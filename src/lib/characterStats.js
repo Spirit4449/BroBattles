@@ -9,9 +9,9 @@ export const characterStats = {
   ninja: {
     baseHealth: 8000,
     attackDescription: "Unleashes a shuriken that boomerangs back.",
-    baseDamage: 1000,
+    baseDamage: 2000,
     ammoCooldownMs: 200,
-    ammoReloadMs: 1400,
+    ammoReloadMs: 1000,
     ammoCapacity: 1,
     specialDescription: "Dashes forward, releasing a flurry of shurikens.",
     specialBaseDamage: 2000,
@@ -72,6 +72,31 @@ export const characterStats = {
     },
     description: "A dark sorcerer who manipulates shadows.",
     unlockPrice: 280,
+  },
+
+  wizard: {
+    baseHealth: 5000,
+    attackDescription:
+      "Puffs out a magical smoke that deals splash baseDamage to everyone in the path.",
+    baseDamage: 1800,
+    ammoCooldownMs: 450,
+    ammoReloadMs: 1000,
+    ammoCapacity: 3,
+    specialDescription: "Unleashes a staff nova that expands outward.",
+    specialBaseDamage: 2400,
+    specialChargeHits: 3,
+    spriteScale: 1,
+    body: {
+      widthShrink: 190,
+      heightShrink: 100,
+      offsetXFromHalf: 0,
+      offsetY: 50,
+      // Shift body to the right when facing left to cover staff
+      flipOffset: 0,
+    },
+    description: "A dark sorcerer who manipulates shadows.",
+    unlockPrice: 2,
+    free: true,
   },
 };
 

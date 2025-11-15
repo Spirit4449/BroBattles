@@ -3,6 +3,7 @@
 
 const dustPool = [];
 const dustPoolMax = 120;
+const markerPool = new Set();
 
 export function spawnDust(scene, x, y, tint = 0xbbbbbb) {
   let g = dustPool.find((o) => !o.active);
@@ -64,6 +65,47 @@ export function prewarmDust(scene, count = 6) {
     g.active = false;
     g.clear();
   });
+}
+
+export function spawnHealthMarker(scene, x, y, delta, opts = {}) {
+  if (!scene || !scene.add) return null;
+  if (!Number.isFinite(delta) || delta === 0) return null;
+  const rounded = Math.round(delta);
+  if (rounded === 0) return null;
+  const positive = rounded > 0;
+  const color = positive ? "#23d88c" : "#ff5c5c";
+  const strokeColor = positive ? "#0a3f28" : "#5a0a0a";
+  const label = `${positive ? "+" : "-"}${Math.abs(rounded)}`;
+  const depth = typeof opts.depth === "number" ? opts.depth : 12;
+  const fontSize = opts.fontSize || "13px";
+  const marker = scene.add.text(x, y, label, {
+    fontFamily: "Poppins, 'Arial Black', sans-serif",
+    fontSize,
+    fontStyle: "400",
+    color,
+    stroke: strokeColor,
+    strokeThickness: 6,
+    padding: { x: 10, y: 4 },
+  });
+  marker.setOrigin(0.5);
+  marker.setDepth(depth);
+  marker.setShadow(0, 4, "rgba(0,0,0,0.35)", 4, true, true);
+  markerPool.add(marker);
+  const float = opts.floatDistance || 38;
+  const duration = opts.duration || 620;
+  scene.tweens.add({
+    targets: marker,
+    y: y - float,
+    alpha: 0.2,
+    scale: 1.18,
+    duration,
+    ease: "Cubic.easeOut",
+    onComplete: () => {
+      markerPool.delete(marker);
+      marker.destroy();
+    },
+  });
+  return marker;
 }
 
 // Note: character-specific effects (like Draven's fire trail) live in

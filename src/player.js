@@ -22,7 +22,7 @@ import {
   getStats,
   getEffectsClass,
 } from "./characters";
-import { spawnDust } from "./effects";
+import { spawnDust, spawnHealthMarker } from "./effects";
 // Globals
 let player;
 let cursors;
@@ -767,10 +767,16 @@ socket.on("health-update", (data) => {
       if (currentHealth > maxHealth) currentHealth = maxHealth;
     }
     currentHealth = data.health;
+    const delta = currentHealth - prev;
     pdbg();
+    if (scene && player && delta !== 0) {
+      const markerY = player.body
+        ? player.body.y - 16
+        : player.y - player.height / 2;
+      spawnHealthMarker(scene, player.x, markerY, delta, { depth: 18 });
+    }
     // SFX: play damage vs heal feedback
     if (scene && scene.sound && !dead) {
-      const delta = currentHealth - prev;
       if (delta < 0) {
         // Took damage
         scene.sound.play("sfx-damage", { volume: 3 });

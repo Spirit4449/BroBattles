@@ -1,5 +1,13 @@
-const { DEFAULT_CHARACTER, defaultCharacterList } = require("../../lib/characterStats");
+const {
+  DEFAULT_CHARACTER,
+  defaultCharacterList,
+} = require("../../lib/characterStats");
 const { randomString } = require("./utils");
+
+const ADMIN_TOKENS = (process.env.ADMIN_USERS || "nishay")
+  .split(",")
+  .map((token) => token.trim())
+  .filter(Boolean);
 
 function isGuest(userRow) {
   return userRow?.expires_at !== null && userRow?.expires_at !== undefined;
@@ -66,7 +74,32 @@ function makeAuthHelpers(db, cookieOpts) {
     return rows[0] || null;
   }
 
-  return { createGuestAndSetCookies, getOrCreateCurrentUser, requireCurrentUser, isGuest };
+  function isAdminUser(user) {
+    if (!user || !ADMIN_TOKENS.length) return false;
+    const id = String(user.user_id || "");
+    const name = String(user.name || "").toLowerCase();
+    return ADMIN_TOKENS.some((token) => {
+      const trimmed = token.trim();
+      if (!trimmed) return false;
+      if (/^[0-9]+$/.test(trimmed)) return trimmed === id;
+      return trimmed.toLowerCase() === name;
+    });
+  }
+
+  async function requireAdminUser(req, res) {
+    const user = await requireCurrentUser(req, res);
+    if (!user || !isAdminUser(user)) return null;
+    return user;
+  }
+
+  return {
+    createGuestAndSetCookies,
+    getOrCreateCurrentUser,
+    requireCurrentUser,
+    requireAdminUser,
+    isGuest,
+    isAdminUser,
+  };
 }
 
 module.exports = { makeAuthHelpers, isGuest };

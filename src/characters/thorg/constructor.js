@@ -2,6 +2,7 @@
 import socket from "../../socket";
 import { characterStats } from "../../lib/characterStats.js";
 import { animations } from "./anim";
+import { performThorgFallAttack } from "./attack";
 
 // Single source of truth for this character's name/key
 const NAME = "thorg";
@@ -20,26 +21,35 @@ class Thorg {
       `${staticPath}/${NAME}/animations.json`
     );
 
+    scene.load.audio("thorg-throw", `${staticPath}/${NAME}/swoosh.mp3`);
+    if (!scene.sound.get("thorg-hit")) {
+      scene.load.audio("thorg-hit", `${staticPath}/hit.mp3`);
+    }
   }
 
   static setupAnimations(scene) {
     animations(scene);
   }
 
-  // Remote attack visualization for Thorg (slash effect only)
+  // Remote attack visualization for Thorg: supports slash and falling rectangle
   static handleRemoteAttack(scene, data, ownerWrapper) {
-    if (data.type !== `${NAME}-slash`) return false;
     const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
     if (!ownerSprite) return true; // nothing to show
-    // Spawn a visual-only slash effect attached to the owner sprite
-    Thorg._spawnSlashEffect(
-      scene,
-      ownerSprite,
-      data.direction,
-      data.range,
-      data.duration
-    );
-    return true;
+    if (data.type === `${NAME}-slash`) {
+      Thorg._spawnSlashEffect(
+        scene,
+        ownerSprite,
+        data.direction,
+        data.range,
+        data.duration
+      );
+      return true;
+    }
+    if (data.type === `${NAME}-fall`) {
+      Thorg._spawnFallEffect(scene, ownerSprite, data.direction);
+      return true;
+    }
+    return false;
   }
 
   // Shared helper to render the slash effect (graphics stroke arc)
@@ -214,76 +224,71 @@ class Thorg {
   }
 
   handlePointerDown() {
-    const p = this.player;
-    const direction = p.flipX ? -1 : 1;
-    const range = 90;
-    const duration = 220; // ms
-    const stats =
-      (this.constructor.getStats && this.constructor.getStats()) || {};
-    const damage = stats.damage;
+    // Use the shared Thorg fall attack implementation (owner-side hits + payload)
+    return this.performDefaultAttack(() => performThorgFallAttack(this));
+  }
 
-    // Character-specific execution wrapped by default attack flow
-    return this.performDefaultAttack(() => {
-      // Play a suitable animation
-      if (
-        this.scene.anims &&
-        (this.scene.anims.exists(`${NAME}-throw`) ||
-          this.scene.anims.exists("throw"))
-      ) {
-        p.anims.play(
-          this.scene.anims.exists(`${NAME}-throw`) ? `${NAME}-throw` : "throw",
-          true
-        );
+  // Spawn a simple rectangle visual attached to owner that mimics the falling arc
+  static _spawnFallEffect(scene, sprite, direction = 1) {
+    const startX = sprite.x + (direction >= 0 ? 10 : -10);
+    const startY = sprite.y - sprite.height * 0.5;
+    const range = 140;
+    const endX = startX + direction * range;
+    const endY = sprite.y + 110;
+    const arcHeight = 90;
+    const curveMagnitude = 14;
+    const samplePath = (t) => {
+      const clamped = Phaser.Math.Clamp(t, 0, 1);
+      const curve = Math.sin(Math.PI * clamped) * (curveMagnitude * direction);
+      const x = Phaser.Math.Linear(startX, endX, clamped) + curve;
+      const y =
+        Phaser.Math.Linear(startY, endY, clamped) -
+        arcHeight * Math.sin(Math.PI * clamped);
+      return { x, y };
+    };
+
+    // Prefer an animated texture for the bat; if not available, create no visible hitbox
+    try {
+      const texKey = scene.textures.exists(`${NAME}-bat`)
+        ? `${NAME}-bat`
+        : scene.textures.exists(`${NAME}-weapon`)
+        ? `${NAME}-weapon`
+        : null;
+      if (!texKey) {
+        // Invisible placeholder (no visible hitbox)
+        return null;
       }
-
-      // Local visual effect
-      Thorg._spawnSlashEffect(this.scene, p, direction, range, duration);
-
-      // Owner-side hit detection
-      const alreadyHit = new Set();
-      const enemies = Object.values(this.opponentPlayersRef || {});
-      const centerOffsetY = p.height * 0.2;
-      const cx = () => p.x + (direction >= 0 ? 10 : -10);
-      const cy = () => p.y - centerOffsetY;
-      const startRad = Phaser.Math.DegToRad(direction >= 0 ? -60 : 240);
-      const endRad = Phaser.Math.DegToRad(direction >= 0 ? 60 : 120);
+      const eff = scene.add.sprite(startX, startY, texKey);
+      eff.setDepth(7);
+      eff.setScale(0.8);
+      eff.setFlipX(direction < 0);
+      const animName = `${texKey}-fly`;
+      if (scene.anims && scene.anims.exists(animName)) {
+        eff.anims.play(animName);
+      }
       const proxy = { t: 0 };
-      this.scene.tweens.add({
+      scene.tweens.add({
+        targets: eff,
+        scale: 1.25,
+        duration: 380,
+        ease: "Sine.easeOut",
+      });
+      scene.tweens.add({
         targets: proxy,
         t: 1,
-        duration,
-        ease: "Sine.easeOut",
+        duration: 380,
+        ease: "Sine.easeIn",
         onUpdate: () => {
-          const cur = Phaser.Math.Linear(startRad, endRad, proxy.t);
-          const tipX = cx() + direction * Math.cos(cur) * range;
-          const tipY = cy() + Math.sin(cur) * Math.round(range * 0.6);
-          for (const wrap of enemies) {
-            const spr = wrap && wrap.opponent;
-            const name = wrap && wrap.username;
-            if (!spr || !name || alreadyHit.has(name)) continue;
-            const dx = spr.x - cx();
-            const dist = Math.hypot(spr.x - tipX, spr.y - tipY);
-            if (dist <= 38 && Math.sign(dx) === Math.sign(direction)) {
-              alreadyHit.add(name);
-              socket.emit("hit", {
-                attacker: this.username,
-                target: name,
-                damage,
-                gameId: this.gameId,
-              });
-            }
-          }
+          const pt = samplePath(proxy.t);
+          eff.x = pt.x;
+          eff.y = pt.y;
         },
+        onComplete: () => eff.destroy(),
       });
-
-      return {
-        name: this.username,
-        type: `${NAME}-slash`,
-        direction,
-        range,
-        duration,
-      };
-    });
+      return eff;
+    } catch (e) {
+      return null;
+    }
   }
 }
 

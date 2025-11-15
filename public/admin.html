@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Control Center</title>
+    <link rel="stylesheet" href="/bundles/admin.css" />
+  </head>
+  <body>
+    <div class="admin-shell">
+      <header class="admin-header">
+        <div>
+          <p style="margin: 0; font-size: 14px; color: #94a3b8">
+            Administrator
+          </p>
+          <h1 id="adminName">Loading…</h1>
+        </div>
+        <button onclick="location.href='/'" class="secondary">
+          Back to Lobby
+        </button>
+      </header>
+
+      <div id="errorBanner" class="hidden"></div>
+
+      <section id="statsGrid">
+        <div class="stat-card">
+          <span>Total Users</span>
+          <strong data-stat="users">-</strong>
+        </div>
+        <div class="stat-card">
+          <span>Guests Active</span>
+          <strong data-stat="guests">-</strong>
+        </div>
+        <div class="stat-card">
+          <span>Parties</span>
+          <strong data-stat="parties">-</strong>
+        </div>
+        <div class="stat-card">
+          <span>Live Matches</span>
+          <strong data-stat="live_matches">-</strong>
+        </div>
+      </section>
+
+      <section class="panels">
+        <article class="panel">
+          <h2>Player Editor</h2>
+          <form id="userSearchForm" class="flex-row" autocomplete="off">
+            <div>
+              <label for="userSearch">Username or ID</label>
+              <input
+                id="userSearch"
+                name="userSearch"
+                placeholder="Spirit4449 or 12"
+                required
+              />
+            </div>
+            <div style="align-self: flex-end">
+              <button type="submit">Load</button>
+            </div>
+          </form>
+          <div id="userPlaceholder">
+            Search for a player to unlock edit controls.
+          </div>
+          <form id="userEditForm" class="hidden" novalidate>
+            <div id="userEditor" class="hidden">
+              <h3 id="userName" style="margin-top: 8px"></h3>
+              <div class="flex-row">
+                <div>
+                  <label for="fieldCoins">Coins</label>
+                  <input id="fieldCoins" type="number" min="0" />
+                </div>
+                <div>
+                  <label for="fieldGems">Gems</label>
+                  <input id="fieldGems" type="number" min="0" />
+                </div>
+              </div>
+              <div class="flex-row">
+                <div>
+                  <label for="fieldTrophies">Trophies</label>
+                  <input id="fieldTrophies" type="number" />
+                </div>
+                <div>
+                  <label for="fieldStatus">Presence</label>
+                  <select id="fieldStatus">
+                    <option value="online">online</option>
+                    <option value="idle">idle</option>
+                    <option value="ready">ready</option>
+                    <option value="offline">offline</option>
+                  </select>
+                </div>
+              </div>
+              <label for="fieldClass">Character Class</label>
+              <input id="fieldClass" placeholder="ninja" />
+              <button type="submit">Apply Changes</button>
+            </div>
+          </form>
+        </article>
+
+        <article class="panel">
+          <h2>Runtime Controls</h2>
+          <form id="runtimeForm">
+            <label class="flex-row" style="align-items: center; gap: 8px">
+              <input type="checkbox" id="maintenanceToggle" />
+              <span>Maintenance Mode</span>
+            </label>
+            <label for="announcementField">Banner Message</label>
+            <textarea
+              id="announcementField"
+              placeholder="Global announcement"
+            ></textarea>
+            <div class="flex-row">
+              <div>
+                <label for="rewardCoinMultiplier">Coin Multiplier</label>
+                <input
+                  id="rewardCoinMultiplier"
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                />
+              </div>
+              <div>
+                <label for="rewardGemMultiplier">Gem Multiplier</label>
+                <input
+                  id="rewardGemMultiplier"
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                />
+              </div>
+            </div>
+            <div class="flex-row">
+              <div>
+                <label for="rewardFloor">Coin Floor</label>
+                <input id="rewardFloor" type="number" min="0" />
+              </div>
+              <div>
+                <label for="rewardCeiling">Coin Ceiling</label>
+                <input id="rewardCeiling" type="number" min="1" />
+              </div>
+            </div>
+            <button type="submit">Save Overrides</button>
+          </form>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Recent Users</h2>
+        <ul id="recentUsers" class="recent-list"></ul>
+      </section>
+      <section class="panel">
+        <h2>Recent Matches</h2>
+        <ul id="recentMatches" class="recent-list"></ul>
+      </section>
+    </div>
+    <div id="toast" class="hidden"></div>
+    <script src="/bundles/admin.bundle.js" defer></script>
+  </body>
+</html>

@@ -8,6 +8,7 @@ import {
   getEffectsClass,
 } from "./characters";
 import socket from "./socket";
+import { spawnHealthMarker } from "./effects";
 
 export default class OpPlayer {
   constructor(
@@ -115,12 +116,27 @@ export default class OpPlayer {
     socket.on("health-update", (data) => {
       // data: { username, health, gameId }
       if (data.username === this.username) {
+        const prevHealth = this.opCurrentHealth;
         if (typeof data.maxHealth === "number" && data.maxHealth > 0) {
           this.opMaxHealth = data.maxHealth;
           if (this.opCurrentHealth > this.opMaxHealth)
             this.opCurrentHealth = this.opMaxHealth;
         }
         this.opCurrentHealth = data.health;
+        const delta = this.opCurrentHealth - prevHealth;
+        if (
+          delta !== 0 &&
+          this.scene &&
+          this.opponent &&
+          this.opponent.active
+        ) {
+          const bodyTop = this.opponent.body
+            ? this.opponent.body.y
+            : this.opponent.y - this.opponent.height / 2;
+          spawnHealthMarker(this.scene, this.opponent.x, bodyTop - 18, delta, {
+            depth: 11,
+          });
+        }
         if (this.opCurrentHealth <= 0) {
           this.opCurrentHealth = 0;
           this.updateHealthBar(true); // show dead styling & 0

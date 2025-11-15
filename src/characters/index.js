@@ -2,12 +2,14 @@
 import Ninja from "./ninja/constructor";
 import Thorg from "./thorg/constructor";
 import Draven from "./draven/constructor";
+import Wizard from "./wizard/constructor";
 import { characterStats } from "../lib/characterStats.js";
 
 const registry = {
   ninja: Ninja,
   thorg: Thorg,
   draven: Draven,
+  wizard: Wizard,
 };
 
 export function preloadAll(scene, staticPath) {

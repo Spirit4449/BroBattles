@@ -5,13 +5,14 @@
  * @typedef {Object} GameHubDeps
  * @property {import('socket.io').Server} io
  * @property {object} db - Database helpers
+ * @property {object} [runtimeConfig]
  */
 
 /**
  * Create game hub controller
  * @param {GameHubDeps} deps
  */
-function createGameHub({ io, db }) {
+function createGameHub({ io, db, runtimeConfig = null }) {
   // Map of matchId -> GameRoom instance
   const activeRooms = new Map();
 
@@ -27,7 +28,11 @@ function createGameHub({ io, db }) {
     }
 
     const { GameRoom } = require("./gameRoom");
-    const room = new GameRoom(matchId, matchData, { io, db });
+    const room = new GameRoom(matchId, matchData, {
+      io,
+      db,
+      runtimeConfig,
+    });
     activeRooms.set(matchId, room);
 
     console.log(

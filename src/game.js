@@ -20,7 +20,8 @@ import {
 import socket, { waitForConnect } from "./socket";
 import OpPlayer from "./opPlayer";
 import { spawnDust, prewarmDust } from "./effects";
-import { changeDebugState } from "./characters/draven/attack";
+import { changeDebugState as changeDravenDebug } from "./characters/draven/attack";
+import { changeDebugState as changeThorgDebug } from "./characters/thorg/attack";
 
 // Make Phaser globally available for character modules
 window.Phaser = Phaser;
@@ -940,7 +941,12 @@ class GameScene extends Phaser.Scene {
       if (!world) return;
       const enable = !world.drawDebug;
       world.drawDebug = enable;
-      changeDebugState(enable);
+      try {
+        changeDravenDebug(enable);
+      } catch (_) {}
+      try {
+        changeThorgDebug(enable);
+      } catch (_) {}
       if (enable) {
         // Create debug graphic if Phaser hasn't created it yet
         try {
@@ -1495,6 +1501,83 @@ function showGameOverScreen(payload) {
   if (winner === null) heading = "Draw";
   else if (winner === gameData?.yourTeam) heading = "Victory";
   else heading = "Defeat";
+  const rewards = Array.isArray(payload?.meta?.rewards)
+    ? payload.meta.rewards
+    : [];
+  const myReward = rewards.find((r) => r.username === username);
+  const escapeHtml = (val) =>
+    String(val ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  const baseRowStyle =
+    "display:grid;grid-template-columns:2.2fr repeat(5,1fr);gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid rgba(255,255,255,0.08);font-size:13px;";
+  const headerRow = `
+    <div style="${baseRowStyle}font-weight:600;border-bottom:1px solid rgba(255,255,255,0.2);text-transform:uppercase;font-size:12px;">
+      <div style="text-align:left;">Player</div>
+      <div>Hits</div>
+      <div>Damage</div>
+      <div>Kills</div>
+      <div>Coins</div>
+      <div>Gems</div>
+    </div>`;
+  const rewardRowsHtml = rewards
+    .map((r) => {
+      const isYou = r.username === username;
+      const rowStyle = `${baseRowStyle}${
+        isYou
+          ? "background:rgba(37,99,235,0.18);border-bottom-color:rgba(37,99,235,0.35);"
+          : ""
+      }`;
+      const label = `${escapeHtml(r.username)}${
+        isYou ? ' <span style="font-size:11px;color:#93c5fd;">(You)</span>' : ""
+      }`;
+      return `
+        <div style="${rowStyle}">
+          <div style="text-align:left;font-weight:${
+            isYou ? 600 : 500
+          };">${label}</div>
+          <div>${r.hits ?? 0}</div>
+          <div>${r.damage ?? 0}</div>
+          <div>${r.kills ?? 0}</div>
+          <div style="color:#facc15;font-weight:600;">${
+            r.coinsAwarded ?? 0
+          }</div>
+          <div style="color:#67e8f9;font-weight:600;">${
+            r.gemsAwarded ?? 0
+          }</div>
+        </div>`;
+    })
+    .join("");
+  const rewardSectionHtml = rewards.length
+    ? `
+      <div style="margin-top:28px;text-align:left;">
+        <h2 style="margin:0 0 10px;font-size:18px;color:#f8fafc;">Match Rewards</h2>
+        <div style="border:1px solid rgba(148,163,184,0.25);border-radius:10px;overflow:hidden;background:rgba(15,23,42,0.65);">
+          ${headerRow}
+          ${rewardRowsHtml}
+        </div>
+      </div>`
+    : "";
+  const personalSummaryHtml = myReward
+    ? `
+      <div style="margin-top:20px;padding:14px 18px;border-radius:10px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.35);text-align:left;">
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px;">You earned</div>
+        <div style="display:flex;gap:18px;font-size:18px;font-weight:600;">
+          <span style="color:#facc15;">${
+            myReward.coinsAwarded ?? 0
+          } coins</span>
+          <span style="color:#67e8f9;">${myReward.gemsAwarded ?? 0} gems</span>
+        </div>
+        <div style="margin-top:6px;font-size:13px;color:#cbd5f5;">
+          ${myReward.hits ?? 0} hits · ${myReward.damage ?? 0} dmg · ${
+        myReward.kills ?? 0
+      } kills
+        </div>
+      </div>`
+    : "";
   div.innerHTML = `
     <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;background:rgba(0,0,0,0.65);font-family:Arial,sans-serif;">
       <div style="background:#111;padding:32px 48px;border:2px solid #444;border-radius:12px;min-width:320px;text-align:center;box-shadow:0 0 32px rgba(0,0,0,0.6);color:#fff;">
@@ -1506,7 +1589,9 @@ function showGameOverScreen(payload) {
         <p style="margin:0 0 20px;font-size:16px;opacity:0.8;">Match ${
           payload?.matchId ?? ""
         }</p>
-        <button id="go-lobby" style="background:#2563eb;color:#fff;font-size:16px;padding:10px 22px;border:none;border-radius:6px;cursor:pointer;">Return to Lobby</button>
+        ${personalSummaryHtml || ""}
+        ${rewardSectionHtml || ""}
+        <button id="go-lobby" style="background:#2563eb;color:#fff;font-size:16px;padding:10px 22px;border:none;border-radius:6px;cursor:pointer;margin-top:20px;">Return to Lobby</button>
       </div>
     </div>`;
   document.body.appendChild(div);

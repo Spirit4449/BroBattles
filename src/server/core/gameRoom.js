@@ -9,16 +9,18 @@ const WORLD_BOUNDS = {
 };
 
 class GameRoom {
-  constructor(matchId, matchData, { io, db }) {
+  constructor(matchId, matchData, { io, db, runtimeConfig = null }) {
     this.matchId = matchId;
     this.matchData = matchData; // { mode, map, players }
     this.io = io;
     this.db = db;
+    this.runtimeConfig = runtimeConfig;
 
     // Room state
     this.status = "waiting"; // waiting, active, finished
     this.startTime = Date.now();
     this.players = new Map(); // socketId -> playerData
+    this.rewardStats = new Map(); // name -> { userId, team, hits, damage, kills }
     this.gameState = null;
 
     // Game loop (will migrate to fixed-step accumulator + snapshot cadence)
@@ -74,6 +76,7 @@ class GameRoom {
       this.players.delete(existingPlayer.socketId);
       existingPlayer.socketId = socket.id;
       this.players.set(socket.id, existingPlayer);
+      this._ensureRewardBucket(existingPlayer);
       console.log(`[GameRoom ${this.matchId}] Player ${user.name} reconnected`);
     } else {
       // New player joining
@@ -122,6 +125,7 @@ class GameRoom {
       };
 
       this.players.set(socket.id, playerData);
+      this._ensureRewardBucket(playerData);
       console.log(
         `[GameRoom ${this.matchId}] Player ${user.name} joined (${this.players.size}/${this.matchData.players.length})`
       );
@@ -724,16 +728,25 @@ class GameRoom {
       const DUP_WINDOW_MS = 80; // hits within 80ms considered duplicate
       if (!isSelf && now - last < DUP_WINDOW_MS) return; // duplicate, ignore
       this._recentHits.set(key, now);
+      this._recordCombatStat(attacker, { hits: 1 });
 
       // Apply damage
       const old = target.health;
       target.health = Math.max(0, target.health - Math.round(dmg));
+      const appliedDamage = Math.max(0, old - target.health);
       attacker.lastAttackAt = now;
       target.lastDamagedAt = now;
       attacker.lastCombatAt = now;
       target.lastCombatAt = now;
+      if (appliedDamage > 0) {
+        this._recordCombatStat(attacker, { damage: appliedDamage });
+      }
 
       if (target.health !== old) {
+        const scoredKill = !isSelf && target.health === 0 && old > 0 ? 1 : 0;
+        if (scoredKill) {
+          this._recordCombatStat(attacker, { kills: scoredKill });
+        }
         if (target.health === 0) target.isAlive = false;
         this._broadcastHealthUpdate(target);
         if (!target.isAlive) {
@@ -947,11 +960,23 @@ class GameRoom {
         e?.message
       );
     }
+    let rewardSummary = [];
+    try {
+      rewardSummary = await this._distributeMatchRewards(winnerTeam);
+    } catch (e) {
+      console.warn(
+        `[GameRoom ${this.matchId}] reward distribution failed`,
+        e?.message
+      );
+    }
+
+    const finalMeta = { ...(meta || {}), rewards: rewardSummary };
+
     // Broadcast game over event to clients
     this.io.to(`game:${this.matchId}`).emit("game:over", {
       matchId: this.matchId,
       winnerTeam: winnerTeam, // may be null for draw
-      meta,
+      meta: finalMeta,
     });
     // Optional: schedule room cleanup later (allow clients to show UI)
     setTimeout(() => {
@@ -959,6 +984,136 @@ class GameRoom {
         this.cleanup();
       } catch (_) {}
     }, 15000); // 15s grace
+  }
+
+  _ensureRewardBucket(playerData) {
+    if (!playerData || !playerData.name) return null;
+    if (!this.rewardStats) this.rewardStats = new Map();
+    let bucket = this.rewardStats.get(playerData.name);
+    if (!bucket) {
+      bucket = {
+        username: playerData.name,
+        userId: playerData.user_id,
+        team: playerData.team,
+        hits: 0,
+        damage: 0,
+        kills: 0,
+      };
+      this.rewardStats.set(playerData.name, bucket);
+    } else {
+      bucket.userId = playerData.user_id;
+      bucket.team = playerData.team;
+    }
+    return bucket;
+  }
+
+  _recordCombatStat(playerData, delta = {}) {
+    const bucket = this._ensureRewardBucket(playerData);
+    if (!bucket) return;
+    if (delta.hits) bucket.hits += Math.max(0, delta.hits);
+    if (delta.damage) bucket.damage += Math.max(0, Math.round(delta.damage));
+    if (delta.kills) bucket.kills += Math.max(0, delta.kills);
+  }
+
+  async _distributeMatchRewards(winnerTeam) {
+    if (!this.rewardStats) this.rewardStats = new Map();
+    const summary = [];
+    const updates = [];
+
+    for (const playerData of this.players.values()) {
+      const bucket = this._ensureRewardBucket(playerData) || {
+        username: playerData.name,
+        team: playerData.team,
+        hits: 0,
+        damage: 0,
+        kills: 0,
+      };
+      const reward = this._calculateRewards(
+        bucket,
+        winnerTeam,
+        playerData.team
+      );
+      summary.push({
+        username: bucket.username,
+        team: bucket.team,
+        hits: bucket.hits,
+        damage: bucket.damage,
+        kills: bucket.kills,
+        coinsAwarded: reward.coins,
+        gemsAwarded: reward.gems,
+      });
+      if ((reward.coins > 0 || reward.gems > 0) && playerData.user_id) {
+        updates.push(
+          this.db
+            .runQuery(
+              "UPDATE users SET coins = coins + ?, gems = gems + ? WHERE user_id = ?",
+              [reward.coins, reward.gems, playerData.user_id]
+            )
+            .catch((e) => {
+              console.warn(
+                `[GameRoom ${this.matchId}] Failed to update rewards for ${playerData.name}`,
+                e?.message
+              );
+            })
+        );
+      }
+    }
+
+    if (updates.length) {
+      await Promise.all(updates);
+    }
+
+    return summary;
+  }
+
+  _calculateRewards(bucket, winnerTeam, playerTeam) {
+    const hits = bucket?.hits || 0;
+    const damage = bucket?.damage || 0;
+    const kills = bucket?.kills || 0;
+    const isWinner = winnerTeam && playerTeam && winnerTeam === playerTeam;
+
+    const baseCoins = 40;
+    const coinFromHits = hits * 2;
+    const coinFromDamage = Math.floor(damage / 150);
+    const coinFromKills = kills * 25;
+    const winBonus = winnerTeam == null ? 10 : isWinner ? 40 : 15;
+    let coins =
+      baseCoins + coinFromHits + coinFromDamage + coinFromKills + winBonus;
+    let gems = 0;
+    if (isWinner) gems += 10;
+    if (kills >= 1) gems += 5;
+    if (kills >= 2) gems += 20;
+    if (damage >= 10000) gems += 10;
+    if (damage >= 15000) gems += 5;
+
+    const overrides = (() => {
+      try {
+        if (
+          this.runtimeConfig &&
+          typeof this.runtimeConfig.get === "function"
+        ) {
+          return this.runtimeConfig.get() || {};
+        }
+        return this.runtimeConfig || {};
+      } catch (_) {
+        return {};
+      }
+    })();
+    const rewardMultipliers = overrides?.rewardMultipliers || {};
+    const coinMultiplier = Number(rewardMultipliers.coins) || 1;
+    const gemMultiplier = Number(rewardMultipliers.gems) || 1;
+    if (Number.isFinite(coinMultiplier) && coinMultiplier > 0) {
+      coins *= coinMultiplier;
+    }
+    if (Number.isFinite(gemMultiplier) && gemMultiplier > 0) {
+      gems *= gemMultiplier;
+    }
+
+    const minCoins = Number(overrides?.rewardFloor) || 5;
+    const maxCoins = Number(overrides?.rewardCeiling) || 500;
+    coins = Math.max(minCoins, Math.min(maxCoins, Math.round(coins)));
+
+    return { coins, gems };
   }
 }
 

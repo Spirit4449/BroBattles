@@ -10,6 +10,7 @@ module.exports = {
     index: "./src/index.js",
     signup: "./src/signup.js",
     login: "./src/login.js",
+    admin: "./src/admin.js",
   },
   output: {
     filename: "bundles/[name].bundle.js",

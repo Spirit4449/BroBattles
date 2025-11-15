@@ -28,6 +28,8 @@ const { registerEconomyRoutes } = require("./routes/economy.js");
 const { makeAuthHelpers } = require("./helpers/auth.js");
 const { startCleanupJobs } = require("./jobs/cleanup.js");
 const { initSocket } = require("./core/socket.js");
+const { createRuntimeConfig } = require("./helpers/runtimeConfig.js");
+const { registerAdminRoutes } = require("./routes/admin.js");
 
 const app = express();
 const server = http.createServer(app);
@@ -38,7 +40,8 @@ const port = Number(process.env.PORT) || 3002;
 const IS_PROD = process.env.NODE_ENV === "production";
 // Allow overriding cookie security for HTTP deployments (e.g., Raspberry Pi dev)
 // Set SECURE_COOKIES=true to force Secure; default is false unless explicitly enabled
-const SECURE_COOKIES = String(process.env.SECURE_COOKIES || "").toLowerCase() === "true";
+const SECURE_COOKIES =
+  String(process.env.SECURE_COOKIES || "").toLowerCase() === "true";
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const DIST_DIR = path.join(ROOT_DIR, "dist");
 const PAGE_ROOT = IS_PROD ? DIST_DIR : PUBLIC_DIR;
@@ -73,6 +76,10 @@ const DISPLAY_COOKIE_OPTS = { sameSite: "lax", secure: SECURE_COOKIES };
 // Expose cookie opts for downstream modules
 app.locals.SIGNED_COOKIE_OPTS = SIGNED_COOKIE_OPTS;
 app.locals.DISPLAY_COOKIE_OPTS = DISPLAY_COOKIE_OPTS;
+
+// Runtime overrides editable via admin dashboard
+const runtimeConfig = createRuntimeConfig({ rootDir: ROOT_DIR });
+app.locals.runtimeConfig = runtimeConfig;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -113,6 +120,7 @@ const socketApi = initSocket({
     updateLastSeen: db.updateLastSeen,
     runQuery: db.runQuery,
   },
+  runtimeConfig,
 });
 app.locals.socketApi = socketApi;
 
@@ -121,6 +129,14 @@ const auth = makeAuthHelpers(db, { SIGNED_COOKIE_OPTS, DISPLAY_COOKIE_OPTS });
 
 // Register routes
 registerEconomyRoutes({ app, db, auth });
+registerAdminRoutes({
+  app,
+  db,
+  auth,
+  pageRoot: PAGE_ROOT,
+  distDir: DIST_DIR,
+  runtimeConfig,
+});
 registerRoutes({ app, io, db, auth, pageRoot: PAGE_ROOT, distDir: DIST_DIR });
 
 // Server start
@@ -130,7 +146,9 @@ registerRoutes({ app, io, db, auth, pageRoot: PAGE_ROOT, distDir: DIST_DIR });
     console.log("✅ Database connected");
     server.listen(port, "0.0.0.0", () => {
       console.log(
-        `Server listening on 0.0.0.0:${port} (cookies secure=${SECURE_COOKIES}, env=${process.env.NODE_ENV || "undefined"})`
+        `Server listening on 0.0.0.0:${port} (cookies secure=${SECURE_COOKIES}, env=${
+          process.env.NODE_ENV || "undefined"
+        })`
       );
     });
   } catch (e) {

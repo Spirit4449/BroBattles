@@ -33,9 +33,9 @@ function readSignedCookieFromHandshake(socket, cookieName, secret) {
  *      updateLastSeen
  *    }
  */
-function initSocket({ io, COOKIE_SECRET, db }) {
+function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
   // Game hub for managing active game rooms
-  const gameHub = createGameHub({ io, db });
+  const gameHub = createGameHub({ io, db, runtimeConfig });
 
   // Matchmaking controller (power-saved loop inside)
   const mm = createMatchmaking({

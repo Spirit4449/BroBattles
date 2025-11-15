@@ -1,0 +1,27 @@
+{
+  "maintenanceMode": false,
+  "announcements": "Help me",
+  "rewardMultipliers": {
+    "coins": 1,
+    "gems": 1
+  },
+  "rewardFloor": 5,
+  "rewardCeiling": 500,
+  "characterTuning": {
+    "ninja": {
+      "healthMultiplier": 1033,
+      "damageMultiplier": 1333,
+      "specialMultiplier": 1
+    },
+    "thorg": {
+      "healthMultiplier": 1,
+      "damageMultiplier": 1,
+      "specialMultiplier": 1
+    },
+    "draven": {
+      "healthMultiplier": 100,
+      "damageMultiplier": 1,
+      "specialMultiplier": 1
+    }
+  }
+}
