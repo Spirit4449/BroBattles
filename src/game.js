@@ -22,6 +22,7 @@ import OpPlayer from "./opPlayer";
 import { spawnDust, prewarmDust } from "./effects";
 import { changeDebugState as changeDravenDebug } from "./characters/draven/attack";
 import { changeDebugState as changeThorgDebug } from "./characters/thorg/attack";
+import { changeDebugState as changeWizardDebug } from "./characters/wizard/attack";
 
 // Make Phaser globally available for character modules
 window.Phaser = Phaser;
@@ -946,6 +947,9 @@ class GameScene extends Phaser.Scene {
       } catch (_) {}
       try {
         changeThorgDebug(enable);
+      } catch (_) {}
+      try {
+        changeWizardDebug(enable);
       } catch (_) {}
       if (enable) {
         // Create debug graphic if Phaser hasn't created it yet

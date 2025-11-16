@@ -1,22 +1,73 @@
 import socket from "../../socket";
 
-const FIREBALL_SPEED = 800; // px per second after launch
-const FIREBALL_RANGE = 720; // px travel before despawn
-const FIREBALL_RADIUS = 14; // collision radius
+const FIREBALL_SPEED = 450; // px per second after launch
+const FIREBALL_RANGE = 1050; // px travel before despawn
+const FIREBALL_VISUAL_RADIUS = 14;
+const FIREBALL_COLLISION_RADIUS = 57; // generous hitbox to catch edge hits
 const FIREBALL_INITIAL_SCALE = 0.1; // spawn scale
-const FIREBALL_ACTIVE_SCALE = 0.29; // scale once flying
+const FIREBALL_ACTIVE_SCALE = 0.5; // scale once flying
 const FIREBALL_GLOW_RADIUS_MULT = 1.35;
-const FIREBALL_BOB_AMPLITUDE = 14;
+const FIREBALL_BOB_AMPLITUDE = 5;
 const FIREBALL_VERTICAL_OFFSET = 0.12; // fraction of height to lift from feet
-const FIREBALL_CAST_DELAY_MS = 200; // pre-launch delay
-const FIREBALL_ROTATION_SPEED = 600; // degrees per second
+const FIREBALL_CAST_DELAY_MS = 300; // pre-launch delay
 const FIREBALL_BOB_TWEEN_MS = 220; // remote bob tween duration
-const FIREBALL_FORWARD_OFFSET = 0.2; // multiplier applied to sprite width for spawn X offset
-const FIREBALL_BOB_FREQ_MS = 90; // divisor for owner bob sine wave (larger = slower)
-const FIREBALL_ROTATION_TWEEN_MS = 400; // remote rotation tween duration
+const FIREBALL_FORWARD_OFFSET = 0.23; // multiplier applied to sprite width for spawn X offset
+const FIREBALL_BOB_FREQ_MS = 120; // divisor for owner bob sine wave (larger = slower)
+const FIREBALL_DEPTH = 100; // ensure rendering above tilemap and ground
+const FIREBALL_BASE_ANGLE_DEG = -90; // sideways orientation; right=+90, left=-90
+
+let DEBUG_DRAW = false;
+const ACTIVE_DEBUG_SHAPES = new Set();
 
 function makeId() {
   return `wizardFireball_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+}
+
+function registerDebugShape(shape) {
+  if (!shape) return shape;
+  ACTIVE_DEBUG_SHAPES.add(shape);
+  shape.setVisible(DEBUG_DRAW);
+  shape.once("destroy", () => {
+    ACTIVE_DEBUG_SHAPES.delete(shape);
+  });
+  return shape;
+}
+
+function createDebugCircle(scene) {
+  if (!scene?.add) return null;
+  const circle = scene.add.circle(
+    0,
+    0,
+    FIREBALL_COLLISION_RADIUS,
+    0x00ffff,
+    0.08
+  );
+  circle.setStrokeStyle(1, 0x00ffff, 0.8);
+  circle.setDepth(9999);
+  return registerDebugShape(circle);
+}
+
+function attachDebugFollower(scene, target) {
+  if (!scene || !target) return null;
+  const circle = createDebugCircle(scene);
+  if (!circle) return null;
+  const updater = () => {
+    if (!circle.active || !target.active) return;
+    circle.x = target.x;
+    circle.y = target.y;
+  };
+  scene.events.on("update", updater);
+  let disposed = false;
+  const destroy = () => {
+    if (disposed) return;
+    disposed = true;
+    scene.events.off("update", updater);
+    circle.destroy();
+  };
+  return {
+    destroy,
+    shape: circle,
+  };
 }
 
 function circleRectOverlap(cx, cy, radius, bx1, by1, bx2, by2) {
@@ -37,13 +88,39 @@ function createFireballSprite(scene, x, y, direction) {
     : null;
   const sprite = key
     ? scene.add.sprite(x, y, key)
-    : scene.add.circle(x, y, FIREBALL_RADIUS, 0xff8b3d, 0.9);
-  sprite.setDepth(8);
-  if (sprite.setBlendMode) sprite.setBlendMode(Phaser.BlendModes.ADD);
+    : scene.add.circle(x, y, FIREBALL_VISUAL_RADIUS, 0xff8b3d, 0.9);
+  sprite.setDepth(FIREBALL_DEPTH);
   if (sprite.setScale) sprite.setScale(FIREBALL_INITIAL_SCALE);
   if (sprite.setFlipX) sprite.setFlipX(direction < 0);
-  if (sprite.setRotation)
-    sprite.setRotation(Phaser.Math.DegToRad(direction < 0 ? 180 : 0));
+  if (sprite.setAngle)
+    sprite.setAngle(direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG);
+
+  // Ensure animated fireball plays if atlas frames are available
+  if (key === "wizard-fireball" && scene.textures.exists("wizard-fireball")) {
+    const animKey = "wizard-fireball:loop";
+    if (!scene.anims.exists(animKey)) {
+      const tex = scene.textures.get("wizard-fireball");
+      const names = (tex && tex.getFrameNames && tex.getFrameNames()) || [];
+      const frames = names.filter((n) => n && n !== "__BASE");
+      if (frames.length > 1) {
+        frames.sort((a, b) => {
+          const ra = /([0-9]+)(?!.*[0-9])/.exec(a);
+          const rb = /([0-9]+)(?!.*[0-9])/.exec(b);
+          if (ra && rb) return Number(ra[1]) - Number(rb[1]);
+          return a.localeCompare(b);
+        });
+        scene.anims.create({
+          key: animKey,
+          frames: frames.map((f) => ({ key: "wizard-fireball", frame: f })),
+          frameRate: 16,
+          repeat: -1,
+        });
+      }
+    }
+    if (sprite.anims && scene.anims.exists("wizard-fireball:loop")) {
+      sprite.anims.play("wizard-fireball:loop", true);
+    }
+  }
   return sprite;
 }
 
@@ -53,12 +130,11 @@ function spawnFireballTrail(scene, sprite) {
   const glow = scene.add.circle(
     sprite.x,
     sprite.y,
-    FIREBALL_RADIUS * FIREBALL_GLOW_RADIUS_MULT,
+    FIREBALL_VISUAL_RADIUS * FIREBALL_GLOW_RADIUS_MULT,
     0xff6b2c,
     0.22
   );
-  glow.setDepth(sprite.depth - 1);
-  glow.setBlendMode(Phaser.BlendModes.ADD);
+  glow.setDepth(FIREBALL_DEPTH - 1);
   const update = () => {
     if (!glow.active || !sprite.active) return;
     glow.x = sprite.x;
@@ -91,7 +167,13 @@ function spawnImpact(scene, x, y) {
       });
       scene.time.delayedCall(320, () => emitter.destroy());
     } else if (scene.add?.circle) {
-      const flash = scene.add.circle(x, y, FIREBALL_RADIUS, 0xffd9a0, 0.6);
+      const flash = scene.add.circle(
+        x,
+        y,
+        FIREBALL_VISUAL_RADIUS,
+        0xffd9a0,
+        0.6
+      );
       flash.setBlendMode(Phaser.BlendModes.ADD);
       scene.tweens.add({
         targets: flash,
@@ -143,6 +225,10 @@ export function performWizardFireball(instance) {
     currentOrigin.y,
     direction
   );
+  const debugFollower = attachDebugFollower(scene, sprite);
+  if (debugFollower) {
+    sprite.once("destroy", () => debugFollower.destroy());
+  }
   scene.tweens.add({
     targets: sprite,
     scale: FIREBALL_ACTIVE_SCALE,
@@ -168,6 +254,7 @@ export function performWizardFireball(instance) {
     alive = false;
     scene.events.off("update", update);
     if (trail) trail.destroy();
+    debugFollower?.destroy();
     spawnImpact(scene, hitPosition?.x ?? sprite.x, hitPosition?.y ?? sprite.y);
     sprite.destroy();
   };
@@ -181,6 +268,8 @@ export function performWizardFireball(instance) {
       sprite.x = currentOrigin.x;
       sprite.y = currentOrigin.y;
       if (sprite.setFlipX) sprite.setFlipX(direction < 0);
+      if (sprite.setAngle)
+        sprite.setAngle(direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG);
       launchTimer -= dt;
       if (launchTimer > 0) return;
       launched = true;
@@ -197,11 +286,7 @@ export function performWizardFireball(instance) {
     sprite.y =
       travelBaseY +
       Math.sin(travelElapsed / FIREBALL_BOB_FREQ_MS) * FIREBALL_BOB_AMPLITUDE;
-    if (sprite.rotation !== undefined) {
-      sprite.rotation +=
-        Phaser.Math.DegToRad(FIREBALL_ROTATION_SPEED * (dt / 1000)) *
-        travelDirection;
-    }
+    // No rotation during flight
 
     // Owner-side collision detection
     const opponents = Object.values(opponentPlayersRef || {});
@@ -227,7 +312,7 @@ export function performWizardFireball(instance) {
         circleRectOverlap(
           sprite.x,
           sprite.y,
-          FIREBALL_RADIUS,
+          FIREBALL_COLLISION_RADIUS,
           bx1,
           by1,
           bx2,
@@ -242,8 +327,6 @@ export function performWizardFireball(instance) {
           damage: damageValue,
           gameId,
         });
-        cleanup({ x: (bx1 + bx2) / 2, y: (by1 + by2) / 2 });
-        return;
       }
     }
 
@@ -282,12 +365,18 @@ export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
   const bob = payload?.bob ?? FIREBALL_BOB_AMPLITUDE;
 
   const sprite = createFireballSprite(scene, start.x, start.y, direction);
+  if (sprite.setAngle)
+    sprite.setAngle(direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG);
   scene.tweens.add({
     targets: sprite,
     scale: FIREBALL_ACTIVE_SCALE,
     ease: "Sine.easeOut",
     duration: startup,
   });
+  const debugFollower = attachDebugFollower(scene, sprite);
+  if (debugFollower) {
+    sprite.once("destroy", () => debugFollower.destroy());
+  }
   const trail = spawnFireballTrail(scene, sprite);
 
   scene.tweens.add({
@@ -300,6 +389,7 @@ export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
       spawnImpact(scene, sprite.x, sprite.y);
       sprite.destroy();
       if (trail) trail.destroy();
+      debugFollower?.destroy();
     },
   });
   scene.tweens.add({
@@ -311,15 +401,12 @@ export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
     delay: startup,
     repeat: Math.ceil(travelDuration / FIREBALL_BOB_TWEEN_MS),
   });
-  scene.tweens.add({
-    targets: sprite,
-    angle: { from: 0, to: direction < 0 ? -360 : 360 },
-    ease: "Linear",
-    duration: FIREBALL_ROTATION_TWEEN_MS,
-    delay: startup,
-    repeat: travelDuration
-      ? Math.ceil(travelDuration / FIREBALL_ROTATION_TWEEN_MS)
-      : -1,
-  });
   return sprite;
+}
+
+export function changeDebugState(state) {
+  DEBUG_DRAW = !!state;
+  for (const shape of ACTIVE_DEBUG_SHAPES) {
+    shape.setVisible(DEBUG_DRAW);
+  }
 }

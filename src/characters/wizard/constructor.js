@@ -20,7 +20,12 @@ class Wizard {
       `${staticPath}/${NAME}/spritesheet.webp`,
       `${staticPath}/${NAME}/animations.json`
     );
-    scene.load.image("wizard-fireball", `${staticPath}/${NAME}/fireball.webp`);
+    // Load animated fireball atlas (frames defined in fireball.json)
+    scene.load.atlas(
+      "wizard-fireball",
+      `${staticPath}/${NAME}/fireball.webp`,
+      `${staticPath}/${NAME}/fireball.json`
+    );
     scene.load.audio("fireball-sound", `${staticPath}/${NAME}/fireball.mp3`);
     if (!scene.cache?.audio?.exists("wizard-impact")) {
       scene.load.audio("wizard-impact", `${staticPath}/damage.mp3`);

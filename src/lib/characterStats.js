@@ -7,7 +7,7 @@ export const LEVEL_CAP = 5;
 
 export const characterStats = {
   ninja: {
-    baseHealth: 8000,
+    baseHealth: 7000,
     attackDescription: "Unleashes a shuriken that boomerangs back.",
     baseDamage: 2000,
     ammoCooldownMs: 200,
@@ -16,7 +16,7 @@ export const characterStats = {
     specialDescription: "Dashes forward, releasing a flurry of shurikens.",
     specialBaseDamage: 2000,
     specialChargeHits: 3,
-    spriteScale: 1,
+    spriteScale: 0.9,
     body: {
       widthShrink: 35,
       heightShrink: 10,
@@ -31,9 +31,9 @@ export const characterStats = {
     baseHealth: 13000,
     attackDescription:
       "Swings a heavy axe in a short arc, pushing back nearby enemies.",
-    baseDamage: 1800,
-    ammoCooldownMs: 350,
-    ammoReloadMs: 1000,
+    baseDamage: 1500,
+    ammoCooldownMs: 150,
+    ammoReloadMs: 800,
     ammoCapacity: 3,
     specialDescription: "Slams the ground to send a shockwave forward.",
     specialBaseDamage: 2800,
@@ -54,7 +54,7 @@ export const characterStats = {
     baseHealth: 6500,
     attackDescription:
       "Puffs out a magical smoke that deals splash baseDamage to everyone in the path.",
-    baseDamage: 2000,
+    baseDamage: 2500,
     ammoCooldownMs: 450,
     ammoReloadMs: 1600,
     ammoCapacity: 3,
@@ -78,19 +78,19 @@ export const characterStats = {
     baseHealth: 5000,
     attackDescription:
       "Puffs out a magical smoke that deals splash baseDamage to everyone in the path.",
-    baseDamage: 1800,
+    baseDamage: 3000,
     ammoCooldownMs: 450,
-    ammoReloadMs: 1000,
+    ammoReloadMs: 3000,
     ammoCapacity: 3,
     specialDescription: "Unleashes a staff nova that expands outward.",
     specialBaseDamage: 2400,
     specialChargeHits: 3,
-    spriteScale: 1,
+    spriteScale: 0.94,
     body: {
       widthShrink: 190,
-      heightShrink: 100,
+      heightShrink: 110,
       offsetXFromHalf: 0,
-      offsetY: 50,
+      offsetY: 60,
       // Shift body to the right when facing left to cover staff
       flipOffset: 0,
     },
