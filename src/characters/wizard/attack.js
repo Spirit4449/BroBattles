@@ -93,7 +93,9 @@ function createFireballSprite(scene, x, y, direction) {
   if (sprite.setScale) sprite.setScale(FIREBALL_INITIAL_SCALE);
   if (sprite.setFlipX) sprite.setFlipX(direction < 0);
   if (sprite.setAngle)
-    sprite.setAngle(direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG);
+    sprite.setAngle(
+      direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG
+    );
 
   // Ensure animated fireball plays if atlas frames are available
   if (key === "wizard-fireball" && scene.textures.exists("wizard-fireball")) {
@@ -269,7 +271,9 @@ export function performWizardFireball(instance) {
       sprite.y = currentOrigin.y;
       if (sprite.setFlipX) sprite.setFlipX(direction < 0);
       if (sprite.setAngle)
-        sprite.setAngle(direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG);
+        sprite.setAngle(
+          direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG
+        );
       launchTimer -= dt;
       if (launchTimer > 0) return;
       launched = true;
@@ -366,7 +370,9 @@ export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
 
   const sprite = createFireballSprite(scene, start.x, start.y, direction);
   if (sprite.setAngle)
-    sprite.setAngle(direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG);
+    sprite.setAngle(
+      direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG
+    );
   scene.tweens.add({
     targets: sprite,
     scale: FIREBALL_ACTIVE_SCALE,
