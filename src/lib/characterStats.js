@@ -9,7 +9,7 @@ export const characterStats = {
   ninja: {
     baseHealth: 7000,
     attackDescription: "Unleashes a shuriken that boomerangs back.",
-    baseDamage: 2000,
+    baseDamage: 1500,
     ammoCooldownMs: 200,
     ammoReloadMs: 1000,
     ammoCapacity: 1,
@@ -85,7 +85,7 @@ export const characterStats = {
     specialDescription: "Unleashes a staff nova that expands outward.",
     specialBaseDamage: 2400,
     specialChargeHits: 3,
-    spriteScale: 0.94,
+    spriteScale: 0.92,
     body: {
       widthShrink: 190,
       heightShrink: 110,

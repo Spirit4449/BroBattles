@@ -10,6 +10,7 @@ const FIREBALL_GLOW_RADIUS_MULT = 1.35;
 const FIREBALL_BOB_AMPLITUDE = 5;
 const FIREBALL_VERTICAL_OFFSET = 0.12; // fraction of height to lift from feet
 const FIREBALL_CAST_DELAY_MS = 300; // pre-launch delay
+const FIREBALL_FLIP_LOCK_MS = 500; // how long flip is locked (cast delay + 100ms)
 const FIREBALL_BOB_TWEEN_MS = 220; // remote bob tween duration
 const FIREBALL_FORWARD_OFFSET = 0.23; // multiplier applied to sprite width for spawn X offset
 const FIREBALL_BOB_FREQ_MS = 120; // divisor for owner bob sine wave (larger = slower)
@@ -91,7 +92,6 @@ function createFireballSprite(scene, x, y, direction) {
     : scene.add.circle(x, y, FIREBALL_VISUAL_RADIUS, 0xff8b3d, 0.9);
   sprite.setDepth(FIREBALL_DEPTH);
   if (sprite.setScale) sprite.setScale(FIREBALL_INITIAL_SCALE);
-  if (sprite.setFlipX) sprite.setFlipX(direction < 0);
   if (sprite.setAngle)
     sprite.setAngle(
       direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG
@@ -197,6 +197,11 @@ export function performWizardFireball(instance) {
   let direction = p.flipX ? -1 : 1;
   let travelDirection = direction;
   const attackId = makeId();
+  
+  // Lock the player's flip state during cast
+  const originalFlipX = p.flipX;
+  p._lockFlip = true;
+  p._lockedFlipX = originalFlipX;
 
   const computeOrigin = (dir = direction) => ({
     x: p.x + dir * ((p.displayWidth || 80) * FIREBALL_FORWARD_OFFSET),
@@ -243,6 +248,7 @@ export function performWizardFireball(instance) {
   let traveled = 0;
   let travelElapsed = 0;
   let launchTimer = FIREBALL_CAST_DELAY_MS;
+  let flipLockTimer = FIREBALL_FLIP_LOCK_MS;
   let launched = launchTimer <= 0;
   let alive = true;
 
@@ -259,17 +265,31 @@ export function performWizardFireball(instance) {
     debugFollower?.destroy();
     spawnImpact(scene, hitPosition?.x ?? sprite.x, hitPosition?.y ?? sprite.y);
     sprite.destroy();
+    // Unlock the player's flip after attack completes
+    if (p) {
+      p._lockFlip = false;
+      p._lockedFlipX = undefined;
+    }
   };
 
   const update = () => {
     if (!alive || !sprite.active) return;
     const dt = scene.game.loop.delta || 16;
+    
+    // Handle flip lock timer independently
+    if (flipLockTimer > 0) {
+      flipLockTimer -= dt;
+      if (flipLockTimer <= 0 && p) {
+        p._lockFlip = false;
+        p._lockedFlipX = undefined;
+      }
+    }
+    
     if (!launched) {
-      direction = p.flipX ? -1 : 1;
+      // Don't update direction - keep it locked to original
       currentOrigin = computeOrigin(direction);
       sprite.x = currentOrigin.x;
       sprite.y = currentOrigin.y;
-      if (sprite.setFlipX) sprite.setFlipX(direction < 0);
       if (sprite.setAngle)
         sprite.setAngle(
           direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG
