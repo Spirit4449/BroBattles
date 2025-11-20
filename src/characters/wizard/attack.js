@@ -197,7 +197,7 @@ export function performWizardFireball(instance) {
   let direction = p.flipX ? -1 : 1;
   let travelDirection = direction;
   const attackId = makeId();
-  
+
   // Lock the player's flip state during cast
   const originalFlipX = p.flipX;
   p._lockFlip = true;
@@ -275,7 +275,7 @@ export function performWizardFireball(instance) {
   const update = () => {
     if (!alive || !sprite.active) return;
     const dt = scene.game.loop.delta || 16;
-    
+
     // Handle flip lock timer independently
     if (flipLockTimer > 0) {
       flipLockTimer -= dt;
@@ -284,7 +284,7 @@ export function performWizardFireball(instance) {
         p._lockedFlipX = undefined;
       }
     }
-    
+
     if (!launched) {
       // Don't update direction - keep it locked to original
       currentOrigin = computeOrigin(direction);
