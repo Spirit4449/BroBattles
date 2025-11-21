@@ -7,6 +7,8 @@ import {
   getStats,
   getEffectsClass,
 } from "./characters";
+import { performSpecial } from "./characters/special";
+import { player } from "./player";
 import socket from "./socket";
 import { spawnHealthMarker } from "./effects";
 
@@ -32,6 +34,8 @@ export default class OpPlayer {
     this.playersInTeam = playersInTeam;
     this.opMaxHealth = 8000;
     this.opCurrentHealth = 8000;
+    this.opSuperCharge = 0;
+    this.opMaxSuperCharge = 100;
     this.opHealthBarWidth = 60;
     this.movementTween = null; // Store reference to current movement tween
     this.effects = null; // per-opponent effects (e.g., Draven fire)
@@ -42,6 +46,7 @@ export default class OpPlayer {
     // Creates the sprite
     const textureKey = getTextureKey(this.character);
     this.opponent = this.scene.physics.add.sprite(-100, -100, textureKey);
+    this.opponent.username = this.username; // Attach username for collision detection
     // Avoid first-frame pop: hide until frame/body configured and spawn applied
     this.opponent.setVisible(false);
     const stats = getStats(this.character);
@@ -107,6 +112,8 @@ export default class OpPlayer {
     });
 
     this.opHealthBar = this.scene.add.graphics();
+    this.opSuperBarBack = this.scene.add.graphics();
+    this.opSuperBar = this.scene.add.graphics();
 
     // Initially updates health bar and name positioning
     this.updateHealthBar();
@@ -164,6 +171,32 @@ export default class OpPlayer {
       }
     };
     socket.on("health-update", this.healthUpdateListener);
+
+    // Listen for super updates
+    this.superUpdateListener = (data) => {
+      if (data.username === this.username) {
+        this.opSuperCharge = data.charge;
+        this.opMaxSuperCharge = data.maxCharge;
+        this.updateHealthBar();
+      }
+    };
+    socket.on("super-update", this.superUpdateListener);
+
+    this.specialListener = (data) => {
+      if (data.username === this.username) {
+        performSpecial(
+          data.character,
+          this.scene,
+          this.opponent,
+          this.playersInTeam,
+          [player], // Target local player
+          this.username,
+          null,
+          false // isOwner
+        );
+      }
+    };
+    socket.on("player:special", this.specialListener);
   }
 
   _onSceneUpdate() {
@@ -257,6 +290,55 @@ export default class OpPlayer {
       y - 8
     );
     this.opHealthText.setDepth(2);
+
+    this.drawSuperBar(healthBarX, y + 18);
+  }
+
+  drawSuperBar(x, y) {
+    if (!this.opSuperBar || !this.opSuperBarBack) return;
+    this.opSuperBarBack.clear();
+    this.opSuperBar.clear();
+
+    const width = 60;
+    const height = 4;
+
+    // Background
+    this.opSuperBarBack.fillStyle(0x222222, 0.65);
+    this.opSuperBarBack.fillRect(x, y, width, height);
+
+    // Fill
+    const percent =
+      this.opMaxSuperCharge > 0
+        ? Phaser.Math.Clamp(this.opSuperCharge / this.opMaxSuperCharge, 0, 1)
+        : 0;
+    if (percent > 0) {
+      const isFull = percent >= 1;
+
+      if (isFull) {
+        const time = this.scene.time.now;
+        // Cool pulse effect: Gold glow breathing
+        const glowAlpha = 0.3 + 0.3 * Math.sin(time / 200);
+
+        // Outer glow
+        this.opSuperBar.fillStyle(0xffd700, glowAlpha);
+        this.opSuperBar.fillRect(x - 2, y - 2, width + 4, height + 4);
+
+        // Main bar solid gold
+        this.opSuperBar.fillStyle(0xffd700, 1);
+        this.opSuperBar.fillRect(x, y, width, height);
+
+        // White rim pulse
+        this.opSuperBar.lineStyle(1, 0xffffff, glowAlpha + 0.2);
+        this.opSuperBar.strokeRect(x, y, width, height);
+      } else {
+        // Charging yellow
+        this.opSuperBar.fillStyle(0xffff00, 1);
+        this.opSuperBar.fillRect(x, y, width * percent, height);
+      }
+    }
+
+    this.opSuperBar.setDepth(2);
+    this.opSuperBarBack.setDepth(1);
   }
 
   // Clean up method to stop any active tweens and remove sprites
@@ -264,6 +346,14 @@ export default class OpPlayer {
     if (this.healthUpdateListener) {
       socket.off("health-update", this.healthUpdateListener);
       this.healthUpdateListener = null;
+    }
+    if (this.superUpdateListener) {
+      socket.off("super-update", this.superUpdateListener);
+      this.superUpdateListener = null;
+    }
+    if (this.specialListener) {
+      socket.off("player:special", this.specialListener);
+      this.specialListener = null;
     }
     if (this.movementTween) {
       this.movementTween.remove();
@@ -284,6 +374,12 @@ export default class OpPlayer {
     }
     if (this.opHealthBar) {
       this.opHealthBar.destroy();
+    }
+    if (this.opSuperBar) {
+      this.opSuperBar.destroy();
+    }
+    if (this.opSuperBarBack) {
+      this.opSuperBarBack.destroy();
     }
   }
 }

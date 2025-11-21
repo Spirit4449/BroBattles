@@ -16,6 +16,7 @@ export const characterStats = {
     specialDescription: "Dashes forward, releasing a flurry of shurikens.",
     specialBaseDamage: 2000,
     specialChargeHits: 3,
+    specialChargeDamage: 4500,
     spriteScale: 0.9,
     body: {
       widthShrink: 35,
@@ -38,6 +39,7 @@ export const characterStats = {
     specialDescription: "Slams the ground to send a shockwave forward.",
     specialBaseDamage: 2800,
     specialChargeHits: 4,
+    specialChargeDamage: 4500,
     spriteScale: 0.7,
     body: {
       widthShrink: 30,
@@ -61,6 +63,7 @@ export const characterStats = {
     specialDescription: "Unleashes a staff nova that expands outward.",
     specialBaseDamage: 2400,
     specialChargeHits: 3,
+    specialChargeDamage: 5000,
     spriteScale: 1.2,
     body: {
       widthShrink: 220,
@@ -85,6 +88,7 @@ export const characterStats = {
     specialDescription: "Unleashes a staff nova that expands outward.",
     specialBaseDamage: 2400,
     specialChargeHits: 3,
+    specialChargeDamage: 6000,
     spriteScale: 0.92,
     body: {
       widthShrink: 190,

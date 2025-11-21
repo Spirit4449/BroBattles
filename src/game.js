@@ -10,7 +10,13 @@ import {
   mangroveMeadowObjects,
   positionMangroveSpawn,
 } from "./maps/mangroveMeadow";
-import { createPlayer, player, handlePlayerMovement, dead } from "./player";
+import {
+  createPlayer,
+  player,
+  handlePlayerMovement,
+  dead,
+  setSuperStats,
+} from "./player";
 import {
   preloadAll,
   handleRemoteAttack,
@@ -890,6 +896,13 @@ class GameScene extends Phaser.Scene {
       String(gameData.map),
       opponentPlayers
     );
+
+    // Set initial super stats
+    const me = (gameData.players || []).find((p) => p.name === username);
+    if (me) {
+      setSuperStats(me.superCharge || 0, me.maxSuperCharge || 100);
+    }
+
     // Safety: ensure we never keep an OpPlayer entry for myself
     try {
       if (username) {
@@ -1104,8 +1117,14 @@ class GameScene extends Phaser.Scene {
       if (playerData.stats && typeof playerData.stats.health === "number") {
         opPlayer.opMaxHealth = playerData.stats.health;
         opPlayer.opCurrentHealth = playerData.stats.health;
-        if (opPlayer.updateHealthBar) opPlayer.updateHealthBar();
       }
+      if (typeof playerData.superCharge === "number") {
+        opPlayer.opSuperCharge = playerData.superCharge;
+      }
+      if (typeof playerData.maxSuperCharge === "number") {
+        opPlayer.opMaxSuperCharge = playerData.maxSuperCharge;
+      }
+      if (opPlayer.updateHealthBar) opPlayer.updateHealthBar();
 
       playerContainer[playerData.name] = opPlayer;
 

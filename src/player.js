@@ -22,6 +22,7 @@ import {
   getStats,
   getEffectsClass,
 } from "./characters";
+import { performSpecial } from "./characters/special";
 import { spawnDust, spawnHealthMarker } from "./effects";
 // Globals
 let player;
@@ -56,6 +57,12 @@ let ammoCapacity = 1; // number of segments
 let ammoCharges = 1; // current charges available
 let nextFireTime = 0; // timestamp (ms) when we can fire again
 let reloadTimerMs = 0; // accumulates while reloading toward ammoReloadMs
+
+let superBar;
+let superBarBack;
+let superCharge = 0;
+let maxSuperCharge = 100;
+let keyI;
 
 let playerName;
 
@@ -116,12 +123,18 @@ export function createPlayer(
     keySpace = scene.input.keyboard.addKey("SPACE");
     keyJ = scene.input.keyboard.addKey("J");
   }
+  try {
+    keyI = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.I);
+  } catch (e) {
+    keyI = scene.input.keyboard.addKey("I");
+  }
 
   // Animations are registered globally in game.js via setupAll(scene)
 
   // Create player sprite!! Use character's texture key
   const textureKey = getTextureKey(character);
   player = scene.physics.add.sprite(-100, -100, textureKey);
+  player.username = username; // Attach username for collision detection
   player.setCollideWorldBounds(true);
   player.anims.play(resolveAnimKey(scene, currentCharacter, "idle"), true); // Play idle animation
   // Hide until we've configured frame/body and spawn to avoid a mid-air first render
@@ -221,6 +234,8 @@ export function createPlayer(
   // Ammo bar background & fill (render order: background, fill)
   ammoBarBack = scene.add.graphics();
   ammoBar = scene.add.graphics();
+  superBarBack = scene.add.graphics();
+  superBar = scene.add.graphics();
 
   // Triangle to show which one is the user. Dissapears when the player moves
   indicatorTriangle = scene.add.graphics();
@@ -331,6 +346,51 @@ function updateHealthBar() {
 
   // Draw ammo bar underneath health (only for local player & when alive)
   drawAmmoBar(healthBarX, y + 11);
+  drawSuperBar(healthBarX, y + 18);
+}
+
+function drawSuperBar(x, y) {
+  if (!superBar || !superBarBack) return;
+  superBarBack.clear();
+  superBar.clear();
+
+  const width = 60;
+  const height = 4;
+
+  // Background
+  superBarBack.fillStyle(0x222222, 0.65);
+  superBarBack.fillRect(x, y, width, height);
+
+  // Fill
+  const percent = maxSuperCharge > 0 ? Phaser.Math.Clamp(superCharge / maxSuperCharge, 0, 1) : 0;
+  if (percent > 0) {
+    const isFull = percent >= 1;
+
+    if (isFull) {
+      const time = scene.time.now;
+      // Cool pulse effect: Gold glow breathing
+      const glowAlpha = 0.3 + 0.3 * Math.sin(time / 200);
+
+      // Outer glow
+      superBar.fillStyle(0xffd700, glowAlpha);
+      superBar.fillRect(x - 2, y - 2, width + 4, height + 4);
+
+      // Main bar solid gold
+      superBar.fillStyle(0xffd700, 1);
+      superBar.fillRect(x, y, width, height);
+
+      // White rim pulse
+      superBar.lineStyle(1, 0xffffff, glowAlpha + 0.2);
+      superBar.strokeRect(x, y, width, height);
+    } else {
+      // Charging yellow
+      superBar.fillStyle(0xffff00, 1);
+      superBar.fillRect(x, y, width * percent, height);
+    }
+  }
+
+  superBar.setDepth(2);
+  superBarBack.setDepth(1);
 }
 
 function drawAmmoBar(forcedX, forcedY) {
@@ -461,6 +521,12 @@ export function handlePlayerMovement(scene) {
         charCtrl.attack(dir);
       } else if (charCtrl && typeof charCtrl.handlePointerDown === "function") {
         charCtrl.handlePointerDown();
+      }
+    }
+    // Handle special on I
+    if (keyI && Phaser.Input.Keyboard.JustDown(keyI) && !dead) {
+      if (superCharge >= maxSuperCharge) {
+        socket.emit("game:special");
       }
     }
   } catch (_) {}
@@ -756,6 +822,12 @@ export function handlePlayerMovement(scene) {
   }
 }
 
+export function setSuperStats(charge, maxCharge) {
+  superCharge = charge;
+  maxSuperCharge = maxCharge;
+  updateHealthBar();
+}
+
 export { player, frame, currentHealth, setCurrentHealth, dead };
 
 // Listen for authoritative health updates from server
@@ -801,5 +873,32 @@ socket.on("health-update", (data) => {
       currentHealth = 0; // force exact 0
     }
     updateHealthBar(); // always refresh (covers death case where movement loop stops)
+  }
+});
+
+socket.on("super-update", (data) => {
+  if (data.username === username) {
+    superCharge = data.charge;
+    maxSuperCharge = data.maxCharge;
+    updateHealthBar();
+  }
+});
+
+socket.on("player:special", (data) => {
+  if (data.username === username) {
+    const targets = Object.values(opponentPlayersRef || {})
+      .map((op) => op.opponent)
+      .filter((s) => s && s.active);
+
+    performSpecial(
+      data.character,
+      scene,
+      player,
+      playersInTeam,
+      targets,
+      username,
+      gameId,
+      true // isOwner
+    );
   }
 });

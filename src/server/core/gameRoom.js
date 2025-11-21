@@ -88,7 +88,7 @@ class GameRoom {
         user.user_id,
         matchPlayer.char_class
       );
-      const { maxHealth, baseDamage, specialDamage } = this._computeStats(
+      const { maxHealth, baseDamage, specialDamage, specialChargeDamage } = this._computeStats(
         matchPlayer.char_class,
         level
       );
@@ -105,6 +105,8 @@ class GameRoom {
         y: 400,
         maxHealth,
         health: maxHealth,
+        superCharge: 0,
+        maxSuperCharge: specialChargeDamage,
         isAlive: true,
         lastInput: Date.now(),
 
@@ -191,6 +193,30 @@ class GameRoom {
       this.handlePlayerAction(socket.id, actionData);
     });
 
+    // Handle special attack request
+    socket.on("game:special", () => {
+      const p = this.players.get(socket.id);
+      if (!p || !p.isAlive) return;
+
+      if (p.superCharge >= p.maxSuperCharge) {
+        p.superCharge = 0;
+        // Broadcast reset
+        this.io.to(`game:${this.matchId}`).emit("super-update", {
+          username: p.name,
+          charge: 0,
+          maxCharge: p.maxSuperCharge,
+        });
+
+        // Broadcast special activation
+        this.io.to(`game:${this.matchId}`).emit("player:special", {
+          username: p.name,
+          character: p.char_class,
+          origin: { x: p.x, y: p.y },
+          flip: !!p.flip,
+        });
+      }
+    });
+
     // Owner-side hit proposal (server authoritative application)
     socket.on("hit", (payload) => {
       this.handleHit(socket.id, payload);
@@ -272,6 +298,8 @@ class GameRoom {
         x: p.x,
         y: p.y,
         health: p.health,
+        superCharge: p.superCharge,
+        maxSuperCharge: p.maxSuperCharge,
         stats: { health: p.maxHealth },
         level: p.level,
         isAlive: p.isAlive,
@@ -740,6 +768,19 @@ class GameRoom {
       target.lastCombatAt = now;
       if (appliedDamage > 0) {
         this._recordCombatStat(attacker, { damage: appliedDamage });
+
+        // Update super charge
+        if (!isSelf && attacker.maxSuperCharge > 0) {
+          attacker.superCharge = Math.min(
+            attacker.maxSuperCharge,
+            (attacker.superCharge || 0) + appliedDamage
+          );
+          this.io.to(`game:${this.matchId}`).emit("super-update", {
+            username: attacker.name,
+            charge: attacker.superCharge,
+            maxCharge: attacker.maxSuperCharge,
+          });
+        }
       }
 
       if (target.health !== old) {
@@ -803,6 +844,7 @@ class GameRoom {
         getHealth,
         getDamage,
         getSpecialDamage,
+        getCharacterStats,
       } = require("../../lib/characterStats.js");
       const maxHealth = Math.max(1, Number(getHealth(charClass, level)) || 1);
       const baseDamage = Math.max(0, Number(getDamage(charClass, level)) || 0);
@@ -810,13 +852,15 @@ class GameRoom {
         0,
         Number(getSpecialDamage(charClass, level)) || 0
       );
-      return { maxHealth, baseDamage, specialDamage };
+      const stats = getCharacterStats(charClass) || {};
+      const specialChargeDamage = stats.specialChargeDamage || 3000;
+      return { maxHealth, baseDamage, specialDamage, specialChargeDamage };
     } catch (e) {
       console.warn(
         `[GameRoom ${this.matchId}] computeStats failed:`,
         e?.message
       );
-      return { maxHealth: 100, baseDamage: 100, specialDamage: 200 };
+      return { maxHealth: 100, baseDamage: 100, specialDamage: 200, specialChargeDamage: 3000 };
     }
   }
 
