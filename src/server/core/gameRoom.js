@@ -88,10 +88,8 @@ class GameRoom {
         user.user_id,
         matchPlayer.char_class
       );
-      const { maxHealth, baseDamage, specialDamage, specialChargeDamage } = this._computeStats(
-        matchPlayer.char_class,
-        level
-      );
+      const { maxHealth, baseDamage, specialDamage, specialChargeDamage } =
+        this._computeStats(matchPlayer.char_class, level);
 
       const playerData = {
         socketId: socket.id,
@@ -860,7 +858,12 @@ class GameRoom {
         `[GameRoom ${this.matchId}] computeStats failed:`,
         e?.message
       );
-      return { maxHealth: 100, baseDamage: 100, specialDamage: 200, specialChargeDamage: 3000 };
+      return {
+        maxHealth: 100,
+        baseDamage: 100,
+        specialDamage: 200,
+        specialChargeDamage: 3000,
+      };
     }
   }
 

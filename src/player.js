@@ -362,7 +362,10 @@ function drawSuperBar(x, y) {
   superBarBack.fillRect(x, y, width, height);
 
   // Fill
-  const percent = maxSuperCharge > 0 ? Phaser.Math.Clamp(superCharge / maxSuperCharge, 0, 1) : 0;
+  const percent =
+    maxSuperCharge > 0
+      ? Phaser.Math.Clamp(superCharge / maxSuperCharge, 0, 1)
+      : 0;
   if (percent > 0) {
     const isFull = percent >= 1;
 
