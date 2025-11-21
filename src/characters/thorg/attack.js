@@ -44,7 +44,7 @@ export function performThorgFallAttack(instance) {
     if (scene.sound) {
       // Play both legacy thorg sound (if present) and the new release swoosh
       try {
-        scene.sound.play("thorg-throw", { volume: 0.45 });
+        scene.sound.play("thorg-throw", { volume: 0.6 });
       } catch (_) {}
       try {
         scene.sound.play("swoosh", { volume: 0.5 });

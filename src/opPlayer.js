@@ -113,7 +113,7 @@ export default class OpPlayer {
     this.updateUIPosition();
 
     // Listen for health updates for this opponent
-    socket.on("health-update", (data) => {
+    this.healthUpdateListener = (data) => {
       // data: { username, health, gameId }
       if (data.username === this.username) {
         const prevHealth = this.opCurrentHealth;
@@ -136,6 +136,18 @@ export default class OpPlayer {
           spawnHealthMarker(this.scene, this.opponent.x, bodyTop - 18, delta, {
             depth: 11,
           });
+          // Play damage sound for everyone (lower volume for remote players)
+          if (delta < 0) {
+            try {
+              // Use character-specific hit sound if available, else generic
+              const charHitKey = `${this.character}-hit`;
+              const key = this.scene.sound.get(charHitKey)
+                ? charHitKey
+                : "sfx-damage";
+              // If this is NOT the local player (which it isn't, since this is OpPlayer), play at lower volume
+              this.scene.sound.play(key, { volume: 0.4 });
+            } catch (_) {}
+          }
         }
         if (this.opCurrentHealth <= 0) {
           this.opCurrentHealth = 0;
@@ -150,7 +162,8 @@ export default class OpPlayer {
           this.updateHealthBar();
         }
       }
-    });
+    };
+    socket.on("health-update", this.healthUpdateListener);
   }
 
   _onSceneUpdate() {
@@ -190,6 +203,7 @@ export default class OpPlayer {
   }
 
   updateHealthBar(dead = false, healthBarY) {
+    if (!this.opHealthText || !this.opHealthText.active) return;
     if (this.opCurrentHealth < 0) {
       // Prevents health from going negative
       this.opCurrentHealth = 0;
@@ -247,6 +261,10 @@ export default class OpPlayer {
 
   // Clean up method to stop any active tweens and remove sprites
   destroy() {
+    if (this.healthUpdateListener) {
+      socket.off("health-update", this.healthUpdateListener);
+      this.healthUpdateListener = null;
+    }
     if (this.movementTween) {
       this.movementTween.remove();
       this.movementTween = null;

@@ -23,7 +23,7 @@ class Thorg {
 
     scene.load.audio("thorg-throw", `${staticPath}/${NAME}/swoosh.mp3`);
     if (!scene.sound.get("thorg-hit")) {
-      scene.load.audio("thorg-hit", `${staticPath}/hit.mp3`);
+      scene.load.audio("thorg-hit", `${staticPath}/${NAME}/hit.mp3`);
     }
   }
 
@@ -47,6 +47,10 @@ class Thorg {
     }
     if (data.type === `${NAME}-fall`) {
       Thorg._spawnFallEffect(scene, ownerSprite, data.direction);
+      // Play attack sound for remote players (lower volume)
+      try {
+        scene.sound?.play("thorg-throw", { volume: 0.25 });
+      } catch (_) {}
       return true;
     }
     return false;

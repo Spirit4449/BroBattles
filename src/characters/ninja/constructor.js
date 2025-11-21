@@ -46,7 +46,7 @@ class Ninja {
       // Play remote throw SFX for other players
       try {
         const sfx = scene.sound.add("shurikenThrow");
-        sfx.setVolume(1);
+        sfx.setVolume(0.5); // Lower volume for remote players
         sfx.setRate(1.3);
         sfx.play();
       } catch (_) {}

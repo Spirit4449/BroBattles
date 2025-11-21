@@ -154,21 +154,10 @@ function spawnFireballTrail(scene, sprite) {
   };
 }
 
-function spawnImpact(scene, x, y) {
+function spawnImpact(scene, x, y, playSound = true) {
   try {
-    if (scene.add?.particles) {
-      const emitter = scene.add.particles(0xffe29f, {
-        x,
-        y,
-        speed: 90,
-        lifespan: 280,
-        quantity: 6,
-        scale: { start: 0.8, end: 0 },
-        alpha: { start: 0.8, end: 0 },
-        blendMode: "ADD",
-      });
-      scene.time.delayedCall(320, () => emitter.destroy());
-    } else if (scene.add?.circle) {
+    // Use simple circle flash instead of particles to avoid texture issues
+    if (scene.add?.circle) {
       const flash = scene.add.circle(
         x,
         y,
@@ -185,9 +174,12 @@ function spawnImpact(scene, x, y) {
         onComplete: () => flash.destroy(),
       });
     }
-    const played = scene.sound?.play("wizard-impact", { volume: 0.45 });
-    if (!played) {
-      scene.sound?.play("damage", { volume: 0.4 });
+    // Play impact sound (audible to everyone if called from remote visual too)
+    if (playSound) {
+      const played = scene.sound?.play("wizard-impact", { volume: 0.45 });
+      if (!played) {
+        scene.sound?.play("sfx-damage", { volume: 0.4 });
+      }
     }
   } catch (_) {}
 }
@@ -257,13 +249,18 @@ export function performWizardFireball(instance) {
     Math.round(instance.constructor?.getStats?.()?.baseDamage || 0)
   );
 
-  const cleanup = (hitPosition) => {
+  const cleanup = (hitPosition, playSound = true) => {
     if (!alive) return;
     alive = false;
     scene.events.off("update", update);
     if (trail) trail.destroy();
     debugFollower?.destroy();
-    spawnImpact(scene, hitPosition?.x ?? sprite.x, hitPosition?.y ?? sprite.y);
+    spawnImpact(
+      scene,
+      hitPosition?.x ?? sprite.x,
+      hitPosition?.y ?? sprite.y,
+      playSound
+    );
     sprite.destroy();
     // Unlock the player's flip after attack completes
     if (p) {
@@ -351,11 +348,14 @@ export function performWizardFireball(instance) {
           damage: damageValue,
           gameId,
         });
+        // Play hit sound and visual immediately on impact
+        spawnImpact(scene, sprite.x, sprite.y, true);
+        // Continue flight (piercing)
       }
     }
 
     if (traveled >= FIREBALL_RANGE || travelElapsed >= lifetimeMs) {
-      cleanup();
+      cleanup(null, false);
     }
   };
 
@@ -388,6 +388,11 @@ export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
   const startup = payload?.startup ?? FIREBALL_CAST_DELAY_MS;
   const bob = payload?.bob ?? FIREBALL_BOB_AMPLITUDE;
 
+  // Play launch sound for remote players (lower volume)
+  try {
+    scene.sound?.play("wizard-fireball", { volume: 0.3 });
+  } catch (_) {}
+
   const sprite = createFireballSprite(scene, start.x, start.y, direction);
   if (sprite.setAngle)
     sprite.setAngle(
@@ -412,7 +417,7 @@ export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
     duration: travelDuration,
     delay: startup,
     onComplete: () => {
-      spawnImpact(scene, sprite.x, sprite.y);
+      spawnImpact(scene, sprite.x, sprite.y, false);
       sprite.destroy();
       if (trail) trail.destroy();
       debugFollower?.destroy();

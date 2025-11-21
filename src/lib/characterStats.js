@@ -95,8 +95,7 @@ export const characterStats = {
       flipOffset: 0,
     },
     description: "A dark sorcerer who manipulates shadows.",
-    unlockPrice: 2,
-    free: true,
+    unlockPrice: 200,
   },
 };
 

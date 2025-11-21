@@ -26,9 +26,9 @@ class Wizard {
       `${staticPath}/${NAME}/fireball.webp`,
       `${staticPath}/${NAME}/fireball.json`
     );
-    scene.load.audio("fireball-sound", `${staticPath}/${NAME}/fireball.mp3`);
+    scene.load.audio("wizard-fireball", `${staticPath}/${NAME}/fireball.mp3`);
     if (!scene.cache?.audio?.exists("wizard-impact")) {
-      scene.load.audio("wizard-impact", `${staticPath}/damage.mp3`);
+      scene.load.audio("wizard-impact", `${staticPath}/${NAME}/hit.mp3`);
     }
   }
 
