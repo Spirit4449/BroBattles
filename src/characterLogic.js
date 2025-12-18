@@ -8,6 +8,7 @@ import {
   upgradePrice,
 } from "./lib/characterStats.js";
 import socket from "./socket.js";
+import { playSound } from "./lib/uiSounds.js";
 
 // Keep a reference to user data for confirmations and currency display
 let _userDataRef = null;
@@ -35,6 +36,7 @@ export function initializeCharacterSelect(userData) {
   closeButton.className = "close-popup";
   closeButton.innerHTML = "×";
   closeButton.onclick = () => closeCharacterSelect();
+  closeButton.setAttribute("data-sound", "cancel");
 
   const charactersGrid = document.createElement("div");
   charactersGrid.className = "characters-grid";
@@ -248,6 +250,7 @@ function createCharacterCard(character, userData) {
     }
     upgradeBtn.addEventListener("click", (e) => {
       e.stopPropagation();
+      playSound("cursor4", 0.2);
       showConfirmDialog({ type: "upgrade", character, level, price }, () =>
         applyUpgrade(character, level)
       );
@@ -281,6 +284,7 @@ export function openCharacterSelect() {
   const overlay = document.querySelector(".character-select-overlay");
   overlay.style.display = "flex";
 }
+playSound("click", 0.4);
 
 function selectCharacter(character) {
   try {
@@ -333,6 +337,8 @@ function selectCharacter(character) {
   } catch (e) {
     console.warn("selectCharacter failed:", e?.message);
   } finally {
+    playSound("cursor4", 0.4);
+
     const overlay = document.querySelector(".character-select-overlay");
     if (overlay) overlay.style.display = "none";
   }
@@ -436,7 +442,11 @@ function showConfirmDialog(opts, onConfirm) {
     isUpgrade ? "/assets/coin.webp" : "/assets/gem.webp"
   }" alt=""/> <span>${price}</span>`;
 
-  cancelBtn.onclick = () => backdrop.remove();
+  cancelBtn.onclick = () => {
+          playSound("cursor4", 0.2);
+
+    backdrop.remove();
+  };
   // Click-out to close confirm
   backdrop.addEventListener("click", (e) => {
     if (e.target === backdrop) backdrop.remove();
@@ -444,6 +454,8 @@ function showConfirmDialog(opts, onConfirm) {
   });
   okBtn.onclick = () => {
     backdrop.remove();
+          playSound("cursor4", 0.2);
+    
     onConfirm && onConfirm();
   };
 

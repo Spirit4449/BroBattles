@@ -73,18 +73,18 @@
 
     <div id="bottom-bar">
       <div class="dropdown-group">
-        <select id="mode" name="mode" class="dropdown">
-          <option value="1">1v1</option>
+        <select id="mode" name="mode" class="dropdown" data-sound="cursor4">
+          <option value="1" >1v1</option>
           <option value="2">2v2</option>
           <option value="3">3v3</option>
         </select>
-        <select id="map" name="map" class="dropdown">
+        <select id="map" name="map" class="dropdown" data-sound="cursor4">
           <option value="1">Lushy Peaks</option>
           <option value="2">Mangrove Meadow</option>
         </select>
       </div>
 
-      <input type="submit" id="ready" value="Ready" />
+      <input type="submit" id="ready" value="Ready" data-sound="ready" />
     </div>
 
     <!-- Matchmaking Overlay (static element) -->
@@ -113,7 +113,14 @@
           <div id="mm-players" class="mm-players-grid" aria-live="polite"></div>
         </div>
         <div class="mm-actions">
-          <button id="mm-cancel" class="mm-btn" type="button">Cancel</button>
+          <button
+            id="mm-cancel"
+            class="mm-btn"
+            type="button"
+            data-sound="cancel"
+          >
+            Cancel
+          </button>
         </div>
       </div>
     </div>

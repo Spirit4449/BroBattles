@@ -136,6 +136,7 @@ export function socketInit() {
             if (!__partyRosterNames.has(name) && name !== currentUserName) {
               sonner(`${name} joined your party`, null, "OK", null, {
                 duration: 2000,
+                sound: "notification"
               });
             }
           }
@@ -144,6 +145,7 @@ export function socketInit() {
             if (!newNames.has(old) && old !== currentUserName) {
               sonner(`${old} left your party`, null, "OK", null, {
                 duration: 2000,
+                sound: "notification"
               });
             }
           }
@@ -298,7 +300,7 @@ export function socketInit() {
     try {
       hideMatchmakingOverlay();
       if (err?.message) {
-        sonner("Queue error", err.message, "error");
+        sonner("Queue error", err.message, "error", {sound: "notification"});
       }
       // Reset local ready state so next click attempts to join again
       const selfSlot = Array.from(
@@ -320,6 +322,7 @@ export function socketInit() {
     if (data?.reason && overlay && !overlay.classList.contains("hidden")) {
       sonner("Cancelled matchmaking", data.reason, null, null, {
         duration: 3000,
+        sound: "notification"
       });
     }
     hideMatchmakingOverlay();

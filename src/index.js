@@ -14,6 +14,7 @@ import {
   initializeCharacterSelect,
   openCharacterSelect,
 } from "./characterLogic.js";
+import { initUISounds, playSound } from "./lib/uiSounds.js";
 import "./styles/characterSelect.css";
 import "./styles/index.css";
 import "./styles/sonner.css";
@@ -114,6 +115,7 @@ async function bootstrapPartyData(partyId) {
       });
     sonner("Joined party", undefined, undefined, undefined, {
       duration: 1500,
+      sound: "notification",
     });
   } catch (error) {
     console.error("Error:", error);
@@ -123,6 +125,9 @@ async function bootstrapPartyData(partyId) {
 document.addEventListener("DOMContentLoaded", async () => {
   await statusPromise;
   if (!userData) return;
+
+  // Initialize UI sounds
+  initUISounds();
 
   signUpOut(guest);
 
@@ -154,6 +159,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const slot = e.target.closest && e.target.closest(".character-slot");
       if (!slot) return;
       if (slot.dataset.isCurrentUser === "true") {
+        playSound("cursor5", 0.4);
         openCharacterSelect();
       }
     });
@@ -173,6 +179,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     createPartyButton.style.background =
       "linear-gradient(135deg, #d63939, #cf4545)";
     createPartyButton.addEventListener("click", leaveParty);
+    createPartyButton.setAttribute("data-sound", "cancel2");
 
     // Ensure current Invite badges are visible and clickable in party
     inviteStatus.forEach((status) => {

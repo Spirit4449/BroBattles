@@ -1,3 +1,4 @@
+import { playSound } from "./uiSounds.js";
 // Exported function: sonner(header, message, buttonText = "OK", onClick?, options?)
 // options: { duration?: number, containerId?: string }
 export function sonner(
@@ -83,6 +84,14 @@ export function sonner(
 
   // Auto-close
   timer = setTimeout(close, duration);
+
+  // Optional notification sound
+  if (options.sound) {
+    const volume = Number.isFinite(Number(options.soundVolume))
+      ? Number(options.soundVolume)
+      : 0.6;
+    playSound(options.sound, volume);
+  }
 
   // Click outside to dismiss (optional—comment out if undesired)
   // el.addEventListener("click", (e) => {
