@@ -360,6 +360,7 @@ function drawSuperBar(x, y) {
   // Background
   superBarBack.fillStyle(0x222222, 0.65);
   superBarBack.fillRect(x, y, width, height);
+  superBarBack.strokeRoundedRect(x, y, width, height, 3);
 
   // Fill
   const percent =

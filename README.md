@@ -58,6 +58,7 @@ The server will auto-generate a `.cookie-secret` file on first run. You can opti
 - `NODE_ENV` - Environment mode (development/production)
 - `SECURE_COOKIES` - Set to `true` for HTTPS (default: false)
 - `COOKIE_SECRET` - Custom cookie secret (auto-generated if not set)
+- `ADMIN_USERS` - All the users who can access admin panel on /admin
 
 ### 5. Build and Run
 

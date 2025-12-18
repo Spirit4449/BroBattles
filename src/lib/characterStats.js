@@ -86,8 +86,8 @@ export const characterStats = {
     ammoReloadMs: 3000,
     ammoCapacity: 3,
     specialDescription: "Unleashes a staff nova that expands outward.",
-    specialBaseDamage: 2400,
-    specialChargeHits: 3,
+    specialBaseDamage: 8000,
+    specialChargeHits: 30,
     specialChargeDamage: 6000,
     spriteScale: 0.92,
     body: {

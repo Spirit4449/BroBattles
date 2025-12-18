@@ -1,5 +1,5 @@
 {
-  "maintenanceMode": false,
+  "maintenanceMode": true,
   "announcements": "Help me",
   "rewardMultipliers": {
     "coins": 1,

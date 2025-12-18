@@ -93,7 +93,7 @@ export default class OpPlayer {
       : this.opponent.y - this.opponent.height / 2;
     this.opPlayerName = this.scene.add.text(
       this.opponent.x,
-      bodyTop - 36,
+      bodyTop - 44,
       this.username
     );
     this.opPlayerName.setStyle({
@@ -230,7 +230,7 @@ export default class OpPlayer {
       ? this.opponent.body.y
       : this.opponent.y - this.opponent.height / 2;
     if (this.opPlayerName) {
-      this.opPlayerName.setPosition(this.opponent.x, bodyTop - 36);
+      this.opPlayerName.setPosition(this.opponent.x, bodyTop - 44);
     }
     this.updateHealthBar(false);
   }
@@ -260,7 +260,7 @@ export default class OpPlayer {
     const y =
       typeof healthBarY === "number" && !Number.isNaN(healthBarY)
         ? healthBarY
-        : bodyTop - 15;
+        : bodyTop - 21;
     if (dead === false) {
       this.opHealthText.setText(`${this.opCurrentHealth}`);
     } else {
@@ -291,7 +291,7 @@ export default class OpPlayer {
     );
     this.opHealthText.setDepth(2);
 
-    this.drawSuperBar(healthBarX, y + 18);
+    this.drawSuperBar(healthBarX, y + 11);
   }
 
   drawSuperBar(x, y) {
