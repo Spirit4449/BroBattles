@@ -955,8 +955,7 @@ function setupGameEventListeners() {
               op.opponent,
               pd.team,
               idx,
-              (gameData.players || []).filter((p) => p.team === pd.team)
-                .length,
+              (gameData.players || []).filter((p) => p.team === pd.team).length,
             );
           } else if (String(gameData.map) === "2") {
             positionMangroveSpawn(gameScene, op.opponent, pd.team, idx);
