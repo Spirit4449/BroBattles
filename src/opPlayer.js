@@ -21,7 +21,7 @@ export default class OpPlayer {
     spawnPlatform,
     spawn,
     playersInTeam,
-    map
+    map,
   ) {
     this.scene = scene;
     this.character = character;
@@ -39,6 +39,8 @@ export default class OpPlayer {
     this.opHealthBarWidth = 60;
     this.movementTween = null; // Store reference to current movement tween
     this.effects = null; // per-opponent effects (e.g., Draven fire)
+    this.presenceConnected = true;
+    this.presenceLoaded = true;
     this.createOpPlayer();
   }
 
@@ -63,7 +65,7 @@ export default class OpPlayer {
     this.opponent.setCollideWorldBounds(false); // no world-bounds collision for remote visuals
     this.opponent.anims.play(
       resolveAnimKey(this.scene, this.character, "idle"),
-      true
+      true,
     );
 
     // Configure frame/body BEFORE computing spawn for correct initial grounding
@@ -73,7 +75,7 @@ export default class OpPlayer {
     const heightShrink = bs.heightShrink ?? 10;
     this.opponent.body.setSize(
       this.opFrame.width - widthShrink,
-      this.opFrame.height - heightShrink
+      this.opFrame.height - heightShrink,
     );
     this.applyFlipOffset();
 
@@ -94,7 +96,7 @@ export default class OpPlayer {
     this.opPlayerName = this.scene.add.text(
       this.opponent.x,
       bodyTop - 44,
-      this.username
+      this.username,
     );
     this.opPlayerName.setStyle({
       font: "bold 8pt Arial",
@@ -159,6 +161,30 @@ export default class OpPlayer {
         if (this.opCurrentHealth <= 0) {
           this.opCurrentHealth = 0;
           this.updateHealthBar(true); // show dead styling & 0
+          if (this.opponent?.active) {
+            try {
+              this.opponent.setVelocity(0, 0);
+            } catch (_) {}
+            try {
+              this.opponent.anims.play(
+                resolveAnimKey(this.scene, this.character, "dying"),
+                true,
+              );
+            } catch (_) {}
+            if (!this._deathFading) {
+              this._deathFading = true;
+              try {
+                this.scene.tweens.add({
+                  targets: this.opponent,
+                  alpha: 0.4,
+                  duration: 260,
+                  ease: "Quad.easeOut",
+                });
+              } catch (_) {
+                this.opponent.alpha = 0.4;
+              }
+            }
+          }
           // Stop effects if any
           if (this.effects) {
             // no explicit destroy needed, just stop updating
@@ -192,7 +218,7 @@ export default class OpPlayer {
           [player], // Target local player
           this.username,
           null,
-          false // isOwner
+          false, // isOwner
         );
       }
     };
@@ -235,6 +261,36 @@ export default class OpPlayer {
     this.updateHealthBar(false);
   }
 
+  setPresenceState(connected, loaded) {
+    this.presenceConnected = connected !== false;
+    this.presenceLoaded = loaded !== false;
+    const shouldRender = !!this.opponent?.active;
+    if (this.opponent) {
+      this.opponent.setVisible(shouldRender);
+      this.opponent.setAlpha(1);
+    }
+    if (this.opPlayerName) {
+      this.opPlayerName.setVisible(shouldRender);
+      this.opPlayerName.setAlpha(1);
+    }
+    if (this.opHealthText) {
+      this.opHealthText.setVisible(shouldRender);
+      this.opHealthText.setAlpha(1);
+    }
+    if (this.opHealthBar) {
+      this.opHealthBar.setVisible(shouldRender);
+      this.opHealthBar.setAlpha(1);
+    }
+    if (this.opSuperBarBack) {
+      this.opSuperBarBack.setVisible(shouldRender);
+      this.opSuperBarBack.setAlpha(1);
+    }
+    if (this.opSuperBar) {
+      this.opSuperBar.setVisible(shouldRender);
+      this.opSuperBar.setAlpha(1);
+    }
+  }
+
   updateHealthBar(dead = false, healthBarY) {
     if (!this.opHealthText || !this.opHealthText.active) return;
     if (this.opCurrentHealth < 0) {
@@ -244,7 +300,7 @@ export default class OpPlayer {
     // Sets percentage of health
     const healthPercentage = Math.max(
       0,
-      Math.min(1, this.opCurrentHealth / this.opMaxHealth)
+      Math.min(1, this.opCurrentHealth / this.opMaxHealth),
     );
     const displayedWidth = this.opHealthBarWidth * healthPercentage;
 
@@ -276,7 +332,7 @@ export default class OpPlayer {
       y,
       this.opHealthBarWidth,
       9,
-      3
+      3,
     );
 
     // Teammates should be green, opponents red
@@ -287,7 +343,7 @@ export default class OpPlayer {
 
     this.opHealthText.setPosition(
       this.opponent.x - this.opHealthText.width / 2,
-      y - 8
+      y - 8,
     );
     this.opHealthText.setDepth(2);
 

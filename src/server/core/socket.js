@@ -71,7 +71,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
       const userIdStr = readSignedCookieFromHandshake(
         socket,
         "user_id", // this cookie stores the user ID
-        COOKIE_SECRET
+        COOKIE_SECRET,
       );
       if (!userIdStr) {
         socket.data.user = null;
@@ -118,7 +118,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
           if (!room0) {
             const rows = await db.runQuery(
               "SELECT mode, map, status FROM matches WHERE match_id = ? LIMIT 1",
-              [matchId]
+              [matchId],
             );
             if (
               rows?.length &&
@@ -129,7 +129,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
                    FROM match_participants mp
                    JOIN users u ON u.user_id = mp.user_id
                   WHERE mp.match_id = ?`,
-                [matchId]
+                [matchId],
               );
               if (partRows?.length) {
                 const matchData = {
@@ -215,7 +215,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
       } catch (e) {
         console.warn(
           "Could not set online presence or auto join party:",
-          e?.message
+          e?.message,
         );
       }
     }
@@ -242,6 +242,16 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
         // For non-party, do not emit; optionally update self-only UI client-side
         if (!partyId) return;
 
+        const partyRows = await db.runQuery(
+          "SELECT status, mode, map FROM parties WHERE party_id = ? LIMIT 1",
+          [partyId],
+        );
+        const partyStatus = String(partyRows[0]?.status || "").toLowerCase();
+        if (partyStatus === PARTY_STATUS.LIVE) {
+          // Ignore stale ready toggles while the party is in an active match.
+          return;
+        }
+
         await db.setUserStatus(uname, isReady ? "ready" : "online");
         io.to(`party:${partyId}`).emit("status:update", {
           partyId,
@@ -251,13 +261,18 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
 
         // If a member un-readies while party was matchmaking, cancel queue and hide overlay
         if (!isReady) {
-          try {
-            await mm.queueLeave({ partyId, userId: null });
-          } catch (_) {}
-          // mm.queueLeave already sets party to IDLE; helper call not required here
-          io.to(`party:${partyId}`).emit("match:cancelled", {
-            reason: `${uname} cancelled matchmaking`,
-          });
+          if (
+            partyStatus === PARTY_STATUS.QUEUED ||
+            partyStatus === PARTY_STATUS.READY_CHECK
+          ) {
+            try {
+              await mm.queueLeave({ partyId, userId: null });
+            } catch (_) {}
+            // mm.queueLeave already sets party to IDLE; helper call not required here
+            io.to(`party:${partyId}`).emit("match:cancelled", {
+              reason: `${uname} cancelled matchmaking`,
+            });
+          }
         }
 
         // If everyone in party is ready, update party status and notify clients to show overlay
@@ -265,9 +280,13 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
         const allReady =
           members.length > 0 &&
           members.every(
-            (m) => String(m.status || "").toLowerCase() === "ready"
+            (m) => String(m.status || "").toLowerCase() === "ready",
           );
-        if (allReady) {
+        if (
+          allReady &&
+          (partyStatus === PARTY_STATUS.IDLE ||
+            partyStatus === PARTY_STATUS.QUEUED)
+        ) {
           try {
             await db.setPartyStatus(partyId, PARTY_STATUS.QUEUED);
           } catch (_) {}
@@ -277,12 +296,8 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
           console.log(`[party:${partyId}] all-ready -> matchmaking`);
           // Auto-enqueue this party using its current mode/map
           try {
-            const row = await db.runQuery(
-              "SELECT mode, map FROM parties WHERE party_id = ? LIMIT 1",
-              [partyId]
-            );
-            const mode = row[0]?.mode || 1;
-            const map = row[0]?.map || 1;
+            const mode = partyRows[0]?.mode || 1;
+            const map = partyRows[0]?.map || 1;
             await mm.queueJoin({ partyId, mode, map });
           } catch (err) {
             console.warn("enqueue failed:", err?.message);
@@ -403,13 +418,13 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
            JOIN match_participants mp ON m.match_id = mp.match_id 
            JOIN users u ON u.user_id = mp.user_id 
            WHERE u.name = ? AND m.status = 'live'`,
-          [uname]
+          [uname],
         );
 
         if (liveMatches.length > 0) {
           // User is transitioning to a live game, don't cancel
           console.log(
-            `[transition] user=${uname} moving to live game, not canceling`
+            `[transition] user=${uname} moving to live game, not canceling`,
           );
           return;
         }
@@ -452,7 +467,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
         });
 
         console.log(
-          `[party:${data.partyId}] Mode changed to ${data.selectedValue} by ${uname}`
+          `[party:${data.partyId}] Mode changed to ${data.selectedValue} by ${uname}`,
         );
       } catch (e) {
         console.warn("mode-change error:", e?.message);
@@ -480,7 +495,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
         });
 
         console.log(
-          `[party:${data.partyId}] Map changed to ${data.selectedValue} by ${uname}`
+          `[party:${data.partyId}] Map changed to ${data.selectedValue} by ${uname}`,
         );
       } catch (e) {
         console.warn("map-change error:", e?.message);
@@ -504,13 +519,13 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
         if (partyId) {
           const mem = await db.runQuery(
             "SELECT 1 FROM party_members WHERE party_id = ? AND name = ? LIMIT 1",
-            [partyId, uname]
+            [partyId, uname],
           );
           if (!mem?.length) {
             // Still allow updating your own selected character silently
             await db.runQuery(
               "UPDATE users SET char_class = ? WHERE name = ?",
-              [charClass, uname]
+              [charClass, uname],
             );
             return;
           }
@@ -601,12 +616,12 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
            JOIN match_participants mp ON m.match_id = mp.match_id 
            JOIN users u ON u.user_id = mp.user_id 
            WHERE u.name = ? AND m.status = 'live'`,
-          [username]
+          [username],
         );
 
         if (liveMatches.length > 0) {
           console.log(
-            `[disconnect] user=${username} has live match, not cleaning up game rooms yet`
+            `[disconnect] user=${username} has live match, not cleaning up game rooms yet`,
           );
         }
       } catch (e) {
@@ -633,7 +648,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
            JOIN match_participants mp ON m.match_id = mp.match_id 
            JOIN users u ON u.user_id = mp.user_id 
            WHERE u.name = ? AND m.status = 'live'`,
-          [username]
+          [username],
         );
 
         if (liveMatches.length === 0) {
@@ -642,7 +657,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
           if (pid) {
             io.to(`party:${pid}`).emit("match:cancelled");
             console.log(
-              `[cancel][emit] disconnect user=${username} party=${pid}`
+              `[cancel][emit] disconnect user=${username} party=${pid}`,
             );
           } else {
             console.log(`[cancel] disconnect user=${username} solo`);
@@ -670,7 +685,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
       try {
         const rows = await db.runQuery(
           "SELECT socket_id FROM users WHERE name = ? LIMIT 1",
-          [username]
+          [username],
         );
         const sid = rows[0]?.socket_id;
         if (!sid) return;
@@ -688,7 +703,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
       try {
         const rows = await db.runQuery(
           "SELECT socket_id FROM users WHERE name = ? LIMIT 1",
-          [username]
+          [username],
         );
         const sid = rows[0]?.socket_id;
         if (!sid) return;
@@ -713,14 +728,14 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
             reason: `A new user joined the party`,
           });
           console.log(
-            `[cancel][party] composition changed -> cancelled party ${partyId}`
+            `[cancel][party] composition changed -> cancelled party ${partyId}`,
           );
         }
         if (userId) {
           try {
             await mm.queueLeave({ partyId: null, userId });
             console.log(
-              `[cancel][solo] user ${userId} solo ticket, if any, removed`
+              `[cancel][solo] user ${userId} solo ticket, if any, removed`,
             );
           } catch (_) {}
         }

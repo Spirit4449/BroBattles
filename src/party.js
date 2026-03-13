@@ -4,6 +4,29 @@ import socket, { ensureSocketConnected, waitForConnect } from "./socket";
 // Track last known party roster to detect joins/leaves
 let __partyRosterNames = null; // Set<string> of member names
 let __partyRosterPartyId = null;
+const SOLO_MODE_STORAGE_KEY = "bb_solo_mode";
+const SOLO_MAP_STORAGE_KEY = "bb_solo_map";
+
+function canPersistSoloSelections() {
+  const host = String(window.location.hostname || "").toLowerCase();
+  return host === "localhost" || host === "127.0.0.1";
+}
+
+function setSoloSelection(key, value) {
+  if (!canPersistSoloSelections()) return;
+  try {
+    localStorage.setItem(key, String(value));
+  } catch (_) {}
+}
+
+function getSoloSelection(key) {
+  if (!canPersistSoloSelections()) return null;
+  try {
+    return localStorage.getItem(key);
+  } catch (_) {
+    return null;
+  }
+}
 
 export function checkIfInParty() {
   const pathname = window.location.pathname;
@@ -120,7 +143,7 @@ export function socketInit() {
         const newNames = new Set(
           (Array.isArray(data?.members) ? data.members : [])
             .map((m) => m?.name)
-            .filter(Boolean)
+            .filter(Boolean),
         );
         // Reset baseline on first render or party change
         if (
@@ -136,7 +159,7 @@ export function socketInit() {
             if (!__partyRosterNames.has(name) && name !== currentUserName) {
               sonner(`${name} joined your party`, null, "OK", null, {
                 duration: 2000,
-                sound: "notification"
+                sound: "notification",
               });
             }
           }
@@ -145,7 +168,7 @@ export function socketInit() {
             if (!newNames.has(old) && old !== currentUserName) {
               sonner(`${old} left your party`, null, "OK", null, {
                 duration: 2000,
-                sound: "notification"
+                sound: "notification",
               });
             }
           }
@@ -300,11 +323,11 @@ export function socketInit() {
     try {
       hideMatchmakingOverlay();
       if (err?.message) {
-        sonner("Queue error", err.message, "error", {sound: "notification"});
+        sonner("Queue error", err.message, "error", { sound: "notification" });
       }
       // Reset local ready state so next click attempts to join again
       const selfSlot = Array.from(
-        document.querySelectorAll(".character-slot")
+        document.querySelectorAll(".character-slot"),
       ).find((s) => s.dataset.isCurrentUser === "true");
       const statusEl = selfSlot?.querySelector(".status");
       if (statusEl) {
@@ -322,14 +345,14 @@ export function socketInit() {
     if (data?.reason && overlay && !overlay.classList.contains("hidden")) {
       sonner("Cancelled matchmaking", data.reason, null, null, {
         duration: 3000,
-        sound: "notification"
+        sound: "notification",
       });
     }
     hideMatchmakingOverlay();
     // Reset your local ready state so next click sets Ready (prevents double-click issue)
     try {
       const selfSlot = Array.from(
-        document.querySelectorAll(".character-slot")
+        document.querySelectorAll(".character-slot"),
       ).find((s) => s.dataset.isCurrentUser === "true");
       const statusEl = selfSlot?.querySelector(".status");
       if (statusEl) {
@@ -610,8 +633,30 @@ export function initializeModeDropdown() {
   const modeDropdown = document.getElementById("mode");
   const mapDropdown = document.getElementById("map");
   const partyId = checkIfInParty();
+  const isSolo = !partyId;
 
   if (!modeDropdown) return;
+
+  if (isSolo) {
+    const savedMode = getSoloSelection(SOLO_MODE_STORAGE_KEY);
+    if (
+      savedMode &&
+      modeDropdown.querySelector(`option[value="${savedMode}"]`)
+    ) {
+      modeDropdown.value = savedMode;
+    }
+    if (mapDropdown) {
+      const savedMap = getSoloSelection(SOLO_MAP_STORAGE_KEY);
+      if (
+        savedMap &&
+        mapDropdown.querySelector(`option[value="${savedMap}"]`)
+      ) {
+        mapDropdown.value = savedMap;
+      }
+      setLobbyBackground(mapDropdown.value);
+    }
+    updatePlatformsForMode(modeDropdown.value);
+  }
 
   let previousModeValue = modeDropdown.value;
 
@@ -643,7 +688,7 @@ export function initializeModeDropdown() {
           sonner(
             "Too many players for this mode!",
             "Please remove 1 or more players before changing to this mode",
-            "error"
+            "error",
           );
           modeDropdown.value = previousModeValue;
           return;
@@ -666,13 +711,14 @@ export function initializeModeDropdown() {
         sonner(
           "Failed to change mode",
           "Please try again. If the problem persists, try refreshing the page.",
-          "error"
+          "error",
         );
         modeDropdown.value = previousModeValue;
       }
     } else {
       // Not in a party - just update platforms locally
       updatePlatformsForMode(selectedValue);
+      setSoloSelection(SOLO_MODE_STORAGE_KEY, selectedValue);
       previousModeValue = selectedValue;
     }
   });
@@ -693,6 +739,8 @@ export function initializeModeDropdown() {
           username,
           partyId,
         });
+      } else {
+        setSoloSelection(SOLO_MAP_STORAGE_KEY, selectedValue);
       }
     });
   }
@@ -710,10 +758,10 @@ export function updatePlatformsForMode(mode) {
 
   // Get existing platforms
   const yourPlatforms = document.querySelectorAll(
-    '.platform[data-team="your-team"]'
+    '.platform[data-team="your-team"]',
   );
   const opPlatforms = document.querySelectorAll(
-    '.platform[data-team="op-team"]'
+    '.platform[data-team="op-team"]',
   );
   console.log("[party] platform counts", {
     your: yourPlatforms.length,
@@ -890,7 +938,7 @@ export function initReadyToggle() {
   readyBtn.addEventListener("click", () => {
     // Find current user's status element to update optimistically
     const selfSlot = Array.from(
-      document.querySelectorAll(".character-slot")
+      document.querySelectorAll(".character-slot"),
     ).find((s) => s.dataset.isCurrentUser === "true");
     const statusEl = selfSlot?.querySelector(".status");
     if (!statusEl) return;
@@ -954,7 +1002,7 @@ function mapNameFromId(id) {
   const mapSel = document.getElementById("map");
   if (!mapSel) return String(id);
   const opt = Array.from(mapSel.options).find(
-    (o) => Number(o.value) === Number(id)
+    (o) => Number(o.value) === Number(id),
   );
   return opt ? opt.textContent : String(id);
 }
@@ -963,7 +1011,7 @@ function modeNameFromId(id) {
   const modeSel = document.getElementById("mode");
   if (!modeSel) return `${id}v${id}`;
   const opt = Array.from(modeSel.options).find(
-    (o) => Number(o.value) === Number(id)
+    (o) => Number(o.value) === Number(id),
   );
   return opt ? opt.textContent : `${id}v${id}`;
 }
@@ -1040,7 +1088,7 @@ function wireCancelButton() {
     // Also reset local ready state immediately
     try {
       const selfSlot = Array.from(
-        document.querySelectorAll(".character-slot")
+        document.querySelectorAll(".character-slot"),
       ).find((s) => s.dataset.isCurrentUser === "true");
       const statusEl = selfSlot?.querySelector(".status");
       if (statusEl) {
@@ -1066,7 +1114,7 @@ function setReadyButtonState(isCancel) {
 
 function syncReadyButtonFromSelfSlot() {
   const selfSlot = Array.from(
-    document.querySelectorAll(".character-slot")
+    document.querySelectorAll(".character-slot"),
   ).find((s) => s.dataset.isCurrentUser === "true");
   const statusEl = selfSlot?.querySelector(".status");
   if (!statusEl) return;

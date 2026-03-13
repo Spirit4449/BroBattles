@@ -3,24 +3,27 @@
 
 // World bounds for Phase 1 (client-authoritative positions)
 const WORLD_BOUNDS = {
-  width: 1300, // match Phaser config width
-  height: 650, // match Phaser config height
+  width: 2300, // match Phaser config width
+  height: 1000, // match Phaser config height
   margin: 200, // allow going a bit off-screen before clamping
 };
 
 // ── Easily-tunable match timing ───────────────────────────────────────────
-const GAME_DURATION_MS = 0.5 * 60 * 1000; // 2.5 minutes until sudden death starts
+const GAME_DURATION_MS = 2.5 * 60 * 1000; // 2.5 minutes until sudden death starts
 const SD_RISE_SPEED = 15; // px/s the poison water rises (world: 1300×650)
+const SD_RISE_FAST_PHASE_MS = 12000;
+const SD_RISE_FAST_MULT = 2.2;
 const SD_DAMAGE_PER_SEC = 400; // HP/s lost while standing in the poison
 const TIMER_EMIT_INTERVAL_MS = 500; // how often game:timer is broadcast to clients
 // Powerup tuning (server-authoritative)
 const POWERUP_SPAWN_INTERVAL_MS = 20000; // recommended cadence
 const POWERUP_STARTING_COUNT = 2; // spawn this many when game loop begins
 const POWERUP_MAX_ACTIVE = 3;
-const POWERUP_PICKUP_RADIUS = 52;
-const POWERUP_DESPAWN_MS = 7000;
+const POWERUP_PICKUP_RADIUS = 65;
+const POWERUP_DESPAWN_MS = 10000;
 const POWERUP_RECENT_SPAWN_MEMORY = 4;
-const POWERUP_SPAWN_Y_LIFT = 34; // lift from platform surface so pickup is visibly above ground
+const POWERUP_SPAWN_Y_LIFT = 22; // lift from platform surface to keep pickups clear of terrain
+const POWERUP_LAYOUT_BASE_CENTER_X = 650;
 const POWERUP_TYPES = ["rage", "health", "shield", "poison", "gravityBoots"];
 const POWERUP_DURATIONS_MS = {
   rage: 10000,
@@ -144,10 +147,17 @@ class GameRoom {
     );
     if (existingPlayer) {
       // Update socket for reconnection
-      this.players.delete(existingPlayer.socketId);
+      for (const [key, value] of this.players.entries()) {
+        if (value?.user_id === user.user_id) this.players.delete(key);
+      }
       existingPlayer.socketId = socket.id;
+      existingPlayer.connected = true;
       this.players.set(socket.id, existingPlayer);
       this._ensureRewardBucket(existingPlayer);
+      this.io.to(`game:${this.matchId}`).emit("player:reconnected", {
+        name: existingPlayer.name,
+        username: existingPlayer.name,
+      });
       console.log(`[GameRoom ${this.matchId}] Player ${user.name} reconnected`);
     } else {
       // New player joining
@@ -168,6 +178,9 @@ class GameRoom {
         name: user.name,
         team: matchPlayer.team,
         char_class: matchPlayer.char_class,
+        connected: true,
+        loaded: false,
+        spawnIndex: this._computeSpawnIndex(user.name, matchPlayer.team),
 
         // Game state
         x: 400, // Will be set by spawn logic
@@ -208,6 +221,15 @@ class GameRoom {
           rageNextTickAt: 0,
           gravityNextTickAt: 0,
         },
+
+        ammoState: {
+          capacity: 1,
+          charges: 1,
+          cooldownMs: 1200,
+          reloadMs: 1200,
+          reloadTimerMs: 0,
+          nextFireInMs: 0,
+        },
       };
 
       this.players.set(socket.id, playerData);
@@ -246,6 +268,9 @@ class GameRoom {
 
     socket.leave(`game:${this.matchId}`);
     this.players.delete(socket.id);
+    playerData.socketId = null;
+    playerData.connected = false;
+    this.players.set(`offline:${playerData.user_id}`, playerData);
 
     console.log(
       `[GameRoom ${this.matchId}] Player ${user.name} left (${this.players.size} remaining)`,
@@ -257,6 +282,7 @@ class GameRoom {
       // In a real game, you might want to pause or give them a grace period
       this.io.to(`game:${this.matchId}`).emit("player:disconnected", {
         name: user.name,
+        username: user.name,
         playersRemaining: this.players.size,
       });
     }
@@ -362,21 +388,6 @@ class GameRoom {
     if (!playerData) return;
 
     // Prepare game state for this player
-    const computeSpawnIndex = (name, team) => {
-      try {
-        const teamList = (this.matchData.players || [])
-          .filter((p) => p.team === team)
-          .map((p) => ({ name: p.name }))
-          .sort((a, b) => a.name.localeCompare(b.name));
-        const idx = Math.max(
-          0,
-          teamList.findIndex((p) => p.name === name),
-        );
-        return idx;
-      } catch (e) {
-        return 0;
-      }
-    };
     const gameStateForPlayer = {
       matchId: this.matchId,
       mode: this.matchData.mode,
@@ -405,7 +416,10 @@ class GameRoom {
         stats: { health: p.maxHealth },
         level: p.level,
         isAlive: p.isAlive,
-        spawnIndex: computeSpawnIndex(p.name, p.team),
+        spawnIndex: this._computeSpawnIndex(p.name, p.team),
+        connected: p.connected !== false,
+        loaded: p.loaded === true,
+        ammoState: p.ammoState || null,
       })),
       status: this.status,
     };
@@ -490,9 +504,26 @@ class GameRoom {
    * Initialize spawn positions for players
    */
   initializeSpawnPositions() {
-    // No-op: Client is responsible for map-accurate spawn placement via
-    // positionLushySpawn/positionMangroveSpawn helpers. Server will adopt
-    // positions from client input in Phase 1.
+    for (const p of this.players.values()) {
+      const spawnIndex = this._computeSpawnIndex(p.name, p.team);
+      p.spawnIndex = spawnIndex;
+      p.loaded = false;
+    }
+  }
+
+  _computeSpawnIndex(name, team) {
+    try {
+      const teamList = (this.matchData.players || [])
+        .filter((p) => p.team === team)
+        .map((p) => ({ name: p.name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return Math.max(
+        0,
+        teamList.findIndex((p) => p.name === name),
+      );
+    } catch (_) {
+      return 0;
+    }
   }
 
   /**
@@ -567,11 +598,12 @@ class GameRoom {
     const remaining = Math.max(0, GAME_DURATION_MS - elapsed);
     const suddenDeath = elapsed >= GAME_DURATION_MS;
 
-    // Compute poison water surface (world Y: 650=bottom, 0=top)
+    // Compute poison water surface (world Y: WORLD_BOUNDS.height=bottom, 0=top)
     const sdElapsed = suddenDeath ? elapsed - GAME_DURATION_MS : 0;
+    const worldBottomY = Number(WORLD_BOUNDS.height) || 1000;
     const poisonY = suddenDeath
-      ? Math.max(0, 650 - (sdElapsed / 1000) * SD_RISE_SPEED)
-      : 700; // off-screen
+      ? this._computePoisonY(sdElapsed)
+      : worldBottomY + 60; // off-screen
 
     // Announce sudden death exactly once
     if (suddenDeath && !this._suddenDeathActive) {
@@ -586,7 +618,7 @@ class GameRoom {
     if (this._suddenDeathActive) {
       const dmgPerTick = (SD_DAMAGE_PER_SEC * this.FIXED_DT_MS) / 1000;
       for (const p of this.players.values()) {
-        if (!p.isAlive) continue;
+        if (!p.isAlive || p.connected === false || p.loaded !== true) continue;
         if (typeof p.y !== "number" || p.y < poisonY) continue; // above waterline
         // Block regen for any player standing in the poison water
         p.lastCombatAt = now;
@@ -664,7 +696,8 @@ class GameRoom {
    */
   handlePlayerInput(socketId, inputData) {
     const playerData = this.players.get(socketId);
-    if (!playerData || !playerData.isAlive) return;
+    if (!playerData || !playerData.isAlive || playerData.connected === false)
+      return;
 
     // Validate input
     if (!inputData || typeof inputData !== "object") return;
@@ -688,6 +721,20 @@ class GameRoom {
       if (typeof inputData.animation === "string") {
         playerData.animation = inputData.animation;
       }
+      if (inputData.loaded === true) {
+        playerData.loaded = true;
+      }
+      if (inputData.ammoState && typeof inputData.ammoState === "object") {
+        const a = inputData.ammoState;
+        playerData.ammoState = {
+          capacity: Math.max(1, Number(a.capacity) || 1),
+          charges: Math.max(0, Number(a.charges) || 0),
+          cooldownMs: Math.max(50, Number(a.cooldownMs) || 1200),
+          reloadMs: Math.max(100, Number(a.reloadMs) || 1200),
+          reloadTimerMs: Math.max(0, Number(a.reloadTimerMs) || 0),
+          nextFireInMs: Math.max(0, Number(a.nextFireInMs) || 0),
+        };
+      }
       playerData.lastInput = Date.now();
       return; // done
     }
@@ -706,7 +753,13 @@ class GameRoom {
    */
   handlePlayerAction(socketId, actionData) {
     const playerData = this.players.get(socketId);
-    if (!playerData || !playerData.isAlive) return;
+    if (
+      !playerData ||
+      !playerData.isAlive ||
+      playerData.connected === false ||
+      playerData.loaded !== true
+    )
+      return;
 
     // Basic action validation
     if (!actionData || !actionData.type) return;
@@ -739,7 +792,12 @@ class GameRoom {
   processTick() {
     // For Phase 1, just process basic movement inputs
     for (const playerData of this.players.values()) {
-      if (!playerData.isAlive) continue;
+      if (
+        !playerData.isAlive ||
+        playerData.connected === false ||
+        playerData.loaded !== true
+      )
+        continue;
 
       // Process latest input from buffer
       if (playerData.inputBuffer.length > 0) {
@@ -759,7 +817,7 @@ class GameRoom {
   processRegen() {
     const now = Date.now();
     for (const p of this.players.values()) {
-      if (!p.isAlive) continue;
+      if (!p.isAlive || p.connected === false || p.loaded !== true) continue;
       if (typeof p.maxHealth !== "number" || typeof p.health !== "number")
         continue;
 
@@ -791,10 +849,15 @@ class GameRoom {
 
   _getPlatformSpawnPoints() {
     const mapId = Number(this.matchData?.map) || 1;
-    const points = POWERUP_PLATFORM_POINTS[mapId] || POWERUP_PLATFORM_POINTS[1];
-    return Array.isArray(points) && points.length
-      ? points
-      : POWERUP_PLATFORM_POINTS[1];
+    const raw = POWERUP_PLATFORM_POINTS[mapId] || POWERUP_PLATFORM_POINTS[1];
+    const points =
+      Array.isArray(raw) && raw.length ? raw : POWERUP_PLATFORM_POINTS[1];
+    const centerShiftX =
+      (Number(WORLD_BOUNDS.width) || 1300) / 2 - POWERUP_LAYOUT_BASE_CENTER_X;
+    return points.map((p) => ({
+      x: (Number(p.x) || POWERUP_LAYOUT_BASE_CENTER_X) + centerShiftX,
+      y: Number(p.y) || 300,
+    }));
   }
 
   _pickSpawnPoint() {
@@ -866,8 +929,17 @@ class GameRoom {
     if (!this._suddenDeathActive) return false;
     const elapsed = nowTs - this._loopStartWallTime;
     const sdElapsed = Math.max(0, elapsed - GAME_DURATION_MS);
-    const poisonY = Math.max(0, 650 - (sdElapsed / 1000) * SD_RISE_SPEED);
+    const poisonY = this._computePoisonY(sdElapsed);
     return typeof playerData?.y === "number" && playerData.y >= poisonY;
+  }
+
+  _computePoisonY(sdElapsedMs) {
+    const worldBottomY = Number(WORLD_BOUNDS.height) || 1000;
+    const earlySec = Math.min(sdElapsedMs, SD_RISE_FAST_PHASE_MS) / 1000;
+    const lateSec = Math.max(0, sdElapsedMs - SD_RISE_FAST_PHASE_MS) / 1000;
+    const rise =
+      earlySec * SD_RISE_SPEED * SD_RISE_FAST_MULT + lateSec * SD_RISE_SPEED;
+    return Math.max(0, worldBottomY - rise);
   }
 
   _applyPowerupToPlayer(playerData, type, nowTs) {
@@ -925,7 +997,7 @@ class GameRoom {
         continue;
       }
       for (const p of this.players.values()) {
-        if (!p.isAlive) continue;
+        if (!p.isAlive || p.connected === false || p.loaded !== true) continue;
         const dx = (p.x || 0) - pu.x;
         const dy = (p.y || 0) - pu.y;
         if (Math.hypot(dx, dy) > POWERUP_PICKUP_RADIUS) continue;
@@ -949,7 +1021,13 @@ class GameRoom {
     if (this.status !== "active") return;
     const now = Date.now();
     for (const p of this.players.values()) {
-      if (!p.isAlive || !p.effects) continue;
+      if (
+        !p.isAlive ||
+        !p.effects ||
+        p.connected === false ||
+        p.loaded !== true
+      )
+        continue;
       const e = p.effects;
 
       // Poison DOT
@@ -1098,6 +1176,8 @@ class GameRoom {
         animation: playerData.animation || null,
         health: playerData.health,
         isAlive: playerData.isAlive,
+        connected: playerData.connected !== false,
+        loaded: playerData.loaded === true,
       };
     }
 
@@ -1164,6 +1244,13 @@ class GameRoom {
         (p) => p.name === targetName,
       );
       if (!attacker || !target) return;
+      if (
+        attacker.connected === false ||
+        attacker.loaded !== true ||
+        target.connected === false ||
+        target.loaded !== true
+      )
+        return;
       if (!attacker.isAlive || !target.isAlive) return;
       // Allow self-hit (suicide on fall) but otherwise disable friendly fire
       const isSelf = attacker.name === target.name;
@@ -1397,6 +1484,7 @@ class GameRoom {
         (p) => p.name === targetName,
       );
       if (!target || !target.isAlive) return;
+      if (target.connected === false || target.loaded !== true) return;
 
       // Basic anti-abuse: optionally require same team if source provided
       if (source && source.team && target.team && source.team !== target.team)
@@ -1486,6 +1574,62 @@ class GameRoom {
     } catch (e) {
       console.warn(
         `[GameRoom ${this.matchId}] failed to update match status`,
+        e?.message,
+      );
+    }
+    // Restore lobby-ready state so parties can queue cleanly after returning.
+    try {
+      const participants = await this.db.runQuery(
+        `SELECT mp.user_id, mp.party_id, u.name
+           FROM match_participants mp
+           JOIN users u ON u.user_id = mp.user_id
+          WHERE mp.match_id = ?`,
+        [this.matchId],
+      );
+      if (participants.length) {
+        const userIds = participants
+          .map((p) => Number(p.user_id))
+          .filter((id) => Number.isFinite(id));
+        if (userIds.length) {
+          const placeholders = userIds.map(() => "?").join(",");
+          await this.db.runQuery(
+            `UPDATE users SET status='online' WHERE user_id IN (${placeholders})`,
+            userIds,
+          );
+        }
+
+        const partyIds = [
+          ...new Set(
+            participants
+              .map((p) => Number(p.party_id))
+              .filter((id) => Number.isFinite(id) && id > 0),
+          ),
+        ];
+        if (partyIds.length) {
+          if (typeof this.db.setPartiesStatus === "function") {
+            await this.db.setPartiesStatus(partyIds, "idle");
+          } else {
+            const ph = partyIds.map(() => "?").join(",");
+            await this.db.runQuery(
+              `UPDATE parties SET status='idle' WHERE party_id IN (${ph})`,
+              partyIds,
+            );
+          }
+        }
+
+        for (const p of participants) {
+          const pid = Number(p.party_id);
+          if (!Number.isFinite(pid) || pid <= 0) continue;
+          this.io.to(`party:${pid}`).emit("status:update", {
+            partyId: pid,
+            name: p.name,
+            status: "online",
+          });
+        }
+      }
+    } catch (e) {
+      console.warn(
+        `[GameRoom ${this.matchId}] failed to reset post-match presence`,
         e?.message,
       );
     }

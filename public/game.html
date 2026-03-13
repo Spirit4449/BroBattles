@@ -486,7 +486,7 @@
         left: 10px;
         top: 10px;
         z-index: 9997;
-        width: min(248px, calc(100vw - 20px));
+        width: min(208px, calc(100vw - 20px));
         background: linear-gradient(
           180deg,
           rgba(42, 50, 78, 0.9),
@@ -498,46 +498,54 @@
         box-shadow:
           0 8px 20px rgba(0, 0, 0, 0.45),
           inset 0 0 0 1px rgba(96, 165, 250, 0.08);
-        padding: 12px;
+        padding: 7px;
       }
-      #team-status-hud .team-hud-section + .team-hud-section {
-        margin-top: 8px;
+      #team-status-hud .team-hud-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 6px;
+        row-gap: 3px;
+        align-items: center;
       }
       #team-status-hud .team-hud-title {
-        margin: 0 0 5px;
+        margin: 0;
         font-family: "Press Start 2P", cursive;
-        font-size: 9px;
+        font-size: 8px;
         letter-spacing: 0.3px;
         color: #60a5fa;
+        text-align: center;
+        padding-bottom: 3px;
+        border-bottom: 1px solid rgba(96, 165, 250, 0.35);
       }
-      #team-status-hud .team-hud-list {
+      #team-status-hud .team-hud-cell {
+        min-height: 20px;
         margin: 0;
         padding: 0;
-        list-style: none;
-        display: grid;
-        gap: 4px;
       }
       #team-status-hud .team-hud-player {
         display: grid;
-        grid-template-columns: 20px 1fr;
+        grid-template-columns: 16px 1fr;
         align-items: center;
-        gap: 6px;
-        padding: 4px 6px;
+        gap: 5px;
+        padding: 3px 5px;
         border: 1px solid rgba(30, 58, 138, 0.7);
-        border-radius: 8px;
+        border-radius: 7px;
         background: rgba(8, 18, 58, 0.65);
         transition:
           filter 140ms ease,
           opacity 140ms ease;
       }
+      #team-status-hud .team-hud-player.disconnected {
+        opacity: 0.55;
+      }
       #team-status-hud .team-hud-player img {
-        width: 18px;
-        height: 18px;
+        width: 14px;
+        height: 14px;
         image-rendering: pixelated;
         object-fit: contain;
       }
       #team-status-hud .team-hud-player-name {
-        font-size: 12px;
+        font-size: 11px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -571,11 +579,17 @@
           right: 8px;
           width: min(246px, calc(100vw - 16px));
         }
+        #game-timer-hud {
+          top: 8px;
+          right: 8px;
+          left: auto;
+          transform: none;
+        }
         #team-status-hud {
-          top: auto;
-          bottom: 8px;
+          top: 8px;
           left: 8px;
-          width: min(220px, calc(100vw - 16px));
+          bottom: auto;
+          width: min(186px, calc(100vw - 16px));
         }
       }
     </style>
@@ -606,14 +620,7 @@
     <div id="hud"></div>
 
     <aside id="team-status-hud" class="hidden" aria-live="polite">
-      <section class="team-hud-section">
-        <h3 class="team-hud-title">Your Team</h3>
-        <ul id="team-status-your" class="team-hud-list"></ul>
-      </section>
-      <section class="team-hud-section">
-        <h3 class="team-hud-title">Other Team</h3>
-        <ul id="team-status-opp" class="team-hud-list"></ul>
-      </section>
+      <div class="team-hud-grid" id="team-status-grid"></div>
     </aside>
 
     <div id="game-timer-hud" class="hidden" aria-live="polite">

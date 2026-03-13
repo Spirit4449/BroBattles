@@ -10,11 +10,44 @@ let smallRightPlatform;
 
 const lushyPeaksObjects = [];
 
+function snapSpriteToPlatform(sprite, platform, targetX, epsilon = 2) {
+  if (!sprite || !platform) return;
+
+  const topY = platform.body ? platform.body.top : platform.getTopCenter().y;
+  if (sprite.body) {
+    const body = sprite.body;
+    const halfH = (Number(body.height) || 0) / 2;
+    const offsetY = Number(body.offset?.y) || 0;
+    const targetY = topY - halfH - offsetY - epsilon;
+
+    if (typeof body.reset === "function") {
+      body.reset(targetX, targetY);
+    } else {
+      sprite.setPosition(targetX, targetY);
+    }
+
+    if (body.velocity?.set) body.velocity.set(0, 0);
+    if (body.acceleration?.set) body.acceleration.set(0, 0);
+    if (typeof body.updateFromGameObject === "function") {
+      body.updateFromGameObject();
+      const desiredBottom = topY - epsilon;
+      const correction = desiredBottom - body.bottom;
+      if (Math.abs(correction) > 0.5) {
+        sprite.y += correction;
+        body.updateFromGameObject();
+      }
+    }
+  } else {
+    const h = Number(sprite.height) || 0;
+    sprite.setPosition(targetX, topY - h / 2 - epsilon);
+  }
+}
+
 export function lushyPeaks(scene) {
   // Canvas variables
   const canvasWidth = scene.game.config.width;
   const canvasHeight = scene.game.config.height;
-  const centerX = scene.cameras.main.width / 2;
+  const centerX = scene.scale.width / 2;
 
   // Setup background position
   // const background = scene.add.sprite(0, -180, "lushy-bg");
@@ -24,14 +57,14 @@ export function lushyPeaks(scene) {
   // background.setOrigin(0, 0);
 
   // Base
-  base = scene.physics.add.sprite(centerX, 580, "lushy-base");
+  base = scene.physics.add.sprite(centerX, 630, "lushy-base");
   base.body.allowGravity = false; // Doesn't allow gravity
   base.setImmovable(true); // Makes sure it doesn't move
   base.setScale(0.7); // Makes it smaller
   lushyPeaksObjects.push(base);
 
   // Platform
-  platform = scene.physics.add.sprite(centerX, 240, "lushy-platform");
+  platform = scene.physics.add.sprite(centerX, 300, "lushy-platform");
   platform.setScale(0.7);
   platform.body.allowGravity = false;
   platform.setImmovable(true);
@@ -40,8 +73,8 @@ export function lushyPeaks(scene) {
   // Left Platform
   leftPlatform = scene.physics.add.sprite(
     centerX - 490,
-    260,
-    "lushy-side-platform"
+    320,
+    "lushy-side-platform",
   );
   leftPlatform.setScale(0.7);
   leftPlatform.body.allowGravity = false;
@@ -51,8 +84,8 @@ export function lushyPeaks(scene) {
   // Right Platform
   rightPlatform = scene.physics.add.sprite(
     centerX + 490,
-    260,
-    "lushy-side-platform"
+    320,
+    "lushy-side-platform",
   );
   rightPlatform.setScale(0.7);
   rightPlatform.body.allowGravity = false;
@@ -61,8 +94,8 @@ export function lushyPeaks(scene) {
 
   smallLeftPlatform = scene.physics.add.sprite(
     centerX - 580,
-    530,
-    "mangrove-tiny-platform"
+    560,
+    "mangrove-tiny-platform",
   );
   smallLeftPlatform.setScale(0.45);
   smallLeftPlatform.body.allowGravity = false;
@@ -71,14 +104,13 @@ export function lushyPeaks(scene) {
 
   smallRightPlatform = scene.physics.add.sprite(
     centerX + 580,
-    530,
-    "mangrove-tiny-platform"
+    560,
+    "mangrove-tiny-platform",
   );
   smallRightPlatform.setScale(0.45);
   smallRightPlatform.body.allowGravity = false;
   smallRightPlatform.setImmovable(true);
   lushyPeaksObjects.push(smallRightPlatform);
-
 }
 
 // Determine a consistent spawn position for Lushy Peaks
@@ -92,15 +124,7 @@ export function positionLushySpawn(scene, sprite, team, index, teamSize) {
   const slots = Math.max(1, Number(teamSize) || 1);
   const i = Math.min(slots - 1, Math.max(0, Number(index) || 0));
   const cx = bounds.left + bounds.width * ((i + 0.5) / slots);
-  const bodyH = sprite.body ? sprite.body.height : sprite.height;
-  // Prefer physics body for precise top if available
-  const topY = target.body ? target.body.top : target.getTopCenter().y;
-  const cy = topY - bodyH / 2 - 5; // epsilon above to avoid initial overlap
-  if (sprite.body && typeof sprite.body.reset === "function") {
-    sprite.body.reset(cx, cy);
-  } else {
-    sprite.setPosition(cx, cy);
-  }
+  snapSpriteToPlatform(sprite, target, cx, 2);
 }
 
 export { lushyPeaksObjects };

@@ -17,6 +17,8 @@ import {
   dead,
   setSuperStats,
   setPowerupMobility,
+  applyAuthoritativeState,
+  getAmmoSyncState,
 } from "./player";
 import {
   preloadAll,
@@ -37,7 +39,7 @@ window.Phaser = Phaser;
 // Path to get assets
 const staticPath = "/assets";
 const BATTLE_HELP_DISMISSED_KEY = "bb_hide_keybind_hud_v1";
-const TEAM_HUD_ROWS = new Map(); // name -> <li>
+const TEAM_HUD_ROWS = new Map(); // name -> { row }
 const POWERUP_TYPES = ["rage", "health", "shield", "poison", "gravityBoots"];
 // Asset folder naming follows the requested convention under /assets/powerups/[name]/
 const POWERUP_ASSET_DIR = {
@@ -59,10 +61,10 @@ const POWERUP_COLORS = {
 let __booted = false;
 function onReady(fn) {
   if (document.readyState === "loading") {
-    // not ready yet â€” wait once
+    // not ready yet - wait once
     document.addEventListener("DOMContentLoaded", fn, { once: true });
   } else {
-    // DOM is already ready â€” run on next tick to keep ordering sane
+    // DOM is already ready - run on next tick to keep ordering sane
     queueMicrotask(fn); // or setTimeout(fn, 0)
   }
 }
@@ -116,6 +118,7 @@ let joinInFlight = false; // prevent duplicate in-flight join emits
 let startingPhase = false; // server announced starting phase
 let readyAckSent = false; // ensure single ready ack
 let isLiveGame = false; // server reported active game (late join)
+let pendingAuthoritativeLocalState = null; // apply once local sprite exists
 // Buffer for remote actions that arrive before scene is ready
 const PENDING_ACTIONS = [];
 // Spawn coordination
@@ -126,6 +129,8 @@ let latestPlayerEffects = {}; // name -> effect duration map (ms remaining)
 const POWERUP_COLLECT_QUEUE = [];
 const LAST_HEALTH_BY_PLAYER = Object.create(null);
 const SHIELD_IMPACT_QUEUE = [];
+const LAST_SHIELD_ACTIVE_AT = Object.create(null);
+const POST_MATCH_REWARD_STORAGE_KEY = "bb_post_match_rewards_v1";
 
 // Movement throttling variables
 let lastMovementSent = 0;
@@ -211,6 +216,17 @@ function playMatchEndSound(winnerTeam) {
     return;
   }
   trigger();
+}
+
+function trackShieldEffectsPresence(effectsSnapshot) {
+  if (!effectsSnapshot || typeof effectsSnapshot !== "object") return;
+  const now = Date.now();
+  for (const [name, fx] of Object.entries(effectsSnapshot)) {
+    if (!name || !fx) continue;
+    if ((Number(fx.shield) || 0) > 0) {
+      LAST_SHIELD_ACTIVE_AT[name] = now;
+    }
+  }
 }
 
 // Prewarm frequently used textures to force GL upload before gameplay
@@ -456,12 +472,10 @@ function initKeybindHud() {
 
 function initTeamStatusHud(players) {
   const root = document.getElementById("team-status-hud");
-  const yourList = document.getElementById("team-status-your");
-  const oppList = document.getElementById("team-status-opp");
-  if (!root || !yourList || !oppList) return;
+  const grid = document.getElementById("team-status-grid");
+  if (!root || !grid) return;
 
-  yourList.innerHTML = "";
-  oppList.innerHTML = "";
+  grid.innerHTML = "";
   TEAM_HUD_ROWS.clear();
 
   const list = Array.isArray(players) ? players : [];
@@ -471,37 +485,72 @@ function initTeamStatusHud(players) {
     return String(a?.name || "").localeCompare(String(b?.name || ""));
   });
 
-  const append = (container, p) => {
+  const makeCell = (p) => {
+    const cell = document.createElement("div");
+    cell.className = "team-hud-cell";
+    if (!p) return cell;
+
     const row = document.createElement("li");
     row.className = "team-hud-player";
     if (p?.isAlive === false) row.classList.add("dead");
+
     const img = document.createElement("img");
     const cls = (p?.char_class || "ninja").toLowerCase();
     img.src = `/assets/${cls}/body.webp`;
     img.alt = cls;
+
     const nameEl = document.createElement("div");
     nameEl.className = "team-hud-player-name";
     const name = String(p?.name || "Player");
     nameEl.textContent = name + (name === username ? " (You)" : "");
+
     row.appendChild(img);
     row.appendChild(nameEl);
-    container.appendChild(row);
-    TEAM_HUD_ROWS.set(name, row);
+    cell.appendChild(row);
+    TEAM_HUD_ROWS.set(name, { row });
+    return cell;
   };
 
   const yourTeam = sorted.filter((p) => p?.team === gameData?.yourTeam);
   const oppTeam = sorted.filter((p) => p?.team !== gameData?.yourTeam);
-  yourTeam.forEach((p) => append(yourList, p));
-  oppTeam.forEach((p) => append(oppList, p));
+
+  const yourHeader = document.createElement("div");
+  yourHeader.className = "team-hud-title";
+  yourHeader.textContent = "Your Team";
+  const oppHeader = document.createElement("div");
+  oppHeader.className = "team-hud-title";
+  oppHeader.textContent = "Other Team";
+  grid.appendChild(yourHeader);
+  grid.appendChild(oppHeader);
+
+  const rows = Math.max(yourTeam.length, oppTeam.length);
+  for (let i = 0; i < rows; i++) {
+    grid.appendChild(makeCell(yourTeam[i]));
+    grid.appendChild(makeCell(oppTeam[i]));
+  }
 
   root.classList.toggle("hidden", sorted.length === 0);
 }
 
 function setTeamHudPlayerAlive(name, isAlive) {
   if (!name) return;
-  const row = TEAM_HUD_ROWS.get(String(name));
-  if (!row) return;
-  row.classList.toggle("dead", !isAlive);
+  const entry = TEAM_HUD_ROWS.get(String(name));
+  if (!entry?.row) return;
+  entry.row.classList.toggle("dead", !isAlive);
+}
+
+function setTeamHudPlayerPresence(name, connected) {
+  if (!name) return;
+  const entry = TEAM_HUD_ROWS.get(String(name));
+  if (!entry?.row) return;
+  entry.row.classList.toggle("disconnected", !connected);
+}
+
+function setTeamHudPlayerLoaded(name, loaded) {
+  if (!name) return;
+  const entry = TEAM_HUD_ROWS.get(String(name));
+  if (!entry?.row) return;
+  entry.row.classList.toggle("loading", !loaded);
 }
 
 function syncTeamHudFromSnapshot(playersByName) {
@@ -509,6 +558,12 @@ function syncTeamHudFromSnapshot(playersByName) {
   for (const [name, data] of Object.entries(playersByName)) {
     if (typeof data?.health === "number") {
       setTeamHudPlayerAlive(name, data.health > 0);
+    }
+    if (typeof data?.connected === "boolean") {
+      setTeamHudPlayerPresence(name, data.connected);
+    }
+    if (typeof data?.loaded === "boolean") {
+      setTeamHudPlayerLoaded(name, data.loaded);
     }
   }
 }
@@ -543,6 +598,9 @@ function setupGameEventListeners() {
   };
   socket.on("connect", tryJoin);
   socket.on("reconnect", tryJoin);
+  socket.on("game:joined", () => {
+    hasJoined = true;
+  });
   // If we're already connected when listeners are added, attempt once now
   if (socket.connected) tryJoin();
 
@@ -553,6 +611,7 @@ function setupGameEventListeners() {
       status: gameState?.status,
     });
     gameInitialized = true;
+    hasJoined = true;
     // Mark if game is already live (late join)
     try {
       const status = String(gameState?.status || "").toLowerCase();
@@ -577,6 +636,12 @@ function setupGameEventListeners() {
           if (typeof p.spawnIndex === "number") {
             SERVER_SPAWN_INDEX[p.name] = p.spawnIndex;
           }
+          if (typeof p.connected === "boolean") {
+            setTeamHudPlayerPresence(p.name, p.connected);
+          }
+          if (typeof p.loaded === "boolean") {
+            setTeamHudPlayerLoaded(p.name, p.loaded);
+          }
         }
       }
       if (typeof gameState.spawnVersion === "number") {
@@ -587,10 +652,14 @@ function setupGameEventListeners() {
     } catch (_) {}
 
     // Update local game data with server state
-    if (gameState.players) {
+    if (gameData?.players) {
       // Initialize opponent and team players based on server data
-      initializePlayers(gameState.players);
-      initTeamStatusHud(gameState.players);
+      initializePlayers(gameData.players);
+      initTeamStatusHud(
+        Array.isArray(gameState?.players) && gameState.players.length
+          ? gameState.players
+          : gameData.players,
+      );
     }
     if (Array.isArray(gameState.powerups)) latestPowerups = gameState.powerups;
     if (
@@ -598,6 +667,7 @@ function setupGameEventListeners() {
       typeof gameState.playerEffects === "object"
     ) {
       latestPlayerEffects = gameState.playerEffects;
+      trackShieldEffectsPresence(latestPlayerEffects);
     }
 
     // Cache my level and stats for character modules
@@ -606,6 +676,18 @@ function setupGameEventListeners() {
       if (me) {
         window.__MATCH_SESSION__.level = me.level || 1;
         window.__MATCH_SESSION__.stats = me.stats || {};
+        pendingAuthoritativeLocalState = {
+          x: me.x,
+          y: me.y,
+          health: me.health,
+          maxHealth: me.stats?.health,
+          superCharge: me.superCharge,
+          maxSuperCharge: me.maxSuperCharge,
+          ammoState: me.ammoState || null,
+          isAlive: me.isAlive,
+          loaded: me.loaded === true,
+          connected: me.connected !== false,
+        };
       }
     } catch (_) {}
   });
@@ -636,7 +718,8 @@ function setupGameEventListeners() {
       if (
         typeof prev === "number" &&
         payload.health < prev &&
-        (latestPlayerEffects?.[payload.username]?.shield || 0) > 0
+        ((latestPlayerEffects?.[payload.username]?.shield || 0) > 0 ||
+          Date.now() - (LAST_SHIELD_ACTIVE_AT[payload.username] || 0) <= 900)
       ) {
         SHIELD_IMPACT_QUEUE.push({
           username: payload.username,
@@ -659,6 +742,7 @@ function setupGameEventListeners() {
     if (Array.isArray(snapshot.powerups)) latestPowerups = snapshot.powerups;
     if (snapshot.playerEffects && typeof snapshot.playerEffects === "object") {
       latestPlayerEffects = snapshot.playerEffects;
+      trackShieldEffectsPresence(latestPlayerEffects);
     }
     syncTeamHudFromSnapshot(snapshot.players);
     if (!stateActive) {
@@ -756,6 +840,32 @@ function setupGameEventListeners() {
               (gameData.players || []).filter((p) => p.team === pd.team).length,
               String(gameData.map),
             );
+            op._spawnVersion = SPAWN_VERSION;
+            try {
+              const idx =
+                typeof SERVER_SPAWN_INDEX[pd.name] === "number"
+                  ? SERVER_SPAWN_INDEX[pd.name]
+                  : Math.max(
+                      0,
+                      (gameData.players || [])
+                        .filter((p) => p.team === pd.team)
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .findIndex((p) => p.name === pd.name),
+                    );
+              if (String(gameData.map) === "1") {
+                positionLushySpawn(
+                  gameScene,
+                  op.opponent,
+                  pd.team,
+                  idx,
+                  (gameData.players || []).filter((p) => p.team === pd.team)
+                    .length,
+                );
+              } else if (String(gameData.map) === "2") {
+                positionMangroveSpawn(gameScene, op.opponent, pd.team, idx);
+              }
+              op.updateUIPosition?.();
+            } catch (_) {}
             container[pd.name] = op;
           }
         }
@@ -827,6 +937,32 @@ function setupGameEventListeners() {
         );
         container[pd.name] = op;
         wrapper = op;
+        op._spawnVersion = SPAWN_VERSION;
+        try {
+          const idx =
+            typeof SERVER_SPAWN_INDEX[pd.name] === "number"
+              ? SERVER_SPAWN_INDEX[pd.name]
+              : Math.max(
+                  0,
+                  (gameData.players || [])
+                    .filter((p) => p.team === pd.team)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .findIndex((p) => p.name === pd.name),
+                );
+          if (String(gameData.map) === "1") {
+            positionLushySpawn(
+              gameScene,
+              op.opponent,
+              pd.team,
+              idx,
+              (gameData.players || []).filter((p) => p.team === pd.team)
+                .length,
+            );
+          } else if (String(gameData.map) === "2") {
+            positionMangroveSpawn(gameScene, op.opponent, pd.team, idx);
+          }
+          op.updateUIPosition?.();
+        } catch (_) {}
       }
 
       // Do NOT snap the opponent sprite to packet.origin; keep interpolation smooth.
@@ -844,6 +980,10 @@ function setupGameEventListeners() {
         }
       }
       const consumed = handleRemoteAttack(gameScene, charKey, act, wrapper);
+      // Prevent snapshot idle/run animation from immediately stomping attack anims.
+      if (consumed && wrapper) {
+        wrapper._animLockUntil = performance.now() + 520;
+      }
       if (!consumed) {
         // Optional dev log for unhandled action types
         console.debug("Unhandled remote action", {
@@ -866,7 +1006,16 @@ function setupGameEventListeners() {
   // Player disconnections
   socket.on("player:disconnected", (data) => {
     console.log("Player disconnected:", data);
-    // Handle player disconnection in UI
+    if (data?.name) {
+      setTeamHudPlayerPresence(data.name, false);
+      setTeamHudPlayerLoaded(data.name, false);
+    }
+  });
+
+  socket.on("player:reconnected", (data) => {
+    if (data?.name) {
+      setTeamHudPlayerPresence(data.name, true);
+    }
   });
 
   // Game over event (team elimination)
@@ -882,7 +1031,9 @@ function setupGameEventListeners() {
     try {
       document.getElementById("game-timer-hud")?.classList.add("hidden");
     } catch (_) {}
-    showGameOverScreen(payload);
+    setTimeout(() => {
+      showGameOverScreen(payload);
+    }, 2000);
   });
 
   // Server-synced game timer and sudden death
@@ -942,16 +1093,16 @@ function setupGameEventListeners() {
 function initializePlayers(players) {
   // Clear existing players
   for (const name in opponentPlayers) {
-    if (opponentPlayers[name].sprite) {
-      opponentPlayers[name].sprite.destroy();
-    }
+    const existing = opponentPlayers[name];
+    if (typeof existing?.destroy === "function") existing.destroy();
+    else if (existing?.opponent?.destroy) existing.opponent.destroy();
     delete opponentPlayers[name];
   }
 
   for (const name in teamPlayers) {
-    if (teamPlayers[name].sprite) {
-      teamPlayers[name].sprite.destroy();
-    }
+    const existing = teamPlayers[name];
+    if (typeof existing?.destroy === "function") existing.destroy();
+    else if (existing?.opponent?.destroy) existing.opponent.destroy();
     delete teamPlayers[name];
   }
 
@@ -972,8 +1123,10 @@ function initializePlayers(players) {
       team: playerData.team,
       x: playerData.x || 100,
       y: playerData.y || 100,
-      health: playerData.health || 100,
+      health: typeof playerData.health === "number" ? playerData.health : 100,
       isAlive: playerData.isAlive !== false,
+      connected: playerData.connected !== false,
+      loaded: playerData.loaded === true,
       spawnIndex:
         typeof playerData.spawnIndex === "number"
           ? playerData.spawnIndex
@@ -1000,8 +1153,8 @@ class GameScene extends Phaser.Scene {
   preload() {
     this.load.on("progress", (p) => {
       // 50% - 90%
-      const pct = Math.floor(50 + p * 40); // maps 0â€“1 â†’ 50â€“90
-      updateLoading(pct, `Loading assetsâ€¦`);
+      const pct = Math.floor(50 + p * 40); // maps 0-1 -> 50-90
+      updateLoading(pct, `Loading assets...`);
     });
 
     this.load.once("complete", () => {
@@ -1047,23 +1200,22 @@ class GameScene extends Phaser.Scene {
     this.load.audio("sfx-walljump", `${staticPath}/walljump.mp3`);
     this.load.audio("sfx-sliding", `${staticPath}/sliding.mp3`);
     this.load.audio("sfx-sudden-death", `${staticPath}/suddendeath.mp3`);
+    this.load.audio("sfx-noammo", [
+      `${staticPath}/noammo.mp3`,
+      `${staticPath}/land.mp3`,
+    ]);
     // Combat/health SFX
     this.load.audio("sfx-damage", `${staticPath}/damage.mp3`);
     this.load.audio("sfx-heal", `${staticPath}/heal.mp3`);
     // Music (non-blocking BGM: handled via HTMLAudio at runtime)
     this.load.audio("win", `${staticPath}/win.mp3`);
     this.load.audio("lose", `${staticPath}/lose.mp3`);
-
     // Powerup assets (support common icon/audio extensions)
     for (const type of POWERUP_TYPES) {
       const dir = POWERUP_ASSET_DIR[type] || type;
       this.load.image(
         `pu-icon-${type}-webp`,
         `${staticPath}/powerups/${dir}/icon.webp`,
-      );
-      this.load.image(
-        `pu-icon-${type}-png`,
-        `${staticPath}/powerups/${dir}/icon.png`,
       );
       this.load.audio(`pu-touch-${type}`, [
         `${staticPath}/powerups/${dir}/touch.mp3`,
@@ -1083,13 +1235,18 @@ class GameScene extends Phaser.Scene {
     this.input.keyboard.enabled = false;
     this.physics.world.setBoundsCollision(false, false, false, false);
     // Poison water overlay graphics (sudden death - drawn every frame in update)
-    this._poisonWaterY = 700; // start off-screen below world
+    const worldH =
+      Number(this.scale?.height) || Number(this.game.config.height) || 1000;
+    this._poisonWaterY = worldH + 60; // start off-screen below world
     this._smoothPoisonY = null; // interpolated, set on first use
     this._poisonGraphics = this.add.graphics();
     this._poisonGraphics.setDepth(12);
     // Pre-generate bubble positions (22 bubbles, deterministic so no jitter on re-use)
-    this._poisonBubbles = Array.from({ length: 22 }, (_, i) => ({
-      x: 30 + ((i * 59 + i * 11) % 1240),
+    const poisonWidth =
+      Number(this.scale?.width) || Number(this.game.config.width) || 1300;
+    const bubbleCount = Math.max(22, Math.floor(poisonWidth / 60));
+    this._poisonBubbles = Array.from({ length: bubbleCount }, (_, i) => ({
+      x: 30 + ((i * 59 + i * 11) % Math.max(60, poisonWidth - 60)),
       phase: i * 0.57,
       r: 1.5 + (i % 3) * 0.75,
       speed: 20 + (i % 6) * 8,
@@ -1309,6 +1466,29 @@ class GameScene extends Phaser.Scene {
       }
     } catch (_) {}
 
+    // If server already has my live state (refresh/reconnect), apply it after spawn snap.
+    try {
+      if (pendingAuthoritativeLocalState) {
+        applyAuthoritativeState(pendingAuthoritativeLocalState);
+        const shouldRestorePosition =
+          isLiveGame &&
+          pendingAuthoritativeLocalState.connected !== false &&
+          pendingAuthoritativeLocalState.loaded === true;
+        if (
+          shouldRestorePosition &&
+          pendingAuthoritativeLocalState.isAlive !== false &&
+          Number.isFinite(pendingAuthoritativeLocalState.x) &&
+          Number.isFinite(pendingAuthoritativeLocalState.y) &&
+          player?.body
+        ) {
+          player.body.reset(
+            pendingAuthoritativeLocalState.x,
+            pendingAuthoritativeLocalState.y,
+          );
+        }
+      }
+    } catch (_) {}
+
     // Server stats are already applied above prior to createPlayer
 
     // Initialize other players from game data
@@ -1360,6 +1540,34 @@ class GameScene extends Phaser.Scene {
       // Add collider between the object and each map object
       this.physics.add.collider(player, mapObject);
     });
+
+    // Camera: smooth follow
+    const cam = this.cameras.main;
+
+    // Starting zoom; update() adjusts this dynamically based on player height.
+    cam.setZoom(1.7);
+
+    // Horizontal: keep the 1700px camera window centered on the map content
+    // (which always sits at game.config.width / 2). This decouples the camera
+    // from the total world width, so expanding the canvas for device clipping
+    // never shifts the visible play area.
+    // Vertical: keep slight top headroom without wasting too much empty space.
+    const contentCenterX = this.game.config.width / 2;
+    cam.setBounds(contentCenterX - 850, -40, 1700, this.game.config.height);
+
+    // Deadzone: small central box - camera only chases when player exits it.
+    cam.setDeadzone(50, 50);
+
+    // Downward bias: keep baseline framing close to original feel.
+    // This places the player in the upper half of the frame when on high
+    // platforms, naturally revealing the content below them.
+    cam.setFollowOffset(0, 120);
+
+    // lerpX=0.08 for crisp horizontal tracking; lerpY=0.05 is deliberately
+    // lazier so the vertical frame shifts more gently - vertical centering is
+    // less critical than horizontal awareness.
+    cam.startFollow(player, false, 0.08, 0.05);
+    // End camera setup
   }
 
   initializeOtherPlayers() {
@@ -1490,6 +1698,10 @@ class GameScene extends Phaser.Scene {
         opPlayer.opMaxSuperCharge = playerData.maxSuperCharge;
       }
       if (opPlayer.updateHealthBar) opPlayer.updateHealthBar();
+      opPlayer.setPresenceState?.(
+        playerData.connected !== false,
+        playerData.loaded === true,
+      );
 
       playerContainer[playerData.name] = opPlayer;
 
@@ -1632,7 +1844,7 @@ class GameScene extends Phaser.Scene {
       const pulse = 0.5 + 0.5 * Math.sin(nowSec * 10 + (spr.x || 0) * 0.012);
       spr.setTint(pulse > 0.52 ? 0xc084fc : 0x7e22ce);
       spr.setScale(baseX * 1.14, baseY * 1.14);
-      spr.setOrigin(baseOriginX, Math.min(1, baseOriginY + 0.1));
+      spr.setOrigin(baseOriginX, baseOriginY);
       if (Math.random() < 0.72) {
         this._spawnTrailParticle(
           spr.x + Phaser.Math.Between(-18, 18),
@@ -1656,8 +1868,7 @@ class GameScene extends Phaser.Scene {
       // Rage keeps a fixed size boost; only tint pulses.
       spr.setTint(pulse > 0 ? 0xc084fc : 0x9333ea);
       spr.setScale(baseX * 1.22, baseY * 1.22);
-      // Shift origin downward so the extra size grows upward rather than into the floor.
-      spr.setOrigin(baseOriginX, Math.min(1, baseOriginY + 0.12));
+      spr.setOrigin(baseOriginX, baseOriginY);
       if (Math.random() < 0.32) {
         this._spawnTrailParticle(
           spr.x + Phaser.Math.Between(-14, 14),
@@ -1772,6 +1983,36 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  _spriteFrameForAura(spr) {
+    if (!spr) {
+      return { x: 0, y: 0, top: 0, bottom: 0, radius: 24 };
+    }
+    const body = spr.body;
+    if (
+      body &&
+      Number.isFinite(body.center?.x) &&
+      Number.isFinite(body.center?.y)
+    ) {
+      const w = Math.max(14, Number(body.width) || 14);
+      const h = Math.max(20, Number(body.height) || 20);
+      return {
+        x: body.center.x,
+        y: body.center.y,
+        top: Number(body.top) || body.center.y - h / 2,
+        bottom: Number(body.bottom) || body.center.y + h / 2,
+        radius: Phaser.Math.Clamp(Math.max(w, h) * 0.58, 18, 46),
+      };
+    }
+    const h = Number(spr.height) || 48;
+    return {
+      x: spr.x,
+      y: spr.y,
+      top: spr.y - h / 2,
+      bottom: spr.y + h / 2,
+      radius: Phaser.Math.Clamp(h * 0.58, 18, 46),
+    };
+  }
+
   _renderPowerupAuras(nowSec) {
     const g = this._powerupAuraGraphics;
     if (!g) return;
@@ -1787,58 +2028,61 @@ class GameScene extends Phaser.Scene {
 
     const drawAura = (spr, fx) => {
       if (!spr || !fx) return;
-      const x = spr.x;
-      const y = spr.y;
+      const frame = this._spriteFrameForAura(spr);
+      const x = frame.x;
+      const y = frame.y;
+      const r = frame.radius;
       const pulse = 0.75 + 0.25 * Math.sin(nowSec * 8 + x * 0.01);
       if ((fx.health || 0) > 0) {
         g.fillStyle(POWERUP_COLORS.health, 0.12 * pulse);
-        g.fillCircle(x, y + 6, 44 + 4 * pulse);
+        g.fillCircle(x, y, r + 4 * pulse);
         g.lineStyle(3, POWERUP_COLORS.health, 0.75 * pulse);
-        g.strokeCircle(x, y + 6, 44 + 4 * pulse);
+        g.strokeCircle(x, y, r + 4 * pulse);
       }
       if ((fx.shield || 0) > 0) {
         g.fillStyle(POWERUP_COLORS.shield, 0.22);
-        g.fillCircle(x, y + 6, 40 + 4 * pulse);
+        g.fillCircle(x, y, Math.max(16, r - 4 + 4 * pulse));
         g.lineStyle(4, POWERUP_COLORS.shield, 0.82 * pulse);
-        g.strokeCircle(x, y + 6, 40 + 4 * pulse);
+        g.strokeCircle(x, y, Math.max(16, r - 4 + 4 * pulse));
         g.fillStyle(0xffedd5, 0.08 + 0.05 * pulse);
-        g.fillCircle(x, y + 6, 28 + 2 * pulse);
+        g.fillCircle(x, y, Math.max(12, r - 16 + 2 * pulse));
       }
       if ((fx.poison || 0) > 0) {
         g.fillStyle(POWERUP_COLORS.poison, 0.1 * pulse);
-        g.fillCircle(x, y + 6, 42 + 3 * pulse);
+        g.fillCircle(x, y, Math.max(16, r - 2 + 3 * pulse));
         g.lineStyle(3, POWERUP_COLORS.poison, 0.75 * pulse);
-        g.strokeCircle(x, y + 6, 42 + 3 * pulse);
+        g.strokeCircle(x, y, Math.max(16, r - 2 + 3 * pulse));
       }
       if ((fx.rage || 0) > 0) {
         g.fillStyle(POWERUP_COLORS.rage, 0.2 + 0.08 * pulse);
-        g.fillCircle(x, y + 6, 40 + 4 * pulse);
+        g.fillCircle(x, y, Math.max(16, r - 4 + 4 * pulse));
         g.lineStyle(3.5, POWERUP_COLORS.rage, 0.85 * pulse);
-        g.strokeCircle(x, y + 6, 47 + 4 * pulse);
+        g.strokeCircle(x, y, r + 3 + 4 * pulse);
         g.lineStyle(
           2.5,
           0xffffff,
           0.3 + 0.25 * Math.abs(Math.sin(nowSec * 16 + y * 0.015)),
         );
-        g.strokeCircle(x, y + 6, 52 + 2.2 * pulse);
+        g.strokeCircle(x, y, r + 8 + 2.2 * pulse);
       }
       if ((fx.gravityBoots || 0) > 0) {
+        const bootY = frame.bottom - 2;
         g.fillStyle(POWERUP_COLORS.gravityBoots, 0.22 * pulse);
-        g.fillEllipse(x, y + 26, 46, 10);
+        g.fillEllipse(x, bootY, Math.max(28, r + 4), 10);
         g.lineStyle(2, POWERUP_COLORS.gravityBoots, 0.75 * pulse);
-        g.strokeEllipse(x, y + 26, 46, 10);
+        g.strokeEllipse(x, bootY, Math.max(28, r + 4), 10);
       }
       if ((fx.thorgRage || 0) > 0) {
         g.fillStyle(POWERUP_COLORS.thorgRage, 0.22 + 0.08 * pulse);
-        g.fillCircle(x, y + 4, 50 + 5 * pulse);
+        g.fillCircle(x, y, r + 6 + 5 * pulse);
         g.lineStyle(4.5, POWERUP_COLORS.thorgRage, 0.88 * pulse);
-        g.strokeCircle(x, y + 4, 56 + 5 * pulse);
+        g.strokeCircle(x, y, r + 12 + 5 * pulse);
         g.lineStyle(
           3,
           0xffffff,
           0.28 + 0.18 * Math.abs(Math.sin(nowSec * 18 + y * 0.02)),
         );
-        g.strokeCircle(x, y + 4, 62 + 2.5 * pulse);
+        g.strokeCircle(x, y, r + 18 + 2.5 * pulse);
       }
     };
 
@@ -1862,8 +2106,9 @@ class GameScene extends Phaser.Scene {
       const impact = SHIELD_IMPACT_QUEUE.shift();
       const spr = this._getSpriteByUsername(impact?.username);
       if (!spr || !fxG) continue;
-      const x = spr.x;
-      const y = spr.y - 8;
+      const frame = this._spriteFrameForAura(spr);
+      const x = frame.x;
+      const y = frame.y;
       for (let i = 0; i < 3; i++) {
         const ring = this.add.circle(
           x,
@@ -1945,23 +2190,50 @@ class GameScene extends Phaser.Scene {
           type: pu.type,
           x: pu.x,
           y: pu.y,
+          expiresAt: Number(pu.expiresAt) || 0,
           glow,
           sprite: spr,
           container,
           phase: Math.random() * Math.PI * 2,
           despawning: false,
         };
+        visual.container.setAlpha(0);
+        visual.glow.setAlpha(0);
+        visual.container.setScale(0.55);
+        visual.glow.setScale(0.45);
+        this.tweens.add({
+          targets: [visual.container, visual.glow],
+          alpha: 1,
+          scaleX: 1,
+          scaleY: 1,
+          duration: 480,
+          ease: "Back.easeOut",
+        });
         this._powerupVisuals[id] = visual;
       }
 
       if (!visual.despawning) {
+        visual.expiresAt = Number(pu.expiresAt) || visual.expiresAt || 0;
         visual.x = pu.x;
         visual.y = pu.y;
         const bob = Math.sin(nowSec * 2.8 + visual.phase) * 5;
-        visual.container.x = pu.x;
-        visual.container.y = pu.y - 6 + bob;
-        visual.glow.x = pu.x;
-        visual.glow.y = pu.y - 6 + bob + 1;
+        let shakeX = 0;
+        let shakeY = 0;
+        if (visual.expiresAt > 0) {
+          const remainingMs = visual.expiresAt - Date.now();
+          if (remainingMs <= 2800) {
+            const warn = Phaser.Math.Clamp(1 - remainingMs / 2800, 0, 1);
+            const speed = 12 + warn * 5;
+            const amp = 0.8 + warn * 1.8;
+            shakeX = Math.sin(nowSec * speed + visual.phase * 3) * amp;
+            shakeY =
+              Math.cos(nowSec * (speed * 1.13) + visual.phase * 3) * amp * 0.6;
+          }
+        }
+        visual.container.x = pu.x + shakeX;
+        visual.container.y = pu.y - 6 + bob + shakeY;
+        visual.glow.x = pu.x + shakeX;
+        visual.glow.y = pu.y - 6 + bob + shakeY + 1;
         visual.glow.alpha =
           0.18 + 0.18 * Math.abs(Math.sin(nowSec * 3.5 + visual.phase));
         visual.glow.radius =
@@ -2047,15 +2319,20 @@ class GameScene extends Phaser.Scene {
       g.clear();
 
       // Smooth-lerp toward server-sent Y so 500ms updates don't cause visible jumps
+      const worldH =
+        Number(this.scale?.height) || Number(this.game.config.height) || 1000;
       if (this._smoothPoisonY == null)
-        this._smoothPoisonY = this._poisonWaterY ?? 700;
-      this._smoothPoisonY +=
-        ((this._poisonWaterY ?? 700) - this._smoothPoisonY) * 0.07;
+        this._smoothPoisonY = this._poisonWaterY ?? worldH + 60;
+      const poisonTargetY = this._poisonWaterY ?? worldH + 60;
+      const poisonDelta = poisonTargetY - this._smoothPoisonY;
+      const poisonLerp = Math.abs(poisonDelta) > 60 ? 0.2 : 0.07;
+      this._smoothPoisonY += poisonDelta * poisonLerp;
       const py = this._smoothPoisonY;
 
-      if (py < 660) {
-        const W = 1300;
-        const BOTTOM = 680; // extend below world so no gap at screen edge
+      if (py < worldH + 10) {
+        const W =
+          Number(this.scale?.width) || Number(this.game.config.width) || 1300;
+        const BOTTOM = worldH + 40; // extend below world so no gap at screen edge
         const t = this.time.now / 1000; // seconds
         // Dual-harmonic wave function
         const amp = 7;
@@ -2064,14 +2341,14 @@ class GameScene extends Phaser.Scene {
           amp * Math.sin(x * 0.011 + t * 1.7) +
           amp * 0.4 * Math.sin(x * 0.024 - t * 1.1);
 
-        // 1. Dark base body â€” wave surface down to bottom
+        // 1. Dark base body - wave surface down to bottom
         const basePts = [{ x: 0, y: BOTTOM }];
         for (let x = 0; x <= W; x += 8) basePts.push({ x, y: waveY(x) });
         basePts.push({ x: W, y: BOTTOM });
         g.fillStyle(0x166534, 0.48);
         g.fillPoints(basePts, true);
 
-        // 2. Mid-depth overlay â€” slightly lighter, surface shifted down to show depth
+        // 2. Mid-depth overlay - slightly lighter, surface shifted down to show depth
         const midPts = [{ x: 0, y: BOTTOM }];
         for (let x = 0; x <= W; x += 8) midPts.push({ x, y: waveY(x) + 16 });
         midPts.push({ x: W, y: BOTTOM });
@@ -2111,7 +2388,7 @@ class GameScene extends Phaser.Scene {
         const cssDiv = document.getElementById("poison-water-bg");
         if (cssDiv) {
           const canvasH = this.game.canvas.clientHeight || 650;
-          const frac = Math.max(0, Math.min(1, (660 - py) / 660));
+          const frac = Math.max(0, Math.min(1, (worldH - py) / worldH));
           cssDiv.style.height = Math.floor(frac * canvasH) + "px";
           cssDiv.style.display = "block";
 
@@ -2137,6 +2414,25 @@ class GameScene extends Phaser.Scene {
     // Powerup visuals/effects are rendered for all players every frame.
     this._renderPowerupsAndEffects();
 
+    // Dynamic zoom: smoothly zoom out as the player climbs higher.
+    // Keep bottom gameplay unchanged at 1.7, but reduce top zoom-out so
+    // horizontal vision doesn't expand too much on high platforms.
+    if (player) {
+      const cam = this.cameras.main;
+      const t = Phaser.Math.Clamp((player.y - 80) / (520 - 80), 0, 1);
+      const targetZoom = 1.3 + (1.7 - 1.3) * t;
+      cam.setZoom(cam.zoom + (targetZoom - cam.zoom) * 0.05);
+
+      // When high up, bias the camera lower to reveal more below and reduce
+      // the amount of empty sky shown above top-platform fights.
+      const highFactor = 1 - t;
+      const targetFollowOffsetY = 120 + 80 * highFactor;
+      cam.setFollowOffset(
+        0,
+        cam.followOffset.y + (targetFollowOffsetY - cam.followOffset.y) * 0.08,
+      );
+    }
+
     // Only process if game is initialized
     if (!hasJoined || !gameInitialized || dead || gameEnded) return;
 
@@ -2152,6 +2448,8 @@ class GameScene extends Phaser.Scene {
           y: player.y,
           flip: player.flipX,
           animation: player.anims?.currentAnim?.key || null,
+          loaded: true,
+          ammoState: getAmmoSyncState(),
         };
 
         // Only send if state has changed
@@ -2355,27 +2653,90 @@ class GameScene extends Phaser.Scene {
 
       if (!aPosData && !bPosData) return;
 
+      const isDeadBySnapshot =
+        aPosData?.isAlive === false || bPosData?.isAlive === false;
+      const isConnected =
+        (bPosData && typeof bPosData.connected === "boolean"
+          ? bPosData.connected
+          : true) &&
+        (aPosData && typeof aPosData.connected === "boolean"
+          ? aPosData.connected
+          : true);
+      const isLoaded =
+        (bPosData && typeof bPosData.loaded === "boolean"
+          ? bPosData.loaded
+          : true) &&
+        (aPosData && typeof aPosData.loaded === "boolean"
+          ? aPosData.loaded
+          : true);
+
       // Position interpolation target
       let targetX = spr.x;
       let targetY = spr.y;
-      if (aPosData && bPosData) {
-        targetX = aPosData.x + alpha * (bPosData.x - aPosData.x);
-        targetY = aPosData.y + alpha * (bPosData.y - aPosData.y);
-      } else if (bPosData) {
-        targetX = bPosData.x;
-        targetY = bPosData.y;
-      } else if (aPosData) {
-        targetX = aPosData.x;
-        targetY = aPosData.y;
+      if (isLoaded) {
+        if (aPosData && bPosData) {
+          targetX = aPosData.x + alpha * (bPosData.x - aPosData.x);
+          targetY = aPosData.y + alpha * (bPosData.y - aPosData.y);
+        } else if (bPosData) {
+          targetX = bPosData.x;
+          targetY = bPosData.y;
+        } else if (aPosData) {
+          targetX = aPosData.x;
+          targetY = aPosData.y;
+        }
       }
 
       // Direct snap to interpolated position (adaptive delay already smoothing jitter)
       spr.x = targetX;
       spr.y = targetY;
+      if (typeof wrapper.setPresenceState === "function") {
+        wrapper.setPresenceState(isConnected, isLoaded);
+      } else {
+        // Fallback visual for wrappers without presence helper.
+        spr.alpha = 1;
+      }
+      setTeamHudPlayerPresence(name, isConnected);
+      setTeamHudPlayerLoaded(name, isLoaded);
 
       // Orientation/animation: take from newer if present (prefer b then a)
       const animSrc = bPosData && bPosData.animation ? bPosData : aPosData;
-      if (animSrc) {
+      if (isDeadBySnapshot) {
+        if (!wrapper._deathVisualApplied) {
+          wrapper._deathVisualApplied = true;
+          wrapper.opCurrentHealth = 0;
+          try {
+            wrapper.updateHealthBar(true);
+          } catch (_) {}
+          try {
+            spr.setVelocity(0, 0);
+          } catch (_) {}
+          try {
+            spr.anims.play(
+              resolveAnimKey(this, wrapper.character, "dying", "idle"),
+              true,
+            );
+          } catch (_) {}
+          try {
+            this.tweens.add({
+              targets: spr,
+              alpha: 0.4,
+              duration: 260,
+              ease: "Quad.easeOut",
+            });
+          } catch (_) {
+            spr.alpha = 0.4;
+          }
+        }
+      } else {
+        if (wrapper._deathVisualApplied) {
+          wrapper._deathVisualApplied = false;
+          try {
+            spr.alpha = 1;
+          } catch (_) {}
+        }
+      }
+
+      if (animSrc && !isDeadBySnapshot && isConnected && isLoaded) {
         const prevFlip = spr.flipX;
         spr.flipX = !!animSrc.flip;
         if (
@@ -2384,9 +2745,39 @@ class GameScene extends Phaser.Scene {
         ) {
           wrapper.applyFlipOffset();
         }
-        if (animSrc.animation) {
+        const lockUntil = Number(wrapper._animLockUntil || 0);
+        if (performance.now() >= lockUntil) {
+          let chosenAnim = animSrc.animation || "idle";
+          if ((wrapper.character || "").toLowerCase() === "thorg") {
+            const dx =
+              (bPosData?.x ?? aPosData?.x ?? spr.x) -
+              (aPosData?.x ?? bPosData?.x ?? spr.x);
+            const dy =
+              (bPosData?.y ?? aPosData?.y ?? spr.y) -
+              (aPosData?.y ?? bPosData?.y ?? spr.y);
+            const absDx = Math.abs(dx);
+            const absDy = Math.abs(dy);
+            const attackLike =
+              typeof chosenAnim === "string" &&
+              /throw|attack|slash/i.test(chosenAnim);
+
+            if (attackLike) {
+              // Avoid stale remote attack loops by selecting locomotion from motion.
+              if (absDy > 1.8) {
+                chosenAnim = dy < 0 ? "jumping" : "falling";
+              } else if (absDx > 1.2) {
+                chosenAnim = "running";
+              } else {
+                chosenAnim = "idle";
+              }
+            } else if (absDy > 2.2) {
+              chosenAnim = dy < 0 ? "jumping" : "falling";
+            } else if (absDx <= 0.7) {
+              chosenAnim = "idle";
+            }
+          }
           spr.anims.play(
-            resolveAnimKey(this, wrapper.character, animSrc.animation, "idle"),
+            resolveAnimKey(this, wrapper.character, chosenAnim, "idle"),
             true,
           );
         }
@@ -2424,8 +2815,8 @@ const config = {
     mode: Phaser.Scale.FIT,
     // We'll position the canvas via CSS, so disable Phaser auto centering
     autoCenter: Phaser.Scale.NO_CENTER,
-    width: 1300,
-    height: 650,
+    width: 2300,
+    height: 1000,
   },
   scene: GameScene,
   physics: {
@@ -2528,6 +2919,18 @@ function showGameOverScreen(payload) {
     ? payload.meta.rewards
     : [];
   const myReward = rewards.find((r) => r.username === username);
+  try {
+    if (myReward) {
+      sessionStorage.setItem(
+        POST_MATCH_REWARD_STORAGE_KEY,
+        JSON.stringify({
+          at: Date.now(),
+          coinsAwarded: Number(myReward.coinsAwarded) || 0,
+          gemsAwarded: Number(myReward.gemsAwarded) || 0,
+        }),
+      );
+    }
+  } catch (_) {}
   const escapeHtml = (val) =>
     String(val ?? "")
       .replace(/&/g, "&amp;")
@@ -2536,15 +2939,14 @@ function showGameOverScreen(payload) {
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
   const baseRowStyle =
-    "display:grid;grid-template-columns:2.2fr repeat(5,1fr);gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid rgba(176,219,255,0.18);font-size:13px;";
+    "display:grid;grid-template-columns:2fr 1.1fr repeat(3,1fr);gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid rgba(176,219,255,0.18);font-size:13px;";
   const headerRow = `
     <div style="${baseRowStyle}font-weight:600;border-bottom:1px solid rgba(176,219,255,0.3);text-transform:uppercase;font-size:11px;color:#cce8ff;font-family:'Press Start 2P', cursive;">
       <div style="text-align:left;">Player</div>
+      <div>Team</div>
       <div>Hits</div>
       <div>Damage</div>
       <div>Kills</div>
-      <div>Coins</div>
-      <div>Gems</div>
     </div>`;
   const rewardRowsHtml = rewards
     .map((r) => {
@@ -2562,22 +2964,17 @@ function showGameOverScreen(payload) {
           <div style="text-align:left;font-weight:${
             isYou ? 600 : 500
           };">${label}</div>
+          <div>${escapeHtml(String(r.team || "-").toUpperCase())}</div>
           <div>${r.hits ?? 0}</div>
           <div>${r.damage ?? 0}</div>
           <div>${r.kills ?? 0}</div>
-          <div style="color:#facc15;font-weight:600;">${
-            r.coinsAwarded ?? 0
-          }</div>
-          <div style="color:#67e8f9;font-weight:600;">${
-            r.gemsAwarded ?? 0
-          }</div>
         </div>`;
     })
     .join("");
   const rewardSectionHtml = rewards.length
     ? `
       <div style="margin-top:28px;text-align:left;">
-        <h2 style="margin:0 0 10px;font-size:18px;color:#e8f4ff;font-family:'Press Start 2P', cursive;">Match Rewards</h2>
+        <h2 style="margin:0 0 10px;font-size:18px;color:#e8f4ff;font-family:'Press Start 2P', cursive;">Match Results</h2>
         <div style="border:1px solid rgba(123,191,255,0.35);border-radius:10px;overflow:hidden;background:rgba(14,34,58,0.75);">
           ${headerRow}
           ${rewardRowsHtml}
@@ -2586,16 +2983,18 @@ function showGameOverScreen(payload) {
     : "";
   const personalSummaryHtml = myReward
     ? `
-      <div style="margin-top:20px;padding:14px 18px;border-radius:10px;background:rgba(76,146,214,0.16);border:1px solid rgba(125,189,255,0.45);text-align:left;">
-        <div style="font-size:15px;font-weight:600;margin-bottom:6px;color:#d7eeff;">You earned</div>
-        <div style="display:flex;gap:18px;font-size:18px;font-weight:600;">
-          <span style="color:#facc15;">${
+      <div style="margin-top:16px;padding:16px 18px;border-radius:10px;background:rgba(76,146,214,0.16);border:1px solid rgba(125,189,255,0.45);text-align:center;">
+        <div style="font-size:15px;font-weight:600;margin-bottom:10px;color:#d7eeff;">You Earned</div>
+        <div style="display:flex;justify-content:center;gap:26px;align-items:center;font-size:20px;font-weight:600;">
+          <span style="display:flex;align-items:center;gap:8px;color:#facc15;"><img src="/assets/coin.webp" width="18" height="18" alt="coins" />${
             myReward.coinsAwarded ?? 0
-          } coins</span>
-          <span style="color:#67e8f9;">${myReward.gemsAwarded ?? 0} gems</span>
+          }</span>
+          <span style="display:flex;align-items:center;gap:8px;color:#67e8f9;"><img src="/assets/gem.webp" width="18" height="18" alt="gems" />${
+            myReward.gemsAwarded ?? 0
+          }</span>
         </div>
         <div style="margin-top:6px;font-size:13px;color:#c8e6ff;">
-          ${myReward.hits ?? 0} hits Â· ${myReward.damage ?? 0} dmg Â· ${
+          ${myReward.hits ?? 0} hits | ${myReward.damage ?? 0} dmg | ${
             myReward.kills ?? 0
           } kills
         </div>
@@ -2610,16 +3009,51 @@ function showGameOverScreen(payload) {
         }${
           winner && winner !== gameData?.yourTeam ? "color:#ff9a9a;" : ""
         }">${heading}</h1>
-        <p style="margin:0 0 20px;font-size:14px;opacity:0.92;color:#d4ebff;">Match ${
-          payload?.matchId ?? ""
-        }</p>
         ${personalSummaryHtml || ""}
         ${rewardSectionHtml || ""}
-        <button id="go-lobby" style="background:linear-gradient(180deg,#4fa5ff,#3d87df);color:#fff;font-size:14px;font-family:'Press Start 2P',cursive;padding:11px 18px;border:1px solid #d5ecff;border-radius:8px;box-shadow:0 3px 0 #1f4f83, 0 8px 18px rgba(0,0,0,0.22);cursor:pointer;margin-top:20px;">Return to Lobby</button>
+        <button id="go-lobby" style="background:linear-gradient(180deg,#4fa5ff,#3d87df);color:#fff;font-size:14px;font-family:'Press Start 2P',cursive;padding:11px 18px;border:1px solid #d5ecff;border-radius:8px;box-shadow:0 3px 0 #1f4f83, 0 8px 18px rgba(0,0,0,0.22);cursor:pointer;margin-top:20px;">Return to Lobby (10)</button>
       </div>
     </div>`;
   document.body.appendChild(div);
-  document.getElementById("go-lobby").addEventListener("click", () => {
+  let leaving = false;
+  let countdown = 10;
+  const button = document.getElementById("go-lobby");
+  const goToLobby = async () => {
+    if (leaving) return;
+    leaving = true;
+    try {
+      const res = await fetch("/status", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        const pid = Number(data?.party_id);
+        if (Number.isFinite(pid) && pid > 0) {
+          window.location.href = `/party/${pid}`;
+          return;
+        }
+      }
+    } catch (_) {}
+    try {
+      const myPartyId = Number(
+        (gameData?.players || []).find((p) => p.name === username)?.party_id,
+      );
+      if (Number.isFinite(myPartyId) && myPartyId > 0) {
+        window.location.href = `/party/${myPartyId}`;
+        return;
+      }
+    } catch (_) {}
     window.location.href = "/";
+  };
+  const timer = setInterval(() => {
+    countdown -= 1;
+    if (button)
+      button.textContent = `Return to Lobby (${Math.max(0, countdown)})`;
+    if (countdown <= 0) {
+      clearInterval(timer);
+      goToLobby();
+    }
+  }, 1000);
+  button.addEventListener("click", async () => {
+    clearInterval(timer);
+    await goToLobby();
   });
 }

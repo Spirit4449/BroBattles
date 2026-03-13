@@ -2,7 +2,17 @@
 import socket from "../../socket";
 import { characterStats } from "../../lib/characterStats.js";
 import { animations } from "./anim";
-import { performThorgFallAttack } from "./attack";
+import {
+  performThorgFallAttack,
+  THORG_FALL_WINDUP_MS,
+  THORG_FALL_STRIKE_MS,
+  THORG_FALL_DURATION_MS,
+  THORG_FALL_FOLLOW_AFTER_WINDUP_MS,
+  THORG_FALL_RANGE,
+  THORG_FALL_ARC_HEIGHT,
+  THORG_FALL_CURVE_MAGNITUDE,
+  THORG_FALL_END_Y_OFFSET,
+} from "./attack";
 
 // Single source of truth for this character's name/key
 const NAME = "thorg";
@@ -240,26 +250,24 @@ class Thorg {
 
   // Spawn a simple rectangle visual attached to owner that mimics the falling arc
   static _spawnFallEffect(scene, sprite, direction = 1) {
-    const WINDUP_MS = 180;
-    const STRIKE_MS = 290;
-    const FOLLOW_AFTER_WINDUP_MS = 70;
+    const baseAngle = 0;
     const getAnchor = () => ({
       x: sprite.x + (direction >= 0 ? 10 : -10),
       y: sprite.y - sprite.height * 0.5,
     });
     let strikeStartX = 0;
     let strikeStartY = 0;
-    const range = 140;
+    const range = THORG_FALL_RANGE;
     let endX = 0;
     let endY = 0;
-    const arcHeight = 90;
-    const curveMagnitude = 14;
+    const arcHeight = THORG_FALL_ARC_HEIGHT;
+    const curveMagnitude = THORG_FALL_CURVE_MAGNITUDE;
     const resolveStrikePath = () => {
       const a = getAnchor();
       strikeStartX = a.x - direction * 14;
       strikeStartY = a.y - 8;
       endX = strikeStartX + direction * range;
-      endY = a.y + 110;
+      endY = a.y + THORG_FALL_END_Y_OFFSET;
     };
     const samplePath = (t) => {
       const clamped = Phaser.Math.Clamp(t, 0, 1);
@@ -285,7 +293,7 @@ class Thorg {
       const startAnchor = getAnchor();
       const eff = scene.add.sprite(startAnchor.x, startAnchor.y, texKey);
       eff.setDepth(7);
-      eff.setScale(0.9);
+      eff.setScale(0.72);
       eff.setFlipX(false);
       const baseAim = direction >= 0 ? 0 : Math.PI;
       const baseRot = baseAim + Thorg.WEAPON_FORWARD_OFFSET + direction * 0.08;
@@ -297,30 +305,52 @@ class Thorg {
       }
       scene.tweens.add({
         targets: eff,
-        scale: 1.25,
-        duration: STRIKE_MS,
-        delay: WINDUP_MS,
+        scale: 1.16,
+        duration: THORG_FALL_STRIKE_MS,
+        delay: THORG_FALL_WINDUP_MS,
         ease: "Sine.easeOut",
       });
 
-      const bornAt = scene.time.now;
+      let elapsed = 0;
+      let strikeStarted = false;
       const renderVis = () => {
         if (!eff.active) return;
-        const elapsed = scene.time.now - bornAt;
-        if (elapsed < WINDUP_MS) {
-          const windupT = Phaser.Math.Clamp(elapsed / WINDUP_MS, 0, 1);
+
+        const dt = scene.game?.loop?.delta || 16;
+        elapsed += dt;
+
+        if (!strikeStarted) {
+          const windupT = Phaser.Math.Clamp(
+            elapsed / THORG_FALL_WINDUP_MS,
+            0,
+            1,
+          );
+          if (sprite?.active) {
+            const leanDeg = Phaser.Math.Linear(0, -8 * direction, windupT);
+            sprite.setAngle(baseAngle + leanDeg);
+          }
           const followAnchor = getAnchor();
           const windupBackX = followAnchor.x - direction * 18;
           const windupBackY = followAnchor.y - 12;
           eff.x = Phaser.Math.Linear(followAnchor.x, windupBackX, windupT);
           eff.y = Phaser.Math.Linear(followAnchor.y, windupBackY, windupT);
           eff.rotation = Phaser.Math.Linear(baseRot, windupRot, windupT);
-          return;
+          if (elapsed < THORG_FALL_WINDUP_MS) return;
+          strikeStarted = true;
+          if (sprite?.active) sprite.setAngle(baseAngle + 4 * direction);
+          resolveStrikePath();
         }
 
-        const strikeElapsed = Math.max(0, elapsed - WINDUP_MS);
-        const tNow = Phaser.Math.Clamp(strikeElapsed / STRIKE_MS, 0, 1);
-        if (elapsed <= WINDUP_MS + FOLLOW_AFTER_WINDUP_MS) {
+        const strikeElapsed = Math.max(0, elapsed - THORG_FALL_WINDUP_MS);
+        const tNow = Phaser.Math.Clamp(
+          strikeElapsed / THORG_FALL_STRIKE_MS,
+          0,
+          1,
+        );
+        if (
+          elapsed <=
+          THORG_FALL_WINDUP_MS + THORG_FALL_FOLLOW_AFTER_WINDUP_MS
+        ) {
           resolveStrikePath();
         }
         const pt = samplePath(tNow);
@@ -333,11 +363,18 @@ class Thorg {
           Thorg.WEAPON_FORWARD_OFFSET;
         const delta = Phaser.Math.Angle.Wrap(targetRot - baseRot);
         eff.rotation = baseRot + delta * 0.5;
+
+        if (elapsed >= THORG_FALL_DURATION_MS) {
+          scene.events.off("update", renderVis);
+          if (sprite?.active) sprite.setAngle(0);
+          if (eff.active) eff.destroy();
+        }
       };
 
       scene.events.on("update", renderVis);
-      scene.time.delayedCall(WINDUP_MS + STRIKE_MS + 30, () => {
+      scene.time.delayedCall(THORG_FALL_DURATION_MS + 30, () => {
         scene.events.off("update", renderVis);
+        if (sprite?.active) sprite.setAngle(0);
         if (eff.active) eff.destroy();
       });
       return eff;

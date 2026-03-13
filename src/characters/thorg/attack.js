@@ -2,10 +2,15 @@ import socket from "../../socket";
 
 const RECT_W = 120;
 const RECT_H = 60;
-const WINDUP_MS = 180;
-const STRIKE_MS = 290;
-const DURATION = WINDUP_MS + STRIKE_MS;
-const FOLLOW_AFTER_WINDUP_MS = 70;
+export const THORG_FALL_WINDUP_MS = 180;
+export const THORG_FALL_STRIKE_MS = 290;
+export const THORG_FALL_DURATION_MS =
+  THORG_FALL_WINDUP_MS + THORG_FALL_STRIKE_MS;
+export const THORG_FALL_FOLLOW_AFTER_WINDUP_MS = 70;
+export const THORG_FALL_RANGE = 110;
+export const THORG_FALL_ARC_HEIGHT = 120;
+export const THORG_FALL_CURVE_MAGNITUDE = 20;
+export const THORG_FALL_END_Y_OFFSET = 100;
 const DAMAGE_TICK_MS = 90;
 const SPRITE_FORWARD_OFFSET = -Math.PI / 2; // weapon art points downward at rotation=0
 let DEBUG_DRAW = false;
@@ -22,16 +27,28 @@ export function performThorgFallAttack(instance) {
   const { scene, player: p, username, gameId, opponentPlayersRef } = instance;
   const direction = p.flipX ? -1 : 1;
   const rageActive = !!p._thorgRageActive;
-  const baseAngle = p.angle || 0;
+  const baseAngle = 0;
+
+  if (typeof p._thorgAttackCleanup === "function") {
+    try {
+      p._thorgAttackCleanup();
+    } catch (_) {}
+  }
+
+  let finished = false;
   p._lockFlip = true;
   p._lockedFlipX = p.flipX;
-  const unlockFlip = () => {
+  const unlockFlip = (force = false) => {
+    if (finished && !force) return;
+    finished = true;
     if (p && p._lockFlip) {
       p._lockFlip = false;
       delete p._lockedFlipX;
     }
-    if (p && p.active) p.setAngle(baseAngle);
+    if (p) delete p._thorgAttackCleanup;
+    if (p && p.active) p.setAngle(0);
   };
+  p._thorgAttackCleanup = () => unlockFlip(true);
   const attackId = makeId();
   const hitSet = new Set();
 
@@ -62,17 +79,17 @@ export function performThorgFallAttack(instance) {
   });
   let strikeStartX = 0;
   let strikeStartY = 0;
-  const range = 110;
+  const range = THORG_FALL_RANGE;
   let endX0 = 0;
   let endY0 = 0;
-  const arcHeight = 120; // peak above start
-  const curveMagnitude = 20;
+  const arcHeight = THORG_FALL_ARC_HEIGHT; // peak above start
+  const curveMagnitude = THORG_FALL_CURVE_MAGNITUDE;
   const resolveStrikePath = () => {
     const a = getAnchor();
     strikeStartX = a.x - direction * 14;
     strikeStartY = a.y - 8;
     endX0 = strikeStartX + direction * range;
-    endY0 = a.y + 100;
+    endY0 = a.y + THORG_FALL_END_Y_OFFSET;
   };
   const samplePath = (t) => {
     const clamped = Phaser.Math.Clamp(t, 0, 1);
@@ -98,18 +115,18 @@ export function performThorgFallAttack(instance) {
       p.flipX = p._lockedFlipX;
     }
 
-    const strikeElapsed = Math.max(0, elapsed - WINDUP_MS);
-    const t = Math.min(1, strikeElapsed / STRIKE_MS);
+    const strikeElapsed = Math.max(0, elapsed - THORG_FALL_WINDUP_MS);
+    const t = Math.min(1, strikeElapsed / THORG_FALL_STRIKE_MS);
     const { x, y } = samplePath(t);
 
     // Windup lean: pull torso back before release so it doesn't feel static.
     if (!strikeStarted) {
-      const windupT = Phaser.Math.Clamp(elapsed / WINDUP_MS, 0, 1);
+      const windupT = Phaser.Math.Clamp(elapsed / THORG_FALL_WINDUP_MS, 0, 1);
       const leanDeg = Phaser.Math.Linear(0, -8 * direction, windupT);
       p.setAngle(baseAngle + leanDeg);
     }
 
-    if (!strikeStarted && elapsed >= WINDUP_MS) {
+    if (!strikeStarted && elapsed >= THORG_FALL_WINDUP_MS) {
       strikeStarted = true;
       resolveStrikePath();
       p.setAngle(baseAngle + 4 * direction);
@@ -172,7 +189,7 @@ export function performThorgFallAttack(instance) {
       } catch (_) {}
     }
 
-    if (elapsed >= DURATION) {
+    if (elapsed >= THORG_FALL_DURATION_MS) {
       scene.events.off("update", update);
       if (dbg) dbg.destroy();
       p.setAngle(baseAngle);
@@ -205,15 +222,19 @@ export function performThorgFallAttack(instance) {
       scene.tweens.add({
         targets: sprite,
         scale: rageActive ? 1.34 : 1.16,
-        duration: STRIKE_MS,
-        delay: WINDUP_MS,
+        duration: THORG_FALL_STRIKE_MS,
+        delay: THORG_FALL_WINDUP_MS,
         ease: "Sine.easeOut",
       });
 
       const renderVis = () => {
         if (!sprite.active) return;
         if (!strikeStarted) {
-          const windupT = Phaser.Math.Clamp(elapsed / WINDUP_MS, 0, 1);
+          const windupT = Phaser.Math.Clamp(
+            elapsed / THORG_FALL_WINDUP_MS,
+            0,
+            1,
+          );
           const followAnchor = getAnchor();
           const windupBackX = followAnchor.x - direction * 18;
           const windupBackY = followAnchor.y - 12;
@@ -223,9 +244,16 @@ export function performThorgFallAttack(instance) {
           return;
         }
 
-        const strikeElapsed = Math.max(0, elapsed - WINDUP_MS);
-        const tNow = Phaser.Math.Clamp(strikeElapsed / STRIKE_MS, 0, 1);
-        if (elapsed <= WINDUP_MS + FOLLOW_AFTER_WINDUP_MS) {
+        const strikeElapsed = Math.max(0, elapsed - THORG_FALL_WINDUP_MS);
+        const tNow = Phaser.Math.Clamp(
+          strikeElapsed / THORG_FALL_STRIKE_MS,
+          0,
+          1,
+        );
+        if (
+          elapsed <=
+          THORG_FALL_WINDUP_MS + THORG_FALL_FOLLOW_AFTER_WINDUP_MS
+        ) {
           resolveStrikePath();
         }
         const pt = samplePath(tNow);
@@ -242,7 +270,7 @@ export function performThorgFallAttack(instance) {
       };
 
       scene.events.on("update", renderVis);
-      scene.time.delayedCall(DURATION + 30, () => {
+      scene.time.delayedCall(THORG_FALL_DURATION_MS + 30, () => {
         scene.events.off("update", renderVis);
         if (sprite.active) sprite.destroy();
       });

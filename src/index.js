@@ -21,6 +21,48 @@ import "./styles/sonner.css";
 
 let userData = null;
 let guest = false;
+const POST_MATCH_REWARD_STORAGE_KEY = "bb_post_match_rewards_v1";
+
+function animateNumber(el, from, to, durationMs) {
+  if (!el) return;
+  const start = performance.now();
+  const run = (now) => {
+    const t = Math.min(1, (now - start) / durationMs);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const value = Math.round(from + (to - from) * eased);
+    el.textContent = String(value);
+    if (t < 1) requestAnimationFrame(run);
+  };
+  requestAnimationFrame(run);
+}
+
+function animatePostMatchRewardsIfPresent(coinEl, gemEl, coinsNow, gemsNow) {
+  if (!coinEl || !gemEl) return;
+  let payload = null;
+  try {
+    payload = JSON.parse(
+      sessionStorage.getItem(POST_MATCH_REWARD_STORAGE_KEY) || "null",
+    );
+  } catch (_) {
+    payload = null;
+  }
+  if (!payload || typeof payload !== "object") return;
+  const ageMs = Date.now() - Number(payload.at || 0);
+  const coinsAwarded = Math.max(0, Number(payload.coinsAwarded) || 0);
+  const gemsAwarded = Math.max(0, Number(payload.gemsAwarded) || 0);
+  try {
+    sessionStorage.removeItem(POST_MATCH_REWARD_STORAGE_KEY);
+  } catch (_) {}
+  if (ageMs < 0 || ageMs > 2 * 60 * 1000) return;
+  if (coinsAwarded <= 0 && gemsAwarded <= 0) return;
+
+  const coinsFrom = Math.max(0, Number(coinsNow) - coinsAwarded);
+  const gemsFrom = Math.max(0, Number(gemsNow) - gemsAwarded);
+  coinEl.textContent = String(coinsFrom);
+  gemEl.textContent = String(gemsFrom);
+  animateNumber(coinEl, coinsFrom, Number(coinsNow), 1600);
+  animateNumber(gemEl, gemsFrom, Number(gemsNow), 1600);
+}
 
 /**
  * Check if user has a live match and redirect to it
@@ -148,6 +190,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch {}
   coinCount.textContent = userData.coins;
   gemCount.textContent = userData.gems;
+  animatePostMatchRewardsIfPresent(
+    coinCount,
+    gemCount,
+    Number(userData.coins) || 0,
+    Number(userData.gems) || 0,
+  );
 
   // Initialize character select UI
   initializeCharacterSelect(userData);
@@ -206,7 +254,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           "Share this with your friends to invite them to the party",
           undefined,
           undefined,
-          { duration: 2000 }
+          { duration: 2000 },
         );
       });
     }

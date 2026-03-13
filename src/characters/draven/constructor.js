@@ -21,13 +21,13 @@ class draven {
     scene.load.atlas(
       NAME,
       `${staticPath}/${NAME}/spritesheet.webp`,
-      `${staticPath}/${NAME}/animations.json`
+      `${staticPath}/${NAME}/animations.json`,
     );
     // Explosion atlas (separate) for splash attack visual
     scene.load.atlas(
       `${NAME}-explosion`,
       `${staticPath}/${NAME}/explosion.webp`,
-      `${staticPath}/${NAME}/explosion.json`
+      `${staticPath}/${NAME}/explosion.json`,
     );
     // Fireball / splash SFX
     scene.load.audio("draven-fireball", `${staticPath}/${NAME}/fireball.mp3`);
@@ -84,6 +84,11 @@ class draven {
     if (!data || data.type !== "draven-splash") return false;
     const ownerSprite = ownerWrapper && ownerWrapper.opponent;
     if (!ownerSprite) return true; // nothing to draw
+    try {
+      if (scene.anims?.exists("draven-throw")) {
+        ownerSprite.anims.play("draven-throw", true);
+      }
+    } catch (_) {}
     // Play remote attack start SFX (mirror owner's throw)
     try {
       scene.sound && scene.sound.play("draven-fireball", { volume: 0.4 });

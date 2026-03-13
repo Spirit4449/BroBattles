@@ -48,7 +48,7 @@ export function animations(scene) {
     if (!ordered.length) return;
 
     // Hold the lift frames longer, then accelerate through the downswing.
-    const durations = [200, 300, 95, 100, 100];
+    const durations = [150, 100, 95, 100, 100];
     scene.anims.create({
       key: `${NAME}-throw`,
       frames: ordered.map((f, i) => ({
@@ -56,7 +56,7 @@ export function animations(scene) {
         frame: f,
         duration: durations[Math.min(i, durations.length - 1)],
       })),
-      frameRate: 7,
+      frameRate: 10,
       repeat: 0,
     });
   };

@@ -59,6 +59,8 @@ let ammoCapacity = 1; // number of segments
 let ammoCharges = 1; // current charges available
 let nextFireTime = 0; // timestamp (ms) when we can fire again
 let reloadTimerMs = 0; // accumulates while reloading toward ammoReloadMs
+let ammoBarShakeUntil = 0;
+let lastNoAmmoSfxAt = 0;
 
 let superBar;
 let superBarBack;
@@ -278,11 +280,31 @@ export function createPlayer(
     getCharges: () => ammoCharges,
     getNextFireTime: () => nextFireTime,
     // actions
+    triggerNoAmmoFeedback: (playSound = true) => {
+      const now = Date.now();
+      ammoBarShakeUntil = now + 180;
+      if (!playSound) return;
+      if (now - lastNoAmmoSfxAt < 120) return;
+      lastNoAmmoSfxAt = now;
+      try {
+        scene?.sound?.play("sfx-noammo", { volume: 0.2, rate: 1.06 });
+      } catch (_) {}
+    },
     tryConsume: () => {
       const now = Date.now();
-      if (!canAttack) return false;
-      if (now < nextFireTime) return false;
-      if (ammoCharges <= 0) return false;
+      if (!canAttack) {
+        if (ammoCharges <= 0) ammoHooks.triggerNoAmmoFeedback(true);
+        else if (now < nextFireTime) ammoHooks.triggerNoAmmoFeedback(false);
+        return false;
+      }
+      if (now < nextFireTime) {
+        ammoHooks.triggerNoAmmoFeedback(false);
+        return false;
+      }
+      if (ammoCharges <= 0) {
+        ammoHooks.triggerNoAmmoFeedback(true);
+        return false;
+      }
       ammoCharges -= 1;
       nextFireTime = now + ammoCooldownMs;
       // start/restart reloading if not full
@@ -458,7 +480,10 @@ function drawSuperBar(x, y) {
 
 function drawAmmoBar(forcedX, forcedY) {
   if (!ammoBar || !ammoBarBack) return;
-  const x = forcedX !== undefined ? forcedX : player.x - ammoBarWidth / 2;
+  const shakeX =
+    Date.now() < ammoBarShakeUntil ? Phaser.Math.Between(-3, 3) : 0;
+  const x =
+    (forcedX !== undefined ? forcedX : player.x - ammoBarWidth / 2) + shakeX;
   const bodyTop = player.body ? player.body.y : player.y - player.height / 2;
   const y = forcedY !== undefined ? forcedY : bodyTop - 9; // just under health bar
   ammoBarBack.clear();
@@ -934,6 +959,73 @@ export function setSuperStats(charge, maxCharge) {
   updateHealthBar();
 }
 
+export function applyAuthoritativeState(state) {
+  if (!state || typeof state !== "object") return;
+
+  if (typeof state.maxHealth === "number" && state.maxHealth > 0) {
+    maxHealth = state.maxHealth;
+  }
+  if (typeof state.health === "number") {
+    currentHealth = Math.max(0, Math.min(maxHealth, Math.round(state.health)));
+  }
+  if (typeof state.superCharge === "number") {
+    superCharge = Math.max(0, Math.round(state.superCharge));
+  }
+  if (typeof state.maxSuperCharge === "number" && state.maxSuperCharge > 0) {
+    maxSuperCharge = Math.round(state.maxSuperCharge);
+  }
+
+  const ammo = state.ammoState;
+  if (ammo && typeof ammo === "object") {
+    const cap = Number(ammo.capacity);
+    const charges = Number(ammo.charges);
+    const cooldown = Number(ammo.cooldownMs);
+    const reload = Number(ammo.reloadMs);
+    const reloadTimer = Number(ammo.reloadTimerMs);
+    const nextFireIn = Number(ammo.nextFireInMs);
+
+    if (Number.isFinite(cap) && cap > 0) {
+      ammoCapacity = Math.max(1, Math.round(cap));
+    }
+    if (Number.isFinite(charges)) {
+      ammoCharges = Phaser.Math.Clamp(Math.round(charges), 0, ammoCapacity);
+    }
+    if (Number.isFinite(cooldown) && cooldown > 0) {
+      ammoCooldownMs = cooldown;
+    }
+    if (Number.isFinite(reload) && reload > 0) {
+      ammoReloadMs = reload;
+    }
+    if (Number.isFinite(reloadTimer) && reloadTimer >= 0) {
+      reloadTimerMs = Phaser.Math.Clamp(reloadTimer, 0, ammoReloadMs);
+    }
+    if (Number.isFinite(nextFireIn)) {
+      nextFireTime = Date.now() + Math.max(0, nextFireIn);
+    }
+  }
+
+  if (typeof state.isAlive === "boolean") {
+    dead = !state.isAlive;
+    if (!dead && player) {
+      player.alpha = 1;
+      if (player.body) player.body.enable = true;
+    }
+  }
+
+  updateHealthBar();
+}
+
+export function getAmmoSyncState() {
+  return {
+    capacity: ammoCapacity,
+    charges: ammoCharges,
+    cooldownMs: ammoCooldownMs,
+    reloadMs: ammoReloadMs,
+    reloadTimerMs: reloadTimerMs,
+    nextFireInMs: Math.max(0, Math.round(nextFireTime - Date.now())),
+  };
+}
+
 export function setPowerupMobility(speedMult = 1, jumpMult = 1) {
   movementSpeedMult = Number.isFinite(speedMult) ? Math.max(0.5, speedMult) : 1;
   movementJumpMult = Number.isFinite(jumpMult) ? Math.max(0.5, jumpMult) : 1;
@@ -984,7 +1076,20 @@ socket.on("health-update", (data) => {
           true,
         );
         scene.input.enabled = false;
-        player.alpha = 0.5;
+        player.setVelocity(0, 0);
+        if (player.body) {
+          player.body.enable = false;
+        }
+        try {
+          scene.tweens.add({
+            targets: player,
+            alpha: 0.38,
+            duration: 260,
+            ease: "Quad.easeOut",
+          });
+        } catch (_) {
+          player.alpha = 0.38;
+        }
         pdbg();
       }
       currentHealth = 0; // force exact 0

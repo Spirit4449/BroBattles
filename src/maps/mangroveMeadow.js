@@ -14,11 +14,44 @@ let tinyPlatform6;
 
 const mangroveMeadowObjects = [];
 
+function snapSpriteToPlatform(sprite, platform, targetX, epsilon = 2) {
+  if (!sprite || !platform) return;
+
+  const topY = platform.body ? platform.body.top : platform.getTopCenter().y;
+  if (sprite.body) {
+    const body = sprite.body;
+    const halfH = (Number(body.height) || 0) / 2;
+    const offsetY = Number(body.offset?.y) || 0;
+    const targetY = topY - halfH - offsetY - epsilon;
+
+    if (typeof body.reset === "function") {
+      body.reset(targetX, targetY);
+    } else {
+      sprite.setPosition(targetX, targetY);
+    }
+
+    if (body.velocity?.set) body.velocity.set(0, 0);
+    if (body.acceleration?.set) body.acceleration.set(0, 0);
+    if (typeof body.updateFromGameObject === "function") {
+      body.updateFromGameObject();
+      const desiredBottom = topY - epsilon;
+      const correction = desiredBottom - body.bottom;
+      if (Math.abs(correction) > 0.5) {
+        sprite.y += correction;
+        body.updateFromGameObject();
+      }
+    }
+  } else {
+    const h = Number(sprite.height) || 0;
+    sprite.setPosition(targetX, topY - h / 2 - epsilon);
+  }
+}
+
 export function mangroveMeadow(scene) {
   // Canvas variables
   const canvasWidth = scene.game.config.width;
   const canvasHeight = scene.game.config.height;
-  const centerX = scene.cameras.main.width / 2;
+  const centerX = scene.scale.width / 2;
 
   // Setup background position
   // const background = scene.add.sprite(0, -180, "mangrove-bg");
@@ -52,7 +85,7 @@ export function mangroveMeadow(scene) {
   baseRight = scene.physics.add.sprite(
     centerX + 422,
     638,
-    "mangrove-base-right"
+    "mangrove-base-right",
   );
   baseRight.body.allowGravity = false; // Doesn't allow gravity
   baseRight.setImmovable(true); // Makes sure it doesn't move
@@ -63,7 +96,7 @@ export function mangroveMeadow(scene) {
   tinyPlatform1 = scene.physics.add.sprite(
     centerX - 280,
     325,
-    "mangrove-tiny-platform"
+    "mangrove-tiny-platform",
   );
   tinyPlatform1.setScale(0.6);
   tinyPlatform1.body.allowGravity = false;
@@ -74,7 +107,7 @@ export function mangroveMeadow(scene) {
   tinyPlatform2 = scene.physics.add.sprite(
     centerX + 280,
     325,
-    "mangrove-tiny-platform"
+    "mangrove-tiny-platform",
   );
   tinyPlatform2.setScale(0.6);
   tinyPlatform2.body.allowGravity = false;
@@ -85,7 +118,7 @@ export function mangroveMeadow(scene) {
   tinyPlatform3 = scene.physics.add.sprite(
     centerX - 430,
     200,
-    "mangrove-tiny-platform"
+    "mangrove-tiny-platform",
   );
   tinyPlatform3.setScale(0.6);
   tinyPlatform3.body.allowGravity = false;
@@ -96,7 +129,7 @@ export function mangroveMeadow(scene) {
   tinyPlatform4 = scene.physics.add.sprite(
     centerX + 430,
     200,
-    "mangrove-tiny-platform"
+    "mangrove-tiny-platform",
   );
   tinyPlatform4.setScale(0.6);
   tinyPlatform4.body.allowGravity = false;
@@ -107,7 +140,7 @@ export function mangroveMeadow(scene) {
   tinyPlatform5 = scene.physics.add.sprite(
     centerX - 130,
     150,
-    "mangrove-tiny-platform"
+    "mangrove-tiny-platform",
   );
   tinyPlatform5.setScale(0.6);
   tinyPlatform5.body.allowGravity = false;
@@ -118,7 +151,7 @@ export function mangroveMeadow(scene) {
   tinyPlatform6 = scene.physics.add.sprite(
     centerX + 130,
     150,
-    "mangrove-tiny-platform"
+    "mangrove-tiny-platform",
   );
   tinyPlatform6.setScale(0.6);
   tinyPlatform6.body.allowGravity = false;
@@ -138,14 +171,7 @@ export function positionMangroveSpawn(scene, sprite, team, index) {
   const plat = group[i];
   if (!plat) return;
   const cx = plat.getCenter().x;
-  const bodyH = sprite.body ? sprite.body.height : sprite.height;
-  const topY = plat.body ? plat.body.top : plat.getTopCenter().y;
-  const cy = topY - bodyH / 2 - 5;
-  if (sprite.body && typeof sprite.body.reset === "function") {
-    sprite.body.reset(cx, cy);
-  } else {
-    sprite.setPosition(cx, cy);
-  }
+  snapSpriteToPlatform(sprite, plat, cx, 2);
 }
 
 export {
