@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -29,6 +29,48 @@
         height: 100%;
         overflow: hidden;
         z-index: 0;
+      }
+      /* Full-viewport poison water bg (covers side/top strips outside Phaser canvas) */
+      #poison-water-bg {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 0;
+        background: linear-gradient(
+          to top,
+          rgba(22, 101, 52, 0.72) 0%,
+          rgba(22, 163, 74, 0.42) 55%,
+          transparent 100%
+        );
+        pointer-events: none;
+        z-index: 0;
+        display: none;
+      }
+      /* Red vignette pulsing from screen edges while player is in poison water */
+      #water-vignette {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 2;
+        background: radial-gradient(
+          ellipse at center,
+          transparent 38%,
+          rgba(185, 28, 28, 0.68) 100%
+        );
+        opacity: 0;
+      }
+      @keyframes water-danger-pulse {
+        0%,
+        100% {
+          opacity: 0.32;
+        }
+        50% {
+          opacity: 0.78;
+        }
+      }
+      .water-danger-active {
+        animation: water-danger-pulse 0.9s ease-in-out infinite !important;
       }
       .background-image {
         width: 100%;
@@ -111,7 +153,7 @@
         display: none !important;
       }
 
-      /* ===== Battle Start Overlay (mimics matchmaking aesthetic) ===== */
+      /* ===== Battle Start Overlay (playful, blue-toned game card style) ===== */
       #battle-start-overlay {
         position: fixed;
         inset: 0;
@@ -133,42 +175,84 @@
         position: absolute;
         inset: 0;
         overflow: hidden;
-        backdrop-filter: blur(7px);
+        backdrop-filter: blur(6px);
         transform: scale(1.02);
         width: 100%;
         height: 100%;
-        background-color: #2e2e2e4b;
+        background:
+          radial-gradient(
+            circle at 18% 20%,
+            rgba(142, 197, 255, 0.2),
+            transparent 42%
+          ),
+          radial-gradient(
+            circle at 84% 78%,
+            rgba(120, 189, 255, 0.14),
+            transparent 38%
+          ),
+          rgba(14, 30, 55, 0.5);
       }
       #battle-start-overlay .bs-panel {
         position: relative;
         z-index: 1;
-        background: rgba(10, 10, 12, 0.85);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 14px;
-        padding: 20px 24px;
+        background: linear-gradient(180deg, #204874eb 0%, #153357f0 100%);
+        border: 3px solid #78bdff;
+        border-radius: 16px;
+        padding: 22px 24px 20px;
         width: min(900px, 92vw);
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-        color: #fff;
+        box-shadow:
+          0 18px 45px rgba(0, 0, 0, 0.5),
+          inset 0 0 0 2px rgba(255, 255, 255, 0.16);
+        color: #eaf5ff;
         text-align: center;
+        overflow: hidden;
+      }
+      #battle-start-overlay .bs-panel::before {
+        content: "";
+        position: absolute;
+        inset: 8px;
+        border: 1px dashed rgba(202, 230, 255, 0.35);
+        border-radius: 11px;
+        pointer-events: none;
+      }
+      #battle-start-overlay .bs-panel::after {
+        content: "GET READY";
+        position: absolute;
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%) rotate(-2deg);
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 2px solid #def3ff;
+        background: linear-gradient(180deg, #4fa5ff, #3d87df);
+        font-family: "Press Start 2P", cursive;
+        font-size: clamp(9px, 1.5vw, 11px);
+        letter-spacing: 0.8px;
+        color: #fff;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
       }
       #battle-start-overlay .bs-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        margin-bottom: 16px;
+        margin: 30px 0 16px;
         font-weight: 700;
       }
       #battle-start-overlay .bs-mode,
       #battle-start-overlay .bs-map {
         font-size: clamp(14px, 2vw, 16px);
-        opacity: 0.9;
+        opacity: 0.95;
+        font-family: "Press Start 2P", cursive;
+        color: #cce8ff;
       }
       #battle-start-overlay .bs-vs {
         font-size: clamp(20px, 3.6vw, 28px);
-        letter-spacing: 1px;
-        color: #ffd166;
-        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+        letter-spacing: 2px;
+        color: #9bd0ff;
+        font-family: "Press Start 2P", cursive;
+        text-shadow: 0 3px 0 #1d4f86;
+        animation: bs-pulse 1.2s ease-in-out infinite;
       }
       #battle-start-overlay .bs-grid {
         display: grid;
@@ -183,7 +267,7 @@
         padding: 8px;
       }
       #battle-start-overlay .bs-col.your {
-        border-right: 1px dashed rgba(255, 255, 255, 0.08);
+        border-right: 2px dashed rgba(120, 189, 255, 0.35);
       }
       #battle-start-overlay .bs-player {
         display: flex;
@@ -194,23 +278,25 @@
         min-width: 140px;
         background: linear-gradient(
           180deg,
-          rgba(255, 255, 255, 0.06),
-          rgba(255, 255, 255, 0.02)
+          rgba(171, 218, 255, 0.2),
+          rgba(124, 190, 255, 0.09)
         );
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 2px solid rgba(148, 202, 255, 0.45);
         border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
       }
       #battle-start-overlay .bs-col.opp .bs-player {
         background: linear-gradient(
           180deg,
-          rgba(255, 100, 100, 0.1),
-          rgba(255, 255, 255, 0.02)
+          rgba(124, 186, 252, 0.22),
+          rgba(84, 150, 231, 0.1)
         );
-        border-color: rgba(255, 120, 120, 0.2);
+        border-color: rgba(106, 172, 247, 0.45);
       }
       #battle-start-overlay .bs-player img {
         width: 64px;
         image-rendering: pixelated;
+        filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.35));
       }
       #battle-start-overlay .bs-name {
         font-size: 14px;
@@ -222,10 +308,275 @@
         font-weight: 800;
         margin: 8px 0 2px;
         letter-spacing: 2px;
+        color: #d6ecff;
+        font-family: "Press Start 2P", cursive;
+        text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
       }
       #battle-start-overlay .bs-sub {
-        opacity: 0.8;
+        opacity: 0.9;
         font-size: 13px;
+        color: #cde7ff;
+      }
+
+      #game-timer-hud {
+        position: fixed;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9998;
+        background: linear-gradient(
+          180deg,
+          rgba(40, 44, 62, 0.94),
+          rgba(42, 47, 64, 0.96)
+        );
+        border: 2px solid #1e3a8a;
+        border-radius: 12px;
+        color: #e2e8f0;
+        box-shadow:
+          0 8px 24px rgba(0, 0, 0, 0.45),
+          inset 0 0 0 1px rgba(96, 165, 250, 0.1);
+        padding: 8px 20px 10px;
+        text-align: center;
+        min-width: 130px;
+        pointer-events: none;
+      }
+      #game-timer-hud .timer-display {
+        font-family: "Press Start 2P", cursive;
+        font-size: clamp(22px, 3.8vw, 30px);
+        letter-spacing: 3px;
+        color: #e2e8f0;
+        line-height: 1;
+        display: block;
+      }
+      #game-timer-hud .timer-label {
+        font-size: 8px;
+        font-family: "Press Start 2P", cursive;
+        color: #60a5fa;
+        letter-spacing: 0.3px;
+        margin-top: 5px;
+        display: block;
+      }
+      #game-timer-hud.sudden-death .timer-display {
+        color: #f87171;
+        animation: sd-blink 0.9s step-start infinite;
+      }
+      #game-timer-hud.sudden-death .timer-label {
+        color: #fca5a5;
+      }
+      @keyframes sd-blink {
+        0%,
+        49% {
+          opacity: 1;
+        }
+        50%,
+        100% {
+          opacity: 0.45;
+        }
+      }
+
+      #battle-keybind-hud {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        z-index: 9999;
+        width: min(200px, calc(100vw - 20px));
+        background: linear-gradient(
+          180deg,
+          rgba(34, 40, 61, 0.9),
+          rgba(48, 53, 72, 0.6)
+        );
+        border: 2px solid #1e3a8a;
+        border-radius: 10px;
+        color: #e2e8f0;
+        box-shadow:
+          0 8px 20px rgba(0, 0, 0, 0.45),
+          inset 0 0 0 1px rgba(96, 165, 250, 0.08);
+        padding: 8px 8px 7px;
+        text-align: left;
+      }
+      #battle-keybind-hud .hud-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+      #battle-keybind-hud .bs-help-title {
+        font-family: "Press Start 2P", cursive;
+        font-size: 9px;
+        line-height: 1.35;
+        color: #60a5fa;
+      }
+      #battle-keybind-hud .bs-help-dismiss {
+        width: 20px;
+        height: 20px;
+        border: 1px solid #a9d7ff;
+        border-radius: 6px;
+        background: linear-gradient(180deg, #4b95e6, #3678c3);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        line-height: 1;
+        box-shadow: 0 2px 0 #214c7c;
+      }
+      #battle-keybind-hud .bs-help-dismiss:active {
+        transform: translateY(1px);
+        box-shadow: 0 1px 0 #214c7c;
+      }
+      #battle-keybind-hud .bs-help-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 4px;
+        font-size: 11px;
+      }
+      #battle-keybind-hud .bs-help-row {
+        display: grid;
+        grid-template-columns: minmax(140px, 1fr) auto;
+        align-items: center;
+        gap: 6px;
+      }
+      #battle-keybind-hud .bs-help-row kbd {
+        display: inline-block;
+        min-width: 22px;
+        border: 1px solid #cde9ff;
+        border-radius: 6px;
+        padding: 2px 6px;
+        background: linear-gradient(180deg, #eff8ff, #cfe8ff);
+        font-family: "Press Start 2P", cursive;
+        font-size: 8px;
+        text-align: center;
+        color: #14457a;
+        box-shadow:
+          0 2px 0 #7fb5e7,
+          0 3px 6px rgba(0, 0, 0, 0.18);
+      }
+      #battle-keybind-hud .bs-help-row .key-group {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+      }
+      #battle-keybind-hud .keyboard-pair {
+        display: inline-flex;
+        gap: 8px;
+        align-items: flex-end;
+      }
+      #battle-keybind-hud .keyboard-cluster {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(2, auto);
+        gap: 3px;
+      }
+      #battle-keybind-hud .keyboard-cluster .spacer {
+        width: 18px;
+        height: 1px;
+      }
+      #battle-keybind-hud .keyboard-cluster kbd {
+        min-width: 18px;
+        padding: 2px 0;
+      }
+      #battle-keybind-hud .bs-help-row span {
+        color: #bfdbfe;
+      }
+
+      #team-status-hud {
+        position: fixed;
+        left: 10px;
+        top: 10px;
+        z-index: 9997;
+        width: min(248px, calc(100vw - 20px));
+        background: linear-gradient(
+          180deg,
+          rgba(42, 50, 78, 0.9),
+          rgba(24, 31, 62, 0.9)
+        );
+        border: 2px solid #1e3a8a;
+        border-radius: 10px;
+        color: #e2e8f0;
+        box-shadow:
+          0 8px 20px rgba(0, 0, 0, 0.45),
+          inset 0 0 0 1px rgba(96, 165, 250, 0.08);
+        padding: 12px;
+      }
+      #team-status-hud .team-hud-section + .team-hud-section {
+        margin-top: 8px;
+      }
+      #team-status-hud .team-hud-title {
+        margin: 0 0 5px;
+        font-family: "Press Start 2P", cursive;
+        font-size: 9px;
+        letter-spacing: 0.3px;
+        color: #60a5fa;
+      }
+      #team-status-hud .team-hud-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 4px;
+      }
+      #team-status-hud .team-hud-player {
+        display: grid;
+        grid-template-columns: 20px 1fr;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 6px;
+        border: 1px solid rgba(30, 58, 138, 0.7);
+        border-radius: 8px;
+        background: rgba(8, 18, 58, 0.65);
+        transition:
+          filter 140ms ease,
+          opacity 140ms ease;
+      }
+      #team-status-hud .team-hud-player img {
+        width: 18px;
+        height: 18px;
+        image-rendering: pixelated;
+        object-fit: contain;
+      }
+      #team-status-hud .team-hud-player-name {
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #team-status-hud .team-hud-player.dead {
+        filter: grayscale(1);
+        opacity: 0.55;
+      }
+
+      @keyframes bs-pulse {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.08);
+        }
+      }
+
+      @media (max-width: 760px) {
+        #battle-start-overlay .bs-grid {
+          grid-template-columns: 1fr;
+        }
+        #battle-start-overlay .bs-col.your {
+          border-right: none;
+          border-bottom: 2px dashed rgba(120, 189, 255, 0.35);
+          padding-bottom: 14px;
+        }
+        #battle-keybind-hud {
+          top: 8px;
+          right: 8px;
+          width: min(246px, calc(100vw - 16px));
+        }
+        #team-status-hud {
+          top: auto;
+          bottom: 8px;
+          left: 8px;
+          width: min(220px, calc(100vw - 16px));
+        }
       }
     </style>
   </head>
@@ -247,7 +598,28 @@
       />
     </div>
 
+    <!-- Poison water CSS overlay: fills viewport strips outside Phaser canvas -->
+    <div id="poison-water-bg"></div>
+
+    <!-- Red edge vignette shown while local player is submerged -->
+    <div id="water-vignette"></div>
     <div id="hud"></div>
+
+    <aside id="team-status-hud" class="hidden" aria-live="polite">
+      <section class="team-hud-section">
+        <h3 class="team-hud-title">Your Team</h3>
+        <ul id="team-status-your" class="team-hud-list"></ul>
+      </section>
+      <section class="team-hud-section">
+        <h3 class="team-hud-title">Other Team</h3>
+        <ul id="team-status-opp" class="team-hud-list"></ul>
+      </section>
+    </aside>
+
+    <div id="game-timer-hud" class="hidden" aria-live="polite">
+      <span class="timer-display" id="game-timer-display">3:00</span>
+      <span class="timer-label" id="game-timer-label">Time Remaining</span>
+    </div>
 
     <!-- Battle Start Overlay (populated by game.js) -->
     <div id="battle-start-overlay" class="hidden" aria-hidden="true">
@@ -268,6 +640,38 @@
         </div>
       </div>
     </div>
+
+    <aside id="battle-keybind-hud" class="hidden" aria-live="polite">
+      <div class="hud-head">
+        <div class="bs-help-title">Controls</div>
+        <button
+          id="battle-keybind-dismiss"
+          class="bs-help-dismiss"
+          type="button"
+          aria-label="Dismiss controls"
+        >
+          ×
+        </button>
+      </div>
+      <ul class="bs-help-list">
+        <li class="bs-help-row">
+          <span class="keyboard-pair">
+            <span class="keyboard-cluster" aria-hidden="true">
+              <span class="spacer"></span><kbd>W</kbd
+              ><span class="spacer"></span> <kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>
+            </span>
+            <span class="keyboard-cluster" aria-hidden="true">
+              <span class="spacer"></span><kbd>↑</kbd
+              ><span class="spacer"></span> <kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd>
+            </span>
+          </span>
+          <span>Move</span>
+        </li>
+
+        <li class="bs-help-row"><kbd>J</kbd><span>Attack</span></li>
+        <li class="bs-help-row"><kbd>I</kbd><span>Special</span></li>
+      </ul>
+    </aside>
 
     <!-- Loading UI -->
     <div
@@ -357,7 +761,7 @@
         // Start creeping immediately during Phaser download
         startCreep("Downloading engine…");
         await loadScript(
-          "https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser-arcade-physics.min.js"
+          "https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser-arcade-physics.min.js",
         );
 
         // Ensure we show some progress after engine arrives

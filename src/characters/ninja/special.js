@@ -8,7 +8,7 @@ export function perform(
   opponentPlayers,
   username,
   gameId,
-  isOwner = false
+  isOwner = false,
 ) {
   const isLeft = player.flipX;
   const velocityX = isLeft ? -600 : 600;

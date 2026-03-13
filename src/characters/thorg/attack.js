@@ -2,7 +2,7 @@ import socket from "../../socket";
 
 const RECT_W = 120;
 const RECT_H = 60;
-const DURATION = 380;
+const DURATION = 400;
 const DAMAGE_TICK_MS = 90;
 let DEBUG_DRAW = false;
 
@@ -57,7 +57,7 @@ export function performThorgFallAttack(instance) {
   let dmgAccum = 0;
   const startX0 = p.x + (direction >= 0 ? 10 : -10);
   const startY0 = p.y - p.height * 0.5;
-  const range = 140;
+  const range = 110;
   const endX0 = startX0 + direction * range;
   const endY0 = p.y + 100; // drop much lower before dissipating
   const arcHeight = 120; // peak above start
@@ -175,7 +175,7 @@ export function performThorgFallAttack(instance) {
       // scale up over time
       scene.tweens.add({
         targets: sprite,
-        scale: 1.25,
+        scale: 1,
         duration: DURATION,
         ease: "Sine.easeOut",
       });

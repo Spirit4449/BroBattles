@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -74,7 +74,7 @@
     <div id="bottom-bar">
       <div class="dropdown-group">
         <select id="mode" name="mode" class="dropdown" data-sound="cursor4">
-          <option value="1" >1v1</option>
+          <option value="1">1v1</option>
           <option value="2">2v2</option>
           <option value="3">3v3</option>
         </select>
@@ -112,6 +112,10 @@
           </div>
           <div id="mm-players" class="mm-players-grid" aria-live="polite"></div>
         </div>
+        <div id="mm-tips">
+          <span class="mm-tips-icon">💡</span>
+          <span id="tips-text"></span>
+        </div>
         <div class="mm-actions">
           <button
             id="mm-cancel"
@@ -125,6 +129,42 @@
       </div>
     </div>
 
+    <script>
+      (function () {
+        var tips = [
+          "Stay still to regenerate health. Pick your moment wisely.",
+          "Watch the yellow bar. When it's full, your special attack is ready.",
+          "Earn more gems by racking up kills and dealing big damage.",
+          "Jump toward a wall and press jump again to wall jump your way up.",
+          "Falling off the map is an instant KO. Stay on solid ground.",
+          "Spend your coins in the shop to upgrade your character's stats.",
+          "Use gems to unlock new characters with unique fighting styles.",
+          "Every attack has a cooldown. Wait for it before swinging again.",
+          "Ammo is limited! Aim carefully and don't waste your shots.",
+          "Low on health? Back off and regenerate before re-engaging.",
+          "Team up with your partner to focus one enemy at a time.",
+          "Wall jumping can save your life after being knocked off the edge.",
+          "Your special attack deals massive damage. Save it for the right moment.",
+          "Keep moving. A stationary target is an easy target.",
+          "Different characters have different ranges. Know your spacing.",
+          "Left-click to attack. No need to reach for J.",
+          "Right-click to unleash your special when the yellow bar is full.",
+        ];
+        var idx = Math.floor(Math.random() * tips.length);
+        var el = document.getElementById("tips-text");
+        function showTip() {
+          if (!el) return;
+          el.style.opacity = "0";
+          setTimeout(function () {
+            el.textContent = tips[idx];
+            el.style.opacity = "1";
+            idx = (idx + 1) % tips.length;
+          }, 350);
+        }
+        showTip();
+        setInterval(showTip, 4000);
+      })();
+    </script>
     <script src="/bundles/index.bundle.js"></script>
   </body>
 </html>

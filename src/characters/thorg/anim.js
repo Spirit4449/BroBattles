@@ -37,11 +37,11 @@ export function animations(scene) {
   };
 
   // Try reasonable prefix variants for robustness across atlases
-  make(`${NAME}-running`, ["running", "run"], 20, 0);
-  make(`${NAME}-idle`, ["idle", "stand", "idle_"], 5, -1);
-  make(`${NAME}-jumping`, ["jumping", "jump"], 20, 0);
+  make(`${NAME}-running`, ["running", "run"], 9, 0);
+  make(`${NAME}-idle`, ["idle", "stand", "idle_"], 3, -1);
+  make(`${NAME}-jumping`, ["jumping", "jump"], 7, 0);
   make(`${NAME}-sliding`, ["wall", "slide", "sliding"], 20, 2);
-  make(`${NAME}-falling`, ["falling", "fall"], 20, 0);
-  make(`${NAME}-throw`, ["throw", "attack", "attack_throw"], 15, 0);
+  make(`${NAME}-falling`, ["falling", "fall"], 8, 0);
+  make(`${NAME}-throw`, ["throw", "attack", "attack_throw"], 7, 0);
   make(`${NAME}-dying`, ["dying", "death", "dead"], 10, 0);
 }

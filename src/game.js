@@ -16,6 +16,7 @@ import {
   handlePlayerMovement,
   dead,
   setSuperStats,
+  setPowerupMobility,
 } from "./player";
 import {
   preloadAll,
@@ -35,14 +36,32 @@ window.Phaser = Phaser;
 
 // Path to get assets
 const staticPath = "/assets";
+const BATTLE_HELP_DISMISSED_KEY = "bb_hide_keybind_hud_v1";
+const TEAM_HUD_ROWS = new Map(); // name -> <li>
+const POWERUP_TYPES = ["rage", "health", "shield", "poison", "gravityBoots"];
+// Asset folder naming follows the requested convention under /assets/powerups/[name]/
+const POWERUP_ASSET_DIR = {
+  rage: "rage",
+  health: "health",
+  shield: "shield",
+  poison: "poison",
+  gravityBoots: "gravity-boots",
+};
+const POWERUP_COLORS = {
+  rage: 0xa855f7,
+  health: 0x34d399,
+  shield: 0xf97316,
+  poison: 0xfacc15,
+  gravityBoots: 0xef4444,
+};
 
 let __booted = false;
 function onReady(fn) {
   if (document.readyState === "loading") {
-    // not ready yet — wait once
+    // not ready yet â€” wait once
     document.addEventListener("DOMContentLoaded", fn, { once: true });
   } else {
-    // DOM is already ready — run on next tick to keep ordering sane
+    // DOM is already ready â€” run on next tick to keep ordering sane
     queueMicrotask(fn); // or setTimeout(fn, 0)
   }
 }
@@ -101,6 +120,11 @@ const PENDING_ACTIONS = [];
 // Spawn coordination
 let SPAWN_VERSION = 0; // increments per scene init to version spawns
 const SERVER_SPAWN_INDEX = Object.create(null); // name -> spawnIndex (if server provided)
+let latestPowerups = []; // from server snapshots
+let latestPlayerEffects = {}; // name -> effect duration map (ms remaining)
+const POWERUP_COLLECT_QUEUE = [];
+const LAST_HEALTH_BY_PLAYER = Object.create(null);
+const SHIELD_IMPACT_QUEUE = [];
 
 // Movement throttling variables
 let lastMovementSent = 0;
@@ -215,6 +239,7 @@ async function initializeGame() {
     gameData = await fetchGameData();
     console.log("Game data received:", gameData);
     username = gameData.yourName || username;
+    initTeamStatusHud(gameData?.players || []);
 
     // 1) Register listeners before join
     console.log("Setting up game listeners");
@@ -296,6 +321,144 @@ function showBattleStartOverlay(players) {
   return root;
 }
 
+function initTimerHud() {
+  const hud = document.getElementById("game-timer-hud");
+  if (hud) hud.classList.add("hidden");
+}
+
+function updateTimerHud(remainingMs, suddenDeath) {
+  const hud = document.getElementById("game-timer-hud");
+  const display = document.getElementById("game-timer-display");
+  const label = document.getElementById("game-timer-label");
+  if (!hud) return;
+  hud.classList.remove("hidden");
+  const totalSec = Math.max(0, Math.ceil(remainingMs / 1000));
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  if (display) display.textContent = `${mins}:${String(secs).padStart(2, "0")}`;
+  if (suddenDeath) {
+    hud.classList.add("sudden-death");
+    if (label) label.textContent = "SUDDEN DEATH";
+  } else {
+    hud.classList.remove("sudden-death");
+    if (label) label.textContent = "Time Reamining";
+  }
+}
+
+function showSuddenDeathBanner() {
+  const existing = document.getElementById("sd-flash-banner");
+  if (existing) return;
+  const banner = document.createElement("div");
+  banner.id = "sd-flash-banner";
+  banner.textContent = "SUDDEN DEATH";
+  Object.assign(banner.style, {
+    position: "fixed",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%) scale(0.3)",
+    fontFamily: "'Press Start 2P', cursive",
+    fontSize: "clamp(28px, 6vw, 52px)",
+    color: "#f87171",
+    textShadow: "0 4px 0 #7f1d1d, 0 0 30px rgba(248,113,113,0.85)",
+    zIndex: "10000",
+    letterSpacing: "4px",
+    pointerEvents: "none",
+    transition:
+      "transform 0.5s cubic-bezier(0.34,1.56,0.64,1), opacity 0.7s ease",
+    opacity: "0",
+    whiteSpace: "nowrap",
+  });
+  document.body.appendChild(banner);
+  requestAnimationFrame(() => {
+    banner.style.transform = "translate(-50%, -50%) scale(1)";
+    banner.style.opacity = "1";
+  });
+  setTimeout(() => {
+    banner.style.opacity = "0";
+    banner.style.transform = "translate(-50%, -50%) scale(1.3)";
+    setTimeout(() => banner.remove(), 600);
+  }, 2500);
+}
+
+function initKeybindHud() {
+  const hud = document.getElementById("battle-keybind-hud");
+  const dismissBtn = document.getElementById("battle-keybind-dismiss");
+  if (!hud) return;
+
+  let dismissed = false;
+  try {
+    dismissed = localStorage.getItem(BATTLE_HELP_DISMISSED_KEY) === "1";
+  } catch (_) {}
+  hud.classList.toggle("hidden", dismissed);
+
+  if (!dismissBtn) return;
+  dismissBtn.addEventListener("click", () => {
+    hud.classList.add("hidden");
+    try {
+      localStorage.setItem(BATTLE_HELP_DISMISSED_KEY, "1");
+    } catch (_) {}
+  });
+}
+
+function initTeamStatusHud(players) {
+  const root = document.getElementById("team-status-hud");
+  const yourList = document.getElementById("team-status-your");
+  const oppList = document.getElementById("team-status-opp");
+  if (!root || !yourList || !oppList) return;
+
+  yourList.innerHTML = "";
+  oppList.innerHTML = "";
+  TEAM_HUD_ROWS.clear();
+
+  const list = Array.isArray(players) ? players : [];
+  const sorted = [...list].sort((a, b) => {
+    if (a?.name === username) return -1;
+    if (b?.name === username) return 1;
+    return String(a?.name || "").localeCompare(String(b?.name || ""));
+  });
+
+  const append = (container, p) => {
+    const row = document.createElement("li");
+    row.className = "team-hud-player";
+    if (p?.isAlive === false) row.classList.add("dead");
+    const img = document.createElement("img");
+    const cls = (p?.char_class || "ninja").toLowerCase();
+    img.src = `/assets/${cls}/body.webp`;
+    img.alt = cls;
+    const nameEl = document.createElement("div");
+    nameEl.className = "team-hud-player-name";
+    const name = String(p?.name || "Player");
+    nameEl.textContent = name + (name === username ? " (You)" : "");
+    row.appendChild(img);
+    row.appendChild(nameEl);
+    container.appendChild(row);
+    TEAM_HUD_ROWS.set(name, row);
+  };
+
+  const yourTeam = sorted.filter((p) => p?.team === gameData?.yourTeam);
+  const oppTeam = sorted.filter((p) => p?.team !== gameData?.yourTeam);
+  yourTeam.forEach((p) => append(yourList, p));
+  oppTeam.forEach((p) => append(oppList, p));
+
+  root.classList.toggle("hidden", sorted.length === 0);
+}
+
+function setTeamHudPlayerAlive(name, isAlive) {
+  if (!name) return;
+  const row = TEAM_HUD_ROWS.get(String(name));
+  if (!row) return;
+  row.classList.toggle("dead", !isAlive);
+}
+
+function syncTeamHudFromSnapshot(playersByName) {
+  if (!playersByName || typeof playersByName !== "object") return;
+  for (const [name, data] of Object.entries(playersByName)) {
+    if (typeof data?.health === "number") {
+      setTeamHudPlayerAlive(name, data.health > 0);
+    }
+  }
+}
+
 // Set up socket event listeners for game
 function setupGameEventListeners() {
   // Re-join room if socket reconnects before init completed (idempotent on server)
@@ -373,6 +536,14 @@ function setupGameEventListeners() {
     if (gameState.players) {
       // Initialize opponent and team players based on server data
       initializePlayers(gameState.players);
+      initTeamStatusHud(gameState.players);
+    }
+    if (Array.isArray(gameState.powerups)) latestPowerups = gameState.powerups;
+    if (
+      gameState.playerEffects &&
+      typeof gameState.playerEffects === "object"
+    ) {
+      latestPlayerEffects = gameState.playerEffects;
     }
 
     // Cache my level and stats for character modules
@@ -402,11 +573,40 @@ function setupGameEventListeners() {
     trySendReadyAck();
   });
 
+  socket.on("health-update", (payload) => {
+    if (!payload?.username) return;
+    if (typeof payload.health === "number") {
+      setTeamHudPlayerAlive(payload.username, payload.health > 0);
+      const prev = LAST_HEALTH_BY_PLAYER[payload.username];
+      LAST_HEALTH_BY_PLAYER[payload.username] = payload.health;
+      if (
+        typeof prev === "number" &&
+        payload.health < prev &&
+        (latestPlayerEffects?.[payload.username]?.shield || 0) > 0
+      ) {
+        SHIELD_IMPACT_QUEUE.push({
+          username: payload.username,
+          at: Date.now(),
+        });
+      }
+    }
+  });
+
+  socket.on("player:dead", (payload) => {
+    if (!payload?.username) return;
+    setTeamHudPlayerAlive(payload.username, false);
+  });
+
   // No periodic join retries needed; reconnect handler covers transient drops
 
   // Server snapshots for interpolation
   socket.on("game:snapshot", (snapshot) => {
     if (!snapshot || !snapshot.players) return;
+    if (Array.isArray(snapshot.powerups)) latestPowerups = snapshot.powerups;
+    if (snapshot.playerEffects && typeof snapshot.playerEffects === "object") {
+      latestPlayerEffects = snapshot.playerEffects;
+    }
+    syncTeamHudFromSnapshot(snapshot.players);
     if (!stateActive) {
       stateActive = true;
       console.log("Started receiving server snapshots (tMono/tickId enabled)");
@@ -427,7 +627,7 @@ function setupGameEventListeners() {
         monoCalibrated = true;
         console.log(
           "Monotonic offset calibrated (ms):",
-          serverMonoOffset.toFixed(2)
+          serverMonoOffset.toFixed(2),
         );
       }
     } catch (_) {}
@@ -500,7 +700,7 @@ function setupGameEventListeners() {
               null,
               null,
               (gameData.players || []).filter((p) => p.team === pd.team).length,
-              String(gameData.map)
+              String(gameData.map),
             );
             container[pd.name] = op;
           }
@@ -531,8 +731,8 @@ function setupGameEventListeners() {
         const stdev = Math.sqrt(variance);
         console.log(
           `[interp] snapshots avg=${avg.toFixed(2)}ms sd=${stdev.toFixed(
-            2
-          )}ms n=${arr.length}`
+            2,
+          )}ms n=${arr.length}`,
         );
         lastDiagLogMono = cm;
       }
@@ -569,7 +769,7 @@ function setupGameEventListeners() {
           null,
           null,
           (gameData.players || []).filter((p) => p.team === pd.team).length,
-          String(gameData.map)
+          String(gameData.map),
         );
         container[pd.name] = op;
         wrapper = op;
@@ -622,7 +822,57 @@ function setupGameEventListeners() {
     try {
       player && player.body && (player.body.enable = false);
     } catch (_) {}
+    // Hide timer HUD
+    try {
+      document.getElementById("game-timer-hud")?.classList.add("hidden");
+    } catch (_) {}
     showGameOverScreen(payload);
+  });
+
+  // Server-synced game timer and sudden death
+  socket.on("game:timer", (payload) => {
+    updateTimerHud(payload.remaining, payload.suddenDeath);
+    if (
+      payload.suddenDeath &&
+      typeof payload.poisonY === "number" &&
+      gameScene
+    ) {
+      gameScene._poisonWaterY = payload.poisonY;
+    }
+  });
+
+  socket.on("game:sudden-death:start", (payload) => {
+    showSuddenDeathBanner();
+    if (gameScene && typeof payload?.poisonY === "number") {
+      gameScene._poisonWaterY = payload.poisonY;
+    }
+  });
+
+  socket.on("powerup:collected", (payload) => {
+    if (!payload || typeof payload.id === "undefined") return;
+    POWERUP_COLLECT_QUEUE.push(payload);
+  });
+
+  socket.on("powerup:tick", (payload) => {
+    if (!payload || !payload.type || !gameScene || !gameScene.sound) return;
+    // Tick SFX only on effects that feel periodic
+    if (payload.type === "poison") {
+      try {
+        gameScene.sound.play("pu-tick-poison", { volume: 0.28 });
+      } catch (_) {}
+    } else if (payload.type === "health") {
+      try {
+        gameScene.sound.play("pu-tick-health", { volume: 0.2 });
+      } catch (_) {}
+    } else if (payload.type === "rage") {
+      try {
+        gameScene.sound.play("pu-tick-rage", { volume: 0.18 });
+      } catch (_) {}
+    } else if (payload.type === "gravityBoots") {
+      try {
+        gameScene.sound.play("pu-tick-gravityBoots", { volume: 0.2 });
+      } catch (_) {}
+    }
   });
 }
 
@@ -671,7 +921,12 @@ function initializePlayers(players) {
 }
 
 // Initialize game when page loads
-window.__BOOT_GAME__ = () => onReady(initializeGame);
+window.__BOOT_GAME__ = () =>
+  onReady(() => {
+    initKeybindHud();
+    initTimerHud();
+    initializeGame();
+  });
 
 // Phaser class to setup the game
 class GameScene extends Phaser.Scene {
@@ -683,8 +938,8 @@ class GameScene extends Phaser.Scene {
   preload() {
     this.load.on("progress", (p) => {
       // 50% - 90%
-      const pct = Math.floor(50 + p * 40); // maps 0–1 → 50–90
-      updateLoading(pct, `Loading assets…`);
+      const pct = Math.floor(50 + p * 40); // maps 0â€“1 â†’ 50â€“90
+      updateLoading(pct, `Loading assetsâ€¦`);
     });
 
     this.load.once("complete", () => {
@@ -703,23 +958,23 @@ class GameScene extends Phaser.Scene {
     this.load.image("lushy-platform", `${staticPath}/lushy/largePlatform.webp`);
     this.load.image(
       "lushy-side-platform",
-      `${staticPath}/lushy/sidePlatform.webp`
+      `${staticPath}/lushy/sidePlatform.webp`,
     );
     this.load.image(
       "mangrove-tiny-platform",
-      `${staticPath}/mangrove/tinyPlatform.webp`
+      `${staticPath}/mangrove/tinyPlatform.webp`,
     );
     this.load.image(
       "mangrove-base-left",
-      `${staticPath}/mangrove/baseLeft.webp`
+      `${staticPath}/mangrove/baseLeft.webp`,
     );
     this.load.image(
       "mangrove-base-middle",
-      `${staticPath}/mangrove/baseMiddle.webp`
+      `${staticPath}/mangrove/baseMiddle.webp`,
     );
     this.load.image(
       "mangrove-base-right",
-      `${staticPath}/mangrove/baseRight.webp`
+      `${staticPath}/mangrove/baseRight.webp`,
     );
     this.load.image("mangrove-base-top", `${staticPath}/mangrove/baseTop.webp`);
     this.load.image("thorg-weapon", `${staticPath}/thorg/weapon.webp`);
@@ -734,6 +989,27 @@ class GameScene extends Phaser.Scene {
     // Music (non-blocking BGM: handled via HTMLAudio at runtime)
     this.load.audio("win", `${staticPath}/win.mp3`);
     this.load.audio("lose", `${staticPath}/lose.mp3`);
+
+    // Powerup assets (support common icon/audio extensions)
+    for (const type of POWERUP_TYPES) {
+      const dir = POWERUP_ASSET_DIR[type] || type;
+      this.load.image(
+        `pu-icon-${type}-webp`,
+        `${staticPath}/powerups/${dir}/icon.webp`,
+      );
+      this.load.image(
+        `pu-icon-${type}-png`,
+        `${staticPath}/powerups/${dir}/icon.png`,
+      );
+      this.load.audio(`pu-touch-${type}`, [
+        `${staticPath}/powerups/${dir}/touch.mp3`,
+        `${staticPath}/powerups/${dir}/touch.wav`,
+      ]);
+      this.load.audio(`pu-tick-${type}`, [
+        `${staticPath}/powerups/${dir}/tick.mp3`,
+        `${staticPath}/powerups/${dir}/tick.wav`,
+      ]);
+    }
   }
 
   create() {
@@ -742,6 +1018,24 @@ class GameScene extends Phaser.Scene {
     // Don't let players move until game is fully ready (unless late-joining a live game)
     this.input.keyboard.enabled = false;
     this.physics.world.setBoundsCollision(false, false, false, false);
+    // Poison water overlay graphics (sudden death - drawn every frame in update)
+    this._poisonWaterY = 700; // start off-screen below world
+    this._smoothPoisonY = null; // interpolated, set on first use
+    this._poisonGraphics = this.add.graphics();
+    this._poisonGraphics.setDepth(12);
+    // Pre-generate bubble positions (22 bubbles, deterministic so no jitter on re-use)
+    this._poisonBubbles = Array.from({ length: 22 }, (_, i) => ({
+      x: 30 + ((i * 59 + i * 11) % 1240),
+      phase: i * 0.57,
+      r: 1.5 + (i % 3) * 0.75,
+      speed: 20 + (i % 6) * 8,
+      drift: 2.5 + (i % 4) * 1.5,
+    }));
+    this._powerupVisuals = Object.create(null); // id -> visual bundle
+    this._powerupAuraGraphics = this.add.graphics();
+    this._powerupAuraGraphics.setDepth(21);
+    this._powerupFxGraphics = this.add.graphics();
+    this._powerupFxGraphics.setDepth(20);
     // Wait for game data before creating map and player
     if (!gameData) {
       console.log("Waiting for game data...");
@@ -796,7 +1090,7 @@ class GameScene extends Phaser.Scene {
             if (!playerName || !action) continue;
             if (playerName === username) continue;
             const pd = (gameData.players || []).find(
-              (p) => p.name === playerName
+              (p) => p.name === playerName,
             );
             const isTeammate = pd && pd.team === gameData.yourTeam;
             const container = isTeammate ? teamPlayers : opponentPlayers;
@@ -894,7 +1188,7 @@ class GameScene extends Phaser.Scene {
       (gameData.players || []).filter((p) => p.team === gameData.yourTeam)
         .length,
       String(gameData.map),
-      opponentPlayers
+      opponentPlayers,
     );
 
     // Set initial super stats
@@ -930,11 +1224,11 @@ class GameScene extends Phaser.Scene {
           .sort((a, b) => a.name.localeCompare(b.name));
         myIndex = Math.max(
           0,
-          teamList.findIndex((p) => p.name === username)
+          teamList.findIndex((p) => p.name === username),
         );
       }
       const teamSize = (gameData.players || []).filter(
-        (p) => p.team === gameData.yourTeam
+        (p) => p.team === gameData.yourTeam,
       ).length;
       if (String(gameData.map) === "1") {
         positionLushySpawn(this, player, gameData.yourTeam, myIndex, teamSize);
@@ -1019,8 +1313,8 @@ class GameScene extends Phaser.Scene {
             typeof existing.spawnIndex === "number"
               ? existing.spawnIndex
               : typeof SERVER_SPAWN_INDEX[playerData.name] === "number"
-              ? SERVER_SPAWN_INDEX[playerData.name]
-              : undefined;
+                ? SERVER_SPAWN_INDEX[playerData.name]
+                : undefined;
           const index =
             typeof idx === "number"
               ? idx
@@ -1030,7 +1324,7 @@ class GameScene extends Phaser.Scene {
                     .sort((a, b) => a.name.localeCompare(b.name));
                   return Math.max(
                     0,
-                    teamList.findIndex((p) => p.name === playerData.name)
+                    teamList.findIndex((p) => p.name === playerData.name),
                   );
                 })();
           if (String(gameData.map) === "1") {
@@ -1040,14 +1334,14 @@ class GameScene extends Phaser.Scene {
               playerData.team,
               index,
               (gameData.players || []).filter((p) => p.team === playerData.team)
-                .length
+                .length,
             );
           } else if (String(gameData.map) === "2") {
             positionMangroveSpawn(
               this,
               existing.opponent,
               playerData.team,
-              index
+              index,
             );
           }
           if (existing.updateUIPosition) existing.updateUIPosition();
@@ -1064,10 +1358,9 @@ class GameScene extends Phaser.Scene {
         isTeammate ? "teammate" : playerData.team, // team or teammate flag for ally coloring
         null,
         null,
-        (gameData.players || []).filter(
-          (p) => p.team === playerData.team
-        ).length,
-        String(gameData.map) // map as string for spawn helpers
+        (gameData.players || []).filter((p) => p.team === playerData.team)
+          .length,
+        String(gameData.map), // map as string for spawn helpers
       );
 
       // Tag instance with spawn version and optional server index to support idempotency
@@ -1082,16 +1375,16 @@ class GameScene extends Phaser.Scene {
           typeof opPlayer.spawnIndex === "number"
             ? opPlayer.spawnIndex
             : typeof playerData.spawnIndex === "number"
-            ? playerData.spawnIndex
-            : (() => {
-                const teamList = (gameData.players || [])
-                  .filter((p) => p.team === playerData.team)
-                  .sort((a, b) => a.name.localeCompare(b.name));
-                return Math.max(
-                  0,
-                  teamList.findIndex((p) => p.name === playerData.name)
-                );
-              })();
+              ? playerData.spawnIndex
+              : (() => {
+                  const teamList = (gameData.players || [])
+                    .filter((p) => p.team === playerData.team)
+                    .sort((a, b) => a.name.localeCompare(b.name));
+                  return Math.max(
+                    0,
+                    teamList.findIndex((p) => p.name === playerData.name),
+                  );
+                })();
         const index = Math.max(0, idx);
         if (String(gameData.map) === "1") {
           positionLushySpawn(
@@ -1100,14 +1393,14 @@ class GameScene extends Phaser.Scene {
             playerData.team,
             index,
             (gameData.players || []).filter((p) => p.team === playerData.team)
-              .length
+              .length,
           );
         } else if (String(gameData.map) === "2") {
           positionMangroveSpawn(
             this,
             opPlayer.opponent,
             playerData.team,
-            index
+            index,
           );
         }
         if (opPlayer.updateUIPosition) opPlayer.updateUIPosition();
@@ -1140,7 +1433,521 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  _powerupTextureFor(type) {
+    const webpKey = `pu-icon-${type}-webp`;
+    const pngKey = `pu-icon-${type}-png`;
+    if (this.textures.exists(webpKey)) return webpKey;
+    if (this.textures.exists(pngKey)) return pngKey;
+    return null;
+  }
+
+  _powerupLabelFor(type) {
+    if (type === "gravityBoots") return "B";
+    if (type === "shield") return "S";
+    return String(type || "?")
+      .charAt(0)
+      .toUpperCase();
+  }
+
+  _spawnTrailParticle(x, y, color, r = 5, life = 260) {
+    const c = this.add.circle(x, y, r, color, 0.75);
+    c.setDepth(19);
+    this.tweens.add({
+      targets: c,
+      y: y - Phaser.Math.Between(10, 24),
+      x: x + Phaser.Math.Between(-8, 8),
+      alpha: 0,
+      scaleX: Phaser.Math.FloatBetween(1.2, 1.8),
+      scaleY: Phaser.Math.FloatBetween(1.2, 1.8),
+      duration: life,
+      ease: "Quad.easeOut",
+      onComplete: () => c.destroy(),
+    });
+  }
+
+  _getSpriteByUsername(name) {
+    if (!name) return null;
+    if (name === username) return player;
+    const w = opponentPlayers[name] || teamPlayers[name];
+    return w?.opponent || null;
+  }
+
+  _spawnPlusParticle(x, y, color, size = 7, life = 380) {
+    const g = this.add.graphics();
+    g.setDepth(19);
+    g.fillStyle(color, 0.88);
+    g.fillRect(-size * 0.5, -size * 0.18, size, size * 0.36);
+    g.fillRect(-size * 0.18, -size * 0.5, size * 0.36, size);
+    g.x = x;
+    g.y = y;
+    this.tweens.add({
+      targets: g,
+      y: y - Phaser.Math.Between(22, 42),
+      x: x + Phaser.Math.Between(-10, 10),
+      alpha: 0,
+      angle: Phaser.Math.Between(-25, 25),
+      scaleX: Phaser.Math.FloatBetween(1.1, 1.7),
+      scaleY: Phaser.Math.FloatBetween(1.1, 1.7),
+      duration: life,
+      ease: "Quad.easeOut",
+      onComplete: () => g.destroy(),
+    });
+  }
+
+  _applyPowerupCharacterFX(spr, fx, nowSec) {
+    if (!spr || !spr.active) return;
+    if (typeof spr._puBaseScaleX !== "number") {
+      spr._puBaseScaleX = spr.scaleX || 1;
+      spr._puBaseScaleY = spr.scaleY || 1;
+    }
+    if (typeof spr._puBaseOriginX !== "number") {
+      spr._puBaseOriginX = typeof spr.originX === "number" ? spr.originX : 0.5;
+      spr._puBaseOriginY = typeof spr.originY === "number" ? spr.originY : 0.5;
+    }
+    const baseX = spr._puBaseScaleX || 1;
+    const baseY = spr._puBaseScaleY || 1;
+    const baseOriginX = spr._puBaseOriginX ?? 0.5;
+    const baseOriginY = spr._puBaseOriginY ?? 0.5;
+    const rageOn = (fx?.rage || 0) > 0;
+    const healthOn = (fx?.health || 0) > 0;
+    const poisonOn = (fx?.poison || 0) > 0;
+    const bootsOn = (fx?.gravityBoots || 0) > 0;
+
+    if (rageOn) {
+      const pulse = Math.sin(nowSec * 8 + (spr.x || 0) * 0.01);
+      // Rage keeps a fixed size boost; only tint pulses.
+      spr.setTint(pulse > 0 ? 0xc084fc : 0x9333ea);
+      spr.setScale(baseX * 1.22, baseY * 1.22);
+      // Shift origin downward so the extra size grows upward rather than into the floor.
+      spr.setOrigin(baseOriginX, Math.min(1, baseOriginY + 0.12));
+      if (Math.random() < 0.32) {
+        this._spawnTrailParticle(
+          spr.x + Phaser.Math.Between(-14, 14),
+          spr.y + Phaser.Math.Between(-26, 18),
+          POWERUP_COLORS.rage,
+          3.5,
+          300,
+        );
+      }
+    } else if (healthOn) {
+      const healthPulse = Math.sin(nowSec * 5 + (spr.x || 0) * 0.01);
+      spr.setTint(healthPulse > 0 ? 0x86efac : 0x34d399);
+      spr.setScale(baseX, baseY);
+      spr.setOrigin(baseOriginX, baseOriginY);
+      if (Math.random() < 0.55) {
+        this._spawnPlusParticle(
+          spr.x + Phaser.Math.Between(-16, 16),
+          spr.y + Phaser.Math.Between(-30, 8),
+          POWERUP_COLORS.health,
+          9,
+          430,
+        );
+      }
+    } else if (poisonOn) {
+      spr.clearTint();
+      spr.setScale(baseX, baseY);
+      spr.setOrigin(baseOriginX, baseOriginY);
+      if (Math.random() < 0.42) {
+        this._spawnTrailParticle(
+          spr.x + Phaser.Math.Between(-12, 12),
+          spr.y + Phaser.Math.Between(-18, 18),
+          POWERUP_COLORS.poison,
+          4.3,
+          300,
+        );
+      }
+    } else if (bootsOn) {
+      spr.clearTint();
+      spr.setScale(baseX, baseY);
+      spr.setOrigin(baseOriginX, baseOriginY);
+      const vy = spr.body?.velocity?.y || 0;
+      if (vy < -70 && Math.random() < 0.65) {
+        this._spawnTrailParticle(
+          spr.x + Phaser.Math.Between(-10, 10),
+          spr.y + Phaser.Math.Between(10, 22),
+          POWERUP_COLORS.gravityBoots,
+          3.6,
+          250,
+        );
+      }
+    } else {
+      spr.clearTint();
+      spr.setScale(baseX, baseY);
+      spr.setOrigin(baseOriginX, baseOriginY);
+    }
+  }
+
+  _consumeCollectedPowerupQueue() {
+    while (POWERUP_COLLECT_QUEUE.length > 0) {
+      const evt = POWERUP_COLLECT_QUEUE.shift();
+      if (!evt) continue;
+      const id = String(evt.id);
+      const visual = this._powerupVisuals[id];
+      try {
+        this.sound.play(`pu-touch-${evt.type}`, { volume: 0.45 });
+      } catch (_) {}
+      if (visual && !visual.despawning) {
+        visual.despawning = true;
+        this.tweens.add({
+          targets: [visual.container, visual.glow],
+          alpha: 0,
+          scaleX: 0.2,
+          scaleY: 0.2,
+          angle: 180,
+          duration: 220,
+          ease: "Back.easeIn",
+          onComplete: () => {
+            try {
+              visual.glow.destroy();
+              visual.container.destroy();
+            } catch (_) {}
+            delete this._powerupVisuals[id];
+          },
+        });
+      } else if (typeof evt.x === "number" && typeof evt.y === "number") {
+        // Fallback poof if snapshot already removed this sprite
+        const puff = this.add.circle(
+          evt.x,
+          evt.y,
+          14,
+          POWERUP_COLORS[evt.type] || 0xffffff,
+          0.9,
+        );
+        puff.setDepth(6);
+        this.tweens.add({
+          targets: puff,
+          alpha: 0,
+          scaleX: 1.9,
+          scaleY: 1.9,
+          duration: 220,
+          ease: "Quad.easeOut",
+          onComplete: () => puff.destroy(),
+        });
+      }
+    }
+  }
+
+  _renderPowerupAuras(nowSec) {
+    const g = this._powerupAuraGraphics;
+    if (!g) return;
+    g.clear();
+
+    const me = latestPlayerEffects[username] || {};
+    const speedMult = (me.rage || 0) > 0 ? 1.25 : 1;
+    const jumpMult = (me.gravityBoots || 0) > 0 ? 1.5 : 1;
+    setPowerupMobility(speedMult, jumpMult);
+
+    const drawAura = (spr, fx) => {
+      if (!spr || !fx) return;
+      const x = spr.x;
+      const y = spr.y;
+      const pulse = 0.75 + 0.25 * Math.sin(nowSec * 8 + x * 0.01);
+      if ((fx.health || 0) > 0) {
+        g.fillStyle(POWERUP_COLORS.health, 0.12 * pulse);
+        g.fillCircle(x, y + 6, 44 + 4 * pulse);
+        g.lineStyle(3, POWERUP_COLORS.health, 0.75 * pulse);
+        g.strokeCircle(x, y + 6, 44 + 4 * pulse);
+      }
+      if ((fx.shield || 0) > 0) {
+        g.fillStyle(POWERUP_COLORS.shield, 0.22);
+        g.fillCircle(x, y + 6, 40 + 4 * pulse);
+        g.lineStyle(4, POWERUP_COLORS.shield, 0.82 * pulse);
+        g.strokeCircle(x, y + 6, 40 + 4 * pulse);
+        g.fillStyle(0xffedd5, 0.08 + 0.05 * pulse);
+        g.fillCircle(x, y + 6, 28 + 2 * pulse);
+      }
+      if ((fx.poison || 0) > 0) {
+        g.fillStyle(POWERUP_COLORS.poison, 0.1 * pulse);
+        g.fillCircle(x, y + 6, 42 + 3 * pulse);
+        g.lineStyle(3, POWERUP_COLORS.poison, 0.75 * pulse);
+        g.strokeCircle(x, y + 6, 42 + 3 * pulse);
+      }
+      if ((fx.rage || 0) > 0) {
+        g.lineStyle(3.5, POWERUP_COLORS.rage, 0.85 * pulse);
+        g.strokeCircle(x, y + 6, 47 + 4 * pulse);
+      }
+      if ((fx.gravityBoots || 0) > 0) {
+        g.fillStyle(POWERUP_COLORS.gravityBoots, 0.22 * pulse);
+        g.fillEllipse(x, y + 26, 46, 10);
+        g.lineStyle(2, POWERUP_COLORS.gravityBoots, 0.75 * pulse);
+        g.strokeEllipse(x, y + 26, 46, 10);
+      }
+    };
+
+    drawAura(player, latestPlayerEffects[username] || {});
+    this._applyPowerupCharacterFX(
+      player,
+      latestPlayerEffects[username] || {},
+      nowSec,
+    );
+    for (const [name, fx] of Object.entries(latestPlayerEffects || {})) {
+      if (name === username) continue;
+      const wrapper = opponentPlayers[name] || teamPlayers[name];
+      if (!wrapper || !wrapper.opponent) continue;
+      drawAura(wrapper.opponent, fx);
+      this._applyPowerupCharacterFX(wrapper.opponent, fx, nowSec);
+    }
+
+    // Shield impact pulses when shielded players take damage.
+    const fxG = this._powerupFxGraphics;
+    while (SHIELD_IMPACT_QUEUE.length > 0) {
+      const impact = SHIELD_IMPACT_QUEUE.shift();
+      const spr = this._getSpriteByUsername(impact?.username);
+      if (!spr || !fxG) continue;
+      const x = spr.x;
+      const y = spr.y - 8;
+      for (let i = 0; i < 3; i++) {
+        const ring = this.add.circle(
+          x,
+          y,
+          24 + i * 4,
+          POWERUP_COLORS.shield,
+          0.22 - i * 0.05,
+        );
+        ring.setDepth(22);
+        ring.setStrokeStyle(3, 0xffedd5, 0.85);
+        this.tweens.add({
+          targets: ring,
+          alpha: 0,
+          scaleX: 1.45 + i * 0.08,
+          scaleY: 1.45 + i * 0.08,
+          duration: 220 + i * 40,
+          ease: "Cubic.easeOut",
+          onComplete: () => ring.destroy(),
+        });
+      }
+    }
+  }
+
+  _renderPowerupsAndEffects() {
+    this._consumeCollectedPowerupQueue();
+    const nowSec = this.time.now / 1000;
+    const seenIds = new Set();
+    const fxG = this._powerupFxGraphics;
+    if (fxG) fxG.clear();
+
+    for (const pu of latestPowerups || []) {
+      if (!pu || typeof pu.id === "undefined") continue;
+      const id = String(pu.id);
+      seenIds.add(id);
+      let visual = this._powerupVisuals[id];
+      if (!visual) {
+        const glow = this.add.circle(
+          pu.x,
+          pu.y,
+          16,
+          POWERUP_COLORS[pu.type] || 0xffffff,
+          0.28,
+        );
+        glow.setDepth(4);
+        const iconKey = this._powerupTextureFor(pu.type);
+        const children = [];
+        let spr = null;
+        if (iconKey) {
+          spr = this.add.image(0, 3, iconKey);
+          spr.setOrigin(0.5, 0.5);
+          // Normalize icon size so giant source images don't overflow and look offset.
+          const maxDim = Math.max(spr.width || 1, spr.height || 1);
+          const targetSize = 42;
+          const s = maxDim > 0 ? targetSize / maxDim : 1;
+          spr.setScale(s);
+          children.push(spr);
+        } else {
+          const badge = this.add.circle(
+            0,
+            0,
+            12,
+            POWERUP_COLORS[pu.type] || 0xffffff,
+            0.9,
+          );
+          const lbl = this.add.text(0, -1, this._powerupLabelFor(pu.type), {
+            fontFamily: "Press Start 2P",
+            fontSize: "10px",
+            color: "#ffffff",
+            stroke: "#000000",
+            strokeThickness: 3,
+          });
+          lbl.setOrigin(0.5, 0.5);
+          children.push(badge, lbl);
+        }
+        const container = this.add.container(pu.x, pu.y, children);
+        container.setDepth(5);
+        visual = {
+          id,
+          type: pu.type,
+          x: pu.x,
+          y: pu.y,
+          glow,
+          sprite: spr,
+          container,
+          phase: Math.random() * Math.PI * 2,
+          despawning: false,
+        };
+        this._powerupVisuals[id] = visual;
+      }
+
+      if (!visual.despawning) {
+        visual.x = pu.x;
+        visual.y = pu.y;
+        const bob = Math.sin(nowSec * 2.8 + visual.phase) * 5;
+        visual.container.x = pu.x;
+        visual.container.y = pu.y - 6 + bob;
+        visual.glow.x = pu.x;
+        visual.glow.y = pu.y - 6 + bob + 1;
+        visual.glow.alpha =
+          0.18 + 0.18 * Math.abs(Math.sin(nowSec * 3.5 + visual.phase));
+        visual.glow.radius =
+          16 + 4 * Math.abs(Math.sin(nowSec * 2.7 + visual.phase));
+        // Half-spin/pixel-distort feel
+        if (visual.sprite) {
+          const baseS = visual.sprite.scaleY || 1;
+          visual.sprite.scaleX =
+            baseS * (0.9 + 0.1 * Math.sin(nowSec * 4.1 + visual.phase));
+          visual.sprite.scaleY = baseS;
+          visual.sprite.rotation = 0.05 * Math.sin(nowSec * 2.1 + visual.phase);
+        }
+
+        // Per-powerup VFX: animated rings + orbiting particles for visibility.
+        if (fxG) {
+          const c = POWERUP_COLORS[pu.type] || 0xffffff;
+          const ringCy = visual.container.y + 8;
+          const r1 = 21 + 4 * Math.sin(nowSec * 3 + visual.phase);
+          const r2 = 27 + 3 * Math.sin(nowSec * 2.1 + visual.phase + 0.8);
+          fxG.lineStyle(2.5, c, 0.6);
+          fxG.strokeCircle(visual.container.x, ringCy, r1);
+          fxG.lineStyle(2.5, c, 0.38);
+          fxG.strokeCircle(visual.container.x, ringCy, r2);
+          for (let i = 0; i < 4; i++) {
+            const a = nowSec * (1.6 + i * 0.15) + visual.phase + i * 1.57;
+            const px = visual.container.x + Math.cos(a) * (r1 + 3);
+            const py = ringCy + Math.sin(a) * (r1 + 3);
+            fxG.fillStyle(c, 0.8);
+            fxG.fillCircle(px, py, 3);
+          }
+        }
+      }
+    }
+
+    for (const [id, visual] of Object.entries(this._powerupVisuals)) {
+      if (seenIds.has(id) || visual.despawning) continue;
+      visual.despawning = true;
+      this.tweens.add({
+        targets: [visual.container, visual.glow],
+        alpha: 0,
+        scaleX: 0.35,
+        scaleY: 0.35,
+        duration: 180,
+        ease: "Quad.easeIn",
+        onComplete: () => {
+          try {
+            visual.glow.destroy();
+            visual.container.destroy();
+          } catch (_) {}
+          delete this._powerupVisuals[id];
+        },
+      });
+    }
+
+    this._renderPowerupAuras(nowSec);
+  }
+
   update() {
+    // Draw poison water overlay (rendered every frame, including when dead)
+    if (this._poisonGraphics) {
+      const g = this._poisonGraphics;
+      g.clear();
+
+      // Smooth-lerp toward server-sent Y so 500ms updates don't cause visible jumps
+      if (this._smoothPoisonY == null)
+        this._smoothPoisonY = this._poisonWaterY ?? 700;
+      this._smoothPoisonY +=
+        ((this._poisonWaterY ?? 700) - this._smoothPoisonY) * 0.07;
+      const py = this._smoothPoisonY;
+
+      if (py < 660) {
+        const W = 1300;
+        const BOTTOM = 680; // extend below world so no gap at screen edge
+        const t = this.time.now / 1000; // seconds
+        // Dual-harmonic wave function
+        const amp = 7;
+        const waveY = (x) =>
+          py +
+          amp * Math.sin(x * 0.011 + t * 1.7) +
+          amp * 0.4 * Math.sin(x * 0.024 - t * 1.1);
+
+        // 1. Dark base body â€” wave surface down to bottom
+        const basePts = [{ x: 0, y: BOTTOM }];
+        for (let x = 0; x <= W; x += 8) basePts.push({ x, y: waveY(x) });
+        basePts.push({ x: W, y: BOTTOM });
+        g.fillStyle(0x166534, 0.48);
+        g.fillPoints(basePts, true);
+
+        // 2. Mid-depth overlay â€” slightly lighter, surface shifted down to show depth
+        const midPts = [{ x: 0, y: BOTTOM }];
+        for (let x = 0; x <= W; x += 8) midPts.push({ x, y: waveY(x) + 16 });
+        midPts.push({ x: W, y: BOTTOM });
+        g.fillStyle(0x16a34a, 0.27);
+        g.fillPoints(midPts, true);
+
+        // 3. Bright glowing surface stroke
+        g.lineStyle(3, 0x4ade80, 0.95);
+        g.beginPath();
+        for (let x = 0; x <= W; x += 8) {
+          x === 0 ? g.moveTo(x, waveY(x)) : g.lineTo(x, waveY(x));
+        }
+        g.strokePath();
+
+        // 4. Foam flecks along wave crests
+        g.fillStyle(0xd1fae5, 0.85);
+        for (let x = 20; x < W; x += 55) {
+          const wy = waveY(x);
+          const r = 1.8 + 1.4 * Math.abs(Math.sin(t * 1.3 + x * 0.05));
+          g.fillCircle(x + 8 * Math.sin(t * 0.9 + x * 0.03), wy - r * 0.3, r);
+        }
+
+        // 5. Rising bubble particles
+        for (const b of this._poisonBubbles) {
+          const range = BOTTOM - 20 - (py + amp + 8);
+          if (range <= 0) continue;
+          const elapsed = (t + b.phase * 4) % (range / b.speed);
+          const bY = BOTTOM - 20 - elapsed * b.speed;
+          if (bY < py + amp || bY > BOTTOM - 5) continue;
+          const bX = b.x + b.drift * Math.sin(t * 0.7 + b.phase);
+          const alpha = Math.min(0.6, (bY - py) / 35) * 0.9;
+          g.fillStyle(0x86efac, alpha);
+          g.fillCircle(bX, bY, b.r);
+        }
+
+        // 6. Sync CSS background overlay (fills viewport area outside Phaser canvas)
+        const cssDiv = document.getElementById("poison-water-bg");
+        if (cssDiv) {
+          const canvasH = this.game.canvas.clientHeight || 650;
+          const frac = Math.max(0, Math.min(1, (660 - py) / 660));
+          cssDiv.style.height = Math.floor(frac * canvasH) + "px";
+          cssDiv.style.display = "block";
+
+          // 7. Red vignette when local player is submerged
+          const vigEl = document.getElementById("water-vignette");
+          if (vigEl) {
+            const inWater = player && player.y >= py;
+            vigEl.classList.toggle("water-danger-active", !!inWater && !dead);
+            if (!inWater || dead) vigEl.style.opacity = "0";
+          }
+        }
+      } else {
+        const cssDiv = document.getElementById("poison-water-bg");
+        if (cssDiv) cssDiv.style.display = "none";
+        const vigEl2 = document.getElementById("water-vignette");
+        if (vigEl2) {
+          vigEl2.classList.remove("water-danger-active");
+          vigEl2.style.opacity = "0";
+        }
+      }
+    }
+
+    // Powerup visuals/effects are rendered for all players every frame.
+    this._renderPowerupsAndEffects();
+
     // Only process if game is initialized
     if (!hasJoined || !gameInitialized || dead || gameEnded) return;
 
@@ -1224,7 +2031,7 @@ class GameScene extends Phaser.Scene {
           console.warn(
             `[interp] clamping backlog: lag=${lagMs.toFixed(1)}ms buffer=${
               stateBuffer.length
-            }`
+            }`,
           );
           targetMono = minTarget;
           renderClockMono = targetMono + interpDelayMs;
@@ -1326,10 +2133,10 @@ class GameScene extends Phaser.Scene {
         lastAdaptivePrint = pn;
         console.log(
           `[adaptive] delay=${interpDelayMs.toFixed(
-            1
+            1,
           )}ms spacingEma=${spacingEma?.toFixed(
-            2
-          )} jitterEma=${jitterEma?.toFixed(2)} buffer=${stateBuffer.length}`
+            2,
+          )} jitterEma=${jitterEma?.toFixed(2)} buffer=${stateBuffer.length}`,
         );
       }
     } catch (_) {}
@@ -1391,7 +2198,7 @@ class GameScene extends Phaser.Scene {
         if (animSrc.animation) {
           spr.anims.play(
             resolveAnimKey(this, wrapper.character, animSrc.animation, "idle"),
-            true
+            true,
           );
         }
       }
@@ -1509,6 +2316,10 @@ function hideBattleStartOverlay() {
     overlay.classList.add("hidden");
     overlay.setAttribute("aria-hidden", "true");
   }, 300);
+  // Show game timer HUD once battle begins
+  try {
+    document.getElementById("game-timer-hud")?.classList.remove("hidden");
+  } catch (_) {}
 }
 
 // -----------------------------
@@ -1536,9 +2347,9 @@ function showGameOverScreen(payload) {
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
   const baseRowStyle =
-    "display:grid;grid-template-columns:2.2fr repeat(5,1fr);gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid rgba(255,255,255,0.08);font-size:13px;";
+    "display:grid;grid-template-columns:2.2fr repeat(5,1fr);gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid rgba(176,219,255,0.18);font-size:13px;";
   const headerRow = `
-    <div style="${baseRowStyle}font-weight:600;border-bottom:1px solid rgba(255,255,255,0.2);text-transform:uppercase;font-size:12px;">
+    <div style="${baseRowStyle}font-weight:600;border-bottom:1px solid rgba(176,219,255,0.3);text-transform:uppercase;font-size:11px;color:#cce8ff;font-family:'Press Start 2P', cursive;">
       <div style="text-align:left;">Player</div>
       <div>Hits</div>
       <div>Damage</div>
@@ -1551,11 +2362,11 @@ function showGameOverScreen(payload) {
       const isYou = r.username === username;
       const rowStyle = `${baseRowStyle}${
         isYou
-          ? "background:rgba(37,99,235,0.18);border-bottom-color:rgba(37,99,235,0.35);"
+          ? "background:rgba(88,157,226,0.2);border-bottom-color:rgba(126,194,255,0.45);"
           : ""
       }`;
       const label = `${escapeHtml(r.username)}${
-        isYou ? ' <span style="font-size:11px;color:#93c5fd;">(You)</span>' : ""
+        isYou ? ' <span style="font-size:11px;color:#c3e4ff;">(You)</span>' : ""
       }`;
       return `
         <div style="${rowStyle}">
@@ -1577,8 +2388,8 @@ function showGameOverScreen(payload) {
   const rewardSectionHtml = rewards.length
     ? `
       <div style="margin-top:28px;text-align:left;">
-        <h2 style="margin:0 0 10px;font-size:18px;color:#f8fafc;">Match Rewards</h2>
-        <div style="border:1px solid rgba(148,163,184,0.25);border-radius:10px;overflow:hidden;background:rgba(15,23,42,0.65);">
+        <h2 style="margin:0 0 10px;font-size:18px;color:#e8f4ff;font-family:'Press Start 2P', cursive;">Match Rewards</h2>
+        <div style="border:1px solid rgba(123,191,255,0.35);border-radius:10px;overflow:hidden;background:rgba(14,34,58,0.75);">
           ${headerRow}
           ${rewardRowsHtml}
         </div>
@@ -1586,35 +2397,36 @@ function showGameOverScreen(payload) {
     : "";
   const personalSummaryHtml = myReward
     ? `
-      <div style="margin-top:20px;padding:14px 18px;border-radius:10px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.35);text-align:left;">
-        <div style="font-size:15px;font-weight:600;margin-bottom:6px;">You earned</div>
+      <div style="margin-top:20px;padding:14px 18px;border-radius:10px;background:rgba(76,146,214,0.16);border:1px solid rgba(125,189,255,0.45);text-align:left;">
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px;color:#d7eeff;">You earned</div>
         <div style="display:flex;gap:18px;font-size:18px;font-weight:600;">
           <span style="color:#facc15;">${
             myReward.coinsAwarded ?? 0
           } coins</span>
           <span style="color:#67e8f9;">${myReward.gemsAwarded ?? 0} gems</span>
         </div>
-        <div style="margin-top:6px;font-size:13px;color:#cbd5f5;">
-          ${myReward.hits ?? 0} hits · ${myReward.damage ?? 0} dmg · ${
-        myReward.kills ?? 0
-      } kills
+        <div style="margin-top:6px;font-size:13px;color:#c8e6ff;">
+          ${myReward.hits ?? 0} hits Â· ${myReward.damage ?? 0} dmg Â· ${
+            myReward.kills ?? 0
+          } kills
         </div>
       </div>`
     : "";
   div.innerHTML = `
-    <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;background:rgba(0,0,0,0.65);font-family:Arial,sans-serif;">
-      <div style="background:#111;padding:32px 48px;border:2px solid #444;border-radius:12px;min-width:320px;text-align:center;box-shadow:0 0 32px rgba(0,0,0,0.6);color:#fff;">
-        <h1 style="margin:0 0 12px;font-size:48px;letter-spacing:2px;${
-          winner === gameData?.yourTeam ? "color:#4ade80;" : ""
+    <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;background:radial-gradient(circle at 12% 14%, rgba(146,205,255,0.22), transparent 38%), rgba(5,12,20,0.72);font-family:'Poppins',sans-serif;">
+      <div style="position:relative;background:linear-gradient(180deg,#204874f2,#153357f2);padding:32px 48px;border:3px solid #78bdff;border-radius:14px;min-width:320px;max-width:min(980px,92vw);text-align:center;box-shadow:0 16px 38px rgba(0,0,0,0.5), inset 0 0 0 2px rgba(220,240,255,0.2);color:#fff;">
+        <div style="position:absolute;inset:8px;border:1px dashed rgba(199,230,255,0.45);border-radius:10px;pointer-events:none;"></div>
+        <h1 style="margin:0 0 12px;font-size:44px;letter-spacing:2px;font-family:'Press Start 2P',cursive;line-height:1.2;${
+          winner === gameData?.yourTeam ? "color:#9fffc3;" : ""
         }${
-    winner && winner !== gameData?.yourTeam ? "color:#ef4444;" : ""
-  }">${heading}</h1>
-        <p style="margin:0 0 20px;font-size:16px;opacity:0.8;">Match ${
+          winner && winner !== gameData?.yourTeam ? "color:#ff9a9a;" : ""
+        }">${heading}</h1>
+        <p style="margin:0 0 20px;font-size:14px;opacity:0.92;color:#d4ebff;">Match ${
           payload?.matchId ?? ""
         }</p>
         ${personalSummaryHtml || ""}
         ${rewardSectionHtml || ""}
-        <button id="go-lobby" style="background:#2563eb;color:#fff;font-size:16px;padding:10px 22px;border:none;border-radius:6px;cursor:pointer;margin-top:20px;">Return to Lobby</button>
+        <button id="go-lobby" style="background:linear-gradient(180deg,#4fa5ff,#3d87df);color:#fff;font-size:14px;font-family:'Press Start 2P',cursive;padding:11px 18px;border:1px solid #d5ecff;border-radius:8px;box-shadow:0 3px 0 #1f4f83, 0 8px 18px rgba(0,0,0,0.22);cursor:pointer;margin-top:20px;">Return to Lobby</button>
       </div>
     </div>`;
   document.body.appendChild(div);

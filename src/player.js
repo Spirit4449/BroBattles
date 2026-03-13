@@ -63,6 +63,9 @@ let superBarBack;
 let superCharge = 0;
 let maxSuperCharge = 100;
 let keyI;
+let _specialNotReadyFlash = 0; // timestamp until "not ready" red flash expires
+let movementSpeedMult = 1;
+let movementJumpMult = 1;
 
 let playerName;
 
@@ -99,7 +102,7 @@ export function createPlayer(
   spawnParam,
   playersInTeamParam,
   mapParam,
-  opponentPlayersParam
+  opponentPlayersParam,
 ) {
   username = name;
   scene = sceneParam;
@@ -115,7 +118,7 @@ export function createPlayer(
   // Bind additional keys once
   try {
     keySpace = scene.input.keyboard.addKey(
-      Phaser.Input.Keyboard.KeyCodes.SPACE
+      Phaser.Input.Keyboard.KeyCodes.SPACE,
     );
     keyJ = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.J);
   } catch (e) {
@@ -247,7 +250,7 @@ export function createPlayer(
     player.x - 13,
     bodyTop - 20, // Left point
     player.x + 13,
-    bodyTop - 20 // Right point
+    bodyTop - 20, // Right point
   );
   indicatorTriangle.fillStyle(0x99ab2c); // Green color
   indicatorTriangle.fillTriangleShape(triangle);
@@ -295,6 +298,43 @@ export function createPlayer(
   });
   charCtrl = ctrl;
   if (ctrl && ctrl.attachInput) ctrl.attachInput();
+
+  // Left-click → attack, Right-click → special (register once per scene)
+  if (!scene._mouseCombatAttached) {
+    scene._mouseCombatAttached = true;
+
+    scene.input.on("pointerdown", (pointer) => {
+      if (dead) return;
+      if (pointer.button === 2) {
+        // Right-click: special ONLY — never falls through to attack
+        if (superCharge >= maxSuperCharge) {
+          socket.emit("game:special");
+        } else {
+          _specialNotReadyFlash = Date.now() + 500; // 500ms red flash on bar
+        }
+        return;
+      }
+      if (pointer.button === 0) {
+        // Left-click: attack
+        const dir = player && player.flipX ? -1 : 1;
+        try {
+          if (charCtrl && typeof charCtrl.attack === "function") {
+            charCtrl.attack(dir);
+          } else if (
+            charCtrl &&
+            typeof charCtrl.handlePointerDown === "function"
+          ) {
+            charCtrl.handlePointerDown();
+          }
+        } catch (_) {}
+      }
+    });
+
+    // Prevent the browser context menu on right-click over the canvas
+    scene.game.canvas.addEventListener("contextmenu", (e) =>
+      e.preventDefault(),
+    );
+  }
 
   // Per-character effects: instantiate if the character provides an Effects class
   const EffectsCls = getEffectsClass(currentCharacter);
@@ -367,7 +407,13 @@ function drawSuperBar(x, y) {
     maxSuperCharge > 0
       ? Phaser.Math.Clamp(superCharge / maxSuperCharge, 0, 1)
       : 0;
-  if (percent > 0) {
+  const isFlashing = Date.now() < _specialNotReadyFlash;
+  if (isFlashing && percent < 1) {
+    // Red flash when right-clicked while special isn't charged
+    const pulse = 0.65 + 0.35 * Math.abs(Math.sin(Date.now() / 75));
+    superBar.fillStyle(0xff4444, pulse);
+    superBar.fillRect(x, y, width * Math.max(percent, 0.18), height);
+  } else if (percent > 0) {
     const isFull = percent >= 1;
 
     if (isFull) {
@@ -454,7 +500,7 @@ export function handlePlayerMovement(scene) {
     }
   }
   // - maxSpeed: top horizontal running speed. Higher = faster.
-  const maxSpeed = 260;
+  const maxSpeed = 260 * Math.max(0.5, movementSpeedMult || 1);
   // - accel: how fast you speed up on ground. Higher = snappier starts.
   const accel = 3500;
   // - airAccel: acceleration in air. Higher = more air control; lower = floatier.
@@ -564,7 +610,7 @@ export function handlePlayerMovement(scene) {
       // If the player is not in the air or attacking or dead, it plays the running animation
       player.anims.play(
         resolveAnimKey(scene, currentCharacter, "running"),
-        true
+        true,
       );
       // Footstep SFX throttled
       sfxWalkCooldown += scene.game.loop.delta;
@@ -601,7 +647,7 @@ export function handlePlayerMovement(scene) {
       // If the player is not in the air or attacking or dead, it plays the running animation
       player.anims.play(
         resolveAnimKey(scene, currentCharacter, "running"),
-        true
+        true,
       );
       // Footstep SFX throttled
       sfxWalkCooldown += scene.game.loop.delta;
@@ -629,7 +675,7 @@ export function handlePlayerMovement(scene) {
     // Slight jump boost when moving fast to feel snappier transitions
     const vx = Math.abs(player.body.velocity.x || 0);
     const boost = Phaser.Math.Clamp((vx / maxSpeed) * jumpBoost, 0, jumpBoost);
-    jumpSpeed = 360 + boost; // slightly higher base for a stronger jump
+    jumpSpeed = (360 + boost) * Math.max(0.5, movementJumpMult || 1); // slightly higher base for a stronger jump
     jump(); // Calls jump
     scene.sound.play("sfx-jump", { volume: 3 });
   } else if (
@@ -733,7 +779,7 @@ export function handlePlayerMovement(scene) {
       spawnDust(
         scene,
         dustX + Phaser.Math.Between(-6, 6),
-        dustY + Phaser.Math.Between(-2, 2)
+        dustY + Phaser.Math.Between(-2, 2),
       );
     }
   }
@@ -754,7 +800,7 @@ export function handlePlayerMovement(scene) {
     if (!isAttacking) {
       player.anims.play(
         resolveAnimKey(scene, currentCharacter, "jumping"),
-        true
+        true,
       );
     }
     pdbg();
@@ -788,7 +834,7 @@ export function handlePlayerMovement(scene) {
     if (!isAttacking) {
       player.anims.play(
         resolveAnimKey(scene, currentCharacter, "jumping"),
-        true
+        true,
       );
     }
     pdbg();
@@ -813,7 +859,7 @@ export function handlePlayerMovement(scene) {
     if (!isAttacking) {
       player.anims.play(
         resolveAnimKey(scene, currentCharacter, "falling"),
-        true
+        true,
       );
     }
     pdbg();
@@ -830,6 +876,11 @@ export function setSuperStats(charge, maxCharge) {
   superCharge = charge;
   maxSuperCharge = maxCharge;
   updateHealthBar();
+}
+
+export function setPowerupMobility(speedMult = 1, jumpMult = 1) {
+  movementSpeedMult = Number.isFinite(speedMult) ? Math.max(0.5, speedMult) : 1;
+  movementJumpMult = Number.isFinite(jumpMult) ? Math.max(0.5, jumpMult) : 1;
 }
 
 export { player, frame, currentHealth, setCurrentHealth, dead };
@@ -868,7 +919,7 @@ socket.on("health-update", (data) => {
         dead = true;
         player.anims.play(
           resolveAnimKey(scene, currentCharacter, "dying"),
-          true
+          true,
         );
         scene.input.enabled = false;
         player.alpha = 0.5;
@@ -902,7 +953,7 @@ socket.on("player:special", (data) => {
       targets,
       username,
       gameId,
-      true // isOwner
+      true, // isOwner
     );
   }
 });
