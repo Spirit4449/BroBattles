@@ -18,16 +18,22 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       {
         direction: 1,
         forwardDistance: 520,
+        endYOffset: 0,
         outwardDuration: 600, // ms
         returnSpeed: 580, // px/s (cap)
         rotationSpeed: 950, // deg/s
         scale: 0.1,
         damage: 1000,
+        glowScale: 1,
+        attackType: "basic",
+        instanceId: null,
         username: "",
         gameId: "",
         isOwner: false,
         maxLifetime: 7000,
         hitCooldown: 300,
+        ctrl1YOffset: 20,
+        ctrl2YOffset: -40,
       },
       config || {}
     );
@@ -79,15 +85,19 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     this.startX = startPos.x;
     this.startY = startPos.y;
     this.endX = this.startX + this.cfg.direction * this.cfg.forwardDistance;
-    this.endY = this.startY;
-    const dipDown = 20;
-    const bulgeUp = 40;
+    this.endY = this.startY + (this.cfg.endYOffset || 0);
+    const dipDown = Number.isFinite(this.cfg.ctrl1YOffset)
+      ? this.cfg.ctrl1YOffset
+      : 20;
+    const bulgeUp = Number.isFinite(this.cfg.ctrl2YOffset)
+      ? Math.abs(this.cfg.ctrl2YOffset)
+      : 40;
     this.ctrl1X =
       this.startX + this.cfg.direction * this.cfg.forwardDistance * 0.25;
     this.ctrl1Y = this.startY + dipDown;
     this.ctrl2X =
       this.startX + this.cfg.direction * this.cfg.forwardDistance * 0.6;
-    this.ctrl2Y = this.startY - bulgeUp;
+    this.ctrl2Y = this.startY - bulgeUp + (this.cfg.endYOffset || 0) * 0.45;
 
     // Unified subtle glow (blue if owner, red otherwise)
     const glowColor = this.cfg.isOwner ? 0x2e9bff : 0xff3a2e;
@@ -109,7 +119,8 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
   }
 
   _drawGlow(colorInt) {
-    const baseRadius = 85 * this.cfg.scale;
+    const glowScale = Math.max(0.8, Number(this.cfg.glowScale) || 1);
+    const baseRadius = 85 * this.cfg.scale * glowScale;
     const innerRadius = baseRadius * 0.42;
     const midRadius = baseRadius * 0.9;
     const outerRadius = baseRadius * 1.2;
@@ -153,6 +164,8 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       attacker: this.cfg.username,
       target: targetUsername,
       damage: this.cfg.damage,
+      attackType: this.cfg.attackType || "basic",
+      instanceId: this.cfg.instanceId,
       gameId: this.cfg.gameId,
     });
     // Play hit SFX locally for the owner
@@ -167,7 +180,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       if (!obj) return;
       const sprite = obj.opponent || obj;
       this.scene.physics.add.overlap(this, sprite, () => {
-        if (obj.opponent) this.tryDamage(obj);
+        this.tryDamage(obj.opponent ? obj : sprite);
       });
     });
   }
@@ -179,7 +192,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
   spawnTrail() {
     if (!this.scene.textures.exists("shuriken")) return;
     const s = this.scene.add.image(this.x, this.y, "shuriken");
-    s.setScale(this.cfg.scale * 0.4);
+    s.setScale(this.cfg.scale * 0.48);
     s.setDepth(4);
     s.alpha = 0.35;
     this.scene.tweens.add({

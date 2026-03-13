@@ -1,7 +1,9 @@
 import * as NinjaSpecial from "./ninja/special";
+import * as ThorgSpecial from "./thorg/special";
 
 const specials = {
   ninja: NinjaSpecial,
+  thorg: ThorgSpecial,
 };
 
 export function performSpecial(

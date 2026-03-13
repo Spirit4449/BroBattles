@@ -35,6 +35,12 @@ const POWERUP_HEALTH_REGEN_PER_SEC = 600;
 const POWERUP_POISON_DPS = 600;
 const POWERUP_EFFECT_TICK_MS = 500;
 const POWERUP_AMBIENT_TICK_MS = 1200; // occasional cadence for non-damaging powerups
+const THORG_RAGE_DURATION_MS = 8000;
+const THORG_RAGE_DAMAGE_MULT = 1.12;
+const THORG_RAGE_KNOCKBACK_X = 155;
+const THORG_RAGE_KNOCKBACK_Y = 88;
+const NINJA_SWARM_HIT_DAMAGE = 300;
+const NINJA_SWARM_CHARGE_RATIO = 0.25;
 const POWERUP_PLATFORM_POINTS = {
   // Reachable top-surface slots (avoid center-only placement)
   1: [
@@ -195,6 +201,8 @@ class GameRoom {
           shieldUntil: 0,
           poisonUntil: 0,
           gravityUntil: 0,
+          thorgRageUntil: 0,
+          thorgRageNextTickAt: 0,
           healthNextTickAt: 0,
           poisonNextTickAt: 0,
           rageNextTickAt: 0,
@@ -276,6 +284,15 @@ class GameRoom {
 
       if (p.superCharge >= p.maxSuperCharge) {
         p.superCharge = 0;
+        const now = Date.now();
+        if (p.char_class === "thorg") {
+          p.effects = p.effects || {};
+          p.effects.thorgRageUntil = Math.max(
+            p.effects.thorgRageUntil || 0,
+            now + THORG_RAGE_DURATION_MS,
+          );
+          p.effects.thorgRageNextTickAt = now + POWERUP_AMBIENT_TICK_MS;
+        }
         // Broadcast reset
         this.io.to(`game:${this.matchId}`).emit("super-update", {
           username: p.name,
@@ -987,6 +1004,14 @@ class GameRoom {
         });
       }
 
+      if ((e.thorgRageUntil || 0) > now && (e.thorgRageNextTickAt || 0) <= now) {
+        e.thorgRageNextTickAt = now + Math.max(700, POWERUP_AMBIENT_TICK_MS - 250);
+        this.io.to(`game:${this.matchId}`).emit("powerup:tick", {
+          type: "thorgRage",
+          username: p.name,
+        });
+      }
+
       if ((e.gravityUntil || 0) > now && (e.gravityNextTickAt || 0) <= now) {
         e.gravityNextTickAt = now + POWERUP_AMBIENT_TICK_MS;
         this.io.to(`game:${this.matchId}`).emit("powerup:tick", {
@@ -1008,6 +1033,7 @@ class GameRoom {
         shield: Math.max(0, (e.shieldUntil || 0) - now),
         poison: Math.max(0, (e.poisonUntil || 0) - now),
         gravityBoots: Math.max(0, (e.gravityUntil || 0) - now),
+        thorgRage: Math.max(0, (e.thorgRageUntil || 0) - now),
       };
     }
     return out;
@@ -1147,8 +1173,10 @@ class GameRoom {
 
       // Determine damage from server-side stats
       const attackType = String(payload.attackType || "basic").toLowerCase();
-      const base =
-        attackType === "special"
+      const isNinjaSwarm = attackType === "ninja-special-swarm";
+      const base = isNinjaSwarm
+        ? NINJA_SWARM_HIT_DAMAGE
+        : attackType === "special"
           ? Number(attacker.specialDamage || 0)
           : Number(attacker.baseDamage || 0);
       let dmg = Number.isFinite(base) && base > 0 ? base : 0;
@@ -1158,6 +1186,12 @@ class GameRoom {
       if ((attacker.effects?.rageUntil || 0) > now) {
         dmg *= POWERUP_RAGE_DAMAGE_MULT;
       }
+      if (
+        attacker.char_class === "thorg" &&
+        (attacker.effects?.thorgRageUntil || 0) > now
+      ) {
+        dmg *= THORG_RAGE_DAMAGE_MULT;
+      }
 
       if (dmg <= 0) return;
 
@@ -1166,12 +1200,20 @@ class GameRoom {
       const dx = (attacker.x || 0) - (target.x || 0);
       const dy = (attacker.y || 0) - (target.y || 0);
       const dist = Math.hypot(dx, dy);
-      const maxDist = attackType === "special" ? 1000 : 850; // px
+      const maxDist = attackType === "special" || isNinjaSwarm ? 1000 : 850; // px
       if (!isSelf && dist > maxDist) return; // ignore impossible hits
 
       // Basic per-attacker->target rate limit to avoid accidental double submissions
       this._recentHits = this._recentHits || new Map(); // key: attacker|target -> timestamp
-      const key = attacker.name + "|" + target.name + "|" + attackType;
+      const instanceId = payload.instanceId ? String(payload.instanceId) : "";
+      const key =
+        attacker.name +
+        "|" +
+        target.name +
+        "|" +
+        attackType +
+        "|" +
+        instanceId;
       const last = this._recentHits.get(key) || 0;
       const DUP_WINDOW_MS = 80; // hits within 80ms considered duplicate
       if (!isSelf && now - last < DUP_WINDOW_MS) return; // duplicate, ignore
@@ -1194,14 +1236,31 @@ class GameRoom {
 
         // Update super charge
         if (!isSelf && attacker.maxSuperCharge > 0) {
+          const chargeGain = isNinjaSwarm
+            ? Math.round(appliedDamage * NINJA_SWARM_CHARGE_RATIO)
+            : appliedDamage;
           attacker.superCharge = Math.min(
             attacker.maxSuperCharge,
-            (attacker.superCharge || 0) + appliedDamage,
+            (attacker.superCharge || 0) + chargeGain,
           );
           this.io.to(`game:${this.matchId}`).emit("super-update", {
             username: attacker.name,
             charge: attacker.superCharge,
             maxCharge: attacker.maxSuperCharge,
+          });
+        }
+
+        if (
+          !isSelf &&
+          attacker.char_class === "thorg" &&
+          (attacker.effects?.thorgRageUntil || 0) > now &&
+          target.socketId
+        ) {
+          const knockDirection = (target.x || 0) >= (attacker.x || 0) ? 1 : -1;
+          this.io.to(target.socketId).emit("player:knockback", {
+            source: attacker.name,
+            amountX: THORG_RAGE_KNOCKBACK_X * knockDirection,
+            amountY: THORG_RAGE_KNOCKBACK_Y,
           });
         }
       }

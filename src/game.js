@@ -53,6 +53,7 @@ const POWERUP_COLORS = {
   shield: 0xf97316,
   poison: 0xfacc15,
   gravityBoots: 0xef4444,
+  thorgRage: 0x9333ea,
 };
 
 let __booted = false;
@@ -184,6 +185,32 @@ function stopSuddenDeathMusic() {
       gameScene._suddenDeathMusicSfx.stop();
     }
   } catch (_) {}
+}
+
+function playMatchEndSound(winnerTeam) {
+  if (!gameScene || !gameScene.sound) return;
+  const key =
+    winnerTeam == null
+      ? null
+      : winnerTeam === gameData?.yourTeam
+        ? "win"
+        : "lose";
+  if (!key) return;
+  const trigger = () => {
+    try {
+      gameScene._bgmEl?.pause();
+    } catch (_) {}
+    try {
+      gameScene.sound.play(key, {
+        volume: key === "win" ? 0.55 : 0.48,
+      });
+    } catch (_) {}
+  };
+  if (gameScene.sound.locked) {
+    gameScene.sound.once("unlocked", trigger);
+    return;
+  }
+  trigger();
 }
 
 // Prewarm frequently used textures to force GL upload before gameplay
@@ -847,6 +874,7 @@ function setupGameEventListeners() {
     if (gameEnded) return; // idempotent
     gameEnded = true;
     stopSuddenDeathMusic();
+    playMatchEndSound(payload?.winnerTeam);
     try {
       player && player.body && (player.body.enable = false);
     } catch (_) {}
@@ -897,6 +925,10 @@ function setupGameEventListeners() {
     } else if (payload.type === "rage") {
       try {
         gameScene.sound.play("pu-tick-rage", { volume: 0.18 });
+      } catch (_) {}
+    } else if (payload.type === "thorgRage") {
+      try {
+        gameScene.sound.play("pu-tick-rage", { volume: 0.22, rate: 0.9 });
       } catch (_) {}
     } else if (payload.type === "gravityBoots") {
       try {
@@ -1013,6 +1045,7 @@ class GameScene extends Phaser.Scene {
     this.load.audio("sfx-jump", `${staticPath}/jump.mp3`);
     this.load.audio("sfx-land", `${staticPath}/land.mp3`);
     this.load.audio("sfx-walljump", `${staticPath}/walljump.mp3`);
+    this.load.audio("sfx-sliding", `${staticPath}/sliding.mp3`);
     this.load.audio("sfx-sudden-death", `${staticPath}/suddendeath.mp3`);
     // Combat/health SFX
     this.load.audio("sfx-damage", `${staticPath}/damage.mp3`);
@@ -1588,11 +1621,37 @@ class GameScene extends Phaser.Scene {
     const baseOriginX = spr._puBaseOriginX ?? 0.5;
     const baseOriginY = spr._puBaseOriginY ?? 0.5;
     const rageOn = (fx?.rage || 0) > 0;
+    const thorgRageOn = (fx?.thorgRage || 0) > 0;
     const healthOn = (fx?.health || 0) > 0;
     const poisonOn = (fx?.poison || 0) > 0;
     const bootsOn = (fx?.gravityBoots || 0) > 0;
 
-    if (rageOn) {
+    spr._thorgRageActive = thorgRageOn;
+
+    if (thorgRageOn) {
+      const pulse = 0.5 + 0.5 * Math.sin(nowSec * 10 + (spr.x || 0) * 0.012);
+      spr.setTint(pulse > 0.52 ? 0xc084fc : 0x7e22ce);
+      spr.setScale(baseX * 1.14, baseY * 1.14);
+      spr.setOrigin(baseOriginX, Math.min(1, baseOriginY + 0.1));
+      if (Math.random() < 0.72) {
+        this._spawnTrailParticle(
+          spr.x + Phaser.Math.Between(-18, 18),
+          spr.y + Phaser.Math.Between(-34, 14),
+          POWERUP_COLORS.thorgRage,
+          Phaser.Math.FloatBetween(3.6, 6.2),
+          340,
+        );
+      }
+      if (Math.random() < 0.28) {
+        this._spawnTrailParticle(
+          spr.x + Phaser.Math.Between(-12, 12),
+          spr.y + Phaser.Math.Between(-38, 4),
+          0xffffff,
+          Phaser.Math.FloatBetween(2.6, 4.2),
+          260,
+        );
+      }
+    } else if (rageOn) {
       const pulse = Math.sin(nowSec * 8 + (spr.x || 0) * 0.01);
       // Rage keeps a fixed size boost; only tint pulses.
       spr.setTint(pulse > 0 ? 0xc084fc : 0x9333ea);
@@ -1719,8 +1778,12 @@ class GameScene extends Phaser.Scene {
     g.clear();
 
     const me = latestPlayerEffects[username] || {};
-    const speedMult = (me.rage || 0) > 0 ? 1.25 : 1;
-    const jumpMult = (me.gravityBoots || 0) > 0 ? 1.5 : 1;
+    const speedMult =
+      ((me.rage || 0) > 0 ? 1.25 : 1) *
+      ((me.thorgRage || 0) > 0 ? 1.12 : 1);
+    const jumpMult =
+      ((me.gravityBoots || 0) > 0 ? 1.5 : 1) *
+      ((me.thorgRage || 0) > 0 ? 1.12 : 1);
     setPowerupMobility(speedMult, jumpMult);
 
     const drawAura = (spr, fx) => {
@@ -1765,6 +1828,18 @@ class GameScene extends Phaser.Scene {
         g.fillEllipse(x, y + 26, 46, 10);
         g.lineStyle(2, POWERUP_COLORS.gravityBoots, 0.75 * pulse);
         g.strokeEllipse(x, y + 26, 46, 10);
+      }
+      if ((fx.thorgRage || 0) > 0) {
+        g.fillStyle(POWERUP_COLORS.thorgRage, 0.22 + 0.08 * pulse);
+        g.fillCircle(x, y + 4, 50 + 5 * pulse);
+        g.lineStyle(4.5, POWERUP_COLORS.thorgRage, 0.88 * pulse);
+        g.strokeCircle(x, y + 4, 56 + 5 * pulse);
+        g.lineStyle(
+          3,
+          0xffffff,
+          0.28 + 0.18 * Math.abs(Math.sin(nowSec * 18 + y * 0.02)),
+        );
+        g.strokeCircle(x, y + 4, 62 + 2.5 * pulse);
       }
     };
 

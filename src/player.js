@@ -37,6 +37,8 @@ let canAttack = true;
 // SFX state
 let sfxWalkCooldown = 0;
 let wasOnGround = false;
+let wallSlideLoopSfx = null;
+let wallSlideLoopPlaying = false;
 
 let frame;
 
@@ -130,6 +132,17 @@ export function createPlayer(
     keyI = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.I);
   } catch (e) {
     keyI = scene.input.keyboard.addKey("I");
+  }
+
+  try {
+    wallSlideLoopSfx = scene.sound?.add("sfx-sliding", {
+      loop: true,
+      volume: 0.3,
+    });
+    wallSlideLoopPlaying = false;
+  } catch (_) {
+    wallSlideLoopSfx = null;
+    wallSlideLoopPlaying = false;
   }
 
   // Animations are registered globally in game.js via setupAll(scene)
@@ -694,6 +707,13 @@ export function handlePlayerMovement(scene) {
     player.anims.play(resolveAnimKey(scene, currentCharacter, "sliding"), true); // Plays sliding animation
   }
 
+  const isWallSliding =
+    !dead &&
+    !player.body.touching.down &&
+    (player.body.touching.left || player.body.touching.right) &&
+    (player.body.velocity.y || 0) > 20;
+  updateWallSlideAudio(isWallSliding);
+
   // Wall slide: when touching a wall and airborne, limit fall speed for a slower slide
   if (
     !player.body.touching.down &&
@@ -810,6 +830,7 @@ export function handlePlayerMovement(scene) {
   }
 
   function wallJump() {
+    updateWallSlideAudio(false);
     // More powerful wall jump using physics impulses (no tween)
     canWallJump = false;
     const fromLeft = !!player.body.touching.left;
@@ -870,6 +891,7 @@ export function handlePlayerMovement(scene) {
   }
 
   function fall() {
+    updateWallSlideAudio(false);
     if (!isAttacking) {
       player.anims.play(
         resolveAnimKey(scene, currentCharacter, "falling"),
@@ -881,8 +903,28 @@ export function handlePlayerMovement(scene) {
   }
 
   function idle() {
+    updateWallSlideAudio(false);
     player.anims.play(resolveAnimKey(scene, currentCharacter, "idle"), true);
     pdbg();
+  }
+
+  function updateWallSlideAudio(shouldPlay) {
+    if (!wallSlideLoopSfx) return;
+    if (shouldPlay) {
+      if (!wallSlideLoopPlaying) {
+        try {
+          wallSlideLoopSfx.play();
+          wallSlideLoopPlaying = true;
+        } catch (_) {}
+      }
+      return;
+    }
+    if (wallSlideLoopPlaying) {
+      try {
+        wallSlideLoopSfx.stop();
+      } catch (_) {}
+      wallSlideLoopPlaying = false;
+    }
   }
 }
 
@@ -931,6 +973,12 @@ socket.on("health-update", (data) => {
     if (currentHealth <= 0) {
       if (!dead) {
         dead = true;
+        if (wallSlideLoopPlaying && wallSlideLoopSfx) {
+          try {
+            wallSlideLoopSfx.stop();
+          } catch (_) {}
+          wallSlideLoopPlaying = false;
+        }
         player.anims.play(
           resolveAnimKey(scene, currentCharacter, "dying"),
           true,
@@ -970,4 +1018,13 @@ socket.on("player:special", (data) => {
       true, // isOwner
     );
   }
+});
+
+socket.on("player:knockback", (data) => {
+  if (!player || !player.body || dead) return;
+  const amountX = Number(data?.amountX) || 0;
+  const amountY = Number(data?.amountY) || 0;
+  player.setVelocityX(amountX);
+  player.setVelocityY(-Math.abs(amountY));
+  player._wallKickLockUntil = Date.now() + 120;
 });

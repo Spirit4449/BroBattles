@@ -21,6 +21,7 @@ function makeId() {
 export function performThorgFallAttack(instance) {
   const { scene, player: p, username, gameId, opponentPlayersRef } = instance;
   const direction = p.flipX ? -1 : 1;
+  const rageActive = !!p._thorgRageActive;
   const baseAngle = p.angle || 0;
   p._lockFlip = true;
   p._lockedFlipX = p.flipX;
@@ -148,10 +149,6 @@ export function performThorgFallAttack(instance) {
           socket.emit("hit", {
             attacker: username,
             target: name,
-            damage:
-              (instance.constructor.getStats &&
-                instance.constructor.getStats().damage) ||
-              1,
             gameId,
           });
           try {
@@ -194,7 +191,7 @@ export function performThorgFallAttack(instance) {
     if (texKey && scene.add) {
       const sprite = scene.add.sprite(startAnchor.x, startAnchor.y, texKey);
       sprite.setDepth(7);
-      sprite.setScale(0.72);
+      sprite.setScale(rageActive ? 0.82 : 0.72);
       sprite.setFlipX(false);
       const baseAim = direction >= 0 ? 0 : Math.PI;
       const baseRot = baseAim + SPRITE_FORWARD_OFFSET + direction * 0.08;
@@ -207,7 +204,7 @@ export function performThorgFallAttack(instance) {
       }
       scene.tweens.add({
         targets: sprite,
-        scale: 1.16,
+        scale: rageActive ? 1.34 : 1.16,
         duration: STRIKE_MS,
         delay: WINDUP_MS,
         ease: "Sine.easeOut",
