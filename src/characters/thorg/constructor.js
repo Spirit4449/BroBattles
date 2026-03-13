@@ -8,6 +8,7 @@ import { performThorgFallAttack } from "./attack";
 const NAME = "thorg";
 
 class Thorg {
+  static WEAPON_FORWARD_OFFSET = -Math.PI / 2; // weapon art points downward at rotation=0
   // Main texture key used for this character's sprite
   static textureKey = NAME;
   static getTextureKey() {
@@ -18,7 +19,7 @@ class Thorg {
     scene.load.atlas(
       NAME,
       `${staticPath}/${NAME}/spritesheet.webp`,
-      `${staticPath}/${NAME}/animations.json`
+      `${staticPath}/${NAME}/animations.json`,
     );
 
     scene.load.audio("thorg-throw", `${staticPath}/${NAME}/swoosh.mp3`);
@@ -41,11 +42,16 @@ class Thorg {
         ownerSprite,
         data.direction,
         data.range,
-        data.duration
+        data.duration,
       );
       return true;
     }
     if (data.type === `${NAME}-fall`) {
+      try {
+        if (scene.anims?.exists(`${NAME}-throw`)) {
+          ownerSprite.anims.play(`${NAME}-throw`, true);
+        }
+      } catch (_) {}
       Thorg._spawnFallEffect(scene, ownerSprite, data.direction);
       // Play attack sound for remote players (lower volume)
       try {
@@ -62,7 +68,7 @@ class Thorg {
     sprite,
     direction = 1,
     range = 20,
-    duration = 300
+    duration = 300,
   ) {
     // If we have an image, animate it along an overhead oval path. Otherwise, fallback to vector band.
     const hasTex = scene.textures.exists(`${NAME}-weapon`);
@@ -96,7 +102,7 @@ class Thorg {
           // Face along tangent of the path
           const tangent = Math.atan2(
             ry * Math.cos(a),
-            -direction * rx * Math.sin(a)
+            -direction * rx * Math.sin(a),
           );
           eff.rotation = tangent;
         },
@@ -134,7 +140,7 @@ class Thorg {
         const t0 = Phaser.Math.Linear(
           startRad,
           now,
-          Math.max(0, proxy.t - 0.25)
+          Math.max(0, proxy.t - 0.25),
         );
         g.clear();
         g.fillStyle(mainColor, 0.85);
@@ -155,14 +161,14 @@ class Thorg {
         g.lineStyle(
           Math.max(2, Math.floor(thickness * 0.3)),
           outlineColor,
-          0.9
+          0.9,
         );
         g.beginPath();
         for (let i = 0; i <= steps; i++) {
           const a = Phaser.Math.Linear(
             Math.max(t0, now - 0.25),
             now,
-            i / steps
+            i / steps,
           );
           const p = ept(a, rx + 2, ry + 1);
           if (i === 0) g.moveTo(p.x, p.y);
@@ -234,19 +240,33 @@ class Thorg {
 
   // Spawn a simple rectangle visual attached to owner that mimics the falling arc
   static _spawnFallEffect(scene, sprite, direction = 1) {
-    const startX = sprite.x + (direction >= 0 ? 10 : -10);
-    const startY = sprite.y - sprite.height * 0.5;
+    const WINDUP_MS = 180;
+    const STRIKE_MS = 290;
+    const FOLLOW_AFTER_WINDUP_MS = 70;
+    const getAnchor = () => ({
+      x: sprite.x + (direction >= 0 ? 10 : -10),
+      y: sprite.y - sprite.height * 0.5,
+    });
+    let strikeStartX = 0;
+    let strikeStartY = 0;
     const range = 140;
-    const endX = startX + direction * range;
-    const endY = sprite.y + 110;
+    let endX = 0;
+    let endY = 0;
     const arcHeight = 90;
     const curveMagnitude = 14;
+    const resolveStrikePath = () => {
+      const a = getAnchor();
+      strikeStartX = a.x - direction * 14;
+      strikeStartY = a.y - 8;
+      endX = strikeStartX + direction * range;
+      endY = a.y + 110;
+    };
     const samplePath = (t) => {
       const clamped = Phaser.Math.Clamp(t, 0, 1);
       const curve = Math.sin(Math.PI * clamped) * (curveMagnitude * direction);
-      const x = Phaser.Math.Linear(startX, endX, clamped) + curve;
+      const x = Phaser.Math.Linear(strikeStartX, endX, clamped) + curve;
       const y =
-        Phaser.Math.Linear(startY, endY, clamped) -
+        Phaser.Math.Linear(strikeStartY, endY, clamped) -
         arcHeight * Math.sin(Math.PI * clamped);
       return { x, y };
     };
@@ -256,38 +276,69 @@ class Thorg {
       const texKey = scene.textures.exists(`${NAME}-bat`)
         ? `${NAME}-bat`
         : scene.textures.exists(`${NAME}-weapon`)
-        ? `${NAME}-weapon`
-        : null;
+          ? `${NAME}-weapon`
+          : null;
       if (!texKey) {
         // Invisible placeholder (no visible hitbox)
         return null;
       }
-      const eff = scene.add.sprite(startX, startY, texKey);
+      const startAnchor = getAnchor();
+      const eff = scene.add.sprite(startAnchor.x, startAnchor.y, texKey);
       eff.setDepth(7);
-      eff.setScale(0.8);
-      eff.setFlipX(direction < 0);
+      eff.setScale(0.9);
+      eff.setFlipX(false);
+      const baseAim = direction >= 0 ? 0 : Math.PI;
+      const baseRot = baseAim + Thorg.WEAPON_FORWARD_OFFSET + direction * 0.08;
+      const windupRot = baseRot - direction * 0.35;
+      eff.rotation = baseRot;
       const animName = `${texKey}-fly`;
       if (scene.anims && scene.anims.exists(animName)) {
         eff.anims.play(animName);
       }
-      const proxy = { t: 0 };
       scene.tweens.add({
         targets: eff,
         scale: 1.25,
-        duration: 380,
+        duration: STRIKE_MS,
+        delay: WINDUP_MS,
         ease: "Sine.easeOut",
       });
-      scene.tweens.add({
-        targets: proxy,
-        t: 1,
-        duration: 380,
-        ease: "Sine.easeIn",
-        onUpdate: () => {
-          const pt = samplePath(proxy.t);
-          eff.x = pt.x;
-          eff.y = pt.y;
-        },
-        onComplete: () => eff.destroy(),
+
+      const bornAt = scene.time.now;
+      const renderVis = () => {
+        if (!eff.active) return;
+        const elapsed = scene.time.now - bornAt;
+        if (elapsed < WINDUP_MS) {
+          const windupT = Phaser.Math.Clamp(elapsed / WINDUP_MS, 0, 1);
+          const followAnchor = getAnchor();
+          const windupBackX = followAnchor.x - direction * 18;
+          const windupBackY = followAnchor.y - 12;
+          eff.x = Phaser.Math.Linear(followAnchor.x, windupBackX, windupT);
+          eff.y = Phaser.Math.Linear(followAnchor.y, windupBackY, windupT);
+          eff.rotation = Phaser.Math.Linear(baseRot, windupRot, windupT);
+          return;
+        }
+
+        const strikeElapsed = Math.max(0, elapsed - WINDUP_MS);
+        const tNow = Phaser.Math.Clamp(strikeElapsed / STRIKE_MS, 0, 1);
+        if (elapsed <= WINDUP_MS + FOLLOW_AFTER_WINDUP_MS) {
+          resolveStrikePath();
+        }
+        const pt = samplePath(tNow);
+        const nextPt = samplePath(Math.min(1, tNow + 0.035));
+        eff.x = pt.x;
+        eff.y = pt.y;
+        const targetRot =
+          Math.atan2(nextPt.y - pt.y, nextPt.x - pt.x) +
+          direction * 0.1 +
+          Thorg.WEAPON_FORWARD_OFFSET;
+        const delta = Phaser.Math.Angle.Wrap(targetRot - baseRot);
+        eff.rotation = baseRot + delta * 0.5;
+      };
+
+      scene.events.on("update", renderVis);
+      scene.time.delayedCall(WINDUP_MS + STRIKE_MS + 30, () => {
+        scene.events.off("update", renderVis);
+        if (eff.active) eff.destroy();
       });
       return eff;
     } catch (e) {

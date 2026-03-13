@@ -57,6 +57,60 @@ export function spawnDust(scene, x, y, tint = 0xbbbbbb) {
   }
 }
 
+export function spawnWallKickCloud(
+  scene,
+  x,
+  y,
+  direction = 1,
+  tint = 0xd9d9d9,
+) {
+  if (!scene || !scene.add) return;
+  const puffs = Phaser.Math.Between(2, 6);
+  const push = direction >= 0 ? 1 : -1;
+
+  for (let i = 0; i < puffs; i++) {
+    const g = scene.add.graphics();
+    g.setDepth(4);
+    g.fillStyle(tint, Phaser.Math.FloatBetween(0.62, 0.84));
+    const r = Phaser.Math.Between(6, 12);
+    g.fillCircle(0, 0, r);
+    g.x = x + Phaser.Math.Between(-4, 4);
+    g.y = y + Phaser.Math.Between(-5, 5);
+
+    scene.tweens.add({
+      targets: g,
+      x: g.x - push * Phaser.Math.Between(18, 34),
+      y: g.y - Phaser.Math.Between(8, 20),
+      alpha: 0,
+      scaleX: Phaser.Math.FloatBetween(1.25, 1.9),
+      scaleY: Phaser.Math.FloatBetween(1.25, 1.9),
+      duration: Phaser.Math.Between(250, 380),
+      ease: "Cubic.easeOut",
+      onComplete: () => g.destroy(),
+    });
+  }
+
+  // Sharp impulse streak at the wall contact point to sell kickback.
+  const streak = scene.add.graphics();
+  streak.setDepth(4);
+  streak.fillStyle(0xffffff, 0.65);
+  const w = Phaser.Math.Between(12, 18);
+  const h = Phaser.Math.Between(4, 6);
+  streak.fillRoundedRect(-w / 2, -h / 2, w, h, 2);
+  streak.x = x;
+  streak.y = y;
+  streak.rotation = push > 0 ? Math.PI : 0;
+  scene.tweens.add({
+    targets: streak,
+    x: x - push * Phaser.Math.Between(20, 32),
+    alpha: 0,
+    scaleX: 2,
+    duration: 160,
+    ease: "Sine.easeOut",
+    onComplete: () => streak.destroy(),
+  });
+}
+
 export function prewarmDust(scene, count = 6) {
   for (let i = 0; i < count; i++) {
     spawnDust(scene, -9999, -9999);

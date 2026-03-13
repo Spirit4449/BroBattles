@@ -2,8 +2,12 @@ import socket from "../../socket";
 
 const RECT_W = 120;
 const RECT_H = 60;
-const DURATION = 400;
+const WINDUP_MS = 180;
+const STRIKE_MS = 290;
+const DURATION = WINDUP_MS + STRIKE_MS;
+const FOLLOW_AFTER_WINDUP_MS = 70;
 const DAMAGE_TICK_MS = 90;
+const SPRITE_FORWARD_OFFSET = -Math.PI / 2; // weapon art points downward at rotation=0
 let DEBUG_DRAW = false;
 
 function rectsOverlap(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2) {
@@ -17,6 +21,7 @@ function makeId() {
 export function performThorgFallAttack(instance) {
   const { scene, player: p, username, gameId, opponentPlayersRef } = instance;
   const direction = p.flipX ? -1 : 1;
+  const baseAngle = p.angle || 0;
   p._lockFlip = true;
   p._lockedFlipX = p.flipX;
   const unlockFlip = () => {
@@ -24,19 +29,15 @@ export function performThorgFallAttack(instance) {
       p._lockFlip = false;
       delete p._lockedFlipX;
     }
+    if (p && p.active) p.setAngle(baseAngle);
   };
   const attackId = makeId();
   const hitSet = new Set();
 
   // play simple throw animation if present
-  if (
-    scene.anims &&
-    (scene.anims.exists("thorg-throw") || scene.anims.exists("throw"))
-  ) {
-    p.anims.play(
-      scene.anims.exists("thorg-throw") ? "thorg-throw" : "throw",
-      true
-    );
+  if (scene.anims) {
+    if (scene.anims.exists("thorg-throw")) p.anims.play("thorg-throw", true);
+    else if (scene.anims.exists("throw")) p.anims.play("throw", true);
   }
 
   // Visual SFX local-only
@@ -46,28 +47,38 @@ export function performThorgFallAttack(instance) {
       try {
         scene.sound.play("thorg-throw", { volume: 0.6 });
       } catch (_) {}
-      try {
-        scene.sound.play("swoosh", { volume: 0.5 });
-      } catch (_) {}
+      // Swoosh plays on impact below, not at lift start.
     }
   } catch (e) {}
 
   // movement proxy t from 0->1
   let elapsed = 0;
   let dmgAccum = 0;
-  const startX0 = p.x + (direction >= 0 ? 10 : -10);
-  const startY0 = p.y - p.height * 0.5;
+  let strikeStarted = false;
+  const getAnchor = () => ({
+    x: p.x + (direction >= 0 ? 10 : -10),
+    y: p.y - p.height * 0.5,
+  });
+  let strikeStartX = 0;
+  let strikeStartY = 0;
   const range = 110;
-  const endX0 = startX0 + direction * range;
-  const endY0 = p.y + 100; // drop much lower before dissipating
+  let endX0 = 0;
+  let endY0 = 0;
   const arcHeight = 120; // peak above start
   const curveMagnitude = 20;
+  const resolveStrikePath = () => {
+    const a = getAnchor();
+    strikeStartX = a.x - direction * 14;
+    strikeStartY = a.y - 8;
+    endX0 = strikeStartX + direction * range;
+    endY0 = a.y + 100;
+  };
   const samplePath = (t) => {
     const clamped = Phaser.Math.Clamp(t, 0, 1);
     const curve = Math.sin(Math.PI * clamped) * (curveMagnitude * direction);
-    const x = Phaser.Math.Linear(startX0, endX0, clamped) + curve;
+    const x = Phaser.Math.Linear(strikeStartX, endX0, clamped) + curve;
     const y =
-      Phaser.Math.Linear(startY0, endY0, clamped) -
+      Phaser.Math.Linear(strikeStartY, endY0, clamped) -
       arcHeight * Math.sin(Math.PI * clamped);
     return { x, y };
   };
@@ -86,11 +97,28 @@ export function performThorgFallAttack(instance) {
       p.flipX = p._lockedFlipX;
     }
 
-    const t = Math.min(1, elapsed / DURATION);
+    const strikeElapsed = Math.max(0, elapsed - WINDUP_MS);
+    const t = Math.min(1, strikeElapsed / STRIKE_MS);
     const { x, y } = samplePath(t);
 
+    // Windup lean: pull torso back before release so it doesn't feel static.
+    if (!strikeStarted) {
+      const windupT = Phaser.Math.Clamp(elapsed / WINDUP_MS, 0, 1);
+      const leanDeg = Phaser.Math.Linear(0, -8 * direction, windupT);
+      p.setAngle(baseAngle + leanDeg);
+    }
+
+    if (!strikeStarted && elapsed >= WINDUP_MS) {
+      strikeStarted = true;
+      resolveStrikePath();
+      p.setAngle(baseAngle + 4 * direction);
+      try {
+        if (scene.sound) scene.sound.play("swoosh", { volume: 0.5 });
+      } catch (_) {}
+    }
+
     // Damage ticks during flight
-    if (dmgAccum >= DAMAGE_TICK_MS) {
+    if (strikeStarted && dmgAccum >= DAMAGE_TICK_MS) {
       dmgAccum = 0;
       const left = x - RECT_W / 2 - 6;
       const right = x + RECT_W / 2 + 6;
@@ -147,49 +175,79 @@ export function performThorgFallAttack(instance) {
       } catch (_) {}
     }
 
-    if (t >= 1) {
+    if (elapsed >= DURATION) {
       scene.events.off("update", update);
       if (dbg) dbg.destroy();
+      p.setAngle(baseAngle);
       scene.time.delayedCall(80, unlockFlip);
     }
   };
 
   // Spawn a local visual 'bat' if texture exists. Do not show any hitbox by default.
   try {
+    const startAnchor = getAnchor();
     const texKey = scene.textures.exists("thorg-bat")
       ? "thorg-bat"
       : scene.textures.exists("thorg-weapon")
-      ? "thorg-weapon"
-      : null;
+        ? "thorg-weapon"
+        : null;
     if (texKey && scene.add) {
-      const sprite = scene.add.sprite(startX0, startY0, texKey);
+      const sprite = scene.add.sprite(startAnchor.x, startAnchor.y, texKey);
       sprite.setDepth(7);
-      sprite.setScale(0.3);
-      sprite.setFlipX(direction < 0);
+      sprite.setScale(0.72);
+      sprite.setFlipX(false);
+      const baseAim = direction >= 0 ? 0 : Math.PI;
+      const baseRot = baseAim + SPRITE_FORWARD_OFFSET + direction * 0.08;
+      const windupRot = baseRot - direction * 0.35;
+      sprite.rotation = baseRot;
       // Play animation name convention: 'thorg-bat-fly' or 'thorg-weapon-fly'
       const animName = `${texKey}-fly`;
       if (scene.anims && scene.anims.exists(animName)) {
         sprite.anims.play(animName);
       }
-      const proxyVis = { t: 0 };
-      // scale up over time
       scene.tweens.add({
         targets: sprite,
-        scale: 1,
-        duration: DURATION,
+        scale: 1.16,
+        duration: STRIKE_MS,
+        delay: WINDUP_MS,
         ease: "Sine.easeOut",
       });
-      scene.tweens.add({
-        targets: proxyVis,
-        t: 1,
-        duration: DURATION,
-        ease: "Sine.easeIn",
-        onUpdate: () => {
-          const pt = samplePath(proxyVis.t);
-          sprite.x = pt.x;
-          sprite.y = pt.y;
-        },
-        onComplete: () => sprite.destroy(),
+
+      const renderVis = () => {
+        if (!sprite.active) return;
+        if (!strikeStarted) {
+          const windupT = Phaser.Math.Clamp(elapsed / WINDUP_MS, 0, 1);
+          const followAnchor = getAnchor();
+          const windupBackX = followAnchor.x - direction * 18;
+          const windupBackY = followAnchor.y - 12;
+          sprite.x = Phaser.Math.Linear(followAnchor.x, windupBackX, windupT);
+          sprite.y = Phaser.Math.Linear(followAnchor.y, windupBackY, windupT);
+          sprite.rotation = Phaser.Math.Linear(baseRot, windupRot, windupT);
+          return;
+        }
+
+        const strikeElapsed = Math.max(0, elapsed - WINDUP_MS);
+        const tNow = Phaser.Math.Clamp(strikeElapsed / STRIKE_MS, 0, 1);
+        if (elapsed <= WINDUP_MS + FOLLOW_AFTER_WINDUP_MS) {
+          resolveStrikePath();
+        }
+        const pt = samplePath(tNow);
+        const nextPt = samplePath(Math.min(1, tNow + 0.035));
+        sprite.x = pt.x;
+        sprite.y = pt.y;
+        const targetRot =
+          Math.atan2(nextPt.y - pt.y, nextPt.x - pt.x) +
+          direction * 0.1 +
+          SPRITE_FORWARD_OFFSET;
+        // Use half-strength rotation so it doesn't spin/tilt too far.
+        const delta = Phaser.Math.Angle.Wrap(targetRot - baseRot);
+        sprite.rotation = baseRot + delta * 0.5;
+      };
+
+      scene.events.on("update", renderVis);
+      scene.time.delayedCall(DURATION + 30, () => {
+        scene.events.off("update", renderVis);
+        if (sprite.active) sprite.destroy();
       });
     }
   } catch (e) {

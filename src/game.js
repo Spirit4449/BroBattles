@@ -159,6 +159,33 @@ let lastAdaptivePrint = 0;
 // Game scene reference
 let gameScene = null;
 
+function startSuddenDeathMusic() {
+  if (!gameScene || !gameScene.sound) return;
+  try {
+    try {
+      gameScene._bgmEl?.pause();
+    } catch (_) {}
+    if (!gameScene._suddenDeathMusicSfx) {
+      gameScene._suddenDeathMusicSfx = gameScene.sound.add("sfx-sudden-death", {
+        loop: true,
+        volume: 0.32,
+      });
+    }
+    if (!gameScene._suddenDeathMusicSfx.isPlaying) {
+      gameScene._suddenDeathMusicSfx.play();
+    }
+  } catch (_) {}
+}
+
+function stopSuddenDeathMusic() {
+  if (!gameScene || !gameScene._suddenDeathMusicSfx) return;
+  try {
+    if (gameScene._suddenDeathMusicSfx.isPlaying) {
+      gameScene._suddenDeathMusicSfx.stop();
+    }
+  } catch (_) {}
+}
+
 // Prewarm frequently used textures to force GL upload before gameplay
 function prewarmTextures(scene) {
   try {
@@ -819,6 +846,7 @@ function setupGameEventListeners() {
   socket.on("game:over", (payload) => {
     if (gameEnded) return; // idempotent
     gameEnded = true;
+    stopSuddenDeathMusic();
     try {
       player && player.body && (player.body.enable = false);
     } catch (_) {}
@@ -838,11 +866,13 @@ function setupGameEventListeners() {
       gameScene
     ) {
       gameScene._poisonWaterY = payload.poisonY;
+      startSuddenDeathMusic();
     }
   });
 
   socket.on("game:sudden-death:start", (payload) => {
     showSuddenDeathBanner();
+    startSuddenDeathMusic();
     if (gameScene && typeof payload?.poisonY === "number") {
       gameScene._poisonWaterY = payload.poisonY;
     }
@@ -983,6 +1013,7 @@ class GameScene extends Phaser.Scene {
     this.load.audio("sfx-jump", `${staticPath}/jump.mp3`);
     this.load.audio("sfx-land", `${staticPath}/land.mp3`);
     this.load.audio("sfx-walljump", `${staticPath}/walljump.mp3`);
+    this.load.audio("sfx-sudden-death", `${staticPath}/suddendeath.mp3`);
     // Combat/health SFX
     this.load.audio("sfx-damage", `${staticPath}/damage.mp3`);
     this.load.audio("sfx-heal", `${staticPath}/heal.mp3`);
@@ -1167,6 +1198,14 @@ class GameScene extends Phaser.Scene {
     // Extra safety: if for some reason 'unlocked' doesn't fire, start on first pointer/keydown
     this.input.once("pointerdown", startBgm);
     this.input.keyboard?.once("keydown", startBgm);
+
+    this.events.once("shutdown", () => {
+      stopSuddenDeathMusic();
+      try {
+        this._suddenDeathMusicSfx?.destroy();
+      } catch (_) {}
+      this._suddenDeathMusicSfx = null;
+    });
 
     // Cache my level and stats BEFORE creating the player so HUD uses server values
     try {
@@ -1494,6 +1533,46 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  _spawnArrowParticle(
+    x,
+    y,
+    color,
+    angle = -Math.PI / 2,
+    size = 11,
+    life = 260,
+  ) {
+    const g = this.add.graphics();
+    g.setDepth(19);
+    g.fillStyle(color, 0.9);
+    // Arrow body
+    g.fillRect(-size * 0.5, -size * 0.12, size * 0.62, size * 0.24);
+    // Arrow head
+    g.beginPath();
+    g.moveTo(size * 0.12, -size * 0.32);
+    g.lineTo(size * 0.52, 0);
+    g.lineTo(size * 0.12, size * 0.32);
+    g.closePath();
+    g.fillPath();
+    // Tiny white accent for readability
+    g.fillStyle(0xffffff, 0.72);
+    g.fillRect(-size * 0.34, -size * 0.06, size * 0.24, size * 0.12);
+
+    g.x = x;
+    g.y = y;
+    g.rotation = angle;
+    this.tweens.add({
+      targets: g,
+      x: x - Math.cos(angle) * Phaser.Math.Between(18, 30),
+      y: y - Math.sin(angle) * Phaser.Math.Between(18, 30),
+      alpha: 0,
+      scaleX: Phaser.Math.FloatBetween(0.9, 1.25),
+      scaleY: Phaser.Math.FloatBetween(0.9, 1.25),
+      duration: life,
+      ease: "Cubic.easeOut",
+      onComplete: () => g.destroy(),
+    });
+  }
+
   _applyPowerupCharacterFX(spr, fx, nowSec) {
     if (!spr || !spr.active) return;
     if (typeof spr._puBaseScaleX !== "number") {
@@ -1560,14 +1639,21 @@ class GameScene extends Phaser.Scene {
       spr.clearTint();
       spr.setScale(baseX, baseY);
       spr.setOrigin(baseOriginX, baseOriginY);
+      spr.setTint(0xfca5a5);
       const vy = spr.body?.velocity?.y || 0;
-      if (vy < -70 && Math.random() < 0.65) {
-        this._spawnTrailParticle(
-          spr.x + Phaser.Math.Between(-10, 10),
-          spr.y + Phaser.Math.Between(10, 22),
+      const vx = spr.body?.velocity?.x || 0;
+      if (vy < -35 && Math.random() < 0.72) {
+        const moveAngle = Math.atan2(
+          vy || -140,
+          Math.abs(vx) > 8 ? vx : spr.flipX ? -24 : 24,
+        );
+        this._spawnArrowParticle(
+          spr.x + Phaser.Math.Between(-12, 12),
+          spr.y + Phaser.Math.Between(8, 20),
           POWERUP_COLORS.gravityBoots,
-          3.6,
-          250,
+          moveAngle + Phaser.Math.FloatBetween(-0.24, 0.24),
+          Phaser.Math.Between(9, 13),
+          280,
         );
       }
     } else {
@@ -1663,8 +1749,16 @@ class GameScene extends Phaser.Scene {
         g.strokeCircle(x, y + 6, 42 + 3 * pulse);
       }
       if ((fx.rage || 0) > 0) {
+        g.fillStyle(POWERUP_COLORS.rage, 0.2 + 0.08 * pulse);
+        g.fillCircle(x, y + 6, 40 + 4 * pulse);
         g.lineStyle(3.5, POWERUP_COLORS.rage, 0.85 * pulse);
         g.strokeCircle(x, y + 6, 47 + 4 * pulse);
+        g.lineStyle(
+          2.5,
+          0xffffff,
+          0.3 + 0.25 * Math.abs(Math.sin(nowSec * 16 + y * 0.015)),
+        );
+        g.strokeCircle(x, y + 6, 52 + 2.2 * pulse);
       }
       if ((fx.gravityBoots || 0) > 0) {
         g.fillStyle(POWERUP_COLORS.gravityBoots, 0.22 * pulse);
@@ -1813,6 +1907,27 @@ class GameScene extends Phaser.Scene {
           const ringCy = visual.container.y + 8;
           const r1 = 21 + 4 * Math.sin(nowSec * 3 + visual.phase);
           const r2 = 27 + 3 * Math.sin(nowSec * 2.1 + visual.phase + 0.8);
+          if (pu.type === "rage") {
+            const shimmer =
+              0.28 + 0.22 * Math.abs(Math.sin(nowSec * 14 + visual.phase));
+            fxG.fillStyle(POWERUP_COLORS.rage, 0.22);
+            fxG.fillCircle(
+              visual.container.x,
+              ringCy,
+              18 + 2 * Math.sin(nowSec * 5 + visual.phase),
+            );
+            fxG.lineStyle(3, 0xffffff, shimmer);
+            fxG.strokeCircle(visual.container.x, ringCy, r1 + 6);
+            for (let i = 0; i < 3; i++) {
+              const aa = nowSec * (2.3 + i * 0.2) + visual.phase + i * 2.1;
+              fxG.fillStyle(0xffffff, 0.75 - i * 0.15);
+              fxG.fillCircle(
+                visual.container.x + Math.cos(aa) * (r1 + 4),
+                ringCy + Math.sin(aa) * (r1 + 4),
+                2.2 - i * 0.35,
+              );
+            }
+          }
           fxG.lineStyle(2.5, c, 0.6);
           fxG.strokeCircle(visual.container.x, ringCy, r1);
           fxG.lineStyle(2.5, c, 0.38);

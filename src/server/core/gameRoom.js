@@ -9,16 +9,16 @@ const WORLD_BOUNDS = {
 };
 
 // ── Easily-tunable match timing ───────────────────────────────────────────
-const GAME_DURATION_MS = 3 * 60 * 1000; // 3 minutes until sudden death starts
+const GAME_DURATION_MS = .5 * 60 * 1000; // 2.5 minutes until sudden death starts
 const SD_RISE_SPEED = 15; // px/s the poison water rises (world: 1300×650)
 const SD_DAMAGE_PER_SEC = 400; // HP/s lost while standing in the poison
 const TIMER_EMIT_INTERVAL_MS = 500; // how often game:timer is broadcast to clients
 // Powerup tuning (server-authoritative)
 const POWERUP_SPAWN_INTERVAL_MS = 20000; // recommended cadence
 const POWERUP_STARTING_COUNT = 2; // spawn this many when game loop begins
-const POWERUP_MAX_ACTIVE = 4;
-const POWERUP_PICKUP_RADIUS = 46;
-const POWERUP_DESPAWN_MS = 30000;
+const POWERUP_MAX_ACTIVE = 3;
+const POWERUP_PICKUP_RADIUS = 52;
+const POWERUP_DESPAWN_MS = 7000;
 const POWERUP_RECENT_SPAWN_MEMORY = 4;
 const POWERUP_SPAWN_Y_LIFT = 34; // lift from platform surface so pickup is visibly above ground
 const POWERUP_TYPES = ["rage", "health", "shield", "poison", "gravityBoots"];
@@ -26,13 +26,13 @@ const POWERUP_DURATIONS_MS = {
   rage: 10000,
   health: 10000,
   shield: 10000,
-  poison: 5000,
-  gravityBoots: 10000,
+  poison: 8000,
+  gravityBoots: 7000,
 };
 const POWERUP_RAGE_DAMAGE_MULT = 1.35;
-const POWERUP_SHIELD_DAMAGE_MULT = 0.5; // takes 50% damage
+const POWERUP_SHIELD_DAMAGE_MULT = 0.7; // takes 70% damage
 const POWERUP_HEALTH_REGEN_PER_SEC = 600;
-const POWERUP_POISON_DPS = 500;
+const POWERUP_POISON_DPS = 600;
 const POWERUP_EFFECT_TICK_MS = 500;
 const POWERUP_AMBIENT_TICK_MS = 1200; // occasional cadence for non-damaging powerups
 const POWERUP_PLATFORM_POINTS = {

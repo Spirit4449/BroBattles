@@ -4,6 +4,8 @@ export function animations(scene) {
   const allNames = (tex && tex.getFrameNames()) || [];
   const lower = new Map(allNames.map((n) => [n.toLowerCase(), n]));
 
+  const getFrame = (name) => lower.get(String(name).toLowerCase()) || null;
+
   const findFrames = (candidates) => {
     // candidates: array of lowercase prefixes to try (e.g., ["running", "run"])
     // Return sorted frame names by numeric suffix when present.
@@ -36,12 +38,35 @@ export function animations(scene) {
     });
   };
 
+  const makeThrowLiftSlam = () => {
+    const ordered = ["throw00", "throw01", "throw02", "throw03", "throw04"]
+      .map((n) => getFrame(n))
+      .filter(Boolean);
+    if (scene.anims.exists(`${NAME}-throw`)) {
+      scene.anims.remove(`${NAME}-throw`);
+    }
+    if (!ordered.length) return;
+
+    // Hold the lift frames longer, then accelerate through the downswing.
+    const durations = [200, 300, 95, 100, 100];
+    scene.anims.create({
+      key: `${NAME}-throw`,
+      frames: ordered.map((f, i) => ({
+        key: NAME,
+        frame: f,
+        duration: durations[Math.min(i, durations.length - 1)],
+      })),
+      frameRate: 7,
+      repeat: 0,
+    });
+  };
+
   // Try reasonable prefix variants for robustness across atlases
   make(`${NAME}-running`, ["running", "run"], 9, 0);
   make(`${NAME}-idle`, ["idle", "stand", "idle_"], 3, -1);
   make(`${NAME}-jumping`, ["jumping", "jump"], 7, 0);
   make(`${NAME}-sliding`, ["wall", "slide", "sliding"], 20, 2);
   make(`${NAME}-falling`, ["falling", "fall"], 8, 0);
-  make(`${NAME}-throw`, ["throw", "attack", "attack_throw"], 7, 0);
+  makeThrowLiftSlam();
   make(`${NAME}-dying`, ["dying", "death", "dead"], 10, 0);
 }

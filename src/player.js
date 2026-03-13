@@ -23,7 +23,7 @@ import {
   getEffectsClass,
 } from "./characters";
 import { performSpecial } from "./characters/special";
-import { spawnDust, spawnHealthMarker } from "./effects";
+import { spawnDust, spawnHealthMarker, spawnWallKickCloud } from "./effects";
 // Globals
 let player;
 let cursors;
@@ -842,6 +842,20 @@ export function handlePlayerMovement(scene) {
     // Apply velocity impulses
     // Nudge away from the wall first so we don't remain embedded and lose the kick
     const sep = 3;
+
+    // Visual-only kickback cloud at wall contact point.
+    try {
+      const body = player.body;
+      const contactX = body
+        ? body.x + (fromLeft ? 0 : body.width)
+        : player.x + (fromLeft ? -player.width * 0.5 : player.width * 0.5);
+      const contactY = body
+        ? body.y + body.height * 0.62
+        : player.y + player.height * 0.18;
+      // direction indicates kick direction away from wall.
+      spawnWallKickCloud(scene, contactX, contactY, fromLeft ? 1 : -1);
+    } catch (_) {}
+
     player.x += fromLeft ? sep : -sep;
     player.setVelocityX(horizKick);
     player.setVelocityY(-vertKick);
@@ -906,7 +920,7 @@ socket.on("health-update", (data) => {
     if (scene && scene.sound && !dead) {
       if (delta < 0) {
         // Took damage
-        scene.sound.play("sfx-damage", { volume: 3 });
+        scene.sound.play("sfx-damage", { volume: 5 });
       } else if (delta > 0) {
         const s = scene.sound.add("sfx-heal", { volume: 0.1 });
         try {
