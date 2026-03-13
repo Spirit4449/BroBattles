@@ -36,7 +36,8 @@ export const characterStats = {
     ammoCooldownMs: 150,
     ammoReloadMs: 800,
     ammoCapacity: 3,
-    specialDescription: "Enters a purple rage that buffs weapon strikes and mobility.",
+    specialDescription:
+      "Enters a purple rage that buffs weapon strikes and mobility.",
     specialBaseDamage: 2800,
     specialChargeHits: 4,
     specialChargeDamage: 4500,
@@ -113,7 +114,7 @@ export function getAllCharacters() {
 
 export function getFreeCharacters() {
   return Object.keys(characterStats).filter(
-    (char) => characterStats[char].free
+    (char) => characterStats[char].free,
   );
 }
 
@@ -122,7 +123,7 @@ export function defaultCharacterList() {
     Object.keys(characterStats).map((char) => [
       char,
       characterStats[char].free ? 1 : 0,
-    ])
+    ]),
   );
 }
 

@@ -1779,8 +1779,7 @@ class GameScene extends Phaser.Scene {
 
     const me = latestPlayerEffects[username] || {};
     const speedMult =
-      ((me.rage || 0) > 0 ? 1.25 : 1) *
-      ((me.thorgRage || 0) > 0 ? 1.12 : 1);
+      ((me.rage || 0) > 0 ? 1.25 : 1) * ((me.thorgRage || 0) > 0 ? 1.12 : 1);
     const jumpMult =
       ((me.gravityBoots || 0) > 0 ? 1.5 : 1) *
       ((me.thorgRage || 0) > 0 ? 1.12 : 1);

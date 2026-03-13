@@ -9,7 +9,7 @@ const WORLD_BOUNDS = {
 };
 
 // ── Easily-tunable match timing ───────────────────────────────────────────
-const GAME_DURATION_MS = .5 * 60 * 1000; // 2.5 minutes until sudden death starts
+const GAME_DURATION_MS = 0.5 * 60 * 1000; // 2.5 minutes until sudden death starts
 const SD_RISE_SPEED = 15; // px/s the poison water rises (world: 1300×650)
 const SD_DAMAGE_PER_SEC = 400; // HP/s lost while standing in the poison
 const TIMER_EMIT_INTERVAL_MS = 500; // how often game:timer is broadcast to clients
@@ -1004,8 +1004,12 @@ class GameRoom {
         });
       }
 
-      if ((e.thorgRageUntil || 0) > now && (e.thorgRageNextTickAt || 0) <= now) {
-        e.thorgRageNextTickAt = now + Math.max(700, POWERUP_AMBIENT_TICK_MS - 250);
+      if (
+        (e.thorgRageUntil || 0) > now &&
+        (e.thorgRageNextTickAt || 0) <= now
+      ) {
+        e.thorgRageNextTickAt =
+          now + Math.max(700, POWERUP_AMBIENT_TICK_MS - 250);
         this.io.to(`game:${this.matchId}`).emit("powerup:tick", {
           type: "thorgRage",
           username: p.name,
@@ -1207,13 +1211,7 @@ class GameRoom {
       this._recentHits = this._recentHits || new Map(); // key: attacker|target -> timestamp
       const instanceId = payload.instanceId ? String(payload.instanceId) : "";
       const key =
-        attacker.name +
-        "|" +
-        target.name +
-        "|" +
-        attackType +
-        "|" +
-        instanceId;
+        attacker.name + "|" + target.name + "|" + attackType + "|" + instanceId;
       const last = this._recentHits.get(key) || 0;
       const DUP_WINDOW_MS = 80; // hits within 80ms considered duplicate
       if (!isSelf && now - last < DUP_WINDOW_MS) return; // duplicate, ignore

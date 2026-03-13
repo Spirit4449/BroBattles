@@ -35,7 +35,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
         ctrl1YOffset: 20,
         ctrl2YOffset: -40,
       },
-      config || {}
+      config || {},
     );
 
     // Phase state
@@ -237,7 +237,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       const rawT = Phaser.Math.Clamp(
         this.elapsed / this.cfg.outwardDuration,
         0,
-        1
+        1,
       );
       const t = (1 - Math.cos(Math.PI * rawT)) / 2; // ease in-out
       const nx = this.cubic(
@@ -245,21 +245,21 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
         this.startX,
         this.ctrl1X,
         this.ctrl2X,
-        this.endX
+        this.endX,
       );
       const ny = this.cubic(
         t,
         this.startY,
         this.ctrl1Y,
         this.ctrl2Y,
-        this.endY
+        this.endY,
       );
       this.setPosition(nx, ny);
       if (rawT >= 1) {
         this.phase = "hover";
         this.elapsed = 0;
         this.setAngularVelocity(
-          this.cfg.rotationSpeed * 0.55 * this.cfg.direction
+          this.cfg.rotationSpeed * 0.55 * this.cfg.direction,
         );
       }
     } else if (this.phase === "hover") {
@@ -267,7 +267,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
         this.phase = "return";
         this.elapsed = 0;
         this.setAngularVelocity(
-          this.cfg.rotationSpeed * 1.15 * this.cfg.direction
+          this.cfg.rotationSpeed * 1.15 * this.cfg.direction,
         );
       }
     } else if (this.phase === "return") {
@@ -280,12 +280,12 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
         this.currentReturnSpeed = Math.min(
           this.cfg.returnSpeed,
-          this.currentReturnSpeed + this.returnAcceleration * (delta / 1000)
+          this.currentReturnSpeed + this.returnAcceleration * (delta / 1000),
         );
         const spd = this.currentReturnSpeed * (delta / 1000);
         this.setPosition(
           this.x + (dx / dist) * spd,
-          this.y + (dy / dist) * spd
+          this.y + (dy / dist) * spd,
         );
         if (dist < 30) {
           if (
