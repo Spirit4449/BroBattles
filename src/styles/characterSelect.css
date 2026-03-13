@@ -99,7 +99,8 @@
   background: linear-gradient(145deg, #2d3748, #4a5568);
   border: 2px solid #4a5568;
   border-radius: 8px;
-  padding: 12px;
+  padding: 8px;
+  box-sizing: border-box;
   cursor: pointer;
   transition: all 0.3s ease;
   display: flex;

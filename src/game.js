@@ -651,15 +651,26 @@ function setupGameEventListeners() {
       }
     } catch (_) {}
 
-    // Update local game data with server state
-    if (gameData?.players) {
-      // Initialize opponent and team players based on server data
-      initializePlayers(gameData.players);
-      initTeamStatusHud(
-        Array.isArray(gameState?.players) && gameState.players.length
-          ? gameState.players
-          : gameData.players,
+    // Build a complete roster from gamedata + game:init (game:init carries live status).
+    if (Array.isArray(gameData?.players)) {
+      const initByName = new Map(
+        (Array.isArray(gameState?.players) ? gameState.players : []).map(
+          (p) => [p?.name, p],
+        ),
       );
+      const mergedRoster = gameData.players.map((p) => {
+        const live = initByName.get(p.name) || null;
+        return {
+          ...p,
+          ...(live || {}),
+          name: p.name,
+          team: p.team,
+          char_class: p.char_class,
+        };
+      });
+
+      initializePlayers(mergedRoster);
+      initTeamStatusHud(mergedRoster);
     }
     if (Array.isArray(gameState.powerups)) latestPowerups = gameState.powerups;
     if (
@@ -1836,6 +1847,19 @@ class GameScene extends Phaser.Scene {
     const healthOn = (fx?.health || 0) > 0;
     const poisonOn = (fx?.poison || 0) > 0;
     const bootsOn = (fx?.gravityBoots || 0) > 0;
+    const rageLikeOn = rageOn || thorgRageOn;
+
+    // Apply a one-time upward lift when rage visuals activate to avoid floor clipping
+    // from sudden scale-up on grounded sprites.
+    if (rageLikeOn && !spr._rageLiftApplied) {
+      spr.y -= 6;
+      if (spr.body && typeof spr.body.updateFromGameObject === "function") {
+        spr.body.updateFromGameObject();
+      }
+      spr._rageLiftApplied = true;
+    } else if (!rageLikeOn && spr._rageLiftApplied) {
+      spr._rageLiftApplied = false;
+    }
 
     spr._thorgRageActive = thorgRageOn;
 

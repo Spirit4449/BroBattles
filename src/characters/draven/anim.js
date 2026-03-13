@@ -43,5 +43,6 @@ export function animations(scene) {
   make(`${NAME}-sliding`, ["wall", "slide", "sliding"], 20, 2);
   make(`${NAME}-falling`, ["falling", "fall"], 20, 0);
   make(`${NAME}-throw`, ["throw", "attack", "attack_throw"], 15, 0);
+  make(`${NAME}-special`, ["special", "ultimate", "ult"], 12, -1);
   make(`${NAME}-dying`, ["dying", "death", "dead"], 10, 0);
 }

@@ -37,7 +37,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     // fallback: use mode as team size if looks sane; else default to 1
     const fallback = Number.isFinite(m) && m > 0 && m <= 5 ? m : 1;
     console.log(
-      `[mm] unknown mode=${mode}, using fallback team size of ${fallback}`
+      `[mm] unknown mode=${mode}, using fallback team size of ${fallback}`,
     );
     return fallback;
   }
@@ -63,7 +63,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
   async function getMatchDataForGameRoom(matchId) {
     const matchRows = await db.runQuery(
       "SELECT mode, map FROM matches WHERE match_id = ? LIMIT 1",
-      [matchId]
+      [matchId],
     );
 
     const participantRows = await db.runQuery(
@@ -71,7 +71,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
        FROM match_participants mp 
        JOIN users u ON u.user_id = mp.user_id 
        WHERE mp.match_id = ?`,
-      [matchId]
+      [matchId],
     );
 
     if (!matchRows.length || !participantRows.length) {
@@ -94,7 +94,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
   async function computePartyMMR(partyId) {
     const rows = await db.runQuery(
       "SELECT u.user_id, u.char_levels FROM party_members pm JOIN users u ON u.name = pm.name WHERE pm.party_id = ?",
-      [partyId]
+      [partyId],
     );
     if (!rows.length) return 0;
     const mmrs = rows.map(computeUserMMRFromRow);
@@ -104,7 +104,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
   async function getPartyTeamCounts(partyId) {
     const rows = await db.runQuery(
       "SELECT team, COUNT(*) AS c FROM party_members WHERE party_id = ? GROUP BY team",
-      [partyId]
+      [partyId],
     );
     const t1 = rows.find((r) => r.team === "team1")?.c || 0;
     const t2 = rows.find((r) => r.team === "team2")?.c || 0;
@@ -130,7 +130,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
       size = counts.t1 + counts.t2;
       const rows = await db.runQuery(
         "SELECT 1 FROM party_members WHERE party_id=? LIMIT 1",
-        [partyId]
+        [partyId],
       );
       if (!rows.length) throw new Error("empty party");
       if (size <= 0) throw new Error("no players assigned to teams");
@@ -161,7 +161,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
         Number(mmr),
         counts.t1,
         counts.t2,
-      ]
+      ],
     );
 
     if (partyId)
@@ -172,8 +172,10 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     console.log(
       `[queue] join ${
         partyId ? "p=" + partyId : "u=" + userId
-      } mode=${mode} map=${map} t1=${counts.t1} t2=${counts.t2} mmr=${mmr}`
+      } mode=${mode} map=${map} t1=${counts.t1} t2=${counts.t2} mmr=${mmr}`,
     );
+    // Reset per-ticket progress cache so fresh queue sessions always get updates.
+    lastProgress.clear();
     await ensureLoop();
     return res.insertId || 0;
   }
@@ -183,7 +185,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     const id = partyId || userId;
     const r = await db.runQuery(
       `DELETE FROM match_tickets WHERE ${field} = ?`,
-      [id]
+      [id],
     );
     if (partyId)
       await db.runQuery("UPDATE parties SET status=? WHERE party_id=?", [
@@ -193,15 +195,17 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     console.log(
       `[queue] leave ${partyId ? "p=" + partyId : "u=" + userId} removed=${
         r?.affectedRows || 0
-      }`
+      }`,
     );
+    // Avoid stale suppression across leave/rejoin cycles.
+    lastProgress.clear();
     await maybeStopLoop();
   }
 
   async function ensureLoop() {
     if (loop) return;
     const [{ c }] = await db.runQuery(
-      "SELECT COUNT(*) AS c FROM match_tickets WHERE status='queued'"
+      "SELECT COUNT(*) AS c FROM match_tickets WHERE status='queued'",
     );
     if (Number(c) === 0) return; // nothing to do
     console.log(`[mm] loop:start queued=${c}`);
@@ -211,7 +215,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
   async function maybeStopLoop() {
     // Only count unclaimed queued tickets; claimed tickets are in-progress and should not keep loop alive
     const [{ c }] = await db.runQuery(
-      "SELECT COUNT(*) AS c FROM match_tickets WHERE status='queued' AND (claimed_by IS NULL OR claimed_by='')"
+      "SELECT COUNT(*) AS c FROM match_tickets WHERE status='queued' AND (claimed_by IS NULL OR claimed_by='')",
     );
     if (Number(c) === 0 && loop) {
       clearInterval(loop);
@@ -238,7 +242,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
   async function tick() {
     try {
       const queued = await db.runQuery(
-        "SELECT * FROM match_tickets WHERE status='queued' AND (claimed_by IS NULL OR claimed_by='') ORDER BY created_at"
+        "SELECT * FROM match_tickets WHERE status='queued' AND (claimed_by IS NULL OR claimed_by='') ORDER BY created_at",
       );
       if (!queued.length) return maybeStopLoop();
 
@@ -251,9 +255,9 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
           `[mm] consider mode=${modeStr} map=${mapStr} S=${S} tickets=${items
             .map(
               (t) =>
-                `#${t.ticket_id}[${t.team1_count}/${t.team2_count},mmr=${t.mmr}]`
+                `#${t.ticket_id}[${t.team1_count}/${t.team2_count},mmr=${t.mmr}]`,
             )
-            .join(",")}`
+            .join(",")}`,
         );
         // Emit progressive updates so parties/solos see incremental filling
         await emitProgressForBucket(Number(modeStr), Number(mapStr), items, S);
@@ -276,7 +280,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
               Number(modeStr),
               Number(mapStr),
               items,
-              S
+              S,
             );
           }
         }
@@ -284,11 +288,11 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
       // Best-effort cleanup of any stale claimed tickets (claimed but never deleted due to crash/race)
       try {
         const stale = await db.runQuery(
-          "DELETE FROM match_tickets WHERE status='queued' AND claimed_by IS NOT NULL AND claimed_by<>'' AND created_at < (NOW() - INTERVAL 60 SECOND)"
+          "DELETE FROM match_tickets WHERE status='queued' AND claimed_by IS NOT NULL AND claimed_by<>'' AND created_at < (NOW() - INTERVAL 60 SECOND)",
         );
         if (stale?.affectedRows) {
           console.log(
-            `[mm] cleanup removed stale claimed tickets=${stale.affectedRows}`
+            `[mm] cleanup removed stale claimed tickets=${stale.affectedRows}`,
           );
         }
       } catch (_) {}
@@ -303,11 +307,12 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     const totalPlayers = Math.min(
       items.reduce(
         (acc, t) => acc + Number(t.size || t.team1_count + t.team2_count || 0),
-        0
+        0,
       ),
-      S * 2
+      S * 2,
     );
     const payload = { mode, map, found: totalPlayers, total: S * 2 };
+    const signature = `${mode}:${map}:${payload.found}:${payload.total}`;
 
     // Prepare solo sockets lookup once per bucket
     const soloIds = items.filter((t) => t.user_id).map((t) => t.user_id);
@@ -317,7 +322,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
         const placeholders = soloIds.map(() => "?").join(",");
         const rows = await db.runQuery(
           `SELECT user_id, socket_id FROM users WHERE user_id IN (${placeholders})`,
-          soloIds
+          soloIds,
         );
         soloSockets = new Map(rows.map((r) => [r.user_id, r.socket_id]));
       } catch (_) {}
@@ -325,8 +330,8 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
 
     for (const t of items) {
       const prev = lastProgress.get(t.ticket_id);
-      if (prev === payload.found) continue; // avoid spam if unchanged
-      lastProgress.set(t.ticket_id, payload.found);
+      if (prev === signature) continue; // avoid spam if unchanged
+      lastProgress.set(t.ticket_id, signature);
       if (t.party_id) {
         io.to(`party:${t.party_id}`).emit("match:progress", payload);
       } else if (t.user_id) {
@@ -356,7 +361,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
       console.log(
         `[mm] no-combo S=${S} window=${window} pool=${sorted
           .map((t) => `${t.team1_count}/${t.team2_count}`)
-          .join("|")}`
+          .join("|")}`,
       );
     }
     return best;
@@ -399,7 +404,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     const placeholders = ids.map(() => "?").join(",");
     const r = await db.runQuery(
       `UPDATE match_tickets SET claimed_by = ? WHERE ticket_id IN (${placeholders}) AND status='queued' AND (claimed_by IS NULL OR claimed_by='')`,
-      [WORKER, ...ids]
+      [WORKER, ...ids],
     );
     if ((r?.affectedRows || 0) !== ids.length) {
       // lost race
@@ -414,7 +419,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
       if (t.party_id) {
         const rows = await db.runQuery(
           "SELECT u.user_id, u.name, u.char_class, pm.party_id, pm.team FROM party_members pm JOIN users u ON u.name = pm.name WHERE pm.party_id = ?",
-          [t.party_id]
+          [t.party_id],
         );
         rows.forEach((u) => {
           let team = u.team;
@@ -449,17 +454,17 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     const size1 = players.filter((p) => p.team === "team1").length;
     const size2 = players.filter((p) => p.team === "team2").length;
     const mmrDelta = Math.abs(
-      averageTicketMMR(tickets, "team1") - averageTicketMMR(tickets, "team2")
+      averageTicketMMR(tickets, "team1") - averageTicketMMR(tickets, "team2"),
     );
     console.log(
-      `[match:new] #${matchId} mode=${mode} map=${map} ${size1}v${size2} mmrΔ=${mmrDelta} tickets=${tickets.length}`
+      `[match:new] #${matchId} mode=${mode} map=${map} ${size1}v${size2} mmrΔ=${mmrDelta} tickets=${tickets.length}`,
     );
 
     // Notify participants and start ready-check window
     await emitMatchFound(matchId, mode, map, players);
     startReadyCheck(
       matchId,
-      players.map((p) => p.user_id)
+      players.map((p) => p.user_id),
     );
   }
 
@@ -482,7 +487,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     const placeholders = userIds.map(() => "?").join(",");
     const rows = await db.runQuery(
       `SELECT user_id, socket_id FROM users WHERE user_id IN (${placeholders})`,
-      userIds
+      userIds,
     );
     const socketByUser = new Map(rows.map((r) => [r.user_id, r.socket_id]));
     for (const p of players) {
@@ -520,10 +525,10 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
         if (state.ready.size !== state.userIds.size) {
           await cancelMatch(
             matchId,
-            "One or more players disconnected or timed out"
+            "One or more players disconnected or timed out",
           );
           console.log(
-            `[ready:timeout] #${matchId} ready=${state.ready.size}/${state.userIds.size}`
+            `[ready:timeout] #${matchId} ready=${state.ready.size}/${state.userIds.size}`,
           );
         }
       } else if (state.ready.size === state.userIds.size) {
@@ -531,12 +536,12 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
         readyStates.delete(matchId);
         await db.runQuery(
           "UPDATE matches SET status='live' WHERE match_id= ?",
-          [matchId]
+          [matchId],
         );
         try {
           const rows = await db.runQuery(
             "SELECT DISTINCT party_id FROM match_participants WHERE match_id = ? AND party_id IS NOT NULL",
-            [matchId]
+            [matchId],
           );
           const ids = rows.map((r) => r.party_id);
           if (ids.length) await db.setPartiesStatus(ids, PARTY_STATUS.LIVE);
@@ -548,11 +553,11 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
           if (userIds.length) {
             const r = await db.runQuery(
               `DELETE FROM match_tickets WHERE user_id IN (${placeholders}) OR party_id IN (SELECT DISTINCT party_id FROM match_participants WHERE match_id=?)`,
-              [...userIds, matchId]
+              [...userIds, matchId],
             );
             if (r?.affectedRows) {
               console.log(
-                `[match:live] cleaned stray tickets=${r.affectedRows}`
+                `[match:live] cleaned stray tickets=${r.affectedRows}`,
               );
             }
           }
@@ -570,7 +575,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
             const placeholders = userIds.map(() => "?").join(",");
             const socketRows = await db.runQuery(
               `SELECT user_id, socket_id FROM users WHERE user_id IN (${placeholders})`,
-              userIds
+              userIds,
             );
 
             for (const row of socketRows) {
@@ -584,7 +589,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
           } catch (error) {
             console.error(
               `[match:live] Failed to create game room for match ${matchId}:`,
-              error
+              error,
             );
           }
         }
@@ -606,7 +611,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     return runInTx(async (conn, q) => {
       const { insertId: matchId } = await q(
         "INSERT INTO matches (mode,map,status) VALUES (?,?, 'queued')",
-        [mode, map]
+        [mode, map],
       );
       if (players.length) {
         const placeholders = players.map(() => "(?,?,?,?,?)").join(",");
@@ -619,7 +624,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
         ]);
         await q(
           `INSERT INTO match_participants (match_id,user_id,party_id,team,char_class) VALUES ${placeholders}`,
-          values
+          values,
         );
       }
       if (ids.length) {
@@ -631,7 +636,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
           `UPDATE parties SET status=? WHERE party_id IN (${partyIds
             .map(() => "?")
             .join(",")})`,
-          [PARTY_STATUS.READY_CHECK, ...partyIds]
+          [PARTY_STATUS.READY_CHECK, ...partyIds],
         );
       return matchId;
     });
@@ -640,13 +645,13 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
   async function cancelMatch(matchId, reason) {
     await db.runQuery(
       "UPDATE matches SET status='cancelled' WHERE match_id=?",
-      [matchId]
+      [matchId],
     );
     // Reset any involved parties to idle
     try {
       const rows = await db.runQuery(
         "SELECT DISTINCT party_id FROM match_participants WHERE match_id = ? AND party_id IS NOT NULL",
-        [matchId]
+        [matchId],
       );
       const ids = rows.map((r) => r.party_id);
       if (ids.length) await db.setPartiesStatus(ids, PARTY_STATUS.IDLE);
@@ -655,7 +660,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     try {
       const rows = await db.runQuery(
         "SELECT mp.user_id, u.socket_id FROM match_participants mp JOIN users u ON u.user_id = mp.user_id WHERE mp.match_id=?",
-        [matchId]
+        [matchId],
       );
       for (const r of rows) {
         const sock = r.socket_id ? io.sockets.sockets.get(r.socket_id) : null;
@@ -669,7 +674,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     // remove ticket for the user's party if any
     const rows = await db.runQuery(
       "SELECT party_id FROM party_members WHERE name=? LIMIT 1",
-      [name]
+      [name],
     );
     const partyId = rows[0]?.party_id || null;
     if (partyId) {
@@ -684,17 +689,17 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     try {
       const u = await db.runQuery(
         "SELECT user_id FROM users WHERE name=? LIMIT 1",
-        [name]
+        [name],
       );
       const userId = u[0]?.user_id || null;
       if (userId) {
         const r = await db.runQuery(
           "DELETE FROM match_tickets WHERE user_id=?",
-          [userId]
+          [userId],
         );
         if (r?.affectedRows) {
           console.log(
-            `[queue] remove u=${userId} reason=disconnect name=${name}`
+            `[queue] remove u=${userId} reason=disconnect name=${name}`,
           );
           await maybeStopLoop();
         }

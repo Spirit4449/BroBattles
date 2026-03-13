@@ -7,10 +7,10 @@ export const THORG_FALL_STRIKE_MS = 290;
 export const THORG_FALL_DURATION_MS =
   THORG_FALL_WINDUP_MS + THORG_FALL_STRIKE_MS;
 export const THORG_FALL_FOLLOW_AFTER_WINDUP_MS = 70;
-export const THORG_FALL_RANGE = 110;
+export const THORG_FALL_RANGE = 120;
 export const THORG_FALL_ARC_HEIGHT = 120;
 export const THORG_FALL_CURVE_MAGNITUDE = 20;
-export const THORG_FALL_END_Y_OFFSET = 100;
+export const THORG_FALL_END_Y_OFFSET = 300;
 const DAMAGE_TICK_MS = 90;
 const SPRITE_FORWARD_OFFSET = -Math.PI / 2; // weapon art points downward at rotation=0
 let DEBUG_DRAW = false;

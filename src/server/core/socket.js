@@ -537,6 +537,14 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
           uname,
         ]);
 
+        if (partyId) {
+          await setPresence(uname, "Selecting Character", partyId);
+          // Keep this state brief so normal ready/online flow resumes quickly.
+          setTimeout(() => {
+            void setPresence(uname, "online", partyId);
+          }, 1500);
+        }
+
         // If in a party, broadcast refreshed roster to everyone
         if (partyId) {
           // Fetch party + members and emit via existing helper for consistency

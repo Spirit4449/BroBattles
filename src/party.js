@@ -6,6 +6,7 @@ let __partyRosterNames = null; // Set<string> of member names
 let __partyRosterPartyId = null;
 const SOLO_MODE_STORAGE_KEY = "bb_solo_mode";
 const SOLO_MAP_STORAGE_KEY = "bb_solo_map";
+let activeQueueContext = null; // { mode, map }
 
 function canPersistSoloSelections() {
   const host = String(window.location.hostname || "").toLowerCase();
@@ -270,6 +271,7 @@ export function socketInit() {
     // Seed with current party roster so found count starts with existing members
     const mode = Number(document.getElementById("mode")?.value) || 1;
     const map = Number(document.getElementById("map")?.value) || 1;
+    activeQueueContext = { mode, map };
     const members = collectCurrentPartyMembers();
     showMatchmakingOverlay();
     updateMMOverlay({
@@ -284,11 +286,14 @@ export function socketInit() {
   // When a match is found, update overlay and auto-ack ready for this client
   socket.on("match:found", (payload) => {
     // payload: { matchId, mode, map, yourTeam, players }
+    const payloadMode = Number(payload?.mode) || 1;
+    const payloadMap = Number(payload?.map) || 1;
+    activeQueueContext = { mode: payloadMode, map: payloadMap };
     updateMMOverlay({
       found: Array.isArray(payload?.players) ? payload.players.length : 0,
-      total: (Number(document.getElementById("mode")?.value) || 1) * 2,
-      mode: payload?.mode,
-      map: payload?.map,
+      total: payloadMode * 2,
+      mode: payloadMode,
+      map: payloadMap,
       players: payload?.players || [],
     });
     if (payload?.matchId) {
@@ -309,6 +314,7 @@ export function socketInit() {
 
       // Store match info for game page
       sessionStorage.setItem("matchId", matchId);
+      activeQueueContext = null;
 
       // Redirect to game page using new URL format
       window.location.href = `/game/${matchId}`;
@@ -349,6 +355,7 @@ export function socketInit() {
       });
     }
     hideMatchmakingOverlay();
+    activeQueueContext = null;
     // Reset your local ready state so next click sets Ready (prevents double-click issue)
     try {
       const selfSlot = Array.from(
@@ -367,9 +374,17 @@ export function socketInit() {
   socket.on("match:progress", (data) => {
     const currentMode = Number(document.getElementById("mode")?.value) || 1;
     const currentMap = Number(document.getElementById("map")?.value) || 1;
+    const targetMode = Number(activeQueueContext?.mode) || currentMode;
+    const targetMap = Number(activeQueueContext?.map) || currentMap;
     // Only update if it matches the current selection
-    if (Number(data?.mode) !== currentMode || Number(data?.map) !== currentMap)
+    if (Number(data?.mode) !== targetMode || Number(data?.map) !== targetMap)
       return;
+
+    // Keep overlay context aligned to server payload while queued.
+    activeQueueContext = {
+      mode: Number(data?.mode) || targetMode,
+      map: Number(data?.map) || targetMap,
+    };
 
     const overlay = document.getElementById("matchmaking-overlay");
     if (overlay && overlay.classList.contains("hidden")) {
@@ -377,9 +392,9 @@ export function socketInit() {
     }
     updateMMOverlay({
       found: Number(data?.found) || 0,
-      total: Number(data?.total) || currentMode * 2,
-      mode: data?.mode || currentMode,
-      map: data?.map || currentMap,
+      total: Number(data?.total) || targetMode * 2,
+      mode: Number(data?.mode) || targetMode,
+      map: Number(data?.map) || targetMap,
       players: collectCurrentPartyMembers(),
     });
   });
@@ -612,6 +627,9 @@ function statusToClass(status) {
   const s = String(status || "")
     .trim()
     .toLowerCase();
+  if (s === "in battle") return "in-battle";
+  if (s === "end screen") return "end-screen";
+  if (s === "selecting character") return "selecting-character";
   // Explicit checks first
   if (s === "online" || s === "idle") return "online";
   if (s === "ready") return "ready";
@@ -961,11 +979,13 @@ export function initReadyToggle() {
         const mode = Number(document.getElementById("mode")?.value) || 1;
         const map = Number(document.getElementById("map")?.value) || 1;
         const side = "team1"; // default; server may flip if needed
+        activeQueueContext = { mode, map };
         socket.emit("queue:join", { mode, map, side });
         showMatchmakingOverlay();
       } else {
         socket.emit("queue:leave");
         hideMatchmakingOverlay();
+        activeQueueContext = null;
       }
     }
   });
@@ -1085,6 +1105,7 @@ function wireCancelButton() {
     } else {
       socket.emit("queue:leave");
     }
+    activeQueueContext = null;
     // Also reset local ready state immediately
     try {
       const selfSlot = Array.from(

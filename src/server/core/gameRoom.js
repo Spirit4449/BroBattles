@@ -44,6 +44,14 @@ const THORG_RAGE_KNOCKBACK_X = 155;
 const THORG_RAGE_KNOCKBACK_Y = 88;
 const NINJA_SWARM_HIT_DAMAGE = 300;
 const NINJA_SWARM_CHARGE_RATIO = 0.25;
+const DRAVEN_INFERNO_DURATION_MS = 3000;
+const DRAVEN_INFERNO_RISE_MS = 320;
+const DRAVEN_INFERNO_LIFT_PX = 125;
+const DRAVEN_INFERNO_BOB_PX = 8;
+const DRAVEN_INFERNO_DAMAGE_TICK_MS = 220;
+const DRAVEN_INFERNO_RADIUS_X = 215;
+const DRAVEN_INFERNO_RADIUS_Y = 145;
+const DRAVEN_INFERNO_DAMAGE_SCALE = 0.22;
 const POWERUP_PLATFORM_POINTS = {
   // Reachable top-surface slots (avoid center-only placement)
   1: [
@@ -311,6 +319,7 @@ class GameRoom {
       if (p.superCharge >= p.maxSuperCharge) {
         p.superCharge = 0;
         const now = Date.now();
+        p.lastCombatAt = now;
         if (p.char_class === "thorg") {
           p.effects = p.effects || {};
           p.effects.thorgRageUntil = Math.max(
@@ -318,6 +327,13 @@ class GameRoom {
             now + THORG_RAGE_DURATION_MS,
           );
           p.effects.thorgRageNextTickAt = now + POWERUP_AMBIENT_TICK_MS;
+        } else if (p.char_class === "draven") {
+          p.effects = p.effects || {};
+          p.effects.dravenInfernoUntil = now + DRAVEN_INFERNO_DURATION_MS;
+          p.effects.dravenInfernoStartedAt = now;
+          p.effects.dravenInfernoAnchorX = Number.isFinite(p.x) ? p.x : 0;
+          p.effects.dravenInfernoAnchorY = Number.isFinite(p.y) ? p.y : 0;
+          p.effects.dravenInfernoNextDamageAt = now + 80;
         }
         // Broadcast reset
         this.io.to(`game:${this.matchId}`).emit("super-update", {
@@ -387,6 +403,13 @@ class GameRoom {
     const playerData = this.players.get(socket.id);
     if (!playerData) return;
 
+    // Build a lookup of live state by name from currently tracked room players.
+    const liveByName = new Map();
+    for (const p of this.players.values()) {
+      if (!p?.name) continue;
+      liveByName.set(p.name, p);
+    }
+
     // Prepare game state for this player
     const gameStateForPlayer = {
       matchId: this.matchId,
@@ -404,23 +427,30 @@ class GameRoom {
         expiresAt: pu.expiresAt,
       })),
       playerEffects: this._buildPlayerEffectsSnapshot(),
-      players: Array.from(this.players.values()).map((p) => ({
-        name: p.name,
-        team: p.team,
-        char_class: p.char_class,
-        x: p.x,
-        y: p.y,
-        health: p.health,
-        superCharge: p.superCharge,
-        maxSuperCharge: p.maxSuperCharge,
-        stats: { health: p.maxHealth },
-        level: p.level,
-        isAlive: p.isAlive,
-        spawnIndex: this._computeSpawnIndex(p.name, p.team),
-        connected: p.connected !== false,
-        loaded: p.loaded === true,
-        ammoState: p.ammoState || null,
-      })),
+      // Always include full match roster so every client sees all participants,
+      // even if some sockets have not joined this room yet.
+      players: (this.matchData.players || []).map((mp) => {
+        const p = liveByName.get(mp.name);
+        return {
+          name: mp.name,
+          team: mp.team,
+          char_class: p?.char_class || mp.char_class,
+          x: Number.isFinite(p?.x) ? p.x : 400,
+          y: Number.isFinite(p?.y) ? p.y : 400,
+          health: Number.isFinite(p?.health) ? p.health : null,
+          superCharge: Number.isFinite(p?.superCharge) ? p.superCharge : 0,
+          maxSuperCharge: Number.isFinite(p?.maxSuperCharge)
+            ? p.maxSuperCharge
+            : 100,
+          stats: { health: Number.isFinite(p?.maxHealth) ? p.maxHealth : null },
+          level: Number.isFinite(p?.level) ? p.level : 1,
+          isAlive: p ? p.isAlive !== false : true,
+          spawnIndex: this._computeSpawnIndex(mp.name, mp.team),
+          connected: p ? p.connected !== false : false,
+          loaded: p ? p.loaded === true : false,
+          ammoState: p?.ammoState || null,
+        };
+      }),
       status: this.status,
     };
     console.log("Emitting initial game state to player", gameStateForPlayer);
@@ -486,6 +516,9 @@ class GameRoom {
 
     this.status = "active";
 
+    // Mark match participants as actively in battle for party presence UI.
+    void this._broadcastParticipantStatus("In Battle");
+
     // Initialize spawn positions (basic implementation)
     this.initializeSpawnPositions();
 
@@ -498,6 +531,36 @@ class GameRoom {
     setTimeout(() => {
       this.startGameLoop();
     }, 3000);
+  }
+
+  async _broadcastParticipantStatus(statusLabel) {
+    if (!statusLabel) return;
+    try {
+      const participants = await this.db.runQuery(
+        `SELECT mp.party_id, u.name
+           FROM match_participants mp
+           JOIN users u ON u.user_id = mp.user_id
+          WHERE mp.match_id = ?`,
+        [this.matchId],
+      );
+      for (const p of participants || []) {
+        try {
+          await this.db.setUserStatus(p.name, statusLabel);
+        } catch (_) {}
+        const pid = Number(p.party_id);
+        if (!Number.isFinite(pid) || pid <= 0) continue;
+        this.io.to(`party:${pid}`).emit("status:update", {
+          partyId: pid,
+          name: p.name,
+          status: statusLabel,
+        });
+      }
+    } catch (e) {
+      console.warn(
+        `[GameRoom ${this.matchId}] failed to broadcast participant status`,
+        e?.message,
+      );
+    }
   }
 
   /**
@@ -702,6 +765,23 @@ class GameRoom {
     // Validate input
     if (!inputData || typeof inputData !== "object") return;
 
+    const now = Date.now();
+    const infernoActive =
+      playerData.char_class === "draven" &&
+      (playerData.effects?.dravenInfernoUntil || 0) > now;
+
+    // While Draven inferno is active, lock movement and ignore client position updates.
+    if (infernoActive) {
+      if (inputData.loaded === true) {
+        playerData.loaded = true;
+      }
+      if (typeof inputData.animation === "string") {
+        playerData.animation = inputData.animation;
+      }
+      playerData.lastInput = now;
+      return;
+    }
+
     // If client sent authoritative position, accept it (Phase 1: make it work)
     if (
       typeof inputData.x === "number" &&
@@ -790,6 +870,8 @@ class GameRoom {
    * Process a single game tick
    */
   processTick() {
+    this._tickDravenInferno();
+
     // For Phase 1, just process basic movement inputs
     for (const playerData of this.players.values()) {
       if (
@@ -807,6 +889,107 @@ class GameRoom {
 
         // Clear old inputs
         playerData.inputBuffer = [];
+      }
+    }
+  }
+
+  _tickDravenInferno() {
+    const now = Date.now();
+    for (const caster of this.players.values()) {
+      if (
+        !caster ||
+        caster.char_class !== "draven" ||
+        !caster.isAlive ||
+        caster.connected === false ||
+        caster.loaded !== true
+      ) {
+        continue;
+      }
+
+      const e = caster.effects || {};
+      const until = Number(e.dravenInfernoUntil || 0);
+      if (until <= now) continue;
+
+      const startedAt = Number(e.dravenInfernoStartedAt || now);
+      const anchorX = Number.isFinite(e.dravenInfernoAnchorX)
+        ? e.dravenInfernoAnchorX
+        : Number(caster.x) || 0;
+      const anchorY = Number.isFinite(e.dravenInfernoAnchorY)
+        ? e.dravenInfernoAnchorY
+        : Number(caster.y) || 0;
+
+      const riseT = Math.max(
+        0,
+        Math.min(1, (now - startedAt) / DRAVEN_INFERNO_RISE_MS),
+      );
+      const liftNow = DRAVEN_INFERNO_LIFT_PX * (1 - Math.pow(1 - riseT, 3));
+      const bob = Math.sin((now - startedAt) / 120) * DRAVEN_INFERNO_BOB_PX;
+
+      caster.x = anchorX;
+      caster.y = anchorY - liftNow + bob;
+      caster.animation = "draven-special";
+      caster.lastCombatAt = now;
+
+      if ((Number(e.dravenInfernoNextDamageAt) || 0) > now) continue;
+      e.dravenInfernoNextDamageAt = now + DRAVEN_INFERNO_DAMAGE_TICK_MS;
+
+      let perTickDmg = Math.round(
+        Math.max(
+          120,
+          Number(caster.specialDamage || 0) * DRAVEN_INFERNO_DAMAGE_SCALE,
+        ),
+      );
+      if ((caster.effects?.rageUntil || 0) > now) {
+        perTickDmg = Math.round(perTickDmg * POWERUP_RAGE_DAMAGE_MULT);
+      }
+
+      for (const target of this.players.values()) {
+        if (!target || target.name === caster.name) continue;
+        if (
+          !target.isAlive ||
+          target.connected === false ||
+          target.loaded !== true
+        )
+          continue;
+        if (caster.team && target.team && caster.team === target.team) continue;
+
+        const dx = Math.abs((target.x || 0) - anchorX);
+        const dy = Math.abs((target.y || 0) - anchorY);
+        if (dx > DRAVEN_INFERNO_RADIUS_X || dy > DRAVEN_INFERNO_RADIUS_Y) {
+          continue;
+        }
+
+        let dmg = perTickDmg;
+        if ((target.effects?.shieldUntil || 0) > now) {
+          dmg = Math.round(dmg * POWERUP_SHIELD_DAMAGE_MULT);
+        }
+        if (dmg <= 0) continue;
+
+        const old = Number(target.health || 0);
+        target.health = Math.max(0, old - dmg);
+        const applied = Math.max(0, old - target.health);
+        if (applied <= 0) continue;
+
+        target.lastDamagedAt = now;
+        target.lastCombatAt = now;
+        this._recordCombatStat(caster, { damage: applied, hits: 1 });
+
+        if (target.health === 0 && old > 0) {
+          target.isAlive = false;
+          this._recordCombatStat(caster, { kills: 1 });
+        }
+
+        this._broadcastHealthUpdate(target);
+
+        if (!target.isAlive) {
+          this.io.to(`game:${this.matchId}`).emit("player:dead", {
+            username: target.name,
+            gameId: this.matchId,
+          });
+          try {
+            this._checkVictoryCondition();
+          } catch (_) {}
+        }
       }
     }
   }
@@ -1579,6 +1762,8 @@ class GameRoom {
     }
     // Restore lobby-ready state so parties can queue cleanly after returning.
     try {
+      await this._broadcastParticipantStatus("End Screen");
+
       const participants = await this.db.runQuery(
         `SELECT mp.user_id, mp.party_id, u.name
            FROM match_participants mp

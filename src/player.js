@@ -340,6 +340,7 @@ export function createPlayer(
 
     scene.input.on("pointerdown", (pointer) => {
       if (dead) return;
+      if ((player?._movementLockedUntil || 0) > Date.now()) return;
       if (pointer.button === 2) {
         // Right-click: special ONLY — never falls through to attack
         if (superCharge >= maxSuperCharge) {
@@ -575,14 +576,61 @@ export function handlePlayerMovement(scene) {
     : player._lastGroundTime || 0;
 
   // Keys. Player can use either arrow keys or WASD
-  const leftKey =
-    cursors.left.isDown || scene.input.keyboard.addKey("A").isDown;
-  const rightKey =
+  let leftKey = cursors.left.isDown || scene.input.keyboard.addKey("A").isDown;
+  let rightKey =
     cursors.right.isDown || scene.input.keyboard.addKey("D").isDown;
-  const upKey =
+  let upKey =
     cursors.up.isDown ||
     scene.input.keyboard.addKey("W").isDown ||
     (keySpace && keySpace.isDown);
+
+  const nowTs = Date.now();
+  const movementLocked = (player?._movementLockedUntil || 0) > nowTs;
+  if (movementLocked) {
+    leftKey = false;
+    rightKey = false;
+    upKey = false;
+    if (player.body) {
+      player.setAccelerationX(0);
+      player.setVelocityX(0);
+      player.body.allowGravity = false;
+    }
+
+    const startedAt = Number(player._dravenInfernoStartedAt || nowTs);
+    const baseX = Number.isFinite(player._dravenInfernoBaseX)
+      ? player._dravenInfernoBaseX
+      : player.x;
+    const baseY = Number.isFinite(player._dravenInfernoBaseY)
+      ? player._dravenInfernoBaseY
+      : player.y;
+    const riseT = Phaser.Math.Clamp((nowTs - startedAt) / 320, 0, 1);
+    const lift = Number(player._dravenInfernoLift || 125);
+    const hoverY =
+      baseY -
+      lift * Phaser.Math.Easing.Cubic.Out(riseT) +
+      Math.sin((nowTs - startedAt) / 120) * 8;
+    player.x = baseX;
+    player.y = hoverY;
+
+    if (scene.anims?.exists("draven-special")) {
+      try {
+        if (player.anims?.currentAnim?.key !== "draven-special") {
+          player.anims.play("draven-special", true);
+        }
+      } catch (_) {}
+    }
+  } else if (
+    player &&
+    player.body &&
+    player._dravenInfernoPrevGravity !== undefined
+  ) {
+    const prevGravity =
+      typeof player._dravenInfernoPrevGravity === "boolean"
+        ? player._dravenInfernoPrevGravity
+        : true;
+    player.body.allowGravity = prevGravity;
+    delete player._dravenInfernoPrevGravity;
+  }
 
   // Fast-fall gravity: apply extra gravity only when falling (vy > 0) and airborne.
   try {
@@ -603,18 +651,25 @@ export function handlePlayerMovement(scene) {
   // Handle attack on J (edge-triggered)
   try {
     if (keyJ && Phaser.Input.Keyboard.JustDown(keyJ) && !dead) {
-      // Prefer a unified attack(direction) if provided; otherwise fall back to pointer-based handler
-      const dir = player && player.flipX ? -1 : 1;
-      if (charCtrl && typeof charCtrl.attack === "function") {
-        charCtrl.attack(dir);
-      } else if (charCtrl && typeof charCtrl.handlePointerDown === "function") {
-        charCtrl.handlePointerDown();
+      if (!((player?._movementLockedUntil || 0) > Date.now())) {
+        // Prefer a unified attack(direction) if provided; otherwise fall back to pointer-based handler
+        const dir = player && player.flipX ? -1 : 1;
+        if (charCtrl && typeof charCtrl.attack === "function") {
+          charCtrl.attack(dir);
+        } else if (
+          charCtrl &&
+          typeof charCtrl.handlePointerDown === "function"
+        ) {
+          charCtrl.handlePointerDown();
+        }
       }
     }
     // Handle special on I
     if (keyI && Phaser.Input.Keyboard.JustDown(keyI) && !dead) {
-      if (superCharge >= maxSuperCharge) {
-        socket.emit("game:special");
+      if (!((player?._movementLockedUntil || 0) > Date.now())) {
+        if (superCharge >= maxSuperCharge) {
+          socket.emit("game:special");
+        }
       }
     }
   } catch (_) {}
