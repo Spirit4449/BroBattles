@@ -166,6 +166,7 @@ export function performThorgFallAttack(instance) {
           socket.emit("hit", {
             attacker: username,
             target: name,
+            attackTime: Date.now(),
             gameId,
           });
           try {

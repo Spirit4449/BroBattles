@@ -46,7 +46,7 @@ export function performDravenSplashAttack(instance) {
   ) {
     p.anims.play(
       scene.anims.exists("draven-throw") ? "draven-throw" : "throw",
-      true
+      true,
     );
   }
 
@@ -191,6 +191,7 @@ function applySplashDamage({
         attacker,
         target: name,
         attackType: "basic", // treat as basic attack damage
+        attackTime: Date.now(),
         gameId,
       });
       hitAny = true;

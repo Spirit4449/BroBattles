@@ -41,7 +41,7 @@ function createDebugCircle(scene) {
     0,
     FIREBALL_COLLISION_RADIUS,
     0x00ffff,
-    0.08
+    0.08,
   );
   circle.setStrokeStyle(1, 0x00ffff, 0.8);
   circle.setDepth(9999);
@@ -83,10 +83,10 @@ function createFireballSprite(scene, x, y, direction) {
   const key = scene.textures.exists("wizard-fireball")
     ? "wizard-fireball"
     : scene.textures.exists("fireball")
-    ? "fireball"
-    : scene.textures.exists("wizard")
-    ? "wizard"
-    : null;
+      ? "fireball"
+      : scene.textures.exists("wizard")
+        ? "wizard"
+        : null;
   const sprite = key
     ? scene.add.sprite(x, y, key)
     : scene.add.circle(x, y, FIREBALL_VISUAL_RADIUS, 0xff8b3d, 0.9);
@@ -94,7 +94,7 @@ function createFireballSprite(scene, x, y, direction) {
   if (sprite.setScale) sprite.setScale(FIREBALL_INITIAL_SCALE);
   if (sprite.setAngle)
     sprite.setAngle(
-      direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG
+      direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG,
     );
 
   // Ensure animated fireball plays if atlas frames are available
@@ -134,7 +134,7 @@ function spawnFireballTrail(scene, sprite) {
     sprite.y,
     FIREBALL_VISUAL_RADIUS * FIREBALL_GLOW_RADIUS_MULT,
     0xff6b2c,
-    0.22
+    0.22,
   );
   glow.setDepth(FIREBALL_DEPTH - 1);
   const update = () => {
@@ -163,7 +163,7 @@ function spawnImpact(scene, x, y, playSound = true) {
         y,
         FIREBALL_VISUAL_RADIUS,
         0xffd9a0,
-        0.6
+        0.6,
       );
       flash.setBlendMode(Phaser.BlendModes.ADD);
       scene.tweens.add({
@@ -222,7 +222,7 @@ export function performWizardFireball(instance) {
     scene,
     currentOrigin.x,
     currentOrigin.y,
-    direction
+    direction,
   );
   const debugFollower = attachDebugFollower(scene, sprite);
   if (debugFollower) {
@@ -246,7 +246,7 @@ export function performWizardFireball(instance) {
 
   const damageValue = Math.max(
     1,
-    Math.round(instance.constructor?.getStats?.()?.baseDamage || 0)
+    Math.round(instance.constructor?.getStats?.()?.baseDamage || 0),
   );
 
   const cleanup = (hitPosition, playSound = true) => {
@@ -259,7 +259,7 @@ export function performWizardFireball(instance) {
       scene,
       hitPosition?.x ?? sprite.x,
       hitPosition?.y ?? sprite.y,
-      playSound
+      playSound,
     );
     sprite.destroy();
     // Unlock the player's flip after attack completes
@@ -289,7 +289,7 @@ export function performWizardFireball(instance) {
       sprite.y = currentOrigin.y;
       if (sprite.setAngle)
         sprite.setAngle(
-          direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG
+          direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG,
         );
       launchTimer -= dt;
       if (launchTimer > 0) return;
@@ -337,7 +337,7 @@ export function performWizardFireball(instance) {
           bx1,
           by1,
           bx2,
-          by2
+          by2,
         )
       ) {
         hitSet.add(name);
@@ -345,6 +345,7 @@ export function performWizardFireball(instance) {
           attacker: username,
           target: name,
           attackType: "basic",
+          attackTime: Date.now(),
           damage: damageValue,
           gameId,
         });
@@ -396,7 +397,7 @@ export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
   const sprite = createFireballSprite(scene, start.x, start.y, direction);
   if (sprite.setAngle)
     sprite.setAngle(
-      direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG
+      direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG,
     );
   scene.tweens.add({
     targets: sprite,

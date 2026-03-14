@@ -52,6 +52,30 @@ const DRAVEN_INFERNO_DAMAGE_TICK_MS = 220;
 const DRAVEN_INFERNO_RADIUS_X = 215;
 const DRAVEN_INFERNO_RADIUS_Y = 145;
 const DRAVEN_INFERNO_DAMAGE_SCALE = 0.22;
+// ── Combat hit validation tunables ────────────────────────────────────────
+const HIT_REWIND_MAX_MS = 200; // roll back positions this far for lag compensation
+const HIT_STALENESS_MAX_MS = 300; // ignore attack claims older than this
+const POSITION_HISTORY_DEPTH = 50; // position records per player (~2.5s at 20 Hz)
+// Movement plausibility caps (used to clamp teleporting positions in history buffer).
+const MOVE_PLAUSIBLE_SPEED_H = 320; // px/s horizontal (game max 260 + powerup margin)
+const MOVE_PLAUSIBLE_SPEED_V = 1100; // px/s vertical (max fall 1000 + jump impulse)
+const MOVE_PLAUSIBLE_LAG_PAD_H = 80; // extra px allowed for network lag
+const MOVE_PLAUSIBLE_LAG_PAD_V = 100; // extra px allowed for network lag
+// Facing-direction tolerance for melee range checks (px).
+const MELEE_FACING_TOLERANCE = 50; // allow slight overlap at the facing boundary
+// Per-character maximum accepted hit distance (visual range + generous lag margin).
+// These replace the old flat 850 / 1000 px gates and are keyed by
+// "<char_class>|<attackType>" so every ability has its own budget.
+const ATTACK_MAX_DIST_MAP = {
+  "draven|basic": 380, // splash w=165 + TIP_OFFSET=50 + lag margin
+  "thorg|basic": 450, // fall arc ~240 px + lag margin
+  "wizard|basic": 1250, // fireball travels up to 1050 px; accepts along full path
+  "ninja|basic": 720, // shuriken forward 520 px + return arc
+  "ninja|special": 800, // swarm spread
+  "any|basic": 520, // generic fallback
+  "any|special": 800, // generic special fallback
+  "any|ninja-special-swarm": 800,
+};
 const POWERUP_PLATFORM_POINTS = {
   // Reachable top-surface slots (avoid center-only placement)
   1: [
@@ -793,8 +817,51 @@ class GameRoom {
       const maxX = WORLD_BOUNDS.width + WORLD_BOUNDS.margin;
       const minY = -WORLD_BOUNDS.margin;
       const maxY = WORLD_BOUNDS.height + WORLD_BOUNDS.margin;
-      playerData.x = Math.max(minX, Math.min(maxX, inputData.x));
-      playerData.y = Math.max(minY, Math.min(maxY, inputData.y));
+      // Movement plausibility check: prevent giant position jumps (lag spikes,
+      // reconnects, or anomalies) from corrupting the position history used for
+      // hit-time rewind.  We clamp rather than reject so the player's visual
+      // position doesn't freeze, while keeping history entries sane.
+      const rawX = Math.max(minX, Math.min(maxX, inputData.x));
+      const rawY = Math.max(minY, Math.min(maxY, inputData.y));
+      const _dtMove =
+        playerData.lastInput > 0 ? now - playerData.lastInput : 9999;
+      if (_dtMove > 5 && _dtMove < 2000) {
+        const maxDX =
+          MOVE_PLAUSIBLE_SPEED_H * (_dtMove / 1000) + MOVE_PLAUSIBLE_LAG_PAD_H;
+        const maxDY =
+          MOVE_PLAUSIBLE_SPEED_V * (_dtMove / 1000) + MOVE_PLAUSIBLE_LAG_PAD_V;
+        const absDX = Math.abs(rawX - playerData.x);
+        const absDY = Math.abs(rawY - playerData.y);
+        if (absDX > maxDX || absDY > maxDY) {
+          if (this.DEV_TIMING_DIAG) {
+            console.warn(
+              `[GameRoom ${this.matchId}] position jump clamped: ${playerData.name} ` +
+                `dx=${absDX.toFixed(0)}>${maxDX.toFixed(0)} ` +
+                `dy=${absDY.toFixed(0)}>${maxDY.toFixed(0)} dt=${_dtMove}ms`,
+            );
+          }
+          playerData.x = Math.max(
+            minX,
+            Math.min(
+              maxX,
+              playerData.x + Math.sign(rawX - playerData.x) * maxDX,
+            ),
+          );
+          playerData.y = Math.max(
+            minY,
+            Math.min(
+              maxY,
+              playerData.y + Math.sign(rawY - playerData.y) * maxDY,
+            ),
+          );
+        } else {
+          playerData.x = rawX;
+          playerData.y = rawY;
+        }
+      } else {
+        playerData.x = rawX;
+        playerData.y = rawY;
+      }
       if (typeof inputData.flip !== "undefined") {
         playerData.flip = !!inputData.flip;
       }
@@ -814,6 +881,12 @@ class GameRoom {
           reloadTimerMs: Math.max(0, Number(a.reloadTimerMs) || 0),
           nextFireInMs: Math.max(0, Number(a.nextFireInMs) || 0),
         };
+      }
+      // Record position in history ring buffer used for hit-time rewind validation.
+      if (!playerData._posHistory) playerData._posHistory = [];
+      playerData._posHistory.push({ x: playerData.x, y: playerData.y, t: now });
+      if (playerData._posHistory.length > POSITION_HISTORY_DEPTH) {
+        playerData._posHistory.shift();
       }
       playerData.lastInput = Date.now();
       return; // done
@@ -1409,9 +1482,40 @@ class GameRoom {
   }
 
   /**
+   * Return the per-character maximum hit acceptance distance (px).
+   * Falls back to the generic "any|<type>" bucket when no exact entry exists.
+   */
+  _getAttackMaxDist(charClass, attackType) {
+    const key = `${charClass}|${attackType}`;
+    if (ATTACK_MAX_DIST_MAP[key] !== undefined) return ATTACK_MAX_DIST_MAP[key];
+    const fallbackKey = `any|${attackType}`;
+    return ATTACK_MAX_DIST_MAP[fallbackKey] ?? 600;
+  }
+
+  /**
+   * Look up the recorded position of a player closest to `targetTimeMs` (wall ms).
+   * Falls back to the player's current position when history is empty.
+   */
+  _getHistoricalPosition(playerData, targetTimeMs) {
+    const hist = playerData._posHistory;
+    if (!hist || hist.length === 0) return { x: playerData.x, y: playerData.y };
+    let best = hist[hist.length - 1];
+    let bestDiff = Math.abs(best.t - targetTimeMs);
+    for (let i = hist.length - 2; i >= 0; i--) {
+      const diff = Math.abs(hist[i].t - targetTimeMs);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = hist[i];
+      }
+      if (hist[i].t < targetTimeMs - 500) break; // no need to search further back
+    }
+    return { x: best.x, y: best.y };
+  }
+
+  /**
    * Handle a client-proposed hit. Server validates and applies damage.
    * @param {string} socketId
-   * @param {object} payload { attacker, target, attackType?, instanceId?, damage? }
+   * @param {object} payload { attacker, target, attackType?, instanceId?, attackTime?, damage? }
    */
   handleHit(socketId, payload) {
     try {
@@ -1469,13 +1573,51 @@ class GameRoom {
 
       if (dmg <= 0) return;
 
-      // Generous plausibility check on distance (without per-ability ranges yet)
-      // Prevents blatant long-range spoofing while not being too strict.
-      const dx = (attacker.x || 0) - (target.x || 0);
-      const dy = (attacker.y || 0) - (target.y || 0);
+      // Per-character range check with lag-compensated position rewind.
+      // The client reports attackTime (wall clock) so the server can look up
+      // both players' historical positions at the moment the hit was detected,
+      // rather than comparing against the latest (stale) known positions.
+      const attackTimeRaw =
+        typeof payload.attackTime === "number" &&
+        Number.isFinite(payload.attackTime)
+          ? payload.attackTime
+          : now;
+      // Clamp to [now - HIT_STALENESS_MAX_MS, now] — reject absurdly old claims
+      // but still handle normal network round-trip delay gracefully.
+      const attackTimeClamped = Math.max(
+        now - HIT_STALENESS_MAX_MS,
+        Math.min(now, attackTimeRaw),
+      );
+      const aPos = this._getHistoricalPosition(attacker, attackTimeClamped);
+      const tPos = this._getHistoricalPosition(target, attackTimeClamped);
+      const dx = aPos.x - tPos.x;
+      const dy = aPos.y - tPos.y;
       const dist = Math.hypot(dx, dy);
-      const maxDist = attackType === "special" || isNinjaSwarm ? 1000 : 850; // px
-      if (!isSelf && dist > maxDist) return; // ignore impossible hits
+      const maxDist = this._getAttackMaxDist(attacker.char_class, attackType);
+      if (!isSelf && dist > maxDist) {
+        if (this.DEV_TIMING_DIAG) {
+          console.warn(
+            `[GameRoom ${this.matchId}] hit rejected: dist=${dist.toFixed(0)}px > max=${maxDist}px ` +
+              `attacker=${attacker.name}(${attacker.char_class}) target=${target.name} ` +
+              `type=${attackType} age=${(now - attackTimeClamped).toFixed(0)}ms`,
+          );
+        }
+        return;
+      }
+
+      // Facing-direction check for melee attacks (Draven splash, Thorg fall).
+      // The target must be on the side the attacker is facing; a generous tolerance
+      // prevents false rejections at the boundary.
+      const isMeleeFacing =
+        !isSelf &&
+        attackType === "basic" &&
+        (attacker.char_class === "draven" || attacker.char_class === "thorg");
+      if (isMeleeFacing) {
+        const facingRight = !attacker.flip; // flip=false → facing right
+        const relX = tPos.x - aPos.x; // positive → target is to the right
+        if (facingRight && relX < -MELEE_FACING_TOLERANCE) return;
+        if (!facingRight && relX > MELEE_FACING_TOLERANCE) return;
+      }
 
       // Basic per-attacker->target rate limit to avoid accidental double submissions
       this._recentHits = this._recentHits || new Map(); // key: attacker|target -> timestamp

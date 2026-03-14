@@ -166,6 +166,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       damage: this.cfg.damage,
       attackType: this.cfg.attackType || "basic",
       instanceId: this.cfg.instanceId,
+      attackTime: Date.now(),
       gameId: this.cfg.gameId,
     });
     // Play hit SFX locally for the owner

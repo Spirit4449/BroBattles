@@ -991,8 +991,11 @@ function setupGameEventListeners() {
       }
       const consumed = handleRemoteAttack(gameScene, charKey, act, wrapper);
       // Prevent snapshot idle/run animation from immediately stomping attack anims.
+      // Also open a combat precision window so this opponent's sprite blends toward
+      // their newest known position (reducing visual-vs-authoritative gap on hits).
       if (consumed && wrapper) {
         wrapper._animLockUntil = performance.now() + 520;
+        wrapper._attackPrecisionUntil = performance.now() + 600;
       }
       if (!consumed) {
         // Optional dev log for unhandled action types
@@ -2693,13 +2696,19 @@ class GameScene extends Phaser.Scene {
           ? aPosData.loaded
           : true);
 
-      // Position interpolation target
+      // Position interpolation target.
+      // During a combat precision window (opened when we receive an attack from this
+      // opponent), blend toward their newest known snapshot position at a higher rate
+      // (effectiveAlpha ≥ 0.85) to shrink the visual-vs-authoritative gap on hits.
       let targetX = spr.x;
       let targetY = spr.y;
       if (isLoaded) {
+        const inPrecision =
+          (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
+        const effectiveAlpha = inPrecision ? Math.max(alpha, 0.85) : alpha;
         if (aPosData && bPosData) {
-          targetX = aPosData.x + alpha * (bPosData.x - aPosData.x);
-          targetY = aPosData.y + alpha * (bPosData.y - aPosData.y);
+          targetX = aPosData.x + effectiveAlpha * (bPosData.x - aPosData.x);
+          targetY = aPosData.y + effectiveAlpha * (bPosData.y - aPosData.y);
         } else if (bPosData) {
           targetX = bPosData.x;
           targetY = bPosData.y;
