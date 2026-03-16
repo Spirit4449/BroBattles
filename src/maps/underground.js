@@ -1,4 +1,4 @@
-// lushyPeaks.js
+// underground.js
 // To add / tweak this map, edit the constants below — no need to touch build() or
 // positionSpawn().  To add an entirely new map, follow the same pattern and
 // register it in src/maps/manifest.js.
@@ -10,7 +10,7 @@ const SCALE_MAIN = 0.7; // base + centre platform + side platforms
 const SCALE_TINY = 0.45; // small corner platforms
 
 const BASE_Y = 630; // main floor Y
-const PLATFORM_Y = 300; // elevated centre platform Y
+const PLATFORM_Y = 700; // elevated centre platform Y
 const SIDE_DX = 490; // left/right side platform X offset from centre
 const SIDE_Y = 320; // side platform Y
 const SMALL_DX = 580; // small corner platform X offset from centre
@@ -23,12 +23,14 @@ const TEAM2_PLATFORM = "top";
 // ── Runtime platform references (set during build) ───────────────────────────
 let _base = null;
 let _platform = null;
+let _platform2 = null;
+let _platform3 = null;
 const _objects = [];
 
 // ── Map definition ───────────────────────────────────────────────────────────
 export const definition = {
-  id: 1,
-  name: "Lushy Peaks",
+  id: 3,
+  name: "Underground",
   bgAsset: "/assets/lushy/gameBg.webp",
 
   build(scene) {
@@ -46,12 +48,9 @@ export const definition = {
       return s;
     }
 
-    _base = plat("lushy-base", cx, BASE_Y, SCALE_MAIN);
-    _platform = plat("lushy-platform", cx, PLATFORM_Y, SCALE_MAIN);
-    plat("lushy-side-platform", cx - SIDE_DX, SIDE_Y, SCALE_MAIN);
-    plat("lushy-side-platform", cx + SIDE_DX, SIDE_Y, SCALE_MAIN);
-    plat("mangrove-tiny-platform", cx - SMALL_DX, SMALL_Y, SCALE_TINY);
-    plat("mangrove-tiny-platform", cx + SMALL_DX, SMALL_Y, SCALE_TINY);
+    _platform = plat("lushy-platform", 200, PLATFORM_Y, SCALE_MAIN);
+    _platform2 = plat("lushy-platform", 600, PLATFORM_Y, SCALE_MAIN);
+    _platform3 = plat("lushy-platform", 1000, PLATFORM_Y, SCALE_MAIN);
   },
 
   getObjects() {
@@ -66,7 +65,7 @@ export const definition = {
    * @param {number}  teamSize  — total players on that team
    */
   positionSpawn(scene, sprite, team, index, teamSize) {
-    const target = team === "team2" ? _platform : _base;
+    const target = team === "team2" ? _platform : _platform3;
     if (!sprite || !target) return;
     const bounds = target.getBounds();
     const slots = Math.max(1, Number(teamSize) || 1);
@@ -77,12 +76,12 @@ export const definition = {
 };
 
 // ── Legacy named exports (game.js backward-compat; use manifest.js for new code) ──
-export const lushyPeaksObjects = _objects;
+export const undergroundObjects = _objects;
 
-export function lushyPeaks(scene) {
+export function underground(scene) {
   definition.build(scene);
 }
 
-export function positionLushySpawn(scene, sprite, team, index, teamSize) {
+export function positionUndergroundSpawn(scene, sprite, team, index, teamSize) {
   definition.positionSpawn(scene, sprite, team, index, teamSize);
 }

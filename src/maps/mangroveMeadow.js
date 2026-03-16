@@ -1,185 +1,95 @@
-// map.js
+// mangroveMeadow.js
+// To add / tweak this map, edit the constants below — no need to touch build()
+// or positionSpawn().  To add an entirely new map, follow the same pattern and
+// register it in src/maps/manifest.js.
 
-// Globals
-let baseMiddle;
-let baseTop;
-let baseLeft;
-let baseRight;
-let tinyPlatform1;
-let tinyPlatform2;
-let tinyPlatform3;
-let tinyPlatform4;
-let tinyPlatform5;
-let tinyPlatform6;
+import { snapSpriteToPlatform } from "./mapUtils";
 
-const mangroveMeadowObjects = [];
+// ── Layout constants ─────────────────────────────────────────────────────────
+const SCALE = 0.6;
 
-function snapSpriteToPlatform(sprite, platform, targetX, epsilon = 2) {
-  if (!sprite || !platform) return;
+const BASE_MID_Y = 600; // main floor
+const BASE_TOP_Y = 408; // elevated centre base
+const BASE_SIDE_DX = 422; // left/right base X offset from centre
+const BASE_SIDE_Y = 638; // left/right base Y
 
-  const topY = platform.body ? platform.body.top : platform.getTopCenter().y;
-  if (sprite.body) {
-    const body = sprite.body;
-    const halfH = (Number(body.height) || 0) / 2;
-    const offsetY = Number(body.offset?.y) || 0;
-    const targetY = topY - halfH - offsetY - epsilon;
+// Tiny platform layout: each entry is [dx, y]
+// Indices 0-2 → team2 spawn platforms; indices 3-5 → team1 spawn platforms
+const TINY_LAYOUT = [
+  [-280, 325], // 0 – team2
+  [+280, 325], // 1 – team2
+  [-430, 200], // 2 – team2
+  [+430, 200], // 3 – team1
+  [-130, 150], // 4 – team1
+  [+130, 150], // 5 – team1
+];
 
-    if (typeof body.reset === "function") {
-      body.reset(targetX, targetY);
-    } else {
-      sprite.setPosition(targetX, targetY);
+const TEAM2_SPAWN_INDICES = [0, 1, 2];
+const TEAM1_SPAWN_INDICES = [3, 4, 5];
+
+// ── Runtime references (set during build) ──────────────────────────────────
+const _tinyPlatforms = []; // [0..5] matching TINY_LAYOUT
+const _objects = [];
+
+// ── Map definition ───────────────────────────────────────────────────────────
+export const definition = {
+  id: 2,
+  name: "Mangrove Meadow",
+  bgAsset: "/assets/mangrove/gameBg.webp",
+
+  build(scene) {
+    _objects.length = 0;
+    _tinyPlatforms.length = 0;
+    const cx = scene.scale.width / 2;
+
+    function plat(key, x, y) {
+      const s = scene.physics.add.sprite(x, y, key);
+      s.body.allowGravity = false;
+      s.setImmovable(true);
+      s.setScale(SCALE);
+      _objects.push(s);
+      return s;
     }
 
-    if (body.velocity?.set) body.velocity.set(0, 0);
-    if (body.acceleration?.set) body.acceleration.set(0, 0);
-    if (typeof body.updateFromGameObject === "function") {
-      body.updateFromGameObject();
-      const desiredBottom = topY - epsilon;
-      const correction = desiredBottom - body.bottom;
-      if (Math.abs(correction) > 0.5) {
-        sprite.y += correction;
-        body.updateFromGameObject();
-      }
+    plat("mangrove-base-middle", cx, BASE_MID_Y);
+    plat("mangrove-base-top", cx, BASE_TOP_Y);
+    plat("mangrove-base-left", cx - BASE_SIDE_DX, BASE_SIDE_Y);
+    plat("mangrove-base-right", cx + BASE_SIDE_DX, BASE_SIDE_Y);
+
+    for (const [dx, y] of TINY_LAYOUT) {
+      _tinyPlatforms.push(plat("mangrove-tiny-platform", cx + dx, y));
     }
-  } else {
-    const h = Number(sprite.height) || 0;
-    sprite.setPosition(targetX, topY - h / 2 - epsilon);
-  }
-}
+  },
+
+  getObjects() {
+    return _objects;
+  },
+
+  /**
+   * @param {object}  scene
+   * @param {object}  sprite    — Phaser sprite to position
+   * @param {string}  team      — "team1" | "team2"
+   * @param {number}  index     — 0-based index within the team
+   * @param {number}  [teamSize] — unused (kept for uniform signature)
+   */
+  positionSpawn(scene, sprite, team, index /*, teamSize */) {
+    if (!sprite) return;
+    const indices =
+      team === "team2" ? TEAM2_SPAWN_INDICES : TEAM1_SPAWN_INDICES;
+    const i = Math.max(0, Number(index) || 0) % indices.length;
+    const plat = _tinyPlatforms[indices[i]];
+    if (!plat) return;
+    snapSpriteToPlatform(sprite, plat, plat.getCenter().x, 2);
+  },
+};
+
+// ── Legacy named exports (game.js backward-compat; use manifest.js for new code) ──
+export const mangroveMeadowObjects = _objects;
 
 export function mangroveMeadow(scene) {
-  // Canvas variables
-  const canvasWidth = scene.game.config.width;
-  const canvasHeight = scene.game.config.height;
-  const centerX = scene.scale.width / 2;
-
-  // Setup background position
-  // const background = scene.add.sprite(0, -180, "mangrove-bg");
-  // // Set background to the size of the canvas
-  // background.displayWidth = scene.sys.canvas.width;
-  // background.displayHeight = scene.sys.canvas.height + 500; // add 500 to prevent distortion
-  // background.setOrigin(0, 0);
-
-  // Base Middle
-  baseMiddle = scene.physics.add.sprite(centerX, 600, "mangrove-base-middle");
-  baseMiddle.body.allowGravity = false; // Doesn't allow gravity
-  baseMiddle.setImmovable(true); // Makes sure it doesn't move
-  baseMiddle.setScale(0.6); // Makes it smaller
-  mangroveMeadowObjects.push(baseMiddle);
-
-  // Base Top
-  baseTop = scene.physics.add.sprite(centerX, 408, "mangrove-base-top");
-  baseTop.body.allowGravity = false; // Doesn't allow gravity
-  baseTop.setImmovable(true); // Makes sure it doesn't move
-  baseTop.setScale(0.6); // Makes it smaller
-  mangroveMeadowObjects.push(baseTop);
-
-  // Base Left
-  baseLeft = scene.physics.add.sprite(centerX - 422, 638, "mangrove-base-left");
-  baseLeft.body.allowGravity = false; // Doesn't allow gravity
-  baseLeft.setImmovable(true); // Makes sure it doesn't move
-  baseLeft.setScale(0.6); // Makes it smaller
-  mangroveMeadowObjects.push(baseLeft);
-
-  // Base Right
-  baseRight = scene.physics.add.sprite(
-    centerX + 422,
-    638,
-    "mangrove-base-right",
-  );
-  baseRight.body.allowGravity = false; // Doesn't allow gravity
-  baseRight.setImmovable(true); // Makes sure it doesn't move
-  baseRight.setScale(0.6); // Makes it smaller
-  mangroveMeadowObjects.push(baseRight);
-
-  // Platform
-  tinyPlatform1 = scene.physics.add.sprite(
-    centerX - 280,
-    325,
-    "mangrove-tiny-platform",
-  );
-  tinyPlatform1.setScale(0.6);
-  tinyPlatform1.body.allowGravity = false;
-  tinyPlatform1.setImmovable(true);
-  mangroveMeadowObjects.push(tinyPlatform1);
-
-  // Platform 2
-  tinyPlatform2 = scene.physics.add.sprite(
-    centerX + 280,
-    325,
-    "mangrove-tiny-platform",
-  );
-  tinyPlatform2.setScale(0.6);
-  tinyPlatform2.body.allowGravity = false;
-  tinyPlatform2.setImmovable(true);
-  mangroveMeadowObjects.push(tinyPlatform2);
-
-  // Platform 3
-  tinyPlatform3 = scene.physics.add.sprite(
-    centerX - 430,
-    200,
-    "mangrove-tiny-platform",
-  );
-  tinyPlatform3.setScale(0.6);
-  tinyPlatform3.body.allowGravity = false;
-  tinyPlatform3.setImmovable(true);
-  mangroveMeadowObjects.push(tinyPlatform3);
-
-  // Platform 4
-  tinyPlatform4 = scene.physics.add.sprite(
-    centerX + 430,
-    200,
-    "mangrove-tiny-platform",
-  );
-  tinyPlatform4.setScale(0.6);
-  tinyPlatform4.body.allowGravity = false;
-  tinyPlatform4.setImmovable(true);
-  mangroveMeadowObjects.push(tinyPlatform4);
-
-  // Platform 5
-  tinyPlatform5 = scene.physics.add.sprite(
-    centerX - 130,
-    150,
-    "mangrove-tiny-platform",
-  );
-  tinyPlatform5.setScale(0.6);
-  tinyPlatform5.body.allowGravity = false;
-  tinyPlatform5.setImmovable(true);
-  mangroveMeadowObjects.push(tinyPlatform5);
-
-  // Platform 6
-  tinyPlatform6 = scene.physics.add.sprite(
-    centerX + 130,
-    150,
-    "mangrove-tiny-platform",
-  );
-  tinyPlatform6.setScale(0.6);
-  tinyPlatform6.body.allowGravity = false;
-  tinyPlatform6.setImmovable(true);
-  mangroveMeadowObjects.push(tinyPlatform6);
+  definition.build(scene);
 }
 
-// Determine a consistent spawn position for Mangrove Meadow
-// team: 'team1' uses bottom triples (4,5,6), 'team2' uses top triples (1,2,3)
-// index: 0-based index within team; cycles across three platforms left->right
 export function positionMangroveSpawn(scene, sprite, team, index) {
-  if (!sprite) return;
-  const top = [tinyPlatform1, tinyPlatform2, tinyPlatform3];
-  const bottom = [tinyPlatform4, tinyPlatform5, tinyPlatform6];
-  const group = team === "team2" ? top : bottom;
-  const i = Math.max(0, Number(index) || 0) % group.length;
-  const plat = group[i];
-  if (!plat) return;
-  const cx = plat.getCenter().x;
-  snapSpriteToPlatform(sprite, plat, cx, 2);
+  definition.positionSpawn(scene, sprite, team, index);
 }
-
-export {
-  mangroveMeadowObjects,
-  tinyPlatform1,
-  tinyPlatform2,
-  tinyPlatform3,
-  tinyPlatform4,
-  tinyPlatform5,
-  tinyPlatform6,
-};

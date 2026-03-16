@@ -73,7 +73,7 @@ export const characterStats = {
     attackDescription:
       "Swings a heavy axe in a short arc, pushing back nearby enemies.",
     baseDamage: 1500,
-    ammoCooldownMs: 150,
+    ammoCooldownMs: 400,
     ammoReloadMs: 800,
     ammoCapacity: 3,
     specialDescription:
@@ -202,7 +202,7 @@ export const characterStats = {
     attackDescription:
       "Puffs out a magical smoke that deals splash baseDamage to everyone in the path.",
     baseDamage: 3000,
-    ammoCooldownMs: 450,
+    ammoCooldownMs: 800,
     ammoReloadMs: 3000,
     ammoCapacity: 3,
     specialDescription: "Unleashes a staff nova that expands outward.",

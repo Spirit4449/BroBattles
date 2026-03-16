@@ -23,15 +23,21 @@ function getPlatformSpawnPoints(room) {
     Array.isArray(raw) && raw.length ? raw : POWERUP_PLATFORM_POINTS[1];
   const centerShiftX =
     (Number(WORLD_BOUNDS.width) || 1300) / 2 - POWERUP_LAYOUT_BASE_CENTER_X;
-  return points.map((p) => ({
-    x: (Number(p.x) || POWERUP_LAYOUT_BASE_CENTER_X) + centerShiftX,
-    y: Number(p.y) || 300,
-  }));
+  return points
+    .map((p) => ({
+      x: Number(p?.x),
+      y: Number(p?.y),
+    }))
+    .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+    .map((p) => ({
+      x: p.x + centerShiftX,
+      y: p.y,
+    }));
 }
 
 function pickSpawnPoint(room) {
   const points = getPlatformSpawnPoints(room);
-  if (!points.length) return { x: 650, y: 300 };
+  if (!points.length) return null;
 
   const activeIdxSet = new Set();
   for (const pu of room._powerups.values()) {
@@ -79,12 +85,18 @@ function spawnPowerup(room) {
   if (room._powerups.size >= POWERUP_MAX_ACTIVE) return;
   const type = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
   const point = pickSpawnPoint(room);
+  if (!point) {
+    console.warn(
+      `[GameRoom ${room.matchId}] Skipping powerup spawn: no valid platform spawn points for map ${room.matchData?.map}`,
+    );
+    return;
+  }
   const now = Date.now();
   const powerup = {
     id: room._nextPowerupId++,
     type,
-    x: Number(point.x) || 650,
-    y: (Number(point.y) || 300) - POWERUP_SPAWN_Y_LIFT,
+    x: point.x,
+    y: point.y - POWERUP_SPAWN_Y_LIFT,
     spawnedAt: now,
     expiresAt: now + POWERUP_DESPAWN_MS,
   };

@@ -1,15 +1,11 @@
 // game.js
 
 import {
-  lushyPeaks,
-  lushyPeaksObjects,
-  positionLushySpawn,
-} from "./maps/lushyPeaks";
-import {
-  mangroveMeadow,
-  mangroveMeadowObjects,
-  positionMangroveSpawn,
-} from "./maps/mangroveMeadow";
+  buildMap,
+  positionSpawn,
+  getMapBgAsset,
+  getMapObjects,
+} from "./maps/manifest";
 import {
   createPlayer,
   player,
@@ -348,10 +344,7 @@ function showBattleStartOverlay(players) {
   // Background image based on map
   const bg = document.getElementById("bs-bg");
   if (bg) {
-    bg.src =
-      String(gameData?.map) === "2"
-        ? "/assets/mangrove/gameBg.webp"
-        : "/assets/lushy/gameBg.webp";
+    bg.src = getMapBgAsset(gameData?.map);
   }
 
   // Header labels
@@ -873,18 +866,15 @@ function setupGameEventListeners() {
                         .sort((a, b) => a.name.localeCompare(b.name))
                         .findIndex((p) => p.name === pd.name),
                     );
-              if (String(gameData.map) === "1") {
-                positionLushySpawn(
-                  gameScene,
-                  op.opponent,
-                  pd.team,
-                  idx,
-                  (gameData.players || []).filter((p) => p.team === pd.team)
-                    .length,
-                );
-              } else if (String(gameData.map) === "2") {
-                positionMangroveSpawn(gameScene, op.opponent, pd.team, idx);
-              }
+              positionSpawn(
+                gameScene,
+                op.opponent,
+                gameData.map,
+                pd.team,
+                idx,
+                (gameData.players || []).filter((p) => p.team === pd.team)
+                  .length,
+              );
               op.updateUIPosition?.();
             } catch (_) {}
             container[pd.name] = op;
@@ -970,17 +960,14 @@ function setupGameEventListeners() {
                     .sort((a, b) => a.name.localeCompare(b.name))
                     .findIndex((p) => p.name === pd.name),
                 );
-          if (String(gameData.map) === "1") {
-            positionLushySpawn(
-              gameScene,
-              op.opponent,
-              pd.team,
-              idx,
-              (gameData.players || []).filter((p) => p.team === pd.team).length,
-            );
-          } else if (String(gameData.map) === "2") {
-            positionMangroveSpawn(gameScene, op.opponent, pd.team, idx);
-          }
+          positionSpawn(
+            gameScene,
+            op.opponent,
+            gameData.map,
+            pd.team,
+            idx,
+            (gameData.players || []).filter((p) => p.team === pd.team).length,
+          );
           op.updateUIPosition?.();
         } catch (_) {}
       }
@@ -1295,13 +1282,8 @@ class GameScene extends Phaser.Scene {
     SPAWN_VERSION = Math.max(SPAWN_VERSION, Date.now());
     // No per-scene spawn plan needed now; map modules provide positioning helpers
     // Creates the map objects based on game data
-    if (gameData.map === 1) {
-      mapObjects = lushyPeaksObjects;
-      lushyPeaks(this);
-    } else if (gameData.map === 2) {
-      mapObjects = mangroveMeadowObjects;
-      mangroveMeadow(this);
-    }
+    buildMap(this, gameData.map);
+    mapObjects = getMapObjects(gameData.map);
 
     // Ensure all character animations are registered for this scene
     setupAll(this);
@@ -1464,11 +1446,14 @@ class GameScene extends Phaser.Scene {
       const teamSize = (gameData.players || []).filter(
         (p) => p.team === gameData.yourTeam,
       ).length;
-      if (String(gameData.map) === "1") {
-        positionLushySpawn(this, player, gameData.yourTeam, myIndex, teamSize);
-      } else if (String(gameData.map) === "2") {
-        positionMangroveSpawn(this, player, gameData.yourTeam, myIndex);
-      }
+      positionSpawn(
+        this,
+        player,
+        gameData.map,
+        gameData.yourTeam,
+        myIndex,
+        teamSize,
+      );
     } catch (_) {}
 
     // If server already has my live state (refresh/reconnect), apply it after spawn snap.
@@ -1552,7 +1537,7 @@ class GameScene extends Phaser.Scene {
     // never shifts the visible play area.
     // Vertical: keep slight top headroom without wasting too much empty space.
     const contentCenterX = this.game.config.width / 2;
-    cam.setBounds(contentCenterX - 850, -40, 1700, this.game.config.height);
+    cam.setBounds(contentCenterX - 850, -40, 2000, this.game.config.height);
 
     // Deadzone: small central box - camera only chases when player exits it.
     cam.setDeadzone(50, 50);
@@ -1606,23 +1591,15 @@ class GameScene extends Phaser.Scene {
                     teamList.findIndex((p) => p.name === playerData.name),
                   );
                 })();
-          if (String(gameData.map) === "1") {
-            positionLushySpawn(
-              this,
-              existing.opponent,
-              playerData.team,
-              index,
-              (gameData.players || []).filter((p) => p.team === playerData.team)
-                .length,
-            );
-          } else if (String(gameData.map) === "2") {
-            positionMangroveSpawn(
-              this,
-              existing.opponent,
-              playerData.team,
-              index,
-            );
-          }
+          positionSpawn(
+            this,
+            existing.opponent,
+            gameData.map,
+            playerData.team,
+            index,
+            (gameData.players || []).filter((p) => p.team === playerData.team)
+              .length,
+          );
           if (existing.updateUIPosition) existing.updateUIPosition();
         } catch (_) {}
         return;
@@ -1665,23 +1642,15 @@ class GameScene extends Phaser.Scene {
                   );
                 })();
         const index = Math.max(0, idx);
-        if (String(gameData.map) === "1") {
-          positionLushySpawn(
-            this,
-            opPlayer.opponent,
-            playerData.team,
-            index,
-            (gameData.players || []).filter((p) => p.team === playerData.team)
-              .length,
-          );
-        } else if (String(gameData.map) === "2") {
-          positionMangroveSpawn(
-            this,
-            opPlayer.opponent,
-            playerData.team,
-            index,
-          );
-        }
+        positionSpawn(
+          this,
+          opPlayer.opponent,
+          gameData.map,
+          playerData.team,
+          index,
+          (gameData.players || []).filter((p) => p.team === playerData.team)
+            .length,
+        );
         if (opPlayer.updateUIPosition) opPlayer.updateUIPosition();
       } catch (_) {}
 
