@@ -1,39 +1,67 @@
 // src/characters/draven/draven.js
 import socket from "../../socket";
-import { characterStats } from "../../lib/characterStats.js";
+import {
+  characterStats,
+  getCharacterTuning,
+} from "../../lib/characterStats.js";
 import { animations } from "./anim";
 import DravenEffects from "./effects";
-import { performDravenSplashAttack, spawnExplosion } from "./attack";
+import {
+  performDravenSplashAttack,
+  spawnExplosion,
+  changeDebugState,
+} from "./attack";
+import { executeDefaultAttack } from "../shared/attackFlow";
+import CharacterEntityBase from "../shared/characterEntityBase";
 
 // Single source of truth for this character's name/key
 const NAME = "draven";
+const DRAVEN_TUNING = getCharacterTuning(NAME);
+const SPLASH = DRAVEN_TUNING.attack?.splash || {};
 
-class draven {
+class Draven extends CharacterEntityBase {
+  static key = NAME;
   // Main texture key used for this character's sprite
   static textureKey = NAME;
   // Optional per-player effects class to be used for this character
   static Effects = DravenEffects;
-  static getTextureKey() {
-    return draven.textureKey;
-  }
+
+  static sounds = {
+    attack: { key: "draven-fireball", volume: 0.4 },
+    hit: { key: "draven-hit", volume: 0.5 },
+    special: { key: "draven-special", volume: 0.6, rate: 0.8 },
+  };
+
   static preload(scene, staticPath = "/assets") {
     // Load atlas and projectile/sounds
     scene.load.atlas(
       NAME,
-      `${staticPath}/${NAME}/spritesheet.webp`,
-      `${staticPath}/${NAME}/animations.json`,
+      this.characterAssetPath(staticPath, "spritesheet.webp"),
+      this.characterAssetPath(staticPath, "animations.json"),
     );
     // Explosion atlas (separate) for splash attack visual
     scene.load.atlas(
       `${NAME}-explosion`,
-      `${staticPath}/${NAME}/explosion.webp`,
-      `${staticPath}/${NAME}/explosion.json`,
+      this.characterAssetPath(staticPath, "explosion.webp"),
+      this.characterAssetPath(staticPath, "explosion.json"),
     );
     // Fireball / splash SFX
-    scene.load.audio("draven-fireball", `${staticPath}/${NAME}/fireball.mp3`);
-    if (!scene.sound.get("draven-hit")) {
-      scene.load.audio("draven-hit", `${staticPath}/draven/hit.mp3`);
+    scene.load.audio(
+      `${NAME}-fireball`,
+      this.characterAssetPath(staticPath, "fireball.mp3"),
+    );
+    if (!scene.sound.get(`${NAME}-hit`)) {
+      scene.load.audio(
+        `${NAME}-hit`,
+        this.characterAssetPath(staticPath, "hit.mp3"),
+      );
     }
+
+    scene.load.audio(
+      `${NAME}-special`,
+      this.characterAssetPath(staticPath, "special.mp3"),
+    );
+
     // Ensure nearest-neighbor sampling for crisp pixel art (renderer-agnostic)
     scene.load.on(Phaser.Loader.Events.COMPLETE, () => {
       try {
@@ -79,6 +107,10 @@ class draven {
     }
   }
 
+  static setDebugState(enabled) {
+    changeDebugState(enabled);
+  }
+
   // Remote attack visualization: replicate moving splash & delayed explosion
   static handleRemoteAttack(scene, data, ownerWrapper) {
     if (!data || data.type !== "draven-splash") return false;
@@ -93,14 +125,15 @@ class draven {
     try {
       scene.sound && scene.sound.play("draven-fireball", { volume: 0.4 });
     } catch (_) {}
-    const delay = data.delay || 500;
-    const tipOffset = data.tipOffset || 90;
+    const delay = data.delay || SPLASH.remoteExplosionDelayMs || 500;
+    const tipOffset = data.tipOffset || SPLASH.remoteExplosionTipOffset || 90;
+    const centerYFactor = SPLASH.centerYFactor || 0.15;
     // Removed opponent-side debug splash rectangle; only show final explosion now
     scene.time.delayedCall(delay, () => {
       if (!ownerSprite || !ownerSprite.active) return;
       const dir = ownerSprite.flipX ? -1 : 1;
       const ex = ownerSprite.x + (dir > 0 ? tipOffset : -tipOffset);
-      const ey = ownerSprite.y - ownerSprite.height * 0.15;
+      const ey = ownerSprite.y - ownerSprite.height * centerYFactor;
       spawnExplosion(scene, ex, ey);
       // Optional impact SFX on remote explosion
       try {
@@ -115,60 +148,28 @@ class draven {
     return characterStats.draven;
   }
 
-  constructor({
-    scene,
-    player,
-    username,
-    gameId,
-    opponentPlayersRef,
-    mapObjects,
-    ammoHooks,
-  }) {
-    this.scene = scene;
-    this.player = player;
-    this.username = username;
-    this.gameId = gameId;
-    this.opponentPlayersRef = opponentPlayersRef;
-    this.mapObjects = mapObjects;
-    this.ammo = ammoHooks;
-  }
-
-  attachInput() {
-    this.scene.input.on("pointerdown", () => this.handlePointerDown());
+  constructor(deps) {
+    super(deps);
   }
 
   // Common default behavior for firing attacks
   performDefaultAttack(payloadBuilder, onAfterFire) {
-    const {
-      getAmmoCooldownMs,
-      tryConsume,
-      setCanAttack,
-      setIsAttacking,
-      drawAmmoBar,
-    } = this.ammo;
+    const result = executeDefaultAttack({
+      scene: this.scene,
+      ammo: this.ammo,
+      emitAction: (payload) => socket.emit("game:action", payload),
+      payloadBuilder,
+      onAfterFire,
+      attackResetMs: null,
+    });
 
-    if (!tryConsume()) return false;
-    setIsAttacking(true);
-    setCanAttack(false);
+    if (!result.fired) return false;
 
-    const cooldown = getAmmoCooldownMs();
-    this.scene.time.delayedCall(cooldown, () => setCanAttack(true));
     // We'll clear isAttacking when the attack animation actually completes (see below)
     // Provide a safety fallback in case the animation is interrupted.
-    let cleared = false;
-    const safeClear = () => {
-      if (cleared) return;
-      cleared = true;
-      setIsAttacking(false);
-    };
+    const safeClear = result.clearAttack;
     // Safety fallback: if nothing else clears it within 900ms, clear automatically
     this.scene.time.delayedCall(900, safeClear);
-
-    const payload =
-      typeof payloadBuilder === "function" ? payloadBuilder() : null;
-    if (payload) socket.emit("game:action", payload);
-    drawAmmoBar();
-    if (typeof onAfterFire === "function") onAfterFire();
 
     // Attempt to detect and listen for the throw animation to finish before clearing isAttacking
     try {
@@ -203,4 +204,4 @@ class draven {
   }
 }
 
-export default draven;
+export default Draven;

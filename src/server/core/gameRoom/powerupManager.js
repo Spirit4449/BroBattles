@@ -12,13 +12,9 @@ const {
   POWERUP_SPAWN_Y_LIFT,
   POWERUP_LAYOUT_BASE_CENTER_X,
   POWERUP_TYPES,
-  POWERUP_DURATIONS_MS,
-  POWERUP_HEALTH_REGEN_PER_SEC,
-  POWERUP_POISON_DPS,
-  POWERUP_EFFECT_TICK_MS,
-  POWERUP_AMBIENT_TICK_MS,
   POWERUP_PLATFORM_POINTS,
 } = require("../gameRoomConfig");
+const effectManager = require("./effects/effectManager");
 
 function getPlatformSpawnPoints(room) {
   const mapId = Number(room.matchData?.map) || 1;
@@ -113,34 +109,8 @@ function isInSuddenDeathWater(room, playerData, nowTs) {
 }
 
 function applyPowerupToPlayer(room, playerData, type, nowTs) {
-  if (!playerData || !playerData.effects) return;
-  const effects = playerData.effects;
-  const duration = POWERUP_DURATIONS_MS[type] || 5000;
-  if (type === "rage") {
-    effects.rageUntil = Math.max(effects.rageUntil || 0, nowTs + duration);
-    if ((effects.rageNextTickAt || 0) <= nowTs) {
-      effects.rageNextTickAt = nowTs + POWERUP_AMBIENT_TICK_MS;
-    }
-  } else if (type === "health") {
-    const old = playerData.health;
-    playerData.health = playerData.maxHealth;
-    effects.healthUntil = Math.max(effects.healthUntil || 0, nowTs + duration);
-    effects.healthNextTickAt = nowTs + POWERUP_EFFECT_TICK_MS;
-    if (playerData.health !== old) room._broadcastHealthUpdate(playerData);
-  } else if (type === "shield") {
-    effects.shieldUntil = Math.max(effects.shieldUntil || 0, nowTs + duration);
-  } else if (type === "poison") {
-    effects.poisonUntil = Math.max(effects.poisonUntil || 0, nowTs + duration);
-    effects.poisonNextTickAt = nowTs + POWERUP_EFFECT_TICK_MS;
-  } else if (type === "gravityBoots") {
-    effects.gravityUntil = Math.max(
-      effects.gravityUntil || 0,
-      nowTs + duration,
-    );
-    if ((effects.gravityNextTickAt || 0) <= nowTs) {
-      effects.gravityNextTickAt = nowTs + POWERUP_AMBIENT_TICK_MS;
-    }
-  }
+  if (!playerData) return;
+  effectManager.apply(playerData, type, nowTs, {}, room);
 }
 
 function tickPowerups(room) {
@@ -182,82 +152,8 @@ function tickPowerupEffects(room) {
   if (room.status !== "active") return;
   const now = Date.now();
   for (const p of room.players.values()) {
-    if (
-      !p.isAlive ||
-      !p.effects ||
-      p.connected === false ||
-      p.loaded !== true
-    ) {
-      continue;
-    }
-    const e = p.effects;
-
-    if ((e.poisonUntil || 0) > now && (e.poisonNextTickAt || 0) <= now) {
-      e.poisonNextTickAt = now + POWERUP_EFFECT_TICK_MS;
-      const old = p.health;
-      const dmg = (POWERUP_POISON_DPS * POWERUP_EFFECT_TICK_MS) / 1000;
-      p.health = Math.max(0, p.health - dmg);
-      p.lastCombatAt = now;
-      if (p.health !== old) {
-        room._broadcastHealthUpdate(p);
-        room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
-          type: "poison",
-          username: p.name,
-        });
-        if (p.health <= 0) {
-          p.isAlive = false;
-          room.io.to(`game:${room.matchId}`).emit("player:dead", {
-            username: p.name,
-            gameId: room.matchId,
-          });
-          try {
-            room._checkVictoryCondition();
-          } catch (_) {}
-        }
-      }
-    }
-
-    if ((e.healthUntil || 0) > now && (e.healthNextTickAt || 0) <= now) {
-      e.healthNextTickAt = now + POWERUP_EFFECT_TICK_MS;
-      if (!isInSuddenDeathWater(room, p, now)) {
-        const old = p.health;
-        const inc =
-          (POWERUP_HEALTH_REGEN_PER_SEC * POWERUP_EFFECT_TICK_MS) / 1000;
-        p.health = Math.min(p.maxHealth, p.health + inc);
-        if (p.health !== old) {
-          room._maybeBroadcastHealth(p, now);
-          room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
-            type: "health",
-            username: p.name,
-          });
-        }
-      }
-    }
-
-    if ((e.rageUntil || 0) > now && (e.rageNextTickAt || 0) <= now) {
-      e.rageNextTickAt = now + POWERUP_AMBIENT_TICK_MS;
-      room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
-        type: "rage",
-        username: p.name,
-      });
-    }
-
-    if ((e.thorgRageUntil || 0) > now && (e.thorgRageNextTickAt || 0) <= now) {
-      e.thorgRageNextTickAt =
-        now + Math.max(700, POWERUP_AMBIENT_TICK_MS - 250);
-      room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
-        type: "thorgRage",
-        username: p.name,
-      });
-    }
-
-    if ((e.gravityUntil || 0) > now && (e.gravityNextTickAt || 0) <= now) {
-      e.gravityNextTickAt = now + POWERUP_AMBIENT_TICK_MS;
-      room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
-        type: "gravityBoots",
-        username: p.name,
-      });
-    }
+    if (!p.isAlive || p.connected === false || p.loaded !== true) continue;
+    effectManager.tickAll(p, room, now);
   }
 }
 
@@ -265,15 +161,7 @@ function buildPlayerEffectsSnapshot(room) {
   const now = Date.now();
   const out = {};
   for (const p of room.players.values()) {
-    const e = p.effects || {};
-    out[p.name] = {
-      rage: Math.max(0, (e.rageUntil || 0) - now),
-      health: Math.max(0, (e.healthUntil || 0) - now),
-      shield: Math.max(0, (e.shieldUntil || 0) - now),
-      poison: Math.max(0, (e.poisonUntil || 0) - now),
-      gravityBoots: Math.max(0, (e.gravityUntil || 0) - now),
-      thorgRage: Math.max(0, (e.thorgRageUntil || 0) - now),
-    };
+    out[p.name] = effectManager.snapshotAll(p, now);
   }
   return out;
 }

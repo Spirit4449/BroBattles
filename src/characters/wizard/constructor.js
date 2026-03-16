@@ -2,38 +2,57 @@
 import socket from "../../socket";
 import { characterStats } from "../../lib/characterStats.js";
 import { animations } from "./anim";
-import { performWizardFireball, spawnWizardFireballVisual } from "./attack";
+import {
+  performWizardFireball,
+  spawnWizardFireballVisual,
+  changeDebugState,
+} from "./attack";
+import { executeDefaultAttack } from "../shared/attackFlow";
+import CharacterEntityBase from "../shared/characterEntityBase";
 
 const NAME = "wizard";
 
-class Wizard {
+class Wizard extends CharacterEntityBase {
+  static key = NAME;
   static textureKey = NAME;
 
-  static getTextureKey() {
-    return Wizard.textureKey;
-  }
+  static sounds = {
+    attack: { key: "wizard-fireball", volume: 0.55 },
+    hit: { key: "wizard-impact", volume: 0.45 },
+    special: { key: "wizard-fireball", volume: 0.4, rate: 0.75 },
+  };
 
   static preload(scene, staticPath = "/assets") {
     if (!scene?.load) return;
     scene.load.atlas(
       NAME,
-      `${staticPath}/${NAME}/spritesheet.webp`,
-      `${staticPath}/${NAME}/animations.json`
+      this.characterAssetPath(staticPath, "spritesheet.webp"),
+      this.characterAssetPath(staticPath, "animations.json"),
     );
     // Load animated fireball atlas (frames defined in fireball.json)
     scene.load.atlas(
       "wizard-fireball",
-      `${staticPath}/${NAME}/fireball.webp`,
-      `${staticPath}/${NAME}/fireball.json`
+      this.characterAssetPath(staticPath, "fireball.webp"),
+      this.characterAssetPath(staticPath, "fireball.json"),
     );
-    scene.load.audio("wizard-fireball", `${staticPath}/${NAME}/fireball.mp3`);
+    scene.load.audio(
+      "wizard-fireball",
+      this.characterAssetPath(staticPath, "fireball.mp3"),
+    );
     if (!scene.cache?.audio?.exists("wizard-impact")) {
-      scene.load.audio("wizard-impact", `${staticPath}/${NAME}/hit.mp3`);
+      scene.load.audio(
+        "wizard-impact",
+        this.characterAssetPath(staticPath, "hit.mp3"),
+      );
     }
   }
 
   static setupAnimations(scene) {
     animations(scene);
+  }
+
+  static setDebugState(enabled) {
+    changeDebugState(enabled);
   }
 
   static getStats() {
@@ -47,65 +66,27 @@ class Wizard {
     return true;
   }
 
-  constructor({
-    scene,
-    player,
-    username,
-    gameId,
-    opponentPlayersRef,
-    mapObjects,
-    ammoHooks,
-  }) {
-    this.scene = scene;
-    this.player = player;
-    this.username = username;
-    this.gameId = gameId;
-    this.opponentPlayersRef = opponentPlayersRef;
-    this.mapObjects = mapObjects;
-    this.ammo = ammoHooks;
-  }
-
-  attachInput() {
-    if (!this.scene?.input) return;
-    this.scene.input.on("pointerdown", this.handlePointerDown, this);
+  constructor(deps) {
+    super(deps);
   }
 
   performDefaultAttack(payloadBuilder, onAfterFire) {
-    const {
-      getAmmoCooldownMs,
-      tryConsume,
-      setCanAttack,
-      setIsAttacking,
-      drawAmmoBar,
-    } = this.ammo || {};
-
-    if (!tryConsume || !tryConsume()) return false;
-    setIsAttacking && setIsAttacking(true);
-    setCanAttack && setCanAttack(false);
-
-    const cooldown = getAmmoCooldownMs ? getAmmoCooldownMs() : 450;
+    const cooldown = this.ammo?.getAmmoCooldownMs
+      ? Number(this.ammo.getAmmoCooldownMs()) || 450
+      : 450;
     const settleDuration = Math.max(200, cooldown);
-    if (this.scene?.time?.delayedCall) {
-      if (setCanAttack) {
-        this.scene.time.delayedCall(cooldown, () => setCanAttack(true));
-      }
-      this.scene.time.delayedCall(
-        settleDuration,
-        () => setIsAttacking && setIsAttacking(false)
-      );
-    } else {
-      if (setCanAttack) {
-        setTimeout(() => setCanAttack(true), cooldown);
-      }
-      setTimeout(() => setIsAttacking && setIsAttacking(false), settleDuration);
-    }
 
-    const payload =
-      typeof payloadBuilder === "function" ? payloadBuilder() : null;
-    if (payload) socket.emit("game:action", payload);
-    if (drawAmmoBar) drawAmmoBar();
-    if (typeof onAfterFire === "function") onAfterFire();
-    return true;
+    const result = executeDefaultAttack({
+      scene: this.scene,
+      ammo: this.ammo,
+      emitAction: (payload) => socket.emit("game:action", payload),
+      payloadBuilder,
+      onAfterFire,
+      attackResetMs: settleDuration,
+      cooldownFallbackMs: 450,
+    });
+
+    return !!result.fired;
   }
 
   handlePointerDown = () => {

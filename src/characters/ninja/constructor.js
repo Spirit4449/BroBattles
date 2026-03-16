@@ -1,32 +1,56 @@
 // src/characters/ninja/ninja.js
 import socket from "../../socket";
-import { characterStats } from "../../lib/characterStats.js";
+import {
+  characterStats,
+  getCharacterTuning,
+} from "../../lib/characterStats.js";
 import ReturningShuriken from "./attack";
 import { animations } from "./anim";
+import {
+  executeDefaultAttack,
+  resolveSessionDamage,
+} from "../shared/attackFlow";
+import CharacterEntityBase from "../shared/characterEntityBase";
 
 // Single source of truth for this character's name/key
 const NAME = "ninja";
+const NINJA_TUNING = getCharacterTuning(NAME);
+const RETURNING_SHURIKEN = NINJA_TUNING.attack?.returningShuriken || {};
 
-class Ninja {
+class Ninja extends CharacterEntityBase {
+  static key = NAME;
   // Main texture key used for this character's sprite
   static textureKey = NAME;
-  static getTextureKey() {
-    return Ninja.textureKey;
-  }
+
+  static sounds = {
+    attack: { key: "shurikenThrow", volume: 0.5, rate: 1.3 },
+    hit: { key: "shurikenHit", volume: 0.6 },
+    hitWood: { key: "shurikenHitWood", volume: 0.7 },
+  };
+
   static preload(scene, staticPath = "/assets") {
     // Load atlas and projectile/sounds
     scene.load.atlas(
       NAME,
-      `${staticPath}/${NAME}/spritesheet.webp`,
-      `${staticPath}/${NAME}/animations.json`
+      this.characterAssetPath(staticPath, "spritesheet.webp"),
+      this.characterAssetPath(staticPath, "animations.json"),
     );
-    scene.load.image("shuriken", `${staticPath}/${NAME}/shuriken.webp`);
+    scene.load.image(
+      "shuriken",
+      this.characterAssetPath(staticPath, "shuriken.webp"),
+    );
     scene.load.audio(
       "shurikenThrow",
-      `${staticPath}/${NAME}/shurikenThrow.mp3`
+      this.characterAssetPath(staticPath, "shurikenThrow.mp3"),
     );
-    scene.load.audio("shurikenHit", `${staticPath}/${NAME}/hit.mp3`);
-    scene.load.audio("shurikenHitWood", `${staticPath}/${NAME}/woodhit.wav`);
+    scene.load.audio(
+      "shurikenHit",
+      this.characterAssetPath(staticPath, "hit.mp3"),
+    );
+    scene.load.audio(
+      "shurikenHitWood",
+      this.characterAssetPath(staticPath, "woodhit.wav"),
+    );
   }
 
   static setupAnimations(scene) {
@@ -57,14 +81,18 @@ class Ninja {
         ownerSprite,
         {
           direction: data.direction,
-          forwardDistance: data.forwardDistance || 500,
-          outwardDuration: data.outwardDuration || 380,
-          returnSpeed: data.returnSpeed || 900,
-          rotationSpeed: data.rotationSpeed || 2000,
-          scale: data.scale || 0.1,
+          forwardDistance:
+            data.forwardDistance || RETURNING_SHURIKEN.forwardDistance || 500,
+          outwardDuration:
+            data.outwardDuration || RETURNING_SHURIKEN.outwardDuration || 380,
+          returnSpeed:
+            data.returnSpeed || RETURNING_SHURIKEN.returnSpeed || 900,
+          rotationSpeed:
+            data.rotationSpeed || RETURNING_SHURIKEN.rotationSpeed || 2000,
+          scale: data.scale || RETURNING_SHURIKEN.scale || 0.1,
           damage: data.damage,
           isOwner: false,
-        }
+        },
       );
       // Remote collision intentionally omitted (owner authoritative)
       return true;
@@ -85,56 +113,21 @@ class Ninja {
     return true;
   }
 
-  constructor({
-    scene,
-    player,
-    username,
-    gameId,
-    opponentPlayersRef,
-    mapObjects,
-    ammoHooks,
-  }) {
-    this.scene = scene;
-    this.player = player;
-    this.username = username;
-    this.gameId = gameId;
-    this.opponentPlayersRef = opponentPlayersRef;
-    this.mapObjects = mapObjects;
-    this.ammo = ammoHooks;
-  }
-
-  attachInput() {
-    this.scene.input.on("pointerdown", () => this.handlePointerDown());
+  constructor(deps) {
+    super(deps);
   }
 
   // Generic/default attack flow: ammo checks, flags, UI, socket emit
   performDefaultAttack(payloadBuilder, onAfterFire) {
-    const {
-      getAmmoCooldownMs,
-      tryConsume,
-      setCanAttack,
-      setIsAttacking,
-      drawAmmoBar,
-    } = this.ammo;
-
-    if (!tryConsume()) return false;
-    setCanAttack(false);
-    setIsAttacking(true);
-
-    const cooldown = getAmmoCooldownMs();
-    this.scene.time.delayedCall(cooldown, () => setCanAttack(true));
-    // Reset attacking state a bit after shot
-    setTimeout(() => setIsAttacking(false), 300);
-
-    // Build and broadcast attack payload
-    const payload =
-      typeof payloadBuilder === "function" ? payloadBuilder() : null;
-    if (payload) socket.emit("game:action", payload);
-
-    // Update UI
-    drawAmmoBar();
-    if (typeof onAfterFire === "function") onAfterFire();
-    return true;
+    const result = executeDefaultAttack({
+      scene: this.scene,
+      ammo: this.ammo,
+      emitAction: (payload) => socket.emit("game:action", payload),
+      payloadBuilder,
+      onAfterFire,
+      attackResetMs: 300,
+    });
+    return !!result.fired;
   }
 
   // Ninja-specific attack: spawn a returning shuriken with owner-side collisions
@@ -143,12 +136,11 @@ class Ninja {
     const direction = p.flipX ? -1 : 1;
 
     // Prefer server-provided level-based damage; fallback to base stats
-    const session = (window && window.__MATCH_SESSION__) || {};
-    const damage =
-      (session.stats && typeof session.stats.damage === "number"
-        ? session.stats.damage
-        : ((this.constructor.getStats && this.constructor.getStats()) || {})
-            .baseDamage) || 1000;
+    const baseDamage = (
+      (this.constructor.getStats && this.constructor.getStats()) ||
+      {}
+    ).baseDamage;
+    const damage = resolveSessionDamage(baseDamage, 1000);
 
     const fired = this.performDefaultAttack(() => {
       // Play throw anim and sfx
@@ -163,7 +155,7 @@ class Ninja {
       ) {
         p.anims.play(
           this.scene.anims.exists(`${NAME}-throw`) ? `${NAME}-throw` : "throw",
-          true
+          true,
         );
       }
 
@@ -173,18 +165,18 @@ class Ninja {
         gameId: this.gameId,
         isOwner: true,
         damage,
-        rotationSpeed: 2000,
-        forwardDistance: 500,
-        arcHeight: 160,
-        outwardDuration: 380,
-        returnSpeed: 900,
+        rotationSpeed: RETURNING_SHURIKEN.rotationSpeed || 2000,
+        forwardDistance: RETURNING_SHURIKEN.forwardDistance || 500,
+        arcHeight: RETURNING_SHURIKEN.arcHeight || 160,
+        outwardDuration: RETURNING_SHURIKEN.outwardDuration || 380,
+        returnSpeed: RETURNING_SHURIKEN.returnSpeed || 900,
       };
 
       const returning = new ReturningShuriken(
         this.scene,
         { x: p.x, y: p.y },
         p,
-        config
+        config,
       );
 
       // Owner-only collisions

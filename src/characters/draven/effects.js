@@ -1,13 +1,17 @@
 // Draven-specific per-player effects (fire trail)
+import { getCharacterTuning } from "../../lib/characterStats.js";
+
+const DRAVEN_TUNING = getCharacterTuning("draven");
+const FIRE_TRAIL = DRAVEN_TUNING.effects?.fireTrail || {};
 
 export default class DravenEffects {
   constructor(scene, sprite) {
     this.scene = scene;
     this.sprite = sprite;
     this._timer = 0;
-    this._interval = 45; // ms between flame spawns
+    this._interval = FIRE_TRAIL.intervalMs ?? 45;
     this._pool = [];
-    this._poolMax = 60;
+    this._poolMax = FIRE_TRAIL.poolMax ?? 60;
   }
 
   // Internal: get a pooled graphics object
@@ -40,23 +44,58 @@ export default class DravenEffects {
 
   _spawnFlame(x, y) {
     const g = this._acquire();
-    const baseSize = Phaser.Math.Between(5, 9);
+    const baseSize = Phaser.Math.Between(
+      FIRE_TRAIL.baseSizeMin ?? 5,
+      FIRE_TRAIL.baseSizeMax ?? 9,
+    );
     // Glow layers
-    g.fillStyle(0x312841, 0.35);
+    g.fillStyle(
+      FIRE_TRAIL.outerColor ?? 0x312841,
+      FIRE_TRAIL.outerAlpha ?? 0.35,
+    );
     g.fillCircle(0, 0, baseSize);
-    g.fillStyle(0xba5d22, 0.55);
+    g.fillStyle(FIRE_TRAIL.midColor ?? 0xba5d22, FIRE_TRAIL.midAlpha ?? 0.55);
     g.fillCircle(0, 0, baseSize * 0.65);
     g.fillStyle(
-      Phaser.Display.Color.GetColor(49, Phaser.Math.Between(30, 60), 60),
-      0.9
+      Phaser.Display.Color.GetColor(
+        49,
+        Phaser.Math.Between(
+          FIRE_TRAIL.innerColorMin ?? 30,
+          FIRE_TRAIL.innerColorMax ?? 60,
+        ),
+        60,
+      ),
+      FIRE_TRAIL.innerAlpha ?? 0.9,
     );
     g.fillCircle(0, 0, baseSize * 0.35);
-    g.x = x + Phaser.Math.Between(-3, 3);
-    g.y = y + Phaser.Math.Between(-3, 3);
-    const driftX = Phaser.Math.Between(-12, 12);
-    const driftY = Phaser.Math.Between(-18, -4);
-    const scaleTarget = Phaser.Math.FloatBetween(0.15, 0.35);
-    const duration = Phaser.Math.Between(260, 420);
+    g.x =
+      x +
+      Phaser.Math.Between(
+        FIRE_TRAIL.jitterMin ?? -3,
+        FIRE_TRAIL.jitterMax ?? 3,
+      );
+    g.y =
+      y +
+      Phaser.Math.Between(
+        FIRE_TRAIL.jitterMin ?? -3,
+        FIRE_TRAIL.jitterMax ?? 3,
+      );
+    const driftX = Phaser.Math.Between(
+      FIRE_TRAIL.driftXMin ?? -12,
+      FIRE_TRAIL.driftXMax ?? 12,
+    );
+    const driftY = Phaser.Math.Between(
+      FIRE_TRAIL.driftYMin ?? -18,
+      FIRE_TRAIL.driftYMax ?? -4,
+    );
+    const scaleTarget = Phaser.Math.FloatBetween(
+      FIRE_TRAIL.scaleTargetMin ?? 0.15,
+      FIRE_TRAIL.scaleTargetMax ?? 0.35,
+    );
+    const duration = Phaser.Math.Between(
+      FIRE_TRAIL.durationMinMs ?? 260,
+      FIRE_TRAIL.durationMaxMs ?? 420,
+    );
     g.scale = 1;
     this.scene.tweens.add({
       targets: g,
@@ -77,9 +116,13 @@ export default class DravenEffects {
     this._timer += deltaMs;
     if (this._timer >= this._interval) {
       this._timer = 0;
-      const baseX = this.sprite.x - (this.sprite.flipX ? -14 : 14);
-      const baseY = this.sprite.y + 8;
-      const count = Phaser.Math.Between(1, 2);
+      const offsetX = FIRE_TRAIL.spawnOffsetX ?? 14;
+      const baseX = this.sprite.x - (this.sprite.flipX ? -offsetX : offsetX);
+      const baseY = this.sprite.y + (FIRE_TRAIL.spawnOffsetY ?? 8);
+      const count = Phaser.Math.Between(
+        FIRE_TRAIL.spawnCountMin ?? 1,
+        FIRE_TRAIL.spawnCountMax ?? 2,
+      );
       for (let i = 0; i < count; i++) this._spawnFlame(baseX, baseY);
     }
   }

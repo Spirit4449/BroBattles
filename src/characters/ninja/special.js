@@ -1,22 +1,26 @@
 import ReturningShuriken from "./attack";
+import { getCharacterTuning } from "../../lib/characterStats.js";
+import { createRuntimeId } from "../shared/runtimeId";
+import { lockPlayerFlip } from "../shared/flipLock";
 
-const SWARM_COUNT = 15;
-const SWARM_RELEASE_MS = 36;
-const SWARM_LOCK_MS = SWARM_COUNT * SWARM_RELEASE_MS + 180;
-const SWARM_DAMAGE = 300;
+const NINJA_TUNING = getCharacterTuning("ninja");
+const SWARM = NINJA_TUNING.special?.swarm || {};
+const SWARM_COUNT = SWARM.count ?? 15;
+const SWARM_RELEASE_MS = SWARM.releaseMs ?? 36;
+const SWARM_LOCK_MS =
+  SWARM_COUNT * SWARM_RELEASE_MS + (SWARM.lockPaddingMs ?? 180);
+const SWARM_DAMAGE = SWARM.damage ?? 300;
 
 function makeSwarmInstanceId(burstIndex) {
-  return `ninja_swarm_${Date.now()}_${burstIndex}_${Math.floor(Math.random() * 1e6)}`;
+  return createRuntimeId("ninja_swarm", burstIndex);
 }
 
 function lockFlipDuringRelease(scene, player) {
   if (!player) return;
-  player._lockFlip = true;
-  player._lockedFlipX = player.flipX;
+  const unlockFlip = lockPlayerFlip(player);
   scene.time.delayedCall(SWARM_LOCK_MS, () => {
     if (!player || !player.active) return;
-    player._lockFlip = false;
-    delete player._lockedFlipX;
+    unlockFlip();
   });
 }
 
@@ -33,10 +37,14 @@ function spawnSingleSwarmShuriken(
   const direction = player.flipX ? -1 : 1;
   const center = (SWARM_COUNT - 1) * 0.5;
   const spread = burstIndex - center;
-  const yOffset = spread * 5.5;
-  const fanStrength = spread * 14;
-  const spawnX = player.x + direction * (28 + Math.abs(spread) * 1.6);
-  const spawnY = player.y - 12 + yOffset;
+  const yOffset = spread * (SWARM.yOffsetPerShard ?? 5.5);
+  const fanStrength = spread * (SWARM.fanStrengthPerShard ?? 14);
+  const spawnX =
+    player.x +
+    direction *
+      ((SWARM.spawnForwardBase ?? 28) +
+        Math.abs(spread) * (SWARM.spawnForwardPerShard ?? 1.6));
+  const spawnY = player.y + (SWARM.spawnYBase ?? -12) + yOffset;
   const config = {
     direction,
     username,
@@ -45,17 +53,28 @@ function spawnSingleSwarmShuriken(
     damage: SWARM_DAMAGE,
     attackType: "ninja-special-swarm",
     instanceId: makeSwarmInstanceId(burstIndex),
-    scale: 0.135,
-    glowScale: 1.35,
-    rotationSpeed: 2200 + Math.abs(spread) * 35,
-    forwardDistance: 440 + Math.abs(spread) * 6,
-    outwardDuration: 330 + Math.abs(spread) * 8,
-    returnSpeed: 960,
-    hitCooldown: 320,
+    scale: SWARM.scale ?? 0.135,
+    glowScale: SWARM.glowScale ?? 1.35,
+    rotationSpeed:
+      (SWARM.rotationSpeedBase ?? 2200) +
+      Math.abs(spread) * (SWARM.rotationSpeedPerShard ?? 35),
+    forwardDistance:
+      (SWARM.forwardDistanceBase ?? 440) +
+      Math.abs(spread) * (SWARM.forwardDistancePerShard ?? 6),
+    outwardDuration:
+      (SWARM.outwardDurationBase ?? 330) +
+      Math.abs(spread) * (SWARM.outwardDurationPerShard ?? 8),
+    returnSpeed: SWARM.returnSpeed ?? 960,
+    hitCooldown: SWARM.hitCooldownMs ?? 320,
     endYOffset: fanStrength,
-    ctrl1YOffset: 16 + yOffset * 0.25,
-    ctrl2YOffset: -(52 + Math.abs(fanStrength) * 0.45),
-    maxLifetime: 5200,
+    ctrl1YOffset:
+      (SWARM.ctrl1YOffsetBase ?? 16) +
+      yOffset * (SWARM.ctrl1YOffsetScale ?? 0.25),
+    ctrl2YOffset: -(
+      (SWARM.ctrl2YOffsetBase ?? 52) +
+      Math.abs(fanStrength) * (SWARM.ctrl2YOffsetScale ?? 0.45)
+    ),
+    maxLifetime: SWARM.maxLifetimeMs ?? 5200,
   };
 
   const shuriken = new ReturningShuriken(

@@ -1,7 +1,11 @@
 // src/characters/thorg/thorg.js
 import socket from "../../socket";
-import { characterStats } from "../../lib/characterStats.js";
+import {
+  characterStats,
+  getCharacterTuning,
+} from "../../lib/characterStats.js";
 import { animations } from "./anim";
+import { executeDefaultAttack } from "../shared/attackFlow";
 import {
   performThorgFallAttack,
   THORG_FALL_WINDUP_MS,
@@ -12,34 +16,57 @@ import {
   THORG_FALL_ARC_HEIGHT,
   THORG_FALL_CURVE_MAGNITUDE,
   THORG_FALL_END_Y_OFFSET,
+  changeDebugState,
 } from "./attack";
+import CharacterEntityBase from "../shared/characterEntityBase";
 
 // Single source of truth for this character's name/key
 const NAME = "thorg";
+const THORG_TUNING = getCharacterTuning(NAME);
+const FALL = THORG_TUNING.attack?.fall || {};
 
-class Thorg {
-  static WEAPON_FORWARD_OFFSET = -Math.PI / 2; // weapon art points downward at rotation=0
+class Thorg extends CharacterEntityBase {
+  static key = NAME;
+  static WEAPON_FORWARD_OFFSET = FALL.spriteForwardOffset ?? -Math.PI / 2; // weapon art points downward at rotation=0
   // Main texture key used for this character's sprite
   static textureKey = NAME;
-  static getTextureKey() {
-    return Thorg.textureKey;
-  }
+
+  static sounds = {
+    attack: { key: "thorg-throw", volume: 0.6 },
+    hit: { key: "thorg-hit", volume: 0.8 },
+    special: { key: "thorg-throw", volume: 0.5, rate: 0.85 },
+  };
+
   static preload(scene, staticPath = "/assets") {
     // Load atlas and projectile/sounds
     scene.load.atlas(
       NAME,
-      `${staticPath}/${NAME}/spritesheet.webp`,
-      `${staticPath}/${NAME}/animations.json`,
+      this.characterAssetPath(staticPath, "spritesheet.webp"),
+      this.characterAssetPath(staticPath, "animations.json"),
+    );
+    scene.load.image(
+      `${NAME}-weapon`,
+      this.characterAssetPath(staticPath, "weapon.webp"),
     );
 
-    scene.load.audio("thorg-throw", `${staticPath}/${NAME}/swoosh.mp3`);
+    scene.load.audio(
+      "thorg-throw",
+      this.characterAssetPath(staticPath, "swoosh.mp3"),
+    );
     if (!scene.sound.get("thorg-hit")) {
-      scene.load.audio("thorg-hit", `${staticPath}/${NAME}/hit.mp3`);
+      scene.load.audio(
+        "thorg-hit",
+        this.characterAssetPath(staticPath, "hit.mp3"),
+      );
     }
   }
 
   static setupAnimations(scene) {
     animations(scene);
+  }
+
+  static setDebugState(enabled) {
+    changeDebugState(enabled);
   }
 
   // Remote attack visualization for Thorg: supports slash and falling rectangle
@@ -195,52 +222,142 @@ class Thorg {
     return characterStats.thorg;
   }
 
-  constructor({
-    scene,
-    player,
-    username,
-    gameId,
-    opponentPlayersRef,
-    mapObjects,
-    ammoHooks,
-  }) {
-    this.scene = scene;
-    this.player = player;
-    this.username = username;
-    this.gameId = gameId;
-    this.opponentPlayersRef = opponentPlayersRef;
-    this.mapObjects = mapObjects;
-    this.ammo = ammoHooks;
+  static chooseRemoteAnimation({
+    animation = "idle",
+    previousPosition,
+    currentPosition,
+    sprite,
+  } = {}) {
+    let chosenAnim = animation || "idle";
+    const currentX =
+      currentPosition?.x ?? previousPosition?.x ?? sprite?.x ?? 0;
+    const previousX =
+      previousPosition?.x ?? currentPosition?.x ?? sprite?.x ?? 0;
+    const currentY =
+      currentPosition?.y ?? previousPosition?.y ?? sprite?.y ?? 0;
+    const previousY =
+      previousPosition?.y ?? currentPosition?.y ?? sprite?.y ?? 0;
+    const dx = currentX - previousX;
+    const dy = currentY - previousY;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    const attackLike =
+      typeof chosenAnim === "string" && /throw|attack|slash/i.test(chosenAnim);
+
+    if (attackLike) {
+      if (absDy > 1.8) {
+        chosenAnim = dy < 0 ? "jumping" : "falling";
+      } else if (absDx > 1.2) {
+        chosenAnim = "running";
+      } else {
+        chosenAnim = "idle";
+      }
+      return chosenAnim;
+    }
+
+    if (absDy > 2.2) {
+      return dy < 0 ? "jumping" : "falling";
+    }
+    if (absDx <= 0.7) {
+      return "idle";
+    }
+    return chosenAnim;
   }
 
-  attachInput() {
-    this.scene.input.on("pointerdown", () => this.handlePointerDown());
+  static applyPowerupFx({
+    scene,
+    sprite,
+    effects,
+    nowSec,
+    colors,
+    spawnTrailParticle,
+  } = {}) {
+    if (!scene || !sprite || !effects)
+      return { handled: false, rageLike: false };
+    const thorgRageOn = (effects.thorgRage || 0) > 0;
+    if (!thorgRageOn) return { handled: false, rageLike: false };
+
+    const pulse = 0.5 + 0.5 * Math.sin(nowSec * 10 + (sprite.x || 0) * 0.012);
+    sprite.setTint(pulse > 0.52 ? 0xc084fc : 0x7e22ce);
+
+    const baseX = sprite._puBaseScaleX || 1;
+    const baseY = sprite._puBaseScaleY || 1;
+    const baseOriginX = sprite._puBaseOriginX ?? 0.5;
+    const baseOriginY = sprite._puBaseOriginY ?? 0.5;
+    sprite.setScale(baseX * 1.14, baseY * 1.14);
+    sprite.setOrigin(baseOriginX, baseOriginY);
+
+    if (typeof spawnTrailParticle === "function" && Math.random() < 0.72) {
+      spawnTrailParticle(
+        sprite.x + Phaser.Math.Between(-18, 18),
+        sprite.y + Phaser.Math.Between(-34, 14),
+        colors?.thorgRage || 0x9333ea,
+        Phaser.Math.FloatBetween(3.6, 6.2),
+        340,
+      );
+    }
+    if (typeof spawnTrailParticle === "function" && Math.random() < 0.28) {
+      spawnTrailParticle(
+        sprite.x + Phaser.Math.Between(-12, 12),
+        sprite.y + Phaser.Math.Between(-38, 4),
+        0xffffff,
+        Phaser.Math.FloatBetween(2.6, 4.2),
+        260,
+      );
+    }
+
+    return { handled: true, rageLike: true };
+  }
+
+  static drawPowerupAura({ graphics, frame, effects, nowSec, colors } = {}) {
+    if (!graphics || !frame || !effects) return false;
+    if ((effects.thorgRage || 0) <= 0) return false;
+    const x = frame.x;
+    const y = frame.y;
+    const r = frame.radius;
+    const pulse = 0.75 + 0.25 * Math.sin(nowSec * 8 + x * 0.01);
+
+    graphics.fillStyle(colors?.thorgRage || 0x9333ea, 0.22 + 0.08 * pulse);
+    graphics.fillCircle(x, y, r + 6 + 5 * pulse);
+    graphics.lineStyle(4.5, colors?.thorgRage || 0x9333ea, 0.88 * pulse);
+    graphics.strokeCircle(x, y, r + 12 + 5 * pulse);
+    graphics.lineStyle(
+      3,
+      0xffffff,
+      0.28 + 0.18 * Math.abs(Math.sin(nowSec * 18 + y * 0.02)),
+    );
+    graphics.strokeCircle(x, y, r + 18 + 2.5 * pulse);
+    return true;
+  }
+
+  static getPowerupMobilityModifier(effects = {}) {
+    if ((effects.thorgRage || 0) > 0) {
+      return { speedMult: 1.12, jumpMult: 1.12 };
+    }
+    return { speedMult: 1, jumpMult: 1 };
+  }
+
+  static getEffectTickSounds() {
+    return {
+      thorgRage: { key: "pu-tick-rage", options: { volume: 0.22, rate: 0.9 } },
+    };
+  }
+
+  constructor(deps) {
+    super(deps);
   }
 
   // Common default behavior for firing attacks
   performDefaultAttack(payloadBuilder, onAfterFire) {
-    const {
-      getAmmoCooldownMs,
-      tryConsume,
-      setCanAttack,
-      setIsAttacking,
-      drawAmmoBar,
-    } = this.ammo;
-
-    if (!tryConsume()) return false;
-    setIsAttacking(true);
-    setCanAttack(false);
-
-    const cooldown = getAmmoCooldownMs();
-    this.scene.time.delayedCall(cooldown, () => setCanAttack(true));
-    setTimeout(() => setIsAttacking(false), 250);
-
-    const payload =
-      typeof payloadBuilder === "function" ? payloadBuilder() : null;
-    if (payload) socket.emit("game:action", payload);
-    drawAmmoBar();
-    if (typeof onAfterFire === "function") onAfterFire();
-    return true;
+    const result = executeDefaultAttack({
+      scene: this.scene,
+      ammo: this.ammo,
+      emitAction: (payload) => socket.emit("game:action", payload),
+      payloadBuilder,
+      onAfterFire,
+      attackResetMs: 250,
+    });
+    return !!result.fired;
   }
 
   handlePointerDown() {

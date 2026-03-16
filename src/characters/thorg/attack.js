@@ -1,27 +1,26 @@
 import socket from "../../socket";
+import { getCharacterTuning } from "../../lib/characterStats.js";
+import { rectsOverlap, getSpriteBounds } from "../shared/combatGeometry";
+import { createRuntimeId } from "../shared/runtimeId";
+import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
 
-const RECT_W = 120;
-const RECT_H = 60;
-export const THORG_FALL_WINDUP_MS = 180;
-export const THORG_FALL_STRIKE_MS = 290;
+const THORG_TUNING = getCharacterTuning("thorg");
+const FALL = THORG_TUNING.attack?.fall || {};
+
+const RECT_W = FALL.rectWidth ?? 120;
+const RECT_H = FALL.rectHeight ?? 60;
+export const THORG_FALL_WINDUP_MS = FALL.windupMs ?? 180;
+export const THORG_FALL_STRIKE_MS = FALL.strikeMs ?? 290;
 export const THORG_FALL_DURATION_MS =
   THORG_FALL_WINDUP_MS + THORG_FALL_STRIKE_MS;
-export const THORG_FALL_FOLLOW_AFTER_WINDUP_MS = 70;
-export const THORG_FALL_RANGE = 120;
-export const THORG_FALL_ARC_HEIGHT = 120;
-export const THORG_FALL_CURVE_MAGNITUDE = 20;
-export const THORG_FALL_END_Y_OFFSET = 300;
-const DAMAGE_TICK_MS = 90;
-const SPRITE_FORWARD_OFFSET = -Math.PI / 2; // weapon art points downward at rotation=0
+export const THORG_FALL_FOLLOW_AFTER_WINDUP_MS = FALL.followAfterWindupMs ?? 70;
+export const THORG_FALL_RANGE = FALL.range ?? 120;
+export const THORG_FALL_ARC_HEIGHT = FALL.arcHeight ?? 120;
+export const THORG_FALL_CURVE_MAGNITUDE = FALL.curveMagnitude ?? 20;
+export const THORG_FALL_END_Y_OFFSET = FALL.endYOffset ?? 300;
+const DAMAGE_TICK_MS = FALL.damageTickMs ?? 90;
+const SPRITE_FORWARD_OFFSET = FALL.spriteForwardOffset ?? -Math.PI / 2; // weapon art points downward at rotation=0
 let DEBUG_DRAW = false;
-
-function rectsOverlap(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2) {
-  return ax1 <= bx2 && ax2 >= bx1 && ay1 <= by2 && ay2 >= by1;
-}
-
-function makeId() {
-  return `thorgFall_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
-}
 
 export function performThorgFallAttack(instance) {
   const { scene, player: p, username, gameId, opponentPlayersRef } = instance;
@@ -36,20 +35,16 @@ export function performThorgFallAttack(instance) {
   }
 
   let finished = false;
-  p._lockFlip = true;
-  p._lockedFlipX = p.flipX;
+  const baseUnlockFlip = lockPlayerFlip(p);
   const unlockFlip = (force = false) => {
     if (finished && !force) return;
     finished = true;
-    if (p && p._lockFlip) {
-      p._lockFlip = false;
-      delete p._lockedFlipX;
-    }
+    baseUnlockFlip();
     if (p) delete p._thorgAttackCleanup;
     if (p && p.active) p.setAngle(0);
   };
   p._thorgAttackCleanup = () => unlockFlip(true);
-  const attackId = makeId();
+  const attackId = createRuntimeId("thorgFall");
   const hitSet = new Set();
 
   // play simple throw animation if present
@@ -107,13 +102,7 @@ export function performThorgFallAttack(instance) {
     elapsed += dt;
     dmgAccum += dt;
     // enforce flip lock
-    if (
-      p._lockFlip &&
-      p._lockedFlipX !== undefined &&
-      p.flipX !== p._lockedFlipX
-    ) {
-      p.flipX = p._lockedFlipX;
-    }
+    enforceLockedFlip(p);
 
     const strikeElapsed = Math.max(0, elapsed - THORG_FALL_WINDUP_MS);
     const t = Math.min(1, strikeElapsed / THORG_FALL_STRIKE_MS);
@@ -147,21 +136,19 @@ export function performThorgFallAttack(instance) {
         const spr = wrap && wrap.opponent;
         const name = wrap && wrap.username;
         if (!spr || !name || hitSet.has(name)) continue;
-        let bx1, by1, bx2, by2;
-        if (spr.body) {
-          bx1 = spr.body.x;
-          by1 = spr.body.y;
-          bx2 = spr.body.x + spr.body.width;
-          by2 = spr.body.y + spr.body.height;
-        } else {
-          const halfW = (spr.displayWidth || spr.width || 0) / 2;
-          const halfH = (spr.displayHeight || spr.height || 0) / 2;
-          bx1 = spr.x - halfW;
-          bx2 = spr.x + halfW;
-          by1 = spr.y - halfH;
-          by2 = spr.y + halfH;
-        }
-        if (rectsOverlap(left, top, right, bottom, bx1, by1, bx2, by2)) {
+        const bounds = getSpriteBounds(spr);
+        if (
+          rectsOverlap(
+            left,
+            top,
+            right,
+            bottom,
+            bounds.left,
+            bounds.top,
+            bounds.right,
+            bounds.bottom,
+          )
+        ) {
           hitSet.add(name);
           socket.emit("hit", {
             attacker: username,

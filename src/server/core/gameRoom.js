@@ -2,24 +2,25 @@
 // Individual game room handling server-authoritative game state
 const {
   POWERUP_STARTING_COUNT,
-  POWERUP_RAGE_DAMAGE_MULT,
-  POWERUP_SHIELD_DAMAGE_MULT,
-  THORG_RAGE_DAMAGE_MULT,
-  THORG_RAGE_KNOCKBACK_X,
-  THORG_RAGE_KNOCKBACK_Y,
   NINJA_SWARM_HIT_DAMAGE,
   NINJA_SWARM_CHARGE_RATIO,
 } = require("./gameRoomConfig");
+const effectManager = require("./gameRoom/effects/effectManager");
 const powerupManager = require("./gameRoom/powerupManager");
 const combatValidation = require("./gameRoom/combatValidation");
 const healthManager = require("./gameRoom/healthManager");
 const timerManager = require("./gameRoom/timerManager");
 const inputManager = require("./gameRoom/inputManager");
-const dravenInfernoManager = require("./gameRoom/dravenInfernoManager");
 const rewardManager = require("./gameRoom/rewardManager");
 const lifecycleManager = require("./gameRoom/lifecycleManager");
 const roomStateManager = require("./gameRoom/roomStateManager");
-const specialAbilityManager = require("./gameRoom/specialAbilityManager");
+const {
+  activateSpecial,
+  tickActiveAbilities,
+  applyOutgoingDamageMultiplier,
+  requiresMeleeFacingCheck,
+  getKnockback,
+} = require("./gameRoom/abilityRuntimeManager");
 
 class GameRoom {
   constructor(matchId, matchData, { io, db, runtimeConfig = null }) {
@@ -114,8 +115,15 @@ class GameRoom {
         user.user_id,
         matchPlayer.char_class,
       );
-      const { maxHealth, baseDamage, specialDamage, specialChargeDamage } =
-        this._computeStats(matchPlayer.char_class, level);
+      const {
+        maxHealth,
+        baseDamage,
+        specialDamage,
+        specialChargeDamage,
+        ammoCapacity,
+        ammoCooldownMs,
+        ammoReloadMs,
+      } = this._computeStats(matchPlayer.char_class, level);
 
       const playerData = {
         socketId: socket.id,
@@ -152,26 +160,16 @@ class GameRoom {
         _regenCarry: 0, // fractional regen accumulator
         _lastHealthBroadcastAt: 0,
 
-        // Timed powerup state
-        effects: {
-          rageUntil: 0,
-          healthUntil: 0,
-          shieldUntil: 0,
-          poisonUntil: 0,
-          gravityUntil: 0,
-          thorgRageUntil: 0,
-          thorgRageNextTickAt: 0,
-          healthNextTickAt: 0,
-          poisonNextTickAt: 0,
-          rageNextTickAt: 0,
-          gravityNextTickAt: 0,
-        },
+        // Timed powerup state (managed by effectManager via player.activeEffects)
+        // player.effects is reserved for ability-specific state (e.g. dravenInferno*)
+        effects: {},
+        activeEffects: {},
 
         ammoState: {
-          capacity: 1,
-          charges: 1,
-          cooldownMs: 1200,
-          reloadMs: 1200,
+          capacity: ammoCapacity,
+          charges: ammoCapacity,
+          cooldownMs: ammoCooldownMs,
+          reloadMs: ammoReloadMs,
           reloadTimerMs: 0,
           nextFireInMs: 0,
         },
@@ -250,7 +248,27 @@ class GameRoom {
 
     // Handle special attack request
     socket.on("game:special", () => {
-      specialAbilityManager.handleSpecialRequest(this, socket.id);
+      const p = this.players.get(socket.id);
+      if (!p || !p.isAlive) return;
+      if (p.superCharge < p.maxSuperCharge) return;
+
+      p.superCharge = 0;
+      const now = Date.now();
+      p.lastCombatAt = now;
+      activateSpecial(this, p, now);
+
+      this.io.to(`game:${this.matchId}`).emit("super-update", {
+        username: p.name,
+        charge: 0,
+        maxCharge: p.maxSuperCharge,
+      });
+
+      this.io.to(`game:${this.matchId}`).emit("player:special", {
+        username: p.name,
+        character: p.char_class,
+        origin: { x: p.x, y: p.y },
+        flip: !!p.flip,
+      });
     });
 
     // Owner-side hit proposal (server authoritative application)
@@ -468,7 +486,7 @@ class GameRoom {
    * Process a single game tick
    */
   processTick() {
-    this._tickDravenInferno();
+    tickActiveAbilities(this, Date.now());
 
     // For Phase 1, just process basic movement inputs
     for (const playerData of this.players.values()) {
@@ -489,10 +507,6 @@ class GameRoom {
         playerData.inputBuffer = [];
       }
     }
-  }
-
-  _tickDravenInferno() {
-    dravenInfernoManager.tickDravenInferno(this);
   }
 
   /**
@@ -654,17 +668,10 @@ class GameRoom {
           : Number(attacker.baseDamage || 0);
       let dmg = Number.isFinite(base) && base > 0 ? base : 0;
 
-      // Rage buff: increase outgoing damage
+      // Outgoing damage modifiers (rage powerup, thorgRage ability, damageBoost, etc.)
       const now = Date.now();
-      if ((attacker.effects?.rageUntil || 0) > now) {
-        dmg *= POWERUP_RAGE_DAMAGE_MULT;
-      }
-      if (
-        attacker.char_class === "thorg" &&
-        (attacker.effects?.thorgRageUntil || 0) > now
-      ) {
-        dmg *= THORG_RAGE_DAMAGE_MULT;
-      }
+      dmg *= effectManager.getModifiers(attacker, now).damageMult;
+      dmg = applyOutgoingDamageMultiplier(attacker, dmg, now);
 
       if (dmg <= 0) return;
 
@@ -701,10 +708,11 @@ class GameRoom {
       // Facing-direction check for melee attacks (Draven splash, Thorg fall).
       // The target must be on the side the attacker is facing; a generous tolerance
       // prevents false rejections at the boundary.
-      const isMeleeFacing =
-        !isSelf &&
-        attackType === "basic" &&
-        (attacker.char_class === "draven" || attacker.char_class === "thorg");
+      const isMeleeFacing = requiresMeleeFacingCheck(
+        attacker,
+        attackType,
+        isSelf,
+      );
       if (isMeleeFacing) {
         const validFacing = combatValidation.isMeleeFacingValid({
           attacker,
@@ -725,10 +733,8 @@ class GameRoom {
       this._recentHits.set(key, now);
       this._recordCombatStat(attacker, { hits: 1 });
 
-      // Apply damage
-      if ((target.effects?.shieldUntil || 0) > now) {
-        dmg *= POWERUP_SHIELD_DAMAGE_MULT;
-      }
+      // Apply damage (incoming modifier covers shield powerup, freeze stun, etc.)
+      dmg *= effectManager.getModifiers(target, now).damageTakenMult;
       const old = target.health;
       target.health = Math.max(0, target.health - Math.round(dmg));
       const appliedDamage = Math.max(0, old - target.health);
@@ -755,18 +761,14 @@ class GameRoom {
           });
         }
 
-        if (
-          !isSelf &&
-          attacker.char_class === "thorg" &&
-          (attacker.effects?.thorgRageUntil || 0) > now &&
-          target.socketId
-        ) {
-          const knockDirection = (target.x || 0) >= (attacker.x || 0) ? 1 : -1;
-          this.io.to(target.socketId).emit("player:knockback", {
-            source: attacker.name,
-            amountX: THORG_RAGE_KNOCKBACK_X * knockDirection,
-            amountY: THORG_RAGE_KNOCKBACK_Y,
-          });
+        if (!isSelf) {
+          const knockback = getKnockback(attacker, target, now);
+          if (knockback) {
+            this.io.to(target.socketId).emit("player:knockback", {
+              source: attacker.name,
+              ...knockback,
+            });
+          }
         }
       }
 
@@ -841,7 +843,18 @@ class GameRoom {
       );
       const stats = getCharacterStats(charClass) || {};
       const specialChargeDamage = stats.specialChargeDamage || 3000;
-      return { maxHealth, baseDamage, specialDamage, specialChargeDamage };
+      const ammoCapacity = stats.ammoCapacity || 1;
+      const ammoCooldownMs = stats.ammoCooldownMs || 1200;
+      const ammoReloadMs = stats.ammoReloadMs || 1200;
+      return {
+        maxHealth,
+        baseDamage,
+        specialDamage,
+        specialChargeDamage,
+        ammoCapacity,
+        ammoCooldownMs,
+        ammoReloadMs,
+      };
     } catch (e) {
       console.warn(
         `[GameRoom ${this.matchId}] computeStats failed:`,
@@ -852,6 +865,9 @@ class GameRoom {
         baseDamage: 100,
         specialDamage: 200,
         specialChargeDamage: 3000,
+        ammoCapacity: 1,
+        ammoCooldownMs: 1200,
+        ammoReloadMs: 1200,
       };
     }
   }

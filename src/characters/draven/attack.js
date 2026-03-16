@@ -1,41 +1,32 @@
 // Draven splash attack extracted
 import socket from "../../socket";
+import { getCharacterTuning } from "../../lib/characterStats.js";
+import { rectsOverlap, getSpriteBounds } from "../shared/combatGeometry";
+import { createRuntimeId } from "../shared/runtimeId";
+import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
 
-const SPLASH_W = 165;
-const SPLASH_H = 130; // Tuned final max height
-const ACTIVE_WINDOW_MS = 450; // Attack stays active this long (moving with player)
-const FLIP_UNLOCK_MS = 530; // Facing locked for full active window
-const DAMAGE_TICK_MS = 90; // Damage cadence
-const DAMAGE_START_MS = 100; // Telegraph before any damage
-const TIP_OFFSET = 50; // Horizontal distance from player center to splash center
-const MIN_SPLASH_H = 20; // Initial small height for upward sweep
-const GROW_DURATION_MS = 220; // Time over which the hitbox grows to full height
+const DRAVEN_TUNING = getCharacterTuning("draven");
+const SPLASH = DRAVEN_TUNING.attack?.splash || {};
+const SPLASH_W = SPLASH.width ?? 165;
+const SPLASH_H = SPLASH.height ?? 130; // Tuned final max height
+const ACTIVE_WINDOW_MS = SPLASH.activeWindowMs ?? 450; // Attack stays active this long (moving with player)
+const FLIP_UNLOCK_MS = SPLASH.flipUnlockMs ?? 530; // Facing locked for full active window
+const DAMAGE_TICK_MS = SPLASH.damageTickMs ?? 90; // Damage cadence
+const DAMAGE_START_MS = SPLASH.damageStartMs ?? 100; // Telegraph before any damage
+const TIP_OFFSET = SPLASH.tipOffset ?? 50; // Horizontal distance from player center to splash center
+const MIN_SPLASH_H = SPLASH.minHeight ?? 20; // Initial small height for upward sweep
+const GROW_DURATION_MS = SPLASH.growDurationMs ?? 220; // Time over which the hitbox grows to full height
+const CENTER_Y_FACTOR = SPLASH.centerYFactor ?? 0.15;
+const HITBOX_INFLATE = SPLASH.hitboxInflate ?? 6;
 var DEBUG_DRAW = false; // Draw debug rectangle of current hitbox
-
-// Rectangle overlap helper (inclusive edges)
-function rectsOverlap(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2) {
-  return ax1 <= bx2 && ax2 >= bx1 && ay1 <= by2 && ay2 >= by1;
-}
-
-// Util to build unique id for correlating remote visuals (no gameplay authority)
-function makeId() {
-  return `dravenSplash_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
-}
 
 export function performDravenSplashAttack(instance) {
   const { scene, player: p, username, gameId, opponentPlayersRef } = instance;
 
   // Lock facing direction for the whole attack window
   const direction = p.flipX ? -1 : 1; // -1 = facing left, 1 = facing right
-  p._lockFlip = true;
-  p._lockedFlipX = p.flipX; // remember original orientation
-  const unlockFlip = () => {
-    if (p && p._lockFlip) {
-      p._lockFlip = false;
-      delete p._lockedFlipX;
-    }
-  };
-  const attackId = makeId();
+  const unlockFlip = lockPlayerFlip(p); // remember original orientation
+  const attackId = createRuntimeId("dravenSplash");
   // Track which opponents have already been hit (each only once per attack instance)
   const hitSet = new Set();
 
@@ -71,24 +62,12 @@ export function performDravenSplashAttack(instance) {
     elapsed += dt;
     damageAccum += dt;
     // Reinforce visual flip lock every frame
-    if (
-      p._lockFlip &&
-      p._lockedFlipX !== undefined &&
-      p.flipX !== p._lockedFlipX
-    ) {
-      p.flipX = p._lockedFlipX;
-      if (p.body && p.body.setOffset && typeof p._lockedFlipX === "boolean") {
-        // Attempt to reapply any offset logic if provided by player script
-        if (typeof p.scene !== "undefined" && p.scene.events) {
-          // No direct accessor to applyFlipOffsetLocal here; player module enforces on change.
-        }
-      }
-    }
+    enforceLockedFlip(p);
     if (elapsed >= DAMAGE_START_MS && damageAccum >= DAMAGE_TICK_MS) {
       damageAccum = 0;
       // Dynamic center (moves with player) using locked direction
       const cx = p.x + (direction > 0 ? TIP_OFFSET : -TIP_OFFSET);
-      const baseCenterY = p.y - p.height * 0.15; // original center reference
+      const baseCenterY = p.y - p.height * CENTER_Y_FACTOR; // original center reference
       const growT = Math.min(1, elapsed / GROW_DURATION_MS);
       const currentH = MIN_SPLASH_H + (SPLASH_H - MIN_SPLASH_H) * growT;
       const finalBottom = baseCenterY + SPLASH_H / 2; // anchor bottom at final position
@@ -156,7 +135,7 @@ function applySplashDamage({
   hitSet,
 }) {
   // Splash rectangle bounds (slightly inflated so edge contacts count)
-  const inflate = 6; // px padding to be more forgiving
+  const inflate = HITBOX_INFLATE; // px padding to be more forgiving
   const left = centerX - w / 2 - inflate;
   const right = centerX + w / 2 + inflate;
   const top = centerY - h / 2 - inflate;
@@ -168,24 +147,19 @@ function applySplashDamage({
     const spr = wrap && wrap.opponent;
     const name = wrap && wrap.username;
     if (!spr || !name || (hitSet && hitSet.has(name))) continue;
-    // Determine opponent bounds (prefer physics body for accuracy)
-    let bx1, by1, bx2, by2;
-    if (spr.body) {
-      // Arcade body.x/y are top-left
-      bx1 = spr.body.x;
-      by1 = spr.body.y;
-      bx2 = spr.body.x + spr.body.width;
-      by2 = spr.body.y + spr.body.height;
-    } else {
-      // Fallback to approximate sprite rectangle using display size
-      const halfW = (spr.displayWidth || spr.width || 0) / 2;
-      const halfH = (spr.displayHeight || spr.height || 0) / 2;
-      bx1 = spr.x - halfW;
-      bx2 = spr.x + halfW;
-      by1 = spr.y - halfH;
-      by2 = spr.y + halfH;
-    }
-    if (rectsOverlap(left, top, right, bottom, bx1, by1, bx2, by2)) {
+    const bounds = getSpriteBounds(spr);
+    if (
+      rectsOverlap(
+        left,
+        top,
+        right,
+        bottom,
+        bounds.left,
+        bounds.top,
+        bounds.right,
+        bounds.bottom,
+      )
+    ) {
       if (hitSet) hitSet.add(name);
       socket.emit("hit", {
         attacker,
@@ -195,7 +169,10 @@ function applySplashDamage({
         gameId,
       });
       hitAny = true;
-      newHits.push({ x: (bx1 + bx2) / 2, y: (by1 + by2) / 2 + 4 });
+      newHits.push({
+        x: (bounds.left + bounds.right) / 2,
+        y: (bounds.top + bounds.bottom) / 2 + 4,
+      });
       // Optional: tiny debug flash (comment out in production)
       // const flash = scene.add.rectangle((bx1+bx2)/2, (by1+by2)/2, 10, 10, 0xffd28a, 0.6);
       // scene.tweens.add({ targets: flash, alpha: 0, duration: 180, onComplete: ()=> flash.destroy() });

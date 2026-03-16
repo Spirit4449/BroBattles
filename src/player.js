@@ -18,6 +18,7 @@ import {
 import {
   createFor as createCharacterFor,
   getTextureKey,
+  getCharacterClassByKey,
   resolveAnimKey,
   getStats,
   getEffectsClass,
@@ -149,9 +150,12 @@ export function createPlayer(
 
   // Animations are registered globally in game.js via setupAll(scene)
 
-  // Create player sprite!! Use character's texture key
-  const textureKey = getTextureKey(character);
-  player = scene.physics.add.sprite(-100, -100, textureKey);
+  // Create player sprite using the character class factory so each class
+  // owns its own texture key without duplicating it here.
+  const CharCls = getCharacterClassByKey(character);
+  player = CharCls
+    ? CharCls.createSprite(scene)
+    : scene.physics.add.sprite(-100, -100, getTextureKey(character));
   player.username = username; // Attach username for collision detection
   player.setCollideWorldBounds(true);
   player.anims.play(resolveAnimKey(scene, currentCharacter, "idle"), true); // Play idle animation

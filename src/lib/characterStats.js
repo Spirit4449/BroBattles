@@ -24,6 +24,46 @@ export const characterStats = {
       offsetXFromHalf: 0,
       offsetY: 10,
     },
+    tuning: {
+      attack: {
+        returningShuriken: {
+          rotationSpeed: 2000,
+          forwardDistance: 500,
+          arcHeight: 160,
+          outwardDuration: 380,
+          returnSpeed: 900,
+          scale: 0.1,
+        },
+      },
+      special: {
+        swarm: {
+          count: 15,
+          releaseMs: 36,
+          lockPaddingMs: 180,
+          damage: 300,
+          yOffsetPerShard: 5.5,
+          fanStrengthPerShard: 14,
+          spawnForwardBase: 28,
+          spawnForwardPerShard: 1.6,
+          spawnYBase: -12,
+          scale: 0.135,
+          glowScale: 1.35,
+          rotationSpeedBase: 2200,
+          rotationSpeedPerShard: 35,
+          forwardDistanceBase: 440,
+          forwardDistancePerShard: 6,
+          outwardDurationBase: 330,
+          outwardDurationPerShard: 8,
+          returnSpeed: 960,
+          hitCooldownMs: 320,
+          ctrl1YOffsetBase: 16,
+          ctrl1YOffsetScale: 0.25,
+          ctrl2YOffsetBase: 52,
+          ctrl2YOffsetScale: 0.45,
+          maxLifetimeMs: 5200,
+        },
+      },
+    },
     description: "A swift and agile fighter.",
     free: true,
   },
@@ -48,6 +88,26 @@ export const characterStats = {
       offsetXFromHalf: -18,
       offsetY: 8,
       flipOffset: 14,
+    },
+    tuning: {
+      attack: {
+        fall: {
+          rectWidth: 120,
+          rectHeight: 60,
+          windupMs: 180,
+          strikeMs: 290,
+          followAfterWindupMs: 70,
+          range: 120,
+          arcHeight: 120,
+          curveMagnitude: 20,
+          endYOffset: 300,
+          damageTickMs: 90,
+          spriteForwardOffset: -Math.PI / 2,
+        },
+      },
+      special: {
+        rageDurationMs: 8000,
+      },
     },
     description: "A sturdy frontline bruiser with crushing blows.",
     free: true,
@@ -74,6 +134,65 @@ export const characterStats = {
       // Shift body to the right when facing left to cover staff
       flipOffset: 5,
     },
+    tuning: {
+      attack: {
+        splash: {
+          width: 165,
+          height: 130,
+          activeWindowMs: 450,
+          flipUnlockMs: 530,
+          damageTickMs: 90,
+          damageStartMs: 100,
+          tipOffset: 50,
+          minHeight: 20,
+          growDurationMs: 220,
+          centerYFactor: 0.15,
+          hitboxInflate: 6,
+          remoteExplosionDelayMs: 500,
+          remoteExplosionTipOffset: 90,
+        },
+      },
+      special: {
+        inferno: {
+          durationMs: 3000,
+          riseMs: 320,
+          liftPx: 125,
+          bobPx: 8,
+          fireRingRadius: 185,
+          firePulseMs: 120,
+          explosionPulseMs: 260,
+        },
+      },
+      effects: {
+        fireTrail: {
+          intervalMs: 45,
+          poolMax: 60,
+          baseSizeMin: 5,
+          baseSizeMax: 9,
+          outerColor: 0x312841,
+          outerAlpha: 0.35,
+          midColor: 0xba5d22,
+          midAlpha: 0.55,
+          innerColorMin: 30,
+          innerColorMax: 60,
+          innerAlpha: 0.9,
+          jitterMin: -3,
+          jitterMax: 3,
+          driftXMin: -12,
+          driftXMax: 12,
+          driftYMin: -18,
+          driftYMax: -4,
+          scaleTargetMin: 0.15,
+          scaleTargetMax: 0.35,
+          durationMinMs: 260,
+          durationMaxMs: 420,
+          spawnOffsetX: 14,
+          spawnOffsetY: 8,
+          spawnCountMin: 1,
+          spawnCountMax: 2,
+        },
+      },
+    },
     description: "A dark sorcerer who manipulates shadows.",
     unlockPrice: 280,
   },
@@ -99,6 +218,28 @@ export const characterStats = {
       // Shift body to the right when facing left to cover staff
       flipOffset: 0,
     },
+    tuning: {
+      attack: {
+        fireball: {
+          speed: 450,
+          range: 1050,
+          visualRadius: 14,
+          collisionRadius: 57,
+          initialScale: 0.1,
+          activeScale: 0.5,
+          glowRadiusMultiplier: 1.35,
+          bobAmplitude: 5,
+          verticalOffset: 0.12,
+          castDelayMs: 300,
+          flipLockMs: 500,
+          bobTweenMs: 220,
+          forwardOffset: 0.23,
+          bobFreqMs: 120,
+          depth: 100,
+          baseAngleDeg: -90,
+        },
+      },
+    },
     description: "A dark sorcerer who manipulates shadows.",
     unlockPrice: 200,
   },
@@ -106,6 +247,11 @@ export const characterStats = {
 
 export function getCharacterStats(character) {
   return characterStats[character] || undefined;
+}
+
+export function getCharacterTuning(character) {
+  const stats = getCharacterStats(character);
+  return (stats && stats.tuning) || {};
 }
 
 export function getAllCharacters() {
@@ -156,6 +302,7 @@ if (typeof module !== "undefined" && module.exports) {
     LEVEL_CAP,
     characterStats,
     getCharacterStats,
+    getCharacterTuning,
     getAllCharacters,
     getFreeCharacters,
     defaultCharacterList,

@@ -1,12 +1,18 @@
 import { spawnExplosion } from "./attack";
+import { getCharacterTuning } from "../../lib/characterStats.js";
+import { createRuntimeId } from "../shared/runtimeId";
+import { lockPlayerFlip } from "../shared/flipLock";
 
-const DRAVEN_INFERNO_DURATION_MS = 3000;
-const DRAVEN_INFERNO_RISE_MS = 320;
-const DRAVEN_INFERNO_LIFT_PX = 125;
-const DRAVEN_INFERNO_BOB_PX = 8;
-const DRAVEN_FIRE_RING_RADIUS = 185;
-const DRAVEN_FIRE_PULSE_MS = 120;
-const DRAVEN_EXPLOSION_PULSE_MS = 260;
+const DRAVEN_TUNING = getCharacterTuning("draven");
+const INFERNO = DRAVEN_TUNING.special?.inferno || {};
+
+const DRAVEN_INFERNO_DURATION_MS = INFERNO.durationMs ?? 3000;
+const DRAVEN_INFERNO_RISE_MS = INFERNO.riseMs ?? 320;
+const DRAVEN_INFERNO_LIFT_PX = INFERNO.liftPx ?? 125;
+const DRAVEN_INFERNO_BOB_PX = INFERNO.bobPx ?? 8;
+const DRAVEN_FIRE_RING_RADIUS = INFERNO.fireRingRadius ?? 185;
+const DRAVEN_FIRE_PULSE_MS = INFERNO.firePulseMs ?? 120;
+const DRAVEN_EXPLOSION_PULSE_MS = INFERNO.explosionPulseMs ?? 260;
 
 const FIRE_COLORS = [0xff5a2f, 0xff8a00, 0xb13cff, 0xff2f5d];
 
@@ -139,7 +145,7 @@ export function perform(
   if (!scene || !player || !player.active) return;
 
   const now = Date.now();
-  const token = `draven_inferno_${now}_${Math.floor(Math.random() * 1e6)}`;
+  const token = createRuntimeId("draven_inferno");
   const baseX = player.x;
   const baseY = player.y;
 
@@ -151,8 +157,7 @@ export function perform(
   player._dravenInfernoLift = DRAVEN_INFERNO_LIFT_PX;
   player._movementLockedUntil = now + DRAVEN_INFERNO_DURATION_MS;
 
-  player._lockFlip = true;
-  player._lockedFlipX = player.flipX;
+  const unlockFlip = lockPlayerFlip(player);
 
   if (player.body) {
     player._dravenInfernoPrevGravity = player.body.allowGravity;
@@ -171,9 +176,8 @@ export function perform(
   }
 
   try {
-    scene.sound?.play("draven-fireball", {
+    scene.sound?.play("draven-special", {
       volume: isOwner ? 0.65 : 0.35,
-      rate: 0.9,
     });
   } catch (_) {}
 
@@ -185,8 +189,7 @@ export function perform(
 
     player._movementLockedUntil = 0;
     player._dravenInfernoUntil = 0;
-    player._lockFlip = false;
-    delete player._lockedFlipX;
+    unlockFlip();
 
     if (player.body) {
       const prevGravity =

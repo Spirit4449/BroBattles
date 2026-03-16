@@ -25,13 +25,16 @@ import {
   handleRemoteAttack,
   setupAll,
   resolveAnimKey,
+  chooseRemoteAnimation,
+  setAttackDebugState,
+  applyCharacterPowerupFx,
+  drawCharacterPowerupAura,
+  getCharacterPowerupMobilityModifier,
+  getCharacterEffectTickSounds,
 } from "./characters";
 import socket, { waitForConnect } from "./socket";
 import OpPlayer from "./opPlayer";
 import { spawnDust, prewarmDust } from "./effects";
-import { changeDebugState as changeDravenDebug } from "./characters/draven/attack";
-import { changeDebugState as changeThorgDebug } from "./characters/thorg/attack";
-import { changeDebugState as changeWizardDebug } from "./characters/wizard/attack";
 
 // Make Phaser globally available for character modules
 window.Phaser = Phaser;
@@ -55,7 +58,14 @@ const POWERUP_COLORS = {
   shield: 0xf97316,
   poison: 0xfacc15,
   gravityBoots: 0xef4444,
-  thorgRage: 0x9333ea,
+};
+
+const POWERUP_TICK_SOUNDS = {
+  poison: { key: "pu-tick-poison", options: { volume: 0.28 } },
+  health: { key: "pu-tick-health", options: { volume: 0.2 } },
+  rage: { key: "pu-tick-rage", options: { volume: 0.18 } },
+  gravityBoots: { key: "pu-tick-gravityBoots", options: { volume: 0.2 } },
+  ...getCharacterEffectTickSounds(),
 };
 
 let __booted = false;
@@ -1077,28 +1087,11 @@ function setupGameEventListeners() {
 
   socket.on("powerup:tick", (payload) => {
     if (!payload || !payload.type || !gameScene || !gameScene.sound) return;
-    // Tick SFX only on effects that feel periodic
-    if (payload.type === "poison") {
-      try {
-        gameScene.sound.play("pu-tick-poison", { volume: 0.28 });
-      } catch (_) {}
-    } else if (payload.type === "health") {
-      try {
-        gameScene.sound.play("pu-tick-health", { volume: 0.2 });
-      } catch (_) {}
-    } else if (payload.type === "rage") {
-      try {
-        gameScene.sound.play("pu-tick-rage", { volume: 0.18 });
-      } catch (_) {}
-    } else if (payload.type === "thorgRage") {
-      try {
-        gameScene.sound.play("pu-tick-rage", { volume: 0.22, rate: 0.9 });
-      } catch (_) {}
-    } else if (payload.type === "gravityBoots") {
-      try {
-        gameScene.sound.play("pu-tick-gravityBoots", { volume: 0.2 });
-      } catch (_) {}
-    }
+    const entry = POWERUP_TICK_SOUNDS[payload.type];
+    if (!entry) return;
+    try {
+      gameScene.sound.play(entry.key, entry.options || {});
+    } catch (_) {}
   });
 }
 
@@ -1205,7 +1198,6 @@ class GameScene extends Phaser.Scene {
       `${staticPath}/mangrove/baseRight.webp`,
     );
     this.load.image("mangrove-base-top", `${staticPath}/mangrove/baseTop.webp`);
-    this.load.image("thorg-weapon", `${staticPath}/thorg/weapon.webp`);
     // Movement SFX (place files under /assets/audio)
     this.load.audio("sfx-step", `${staticPath}/step.mp3`);
     this.load.audio("sfx-jump", `${staticPath}/jump.mp3`);
@@ -1515,13 +1507,7 @@ class GameScene extends Phaser.Scene {
       const enable = !world.drawDebug;
       world.drawDebug = enable;
       try {
-        changeDravenDebug(enable);
-      } catch (_) {}
-      try {
-        changeThorgDebug(enable);
-      } catch (_) {}
-      try {
-        changeWizardDebug(enable);
+        setAttackDebugState(enable);
       } catch (_) {}
       if (enable) {
         // Create debug graphic if Phaser hasn't created it yet
@@ -1831,7 +1817,7 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  _applyPowerupCharacterFX(spr, fx, nowSec) {
+  _applyPowerupCharacterFX(spr, fx, nowSec, characterKey = null) {
     if (!spr || !spr.active) return;
     if (typeof spr._puBaseScaleX !== "number") {
       spr._puBaseScaleX = spr.scaleX || 1;
@@ -1846,11 +1832,18 @@ class GameScene extends Phaser.Scene {
     const baseOriginX = spr._puBaseOriginX ?? 0.5;
     const baseOriginY = spr._puBaseOriginY ?? 0.5;
     const rageOn = (fx?.rage || 0) > 0;
-    const thorgRageOn = (fx?.thorgRage || 0) > 0;
     const healthOn = (fx?.health || 0) > 0;
     const poisonOn = (fx?.poison || 0) > 0;
     const bootsOn = (fx?.gravityBoots || 0) > 0;
-    const rageLikeOn = rageOn || thorgRageOn;
+    const custom = applyCharacterPowerupFx(characterKey, {
+      scene: this,
+      sprite: spr,
+      effects: fx,
+      nowSec,
+      colors: POWERUP_COLORS,
+      spawnTrailParticle: this._spawnTrailParticle.bind(this),
+    });
+    const rageLikeOn = rageOn || !!custom?.rageLike;
 
     // Apply a one-time upward lift when rage visuals activate to avoid floor clipping
     // from sudden scale-up on grounded sprites.
@@ -1864,32 +1857,11 @@ class GameScene extends Phaser.Scene {
       spr._rageLiftApplied = false;
     }
 
-    spr._thorgRageActive = thorgRageOn;
+    if (custom?.handled) {
+      return;
+    }
 
-    if (thorgRageOn) {
-      const pulse = 0.5 + 0.5 * Math.sin(nowSec * 10 + (spr.x || 0) * 0.012);
-      spr.setTint(pulse > 0.52 ? 0xc084fc : 0x7e22ce);
-      spr.setScale(baseX * 1.14, baseY * 1.14);
-      spr.setOrigin(baseOriginX, baseOriginY);
-      if (Math.random() < 0.72) {
-        this._spawnTrailParticle(
-          spr.x + Phaser.Math.Between(-18, 18),
-          spr.y + Phaser.Math.Between(-34, 14),
-          POWERUP_COLORS.thorgRage,
-          Phaser.Math.FloatBetween(3.6, 6.2),
-          340,
-        );
-      }
-      if (Math.random() < 0.28) {
-        this._spawnTrailParticle(
-          spr.x + Phaser.Math.Between(-12, 12),
-          spr.y + Phaser.Math.Between(-38, 4),
-          0xffffff,
-          Phaser.Math.FloatBetween(2.6, 4.2),
-          260,
-        );
-      }
-    } else if (rageOn) {
+    if (rageOn) {
       const pulse = Math.sin(nowSec * 8 + (spr.x || 0) * 0.01);
       // Rage keeps a fixed size boost; only tint pulses.
       spr.setTint(pulse > 0 ? 0xc084fc : 0x9333ea);
@@ -2045,11 +2017,14 @@ class GameScene extends Phaser.Scene {
     g.clear();
 
     const me = latestPlayerEffects[username] || {};
-    const speedMult =
-      ((me.rage || 0) > 0 ? 1.25 : 1) * ((me.thorgRage || 0) > 0 ? 1.12 : 1);
-    const jumpMult =
-      ((me.gravityBoots || 0) > 0 ? 1.5 : 1) *
-      ((me.thorgRage || 0) > 0 ? 1.12 : 1);
+    const baseSpeedMult = (me.rage || 0) > 0 ? 1.25 : 1;
+    const baseJumpMult = (me.gravityBoots || 0) > 0 ? 1.5 : 1;
+    const charMobility = getCharacterPowerupMobilityModifier(
+      gameData?.yourCharacter,
+      me,
+    );
+    const speedMult = baseSpeedMult * (charMobility?.speedMult || 1);
+    const jumpMult = baseJumpMult * (charMobility?.jumpMult || 1);
     setPowerupMobility(speedMult, jumpMult);
 
     const drawAura = (spr, fx) => {
@@ -2098,32 +2073,40 @@ class GameScene extends Phaser.Scene {
         g.lineStyle(2, POWERUP_COLORS.gravityBoots, 0.75 * pulse);
         g.strokeEllipse(x, bootY, Math.max(28, r + 4), 10);
       }
-      if ((fx.thorgRage || 0) > 0) {
-        g.fillStyle(POWERUP_COLORS.thorgRage, 0.22 + 0.08 * pulse);
-        g.fillCircle(x, y, r + 6 + 5 * pulse);
-        g.lineStyle(4.5, POWERUP_COLORS.thorgRage, 0.88 * pulse);
-        g.strokeCircle(x, y, r + 12 + 5 * pulse);
-        g.lineStyle(
-          3,
-          0xffffff,
-          0.28 + 0.18 * Math.abs(Math.sin(nowSec * 18 + y * 0.02)),
-        );
-        g.strokeCircle(x, y, r + 18 + 2.5 * pulse);
-      }
     };
 
     drawAura(player, latestPlayerEffects[username] || {});
+    drawCharacterPowerupAura(gameData?.yourCharacter, {
+      graphics: g,
+      frame: this._spriteFrameForAura(player),
+      effects: latestPlayerEffects[username] || {},
+      nowSec,
+      colors: POWERUP_COLORS,
+    });
     this._applyPowerupCharacterFX(
       player,
       latestPlayerEffects[username] || {},
       nowSec,
+      gameData?.yourCharacter,
     );
     for (const [name, fx] of Object.entries(latestPlayerEffects || {})) {
       if (name === username) continue;
       const wrapper = opponentPlayers[name] || teamPlayers[name];
       if (!wrapper || !wrapper.opponent) continue;
       drawAura(wrapper.opponent, fx);
-      this._applyPowerupCharacterFX(wrapper.opponent, fx, nowSec);
+      drawCharacterPowerupAura(wrapper.character, {
+        graphics: g,
+        frame: this._spriteFrameForAura(wrapper.opponent),
+        effects: fx,
+        nowSec,
+        colors: POWERUP_COLORS,
+      });
+      this._applyPowerupCharacterFX(
+        wrapper.opponent,
+        fx,
+        nowSec,
+        wrapper.character,
+      );
     }
 
     // Shield impact pulses when shielded players take damage.
@@ -2779,35 +2762,12 @@ class GameScene extends Phaser.Scene {
         }
         const lockUntil = Number(wrapper._animLockUntil || 0);
         if (performance.now() >= lockUntil) {
-          let chosenAnim = animSrc.animation || "idle";
-          if ((wrapper.character || "").toLowerCase() === "thorg") {
-            const dx =
-              (bPosData?.x ?? aPosData?.x ?? spr.x) -
-              (aPosData?.x ?? bPosData?.x ?? spr.x);
-            const dy =
-              (bPosData?.y ?? aPosData?.y ?? spr.y) -
-              (aPosData?.y ?? bPosData?.y ?? spr.y);
-            const absDx = Math.abs(dx);
-            const absDy = Math.abs(dy);
-            const attackLike =
-              typeof chosenAnim === "string" &&
-              /throw|attack|slash/i.test(chosenAnim);
-
-            if (attackLike) {
-              // Avoid stale remote attack loops by selecting locomotion from motion.
-              if (absDy > 1.8) {
-                chosenAnim = dy < 0 ? "jumping" : "falling";
-              } else if (absDx > 1.2) {
-                chosenAnim = "running";
-              } else {
-                chosenAnim = "idle";
-              }
-            } else if (absDy > 2.2) {
-              chosenAnim = dy < 0 ? "jumping" : "falling";
-            } else if (absDx <= 0.7) {
-              chosenAnim = "idle";
-            }
-          }
+          const chosenAnim = chooseRemoteAnimation(wrapper.character, {
+            animation: animSrc.animation || "idle",
+            previousPosition: aPosData,
+            currentPosition: bPosData,
+            sprite: spr,
+          });
           spr.anims.play(
             resolveAnimKey(this, wrapper.character, chosenAnim, "idle"),
             true,

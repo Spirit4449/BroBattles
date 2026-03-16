@@ -1,28 +1,31 @@
 import socket from "../../socket";
+import { getCharacterTuning } from "../../lib/characterStats.js";
+import { circleRectOverlap, getSpriteBounds } from "../shared/combatGeometry";
+import { createRuntimeId } from "../shared/runtimeId";
+import { lockPlayerFlip } from "../shared/flipLock";
 
-const FIREBALL_SPEED = 450; // px per second after launch
-const FIREBALL_RANGE = 1050; // px travel before despawn
-const FIREBALL_VISUAL_RADIUS = 14;
-const FIREBALL_COLLISION_RADIUS = 57; // generous hitbox to catch edge hits
-const FIREBALL_INITIAL_SCALE = 0.1; // spawn scale
-const FIREBALL_ACTIVE_SCALE = 0.5; // scale once flying
-const FIREBALL_GLOW_RADIUS_MULT = 1.35;
-const FIREBALL_BOB_AMPLITUDE = 5;
-const FIREBALL_VERTICAL_OFFSET = 0.12; // fraction of height to lift from feet
-const FIREBALL_CAST_DELAY_MS = 300; // pre-launch delay
-const FIREBALL_FLIP_LOCK_MS = 500; // how long flip is locked (cast delay + 100ms)
-const FIREBALL_BOB_TWEEN_MS = 220; // remote bob tween duration
-const FIREBALL_FORWARD_OFFSET = 0.23; // multiplier applied to sprite width for spawn X offset
-const FIREBALL_BOB_FREQ_MS = 120; // divisor for owner bob sine wave (larger = slower)
-const FIREBALL_DEPTH = 100; // ensure rendering above tilemap and ground
-const FIREBALL_BASE_ANGLE_DEG = -90; // sideways orientation; right=+90, left=-90
+const WIZARD_TUNING = getCharacterTuning("wizard");
+const FIREBALL = WIZARD_TUNING.attack?.fireball || {};
+
+const FIREBALL_SPEED = FIREBALL.speed ?? 450; // px per second after launch
+const FIREBALL_RANGE = FIREBALL.range ?? 1050; // px travel before despawn
+const FIREBALL_VISUAL_RADIUS = FIREBALL.visualRadius ?? 14;
+const FIREBALL_COLLISION_RADIUS = FIREBALL.collisionRadius ?? 57; // generous hitbox to catch edge hits
+const FIREBALL_INITIAL_SCALE = FIREBALL.initialScale ?? 0.1; // spawn scale
+const FIREBALL_ACTIVE_SCALE = FIREBALL.activeScale ?? 0.5; // scale once flying
+const FIREBALL_GLOW_RADIUS_MULT = FIREBALL.glowRadiusMultiplier ?? 1.35;
+const FIREBALL_BOB_AMPLITUDE = FIREBALL.bobAmplitude ?? 5;
+const FIREBALL_VERTICAL_OFFSET = FIREBALL.verticalOffset ?? 0.12; // fraction of height to lift from feet
+const FIREBALL_CAST_DELAY_MS = FIREBALL.castDelayMs ?? 300; // pre-launch delay
+const FIREBALL_FLIP_LOCK_MS = FIREBALL.flipLockMs ?? 500; // how long flip is locked (cast delay + 100ms)
+const FIREBALL_BOB_TWEEN_MS = FIREBALL.bobTweenMs ?? 220; // remote bob tween duration
+const FIREBALL_FORWARD_OFFSET = FIREBALL.forwardOffset ?? 0.23; // multiplier applied to sprite width for spawn X offset
+const FIREBALL_BOB_FREQ_MS = FIREBALL.bobFreqMs ?? 120; // divisor for owner bob sine wave (larger = slower)
+const FIREBALL_DEPTH = FIREBALL.depth ?? 100; // ensure rendering above tilemap and ground
+const FIREBALL_BASE_ANGLE_DEG = FIREBALL.baseAngleDeg ?? -90; // sideways orientation; right=+90, left=-90
 
 let DEBUG_DRAW = false;
 const ACTIVE_DEBUG_SHAPES = new Set();
-
-function makeId() {
-  return `wizardFireball_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
-}
 
 function registerDebugShape(shape) {
   if (!shape) return shape;
@@ -69,14 +72,6 @@ function attachDebugFollower(scene, target) {
     destroy,
     shape: circle,
   };
-}
-
-function circleRectOverlap(cx, cy, radius, bx1, by1, bx2, by2) {
-  const closestX = Phaser.Math.Clamp(cx, bx1, bx2);
-  const closestY = Phaser.Math.Clamp(cy, by1, by2);
-  const dx = cx - closestX;
-  const dy = cy - closestY;
-  return dx * dx + dy * dy <= radius * radius;
 }
 
 function createFireballSprite(scene, x, y, direction) {
@@ -188,12 +183,10 @@ export function performWizardFireball(instance) {
   const { scene, player: p, username, gameId, opponentPlayersRef } = instance;
   let direction = p.flipX ? -1 : 1;
   let travelDirection = direction;
-  const attackId = makeId();
+  const attackId = createRuntimeId("wizardFireball");
 
   // Lock the player's flip state during cast
-  const originalFlipX = p.flipX;
-  p._lockFlip = true;
-  p._lockedFlipX = originalFlipX;
+  const unlockFlip = lockPlayerFlip(p);
 
   const computeOrigin = (dir = direction) => ({
     x: p.x + dir * ((p.displayWidth || 80) * FIREBALL_FORWARD_OFFSET),
@@ -264,8 +257,7 @@ export function performWizardFireball(instance) {
     sprite.destroy();
     // Unlock the player's flip after attack completes
     if (p) {
-      p._lockFlip = false;
-      p._lockedFlipX = undefined;
+      unlockFlip();
     }
   };
 
@@ -277,8 +269,7 @@ export function performWizardFireball(instance) {
     if (flipLockTimer > 0) {
       flipLockTimer -= dt;
       if (flipLockTimer <= 0 && p) {
-        p._lockFlip = false;
-        p._lockedFlipX = undefined;
+        unlockFlip();
       }
     }
 
@@ -315,29 +306,16 @@ export function performWizardFireball(instance) {
       const spr = wrap?.opponent;
       const name = wrap?.username;
       if (!spr || !name || hitSet.has(name)) continue;
-      let bx1, by1, bx2, by2;
-      if (spr.body) {
-        bx1 = spr.body.x;
-        by1 = spr.body.y;
-        bx2 = spr.body.x + spr.body.width;
-        by2 = spr.body.y + spr.body.height;
-      } else {
-        const halfW = (spr.displayWidth || spr.width || 0) / 2;
-        const halfH = (spr.displayHeight || spr.height || 0) / 2;
-        bx1 = spr.x - halfW;
-        by1 = spr.y - halfH;
-        bx2 = spr.x + halfW;
-        by2 = spr.y + halfH;
-      }
+      const bounds = getSpriteBounds(spr);
       if (
         circleRectOverlap(
           sprite.x,
           sprite.y,
           FIREBALL_COLLISION_RADIUS,
-          bx1,
-          by1,
-          bx2,
-          by2,
+          bounds.left,
+          bounds.top,
+          bounds.right,
+          bounds.bottom,
         )
       ) {
         hitSet.add(name);

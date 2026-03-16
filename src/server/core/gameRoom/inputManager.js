@@ -6,6 +6,7 @@ const {
   MOVE_PLAUSIBLE_LAG_PAD_H,
   MOVE_PLAUSIBLE_LAG_PAD_V,
 } = require("../gameRoomConfig");
+const { isMovementSuppressed } = require("./abilityRuntimeManager");
 
 function handlePlayerInput(room, socketId, inputData) {
   const playerData = room.players.get(socketId);
@@ -16,9 +17,7 @@ function handlePlayerInput(room, socketId, inputData) {
   if (!inputData || typeof inputData !== "object") return;
 
   const now = Date.now();
-  const infernoActive =
-    playerData.char_class === "draven" &&
-    (playerData.effects?.dravenInfernoUntil || 0) > now;
+  const infernoActive = isMovementSuppressed(playerData, now);
 
   if (infernoActive) {
     if (inputData.loaded === true) playerData.loaded = true;
