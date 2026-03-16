@@ -1,112 +1,25 @@
 // gameRoom.js
 // Individual game room handling server-authoritative game state
-
-// World bounds for Phase 1 (client-authoritative positions)
-const WORLD_BOUNDS = {
-  width: 2300, // match Phaser config width
-  height: 1000, // match Phaser config height
-  margin: 200, // allow going a bit off-screen before clamping
-};
-
-// ── Easily-tunable match timing ───────────────────────────────────────────
-const GAME_DURATION_MS = 2.5 * 60 * 1000; // 2.5 minutes until sudden death starts
-const SD_RISE_SPEED = 15; // px/s the poison water rises (world: 1300×650)
-const SD_RISE_FAST_PHASE_MS = 12000;
-const SD_RISE_FAST_MULT = 2.2;
-const SD_DAMAGE_PER_SEC = 400; // HP/s lost while standing in the poison
-const TIMER_EMIT_INTERVAL_MS = 500; // how often game:timer is broadcast to clients
-// Powerup tuning (server-authoritative)
-const POWERUP_SPAWN_INTERVAL_MS = 20000; // recommended cadence
-const POWERUP_STARTING_COUNT = 2; // spawn this many when game loop begins
-const POWERUP_MAX_ACTIVE = 3;
-const POWERUP_PICKUP_RADIUS = 65;
-const POWERUP_DESPAWN_MS = 10000;
-const POWERUP_RECENT_SPAWN_MEMORY = 4;
-const POWERUP_SPAWN_Y_LIFT = 22; // lift from platform surface to keep pickups clear of terrain
-const POWERUP_LAYOUT_BASE_CENTER_X = 650;
-const POWERUP_TYPES = ["rage", "health", "shield", "poison", "gravityBoots"];
-const POWERUP_DURATIONS_MS = {
-  rage: 10000,
-  health: 10000,
-  shield: 10000,
-  poison: 8000,
-  gravityBoots: 7000,
-};
-const POWERUP_RAGE_DAMAGE_MULT = 1.35;
-const POWERUP_SHIELD_DAMAGE_MULT = 0.7; // takes 70% damage
-const POWERUP_HEALTH_REGEN_PER_SEC = 600;
-const POWERUP_POISON_DPS = 600;
-const POWERUP_EFFECT_TICK_MS = 500;
-const POWERUP_AMBIENT_TICK_MS = 1200; // occasional cadence for non-damaging powerups
-const THORG_RAGE_DURATION_MS = 8000;
-const THORG_RAGE_DAMAGE_MULT = 1.12;
-const THORG_RAGE_KNOCKBACK_X = 155;
-const THORG_RAGE_KNOCKBACK_Y = 88;
-const NINJA_SWARM_HIT_DAMAGE = 300;
-const NINJA_SWARM_CHARGE_RATIO = 0.25;
-const DRAVEN_INFERNO_DURATION_MS = 3000;
-const DRAVEN_INFERNO_RISE_MS = 320;
-const DRAVEN_INFERNO_LIFT_PX = 125;
-const DRAVEN_INFERNO_BOB_PX = 8;
-const DRAVEN_INFERNO_DAMAGE_TICK_MS = 220;
-const DRAVEN_INFERNO_RADIUS_X = 215;
-const DRAVEN_INFERNO_RADIUS_Y = 145;
-const DRAVEN_INFERNO_DAMAGE_SCALE = 0.22;
-// ── Combat hit validation tunables ────────────────────────────────────────
-const HIT_REWIND_MAX_MS = 200; // roll back positions this far for lag compensation
-const HIT_STALENESS_MAX_MS = 300; // ignore attack claims older than this
-const POSITION_HISTORY_DEPTH = 50; // position records per player (~2.5s at 20 Hz)
-// Movement plausibility caps (used to clamp teleporting positions in history buffer).
-const MOVE_PLAUSIBLE_SPEED_H = 320; // px/s horizontal (game max 260 + powerup margin)
-const MOVE_PLAUSIBLE_SPEED_V = 1100; // px/s vertical (max fall 1000 + jump impulse)
-const MOVE_PLAUSIBLE_LAG_PAD_H = 80; // extra px allowed for network lag
-const MOVE_PLAUSIBLE_LAG_PAD_V = 100; // extra px allowed for network lag
-// Facing-direction tolerance for melee range checks (px).
-const MELEE_FACING_TOLERANCE = 50; // allow slight overlap at the facing boundary
-// Per-character maximum accepted hit distance (visual range + generous lag margin).
-// These replace the old flat 850 / 1000 px gates and are keyed by
-// "<char_class>|<attackType>" so every ability has its own budget.
-const ATTACK_MAX_DIST_MAP = {
-  "draven|basic": 380, // splash w=165 + TIP_OFFSET=50 + lag margin
-  "thorg|basic": 450, // fall arc ~240 px + lag margin
-  "wizard|basic": 1250, // fireball travels up to 1050 px; accepts along full path
-  "ninja|basic": 720, // shuriken forward 520 px + return arc
-  "ninja|special": 800, // swarm spread
-  "any|basic": 520, // generic fallback
-  "any|special": 800, // generic special fallback
-  "any|ninja-special-swarm": 800,
-};
-const POWERUP_PLATFORM_POINTS = {
-  // Reachable top-surface slots (avoid center-only placement)
-  1: [
-    { x: 435, y: 506 },
-    { x: 650, y: 506 },
-    { x: 865, y: 506 },
-    { x: 505, y: 166 },
-    { x: 650, y: 166 },
-    { x: 795, y: 166 },
-    { x: 145, y: 188 },
-    { x: 285, y: 188 },
-    { x: 1015, y: 188 },
-    { x: 1155, y: 188 },
-    { x: 92, y: 468 },
-    { x: 1208, y: 468 },
-  ],
-  2: [
-    { x: 590, y: 330 },
-    { x: 710, y: 330 },
-    { x: 650, y: 520 },
-    { x: 225, y: 560 },
-    { x: 1075, y: 560 },
-    { x: 370, y: 247 },
-    { x: 930, y: 247 },
-    { x: 220, y: 122 },
-    { x: 1080, y: 122 },
-    { x: 520, y: 72 },
-    { x: 780, y: 72 },
-  ],
-};
-// ──────────────────────────────────────────────────────────────────────────
+const {
+  POWERUP_STARTING_COUNT,
+  POWERUP_RAGE_DAMAGE_MULT,
+  POWERUP_SHIELD_DAMAGE_MULT,
+  THORG_RAGE_DAMAGE_MULT,
+  THORG_RAGE_KNOCKBACK_X,
+  THORG_RAGE_KNOCKBACK_Y,
+  NINJA_SWARM_HIT_DAMAGE,
+  NINJA_SWARM_CHARGE_RATIO,
+} = require("./gameRoomConfig");
+const powerupManager = require("./gameRoom/powerupManager");
+const combatValidation = require("./gameRoom/combatValidation");
+const healthManager = require("./gameRoom/healthManager");
+const timerManager = require("./gameRoom/timerManager");
+const inputManager = require("./gameRoom/inputManager");
+const dravenInfernoManager = require("./gameRoom/dravenInfernoManager");
+const rewardManager = require("./gameRoom/rewardManager");
+const lifecycleManager = require("./gameRoom/lifecycleManager");
+const roomStateManager = require("./gameRoom/roomStateManager");
+const specialAbilityManager = require("./gameRoom/specialAbilityManager");
 
 class GameRoom {
   constructor(matchId, matchData, { io, db, runtimeConfig = null }) {
@@ -337,43 +250,7 @@ class GameRoom {
 
     // Handle special attack request
     socket.on("game:special", () => {
-      const p = this.players.get(socket.id);
-      if (!p || !p.isAlive) return;
-
-      if (p.superCharge >= p.maxSuperCharge) {
-        p.superCharge = 0;
-        const now = Date.now();
-        p.lastCombatAt = now;
-        if (p.char_class === "thorg") {
-          p.effects = p.effects || {};
-          p.effects.thorgRageUntil = Math.max(
-            p.effects.thorgRageUntil || 0,
-            now + THORG_RAGE_DURATION_MS,
-          );
-          p.effects.thorgRageNextTickAt = now + POWERUP_AMBIENT_TICK_MS;
-        } else if (p.char_class === "draven") {
-          p.effects = p.effects || {};
-          p.effects.dravenInfernoUntil = now + DRAVEN_INFERNO_DURATION_MS;
-          p.effects.dravenInfernoStartedAt = now;
-          p.effects.dravenInfernoAnchorX = Number.isFinite(p.x) ? p.x : 0;
-          p.effects.dravenInfernoAnchorY = Number.isFinite(p.y) ? p.y : 0;
-          p.effects.dravenInfernoNextDamageAt = now + 80;
-        }
-        // Broadcast reset
-        this.io.to(`game:${this.matchId}`).emit("super-update", {
-          username: p.name,
-          charge: 0,
-          maxCharge: p.maxSuperCharge,
-        });
-
-        // Broadcast special activation
-        this.io.to(`game:${this.matchId}`).emit("player:special", {
-          username: p.name,
-          character: p.char_class,
-          origin: { x: p.x, y: p.y },
-          flip: !!p.flip,
-        });
-      }
+      specialAbilityManager.handleSpecialRequest(this, socket.id);
     });
 
     // Owner-side hit proposal (server authoritative application)
@@ -424,61 +301,7 @@ class GameRoom {
    * @param {object} socket
    */
   sendGameStateToPlayer(socket) {
-    const playerData = this.players.get(socket.id);
-    if (!playerData) return;
-
-    // Build a lookup of live state by name from currently tracked room players.
-    const liveByName = new Map();
-    for (const p of this.players.values()) {
-      if (!p?.name) continue;
-      liveByName.set(p.name, p);
-    }
-
-    // Prepare game state for this player
-    const gameStateForPlayer = {
-      matchId: this.matchId,
-      mode: this.matchData.mode,
-      map: this.matchData.map,
-      yourTeam: playerData.team,
-      yourCharacter: playerData.char_class,
-      spawnVersion: this.spawnVersion,
-      powerups: Array.from(this._powerups.values()).map((pu) => ({
-        id: pu.id,
-        type: pu.type,
-        x: pu.x,
-        y: pu.y,
-        spawnedAt: pu.spawnedAt,
-        expiresAt: pu.expiresAt,
-      })),
-      playerEffects: this._buildPlayerEffectsSnapshot(),
-      // Always include full match roster so every client sees all participants,
-      // even if some sockets have not joined this room yet.
-      players: (this.matchData.players || []).map((mp) => {
-        const p = liveByName.get(mp.name);
-        return {
-          name: mp.name,
-          team: mp.team,
-          char_class: p?.char_class || mp.char_class,
-          x: Number.isFinite(p?.x) ? p.x : 400,
-          y: Number.isFinite(p?.y) ? p.y : 400,
-          health: Number.isFinite(p?.health) ? p.health : null,
-          superCharge: Number.isFinite(p?.superCharge) ? p.superCharge : 0,
-          maxSuperCharge: Number.isFinite(p?.maxSuperCharge)
-            ? p.maxSuperCharge
-            : 100,
-          stats: { health: Number.isFinite(p?.maxHealth) ? p.maxHealth : null },
-          level: Number.isFinite(p?.level) ? p.level : 1,
-          isAlive: p ? p.isAlive !== false : true,
-          spawnIndex: this._computeSpawnIndex(mp.name, mp.team),
-          connected: p ? p.connected !== false : false,
-          loaded: p ? p.loaded === true : false,
-          ammoState: p?.ammoState || null,
-        };
-      }),
-      status: this.status,
-    };
-    console.log("Emitting initial game state to player", gameStateForPlayer);
-    socket.emit("game:init", gameStateForPlayer);
+    roomStateManager.sendGameStateToPlayer(this, socket);
   }
 
   /**
@@ -486,28 +309,7 @@ class GameRoom {
    * If all acks received sooner, start immediately; otherwise start on timeout.
    */
   potentialStartGame() {
-    if (this.status !== "waiting") return; // only transition from waiting
-    this.status = "starting";
-    this._readyAcks = new Set();
-    console.log(
-      `[GameRoom ${this.matchId}] Entering starting phase (10s timeout)`,
-    );
-
-    // Announce starting phase to clients (UI can show VS overlay)
-    this.io.to(`game:${this.matchId}`).emit("game:starting", {
-      timeoutMs: 10000,
-      at: Date.now(),
-    });
-
-    // Safety timeout: start even if not all clients ack
-    if (this._startTimeout) {
-      try {
-        clearTimeout(this._startTimeout);
-      } catch (_) {}
-    }
-    this._startTimeout = setTimeout(() => {
-      this._finalizeStart("timeout");
-    }, 10000);
+    lifecycleManager.potentialStartGame(this);
   }
 
   /**
@@ -515,102 +317,29 @@ class GameRoom {
    * @param {"all_acks"|"timeout"} reason
    */
   _finalizeStart(reason = "timeout") {
-    if (this.status !== "starting") return; // idempotent guard
-    if (this._startTimeout) {
-      try {
-        clearTimeout(this._startTimeout);
-      } catch (_) {}
-      this._startTimeout = null;
-    }
-    const have = this._readyAcks?.size || 0;
-    const need = this._requiredUserIds?.size || 0;
-    console.log(
-      `[GameRoom ${this.matchId}] Finalizing start (reason=${reason}) acks=${have}/${need}`,
-    );
-    this.startGame();
+    lifecycleManager.finalizeStart(this, reason);
   }
 
   /**
    * Start the game
    */
   startGame() {
-    console.log(
-      `[GameRoom ${this.matchId}] Starting game with ${this.players.size} players`,
-    );
-
-    this.status = "active";
-
-    // Mark match participants as actively in battle for party presence UI.
-    void this._broadcastParticipantStatus("In Battle");
-
-    // Initialize spawn positions (basic implementation)
-    this.initializeSpawnPositions();
-
-    // Notify all players that game is starting
-    this.io.to(`game:${this.matchId}`).emit("game:start", {
-      countdown: 3, // 3 second countdown
-    });
-
-    // Start the game loop after countdown
-    setTimeout(() => {
-      this.startGameLoop();
-    }, 3000);
+    lifecycleManager.startGame(this);
   }
 
   async _broadcastParticipantStatus(statusLabel) {
-    if (!statusLabel) return;
-    try {
-      const participants = await this.db.runQuery(
-        `SELECT mp.party_id, u.name
-           FROM match_participants mp
-           JOIN users u ON u.user_id = mp.user_id
-          WHERE mp.match_id = ?`,
-        [this.matchId],
-      );
-      for (const p of participants || []) {
-        try {
-          await this.db.setUserStatus(p.name, statusLabel);
-        } catch (_) {}
-        const pid = Number(p.party_id);
-        if (!Number.isFinite(pid) || pid <= 0) continue;
-        this.io.to(`party:${pid}`).emit("status:update", {
-          partyId: pid,
-          name: p.name,
-          status: statusLabel,
-        });
-      }
-    } catch (e) {
-      console.warn(
-        `[GameRoom ${this.matchId}] failed to broadcast participant status`,
-        e?.message,
-      );
-    }
+    return lifecycleManager.broadcastParticipantStatus(this, statusLabel);
   }
 
   /**
    * Initialize spawn positions for players
    */
   initializeSpawnPositions() {
-    for (const p of this.players.values()) {
-      const spawnIndex = this._computeSpawnIndex(p.name, p.team);
-      p.spawnIndex = spawnIndex;
-      p.loaded = false;
-    }
+    roomStateManager.initializeSpawnPositions(this);
   }
 
   _computeSpawnIndex(name, team) {
-    try {
-      const teamList = (this.matchData.players || [])
-        .filter((p) => p.team === team)
-        .map((p) => ({ name: p.name }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-      return Math.max(
-        0,
-        teamList.findIndex((p) => p.name === name),
-      );
-    } catch (_) {
-      return 0;
-    }
+    return roomStateManager.computeSpawnIndex(this, name, team);
   }
 
   /**
@@ -679,101 +408,11 @@ class GameRoom {
    * Call once per fixed-step tick (inside step() in startGameLoop).
    */
   _tickTimerAndSuddenDeath() {
-    if (this.status !== "active") return;
-    const now = Date.now();
-    const elapsed = now - this._loopStartWallTime;
-    const remaining = Math.max(0, GAME_DURATION_MS - elapsed);
-    const suddenDeath = elapsed >= GAME_DURATION_MS;
-
-    // Compute poison water surface (world Y: WORLD_BOUNDS.height=bottom, 0=top)
-    const sdElapsed = suddenDeath ? elapsed - GAME_DURATION_MS : 0;
-    const worldBottomY = Number(WORLD_BOUNDS.height) || 1000;
-    const poisonY = suddenDeath
-      ? this._computePoisonY(sdElapsed)
-      : worldBottomY + 60; // off-screen
-
-    // Announce sudden death exactly once
-    if (suddenDeath && !this._suddenDeathActive) {
-      this._suddenDeathActive = true;
-      this.io
-        .to(`game:${this.matchId}`)
-        .emit("game:sudden-death:start", { poisonY });
-      console.log(`[GameRoom ${this.matchId}] Sudden death started`);
-    }
-
-    // Apply poison damage each tick to alive players in the water
-    if (this._suddenDeathActive) {
-      const dmgPerTick = (SD_DAMAGE_PER_SEC * this.FIXED_DT_MS) / 1000;
-      for (const p of this.players.values()) {
-        if (!p.isAlive || p.connected === false || p.loaded !== true) continue;
-        if (typeof p.y !== "number" || p.y < poisonY) continue; // above waterline
-        // Block regen for any player standing in the poison water
-        p.lastCombatAt = now;
-        const old = p.health;
-        p.health = Math.max(0, p.health - dmgPerTick);
-        if (p.health !== old) {
-          this._maybeBroadcastHealth(p, now);
-          if (p.health <= 0) {
-            p.isAlive = false;
-            p.health = 0;
-            this._broadcastHealthUpdate(p);
-            this.io.to(`game:${this.matchId}`).emit("player:dead", {
-              username: p.name,
-              gameId: this.matchId,
-            });
-            try {
-              this._checkVictoryCondition();
-            } catch (_) {}
-          }
-        }
-      }
-    }
-
-    // Broadcast timer at controlled interval
-    if (now - this._lastTimerEmitMs >= TIMER_EMIT_INTERVAL_MS) {
-      this._lastTimerEmitMs = now;
-      this.io.to(`game:${this.matchId}`).emit("game:timer", {
-        elapsed,
-        remaining,
-        total: GAME_DURATION_MS,
-        suddenDeath,
-        poisonY,
-      });
-    }
+    timerManager.tickTimerAndSuddenDeath(this);
   }
 
   _emitSnapshotWithTiming(snapMono) {
-    const wall = Date.now();
-    if (this._lastSnapshotMono > 0) {
-      const spacing = snapMono - this._lastSnapshotMono;
-      if (spacing >= 0) this._snapshotIntervals.push(spacing);
-    }
-    this._lastSnapshotMono = snapMono;
-    this.broadcastSnapshot({
-      tickId: this._tickId,
-      tMono: snapMono,
-      sentAtWallMs: wall,
-    });
-    if (this.DEV_TIMING_DIAG) {
-      if (
-        snapMono - this._diagLastLogMono >= 1000 &&
-        this._snapshotIntervals.length
-      ) {
-        const arr = this._snapshotIntervals.slice(-60);
-        const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
-        const variance =
-          arr.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / arr.length;
-        const stdev = Math.sqrt(variance);
-        console.log(
-          `[GameRoom ${this.matchId}] timing tickId=${
-            this._tickId
-          } avgSpacing=${avg.toFixed(2)}ms stdev=${stdev.toFixed(
-            2,
-          )}ms samples=${arr.length}`,
-        );
-        this._diagLastLogMono = snapMono;
-      }
-    }
+    timerManager.emitSnapshotWithTiming(this, snapMono);
   }
 
   /**
@@ -782,121 +421,7 @@ class GameRoom {
    * @param {object} inputData
    */
   handlePlayerInput(socketId, inputData) {
-    const playerData = this.players.get(socketId);
-    if (!playerData || !playerData.isAlive || playerData.connected === false)
-      return;
-
-    // Validate input
-    if (!inputData || typeof inputData !== "object") return;
-
-    const now = Date.now();
-    const infernoActive =
-      playerData.char_class === "draven" &&
-      (playerData.effects?.dravenInfernoUntil || 0) > now;
-
-    // While Draven inferno is active, lock movement and ignore client position updates.
-    if (infernoActive) {
-      if (inputData.loaded === true) {
-        playerData.loaded = true;
-      }
-      if (typeof inputData.animation === "string") {
-        playerData.animation = inputData.animation;
-      }
-      playerData.lastInput = now;
-      return;
-    }
-
-    // If client sent authoritative position, accept it (Phase 1: make it work)
-    if (
-      typeof inputData.x === "number" &&
-      typeof inputData.y === "number" &&
-      Number.isFinite(inputData.x) &&
-      Number.isFinite(inputData.y)
-    ) {
-      const minX = -WORLD_BOUNDS.margin;
-      const maxX = WORLD_BOUNDS.width + WORLD_BOUNDS.margin;
-      const minY = -WORLD_BOUNDS.margin;
-      const maxY = WORLD_BOUNDS.height + WORLD_BOUNDS.margin;
-      // Movement plausibility check: prevent giant position jumps (lag spikes,
-      // reconnects, or anomalies) from corrupting the position history used for
-      // hit-time rewind.  We clamp rather than reject so the player's visual
-      // position doesn't freeze, while keeping history entries sane.
-      const rawX = Math.max(minX, Math.min(maxX, inputData.x));
-      const rawY = Math.max(minY, Math.min(maxY, inputData.y));
-      const _dtMove =
-        playerData.lastInput > 0 ? now - playerData.lastInput : 9999;
-      if (_dtMove > 5 && _dtMove < 2000) {
-        const maxDX =
-          MOVE_PLAUSIBLE_SPEED_H * (_dtMove / 1000) + MOVE_PLAUSIBLE_LAG_PAD_H;
-        const maxDY =
-          MOVE_PLAUSIBLE_SPEED_V * (_dtMove / 1000) + MOVE_PLAUSIBLE_LAG_PAD_V;
-        const absDX = Math.abs(rawX - playerData.x);
-        const absDY = Math.abs(rawY - playerData.y);
-        if (absDX > maxDX || absDY > maxDY) {
-          if (this.DEV_TIMING_DIAG) {
-            console.warn(
-              `[GameRoom ${this.matchId}] position jump clamped: ${playerData.name} ` +
-                `dx=${absDX.toFixed(0)}>${maxDX.toFixed(0)} ` +
-                `dy=${absDY.toFixed(0)}>${maxDY.toFixed(0)} dt=${_dtMove}ms`,
-            );
-          }
-          playerData.x = Math.max(
-            minX,
-            Math.min(
-              maxX,
-              playerData.x + Math.sign(rawX - playerData.x) * maxDX,
-            ),
-          );
-          playerData.y = Math.max(
-            minY,
-            Math.min(
-              maxY,
-              playerData.y + Math.sign(rawY - playerData.y) * maxDY,
-            ),
-          );
-        } else {
-          playerData.x = rawX;
-          playerData.y = rawY;
-        }
-      } else {
-        playerData.x = rawX;
-        playerData.y = rawY;
-      }
-      if (typeof inputData.flip !== "undefined") {
-        playerData.flip = !!inputData.flip;
-      }
-      if (typeof inputData.animation === "string") {
-        playerData.animation = inputData.animation;
-      }
-      if (inputData.loaded === true) {
-        playerData.loaded = true;
-      }
-      if (inputData.ammoState && typeof inputData.ammoState === "object") {
-        const a = inputData.ammoState;
-        playerData.ammoState = {
-          capacity: Math.max(1, Number(a.capacity) || 1),
-          charges: Math.max(0, Number(a.charges) || 0),
-          cooldownMs: Math.max(50, Number(a.cooldownMs) || 1200),
-          reloadMs: Math.max(100, Number(a.reloadMs) || 1200),
-          reloadTimerMs: Math.max(0, Number(a.reloadTimerMs) || 0),
-          nextFireInMs: Math.max(0, Number(a.nextFireInMs) || 0),
-        };
-      }
-      // Record position in history ring buffer used for hit-time rewind validation.
-      if (!playerData._posHistory) playerData._posHistory = [];
-      playerData._posHistory.push({ x: playerData.x, y: playerData.y, t: now });
-      if (playerData._posHistory.length > POSITION_HISTORY_DEPTH) {
-        playerData._posHistory.shift();
-      }
-      playerData.lastInput = Date.now();
-      return; // done
-    }
-
-    // Else treat as directional input (server-simulated fallback)
-    inputData.timestamp = Date.now();
-    playerData.inputBuffer.push(inputData);
-    if (playerData.inputBuffer.length > 10) playerData.inputBuffer.shift();
-    playerData.lastInput = Date.now();
+    inputManager.handlePlayerInput(this, socketId, inputData);
   }
 
   /**
@@ -967,414 +492,50 @@ class GameRoom {
   }
 
   _tickDravenInferno() {
-    const now = Date.now();
-    for (const caster of this.players.values()) {
-      if (
-        !caster ||
-        caster.char_class !== "draven" ||
-        !caster.isAlive ||
-        caster.connected === false ||
-        caster.loaded !== true
-      ) {
-        continue;
-      }
-
-      const e = caster.effects || {};
-      const until = Number(e.dravenInfernoUntil || 0);
-      if (until <= now) continue;
-
-      const startedAt = Number(e.dravenInfernoStartedAt || now);
-      const anchorX = Number.isFinite(e.dravenInfernoAnchorX)
-        ? e.dravenInfernoAnchorX
-        : Number(caster.x) || 0;
-      const anchorY = Number.isFinite(e.dravenInfernoAnchorY)
-        ? e.dravenInfernoAnchorY
-        : Number(caster.y) || 0;
-
-      const riseT = Math.max(
-        0,
-        Math.min(1, (now - startedAt) / DRAVEN_INFERNO_RISE_MS),
-      );
-      const liftNow = DRAVEN_INFERNO_LIFT_PX * (1 - Math.pow(1 - riseT, 3));
-      const bob = Math.sin((now - startedAt) / 120) * DRAVEN_INFERNO_BOB_PX;
-
-      caster.x = anchorX;
-      caster.y = anchorY - liftNow + bob;
-      caster.animation = "draven-special";
-      caster.lastCombatAt = now;
-
-      if ((Number(e.dravenInfernoNextDamageAt) || 0) > now) continue;
-      e.dravenInfernoNextDamageAt = now + DRAVEN_INFERNO_DAMAGE_TICK_MS;
-
-      let perTickDmg = Math.round(
-        Math.max(
-          120,
-          Number(caster.specialDamage || 0) * DRAVEN_INFERNO_DAMAGE_SCALE,
-        ),
-      );
-      if ((caster.effects?.rageUntil || 0) > now) {
-        perTickDmg = Math.round(perTickDmg * POWERUP_RAGE_DAMAGE_MULT);
-      }
-
-      for (const target of this.players.values()) {
-        if (!target || target.name === caster.name) continue;
-        if (
-          !target.isAlive ||
-          target.connected === false ||
-          target.loaded !== true
-        )
-          continue;
-        if (caster.team && target.team && caster.team === target.team) continue;
-
-        const dx = Math.abs((target.x || 0) - anchorX);
-        const dy = Math.abs((target.y || 0) - anchorY);
-        if (dx > DRAVEN_INFERNO_RADIUS_X || dy > DRAVEN_INFERNO_RADIUS_Y) {
-          continue;
-        }
-
-        let dmg = perTickDmg;
-        if ((target.effects?.shieldUntil || 0) > now) {
-          dmg = Math.round(dmg * POWERUP_SHIELD_DAMAGE_MULT);
-        }
-        if (dmg <= 0) continue;
-
-        const old = Number(target.health || 0);
-        target.health = Math.max(0, old - dmg);
-        const applied = Math.max(0, old - target.health);
-        if (applied <= 0) continue;
-
-        target.lastDamagedAt = now;
-        target.lastCombatAt = now;
-        this._recordCombatStat(caster, { damage: applied, hits: 1 });
-
-        if (target.health === 0 && old > 0) {
-          target.isAlive = false;
-          this._recordCombatStat(caster, { kills: 1 });
-        }
-
-        this._broadcastHealthUpdate(target);
-
-        if (!target.isAlive) {
-          this.io.to(`game:${this.matchId}`).emit("player:dead", {
-            username: target.name,
-            gameId: this.matchId,
-          });
-          try {
-            this._checkVictoryCondition();
-          } catch (_) {}
-        }
-      }
-    }
+    dravenInfernoManager.tickDravenInferno(this);
   }
 
   /**
    * Apply passive health regeneration to players who are out of combat.
    */
   processRegen() {
-    const now = Date.now();
-    for (const p of this.players.values()) {
-      if (!p.isAlive || p.connected === false || p.loaded !== true) continue;
-      if (typeof p.maxHealth !== "number" || typeof p.health !== "number")
-        continue;
-
-      const idleFor = now - (p.lastCombatAt || 0);
-      if (idleFor < this.REGEN_DELAY_MS) continue; // still in post-combat cooldown
-      if (p.health >= p.maxHealth) continue; // already full
-
-      const nextAt = p._regenNextAt || 0;
-      if (now < nextAt) continue; // wait until next tick
-
-      const missing = Math.max(0, p.maxHealth - p.health);
-      // Base desired heal = max(fixed minimum, % of missing)
-      const baseDesired = Math.max(
-        this.REGEN_MIN_ABS,
-        Math.ceil(missing * this.REGEN_MISSING_RATIO),
-      );
-      // Round up to next 100 multiple (e.g., 1->100, 401->500)
-      let inc = Math.ceil(baseDesired / 100) * 100;
-      // Never exceed the actual missing health
-      inc = Math.min(inc, missing);
-      const old = p.health;
-      p.health = Math.min(p.maxHealth, p.health + inc);
-      p._regenNextAt = now + this.REGEN_TICK_MS;
-      if (p.health !== old) {
-        this._maybeBroadcastHealth(p, now);
-      }
-    }
+    healthManager.processRegen(this);
   }
 
   _getPlatformSpawnPoints() {
-    const mapId = Number(this.matchData?.map) || 1;
-    const raw = POWERUP_PLATFORM_POINTS[mapId] || POWERUP_PLATFORM_POINTS[1];
-    const points =
-      Array.isArray(raw) && raw.length ? raw : POWERUP_PLATFORM_POINTS[1];
-    const centerShiftX =
-      (Number(WORLD_BOUNDS.width) || 1300) / 2 - POWERUP_LAYOUT_BASE_CENTER_X;
-    return points.map((p) => ({
-      x: (Number(p.x) || POWERUP_LAYOUT_BASE_CENTER_X) + centerShiftX,
-      y: Number(p.y) || 300,
-    }));
+    return powerupManager.getPlatformSpawnPoints(this);
   }
 
   _pickSpawnPoint() {
-    const points = this._getPlatformSpawnPoints();
-    if (!points.length) return { x: 650, y: 300 };
-
-    // Avoid spawning on top of current powerups or recent points.
-    const activeIdxSet = new Set();
-    for (const pu of this._powerups.values()) {
-      let bestIdx = -1;
-      let bestDist = Infinity;
-      for (let i = 0; i < points.length; i++) {
-        const dx = points[i].x - pu.x;
-        const dy = points[i].y - pu.y;
-        const d = dx * dx + dy * dy;
-        if (d < bestDist) {
-          bestDist = d;
-          bestIdx = i;
-        }
-      }
-      if (bestIdx >= 0) activeIdxSet.add(bestIdx);
-    }
-
-    const avoidRecent = new Set(this._recentPowerupSpawnIdx);
-    const available = [];
-    for (let i = 0; i < points.length; i++) {
-      if (activeIdxSet.has(i)) continue;
-      if (avoidRecent.has(i)) continue;
-      available.push(i);
-    }
-
-    // If everything got filtered, progressively relax constraints.
-    if (!available.length) {
-      for (let i = 0; i < points.length; i++) {
-        if (!activeIdxSet.has(i)) available.push(i);
-      }
-    }
-    if (!available.length) {
-      for (let i = 0; i < points.length; i++) available.push(i);
-    }
-
-    const idx = available[Math.floor(Math.random() * available.length)] ?? 0;
-    this._recentPowerupSpawnIdx.push(idx);
-    if (this._recentPowerupSpawnIdx.length > POWERUP_RECENT_SPAWN_MEMORY) {
-      this._recentPowerupSpawnIdx.shift();
-    }
-    return points[idx];
+    return powerupManager.pickSpawnPoint(this);
   }
 
   _spawnPowerup() {
-    if (this.status !== "active") return;
-    if (this._powerups.size >= POWERUP_MAX_ACTIVE) return;
-    const type =
-      POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
-    const point = this._pickSpawnPoint();
-    const now = Date.now();
-    const powerup = {
-      id: this._nextPowerupId++,
-      type,
-      x: Number(point.x) || 650,
-      y: (Number(point.y) || 300) - POWERUP_SPAWN_Y_LIFT,
-      spawnedAt: now,
-      expiresAt: now + POWERUP_DESPAWN_MS,
-    };
-    this._powerups.set(powerup.id, powerup);
+    powerupManager.spawnPowerup(this);
   }
 
   _isInSuddenDeathWater(playerData, nowTs) {
-    if (!this._suddenDeathActive) return false;
-    const elapsed = nowTs - this._loopStartWallTime;
-    const sdElapsed = Math.max(0, elapsed - GAME_DURATION_MS);
-    const poisonY = this._computePoisonY(sdElapsed);
-    return typeof playerData?.y === "number" && playerData.y >= poisonY;
+    return powerupManager.isInSuddenDeathWater(this, playerData, nowTs);
   }
 
   _computePoisonY(sdElapsedMs) {
-    const worldBottomY = Number(WORLD_BOUNDS.height) || 1000;
-    const earlySec = Math.min(sdElapsedMs, SD_RISE_FAST_PHASE_MS) / 1000;
-    const lateSec = Math.max(0, sdElapsedMs - SD_RISE_FAST_PHASE_MS) / 1000;
-    const rise =
-      earlySec * SD_RISE_SPEED * SD_RISE_FAST_MULT + lateSec * SD_RISE_SPEED;
-    return Math.max(0, worldBottomY - rise);
+    return powerupManager.computePoisonY(this, sdElapsedMs);
   }
 
   _applyPowerupToPlayer(playerData, type, nowTs) {
-    if (!playerData || !playerData.effects) return;
-    const effects = playerData.effects;
-    const duration = POWERUP_DURATIONS_MS[type] || 5000;
-    if (type === "rage") {
-      effects.rageUntil = Math.max(effects.rageUntil || 0, nowTs + duration);
-      if ((effects.rageNextTickAt || 0) <= nowTs) {
-        effects.rageNextTickAt = nowTs + POWERUP_AMBIENT_TICK_MS;
-      }
-    } else if (type === "health") {
-      const old = playerData.health;
-      playerData.health = playerData.maxHealth;
-      effects.healthUntil = Math.max(
-        effects.healthUntil || 0,
-        nowTs + duration,
-      );
-      effects.healthNextTickAt = nowTs + POWERUP_EFFECT_TICK_MS;
-      if (playerData.health !== old) this._broadcastHealthUpdate(playerData);
-    } else if (type === "shield") {
-      effects.shieldUntil = Math.max(
-        effects.shieldUntil || 0,
-        nowTs + duration,
-      );
-    } else if (type === "poison") {
-      effects.poisonUntil = Math.max(
-        effects.poisonUntil || 0,
-        nowTs + duration,
-      );
-      effects.poisonNextTickAt = nowTs + POWERUP_EFFECT_TICK_MS;
-    } else if (type === "gravityBoots") {
-      effects.gravityUntil = Math.max(
-        effects.gravityUntil || 0,
-        nowTs + duration,
-      );
-      if ((effects.gravityNextTickAt || 0) <= nowTs) {
-        effects.gravityNextTickAt = nowTs + POWERUP_AMBIENT_TICK_MS;
-      }
-    }
+    powerupManager.applyPowerupToPlayer(this, playerData, type, nowTs);
   }
 
   _tickPowerups() {
-    if (this.status !== "active") return;
-    const now = Date.now();
-
-    if (now - this._lastPowerupSpawnAt >= POWERUP_SPAWN_INTERVAL_MS) {
-      this._lastPowerupSpawnAt = now;
-      this._spawnPowerup();
-    }
-
-    for (const [id, pu] of this._powerups.entries()) {
-      if (!pu || now >= (pu.expiresAt || 0)) {
-        this._powerups.delete(id);
-        continue;
-      }
-      for (const p of this.players.values()) {
-        if (!p.isAlive || p.connected === false || p.loaded !== true) continue;
-        const dx = (p.x || 0) - pu.x;
-        const dy = (p.y || 0) - pu.y;
-        if (Math.hypot(dx, dy) > POWERUP_PICKUP_RADIUS) continue;
-
-        this._applyPowerupToPlayer(p, pu.type, now);
-        this._powerups.delete(id);
-        this.io.to(`game:${this.matchId}`).emit("powerup:collected", {
-          id: pu.id,
-          type: pu.type,
-          username: p.name,
-          x: pu.x,
-          y: pu.y,
-          at: now,
-        });
-        break;
-      }
-    }
+    powerupManager.tickPowerups(this);
   }
 
   _tickPowerupEffects() {
-    if (this.status !== "active") return;
-    const now = Date.now();
-    for (const p of this.players.values()) {
-      if (
-        !p.isAlive ||
-        !p.effects ||
-        p.connected === false ||
-        p.loaded !== true
-      )
-        continue;
-      const e = p.effects;
-
-      // Poison DOT
-      if ((e.poisonUntil || 0) > now && (e.poisonNextTickAt || 0) <= now) {
-        e.poisonNextTickAt = now + POWERUP_EFFECT_TICK_MS;
-        const old = p.health;
-        const dmg = (POWERUP_POISON_DPS * POWERUP_EFFECT_TICK_MS) / 1000;
-        p.health = Math.max(0, p.health - dmg);
-        p.lastCombatAt = now;
-        if (p.health !== old) {
-          this._broadcastHealthUpdate(p);
-          this.io.to(`game:${this.matchId}`).emit("powerup:tick", {
-            type: "poison",
-            username: p.name,
-          });
-          if (p.health <= 0) {
-            p.isAlive = false;
-            this.io.to(`game:${this.matchId}`).emit("player:dead", {
-              username: p.name,
-              gameId: this.matchId,
-            });
-            try {
-              this._checkVictoryCondition();
-            } catch (_) {}
-          }
-        }
-      }
-
-      // Health-over-time boost (paused while standing in sudden-death water)
-      if ((e.healthUntil || 0) > now && (e.healthNextTickAt || 0) <= now) {
-        e.healthNextTickAt = now + POWERUP_EFFECT_TICK_MS;
-        if (!this._isInSuddenDeathWater(p, now)) {
-          const old = p.health;
-          const inc =
-            (POWERUP_HEALTH_REGEN_PER_SEC * POWERUP_EFFECT_TICK_MS) / 1000;
-          p.health = Math.min(p.maxHealth, p.health + inc);
-          if (p.health !== old) {
-            this._maybeBroadcastHealth(p, now);
-            this.io.to(`game:${this.matchId}`).emit("powerup:tick", {
-              type: "health",
-              username: p.name,
-            });
-          }
-        }
-      }
-
-      if ((e.rageUntil || 0) > now && (e.rageNextTickAt || 0) <= now) {
-        e.rageNextTickAt = now + POWERUP_AMBIENT_TICK_MS;
-        this.io.to(`game:${this.matchId}`).emit("powerup:tick", {
-          type: "rage",
-          username: p.name,
-        });
-      }
-
-      if (
-        (e.thorgRageUntil || 0) > now &&
-        (e.thorgRageNextTickAt || 0) <= now
-      ) {
-        e.thorgRageNextTickAt =
-          now + Math.max(700, POWERUP_AMBIENT_TICK_MS - 250);
-        this.io.to(`game:${this.matchId}`).emit("powerup:tick", {
-          type: "thorgRage",
-          username: p.name,
-        });
-      }
-
-      if ((e.gravityUntil || 0) > now && (e.gravityNextTickAt || 0) <= now) {
-        e.gravityNextTickAt = now + POWERUP_AMBIENT_TICK_MS;
-        this.io.to(`game:${this.matchId}`).emit("powerup:tick", {
-          type: "gravityBoots",
-          username: p.name,
-        });
-      }
-    }
+    powerupManager.tickPowerupEffects(this);
   }
 
   _buildPlayerEffectsSnapshot() {
-    const now = Date.now();
-    const out = {};
-    for (const p of this.players.values()) {
-      const e = p.effects || {};
-      out[p.name] = {
-        rage: Math.max(0, (e.rageUntil || 0) - now),
-        health: Math.max(0, (e.healthUntil || 0) - now),
-        shield: Math.max(0, (e.shieldUntil || 0) - now),
-        poison: Math.max(0, (e.poisonUntil || 0) - now),
-        gravityBoots: Math.max(0, (e.gravityUntil || 0) - now),
-        thorgRage: Math.max(0, (e.thorgRageUntil || 0) - now),
-      };
-    }
-    return out;
+    return powerupManager.buildPlayerEffectsSnapshot(this);
   }
 
   /**
@@ -1383,65 +544,14 @@ class GameRoom {
    * @param {object} input
    */
   processPlayerMovement(playerData, input) {
-    // Basic movement processing (expand this later)
-    const speed = 5;
-
-    if (input.left) playerData.x -= speed;
-    if (input.right) playerData.x += speed;
-    if (input.up) playerData.y -= speed;
-    if (input.down) playerData.y += speed;
-
-    // Basic bounds checking (allow slight off-screen margin)
-    const minX = -WORLD_BOUNDS.margin;
-    const maxX = WORLD_BOUNDS.width + WORLD_BOUNDS.margin;
-    const minY = -WORLD_BOUNDS.margin;
-    const maxY = WORLD_BOUNDS.height + WORLD_BOUNDS.margin;
-    playerData.x = Math.max(minX, Math.min(maxX, playerData.x));
-    playerData.y = Math.max(minY, Math.min(maxY, playerData.y));
+    inputManager.processPlayerMovement(playerData, input);
   }
 
   /**
    * Broadcast game state snapshot to all players
    */
   broadcastSnapshot(extraTiming = null) {
-    const snapshot = {
-      timestamp: Date.now(), // legacy field for existing clients
-      players: {},
-      powerups: Array.from(this._powerups.values()).map((pu) => ({
-        id: pu.id,
-        type: pu.type,
-        x: pu.x,
-        y: pu.y,
-        spawnedAt: pu.spawnedAt,
-        expiresAt: pu.expiresAt,
-      })),
-      playerEffects: this._buildPlayerEffectsSnapshot(),
-    };
-    if (extraTiming) {
-      snapshot.tickId = extraTiming.tickId;
-      snapshot.tMono = extraTiming.tMono;
-      snapshot.sentAtWallMs = extraTiming.sentAtWallMs;
-    }
-
-    // Build snapshot of all player positions
-    for (const playerData of this.players.values()) {
-      snapshot.players[playerData.name] = {
-        x: playerData.x,
-        y: playerData.y,
-        flip: !!playerData.flip,
-        animation: playerData.animation || null,
-        health: playerData.health,
-        isAlive: playerData.isAlive,
-        connected: playerData.connected !== false,
-        loaded: playerData.loaded === true,
-      };
-    }
-
-    // Disable compression for frequent movement messages to reduce latency
-    this.io
-      .to(`game:${this.matchId}`)
-      .compress(false)
-      .emit("game:snapshot", snapshot);
+    roomStateManager.broadcastSnapshot(this, extraTiming);
   }
 
   /**
@@ -1486,10 +596,7 @@ class GameRoom {
    * Falls back to the generic "any|<type>" bucket when no exact entry exists.
    */
   _getAttackMaxDist(charClass, attackType) {
-    const key = `${charClass}|${attackType}`;
-    if (ATTACK_MAX_DIST_MAP[key] !== undefined) return ATTACK_MAX_DIST_MAP[key];
-    const fallbackKey = `any|${attackType}`;
-    return ATTACK_MAX_DIST_MAP[fallbackKey] ?? 600;
+    return combatValidation.getAttackMaxDist(charClass, attackType);
   }
 
   /**
@@ -1497,19 +604,7 @@ class GameRoom {
    * Falls back to the player's current position when history is empty.
    */
   _getHistoricalPosition(playerData, targetTimeMs) {
-    const hist = playerData._posHistory;
-    if (!hist || hist.length === 0) return { x: playerData.x, y: playerData.y };
-    let best = hist[hist.length - 1];
-    let bestDiff = Math.abs(best.t - targetTimeMs);
-    for (let i = hist.length - 2; i >= 0; i--) {
-      const diff = Math.abs(hist[i].t - targetTimeMs);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        best = hist[i];
-      }
-      if (hist[i].t < targetTimeMs - 500) break; // no need to search further back
-    }
-    return { x: best.x, y: best.y };
+    return combatValidation.getHistoricalPosition(playerData, targetTimeMs);
   }
 
   /**
@@ -1584,16 +679,14 @@ class GameRoom {
           : now;
       // Clamp to [now - HIT_STALENESS_MAX_MS, now] — reject absurdly old claims
       // but still handle normal network round-trip delay gracefully.
-      const attackTimeClamped = Math.max(
-        now - HIT_STALENESS_MAX_MS,
-        Math.min(now, attackTimeRaw),
-      );
-      const aPos = this._getHistoricalPosition(attacker, attackTimeClamped);
-      const tPos = this._getHistoricalPosition(target, attackTimeClamped);
-      const dx = aPos.x - tPos.x;
-      const dy = aPos.y - tPos.y;
-      const dist = Math.hypot(dx, dy);
-      const maxDist = this._getAttackMaxDist(attacker.char_class, attackType);
+      const { attackTimeClamped, aPos, tPos, dist, maxDist } =
+        combatValidation.evaluateHitRange({
+          attacker,
+          target,
+          attackType,
+          attackTimeRaw,
+          now,
+        });
       if (!isSelf && dist > maxDist) {
         if (this.DEV_TIMING_DIAG) {
           console.warn(
@@ -1613,10 +706,12 @@ class GameRoom {
         attackType === "basic" &&
         (attacker.char_class === "draven" || attacker.char_class === "thorg");
       if (isMeleeFacing) {
-        const facingRight = !attacker.flip; // flip=false → facing right
-        const relX = tPos.x - aPos.x; // positive → target is to the right
-        if (facingRight && relX < -MELEE_FACING_TOLERANCE) return;
-        if (!facingRight && relX > MELEE_FACING_TOLERANCE) return;
+        const validFacing = combatValidation.isMeleeFacingValid({
+          attacker,
+          aPos,
+          tPos,
+        });
+        if (!validFacing) return;
       }
 
       // Basic per-attacker->target rate limit to avoid accidental double submissions
@@ -1765,109 +860,28 @@ class GameRoom {
    * Emit a health-update to all players in the room.
    */
   _broadcastHealthUpdate(playerData) {
-    this.io.to(`game:${this.matchId}`).emit("health-update", {
-      username: playerData.name,
-      health: Math.max(0, Math.round(playerData.health)),
-      maxHealth: Math.max(
-        1,
-        Math.round(playerData.maxHealth || playerData.health || 1),
-      ),
-      gameId: this.matchId,
-    });
-    playerData._lastHealthBroadcastAt = Date.now();
+    healthManager.broadcastHealthUpdate(this, playerData);
   }
 
   /**
    * Conditionally broadcast health if min interval elapsed.
    */
   _maybeBroadcastHealth(playerData, nowTs) {
-    const last = Number(playerData._lastHealthBroadcastAt || 0);
-    if (
-      nowTs - last >= this.REGEN_BROADCAST_MIN_MS ||
-      playerData.health === playerData.maxHealth
-    ) {
-      this._broadcastHealthUpdate(playerData);
-    }
+    healthManager.maybeBroadcastHealth(this, playerData, nowTs);
   }
 
   /**
    * Handle heal proposal from client. Applies clamped heal to target.
    */
   handleHeal(socketId, payload) {
-    try {
-      if (!payload || typeof payload !== "object") return;
-      const sourceName = String(
-        payload.source || payload.attacker || "",
-      ).trim();
-      const targetName = String(payload.target || "").trim();
-      if (!targetName) return;
-
-      const source = sourceName
-        ? Array.from(this.players.values()).find((p) => p.name === sourceName)
-        : null;
-      const target = Array.from(this.players.values()).find(
-        (p) => p.name === targetName,
-      );
-      if (!target || !target.isAlive) return;
-      if (target.connected === false || target.loaded !== true) return;
-
-      // Basic anti-abuse: optionally require same team if source provided
-      if (source && source.team && target.team && source.team !== target.team)
-        return;
-
-      // Compute heal amount: use a conservative default (half of baseDamage) if no ability type specified
-      const ability = String(
-        payload.abilityType || payload.attackType || "heal",
-      ).toLowerCase();
-      let amount = 0;
-      if (source) {
-        // Tie to source offensive power to avoid huge spoofed heals
-        const ref = Math.max(0, Number(source.baseDamage || 0));
-        amount = Math.round(ref * 0.5);
-      } else {
-        amount = 200; // fallback small heal
-      }
-      if (amount <= 0) return;
-
-      const now = Date.now();
-      const old = target.health;
-      target.health = Math.min(target.maxHealth, target.health + amount);
-      if (target.health !== old) {
-        // Mark combat only if healing counts as combat pause (we will mark as combat to pause regen stacking)
-        target.lastCombatAt = now;
-        this._broadcastHealthUpdate(target);
-      }
-    } catch (e) {
-      console.warn(`[GameRoom ${this.matchId}] handleHeal error:`, e?.message);
-    }
+    healthManager.handleHeal(this, payload);
   }
 
   /**
    * Evaluate whether one team has been fully eliminated and finish the game if so.
    */
   _checkVictoryCondition() {
-    if (this.status !== "active") return; // only during active play
-    const aliveByTeam = { team1: 0, team2: 0 };
-    for (const p of this.players.values()) {
-      if (p.isAlive) {
-        if (p.team === "team1") aliveByTeam.team1++;
-        else if (p.team === "team2") aliveByTeam.team2++;
-      }
-    }
-    const t1Alive = aliveByTeam.team1;
-    const t2Alive = aliveByTeam.team2;
-    let winner = null;
-    if (t1Alive === 0 && t2Alive === 0) {
-      // Simultaneous elimination -> draw (null winner)
-      winner = null;
-    } else if (t1Alive === 0) {
-      winner = "team2";
-    } else if (t2Alive === 0) {
-      winner = "team1";
-    }
-    if (winner !== null || (t1Alive === 0 && t2Alive === 0)) {
-      this._finishGame(winner, { t1Alive, t2Alive });
-    }
+    lifecycleManager.checkVictoryCondition(this);
   }
 
   /**
@@ -1875,245 +889,23 @@ class GameRoom {
    * @param {string|null} winnerTeam null means draw
    */
   async _finishGame(winnerTeam, meta = {}) {
-    if (this.status === "finished") return; // idempotent
-    this.status = "finished";
-    console.log(
-      `[GameRoom ${this.matchId}] Game finished. Winner: ${
-        winnerTeam || "draw"
-      }`,
-    );
-    // Stop loop
-    this._loopRunning = false;
-    if (this.gameLoop) {
-      try {
-        clearInterval(this.gameLoop);
-      } catch (_) {}
-      this.gameLoop = null;
-    }
-    // Persist match completion (best-effort)
-    try {
-      await this.db.runQuery(
-        "UPDATE matches SET status = 'completed' WHERE match_id = ?",
-        [this.matchId],
-      );
-    } catch (e) {
-      console.warn(
-        `[GameRoom ${this.matchId}] failed to update match status`,
-        e?.message,
-      );
-    }
-    // Restore lobby-ready state so parties can queue cleanly after returning.
-    try {
-      await this._broadcastParticipantStatus("End Screen");
-
-      const participants = await this.db.runQuery(
-        `SELECT mp.user_id, mp.party_id, u.name
-           FROM match_participants mp
-           JOIN users u ON u.user_id = mp.user_id
-          WHERE mp.match_id = ?`,
-        [this.matchId],
-      );
-      if (participants.length) {
-        const userIds = participants
-          .map((p) => Number(p.user_id))
-          .filter((id) => Number.isFinite(id));
-        if (userIds.length) {
-          const placeholders = userIds.map(() => "?").join(",");
-          await this.db.runQuery(
-            `UPDATE users SET status='online' WHERE user_id IN (${placeholders})`,
-            userIds,
-          );
-        }
-
-        const partyIds = [
-          ...new Set(
-            participants
-              .map((p) => Number(p.party_id))
-              .filter((id) => Number.isFinite(id) && id > 0),
-          ),
-        ];
-        if (partyIds.length) {
-          if (typeof this.db.setPartiesStatus === "function") {
-            await this.db.setPartiesStatus(partyIds, "idle");
-          } else {
-            const ph = partyIds.map(() => "?").join(",");
-            await this.db.runQuery(
-              `UPDATE parties SET status='idle' WHERE party_id IN (${ph})`,
-              partyIds,
-            );
-          }
-        }
-
-        for (const p of participants) {
-          const pid = Number(p.party_id);
-          if (!Number.isFinite(pid) || pid <= 0) continue;
-          this.io.to(`party:${pid}`).emit("status:update", {
-            partyId: pid,
-            name: p.name,
-            status: "online",
-          });
-        }
-      }
-    } catch (e) {
-      console.warn(
-        `[GameRoom ${this.matchId}] failed to reset post-match presence`,
-        e?.message,
-      );
-    }
-    let rewardSummary = [];
-    try {
-      rewardSummary = await this._distributeMatchRewards(winnerTeam);
-    } catch (e) {
-      console.warn(
-        `[GameRoom ${this.matchId}] reward distribution failed`,
-        e?.message,
-      );
-    }
-
-    const finalMeta = { ...(meta || {}), rewards: rewardSummary };
-
-    // Broadcast game over event to clients
-    this.io.to(`game:${this.matchId}`).emit("game:over", {
-      matchId: this.matchId,
-      winnerTeam: winnerTeam, // may be null for draw
-      meta: finalMeta,
-    });
-    // Optional: schedule room cleanup later (allow clients to show UI)
-    setTimeout(() => {
-      try {
-        this.cleanup();
-      } catch (_) {}
-    }, 15000); // 15s grace
+    return lifecycleManager.finishGame(this, winnerTeam, meta);
   }
 
   _ensureRewardBucket(playerData) {
-    if (!playerData || !playerData.name) return null;
-    if (!this.rewardStats) this.rewardStats = new Map();
-    let bucket = this.rewardStats.get(playerData.name);
-    if (!bucket) {
-      bucket = {
-        username: playerData.name,
-        userId: playerData.user_id,
-        team: playerData.team,
-        hits: 0,
-        damage: 0,
-        kills: 0,
-      };
-      this.rewardStats.set(playerData.name, bucket);
-    } else {
-      bucket.userId = playerData.user_id;
-      bucket.team = playerData.team;
-    }
-    return bucket;
+    return rewardManager.ensureRewardBucket(this, playerData);
   }
 
   _recordCombatStat(playerData, delta = {}) {
-    const bucket = this._ensureRewardBucket(playerData);
-    if (!bucket) return;
-    if (delta.hits) bucket.hits += Math.max(0, delta.hits);
-    if (delta.damage) bucket.damage += Math.max(0, Math.round(delta.damage));
-    if (delta.kills) bucket.kills += Math.max(0, delta.kills);
+    rewardManager.recordCombatStat(this, playerData, delta);
   }
 
   async _distributeMatchRewards(winnerTeam) {
-    if (!this.rewardStats) this.rewardStats = new Map();
-    const summary = [];
-    const updates = [];
-
-    for (const playerData of this.players.values()) {
-      const bucket = this._ensureRewardBucket(playerData) || {
-        username: playerData.name,
-        team: playerData.team,
-        hits: 0,
-        damage: 0,
-        kills: 0,
-      };
-      const reward = this._calculateRewards(
-        bucket,
-        winnerTeam,
-        playerData.team,
-      );
-      summary.push({
-        username: bucket.username,
-        team: bucket.team,
-        hits: bucket.hits,
-        damage: bucket.damage,
-        kills: bucket.kills,
-        coinsAwarded: reward.coins,
-        gemsAwarded: reward.gems,
-      });
-      if ((reward.coins > 0 || reward.gems > 0) && playerData.user_id) {
-        updates.push(
-          this.db
-            .runQuery(
-              "UPDATE users SET coins = coins + ?, gems = gems + ? WHERE user_id = ?",
-              [reward.coins, reward.gems, playerData.user_id],
-            )
-            .catch((e) => {
-              console.warn(
-                `[GameRoom ${this.matchId}] Failed to update rewards for ${playerData.name}`,
-                e?.message,
-              );
-            }),
-        );
-      }
-    }
-
-    if (updates.length) {
-      await Promise.all(updates);
-    }
-
-    return summary;
+    return rewardManager.distributeMatchRewards(this, winnerTeam);
   }
 
   _calculateRewards(bucket, winnerTeam, playerTeam) {
-    const hits = bucket?.hits || 0;
-    const damage = bucket?.damage || 0;
-    const kills = bucket?.kills || 0;
-    const isWinner = winnerTeam && playerTeam && winnerTeam === playerTeam;
-
-    const baseCoins = 40;
-    const coinFromHits = hits * 3;
-    const coinFromDamage = Math.floor(damage / 150);
-    const coinFromKills = kills * 30;
-    const winBonus = winnerTeam == null ? 10 : isWinner ? 40 : 15;
-    let coins =
-      baseCoins + coinFromHits + coinFromDamage + coinFromKills + winBonus;
-    let gems = 0;
-    if (isWinner) gems += 20;
-    if (kills >= 1) gems += 10;
-    if (kills >= 2) gems += 30;
-    if (damage >= 10000) gems += 20;
-    if (damage >= 15000) gems += 15;
-
-    const overrides = (() => {
-      try {
-        if (
-          this.runtimeConfig &&
-          typeof this.runtimeConfig.get === "function"
-        ) {
-          return this.runtimeConfig.get() || {};
-        }
-        return this.runtimeConfig || {};
-      } catch (_) {
-        return {};
-      }
-    })();
-    const rewardMultipliers = overrides?.rewardMultipliers || {};
-    const coinMultiplier = Number(rewardMultipliers.coins) || 1;
-    const gemMultiplier = Number(rewardMultipliers.gems) || 1;
-    if (Number.isFinite(coinMultiplier) && coinMultiplier > 0) {
-      coins *= coinMultiplier;
-    }
-    if (Number.isFinite(gemMultiplier) && gemMultiplier > 0) {
-      gems *= gemMultiplier;
-    }
-
-    const minCoins = Number(overrides?.rewardFloor) || 5;
-    const maxCoins = Number(overrides?.rewardCeiling) || 500;
-    coins = Math.max(minCoins, Math.min(maxCoins, Math.round(coins)));
-
-    return { coins, gems };
+    return rewardManager.calculateRewards(this, bucket, winnerTeam, playerTeam);
   }
 }
 

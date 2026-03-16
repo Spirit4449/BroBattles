@@ -1,12 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-
-function capacityFromMode(mode) {
-  const m = Number(mode) || 1;
-  const perTeam = Math.max(1, Math.min(3, m));
-  return { total: perTeam * 2, perTeam };
-}
+const { capacityFromMode } = require("./constants");
 
 function randomString(length, numbersOnly = false) {
   const letters = numbersOnly
@@ -14,7 +9,7 @@ function randomString(length, numbersOnly = false) {
     : "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   return Array.from(
     { length },
-    () => letters[Math.floor(Math.random() * letters.length)]
+    () => letters[Math.floor(Math.random() * letters.length)],
   ).join("");
 }
 
