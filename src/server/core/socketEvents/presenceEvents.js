@@ -6,6 +6,7 @@ function registerPresenceEvents(
     mm,
     gameHub,
     setPresence,
+    partyQueueTransition,
     userSockets,
     pendingOffline,
     DISCONNECT_GRACE_MS,
@@ -49,36 +50,12 @@ function registerPresenceEvents(
       pendingOffline.set(uname, timer);
     }
 
-    try {
-      const pid = await db.getPartyIdByName(uname);
-      const liveMatches = await db.runQuery(
-        `SELECT m.match_id FROM matches m
-         JOIN match_participants mp ON m.match_id = mp.match_id
-         JOIN users u ON u.user_id = mp.user_id
-         WHERE u.name = ? AND m.status = 'live'`,
-        [uname],
-      );
-
-      if (liveMatches.length > 0) {
-        console.log(
-          `[transition] user=${uname} moving to live game, not canceling`,
-        );
-        return;
-      }
-
-      await mm.handleDisconnect(uname);
-      if (pid) {
-        io.to(`party:${pid}`).emit("match:cancelled", {
-          reason: `${uname} disconnected or went offline`,
-        });
-        console.log(`[cancel][emit] bye user=${uname} party=${pid}`);
-      } else {
-        socket.emit("match:cancelled", {
-          reason: `${uname} disconnected or went offline`,
-        });
-        console.log(`[cancel][emit] bye-solo user=${uname}`);
-      }
-    } catch (_) {}
+    await partyQueueTransition.cancelForDisconnectedUser({
+      username: uname,
+      socket,
+      reason: `${uname} disconnected or went offline`,
+      allowSoloEmit: true,
+    });
   });
 
   socket.on("disconnect", async () => {
@@ -131,28 +108,12 @@ function registerPresenceEvents(
       pendingOffline.set(username, timer);
     }
 
-    try {
-      const liveMatches = await db.runQuery(
-        `SELECT m.match_id FROM matches m
-         JOIN match_participants mp ON m.match_id = mp.match_id
-         JOIN users u ON u.user_id = mp.user_id
-         WHERE u.name = ? AND m.status = 'live'`,
-        [username],
-      );
-
-      if (liveMatches.length === 0) {
-        await mm.handleDisconnect(username);
-        const pid = await db.getPartyIdByName(username);
-        if (pid) {
-          io.to(`party:${pid}`).emit("match:cancelled");
-          console.log(
-            `[cancel][emit] disconnect user=${username} party=${pid}`,
-          );
-        } else {
-          console.log(`[cancel] disconnect user=${username} solo`);
-        }
-      }
-    } catch (_) {}
+    await partyQueueTransition.cancelForDisconnectedUser({
+      username,
+      socket: null,
+      reason: null,
+      allowSoloEmit: false,
+    });
   });
 }
 

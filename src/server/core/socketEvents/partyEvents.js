@@ -1,8 +1,6 @@
-const { emitRoster, selectPartyById } = require("../../helpers/party");
-
 function registerPartyEvents(
   socket,
-  { db, io, mm, setPresence, PARTY_STATUS },
+  { db, io, mm, partyPresence, partyState, partyQueueTransition, PARTY_STATUS },
 ) {
   socket.on("ready:status", async (data) => {
     try {
@@ -20,22 +18,20 @@ function registerPartyEvents(
       const partyStatus = String(partyRows[0]?.status || "").toLowerCase();
       if (partyStatus === PARTY_STATUS.LIVE) return;
 
-      await db.setUserStatus(uname, isReady ? "ready" : "online");
-      io.to(`party:${partyId}`).emit("status:update", {
+      await partyPresence.setUserPresence(
+        uname,
+        isReady ? "ready" : "online",
         partyId,
-        name: uname,
-        status: isReady ? "ready" : "online",
-      });
+      );
 
       if (!isReady) {
         if (
           partyStatus === PARTY_STATUS.QUEUED ||
           partyStatus === PARTY_STATUS.READY_CHECK
         ) {
-          try {
-            await mm.queueLeave({ partyId, userId: null });
-          } catch (_) {}
-          io.to(`party:${partyId}`).emit("match:cancelled", {
+          await partyQueueTransition.cancelPartyQueue({
+            partyId,
+            userId: null,
             reason: `${uname} cancelled matchmaking`,
           });
         }
@@ -75,10 +71,10 @@ function registerPartyEvents(
     if (!uname || !data.partyId) return;
 
     try {
-      await db.runQuery("UPDATE parties SET mode = ? WHERE party_id = ?", [
-        data.selectedValue,
-        data.partyId,
-      ]);
+      await partyState.setPartyMode({
+        partyId: data.partyId,
+        mode: data.selectedValue,
+      });
 
       io.to(`party:${data.partyId}`).emit("mode-change", {
         partyId: data.partyId,
@@ -101,10 +97,10 @@ function registerPartyEvents(
     if (!uname || !data.partyId) return;
 
     try {
-      await db.runQuery("UPDATE parties SET map = ? WHERE party_id = ?", [
-        data.selectedValue,
-        data.partyId,
-      ]);
+      await partyState.setPartyMap({
+        partyId: data.partyId,
+        map: data.selectedValue,
+      });
 
       io.to(`party:${data.partyId}`).emit("map-change", {
         partyId: data.partyId,
@@ -151,18 +147,17 @@ function registerPartyEvents(
       ]);
 
       if (partyId) {
-        await setPresence(uname, "Selecting Character", partyId);
-        setTimeout(() => {
-          void setPresence(uname, "online", partyId);
-        }, 1500);
+        await partyPresence.setTransientPresence({
+          name: uname,
+          status: "Selecting Character",
+          restoreStatus: "online",
+          partyId,
+          durationMs: 1500,
+        });
       }
 
       if (partyId) {
-        const party = await selectPartyById(db, partyId);
-        if (party) {
-          const members = await db.fetchPartyMembersDetailed(partyId);
-          await emitRoster(io, partyId, party, members);
-        }
+        await partyPresence.emitPartyRosterById(partyId);
       }
 
       console.log(`[party:${partyId ?? "-"}] ${uname} selected ${charClass}`);

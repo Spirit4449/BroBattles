@@ -14,6 +14,13 @@ const {
   registerMatchmakingEvents,
 } = require("./socketEvents/matchmakingEvents");
 const { registerPresenceEvents } = require("./socketEvents/presenceEvents");
+const {
+  createPartyPresenceService,
+} = require("../services/partyPresenceService");
+const { createPartyStateService } = require("../services/partyStateService");
+const {
+  createPartyQueueTransitionService,
+} = require("../services/partyQueueTransitionService");
 
 // Presence tracking (multi-tab safe)
 const userSockets = new Map(); // name -> Set<socketId>
@@ -51,20 +58,13 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
     gameHub, // Pass game hub to matchmaking
     teamSizeByMode: TEAM_SIZE_BY_MODE,
   });
-  // unified presence setter
-  async function setPresence(name, status, partyId = null) {
-    try {
-      await db.setUserStatus(name, status);
-      if (!partyId) partyId = await db.getPartyIdByName(name);
-      if (partyId) {
-        io.to(`party:${partyId}`).emit("status:update", {
-          partyId,
-          name,
-          status,
-        });
-      }
-    } catch (_) {}
-  }
+  const partyPresence = createPartyPresenceService({ db, io });
+  const partyState = createPartyStateService({ db, io });
+  const partyQueueTransition = createPartyQueueTransitionService({
+    db,
+    io,
+    mm,
+  });
 
   // auth: attach user row from signed cookie (middleware)
   io.use(async (socket, next) => {
@@ -124,7 +124,11 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
       try {
         // mark online if not already and emit to others
         const partyId = await db.getPartyIdByName(username);
-        await setPresence(username, "online", partyId || null);
+        await partyPresence.setUserPresence(
+          username,
+          "online",
+          partyId || null,
+        );
         // auto-join room
         if (partyId) {
           socket.join(`party:${partyId}`);
@@ -145,7 +149,9 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
       db,
       io,
       mm,
-      setPresence,
+      partyPresence,
+      partyState,
+      partyQueueTransition,
       PARTY_STATUS,
     });
 
@@ -160,7 +166,8 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
       io,
       mm,
       gameHub,
-      setPresence,
+      setPresence: partyPresence.setUserPresence,
+      partyQueueTransition,
       userSockets,
       pendingOffline,
       DISCONNECT_GRACE_MS,
@@ -219,29 +226,11 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
     },
     // Cancel any active matchmaking when party composition changes (e.g., someone joins)
     async cancelPartyQueue(partyId, userId = null) {
-      try {
-        if (partyId) {
-          try {
-            await mm.queueLeave({ partyId, userId: null });
-          } catch (_) {}
-          io.to(`party:${partyId}`).emit("match:cancelled", {
-            reason: `A new user joined the party`,
-          });
-          console.log(
-            `[cancel][party] composition changed -> cancelled party ${partyId}`,
-          );
-        }
-        if (userId) {
-          try {
-            await mm.queueLeave({ partyId: null, userId });
-            console.log(
-              `[cancel][solo] user ${userId} solo ticket, if any, removed`,
-            );
-          } catch (_) {}
-        }
-      } catch (e) {
-        console.warn("cancelPartyQueue failed:", e?.message);
-      }
+      await partyQueueTransition.cancelPartyQueue({
+        partyId,
+        userId,
+        reason: "A new user joined the party",
+      });
     },
   };
 }

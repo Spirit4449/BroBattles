@@ -1,16 +1,13 @@
 const path = require("path");
 const bcrypt = require("bcrypt");
 const { capacityFromMode } = require("../helpers/utils");
-const {
-  selectPartyById,
-  emitRoster,
-  updateOrDeleteParty,
-} = require("../helpers/party");
+const { selectPartyById, emitRoster } = require("../helpers/party");
 const { getUserLiveMatch } = require("../helpers/match");
-const { PARTY_STATUS } = require("../helpers/constants");
+const { createPartyStateService } = require("../services/partyStateService");
 
 function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
   const { getOrCreateCurrentUser, requireCurrentUser, isGuest } = auth;
+  const partyState = createPartyStateService({ db, io });
 
   app.get("/partyfull", (req, res) => {
     res.sendFile(path.join(pageRoot, "Errors", "partyfull.html"));
@@ -39,7 +36,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
 
       const rows = await db.runQuery(
         "SELECT party_id FROM party_members WHERE name = ? LIMIT 1",
-        [user?.name]
+        [user?.name],
       );
       if (rows.length) return res.redirect(`/party/${rows[0].party_id}`);
     } catch (e) {
@@ -56,7 +53,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
 
       const rows = await db.runQuery(
         "SELECT 1 FROM parties WHERE party_id = ? LIMIT 1",
-        [req.params.partyid]
+        [req.params.partyid],
       );
       if (!rows.length)
         return res.sendFile(path.join(distDir, "Errors", "partynotfound.html"));
@@ -70,7 +67,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
     try {
       const rows = await db.runQuery(
         "SELECT 1 FROM matches WHERE match_id = ? LIMIT 1",
-        [req.params.matchid]
+        [req.params.matchid],
       );
       if (!rows.length)
         return res.sendFile(path.join(distDir, "Errors", "gamenotfound.html"));
@@ -90,7 +87,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
       if (userNormalized && typeof userNormalized.char_levels === "string") {
         try {
           userNormalized.char_levels = JSON.parse(
-            userNormalized.char_levels || "{}"
+            userNormalized.char_levels || "{}",
           );
         } catch (_) {
           userNormalized.char_levels = {};
@@ -98,7 +95,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
       }
       const partyRows = await db.runQuery(
         "SELECT party_id FROM party_members WHERE name = ? LIMIT 1",
-        [userNormalized?.name]
+        [userNormalized?.name],
       );
 
       // Check for live match
@@ -142,19 +139,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
       if (!user) return res.status(401).json({ error: "Not authenticated" });
       const username = user.name;
 
-      const partyId = await db.withTransaction(async (conn, q) => {
-        await q("DELETE FROM party_members WHERE name = ?", [username]);
-        const insertParty = await q(
-          "INSERT INTO parties (status, mode, map) VALUES (?, ?, ?)",
-          [PARTY_STATUS.IDLE, 1, 1]
-        );
-        const newPartyId = insertParty.insertId;
-        await q(
-          "INSERT INTO party_members (party_id, name, team) VALUES (?, ?, ?)",
-          [newPartyId, username, "team1"]
-        );
-        return newPartyId;
-      });
+      const partyId = await partyState.createPartyForUser(username);
 
       console.log(`[party] Party ${partyId} created by ${username}`);
       res.status(201).json({ partyId });
@@ -175,138 +160,36 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
     if (!Number.isFinite(partyId) || partyId <= 0) {
       return res.status(400).json({ error: "partyId is required" });
     }
-    let conn;
     try {
-      conn = await db.pool.getConnection();
-      await conn.beginTransaction();
-
-      const [partyRows] = await conn.query(
-        "SELECT * FROM parties WHERE party_id = ? FOR UPDATE",
-        [partyId]
-      );
-      if (!partyRows.length) {
-        await conn.rollback();
-        return res
-          .status(404)
-          .json({ error: "Party not found", redirect: "/partynotfound" });
+      const result = await partyState.joinPartyAndGetData({
+        partyId,
+        username,
+      });
+      if (!result.ok) {
+        return res.status(result.statusCode || 500).json(result.payload || {});
       }
-      const party = partyRows[0];
-      const { total: totalCap, perTeam: perTeamCap } = capacityFromMode(
-        party.mode
-      );
-
-      const [existing] = await conn.query(
-        "SELECT team FROM party_members WHERE party_id = ? AND name = ? LIMIT 1",
-        [partyId, username]
-      );
-      let joinedNow = false;
-
-      if (!existing.length) {
-        const [[{ cnt: currentCount }]] = await conn.query(
-          "SELECT COUNT(*) AS cnt FROM party_members WHERE party_id = ? FOR UPDATE",
-          [partyId]
-        );
-        if (currentCount >= totalCap) {
-          await conn.rollback();
-          console.log(`[party] join-reject`, {
-            username,
-            partyId,
-            currentCount,
-            totalCap,
-          });
-          return res
-            .status(409)
-            .json({ error: "Party is full", redirect: "/partyfull" });
-        }
-
-        const [teamCounts] = await conn.query(
-          "SELECT team, COUNT(*) AS c FROM party_members WHERE party_id = ? GROUP BY team FOR UPDATE",
-          [partyId]
-        );
-        const map = new Map(teamCounts.map((r) => [r.team, Number(r.c)]));
-        const team1Count = map.get("team1") || 0;
-        const team2Count = map.get("team2") || 0;
-
-        let chosen = team1Count > team2Count ? "team2" : "team1";
-        if (
-          (chosen === "team1" && team1Count >= perTeamCap) ||
-          (chosen === "team2" && team2Count >= perTeamCap)
-        ) {
-          chosen = chosen === "team1" ? "team2" : "team1";
-        }
-        if (
-          (chosen === "team1" && team1Count >= perTeamCap) ||
-          (chosen === "team2" && team2Count >= perTeamCap)
-        ) {
-          await conn.rollback();
-          return res
-            .status(409)
-            .json({ error: "Party is full", redirect: "/partyfull" });
-        }
-
-        await conn.query(
-          "DELETE FROM party_members WHERE name = ? AND party_id <> ?",
-          [username, partyId]
-        );
-        try {
-          await conn.query(
-            "INSERT INTO party_members (party_id, name, team, joined_at) VALUES (?, ?, ?, NOW())",
-            [partyId, username, chosen]
-          );
-          console.log(`[party] join`, { username, partyId, team: chosen });
-          joinedNow = true;
-        } catch (e) {
-          if (!(e && e.code === "ER_DUP_ENTRY")) {
-            await conn.rollback();
-            return res.status(500).json({ error: "Could not join party" });
-          }
-        }
-      } else {
-        console.log(`[party] already-in`, { username, partyId });
-      }
-
-      await conn.query(
-        "UPDATE party_members SET last_seen = NOW() WHERE party_id = ? AND name = ?",
-        [partyId, username]
-      );
-
-      const [memberRows] = await conn.query(
-        `SELECT pm.name, pm.team, u.char_class, u.status
-           FROM party_members pm
-           LEFT JOIN users u ON u.name = pm.name
-          WHERE pm.party_id = ?
-          ORDER BY pm.joined_at, pm.name`,
-        [partyId]
-      );
-
-      await conn.commit();
 
       await req.app.locals.socketApi.moveUserSocketToParty(username, partyId);
       // If a new member joined, cancel any active matchmaking for this party (and their solo ticket if any)
-      if (joinedNow) {
+      if (result.joinedNow) {
         try {
           await req.app.locals.socketApi.cancelPartyQueue(
             partyId,
-            user.user_id
+            user.user_id,
           );
         } catch (_) {}
       }
-      await emitRoster(io, partyId, party, memberRows);
+      await emitRoster(io, partyId, result.party, result.members);
 
       res.json({
-        party,
-        capacity: { total: totalCap, perTeam: perTeamCap },
-        members: memberRows,
+        party: result.party,
+        capacity: result.capacity,
+        members: result.members,
         viewer: username,
       });
     } catch (err) {
-      try {
-        if (conn) await conn.rollback();
-      } catch {}
       console.error("[party] /partydata error", err);
       res.status(500).json({ error: "Internal error" });
-    } finally {
-      if (conn) conn.release();
     }
   });
 
@@ -318,7 +201,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
       if (!partyId) return res.status(400).json({ error: "Party ID required" });
       const membership = await db.runQuery(
         "SELECT 1 FROM party_members WHERE name = ? AND party_id = ? LIMIT 1",
-        [user.name, partyId]
+        [user.name, partyId],
       );
       if (!membership.length)
         return res.status(403).json({ error: "Not a member of this party" });
@@ -348,24 +231,20 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
       if (!partyId) {
         const rows = await db.runQuery(
           "SELECT party_id FROM party_members WHERE name = ? LIMIT 1",
-          [username]
+          [username],
         );
         if (!rows.length)
           return res.json({ success: true, left: false, deleted: false });
         partyId = rows[0].party_id;
       }
-      const del = await db.runQuery(
-        "DELETE FROM party_members WHERE party_id = ? AND name = ?",
-        [partyId, username]
-      );
-      if (!del?.affectedRows)
+      const leaveResult = await partyState.leaveParty({ partyId, username });
+      if (!leaveResult.left)
         return res.json({ success: true, left: false, deleted: false });
       await req.app.locals.socketApi.moveUserSocketToLobby(username);
-      const deleted = await updateOrDeleteParty(io, db, partyId);
       console.log(
-        `[party] ${username} left party ${partyId}, party deleted: ${deleted}`
+        `[party] ${username} left party ${partyId}, party deleted: ${leaveResult.deleted}`,
       );
-      res.json({ success: true, left: true, deleted });
+      res.json({ success: true, left: true, deleted: leaveResult.deleted });
     } catch (e) {
       console.error("/leave-party", e);
       res.status(500).json({ error: "Internal error" });
@@ -396,7 +275,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
       // Verify user is participant in this match
       const participantRows = await db.runQuery(
         "SELECT mp.*, m.mode, m.map, m.status FROM match_participants mp JOIN matches m ON m.match_id = mp.match_id WHERE mp.match_id = ? AND mp.user_id = ?",
-        [matchId, user.user_id]
+        [matchId, user.user_id],
       );
 
       if (!participantRows.length) {
@@ -422,7 +301,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
            FROM match_participants mp
            JOIN users u ON u.user_id = mp.user_id
           WHERE mp.match_id = ?`,
-        [matchId]
+        [matchId],
       );
 
       // Prepare game data
@@ -518,7 +397,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
           `UPDATE users
              SET name = ?, password = ?, expires_at = NULL
            WHERE user_id = ?`,
-          [username, hash, user.user_id]
+          [username, hash, user.user_id],
         );
         if (!result || result.affectedRows !== 1) {
           return res.status(409).json({
@@ -537,7 +416,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
       res.cookie(
         "display_name",
         username,
-        app.locals?.DISPLAY_COOKIE_OPTS || {}
+        app.locals?.DISPLAY_COOKIE_OPTS || {},
       );
       return res.status(201).json({ success: true, username });
     } catch (error) {
@@ -561,7 +440,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
       }
       const rows = await db.runQuery(
         "SELECT user_id, name, password FROM users WHERE name = ? AND expires_at IS NULL LIMIT 1",
-        [username]
+        [username],
       );
       if (rows.length === 0) {
         return res
@@ -582,7 +461,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
       res.cookie(
         "display_name",
         user.name,
-        app.locals?.DISPLAY_COOKIE_OPTS || {}
+        app.locals?.DISPLAY_COOKIE_OPTS || {},
       );
       return res
         .status(200)
