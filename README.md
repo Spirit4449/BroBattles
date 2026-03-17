@@ -82,11 +82,9 @@ npm start
 ### Getting Started
 
 1. **Open Your Browser**
-
    - Navigate to `http://localhost:3002` (or your configured port)
 
 2. **Create an Account** (Optional)
-
    - Click "Sign Up" to create a persistent account
    - Or continue as a guest (automatically created)
 
@@ -190,6 +188,12 @@ Run the development server with hot reloading:
 npm run dev
 ```
 
+Build production bundles:
+
+```bash
+npm run build
+```
+
 The project structure follows:
 
 - `src/` - Client-side game code and server code
@@ -197,9 +201,19 @@ The project structure follows:
 - `src/server/` - Server-side logic (matchmaking, game rooms, routes)
 - `server/migrations/` - Database migrations
 
+## Architecture and Contribution Docs
+
+- Architecture map: `docs/ARCHITECTURE_MAP.md`
+- Contributor guide with exact "add character/map/powerup" instructions: `docs/CONTRIBUTING.md`
+- Repository coding constraints: `.github/copilot-instructions.md`
+
 ## Contributing
 
-Contributions are welcome! Please follow the existing code patterns and naming conventions outlined in `.github/copilot-instructions.md`.
+Contributions are welcome. Before opening a PR:
+
+1. Read `docs/ARCHITECTURE_MAP.md`.
+2. Follow `docs/CONTRIBUTING.md` checklists.
+3. Run `npm run build` and verify gameplay paths affected by your change.
 
 ## License
 
