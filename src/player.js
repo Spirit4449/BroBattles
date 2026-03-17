@@ -724,7 +724,8 @@ export function handlePlayerMovement(scene) {
     !!player.body.touching.right ||
     !!player.body.blocked.left ||
     !!player.body.blocked.right;
-  const touchingLeftNow = !!player.body.touching.left || !!player.body.blocked.left;
+  const touchingLeftNow =
+    !!player.body.touching.left || !!player.body.blocked.left;
   const touchingRightNow =
     !!player.body.touching.right || !!player.body.blocked.right;
   const nowWallTs = Date.now();
@@ -946,11 +947,7 @@ export function handlePlayerMovement(scene) {
     wallJump(wallSide, awayPressed); // Calls walljump
     scene.sound.play("sfx-walljump", { volume: 4 });
   }
-  if (
-    !dead &&
-    (touchingLeftNow || touchingRightNow) &&
-    !isAttacking
-  ) {
+  if (!dead && (touchingLeftNow || touchingRightNow) && !isAttacking) {
     player.anims.play(resolveAnimKey(scene, currentCharacter, "sliding"), true); // Plays sliding animation
   }
 
@@ -962,10 +959,7 @@ export function handlePlayerMovement(scene) {
   updateWallSlideAudio(isWallSliding);
 
   // Wall slide: when touching a wall and airborne, limit fall speed for a slower slide
-  if (
-    !player.body.touching.down &&
-    (touchingLeftNow || touchingRightNow)
-  ) {
+  if (!player.body.touching.down && (touchingLeftNow || touchingRightNow)) {
     if (player.body.velocity.y > wallSlideMaxFallSpeed) {
       player.setVelocityY(wallSlideMaxFallSpeed);
     }
