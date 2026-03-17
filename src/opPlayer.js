@@ -1,6 +1,5 @@
 // opplayer.js
 
-import { base, platform } from "./maps/lushyPeaks";
 import {
   getTextureKey,
   resolveAnimKey,

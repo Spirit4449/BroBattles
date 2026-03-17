@@ -5,7 +5,25 @@ import {
   positionSpawn,
   getMapBgAsset,
   getMapObjects,
+  normalizeMapId,
 } from "./maps/manifest";
+import { createGameHudController } from "./hud/gameHudController";
+import { createGameOverScreenController } from "./hud/gameOverScreenController";
+import { createSnapshotBuffer } from "./match/snapshotBuffer";
+import { createMatchCoordinator } from "./match/matchCoordinator";
+import { preloadGameAssets } from "./gameScene/preloadGameAssets";
+import { renderPoisonWater } from "./gameScene/poisonWaterRenderer";
+import { updateDynamicCamera } from "./gameScene/cameraDynamics";
+import { createLocalInputSync } from "./gameScene/localInputSync";
+import { processSnapshotInterpolation } from "./gameScene/networkInterpolation";
+import { updateHealthBars } from "./gameScene/healthBarUpdater";
+import {
+  POWERUP_TYPES,
+  POWERUP_ASSET_DIR,
+  POWERUP_COLORS,
+  createPowerupTickSounds,
+} from "./powerups/powerupConfig";
+import { createPowerupRenderer } from "./powerups/powerupRenderer";
 import {
   createPlayer,
   player,
@@ -37,32 +55,9 @@ window.Phaser = Phaser;
 
 // Path to get assets
 const staticPath = "/assets";
-const BATTLE_HELP_DISMISSED_KEY = "bb_hide_keybind_hud_v1";
-const TEAM_HUD_ROWS = new Map(); // name -> { row }
-const POWERUP_TYPES = ["rage", "health", "shield", "poison", "gravityBoots"];
-// Asset folder naming follows the requested convention under /assets/powerups/[name]/
-const POWERUP_ASSET_DIR = {
-  rage: "rage",
-  health: "health",
-  shield: "shield",
-  poison: "poison",
-  gravityBoots: "gravity-boots",
-};
-const POWERUP_COLORS = {
-  rage: 0xa855f7,
-  health: 0x34d399,
-  shield: 0xf97316,
-  poison: 0xfacc15,
-  gravityBoots: 0xef4444,
-};
-
-const POWERUP_TICK_SOUNDS = {
-  poison: { key: "pu-tick-poison", options: { volume: 0.28 } },
-  health: { key: "pu-tick-health", options: { volume: 0.2 } },
-  rage: { key: "pu-tick-rage", options: { volume: 0.18 } },
-  gravityBoots: { key: "pu-tick-gravityBoots", options: { volume: 0.2 } },
-  ...getCharacterEffectTickSounds(),
-};
+const POWERUP_TICK_SOUNDS = createPowerupTickSounds(
+  getCharacterEffectTickSounds(),
+);
 
 let __booted = false;
 function onReady(fn) {
@@ -138,38 +133,128 @@ const SHIELD_IMPACT_QUEUE = [];
 const LAST_SHIELD_ACTIVE_AT = Object.create(null);
 const POST_MATCH_REWARD_STORAGE_KEY = "bb_post_match_rewards_v1";
 
-// Movement throttling variables
-let lastMovementSent = 0;
-const movementThrottleMs = 20; // ~60Hz movement updates for snappier remote view
-let lastPlayerState = { x: 0, y: 0, flip: false, animation: null };
+const localInputSync = createLocalInputSync({
+  socket,
+  getAmmoSyncState,
+  throttleMs: 20,
+});
 
 // Server snapshot interpolation
-let stateActive = false; // set true once we start receiving server snapshots
-const stateBuffer = []; // queue of { tMono, tickId, players: { [username]: {...} } }
-const MAX_STATE_BUFFER = 120; // cushion (~6s at 20 Hz) for safety
-let interpDelayMs = 150; // slightly larger to absorb jitter (will tune later)
-// Monotonic timing alignment
-let serverMonoOffset = 0; // server tMono - client performance.now()
-let monoCalibrated = false;
-const SNAP_INTERVAL_MS = 50; // 20 Hz cadence from server
-// Diagnostics
-let snapshotSpacings = []; // recent spacing deltas
-let lastDiagLogMono = 0;
-
-// ---- Adaptive interpolation / PLL variables (Task 4) ----
-let renderClockMono = null; // our smoothed render timeline in server-monotonic domain
-let lastFramePerfNow = null; // perf.now of previous frame for delta calc
-const MIN_INTERP_DELAY = 120;
-const MAX_INTERP_DELAY = 300;
-// EMA of snapshot spacing & jitter (absolute deviation)
-let spacingEma = null;
-let jitterEma = null;
-const SPACING_EMA_ALPHA = 0.12; // responsiveness of spacing/jitter tracking
-// Debug diag throttle
-let lastAdaptivePrint = 0;
+const snapshotBuffer = createSnapshotBuffer({
+  maxStateBuffer: 120,
+  initialInterpDelayMs: 150,
+  minInterpDelayMs: 120,
+  maxInterpDelayMs: 300,
+  snapIntervalMs: 50,
+  spacingEmaAlpha: 0.12,
+});
 
 // Game scene reference
 let gameScene = null;
+
+// matchCoordinator is declared here and instantiated after hud/snapshotBuffer below.
+// It is created at module scope so all state setters close over the let variables.
+let matchCoordinator = null;
+
+const hud = createGameHudController({
+  getGameData: () => gameData,
+  getUsername: () => username,
+  getMapBgAsset,
+  onEnableInput: () => {
+    try {
+      if (gameScene && gameScene.input?.keyboard) {
+        gameScene.input.keyboard.enabled = true;
+      }
+    } catch (_) {}
+  },
+});
+
+const gameOverScreenController = createGameOverScreenController({
+  getGameData: () => gameData,
+  getUsername: () => username,
+  rewardStorageKey: POST_MATCH_REWARD_STORAGE_KEY,
+});
+
+// Wire all server socket event handling for the live match.
+// Function declarations below (startSuddenDeathMusic, etc.) are hoisted so this
+// can safely reference them even though they appear later in the file.
+matchCoordinator = createMatchCoordinator({
+  socket,
+  getGameData: () => gameData,
+  getUsername: () => username,
+  getJoinPayload: () => __joinPayload,
+  getGameScene: () => gameScene,
+  getPlayer: () => player,
+  getGameInitialized: () => gameInitialized,
+  setGameInitialized: (v) => {
+    gameInitialized = v;
+  },
+  getHasJoined: () => hasJoined,
+  setHasJoined: (v) => {
+    hasJoined = v;
+  },
+  getJoinInFlight: () => joinInFlight,
+  setJoinInFlight: (v) => {
+    joinInFlight = v;
+  },
+  getIsLiveGame: () => isLiveGame,
+  setIsLiveGame: (v) => {
+    isLiveGame = v;
+  },
+  getGameEnded: () => gameEnded,
+  setGameEnded: (v) => {
+    gameEnded = v;
+  },
+  setStartingPhase: (v) => {
+    startingPhase = v;
+  },
+  setPendingAuthoritativeLocalState: (v) => {
+    pendingAuthoritativeLocalState = v;
+  },
+  getSpawnVersion: () => SPAWN_VERSION,
+  setSpawnVersion: (v) => {
+    SPAWN_VERSION = v;
+  },
+  serverSpawnIndex: SERVER_SPAWN_INDEX,
+  setLatestPowerups: (v) => {
+    latestPowerups = v;
+  },
+  setLatestPlayerEffects: (v) => {
+    latestPlayerEffects = v;
+  },
+  getLatestPlayerEffects: () => latestPlayerEffects,
+  opponentPlayers,
+  teamPlayers,
+  pendingActionsQueue: PENDING_ACTIONS,
+  powerupCollectQueue: POWERUP_COLLECT_QUEUE,
+  shieldImpactQueue: SHIELD_IMPACT_QUEUE,
+  lastHealthByPlayer: LAST_HEALTH_BY_PLAYER,
+  lastShieldActiveAt: LAST_SHIELD_ACTIVE_AT,
+  snapshotBuffer,
+  hud,
+  positionSpawn,
+  OpPlayer,
+  handleRemoteAttack,
+  powerupTickSounds: POWERUP_TICK_SOUNDS,
+  onInitializePlayers: initializePlayers,
+  onTrySendReadyAck: trySendReadyAck,
+  onTrackShieldEffects: trackShieldEffectsPresence,
+  onStartSuddenDeathMusic: startSuddenDeathMusic,
+  onStopSuddenDeathMusic: stopSuddenDeathMusic,
+  onPlayMatchEndSound: playMatchEndSound,
+  onShowGameOverScreen: showGameOverScreen,
+});
+
+// Ensure listeners are not kept around when the tab navigates away.
+window.addEventListener(
+  "beforeunload",
+  () => {
+    try {
+      matchCoordinator?.dispose();
+    } catch (_) {}
+  },
+  { once: true },
+);
 
 function startSuddenDeathMusic() {
   if (!gameScene || !gameScene.sound) return;
@@ -319,7 +404,8 @@ async function initializeGame() {
 
     // 1) Register listeners before join
     console.log("Setting up game listeners");
-    setupGameEventListeners();
+    matchCoordinator.dispose();
+    matchCoordinator.register();
 
     // 2) Enrich payload with gameId if provided
     if (gameData?.gameId) __joinPayload.gameId = Number(gameData.gameId);
@@ -338,748 +424,43 @@ async function initializeGame() {
 // Battle Start Overlay (static DOM in game.html)
 // -----------------------------
 function showBattleStartOverlay(players) {
-  const root = document.getElementById("battle-start-overlay");
-  if (!root) return null;
-
-  // Background image based on map
-  const bg = document.getElementById("bs-bg");
-  if (bg) {
-    bg.src = getMapBgAsset(gameData?.map);
-  }
-
-  // Header labels
-  const modeEl = document.getElementById("bs-mode");
-  if (modeEl)
-    modeEl.textContent = `${gameData?.mode || 1}v${gameData?.mode || 1}`;
-  const mapEl = document.getElementById("bs-map");
-  if (mapEl) mapEl.textContent = `Map ${gameData?.map || 1}`;
-
-  // Columns
-  const yourCol = document.getElementById("bs-your");
-  const oppCol = document.getElementById("bs-opp");
-  if (yourCol) yourCol.innerHTML = "";
-  if (oppCol) oppCol.innerHTML = "";
-  const yourTeam = (players || []).filter((p) => p.team === gameData?.yourTeam);
-  const oppTeam = (players || []).filter((p) => p.team !== gameData?.yourTeam);
-
-  const appendTile = (container, p) => {
-    if (!container) return;
-    const tile = document.createElement("div");
-    tile.className = "bs-player";
-    const img = document.createElement("img");
-    const cls = (p?.char_class || "ninja").toLowerCase();
-    img.src = `/assets/${cls}/body.webp`;
-    img.alt = cls;
-    const name = document.createElement("div");
-    name.className = "bs-name";
-    const nm = p?.name || "Player";
-    name.textContent = nm + (nm === username ? " (You)" : "");
-    tile.appendChild(img);
-    tile.appendChild(name);
-    container.appendChild(tile);
-  };
-
-  yourTeam.forEach((p) => appendTile(yourCol, p));
-  oppTeam.forEach((p) => appendTile(oppCol, p));
-
-  // Reset countdown label
-  const c = document.getElementById("countdown-display");
-  if (c) c.textContent = "3";
-
-  // Show and fade-in
-  root.classList.remove("hidden");
-  root.setAttribute("aria-hidden", "false");
-  const wrap = root.querySelector(".bs-wrap");
-  if (wrap) requestAnimationFrame(() => (wrap.style.opacity = "1"));
-  return root;
+  return hud.showBattleStartOverlay(players);
 }
 
 function initTimerHud() {
-  const hud = document.getElementById("game-timer-hud");
-  if (hud) hud.classList.add("hidden");
+  return hud.initTimerHud();
 }
 
 function updateTimerHud(remainingMs, suddenDeath) {
-  const hud = document.getElementById("game-timer-hud");
-  const display = document.getElementById("game-timer-display");
-  const label = document.getElementById("game-timer-label");
-  if (!hud) return;
-  hud.classList.remove("hidden");
-  const totalSec = Math.max(0, Math.ceil(remainingMs / 1000));
-  const mins = Math.floor(totalSec / 60);
-  const secs = totalSec % 60;
-  if (display) display.textContent = `${mins}:${String(secs).padStart(2, "0")}`;
-  if (suddenDeath) {
-    hud.classList.add("sudden-death");
-    if (label) label.textContent = "SUDDEN DEATH";
-  } else {
-    hud.classList.remove("sudden-death");
-    if (label) label.textContent = "Time Reamining";
-  }
+  return hud.updateTimerHud(remainingMs, suddenDeath);
 }
 
 function showSuddenDeathBanner() {
-  const existing = document.getElementById("sd-flash-banner");
-  if (existing) return;
-  const banner = document.createElement("div");
-  banner.id = "sd-flash-banner";
-  banner.textContent = "SUDDEN DEATH";
-  Object.assign(banner.style, {
-    position: "fixed",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%) scale(0.3)",
-    fontFamily: "'Press Start 2P', cursive",
-    fontSize: "clamp(28px, 6vw, 52px)",
-    color: "#f87171",
-    textShadow: "0 4px 0 #7f1d1d, 0 0 30px rgba(248,113,113,0.85)",
-    zIndex: "10000",
-    letterSpacing: "4px",
-    pointerEvents: "none",
-    transition:
-      "transform 0.5s cubic-bezier(0.34,1.56,0.64,1), opacity 0.7s ease",
-    opacity: "0",
-    whiteSpace: "nowrap",
-  });
-  document.body.appendChild(banner);
-  requestAnimationFrame(() => {
-    banner.style.transform = "translate(-50%, -50%) scale(1)";
-    banner.style.opacity = "1";
-  });
-  setTimeout(() => {
-    banner.style.opacity = "0";
-    banner.style.transform = "translate(-50%, -50%) scale(1.3)";
-    setTimeout(() => banner.remove(), 600);
-  }, 2500);
+  return hud.showSuddenDeathBanner();
 }
 
 function initKeybindHud() {
-  const hud = document.getElementById("battle-keybind-hud");
-  const dismissBtn = document.getElementById("battle-keybind-dismiss");
-  if (!hud) return;
-
-  let dismissed = false;
-  try {
-    dismissed = localStorage.getItem(BATTLE_HELP_DISMISSED_KEY) === "1";
-  } catch (_) {}
-  hud.classList.toggle("hidden", dismissed);
-
-  if (!dismissBtn) return;
-  dismissBtn.addEventListener("click", () => {
-    hud.classList.add("hidden");
-    try {
-      localStorage.setItem(BATTLE_HELP_DISMISSED_KEY, "1");
-    } catch (_) {}
-  });
+  return hud.initKeybindHud();
 }
 
 function initTeamStatusHud(players) {
-  const root = document.getElementById("team-status-hud");
-  const grid = document.getElementById("team-status-grid");
-  if (!root || !grid) return;
-
-  grid.innerHTML = "";
-  TEAM_HUD_ROWS.clear();
-
-  const list = Array.isArray(players) ? players : [];
-  const sorted = [...list].sort((a, b) => {
-    if (a?.name === username) return -1;
-    if (b?.name === username) return 1;
-    return String(a?.name || "").localeCompare(String(b?.name || ""));
-  });
-
-  const makeCell = (p) => {
-    const cell = document.createElement("div");
-    cell.className = "team-hud-cell";
-    if (!p) return cell;
-
-    const row = document.createElement("li");
-    row.className = "team-hud-player";
-    if (p?.isAlive === false) row.classList.add("dead");
-
-    const img = document.createElement("img");
-    const cls = (p?.char_class || "ninja").toLowerCase();
-    img.src = `/assets/${cls}/body.webp`;
-    img.alt = cls;
-
-    const nameEl = document.createElement("div");
-    nameEl.className = "team-hud-player-name";
-    const name = String(p?.name || "Player");
-    nameEl.textContent = name + (name === username ? " (You)" : "");
-
-    row.appendChild(img);
-    row.appendChild(nameEl);
-    cell.appendChild(row);
-    TEAM_HUD_ROWS.set(name, { row });
-    return cell;
-  };
-
-  const yourTeam = sorted.filter((p) => p?.team === gameData?.yourTeam);
-  const oppTeam = sorted.filter((p) => p?.team !== gameData?.yourTeam);
-
-  const yourHeader = document.createElement("div");
-  yourHeader.className = "team-hud-title";
-  yourHeader.textContent = "Your Team";
-  const oppHeader = document.createElement("div");
-  oppHeader.className = "team-hud-title";
-  oppHeader.textContent = "Other Team";
-  grid.appendChild(yourHeader);
-  grid.appendChild(oppHeader);
-
-  const rows = Math.max(yourTeam.length, oppTeam.length);
-  for (let i = 0; i < rows; i++) {
-    grid.appendChild(makeCell(yourTeam[i]));
-    grid.appendChild(makeCell(oppTeam[i]));
-  }
-
-  root.classList.toggle("hidden", sorted.length === 0);
+  return hud.initTeamStatusHud(players);
 }
 
 function setTeamHudPlayerAlive(name, isAlive) {
-  if (!name) return;
-  const entry = TEAM_HUD_ROWS.get(String(name));
-  if (!entry?.row) return;
-  entry.row.classList.toggle("dead", !isAlive);
+  return hud.setTeamHudPlayerAlive(name, isAlive);
 }
 
 function setTeamHudPlayerPresence(name, connected) {
-  if (!name) return;
-  const entry = TEAM_HUD_ROWS.get(String(name));
-  if (!entry?.row) return;
-  entry.row.classList.toggle("disconnected", !connected);
+  return hud.setTeamHudPlayerPresence(name, connected);
 }
 
 function setTeamHudPlayerLoaded(name, loaded) {
-  if (!name) return;
-  const entry = TEAM_HUD_ROWS.get(String(name));
-  if (!entry?.row) return;
-  entry.row.classList.toggle("loading", !loaded);
+  return hud.setTeamHudPlayerLoaded(name, loaded);
 }
 
 function syncTeamHudFromSnapshot(playersByName) {
-  if (!playersByName || typeof playersByName !== "object") return;
-  for (const [name, data] of Object.entries(playersByName)) {
-    if (typeof data?.health === "number") {
-      setTeamHudPlayerAlive(name, data.health > 0);
-    }
-    if (typeof data?.connected === "boolean") {
-      setTeamHudPlayerPresence(name, data.connected);
-    }
-    if (typeof data?.loaded === "boolean") {
-      setTeamHudPlayerLoaded(name, data.loaded);
-    }
-  }
-}
-
-// Set up socket event listeners for game
-function setupGameEventListeners() {
-  // Re-join room if socket reconnects before init completed (idempotent on server)
-  const tryJoin = () => {
-    if (
-      !gameInitialized &&
-      __joinPayload &&
-      Number(__joinPayload.matchId) > 0 &&
-      !hasJoined &&
-      !joinInFlight
-    ) {
-      console.log("[game] connect", __joinPayload);
-      try {
-        joinInFlight = true;
-        socket.emit("game:join", __joinPayload, (ack) => {
-          joinInFlight = false;
-          if (!ack || ack.ok !== true) {
-            console.warn("[game] join ack failed", ack);
-          } else {
-            console.log("[game] join ack ok", ack);
-            hasJoined = true;
-          }
-        });
-      } catch (e) {
-        console.warn("[game] join emit error", e);
-      }
-    }
-  };
-  socket.on("connect", tryJoin);
-  socket.on("reconnect", tryJoin);
-  socket.on("game:joined", () => {
-    hasJoined = true;
-  });
-  // If we're already connected when listeners are added, attempt once now
-  if (socket.connected) tryJoin();
-
-  // Game initialization
-  socket.on("game:init", (gameState) => {
-    console.log("Game initialized:", {
-      players: Array.isArray(gameState?.players) ? gameState.players.length : 0,
-      status: gameState?.status,
-    });
-    gameInitialized = true;
-    hasJoined = true;
-    // Mark if game is already live (late join)
-    try {
-      const status = String(gameState?.status || "").toLowerCase();
-      isLiveGame =
-        status === "active" || status === "started" || status === "running";
-      console.log(isLiveGame, "is live");
-    } catch (_) {}
-    // If already live at init, hide overlay and enable controls immediately
-    if (isLiveGame) {
-      hideBattleStartOverlay();
-      try {
-        if (gameScene && gameScene.input?.keyboard) {
-          gameScene.input.keyboard.enabled = true;
-        }
-      } catch (_) {}
-    }
-
-    // Capture server-provided spawn index/version if present
-    try {
-      if (Array.isArray(gameState.players)) {
-        for (const p of gameState.players) {
-          if (typeof p.spawnIndex === "number") {
-            SERVER_SPAWN_INDEX[p.name] = p.spawnIndex;
-          }
-          if (typeof p.connected === "boolean") {
-            setTeamHudPlayerPresence(p.name, p.connected);
-          }
-          if (typeof p.loaded === "boolean") {
-            setTeamHudPlayerLoaded(p.name, p.loaded);
-          }
-        }
-      }
-      if (typeof gameState.spawnVersion === "number") {
-        // Only advance if server version is newer
-        if (gameState.spawnVersion > SPAWN_VERSION)
-          SPAWN_VERSION = gameState.spawnVersion;
-      }
-    } catch (_) {}
-
-    // Build a complete roster from gamedata + game:init (game:init carries live status).
-    if (Array.isArray(gameData?.players)) {
-      const initByName = new Map(
-        (Array.isArray(gameState?.players) ? gameState.players : []).map(
-          (p) => [p?.name, p],
-        ),
-      );
-      const mergedRoster = gameData.players.map((p) => {
-        const live = initByName.get(p.name) || null;
-        return {
-          ...p,
-          ...(live || {}),
-          name: p.name,
-          team: p.team,
-          char_class: p.char_class,
-        };
-      });
-
-      initializePlayers(mergedRoster);
-      initTeamStatusHud(mergedRoster);
-    }
-    if (Array.isArray(gameState.powerups)) latestPowerups = gameState.powerups;
-    if (
-      gameState.playerEffects &&
-      typeof gameState.playerEffects === "object"
-    ) {
-      latestPlayerEffects = gameState.playerEffects;
-      trackShieldEffectsPresence(latestPlayerEffects);
-    }
-
-    // Cache my level and stats for character modules
-    try {
-      const me = (gameState.players || []).find((p) => p.name === username);
-      if (me) {
-        window.__MATCH_SESSION__.level = me.level || 1;
-        window.__MATCH_SESSION__.stats = me.stats || {};
-        pendingAuthoritativeLocalState = {
-          x: me.x,
-          y: me.y,
-          health: me.health,
-          maxHealth: me.stats?.health,
-          superCharge: me.superCharge,
-          maxSuperCharge: me.maxSuperCharge,
-          ammoState: me.ammoState || null,
-          isAlive: me.isAlive,
-          loaded: me.loaded === true,
-          connected: me.connected !== false,
-        };
-      }
-    } catch (_) {}
-  });
-
-  // Game start countdown (only if not already live)
-  socket.on("game:start", (data) => {
-    console.log("Game starting:", data);
-    if (!isLiveGame) startCountdown();
-  });
-
-  // Server indicates starting phase (10s window)
-  socket.on("game:starting", (payload) => {
-    console.log("Game starting phase:", payload);
-    startingPhase = true;
-    // Only show overlay if not already live
-    if (!isLiveGame) {
-      showBattleStartOverlay(gameData.players);
-    }
-    trySendReadyAck();
-  });
-
-  socket.on("health-update", (payload) => {
-    if (!payload?.username) return;
-    if (typeof payload.health === "number") {
-      setTeamHudPlayerAlive(payload.username, payload.health > 0);
-      const prev = LAST_HEALTH_BY_PLAYER[payload.username];
-      LAST_HEALTH_BY_PLAYER[payload.username] = payload.health;
-      if (
-        typeof prev === "number" &&
-        payload.health < prev &&
-        ((latestPlayerEffects?.[payload.username]?.shield || 0) > 0 ||
-          Date.now() - (LAST_SHIELD_ACTIVE_AT[payload.username] || 0) <= 900)
-      ) {
-        SHIELD_IMPACT_QUEUE.push({
-          username: payload.username,
-          at: Date.now(),
-        });
-      }
-    }
-  });
-
-  socket.on("player:dead", (payload) => {
-    if (!payload?.username) return;
-    setTeamHudPlayerAlive(payload.username, false);
-  });
-
-  // No periodic join retries needed; reconnect handler covers transient drops
-
-  // Server snapshots for interpolation
-  socket.on("game:snapshot", (snapshot) => {
-    if (!snapshot || !snapshot.players) return;
-    if (Array.isArray(snapshot.powerups)) latestPowerups = snapshot.powerups;
-    if (snapshot.playerEffects && typeof snapshot.playerEffects === "object") {
-      latestPlayerEffects = snapshot.playerEffects;
-      trackShieldEffectsPresence(latestPlayerEffects);
-    }
-    syncTeamHudFromSnapshot(snapshot.players);
-    if (!stateActive) {
-      stateActive = true;
-      console.log("Started receiving server snapshots (tMono/tickId enabled)");
-      // Receiving snapshots implies the match is live; hide any pending overlay.
-      try {
-        hideBattleStartOverlay();
-        if (gameScene && gameScene.input?.keyboard) {
-          gameScene.input.keyboard.enabled = true;
-        }
-      } catch (_) {}
-    }
-
-    // Calibrate monotonic offset using performance.now() vs server tMono
-    try {
-      const clientMonoNow = performance.now();
-      if (!monoCalibrated && typeof snapshot.tMono === "number") {
-        serverMonoOffset = snapshot.tMono - clientMonoNow; // server = client + offset
-        monoCalibrated = true;
-        console.log(
-          "Monotonic offset calibrated (ms):",
-          serverMonoOffset.toFixed(2),
-        );
-      }
-    } catch (_) {}
-
-    // Derive monotonic time for snapshot (fallbacks if missing)
-    let snapMono = null;
-    if (typeof snapshot.tMono === "number") {
-      snapMono = snapshot.tMono;
-    } else if (typeof snapshot.timestamp === "number") {
-      // Fallback: treat legacy timestamp as wall ms, convert using offset if calibrated
-      const clientMonoNow = performance.now();
-      snapMono = monoCalibrated
-        ? clientMonoNow + serverMonoOffset // approximate current server mono
-        : snapshot.timestamp; // best effort
-    } else {
-      snapMono = (performance.now && performance.now()) || Date.now();
-    }
-
-    // Track spacing diagnostics + adaptive EMA for delay
-    if (stateBuffer.length > 0) {
-      const prev = stateBuffer[stateBuffer.length - 1].tMono;
-      const d = snapMono - prev;
-      if (d >= 0 && d < 500) {
-        snapshotSpacings.push(d);
-        if (snapshotSpacings.length > 400) snapshotSpacings.splice(0, 200);
-        // EMA updates
-        spacingEma =
-          spacingEma == null
-            ? d
-            : spacingEma + (d - spacingEma) * SPACING_EMA_ALPHA;
-        const dev = Math.abs(d - (spacingEma || d));
-        jitterEma =
-          jitterEma == null
-            ? dev
-            : jitterEma + (dev - jitterEma) * SPACING_EMA_ALPHA;
-        // Adaptive delay target: base ~ 3 * spacing + 2 * jitter (bounded)
-        if (spacingEma != null && jitterEma != null) {
-          let targetDelay = spacingEma * 3 + jitterEma * 2;
-          if (targetDelay < MIN_INTERP_DELAY) targetDelay = MIN_INTERP_DELAY;
-          if (targetDelay > MAX_INTERP_DELAY) targetDelay = MAX_INTERP_DELAY;
-          // Smooth adjustments (avoid big jumps)
-          interpDelayMs += (targetDelay - interpDelayMs) * 0.1;
-        }
-      }
-    }
-
-    // Initialize render clock when first snapshot w/ monotonic time arrives
-    if (renderClockMono == null && typeof snapMono === "number") {
-      renderClockMono = snapMono; // start locked
-      lastFramePerfNow = performance.now();
-    }
-
-    // Late-join safety: create opponents on first snapshot if missing
-    try {
-      if (gameScene && snapshot && snapshot.players) {
-        for (const name of Object.keys(snapshot.players)) {
-          if (name === username) continue;
-          const pd = (gameData.players || []).find((p) => p.name === name);
-          const isTeammate = pd && pd.team === gameData.yourTeam;
-          const existing =
-            (isTeammate ? teamPlayers[name] : opponentPlayers[name]) || null;
-          const isValidInstance = !!(existing && existing.opponent);
-          if (!isValidInstance && pd) {
-            const container = isTeammate ? teamPlayers : opponentPlayers;
-            const op = new OpPlayer(
-              gameScene,
-              pd.char_class,
-              pd.name,
-              isTeammate ? "teammate" : pd.team,
-              null,
-              null,
-              (gameData.players || []).filter((p) => p.team === pd.team).length,
-              String(gameData.map),
-            );
-            op._spawnVersion = SPAWN_VERSION;
-            try {
-              const idx =
-                typeof SERVER_SPAWN_INDEX[pd.name] === "number"
-                  ? SERVER_SPAWN_INDEX[pd.name]
-                  : Math.max(
-                      0,
-                      (gameData.players || [])
-                        .filter((p) => p.team === pd.team)
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .findIndex((p) => p.name === pd.name),
-                    );
-              positionSpawn(
-                gameScene,
-                op.opponent,
-                gameData.map,
-                pd.team,
-                idx,
-                (gameData.players || []).filter((p) => p.team === pd.team)
-                  .length,
-              );
-              op.updateUIPosition?.();
-            } catch (_) {}
-            container[pd.name] = op;
-          }
-        }
-      }
-    } catch (_) {}
-
-    // Add to state buffer for interpolation using server monotonic timeline
-    stateBuffer.push({
-      tMono: snapMono,
-      tickId: typeof snapshot.tickId === "number" ? snapshot.tickId : null,
-      players: snapshot.players,
-    });
-
-    // Keep buffer size manageable
-    if (stateBuffer.length > MAX_STATE_BUFFER) {
-      stateBuffer.shift();
-    }
-
-    // Periodic diagnostics (every ~4s) about snapshot spacing
-    try {
-      const cm = performance.now();
-      if (cm - lastDiagLogMono > 4000 && snapshotSpacings.length > 5) {
-        const arr = snapshotSpacings.slice(-80);
-        const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
-        const variance =
-          arr.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / arr.length;
-        const stdev = Math.sqrt(variance);
-        console.log(
-          `[interp] snapshots avg=${avg.toFixed(2)}ms sd=${stdev.toFixed(
-            2,
-          )}ms n=${arr.length}`,
-        );
-        lastDiagLogMono = cm;
-      }
-    } catch (_) {}
-  });
-
-  // Game actions from other players
-  socket.on("game:action", (packet) => {
-    try {
-      if (!packet) return;
-      // If scene not ready yet, queue the action to replay shortly
-      if (!gameScene || !gameScene.sys || !gameScene.sys.isActive) {
-        PENDING_ACTIONS.push(packet);
-        return;
-      }
-      const { playerName, character, origin, flip, action } = packet;
-      if (!playerName || !action) return;
-      if (playerName === username) return; // ignore self
-
-      // Determine which container holds this player
-      const pd = (gameData.players || []).find((p) => p.name === playerName);
-      const isTeammate = pd && pd.team === gameData.yourTeam;
-      const container = isTeammate ? teamPlayers : opponentPlayers;
-      let wrapper = container[playerName];
-
-      // Lazy-create if missing (late join/desync safety)
-      if (!wrapper || !wrapper.opponent) {
-        if (!pd) return; // can't create without char/team info
-        const op = new OpPlayer(
-          gameScene,
-          pd.char_class,
-          pd.name,
-          isTeammate ? "teammate" : pd.team,
-          null,
-          null,
-          (gameData.players || []).filter((p) => p.team === pd.team).length,
-          String(gameData.map),
-        );
-        container[pd.name] = op;
-        wrapper = op;
-        op._spawnVersion = SPAWN_VERSION;
-        try {
-          const idx =
-            typeof SERVER_SPAWN_INDEX[pd.name] === "number"
-              ? SERVER_SPAWN_INDEX[pd.name]
-              : Math.max(
-                  0,
-                  (gameData.players || [])
-                    .filter((p) => p.team === pd.team)
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .findIndex((p) => p.name === pd.name),
-                );
-          positionSpawn(
-            gameScene,
-            op.opponent,
-            gameData.map,
-            pd.team,
-            idx,
-            (gameData.players || []).filter((p) => p.team === pd.team).length,
-          );
-          op.updateUIPosition?.();
-        } catch (_) {}
-      }
-
-      // Do NOT snap the opponent sprite to packet.origin; keep interpolation smooth.
-      // We'll only use origin for spawning projectiles/effects coordinates below.
-
-      // Resolve character (packet.character overrides roster info if present)
-      const charKey = (character || (pd && pd.char_class) || "").toLowerCase();
-      // Build action payload: use live sprite position/flip for fluid visuals
-      const act = { ...(action || {}) };
-      if (wrapper && wrapper.opponent) {
-        act.x = wrapper.opponent.x;
-        act.y = wrapper.opponent.y;
-        if (typeof act.direction !== "number") {
-          act.direction = wrapper.opponent.flipX ? -1 : 1;
-        }
-      }
-      const consumed = handleRemoteAttack(gameScene, charKey, act, wrapper);
-      // Prevent snapshot idle/run animation from immediately stomping attack anims.
-      // Also open a combat precision window so this opponent's sprite blends toward
-      // their newest known position (reducing visual-vs-authoritative gap on hits).
-      if (consumed && wrapper) {
-        wrapper._animLockUntil = performance.now() + 520;
-        wrapper._attackPrecisionUntil = performance.now() + 600;
-      }
-      if (!consumed) {
-        // Optional dev log for unhandled action types
-        console.debug("Unhandled remote action", {
-          playerName,
-          charKey,
-          action,
-        });
-      }
-    } catch (err) {
-      console.warn("Failed to handle remote game:action", err);
-    }
-  });
-
-  // Game errors
-  socket.on("game:error", (error) => {
-    console.error("Game error:", error);
-    alert(`Game error: ${error.message}`);
-  });
-
-  // Player disconnections
-  socket.on("player:disconnected", (data) => {
-    console.log("Player disconnected:", data);
-    if (data?.name) {
-      setTeamHudPlayerPresence(data.name, false);
-      setTeamHudPlayerLoaded(data.name, false);
-    }
-  });
-
-  socket.on("player:reconnected", (data) => {
-    if (data?.name) {
-      setTeamHudPlayerPresence(data.name, true);
-    }
-  });
-
-  // Game over event (team elimination)
-  socket.on("game:over", (payload) => {
-    if (gameEnded) return; // idempotent
-    gameEnded = true;
-    stopSuddenDeathMusic();
-    playMatchEndSound(payload?.winnerTeam);
-    try {
-      player && player.body && (player.body.enable = false);
-    } catch (_) {}
-    // Hide timer HUD
-    try {
-      document.getElementById("game-timer-hud")?.classList.add("hidden");
-    } catch (_) {}
-    setTimeout(() => {
-      showGameOverScreen(payload);
-    }, 2000);
-  });
-
-  // Server-synced game timer and sudden death
-  socket.on("game:timer", (payload) => {
-    updateTimerHud(payload.remaining, payload.suddenDeath);
-    if (
-      payload.suddenDeath &&
-      typeof payload.poisonY === "number" &&
-      gameScene
-    ) {
-      gameScene._poisonWaterY = payload.poisonY;
-      startSuddenDeathMusic();
-    }
-  });
-
-  socket.on("game:sudden-death:start", (payload) => {
-    showSuddenDeathBanner();
-    startSuddenDeathMusic();
-    if (gameScene && typeof payload?.poisonY === "number") {
-      gameScene._poisonWaterY = payload.poisonY;
-    }
-  });
-
-  socket.on("powerup:collected", (payload) => {
-    if (!payload || typeof payload.id === "undefined") return;
-    POWERUP_COLLECT_QUEUE.push(payload);
-  });
-
-  socket.on("powerup:tick", (payload) => {
-    if (!payload || !payload.type || !gameScene || !gameScene.sound) return;
-    const entry = POWERUP_TICK_SOUNDS[payload.type];
-    if (!entry) return;
-    try {
-      gameScene.sound.play(entry.key, entry.options || {});
-    } catch (_) {}
-  });
+  return hud.syncTeamHudFromSnapshot(playersByName);
 }
 
 // Initialize players based on server data
@@ -1157,67 +538,13 @@ class GameScene extends Phaser.Scene {
       // Input will be enabled on game:start or immediately if already live.
     });
 
-    // Character assets (preload all registered characters)
-    preloadAll(this, staticPath);
-
-    this.load.image("tiles-image", `${staticPath}/map.webp`);
-    this.load.tilemapTiledJSON("tiles", `${staticPath}/tilesheet.json`);
-    this.load.image("lushy-base", `${staticPath}/lushy/base.webp`);
-    this.load.image("lushy-platform", `${staticPath}/lushy/largePlatform.webp`);
-    this.load.image(
-      "lushy-side-platform",
-      `${staticPath}/lushy/sidePlatform.webp`,
-    );
-    this.load.image(
-      "mangrove-tiny-platform",
-      `${staticPath}/mangrove/tinyPlatform.webp`,
-    );
-    this.load.image(
-      "mangrove-base-left",
-      `${staticPath}/mangrove/baseLeft.webp`,
-    );
-    this.load.image(
-      "mangrove-base-middle",
-      `${staticPath}/mangrove/baseMiddle.webp`,
-    );
-    this.load.image(
-      "mangrove-base-right",
-      `${staticPath}/mangrove/baseRight.webp`,
-    );
-    this.load.image("mangrove-base-top", `${staticPath}/mangrove/baseTop.webp`);
-    // Movement SFX (place files under /assets/audio)
-    this.load.audio("sfx-step", `${staticPath}/step.mp3`);
-    this.load.audio("sfx-jump", `${staticPath}/jump.mp3`);
-    this.load.audio("sfx-land", `${staticPath}/land.mp3`);
-    this.load.audio("sfx-walljump", `${staticPath}/walljump.mp3`);
-    this.load.audio("sfx-sliding", `${staticPath}/sliding.mp3`);
-    this.load.audio("sfx-sudden-death", `${staticPath}/suddendeath.mp3`);
-    this.load.audio("sfx-noammo", [
-      `${staticPath}/noammo.mp3`,
-      `${staticPath}/land.mp3`,
-    ]);
-    // Combat/health SFX
-    this.load.audio("sfx-damage", `${staticPath}/damage.mp3`);
-    this.load.audio("sfx-heal", `${staticPath}/heal.mp3`);
-    // Music (non-blocking BGM: handled via HTMLAudio at runtime)
-    this.load.audio("win", `${staticPath}/win.mp3`);
-    this.load.audio("lose", `${staticPath}/lose.mp3`);
-    // Powerup assets (support common icon/audio extensions)
-    for (const type of POWERUP_TYPES) {
-      const dir = POWERUP_ASSET_DIR[type] || type;
-      this.load.image(
-        `pu-icon-${type}-webp`,
-        `${staticPath}/powerups/${dir}/icon.webp`,
-      );
-      this.load.audio(`pu-touch-${type}`, [
-        `${staticPath}/powerups/${dir}/touch.mp3`,
-        `${staticPath}/powerups/${dir}/touch.wav`,
-      ]);
-      this.load.audio(`pu-tick-${type}`, [
-        `${staticPath}/powerups/${dir}/tick.mp3`,
-        `${staticPath}/powerups/${dir}/tick.wav`,
-      ]);
-    }
+    preloadGameAssets({
+      scene: this,
+      staticPath,
+      powerupTypes: POWERUP_TYPES,
+      powerupAssetDir: POWERUP_ASSET_DIR,
+      preloadAllCharacters: preloadAll,
+    });
   }
 
   create() {
@@ -1249,6 +576,24 @@ class GameScene extends Phaser.Scene {
     this._powerupAuraGraphics.setDepth(21);
     this._powerupFxGraphics = this.add.graphics();
     this._powerupFxGraphics.setDepth(20);
+    this._powerupRenderer = createPowerupRenderer({
+      scene: this,
+      Phaser,
+      colors: POWERUP_COLORS,
+      getUsername: () => username,
+      getGameData: () => gameData,
+      getLocalPlayer: () => player,
+      getOpponentPlayers: () => opponentPlayers,
+      getTeamPlayers: () => teamPlayers,
+      getLatestPowerups: () => latestPowerups,
+      getLatestPlayerEffects: () => latestPlayerEffects,
+      powerupCollectQueue: POWERUP_COLLECT_QUEUE,
+      shieldImpactQueue: SHIELD_IMPACT_QUEUE,
+      setPowerupMobility,
+      applyCharacterPowerupFx,
+      drawCharacterPowerupAura,
+      getCharacterPowerupMobilityModifier,
+    });
     // Wait for game data before creating map and player
     if (!gameData) {
       console.log("Waiting for game data...");
@@ -1280,10 +625,11 @@ class GameScene extends Phaser.Scene {
   initializeGameWorld() {
     // New spawn version for this scene
     SPAWN_VERSION = Math.max(SPAWN_VERSION, Date.now());
+    const activeMapId = normalizeMapId(gameData?.map);
     // No per-scene spawn plan needed now; map modules provide positioning helpers
     // Creates the map objects based on game data
-    buildMap(this, gameData.map);
-    mapObjects = getMapObjects(gameData.map);
+    buildMap(this, activeMapId);
+    mapObjects = getMapObjects(activeMapId);
 
     // Ensure all character animations are registered for this scene
     setupAll(this);
@@ -1377,6 +723,9 @@ class GameScene extends Phaser.Scene {
     this.input.keyboard?.once("keydown", startBgm);
 
     this.events.once("shutdown", () => {
+      try {
+        matchCoordinator?.dispose();
+      } catch (_) {}
       stopSuddenDeathMusic();
       try {
         this._suddenDeathMusicSfx?.destroy();
@@ -1403,7 +752,7 @@ class GameScene extends Phaser.Scene {
       null,
       (gameData.players || []).filter((p) => p.team === gameData.yourTeam)
         .length,
-      String(gameData.map),
+      activeMapId,
       opponentPlayers,
     );
 
@@ -1449,7 +798,7 @@ class GameScene extends Phaser.Scene {
       positionSpawn(
         this,
         player,
-        gameData.map,
+        activeMapId,
         gameData.yourTeam,
         myIndex,
         teamSize,
@@ -1555,6 +904,7 @@ class GameScene extends Phaser.Scene {
   }
 
   initializeOtherPlayers() {
+    const activeMapId = normalizeMapId(gameData?.map);
     // Create OpPlayer instances for other players
     gameData.players.forEach((playerData) => {
       if (playerData.name === username) {
@@ -1594,7 +944,7 @@ class GameScene extends Phaser.Scene {
           positionSpawn(
             this,
             existing.opponent,
-            gameData.map,
+            activeMapId,
             playerData.team,
             index,
             (gameData.players || []).filter((p) => p.team === playerData.team)
@@ -1616,7 +966,7 @@ class GameScene extends Phaser.Scene {
         null,
         (gameData.players || []).filter((p) => p.team === playerData.team)
           .length,
-        String(gameData.map), // map as string for spawn helpers
+        activeMapId,
       );
 
       // Tag instance with spawn version and optional server index to support idempotency
@@ -1645,7 +995,7 @@ class GameScene extends Phaser.Scene {
         positionSpawn(
           this,
           opPlayer.opponent,
-          gameData.map,
+          activeMapId,
           playerData.team,
           index,
           (gameData.players || []).filter((p) => p.team === playerData.team)
@@ -1685,940 +1035,36 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  _powerupTextureFor(type) {
-    const webpKey = `pu-icon-${type}-webp`;
-    const pngKey = `pu-icon-${type}-png`;
-    if (this.textures.exists(webpKey)) return webpKey;
-    if (this.textures.exists(pngKey)) return pngKey;
-    return null;
-  }
-
-  _powerupLabelFor(type) {
-    if (type === "gravityBoots") return "B";
-    if (type === "shield") return "S";
-    return String(type || "?")
-      .charAt(0)
-      .toUpperCase();
-  }
-
-  _spawnTrailParticle(x, y, color, r = 5, life = 260) {
-    const c = this.add.circle(x, y, r, color, 0.75);
-    c.setDepth(19);
-    this.tweens.add({
-      targets: c,
-      y: y - Phaser.Math.Between(10, 24),
-      x: x + Phaser.Math.Between(-8, 8),
-      alpha: 0,
-      scaleX: Phaser.Math.FloatBetween(1.2, 1.8),
-      scaleY: Phaser.Math.FloatBetween(1.2, 1.8),
-      duration: life,
-      ease: "Quad.easeOut",
-      onComplete: () => c.destroy(),
-    });
-  }
-
-  _getSpriteByUsername(name) {
-    if (!name) return null;
-    if (name === username) return player;
-    const w = opponentPlayers[name] || teamPlayers[name];
-    return w?.opponent || null;
-  }
-
-  _spawnPlusParticle(x, y, color, size = 7, life = 380) {
-    const g = this.add.graphics();
-    g.setDepth(19);
-    g.fillStyle(color, 0.88);
-    g.fillRect(-size * 0.5, -size * 0.18, size, size * 0.36);
-    g.fillRect(-size * 0.18, -size * 0.5, size * 0.36, size);
-    g.x = x;
-    g.y = y;
-    this.tweens.add({
-      targets: g,
-      y: y - Phaser.Math.Between(22, 42),
-      x: x + Phaser.Math.Between(-10, 10),
-      alpha: 0,
-      angle: Phaser.Math.Between(-25, 25),
-      scaleX: Phaser.Math.FloatBetween(1.1, 1.7),
-      scaleY: Phaser.Math.FloatBetween(1.1, 1.7),
-      duration: life,
-      ease: "Quad.easeOut",
-      onComplete: () => g.destroy(),
-    });
-  }
-
-  _spawnArrowParticle(
-    x,
-    y,
-    color,
-    angle = -Math.PI / 2,
-    size = 11,
-    life = 260,
-  ) {
-    const g = this.add.graphics();
-    g.setDepth(19);
-    g.fillStyle(color, 0.9);
-    // Arrow body
-    g.fillRect(-size * 0.5, -size * 0.12, size * 0.62, size * 0.24);
-    // Arrow head
-    g.beginPath();
-    g.moveTo(size * 0.12, -size * 0.32);
-    g.lineTo(size * 0.52, 0);
-    g.lineTo(size * 0.12, size * 0.32);
-    g.closePath();
-    g.fillPath();
-    // Tiny white accent for readability
-    g.fillStyle(0xffffff, 0.72);
-    g.fillRect(-size * 0.34, -size * 0.06, size * 0.24, size * 0.12);
-
-    g.x = x;
-    g.y = y;
-    g.rotation = angle;
-    this.tweens.add({
-      targets: g,
-      x: x - Math.cos(angle) * Phaser.Math.Between(18, 30),
-      y: y - Math.sin(angle) * Phaser.Math.Between(18, 30),
-      alpha: 0,
-      scaleX: Phaser.Math.FloatBetween(0.9, 1.25),
-      scaleY: Phaser.Math.FloatBetween(0.9, 1.25),
-      duration: life,
-      ease: "Cubic.easeOut",
-      onComplete: () => g.destroy(),
-    });
-  }
-
-  _applyPowerupCharacterFX(spr, fx, nowSec, characterKey = null) {
-    if (!spr || !spr.active) return;
-    if (typeof spr._puBaseScaleX !== "number") {
-      spr._puBaseScaleX = spr.scaleX || 1;
-      spr._puBaseScaleY = spr.scaleY || 1;
-    }
-    if (typeof spr._puBaseOriginX !== "number") {
-      spr._puBaseOriginX = typeof spr.originX === "number" ? spr.originX : 0.5;
-      spr._puBaseOriginY = typeof spr.originY === "number" ? spr.originY : 0.5;
-    }
-    const baseX = spr._puBaseScaleX || 1;
-    const baseY = spr._puBaseScaleY || 1;
-    const baseOriginX = spr._puBaseOriginX ?? 0.5;
-    const baseOriginY = spr._puBaseOriginY ?? 0.5;
-    const rageOn = (fx?.rage || 0) > 0;
-    const healthOn = (fx?.health || 0) > 0;
-    const poisonOn = (fx?.poison || 0) > 0;
-    const bootsOn = (fx?.gravityBoots || 0) > 0;
-    const custom = applyCharacterPowerupFx(characterKey, {
-      scene: this,
-      sprite: spr,
-      effects: fx,
-      nowSec,
-      colors: POWERUP_COLORS,
-      spawnTrailParticle: this._spawnTrailParticle.bind(this),
-    });
-    const rageLikeOn = rageOn || !!custom?.rageLike;
-
-    // Apply a one-time upward lift when rage visuals activate to avoid floor clipping
-    // from sudden scale-up on grounded sprites.
-    if (rageLikeOn && !spr._rageLiftApplied) {
-      spr.y -= 6;
-      if (spr.body && typeof spr.body.updateFromGameObject === "function") {
-        spr.body.updateFromGameObject();
-      }
-      spr._rageLiftApplied = true;
-    } else if (!rageLikeOn && spr._rageLiftApplied) {
-      spr._rageLiftApplied = false;
-    }
-
-    if (custom?.handled) {
-      return;
-    }
-
-    if (rageOn) {
-      const pulse = Math.sin(nowSec * 8 + (spr.x || 0) * 0.01);
-      // Rage keeps a fixed size boost; only tint pulses.
-      spr.setTint(pulse > 0 ? 0xc084fc : 0x9333ea);
-      spr.setScale(baseX * 1.22, baseY * 1.22);
-      spr.setOrigin(baseOriginX, baseOriginY);
-      if (Math.random() < 0.32) {
-        this._spawnTrailParticle(
-          spr.x + Phaser.Math.Between(-14, 14),
-          spr.y + Phaser.Math.Between(-26, 18),
-          POWERUP_COLORS.rage,
-          3.5,
-          300,
-        );
-      }
-    } else if (healthOn) {
-      const healthPulse = Math.sin(nowSec * 5 + (spr.x || 0) * 0.01);
-      spr.setTint(healthPulse > 0 ? 0x86efac : 0x34d399);
-      spr.setScale(baseX, baseY);
-      spr.setOrigin(baseOriginX, baseOriginY);
-      if (Math.random() < 0.55) {
-        this._spawnPlusParticle(
-          spr.x + Phaser.Math.Between(-16, 16),
-          spr.y + Phaser.Math.Between(-30, 8),
-          POWERUP_COLORS.health,
-          9,
-          430,
-        );
-      }
-    } else if (poisonOn) {
-      spr.clearTint();
-      spr.setScale(baseX, baseY);
-      spr.setOrigin(baseOriginX, baseOriginY);
-      if (Math.random() < 0.42) {
-        this._spawnTrailParticle(
-          spr.x + Phaser.Math.Between(-12, 12),
-          spr.y + Phaser.Math.Between(-18, 18),
-          POWERUP_COLORS.poison,
-          4.3,
-          300,
-        );
-      }
-    } else if (bootsOn) {
-      spr.clearTint();
-      spr.setScale(baseX, baseY);
-      spr.setOrigin(baseOriginX, baseOriginY);
-      spr.setTint(0xfca5a5);
-      const vy = spr.body?.velocity?.y || 0;
-      const vx = spr.body?.velocity?.x || 0;
-      if (vy < -35 && Math.random() < 0.72) {
-        const moveAngle = Math.atan2(
-          vy || -140,
-          Math.abs(vx) > 8 ? vx : spr.flipX ? -24 : 24,
-        );
-        this._spawnArrowParticle(
-          spr.x + Phaser.Math.Between(-12, 12),
-          spr.y + Phaser.Math.Between(8, 20),
-          POWERUP_COLORS.gravityBoots,
-          moveAngle + Phaser.Math.FloatBetween(-0.24, 0.24),
-          Phaser.Math.Between(9, 13),
-          280,
-        );
-      }
-    } else {
-      spr.clearTint();
-      spr.setScale(baseX, baseY);
-      spr.setOrigin(baseOriginX, baseOriginY);
-    }
-  }
-
-  _consumeCollectedPowerupQueue() {
-    while (POWERUP_COLLECT_QUEUE.length > 0) {
-      const evt = POWERUP_COLLECT_QUEUE.shift();
-      if (!evt) continue;
-      const id = String(evt.id);
-      const visual = this._powerupVisuals[id];
-      try {
-        this.sound.play(`pu-touch-${evt.type}`, { volume: 0.45 });
-      } catch (_) {}
-      if (visual && !visual.despawning) {
-        visual.despawning = true;
-        this.tweens.add({
-          targets: [visual.container, visual.glow],
-          alpha: 0,
-          scaleX: 0.2,
-          scaleY: 0.2,
-          angle: 180,
-          duration: 220,
-          ease: "Back.easeIn",
-          onComplete: () => {
-            try {
-              visual.glow.destroy();
-              visual.container.destroy();
-            } catch (_) {}
-            delete this._powerupVisuals[id];
-          },
-        });
-      } else if (typeof evt.x === "number" && typeof evt.y === "number") {
-        // Fallback poof if snapshot already removed this sprite
-        const puff = this.add.circle(
-          evt.x,
-          evt.y,
-          14,
-          POWERUP_COLORS[evt.type] || 0xffffff,
-          0.9,
-        );
-        puff.setDepth(6);
-        this.tweens.add({
-          targets: puff,
-          alpha: 0,
-          scaleX: 1.9,
-          scaleY: 1.9,
-          duration: 220,
-          ease: "Quad.easeOut",
-          onComplete: () => puff.destroy(),
-        });
-      }
-    }
-  }
-
-  _spriteFrameForAura(spr) {
-    if (!spr) {
-      return { x: 0, y: 0, top: 0, bottom: 0, radius: 24 };
-    }
-    const body = spr.body;
-    if (
-      body &&
-      Number.isFinite(body.center?.x) &&
-      Number.isFinite(body.center?.y)
-    ) {
-      const w = Math.max(14, Number(body.width) || 14);
-      const h = Math.max(20, Number(body.height) || 20);
-      return {
-        x: body.center.x,
-        y: body.center.y,
-        top: Number(body.top) || body.center.y - h / 2,
-        bottom: Number(body.bottom) || body.center.y + h / 2,
-        radius: Phaser.Math.Clamp(Math.max(w, h) * 0.58, 18, 46),
-      };
-    }
-    const h = Number(spr.height) || 48;
-    return {
-      x: spr.x,
-      y: spr.y,
-      top: spr.y - h / 2,
-      bottom: spr.y + h / 2,
-      radius: Phaser.Math.Clamp(h * 0.58, 18, 46),
-    };
-  }
-
-  _renderPowerupAuras(nowSec) {
-    const g = this._powerupAuraGraphics;
-    if (!g) return;
-    g.clear();
-
-    const me = latestPlayerEffects[username] || {};
-    const baseSpeedMult = (me.rage || 0) > 0 ? 1.25 : 1;
-    const baseJumpMult = (me.gravityBoots || 0) > 0 ? 1.5 : 1;
-    const charMobility = getCharacterPowerupMobilityModifier(
-      gameData?.yourCharacter,
-      me,
-    );
-    const speedMult = baseSpeedMult * (charMobility?.speedMult || 1);
-    const jumpMult = baseJumpMult * (charMobility?.jumpMult || 1);
-    setPowerupMobility(speedMult, jumpMult);
-
-    const drawAura = (spr, fx) => {
-      if (!spr || !fx) return;
-      const frame = this._spriteFrameForAura(spr);
-      const x = frame.x;
-      const y = frame.y;
-      const r = frame.radius;
-      const pulse = 0.75 + 0.25 * Math.sin(nowSec * 8 + x * 0.01);
-      if ((fx.health || 0) > 0) {
-        g.fillStyle(POWERUP_COLORS.health, 0.12 * pulse);
-        g.fillCircle(x, y, r + 4 * pulse);
-        g.lineStyle(3, POWERUP_COLORS.health, 0.75 * pulse);
-        g.strokeCircle(x, y, r + 4 * pulse);
-      }
-      if ((fx.shield || 0) > 0) {
-        g.fillStyle(POWERUP_COLORS.shield, 0.22);
-        g.fillCircle(x, y, Math.max(16, r - 4 + 4 * pulse));
-        g.lineStyle(4, POWERUP_COLORS.shield, 0.82 * pulse);
-        g.strokeCircle(x, y, Math.max(16, r - 4 + 4 * pulse));
-        g.fillStyle(0xffedd5, 0.08 + 0.05 * pulse);
-        g.fillCircle(x, y, Math.max(12, r - 16 + 2 * pulse));
-      }
-      if ((fx.poison || 0) > 0) {
-        g.fillStyle(POWERUP_COLORS.poison, 0.1 * pulse);
-        g.fillCircle(x, y, Math.max(16, r - 2 + 3 * pulse));
-        g.lineStyle(3, POWERUP_COLORS.poison, 0.75 * pulse);
-        g.strokeCircle(x, y, Math.max(16, r - 2 + 3 * pulse));
-      }
-      if ((fx.rage || 0) > 0) {
-        g.fillStyle(POWERUP_COLORS.rage, 0.2 + 0.08 * pulse);
-        g.fillCircle(x, y, Math.max(16, r - 4 + 4 * pulse));
-        g.lineStyle(3.5, POWERUP_COLORS.rage, 0.85 * pulse);
-        g.strokeCircle(x, y, r + 3 + 4 * pulse);
-        g.lineStyle(
-          2.5,
-          0xffffff,
-          0.3 + 0.25 * Math.abs(Math.sin(nowSec * 16 + y * 0.015)),
-        );
-        g.strokeCircle(x, y, r + 8 + 2.2 * pulse);
-      }
-      if ((fx.gravityBoots || 0) > 0) {
-        const bootY = frame.bottom - 2;
-        g.fillStyle(POWERUP_COLORS.gravityBoots, 0.22 * pulse);
-        g.fillEllipse(x, bootY, Math.max(28, r + 4), 10);
-        g.lineStyle(2, POWERUP_COLORS.gravityBoots, 0.75 * pulse);
-        g.strokeEllipse(x, bootY, Math.max(28, r + 4), 10);
-      }
-    };
-
-    drawAura(player, latestPlayerEffects[username] || {});
-    drawCharacterPowerupAura(gameData?.yourCharacter, {
-      graphics: g,
-      frame: this._spriteFrameForAura(player),
-      effects: latestPlayerEffects[username] || {},
-      nowSec,
-      colors: POWERUP_COLORS,
-    });
-    this._applyPowerupCharacterFX(
-      player,
-      latestPlayerEffects[username] || {},
-      nowSec,
-      gameData?.yourCharacter,
-    );
-    for (const [name, fx] of Object.entries(latestPlayerEffects || {})) {
-      if (name === username) continue;
-      const wrapper = opponentPlayers[name] || teamPlayers[name];
-      if (!wrapper || !wrapper.opponent) continue;
-      drawAura(wrapper.opponent, fx);
-      drawCharacterPowerupAura(wrapper.character, {
-        graphics: g,
-        frame: this._spriteFrameForAura(wrapper.opponent),
-        effects: fx,
-        nowSec,
-        colors: POWERUP_COLORS,
-      });
-      this._applyPowerupCharacterFX(
-        wrapper.opponent,
-        fx,
-        nowSec,
-        wrapper.character,
-      );
-    }
-
-    // Shield impact pulses when shielded players take damage.
-    const fxG = this._powerupFxGraphics;
-    while (SHIELD_IMPACT_QUEUE.length > 0) {
-      const impact = SHIELD_IMPACT_QUEUE.shift();
-      const spr = this._getSpriteByUsername(impact?.username);
-      if (!spr || !fxG) continue;
-      const frame = this._spriteFrameForAura(spr);
-      const x = frame.x;
-      const y = frame.y;
-      for (let i = 0; i < 3; i++) {
-        const ring = this.add.circle(
-          x,
-          y,
-          24 + i * 4,
-          POWERUP_COLORS.shield,
-          0.22 - i * 0.05,
-        );
-        ring.setDepth(22);
-        ring.setStrokeStyle(3, 0xffedd5, 0.85);
-        this.tweens.add({
-          targets: ring,
-          alpha: 0,
-          scaleX: 1.45 + i * 0.08,
-          scaleY: 1.45 + i * 0.08,
-          duration: 220 + i * 40,
-          ease: "Cubic.easeOut",
-          onComplete: () => ring.destroy(),
-        });
-      }
-    }
-  }
-
   _renderPowerupsAndEffects() {
-    this._consumeCollectedPowerupQueue();
-    const nowSec = this.time.now / 1000;
-    const seenIds = new Set();
-    const fxG = this._powerupFxGraphics;
-    if (fxG) fxG.clear();
-
-    for (const pu of latestPowerups || []) {
-      if (!pu || typeof pu.id === "undefined") continue;
-      const id = String(pu.id);
-      seenIds.add(id);
-      let visual = this._powerupVisuals[id];
-      if (!visual) {
-        const glow = this.add.circle(
-          pu.x,
-          pu.y,
-          16,
-          POWERUP_COLORS[pu.type] || 0xffffff,
-          0.28,
-        );
-        glow.setDepth(4);
-        const iconKey = this._powerupTextureFor(pu.type);
-        const children = [];
-        let spr = null;
-        if (iconKey) {
-          spr = this.add.image(0, 3, iconKey);
-          spr.setOrigin(0.5, 0.5);
-          // Normalize icon size so giant source images don't overflow and look offset.
-          const maxDim = Math.max(spr.width || 1, spr.height || 1);
-          const targetSize = 42;
-          const s = maxDim > 0 ? targetSize / maxDim : 1;
-          spr.setScale(s);
-          children.push(spr);
-        } else {
-          const badge = this.add.circle(
-            0,
-            0,
-            12,
-            POWERUP_COLORS[pu.type] || 0xffffff,
-            0.9,
-          );
-          const lbl = this.add.text(0, -1, this._powerupLabelFor(pu.type), {
-            fontFamily: "Press Start 2P",
-            fontSize: "10px",
-            color: "#ffffff",
-            stroke: "#000000",
-            strokeThickness: 3,
-          });
-          lbl.setOrigin(0.5, 0.5);
-          children.push(badge, lbl);
-        }
-        const container = this.add.container(pu.x, pu.y, children);
-        container.setDepth(5);
-        visual = {
-          id,
-          type: pu.type,
-          x: pu.x,
-          y: pu.y,
-          expiresAt: Number(pu.expiresAt) || 0,
-          glow,
-          sprite: spr,
-          container,
-          phase: Math.random() * Math.PI * 2,
-          despawning: false,
-        };
-        visual.container.setAlpha(0);
-        visual.glow.setAlpha(0);
-        visual.container.setScale(0.55);
-        visual.glow.setScale(0.45);
-        this.tweens.add({
-          targets: [visual.container, visual.glow],
-          alpha: 1,
-          scaleX: 1,
-          scaleY: 1,
-          duration: 480,
-          ease: "Back.easeOut",
-        });
-        this._powerupVisuals[id] = visual;
-      }
-
-      if (!visual.despawning) {
-        visual.expiresAt = Number(pu.expiresAt) || visual.expiresAt || 0;
-        visual.x = pu.x;
-        visual.y = pu.y;
-        const bob = Math.sin(nowSec * 2.8 + visual.phase) * 5;
-        let shakeX = 0;
-        let shakeY = 0;
-        if (visual.expiresAt > 0) {
-          const remainingMs = visual.expiresAt - Date.now();
-          if (remainingMs <= 2800) {
-            const warn = Phaser.Math.Clamp(1 - remainingMs / 2800, 0, 1);
-            const speed = 12 + warn * 5;
-            const amp = 0.8 + warn * 1.8;
-            shakeX = Math.sin(nowSec * speed + visual.phase * 3) * amp;
-            shakeY =
-              Math.cos(nowSec * (speed * 1.13) + visual.phase * 3) * amp * 0.6;
-          }
-        }
-        visual.container.x = pu.x + shakeX;
-        visual.container.y = pu.y - 6 + bob + shakeY;
-        visual.glow.x = pu.x + shakeX;
-        visual.glow.y = pu.y - 6 + bob + shakeY + 1;
-        visual.glow.alpha =
-          0.18 + 0.18 * Math.abs(Math.sin(nowSec * 3.5 + visual.phase));
-        visual.glow.radius =
-          16 + 4 * Math.abs(Math.sin(nowSec * 2.7 + visual.phase));
-        // Half-spin/pixel-distort feel
-        if (visual.sprite) {
-          const baseS = visual.sprite.scaleY || 1;
-          visual.sprite.scaleX =
-            baseS * (0.9 + 0.1 * Math.sin(nowSec * 4.1 + visual.phase));
-          visual.sprite.scaleY = baseS;
-          visual.sprite.rotation = 0.05 * Math.sin(nowSec * 2.1 + visual.phase);
-        }
-
-        // Per-powerup VFX: animated rings + orbiting particles for visibility.
-        if (fxG) {
-          const c = POWERUP_COLORS[pu.type] || 0xffffff;
-          const ringCy = visual.container.y + 8;
-          const r1 = 21 + 4 * Math.sin(nowSec * 3 + visual.phase);
-          const r2 = 27 + 3 * Math.sin(nowSec * 2.1 + visual.phase + 0.8);
-          if (pu.type === "rage") {
-            const shimmer =
-              0.28 + 0.22 * Math.abs(Math.sin(nowSec * 14 + visual.phase));
-            fxG.fillStyle(POWERUP_COLORS.rage, 0.22);
-            fxG.fillCircle(
-              visual.container.x,
-              ringCy,
-              18 + 2 * Math.sin(nowSec * 5 + visual.phase),
-            );
-            fxG.lineStyle(3, 0xffffff, shimmer);
-            fxG.strokeCircle(visual.container.x, ringCy, r1 + 6);
-            for (let i = 0; i < 3; i++) {
-              const aa = nowSec * (2.3 + i * 0.2) + visual.phase + i * 2.1;
-              fxG.fillStyle(0xffffff, 0.75 - i * 0.15);
-              fxG.fillCircle(
-                visual.container.x + Math.cos(aa) * (r1 + 4),
-                ringCy + Math.sin(aa) * (r1 + 4),
-                2.2 - i * 0.35,
-              );
-            }
-          }
-          fxG.lineStyle(2.5, c, 0.6);
-          fxG.strokeCircle(visual.container.x, ringCy, r1);
-          fxG.lineStyle(2.5, c, 0.38);
-          fxG.strokeCircle(visual.container.x, ringCy, r2);
-          for (let i = 0; i < 4; i++) {
-            const a = nowSec * (1.6 + i * 0.15) + visual.phase + i * 1.57;
-            const px = visual.container.x + Math.cos(a) * (r1 + 3);
-            const py = ringCy + Math.sin(a) * (r1 + 3);
-            fxG.fillStyle(c, 0.8);
-            fxG.fillCircle(px, py, 3);
-          }
-        }
-      }
-    }
-
-    for (const [id, visual] of Object.entries(this._powerupVisuals)) {
-      if (seenIds.has(id) || visual.despawning) continue;
-      visual.despawning = true;
-      this.tweens.add({
-        targets: [visual.container, visual.glow],
-        alpha: 0,
-        scaleX: 0.35,
-        scaleY: 0.35,
-        duration: 180,
-        ease: "Quad.easeIn",
-        onComplete: () => {
-          try {
-            visual.glow.destroy();
-            visual.container.destroy();
-          } catch (_) {}
-          delete this._powerupVisuals[id];
-        },
-      });
-    }
-
-    this._renderPowerupAuras(nowSec);
+    this._powerupRenderer?.renderPowerupsAndEffects();
   }
 
   update() {
-    // Draw poison water overlay (rendered every frame, including when dead)
-    if (this._poisonGraphics) {
-      const g = this._poisonGraphics;
-      g.clear();
-
-      // Smooth-lerp toward server-sent Y so 500ms updates don't cause visible jumps
-      const worldH =
-        Number(this.scale?.height) || Number(this.game.config.height) || 1000;
-      if (this._smoothPoisonY == null)
-        this._smoothPoisonY = this._poisonWaterY ?? worldH + 60;
-      const poisonTargetY = this._poisonWaterY ?? worldH + 60;
-      const poisonDelta = poisonTargetY - this._smoothPoisonY;
-      const poisonLerp = Math.abs(poisonDelta) > 60 ? 0.2 : 0.07;
-      this._smoothPoisonY += poisonDelta * poisonLerp;
-      const py = this._smoothPoisonY;
-
-      if (py < worldH + 10) {
-        const W =
-          Number(this.scale?.width) || Number(this.game.config.width) || 1300;
-        const BOTTOM = worldH + 40; // extend below world so no gap at screen edge
-        const t = this.time.now / 1000; // seconds
-        // Dual-harmonic wave function
-        const amp = 7;
-        const waveY = (x) =>
-          py +
-          amp * Math.sin(x * 0.011 + t * 1.7) +
-          amp * 0.4 * Math.sin(x * 0.024 - t * 1.1);
-
-        // 1. Dark base body - wave surface down to bottom
-        const basePts = [{ x: 0, y: BOTTOM }];
-        for (let x = 0; x <= W; x += 8) basePts.push({ x, y: waveY(x) });
-        basePts.push({ x: W, y: BOTTOM });
-        g.fillStyle(0x166534, 0.48);
-        g.fillPoints(basePts, true);
-
-        // 2. Mid-depth overlay - slightly lighter, surface shifted down to show depth
-        const midPts = [{ x: 0, y: BOTTOM }];
-        for (let x = 0; x <= W; x += 8) midPts.push({ x, y: waveY(x) + 16 });
-        midPts.push({ x: W, y: BOTTOM });
-        g.fillStyle(0x16a34a, 0.27);
-        g.fillPoints(midPts, true);
-
-        // 3. Bright glowing surface stroke
-        g.lineStyle(3, 0x4ade80, 0.95);
-        g.beginPath();
-        for (let x = 0; x <= W; x += 8) {
-          x === 0 ? g.moveTo(x, waveY(x)) : g.lineTo(x, waveY(x));
-        }
-        g.strokePath();
-
-        // 4. Foam flecks along wave crests
-        g.fillStyle(0xd1fae5, 0.85);
-        for (let x = 20; x < W; x += 55) {
-          const wy = waveY(x);
-          const r = 1.8 + 1.4 * Math.abs(Math.sin(t * 1.3 + x * 0.05));
-          g.fillCircle(x + 8 * Math.sin(t * 0.9 + x * 0.03), wy - r * 0.3, r);
-        }
-
-        // 5. Rising bubble particles
-        for (const b of this._poisonBubbles) {
-          const range = BOTTOM - 20 - (py + amp + 8);
-          if (range <= 0) continue;
-          const elapsed = (t + b.phase * 4) % (range / b.speed);
-          const bY = BOTTOM - 20 - elapsed * b.speed;
-          if (bY < py + amp || bY > BOTTOM - 5) continue;
-          const bX = b.x + b.drift * Math.sin(t * 0.7 + b.phase);
-          const alpha = Math.min(0.6, (bY - py) / 35) * 0.9;
-          g.fillStyle(0x86efac, alpha);
-          g.fillCircle(bX, bY, b.r);
-        }
-
-        // 6. Sync CSS background overlay (fills viewport area outside Phaser canvas)
-        const cssDiv = document.getElementById("poison-water-bg");
-        if (cssDiv) {
-          const canvasH = this.game.canvas.clientHeight || 650;
-          const frac = Math.max(0, Math.min(1, (worldH - py) / worldH));
-          cssDiv.style.height = Math.floor(frac * canvasH) + "px";
-          cssDiv.style.display = "block";
-
-          // 7. Red vignette when local player is submerged
-          const vigEl = document.getElementById("water-vignette");
-          if (vigEl) {
-            const inWater = player && player.y >= py;
-            vigEl.classList.toggle("water-danger-active", !!inWater && !dead);
-            if (!inWater || dead) vigEl.style.opacity = "0";
-          }
-        }
-      } else {
-        const cssDiv = document.getElementById("poison-water-bg");
-        if (cssDiv) cssDiv.style.display = "none";
-        const vigEl2 = document.getElementById("water-vignette");
-        if (vigEl2) {
-          vigEl2.classList.remove("water-danger-active");
-          vigEl2.style.opacity = "0";
-        }
-      }
-    }
+    renderPoisonWater(this, { player, dead });
 
     // Powerup visuals/effects are rendered for all players every frame.
     this._renderPowerupsAndEffects();
 
-    // Dynamic zoom: smoothly zoom out as the player climbs higher.
-    // Keep bottom gameplay unchanged at 1.7, but reduce top zoom-out so
-    // horizontal vision doesn't expand too much on high platforms.
-    if (player) {
-      const cam = this.cameras.main;
-      const t = Phaser.Math.Clamp((player.y - 80) / (520 - 80), 0, 1);
-      const targetZoom = 1.3 + (1.7 - 1.3) * t;
-      cam.setZoom(cam.zoom + (targetZoom - cam.zoom) * 0.05);
-
-      // When high up, bias the camera lower to reveal more below and reduce
-      // the amount of empty sky shown above top-platform fights.
-      const highFactor = 1 - t;
-      const targetFollowOffsetY = 120 + 80 * highFactor;
-      cam.setFollowOffset(
-        0,
-        cam.followOffset.y + (targetFollowOffsetY - cam.followOffset.y) * 0.08,
-      );
-    }
+    updateDynamicCamera(this, player, Phaser);
 
     // Only process if game is initialized
     if (!hasJoined || !gameInitialized || dead || gameEnded) return;
 
-    // Handle player movement input and send to server
-    if (player && !dead && !gameEnded) {
-      handlePlayerMovement(this);
+    localInputSync.sync(this, player, {
+      dead,
+      gameEnded,
+      handlePlayerMovement,
+    });
 
-      // Send position + state to server (throttled)
-      const now = Date.now();
-      if (now - lastMovementSent >= movementThrottleMs) {
-        const currentState = {
-          x: player.x,
-          y: player.y,
-          flip: player.flipX,
-          animation: player.anims?.currentAnim?.key || null,
-          loaded: true,
-          ammoState: getAmmoSyncState(),
-        };
+    processSnapshotInterpolation({
+      snapshotBuffer,
+      now: performance.now(),
+      applyFrame: (frame) =>
+        this.interpolatePlayerStates(frame.aState, frame.bState, frame.alpha),
+      onDebugLine: (line) => console.log(line),
+    });
 
-        // Only send if state has changed
-        if (
-          Math.abs(currentState.x - lastPlayerState.x) > 1 ||
-          Math.abs(currentState.y - lastPlayerState.y) > 1 ||
-          currentState.flip !== lastPlayerState.flip ||
-          currentState.animation !== lastPlayerState.animation
-        ) {
-          // Disable per-message compression for movement for lower latency on constrained devices
-          socket.volatile.compress(false).emit("game:input", currentState);
-
-          lastPlayerState = { ...currentState };
-          lastMovementSent = now;
-        }
-      }
-    }
-
-    // Server state interpolation
-    if (stateActive && stateBuffer.length > 0) {
-      const perfNow = performance.now();
-      if (renderClockMono == null) {
-        // Fallback: just snap to last
-        const last = stateBuffer[stateBuffer.length - 1];
-        this.interpolatePlayerStates(last, last, 1);
-      } else {
-        // Advance render clock by real frame delta (bounded) then subtract adaptive delay
-        if (lastFramePerfNow == null) lastFramePerfNow = perfNow;
-        let dt = perfNow - lastFramePerfNow;
-        lastFramePerfNow = perfNow;
-        if (dt < 0) dt = 0;
-        if (dt > 250) dt = 250; // clamp huge frame stalls
-        renderClockMono += dt; // advance in server mono domain (assuming near 1:1)
-        let targetMono = renderClockMono - interpDelayMs;
-
-        // Guard: ensure we don't outrun newest snapshot - small margin
-        const newest = stateBuffer[stateBuffer.length - 1].tMono;
-        const oldest = stateBuffer[0].tMono;
-        if (targetMono > newest - 5) {
-          // Pull back gently (fast catch-up)
-          targetMono = newest - 5;
-          renderClockMono = targetMono + interpDelayMs;
-        }
-        // If we're too close to oldest (buffer underrun), push forward
-        if (targetMono < oldest + 5) {
-          targetMono = oldest + 5;
-          renderClockMono = targetMono + interpDelayMs;
-        }
-
-        // PLL correction: measure average spacing vs expected to nudge speed
-        if (spacingEma != null) {
-          const expected = 50; // server nominal spacing
-          const error = spacingEma - expected; // positive => slower than expected
-          // tiny proportional adjustment to render clock to keep phase reasonable
-          renderClockMono += error * 0.02; // extremely conservative
-        }
-
-        // ---- Backlog safeguard ----
-        const headT = newest; // latest snapshot tMono
-        let lagMs = headT - interpDelayMs - targetMono;
-
-        // Hard clamp: never render more than 500ms behind head
-        const MAX_HISTORY_MS = 500;
-        const minTarget = headT - (interpDelayMs + MAX_HISTORY_MS);
-        if (targetMono < minTarget) {
-          console.warn(
-            `[interp] clamping backlog: lag=${lagMs.toFixed(1)}ms buffer=${
-              stateBuffer.length
-            }`,
-          );
-          targetMono = minTarget;
-          renderClockMono = targetMono + interpDelayMs;
-
-          // Drop stale snapshots older than target
-          while (
-            stateBuffer.length > 2 &&
-            stateBuffer[1].tMono <= targetMono - 50
-          ) {
-            stateBuffer.shift();
-          }
-          lagMs = headT - interpDelayMs - targetMono;
-        }
-
-        // Fast-forward if we ever fall >1s behind
-        if (lagMs > 1000) {
-          console.warn(`[interp] severe lag reset: lag=${lagMs.toFixed(0)}ms`);
-          targetMono = headT - interpDelayMs;
-          renderClockMono = targetMono + interpDelayMs;
-          // keep only most recent ~10
-          if (stateBuffer.length > 10) {
-            stateBuffer.splice(0, stateBuffer.length - 10);
-          }
-        }
-        // ----------------------------
-
-        // ---- Catch-up PLL (gentle fast-forward when behind) ----
-        {
-          const headT = newest; // latest snapshot tMono
-          const desired = headT - interpDelayMs;
-          let lagMs = desired - targetMono; // >0 means we are behind
-
-          // If we are behind by more than ~2 frames at 20Hz, speed up a bit
-          if (lagMs > 120) {
-            // Proportional gain: move up to 10ms/frame toward the head
-            const gain = 0.12; // small proportional factor
-            const maxPerFrame = 10; // hard cap per frame (ms)
-            const step = Math.min(lagMs * gain, maxPerFrame);
-            targetMono += step;
-            renderClockMono = targetMono + interpDelayMs;
-          }
-
-          // If somehow ahead (negative lag), gently slow down a bit
-          if (lagMs < -60) {
-            const gain = 0.08;
-            const maxPerFrame = 8;
-            const step = Math.min(-lagMs * gain, maxPerFrame);
-            targetMono -= step;
-            renderClockMono = targetMono + interpDelayMs;
-          }
-
-          // Keep buffer tight around target: drop stale snapshots far behind target
-          while (
-            stateBuffer.length > 2 &&
-            stateBuffer[1].tMono <= targetMono - 50
-          ) {
-            stateBuffer.shift();
-          }
-        }
-        // --------------------------------------------------------
-
-        // Locate surrounding snapshots for targetMono
-        let aState = null;
-        let bState = null;
-        for (let i = 0; i < stateBuffer.length - 1; i++) {
-          const a = stateBuffer[i];
-          const b = stateBuffer[i + 1];
-          if (a.tMono <= targetMono && targetMono <= b.tMono) {
-            aState = a;
-            bState = b;
-            break;
-          }
-        }
-
-        if (aState && bState) {
-          const span = bState.tMono - aState.tMono;
-          let alpha = span > 0 ? (targetMono - aState.tMono) / span : 1;
-          if (alpha < 0) alpha = 0;
-          else if (alpha > 1) alpha = 1;
-          this.interpolatePlayerStates(aState, bState, alpha);
-        } else {
-          // Fallbacks
-          if (stateBuffer.length >= 2) {
-            const a = stateBuffer[stateBuffer.length - 2];
-            const b = stateBuffer[stateBuffer.length - 1];
-            this.interpolatePlayerStates(a, b, 1);
-          } else if (stateBuffer.length === 1) {
-            const only = stateBuffer[0];
-            this.interpolatePlayerStates(only, only, 1);
-          }
-        }
-      }
-    }
-
-    // Debug print every ~5s (dev aid) - comment out for production
-    try {
-      const pn = performance.now();
-      if (pn - lastAdaptivePrint > 5000 && spacingEma != null) {
-        lastAdaptivePrint = pn;
-        console.log(
-          `[adaptive] delay=${interpDelayMs.toFixed(
-            1,
-          )}ms spacingEma=${spacingEma?.toFixed(
-            2,
-          )} jitterEma=${jitterEma?.toFixed(2)} buffer=${stateBuffer.length}`,
-        );
-      }
-    } catch (_) {}
-
-    // Update health bars for all players
-    for (const player in opponentPlayers) {
-      const opponentPlayer = opponentPlayers[player];
-      if (opponentPlayer.updateHealthBar) {
-        opponentPlayer.updateHealthBar();
-      }
-    }
-    for (const player in teamPlayers) {
-      const teamPlayer = teamPlayers[player];
-      if (teamPlayer.updateHealthBar) {
-        teamPlayer.updateHealthBar();
-      }
-    }
+    updateHealthBars({ opponentPlayers, teamPlayers });
   }
 
   interpolatePlayerStates(aState, bState, alpha) {
@@ -2806,61 +1252,11 @@ function trySendReadyAck() {
 }
 
 function startCountdown() {
-  const countdownEl = document.getElementById("countdown-display");
-  if (!countdownEl) return;
-
-  let count = 3;
-
-  const updateCountdown = () => {
-    if (count > 0) {
-      countdownEl.style.transform = "scale(0.5)";
-      countdownEl.style.opacity = "0.5";
-
-      setTimeout(() => {
-        countdownEl.textContent = count;
-        countdownEl.style.transform = "scale(1.2)";
-        countdownEl.style.opacity = "1";
-        countdownEl.style.transition = "transform 0.3s ease, opacity 0.3s ease";
-
-        setTimeout(() => {
-          countdownEl.style.transform = "scale(1)";
-        }, 150);
-      }, 50);
-
-      count--;
-      setTimeout(updateCountdown, 1000);
-    } else {
-      countdownEl.textContent = "FIGHT!";
-      countdownEl.style.color = "#ef4444";
-      countdownEl.style.transform = "scale(1.5)";
-
-      setTimeout(() => {
-        hideBattleStartOverlay();
-        try {
-          if (gameScene && gameScene.input?.keyboard) {
-            gameScene.input.keyboard.enabled = true;
-          }
-        } catch (_) {}
-      }, 1000);
-    }
-  };
-
-  updateCountdown();
+  return hud.startCountdown();
 }
 
 function hideBattleStartOverlay() {
-  const overlay = document.getElementById("battle-start-overlay");
-  if (!overlay) return;
-  const wrap = overlay.querySelector(".bs-wrap");
-  if (wrap) wrap.style.opacity = "0";
-  setTimeout(() => {
-    overlay.classList.add("hidden");
-    overlay.setAttribute("aria-hidden", "true");
-  }, 300);
-  // Show game timer HUD once battle begins
-  try {
-    document.getElementById("game-timer-hud")?.classList.remove("hidden");
-  } catch (_) {}
+  return hud.hideBattleStartOverlay();
 }
 
 // -----------------------------

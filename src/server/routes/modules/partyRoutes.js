@@ -1,0 +1,113 @@
+const { emitRoster } = require("../../helpers/party");
+const { createPartyStateService } = require("../../services/partyStateService");
+const { createPartyRouteService } = require("../../services/partyRouteService");
+
+function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
+  const partyState = createPartyStateService({ db, io });
+  const partyRoute = createPartyRouteService({ db });
+
+  app.post("/create-party", async (req, res) => {
+    try {
+      const user = await requireCurrentUser(req, res);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+      const username = user.name;
+
+      const partyId = await partyState.createPartyForUser(username);
+
+      console.log(`[party] Party ${partyId} created by ${username}`);
+      res.status(201).json({ partyId });
+    } catch (err) {
+      console.error(`[party] Failed to create party:`, err.message);
+      if (err?.code === "ER_DUP_ENTRY")
+        return res.status(409).json({ error: "Duplicate membership" });
+      res.status(500).json({ error: "Failed to create party" });
+    }
+  });
+
+  app.post("/partydata", async (req, res) => {
+    const user = await requireCurrentUser(req, res);
+    if (!user) return res.status(401).json({ error: "Not authenticated" });
+    const username = user.name;
+    const partyIdRaw = req.body?.partyId;
+    const partyId = Number(partyIdRaw);
+    if (!Number.isFinite(partyId) || partyId <= 0) {
+      return res.status(400).json({ error: "partyId is required" });
+    }
+    try {
+      const result = await partyState.joinPartyAndGetData({
+        partyId,
+        username,
+      });
+      if (!result.ok) {
+        return res.status(result.statusCode || 500).json(result.payload || {});
+      }
+
+      await req.app.locals.socketApi.moveUserSocketToParty(username, partyId);
+      if (result.joinedNow) {
+        try {
+          await req.app.locals.socketApi.cancelPartyQueue(
+            partyId,
+            user.user_id,
+          );
+        } catch (_) {}
+      }
+      await emitRoster(io, partyId, result.party, result.members);
+
+      res.json({
+        party: result.party,
+        capacity: result.capacity,
+        members: result.members,
+        viewer: username,
+      });
+    } catch (err) {
+      console.error("[party] /partydata error", err);
+      res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  app.post("/party-members", async (req, res) => {
+    try {
+      const user = await requireCurrentUser(req, res);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+      const result = await partyRoute.getPartyMembersView({
+        username: user.name,
+        partyId: req.body?.partyId,
+      });
+      if (!result.ok) {
+        return res.status(result.statusCode || 400).json(result.payload || {});
+      }
+      return res.json(result.payload);
+    } catch (err) {
+      console.error("[party] /party-members error", err);
+      res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  app.post("/leave-party", async (req, res) => {
+    try {
+      const user = await requireCurrentUser(req, res);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+      const username = user.name;
+      const partyId = await partyRoute.resolveLeavePartyId({
+        username,
+        partyId: req.body?.partyId,
+      });
+      if (!partyId) {
+        return res.json({ success: true, left: false, deleted: false });
+      }
+      const leaveResult = await partyState.leaveParty({ partyId, username });
+      if (!leaveResult.left)
+        return res.json({ success: true, left: false, deleted: false });
+      await req.app.locals.socketApi.moveUserSocketToLobby(username);
+      console.log(
+        `[party] ${username} left party ${partyId}, party deleted: ${leaveResult.deleted}`,
+      );
+      res.json({ success: true, left: true, deleted: leaveResult.deleted });
+    } catch (e) {
+      console.error("/leave-party", e);
+      res.status(500).json({ error: "Internal error" });
+    }
+  });
+}
+
+module.exports = { registerPartyRoutes };

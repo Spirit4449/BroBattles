@@ -16,13 +16,19 @@ for (const d of [lushyDef, mangroveDef, undergroundDef]) {
   MAPS[d.id] = d;
 }
 
+export function normalizeMapId(mapId) {
+  const n = Number(mapId);
+  if (Number.isFinite(n) && MAPS[n]) return n;
+  return lushyDef.id;
+}
+
 /**
  * Build the map platforms inside a Phaser scene.
  * @param {Phaser.Scene} scene
  * @param {number|string} mapId
  */
 export function buildMap(scene, mapId) {
-  MAPS[Number(mapId)]?.build(scene);
+  MAPS[normalizeMapId(mapId)]?.build(scene);
 }
 
 /**
@@ -37,7 +43,13 @@ export function buildMap(scene, mapId) {
  * @param {number}       teamSize  — total players on that team
  */
 export function positionSpawn(scene, sprite, mapId, team, index, teamSize) {
-  MAPS[Number(mapId)]?.positionSpawn(scene, sprite, team, index, teamSize);
+  MAPS[normalizeMapId(mapId)]?.positionSpawn(
+    scene,
+    sprite,
+    team,
+    index,
+    teamSize,
+  );
 }
 
 /**
@@ -47,7 +59,7 @@ export function positionSpawn(scene, sprite, mapId, team, index, teamSize) {
  * @returns {object[]}
  */
 export function getMapObjects(mapId) {
-  return MAPS[Number(mapId)]?.getObjects() ?? [];
+  return MAPS[normalizeMapId(mapId)]?.getObjects() ?? [];
 }
 
 /**
@@ -56,7 +68,7 @@ export function getMapObjects(mapId) {
  * @returns {string}
  */
 export function getMapBgAsset(mapId) {
-  return MAPS[Number(mapId)]?.bgAsset ?? "/assets/lushy/gameBg.webp";
+  return MAPS[normalizeMapId(mapId)]?.bgAsset ?? "/assets/lushy/gameBg.webp";
 }
 
 export default MAPS;

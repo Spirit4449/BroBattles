@@ -23,8 +23,9 @@ import {
   getStats,
   getEffectsClass,
 } from "./characters";
-import { performSpecial } from "./characters/special";
 import { spawnDust, spawnHealthMarker, spawnWallKickCloud } from "./effects";
+import { bindLocalSocketEvents } from "./players/localSocketEvents";
+import { createLocalStateSync } from "./players/localStateSync";
 // Globals
 let player;
 let cursors;
@@ -97,6 +98,63 @@ let bodyConfig = null;
 let applyFlipOffsetLocal = null;
 let charEffects = null; // per-character, per-player effects handler (e.g., Draven fire)
 let charCtrl = null; // active character controller instance
+let disposeLocalSocketEvents = null;
+
+const localStateSync = createLocalStateSync({
+  Phaser,
+  getPlayer: () => player,
+  getDead: () => dead,
+  setDead: (value) => {
+    dead = value;
+  },
+  getMaxHealth: () => maxHealth,
+  setMaxHealth: (value) => {
+    maxHealth = value;
+  },
+  getCurrentHealth: () => currentHealth,
+  setCurrentHealth: (value) => {
+    currentHealth = value;
+  },
+  getSuperCharge: () => superCharge,
+  setSuperCharge: (value) => {
+    superCharge = value;
+  },
+  getMaxSuperCharge: () => maxSuperCharge,
+  setMaxSuperCharge: (value) => {
+    maxSuperCharge = value;
+  },
+  getAmmoCapacity: () => ammoCapacity,
+  setAmmoCapacity: (value) => {
+    ammoCapacity = value;
+  },
+  getAmmoCharges: () => ammoCharges,
+  setAmmoCharges: (value) => {
+    ammoCharges = value;
+  },
+  getAmmoCooldownMs: () => ammoCooldownMs,
+  setAmmoCooldownMs: (value) => {
+    ammoCooldownMs = value;
+  },
+  getAmmoReloadMs: () => ammoReloadMs,
+  setAmmoReloadMs: (value) => {
+    ammoReloadMs = value;
+  },
+  getReloadTimerMs: () => reloadTimerMs,
+  setReloadTimerMs: (value) => {
+    reloadTimerMs = value;
+  },
+  getNextFireTime: () => nextFireTime,
+  setNextFireTime: (value) => {
+    nextFireTime = value;
+  },
+  setMovementSpeedMult: (value) => {
+    movementSpeedMult = value;
+  },
+  setMovementJumpMult: (value) => {
+    movementJumpMult = value;
+  },
+  updateHealthBar: () => updateHealthBar(),
+});
 
 // Create player function
 export function createPlayer(
@@ -109,6 +167,13 @@ export function createPlayer(
   mapParam,
   opponentPlayersParam,
 ) {
+  if (disposeLocalSocketEvents) {
+    try {
+      disposeLocalSocketEvents();
+    } catch (_) {}
+    disposeLocalSocketEvents = null;
+  }
+
   username = name;
   scene = sceneParam;
   spawn = spawnParam;
@@ -379,6 +444,67 @@ export function createPlayer(
   // Per-character effects: instantiate if the character provides an Effects class
   const EffectsCls = getEffectsClass(currentCharacter);
   charEffects = EffectsCls ? new EffectsCls(scene, player) : null;
+
+  disposeLocalSocketEvents = bindLocalSocketEvents({
+    socket,
+    getUsername: () => username,
+    getScene: () => scene,
+    getPlayer: () => player,
+    getCurrentCharacter: () => currentCharacter,
+    getGameId: () => gameId,
+    getPlayersInTeam: () => playersInTeam,
+    getOpponentPlayersRef: () => opponentPlayersRef,
+    resolveAnimKey,
+    spawnHealthMarker,
+    updateHealthBar,
+    getCurrentHealth: () => currentHealth,
+    setCurrentHealthValue: (value) => {
+      currentHealth = value;
+    },
+    getMaxHealth: () => maxHealth,
+    setMaxHealth: (value) => {
+      maxHealth = value;
+    },
+    getDead: () => dead,
+    setDead: (value) => {
+      dead = value;
+    },
+    getSuperCharge: () => superCharge,
+    setSuperCharge: (value) => {
+      superCharge = value;
+    },
+    setMaxSuperCharge: (value) => {
+      maxSuperCharge = value;
+    },
+    getWallSlideLoopSfx: () => wallSlideLoopSfx,
+    getWallSlideLoopPlaying: () => wallSlideLoopPlaying,
+    setWallSlideLoopPlaying: (value) => {
+      wallSlideLoopPlaying = value;
+    },
+    onDebug: pdbg,
+  });
+
+  if (!scene._localSocketEventsCleanupBound) {
+    scene._localSocketEventsCleanupBound = true;
+    scene.events.once("shutdown", () => {
+      if (disposeLocalSocketEvents) {
+        try {
+          disposeLocalSocketEvents();
+        } catch (_) {}
+        disposeLocalSocketEvents = null;
+      }
+      scene._localSocketEventsCleanupBound = false;
+    });
+    scene.events.once("destroy", () => {
+      if (disposeLocalSocketEvents) {
+        try {
+          disposeLocalSocketEvents();
+        } catch (_) {}
+        disposeLocalSocketEvents = null;
+      }
+      scene._localSocketEventsCleanupBound = false;
+    });
+  }
 }
 
 // Function to set health of player from another file
@@ -1013,182 +1139,19 @@ export function handlePlayerMovement(scene) {
 }
 
 export function setSuperStats(charge, maxCharge) {
-  superCharge = charge;
-  maxSuperCharge = maxCharge;
-  updateHealthBar();
+  return localStateSync.setSuperStats(charge, maxCharge);
 }
 
 export function applyAuthoritativeState(state) {
-  if (!state || typeof state !== "object") return;
-
-  if (typeof state.maxHealth === "number" && state.maxHealth > 0) {
-    maxHealth = state.maxHealth;
-  }
-  if (typeof state.health === "number") {
-    currentHealth = Math.max(0, Math.min(maxHealth, Math.round(state.health)));
-  }
-  if (typeof state.superCharge === "number") {
-    superCharge = Math.max(0, Math.round(state.superCharge));
-  }
-  if (typeof state.maxSuperCharge === "number" && state.maxSuperCharge > 0) {
-    maxSuperCharge = Math.round(state.maxSuperCharge);
-  }
-
-  const ammo = state.ammoState;
-  if (ammo && typeof ammo === "object") {
-    const cap = Number(ammo.capacity);
-    const charges = Number(ammo.charges);
-    const cooldown = Number(ammo.cooldownMs);
-    const reload = Number(ammo.reloadMs);
-    const reloadTimer = Number(ammo.reloadTimerMs);
-    const nextFireIn = Number(ammo.nextFireInMs);
-
-    if (Number.isFinite(cap) && cap > 0) {
-      ammoCapacity = Math.max(1, Math.round(cap));
-    }
-    if (Number.isFinite(charges)) {
-      ammoCharges = Phaser.Math.Clamp(Math.round(charges), 0, ammoCapacity);
-    }
-    if (Number.isFinite(cooldown) && cooldown > 0) {
-      ammoCooldownMs = cooldown;
-    }
-    if (Number.isFinite(reload) && reload > 0) {
-      ammoReloadMs = reload;
-    }
-    if (Number.isFinite(reloadTimer) && reloadTimer >= 0) {
-      reloadTimerMs = Phaser.Math.Clamp(reloadTimer, 0, ammoReloadMs);
-    }
-    if (Number.isFinite(nextFireIn)) {
-      nextFireTime = Date.now() + Math.max(0, nextFireIn);
-    }
-  }
-
-  if (typeof state.isAlive === "boolean") {
-    dead = !state.isAlive;
-    if (!dead && player) {
-      player.alpha = 1;
-      if (player.body) player.body.enable = true;
-    }
-  }
-
-  updateHealthBar();
+  return localStateSync.applyAuthoritativeState(state);
 }
 
 export function getAmmoSyncState() {
-  return {
-    capacity: ammoCapacity,
-    charges: ammoCharges,
-    cooldownMs: ammoCooldownMs,
-    reloadMs: ammoReloadMs,
-    reloadTimerMs: reloadTimerMs,
-    nextFireInMs: Math.max(0, Math.round(nextFireTime - Date.now())),
-  };
+  return localStateSync.getAmmoSyncState();
 }
 
 export function setPowerupMobility(speedMult = 1, jumpMult = 1) {
-  movementSpeedMult = Number.isFinite(speedMult) ? Math.max(0.5, speedMult) : 1;
-  movementJumpMult = Number.isFinite(jumpMult) ? Math.max(0.5, jumpMult) : 1;
+  return localStateSync.setPowerupMobility(speedMult, jumpMult);
 }
 
 export { player, frame, currentHealth, setCurrentHealth, dead };
-
-// Listen for authoritative health updates from server
-socket.on("health-update", (data) => {
-  if (data.username === username) {
-    const prev = currentHealth;
-    if (typeof data.maxHealth === "number" && data.maxHealth > 0) {
-      maxHealth = data.maxHealth;
-      if (currentHealth > maxHealth) currentHealth = maxHealth;
-    }
-    currentHealth = data.health;
-    const delta = currentHealth - prev;
-    pdbg();
-    if (scene && player && delta !== 0) {
-      const markerY = player.body
-        ? player.body.y - 16
-        : player.y - player.height / 2;
-      spawnHealthMarker(scene, player.x, markerY, delta, { depth: 18 });
-    }
-    // SFX: play damage vs heal feedback
-    if (scene && scene.sound && !dead) {
-      if (delta < 0) {
-        // Took damage
-        scene.sound.play("sfx-damage", { volume: 5 });
-      } else if (delta > 0) {
-        const s = scene.sound.add("sfx-heal", { volume: 0.1 });
-        try {
-          s.play();
-        } catch (_) {}
-      }
-    }
-    if (currentHealth <= 0) {
-      if (!dead) {
-        dead = true;
-        if (wallSlideLoopPlaying && wallSlideLoopSfx) {
-          try {
-            wallSlideLoopSfx.stop();
-          } catch (_) {}
-          wallSlideLoopPlaying = false;
-        }
-        player.anims.play(
-          resolveAnimKey(scene, currentCharacter, "dying"),
-          true,
-        );
-        scene.input.enabled = false;
-        player.setVelocity(0, 0);
-        if (player.body) {
-          player.body.enable = false;
-        }
-        try {
-          scene.tweens.add({
-            targets: player,
-            alpha: 0.38,
-            duration: 260,
-            ease: "Quad.easeOut",
-          });
-        } catch (_) {
-          player.alpha = 0.38;
-        }
-        pdbg();
-      }
-      currentHealth = 0; // force exact 0
-    }
-    updateHealthBar(); // always refresh (covers death case where movement loop stops)
-  }
-});
-
-socket.on("super-update", (data) => {
-  if (data.username === username) {
-    superCharge = data.charge;
-    maxSuperCharge = data.maxCharge;
-    updateHealthBar();
-  }
-});
-
-socket.on("player:special", (data) => {
-  if (data.username === username) {
-    const targets = Object.values(opponentPlayersRef || {})
-      .map((op) => op.opponent)
-      .filter((s) => s && s.active);
-
-    performSpecial(
-      data.character,
-      scene,
-      player,
-      playersInTeam,
-      targets,
-      username,
-      gameId,
-      true, // isOwner
-    );
-  }
-});
-
-socket.on("player:knockback", (data) => {
-  if (!player || !player.body || dead) return;
-  const amountX = Number(data?.amountX) || 0;
-  const amountY = Number(data?.amountY) || 0;
-  player.setVelocityX(amountX);
-  player.setVelocityY(-Math.abs(amountY));
-  player._wallKickLockUntil = Date.now() + 120;
-});
