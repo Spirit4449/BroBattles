@@ -324,6 +324,9 @@ export function setLobbyBackground(mapValue) {
     // Mangrove Meadow
     document.body.style.backgroundImage =
       'url("/assets/mangrove/lobbyBg.webp")';
+  } else if (map === "3") {
+    // Serenity
+    document.body.style.backgroundImage = 'url("/assets/serenity/lobbyBg.webp")';
   } else {
     // Default map
     document.body.style.backgroundImage = 'url("/assets/lushy/lobbyBg.webp")';

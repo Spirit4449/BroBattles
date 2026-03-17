@@ -447,6 +447,16 @@ function initTeamStatusHud(players) {
   return hud.initTeamStatusHud(players);
 }
 
+function applyMatchBackground(mapId) {
+  try {
+    const bgUrl = getMapBgAsset(mapId);
+    const bgImg = document.querySelector("#game-bg img");
+    if (bgImg && bgUrl) {
+      bgImg.setAttribute("src", bgUrl);
+    }
+  } catch (_) {}
+}
+
 function setTeamHudPlayerAlive(name, isAlive) {
   return hud.setTeamHudPlayerAlive(name, isAlive);
 }
@@ -681,6 +691,7 @@ class GameScene extends Phaser.Scene {
 
     // Background music: play once (2:30 track), no loop, but only after audio unlock (user gesture)
     this._bgmStarted = false;
+    applyMatchBackground(gameData?.map);
     const startBgm = () => {
       if (this._bgmStarted) return;
       this._bgmStarted = true;

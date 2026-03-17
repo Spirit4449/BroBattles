@@ -12,9 +12,9 @@ const SCALE_TINY = 0.45; // small corner platforms
 const BASE_Y = 630; // main floor Y
 const PLATFORM_Y = 300; // elevated centre platform Y
 const SIDE_DX = 490; // left/right side platform X offset from centre
-const SIDE_Y = 320; // side platform Y
-const SMALL_DX = 580; // small corner platform X offset from centre
-const SMALL_Y = 560; // small corner platform Y
+const SIDE_Y = 325; // side platform Y
+const SMALL_DX = 530; // small corner platform X offset from centre
+const SMALL_Y = 580; // small corner platform Y
 
 // team1 spawns on base (bottom), team2 spawns on the elevated platform (top)
 const TEAM1_PLATFORM = "base";

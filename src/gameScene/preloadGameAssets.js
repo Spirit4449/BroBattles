@@ -36,6 +36,11 @@ export function preloadGameAssets({
   );
   scene.load.image("mangrove-base-top", `${staticPath}/mangrove/baseTop.webp`);
 
+
+  scene.load.image("serenity-large-platform", `${staticPath}/serenity/largePlatform.webp`);
+  scene.load.image("serenity-side-platform", `${staticPath}/serenity/sidePlatform.webp`);
+  scene.load.image("serenity-log-platform", `${staticPath}/serenity/logPlatform.webp`);
+
   // Movement SFX (place files under /assets/audio)
   scene.load.audio("sfx-step", `${staticPath}/step.mp3`);
   scene.load.audio("sfx-jump", `${staticPath}/jump.mp3`);

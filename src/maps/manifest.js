@@ -8,11 +8,11 @@
 
 import { definition as lushyDef } from "./lushyPeaks";
 import { definition as mangroveDef } from "./mangroveMeadow";
-import { definition as undergroundDef } from "./underground";
+import { definition as serenityDef } from "./serenity";
 
 // Registry: numeric mapId -> definition
 const MAPS = {};
-for (const d of [lushyDef, mangroveDef, undergroundDef]) {
+for (const d of [lushyDef, mangroveDef, serenityDef]) {
   MAPS[d.id] = d;
 }
 

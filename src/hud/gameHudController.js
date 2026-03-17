@@ -29,12 +29,17 @@ export function createGameHudController({
     const gameData = _gameData();
     const username = _username();
 
+    const mapBgAsset =
+      typeof getMapBgAsset === "function"
+        ? getMapBgAsset(gameData?.map)
+        : "/assets/lushy/gameBg.webp";
+
     const bg = document.getElementById("bs-bg");
-    if (bg) {
-      bg.src =
-        typeof getMapBgAsset === "function"
-          ? getMapBgAsset(gameData?.map)
-          : "/assets/lushy/gameBg.webp";
+    if (bg) bg.src = mapBgAsset;
+
+    const backdrop = root.querySelector(".bs-backdrop");
+    if (backdrop) {
+      backdrop.style.setProperty("--bs-map-bg", `url("${mapBgAsset}")`);
     }
 
     const modeEl = document.getElementById("bs-mode");

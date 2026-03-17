@@ -692,6 +692,12 @@ export function handlePlayerMovement(scene) {
   // - wallKickLockMs: short window after a wall jump where opposite input is ignored
   //   so the horizontal kick isn't immediately canceled by collisions or input.
   const wallKickLockMs = 160;
+  // - wallJumpGraceMs/wallJumpGracePx: allow wall jump shortly after leaving wall.
+  const wallJumpGraceMs = 120;
+  const wallJumpGracePx = 50;
+  // - wall kick strength: small when jumping with up-only, full when up+away.
+  const wallKickSmall = 150;
+  const wallKickFull = 360;
   // - fallGravityFactor: gravity multiplier while falling (fast-fall). 1.0 = off.
   const fallGravityFactor = 1.35;
   // Ensure body uses our drag settings once
@@ -706,13 +712,40 @@ export function handlePlayerMovement(scene) {
     : player._lastGroundTime || 0;
 
   // Keys. Player can use either arrow keys or WASD
-  let leftKey = cursors.left.isDown || scene.input.keyboard.addKey("A").isDown;
-  let rightKey =
-    cursors.right.isDown || scene.input.keyboard.addKey("D").isDown;
-  let upKey =
-    cursors.up.isDown ||
-    scene.input.keyboard.addKey("W").isDown ||
-    (keySpace && keySpace.isDown);
+  const keyA = scene.input.keyboard.addKey("A");
+  const keyD = scene.input.keyboard.addKey("D");
+  const keyW = scene.input.keyboard.addKey("W");
+  let leftKey = cursors.left.isDown || keyA.isDown;
+  let rightKey = cursors.right.isDown || keyD.isDown;
+  let upKey = cursors.up.isDown || keyW.isDown || (keySpace && keySpace.isDown);
+
+  const touchingWallNow =
+    !!player.body.touching.left ||
+    !!player.body.touching.right ||
+    !!player.body.blocked.left ||
+    !!player.body.blocked.right;
+  const touchingLeftNow = !!player.body.touching.left || !!player.body.blocked.left;
+  const touchingRightNow =
+    !!player.body.touching.right || !!player.body.blocked.right;
+  const nowWallTs = Date.now();
+  if (touchingWallNow) {
+    player._lastWallTouchTime = nowWallTs;
+    player._lastWallTouchSide = touchingLeftNow ? "left" : "right";
+    player._lastWallTouchX = player.x;
+  }
+  const wallTouchAge = nowWallTs - (player._lastWallTouchTime || 0);
+  const wallTouchDx = Math.abs((player._lastWallTouchX ?? player.x) - player.x);
+  const wallJumpGraceActive =
+    !touchingWallNow &&
+    wallTouchAge <= wallJumpGraceMs &&
+    wallTouchDx <= wallJumpGracePx;
+  const wallSide = touchingLeftNow
+    ? "left"
+    : touchingRightNow
+      ? "right"
+      : wallJumpGraceActive
+        ? player._lastWallTouchSide
+        : null;
 
   const nowTs = Date.now();
   const movementLocked = (player?._movementLockedUntil || 0) > nowTs;
@@ -902,16 +935,20 @@ export function handlePlayerMovement(scene) {
     jump(); // Calls jump
     scene.sound.play("sfx-jump", { volume: 3 });
   } else if (
-    // If player is touching a wall while jumping
-    (player.body.touching.left || (player.body.touching.right && !dead)) &&
+    // Wall jump can trigger while holding up (no re-press required).
+    !dead &&
+    wallSide &&
+    !player.body.touching.down &&
     canWallJump &&
     upKey
   ) {
-    wallJump(); // Calls walljump
+    const awayPressed = wallSide === "left" ? rightKey : leftKey;
+    wallJump(wallSide, awayPressed); // Calls walljump
     scene.sound.play("sfx-walljump", { volume: 4 });
   }
   if (
-    (player.body.touching.left || (player.body.touching.right && !dead)) &&
+    !dead &&
+    (touchingLeftNow || touchingRightNow) &&
     !isAttacking
   ) {
     player.anims.play(resolveAnimKey(scene, currentCharacter, "sliding"), true); // Plays sliding animation
@@ -920,14 +957,14 @@ export function handlePlayerMovement(scene) {
   const isWallSliding =
     !dead &&
     !player.body.touching.down &&
-    (player.body.touching.left || player.body.touching.right) &&
+    (touchingLeftNow || touchingRightNow) &&
     (player.body.velocity.y || 0) > 20;
   updateWallSlideAudio(isWallSliding);
 
   // Wall slide: when touching a wall and airborne, limit fall speed for a slower slide
   if (
     !player.body.touching.down &&
-    (player.body.touching.left || player.body.touching.right)
+    (touchingLeftNow || touchingRightNow)
   ) {
     if (player.body.velocity.y > wallSlideMaxFallSpeed) {
       player.setVelocityY(wallSlideMaxFallSpeed);
@@ -1039,12 +1076,13 @@ export function handlePlayerMovement(scene) {
     isJumping = true;
   }
 
-  function wallJump() {
+  function wallJump(wallSideParam, awayPressed) {
     updateWallSlideAudio(false);
     // More powerful wall jump using physics impulses (no tween)
     canWallJump = false;
-    const fromLeft = !!player.body.touching.left;
-    const horizKick = fromLeft ? 360 : -360; // slightly less horizontal push
+    const fromLeft = wallSideParam === "left";
+    const horizKickMag = awayPressed ? wallKickFull : wallKickSmall;
+    const horizKick = fromLeft ? horizKickMag : -horizKickMag;
     const vertKick = Math.max(jumpSpeed + 30, 220); // slightly less vertical pop
 
     // Face away from the wall and fix body offset
@@ -1072,7 +1110,7 @@ export function handlePlayerMovement(scene) {
 
     // Apply velocity impulses
     // Nudge away from the wall first so we don't remain embedded and lose the kick
-    const sep = 3;
+    const sep = 8;
 
     // Visual-only kickback cloud at wall contact point.
     try {

@@ -7,7 +7,7 @@ const WORLD_BOUNDS = {
   margin: 200,
 };
 
-const GAME_DURATION_MS = 2.5 * 60 * 1000;
+const GAME_DURATION_MS = 26.5 * 60 * 1000;
 const SD_RISE_SPEED = 15;
 const SD_RISE_FAST_PHASE_MS = 12000;
 const SD_RISE_FAST_MULT = 2.2;
