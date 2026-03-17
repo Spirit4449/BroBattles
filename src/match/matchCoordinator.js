@@ -117,6 +117,7 @@ export function createMatchCoordinator(config) {
     onPlayMatchEndSound,
     onShowGameOverScreen,
   } = config;
+  const REMOTE_ATTACK_PRECISION_WINDOW_MS = 320;
 
   // ---------------------------------------------------------------------------
   // Private helpers
@@ -431,12 +432,31 @@ export function createMatchCoordinator(config) {
       const pd = (gameData.players || []).find((p) => p.name === playerName);
       const charKey = (character || (pd && pd.char_class) || "").toLowerCase();
 
-      // Use live sprite position for attack visuals, not the packet origin,
-      // so attacks stay spatially coherent with the interpolated sprite.
+      // Prefer server-authoritative origin for attack visuals so remote combat
+      // lines up with the authoritative simulation timeline.
       const act = { ...(action || {}) };
+      const originX = Number(packet?.origin?.x);
+      const originY = Number(packet?.origin?.y);
+      const hasAuthoritativeOrigin =
+        Number.isFinite(originX) && Number.isFinite(originY);
+      if (hasAuthoritativeOrigin) {
+        act.x = originX;
+        act.y = originY;
+        if (!act.start || typeof act.start !== "object") {
+          act.start = { x: originX, y: originY };
+        }
+      }
       if (wrapper.opponent) {
-        act.x = wrapper.opponent.x;
-        act.y = wrapper.opponent.y;
+        if (!hasAuthoritativeOrigin) {
+          act.x = wrapper.opponent.x;
+          act.y = wrapper.opponent.y;
+        }
+        if (
+          typeof act.direction !== "number" &&
+          typeof packet.flip === "boolean"
+        ) {
+          act.direction = packet.flip ? -1 : 1;
+        }
         if (typeof act.direction !== "number") {
           act.direction = wrapper.opponent.flipX ? -1 : 1;
         }
@@ -447,7 +467,8 @@ export function createMatchCoordinator(config) {
       // and open a precision window so interpolation blends toward hit position.
       if (consumed && wrapper) {
         wrapper._animLockUntil = performance.now() + 520;
-        wrapper._attackPrecisionUntil = performance.now() + 600;
+        wrapper._attackPrecisionUntil =
+          performance.now() + REMOTE_ATTACK_PRECISION_WINDOW_MS;
       }
       if (!consumed) {
         console.debug("Unhandled remote action", {

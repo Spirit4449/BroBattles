@@ -128,12 +128,24 @@ class Draven extends CharacterEntityBase {
     const delay = data.delay || SPLASH.remoteExplosionDelayMs || 500;
     const tipOffset = data.tipOffset || SPLASH.remoteExplosionTipOffset || 90;
     const centerYFactor = SPLASH.centerYFactor || 0.15;
+    const originX = Number(data?.origin?.x);
+    const originY = Number(data?.origin?.y);
+    const hasOrigin = Number.isFinite(originX) && Number.isFinite(originY);
     // Removed opponent-side debug splash rectangle; only show final explosion now
     scene.time.delayedCall(delay, () => {
       if (!ownerSprite || !ownerSprite.active) return;
-      const dir = ownerSprite.flipX ? -1 : 1;
-      const ex = ownerSprite.x + (dir > 0 ? tipOffset : -tipOffset);
-      const ey = ownerSprite.y - ownerSprite.height * centerYFactor;
+      const dir =
+        typeof data.direction === "number"
+          ? data.direction >= 0
+            ? 1
+            : -1
+          : ownerSprite.flipX
+            ? -1
+            : 1;
+      const anchorX = hasOrigin ? originX : ownerSprite.x;
+      const anchorY = hasOrigin ? originY : ownerSprite.y;
+      const ex = anchorX + (dir > 0 ? tipOffset : -tipOffset);
+      const ey = anchorY - ownerSprite.height * centerYFactor;
       spawnExplosion(scene, ex, ey);
       // Optional impact SFX on remote explosion
       try {

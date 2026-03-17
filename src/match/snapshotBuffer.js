@@ -6,6 +6,9 @@ export function createSnapshotBuffer({
   snapIntervalMs = 50,
   maxSpacingMs = 500,
   spacingEmaAlpha = 0.12,
+  enableAdaptiveDelay = false,
+  enableClockCorrection = false,
+  enableBacklogCatchup = false,
 } = {}) {
   let active = false;
   const stateBuffer = [];
@@ -70,7 +73,7 @@ export function createSnapshotBuffer({
             ? dev
             : jitterEma + (dev - jitterEma) * spacingEmaAlpha;
 
-        if (spacingEma != null && jitterEma != null) {
+        if (enableAdaptiveDelay && spacingEma != null && jitterEma != null) {
           let targetDelay = spacingEma * 3 + jitterEma * 2;
           if (targetDelay < minInterpDelayMs) targetDelay = minInterpDelayMs;
           if (targetDelay > maxInterpDelayMs) targetDelay = maxInterpDelayMs;
@@ -141,55 +144,64 @@ export function createSnapshotBuffer({
       renderClockMono = targetMono + interpDelayMs;
     }
 
-    if (spacingEma != null) {
+    if (enableClockCorrection && spacingEma != null) {
       const error = spacingEma - snapIntervalMs;
       renderClockMono += error * 0.02;
     }
 
-    const headT = newest;
-    let lagMs = headT - interpDelayMs - targetMono;
-    const maxHistoryMs = 500;
-    const minTarget = headT - (interpDelayMs + maxHistoryMs);
-    if (targetMono < minTarget) {
-      console.warn(
-        `[interp] clamping backlog: lag=${lagMs.toFixed(1)}ms buffer=${stateBuffer.length}`,
-      );
-      targetMono = minTarget;
-      renderClockMono = targetMono + interpDelayMs;
-      while (
-        stateBuffer.length > 2 &&
-        stateBuffer[1].tMono <= targetMono - 50
-      ) {
-        stateBuffer.shift();
-      }
-      lagMs = headT - interpDelayMs - targetMono;
-    }
-
-    if (lagMs > 1000) {
-      console.warn(`[interp] severe lag reset: lag=${lagMs.toFixed(0)}ms`);
-      targetMono = headT - interpDelayMs;
-      renderClockMono = targetMono + interpDelayMs;
-      if (stateBuffer.length > 10) {
-        stateBuffer.splice(0, stateBuffer.length - 10);
-      }
-    }
-
-    {
-      const desired = headT - interpDelayMs;
-      lagMs = desired - targetMono;
-
-      if (lagMs > 120) {
-        const step = Math.min(lagMs * 0.12, 10);
-        targetMono += step;
+    if (enableBacklogCatchup) {
+      const headT = newest;
+      let lagMs = headT - interpDelayMs - targetMono;
+      const maxHistoryMs = 500;
+      const minTarget = headT - (interpDelayMs + maxHistoryMs);
+      if (targetMono < minTarget) {
+        console.warn(
+          `[interp] clamping backlog: lag=${lagMs.toFixed(1)}ms buffer=${stateBuffer.length}`,
+        );
+        targetMono = minTarget;
         renderClockMono = targetMono + interpDelayMs;
+        while (
+          stateBuffer.length > 2 &&
+          stateBuffer[1].tMono <= targetMono - 50
+        ) {
+          stateBuffer.shift();
+        }
+        lagMs = headT - interpDelayMs - targetMono;
       }
 
-      if (lagMs < -60) {
-        const step = Math.min(-lagMs * 0.08, 8);
-        targetMono -= step;
+      if (lagMs > 1000) {
+        console.warn(`[interp] severe lag reset: lag=${lagMs.toFixed(0)}ms`);
+        targetMono = headT - interpDelayMs;
         renderClockMono = targetMono + interpDelayMs;
+        if (stateBuffer.length > 10) {
+          stateBuffer.splice(0, stateBuffer.length - 10);
+        }
       }
 
+      {
+        const desired = headT - interpDelayMs;
+        lagMs = desired - targetMono;
+
+        if (lagMs > 120) {
+          const step = Math.min(lagMs * 0.12, 10);
+          targetMono += step;
+          renderClockMono = targetMono + interpDelayMs;
+        }
+
+        if (lagMs < -60) {
+          const step = Math.min(-lagMs * 0.08, 8);
+          targetMono -= step;
+          renderClockMono = targetMono + interpDelayMs;
+        }
+
+        while (
+          stateBuffer.length > 2 &&
+          stateBuffer[1].tMono <= targetMono - 50
+        ) {
+          stateBuffer.shift();
+        }
+      }
+    } else {
       while (
         stateBuffer.length > 2 &&
         stateBuffer[1].tMono <= targetMono - 50
@@ -229,6 +241,7 @@ export function createSnapshotBuffer({
   }
 
   function consumeAdaptiveDebugLine(perfNow = performance.now()) {
+    if (!enableAdaptiveDelay) return null;
     if (spacingEma == null) return null;
     if (perfNow - lastAdaptivePrint <= 5000) return null;
     lastAdaptivePrint = perfNow;

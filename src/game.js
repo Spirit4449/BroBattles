@@ -137,16 +137,20 @@ const localInputSync = createLocalInputSync({
   socket,
   getAmmoSyncState,
   throttleMs: 20,
+  emitIntentV2: true,
 });
 
 // Server snapshot interpolation
 const snapshotBuffer = createSnapshotBuffer({
   maxStateBuffer: 120,
-  initialInterpDelayMs: 150,
-  minInterpDelayMs: 120,
-  maxInterpDelayMs: 300,
+  initialInterpDelayMs: 130,
+  minInterpDelayMs: 110,
+  maxInterpDelayMs: 220,
   snapIntervalMs: 50,
   spacingEmaAlpha: 0.12,
+  enableAdaptiveDelay: false,
+  enableClockCorrection: false,
+  enableBacklogCatchup: false,
 });
 
 // Game scene reference

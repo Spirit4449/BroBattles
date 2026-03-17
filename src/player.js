@@ -796,6 +796,18 @@ export function handlePlayerMovement(scene) {
     delete player._dravenInfernoPrevGravity;
   }
 
+  // Persist a normalized input intent snapshot for network sync.
+  if (player) {
+    player._lastInputIntent = {
+      left: !!leftKey,
+      right: !!rightKey,
+      up: !!upKey,
+      down: false,
+      jump: !!upKey,
+      locked: !!movementLocked,
+    };
+  }
+
   // Fast-fall gravity: apply extra gravity only when falling (vy > 0) and airborne.
   try {
     const worldG = scene.physics?.world?.gravity?.y || 0;
