@@ -4,8 +4,6 @@ const {
   POWERUP_STARTING_COUNT,
   NINJA_SWARM_HIT_DAMAGE,
   NINJA_SWARM_CHARGE_RATIO,
-  SERVER_AUTHORITATIVE_MOVEMENT_V2,
-  POSITION_HISTORY_DEPTH,
 } = require("./gameRoomConfig");
 const effectManager = require("./gameRoom/effects/effectManager");
 const powerupManager = require("./gameRoom/powerupManager");
@@ -31,16 +29,6 @@ class GameRoom {
     this.io = io;
     this.db = db;
     this.runtimeConfig = runtimeConfig;
-    this.SERVER_AUTHORITATIVE_MOVEMENT_V2 = SERVER_AUTHORITATIVE_MOVEMENT_V2;
-    try {
-      const runtime = this.runtimeConfig?.get?.() || {};
-      if (
-        typeof runtime?.netcode?.serverAuthoritativeMovementV2 === "boolean"
-      ) {
-        this.SERVER_AUTHORITATIVE_MOVEMENT_V2 =
-          runtime.netcode.serverAuthoritativeMovementV2;
-      }
-    } catch (_) {}
 
     // Room state
     this.status = "waiting"; // waiting, active, finished
@@ -57,7 +45,7 @@ class GameRoom {
     this._snapshotIntervals = []; // diagnostics (ms spacing between snapshots)
     this._diagLastLogMono = 0;
     this.FIXED_DT_MS = 1000 / 60; // 60 Hz fixed step
-    this.SNAPSHOT_EVERY_TICKS = 3; // 60/2 = 30 Hz snapshots
+    this.SNAPSHOT_EVERY_TICKS = 2; // 60/2 = 30 Hz snapshots
     this.DEV_TIMING_DIAG = true; // temporary diagnostics flag
 
     // Health/regen tuning (simple, readable constants)
@@ -159,8 +147,6 @@ class GameRoom {
 
         // Input buffer for server authority
         inputBuffer: [],
-        _lastProcessedInputSeq: null,
-        _lastReceivedInputSeq: null,
 
         // Combat stats (server-side authoritative)
         level,
@@ -500,8 +486,7 @@ class GameRoom {
    * Process a single game tick
    */
   processTick() {
-    const now = Date.now();
-    tickActiveAbilities(this, now);
+    tickActiveAbilities(this, Date.now());
 
     // For Phase 1, just process basic movement inputs
     for (const playerData of this.players.values()) {
@@ -517,24 +502,6 @@ class GameRoom {
         const latestInput =
           playerData.inputBuffer[playerData.inputBuffer.length - 1];
         this.processPlayerMovement(playerData, latestInput);
-        if (
-          latestInput &&
-          Object.prototype.hasOwnProperty.call(latestInput, "seq") &&
-          Number.isFinite(latestInput.seq)
-        ) {
-          playerData._lastProcessedInputSeq = latestInput.seq;
-        }
-
-        if (!playerData._posHistory) playerData._posHistory = [];
-        playerData._posHistory.push({
-          x: playerData.x,
-          y: playerData.y,
-          t: now,
-        });
-        if (playerData._posHistory.length > POSITION_HISTORY_DEPTH) {
-          playerData._posHistory.shift();
-        }
-        playerData.lastInput = now;
 
         // Clear old inputs
         playerData.inputBuffer = [];

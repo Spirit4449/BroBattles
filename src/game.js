@@ -137,7 +137,6 @@ const localInputSync = createLocalInputSync({
   socket,
   getAmmoSyncState,
   throttleMs: 20,
-  emitIntentV2: true,
 });
 
 // Server snapshot interpolation

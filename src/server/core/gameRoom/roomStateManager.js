@@ -107,9 +107,6 @@ function broadcastSnapshot(room, extraTiming = null) {
       isAlive: playerData.isAlive,
       connected: playerData.connected !== false,
       loaded: playerData.loaded === true,
-      lastProcessedInputSeq: Number.isFinite(playerData._lastProcessedInputSeq)
-        ? playerData._lastProcessedInputSeq
-        : null,
     };
   }
 
