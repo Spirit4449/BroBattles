@@ -14,6 +14,7 @@ import {
   initializeCharacterSelect,
   openCharacterSelect,
 } from "./characterLogic.js";
+import { getLobbyBgAsset } from "./maps/manifest";
 import { initUISounds, playSound } from "./lib/uiSounds.js";
 import "./styles/characterSelect.css";
 import "./styles/index.css";
@@ -147,6 +148,22 @@ async function bootstrapPartyData(partyId) {
     }
 
     const data = await resp.json();
+    if (data?.party) {
+      const modeSel = document.getElementById("mode");
+      const mapSel = document.getElementById("map");
+      const modeVal = String(data.party.mode || "1");
+      const mapVal = String(data.party.map || "1");
+      if (modeSel) modeSel.value = modeVal;
+      if (mapSel) mapSel.value = mapVal;
+      try {
+        const host = String(window.location.hostname || "").toLowerCase();
+        if (host === "localhost" || host === "127.0.0.1") {
+          localStorage.setItem("bb_solo_mode", modeVal);
+          localStorage.setItem("bb_solo_map", mapVal);
+        }
+      } catch (_) {}
+      setLobbyBackground(mapVal);
+    }
     // Immediately render roster so UI isn't empty before socket pushes
     if (data?.members)
       renderPartyMembers({
@@ -319,16 +336,23 @@ function signUpOut(guest) {
 }
 
 export function setLobbyBackground(mapValue) {
-  const map = String(mapValue);
-  if (map === "2") {
-    // Mangrove Meadow
-    document.body.style.backgroundImage =
-      'url("/assets/mangrove/lobbyBg.webp")';
-  } else if (map === "3") {
-    // Serenity
-    document.body.style.backgroundImage = 'url("/assets/serenity/lobbyBg.webp")';
-  } else {
-    // Default map
-    document.body.style.backgroundImage = 'url("/assets/lushy/lobbyBg.webp")';
+  const nextUrl = getLobbyBgAsset(mapValue);
+  const current = document.body.style.backgroundImage || "";
+  const target = `url("${nextUrl}")`;
+  if (current === target) return;
+
+  let overlay = document.getElementById("lobby-bg-fade");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "lobby-bg-fade";
+    document.body.appendChild(overlay);
   }
+
+  overlay.style.backgroundImage = target;
+  overlay.classList.add("active");
+
+  setTimeout(() => {
+    document.body.style.backgroundImage = target;
+    overlay.classList.remove("active");
+  }, 240);
 }

@@ -71,4 +71,27 @@ export function getMapBgAsset(mapId) {
   return MAPS[normalizeMapId(mapId)]?.bgAsset ?? "/assets/lushy/gameBg.webp";
 }
 
+/**
+ * Lobby background image URL for the given map.
+ * @param {number|string} mapId
+ * @returns {string}
+ */
+export function getLobbyBgAsset(mapId) {
+  return (
+    MAPS[normalizeMapId(mapId)]?.lobbyBgAsset ?? "/assets/lushy/lobbyBg.webp"
+  );
+}
+
+/**
+ * Lobby platform image URL for the given map.
+ * @param {number|string} mapId
+ * @returns {string}
+ */
+export function getLobbyPlatformAsset(mapId) {
+  return (
+    MAPS[normalizeMapId(mapId)]?.lobbyPlatformAsset ??
+    "/assets/lobbyplatform.webp"
+  );
+}
+
 export default MAPS;

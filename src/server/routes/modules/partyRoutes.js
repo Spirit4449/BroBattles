@@ -42,6 +42,15 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
         return res.status(result.statusCode || 500).json(result.payload || {});
       }
 
+      try {
+        await db.setUserStatus(username, "online");
+      } catch (_) {}
+
+      let membersForEmit = result.members;
+      try {
+        membersForEmit = await db.fetchPartyMembersDetailed(partyId);
+      } catch (_) {}
+
       await req.app.locals.socketApi.moveUserSocketToParty(username, partyId);
       if (result.joinedNow) {
         try {
@@ -51,12 +60,27 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
           );
         } catch (_) {}
       }
-      await emitRoster(io, partyId, result.party, result.members);
+      await emitRoster(io, partyId, result.party, membersForEmit);
+
+      // Authoritative settings sync: ensure joiners adopt party mode/map.
+      io.to(`party:${partyId}`).emit("mode-change", {
+        partyId,
+        selectedValue: result.party?.mode,
+        mode: result.party?.mode,
+        username,
+        members: membersForEmit,
+      });
+      io.to(`party:${partyId}`).emit("map-change", {
+        partyId,
+        selectedValue: result.party?.map,
+        map: result.party?.map,
+        username,
+      });
 
       res.json({
         party: result.party,
         capacity: result.capacity,
-        members: result.members,
+        members: membersForEmit,
         viewer: username,
       });
     } catch (err) {

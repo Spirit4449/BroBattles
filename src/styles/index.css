@@ -10,6 +10,22 @@ body {
   overflow: hidden;
 }
 
+#lobby-bg-fade {
+  position: fixed;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: opacity 220ms ease;
+}
+
+#lobby-bg-fade.active {
+  opacity: 1;
+}
+
 /* Utility */
 .hidden {
   display: none !important;
@@ -110,6 +126,39 @@ h3 {
   background-position: center bottom;
   pointer-events: none;
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+  transition:
+    transform 200ms ease,
+    filter 200ms ease;
+}
+
+#lobby-area.map-switching .platform {
+  animation: platformMapShift 240ms ease;
+}
+
+.platform-image.map-switch {
+  animation: platformImagePop 240ms ease;
+}
+
+@keyframes platformMapShift {
+  0% {
+    transform: translateY(6px);
+    opacity: 0.82;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes platformImagePop {
+  0% {
+    transform: scale(0.96);
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.25));
+  }
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+  }
 }
 
 /* 1v1 Mode - Much larger platforms utilizing more space */
@@ -339,6 +388,11 @@ h3 {
 
 .status.not-ready {
   background: linear-gradient(135deg, #ff4757, #ff3742);
+  color: white;
+}
+
+.status.offline {
+  background: linear-gradient(135deg, #e11d48, #b91c1c);
   color: white;
 }
 

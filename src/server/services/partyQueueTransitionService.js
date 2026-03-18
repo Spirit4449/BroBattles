@@ -1,4 +1,23 @@
 function createPartyQueueTransitionService({ db, io, mm }) {
+  async function resetPartyMembersOnline(partyId, { excludeName = null } = {}) {
+    if (!partyId) return;
+    try {
+      const members = await db.fetchPartyMembersDetailed(partyId);
+      for (const m of members || []) {
+        if (!m?.name) continue;
+        if (excludeName && m.name === excludeName) continue;
+        try {
+          await db.setUserStatus(m.name, "online");
+        } catch (_) {}
+        io.to(`party:${partyId}`).emit("status:update", {
+          partyId,
+          name: m.name,
+          status: "online",
+        });
+      }
+    } catch (_) {}
+  }
+
   async function userHasLiveMatch(username) {
     const liveMatches = await db.runQuery(
       `SELECT m.match_id FROM matches m
@@ -16,6 +35,7 @@ function createPartyQueueTransitionService({ db, io, mm }) {
         try {
           await mm.queueLeave({ partyId, userId: null });
         } catch (_) {}
+        await resetPartyMembersOnline(partyId);
         io.to(`party:${partyId}`).emit("match:cancelled", { reason });
         console.log(
           `[cancel][party] cancelled party ${partyId}${reason ? ` reason=${reason}` : ""}`,
@@ -48,6 +68,7 @@ function createPartyQueueTransitionService({ db, io, mm }) {
       await mm.handleDisconnect(username);
       const pid = await db.getPartyIdByName(username);
       if (pid) {
+        await resetPartyMembersOnline(pid, { excludeName: username });
         const payload = reason ? { reason } : {};
         io.to(`party:${pid}`).emit("match:cancelled", payload);
         console.log(`[cancel][emit] user=${username} party=${pid}`);

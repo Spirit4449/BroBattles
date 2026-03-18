@@ -2,6 +2,62 @@ function registerPartyEvents(
   socket,
   { db, io, mm, partyPresence, partyState, partyQueueTransition, PARTY_STATUS },
 ) {
+  async function setPartyStatusSafe(partyId, status) {
+    if (!partyId) return;
+    if (typeof db.setPartyStatus === "function") {
+      await db.setPartyStatus(partyId, status);
+      return;
+    }
+    await db.runQuery("UPDATE parties SET status = ? WHERE party_id = ?", [
+      status,
+      partyId,
+    ]);
+  }
+
+  socket.on("char-menu:status", async (data) => {
+    const uname = socket.data.user?.name;
+    if (!uname) return;
+    const partyId = data?.partyId ? Number(data.partyId) : null;
+    const open = data?.open === true;
+    if (!partyId) return;
+
+    try {
+      const mem = await db.runQuery(
+        "SELECT 1 FROM party_members WHERE party_id = ? AND name = ? LIMIT 1",
+        [partyId, uname],
+      );
+      if (!mem?.length) return;
+
+      if (open) {
+        const statusRows = await db.runQuery(
+          "SELECT status FROM users WHERE name = ? LIMIT 1",
+          [uname],
+        );
+        const current = String(statusRows[0]?.status || "").toLowerCase();
+        socket.data.charMenuPrevStatus =
+          current === "selecting character"
+            ? socket.data.charMenuPrevStatus || "online"
+            : statusRows[0]?.status || "online";
+        await partyPresence.setUserPresence(
+          uname,
+          "Selecting Character",
+          partyId,
+        );
+        return;
+      }
+
+      const previous = String(socket.data.charMenuPrevStatus || "online");
+      socket.data.charMenuPrevStatus = null;
+      const restore =
+        String(previous).toLowerCase() === "selecting character"
+          ? "online"
+          : previous;
+      await partyPresence.setUserPresence(uname, restore, partyId);
+    } catch (e) {
+      console.warn("char-menu:status error:", e?.message);
+    }
+  });
+
   socket.on("ready:status", async (data) => {
     try {
       const uname = socket.data.user?.name;
@@ -47,18 +103,22 @@ function registerPartyEvents(
           partyStatus === PARTY_STATUS.QUEUED)
       ) {
         try {
-          await db.setPartyStatus(partyId, PARTY_STATUS.QUEUED);
-        } catch (_) {}
-        io.to(`party:${partyId}`).emit("party:matchmaking:start", {
-          partyId,
-        });
-        console.log(`[party:${partyId}] all-ready -> matchmaking`);
-        try {
           const mode = partyRows[0]?.mode || 1;
           const map = partyRows[0]?.map || 1;
+          await setPartyStatusSafe(partyId, PARTY_STATUS.QUEUED);
           await mm.queueJoin({ partyId, mode, map });
+          io.to(`party:${partyId}`).emit("party:matchmaking:start", {
+            partyId,
+          });
+          console.log(`[party:${partyId}] all-ready -> matchmaking`);
         } catch (err) {
           console.warn("enqueue failed:", err?.message);
+          try {
+            await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
+          } catch (_) {}
+          io.to(`party:${partyId}`).emit("match:cancelled", {
+            reason: err?.message || "Failed to join matchmaking",
+          });
         }
       }
     } catch (e) {
@@ -145,16 +205,6 @@ function registerPartyEvents(
         charClass,
         uname,
       ]);
-
-      if (partyId) {
-        await partyPresence.setTransientPresence({
-          name: uname,
-          status: "Selecting Character",
-          restoreStatus: "online",
-          partyId,
-          durationMs: 1500,
-        });
-      }
 
       if (partyId) {
         await partyPresence.emitPartyRosterById(partyId);

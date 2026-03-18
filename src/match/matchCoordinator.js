@@ -118,6 +118,10 @@ export function createMatchCoordinator(config) {
     onShowGameOverScreen,
   } = config;
   const REMOTE_ATTACK_PRECISION_WINDOW_MS = 320;
+  const START_WATCHDOG_TIMEOUT_MS = 15_000;
+
+  let _startWatchdogTimer = null;
+  let _startWatchdogDeadline = 0;
 
   // ---------------------------------------------------------------------------
   // Private helpers
@@ -229,6 +233,47 @@ export function createMatchCoordinator(config) {
     setHasJoined(true);
   }
 
+  function _stopStartWatchdog() {
+    if (_startWatchdogTimer) {
+      clearInterval(_startWatchdogTimer);
+      _startWatchdogTimer = null;
+    }
+    _startWatchdogDeadline = 0;
+  }
+
+  function _startStartWatchdog() {
+    if (getIsLiveGame() || getGameEnded()) return;
+    if (_startWatchdogTimer) return;
+
+    const joinPayload = getJoinPayload() || {};
+    const joinMatchId = Number(joinPayload.matchId);
+    if (!Number.isFinite(joinMatchId) || joinMatchId <= 0) return;
+
+    _startWatchdogDeadline = Date.now() + START_WATCHDOG_TIMEOUT_MS;
+    _startWatchdogTimer = setInterval(() => {
+      if (getGameEnded() || getIsLiveGame()) {
+        _stopStartWatchdog();
+        return;
+      }
+
+      if (Date.now() >= _startWatchdogDeadline) {
+        _stopStartWatchdog();
+        try {
+          alert("Match start timed out. Returning to lobby.");
+        } catch (_) {}
+        window.location.href = "/";
+        return;
+      }
+
+      try {
+        socket.emit("game:join", joinPayload);
+      } catch (_) {}
+      try {
+        socket.emit("game:ready", { matchId: joinMatchId });
+      } catch (_) {}
+    }, 1000);
+  }
+
   function _onGameInit(gameState) {
     const gameData = getGameData();
     const username = getUsername();
@@ -253,6 +298,11 @@ export function createMatchCoordinator(config) {
         try {
           const scene = getGameScene();
           if (scene?.input?.keyboard) scene.input.keyboard.enabled = true;
+        } catch (_) {}
+      } else if (status === "waiting" || status === "starting") {
+        try {
+          const gameData = getGameData();
+          hud.showBattleStartOverlay(gameData.players);
         } catch (_) {}
       }
     } catch (_) {}
@@ -333,6 +383,7 @@ export function createMatchCoordinator(config) {
   /** Server says the game has started — begin the pre-game countdown for normal joiners. */
   function _onGameStart(data) {
     console.log("Game starting:", data);
+    _stopStartWatchdog();
     // Late joiners skip the countdown because the game is already running
     if (!getIsLiveGame()) hud.startCountdown();
   }
@@ -346,6 +397,7 @@ export function createMatchCoordinator(config) {
       hud.showBattleStartOverlay(gameData.players);
     }
     onTrySendReadyAck();
+    _startStartWatchdog();
   }
 
   function _onHealthUpdate(payload) {
@@ -385,6 +437,7 @@ export function createMatchCoordinator(config) {
     const ingest = snapshotBuffer.ingestSnapshot(snapshot, performance.now());
     if (ingest.activated) {
       console.log("Started receiving server snapshots (tMono/tickId enabled)");
+      _stopStartWatchdog();
       try {
         hud.hideBattleStartOverlay();
         const scene = getGameScene();
@@ -521,6 +574,7 @@ export function createMatchCoordinator(config) {
 
   function _onGameError(error) {
     console.error("Game error:", error);
+    _stopStartWatchdog();
     alert(`Game error: ${error.message}`);
   }
 
@@ -538,6 +592,7 @@ export function createMatchCoordinator(config) {
 
   function _onGameOver(payload) {
     if (getGameEnded()) return; // idempotent guard
+    _stopStartWatchdog();
     setGameEnded(true);
     onStopSuddenDeathMusic();
     onPlayMatchEndSound(payload?.winnerTeam);
@@ -612,10 +667,14 @@ export function createMatchCoordinator(config) {
 
     // If already connected when register() is called, attempt join right away
     if (socket.connected) _tryJoin();
+
+    // Safety net for rare cases where start events are missed after joining.
+    _startStartWatchdog();
   }
 
   /** Remove all match socket listeners. Safe to call multiple times. */
   function dispose() {
+    _stopStartWatchdog();
     socket.off("connect", _tryJoin);
     socket.off("reconnect", _tryJoin);
     socket.off("game:joined", _onGameJoined);

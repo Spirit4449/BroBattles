@@ -13,6 +13,25 @@ import { playSound } from "./lib/uiSounds.js";
 // Keep a reference to user data for confirmations and currency display
 let _userDataRef = null;
 
+function getActivePartyIdFromPath() {
+  const pathname = window.location.pathname || "";
+  if (!pathname.includes("/party/")) return null;
+  const last = pathname.split("/").filter(Boolean).pop();
+  if (last && /^\d+$/.test(last)) return Number(last);
+  return last || null;
+}
+
+function emitCharacterMenuStatus(open) {
+  try {
+    const partyId = getActivePartyIdFromPath();
+    if (!partyId) return;
+    socket.emit("char-menu:status", {
+      partyId,
+      open: !!open,
+    });
+  } catch (_) {}
+}
+
 export function initializeCharacterSelect(userData) {
   _userDataRef = userData;
   const overlay = document.createElement("div");
@@ -43,7 +62,7 @@ export function initializeCharacterSelect(userData) {
 
   const characters = getAllCharacters();
   characters.forEach((char) =>
-    charactersGrid.appendChild(createCharacterCard(char, userData))
+    charactersGrid.appendChild(createCharacterCard(char, userData)),
   );
 
   headerBar.appendChild(title);
@@ -113,17 +132,19 @@ export function initializeCharacterSelect(userData) {
       0,
       0,
       particlesCanvas.clientWidth,
-      particlesCanvas.clientHeight
+      particlesCanvas.clientHeight,
     );
   }
   window.addEventListener("resize", resizeCanvas);
 
   function openCharacterSelect() {
     overlay.style.display = "flex";
+    emitCharacterMenuStatus(true);
     startParticles();
   }
   function closeCharacterSelect() {
     overlay.style.display = "none";
+    emitCharacterMenuStatus(false);
     stopParticles();
   }
   window.__openCharacterSelect = openCharacterSelect;
@@ -203,8 +224,8 @@ function createCharacterCard(character, userData) {
     <div class="stat-main-value">${currentDamage}</div>
     <div class="stat-bar attack-bar"><div class="stat-fill" style="width: ${damagePercent}%"></div></div>
     <div class="stat-details">${stats.ammoCapacity} ammo<br>${(
-    stats.ammoReloadMs / 1000
-  ).toFixed(1)}s reload</div>`;
+      stats.ammoReloadMs / 1000
+    ).toFixed(1)}s reload</div>`;
 
   const specialSection = document.createElement("div");
   specialSection.className = "stat-section";
@@ -230,7 +251,7 @@ function createCharacterCard(character, userData) {
     lockBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       showConfirmDialog({ type: "unlock", character, level, price }, () =>
-        applyUnlock(character, price)
+        applyUnlock(character, price),
       );
     });
     actionRow.appendChild(lockBtn);
@@ -252,7 +273,7 @@ function createCharacterCard(character, userData) {
       e.stopPropagation();
       playSound("cursor4", 0.2);
       showConfirmDialog({ type: "upgrade", character, level, price }, () =>
-        applyUpgrade(character, level)
+        applyUpgrade(character, level),
       );
     });
     actionRow.appendChild(upgradeBtn);
@@ -283,6 +304,7 @@ export function openCharacterSelect() {
   if (window.__openCharacterSelect) return window.__openCharacterSelect();
   const overlay = document.querySelector(".character-select-overlay");
   overlay.style.display = "flex";
+  emitCharacterMenuStatus(true);
 }
 playSound("click", 0.4);
 
@@ -318,15 +340,7 @@ function selectCharacter(character) {
     }
 
     // If in a party, emit socket event so others update
-    const partyId = (function () {
-      const pathname = window.location.pathname || "";
-      if (pathname.includes("/party/")) {
-        const last = pathname.split("/").filter(Boolean).pop();
-        if (last && /^\d+$/.test(last)) return Number(last);
-        return last; // fallback allow non-numeric ids if used
-      }
-      return null;
-    })();
+    const partyId = getActivePartyIdFromPath();
     if (partyId) {
       socket.emit("char-change", { partyId, character: charClass });
     } else {
@@ -425,7 +439,7 @@ function showConfirmDialog(opts, onConfirm) {
   const remainingText = document.createElement("span");
   remainingText.textContent = `Remaining after purchase: ${Math.max(
     remaining,
-    0
+    0,
   )}`;
   priceRow.appendChild(remainingIcon);
   priceRow.appendChild(remainingText);
@@ -443,7 +457,7 @@ function showConfirmDialog(opts, onConfirm) {
   }" alt=""/> <span>${price}</span>`;
 
   cancelBtn.onclick = () => {
-          playSound("cursor4", 0.2);
+    playSound("cursor4", 0.2);
 
     backdrop.remove();
   };
@@ -454,8 +468,8 @@ function showConfirmDialog(opts, onConfirm) {
   });
   okBtn.onclick = () => {
     backdrop.remove();
-          playSound("cursor4", 0.2);
-    
+    playSound("cursor4", 0.2);
+
     onConfirm && onConfirm();
   };
 
@@ -598,7 +612,7 @@ function applyUpgrade(character, currentLevel) {
             const newLevel = Number(data.newLevel);
             _userDataRef.coins = Math.max(
               0,
-              Number(_userDataRef.coins || 0) - spent
+              Number(_userDataRef.coins || 0) - spent,
             );
             _userDataRef.char_levels = _userDataRef.char_levels || {};
             _userDataRef.char_levels[character] = newLevel;
@@ -639,7 +653,7 @@ function applyUnlock(character, price) {
               // fallback: subtract spent
               _userDataRef.gems = Math.max(
                 0,
-                Number(_userDataRef.gems || 0) - Number(data.spent || 0)
+                Number(_userDataRef.gems || 0) - Number(data.spent || 0),
               );
             }
             _userDataRef.char_levels = _userDataRef.char_levels || {};

@@ -1,4 +1,16 @@
 function registerMatchmakingEvents(socket, { db, io, mm, PARTY_STATUS }) {
+  async function setPartyStatusSafe(partyId, status) {
+    if (!partyId) return;
+    if (typeof db.setPartyStatus === "function") {
+      await db.setPartyStatus(partyId, status);
+      return;
+    }
+    await db.runQuery("UPDATE parties SET status = ? WHERE party_id = ?", [
+      status,
+      partyId,
+    ]);
+  }
+
   socket.on("queue:join", async (data) => {
     try {
       const uname = socket.data.user?.name;
@@ -11,6 +23,11 @@ function registerMatchmakingEvents(socket, { db, io, mm, PARTY_STATUS }) {
         mode,
         map,
         side,
+      });
+      socket.emit("queue:joined", {
+        mode: Number(mode) || 1,
+        map: Number(map) || 1,
+        partyId: pid || null,
       });
     } catch (e) {
       console.warn("queue:join error:", e?.message);
@@ -31,7 +48,21 @@ function registerMatchmakingEvents(socket, { db, io, mm, PARTY_STATUS }) {
       });
       if (pid) {
         try {
-          await db.setPartyStatus(pid, PARTY_STATUS.IDLE);
+          await setPartyStatusSafe(pid, PARTY_STATUS.IDLE);
+        } catch (_) {}
+        try {
+          const members = await db.fetchPartyMembersDetailed(pid);
+          for (const m of members || []) {
+            if (!m?.name) continue;
+            try {
+              await db.setUserStatus(m.name, "online");
+            } catch (_) {}
+            io.to(`party:${pid}`).emit("status:update", {
+              partyId: pid,
+              name: m.name,
+              status: "online",
+            });
+          }
         } catch (_) {}
       }
 

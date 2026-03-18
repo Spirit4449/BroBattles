@@ -56,6 +56,8 @@ export const definition = {
   id: 3,
   name: "serenity",
   bgAsset: "/assets/serenity/gameBg.webp",
+  lobbyBgAsset: "/assets/serenity/lobbyBg.webp",
+  lobbyPlatformAsset: "/assets/serenity/sidePlatform.webp",
 
   build(scene) {
     _objects.length = 0;

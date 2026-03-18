@@ -1,5 +1,6 @@
 import { sonner } from "./lib/sonner.js";
 import socket, { ensureSocketConnected, waitForConnect } from "./socket";
+import { getLobbyPlatformAsset } from "./maps/manifest";
 
 // Track last known party roster to detect joins/leaves
 let __partyRosterNames = null; // Set<string> of member names
@@ -7,6 +8,50 @@ let __partyRosterPartyId = null;
 const SOLO_MODE_STORAGE_KEY = "bb_solo_mode";
 const SOLO_MAP_STORAGE_KEY = "bb_solo_map";
 let activeQueueContext = null; // { mode, map }
+let mmOverlayPlayers = [];
+let mmOverlayPlayersSig = "";
+let mmOverlayTotal = 0;
+
+function normalizeStatusLabel(status) {
+  const s = String(status || "")
+    .trim()
+    .toLowerCase();
+  if (s === "offline") return "offline";
+  if (s === "ready") return "ready";
+  if (s === "online" || s === "idle") return "online";
+  if (s === "in battle") return "In Battle";
+  if (s === "end screen") return "End Screen";
+  if (s === "selecting character") return "Selecting Character";
+  if (s.startsWith("not ")) return "not ready";
+  return status || "online";
+}
+
+function getCurrentMapValue() {
+  return String(document.getElementById("map")?.value || "1");
+}
+
+function applyPlatformImageForMap(mapValue) {
+  const platformUrl = getLobbyPlatformAsset(mapValue || getCurrentMapValue());
+  const imageEls = document.querySelectorAll(".platform-image");
+  for (const imageEl of imageEls) {
+    if (!imageEl) continue;
+    imageEl.style.backgroundImage = `url("${platformUrl}")`;
+  }
+}
+
+function animatePlatformsForMapSwitch() {
+  const lobbyArea = document.getElementById("lobby-area");
+  if (lobbyArea) {
+    lobbyArea.classList.add("map-switching");
+    setTimeout(() => lobbyArea.classList.remove("map-switching"), 260);
+  }
+  for (const imageEl of document.querySelectorAll(".platform-image")) {
+    imageEl.classList.remove("map-switch");
+    void imageEl.offsetWidth;
+    imageEl.classList.add("map-switch");
+    setTimeout(() => imageEl.classList.remove("map-switch"), 260);
+  }
+}
 
 function canPersistSoloSelections() {
   const host = String(window.location.hostname || "").toLowerCase();
@@ -182,9 +227,24 @@ export function socketInit() {
 
       // Sync mode/map dropdowns if present
       const modeSel = document.getElementById("mode");
-      if (modeSel && data.mode) modeSel.value = String(data.mode);
+      if (modeSel && data.mode) {
+        modeSel.value = String(data.mode);
+        setSoloSelection(SOLO_MODE_STORAGE_KEY, modeSel.value);
+      }
       const mapSel = document.getElementById("map");
-      if (mapSel && data.map) mapSel.value = String(data.map);
+      if (mapSel && data.map) {
+        mapSel.value = String(data.map);
+        setSoloSelection(SOLO_MAP_STORAGE_KEY, mapSel.value);
+      }
+
+      // Keep lobby visuals in sync with authoritative party map/mode.
+      if (data.map) {
+        setLobbyBackground(String(data.map));
+        applyPlatformImageForMap(String(data.map));
+      }
+      if (data.mode) {
+        updatePlatformsForMode(String(data.mode));
+      }
 
       // Render minimal 1v1 view into the existing two slots if available
       renderPartyMembers(data);
@@ -211,14 +271,15 @@ export function socketInit() {
       if (!nameEl || !statusEl) continue;
       const text = nameEl.textContent || "";
       if (text === evt.name || text === `${evt.name} (You)`) {
-        statusEl.textContent = evt.status || "Not Ready";
-        statusEl.className = `status ${statusToClass(evt.status)}`;
+        const normalized = normalizeStatusLabel(evt.status || "online");
+        statusEl.textContent = normalized;
+        statusEl.className = `status ${statusToClass(normalized)}`;
         // If this status belongs to current user, reflect it on the Ready button
         const currentUserName =
           document.getElementById("username-text")?.textContent || "";
         const isSelf = evt.name === currentUserName;
         if (isSelf) {
-          const isReady = String(evt.status || "")
+          const isReady = String(normalized || "")
             .toLowerCase()
             .includes("ready");
           setReadyButtonState(!!isReady);
@@ -235,6 +296,7 @@ export function socketInit() {
     const modeDropdown = document.getElementById("mode");
     if (modeDropdown) {
       modeDropdown.value = data.selectedValue || data.mode;
+      setSoloSelection(SOLO_MODE_STORAGE_KEY, modeDropdown.value);
     }
 
     // Update platforms for new mode
@@ -259,27 +321,48 @@ export function socketInit() {
     const mapDropdown = document.getElementById("map");
     if (mapDropdown) {
       mapDropdown.value = data.selectedValue || data.map;
+      setSoloSelection(SOLO_MAP_STORAGE_KEY, mapDropdown.value);
     }
 
     // Update lobby background
     setLobbyBackground(data.selectedValue || data.map);
+    applyPlatformImageForMap(data.selectedValue || data.map);
+    animatePlatformsForMapSwitch();
   });
 
   // Party-wide: everyone ready -> show matchmaking overlay
   socket.on("party:matchmaking:start", ({ partyId }) => {
     if (currentPartyId && String(partyId) !== String(currentPartyId)) return;
-    // Seed with current party roster so found count starts with existing members
     const mode = Number(document.getElementById("mode")?.value) || 1;
     const map = Number(document.getElementById("map")?.value) || 1;
     activeQueueContext = { mode, map };
-    const members = collectCurrentPartyMembers();
+    mmOverlayPlayers = [];
+    mmOverlayPlayersSig = "";
+    mmOverlayTotal = mode * 2;
     showMatchmakingOverlay();
     updateMMOverlay({
-      found: members.length,
+      found: 0,
       total: mode * 2,
       mode,
       map,
-      players: members,
+      players: [],
+    });
+  });
+
+  socket.on("queue:joined", (payload) => {
+    const mode = Number(payload?.mode) || 1;
+    const map = Number(payload?.map) || 1;
+    activeQueueContext = { mode, map };
+    mmOverlayPlayers = [];
+    mmOverlayPlayersSig = "";
+    mmOverlayTotal = mode * 2;
+    showMatchmakingOverlay();
+    updateMMOverlay({
+      found: 0,
+      total: mode * 2,
+      mode,
+      map,
+      players: [],
     });
   });
 
@@ -289,12 +372,17 @@ export function socketInit() {
     const payloadMode = Number(payload?.mode) || 1;
     const payloadMap = Number(payload?.map) || 1;
     activeQueueContext = { mode: payloadMode, map: payloadMap };
+    mmOverlayPlayers = Array.isArray(payload?.players) ? payload.players : [];
+    mmOverlayPlayersSig = JSON.stringify(
+      mmOverlayPlayers.map((p) => `${p?.name || ""}:${p?.char_class || ""}`),
+    );
+    mmOverlayTotal = payloadMode * 2;
     updateMMOverlay({
-      found: Array.isArray(payload?.players) ? payload.players.length : 0,
+      found: mmOverlayPlayers.length,
       total: payloadMode * 2,
       mode: payloadMode,
       map: payloadMap,
-      players: payload?.players || [],
+      players: mmOverlayPlayers,
     });
     if (payload?.matchId) {
       socket.emit("ready:ack", { matchId: payload.matchId });
@@ -328,6 +416,9 @@ export function socketInit() {
   socket.on("queue:error", (err) => {
     try {
       hideMatchmakingOverlay();
+      mmOverlayPlayers = [];
+      mmOverlayPlayersSig = "";
+      mmOverlayTotal = 0;
       if (err?.message) {
         sonner("Queue error", err.message, "error", { sound: "notification" });
       }
@@ -356,6 +447,9 @@ export function socketInit() {
     }
     hideMatchmakingOverlay();
     activeQueueContext = null;
+    mmOverlayPlayers = [];
+    mmOverlayPlayersSig = "";
+    mmOverlayTotal = 0;
     // Reset your local ready state so next click sets Ready (prevents double-click issue)
     try {
       const selfSlot = Array.from(
@@ -390,12 +484,23 @@ export function socketInit() {
     if (overlay && overlay.classList.contains("hidden")) {
       showMatchmakingOverlay();
     }
+    const incomingPlayers = Array.isArray(data?.players) ? data.players : null;
+    if (incomingPlayers) {
+      const nextSig = JSON.stringify(
+        incomingPlayers.map((p) => `${p?.name || ""}:${p?.char_class || ""}`),
+      );
+      if (nextSig !== mmOverlayPlayersSig) {
+        mmOverlayPlayersSig = nextSig;
+        mmOverlayPlayers = incomingPlayers;
+      }
+    }
+    mmOverlayTotal = Number(data?.total) || targetMode * 2;
     updateMMOverlay({
       found: Number(data?.found) || 0,
-      total: Number(data?.total) || targetMode * 2,
+      total: mmOverlayTotal,
       mode: Number(data?.mode) || targetMode,
       map: Number(data?.map) || targetMap,
-      players: collectCurrentPartyMembers(),
+      players: mmOverlayPlayers,
     });
   });
 
@@ -579,7 +684,7 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
   }
 
   if (statusEl) {
-    const st = member.status || "Not Ready";
+    const st = normalizeStatusLabel(member.status || "online");
     statusEl.textContent = st;
     statusEl.className = `status ${statusToClass(st)}`;
     // Remove any previous event listeners
@@ -627,6 +732,7 @@ function statusToClass(status) {
   const s = String(status || "")
     .trim()
     .toLowerCase();
+  if (s === "offline") return "offline";
   if (s === "in battle") return "in-battle";
   if (s === "end screen") return "end-screen";
   if (s === "selecting character") return "selecting-character";
@@ -749,6 +855,8 @@ export function initializeModeDropdown() {
 
       // Update lobby background immediately
       setLobbyBackground(selectedValue);
+      applyPlatformImageForMap(selectedValue);
+      animatePlatformsForMapSwitch();
 
       // If in a party, emit to server
       if (partyId) {
@@ -803,6 +911,8 @@ export function updatePlatformsForMode(mode) {
       createPlatform("op-team", i);
     }
   }
+
+  applyPlatformImageForMap(getCurrentMapValue());
 }
 
 function createPlatform(team, slotNumber) {
@@ -876,6 +986,9 @@ function createPlatform(team, slotNumber) {
   // Add platform image
   const platformImage = document.createElement("div");
   platformImage.className = "platform-image";
+  platformImage.style.backgroundImage = `url("${getLobbyPlatformAsset(
+    getCurrentMapValue(),
+  )}")`;
   platform.appendChild(platformImage);
 
   lobbyArea.appendChild(platform);
@@ -965,7 +1078,7 @@ export function initReadyToggle() {
     const nextReady = !cur.includes("ready");
 
     // Optimistic local update
-    statusEl.textContent = nextReady ? "Ready" : "online";
+    statusEl.textContent = nextReady ? "ready" : "online";
     statusEl.className = `status ${nextReady ? "ready" : "online"}`;
     // Update Ready button appearance/label
     setReadyButtonState(nextReady);
@@ -1002,11 +1115,13 @@ export function showMatchmakingOverlay() {
   overlay.classList.remove("hidden");
   overlay.setAttribute("aria-hidden", "false");
   updateMMOverlay({
-    found: collectCurrentPartyMembers().length,
-    total: (Number(document.getElementById("mode")?.value) || 1) * 2,
+    found: 0,
+    total:
+      mmOverlayTotal ||
+      (Number(document.getElementById("mode")?.value) || 1) * 2,
     mode: Number(document.getElementById("mode")?.value) || 1,
     map: Number(document.getElementById("map")?.value) || 1,
-    players: collectCurrentPartyMembers(),
+    players: mmOverlayPlayers,
   });
   wireCancelButton();
 }
@@ -1047,9 +1162,16 @@ function updateMMOverlay({ found, total, mode, map, players }) {
   if (modeEl) modeEl.textContent = modeNameFromId(mode ?? 1);
   if (mapEl) mapEl.textContent = mapNameFromId(map ?? 1);
   if (grid) {
+    const playersArr = Array.isArray(players) ? players : [];
+    const nextSig = JSON.stringify({
+      total: Number(total ?? 0) || 0,
+      players: playersArr.map((p) => `${p?.name || ""}:${p?.char_class || ""}`),
+    });
+    if (nextSig === grid.dataset.renderSig) return;
+    grid.dataset.renderSig = nextSig;
+
     grid.innerHTML = "";
     const count = Number(total ?? 0) || 0;
-    const playersArr = Array.isArray(players) ? players : [];
     for (let i = 0; i < count; i++) {
       const p = playersArr[i];
       const item = document.createElement("div");
@@ -1106,6 +1228,9 @@ function wireCancelButton() {
       socket.emit("queue:leave");
     }
     activeQueueContext = null;
+    mmOverlayPlayers = [];
+    mmOverlayPlayersSig = "";
+    mmOverlayTotal = 0;
     // Also reset local ready state immediately
     try {
       const selfSlot = Array.from(
