@@ -1,6 +1,12 @@
 // Centralized GameRoom tuning/config constants.
 // Keep values identical to preserve gameplay behavior during refactor.
 
+const MOVEMENT_PHYSICS = require("../gameRoom/movementPhysics");
+
+// ========== FEATURE FLAGS ==========
+// Rollout flags for Phase 2 netcode improvements
+const USE_SERVER_MOVEMENT_SIMULATION_V1 = true;
+
 const WORLD_BOUNDS = {
   width: 2300,
   height: 1000,
@@ -93,6 +99,8 @@ const POWERUP_PLATFORM_POINTS = {
 };
 
 module.exports = {
+  MOVEMENT_PHYSICS,
+  USE_SERVER_MOVEMENT_SIMULATION_V1,
   WORLD_BOUNDS,
   GAME_DURATION_MS,
   SD_RISE_SPEED,

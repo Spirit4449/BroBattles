@@ -136,20 +136,20 @@ const POST_MATCH_REWARD_STORAGE_KEY = "bb_post_match_rewards_v1";
 const localInputSync = createLocalInputSync({
   socket,
   getAmmoSyncState,
-  throttleMs: 20,
+  throttleMs: 30,
 });
 
 // Server snapshot interpolation
 const snapshotBuffer = createSnapshotBuffer({
-  maxStateBuffer: 120,
-  initialInterpDelayMs: 130,
-  minInterpDelayMs: 110,
-  maxInterpDelayMs: 220,
+  maxStateBuffer: 90,
+  initialInterpDelayMs: 115,
+  minInterpDelayMs: 95,
+  maxInterpDelayMs: 180,
   snapIntervalMs: 50,
   spacingEmaAlpha: 0.12,
-  enableAdaptiveDelay: false,
+  enableAdaptiveDelay: true,
   enableClockCorrection: false,
-  enableBacklogCatchup: false,
+  enableBacklogCatchup: true,
 });
 
 // Game scene reference
@@ -1081,6 +1081,20 @@ class GameScene extends Phaser.Scene {
     updateHealthBars({ opponentPlayers, teamPlayers });
   }
 
+  /**
+   * CRITICAL SAFEGUARD (Phase 2 netcode):
+   * This function ONLY updates remote players (opponentPlayers and teamPlayers).
+   * LOCAL PLAYER is NEVER snapped from snapshots and remains 100% Phaser physics-driven.
+   *
+   * Violating this would cause double-application of movement:
+   * 1. handlePlayerMovement() applies physics: player.x += velocity * dt
+   * 2. If snapshot also sets: player.x = snapshot.x
+   * 3. Result: Position applied twice, then corrected → jitter/rubber-banding
+   *
+   * When server-side movement simulation (Phase 2B) is enabled, it will ONLY
+   * be used for hit validation via stored position history. Snapshots will NOT
+   * update the local player's position.
+   */
   interpolatePlayerStates(aState, bState, alpha) {
     const applyInterp = (wrapper, name) => {
       if (!wrapper || !wrapper.opponent) return;
@@ -1130,9 +1144,25 @@ class GameScene extends Phaser.Scene {
         }
       }
 
-      // Direct snap to interpolated position (adaptive delay already smoothing jitter)
-      spr.x = targetX;
-      spr.y = targetY;
+      // Move toward interpolated target with a bounded step.
+      // This prevents visible twitch from sudden target jumps while still catching up fast.
+      const dx = targetX - spr.x;
+      const dy = targetY - spr.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 0.35) {
+        const inPrecision =
+          (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
+        const maxStep = inPrecision ? 120 : 70;
+        const snapDistance = inPrecision ? 220 : 140;
+        if (dist <= snapDistance) {
+          spr.x = targetX;
+          spr.y = targetY;
+        } else {
+          const step = Math.min(maxStep, dist);
+          spr.x += (dx / dist) * step;
+          spr.y += (dy / dist) * step;
+        }
+      }
       if (typeof wrapper.setPresenceState === "function") {
         wrapper.setPresenceState(isConnected, isLoaded);
       } else {

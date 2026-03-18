@@ -77,6 +77,8 @@ function sendGameStateToPlayer(room, socket) {
 }
 
 function broadcastSnapshot(room, extraTiming = null) {
+  const { USE_SERVER_MOVEMENT_SIMULATION_V1 } = require("../gameRoomConfig");
+
   const snapshot = {
     timestamp: Date.now(),
     players: {},
@@ -98,7 +100,7 @@ function broadcastSnapshot(room, extraTiming = null) {
   }
 
   for (const playerData of room.players.values()) {
-    snapshot.players[playerData.name] = {
+    const playerSnapshot = {
       x: playerData.x,
       y: playerData.y,
       flip: !!playerData.flip,
@@ -108,6 +110,19 @@ function broadcastSnapshot(room, extraTiming = null) {
       connected: playerData.connected !== false,
       loaded: playerData.loaded === true,
     };
+
+    // PHASE 2: Add optional diagnostic fields for server-side movement simulation
+    // (ignore if old client; only populated when flag enabled)
+    if (USE_SERVER_MOVEMENT_SIMULATION_V1) {
+      if (typeof playerData._simX === "number")
+        playerSnapshot.simX = playerData._simX;
+      if (typeof playerData._simY === "number")
+        playerSnapshot.simY = playerData._simY;
+      if (typeof playerData._lastInputSeq === "number")
+        playerSnapshot.inputSeq = playerData._lastInputSeq;
+    }
+
+    snapshot.players[playerData.name] = playerSnapshot;
   }
 
   room.io

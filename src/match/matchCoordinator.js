@@ -432,24 +432,50 @@ export function createMatchCoordinator(config) {
       const pd = (gameData.players || []).find((p) => p.name === playerName);
       const charKey = (character || (pd && pd.char_class) || "").toLowerCase();
 
-      // Prefer server-authoritative origin for attack visuals so remote combat
-      // lines up with the authoritative simulation timeline.
+      // PHASE 2: Attack visual consistency fix
+      // Always render attack from opponent's CURRENT INTERPOLATED SPRITE POSITION
+      // (not from server-recorded origin). This prevents visual gaps/stuttering.
+      // Server origin is used only for hit validation (separate concern).
       const act = { ...(action || {}) };
-      const originX = Number(packet?.origin?.x);
-      const originY = Number(packet?.origin?.y);
-      const hasAuthoritativeOrigin =
-        Number.isFinite(originX) && Number.isFinite(originY);
-      if (hasAuthoritativeOrigin) {
-        act.x = originX;
-        act.y = originY;
-        if (!act.start || typeof act.start !== "object") {
-          act.start = { x: originX, y: originY };
-        }
-      }
+
       if (wrapper.opponent) {
-        if (!hasAuthoritativeOrigin) {
-          act.x = wrapper.opponent.x;
-          act.y = wrapper.opponent.y;
+        const ownerSprite = wrapper.opponent;
+        const actionType = String(act.type || "").toLowerCase();
+        const isProjectileAction =
+          actionType.includes("fireball") ||
+          actionType.includes("shuriken") ||
+          actionType.includes("projectile");
+
+        // Default visual origin: current interpolated owner position.
+        let visualX = ownerSprite.x;
+        let visualY = ownerSprite.y;
+
+        if (isProjectileAction) {
+          // Projectiles are most sensitive to cross-client origin gaps.
+          // Use a hybrid anchor: mostly visible sprite position, lightly nudged
+          // toward server origin (bounded) to reduce left/right disagreement.
+          const lift =
+            (ownerSprite.displayHeight || ownerSprite.height || 120) * 0.12;
+          visualY = ownerSprite.y - lift;
+          const ox = Number(packet?.origin?.x);
+          const oy = Number(packet?.origin?.y);
+          if (Number.isFinite(ox) && Number.isFinite(oy)) {
+            const dx = ox - visualX;
+            const dy = oy - visualY;
+            const d = Math.hypot(dx, dy);
+            if (d > 0.001) {
+              const pull = Math.min(36, d);
+              visualX += (dx / d) * pull;
+              visualY += (dy / d) * pull;
+            }
+          }
+        }
+
+        // Use visual anchor for rendering (consistent with interpolation)
+        act.x = visualX;
+        act.y = visualY;
+        if (isProjectileAction || !act.start || typeof act.start !== "object") {
+          act.start = { x: visualX, y: visualY };
         }
         if (
           typeof act.direction !== "number" &&
@@ -458,7 +484,18 @@ export function createMatchCoordinator(config) {
           act.direction = packet.flip ? -1 : 1;
         }
         if (typeof act.direction !== "number") {
-          act.direction = wrapper.opponent.flipX ? -1 : 1;
+          act.direction = ownerSprite.flipX ? -1 : 1;
+        }
+      }
+
+      // Diagnostic: log if server-provided origin differs significantly from visual
+      if (packet?.origin && wrapper?.opponent) {
+        const originDeltaX = Math.abs(packet.origin.x - wrapper.opponent.x);
+        const originDeltaY = Math.abs(packet.origin.y - wrapper.opponent.y);
+        if (originDeltaX > 60 || originDeltaY > 60) {
+          console.debug(
+            `[Attack Visual Delta] ${playerName}: visual (${wrapper.opponent.x.toFixed(0)},${wrapper.opponent.y.toFixed(0)}) vs origin (${packet.origin.x.toFixed(0)},${packet.origin.y.toFixed(0)}) delta=(${originDeltaX.toFixed(0)},${originDeltaY.toFixed(0)})px`,
+          );
         }
       }
 

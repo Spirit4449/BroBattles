@@ -241,6 +241,12 @@ class GameRoom {
       this.handlePlayerInput(socket.id, inputData);
     });
 
+    // NEW: Handle input intent (Phase 2 server-side movement simulation)
+    // Non-breaking; queued but not used unless USE_SERVER_MOVEMENT_SIMULATION_V1 enabled
+    socket.on("game:input-intent", (intentData) => {
+      inputManager.handlePlayerInputIntent(this, socket.id, intentData);
+    });
+
     // Handle player actions (attacks, abilities, etc.)
     socket.on("game:action", (actionData) => {
       this.handlePlayerAction(socket.id, actionData);

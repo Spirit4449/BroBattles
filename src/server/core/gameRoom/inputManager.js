@@ -123,7 +123,37 @@ function processPlayerMovement(playerData, input) {
   playerData.y = Math.max(minY, Math.min(maxY, playerData.y));
 }
 
+/**
+ * Phase 2: Handle input-intent messages for server-side movement simulation.
+ * Non-breaking: server currently queues but doesn't use unless flag enabled.
+ * Intent structure: { direction: [-1|0|1], isJumping: bool, timestamp, sequence }
+ */
+function handlePlayerInputIntent(room, socketId, intentData) {
+  const playerData = room.players.get(socketId);
+  if (!playerData) return;
+
+  if (!intentData || typeof intentData !== "object") return;
+
+  // Queue intent for server-side simulation (when USE_SERVER_MOVEMENT_SIMULATION_V1 enabled)
+  if (!playerData._inputIntentQueue) playerData._inputIntentQueue = [];
+  playerData._inputIntentQueue.push({
+    direction: Number(intentData.direction) || 0,
+    isJumping: !!intentData.isJumping,
+    timestamp: Number(intentData.timestamp) || Date.now(),
+    sequence: Number(intentData.sequence) || -1,
+  });
+
+  // Keep queue limited to prevent memory leak
+  if (playerData._inputIntentQueue.length > 20) {
+    playerData._inputIntentQueue.shift();
+  }
+
+  // Store last intent for diagnostics
+  playerData._lastInputIntent = intentData;
+}
+
 module.exports = {
   handlePlayerInput,
+  handlePlayerInputIntent,
   processPlayerMovement,
 };
