@@ -49,6 +49,9 @@ const NINJA_SWARM_CHARGE_RATIO = 0.35;
 const HIT_REWIND_MAX_MS = 200;
 const HIT_STALENESS_MAX_MS = 300;
 const HIT_FUTURE_TOLERANCE_MS = 120;
+// Allow modest client/server wall-clock drift (NTP skew, mobile devices, SBCs).
+// We still clamp future timestamps to `now`, so this only affects rejection.
+const HIT_CLOCK_SKEW_ALLOWANCE_MS = 2500;
 const POSITION_HISTORY_DEPTH = 50;
 
 const MOVE_PLAUSIBLE_SPEED_H = 320;
@@ -129,6 +132,7 @@ module.exports = {
   HIT_REWIND_MAX_MS,
   HIT_STALENESS_MAX_MS,
   HIT_FUTURE_TOLERANCE_MS,
+  HIT_CLOCK_SKEW_ALLOWANCE_MS,
   POSITION_HISTORY_DEPTH,
   MOVE_PLAUSIBLE_SPEED_H,
   MOVE_PLAUSIBLE_SPEED_V,

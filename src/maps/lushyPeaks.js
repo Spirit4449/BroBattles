@@ -32,7 +32,7 @@ export const definition = {
   bgAsset: "/assets/lushy/gameBg.webp",
   mapSelectPreviewAsset: "/assets/lushy/gameBg.webp",
   lobbyBgAsset: "/assets/lushy/lobbyBg.webp",
-  lobbyPlatformAsset: "/assets/lushy/lobbyplatform.webp",
+  lobbyPlatformAsset: "/assets/lushy/lobbyPlatform.webp",
   lobbyCharacterOffsetY: 0,
 
   build(scene) {

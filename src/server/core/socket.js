@@ -22,6 +22,35 @@ const {
   createPartyQueueTransitionService,
 } = require("../services/partyQueueTransitionService");
 
+const DEBUG_SOCKET_EVENTS =
+  String(process.env.DEBUG_SOCKET_EVENTS || "").toLowerCase() === "1" ||
+  String(process.env.DEBUG_SOCKET_EVENTS || "").toLowerCase() === "true";
+const NOISY_EVENTS = new Set(["game:input", "game:input-intent", "heartbeat"]);
+const NOISY_EVENT_SAMPLE_EVERY = 50;
+
+function summarizeArg(value) {
+  if (value == null) return value;
+  if (typeof value !== "object") return value;
+  if (Array.isArray(value)) return `[array:${value.length}]`;
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (v == null) {
+      out[k] = v;
+      continue;
+    }
+    if (Array.isArray(v)) {
+      out[k] = `[array:${v.length}]`;
+      continue;
+    }
+    if (typeof v === "object") {
+      out[k] = "[object]";
+      continue;
+    }
+    out[k] = v;
+  }
+  return out;
+}
+
 // Presence tracking (multi-tab safe)
 const userSockets = new Map(); // name -> Set<socketId>
 const pendingOffline = new Map(); // name -> timeoutId
@@ -91,6 +120,36 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
     const user = socket.data.user; // returns from middleware
     const userId = user?.user_id;
     const username = user?.name;
+
+    if (DEBUG_SOCKET_EVENTS) {
+      const eventCounts = new Map();
+      const shouldLogEvent = (eventName) => {
+        if (!NOISY_EVENTS.has(eventName)) return true;
+        const n = (eventCounts.get(eventName) || 0) + 1;
+        eventCounts.set(eventName, n);
+        return n % NOISY_EVENT_SAMPLE_EVERY === 0;
+      };
+
+      socket.onAny((eventName, ...args) => {
+        if (!shouldLogEvent(eventName)) return;
+        const sample = args.slice(0, 1).map(summarizeArg);
+        console.log(
+          `[SocketDebug] IN event=${eventName} socket=${socket.id} user=${username || "anon"}`,
+          sample.length ? sample[0] : "",
+        );
+      });
+
+      if (typeof socket.onAnyOutgoing === "function") {
+        socket.onAnyOutgoing((eventName, ...args) => {
+          if (!shouldLogEvent(eventName)) return;
+          const sample = args.slice(0, 1).map(summarizeArg);
+          console.log(
+            `[SocketDebug] OUT event=${eventName} socket=${socket.id} user=${username || "anon"}`,
+            sample.length ? sample[0] : "",
+          );
+        });
+      }
+    }
 
     // IMPORTANT: Register timing-sensitive handlers BEFORE any awaited work
     // to avoid dropping early client emits (e.g., game:join right after connect).

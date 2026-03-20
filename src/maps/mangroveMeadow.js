@@ -38,7 +38,7 @@ export const definition = {
   bgAsset: "/assets/mangrove/gameBg.webp",
   mapSelectPreviewAsset: "/assets/mangrove/gameBg.webp",
   lobbyBgAsset: "/assets/mangrove/lobbyBg.webp",
-  lobbyPlatformAsset: "/assets/mangrove/lobbyplatform.webp",
+  lobbyPlatformAsset: "/assets/mangrove/lobbyPlatform.webp",
   lobbyCharacterOffsetY: 55,
 
   build(scene) {

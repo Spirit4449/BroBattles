@@ -2,6 +2,7 @@ const {
   ATTACK_MAX_DIST_MAP,
   HIT_STALENESS_MAX_MS,
   HIT_FUTURE_TOLERANCE_MS,
+  HIT_CLOCK_SKEW_ALLOWANCE_MS,
   MELEE_FACING_TOLERANCE,
 } = require("../gameRoomConfig");
 
@@ -52,7 +53,8 @@ function evaluateHitRange({
   const tPos = getHistoricalPosition(target, attackTimeClamped);
   const dist = Math.hypot(aPos.x - tPos.x, aPos.y - tPos.y);
   const maxDist = getAttackMaxDist(attacker.char_class, attackType);
-  const attackWasFuture = attackTimeRaw > now + HIT_FUTURE_TOLERANCE_MS;
+  const attackWasFuture =
+    attackTimeRaw > now + HIT_FUTURE_TOLERANCE_MS + HIT_CLOCK_SKEW_ALLOWANCE_MS;
   return {
     attackTimeClamped,
     aPos,

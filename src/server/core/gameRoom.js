@@ -47,6 +47,9 @@ class GameRoom {
     this.FIXED_DT_MS = 1000 / 60; // 60 Hz fixed step
     this.SNAPSHOT_EVERY_TICKS = 2; // 60/2 = 30 Hz snapshots
     this.DEV_TIMING_DIAG = true; // temporary diagnostics flag
+    this.DEBUG_HIT_EVENTS =
+      String(process.env.DEBUG_HIT_EVENTS || "").toLowerCase() === "1" ||
+      String(process.env.DEBUG_HIT_EVENTS || "").toLowerCase() === "true";
 
     // Health/regen tuning (simple, readable constants)
     this.REGEN_DELAY_MS = 3500; // idle time before regen starts
@@ -637,7 +640,14 @@ class GameRoom {
       if (!payload || typeof payload !== "object") return;
       const attackerName = String(payload.attacker || "").trim();
       const targetName = String(payload.target || "").trim();
-      if (!attackerName || !targetName) return;
+      if (!attackerName || !targetName) {
+        if (this.DEBUG_HIT_EVENTS) {
+          console.log(
+            `[HitDebug ${this.matchId}] reject reason=invalid_names socket=${socketId}`,
+          );
+        }
+        return;
+      }
 
       const attacker = Array.from(this.players.values()).find(
         (p) => p.name === attackerName,
@@ -645,15 +655,35 @@ class GameRoom {
       const target = Array.from(this.players.values()).find(
         (p) => p.name === targetName,
       );
-      if (!attacker || !target) return;
+      if (!attacker || !target) {
+        if (this.DEBUG_HIT_EVENTS) {
+          console.log(
+            `[HitDebug ${this.matchId}] reject reason=missing_player attacker=${attackerName} target=${targetName}`,
+          );
+        }
+        return;
+      }
       if (
         attacker.connected === false ||
         attacker.loaded !== true ||
         target.connected === false ||
         target.loaded !== true
-      )
+      ) {
+        if (this.DEBUG_HIT_EVENTS) {
+          console.log(
+            `[HitDebug ${this.matchId}] reject reason=not_loaded_or_disconnected attacker=${attacker.name} target=${target.name}`,
+          );
+        }
         return;
-      if (!attacker.isAlive || !target.isAlive) return;
+      }
+      if (!attacker.isAlive || !target.isAlive) {
+        if (this.DEBUG_HIT_EVENTS) {
+          console.log(
+            `[HitDebug ${this.matchId}] reject reason=dead_player attackerAlive=${attacker.isAlive} targetAlive=${target.isAlive}`,
+          );
+        }
+        return;
+      }
       // Allow self-hit (suicide on fall) but otherwise disable friendly fire
       const isSelf = attacker.name === target.name;
       if (
@@ -661,8 +691,14 @@ class GameRoom {
         attacker.team &&
         target.team &&
         attacker.team === target.team
-      )
+      ) {
+        if (this.DEBUG_HIT_EVENTS) {
+          console.log(
+            `[HitDebug ${this.matchId}] reject reason=friendly_fire attacker=${attacker.name} target=${target.name}`,
+          );
+        }
         return;
+      }
 
       // Determine damage from server-side stats
       const attackType = String(payload.attackType || "basic").toLowerCase();
@@ -679,7 +715,14 @@ class GameRoom {
       dmg *= effectManager.getModifiers(attacker, now).damageMult;
       dmg = applyOutgoingDamageMultiplier(attacker, dmg, now);
 
-      if (dmg <= 0) return;
+      if (dmg <= 0) {
+        if (this.DEBUG_HIT_EVENTS) {
+          console.log(
+            `[HitDebug ${this.matchId}] reject reason=non_positive_damage attacker=${attacker.name} type=${attackType} dmg=${dmg}`,
+          );
+        }
+        return;
+      }
 
       // Per-character range check with lag-compensated position rewind.
       // The client reports attackTime (wall clock) so the server can look up
@@ -734,7 +777,14 @@ class GameRoom {
           aPos,
           tPos,
         });
-        if (!validFacing) return;
+        if (!validFacing) {
+          if (this.DEBUG_HIT_EVENTS) {
+            console.log(
+              `[HitDebug ${this.matchId}] reject reason=facing attacker=${attacker.name} target=${target.name} type=${attackType}`,
+            );
+          }
+          return;
+        }
       }
 
       // Basic per-attacker->target rate limit to avoid accidental double submissions
@@ -744,7 +794,14 @@ class GameRoom {
         attacker.name + "|" + target.name + "|" + attackType + "|" + instanceId;
       const last = this._recentHits.get(key) || 0;
       const DUP_WINDOW_MS = 80; // hits within 80ms considered duplicate
-      if (!isSelf && now - last < DUP_WINDOW_MS) return; // duplicate, ignore
+      if (!isSelf && now - last < DUP_WINDOW_MS) {
+        if (this.DEBUG_HIT_EVENTS) {
+          console.log(
+            `[HitDebug ${this.matchId}] reject reason=duplicate attacker=${attacker.name} target=${target.name} type=${attackType} dt=${now - last}`,
+          );
+        }
+        return; // duplicate, ignore
+      }
       this._recentHits.set(key, now);
       this._recordCombatStat(attacker, { hits: 1 });
 
@@ -753,6 +810,11 @@ class GameRoom {
       const old = target.health;
       target.health = Math.max(0, target.health - Math.round(dmg));
       const appliedDamage = Math.max(0, old - target.health);
+      if (this.DEBUG_HIT_EVENTS) {
+        console.log(
+          `[HitDebug ${this.matchId}] accept attacker=${attacker.name} target=${target.name} type=${attackType} dist=${dist.toFixed(0)}/${maxDist} dmgRaw=${Math.round(dmg)} applied=${appliedDamage} hp=${old}->${target.health}`,
+        );
+      }
       attacker.lastAttackAt = now;
       target.lastDamagedAt = now;
       attacker.lastCombatAt = now;

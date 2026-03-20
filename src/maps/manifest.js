@@ -108,7 +108,7 @@ export function getLobbyBgAsset(mapId) {
 export function getLobbyPlatformAsset(mapId) {
   return (
     MAPS[normalizeMapId(mapId)]?.lobbyPlatformAsset ??
-    "/assets/lushy/lobbyplatform.webp"
+    "/assets/lushy/lobbyPlatform.webp"
   );
 }
 
