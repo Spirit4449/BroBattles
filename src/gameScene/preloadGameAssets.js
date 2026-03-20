@@ -40,6 +40,7 @@ export function preloadGameAssets({
   scene.load.image("serenity-large-platform", `${staticPath}/serenity/largePlatform.webp`);
   scene.load.image("serenity-side-platform", `${staticPath}/serenity/sidePlatform.webp`);
   scene.load.image("serenity-log-platform", `${staticPath}/serenity/logPlatform.webp`);
+  scene.load.image("serenity-small-rock", `${staticPath}/serenity/smallRock.webp`);
 
   // Movement SFX (place files under /assets/audio)
   scene.load.audio("sfx-step", `${staticPath}/step.mp3`);

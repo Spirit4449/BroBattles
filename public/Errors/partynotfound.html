@@ -1,6 +1,6 @@
 <!-- welcome.html -->
 
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -56,13 +56,20 @@
   <body>
     <div class="container">
       <h1>Party not found</h1>
-    <button type="submit" id="submitButton" class="text" onclick="returnHome()">Return home</button>
+      <button
+        type="submit"
+        id="submitButton"
+        class="text"
+        onclick="returnHome()"
+      >
+        Return home
+      </button>
     </div>
 
     <script>
-        function returnHome() {
-            window.location.href = '/'
-        }
+      function returnHome() {
+        window.location.href = "/";
+      }
     </script>
   </body>
 </html>

@@ -30,8 +30,10 @@ export const definition = {
   id: 1,
   name: "Lushy Peaks",
   bgAsset: "/assets/lushy/gameBg.webp",
+  mapSelectPreviewAsset: "/assets/lushy/gameBg.webp",
   lobbyBgAsset: "/assets/lushy/lobbyBg.webp",
-  lobbyPlatformAsset: "/assets/lobbyplatform.webp",
+  lobbyPlatformAsset: "/assets/lushy/lobbyplatform.webp",
+  lobbyCharacterOffsetY: 0,
 
   build(scene) {
     _objects.length = 0;

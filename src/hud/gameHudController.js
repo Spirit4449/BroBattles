@@ -1,14 +1,172 @@
 // HUD controller for battle overlays, timer, keybind help, and team status.
 // Keeps DOM/UI concerns out of game scene orchestration.
 
+import { playSound } from "../lib/uiSounds.js";
+
 export function createGameHudController({
   getGameData,
   getUsername,
   getMapBgAsset,
   onEnableInput,
+  onCountdownFight,
+  getScene,
   battleHelpDismissedKey = "bb_hide_keybind_hud_v1",
 } = {}) {
   const teamRows = new Map(); // name -> { row }
+  let cardCatalog = null;
+  let cardCatalogFetchPromise = null;
+  let introSequencePromise = null;
+  let countdownRunning = false;
+  let deferGameplayHudReveal = false;
+  let currentCardNodes = [];
+
+  function _fallbackCatalog() {
+    return {
+      defaultCardId: "default",
+      cards: [
+        {
+          id: "default",
+          name: "Default Card",
+          assetUrl: "/assets/player-cards/default.webp",
+        },
+      ],
+    };
+  }
+
+  async function _ensureCardCatalog() {
+    if (cardCatalog) return cardCatalog;
+    if (cardCatalogFetchPromise) return cardCatalogFetchPromise;
+
+    cardCatalogFetchPromise = fetch("/player-cards/catalog", {
+      credentials: "same-origin",
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const catalog = data?.catalog;
+        if (catalog && Array.isArray(catalog.cards) && catalog.cards.length) {
+          cardCatalog = catalog;
+        } else {
+          cardCatalog = _fallbackCatalog();
+        }
+        return cardCatalog;
+      })
+      .catch(() => {
+        cardCatalog = _fallbackCatalog();
+        return cardCatalog;
+      })
+      .finally(() => {
+        cardCatalogFetchPromise = null;
+      });
+
+    return cardCatalogFetchPromise;
+  }
+
+  function _resolveCard(catalog, selectedCardId) {
+    const list = Array.isArray(catalog?.cards) ? catalog.cards : [];
+    const wanted = String(selectedCardId || "").trim();
+    const bySelected = wanted
+      ? list.find((card) => String(card?.id) === wanted)
+      : null;
+    if (bySelected) return bySelected;
+    const def = String(catalog?.defaultCardId || "").trim();
+    if (def) {
+      const byDefault = list.find((card) => String(card?.id) === def);
+      if (byDefault) return byDefault;
+    }
+    return list[0] || _fallbackCatalog().cards[0];
+  }
+
+  function _createPlayerCardElement({ player, username, side, catalog }) {
+    const root = document.createElement("div");
+    root.className = `bs-player-card ${side === "your" ? "your" : "opp"}`;
+
+    const card = _resolveCard(catalog, player?.selected_card_id);
+
+    const floatDuration = 3.8 + Math.random() * 2.2;
+    const floatDelay = Math.random() * 1.9;
+    root.style.setProperty("--float-duration", `${floatDuration.toFixed(2)}s`);
+    root.style.setProperty("--float-delay", `${floatDelay.toFixed(2)}s`);
+
+    const frame = document.createElement("img");
+    frame.className = "bs-card-frame";
+    frame.src = card?.assetUrl || "/assets/player-cards/default.webp";
+    frame.alt = card?.name || "Player Card";
+
+    const nameEl = document.createElement("div");
+    nameEl.className = "bs-card-player-name";
+    const nm = String(player?.name || "Player");
+    nameEl.textContent = nm + (nm === username ? " (You)" : "");
+
+    const charNameEl = document.createElement("div");
+    charNameEl.className = "bs-card-character-name";
+    charNameEl.textContent = String(player?.char_class || "default");
+
+    const spriteWrap = document.createElement("div");
+    spriteWrap.className = "bs-card-sprite-wrap";
+    const sprite = document.createElement("img");
+    sprite.className = "bs-card-sprite";
+    const cls = String(player?.char_class || "").toLowerCase();
+    if (cls) {
+      sprite.src = `/assets/${cls}/body.webp`;
+      sprite.alt = cls;
+    } else {
+      sprite.src = card?.assetUrl || "/assets/player-cards/default.webp";
+      sprite.alt = "default";
+    }
+    sprite.onerror = () => {
+      sprite.onerror = null;
+      sprite.src = card?.assetUrl || "/assets/player-cards/default.webp";
+    };
+    spriteWrap.appendChild(sprite);
+
+    const statsRow = document.createElement("div");
+    statsRow.className = "bs-card-stats";
+    statsRow.innerHTML = `<div class="bs-card-stat-label">Character Level</div><div class="bs-card-stat-value">${Number(player?.level) || 1}</div>`;
+
+    root.appendChild(frame);
+    root.appendChild(nameEl);
+    root.appendChild(charNameEl);
+    root.appendChild(spriteWrap);
+    root.appendChild(statsRow);
+    return root;
+  }
+
+  function _animateCardsIn(entries) {
+    entries.forEach((node) => node.classList.remove("is-in"));
+    requestAnimationFrame(() => {
+      entries.forEach((node) => node.classList.add("is-in"));
+    });
+  }
+
+  function _sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function _isOverlayVisible() {
+    const overlay = document.getElementById("battle-start-overlay");
+    return !!overlay && !overlay.classList.contains("hidden");
+  }
+
+  async function _runIntroSequence() {
+    if (introSequencePromise) return introSequencePromise;
+
+    const root = document.getElementById("battle-start-overlay");
+    if (!root) return;
+
+    introSequencePromise = (async () => {
+      root.classList.add("phase-cinematic");
+      root.classList.remove("phase-darkened", "phase-cards");
+
+      // 1 second of darkness before cards appear
+      await _sleep(1000);
+
+      root.classList.add("phase-darkened", "phase-cards");
+      await _sleep(40);
+      _animateCardsIn(currentCardNodes);
+    })();
+
+    return introSequencePromise;
+  }
 
   function _gameData() {
     return typeof getGameData === "function" ? getGameData() : null;
@@ -42,12 +200,36 @@ export function createGameHudController({
       backdrop.style.setProperty("--bs-map-bg", `url("${mapBgAsset}")`);
     }
 
-    const modeEl = document.getElementById("bs-mode");
-    if (modeEl) {
-      modeEl.textContent = `${gameData?.mode || 1}v${gameData?.mode || 1}`;
+    root.dataset.teamSize = String(Number(gameData?.mode) || 1);
+
+    const mapMode = document.getElementById("bs-map-mode");
+    if (mapMode) {
+      const mapId = Number(gameData?.map) || 1;
+      const mapName =
+        mapId === 1
+          ? "Lushy Peaks"
+          : mapId === 2
+            ? "Mangrove Meadow"
+            : mapId === 3
+              ? "Serenity"
+              : `Map ${mapId}`;
+      const teamMode = `${Math.max(1, Number(gameData?.mode) || 1)}v${Math.max(
+        1,
+        Number(gameData?.mode) || 1,
+      )}`;
+      mapMode.textContent = `${mapName} • ${teamMode}`;
     }
-    const mapEl = document.getElementById("bs-map");
-    if (mapEl) mapEl.textContent = `Map ${gameData?.map || 1}`;
+
+    deferGameplayHudReveal = true;
+
+    try {
+      const timerHud = document.getElementById("game-timer-hud");
+      const teamHud = document.getElementById("team-status-hud");
+      timerHud?.classList.add("hidden", "hud-intro-enter");
+      teamHud?.classList.add("hidden", "hud-intro-enter");
+      timerHud?.classList.remove("in");
+      teamHud?.classList.remove("in");
+    } catch (_) {}
 
     const yourCol = document.getElementById("bs-your");
     const oppCol = document.getElementById("bs-opp");
@@ -61,30 +243,52 @@ export function createGameHudController({
       (p) => p.team !== gameData?.yourTeam,
     );
 
-    const appendTile = (container, p) => {
-      if (!container) return;
-      const tile = document.createElement("div");
-      tile.className = "bs-player";
-      const img = document.createElement("img");
-      const cls = (p?.char_class || "ninja").toLowerCase();
-      img.src = `/assets/${cls}/body.webp`;
-      img.alt = cls;
-      const name = document.createElement("div");
-      name.className = "bs-name";
-      const nm = p?.name || "Player";
-      name.textContent = nm + (nm === username ? " (You)" : "");
-      tile.appendChild(img);
-      tile.appendChild(name);
-      container.appendChild(tile);
+    const renderPlayers = (catalog) => {
+      if (yourCol) yourCol.innerHTML = "";
+      if (oppCol) oppCol.innerHTML = "";
+
+      const yourNodes = [];
+      const oppNodes = [];
+
+      yourTeam.forEach((p) => {
+        if (!yourCol) return;
+        const node = _createPlayerCardElement({
+          player: p,
+          username,
+          side: "your",
+          catalog,
+        });
+        yourCol.appendChild(node);
+        yourNodes.push(node);
+      });
+      oppTeam.forEach((p) => {
+        if (!oppCol) return;
+        const node = _createPlayerCardElement({
+          player: p,
+          username,
+          side: "opp",
+          catalog,
+        });
+        oppCol.appendChild(node);
+        oppNodes.push(node);
+      });
+
+      currentCardNodes = [...yourNodes, ...oppNodes];
     };
 
-    yourTeam.forEach((p) => appendTile(yourCol, p));
-    oppTeam.forEach((p) => appendTile(oppCol, p));
+    renderPlayers(cardCatalog || _fallbackCatalog());
+    _ensureCardCatalog().then((catalog) => {
+      const stillVisible = !root.classList.contains("hidden");
+      if (!stillVisible) return;
+      renderPlayers(catalog || _fallbackCatalog());
+    });
 
     const c = document.getElementById("countdown-display");
-    if (c) c.textContent = "3";
+    if (c) c.textContent = "5";
 
     root.classList.remove("hidden");
+    root.classList.remove("phase-darkened", "phase-cards");
+    root.classList.add("phase-cinematic");
     root.setAttribute("aria-hidden", "false");
     const wrap = root.querySelector(".bs-wrap");
     if (wrap) requestAnimationFrame(() => (wrap.style.opacity = "1"));
@@ -101,7 +305,9 @@ export function createGameHudController({
     const display = document.getElementById("game-timer-display");
     const label = document.getElementById("game-timer-label");
     if (!hud) return;
-    hud.classList.remove("hidden");
+    if (!deferGameplayHudReveal) {
+      hud.classList.remove("hidden");
+    }
     const totalSec = Math.max(0, Math.ceil(remainingMs / 1000));
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
@@ -234,7 +440,11 @@ export function createGameHudController({
       grid.appendChild(makeCell(oppTeam[i]));
     }
 
-    root.classList.toggle("hidden", sorted.length === 0);
+    if (deferGameplayHudReveal) {
+      root.classList.add("hidden");
+    } else {
+      root.classList.toggle("hidden", sorted.length === 0);
+    }
   }
 
   function setTeamHudPlayerAlive(name, isAlive) {
@@ -281,50 +491,100 @@ export function createGameHudController({
     setTimeout(() => {
       overlay.classList.add("hidden");
       overlay.setAttribute("aria-hidden", "true");
+      overlay.classList.remove(
+        "phase-cinematic",
+        "phase-darkened",
+        "phase-cards",
+      );
+
+      deferGameplayHudReveal = false;
+      try {
+        const timerHud = document.getElementById("game-timer-hud");
+        const teamHud = document.getElementById("team-status-hud");
+        timerHud?.classList.remove("hidden");
+        teamHud?.classList.remove("hidden");
+        requestAnimationFrame(() => {
+          timerHud?.classList.add("in");
+          teamHud?.classList.add("in");
+        });
+      } catch (_) {}
     }, 300);
-    try {
-      document.getElementById("game-timer-hud")?.classList.remove("hidden");
-    } catch (_) {}
   }
 
-  function startCountdown() {
+  function startCountdown(seconds = 7) {
+    if (countdownRunning) return;
+    countdownRunning = true;
+
     const countdownEl = document.getElementById("countdown-display");
-    if (!countdownEl) return;
+    if (!countdownEl) {
+      countdownRunning = false;
+      return;
+    }
 
-    let count = 3;
+    // Start intro sequence in parallel so countdown stays aligned to server start.
+    // Intro runs for 1 second (darkness), then shows cards and countdown starts
+    _runIntroSequence().catch(() => {});
 
-    const updateCountdown = () => {
-      if (count > 0) {
-        countdownEl.style.transform = "scale(0.5)";
-        countdownEl.style.opacity = "0.5";
+    const totalSeconds = Math.max(1, Number(seconds) || 7);
+    const introDuration = 1000; // 1 second of darkness before countdown
+    const countdownDuration = totalSeconds - introDuration / 1000; // 6 seconds for countdown (5, 4, 3, 2, 1, FIGHT)
 
-        setTimeout(() => {
-          countdownEl.textContent = count;
-          countdownEl.style.transform = "scale(1.2)";
-          countdownEl.style.opacity = "1";
-          countdownEl.style.transition =
-            "transform 0.3s ease, opacity 0.3s ease";
+    const runCountdown = () => {
+      // Wait for intro darkness to complete, then start countdown
+      setTimeout(() => {
+        // Countdown: 5, 4, 3, 2, 1, FIGHT
+        const numbers = [5, 4, 3, 2, 1];
+        let displayIndex = 0;
 
-          setTimeout(() => {
-            countdownEl.style.transform = "scale(1)";
-          }, 150);
-        }, 50);
+        const displayNext = () => {
+          if (displayIndex < numbers.length) {
+            const num = numbers[displayIndex];
 
-        count--;
-        setTimeout(updateCountdown, 1000);
-      } else {
-        countdownEl.textContent = "FIGHT!";
-        countdownEl.style.color = "#ef4444";
-        countdownEl.style.transform = "scale(1.5)";
+            // Animate in
+            countdownEl.style.transform = "translate(-50%, -50%) scale(0.5)";
+            countdownEl.style.opacity = "0.5";
 
-        setTimeout(() => {
-          hideBattleStartOverlay();
-          _enableInput();
-        }, 1000);
-      }
+            setTimeout(() => {
+              countdownEl.textContent = num;
+              playSound("beep", 0.6);
+              countdownEl.style.transform = "translate(-50%, -50%) scale(1.2)";
+              countdownEl.style.opacity = "1";
+              countdownEl.style.transition =
+                "transform 0.3s ease, opacity 0.3s ease";
+
+              setTimeout(() => {
+                countdownEl.style.transform = "translate(-50%, -50%) scale(1)";
+              }, 150);
+            }, 50);
+
+            displayIndex++;
+            setTimeout(displayNext, 1000);
+          } else {
+            // Show FIGHT
+            countdownEl.textContent = "FIGHT!";
+            countdownEl.style.color = "#ef4444";
+            countdownEl.style.transform = "translate(-50%, -50%) scale(1.5)";
+            playSound("start", 0.8);
+
+            try {
+              if (typeof onCountdownFight === "function") {
+                onCountdownFight();
+              }
+            } catch (_) {}
+
+            // Immediately hide overlay, enable input
+            hideBattleStartOverlay();
+            _enableInput();
+            introSequencePromise = null;
+            countdownRunning = false;
+          }
+        };
+
+        displayNext();
+      }, introDuration);
     };
 
-    updateCountdown();
+    runCountdown();
   }
 
   return {
@@ -338,6 +598,7 @@ export function createGameHudController({
     setTeamHudPlayerPresence,
     setTeamHudPlayerLoaded,
     syncTeamHudFromSnapshot,
+    isBattleIntroActive: () => countdownRunning || _isOverlayVisible(),
     startCountdown,
     hideBattleStartOverlay,
   };

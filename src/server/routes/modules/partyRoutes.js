@@ -60,7 +60,7 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
           );
         } catch (_) {}
       }
-      await emitRoster(io, partyId, result.party, membersForEmit);
+      await emitRoster(io, partyId, result.party, membersForEmit, db);
 
       // Authoritative settings sync: ensure joiners adopt party mode/map.
       io.to(`party:${partyId}`).emit("mode-change", {

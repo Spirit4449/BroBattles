@@ -44,6 +44,10 @@ async function buildGameDataForMatch({ db, requireCurrentUser, req, res }) {
     [matchId],
   );
 
+  const selectedByName = await db.fetchSelectedCardsByNames(
+    allParticipants.map((p) => p.name),
+  );
+
   const {
     getHealth,
     getDamage,
@@ -74,6 +78,7 @@ async function buildGameDataForMatch({ db, requireCurrentUser, req, res }) {
         name: p.name,
         team: p.team,
         char_class: p.char_class,
+        selected_card_id: selectedByName[p.name] ?? null,
         level,
         stats: {
           health: getHealth(p.char_class, level),

@@ -28,7 +28,7 @@ const MOVEMENT_PHYSICS = {
   wallSlideMaxFallSpeed: 160,
   wallKickLockMs: 160,
   wallJumpGraceMs: 120,
-  wallJumpGracePx: 50,
+  wallJumpGracePx: 20,
   wallKickSmall: 150,
   wallKickFull: 360,
 

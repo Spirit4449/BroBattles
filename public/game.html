@@ -12,6 +12,12 @@
       rel="stylesheet"
     />
     <style>
+      @font-face {
+        font-family: "Press Start 2P";
+        src: url("/assets/PressStart2p-Regular.TTF") format("truetype");
+        font-display: swap;
+      }
+
       html,
       body {
         margin: 0;
@@ -153,6 +159,20 @@
         display: none !important;
       }
 
+      #game-timer-hud.hud-intro-enter,
+      #team-status-hud.hud-intro-enter {
+        opacity: 0;
+        transform: translateY(-28px);
+        transition:
+          transform 360ms cubic-bezier(0.22, 0.9, 0.32, 1),
+          opacity 320ms ease;
+      }
+      #game-timer-hud.hud-intro-enter.in,
+      #team-status-hud.hud-intro-enter.in {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
       /* ===== Battle Start Overlay (playful, blue-toned game card style) ===== */
       #battle-start-overlay {
         position: fixed;
@@ -165,167 +185,362 @@
       #battle-start-overlay .bs-wrap {
         position: absolute;
         inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        display: block;
         transition: opacity 0.3s ease;
         opacity: 0;
       }
       #battle-start-overlay .bs-backdrop {
         position: absolute;
         inset: 0;
-        overflow: hidden;
-        backdrop-filter: blur(6px);
-        transform: scale(1.02);
-        width: 100%;
-        height: 100%;
         background:
           radial-gradient(
-            circle at 18% 20%,
-            rgba(142, 197, 255, 0.2),
-            transparent 42%
+            circle at 50% 35%,
+            rgba(35, 62, 96, 0.2),
+            rgba(8, 13, 22, 0.46) 58%,
+            rgba(3, 5, 10, 0.74)
           ),
-          radial-gradient(
-            circle at 84% 78%,
-            rgba(120, 189, 255, 0.14),
-            transparent 38%
-          ),
-          linear-gradient(rgba(14, 30, 55, 0.5), rgba(14, 30, 55, 0.5)),
-          var(--bs-map-bg, none), rgba(14, 30, 55, 0.5);
-        background-position: center;
-        background-size: cover;
+          rgba(0, 0, 0, 0.58);
+        opacity: 0;
+        transition: opacity 240ms ease;
+      }
+      #battle-start-overlay .bs-backdrop::before,
+      #battle-start-overlay .bs-backdrop::after {
+        content: "";
+        position: absolute;
+        border-radius: 999px;
+        filter: blur(20px);
+        opacity: 0;
+        transition: opacity 280ms ease;
+      }
+      #battle-start-overlay .bs-backdrop::before {
+        width: min(42vw, 560px);
+        height: min(42vw, 560px);
+        left: -10vw;
+        top: 18vh;
+        background: radial-gradient(
+          circle,
+          rgba(35, 165, 255, 0.32) 0%,
+          rgba(35, 165, 255, 0) 72%
+        );
+        animation: bs-blob-left 4.8s ease-in-out infinite;
+      }
+      #battle-start-overlay .bs-backdrop::after {
+        width: min(36vw, 500px);
+        height: min(36vw, 500px);
+        right: -8vw;
+        top: 12vh;
+        background: radial-gradient(
+          circle,
+          rgba(147, 199, 255, 0.28) 0%,
+          rgba(147, 199, 255, 0) 70%
+        );
+        animation: bs-blob-right 5.4s ease-in-out infinite;
       }
       #battle-start-overlay .bs-panel {
-        position: relative;
-        z-index: 1;
-        background: linear-gradient(180deg, #204874eb 0%, #153357f0 100%);
-        border: 3px solid #78bdff;
-        border-radius: 16px;
-        padding: 22px 24px 20px;
-        width: min(900px, 92vw);
-        box-shadow:
-          0 18px 45px rgba(0, 0, 0, 0.5),
-          inset 0 0 0 2px rgba(255, 255, 255, 0.16);
+        position: absolute;
+        inset: 0;
+        background: transparent;
+        border: 0;
+        box-shadow: none;
         color: #eaf5ff;
         text-align: center;
-        overflow: hidden;
+        overflow: visible;
       }
       #battle-start-overlay .bs-panel::before {
         content: "";
         position: absolute;
-        inset: 8px;
-        border: 1px dashed rgba(202, 230, 255, 0.35);
-        border-radius: 11px;
+        inset: 0;
+        background-image: radial-gradient(
+          circle,
+          rgba(188, 225, 255, 0.2) 1px,
+          transparent 1.8px
+        );
+        background-size: 18px 18px;
+        opacity: 0;
+        transition: opacity 260ms ease;
+        animation: bs-dots-shift 11s linear infinite;
         pointer-events: none;
       }
-      #battle-start-overlay .bs-panel::after {
-        content: "GET READY";
-        position: absolute;
-        top: 12px;
-        left: 50%;
-        transform: translateX(-50%) rotate(-2deg);
-        padding: 6px 12px;
-        border-radius: 999px;
-        border: 2px solid #def3ff;
-        background: linear-gradient(180deg, #4fa5ff, #3d87df);
-        font-family: "Press Start 2P", cursive;
-        font-size: clamp(9px, 1.5vw, 11px);
-        letter-spacing: 0.8px;
-        color: #fff;
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
-      }
-      #battle-start-overlay .bs-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin: 30px 0 16px;
-        font-weight: 700;
-      }
-      #battle-start-overlay .bs-mode,
-      #battle-start-overlay .bs-map {
-        font-size: clamp(14px, 2vw, 16px);
-        opacity: 0.95;
-        font-family: "Press Start 2P", cursive;
-        color: #cce8ff;
-      }
-      #battle-start-overlay .bs-vs {
-        font-size: clamp(20px, 3.6vw, 28px);
-        letter-spacing: 2px;
-        color: #9bd0ff;
-        font-family: "Press Start 2P", cursive;
-        text-shadow: 0 3px 0 #1d4f86;
-        animation: bs-pulse 1.2s ease-in-out infinite;
-      }
       #battle-start-overlay .bs-grid {
+        position: absolute;
+        inset: 76px 60px 0;
+        z-index: 2;
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 16px;
+        gap: 26px;
+        align-content: center;
       }
       #battle-start-overlay .bs-col {
         display: flex;
         flex-wrap: wrap;
         justify-content: center;
-        gap: 12px;
-        padding: 8px;
+        align-items: center;
+        align-content: center;
+        gap: 16px;
+        padding: 10px;
       }
-      #battle-start-overlay .bs-col.your {
-        border-right: 2px dashed rgba(120, 189, 255, 0.35);
+      #battle-start-overlay .bs-player-card {
+        --pn-x: 50%;
+        --pn-y: 20%;
+        --pn-maxw: 72%;
+        --pn-scale: 1;
+        --cn-x: 50%;
+        --cn-y: 25.5%;
+        --cn-maxw: 66%;
+        --cn-scale: 0.9;
+        --spr-x: 50%;
+        --spr-y: 52%;
+        --spr-w: 36%;
+        --spr-h: 29%;
+        --stats-x: 50%;
+        --stats-y: 72%;
+        --stats-w: 68%;
+        --stats-h: 12%;
+        --enter-x: 0px;
+        --enter-y: 12px;
+
+        position: relative;
+        width: min(20vw, 220px);
+        aspect-ratio: 650 / 1250;
+        opacity: 0;
+        transform: translate3d(var(--enter-x), var(--enter-y), 0) scale(0.92);
+        filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.42));
+        transition:
+          transform 240ms ease,
+          opacity 240ms ease,
+          filter 240ms ease;
       }
-      #battle-start-overlay .bs-player {
+      #battle-start-overlay .bs-player-card::after {
+        content: "";
+        position: absolute;
+        inset: 14% 12%;
+        z-index: -1;
+        border-radius: 18px;
+        background: radial-gradient(
+          circle,
+          rgba(120, 210, 255, 0.42) 0%,
+          rgba(120, 210, 255, 0.2) 42%,
+          rgba(120, 210, 255, 0) 72%
+        );
+        filter: blur(22px);
+        opacity: 0;
+        transform: scale(0.92);
+        transition:
+          opacity 260ms ease,
+          transform 260ms ease;
+        pointer-events: none;
+      }
+
+      #battle-start-overlay[data-team-size="1"] .bs-player-card {
+        width: min(22vw, 245px);
+      }
+      #battle-start-overlay[data-team-size="2"] .bs-player-card {
+        width: min(18.5vw, 205px);
+      }
+      #battle-start-overlay[data-team-size="3"] .bs-player-card {
+        width: min(15vw, 172px);
+      }
+
+      #battle-start-overlay .bs-header {
+        position: absolute;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 4;
         display: flex;
         flex-direction: column;
         align-items: center;
+        gap: 4px;
+        text-align: center;
+        pointer-events: none;
+      }
+
+      #battle-start-overlay .bs-brand-row {
+        display: flex;
+        align-items: center;
         gap: 8px;
-        padding: 12px;
-        min-width: 140px;
-        background: linear-gradient(
-          180deg,
-          rgba(171, 218, 255, 0.2),
-          rgba(124, 190, 255, 0.09)
-        );
-        border: 2px solid rgba(148, 202, 255, 0.45);
-        border-radius: 10px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
       }
-      #battle-start-overlay .bs-col.opp .bs-player {
-        background: linear-gradient(
-          180deg,
-          rgba(124, 186, 252, 0.22),
-          rgba(84, 150, 231, 0.1)
-        );
-        border-color: rgba(106, 172, 247, 0.45);
+
+      #battle-start-overlay .bs-brand-logo {
+        width: 22px;
+        height: 22px;
+        object-fit: contain;
+        filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.45));
       }
-      #battle-start-overlay .bs-player img {
-        width: 64px;
-        image-rendering: pixelated;
-        filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.35));
+
+      #battle-start-overlay .bs-brand-title {
+        font-family: "Press Start 2P", cursive;
+        font-size: clamp(11px, 1.2vw, 16px);
+        color: #eaf6ff;
+        letter-spacing: 1px;
+        text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
       }
-      #battle-start-overlay .bs-name {
-        font-size: 14px;
+
+      #battle-start-overlay .bs-map-mode {
+        font-size: clamp(9px, 0.95vw, 12px);
+        color: #c8e7ff;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+      }
+      #battle-start-overlay .bs-player-card.is-in {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+        filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.42))
+          drop-shadow(0 0 14px rgba(111, 205, 255, 0.5));
+      }
+      #battle-start-overlay .bs-player-card.is-in::after {
+        opacity: 0.72;
+        transform: scale(1);
+      }
+      #battle-start-overlay .bs-card-frame {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: contain;
+      }
+      #battle-start-overlay .bs-card-player-name,
+      #battle-start-overlay .bs-card-character-name,
+      #battle-start-overlay .bs-card-sprite-wrap,
+      #battle-start-overlay .bs-card-stats {
+        position: absolute;
+        left: 50%;
+        transform: translate(-50%, -50%);
+      }
+      #battle-start-overlay .bs-card-player-name {
+        left: 50%;
+        top: 21.2%;
+        max-width: 74%;
+        font-size: clamp(12px, 1.08vw, 15px);
+        font-weight: 700;
+        color: #f9fdff;
+        text-shadow: 0 2px 3px rgba(0, 0, 0, 0.75);
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #battle-start-overlay .bs-card-character-name {
+        left: 50%;
+        top: 27.6%;
+        max-width: 68%;
+        font-size: clamp(10px, 0.9vw, 12px);
         font-weight: 600;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        color: #ced7e2;
+        text-transform: capitalize;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #battle-start-overlay .bs-card-sprite-wrap {
+        left: 50%;
+        top: 53%;
+        width: 36%;
+        height: 29%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #battle-start-overlay .bs-card-sprite {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        image-rendering: pixelated;
+        filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.35));
+      }
+      #battle-start-overlay .bs-card-stats {
+        left: 50%;
+        top: 71.6%;
+        width: 67%;
+        height: 11.8%;
+        border-radius: 10px;
+        background: linear-gradient(
+          180deg,
+          rgba(44, 54, 74, 0.85),
+          rgba(37, 44, 61, 0.82)
+        );
+        border: 1px solid rgba(162, 192, 230, 0.35);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        padding: 2px 6px;
+      }
+      #battle-start-overlay .bs-card-stat-label {
+        font-size: clamp(7px, 0.65vw, 9px);
+        text-transform: uppercase;
+        letter-spacing: 0.7px;
+        color: #a5c0e6;
+      }
+      #battle-start-overlay .bs-card-stat-value {
+        font-size: clamp(11px, 1.1vw, 14px);
+        font-weight: 700;
+        color: #f4f8ff;
       }
       #battle-start-overlay .bs-count {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 4;
         font-size: clamp(28px, 6vw, 56px);
         font-weight: 800;
-        margin: 8px 0 2px;
+        margin: 0;
         letter-spacing: 2px;
         color: #d6ecff;
         font-family: "Press Start 2P", cursive;
         text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+        opacity: 0;
+        transition: opacity 200ms ease;
       }
-      #battle-start-overlay .bs-sub {
-        opacity: 0.9;
-        font-size: 13px;
-        color: #cde7ff;
+      #battle-start-overlay.phase-darkened .bs-backdrop {
+        opacity: 1;
+      }
+      #battle-start-overlay.phase-darkened .bs-backdrop::before,
+      #battle-start-overlay.phase-darkened .bs-backdrop::after {
+        opacity: 1;
+      }
+      #battle-start-overlay.phase-cards .bs-panel::before {
+        opacity: 0.38;
+      }
+      #battle-start-overlay.phase-cards .bs-count {
+        opacity: 1;
+      }
+
+      @keyframes bs-blob-left {
+        0%,
+        100% {
+          transform: translate3d(0, 0, 0) scale(1);
+        }
+        50% {
+          transform: translate3d(5vw, -2vh, 0) scale(1.08);
+        }
+      }
+      @keyframes bs-blob-right {
+        0%,
+        100% {
+          transform: translate3d(0, 0, 0) scale(1);
+        }
+        50% {
+          transform: translate3d(-4vw, 3vh, 0) scale(1.06);
+        }
+      }
+      @keyframes bs-dots-shift {
+        0% {
+          background-position: 0 0;
+        }
+        100% {
+          background-position: 36px 26px;
+        }
       }
 
       #game-timer-hud {
         position: fixed;
         top: 10px;
         left: 50%;
-        transform: translateX(-50%);
+        transform: translateY(0);
         z-index: 9998;
         background: linear-gradient(
           180deg,
@@ -342,6 +557,16 @@
         text-align: center;
         min-width: 130px;
         pointer-events: none;
+      }
+      #game-timer-hud.hud-intro-enter,
+      #game-timer-hud.hud-intro-enter.in {
+        left: 50%;
+      }
+      #game-timer-hud.hud-intro-enter {
+        transform: translate(-50%, -28px);
+      }
+      #game-timer-hud.hud-intro-enter.in {
+        transform: translate(-50%, 0);
       }
       #game-timer-hud .timer-display {
         font-family: "Press Start 2P", cursive;
@@ -558,24 +783,14 @@
         opacity: 0.55;
       }
 
-      @keyframes bs-pulse {
-        0%,
-        100% {
-          transform: scale(1);
-        }
-        50% {
-          transform: scale(1.08);
-        }
-      }
-
       @media (max-width: 760px) {
         #battle-start-overlay .bs-grid {
+          inset: 70px 10px 0;
           grid-template-columns: 1fr;
+          align-content: center;
         }
-        #battle-start-overlay .bs-col.your {
-          border-right: none;
-          border-bottom: 2px dashed rgba(120, 189, 255, 0.35);
-          padding-bottom: 14px;
+        #battle-start-overlay .bs-player-card {
+          width: min(34vw, 200px);
         }
         #battle-keybind-hud {
           top: 8px;
@@ -636,17 +851,22 @@
       <div class="bs-wrap">
         <div class="bs-backdrop"></div>
         <div class="bs-panel">
-          <div class="bs-head">
-            <div class="bs-mode" id="bs-mode">1v1</div>
-            <div class="bs-vs">VS</div>
-            <div class="bs-map" id="bs-map">Map 1</div>
+          <div class="bs-header" aria-live="polite">
+            <div class="bs-brand-row">
+              <img
+                class="bs-brand-logo"
+                src="/assets/sword.svg"
+                alt="Bro Battles"
+              />
+              <div class="bs-brand-title">Bro Battles</div>
+            </div>
+            <div class="bs-map-mode" id="bs-map-mode">Lushy Peaks • 1v1</div>
           </div>
           <div class="bs-grid">
             <div class="bs-col your" id="bs-your"></div>
             <div class="bs-col opp" id="bs-opp"></div>
           </div>
           <div id="countdown-display" class="bs-count">3</div>
-          <div class="bs-sub">Waiting on other players…</div>
         </div>
       </div>
     </div>

@@ -694,7 +694,7 @@ export function handlePlayerMovement(scene) {
   const wallKickLockMs = 160;
   // - wallJumpGraceMs/wallJumpGracePx: allow wall jump shortly after leaving wall.
   const wallJumpGraceMs = 120;
-  const wallJumpGracePx = 50;
+  const wallJumpGracePx = 20;
   // - wall kick strength: small when jumping with up-only, full when up+away.
   const wallKickSmall = 150;
   const wallKickFull = 360;
@@ -718,6 +718,10 @@ export function handlePlayerMovement(scene) {
   let leftKey = cursors.left.isDown || keyA.isDown;
   let rightKey = cursors.right.isDown || keyD.isDown;
   let upKey = cursors.up.isDown || keyW.isDown || (keySpace && keySpace.isDown);
+  const upKeyFreshPress =
+    Phaser.Input.Keyboard.JustDown(cursors.up) ||
+    Phaser.Input.Keyboard.JustDown(keyW) ||
+    (!!keySpace && Phaser.Input.Keyboard.JustDown(keySpace));
 
   const touchingWallNow =
     !!player.body.touching.left ||
@@ -936,12 +940,12 @@ export function handlePlayerMovement(scene) {
     jump(); // Calls jump
     scene.sound.play("sfx-jump", { volume: 3 });
   } else if (
-    // Wall jump can trigger while holding up (no re-press required).
+    // Wall jump requires a fresh jump press each time.
     !dead &&
     wallSide &&
     !player.body.touching.down &&
     canWallJump &&
-    upKey
+    upKeyFreshPress
   ) {
     const awayPressed = wallSide === "left" ? rightKey : leftKey;
     wallJump(wallSide, awayPressed); // Calls walljump

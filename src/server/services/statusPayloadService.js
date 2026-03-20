@@ -24,6 +24,25 @@ async function buildStatusPayload({
   });
   const userNormalized = normalizeUserForStatus(user);
 
+  let selectedCardId = null;
+  let ownedCardIds = [];
+  if (userNormalized?.user_id) {
+    try {
+      selectedCardId = await db.getUserSelectedCardId(userNormalized.user_id);
+    } catch (_) {
+      selectedCardId = null;
+    }
+    try {
+      ownedCardIds = await db.getUserOwnedCardIds(userNormalized.user_id);
+    } catch (_) {
+      ownedCardIds = [];
+    }
+  }
+  if (userNormalized) {
+    userNormalized.selected_card_id = selectedCardId;
+    userNormalized.owned_card_ids = ownedCardIds;
+  }
+
   const partyRows = await db.runQuery(
     "SELECT party_id FROM party_members WHERE name = ? LIMIT 1",
     [userNormalized?.name],

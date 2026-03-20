@@ -1,0 +1,75 @@
+.cs-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 12050;
+}
+
+.cs-confirm {
+  width: 90%;
+  max-width: 420px;
+  background: #1f2937;
+  color: #f3f4f6;
+  padding: 16px 18px;
+}
+
+.cs-confirm-title {
+  font-weight: 800;
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.cs-confirm-body p {
+  margin: 6px 0;
+  font-size: 14px;
+  color: #e5e7eb;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cs-confirm-actions {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.cs-btn {
+  padding: 8px 14px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+}
+
+.cs-btn.cancel {
+  background: #374151;
+  color: #e5e7eb;
+}
+
+.cs-btn.cancel:hover {
+  filter: brightness(1.05);
+}
+
+.cs-btn.confirm {
+  background: linear-gradient(145deg, #4a9eff, #3182ce);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cs-btn.confirm:hover {
+  filter: brightness(1.06);
+}
+
+.cs-currency {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  display: inline-block;
+  vertical-align: middle;
+}

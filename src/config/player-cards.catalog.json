@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "defaultCardId": "default",
+  "renderGuides": {
+    "fullCardSizePx": {
+      "w": 650,
+      "h": 1250
+    },
+    "nonGraphicAreaPx": {
+      "w": 835,
+      "h": 240
+    }
+  },
+  "cards": [
+    {
+      "id": "default",
+      "name": "Default Card",
+      "assetUrl": "/assets/player-cards/default.webp",
+      "rarity": "common",
+      "cost": {
+        "coins": 0,
+        "gems": 0
+      }
+    },
+    {
+      "id": "shuriken-strike",
+      "name": "Shuriken Strike",
+      "assetUrl": "/assets/player-cards/shuriken-strike.webp",
+      "rarity": "rare",
+      "cost": {
+        "coins": 400,
+        "gems": 20
+      }
+    }
+  ]
+}

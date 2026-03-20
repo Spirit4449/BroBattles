@@ -131,6 +131,83 @@ async function setPartiesStatus(partyIds, status) {
   ]);
 }
 
+async function getUserSelectedCardId(userId) {
+  try {
+    const rows = await runQuery(
+      "SELECT selected_card_id FROM users WHERE user_id = ? LIMIT 1",
+      [userId],
+    );
+    return rows[0]?.selected_card_id ?? null;
+  } catch (error) {
+    if (error?.code === "ER_BAD_FIELD_ERROR") return null;
+    throw error;
+  }
+}
+
+async function getUserOwnedCardIds(userId) {
+  try {
+    const rows = await runQuery(
+      "SELECT card_id FROM user_cards WHERE user_id = ?",
+      [userId],
+    );
+    return rows.map((r) => String(r.card_id));
+  } catch (error) {
+    if (error?.code === "ER_NO_SUCH_TABLE") return [];
+    throw error;
+  }
+}
+
+async function userOwnsCard(userId, cardId) {
+  try {
+    const rows = await runQuery(
+      "SELECT 1 AS ok FROM user_cards WHERE user_id = ? AND card_id = ? LIMIT 1",
+      [userId, String(cardId)],
+    );
+    return !!rows[0];
+  } catch (error) {
+    if (error?.code === "ER_NO_SUCH_TABLE") return false;
+    throw error;
+  }
+}
+
+async function setUserSelectedCardId(userId, cardId) {
+  try {
+    return await runQuery(
+      "UPDATE users SET selected_card_id = ? WHERE user_id = ?",
+      [String(cardId), userId],
+    );
+  } catch (error) {
+    if (error?.code === "ER_BAD_FIELD_ERROR") {
+      throw new Error(
+        "selected_card_id column missing in users table. Apply the player-cards migration.",
+      );
+    }
+    throw error;
+  }
+}
+
+async function fetchSelectedCardsByNames(names) {
+  const unique = Array.from(
+    new Set((Array.isArray(names) ? names : []).map((n) => String(n || ""))),
+  ).filter(Boolean);
+  if (!unique.length) return {};
+  try {
+    const placeholders = unique.map(() => "?").join(",");
+    const rows = await runQuery(
+      `SELECT name, selected_card_id FROM users WHERE name IN (${placeholders})`,
+      unique,
+    );
+    const out = {};
+    for (const row of rows) {
+      out[row.name] = row.selected_card_id ?? null;
+    }
+    return out;
+  } catch (error) {
+    if (error?.code === "ER_BAD_FIELD_ERROR") return {};
+    throw error;
+  }
+}
+
 async function updateLastSeen(partyId, username) {
   const result = await runQuery(
     "UPDATE party_members SET last_seen = NOW() WHERE party_id = ? AND name = ?",
@@ -256,4 +333,9 @@ module.exports = {
   setPartyStatus,
   setPartiesStatus,
   getUserSocketId,
+  getUserSelectedCardId,
+  getUserOwnedCardIds,
+  userOwnsCard,
+  setUserSelectedCardId,
+  fetchSelectedCardsByNames,
 };

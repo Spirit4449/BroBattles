@@ -49,12 +49,12 @@ function startGame(room) {
   room.initializeSpawnPositions();
 
   room.io.to(`game:${room.matchId}`).emit("game:start", {
-    countdown: 3,
+    countdown: 6,
   });
 
   setTimeout(() => {
     room.startGameLoop();
-  }, 3000);
+  }, 6000);
 }
 
 async function broadcastParticipantStatus(room, statusLabel) {

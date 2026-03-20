@@ -389,28 +389,70 @@ export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
   }
   const trail = spawnFireballTrail(scene, sprite);
 
-  scene.tweens.add({
-    targets: sprite,
-    x: start.x + direction * range,
-    ease: "Linear",
-    duration: travelDuration,
-    delay: startup,
-    onComplete: () => {
-      spawnImpact(scene, sprite.x, sprite.y, false);
-      sprite.destroy();
-      if (trail) trail.destroy();
-      debugFollower?.destroy();
-    },
+  let startupFollower = null;
+  const followOwnerDuringStartup =
+    startup > 0 && ownerSprite && ownerSprite.active;
+  if (followOwnerDuringStartup) {
+    const updateStartupOrigin = () => {
+      if (!sprite.active || !ownerSprite?.active) return;
+      const liveStart = {
+        x:
+          ownerSprite.x +
+          direction *
+            ((ownerSprite.displayWidth || 80) * FIREBALL_FORWARD_OFFSET),
+        y:
+          ownerSprite.y -
+          (ownerSprite.displayHeight || ownerSprite.height || 120) *
+            FIREBALL_VERTICAL_OFFSET,
+      };
+      sprite.x = liveStart.x;
+      sprite.y = liveStart.y;
+    };
+    updateStartupOrigin();
+    scene.events.on("update", updateStartupOrigin);
+    startupFollower = () => {
+      scene.events.off("update", updateStartupOrigin);
+      startupFollower = null;
+    };
+  }
+
+  sprite.once("destroy", () => {
+    if (startupFollower) startupFollower();
   });
-  scene.tweens.add({
-    targets: sprite,
-    y: start.y + bob,
-    ease: "Sine.easeInOut",
-    yoyo: true,
-    duration: FIREBALL_BOB_TWEEN_MS,
-    delay: startup,
-    repeat: Math.ceil(travelDuration / FIREBALL_BOB_TWEEN_MS),
-  });
+
+  const launch = () => {
+    if (!sprite.active) return;
+    if (startupFollower) startupFollower();
+    const launchX = sprite.x;
+    const launchY = sprite.y;
+
+    scene.tweens.add({
+      targets: sprite,
+      x: launchX + direction * range,
+      ease: "Linear",
+      duration: travelDuration,
+      onComplete: () => {
+        spawnImpact(scene, sprite.x, sprite.y, false);
+        sprite.destroy();
+        if (trail) trail.destroy();
+        debugFollower?.destroy();
+      },
+    });
+    scene.tweens.add({
+      targets: sprite,
+      y: launchY + bob,
+      ease: "Sine.easeInOut",
+      yoyo: true,
+      duration: FIREBALL_BOB_TWEEN_MS,
+      repeat: Math.ceil(travelDuration / FIREBALL_BOB_TWEEN_MS),
+    });
+  };
+
+  if (startup > 0) {
+    scene.time.delayedCall(startup, launch);
+  } else {
+    launch();
+  }
   return sprite;
 }
 

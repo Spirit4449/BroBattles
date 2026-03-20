@@ -20,17 +20,20 @@ const SERENITY_CONFIG = {
     rightSideExtraY: 100,
     logX: 350,
     logY: 260,
+    rockX: 350,
+    rockY: 490,
   },
   bodies: {
     large: { h: 480, offsetY: 70 },
     left: { h: 95, offsetY: 25 },
     right: { h: 120, offsetY: 25 },
+    rock: { h: 90, offsetY: 25 },
   },
   sideWalls: {
     w: 16,
-    inset: 18,
-    left: { h: 70, dy: 60 },
-    right: { h: 160, dy: 100 },
+    inset: 7,
+    left: { h: 70, dy: 62 },
+    right: { h: 160, dy: 110 },
   },
   log: {
     bars: [
@@ -47,6 +50,7 @@ let _largePlatform = null;
 let _leftPlatform = null;
 let _rightPlatform = null;
 let _logPlatform = null;
+let _smallRock = null;
 let _logBars = [];
 let _sideWalls = [];
 const _objects = [];
@@ -56,8 +60,12 @@ export const definition = {
   id: 3,
   name: "serenity",
   bgAsset: "/assets/serenity/gameBg.webp",
+  mapSelectPreviewAsset: "/assets/serenity/preview.webp",
   lobbyBgAsset: "/assets/serenity/lobbyBg.webp",
-  lobbyPlatformAsset: "/assets/serenity/sidePlatform.webp",
+  lobbyPlatformAsset: "/assets/serenity/lobbyPlatform.webp",
+  lobbyCharacterOffsetY: 25,
+  // Optional per-mode override (1v1/2v2/3v3). Omit to use scaled base offset.
+  // lobbyCharacterOffsetYByMode: { 1: 16, 2: 11, 3: 9 },
 
   build(scene) {
     _objects.length = 0;
@@ -118,6 +126,23 @@ export const definition = {
     _rightPlatform.body.setOffset(
       _rightPlatform.body.offset.x,
       SERENITY_CONFIG.bodies.right.offsetY,
+    );
+
+
+    
+  _smallRock = plat(
+      "serenity-small-rock",
+      cx - SERENITY_CONFIG.layout.rockX,
+      SERENITY_CONFIG.layout.rockY,
+      SERENITY_CONFIG.scale.main,
+    );
+    _smallRock.body.setSize(
+      _smallRock.body.width,
+      SERENITY_CONFIG.bodies.rock.h,
+    );
+    _smallRock.body.setOffset(
+      _smallRock.body.offset.x,
+      SERENITY_CONFIG.bodies.rock.offsetY,
     );
 
     function addWallJumpSides(platform) {

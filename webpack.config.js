@@ -11,6 +11,7 @@ module.exports = {
     signup: "./src/signup.js",
     login: "./src/login.js",
     admin: "./src/admin.js",
+    profile: "./src/profile.js",
   },
   output: {
     filename: "bundles/[name].bundle.js",

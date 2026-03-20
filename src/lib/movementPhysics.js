@@ -26,8 +26,8 @@ export const MOVEMENT_PHYSICS = {
   wallJumpCooldownMs: 320,
   wallSlideMaxFallSpeed: 160,
   wallKickLockMs: 160,
-  wallJumpGraceMs: 120,
-  wallJumpGracePx: 50,
+  wallJumpGraceMs: 220,
+  wallJumpGracePx: 120,
   wallKickSmall: 150,
   wallKickFull: 360,
 

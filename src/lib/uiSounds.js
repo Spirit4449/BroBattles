@@ -23,11 +23,13 @@ const soundFiles = {
   cursor5: "Cursor5",
   party: "party",
   notification: "notification",
+  beep: "beep",
+  start: "start",
 };
 
 function createAudioWithFallback(filename) {
   const sources = [".mp3", ".wav"].map(
-    (ext) => `${soundPath}${filename}${ext}`
+    (ext) => `${soundPath}${filename}${ext}`,
   );
   const audio = new Audio();
   audio.preload = "auto";
@@ -106,7 +108,7 @@ export function initUISounds() {
         playSound(soundName, volume);
       }
     },
-    true
+    true,
   );
 
   // Optional: hover sounds
@@ -120,6 +122,6 @@ export function initUISounds() {
         playSound(soundName, volume);
       }
     },
-    true
+    true,
   );
 }

@@ -20,10 +20,13 @@ function registerPageRoutes({
     res.sendFile(path.join(pageRoot, "Errors", "signed-out.html"));
   });
   app.get("/signup", (req, res) => {
-    res.sendFile(path.join(distDir, "signup.html"));
+    res.sendFile(path.join(pageRoot, "signup.html"));
   });
   app.get("/login", (req, res) => {
-    res.sendFile(path.join(distDir, "login.html"));
+    res.sendFile(path.join(pageRoot, "login.html"));
+  });
+  app.get("/profile", (_req, res) => {
+    res.redirect("/");
   });
 
   app.get("/", async (req, res) => {

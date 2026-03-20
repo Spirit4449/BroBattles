@@ -1,3 +1,9 @@
+@font-face {
+  font-family: "Press Start 2P";
+  src: url("/assets/PressStart2p-Regular.TTF") format("truetype");
+  font-display: swap;
+}
+
 body {
   margin: 0;
   /* Use root-relative path served by Express/DevServer static from dist */
@@ -72,6 +78,36 @@ h3 {
   cursor: pointer;
 }
 
+.pixel-menu-button {
+  font-size: 12px;
+  text-transform: uppercase;
+  font-family: "Press Start 2P", system-ui;
+  border: 0;
+  box-shadow:
+    0px 5px black,
+    0px -5px black,
+    5px 0px black,
+    -5px 0px black,
+    0px 10px #00000038,
+    5px 5px #00000038,
+    -5px 5px #00000038,
+    inset 0px 5px #ffffff36;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pixel-menu-button:active {
+  transform: translateY(5px);
+  box-shadow:
+    0px 5px black,
+    0px -5px black,
+    5px 0px black,
+    -5px 0px black,
+    inset 0px 5px #00000038;
+}
+
 .resources {
   margin-right: 20px;
   gap: 5px;
@@ -103,23 +139,31 @@ h3 {
   width: 100%;
   height: calc(100vh - 140px);
   margin-top: 20px;
+  --lobby-character-seam-overlap: clamp(6px, 1.2vh, 14px);
 }
 
 /* Platform styling - responsive and mode-based sizing */
 .platform {
   position: absolute;
+  --platform-width: clamp(220px, 30vw, 420px);
   /* Remove background image from container to avoid overlap with character slot */
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0; /* ensure no space between children */
+  width: var(--platform-width);
   padding-top: 10px;
   transition: all 0.3s ease;
+  isolation: isolate;
 }
 
 /* Visual platform image placed as a separate element to stack vertically */
 .platform-image {
+  position: relative;
+  z-index: 1;
   width: 100%;
+  aspect-ratio: 638 / 300;
+  height: auto;
   background-image: url("/assets/lobbyplatform.webp");
   background-size: contain;
   background-repeat: no-repeat;
@@ -163,70 +207,54 @@ h3 {
 
 /* 1v1 Mode - Much larger platforms utilizing more space */
 .mode-1 .platform {
-  width: min(35vw, 450px); /* Increased from 25vw, 300px */
-  height: min(25vh, 200px); /* Increased from 15vh, 100px */
-}
-
-.mode-1 .platform-image {
-  /* Never shrink too small; prefer viewport height but keep sensible bounds */
-  height: clamp(70px, 10vh, 120px);
+  --platform-width: clamp(220px, 34vw, 420px);
 }
 
 .mode-1 .platform.your-team-1 {
-  left: 10%; /* Moved closer to center */
-  top: 40%; /* Adjusted to use more bottom space */
+  left: 5%; /* Moved closer to center */
+  top: 45%; /* Adjusted to use more bottom space */
   transform: translateY(-30%); /* Less centering to use bottom space */
 }
 
 .mode-1 .platform.op-team-1 {
-  right: 10%; /* Moved closer to center */
-  top: 40%; /* Adjusted to use more bottom space */
+  right: 5%; /* Moved closer to center */
+  top: 45%; /* Adjusted to use more bottom space */
   transform: translateY(-30%); /* Less centering to use bottom space */
 }
 
 /* 2v2 Mode - Medium platforms positioned diagonally, bigger */
 .mode-2 .platform {
-  width: min(25vw, 350px); /* Increased from 18vw, 280px */
-  height: min(18vh, 150px); /* Increased from 10vh, 120px */
-}
-
-.mode-2 .platform-image {
-  height: clamp(60px, 8vh, 100px);
+  --platform-width: clamp(250px, 20vw, 380px);
 }
 
 .mode-2 .platform.your-team-1 {
   left: 5%; /* Moved out slightly for bigger platforms */
-  top: 25%; /* Adjusted to use more bottom space */
+  top: 15%; /* Adjusted to use more bottom space */
 }
 
 .mode-2 .platform.your-team-2 {
   left: 15%; /* Adjusted spacing */
-  top: 50%; /* Moved down to use bottom space */
+  top: 53%; /* Moved down to use bottom space */
 }
 
 .mode-2 .platform.op-team-1 {
   right: 5%; /* Moved out slightly for bigger platforms */
-  top: 25%; /* Adjusted to use more bottom space */
+  top: 15%; /* Adjusted to use more bottom space */
 }
 
 .mode-2 .platform.op-team-2 {
   right: 15%; /* Adjusted spacing */
-  top: 50%; /* Moved down to use bottom space */
+  top: 53%; /* Moved down to use bottom space */
 }
 
 /* 3v3 Mode - Triangular formation with better spacing, bigger platforms */
 .mode-3 .platform {
-  width: min(22vw, 320px);
-  height: min(18vh, 150px);
-}
-
-.mode-3 .platform-image {
-  height: clamp(70px, 9vh, 120px);
+  --platform-width: clamp(120px, 15vw, 230px);
 }
 
 .mode-3 .platform.your-team-1 {
   left: 3%; /* Slightly adjusted for bigger platforms */
-  top: 20%; /* Moved up to use more bottom space */
+  top: 15%; /* Moved up to use more bottom space */
 }
 
 .mode-3 .platform.your-team-2 {
@@ -236,12 +264,12 @@ h3 {
 
 .mode-3 .platform.your-team-3 {
   left: 21%; /* Adjusted spacing */
-  top: 60%; /* Moved down to use bottom space */
+  top: 65%; /* Moved down to use bottom space */
 }
 
 .mode-3 .platform.op-team-1 {
   right: 3%; /* Slightly adjusted for bigger platforms */
-  top: 20%; /* Moved up to use more bottom space */
+  top: 15%; /* Moved up to use more bottom space */
 }
 
 .mode-3 .platform.op-team-2 {
@@ -251,7 +279,7 @@ h3 {
 
 .mode-3 .platform.op-team-3 {
   right: 21%; /* Adjusted spacing */
-  top: 60%; /* Moved down to use bottom space */
+  top: 65%; /* Moved down to use bottom space */
 }
 
 /* VS indicator in the center */
@@ -270,6 +298,7 @@ h3 {
 /* Character container on platforms - anchored so the character sits on the platform */
 .character-slot {
   position: relative;
+  z-index: 2;
   width: min(8vw, 90px);
   height: min(13vh, 130px);
   display: flex;
@@ -279,12 +308,13 @@ h3 {
   cursor: pointer;
   transition: all 0.2s ease;
   margin-top: 0;
-  /* No gap between character and platform; status will overlap the seam */
-  margin-bottom: 0;
+  /* Keep character feet merged with platform across responsive scales. */
+  margin-bottom: calc(-1 * var(--lobby-character-seam-overlap));
   border-radius: 8px;
   padding: 5px 5px 0px 5px;
   /* Ensure sprite stays at top regardless of platform size */
   min-height: 80px;
+  transform: translateY(var(--lobby-character-offset-y, 0px));
 }
 
 .character-slot.player-display {
@@ -313,6 +343,7 @@ h3 {
 .character-sprite {
   width: min(7vw, 90px);
   height: min(7vw, 100px);
+  display: block;
   margin-top: auto; /* push sprite to bottom within the slot */
   margin-bottom: 0;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
@@ -467,25 +498,14 @@ h3 {
 
 /* Scope dropdown baseline styles to the bottom bar only */
 #bottom-bar select.dropdown {
-  border-radius: 8px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
   padding: 12px 20px;
   font-size: 16px;
-  font-weight: 600;
-  font-family: "Poppins", sans-serif;
   cursor: pointer;
   outline: none;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
   color: #ffffff;
   /* Remove native arrow and add a consistent chevron */
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 14px 14px;
-  padding-right: 42px; /* space for chevron */
+  padding-right: 20px; /* space for chevron */
   color-scheme: dark; /* hint UA to use dark popups */
 }
 
@@ -520,9 +540,6 @@ h3 {
 /* Consistent focus ring behavior within the bottom bar */
 #bottom-bar select.dropdown:focus {
   border-color: rgba(255, 255, 255, 0.6);
-  box-shadow:
-    0 0 0 2px rgba(255, 255, 255, 0.15),
-    0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
 #bottom-bar #character {
@@ -550,9 +567,6 @@ h3 {
 }
 #bottom-bar #mode:focus {
   border-color: #49d15d;
-  box-shadow:
-    0 0 0 2px rgba(73, 209, 93, 0.35),
-    0 6px 20px rgba(73, 209, 93, 0.4);
 }
 
 #bottom-bar #map {
@@ -573,53 +587,241 @@ h3 {
 .dropdown-group {
   display: flex;
   gap: 15px;
+  align-items: center;
+}
+
+#map {
+  display: none;
+}
+
+.map-picker {
+  display: flex;
+  gap: 8px;
+  padding: 5px 6px;
+  height: 40px;
+  min-width: 230px;
+  background: linear-gradient(
+    135deg,
+    rgba(128, 122, 83, 0.4),
+    rgba(113, 108, 82, 0.5)
+  );
+}
+
+.map-picker:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(58, 52, 16, 0.5),
+    rgba(42, 38, 12, 0.6)
+  );
+}
+
+#map-preview-img {
+  width: 50px;
+  height: 30px;
+  border-radius: 3px;
+  object-fit: cover;
+  border: 3px solid rgba(0, 0, 0, 0.4);
+}
+
+#map-preview-name {
+  font-size: 10px;
+  color: #fff;
+  line-height: 1.25;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-select-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.character-select-popup .map-select-grid {
+  width: min(100%, 520px);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.map-select-card {
+  display: flex;
+  flex-direction: column;
+  border: 2px solid rgba(157, 195, 249, 0.4);
+  border-radius: 10px;
+  box-sizing: border-box;
+  padding: 10px;
+  background: linear-gradient(
+    180deg,
+    rgba(8, 17, 34, 0.88),
+    rgba(4, 12, 28, 0.92)
+  );
+  color: #e5f0ff;
+  text-align: left;
+}
+
+.map-select-card.active {
+  border-color: rgba(255, 215, 125, 0.8);
+  box-shadow: 0 0 0 2px rgba(255, 215, 125, 0.25);
+}
+
+.map-select-card img {
+  width: 100%;
+  height: 150px;
+  border-radius: 8px;
+  object-fit: cover;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.map-select-name {
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.profile-card-rarity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.profile-card-rarity.common {
+  background: rgba(107, 114, 128, 0.72);
+}
+
+.profile-card-rarity.rare {
+  background: rgba(37, 99, 235, 0.82);
+}
+
+.profile-card-rarity.epic {
+  background: rgba(126, 34, 206, 0.82);
+}
+
+.profile-card-rarity.legendary {
+  background: rgba(217, 119, 6, 0.85);
+}
+
+.profile-card-tile.rare,
+.profile-card-tile.epic,
+.profile-card-tile.legendary {
+  position: relative;
+  overflow: hidden;
+}
+
+.profile-card-tile.rare::before,
+.profile-card-tile.epic::before,
+.profile-card-tile.legendary::before {
+  content: "";
+  position: absolute;
+  top: -120%;
+  left: -40%;
+  width: 30%;
+  height: 320%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0.42),
+    rgba(255, 255, 255, 0)
+  );
+  transform: rotate(20deg);
+  animation: cardGlimmer 2.8s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes cardGlimmer {
+  0% {
+    transform: translateX(-170%) rotate(20deg);
+  }
+  100% {
+    transform: translateX(420%) rotate(20deg);
+  }
+}
+
+.profile-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-cost img {
+  width: 13px;
+  height: 13px;
+  object-fit: contain;
 }
 
 #ready {
-  background: linear-gradient(135deg, #eac809, #d4b000);
-  border-radius: 8px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: linear-gradient(135deg, #b49e20, #bda322);
   padding: 13px 35px;
   font-size: 18px;
-  font-weight: 700;
-  font-family: "Poppins", sans-serif;
   cursor: pointer;
   transition: all 0.3s ease;
-  color: white;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
-  box-shadow: 0 4px 15px rgba(234, 200, 9, 0.4);
+  color: #ffffff;
 }
 #ready:hover {
-  background: linear-gradient(135deg, #d4b000, #c4a000);
-  box-shadow: 0 6px 20px rgba(234, 200, 9, 0.6);
+  background: linear-gradient(135deg, #d4ba3a, #c6991b);
 }
 
 /* Cancel (red) visual state for Ready button */
 #ready.cancel {
   background: linear-gradient(135deg, #ff4757, #dc3545);
-  box-shadow: 0 4px 15px rgba(255, 71, 87, 0.45);
 }
 #ready.cancel:hover {
   background: linear-gradient(135deg, #dc3545, #c82333);
-  box-shadow: 0 6px 20px rgba(255, 71, 87, 0.65);
 }
 
 #username-text {
-  margin-right: 10px;
+  margin-right: 0;
+}
+
+#username-button {
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#username-button #username-text {
+  display: inline-block;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .account {
-  height: 35px;
+  height: 30px;
   background: linear-gradient(135deg, #9aad44, #829e1c);
-  border-radius: 8px;
-  padding: 0px 15px;
-  box-sizing: border-box;
+  padding: 0px 10px;
   color: white;
-  margin-left: 10px;
+  margin-left: 15px;
   cursor: pointer;
   transition: all 0.3s ease;
-  border: 2px solid rgba(255, 255, 255, 0.3);
   font-weight: 400;
+  box-shadow:
+    0px 5px rgb(16, 80, 19),
+    0px -5px rgb(16, 80, 19),
+    5px 0px rgb(16, 80, 19),
+    -5px 0px rgb(16, 80, 19),
+    0px 10px #00000038,
+    5px 5px #00000038,
+    -5px 5px #00000038,
+    inset 0px 5px #ffffff36;
 }
 .account:hover {
   background: linear-gradient(135deg, #bb773c, #a2642a);
@@ -629,25 +831,21 @@ h3 {
   position: fixed;
   top: 80px;
   left: 20px;
+  font-size: 11px;
+  height: 35px;
   background: linear-gradient(135deg, #6947ff, #8e35dc);
-  width: 100px;
-  height: 45px;
-  border-radius: 8px;
   display: flex;
   justify-content: center;
   align-items: center;
-  border: 2px solid rgba(255, 255, 255, 0.3);
   cursor: pointer;
   color: white;
   font-weight: 600;
   z-index: 1;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(255, 71, 87, 0.4);
 }
 .party-button:hover {
   background: linear-gradient(135deg, #7356f7, #9e50e3);
-  box-shadow: 0 6px 20px rgba(255, 71, 87, 0.6);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 /* Drag and drop visual feedback - less obnoxious */
@@ -686,13 +884,11 @@ h3 {
 /* Responsive adjustments for smaller screens */
 @media (max-width: 768px) {
   .mode-1 .platform {
-    width: min(40vw, 340px);
-    height: min(20vh, 170px);
+    --platform-width: clamp(250px, 42vw, 360px);
   }
 
   .mode-2 .platform {
-    width: min(30vw, 250px);
-    height: min(15vh, 120px);
+    --platform-width: clamp(200px, 33vw, 300px);
   }
 
   .mode-2 .platform.your-team-2,
@@ -701,8 +897,7 @@ h3 {
   }
 
   .mode-3 .platform {
-    width: min(27vw, 220px);
-    height: min(14vh, 110px);
+    --platform-width: clamp(150px, 27vw, 230px);
   }
 
   .mode-3 .platform.your-team-2,
@@ -719,7 +914,7 @@ h3 {
     width: min(12vw, 80px);
     height: min(15vh, 100px);
     min-height: 70px;
-    margin-bottom: 0;
+    margin-bottom: calc(-1 * var(--lobby-character-seam-overlap));
   }
 
   .character-sprite {
@@ -730,25 +925,22 @@ h3 {
 
 @media (max-width: 480px) {
   .mode-1 .platform {
-    width: min(45vw, 250px);
-    height: min(18vh, 120px);
+    --platform-width: clamp(190px, 45vw, 260px);
   }
 
   .mode-2 .platform {
-    width: min(35vw, 200px);
-    height: min(14vh, 100px);
+    --platform-width: clamp(155px, 36vw, 210px);
   }
 
   .mode-3 .platform {
-    width: min(32vw, 170px);
-    height: min(13vh, 90px);
+    --platform-width: clamp(130px, 31vw, 175px);
   }
 
   .character-slot {
     width: min(15vw, 70px);
     height: min(18vh, 90px);
     min-height: 60px;
-    margin-bottom: 0;
+    margin-bottom: calc(-1 * var(--lobby-character-seam-overlap));
   }
 
   .character-sprite {
@@ -764,6 +956,228 @@ h3 {
   .status {
     font-size: min(1.5vw, 8px);
     bottom: -8px;
+  }
+}
+
+#profile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.profile-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      circle at 18% 15%,
+      rgba(255, 193, 74, 0.24),
+      transparent 52%
+    ),
+    radial-gradient(
+      circle at 85% 20%,
+      rgba(42, 187, 255, 0.2),
+      transparent 56%
+    ),
+    rgba(6, 12, 25, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.profile-popup {
+  position: relative;
+  z-index: 1;
+  width: min(1120px, 96vw);
+  max-height: min(760px, 92vh);
+  overflow: auto;
+  padding: 20px;
+  border-radius: 14px;
+  border: 3px solid #132d59;
+  background:
+    linear-gradient(145deg, rgba(16, 32, 64, 0.96), rgba(10, 20, 42, 0.97)),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04));
+  box-shadow:
+    0 0 0 4px rgba(123, 191, 255, 0.24),
+    0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+.profile-popup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.profile-popup-head h2 {
+  margin: 0;
+  font-family: "Press Start 2P", system-ui;
+  font-size: clamp(14px, 2vw, 22px);
+  color: #e5f6ff;
+  text-shadow: 0 2px 0 rgba(17, 54, 103, 0.75);
+}
+
+.profile-close {
+  height: 30px;
+  padding: 0 14px;
+  background: linear-gradient(135deg, #d14b42, #ab2e2e);
+  color: #fff;
+}
+
+.profile-popup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.profile-panel {
+  border: 2px solid rgba(130, 197, 255, 0.38);
+  border-radius: 12px;
+  padding: 14px;
+  background: linear-gradient(
+    180deg,
+    rgba(20, 38, 74, 0.88),
+    rgba(13, 26, 52, 0.9)
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.profile-panel h3 {
+  margin: 0 0 12px;
+  color: #d8edff;
+  font-size: 13px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.profile-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  background: rgba(7, 18, 39, 0.58);
+  border: 1px solid rgba(126, 191, 255, 0.2);
+  color: #cfe8ff;
+}
+
+.profile-stat-row strong {
+  color: #ffffff;
+}
+
+.profile-form {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.profile-form label {
+  font-size: 11px;
+  color: #b8ddff;
+  letter-spacing: 0.2px;
+}
+
+.profile-form input {
+  border: 1px solid rgba(153, 211, 255, 0.42);
+  border-radius: 8px;
+  background: rgba(8, 18, 38, 0.84);
+  color: #f2f8ff;
+  padding: 10px;
+}
+
+.profile-action-btn {
+  justify-self: start;
+  min-height: 30px;
+  padding: 0 14px;
+  background: linear-gradient(135deg, #18a462, #0e8255);
+  color: #fff;
+}
+
+.profile-message {
+  min-height: 18px;
+  margin: 0;
+  color: #bfe2ff;
+  font-size: 12px;
+}
+
+.profile-cards-panel {
+  margin-top: 14px;
+}
+
+.profile-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.profile-card-tile {
+  border: 1px solid rgba(157, 195, 249, 0.4);
+  border-radius: 10px;
+  padding: 8px;
+  background: linear-gradient(
+    180deg,
+    rgba(8, 17, 34, 0.88),
+    rgba(4, 12, 28, 0.92)
+  );
+}
+
+.profile-card-tile img {
+  width: 100%;
+  aspect-ratio: 650 / 1250;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
+}
+
+.profile-card-meta {
+  margin-top: 6px;
+  display: grid;
+  gap: 3px;
+  color: #d8ecff;
+  font-size: 11px;
+}
+
+.profile-card-meta strong {
+  font-size: 12px;
+  color: #ffffff;
+}
+
+.profile-card-actions {
+  margin-top: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.profile-card-state {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: #9fd2ff;
+}
+
+.profile-card-btn {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 10px;
+  background: linear-gradient(135deg, #2d78d5, #1f59af);
+  color: #fff;
+}
+
+.profile-card-btn:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+@media (max-width: 880px) {
+  .profile-popup-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -984,22 +1398,16 @@ h3 {
 
 .mm-btn {
   background: linear-gradient(135deg, #eac809, #d4b000);
-  border-radius: 8px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  padding: 12px 88px;
-  font-size: 16px;
+  padding: 16px 88px;
   font-weight: 700;
-  font-family: "Poppins", sans-serif;
   cursor: pointer;
   transition: all 0.3s ease;
   color: white;
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
-  box-shadow: 0 4px 15px rgba(234, 200, 9, 0.35);
 }
 
 .mm-btn:hover {
   background: linear-gradient(135deg, #d4b000, #c4a000);
-  box-shadow: 0 6px 20px rgba(234, 200, 9, 0.55);
 }
 
 /* Animations */

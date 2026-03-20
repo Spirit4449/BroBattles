@@ -33,7 +33,7 @@ function createPartyPresenceService({ db, io }) {
     const party = await selectPartyById(db, partyId);
     if (!party) return;
     const members = await db.fetchPartyMembersDetailed(partyId);
-    await emitRoster(io, partyId, party, members);
+    await emitRoster(io, partyId, party, members, db);
   }
 
   return {

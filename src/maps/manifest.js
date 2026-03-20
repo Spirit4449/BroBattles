@@ -16,6 +16,12 @@ for (const d of [lushyDef, mangroveDef, serenityDef]) {
   MAPS[d.id] = d;
 }
 
+const LOBBY_OFFSET_MODE_SCALE = {
+  1: 1,
+  2: 0.72,
+  3: 0.58,
+};
+
 export function normalizeMapId(mapId) {
   const n = Number(mapId);
   if (Number.isFinite(n) && MAPS[n]) return n;
@@ -72,6 +78,18 @@ export function getMapBgAsset(mapId) {
 }
 
 /**
+ * Map selection preview image URL for lobby map picker popup.
+ * @param {number|string} mapId
+ * @returns {string}
+ */
+export function getMapSelectPreviewAsset(mapId) {
+  const def = MAPS[normalizeMapId(mapId)];
+  return (
+    def?.mapSelectPreviewAsset || def?.bgAsset || "/assets/lushy/gameBg.webp"
+  );
+}
+
+/**
  * Lobby background image URL for the given map.
  * @param {number|string} mapId
  * @returns {string}
@@ -90,8 +108,33 @@ export function getLobbyBgAsset(mapId) {
 export function getLobbyPlatformAsset(mapId) {
   return (
     MAPS[normalizeMapId(mapId)]?.lobbyPlatformAsset ??
-    "/assets/lobbyplatform.webp"
+    "/assets/lushy/lobbyplatform.webp"
   );
+}
+
+/**
+ * Lobby character Y offset in px for the given map + mode.
+ * Positive values move characters down toward the platform image.
+ * @param {number|string} mapId
+ * @param {number|string} [mode]
+ * @returns {number}
+ */
+export function getLobbyCharacterOffsetY(mapId, mode = 1) {
+  const def = MAPS[normalizeMapId(mapId)] || {};
+  const m = Math.max(1, Math.min(3, Number(mode) || 1));
+
+  // Optional explicit per-mode override on map definitions.
+  const byMode = def?.lobbyCharacterOffsetYByMode;
+  if (byMode && typeof byMode === "object") {
+    const explicit = Number(byMode[m] ?? byMode[String(m)]);
+    if (Number.isFinite(explicit)) return explicit;
+  }
+
+  // Backward-compatible numeric base offset with mode scaling.
+  const base = Number(def?.lobbyCharacterOffsetY);
+  if (!Number.isFinite(base)) return 0;
+  const scale = Number(LOBBY_OFFSET_MODE_SCALE[m]) || 1;
+  return Math.round(base * scale * 100) / 100;
 }
 
 export default MAPS;

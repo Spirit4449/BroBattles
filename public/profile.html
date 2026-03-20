@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Profile</title>
+    <link rel="shortcut icon" href="/assets/sword.svg" type="image/x-icon" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/bundles/profile.css" />
+  </head>
+  <body class="profile-page-body">
+    <div class="profile-page">
+      <header class="profile-header">
+        <button id="back-btn" class="profile-btn">Back To Lobby</button>
+        <h1>Player Profile</h1>
+      </header>
+
+      <main class="profile-grid">
+        <section class="profile-card overview">
+          <h2 id="profile-username">Loading...</h2>
+          <div class="stat-row">
+            <span>Coins</span>
+            <strong id="profile-coins">0</strong>
+          </div>
+          <div class="stat-row">
+            <span>Gems</span>
+            <strong id="profile-gems">0</strong>
+          </div>
+          <div class="stat-row">
+            <span>Trophies</span>
+            <strong id="profile-trophies">0</strong>
+          </div>
+          <div class="stat-row">
+            <span>Total Matches</span>
+            <strong id="profile-matches">0</strong>
+          </div>
+          <div class="stat-row">
+            <span>Avg Character Level</span>
+            <strong id="profile-avg-level">1</strong>
+          </div>
+          <div class="actions-row">
+            <button id="change-card-btn" class="profile-btn primary">
+              Change Player Card
+            </button>
+          </div>
+        </section>
+
+        <section class="profile-card account">
+          <h3>Account Settings</h3>
+          <form id="username-form" class="profile-form">
+            <label for="new-username">Change Username</label>
+            <input id="new-username" name="new-username" type="text" />
+            <button type="submit" class="profile-btn">Save Username</button>
+          </form>
+
+          <form id="password-form" class="profile-form">
+            <label for="current-password">Current Password</label>
+            <input
+              id="current-password"
+              name="current-password"
+              type="password"
+            />
+            <label for="new-password">New Password</label>
+            <input id="new-password" name="new-password" type="password" />
+            <button type="submit" class="profile-btn">Change Password</button>
+          </form>
+          <p id="account-message" class="account-message"></p>
+        </section>
+      </main>
+    </div>
+
+    <div id="cards-modal" class="cards-modal hidden" aria-hidden="true">
+      <div class="cards-modal-backdrop"></div>
+      <div class="cards-modal-panel">
+        <div class="cards-modal-head">
+          <h2>Player Cards</h2>
+          <button id="close-cards-modal" class="profile-btn">Close</button>
+        </div>
+        <div id="cards-grid" class="cards-grid"></div>
+      </div>
+    </div>
+
+    <script src="/bundles/profile.bundle.js"></script>
+  </body>
+</html>

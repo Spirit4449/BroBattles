@@ -242,7 +242,7 @@ function createCharacterCard(character, userData) {
   if (isLocked) {
     const price = stats.unlockPrice;
     const lockBtn = document.createElement("button");
-    lockBtn.className = "locked-button";
+    lockBtn.className = "locked-button pixel-menu-button";
     const priceHtml =
       typeof price === "number"
         ? `<span class="button-price"><img class="cs-currency" src="/assets/gem.webp" alt=""/> ${price}</span>`
@@ -261,7 +261,7 @@ function createCharacterCard(character, userData) {
     const coins = Number(userData?.coins || 0);
     const affordable = coins >= price;
     const upgradeBtn = document.createElement("button");
-    upgradeBtn.className = `upgrade-button${
+    upgradeBtn.className = `upgrade-button pixel-menu-button${
       affordable ? " gleam" : " disabled"
     }`;
     upgradeBtn.innerHTML = `<img class="upgrade-icon" src="/assets/upgrade.webp" alt="" onerror="this.style.display='none'"/> <span>Upgrade</span> <span class="button-price"><img class="cs-currency" src="/assets/coin.webp" alt=""/> ${price}</span>`;
@@ -279,7 +279,7 @@ function createCharacterCard(character, userData) {
     actionRow.appendChild(upgradeBtn);
   } else {
     const maxed = document.createElement("div");
-    maxed.className = "maxed-button";
+    maxed.className = "maxed-button pixel-menu-button";
     maxed.textContent = "Maxed Out";
     actionRow.appendChild(maxed);
   }
@@ -448,10 +448,10 @@ function showConfirmDialog(opts, onConfirm) {
   const actions = document.createElement("div");
   actions.className = "cs-confirm-actions";
   const cancelBtn = document.createElement("button");
-  cancelBtn.className = "cs-btn cancel";
+  cancelBtn.className = "cs-btn cancel pixel-menu-button";
   cancelBtn.textContent = "Cancel";
   const okBtn = document.createElement("button");
-  okBtn.className = "cs-btn confirm";
+  okBtn.className = "cs-btn confirm pixel-menu-button";
   okBtn.innerHTML = `<img class="cs-currency" src="${
     isUpgrade ? "/assets/coin.webp" : "/assets/gem.webp"
   }" alt=""/> <span>${price}</span>`;
@@ -509,7 +509,7 @@ function showInsufficientDialog(currency) {
   const actions = document.createElement("div");
   actions.className = "cs-confirm-actions";
   const closeBtn = document.createElement("button");
-  closeBtn.className = "cs-btn cancel";
+  closeBtn.className = "cs-btn cancel pixel-menu-button";
   closeBtn.textContent = "Close";
   closeBtn.onclick = () => backdrop.remove();
   actions.appendChild(closeBtn);
@@ -542,7 +542,7 @@ function showErrorDialog(message) {
   const actions = document.createElement("div");
   actions.className = "cs-confirm-actions";
   const closeBtn = document.createElement("button");
-  closeBtn.className = "cs-btn cancel";
+  closeBtn.className = "cs-btn cancel pixel-menu-button";
   closeBtn.textContent = "Close";
   closeBtn.onclick = () => backdrop.remove();
   actions.appendChild(closeBtn);

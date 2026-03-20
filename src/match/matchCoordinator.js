@@ -385,7 +385,10 @@ export function createMatchCoordinator(config) {
     console.log("Game starting:", data);
     _stopStartWatchdog();
     // Late joiners skip the countdown because the game is already running
-    if (!getIsLiveGame()) hud.startCountdown();
+    if (!getIsLiveGame()) {
+      const seconds = Math.max(1, Number(data?.countdown) || 3);
+      hud.startCountdown(seconds);
+    }
   }
 
   /** Server entered the starting window — show battle overlay and ack readiness. */
@@ -439,9 +442,15 @@ export function createMatchCoordinator(config) {
       console.log("Started receiving server snapshots (tMono/tickId enabled)");
       _stopStartWatchdog();
       try {
-        hud.hideBattleStartOverlay();
-        const scene = getGameScene();
-        if (scene?.input?.keyboard) scene.input.keyboard.enabled = true;
+        const introActive =
+          typeof hud?.isBattleIntroActive === "function"
+            ? hud.isBattleIntroActive()
+            : false;
+        if (!introActive) {
+          hud.hideBattleStartOverlay();
+          const scene = getGameScene();
+          if (scene?.input?.keyboard) scene.input.keyboard.enabled = true;
+        }
       } catch (_) {}
     }
     if (typeof ingest.calibrationLog === "number") {
@@ -498,6 +507,7 @@ export function createMatchCoordinator(config) {
           actionType.includes("fireball") ||
           actionType.includes("shuriken") ||
           actionType.includes("projectile");
+        const isFireballAction = actionType.includes("fireball");
 
         // Default visual origin: current interpolated owner position.
         let visualX = ownerSprite.x;
@@ -510,16 +520,19 @@ export function createMatchCoordinator(config) {
           const lift =
             (ownerSprite.displayHeight || ownerSprite.height || 120) * 0.12;
           visualY = ownerSprite.y - lift;
-          const ox = Number(packet?.origin?.x);
-          const oy = Number(packet?.origin?.y);
-          if (Number.isFinite(ox) && Number.isFinite(oy)) {
-            const dx = ox - visualX;
-            const dy = oy - visualY;
-            const d = Math.hypot(dx, dy);
-            if (d > 0.001) {
-              const pull = Math.min(36, d);
-              visualX += (dx / d) * pull;
-              visualY += (dy / d) * pull;
+          // Fireballs already follow caster during startup; avoid extra origin pull.
+          if (!isFireballAction) {
+            const ox = Number(packet?.origin?.x);
+            const oy = Number(packet?.origin?.y);
+            if (Number.isFinite(ox) && Number.isFinite(oy)) {
+              const dx = ox - visualX;
+              const dy = oy - visualY;
+              const d = Math.hypot(dx, dy);
+              if (d > 0.001) {
+                const pull = Math.min(36, d);
+                visualX += (dx / d) * pull;
+                visualY += (dy / d) * pull;
+              }
             }
           }
         }

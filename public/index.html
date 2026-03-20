@@ -18,7 +18,7 @@
     <div id="navbar">
       <div class="flex">
         <img src="/assets/sword.svg" width="20px" />
-        <h2>Bro Battle</h2>
+        <h2>Bro Battles</h2>
       </div>
       <div class="flex" id="navbar-right">
         <div class="flex resources">
@@ -30,13 +30,18 @@
           <img src="/assets/gem.webp" width="20px" alt="gems" />
           <p id="gem-count"></p>
         </div>
-        <h3 id="username-text"></h3>
-        <div class="flex account" id="sign-out">Sign out</div>
-        <div class="flex account" id="login">Log in</div>
+        <button
+          id="username-button"
+          class="account username-account pixel-menu-button"
+        >
+          <span id="username-text"></span>
+        </button>
+        <div class="flex account pixel-menu-button" id="sign-out">Sign Up</div>
+        <div class="flex account pixel-menu-button" id="login">Log in</div>
       </div>
     </div>
 
-    <button id="create-party" class="party-button">
+    <button id="create-party" class="party-button pixel-menu-button">
       <p>Create Party</p>
     </button>
 
@@ -73,19 +78,145 @@
 
     <div id="bottom-bar">
       <div class="dropdown-group">
-        <select id="mode" name="mode" class="dropdown" data-sound="cursor4">
+        <select
+          id="mode"
+          name="mode"
+          class="dropdown pixel-menu-button"
+          data-sound="cursor4"
+        >
           <option value="1">1v1</option>
           <option value="2">2v2</option>
           <option value="3">3v3</option>
         </select>
-        <select id="map" name="map" class="dropdown" data-sound="cursor4">
+        <select
+          id="map"
+          name="map"
+          class="dropdown pixel-menu-button"
+          data-sound="cursor4"
+        >
           <option value="1">Lushy Peaks</option>
           <option value="2">Mangrove Meadow</option>
           <option value="3">Serenity</option>
         </select>
+        <button
+          id="map-picker-open"
+          type="button"
+          class="map-picker pixel-menu-button"
+          data-sound="cursor4"
+          aria-label="Open map selector"
+        >
+          <img
+            id="map-preview-img"
+            src="/assets/lushy/lobbyBg.webp"
+            alt="Map preview"
+          />
+          <span id="map-preview-name">Lushy Peaks</span>
+        </button>
       </div>
 
-      <input type="submit" id="ready" value="Ready" data-sound="ready" />
+      <input
+        type="submit"
+        id="ready"
+        class="pixel-menu-button"
+        value="Ready"
+        data-sound="ready"
+      />
+    </div>
+
+    <div id="profile-overlay" class="hidden" aria-hidden="true">
+      <div class="profile-overlay-backdrop"></div>
+      <section
+        class="profile-popup"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-popup-title"
+      >
+        <header class="profile-popup-head">
+          <h2 id="profile-popup-title">Your Profile</h2>
+          <button
+            id="profile-close"
+            class="profile-close pixel-menu-button"
+            type="button"
+          >
+            Close
+          </button>
+        </header>
+
+        <div class="profile-popup-grid">
+          <article class="profile-panel profile-stats-panel">
+            <h3>Stats</h3>
+            <div class="profile-stat-row">
+              <span>Username</span><strong id="profile-username">-</strong>
+            </div>
+            <div class="profile-stat-row">
+              <span>Coins</span><strong id="profile-coins">0</strong>
+            </div>
+            <div class="profile-stat-row">
+              <span>Gems</span><strong id="profile-gems">0</strong>
+            </div>
+            <div class="profile-stat-row">
+              <span>Trophies</span><strong id="profile-trophies">0</strong>
+            </div>
+            <div class="profile-stat-row">
+              <span>Total Matches</span><strong id="profile-matches">0</strong>
+            </div>
+            <div class="profile-stat-row">
+              <span>Avg Char Level</span
+              ><strong id="profile-avg-level">1</strong>
+            </div>
+          </article>
+
+          <article class="profile-panel profile-account-panel">
+            <h3>Account Settings</h3>
+            <form id="profile-username-form" class="profile-form">
+              <label for="profile-new-username">Change Username</label>
+              <input
+                id="profile-new-username"
+                type="text"
+                maxlength="20"
+                required
+              />
+              <button
+                class="profile-action-btn pixel-menu-button"
+                type="submit"
+              >
+                Update Name
+              </button>
+            </form>
+            <form id="profile-password-form" class="profile-form">
+              <label for="profile-current-password">Current Password</label>
+              <input
+                id="profile-current-password"
+                type="password"
+                minlength="6"
+              />
+              <label for="profile-new-password">New Password</label>
+              <input
+                id="profile-new-password"
+                type="password"
+                minlength="6"
+                required
+              />
+              <button
+                class="profile-action-btn pixel-menu-button"
+                type="submit"
+              >
+                Update Password
+              </button>
+            </form>
+            <p
+              id="profile-message"
+              class="profile-message"
+              aria-live="polite"
+            ></p>
+          </article>
+        </div>
+
+        <section class="profile-panel profile-cards-panel">
+          <h3>Player Cards</h3>
+          <div id="profile-cards-grid" class="profile-cards-grid"></div>
+        </section>
+      </section>
     </div>
 
     <!-- Matchmaking Overlay (static element) -->
@@ -120,7 +251,7 @@
         <div class="mm-actions">
           <button
             id="mm-cancel"
-            class="mm-btn"
+            class="mm-btn pixel-menu-button"
             type="button"
             data-sound="cancel"
           >

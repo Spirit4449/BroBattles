@@ -16,13 +16,302 @@ import {
 } from "./characterLogic.js";
 import { getLobbyBgAsset } from "./maps/manifest";
 import { initUISounds, playSound } from "./lib/uiSounds.js";
+import { showUiConfirm } from "./lib/uiConfirm.js";
 import "./styles/characterSelect.css";
 import "./styles/index.css";
+import "./styles/profile.css";
+import "./styles/selectionPopup.css";
 import "./styles/sonner.css";
 
 let userData = null;
 let guest = false;
 const POST_MATCH_REWARD_STORAGE_KEY = "bb_post_match_rewards_v1";
+const lobbyProfileState = {
+  profile: null,
+  catalog: null,
+  ownedCardIds: [],
+  selectedCardId: null,
+  loadingPromise: null,
+};
+
+function setProfilePopupMessage(text, isError = false) {
+  const msg = document.getElementById("profile-message");
+  if (!msg) return;
+  msg.textContent = text || "";
+  msg.style.color = isError ? "#ff9aa9" : "#bfe2ff";
+}
+
+async function profileFetchJson(url, options) {
+  const res = await fetch(url, {
+    credentials: "same-origin",
+    ...(options || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || "Request failed");
+  }
+  return data;
+}
+
+function renderProfilePopupStats() {
+  const profile = lobbyProfileState.profile;
+  if (!profile) return;
+
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(value ?? "");
+  };
+
+  setText("profile-username", profile.username || "-");
+  setText("profile-coins", Number(profile.coins) || 0);
+  setText("profile-gems", Number(profile.gems) || 0);
+  setText("profile-trophies", Number(profile.trophies) || 0);
+  setText("profile-matches", Number(profile.totalMatches) || 0);
+  setText("profile-avg-level", Number(profile.avgCharLevel) || 1);
+
+  const usernameInput = document.getElementById("profile-new-username");
+  if (usernameInput && !usernameInput.value) {
+    usernameInput.value = profile.username || "";
+  }
+
+  // Keep navbar resource counters in sync after buy operations.
+  const coinCount = document.getElementById("coin-count");
+  const gemCount = document.getElementById("gem-count");
+  if (coinCount) coinCount.textContent = String(Number(profile.coins) || 0);
+  if (gemCount) gemCount.textContent = String(Number(profile.gems) || 0);
+}
+
+function renderProfilePopupCards() {
+  const grid = document.getElementById("profile-cards-grid");
+  if (!grid) return;
+  grid.innerHTML = "";
+
+  const catalogCards = Array.isArray(lobbyProfileState.catalog?.cards)
+    ? lobbyProfileState.catalog.cards
+    : [];
+  const owned = new Set((lobbyProfileState.ownedCardIds || []).map(String));
+  const selected = String(lobbyProfileState.selectedCardId || "");
+
+  catalogCards.forEach((card) => {
+    const id = String(card?.id || "");
+    const isOwned = owned.has(id);
+    const isSelected = isOwned && selected === id;
+    const rarity = String(card?.rarity || "common").toLowerCase();
+    const coinCost = Math.max(0, Number(card?.cost?.coins || 0));
+    const gemCost = Math.max(0, Number(card?.cost?.gems || 0));
+    const useGems = gemCost > 0;
+    const price = useGems ? gemCost : coinCost;
+    const currencyIcon = useGems ? "/assets/gem.webp" : "/assets/coin.webp";
+    const currencyLabel = useGems ? "gems" : "coins";
+
+    const tile = document.createElement("article");
+    tile.className = `profile-card-tile ${rarity}`;
+    tile.innerHTML = `
+      <img src="${card.assetUrl}" alt="${card.name}" />
+      <div class="profile-card-meta">
+        <strong>${card.name}</strong>
+        <span class="profile-card-rarity ${rarity}">${rarity}</span>
+        <span class="profile-cost"><img src="${currencyIcon}" alt="${currencyLabel}" /> ${price}</span>
+      </div>
+      <div class="profile-card-actions">
+        <span class="profile-card-state">${isSelected ? "Equipped" : isOwned ? "Owned" : "Locked"}</span>
+        <button class="profile-card-btn pixel-menu-button" type="button" data-card-id="${id}" data-action="${isOwned ? "equip" : "buy"}">
+          ${isOwned ? (isSelected ? "Selected" : "Equip") : "Buy"}
+        </button>
+      </div>
+    `;
+
+    const actionBtn = tile.querySelector("button[data-card-id]");
+    if (actionBtn) {
+      if (isSelected) actionBtn.disabled = true;
+      actionBtn.addEventListener("click", async () => {
+        try {
+          actionBtn.disabled = true;
+          const cardId = String(actionBtn.dataset.cardId || "");
+          const action = String(actionBtn.dataset.action || "equip");
+
+          if (action === "buy") {
+            const ok = await showUiConfirm({
+              title: "Confirm Purchase",
+              message: `Buy ${card.name} for ${price} ${currencyLabel}?`,
+              confirmLabel: `${price}`,
+              confirmIcon: currencyIcon,
+            });
+            if (!ok) {
+              actionBtn.disabled = false;
+              return;
+            }
+          }
+
+          if (action === "buy") {
+            await profileFetchJson("/player-cards/buy", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ cardId }),
+            });
+          }
+
+          await profileFetchJson("/player-cards/select", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cardId }),
+          });
+
+          await loadProfilePopupData(true);
+          sonner(
+            action === "buy" ? "Card purchased" : "Card equipped",
+            undefined,
+            "success",
+          );
+        } catch (err) {
+          const msg = String(err?.message || "Card action failed.");
+          sonner(
+            msg.includes("Not enough")
+              ? "Not enough coins/gems"
+              : "Card action failed",
+            msg,
+            "error",
+          );
+          actionBtn.disabled = false;
+        }
+      });
+    }
+
+    grid.appendChild(tile);
+  });
+}
+
+async function loadProfilePopupData(force = false) {
+  if (!force && lobbyProfileState.profile && lobbyProfileState.catalog) {
+    renderProfilePopupStats();
+    renderProfilePopupCards();
+    return;
+  }
+  if (lobbyProfileState.loadingPromise) return lobbyProfileState.loadingPromise;
+
+  lobbyProfileState.loadingPromise = Promise.all([
+    profileFetchJson("/profile/data"),
+    profileFetchJson("/player-cards/catalog"),
+    profileFetchJson("/player-cards/owned"),
+  ])
+    .then(([profileRes, catalogRes, ownedRes]) => {
+      const profile = profileRes?.profile || {};
+      lobbyProfileState.profile = profile;
+      lobbyProfileState.catalog =
+        catalogRes?.catalog && Array.isArray(catalogRes.catalog.cards)
+          ? catalogRes.catalog
+          : { cards: [] };
+      lobbyProfileState.ownedCardIds = Array.isArray(ownedRes?.ownedCardIds)
+        ? ownedRes.ownedCardIds
+        : [];
+      lobbyProfileState.selectedCardId =
+        ownedRes?.selectedCardId || profile?.selectedCardId || null;
+
+      if (userData) {
+        userData.name = profile.username || userData.name;
+        userData.coins = Number(profile.coins ?? userData.coins) || 0;
+        userData.gems = Number(profile.gems ?? userData.gems) || 0;
+      }
+
+      const usernameText = document.getElementById("username-text");
+      if (usernameText) usernameText.textContent = profile.username || "";
+
+      renderProfilePopupStats();
+      renderProfilePopupCards();
+    })
+    .finally(() => {
+      lobbyProfileState.loadingPromise = null;
+    });
+
+  return lobbyProfileState.loadingPromise;
+}
+
+function initProfilePopup() {
+  const overlay = document.getElementById("profile-overlay");
+  const closeBtn = document.getElementById("profile-close");
+  const backdrop = overlay?.querySelector(".profile-overlay-backdrop");
+  const usernameForm = document.getElementById("profile-username-form");
+  const passwordForm = document.getElementById("profile-password-form");
+  const usernameInput = document.getElementById("profile-new-username");
+  const currentPasswordInput = document.getElementById(
+    "profile-current-password",
+  );
+  const newPasswordInput = document.getElementById("profile-new-password");
+
+  if (!overlay) return;
+
+  const close = () => {
+    overlay.classList.add("hidden");
+    overlay.setAttribute("aria-hidden", "true");
+    setProfilePopupMessage("");
+  };
+
+  const open = async () => {
+    overlay.classList.remove("hidden");
+    overlay.setAttribute("aria-hidden", "false");
+    setProfilePopupMessage("Loading profile...");
+    try {
+      await loadProfilePopupData(true);
+      setProfilePopupMessage("");
+    } catch (err) {
+      setProfilePopupMessage(err.message || "Failed to load profile.", true);
+    }
+  };
+
+  closeBtn?.addEventListener("click", close);
+  backdrop?.addEventListener("click", close);
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!overlay.classList.contains("hidden")) close();
+  });
+
+  usernameForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = String(usernameInput?.value || "").trim();
+    if (!username) return;
+    try {
+      const data = await profileFetchJson("/profile/change-username", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username }),
+      });
+
+      if (!lobbyProfileState.profile) lobbyProfileState.profile = {};
+      lobbyProfileState.profile.username = data.username || username;
+      if (userData) userData.name = data.username || username;
+
+      const usernameText = document.getElementById("username-text");
+      if (usernameText) usernameText.textContent = data.username || username;
+
+      renderProfilePopupStats();
+      setProfilePopupMessage("Username updated.");
+    } catch (err) {
+      setProfilePopupMessage(err.message || "Unable to update username.", true);
+    }
+  });
+
+  passwordForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const currentPassword = String(currentPasswordInput?.value || "");
+    const newPassword = String(newPasswordInput?.value || "");
+    if (!newPassword) return;
+    try {
+      await profileFetchJson("/profile/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      if (currentPasswordInput) currentPasswordInput.value = "";
+      if (newPasswordInput) newPasswordInput.value = "";
+      setProfilePopupMessage("Password updated.");
+    } catch (err) {
+      setProfilePopupMessage(err.message || "Unable to update password.", true);
+    }
+  });
+
+  return { open, close };
+}
 
 function animateNumber(el, from, to, durationMs) {
   if (!el) return;
@@ -197,8 +486,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const coinCount = document.getElementById("coin-count");
   const gemCount = document.getElementById("gem-count");
+  const usernameButton = document.getElementById("username-button");
 
   document.getElementById("username-text").textContent = userData.name;
+  const profilePopup = initProfilePopup();
+  if (usernameButton) {
+    usernameButton.addEventListener("click", () => {
+      if (profilePopup?.open) {
+        profilePopup.open();
+      }
+    });
+  }
   setLobbyBackground("1");
   characterBodyElement.src = `/assets/${userData.char_class}/body.webp`;
   // Ensure non-random styling on initial sprite
@@ -324,10 +622,11 @@ function signUpOut(guest) {
   const signOut = document.getElementById("sign-out");
   const login = document.getElementById("login");
   if (guest) {
-    signOut.textContent = "Sign Up";
     signOut.addEventListener("click", () => (window.location.href = "/signup"));
     login.addEventListener("click", () => (window.location.href = "/login"));
   } else {
+    signOut.textContent = "Sign Out";
+    signOut.style.background = "linear-gradient(135deg, #d63939, #cf4545)";
     signOut.addEventListener("click", () => {
       window.location.href = "/signed-out";
     });

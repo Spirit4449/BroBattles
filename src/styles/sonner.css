@@ -5,9 +5,9 @@
   left: 0;
   right: 0;
   display: flex;
-  flex-direction: column;        /* stack vertically */
-  align-items: center;           /* center horizontally */
-  gap: 10px;                     /* space between toasts */
+  flex-direction: column; /* stack vertically */
+  align-items: center; /* center horizontally */
+  gap: 10px; /* space between toasts */
   pointer-events: none;
   z-index: 9999;
 }
@@ -15,24 +15,31 @@
 /* Toast card */
 .sonner {
   pointer-events: auto;
-  max-width: 500px;              /* a bit wider so inline layout breathes */
+  max-width: 500px; /* a bit wider so inline layout breathes */
   width: calc(100% - 24px);
   box-sizing: border-box;
   background: #22202e;
   color: #fff;
-  border: 1px solid rgba(255,255,255,.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   overflow: hidden;
   opacity: 0;
-  transform: translateY(-16px);  /* enter from top */
-  transition: transform .28s ease, opacity .28s ease;
+  transform: translateY(-16px); /* enter from top */
+  transition:
+    transform 0.28s ease,
+    opacity 0.28s ease;
   will-change: transform, opacity;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
 
   /* Inline layout: content + actions in one row */
   display: grid;
-  grid-template-columns: 1fr auto;    /* text takes remaining space, button fits */
+  grid-template-columns: 1fr auto; /* text takes remaining space, button fits */
   grid-auto-rows: auto;
 }
 
@@ -45,7 +52,7 @@
 /* Inline content area */
 .sonner__content {
   padding: 12px 12px 10px 14px;
-  min-width: 0;                 /* allow text to wrap instead of overflowing */
+  min-width: 0; /* allow text to wrap instead of overflowing */
 }
 
 .sonner__hdr {
@@ -84,7 +91,9 @@
   font-size: 13px;
   cursor: pointer;
 }
-.sonner__btn:hover { filter: brightness(.95); }
+.sonner__btn:hover {
+  filter: brightness(0.95);
+}
 
 /* Progress bar spans full width on its own row */
 .sonner__progress {
@@ -96,10 +105,21 @@
 .sonner__progress.anim {
   animation: sonnerBar var(--sonner-duration, 5s) linear forwards;
 }
-@keyframes sonnerBar { from { width: 100% } to { width: 0 } }
+@keyframes sonnerBar {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0;
+  }
+}
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .sonner { transition: none; }
-  .sonner__progress.anim { animation: none; }
+  .sonner {
+    transition: none;
+  }
+  .sonner__progress.anim {
+    animation: none;
+  }
 }

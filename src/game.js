@@ -163,6 +163,12 @@ const hud = createGameHudController({
   getGameData: () => gameData,
   getUsername: () => username,
   getMapBgAsset,
+  getScene: () => gameScene,
+  onCountdownFight: () => {
+    try {
+      gameScene?._startMainBgm?.();
+    } catch (_) {}
+  },
   onEnableInput: () => {
     try {
       if (gameScene && gameScene.input?.keyboard) {
@@ -692,7 +698,7 @@ class GameScene extends Phaser.Scene {
       }
     } catch (_) {}
 
-    // Background music: play once (2:30 track), no loop, but only after audio unlock (user gesture)
+    // Background music: prepare a starter callback and trigger it at FIGHT.
     this._bgmStarted = false;
     applyMatchBackground(gameData?.map);
     const startBgm = () => {
@@ -725,16 +731,16 @@ class GameScene extends Phaser.Scene {
         if (p && typeof p.catch === "function") p.catch(() => {});
       } catch (e) {}
     };
-    if (this.sound.locked) {
-      // Phaser will emit 'unlocked' on first user interaction
-      this.sound.once("unlocked", startBgm);
-    } else {
-      // If already unlocked, start immediately; also set a safe first-click hook
+    this._startMainBgm = () => {
+      if (this._bgmStarted) return;
+      if (this.sound.locked) {
+        this.sound.once("unlocked", startBgm);
+        this.input.once("pointerdown", startBgm);
+        this.input.keyboard?.once("keydown", startBgm);
+        return;
+      }
       startBgm();
-    }
-    // Extra safety: if for some reason 'unlocked' doesn't fire, start on first pointer/keydown
-    this.input.once("pointerdown", startBgm);
-    this.input.keyboard?.once("keydown", startBgm);
+    };
 
     this.events.once("shutdown", () => {
       try {

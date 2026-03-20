@@ -1,6 +1,10 @@
 import { sonner } from "./lib/sonner.js";
 import socket, { ensureSocketConnected, waitForConnect } from "./socket";
-import { getLobbyPlatformAsset } from "./maps/manifest";
+import {
+  getLobbyCharacterOffsetY,
+  getMapSelectPreviewAsset,
+  getLobbyPlatformAsset,
+} from "./maps/manifest";
 
 // Track last known party roster to detect joins/leaves
 let __partyRosterNames = null; // Set<string> of member names
@@ -11,6 +15,7 @@ let activeQueueContext = null; // { mode, map }
 let mmOverlayPlayers = [];
 let mmOverlayPlayersSig = "";
 let mmOverlayTotal = 0;
+let __lobbyOffsetResizeBound = false;
 
 function normalizeStatusLabel(status) {
   const s = String(status || "")
@@ -30,6 +35,120 @@ function getCurrentMapValue() {
   return String(document.getElementById("map")?.value || "1");
 }
 
+function getCurrentModeValue() {
+  return String(document.getElementById("mode")?.value || "1");
+}
+
+function syncMapPickerUi(mapValue) {
+  const mapDropdown = document.getElementById("map");
+  const previewImg = document.getElementById("map-preview-img");
+  const previewName = document.getElementById("map-preview-name");
+  if (!mapDropdown) return;
+
+  const normalized = String(mapValue || mapDropdown.value || "1");
+  if (mapDropdown.value !== normalized) {
+    mapDropdown.value = normalized;
+  }
+
+  const selectedOption = mapDropdown.querySelector(
+    `option[value="${normalized}"]`,
+  );
+  if (previewName) {
+    previewName.textContent = selectedOption?.textContent || "Unknown Map";
+  }
+  if (previewImg) {
+    previewImg.src = getMapSelectPreviewAsset(normalized);
+  }
+}
+
+function setupMapPickerControls() {
+  const mapDropdown = document.getElementById("map");
+  const openBtn = document.getElementById("map-picker-open");
+  if (!mapDropdown || !openBtn) return;
+
+  const options = Array.from(mapDropdown.options || []);
+  if (!options.length) return;
+
+  const openMapPopup = () => {
+    const overlay = document.createElement("div");
+    overlay.className = "character-select-overlay";
+    overlay.style.zIndex = "12020";
+
+    const popup = document.createElement("div");
+    popup.className = "character-select-popup";
+
+    const header = document.createElement("div");
+    header.className = "popup-header";
+
+    const title = document.createElement("h2");
+    title.className = "popup-title";
+    title.textContent = "Choose Map";
+
+    const close = document.createElement("button");
+    close.className = "close-popup";
+    close.type = "button";
+    close.textContent = "×";
+
+    const grid = document.createElement("div");
+    grid.className = "map-select-grid";
+
+    const closePopup = () => {
+      try {
+        overlay.remove();
+      } catch (_) {}
+    };
+
+    options.forEach((opt) => {
+      const value = String(opt.value);
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = `map-select-card pixel-menu-button${
+        String(mapDropdown.value) === value ? " active" : ""
+      }`;
+      card.innerHTML = `
+        <img src="${getMapSelectPreviewAsset(value)}" alt="${opt.textContent || "Map"}" />
+        <div class="map-select-name">${opt.textContent || "Map"}</div>
+      `;
+      card.addEventListener("click", () => {
+        mapDropdown.value = value;
+        mapDropdown.dispatchEvent(new Event("change", { bubbles: true }));
+        closePopup();
+      });
+      grid.appendChild(card);
+    });
+
+    close.addEventListener("click", closePopup);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) closePopup();
+    });
+    popup.addEventListener("click", (e) => e.stopPropagation());
+
+    header.appendChild(title);
+    header.appendChild(close);
+    popup.appendChild(header);
+    popup.appendChild(grid);
+    overlay.appendChild(popup);
+    document.body.appendChild(overlay);
+    overlay.style.display = "flex";
+  };
+
+  if (openBtn.dataset.bound !== "1") {
+    openBtn.dataset.bound = "1";
+    openBtn.addEventListener("click", openMapPopup);
+  }
+
+  syncMapPickerUi(mapDropdown.value);
+}
+
+function getViewportOffsetScale() {
+  // Gradually reduce vertical push on narrow layouts where elements stack tighter.
+  const w = Number(window.innerWidth) || 1280;
+  const minW = 420;
+  const maxW = 1440;
+  const t = Math.max(0, Math.min(1, (w - minW) / (maxW - minW)));
+  return 0.56 + t * 0.44; // 420px => 0.56, 1440px+ => 1.0
+}
+
 function applyPlatformImageForMap(mapValue) {
   const platformUrl = getLobbyPlatformAsset(mapValue || getCurrentMapValue());
   const imageEls = document.querySelectorAll(".platform-image");
@@ -37,6 +156,35 @@ function applyPlatformImageForMap(mapValue) {
     if (!imageEl) continue;
     imageEl.style.backgroundImage = `url("${platformUrl}")`;
   }
+}
+
+function applyLobbyCharacterOffsetForMap(mapValue, modeValue) {
+  const baseOffsetPx = getLobbyCharacterOffsetY(
+    mapValue || getCurrentMapValue(),
+    modeValue || getCurrentModeValue(),
+  );
+  const offsetPx =
+    Math.round(baseOffsetPx * getViewportOffsetScale() * 100) / 100;
+  const lobbyArea = document.getElementById("lobby-area");
+  if (!lobbyArea) return;
+  lobbyArea.style.setProperty("--lobby-character-offset-y", `${offsetPx}px`);
+}
+
+function bindLobbyOffsetResizeHandler() {
+  if (__lobbyOffsetResizeBound) return;
+  __lobbyOffsetResizeBound = true;
+
+  let rafId = 0;
+  window.addEventListener("resize", () => {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(() => {
+      applyLobbyCharacterOffsetForMap(
+        getCurrentMapValue(),
+        getCurrentModeValue(),
+      );
+      rafId = 0;
+    });
+  });
 }
 
 function animatePlatformsForMapSwitch() {
@@ -241,6 +389,10 @@ export function socketInit() {
       if (data.map) {
         setLobbyBackground(String(data.map));
         applyPlatformImageForMap(String(data.map));
+        applyLobbyCharacterOffsetForMap(
+          String(data.map),
+          String(data.mode || 1),
+        );
       }
       if (data.mode) {
         updatePlatformsForMode(String(data.mode));
@@ -322,11 +474,16 @@ export function socketInit() {
     if (mapDropdown) {
       mapDropdown.value = data.selectedValue || data.map;
       setSoloSelection(SOLO_MAP_STORAGE_KEY, mapDropdown.value);
+      syncMapPickerUi(mapDropdown.value);
     }
 
     // Update lobby background
     setLobbyBackground(data.selectedValue || data.map);
     applyPlatformImageForMap(data.selectedValue || data.map);
+    applyLobbyCharacterOffsetForMap(
+      data.selectedValue || data.map,
+      data.mode || document.getElementById("mode")?.value || "1",
+    );
     animatePlatformsForMapSwitch();
   });
 
@@ -760,6 +917,8 @@ export function initializeModeDropdown() {
   const isSolo = !partyId;
 
   if (!modeDropdown) return;
+  bindLobbyOffsetResizeHandler();
+  setupMapPickerControls();
 
   if (isSolo) {
     const savedMode = getSoloSelection(SOLO_MODE_STORAGE_KEY);
@@ -778,6 +937,8 @@ export function initializeModeDropdown() {
         mapDropdown.value = savedMap;
       }
       setLobbyBackground(mapDropdown.value);
+      syncMapPickerUi(mapDropdown.value);
+      applyLobbyCharacterOffsetForMap(mapDropdown.value, modeDropdown.value);
     }
     updatePlatformsForMode(modeDropdown.value);
   }
@@ -856,6 +1017,11 @@ export function initializeModeDropdown() {
       // Update lobby background immediately
       setLobbyBackground(selectedValue);
       applyPlatformImageForMap(selectedValue);
+      applyLobbyCharacterOffsetForMap(
+        selectedValue,
+        modeDropdown?.value || "1",
+      );
+      syncMapPickerUi(selectedValue);
       animatePlatformsForMapSwitch();
 
       // If in a party, emit to server
@@ -913,6 +1079,7 @@ export function updatePlatformsForMode(mode) {
   }
 
   applyPlatformImageForMap(getCurrentMapValue());
+  applyLobbyCharacterOffsetForMap(getCurrentMapValue(), mode);
 }
 
 function createPlatform(team, slotNumber) {
