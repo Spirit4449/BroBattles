@@ -35,10 +35,10 @@ export function animations(scene) {
   };
 
   ensureAnim(`${NAME}-idle`, ["idle", "stand"], 6, -1);
-  ensureAnim(`${NAME}-running`, ["run", "walk", "move"], 14, -1);
+  ensureAnim(`${NAME}-running`, ["run", "walk", "move"], 18, -1);
   ensureAnim(`${NAME}-jumping`, ["jump"], 18, 0);
   ensureAnim(`${NAME}-falling`, ["fall"], 18, 0);
-  ensureAnim(`${NAME}-sliding`, ["wall", "slide", "sliding"], 20, 2);
+  ensureAnim(`${NAME}-sliding`, ["sing", "slide", "sliding"], 20, 2);
   ensureAnim(`${NAME}-throw`, ["throw", "attack"], 17, 0);
   ensureAnim(`${NAME}-dying`, ["death", "die"], 10, 0);
 }

@@ -241,12 +241,14 @@ function initProfilePopup() {
   if (!overlay) return;
 
   const close = () => {
+    playSound("cancel", 0.4);
     overlay.classList.add("hidden");
     overlay.setAttribute("aria-hidden", "true");
     setProfilePopupMessage("");
   };
 
   const open = async () => {
+    playSound("cursor4", 0.4);
     overlay.classList.remove("hidden");
     overlay.setAttribute("aria-hidden", "false");
     setProfilePopupMessage("Loading profile...");

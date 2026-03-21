@@ -7,6 +7,7 @@ import {
   LEVEL_CAP,
   upgradePrice,
 } from "./lib/characterStats.js";
+import { getSharedSelectionPopupShell } from "./lib/selectionPopupShell.js";
 import socket from "./socket.js";
 import { playSound } from "./lib/uiSounds.js";
 
@@ -34,28 +35,10 @@ function emitCharacterMenuStatus(open) {
 
 export function initializeCharacterSelect(userData) {
   _userDataRef = userData;
-  const overlay = document.createElement("div");
-  overlay.className = "character-select-overlay";
+  const popupShell = getSharedSelectionPopupShell();
 
   const particlesCanvas = document.createElement("canvas");
   particlesCanvas.className = "particles-canvas";
-  overlay.appendChild(particlesCanvas);
-
-  const popup = document.createElement("div");
-  popup.className = "character-select-popup";
-
-  const headerBar = document.createElement("div");
-  headerBar.className = "popup-header";
-
-  const title = document.createElement("h2");
-  title.className = "popup-title";
-  title.textContent = "Choose Your Fighter";
-
-  const closeButton = document.createElement("button");
-  closeButton.className = "close-popup";
-  closeButton.innerHTML = "×";
-  closeButton.onclick = () => closeCharacterSelect();
-  closeButton.setAttribute("data-sound", "cancel");
 
   const charactersGrid = document.createElement("div");
   charactersGrid.className = "characters-grid";
@@ -65,19 +48,15 @@ export function initializeCharacterSelect(userData) {
     charactersGrid.appendChild(createCharacterCard(char, userData)),
   );
 
-  headerBar.appendChild(title);
-  headerBar.appendChild(closeButton);
-  popup.appendChild(headerBar);
-  popup.appendChild(charactersGrid);
-  overlay.appendChild(popup);
-  document.body.appendChild(overlay);
-
-  // Close character select when clicking outside the popup
-  overlay.addEventListener("click", (e) => {
-    if (!popup.contains(e.target)) closeCharacterSelect();
-  });
-  // Prevent clicks inside popup from bubbling to overlay
-  popup.addEventListener("click", (e) => e.stopPropagation());
+  const mountCharacterPopup = () => {
+    popupShell.mount({
+      titleText: "Choose Your Fighter",
+      onClose: () => closeCharacterSelect(),
+      closeButtonAttrs: { "data-sound": "cancel" },
+      contentNode: charactersGrid,
+      backgroundNode: particlesCanvas,
+    });
+  };
 
   // --- Particles background behind popup ---
   let rafId = null;
@@ -138,12 +117,13 @@ export function initializeCharacterSelect(userData) {
   window.addEventListener("resize", resizeCanvas);
 
   function openCharacterSelect() {
-    overlay.style.display = "flex";
+    mountCharacterPopup();
+    popupShell.show();
     emitCharacterMenuStatus(true);
     startParticles();
   }
   function closeCharacterSelect() {
-    overlay.style.display = "none";
+    popupShell.hide();
     emitCharacterMenuStatus(false);
     stopParticles();
   }

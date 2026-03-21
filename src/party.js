@@ -1,5 +1,6 @@
 import { sonner } from "./lib/sonner.js";
 import socket, { ensureSocketConnected, waitForConnect } from "./socket";
+import { getSharedSelectionPopupShell } from "./lib/selectionPopupShell.js";
 import {
   getLobbyCharacterOffsetY,
   getMapSelectPreviewAsset,
@@ -16,6 +17,7 @@ let mmOverlayPlayers = [];
 let mmOverlayPlayersSig = "";
 let mmOverlayTotal = 0;
 let __lobbyOffsetResizeBound = false;
+let __mapPopupUi = null;
 
 function normalizeStatusLabel(status) {
   const s = String(status || "")
@@ -69,39 +71,22 @@ function setupMapPickerControls() {
   const options = Array.from(mapDropdown.options || []);
   if (!options.length) return;
 
-  const openMapPopup = () => {
-    const overlay = document.createElement("div");
-    overlay.className = "character-select-overlay";
-    overlay.style.zIndex = "12020";
+  const ensureMapPopup = () => {
+    if (__mapPopupUi) return __mapPopupUi;
 
-    const popup = document.createElement("div");
-    popup.className = "character-select-popup";
-
-    const header = document.createElement("div");
-    header.className = "popup-header";
-
-    const title = document.createElement("h2");
-    title.className = "popup-title";
-    title.textContent = "Choose Map";
-
-    const close = document.createElement("button");
-    close.className = "close-popup";
-    close.type = "button";
-    close.textContent = "×";
+    const popupShell = getSharedSelectionPopupShell();
+    const closePopup = () => {
+      popupShell.hide();
+    };
 
     const grid = document.createElement("div");
     grid.className = "map-select-grid";
-
-    const closePopup = () => {
-      try {
-        overlay.remove();
-      } catch (_) {}
-    };
 
     options.forEach((opt) => {
       const value = String(opt.value);
       const card = document.createElement("button");
       card.type = "button";
+      card.dataset.mapValue = value;
       card.className = `map-select-card pixel-menu-button${
         String(mapDropdown.value) === value ? " active" : ""
       }`;
@@ -117,19 +102,35 @@ function setupMapPickerControls() {
       grid.appendChild(card);
     });
 
-    close.addEventListener("click", closePopup);
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) closePopup();
-    });
-    popup.addEventListener("click", (e) => e.stopPropagation());
+    __mapPopupUi = {
+      popupShell,
+      grid,
+      closePopup,
+    };
 
-    header.appendChild(title);
-    header.appendChild(close);
-    popup.appendChild(header);
-    popup.appendChild(grid);
-    overlay.appendChild(popup);
-    document.body.appendChild(overlay);
-    overlay.style.display = "flex";
+    return __mapPopupUi;
+  };
+
+  const openMapPopup = () => {
+    const popupUi = ensureMapPopup();
+    const { popupShell, grid, closePopup } = popupUi;
+
+    // Keep active card in sync with latest dropdown value each open.
+    const selected = String(mapDropdown.value || "1");
+    for (const card of grid.querySelectorAll(".map-select-card")) {
+      const isActive = String(card.dataset.mapValue || "") === selected;
+      card.classList.toggle("active", isActive);
+    }
+
+    popupShell
+      .mount({
+        titleText: "Choose Map",
+        onClose: closePopup,
+        zIndex: 12020,
+        contentNode: grid,
+        backgroundNode: null,
+      })
+      .show();
   };
 
   if (openBtn.dataset.bound !== "1") {

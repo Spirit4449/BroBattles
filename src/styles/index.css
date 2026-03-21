@@ -646,6 +646,8 @@ h3 {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  contain: layout paint;
   padding: 4px;
   box-sizing: border-box;
 }
@@ -653,6 +655,7 @@ h3 {
 .map-select-card {
   display: flex;
   flex-direction: column;
+  contain: content;
   border: 2px solid rgba(157, 195, 249, 0.4);
   border-radius: 10px;
   box-sizing: border-box;
