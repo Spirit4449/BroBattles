@@ -19,6 +19,7 @@ export function createGameHudController({
   let countdownRunning = false;
   let deferGameplayHudReveal = false;
   let currentCardNodes = [];
+  let timerPaused = false;
 
   function _fallbackCatalog() {
     return {
@@ -308,6 +309,11 @@ export function createGameHudController({
     if (!deferGameplayHudReveal) {
       hud.classList.remove("hidden");
     }
+    if (timerPaused) {
+      if (label) label.textContent = "Paused (Editor)";
+      return;
+    }
+
     const totalSec = Math.max(0, Math.ceil(remainingMs / 1000));
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
@@ -587,6 +593,14 @@ export function createGameHudController({
     runCountdown();
   }
 
+  function setTimerPaused(paused) {
+    timerPaused = !!paused;
+    if (!timerPaused) {
+      const label = document.getElementById("game-timer-label");
+      if (label) label.textContent = "Time Reamining";
+    }
+  }
+
   return {
     showBattleStartOverlay,
     initTimerHud,
@@ -601,5 +615,6 @@ export function createGameHudController({
     isBattleIntroActive: () => countdownRunning || _isOverlayVisible(),
     startCountdown,
     hideBattleStartOverlay,
+    setTimerPaused,
   };
 }

@@ -3,9 +3,14 @@ import { getCharacterTuning } from "../../lib/characterStats.js";
 import { rectsOverlap, getSpriteBounds } from "../shared/combatGeometry";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
+import {
+  getChargeRatioFromContext,
+  scaleByCharge,
+} from "../shared/chargeAttack";
 
 const THORG_TUNING = getCharacterTuning("thorg");
 const FALL = THORG_TUNING.attack?.fall || {};
+const FALL_CHARGE = THORG_TUNING.attack?.charge || {};
 
 const RECT_W = FALL.rectWidth ?? 120;
 const RECT_H = FALL.rectHeight ?? 60;
@@ -22,9 +27,10 @@ const DAMAGE_TICK_MS = FALL.damageTickMs ?? 90;
 const SPRITE_FORWARD_OFFSET = FALL.spriteForwardOffset ?? -Math.PI / 2; // weapon art points downward at rotation=0
 let DEBUG_DRAW = false;
 
-export function performThorgFallAttack(instance) {
+export function performThorgFallAttack(instance, attackContext = null) {
   const { scene, player: p, username, gameId, opponentPlayersRef } = instance;
   const direction = p.flipX ? -1 : 1;
+  const chargeRatio = getChargeRatioFromContext(attackContext);
   const rageActive = !!p._thorgRageActive;
   const baseAngle = 0;
 
@@ -74,7 +80,11 @@ export function performThorgFallAttack(instance) {
   });
   let strikeStartX = 0;
   let strikeStartY = 0;
-  const range = THORG_FALL_RANGE;
+  const range = scaleByCharge({
+    baseValue: THORG_FALL_RANGE,
+    chargeRatio,
+    maxScale: FALL_CHARGE.rangeScaleMax || 1,
+  });
   let endX0 = 0;
   let endY0 = 0;
   const arcHeight = THORG_FALL_ARC_HEIGHT; // peak above start
@@ -153,6 +163,7 @@ export function performThorgFallAttack(instance) {
           socket.emit("hit", {
             attacker: username,
             target: name,
+            chargeRatio,
             attackTime: Date.now(),
             gameId,
           });
@@ -273,6 +284,8 @@ export function performThorgFallAttack(instance) {
     type: "thorg-fall",
     id: attackId,
     direction,
+    range,
+    chargeRatio,
   };
 }
 

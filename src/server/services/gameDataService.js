@@ -1,4 +1,10 @@
-async function buildGameDataForMatch({ db, requireCurrentUser, req, res }) {
+async function buildGameDataForMatch({
+  db,
+  requireCurrentUser,
+  isAdminUser,
+  req,
+  res,
+}) {
   const user = await requireCurrentUser(req, res);
   if (!user) return { ok: false, handled: true };
 
@@ -59,6 +65,7 @@ async function buildGameDataForMatch({ db, requireCurrentUser, req, res }) {
     mode: participant.mode,
     map: participant.map,
     yourName: user.name,
+    isAdmin: typeof isAdminUser === "function" ? !!isAdminUser(user) : false,
     yourTeam: participant.team,
     yourCharacter: participant.char_class,
     players: allParticipants.map((p) => {

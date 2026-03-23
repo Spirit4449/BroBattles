@@ -140,13 +140,7 @@ export function createMatchCoordinator(config) {
       const idx =
         typeof serverSpawnIndex[pd.name] === "number"
           ? serverSpawnIndex[pd.name]
-          : Math.max(
-              0,
-              teamRoster
-                .slice()
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .findIndex((p) => p.name === pd.name),
-            );
+          : 0;
       positionSpawn(
         getGameScene(),
         op.opponent,

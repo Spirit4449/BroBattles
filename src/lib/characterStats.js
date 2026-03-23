@@ -4,6 +4,8 @@
 // Default character for new users
 export const DEFAULT_CHARACTER = "ninja";
 export const LEVEL_CAP = 5;
+export const ATTACK_CHARGE_MAX_HOLD_MS = 3500;
+export const ATTACK_CHARGE_TAP_THRESHOLD_MS = 150;
 
 export const characterStats = {
   ninja: {
@@ -26,6 +28,11 @@ export const characterStats = {
     },
     tuning: {
       attack: {
+        charge: {
+          rangeScaleMax: 1.8,
+          reticleBaseRange: 500,
+          reticleMaxRange: 900,
+        },
         returningShuriken: {
           rotationSpeed: 2000,
           forwardDistance: 500,
@@ -91,6 +98,11 @@ export const characterStats = {
     },
     tuning: {
       attack: {
+        charge: {
+          rangeScaleMax: 1.8,
+          reticleBaseRange: 120,
+          reticleMaxRange: 216,
+        },
         fall: {
           rectWidth: 120,
           rectHeight: 60,
@@ -136,6 +148,11 @@ export const characterStats = {
     },
     tuning: {
       attack: {
+        charge: {
+          damageScaleMax: 1.8,
+          audioRateMax: 1.2,
+          audioVolumeMax: 0.8,
+        },
         splash: {
           width: 165,
           height: 130,
@@ -220,6 +237,9 @@ export const characterStats = {
     },
     tuning: {
       attack: {
+        charge: {
+          scaleMax: 1.9,
+        },
         fireball: {
           speed: 450,
           range: 1050,
@@ -252,6 +272,11 @@ export function getCharacterStats(character) {
 export function getCharacterTuning(character) {
   const stats = getCharacterStats(character);
   return (stats && stats.tuning) || {};
+}
+
+export function getAttackChargeConfig(character) {
+  const tuning = getCharacterTuning(character);
+  return (tuning && tuning.attack && tuning.attack.charge) || {};
 }
 
 export function getAllCharacters() {
@@ -300,9 +325,12 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     DEFAULT_CHARACTER,
     LEVEL_CAP,
+    ATTACK_CHARGE_MAX_HOLD_MS,
+    ATTACK_CHARGE_TAP_THRESHOLD_MS,
     characterStats,
     getCharacterStats,
     getCharacterTuning,
+    getAttackChargeConfig,
     getAllCharacters,
     getFreeCharacters,
     defaultCharacterList,

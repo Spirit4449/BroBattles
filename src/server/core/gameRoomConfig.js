@@ -25,10 +25,15 @@ const POWERUP_STARTING_COUNT = 2;
 const POWERUP_MAX_ACTIVE = 3;
 const POWERUP_PICKUP_RADIUS = 70;
 const POWERUP_DESPAWN_MS = 10000;
-const POWERUP_RECENT_SPAWN_MEMORY = 4;
 const POWERUP_SPAWN_Y_LIFT = 22;
-const POWERUP_LAYOUT_BASE_CENTER_X = 650;
 const POWERUP_TYPES = ["rage", "health", "shield", "poison", "gravityBoots"];
+const POWERUP_TYPE_ROTATION = [
+  "rage",
+  "health",
+  "shield",
+  "poison",
+  "gravityBoots",
+];
 const POWERUP_DURATIONS_MS = {
   rage: 10000,
   health: 10000,
@@ -45,6 +50,10 @@ const POWERUP_AMBIENT_TICK_MS = 1200;
 
 const NINJA_SWARM_HIT_DAMAGE = 300;
 const NINJA_SWARM_CHARGE_RATIO = 0.35;
+const ATTACK_CHARGE_MAX_HOLD_MS = 3500;
+const NINJA_CHARGE_RANGE_SCALE_MAX = 1.8;
+const THORG_CHARGE_RANGE_SCALE_MAX = 1.8;
+const DRAVEN_CHARGE_DAMAGE_SCALE_MAX = 1.8;
 
 const HIT_REWIND_MAX_MS = 200;
 const HIT_STALENESS_MAX_MS = 300;
@@ -73,31 +82,42 @@ const ATTACK_MAX_DIST_MAP = {
 
 const POWERUP_PLATFORM_POINTS = {
   1: [
-    { x: 435, y: 506 },
-    { x: 650, y: 506 },
-    { x: 865, y: 506 },
-    { x: 505, y: 166 },
-    { x: 650, y: 166 },
-    { x: 795, y: 166 },
-    { x: 145, y: 188 },
-    { x: 285, y: 188 },
-    { x: 1015, y: 188 },
-    { x: 1155, y: 188 },
-    { x: 92, y: 468 },
-    { x: 1208, y: 468 },
+    { x: 935, y: 506 },
+    { x: 1150, y: 506 },
+    { x: 1365, y: 506 },
+    { x: 1005, y: 166 },
+    { x: 1150, y: 166 },
+    { x: 1295, y: 166 },
+    { x: 645, y: 188 },
+    { x: 785, y: 188 },
+    { x: 1515, y: 188 },
+    { x: 1655, y: 188 },
+    { x: 592, y: 468 },
+    { x: 1708, y: 468 },
   ],
   2: [
-    { x: 590, y: 330 },
-    { x: 710, y: 330 },
-    { x: 650, y: 520 },
-    { x: 225, y: 560 },
-    { x: 1075, y: 560 },
-    { x: 370, y: 247 },
-    { x: 930, y: 247 },
-    { x: 220, y: 122 },
-    { x: 1080, y: 122 },
-    { x: 520, y: 72 },
-    { x: 780, y: 72 },
+    { x: 1090, y: 330 },
+    { x: 1210, y: 330 },
+    { x: 1150, y: 520 },
+    { x: 725, y: 560 },
+    { x: 1575, y: 560 },
+    { x: 870, y: 247 },
+    { x: 1430, y: 247 },
+    { x: 720, y: 122 },
+    { x: 1580, y: 122 },
+    { x: 1020, y: 72 },
+    { x: 1280, y: 72 },
+  ],
+  3: [
+    { x: 950, y: 500 },
+    { x: 1150, y: 500 },
+    { x: 1350, y: 500 },
+    { x: 760, y: 260 },
+    { x: 1490, y: 340 },
+    { x: 1000, y: 230 },
+    { x: 1225, y: 230 },
+    { x: 1500, y: 230 },
+    { x: 860, y: 340 },
   ],
 };
 
@@ -116,10 +136,9 @@ module.exports = {
   POWERUP_MAX_ACTIVE,
   POWERUP_PICKUP_RADIUS,
   POWERUP_DESPAWN_MS,
-  POWERUP_RECENT_SPAWN_MEMORY,
   POWERUP_SPAWN_Y_LIFT,
-  POWERUP_LAYOUT_BASE_CENTER_X,
   POWERUP_TYPES,
+  POWERUP_TYPE_ROTATION,
   POWERUP_DURATIONS_MS,
   POWERUP_RAGE_DAMAGE_MULT,
   POWERUP_SHIELD_DAMAGE_MULT,
@@ -129,6 +148,10 @@ module.exports = {
   POWERUP_AMBIENT_TICK_MS,
   NINJA_SWARM_HIT_DAMAGE,
   NINJA_SWARM_CHARGE_RATIO,
+  ATTACK_CHARGE_MAX_HOLD_MS,
+  NINJA_CHARGE_RANGE_SCALE_MAX,
+  THORG_CHARGE_RANGE_SCALE_MAX,
+  DRAVEN_CHARGE_DAMAGE_SCALE_MAX,
   HIT_REWIND_MAX_MS,
   HIT_STALENESS_MAX_MS,
   HIT_FUTURE_TOLERANCE_MS,

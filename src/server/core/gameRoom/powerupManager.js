@@ -8,10 +8,8 @@ const {
   POWERUP_MAX_ACTIVE,
   POWERUP_PICKUP_RADIUS,
   POWERUP_DESPAWN_MS,
-  POWERUP_RECENT_SPAWN_MEMORY,
   POWERUP_SPAWN_Y_LIFT,
-  POWERUP_LAYOUT_BASE_CENTER_X,
-  POWERUP_TYPES,
+  POWERUP_TYPE_ROTATION,
   POWERUP_PLATFORM_POINTS,
 } = require("../gameRoomConfig");
 const effectManager = require("./effects/effectManager");
@@ -21,69 +19,31 @@ function getPlatformSpawnPoints(room) {
   const raw = POWERUP_PLATFORM_POINTS[mapId] || POWERUP_PLATFORM_POINTS[1];
   const points =
     Array.isArray(raw) && raw.length ? raw : POWERUP_PLATFORM_POINTS[1];
-  const centerShiftX =
-    (Number(WORLD_BOUNDS.width) || 1300) / 2 - POWERUP_LAYOUT_BASE_CENTER_X;
   return points
     .map((p) => ({
       x: Number(p?.x),
       y: Number(p?.y),
     }))
-    .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
-    .map((p) => ({
-      x: p.x + centerShiftX,
-      y: p.y,
-    }));
+    .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
 }
 
 function pickSpawnPoint(room) {
   const points = getPlatformSpawnPoints(room);
   if (!points.length) return null;
-
-  const activeIdxSet = new Set();
-  for (const pu of room._powerups.values()) {
-    let bestIdx = -1;
-    let bestDist = Infinity;
-    for (let i = 0; i < points.length; i++) {
-      const dx = points[i].x - pu.x;
-      const dy = points[i].y - pu.y;
-      const d = dx * dx + dy * dy;
-      if (d < bestDist) {
-        bestDist = d;
-        bestIdx = i;
-      }
-    }
-    if (bestIdx >= 0) activeIdxSet.add(bestIdx);
-  }
-
-  const avoidRecent = new Set(room._recentPowerupSpawnIdx);
-  const available = [];
-  for (let i = 0; i < points.length; i++) {
-    if (activeIdxSet.has(i)) continue;
-    if (avoidRecent.has(i)) continue;
-    available.push(i);
-  }
-
-  if (!available.length) {
-    for (let i = 0; i < points.length; i++) {
-      if (!activeIdxSet.has(i)) available.push(i);
-    }
-  }
-  if (!available.length) {
-    for (let i = 0; i < points.length; i++) available.push(i);
-  }
-
-  const idx = available[Math.floor(Math.random() * available.length)] ?? 0;
-  room._recentPowerupSpawnIdx.push(idx);
-  if (room._recentPowerupSpawnIdx.length > POWERUP_RECENT_SPAWN_MEMORY) {
-    room._recentPowerupSpawnIdx.shift();
-  }
+  const idx = room._nextPowerupSpawnPointIdx % points.length;
+  room._nextPowerupSpawnPointIdx += 1;
   return points[idx];
 }
 
 function spawnPowerup(room) {
   if (room.status !== "active") return;
   if (room._powerups.size >= POWERUP_MAX_ACTIVE) return;
-  const type = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
+  const typeList =
+    Array.isArray(POWERUP_TYPE_ROTATION) && POWERUP_TYPE_ROTATION.length
+      ? POWERUP_TYPE_ROTATION
+      : ["rage", "health", "shield", "poison", "gravityBoots"];
+  const type = typeList[room._nextPowerupTypeIdx % typeList.length];
+  room._nextPowerupTypeIdx += 1;
   const point = pickSpawnPoint(room);
   if (!point) {
     console.warn(

@@ -89,7 +89,12 @@ class Thorg extends CharacterEntityBase {
           ownerSprite.anims.play(`${NAME}-throw`, true);
         }
       } catch (_) {}
-      Thorg._spawnFallEffect(scene, ownerSprite, data.direction);
+      Thorg._spawnFallEffect(
+        scene,
+        ownerSprite,
+        data.direction,
+        Number(data.range) || THORG_FALL_RANGE,
+      );
       // Play attack sound for remote players (lower volume)
       try {
         scene.sound?.play("thorg-throw", { volume: 0.25 });
@@ -360,13 +365,21 @@ class Thorg extends CharacterEntityBase {
     return !!result.fired;
   }
 
-  handlePointerDown() {
+  handlePointerDown(attackContext) {
+    const context = attackContext || this.consumeAttackContext();
     // Use the shared Thorg fall attack implementation (owner-side hits + payload)
-    return this.performDefaultAttack(() => performThorgFallAttack(this));
+    return this.performDefaultAttack(() =>
+      performThorgFallAttack(this, context),
+    );
   }
 
   // Spawn a simple rectangle visual attached to owner that mimics the falling arc
-  static _spawnFallEffect(scene, sprite, direction = 1) {
+  static _spawnFallEffect(
+    scene,
+    sprite,
+    direction = 1,
+    rangeScale = THORG_FALL_RANGE,
+  ) {
     const baseAngle = 0;
     const getAnchor = () => ({
       x: sprite.x + (direction >= 0 ? 10 : -10),
@@ -374,7 +387,7 @@ class Thorg extends CharacterEntityBase {
     });
     let strikeStartX = 0;
     let strikeStartY = 0;
-    const range = THORG_FALL_RANGE;
+    const range = rangeScale;
     let endX = 0;
     let endY = 0;
     const arcHeight = THORG_FALL_ARC_HEIGHT;

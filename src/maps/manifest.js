@@ -69,6 +69,47 @@ export function getMapObjects(mapId) {
 }
 
 /**
+ * Player + powerup spawn config for a map.
+ * @param {number|string} mapId
+ * @returns {object}
+ */
+export function getMapSpawnConfig(mapId) {
+  return (
+    MAPS[normalizeMapId(mapId)]?.getSpawnConfig?.() ?? {
+      players: {},
+      powerups: [],
+    }
+  );
+}
+
+/**
+ * Runtime boundary/camera config for a map.
+ * @param {number|string} mapId
+ * @returns {object}
+ */
+export function getMapBoundaryConfig(mapId) {
+  return MAPS[normalizeMapId(mapId)]?.getBoundaryConfig?.() ?? {};
+}
+
+/**
+ * List of texture keys that can be used to add platforms in editor mode.
+ * @param {number|string} mapId
+ * @returns {string[]}
+ */
+export function getMapEditorTextureKeys(mapId) {
+  return MAPS[normalizeMapId(mapId)]?.getEditorTextureKeys?.() ?? [];
+}
+
+/**
+ * Runtime platform anchors for spawn snapping.
+ * @param {number|string} mapId
+ * @returns {object}
+ */
+export function getMapSpawnAnchors(mapId) {
+  return MAPS[normalizeMapId(mapId)]?.getSpawnAnchors?.() ?? {};
+}
+
+/**
  * Background image URL for the given map (used in battle-start overlay).
  * @param {number|string} mapId
  * @returns {string}

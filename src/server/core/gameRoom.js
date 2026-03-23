@@ -4,6 +4,7 @@ const {
   POWERUP_STARTING_COUNT,
   NINJA_SWARM_HIT_DAMAGE,
   NINJA_SWARM_CHARGE_RATIO,
+  DRAVEN_CHARGE_DAMAGE_SCALE_MAX,
 } = require("./gameRoomConfig");
 const effectManager = require("./gameRoom/effects/effectManager");
 const powerupManager = require("./gameRoom/powerupManager");
@@ -74,7 +75,8 @@ class GameRoom {
     this._powerups = new Map(); // id -> { id, type, x, y, spawnedAt, expiresAt }
     this._nextPowerupId = 1;
     this._lastPowerupSpawnAt = 0;
-    this._recentPowerupSpawnIdx = [];
+    this._nextPowerupSpawnPointIdx = 0;
+    this._nextPowerupTypeIdx = 0;
 
     console.log(
       `[GameRoom ${matchId}] Created for mode ${matchData.mode}, map ${matchData.map}`,
@@ -382,7 +384,8 @@ class GameRoom {
     this._powerups.clear();
     this._nextPowerupId = 1;
     this._lastPowerupSpawnAt = this._loopStartWallTime;
-    this._recentPowerupSpawnIdx = [];
+    this._nextPowerupSpawnPointIdx = 0;
+    this._nextPowerupTypeIdx = 0;
     for (let i = 0; i < POWERUP_STARTING_COUNT; i++) {
       this._spawnPowerup();
     }
@@ -702,6 +705,9 @@ class GameRoom {
 
       // Determine damage from server-side stats
       const attackType = String(payload.attackType || "basic").toLowerCase();
+      const chargeRatio = combatValidation.clampChargeRatio(
+        payload.chargeRatio,
+      );
       const isNinjaSwarm = attackType === "ninja-special-swarm";
       const base = isNinjaSwarm
         ? NINJA_SWARM_HIT_DAMAGE
@@ -709,6 +715,10 @@ class GameRoom {
           ? Number(attacker.specialDamage || 0)
           : Number(attacker.baseDamage || 0);
       let dmg = Number.isFinite(base) && base > 0 ? base : 0;
+
+      if (attackType === "basic" && attacker.char_class === "draven") {
+        dmg *= 1 + (DRAVEN_CHARGE_DAMAGE_SCALE_MAX - 1) * chargeRatio;
+      }
 
       // Outgoing damage modifiers (rage powerup, thorgRage ability, damageBoost, etc.)
       const now = Date.now();
@@ -740,6 +750,7 @@ class GameRoom {
           attacker,
           target,
           attackType,
+          chargeRatio,
           attackTimeRaw,
           now,
         });

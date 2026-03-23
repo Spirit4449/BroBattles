@@ -1,12 +1,13 @@
 const { buildGameDataForMatch } = require("../../services/gameDataService");
 
-function registerGameRoutes({ app, db, requireCurrentUser }) {
+function registerGameRoutes({ app, db, requireCurrentUser, isAdminUser }) {
   app.post("/gamedata", async (req, res) => {
     console.log("Fetching game data for match:", req.body);
     try {
       const result = await buildGameDataForMatch({
         db,
         requireCurrentUser,
+        isAdminUser,
         req,
         res,
       });

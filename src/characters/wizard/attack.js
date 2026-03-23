@@ -3,9 +3,14 @@ import { getCharacterTuning } from "../../lib/characterStats.js";
 import { circleRectOverlap, getSpriteBounds } from "../shared/combatGeometry";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
+import {
+  getChargeRatioFromContext,
+  scaleByCharge,
+} from "../shared/chargeAttack";
 
 const WIZARD_TUNING = getCharacterTuning("wizard");
 const FIREBALL = WIZARD_TUNING.attack?.fireball || {};
+const WIZARD_CHARGE = WIZARD_TUNING.attack?.charge || {};
 
 const FIREBALL_SPEED = FIREBALL.speed ?? 450; // px per second after launch
 const FIREBALL_RANGE = FIREBALL.range ?? 1050; // px travel before despawn
@@ -179,11 +184,22 @@ function spawnImpact(scene, x, y, playSound = true) {
   } catch (_) {}
 }
 
-export function performWizardFireball(instance) {
+export function performWizardFireball(instance, attackContext = null) {
   const { scene, player: p, username, gameId, opponentPlayersRef } = instance;
+  const chargeRatio = getChargeRatioFromContext(attackContext);
   let direction = p.flipX ? -1 : 1;
   let travelDirection = direction;
   const attackId = createRuntimeId("wizardFireball");
+  const chargedScale = scaleByCharge({
+    baseValue: FIREBALL_ACTIVE_SCALE,
+    chargeRatio,
+    maxScale: WIZARD_CHARGE.scaleMax || 1,
+  });
+  const chargedCollisionRadius = scaleByCharge({
+    baseValue: FIREBALL_COLLISION_RADIUS,
+    chargeRatio,
+    maxScale: WIZARD_CHARGE.scaleMax || 1,
+  });
 
   // Lock the player's flip state during cast
   const unlockFlip = lockPlayerFlip(p);
@@ -223,7 +239,7 @@ export function performWizardFireball(instance) {
   }
   scene.tweens.add({
     targets: sprite,
-    scale: FIREBALL_ACTIVE_SCALE,
+    scale: chargedScale,
     ease: "Sine.easeOut",
     duration: FIREBALL_CAST_DELAY_MS,
   });
@@ -311,7 +327,7 @@ export function performWizardFireball(instance) {
         circleRectOverlap(
           sprite.x,
           sprite.y,
-          FIREBALL_COLLISION_RADIUS,
+          chargedCollisionRadius,
           bounds.left,
           bounds.top,
           bounds.right,
@@ -323,6 +339,7 @@ export function performWizardFireball(instance) {
           attacker: username,
           target: name,
           attackType: "basic",
+          chargeRatio,
           attackTime: Date.now(),
           damage: damageValue,
           gameId,
@@ -349,6 +366,8 @@ export function performWizardFireball(instance) {
     duration: lifetimeMs,
     startup: FIREBALL_CAST_DELAY_MS,
     bob: FIREBALL_BOB_AMPLITUDE,
+    scale: chargedScale,
+    chargeRatio,
   };
 }
 
@@ -366,6 +385,7 @@ export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
     payload?.duration || Math.round((range / FIREBALL_SPEED) * 1000);
   const startup = payload?.startup ?? FIREBALL_CAST_DELAY_MS;
   const bob = payload?.bob ?? FIREBALL_BOB_AMPLITUDE;
+  const scale = Number(payload?.scale) || FIREBALL_ACTIVE_SCALE;
 
   // Play launch sound for remote players (lower volume)
   try {
@@ -379,7 +399,7 @@ export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
     );
   scene.tweens.add({
     targets: sprite,
-    scale: FIREBALL_ACTIVE_SCALE,
+    scale,
     ease: "Sine.easeOut",
     duration: startup,
   });

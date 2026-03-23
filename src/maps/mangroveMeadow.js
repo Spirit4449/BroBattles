@@ -3,7 +3,7 @@
 // or positionSpawn().  To add an entirely new map, follow the same pattern and
 // register it in src/maps/manifest.js.
 
-import { snapSpriteToPlatform } from "./mapUtils";
+import { getSpawnPointForTeam, placeSpriteAtConfiguredSpawn } from "./mapUtils";
 
 // ── Layout constants ─────────────────────────────────────────────────────────
 const SCALE = 0.6;
@@ -24,12 +24,74 @@ const TINY_LAYOUT = [
   [+130, 150], // 5 – team1
 ];
 
-const TEAM2_SPAWN_INDICES = [0, 1, 2];
-const TEAM1_SPAWN_INDICES = [3, 4, 5];
+const SPAWN_CONFIG = {
+  players: {
+    team1: {
+      1: [{ anchorId: "tiny-3", dx: 0 }],
+      2: [
+        { anchorId: "tiny-3", dx: 0 },
+        { anchorId: "tiny-4", dx: 0 },
+      ],
+      3: [
+        { anchorId: "tiny-3", dx: 0 },
+        { anchorId: "tiny-4", dx: 0 },
+        { anchorId: "tiny-5", dx: 0 },
+      ],
+    },
+    team2: {
+      1: [{ anchorId: "tiny-0", dx: 0 }],
+      2: [
+        { anchorId: "tiny-0", dx: 0 },
+        { anchorId: "tiny-1", dx: 0 },
+      ],
+      3: [
+        { anchorId: "tiny-0", dx: 0 },
+        { anchorId: "tiny-1", dx: 0 },
+        { anchorId: "tiny-2", dx: 0 },
+      ],
+    },
+  },
+  powerups: [
+    { x: 1090, y: 308 },
+    { x: 1210, y: 308 },
+    { x: 1150, y: 498 },
+    { x: 725, y: 538 },
+    { x: 1575, y: 538 },
+    { x: 870, y: 225 },
+    { x: 1430, y: 225 },
+    { x: 720, y: 100 },
+    { x: 1580, y: 100 },
+    { x: 1020, y: 50 },
+    { x: 1280, y: 50 },
+  ],
+};
+
+const BOUNDARY_CONFIG = {
+  world: { x: 0, y: 0, width: 2300, height: 1000 },
+  camera: {
+    x: -200,
+    y: -40,
+    width: 2000,
+    height: 1000,
+    zoom: 1.7,
+    deadzoneWidth: 50,
+    deadzoneHeight: 50,
+    followOffsetY: 120,
+  },
+};
+
+const EDITOR_TEXTURE_KEYS = [
+  "mangrove-base-middle",
+  "mangrove-base-top",
+  "mangrove-base-left",
+  "mangrove-base-right",
+  "mangrove-tiny-platform",
+];
 
 // ── Runtime references (set during build) ──────────────────────────────────
 const _tinyPlatforms = []; // [0..5] matching TINY_LAYOUT
 const _objects = [];
+const _spawnAnchors = Object.create(null);
 
 // ── Map definition ───────────────────────────────────────────────────────────
 export const definition = {
@@ -63,6 +125,10 @@ export const definition = {
     for (const [dx, y] of TINY_LAYOUT) {
       _tinyPlatforms.push(plat("mangrove-tiny-platform", cx + dx, y));
     }
+
+    for (let i = 0; i < _tinyPlatforms.length; i++) {
+      _spawnAnchors[`tiny-${i}`] = _tinyPlatforms[i];
+    }
   },
 
   getObjects() {
@@ -76,14 +142,26 @@ export const definition = {
    * @param {number}  index     — 0-based index within the team
    * @param {number}  [teamSize] — unused (kept for uniform signature)
    */
-  positionSpawn(scene, sprite, team, index /*, teamSize */) {
-    if (!sprite) return;
-    const indices =
-      team === "team2" ? TEAM2_SPAWN_INDICES : TEAM1_SPAWN_INDICES;
-    const i = Math.max(0, Number(index) || 0) % indices.length;
-    const plat = _tinyPlatforms[indices[i]];
-    if (!plat) return;
-    snapSpriteToPlatform(sprite, plat, plat.getCenter().x, 2);
+  positionSpawn(scene, sprite, team, index, teamSize) {
+    const point = getSpawnPointForTeam(SPAWN_CONFIG, team, index, teamSize);
+    if (!point) return;
+    placeSpriteAtConfiguredSpawn(scene, sprite, point, _spawnAnchors, 2);
+  },
+
+  getSpawnConfig() {
+    return SPAWN_CONFIG;
+  },
+
+  getBoundaryConfig() {
+    return BOUNDARY_CONFIG;
+  },
+
+  getEditorTextureKeys() {
+    return EDITOR_TEXTURE_KEYS;
+  },
+
+  getSpawnAnchors() {
+    return _spawnAnchors;
   },
 };
 

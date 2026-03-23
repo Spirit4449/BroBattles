@@ -97,6 +97,29 @@ export default class CharacterEntityBase {
     this.opponentPlayersRef = opponentPlayersRef;
     this.mapObjects = mapObjects;
     this.ammo = ammoHooks;
+    this._pendingAttackContext = null;
+  }
+
+  setAttackContext(context) {
+    this._pendingAttackContext = context || null;
+  }
+
+  consumeAttackContext() {
+    const context = this._pendingAttackContext || null;
+    this._pendingAttackContext = null;
+    return context;
+  }
+
+  attack(direction, context) {
+    if (!this.player) return false;
+    if (direction === -1 || direction === 1) {
+      this.player.flipX = direction < 0;
+    }
+    this.setAttackContext(context);
+    if (typeof this.handlePointerDown === "function") {
+      return this.handlePointerDown(context);
+    }
+    return false;
   }
 
   attachInput() {

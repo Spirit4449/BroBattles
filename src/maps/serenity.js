@@ -3,7 +3,7 @@
 // positionSpawn().  To add an entirely new map, follow the same pattern and
 // register it in src/maps/manifest.js.
 
-import { snapSpriteToPlatform } from "./mapUtils";
+import { getSpawnPointForTeam, placeSpriteAtConfiguredSpawn } from "./mapUtils";
 
 // ── Single tuning object (edit only this) ───────────────────────────────────
 const SERENITY_CONFIG = {
@@ -43,6 +43,64 @@ const SERENITY_CONFIG = {
     ],
     barH: 16,
   },
+  spawns: {
+    players: {
+      team1: {
+        1: [{ dx: 350, anchorId: "log-mid" }],
+        2: [
+          { dx: 250, anchorId: "log-mid" },
+          { dx: 450, anchorId: "log-mid" },
+        ],
+        3: [
+          { dx: 205, anchorId: "log-mid" },
+          { dx: 350, anchorId: "log-mid" },
+          { dx: 495, anchorId: "log-mid" },
+        ],
+      },
+      team2: {
+        1: [{ dx: 0, anchorId: "large" }],
+        2: [
+          { dx: -130, anchorId: "large" },
+          { dx: 130, anchorId: "large" },
+        ],
+        3: [
+          { dx: -200, anchorId: "large" },
+          { dx: 0, anchorId: "large" },
+          { dx: 200, anchorId: "large" },
+        ],
+      },
+    },
+    powerups: [
+      { x: 950, y: 500 },
+      { x: 1150, y: 500 },
+      { x: 1350, y: 500 },
+      { x: 760, y: 260 },
+      { x: 1490, y: 340 },
+      { x: 1000, y: 230 },
+      { x: 1225, y: 230 },
+      { x: 1500, y: 230 },
+      { x: 860, y: 340 },
+    ],
+  },
+  boundaries: {
+    world: { x: 0, y: 0, width: 2300, height: 1000 },
+    camera: {
+      x: -200,
+      y: -40,
+      width: 2000,
+      height: 1000,
+      zoom: 1.7,
+      deadzoneWidth: 50,
+      deadzoneHeight: 50,
+      followOffsetY: 120,
+    },
+  },
+  editorTextureKeys: [
+    "serenity-large-platform",
+    "serenity-side-platform",
+    "serenity-log-platform",
+    "serenity-small-rock",
+  ],
 };
 
 // ── Runtime platform references (set during build) ───────────────────────────
@@ -54,6 +112,7 @@ let _smallRock = null;
 let _logBars = [];
 let _sideWalls = [];
 const _objects = [];
+const _spawnAnchors = Object.create(null);
 
 // ── Map definition ───────────────────────────────────────────────────────────
 export const definition = {
@@ -96,6 +155,7 @@ export const definition = {
       _largePlatform.body.offset.x,
       SERENITY_CONFIG.bodies.large.offsetY,
     );
+    _spawnAnchors.large = _largePlatform;
 
     _leftPlatform = plat(
       "serenity-side-platform",
@@ -128,9 +188,7 @@ export const definition = {
       SERENITY_CONFIG.bodies.right.offsetY,
     );
 
-
-    
-  _smallRock = plat(
+    _smallRock = plat(
       "serenity-small-rock",
       cx - SERENITY_CONFIG.layout.rockX,
       SERENITY_CONFIG.layout.rockY,
@@ -206,6 +264,7 @@ export const definition = {
       _logBars.push(bar);
       _objects.push(bar);
     }
+    _spawnAnchors["log-mid"] = _logBars[1] || _logPlatform;
   },
 
   getObjects() {
@@ -220,14 +279,30 @@ export const definition = {
    * @param {number}  teamSize  — total players on that team
    */
   positionSpawn(scene, sprite, team, index, teamSize) {
-    const target =
-      team === "team2" ? _largePlatform : (_logBars[1] ?? _logPlatform);
-    if (!sprite || !target) return;
-    const bounds = target.getBounds();
-    const slots = Math.max(1, Number(teamSize) || 1);
-    const i = Math.min(slots - 1, Math.max(0, Number(index) || 0));
-    const cx = bounds.left + bounds.width * ((i + 0.5) / slots);
-    snapSpriteToPlatform(sprite, target, cx, 2);
+    const point = getSpawnPointForTeam(
+      SERENITY_CONFIG.spawns,
+      team,
+      index,
+      teamSize,
+    );
+    if (!point) return;
+    placeSpriteAtConfiguredSpawn(scene, sprite, point, _spawnAnchors, 2);
+  },
+
+  getSpawnConfig() {
+    return SERENITY_CONFIG.spawns;
+  },
+
+  getBoundaryConfig() {
+    return SERENITY_CONFIG.boundaries;
+  },
+
+  getEditorTextureKeys() {
+    return SERENITY_CONFIG.editorTextureKeys;
+  },
+
+  getSpawnAnchors() {
+    return _spawnAnchors;
   },
 };
 

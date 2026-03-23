@@ -10,12 +10,14 @@ This project is a browser game built with Phaser (client) and Express + Socket.I
 - Production start: `npm start`
 - Debug production bundle with maps: `npm run sourcemap`
 - Automated tests: none configured right now (do not assume a test runner exists)
+- Do not run npm run build unless you have worked through many files and spent lots of time on a task.
 
 ## Environment and runtime
 
 - Env: `NODE_ENV`, `PORT`, `SECURE_COOKIES` (false by default for HTTP dev), `COOKIE_SECRET` (persisted to `.cookie-secret` if missing), `ADMIN_USERS`.
 - Webpack copies `public/**` to `dist/**`; bundles to `dist/bundles/*.bundle.js`.
 - MySQL is required for gameplay/auth flows; default DB name is `game`.
+- If you make any changes that require updates to the DB, send me schema to change it in database.md.
 
 ## Architecture
 
@@ -84,3 +86,13 @@ Keep edits aligned with these contracts and file locations; when changing a publ
 - Suggest → then patch. When confidence < 80%, propose diagnostics or a small experiment first (extra logs, a guarded code path), not a sweeping change.
 
 - No build/tooling churn (webpack, eslint, tsconfig) unless the task is tooling itself.
+
+- Use MCP Context7 for any task that requires more understanding of Phaser 3. 
+
+- I prefer all constants and things you regularly update to be in the same location so I can easily update things.
+
+- I don't always have the right idea for implementing new and big features since I am not a professional. In this case, do research on how similar games implement the feature, and propose a few options with pros/cons before implementing. This is especially important for features that touch core gameplay or data models.
+
+- Create new files when features differ from existing ones, but try to keep related features together. For example, if you are adding a new socket event related to matchmaking, it should probably go in `core/matchmaking.js` rather than a new file.
+
+- A lot of the times I reference assets I upload in the public folder. I will usually upload before prompting, but if I forget to upload an asset before asking for a change related to it, please create a name for it that uses the existing conventions in the public folder and have me upload as that file name.

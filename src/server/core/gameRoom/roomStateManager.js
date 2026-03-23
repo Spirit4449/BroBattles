@@ -2,8 +2,7 @@ function computeSpawnIndex(room, name, team) {
   try {
     const teamList = (room.matchData.players || [])
       .filter((p) => p.team === team)
-      .map((p) => ({ name: p.name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .map((p) => ({ name: p.name }));
     return Math.max(
       0,
       teamList.findIndex((p) => p.name === name),

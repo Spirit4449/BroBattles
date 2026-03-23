@@ -5,8 +5,10 @@ import {
   positionSpawn,
   getMapBgAsset,
   getMapObjects,
+  getMapBoundaryConfig,
   normalizeMapId,
 } from "./maps/manifest";
+import { applyMapBounds } from "./maps/mapUtils";
 import { createGameHudController } from "./hud/gameHudController";
 import { createGameOverScreenController } from "./hud/gameOverScreenController";
 import { createSnapshotBuffer } from "./match/snapshotBuffer";
@@ -17,6 +19,7 @@ import { updateDynamicCamera } from "./gameScene/cameraDynamics";
 import { createLocalInputSync } from "./gameScene/localInputSync";
 import { processSnapshotInterpolation } from "./gameScene/networkInterpolation";
 import { updateHealthBars } from "./gameScene/healthBarUpdater";
+import { createMapEditorRuntime } from "./gameScene/mapEditorRuntime";
 import {
   POWERUP_TYPES,
   POWERUP_ASSET_DIR,
@@ -132,6 +135,28 @@ const LAST_HEALTH_BY_PLAYER = Object.create(null);
 const SHIELD_IMPACT_QUEUE = [];
 const LAST_SHIELD_ACTIVE_AT = Object.create(null);
 const POST_MATCH_REWARD_STORAGE_KEY = "bb_post_match_rewards_v1";
+const EDIT_CAMERA_SCROLL_SPEED = 14;
+
+function updateEditorCamera(scene) {
+  if (!scene || !scene._editModeActive) return;
+  const cam = scene.cameras?.main;
+  const keys = scene._editorCamKeys;
+  if (!cam || !keys) return;
+
+  let dx = 0;
+  let dy = 0;
+
+  if (keys.left?.isDown || keys.leftAlt?.isDown) dx -= 1;
+  if (keys.right?.isDown || keys.rightAlt?.isDown) dx += 1;
+  if (keys.up?.isDown || keys.upAlt?.isDown) dy -= 1;
+  if (keys.down?.isDown || keys.downAlt?.isDown) dy += 1;
+
+  if (dx === 0 && dy === 0) return;
+
+  const step = EDIT_CAMERA_SCROLL_SPEED / Math.max(0.3, cam.zoom || 1);
+  cam.scrollX += dx * step;
+  cam.scrollY += dy * step;
+}
 
 const localInputSync = createLocalInputSync({
   socket,
@@ -649,6 +674,8 @@ class GameScene extends Phaser.Scene {
     // Creates the map objects based on game data
     buildMap(this, activeMapId);
     mapObjects = getMapObjects(activeMapId);
+    const mapBoundaryConfig = getMapBoundaryConfig(activeMapId);
+    applyMapBounds(this, mapBoundaryConfig);
 
     // Ensure all character animations are registered for this scene
     setupAll(this);
@@ -746,6 +773,10 @@ class GameScene extends Phaser.Scene {
       try {
         matchCoordinator?.dispose();
       } catch (_) {}
+      try {
+        this._mapEditorRuntime?.destroy?.();
+      } catch (_) {}
+      this._mapEditorRuntime = null;
       stopSuddenDeathMusic();
       try {
         this._suddenDeathMusicSfx?.destroy();
@@ -800,18 +831,8 @@ class GameScene extends Phaser.Scene {
     // After sprite exists and body sized, move to a map-appropriate spawn slot (prefer server spawnIndex)
     try {
       const serverIdx = SERVER_SPAWN_INDEX[username];
-      let myIndex;
-      if (typeof serverIdx === "number") {
-        myIndex = Math.max(0, serverIdx);
-      } else {
-        const teamList = (gameData.players || [])
-          .filter((p) => p.team === gameData.yourTeam)
-          .sort((a, b) => a.name.localeCompare(b.name));
-        myIndex = Math.max(
-          0,
-          teamList.findIndex((p) => p.name === username),
-        );
-      }
+      const myIndex =
+        typeof serverIdx === "number" ? Math.max(0, serverIdx) : 0;
       const teamSize = (gameData.players || []).filter(
         (p) => p.team === gameData.yourTeam,
       ).length;
@@ -896,30 +917,73 @@ class GameScene extends Phaser.Scene {
 
     // Camera: smooth follow
     const cam = this.cameras.main;
-
-    // Starting zoom; update() adjusts this dynamically based on player height.
-    cam.setZoom(1.7);
-
-    // Horizontal: keep the 1700px camera window centered on the map content
-    // (which always sits at game.config.width / 2). This decouples the camera
-    // from the total world width, so expanding the canvas for device clipping
-    // never shifts the visible play area.
-    // Vertical: keep slight top headroom without wasting too much empty space.
-    const contentCenterX = this.game.config.width / 2;
-    cam.setBounds(contentCenterX - 850, -40, 2000, this.game.config.height);
-
-    // Deadzone: small central box - camera only chases when player exits it.
-    cam.setDeadzone(50, 50);
-
-    // Downward bias: keep baseline framing close to original feel.
-    // This places the player in the upper half of the frame when on high
-    // platforms, naturally revealing the content below them.
-    cam.setFollowOffset(0, 120);
+    if (!mapBoundaryConfig?.camera) {
+      cam.setZoom(1.7);
+      const contentCenterX = this.game.config.width / 2;
+      cam.setBounds(contentCenterX - 850, -40, 2000, this.game.config.height);
+      cam.setDeadzone(50, 50);
+      cam.setFollowOffset(0, 120);
+    }
 
     // lerpX=0.08 for crisp horizontal tracking; lerpY=0.05 is deliberately
     // lazier so the vertical frame shifts more gently - vertical centering is
     // less critical than horizontal awareness.
     cam.startFollow(player, false, 0.08, 0.05);
+    this._editModeActive = false;
+    this._editorCamKeys = this.input.keyboard.addKeys({
+      left: Phaser.Input.Keyboard.KeyCodes.LEFT,
+      right: Phaser.Input.Keyboard.KeyCodes.RIGHT,
+      up: Phaser.Input.Keyboard.KeyCodes.UP,
+      down: Phaser.Input.Keyboard.KeyCodes.DOWN,
+      leftAlt: Phaser.Input.Keyboard.KeyCodes.A,
+      rightAlt: Phaser.Input.Keyboard.KeyCodes.D,
+      upAlt: Phaser.Input.Keyboard.KeyCodes.W,
+      downAlt: Phaser.Input.Keyboard.KeyCodes.S,
+    });
+
+    if (!this._mapEditorRuntime) {
+      this._mapEditorRuntime = createMapEditorRuntime({
+        scene: this,
+        mapId: activeMapId,
+        mapObjects,
+        canEdit: !!gameData?.isAdmin,
+        onCreateMapObject: (mapObject) => {
+          if (!mapObject) return;
+          try {
+            if (player) this.physics.add.collider(player, mapObject);
+          } catch (_) {}
+          for (const p of Object.values(opponentPlayers || {})) {
+            try {
+              if (p?.opponent) this.physics.add.collider(p.opponent, mapObject);
+            } catch (_) {}
+          }
+          for (const p of Object.values(teamPlayers || {})) {
+            try {
+              if (p?.opponent) this.physics.add.collider(p.opponent, mapObject);
+            } catch (_) {}
+          }
+        },
+        onEditModeChange: (editing) => {
+          try {
+            this._editModeActive = !!editing;
+            window.__BB_MAP_EDIT_ACTIVE = !!editing;
+            if (this._editModeActive) {
+              try {
+                player?.setVelocity?.(0, 0);
+              } catch (_) {}
+              try {
+                this.cameras.main.stopFollow();
+              } catch (_) {}
+            } else {
+              try {
+                this.cameras.main.startFollow(player, false, 0.08, 0.05);
+              } catch (_) {}
+            }
+            hud.setTimerPaused?.(!!editing);
+          } catch (_) {}
+        },
+      });
+    }
     // End camera setup
   }
 
@@ -948,25 +1012,13 @@ class GameScene extends Phaser.Scene {
               ? existing.spawnIndex
               : typeof SERVER_SPAWN_INDEX[playerData.name] === "number"
                 ? SERVER_SPAWN_INDEX[playerData.name]
-                : undefined;
-          const index =
-            typeof idx === "number"
-              ? idx
-              : (() => {
-                  const teamList = (gameData.players || [])
-                    .filter((p) => p.team === playerData.team)
-                    .sort((a, b) => a.name.localeCompare(b.name));
-                  return Math.max(
-                    0,
-                    teamList.findIndex((p) => p.name === playerData.name),
-                  );
-                })();
+                : 0;
           positionSpawn(
             this,
             existing.opponent,
             activeMapId,
             playerData.team,
-            index,
+            Math.max(0, idx),
             (gameData.players || []).filter((p) => p.team === playerData.team)
               .length,
           );
@@ -1002,15 +1054,7 @@ class GameScene extends Phaser.Scene {
             ? opPlayer.spawnIndex
             : typeof playerData.spawnIndex === "number"
               ? playerData.spawnIndex
-              : (() => {
-                  const teamList = (gameData.players || [])
-                    .filter((p) => p.team === playerData.team)
-                    .sort((a, b) => a.name.localeCompare(b.name));
-                  return Math.max(
-                    0,
-                    teamList.findIndex((p) => p.name === playerData.name),
-                  );
-                })();
+              : 0;
         const index = Math.max(0, idx);
         positionSpawn(
           this,
@@ -1065,10 +1109,21 @@ class GameScene extends Phaser.Scene {
     // Powerup visuals/effects are rendered for all players every frame.
     this._renderPowerupsAndEffects();
 
-    updateDynamicCamera(this, player, Phaser);
+    if (this._editModeActive) {
+      updateEditorCamera(this);
+    } else {
+      updateDynamicCamera(this, player, Phaser);
+    }
 
     // Only process if game is initialized
     if (!hasJoined || !gameInitialized || dead || gameEnded) return;
+
+    if (this._editModeActive) {
+      try {
+        player?.setVelocity?.(0, 0);
+      } catch (_) {}
+      return;
+    }
 
     localInputSync.sync(this, player, {
       dead,

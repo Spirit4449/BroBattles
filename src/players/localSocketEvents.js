@@ -24,8 +24,17 @@ export function bindLocalSocketEvents({
   getWallSlideLoopSfx,
   getWallSlideLoopPlaying,
   setWallSlideLoopPlaying,
+  getIsEditMode,
+  onLocalDeath,
   onDebug,
 }) {
+  const isEditModeActive = () => {
+    try {
+      if (typeof getIsEditMode === "function") return !!getIsEditMode();
+    } catch (_) {}
+    return !!window.__BB_MAP_EDIT_ACTIVE;
+  };
+
   const healthUpdateHandler = (data) => {
     if (data.username !== getUsername()) return;
 
@@ -42,6 +51,13 @@ export function bindLocalSocketEvents({
     setCurrentHealthValue(data.health);
 
     const delta = getCurrentHealth() - prev;
+
+    if (isEditModeActive() && delta < 0) {
+      setCurrentHealthValue(prev);
+      updateHealthBar();
+      return;
+    }
+
     onDebug?.();
 
     if (scene && player && delta !== 0) {
@@ -65,6 +81,11 @@ export function bindLocalSocketEvents({
     if (getCurrentHealth() <= 0) {
       if (!getDead()) {
         setDead(true);
+        if (typeof onLocalDeath === "function") {
+          try {
+            onLocalDeath();
+          } catch (_) {}
+        }
         if (getWallSlideLoopPlaying() && getWallSlideLoopSfx()) {
           try {
             getWallSlideLoopSfx().stop();
@@ -130,6 +151,7 @@ export function bindLocalSocketEvents({
   };
 
   const knockbackHandler = (data) => {
+    if (isEditModeActive()) return;
     const player = getPlayer();
     if (!player || !player.body || getDead()) return;
 

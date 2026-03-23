@@ -10,7 +10,8 @@ const { registerPlayerCardsRoutes } = require("./modules/playerCardsRoutes");
 const { registerProfileRoutes } = require("./modules/profileRoutes");
 
 function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
-  const { getOrCreateCurrentUser, requireCurrentUser, isGuest } = auth;
+  const { getOrCreateCurrentUser, requireCurrentUser, isGuest, isAdminUser } =
+    auth;
 
   registerPageRoutes({
     app,
@@ -38,6 +39,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
     app,
     db,
     requireCurrentUser,
+    isAdminUser,
   });
 
   registerAuthRoutes({

@@ -32,6 +32,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
         isOwner: false,
         maxLifetime: 7000,
         hitCooldown: 300,
+        chargeRatio: 0,
         ctrl1YOffset: 20,
         ctrl2YOffset: -40,
       },
@@ -165,6 +166,9 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       target: targetUsername,
       damage: this.cfg.damage,
       attackType: this.cfg.attackType || "basic",
+      chargeRatio: Number.isFinite(this.cfg.chargeRatio)
+        ? this.cfg.chargeRatio
+        : 0,
       instanceId: this.cfg.instanceId,
       attackTime: Date.now(),
       gameId: this.cfg.gameId,

@@ -11,11 +11,16 @@ import {
   resolveSessionDamage,
 } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
+import {
+  getChargeRatioFromContext,
+  scaleByCharge,
+} from "../shared/chargeAttack";
 
 // Single source of truth for this character's name/key
 const NAME = "ninja";
 const NINJA_TUNING = getCharacterTuning(NAME);
 const RETURNING_SHURIKEN = NINJA_TUNING.attack?.returningShuriken || {};
+const NINJA_CHARGE = NINJA_TUNING.attack?.charge || {};
 
 class Ninja extends CharacterEntityBase {
   static key = NAME;
@@ -131,7 +136,9 @@ class Ninja extends CharacterEntityBase {
   }
 
   // Ninja-specific attack: spawn a returning shuriken with owner-side collisions
-  handlePointerDown() {
+  handlePointerDown(attackContext) {
+    const context = attackContext || this.consumeAttackContext();
+    const chargeRatio = getChargeRatioFromContext(context);
     const p = this.player;
     const direction = p.flipX ? -1 : 1;
 
@@ -165,8 +172,13 @@ class Ninja extends CharacterEntityBase {
         gameId: this.gameId,
         isOwner: true,
         damage,
+        chargeRatio,
         rotationSpeed: RETURNING_SHURIKEN.rotationSpeed || 2000,
-        forwardDistance: RETURNING_SHURIKEN.forwardDistance || 500,
+        forwardDistance: scaleByCharge({
+          baseValue: RETURNING_SHURIKEN.forwardDistance || 500,
+          chargeRatio,
+          maxScale: NINJA_CHARGE.rangeScaleMax || 1,
+        }),
         arcHeight: RETURNING_SHURIKEN.arcHeight || 160,
         outwardDuration: RETURNING_SHURIKEN.outwardDuration || 380,
         returnSpeed: RETURNING_SHURIKEN.returnSpeed || 900,
@@ -205,6 +217,7 @@ class Ninja extends CharacterEntityBase {
         outwardDuration: config.outwardDuration,
         returnSpeed: config.returnSpeed,
         rotationSpeed: config.rotationSpeed,
+        chargeRatio,
       };
     });
 

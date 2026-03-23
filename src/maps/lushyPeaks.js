@@ -3,7 +3,7 @@
 // positionSpawn().  To add an entirely new map, follow the same pattern and
 // register it in src/maps/manifest.js.
 
-import { snapSpriteToPlatform } from "./mapUtils";
+import { getSpawnPointForTeam, placeSpriteAtConfiguredSpawn } from "./mapUtils";
 
 // ── Layout constants ─────────────────────────────────────────────────────────
 const SCALE_MAIN = 0.7; // base + centre platform + side platforms
@@ -16,14 +16,75 @@ const SIDE_Y = 325; // side platform Y
 const SMALL_DX = 530; // small corner platform X offset from centre
 const SMALL_Y = 580; // small corner platform Y
 
-// team1 spawns on base (bottom), team2 spawns on the elevated platform (top)
-const TEAM1_PLATFORM = "base";
-const TEAM2_PLATFORM = "top";
+const SPAWN_CONFIG = {
+  players: {
+    team1: {
+      1: [{ dx: 0, anchorId: "base" }],
+      2: [
+        { dx: -120, anchorId: "base" },
+        { dx: 120, anchorId: "base" },
+      ],
+      3: [
+        { dx: -180, anchorId: "base" },
+        { dx: 0, anchorId: "base" },
+        { dx: 180, anchorId: "base" },
+      ],
+    },
+    team2: {
+      1: [{ dx: 0, anchorId: "top" }],
+      2: [
+        { dx: -120, anchorId: "top" },
+        { dx: 120, anchorId: "top" },
+      ],
+      3: [
+        { dx: -180, anchorId: "top" },
+        { dx: 0, anchorId: "top" },
+        { dx: 180, anchorId: "top" },
+      ],
+    },
+  },
+  powerups: [
+    { x: 935, y: 484 },
+    { x: 1150, y: 484 },
+    { x: 1365, y: 484 },
+    { x: 1005, y: 144 },
+    { x: 1150, y: 144 },
+    { x: 1295, y: 144 },
+    { x: 645, y: 166 },
+    { x: 785, y: 166 },
+    { x: 1515, y: 166 },
+    { x: 1655, y: 166 },
+    { x: 592, y: 446 },
+    { x: 1708, y: 446 },
+  ],
+};
+
+const BOUNDARY_CONFIG = {
+  world: { x: 0, y: 0, width: 2300, height: 1000 },
+  camera: {
+    x: -200,
+    y: -40,
+    width: 2000,
+    height: 1000,
+    zoom: 1.7,
+    deadzoneWidth: 50,
+    deadzoneHeight: 50,
+    followOffsetY: 120,
+  },
+};
+
+const EDITOR_TEXTURE_KEYS = [
+  "lushy-base",
+  "lushy-platform",
+  "lushy-side-platform",
+  "mangrove-tiny-platform",
+];
 
 // ── Runtime platform references (set during build) ───────────────────────────
 let _base = null;
 let _platform = null;
 const _objects = [];
+const _spawnAnchors = Object.create(null);
 
 // ── Map definition ───────────────────────────────────────────────────────────
 export const definition = {
@@ -52,6 +113,8 @@ export const definition = {
 
     _base = plat("lushy-base", cx, BASE_Y, SCALE_MAIN);
     _platform = plat("lushy-platform", cx, PLATFORM_Y, SCALE_MAIN);
+    _spawnAnchors.base = _base;
+    _spawnAnchors.top = _platform;
     plat("lushy-side-platform", cx - SIDE_DX, SIDE_Y, SCALE_MAIN);
     plat("lushy-side-platform", cx + SIDE_DX, SIDE_Y, SCALE_MAIN);
     plat("mangrove-tiny-platform", cx - SMALL_DX, SMALL_Y, SCALE_TINY);
@@ -70,13 +133,25 @@ export const definition = {
    * @param {number}  teamSize  — total players on that team
    */
   positionSpawn(scene, sprite, team, index, teamSize) {
-    const target = team === "team2" ? _platform : _base;
-    if (!sprite || !target) return;
-    const bounds = target.getBounds();
-    const slots = Math.max(1, Number(teamSize) || 1);
-    const i = Math.min(slots - 1, Math.max(0, Number(index) || 0));
-    const cx = bounds.left + bounds.width * ((i + 0.5) / slots);
-    snapSpriteToPlatform(sprite, target, cx, 2);
+    const point = getSpawnPointForTeam(SPAWN_CONFIG, team, index, teamSize);
+    if (!point) return;
+    placeSpriteAtConfiguredSpawn(scene, sprite, point, _spawnAnchors, 2);
+  },
+
+  getSpawnConfig() {
+    return SPAWN_CONFIG;
+  },
+
+  getBoundaryConfig() {
+    return BOUNDARY_CONFIG;
+  },
+
+  getEditorTextureKeys() {
+    return EDITOR_TEXTURE_KEYS;
+  },
+
+  getSpawnAnchors() {
+    return _spawnAnchors;
   },
 };
 
