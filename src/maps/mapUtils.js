@@ -3,57 +3,73 @@
 // Imported by every map module — eliminates the copy-paste duplication.
 
 /**
- * Snap a sprite so its feet land exactly on top of a platform.
- * Works for both arcade-physics bodies and plain display objects.
+ * Snap a sprite so its bottom lands exactly on top of a platform.
+ * Simple approach: get platform top, position sprite so its display bottom aligns with it.
  *
  * @param {Phaser.GameObjects.Sprite} sprite
  * @param {Phaser.GameObjects.Sprite} platform
  * @param {number} targetX  — desired center X
- * @param {number} [epsilon=2] — tiny upward nudge so the physics engine never
- *   considers the sprite "below" the surface and tunnels through it.
+ * @param {number} [epsilon=2] — tiny upward nudge to prevent tunneling
  */
 export function snapSpriteToPlatform(sprite, platform, targetX, epsilon = 2) {
   if (!sprite || !platform) return;
 
-  const topY = platform.body ? platform.body.top : platform.getTopCenter().y;
-  if (sprite.body) {
-    const body = sprite.body;
-    const halfH = (Number(body.height) || 0) / 2;
-    const offsetY = Number(body.offset?.y) || 0;
-    const targetY = topY - halfH - offsetY - epsilon;
+  // Get platform top Y coordinate
+  const platformTopY = platform.body
+    ? platform.body.top
+    : platform.getTopCenter().y;
 
-    if (typeof body.reset === "function") {
-      body.reset(targetX, targetY);
-    } else {
-      sprite.setPosition(targetX, targetY);
-    }
+  // Position sprite so its display bottom sits on the platform top
+  // Sprite display height = height * scaleY
+  const displayHeight = sprite.height * Math.abs(sprite.scaleY || 1);
+  const halfDisplayHeight = displayHeight / 2;
 
-    if (body.velocity?.set) body.velocity.set(0, 0);
-    if (body.acceleration?.set) body.acceleration.set(0, 0);
-    if (typeof body.updateFromGameObject === "function") {
-      body.updateFromGameObject();
-      const desiredBottom = topY - epsilon;
-      const correction = desiredBottom - body.bottom;
-      if (Math.abs(correction) > 0.5) {
-        sprite.y += correction;
-        body.updateFromGameObject();
-      }
-    }
+  // Sprite center Y = platformTopY - halfDisplayHeight - epsilon
+  const targetY = platformTopY - halfDisplayHeight - epsilon;
+
+  // Set position and reset physics
+  if (sprite.body && typeof sprite.body.reset === "function") {
+    sprite.body.reset(targetX, targetY);
   } else {
-    const h = Number(sprite.height) || 0;
-    sprite.setPosition(targetX, topY - h / 2 - epsilon);
+    sprite.setPosition(targetX, targetY);
+  }
+
+  // Clear any existing velocity
+  if (sprite.body?.velocity?.set) sprite.body.velocity.set(0, 0);
+  if (sprite.body?.acceleration?.set) sprite.body.acceleration.set(0, 0);
+
+  // Update physics body position
+  if (sprite.body?.updateFromGameObject) {
+    sprite.body.updateFromGameObject();
   }
 }
 
-function resolveSpawnX(scene, point) {
+function getAnchorCenterX(anchor) {
+  if (!anchor) return null;
+
+  const bodyCenterX = Number(anchor?.body?.center?.x);
+  if (Number.isFinite(bodyCenterX)) return bodyCenterX;
+
+  const anchorX = Number(anchor?.x);
+  if (Number.isFinite(anchorX)) return anchorX;
+
+  return null;
+}
+
+function resolveSpawnX(scene, point, anchor = null) {
   const x = Number(point?.x);
   if (Number.isFinite(x)) return x;
+
   const dx = Number(point?.dx);
-  if (Number.isFinite(dx)) {
-    const cx =
-      Number(scene?.scale?.width || scene?.game?.config?.width || 0) / 2;
-    return cx + dx;
+  const anchorX = getAnchorCenterX(anchor);
+  if (Number.isFinite(anchorX)) {
+    return Number.isFinite(dx) ? anchorX + dx : anchorX;
   }
+
+  if (Number.isFinite(dx)) {
+    return getSceneWorldCenterX(scene) + dx;
+  }
+
   return null;
 }
 
@@ -72,11 +88,12 @@ export function placeSpriteAtConfiguredSpawn(
 ) {
   if (!scene || !sprite || !point) return;
 
-  const x = resolveSpawnX(scene, point);
-  if (!Number.isFinite(x)) return;
-
   const anchorId = String(point?.anchorId || "").trim();
   const anchor = anchorId ? anchors?.[anchorId] : null;
+
+  const x = resolveSpawnX(scene, point, anchor);
+  if (!Number.isFinite(x)) return;
+
   if (anchor) {
     snapSpriteToPlatform(sprite, anchor, x, epsilon);
     return;
@@ -92,11 +109,12 @@ export function placeSpriteAtConfiguredSpawn(
 }
 
 export function getSpawnPreviewPoint(scene, point, anchors = {}, epsilon = 2) {
-  const x = resolveSpawnX(scene, point);
-  if (!Number.isFinite(x)) return null;
-
   const anchorId = String(point?.anchorId || "").trim();
   const anchor = anchorId ? anchors?.[anchorId] : null;
+
+  const x = resolveSpawnX(scene, point, anchor);
+  if (!Number.isFinite(x)) return null;
+
   if (anchor) {
     const topY = anchor.body ? anchor.body.top : anchor.getTopCenter().y;
     return { x, y: topY - epsilon };
@@ -120,6 +138,25 @@ export function getSpawnPointForTeam(spawnConfig, team, index, teamSize) {
 
   const i = Math.max(0, Math.min(slots.length - 1, Number(index) || 0));
   return slots[i] || slots[0];
+}
+
+export function getSceneWorldCenterX(scene) {
+  const worldCenter = Number(scene?.physics?.world?.bounds?.centerX);
+  if (Number.isFinite(worldCenter)) return worldCenter;
+
+  const worldX = Number(scene?.physics?.world?.bounds?.x);
+  const worldW = Number(scene?.physics?.world?.bounds?.width);
+  if (Number.isFinite(worldX) && Number.isFinite(worldW) && worldW > 0) {
+    return worldX + worldW / 2;
+  }
+
+  const scaleW = Number(scene?.scale?.width);
+  if (Number.isFinite(scaleW) && scaleW > 0) return scaleW / 2;
+
+  const gameW = Number(scene?.game?.config?.width);
+  if (Number.isFinite(gameW) && gameW > 0) return gameW / 2;
+
+  return 1150;
 }
 
 export function applyMapBounds(scene, boundsConfig = {}) {
@@ -172,5 +209,93 @@ export function applyMapBounds(scene, boundsConfig = {}) {
     if (Number.isFinite(zoom)) {
       cam.setZoom(zoom);
     }
+  }
+}
+
+function createConfiguredPlatform(scene, row) {
+  const key = String(row?.textureKey || "").trim();
+  if (!key || !scene?.textures?.exists(key)) return null;
+
+  const x = Number(row?.x);
+  const y = Number(row?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+
+  const sprite = scene.physics.add.sprite(x, y, key);
+  sprite.body.allowGravity = false;
+  sprite.setImmovable(true);
+  sprite.setScale(Number(row?.scaleX) || 1, Number(row?.scaleY) || 1);
+  sprite.setFlipX(!!row?.flipX);
+
+  const bw = Number(row?.body?.width);
+  const bh = Number(row?.body?.height);
+  if (
+    sprite.body &&
+    Number.isFinite(bw) &&
+    Number.isFinite(bh) &&
+    bw > 0 &&
+    bh > 0
+  ) {
+    sprite.body.setSize(bw, bh);
+  }
+  const ox = Number(row?.body?.offsetX);
+  const oy = Number(row?.body?.offsetY);
+  if (sprite.body && Number.isFinite(ox) && Number.isFinite(oy)) {
+    sprite.body.setOffset(ox, oy);
+  }
+
+  if (sprite.body && typeof sprite.body.updateFromGameObject === "function") {
+    sprite.body.updateFromGameObject();
+  }
+  return sprite;
+}
+
+function createConfiguredBoundary(scene, row) {
+  const x = Number(row?.x);
+  const y = Number(row?.y);
+  const w = Number(row?.width);
+  const h = Number(row?.height);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0)
+    return null;
+
+  const zone = scene.add.zone(x, y, w, h);
+  scene.physics.add.existing(zone, true);
+  zone.body.checkCollision.up = row?.collision?.up !== false;
+  zone.body.checkCollision.down = row?.collision?.down !== false;
+  zone.body.checkCollision.left = row?.collision?.left !== false;
+  zone.body.checkCollision.right = row?.collision?.right !== false;
+  return zone;
+}
+
+/**
+ * Appends platform/boundary objects to an existing map object list using
+ * reusable config from editor-exported snippets.
+ *
+ * @param {Phaser.Scene} scene
+ * @param {Array} objects - map object array to append into
+ * @param {object} layoutConfig - { platforms: [], hitboxes: [] }
+ */
+export function appendLayoutObjectsFromConfig(
+  scene,
+  objects,
+  layoutConfig = {},
+) {
+  if (!scene || !Array.isArray(objects) || !layoutConfig) return;
+
+  const platforms = Array.isArray(layoutConfig.platforms)
+    ? layoutConfig.platforms
+    : [];
+  const hitboxes = Array.isArray(layoutConfig.hitboxes)
+    ? layoutConfig.hitboxes
+    : [];
+
+  for (const row of platforms) {
+    const sprite = createConfiguredPlatform(scene, row);
+    if (sprite) objects.push(sprite);
+  }
+
+  for (const row of hitboxes) {
+    const zone = createConfiguredBoundary(scene, row);
+    if (zone) objects.push(zone);
   }
 }

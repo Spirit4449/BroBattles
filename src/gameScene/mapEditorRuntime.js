@@ -62,6 +62,28 @@ function nearestWithThreshold(value, candidates, threshold = 40) {
   return best;
 }
 
+function findNearestCandidate(value, candidates, threshold = 40) {
+  let best = null;
+  let bestDist = threshold + 1;
+  for (const c of candidates) {
+    if (!Number.isFinite(c)) continue;
+    const d = Math.abs(c - value);
+    if (d < bestDist) {
+      best = c;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
+function clampNum(v, min, max) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return min;
+  if (Number.isFinite(min) && n < min) return min;
+  if (Number.isFinite(max) && n > max) return max;
+  return n;
+}
+
 export function createMapEditorRuntime({
   scene,
   mapId,
@@ -97,6 +119,8 @@ export function createMapEditorRuntime({
     pendingDragSnapshot: null,
     groupDragStart: null,
     handleDragStart: null,
+    snapGuideX: null,
+    snapGuideY: null,
     history: { stack: [], index: -1 },
   };
 
@@ -139,6 +163,7 @@ export function createMapEditorRuntime({
       #map-edit-panel button{background:#16384f;color:#e8f7ff;border:1px solid #4ec6ff;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px}
       #map-edit-panel button.warn{border-color:#ff9f5f;color:#ffd8bd}
       #map-edit-panel button.on{background:#215773;border-color:#8adfff;color:#f4fbff}
+      #map-edit-panel button.off{background:#3a4552;border-color:#596776;color:#a9b7c7;opacity:.72}
       #map-edit-panel .tiny{font-size:11px;opacity:.85;line-height:1.35;margin:6px 0 0 0}
     </style>
     <div id="map-edit-panel">
@@ -170,9 +195,16 @@ export function createMapEditorRuntime({
         <div class="btns">
           <button id="map-edit-add-platform" type="button">Add Platform</button>
           <button id="map-edit-add-boundary" type="button">Add Boundary Zone</button>
-          <button id="map-edit-apply" type="button">Apply Fields</button>
+          <button id="map-edit-center-scene" type="button">Center Scene</button>
           <button id="map-edit-export" class="warn" type="button">Export Std JSON</button>
           <button id="map-edit-export-snippets" type="button">Export Map Snippets</button>
+        </div>
+
+        <div class="btns" id="map-edit-boundary-sides">
+          <button id="map-edit-side-up" type="button">Top</button>
+          <button id="map-edit-side-down" type="button">Bottom</button>
+          <button id="map-edit-side-left" type="button">Left</button>
+          <button id="map-edit-side-right" type="button">Right</button>
         </div>
 
         <div class="btns">
@@ -197,14 +229,31 @@ export function createMapEditorRuntime({
         </div>
 
         <div class="btns">
-          <button id="map-edit-import" type="button">Apply JSON</button>
+          <button id="map-edit-import" type="button">Import JSON</button>
         </div>
         <textarea id="map-edit-json" placeholder="Paste/export standard map editor JSON here..."></textarea>
-        <p class="tiny">Shift+Click to multi-select. Drag one selected object to move selected group. Ctrl+D toggles editor, Tab hides/shows menu, Ctrl+Z/Ctrl+Y undo-redo. Hold Shift while dragging to snap. Handle dragging uses aspect-ratio scaling only.</p>
+        <p class="tiny">Single selection editor. Ctrl+D toggles editor, Ctrl+Z/Ctrl+Y undo-redo. Hold Shift while dragging to snap. Field edits apply when you leave a field (blur/change/enter). Boundary side toggles are editable only for boundary zones and disabled sides are greyed out.</p>
       </div>
     </div>
   `;
   document.body.appendChild(host);
+
+  // Keep panel interaction from reaching the Phaser canvas beneath it.
+  const swallowUiPointer = (ev) => {
+    ev.stopPropagation();
+  };
+  [
+    "pointerdown",
+    "pointerup",
+    "pointermove",
+    "mousedown",
+    "mouseup",
+    "click",
+    "dblclick",
+    "touchstart",
+    "touchend",
+    "wheel",
+  ].forEach((name) => host.addEventListener(name, swallowUiPointer));
 
   const el = {
     min: host.querySelector("#map-edit-min"),
@@ -214,7 +263,7 @@ export function createMapEditorRuntime({
     focus: host.querySelector("#map-edit-focus"),
     addPlatform: host.querySelector("#map-edit-add-platform"),
     addBoundary: host.querySelector("#map-edit-add-boundary"),
-    apply: host.querySelector("#map-edit-apply"),
+    centerScene: host.querySelector("#map-edit-center-scene"),
     export: host.querySelector("#map-edit-export"),
     exportSnippets: host.querySelector("#map-edit-export-snippets"),
     importBtn: host.querySelector("#map-edit-import"),
@@ -228,6 +277,10 @@ export function createMapEditorRuntime({
     ox: host.querySelector("#map-edit-ox"),
     oy: host.querySelector("#map-edit-oy"),
     json: host.querySelector("#map-edit-json"),
+    sideUp: host.querySelector("#map-edit-side-up"),
+    sideDown: host.querySelector("#map-edit-side-down"),
+    sideLeft: host.querySelector("#map-edit-side-left"),
+    sideRight: host.querySelector("#map-edit-side-right"),
   };
 
   function pushSelectable(rec) {
@@ -248,10 +301,9 @@ export function createMapEditorRuntime({
   }
 
   function setSelected(id, additive = false) {
-    if (!additive) state.selectedIds.clear();
+    state.selectedIds.clear();
     if (!id) return;
-    if (additive && state.selectedIds.has(id)) state.selectedIds.delete(id);
-    else state.selectedIds.add(id);
+    state.selectedIds.add(id);
     state.selectedId = id;
     refreshSelect();
     syncInputsFromSelection();
@@ -290,21 +342,22 @@ export function createMapEditorRuntime({
     };
   }
 
-  function serializeEntity(entity) {
+  function serializeEntity(entity, rounded = true) {
+    const num = (v) => (rounded ? round2(v) : Number(v || 0));
     const go = entity.go;
     const body = go.body || null;
     return {
       type: entity.type,
       textureKey: go.texture?.key || null,
-      x: round2(go.x),
-      y: round2(go.y),
-      scaleX: round2(go.scaleX || 1),
-      scaleY: round2(go.scaleY || 1),
+      x: num(go.x),
+      y: num(go.y),
+      scaleX: num(go.scaleX || 1),
+      scaleY: num(go.scaleY || 1),
       flipX: !!go.flipX,
-      width: round2(body?.width || go.width || 0),
-      height: round2(body?.height || go.height || 0),
-      offsetX: round2(body?.offset?.x || 0),
-      offsetY: round2(body?.offset?.y || 0),
+      width: num(body?.width || go.width || 0),
+      height: num(body?.height || go.height || 0),
+      offsetX: num(body?.offset?.x || 0),
+      offsetY: num(body?.offset?.y || 0),
       collision: body
         ? {
             up: body.checkCollision.up !== false,
@@ -318,9 +371,64 @@ export function createMapEditorRuntime({
 
   function snapshot() {
     return {
-      entities: state.entities.map(serializeEntity),
+      entities: state.entities.map((e) => serializeEntity(e, false)),
       spawns: cloneJson(spawnConfig),
     };
+  }
+
+  function resetHistoryBaseline() {
+    state.history.stack = [snapshot()];
+    state.history.index = 0;
+  }
+
+  function clearEntities() {
+    for (const entity of state.entities) {
+      try {
+        entity.go?.destroy?.();
+      } catch (_) {}
+    }
+    state.entities = [];
+    state.selectables = state.selectables.filter((s) => s.kind !== "entity");
+    mapObjects.length = 0;
+  }
+
+  function rebuildEntitiesFromSnapshotRows(rows) {
+    clearEntities();
+    if (!Array.isArray(rows)) return;
+
+    for (const row of rows) {
+      if (row?.type === "zone") {
+        const zone = createZone(
+          scene,
+          PhaserNs,
+          Number(row?.x) || 0,
+          Number(row?.y) || 0,
+          Math.max(4, Number(row?.width) || 80),
+          Math.max(4, Number(row?.height) || 20),
+        );
+        mapObjects.push(zone);
+        registerEntity(zone, "map");
+        const entity = state.entities[state.entities.length - 1];
+        applyEntityState(entity, row);
+        onCreateMapObject?.(zone);
+        continue;
+      }
+
+      const texture = String(row?.textureKey || "");
+      if (!texture || !scene.textures.exists(texture)) continue;
+      const sprite = scene.physics.add.sprite(
+        Number(row?.x) || 0,
+        Number(row?.y) || 0,
+        texture,
+      );
+      sprite.body.allowGravity = false;
+      sprite.setImmovable(true);
+      mapObjects.push(sprite);
+      registerEntity(sprite, "map");
+      const entity = state.entities[state.entities.length - 1];
+      applyEntityState(entity, row);
+      onCreateMapObject?.(sprite);
+    }
   }
 
   function applyEntityState(entity, row) {
@@ -360,19 +468,15 @@ export function createMapEditorRuntime({
   }
 
   function applySnapshot(s) {
-    if (
-      !s ||
-      !Array.isArray(s.entities) ||
-      s.entities.length !== state.entities.length
-    )
-      return false;
+    if (!s || !Array.isArray(s.entities)) return false;
     state.isApplyingSnapshot = true;
     try {
-      for (let i = 0; i < state.entities.length; i++) {
-        applyEntityState(state.entities[i], s.entities[i]);
-      }
+      rebuildEntitiesFromSnapshotRows(s.entities);
       spawnConfig = cloneJson(s.spawns || spawnConfig);
       rebuildSpawnMarkers();
+      if (state.selectables.length) {
+        setSelected(state.selectables[0].id, false);
+      }
       return true;
     } finally {
       state.isApplyingSnapshot = false;
@@ -391,13 +495,19 @@ export function createMapEditorRuntime({
   }
 
   function undo() {
+    if (state.pendingDragSnapshot) return;
     if (state.history.index <= 0) return;
+    state.groupDragStart = null;
+    state.handleDragStart = null;
     state.history.index -= 1;
     applySnapshot(state.history.stack[state.history.index]);
   }
 
   function redo() {
+    if (state.pendingDragSnapshot) return;
     if (state.history.index >= state.history.stack.length - 1) return;
+    state.groupDragStart = null;
+    state.handleDragStart = null;
     state.history.index += 1;
     applySnapshot(state.history.stack[state.history.index]);
   }
@@ -435,10 +545,12 @@ export function createMapEditorRuntime({
       graphics.setVisible(false);
       for (const h of Object.values(handles)) h.setVisible(false);
       for (const m of state.markers) m.marker.setVisible(false);
+      state.snapGuideX = null;
+      state.snapGuideY = null;
       onEditModeChange?.(false);
       return;
     }
-    setPanelVisibility(!state.panelHidden);
+    setPanelVisibility(true);
     graphics.setVisible(true);
     for (const m of state.markers) m.marker.setVisible(shouldShowMarker(m));
     onEditModeChange?.(true);
@@ -451,8 +563,7 @@ export function createMapEditorRuntime({
       if (rec.kind === "marker" && !shouldShowMarker(rec.ref)) continue;
       const opt = document.createElement("option");
       opt.value = rec.id;
-      const mark = state.selectedIds.has(rec.id) ? "* " : "";
-      opt.textContent = `${mark}${rec.label}`;
+      opt.textContent = rec.label;
       if (rec.id === current) opt.selected = true;
       el.select.appendChild(opt);
     }
@@ -505,6 +616,42 @@ export function createMapEditorRuntime({
     el.oy.value = "0";
   }
 
+  function refreshBoundarySideButtons() {
+    const btns = [el.sideUp, el.sideDown, el.sideLeft, el.sideRight];
+    const selected = findSelected();
+    const isBoundary =
+      selected?.kind === "entity" && selected.ref?.type === "zone";
+    const body = isBoundary ? selected.ref.go?.body : null;
+
+    for (const b of btns) {
+      if (!b) continue;
+      b.disabled = !isBoundary;
+      b.classList.toggle("off", !isBoundary);
+      b.classList.toggle("on", false);
+    }
+    if (!isBoundary || !body) return;
+
+    el.sideUp?.classList.toggle("on", body.checkCollision.up !== false);
+    el.sideUp?.classList.toggle("off", body.checkCollision.up === false);
+    el.sideDown?.classList.toggle("on", body.checkCollision.down !== false);
+    el.sideDown?.classList.toggle("off", body.checkCollision.down === false);
+    el.sideLeft?.classList.toggle("on", body.checkCollision.left !== false);
+    el.sideLeft?.classList.toggle("off", body.checkCollision.left === false);
+    el.sideRight?.classList.toggle("on", body.checkCollision.right !== false);
+    el.sideRight?.classList.toggle("off", body.checkCollision.right === false);
+  }
+
+  function toggleBoundarySide(sideKey) {
+    const selected = findSelected();
+    if (!(selected?.kind === "entity" && selected.ref?.type === "zone")) return;
+    const body = selected.ref.go?.body;
+    if (!body || !body.checkCollision) return;
+    const prev = body.checkCollision[sideKey] !== false;
+    body.checkCollision[sideKey] = !prev;
+    commitHistory();
+    refreshBoundarySideButtons();
+  }
+
   function registerEntity(go, prefix = "obj") {
     if (!go) return;
     const id = `${prefix}-${state.entities.length + 1}`;
@@ -529,7 +676,7 @@ export function createMapEditorRuntime({
 
     go.on("pointerdown", (pointer) => {
       if (!state.enabled) return;
-      setSelected(id, !!pointer?.event?.shiftKey);
+      setSelected(id, false);
     });
   }
 
@@ -541,6 +688,28 @@ export function createMapEditorRuntime({
     }
     state.markers = [];
     state.selectables = state.selectables.filter((s) => s.kind !== "marker");
+  }
+
+  function resolveAnchorSnapAt(x, y) {
+    let best = null;
+    let bestScore = Infinity;
+    const entries = Object.entries(spawnAnchors || {});
+    for (const [anchorId, anchor] of entries) {
+      if (!anchor || !anchor.active) continue;
+      const b = anchor.getBounds?.();
+      if (!b) continue;
+      const topY = anchor.body ? anchor.body.top : b.top;
+      const clampedX = Math.max(b.left, Math.min(b.right, x));
+      const dx = Math.abs(x - clampedX);
+      const dy = Math.abs(y - topY);
+      if (dx > 72 || dy > 90) continue;
+      const score = dx * 1.2 + dy;
+      if (score < bestScore) {
+        bestScore = score;
+        best = { anchorId };
+      }
+    }
+    return best;
   }
 
   function rebuildSpawnMarkers() {
@@ -613,6 +782,8 @@ export function createMapEditorRuntime({
 
   function snapPoint(rawX, rawY, opts = {}) {
     const out = { x: rawX, y: rawY };
+    state.snapGuideX = null;
+    state.snapGuideY = null;
 
     if (state.gridSize > 0) {
       out.x = Math.round(out.x / state.gridSize) * state.gridSize;
@@ -645,12 +816,20 @@ export function createMapEditorRuntime({
       }
     }
 
-    out.x = nearestWithThreshold(out.x, candX, 36);
-    out.y = nearestWithThreshold(out.y, candY, 36);
+    const snappedX = findNearestCandidate(out.x, candX, 36);
+    const snappedY = findNearestCandidate(out.y, candY, 36);
+    if (Number.isFinite(snappedX)) {
+      out.x = snappedX;
+      state.snapGuideX = snappedX;
+    }
+    if (Number.isFinite(snappedY)) {
+      out.y = snappedY;
+      state.snapGuideY = snappedY;
+    }
     return out;
   }
 
-  function applyInputsToSelection() {
+  function applyInputsToSelection({ commit = true } = {}) {
     const x = Number(el.x.value);
     const y = Number(el.y.value);
     const sx = Number(el.sx.value);
@@ -660,45 +839,22 @@ export function createMapEditorRuntime({
     const ox = Number(el.ox.value);
     const oy = Number(el.oy.value);
 
-    const ents = selectedEntities();
-    if (ents.length > 1) {
-      const anchor = ents[ents.length - 1].go;
-      const dx = Number.isFinite(x) ? x - anchor.x : 0;
-      const dy = Number.isFinite(y) ? y - anchor.y : 0;
-      for (const ent of ents) {
-        const go = ent.go;
-        if (Number.isFinite(x) || Number.isFinite(y))
-          go.setPosition(go.x + dx, go.y + dy);
-        if (ent.type === "sprite") {
-          if (Number.isFinite(sx) && Number.isFinite(sy)) go.setScale(sx, sy);
-          if (go.body && Number.isFinite(w) && Number.isFinite(h))
-            go.body.setSize(w, h);
-          if (go.body && Number.isFinite(ox) && Number.isFinite(oy))
-            go.body.setOffset(ox, oy);
-          if (go.body && typeof go.body.reset === "function")
-            go.body.reset(go.x, go.y);
-        } else if (Number.isFinite(w) && Number.isFinite(h) && w > 1 && h > 1) {
-          go.setSize(w, h);
-          if (go.body && typeof go.body.setSize === "function")
-            go.body.setSize(w, h, true);
-          setZoneInteractive(PhaserNs, go, w, h);
-        }
-        updateBodyFromGameObject(go);
-      }
-      commitHistory();
-      syncInputsFromSelection();
-      return;
-    }
-
     const selected = findSelected();
     if (!selected) return;
     if (selected.kind === "entity") {
       const go = selected.ref.go;
       if (Number.isFinite(x) && Number.isFinite(y)) go.setPosition(x, y);
       if (selected.ref.type === "sprite") {
-        if (Number.isFinite(sx) && Number.isFinite(sy)) go.setScale(sx, sy);
-        if (go.body && Number.isFinite(w) && Number.isFinite(h))
-          go.body.setSize(w, h);
+        const nextScaleX = Number.isFinite(sx) ? sx : go.scaleX || 1;
+        const nextScaleY = Number.isFinite(sy) ? sy : go.scaleY || 1;
+        if (Number.isFinite(sx) && Number.isFinite(sy)) {
+          go.setScale(nextScaleX, nextScaleY);
+        }
+        if (go.body && Number.isFinite(w) && Number.isFinite(h)) {
+          const rawW = Math.max(1, w / Math.max(0.0001, Math.abs(nextScaleX)));
+          const rawH = Math.max(1, h / Math.max(0.0001, Math.abs(nextScaleY)));
+          go.body.setSize(rawW, rawH);
+        }
         if (go.body && Number.isFinite(ox) && Number.isFinite(oy))
           go.body.setOffset(ox, oy);
         if (go.body && typeof go.body.reset === "function")
@@ -710,8 +866,9 @@ export function createMapEditorRuntime({
         setZoneInteractive(PhaserNs, go, w, h);
       }
       updateBodyFromGameObject(go);
-      commitHistory();
+      if (commit) commitHistory();
       syncInputsFromSelection();
+      refreshBoundarySideButtons();
       return;
     }
 
@@ -721,7 +878,8 @@ export function createMapEditorRuntime({
     delete point.dx;
     selected.ref.marker.x = point.x;
     if (!point.anchorId) selected.ref.marker.y = point.y;
-    commitHistory();
+    if (commit) commitHistory();
+    refreshBoundarySideButtons();
   }
 
   function createPlatform() {
@@ -758,7 +916,100 @@ export function createMapEditorRuntime({
     commitHistory();
   }
 
-  function exportConfig() {
+  function centerSceneToWorld() {
+    if (!state.entities.length) return;
+    let left = Infinity;
+    let right = -Infinity;
+    let top = Infinity;
+    let bottom = -Infinity;
+    for (const entity of state.entities) {
+      const b = getEntityBounds(entity);
+      left = Math.min(left, b.left);
+      right = Math.max(right, b.right);
+      top = Math.min(top, b.top);
+      bottom = Math.max(bottom, b.bottom);
+    }
+    if (!Number.isFinite(left) || !Number.isFinite(right)) return;
+
+    const world = scene.physics?.world?.bounds;
+    const worldCenterX = Number.isFinite(world?.centerX)
+      ? world.centerX
+      : (Number(scene.scale?.width) || 1300) / 2;
+    const worldCenterY = Number.isFinite(world?.centerY)
+      ? world.centerY
+      : (Number(scene.scale?.height) || 1000) / 2;
+
+    const currentCenterX = (left + right) / 2;
+    const currentCenterY = (top + bottom) / 2;
+    const dx = worldCenterX - currentCenterX;
+    const dy = worldCenterY - currentCenterY;
+
+    for (const entity of state.entities) {
+      const go = entity.go;
+      go.setPosition(go.x + dx, go.y + dy);
+      if (go.body && typeof go.body.reset === "function")
+        go.body.reset(go.x, go.y);
+      updateBodyFromGameObject(go);
+    }
+
+    const players = spawnConfig?.players || {};
+    for (const team of Object.keys(players)) {
+      const byMode = players[team] || {};
+      for (const mode of Object.keys(byMode)) {
+        const list = Array.isArray(byMode[mode]) ? byMode[mode] : [];
+        for (const p of list) {
+          if (Number.isFinite(p?.x)) p.x += dx;
+          else if (Number.isFinite(p?.dx)) p.dx += dx;
+          if (!p?.anchorId && Number.isFinite(p?.y)) p.y += dy;
+        }
+      }
+    }
+    if (Array.isArray(spawnConfig?.powerups)) {
+      for (const p of spawnConfig.powerups) {
+        if (Number.isFinite(p?.x)) p.x += dx;
+        if (Number.isFinite(p?.y)) p.y += dy;
+      }
+    }
+
+    rebuildSpawnMarkers();
+    commitHistory();
+    syncInputsFromSelection();
+  }
+
+  function removeSelectedEntities() {
+    const selectedEntityIds = new Set(
+      [...state.selectedIds].filter(
+        (id) => findSelectableById(id)?.kind === "entity",
+      ),
+    );
+    if (!selectedEntityIds.size) return;
+
+    for (const ent of state.entities) {
+      if (!selectedEntityIds.has(ent.id)) continue;
+      const idx = mapObjects.indexOf(ent.go);
+      if (idx >= 0) mapObjects.splice(idx, 1);
+      try {
+        ent.go.destroy();
+      } catch (_) {}
+    }
+
+    state.entities = state.entities.filter((e) => !selectedEntityIds.has(e.id));
+    state.selectables = state.selectables.filter(
+      (s) => !(s.kind === "entity" && selectedEntityIds.has(s.id)),
+    );
+    for (const id of selectedEntityIds) state.selectedIds.delete(id);
+    if (selectedEntityIds.has(state.selectedId)) state.selectedId = "";
+
+    refreshSelect();
+    if (!state.selectedId && state.selectables.length) {
+      setSelected(state.selectables[0].id, false);
+    } else {
+      syncInputsFromSelection();
+    }
+    commitHistory();
+  }
+
+  function buildExportPayload() {
     const platforms = [];
     const hitboxes = [];
 
@@ -798,13 +1049,17 @@ export function createMapEditorRuntime({
       }
     }
 
-    const payload = {
+    return {
       schema: "bb-map-editor.v1",
       mapId,
       platforms,
       hitboxes,
       spawns: cloneJson(spawnConfig),
     };
+  }
+
+  function exportConfig() {
+    const payload = buildExportPayload();
     const txt = JSON.stringify(payload, null, 2);
     el.json.value = txt;
     if (navigator?.clipboard?.writeText)
@@ -812,26 +1067,22 @@ export function createMapEditorRuntime({
   }
 
   function exportMapSnippets() {
-    let parsed = null;
-    try {
-      parsed = JSON.parse(String(el.json.value || "").trim());
-    } catch (_) {
-      exportConfig();
-      try {
-        parsed = JSON.parse(String(el.json.value || "").trim());
-      } catch (_) {
-        parsed = null;
-      }
-    }
-    if (!parsed || typeof parsed !== "object") return;
+    const parsed = buildExportPayload();
 
     const snippet = [
       "// Paste this into your map module",
       `const SPAWN_CONFIG = ${JSON.stringify(parsed.spawns || {}, null, 2)};`,
       "",
-      "// Optional generated data from editor",
-      `const EDITOR_PLATFORMS = ${JSON.stringify(parsed.platforms || [], null, 2)};`,
-      `const EDITOR_HITBOXES = ${JSON.stringify(parsed.hitboxes || [], null, 2)};`,
+      "// Reusable editor layout for mapUtils.appendLayoutObjectsFromConfig",
+      "const MAP_LAYOUT_CONFIG = {",
+      `  platforms: ${JSON.stringify(parsed.platforms || [], null, 2)},`,
+      `  hitboxes: ${JSON.stringify(parsed.hitboxes || [], null, 2)},`,
+      "};",
+      "",
+      "// In map file:",
+      "// 1) set USE_LAYOUT_CONFIG_ONLY = true",
+      "// 2) import appendLayoutObjectsFromConfig from mapUtils",
+      "// 3) call appendLayoutObjectsFromConfig(scene, _objects, MAP_LAYOUT_CONFIG) inside build()",
     ].join("\n");
 
     el.json.value = snippet;
@@ -909,18 +1160,27 @@ export function createMapEditorRuntime({
     const axis = name === "e" || name === "w" ? "x" : "y";
     const startDist = Math.max(
       1,
-      axis === "x" ? start.width / 2 : start.height / 2,
+      axis === "x" ? start.displayWidth / 2 : start.displayHeight / 2,
     );
     const currDist = Math.max(
       1,
       axis === "x" ? Math.abs(snapped.x - go.x) : Math.abs(snapped.y - go.y),
     );
-    const uniformScale = Math.max(0.05, currDist / startDist);
+    const uniformScale = clampNum(currDist / startDist, 0.05, 50);
 
     if (entity.type === "sprite") {
       const sx = Math.max(0.05, start.scaleX * uniformScale);
       const sy = Math.max(0.05, start.scaleY * uniformScale);
       go.setScale(sx, sy);
+      const nextWidth = Math.max(1, start.displayWidth * uniformScale);
+      const nextHeight = Math.max(1, start.displayHeight * uniformScale);
+      let nextX = go.x;
+      let nextY = go.y;
+      if (name === "e") nextX = start.left + nextWidth / 2;
+      else if (name === "w") nextX = start.right - nextWidth / 2;
+      if (name === "s") nextY = start.top + nextHeight / 2;
+      else if (name === "n") nextY = start.bottom - nextHeight / 2;
+      go.setPosition(nextX, nextY);
       if (go.body && typeof go.body.reset === "function")
         go.body.reset(go.x, go.y);
       updateBodyFromGameObject(go);
@@ -928,8 +1188,17 @@ export function createMapEditorRuntime({
       return;
     }
 
-    const w = Math.max(6, start.width * uniformScale);
-    const h = Math.max(6, start.height * uniformScale);
+    const baseW = Math.max(6, start.width);
+    const baseH = Math.max(6, start.height);
+    const w = axis === "x" ? Math.max(6, baseW * uniformScale) : baseW;
+    const h = axis === "y" ? Math.max(6, baseH * uniformScale) : baseH;
+    let nextX = go.x;
+    let nextY = go.y;
+    if (name === "e") nextX = start.left + w / 2;
+    else if (name === "w") nextX = start.right - w / 2;
+    else if (name === "s") nextY = start.top + h / 2;
+    else if (name === "n") nextY = start.bottom - h / 2;
+    go.setPosition(nextX, nextY);
     go.setSize(w, h);
     if (go.body && typeof go.body.setSize === "function")
       go.body.setSize(w, h, true);
@@ -940,25 +1209,26 @@ export function createMapEditorRuntime({
 
   function drawGrid() {
     if (!state.enabled || !state.showGrid || state.gridSize <= 0) return;
-    const worldW =
-      Number(scene.physics?.world?.bounds?.width) ||
-      Number(scene.scale?.width) ||
-      1300;
-    const worldH =
-      Number(scene.physics?.world?.bounds?.height) ||
-      Number(scene.scale?.height) ||
-      1000;
+    const wb = scene.physics?.world?.bounds;
+    const worldX = Number.isFinite(wb?.x) ? wb.x : 0;
+    const worldY = Number.isFinite(wb?.y) ? wb.y : 0;
+    const worldW = Number.isFinite(wb?.width)
+      ? wb.width
+      : Number(scene.scale?.width) || 1300;
+    const worldH = Number.isFinite(wb?.height)
+      ? wb.height
+      : Number(scene.scale?.height) || 1000;
     graphics.lineStyle(1, 0x376481, 0.28);
-    for (let x = 0; x <= worldW; x += state.gridSize) {
+    for (let x = worldX; x <= worldX + worldW; x += state.gridSize) {
       graphics.beginPath();
-      graphics.moveTo(x, 0);
-      graphics.lineTo(x, worldH);
+      graphics.moveTo(x, worldY);
+      graphics.lineTo(x, worldY + worldH);
       graphics.strokePath();
     }
-    for (let y = 0; y <= worldH; y += state.gridSize) {
+    for (let y = worldY; y <= worldY + worldH; y += state.gridSize) {
       graphics.beginPath();
-      graphics.moveTo(0, y);
-      graphics.lineTo(worldW, y);
+      graphics.moveTo(worldX, y);
+      graphics.lineTo(worldX + worldW, y);
       graphics.strokePath();
     }
   }
@@ -968,6 +1238,76 @@ export function createMapEditorRuntime({
     if (!state.enabled) return;
 
     drawGrid();
+
+    const wb = scene.physics?.world?.bounds;
+    const worldX = Number.isFinite(wb?.x) ? wb.x : 0;
+    const worldY = Number.isFinite(wb?.y) ? wb.y : 0;
+    const worldW = Number.isFinite(wb?.width)
+      ? wb.width
+      : Number(scene.scale?.width) || 1300;
+    const worldH = Number.isFinite(wb?.height)
+      ? wb.height
+      : Number(scene.scale?.height) || 1000;
+
+    const cx = worldX + worldW / 2;
+    const cy = worldY + worldH / 2;
+    const q1x = worldX + worldW * 0.25;
+    const q3x = worldX + worldW * 0.75;
+    const q1y = worldY + worldH * 0.25;
+    const q3y = worldY + worldH * 0.75;
+
+    graphics.lineStyle(1.5, 0xffd166, 0.82);
+    graphics.strokeLineShape(
+      new PhaserNs.Geom.Line(worldX, worldY, worldX + worldW, worldY),
+    );
+    graphics.strokeLineShape(
+      new PhaserNs.Geom.Line(worldX, worldY, worldX, worldY + worldH),
+    );
+
+    graphics.lineStyle(1.8, 0x72f1b8, 0.82);
+    graphics.strokeLineShape(
+      new PhaserNs.Geom.Line(cx, worldY, cx, worldY + worldH),
+    );
+    graphics.strokeLineShape(
+      new PhaserNs.Geom.Line(worldX, cy, worldX + worldW, cy),
+    );
+
+    graphics.lineStyle(1.2, 0x93c5fd, 0.58);
+    graphics.strokeLineShape(
+      new PhaserNs.Geom.Line(q1x, worldY, q1x, worldY + worldH),
+    );
+    graphics.strokeLineShape(
+      new PhaserNs.Geom.Line(q3x, worldY, q3x, worldY + worldH),
+    );
+    graphics.strokeLineShape(
+      new PhaserNs.Geom.Line(worldX, q1y, worldX + worldW, q1y),
+    );
+    graphics.strokeLineShape(
+      new PhaserNs.Geom.Line(worldX, q3y, worldX + worldW, q3y),
+    );
+
+    if (Number.isFinite(state.snapGuideX)) {
+      graphics.lineStyle(2, 0xff3b8d, 0.95);
+      graphics.strokeLineShape(
+        new PhaserNs.Geom.Line(
+          state.snapGuideX,
+          worldY,
+          state.snapGuideX,
+          worldY + worldH,
+        ),
+      );
+    }
+    if (Number.isFinite(state.snapGuideY)) {
+      graphics.lineStyle(2, 0xff3b8d, 0.95);
+      graphics.strokeLineShape(
+        new PhaserNs.Geom.Line(
+          worldX,
+          state.snapGuideY,
+          worldX + worldW,
+          state.snapGuideY,
+        ),
+      );
+    }
 
     for (const entity of state.entities) {
       const go = entity.go;
@@ -1018,8 +1358,6 @@ export function createMapEditorRuntime({
 
   function registerKeyboardShortcuts() {
     const onKeyDown = (ev) => {
-      if (isTextInputTarget(ev.target)) return;
-
       const ctrl = ev.ctrlKey || ev.metaKey;
       const key = String(ev.key || "").toLowerCase();
 
@@ -1029,13 +1367,9 @@ export function createMapEditorRuntime({
         return;
       }
 
-      if (!state.enabled) return;
+      if (isTextInputTarget(ev.target)) return;
 
-      if (key === "tab") {
-        ev.preventDefault();
-        setPanelVisibility(state.panelHidden);
-        return;
-      }
+      if (!state.enabled) return;
 
       if (!ctrl) return;
 
@@ -1075,11 +1409,24 @@ export function createMapEditorRuntime({
       if (selected?.kind === "entity") {
         const target = selected.ref.go;
         const body = target?.body;
+        const bounds = getEntityBounds(selected.ref);
         const width = Number(body?.width || target?.width || 0);
         const height = Number(body?.height || target?.height || 0);
         state.handleDragStart = {
           width: Math.max(1, width),
           height: Math.max(1, height),
+          displayWidth: Math.max(
+            1,
+            Number(bounds.right - bounds.left) || width,
+          ),
+          displayHeight: Math.max(
+            1,
+            Number(bounds.bottom - bounds.top) || height,
+          ),
+          left: bounds.left,
+          right: bounds.right,
+          top: bounds.top,
+          bottom: bounds.bottom,
           scaleX: Math.max(0.05, Number(target?.scaleX) || 1),
           scaleY: Math.max(0.05, Number(target?.scaleY) || 1),
         };
@@ -1087,18 +1434,7 @@ export function createMapEditorRuntime({
       return;
     }
 
-    if (isEntity) {
-      const ent = state.entities.find((e) => e.go === go);
-      const sel = selectedEntities();
-      if (ent && state.selectedIds.has(ent.id) && sel.length > 1) {
-        state.groupDragStart = {
-          anchorId: ent.id,
-          anchorX: go.x,
-          anchorY: go.y,
-          items: sel.map((e) => ({ go: e.go, x: e.go.x, y: e.go.y })),
-        };
-      }
-    }
+    if (isEntity) return;
   });
 
   scene.input.on("drag", (pointer, go, dragX, dragY) => {
@@ -1116,23 +1452,6 @@ export function createMapEditorRuntime({
 
     const ent = state.entities.find((e) => e.go === go);
     if (ent) {
-      if (state.groupDragStart && state.groupDragStart.anchorId === ent.id) {
-        const snapped = snapPoint(dragX, dragY, {
-          shiftSnap: !!pointer?.event?.shiftKey,
-          excludeGo: go,
-        });
-        const dx = Math.round(snapped.x) - state.groupDragStart.anchorX;
-        const dy = Math.round(snapped.y) - state.groupDragStart.anchorY;
-        for (const item of state.groupDragStart.items) {
-          item.go.setPosition(item.x + dx, item.y + dy);
-          if (item.go.body && typeof item.go.body.reset === "function")
-            item.go.body.reset(item.go.x, item.go.y);
-          updateBodyFromGameObject(item.go);
-        }
-        syncInputsFromSelection();
-        return;
-      }
-
       const snapped = snapPoint(dragX, dragY, {
         shiftSnap: !!pointer?.event?.shiftKey,
         excludeGo: go,
@@ -1157,11 +1476,26 @@ export function createMapEditorRuntime({
     });
     marker.point.x = Math.round(snapped.x);
     delete marker.point.dx;
-    if (!marker.point.anchorId) {
+    const anchorHit =
+      marker.type === "spawn"
+        ? resolveAnchorSnapAt(snapped.x, snapped.y)
+        : null;
+    if (anchorHit) {
+      marker.point.anchorId = anchorHit.anchorId;
+      delete marker.point.y;
+      const preview = getSpawnPreviewPoint(
+        scene,
+        marker.point,
+        spawnAnchors,
+        2,
+      );
+      if (preview) go.setPosition(preview.x, preview.y);
+      else go.setPosition(marker.point.x, go.y);
+    } else {
+      delete marker.point.anchorId;
       marker.point.y = Math.round(snapped.y);
-      go.y = marker.point.y;
+      go.setPosition(marker.point.x, marker.point.y);
     }
-    go.x = marker.point.x;
     syncInputsFromSelection();
   });
 
@@ -1171,6 +1505,8 @@ export function createMapEditorRuntime({
     state.pendingDragSnapshot = null;
     state.groupDragStart = null;
     state.handleDragStart = null;
+    state.snapGuideX = null;
+    state.snapGuideY = null;
     const after = snapshot();
     if (JSON.stringify(before) !== JSON.stringify(after)) {
       state.history.stack = state.history.stack.slice(
@@ -1197,10 +1533,61 @@ export function createMapEditorRuntime({
   });
   el.addPlatform.addEventListener("click", createPlatform);
   el.addBoundary.addEventListener("click", createBoundaryZone);
-  el.apply.addEventListener("click", applyInputsToSelection);
+  el.centerScene.addEventListener("click", centerSceneToWorld);
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.id = "map-edit-delete";
+  deleteBtn.className = "warn";
+  deleteBtn.textContent = "Delete Selected";
+  el.addBoundary.parentElement?.appendChild(deleteBtn);
+  deleteBtn.addEventListener("click", removeSelectedEntities);
   el.export.addEventListener("click", exportConfig);
   el.exportSnippets.addEventListener("click", exportMapSnippets);
   el.importBtn.addEventListener("click", importConfig);
+
+  el.sideUp?.addEventListener("click", () => toggleBoundarySide("up"));
+  el.sideDown?.addEventListener("click", () => toggleBoundarySide("down"));
+  el.sideLeft?.addEventListener("click", () => toggleBoundarySide("left"));
+  el.sideRight?.addEventListener("click", () => toggleBoundarySide("right"));
+
+  const editCommitFields = [el.x, el.y, el.sx, el.sy, el.w, el.h, el.ox, el.oy];
+  for (const input of editCommitFields) {
+    if (!input) continue;
+    input.addEventListener("focus", () => {
+      input.dataset.bbStartValue = String(input.value ?? "");
+    });
+    input.addEventListener("change", () => {
+      const before = String(input.dataset.bbStartValue ?? "");
+      const after = String(input.value ?? "");
+      if (before === after) return;
+      applyInputsToSelection({ commit: true });
+      input.dataset.bbStartValue = after;
+    });
+    input.addEventListener("blur", () => {
+      const before = String(input.dataset.bbStartValue ?? "");
+      const after = String(input.value ?? "");
+      if (before === after) return;
+      applyInputsToSelection({ commit: true });
+      input.dataset.bbStartValue = after;
+    });
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      const before = String(input.dataset.bbStartValue ?? "");
+      const after = String(input.value ?? "");
+      if (before === after) {
+        try {
+          input.blur();
+        } catch (_) {}
+        return;
+      }
+      applyInputsToSelection({ commit: true });
+      input.dataset.bbStartValue = after;
+      try {
+        input.blur();
+      } catch (_) {}
+    });
+  }
 
   el.gridCycle.addEventListener("click", () => {
     if (state.gridSize === 0) state.gridSize = 16;
@@ -1220,6 +1607,7 @@ export function createMapEditorRuntime({
 
   refreshSelect();
   if (state.selectables.length) setSelected(state.selectables[0].id, false);
+  refreshBoundarySideButtons();
 
   refreshGridButtons();
   setPanelVisibility(false);
@@ -1227,8 +1615,7 @@ export function createMapEditorRuntime({
   for (const h of Object.values(handles)) h.setVisible(false);
   graphics.setVisible(false);
 
-  state.history.stack = [snapshot()];
-  state.history.index = 0;
+  resetHistoryBaseline();
 
   const disposeShortcuts = registerKeyboardShortcuts();
   scene.events.on("postupdate", drawOverlay);

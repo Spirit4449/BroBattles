@@ -433,6 +433,7 @@ export function createPlayer(
     scene._mouseCombatAttached = true;
 
     scene.input.on("pointerdown", (pointer) => {
+      if (window.__BB_MAP_EDIT_ACTIVE) return;
       if (dead) return;
       if ((player?._movementLockedUntil || 0) > Date.now()) return;
       if (pointer.button === 2) {

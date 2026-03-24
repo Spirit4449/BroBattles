@@ -3,7 +3,12 @@
 // or positionSpawn().  To add an entirely new map, follow the same pattern and
 // register it in src/maps/manifest.js.
 
-import { getSpawnPointForTeam, placeSpriteAtConfiguredSpawn } from "./mapUtils";
+import {
+  appendLayoutObjectsFromConfig,
+  getSceneWorldCenterX,
+  getSpawnPointForTeam,
+  placeSpriteAtConfiguredSpawn,
+} from "./mapUtils";
 
 // ── Layout constants ─────────────────────────────────────────────────────────
 const SCALE = 0.6;
@@ -69,9 +74,9 @@ const SPAWN_CONFIG = {
 const BOUNDARY_CONFIG = {
   world: { x: 0, y: 0, width: 2300, height: 1000 },
   camera: {
-    x: -200,
+    x: 0,
     y: -40,
-    width: 2000,
+    width: 2300,
     height: 1000,
     zoom: 1.7,
     deadzoneWidth: 50,
@@ -87,6 +92,14 @@ const EDITOR_TEXTURE_KEYS = [
   "mangrove-base-right",
   "mangrove-tiny-platform",
 ];
+
+// Optional editor-driven layout config. Set `USE_LAYOUT_CONFIG_ONLY=true`
+// and paste exported platforms/hitboxes below to build this map from config.
+const USE_LAYOUT_CONFIG_ONLY = false;
+const MAP_LAYOUT_CONFIG = {
+  platforms: [],
+  hitboxes: [],
+};
 
 // ── Runtime references (set during build) ──────────────────────────────────
 const _tinyPlatforms = []; // [0..5] matching TINY_LAYOUT
@@ -106,7 +119,14 @@ export const definition = {
   build(scene) {
     _objects.length = 0;
     _tinyPlatforms.length = 0;
-    const cx = scene.scale.width / 2;
+    for (const k of Object.keys(_spawnAnchors)) delete _spawnAnchors[k];
+
+    if (USE_LAYOUT_CONFIG_ONLY) {
+      appendLayoutObjectsFromConfig(scene, _objects, MAP_LAYOUT_CONFIG);
+      return;
+    }
+
+    const cx = getSceneWorldCenterX(scene);
 
     function plat(key, x, y) {
       const s = scene.physics.add.sprite(x, y, key);

@@ -330,6 +330,7 @@ export function createGameHudController({
   }
 
   function showSuddenDeathBanner() {
+    if (window.__BB_MAP_EDIT_ACTIVE) return;
     const existing = document.getElementById("sd-flash-banner");
     if (existing) return;
     const banner = document.createElement("div");

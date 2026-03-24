@@ -1104,7 +1104,24 @@ class GameScene extends Phaser.Scene {
   }
 
   update() {
-    renderPoisonWater(this, { player, dead });
+    if (this._editModeActive) {
+      try {
+        this._poisonGraphics?.clear?.();
+      } catch (_) {}
+      try {
+        const cssDiv = document.getElementById("poison-water-bg");
+        if (cssDiv) cssDiv.style.display = "none";
+      } catch (_) {}
+      try {
+        const vigEl = document.getElementById("water-vignette");
+        if (vigEl) {
+          vigEl.classList.remove("water-danger-active");
+          vigEl.style.opacity = "0";
+        }
+      } catch (_) {}
+    } else {
+      renderPoisonWater(this, { player, dead });
+    }
 
     // Powerup visuals/effects are rendered for all players every frame.
     this._renderPowerupsAndEffects();
@@ -1368,5 +1385,6 @@ function hideBattleStartOverlay() {
 // Simple Game Over Overlay
 // -----------------------------
 function showGameOverScreen(payload) {
+  if (window.__BB_MAP_EDIT_ACTIVE) return;
   gameOverScreenController.showGameOverScreen(payload);
 }
