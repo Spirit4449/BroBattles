@@ -146,7 +146,7 @@ export function createMapEditorRuntime({
   host.id = "map-edit-host";
   host.innerHTML = `
     <style>
-      #map-edit-host{position:fixed;top:14px;right:14px;z-index:99999;font-family:Poppins,system-ui,sans-serif}
+      #map-edit-host{position:fixed;top:14px;right:14px;z-index:99999;font-family:system-ui,sans-serif}
       #map-edit-panel{margin-top:8px;width:min(430px,95vw);background:rgba(7,14,24,.93);color:#d6ebff;border:1px solid #4ec6ff;border-radius:12px;padding:10px;backdrop-filter:blur(6px);display:none}
       #map-edit-panel.open{display:block}
       #map-edit-panel.min{width:min(250px,90vw)}

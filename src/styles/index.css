@@ -1,6 +1,6 @@
 @font-face {
   font-family: "Press Start 2P";
-  src: url("/assets/PressStart2p-Regular.TTF") format("truetype");
+  src: url("/assets/PressStart2P.woff2") format("woff2");
   font-display: swap;
 }
 
@@ -11,7 +11,7 @@ body {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  font-family: "Poppins", sans-serif;
+  font-family: "Lato", sans-serif;
   height: 100vh;
   overflow: hidden;
 }
@@ -1265,12 +1265,12 @@ h3 {
 }
 
 .mm-heading {
-  margin: 0;
-  font-size: clamp(20px, 10vw, 80px);
-  font-weight: 800;
-  letter-spacing: 0.3px;
+  margin: 40px;
+  font-size: clamp(20px, 5vw, 60px);
+  font-family: "Press Start 2P", "Lato", sans-serif;
   text-align: center;
   text-shadow: 0 2px 10px rgba(0, 212, 255, 0.3);
+  text-transform: uppercase;
 }
 
 .mm-progress {
@@ -1308,10 +1308,10 @@ h3 {
   }
 }
 .mm-count {
-  font-size: clamp(28px, 5vw, 46px);
-  font-weight: 800;
-  letter-spacing: 1px;
-  margin-bottom: 10px;
+  font-size: clamp(28px, 4vw, 40px);
+  margin: 15px;
+  letter-spacing: -10px;
+  font-family: "Press Start 2P", "Lato", sans-serif;
 }
 
 .mm-info {

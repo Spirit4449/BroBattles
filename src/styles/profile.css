@@ -1,12 +1,11 @@
 @font-face {
   font-family: "Press Start 2P";
-  src: url("/assets/PressStart2p-Regular.TTF") format("truetype");
+  src: url("/assets/PressStart2P.woff2") format("woff2");
   font-display: swap;
 }
 
 body.profile-page-body {
   margin: 0;
-  font-family: "Poppins", sans-serif;
   background: radial-gradient(circle at 20% 20%, #223f7c, #0b1630 60%);
   color: #e7f2ff;
 }
@@ -25,7 +24,7 @@ body.profile-page-body {
 
 .profile-header h1 {
   margin: 0;
-  font-family: "Press Start 2P", cursive;
+  font-family: "Press Start 2P", Lato, sans-serif;
   font-size: clamp(16px, 2vw, 24px);
 }
 

@@ -1,9 +1,13 @@
 /* Shared styles for login and signup pages */
-
+@font-face {
+        font-family: "Press Start 2P";
+        src: url("/assets/PressStart2P.woff2") format("woff2");
+        font-display: swap;
+      }
 html,
 body {
   margin: 0;
-  font-family: "Poppins", sans-serif;
+  font-family: "Lato", sans-serif;
   background: linear-gradient(135deg, #1e1e2e, #26263a);
   min-height: 100vh;
   color: #e2e8f0;
@@ -107,9 +111,10 @@ h1 {
   background: rgba(0, 0, 0, 0.2);
   border: none;
   padding: 0 16px;
-  font-size: 16px;
+  font-size: 12px;
+  letter-spacing: -1px;
   color: #e2e8f0;
-  font-family: "Poppins", sans-serif;
+  font-family: "Press Start 2P", "Lato", sans-serif;
   transition: all 0.3s ease;
   box-sizing: border-box;
 }
@@ -134,7 +139,7 @@ h1 {
   transition: all 0.3s ease;
   font-weight: 600;
   font-size: 16px;
-  font-family: "Poppins", sans-serif;
+  font-family: "Press Start 2P", "Lato", sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-top: 8px;

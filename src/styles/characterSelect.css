@@ -10,7 +10,6 @@
   justify-content: center;
   align-items: center;
   z-index: 1000;
-  font-family: var(--font-primary);
 }
 
 .character-select-popup {
@@ -64,8 +63,7 @@
 .popup-title {
   margin: 0;
   font-size: clamp(20px, 2vw, 28px);
-  font-weight: 800;
-  letter-spacing: 1px;
+  font-family: "Press Start 2P", "Lato", sans-serif;
   text-transform: uppercase;
   color: #ffffff;
   text-shadow:
@@ -229,15 +227,15 @@
 .character-name {
   font-size: 20px;
   font-weight: bold;
-  font-family: "Press Start 2P", "Poppins", sans-serif;
-  letter-spacing: -2px;
+  font-family: "Press Start 2P", "Lato", sans-serif;
   margin: 0 0 8px 0; /* slightly more space under name */
   color: #f7fafc;
-  text-transform: capitalize;
+    text-transform: uppercase;
 }
 
+
 .character-description {
-  font-size: 12px;
+  font-size: 15px;
   color: #a0aec0;
   margin: 0;
   font-style: italic;

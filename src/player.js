@@ -324,14 +324,14 @@ export function createPlayer(
   const bodyTop = player.body ? player.body.y : player.y - player.height / 2;
   playerName = scene.add.text(player.x, bodyTop - 50, username);
   playerName.setStyle({
-    font: "bold 8pt Arial",
+    font: "bold 8pt LilitaOne-Regular",
     fill: "#000000",
   });
   playerName.setOrigin(0.5, 0);
 
   // Health text
   healthText = scene.add.text(0, 0, "", {
-    fontFamily: "Arial",
+    fontFamily: "LilitaOne-Regular",
     fontSize: "10px",
     color: "#FFFFFF", // White
     stroke: "#000000", // Black

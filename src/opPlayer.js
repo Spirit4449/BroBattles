@@ -98,14 +98,14 @@ export default class OpPlayer {
       this.username,
     );
     this.opPlayerName.setStyle({
-      font: "bold 8pt Arial",
-      fill: "#000000",
+      font: "bold 8pt LilitaOne-Regular",
+      fill: "#471111",
     });
     this.opPlayerName.setOrigin(0.5, 0);
     this.opPlayerName.setDepth(3); // above health text
 
     this.opHealthText = this.scene.add.text(0, 0, "", {
-      fontFamily: "Arial",
+      fontFamily: "LilitaOne-Regular",
       fontSize: "10px",
       color: "#FFFFFF",
       stroke: "#000000",

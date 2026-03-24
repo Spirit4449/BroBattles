@@ -51,7 +51,7 @@ export function createGameOverScreenController({
       "display:grid;grid-template-columns:2fr 1.1fr repeat(3,1fr);gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid rgba(176,219,255,0.18);font-size:13px;";
 
     const headerRow = `
-      <div style="${baseRowStyle}font-weight:600;border-bottom:1px solid rgba(176,219,255,0.3);text-transform:uppercase;font-size:11px;color:#cce8ff;font-family:'Press Start 2P', cursive;">
+      <div style="${baseRowStyle}font-weight:600;border-bottom:1px solid rgba(176,219,255,0.3);text-transform:uppercase;font-size:11px;color:#cce8ff;font-family: "Press Start 2P", "Lato", sans-serif;">
         <div style="text-align:left;">Player</div>
         <div>Team</div>
         <div>Hits</div>
@@ -86,7 +86,7 @@ export function createGameOverScreenController({
     const rewardSectionHtml = rewards.length
       ? `
         <div style="margin-top:28px;text-align:left;">
-          <h2 style="margin:0 0 10px;font-size:18px;color:#e8f4ff;font-family:'Press Start 2P', cursive;">Match Results</h2>
+          <h2 style="margin:0 0 10px;font-size:18px;color:#e8f4ff;font-family: "Press Start 2P", "Lato", sans-serif;">Match Results</h2>
           <div style="border:1px solid rgba(123,191,255,0.35);border-radius:10px;overflow:hidden;background:rgba(14,34,58,0.75);">
             ${headerRow}
             ${rewardRowsHtml}
@@ -115,15 +115,15 @@ export function createGameOverScreenController({
       : "";
 
     div.innerHTML = `
-      <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;background:radial-gradient(circle at 12% 14%, rgba(146,205,255,0.22), transparent 38%), rgba(5,12,20,0.72);font-family:'Poppins',sans-serif;">
+      <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;background:radial-gradient(circle at 12% 14%, rgba(146,205,255,0.22), transparent 38%), rgba(5,12,20,0.72);font-family: "Press Start 2P", "Lato", sans-serif;">
         <div style="position:relative;background:linear-gradient(180deg,#204874f2,#153357f2);padding:32px 48px;border:3px solid #78bdff;border-radius:14px;min-width:320px;max-width:min(980px,92vw);text-align:center;box-shadow:0 16px 38px rgba(0,0,0,0.5), inset 0 0 0 2px rgba(220,240,255,0.2);color:#fff;">
           <div style="position:absolute;inset:8px;border:1px dashed rgba(199,230,255,0.45);border-radius:10px;pointer-events:none;"></div>
-          <h1 style="margin:0 0 12px;font-size:44px;letter-spacing:2px;font-family:'Press Start 2P',cursive;line-height:1.2;${
+          <h1 style="margin:0 0 12px;font-size:44px;letter-spacing:2px;font-family: "Press Start 2P", "Lato", sans-serif;line-height:1.2;${
             winner === gameData?.yourTeam ? "color:#9fffc3;" : ""
           }${winner && winner !== gameData?.yourTeam ? "color:#ff9a9a;" : ""}">${heading}</h1>
           ${personalSummaryHtml || ""}
           ${rewardSectionHtml || ""}
-          <button id="go-lobby" style="background:linear-gradient(180deg,#4fa5ff,#3d87df);color:#fff;font-size:14px;font-family:'Press Start 2P',cursive;padding:11px 18px;border:1px solid #d5ecff;border-radius:8px;box-shadow:0 3px 0 #1f4f83, 0 8px 18px rgba(0,0,0,0.22);cursor:pointer;margin-top:20px;">Return to Lobby (10)</button>
+          <button id="go-lobby" style="background:linear-gradient(180deg,#4fa5ff,#3d87df);color:#fff;font-size:14px;font-family: "Press Start 2P", "Lato", sans-serif;padding:11px 18px;border:1px solid #d5ecff;border-radius:8px;box-shadow:0 3px 0 #1f4f83, 0 8px 18px rgba(0,0,0,0.22);cursor:pointer;margin-top:20px;">Return to Lobby (10)</button>
         </div>
       </div>`;
 

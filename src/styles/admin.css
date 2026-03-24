@@ -12,12 +12,7 @@
 
 body {
   margin: 0;
-  font-family:
-    "Inter",
-    "Segoe UI",
-    system-ui,
-    -apple-system,
-    sans-serif;
+  font-family: "Press Start 2P", system-ui;
   background: radial-gradient(circle at top, #0b1224, #03050a 65%);
   color: var(--text);
   min-height: 100vh;

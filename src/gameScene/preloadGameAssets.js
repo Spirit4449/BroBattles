@@ -78,4 +78,6 @@ export function preloadGameAssets({
       `${staticPath}/powerups/${dir}/tick.wav`,
     ]);
   }
+
+  scene.load.font('PressStart2P', `${staticPath}/LilitaOne-Regular.ttf`, 'truetype');
 }
