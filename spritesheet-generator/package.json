@@ -1,0 +1,17 @@
+{
+  "name": "spritesheet-generator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simple local Express app for turning animation videos into Bro Battles spritesheets.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
+    "sharp": "^0.33.5"
+  }
+}

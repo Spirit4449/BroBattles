@@ -1,0 +1,494 @@
+:root {
+  color-scheme: dark;
+  --panel: rgba(15, 26, 32, 0.92);
+  --panel-2: rgba(22, 38, 46, 0.9);
+  --line: rgba(128, 177, 195, 0.24);
+  --text: #edf7fa;
+  --muted: #9db8c2;
+  --accent: #72d7c5;
+  --accent-2: #f8c35f;
+  --danger: #ff8d89;
+  --shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Segoe UI Variable", "Segoe UI", "Trebuchet MS", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top, rgba(114, 215, 197, 0.18), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(248, 195, 95, 0.12), transparent 26%),
+    linear-gradient(180deg, #091014 0%, #101b21 100%);
+}
+
+a,
+code {
+  color: var(--text);
+}
+
+.page-shell {
+  width: min(1260px, calc(100% - 32px));
+  margin: 32px auto 48px;
+  display: grid;
+  gap: 18px;
+}
+
+.hero-card,
+.tool-card,
+.status-card,
+.editor-card,
+.result-card,
+.modal-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+}
+
+.hero-card,
+.tool-card,
+.editor-card,
+.result-card {
+  padding: 24px;
+}
+
+.hero-card h1,
+.card-header h2,
+.modal-header h2 {
+  margin: 0;
+  line-height: 1.05;
+}
+
+.hero-copy {
+  max-width: 860px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.76rem;
+  color: var(--accent);
+}
+
+.card-header,
+.modal-header,
+.panel-header,
+.animation-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.field-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.field-grid--top {
+  grid-template-columns: 2fr 1fr 1.2fr;
+}
+
+.field,
+.compact-field {
+  display: grid;
+  gap: 8px;
+}
+
+.field span,
+.compact-field span,
+.metric-label,
+.status-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+input[type="text"],
+input[type="file"],
+input[type="range"],
+input[type="number"],
+input[type="color"] {
+  width: 100%;
+}
+
+input[type="text"],
+input[type="file"],
+input[type="number"],
+input[type="color"] {
+  min-height: 44px;
+  border: 1px solid rgba(157, 184, 194, 0.2);
+  border-radius: 14px;
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 10px 12px;
+}
+
+input[type="range"] {
+  accent-color: var(--accent-2);
+}
+
+input[type="file"] {
+  padding: 8px 10px;
+}
+
+output {
+  color: var(--accent-2);
+  font-weight: 700;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font-size: 0.96rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #082324;
+  background: linear-gradient(135deg, var(--accent), #8cf0df);
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.secondary-button,
+.small-button {
+  color: #0a1d22;
+  background: linear-gradient(135deg, var(--accent-2), #f7dc98);
+}
+
+.ghost-button {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.danger-button {
+  background: linear-gradient(135deg, #ff9a92, #ffc1bb);
+}
+
+.tool-button {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.tool-button.is-active {
+  background: linear-gradient(135deg, var(--accent), #8cf0df);
+  color: #082324;
+}
+
+.status-card {
+  padding: 16px 20px;
+}
+
+.status-line {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+#status-text.is-error {
+  color: var(--danger);
+}
+
+.workspace-summary,
+.result-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.summary-metric,
+.animation-card,
+.count-card,
+.preview-card,
+.editor-surface-card {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(157, 184, 194, 0.14);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.summary-metric {
+  display: grid;
+  gap: 8px;
+}
+
+.summary-metric strong {
+  font-size: 1.05rem;
+}
+
+.animation-grid,
+.preview-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.animation-card {
+  display: grid;
+  gap: 14px;
+}
+
+.animation-card-header p,
+.panel-header p,
+.empty-copy {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.selection-badge {
+  align-self: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(114, 215, 197, 0.12);
+  color: var(--accent);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.animation-preview-stage,
+.editor-canvas-stage,
+.preview-card img {
+  border-radius: 14px;
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.08) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.08) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.08) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.08) 75%);
+  background-size: 16px 16px;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+}
+
+.animation-preview-stage {
+  min-height: 212px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.animation-preview-stage canvas,
+.preview-card img,
+#frame-editor-canvas {
+  image-rendering: pixelated;
+}
+
+.animation-preview-stage canvas {
+  cursor: pointer;
+}
+
+.card-controls {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 12px;
+}
+
+.grow {
+  min-width: 0;
+}
+
+.card-actions,
+.toolbar-actions,
+.tool-toggle-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.result-body,
+.count-card {
+  margin-top: 16px;
+}
+
+.link-grid {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.link-grid a,
+.preview-card a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(114, 215, 197, 0.22);
+  background: rgba(114, 215, 197, 0.08);
+  text-decoration: none;
+}
+
+.count-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.count-card li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.count-card li strong {
+  color: var(--text);
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 8, 12, 0.75);
+  backdrop-filter: blur(6px);
+}
+
+.modal-panel {
+  position: relative;
+  width: min(1320px, calc(100% - 28px));
+  margin: 18px auto;
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  padding: 22px;
+}
+
+.editor-toolbar {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(280px, auto);
+  gap: 12px;
+  align-items: end;
+}
+
+.modal-editor-layout {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 14px;
+}
+
+.editor-canvas-stage {
+  margin-top: 14px;
+  min-height: 560px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+#frame-editor-canvas {
+  cursor: crosshair;
+  border: 1px solid rgba(157, 184, 194, 0.14);
+  background: transparent;
+}
+
+.timeline-strip {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.timeline-frame {
+  min-width: 96px;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  display: grid;
+  gap: 8px;
+}
+
+.timeline-frame span {
+  text-align: center;
+}
+
+.timeline-frame.is-current {
+  outline: 2px solid var(--accent-2);
+}
+
+.timeline-frame.is-body {
+  border: 1px solid rgba(114, 215, 197, 0.55);
+  background: rgba(114, 215, 197, 0.12);
+}
+
+.timeline-thumb {
+  width: 74px;
+  height: 74px;
+  margin: 0 auto;
+  display: block;
+  image-rendering: pixelated;
+}
+
+@media (max-width: 1080px) {
+  .field-grid--top,
+  .workspace-summary,
+  .result-summary,
+  .animation-grid,
+  .preview-grid,
+  .card-controls,
+  .modal-editor-layout,
+  .editor-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .page-shell {
+    width: min(100% - 20px, 1260px);
+    margin-top: 16px;
+  }
+
+  .hero-card,
+  .tool-card,
+  .editor-card,
+  .result-card,
+  .modal-panel {
+    padding: 18px;
+  }
+
+  .card-header,
+  .modal-header,
+  .panel-header,
+  .animation-card-header {
+    flex-direction: column;
+  }
+}

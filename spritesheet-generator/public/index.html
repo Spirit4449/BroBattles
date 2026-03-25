@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bro Battles Spritesheet Generator</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="hero-card">
+        <p class="eyebrow">Bro Battles Asset Tool</p>
+        <h1>Upload one animation at a time, edit every frame, export when ready</h1>
+        <p class="hero-copy">
+          Each animation has its own upload flow, fps, and editor. Open an
+          animation editor to scrub frames, draw with a brush, erase pixels,
+          delete bad frames, duplicate good ones, add new blanks, and then
+          export the character atlas only when the frame timeline looks right.
+        </p>
+      </section>
+
+      <section class="tool-card">
+        <div class="card-header">
+          <div>
+            <p class="eyebrow">Session</p>
+            <h2>Character Setup</h2>
+          </div>
+          <button id="new-session-button" type="button">Create Session</button>
+        </div>
+
+        <div class="field-grid field-grid--top">
+          <label class="field">
+            <span>Character name</span>
+            <input
+              id="character-name"
+              type="text"
+              placeholder="shadow-brawler"
+              required
+            />
+          </label>
+
+          <label class="field">
+            <span>Background key color</span>
+            <input id="key-color" type="color" value="#00ff00" />
+          </label>
+
+          <label class="field">
+            <span>Tolerance</span>
+            <input
+              id="tolerance"
+              type="range"
+              min="0"
+              max="80"
+              step="1"
+              value="26"
+            />
+            <output id="tolerance-output">26</output>
+          </label>
+        </div>
+      </section>
+
+      <section class="status-card">
+        <div class="status-line">
+          <span class="status-label">Status</span>
+          <span id="status-text">Create a session, then upload any animation you want to work on.</span>
+        </div>
+      </section>
+
+      <section class="editor-card">
+        <div class="card-header">
+          <div>
+            <p class="eyebrow">Animations</p>
+            <h2>Per-Animation Workspace</h2>
+          </div>
+          <button id="export-button" type="button" class="secondary-button">
+            Export Bundle
+          </button>
+        </div>
+
+        <div class="workspace-summary" id="workspace-summary"></div>
+        <div class="animation-grid" id="animation-grid"></div>
+      </section>
+
+      <section class="result-card is-empty" id="result-card">
+        <div class="card-header">
+          <div>
+            <p class="eyebrow">Export</p>
+            <h2>Bundle Output</h2>
+          </div>
+        </div>
+
+        <div class="result-body" id="result-body">
+          <p class="empty-copy">
+            Exported files and download links will appear here after you export.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <div class="modal hidden" id="editor-modal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-editor="true"></div>
+      <section class="modal-panel">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow" id="modal-eyebrow">Animation Editor</p>
+            <h2 id="modal-title">Idle</h2>
+          </div>
+          <button id="close-editor-button" type="button" class="ghost-button">
+            Close
+          </button>
+        </div>
+
+        <div class="editor-toolbar">
+          <label class="field compact-field">
+            <span>FPS</span>
+            <input id="editor-fps" type="number" min="1" max="60" step="1" />
+          </label>
+
+          <div class="tool-toggle-group">
+            <button id="tool-brush" type="button" class="tool-button is-active">
+              Brush
+            </button>
+            <button id="tool-eraser" type="button" class="tool-button">
+              Eraser
+            </button>
+          </div>
+
+          <label class="field compact-field">
+            <span>Brush Color</span>
+            <input id="brush-color" type="color" value="#ffffff" />
+          </label>
+
+          <label class="field compact-field">
+            <span>Brush Size</span>
+            <input id="brush-size" type="range" min="1" max="12" step="1" value="1" />
+            <output id="brush-size-output">1</output>
+          </label>
+
+          <div class="toolbar-actions">
+            <button id="prev-frame-button" type="button" class="small-button">
+              Prev Frame
+            </button>
+            <button id="next-frame-button" type="button" class="small-button">
+              Next Frame
+            </button>
+            <button id="set-body-button" type="button" class="small-button">
+              Use As Body
+            </button>
+            <button id="import-frame-button" type="button" class="small-button">
+              Import Image
+            </button>
+            <input
+              id="import-frame-input"
+              type="file"
+              accept="image/png,image/webp,image/jpeg"
+              hidden
+            />
+            <button id="add-frame-button" type="button" class="small-button">
+              Add Blank
+            </button>
+            <button id="duplicate-frame-button" type="button" class="small-button">
+              Duplicate
+            </button>
+            <button id="delete-frame-button" type="button" class="small-button danger-button">
+              Delete
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-editor-layout">
+          <article class="editor-surface-card">
+            <div class="panel-header">
+              <h3>Frame Canvas</h3>
+              <p id="frame-meta">Frame 1</p>
+            </div>
+            <div class="editor-canvas-stage">
+              <canvas id="frame-editor-canvas"></canvas>
+            </div>
+          </article>
+
+          <article class="editor-surface-card">
+            <div class="panel-header">
+              <h3>Timeline</h3>
+              <p>Scrollable frame strip. Click a frame to edit it.</p>
+            </div>
+            <div class="timeline-strip" id="timeline-strip"></div>
+          </article>
+        </div>
+      </section>
+    </div>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>
