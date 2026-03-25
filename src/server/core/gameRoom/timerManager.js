@@ -2,8 +2,51 @@ const {
   WORLD_BOUNDS,
   GAME_DURATION_MS,
   SD_DAMAGE_PER_SEC,
+  SUDDEN_DEATH_MAX_MS,
   TIMER_EMIT_INTERVAL_MS,
 } = require("../gameRoomConfig");
+
+function decideSuddenDeathWinner(room) {
+  const teams = {
+    team1: { alive: 0, health: 0, damage: 0 },
+    team2: { alive: 0, health: 0, damage: 0 },
+  };
+
+  for (const p of room.players.values()) {
+    if (!p || (p.team !== "team1" && p.team !== "team2")) continue;
+    const team = teams[p.team];
+    if (p.isAlive) team.alive += 1;
+    team.health += Math.max(0, Number(p.health) || 0);
+  }
+
+  for (const bucket of room.rewardStats?.values?.() || []) {
+    if (!bucket || (bucket.team !== "team1" && bucket.team !== "team2")) continue;
+    teams[bucket.team].damage += Math.max(0, Number(bucket.damage) || 0);
+  }
+
+  if (teams.team1.alive !== teams.team2.alive) {
+    return {
+      winnerTeam: teams.team1.alive > teams.team2.alive ? "team1" : "team2",
+      reason: "alive",
+      teams,
+    };
+  }
+  if (teams.team1.health !== teams.team2.health) {
+    return {
+      winnerTeam: teams.team1.health > teams.team2.health ? "team1" : "team2",
+      reason: "health",
+      teams,
+    };
+  }
+  if (teams.team1.damage !== teams.team2.damage) {
+    return {
+      winnerTeam: teams.team1.damage > teams.team2.damage ? "team1" : "team2",
+      reason: "damage",
+      teams,
+    };
+  }
+  return { winnerTeam: null, reason: "draw", teams };
+}
 
 function tickTimerAndSuddenDeath(room) {
   if (room.status !== "active") return;
@@ -27,6 +70,21 @@ function tickTimerAndSuddenDeath(room) {
   }
 
   if (room._suddenDeathActive) {
+    if (sdElapsed >= SUDDEN_DEATH_MAX_MS) {
+      const outcome = decideSuddenDeathWinner(room);
+      room._finishGame(outcome.winnerTeam, {
+        suddenDeathTimeout: true,
+        tiebreakReason: outcome.reason,
+        team1Alive: outcome.teams.team1.alive,
+        team2Alive: outcome.teams.team2.alive,
+        team1Health: outcome.teams.team1.health,
+        team2Health: outcome.teams.team2.health,
+        team1Damage: outcome.teams.team1.damage,
+        team2Damage: outcome.teams.team2.damage,
+      });
+      return;
+    }
+
     const dmgPerTick = (SD_DAMAGE_PER_SEC * room.FIXED_DT_MS) / 1000;
     for (const p of room.players.values()) {
       if (!p.isAlive || p.connected === false || p.loaded !== true) continue;

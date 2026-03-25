@@ -8,6 +8,7 @@ const {
   POWERUP_MAX_ACTIVE,
   POWERUP_PICKUP_RADIUS,
   POWERUP_DESPAWN_MS,
+  POWERUP_OMEN_MS,
   POWERUP_SPAWN_Y_LIFT,
   POWERUP_TYPE_ROTATION,
   POWERUP_PLATFORM_POINTS,
@@ -58,7 +59,8 @@ function spawnPowerup(room) {
     x: point.x,
     y: point.y - POWERUP_SPAWN_Y_LIFT,
     spawnedAt: now,
-    expiresAt: now + POWERUP_DESPAWN_MS,
+    activeAt: now + POWERUP_OMEN_MS,
+    expiresAt: now + POWERUP_OMEN_MS + POWERUP_DESPAWN_MS,
   };
   room._powerups.set(powerup.id, powerup);
 }
@@ -99,6 +101,7 @@ function tickPowerups(room) {
       room._powerups.delete(id);
       continue;
     }
+    if (now < Number(pu.activeAt || 0)) continue;
     for (const p of room.players.values()) {
       if (!p.isAlive || p.connected === false || p.loaded !== true) continue;
       const dx = (p.x || 0) - pu.x;

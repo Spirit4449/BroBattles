@@ -129,6 +129,7 @@ export function createMatchCoordinator(config) {
 
   let _startWatchdogTimer = null;
   let _startWatchdogDeadline = 0;
+  let _forceLiveInputTimer = null;
 
   // ---------------------------------------------------------------------------
   // Private helpers
@@ -156,6 +157,14 @@ export function createMatchCoordinator(config) {
         idx,
         teamRoster.length,
       );
+      if (
+        pd.loaded === true &&
+        Number.isFinite(pd.x) &&
+        Number.isFinite(pd.y)
+      ) {
+        op.opponent.body?.reset?.(pd.x, pd.y);
+      }
+      op.finalizeSpawnPresentation?.();
       op.updateUIPosition?.();
     } catch (_) {}
   }
@@ -242,6 +251,24 @@ export function createMatchCoordinator(config) {
     _startWatchdogDeadline = 0;
   }
 
+  function _clearForceLiveInputTimer() {
+    if (_forceLiveInputTimer) {
+      clearTimeout(_forceLiveInputTimer);
+      _forceLiveInputTimer = null;
+    }
+  }
+
+  function _forceLiveClientState() {
+    try {
+      setIsLiveGame(true);
+      setStartingPhase(false);
+      hud.hideBattleStartOverlay();
+      const scene = getGameScene();
+      if (scene?.input) scene.input.enabled = true;
+      if (scene?.input?.keyboard) scene.input.keyboard.enabled = true;
+    } catch (_) {}
+  }
+
   function _startStartWatchdog() {
     if (getIsLiveGame() || getGameEnded()) return;
     if (_startWatchdogTimer) return;
@@ -254,11 +281,13 @@ export function createMatchCoordinator(config) {
     _startWatchdogTimer = setInterval(() => {
       if (getGameEnded() || getIsLiveGame()) {
         _stopStartWatchdog();
+        _clearForceLiveInputTimer();
         return;
       }
 
       if (Date.now() >= _startWatchdogDeadline) {
         _stopStartWatchdog();
+        _clearForceLiveInputTimer();
         try {
           alert("Match start timed out. Returning to lobby.");
         } catch (_) {}
@@ -270,7 +299,16 @@ export function createMatchCoordinator(config) {
         socket.emit("game:join", joinPayload);
       } catch (_) {}
       try {
-        socket.emit("game:ready", { matchId: joinMatchId });
+        const readyPayload = { matchId: joinMatchId };
+        const localPlayer = getPlayer();
+        if (localPlayer) {
+          if (Number.isFinite(localPlayer.x)) readyPayload.x = localPlayer.x;
+          if (Number.isFinite(localPlayer.y)) readyPayload.y = localPlayer.y;
+          readyPayload.flip = !!localPlayer.flipX;
+          readyPayload.animation =
+            localPlayer.anims?.currentAnim?.key || null;
+        }
+        socket.emit("game:ready", readyPayload);
       } catch (_) {}
     }, 1000);
   }
@@ -295,11 +333,8 @@ export function createMatchCoordinator(config) {
       setIsLiveGame(live);
       console.log(live, "is live");
       if (live) {
-        hud.hideBattleStartOverlay();
-        try {
-          const scene = getGameScene();
-          if (scene?.input?.keyboard) scene.input.keyboard.enabled = true;
-        } catch (_) {}
+        _clearForceLiveInputTimer();
+        _forceLiveClientState();
       } else if (status === "waiting" || status === "starting") {
         try {
           const gameData = getGameData();
@@ -345,6 +380,7 @@ export function createMatchCoordinator(config) {
           char_class: p.char_class,
         };
       });
+      gameData.players = mergedRoster;
       onInitializePlayers(mergedRoster);
       hud.initTeamStatusHud(mergedRoster);
     }
@@ -381,17 +417,27 @@ export function createMatchCoordinator(config) {
         });
       }
     } catch (_) {}
+
+    onTrySendReadyAck();
   }
 
   /** Server says the game has started — begin the pre-game countdown for normal joiners. */
   function _onGameStart(data) {
     console.log("Game starting:", data);
     _stopStartWatchdog();
+    _clearForceLiveInputTimer();
+    const seconds = Math.max(1, Number(data?.countdown) || 3);
     // Late joiners skip the countdown because the game is already running
     if (!getIsLiveGame()) {
-      const seconds = Math.max(1, Number(data?.countdown) || 3);
       hud.startCountdown(seconds);
     }
+    _forceLiveInputTimer = setTimeout(
+      () => {
+        _forceLiveInputTimer = null;
+        _forceLiveClientState();
+      },
+      seconds * 1000 + 250,
+    );
   }
 
   /** Server entered the starting window — show battle overlay and ack readiness. */
@@ -460,6 +506,16 @@ export function createMatchCoordinator(config) {
   function _onGameSnapshot(snapshot) {
     if (!snapshot || !snapshot.players) return;
 
+    try {
+      const gameData = getGameData();
+      if (Array.isArray(gameData?.players)) {
+        gameData.players = gameData.players.map((p) => {
+          const live = snapshot.players?.[p.name];
+          return live ? { ...p, ...live, name: p.name } : p;
+        });
+      }
+    } catch (_) {}
+
     if (Array.isArray(snapshot.powerups)) setLatestPowerups(snapshot.powerups);
     if (Array.isArray(snapshot.deathDrops)) {
       setLatestDeathDrops(snapshot.deathDrops);
@@ -475,17 +531,8 @@ export function createMatchCoordinator(config) {
     if (ingest.activated) {
       console.log("Started receiving server snapshots (tMono/tickId enabled)");
       _stopStartWatchdog();
-      try {
-        const introActive =
-          typeof hud?.isBattleIntroActive === "function"
-            ? hud.isBattleIntroActive()
-            : false;
-        if (!introActive) {
-          hud.hideBattleStartOverlay();
-          const scene = getGameScene();
-          if (scene?.input?.keyboard) scene.input.keyboard.enabled = true;
-        }
-      } catch (_) {}
+      _clearForceLiveInputTimer();
+      _forceLiveClientState();
     }
     if (typeof ingest.calibrationLog === "number") {
       console.log(
@@ -640,6 +687,7 @@ export function createMatchCoordinator(config) {
   function _onGameOver(payload) {
     if (getGameEnded()) return; // idempotent guard
     _stopStartWatchdog();
+    _clearForceLiveInputTimer();
     setGameEnded(true);
     onStopSuddenDeathMusic();
     onPlayMatchEndSound(payload?.winnerTeam);
@@ -735,6 +783,7 @@ export function createMatchCoordinator(config) {
   /** Remove all match socket listeners. Safe to call multiple times. */
   function dispose() {
     _stopStartWatchdog();
+    _clearForceLiveInputTimer();
     socket.off("connect", _tryJoin);
     socket.off("reconnect", _tryJoin);
     socket.off("game:joined", _onGameJoined);

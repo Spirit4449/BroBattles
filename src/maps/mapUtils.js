@@ -19,13 +19,32 @@ export function snapSpriteToPlatform(sprite, platform, targetX, epsilon = 2) {
     ? platform.body.top
     : platform.getTopCenter().y;
 
-  // Position sprite so its display bottom sits on the platform top
-  // Sprite display height = height * scaleY
-  const displayHeight = sprite.height * Math.abs(sprite.scaleY || 1);
-  const halfDisplayHeight = displayHeight / 2;
+  // Sync the Arcade body from the configured sprite/body settings first, then
+  // use the body's real bottom offset from the sprite center. This is more
+  // reliable than reconstructing it from display-height math for heavily
+  // scaled or offset characters like Draven.
+  try {
+    sprite.body?.updateFromGameObject?.();
+  } catch (_) {}
 
-  // Sprite center Y = platformTopY - halfDisplayHeight - epsilon
-  const targetY = platformTopY - halfDisplayHeight - epsilon;
+  let bodyBottomOffset = null;
+  const spriteY = Number(sprite.y);
+  const bodyBottom = Number(sprite.body?.bottom);
+  const displayHeight = sprite.height * Math.abs(sprite.scaleY || 1);
+
+  if (
+    Number.isFinite(spriteY) &&
+    Number.isFinite(bodyBottom)
+  ) {
+    bodyBottomOffset = bodyBottom - spriteY;
+  }
+
+  if (!Number.isFinite(bodyBottomOffset)) {
+    bodyBottomOffset = displayHeight / 2;
+  }
+
+  // Sprite center Y such that the body's bottom lands on the platform top.
+  const targetY = platformTopY - epsilon - bodyBottomOffset;
 
   // Set position and reset physics
   if (sprite.body && typeof sprite.body.reset === "function") {

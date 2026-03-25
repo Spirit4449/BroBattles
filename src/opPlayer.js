@@ -41,6 +41,7 @@ export default class OpPlayer {
     this.presenceConnected = true;
     this.presenceLoaded = true;
     this._worldUiHidden = false;
+    this._spawnPresented = false;
     this._deathPresentationActive = false;
     this._corpseRemoved = false;
     this.createOpPlayer();
@@ -88,8 +89,8 @@ export default class OpPlayer {
       this.scene.events.on("update", this._onSceneUpdate, this);
     }
 
-    // Reveal only after position is finalized (spawn set and UI anchored)
-    this.opponent.setVisible(true);
+    // Reveal only after the scene applies the actual spawn.
+    this.opponent.setVisible(false);
 
     // Sets the text of the name to username
     const bodyTop = this.opponent.body
@@ -122,6 +123,7 @@ export default class OpPlayer {
     // Initially updates health bar and name positioning
     this.updateHealthBar();
     this.updateUIPosition();
+    this.setPresenceState(this.presenceConnected, this.presenceLoaded);
 
     // Listen for health updates for this opponent
     this.healthUpdateListener = (data) => {
@@ -237,7 +239,8 @@ export default class OpPlayer {
   setPresenceState(connected, loaded) {
     this.presenceConnected = connected !== false;
     this.presenceLoaded = loaded !== false;
-    const shouldRender = !!this.opponent?.active && !this._corpseRemoved;
+    const shouldRender =
+      !!this.opponent?.active && !this._corpseRemoved && this._spawnPresented;
     if (this.opponent) {
       this.opponent.setVisible(shouldRender);
       this.opponent.setAlpha(1);
@@ -262,6 +265,13 @@ export default class OpPlayer {
       this.opSuperBar.setVisible(shouldRender && !this._worldUiHidden);
       this.opSuperBar.setAlpha(1);
     }
+  }
+
+  finalizeSpawnPresentation() {
+    if (!this.opponent || this._corpseRemoved) return;
+    this._spawnPresented = true;
+    this.updateUIPosition();
+    this.setPresenceState(this.presenceConnected, this.presenceLoaded);
   }
 
   updateHealthBar(dead = false, healthBarY) {
@@ -404,6 +414,7 @@ export default class OpPlayer {
       return;
 
     this._deathPresentationActive = true;
+    this._spawnPresented = true;
     this.opCurrentHealth = 0;
     if (Number.isFinite(meta?.x) && Number.isFinite(meta?.y)) {
       this.opponent.x = meta.x;

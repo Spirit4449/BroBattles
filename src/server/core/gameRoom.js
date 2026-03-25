@@ -144,8 +144,8 @@ class GameRoom {
         spawnIndex: this._computeSpawnIndex(user.name, matchPlayer.team),
 
         // Game state
-        x: 400, // Will be set by spawn logic
-        y: 400,
+        x: null,
+        y: null,
         maxHealth,
         health: maxHealth,
         superCharge: 0,
@@ -306,11 +306,19 @@ class GameRoom {
     });
 
     // Client signals they're ready to start (assets + scene loaded)
-    socket.on("game:ready", () => {
+    socket.on("game:ready", (payload = {}) => {
       try {
-        if (this.status !== "starting") return;
         const p = this.players.get(socket.id);
         if (!p || !p.user_id) return;
+        p._sceneReady = true;
+        if (Number.isFinite(Number(payload?.x))) p.x = Number(payload.x);
+        if (Number.isFinite(Number(payload?.y))) p.y = Number(payload.y);
+        if (typeof payload?.flip === "boolean") p.flip = !!payload.flip;
+        if (typeof payload?.animation === "string") {
+          p.animation = payload.animation;
+        }
+        p.loaded = Number.isFinite(p.x) && Number.isFinite(p.y);
+        if (this.status !== "starting") return;
         // Track by user_id (robust to reconnection)
         if (!this._readyAcks.has(p.user_id)) {
           this._readyAcks.add(p.user_id);

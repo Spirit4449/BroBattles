@@ -315,8 +315,9 @@ export function createPlayer(
     }
   });
 
-  // Now that position is finalized (spawn set using body-aware math), reveal the sprite
-  player.setVisible(true);
+  // Keep the local player hidden until the scene finishes spawn placement and any
+  // reconnect position restore. That removes the first-frame pop from -100,-100.
+  player.setVisible(false);
 
   // Frame/body already configured above prior to spawn for correct initial grounding
 
@@ -351,7 +352,7 @@ export function createPlayer(
 
   // Triangle to show which one is the user. Dissapears when the player moves
   indicatorTriangle = scene.add.graphics();
-  setLocalUiVisible(true);
+  setLocalUiVisible(false);
 
   // Arrow above the body top so it's consistent across different frame paddings
   const triangle = new Phaser.Geom.Triangle(
@@ -364,6 +365,7 @@ export function createPlayer(
   );
   indicatorTriangle.fillStyle(0x99ab2c); // Green color
   indicatorTriangle.fillTriangleShape(triangle);
+  indicatorTriangle.setVisible(false);
 
   // Character controller wiring (centralized per character)
   const ammoHooks = {
@@ -605,6 +607,49 @@ function setLocalUiVisible(visible) {
     indicatorTriangle?.setVisible(shouldShow);
     if (!shouldShow) indicatorTriangle?.clear?.();
   } catch (_) {}
+}
+
+function drawIndicatorTriangle() {
+  if (!indicatorTriangle || !player) return;
+  indicatorTriangle.clear();
+  const bodyTop = player.body ? player.body.y : player.y - player.height / 2;
+  const triangle = new Phaser.Geom.Triangle(
+    player.x,
+    bodyTop - 10,
+    player.x - 13,
+    bodyTop - 20,
+    player.x + 13,
+    bodyTop - 20,
+  );
+  indicatorTriangle.fillStyle(0x99ab2c);
+  indicatorTriangle.fillTriangleShape(triangle);
+}
+
+function syncLocalUiPosition() {
+  if (!player) return;
+  const uiTop = player.body ? player.body.y : player.y - player.height / 2;
+  try {
+    playerName?.setPosition(player.x, uiTop - 22);
+  } catch (_) {}
+  try {
+    if (indicatorTriangle?.visible) drawIndicatorTriangle();
+  } catch (_) {}
+  updateHealthBar();
+}
+
+export function finalizeLocalSpawnPresentation() {
+  if (!player) return;
+  try {
+    player.setVisible(true);
+  } catch (_) {}
+  setLocalUiVisible(!dead);
+  if (!dead) {
+    try {
+      indicatorTriangle?.setVisible(true);
+      drawIndicatorTriangle();
+    } catch (_) {}
+  }
+  syncLocalUiPosition();
 }
 
 function updateHealthBar() {
@@ -1108,6 +1153,7 @@ export function handlePlayerMovement(scene) {
   if (leftKey) {
     if (indicatorTriangle) {
       indicatorTriangle.clear(); // Removes indicator triangle if the player has moved
+      indicatorTriangle.setVisible(false);
     }
     // Apply acceleration left (respect wall-kick lock)
     const lockActive = (player._wallKickLockUntil || 0) > Date.now();
@@ -1146,6 +1192,7 @@ export function handlePlayerMovement(scene) {
   } else if (rightKey) {
     if (indicatorTriangle) {
       indicatorTriangle.clear(); // Removes indicator triangle if the player has moved
+      indicatorTriangle.setVisible(false);
     }
     const wasFlip = player.flipX;
     if (!player._lockFlip) {
@@ -1204,6 +1251,7 @@ export function handlePlayerMovement(scene) {
     // If player is touching ground and jumping
     if (indicatorTriangle) {
       indicatorTriangle.clear(); // Removes indicator triangle if the player has jumped
+      indicatorTriangle.setVisible(false);
     }
     // Slight jump boost when moving fast to feel snappier transitions
     const vx = Math.abs(player.body.velocity.x || 0);
@@ -1251,10 +1299,7 @@ export function handlePlayerMovement(scene) {
     idle();
   }
 
-  updateHealthBar(); // Updates the health bar after the new player position
-  // Keep name anchored to body top regardless of frame padding
-  const uiTop = player.body ? player.body.y : player.y - player.height / 2;
-  playerName.setPosition(player.x, uiTop - 22);
+  syncLocalUiPosition();
 
   // Landing detection (transition airborne -> grounded)
   const onGround = player.body.touching.down;

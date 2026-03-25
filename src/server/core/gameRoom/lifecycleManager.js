@@ -109,30 +109,61 @@ function checkVictoryCondition(room) {
     winner = "team1";
   }
 
-  if (winner === null && t1Alive === 0 && t2Alive === 0) {
-    if (!room._pendingDrawFinishTimeout) {
-      room._pendingDrawFinishTimeout = setTimeout(() => {
-        room._pendingDrawFinishTimeout = null;
-        if (room.status !== "active") return;
-        const everyoneStillDead = Array.from(room.players.values()).every(
-          (p) => !p.isAlive,
-        );
-        if (everyoneStillDead) {
-          room._finishGame(null, { t1Alive: 0, t2Alive: 0 });
-        }
-      }, ALL_DEAD_GAME_OVER_DELAY_MS);
+  const terminal =
+    winner !== null || (winner === null && t1Alive === 0 && t2Alive === 0);
+
+  if (!terminal) {
+    if (room._pendingVictoryFinishTimeout) {
+      clearTimeout(room._pendingVictoryFinishTimeout);
+      room._pendingVictoryFinishTimeout = null;
+      room._pendingVictoryOutcomeKey = null;
     }
     return;
   }
 
-  if (room._pendingDrawFinishTimeout) {
-    clearTimeout(room._pendingDrawFinishTimeout);
-    room._pendingDrawFinishTimeout = null;
+  const outcomeKey =
+    winner !== null ? String(winner) : t1Alive === 0 && t2Alive === 0 ? "draw" : null;
+
+  if (
+    room._pendingVictoryFinishTimeout &&
+    room._pendingVictoryOutcomeKey === outcomeKey
+  ) {
+    return;
   }
 
-  if (winner !== null || (t1Alive === 0 && t2Alive === 0)) {
-    room._finishGame(winner, { t1Alive, t2Alive });
+  if (room._pendingVictoryFinishTimeout) {
+    clearTimeout(room._pendingVictoryFinishTimeout);
   }
+
+  room._pendingVictoryOutcomeKey = outcomeKey;
+  room._pendingVictoryFinishTimeout = setTimeout(() => {
+    room._pendingVictoryFinishTimeout = null;
+    room._pendingVictoryOutcomeKey = null;
+    if (room.status !== "active") return;
+
+    const latestAlive = { team1: 0, team2: 0 };
+    for (const p of room.players.values()) {
+      if (!p.isAlive) continue;
+      if (p.team === "team1") latestAlive.team1++;
+      else if (p.team === "team2") latestAlive.team2++;
+    }
+
+    let latestWinner = null;
+    if (latestAlive.team1 === 0 && latestAlive.team2 === 0) {
+      latestWinner = null;
+    } else if (latestAlive.team1 === 0) {
+      latestWinner = "team2";
+    } else if (latestAlive.team2 === 0) {
+      latestWinner = "team1";
+    } else {
+      return;
+    }
+
+    room._finishGame(latestWinner, {
+      t1Alive: latestAlive.team1,
+      t2Alive: latestAlive.team2,
+    });
+  }, ALL_DEAD_GAME_OVER_DELAY_MS);
 }
 
 async function finishGame(room, winnerTeam, meta = {}) {
@@ -143,9 +174,10 @@ async function finishGame(room, winnerTeam, meta = {}) {
   );
 
   room._loopRunning = false;
-  if (room._pendingDrawFinishTimeout) {
-    clearTimeout(room._pendingDrawFinishTimeout);
-    room._pendingDrawFinishTimeout = null;
+  if (room._pendingVictoryFinishTimeout) {
+    clearTimeout(room._pendingVictoryFinishTimeout);
+    room._pendingVictoryFinishTimeout = null;
+    room._pendingVictoryOutcomeKey = null;
   }
   if (room.gameLoop) {
     try {

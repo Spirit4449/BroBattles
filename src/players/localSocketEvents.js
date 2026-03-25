@@ -132,7 +132,7 @@ export function bindLocalSocketEvents({
     }
 
     try {
-      scene.sound.play("sfx-death", { volume: 0.52 });
+      scene.sound.play("sfx-you-death", { volume: 0.55 });
     } catch (_) {}
     spawnDeathBurst(scene, player, { color: 0xff7394, glowColor: 0xffd4de });
     try {

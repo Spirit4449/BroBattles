@@ -16,7 +16,11 @@ function initializeSpawnPositions(room) {
   for (const p of room.players.values()) {
     const spawnIndex = computeSpawnIndex(room, p.name, p.team);
     p.spawnIndex = spawnIndex;
-    p.loaded = false;
+    p.loaded =
+      p.loaded === true ||
+      (p._sceneReady === true &&
+        Number.isFinite(p.x) &&
+        Number.isFinite(p.y));
   }
 }
 
@@ -43,6 +47,7 @@ function sendGameStateToPlayer(room, socket) {
       x: pu.x,
       y: pu.y,
       spawnedAt: pu.spawnedAt,
+      activeAt: pu.activeAt,
       expiresAt: pu.expiresAt,
     })),
     deathDrops: room._buildDeathDropsSnapshot(),
@@ -53,8 +58,8 @@ function sendGameStateToPlayer(room, socket) {
         name: mp.name,
         team: mp.team,
         char_class: p?.char_class || mp.char_class,
-        x: Number.isFinite(p?.x) ? p.x : 400,
-        y: Number.isFinite(p?.y) ? p.y : 400,
+        x: Number.isFinite(p?.x) ? p.x : null,
+        y: Number.isFinite(p?.y) ? p.y : null,
         health: Number.isFinite(p?.health) ? p.health : null,
         superCharge: Number.isFinite(p?.superCharge) ? p.superCharge : 0,
         maxSuperCharge: Number.isFinite(p?.maxSuperCharge)
@@ -88,6 +93,7 @@ function broadcastSnapshot(room, extraTiming = null) {
       x: pu.x,
       y: pu.y,
       spawnedAt: pu.spawnedAt,
+      activeAt: pu.activeAt,
       expiresAt: pu.expiresAt,
     })),
     deathDrops: room._buildDeathDropsSnapshot(),
@@ -102,8 +108,8 @@ function broadcastSnapshot(room, extraTiming = null) {
 
   for (const playerData of room.players.values()) {
     const playerSnapshot = {
-      x: playerData.x,
-      y: playerData.y,
+      x: Number.isFinite(playerData.x) ? playerData.x : null,
+      y: Number.isFinite(playerData.y) ? playerData.y : null,
       flip: !!playerData.flip,
       animation: playerData.animation || null,
       health: playerData.health,

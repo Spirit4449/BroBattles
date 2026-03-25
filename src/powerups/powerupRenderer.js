@@ -284,7 +284,15 @@ export function createPowerupRenderer({
       if (visual && !visual.despawning) {
         visual.despawning = true;
         scene.tweens.add({
-          targets: [visual.container, visual.glow, visual.glowOuter, visual.glowCore],
+          targets: [
+            visual.container,
+            visual.glow,
+            visual.glowOuter,
+            visual.glowCore,
+            visual.omenBase,
+            visual.omenRing,
+            visual.omenEcho,
+          ].filter(Boolean),
           alpha: 0,
           scaleX: 0.2,
           scaleY: 0.2,
@@ -293,6 +301,9 @@ export function createPowerupRenderer({
           ease: "Back.easeIn",
           onComplete: () => {
             try {
+              visual.omenBase?.destroy?.();
+              visual.omenRing?.destroy?.();
+              visual.omenEcho?.destroy?.();
               visual.glow.destroy();
               visual.glowOuter.destroy();
               visual.glowCore.destroy();
@@ -755,6 +766,16 @@ export function createPowerupRenderer({
         const glowCore = scene.add.circle(pu.x, pu.y, 10, 0xffffff, 0.16);
         glowCore.setDepth(4);
         glowCore.setBlendMode(Phaser.BlendModes.ADD);
+        const omenBase = scene.add.circle(pu.x, pu.y + 4, 16, glowColor, 0.34);
+        omenBase.setDepth(3);
+        omenBase.setBlendMode(Phaser.BlendModes.ADD);
+        const omenRing = scene.add.circle(pu.x, pu.y + 4, 24, glowColor, 0.24);
+        omenRing.setDepth(4);
+        omenRing.setStrokeStyle(4, 0xffffff, 0.72);
+        omenRing.setBlendMode(Phaser.BlendModes.ADD);
+        const omenEcho = scene.add.circle(pu.x, pu.y + 4, 36, glowColor, 0.14);
+        omenEcho.setDepth(2);
+        omenEcho.setBlendMode(Phaser.BlendModes.ADD);
         const iconKey = powerupTextureFor(pu.type);
         const children = [];
         let spr = null;
@@ -791,13 +812,18 @@ export function createPowerupRenderer({
           type: pu.type,
           x: pu.x,
           y: pu.y,
+          activeAt: Number(pu.activeAt) || Number(pu.spawnedAt) || Date.now(),
           expiresAt: Number(pu.expiresAt) || 0,
           glow,
           glowOuter,
           glowCore,
+          omenBase,
+          omenRing,
+          omenEcho,
           sprite: spr,
           container,
           phase: Math.random() * Math.PI * 2,
+          activated: false,
           despawning: false,
         };
         visual.container.setAlpha(0);
@@ -808,21 +834,99 @@ export function createPowerupRenderer({
         visual.glow.setScale(0.45);
         visual.glowOuter.setScale(0.45);
         visual.glowCore.setScale(0.45);
-        scene.tweens.add({
-          targets: [visual.container, visual.glow, visual.glowOuter, visual.glowCore],
-          alpha: 1,
-          scaleX: 1,
-          scaleY: 1,
-          duration: 480,
-          ease: "Back.easeOut",
-        });
         scene._powerupVisuals[id] = visual;
       }
 
       if (!visual.despawning) {
+        const nowMs = Date.now();
+        visual.activeAt =
+          Number(pu.activeAt) || visual.activeAt || Number(pu.spawnedAt) || nowMs;
         visual.expiresAt = Number(pu.expiresAt) || visual.expiresAt || 0;
         visual.x = pu.x;
         visual.y = pu.y;
+        const isActive = nowMs >= visual.activeAt;
+
+        if (!visual.activated && isActive) {
+          visual.activated = true;
+          const activationAge = nowMs - visual.activeAt;
+          if (activationAge > 260) {
+            visual.container.setPosition(pu.x, pu.y - 6);
+            visual.glow.setPosition(pu.x, pu.y - 5);
+            visual.glowOuter.setPosition(pu.x, pu.y - 5);
+            visual.glowCore.setPosition(pu.x, pu.y - 5);
+            visual.container.setScale(1);
+            visual.glow.setScale(1);
+            visual.glowOuter.setScale(1);
+            visual.glowCore.setScale(1);
+            visual.container.setAlpha(1);
+            visual.glow.setAlpha(1);
+            visual.glowOuter.setAlpha(1);
+            visual.glowCore.setAlpha(1);
+            if (visual.omenBase) visual.omenBase.alpha = 0;
+            if (visual.omenRing) visual.omenRing.alpha = 0;
+            if (visual.omenEcho) visual.omenEcho.alpha = 0;
+          } else {
+            visual.container.setPosition(pu.x, pu.y + 16);
+            visual.glow.setPosition(pu.x, pu.y + 17);
+            visual.glowOuter.setPosition(pu.x, pu.y + 17);
+            visual.glowCore.setPosition(pu.x, pu.y + 17);
+            visual.container.setScale(0.78);
+            visual.glow.setScale(0.72);
+            visual.glowOuter.setScale(0.72);
+            visual.glowCore.setScale(0.72);
+            scene.tweens.add({
+              targets: [visual.omenBase, visual.omenRing, visual.omenEcho].filter(
+                Boolean,
+              ),
+              alpha: 0,
+              scaleX: 1.28,
+              scaleY: 1.28,
+              duration: 220,
+              ease: "Quad.easeIn",
+            });
+            scene.tweens.add({
+              targets: [visual.container, visual.glow, visual.glowOuter, visual.glowCore],
+              alpha: 1,
+              y: "-=22",
+              scaleX: 1,
+              scaleY: 1,
+              duration: 340,
+              ease: "Cubic.easeOut",
+            });
+          }
+        }
+
+        if (!isActive) {
+          const omenProgress = Phaser.Math.Clamp(
+            1 - (visual.activeAt - nowMs) / 2000,
+            0,
+            1,
+          );
+          const omenPulse = 0.5 + 0.5 * Math.sin(nowSec * 7 + visual.phase);
+          const omenX = pu.x;
+          const omenY = pu.y + 4;
+          visual.container.setAlpha(0);
+          visual.glow.setAlpha(0);
+          visual.glowOuter.setAlpha(0);
+          visual.glowCore.setAlpha(0);
+          visual.omenBase?.setPosition(omenX, omenY);
+          visual.omenRing?.setPosition(omenX, omenY);
+          visual.omenEcho?.setPosition(omenX, omenY);
+          if (visual.omenBase) {
+            visual.omenBase.alpha = 0.28 + 0.26 * omenPulse;
+            visual.omenBase.radius = 14 + omenProgress * 12 + omenPulse * 4;
+          }
+          if (visual.omenRing) {
+            visual.omenRing.alpha = 0.32 + 0.28 * omenPulse;
+            visual.omenRing.radius = 22 + omenProgress * 20 + omenPulse * 7;
+          }
+          if (visual.omenEcho) {
+            visual.omenEcho.alpha = 0.12 + 0.16 * omenPulse;
+            visual.omenEcho.radius = 34 + omenProgress * 30 + omenPulse * 10;
+          }
+          continue;
+        }
+
         const bob = Math.sin(nowSec * 2.8 + visual.phase) * 5;
         let shakeX = 0;
         let shakeY = 0;
@@ -837,6 +941,9 @@ export function createPowerupRenderer({
               Math.cos(nowSec * (speed * 1.13) + visual.phase * 3) * amp * 0.6;
           }
         }
+        if (visual.omenBase) visual.omenBase.alpha = 0;
+        if (visual.omenRing) visual.omenRing.alpha = 0;
+        if (visual.omenEcho) visual.omenEcho.alpha = 0;
         visual.container.x = pu.x + shakeX;
         visual.container.y = pu.y - 6 + bob + shakeY;
         visual.glow.x = pu.x + shakeX;
@@ -905,7 +1012,15 @@ export function createPowerupRenderer({
       if (seenIds.has(id) || visual.despawning) continue;
       visual.despawning = true;
       scene.tweens.add({
-        targets: [visual.container, visual.glow, visual.glowOuter, visual.glowCore],
+        targets: [
+          visual.container,
+          visual.glow,
+          visual.glowOuter,
+          visual.glowCore,
+          visual.omenBase,
+          visual.omenRing,
+          visual.omenEcho,
+        ].filter(Boolean),
         alpha: 0,
         scaleX: 0.35,
         scaleY: 0.35,
@@ -913,6 +1028,9 @@ export function createPowerupRenderer({
         ease: "Quad.easeIn",
         onComplete: () => {
           try {
+            visual.omenBase?.destroy?.();
+            visual.omenRing?.destroy?.();
+            visual.omenEcho?.destroy?.();
             visual.glow.destroy();
             visual.glowOuter.destroy();
             visual.glowCore.destroy();

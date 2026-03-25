@@ -29,6 +29,7 @@ import {
 import { createPowerupRenderer } from "./powerups/powerupRenderer";
 import {
   createPlayer,
+  finalizeLocalSpawnPresentation,
   player,
   handlePlayerMovement,
   dead,
@@ -560,6 +561,16 @@ function initializePlayers(players) {
   });
 }
 
+function attachMapCollidersToSprite(scene, sprite, objects) {
+  if (!scene?.physics || !sprite || !Array.isArray(objects)) return;
+  for (const mapObject of objects) {
+    if (!mapObject) continue;
+    try {
+      scene.physics.add.collider(sprite, mapObject);
+    } catch (_) {}
+  }
+}
+
 // Initialize game when page loads
 window.__BOOT_GAME__ = () =>
   onReady(() => {
@@ -839,6 +850,8 @@ class GameScene extends Phaser.Scene {
       opponentPlayers,
     );
 
+    attachMapCollidersToSprite(this, player, mapObjects);
+
     // Set initial super stats
     const me = (gameData.players || []).find((p) => p.name === username);
     if (me) {
@@ -876,6 +889,7 @@ class GameScene extends Phaser.Scene {
         myIndex,
         teamSize,
       );
+      stabilizeSpawnedSpriteOnMap(this, player, mapObjects);
     } catch (_) {}
 
     // If server already has my live state (refresh/reconnect), apply it after spawn snap.
@@ -897,8 +911,13 @@ class GameScene extends Phaser.Scene {
             pendingAuthoritativeLocalState.x,
             pendingAuthoritativeLocalState.y,
           );
+          stabilizeSpawnedSpriteOnMap(this, player, mapObjects);
         }
       }
+    } catch (_) {}
+
+    try {
+      finalizeLocalSpawnPresentation();
     } catch (_) {}
 
     // Server stats are already applied above prior to createPlayer
@@ -939,12 +958,6 @@ class GameScene extends Phaser.Scene {
       // Keep config in sync for any systems that read it
       const arcadeCfg = this.sys?.game?.config?.physics?.arcade;
       if (arcadeCfg) arcadeCfg.debug = enable;
-    });
-
-    // Adds collision between map and player
-    mapObjects.forEach((mapObject) => {
-      // Add collider between the object and each map object
-      this.physics.add.collider(player, mapObject);
     });
 
     // Camera: smooth follow
@@ -1054,6 +1067,14 @@ class GameScene extends Phaser.Scene {
             (gameData.players || []).filter((p) => p.team === playerData.team)
               .length,
           );
+          if (
+            playerData.loaded === true &&
+            Number.isFinite(playerData.x) &&
+            Number.isFinite(playerData.y)
+          ) {
+            existing.opponent.body?.reset?.(playerData.x, playerData.y);
+          }
+          existing.finalizeSpawnPresentation?.();
           if (existing.updateUIPosition) existing.updateUIPosition();
         } catch (_) {}
         return;
@@ -1072,6 +1093,8 @@ class GameScene extends Phaser.Scene {
           .length,
         activeMapId,
       );
+
+      attachMapCollidersToSprite(this, opPlayer.opponent, mapObjects);
 
       // Tag instance with spawn version and optional server index to support idempotency
       opPlayer._spawnVersion = SPAWN_VERSION;
@@ -1097,6 +1120,14 @@ class GameScene extends Phaser.Scene {
           (gameData.players || []).filter((p) => p.team === playerData.team)
             .length,
         );
+        if (
+          playerData.loaded === true &&
+          Number.isFinite(playerData.x) &&
+          Number.isFinite(playerData.y)
+        ) {
+          opPlayer.opponent.body?.reset?.(playerData.x, playerData.y);
+        }
+        opPlayer.finalizeSpawnPresentation?.();
         if (opPlayer.updateUIPosition) opPlayer.updateUIPosition();
       } catch (_) {}
 
@@ -1293,15 +1324,26 @@ class GameScene extends Phaser.Scene {
         const inPrecision =
           (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
         const effectiveAlpha = inPrecision ? Math.max(alpha, 0.85) : alpha;
-        if (aPosData && bPosData) {
-          targetX = aPosData.x + effectiveAlpha * (bPosData.x - aPosData.x);
-          targetY = aPosData.y + effectiveAlpha * (bPosData.y - aPosData.y);
-        } else if (bPosData) {
-          targetX = bPosData.x;
-          targetY = bPosData.y;
-        } else if (aPosData) {
-          targetX = aPosData.x;
-          targetY = aPosData.y;
+        const aX = Number(aPosData?.x);
+        const aY = Number(aPosData?.y);
+        const bX = Number(bPosData?.x);
+        const bY = Number(bPosData?.y);
+        if (
+          aPosData &&
+          bPosData &&
+          Number.isFinite(aX) &&
+          Number.isFinite(aY) &&
+          Number.isFinite(bX) &&
+          Number.isFinite(bY)
+        ) {
+          targetX = aX + effectiveAlpha * (bX - aX);
+          targetY = aY + effectiveAlpha * (bY - aY);
+        } else if (bPosData && Number.isFinite(bX) && Number.isFinite(bY)) {
+          targetX = bX;
+          targetY = bY;
+        } else if (aPosData && Number.isFinite(aX) && Number.isFinite(aY)) {
+          targetX = aX;
+          targetY = aY;
         }
       }
 
@@ -1394,6 +1436,23 @@ class GameScene extends Phaser.Scene {
   }
 }
 
+function stabilizeSpawnedSpriteOnMap(scene, sprite, objects) {
+  if (!scene?.physics?.world || !sprite || !Array.isArray(objects)) return;
+  try {
+    sprite.body?.updateFromGameObject?.();
+  } catch (_) {}
+  try {
+    sprite.setVelocity?.(0, 0);
+    sprite.setAcceleration?.(0, 0);
+  } catch (_) {}
+  for (const mapObject of objects) {
+    if (!mapObject) continue;
+    try {
+      scene.physics.world.collide(sprite, mapObject);
+    } catch (_) {}
+  }
+}
+
 const config = {
   // Force Canvas renderer; enable transparency so the canvas can show the HTML/CSS background behind it
   type: Phaser.CANVAS,
@@ -1427,14 +1486,25 @@ const game = new Phaser.Game(config);
 
 export { opponentPlayers, teamPlayers };
 
-// Emit a one-time game:ready ack when both scene and startingPhase are true
+function buildReadyPayload() {
+  const payload = { matchId: Number(matchId) };
+  if (!player) return payload;
+  if (Number.isFinite(player.x)) payload.x = player.x;
+  if (Number.isFinite(player.y)) payload.y = player.y;
+  payload.flip = !!player.flipX;
+  payload.animation = player.anims?.currentAnim?.key || null;
+  return payload;
+}
+
+// Emit a one-time game:ready handshake once the scene exists and the server can
+// use the local player's real spawn position instead of waiting for movement.
 function trySendReadyAck() {
   if (readyAckSent) return;
   const sceneReady = !!gameScene && !!player; // player created implies scene ready
-  if (!sceneReady || !startingPhase) return;
+  if (!sceneReady || (!startingPhase && !isLiveGame)) return;
   try {
     readyAckSent = true;
-    socket.emit("game:ready", { matchId: Number(matchId) });
+    socket.emit("game:ready", buildReadyPayload());
     console.log("Sent game:ready ack");
   } catch (_) {}
 }
