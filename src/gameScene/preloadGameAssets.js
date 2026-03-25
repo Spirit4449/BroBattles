@@ -61,7 +61,7 @@ export function preloadGameAssets({
   scene.load.audio("sfx-walljump", `${staticPath}/walljump.mp3`);
   scene.load.audio("sfx-sliding", `${staticPath}/sliding.mp3`);
   scene.load.audio("sfx-sudden-death", `${staticPath}/suddendeath.mp3`);
-  scene.load.audio("sfx-death", `${staticPath}/death.mp3`);
+  scene.load.audio("sfx-death", `${staticPath}/death.wav`);
   scene.load.audio("sfx-coin-pickup", `${staticPath}/coin.mp3`);
   scene.load.audio("sfx-gem-pickup", `${staticPath}/gem.mp3`);
   scene.load.audio("sfx-noammo", [
