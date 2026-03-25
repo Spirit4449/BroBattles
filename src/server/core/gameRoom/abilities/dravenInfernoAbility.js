@@ -98,20 +98,17 @@ function tick(room, caster, now) {
     room._recordCombatStat(caster, { damage: applied, hits: 1 });
 
     if (target.health === 0 && old > 0) {
-      target.isAlive = false;
       room._recordCombatStat(caster, { kills: 1 });
     }
 
-    room._broadcastHealthUpdate(target);
+    room._broadcastHealthUpdate(target, { cause: "combat" });
 
-    if (!target.isAlive) {
-      room.io.to(`game:${room.matchId}`).emit("player:dead", {
-        username: target.name,
-        gameId: room.matchId,
+    if (target.health === 0 && old > 0) {
+      room._handlePlayerDeath(target, {
+        cause: "combat",
+        killedBy: caster.name,
+        at: now,
       });
-      try {
-        room._checkVictoryCondition();
-      } catch (_) {}
     }
   }
 }

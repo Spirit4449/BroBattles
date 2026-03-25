@@ -24,12 +24,12 @@ function processRegen(room) {
     p.health = Math.min(p.maxHealth, p.health + inc);
     p._regenNextAt = now + room.REGEN_TICK_MS;
     if (p.health !== old) {
-      maybeBroadcastHealth(room, p, now);
+      maybeBroadcastHealth(room, p, now, { cause: "heal" });
     }
   }
 }
 
-function broadcastHealthUpdate(room, playerData) {
+function broadcastHealthUpdate(room, playerData, meta = {}) {
   room.io.to(`game:${room.matchId}`).emit("health-update", {
     username: playerData.name,
     health: Math.max(0, Math.round(playerData.health)),
@@ -37,18 +37,19 @@ function broadcastHealthUpdate(room, playerData) {
       1,
       Math.round(playerData.maxHealth || playerData.health || 1),
     ),
+    cause: meta.cause || null,
     gameId: room.matchId,
   });
   playerData._lastHealthBroadcastAt = Date.now();
 }
 
-function maybeBroadcastHealth(room, playerData, nowTs) {
+function maybeBroadcastHealth(room, playerData, nowTs, meta = {}) {
   const last = Number(playerData._lastHealthBroadcastAt || 0);
   if (
     nowTs - last >= room.REGEN_BROADCAST_MIN_MS ||
     playerData.health === playerData.maxHealth
   ) {
-    broadcastHealthUpdate(room, playerData);
+    broadcastHealthUpdate(room, playerData, meta);
   }
 }
 
@@ -86,7 +87,7 @@ function handleHeal(room, payload) {
     target.health = Math.min(target.maxHealth, target.health + amount);
     if (target.health !== old) {
       target.lastCombatAt = now;
-      broadcastHealthUpdate(room, target);
+      broadcastHealthUpdate(room, target, { cause: "heal" });
     }
   } catch (e) {
     console.warn(`[GameRoom ${room.matchId}] handleHeal error:`, e?.message);

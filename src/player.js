@@ -351,6 +351,7 @@ export function createPlayer(
 
   // Triangle to show which one is the user. Dissapears when the player moves
   indicatorTriangle = scene.add.graphics();
+  setLocalUiVisible(true);
 
   // Arrow above the body top so it's consistent across different frame paddings
   const triangle = new Phaser.Geom.Triangle(
@@ -513,6 +514,12 @@ export function createPlayer(
     onLocalDeath: () => {
       resetChargeState();
       updateHealthBar();
+      setLocalUiVisible(false);
+    },
+    removeLocalCorpse: () => {
+      try {
+        player?.setVisible(false);
+      } catch (_) {}
     },
     onDebug: pdbg,
   });
@@ -561,6 +568,45 @@ function setCurrentHealth(damage) {
   if (currentHealth < 0) currentHealth = 0;
   updateHealthBar();
 }
+
+function setLocalUiVisible(visible) {
+  const shouldShow = visible !== false;
+  try {
+    playerName?.setVisible(shouldShow);
+  } catch (_) {}
+  try {
+    healthText?.setVisible(shouldShow);
+  } catch (_) {}
+  try {
+    healthBar?.setVisible(shouldShow);
+  } catch (_) {}
+  try {
+    ammoBar?.setVisible(shouldShow);
+  } catch (_) {}
+  try {
+    ammoBarBack?.setVisible(shouldShow);
+  } catch (_) {}
+  try {
+    chargeBar?.setVisible(shouldShow);
+  } catch (_) {}
+  try {
+    chargeBarBack?.setVisible(shouldShow);
+  } catch (_) {}
+  try {
+    superBar?.setVisible(shouldShow);
+  } catch (_) {}
+  try {
+    superBarBack?.setVisible(shouldShow);
+  } catch (_) {}
+  try {
+    rangeReticle?.setVisible(shouldShow);
+  } catch (_) {}
+  try {
+    indicatorTriangle?.setVisible(shouldShow);
+    if (!shouldShow) indicatorTriangle?.clear?.();
+  } catch (_) {}
+}
+
 function updateHealthBar() {
   if (currentHealth <= 0) currentHealth = 0;
   const healthPercentage = currentHealth / maxHealth;
@@ -579,7 +625,6 @@ function updateHealthBar() {
   } else {
     // Show 0 instead of blank when dead
     healthText.setText(`0`);
-    playerName.setPosition(player.x, playerName.y + 30);
   }
 
   // Draw the background rectangle with the default fill color
@@ -855,16 +900,16 @@ export function handlePlayerMovement(scene) {
   // - maxSpeed: top horizontal running speed. Higher = faster.
   const maxSpeed = 260 * Math.max(0.5, movementSpeedMult || 1);
   // - accel: how fast you speed up on ground. Higher = snappier starts.
-  const accel = 3500;
+  const accel = 3000;
   // - airAccel: acceleration in air. Higher = more air control; lower = floatier.
   const airAccel = 3300;
   // - dragGround: how quickly you slow when you release input on ground.
   //   Higher = stop sooner; lower = glide longer.
-  const dragGround = 1300;
+  const dragGround = 1200;
   // - dragAir: subtle slowdown in air (prevents infinite drift).
-  const dragAir = 200;
+  const dragAir = 260;
   // - jumpSpeed: base jump power (lower to make jumps less powerful).
-  let jumpSpeed = 450; // was stronger before; keep lower for smaller hops
+  let jumpSpeed = 400; // was stronger before; keep lower for smaller hops
   // - jumpBoost: small bonus based on current horizontal speed (running jumps feel punchier).
   const jumpBoost = 10;
   // - coyoteTimeMs: grace window to jump just after leaving a ledge (more forgiving platforming).
@@ -876,12 +921,11 @@ export function handlePlayerMovement(scene) {
   // - wallKickLockMs: short window after a wall jump where opposite input is ignored
   //   so the horizontal kick isn't immediately canceled by collisions or input.
   const wallKickLockMs = 160;
-  // - wallJumpGraceMs/wallJumpGracePx: allow wall jump shortly after leaving wall.
-  const wallJumpGraceMs = 120;
-  const wallJumpGracePx = 20;
-  // - wall kick strength: small when jumping with up-only, full when up+away.
-  const wallKickSmall = 150;
+  // - wall kick strength: always use the stronger outward push.
   const wallKickFull = 360;
+  const wallSlideSnapDistance = 10;
+  const wallSlideVerticalPadding = 6;
+  const wallJumpPressBufferMs = 120;
   // - fallGravityFactor: gravity multiplier while falling (fast-fall). 1.0 = off.
   const fallGravityFactor = 1.35;
   // Ensure body uses our drag settings once
@@ -906,6 +950,9 @@ export function handlePlayerMovement(scene) {
     Phaser.Input.Keyboard.JustDown(cursors.up) ||
     Phaser.Input.Keyboard.JustDown(keyW) ||
     (!!keySpace && Phaser.Input.Keyboard.JustDown(keySpace));
+  if (upKeyFreshPress) {
+    player._lastJumpPressTime = Date.now();
+  }
 
   const touchingWallNow =
     !!player.body.touching.left ||
@@ -916,24 +963,60 @@ export function handlePlayerMovement(scene) {
     !!player.body.touching.left || !!player.body.blocked.left;
   const touchingRightNow =
     !!player.body.touching.right || !!player.body.blocked.right;
-  const nowWallTs = Date.now();
-  if (touchingWallNow) {
-    player._lastWallTouchTime = nowWallTs;
-    player._lastWallTouchSide = touchingLeftNow ? "left" : "right";
-    player._lastWallTouchX = player.x;
+  const playerBodyLeft = player.body.x;
+  const playerBodyRight = player.body.x + player.body.width;
+  const playerBodyTop = player.body.y;
+  const playerBodyBottom = player.body.y + player.body.height;
+  let nearLeftWall = false;
+  let nearRightWall = false;
+  if (Array.isArray(mapObjects)) {
+    for (const obj of mapObjects) {
+      const body = obj?.body;
+      if (!body || body === player.body || body.enable === false) continue;
+      const bodyWidth = Number(body.width) || 0;
+      const bodyHeight = Number(body.height) || 0;
+      if (bodyWidth <= 0 || bodyHeight <= 0) continue;
+
+      const objLeft = Number(body.x) || 0;
+      const objRight = objLeft + bodyWidth;
+      const objTop = Number(body.y) || 0;
+      const objBottom = objTop + bodyHeight;
+      const verticallyAligned =
+        playerBodyBottom > objTop + wallSlideVerticalPadding &&
+        playerBodyTop < objBottom - wallSlideVerticalPadding;
+      if (!verticallyAligned) continue;
+
+      if (
+        body.checkCollision?.right !== false &&
+        playerBodyLeft >= objRight &&
+        playerBodyLeft - objRight <= wallSlideSnapDistance
+      ) {
+        nearLeftWall = true;
+      }
+      if (
+        body.checkCollision?.left !== false &&
+        objLeft >= playerBodyRight &&
+        objLeft - playerBodyRight <= wallSlideSnapDistance
+      ) {
+        nearRightWall = true;
+      }
+      if (nearLeftWall && nearRightWall) break;
+    }
   }
-  const wallTouchAge = nowWallTs - (player._lastWallTouchTime || 0);
-  const wallTouchDx = Math.abs((player._lastWallTouchX ?? player.x) - player.x);
-  const wallJumpGraceActive =
-    !touchingWallNow &&
-    wallTouchAge <= wallJumpGraceMs &&
-    wallTouchDx <= wallJumpGracePx;
+  const nowWallTs = Date.now();
+  const bufferedJumpPressActive =
+    nowWallTs - (player._lastJumpPressTime || 0) <= wallJumpPressBufferMs;
+  const wallSlideLeft = touchingLeftNow || nearLeftWall;
+  const wallSlideRight = touchingRightNow || nearRightWall;
+  const wallSlideContact = wallSlideLeft || wallSlideRight;
   const wallSide = touchingLeftNow
     ? "left"
     : touchingRightNow
       ? "right"
-      : wallJumpGraceActive
-        ? player._lastWallTouchSide
+      : nearLeftWall
+        ? "left"
+      : nearRightWall
+        ? "right"
         : null;
 
   const nowTs = Date.now();
@@ -989,9 +1072,7 @@ export function handlePlayerMovement(scene) {
     const worldG = scene.physics?.world?.gravity?.y || 0;
     const isAirborne = !player.body.touching.down;
     const isFalling = (player.body.velocity.y || 0) > 5;
-    const touchingWall =
-      player.body.touching.left || player.body.touching.right;
-    if (isAirborne && isFalling && !touchingWall && fallGravityFactor > 1) {
+    if (isAirborne && isFalling && !wallSlideContact && fallGravityFactor > 1) {
       // Additive per-body gravity so total ~= worldG * fallGravityFactor
       player.body.setGravityY(worldG * (fallGravityFactor - 1));
     } else {
@@ -1105,6 +1186,16 @@ export function handlePlayerMovement(scene) {
   // Jumping
   const now = Date.now();
   if (
+    !dead &&
+    wallSide &&
+    !player.body.touching.down &&
+    canWallJump &&
+    bufferedJumpPressActive
+  ) {
+    wallJump(wallSide); // Calls walljump
+    scene.sound.play("sfx-walljump", { volume: 4 });
+    player._lastJumpPressTime = 0;
+  } else if (
     upKey &&
     (player.body.touching.down ||
       now - (player._lastGroundTime || 0) <= coyoteTimeMs) &&
@@ -1120,31 +1211,20 @@ export function handlePlayerMovement(scene) {
     jumpSpeed = (360 + boost) * Math.max(0.5, movementJumpMult || 1); // slightly higher base for a stronger jump
     jump(); // Calls jump
     scene.sound.play("sfx-jump", { volume: 3 });
-  } else if (
-    // Wall jump requires a fresh jump press each time.
-    !dead &&
-    wallSide &&
-    !player.body.touching.down &&
-    canWallJump &&
-    upKeyFreshPress
-  ) {
-    const awayPressed = wallSide === "left" ? rightKey : leftKey;
-    wallJump(wallSide, awayPressed); // Calls walljump
-    scene.sound.play("sfx-walljump", { volume: 4 });
   }
-  if (!dead && (touchingLeftNow || touchingRightNow) && !isAttacking) {
+  if (!dead && wallSlideContact && !isAttacking) {
     player.anims.play(resolveAnimKey(scene, currentCharacter, "sliding"), true); // Plays sliding animation
   }
 
   const isWallSliding =
     !dead &&
     !player.body.touching.down &&
-    (touchingLeftNow || touchingRightNow) &&
+    wallSlideContact &&
     (player.body.velocity.y || 0) > 20;
   updateWallSlideAudio(isWallSliding);
 
   // Wall slide: when touching a wall and airborne, limit fall speed for a slower slide
-  if (!player.body.touching.down && (touchingLeftNow || touchingRightNow)) {
+  if (!player.body.touching.down && wallSlideContact) {
     if (player.body.velocity.y > wallSlideMaxFallSpeed) {
       player.setVelocityY(wallSlideMaxFallSpeed);
     }
@@ -1154,8 +1234,7 @@ export function handlePlayerMovement(scene) {
   if (
     !player.anims.isPlaying &&
     !player.body.touching.down &&
-    !player.body.touching.left &&
-    !player.body.touching.right &&
+    !wallSlideContact &&
     !isAttacking
   ) {
     fall(); // Plays falling animation if the player is not touching a wall or if any other animation is playing
@@ -1255,13 +1334,12 @@ export function handlePlayerMovement(scene) {
     isJumping = true;
   }
 
-  function wallJump(wallSideParam, awayPressed) {
+  function wallJump(wallSideParam) {
     updateWallSlideAudio(false);
     // More powerful wall jump using physics impulses (no tween)
     canWallJump = false;
     const fromLeft = wallSideParam === "left";
-    const horizKickMag = awayPressed ? wallKickFull : wallKickSmall;
-    const horizKick = fromLeft ? horizKickMag : -horizKickMag;
+    const horizKick = fromLeft ? wallKickFull : -wallKickFull;
     const vertKick = Math.max(jumpSpeed + 30, 220); // slightly less vertical pop
 
     // Face away from the wall and fix body offset

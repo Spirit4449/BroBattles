@@ -11,7 +11,7 @@ const MOVEMENT_PHYSICS = {
   accel: 3500, // ground acceleration
   airAccel: 2300, // air acceleration
   dragGround: 1300, // slowdown on ground when no input
-  dragAir: 200, // subtle slowdown in air
+  dragAir: 240, // subtle slowdown in air
 
   // Vertical movement
   gravity: 950, // world gravity (px/s²)
@@ -27,9 +27,6 @@ const MOVEMENT_PHYSICS = {
   wallJumpCooldownMs: 320,
   wallSlideMaxFallSpeed: 160,
   wallKickLockMs: 160,
-  wallJumpGraceMs: 120,
-  wallJumpGracePx: 20,
-  wallKickSmall: 150,
   wallKickFull: 360,
 
   // Speed multipliers (applied by powerups/effects)

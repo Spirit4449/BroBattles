@@ -8,6 +8,7 @@ const {
 } = require("./gameRoomConfig");
 const effectManager = require("./gameRoom/effects/effectManager");
 const powerupManager = require("./gameRoom/powerupManager");
+const deathDropManager = require("./gameRoom/deathDropManager");
 const combatValidation = require("./gameRoom/combatValidation");
 const healthManager = require("./gameRoom/healthManager");
 const timerManager = require("./gameRoom/timerManager");
@@ -77,6 +78,8 @@ class GameRoom {
     this._lastPowerupSpawnAt = 0;
     this._nextPowerupSpawnPointIdx = 0;
     this._nextPowerupTypeIdx = 0;
+    this._deathDrops = new Map(); // id -> authoritative drop plan
+    this._nextDeathDropId = 1;
 
     console.log(
       `[GameRoom ${matchId}] Created for mode ${matchData.mode}, map ${matchData.map}`,
@@ -292,6 +295,10 @@ class GameRoom {
       this.handleHeal(socket.id, payload);
     });
 
+    socket.on("deathdrop:pickup", (payload) => {
+      this._handleDeathDropPickup(socket.id, payload);
+    });
+
     // Handle disconnection
     socket.on("disconnect", () => {
       // This will be handled by the main socket disconnect handler
@@ -386,6 +393,8 @@ class GameRoom {
     this._lastPowerupSpawnAt = this._loopStartWallTime;
     this._nextPowerupSpawnPointIdx = 0;
     this._nextPowerupTypeIdx = 0;
+    this._deathDrops.clear();
+    this._nextDeathDropId = 1;
     for (let i = 0; i < POWERUP_STARTING_COUNT; i++) {
       this._spawnPowerup();
     }
@@ -402,6 +411,7 @@ class GameRoom {
       this.processRegen();
       this._tickTimerAndSuddenDeath();
       this._tickPowerups();
+      this._tickDeathDrops();
       // Snapshot cadence: deterministic every N ticks
       if (this._tickId % this.SNAPSHOT_EVERY_TICKS === 0) {
         this._emitSnapshotWithTiming(currentMono);
@@ -556,12 +566,20 @@ class GameRoom {
     powerupManager.tickPowerups(this);
   }
 
+  _tickDeathDrops() {
+    deathDropManager.tickDeathDrops(this);
+  }
+
   _tickPowerupEffects() {
     powerupManager.tickPowerupEffects(this);
   }
 
   _buildPlayerEffectsSnapshot() {
     return powerupManager.buildPlayerEffectsSnapshot(this);
+  }
+
+  _buildDeathDropsSnapshot() {
+    return deathDropManager.buildDeathDropsSnapshot(this);
   }
 
   /**
@@ -603,6 +621,8 @@ class GameRoom {
     }
 
     this.players.clear();
+    this._powerups.clear();
+    this._deathDrops.clear();
     console.log(`[GameRoom ${this.matchId}] Cleaned up`);
   }
 
@@ -865,27 +885,17 @@ class GameRoom {
         if (scoredKill) {
           this._recordCombatStat(attacker, { kills: scoredKill });
         }
-        if (target.health === 0) target.isAlive = false;
-        this._broadcastHealthUpdate(target);
-        if (!target.isAlive) {
+        this._broadcastHealthUpdate(target, { cause: "combat" });
+        if (target.health === 0 && old > 0) {
           console.log(
             `%c[GameRoom ${this.matchId}] Player ${target.name} was killed by ${attacker.name}`,
             "color: red; font-weight: bold;",
           );
-          // Optional: emit death event
-          this.io.to(`game:${this.matchId}`).emit("player:dead", {
-            username: target.name,
-            gameId: this.matchId,
+          this._handlePlayerDeath(target, {
+            cause: "combat",
+            killedBy: attacker.name,
+            at: now,
           });
-          // After a death, check victory conditions
-          try {
-            this._checkVictoryCondition();
-          } catch (e) {
-            console.warn(
-              `[GameRoom ${this.matchId}] victory check failed`,
-              e?.message,
-            );
-          }
         }
       }
     } catch (e) {
@@ -963,15 +973,15 @@ class GameRoom {
   /**
    * Emit a health-update to all players in the room.
    */
-  _broadcastHealthUpdate(playerData) {
-    healthManager.broadcastHealthUpdate(this, playerData);
+  _broadcastHealthUpdate(playerData, meta = {}) {
+    healthManager.broadcastHealthUpdate(this, playerData, meta);
   }
 
   /**
    * Conditionally broadcast health if min interval elapsed.
    */
-  _maybeBroadcastHealth(playerData, nowTs) {
-    healthManager.maybeBroadcastHealth(this, playerData, nowTs);
+  _maybeBroadcastHealth(playerData, nowTs, meta = {}) {
+    healthManager.maybeBroadcastHealth(this, playerData, nowTs, meta);
   }
 
   /**
@@ -1010,6 +1020,14 @@ class GameRoom {
 
   _calculateRewards(bucket, winnerTeam, playerTeam) {
     return rewardManager.calculateRewards(this, bucket, winnerTeam, playerTeam);
+  }
+
+  _handlePlayerDeath(playerData, meta = {}) {
+    return deathDropManager.handlePlayerDeath(this, playerData, meta);
+  }
+
+  _handleDeathDropPickup(socketId, payload) {
+    return deathDropManager.handleDeathDropPickup(this, socketId, payload);
   }
 }
 

@@ -45,6 +45,7 @@ function sendGameStateToPlayer(room, socket) {
       spawnedAt: pu.spawnedAt,
       expiresAt: pu.expiresAt,
     })),
+    deathDrops: room._buildDeathDropsSnapshot(),
     playerEffects: room._buildPlayerEffectsSnapshot(),
     players: (room.matchData.players || []).map((mp) => {
       const p = liveByName.get(mp.name);
@@ -89,6 +90,7 @@ function broadcastSnapshot(room, extraTiming = null) {
       spawnedAt: pu.spawnedAt,
       expiresAt: pu.expiresAt,
     })),
+    deathDrops: room._buildDeathDropsSnapshot(),
     playerEffects: room._buildPlayerEffectsSnapshot(),
   };
 

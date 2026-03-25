@@ -5,6 +5,8 @@ export function renderPoisonWater(scene, { player, dead }) {
 
   const g = scene._poisonGraphics;
   g.clear();
+  const damagePulseActive = (scene._damageVignetteUntil || 0) > Date.now();
+  const spectatorVignette = !!scene._spectatorVignette;
 
   // Smooth-lerp toward server-sent Y so 500ms updates don't cause visible jumps
   const worldH =
@@ -77,8 +79,18 @@ export function renderPoisonWater(scene, { player, dead }) {
       const vigEl = document.getElementById("water-vignette");
       if (vigEl) {
         const inWater = player && player.y >= py;
-        vigEl.classList.toggle("water-danger-active", !!inWater && !dead);
-        if (!inWater || dead) vigEl.style.opacity = "0";
+        const showDanger = (!!inWater && !dead) || damagePulseActive;
+        vigEl.style.background = spectatorVignette
+          ? "radial-gradient(ellipse at center, transparent 34%, rgba(15, 23, 42, 0.72) 100%)"
+          : "radial-gradient(ellipse at center, transparent 38%, rgba(185, 28, 28, 0.68) 100%)";
+        vigEl.classList.toggle("water-danger-active", showDanger);
+        if (damagePulseActive) {
+          vigEl.style.opacity = "0.72";
+        } else if (spectatorVignette) {
+          vigEl.style.opacity = "0.42";
+        } else if (!inWater || dead) {
+          vigEl.style.opacity = "0";
+        }
       }
     }
   } else {
@@ -86,8 +98,19 @@ export function renderPoisonWater(scene, { player, dead }) {
     if (cssDiv) cssDiv.style.display = "none";
     const vigEl = document.getElementById("water-vignette");
     if (vigEl) {
-      vigEl.classList.remove("water-danger-active");
-      vigEl.style.opacity = "0";
+      vigEl.style.background = spectatorVignette
+        ? "radial-gradient(ellipse at center, transparent 34%, rgba(15, 23, 42, 0.72) 100%)"
+        : "radial-gradient(ellipse at center, transparent 38%, rgba(185, 28, 28, 0.68) 100%)";
+      if (damagePulseActive) {
+        vigEl.classList.add("water-danger-active");
+        vigEl.style.opacity = "0.72";
+      } else if (spectatorVignette) {
+        vigEl.classList.remove("water-danger-active");
+        vigEl.style.opacity = "0.42";
+      } else {
+        vigEl.classList.remove("water-danger-active");
+        vigEl.style.opacity = "0";
+      }
     }
   }
 }

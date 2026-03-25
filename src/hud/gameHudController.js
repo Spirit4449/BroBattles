@@ -365,6 +365,51 @@ export function createGameHudController({
     }, 2500);
   }
 
+  function showSpectatingBanner() {
+    if (window.__BB_MAP_EDIT_ACTIVE) return;
+    let banner = document.getElementById("spectating-banner");
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "spectating-banner";
+      banner.textContent = "Spectating";
+      Object.assign(banner.style, {
+        position: "fixed",
+        bottom: "18px",
+        left: "50%",
+        transform: "translate(-50%, -120px)",
+        opacity: "0",
+        padding: "12px 20px",
+        borderRadius: "10px",
+        border: "2px solid rgba(186, 230, 253, 0.9)",
+        background:
+          "linear-gradient(180deg, rgba(11,28,47,0.94), rgba(20,54,87,0.94))",
+        color: "#e0f2fe",
+        fontFamily: "'Press Start 2P', cursive",
+        fontSize: "14px",
+        letterSpacing: "2px",
+        textTransform: "uppercase",
+        textShadow: "0 2px 0 rgba(8,15,30,0.9)",
+        boxShadow: "0 12px 28px rgba(0,0,0,0.28)",
+        zIndex: "10000",
+        pointerEvents: "none",
+        transition:
+          "transform 0.5s cubic-bezier(0.22,1,0.36,1), opacity 0.35s ease",
+      });
+      document.body.appendChild(banner);
+    }
+    requestAnimationFrame(() => {
+      banner.style.opacity = "1";
+      banner.style.transform = "translate(-50%, 0)";
+    });
+  }
+
+  function hideSpectatingBanner() {
+    const banner = document.getElementById("spectating-banner");
+    if (!banner) return;
+    banner.style.opacity = "0";
+    banner.style.transform = "translate(-50%, -120px)";
+  }
+
   function initKeybindHud() {
     const hud = document.getElementById("battle-keybind-hud");
     const dismissBtn = document.getElementById("battle-keybind-dismiss");
@@ -607,6 +652,8 @@ export function createGameHudController({
     initTimerHud,
     updateTimerHud,
     showSuddenDeathBanner,
+    showSpectatingBanner,
+    hideSpectatingBanner,
     initKeybindHud,
     initTeamStatusHud,
     setTeamHudPlayerAlive,

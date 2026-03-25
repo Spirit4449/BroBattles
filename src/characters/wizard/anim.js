@@ -40,5 +40,5 @@ export function animations(scene) {
   ensureAnim(`${NAME}-falling`, ["fall"], 18, 0);
   ensureAnim(`${NAME}-sliding`, ["sing", "slide", "sliding"], 20, 2);
   ensureAnim(`${NAME}-throw`, ["throw", "attack"], 17, 0);
-  ensureAnim(`${NAME}-dying`, ["death", "die"], 10, 0);
+  ensureAnim(`${NAME}-dying`, ["dying", "death", "die"], 10, 0);
 }

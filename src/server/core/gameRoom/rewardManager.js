@@ -10,11 +10,15 @@ function ensureRewardBucket(room, playerData) {
       hits: 0,
       damage: 0,
       kills: 0,
+      dropCoins: 0,
+      dropGems: 0,
     };
     room.rewardStats.set(playerData.name, bucket);
   } else {
     bucket.userId = playerData.user_id;
     bucket.team = playerData.team;
+    bucket.dropCoins = Number(bucket.dropCoins) || 0;
+    bucket.dropGems = Number(bucket.dropGems) || 0;
   }
   return bucket;
 }
@@ -75,6 +79,8 @@ function calculateRewards(room, bucket, winnerTeam, playerTeam) {
   const hits = bucket?.hits || 0;
   const damage = bucket?.damage || 0;
   const kills = bucket?.kills || 0;
+  const dropCoins = bucket?.dropCoins || 0;
+  const dropGems = bucket?.dropGems || 0;
   const isWinner = winnerTeam && playerTeam && winnerTeam === playerTeam;
 
   const baseCoins = 40;
@@ -115,6 +121,8 @@ function calculateRewards(room, bucket, winnerTeam, playerTeam) {
   const minCoins = Number(overrides?.rewardFloor) || 5;
   const maxCoins = Number(overrides?.rewardCeiling) || 500;
   coins = Math.max(minCoins, Math.min(maxCoins, Math.round(coins)));
+  coins += Math.max(0, Math.round(dropCoins));
+  gems += Math.max(0, Math.round(dropGems));
 
   return { coins, gems };
 }

@@ -81,7 +81,9 @@ const effectDefs = {
     onApply(player, room) {
       const prev = player.health;
       player.health = player.maxHealth;
-      if (player.health !== prev) room._broadcastHealthUpdate(player);
+      if (player.health !== prev) {
+        room._broadcastHealthUpdate(player, { cause: "heal" });
+      }
     },
     onTick(player, room, now) {
       if (_isInSuddenDeathWater(room, player, now)) return;
@@ -90,7 +92,7 @@ const effectDefs = {
         (POWERUP_HEALTH_REGEN_PER_SEC * POWERUP_EFFECT_TICK_MS) / 1000;
       player.health = Math.min(player.maxHealth, player.health + inc);
       if (player.health !== prev) {
-        room._maybeBroadcastHealth(player, now);
+        room._maybeBroadcastHealth(player, now, { cause: "heal" });
         room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
           type: "health",
           username: player.name,
@@ -111,20 +113,13 @@ const effectDefs = {
       player.health = Math.max(0, player.health - dmg);
       player.lastCombatAt = now;
       if (player.health !== prev) {
-        room._broadcastHealthUpdate(player);
+        room._broadcastHealthUpdate(player, { cause: "poison" });
         room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
           type: "poison",
           username: player.name,
         });
         if (player.health <= 0) {
-          player.isAlive = false;
-          room.io.to(`game:${room.matchId}`).emit("player:dead", {
-            username: player.name,
-            gameId: room.matchId,
-          });
-          try {
-            room._checkVictoryCondition();
-          } catch (_) {}
+          room._handlePlayerDeath(player, { cause: "poison", at: now });
         }
       }
     },

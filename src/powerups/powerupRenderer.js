@@ -10,9 +10,14 @@ export function createPowerupRenderer({
   getOpponentPlayers,
   getTeamPlayers,
   getLatestPowerups,
+  getLatestDeathDrops,
   getLatestPlayerEffects,
   powerupCollectQueue,
+  deathdropCollectQueue,
   shieldImpactQueue,
+  socket,
+  getMapObjects,
+  getDead,
   setPowerupMobility,
   applyCharacterPowerupFx,
   drawCharacterPowerupAura,
@@ -32,6 +37,48 @@ export function createPowerupRenderer({
     return String(type || "?")
       .charAt(0)
       .toUpperCase();
+  }
+
+  function deathDropTextureFor(type) {
+    return type === "gem" ? "deathdrop-gem" : "deathdrop-coin";
+  }
+
+  function deathDropColorFor(type) {
+    return type === "gem" ? 0x67e8f9 : 0xfacc15;
+  }
+
+  function cleanupDeathDropVisual(id, visual) {
+    if (!visual) return;
+    try {
+      visual.colliders?.forEach((collider) => collider?.destroy?.());
+    } catch (_) {}
+    try {
+      visual.glow?.destroy?.();
+      visual.glowOuter?.destroy?.();
+      visual.glowCore?.destroy?.();
+    } catch (_) {}
+    try {
+      visual.sprite?.destroy?.();
+    } catch (_) {}
+    delete scene._deathDropVisuals[id];
+    try {
+      scene._pendingDeathDropPickups?.delete?.(id);
+    } catch (_) {}
+  }
+
+  function markDeathDropLanded(visual) {
+    if (!visual || visual.settled || !visual.sprite?.body) return;
+    const body = visual.sprite.body;
+    if (!body.blocked.down && !body.touching.down) return;
+    visual.settled = true;
+    visual.settledX = visual.sprite.x;
+    visual.settledY = visual.sprite.y;
+    try {
+      visual.sprite.setVelocity(0, 0);
+      visual.sprite.body.setAllowGravity(false);
+      visual.sprite.body.moves = false;
+      visual.sprite.body.immovable = true;
+    } catch (_) {}
   }
 
   function spawnTrailParticle(x, y, color, r = 5, life = 260) {
@@ -237,7 +284,7 @@ export function createPowerupRenderer({
       if (visual && !visual.despawning) {
         visual.despawning = true;
         scene.tweens.add({
-          targets: [visual.container, visual.glow],
+          targets: [visual.container, visual.glow, visual.glowOuter, visual.glowCore],
           alpha: 0,
           scaleX: 0.2,
           scaleY: 0.2,
@@ -247,6 +294,8 @@ export function createPowerupRenderer({
           onComplete: () => {
             try {
               visual.glow.destroy();
+              visual.glowOuter.destroy();
+              visual.glowCore.destroy();
               visual.container.destroy();
             } catch (_) {}
             delete scene._powerupVisuals[id];
@@ -271,6 +320,256 @@ export function createPowerupRenderer({
           onComplete: () => puff.destroy(),
         });
       }
+    }
+  }
+
+  function consumeCollectedDeathDropQueue() {
+    while (deathdropCollectQueue.length > 0) {
+      const evt = deathdropCollectQueue.shift();
+      if (!evt) continue;
+      const id = String(evt.id);
+      scene._pendingDeathDropPickups?.delete?.(id);
+      try {
+        scene.sound.play(
+          evt.type === "gem" ? "sfx-gem-pickup" : "sfx-coin-pickup",
+          { volume: 0.42 },
+        );
+      } catch (_) {}
+      const visual = scene._deathDropVisuals[id];
+      if (visual && !visual.despawning) {
+        visual.despawning = true;
+        try {
+          visual.sprite.body.enable = false;
+        } catch (_) {}
+        scene.tweens.add({
+          targets: [
+            visual.sprite,
+            visual.glow,
+            visual.glowOuter,
+            visual.glowCore,
+          ],
+          alpha: 0,
+          scaleX: 0.2,
+          scaleY: 0.2,
+          angle: 220,
+          duration: 190,
+          ease: "Back.easeIn",
+          onComplete: () => cleanupDeathDropVisual(id, visual),
+        });
+      } else if (typeof evt.x === "number" && typeof evt.y === "number") {
+        const puff = scene.add.circle(
+          evt.x,
+          evt.y,
+          13,
+          deathDropColorFor(evt.type),
+          0.88,
+        );
+        puff.setDepth(8);
+        puff.setBlendMode(Phaser.BlendModes.ADD);
+        scene.tweens.add({
+          targets: puff,
+          alpha: 0,
+          scaleX: 1.9,
+          scaleY: 1.9,
+          duration: 180,
+          ease: "Quad.easeOut",
+          onComplete: () => puff.destroy(),
+        });
+      }
+    }
+  }
+
+  function renderDeathDrops(nowSec) {
+    const seenIds = new Set();
+    const latestDrops = getLatestDeathDrops() || [];
+
+    for (const drop of latestDrops) {
+      if (!drop || typeof drop.id === "undefined") continue;
+      const id = String(drop.id);
+      seenIds.add(id);
+      let visual = scene._deathDropVisuals[id];
+
+      if (!visual) {
+        const tint = deathDropColorFor(drop.type);
+        const glow = scene.add.circle(drop.spawnX, drop.spawnY, 14, tint, 0.22);
+        glow.setDepth(6);
+        glow.setBlendMode(Phaser.BlendModes.ADD);
+        const glowOuter = scene.add.circle(
+          drop.spawnX,
+          drop.spawnY,
+          22,
+          tint,
+          0.1,
+        );
+        glowOuter.setDepth(5);
+        glowOuter.setBlendMode(Phaser.BlendModes.ADD);
+        const glowCore = scene.add.circle(
+          drop.spawnX,
+          drop.spawnY,
+          8,
+          0xffffff,
+          0.14,
+        );
+        glowCore.setDepth(6);
+        glowCore.setBlendMode(Phaser.BlendModes.ADD);
+
+        const sprite = scene.physics.add.image(
+          drop.spawnX,
+          drop.spawnY,
+          deathDropTextureFor(drop.type),
+        );
+        sprite.setDepth(7);
+        sprite.setCollideWorldBounds(false);
+        sprite.setBounce(0.16, 0.08);
+        sprite.setDrag(0, 0);
+        sprite.setVelocity(Number(drop.vx) || 0, Number(drop.vy) || 0);
+        const maxDim = Math.max(sprite.width || 1, sprite.height || 1);
+        const targetSize = drop.type === "gem" ? 26 : 24;
+        const baseScale = maxDim > 0 ? targetSize / maxDim : 1;
+        sprite.setScale(baseScale);
+        sprite._baseDeathDropScale = baseScale;
+
+        const colliders = [];
+        for (const mapObject of getMapObjects?.() || []) {
+          if (!mapObject) continue;
+          colliders.push(
+            scene.physics.add.collider(sprite, mapObject, () => {
+              markDeathDropLanded(visual);
+            }),
+          );
+        }
+
+        visual = {
+          id,
+          type: drop.type,
+          sprite,
+          glow,
+          glowOuter,
+          glowCore,
+          colliders,
+          phase: Math.random() * Math.PI * 2,
+          spawnedAt: Number(drop.spawnedAt) || Date.now(),
+          blinkAt: Number(drop.blinkAt) || 0,
+          expiresAt: Number(drop.expiresAt) || 0,
+          settled: false,
+          settledX: drop.spawnX,
+          settledY: drop.spawnY,
+          despawning: false,
+        };
+
+        scene._deathDropVisuals[id] = visual;
+      }
+
+      if (visual.despawning) continue;
+
+      visual.spawnedAt = Number(drop.spawnedAt) || visual.spawnedAt;
+      visual.blinkAt = Number(drop.blinkAt) || visual.blinkAt;
+      visual.expiresAt = Number(drop.expiresAt) || visual.expiresAt;
+      if (
+        scene._pendingDeathDropPickups?.has(id) &&
+        Date.now() - Number(visual.pickupRequestedAt || 0) > 120
+      ) {
+        scene._pendingDeathDropPickups.delete(id);
+      }
+
+      if (!visual.settled) {
+        markDeathDropLanded(visual);
+      }
+
+      const baseScale = Number(visual.sprite?._baseDeathDropScale) || 1;
+      const remainingMs =
+        visual.expiresAt > 0 ? visual.expiresAt - Date.now() : 9999;
+      const pulseWindowMs = Math.max(
+        1,
+        Number(visual.expiresAt || 0) - Number(visual.blinkAt || 0) || 3000,
+      );
+      const pulseT = Phaser.Math.Clamp(
+        1 - remainingMs / pulseWindowMs,
+        0,
+        1,
+      );
+      const pulseSpeed = 8 + pulseT * 26;
+      const pulseWave = Math.abs(
+        Math.sin(nowSec * pulseSpeed + visual.phase * 1.7),
+      );
+      const blinkAlpha =
+        pulseT > 0 ? 0.26 + (0.74 - pulseT * 0.08) * pulseWave : 1;
+
+      if (visual.settled) {
+        const bob = Math.sin(nowSec * 2.8 + visual.phase) * 5;
+        visual.sprite.x = visual.settledX;
+        visual.sprite.y = visual.settledY - 6 + bob;
+      }
+
+      const x = visual.sprite.x;
+      const y = visual.sprite.y;
+      visual.glow.x = x;
+      visual.glow.y = y + 1;
+      visual.glowOuter.x = x;
+      visual.glowOuter.y = y + 1;
+      visual.glowCore.x = x;
+      visual.glowCore.y = y + 1;
+
+      const glowPulse = Math.abs(Math.sin(nowSec * 3.5 + visual.phase));
+      visual.glow.alpha = (0.22 + 0.18 * glowPulse + pulseT * 0.08) * blinkAlpha;
+      visual.glow.radius = 15 + 4 * glowPulse + pulseT * 2;
+      visual.glowOuter.alpha =
+        (0.1 + 0.1 * glowPulse + pulseT * 0.06) * blinkAlpha;
+      visual.glowOuter.radius = visual.glow.radius + 7 + pulseT * 2;
+      visual.glowCore.alpha =
+        (0.12 + 0.08 * glowPulse + pulseT * 0.05) * blinkAlpha;
+      visual.glowCore.radius = 7 + 2 * glowPulse + pulseT;
+      visual.sprite.alpha = blinkAlpha;
+
+      if (visual.type === "coin") {
+        visual.sprite.scaleX =
+          baseScale * (0.88 + 0.12 * Math.sin(nowSec * 7.2 + visual.phase));
+        visual.sprite.scaleY = baseScale;
+        visual.sprite.rotation = 0.08 * Math.sin(nowSec * 3.1 + visual.phase);
+      } else {
+        const scalePulse = 0.94 + 0.08 * Math.sin(nowSec * 3.6 + visual.phase);
+        visual.sprite.setScale(baseScale * scalePulse);
+        visual.sprite.rotation = 0.06 * Math.sin(nowSec * 2.4 + visual.phase);
+      }
+
+      if (
+        visual.settled &&
+        !getDead?.() &&
+        !scene._pendingDeathDropPickups?.has(id) &&
+        !visual.despawning
+      ) {
+        const local = getLocalPlayer?.();
+        const localBody = local?.body;
+        const localX = Number(localBody?.center?.x) || Number(local?.x);
+        const localY = Number(localBody?.center?.y) || Number(local?.y);
+        if (
+          Number.isFinite(localX) &&
+          Number.isFinite(localY) &&
+          Math.hypot(localX - visual.settledX, localY - visual.settledY) <= 110
+        ) {
+          scene._pendingDeathDropPickups?.add(id);
+          visual.pickupRequestedAt = Date.now();
+          socket?.emit?.("deathdrop:pickup", {
+            id: drop.id,
+            x: visual.settledX,
+            y: visual.settledY,
+          });
+        }
+      }
+    }
+
+    for (const [id, visual] of Object.entries(scene._deathDropVisuals || {})) {
+      if (seenIds.has(id) || visual.despawning) continue;
+      visual.despawning = true;
+      scene.tweens.add({
+        targets: [visual.sprite, visual.glow, visual.glowOuter, visual.glowCore],
+        alpha: 0,
+        scaleX: 0.35,
+        scaleY: 0.35,
+        duration: 160,
+        ease: "Quad.easeIn",
+        onComplete: () => cleanupDeathDropVisual(id, visual),
+      });
     }
   }
 
@@ -434,6 +733,7 @@ export function createPowerupRenderer({
 
   function renderPowerupsAndEffects() {
     consumeCollectedPowerupQueue();
+    consumeCollectedDeathDropQueue();
     const nowSec = scene.time.now / 1000;
     const seenIds = new Set();
     const fxG = scene._powerupFxGraphics;
@@ -445,14 +745,16 @@ export function createPowerupRenderer({
       seenIds.add(id);
       let visual = scene._powerupVisuals[id];
       if (!visual) {
-        const glow = scene.add.circle(
-          pu.x,
-          pu.y,
-          16,
-          colors[pu.type] || 0xffffff,
-          0.28,
-        );
+        const glowColor = colors[pu.type] || 0xffffff;
+        const glow = scene.add.circle(pu.x, pu.y, 16, glowColor, 0.28);
         glow.setDepth(4);
+        glow.setBlendMode(Phaser.BlendModes.ADD);
+        const glowOuter = scene.add.circle(pu.x, pu.y, 24, glowColor, 0.12);
+        glowOuter.setDepth(3);
+        glowOuter.setBlendMode(Phaser.BlendModes.ADD);
+        const glowCore = scene.add.circle(pu.x, pu.y, 10, 0xffffff, 0.16);
+        glowCore.setDepth(4);
+        glowCore.setBlendMode(Phaser.BlendModes.ADD);
         const iconKey = powerupTextureFor(pu.type);
         const children = [];
         let spr = null;
@@ -491,6 +793,8 @@ export function createPowerupRenderer({
           y: pu.y,
           expiresAt: Number(pu.expiresAt) || 0,
           glow,
+          glowOuter,
+          glowCore,
           sprite: spr,
           container,
           phase: Math.random() * Math.PI * 2,
@@ -498,10 +802,14 @@ export function createPowerupRenderer({
         };
         visual.container.setAlpha(0);
         visual.glow.setAlpha(0);
+        visual.glowOuter.setAlpha(0);
+        visual.glowCore.setAlpha(0);
         visual.container.setScale(0.55);
         visual.glow.setScale(0.45);
+        visual.glowOuter.setScale(0.45);
+        visual.glowCore.setScale(0.45);
         scene.tweens.add({
-          targets: [visual.container, visual.glow],
+          targets: [visual.container, visual.glow, visual.glowOuter, visual.glowCore],
           alpha: 1,
           scaleX: 1,
           scaleY: 1,
@@ -533,10 +841,17 @@ export function createPowerupRenderer({
         visual.container.y = pu.y - 6 + bob + shakeY;
         visual.glow.x = pu.x + shakeX;
         visual.glow.y = pu.y - 6 + bob + shakeY + 1;
-        visual.glow.alpha =
-          0.18 + 0.18 * Math.abs(Math.sin(nowSec * 3.5 + visual.phase));
-        visual.glow.radius =
-          16 + 4 * Math.abs(Math.sin(nowSec * 2.7 + visual.phase));
+        visual.glowOuter.x = visual.glow.x;
+        visual.glowOuter.y = visual.glow.y;
+        visual.glowCore.x = visual.glow.x;
+        visual.glowCore.y = visual.glow.y;
+        const glowPulse = Math.abs(Math.sin(nowSec * 3.5 + visual.phase));
+        visual.glow.alpha = 0.28 + 0.22 * glowPulse;
+        visual.glow.radius = 17 + 5 * Math.abs(Math.sin(nowSec * 2.7 + visual.phase));
+        visual.glowOuter.alpha = 0.14 + 0.12 * glowPulse;
+        visual.glowOuter.radius = visual.glow.radius + 8;
+        visual.glowCore.alpha = 0.14 + 0.1 * Math.abs(Math.sin(nowSec * 5.2 + visual.phase));
+        visual.glowCore.radius = 9 + 2 * glowPulse;
         if (visual.sprite) {
           const baseS = visual.sprite.scaleY || 1;
           visual.sprite.scaleX =
@@ -590,7 +905,7 @@ export function createPowerupRenderer({
       if (seenIds.has(id) || visual.despawning) continue;
       visual.despawning = true;
       scene.tweens.add({
-        targets: [visual.container, visual.glow],
+        targets: [visual.container, visual.glow, visual.glowOuter, visual.glowCore],
         alpha: 0,
         scaleX: 0.35,
         scaleY: 0.35,
@@ -599,13 +914,16 @@ export function createPowerupRenderer({
         onComplete: () => {
           try {
             visual.glow.destroy();
+            visual.glowOuter.destroy();
+            visual.glowCore.destroy();
             visual.container.destroy();
           } catch (_) {}
           delete scene._powerupVisuals[id];
         },
-      });
+        });
     }
 
+    renderDeathDrops(nowSec);
     renderPowerupAuras(nowSec);
   }
 

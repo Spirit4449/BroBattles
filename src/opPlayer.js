@@ -9,7 +9,7 @@ import {
 import { performSpecial } from "./characters/special";
 import { player } from "./player";
 import socket from "./socket";
-import { spawnHealthMarker } from "./effects";
+import { spawnDeathBurst, spawnHealthMarker } from "./effects";
 
 export default class OpPlayer {
   constructor(
@@ -40,6 +40,9 @@ export default class OpPlayer {
     this.effects = null; // per-opponent effects (e.g., Draven fire)
     this.presenceConnected = true;
     this.presenceLoaded = true;
+    this._worldUiHidden = false;
+    this._deathPresentationActive = false;
+    this._corpseRemoved = false;
     this.createOpPlayer();
   }
 
@@ -159,37 +162,7 @@ export default class OpPlayer {
         }
         if (this.opCurrentHealth <= 0) {
           this.opCurrentHealth = 0;
-          this.updateHealthBar(true); // show dead styling & 0
-          if (this.opponent?.active) {
-            try {
-              this.opponent.setVelocity(0, 0);
-            } catch (_) {}
-            try {
-              this.opponent.anims.play(
-                resolveAnimKey(this.scene, this.character, "dying"),
-                true,
-              );
-            } catch (_) {}
-            if (!this._deathFading) {
-              this._deathFading = true;
-              try {
-                this.scene.tweens.add({
-                  targets: this.opponent,
-                  alpha: 0.4,
-                  duration: 260,
-                  ease: "Quad.easeOut",
-                });
-              } catch (_) {
-                this.opponent.alpha = 0.4;
-              }
-            }
-          }
-          // Stop effects if any
-          if (this.effects) {
-            // no explicit destroy needed, just stop updating
-            this.scene.events.off("update", this._onSceneUpdate, this);
-            this.effects = null;
-          }
+          this.updateHealthBar(true);
         } else {
           this.updateHealthBar();
         }
@@ -251,6 +224,7 @@ export default class OpPlayer {
   // Public helper to sync UI positions immediately (used after teleports/initial position set)
   updateUIPosition() {
     if (!this.opponent) return;
+    if (this._worldUiHidden) return;
     const bodyTop = this.opponent.body
       ? this.opponent.body.y
       : this.opponent.y - this.opponent.height / 2;
@@ -263,35 +237,41 @@ export default class OpPlayer {
   setPresenceState(connected, loaded) {
     this.presenceConnected = connected !== false;
     this.presenceLoaded = loaded !== false;
-    const shouldRender = !!this.opponent?.active;
+    const shouldRender = !!this.opponent?.active && !this._corpseRemoved;
     if (this.opponent) {
       this.opponent.setVisible(shouldRender);
       this.opponent.setAlpha(1);
     }
     if (this.opPlayerName) {
-      this.opPlayerName.setVisible(shouldRender);
+      this.opPlayerName.setVisible(shouldRender && !this._worldUiHidden);
       this.opPlayerName.setAlpha(1);
     }
     if (this.opHealthText) {
-      this.opHealthText.setVisible(shouldRender);
+      this.opHealthText.setVisible(shouldRender && !this._worldUiHidden);
       this.opHealthText.setAlpha(1);
     }
     if (this.opHealthBar) {
-      this.opHealthBar.setVisible(shouldRender);
+      this.opHealthBar.setVisible(shouldRender && !this._worldUiHidden);
       this.opHealthBar.setAlpha(1);
     }
     if (this.opSuperBarBack) {
-      this.opSuperBarBack.setVisible(shouldRender);
+      this.opSuperBarBack.setVisible(shouldRender && !this._worldUiHidden);
       this.opSuperBarBack.setAlpha(1);
     }
     if (this.opSuperBar) {
-      this.opSuperBar.setVisible(shouldRender);
+      this.opSuperBar.setVisible(shouldRender && !this._worldUiHidden);
       this.opSuperBar.setAlpha(1);
     }
   }
 
   updateHealthBar(dead = false, healthBarY) {
     if (!this.opHealthText || !this.opHealthText.active) return;
+    if (this._worldUiHidden) {
+      this.opHealthBar?.clear?.();
+      this.opSuperBarBack?.clear?.();
+      this.opSuperBar?.clear?.();
+      return;
+    }
     if (this.opCurrentHealth < 0) {
       // Prevents health from going negative
       this.opCurrentHealth = 0;
@@ -351,6 +331,7 @@ export default class OpPlayer {
 
   drawSuperBar(x, y) {
     if (!this.opSuperBar || !this.opSuperBarBack) return;
+    if (this._worldUiHidden) return;
     this.opSuperBarBack.clear();
     this.opSuperBar.clear();
 
@@ -394,6 +375,82 @@ export default class OpPlayer {
 
     this.opSuperBar.setDepth(2);
     this.opSuperBarBack.setDepth(1);
+  }
+
+  hideWorldUi() {
+    this._worldUiHidden = true;
+    try {
+      this.opPlayerName?.setVisible(false);
+    } catch (_) {}
+    try {
+      this.opHealthText?.setVisible(false);
+    } catch (_) {}
+    try {
+      this.opHealthBar?.setVisible(false);
+      this.opHealthBar?.clear?.();
+    } catch (_) {}
+    try {
+      this.opSuperBarBack?.setVisible(false);
+      this.opSuperBarBack?.clear?.();
+    } catch (_) {}
+    try {
+      this.opSuperBar?.setVisible(false);
+      this.opSuperBar?.clear?.();
+    } catch (_) {}
+  }
+
+  startDeathPresentation(meta = {}) {
+    if (!this.opponent || !this.opponent.active || this._deathPresentationActive)
+      return;
+
+    this._deathPresentationActive = true;
+    this.opCurrentHealth = 0;
+    if (Number.isFinite(meta?.x) && Number.isFinite(meta?.y)) {
+      this.opponent.x = meta.x;
+      this.opponent.y = meta.y;
+    }
+    this.hideWorldUi();
+
+    if (this.movementTween) {
+      try {
+        this.movementTween.remove();
+      } catch (_) {}
+      this.movementTween = null;
+    }
+    if (this.effects) {
+      this.scene.events.off("update", this._onSceneUpdate, this);
+      this.effects = null;
+    }
+
+    try {
+      this.scene.sound.play("sfx-death", { volume: 0.46 });
+    } catch (_) {}
+    spawnDeathBurst(this.scene, this.opponent, {
+      color: 0xff7394,
+      glowColor: 0xffd4de,
+    });
+    try {
+      this.opponent.setVelocity(0, 0);
+    } catch (_) {}
+    try {
+      this.opponent.alpha = 1;
+      this.opponent.setVisible(true);
+      this.opponent.anims.play(
+        resolveAnimKey(this.scene, this.character, "dying", "idle"),
+        true,
+      );
+    } catch (_) {}
+    if (this.opponent.body) {
+      this.opponent.body.enable = false;
+    }
+
+    this.scene.time.delayedCall(1500, () => {
+      if (!this.opponent) return;
+      this._corpseRemoved = true;
+      try {
+        this.opponent.setVisible(false);
+      } catch (_) {}
+    });
   }
 
   // Clean up method to stop any active tweens and remove sprites

@@ -1,4 +1,9 @@
 import { performSpecial } from "../characters/special";
+import {
+  spawnDamageImpact,
+  spawnDeathBurst,
+  triggerDamageScreenPulse,
+} from "../effects";
 
 export function bindLocalSocketEvents({
   socket,
@@ -26,6 +31,7 @@ export function bindLocalSocketEvents({
   setWallSlideLoopPlaying,
   getIsEditMode,
   onLocalDeath,
+  removeLocalCorpse,
   onDebug,
 }) {
   const isEditModeActive = () => {
@@ -70,6 +76,10 @@ export function bindLocalSocketEvents({
     if (scene && scene.sound && !getDead()) {
       if (delta < 0) {
         scene.sound.play("sfx-damage", { volume: 5 });
+        if (data.cause !== "poison") {
+          spawnDamageImpact(scene, player);
+          triggerDamageScreenPulse(scene);
+        }
       } else if (delta > 0) {
         const s = scene.sound.add("sfx-heal", { volume: 0.1 });
         try {
@@ -92,33 +102,70 @@ export function bindLocalSocketEvents({
           } catch (_) {}
           setWallSlideLoopPlaying(false);
         }
-        if (scene && player) {
-          player.anims.play(
-            resolveAnimKey(scene, getCurrentCharacter(), "dying"),
-            true,
-          );
-          scene.input.enabled = false;
-          player.setVelocity(0, 0);
-          if (player.body) {
-            player.body.enable = false;
-          }
-          try {
-            scene.tweens.add({
-              targets: player,
-              alpha: 0.38,
-              duration: 260,
-              ease: "Quad.easeOut",
-            });
-          } catch (_) {
-            player.alpha = 0.38;
-          }
-        }
         onDebug?.();
       }
       setCurrentHealthValue(0);
     }
 
     updateHealthBar();
+  };
+
+  const playerDeadHandler = (payload) => {
+    if (payload?.username !== getUsername()) return;
+
+    const scene = getScene();
+    const player = getPlayer();
+    if (!scene || !player || player._deathPresentationActive) return;
+
+    player._deathPresentationActive = true;
+    player._deathPresentationAt = Number(payload?.at) || Date.now();
+    setDead(true);
+    try {
+      onLocalDeath?.();
+    } catch (_) {}
+
+    if (getWallSlideLoopPlaying() && getWallSlideLoopSfx()) {
+      try {
+        getWallSlideLoopSfx().stop();
+      } catch (_) {}
+      setWallSlideLoopPlaying(false);
+    }
+
+    try {
+      scene.sound.play("sfx-death", { volume: 0.52 });
+    } catch (_) {}
+    spawnDeathBurst(scene, player, { color: 0xff7394, glowColor: 0xffd4de });
+    try {
+      player.alpha = 1;
+      player.setVisible(true);
+      player.anims.play(
+        resolveAnimKey(scene, getCurrentCharacter(), "dying", "idle"),
+        true,
+      );
+    } catch (_) {}
+    try {
+      scene.input.enabled = false;
+      if (scene.input?.keyboard) scene.input.keyboard.enabled = false;
+    } catch (_) {}
+    try {
+      player.setAcceleration(0, 0);
+    } catch (_) {}
+    try {
+      player.setVelocity(0, 0);
+    } catch (_) {}
+    if (player.body) {
+      player.body.enable = false;
+    }
+
+    scene.time.delayedCall(1500, () => {
+      if (!player) return;
+      try {
+        removeLocalCorpse?.();
+      } catch (_) {}
+      try {
+        player.setVisible(false);
+      } catch (_) {}
+    });
   };
 
   const superUpdateHandler = (data) => {
@@ -166,11 +213,13 @@ export function bindLocalSocketEvents({
   socket.on("super-update", superUpdateHandler);
   socket.on("player:special", specialHandler);
   socket.on("player:knockback", knockbackHandler);
+  socket.on("player:dead", playerDeadHandler);
 
   return () => {
     socket.off("health-update", healthUpdateHandler);
     socket.off("super-update", superUpdateHandler);
     socket.off("player:special", specialHandler);
     socket.off("player:knockback", knockbackHandler);
+    socket.off("player:dead", playerDeadHandler);
   };
 }

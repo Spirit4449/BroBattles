@@ -35,12 +35,24 @@ export function preloadGameAssets({
     `${staticPath}/mangrove/baseRight.webp`,
   );
   scene.load.image("mangrove-base-top", `${staticPath}/mangrove/baseTop.webp`);
-
-
-  scene.load.image("serenity-large-platform", `${staticPath}/serenity/largePlatform.webp`);
-  scene.load.image("serenity-side-platform", `${staticPath}/serenity/sidePlatform.webp`);
-  scene.load.image("serenity-log-platform", `${staticPath}/serenity/logPlatform.webp`);
-  scene.load.image("serenity-small-rock", `${staticPath}/serenity/smallRock.webp`);
+  scene.load.image(
+    "serenity-large-platform",
+    `${staticPath}/serenity/largePlatform.webp`,
+  );
+  scene.load.image(
+    "serenity-side-platform",
+    `${staticPath}/serenity/sidePlatform.webp`,
+  );
+  scene.load.image(
+    "serenity-log-platform",
+    `${staticPath}/serenity/logPlatform.webp`,
+  );
+  scene.load.image(
+    "serenity-small-rock",
+    `${staticPath}/serenity/smallRock.webp`,
+  );
+  scene.load.image("deathdrop-coin", `${staticPath}/coin.webp`);
+  scene.load.image("deathdrop-gem", `${staticPath}/gem.webp`);
 
   // Movement SFX (place files under /assets/audio)
   scene.load.audio("sfx-step", `${staticPath}/step.mp3`);
@@ -49,6 +61,9 @@ export function preloadGameAssets({
   scene.load.audio("sfx-walljump", `${staticPath}/walljump.mp3`);
   scene.load.audio("sfx-sliding", `${staticPath}/sliding.mp3`);
   scene.load.audio("sfx-sudden-death", `${staticPath}/suddendeath.mp3`);
+  scene.load.audio("sfx-death", `${staticPath}/death.mp3`);
+  scene.load.audio("sfx-coin-pickup", `${staticPath}/coin.mp3`);
+  scene.load.audio("sfx-gem-pickup", `${staticPath}/gem.mp3`);
   scene.load.audio("sfx-noammo", [
     `${staticPath}/noammo.mp3`,
     `${staticPath}/land.mp3`,
@@ -78,6 +93,9 @@ export function preloadGameAssets({
       `${staticPath}/powerups/${dir}/tick.wav`,
     ]);
   }
-
-  scene.load.font('PressStart2P', `${staticPath}/LilitaOne-Regular.ttf`, 'truetype');
+  scene.load.font(
+    "PressStart2P",
+    `${staticPath}/LilitaOne-Regular.ttf`,
+    "truetype",
+  );
 }

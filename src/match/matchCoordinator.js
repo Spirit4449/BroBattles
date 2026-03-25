@@ -7,6 +7,7 @@
 // Dependencies are injected via the config object so this module has zero
 // hidden global state and can be tested or instantiated in isolation.
 import { normalizeMapId } from "../maps/manifest";
+import { spawnDamageImpact } from "../effects";
 
 /**
  * @typedef {object} MatchCoordinatorConfig
@@ -36,6 +37,8 @@ import { normalizeMapId } from "../maps/manifest";
  * @property {object}              serverSpawnIndex
  * // ---- live state (set via setter, read externally via closure var) ----
  * @property {(v: Array) => void}  setLatestPowerups
+ * @property {() => Array}         getLatestDeathDrops
+ * @property {(v: Array) => void}  setLatestDeathDrops
  * @property {(v: object) => void} setLatestPlayerEffects
  * @property {() => object}        getLatestPlayerEffects
  * // ---- by-reference mutable collections  ----
@@ -43,6 +46,7 @@ import { normalizeMapId } from "../maps/manifest";
  * @property {object} teamPlayers
  * @property {Array}  pendingActionsQueue
  * @property {Array}  powerupCollectQueue
+ * @property {Array}  deathdropCollectQueue
  * @property {Array}  shieldImpactQueue
  * @property {object} lastHealthByPlayer
  * @property {object} lastShieldActiveAt
@@ -94,12 +98,15 @@ export function createMatchCoordinator(config) {
     setSpawnVersion,
     serverSpawnIndex,
     setLatestPowerups,
+    getLatestDeathDrops,
+    setLatestDeathDrops,
     setLatestPlayerEffects,
     getLatestPlayerEffects,
     opponentPlayers,
     teamPlayers,
     pendingActionsQueue,
     powerupCollectQueue,
+    deathdropCollectQueue,
     shieldImpactQueue,
     lastHealthByPlayer,
     lastShieldActiveAt,
@@ -344,6 +351,8 @@ export function createMatchCoordinator(config) {
 
     if (Array.isArray(gameState.powerups))
       setLatestPowerups(gameState.powerups);
+    if (Array.isArray(gameState.deathDrops))
+      setLatestDeathDrops(gameState.deathDrops);
     if (
       gameState.playerEffects &&
       typeof gameState.playerEffects === "object"
@@ -403,6 +412,19 @@ export function createMatchCoordinator(config) {
       hud.setTeamHudPlayerAlive(payload.username, payload.health > 0);
       const prev = lastHealthByPlayer[payload.username];
       lastHealthByPlayer[payload.username] = payload.health;
+      if (
+        typeof prev === "number" &&
+        payload.health < prev &&
+        payload.username !== getUsername() &&
+        payload.cause !== "poison"
+      ) {
+        const wrapper =
+          opponentPlayers[payload.username] || teamPlayers[payload.username];
+        if (wrapper?.opponent) {
+          const scene = getGameScene();
+          if (scene) spawnDamageImpact(scene, wrapper.opponent);
+        }
+      }
       // Flash shield-impact particle if health dropped while shield was active
       if (
         typeof prev === "number" &&
@@ -418,12 +440,30 @@ export function createMatchCoordinator(config) {
   function _onPlayerDead(payload) {
     if (!payload?.username) return;
     hud.setTeamHudPlayerAlive(payload.username, false);
+    if (Array.isArray(payload.drops) && payload.drops.length) {
+      const known = Array.isArray(getLatestDeathDrops())
+        ? getLatestDeathDrops()
+        : [];
+      const byId = new Map(known.map((drop) => [String(drop.id), drop]));
+      for (const drop of payload.drops) {
+        if (drop?.id == null) continue;
+        byId.set(String(drop.id), drop);
+      }
+      setLatestDeathDrops(Array.from(byId.values()));
+    }
+    if (payload.username === getUsername()) return;
+    const wrapper =
+      opponentPlayers[payload.username] || teamPlayers[payload.username];
+    wrapper?.startDeathPresentation?.(payload);
   }
 
   function _onGameSnapshot(snapshot) {
     if (!snapshot || !snapshot.players) return;
 
     if (Array.isArray(snapshot.powerups)) setLatestPowerups(snapshot.powerups);
+    if (Array.isArray(snapshot.deathDrops)) {
+      setLatestDeathDrops(snapshot.deathDrops);
+    }
     if (snapshot.playerEffects && typeof snapshot.playerEffects === "object") {
       setLatestPlayerEffects(snapshot.playerEffects);
       onTrackShieldEffects(snapshot.playerEffects);
@@ -604,6 +644,9 @@ export function createMatchCoordinator(config) {
     onStopSuddenDeathMusic();
     onPlayMatchEndSound(payload?.winnerTeam);
     try {
+      hud.hideSpectatingBanner?.();
+    } catch (_) {}
+    try {
       const p = getPlayer();
       if (p?.body) p.body.enable = false;
     } catch (_) {}
@@ -647,6 +690,15 @@ export function createMatchCoordinator(config) {
     } catch (_) {}
   }
 
+  function _onDeathDropCollected(payload) {
+    if (!payload || typeof payload.id === "undefined") return;
+    deathdropCollectQueue.push(payload);
+    const known = Array.isArray(getLatestDeathDrops()) ? getLatestDeathDrops() : [];
+    setLatestDeathDrops(
+      known.filter((drop) => String(drop?.id) !== String(payload.id)),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Public API
   // ---------------------------------------------------------------------------
@@ -671,6 +723,7 @@ export function createMatchCoordinator(config) {
     socket.on("game:sudden-death:start", _onGameSuddenDeath);
     socket.on("powerup:collected", _onPowerupCollected);
     socket.on("powerup:tick", _onPowerupTick);
+    socket.on("deathdrop:collected", _onDeathDropCollected);
 
     // If already connected when register() is called, attempt join right away
     if (socket.connected) _tryJoin();
@@ -700,6 +753,7 @@ export function createMatchCoordinator(config) {
     socket.off("game:sudden-death:start", _onGameSuddenDeath);
     socket.off("powerup:collected", _onPowerupCollected);
     socket.off("powerup:tick", _onPowerupTick);
+    socket.off("deathdrop:collected", _onDeathDropCollected);
   }
 
   return { register, dispose };

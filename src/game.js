@@ -129,8 +129,10 @@ const PENDING_ACTIONS = [];
 let SPAWN_VERSION = 0; // increments per scene init to version spawns
 const SERVER_SPAWN_INDEX = Object.create(null); // name -> spawnIndex (if server provided)
 let latestPowerups = []; // from server snapshots
+let latestDeathDrops = []; // from server snapshots / death events
 let latestPlayerEffects = {}; // name -> effect duration map (ms remaining)
 const POWERUP_COLLECT_QUEUE = [];
+const DEATHDROP_COLLECT_QUEUE = [];
 const LAST_HEALTH_BY_PLAYER = Object.create(null);
 const SHIELD_IMPACT_QUEUE = [];
 const LAST_SHIELD_ACTIVE_AT = Object.create(null);
@@ -253,6 +255,10 @@ matchCoordinator = createMatchCoordinator({
   setLatestPowerups: (v) => {
     latestPowerups = v;
   },
+  getLatestDeathDrops: () => latestDeathDrops,
+  setLatestDeathDrops: (v) => {
+    latestDeathDrops = v;
+  },
   setLatestPlayerEffects: (v) => {
     latestPlayerEffects = v;
   },
@@ -261,6 +267,7 @@ matchCoordinator = createMatchCoordinator({
   teamPlayers,
   pendingActionsQueue: PENDING_ACTIONS,
   powerupCollectQueue: POWERUP_COLLECT_QUEUE,
+  deathdropCollectQueue: DEATHDROP_COLLECT_QUEUE,
   shieldImpactQueue: SHIELD_IMPACT_QUEUE,
   lastHealthByPlayer: LAST_HEALTH_BY_PLAYER,
   lastShieldActiveAt: LAST_SHIELD_ACTIVE_AT,
@@ -616,6 +623,8 @@ class GameScene extends Phaser.Scene {
       drift: 2.5 + (i % 4) * 1.5,
     }));
     this._powerupVisuals = Object.create(null); // id -> visual bundle
+    this._deathDropVisuals = Object.create(null); // id -> visual bundle
+    this._pendingDeathDropPickups = new Set();
     this._powerupAuraGraphics = this.add.graphics();
     this._powerupAuraGraphics.setDepth(21);
     this._powerupFxGraphics = this.add.graphics();
@@ -630,9 +639,14 @@ class GameScene extends Phaser.Scene {
       getOpponentPlayers: () => opponentPlayers,
       getTeamPlayers: () => teamPlayers,
       getLatestPowerups: () => latestPowerups,
+      getLatestDeathDrops: () => latestDeathDrops,
       getLatestPlayerEffects: () => latestPlayerEffects,
       powerupCollectQueue: POWERUP_COLLECT_QUEUE,
+      deathdropCollectQueue: DEATHDROP_COLLECT_QUEUE,
       shieldImpactQueue: SHIELD_IMPACT_QUEUE,
+      socket,
+      getMapObjects: () => mapObjects,
+      getDead: () => dead,
       setPowerupMobility,
       applyCharacterPowerupFx,
       drawCharacterPowerupAura,
@@ -676,6 +690,21 @@ class GameScene extends Phaser.Scene {
     mapObjects = getMapObjects(activeMapId);
     const mapBoundaryConfig = getMapBoundaryConfig(activeMapId);
     applyMapBounds(this, mapBoundaryConfig);
+    this._spectatorBounds = {
+      centerX:
+        Number(this.physics?.world?.bounds?.centerX) ||
+        Number(this.game.config.width) / 2,
+      centerY:
+        Number(this.physics?.world?.bounds?.centerY) ||
+        Number(this.game.config.height) / 2,
+      width:
+        Number(this.physics?.world?.bounds?.width) ||
+        Number(this.game.config.width),
+      height:
+        Number(this.physics?.world?.bounds?.height) ||
+        Number(this.game.config.height),
+    };
+    this._spectatorModeActive = false;
 
     // Ensure all character animations are registered for this scene
     setupAll(this);
@@ -782,6 +811,9 @@ class GameScene extends Phaser.Scene {
         this._suddenDeathMusicSfx?.destroy();
       } catch (_) {}
       this._suddenDeathMusicSfx = null;
+      try {
+        hud.hideSpectatingBanner?.();
+      } catch (_) {}
     });
 
     // Cache my level and stats BEFORE creating the player so HUD uses server values
@@ -1103,6 +1135,49 @@ class GameScene extends Phaser.Scene {
     this._powerupRenderer?.renderPowerupsAndEffects();
   }
 
+  _enterSpectatorMode() {
+    if (this._spectatorModeActive) return;
+    this._spectatorModeActive = true;
+    this._spectatorVignette = true;
+    hud.showSpectatingBanner?.();
+
+    const cam = this.cameras.main;
+    if (!cam) return;
+    try {
+      cam.stopFollow();
+    } catch (_) {}
+
+    const bounds = this._spectatorBounds || {};
+    const targetX =
+      Number(bounds.centerX) || Number(this.physics?.world?.bounds?.centerX) || 1150;
+    const targetY =
+      Number(bounds.centerY) || Number(this.physics?.world?.bounds?.centerY) || 500;
+    const width = Math.max(
+      1,
+      Number(bounds.width) || Number(this.physics?.world?.bounds?.width) || 2300,
+    );
+    const height = Math.max(
+      1,
+      Number(bounds.height) || Number(this.physics?.world?.bounds?.height) || 1000,
+    );
+    const zoomX = (Number(this.scale?.width) || width) / width;
+    const zoomY = (Number(this.scale?.height) || height) / height;
+    const targetZoom = Phaser.Math.Clamp(
+      Math.min(1, Math.min(zoomX, zoomY) * 0.94),
+      0.72,
+      1,
+    );
+
+    try {
+      cam.pan(targetX, targetY, 900, "Cubic.easeOut");
+    } catch (_) {}
+    try {
+      cam.zoomTo(targetZoom, 900, "Quad.easeOut");
+    } catch (_) {
+      cam.setZoom(targetZoom);
+    }
+  }
+
   update() {
     if (this._editModeActive) {
       try {
@@ -1126,27 +1201,35 @@ class GameScene extends Phaser.Scene {
     // Powerup visuals/effects are rendered for all players every frame.
     this._renderPowerupsAndEffects();
 
-    if (this._editModeActive) {
-      updateEditorCamera(this);
-    } else {
-      updateDynamicCamera(this, player, Phaser);
-    }
-
     // Only process if game is initialized
-    if (!hasJoined || !gameInitialized || dead || gameEnded) return;
+    if (!hasJoined || !gameInitialized || gameEnded) return;
 
     if (this._editModeActive) {
       try {
         player?.setVelocity?.(0, 0);
       } catch (_) {}
+      updateEditorCamera(this);
       return;
     }
 
-    localInputSync.sync(this, player, {
-      dead,
-      gameEnded,
-      handlePlayerMovement,
-    });
+    if (dead) {
+      this._enterSpectatorMode();
+    } else {
+      this._spectatorVignette = false;
+      if (this._spectatorModeActive) {
+        try {
+          this.cameras.main.startFollow(player, false, 0.08, 0.05);
+        } catch (_) {}
+      }
+      this._spectatorModeActive = false;
+      hud.hideSpectatingBanner?.();
+      updateDynamicCamera(this, player, Phaser);
+      localInputSync.sync(this, player, {
+        dead,
+        gameEnded,
+        handlePlayerMovement,
+      });
+    }
 
     processSnapshotInterpolation({
       snapshotBuffer,
@@ -1222,23 +1305,25 @@ class GameScene extends Phaser.Scene {
         }
       }
 
-      // Move toward interpolated target with a bounded step.
-      // This prevents visible twitch from sudden target jumps while still catching up fast.
-      const dx = targetX - spr.x;
-      const dy = targetY - spr.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist > 0.35) {
-        const inPrecision =
-          (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
-        const maxStep = inPrecision ? 120 : 70;
-        const snapDistance = inPrecision ? 220 : 140;
-        if (dist <= snapDistance) {
-          spr.x = targetX;
-          spr.y = targetY;
-        } else {
-          const step = Math.min(maxStep, dist);
-          spr.x += (dx / dist) * step;
-          spr.y += (dy / dist) * step;
+      if (!wrapper._deathPresentationActive && !wrapper._corpseRemoved) {
+        // Move toward interpolated target with a bounded step.
+        // This prevents visible twitch from sudden target jumps while still catching up fast.
+        const dx = targetX - spr.x;
+        const dy = targetY - spr.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0.35) {
+          const inPrecision =
+            (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
+          const maxStep = inPrecision ? 120 : 70;
+          const snapDistance = inPrecision ? 220 : 140;
+          if (dist <= snapDistance) {
+            spr.x = targetX;
+            spr.y = targetY;
+          } else {
+            const step = Math.min(maxStep, dist);
+            spr.x += (dx / dist) * step;
+            spr.y += (dy / dist) * step;
+          }
         }
       }
       if (typeof wrapper.setPresenceState === "function") {
@@ -1253,42 +1338,23 @@ class GameScene extends Phaser.Scene {
       // Orientation/animation: take from newer if present (prefer b then a)
       const animSrc = bPosData && bPosData.animation ? bPosData : aPosData;
       if (isDeadBySnapshot) {
-        if (!wrapper._deathVisualApplied) {
-          wrapper._deathVisualApplied = true;
-          wrapper.opCurrentHealth = 0;
-          try {
-            wrapper.updateHealthBar(true);
-          } catch (_) {}
-          try {
-            spr.setVelocity(0, 0);
-          } catch (_) {}
-          try {
-            spr.anims.play(
-              resolveAnimKey(this, wrapper.character, "dying", "idle"),
-              true,
-            );
-          } catch (_) {}
-          try {
-            this.tweens.add({
-              targets: spr,
-              alpha: 0.4,
-              duration: 260,
-              ease: "Quad.easeOut",
-            });
-          } catch (_) {
-            spr.alpha = 0.4;
-          }
-        }
-      } else {
-        if (wrapper._deathVisualApplied) {
-          wrapper._deathVisualApplied = false;
-          try {
-            spr.alpha = 1;
-          } catch (_) {}
-        }
+        wrapper.startDeathPresentation?.({
+          x: targetX,
+          y: targetY,
+          at:
+            Number(bState?.timestamp) ||
+            Number(aState?.timestamp) ||
+            Date.now(),
+        });
       }
 
-      if (animSrc && !isDeadBySnapshot && isConnected && isLoaded) {
+      if (
+        animSrc &&
+        !isDeadBySnapshot &&
+        !wrapper._deathPresentationActive &&
+        isConnected &&
+        isLoaded
+      ) {
         const prevFlip = spr.flipX;
         spr.flipX = !!animSrc.flip;
         if (
@@ -1313,7 +1379,7 @@ class GameScene extends Phaser.Scene {
       }
 
       // Update name tag position
-      if (wrapper.opPlayerName) {
+      if (wrapper.opPlayerName && !wrapper._worldUiHidden) {
         const bodyTop = spr.body ? spr.body.y : spr.y - spr.height / 2;
         wrapper.opPlayerName.setPosition(spr.x, bodyTop - 36);
       }
@@ -1351,7 +1417,7 @@ const config = {
   physics: {
     default: "arcade",
     arcade: {
-      gravity: { y: 950 },
+      gravity: { y: 800 },
       debug: false,
     },
   },

@@ -1,3 +1,5 @@
+const { ALL_DEAD_GAME_OVER_DELAY_MS } = require("../gameRoomConfig");
+
 function potentialStartGame(room) {
   if (room.status !== "waiting") return;
   room.status = "starting";
@@ -107,6 +109,27 @@ function checkVictoryCondition(room) {
     winner = "team1";
   }
 
+  if (winner === null && t1Alive === 0 && t2Alive === 0) {
+    if (!room._pendingDrawFinishTimeout) {
+      room._pendingDrawFinishTimeout = setTimeout(() => {
+        room._pendingDrawFinishTimeout = null;
+        if (room.status !== "active") return;
+        const everyoneStillDead = Array.from(room.players.values()).every(
+          (p) => !p.isAlive,
+        );
+        if (everyoneStillDead) {
+          room._finishGame(null, { t1Alive: 0, t2Alive: 0 });
+        }
+      }, ALL_DEAD_GAME_OVER_DELAY_MS);
+    }
+    return;
+  }
+
+  if (room._pendingDrawFinishTimeout) {
+    clearTimeout(room._pendingDrawFinishTimeout);
+    room._pendingDrawFinishTimeout = null;
+  }
+
   if (winner !== null || (t1Alive === 0 && t2Alive === 0)) {
     room._finishGame(winner, { t1Alive, t2Alive });
   }
@@ -120,6 +143,10 @@ async function finishGame(room, winnerTeam, meta = {}) {
   );
 
   room._loopRunning = false;
+  if (room._pendingDrawFinishTimeout) {
+    clearTimeout(room._pendingDrawFinishTimeout);
+    room._pendingDrawFinishTimeout = null;
+  }
   if (room.gameLoop) {
     try {
       clearInterval(room.gameLoop);

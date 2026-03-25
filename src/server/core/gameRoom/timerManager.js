@@ -36,18 +36,11 @@ function tickTimerAndSuddenDeath(room) {
       const old = p.health;
       p.health = Math.max(0, p.health - dmgPerTick);
       if (p.health !== old) {
-        room._maybeBroadcastHealth(p, now);
+        room._maybeBroadcastHealth(p, now, { cause: "poison" });
         if (p.health <= 0) {
-          p.isAlive = false;
           p.health = 0;
-          room._broadcastHealthUpdate(p);
-          room.io.to(`game:${room.matchId}`).emit("player:dead", {
-            username: p.name,
-            gameId: room.matchId,
-          });
-          try {
-            room._checkVictoryCondition();
-          } catch (_) {}
+          room._broadcastHealthUpdate(p, { cause: "poison" });
+          room._handlePlayerDeath(p, { cause: "poison", at: now });
         }
       }
     }
