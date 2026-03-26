@@ -1,4 +1,5 @@
-const { capacityFromMode } = require("./utils");
+const { capacityFromSelection } = require("./utils");
+const { normalizeSelectionFromRow } = require("./gameSelectionCatalog");
 
 async function selectPartyById(db, partyId) {
   const rows = await db.runQuery(
@@ -27,11 +28,15 @@ async function emitRoster(io, partyId, party, members, db = null) {
       selected_card_id: selectedByName[m?.name] ?? fallback,
     };
   });
-  const capacity = capacityFromMode(party.mode);
+  const selection = normalizeSelectionFromRow(party || {});
+  const capacity = capacityFromSelection(selection);
   io.to(`party:${partyId}`).emit("party:members", {
     partyId,
     mode: party.mode,
-    map: party.map,
+    modeId: selection.modeId,
+    modeVariantId: selection.modeVariantId,
+    selection,
+    map: selection.mapId,
     capacity,
     members: roster,
   });

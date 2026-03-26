@@ -1,5 +1,11 @@
 function createProgressEmitter({ db, io, lastProgress }) {
-  async function emitProgressForBucket(mode, map, items, teamSize) {
+  async function emitProgressForBucket(
+    modeId,
+    modeVariantId,
+    map,
+    items,
+    teamSize,
+  ) {
     if (!items || !items.length) return;
 
     const totalPlayers = Math.min(
@@ -9,8 +15,15 @@ function createProgressEmitter({ db, io, lastProgress }) {
       ),
       teamSize * 2,
     );
-    const payload = { mode, map, found: totalPlayers, total: teamSize * 2 };
-    const signature = `${mode}:${map}:${payload.found}:${payload.total}`;
+    const payload = {
+      modeId,
+      modeVariantId,
+      selection: { modeId, modeVariantId, mapId: Number(map) },
+      map,
+      found: totalPlayers,
+      total: teamSize * 2,
+    };
+    const signature = `${modeId}:${modeVariantId}:${map}:${payload.found}:${payload.total}`;
 
     const soloIds = items.filter((t) => t.user_id).map((t) => t.user_id);
     let soloSockets = new Map();

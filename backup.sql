@@ -85,6 +85,8 @@ CREATE TABLE `match_tickets` (
   `party_id` int(11) DEFAULT NULL,
   `user_id` int(11) DEFAULT NULL,
   `mode` int(11) NOT NULL,
+  `mode_id` varchar(64) NOT NULL DEFAULT 'duels',
+  `mode_variant_id` varchar(64) DEFAULT NULL,
   `map` int(11) NOT NULL,
   `size` tinyint(4) NOT NULL,
   `mmr` int(11) NOT NULL,
@@ -120,6 +122,8 @@ DROP TABLE IF EXISTS `matches`;
 CREATE TABLE `matches` (
   `match_id` int(11) NOT NULL AUTO_INCREMENT,
   `mode` int(11) NOT NULL,
+  `mode_id` varchar(64) NOT NULL DEFAULT 'duels',
+  `mode_variant_id` varchar(64) DEFAULT NULL,
   `map` int(11) NOT NULL,
   `status` enum('queued','live','completed','cancelled') NOT NULL DEFAULT 'queued',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
@@ -133,7 +137,7 @@ CREATE TABLE `matches` (
 
 LOCK TABLES `matches` WRITE;
 /*!40000 ALTER TABLE `matches` DISABLE KEYS */;
-INSERT INTO `matches` VALUES
+INSERT INTO `matches` (`match_id`,`mode`,`map`,`status`,`created_at`) VALUES
 (1,1,1,'completed','2025-12-18 15:52:01'),
 (2,1,1,'completed','2025-12-18 15:55:42'),
 (3,1,1,'completed','2025-12-18 15:56:12'),
@@ -162,6 +166,13 @@ INSERT INTO `matches` VALUES
 (26,1,1,'completed','2026-03-04 03:46:52'),
 (27,1,1,'completed','2026-03-04 03:47:14'),
 (28,1,2,'completed','2026-03-04 03:48:21');
+UPDATE `matches`
+SET `mode_id` = 'duels',
+    `mode_variant_id` = CASE COALESCE(`mode`, 1)
+      WHEN 2 THEN 'duels-2v2'
+      WHEN 3 THEN 'duels-3v3'
+      ELSE 'duels-1v1'
+    END;
 /*!40000 ALTER TABLE `matches` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -176,6 +187,8 @@ CREATE TABLE `parties` (
   `party_id` int(11) NOT NULL AUTO_INCREMENT,
   `status` enum('idle','queued','ready_check','live') NOT NULL DEFAULT 'idle',
   `mode` int(11) DEFAULT NULL,
+  `mode_id` varchar(64) NOT NULL DEFAULT 'duels',
+  `mode_variant_id` varchar(64) DEFAULT NULL,
   `map` int(11) DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`party_id`)

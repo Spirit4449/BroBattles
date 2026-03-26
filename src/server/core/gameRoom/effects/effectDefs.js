@@ -74,6 +74,15 @@ const effectDefs = {
     snapshotKey: "shield",
   },
 
+  respawnShield: {
+    durationMs: 3000,
+    tickIntervalMs: 0,
+    modifiers: { damageTakenMult: 0 },
+    onApply: null,
+    onTick: null,
+    snapshotKey: "respawnShield",
+  },
+
   health: {
     durationMs: POWERUP_DURATIONS_MS.health || 10000,
     tickIntervalMs: POWERUP_EFFECT_TICK_MS,

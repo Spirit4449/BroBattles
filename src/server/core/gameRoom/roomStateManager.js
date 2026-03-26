@@ -37,10 +37,13 @@ function sendGameStateToPlayer(room, socket) {
   const gameStateForPlayer = {
     matchId: room.matchId,
     mode: room.matchData.mode,
+    modeId: room.matchData.modeId || "duels",
+    modeVariantId: room.matchData.modeVariantId || null,
     map: room.matchData.map,
     yourTeam: playerData.team,
     yourCharacter: playerData.char_class,
     spawnVersion: room.spawnVersion,
+    modeState: room.gameMode?.buildModeState?.() ?? null,
     powerups: Array.from(room._powerups.values()).map((pu) => ({
       id: pu.id,
       type: pu.type,
@@ -86,6 +89,7 @@ function broadcastSnapshot(room, extraTiming = null) {
 
   const snapshot = {
     timestamp: Date.now(),
+    modeState: room.gameMode?.buildModeState?.() ?? null,
     players: {},
     powerups: Array.from(room._powerups.values()).map((pu) => ({
       id: pu.id,

@@ -464,6 +464,43 @@ export default class OpPlayer {
     });
   }
 
+  handleRespawn(meta = {}) {
+    if (!this.opponent) return;
+    this._deathPresentationActive = false;
+    this._corpseRemoved = false;
+    this._spawnPresented = true;
+    if (typeof meta?.maxHealth === "number" && meta.maxHealth > 0) {
+      this.opMaxHealth = meta.maxHealth;
+    }
+    if (typeof meta?.health === "number") {
+      this.opCurrentHealth = meta.health;
+    } else {
+      this.opCurrentHealth = this.opMaxHealth;
+    }
+    try {
+      if (Number.isFinite(meta?.x) && Number.isFinite(meta?.y)) {
+        this.opponent.body?.reset?.(Number(meta.x), Number(meta.y));
+      }
+      this.opponent.setVelocity?.(0, 0);
+      this.opponent.setVisible(true);
+      this.opponent.setAlpha(1);
+      this.opponent.body.enable = true;
+      this.opponent.anims.play(
+        resolveAnimKey(this.scene, this.character, "idle", "idle"),
+        true,
+      );
+    } catch (_) {}
+    if (!this.effects) {
+      const EffectsCls = getEffectsClass(this.character);
+      if (EffectsCls) {
+        this.effects = new EffectsCls(this.scene, this.opponent);
+        this.scene.events.on("update", this._onSceneUpdate, this);
+      }
+    }
+    this.setPresenceState(this.presenceConnected, this.presenceLoaded);
+    this.updateUIPosition();
+  }
+
   // Clean up method to stop any active tweens and remove sprites
   destroy() {
     if (this.healthUpdateListener) {

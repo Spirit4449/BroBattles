@@ -2,6 +2,7 @@
 // Curved, returning, piercing shuriken with deterministic local simulation.
 
 import socket from "../../socket"; // owner-only hit events
+import { emitVaultHitForCircle } from "../shared/vaultTargeting";
 
 export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
   /**
@@ -180,6 +181,29 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     return true;
   }
 
+  tryDamageVault() {
+    if (!this.cfg.isOwner) return false;
+    const now = this.scene.time.now;
+    const last = this.hitTimestamps.__vault || 0;
+    if (now - last < this.cfg.hitCooldown) return false;
+    const hit = emitVaultHitForCircle({
+      attacker: this.cfg.username,
+      x: this.x,
+      y: this.y,
+      radius: Math.max(18, (this.displayWidth || this.width || 24) * 0.5),
+      attackType: this.cfg.attackType || "basic",
+      chargeRatio: Number.isFinite(this.cfg.chargeRatio)
+        ? this.cfg.chargeRatio
+        : 0,
+      instanceId: this.cfg.instanceId,
+      gameId: this.cfg.gameId,
+    });
+    if (hit) {
+      this.hitTimestamps.__vault = now;
+    }
+    return hit;
+  }
+
   attachEnemyOverlap(objects) {
     objects.forEach((obj) => {
       if (!obj) return;
@@ -315,5 +339,6 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       this.glow.x = this.x;
       this.glow.y = this.y;
     }
+    this.tryDamageVault();
   }
 }

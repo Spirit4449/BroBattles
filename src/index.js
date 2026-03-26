@@ -4,6 +4,7 @@ import {
   createParty,
   leaveParty,
   socketInit,
+  applyLobbySelection,
   renderPartyMembers,
   initializeModeDropdown,
   showMatchmakingOverlay,
@@ -440,28 +441,46 @@ async function bootstrapPartyData(partyId) {
 
     const data = await resp.json();
     if (data?.party) {
-      const modeSel = document.getElementById("mode");
-      const mapSel = document.getElementById("map");
-      const modeVal = String(data.party.mode || "1");
-      const mapVal = String(data.party.map || "1");
-      if (modeSel) modeSel.value = modeVal;
-      if (mapSel) mapSel.value = mapVal;
+      const selection = applyLobbySelection(
+        data?.selection || {
+          modeId: data?.party?.mode_id || data?.party?.modeId || "duels",
+          modeVariantId:
+            data?.party?.mode_variant_id ||
+            data?.party?.modeVariantId ||
+            null,
+          mapId: data?.party?.map ?? null,
+        },
+        { persist: false },
+      );
       try {
         const host = String(window.location.hostname || "").toLowerCase();
         if (host === "localhost" || host === "127.0.0.1") {
-          localStorage.setItem("bb_solo_mode", modeVal);
-          localStorage.setItem("bb_solo_map", mapVal);
+          localStorage.setItem(
+            "bb_solo_mode",
+            String(document.getElementById("mode")?.value || "1"),
+          );
+          localStorage.setItem("bb_solo_mode_id", selection.modeId);
+          localStorage.setItem(
+            "bb_solo_mode_variant_id",
+            selection.modeVariantId || "",
+          );
+          if (selection.mapId != null) {
+            localStorage.setItem("bb_solo_map", String(selection.mapId));
+          }
         }
       } catch (_) {}
-      setLobbyBackground(mapVal);
+      if (selection.mapId != null) {
+        setLobbyBackground(String(selection.mapId));
+      }
     }
     // Immediately render roster so UI isn't empty before socket pushes
     if (data?.members)
       renderPartyMembers({
         partyId,
         members: data.members,
+        selection: data?.selection || null,
         mode: data?.party?.mode,
-        map: data?.party?.map,
+        map: data?.selection?.mapId ?? data?.party?.map,
       });
     sonner("Joined party", undefined, undefined, undefined, {
       duration: 1500,

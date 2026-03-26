@@ -37,6 +37,8 @@ import { spawnDamageImpact } from "../effects";
  * @property {object}              serverSpawnIndex
  * // ---- live state (set via setter, read externally via closure var) ----
  * @property {(v: Array) => void}  setLatestPowerups
+ * @property {(v: object|null) => void} setLatestModeState
+ * @property {() => object|null}   getLatestModeState
  * @property {() => Array}         getLatestDeathDrops
  * @property {(v: Array) => void}  setLatestDeathDrops
  * @property {(v: object) => void} setLatestPlayerEffects
@@ -98,6 +100,8 @@ export function createMatchCoordinator(config) {
     setSpawnVersion,
     serverSpawnIndex,
     setLatestPowerups,
+    setLatestModeState,
+    getLatestModeState,
     getLatestDeathDrops,
     setLatestDeathDrops,
     setLatestPlayerEffects,
@@ -387,6 +391,10 @@ export function createMatchCoordinator(config) {
 
     if (Array.isArray(gameState.powerups))
       setLatestPowerups(gameState.powerups);
+    if (gameState.modeState && typeof gameState.modeState === "object") {
+      setLatestModeState(gameState.modeState);
+      hud.syncModeState?.(gameState.modeState, gameData?.yourTeam);
+    }
     if (Array.isArray(gameState.deathDrops))
       setLatestDeathDrops(gameState.deathDrops);
     if (
@@ -475,7 +483,8 @@ export function createMatchCoordinator(config) {
       if (
         typeof prev === "number" &&
         payload.health < prev &&
-        ((getLatestPlayerEffects()?.[payload.username]?.shield || 0) > 0 ||
+        (((getLatestPlayerEffects()?.[payload.username]?.shield || 0) > 0 ||
+          (getLatestPlayerEffects()?.[payload.username]?.respawnShield || 0) > 0) ||
           Date.now() - (lastShieldActiveAt[payload.username] || 0) <= 900)
       ) {
         shieldImpactQueue.push({ username: payload.username, at: Date.now() });
@@ -503,6 +512,15 @@ export function createMatchCoordinator(config) {
     wrapper?.startDeathPresentation?.(payload);
   }
 
+  function _onPlayerRespawn(payload) {
+    if (!payload?.username) return;
+    hud.setTeamHudPlayerAlive(payload.username, true);
+    if (payload.username === getUsername()) return;
+    const wrapper =
+      opponentPlayers[payload.username] || teamPlayers[payload.username];
+    wrapper?.handleRespawn?.(payload);
+  }
+
   function _onGameSnapshot(snapshot) {
     if (!snapshot || !snapshot.players) return;
 
@@ -517,6 +535,10 @@ export function createMatchCoordinator(config) {
     } catch (_) {}
 
     if (Array.isArray(snapshot.powerups)) setLatestPowerups(snapshot.powerups);
+    if (snapshot.modeState && typeof snapshot.modeState === "object") {
+      setLatestModeState(snapshot.modeState);
+      hud.syncModeState?.(snapshot.modeState, getGameData()?.yourTeam);
+    }
     if (Array.isArray(snapshot.deathDrops)) {
       setLatestDeathDrops(snapshot.deathDrops);
     }
@@ -761,6 +783,7 @@ export function createMatchCoordinator(config) {
     socket.on("game:starting", _onGameStarting);
     socket.on("health-update", _onHealthUpdate);
     socket.on("player:dead", _onPlayerDead);
+    socket.on("player:respawn", _onPlayerRespawn);
     socket.on("game:snapshot", _onGameSnapshot);
     socket.on("game:action", _onGameAction);
     socket.on("game:error", _onGameError);
@@ -792,6 +815,7 @@ export function createMatchCoordinator(config) {
     socket.off("game:starting", _onGameStarting);
     socket.off("health-update", _onHealthUpdate);
     socket.off("player:dead", _onPlayerDead);
+    socket.off("player:respawn", _onPlayerRespawn);
     socket.off("game:snapshot", _onGameSnapshot);
     socket.off("game:action", _onGameAction);
     socket.off("game:error", _onGameError);

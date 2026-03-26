@@ -1,3 +1,7 @@
+const {
+  normalizeSelectionFromRow,
+} = require("../helpers/gameSelectionCatalog");
+
 async function buildGameDataForMatch({
   db,
   requireCurrentUser,
@@ -18,7 +22,7 @@ async function buildGameDataForMatch({
   }
 
   const participantRows = await db.runQuery(
-    "SELECT mp.*, m.mode, m.map, m.status FROM match_participants mp JOIN matches m ON m.match_id = mp.match_id WHERE mp.match_id = ? AND mp.user_id = ?",
+    "SELECT mp.*, m.*, m.status FROM match_participants mp JOIN matches m ON m.match_id = mp.match_id WHERE mp.match_id = ? AND mp.user_id = ?",
     [matchId, user.user_id],
   );
 
@@ -34,6 +38,7 @@ async function buildGameDataForMatch({
   }
 
   const participant = participantRows[0];
+  const selection = normalizeSelectionFromRow(participant || {});
   if (participant.status !== "live") {
     return {
       ok: false,
@@ -63,7 +68,10 @@ async function buildGameDataForMatch({
   const gameData = {
     matchId: Number(matchId),
     mode: participant.mode,
-    map: participant.map,
+    modeId: selection.modeId,
+    modeVariantId: selection.modeVariantId,
+    selection,
+    map: selection.mapId,
     yourName: user.name,
     isAdmin: typeof isAdminUser === "function" ? !!isAdminUser(user) : false,
     yourTeam: participant.team,

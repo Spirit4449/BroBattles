@@ -6,18 +6,38 @@ import {
   getMapSelectPreviewAsset,
   getLobbyPlatformAsset,
 } from "./maps/manifest";
+import {
+  getAllGameModes,
+  getCompatibleMapsForSelection,
+  getMapLabel,
+  getModeArtAsset,
+  getModeFallbackArtAsset,
+  getModeById,
+  getModeLabel,
+  getModeSelectionStyle,
+  getModeSubtitle,
+  getSelectionBlockReason,
+  getSelectionDisplayLabel,
+  getTotalPlayersForSelection,
+  isSelectionQueueable,
+  normalizeGameSelection,
+  selectionToLegacyMode,
+} from "./lib/gameSelectionCatalog.js";
 
 // Track last known party roster to detect joins/leaves
 let __partyRosterNames = null; // Set<string> of member names
 let __partyRosterPartyId = null;
 const SOLO_MODE_STORAGE_KEY = "bb_solo_mode";
+const SOLO_MODE_ID_STORAGE_KEY = "bb_solo_mode_id";
+const SOLO_MODE_VARIANT_STORAGE_KEY = "bb_solo_mode_variant_id";
 const SOLO_MAP_STORAGE_KEY = "bb_solo_map";
-let activeQueueContext = null; // { mode, map }
+let activeQueueContext = null; // { selection }
 let mmOverlayPlayers = [];
 let mmOverlayPlayersSig = "";
 let mmOverlayTotal = 0;
 let __lobbyOffsetResizeBound = false;
 let __mapPopupUi = null;
+let __modePopupUi = null;
 
 function normalizeStatusLabel(status) {
   const s = String(status || "")
@@ -41,14 +61,84 @@ function getCurrentModeValue() {
   return String(document.getElementById("mode")?.value || "1");
 }
 
-function syncMapPickerUi(mapValue) {
+function getCurrentSelection() {
+  return normalizeGameSelection({
+    modeId: document.getElementById("mode-id")?.value || "duels",
+    modeVariantId:
+      document.getElementById("mode-variant-id")?.value || "duels-1v1",
+    mapId: document.getElementById("map")?.value || null,
+  });
+}
+
+function rebuildMapDropdown(selection) {
+  const mapDropdown = document.getElementById("map");
+  if (!mapDropdown) return [];
+
+  const normalized = normalizeGameSelection(selection || getCurrentSelection());
+  const compatibleMaps = getCompatibleMapsForSelection(normalized);
+  mapDropdown.innerHTML = "";
+
+  compatibleMaps.forEach((map) => {
+    const opt = document.createElement("option");
+    opt.value = String(map.id);
+    opt.textContent = map.label || `Map ${map.id}`;
+    mapDropdown.appendChild(opt);
+  });
+
+  mapDropdown.disabled = compatibleMaps.length === 0;
+  mapDropdown.value =
+    compatibleMaps.find((map) => Number(map.id) === Number(normalized.mapId))
+      ?.id != null
+      ? String(normalized.mapId)
+      : compatibleMaps[0]?.id != null
+        ? String(compatibleMaps[0].id)
+        : "";
+
+  return compatibleMaps;
+}
+
+function syncModePickerUi(selection = getCurrentSelection()) {
+  const normalized = normalizeGameSelection(selection);
+  const mode = getModeById(normalized.modeId);
+  const previewImg = document.getElementById("mode-preview-img");
+  const previewName = document.getElementById("mode-preview-name");
+  const previewSubtitle = document.getElementById("mode-preview-subtitle");
+  const openBtn = document.getElementById("mode-picker-open");
+
+  if (previewName) previewName.textContent = getModeLabel(normalized.modeId);
+  if (previewSubtitle) {
+    const label = getSelectionDisplayLabel(normalized);
+    previewSubtitle.textContent =
+      label.includes("•") ? label.split("•")[1].trim() : getModeSubtitle(normalized.modeId);
+  }
+  if (previewImg) {
+    previewImg.src = getModeArtAsset(normalized.modeId);
+    previewImg.onerror = () => {
+      previewImg.onerror = null;
+      previewImg.src = getModeFallbackArtAsset(normalized.modeId);
+    };
+  }
+  if (openBtn) {
+    openBtn.classList.toggle(
+      "is-disabled",
+      !isSelectionQueueable(normalized) && normalized.modeId !== "duels",
+    );
+    openBtn.title = mode?.description || "";
+  }
+}
+
+function syncMapPickerUi(mapValue, selection = getCurrentSelection()) {
   const mapDropdown = document.getElementById("map");
   const previewImg = document.getElementById("map-preview-img");
   const previewName = document.getElementById("map-preview-name");
+  const openBtn = document.getElementById("map-picker-open");
   if (!mapDropdown) return;
 
-  const normalized = String(mapValue || mapDropdown.value || "1");
-  if (mapDropdown.value !== normalized) {
+  const compatibleMaps = rebuildMapDropdown(selection);
+  const normalized = String(
+    mapValue || mapDropdown.value || compatibleMaps[0]?.id || "",
+  );
+  if (normalized && mapDropdown.value !== normalized) {
     mapDropdown.value = normalized;
   }
 
@@ -56,20 +146,73 @@ function syncMapPickerUi(mapValue) {
     `option[value="${normalized}"]`,
   );
   if (previewName) {
-    previewName.textContent = selectedOption?.textContent || "Unknown Map";
+    previewName.textContent =
+      compatibleMaps.length > 0
+        ? selectedOption?.textContent || getMapLabel(normalized)
+        : "No Compatible Maps";
   }
   if (previewImg) {
-    previewImg.src = getMapSelectPreviewAsset(normalized);
+    previewImg.src =
+      compatibleMaps.length > 0
+        ? getMapSelectPreviewAsset(normalized)
+        : "/assets/map.webp";
+  }
+  if (openBtn) {
+    openBtn.disabled = compatibleMaps.length === 0;
+    openBtn.classList.toggle("is-disabled", compatibleMaps.length === 0);
+    openBtn.title =
+      compatibleMaps.length === 0
+        ? "No compatible maps are available for this mode yet."
+        : "";
   }
 }
 
-function setupMapPickerControls() {
+function writeSelectionToDom(selection, { persist = false } = {}) {
+  const normalized = normalizeGameSelection(selection);
+  const modeIdInput = document.getElementById("mode-id");
+  const modeVariantInput = document.getElementById("mode-variant-id");
+  const modeDropdown = document.getElementById("mode");
+  if (modeIdInput) modeIdInput.value = normalized.modeId;
+  if (modeVariantInput)
+    modeVariantInput.value = normalized.modeVariantId || "";
+  if (modeDropdown) {
+    modeDropdown.value = String(selectionToLegacyMode(normalized));
+  }
+  const compatibleMaps = rebuildMapDropdown(normalized);
+  const mapDropdown = document.getElementById("map");
+  if (mapDropdown) {
+    const nextMapId =
+      compatibleMaps.find((map) => Number(map.id) === Number(normalized.mapId))
+        ?.id ?? compatibleMaps[0]?.id ?? null;
+    mapDropdown.value = nextMapId != null ? String(nextMapId) : "";
+  }
+  syncModePickerUi(normalized);
+  syncMapPickerUi(mapDropdown?.value || normalized.mapId, normalized);
+  syncReadyAvailability({
+    ...normalized,
+    mapId: mapDropdown?.value ? Number(mapDropdown.value) : null,
+  });
+  if (persist) {
+    setSoloSelection(SOLO_MODE_ID_STORAGE_KEY, normalized.modeId);
+    setSoloSelection(
+      SOLO_MODE_VARIANT_STORAGE_KEY,
+      normalized.modeVariantId || "",
+    );
+    setSoloSelection(SOLO_MODE_STORAGE_KEY, selectionToLegacyMode(normalized));
+    if (mapDropdown?.value) {
+      setSoloSelection(SOLO_MAP_STORAGE_KEY, mapDropdown.value);
+    }
+  }
+  return {
+    ...normalized,
+    mapId: mapDropdown?.value ? Number(mapDropdown.value) : null,
+  };
+}
+
+function setupMapPickerControls(onSelect = null) {
   const mapDropdown = document.getElementById("map");
   const openBtn = document.getElementById("map-picker-open");
   if (!mapDropdown || !openBtn) return;
-
-  const options = Array.from(mapDropdown.options || []);
-  if (!options.length) return;
 
   const ensureMapPopup = () => {
     if (__mapPopupUi) return __mapPopupUi;
@@ -81,26 +224,6 @@ function setupMapPickerControls() {
 
     const grid = document.createElement("div");
     grid.className = "map-select-grid";
-
-    options.forEach((opt) => {
-      const value = String(opt.value);
-      const card = document.createElement("button");
-      card.type = "button";
-      card.dataset.mapValue = value;
-      card.className = `map-select-card pixel-menu-button${
-        String(mapDropdown.value) === value ? " active" : ""
-      }`;
-      card.innerHTML = `
-        <img src="${getMapSelectPreviewAsset(value)}" alt="${opt.textContent || "Map"}" />
-        <div class="map-select-name">${opt.textContent || "Map"}</div>
-      `;
-      card.addEventListener("click", () => {
-        mapDropdown.value = value;
-        mapDropdown.dispatchEvent(new Event("change", { bubbles: true }));
-        closePopup();
-      });
-      grid.appendChild(card);
-    });
 
     __mapPopupUi = {
       popupShell,
@@ -114,6 +237,38 @@ function setupMapPickerControls() {
   const openMapPopup = () => {
     const popupUi = ensureMapPopup();
     const { popupShell, grid, closePopup } = popupUi;
+    grid.innerHTML = "";
+
+    const options = Array.from(mapDropdown.options || []);
+    if (!options.length) {
+      const empty = document.createElement("div");
+      empty.className = "mode-select-empty";
+      empty.textContent = "No compatible maps are available for this mode yet.";
+      grid.appendChild(empty);
+    } else {
+      options.forEach((opt) => {
+        const value = String(opt.value);
+        const card = document.createElement("button");
+        card.type = "button";
+        card.dataset.mapValue = value;
+        card.className = `map-select-card pixel-menu-button${
+          String(mapDropdown.value) === value ? " active" : ""
+        }`;
+        card.innerHTML = `
+          <img src="${getMapSelectPreviewAsset(value)}" alt="${opt.textContent || "Map"}" />
+          <div class="map-select-name">${opt.textContent || "Map"}</div>
+        `;
+        card.addEventListener("click", () => {
+          mapDropdown.value = value;
+          mapDropdown.dispatchEvent(new Event("change", { bubbles: true }));
+          if (typeof onSelect === "function") {
+            onSelect(getCurrentSelection());
+          }
+          closePopup();
+        });
+        grid.appendChild(card);
+      });
+    }
 
     // Keep active card in sync with latest dropdown value each open.
     const selected = String(mapDropdown.value || "1");
@@ -139,6 +294,143 @@ function setupMapPickerControls() {
   }
 
   syncMapPickerUi(mapDropdown.value);
+}
+
+function setupModePickerControls(onSelect = null) {
+  const openBtn = document.getElementById("mode-picker-open");
+  if (!openBtn) return;
+
+  const ensureModePopup = () => {
+    if (__modePopupUi) return __modePopupUi;
+    const popupShell = getSharedSelectionPopupShell();
+    const closePopup = () => popupShell.hide();
+    const content = document.createElement("div");
+    __modePopupUi = { popupShell, closePopup, content };
+    return __modePopupUi;
+  };
+
+  const openModeGrid = () => {
+    const popupUi = ensureModePopup();
+    const { popupShell, closePopup, content } = popupUi;
+    const grid = document.createElement("div");
+    grid.className = "mode-select-grid";
+    const selection = getCurrentSelection();
+
+    getAllGameModes().forEach((mode) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = `map-select-card mode-select-card pixel-menu-button${
+        selection.modeId === mode.id ? " active" : ""
+      }${mode.queueable ? "" : " is-disabled"}`;
+      const artAsset = mode.artAsset || mode.fallbackArtAsset || "/assets/fightImage.webp";
+      const badge = mode.queueable ? "Playable" : "Coming Soon";
+      card.innerHTML = `
+        <span class="mode-select-badge">${badge}</span>
+        <img src="${artAsset}" alt="${mode.label}" />
+        <div class="map-select-name">${mode.label}</div>
+        <div class="mode-select-subtitle">${mode.description || ""}</div>
+        <div class="mode-select-meta">${mode.topology || ""}</div>
+      `;
+      card.querySelector("img")?.addEventListener("error", (event) => {
+        event.currentTarget.src =
+          mode.fallbackArtAsset || "/assets/fightImage.webp";
+      });
+      card.addEventListener("click", () => {
+        if (getModeSelectionStyle(mode.id) === "subcards") {
+          openModeVariantGrid(mode.id);
+          return;
+        }
+        const nextSelection = writeSelectionToDom(
+          {
+            ...selection,
+            modeId: mode.id,
+            modeVariantId: null,
+            mapId: null,
+          },
+          { persist: !checkIfInParty() },
+        );
+        if (typeof onSelect === "function") onSelect(nextSelection);
+        closePopup();
+      });
+      grid.appendChild(card);
+    });
+
+    content.replaceChildren(grid);
+    popupShell
+      .mount({
+        titleText: "Choose Mode",
+        onClose: closePopup,
+        zIndex: 12020,
+        contentNode: content,
+        backgroundNode: null,
+      })
+      .show();
+  };
+
+  const openModeVariantGrid = (modeId) => {
+    const popupUi = ensureModePopup();
+    const { popupShell, closePopup, content } = popupUi;
+    const mode = getModeById(modeId);
+    const selection = getCurrentSelection();
+    const wrapper = document.createElement("div");
+    const backButton = document.createElement("button");
+    backButton.type = "button";
+    backButton.className = "pixel-menu-button";
+    backButton.textContent = "Back";
+    backButton.style.marginBottom = "12px";
+    backButton.addEventListener("click", openModeGrid);
+    wrapper.appendChild(backButton);
+
+    const grid = document.createElement("div");
+    grid.className = "mode-select-grid subcards";
+    const variants = Array.isArray(mode?.variants) ? mode.variants : [];
+    variants.forEach((variant) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = `map-select-card mode-select-card pixel-menu-button${
+        selection.modeVariantId === variant.id ? " active" : ""
+      }`;
+      card.innerHTML = `
+        <img src="${getModeArtAsset(modeId)}" alt="${variant.label}" />
+        <div class="map-select-name">${variant.label}</div>
+        <div class="mode-select-subtitle">${variant.subtitle || getModeSubtitle(modeId)}</div>
+      `;
+      card.querySelector("img")?.addEventListener("error", (event) => {
+        event.currentTarget.src = getModeFallbackArtAsset(modeId);
+      });
+      card.addEventListener("click", () => {
+        const nextSelection = writeSelectionToDom(
+          {
+            ...selection,
+            modeId,
+            modeVariantId: variant.id,
+            mapId: selection.mapId,
+          },
+          { persist: !checkIfInParty() },
+        );
+        if (typeof onSelect === "function") onSelect(nextSelection);
+        closePopup();
+      });
+      grid.appendChild(card);
+    });
+    wrapper.appendChild(grid);
+    content.replaceChildren(wrapper);
+    popupShell
+      .mount({
+        titleText: `${mode?.label || "Mode"} Setup`,
+        onClose: closePopup,
+        zIndex: 12020,
+        contentNode: content,
+        backgroundNode: null,
+      })
+      .show();
+  };
+
+  if (openBtn.dataset.bound !== "1") {
+    openBtn.dataset.bound = "1";
+    openBtn.addEventListener("click", openModeGrid);
+  }
+  syncModePickerUi();
 }
 
 function getViewportOffsetScale() {
@@ -221,6 +513,17 @@ function getSoloSelection(key) {
   } catch (_) {
     return null;
   }
+}
+
+function legacyModeToVariantId(mode) {
+  const numeric = Number(mode);
+  if (numeric === 2) return "duels-2v2";
+  if (numeric === 3) return "duels-3v3";
+  return "duels-1v1";
+}
+
+export function applyLobbySelection(selection, options = {}) {
+  return writeSelectionToDom(selection, options);
 }
 
 export function checkIfInParty() {
@@ -375,32 +678,36 @@ export function socketInit() {
       }
 
       // Sync mode/map dropdowns if present
-      const modeSel = document.getElementById("mode");
-      if (modeSel && data.mode) {
-        modeSel.value = String(data.mode);
-        setSoloSelection(SOLO_MODE_STORAGE_KEY, modeSel.value);
-      }
-      const mapSel = document.getElementById("map");
-      if (mapSel && data.map) {
-        mapSel.value = String(data.map);
-        setSoloSelection(SOLO_MAP_STORAGE_KEY, mapSel.value);
-      }
+      const selection = writeSelectionToDom(
+        {
+          modeId: data?.selection?.modeId || data?.modeId || "duels",
+          modeVariantId:
+            data?.selection?.modeVariantId ||
+            data?.modeVariantId ||
+            "duels-1v1",
+          mapId: data?.selection?.mapId ?? data?.map ?? null,
+        },
+        { persist: false },
+      );
 
       // Keep lobby visuals in sync with authoritative party map/mode.
-      if (data.map) {
-        setLobbyBackground(String(data.map));
-        applyPlatformImageForMap(String(data.map));
+      if (selection.mapId != null) {
+        setLobbyBackground(String(selection.mapId));
+        applyPlatformImageForMap(String(selection.mapId));
         applyLobbyCharacterOffsetForMap(
-          String(data.map),
-          String(data.mode || 1),
+          String(selection.mapId),
+          String(selectionToLegacyMode(selection)),
         );
       }
-      if (data.mode) {
-        updatePlatformsForMode(String(data.mode));
-      }
+      updatePlatformsForMode(String(selectionToLegacyMode(selection)));
 
       // Render minimal 1v1 view into the existing two slots if available
-      renderPartyMembers(data);
+      renderPartyMembers({
+        ...data,
+        selection,
+        mode: selectionToLegacyMode(selection),
+        map: selection.mapId,
+      });
       // Re-bind ready toggle on your slot after DOM updates
       initReadyToggle();
       // Ensure the bottom Ready button reflects current user's status
@@ -446,22 +753,30 @@ export function socketInit() {
     if (currentPartyId && String(data.partyId) !== String(currentPartyId))
       return;
 
-    const modeDropdown = document.getElementById("mode");
-    if (modeDropdown) {
-      modeDropdown.value = data.selectedValue || data.mode;
-      setSoloSelection(SOLO_MODE_STORAGE_KEY, modeDropdown.value);
-    }
+    const selection = writeSelectionToDom(
+      {
+        modeId: data?.selection?.modeId || data?.modeId || "duels",
+        modeVariantId:
+          data?.selection?.modeVariantId ||
+          data?.modeVariantId ||
+          data?.selectedValue ||
+          "duels-1v1",
+        mapId: data?.selection?.mapId ?? getCurrentMapValue(),
+      },
+      { persist: false },
+    );
 
     // Update platforms for new mode
-    updatePlatformsForMode(data.selectedValue || data.mode);
+    updatePlatformsForMode(selectionToLegacyMode(selection));
 
     // Re-render members in new platform layout
     if (data.members) {
       renderPartyMembers({
         partyId: currentPartyId,
         members: data.members,
-        mode: data.selectedValue || data.mode,
-        map: data.map,
+        selection,
+        mode: selectionToLegacyMode(selection),
+        map: selection.mapId,
       });
     }
   });
@@ -471,75 +786,74 @@ export function socketInit() {
     if (currentPartyId && String(data.partyId) !== String(currentPartyId))
       return;
 
-    const mapDropdown = document.getElementById("map");
-    if (mapDropdown) {
-      mapDropdown.value = data.selectedValue || data.map;
-      setSoloSelection(SOLO_MAP_STORAGE_KEY, mapDropdown.value);
-      syncMapPickerUi(mapDropdown.value);
-    }
+    const selection = writeSelectionToDom(
+      {
+        modeId: data?.selection?.modeId || document.getElementById("mode-id")?.value,
+        modeVariantId:
+          data?.selection?.modeVariantId ||
+          document.getElementById("mode-variant-id")?.value,
+        mapId: data?.selection?.mapId ?? data?.selectedValue ?? data?.map,
+      },
+      { persist: false },
+    );
 
     // Update lobby background
-    setLobbyBackground(data.selectedValue || data.map);
-    applyPlatformImageForMap(data.selectedValue || data.map);
+    if (selection.mapId != null) {
+      setLobbyBackground(selection.mapId);
+      applyPlatformImageForMap(selection.mapId);
+    }
     applyLobbyCharacterOffsetForMap(
-      data.selectedValue || data.map,
-      data.mode || document.getElementById("mode")?.value || "1",
+      selection.mapId,
+      selectionToLegacyMode(selection),
     );
     animatePlatformsForMapSwitch();
   });
 
   // Party-wide: everyone ready -> show matchmaking overlay
-  socket.on("party:matchmaking:start", ({ partyId }) => {
+  socket.on("party:matchmaking:start", ({ partyId, selection }) => {
     if (currentPartyId && String(partyId) !== String(currentPartyId)) return;
-    const mode = Number(document.getElementById("mode")?.value) || 1;
-    const map = Number(document.getElementById("map")?.value) || 1;
-    activeQueueContext = { mode, map };
+    const normalized = normalizeGameSelection(selection || getCurrentSelection());
+    activeQueueContext = { selection: normalized };
     mmOverlayPlayers = [];
     mmOverlayPlayersSig = "";
-    mmOverlayTotal = mode * 2;
+    mmOverlayTotal = getTotalPlayersForSelection(normalized);
     showMatchmakingOverlay();
     updateMMOverlay({
       found: 0,
-      total: mode * 2,
-      mode,
-      map,
+      total: mmOverlayTotal,
+      selection: normalized,
       players: [],
     });
   });
 
   socket.on("queue:joined", (payload) => {
-    const mode = Number(payload?.mode) || 1;
-    const map = Number(payload?.map) || 1;
-    activeQueueContext = { mode, map };
+    const normalized = normalizeGameSelection(payload?.selection || getCurrentSelection());
+    activeQueueContext = { selection: normalized };
     mmOverlayPlayers = [];
     mmOverlayPlayersSig = "";
-    mmOverlayTotal = mode * 2;
+    mmOverlayTotal = getTotalPlayersForSelection(normalized);
     showMatchmakingOverlay();
     updateMMOverlay({
       found: 0,
-      total: mode * 2,
-      mode,
-      map,
+      total: mmOverlayTotal,
+      selection: normalized,
       players: [],
     });
   });
 
   // When a match is found, update overlay and auto-ack ready for this client
   socket.on("match:found", (payload) => {
-    // payload: { matchId, mode, map, yourTeam, players }
-    const payloadMode = Number(payload?.mode) || 1;
-    const payloadMap = Number(payload?.map) || 1;
-    activeQueueContext = { mode: payloadMode, map: payloadMap };
+    const normalized = normalizeGameSelection(payload?.selection || getCurrentSelection());
+    activeQueueContext = { selection: normalized };
     mmOverlayPlayers = Array.isArray(payload?.players) ? payload.players : [];
     mmOverlayPlayersSig = JSON.stringify(
       mmOverlayPlayers.map((p) => `${p?.name || ""}:${p?.char_class || ""}`),
     );
-    mmOverlayTotal = payloadMode * 2;
+    mmOverlayTotal = getTotalPlayersForSelection(normalized);
     updateMMOverlay({
       found: mmOverlayPlayers.length,
-      total: payloadMode * 2,
-      mode: payloadMode,
-      map: payloadMap,
+      total: mmOverlayTotal,
+      selection: normalized,
       players: mmOverlayPlayers,
     });
     if (payload?.matchId) {
@@ -624,19 +938,27 @@ export function socketInit() {
 
   // Progressive matching updates: incrementally update overlay found count
   socket.on("match:progress", (data) => {
-    const currentMode = Number(document.getElementById("mode")?.value) || 1;
-    const currentMap = Number(document.getElementById("map")?.value) || 1;
-    const targetMode = Number(activeQueueContext?.mode) || currentMode;
-    const targetMap = Number(activeQueueContext?.map) || currentMap;
+    const currentSelection = getCurrentSelection();
+    const targetSelection = normalizeGameSelection(
+      activeQueueContext?.selection || currentSelection,
+    );
+    const incomingSelection = normalizeGameSelection(
+      data?.selection || {
+        modeId: data?.modeId,
+        modeVariantId: data?.modeVariantId,
+        mapId: data?.map,
+      },
+    );
     // Only update if it matches the current selection
-    if (Number(data?.mode) !== targetMode || Number(data?.map) !== targetMap)
+    if (
+      incomingSelection.modeId !== targetSelection.modeId ||
+      incomingSelection.modeVariantId !== targetSelection.modeVariantId ||
+      Number(incomingSelection.mapId) !== Number(targetSelection.mapId)
+    )
       return;
 
     // Keep overlay context aligned to server payload while queued.
-    activeQueueContext = {
-      mode: Number(data?.mode) || targetMode,
-      map: Number(data?.map) || targetMap,
-    };
+    activeQueueContext = { selection: incomingSelection };
 
     const overlay = document.getElementById("matchmaking-overlay");
     if (overlay && overlay.classList.contains("hidden")) {
@@ -652,12 +974,12 @@ export function socketInit() {
         mmOverlayPlayers = incomingPlayers;
       }
     }
-    mmOverlayTotal = Number(data?.total) || targetMode * 2;
+    mmOverlayTotal =
+      Number(data?.total) || getTotalPlayersForSelection(incomingSelection);
     updateMMOverlay({
       found: Number(data?.found) || 0,
       total: mmOverlayTotal,
-      mode: Number(data?.mode) || targetMode,
-      map: Number(data?.map) || targetMap,
+      selection: incomingSelection,
       players: mmOverlayPlayers,
     });
   });
@@ -721,15 +1043,28 @@ export function renderPartyMembers(data) {
   const members = Array.isArray(data.members) ? data.members : [];
   const currentUserName =
     document.getElementById("username-text")?.textContent || "";
+  const currentSelection = normalizeGameSelection(
+    data?.selection || getCurrentSelection(),
+  );
+  const requestedSlots = Math.max(
+    1,
+    Number(data?.mode) || selectionToLegacyMode(currentSelection),
+  );
+  const team1Members = members.filter((m) => m.team === "team1");
+  const team2Members = members.filter((m) => m.team === "team2");
+  const layoutSlots = Math.max(
+    1,
+    requestedSlots,
+    team1Members.length,
+    team2Members.length,
+  );
 
   // Ensure platforms match the current mode
-  if (data.mode) {
-    updatePlatformsForMode(data.mode);
-  }
+  updatePlatformsForMode(layoutSlots);
 
   console.log("[party] renderPartyMembers()", {
     partyId: data?.partyId,
-    mode: data?.mode,
+    mode: requestedSlots,
     currentUserName,
     members: members.map((m) => ({
       name: m?.name,
@@ -754,9 +1089,6 @@ export function renderPartyMembers(data) {
     const currentUser = members.find((m) => m.name === currentUserName);
     const currentUserTeam = currentUser ? currentUser.team : "team1";
 
-    // Separate members by teams
-    const team1Members = members.filter((m) => m.team === "team1");
-    const team2Members = members.filter((m) => m.team === "team2");
     console.log("[party] team split", {
       yourTeam: currentUserTeam,
       team1: team1Members.map((m) => m.name),
@@ -917,43 +1249,47 @@ export function initializeModeDropdown() {
   const partyId = checkIfInParty();
   const isSolo = !partyId;
 
-  if (!modeDropdown) return;
+  if (!modeDropdown || !mapDropdown) return;
   bindLobbyOffsetResizeHandler();
-  setupMapPickerControls();
+  const applySelectionVisuals = (selection, { animateMap = false } = {}) => {
+    const normalized = writeSelectionToDom(selection, { persist: isSolo });
+    const legacyMode = selectionToLegacyMode(normalized);
+    updatePlatformsForMode(String(legacyMode));
+    if (normalized.mapId != null) {
+      setLobbyBackground(String(normalized.mapId));
+      applyPlatformImageForMap(String(normalized.mapId));
+      applyLobbyCharacterOffsetForMap(String(normalized.mapId), String(legacyMode));
+      if (animateMap) animatePlatformsForMapSwitch();
+    } else {
+      syncMapPickerUi("", normalized);
+    }
+    return normalized;
+  };
 
+  let initialSelection = getCurrentSelection();
   if (isSolo) {
-    const savedMode = getSoloSelection(SOLO_MODE_STORAGE_KEY);
-    if (
-      savedMode &&
-      modeDropdown.querySelector(`option[value="${savedMode}"]`)
-    ) {
-      modeDropdown.value = savedMode;
-    }
-    if (mapDropdown) {
-      const savedMap = getSoloSelection(SOLO_MAP_STORAGE_KEY);
-      if (
-        savedMap &&
-        mapDropdown.querySelector(`option[value="${savedMap}"]`)
-      ) {
-        mapDropdown.value = savedMap;
-      }
-      setLobbyBackground(mapDropdown.value);
-      syncMapPickerUi(mapDropdown.value);
-      applyLobbyCharacterOffsetForMap(mapDropdown.value, modeDropdown.value);
-    }
-    updatePlatformsForMode(modeDropdown.value);
+    initialSelection = normalizeGameSelection({
+      modeId:
+        getSoloSelection(SOLO_MODE_ID_STORAGE_KEY) ||
+        document.getElementById("mode-id")?.value ||
+        "duels",
+      modeVariantId:
+        getSoloSelection(SOLO_MODE_VARIANT_STORAGE_KEY) ||
+        legacyModeToVariantId(getSoloSelection(SOLO_MODE_STORAGE_KEY)) ||
+        document.getElementById("mode-variant-id")?.value ||
+        "duels-1v1",
+      mapId: getSoloSelection(SOLO_MAP_STORAGE_KEY) || getCurrentMapValue(),
+    });
   }
+  applySelectionVisuals(initialSelection);
 
-  let previousModeValue = modeDropdown.value;
-
-  modeDropdown.addEventListener("change", async (event) => {
-    const selectedValue = event.target.value;
+  const handleModeSelection = async (selection) => {
     const username = document.getElementById("username-text")?.textContent;
+    const previousSelection = getCurrentSelection();
+    const nextSelection = normalizeGameSelection(selection);
 
-    // If in a party, validate and emit socket events
     if (partyId) {
       try {
-        // Fetch current party members to validate mode change
         const response = await fetch("/party-members", {
           method: "POST",
           headers: {
@@ -961,37 +1297,29 @@ export function initializeModeDropdown() {
           },
           body: JSON.stringify({ partyId }),
         });
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch party members");
-        }
-
+        if (!response.ok) throw new Error("Failed to fetch party members");
         const data = await response.json();
-        const requiredSlots = Number(selectedValue) * 2;
-
-        if (requiredSlots < data.membersCount) {
-          // Too many players for this mode
+        const requiredSlots = selectionToLegacyMode(nextSelection) * 2;
+        if (
+          nextSelection.modeId === "duels" &&
+          requiredSlots < Number(data.membersCount || 0)
+        ) {
           sonner(
-            "Too many players for this mode!",
-            "Please remove 1 or more players before changing to this mode",
+            "Too many players for this duel size!",
+            "Please remove players before shrinking the duel format.",
             "error",
           );
-          modeDropdown.value = previousModeValue;
+          applySelectionVisuals(previousSelection);
           return;
         }
 
-        // Update platforms locally first for immediate feedback
-        updatePlatformsForMode(selectedValue);
-
-        // Emit mode change to server
+        const applied = applySelectionVisuals(nextSelection);
         socket.emit("mode-change", {
-          selectedValue,
+          selection: applied,
           username,
           partyId,
           members: data.members,
         });
-
-        previousModeValue = selectedValue;
       } catch (error) {
         console.error("Error changing mode:", error);
         sonner(
@@ -999,40 +1327,37 @@ export function initializeModeDropdown() {
           "Please try again. If the problem persists, try refreshing the page.",
           "error",
         );
-        modeDropdown.value = previousModeValue;
+        applySelectionVisuals(previousSelection);
       }
-    } else {
-      // Not in a party - just update platforms locally
-      updatePlatformsForMode(selectedValue);
-      setSoloSelection(SOLO_MODE_STORAGE_KEY, selectedValue);
-      previousModeValue = selectedValue;
+      return;
     }
-  });
 
-  // Map change handler
-  if (mapDropdown) {
+    applySelectionVisuals(nextSelection);
+  };
+
+  setupModePickerControls(handleModeSelection);
+  setupMapPickerControls();
+
+  if (mapDropdown.dataset.bound !== "1") {
+    mapDropdown.dataset.bound = "1";
     mapDropdown.addEventListener("change", (event) => {
       const selectedValue = event.target.value;
       const username = document.getElementById("username-text")?.textContent;
-
-      // Update lobby background immediately
-      setLobbyBackground(selectedValue);
-      applyPlatformImageForMap(selectedValue);
-      applyLobbyCharacterOffsetForMap(
-        selectedValue,
-        modeDropdown?.value || "1",
+      const applied = applySelectionVisuals(
+        {
+          ...getCurrentSelection(),
+          mapId: selectedValue || null,
+        },
+        { animateMap: true },
       );
-      syncMapPickerUi(selectedValue);
-      animatePlatformsForMapSwitch();
 
-      // If in a party, emit to server
       if (partyId) {
         socket.emit("map-change", {
-          selectedValue,
+          selection: applied,
           username,
           partyId,
         });
-      } else {
+      } else if (selectedValue) {
         setSoloSelection(SOLO_MAP_STORAGE_KEY, selectedValue);
       }
     });
@@ -1257,11 +1582,26 @@ export function initReadyToggle() {
     } else {
       // Solo flow: directly join/leave the queue and control overlay locally
       if (nextReady) {
-        const mode = Number(document.getElementById("mode")?.value) || 1;
-        const map = Number(document.getElementById("map")?.value) || 1;
+        const selection = getCurrentSelection();
+        const blockReason = getSelectionBlockReason(selection);
+        if (blockReason) {
+          statusEl.textContent = "online";
+          statusEl.className = "status online";
+          setReadyButtonState(false);
+          sonner("Mode not ready", blockReason, "error");
+          return;
+        }
+        const map = Number(selection.mapId) || 1;
         const side = "team1"; // default; server may flip if needed
-        activeQueueContext = { mode, map };
-        socket.emit("queue:join", { mode, map, side });
+        activeQueueContext = { selection };
+        mmOverlayTotal = getTotalPlayersForSelection(selection);
+        socket.emit("queue:join", {
+          selection,
+          modeId: selection.modeId,
+          modeVariantId: selection.modeVariantId,
+          map,
+          side,
+        });
         showMatchmakingOverlay();
       } else {
         socket.emit("queue:leave");
@@ -1280,15 +1620,15 @@ function ensureOverlay() {
 export function showMatchmakingOverlay() {
   const overlay = ensureOverlay();
   if (!overlay) return;
+  const selection = normalizeGameSelection(
+    activeQueueContext?.selection || getCurrentSelection(),
+  );
   overlay.classList.remove("hidden");
   overlay.setAttribute("aria-hidden", "false");
   updateMMOverlay({
-    found: 0,
-    total:
-      mmOverlayTotal ||
-      (Number(document.getElementById("mode")?.value) || 1) * 2,
-    mode: Number(document.getElementById("mode")?.value) || 1,
-    map: Number(document.getElementById("map")?.value) || 1,
+    found: mmOverlayPlayers.length,
+    total: mmOverlayTotal || getTotalPlayersForSelection(selection),
+    selection,
     players: mmOverlayPlayers,
   });
   wireCancelButton();
@@ -1302,44 +1642,49 @@ export function hideMatchmakingOverlay() {
 }
 
 function mapNameFromId(id) {
-  const mapSel = document.getElementById("map");
-  if (!mapSel) return String(id);
-  const opt = Array.from(mapSel.options).find(
-    (o) => Number(o.value) === Number(id),
-  );
-  return opt ? opt.textContent : String(id);
+  return getMapLabel(id);
 }
 
-function modeNameFromId(id) {
-  const modeSel = document.getElementById("mode");
-  if (!modeSel) return `${id}v${id}`;
-  const opt = Array.from(modeSel.options).find(
-    (o) => Number(o.value) === Number(id),
+function modeNameFromSelection(selection) {
+  return getSelectionDisplayLabel(
+    normalizeGameSelection(selection || getCurrentSelection()),
   );
-  return opt ? opt.textContent : `${id}v${id}`;
 }
 
-function updateMMOverlay({ found, total, mode, map, players }) {
+function updateMMOverlay({ found, total, selection, players }) {
   const foundEl = document.getElementById("mm-found");
   const totalEl = document.getElementById("mm-total");
   const modeEl = document.getElementById("mm-mode");
   const mapEl = document.getElementById("mm-map");
   const grid = document.getElementById("mm-players");
+  const normalized = normalizeGameSelection(
+    selection || activeQueueContext?.selection || getCurrentSelection(),
+  );
   if (foundEl) foundEl.textContent = String(found ?? 0);
-  if (totalEl) totalEl.textContent = String(total ?? 0);
-  if (modeEl) modeEl.textContent = modeNameFromId(mode ?? 1);
-  if (mapEl) mapEl.textContent = mapNameFromId(map ?? 1);
+  if (totalEl) {
+    totalEl.textContent = String(
+      Number(total) || getTotalPlayersForSelection(normalized),
+    );
+  }
+  if (modeEl) modeEl.textContent = modeNameFromSelection(normalized);
+  if (mapEl) {
+    mapEl.textContent =
+      normalized.mapId != null
+        ? mapNameFromId(normalized.mapId)
+        : "No Compatible Maps";
+  }
   if (grid) {
     const playersArr = Array.isArray(players) ? players : [];
     const nextSig = JSON.stringify({
-      total: Number(total ?? 0) || 0,
+      total: Number(total) || getTotalPlayersForSelection(normalized) || 0,
       players: playersArr.map((p) => `${p?.name || ""}:${p?.char_class || ""}`),
     });
     if (nextSig === grid.dataset.renderSig) return;
     grid.dataset.renderSig = nextSig;
 
     grid.innerHTML = "";
-    const count = Number(total ?? 0) || 0;
+    const count =
+      Number(total) || getTotalPlayersForSelection(normalized) || 0;
     for (let i = 0; i < count; i++) {
       const p = playersArr[i];
       const item = document.createElement("div");
@@ -1363,6 +1708,26 @@ function updateMMOverlay({ found, total, mode, map, players }) {
       grid.appendChild(item);
     }
   }
+}
+
+function syncReadyAvailability(selection = getCurrentSelection()) {
+  const btn = document.getElementById("ready");
+  if (!btn) return { blocked: false, reason: "" };
+
+  const normalized = normalizeGameSelection(selection);
+  const reason = getSelectionBlockReason(normalized);
+  const blocked = Boolean(reason);
+  const isCancelState = btn.classList.contains("cancel");
+
+  btn.disabled = blocked && !isCancelState;
+  btn.title = blocked ? reason : "";
+  btn.classList.toggle("is-disabled", blocked && !isCancelState);
+
+  if (!isCancelState) {
+    btn.value = blocked ? "Unavailable" : "Ready";
+  }
+
+  return { blocked, reason, selection: normalized };
 }
 
 function collectCurrentPartyMembers() {
@@ -1410,6 +1775,7 @@ function wireCancelButton() {
         statusEl.className = "status online";
       }
       setReadyButtonState(false);
+      syncReadyAvailability();
     } catch {}
   });
 }
@@ -1424,6 +1790,7 @@ function setReadyButtonState(isCancel) {
   btn.value = isCancel ? "Cancel" : "Ready";
   if (isCancel) btn.classList.add("cancel");
   else btn.classList.remove("cancel");
+  syncReadyAvailability();
 }
 
 function syncReadyButtonFromSelfSlot() {

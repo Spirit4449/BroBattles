@@ -15,18 +15,30 @@ function registerMatchmakingEvents(socket, { db, io, mm, PARTY_STATUS }) {
     try {
       const uname = socket.data.user?.name;
       const userId = socket.data.user?.user_id || null;
-      const { mode, map, side, partyId } = data || {};
+      const { mode, modeId, modeVariantId, selection, map, side, partyId } =
+        data || {};
       const pid = partyId || (uname ? await db.getPartyIdByName(uname) : null);
       await mm.queueJoin({
         partyId: pid || null,
         userId: pid ? null : userId,
         mode,
-        map,
+        modeId: selection?.modeId || modeId || null,
+        modeVariantId: selection?.modeVariantId || modeVariantId || null,
+        map: selection?.mapId ?? map,
         side,
       });
+      const payloadSelection = {
+        modeId: selection?.modeId || modeId || "duels",
+        modeVariantId:
+          selection?.modeVariantId || modeVariantId || "duels-1v1",
+        mapId: Number(selection?.mapId ?? map) || 1,
+      };
       socket.emit("queue:joined", {
         mode: Number(mode) || 1,
-        map: Number(map) || 1,
+        modeId: payloadSelection.modeId,
+        modeVariantId: payloadSelection.modeVariantId,
+        selection: payloadSelection,
+        map: payloadSelection.mapId,
         partyId: pid || null,
       });
     } catch (e) {

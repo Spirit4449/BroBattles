@@ -1,4 +1,10 @@
 // Centralized constants
+const {
+  legacyModeToVariantId,
+  normalizeSelection,
+  getPlayersPerTeamForSelection,
+  getCapacityForSelection,
+} = require("./gameSelectionCatalog");
 
 const PARTY_STATUS = Object.freeze({
   IDLE: "idle",
@@ -16,14 +22,35 @@ const TEAM_SIZE_BY_MODE = Object.freeze({
 const DISCONNECT_GRACE_MS = 3000;
 
 function teamSizeForMode(mode) {
-  const m = Number(mode);
-  if (TEAM_SIZE_BY_MODE[String(m)]) return TEAM_SIZE_BY_MODE[String(m)];
-  return Number.isFinite(m) && m > 0 && m <= 5 ? m : 1;
+  return teamSizeForSelection({
+    modeId: "duels",
+    modeVariantId: legacyModeToVariantId(mode),
+    legacyMode: mode,
+  });
 }
 
 function capacityFromMode(mode) {
-  const perTeam = Math.max(1, Math.min(3, teamSizeForMode(mode)));
-  return { total: perTeam * 2, perTeam };
+  return capacityFromSelection({
+    modeId: "duels",
+    modeVariantId: legacyModeToVariantId(mode),
+    legacyMode: mode,
+  });
+}
+
+function teamSizeForSelection(selection = {}) {
+  const normalized = normalizeSelection(selection);
+  return getPlayersPerTeamForSelection({
+    ...selection,
+    ...normalized,
+  });
+}
+
+function capacityFromSelection(selection = {}) {
+  const normalized = normalizeSelection(selection);
+  return getCapacityForSelection({
+    ...selection,
+    ...normalized,
+  });
 }
 
 module.exports = {
@@ -32,4 +59,6 @@ module.exports = {
   DISCONNECT_GRACE_MS,
   teamSizeForMode,
   capacityFromMode,
+  teamSizeForSelection,
+  capacityFromSelection,
 };

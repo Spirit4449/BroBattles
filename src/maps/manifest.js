@@ -9,12 +9,20 @@
 import { definition as lushyDef } from "./lushyPeaks";
 import { definition as mangroveDef } from "./mangroveMeadow";
 import { definition as serenityDef } from "./serenity";
+import { definition as bankBustTestDef } from "./bankBustTest";
+import mapsCatalog from "../shared/maps.catalog.json";
 
 // Registry: numeric mapId -> definition
 const MAPS = {};
-for (const d of [lushyDef, mangroveDef, serenityDef]) {
+for (const d of [lushyDef, mangroveDef, serenityDef, bankBustTestDef]) {
   MAPS[d.id] = d;
 }
+const MAP_META = new Map(
+  (Array.isArray(mapsCatalog?.maps) ? mapsCatalog.maps : []).map((entry) => [
+    Number(entry?.id),
+    entry,
+  ]),
+);
 
 const LOBBY_OFFSET_MODE_SCALE = {
   1: 1,
@@ -124,8 +132,11 @@ export function getMapBgAsset(mapId) {
  * @returns {string}
  */
 export function getMapSelectPreviewAsset(mapId) {
-  const def = MAPS[normalizeMapId(mapId)];
+  const normalized = normalizeMapId(mapId);
+  const def = MAPS[normalized];
+  const meta = MAP_META.get(normalized);
   return (
+    meta?.mapSelectPreviewAsset ||
     def?.mapSelectPreviewAsset || def?.bgAsset || "/assets/lushy/gameBg.webp"
   );
 }
@@ -136,8 +147,10 @@ export function getMapSelectPreviewAsset(mapId) {
  * @returns {string}
  */
 export function getLobbyBgAsset(mapId) {
+  const meta = MAP_META.get(normalizeMapId(mapId));
   return (
-    MAPS[normalizeMapId(mapId)]?.lobbyBgAsset ?? "/assets/lushy/lobbyBg.webp"
+    meta?.lobbyBgAsset ||
+    (MAPS[normalizeMapId(mapId)]?.lobbyBgAsset ?? "/assets/lushy/lobbyBg.webp")
   );
 }
 
@@ -147,9 +160,11 @@ export function getLobbyBgAsset(mapId) {
  * @returns {string}
  */
 export function getLobbyPlatformAsset(mapId) {
+  const meta = MAP_META.get(normalizeMapId(mapId));
   return (
-    MAPS[normalizeMapId(mapId)]?.lobbyPlatformAsset ??
-    "/assets/lushy/lobbyPlatform.webp"
+    meta?.lobbyPlatformAsset ||
+    (MAPS[normalizeMapId(mapId)]?.lobbyPlatformAsset ??
+      "/assets/lushy/lobbyPlatform.webp")
   );
 }
 

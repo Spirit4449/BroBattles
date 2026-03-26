@@ -16,8 +16,12 @@
  */
 const { PARTY_STATUS } = require("../../server/helpers/constants");
 const {
-  teamSizeForMode: resolveTeamSizeForMode,
+  teamSizeForSelection: resolveTeamSizeForSelection,
 } = require("../../server/helpers/constants");
+const {
+  normalizeSelection,
+  normalizeSelectionFromRow,
+} = require("../../server/helpers/gameSelectionCatalog");
 const {
   createReadyCheckCoordinator,
 } = require("./matchmaking/readyCheckCoordinator");
@@ -48,17 +52,17 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     return fn(null, q);
   }
 
-  function teamSizeForMode(mode) {
-    const m = Number(mode);
-    if (teamSizeByMode && teamSizeByMode[String(m)]) {
-      return teamSizeByMode[String(m)];
-    }
-    return resolveTeamSizeForMode(mode);
+  function teamSizeForSelection(selection) {
+    const normalized = normalizeSelection(selection);
+    return resolveTeamSizeForSelection({
+      ...selection,
+      ...normalized,
+    });
   }
 
   async function getMatchDataForGameRoom(matchId) {
     const matchRows = await db.runQuery(
-      "SELECT mode, map FROM matches WHERE match_id = ? LIMIT 1",
+      "SELECT * FROM matches WHERE match_id = ? LIMIT 1",
       [matchId],
     );
 
@@ -76,7 +80,13 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
 
     return {
       mode: matchRows[0].mode,
-      map: matchRows[0].map,
+      modeId:
+        matchRows[0].mode_id ||
+        normalizeSelectionFromRow(matchRows[0]).modeId,
+      modeVariantId:
+        matchRows[0].mode_variant_id ||
+        normalizeSelectionFromRow(matchRows[0]).modeVariantId,
+      map: normalizeSelectionFromRow(matchRows[0]).mapId,
       players: participantRows.map((p) => ({
         user_id: p.user_id,
         name: p.name,
@@ -120,12 +130,20 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
       if (!queued.length) return maybeStopLoop();
 
       // bucket by (mode,map)
-      const buckets = groupBy(queued, (t) => `${t.mode}:${t.map}`);
+      const buckets = groupBy(
+        queued,
+        (t) =>
+          `${t.mode_id || "duels"}:${t.mode_variant_id || "duels-1v1"}:${t.map}`,
+      );
       for (const [key, items] of buckets.entries()) {
-        const [modeStr, mapStr] = key.split(":");
-        const S = teamSizeForMode(Number(modeStr));
+        const [modeId, modeVariantId, mapStr] = key.split(":");
+        const S = teamSizeForSelection({
+          modeId,
+          modeVariantId,
+          mapId: Number(mapStr),
+        });
         console.log(
-          `[mm] consider mode=${modeStr} map=${mapStr} S=${S} tickets=${items
+          `[mm] consider mode=${modeId}:${modeVariantId} map=${mapStr} S=${S} tickets=${items
             .map(
               (t) =>
                 `#${t.ticket_id}[${t.team1_count}/${t.team2_count},mmr=${t.mmr}]`,
@@ -134,7 +152,8 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
         );
         // Emit progressive updates so parties/solos see incremental filling
         await progressEmitter.emitProgressForBucket(
-          Number(modeStr),
+          modeId,
+          modeVariantId,
           Number(mapStr),
           items,
           S,
@@ -151,11 +170,12 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
             const idx = items.findIndex((x) => x.ticket_id === g.ticket_id);
             if (idx >= 0) items.splice(idx, 1);
           });
-          await assembleAndReady(Number(modeStr), Number(mapStr), group);
+          await assembleAndReady(modeId, modeVariantId, Number(mapStr), group);
           // Update progress for remaining tickets in this bucket
           if (items.length) {
             await progressEmitter.emitProgressForBucket(
-              Number(modeStr),
+              modeId,
+              modeVariantId,
               Number(mapStr),
               items,
               S,
@@ -198,15 +218,20 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     readyCheckCoordinator,
   });
 
-  async function assembleAndReady(mode, map, picks) {
-    return matchAssemblyManager.assembleAndReady(mode, map, picks);
+  async function assembleAndReady(modeId, modeVariantId, map, picks) {
+    return matchAssemblyManager.assembleAndReady(
+      modeId,
+      modeVariantId,
+      map,
+      picks,
+    );
   }
 
   progressEmitter = createProgressEmitter({ db, io, lastProgress });
   queueTicketManager = createQueueTicketManager({
     db,
     partyStatus: PARTY_STATUS,
-    teamSizeForMode,
+    teamSizeForSelection,
     computeUserMMRFromRow,
     computePartyMMR,
     getPartyTeamCounts,

@@ -209,11 +209,53 @@ export function bindLocalSocketEvents({
     player._wallKickLockUntil = Date.now() + 120;
   };
 
+  const playerRespawnHandler = (payload) => {
+    if (payload?.username !== getUsername()) return;
+    const scene = getScene();
+    const player = getPlayer();
+    if (!scene || !player) return;
+
+    setDead(false);
+    if (typeof payload?.maxHealth === "number" && payload.maxHealth > 0) {
+      setMaxHealth(payload.maxHealth);
+    }
+    if (typeof payload?.health === "number") {
+      setCurrentHealthValue(payload.health);
+    }
+
+    try {
+      player._deathPresentationActive = false;
+      player._deathPresentationAt = 0;
+      player.alpha = 1;
+      player.setVisible(true);
+      if (player.body) {
+        player.body.enable = true;
+        if (Number.isFinite(payload?.x) && Number.isFinite(payload?.y)) {
+          player.body.reset(Number(payload.x), Number(payload.y));
+        }
+      }
+      player.setVelocity?.(0, 0);
+      player.setAcceleration?.(0, 0);
+      player.anims?.play?.(
+        resolveAnimKey(scene, getCurrentCharacter(), "idle", "idle"),
+        true,
+      );
+    } catch (_) {}
+
+    try {
+      scene.input.enabled = true;
+      if (scene.input?.keyboard) scene.input.keyboard.enabled = true;
+    } catch (_) {}
+
+    updateHealthBar();
+  };
+
   socket.on("health-update", healthUpdateHandler);
   socket.on("super-update", superUpdateHandler);
   socket.on("player:special", specialHandler);
   socket.on("player:knockback", knockbackHandler);
   socket.on("player:dead", playerDeadHandler);
+  socket.on("player:respawn", playerRespawnHandler);
 
   return () => {
     socket.off("health-update", healthUpdateHandler);
@@ -221,5 +263,6 @@ export function bindLocalSocketEvents({
     socket.off("player:special", specialHandler);
     socket.off("player:knockback", knockbackHandler);
     socket.off("player:dead", playerDeadHandler);
+    socket.off("player:respawn", playerRespawnHandler);
   };
 }

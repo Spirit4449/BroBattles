@@ -2,6 +2,29 @@
 // Keeps DOM/UI concerns out of game scene orchestration.
 
 import { playSound } from "../lib/uiSounds.js";
+import {
+  getMapLabel,
+  getSelectionDisplayLabel,
+  normalizeGameSelection,
+  selectionToLegacyMode,
+} from "../lib/gameSelectionCatalog.js";
+
+function legacyModeToVariantId(mode) {
+  const numeric = Number(mode);
+  if (numeric === 2) return "duels-2v2";
+  if (numeric === 3) return "duels-3v3";
+  return "duels-1v1";
+}
+
+function getSelectionFromGameData(gameData) {
+  return normalizeGameSelection({
+    modeId: gameData?.modeId || "duels",
+    modeVariantId:
+      gameData?.modeVariantId ||
+      (gameData?.modeId ? null : legacyModeToVariantId(gameData?.mode)),
+    mapId: gameData?.map ?? null,
+  });
+}
 
 export function createGameHudController({
   getGameData,
@@ -20,6 +43,8 @@ export function createGameHudController({
   let deferGameplayHudReveal = false;
   let currentCardNodes = [];
   let timerPaused = false;
+  let lastModeAlertAt = 0;
+  let lastModeAlertEventAt = 0;
 
   function _fallbackCatalog() {
     return {
@@ -187,6 +212,7 @@ export function createGameHudController({
 
     const gameData = _gameData();
     const username = _username();
+    const selection = getSelectionFromGameData(gameData);
 
     const mapBgAsset =
       typeof getMapBgAsset === "function"
@@ -201,7 +227,7 @@ export function createGameHudController({
       backdrop.style.setProperty("--bs-map-bg", `url("${mapBgAsset}")`);
     }
 
-    root.dataset.teamSize = String(Number(gameData?.mode) || 1);
+    root.dataset.teamSize = String(selectionToLegacyMode(selection));
 
     const mapMode = document.getElementById("bs-map-mode");
     if (mapMode) {
@@ -219,6 +245,10 @@ export function createGameHudController({
         Number(gameData?.mode) || 1,
       )}`;
       mapMode.textContent = `${mapName} • ${teamMode}`;
+    }
+
+    if (mapMode) {
+      mapMode.textContent = `${getMapLabel(selection.mapId || gameData?.map)} - ${getSelectionDisplayLabel(selection)}`;
     }
 
     deferGameplayHudReveal = true;
@@ -326,6 +356,70 @@ export function createGameHudController({
     } else {
       hud.classList.remove("sudden-death");
       if (label) label.textContent = "Time Reamining";
+    }
+  }
+
+  function _setVaultRow(teamKey, vault, yourTeam) {
+    const row = document.getElementById(`bank-bust-${teamKey}`);
+    if (!row || !vault) return;
+    row.classList.toggle("friendly", yourTeam === teamKey);
+    row.classList.toggle("enemy", yourTeam && yourTeam !== teamKey);
+    const label = row.querySelector(".bank-bust-vault-label");
+    const value = row.querySelector(".bank-bust-vault-value");
+    const fill = row.querySelector(".bank-bust-vault-fill");
+    const hp = Math.max(0, Number(vault?.health) || 0);
+    const maxHp = Math.max(1, Number(vault?.maxHealth) || 1);
+    const ratio = Math.max(0, Math.min(1, hp / maxHp));
+    if (label) {
+      label.textContent =
+        yourTeam === teamKey ? "Your Vault" : "Enemy Vault";
+    }
+    if (value) value.textContent = `${hp} / ${maxHp}`;
+    if (fill) fill.style.width = `${(ratio * 100).toFixed(1)}%`;
+  }
+
+  function _setTeamGold(teamKey, amount) {
+    const row = document.getElementById(`bank-bust-${teamKey}`);
+    const value = row?.querySelector(".bank-bust-gold-value");
+    if (value) value.textContent = `${Math.max(0, Number(amount) || 0)}`;
+  }
+
+  function _showVaultAlert(event, yourTeam) {
+    const root = document.getElementById("bank-bust-alert");
+    if (!root || !event) return;
+    const eventAt = Number(event?.at) || 0;
+    if (eventAt && eventAt <= lastModeAlertEventAt) return;
+    const now = Date.now();
+    if (now - lastModeAlertAt < 700) return;
+    lastModeAlertAt = now;
+    lastModeAlertEventAt = eventAt || now;
+    const attackedOwnVault = yourTeam && event?.targetTeam === yourTeam;
+    root.textContent = attackedOwnVault
+      ? "Your Vault is under attack!"
+      : "Enemy Vault under attack!";
+    root.classList.remove("hidden", "enemy-alert", "friendly-alert");
+    root.classList.add(attackedOwnVault ? "friendly-alert" : "enemy-alert");
+    root.classList.add("show");
+    setTimeout(() => {
+      root.classList.remove("show");
+      root.classList.add("hidden");
+    }, 1600);
+  }
+
+  function syncModeState(modeState, yourTeam = null) {
+    const hud = document.getElementById("bank-bust-hud");
+    if (!hud) return;
+    if (!modeState || String(modeState?.type) !== "bank-bust") {
+      hud.classList.add("hidden");
+      return;
+    }
+    hud.classList.remove("hidden");
+    _setVaultRow("team1", modeState?.vaults?.team1, yourTeam);
+    _setVaultRow("team2", modeState?.vaults?.team2, yourTeam);
+    _setTeamGold("team1", modeState?.teamGold?.team1);
+    _setTeamGold("team2", modeState?.teamGold?.team2);
+    if (modeState?.lastVaultDamageEvent?.at) {
+      _showVaultAlert(modeState.lastVaultDamageEvent, yourTeam);
     }
   }
 
@@ -660,6 +754,7 @@ export function createGameHudController({
     setTeamHudPlayerPresence,
     setTeamHudPlayerLoaded,
     syncTeamHudFromSnapshot,
+    syncModeState,
     isBattleIntroActive: () => countdownRunning || _isOverlayVisible(),
     startCountdown,
     hideBattleStartOverlay,

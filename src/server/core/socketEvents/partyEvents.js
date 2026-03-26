@@ -1,3 +1,11 @@
+const {
+  normalizeSelection,
+  normalizeSelectionFromRow,
+  isSelectionQueueable,
+  getSelectionBlockReason,
+  selectionToLegacyMode,
+} = require("../../helpers/gameSelectionCatalog");
+
 function registerPartyEvents(
   socket,
   { db, io, mm, partyPresence, partyState, partyQueueTransition, PARTY_STATUS },
@@ -68,7 +76,7 @@ function registerPartyEvents(
       if (!partyId) return;
 
       const partyRows = await db.runQuery(
-        "SELECT status, mode, map FROM parties WHERE party_id = ? LIMIT 1",
+        "SELECT * FROM parties WHERE party_id = ? LIMIT 1",
         [partyId],
       );
       const partyStatus = String(partyRows[0]?.status || "").toLowerCase();
@@ -103,12 +111,20 @@ function registerPartyEvents(
           partyStatus === PARTY_STATUS.QUEUED)
       ) {
         try {
-          const mode = partyRows[0]?.mode || 1;
-          const map = partyRows[0]?.map || 1;
+          const selection = normalizeSelectionFromRow(partyRows[0] || {});
+          if (!isSelectionQueueable(selection)) {
+            throw new Error(getSelectionBlockReason(selection));
+          }
           await setPartyStatusSafe(partyId, PARTY_STATUS.QUEUED);
-          await mm.queueJoin({ partyId, mode, map });
+          await mm.queueJoin({
+            partyId,
+            modeId: selection.modeId,
+            modeVariantId: selection.modeVariantId,
+            map: selection.mapId,
+          });
           io.to(`party:${partyId}`).emit("party:matchmaking:start", {
             partyId,
+            selection,
           });
           console.log(`[party:${partyId}] all-ready -> matchmaking`);
         } catch (err) {
@@ -131,21 +147,41 @@ function registerPartyEvents(
     if (!uname || !data.partyId) return;
 
     try {
-      await partyState.setPartyMode({
+      const rows = await db.runQuery(
+        "SELECT * FROM parties WHERE party_id = ? LIMIT 1",
+        [data.partyId],
+      );
+      const currentSelection = normalizeSelectionFromRow(rows[0] || {});
+      const nextSelection = normalizeSelection({
+        modeId: data?.selection?.modeId || data?.modeId || currentSelection.modeId,
+        modeVariantId:
+          data?.selection?.modeVariantId ||
+          data?.modeVariantId ||
+          data?.selectedValue ||
+          currentSelection.modeVariantId,
+        mapId: data?.selection?.mapId ?? currentSelection.mapId,
+      });
+      const savedSelection = await partyState.setPartySelection({
         partyId: data.partyId,
-        mode: data.selectedValue,
+        selection: nextSelection,
       });
 
       io.to(`party:${data.partyId}`).emit("mode-change", {
         partyId: data.partyId,
-        selectedValue: data.selectedValue,
-        mode: data.selectedValue,
+        selectedValue: savedSelection.modeVariantId,
+        mode: selectionToLegacyMode(
+          savedSelection.modeId,
+          savedSelection.modeVariantId,
+        ),
+        modeId: savedSelection.modeId,
+        modeVariantId: savedSelection.modeVariantId,
+        selection: savedSelection,
         username: uname,
         members: data.members,
       });
 
       console.log(
-        `[party:${data.partyId}] Mode changed to ${data.selectedValue} by ${uname}`,
+        `[party:${data.partyId}] Mode changed to ${savedSelection.modeId}:${savedSelection.modeVariantId} by ${uname}`,
       );
     } catch (e) {
       console.warn("mode-change error:", e?.message);
@@ -157,20 +193,37 @@ function registerPartyEvents(
     if (!uname || !data.partyId) return;
 
     try {
-      await partyState.setPartyMap({
+      const rows = await db.runQuery(
+        "SELECT * FROM parties WHERE party_id = ? LIMIT 1",
+        [data.partyId],
+      );
+      const currentSelection = normalizeSelectionFromRow(rows[0] || {});
+      const nextSelection = normalizeSelection({
+        modeId: data?.selection?.modeId || currentSelection.modeId,
+        modeVariantId:
+          data?.selection?.modeVariantId || currentSelection.modeVariantId,
+        mapId:
+          data?.selection?.mapId ??
+          data?.selectedValue ??
+          currentSelection.mapId,
+      });
+      const savedSelection = await partyState.setPartySelection({
         partyId: data.partyId,
-        map: data.selectedValue,
+        selection: nextSelection,
       });
 
       io.to(`party:${data.partyId}`).emit("map-change", {
         partyId: data.partyId,
-        selectedValue: data.selectedValue,
-        map: data.selectedValue,
+        selectedValue: savedSelection.mapId,
+        map: savedSelection.mapId,
+        modeId: savedSelection.modeId,
+        modeVariantId: savedSelection.modeVariantId,
+        selection: savedSelection,
         username: uname,
       });
 
       console.log(
-        `[party:${data.partyId}] Map changed to ${data.selectedValue} by ${uname}`,
+        `[party:${data.partyId}] Map changed to ${savedSelection.mapId} by ${uname}`,
       );
     } catch (e) {
       console.warn("map-change error:", e?.message);

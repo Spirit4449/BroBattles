@@ -1,6 +1,7 @@
 const { emitRoster } = require("../../helpers/party");
 const { createPartyStateService } = require("../../services/partyStateService");
 const { createPartyRouteService } = require("../../services/partyRouteService");
+const { normalizeSelectionFromRow } = require("../../helpers/gameSelectionCatalog");
 
 function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
   const partyState = createPartyStateService({ db, io });
@@ -61,24 +62,32 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
         } catch (_) {}
       }
       await emitRoster(io, partyId, result.party, membersForEmit, db);
+      const selection = normalizeSelectionFromRow(result.party || {});
 
       // Authoritative settings sync: ensure joiners adopt party mode/map.
       io.to(`party:${partyId}`).emit("mode-change", {
         partyId,
-        selectedValue: result.party?.mode,
+        selectedValue: selection.modeVariantId,
         mode: result.party?.mode,
+        modeId: selection.modeId,
+        modeVariantId: selection.modeVariantId,
+        selection,
         username,
         members: membersForEmit,
       });
       io.to(`party:${partyId}`).emit("map-change", {
         partyId,
-        selectedValue: result.party?.map,
-        map: result.party?.map,
+        selectedValue: selection.mapId,
+        map: selection.mapId,
+        modeId: selection.modeId,
+        modeVariantId: selection.modeVariantId,
+        selection,
         username,
       });
 
       res.json({
         party: result.party,
+        selection,
         capacity: result.capacity,
         members: membersForEmit,
         viewer: username,

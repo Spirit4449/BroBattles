@@ -3,6 +3,7 @@ import { getCharacterTuning } from "../../lib/characterStats.js";
 import { rectsOverlap, getSpriteBounds } from "../shared/combatGeometry";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
+import { emitVaultHitForRect } from "../shared/vaultTargeting";
 import {
   getChargeRatioFromContext,
   scaleByCharge,
@@ -172,6 +173,17 @@ export function performThorgFallAttack(instance, attackContext = null) {
           } catch (_) {}
         }
       }
+      emitVaultHitForRect({
+        attacker: username,
+        left,
+        top,
+        right,
+        bottom,
+        attackType: "basic",
+        chargeRatio,
+        gameId,
+        hitSet,
+      });
     }
 
     if (DEBUG_DRAW) {

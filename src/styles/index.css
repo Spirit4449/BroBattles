@@ -594,6 +594,11 @@ h3 {
   display: none;
 }
 
+#mode {
+  display: none;
+}
+
+.mode-picker,
 .map-picker {
   display: flex;
   gap: 8px;
@@ -605,8 +610,10 @@ h3 {
     rgba(128, 122, 83, 0.4),
     rgba(113, 108, 82, 0.5)
   );
+  align-items: center;
 }
 
+.mode-picker:hover,
 .map-picker:hover {
   background: linear-gradient(
     135deg,
@@ -615,6 +622,7 @@ h3 {
   );
 }
 
+#mode-preview-img,
 #map-preview-img {
   width: 50px;
   height: 30px;
@@ -623,6 +631,7 @@ h3 {
   border: 3px solid rgba(0, 0, 0, 0.4);
 }
 
+#mode-preview-name,
 #map-preview-name {
   font-size: 10px;
   color: #fff;
@@ -631,6 +640,20 @@ h3 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mode-picker-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+}
+
+#mode-preview-subtitle {
+  font-size: 9px;
+  color: rgba(226, 237, 255, 0.78);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
 .map-select-grid {
@@ -653,6 +676,7 @@ h3 {
 }
 
 .map-select-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   contain: content;
@@ -667,6 +691,69 @@ h3 {
   );
   color: #e5f0ff;
   text-align: left;
+}
+
+.mode-select-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  width: min(100%, 760px);
+  margin: 0 auto;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.mode-select-grid.subcards {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  width: min(100%, 620px);
+}
+
+.mode-select-card {
+  min-height: 215px;
+}
+
+.mode-select-card.is-disabled {
+  opacity: 0.78;
+}
+
+.mode-select-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #fff7d1;
+  background: rgba(122, 92, 22, 0.86);
+  border: 1px solid rgba(255, 230, 149, 0.5);
+}
+
+.mode-select-subtitle {
+  margin-top: 6px;
+  font-size: 10px;
+  color: rgba(207, 223, 255, 0.82);
+  line-height: 1.35;
+}
+
+.mode-select-meta {
+  margin-top: 12px;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: rgba(157, 195, 249, 0.88);
+}
+
+.mode-select-empty {
+  padding: 22px 18px;
+  text-align: center;
+  color: #e5f0ff;
+  border: 2px dashed rgba(157, 195, 249, 0.35);
+  border-radius: 10px;
+  background: rgba(6, 13, 29, 0.8);
 }
 
 .map-select-card.active {
@@ -778,6 +865,13 @@ h3 {
 }
 #ready:hover {
   background: linear-gradient(135deg, #d4ba3a, #c6991b);
+}
+
+#ready:disabled,
+#ready.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+  filter: saturate(0.55);
 }
 
 /* Cancel (red) visual state for Ready button */

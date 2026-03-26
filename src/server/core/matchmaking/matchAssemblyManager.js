@@ -7,7 +7,9 @@ function createMatchAssemblyManager({
   lastProgress,
   readyCheckCoordinator,
 }) {
-  async function assembleAndReady(mode, map, picks) {
+  const { selectionToLegacyMode } = require("../../helpers/gameSelectionCatalog");
+
+  async function assembleAndReady(modeId, modeVariantId, map, picks) {
     const ids = picks.map((p) => p.ticket.ticket_id);
     const placeholders = ids.map(() => "?").join(",");
     const r = await db.runQuery(
@@ -54,7 +56,14 @@ function createMatchAssemblyManager({
     }
 
     const tickets = picks.map((p) => p.ticket);
-    const matchId = await commitMatch({ mode, map, tickets, players });
+    const matchId = await commitMatch({
+      mode: selectionToLegacyMode(modeId, modeVariantId),
+      modeId,
+      modeVariantId,
+      map,
+      tickets,
+      players,
+    });
 
     ids.forEach((id) => lastProgress.delete(id));
     const size1 = players.filter((p) => p.team === "team1").length;
@@ -63,10 +72,10 @@ function createMatchAssemblyManager({
       averageTicketMMR(tickets, "team1") - averageTicketMMR(tickets, "team2"),
     );
     console.log(
-      `[match:new] #${matchId} mode=${mode} map=${map} ${size1}v${size2} mmrΔ=${mmrDelta} tickets=${tickets.length}`,
+      `[match:new] #${matchId} mode=${modeId}:${modeVariantId} map=${map} ${size1}v${size2} mmrDelta=${mmrDelta} tickets=${tickets.length}`,
     );
 
-    await emitMatchFound(matchId, mode, map, players);
+    await emitMatchFound(matchId, modeId, modeVariantId, map, players);
     readyCheckCoordinator.startReadyCheck(
       matchId,
       players.map((p) => p.user_id),
@@ -84,7 +93,7 @@ function createMatchAssemblyManager({
     return count ? sum / count : 0;
   }
 
-  async function emitMatchFound(matchId, mode, map, players) {
+  async function emitMatchFound(matchId, modeId, modeVariantId, map, players) {
     console.log("[match:found] notifying players...");
     const userIds = players.map((p) => p.user_id);
     if (!userIds.length) return;
@@ -101,7 +110,9 @@ function createMatchAssemblyManager({
       if (!sock) continue;
       sock.emit("match:found", {
         matchId,
-        mode,
+        modeId,
+        modeVariantId,
+        selection: { modeId, modeVariantId, mapId: Number(map) },
         map,
         yourTeam: p.team,
         players: players.map((x) => ({
@@ -114,13 +125,20 @@ function createMatchAssemblyManager({
     }
   }
 
-  async function commitMatch({ mode, map, tickets, players }) {
+  async function commitMatch({
+    mode,
+    modeId,
+    modeVariantId,
+    map,
+    tickets,
+    players,
+  }) {
     const ids = tickets.map((t) => t.ticket_id);
     const partyIds = tickets.filter((t) => !!t.party_id).map((t) => t.party_id);
     return runInTx(async (conn, q) => {
       const { insertId: matchId } = await q(
-        "INSERT INTO matches (mode,map,status) VALUES (?,?, 'queued')",
-        [mode, map],
+        "INSERT INTO matches (mode,mode_id,mode_variant_id,map,status) VALUES (?,?,?,?, 'queued')",
+        [mode, modeId, modeVariantId, map],
       );
       if (players.length) {
         const placeholders = players.map(() => "(?,?,?,?,?)").join(",");

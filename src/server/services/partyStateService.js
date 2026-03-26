@@ -1,14 +1,27 @@
 const { updateOrDeleteParty } = require("../helpers/party");
 const { PARTY_STATUS } = require("../helpers/constants");
-const { capacityFromMode } = require("../helpers/utils");
+const { capacityFromSelection } = require("../helpers/utils");
+const {
+  DEFAULT_MODE_ID,
+  DEFAULT_VARIANT_ID,
+  DEFAULT_MAP_ID,
+  normalizeSelectionFromRow,
+  selectionToLegacyMode,
+} = require("../helpers/gameSelectionCatalog");
 
 function createPartyStateService({ db, io }) {
   async function createPartyForUser(username) {
     return db.withTransaction(async (conn, q) => {
       await q("DELETE FROM party_members WHERE name = ?", [username]);
       const insertParty = await q(
-        "INSERT INTO parties (status, mode, map) VALUES (?, ?, ?)",
-        [PARTY_STATUS.IDLE, 1, 1],
+        "INSERT INTO parties (status, mode, map, mode_id, mode_variant_id) VALUES (?, ?, ?, ?, ?)",
+        [
+          PARTY_STATUS.IDLE,
+          selectionToLegacyMode(DEFAULT_MODE_ID, DEFAULT_VARIANT_ID),
+          DEFAULT_MAP_ID,
+          DEFAULT_MODE_ID,
+          DEFAULT_VARIANT_ID,
+        ],
       );
       const partyId = insertParty.insertId;
       await q(
@@ -20,10 +33,11 @@ function createPartyStateService({ db, io }) {
   }
 
   async function setPartyMode({ partyId, mode }) {
-    await db.runQuery("UPDATE parties SET mode = ? WHERE party_id = ?", [
-      mode,
-      partyId,
-    ]);
+    const legacyMode = selectionToLegacyMode("duels", mode);
+    await db.runQuery(
+      "UPDATE parties SET mode = ?, mode_id = ?, mode_variant_id = ? WHERE party_id = ?",
+      [legacyMode, "duels", mode, partyId],
+    );
   }
 
   async function setPartyMap({ partyId, map }) {
@@ -31,6 +45,29 @@ function createPartyStateService({ db, io }) {
       map,
       partyId,
     ]);
+  }
+
+  async function setPartySelection({ partyId, selection }) {
+    const normalized = normalizeSelectionFromRow({
+      mode_id: selection?.modeId,
+      mode_variant_id: selection?.modeVariantId,
+      map: selection?.mapId,
+    });
+    const legacyMode = selectionToLegacyMode(
+      normalized.modeId,
+      normalized.modeVariantId,
+    );
+    await db.runQuery(
+      "UPDATE parties SET mode = ?, map = ?, mode_id = ?, mode_variant_id = ? WHERE party_id = ?",
+      [
+        legacyMode,
+        normalized.mapId ?? DEFAULT_MAP_ID,
+        normalized.modeId,
+        normalized.modeVariantId,
+        partyId,
+      ],
+    );
+    return normalized;
   }
 
   async function leaveParty({ partyId, username }) {
@@ -65,8 +102,9 @@ function createPartyStateService({ db, io }) {
       }
 
       const party = partyRows[0];
-      const { total: totalCap, perTeam: perTeamCap } = capacityFromMode(
-        party.mode,
+      const selection = normalizeSelectionFromRow(party || {});
+      const { total: totalCap, perTeam: perTeamCap } = capacityFromSelection(
+        selection,
       );
 
       const [existing] = await conn.query(
@@ -165,6 +203,7 @@ function createPartyStateService({ db, io }) {
       return {
         ok: true,
         party,
+        selection: normalizeSelectionFromRow(party || {}),
         members: memberRows,
         capacity: { total: totalCap, perTeam: perTeamCap },
         joinedNow,
@@ -178,6 +217,7 @@ function createPartyStateService({ db, io }) {
     createPartyForUser,
     setPartyMode,
     setPartyMap,
+    setPartySelection,
     leaveParty,
     joinPartyAndGetData,
   };

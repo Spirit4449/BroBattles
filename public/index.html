@@ -88,6 +88,25 @@
           <option value="2">2v2</option>
           <option value="3">3v3</option>
         </select>
+        <input type="hidden" id="mode-id" value="duels" />
+        <input type="hidden" id="mode-variant-id" value="duels-1v1" />
+        <button
+          id="mode-picker-open"
+          type="button"
+          class="mode-picker pixel-menu-button"
+          data-sound="cursor4"
+          aria-label="Open mode selector"
+        >
+          <img
+            id="mode-preview-img"
+            src="/assets/fightImage.webp"
+            alt="Mode preview"
+          />
+          <span class="mode-picker-copy">
+            <span id="mode-preview-name">Duels</span>
+            <span id="mode-preview-subtitle">1v1</span>
+          </span>
+        </button>
         <select
           id="map"
           name="map"

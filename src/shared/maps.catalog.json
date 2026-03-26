@@ -1,0 +1,154 @@
+{
+  "defaultMapId": 1,
+  "maps": [
+    {
+      "id": 1,
+      "key": "lushy-peaks",
+      "label": "Lushy Peaks",
+      "compatibleModeIds": ["duels"],
+      "compatibleVariantIds": ["duels-1v1", "duels-2v2", "duels-3v3"],
+      "mapSelectPreviewAsset": "/assets/lushy/gameBg.webp",
+      "lobbyBgAsset": "/assets/lushy/lobbyBg.webp",
+      "lobbyPlatformAsset": "/assets/lushy/lobbyPlatform.webp"
+    },
+    {
+      "id": 2,
+      "key": "mangrove-meadow",
+      "label": "Mangrove Meadow",
+      "compatibleModeIds": ["duels"],
+      "compatibleVariantIds": ["duels-1v1", "duels-2v2", "duels-3v3"],
+      "mapSelectPreviewAsset": "/assets/mangrove/gameBg.webp",
+      "lobbyBgAsset": "/assets/mangrove/lobbyBg.webp",
+      "lobbyPlatformAsset": "/assets/mangrove/lobbyPlatform.webp"
+    },
+    {
+      "id": 3,
+      "key": "serenity",
+      "label": "Serenity",
+      "compatibleModeIds": ["duels"],
+      "compatibleVariantIds": ["duels-1v1", "duels-2v2", "duels-3v3"],
+      "mapSelectPreviewAsset": "/assets/serenity/preview.webp",
+      "lobbyBgAsset": "/assets/serenity/lobbyBg.webp",
+      "lobbyPlatformAsset": "/assets/serenity/lobbyPlatform.webp"
+    },
+    {
+      "id": 4,
+      "key": "bank-bust-test",
+      "label": "Bank Bust Test",
+      "compatibleModeIds": ["bank-bust"],
+      "compatibleVariantIds": ["bank-bust-3v3"],
+      "mapSelectPreviewAsset": "/assets/serenity/preview.webp",
+      "lobbyBgAsset": "/assets/serenity/lobbyBg.webp",
+      "lobbyPlatformAsset": "/assets/serenity/lobbyPlatform.webp",
+      "objectiveLayout": {
+        "bankBust": {
+          "world": {
+            "width": 3000,
+            "height": 1200
+          },
+          "respawnPoints": {
+            "team1": { "x": 290, "y": 835 },
+            "team2": { "x": 2710, "y": 835 }
+          },
+          "vaults": {
+            "team1": {
+              "x": 480,
+              "y": 820,
+              "radius": 90,
+              "width": 150,
+              "height": 180,
+              "label": "Blue Vault"
+            },
+            "team2": {
+              "x": 2520,
+              "y": 820,
+              "radius": 90,
+              "width": 150,
+              "height": 180,
+              "label": "Red Vault"
+            }
+          },
+          "objects": [
+            {
+              "id": "mine-mid-left",
+              "type": "goldMine",
+              "x": 1120,
+              "y": 800,
+              "radius": 86,
+              "collectionRadius": 110,
+              "yieldAmount": 15,
+              "yieldIntervalMs": 3500,
+              "maxStoredGold": 60
+            },
+            {
+              "id": "mine-mid-right",
+              "type": "goldMine",
+              "x": 1880,
+              "y": 800,
+              "radius": 86,
+              "collectionRadius": 110,
+              "yieldAmount": 15,
+              "yieldIntervalMs": 3500,
+              "maxStoredGold": 60
+            },
+            {
+              "id": "turret-slot-team1-front",
+              "type": "claimableTurret",
+              "x": 840,
+              "y": 790,
+              "claimRadius": 110,
+              "claimCost": 120,
+              "range": 520,
+              "fireRateMs": 900,
+              "damage": 700,
+              "projectileSpeed": 520,
+              "turnSpeed": 0.08
+            },
+            {
+              "id": "turret-slot-team2-front",
+              "type": "claimableTurret",
+              "x": 2160,
+              "y": 790,
+              "claimRadius": 110,
+              "claimCost": 120,
+              "range": 520,
+              "fireRateMs": 900,
+              "damage": 700,
+              "projectileSpeed": 520,
+              "turnSpeed": 0.08
+            },
+            {
+              "id": "wall-slot-team1-lane",
+              "type": "wallSlot",
+              "x": 1020,
+              "y": 820,
+              "buildRadius": 100,
+              "cost": 90,
+              "width": 120,
+              "height": 46
+            },
+            {
+              "id": "wall-slot-team2-lane",
+              "type": "wallSlot",
+              "x": 1980,
+              "y": 820,
+              "buildRadius": 100,
+              "cost": 90,
+              "width": 120,
+              "height": 46
+            }
+          ],
+          "randomGoldSpawnPoints": [
+            { "id": "gold-top-left", "x": 920, "y": 620 },
+            { "id": "gold-top-mid", "x": 1500, "y": 500 },
+            { "id": "gold-top-right", "x": 2080, "y": 620 },
+            { "id": "gold-mid-left", "x": 1240, "y": 760 },
+            { "id": "gold-mid-right", "x": 1760, "y": 760 },
+            { "id": "gold-low-left", "x": 760, "y": 910 },
+            { "id": "gold-low-right", "x": 2240, "y": 910 }
+          ]
+        }
+      }
+    }
+  ]
+}

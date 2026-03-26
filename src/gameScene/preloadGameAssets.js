@@ -52,7 +52,16 @@ export function preloadGameAssets({
     `${staticPath}/serenity/smallRock.webp`,
   );
   scene.load.image("deathdrop-coin", `${staticPath}/coin.webp`);
-  scene.load.image("deathdrop-gem", `${staticPath}/gem.webp`);
+    scene.load.image("deathdrop-gem", `${staticPath}/gem.webp`);
+    scene.load.image("bank-bust-vault", `${staticPath}/bank-bust/vault.webp`);
+    scene.load.image(
+      "bank-bust-turret-base",
+      `${staticPath}/bank-bust/turret-base.webp`,
+    );
+    scene.load.image(
+      "bank-bust-turret-head",
+      `${staticPath}/bank-bust/turret-head.webp`,
+    );
 
   // Movement SFX (place files under /assets/audio)
   scene.load.audio("sfx-step", `${staticPath}/step.mp3`);

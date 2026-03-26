@@ -79,6 +79,7 @@ let superBarBack;
 let superCharge = 0;
 let maxSuperCharge = 100;
 let keyI;
+let keyE;
 let _specialNotReadyFlash = 0; // timestamp until "not ready" red flash expires
 let movementSpeedMult = 1;
 let movementJumpMult = 1;
@@ -222,6 +223,11 @@ export function createPlayer(
     keyI = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.I);
   } catch (e) {
     keyI = scene.input.keyboard.addKey("I");
+  }
+  try {
+    keyE = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+  } catch (e) {
+    keyE = scene.input.keyboard.addKey("E");
   }
 
   try {
@@ -1145,6 +1151,11 @@ export function handlePlayerMovement(scene) {
         if (superCharge >= maxSuperCharge) {
           socket.emit("game:special");
         }
+      }
+    }
+    if (keyE && Phaser.Input.Keyboard.JustDown(keyE) && !dead) {
+      if (!((player?._movementLockedUntil || 0) > Date.now())) {
+        socket.emit("game:action", { type: "mode-interact" });
       }
     }
   } catch (_) {}

@@ -130,7 +130,14 @@ function handlePlayerDeath(room, playerData, meta = {}) {
 
   room.io.to(`game:${room.matchId}`).emit("player:dead", payload);
   try {
-    room._checkVictoryCondition();
+    const modeResult = room.gameMode?.onPlayerDeath?.(playerData, meta) || null;
+    const respawnPlan = room.gameMode?.getRespawnPlan?.(playerData, meta) || null;
+    if (respawnPlan?.enabled) {
+      room._scheduleRespawn?.(playerData, respawnPlan, meta);
+    }
+    if (modeResult?.shouldCheckVictory !== false) {
+      room._checkVictoryCondition();
+    }
   } catch (e) {
     console.warn(
       `[GameRoom ${room.matchId}] victory check failed after death`,
@@ -183,8 +190,10 @@ function handleDeathDropPickup(room, socketId, payload) {
   room._deathDrops.delete(id);
 
   const bucket = room._ensureRewardBucket(playerData);
+  const modeCollectResult =
+    room.gameMode?.onDeathDropCollected?.(playerData, drop) || null;
   if (bucket) {
-    if (drop.type === "coin") {
+    if (drop.type === "coin" && modeCollectResult?.suppressDefaultReward !== true) {
       bucket.dropCoins = (Number(bucket.dropCoins) || 0) + Number(drop.value || 1);
     } else if (drop.type === "gem") {
       bucket.dropGems = (Number(bucket.dropGems) || 0) + Number(drop.value || 1);

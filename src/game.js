@@ -20,6 +20,7 @@ import { createLocalInputSync } from "./gameScene/localInputSync";
 import { processSnapshotInterpolation } from "./gameScene/networkInterpolation";
 import { updateHealthBars } from "./gameScene/healthBarUpdater";
 import { createMapEditorRuntime } from "./gameScene/mapEditorRuntime";
+import { createBankBustRuntime } from "./modes/bankBust/runtime";
 import {
   POWERUP_TYPES,
   POWERUP_ASSET_DIR,
@@ -107,6 +108,7 @@ let username = null;
 let gameData = null; // Will be fetched from /gamedata endpoint
 // Expose current match session details (level, per-character damages) for character modules
 window.__MATCH_SESSION__ = window.__MATCH_SESSION__ || {};
+window.__BB_LIVE_MATCH_CONTEXT__ = window.__BB_LIVE_MATCH_CONTEXT__ || {};
 // Cache join payload for reconnect re-emit safety
 let __joinPayload = { matchId: Number(matchId || 0) };
 
@@ -130,6 +132,7 @@ const PENDING_ACTIONS = [];
 let SPAWN_VERSION = 0; // increments per scene init to version spawns
 const SERVER_SPAWN_INDEX = Object.create(null); // name -> spawnIndex (if server provided)
 let latestPowerups = []; // from server snapshots
+let latestModeState = null; // objective/timer state from server snapshots
 let latestDeathDrops = []; // from server snapshots / death events
 let latestPlayerEffects = {}; // name -> effect duration map (ms remaining)
 const POWERUP_COLLECT_QUEUE = [];
@@ -256,6 +259,11 @@ matchCoordinator = createMatchCoordinator({
   setLatestPowerups: (v) => {
     latestPowerups = v;
   },
+  setLatestModeState: (v) => {
+    latestModeState = v;
+    syncLiveMatchContext();
+  },
+  getLatestModeState: () => latestModeState,
   getLatestDeathDrops: () => latestDeathDrops,
   setLatestDeathDrops: (v) => {
     latestDeathDrops = v;
@@ -356,10 +364,21 @@ function trackShieldEffectsPresence(effectsSnapshot) {
   const now = Date.now();
   for (const [name, fx] of Object.entries(effectsSnapshot)) {
     if (!name || !fx) continue;
-    if ((Number(fx.shield) || 0) > 0) {
+    if ((Number(fx.shield) || 0) > 0 || (Number(fx.respawnShield) || 0) > 0) {
       LAST_SHIELD_ACTIVE_AT[name] = now;
     }
   }
+}
+
+function syncLiveMatchContext() {
+  try {
+    window.__BB_LIVE_MATCH_CONTEXT__ = {
+      modeState: latestModeState,
+      yourTeam: gameData?.yourTeam || null,
+      mapId: gameData?.map ?? null,
+      modeId: gameData?.modeId || null,
+    };
+  } catch (_) {}
 }
 
 // Prewarm frequently used textures to force GL upload before gameplay
@@ -442,6 +461,7 @@ async function initializeGame() {
     gameData = await fetchGameData();
     console.log("Game data received:", gameData);
     username = gameData.yourName || username;
+    syncLiveMatchContext();
     initTeamStatusHud(gameData?.players || []);
 
     // 1) Register listeners before join
@@ -495,7 +515,27 @@ function applyMatchBackground(mapId) {
     const bgImg = document.querySelector("#game-bg img");
     if (bgImg && bgUrl) {
       bgImg.setAttribute("src", bgUrl);
+      bgImg.style.transform = "translate3d(0,0,0) scale(1)";
     }
+  } catch (_) {}
+}
+
+function updateMatchBackgroundParallax(scene) {
+  try {
+    const bgImg = document.querySelector("#game-bg img");
+    const activeMapId = normalizeMapId(gameData?.map);
+    if (!bgImg || activeMapId !== 4) {
+      if (bgImg) bgImg.style.transform = "translate3d(0,0,0) scale(1)";
+      return;
+    }
+    const cam = scene?.cameras?.main;
+    if (!cam) return;
+    const boundsWidth = Number(cam.bounds?.width) || 0;
+    const travel = Math.max(1, boundsWidth - cam.width);
+    const progress = Phaser.Math.Clamp((cam.scrollX - (cam.bounds?.x || 0)) / travel, 0, 1);
+    const shiftPercent = (progress - 0.5) * 18;
+    bgImg.style.transform = `translate3d(${shiftPercent}%,0,0) scale(1.14)`;
+    bgImg.style.transformOrigin = "50% 100%";
   } catch (_) {}
 }
 
@@ -640,6 +680,11 @@ class GameScene extends Phaser.Scene {
     this._powerupAuraGraphics.setDepth(21);
     this._powerupFxGraphics = this.add.graphics();
     this._powerupFxGraphics.setDepth(20);
+    this._modeObjectiveGraphics = this.add.graphics();
+    this._modeObjectiveGraphics.setDepth(8);
+    this._modeObjectiveUiGraphics = this.add.graphics();
+    this._modeObjectiveUiGraphics.setDepth(22);
+    this._bankBustRuntime = null;
     this._powerupRenderer = createPowerupRenderer({
       scene: this,
       Phaser,
@@ -813,6 +858,10 @@ class GameScene extends Phaser.Scene {
       try {
         matchCoordinator?.dispose();
       } catch (_) {}
+      try {
+        this._bankBustRuntime?.destroy?.();
+      } catch (_) {}
+      this._bankBustRuntime = null;
       try {
         this._mapEditorRuntime?.destroy?.();
       } catch (_) {}
@@ -1012,6 +1061,9 @@ class GameScene extends Phaser.Scene {
           try {
             this._editModeActive = !!editing;
             window.__BB_MAP_EDIT_ACTIVE = !!editing;
+            try {
+              this._bankBustRuntime?.setEditMode?.(!!editing);
+            } catch (_) {}
             if (this._editModeActive) {
               try {
                 player?.setVelocity?.(0, 0);
@@ -1028,6 +1080,19 @@ class GameScene extends Phaser.Scene {
           } catch (_) {}
         },
       });
+    }
+    if (!this._bankBustRuntime) {
+      this._bankBustRuntime = createBankBustRuntime({
+          scene: this,
+          Phaser,
+          getGameData: () => gameData,
+          getModeState: () => latestModeState,
+          getLocalPlayer: () => player,
+          getOpponentPlayers: () => opponentPlayers,
+          getTeamPlayers: () => teamPlayers,
+          canEdit: !!gameData?.isAdmin,
+        });
+      this._bankBustRuntime.setEditMode?.(!!this._editModeActive);
     }
     // End camera setup
   }
@@ -1166,6 +1231,10 @@ class GameScene extends Phaser.Scene {
     this._powerupRenderer?.renderPowerupsAndEffects();
   }
 
+  _renderModeObjectives() {
+    this._bankBustRuntime?.render?.();
+  }
+
   _enterSpectatorMode() {
     if (this._spectatorModeActive) return;
     this._spectatorModeActive = true;
@@ -1210,9 +1279,10 @@ class GameScene extends Phaser.Scene {
   }
 
   update() {
-    if (this._editModeActive) {
-      try {
-        this._poisonGraphics?.clear?.();
+      updateMatchBackgroundParallax(this);
+      if (this._editModeActive) {
+        try {
+          this._poisonGraphics?.clear?.();
       } catch (_) {}
       try {
         const cssDiv = document.getElementById("poison-water-bg");
@@ -1231,6 +1301,7 @@ class GameScene extends Phaser.Scene {
 
     // Powerup visuals/effects are rendered for all players every frame.
     this._renderPowerupsAndEffects();
+    this._renderModeObjectives();
 
     // Only process if game is initialized
     if (!hasJoined || !gameInitialized || gameEnded) return;

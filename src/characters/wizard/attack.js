@@ -2,6 +2,7 @@ import socket from "../../socket";
 import { getCharacterTuning } from "../../lib/characterStats.js";
 import { circleRectOverlap, getSpriteBounds } from "../shared/combatGeometry";
 import { createRuntimeId } from "../shared/runtimeId";
+import { emitVaultHitForCircle } from "../shared/vaultTargeting";
 import { lockPlayerFlip } from "../shared/flipLock";
 import {
   getChargeRatioFromContext,
@@ -349,6 +350,17 @@ export function performWizardFireball(instance, attackContext = null) {
         // Continue flight (piercing)
       }
     }
+    emitVaultHitForCircle({
+      attacker: username,
+      x: sprite.x,
+      y: sprite.y,
+      radius: chargedCollisionRadius,
+      attackType: "basic",
+      chargeRatio,
+      instanceId: attackId,
+      gameId,
+      hitSet,
+    });
 
     if (traveled >= FIREBALL_RANGE || travelElapsed >= lifetimeMs) {
       cleanup(null, false);

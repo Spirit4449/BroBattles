@@ -1,4 +1,8 @@
 function registerGameEvents(socket, { db, gameHub }) {
+  const {
+    normalizeSelectionFromRow,
+  } = require("../../helpers/gameSelectionCatalog");
+
   socket.on("game:join", async (data, cb) => {
     try {
       const user = socket.data.user;
@@ -22,7 +26,7 @@ function registerGameEvents(socket, { db, gameHub }) {
         const room0 = gameHub.getGameRoom(matchId);
         if (!room0) {
           const rows = await db.runQuery(
-            "SELECT mode, map, status FROM matches WHERE match_id = ? LIMIT 1",
+            "SELECT * FROM matches WHERE match_id = ? LIMIT 1",
             [matchId],
           );
           if (rows?.length && String(rows[0].status).toLowerCase() === "live") {
@@ -34,9 +38,12 @@ function registerGameEvents(socket, { db, gameHub }) {
               [matchId],
             );
             if (partRows?.length) {
+              const selection = normalizeSelectionFromRow(rows[0] || {});
               const matchData = {
                 mode: rows[0].mode,
-                map: rows[0].map,
+                modeId: selection.modeId,
+                modeVariantId: selection.modeVariantId,
+                map: selection.mapId,
                 players: partRows.map((p) => ({
                   user_id: p.user_id,
                   name: p.name,

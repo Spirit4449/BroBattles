@@ -1,7 +1,7 @@
 function createQueueTicketManager({
   db,
   partyStatus,
-  teamSizeForMode,
+  teamSizeForSelection,
   computeUserMMRFromRow,
   computePartyMMR,
   getPartyTeamCounts,
@@ -9,14 +9,33 @@ function createQueueTicketManager({
   ensureLoop,
   maybeStopLoop,
 }) {
+  const {
+    normalizeSelection,
+    isSelectionQueueable,
+    getSelectionBlockReason,
+    selectionToLegacyMode,
+  } = require("../../helpers/gameSelectionCatalog");
+
   async function queueJoin({
     partyId = null,
     userId = null,
+    modeId = null,
+    modeVariantId = null,
     mode,
     map,
     side = null,
   }) {
-    const S = teamSizeForMode(mode);
+    const selection = normalizeSelection({
+      modeId,
+      modeVariantId,
+      legacyMode: mode,
+      mapId: map,
+    });
+    if (!isSelectionQueueable(selection)) {
+      throw new Error(getSelectionBlockReason(selection));
+    }
+
+    const S = teamSizeForSelection(selection);
     let counts = { t1: 0, t2: 0 };
     let size = 0;
     let mmr = 0;
@@ -47,13 +66,15 @@ function createQueueTicketManager({
     }
 
     const res = await db.runQuery(
-      "INSERT INTO match_tickets (party_id,user_id,mode,map,size,mmr,team1_count,team2_count) VALUES (?,?,?,?,?,?,?,?) " +
-        "ON DUPLICATE KEY UPDATE mode=VALUES(mode), map=VALUES(map), size=VALUES(size), mmr=VALUES(mmr), team1_count=VALUES(team1_count), team2_count=VALUES(team2_count), status='queued', claimed_by=NULL",
+      "INSERT INTO match_tickets (party_id,user_id,mode,mode_id,mode_variant_id,map,size,mmr,team1_count,team2_count) VALUES (?,?,?,?,?,?,?,?,?,?) " +
+        "ON DUPLICATE KEY UPDATE mode=VALUES(mode), mode_id=VALUES(mode_id), mode_variant_id=VALUES(mode_variant_id), map=VALUES(map), size=VALUES(size), mmr=VALUES(mmr), team1_count=VALUES(team1_count), team2_count=VALUES(team2_count), status='queued', claimed_by=NULL",
       [
         partyId || null,
         userId || null,
-        Number(mode),
-        Number(map),
+        selectionToLegacyMode(selection.modeId, selection.modeVariantId),
+        selection.modeId,
+        selection.modeVariantId,
+        Number(selection.mapId),
         Number(size),
         Number(mmr),
         counts.t1,
@@ -69,7 +90,7 @@ function createQueueTicketManager({
     }
 
     console.log(
-      `[queue] join ${partyId ? "p=" + partyId : "u=" + userId} mode=${mode} map=${map} t1=${counts.t1} t2=${counts.t2} mmr=${mmr}`,
+      `[queue] join ${partyId ? "p=" + partyId : "u=" + userId} mode=${selection.modeId}:${selection.modeVariantId} map=${selection.mapId} t1=${counts.t1} t2=${counts.t2} mmr=${mmr}`,
     );
 
     lastProgress.clear();

@@ -1,5 +1,6 @@
-const { capacityFromMode } = require("../helpers/utils");
+const { capacityFromSelection } = require("../helpers/utils");
 const { selectPartyById } = require("../helpers/party");
+const { normalizeSelectionFromRow } = require("../helpers/gameSelectionCatalog");
 
 function createPartyRouteService({ db }) {
   async function getPartyMembersView({ username, partyId }) {
@@ -33,15 +34,19 @@ function createPartyRouteService({ db }) {
     }
 
     const members = await db.fetchPartyMembersDetailed(partyId);
+    const selection = normalizeSelectionFromRow(party || {});
     return {
       ok: true,
       payload: {
         partyId: party.party_id,
         mode: party.mode,
-        map: party.map,
+        modeId: selection.modeId,
+        modeVariantId: selection.modeVariantId,
+        selection,
+        map: selection.mapId,
         members,
         membersCount: members.length,
-        capacity: capacityFromMode(party.mode),
+        capacity: capacityFromSelection(selection),
       },
     };
   }

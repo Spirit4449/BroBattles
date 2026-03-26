@@ -1,0 +1,258 @@
+{
+  "defaultModeId": "duels",
+  "defaultVariantId": "duels-1v1",
+  "modes": [
+    {
+      "id": "duels",
+      "label": "Duels",
+      "description": "Classic elimination battles with selectable team sizes.",
+      "artAsset": "/assets/duels.webp",
+      "fallbackArtAsset": "/assets/fightImage.webp",
+      "queueable": true,
+      "implemented": true,
+      "topology": "team-vs-team",
+      "runtimeClass": "duels",
+      "defaultVariantId": "duels-1v1",
+      "lobbyPresentation": {
+        "selectionStyle": "subcards",
+        "subtitle": "Pick a team size"
+      },
+      "capabilities": {
+        "respawns": false,
+        "objectiveEntities": false,
+        "scoreboard": false,
+        "verticalScrolling": false,
+        "aiBots": false,
+        "economy": false,
+        "modeState": false
+      },
+      "variants": [
+        {
+          "id": "duels-1v1",
+          "label": "1v1",
+          "subtitle": "Two players, one elimination match.",
+          "teamCount": 2,
+          "playersPerTeam": 1,
+          "maxPlayers": 2,
+          "lobbyLayout": "mirrored-teams"
+        },
+        {
+          "id": "duels-2v2",
+          "label": "2v2",
+          "subtitle": "Two teams of two.",
+          "teamCount": 2,
+          "playersPerTeam": 2,
+          "maxPlayers": 4,
+          "lobbyLayout": "mirrored-teams"
+        },
+        {
+          "id": "duels-3v3",
+          "label": "3v3",
+          "subtitle": "Two teams of three.",
+          "teamCount": 2,
+          "playersPerTeam": 3,
+          "maxPlayers": 6,
+          "lobbyLayout": "mirrored-teams"
+        }
+      ]
+    },
+    {
+      "id": "capture-flag",
+      "label": "Capture the Flag",
+      "description": "Steal the enemy flag and return it home.",
+      "artAsset": "/assets/capture-flag.webp",
+      "fallbackArtAsset": "/assets/fightImage.webp",
+      "queueable": false,
+      "implemented": false,
+      "topology": "team-vs-team",
+      "runtimeClass": "unimplemented",
+      "queueDisabledReason": "Capture the Flag is not playable yet.",
+      "lobbyPresentation": {
+        "selectionStyle": "direct",
+        "subtitle": "Coming soon"
+      },
+      "capabilities": {
+        "respawns": true,
+        "objectiveEntities": true,
+        "scoreboard": true,
+        "verticalScrolling": false,
+        "aiBots": false,
+        "economy": false,
+        "modeState": true
+      },
+      "variants": []
+    },
+    {
+      "id": "tower",
+      "label": "Tower",
+      "description": "Race upward through a vertical hazard map.",
+      "artAsset": "/assets/tower.webp",
+      "fallbackArtAsset": "/assets/fightImage.webp",
+      "queueable": false,
+      "implemented": false,
+      "topology": "free-for-all",
+      "runtimeClass": "unimplemented",
+      "queueDisabledReason": "Tower is not playable yet.",
+      "lobbyPresentation": {
+        "selectionStyle": "direct",
+        "subtitle": "Coming soon"
+      },
+      "capabilities": {
+        "respawns": true,
+        "objectiveEntities": true,
+        "scoreboard": true,
+        "verticalScrolling": true,
+        "aiBots": false,
+        "economy": false,
+        "modeState": true
+      },
+      "variants": []
+    },
+    {
+      "id": "airdrop",
+      "label": "Airdrop",
+      "description": "Collect more falling loot than anyone else.",
+      "artAsset": "/assets/airdrop.webp",
+      "fallbackArtAsset": "/assets/fightImage.webp",
+      "queueable": false,
+      "implemented": false,
+      "topology": "free-for-all",
+      "runtimeClass": "unimplemented",
+      "queueDisabledReason": "Airdrop is not playable yet.",
+      "lobbyPresentation": {
+        "selectionStyle": "direct",
+        "subtitle": "Coming soon"
+      },
+      "capabilities": {
+        "respawns": true,
+        "objectiveEntities": true,
+        "scoreboard": true,
+        "verticalScrolling": false,
+        "aiBots": false,
+        "economy": false,
+        "modeState": true
+      },
+      "variants": []
+    },
+    {
+      "id": "bank-bust",
+      "label": "Bank Bust",
+      "description": "Bust the enemy vault before they bust yours.",
+      "artAsset": "/assets/bank-bust.webp",
+      "fallbackArtAsset": "/assets/fightImage.webp",
+      "queueable": true,
+      "implemented": true,
+      "topology": "team-vs-team",
+      "runtimeClass": "bank-bust",
+      "defaultVariantId": "bank-bust-3v3",
+      "settings": {
+        "vaultMaxHp": 12000,
+        "matchDurationMs": 180000,
+        "respawnDelayMs": 3500,
+        "respawnShieldMs": 3000
+      },
+      "lobbyPresentation": {
+        "selectionStyle": "direct",
+        "subtitle": "3v3 objective"
+      },
+      "capabilities": {
+        "respawns": true,
+        "objectiveEntities": true,
+        "scoreboard": true,
+        "verticalScrolling": false,
+        "aiBots": false,
+        "economy": false,
+        "modeState": true
+      },
+      "variants": [
+        {
+          "id": "bank-bust-3v3",
+          "label": "3v3",
+          "subtitle": "Destroy the enemy Vault first.",
+          "teamCount": 2,
+          "playersPerTeam": 3,
+          "maxPlayers": 6,
+          "lobbyLayout": "mirrored-teams"
+        }
+      ]
+    },
+    {
+      "id": "bot-survival",
+      "label": "Bot Survival",
+      "description": "Last as long as you can against AI bots.",
+      "artAsset": "/assets/bot-survival.webp",
+      "fallbackArtAsset": "/assets/fightImage.webp",
+      "queueable": false,
+      "implemented": false,
+      "topology": "pve-survival",
+      "runtimeClass": "unimplemented",
+      "queueDisabledReason": "Bot Survival is not playable yet.",
+      "lobbyPresentation": {
+        "selectionStyle": "direct",
+        "subtitle": "Coming soon"
+      },
+      "capabilities": {
+        "respawns": false,
+        "objectiveEntities": true,
+        "scoreboard": true,
+        "verticalScrolling": false,
+        "aiBots": true,
+        "economy": false,
+        "modeState": true
+      },
+      "variants": []
+    },
+    {
+      "id": "soccer",
+      "label": "Soccer",
+      "description": "Score more goals than the other side.",
+      "artAsset": "/assets/soccer.webp",
+      "fallbackArtAsset": "/assets/fightImage.webp",
+      "queueable": false,
+      "implemented": false,
+      "topology": "team-vs-team",
+      "runtimeClass": "unimplemented",
+      "queueDisabledReason": "Soccer is not playable yet.",
+      "lobbyPresentation": {
+        "selectionStyle": "direct",
+        "subtitle": "Coming soon"
+      },
+      "capabilities": {
+        "respawns": true,
+        "objectiveEntities": true,
+        "scoreboard": true,
+        "verticalScrolling": false,
+        "aiBots": false,
+        "economy": false,
+        "modeState": true
+      },
+      "variants": []
+    },
+    {
+      "id": "bedwars",
+      "label": "Bedwars",
+      "description": "Protect your bed, upgrade, and wipe the other team.",
+      "artAsset": "/assets/bedwars.webp",
+      "fallbackArtAsset": "/assets/fightImage.webp",
+      "queueable": false,
+      "implemented": false,
+      "topology": "team-vs-team",
+      "runtimeClass": "unimplemented",
+      "queueDisabledReason": "Bedwars is not playable yet.",
+      "lobbyPresentation": {
+        "selectionStyle": "direct",
+        "subtitle": "Coming soon"
+      },
+      "capabilities": {
+        "respawns": true,
+        "objectiveEntities": true,
+        "scoreboard": true,
+        "verticalScrolling": false,
+        "aiBots": false,
+        "economy": true,
+        "modeState": true
+      },
+      "variants": []
+    }
+  ]
+}

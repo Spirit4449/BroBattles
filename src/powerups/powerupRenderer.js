@@ -645,7 +645,7 @@ export function createPowerupRenderer({
         g.lineStyle(3, colors.health, 0.75 * pulse);
         g.strokeCircle(x, y, r + 4 * pulse);
       }
-      if ((fx.shield || 0) > 0) {
+      if ((fx.shield || 0) > 0 || (fx.respawnShield || 0) > 0) {
         g.fillStyle(colors.shield, 0.22);
         g.fillCircle(x, y, Math.max(16, r - 4 + 4 * pulse));
         g.lineStyle(4, colors.shield, 0.82 * pulse);

@@ -16,6 +16,7 @@ const inputManager = require("./gameRoom/inputManager");
 const rewardManager = require("./gameRoom/rewardManager");
 const lifecycleManager = require("./gameRoom/lifecycleManager");
 const roomStateManager = require("./gameRoom/roomStateManager");
+const { createGameModeRuntime } = require("./gameModes");
 const {
   activateSpecial,
   tickActiveAbilities,
@@ -38,6 +39,8 @@ class GameRoom {
     this.players = new Map(); // socketId -> playerData
     this.rewardStats = new Map(); // name -> { userId, team, hits, damage, kills }
     this.gameState = null;
+    this.gameMode = createGameModeRuntime(this);
+    this.modeState = this.gameMode?.createRoomState?.() ?? null;
 
     // Game loop (will migrate to fixed-step accumulator + snapshot cadence)
     this.gameLoop = null; // legacy interval reference (used only until refactor start)
@@ -82,7 +85,7 @@ class GameRoom {
     this._nextDeathDropId = 1;
 
     console.log(
-      `[GameRoom ${matchId}] Created for mode ${matchData.mode}, map ${matchData.map}`,
+      `[GameRoom ${matchId}] Created for mode ${matchData.modeId || matchData.mode}:${matchData.modeVariantId || ""} map ${matchData.map}`,
     );
   }
 
@@ -420,6 +423,14 @@ class GameRoom {
       this._tickTimerAndSuddenDeath();
       this._tickPowerups();
       this._tickDeathDrops();
+      try {
+        this.gameMode?.tick?.(Date.now());
+      } catch (e) {
+        console.warn(
+          `[GameRoom ${this.matchId}] mode tick failed:`,
+          e?.message,
+        );
+      }
       // Snapshot cadence: deterministic every N ticks
       if (this._tickId % this.SNAPSHOT_EVERY_TICKS === 0) {
         this._emitSnapshotWithTiming(currentMono);
@@ -489,6 +500,32 @@ class GameRoom {
 
     // Basic action validation
     if (!actionData || !actionData.type) return;
+
+    try {
+      const modeResult = this.gameMode?.handlePlayerAction?.(playerData, actionData);
+      if (modeResult?.handled) {
+        if (modeResult?.broadcast) {
+          this.io.to(`game:${this.matchId}`).emit("game:action", {
+            playerId: playerData.user_id,
+            playerName: playerData.name,
+            origin: { x: playerData.x, y: playerData.y },
+            flip: !!playerData.flip,
+            character: playerData.char_class,
+            action: actionData,
+            t: Date.now(),
+          });
+        }
+        if (modeResult?.shouldBroadcastSnapshot) {
+          this.broadcastSnapshot();
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn(
+        `[GameRoom ${this.matchId}] mode handlePlayerAction failed`,
+        e?.message,
+      );
+    }
 
     console.log(
       `[GameRoom ${this.matchId}] Player ${playerData.name} action: ${actionData.type}`,
@@ -622,6 +659,12 @@ class GameRoom {
 
     // Disconnect all remaining players
     for (const playerData of this.players.values()) {
+      if (playerData?._respawnTimeout) {
+        try {
+          clearTimeout(playerData._respawnTimeout);
+        } catch (_) {}
+        playerData._respawnTimeout = null;
+      }
       const socket = this.io.sockets.sockets.get(playerData.socketId);
       if (socket) {
         socket.leave(`game:${this.matchId}`);
@@ -686,7 +729,12 @@ class GameRoom {
       const target = Array.from(this.players.values()).find(
         (p) => p.name === targetName,
       );
-      if (!attacker || !target) {
+      const vaultMatch = targetName.match(/^vault:(team1|team2)$/i);
+      const targetVaultTeam = vaultMatch ? String(vaultMatch[1]).toLowerCase() : null;
+      const targetVault = targetVaultTeam
+        ? this.gameMode?.getVaultState?.(targetVaultTeam) || null
+        : null;
+      if (!attacker || (!target && !targetVault)) {
         if (this.DEBUG_HIT_EVENTS) {
           console.log(
             `[HitDebug ${this.matchId}] reject reason=missing_player attacker=${attackerName} target=${targetName}`,
@@ -697,28 +745,39 @@ class GameRoom {
       if (
         attacker.connected === false ||
         attacker.loaded !== true ||
-        target.connected === false ||
-        target.loaded !== true
+        (!targetVault &&
+          (target.connected === false || target.loaded !== true))
       ) {
         if (this.DEBUG_HIT_EVENTS) {
           console.log(
-            `[HitDebug ${this.matchId}] reject reason=not_loaded_or_disconnected attacker=${attacker.name} target=${target.name}`,
+            `[HitDebug ${this.matchId}] reject reason=not_loaded_or_disconnected attacker=${attacker.name} target=${targetVault ? targetName : target.name}`,
           );
         }
         return;
       }
-      if (!attacker.isAlive || !target.isAlive) {
+      if (!attacker.isAlive || (!targetVault && !target.isAlive)) {
         if (this.DEBUG_HIT_EVENTS) {
           console.log(
-            `[HitDebug ${this.matchId}] reject reason=dead_player attackerAlive=${attacker.isAlive} targetAlive=${target.isAlive}`,
+            `[HitDebug ${this.matchId}] reject reason=dead_player attackerAlive=${attacker.isAlive} targetAlive=${target?.isAlive}`,
           );
         }
         return;
       }
+      if (targetVault) {
+        if (!attacker.team || attacker.team === targetVaultTeam) {
+          if (this.DEBUG_HIT_EVENTS) {
+            console.log(
+              `[HitDebug ${this.matchId}] reject reason=friendly_vault attacker=${attacker.name} target=${targetName}`,
+            );
+          }
+          return;
+        }
+      }
       // Allow self-hit (suicide on fall) but otherwise disable friendly fire
-      const isSelf = attacker.name === target.name;
+      const isSelf = !targetVault && attacker.name === target.name;
       if (
         !isSelf &&
+        !targetVault &&
         attacker.team &&
         target.team &&
         attacker.team === target.team
@@ -747,6 +806,14 @@ class GameRoom {
       if (attackType === "basic" && attacker.char_class === "draven") {
         dmg *= 1 + (DRAVEN_CHARGE_DAMAGE_SCALE_MAX - 1) * chargeRatio;
       }
+      if (targetVault && attackType !== "basic") {
+        if (this.DEBUG_HIT_EVENTS) {
+          console.log(
+            `[HitDebug ${this.matchId}] reject reason=vault_attack_type attacker=${attacker.name} type=${attackType}`,
+          );
+        }
+        return;
+      }
 
       // Outgoing damage modifiers (rage powerup, thorgRage ability, damageBoost, etc.)
       const now = Date.now();
@@ -773,19 +840,43 @@ class GameRoom {
           : now;
       // Clamp to [now - HIT_STALENESS_MAX_MS, now] — reject absurdly old claims
       // but still handle normal network round-trip delay gracefully.
-      const { attackTimeClamped, aPos, tPos, dist, maxDist, attackWasFuture } =
-        combatValidation.evaluateHitRange({
+      let attackTimeClamped = attackTimeRaw;
+      let aPos = null;
+      let tPos = null;
+      let dist = 0;
+      let maxDist = this._getAttackMaxDist(attacker.char_class, attackType);
+      let attackWasFuture = false;
+      if (targetVault) {
+        aPos = this._getHistoricalPosition(attacker, attackTimeRaw);
+        tPos = { x: Number(targetVault.x) || 0, y: Number(targetVault.y) || 0 };
+        attackTimeClamped = Math.min(now, attackTimeRaw);
+        attackWasFuture = attackTimeRaw > now + 250;
+        dist = Math.hypot(
+          Number(aPos?.x || 0) - tPos.x,
+          Number(aPos?.y || 0) - tPos.y,
+        );
+        maxDist += Math.max(20, Number(targetVault.radius) || 90);
+      } else {
+        ({
+          attackTimeClamped,
+          aPos,
+          tPos,
+          dist,
+          maxDist,
+          attackWasFuture,
+        } = combatValidation.evaluateHitRange({
           attacker,
           target,
           attackType,
           chargeRatio,
           attackTimeRaw,
           now,
-        });
+        }));
+      }
       if (attackWasFuture) {
         if (this.DEV_TIMING_DIAG) {
           console.warn(
-            `[GameRoom ${this.matchId}] hit rejected: future attackTime attacker=${attacker.name} target=${target.name} ` +
+            `[GameRoom ${this.matchId}] hit rejected: future attackTime attacker=${attacker.name} target=${targetVault ? targetName : target.name} ` +
               `type=${attackType} raw=${attackTimeRaw} now=${now}`,
           );
         }
@@ -795,7 +886,7 @@ class GameRoom {
         if (this.DEV_TIMING_DIAG) {
           console.warn(
             `[GameRoom ${this.matchId}] hit rejected: dist=${dist.toFixed(0)}px > max=${maxDist}px ` +
-              `attacker=${attacker.name}(${attacker.char_class}) target=${target.name} ` +
+              `attacker=${attacker.name}(${attacker.char_class}) target=${targetVault ? targetName : target.name} ` +
               `type=${attackType} age=${(now - attackTimeClamped).toFixed(0)}ms`,
           );
         }
@@ -805,7 +896,7 @@ class GameRoom {
       // Facing-direction check for melee attacks (Draven splash, Thorg fall).
       // The target must be on the side the attacker is facing; a generous tolerance
       // prevents false rejections at the boundary.
-      const isMeleeFacing = requiresMeleeFacingCheck(
+      const isMeleeFacing = !targetVault && requiresMeleeFacingCheck(
         attacker,
         attackType,
         isSelf,
@@ -829,20 +920,53 @@ class GameRoom {
       // Basic per-attacker->target rate limit to avoid accidental double submissions
       this._recentHits = this._recentHits || new Map(); // key: attacker|target -> timestamp
       const instanceId = payload.instanceId ? String(payload.instanceId) : "";
-      const key =
-        attacker.name + "|" + target.name + "|" + attackType + "|" + instanceId;
-      const last = this._recentHits.get(key) || 0;
+      const hitTargetKey = targetVault ? `vault:${targetVaultTeam}` : target.name;
+      const keySafe =
+        attacker.name + "|" + hitTargetKey + "|" + attackType + "|" + instanceId;
+      const last = this._recentHits.get(keySafe) || 0;
       const DUP_WINDOW_MS = 80; // hits within 80ms considered duplicate
       if (!isSelf && now - last < DUP_WINDOW_MS) {
         if (this.DEBUG_HIT_EVENTS) {
           console.log(
-            `[HitDebug ${this.matchId}] reject reason=duplicate attacker=${attacker.name} target=${target.name} type=${attackType} dt=${now - last}`,
+            `[HitDebug ${this.matchId}] reject reason=duplicate attacker=${attacker.name} target=${targetVault ? targetName : target.name} type=${attackType} dt=${now - last}`,
           );
         }
         return; // duplicate, ignore
       }
-      this._recentHits.set(key, now);
+      this._recentHits.set(keySafe, now);
       this._recordCombatStat(attacker, { hits: 1 });
+
+      if (targetVault) {
+        const previousHealth = Number(targetVault.health) || 0;
+        const vaultState = this.gameMode?.damageVault?.(targetVaultTeam, dmg, {
+          sourcePlayer: attacker.name,
+          sourceTeam: attacker.team,
+          attackType,
+        });
+        const appliedDamage = Math.max(
+          0,
+          previousHealth - (Number(vaultState?.health) || 0),
+        );
+        if (appliedDamage > 0) {
+          attacker.lastAttackAt = now;
+          attacker.lastCombatAt = now;
+          this._recordCombatStat(attacker, { damage: appliedDamage });
+          if (attacker.maxSuperCharge > 0) {
+            attacker.superCharge = Math.min(
+              attacker.maxSuperCharge,
+              (attacker.superCharge || 0) + appliedDamage,
+            );
+            this.io.to(`game:${this.matchId}`).emit("super-update", {
+              username: attacker.name,
+              charge: attacker.superCharge,
+              maxCharge: attacker.maxSuperCharge,
+            });
+          }
+          this.broadcastSnapshot();
+          this._checkVictoryCondition();
+        }
+        return;
+      }
 
       // Apply damage (incoming modifier covers shield powerup, freeze stun, etc.)
       dmg *= effectManager.getModifiers(target, now).damageTakenMult;
@@ -1032,6 +1156,53 @@ class GameRoom {
 
   _handlePlayerDeath(playerData, meta = {}) {
     return deathDropManager.handlePlayerDeath(this, playerData, meta);
+  }
+
+  _scheduleRespawn(playerData, plan = {}, meta = {}) {
+    if (!playerData || !plan?.enabled) return;
+    if (playerData._respawnTimeout) {
+      try {
+        clearTimeout(playerData._respawnTimeout);
+      } catch (_) {}
+    }
+    const delayMs = Math.max(0, Number(plan.delayMs) || 0);
+    playerData._respawnTimeout = setTimeout(() => {
+      playerData._respawnTimeout = null;
+      if (this.status !== "active") return;
+      const now = Date.now();
+      const spawnX = Number(plan?.position?.x);
+      const spawnY = Number(plan?.position?.y);
+      const nextX = Number.isFinite(spawnX) ? spawnX : Number(playerData.x) || 0;
+      const nextY = Number.isFinite(spawnY) ? spawnY : Number(playerData.y) || 0;
+      playerData.isAlive = true;
+      playerData._deathHandled = false;
+      playerData.health = Math.max(1, Number(playerData.maxHealth) || 1);
+      playerData.x = nextX;
+      playerData.y = nextY;
+      playerData.lastDamagedAt = 0;
+      playerData.lastCombatAt = now;
+      if (Number(plan.shieldMs) > 0) {
+        effectManager.apply(
+          playerData,
+          "respawnShield",
+          now,
+          { durationMs: Number(plan.shieldMs) },
+          this,
+        );
+      }
+      this.io.to(`game:${this.matchId}`).emit("player:respawn", {
+        username: playerData.name,
+        x: nextX,
+        y: nextY,
+        team: playerData.team,
+        health: playerData.health,
+        maxHealth: playerData.maxHealth,
+        shieldMs: Math.max(0, Number(plan.shieldMs) || 0),
+        at: now,
+      });
+      this._broadcastHealthUpdate(playerData, { cause: "respawn" });
+      this.broadcastSnapshot();
+    }, delayMs);
   }
 
   _handleDeathDropPickup(socketId, payload) {

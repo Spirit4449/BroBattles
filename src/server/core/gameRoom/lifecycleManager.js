@@ -49,6 +49,11 @@ function startGame(room) {
   void room._broadcastParticipantStatus("In Battle");
 
   room.initializeSpawnPositions();
+  try {
+    room.gameMode?.onStart?.();
+  } catch (e) {
+    console.warn(`[GameRoom ${room.matchId}] mode onStart failed`, e?.message);
+  }
 
   room.io.to(`game:${room.matchId}`).emit("game:start", {
     countdown: 6,
@@ -91,26 +96,9 @@ async function broadcastParticipantStatus(room, statusLabel) {
 
 function checkVictoryCondition(room) {
   if (room.status !== "active") return;
-  const aliveByTeam = { team1: 0, team2: 0 };
-  for (const p of room.players.values()) {
-    if (!p.isAlive) continue;
-    if (p.team === "team1") aliveByTeam.team1++;
-    else if (p.team === "team2") aliveByTeam.team2++;
-  }
-
-  const t1Alive = aliveByTeam.team1;
-  const t2Alive = aliveByTeam.team2;
-  let winner = null;
-  if (t1Alive === 0 && t2Alive === 0) {
-    winner = null;
-  } else if (t1Alive === 0) {
-    winner = "team2";
-  } else if (t2Alive === 0) {
-    winner = "team1";
-  }
-
-  const terminal =
-    winner !== null || (winner === null && t1Alive === 0 && t2Alive === 0);
+  const victoryState = room.gameMode?.evaluateVictoryState?.() || null;
+  const terminal = victoryState?.terminal === true;
+  const winner = terminal ? victoryState?.winnerTeam ?? null : null;
 
   if (!terminal) {
     if (room._pendingVictoryFinishTimeout) {
@@ -122,7 +110,11 @@ function checkVictoryCondition(room) {
   }
 
   const outcomeKey =
-    winner !== null ? String(winner) : t1Alive === 0 && t2Alive === 0 ? "draw" : null;
+    victoryState?.outcomeKey != null
+      ? String(victoryState.outcomeKey)
+      : winner !== null
+        ? String(winner)
+        : "draw";
 
   if (
     room._pendingVictoryFinishTimeout &&
@@ -136,34 +128,34 @@ function checkVictoryCondition(room) {
   }
 
   room._pendingVictoryOutcomeKey = outcomeKey;
-  room._pendingVictoryFinishTimeout = setTimeout(() => {
+  const finishVictory = () => {
     room._pendingVictoryFinishTimeout = null;
     room._pendingVictoryOutcomeKey = null;
     if (room.status !== "active") return;
 
-    const latestAlive = { team1: 0, team2: 0 };
-    for (const p of room.players.values()) {
-      if (!p.isAlive) continue;
-      if (p.team === "team1") latestAlive.team1++;
-      else if (p.team === "team2") latestAlive.team2++;
-    }
-
-    let latestWinner = null;
-    if (latestAlive.team1 === 0 && latestAlive.team2 === 0) {
-      latestWinner = null;
-    } else if (latestAlive.team1 === 0) {
-      latestWinner = "team2";
-    } else if (latestAlive.team2 === 0) {
-      latestWinner = "team1";
-    } else {
+    const latestVictoryState = room.gameMode?.evaluateVictoryState?.() || null;
+    if (!latestVictoryState?.terminal) {
       return;
     }
 
-    room._finishGame(latestWinner, {
-      t1Alive: latestAlive.team1,
-      t2Alive: latestAlive.team2,
+    room._finishGame(latestVictoryState.winnerTeam ?? null, {
+      ...(latestVictoryState.meta || {}),
     });
-  }, ALL_DEAD_GAME_OVER_DELAY_MS);
+  };
+
+  const delayMs = Math.max(
+    0,
+    Number(victoryState?.meta?.finishDelayMs),
+  );
+  if (delayMs === 0) {
+    finishVictory();
+    return;
+  }
+
+  room._pendingVictoryFinishTimeout = setTimeout(
+    finishVictory,
+    delayMs || ALL_DEAD_GAME_OVER_DELAY_MS,
+  );
 }
 
 async function finishGame(room, winnerTeam, meta = {}) {

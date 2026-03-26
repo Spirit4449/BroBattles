@@ -52,14 +52,29 @@ function tickTimerAndSuddenDeath(room) {
   if (room.status !== "active") return;
   const now = Date.now();
   const elapsed = now - room._loopStartWallTime;
-  const remaining = Math.max(0, GAME_DURATION_MS - elapsed);
-  const suddenDeath = elapsed >= GAME_DURATION_MS;
+  const totalDurationMs = Math.max(
+    1000,
+    Number(room.gameMode?.getMatchDurationMs?.()) || GAME_DURATION_MS,
+  );
+  const shouldUseSuddenDeath = room.gameMode?.supportsSuddenDeath?.() !== false;
+  const remaining = Math.max(0, totalDurationMs - elapsed);
+  const suddenDeath = shouldUseSuddenDeath && elapsed >= totalDurationMs;
 
-  const sdElapsed = suddenDeath ? elapsed - GAME_DURATION_MS : 0;
+  const sdElapsed = suddenDeath ? elapsed - totalDurationMs : 0;
   const worldBottomY = Number(WORLD_BOUNDS.height) || 1000;
   const poisonY = suddenDeath
     ? room._computePoisonY(sdElapsed)
     : worldBottomY + 60;
+
+  if (!shouldUseSuddenDeath && elapsed >= totalDurationMs) {
+    const outcome = room.gameMode?.onTimerExpired?.() || null;
+    if (outcome?.terminal) {
+      room._finishGame(outcome.winnerTeam ?? null, {
+        ...(outcome.meta || {}),
+      });
+      return;
+    }
+  }
 
   if (suddenDeath && !room._suddenDeathActive) {
     room._suddenDeathActive = true;
@@ -109,7 +124,7 @@ function tickTimerAndSuddenDeath(room) {
     room.io.to(`game:${room.matchId}`).emit("game:timer", {
       elapsed,
       remaining,
-      total: GAME_DURATION_MS,
+      total: totalDurationMs,
       suddenDeath,
       poisonY,
     });

@@ -87,6 +87,13 @@ mysql> describe party_members;
 
 mysql>
 
+## Game Mode Registry Scaffold
+
+Apply [migrations/2026-03-25_game_mode_registry_scaffold.sql](migrations/2026-03-25_game_mode_registry_scaffold.sql)
+to add `mode_id` and `mode_variant_id` to `parties`, `matches`, and
+`match_tickets`, and to backfill existing duel rows from the legacy numeric
+`mode` values.
+
 ## Player Cards (Planned Feature)
 
 Card metadata (name, asset URL, costs, render zones) is sourced from
