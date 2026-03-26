@@ -103,7 +103,7 @@ const _spawnAnchors = Object.create(null);
 export const definition = {
   id: 1,
   name: "Lushy Peaks",
-  bgAsset: "/assets/lushy/gameBg.png",
+  bgAsset: "/assets/lushy/gameBg.webp",
   mapSelectPreviewAsset: "/assets/lushy/gameBg.webp",
   lobbyBgAsset: "/assets/lushy/lobbyBg.webp",
   lobbyPlatformAsset: "/assets/lushy/lobbyPlatform.webp",

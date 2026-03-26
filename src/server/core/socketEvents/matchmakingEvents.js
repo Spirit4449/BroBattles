@@ -1,3 +1,10 @@
+const {
+  normalizeSelection,
+  isSelectionQueueable,
+  getSelectionBlockReason,
+  selectionToLegacyMode,
+} = require("../../helpers/gameSelectionCatalog");
+
 function registerMatchmakingEvents(socket, { db, io, mm, PARTY_STATUS }) {
   async function setPartyStatusSafe(partyId, status) {
     if (!partyId) return;
@@ -17,28 +24,35 @@ function registerMatchmakingEvents(socket, { db, io, mm, PARTY_STATUS }) {
       const userId = socket.data.user?.user_id || null;
       const { mode, modeId, modeVariantId, selection, map, side, partyId } =
         data || {};
+      const normalizedSelection = normalizeSelection({
+        modeId: selection?.modeId || modeId || null,
+        modeVariantId: selection?.modeVariantId || modeVariantId || null,
+        legacyMode: mode,
+        mapId: selection?.mapId ?? map,
+      });
+      if (!isSelectionQueueable(normalizedSelection)) {
+        throw new Error(getSelectionBlockReason(normalizedSelection));
+      }
+      const legacyMode = selectionToLegacyMode(
+        normalizedSelection.modeId,
+        normalizedSelection.modeVariantId,
+      );
       const pid = partyId || (uname ? await db.getPartyIdByName(uname) : null);
       await mm.queueJoin({
         partyId: pid || null,
         userId: pid ? null : userId,
-        mode,
-        modeId: selection?.modeId || modeId || null,
-        modeVariantId: selection?.modeVariantId || modeVariantId || null,
-        map: selection?.mapId ?? map,
+        mode: legacyMode,
+        modeId: normalizedSelection.modeId,
+        modeVariantId: normalizedSelection.modeVariantId,
+        map: normalizedSelection.mapId,
         side,
       });
-      const payloadSelection = {
-        modeId: selection?.modeId || modeId || "duels",
-        modeVariantId:
-          selection?.modeVariantId || modeVariantId || "duels-1v1",
-        mapId: Number(selection?.mapId ?? map) || 1,
-      };
       socket.emit("queue:joined", {
-        mode: Number(mode) || 1,
-        modeId: payloadSelection.modeId,
-        modeVariantId: payloadSelection.modeVariantId,
-        selection: payloadSelection,
-        map: payloadSelection.mapId,
+        mode: legacyMode,
+        modeId: normalizedSelection.modeId,
+        modeVariantId: normalizedSelection.modeVariantId,
+        selection: normalizedSelection,
+        map: normalizedSelection.mapId,
         partyId: pid || null,
       });
     } catch (e) {

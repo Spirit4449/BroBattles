@@ -10,19 +10,66 @@ const {
 } = require("../helpers/gameSelectionCatalog");
 
 function createPartyStateService({ db, io }) {
+  function isMissingModeSelectionColumn(error) {
+    return (
+      error?.code === "ER_BAD_FIELD_ERROR" &&
+      /mode_id|mode_variant_id/i.test(String(error?.sqlMessage || error?.message || ""))
+    );
+  }
+
+  async function updatePartySelectionWithFallback(partyId, normalizedSelection) {
+    const legacyMode = selectionToLegacyMode(
+      normalizedSelection.modeId,
+      normalizedSelection.modeVariantId,
+    );
+    const mapId = normalizedSelection.mapId ?? DEFAULT_MAP_ID;
+
+    try {
+      await db.runQuery(
+        "UPDATE parties SET mode = ?, map = ?, mode_id = ?, mode_variant_id = ? WHERE party_id = ?",
+        [
+          legacyMode,
+          mapId,
+          normalizedSelection.modeId,
+          normalizedSelection.modeVariantId,
+          partyId,
+        ],
+      );
+    } catch (error) {
+      if (!isMissingModeSelectionColumn(error)) throw error;
+      await db.runQuery(
+        "UPDATE parties SET mode = ?, map = ? WHERE party_id = ?",
+        [legacyMode, mapId, partyId],
+      );
+    }
+  }
+
   async function createPartyForUser(username) {
     return db.withTransaction(async (conn, q) => {
       await q("DELETE FROM party_members WHERE name = ?", [username]);
-      const insertParty = await q(
-        "INSERT INTO parties (status, mode, map, mode_id, mode_variant_id) VALUES (?, ?, ?, ?, ?)",
-        [
-          PARTY_STATUS.IDLE,
-          selectionToLegacyMode(DEFAULT_MODE_ID, DEFAULT_VARIANT_ID),
-          DEFAULT_MAP_ID,
-          DEFAULT_MODE_ID,
-          DEFAULT_VARIANT_ID,
-        ],
-      );
+      let insertParty;
+      try {
+        insertParty = await q(
+          "INSERT INTO parties (status, mode, map, mode_id, mode_variant_id) VALUES (?, ?, ?, ?, ?)",
+          [
+            PARTY_STATUS.IDLE,
+            selectionToLegacyMode(DEFAULT_MODE_ID, DEFAULT_VARIANT_ID),
+            DEFAULT_MAP_ID,
+            DEFAULT_MODE_ID,
+            DEFAULT_VARIANT_ID,
+          ],
+        );
+      } catch (error) {
+        if (!isMissingModeSelectionColumn(error)) throw error;
+        insertParty = await q(
+          "INSERT INTO parties (status, mode, map) VALUES (?, ?, ?)",
+          [
+            PARTY_STATUS.IDLE,
+            selectionToLegacyMode(DEFAULT_MODE_ID, DEFAULT_VARIANT_ID),
+            DEFAULT_MAP_ID,
+          ],
+        );
+      }
       const partyId = insertParty.insertId;
       await q(
         "INSERT INTO party_members (party_id, name, team) VALUES (?, ?, ?)",
@@ -34,10 +81,18 @@ function createPartyStateService({ db, io }) {
 
   async function setPartyMode({ partyId, mode }) {
     const legacyMode = selectionToLegacyMode("duels", mode);
-    await db.runQuery(
-      "UPDATE parties SET mode = ?, mode_id = ?, mode_variant_id = ? WHERE party_id = ?",
-      [legacyMode, "duels", mode, partyId],
-    );
+    try {
+      await db.runQuery(
+        "UPDATE parties SET mode = ?, mode_id = ?, mode_variant_id = ? WHERE party_id = ?",
+        [legacyMode, "duels", mode, partyId],
+      );
+    } catch (error) {
+      if (!isMissingModeSelectionColumn(error)) throw error;
+      await db.runQuery("UPDATE parties SET mode = ? WHERE party_id = ?", [
+        legacyMode,
+        partyId,
+      ]);
+    }
   }
 
   async function setPartyMap({ partyId, map }) {
@@ -53,20 +108,7 @@ function createPartyStateService({ db, io }) {
       mode_variant_id: selection?.modeVariantId,
       map: selection?.mapId,
     });
-    const legacyMode = selectionToLegacyMode(
-      normalized.modeId,
-      normalized.modeVariantId,
-    );
-    await db.runQuery(
-      "UPDATE parties SET mode = ?, map = ?, mode_id = ?, mode_variant_id = ? WHERE party_id = ?",
-      [
-        legacyMode,
-        normalized.mapId ?? DEFAULT_MAP_ID,
-        normalized.modeId,
-        normalized.modeVariantId,
-        partyId,
-      ],
-    );
+    await updatePartySelectionWithFallback(partyId, normalized);
     return normalized;
   }
 
