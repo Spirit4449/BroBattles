@@ -16,6 +16,7 @@ const inputManager = require("./gameRoom/inputManager");
 const rewardManager = require("./gameRoom/rewardManager");
 const lifecycleManager = require("./gameRoom/lifecycleManager");
 const roomStateManager = require("./gameRoom/roomStateManager");
+const netTestLogger = require("./gameRoom/netTestLogger");
 const { createGameModeRuntime } = require("./gameModes");
 const {
   activateSpecial,
@@ -83,10 +84,15 @@ class GameRoom {
     this._nextPowerupTypeIdx = 0;
     this._deathDrops = new Map(); // id -> authoritative drop plan
     this._nextDeathDropId = 1;
+    this._netTestEnabled = netTestLogger.isServerNetTestEnabled();
 
-    console.log(
-      `[GameRoom ${matchId}] Created for mode ${matchData.modeId || matchData.mode}:${matchData.modeVariantId || ""} map ${matchData.map}`,
-    );
+    if (!this._netTestEnabled) {
+      console.log(
+        `[GameRoom ${matchId}] Created for mode ${matchData.modeId || matchData.mode}:${matchData.modeVariantId || ""} map ${matchData.map}`,
+      );
+    } else {
+      netTestLogger.noteRoomCreated(this);
+    }
   }
 
   async addPlayer(socket, user) {
@@ -115,7 +121,9 @@ class GameRoom {
         name: existingPlayer.name,
         username: existingPlayer.name,
       });
-      console.log(`[GameRoom ${this.matchId}] Player ${user.name} reconnected`);
+      if (!this._netTestEnabled) {
+        console.log(`[GameRoom ${this.matchId}] Player ${user.name} reconnected`);
+      }
     } else {
       // New player joining
       const matchPlayer = this.matchData.players.find(
@@ -188,9 +196,11 @@ class GameRoom {
 
       this.players.set(socket.id, playerData);
       this._ensureRewardBucket(playerData);
-      console.log(
-        `[GameRoom ${this.matchId}] Player ${user.name} joined (${this.players.size}/${this.matchData.players.length})`,
-      );
+      if (!this._netTestEnabled) {
+        console.log(
+          `[GameRoom ${this.matchId}] Player ${user.name} joined (${this.players.size}/${this.matchData.players.length})`,
+        );
+      }
     }
 
     // Join socket to game room
@@ -226,9 +236,11 @@ class GameRoom {
     playerData.connected = false;
     this.players.set(`offline:${playerData.user_id}`, playerData);
 
-    console.log(
-      `[GameRoom ${this.matchId}] Player ${user.name} left (${this.players.size} remaining)`,
-    );
+    if (!this._netTestEnabled) {
+      console.log(
+        `[GameRoom ${this.matchId}] Player ${user.name} left (${this.players.size} remaining)`,
+      );
+    }
 
     // Handle disconnection during active game
     if (this.status === "active") {
@@ -327,9 +339,11 @@ class GameRoom {
           this._readyAcks.add(p.user_id);
           const need = this._requiredUserIds.size;
           const have = this._readyAcks.size;
-          console.log(
-            `[GameRoom ${this.matchId}] Ready ack from ${p.name} (${have}/${need})`,
-          );
+          if (!this._netTestEnabled) {
+            console.log(
+              `[GameRoom ${this.matchId}] Ready ack from ${p.name} (${have}/${need})`,
+            );
+          }
           if (have >= need) {
             this._finalizeStart("all_acks");
           }
@@ -394,7 +408,9 @@ class GameRoom {
    */
   startGameLoop() {
     if (this._loopRunning) return; // already running
-    console.log(`[GameRoom ${this.matchId}] Fixed-step loop started`);
+    if (!this._netTestEnabled) {
+      console.log(`[GameRoom ${this.matchId}] Fixed-step loop started`);
+    }
     this._loopRunning = true;
     this._loopStartWallTime = Date.now();
     this._suddenDeathActive = false;
@@ -527,9 +543,12 @@ class GameRoom {
       );
     }
 
-    console.log(
-      `[GameRoom ${this.matchId}] Player ${playerData.name} action: ${actionData.type}`,
-    );
+    netTestLogger.noteAction(this, playerData, actionData.type);
+    if (!this._netTestEnabled) {
+      console.log(
+        `[GameRoom ${this.matchId}] Player ${playerData.name} action: ${actionData.type}`,
+      );
+    }
 
     // Mark as combat to pause regen even if attack misses
     playerData.lastCombatAt = Date.now();
@@ -674,7 +693,9 @@ class GameRoom {
     this.players.clear();
     this._powerups.clear();
     this._deathDrops.clear();
-    console.log(`[GameRoom ${this.matchId}] Cleaned up`);
+    if (!this._netTestEnabled) {
+      console.log(`[GameRoom ${this.matchId}] Cleaned up`);
+    }
   }
 
   // Getters

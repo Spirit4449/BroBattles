@@ -7,6 +7,7 @@ const {
   MOVE_PLAUSIBLE_LAG_PAD_V,
 } = require("../gameRoomConfig");
 const { isMovementSuppressed } = require("./abilityRuntimeManager");
+const netTestLogger = require("./netTestLogger");
 
 function handlePlayerInput(room, socketId, inputData) {
   const playerData = room.players.get(socketId);
@@ -34,6 +35,8 @@ function handlePlayerInput(room, socketId, inputData) {
     Number.isFinite(inputData.x) &&
     Number.isFinite(inputData.y)
   ) {
+    const prevInputX = Number(playerData.x);
+    const prevInputY = Number(playerData.y);
     const minX = -WORLD_BOUNDS.margin;
     const maxX = WORLD_BOUNDS.width + WORLD_BOUNDS.margin;
     const minY = -WORLD_BOUNDS.margin;
@@ -51,7 +54,14 @@ function handlePlayerInput(room, socketId, inputData) {
       const absDX = Math.abs(rawX - playerData.x);
       const absDY = Math.abs(rawY - playerData.y);
       if (absDX > maxDX || absDY > maxDY) {
-        if (room.DEV_TIMING_DIAG) {
+        netTestLogger.noteInputClamp(room, playerData, {
+          absDX,
+          maxDX,
+          absDY,
+          maxDY,
+          dtMove,
+        });
+        if (room.DEV_TIMING_DIAG && !room._netTestEnabled) {
           console.warn(
             `[GameRoom ${room.matchId}] position jump clamped: ${playerData.name} dx=${absDX.toFixed(0)}>${maxDX.toFixed(0)} dy=${absDY.toFixed(0)}>${maxDY.toFixed(0)} dt=${dtMove}ms`,
           );
@@ -97,6 +107,10 @@ function handlePlayerInput(room, socketId, inputData) {
     if (playerData._posHistory.length > POSITION_HISTORY_DEPTH) {
       playerData._posHistory.shift();
     }
+    netTestLogger.noteInput(room, playerData, now, {
+      dx: rawX - prevInputX,
+      dy: rawY - prevInputY,
+    });
     playerData.lastInput = now;
     return;
   }
@@ -150,6 +164,7 @@ function handlePlayerInputIntent(room, socketId, intentData) {
 
   // Store last intent for diagnostics
   playerData._lastInputIntent = intentData;
+  netTestLogger.noteIntent(room, playerData, intentData);
 }
 
 module.exports = {

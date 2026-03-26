@@ -1,3 +1,5 @@
+import { noteClientActionSent } from "../../lib/netTestLogger.js";
+
 export function executeDefaultAttack({
   scene,
   ammo,
@@ -53,7 +55,10 @@ export function executeDefaultAttack({
 
   const payload =
     typeof payloadBuilder === "function" ? payloadBuilder() : payloadBuilder;
-  if (payload && typeof emitAction === "function") emitAction(payload);
+  if (payload && typeof emitAction === "function") {
+    noteClientActionSent(payload?.type || "attack", payload);
+    emitAction(payload);
+  }
 
   if (typeof drawAmmoBar === "function") drawAmmoBar();
   if (typeof onAfterFire === "function") onAfterFire();

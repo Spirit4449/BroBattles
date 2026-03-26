@@ -1,3 +1,5 @@
+import { shouldMuteClientDefaultLogs } from "../lib/netTestLogger.js";
+
 export function createSnapshotBuffer({
   maxStateBuffer = 120,
   initialInterpDelayMs = 150,
@@ -5,6 +7,8 @@ export function createSnapshotBuffer({
   maxInterpDelayMs = 300,
   snapIntervalMs = 50,
   maxSpacingMs = 500,
+  lateSnapshotThresholdMs = 140,
+  largePositionDeltaPx = 90,
   spacingEmaAlpha = 0.12,
   enableAdaptiveDelay = false,
   enableClockCorrection = false,
@@ -23,6 +27,7 @@ export function createSnapshotBuffer({
   let spacingEma = null;
   let jitterEma = null;
   let lastAdaptivePrint = 0;
+  let lastTickId = null;
 
   function hasData() {
     return active && stateBuffer.length > 0;
@@ -57,9 +62,19 @@ export function createSnapshotBuffer({
       snapMono = clientMonoNow;
     }
 
+    let spacingMs = 0;
+    let lateSnapshot = false;
+    let outOfOrderTick = false;
+    let previousTickId = lastTickId;
+    const currentTickId =
+      typeof snapshot?.tickId === "number" ? snapshot.tickId : null;
+    const positionJumps = [];
+
     if (stateBuffer.length > 0) {
-      const prev = stateBuffer[stateBuffer.length - 1].tMono;
+      const prevState = stateBuffer[stateBuffer.length - 1];
+      const prev = prevState.tMono;
       const d = snapMono - prev;
+      spacingMs = d;
       if (d >= 0 && d < maxSpacingMs) {
         snapshotSpacings.push(d);
         if (snapshotSpacings.length > 400) snapshotSpacings.splice(0, 200);
@@ -80,7 +95,58 @@ export function createSnapshotBuffer({
           if (targetDelay > maxInterpDelayMs) targetDelay = maxInterpDelayMs;
           interpDelayMs += (targetDelay - interpDelayMs) * 0.1;
         }
+        if (d >= Math.max(lateSnapshotThresholdMs, snapIntervalMs * 2)) {
+          lateSnapshot = true;
+        }
       }
+
+      const prevPlayers =
+        prevState?.players && typeof prevState.players === "object"
+          ? prevState.players
+          : {};
+      const nextPlayers =
+        snapshot?.players && typeof snapshot.players === "object"
+          ? snapshot.players
+          : {};
+      for (const [name, nextPos] of Object.entries(nextPlayers)) {
+        const prevPos = prevPlayers[name];
+        if (!prevPos || !nextPos) continue;
+        const prevX = Number(prevPos.x);
+        const prevY = Number(prevPos.y);
+        const nextX = Number(nextPos.x);
+        const nextY = Number(nextPos.y);
+        if (
+          !Number.isFinite(prevX) ||
+          !Number.isFinite(prevY) ||
+          !Number.isFinite(nextX) ||
+          !Number.isFinite(nextY)
+        ) {
+          continue;
+        }
+        const dx = nextX - prevX;
+        const dy = nextY - prevY;
+        const distance = Math.hypot(dx, dy);
+        if (distance >= largePositionDeltaPx) {
+          positionJumps.push({
+            name,
+            distance,
+            dx,
+            dy,
+            prevX,
+            prevY,
+            nextX,
+            nextY,
+          });
+        }
+      }
+    }
+
+    if (
+      typeof currentTickId === "number" &&
+      typeof lastTickId === "number" &&
+      currentTickId <= lastTickId
+    ) {
+      outOfOrderTick = true;
     }
 
     if (renderClockMono == null && typeof snapMono === "number") {
@@ -96,6 +162,9 @@ export function createSnapshotBuffer({
 
     if (stateBuffer.length > maxStateBuffer) {
       stateBuffer.shift();
+    }
+    if (typeof currentTickId === "number") {
+      lastTickId = currentTickId;
     }
 
     let snapshotDiagLine = null;
@@ -114,6 +183,12 @@ export function createSnapshotBuffer({
       snapMono,
       calibrationLog,
       snapshotDiagLine,
+      spacingMs,
+      lateSnapshot,
+      outOfOrderTick,
+      previousTickId,
+      interpDelayMs,
+      positionJumps,
     };
   }
 
@@ -157,9 +232,11 @@ export function createSnapshotBuffer({
       const maxHistoryMs = 500;
       const minTarget = headT - (interpDelayMs + maxHistoryMs);
       if (targetMono < minTarget) {
-        console.warn(
-          `[interp] clamping backlog: lag=${lagMs.toFixed(1)}ms buffer=${stateBuffer.length}`,
-        );
+        if (!shouldMuteClientDefaultLogs()) {
+          console.warn(
+            `[interp] clamping backlog: lag=${lagMs.toFixed(1)}ms buffer=${stateBuffer.length}`,
+          );
+        }
         targetMono = minTarget;
         renderClockMono = targetMono + interpDelayMs;
         while (
@@ -172,7 +249,9 @@ export function createSnapshotBuffer({
       }
 
       if (lagMs > 1000) {
-        console.warn(`[interp] severe lag reset: lag=${lagMs.toFixed(0)}ms`);
+        if (!shouldMuteClientDefaultLogs()) {
+          console.warn(`[interp] severe lag reset: lag=${lagMs.toFixed(0)}ms`);
+        }
         targetMono = headT - interpDelayMs;
         renderClockMono = targetMono + interpDelayMs;
         if (stateBuffer.length > 10) {

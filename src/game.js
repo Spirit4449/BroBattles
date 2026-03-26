@@ -54,6 +54,12 @@ import {
 import socket, { waitForConnect } from "./socket";
 import OpPlayer from "./opPlayer";
 import { spawnDust, prewarmDust } from "./effects";
+import {
+  configureClientNetTest,
+  noteClientFrame,
+  noteClientLifecycle,
+  shouldMuteClientDefaultLogs,
+} from "./lib/netTestLogger.js";
 
 // Make Phaser globally available for character modules
 window.Phaser = Phaser;
@@ -458,15 +464,32 @@ async function initializeGame() {
   try {
     if (__booted) return;
     __booted = true;
-    console.log("Fetching game data for match:", matchId);
+    configureClientNetTest({ matchId });
+    if (!shouldMuteClientDefaultLogs()) {
+      console.log("Fetching game data for match:", matchId);
+    } else {
+      noteClientLifecycle("fetch-gamedata", `matchId=${matchId}`);
+    }
     gameData = await fetchGameData();
-    console.log("Game data received:", gameData);
+    if (!shouldMuteClientDefaultLogs()) {
+      console.log("Game data received:", gameData);
+    } else {
+      noteClientLifecycle(
+        "gamedata",
+        `players=${Array.isArray(gameData?.players) ? gameData.players.length : 0} map=${gameData?.map ?? "?"}`,
+      );
+    }
     username = gameData.yourName || username;
+    configureClientNetTest({ username, matchId });
     syncLiveMatchContext();
     initTeamStatusHud(gameData?.players || []);
 
     // 1) Register listeners before join
-    console.log("Setting up game listeners");
+    if (!shouldMuteClientDefaultLogs()) {
+      console.log("Setting up game listeners");
+    } else {
+      noteClientLifecycle("listeners", "register");
+    }
     matchCoordinator.dispose();
     matchCoordinator.register();
 
@@ -711,7 +734,11 @@ class GameScene extends Phaser.Scene {
     });
     // Wait for game data before creating map and player
     if (!gameData) {
-      console.log("Waiting for game data...");
+      if (!shouldMuteClientDefaultLogs()) {
+        console.log("Waiting for game data...");
+      } else {
+        noteClientLifecycle("wait-gamedata", "");
+      }
       updateLoading(96, "Server error. Refresh or return to lobby.");
       // Poll for game data
       const pollForGameData = () => {
@@ -1344,10 +1371,13 @@ class GameScene extends Phaser.Scene {
           frame.alpha,
           frame,
         ),
-      onDebugLine: (line) => console.log(line),
+      onDebugLine: (line) => {
+        if (!shouldMuteClientDefaultLogs()) console.log(line);
+      },
     });
 
     updateHealthBars({ opponentPlayers, teamPlayers });
+    noteClientFrame(this.game.loop.delta);
   }
 
   /**
@@ -1603,7 +1633,11 @@ function trySendReadyAck() {
   try {
     readyAckSent = true;
     socket.emit("game:ready", buildReadyPayload());
-    console.log("Sent game:ready ack");
+    if (!shouldMuteClientDefaultLogs()) {
+      console.log("Sent game:ready ack");
+    } else {
+      noteClientLifecycle("ready-ack", "");
+    }
   } catch (_) {}
 }
 

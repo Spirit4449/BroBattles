@@ -2,6 +2,11 @@
 // Emits both game:input (position) and game:input-intent (direction/jump/action)
 // for dual-path server movement simulation (Phase 2).
 
+import {
+  noteClientInputSent,
+  noteClientIntentSent,
+} from "../lib/netTestLogger.js";
+
 export function createLocalInputSync({
   socket,
   getAmmoSyncState,
@@ -36,6 +41,12 @@ export function createLocalInputSync({
     ) {
       // Disable per-message compression for movement for lower latency.
       socket.volatile.compress(false).emit("game:input", currentState);
+      noteClientInputSent({
+        now,
+        previousState: lastPlayerState,
+        currentState,
+        previousSentAt: lastMovementSent,
+      });
 
       // NEW: Also emit input intent for Phase 2 server-side movement simulation
       // This is non-breaking; server currently ignores it, but will use it when flag enables
@@ -49,6 +60,7 @@ export function createLocalInputSync({
         sequence: inputIntentSeq++,
       };
       socket.volatile.compress(false).emit("game:input-intent", inputIntent);
+      noteClientIntentSent(inputIntent);
 
       lastPlayerState = { ...currentState };
       lastMovementSent = now;

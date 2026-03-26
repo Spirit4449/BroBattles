@@ -8,6 +8,13 @@
 // hidden global state and can be tested or instantiated in isolation.
 import { normalizeMapId } from "../maps/manifest";
 import { spawnDamageImpact } from "../effects";
+import {
+  configureClientNetTest,
+  noteClientLifecycle,
+  noteClientRemoteAction,
+  noteClientSnapshot,
+  shouldMuteClientDefaultLogs,
+} from "../lib/netTestLogger.js";
 
 /**
  * @typedef {object} MatchCoordinatorConfig
@@ -225,20 +232,45 @@ export function createMatchCoordinator(config) {
       !getHasJoined() &&
       !getJoinInFlight()
     ) {
-      console.log("[game] connect", joinPayload);
+      if (!shouldMuteClientDefaultLogs()) {
+        console.log("[game] connect", joinPayload);
+      } else {
+        noteClientLifecycle(
+          "join-emit",
+          `matchId=${joinPayload?.matchId ?? "?"}`,
+        );
+      }
       try {
         setJoinInFlight(true);
         socket.emit("game:join", joinPayload, (ack) => {
           setJoinInFlight(false);
           if (!ack || ack.ok !== true) {
-            console.warn("[game] join ack failed", ack);
+            if (!shouldMuteClientDefaultLogs()) {
+              console.warn("[game] join ack failed", ack);
+            } else {
+              noteClientLifecycle(
+                "join-ack-fail",
+                `error=${String(ack?.error || "unknown")}`,
+              );
+            }
           } else {
-            console.log("[game] join ack ok", ack);
+            if (!shouldMuteClientDefaultLogs()) {
+              console.log("[game] join ack ok", ack);
+            } else {
+              noteClientLifecycle("join-ack-ok", `matchId=${ack?.matchId ?? "?"}`);
+            }
             setHasJoined(true);
           }
         });
       } catch (e) {
-        console.warn("[game] join emit error", e);
+        if (!shouldMuteClientDefaultLogs()) {
+          console.warn("[game] join emit error", e);
+        } else {
+          noteClientLifecycle(
+            "join-emit-error",
+            String(e?.message || e || ""),
+          );
+        }
       }
     }
   }
@@ -320,11 +352,21 @@ export function createMatchCoordinator(config) {
   function _onGameInit(gameState) {
     const gameData = getGameData();
     const username = getUsername();
-
-    console.log("Game initialized:", {
-      players: Array.isArray(gameState?.players) ? gameState.players.length : 0,
-      status: gameState?.status,
+    configureClientNetTest({
+      username,
+      matchId: gameState?.matchId || getJoinPayload()?.matchId || "",
     });
+    if (!shouldMuteClientDefaultLogs()) {
+      console.log("Game initialized:", {
+        players: Array.isArray(gameState?.players) ? gameState.players.length : 0,
+        status: gameState?.status,
+      });
+    } else {
+      noteClientLifecycle(
+        "init",
+        `players=${Array.isArray(gameState?.players) ? gameState.players.length : 0} status=${String(gameState?.status || "")}`,
+      );
+    }
 
     setGameInitialized(true);
     setHasJoined(true);
@@ -335,7 +377,11 @@ export function createMatchCoordinator(config) {
       const live =
         status === "active" || status === "started" || status === "running";
       setIsLiveGame(live);
-      console.log(live, "is live");
+      if (!shouldMuteClientDefaultLogs()) {
+        console.log(live, "is live");
+      } else {
+        noteClientLifecycle("live-state", `live=${live ? 1 : 0}`);
+      }
       if (live) {
         _clearForceLiveInputTimer();
         _forceLiveClientState();
@@ -431,7 +477,14 @@ export function createMatchCoordinator(config) {
 
   /** Server says the game has started — begin the pre-game countdown for normal joiners. */
   function _onGameStart(data) {
-    console.log("Game starting:", data);
+    if (!shouldMuteClientDefaultLogs()) {
+      console.log("Game starting:", data);
+    } else {
+      noteClientLifecycle(
+        "start",
+        `countdown=${Number(data?.countdown) || 0}`,
+      );
+    }
     _stopStartWatchdog();
     _clearForceLiveInputTimer();
     const seconds = Math.max(1, Number(data?.countdown) || 3);
@@ -450,7 +503,11 @@ export function createMatchCoordinator(config) {
 
   /** Server entered the starting window — show battle overlay and ack readiness. */
   function _onGameStarting(payload) {
-    console.log("Game starting phase:", payload);
+    if (!shouldMuteClientDefaultLogs()) {
+      console.log("Game starting phase:", payload);
+    } else {
+      noteClientLifecycle("starting", `matchId=${payload?.matchId ?? "?"}`);
+    }
     setStartingPhase(true);
     if (!getIsLiveGame()) {
       const gameData = getGameData();
@@ -551,16 +608,27 @@ export function createMatchCoordinator(config) {
 
     const ingest = snapshotBuffer.ingestSnapshot(snapshot, performance.now());
     if (ingest.activated) {
-      console.log("Started receiving server snapshots (tMono/tickId enabled)");
+      if (!shouldMuteClientDefaultLogs()) {
+        console.log("Started receiving server snapshots (tMono/tickId enabled)");
+      } else {
+        noteClientLifecycle("snapshots-live", "");
+      }
       _stopStartWatchdog();
       _clearForceLiveInputTimer();
       _forceLiveClientState();
     }
     if (typeof ingest.calibrationLog === "number") {
-      console.log(
-        "Monotonic offset calibrated (ms):",
-        ingest.calibrationLog.toFixed(2),
-      );
+      if (!shouldMuteClientDefaultLogs()) {
+        console.log(
+          "Monotonic offset calibrated (ms):",
+          ingest.calibrationLog.toFixed(2),
+        );
+      } else {
+        noteClientLifecycle(
+          "mono-offset",
+          `ms=${ingest.calibrationLog.toFixed(2)}`,
+        );
+      }
     }
 
     // Late-join safety: lazily create OpPlayers for any player in this snapshot
@@ -573,7 +641,10 @@ export function createMatchCoordinator(config) {
       }
     } catch (_) {}
 
-    if (ingest.snapshotDiagLine) console.log(ingest.snapshotDiagLine);
+    noteClientSnapshot(snapshot, ingest);
+    if (ingest.snapshotDiagLine && !shouldMuteClientDefaultLogs()) {
+      console.log(ingest.snapshotDiagLine);
+    }
   }
 
   function _onGameAction(packet) {
@@ -589,6 +660,7 @@ export function createMatchCoordinator(config) {
       const { playerName, character, action } = packet;
       if (!playerName || !action) return;
       if (playerName === getUsername()) return; // never process own packets
+      noteClientRemoteAction(packet);
 
       const wrapper = _ensureOpPlayer(playerName);
       if (!wrapper) return;
@@ -662,9 +734,11 @@ export function createMatchCoordinator(config) {
         const originDeltaX = Math.abs(packet.origin.x - wrapper.opponent.x);
         const originDeltaY = Math.abs(packet.origin.y - wrapper.opponent.y);
         if (originDeltaX > 60 || originDeltaY > 60) {
-          console.debug(
-            `[Attack Visual Delta] ${playerName}: visual (${wrapper.opponent.x.toFixed(0)},${wrapper.opponent.y.toFixed(0)}) vs origin (${packet.origin.x.toFixed(0)},${packet.origin.y.toFixed(0)}) delta=(${originDeltaX.toFixed(0)},${originDeltaY.toFixed(0)})px`,
-          );
+          if (!shouldMuteClientDefaultLogs()) {
+            console.debug(
+              `[Attack Visual Delta] ${playerName}: visual (${wrapper.opponent.x.toFixed(0)},${wrapper.opponent.y.toFixed(0)}) vs origin (${packet.origin.x.toFixed(0)},${packet.origin.y.toFixed(0)}) delta=(${originDeltaX.toFixed(0)},${originDeltaY.toFixed(0)})px`,
+            );
+          }
         }
       }
 
@@ -677,14 +751,23 @@ export function createMatchCoordinator(config) {
           performance.now() + REMOTE_ATTACK_PRECISION_WINDOW_MS;
       }
       if (!consumed) {
-        console.debug("Unhandled remote action", {
-          playerName,
-          charKey,
-          action,
-        });
+        if (!shouldMuteClientDefaultLogs()) {
+          console.debug("Unhandled remote action", {
+            playerName,
+            charKey,
+            action,
+          });
+        }
       }
     } catch (err) {
-      console.warn("Failed to handle remote game:action", err);
+      if (!shouldMuteClientDefaultLogs()) {
+        console.warn("Failed to handle remote game:action", err);
+      } else {
+        noteClientLifecycle(
+          "action-rx-error",
+          String(err?.message || err || ""),
+        );
+      }
     }
   }
 
@@ -695,7 +778,11 @@ export function createMatchCoordinator(config) {
   }
 
   function _onPlayerDisconnected(data) {
-    console.log("Player disconnected:", data);
+    if (!shouldMuteClientDefaultLogs()) {
+      console.log("Player disconnected:", data);
+    } else {
+      noteClientLifecycle("player-disconnected", `name=${data?.name ?? "?"}`);
+    }
     if (data?.name) {
       hud.setTeamHudPlayerPresence(data.name, false);
       hud.setTeamHudPlayerLoaded(data.name, false);

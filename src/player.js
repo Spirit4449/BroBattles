@@ -33,6 +33,7 @@ import {
   getAttackChargeConfig,
 } from "./lib/characterStats";
 import { getChargeRatioFromHold } from "./characters/shared/chargeAttack";
+import { noteClientActionSent } from "./lib/netTestLogger.js";
 // Globals
 let player;
 let cursors;
@@ -448,6 +449,7 @@ export function createPlayer(
       if (pointer.button === 2) {
         // Right-click: special ONLY — never falls through to attack
         if (superCharge >= maxSuperCharge) {
+          noteClientActionSent("special", { type: "special" });
           socket.emit("game:special");
         } else {
           _specialNotReadyFlash = Date.now() + 500; // 500ms red flash on bar
@@ -1149,12 +1151,14 @@ export function handlePlayerMovement(scene) {
     if (keyI && Phaser.Input.Keyboard.JustDown(keyI) && !dead) {
       if (!((player?._movementLockedUntil || 0) > Date.now())) {
         if (superCharge >= maxSuperCharge) {
+          noteClientActionSent("special", { type: "special" });
           socket.emit("game:special");
         }
       }
     }
     if (keyE && Phaser.Input.Keyboard.JustDown(keyE) && !dead) {
       if (!((player?._movementLockedUntil || 0) > Date.now())) {
+        noteClientActionSent("mode-interact", { type: "mode-interact" });
         socket.emit("game:action", { type: "mode-interact" });
       }
     }

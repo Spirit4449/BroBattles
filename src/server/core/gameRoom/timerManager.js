@@ -5,6 +5,7 @@ const {
   SUDDEN_DEATH_MAX_MS,
   TIMER_EMIT_INTERVAL_MS,
 } = require("../gameRoomConfig");
+const netTestLogger = require("./netTestLogger");
 
 function decideSuddenDeathWinner(room) {
   const teams = {
@@ -143,7 +144,8 @@ function emitSnapshotWithTiming(room, snapMono) {
     tMono: snapMono,
     sentAtWallMs: wall,
   });
-  if (room.DEV_TIMING_DIAG) {
+  netTestLogger.noteSnapshot(room, snapMono);
+  if (room.DEV_TIMING_DIAG && !room._netTestEnabled) {
     if (
       snapMono - room._diagLastLogMono >= 1000 &&
       room._snapshotIntervals.length

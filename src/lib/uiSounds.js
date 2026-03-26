@@ -1,3 +1,5 @@
+import { shouldMuteClientDefaultLogs } from "./netTestLogger.js";
+
 /**
  * Simple UI sound system
  * Usage:
@@ -85,7 +87,11 @@ export function playSound(soundName, volume = 0.5) {
   if (!sound) return;
   sound.currentTime = 0;
   sound.volume = volume;
-  sound.play().catch((e) => console.warn(`Sound ${soundName} failed:`, e));
+  sound.play().catch((e) => {
+    if (!shouldMuteClientDefaultLogs()) {
+      console.warn(`Sound ${soundName} failed:`, e);
+    }
+  });
 }
 
 // Initialize auto-sound on elements with data-sound attribute
