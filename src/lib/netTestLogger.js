@@ -207,11 +207,12 @@ export function noteClientInputSent({
 export function noteClientIntentSent(intent = {}) {
   if (!clientNetTestState.enabled) return;
   const s = clientNetTestState.summary;
-  if (!intent?.isJumping) return;
+  if (!intent?.jumpPressed) return;
+  const seq = Number(intent?.sequence);
   s.jumpIntentsSent += 1;
   emitLine(
     "jump-tx",
-    `seq=${Number(intent?.sequence) || -1} dir=${Number(intent?.direction) || 0}`,
+    `seq=${Number.isFinite(seq) ? seq : -1} dir=${Number(intent?.direction) || 0}`,
   );
 }
 
@@ -263,9 +264,12 @@ export function noteClientSnapshot(snapshot, ingest = {}) {
   }
 
   const username = clientNetTestState.username;
-  if (username && snapshot?.players?.[username]) {
-    s.lastRemoteX = Number(snapshot.players[username].x);
-    s.lastRemoteY = Number(snapshot.players[username].y);
+  const remoteName = Object.keys(snapshot?.players || {}).find(
+    (name) => name !== username,
+  );
+  if (remoteName && snapshot?.players?.[remoteName]) {
+    s.lastRemoteX = Number(snapshot.players[remoteName].x);
+    s.lastRemoteY = Number(snapshot.players[remoteName].y);
   }
 }
 

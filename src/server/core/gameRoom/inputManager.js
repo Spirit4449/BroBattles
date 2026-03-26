@@ -25,6 +25,16 @@ function handlePlayerInput(room, socketId, inputData) {
     if (typeof inputData.animation === "string") {
       playerData.animation = inputData.animation;
     }
+    if (Number.isFinite(Number(inputData.vx))) {
+      playerData.vx = Number(inputData.vx);
+    }
+    if (Number.isFinite(Number(inputData.vy))) {
+      playerData.vy = Number(inputData.vy);
+    }
+    if (typeof inputData.grounded === "boolean") {
+      playerData.grounded = inputData.grounded;
+    }
+    playerData._lastPositionPacketAt = now;
     playerData.lastInput = now;
     return;
   }
@@ -88,7 +98,17 @@ function handlePlayerInput(room, socketId, inputData) {
     if (typeof inputData.animation === "string") {
       playerData.animation = inputData.animation;
     }
+    if (Number.isFinite(Number(inputData.vx))) {
+      playerData.vx = Number(inputData.vx);
+    }
+    if (Number.isFinite(Number(inputData.vy))) {
+      playerData.vy = Number(inputData.vy);
+    }
+    if (typeof inputData.grounded === "boolean") {
+      playerData.grounded = inputData.grounded;
+    }
     if (inputData.loaded === true) playerData.loaded = true;
+    playerData._lastPositionPacketAt = now;
 
     if (inputData.ammoState && typeof inputData.ammoState === "object") {
       const a = inputData.ammoState;
@@ -150,11 +170,24 @@ function handlePlayerInputIntent(room, socketId, intentData) {
 
   // Queue intent for server-side simulation (when USE_SERVER_MOVEMENT_SIMULATION_V1 enabled)
   if (!playerData._inputIntentQueue) playerData._inputIntentQueue = [];
+  const sequence = Number(intentData.sequence);
   playerData._inputIntentQueue.push({
+    left: !!intentData.left,
+    right: !!intentData.right,
     direction: Number(intentData.direction) || 0,
+    jumpHeld: !!intentData.jumpHeld,
+    jumpPressed: !!intentData.jumpPressed,
     isJumping: !!intentData.isJumping,
+    grounded:
+      typeof intentData.grounded === "boolean" ? intentData.grounded : undefined,
+    facing: Number(intentData.facing) === -1 ? -1 : 1,
+    vx: Number(intentData.vx) || 0,
+    vy: Number(intentData.vy) || 0,
+    movementLocked: !!intentData.movementLocked,
+    animation:
+      typeof intentData.animation === "string" ? intentData.animation : null,
     timestamp: Number(intentData.timestamp) || Date.now(),
-    sequence: Number(intentData.sequence) || -1,
+    sequence: Number.isFinite(sequence) ? sequence : -1,
   });
 
   // Keep queue limited to prevent memory leak
@@ -164,11 +197,61 @@ function handlePlayerInputIntent(room, socketId, intentData) {
 
   // Store last intent for diagnostics
   playerData._lastInputIntent = intentData;
+  playerData._lastInputSeq = Number.isFinite(sequence) ? sequence : -1;
   netTestLogger.noteIntent(room, playerData, intentData);
+}
+
+function advancePlayerKinematics(playerData, dtMs) {
+  if (
+    !playerData ||
+    !playerData.isAlive ||
+    playerData.connected === false ||
+    playerData.loaded !== true
+  ) {
+    return;
+  }
+
+  const x = Number(playerData.x);
+  const y = Number(playerData.y);
+  const vx = Number(playerData.vx);
+  const vy = Number(playerData.vy);
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(vx) ||
+    !Number.isFinite(vy)
+  ) {
+    return;
+  }
+
+  const packetAgeMs = Date.now() - Number(playerData._lastPositionPacketAt || 0);
+  if (packetAgeMs > 1000) return;
+
+  const dtSec = Math.max(0, Number(dtMs) || 0) / 1000;
+  if (dtSec <= 0) return;
+
+  const minX = -WORLD_BOUNDS.margin;
+  const maxX = WORLD_BOUNDS.width + WORLD_BOUNDS.margin;
+  const minY = -WORLD_BOUNDS.margin;
+  const maxY = WORLD_BOUNDS.height + WORLD_BOUNDS.margin;
+
+  playerData.x = Math.max(minX, Math.min(maxX, x + vx * dtSec));
+  playerData.y = Math.max(minY, Math.min(maxY, y + vy * dtSec));
+
+  if (!playerData._posHistory) playerData._posHistory = [];
+  playerData._posHistory.push({
+    x: playerData.x,
+    y: playerData.y,
+    t: Date.now(),
+  });
+  if (playerData._posHistory.length > POSITION_HISTORY_DEPTH) {
+    playerData._posHistory.shift();
+  }
 }
 
 module.exports = {
   handlePlayerInput,
   handlePlayerInputIntent,
   processPlayerMovement,
+  advancePlayerKinematics,
 };

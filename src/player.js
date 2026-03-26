@@ -124,6 +124,21 @@ const chargeState = {
   lockRelease: null,
 };
 
+let networkInputState = {
+  left: false,
+  right: false,
+  direction: 0,
+  jumpHeld: false,
+  jumpPressed: false,
+  grounded: false,
+  vx: 0,
+  vy: 0,
+  facing: 1,
+  animation: null,
+  movementLocked: false,
+  loaded: false,
+};
+
 const localStateSync = createLocalStateSync({
   Phaser,
   getPlayer: () => player,
@@ -1369,6 +1384,25 @@ export function handlePlayerMovement(scene) {
     }
   }
 
+  networkInputState = {
+    left: !!leftKey,
+    right: !!rightKey,
+    direction: rightKey && !leftKey ? 1 : leftKey && !rightKey ? -1 : 0,
+    jumpHeld: !!upKey,
+    jumpPressed: !!upKeyFreshPress,
+    grounded: !!player?.body?.touching?.down,
+    vx: Number(player?.body?.velocity?.x) || 0,
+    vy: Number(player?.body?.velocity?.y) || 0,
+    facing: player?.flipX ? -1 : 1,
+    animation: player?.anims?.currentAnim?.key || null,
+    movementLocked,
+    loaded:
+      !dead &&
+      Number.isFinite(player?.x) &&
+      Number.isFinite(player?.y) &&
+      player?.visible !== false,
+  };
+
   function stopMoving() {
     // Stop applying acceleration and let drag slow the player naturally
     player.setAccelerationX(0);
@@ -1503,6 +1537,10 @@ export function applyAuthoritativeState(state) {
 
 export function getAmmoSyncState() {
   return localStateSync.getAmmoSyncState();
+}
+
+export function getNetworkInputState() {
+  return { ...networkInputState };
 }
 
 export function setPowerupMobility(speedMult = 1, jumpMult = 1) {

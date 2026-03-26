@@ -38,6 +38,7 @@ import {
   setPowerupMobility,
   applyAuthoritativeState,
   getAmmoSyncState,
+  getNetworkInputState,
 } from "./player";
 import {
   preloadAll,
@@ -173,6 +174,7 @@ function updateEditorCamera(scene) {
 const localInputSync = createLocalInputSync({
   socket,
   getAmmoSyncState,
+  getNetworkInputState,
   throttleMs: 30,
 });
 
@@ -1396,11 +1398,15 @@ class GameScene extends Phaser.Scene {
    */
   interpolatePlayerStates(aState, bState, alpha, frame = null) {
     const extrapolationMs = Math.max(0, Number(frame?.extrapolationMs) || 0);
-    const projectAxis = (aValue, bValue, dtMs) => {
+    const projectAxis = (aValue, bValue, dtMs, velocityValue = null) => {
       const aNum = Number(aValue);
       const bNum = Number(bValue);
       if (!Number.isFinite(aNum) || !Number.isFinite(bNum)) {
         return Number.isFinite(bNum) ? bNum : aNum;
+      }
+      const velocityNum = Number(velocityValue);
+      if (Number.isFinite(velocityNum) && extrapolationMs > 0) {
+        return bNum + velocityNum * (extrapolationMs / 1000);
       }
       const safeDtMs = Math.max(1, Number(dtMs) || 0);
       const velocityPerMs = (bNum - aNum) / safeDtMs;
@@ -1460,8 +1466,8 @@ class GameScene extends Phaser.Scene {
               1,
               Number(bState?.tMono) - Number(aState?.tMono),
             );
-            targetX = projectAxis(aX, bX, stateDeltaMs);
-            targetY = projectAxis(aY, bY, stateDeltaMs);
+            targetX = projectAxis(aX, bX, stateDeltaMs, bPosData?.vx);
+            targetY = projectAxis(aY, bY, stateDeltaMs, bPosData?.vy);
           } else {
             targetX = aX + effectiveAlpha * (bX - aX);
             targetY = aY + effectiveAlpha * (bY - aY);
@@ -1484,9 +1490,11 @@ class GameScene extends Phaser.Scene {
         if (dist > 0.35) {
           const inPrecision =
             (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
-          const maxStep = inPrecision ? 120 : 70;
-          const snapDistance = inPrecision ? 220 : 140;
-          if (dist <= snapDistance) {
+          const dtMs = Math.max(1, Number(this.game?.loop?.delta) || 16.7);
+          const followSpeedPxPerSec = inPrecision ? 2600 : 1200;
+          const maxStep = (followSpeedPxPerSec * dtMs) / 1000;
+          const snapDistance = inPrecision ? 24 : 10;
+          if (dist > 520 || dist <= snapDistance) {
             spr.x = targetX;
             spr.y = targetY;
           } else {

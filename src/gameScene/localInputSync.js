@@ -10,6 +10,7 @@ import {
 export function createLocalInputSync({
   socket,
   getAmmoSyncState,
+  getNetworkInputState,
   throttleMs = 60,
 }) {
   let lastMovementSent = 0;
@@ -29,42 +30,52 @@ export function createLocalInputSync({
       y: player.y,
       flip: player.flipX,
       animation: player.anims?.currentAnim?.key || null,
+      vx: Number(player.body?.velocity?.x) || 0,
+      vy: Number(player.body?.velocity?.y) || 0,
+      grounded: !!player.body?.touching?.down,
       loaded: true,
       ammoState: getAmmoSyncState(),
     };
+    const rawInput = getNetworkInputState ? getNetworkInputState() : null;
+    const inputIntent = {
+      left: !!rawInput?.left,
+      right: !!rawInput?.right,
+      direction: Number(rawInput?.direction) || 0,
+      jumpHeld: !!rawInput?.jumpHeld,
+      jumpPressed: !!rawInput?.jumpPressed,
+      isJumping: !!rawInput?.jumpPressed,
+      grounded:
+        typeof rawInput?.grounded === "boolean"
+          ? rawInput.grounded
+          : !!currentState.grounded,
+      facing:
+        Number(rawInput?.facing) === -1 ? -1 : 1,
+      vx:
+        Number.isFinite(Number(rawInput?.vx)) ? Number(rawInput.vx) : currentState.vx,
+      vy:
+        Number.isFinite(Number(rawInput?.vy)) ? Number(rawInput.vy) : currentState.vy,
+      movementLocked: !!rawInput?.movementLocked,
+      animation: rawInput?.animation || currentState.animation,
+      timestamp: now,
+      sequence: inputIntentSeq++,
+    };
 
-    if (
-      Math.abs(currentState.x - lastPlayerState.x) > 2 ||
-      Math.abs(currentState.y - lastPlayerState.y) > 2 ||
-      currentState.flip !== lastPlayerState.flip ||
-      currentState.animation !== lastPlayerState.animation
-    ) {
-      // Disable per-message compression for movement for lower latency.
-      socket.volatile.compress(false).emit("game:input", currentState);
-      noteClientInputSent({
-        now,
-        previousState: lastPlayerState,
-        currentState,
-        previousSentAt: lastMovementSent,
-      });
+    // Disable per-message compression for movement for lower latency.
+    // Send every throttle interval, not only on visible state deltas.
+    socket.volatile.compress(false).emit("game:input", currentState);
+    noteClientInputSent({
+      now,
+      previousState: lastPlayerState,
+      currentState,
+      previousSentAt: lastMovementSent,
+    });
 
-      // NEW: Also emit input intent for Phase 2 server-side movement simulation
-      // This is non-breaking; server currently ignores it, but will use it when flag enables
-      const dx = currentState.x - lastPlayerState.x;
-      const direction = dx > 0.9 ? 1 : dx < -0.9 ? -1 : 0;
-      const airborne = !player.body?.touching?.down;
-      const inputIntent = {
-        direction,
-        isJumping: airborne && (player.body?.velocity?.y || 0) < -60,
-        timestamp: now,
-        sequence: inputIntentSeq++,
-      };
-      socket.volatile.compress(false).emit("game:input-intent", inputIntent);
-      noteClientIntentSent(inputIntent);
+    // Real control intent: based on live controls, not inferred from sampled position deltas.
+    socket.volatile.compress(false).emit("game:input-intent", inputIntent);
+    noteClientIntentSent(inputIntent);
 
-      lastPlayerState = { ...currentState };
-      lastMovementSent = now;
-    }
+    lastPlayerState = { ...currentState };
+    lastMovementSent = now;
   }
 
   return {

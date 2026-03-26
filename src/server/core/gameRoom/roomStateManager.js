@@ -63,6 +63,9 @@ function sendGameStateToPlayer(room, socket) {
         char_class: p?.char_class || mp.char_class,
         x: Number.isFinite(p?.x) ? p.x : null,
         y: Number.isFinite(p?.y) ? p.y : null,
+        vx: Number.isFinite(p?.vx) ? p.vx : 0,
+        vy: Number.isFinite(p?.vy) ? p.vy : 0,
+        grounded: !!p?.grounded,
         health: Number.isFinite(p?.health) ? p.health : null,
         superCharge: Number.isFinite(p?.superCharge) ? p.superCharge : 0,
         maxSuperCharge: Number.isFinite(p?.maxSuperCharge)
@@ -114,6 +117,9 @@ function broadcastSnapshot(room, extraTiming = null) {
     const playerSnapshot = {
       x: Number.isFinite(playerData.x) ? playerData.x : null,
       y: Number.isFinite(playerData.y) ? playerData.y : null,
+      vx: Number.isFinite(playerData.vx) ? playerData.vx : 0,
+      vy: Number.isFinite(playerData.vy) ? playerData.vy : 0,
+      grounded: !!playerData.grounded,
       flip: !!playerData.flip,
       animation: playerData.animation || null,
       health: playerData.health,

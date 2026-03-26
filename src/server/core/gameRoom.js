@@ -157,12 +157,16 @@ class GameRoom {
         // Game state
         x: null,
         y: null,
+        vx: 0,
+        vy: 0,
+        grounded: false,
         maxHealth,
         health: maxHealth,
         superCharge: 0,
         maxSuperCharge: specialChargeDamage,
         isAlive: true,
         lastInput: Date.now(),
+        _lastPositionPacketAt: 0,
 
         // Input buffer for server authority
         inputBuffer: [],
@@ -592,6 +596,8 @@ class GameRoom {
         // Clear old inputs
         playerData.inputBuffer = [];
       }
+
+      inputManager.advancePlayerKinematics(playerData, this.FIXED_DT_MS);
     }
   }
 
