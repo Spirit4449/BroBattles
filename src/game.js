@@ -181,6 +181,7 @@ const snapshotBuffer = createSnapshotBuffer({
   enableAdaptiveDelay: true,
   enableClockCorrection: false,
   enableBacklogCatchup: true,
+  extrapolationLimitMs: 1000,
 });
 
 // Game scene reference
@@ -1337,7 +1338,12 @@ class GameScene extends Phaser.Scene {
       snapshotBuffer,
       now: performance.now(),
       applyFrame: (frame) =>
-        this.interpolatePlayerStates(frame.aState, frame.bState, frame.alpha),
+        this.interpolatePlayerStates(
+          frame.aState,
+          frame.bState,
+          frame.alpha,
+          frame,
+        ),
       onDebugLine: (line) => console.log(line),
     });
 
@@ -1358,7 +1364,19 @@ class GameScene extends Phaser.Scene {
    * be used for hit validation via stored position history. Snapshots will NOT
    * update the local player's position.
    */
-  interpolatePlayerStates(aState, bState, alpha) {
+  interpolatePlayerStates(aState, bState, alpha, frame = null) {
+    const extrapolationMs = Math.max(0, Number(frame?.extrapolationMs) || 0);
+    const projectAxis = (aValue, bValue, dtMs) => {
+      const aNum = Number(aValue);
+      const bNum = Number(bValue);
+      if (!Number.isFinite(aNum) || !Number.isFinite(bNum)) {
+        return Number.isFinite(bNum) ? bNum : aNum;
+      }
+      const safeDtMs = Math.max(1, Number(dtMs) || 0);
+      const velocityPerMs = (bNum - aNum) / safeDtMs;
+      return bNum + velocityPerMs * extrapolationMs;
+    };
+
     const applyInterp = (wrapper, name) => {
       if (!wrapper || !wrapper.opponent) return;
 
@@ -1407,8 +1425,17 @@ class GameScene extends Phaser.Scene {
           Number.isFinite(bX) &&
           Number.isFinite(bY)
         ) {
-          targetX = aX + effectiveAlpha * (bX - aX);
-          targetY = aY + effectiveAlpha * (bY - aY);
+          if (extrapolationMs > 0) {
+            const stateDeltaMs = Math.max(
+              1,
+              Number(bState?.tMono) - Number(aState?.tMono),
+            );
+            targetX = projectAxis(aX, bX, stateDeltaMs);
+            targetY = projectAxis(aY, bY, stateDeltaMs);
+          } else {
+            targetX = aX + effectiveAlpha * (bX - aX);
+            targetY = aY + effectiveAlpha * (bY - aY);
+          }
         } else if (bPosData && Number.isFinite(bX) && Number.isFinite(bY)) {
           targetX = bX;
           targetY = bY;

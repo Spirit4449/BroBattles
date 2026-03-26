@@ -465,7 +465,7 @@ export function createGameHudController({
     if (!banner) {
       banner = document.createElement("div");
       banner.id = "spectating-banner";
-      banner.textContent = "Spectating";
+      banner.textContent = "You Died";
       Object.assign(banner.style, {
         position: "fixed",
         bottom: "18px",

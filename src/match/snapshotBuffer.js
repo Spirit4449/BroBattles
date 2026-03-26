@@ -9,6 +9,7 @@ export function createSnapshotBuffer({
   enableAdaptiveDelay = false,
   enableClockCorrection = false,
   enableBacklogCatchup = false,
+  extrapolationLimitMs = 1000,
 } = {}) {
   let active = false;
   const stateBuffer = [];
@@ -135,8 +136,9 @@ export function createSnapshotBuffer({
 
     const newest = stateBuffer[stateBuffer.length - 1].tMono;
     const oldest = stateBuffer[0].tMono;
-    if (targetMono > newest - 5) {
-      targetMono = newest - 5;
+    const extrapolationCapMono = newest + Math.max(0, extrapolationLimitMs);
+    if (targetMono > extrapolationCapMono) {
+      targetMono = extrapolationCapMono;
       renderClockMono = targetMono + interpDelayMs;
     }
     if (targetMono < oldest + 5) {
@@ -227,17 +229,35 @@ export function createSnapshotBuffer({
       let alpha = span > 0 ? (targetMono - aState.tMono) / span : 1;
       if (alpha < 0) alpha = 0;
       else if (alpha > 1) alpha = 1;
-      return { aState, bState, alpha };
+      return {
+        aState,
+        bState,
+        alpha,
+        targetMono,
+        extrapolationMs: 0,
+      };
     }
 
     if (stateBuffer.length >= 2) {
       const aState = stateBuffer[stateBuffer.length - 2];
       const bState = stateBuffer[stateBuffer.length - 1];
-      return { aState, bState, alpha: 1 };
+      return {
+        aState,
+        bState,
+        alpha: 1,
+        targetMono,
+        extrapolationMs: Math.max(0, targetMono - bState.tMono),
+      };
     }
 
     const only = stateBuffer[0];
-    return { aState: only, bState: only, alpha: 1 };
+    return {
+      aState: only,
+      bState: only,
+      alpha: 1,
+      targetMono,
+      extrapolationMs: Math.max(0, targetMono - only.tMono),
+    };
   }
 
   function consumeAdaptiveDebugLine(perfNow = performance.now()) {
