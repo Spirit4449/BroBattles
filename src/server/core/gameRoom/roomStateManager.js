@@ -1,3 +1,32 @@
+function roundPosition(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  return Math.round(num * 2) / 2;
+}
+
+function roundVelocity(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? Math.round(num) : 0;
+}
+
+function buildWorldStatePayload(room) {
+  return {
+    timestamp: Date.now(),
+    modeState: room.gameMode?.buildModeState?.() ?? null,
+    powerups: Array.from(room._powerups.values()).map((pu) => ({
+      id: pu.id,
+      type: pu.type,
+      x: pu.x,
+      y: pu.y,
+      spawnedAt: pu.spawnedAt,
+      activeAt: pu.activeAt,
+      expiresAt: pu.expiresAt,
+    })),
+    deathDrops: room._buildDeathDropsSnapshot(),
+    playerEffects: room._buildPlayerEffectsSnapshot(),
+  };
+}
+
 function computeSpawnIndex(room, name, team) {
   try {
     const teamList = (room.matchData.players || [])
@@ -43,26 +72,15 @@ function sendGameStateToPlayer(room, socket) {
     yourTeam: playerData.team,
     yourCharacter: playerData.char_class,
     spawnVersion: room.spawnVersion,
-    modeState: room.gameMode?.buildModeState?.() ?? null,
-    powerups: Array.from(room._powerups.values()).map((pu) => ({
-      id: pu.id,
-      type: pu.type,
-      x: pu.x,
-      y: pu.y,
-      spawnedAt: pu.spawnedAt,
-      activeAt: pu.activeAt,
-      expiresAt: pu.expiresAt,
-    })),
-    deathDrops: room._buildDeathDropsSnapshot(),
-    playerEffects: room._buildPlayerEffectsSnapshot(),
+    ...buildWorldStatePayload(room),
     players: (room.matchData.players || []).map((mp) => {
       const p = liveByName.get(mp.name);
       return {
         name: mp.name,
         team: mp.team,
         char_class: p?.char_class || mp.char_class,
-        x: Number.isFinite(p?.x) ? p.x : null,
-        y: Number.isFinite(p?.y) ? p.y : null,
+        x: roundPosition(p?.x),
+        y: roundPosition(p?.y),
         vx: Number.isFinite(p?.vx) ? p.vx : 0,
         vy: Number.isFinite(p?.vy) ? p.vy : 0,
         grounded: !!p?.grounded,
@@ -92,19 +110,7 @@ function broadcastSnapshot(room, extraTiming = null) {
 
   const snapshot = {
     timestamp: Date.now(),
-    modeState: room.gameMode?.buildModeState?.() ?? null,
     players: {},
-    powerups: Array.from(room._powerups.values()).map((pu) => ({
-      id: pu.id,
-      type: pu.type,
-      x: pu.x,
-      y: pu.y,
-      spawnedAt: pu.spawnedAt,
-      activeAt: pu.activeAt,
-      expiresAt: pu.expiresAt,
-    })),
-    deathDrops: room._buildDeathDropsSnapshot(),
-    playerEffects: room._buildPlayerEffectsSnapshot(),
   };
 
   if (extraTiming) {
@@ -115,10 +121,10 @@ function broadcastSnapshot(room, extraTiming = null) {
 
   for (const playerData of room.players.values()) {
     const playerSnapshot = {
-      x: Number.isFinite(playerData.x) ? playerData.x : null,
-      y: Number.isFinite(playerData.y) ? playerData.y : null,
-      vx: Number.isFinite(playerData.vx) ? playerData.vx : 0,
-      vy: Number.isFinite(playerData.vy) ? playerData.vy : 0,
+      x: roundPosition(playerData.x),
+      y: roundPosition(playerData.y),
+      vx: roundVelocity(playerData.vx),
+      vy: roundVelocity(playerData.vy),
       grounded: !!playerData.grounded,
       flip: !!playerData.flip,
       animation: playerData.animation || null,
@@ -148,9 +154,18 @@ function broadcastSnapshot(room, extraTiming = null) {
     .emit("game:snapshot", snapshot);
 }
 
+function broadcastWorldState(room) {
+  room.io
+    .to(`game:${room.matchId}`)
+    .compress(false)
+    .emit("game:state", buildWorldStatePayload(room));
+}
+
 module.exports = {
+  buildWorldStatePayload,
   computeSpawnIndex,
   initializeSpawnPositions,
   sendGameStateToPlayer,
   broadcastSnapshot,
+  broadcastWorldState,
 };

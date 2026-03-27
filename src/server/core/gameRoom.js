@@ -51,7 +51,8 @@ class GameRoom {
     this._snapshotIntervals = []; // diagnostics (ms spacing between snapshots)
     this._diagLastLogMono = 0;
     this.FIXED_DT_MS = 1000 / 60; // 60 Hz fixed step
-    this.SNAPSHOT_EVERY_TICKS = 2; // 60/2 = 30 Hz snapshots
+    this.SNAPSHOT_EVERY_TICKS = 1; // 60/2 = 30 Hz snapshots
+    this.WORLD_STATE_EVERY_TICKS = 8; // 7.5 Hz world-state packets
     this.DEV_TIMING_DIAG = true; // temporary diagnostics flag
     this.DEBUG_HIT_EVENTS =
       String(process.env.DEBUG_HIT_EVENTS || "").toLowerCase() === "1" ||
@@ -455,6 +456,9 @@ class GameRoom {
       if (this._tickId % this.SNAPSHOT_EVERY_TICKS === 0) {
         this._emitSnapshotWithTiming(currentMono);
       }
+      if (this._tickId % this.WORLD_STATE_EVERY_TICKS === 0) {
+        this.broadcastWorldState();
+      }
     };
 
     const loop = () => {
@@ -666,6 +670,10 @@ class GameRoom {
    */
   broadcastSnapshot(extraTiming = null) {
     roomStateManager.broadcastSnapshot(this, extraTiming);
+  }
+
+  broadcastWorldState() {
+    roomStateManager.broadcastWorldState(this);
   }
 
   /**

@@ -175,15 +175,15 @@ const localInputSync = createLocalInputSync({
   socket,
   getAmmoSyncState,
   getNetworkInputState,
-  throttleMs: 30,
+  throttleMs: 20,
 });
 
 // Server snapshot interpolation
 const snapshotBuffer = createSnapshotBuffer({
   maxStateBuffer: 90,
-  initialInterpDelayMs: 115,
-  minInterpDelayMs: 95,
-  maxInterpDelayMs: 180,
+  initialInterpDelayMs: 50,
+  minInterpDelayMs: 20,
+  maxInterpDelayMs: 100,
   snapIntervalMs: 50,
   spacingEmaAlpha: 0.12,
   enableAdaptiveDelay: true,
@@ -1398,6 +1398,38 @@ class GameScene extends Phaser.Scene {
    */
   interpolatePlayerStates(aState, bState, alpha, frame = null) {
     const extrapolationMs = Math.max(0, Number(frame?.extrapolationMs) || 0);
+    const hermiteAxis = (
+      aValue,
+      bValue,
+      aVelocity,
+      bVelocity,
+      t,
+      spanMs,
+    ) => {
+      const p0 = Number(aValue);
+      const p1 = Number(bValue);
+      const v0 = Number(aVelocity);
+      const v1 = Number(bVelocity);
+      const spanSec = Math.max(0.001, Number(spanMs) || 0) / 1000;
+      if (
+        !Number.isFinite(p0) ||
+        !Number.isFinite(p1) ||
+        !Number.isFinite(v0) ||
+        !Number.isFinite(v1)
+      ) {
+        return p0 + t * (p1 - p0);
+      }
+      const tt = t * t;
+      const ttt = tt * t;
+      const m0 = v0 * spanSec;
+      const m1 = v1 * spanSec;
+      return (
+        (2 * ttt - 3 * tt + 1) * p0 +
+        (ttt - 2 * tt + t) * m0 +
+        (-2 * ttt + 3 * tt) * p1 +
+        (ttt - tt) * m1
+      );
+    };
     const projectAxis = (aValue, bValue, dtMs, velocityValue = null) => {
       const aNum = Number(aValue);
       const bNum = Number(bValue);
@@ -1469,8 +1501,26 @@ class GameScene extends Phaser.Scene {
             targetX = projectAxis(aX, bX, stateDeltaMs, bPosData?.vx);
             targetY = projectAxis(aY, bY, stateDeltaMs, bPosData?.vy);
           } else {
-            targetX = aX + effectiveAlpha * (bX - aX);
-            targetY = aY + effectiveAlpha * (bY - aY);
+            const stateDeltaMs = Math.max(
+              1,
+              Number(bState?.tMono) - Number(aState?.tMono),
+            );
+            targetX = hermiteAxis(
+              aX,
+              bX,
+              aPosData?.vx,
+              bPosData?.vx,
+              effectiveAlpha,
+              stateDeltaMs,
+            );
+            targetY = hermiteAxis(
+              aY,
+              bY,
+              aPosData?.vy,
+              bPosData?.vy,
+              effectiveAlpha,
+              stateDeltaMs,
+            );
           }
         } else if (bPosData && Number.isFinite(bX) && Number.isFinite(bY)) {
           targetX = bX;

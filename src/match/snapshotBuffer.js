@@ -2,9 +2,9 @@ import { shouldMuteClientDefaultLogs } from "../lib/netTestLogger.js";
 
 export function createSnapshotBuffer({
   maxStateBuffer = 120,
-  initialInterpDelayMs = 150,
-  minInterpDelayMs = 120,
-  maxInterpDelayMs = 300,
+  initialInterpDelayMs = 50,
+  minInterpDelayMs = 40,
+  maxInterpDelayMs = 100,
   snapIntervalMs = 50,
   maxSpacingMs = 500,
   lateSnapshotThresholdMs = 140,

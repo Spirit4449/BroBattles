@@ -435,21 +435,7 @@ export function createMatchCoordinator(config) {
       hud.initTeamStatusHud(mergedRoster);
     }
 
-    if (Array.isArray(gameState.powerups))
-      setLatestPowerups(gameState.powerups);
-    if (gameState.modeState && typeof gameState.modeState === "object") {
-      setLatestModeState(gameState.modeState);
-      hud.syncModeState?.(gameState.modeState, gameData?.yourTeam);
-    }
-    if (Array.isArray(gameState.deathDrops))
-      setLatestDeathDrops(gameState.deathDrops);
-    if (
-      gameState.playerEffects &&
-      typeof gameState.playerEffects === "object"
-    ) {
-      setLatestPlayerEffects(gameState.playerEffects);
-      onTrackShieldEffects(gameState.playerEffects);
-    }
+    _applyWorldState(gameState, gameData?.yourTeam);
 
     // Stash local player's live stats so character modules and spawn logic can use them
     try {
@@ -591,18 +577,7 @@ export function createMatchCoordinator(config) {
       }
     } catch (_) {}
 
-    if (Array.isArray(snapshot.powerups)) setLatestPowerups(snapshot.powerups);
-    if (snapshot.modeState && typeof snapshot.modeState === "object") {
-      setLatestModeState(snapshot.modeState);
-      hud.syncModeState?.(snapshot.modeState, getGameData()?.yourTeam);
-    }
-    if (Array.isArray(snapshot.deathDrops)) {
-      setLatestDeathDrops(snapshot.deathDrops);
-    }
-    if (snapshot.playerEffects && typeof snapshot.playerEffects === "object") {
-      setLatestPlayerEffects(snapshot.playerEffects);
-      onTrackShieldEffects(snapshot.playerEffects);
-    }
+    _applyWorldState(snapshot, getGameData()?.yourTeam);
 
     hud.syncTeamHudFromSnapshot(snapshot.players);
 
@@ -836,6 +811,26 @@ export function createMatchCoordinator(config) {
     powerupCollectQueue.push(payload);
   }
 
+  function _applyWorldState(payload, yourTeam = getGameData()?.yourTeam) {
+    if (!payload || typeof payload !== "object") return;
+    if (Array.isArray(payload.powerups)) setLatestPowerups(payload.powerups);
+    if (payload.modeState && typeof payload.modeState === "object") {
+      setLatestModeState(payload.modeState);
+      hud.syncModeState?.(payload.modeState, yourTeam);
+    }
+    if (Array.isArray(payload.deathDrops)) {
+      setLatestDeathDrops(payload.deathDrops);
+    }
+    if (payload.playerEffects && typeof payload.playerEffects === "object") {
+      setLatestPlayerEffects(payload.playerEffects);
+      onTrackShieldEffects(payload.playerEffects);
+    }
+  }
+
+  function _onGameState(payload) {
+    _applyWorldState(payload, getGameData()?.yourTeam);
+  }
+
   function _onPowerupTick(payload) {
     if (!payload || !payload.type) return;
     const scene = getGameScene();
@@ -872,6 +867,7 @@ export function createMatchCoordinator(config) {
     socket.on("player:dead", _onPlayerDead);
     socket.on("player:respawn", _onPlayerRespawn);
     socket.on("game:snapshot", _onGameSnapshot);
+    socket.on("game:state", _onGameState);
     socket.on("game:action", _onGameAction);
     socket.on("game:error", _onGameError);
     socket.on("player:disconnected", _onPlayerDisconnected);
@@ -904,6 +900,7 @@ export function createMatchCoordinator(config) {
     socket.off("player:dead", _onPlayerDead);
     socket.off("player:respawn", _onPlayerRespawn);
     socket.off("game:snapshot", _onGameSnapshot);
+    socket.off("game:state", _onGameState);
     socket.off("game:action", _onGameAction);
     socket.off("game:error", _onGameError);
     socket.off("player:disconnected", _onPlayerDisconnected);
