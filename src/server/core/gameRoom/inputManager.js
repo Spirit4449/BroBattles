@@ -8,14 +8,17 @@ const {
 } = require("../gameRoomConfig");
 const { isMovementSuppressed } = require("./abilityRuntimeManager");
 const netTestLogger = require("./netTestLogger");
-const { simulateMovementTick } = require("../../gameRoom/movementSimulator");
-const {
-  getWorldBoundsForMap,
-  clampToWorldBounds,
-} = require("./mapNetRuntime");
 
-function getRoomBounds(room) {
-  return getWorldBoundsForMap(room?.matchData?.map);
+function clampToRoomBounds(x, y) {
+  const margin = Number(WORLD_BOUNDS?.margin) || 0;
+  const minX = -margin;
+  const maxX = Number(WORLD_BOUNDS?.width) + margin;
+  const minY = -margin;
+  const maxY = Number(WORLD_BOUNDS?.height) + margin;
+  return {
+    x: Math.max(minX, Math.min(maxX, Number(x) || 0)),
+    y: Math.max(minY, Math.min(maxY, Number(y) || 0)),
+  };
 }
 
 function pushPositionHistory(playerData, now = Date.now()) {
@@ -41,7 +44,6 @@ function handlePlayerInput(room, socketId, inputData) {
 
   const now = Date.now();
   const infernoActive = isMovementSuppressed(playerData, now);
-  const bounds = getRoomBounds(room);
   const packetSeq = Number(inputData?.sequence);
   const packetTimestamp = Number(inputData?.timestamp);
   if (Number.isFinite(packetSeq)) {
@@ -104,13 +106,15 @@ function handlePlayerInput(room, socketId, inputData) {
   ) {
     const prevInputX = Number(playerData.x);
     const prevInputY = Number(playerData.y);
-    const bounded = clampToWorldBounds(bounds, inputData.x, inputData.y);
+    const bounded = clampToRoomBounds(inputData.x, inputData.y);
     let rawX = bounded.x;
     const rawY = bounded.y;
-    const minX = bounds.x - bounds.margin;
-    const maxX = bounds.x + bounds.width + bounds.margin;
-    const minY = bounds.y - bounds.margin;
-    const maxY = bounds.y + bounds.height + bounds.margin;
+    const minX = -(Number(WORLD_BOUNDS?.margin) || 0);
+    const maxX =
+      Number(WORLD_BOUNDS?.width) + (Number(WORLD_BOUNDS?.margin) || 0);
+    const minY = -(Number(WORLD_BOUNDS?.margin) || 0);
+    const maxY =
+      Number(WORLD_BOUNDS?.height) + (Number(WORLD_BOUNDS?.margin) || 0);
     const dtMove = playerData.lastInput > 0 ? now - playerData.lastInput : 9999;
 
     const reportedVx = Number(inputData.vx);
@@ -317,85 +321,24 @@ function advancePlayerKinematics(room, playerData, dtMs) {
 
   const x = Number(playerData.x);
   const y = Number(playerData.y);
-  const vx = Number(playerData.vx);
-  const vy = Number(playerData.vy);
   if (
     !Number.isFinite(x) ||
-    !Number.isFinite(y) ||
-    !Number.isFinite(vx) ||
-    !Number.isFinite(vy)
+    !Number.isFinite(y)
   ) {
     return;
   }
 
   const now = Date.now();
-  const packetAgeMs = now - Number(playerData._lastPositionPacketAt || 0);
-  if (packetAgeMs > 1000) return;
-
-  const dtNum = Math.max(0, Number(dtMs) || 0);
-  if (dtNum <= 0) return;
-
-  const bounds = getRoomBounds(room);
   const latestIntent = drainLatestIntent(playerData);
-  const canPredictFromIntent =
-    latestIntent &&
-    !latestIntent.movementLocked &&
-    packetAgeMs <= 450;
-
-  if (canPredictFromIntent) {
-    const sequence = Number(latestIntent.sequence);
-    const shouldJump =
-      !!latestIntent.jumpPressed &&
-      Number.isFinite(sequence) &&
-      sequence !== Number(playerData._lastConsumedJumpSeq);
-
-    if (shouldJump) {
-      playerData._lastConsumedJumpSeq = sequence;
+  if (latestIntent && typeof latestIntent.grounded === "boolean") {
+    playerData.grounded = latestIntent.grounded;
+    if (latestIntent.grounded) {
+      playerData._lastGroundTime = now;
     }
-
-    const nextState = simulateMovementTick(
-      {
-        x,
-        y,
-        vx,
-        vy,
-        isGrounded:
-          typeof latestIntent.grounded === "boolean"
-            ? latestIntent.grounded
-            : playerData.grounded !== false,
-        collidingDown:
-          typeof latestIntent.grounded === "boolean"
-            ? latestIntent.grounded
-            : playerData.grounded === true,
-        lastGroundTime: Number(playerData._lastGroundTime) || 0,
-        canJump: playerData._simCanJump !== false,
-        mapId: room?.matchData?.map,
-      },
-      {
-        ...latestIntent,
-        isJumping: shouldJump,
-      },
-      dtNum,
-      { bounds, mapId: room?.matchData?.map },
-    );
-
-    playerData.x = nextState.x;
-    playerData.y = nextState.y;
-    playerData.vx = nextState.vx;
-    playerData.vy = nextState.vy;
-    playerData.grounded = nextState.isGrounded;
-    playerData._lastGroundTime = nextState.lastGroundTime;
-    playerData._simCanJump = nextState.canJump;
-    playerData._simX = nextState.x;
-    playerData._simY = nextState.y;
-  } else {
-    const dtSec = dtNum / 1000;
-    const projected = clampToWorldBounds(bounds, x + vx * dtSec, y + vy * dtSec);
-    playerData.x = projected.x;
-    playerData.y = projected.y;
-    playerData._simX = projected.x;
-    playerData._simY = projected.y;
   }
+
+  playerData._simX = playerData.x;
+  playerData._simY = playerData.y;
 
   pushPositionHistory(playerData, now);
 }

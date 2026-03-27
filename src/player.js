@@ -1586,7 +1586,6 @@ export function reconcileLocalMovement(snapshot = {}) {
   if (snapshot?.isAlive === false || snapshot?.loaded !== true) return;
 
   const now = performance.now();
-  if (now < Number(localMovementReconcileState.spawnSettleUntil || 0)) return;
   const ackSeq = Number(snapshot?.inputSeq);
   if (
     Number.isFinite(ackSeq) &&
@@ -1594,68 +1593,6 @@ export function reconcileLocalMovement(snapshot = {}) {
   ) {
     localMovementReconcileState.lastAckSeq = ackSeq;
     localMovementReconcileState.lastAckAt = now;
-  }
-
-  const targetX = Number(snapshot?.x);
-  const targetY = Number(snapshot?.y);
-  if (!Number.isFinite(targetX) || !Number.isFinite(targetY)) return;
-
-  const dx = targetX - player.x;
-  const dy = targetY - player.y;
-  const dist = Math.hypot(dx, dy);
-  if (dist < 0.001) return;
-  if (
-    Number(localMovementReconcileState.lastAckSeq || -1) < 0 &&
-    dist < 180
-  ) {
-    return;
-  }
-
-  const grounded = !!player.body.touching?.down;
-  const localVx = Number(player.body?.velocity?.x) || 0;
-  const localVy = Number(player.body?.velocity?.y) || 0;
-  const sameDirX =
-    Math.sign(localVx) !== 0 && Math.sign(localVx) === Math.sign(dx);
-  const sameDirY =
-    Math.sign(localVy) !== 0 && Math.sign(localVy) === Math.sign(dy);
-  if (
-    sameDirX &&
-    Math.abs(dx) <= (grounded ? 24 : 34) &&
-    Math.abs(dy) <= (grounded ? 18 : 26)
-  ) {
-    return;
-  }
-
-  const softThreshold = grounded ? 54 : 76;
-  const hardThreshold = grounded ? 124 : 166;
-  const staleAckMs = now - Number(localMovementReconcileState.lastAckAt || 0);
-
-  if (
-    dist >= hardThreshold &&
-    now - Number(localMovementReconcileState.lastHardCorrectAt || 0) >= 180
-  ) {
-    player.body.reset(targetX, targetY);
-    const serverVx = Number(snapshot?.vx);
-    const serverVy = Number(snapshot?.vy);
-    if (Number.isFinite(serverVx)) player.setVelocityX(serverVx);
-    if (Number.isFinite(serverVy)) player.setVelocityY(serverVy);
-    localMovementReconcileState.lastHardCorrectAt = now;
-    localMovementReconcileState.lastSoftCorrectAt = now;
-    return;
-  }
-
-  if (
-    dist >= softThreshold &&
-    staleAckMs <= 450 &&
-    now - Number(localMovementReconcileState.lastSoftCorrectAt || 0) >=
-      (grounded ? 120 : 90)
-  ) {
-    player.x += dx * (grounded ? 0.14 : 0.2);
-    player.y += dy * (grounded ? 0.1 : 0.18);
-    try {
-      player.body.updateFromGameObject?.();
-    } catch (_) {}
-    localMovementReconcileState.lastSoftCorrectAt = now;
   }
 }
 

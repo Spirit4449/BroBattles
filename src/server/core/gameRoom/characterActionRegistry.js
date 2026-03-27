@@ -1,5 +1,5 @@
-const attackDescriptors = require("../../../shared/attackDescriptors.json");
 const attackRuntimeManager = require("./attackRuntimeManager");
+const { getResolvedAttackDescriptor } = require("./attackDescriptorResolver");
 
 function broadcastAction(room, playerData, action, timestamp = Date.now()) {
   room.io.to(`game:${room.matchId}`).emit("game:action", {
@@ -14,8 +14,7 @@ function broadcastAction(room, playerData, action, timestamp = Date.now()) {
 }
 
 function getDescriptor(actionType) {
-  const key = String(actionType || "").toLowerCase();
-  return key ? attackDescriptors?.[key] || null : null;
+  return getResolvedAttackDescriptor(actionType);
 }
 
 function claimActionInstance(room, playerData, actionData, now = Date.now()) {

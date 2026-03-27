@@ -5,7 +5,7 @@ const MOVEMENT_PHYSICS = require("../gameRoom/movementPhysics");
 
 // ========== FEATURE FLAGS ==========
 // Rollout flags for Phase 2 netcode improvements
-const USE_SERVER_MOVEMENT_SIMULATION_V1 = true;
+const USE_SERVER_MOVEMENT_SIMULATION_V1 = false;
 
 const WORLD_BOUNDS = {
   width: 2300,

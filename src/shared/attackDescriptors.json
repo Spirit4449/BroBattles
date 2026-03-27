@@ -65,6 +65,7 @@
       "height": 46,
       "windupMs": 180,
       "activeWindowMs": 290,
+      "followAfterWindupMs": 70,
       "damageTickMs": 90,
       "originOffsetX": 10,
       "originHeightFactor": 0.5,

@@ -11,7 +11,6 @@ import { definition as mangroveDef } from "./mangroveMeadow";
 import { definition as serenityDef } from "./serenity";
 import { definition as bankBustTestDef } from "./bankBustTest";
 import mapsCatalog from "../shared/maps.catalog.json";
-import mapCollisionConfig from "../shared/mapCollisionConfig.json";
 
 // Registry: numeric mapId -> definition
 const MAPS = {};
@@ -98,10 +97,6 @@ export function getMapSpawnConfig(mapId) {
  */
 export function getMapBoundaryConfig(mapId) {
   return MAPS[normalizeMapId(mapId)]?.getBoundaryConfig?.() ?? {};
-}
-
-export function getMapServerCollisionConfig(mapId) {
-  return mapCollisionConfig?.maps?.[String(normalizeMapId(mapId))] ?? null;
 }
 
 /**

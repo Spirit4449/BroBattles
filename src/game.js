@@ -39,7 +39,6 @@ import {
   applyAuthoritativeState,
   getAmmoSyncState,
   getNetworkInputState,
-  reconcileLocalMovement,
   setLocalNetStateFlusher,
 } from "./player";
 import {
@@ -306,7 +305,6 @@ matchCoordinator = createMatchCoordinator({
   onInitializePlayers: initializePlayers,
   onTrySendReadyAck: trySendReadyAck,
   onTrackShieldEffects: trackShieldEffectsPresence,
-  onReconcileLocalMovement: reconcileLocalMovement,
   onStartSuddenDeathMusic: startSuddenDeathMusic,
   onStopSuddenDeathMusic: stopSuddenDeathMusic,
   onPlayMatchEndSound: playMatchEndSound,
@@ -1101,16 +1099,6 @@ class GameScene extends Phaser.Scene {
           try {
             if (player) this.physics.add.collider(player, mapObject);
           } catch (_) {}
-          for (const p of Object.values(opponentPlayers || {})) {
-            try {
-              if (p?.opponent) this.physics.add.collider(p.opponent, mapObject);
-            } catch (_) {}
-          }
-          for (const p of Object.values(teamPlayers || {})) {
-            try {
-              if (p?.opponent) this.physics.add.collider(p.opponent, mapObject);
-            } catch (_) {}
-          }
         },
         onEditModeChange: (editing) => {
           try {
@@ -1213,8 +1201,6 @@ class GameScene extends Phaser.Scene {
           .length,
         activeMapId,
       );
-
-      attachMapCollidersToSprite(this, opPlayer.opponent, mapObjects);
 
       // Tag instance with spawn version and optional server index to support idempotency
       opPlayer._spawnVersion = SPAWN_VERSION;
@@ -1417,9 +1403,9 @@ class GameScene extends Phaser.Scene {
    * 2. If snapshot also sets: player.x = snapshot.x
    * 3. Result: Position applied twice, then corrected → jitter/rubber-banding
    *
-   * When server-side movement simulation (Phase 2B) is enabled, it will ONLY
-   * be used for hit validation via stored position history. Snapshots will NOT
-   * update the local player's position.
+  * When server-side movement simulation (Phase 2B) is enabled, it will ONLY
+  * be used for hit validation via stored position history. Snapshots will NOT
+  * update the local player's position.
    */
   interpolatePlayerStates(aState, bState, alpha, frame = null) {
     const extrapolationMs = Math.max(0, Number(frame?.extrapolationMs) || 0);
@@ -1473,7 +1459,9 @@ class GameScene extends Phaser.Scene {
           const tSec = extrapolationMs / 1000;
           const gravity = Number(MOVEMENT_PHYSICS.gravity) || 0;
           const fallMult =
-            velocityNum > 0 ? Number(MOVEMENT_PHYSICS.fallGravityFactor) || 1 : 1;
+            velocityNum > 0
+              ? Number(MOVEMENT_PHYSICS.fallGravityFactor) || 1
+              : 1;
           return bNum + velocityNum * tSec + 0.5 * gravity * fallMult * tSec * tSec;
         }
         return bNum + velocityNum * (extrapolationMs / 1000);
@@ -1568,7 +1556,7 @@ class GameScene extends Phaser.Scene {
           ? aPosData.loaded
           : true);
 
-      // Position interpolation target.
+      // Render remote players directly from the buffered snapshot timeline.
       // During a combat precision window (opened when we receive an attack from this
       // opponent), blend toward their newest known snapshot position at a higher rate
       // (effectiveAlpha ≥ 0.85) to shrink the visual-vs-authoritative gap on hits.
@@ -1637,43 +1625,57 @@ class GameScene extends Phaser.Scene {
           targetY = aY;
         }
       }
-      const filteredTarget = filterRemoteTarget(
-        wrapper,
-        targetX,
-        targetY,
-        aPosData,
-        bPosData,
-      );
-      targetX = filteredTarget.x;
-      targetY = filteredTarget.y;
+      const shouldSnapToTarget =
+        Number(wrapper._networkSnapUntil) > performance.now();
+      if (shouldSnapToTarget) {
+        wrapper._filteredTargetX = targetX;
+        wrapper._filteredTargetY = targetY;
+        wrapper._stableTargetDirX = 0;
+        wrapper._reverseTargetCandidate = null;
+      } else {
+        const filteredTarget = filterRemoteTarget(
+          wrapper,
+          targetX,
+          targetY,
+          aPosData,
+          bPosData,
+        );
+        targetX = filteredTarget.x;
+        targetY = filteredTarget.y;
+      }
 
       if (!wrapper._deathPresentationActive && !wrapper._corpseRemoved) {
-        // Move toward interpolated target with a bounded step.
-        // This prevents visible twitch from sudden target jumps while still catching up fast.
-        const dx = targetX - spr.x;
-        const dy = targetY - spr.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist > 0.35) {
-          const inPrecision =
-            (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
-          const airborne = !(
-            bPosData?.grounded ?? aPosData?.grounded ?? false
-          );
-          const dtMs = Math.max(1, Number(this.game?.loop?.delta) || 16.7);
-          const followSpeedPxPerSec = inPrecision
-            ? 3000
-            : airborne
-              ? 2300
-              : 1500;
-          const maxStep = (followSpeedPxPerSec * dtMs) / 1000;
-          const snapDistance = inPrecision ? 1.5 : airborne ? 1.25 : 0.9;
-          if (dist > 520 || dist <= snapDistance) {
-            spr.x = targetX;
-            spr.y = targetY;
-          } else {
-            const step = Math.min(maxStep, dist);
-            spr.x += (dx / dist) * step;
-            spr.y += (dy / dist) * step;
+        if (shouldSnapToTarget) {
+          spr.x = targetX;
+          spr.y = targetY;
+        } else {
+          // Move toward interpolated target with a bounded step.
+          // This prevents visible twitch from sudden target jumps while still catching up fast.
+          const dx = targetX - spr.x;
+          const dy = targetY - spr.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 0.35) {
+            const inPrecision =
+              (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
+            const airborne = !(
+              bPosData?.grounded ?? aPosData?.grounded ?? false
+            );
+            const dtMs = Math.max(1, Number(this.game?.loop?.delta) || 16.7);
+            const followSpeedPxPerSec = inPrecision
+              ? 3000
+              : airborne
+                ? 2300
+                : 1500;
+            const maxStep = (followSpeedPxPerSec * dtMs) / 1000;
+            const snapDistance = inPrecision ? 1.5 : airborne ? 1.25 : 0.9;
+            if (dist > 520 || dist <= snapDistance) {
+              spr.x = targetX;
+              spr.y = targetY;
+            } else {
+              const step = Math.min(maxStep, dist);
+              spr.x += (dx / dist) * step;
+              spr.y += (dy / dist) * step;
+            }
           }
         }
       }

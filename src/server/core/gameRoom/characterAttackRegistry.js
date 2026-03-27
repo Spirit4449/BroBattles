@@ -1,18 +1,16 @@
-const mapCollisionConfig = require("../../../shared/mapCollisionConfig.json");
-const attackDescriptors = require("../../../shared/attackDescriptors.json");
+const { getResolvedAttackDescriptor } = require("./attackDescriptorResolver");
+
+const DEFAULT_TARGET_HALF_WIDTH = 28;
+const DEFAULT_TARGET_HALF_HEIGHT = 60;
 
 function getPlayerBounds(target) {
   const halfH = Math.max(
     8,
-    Number(target?._bodyHalfHeight) ||
-      Number(mapCollisionConfig?.defaultPlayerHalfHeight) ||
-      60,
+    Number(target?._bodyHalfHeight) || DEFAULT_TARGET_HALF_HEIGHT,
   );
   const halfW = Math.max(
     4,
-    Number(target?._bodyHalfWidth) ||
-      Number(mapCollisionConfig?.defaultPlayerHalfWidth) ||
-      28,
+    Number(target?._bodyHalfWidth) || DEFAULT_TARGET_HALF_WIDTH,
   );
   const centerX = Number(target.x) + (Number(target?._bodyCenterOffsetX) || 0);
   const centerY = Number(target.y) + (Number(target?._bodyCenterOffsetY) || 0);
@@ -25,8 +23,7 @@ function getPlayerBounds(target) {
 }
 
 function getDescriptor(actionType) {
-  const key = String(actionType || "").toLowerCase();
-  return key ? attackDescriptors?.[key] || null : null;
+  return getResolvedAttackDescriptor(actionType);
 }
 
 function emitServerHit(room, attack, targetName, payload = {}) {
@@ -287,6 +284,10 @@ function buildReturningProjectileAttack(playerData, actionData, descriptor, now)
     maxLifetimeMs: Math.max(250, Number(runtime.maxLifetimeMs) || 7000),
     hitSet: new Set(),
     hitTimes: Object.create(null),
+    phaseHitSets: {
+      outward: new Set(),
+      return: new Set(),
+    },
     phase: "outward",
     phaseElapsed: 0,
     totalElapsed: 0,
@@ -341,14 +342,11 @@ function tickAttachedRect(room, attack, descriptor, now) {
   if (!attacker || !attacker.isAlive) return true;
   const runtime = descriptor?.runtime || {};
   const elapsed = now - attack.createdAt;
-  if (elapsed >= Math.max(1, Number(runtime.activeWindowMs) || 1)) return true;
-  if (elapsed < Math.max(0, Number(runtime.damageStartMs) || 0)) return false;
-
-  attack.damageAccum = (Number(attack.damageAccum) || 0) + room.FIXED_DT_MS;
-  if (attack.damageAccum < Math.max(1, Number(runtime.damageTickMs) || 1)) {
-    return false;
+  const totalDurationMs = Math.max(1, Number(runtime.activeWindowMs) || 1);
+  const sampleElapsed = Math.min(elapsed, totalDurationMs);
+  if (sampleElapsed < Math.max(0, Number(runtime.damageStartMs) || 0)) {
+    return elapsed >= totalDurationMs;
   }
-  attack.damageAccum = 0;
 
   const direction = attacker.flip ? -1 : 1;
   const width = Number(runtime.width) || 1;
@@ -358,7 +356,10 @@ function tickAttachedRect(room, attack, descriptor, now) {
     Number(attacker.y) -
     resolvePlayerHeight(attacker) * (Number(runtime.centerYFactor) || 0);
   const growT =
-    Math.min(1, elapsed / Math.max(1, Number(runtime.growDurationMs) || 1));
+    Math.min(
+      1,
+      sampleElapsed / Math.max(1, Number(runtime.growDurationMs) || 1),
+    );
   const currentHeight =
     Math.max(1, Number(runtime.minHeight) || 1) +
     (height - Math.max(1, Number(runtime.minHeight) || 1)) * growT;
@@ -375,7 +376,7 @@ function tickAttachedRect(room, attack, descriptor, now) {
     },
     now,
   );
-  return false;
+  return elapsed >= totalDurationMs;
 }
 
 function tickPathRect(room, attack, descriptor, now) {
@@ -385,10 +386,15 @@ function tickPathRect(room, attack, descriptor, now) {
   const elapsed = now - attack.createdAt;
   const windupMs = Math.max(0, Number(runtime.windupMs) || 0);
   const activeWindowMs = Math.max(1, Number(runtime.activeWindowMs) || 1);
-  if (elapsed >= windupMs + activeWindowMs) return true;
-  if (elapsed < windupMs) return false;
+  const totalDurationMs = windupMs + activeWindowMs;
+  const sampleElapsed = Math.min(elapsed, totalDurationMs);
+  const followAfterWindupMs = Math.max(
+    0,
+    Number(runtime.followAfterWindupMs) || 0,
+  );
+  if (sampleElapsed < windupMs) return elapsed >= totalDurationMs;
 
-  if (!attack.pathLocked) {
+  if (!attack.pathLocked || sampleElapsed <= windupMs + followAfterWindupMs) {
     const direction = attack.direction === -1 ? -1 : 1;
     const anchorX = Number(attacker.x) + direction * (Number(runtime.originOffsetX) || 0);
     const anchorY =
@@ -398,16 +404,10 @@ function tickPathRect(room, attack, descriptor, now) {
     attack.pathStartY = anchorY + (Number(runtime.startOffsetY) || 0);
     attack.pathEndX = attack.pathStartX + direction * attack.range;
     attack.pathEndY = anchorY + (Number(runtime.endYOffset) || 0);
-    attack.pathLocked = true;
+    attack.pathLocked = sampleElapsed > windupMs + followAfterWindupMs;
   }
 
-  attack.damageAccum = (Number(attack.damageAccum) || 0) + room.FIXED_DT_MS;
-  if (attack.damageAccum < Math.max(1, Number(runtime.damageTickMs) || 1)) {
-    return false;
-  }
-  attack.damageAccum = 0;
-
-  const progress = Math.min(1, (elapsed - windupMs) / activeWindowMs);
+  const progress = Math.min(1, (sampleElapsed - windupMs) / activeWindowMs);
   const curve =
     Math.sin(Math.PI * progress) *
     ((Number(runtime.curveMagnitude) || 0) * (attack.direction === -1 ? -1 : 1));
@@ -432,7 +432,7 @@ function tickPathRect(room, attack, descriptor, now) {
     },
     now,
   );
-  return false;
+  return elapsed >= totalDurationMs;
 }
 
 function tickReturningProjectile(room, attack, descriptor) {
@@ -480,6 +480,10 @@ function tickReturningProjectile(room, attack, descriptor) {
     0,
     Number(runtime.defaultHitCooldownMs) || 0,
   );
+  attack.hitSet =
+    attack.phase === "return"
+      ? attack.phaseHitSets?.return || attack.hitSet
+      : attack.phaseHitSets?.outward || attack.hitSet;
   hitCircleTargets(
     room,
     attack,

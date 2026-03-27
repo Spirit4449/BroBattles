@@ -42,6 +42,7 @@ export default class OpPlayer {
     this.presenceLoaded = true;
     this._worldUiHidden = false;
     this._spawnPresented = false;
+    this._networkSnapUntil = 0;
     this._deathPresentationActive = false;
     this._corpseRemoved = false;
     this.createOpPlayer();
@@ -274,6 +275,7 @@ export default class OpPlayer {
   finalizeSpawnPresentation() {
     if (!this.opponent || this._corpseRemoved) return;
     this._spawnPresented = true;
+    this._networkSnapUntil = performance.now() + 220;
     this.updateUIPosition();
     this.setPresenceState(this.presenceConnected, this.presenceLoaded);
   }
@@ -473,6 +475,7 @@ export default class OpPlayer {
     this._deathPresentationActive = false;
     this._corpseRemoved = false;
     this._spawnPresented = true;
+    this._networkSnapUntil = performance.now() + 220;
     if (typeof meta?.maxHealth === "number" && meta.maxHealth > 0) {
       this.opMaxHealth = meta.maxHealth;
     }

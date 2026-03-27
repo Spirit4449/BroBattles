@@ -583,13 +583,6 @@ export function createMatchCoordinator(config) {
 
     _applyWorldState(snapshot, getGameData()?.yourTeam);
 
-    try {
-      const localSnapshot = snapshot.players?.[getUsername()];
-      if (localSnapshot && typeof onReconcileLocalMovement === "function") {
-        onReconcileLocalMovement(localSnapshot);
-      }
-    } catch (_) {}
-
     hud.syncTeamHudFromSnapshot(snapshot.players);
 
     const ingest = snapshotBuffer.ingestSnapshot(snapshot, performance.now());

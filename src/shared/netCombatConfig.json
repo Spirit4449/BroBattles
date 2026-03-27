@@ -5,7 +5,7 @@
       "range": 1050,
       "bobAmplitude": 5,
       "bobFreqMs": 120,
-      "collisionRadius": 57,
+      "collisionRadius": 38,
       "forwardOffset": 0.23,
       "verticalOffset": 0.12,
       "startupMs": 300,

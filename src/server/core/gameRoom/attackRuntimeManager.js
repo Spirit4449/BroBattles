@@ -5,7 +5,26 @@ function ensureAttackState(room) {
   return room._activeAttacks;
 }
 
+function claimAttackInstance(room, playerData, actionData, now = Date.now()) {
+  const instanceId = String(actionData?.id || "").trim();
+  if (!instanceId) return true;
+  room._recentAttackInstances = room._recentAttackInstances || new Map();
+  const key =
+    `${String(playerData?.socketId || "")}|` +
+    `${String(actionData?.type || "").toLowerCase()}|` +
+    instanceId;
+  for (const [seenKey, seenAt] of room._recentAttackInstances.entries()) {
+    if (now - seenAt > 12000) {
+      room._recentAttackInstances.delete(seenKey);
+    }
+  }
+  if (room._recentAttackInstances.has(key)) return false;
+  room._recentAttackInstances.set(key, now);
+  return true;
+}
+
 function registerAttackFromAction(room, playerData, actionData, now = Date.now()) {
+  if (!claimAttackInstance(room, playerData, actionData, now)) return false;
   const runtimeAttack = createRuntimeAttack(playerData, actionData, now);
   if (!runtimeAttack) return false;
   runtimeAttack.sourceType = String(actionData?.type || "").toLowerCase();
