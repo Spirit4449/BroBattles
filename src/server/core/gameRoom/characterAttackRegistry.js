@@ -3,18 +3,24 @@ const attackDescriptors = require("../../../shared/attackDescriptors.json");
 
 function getPlayerBounds(target) {
   const halfH = Math.max(
-    16,
-    Number(mapCollisionConfig?.defaultPlayerHalfHeight) || 60,
+    8,
+    Number(target?._bodyHalfHeight) ||
+      Number(mapCollisionConfig?.defaultPlayerHalfHeight) ||
+      60,
   );
   const halfW = Math.max(
-    8,
-    Number(mapCollisionConfig?.defaultPlayerHalfWidth) || 28,
+    4,
+    Number(target?._bodyHalfWidth) ||
+      Number(mapCollisionConfig?.defaultPlayerHalfWidth) ||
+      28,
   );
+  const centerX = Number(target.x) + (Number(target?._bodyCenterOffsetX) || 0);
+  const centerY = Number(target.y) + (Number(target?._bodyCenterOffsetY) || 0);
   return {
-    left: Number(target.x) - halfW,
-    right: Number(target.x) + halfW,
-    top: Number(target.y) - halfH,
-    bottom: Number(target.y) + halfH,
+    left: centerX - halfW,
+    right: centerX + halfW,
+    top: centerY - halfH,
+    bottom: centerY + halfH,
   };
 }
 

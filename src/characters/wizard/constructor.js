@@ -13,6 +13,21 @@ import CharacterEntityBase from "../shared/characterEntityBase";
 
 const NAME = "wizard";
 
+function consumeWizardRelease(scene, packetId) {
+  const id = String(packetId || "").trim();
+  if (!id) return true;
+  if (!scene._wizardReleaseSeen) {
+    scene._wizardReleaseSeen = new Map();
+  }
+  const now = Date.now();
+  for (const [key, seenAt] of scene._wizardReleaseSeen.entries()) {
+    if (now - seenAt > 4000) scene._wizardReleaseSeen.delete(key);
+  }
+  if (scene._wizardReleaseSeen.has(id)) return false;
+  scene._wizardReleaseSeen.set(id, now);
+  return true;
+}
+
 class Wizard extends CharacterEntityBase {
   static key = NAME;
   static textureKey = NAME;
@@ -76,6 +91,7 @@ class Wizard extends CharacterEntityBase {
       return true;
     }
     if (data.type === `${NAME}-fireball-release`) {
+      if (!consumeWizardRelease(scene, data.id)) return true;
       spawnWizardFireballVisual(scene, data, ownerSprite);
       return true;
     }
@@ -84,6 +100,7 @@ class Wizard extends CharacterEntityBase {
 
   static handleLocalAuthoritativeAttack(scene, data, localContext = {}) {
     if (!data || data.type !== `${NAME}-fireball-release`) return false;
+    if (!consumeWizardRelease(scene, data.id)) return true;
     spawnWizardFireballAuthoritative(scene, data, localContext);
     return true;
   }

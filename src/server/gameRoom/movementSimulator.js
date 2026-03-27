@@ -47,7 +47,44 @@ function normalizeRect(rect) {
   };
 }
 
+function normalizeSurface(surface) {
+  const centerX = Number(surface?.x);
+  const topY = Number(surface?.y);
+  const width = Number(surface?.width);
+  if (
+    !Number.isFinite(centerX) ||
+    !Number.isFinite(topY) ||
+    !Number.isFinite(width)
+  ) {
+    return null;
+  }
+  return {
+    left: centerX - width / 2,
+    right: centerX + width / 2,
+    top: topY,
+  };
+}
+
+function getPlayerCollisionBox(playerState) {
+  const defaults = getDefaultPlayerCollisionBox();
+  return {
+    halfWidth: Math.max(
+      4,
+      Number(playerState?._bodyHalfWidth) ||
+        Number(playerState?.bodyHalfWidth) ||
+        defaults.halfWidth,
+    ),
+    halfHeight: Math.max(
+      8,
+      Number(playerState?._bodyHalfHeight) ||
+        Number(playerState?.bodyHalfHeight) ||
+        defaults.halfHeight,
+    ),
+  };
+}
+
 function resolveStaticCollisions({
+  playerState,
   previousX,
   previousY,
   x,
@@ -60,7 +97,7 @@ function resolveStaticCollisions({
 }) {
   const surfaces = getSurfaceCollisionConfig(mapId);
   const solids = getSolidCollisionConfig(mapId);
-  const playerBox = getDefaultPlayerCollisionBox();
+  const playerBox = getPlayerCollisionBox(playerState);
   const halfWidth = playerBox.halfWidth;
   const halfHeight = playerBox.halfHeight;
   let resolvedX = x;
@@ -208,6 +245,37 @@ function resolveStaticCollisions({
     inputIntent.grounded &&
     resolvedVy >= 0
   ) {
+    let closestSnapY = null;
+    const feetY = resolvedY + halfHeight;
+    for (const surface of surfaces) {
+      const rect = normalizeSurface(surface);
+      if (!rect) continue;
+      const overlapX =
+        resolvedX + halfWidth >= rect.left && resolvedX - halfWidth <= rect.right;
+      if (!overlapX) continue;
+      const deltaFeet = Math.abs(rect.top - feetY);
+      if (deltaFeet > 28) continue;
+      const candidateY = rect.top - halfHeight;
+      if (closestSnapY === null || deltaFeet < Math.abs(closestSnapY - resolvedY)) {
+        closestSnapY = candidateY;
+      }
+    }
+    for (const solid of solids) {
+      const rect = normalizeRect(solid);
+      if (!rect) continue;
+      const overlapX =
+        resolvedX + halfWidth >= rect.left && resolvedX - halfWidth <= rect.right;
+      if (!overlapX) continue;
+      const deltaFeet = Math.abs(rect.top - feetY);
+      if (deltaFeet > 28) continue;
+      const candidateY = rect.top - halfHeight;
+      if (closestSnapY === null || deltaFeet < Math.abs(closestSnapY - resolvedY)) {
+        closestSnapY = candidateY;
+      }
+    }
+    if (closestSnapY !== null) {
+      resolvedY = closestSnapY;
+    }
     resolvedGrounded = true;
     resolvedVy = 0;
   }
@@ -307,6 +375,7 @@ function simulateMovementTick(playerState, inputIntent, dt, options = {}) {
   y += vy * dtSec;
 
   const resolved = resolveStaticCollisions({
+    playerState,
     previousX,
     previousY,
     x,

@@ -1,8 +1,5 @@
-import socket from "../../socket";
 import { getCharacterTuning } from "../../lib/characterStats.js";
-import { circleRectOverlap, getSpriteBounds } from "../shared/combatGeometry";
 import { createRuntimeId } from "../shared/runtimeId";
-import { emitVaultHitForCircle } from "../shared/vaultTargeting";
 import { lockPlayerFlip } from "../shared/flipLock";
 import {
   getChargeRatioFromContext,
@@ -234,10 +231,6 @@ function spawnWizardFireballProjectile(
   payload,
   {
     ownerSprite = null,
-    isOwner = false,
-    username = "",
-    gameId = null,
-    opponentPlayersRef = null,
   } = {},
 ) {
   if (!scene?.add) return null;
@@ -294,139 +287,39 @@ function spawnWizardFireballProjectile(
     };
   }
 
-  if (!isOwner) {
-    const launch = () => {
-      if (!sprite.active) return;
-      if (startupFollower) startupFollower();
-      const launchX = sprite.x;
-      const launchY = sprite.y;
-
-      scene.tweens.add({
-        targets: sprite,
-        x: launchX + direction * range,
-        ease: "Linear",
-        duration: travelDuration,
-        onComplete: () => {
-          spawnImpact(scene, sprite.x, sprite.y, false);
-          sprite.destroy();
-          if (trail) trail.destroy();
-          debugFollower?.destroy();
-        },
-      });
-      scene.tweens.add({
-        targets: sprite,
-        y: launchY + bob,
-        ease: "Sine.easeInOut",
-        yoyo: true,
-        duration: FIREBALL_BOB_TWEEN_MS,
-        repeat: Math.ceil(travelDuration / FIREBALL_BOB_TWEEN_MS),
-      });
-    };
-
-    if (startup > 0) {
-      scene.time.delayedCall(startup, launch);
-    } else {
-      launch();
-    }
-    return sprite;
-  }
-
-  const hitSet = new Set();
-  let traveled = 0;
-  let travelElapsed = 0;
-  let launchTimer = startup;
-  let launched = launchTimer <= 0;
-  let alive = true;
-  let travelBaseY = sprite.y;
-  const damageValue = Math.max(1, Math.round(payload?.damage || 0));
-
-  const cleanup = (hitPosition, playSound = true) => {
-    if (!alive) return;
-    alive = false;
-    scene.events.off("update", update);
+  const launch = () => {
+    if (!sprite.active) return;
     if (startupFollower) startupFollower();
-    if (trail) trail.destroy();
-    debugFollower?.destroy();
-    spawnImpact(
-      scene,
-      hitPosition?.x ?? sprite.x,
-      hitPosition?.y ?? sprite.y,
-      playSound,
-    );
-    sprite.destroy();
-  };
+    const launchX = sprite.x;
+    const launchY = sprite.y;
 
-  const update = () => {
-    if (!alive || !sprite.active) return;
-    const dt = scene.game.loop.delta || 16;
-
-    if (!launched) {
-      launchTimer -= dt;
-      if (launchTimer > 0) return;
-      launched = true;
-      if (startupFollower) startupFollower();
-      travelBaseY = sprite.y;
-      return;
-    }
-
-    const step = (FIREBALL_SPEED * dt) / 1000;
-    traveled += step;
-    travelElapsed += dt;
-    sprite.x += step * direction;
-    sprite.y =
-      travelBaseY +
-      Math.sin(travelElapsed / FIREBALL_BOB_FREQ_MS) * FIREBALL_BOB_AMPLITUDE;
-
-    const opponents = Object.values(opponentPlayersRef || {});
-    for (const wrap of opponents) {
-      const spr = wrap?.opponent;
-      const name = wrap?.username;
-      if (!spr || !name || hitSet.has(name)) continue;
-      const bounds = getSpriteBounds(spr);
-      if (
-        circleRectOverlap(
-          sprite.x,
-          sprite.y,
-          chargedCollisionRadius,
-          bounds.left,
-          bounds.top,
-          bounds.right,
-          bounds.bottom,
-        )
-      ) {
-        hitSet.add(name);
-        socket.emit("hit", {
-          attacker: username,
-          target: name,
-          attackType: "basic",
-          chargeRatio,
-          attackTime: Date.now(),
-          damage: damageValue,
-          gameId,
-          instanceId: attackId,
-        });
-        spawnImpact(scene, sprite.x, sprite.y, true);
-      }
-    }
-
-    emitVaultHitForCircle({
-      attacker: username,
-      x: sprite.x,
-      y: sprite.y,
-      radius: chargedCollisionRadius,
-      attackType: "basic",
-      chargeRatio,
-      instanceId: attackId,
-      gameId,
-      hitSet,
+    scene.tweens.add({
+      targets: sprite,
+      x: launchX + direction * range,
+      ease: "Linear",
+      duration: travelDuration,
+      onComplete: () => {
+        spawnImpact(scene, sprite.x, sprite.y, false);
+        sprite.destroy();
+        if (trail) trail.destroy();
+        debugFollower?.destroy();
+      },
     });
-
-    if (traveled >= range || travelElapsed >= travelDuration) {
-      cleanup(null, false);
-    }
+    scene.tweens.add({
+      targets: sprite,
+      y: launchY + bob,
+      ease: "Sine.easeInOut",
+      yoyo: true,
+      duration: FIREBALL_BOB_TWEEN_MS,
+      repeat: Math.ceil(travelDuration / FIREBALL_BOB_TWEEN_MS),
+    });
   };
 
-  scene.events.on("update", update);
+  if (startup > 0) {
+    scene.time.delayedCall(startup, launch);
+  } else {
+    launch();
+  }
   return sprite;
 }
 
@@ -469,14 +362,12 @@ export function performWizardFireball(instance, attackContext = null) {
 export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
   return spawnWizardFireballProjectile(scene, payload, {
     ownerSprite,
-    isOwner: false,
   });
 }
 
 export function spawnWizardFireballAuthoritative(scene, payload, localContext = {}) {
   return spawnWizardFireballProjectile(scene, payload, {
     ownerSprite: localContext?.ownerSprite || null,
-    isOwner: false,
   });
 }
 

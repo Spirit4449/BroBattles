@@ -18,6 +18,24 @@ function getDescriptor(actionType) {
   return key ? attackDescriptors?.[key] || null : null;
 }
 
+function claimActionInstance(room, playerData, actionData, now = Date.now()) {
+  const actionId = String(actionData?.id || "").trim();
+  if (!actionId) return true;
+  room._recentCharacterActions = room._recentCharacterActions || new Map();
+  const key =
+    `${String(playerData?.socketId || "")}|` +
+    `${String(actionData?.type || "").toLowerCase()}|` +
+    actionId;
+  for (const [entryKey, seenAt] of room._recentCharacterActions.entries()) {
+    if (now - seenAt > 8000) {
+      room._recentCharacterActions.delete(entryKey);
+    }
+  }
+  if (room._recentCharacterActions.has(key)) return false;
+  room._recentCharacterActions.set(key, now);
+  return true;
+}
+
 function scheduleWindupRelease(room, playerData, actionData, actionNow, descriptor) {
   const flow = descriptor?.actionFlow || {};
   const startupMs = Math.max(0, Number(flow.startupMs) || 0);
@@ -85,6 +103,9 @@ function handleCharacterAction(room, playerData, actionData, actionNow = Date.no
   if (!expectedCharacter || expectedCharacter !== actualCharacter) return null;
 
   const flowKind = String(descriptor?.actionFlow?.kind || "").toLowerCase();
+  if (!claimActionInstance(room, playerData, actionData, actionNow)) {
+    return { handled: true };
+  }
   if (flowKind === "windup-release") {
     return scheduleWindupRelease(
       room,

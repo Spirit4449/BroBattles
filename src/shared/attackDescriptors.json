@@ -17,7 +17,7 @@
     "attackType": "basic",
     "runtime": {
       "kind": "projectile-linear",
-      "collisionRadius": 57,
+      "collisionRadius": 38,
       "speed": 450,
       "range": 1050,
       "forwardOffsetWidthFactor": 0.23,
@@ -88,7 +88,7 @@
       "returnAcceleration": 800,
       "returnStartSpeedFactor": 0.08,
       "maxLifetimeMs": 7000,
-      "defaultHitCooldownMs": 300,
+      "defaultHitCooldownMs": 0,
       "defaultForwardDistance": 500,
       "defaultOutwardDurationMs": 380,
       "defaultReturnSpeed": 900,

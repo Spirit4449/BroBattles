@@ -145,6 +145,7 @@ let localMovementReconcileState = {
   lastAckAt: 0,
   lastSoftCorrectAt: 0,
   lastHardCorrectAt: 0,
+  spawnSettleUntil: 0,
 };
 
 const localStateSync = createLocalStateSync({
@@ -278,6 +279,13 @@ export function createPlayer(
   player.anims.play(resolveAnimKey(scene, currentCharacter, "idle"), true); // Play idle animation
   // Hide until we've configured frame/body and spawn to avoid a mid-air first render
   player.setVisible(false);
+  localMovementReconcileState = {
+    lastAckSeq: -1,
+    lastAckAt: performance.now(),
+    lastSoftCorrectAt: performance.now(),
+    lastHardCorrectAt: performance.now(),
+    spawnSettleUntil: performance.now() + 1200,
+  };
   pdbg();
 
   // Apply character stats (health, ammo, sprite/body sizing)
@@ -1578,6 +1586,7 @@ export function reconcileLocalMovement(snapshot = {}) {
   if (snapshot?.isAlive === false || snapshot?.loaded !== true) return;
 
   const now = performance.now();
+  if (now < Number(localMovementReconcileState.spawnSettleUntil || 0)) return;
   const ackSeq = Number(snapshot?.inputSeq);
   if (
     Number.isFinite(ackSeq) &&
@@ -1595,10 +1604,30 @@ export function reconcileLocalMovement(snapshot = {}) {
   const dy = targetY - player.y;
   const dist = Math.hypot(dx, dy);
   if (dist < 0.001) return;
+  if (
+    Number(localMovementReconcileState.lastAckSeq || -1) < 0 &&
+    dist < 180
+  ) {
+    return;
+  }
 
   const grounded = !!player.body.touching?.down;
-  const softThreshold = grounded ? 42 : 64;
-  const hardThreshold = grounded ? 108 : 148;
+  const localVx = Number(player.body?.velocity?.x) || 0;
+  const localVy = Number(player.body?.velocity?.y) || 0;
+  const sameDirX =
+    Math.sign(localVx) !== 0 && Math.sign(localVx) === Math.sign(dx);
+  const sameDirY =
+    Math.sign(localVy) !== 0 && Math.sign(localVy) === Math.sign(dy);
+  if (
+    sameDirX &&
+    Math.abs(dx) <= (grounded ? 24 : 34) &&
+    Math.abs(dy) <= (grounded ? 18 : 26)
+  ) {
+    return;
+  }
+
+  const softThreshold = grounded ? 54 : 76;
+  const hardThreshold = grounded ? 124 : 166;
   const staleAckMs = now - Number(localMovementReconcileState.lastAckAt || 0);
 
   if (
@@ -1619,10 +1648,10 @@ export function reconcileLocalMovement(snapshot = {}) {
     dist >= softThreshold &&
     staleAckMs <= 450 &&
     now - Number(localMovementReconcileState.lastSoftCorrectAt || 0) >=
-      (grounded ? 90 : 70)
+      (grounded ? 120 : 90)
   ) {
-    player.x += dx * (grounded ? 0.18 : 0.24);
-    player.y += dy * (grounded ? 0.14 : 0.22);
+    player.x += dx * (grounded ? 0.14 : 0.2);
+    player.y += dy * (grounded ? 0.1 : 0.18);
     try {
       player.body.updateFromGameObject?.();
     } catch (_) {}

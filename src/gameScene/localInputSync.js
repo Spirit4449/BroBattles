@@ -76,7 +76,8 @@ export function createLocalInputSync({
     };
     const intentChanged = !sameIntentState(inputIntent, lastIntentState);
     if (!force && !intentChanged && now - lastMovementSent < throttleMs) return;
-    inputIntent.sequence = inputIntentSeq++;
+    const packetSequence = inputIntentSeq++;
+    inputIntent.sequence = packetSequence;
 
     const ammoState = getAmmoSyncState();
     const animation = player.anims?.currentAnim?.key || null;
@@ -86,6 +87,17 @@ export function createLocalInputSync({
     const includeAnimation =
       animation !== lastAnimationSent || now - lastAnimationSentAt >= 180;
 
+    const body = player.body || null;
+    const bodyHalfWidth = body?.width ? Math.round(body.width / 2) : null;
+    const bodyHalfHeight = body?.height ? Math.round(body.height / 2) : null;
+    const bodyCenterOffsetX =
+      body?.center && Number.isFinite(player.x)
+        ? Math.round((body.center.x - player.x) * 2) / 2
+        : 0;
+    const bodyCenterOffsetY =
+      body?.center && Number.isFinite(player.y)
+        ? Math.round((body.center.y - player.y) * 2) / 2
+        : 0;
     const currentState = {
       x: quantizePosition(player.x),
       y: quantizePosition(player.y),
@@ -94,6 +106,14 @@ export function createLocalInputSync({
       vy: quantizeVelocity(player.body?.velocity?.y),
       grounded: !!player.body?.touching?.down,
       loaded: true,
+      sequence: packetSequence,
+      timestamp: now,
+      width: quantizePosition(player.displayWidth || player.width || 0),
+      height: quantizePosition(player.displayHeight || player.height || 0),
+      bodyHalfWidth,
+      bodyHalfHeight,
+      bodyCenterOffsetX,
+      bodyCenterOffsetY,
     };
     if (includeAnimation) currentState.animation = animation;
     if (includeAmmoState) currentState.ammoState = ammoState;

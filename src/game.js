@@ -961,22 +961,37 @@ class GameScene extends Phaser.Scene {
         }
       }
     } catch (_) {}
-    // After sprite exists and body sized, move to a map-appropriate spawn slot (prefer server spawnIndex)
+    const hasAuthoritativeSpawn =
+      pendingAuthoritativeLocalState &&
+      pendingAuthoritativeLocalState.loaded === true &&
+      Number.isFinite(pendingAuthoritativeLocalState.x) &&
+      Number.isFinite(pendingAuthoritativeLocalState.y) &&
+      player?.body;
+
+    // After sprite exists and body sized, move to a map-appropriate spawn slot
+    // only when we do not already have an authoritative live position.
     try {
-      const serverIdx = SERVER_SPAWN_INDEX[username];
-      const myIndex =
-        typeof serverIdx === "number" ? Math.max(0, serverIdx) : 0;
-      const teamSize = (gameData.players || []).filter(
-        (p) => p.team === gameData.yourTeam,
-      ).length;
-      positionSpawn(
-        this,
-        player,
-        activeMapId,
-        gameData.yourTeam,
-        myIndex,
-        teamSize,
-      );
+      if (hasAuthoritativeSpawn) {
+        player.body.reset(
+          pendingAuthoritativeLocalState.x,
+          pendingAuthoritativeLocalState.y,
+        );
+      } else {
+        const serverIdx = SERVER_SPAWN_INDEX[username];
+        const myIndex =
+          typeof serverIdx === "number" ? Math.max(0, serverIdx) : 0;
+        const teamSize = (gameData.players || []).filter(
+          (p) => p.team === gameData.yourTeam,
+        ).length;
+        positionSpawn(
+          this,
+          player,
+          activeMapId,
+          gameData.yourTeam,
+          myIndex,
+          teamSize,
+        );
+      }
       stabilizeSpawnedSpriteOnMap(this, player, mapObjects);
     } catch (_) {}
 
@@ -985,6 +1000,7 @@ class GameScene extends Phaser.Scene {
       if (pendingAuthoritativeLocalState) {
         applyAuthoritativeState(pendingAuthoritativeLocalState);
         const shouldRestorePosition =
+          !hasAuthoritativeSpawn &&
           isLiveGame &&
           pendingAuthoritativeLocalState.connected !== false &&
           pendingAuthoritativeLocalState.loaded === true;
@@ -1781,11 +1797,24 @@ export { opponentPlayers, teamPlayers };
 
 function buildReadyPayload() {
   const payload = { matchId: Number(matchId) };
-  if (!player) return payload;
-  if (Number.isFinite(player.x)) payload.x = player.x;
-  if (Number.isFinite(player.y)) payload.y = player.y;
-  payload.flip = !!player.flipX;
-  payload.animation = player.anims?.currentAnim?.key || null;
+  const authoritativeSpawn =
+    pendingAuthoritativeLocalState &&
+    pendingAuthoritativeLocalState.loaded === true &&
+    Number.isFinite(pendingAuthoritativeLocalState.x) &&
+    Number.isFinite(pendingAuthoritativeLocalState.y)
+      ? pendingAuthoritativeLocalState
+      : null;
+  if (authoritativeSpawn) {
+    payload.x = authoritativeSpawn.x;
+    payload.y = authoritativeSpawn.y;
+  } else if (player) {
+    if (Number.isFinite(player.x)) payload.x = player.x;
+    if (Number.isFinite(player.y)) payload.y = player.y;
+  } else {
+    return payload;
+  }
+  payload.flip = player ? !!player.flipX : false;
+  payload.animation = player?.anims?.currentAnim?.key || null;
   return payload;
 }
 
