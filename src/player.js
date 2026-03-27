@@ -32,6 +32,7 @@ import {
   ATTACK_CHARGE_TAP_THRESHOLD_MS,
   getAttackChargeConfig,
 } from "./lib/characterStats";
+import { MOVEMENT_PHYSICS } from "./lib/movementPhysics.js";
 import { getChargeRatioFromHold } from "./characters/shared/chargeAttack";
 import { noteClientActionSent } from "./lib/netTestLogger.js";
 // Globals
@@ -138,6 +139,12 @@ let networkInputState = {
   animation: null,
   movementLocked: false,
   loaded: false,
+};
+let localMovementReconcileState = {
+  lastAckSeq: -1,
+  lastAckAt: 0,
+  lastSoftCorrectAt: 0,
+  lastHardCorrectAt: 0,
 };
 
 const localStateSync = createLocalStateSync({
@@ -986,37 +993,26 @@ export function handlePlayerMovement(scene) {
       if (applyFlipOffsetLocal) applyFlipOffsetLocal();
     }
   }
-  // - maxSpeed: top horizontal running speed. Higher = faster.
-  const maxSpeed = 260 * Math.max(0.5, movementSpeedMult || 1);
-  // - accel: how fast you speed up on ground. Higher = snappier starts.
-  const accel = 3000;
-  // - airAccel: acceleration in air. Higher = more air control; lower = floatier.
-  const airAccel = 3300;
-  // - dragGround: how quickly you slow when you release input on ground.
-  //   Higher = stop sooner; lower = glide longer.
-  const dragGround = 1200;
-  // - dragAir: subtle slowdown in air (prevents infinite drift).
-  const dragAir = 260;
-  // - jumpSpeed: base jump power (lower to make jumps less powerful).
-  let jumpSpeed = 400; // was stronger before; keep lower for smaller hops
-  // - jumpBoost: small bonus based on current horizontal speed (running jumps feel punchier).
-  const jumpBoost = 10;
-  // - coyoteTimeMs: grace window to jump just after leaving a ledge (more forgiving platforming).
-  const coyoteTimeMs = 130;
-  // - wallJumpCooldownMs: delay before another wall jump is allowed.
-  const wallJumpCooldownMs = 320;
-  // - wallSlideMaxFallSpeed: cap downward speed while touching a wall (slower slide).
-  const wallSlideMaxFallSpeed = 160;
-  // - wallKickLockMs: short window after a wall jump where opposite input is ignored
-  //   so the horizontal kick isn't immediately canceled by collisions or input.
-  const wallKickLockMs = 160;
-  // - wall kick strength: always use the stronger outward push.
-  const wallKickFull = 360;
+  // Shared movement constants are mirrored on the server for prediction.
+  const maxSpeed =
+    MOVEMENT_PHYSICS.maxSpeed *
+    Math.max(MOVEMENT_PHYSICS.minSpeedMult, movementSpeedMult || 1);
+  const accel = MOVEMENT_PHYSICS.accel;
+  const airAccel = MOVEMENT_PHYSICS.airAccel;
+  const dragGround = MOVEMENT_PHYSICS.dragGround;
+  const dragAir = MOVEMENT_PHYSICS.dragAir;
+  let jumpSpeed = MOVEMENT_PHYSICS.jumpSpeed;
+  const jumpBoost = MOVEMENT_PHYSICS.jumpBoost;
+  const coyoteTimeMs = MOVEMENT_PHYSICS.coyoteTimeMs;
+  const wallJumpCooldownMs = MOVEMENT_PHYSICS.wallJumpCooldownMs;
+  const wallSlideMaxFallSpeed = MOVEMENT_PHYSICS.wallSlideMaxFallSpeed;
+  const wallKickLockMs = MOVEMENT_PHYSICS.wallKickLockMs;
+  const wallKickFull = MOVEMENT_PHYSICS.wallKickFull;
   const wallSlideSnapDistance = 10;
   const wallSlideVerticalPadding = 6;
   const wallJumpPressBufferMs = 120;
   // - fallGravityFactor: gravity multiplier while falling (fast-fall). 1.0 = off.
-  const fallGravityFactor = 1.35;
+  const fallGravityFactor = MOVEMENT_PHYSICS.fallGravityFactor;
   // Ensure body uses our drag settings once
   if (player.body) {
     const onGround = player.body.touching.down;
@@ -1314,7 +1310,9 @@ export function handlePlayerMovement(scene) {
     // Slight jump boost when moving fast to feel snappier transitions
     const vx = Math.abs(player.body.velocity.x || 0);
     const boost = Phaser.Math.Clamp((vx / maxSpeed) * jumpBoost, 0, jumpBoost);
-    jumpSpeed = (360 + boost) * Math.max(0.5, movementJumpMult || 1); // slightly higher base for a stronger jump
+    jumpSpeed =
+      (MOVEMENT_PHYSICS.jumpSpeed + boost) *
+      Math.max(MOVEMENT_PHYSICS.minSpeedMult, movementJumpMult || 1);
     jump(); // Calls jump
     scene.sound.play("sfx-jump", { volume: 3 });
   }
@@ -1573,6 +1571,63 @@ export function getNetworkInputState() {
 
 export function setLocalNetStateFlusher(fn) {
   flushLocalNetState = typeof fn === "function" ? fn : null;
+}
+
+export function reconcileLocalMovement(snapshot = {}) {
+  if (!player || !player.body || dead) return;
+  if (snapshot?.isAlive === false || snapshot?.loaded !== true) return;
+
+  const now = performance.now();
+  const ackSeq = Number(snapshot?.inputSeq);
+  if (
+    Number.isFinite(ackSeq) &&
+    ackSeq >= Number(localMovementReconcileState.lastAckSeq || -1)
+  ) {
+    localMovementReconcileState.lastAckSeq = ackSeq;
+    localMovementReconcileState.lastAckAt = now;
+  }
+
+  const targetX = Number(snapshot?.x);
+  const targetY = Number(snapshot?.y);
+  if (!Number.isFinite(targetX) || !Number.isFinite(targetY)) return;
+
+  const dx = targetX - player.x;
+  const dy = targetY - player.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 0.001) return;
+
+  const grounded = !!player.body.touching?.down;
+  const softThreshold = grounded ? 42 : 64;
+  const hardThreshold = grounded ? 108 : 148;
+  const staleAckMs = now - Number(localMovementReconcileState.lastAckAt || 0);
+
+  if (
+    dist >= hardThreshold &&
+    now - Number(localMovementReconcileState.lastHardCorrectAt || 0) >= 180
+  ) {
+    player.body.reset(targetX, targetY);
+    const serverVx = Number(snapshot?.vx);
+    const serverVy = Number(snapshot?.vy);
+    if (Number.isFinite(serverVx)) player.setVelocityX(serverVx);
+    if (Number.isFinite(serverVy)) player.setVelocityY(serverVy);
+    localMovementReconcileState.lastHardCorrectAt = now;
+    localMovementReconcileState.lastSoftCorrectAt = now;
+    return;
+  }
+
+  if (
+    dist >= softThreshold &&
+    staleAckMs <= 450 &&
+    now - Number(localMovementReconcileState.lastSoftCorrectAt || 0) >=
+      (grounded ? 90 : 70)
+  ) {
+    player.x += dx * (grounded ? 0.18 : 0.24);
+    player.y += dy * (grounded ? 0.14 : 0.22);
+    try {
+      player.body.updateFromGameObject?.();
+    } catch (_) {}
+    localMovementReconcileState.lastSoftCorrectAt = now;
+  }
 }
 
 export function setPowerupMobility(speedMult = 1, jumpMult = 1) {

@@ -4,6 +4,7 @@ import { characterStats } from "../../lib/characterStats.js";
 import { animations } from "./anim";
 import {
   performWizardFireball,
+  spawnWizardFireballAuthoritative,
   spawnWizardFireballVisual,
   changeDebugState,
 } from "./attack";
@@ -60,9 +61,30 @@ class Wizard extends CharacterEntityBase {
   }
 
   static handleRemoteAttack(scene, data, ownerWrapper) {
-    if (!data || data.type !== `${NAME}-fireball`) return false;
+    if (!data) return false;
     const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
-    spawnWizardFireballVisual(scene, data, ownerSprite);
+    if (data.type === `${NAME}-fireball`) {
+      try {
+        if (ownerSprite?.anims) {
+          if (scene.anims?.exists("wizard-throw")) {
+            ownerSprite.anims.play("wizard-throw", false);
+          } else if (scene.anims?.exists("throw")) {
+            ownerSprite.anims.play("throw", false);
+          }
+        }
+      } catch (_) {}
+      return true;
+    }
+    if (data.type === `${NAME}-fireball-release`) {
+      spawnWizardFireballVisual(scene, data, ownerSprite);
+      return true;
+    }
+    return false;
+  }
+
+  static handleLocalAuthoritativeAttack(scene, data, localContext = {}) {
+    if (!data || data.type !== `${NAME}-fireball-release`) return false;
+    spawnWizardFireballAuthoritative(scene, data, localContext);
     return true;
   }
 

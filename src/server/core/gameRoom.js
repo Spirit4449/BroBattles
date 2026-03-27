@@ -17,6 +17,7 @@ const rewardManager = require("./gameRoom/rewardManager");
 const lifecycleManager = require("./gameRoom/lifecycleManager");
 const roomStateManager = require("./gameRoom/roomStateManager");
 const netTestLogger = require("./gameRoom/netTestLogger");
+const netCombatConfig = require("../../shared/netCombatConfig.json");
 const { createGameModeRuntime } = require("./gameModes");
 const {
   activateSpecial,
@@ -559,7 +560,65 @@ class GameRoom {
     }
 
     // Mark as combat to pause regen even if attack misses
-    playerData.lastCombatAt = Date.now();
+    const actionNow = Date.now();
+    playerData.lastCombatAt = actionNow;
+
+    if (
+      playerData.char_class === "wizard" &&
+      String(actionData.type || "").toLowerCase() === "wizard-fireball"
+    ) {
+      const startupMs = Math.max(
+        0,
+        Number(netCombatConfig?.wizard?.fireball?.startupMs) || 0,
+      );
+
+      this.io.to(`game:${this.matchId}`).emit("game:action", {
+        playerId: playerData.user_id,
+        playerName: playerData.name,
+        origin: { x: playerData.x, y: playerData.y },
+        flip: !!playerData.flip,
+        character: playerData.char_class,
+        action: {
+          ...actionData,
+          type: "wizard-fireball",
+          startup: startupMs,
+        },
+        t: actionNow,
+      });
+
+      const emitRelease = () => {
+        if (
+          this.status !== "active" ||
+          !playerData?.isAlive ||
+          playerData.connected === false ||
+          playerData.loaded !== true
+        ) {
+          return;
+        }
+        this.io.to(`game:${this.matchId}`).emit("game:action", {
+          playerId: playerData.user_id,
+          playerName: playerData.name,
+          origin: { x: playerData.x, y: playerData.y },
+          flip: !!playerData.flip,
+          character: playerData.char_class,
+          action: {
+            ...actionData,
+            type: "wizard-fireball-release",
+            startup: 0,
+            ownerEcho:
+              netCombatConfig?.wizard?.fireball?.ownerEcho === true,
+          },
+          t: Date.now(),
+        });
+      };
+
+      if (startupMs > 0) {
+        setTimeout(emitRelease, startupMs);
+      } else {
+        emitRelease();
+      }
+      return;
+    }
 
     // Process action (implement specific action handling later)
     // For now, just broadcast to other players
@@ -601,7 +660,7 @@ class GameRoom {
         playerData.inputBuffer = [];
       }
 
-      inputManager.advancePlayerKinematics(playerData, this.FIXED_DT_MS);
+      inputManager.advancePlayerKinematics(this, playerData, this.FIXED_DT_MS);
     }
   }
 

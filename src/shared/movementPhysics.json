@@ -1,0 +1,19 @@
+{
+  "maxSpeed": 260,
+  "accel": 3000,
+  "airAccel": 3300,
+  "dragGround": 1200,
+  "dragAir": 260,
+  "gravity": 800,
+  "fallGravityFactor": 1.35,
+  "jumpSpeed": 360,
+  "jumpBoost": 10,
+  "coyoteTimeMs": 130,
+  "coyoteSpeedThreshold": 130,
+  "wallJumpCooldownMs": 320,
+  "wallSlideMaxFallSpeed": 160,
+  "wallKickLockMs": 160,
+  "wallKickFull": 360,
+  "minSpeedMult": 0.5,
+  "maxSpeedMult": 2
+}

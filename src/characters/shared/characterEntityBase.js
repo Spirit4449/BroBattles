@@ -22,6 +22,10 @@ export default class CharacterEntityBase {
     return false;
   }
 
+  static handleLocalAuthoritativeAttack() {
+    return false;
+  }
+
   static chooseRemoteAnimation({ animation = "idle" } = {}) {
     return animation || "idle";
   }

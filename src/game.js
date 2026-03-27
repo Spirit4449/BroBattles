@@ -39,10 +39,12 @@ import {
   applyAuthoritativeState,
   getAmmoSyncState,
   getNetworkInputState,
+  reconcileLocalMovement,
   setLocalNetStateFlusher,
 } from "./player";
 import {
   preloadAll,
+  handleLocalAuthoritativeAttack,
   handleRemoteAttack,
   setupAll,
   resolveAnimKey,
@@ -62,6 +64,7 @@ import {
   noteClientLifecycle,
   shouldMuteClientDefaultLogs,
 } from "./lib/netTestLogger.js";
+import { MOVEMENT_PHYSICS } from "./lib/movementPhysics.js";
 
 // Make Phaser globally available for character modules
 window.Phaser = Phaser;
@@ -187,7 +190,7 @@ const snapshotBuffer = createSnapshotBuffer({
   maxStateBuffer: 90,
   initialInterpDelayMs: 50,
   minInterpDelayMs: 20,
-  maxInterpDelayMs: 100,
+  maxInterpDelayMs: 50,
   snapIntervalMs: 50,
   spacingEmaAlpha: 0.12,
   enableAdaptiveDelay: true,
@@ -297,11 +300,13 @@ matchCoordinator = createMatchCoordinator({
   hud,
   positionSpawn,
   OpPlayer,
+  handleLocalAuthoritativeAttack,
   handleRemoteAttack,
   powerupTickSounds: POWERUP_TICK_SOUNDS,
   onInitializePlayers: initializePlayers,
   onTrySendReadyAck: trySendReadyAck,
   onTrackShieldEffects: trackShieldEffectsPresence,
+  onReconcileLocalMovement: reconcileLocalMovement,
   onStartSuddenDeathMusic: startSuddenDeathMusic,
   onStopSuddenDeathMusic: stopSuddenDeathMusic,
   onPlayMatchEndSound: playMatchEndSound,
@@ -1434,7 +1439,13 @@ class GameScene extends Phaser.Scene {
         (ttt - tt) * m1
       );
     };
-    const projectAxis = (aValue, bValue, dtMs, velocityValue = null) => {
+    const projectAxis = (
+      aValue,
+      bValue,
+      dtMs,
+      velocityValue = null,
+      options = {},
+    ) => {
       const aNum = Number(aValue);
       const bNum = Number(bValue);
       if (!Number.isFinite(aNum) || !Number.isFinite(bNum)) {
@@ -1442,6 +1453,13 @@ class GameScene extends Phaser.Scene {
       }
       const velocityNum = Number(velocityValue);
       if (Number.isFinite(velocityNum) && extrapolationMs > 0) {
+        if (options?.vertical && options?.airborne) {
+          const tSec = extrapolationMs / 1000;
+          const gravity = Number(MOVEMENT_PHYSICS.gravity) || 0;
+          const fallMult =
+            velocityNum > 0 ? Number(MOVEMENT_PHYSICS.fallGravityFactor) || 1 : 1;
+          return bNum + velocityNum * tSec + 0.5 * gravity * fallMult * tSec * tSec;
+        }
         return bNum + velocityNum * (extrapolationMs / 1000);
       }
       const safeDtMs = Math.max(1, Number(dtMs) || 0);
@@ -1543,7 +1561,14 @@ class GameScene extends Phaser.Scene {
       if (isLoaded) {
         const inPrecision =
           (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
-        const effectiveAlpha = inPrecision ? Math.max(alpha, 0.85) : alpha;
+        const airborne = !(
+          bPosData?.grounded ?? aPosData?.grounded ?? false
+        );
+        const effectiveAlpha = inPrecision
+          ? Math.max(alpha, 0.85)
+          : airborne
+            ? Math.max(alpha, 0.72)
+            : alpha;
         const aX = Number(aPosData?.x);
         const aY = Number(aPosData?.y);
         const bX = Number(bPosData?.x);
@@ -1562,7 +1587,10 @@ class GameScene extends Phaser.Scene {
               Number(bState?.tMono) - Number(aState?.tMono),
             );
             targetX = projectAxis(aX, bX, stateDeltaMs, bPosData?.vx);
-            targetY = projectAxis(aY, bY, stateDeltaMs, bPosData?.vy);
+            targetY = projectAxis(aY, bY, stateDeltaMs, bPosData?.vy, {
+              vertical: true,
+              airborne,
+            });
           } else {
             const stateDeltaMs = Math.max(
               1,
@@ -1612,10 +1640,17 @@ class GameScene extends Phaser.Scene {
         if (dist > 0.35) {
           const inPrecision =
             (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
+          const airborne = !(
+            bPosData?.grounded ?? aPosData?.grounded ?? false
+          );
           const dtMs = Math.max(1, Number(this.game?.loop?.delta) || 16.7);
-          const followSpeedPxPerSec = inPrecision ? 3000 : 1500;
+          const followSpeedPxPerSec = inPrecision
+            ? 3000
+            : airborne
+              ? 2300
+              : 1500;
           const maxStep = (followSpeedPxPerSec * dtMs) / 1000;
-          const snapDistance = inPrecision ? 1.5 : 0.9;
+          const snapDistance = inPrecision ? 1.5 : airborne ? 1.25 : 0.9;
           if (dist > 520 || dist <= snapDistance) {
             spr.x = targetX;
             spr.y = targetY;

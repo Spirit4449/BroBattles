@@ -185,84 +185,166 @@ function spawnImpact(scene, x, y, playSound = true) {
   } catch (_) {}
 }
 
-export function performWizardFireball(instance, attackContext = null) {
-  const { scene, player: p, username, gameId, opponentPlayersRef } = instance;
-  const chargeRatio = getChargeRatioFromContext(attackContext);
-  let direction = p.flipX ? -1 : 1;
-  let travelDirection = direction;
-  const attackId = createRuntimeId("wizardFireball");
-  const chargedScale = scaleByCharge({
-    baseValue: FIREBALL_ACTIVE_SCALE,
-    chargeRatio,
-    maxScale: WIZARD_CHARGE.scaleMax || 1,
-  });
+function playWizardCastWindup(scene, ownerSprite, volume = 0.3) {
+  try {
+    if (ownerSprite?.anims) {
+      if (scene.anims?.exists("wizard-throw")) {
+        ownerSprite.anims.play("wizard-throw", false);
+      } else if (scene.anims?.exists("throw")) {
+        ownerSprite.anims.play("throw", false);
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const played = scene.sound?.play("wizard-fireball", { volume });
+    if (!played) {
+      scene.sound?.play("draven-fireball", { volume: Math.max(0.2, volume * 0.8) });
+    }
+  } catch (_) {}
+}
+
+function resolveProjectileStart(payload, ownerSprite, direction) {
+  const startX = Number(payload?.start?.x);
+  const startY = Number(payload?.start?.y);
+  if (Number.isFinite(startX) && Number.isFinite(startY)) {
+    return { x: startX, y: startY };
+  }
+
+  const originX = Number(payload?.origin?.x);
+  const originY = Number(payload?.origin?.y);
+  if (Number.isFinite(originX) && Number.isFinite(originY)) {
+    return { x: originX, y: originY };
+  }
+
+  return {
+    x:
+      (ownerSprite?.x || 0) +
+      direction * ((ownerSprite?.displayWidth || 80) * FIREBALL_FORWARD_OFFSET),
+    y: ownerSprite
+      ? ownerSprite.y -
+        (ownerSprite.displayHeight || ownerSprite.height || 120) *
+          FIREBALL_VERTICAL_OFFSET
+      : 0,
+  };
+}
+
+function spawnWizardFireballProjectile(
+  scene,
+  payload,
+  {
+    ownerSprite = null,
+    isOwner = false,
+    username = "",
+    gameId = null,
+    opponentPlayersRef = null,
+  } = {},
+) {
+  if (!scene?.add) return null;
+
+  const direction = payload?.direction || 1;
+  const start = resolveProjectileStart(payload, ownerSprite, direction);
+  const range = payload?.range || FIREBALL_RANGE;
+  const travelDuration =
+    payload?.duration || Math.round((range / FIREBALL_SPEED) * 1000);
+  const startup = Math.max(0, Number(payload?.startup) || 0);
+  const bob = payload?.bob ?? FIREBALL_BOB_AMPLITUDE;
+  const scale = Number(payload?.scale) || FIREBALL_ACTIVE_SCALE;
+  const chargeRatio = Number(payload?.chargeRatio) || 0;
+  const attackId = String(payload?.id || createRuntimeId("wizardFireball"));
   const chargedCollisionRadius = scaleByCharge({
     baseValue: FIREBALL_COLLISION_RADIUS,
     chargeRatio,
     maxScale: WIZARD_CHARGE.scaleMax || 1,
   });
 
-  // Lock the player's flip state during cast
-  const unlockFlip = lockPlayerFlip(p);
-
-  const computeOrigin = (dir = direction) => ({
-    x: p.x + dir * ((p.displayWidth || 80) * FIREBALL_FORWARD_OFFSET),
-    y: p.y - (p.displayHeight || p.height || 120) * FIREBALL_VERTICAL_OFFSET,
-  });
-
-  let currentOrigin = computeOrigin(direction);
-  let travelBaseY = currentOrigin.y;
-  const payloadStart = { ...currentOrigin };
-
-  if (scene.anims) {
-    if (scene.anims.exists("wizard-throw")) {
-      p.anims.play("wizard-throw", false);
-    } else if (scene.anims.exists("throw")) {
-      p.anims.play("throw", false);
-    }
+  const sprite = createFireballSprite(scene, start.x, start.y, direction);
+  if (sprite.setAngle) {
+    sprite.setAngle(
+      direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG,
+    );
   }
-  try {
-    const fired = scene.sound?.play("wizard-fireball", { volume: 0.55 });
-    if (!fired) {
-      scene.sound?.play("draven-fireball", { volume: 0.45 });
-    }
-  } catch (_) {}
-
-  const sprite = createFireballSprite(
-    scene,
-    currentOrigin.x,
-    currentOrigin.y,
-    direction,
-  );
+  scene.tweens.add({
+    targets: sprite,
+    scale,
+    ease: "Sine.easeOut",
+    duration: startup,
+  });
   const debugFollower = attachDebugFollower(scene, sprite);
   if (debugFollower) {
     sprite.once("destroy", () => debugFollower.destroy());
   }
-  scene.tweens.add({
-    targets: sprite,
-    scale: chargedScale,
-    ease: "Sine.easeOut",
-    duration: FIREBALL_CAST_DELAY_MS,
-  });
   const trail = spawnFireballTrail(scene, sprite);
-  const lifetimeMs = Math.round((FIREBALL_RANGE / FIREBALL_SPEED) * 1000);
+
+  let startupFollower = null;
+  const followOwnerDuringStartup =
+    startup > 0 && ownerSprite && ownerSprite.active;
+  if (followOwnerDuringStartup) {
+    const updateStartupOrigin = () => {
+      if (!sprite.active || !ownerSprite?.active) return;
+      const liveStart = resolveProjectileStart({}, ownerSprite, direction);
+      sprite.x = liveStart.x;
+      sprite.y = liveStart.y;
+    };
+    updateStartupOrigin();
+    scene.events.on("update", updateStartupOrigin);
+    startupFollower = () => {
+      scene.events.off("update", updateStartupOrigin);
+      startupFollower = null;
+    };
+  }
+
+  if (!isOwner) {
+    const launch = () => {
+      if (!sprite.active) return;
+      if (startupFollower) startupFollower();
+      const launchX = sprite.x;
+      const launchY = sprite.y;
+
+      scene.tweens.add({
+        targets: sprite,
+        x: launchX + direction * range,
+        ease: "Linear",
+        duration: travelDuration,
+        onComplete: () => {
+          spawnImpact(scene, sprite.x, sprite.y, false);
+          sprite.destroy();
+          if (trail) trail.destroy();
+          debugFollower?.destroy();
+        },
+      });
+      scene.tweens.add({
+        targets: sprite,
+        y: launchY + bob,
+        ease: "Sine.easeInOut",
+        yoyo: true,
+        duration: FIREBALL_BOB_TWEEN_MS,
+        repeat: Math.ceil(travelDuration / FIREBALL_BOB_TWEEN_MS),
+      });
+    };
+
+    if (startup > 0) {
+      scene.time.delayedCall(startup, launch);
+    } else {
+      launch();
+    }
+    return sprite;
+  }
+
   const hitSet = new Set();
   let traveled = 0;
   let travelElapsed = 0;
-  let launchTimer = FIREBALL_CAST_DELAY_MS;
-  let flipLockTimer = FIREBALL_FLIP_LOCK_MS;
+  let launchTimer = startup;
   let launched = launchTimer <= 0;
   let alive = true;
-
-  const damageValue = Math.max(
-    1,
-    Math.round(instance.constructor?.getStats?.()?.baseDamage || 0),
-  );
+  let travelBaseY = sprite.y;
+  const damageValue = Math.max(1, Math.round(payload?.damage || 0));
 
   const cleanup = (hitPosition, playSound = true) => {
     if (!alive) return;
     alive = false;
     scene.events.off("update", update);
+    if (startupFollower) startupFollower();
     if (trail) trail.destroy();
     debugFollower?.destroy();
     spawnImpact(
@@ -272,52 +354,29 @@ export function performWizardFireball(instance, attackContext = null) {
       playSound,
     );
     sprite.destroy();
-    // Unlock the player's flip after attack completes
-    if (p) {
-      unlockFlip();
-    }
   };
 
   const update = () => {
     if (!alive || !sprite.active) return;
     const dt = scene.game.loop.delta || 16;
 
-    // Handle flip lock timer independently
-    if (flipLockTimer > 0) {
-      flipLockTimer -= dt;
-      if (flipLockTimer <= 0 && p) {
-        unlockFlip();
-      }
-    }
-
     if (!launched) {
-      // Don't update direction - keep it locked to original
-      currentOrigin = computeOrigin(direction);
-      sprite.x = currentOrigin.x;
-      sprite.y = currentOrigin.y;
-      if (sprite.setAngle)
-        sprite.setAngle(
-          direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG,
-        );
       launchTimer -= dt;
       if (launchTimer > 0) return;
       launched = true;
-      travelDirection = direction;
-      travelBaseY = currentOrigin.y;
-      sprite.x = currentOrigin.x;
-      sprite.y = currentOrigin.y;
+      if (startupFollower) startupFollower();
+      travelBaseY = sprite.y;
       return;
     }
+
     const step = (FIREBALL_SPEED * dt) / 1000;
     traveled += step;
     travelElapsed += dt;
-    sprite.x += step * travelDirection;
+    sprite.x += step * direction;
     sprite.y =
       travelBaseY +
       Math.sin(travelElapsed / FIREBALL_BOB_FREQ_MS) * FIREBALL_BOB_AMPLITUDE;
-    // No rotation during flight
 
-    // Owner-side collision detection
     const opponents = Object.values(opponentPlayersRef || {});
     for (const wrap of opponents) {
       const spr = wrap?.opponent;
@@ -344,12 +403,12 @@ export function performWizardFireball(instance, attackContext = null) {
           attackTime: Date.now(),
           damage: damageValue,
           gameId,
+          instanceId: attackId,
         });
-        // Play hit sound and visual immediately on impact
         spawnImpact(scene, sprite.x, sprite.y, true);
-        // Continue flight (piercing)
       }
     }
+
     emitVaultHitForCircle({
       attacker: username,
       x: sprite.x,
@@ -362,140 +421,66 @@ export function performWizardFireball(instance, attackContext = null) {
       hitSet,
     });
 
-    if (traveled >= FIREBALL_RANGE || travelElapsed >= lifetimeMs) {
+    if (traveled >= range || travelElapsed >= travelDuration) {
       cleanup(null, false);
     }
   };
 
   scene.events.on("update", update);
+  return sprite;
+}
+
+export function performWizardFireball(instance, attackContext = null) {
+  const { scene, player: p } = instance;
+  const chargeRatio = getChargeRatioFromContext(attackContext);
+  const direction = p.flipX ? -1 : 1;
+  const attackId = createRuntimeId("wizardFireball");
+  const chargedScale = scaleByCharge({
+    baseValue: FIREBALL_ACTIVE_SCALE,
+    chargeRatio,
+    maxScale: WIZARD_CHARGE.scaleMax || 1,
+  });
+
+  const unlockFlip = lockPlayerFlip(p);
+  playWizardCastWindup(scene, p, 0.55);
+  scene.time.delayedCall(FIREBALL_FLIP_LOCK_MS, () => {
+    try {
+      unlockFlip();
+    } catch (_) {}
+  });
 
   return {
     type: "wizard-fireball",
     id: attackId,
-    direction: travelDirection,
-    start: payloadStart,
+    direction,
     range: FIREBALL_RANGE,
-    duration: lifetimeMs,
+    duration: Math.round((FIREBALL_RANGE / FIREBALL_SPEED) * 1000),
     startup: FIREBALL_CAST_DELAY_MS,
     bob: FIREBALL_BOB_AMPLITUDE,
     scale: chargedScale,
     chargeRatio,
+    damage: Math.max(
+      1,
+      Math.round(instance.constructor?.getStats?.()?.baseDamage || 0),
+    ),
   };
 }
 
 export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
-  if (!scene?.add) return null;
-  const direction = payload?.direction || 1;
-  const start = payload?.start || {
-    x: ownerSprite?.x || 0,
-    y: ownerSprite
-      ? ownerSprite.y - ownerSprite.height * FIREBALL_VERTICAL_OFFSET
-      : 0,
-  };
-  const range = payload?.range || FIREBALL_RANGE;
-  const travelDuration =
-    payload?.duration || Math.round((range / FIREBALL_SPEED) * 1000);
-  const startup = payload?.startup ?? FIREBALL_CAST_DELAY_MS;
-  const bob = payload?.bob ?? FIREBALL_BOB_AMPLITUDE;
-  const scale = Number(payload?.scale) || FIREBALL_ACTIVE_SCALE;
-
-  // Play launch sound for remote players (lower volume)
-  try {
-    scene.sound?.play("wizard-fireball", { volume: 0.3 });
-  } catch (_) {}
-
-  try {
-    if (ownerSprite?.anims) {
-      if (scene.anims?.exists("wizard-throw")) {
-        ownerSprite.anims.play("wizard-throw", false);
-      } else if (scene.anims?.exists("throw")) {
-        ownerSprite.anims.play("throw", false);
-      }
-    }
-  } catch (_) {}
-
-  const sprite = createFireballSprite(scene, start.x, start.y, direction);
-  if (sprite.setAngle)
-    sprite.setAngle(
-      direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG,
-    );
-  scene.tweens.add({
-    targets: sprite,
-    scale,
-    ease: "Sine.easeOut",
-    duration: startup,
+  return spawnWizardFireballProjectile(scene, payload, {
+    ownerSprite,
+    isOwner: false,
   });
-  const debugFollower = attachDebugFollower(scene, sprite);
-  if (debugFollower) {
-    sprite.once("destroy", () => debugFollower.destroy());
-  }
-  const trail = spawnFireballTrail(scene, sprite);
+}
 
-  let startupFollower = null;
-  const followOwnerDuringStartup =
-    startup > 0 && ownerSprite && ownerSprite.active;
-  if (followOwnerDuringStartup) {
-    const updateStartupOrigin = () => {
-      if (!sprite.active || !ownerSprite?.active) return;
-      const liveStart = {
-        x:
-          ownerSprite.x +
-          direction *
-            ((ownerSprite.displayWidth || 80) * FIREBALL_FORWARD_OFFSET),
-        y:
-          ownerSprite.y -
-          (ownerSprite.displayHeight || ownerSprite.height || 120) *
-            FIREBALL_VERTICAL_OFFSET,
-      };
-      sprite.x = liveStart.x;
-      sprite.y = liveStart.y;
-    };
-    updateStartupOrigin();
-    scene.events.on("update", updateStartupOrigin);
-    startupFollower = () => {
-      scene.events.off("update", updateStartupOrigin);
-      startupFollower = null;
-    };
-  }
-
-  sprite.once("destroy", () => {
-    if (startupFollower) startupFollower();
+export function spawnWizardFireballAuthoritative(scene, payload, localContext = {}) {
+  return spawnWizardFireballProjectile(scene, payload, {
+    ownerSprite: localContext?.ownerSprite || null,
+    isOwner: true,
+    username: localContext?.username || "",
+    gameId: localContext?.gameId || null,
+    opponentPlayersRef: localContext?.opponentPlayersRef || null,
   });
-
-  const launch = () => {
-    if (!sprite.active) return;
-    if (startupFollower) startupFollower();
-    const launchX = sprite.x;
-    const launchY = sprite.y;
-
-    scene.tweens.add({
-      targets: sprite,
-      x: launchX + direction * range,
-      ease: "Linear",
-      duration: travelDuration,
-      onComplete: () => {
-        spawnImpact(scene, sprite.x, sprite.y, false);
-        sprite.destroy();
-        if (trail) trail.destroy();
-        debugFollower?.destroy();
-      },
-    });
-    scene.tweens.add({
-      targets: sprite,
-      y: launchY + bob,
-      ease: "Sine.easeInOut",
-      yoyo: true,
-      duration: FIREBALL_BOB_TWEEN_MS,
-      repeat: Math.ceil(travelDuration / FIREBALL_BOB_TWEEN_MS),
-    });
-  };
-
-  if (startup > 0) {
-    scene.time.delayedCall(startup, launch);
-  } else {
-    launch();
-  }
-  return sprite;
 }
 
 export function changeDebugState(state) {

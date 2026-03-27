@@ -1,0 +1,13 @@
+{
+  "wizard": {
+    "fireball": {
+      "startupMs": 300,
+      "ownerEcho": true
+    }
+  },
+  "draven": {
+    "splash": {
+      "remoteExplosionDelayMs": 500
+    }
+  }
+}

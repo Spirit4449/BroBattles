@@ -74,6 +74,20 @@ export function handleRemoteAttack(scene, character, data, ownerWrapper) {
   return false;
 }
 
+export function handleLocalAuthoritativeAttack(
+  scene,
+  character,
+  data,
+  localContext = {},
+) {
+  const Cls = getCharacterClass(character);
+  if (Cls && typeof Cls.handleLocalAuthoritativeAttack === "function") {
+    Cls.handleLocalAuthoritativeAttack(scene, data, localContext);
+    return true;
+  }
+  return false;
+}
+
 export function chooseRemoteAnimation(character, context = {}) {
   const Cls = getCharacterClass(character);
   if (Cls && typeof Cls.chooseRemoteAnimation === "function") {

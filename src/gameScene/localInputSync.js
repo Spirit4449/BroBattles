@@ -20,6 +20,8 @@ export function createLocalInputSync({
     jumpHeld: false,
     jumpPressed: false,
     facing: 1,
+    grounded: false,
+    movementLocked: false,
   };
   let inputIntentSeq = 0; // sequence number for intent tracking
   let lastAmmoState = null;
@@ -44,7 +46,9 @@ export function createLocalInputSync({
     Number(a.direction) === Number(b.direction) &&
     !!a.jumpHeld === !!b.jumpHeld &&
     !!a.jumpPressed === !!b.jumpPressed &&
-    Number(a.facing) === Number(b.facing);
+    Number(a.facing) === Number(b.facing) &&
+    !!a.grounded === !!b.grounded &&
+    !!a.movementLocked === !!b.movementLocked;
 
   function sync(
     scene,
@@ -62,10 +66,17 @@ export function createLocalInputSync({
       jumpHeld: !!rawInput?.jumpHeld,
       jumpPressed: !!rawInput?.jumpPressed,
       facing: Number(rawInput?.facing) === -1 ? -1 : 1,
-      sequence: inputIntentSeq++,
+      grounded: !!rawInput?.grounded,
+      vx: quantizeVelocity(rawInput?.vx),
+      vy: quantizeVelocity(rawInput?.vy),
+      animation:
+        typeof rawInput?.animation === "string" ? rawInput.animation : null,
+      movementLocked: !!rawInput?.movementLocked,
+      timestamp: now,
     };
     const intentChanged = !sameIntentState(inputIntent, lastIntentState);
     if (!force && !intentChanged && now - lastMovementSent < throttleMs) return;
+    inputIntent.sequence = inputIntentSeq++;
 
     const ammoState = getAmmoSyncState();
     const animation = player.anims?.currentAnim?.key || null;
@@ -110,6 +121,8 @@ export function createLocalInputSync({
       jumpHeld: inputIntent.jumpHeld,
       jumpPressed: inputIntent.jumpPressed,
       facing: inputIntent.facing,
+      grounded: inputIntent.grounded,
+      movementLocked: inputIntent.movementLocked,
     };
     lastMovementSent = now;
     if (includeAmmoState) {

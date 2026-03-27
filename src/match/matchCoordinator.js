@@ -65,11 +65,13 @@ import {
  * @property {Function} positionSpawn
  * @property {Function} OpPlayer
  * @property {Function} handleRemoteAttack
+ * @property {Function} handleLocalAuthoritativeAttack
  * @property {object}   powerupTickSounds
  * // ---- callbacks for behaviors that remain in game.js ----
  * @property {Function} onInitializePlayers
  * @property {Function} onTrySendReadyAck
  * @property {Function} onTrackShieldEffects
+ * @property {Function} onReconcileLocalMovement
  * @property {Function} onStartSuddenDeathMusic
  * @property {Function} onStopSuddenDeathMusic
  * @property {Function} onPlayMatchEndSound
@@ -126,10 +128,12 @@ export function createMatchCoordinator(config) {
     positionSpawn,
     OpPlayer,
     handleRemoteAttack,
+    handleLocalAuthoritativeAttack,
     powerupTickSounds,
     onInitializePlayers,
     onTrySendReadyAck,
     onTrackShieldEffects,
+    onReconcileLocalMovement,
     onStartSuddenDeathMusic,
     onStopSuddenDeathMusic,
     onPlayMatchEndSound,
@@ -579,6 +583,13 @@ export function createMatchCoordinator(config) {
 
     _applyWorldState(snapshot, getGameData()?.yourTeam);
 
+    try {
+      const localSnapshot = snapshot.players?.[getUsername()];
+      if (localSnapshot && typeof onReconcileLocalMovement === "function") {
+        onReconcileLocalMovement(localSnapshot);
+      }
+    } catch (_) {}
+
     hud.syncTeamHudFromSnapshot(snapshot.players);
 
     const ingest = snapshotBuffer.ingestSnapshot(snapshot, performance.now());
@@ -634,21 +645,46 @@ export function createMatchCoordinator(config) {
 
       const { playerName, character, action } = packet;
       if (!playerName || !action) return;
-      if (playerName === getUsername()) return; // never process own packets
+      const isSelfPacket = playerName === getUsername();
+      if (isSelfPacket && !action?.ownerEcho) return;
       noteClientRemoteAction(packet);
-
-      const wrapper = _ensureOpPlayer(playerName);
-      if (!wrapper) return;
+      const actionWithPacketMeta = {
+        ...(action || {}),
+        origin: packet?.origin || action?.origin || null,
+        flip: typeof packet?.flip === "boolean" ? packet.flip : action?.flip,
+      };
 
       const gameData = getGameData();
       const pd = (gameData.players || []).find((p) => p.name === playerName);
       const charKey = (character || (pd && pd.char_class) || "").toLowerCase();
+      if (isSelfPacket) {
+        const consumedLocal =
+          typeof handleLocalAuthoritativeAttack === "function"
+            ? handleLocalAuthoritativeAttack(scene, charKey, actionWithPacketMeta, {
+                ownerSprite: getPlayer(),
+                username: getUsername(),
+                opponentPlayersRef: opponentPlayers,
+                teamPlayersRef: teamPlayers,
+              })
+            : false;
+        if (!consumedLocal && !shouldMuteClientDefaultLogs()) {
+          console.debug("Unhandled local authoritative action", {
+            playerName,
+            charKey,
+            action,
+          });
+        }
+        return;
+      }
+
+      const wrapper = _ensureOpPlayer(playerName);
+      if (!wrapper) return;
 
       // PHASE 2: Attack visual consistency fix
       // Always render attack from opponent's CURRENT INTERPOLATED SPRITE POSITION
       // (not from server-recorded origin). This prevents visual gaps/stuttering.
       // Server origin is used only for hit validation (separate concern).
-      const act = { ...(action || {}) };
+      const act = { ...actionWithPacketMeta };
 
       if (wrapper.opponent) {
         const ownerSprite = wrapper.opponent;

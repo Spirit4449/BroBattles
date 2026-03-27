@@ -9,7 +9,10 @@
  */
 
 const MOVEMENT_PHYSICS = require("./movementPhysics");
-const { WORLD_BOUNDS } = require("../gameRoomConfig");
+const {
+  getWorldBoundsForMap,
+  clampToWorldBounds,
+} = require("../core/gameRoom/mapNetRuntime");
 
 /**
  * Simulate a single fixed-timestep movement tick for a player.
@@ -20,7 +23,7 @@ const { WORLD_BOUNDS } = require("../gameRoomConfig");
  * @param {number} dt - timestep in milliseconds
  * @returns {object} { x, y, vx, vy, isGrounded, canJump }
  */
-function simulateMovementTick(playerState, inputIntent, dt) {
+function simulateMovementTick(playerState, inputIntent, dt, options = {}) {
   // Unpack state (use current values, don't modify original)
   let x = playerState.x || 0;
   let y = playerState.y || 0;
@@ -65,10 +68,14 @@ function simulateMovementTick(playerState, inputIntent, dt) {
   if (direction !== 0) {
     const targetVx = direction * maxSpeed;
     const accelPerSec = moveAccel;
-    vx += (targetVx - vx) * Math.min(1, (accelPerSec * dtSec) / maxSpeed);
+    vx += Math.sign(direction) * accelPerSec * dtSec;
+    if ((direction > 0 && vx > targetVx) || (direction < 0 && vx < targetVx)) {
+      vx = targetVx;
+    }
   } else {
-    // No input: apply drag
-    vx *= Math.pow(1 - moveDrag / 10000, dtSec);
+    const dragDelta = moveDrag * dtSec;
+    if (Math.abs(vx) <= dragDelta) vx = 0;
+    else vx -= Math.sign(vx) * dragDelta;
   }
 
   // Clamp horizontal velocity
@@ -84,9 +91,10 @@ function simulateMovementTick(playerState, inputIntent, dt) {
   }
 
   // ===== LANDING & COYOTE =====
-  // TODO: In a full implementation, check collision here
-  // For now, assume player lands based on vy direction change
-  if (vy > 0 && (playerState.collidingDown || false)) {
+  if (
+    (playerState.collidingDown || false) ||
+    (typeof inputIntent?.grounded === "boolean" && inputIntent.grounded && vy >= 0)
+  ) {
     vy = 0;
     isGrounded = true;
     lastGroundTime = Date.now();
@@ -105,13 +113,11 @@ function simulateMovementTick(playerState, inputIntent, dt) {
   y += vy * dtSec;
 
   // ===== WORLD BOUNDS CLAMPING =====
-  const minX = -WORLD_BOUNDS.margin;
-  const maxX = WORLD_BOUNDS.width + WORLD_BOUNDS.margin;
-  const minY = -WORLD_BOUNDS.margin;
-  const maxY = WORLD_BOUNDS.height + WORLD_BOUNDS.margin;
-
-  x = Math.max(minX, Math.min(maxX, x));
-  y = Math.max(minY, Math.min(maxY, y));
+  const bounds =
+    options?.bounds || getWorldBoundsForMap(options?.mapId || playerState?.mapId);
+  const clamped = clampToWorldBounds(bounds, x, y);
+  x = clamped.x;
+  y = clamped.y;
 
   return {
     x,
@@ -132,10 +138,10 @@ function simulateMovementTick(playerState, inputIntent, dt) {
  * @param {array} intents - [{ direction, isJumping, timestamp }, ...]
  * @returns {object} final state after all intents processed
  */
-function simulateMovementSequence(playerState, intents, dt = 16.67) {
+function simulateMovementSequence(playerState, intents, dt = 16.67, options = {}) {
   let state = { ...playerState };
   for (const intent of intents) {
-    state = simulateMovementTick(state, intent, dt);
+    state = simulateMovementTick(state, intent, dt, options);
   }
   return state;
 }
