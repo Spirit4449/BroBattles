@@ -5,16 +5,6 @@ import socket from "./socket";
 function pdbg() {
   /* logging disabled */
 }
-import { lushyPeaksObjects, base, platform } from "./maps/lushyPeaks";
-import {
-  mangroveMeadowObjects,
-  tinyPlatform1,
-  tinyPlatform2,
-  tinyPlatform3,
-  tinyPlatform4,
-  tinyPlatform5,
-  tinyPlatform6,
-} from "./maps/mangroveMeadow";
 import {
   createFor as createCharacterFor,
   getTextureKey,
@@ -32,7 +22,8 @@ import {
   ATTACK_CHARGE_TAP_THRESHOLD_MS,
   getAttackChargeConfig,
 } from "./lib/characterStats";
-import { MOVEMENT_PHYSICS } from "./lib/movementPhysics.js";
+import { getResolvedCharacterBodyConfig } from "./lib/characterTuning.js";
+import MOVEMENT_PHYSICS from "./shared/movementPhysics.json";
 import { getChargeRatioFromHold } from "./characters/shared/chargeAttack";
 import { noteClientActionSent } from "./lib/netTestLogger.js";
 // Globals
@@ -143,9 +134,6 @@ let networkInputState = {
 let localMovementReconcileState = {
   lastAckSeq: -1,
   lastAckAt: 0,
-  lastSoftCorrectAt: 0,
-  lastHardCorrectAt: 0,
-  spawnSettleUntil: 0,
 };
 
 const localStateSync = createLocalStateSync({
@@ -282,9 +270,6 @@ export function createPlayer(
   localMovementReconcileState = {
     lastAckSeq: -1,
     lastAckAt: performance.now(),
-    lastSoftCorrectAt: performance.now(),
-    lastHardCorrectAt: performance.now(),
-    spawnSettleUntil: performance.now() + 1200,
   };
   pdbg();
 
@@ -314,10 +299,10 @@ export function createPlayer(
 
   // Establish frame/body sizing BEFORE computing spawn so height math is correct
   frame = player.frame;
-  const bs = (stats && stats.body) || {};
+  const bs = getResolvedCharacterBodyConfig(character);
   bodyConfig = bs; // persist for use in movement function
-  const widthShrink = bs.widthShrink ?? 35;
-  const heightShrink = bs.heightShrink ?? 10;
+  const widthShrink = bs.widthShrink;
+  const heightShrink = bs.heightShrink;
   const bw = Math.max(4, frame.width - widthShrink);
   const bh = Math.max(4, frame.height - heightShrink);
   player.body.setSize(bw, bh);
@@ -330,7 +315,7 @@ export function createPlayer(
     const frameW = frame ? frame.width : player.width;
     const bodyW = player.body.width;
     const ox = frameW / 2 - bodyW / 2 + (cfg.offsetXFromHalf ?? 0) + extra;
-    const oy = cfg.offsetY ?? 10;
+    const oy = cfg.offsetY;
     player.body.setOffset(ox, oy);
   };
   applyFlipOffsetLocal();

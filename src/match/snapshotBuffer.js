@@ -1,20 +1,25 @@
 import { shouldMuteClientDefaultLogs } from "../lib/netTestLogger.js";
+import { DEFAULT_SNAPSHOT_BUFFER_CONFIG } from "./snapshotBufferConfig";
 
-export function createSnapshotBuffer({
-  maxStateBuffer = 120,
-  initialInterpDelayMs = 50,
-  minInterpDelayMs = 40,
-  maxInterpDelayMs = 50,
-  snapIntervalMs = 50,
-  maxSpacingMs = 500,
-  lateSnapshotThresholdMs = 140,
-  largePositionDeltaPx = 90,
-  spacingEmaAlpha = 0.12,
-  enableAdaptiveDelay = false,
-  enableClockCorrection = false,
-  enableBacklogCatchup = false,
-  extrapolationLimitMs = 1000,
-} = {}) {
+export function createSnapshotBuffer(options = {}) {
+  const {
+    maxStateBuffer,
+    initialInterpDelayMs,
+    minInterpDelayMs,
+    maxInterpDelayMs,
+    snapIntervalMs,
+    maxSpacingMs,
+    lateSnapshotThresholdMs,
+    largePositionDeltaPx,
+    spacingEmaAlpha,
+    enableAdaptiveDelay,
+    enableClockCorrection,
+    enableBacklogCatchup,
+    extrapolationLimitMs,
+  } = {
+    ...DEFAULT_SNAPSHOT_BUFFER_CONFIG,
+    ...(options || {}),
+  };
   let active = false;
   const stateBuffer = [];
   let interpDelayMs = initialInterpDelayMs;

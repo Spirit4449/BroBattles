@@ -4,6 +4,7 @@ import {
   characterStats,
   getCharacterTuning,
 } from "../../lib/characterStats.js";
+import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import ReturningShuriken from "./attack";
 import { animations } from "./anim";
 import {
@@ -11,6 +12,7 @@ import {
   resolveSessionDamage,
 } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
+import { createRuntimeId } from "../shared/runtimeId";
 import {
   getChargeRatioFromContext,
   scaleByCharge,
@@ -18,8 +20,11 @@ import {
 
 // Single source of truth for this character's name/key
 const NAME = "ninja";
+const RETURNING_SHURIKEN = getResolvedCharacterAttackConfig(
+  NAME,
+  "returningShuriken",
+);
 const NINJA_TUNING = getCharacterTuning(NAME);
-const RETURNING_SHURIKEN = NINJA_TUNING.attack?.returningShuriken || {};
 const NINJA_CHARGE = NINJA_TUNING.attack?.charge || {};
 
 class Ninja extends CharacterEntityBase {
@@ -87,14 +92,13 @@ class Ninja extends CharacterEntityBase {
         {
           direction: data.direction,
           forwardDistance:
-            data.forwardDistance || RETURNING_SHURIKEN.forwardDistance || 500,
+            data.forwardDistance || RETURNING_SHURIKEN.forwardDistance,
           outwardDuration:
-            data.outwardDuration || RETURNING_SHURIKEN.outwardDuration || 380,
-          returnSpeed:
-            data.returnSpeed || RETURNING_SHURIKEN.returnSpeed || 900,
+            data.outwardDuration || RETURNING_SHURIKEN.outwardDuration,
+          returnSpeed: data.returnSpeed || RETURNING_SHURIKEN.returnSpeed,
           rotationSpeed:
-            data.rotationSpeed || RETURNING_SHURIKEN.rotationSpeed || 2000,
-          scale: data.scale || RETURNING_SHURIKEN.scale || 0.1,
+            data.rotationSpeed || RETURNING_SHURIKEN.rotationSpeed,
+          scale: data.scale || RETURNING_SHURIKEN.scale,
           damage: data.damage,
           isOwner: false,
         },
@@ -150,6 +154,7 @@ class Ninja extends CharacterEntityBase {
     const damage = resolveSessionDamage(baseDamage, 1000);
 
     const fired = this.performDefaultAttack(() => {
+      const attackId = createRuntimeId("ninjaShuriken");
       // Play throw anim and sfx
       const sfx = this.scene.sound.add("shurikenThrow");
       sfx.setVolume(1);
@@ -172,17 +177,18 @@ class Ninja extends CharacterEntityBase {
         gameId: this.gameId,
         isOwner: true,
         serverAuthoritativeHits: true,
+        instanceId: attackId,
         damage,
         chargeRatio,
-        rotationSpeed: RETURNING_SHURIKEN.rotationSpeed || 2000,
+        rotationSpeed: RETURNING_SHURIKEN.rotationSpeed,
         forwardDistance: scaleByCharge({
-          baseValue: RETURNING_SHURIKEN.forwardDistance || 500,
+          baseValue: RETURNING_SHURIKEN.forwardDistance,
           chargeRatio,
           maxScale: NINJA_CHARGE.rangeScaleMax || 1,
         }),
-        arcHeight: RETURNING_SHURIKEN.arcHeight || 160,
-        outwardDuration: RETURNING_SHURIKEN.outwardDuration || 380,
-        returnSpeed: RETURNING_SHURIKEN.returnSpeed || 900,
+        arcHeight: RETURNING_SHURIKEN.arcHeight,
+        outwardDuration: RETURNING_SHURIKEN.outwardDuration,
+        returnSpeed: RETURNING_SHURIKEN.returnSpeed,
       };
 
       const returning = new ReturningShuriken(
@@ -209,6 +215,7 @@ class Ninja extends CharacterEntityBase {
 
       return {
         type: "ninja-shuriken",
+        id: attackId,
         x: p.x,
         y: p.y,
         scale: config.scale || 0.1,

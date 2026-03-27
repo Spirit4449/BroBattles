@@ -2,7 +2,7 @@ const path = require("path");
 
 const CATALOG_PATH = path.resolve(
   __dirname,
-  "../../config/player-cards.catalog.json",
+  "../../shared/playerCardsCatalog.json",
 );
 
 let _cache = null;

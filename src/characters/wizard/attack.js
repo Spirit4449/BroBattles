@@ -1,4 +1,5 @@
 import { getCharacterTuning } from "../../lib/characterStats.js";
+import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 import {
@@ -7,25 +8,25 @@ import {
 } from "../shared/chargeAttack";
 
 const WIZARD_TUNING = getCharacterTuning("wizard");
-const FIREBALL = WIZARD_TUNING.attack?.fireball || {};
+const FIREBALL = getResolvedCharacterAttackConfig("wizard", "fireball");
 const WIZARD_CHARGE = WIZARD_TUNING.attack?.charge || {};
 
-const FIREBALL_SPEED = FIREBALL.speed ?? 450; // px per second after launch
-const FIREBALL_RANGE = FIREBALL.range ?? 1050; // px travel before despawn
-const FIREBALL_VISUAL_RADIUS = FIREBALL.visualRadius ?? 14;
-const FIREBALL_COLLISION_RADIUS = FIREBALL.collisionRadius ?? 38;
-const FIREBALL_INITIAL_SCALE = FIREBALL.initialScale ?? 0.1; // spawn scale
-const FIREBALL_ACTIVE_SCALE = FIREBALL.activeScale ?? 0.5; // scale once flying
-const FIREBALL_GLOW_RADIUS_MULT = FIREBALL.glowRadiusMultiplier ?? 1.35;
-const FIREBALL_BOB_AMPLITUDE = FIREBALL.bobAmplitude ?? 5;
-const FIREBALL_VERTICAL_OFFSET = FIREBALL.verticalOffset ?? 0.12; // fraction of height to lift from feet
-const FIREBALL_CAST_DELAY_MS = FIREBALL.castDelayMs ?? 300; // pre-launch delay
-const FIREBALL_FLIP_LOCK_MS = FIREBALL.flipLockMs ?? 300; // how long flip is locked (cast delay + 100ms)
-const FIREBALL_BOB_TWEEN_MS = FIREBALL.bobTweenMs ?? 220; // remote bob tween duration
-const FIREBALL_FORWARD_OFFSET = FIREBALL.forwardOffset ?? 0.23; // multiplier applied to sprite width for spawn X offset
-const FIREBALL_BOB_FREQ_MS = FIREBALL.bobFreqMs ?? 120; // divisor for owner bob sine wave (larger = slower)
-const FIREBALL_DEPTH = FIREBALL.depth ?? 100; // ensure rendering above tilemap and ground
-const FIREBALL_BASE_ANGLE_DEG = FIREBALL.baseAngleDeg ?? -90; // sideways orientation; right=+90, left=-90
+const FIREBALL_SPEED = FIREBALL.speed;
+const FIREBALL_RANGE = FIREBALL.range;
+const FIREBALL_VISUAL_RADIUS = FIREBALL.visualRadius;
+const FIREBALL_COLLISION_RADIUS = FIREBALL.collisionRadius;
+const FIREBALL_INITIAL_SCALE = FIREBALL.initialScale;
+const FIREBALL_ACTIVE_SCALE = FIREBALL.activeScale;
+const FIREBALL_GLOW_RADIUS_MULT = FIREBALL.glowRadiusMultiplier;
+const FIREBALL_BOB_AMPLITUDE = FIREBALL.bobAmplitude;
+const FIREBALL_VERTICAL_OFFSET = FIREBALL.verticalOffset;
+const FIREBALL_CAST_DELAY_MS = FIREBALL.castDelayMs;
+const FIREBALL_FLIP_LOCK_MS = FIREBALL.flipLockMs;
+const FIREBALL_BOB_TWEEN_MS = FIREBALL.bobTweenMs;
+const FIREBALL_FORWARD_OFFSET = FIREBALL.forwardOffset;
+const FIREBALL_BOB_FREQ_MS = FIREBALL.bobFreqMs;
+const FIREBALL_DEPTH = FIREBALL.depth;
+const FIREBALL_BASE_ANGLE_DEG = FIREBALL.baseAngleDeg;
 
 let DEBUG_DRAW = false;
 const ACTIVE_DEBUG_SHAPES = new Set();

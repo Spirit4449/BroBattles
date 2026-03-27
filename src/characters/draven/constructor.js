@@ -2,8 +2,8 @@
 import socket from "../../socket";
 import {
   characterStats,
-  getCharacterTuning,
 } from "../../lib/characterStats.js";
+import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { animations } from "./anim";
 import DravenEffects from "./effects";
 import {
@@ -16,8 +16,7 @@ import CharacterEntityBase from "../shared/characterEntityBase";
 
 // Single source of truth for this character's name/key
 const NAME = "draven";
-const DRAVEN_TUNING = getCharacterTuning(NAME);
-const SPLASH = DRAVEN_TUNING.attack?.splash || {};
+const SPLASH = getResolvedCharacterAttackConfig(NAME, "splash");
 
 class Draven extends CharacterEntityBase {
   static key = NAME;
@@ -133,9 +132,9 @@ class Draven extends CharacterEntityBase {
     try {
       scene.sound && scene.sound.play("draven-fireball", { volume: 0.4 });
     } catch (_) {}
-    const delay = data.delay || SPLASH.remoteExplosionDelayMs || 500;
-    const tipOffset = data.tipOffset || SPLASH.remoteExplosionTipOffset || 90;
-    const centerYFactor = SPLASH.centerYFactor || 0.15;
+    const delay = data.delay || SPLASH.remoteExplosionDelayMs;
+    const tipOffset = data.tipOffset || SPLASH.remoteExplosionTipOffset;
+    const centerYFactor = SPLASH.centerYFactor;
     const originX = Number(data?.origin?.x);
     const originY = Number(data?.origin?.y);
     const hasOrigin = Number.isFinite(originX) && Number.isFinite(originY);

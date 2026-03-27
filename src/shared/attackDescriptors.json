@@ -4,7 +4,6 @@
     "actionFlow": {
       "kind": "windup-release",
       "broadcastType": "wizard-fireball",
-      "startupMs": 300,
       "releaseActionType": "wizard-fireball-release",
       "releaseOwnerEcho": true
     }
@@ -16,14 +15,7 @@
     },
     "attackType": "basic",
     "runtime": {
-      "kind": "projectile-linear",
-      "collisionRadius": 38,
-      "speed": 450,
-      "range": 1050,
-      "forwardOffsetWidthFactor": 0.23,
-      "verticalOffsetHeightFactor": 0.12,
-      "bobAmplitude": 5,
-      "bobFreqMs": 120
+      "kind": "projectile-linear"
     }
   },
   "draven-splash": {
@@ -33,16 +25,7 @@
     },
     "attackType": "basic",
     "runtime": {
-      "kind": "attached-rect",
-      "width": 150,
-      "height": 108,
-      "activeWindowMs": 450,
-      "damageStartMs": 100,
-      "damageTickMs": 90,
-      "tipOffset": 50,
-      "minHeight": 20,
-      "growDurationMs": 220,
-      "centerYFactor": 0.15
+      "kind": "attached-rect"
     },
     "events": {
       "onHitAction": {
@@ -60,20 +43,7 @@
     },
     "attackType": "basic",
     "runtime": {
-      "kind": "path-rect",
-      "width": 94,
-      "height": 46,
-      "windupMs": 180,
-      "activeWindowMs": 290,
-      "followAfterWindupMs": 70,
-      "damageTickMs": 90,
-      "originOffsetX": 10,
-      "originHeightFactor": 0.5,
-      "startOffsetX": -14,
-      "startOffsetY": -8,
-      "endYOffset": 300,
-      "arcHeight": 120,
-      "curveMagnitude": 20
+      "kind": "path-rect"
     }
   },
   "ninja-shuriken": {
@@ -83,19 +53,7 @@
     },
     "attackType": "basic",
     "runtime": {
-      "kind": "returning-projectile",
-      "collisionRadius": 18,
-      "hoverDurationMs": 100,
-      "returnAcceleration": 800,
-      "returnStartSpeedFactor": 0.08,
-      "maxLifetimeMs": 7000,
-      "defaultHitCooldownMs": 0,
-      "defaultForwardDistance": 500,
-      "defaultOutwardDurationMs": 380,
-      "defaultReturnSpeed": 900,
-      "defaultEndYOffset": 0,
-      "defaultCtrl1YOffset": 20,
-      "defaultCtrl2YOffset": -40
+      "kind": "returning-projectile"
     }
   }
 }

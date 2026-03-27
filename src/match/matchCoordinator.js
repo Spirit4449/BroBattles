@@ -71,7 +71,6 @@ import {
  * @property {Function} onInitializePlayers
  * @property {Function} onTrySendReadyAck
  * @property {Function} onTrackShieldEffects
- * @property {Function} onReconcileLocalMovement
  * @property {Function} onStartSuddenDeathMusic
  * @property {Function} onStopSuddenDeathMusic
  * @property {Function} onPlayMatchEndSound
@@ -133,7 +132,6 @@ export function createMatchCoordinator(config) {
     onInitializePlayers,
     onTrySendReadyAck,
     onTrackShieldEffects,
-    onReconcileLocalMovement,
     onStartSuddenDeathMusic,
     onStopSuddenDeathMusic,
     onPlayMatchEndSound,

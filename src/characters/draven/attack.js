@@ -1,6 +1,7 @@
 // Draven splash attack extracted
 import socket from "../../socket";
 import { getCharacterTuning } from "../../lib/characterStats.js";
+import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { rectsOverlap, getSpriteBounds } from "../shared/combatGeometry";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
@@ -11,19 +12,19 @@ import {
 } from "../shared/chargeAttack";
 
 const DRAVEN_TUNING = getCharacterTuning("draven");
-const SPLASH = DRAVEN_TUNING.attack?.splash || {};
+const SPLASH = getResolvedCharacterAttackConfig("draven", "splash");
 const SPLASH_CHARGE = DRAVEN_TUNING.attack?.charge || {};
-const SPLASH_W = SPLASH.width ?? 165;
-const SPLASH_H = SPLASH.height ?? 130; // Tuned final max height
-const ACTIVE_WINDOW_MS = SPLASH.activeWindowMs ?? 450; // Attack stays active this long (moving with player)
-const FLIP_UNLOCK_MS = SPLASH.flipUnlockMs ?? 530; // Facing locked for full active window
-const DAMAGE_TICK_MS = SPLASH.damageTickMs ?? 90; // Damage cadence
-const DAMAGE_START_MS = SPLASH.damageStartMs ?? 100; // Telegraph before any damage
-const TIP_OFFSET = SPLASH.tipOffset ?? 50; // Horizontal distance from player center to splash center
-const MIN_SPLASH_H = SPLASH.minHeight ?? 20; // Initial small height for upward sweep
-const GROW_DURATION_MS = SPLASH.growDurationMs ?? 220; // Time over which the hitbox grows to full height
-const CENTER_Y_FACTOR = SPLASH.centerYFactor ?? 0.15;
-const HITBOX_INFLATE = SPLASH.hitboxInflate ?? 6;
+const SPLASH_W = SPLASH.width;
+const SPLASH_H = SPLASH.height;
+const ACTIVE_WINDOW_MS = SPLASH.activeWindowMs;
+const FLIP_UNLOCK_MS = SPLASH.flipUnlockMs;
+const DAMAGE_TICK_MS = SPLASH.damageTickMs;
+const DAMAGE_START_MS = SPLASH.damageStartMs;
+const TIP_OFFSET = SPLASH.tipOffset;
+const MIN_SPLASH_H = SPLASH.minHeight;
+const GROW_DURATION_MS = SPLASH.growDurationMs;
+const CENTER_Y_FACTOR = SPLASH.centerYFactor;
+const HITBOX_INFLATE = SPLASH.hitboxInflate;
 var DEBUG_DRAW = false; // Draw debug rectangle of current hitbox
 
 export function performDravenSplashAttack(instance, attackContext = null) {

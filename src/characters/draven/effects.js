@@ -1,8 +1,7 @@
 // Draven-specific per-player effects (fire trail)
-import { getCharacterTuning } from "../../lib/characterStats.js";
+import { getResolvedCharacterEffectConfig } from "../../lib/characterTuning.js";
 
-const DRAVEN_TUNING = getCharacterTuning("draven");
-const FIRE_TRAIL = DRAVEN_TUNING.effects?.fireTrail || {};
+const FIRE_TRAIL = getResolvedCharacterEffectConfig("draven", "fireTrail");
 
 export default class DravenEffects {
   constructor(scene, sprite) {

@@ -1,4 +1,5 @@
 import { getCharacterTuning } from "../../lib/characterStats.js";
+import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { rectsOverlap, getSpriteBounds } from "../shared/combatGeometry";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
@@ -8,23 +9,27 @@ import {
 } from "../shared/chargeAttack";
 
 const THORG_TUNING = getCharacterTuning("thorg");
-const FALL = THORG_TUNING.attack?.fall || {};
+const FALL = getResolvedCharacterAttackConfig("thorg", "fall");
 const FALL_CHARGE = THORG_TUNING.attack?.charge || {};
 
-const RECT_W = FALL.rectWidth ?? 120;
-const RECT_H = FALL.rectHeight ?? 60;
-export const THORG_FALL_WINDUP_MS = FALL.windupMs ?? 180;
-export const THORG_FALL_STRIKE_MS = FALL.strikeMs ?? 290;
+const RECT_W = FALL.rectWidth;
+const RECT_H = FALL.rectHeight;
+export const THORG_FALL_WINDUP_MS = FALL.windupMs;
+export const THORG_FALL_STRIKE_MS = FALL.strikeMs;
 export const THORG_FALL_DURATION_MS =
   THORG_FALL_WINDUP_MS + THORG_FALL_STRIKE_MS;
-export const THORG_FALL_FOLLOW_AFTER_WINDUP_MS = FALL.followAfterWindupMs ?? 70;
-export const THORG_FALL_RANGE = FALL.range ?? 120;
-export const THORG_FALL_ARC_HEIGHT = FALL.arcHeight ?? 120;
-export const THORG_FALL_CURVE_MAGNITUDE = FALL.curveMagnitude ?? 20;
-export const THORG_FALL_END_Y_OFFSET = FALL.endYOffset ?? 300;
-const DAMAGE_TICK_MS = FALL.damageTickMs ?? 90;
-const HITBOX_INFLATE = FALL.hitboxInflate ?? 2;
-const SPRITE_FORWARD_OFFSET = FALL.spriteForwardOffset ?? -Math.PI / 2; // weapon art points downward at rotation=0
+export const THORG_FALL_FOLLOW_AFTER_WINDUP_MS = FALL.followAfterWindupMs;
+export const THORG_FALL_RANGE = FALL.range;
+export const THORG_FALL_ARC_HEIGHT = FALL.arcHeight;
+export const THORG_FALL_CURVE_MAGNITUDE = FALL.curveMagnitude;
+export const THORG_FALL_END_Y_OFFSET = FALL.endYOffset;
+const DAMAGE_TICK_MS = FALL.damageTickMs;
+const HITBOX_INFLATE = FALL.hitboxInflate;
+const SPRITE_FORWARD_OFFSET = FALL.spriteForwardOffset;
+const ORIGIN_OFFSET_X = FALL.originOffsetX;
+const ORIGIN_HEIGHT_FACTOR = FALL.originHeightFactor;
+const START_OFFSET_X = FALL.startOffsetX;
+const START_OFFSET_Y = FALL.startOffsetY;
 let DEBUG_DRAW = false;
 
 export function performThorgFallAttack(instance, attackContext = null) {
@@ -75,8 +80,8 @@ export function performThorgFallAttack(instance, attackContext = null) {
   let dmgAccum = 0;
   let strikeStarted = false;
   const getAnchor = () => ({
-    x: p.x + (direction >= 0 ? 10 : -10),
-    y: p.y - p.height * 0.5,
+    x: p.x + direction * ORIGIN_OFFSET_X,
+    y: p.y - p.height * ORIGIN_HEIGHT_FACTOR,
   });
   let strikeStartX = 0;
   let strikeStartY = 0;
@@ -91,8 +96,8 @@ export function performThorgFallAttack(instance, attackContext = null) {
   const curveMagnitude = THORG_FALL_CURVE_MAGNITUDE;
   const resolveStrikePath = () => {
     const a = getAnchor();
-    strikeStartX = a.x - direction * 14;
-    strikeStartY = a.y - 8;
+    strikeStartX = a.x + direction * START_OFFSET_X;
+    strikeStartY = a.y + START_OFFSET_Y;
     endX0 = strikeStartX + direction * range;
     endY0 = a.y + THORG_FALL_END_Y_OFFSET;
   };

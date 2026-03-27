@@ -63,7 +63,7 @@ import {
   noteClientLifecycle,
   shouldMuteClientDefaultLogs,
 } from "./lib/netTestLogger.js";
-import { MOVEMENT_PHYSICS } from "./lib/movementPhysics.js";
+import MOVEMENT_PHYSICS from "./shared/movementPhysics.json";
 
 // Make Phaser globally available for character modules
 window.Phaser = Phaser;
@@ -126,8 +126,8 @@ let __joinPayload = { matchId: Number(matchId || 0) };
 let mapObjects;
 
 // Lists that store all the players in player team and op team
-const opponentPlayers = [];
-const teamPlayers = [];
+const opponentPlayers = Object.create(null);
+const teamPlayers = Object.create(null);
 let gameEnded = false; // stops update loop network emissions after game over
 let gameInitialized = false; // track if game has been initialized
 let hasJoined = false;
@@ -185,18 +185,7 @@ setLocalNetStateFlusher((state) =>
 );
 
 // Server snapshot interpolation
-const snapshotBuffer = createSnapshotBuffer({
-  maxStateBuffer: 90,
-  initialInterpDelayMs: 50,
-  minInterpDelayMs: 20,
-  maxInterpDelayMs: 50,
-  snapIntervalMs: 50,
-  spacingEmaAlpha: 0.12,
-  enableAdaptiveDelay: true,
-  enableClockCorrection: false,
-  enableBacklogCatchup: true,
-  extrapolationLimitMs: 1000,
-});
+const snapshotBuffer = createSnapshotBuffer();
 
 // Game scene reference
 let gameScene = null;

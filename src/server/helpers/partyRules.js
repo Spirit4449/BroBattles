@@ -1,4 +1,3 @@
-// Centralized constants
 const {
   legacyModeToVariantId,
   normalizeSelection,

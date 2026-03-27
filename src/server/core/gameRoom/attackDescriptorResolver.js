@@ -1,5 +1,7 @@
 const attackDescriptors = require("../../../shared/attackDescriptors.json");
-const { getCharacterTuning } = require("../../../lib/characterStats.js");
+const {
+  getResolvedCharacterAttackConfig,
+} = require("../../../lib/characterTuning.js");
 
 function cloneValue(value) {
   if (Array.isArray(value)) {
@@ -40,7 +42,8 @@ function getRuntimeOverrides(actionType) {
   if (!key) return null;
 
   if (key === "wizard-fireball" || key === "wizard-fireball-release") {
-    const fireball = getCharacterTuning("wizard")?.attack?.fireball || {};
+    const fireball =
+      getResolvedCharacterAttackConfig("wizard", "fireball") || {};
     const runtime = {
       collisionRadius: Number(fireball.collisionRadius) || 38,
       speed: Number(fireball.speed) || 450,
@@ -61,7 +64,8 @@ function getRuntimeOverrides(actionType) {
   }
 
   if (key === "draven-splash") {
-    const splash = getCharacterTuning("draven")?.attack?.splash || {};
+    const splash =
+      getResolvedCharacterAttackConfig("draven", "splash") || {};
     return {
       runtime: {
         width: Number(splash.width) || 150,
@@ -78,7 +82,7 @@ function getRuntimeOverrides(actionType) {
   }
 
   if (key === "thorg-fall") {
-    const fall = getCharacterTuning("thorg")?.attack?.fall || {};
+    const fall = getResolvedCharacterAttackConfig("thorg", "fall") || {};
     return {
       runtime: {
         width: Number(fall.rectWidth) || 94,
@@ -90,6 +94,10 @@ function getRuntimeOverrides(actionType) {
           Number(fall.followAfterWindupMs) || 0,
         ),
         damageTickMs: Math.max(1, Number(fall.damageTickMs) || 90),
+        originOffsetX: Number(fall.originOffsetX) || 0,
+        originHeightFactor: Number(fall.originHeightFactor) || 0,
+        startOffsetX: Number(fall.startOffsetX) || 0,
+        startOffsetY: Number(fall.startOffsetY) || 0,
         range: Math.max(1, Number(fall.range) || 120),
         endYOffset: Number(fall.endYOffset) || 300,
         arcHeight: Number(fall.arcHeight) || 120,
@@ -100,14 +108,28 @@ function getRuntimeOverrides(actionType) {
 
   if (key === "ninja-shuriken") {
     const shuriken =
-      getCharacterTuning("ninja")?.attack?.returningShuriken || {};
+      getResolvedCharacterAttackConfig("ninja", "returningShuriken") || {};
     return {
       runtime: {
+        collisionRadius: Math.max(1, Number(shuriken.collisionRadius) || 18),
+        hoverDurationMs: Math.max(0, Number(shuriken.hoverDurationMs) || 0),
+        returnAcceleration: Math.max(
+          0,
+          Number(shuriken.returnAcceleration) || 0,
+        ),
+        returnStartSpeedFactor: Math.max(
+          0,
+          Number(shuriken.returnStartSpeedFactor) || 0,
+        ),
+        maxLifetimeMs: Math.max(250, Number(shuriken.maxLifetimeMs) || 7000),
         defaultForwardDistance:
           Math.max(1, Number(shuriken.forwardDistance) || 500),
         defaultOutwardDurationMs:
           Math.max(1, Number(shuriken.outwardDuration) || 380),
         defaultReturnSpeed: Math.max(1, Number(shuriken.returnSpeed) || 900),
+        defaultEndYOffset: Number(shuriken.endYOffset) || 0,
+        defaultCtrl1YOffset: Number(shuriken.ctrl1YOffset) || 20,
+        defaultCtrl2YOffset: Number(shuriken.ctrl2YOffset) || -40,
       },
     };
   }

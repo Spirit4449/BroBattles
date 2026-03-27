@@ -1,5 +1,3 @@
-const { getUserLiveMatch } = require("../helpers/match");
-
 function normalizeUserForStatus(user) {
   const out = user ? { ...user } : null;
   if (out && typeof out.char_levels === "string") {
@@ -10,6 +8,21 @@ function normalizeUserForStatus(user) {
     }
   }
   return out;
+}
+
+async function getUserLiveMatch(db, userId) {
+  if (!userId) return null;
+
+  try {
+    const rows = await db.runQuery(
+      "SELECT m.match_id FROM matches m JOIN match_participants mp ON m.match_id = mp.match_id WHERE mp.user_id = ? AND m.status = 'live' LIMIT 1",
+      [userId],
+    );
+    return rows.length > 0 ? rows[0].match_id : null;
+  } catch (error) {
+    console.error("Error checking user live match:", error);
+    return null;
+  }
 }
 
 async function buildStatusPayload({

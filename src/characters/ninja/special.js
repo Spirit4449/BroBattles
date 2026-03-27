@@ -1,10 +1,9 @@
 import ReturningShuriken from "./attack";
-import { getCharacterTuning } from "../../lib/characterStats.js";
+import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 
-const NINJA_TUNING = getCharacterTuning("ninja");
-const SWARM = NINJA_TUNING.special?.swarm || {};
+const SWARM = getResolvedCharacterSpecialConfig("ninja", "swarm");
 const SWARM_COUNT = SWARM.count ?? 15;
 const SWARM_RELEASE_MS = SWARM.releaseMs ?? 36;
 const SWARM_LOCK_MS =

@@ -2,8 +2,8 @@
 import socket from "../../socket";
 import {
   characterStats,
-  getCharacterTuning,
 } from "../../lib/characterStats.js";
+import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { animations } from "./anim";
 import { executeDefaultAttack } from "../shared/attackFlow";
 import {
@@ -22,12 +22,11 @@ import CharacterEntityBase from "../shared/characterEntityBase";
 
 // Single source of truth for this character's name/key
 const NAME = "thorg";
-const THORG_TUNING = getCharacterTuning(NAME);
-const FALL = THORG_TUNING.attack?.fall || {};
+const FALL = getResolvedCharacterAttackConfig(NAME, "fall");
 
 class Thorg extends CharacterEntityBase {
   static key = NAME;
-  static WEAPON_FORWARD_OFFSET = FALL.spriteForwardOffset ?? -Math.PI / 2; // weapon art points downward at rotation=0
+  static WEAPON_FORWARD_OFFSET = FALL.spriteForwardOffset;
   // Main texture key used for this character's sprite
   static textureKey = NAME;
 
@@ -403,8 +402,8 @@ class Thorg extends CharacterEntityBase {
   ) {
     const baseAngle = 0;
     const getAnchor = () => ({
-      x: sprite.x + (direction >= 0 ? 10 : -10),
-      y: sprite.y - sprite.height * 0.5,
+      x: sprite.x + direction * FALL.originOffsetX,
+      y: sprite.y - sprite.height * FALL.originHeightFactor,
     });
     let strikeStartX = 0;
     let strikeStartY = 0;
@@ -415,8 +414,8 @@ class Thorg extends CharacterEntityBase {
     const curveMagnitude = THORG_FALL_CURVE_MAGNITUDE;
     const resolveStrikePath = () => {
       const a = getAnchor();
-      strikeStartX = a.x - direction * 14;
-      strikeStartY = a.y - 8;
+      strikeStartX = a.x + direction * FALL.startOffsetX;
+      strikeStartY = a.y + FALL.startOffsetY;
       endX = strikeStartX + direction * range;
       endY = a.y + THORG_FALL_END_Y_OFFSET;
     };

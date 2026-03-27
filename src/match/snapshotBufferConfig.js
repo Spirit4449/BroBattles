@@ -1,0 +1,15 @@
+export const DEFAULT_SNAPSHOT_BUFFER_CONFIG = Object.freeze({
+  maxStateBuffer: 90,
+  initialInterpDelayMs: 50,
+  minInterpDelayMs: 20,
+  maxInterpDelayMs: 50,
+  snapIntervalMs: 50,
+  maxSpacingMs: 500,
+  lateSnapshotThresholdMs: 140,
+  largePositionDeltaPx: 90,
+  spacingEmaAlpha: 0.12,
+  enableAdaptiveDelay: true,
+  enableClockCorrection: false,
+  enableBacklogCatchup: true,
+  extrapolationLimitMs: 1000,
+});

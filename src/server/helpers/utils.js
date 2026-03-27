@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { capacityFromMode, capacityFromSelection } = require("./constants");
+const { capacityFromMode, capacityFromSelection } = require("./partyRules");
 
 function randomString(length, numbersOnly = false) {
   const letters = numbersOnly

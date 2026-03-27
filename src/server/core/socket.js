@@ -5,7 +5,7 @@ const {
   PARTY_STATUS,
   DISCONNECT_GRACE_MS,
   TEAM_SIZE_BY_MODE,
-} = require("../../server/helpers/constants");
+} = require("../../server/helpers/partyRules");
 const { createMatchmaking } = require("./matchmaking");
 const { createGameHub } = require("./gameHub");
 const { registerGameEvents } = require("./socketEvents/gameEvents");

@@ -1,10 +1,9 @@
 import { spawnExplosion } from "./attack";
-import { getCharacterTuning } from "../../lib/characterStats.js";
+import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 
-const DRAVEN_TUNING = getCharacterTuning("draven");
-const INFERNO = DRAVEN_TUNING.special?.inferno || {};
+const INFERNO = getResolvedCharacterSpecialConfig("draven", "inferno");
 
 const DRAVEN_INFERNO_DURATION_MS = INFERNO.durationMs ?? 3000;
 const DRAVEN_INFERNO_RISE_MS = INFERNO.riseMs ?? 320;

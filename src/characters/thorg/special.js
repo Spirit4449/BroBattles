@@ -1,7 +1,7 @@
-import { getCharacterTuning } from "../../lib/characterStats.js";
+import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js";
 
-const THORG_TUNING = getCharacterTuning("thorg");
-const THORG_RAGE_DURATION_MS = THORG_TUNING.special?.rageDurationMs ?? 8000;
+const THORG_SPECIAL = getResolvedCharacterSpecialConfig("thorg");
+const THORG_RAGE_DURATION_MS = THORG_SPECIAL.rageDurationMs;
 
 function setLocalRageState(player, enabled) {
   if (!player) return;

@@ -2,7 +2,13 @@
 // Curved, returning, piercing shuriken with deterministic local simulation.
 
 import socket from "../../socket"; // owner-only hit events
+import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { emitVaultHitForCircle } from "../shared/vaultTargeting";
+
+const RETURNING_SHURIKEN_DEFAULTS = getResolvedCharacterAttackConfig(
+  "ninja",
+  "returningShuriken",
+);
 
 export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
   /**
@@ -18,14 +24,15 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     this.cfg = Object.assign(
       {
         direction: 1,
-        forwardDistance: 520,
-        endYOffset: 0,
-        outwardDuration: 600, // ms
-        returnSpeed: 580, // px/s (cap)
-        rotationSpeed: 950, // deg/s
-        scale: 0.1,
-        collisionSizeScale: 0.52,
-        collisionRadiusScale: 0.26,
+        forwardDistance: RETURNING_SHURIKEN_DEFAULTS.forwardDistance,
+        endYOffset: RETURNING_SHURIKEN_DEFAULTS.endYOffset,
+        outwardDuration: RETURNING_SHURIKEN_DEFAULTS.outwardDuration,
+        returnSpeed: RETURNING_SHURIKEN_DEFAULTS.returnSpeed,
+        rotationSpeed: RETURNING_SHURIKEN_DEFAULTS.rotationSpeed,
+        scale: RETURNING_SHURIKEN_DEFAULTS.scale,
+        collisionSizeScale: RETURNING_SHURIKEN_DEFAULTS.collisionSizeScale,
+        collisionRadiusScale:
+          RETURNING_SHURIKEN_DEFAULTS.collisionRadiusScale,
         damage: 1000,
         glowScale: 1,
         attackType: "basic",
@@ -33,11 +40,15 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
         username: "",
         gameId: "",
         isOwner: false,
-        maxLifetime: 7000,
-        hitCooldown: 300,
+        maxLifetime: RETURNING_SHURIKEN_DEFAULTS.maxLifetimeMs,
+        hitCooldown: RETURNING_SHURIKEN_DEFAULTS.hitCooldownMs,
+        hoverDurationMs: RETURNING_SHURIKEN_DEFAULTS.hoverDurationMs,
+        returnAcceleration: RETURNING_SHURIKEN_DEFAULTS.returnAcceleration,
+        returnStartSpeedFactor:
+          RETURNING_SHURIKEN_DEFAULTS.returnStartSpeedFactor,
         chargeRatio: 0,
-        ctrl1YOffset: 20,
-        ctrl2YOffset: -40,
+        ctrl1YOffset: RETURNING_SHURIKEN_DEFAULTS.ctrl1YOffset,
+        ctrl2YOffset: RETURNING_SHURIKEN_DEFAULTS.ctrl2YOffset,
       },
       config || {},
     );
@@ -46,9 +57,10 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     this.phase = "outward"; // outward -> hover -> return
     this.elapsed = 0; // ms in current phase
     this.totalElapsed = 0; // ms total life
-    this.hoverDuration = 100; // ms to hover before returning
-    this.returnAcceleration = 800; // px/s^2
-    this.currentReturnSpeed = this.cfg.returnSpeed * 0.08; // ramp up
+    this.hoverDuration = this.cfg.hoverDurationMs;
+    this.returnAcceleration = this.cfg.returnAcceleration;
+    this.currentReturnSpeed =
+      this.cfg.returnSpeed * this.cfg.returnStartSpeedFactor;
     this.hitTimestamps = {}; // username -> last hit ms
 
     // Trail state

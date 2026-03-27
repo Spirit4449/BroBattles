@@ -1,5 +1,5 @@
 const { updateOrDeleteParty } = require("../helpers/party");
-const { PARTY_STATUS } = require("../helpers/constants");
+const { PARTY_STATUS } = require("../helpers/partyRules");
 const { capacityFromSelection } = require("../helpers/utils");
 const {
   DEFAULT_MODE_ID,

@@ -1,7 +1,7 @@
 // Centralized GameRoom tuning/config constants.
 // Keep values identical to preserve gameplay behavior during refactor.
 
-const MOVEMENT_PHYSICS = require("../gameRoom/movementPhysics");
+const MOVEMENT_PHYSICS = require("../../shared/movementPhysics.json");
 
 // ========== FEATURE FLAGS ==========
 // Rollout flags for Phase 2 netcode improvements

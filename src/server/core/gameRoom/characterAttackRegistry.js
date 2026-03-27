@@ -93,7 +93,7 @@ function hitCircleTargets(
   attack.hitTimes = attack.hitTimes || Object.create(null);
 
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
-    if (repeatCooldownMs <= 0 && attack.hitSet?.has(target.name)) continue;
+    if (attack.hitSet?.has(target.name)) continue;
     const lastHitAt = Number(attack.hitTimes[target.name]) || 0;
     if (repeatCooldownMs > 0 && now - lastHitAt < repeatCooldownMs) continue;
     const targetBounds = getPlayerBounds(target);
@@ -476,10 +476,6 @@ function tickReturningProjectile(room, attack, descriptor) {
     if (dist < 30) return true;
   }
 
-  const repeatCooldownMs = Math.max(
-    0,
-    Number(runtime.defaultHitCooldownMs) || 0,
-  );
   attack.hitSet =
     attack.phase === "return"
       ? attack.phaseHitSets?.return || attack.hitSet
@@ -492,7 +488,6 @@ function tickReturningProjectile(room, attack, descriptor) {
     attack.y,
     Math.max(1, Number(runtime.collisionRadius) || 1),
     Date.now(),
-    repeatCooldownMs,
   );
   return false;
 }

@@ -14,10 +14,10 @@
  * Create matchmaking controller.
  * @param {MatchmakingDeps} deps
  */
-const { PARTY_STATUS } = require("../../server/helpers/constants");
+const { PARTY_STATUS } = require("../../server/helpers/partyRules");
 const {
   teamSizeForSelection: resolveTeamSizeForSelection,
-} = require("../../server/helpers/constants");
+} = require("../../server/helpers/partyRules");
 const {
   normalizeSelection,
   normalizeSelectionFromRow,

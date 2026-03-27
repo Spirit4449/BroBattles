@@ -6,6 +6,7 @@ import {
   getStats,
   getEffectsClass,
 } from "./characters";
+import { getResolvedCharacterBodyConfig } from "./lib/characterTuning.js";
 import { performSpecial } from "./characters/special";
 import { player } from "./player";
 import socket from "./socket";
@@ -56,7 +57,7 @@ export default class OpPlayer {
     // Avoid first-frame pop: hide until frame/body configured and spawn applied
     this.opponent.setVisible(false);
     const stats = getStats(this.character);
-    this.bodyConfig = (stats && stats.body) || {};
+    this.bodyConfig = getResolvedCharacterBodyConfig(this.character);
     // Apply per-character max health for correct bar scaling
     if (stats && typeof stats.maxHealth === "number") {
       this.opMaxHealth = stats.maxHealth;
@@ -75,8 +76,8 @@ export default class OpPlayer {
     // Configure frame/body BEFORE computing spawn for correct initial grounding
     this.opFrame = this.opponent.frame;
     const bs = this.bodyConfig;
-    const widthShrink = bs.widthShrink ?? 35;
-    const heightShrink = bs.heightShrink ?? 10;
+    const widthShrink = bs.widthShrink;
+    const heightShrink = bs.heightShrink;
     this.opponent.body.setSize(
       this.opFrame.width - widthShrink,
       this.opFrame.height - heightShrink,
@@ -224,7 +225,7 @@ export default class OpPlayer {
     const frameW = this.opFrame ? this.opFrame.width : this.opponent.width;
     const bodyW = this.opponent.body.width;
     const ox = frameW / 2 - bodyW / 2 + (bs.offsetXFromHalf ?? 0) + extra;
-    const oy = bs.offsetY ?? 10;
+    const oy = bs.offsetY;
     this.opponent.body.setOffset(ox, oy);
   }
 
