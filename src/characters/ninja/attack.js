@@ -161,6 +161,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
   }
 
   tryDamage(targetWrapper) {
+    if (this.cfg.serverAuthoritativeHits) return false;
     if (!this.cfg.isOwner) return false; // only owner reports hits
     if (!targetWrapper) return false;
     const targetUsername =
@@ -193,6 +194,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
   }
 
   tryDamageVault() {
+    if (this.cfg.serverAuthoritativeHits) return false;
     if (!this.cfg.isOwner) return false;
     const now = this.scene.time.now;
     const last = this.hitTimestamps.__vault || 0;
@@ -220,6 +222,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
   }
 
   attachEnemyOverlap(objects) {
+    if (this.cfg.serverAuthoritativeHits) return;
     objects.forEach((obj) => {
       if (!obj) return;
       const sprite = obj.opponent || obj;

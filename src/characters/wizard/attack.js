@@ -476,10 +476,7 @@ export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
 export function spawnWizardFireballAuthoritative(scene, payload, localContext = {}) {
   return spawnWizardFireballProjectile(scene, payload, {
     ownerSprite: localContext?.ownerSprite || null,
-    isOwner: true,
-    username: localContext?.username || "",
-    gameId: localContext?.gameId || null,
-    opponentPlayersRef: localContext?.opponentPlayersRef || null,
+    isOwner: false,
   });
 }
 

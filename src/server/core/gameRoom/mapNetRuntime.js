@@ -1,4 +1,5 @@
 const mapNetConfig = require("../../../shared/mapNetConfig.json");
+const mapCollisionConfig = require("../../../shared/mapCollisionConfig.json");
 
 function getWorldBoundsForMap(mapId) {
   const margin = Math.max(0, Number(mapNetConfig?.defaultMargin) || 0);
@@ -36,4 +37,28 @@ function clampToWorldBounds(bounds, x, y) {
 module.exports = {
   getWorldBoundsForMap,
   clampToWorldBounds,
+  getMapCollisionConfig(mapId) {
+    const key = String(Number(mapId) || 1);
+    return mapCollisionConfig?.maps?.[key] || { surfaces: [], solids: [] };
+  },
+  getSurfaceCollisionConfig(mapId) {
+    const key = String(Number(mapId) || 1);
+    return mapCollisionConfig?.maps?.[key]?.surfaces || [];
+  },
+  getSolidCollisionConfig(mapId) {
+    const key = String(Number(mapId) || 1);
+    return mapCollisionConfig?.maps?.[key]?.solids || [];
+  },
+  getDefaultPlayerCollisionBox() {
+    return {
+      halfWidth: Math.max(
+        8,
+        Number(mapCollisionConfig?.defaultPlayerHalfWidth) || 28,
+      ),
+      halfHeight: Math.max(
+        16,
+        Number(mapCollisionConfig?.defaultPlayerHalfHeight) || 60,
+      ),
+    };
+  },
 };

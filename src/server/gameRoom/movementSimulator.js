@@ -12,7 +12,215 @@ const MOVEMENT_PHYSICS = require("./movementPhysics");
 const {
   getWorldBoundsForMap,
   clampToWorldBounds,
+  getSurfaceCollisionConfig,
+  getSolidCollisionConfig,
+  getDefaultPlayerCollisionBox,
 } = require("../core/gameRoom/mapNetRuntime");
+
+function buildPlayerBounds(x, y, halfWidth, halfHeight) {
+  return {
+    left: x - halfWidth,
+    right: x + halfWidth,
+    top: y - halfHeight,
+    bottom: y + halfHeight,
+  };
+}
+
+function normalizeRect(rect) {
+  const x = Number(rect?.x);
+  const y = Number(rect?.y);
+  const width = Number(rect?.width);
+  const height = Number(rect?.height);
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height)
+  ) {
+    return null;
+  }
+  return {
+    left: x - width / 2,
+    right: x + width / 2,
+    top: y - height / 2,
+    bottom: y + height / 2,
+  };
+}
+
+function resolveStaticCollisions({
+  previousX,
+  previousY,
+  x,
+  y,
+  vx,
+  vy,
+  isGrounded,
+  inputIntent,
+  mapId,
+}) {
+  const surfaces = getSurfaceCollisionConfig(mapId);
+  const solids = getSolidCollisionConfig(mapId);
+  const playerBox = getDefaultPlayerCollisionBox();
+  const halfWidth = playerBox.halfWidth;
+  const halfHeight = playerBox.halfHeight;
+  let resolvedX = x;
+  let resolvedY = y;
+  let resolvedVx = vx;
+  let resolvedVy = vy;
+  let resolvedGrounded = isGrounded;
+  let landed = false;
+
+  const prevBounds = buildPlayerBounds(previousX, previousY, halfWidth, halfHeight);
+  let nextBounds = buildPlayerBounds(resolvedX, resolvedY, halfWidth, halfHeight);
+
+  if (resolvedVy >= 0) {
+    let bestSurfaceY = null;
+    for (const surface of surfaces) {
+      const centerX = Number(surface?.x);
+      const topY = Number(surface?.y);
+      const width = Number(surface?.width);
+      if (
+        !Number.isFinite(centerX) ||
+        !Number.isFinite(topY) ||
+        !Number.isFinite(width)
+      ) {
+        continue;
+      }
+      const left = centerX - width / 2;
+      const right = centerX + width / 2;
+      const overlapX = nextBounds.right >= left && nextBounds.left <= right;
+      const crossedTop =
+        prevBounds.bottom <= topY && nextBounds.bottom >= topY;
+      if (!overlapX || !crossedTop) continue;
+      const candidateY = topY - halfHeight;
+      if (bestSurfaceY === null || candidateY < bestSurfaceY) {
+        bestSurfaceY = candidateY;
+      }
+    }
+    if (bestSurfaceY !== null) {
+      resolvedY = bestSurfaceY;
+      resolvedVy = 0;
+      resolvedGrounded = true;
+      landed = true;
+      nextBounds = buildPlayerBounds(resolvedX, resolvedY, halfWidth, halfHeight);
+    }
+  }
+
+  if (!landed) {
+    let bestLandingY = null;
+    let bestCeilingY = null;
+    for (const solid of solids) {
+      const rect = normalizeRect(solid);
+      if (!rect) continue;
+      const overlapX = nextBounds.right >= rect.left && nextBounds.left <= rect.right;
+      if (!overlapX) continue;
+
+      if (resolvedVy >= 0) {
+        const crossedTop =
+          prevBounds.bottom <= rect.top && nextBounds.bottom >= rect.top;
+        if (crossedTop) {
+          const candidateY = rect.top - halfHeight;
+          if (bestLandingY === null || candidateY < bestLandingY) {
+            bestLandingY = candidateY;
+          }
+        }
+      }
+
+      if (resolvedVy < 0) {
+        const crossedBottom =
+          prevBounds.top >= rect.bottom && nextBounds.top <= rect.bottom;
+        if (crossedBottom) {
+          const candidateY = rect.bottom + halfHeight;
+          if (bestCeilingY === null || candidateY > bestCeilingY) {
+            bestCeilingY = candidateY;
+          }
+        }
+      }
+    }
+
+    if (bestLandingY !== null) {
+      resolvedY = bestLandingY;
+      resolvedVy = 0;
+      resolvedGrounded = true;
+      landed = true;
+      nextBounds = buildPlayerBounds(resolvedX, resolvedY, halfWidth, halfHeight);
+    } else if (bestCeilingY !== null) {
+      resolvedY = bestCeilingY;
+      resolvedVy = 0;
+      nextBounds = buildPlayerBounds(resolvedX, resolvedY, halfWidth, halfHeight);
+    }
+  }
+
+  if (resolvedVx !== 0) {
+    let bestRightStop = null;
+    let bestLeftStop = null;
+    const prevResolvedBounds = buildPlayerBounds(
+      previousX,
+      resolvedY,
+      halfWidth,
+      halfHeight,
+    );
+    nextBounds = buildPlayerBounds(resolvedX, resolvedY, halfWidth, halfHeight);
+
+    for (const solid of solids) {
+      const rect = normalizeRect(solid);
+      if (!rect) continue;
+      const overlapY = nextBounds.bottom > rect.top && nextBounds.top < rect.bottom;
+      if (!overlapY) continue;
+
+      if (resolvedVx > 0) {
+        const crossedLeft =
+          prevResolvedBounds.right <= rect.left &&
+          nextBounds.right >= rect.left;
+        if (crossedLeft) {
+          const candidateX = rect.left - halfWidth;
+          if (bestRightStop === null || candidateX < bestRightStop) {
+            bestRightStop = candidateX;
+          }
+        }
+      }
+
+      if (resolvedVx < 0) {
+        const crossedRight =
+          prevResolvedBounds.left >= rect.right &&
+          nextBounds.left <= rect.right;
+        if (crossedRight) {
+          const candidateX = rect.right + halfWidth;
+          if (bestLeftStop === null || candidateX > bestLeftStop) {
+            bestLeftStop = candidateX;
+          }
+        }
+      }
+    }
+
+    if (bestRightStop !== null) {
+      resolvedX = bestRightStop;
+      resolvedVx = 0;
+    } else if (bestLeftStop !== null) {
+      resolvedX = bestLeftStop;
+      resolvedVx = 0;
+    }
+  }
+
+  if (
+    !landed &&
+    typeof inputIntent?.grounded === "boolean" &&
+    inputIntent.grounded &&
+    resolvedVy >= 0
+  ) {
+    resolvedGrounded = true;
+    resolvedVy = 0;
+  }
+
+  return {
+    x: resolvedX,
+    y: resolvedY,
+    vx: resolvedVx,
+    vy: resolvedVy,
+    isGrounded: resolvedGrounded,
+    landed,
+  };
+}
 
 /**
  * Simulate a single fixed-timestep movement tick for a player.
@@ -24,51 +232,42 @@ const {
  * @returns {object} { x, y, vx, vy, isGrounded, canJump }
  */
 function simulateMovementTick(playerState, inputIntent, dt, options = {}) {
-  // Unpack state (use current values, don't modify original)
-  let x = playerState.x || 0;
-  let y = playerState.y || 0;
+  const previousX = playerState.x || 0;
+  const previousY = playerState.y || 0;
+  let x = previousX;
+  let y = previousY;
   let vx = playerState.vx || 0;
   let vy = playerState.vy || 0;
   let isGrounded = playerState.isGrounded !== false;
   let lastGroundTime = playerState.lastGroundTime || 0;
   let canJump = playerState.canJump !== false;
 
-  // Unpack input (default to idle if missing)
   const direction = inputIntent?.direction || 0;
   const isJumping = !!inputIntent?.isJumping;
-
-  // Convert dt to seconds
   const dtSec = dt / 1000;
 
-  // ===== GRAVITY & FALLING =====
   const gravity = MOVEMENT_PHYSICS.gravity;
   vy += gravity * dtSec;
 
-  // Fast-fall when dropping (increase gravity multiplier)
   if (vy > 0 && !isGrounded) {
     const fallMult = MOVEMENT_PHYSICS.fallGravityFactor;
     vy += gravity * (fallMult - 1) * dtSec;
   }
 
-  // Apply ceiling: max downward velocity (optional)
-  const maxVelY = 1000; // reasonable terminal velocity
+  const maxVelY = 1000;
   if (vy > maxVelY) vy = maxVelY;
 
-  // ===== HORIZONTAL MOVEMENT =====
   const maxSpeed = MOVEMENT_PHYSICS.maxSpeed;
   const accel = MOVEMENT_PHYSICS.accel;
   const airAccel = MOVEMENT_PHYSICS.airAccel;
   const dragGround = MOVEMENT_PHYSICS.dragGround;
   const dragAir = MOVEMENT_PHYSICS.dragAir;
-
   const moveAccel = isGrounded ? accel : airAccel;
   const moveDrag = isGrounded ? dragGround : dragAir;
 
-  // Apply direction-based acceleration
   if (direction !== 0) {
     const targetVx = direction * maxSpeed;
-    const accelPerSec = moveAccel;
-    vx += Math.sign(direction) * accelPerSec * dtSec;
+    vx += Math.sign(direction) * moveAccel * dtSec;
     if ((direction > 0 && vx > targetVx) || (direction < 0 && vx < targetVx)) {
       vx = targetVx;
     }
@@ -78,11 +277,9 @@ function simulateMovementTick(playerState, inputIntent, dt, options = {}) {
     else vx -= Math.sign(vx) * dragDelta;
   }
 
-  // Clamp horizontal velocity
   if (vx > maxSpeed) vx = maxSpeed;
   if (vx < -maxSpeed) vx = -maxSpeed;
 
-  // ===== JUMPING =====
   if (isJumping && canJump && isGrounded) {
     vy = -MOVEMENT_PHYSICS.jumpSpeed;
     isGrounded = false;
@@ -90,7 +287,6 @@ function simulateMovementTick(playerState, inputIntent, dt, options = {}) {
     lastGroundTime = Date.now();
   }
 
-  // ===== LANDING & COYOTE =====
   if (
     (playerState.collidingDown || false) ||
     (typeof inputIntent?.grounded === "boolean" && inputIntent.grounded && vy >= 0)
@@ -101,18 +297,36 @@ function simulateMovementTick(playerState, inputIntent, dt, options = {}) {
     canJump = true;
   }
 
-  // Coyote time: allow jump shortly after leaving ground
   const coyoteTimeMs = MOVEMENT_PHYSICS.coyoteTimeMs;
   const timeSinceGround = Date.now() - lastGroundTime;
   if (timeSinceGround < coyoteTimeMs && !isJumping) {
     canJump = true;
   }
 
-  // ===== POSITION UPDATE =====
   x += vx * dtSec;
   y += vy * dtSec;
 
-  // ===== WORLD BOUNDS CLAMPING =====
+  const resolved = resolveStaticCollisions({
+    previousX,
+    previousY,
+    x,
+    y,
+    vx,
+    vy,
+    isGrounded,
+    inputIntent,
+    mapId: options?.mapId || playerState?.mapId,
+  });
+  x = resolved.x;
+  y = resolved.y;
+  vx = resolved.vx;
+  vy = resolved.vy;
+  isGrounded = resolved.isGrounded;
+  if (resolved.landed) {
+    lastGroundTime = Date.now();
+    canJump = true;
+  }
+
   const bounds =
     options?.bounds || getWorldBoundsForMap(options?.mapId || playerState?.mapId);
   const clamped = clampToWorldBounds(bounds, x, y);
@@ -130,15 +344,12 @@ function simulateMovementTick(playerState, inputIntent, dt, options = {}) {
   };
 }
 
-/**
- * Convenience: Process multiple input intents over time.
- * Useful for catch-up or batch processing.
- *
- * @param {object} playerState - initial state
- * @param {array} intents - [{ direction, isJumping, timestamp }, ...]
- * @returns {object} final state after all intents processed
- */
-function simulateMovementSequence(playerState, intents, dt = 16.67, options = {}) {
+function simulateMovementSequence(
+  playerState,
+  intents,
+  dt = 16.67,
+  options = {},
+) {
   let state = { ...playerState };
   for (const intent of intents) {
     state = simulateMovementTick(state, intent, dt, options);

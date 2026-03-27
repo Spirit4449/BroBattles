@@ -1,9 +1,7 @@
-import socket from "../../socket";
 import { getCharacterTuning } from "../../lib/characterStats.js";
 import { rectsOverlap, getSpriteBounds } from "../shared/combatGeometry";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
-import { emitVaultHitForRect } from "../shared/vaultTargeting";
 import {
   getChargeRatioFromContext,
   scaleByCharge,
@@ -161,30 +159,11 @@ export function performThorgFallAttack(instance, attackContext = null) {
             bounds.bottom,
           )
         ) {
+          // Server now owns Thorg hit truth. We only track overlaps locally so
+          // the same target is not repeatedly treated as "fresh" by visuals.
           hitSet.add(name);
-          socket.emit("hit", {
-            attacker: username,
-            target: name,
-            chargeRatio,
-            attackTime: Date.now(),
-            gameId,
-          });
-          try {
-            if (scene.sound) scene.sound.play("thorg-hit", { volume: 0.8 });
-          } catch (_) {}
         }
       }
-      emitVaultHitForRect({
-        attacker: username,
-        left,
-        top,
-        right,
-        bottom,
-        attackType: "basic",
-        chargeRatio,
-        gameId,
-        hitSet,
-      });
     }
 
     if (DEBUG_DRAW) {

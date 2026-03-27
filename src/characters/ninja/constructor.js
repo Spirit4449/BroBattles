@@ -171,6 +171,7 @@ class Ninja extends CharacterEntityBase {
         username: this.username,
         gameId: this.gameId,
         isOwner: true,
+        serverAuthoritativeHits: true,
         damage,
         chargeRatio,
         rotationSpeed: RETURNING_SHURIKEN.rotationSpeed || 2000,
@@ -192,9 +193,11 @@ class Ninja extends CharacterEntityBase {
       );
 
       // Owner-only collisions
-      const enemyList = Object.values(this.opponentPlayersRef || {});
-      returning.attachEnemyOverlap(enemyList);
-      returning.attachMapOverlap(this.mapObjects);
+      if (!config.serverAuthoritativeHits) {
+        const enemyList = Object.values(this.opponentPlayersRef || {});
+        returning.attachEnemyOverlap(enemyList);
+        returning.attachMapOverlap(this.mapObjects);
+      }
 
       // Perk: grant ammo on return
       const { grantCharge, setCanAttack, drawAmmoBar } = this.ammo;

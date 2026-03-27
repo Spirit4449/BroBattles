@@ -113,7 +113,15 @@ class Draven extends CharacterEntityBase {
 
   // Remote attack visualization: replicate moving splash & delayed explosion
   static handleRemoteAttack(scene, data, ownerWrapper) {
-    if (!data || data.type !== "draven-splash") return false;
+    if (!data) return false;
+    if (data.type === "draven-splash-explode") {
+      spawnExplosion(scene, Number(data.x) || 0, Number(data.y) || 0);
+      try {
+        scene.sound && scene.sound.play("draven-hit", { volume: 0.5 });
+      } catch (_) {}
+      return true;
+    }
+    if (data.type !== "draven-splash") return false;
     const ownerSprite = ownerWrapper && ownerWrapper.opponent;
     if (!ownerSprite) return true; // nothing to draw
     try {
@@ -152,6 +160,15 @@ class Draven extends CharacterEntityBase {
         scene.sound && scene.sound.play("draven-hit", { volume: 0.5 });
       } catch (_) {}
     });
+    return true;
+  }
+
+  static handleLocalAuthoritativeAttack(scene, data) {
+    if (!data || data.type !== "draven-splash-explode") return false;
+    spawnExplosion(scene, Number(data.x) || 0, Number(data.y) || 0);
+    try {
+      scene.sound && scene.sound.play("draven-hit", { volume: 0.5 });
+    } catch (_) {}
     return true;
   }
 

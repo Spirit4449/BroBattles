@@ -155,21 +155,19 @@ function applySplashDamage({
   opponents,
   hitSet,
 }) {
-  // Splash rectangle bounds (slightly inflated so edge contacts count)
-  const inflate = HITBOX_INFLATE; // px padding to be more forgiving
+  // Server now owns the damage truth for Draven splash. Keep this helper
+  // purely for optional local debug visualization without emitting hits.
+  const inflate = HITBOX_INFLATE;
   const left = centerX - w / 2 - inflate;
   const right = centerX + w / 2 + inflate;
   const top = centerY - h / 2 - inflate;
   const bottom = centerY + h / 2 + inflate;
-  const list = Object.values(opponents || {});
-  let hitAny = false;
-  const newHits = [];
-  for (const wrap of list) {
-    const spr = wrap && wrap.opponent;
-    const name = wrap && wrap.username;
-    if (!spr || !name || (hitSet && hitSet.has(name))) continue;
-    const bounds = getSpriteBounds(spr);
-    if (
+  if (DEBUG_DRAW) {
+    const list = Object.values(opponents || {});
+    for (const wrap of list) {
+      const spr = wrap && wrap.opponent;
+      if (!spr) continue;
+      const bounds = getSpriteBounds(spr);
       rectsOverlap(
         left,
         top,
@@ -179,43 +177,8 @@ function applySplashDamage({
         bounds.top,
         bounds.right,
         bounds.bottom,
-      )
-    ) {
-      if (hitSet) hitSet.add(name);
-      socket.emit("hit", {
-        attacker,
-        target: name,
-        attackType: "basic", // treat as basic attack damage
-        chargeRatio,
-        attackTime: Date.now(),
-        gameId,
-      });
-      hitAny = true;
-      newHits.push({
-        x: (bounds.left + bounds.right) / 2,
-        y: (bounds.top + bounds.bottom) / 2 + 4,
-      });
-      // Optional: tiny debug flash (comment out in production)
-      // const flash = scene.add.rectangle((bx1+bx2)/2, (by1+by2)/2, 10, 10, 0xffd28a, 0.6);
-      // scene.tweens.add({ targets: flash, alpha: 0, duration: 180, onComplete: ()=> flash.destroy() });
+      );
     }
-  }
-  emitVaultHitForRect({
-    attacker,
-    left,
-    top,
-    right,
-    bottom,
-    attackType: "basic",
-    chargeRatio,
-    gameId,
-    hitSet,
-  });
-  if (hitAny) {
-    try {
-      scene.sound.play("draven-hit", { volume: 0.8 });
-    } catch (_) {}
-    return { newHits };
   }
   return null;
 }

@@ -1,0 +1,58 @@
+{
+  "defaultPlayerHalfWidth": 28,
+  "defaultPlayerHalfHeight": 60,
+  "maps": {
+    "1": {
+      "surfaces": [],
+      "solids": [
+        { "id": "base", "x": 1150, "y": 650, "width": 860, "height": 70 },
+        { "id": "center", "x": 1150, "y": 303, "width": 420, "height": 34 },
+        { "id": "left", "x": 660, "y": 324, "width": 320, "height": 28 },
+        { "id": "right", "x": 1640, "y": 324, "width": 320, "height": 28 },
+        { "id": "tiny-left", "x": 620, "y": 574, "width": 170, "height": 16 },
+        { "id": "tiny-right", "x": 1680, "y": 574, "width": 170, "height": 16 }
+      ]
+    },
+    "2": {
+      "surfaces": [],
+      "solids": [
+        { "id": "base-mid", "x": 1150, "y": 598, "width": 420, "height": 26 },
+        { "id": "base-top", "x": 1150, "y": 420, "width": 360, "height": 54 },
+        { "id": "base-left", "x": 728, "y": 636, "width": 320, "height": 28 },
+        { "id": "base-right", "x": 1572, "y": 636, "width": 320, "height": 28 },
+        { "id": "tiny-0", "x": 870, "y": 333, "width": 150, "height": 16 },
+        { "id": "tiny-1", "x": 1430, "y": 333, "width": 150, "height": 16 },
+        { "id": "tiny-2", "x": 720, "y": 208, "width": 150, "height": 16 },
+        { "id": "tiny-3", "x": 1580, "y": 208, "width": 150, "height": 16 },
+        { "id": "tiny-4", "x": 1020, "y": 158, "width": 150, "height": 16 },
+        { "id": "tiny-5", "x": 1280, "y": 158, "width": 150, "height": 16 }
+      ]
+    },
+    "3": {
+      "surfaces": [
+        { "id": "log-left", "x": 1350, "y": 342, "width": 175, "height": 16 },
+        { "id": "log-mid", "x": 1500, "y": 262, "width": 330, "height": 16 },
+        { "id": "log-right", "x": 1655, "y": 342, "width": 177, "height": 16 }
+      ],
+      "solids": [
+        { "id": "large", "x": 1150, "y": 685, "width": 760, "height": 30 },
+        { "id": "left", "x": 700, "y": 260, "width": 240, "height": 24 },
+        { "id": "right", "x": 1000, "y": 360, "width": 240, "height": 24 },
+        { "id": "rock", "x": 800, "y": 478, "width": 180, "height": 20 }
+      ]
+    },
+    "4": {
+      "surfaces": [],
+      "solids": [
+        { "id": "left-base", "x": 810, "y": 655, "width": 560, "height": 80 },
+        { "id": "right-base", "x": 2190, "y": 655, "width": 560, "height": 80 },
+        { "id": "center-bridge", "x": 1500, "y": 440, "width": 420, "height": 40 },
+        { "id": "top-bridge", "x": 1500, "y": 346, "width": 280, "height": 18 },
+        { "id": "side-left", "x": 1070, "y": 530, "width": 250, "height": 24 },
+        { "id": "side-right", "x": 1930, "y": 530, "width": 250, "height": 24 },
+        { "id": "rock-left", "x": 1250, "y": 575, "width": 110, "height": 18 },
+        { "id": "rock-right", "x": 1750, "y": 575, "width": 110, "height": 18 }
+      ]
+    }
+  }
+}
