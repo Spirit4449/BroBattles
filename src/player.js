@@ -123,6 +123,7 @@ const chargeState = {
   pointerId: null,
   lockRelease: null,
 };
+let flushLocalNetState = null;
 
 let networkInputState = {
   left: false,
@@ -437,6 +438,15 @@ export function createPlayer(
     },
     setCanAttack: (v) => (canAttack = v),
     setIsAttacking: (v) => (isAttacking = v),
+    flushNetState: () => {
+      try {
+        flushLocalNetState?.({
+          dead,
+          gameEnded: false,
+          handlePlayerMovement,
+        });
+      } catch (_) {}
+    },
     // view
     drawAmmoBar: () => drawAmmoBar(),
   };
@@ -464,6 +474,13 @@ export function createPlayer(
       if (pointer.button === 2) {
         // Right-click: special ONLY — never falls through to attack
         if (superCharge >= maxSuperCharge) {
+          try {
+            flushLocalNetState?.({
+              dead,
+              gameEnded: false,
+              handlePlayerMovement,
+            });
+          } catch (_) {}
           noteClientActionSent("special", { type: "special" });
           socket.emit("game:special");
         } else {
@@ -1166,6 +1183,13 @@ export function handlePlayerMovement(scene) {
     if (keyI && Phaser.Input.Keyboard.JustDown(keyI) && !dead) {
       if (!((player?._movementLockedUntil || 0) > Date.now())) {
         if (superCharge >= maxSuperCharge) {
+          try {
+            flushLocalNetState?.({
+              dead,
+              gameEnded: false,
+              handlePlayerMovement,
+            });
+          } catch (_) {}
           noteClientActionSent("special", { type: "special" });
           socket.emit("game:special");
         }
@@ -1541,6 +1565,10 @@ export function getAmmoSyncState() {
 
 export function getNetworkInputState() {
   return { ...networkInputState };
+}
+
+export function setLocalNetStateFlusher(fn) {
+  flushLocalNetState = typeof fn === "function" ? fn : null;
 }
 
 export function setPowerupMobility(speedMult = 1, jumpMult = 1) {

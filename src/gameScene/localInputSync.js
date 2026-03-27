@@ -15,6 +15,12 @@ export function createLocalInputSync({
 }) {
   let lastMovementSent = 0;
   let lastPlayerState = { x: 0, y: 0, flip: false, animation: null };
+  let lastIntentState = {
+    direction: 0,
+    jumpHeld: false,
+    jumpPressed: false,
+    facing: 1,
+  };
   let inputIntentSeq = 0; // sequence number for intent tracking
   let lastAmmoState = null;
   let lastAmmoStateSentAt = 0;
@@ -32,14 +38,34 @@ export function createLocalInputSync({
     a.reloadMs === b.reloadMs &&
     a.reloadTimerMs === b.reloadTimerMs &&
     a.nextFireInMs === b.nextFireInMs;
+  const sameIntentState = (a, b) =>
+    !!a &&
+    !!b &&
+    Number(a.direction) === Number(b.direction) &&
+    !!a.jumpHeld === !!b.jumpHeld &&
+    !!a.jumpPressed === !!b.jumpPressed &&
+    Number(a.facing) === Number(b.facing);
 
-  function sync(scene, player, { dead, gameEnded, handlePlayerMovement }) {
+  function sync(
+    scene,
+    player,
+    { dead, gameEnded, handlePlayerMovement, force = false, reliable = false },
+  ) {
     if (!player || dead || gameEnded) return;
 
     handlePlayerMovement(scene);
 
     const now = Date.now();
-    if (now - lastMovementSent < throttleMs) return;
+    const rawInput = getNetworkInputState ? getNetworkInputState() : null;
+    const inputIntent = {
+      direction: Number(rawInput?.direction) || 0,
+      jumpHeld: !!rawInput?.jumpHeld,
+      jumpPressed: !!rawInput?.jumpPressed,
+      facing: Number(rawInput?.facing) === -1 ? -1 : 1,
+      sequence: inputIntentSeq++,
+    };
+    const intentChanged = !sameIntentState(inputIntent, lastIntentState);
+    if (!force && !intentChanged && now - lastMovementSent < throttleMs) return;
 
     const ammoState = getAmmoSyncState();
     const animation = player.anims?.currentAnim?.key || null;
@@ -60,19 +86,13 @@ export function createLocalInputSync({
     };
     if (includeAnimation) currentState.animation = animation;
     if (includeAmmoState) currentState.ammoState = ammoState;
-    const rawInput = getNetworkInputState ? getNetworkInputState() : null;
-    const inputIntent = {
-      direction: Number(rawInput?.direction) || 0,
-      jumpHeld: !!rawInput?.jumpHeld,
-      jumpPressed: !!rawInput?.jumpPressed,
-      facing:
-        Number(rawInput?.facing) === -1 ? -1 : 1,
-      sequence: inputIntentSeq++,
-    };
+    const movementEmitter = reliable
+      ? socket.compress(false)
+      : socket.volatile.compress(false);
 
     // Disable per-message compression for movement for lower latency.
     // Send every throttle interval, not only on visible state deltas.
-    socket.volatile.compress(false).emit("game:input", currentState);
+    movementEmitter.emit("game:input", currentState);
     noteClientInputSent({
       now,
       previousState: lastPlayerState,
@@ -81,10 +101,16 @@ export function createLocalInputSync({
     });
 
     // Real control intent: based on live controls, not inferred from sampled position deltas.
-    socket.volatile.compress(false).emit("game:input-intent", inputIntent);
+    socket.compress(false).emit("game:input-intent", inputIntent);
     noteClientIntentSent(inputIntent);
 
     lastPlayerState = { ...currentState };
+    lastIntentState = {
+      direction: inputIntent.direction,
+      jumpHeld: inputIntent.jumpHeld,
+      jumpPressed: inputIntent.jumpPressed,
+      facing: inputIntent.facing,
+    };
     lastMovementSent = now;
     if (includeAmmoState) {
       lastAmmoState = { ...ammoState };
@@ -98,5 +124,12 @@ export function createLocalInputSync({
 
   return {
     sync,
+    flushNow(scene, player, state) {
+      return sync(scene, player, {
+        ...state,
+        force: true,
+        reliable: true,
+      });
+    },
   };
 }

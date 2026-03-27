@@ -15,6 +15,7 @@ export function executeDefaultAttack({
     setCanAttack,
     setIsAttacking,
     drawAmmoBar,
+    flushNetState,
   } = ammo || {};
 
   if (typeof tryConsume !== "function" || !tryConsume()) {
@@ -56,6 +57,7 @@ export function executeDefaultAttack({
   const payload =
     typeof payloadBuilder === "function" ? payloadBuilder() : payloadBuilder;
   if (payload && typeof emitAction === "function") {
+    if (typeof flushNetState === "function") flushNetState();
     noteClientActionSent(payload?.type || "attack", payload);
     emitAction(payload);
   }

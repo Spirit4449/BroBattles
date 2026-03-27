@@ -39,6 +39,7 @@ import {
   applyAuthoritativeState,
   getAmmoSyncState,
   getNetworkInputState,
+  setLocalNetStateFlusher,
 } from "./player";
 import {
   preloadAll,
@@ -175,8 +176,11 @@ const localInputSync = createLocalInputSync({
   socket,
   getAmmoSyncState,
   getNetworkInputState,
-  throttleMs: 20,
+  throttleMs: 16,
 });
+setLocalNetStateFlusher((state) =>
+  localInputSync.flushNow(gameScene, player, state),
+);
 
 // Server snapshot interpolation
 const snapshotBuffer = createSnapshotBuffer({
