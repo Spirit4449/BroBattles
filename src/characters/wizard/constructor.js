@@ -71,22 +71,41 @@ class Wizard extends CharacterEntityBase {
   }
 
   performDefaultAttack(payloadBuilder, onAfterFire) {
-    const cooldown = this.ammo?.getAmmoCooldownMs
-      ? Number(this.ammo.getAmmoCooldownMs()) || 450
-      : 450;
-    const settleDuration = Math.max(200, cooldown);
-
     const result = executeDefaultAttack({
       scene: this.scene,
       ammo: this.ammo,
       emitAction: (payload) => socket.emit("game:action", payload),
       payloadBuilder,
       onAfterFire,
-      attackResetMs: settleDuration,
+      attackResetMs: null,
       cooldownFallbackMs: 450,
     });
 
-    return !!result.fired;
+    if (!result.fired) return false;
+
+    const safeClear = result.clearAttack;
+    this.scene.time.delayedCall(950, safeClear);
+
+    try {
+      const p = this.player;
+      const currentAnim =
+        p?.anims && p.anims.currentAnim ? p.anims.currentAnim : null;
+      if (currentAnim && /throw|attack/i.test(currentAnim.key)) {
+        const key = currentAnim.key;
+        const frameRate = currentAnim.frameRate || 18;
+        const frameCount =
+          (currentAnim.frames && currentAnim.frames.length) || frameRate;
+        const estMs = (frameCount / Math.max(1, frameRate)) * 1000 + 120;
+        this.scene.time.delayedCall(Math.min(estMs, 1200), safeClear);
+        p.once("animationcomplete", (anim) => {
+          if (anim && anim.key === key) safeClear();
+        });
+      } else {
+        this.scene.time.delayedCall(520, safeClear);
+      }
+    } catch (_) {}
+
+    return true;
   }
 
   handlePointerDown = (attackContext) => {

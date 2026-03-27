@@ -23,7 +23,7 @@ const FIREBALL_GLOW_RADIUS_MULT = FIREBALL.glowRadiusMultiplier ?? 1.35;
 const FIREBALL_BOB_AMPLITUDE = FIREBALL.bobAmplitude ?? 5;
 const FIREBALL_VERTICAL_OFFSET = FIREBALL.verticalOffset ?? 0.12; // fraction of height to lift from feet
 const FIREBALL_CAST_DELAY_MS = FIREBALL.castDelayMs ?? 300; // pre-launch delay
-const FIREBALL_FLIP_LOCK_MS = FIREBALL.flipLockMs ?? 500; // how long flip is locked (cast delay + 100ms)
+const FIREBALL_FLIP_LOCK_MS = FIREBALL.flipLockMs ?? 300; // how long flip is locked (cast delay + 100ms)
 const FIREBALL_BOB_TWEEN_MS = FIREBALL.bobTweenMs ?? 220; // remote bob tween duration
 const FIREBALL_FORWARD_OFFSET = FIREBALL.forwardOffset ?? 0.23; // multiplier applied to sprite width for spawn X offset
 const FIREBALL_BOB_FREQ_MS = FIREBALL.bobFreqMs ?? 120; // divisor for owner bob sine wave (larger = slower)
@@ -115,7 +115,7 @@ function createFireballSprite(scene, x, y, direction) {
         scene.anims.create({
           key: animKey,
           frames: frames.map((f) => ({ key: "wizard-fireball", frame: f })),
-          frameRate: 16,
+          frameRate: 20,
           repeat: -1,
         });
       }
@@ -216,9 +216,9 @@ export function performWizardFireball(instance, attackContext = null) {
 
   if (scene.anims) {
     if (scene.anims.exists("wizard-throw")) {
-      p.anims.play("wizard-throw", true);
+      p.anims.play("wizard-throw", false);
     } else if (scene.anims.exists("throw")) {
-      p.anims.play("throw", true);
+      p.anims.play("throw", false);
     }
   }
   try {
@@ -402,6 +402,16 @@ export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
   // Play launch sound for remote players (lower volume)
   try {
     scene.sound?.play("wizard-fireball", { volume: 0.3 });
+  } catch (_) {}
+
+  try {
+    if (ownerSprite?.anims) {
+      if (scene.anims?.exists("wizard-throw")) {
+        ownerSprite.anims.play("wizard-throw", false);
+      } else if (scene.anims?.exists("throw")) {
+        ownerSprite.anims.play("throw", false);
+      }
+    }
   } catch (_) {}
 
   const sprite = createFireballSprite(scene, start.x, start.y, direction);

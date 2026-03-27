@@ -39,6 +39,16 @@ let __lobbyOffsetResizeBound = false;
 let __mapPopupUi = null;
 let __modePopupUi = null;
 
+function triggerLobbyCharacterSplash(slot) {
+  if (!slot) return;
+  slot.classList.remove("character-splash");
+  void slot.offsetWidth;
+  slot.classList.add("character-splash");
+  window.setTimeout(() => {
+    slot.classList.remove("character-splash");
+  }, 700);
+}
+
 function normalizeStatusLabel(status) {
   const s = String(status || "")
     .trim()
@@ -223,7 +233,7 @@ function setupMapPickerControls(onSelect = null) {
     };
 
     const grid = document.createElement("div");
-    grid.className = "map-select-grid";
+    grid.className = "map-select-grid selection-popup-scroll";
 
     __mapPopupUi = {
       popupShell,
@@ -305,6 +315,7 @@ function setupModePickerControls(onSelect = null) {
     const popupShell = getSharedSelectionPopupShell();
     const closePopup = () => popupShell.hide();
     const content = document.createElement("div");
+    content.className = "selection-popup-scroll";
     __modePopupUi = { popupShell, closePopup, content };
     return __modePopupUi;
   };
@@ -373,11 +384,11 @@ function setupModePickerControls(onSelect = null) {
     const mode = getModeById(modeId);
     const selection = getCurrentSelection();
     const wrapper = document.createElement("div");
+    wrapper.className = "selection-popup-stack";
     const backButton = document.createElement("button");
     backButton.type = "button";
-    backButton.className = "pixel-menu-button";
+    backButton.className = "pixel-menu-button selection-popup-back";
     backButton.textContent = "Back";
-    backButton.style.marginBottom = "12px";
     backButton.addEventListener("click", openModeGrid);
     wrapper.appendChild(backButton);
 
@@ -1167,10 +1178,14 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
 
   if (spriteEl) {
     const cls = member.char_class || "ninja";
+    const prevCharacter = String(slot.dataset.character || "").trim();
     spriteEl.src = `/assets/${cls}/body.webp`;
     spriteEl.alt = cls;
     spriteEl.classList.remove("random");
     spriteEl.className = "character-sprite";
+    if (prevCharacter && prevCharacter !== cls) {
+      triggerLobbyCharacterSplash(slot);
+    }
   }
 
   if (statusEl) {

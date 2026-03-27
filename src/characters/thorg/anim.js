@@ -65,7 +65,9 @@ export function animations(scene) {
   make(`${NAME}-running`, ["running", "run"], 9, 0);
   make(`${NAME}-idle`, ["idle", "stand", "idle_"], 3, -1);
   make(`${NAME}-jumping`, ["jumping", "jump"], 7, 0);
-  make(`${NAME}-sliding`, ["wall", "slide", "sliding"], 20, 2);
+  // Thorg only has a single sliding frame, so keep it held instead of
+  // letting the non-looping animation complete and disappear between updates.
+  make(`${NAME}-sliding`, ["wall", "slide", "sliding"], 10, -1);
   make(`${NAME}-falling`, ["falling", "fall"], 8, 0);
   makeThrowLiftSlam();
   make(`${NAME}-dying`, ["dying", "death", "dead"], 10, 0);

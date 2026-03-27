@@ -9,7 +9,7 @@ import {
 import { performSpecial } from "./characters/special";
 import { player } from "./player";
 import socket from "./socket";
-import { spawnDeathBurst, spawnHealthMarker } from "./effects";
+import { spawnDeathBurst, spawnHealthMarker, spawnSpawnBurst } from "./effects";
 
 export default class OpPlayer {
   constructor(
@@ -102,8 +102,12 @@ export default class OpPlayer {
       this.username,
     );
     this.opPlayerName.setStyle({
-      font: "bold 8pt LilitaOne-Regular",
-      fill: "#471111",
+      fontFamily: "LilitaOne-Regular",
+      fontSize: "10px",
+      fontStyle: "bold",
+      fill: "#ffffff",
+      stroke: "#000000",
+      strokeThickness: 5,
     });
     this.opPlayerName.setOrigin(0.5, 0);
     this.opPlayerName.setDepth(3); // above health text
@@ -489,6 +493,11 @@ export default class OpPlayer {
         resolveAnimKey(this.scene, this.character, "idle", "idle"),
         true,
       );
+      spawnSpawnBurst(this.scene, this.opponent, {
+        tint: 0xffffff,
+        accent: 0xb8ecff,
+        depth: 27,
+      });
     } catch (_) {}
     if (!this.effects) {
       const EffectsCls = getEffectsClass(this.character);

@@ -33,12 +33,28 @@ export function animations(scene) {
       repeat,
     });
   };
+  const ensureOrderedAttack = () => {
+    if (scene.anims.exists(`${NAME}-throw`)) return;
+    const frames = findFrames(["attack", "throw"]);
+    if (!frames.length) return;
+    scene.anims.create({
+      key: `${NAME}-throw`,
+      frames: frames.map((f, index) => ({
+        key: NAME,
+        frame: f,
+        // Hold the later cast frames slightly longer so the release reads clearly.
+        duration: index >= frames.length - 2 ? 80 : 58,
+      })),
+      frameRate: 18,
+      repeat: 0,
+    });
+  };
 
   ensureAnim(`${NAME}-idle`, ["idle", "stand"], 6, -1);
   ensureAnim(`${NAME}-running`, ["run", "walk", "move"], 18, -1);
   ensureAnim(`${NAME}-jumping`, ["jump"], 18, 0);
   ensureAnim(`${NAME}-falling`, ["fall"], 18, 0);
   ensureAnim(`${NAME}-sliding`, ["sing", "slide", "sliding"], 20, 2);
-  ensureAnim(`${NAME}-throw`, ["throw", "attack"], 17, 0);
+  ensureOrderedAttack();
   ensureAnim(`${NAME}-dying`, ["dying", "death", "die"], 10, 0);
 }

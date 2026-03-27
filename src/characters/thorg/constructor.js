@@ -246,25 +246,46 @@ class Thorg extends CharacterEntityBase {
     const dy = currentY - previousY;
     const absDx = Math.abs(dx);
     const absDy = Math.abs(dy);
+    const vx = Number(currentPosition?.vx);
+    const vy = Number(currentPosition?.vy);
+    const absVx = Math.abs(vx);
+    const grounded =
+      typeof currentPosition?.grounded === "boolean"
+        ? currentPosition.grounded
+        : undefined;
+    const currentAnimKey = String(sprite?.anims?.currentAnim?.key || "");
     const attackLike =
       typeof chosenAnim === "string" && /throw|attack|slash/i.test(chosenAnim);
+    const slideLike =
+      typeof chosenAnim === "string" && /slide/i.test(chosenAnim);
+    const alreadyThrowing = /thorg-throw$/i.test(currentAnimKey);
+    const alreadySliding = /thorg-sliding$/i.test(currentAnimKey);
+
+    if (slideLike || (alreadySliding && grounded === false)) {
+      return grounded === false ? "sliding" : "idle";
+    }
 
     if (attackLike) {
-      if (absDy > 1.8) {
+      if (grounded === false || absDy > 1.8 || Math.abs(vy) > 70) {
         chosenAnim = dy < 0 ? "jumping" : "falling";
-      } else if (absDx > 1.2) {
+      } else if (absDx > 1.2 || absVx > 35) {
         chosenAnim = "running";
       } else {
-        chosenAnim = "idle";
+        // Keep the attack presentation stable instead of dropping back to idle
+        // on low-motion snapshots between throw frames.
+        chosenAnim = alreadyThrowing ? "throw" : "idle";
       }
       return chosenAnim;
     }
 
-    if (absDy > 2.2) {
-      return dy < 0 ? "jumping" : "falling";
+    if (grounded === false || absDy > 2.2 || Math.abs(vy) > 85) {
+      return dy < 0 || vy < -20 ? "jumping" : "falling";
     }
-    if (absDx <= 0.7) {
+    if (absDx <= 0.7 && absVx <= 20) {
       return "idle";
+    }
+    if (chosenAnim === "idle" && (absDx > 0.7 || absVx > 20)) {
+      return "running";
     }
     return chosenAnim;
   }

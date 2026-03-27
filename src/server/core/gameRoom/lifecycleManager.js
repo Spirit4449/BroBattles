@@ -1,4 +1,5 @@
 const { ALL_DEAD_GAME_OVER_DELAY_MS } = require("../gameRoomConfig");
+const effectManager = require("./effects/effectManager");
 
 function potentialStartGame(room) {
   if (room.status !== "waiting") return;
@@ -60,6 +61,28 @@ function startGame(room) {
   });
 
   setTimeout(() => {
+    const now = Date.now();
+    for (const playerData of room.players.values()) {
+      if (!playerData) continue;
+      effectManager.apply(
+        playerData,
+        "respawnShield",
+        now,
+        { durationMs: 3000 },
+        room,
+      );
+      room.io.to(`game:${room.matchId}`).emit("player:respawn", {
+        username: playerData.name,
+        x: Number(playerData.x) || 0,
+        y: Number(playerData.y) || 0,
+        team: playerData.team,
+        health: playerData.health,
+        maxHealth: playerData.maxHealth,
+        shieldMs: 3000,
+        at: now,
+      });
+    }
+    room.broadcastSnapshot();
     room.startGameLoop();
   }, 6000);
 }

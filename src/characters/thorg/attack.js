@@ -25,6 +25,7 @@ export const THORG_FALL_ARC_HEIGHT = FALL.arcHeight ?? 120;
 export const THORG_FALL_CURVE_MAGNITUDE = FALL.curveMagnitude ?? 20;
 export const THORG_FALL_END_Y_OFFSET = FALL.endYOffset ?? 300;
 const DAMAGE_TICK_MS = FALL.damageTickMs ?? 90;
+const HITBOX_INFLATE = FALL.hitboxInflate ?? 2;
 const SPRITE_FORWARD_OFFSET = FALL.spriteForwardOffset ?? -Math.PI / 2; // weapon art points downward at rotation=0
 let DEBUG_DRAW = false;
 
@@ -138,10 +139,10 @@ export function performThorgFallAttack(instance, attackContext = null) {
     // Damage ticks during flight
     if (strikeStarted && dmgAccum >= DAMAGE_TICK_MS) {
       dmgAccum = 0;
-      const left = x - RECT_W / 2 - 6;
-      const right = x + RECT_W / 2 + 6;
-      const top = y - RECT_H / 2 - 6;
-      const bottom = y + RECT_H / 2 + 6;
+      const left = x - RECT_W / 2 - HITBOX_INFLATE;
+      const right = x + RECT_W / 2 + HITBOX_INFLATE;
+      const top = y - RECT_H / 2 - HITBOX_INFLATE;
+      const bottom = y + RECT_H / 2 + HITBOX_INFLATE;
       const list = Object.values(opponentPlayersRef || {});
       for (const wrap of list) {
         const spr = wrap && wrap.opponent;

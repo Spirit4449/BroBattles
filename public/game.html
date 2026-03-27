@@ -408,9 +408,9 @@
       }
       #battle-start-overlay .bs-card-player-name {
         left: 50%;
-        top: 21.2%;
-        max-width: 74%;
-        font-size: clamp(12px, 1.08vw, 15px);
+        top: 23.3%;
+        max-width: 72%;
+        font-size: clamp(12px, 1.02vw, 14px);
         font-weight: 700;
         color: #f9fdff;
         text-shadow: 0 2px 3px rgba(0, 0, 0, 0.75);
@@ -421,7 +421,7 @@
       }
       #battle-start-overlay .bs-card-character-name {
         left: 50%;
-        top: 27.6%;
+        top: 30.2%;
         max-width: 68%;
         font-size: clamp(10px, 0.9vw, 12px);
         font-weight: 600;
@@ -542,7 +542,7 @@
         position: fixed;
         top: 10px;
         left: 50%;
-        transform: translateY(0);
+        transform: translateX(-50%);
         z-index: 9998;
         background: linear-gradient(
           180deg,
@@ -791,13 +791,16 @@
         left: 50%;
         transform: translateX(-50%);
         z-index: 9997;
-        width: min(520px, calc(100vw - 24px));
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
+        width: min(1040px, calc(100vw - 32px));
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: clamp(220px, 24vw, 340px);
         pointer-events: none;
       }
       .bank-bust-vault {
+        width: min(300px, calc(50vw - 180px));
+        min-width: 240px;
         padding: 10px 12px;
         border-radius: 12px;
         border: 2px solid rgba(148, 163, 184, 0.35);
@@ -910,9 +913,9 @@
         }
         #game-timer-hud {
           top: 8px;
-          right: 8px;
-          left: auto;
-          transform: none;
+          left: 50%;
+          right: auto;
+          transform: translateX(-50%);
         }
         #team-status-hud {
           top: 8px;
@@ -921,9 +924,15 @@
           width: min(186px, calc(100vw - 16px));
         }
         #bank-bust-hud {
-          top: 80px;
+          top: 82px;
+          display: grid;
           grid-template-columns: 1fr;
           width: min(320px, calc(100vw - 16px));
+          gap: 8px;
+        }
+        .bank-bust-vault {
+          width: auto;
+          min-width: 0;
         }
         #bank-bust-alert {
           top: 168px;

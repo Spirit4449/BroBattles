@@ -24,6 +24,8 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
         returnSpeed: 580, // px/s (cap)
         rotationSpeed: 950, // deg/s
         scale: 0.1,
+        collisionSizeScale: 0.52,
+        collisionRadiusScale: 0.26,
         damage: 1000,
         glowScale: 1,
         attackType: "basic",
@@ -80,6 +82,15 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     scene.physics.add.existing(this);
     this.setScale(this.cfg.scale);
     this.body.allowGravity = false;
+    const collisionSizeScale = Math.max(
+      0.2,
+      Number(this.cfg.collisionSizeScale) || 0.52,
+    );
+    const collisionSize = Math.max(
+      10,
+      (this.displayWidth || this.width || 24) * collisionSizeScale,
+    );
+    this.body.setSize(collisionSize, collisionSize, true);
     this.setDepth(5);
     this.setAngularVelocity(this.cfg.rotationSpeed * this.cfg.direction);
 
@@ -190,7 +201,11 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       attacker: this.cfg.username,
       x: this.x,
       y: this.y,
-      radius: Math.max(18, (this.displayWidth || this.width || 24) * 0.5),
+      radius: Math.max(
+        10,
+        (this.displayWidth || this.width || 24) *
+          (Math.max(0.1, Number(this.cfg.collisionRadiusScale) || 0.26)),
+      ),
       attackType: this.cfg.attackType || "basic",
       chargeRatio: Number.isFinite(this.cfg.chargeRatio)
         ? this.cfg.chargeRatio

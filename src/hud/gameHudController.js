@@ -355,7 +355,7 @@ export function createGameHudController({
       if (label) label.textContent = "SUDDEN DEATH";
     } else {
       hud.classList.remove("sudden-death");
-      if (label) label.textContent = "Time Reamining";
+      if (label) label.textContent = "Time Remaining";
     }
   }
 
@@ -737,7 +737,7 @@ export function createGameHudController({
     timerPaused = !!paused;
     if (!timerPaused) {
       const label = document.getElementById("game-timer-label");
-      if (label) label.textContent = "Time Reamining";
+      if (label) label.textContent = "Time Remaining";
     }
   }
 

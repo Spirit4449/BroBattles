@@ -2,6 +2,7 @@ import { performSpecial } from "../characters/special";
 import {
   spawnDamageImpact,
   spawnDeathBurst,
+  spawnSpawnBurst,
   triggerDamageScreenPulse,
 } from "../effects";
 
@@ -240,6 +241,11 @@ export function bindLocalSocketEvents({
         resolveAnimKey(scene, getCurrentCharacter(), "idle", "idle"),
         true,
       );
+      spawnSpawnBurst(scene, player, {
+        tint: 0xffffff,
+        accent: 0xb8ecff,
+        depth: 28,
+      });
     } catch (_) {}
 
     try {

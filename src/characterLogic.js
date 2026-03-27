@@ -14,6 +14,16 @@ import { playSound } from "./lib/uiSounds.js";
 // Keep a reference to user data for confirmations and currency display
 let _userDataRef = null;
 
+function triggerLobbyCharacterSplash(slot) {
+  if (!slot) return;
+  slot.classList.remove("character-splash");
+  void slot.offsetWidth;
+  slot.classList.add("character-splash");
+  window.setTimeout(() => {
+    slot.classList.remove("character-splash");
+  }, 700);
+}
+
 function getActivePartyIdFromPath() {
   const pathname = window.location.pathname || "";
   if (!pathname.includes("/party/")) return null;
@@ -310,6 +320,7 @@ function selectCharacter(character) {
       document.getElementById("your-slot-1");
     if (yourSlot) {
       const spriteEl = yourSlot.querySelector(".character-sprite");
+      const prevCharacter = String(yourSlot.dataset.character || "").trim();
       if (spriteEl) {
         spriteEl.src = `/assets/${charClass}/body.webp`;
         spriteEl.alt = charClass;
@@ -317,6 +328,9 @@ function selectCharacter(character) {
       }
       yourSlot.dataset.character = charClass;
       yourSlot.classList.remove("empty");
+      if (prevCharacter && prevCharacter !== charClass) {
+        triggerLobbyCharacterSplash(yourSlot);
+      }
     }
 
     // If in a party, emit socket event so others update

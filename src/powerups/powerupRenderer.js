@@ -645,13 +645,24 @@ export function createPowerupRenderer({
         g.lineStyle(3, colors.health, 0.75 * pulse);
         g.strokeCircle(x, y, r + 4 * pulse);
       }
-      if ((fx.shield || 0) > 0 || (fx.respawnShield || 0) > 0) {
+      if ((fx.shield || 0) > 0) {
         g.fillStyle(colors.shield, 0.22);
         g.fillCircle(x, y, Math.max(16, r - 4 + 4 * pulse));
         g.lineStyle(4, colors.shield, 0.82 * pulse);
         g.strokeCircle(x, y, Math.max(16, r - 4 + 4 * pulse));
         g.fillStyle(0xffedd5, 0.08 + 0.05 * pulse);
         g.fillCircle(x, y, Math.max(12, r - 16 + 2 * pulse));
+      }
+      if ((fx.respawnShield || 0) > 0) {
+        const shieldRadius = Math.max(18, r + 2 + 6 * pulse);
+        g.fillStyle(0xffffff, 0.12 + 0.04 * pulse);
+        g.fillCircle(x, y, Math.max(14, shieldRadius - 7));
+        g.lineStyle(5, 0xffffff, 0.92 * pulse);
+        g.strokeCircle(x, y, shieldRadius);
+        g.lineStyle(2.5, 0xbfe9ff, 0.78 * pulse);
+        g.strokeCircle(x, y, shieldRadius + 8);
+        g.fillStyle(0xe0f7ff, 0.08 + 0.06 * pulse);
+        g.fillCircle(x, y, Math.max(10, shieldRadius - 16));
       }
       if ((fx.poison || 0) > 0) {
         g.fillStyle(colors.poison, 0.1 * pulse);

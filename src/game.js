@@ -1448,6 +1448,65 @@ class GameScene extends Phaser.Scene {
       const velocityPerMs = (bNum - aNum) / safeDtMs;
       return bNum + velocityPerMs * extrapolationMs;
     };
+    const filterRemoteTarget = (
+      wrapper,
+      rawTargetX,
+      rawTargetY,
+      previousSnapshot,
+      currentSnapshot,
+    ) => {
+      const prevAcceptedX = Number(wrapper._filteredTargetX);
+      const prevAcceptedY = Number(wrapper._filteredTargetY);
+      if (!Number.isFinite(prevAcceptedX) || !Number.isFinite(prevAcceptedY)) {
+        wrapper._filteredTargetX = rawTargetX;
+        wrapper._filteredTargetY = rawTargetY;
+        return { x: rawTargetX, y: rawTargetY };
+      }
+
+      const incomingDx = rawTargetX - prevAcceptedX;
+      const stableDir = Number(wrapper._stableTargetDirX) || 0;
+      const snapshotDx =
+        Number(currentSnapshot?.x) - Number(previousSnapshot?.x);
+      const snapshotVx = Number(currentSnapshot?.vx);
+      const motionHint =
+        Number.isFinite(snapshotVx) && Math.abs(snapshotVx) > 35
+          ? Math.sign(snapshotVx)
+          : Number.isFinite(snapshotDx) && Math.abs(snapshotDx) > 1.25
+            ? Math.sign(snapshotDx)
+            : 0;
+      const incomingDir = Math.abs(incomingDx) > 0.75 ? Math.sign(incomingDx) : 0;
+      const reverseAgainstTrend =
+        stableDir !== 0 &&
+        incomingDir !== 0 &&
+        incomingDir === -stableDir &&
+        Math.abs(incomingDx) >= 6;
+      const reverseConfirmed = motionHint !== 0 && motionHint === incomingDir;
+      const nowPerf = performance.now();
+
+      if (reverseAgainstTrend && !reverseConfirmed) {
+        const pending = wrapper._reverseTargetCandidate;
+        if (
+          !pending ||
+          pending.dir !== incomingDir ||
+          nowPerf - pending.at > 180
+        ) {
+          wrapper._reverseTargetCandidate = {
+            dir: incomingDir,
+            at: nowPerf,
+          };
+          return { x: prevAcceptedX, y: prevAcceptedY };
+        }
+      } else {
+        wrapper._reverseTargetCandidate = null;
+      }
+
+      if (incomingDir !== 0) {
+        wrapper._stableTargetDirX = incomingDir;
+      }
+      wrapper._filteredTargetX = rawTargetX;
+      wrapper._filteredTargetY = rawTargetY;
+      return { x: rawTargetX, y: rawTargetY };
+    };
 
     const applyInterp = (wrapper, name) => {
       if (!wrapper || !wrapper.opponent) return;
@@ -1534,6 +1593,15 @@ class GameScene extends Phaser.Scene {
           targetY = aY;
         }
       }
+      const filteredTarget = filterRemoteTarget(
+        wrapper,
+        targetX,
+        targetY,
+        aPosData,
+        bPosData,
+      );
+      targetX = filteredTarget.x;
+      targetY = filteredTarget.y;
 
       if (!wrapper._deathPresentationActive && !wrapper._corpseRemoved) {
         // Move toward interpolated target with a bounded step.
@@ -1545,9 +1613,9 @@ class GameScene extends Phaser.Scene {
           const inPrecision =
             (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
           const dtMs = Math.max(1, Number(this.game?.loop?.delta) || 16.7);
-          const followSpeedPxPerSec = inPrecision ? 2600 : 1200;
+          const followSpeedPxPerSec = inPrecision ? 3000 : 1500;
           const maxStep = (followSpeedPxPerSec * dtMs) / 1000;
-          const snapDistance = inPrecision ? 24 : 10;
+          const snapDistance = inPrecision ? 1.5 : 0.9;
           if (dist > 520 || dist <= snapDistance) {
             spr.x = targetX;
             spr.y = targetY;

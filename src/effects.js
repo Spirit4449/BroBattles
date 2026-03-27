@@ -352,6 +352,107 @@ export function spawnDeathBurst(scene, sprite, opts = {}) {
   }
 }
 
+export function spawnSpawnBurst(scene, sprite, opts = {}) {
+  if (!scene?.add || !sprite) return;
+
+  const body = sprite.body;
+  const cx = Number(body?.center?.x) || Number(sprite.x) || 0;
+  const cy = Number(body?.center?.y) || Number(sprite.y) || 0;
+  const baseRadius = Number(opts.radius) || 34;
+  const tint = opts.tint || 0xf8fafc;
+  const accent = opts.accent || 0x9fe8ff;
+  const depth = typeof opts.depth === "number" ? opts.depth : 25;
+
+  const flash = scene.add.circle(cx, cy, baseRadius * 0.72, tint, 0.22);
+  flash.setDepth(depth);
+  flash.setBlendMode(Phaser.BlendModes.ADD);
+  scene.tweens.add({
+    targets: flash,
+    alpha: 0,
+    scaleX: 1.9,
+    scaleY: 1.9,
+    duration: 260,
+    ease: "Cubic.easeOut",
+    onComplete: () => flash.destroy(),
+  });
+
+  const ring = scene.add.circle(cx, cy, baseRadius, accent, 0.1);
+  ring.setDepth(depth);
+  ring.setStrokeStyle(4, tint, 0.95);
+  ring.setBlendMode(Phaser.BlendModes.ADD);
+  scene.tweens.add({
+    targets: ring,
+    alpha: 0,
+    scaleX: 1.55,
+    scaleY: 1.55,
+    duration: 340,
+    ease: "Cubic.easeOut",
+    onComplete: () => ring.destroy(),
+  });
+
+  const halo = scene.add.circle(cx, cy, baseRadius + 18, accent, 0.08);
+  halo.setDepth(depth - 1);
+  halo.setBlendMode(Phaser.BlendModes.ADD);
+  scene.tweens.add({
+    targets: halo,
+    alpha: 0,
+    scaleX: 1.38,
+    scaleY: 1.38,
+    duration: 420,
+    ease: "Quad.easeOut",
+    onComplete: () => halo.destroy(),
+  });
+
+  for (let i = 0; i < 8; i++) {
+    const angle = (Math.PI * 2 * i) / 8 + Phaser.Math.FloatBetween(-0.1, 0.1);
+    const streak = scene.add.graphics();
+    streak.setDepth(depth + 1);
+    streak.fillStyle(i % 2 === 0 ? tint : accent, 0.92);
+    const w = Phaser.Math.Between(14, 22);
+    const h = Phaser.Math.Between(4, 6);
+    streak.fillRoundedRect(-w / 2, -h / 2, w, h, 2);
+    streak.x = cx;
+    streak.y = cy;
+    streak.rotation = angle;
+    streak.setBlendMode(Phaser.BlendModes.ADD);
+    scene.tweens.add({
+      targets: streak,
+      x: cx + Math.cos(angle) * Phaser.Math.Between(40, 66),
+      y: cy + Math.sin(angle) * Phaser.Math.Between(40, 66),
+      alpha: 0,
+      scaleX: 1.6,
+      duration: Phaser.Math.Between(180, 260),
+      ease: "Sine.easeOut",
+      onComplete: () => streak.destroy(),
+    });
+  }
+
+  for (let i = 0; i < 10; i++) {
+    const mote = scene.add.circle(
+      cx + Phaser.Math.Between(-8, 8),
+      cy + Phaser.Math.Between(-8, 8),
+      Phaser.Math.Between(2, 5),
+      i % 3 === 0 ? accent : tint,
+      Phaser.Math.FloatBetween(0.72, 0.95),
+    );
+    mote.setDepth(depth + 1);
+    mote.setBlendMode(Phaser.BlendModes.ADD);
+    const angle = Phaser.Math.FloatBetween(-Math.PI, Math.PI);
+    const speed = Phaser.Math.Between(24, 58);
+    scene.tweens.add({
+      targets: mote,
+      x: mote.x + Math.cos(angle) * speed,
+      y: mote.y + Math.sin(angle) * speed,
+      alpha: 0,
+      scaleX: Phaser.Math.FloatBetween(0.8, 1.8),
+      scaleY: Phaser.Math.FloatBetween(0.8, 1.8),
+      duration: Phaser.Math.Between(220, 320),
+      ease: "Cubic.easeOut",
+      onComplete: () => mote.destroy(),
+    });
+  }
+}
+
 export function triggerDamageScreenPulse(scene, opts = {}) {
   if (!scene) return;
   const vigEl = document.getElementById("water-vignette");
