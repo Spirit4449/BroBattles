@@ -90,6 +90,7 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
         selection,
         capacity: result.capacity,
         members: membersForEmit,
+        ownerName: result.ownerName || null,
         viewer: username,
       });
     } catch (err) {
@@ -139,6 +140,73 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
     } catch (e) {
       console.error("/leave-party", e);
       res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  app.post("/party/kick", async (req, res) => {
+    try {
+      const user = await requireCurrentUser(req, res);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+      const partyId = Number(req.body?.partyId);
+      const targetName = String(req.body?.targetName || "").trim();
+      if (!Number.isFinite(partyId) || partyId <= 0 || !targetName) {
+        return res.status(400).json({ error: "partyId and targetName are required" });
+      }
+      const result = await partyState.kickMember({
+        partyId,
+        actorName: user.name,
+        targetName,
+      });
+      if (!result.ok) {
+        return res.status(403).json({ error: result.error || "Unable to kick member" });
+      }
+      try {
+        const rows = await db.runQuery(
+          "SELECT socket_id FROM users WHERE name = ? LIMIT 1",
+          [targetName],
+        );
+        const sid = rows?.[0]?.socket_id;
+        const sock = sid ? io.sockets.sockets.get(sid) : null;
+        if (sock) {
+          sock.emit("party:kicked", {
+            partyId,
+            actorName: user.name,
+          });
+        }
+      } catch (_) {}
+      try {
+        await req.app.locals.socketApi.moveUserSocketToLobby(targetName);
+      } catch (_) {}
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("[party] /party/kick error", error);
+      return res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  app.post("/party/make-owner", async (req, res) => {
+    try {
+      const user = await requireCurrentUser(req, res);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+      const partyId = Number(req.body?.partyId);
+      const targetName = String(req.body?.targetName || "").trim();
+      if (!Number.isFinite(partyId) || partyId <= 0 || !targetName) {
+        return res.status(400).json({ error: "partyId and targetName are required" });
+      }
+      const result = await partyState.makeOwner({
+        partyId,
+        actorName: user.name,
+        targetName,
+      });
+      if (!result.ok) {
+        return res
+          .status(403)
+          .json({ error: result.error || "Unable to transfer ownership" });
+      }
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("[party] /party/make-owner error", error);
+      return res.status(500).json({ error: "Internal error" });
     }
   });
 }

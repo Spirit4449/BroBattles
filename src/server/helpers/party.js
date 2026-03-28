@@ -9,6 +9,18 @@ async function selectPartyById(db, partyId) {
   return rows?.[0] || null;
 }
 
+async function getPartyOwnerName(db, partyId) {
+  const rows = await db.runQuery(
+    `SELECT name
+       FROM party_members
+      WHERE party_id = ?
+      ORDER BY joined_at ASC, name ASC
+      LIMIT 1`,
+    [partyId],
+  );
+  return rows?.[0]?.name || null;
+}
+
 async function emitRoster(io, partyId, party, members, db = null) {
   let selectedByName = {};
   try {
@@ -30,8 +42,10 @@ async function emitRoster(io, partyId, party, members, db = null) {
   });
   const selection = normalizeSelectionFromRow(party || {});
   const capacity = capacityFromSelection(selection);
+  const ownerName = db ? await getPartyOwnerName(db, partyId) : null;
   io.to(`party:${partyId}`).emit("party:members", {
     partyId,
+    ownerName,
     mode: party.mode,
     modeId: selection.modeId,
     modeVariantId: selection.modeVariantId,
@@ -54,4 +68,9 @@ async function updateOrDeleteParty(io, db, partyId) {
   return false;
 }
 
-module.exports = { selectPartyById, emitRoster, updateOrDeleteParty };
+module.exports = {
+  selectPartyById,
+  getPartyOwnerName,
+  emitRoster,
+  updateOrDeleteParty,
+};

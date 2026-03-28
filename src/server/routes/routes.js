@@ -26,6 +26,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
     db,
     getOrCreateCurrentUser,
     isGuest,
+    isAdminUser,
   });
 
   registerPartyRoutes({

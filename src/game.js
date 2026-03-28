@@ -1525,6 +1525,11 @@ class GameScene extends Phaser.Scene {
       const spr = wrapper.opponent;
       const aPosData = aState.players[name];
       const bPosData = bState.players[name];
+      const respawnShieldRemainingMs = Math.max(
+        0,
+        Number(latestPlayerEffects?.[name]?.respawnShield) || 0,
+      );
+      const inRespawnShield = respawnShieldRemainingMs > 0;
 
       if (!aPosData && !bPosData) return;
 
@@ -1574,7 +1579,15 @@ class GameScene extends Phaser.Scene {
           Number.isFinite(bX) &&
           Number.isFinite(bY)
         ) {
-          if (extrapolationMs > 0) {
+          if (inRespawnShield) {
+            if (extrapolationMs > 0) {
+              targetX = bX;
+              targetY = bY;
+            } else {
+              targetX = Phaser.Math.Linear(aX, bX, effectiveAlpha);
+              targetY = Phaser.Math.Linear(aY, bY, effectiveAlpha);
+            }
+          } else if (extrapolationMs > 0) {
             const stateDeltaMs = Math.max(
               1,
               Number(bState?.tMono) - Number(aState?.tMono),

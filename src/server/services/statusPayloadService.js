@@ -29,6 +29,7 @@ async function buildStatusPayload({
   db,
   getOrCreateCurrentUser,
   isGuest,
+  isAdminUser,
   req,
   res,
 }) {
@@ -66,6 +67,8 @@ async function buildStatusPayload({
   return {
     success: true,
     userData: userNormalized,
+    isAdmin:
+      typeof isAdminUser === "function" ? !!isAdminUser(userNormalized) : false,
     newlyCreated: userType === "new",
     guest: isGuest(userNormalized),
     party_id: partyRows[0]?.party_id ?? null,

@@ -69,7 +69,7 @@ async function getPartyIdByName(name) {
 
 async function fetchPartyMembersDetailed(partyId) {
   return runQuery(
-    `SELECT pm.name, pm.team, u.char_class, u.status
+    `SELECT pm.name, pm.team, u.char_class, u.status, u.char_levels
        FROM party_members pm
        LEFT JOIN users u ON u.name = pm.name
       WHERE pm.party_id = ?

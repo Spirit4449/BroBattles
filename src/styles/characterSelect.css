@@ -24,7 +24,7 @@
   height: min(88vh, 920px);
   max-height: 88vh;
   position: relative;
-  padding: 30px;
+  padding: 0 30px 30px;
   color: #e2e8f0;
   z-index: 1; /* above particles canvas */
   display: flex;
@@ -57,8 +57,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 66px;
-  margin: -30px -30px 10px -30px; /* overlap to align with blue bar */
+  flex: 0 0 66px;
+  min-height: 66px;
+  margin: 0 -30px 18px -30px;
+  padding: 0 72px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 

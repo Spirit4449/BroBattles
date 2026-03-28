@@ -48,6 +48,7 @@
     <div id="lobby-area" class="mode-1">
       <div class="platform your-team-1" data-team="your-team" data-slot="1">
         <div class="character-slot empty" id="your-slot-1">
+          <div class="slot-level-badge" aria-hidden="true"></div>
           <div class="switch-character">
             <img src="/assets/switch.svg" height="18px" alt="" />
           </div>
@@ -64,6 +65,7 @@
 
       <div class="platform op-team-1" data-team="op-team" data-slot="1">
         <div class="character-slot empty" id="op-slot-1">
+          <div class="slot-level-badge" aria-hidden="true"></div>
           <div class="username op-player">Random</div>
           <img
             class="character-sprite random"
@@ -151,7 +153,12 @@
         aria-labelledby="profile-popup-title"
       >
         <header class="profile-popup-head">
-          <h2 id="profile-popup-title">Your Profile</h2>
+          <div class="profile-head-copy">
+            <h2 id="profile-popup-title">Your Profile</h2>
+            <p id="profile-popup-subtitle" class="profile-popup-subtitle">
+              Loadout, progression, and account overview
+            </p>
+          </div>
           <button
             id="profile-close"
             class="profile-close pixel-menu-button"
@@ -162,30 +169,59 @@
         </header>
 
         <div class="profile-popup-grid">
+          <article class="profile-panel profile-hero-panel">
+            <div class="profile-hero-top">
+              <div class="profile-hero-avatar">
+                <img id="profile-hero-avatar" src="/assets/ninja/body.webp" alt="" />
+              </div>
+              <div class="profile-hero-copy">
+                <div id="profile-hero-name" class="profile-hero-name">-</div>
+                <div id="profile-hero-class" class="profile-hero-class">Ninja</div>
+                <div id="profile-hero-tag" class="profile-hero-tag">Player Profile</div>
+              </div>
+            </div>
+            <div class="profile-hero-metrics">
+              <div class="profile-metric-card">
+                <span>Wins</span><strong id="profile-wins">0</strong>
+              </div>
+              <div class="profile-metric-card">
+                <span>Total Matches</span><strong id="profile-matches">0</strong>
+              </div>
+              <div class="profile-metric-card">
+                <span>Trophies</span><strong id="profile-trophies">0</strong>
+              </div>
+              <div class="profile-metric-card">
+                <span>Avg Char Level</span><strong id="profile-avg-level">1</strong>
+              </div>
+            </div>
+          </article>
+
           <article class="profile-panel profile-stats-panel">
             <h3>Stats</h3>
             <div class="profile-stat-row">
               <span>Username</span><strong id="profile-username">-</strong>
             </div>
-            <div class="profile-stat-row">
+            <div id="profile-coins-row" class="profile-stat-row">
               <span>Coins</span><strong id="profile-coins">0</strong>
             </div>
-            <div class="profile-stat-row">
+            <div id="profile-gems-row" class="profile-stat-row">
               <span>Gems</span><strong id="profile-gems">0</strong>
             </div>
             <div class="profile-stat-row">
-              <span>Trophies</span><strong id="profile-trophies">0</strong>
+              <span>Trophies</span><strong id="profile-stats-trophies">0</strong>
             </div>
             <div class="profile-stat-row">
-              <span>Total Matches</span><strong id="profile-matches">0</strong>
+              <span>Wins</span><strong id="profile-stats-wins">0</strong>
             </div>
             <div class="profile-stat-row">
-              <span>Avg Char Level</span
-              ><strong id="profile-avg-level">1</strong>
+              <span>Main Character</span><strong id="profile-main-class">Ninja</strong>
             </div>
           </article>
 
-          <article class="profile-panel profile-account-panel">
+          <article
+            id="profile-account-panel"
+            class="profile-panel profile-account-panel"
+          >
             <h3>Account Settings</h3>
             <form id="profile-username-form" class="profile-form">
               <label for="profile-new-username">Change Username</label>
@@ -231,7 +267,7 @@
           </article>
         </div>
 
-        <section class="profile-panel profile-cards-panel">
+        <section id="profile-cards-panel" class="profile-panel profile-cards-panel">
           <h3>Player Cards</h3>
           <div id="profile-cards-grid" class="profile-cards-grid"></div>
         </section>
@@ -268,6 +304,14 @@
           <span id="tips-text"></span>
         </div>
         <div class="mm-actions">
+          <button
+            id="mm-fill-bots"
+            class="mm-btn mm-fill-bots pixel-menu-button hidden"
+            type="button"
+            data-sound="cursor4"
+          >
+            Fill With Bots
+          </button>
           <button
             id="mm-cancel"
             class="mm-btn pixel-menu-button"

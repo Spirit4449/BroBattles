@@ -14,6 +14,27 @@ import { playSound } from "./lib/uiSounds.js";
 // Keep a reference to user data for confirmations and currency display
 let _userDataRef = null;
 
+function setLobbySlotLevelIcon(slot, level) {
+  if (!slot) return;
+  let badge = slot.querySelector(".slot-level-badge");
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.className = "slot-level-badge";
+    badge.setAttribute("aria-hidden", "true");
+    slot.insertBefore(badge, slot.firstChild);
+  }
+  if (Number.isFinite(Number(level)) && Number(level) > 0) {
+    const iconLevel = Math.max(1, Math.min(5, Number(level)));
+    badge.innerHTML = `<img src="/assets/levels/${iconLevel}.webp" alt="" />`;
+    badge.dataset.level = String(iconLevel);
+    slot.classList.add("has-level");
+  } else {
+    badge.innerHTML = "";
+    delete badge.dataset.level;
+    slot.classList.remove("has-level");
+  }
+}
+
 function triggerLobbyCharacterSplash(slot) {
   if (!slot) return;
   slot.classList.remove("character-splash");
@@ -328,6 +349,14 @@ function selectCharacter(character) {
       }
       yourSlot.dataset.character = charClass;
       yourSlot.classList.remove("empty");
+      const charLevels =
+        typeof _userDataRef?.char_levels === "object" && _userDataRef?.char_levels
+          ? _userDataRef.char_levels
+          : {};
+      setLobbySlotLevelIcon(
+        yourSlot,
+        Math.max(1, Number(charLevels?.[charClass]) || 1),
+      );
       if (prevCharacter && prevCharacter !== charClass) {
         triggerLobbyCharacterSplash(yourSlot);
       }

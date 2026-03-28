@@ -64,6 +64,7 @@ function startGame(room) {
     const now = Date.now();
     for (const playerData of room.players.values()) {
       if (!playerData) continue;
+      if (playerData.isBot) continue;
       effectManager.apply(
         playerData,
         "respawnShield",
@@ -202,10 +203,18 @@ async function finishGame(room, winnerTeam, meta = {}) {
   }
 
   try {
-    await room.db.runQuery(
-      "UPDATE matches SET status = 'completed' WHERE match_id = ?",
-      [room.matchId],
-    );
+    try {
+      await room.db.runQuery(
+        "UPDATE matches SET status = 'completed', winner_team = ? WHERE match_id = ?",
+        [winnerTeam, room.matchId],
+      );
+    } catch (error) {
+      if (error?.code !== "ER_BAD_FIELD_ERROR") throw error;
+      await room.db.runQuery(
+        "UPDATE matches SET status = 'completed' WHERE match_id = ?",
+        [room.matchId],
+      );
+    }
   } catch (e) {
     console.warn(
       `[GameRoom ${room.matchId}] failed to update match status`,

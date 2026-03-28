@@ -1,5 +1,5 @@
 const { capacityFromSelection } = require("../helpers/utils");
-const { selectPartyById } = require("../helpers/party");
+const { selectPartyById, getPartyOwnerName } = require("../helpers/party");
 const { normalizeSelectionFromRow } = require("../helpers/gameSelectionCatalog");
 
 function createPartyRouteService({ db }) {
@@ -35,10 +35,12 @@ function createPartyRouteService({ db }) {
 
     const members = await db.fetchPartyMembersDetailed(partyId);
     const selection = normalizeSelectionFromRow(party || {});
+    const ownerName = await getPartyOwnerName(db, partyId);
     return {
       ok: true,
       payload: {
         partyId: party.party_id,
+        ownerName,
         mode: party.mode,
         modeId: selection.modeId,
         modeVariantId: selection.modeVariantId,

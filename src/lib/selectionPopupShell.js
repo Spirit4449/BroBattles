@@ -41,6 +41,11 @@ export function getSharedSelectionPopupShell() {
     if (!popup.contains(e.target)) doClose();
   });
   popup.addEventListener("click", (e) => e.stopPropagation());
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (overlay.style.display === "none" || !overlay.isConnected) return;
+    doClose();
+  });
 
   headerBar.appendChild(title);
   headerBar.appendChild(closeButton);

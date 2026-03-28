@@ -16,6 +16,7 @@ import {
   getModeLabel,
   getModeSelectionStyle,
   getModeSubtitle,
+  getPlayersPerTeamForSelection,
   getSelectionBlockReason,
   getSelectionDisplayLabel,
   getTotalPlayersForSelection,
@@ -38,6 +39,52 @@ let mmOverlayTotal = 0;
 let __lobbyOffsetResizeBound = false;
 let __mapPopupUi = null;
 let __modePopupUi = null;
+let __partyContext = {
+  partyId: null,
+  ownerName: null,
+  members: [],
+};
+
+function parseCharacterLevels(levels) {
+  if (!levels) return {};
+  if (typeof levels === "object") return levels;
+  try {
+    return JSON.parse(String(levels || "{}"));
+  } catch (_) {
+    return {};
+  }
+}
+
+function getMemberLevel(member) {
+  if (!member) return null;
+  if (Number.isFinite(Number(member.level))) {
+    return Math.max(1, Number(member.level));
+  }
+  const charClass = String(member.char_class || "ninja");
+  const levels = parseCharacterLevels(member.char_levels);
+  return Math.max(1, Number(levels?.[charClass]) || 1);
+}
+
+function setSlotLevelBadge(slot, level) {
+  if (!slot) return;
+  let badge = slot.querySelector(".slot-level-badge");
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.className = "slot-level-badge";
+    badge.setAttribute("aria-hidden", "true");
+    slot.insertBefore(badge, slot.firstChild);
+  }
+  if (Number.isFinite(Number(level)) && Number(level) > 0) {
+    const iconLevel = Math.max(1, Math.min(5, Number(level)));
+    badge.innerHTML = `<img src="/assets/levels/${iconLevel}.webp" alt="" />`;
+    badge.dataset.level = String(iconLevel);
+    slot.classList.add("has-level");
+  } else {
+    badge.innerHTML = "";
+    delete badge.dataset.level;
+    slot.classList.remove("has-level");
+  }
+}
 
 function triggerLobbyCharacterSplash(slot) {
   if (!slot) return;
@@ -68,7 +115,7 @@ function getCurrentMapValue() {
 }
 
 function getCurrentModeValue() {
-  return String(document.getElementById("mode")?.value || "1");
+  return String(getPlayersPerTeamForSelection(getCurrentSelection()));
 }
 
 function getCurrentSelection() {
@@ -232,11 +279,15 @@ function setupMapPickerControls(onSelect = null) {
       popupShell.hide();
     };
 
+    const content = document.createElement("div");
+    content.className = "selection-popup-scroll map-selection-popup-scroll";
+
     const grid = document.createElement("div");
-    grid.className = "map-select-grid selection-popup-scroll";
+    grid.className = "map-select-grid";
 
     __mapPopupUi = {
       popupShell,
+      content,
       grid,
       closePopup,
     };
@@ -246,7 +297,7 @@ function setupMapPickerControls(onSelect = null) {
 
   const openMapPopup = () => {
     const popupUi = ensureMapPopup();
-    const { popupShell, grid, closePopup } = popupUi;
+    const { popupShell, content, grid, closePopup } = popupUi;
     grid.innerHTML = "";
 
     const options = Array.from(mapDropdown.options || []);
@@ -287,12 +338,14 @@ function setupMapPickerControls(onSelect = null) {
       card.classList.toggle("active", isActive);
     }
 
+    content.replaceChildren(grid);
+
     popupShell
       .mount({
         titleText: "Choose Map",
         onClose: closePopup,
         zIndex: 12020,
-        contentNode: grid,
+        contentNode: content,
         backgroundNode: null,
       })
       .show();
@@ -631,6 +684,11 @@ export function socketInit() {
     // Reset roster baseline when switching rooms
     __partyRosterNames = null;
     __partyRosterPartyId = partyId || null;
+    __partyContext.partyId = partyId || null;
+    if (!partyId) {
+      __partyContext.ownerName = null;
+      __partyContext.members = [];
+    }
   });
 
   // Live roster updates for the party
@@ -778,7 +836,7 @@ export function socketInit() {
     );
 
     // Update platforms for new mode
-    updatePlatformsForMode(selectionToLegacyMode(selection));
+    updatePlatformsForMode(getPlayersPerTeamForSelection(selection));
 
     // Re-render members in new platform layout
     if (data.members) {
@@ -786,7 +844,7 @@ export function socketInit() {
         partyId: currentPartyId,
         members: data.members,
         selection,
-        mode: selectionToLegacyMode(selection),
+        mode: getPlayersPerTeamForSelection(selection),
         map: selection.mapId,
       });
     }
@@ -815,7 +873,7 @@ export function socketInit() {
     }
     applyLobbyCharacterOffsetForMap(
       selection.mapId,
-      selectionToLegacyMode(selection),
+      getPlayersPerTeamForSelection(selection),
     );
     animatePlatformsForMapSwitch();
   });
@@ -917,6 +975,25 @@ export function socketInit() {
       // Reset bottom Ready button
       setReadyButtonState(false);
     } catch (_) {}
+  });
+
+  socket.on("queue:fill-bots:error", (err) => {
+    sonner(
+      "Bot fill failed",
+      err?.message || "Unable to fill this queue with bots.",
+      "error",
+    );
+  });
+
+  socket.on("party:kicked", (data) => {
+    sonner(
+      "Removed from party",
+      data?.actorName
+        ? `${data.actorName} removed you from the party.`
+        : "You were removed from the party.",
+      "error",
+    );
+    window.location.href = "/";
   });
 
   // Match cancelled (e.g., ready timeout) -> hide overlay
@@ -1052,6 +1129,11 @@ export function socketInit() {
 
 export function renderPartyMembers(data) {
   const members = Array.isArray(data.members) ? data.members : [];
+  __partyContext = {
+    partyId: data?.partyId || __partyContext.partyId || checkIfInParty() || null,
+    ownerName: data?.ownerName || __partyContext.ownerName || null,
+    members,
+  };
   const currentUserName =
     document.getElementById("username-text")?.textContent || "";
   const currentSelection = normalizeGameSelection(
@@ -1059,7 +1141,8 @@ export function renderPartyMembers(data) {
   );
   const requestedSlots = Math.max(
     1,
-    Number(data?.mode) || selectionToLegacyMode(currentSelection),
+    getPlayersPerTeamForSelection(currentSelection),
+    Number(data?.mode) || 0,
   );
   const team1Members = members.filter((m) => m.team === "team1");
   const team2Members = members.filter((m) => m.team === "team2");
@@ -1165,6 +1248,10 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
   const displayName = isCurrentUser ? `${member.name} (You)` : member.name;
   // Mark slot ownership for delegated handlers
   slot.dataset.isCurrentUser = isCurrentUser ? "true" : "false";
+  slot.dataset.playerName = member.name || "";
+  slot.dataset.playerTeam = member.team || "";
+  slot.dataset.isOwner =
+    member.name === __partyContext.ownerName ? "true" : "false";
 
   if (usernameEl) {
     usernameEl.textContent = displayName;
@@ -1226,6 +1313,7 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
     isYourTeam ? "player-display" : "op-display"
   }`;
   slot.dataset.character = member.char_class || "ninja";
+  setSlotLevelBadge(slot, getMemberLevel(member));
 
   // Set interaction properties
   slot.style.pointerEvents = "auto";
@@ -1268,12 +1356,13 @@ export function initializeModeDropdown() {
   bindLobbyOffsetResizeHandler();
   const applySelectionVisuals = (selection, { animateMap = false } = {}) => {
     const normalized = writeSelectionToDom(selection, { persist: isSolo });
+    const teamSize = getPlayersPerTeamForSelection(normalized);
     const legacyMode = selectionToLegacyMode(normalized);
-    updatePlatformsForMode(String(legacyMode));
+    updatePlatformsForMode(String(teamSize));
     if (normalized.mapId != null) {
       setLobbyBackground(String(normalized.mapId));
       applyPlatformImageForMap(String(normalized.mapId));
-      applyLobbyCharacterOffsetForMap(String(normalized.mapId), String(legacyMode));
+      applyLobbyCharacterOffsetForMap(String(normalized.mapId), String(teamSize));
       if (animateMap) animatePlatformsForMapSwitch();
     } else {
       syncMapPickerUi("", normalized);
@@ -1314,7 +1403,7 @@ export function initializeModeDropdown() {
         });
         if (!response.ok) throw new Error("Failed to fetch party members");
         const data = await response.json();
-        const requiredSlots = selectionToLegacyMode(nextSelection) * 2;
+        const requiredSlots = getPlayersPerTeamForSelection(nextSelection) * 2;
         if (
           nextSelection.modeId === "duels" &&
           requiredSlots < Number(data.membersCount || 0)
@@ -1442,6 +1531,11 @@ function createPlatform(team, slotNumber) {
   }-slot-${slotNumber}`;
   characterSlot.dataset.isCurrentUser = "false";
 
+  const levelBadge = document.createElement("div");
+  levelBadge.className = "slot-level-badge";
+  levelBadge.setAttribute("aria-hidden", "true");
+  characterSlot.appendChild(levelBadge);
+
   // Add switch-character control (hidden by default), only on your-team side
   if (team === "your-team") {
     const switchDiv = document.createElement("div");
@@ -1537,6 +1631,10 @@ function resetSlotToRandom(slot) {
   slot.className = "character-slot empty";
   slot.dataset.character = "Random";
   slot.dataset.isCurrentUser = "false";
+  slot.dataset.playerName = "";
+  slot.dataset.playerTeam = "";
+  slot.dataset.isOwner = "false";
+  setSlotLevelBadge(slot, null);
   // Hide switch-character if present
   const switchEl = slot.querySelector(".switch-character");
   if (switchEl) switchEl.style.display = "none";
@@ -1647,6 +1745,10 @@ export function showMatchmakingOverlay() {
     players: mmOverlayPlayers,
   });
   wireCancelButton();
+  wireAdminFillBotsButton();
+  const fillBtn = document.getElementById("mm-fill-bots");
+  const isAdmin = !!window.__BRO_BATTLES_USERDATA__?.isAdmin;
+  if (fillBtn) fillBtn.classList.toggle("hidden", !isAdmin);
 }
 
 export function hideMatchmakingOverlay() {
@@ -1795,6 +1897,15 @@ function wireCancelButton() {
   });
 }
 
+function wireAdminFillBotsButton() {
+  const btn = document.getElementById("mm-fill-bots");
+  if (!btn || btn.dataset.bound === "1") return;
+  btn.dataset.bound = "1";
+  btn.addEventListener("click", () => {
+    socket.emit("queue:fill-bots");
+  });
+}
+
 // ---------------------------
 // Ready button helpers
 // ---------------------------
@@ -1817,3 +1928,15 @@ function syncReadyButtonFromSelfSlot() {
   const isReady = (statusEl.textContent || "").toLowerCase().includes("ready");
   setReadyButtonState(isReady);
 }
+
+export function getPartyInteractionContext() {
+  return {
+    partyId: __partyContext.partyId || checkIfInParty() || null,
+    ownerName: __partyContext.ownerName || null,
+    members: Array.isArray(__partyContext.members)
+      ? __partyContext.members.slice()
+      : [],
+  };
+}
+
+export { setSlotLevelBadge };

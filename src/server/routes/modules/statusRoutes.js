@@ -1,12 +1,19 @@
 const { buildStatusPayload } = require("../../services/statusPayloadService");
 
-function registerStatusRoutes({ app, db, getOrCreateCurrentUser, isGuest }) {
+function registerStatusRoutes({
+  app,
+  db,
+  getOrCreateCurrentUser,
+  isGuest,
+  isAdminUser,
+}) {
   app.post("/status", async (req, res) => {
     try {
       const payload = await buildStatusPayload({
         db,
         getOrCreateCurrentUser,
         isGuest,
+        isAdminUser,
         req,
         res,
       });

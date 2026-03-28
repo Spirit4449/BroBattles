@@ -115,6 +115,32 @@ function registerMatchmakingEvents(socket, { db, io, mm, PARTY_STATUS }) {
       console.warn("ready:ack error:", e?.message);
     }
   });
+
+  socket.on("queue:fill-bots", async () => {
+    try {
+      const requester = socket.data.user;
+      if (!requester?.name || !requester?.user_id) {
+        throw new Error("Authentication required.");
+      }
+      const adminNames = String(process.env.ADMIN_USERS || "nishay")
+        .split(",")
+        .map((token) => token.trim().toLowerCase())
+        .filter(Boolean);
+      if (!adminNames.includes(String(requester.name).toLowerCase())) {
+        throw new Error("Admins only.");
+      }
+      const partyId = await db.getPartyIdByName(requester.name);
+      const result = await mm.createBotFilledMatch({
+        userId: requester.user_id,
+        partyId: partyId || null,
+      });
+      socket.emit("queue:fill-bots:ok", { matchId: result.matchId });
+    } catch (e) {
+      socket.emit("queue:fill-bots:error", {
+        message: e?.message || "Unable to fill with bots.",
+      });
+    }
+  });
 }
 
 module.exports = { registerMatchmakingEvents };

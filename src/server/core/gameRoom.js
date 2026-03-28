@@ -72,9 +72,13 @@ class GameRoom {
 
     // Handshake before game start
     this._requiredUserIds = new Set(
-      (Array.isArray(matchData?.players) ? matchData.players : []).map(
-        (p) => p.user_id,
-      ),
+      (Array.isArray(matchData?.players) ? matchData.players : [])
+        .map((p) =>
+          !p?.isBot && Number.isFinite(Number(p?.user_id))
+            ? Number(p.user_id)
+            : null,
+        )
+        .filter((id) => id !== null),
     );
     this._readyAcks = new Set(); // user_id set
     this._startTimeout = null; // NodeJS timer for starting phase
@@ -96,6 +100,150 @@ class GameRoom {
     } else {
       netTestLogger.noteRoomCreated(this);
     }
+
+    this._seedBotPlayers();
+  }
+
+  _seedBotPlayers() {
+    for (const matchPlayer of Array.isArray(this.matchData?.players)
+      ? this.matchData.players
+      : []) {
+      if (!matchPlayer?.isBot) continue;
+      const spawn = this._getBotSpawnState(matchPlayer);
+      const level = 1;
+      const {
+        maxHealth,
+        baseDamage,
+        specialDamage,
+        specialChargeDamage,
+        ammoCapacity,
+        ammoCooldownMs,
+        ammoReloadMs,
+      } = this._computeStats(matchPlayer.char_class || "ninja", level);
+      const key = `bot:${matchPlayer.user_id || matchPlayer.name}`;
+      this.players.set(key, {
+        socketId: null,
+        user_id: matchPlayer.user_id,
+        name: matchPlayer.name,
+        team: matchPlayer.team,
+        char_class: matchPlayer.char_class || "ninja",
+        isBot: true,
+        connected: true,
+        loaded: true,
+        spawnIndex: this._computeSpawnIndex(matchPlayer.name, matchPlayer.team),
+        x: spawn.x,
+        y: spawn.y,
+        vx: 0,
+        vy: 0,
+        grounded: true,
+        maxHealth,
+        health: maxHealth,
+        superCharge: 0,
+        maxSuperCharge: specialChargeDamage,
+        isAlive: true,
+        lastInput: Date.now(),
+        _lastPositionPacketAt: 0,
+        inputBuffer: [],
+        level,
+        baseDamage,
+        specialDamage,
+        lastCombatAt: Date.now(),
+        lastAttackAt: 0,
+        lastDamagedAt: 0,
+        _regenCarry: 0,
+        _lastHealthBroadcastAt: 0,
+        effects: {},
+        activeEffects: {},
+        ammoState: {
+          capacity: ammoCapacity,
+          charges: ammoCapacity,
+          cooldownMs: ammoCooldownMs,
+          reloadMs: ammoReloadMs,
+          reloadTimerMs: 0,
+          nextFireInMs: 0,
+        },
+      });
+    }
+  }
+
+  _getBotSpawnState(matchPlayer) {
+    const mapId = Number(this.matchData?.map) || 1;
+    const team = matchPlayer?.team === "team2" ? "team2" : "team1";
+    const teamSize = Math.max(
+      1,
+      (Array.isArray(this.matchData?.players) ? this.matchData.players : []).filter(
+        (player) => player?.team === team,
+      ).length,
+    );
+    const index = Math.max(
+      0,
+      Number(this._computeSpawnIndex(matchPlayer?.name, team)) || 0,
+    );
+    const slotsBySize = {
+      1: [0],
+      2: [-120, 120],
+      3: [-180, 0, 180],
+    };
+    const pickDx = (fallback = 0, bySize = slotsBySize) => {
+      const list = bySize[String(Math.max(1, Math.min(3, teamSize)))] || [fallback];
+      return Number(list[Math.max(0, Math.min(list.length - 1, index))]) || 0;
+    };
+
+    if (mapId === 1) {
+      const centerX = 1150;
+      const y = team === "team1" ? 490 : 227;
+      return { x: centerX + pickDx(), y };
+    }
+
+    if (mapId === 2) {
+      const centerX = 1150;
+      const teamAnchors =
+        team === "team1"
+          ? [
+              { x: centerX + 430, y: 155 },
+              { x: centerX - 130, y: 105 },
+              { x: centerX + 130, y: 105 },
+            ]
+          : [
+              { x: centerX - 280, y: 280 },
+              { x: centerX + 280, y: 280 },
+              { x: centerX - 430, y: 155 },
+            ];
+      return teamAnchors[Math.max(0, Math.min(teamAnchors.length - 1, index))];
+    }
+
+    if (mapId === 3) {
+      const centerX = 1150;
+      if (team === "team1") {
+        const dxBySize = {
+          1: [0],
+          2: [-100, 100],
+          3: [-145, 0, 145],
+        };
+        return { x: centerX + 350 + pickDx(0, dxBySize), y: 262 };
+      }
+      const dxBySize = {
+        1: [0],
+        2: [-130, 130],
+        3: [-200, 0, 200],
+      };
+      return { x: centerX + pickDx(0, dxBySize), y: 500 };
+    }
+
+    if (mapId === 4) {
+      const base = team === "team1" ? { x: 290, y: 835 } : { x: 2710, y: 835 };
+      const dxBySize = {
+        1: [0],
+        2: [-65, 65],
+        3: [-130, 0, 130],
+      };
+      return { x: base.x + pickDx(0, dxBySize), y: base.y };
+    }
+
+    return {
+      x: team === "team1" ? 1000 : 1300,
+      y: 500,
+    };
   }
 
   async addPlayer(socket, user) {
@@ -118,6 +266,17 @@ class GameRoom {
       }
       existingPlayer.socketId = socket.id;
       existingPlayer.connected = true;
+      // Reconnection/new page load resets client packet sequencing.
+      // If we keep the old sequence counters, the server will reject fresh
+      // movement packets until the new client sequence number catches up.
+      existingPlayer._lastPositionSeq = -1;
+      existingPlayer._lastPositionClientTs = 0;
+      existingPlayer._lastInputSeq = -1;
+      if (Array.isArray(existingPlayer._inputIntentQueue)) {
+        existingPlayer._inputIntentQueue.length = 0;
+      }
+      existingPlayer._currentInputIntent = null;
+      existingPlayer._lastInputIntent = null;
       this.players.set(socket.id, existingPlayer);
       this._ensureRewardBucket(existingPlayer);
       this.io.to(`game:${this.matchId}`).emit("player:reconnected", {

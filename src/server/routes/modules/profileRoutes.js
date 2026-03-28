@@ -5,6 +5,67 @@ const MIN_PW = 6;
 const MAX_PW = 32;
 
 function registerProfileRoutes({ app, db, requireCurrentUser }) {
+  async function buildProfileViewForUser(userRow) {
+    const ownedCardIds = await db.getUserOwnedCardIds(userRow.user_id);
+    const selectedCardId = await db.getUserSelectedCardId(userRow.user_id);
+    const matchesRows = await db.runQuery(
+      "SELECT COUNT(*) AS total FROM match_participants WHERE user_id = ?",
+      [userRow.user_id],
+    );
+
+    let wins = 0;
+    try {
+      const winsRows = await db.runQuery(
+        `SELECT COUNT(*) AS total
+           FROM match_participants mp
+           JOIN matches m ON m.match_id = mp.match_id
+          WHERE mp.user_id = ?
+            AND m.status = 'completed'
+            AND m.winner_team = mp.team`,
+        [userRow.user_id],
+      );
+      wins = Number(winsRows?.[0]?.total) || 0;
+    } catch (_) {
+      wins = 0;
+    }
+
+    let charLevels = {};
+    try {
+      charLevels =
+        typeof userRow.char_levels === "string"
+          ? JSON.parse(userRow.char_levels || "{}")
+          : userRow.char_levels || {};
+    } catch (_) {
+      charLevels = {};
+    }
+
+    const levelValues = Object.values(charLevels)
+      .map((n) => Number(n) || 0)
+      .filter((n) => n > 0);
+    const avgLevel =
+      levelValues.length > 0
+        ? Math.round(
+            (levelValues.reduce((a, b) => a + b, 0) / levelValues.length) * 100,
+          ) / 100
+        : 1;
+
+    return {
+      userId: userRow.user_id,
+      username: userRow.name,
+      guest: !!userRow.expires_at,
+      coins: Number(userRow.coins) || 0,
+      gems: Number(userRow.gems) || 0,
+      trophies: Number(userRow.trophies) || 0,
+      charClass: userRow.char_class || "ninja",
+      charLevels,
+      avgCharLevel: avgLevel,
+      totalMatches: Number(matchesRows?.[0]?.total) || 0,
+      wins,
+      selectedCardId,
+      ownedCardIds,
+    };
+  }
+
   app.get("/profile/data", async (req, res) => {
     try {
       const user = await requireCurrentUser(req, res);
@@ -14,53 +75,60 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
           .json({ success: false, error: "Not authenticated" });
       }
 
-      const ownedCardIds = await db.getUserOwnedCardIds(user.user_id);
-      const selectedCardId = await db.getUserSelectedCardId(user.user_id);
-      const matchesRows = await db.runQuery(
-        "SELECT COUNT(*) AS total FROM match_participants WHERE user_id = ?",
-        [user.user_id],
-      );
-
-      let charLevels = {};
-      try {
-        charLevels =
-          typeof user.char_levels === "string"
-            ? JSON.parse(user.char_levels || "{}")
-            : user.char_levels || {};
-      } catch (_) {
-        charLevels = {};
-      }
-
-      const levelValues = Object.values(charLevels)
-        .map((n) => Number(n) || 0)
-        .filter((n) => n > 0);
-      const avgLevel =
-        levelValues.length > 0
-          ? Math.round(
-              (levelValues.reduce((a, b) => a + b, 0) / levelValues.length) *
-                100,
-            ) / 100
-          : 1;
+      const profile = await buildProfileViewForUser(user);
 
       return res.json({
         success: true,
-        profile: {
-          userId: user.user_id,
-          username: user.name,
-          guest: !!user.expires_at,
-          coins: Number(user.coins) || 0,
-          gems: Number(user.gems) || 0,
-          trophies: Number(user.trophies) || 0,
-          charClass: user.char_class || "ninja",
-          charLevels,
-          avgCharLevel: avgLevel,
-          totalMatches: Number(matchesRows?.[0]?.total) || 0,
-          selectedCardId,
-          ownedCardIds,
-        },
+        profile,
       });
     } catch (error) {
       console.error("[profile] /profile/data error", error);
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  });
+
+  app.get("/profile/view", async (req, res) => {
+    try {
+      const viewer = await requireCurrentUser(req, res);
+      if (!viewer) {
+        return res
+          .status(401)
+          .json({ success: false, error: "Not authenticated" });
+      }
+      const username = String(req.query?.username || "").trim();
+      if (!username) {
+        return res
+          .status(400)
+          .json({ success: false, error: "Username is required." });
+      }
+      const rows = await db.runQuery(
+        "SELECT * FROM users WHERE name = ? LIMIT 1",
+        [username],
+      );
+      const target = rows?.[0];
+      if (!target) {
+        return res
+          .status(404)
+          .json({ success: false, error: "Player not found." });
+      }
+      const profile = await buildProfileViewForUser(target);
+      return res.json({
+        success: true,
+        profile: {
+          userId: profile.userId,
+          username: profile.username,
+          trophies: profile.trophies,
+          charClass: profile.charClass,
+          charLevels: profile.charLevels,
+          avgCharLevel: profile.avgCharLevel,
+          totalMatches: profile.totalMatches,
+          wins: profile.wins,
+        },
+      });
+    } catch (error) {
+      console.error("[profile] /profile/view error", error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });

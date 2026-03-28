@@ -124,6 +124,77 @@ function createPartyStateService({ db, io }) {
     return { left: true, deleted };
   }
 
+  async function getPartyOwnerName(partyId) {
+    const rows = await db.runQuery(
+      `SELECT name
+         FROM party_members
+        WHERE party_id = ?
+        ORDER BY joined_at ASC, name ASC
+        LIMIT 1`,
+      [partyId],
+    );
+    return rows?.[0]?.name || null;
+  }
+
+  async function kickMember({ partyId, actorName, targetName }) {
+    if (!partyId || !actorName || !targetName) {
+      return { ok: false, error: "Missing party action data." };
+    }
+    if (actorName === targetName) {
+      return { ok: false, error: "Use leave party for yourself." };
+    }
+    const ownerName = await getPartyOwnerName(partyId);
+    if (ownerName !== actorName) {
+      return { ok: false, error: "Only the party owner can kick members." };
+    }
+    const result = await db.runQuery(
+      "DELETE FROM party_members WHERE party_id = ? AND name = ?",
+      [partyId, targetName],
+    );
+    if (!result?.affectedRows) {
+      return { ok: false, error: "That player is no longer in the party." };
+    }
+    const deleted = await updateOrDeleteParty(io, db, partyId);
+    return { ok: true, deleted };
+  }
+
+  async function makeOwner({ partyId, actorName, targetName }) {
+    if (!partyId || !actorName || !targetName) {
+      return { ok: false, error: "Missing party action data." };
+    }
+    const ownerName = await getPartyOwnerName(partyId);
+    if (ownerName !== actorName) {
+      return { ok: false, error: "Only the party owner can transfer ownership." };
+    }
+    if (ownerName === targetName) {
+      return { ok: true };
+    }
+    const targetRows = await db.runQuery(
+      "SELECT 1 AS ok FROM party_members WHERE party_id = ? AND name = ? LIMIT 1",
+      [partyId, targetName],
+    );
+    if (!targetRows.length) {
+      return { ok: false, error: "That player is no longer in the party." };
+    }
+    await db.runQuery(
+      `UPDATE party_members
+          SET joined_at = DATE_SUB((
+            SELECT oldest.joined_at
+              FROM (
+                SELECT joined_at
+                  FROM party_members
+                 WHERE party_id = ?
+                 ORDER BY joined_at ASC, name ASC
+                 LIMIT 1
+              ) AS oldest
+          ), INTERVAL 1 SECOND)
+        WHERE party_id = ? AND name = ?`,
+      [partyId, partyId, targetName],
+    );
+    await updateOrDeleteParty(io, db, partyId);
+    return { ok: true };
+  }
+
   async function joinPartyAndGetData({ partyId, username }) {
     let conn;
     try {
@@ -245,6 +316,7 @@ function createPartyStateService({ db, io }) {
       return {
         ok: true,
         party,
+        ownerName: await getPartyOwnerName(partyId),
         selection: normalizeSelectionFromRow(party || {}),
         members: memberRows,
         capacity: { total: totalCap, perTeam: perTeamCap },
@@ -261,6 +333,8 @@ function createPartyStateService({ db, io }) {
     setPartyMap,
     setPartySelection,
     leaveParty,
+    kickMember,
+    makeOwner,
     joinPartyAndGetData,
   };
 }

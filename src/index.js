@@ -6,11 +6,13 @@ import {
   socketInit,
   applyLobbySelection,
   renderPartyMembers,
+  getPartyInteractionContext,
   initializeModeDropdown,
   showMatchmakingOverlay,
   initReadyToggle,
+  setSlotLevelBadge,
 } from "./party.js";
-import { ensureSocketConnected } from "./socket.js";
+import { ensureSocketConnected, waitForConnect } from "./socket.js";
 import {
   initializeCharacterSelect,
   openCharacterSelect,
@@ -33,7 +35,11 @@ const lobbyProfileState = {
   ownedCardIds: [],
   selectedCardId: null,
   loadingPromise: null,
+  viewingSelf: true,
+  viewingUsername: null,
 };
+
+let partySlotMenu = null;
 
 function setProfilePopupMessage(text, isError = false) {
   const msg = document.getElementById("profile-message");
@@ -54,6 +60,29 @@ async function profileFetchJson(url, options) {
   return data;
 }
 
+function ensurePartySlotMenu() {
+  if (partySlotMenu) return partySlotMenu;
+  const menu = document.createElement("div");
+  menu.className = "profile-slot-menu";
+  menu.hidden = true;
+  menu.innerHTML = `
+    <div class="profile-slot-menu-head" id="party-slot-menu-name">Player</div>
+    <div class="profile-slot-menu-actions">
+      <button type="button" class="profile-slot-menu-btn view pixel-menu-button" data-action="view">View Profile</button>
+      <button type="button" class="profile-slot-menu-btn owner pixel-menu-button" data-action="owner">Make Owner</button>
+      <button type="button" class="profile-slot-menu-btn kick pixel-menu-button" data-action="kick">Kick</button>
+    </div>
+  `;
+  document.body.appendChild(menu);
+  document.addEventListener("click", (event) => {
+    if (menu.hidden) return;
+    if (menu.contains(event.target)) return;
+    menu.hidden = true;
+  });
+  partySlotMenu = menu;
+  return menu;
+}
+
 function renderProfilePopupStats() {
   const profile = lobbyProfileState.profile;
   if (!profile) return;
@@ -67,19 +96,65 @@ function renderProfilePopupStats() {
   setText("profile-coins", Number(profile.coins) || 0);
   setText("profile-gems", Number(profile.gems) || 0);
   setText("profile-trophies", Number(profile.trophies) || 0);
+  setText("profile-stats-trophies", Number(profile.trophies) || 0);
   setText("profile-matches", Number(profile.totalMatches) || 0);
   setText("profile-avg-level", Number(profile.avgCharLevel) || 1);
+  setText("profile-wins", Number(profile.wins) || 0);
+  setText("profile-stats-wins", Number(profile.wins) || 0);
+  setText("profile-main-class", String(profile.charClass || "ninja"));
+  setText("profile-hero-name", profile.username || "-");
+  setText("profile-hero-class", String(profile.charClass || "ninja"));
+  setText(
+    "profile-hero-tag",
+    lobbyProfileState.viewingSelf ? "Your Player Profile" : "Public Player Profile",
+  );
+  const heroAvatar = document.getElementById("profile-hero-avatar");
+  if (heroAvatar) {
+    const cls = String(profile.charClass || "ninja");
+    heroAvatar.src = `/assets/${cls}/body.webp`;
+    heroAvatar.alt = cls;
+  }
+  const subtitle = document.getElementById("profile-popup-subtitle");
+  if (subtitle) {
+    subtitle.textContent = lobbyProfileState.viewingSelf
+      ? "Loadout, progression, and account overview"
+      : `${profile.username || "Player"}'s public stats`;
+  }
+  const title = document.getElementById("profile-popup-title");
+  if (title) {
+    title.textContent = lobbyProfileState.viewingSelf
+      ? "Your Profile"
+      : `${profile.username || "Player"} Profile`;
+  }
+  const accountPanel = document.getElementById("profile-account-panel");
+  if (accountPanel) {
+    accountPanel.classList.toggle("is-hidden", !lobbyProfileState.viewingSelf);
+  }
+  const cardsPanel = document.getElementById("profile-cards-panel");
+  if (cardsPanel) {
+    cardsPanel.classList.toggle("is-hidden", !lobbyProfileState.viewingSelf);
+  }
+  const coinsRow = document.getElementById("profile-coins-row");
+  if (coinsRow) {
+    coinsRow.classList.toggle("is-hidden", !lobbyProfileState.viewingSelf);
+  }
+  const gemsRow = document.getElementById("profile-gems-row");
+  if (gemsRow) {
+    gemsRow.classList.toggle("is-hidden", !lobbyProfileState.viewingSelf);
+  }
 
   const usernameInput = document.getElementById("profile-new-username");
-  if (usernameInput && !usernameInput.value) {
+  if (usernameInput && lobbyProfileState.viewingSelf && !usernameInput.value) {
     usernameInput.value = profile.username || "";
   }
 
   // Keep navbar resource counters in sync after buy operations.
   const coinCount = document.getElementById("coin-count");
   const gemCount = document.getElementById("gem-count");
-  if (coinCount) coinCount.textContent = String(Number(profile.coins) || 0);
-  if (gemCount) gemCount.textContent = String(Number(profile.gems) || 0);
+  if (lobbyProfileState.viewingSelf) {
+    if (coinCount) coinCount.textContent = String(Number(profile.coins) || 0);
+    if (gemCount) gemCount.textContent = String(Number(profile.gems) || 0);
+  }
 }
 
 function renderProfilePopupCards() {
@@ -183,6 +258,16 @@ function renderProfilePopupCards() {
 }
 
 async function loadProfilePopupData(force = false) {
+  if (!lobbyProfileState.viewingSelf && lobbyProfileState.viewingUsername) {
+    const profileRes = await profileFetchJson(
+      `/profile/view?username=${encodeURIComponent(lobbyProfileState.viewingUsername)}`,
+    );
+    lobbyProfileState.profile = profileRes?.profile || {};
+    renderProfilePopupStats();
+    const grid = document.getElementById("profile-cards-grid");
+    if (grid) grid.innerHTML = "";
+    return;
+  }
   if (!force && lobbyProfileState.profile && lobbyProfileState.catalog) {
     renderProfilePopupStats();
     renderProfilePopupCards();
@@ -248,7 +333,13 @@ function initProfilePopup() {
     setProfilePopupMessage("");
   };
 
-  const open = async () => {
+  const open = async (options = {}) => {
+    const targetUsername = String(options?.username || "").trim();
+    lobbyProfileState.viewingSelf =
+      !targetUsername || targetUsername === String(userData?.name || "");
+    lobbyProfileState.viewingUsername = lobbyProfileState.viewingSelf
+      ? String(userData?.name || "")
+      : targetUsername;
     playSound("cursor4", 0.4);
     overlay.classList.remove("hidden");
     overlay.setAttribute("aria-hidden", "false");
@@ -314,6 +405,81 @@ function initProfilePopup() {
   });
 
   return { open, close };
+}
+
+async function handlePartyMemberAction(action, playerName, profilePopup) {
+  const party = getPartyInteractionContext();
+  const partyId = Number(party.partyId);
+  if (!action || !playerName) return;
+  if (action === "view") {
+    await profilePopup?.open?.({ username: playerName });
+    return;
+  }
+  if (!Number.isFinite(partyId) || partyId <= 0) return;
+  const endpoint =
+    action === "owner" ? "/party/make-owner" : action === "kick" ? "/party/kick" : "";
+  if (!endpoint) return;
+  try {
+    await profileFetchJson(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ partyId, targetName: playerName }),
+    });
+    sonner(
+      action === "owner" ? "Party owner updated" : "Player removed",
+      action === "owner"
+        ? `${playerName} is now the party owner.`
+        : `${playerName} was kicked from the party.`,
+      "success",
+    );
+  } catch (err) {
+    sonner(
+      action === "owner" ? "Could not transfer ownership" : "Could not kick player",
+      err?.message || "Please try again.",
+      "error",
+    );
+  }
+}
+
+function openPartySlotMenu(slot, anchorEvent, profilePopup) {
+  const menu = ensurePartySlotMenu();
+  const playerName = String(slot?.dataset?.playerName || "").trim();
+  if (!playerName) return;
+  const currentUserName = String(userData?.name || "");
+  const party = getPartyInteractionContext();
+  const isOwner = String(party.ownerName || "") === currentUserName;
+  const isSelf = playerName === currentUserName;
+  const ownerBtn = menu.querySelector('[data-action="owner"]');
+  const kickBtn = menu.querySelector('[data-action="kick"]');
+  const viewBtn = menu.querySelector('[data-action="view"]');
+  const title = menu.querySelector("#party-slot-menu-name");
+  if (title) {
+    title.textContent =
+      playerName === party.ownerName ? `${playerName} (Owner)` : playerName;
+  }
+  if (viewBtn) {
+    viewBtn.onclick = async () => {
+      menu.hidden = true;
+      await handlePartyMemberAction("view", playerName, profilePopup);
+    };
+  }
+  if (ownerBtn) {
+    ownerBtn.hidden = !isOwner || isSelf;
+    ownerBtn.onclick = async () => {
+      menu.hidden = true;
+      await handlePartyMemberAction("owner", playerName, profilePopup);
+    };
+  }
+  if (kickBtn) {
+    kickBtn.hidden = !isOwner || isSelf;
+    kickBtn.onclick = async () => {
+      menu.hidden = true;
+      await handlePartyMemberAction("kick", playerName, profilePopup);
+    };
+  }
+  menu.style.left = `${Math.min(window.innerWidth - 220, anchorEvent.clientX + 12)}px`;
+  menu.style.top = `${Math.min(window.innerHeight - 180, anchorEvent.clientY + 12)}px`;
+  menu.hidden = false;
 }
 
 function animateNumber(el, from, to, durationMs) {
@@ -388,6 +554,8 @@ const statusPromise = fetch("/status", {
   .then((data) => {
     if (data?.userData) {
       userData = data.userData;
+      userData.isAdmin = !!data.isAdmin;
+      window.__BRO_BATTLES_USERDATA__ = userData;
       guest = data.guest;
 
       // Check for live match first
@@ -545,7 +713,25 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (slot.dataset.isCurrentUser === "true") {
         playSound("cursor5", 0.4);
         openCharacterSelect();
+        return;
       }
+      const playerName = String(slot.dataset.playerName || "").trim();
+      if (!playerName || playerName.toLowerCase().startsWith("random")) return;
+      const wantsProfile =
+        !!e.target.closest(".character-sprite, .username, .slot-level-badge");
+      if (wantsProfile) {
+        playSound("cursor4", 0.35);
+        profilePopup?.open?.({ username: playerName });
+        return;
+      }
+      const inParty = !!checkIfInParty();
+      if (inParty) {
+        playSound("cursor4", 0.35);
+        openPartySlotMenu(slot, e, profilePopup);
+        return;
+      }
+      playSound("cursor4", 0.35);
+      profilePopup?.open?.({ username: playerName });
     });
   }
 
@@ -620,6 +806,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (spriteEl) spriteEl.classList.remove("random");
       yourSlot.className = "character-slot player-display";
       yourSlot.dataset.character = userData.char_class || "ninja";
+      const levelBadge = yourSlot.querySelector(".slot-level-badge");
+      const charLevels =
+        typeof userData.char_levels === "object" && userData.char_levels
+          ? userData.char_levels
+          : {};
+      const level = Math.max(1, Number(charLevels?.[userData.char_class]) || 1);
+      if (levelBadge) setSlotLevelBadge(yourSlot, level);
     }
     // Bind Ready button in solo flow
     try {
