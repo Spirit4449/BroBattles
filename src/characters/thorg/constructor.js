@@ -385,12 +385,9 @@ class Thorg extends CharacterEntityBase {
     return !!result.fired;
   }
 
-  handlePointerDown(attackContext) {
-    const context = attackContext || this.consumeAttackContext();
+  handlePointerDown() {
     // Use the shared Thorg fall attack implementation (owner-side hits + payload)
-    return this.performDefaultAttack(() =>
-      performThorgFallAttack(this, context),
-    );
+    return this.performDefaultAttack(() => performThorgFallAttack(this));
   }
 
   // Spawn a simple rectangle visual attached to owner that mimics the falling arc

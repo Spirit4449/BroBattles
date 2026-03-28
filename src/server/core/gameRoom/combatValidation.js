@@ -1,33 +1,15 @@
 const {
   ATTACK_MAX_DIST_MAP,
-  NINJA_CHARGE_RANGE_SCALE_MAX,
-  THORG_CHARGE_RANGE_SCALE_MAX,
   HIT_STALENESS_MAX_MS,
   HIT_FUTURE_TOLERANCE_MS,
   HIT_CLOCK_SKEW_ALLOWANCE_MS,
   MELEE_FACING_TOLERANCE,
 } = require("../gameRoomConfig");
 
-function clampChargeRatio(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 0;
-  if (n <= 0) return 0;
-  if (n >= 1) return 1;
-  return n;
-}
-
-function getAttackMaxDist(charClass, attackType, chargeRatio = 0) {
+function getAttackMaxDist(charClass, attackType) {
   const key = `${charClass}|${attackType}`;
-  const ratio = clampChargeRatio(chargeRatio);
   if (ATTACK_MAX_DIST_MAP[key] !== undefined) {
-    const base = ATTACK_MAX_DIST_MAP[key];
-    if (attackType === "basic" && charClass === "ninja") {
-      return base * (1 + (NINJA_CHARGE_RANGE_SCALE_MAX - 1) * ratio);
-    }
-    if (attackType === "basic" && charClass === "thorg") {
-      return base * (1 + (THORG_CHARGE_RANGE_SCALE_MAX - 1) * ratio);
-    }
-    return base;
+    return ATTACK_MAX_DIST_MAP[key];
   }
   const fallbackKey = `any|${attackType}`;
   return ATTACK_MAX_DIST_MAP[fallbackKey] ?? 600;
@@ -62,7 +44,6 @@ function evaluateHitRange({
   attacker,
   target,
   attackType,
-  chargeRatio,
   attackTimeRaw,
   now,
 }) {
@@ -73,11 +54,7 @@ function evaluateHitRange({
   const aPos = getHistoricalPosition(attacker, attackTimeClamped);
   const tPos = getHistoricalPosition(target, attackTimeClamped);
   const dist = Math.hypot(aPos.x - tPos.x, aPos.y - tPos.y);
-  const maxDist = getAttackMaxDist(
-    attacker.char_class,
-    attackType,
-    chargeRatio,
-  );
+  const maxDist = getAttackMaxDist(attacker.char_class, attackType);
   const attackWasFuture =
     attackTimeRaw > now + HIT_FUTURE_TOLERANCE_MS + HIT_CLOCK_SKEW_ALLOWANCE_MS;
   return {
@@ -103,5 +80,4 @@ module.exports = {
   getHistoricalPosition,
   evaluateHitRange,
   isMeleeFacingValid,
-  clampChargeRatio,
 };

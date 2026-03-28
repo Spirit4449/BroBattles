@@ -227,11 +227,8 @@ class Draven extends CharacterEntityBase {
   }
 
   // Draven splash attack trigger
-  handlePointerDown(attackContext) {
-    const context = attackContext || this.consumeAttackContext();
-    return this.performDefaultAttack(() =>
-      performDravenSplashAttack(this, context),
-    );
+  handlePointerDown() {
+    return this.performDefaultAttack(() => performDravenSplashAttack(this));
   }
 }
 

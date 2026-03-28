@@ -146,6 +146,8 @@ h3 {
 .platform {
   position: absolute;
   --platform-width: clamp(220px, 30vw, 420px);
+  --platform-base-y: 0px;
+  --platform-float-distance: 10px;
   /* Remove background image from container to avoid overlap with character slot */
   display: flex;
   flex-direction: column;
@@ -155,6 +157,32 @@ h3 {
   padding-top: 10px;
   transition: all 0.3s ease;
   isolation: isolate;
+  will-change: transform;
+  animation: lobbyPlatformHoverFloat 7s ease-in-out infinite;
+}
+
+.platform[data-team="your-team"][data-slot="1"] {
+  animation-delay: -0.15s;
+}
+
+.platform[data-team="your-team"][data-slot="2"] {
+  animation-delay: -0.7s;
+}
+
+.platform[data-team="your-team"][data-slot="3"] {
+  animation-delay: -5.2s;
+}
+
+.platform[data-team="op-team"][data-slot="1"] {
+  animation-delay: -0.4s;
+}
+
+.platform[data-team="op-team"][data-slot="2"] {
+  animation-delay: -3s;
+}
+
+.platform[data-team="op-team"][data-slot="3"] {
+  animation-delay: -4.45s;
 }
 
 /* Visual platform image placed as a separate element to stack vertically */
@@ -205,6 +233,18 @@ h3 {
   }
 }
 
+@keyframes lobbyPlatformHoverFloat {
+  0%,
+  100% {
+    transform: translateY(var(--platform-base-y));
+  }
+  50% {
+    transform: translateY(
+      calc(var(--platform-base-y) - var(--platform-float-distance))
+    );
+  }
+}
+
 /* 1v1 Mode - Much larger platforms utilizing more space */
 .mode-1 .platform {
   --platform-width: clamp(220px, 34vw, 420px);
@@ -213,13 +253,13 @@ h3 {
 .mode-1 .platform.your-team-1 {
   left: 5%; /* Moved closer to center */
   top: 45%; /* Adjusted to use more bottom space */
-  transform: translateY(-30%); /* Less centering to use bottom space */
+  --platform-base-y: -30%; /* Less centering to use bottom space */
 }
 
 .mode-1 .platform.op-team-1 {
   right: 5%; /* Moved closer to center */
   top: 45%; /* Adjusted to use more bottom space */
-  transform: translateY(-30%); /* Less centering to use bottom space */
+  --platform-base-y: -30%; /* Less centering to use bottom space */
 }
 
 /* 2v2 Mode - Medium platforms positioned diagonally, bigger */
@@ -659,21 +699,18 @@ h3 {
   display: flex;
   gap: 10px;
   padding: 7px 10px;
-  height: 56px;
+
+  height: 45px;
   min-width: 270px;
   background: linear-gradient(
     135deg,
-    rgba(37, 49, 84, 0.92),
-    rgba(19, 28, 54, 0.94)
+    rgba(9, 97, 72, 0.55),
+    rgba(80, 8, 29, 0.7)
   );
   align-items: center;
   position: relative;
   overflow: hidden;
-  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow:
-    0 8px 18px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
   transition:
     transform 180ms ease,
     box-shadow 180ms ease,
@@ -701,14 +738,10 @@ h3 {
 .map-picker:hover {
   background: linear-gradient(
     135deg,
-    rgba(52, 68, 112, 0.96),
-    rgba(26, 39, 76, 0.98)
+    rgba(9, 32, 76, 0.66),
+    rgba(19, 3, 47, 0.78)
   );
   transform: translateY(-2px) scale(1.01);
-  border-color: rgba(173, 219, 255, 0.4);
-  box-shadow:
-    0 14px 24px rgba(0, 0, 0, 0.28),
-    0 0 0 1px rgba(126, 194, 255, 0.2) inset;
 }
 
 .mode-picker:hover::before,
@@ -797,7 +830,7 @@ h3 {
 }
 
 .character-select-popup .map-select-grid {
-  width: min(100%, 860px);
+  width: min(100%, 600px);
   flex: 0 0 auto;
   min-height: auto;
   overflow: visible;
@@ -1197,17 +1230,33 @@ h3 {
 
 .slot-level-badge {
   position: absolute;
-  top: -18px;
-  left: -18px;
-  width: 62px;
-  height: 62px;
+  top: -10px;
+  left: -10px;
+  width: 45px;
+  height: 45px;
   z-index: 14;
   opacity: 0;
   transform: translateY(-3px) scale(0.96);
   transition:
     opacity 160ms ease,
     transform 160ms ease;
+  animation: badgePop 5s ease-in-out infinite;
   pointer-events: none;
+}
+
+@keyframes badgePop {
+  0% {
+    rotate: -5deg;
+    transform: translateY(-2px) scale(0.98);
+  }
+  50% {
+    rotate: 2deg;
+    transform: translateY(2px) scale(1);
+  }
+  100% {
+    rotate: -5deg;
+    transform: translateY(-2px) scale(0.98);
+  }
 }
 
 .character-slot.has-level .slot-level-badge {

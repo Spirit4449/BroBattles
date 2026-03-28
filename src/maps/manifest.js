@@ -169,6 +169,17 @@ export function getLobbyPlatformAsset(mapId) {
 }
 
 /**
+ * Battle music asset URL for the given map.
+ * Only the active map track should be instantiated at runtime.
+ * @param {number|string} mapId
+ * @returns {string}
+ */
+export function getMapMusicAsset(mapId) {
+  const meta = MAP_META.get(normalizeMapId(mapId));
+  return meta?.musicAsset || "/assets/main.mp3";
+}
+
+/**
  * Lobby character Y offset in px for the given map + mode.
  * Positive values move characters down toward the platform image.
  * @param {number|string} mapId

@@ -1,73 +1,50 @@
 // mangroveMeadow.js
-// To add / tweak this map, edit the constants below — no need to touch build()
-// or positionSpawn().  To add an entirely new map, follow the same pattern and
-// register it in src/maps/manifest.js.
 
 import {
   appendLayoutObjectsFromConfig,
-  getSceneWorldCenterX,
   getSpawnPointForTeam,
   placeSpriteAtConfiguredSpawn,
 } from "./mapUtils";
 
-// ── Layout constants ─────────────────────────────────────────────────────────
-const SCALE = 0.6;
-
-const BASE_MID_Y = 600; // main floor
-const BASE_TOP_Y = 408; // elevated centre base
-const BASE_SIDE_DX = 422; // left/right base X offset from centre
-const BASE_SIDE_Y = 638; // left/right base Y
-
-// Tiny platform layout: each entry is [dx, y]
-// Indices 0-2 → team2 spawn platforms; indices 3-5 → team1 spawn platforms
-const TINY_LAYOUT = [
-  [-280, 325], // 0 – team2
-  [+280, 325], // 1 – team2
-  [-430, 200], // 2 – team2
-  [+430, 200], // 3 – team1
-  [-130, 150], // 4 – team1
-  [+130, 150], // 5 – team1
-];
-
 const SPAWN_CONFIG = {
   players: {
     team1: {
-      1: [{ anchorId: "tiny-3", dx: 0 }],
+      1: [{ x: 1633, anchorId: "tiny-3" }],
       2: [
-        { anchorId: "tiny-3", dx: 0 },
-        { anchorId: "tiny-4", dx: 0 },
+        { x: 1456, anchorId: "tiny-1" },
+        { x: 1004, anchorId: "tiny-4" },
       ],
       3: [
-        { anchorId: "tiny-3", dx: 0 },
-        { anchorId: "tiny-4", dx: 0 },
-        { anchorId: "tiny-5", dx: 0 },
+        { anchorId: "tiny-3", x: 1631 },
+        { x: 1004, anchorId: "tiny-4" },
+        { x: 1298, anchorId: "tiny-5" },
       ],
     },
     team2: {
-      1: [{ anchorId: "tiny-0", dx: 0 }],
+      1: [{ x: 837, anchorId: "tiny-0" }],
       2: [
-        { anchorId: "tiny-0", dx: 0 },
-        { anchorId: "tiny-1", dx: 0 },
+        { x: 840, anchorId: "tiny-0" },
+        { x: 1300, anchorId: "tiny-5" },
       ],
       3: [
-        { anchorId: "tiny-0", dx: 0 },
-        { anchorId: "tiny-1", dx: 0 },
-        { anchorId: "tiny-2", dx: 0 },
+        { anchorId: "tiny-0", x: 843 },
+        { anchorId: "tiny-1", x: 1457 },
+        { anchorId: "tiny-2", x: 671 },
       ],
     },
   },
   powerups: [
-    { x: 1090, y: 308 },
-    { x: 1210, y: 308 },
-    { x: 1150, y: 498 },
-    { x: 725, y: 538 },
-    { x: 1575, y: 538 },
-    { x: 870, y: 225 },
-    { x: 1430, y: 225 },
-    { x: 720, y: 100 },
-    { x: 1580, y: 100 },
-    { x: 1020, y: 50 },
-    { x: 1280, y: 50 },
+    { x: 1007, y: 496 },
+    { x: 1147, y: 364 },
+    { x: 1292, y: 512 },
+    { x: 725, y: 619.3499999999999 },
+    { x: 1664, y: 456 },
+    { x: 870, y: 306.34999999999997 },
+    { x: 611, y: 444 },
+    { x: 720, y: 181.34999999999997 },
+    { x: 1580, y: 181.34999999999997 },
+    { x: 1008, y: 55 },
+    { x: 1295, y: 61 },
   ],
 };
 
@@ -93,20 +70,166 @@ const EDITOR_TEXTURE_KEYS = [
   "mangrove-tiny-platform",
 ];
 
-// Optional editor-driven layout config. Set `USE_LAYOUT_CONFIG_ONLY=true`
-// and paste exported platforms/hitboxes below to build this map from config.
-const USE_LAYOUT_CONFIG_ONLY = false;
+const USE_LAYOUT_CONFIG_ONLY = true;
 const MAP_LAYOUT_CONFIG = {
-  platforms: [],
+  platforms: [
+    {
+      textureKey: "mangrove-base-middle",
+      x: 1150,
+      y: 750,
+      scaleX: 0.6,
+      scaleY: 0.6,
+      flipX: false,
+      body: {
+        width: 613,
+        height: 230,
+        offsetX: 0,
+        offsetY: 0,
+      },
+    },
+    {
+      textureKey: "mangrove-base-top",
+      x: 1150,
+      y: 559,
+      scaleX: 0.6,
+      scaleY: 0.6,
+      flipX: false,
+      body: {
+        width: 155,
+        height: 155,
+        offsetX: 0,
+        offsetY: 0,
+      },
+    },
+    {
+      textureKey: "mangrove-base-left",
+      x: 730,
+      y: 786,
+      scaleX: 0.6,
+      scaleY: 0.6,
+      flipX: false,
+      body: {
+        width: 230,
+        height: 150,
+        offsetX: 0,
+        offsetY: 0,
+      },
+    },
+    {
+      textureKey: "mangrove-base-right",
+      x: 1572,
+      y: 787,
+      scaleX: 0.6,
+      scaleY: 0.6,
+      flipX: false,
+      body: {
+        width: 230,
+        height: 150,
+        offsetX: 0,
+        offsetY: 0,
+      },
+    },
+    {
+      textureKey: "mangrove-tiny-platform",
+      x: 843,
+      y: 451,
+      scaleX: 0.6,
+      scaleY: 0.6,
+      flipX: false,
+      body: {
+        width: 155,
+        height: 40,
+        offsetX: 0,
+        offsetY: 0,
+      },
+    },
+    {
+      textureKey: "mangrove-tiny-platform",
+      x: 1457,
+      y: 451,
+      scaleX: 0.6,
+      scaleY: 0.6,
+      flipX: false,
+      body: {
+        width: 155,
+        height: 40,
+        offsetX: 0,
+        offsetY: 0,
+      },
+    },
+    {
+      textureKey: "mangrove-tiny-platform",
+      x: 672,
+      y: 313,
+      scaleX: 0.6,
+      scaleY: 0.6,
+      flipX: false,
+      body: {
+        width: 155,
+        height: 40,
+        offsetX: 0,
+        offsetY: 0,
+      },
+    },
+    {
+      textureKey: "mangrove-tiny-platform",
+      x: 1633,
+      y: 313,
+      scaleX: 0.6,
+      scaleY: 0.6,
+      flipX: false,
+      body: {
+        width: 155,
+        height: 40,
+        offsetX: 0,
+        offsetY: 0,
+      },
+    },
+    {
+      textureKey: "mangrove-tiny-platform",
+      x: 1009,
+      y: 160,
+      scaleX: 0.6,
+      scaleY: 0.6,
+      flipX: false,
+      body: {
+        width: 155,
+        height: 40,
+        offsetX: 0,
+        offsetY: 0,
+      },
+    },
+    {
+      textureKey: "mangrove-tiny-platform",
+      x: 1295,
+      y: 160,
+      scaleX: 0.6,
+      scaleY: 0.6,
+      flipX: false,
+      body: {
+        width: 155,
+        height: 40,
+        offsetX: 0,
+        offsetY: 0,
+      },
+    },
+  ],
   hitboxes: [],
 };
 
-// ── Runtime references (set during build) ──────────────────────────────────
-const _tinyPlatforms = []; // [0..5] matching TINY_LAYOUT
 const _objects = [];
 const _spawnAnchors = Object.create(null);
 
-// ── Map definition ───────────────────────────────────────────────────────────
+function rebuildSpawnAnchorsFromLayout() {
+  for (const key of Object.keys(_spawnAnchors)) delete _spawnAnchors[key];
+  const tinyPlatforms = _objects.filter(
+    (obj) => obj?.texture?.key === "mangrove-tiny-platform",
+  );
+  tinyPlatforms.forEach((platform, index) => {
+    _spawnAnchors[`tiny-${index}`] = platform;
+  });
+}
+
 export const definition = {
   id: 2,
   name: "Mangrove Meadow",
@@ -118,50 +241,14 @@ export const definition = {
 
   build(scene) {
     _objects.length = 0;
-    _tinyPlatforms.length = 0;
-    for (const k of Object.keys(_spawnAnchors)) delete _spawnAnchors[k];
-
-    if (USE_LAYOUT_CONFIG_ONLY) {
-      appendLayoutObjectsFromConfig(scene, _objects, MAP_LAYOUT_CONFIG);
-      return;
-    }
-
-    const cx = getSceneWorldCenterX(scene);
-
-    function plat(key, x, y) {
-      const s = scene.physics.add.sprite(x, y, key);
-      s.body.allowGravity = false;
-      s.setImmovable(true);
-      s.setScale(SCALE);
-      _objects.push(s);
-      return s;
-    }
-
-    plat("mangrove-base-middle", cx, BASE_MID_Y);
-    plat("mangrove-base-top", cx, BASE_TOP_Y);
-    plat("mangrove-base-left", cx - BASE_SIDE_DX, BASE_SIDE_Y);
-    plat("mangrove-base-right", cx + BASE_SIDE_DX, BASE_SIDE_Y);
-
-    for (const [dx, y] of TINY_LAYOUT) {
-      _tinyPlatforms.push(plat("mangrove-tiny-platform", cx + dx, y));
-    }
-
-    for (let i = 0; i < _tinyPlatforms.length; i++) {
-      _spawnAnchors[`tiny-${i}`] = _tinyPlatforms[i];
-    }
+    appendLayoutObjectsFromConfig(scene, _objects, MAP_LAYOUT_CONFIG);
+    rebuildSpawnAnchorsFromLayout();
   },
 
   getObjects() {
     return _objects;
   },
 
-  /**
-   * @param {object}  scene
-   * @param {object}  sprite    — Phaser sprite to position
-   * @param {string}  team      — "team1" | "team2"
-   * @param {number}  index     — 0-based index within the team
-   * @param {number}  [teamSize] — unused (kept for uniform signature)
-   */
   positionSpawn(scene, sprite, team, index, teamSize) {
     const point = getSpawnPointForTeam(SPAWN_CONFIG, team, index, teamSize);
     if (!point) return;
@@ -185,7 +272,6 @@ export const definition = {
   },
 };
 
-// ── Legacy named exports (game.js backward-compat; use manifest.js for new code) ──
 export const mangroveMeadowObjects = _objects;
 
 export function mangroveMeadow(scene) {

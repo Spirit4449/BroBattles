@@ -1,15 +1,8 @@
-import { getCharacterTuning } from "../../lib/characterStats.js";
 import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
-import {
-  getChargeRatioFromContext,
-  scaleByCharge,
-} from "../shared/chargeAttack";
 
-const WIZARD_TUNING = getCharacterTuning("wizard");
 const FIREBALL = getResolvedCharacterAttackConfig("wizard", "fireball");
-const WIZARD_CHARGE = WIZARD_TUNING.attack?.charge || {};
 
 const FIREBALL_SPEED = FIREBALL.speed;
 const FIREBALL_RANGE = FIREBALL.range;
@@ -244,13 +237,7 @@ function spawnWizardFireballProjectile(
   const startup = Math.max(0, Number(payload?.startup) || 0);
   const bob = payload?.bob ?? FIREBALL_BOB_AMPLITUDE;
   const scale = Number(payload?.scale) || FIREBALL_ACTIVE_SCALE;
-  const chargeRatio = Number(payload?.chargeRatio) || 0;
   const attackId = String(payload?.id || createRuntimeId("wizardFireball"));
-  const chargedCollisionRadius = scaleByCharge({
-    baseValue: FIREBALL_COLLISION_RADIUS,
-    chargeRatio,
-    maxScale: WIZARD_CHARGE.scaleMax || 1,
-  });
 
   const sprite = createFireballSprite(scene, start.x, start.y, direction);
   if (sprite.setAngle) {
@@ -324,16 +311,10 @@ function spawnWizardFireballProjectile(
   return sprite;
 }
 
-export function performWizardFireball(instance, attackContext = null) {
+export function performWizardFireball(instance) {
   const { scene, player: p } = instance;
-  const chargeRatio = getChargeRatioFromContext(attackContext);
   const direction = p.flipX ? -1 : 1;
   const attackId = createRuntimeId("wizardFireball");
-  const chargedScale = scaleByCharge({
-    baseValue: FIREBALL_ACTIVE_SCALE,
-    chargeRatio,
-    maxScale: WIZARD_CHARGE.scaleMax || 1,
-  });
 
   const unlockFlip = lockPlayerFlip(p);
   playWizardCastWindup(scene, p, 0.55);
@@ -351,8 +332,7 @@ export function performWizardFireball(instance, attackContext = null) {
     duration: Math.round((FIREBALL_RANGE / FIREBALL_SPEED) * 1000),
     startup: FIREBALL_CAST_DELAY_MS,
     bob: FIREBALL_BOB_AMPLITUDE,
-    scale: chargedScale,
-    chargeRatio,
+    scale: FIREBALL_ACTIVE_SCALE,
     damage: Math.max(
       1,
       Math.round(instance.constructor?.getStats?.()?.baseDamage || 0),

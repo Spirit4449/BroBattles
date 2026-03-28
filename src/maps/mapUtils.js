@@ -231,6 +231,15 @@ export function applyMapBounds(scene, boundsConfig = {}) {
   }
 }
 
+function setSpriteBodySizeFromDisplaySize(sprite, width, height) {
+  if (!sprite?.body) return;
+  const scaleX = Math.max(0.0001, Math.abs(Number(sprite.scaleX) || 1));
+  const scaleY = Math.max(0.0001, Math.abs(Number(sprite.scaleY) || 1));
+  const rawW = Math.max(1, Number(width) / scaleX);
+  const rawH = Math.max(1, Number(height) / scaleY);
+  sprite.body.setSize(rawW, rawH);
+}
+
 function createConfiguredPlatform(scene, row) {
   const key = String(row?.textureKey || "").trim();
   if (!key || !scene?.textures?.exists(key)) return null;
@@ -245,6 +254,10 @@ function createConfiguredPlatform(scene, row) {
   sprite.setScale(Number(row?.scaleX) || 1, Number(row?.scaleY) || 1);
   sprite.setFlipX(!!row?.flipX);
 
+  if (sprite.body && typeof sprite.body.updateFromGameObject === "function") {
+    sprite.body.updateFromGameObject();
+  }
+
   const bw = Number(row?.body?.width);
   const bh = Number(row?.body?.height);
   if (
@@ -254,16 +267,12 @@ function createConfiguredPlatform(scene, row) {
     bw > 0 &&
     bh > 0
   ) {
-    sprite.body.setSize(bw, bh);
+    setSpriteBodySizeFromDisplaySize(sprite, bw, bh);
   }
   const ox = Number(row?.body?.offsetX);
   const oy = Number(row?.body?.offsetY);
   if (sprite.body && Number.isFinite(ox) && Number.isFinite(oy)) {
     sprite.body.setOffset(ox, oy);
-  }
-
-  if (sprite.body && typeof sprite.body.updateFromGameObject === "function") {
-    sprite.body.updateFromGameObject();
   }
   return sprite;
 }

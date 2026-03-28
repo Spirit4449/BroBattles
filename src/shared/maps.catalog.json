@@ -7,6 +7,7 @@
       "label": "Lushy Peaks",
       "compatibleModeIds": ["duels"],
       "compatibleVariantIds": ["duels-1v1", "duels-2v2", "duels-3v3"],
+      "musicAsset": "/assets/main.mp3",
       "mapSelectPreviewAsset": "/assets/lushy/gameBg.webp",
       "lobbyBgAsset": "/assets/lushy/lobbyBg.webp",
       "lobbyPlatformAsset": "/assets/lushy/lobbyPlatform.webp"
@@ -17,6 +18,7 @@
       "label": "Mangrove Meadow",
       "compatibleModeIds": ["duels"],
       "compatibleVariantIds": ["duels-1v1", "duels-2v2", "duels-3v3"],
+      "musicAsset": "/assets/mangrove/mangrove_main.mp3",
       "mapSelectPreviewAsset": "/assets/mangrove/gameBg.webp",
       "lobbyBgAsset": "/assets/mangrove/lobbyBg.webp",
       "lobbyPlatformAsset": "/assets/mangrove/lobbyPlatform.webp"
@@ -27,6 +29,7 @@
       "label": "Serenity",
       "compatibleModeIds": ["duels"],
       "compatibleVariantIds": ["duels-1v1", "duels-2v2", "duels-3v3"],
+      "musicAsset": "/assets/serenity/serenity_main.mp3",
       "mapSelectPreviewAsset": "/assets/serenity/preview.webp",
       "lobbyBgAsset": "/assets/serenity/lobbyBg.webp",
       "lobbyPlatformAsset": "/assets/serenity/lobbyPlatform.webp"
@@ -37,6 +40,7 @@
       "label": "Bank Bust Test",
       "compatibleModeIds": ["bank-bust"],
       "compatibleVariantIds": ["bank-bust-3v3"],
+      "musicAsset": "/assets/lava.mp3",
       "mapSelectPreviewAsset": "/assets/serenity/preview.webp",
       "lobbyBgAsset": "/assets/serenity/lobbyBg.webp",
       "lobbyPlatformAsset": "/assets/serenity/lobbyPlatform.webp",

@@ -1,9 +1,6 @@
 // src/characters/ninja/ninja.js
 import socket from "../../socket";
-import {
-  characterStats,
-  getCharacterTuning,
-} from "../../lib/characterStats.js";
+import { characterStats } from "../../lib/characterStats.js";
 import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import ReturningShuriken from "./attack";
 import { animations } from "./anim";
@@ -13,10 +10,6 @@ import {
 } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { createRuntimeId } from "../shared/runtimeId";
-import {
-  getChargeRatioFromContext,
-  scaleByCharge,
-} from "../shared/chargeAttack";
 
 // Single source of truth for this character's name/key
 const NAME = "ninja";
@@ -24,8 +17,6 @@ const RETURNING_SHURIKEN = getResolvedCharacterAttackConfig(
   NAME,
   "returningShuriken",
 );
-const NINJA_TUNING = getCharacterTuning(NAME);
-const NINJA_CHARGE = NINJA_TUNING.attack?.charge || {};
 
 class Ninja extends CharacterEntityBase {
   static key = NAME;
@@ -140,9 +131,7 @@ class Ninja extends CharacterEntityBase {
   }
 
   // Ninja-specific attack: spawn a returning shuriken with owner-side collisions
-  handlePointerDown(attackContext) {
-    const context = attackContext || this.consumeAttackContext();
-    const chargeRatio = getChargeRatioFromContext(context);
+  handlePointerDown() {
     const p = this.player;
     const direction = p.flipX ? -1 : 1;
 
@@ -179,13 +168,8 @@ class Ninja extends CharacterEntityBase {
         serverAuthoritativeHits: true,
         instanceId: attackId,
         damage,
-        chargeRatio,
         rotationSpeed: RETURNING_SHURIKEN.rotationSpeed,
-        forwardDistance: scaleByCharge({
-          baseValue: RETURNING_SHURIKEN.forwardDistance,
-          chargeRatio,
-          maxScale: NINJA_CHARGE.rangeScaleMax || 1,
-        }),
+        forwardDistance: RETURNING_SHURIKEN.forwardDistance,
         arcHeight: RETURNING_SHURIKEN.arcHeight,
         outwardDuration: RETURNING_SHURIKEN.outwardDuration,
         returnSpeed: RETURNING_SHURIKEN.returnSpeed,
@@ -227,7 +211,6 @@ class Ninja extends CharacterEntityBase {
         outwardDuration: config.outwardDuration,
         returnSpeed: config.returnSpeed,
         rotationSpeed: config.rotationSpeed,
-        chargeRatio,
       };
     });
 

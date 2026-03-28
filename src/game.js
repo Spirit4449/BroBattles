@@ -4,6 +4,7 @@ import {
   buildMap,
   positionSpawn,
   getMapBgAsset,
+  getMapMusicAsset,
   getMapObjects,
   getMapBoundaryConfig,
   normalizeMapId,
@@ -836,25 +837,34 @@ class GameScene extends Phaser.Scene {
       }
     } catch (_) {}
 
-    // Background music: prepare a starter callback and trigger it at FIGHT.
+    // Background music: create only the active map's track and start it
+    // as soon as the match scene is live.
     this._bgmStarted = false;
     applyMatchBackground(gameData?.map);
+    const bgmSrc = getMapMusicAsset(gameData?.map);
     const startBgm = () => {
       if (this._bgmStarted) return;
       this._bgmStarted = true;
       try {
+        if (this._bgmEl && this._bgmSrc !== bgmSrc) {
+          try {
+            this._bgmEl.pause();
+          } catch (_) {}
+          this._bgmEl = null;
+        }
         if (!this._bgmEl) {
-          const el = new Audio(`${staticPath}/main.mp3`);
-          el.preload = "none"; // or 'metadata' to fetch small header first
-          el.loop = false; // set to true if you want continuous loop
+          const el = new Audio(bgmSrc);
+          el.preload = "auto";
+          el.loop = true;
           el.volume = 0.05;
-          // Optional: el.crossOrigin = 'anonymous';
+          this._bgmSrc = bgmSrc;
           this._bgmEl = el;
           // Hook into scene lifecycle for cleanup
           this.events.once("shutdown", () => {
             try {
               this._bgmEl?.pause();
             } catch (_) {}
+            this._bgmSrc = null;
             this._bgmEl = null;
           });
           this.events.on("pause", () => this._bgmEl?.pause());
@@ -864,7 +874,6 @@ class GameScene extends Phaser.Scene {
             } catch (_) {}
           });
         }
-        // Play (will stream progressively)
         const p = this._bgmEl.play();
         if (p && typeof p.catch === "function") p.catch(() => {});
       } catch (e) {}
@@ -879,6 +888,7 @@ class GameScene extends Phaser.Scene {
       }
       startBgm();
     };
+    this._startMainBgm();
 
     this.events.once("shutdown", () => {
       try {
@@ -1333,9 +1343,6 @@ class GameScene extends Phaser.Scene {
     this._renderPowerupsAndEffects();
     this._renderModeObjectives();
 
-    // Only process if game is initialized
-    if (!hasJoined || !gameInitialized || gameEnded) return;
-
     if (this._editModeActive) {
       try {
         player?.setVelocity?.(0, 0);
@@ -1343,6 +1350,9 @@ class GameScene extends Phaser.Scene {
       updateEditorCamera(this);
       return;
     }
+
+    // Only process if game is initialized
+    if (!hasJoined || !gameInitialized || gameEnded) return;
 
     if (dead) {
       this._enterSpectatorMode();

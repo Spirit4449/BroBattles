@@ -46,7 +46,6 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
         returnAcceleration: RETURNING_SHURIKEN_DEFAULTS.returnAcceleration,
         returnStartSpeedFactor:
           RETURNING_SHURIKEN_DEFAULTS.returnStartSpeedFactor,
-        chargeRatio: 0,
         ctrl1YOffset: RETURNING_SHURIKEN_DEFAULTS.ctrl1YOffset,
         ctrl2YOffset: RETURNING_SHURIKEN_DEFAULTS.ctrl2YOffset,
       },
@@ -191,9 +190,6 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       target: targetUsername,
       damage: this.cfg.damage,
       attackType: this.cfg.attackType || "basic",
-      chargeRatio: Number.isFinite(this.cfg.chargeRatio)
-        ? this.cfg.chargeRatio
-        : 0,
       instanceId: this.cfg.instanceId,
       attackTime: Date.now(),
       gameId: this.cfg.gameId,
@@ -221,9 +217,6 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
           (Math.max(0.1, Number(this.cfg.collisionRadiusScale) || 0.26)),
       ),
       attackType: this.cfg.attackType || "basic",
-      chargeRatio: Number.isFinite(this.cfg.chargeRatio)
-        ? this.cfg.chargeRatio
-        : 0,
       instanceId: this.cfg.instanceId,
       gameId: this.cfg.gameId,
     });

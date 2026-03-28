@@ -48,6 +48,15 @@ function updateBodyFromGameObject(go) {
   } catch (_) {}
 }
 
+function setSpriteBodySizeFromDisplaySize(go, width, height) {
+  if (!go?.body) return;
+  const scaleX = Math.max(0.0001, Math.abs(Number(go.scaleX) || 1));
+  const scaleY = Math.max(0.0001, Math.abs(Number(go.scaleY) || 1));
+  const rawW = Math.max(1, Number(width) / scaleX);
+  const rawH = Math.max(1, Number(height) / scaleY);
+  go.body.setSize(rawW, rawH);
+}
+
 function nearestWithThreshold(value, candidates, threshold = 40) {
   let best = value;
   let bestDist = threshold + 1;
@@ -441,7 +450,7 @@ export function createMapEditorRuntime({
         const w = Number(row.width);
         const h = Number(row.height);
         if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0)
-          go.body.setSize(w, h);
+          setSpriteBodySizeFromDisplaySize(go, w, h);
         const ox = Number(row.offsetX);
         const oy = Number(row.offsetY);
         if (Number.isFinite(ox) && Number.isFinite(oy))

@@ -16,21 +16,14 @@ import {
 import { spawnDust, spawnHealthMarker, spawnWallKickCloud } from "./effects";
 import { bindLocalSocketEvents } from "./players/localSocketEvents";
 import { createLocalStateSync } from "./players/localStateSync";
-import { lockPlayerFlip } from "./characters/shared/flipLock";
-import {
-  ATTACK_CHARGE_MAX_HOLD_MS,
-  ATTACK_CHARGE_TAP_THRESHOLD_MS,
-  getAttackChargeConfig,
-} from "./lib/characterStats";
 import { getResolvedCharacterBodyConfig } from "./lib/characterTuning.js";
 import MOVEMENT_PHYSICS from "./shared/movementPhysics.json";
-import { getChargeRatioFromHold } from "./characters/shared/chargeAttack";
 import { noteClientActionSent } from "./lib/netTestLogger.js";
 // Globals
 let player;
 let cursors;
 let keySpace; // Spacebar for jump
-let keyJ; // J for attack charge
+let keyJ; // J for basic attack
 let canWallJump = true;
 let isMoving = false;
 let isJumping = false;
@@ -54,9 +47,6 @@ let healthText;
 // Ammo/Cooldown bar (client-side only)
 let ammoBar; // graphics
 let ammoBarBack; // background graphics
-let chargeBar; // local charge progress bar
-let chargeBarBack; // local charge bar background
-let rangeReticle; // local-only range reticle for charge attacks
 let ammoBarWidth = 60;
 let ammoCooldownMs = 1200; // time between shots
 let ammoReloadMs = 1200; // time to reload one charge
@@ -103,18 +93,6 @@ let applyFlipOffsetLocal = null;
 let charEffects = null; // per-character, per-player effects handler (e.g., Draven fire)
 let charCtrl = null; // active character controller instance
 let disposeLocalSocketEvents = null;
-let releaseChargePointerHandler = null;
-
-const chargeState = {
-  charging: false,
-  source: null,
-  startedAt: 0,
-  holdMs: 0,
-  ratio: 0,
-  direction: 1,
-  pointerId: null,
-  lockRelease: null,
-};
 let flushLocalNetState = null;
 
 let networkInputState = {
@@ -371,9 +349,6 @@ export function createPlayer(
   // Ammo bar background & fill (render order: background, fill)
   ammoBarBack = scene.add.graphics();
   ammoBar = scene.add.graphics();
-  chargeBarBack = scene.add.graphics();
-  chargeBar = scene.add.graphics();
-  rangeReticle = scene.add.graphics();
   superBarBack = scene.add.graphics();
   superBar = scene.add.graphics();
 
@@ -467,7 +442,8 @@ export function createPlayer(
   charCtrl = ctrl;
   if (ctrl && ctrl.attachInput) ctrl.attachInput();
 
-  // Left-click → attack, Right-click → special (register once per scene)
+  // Left-click is intentionally idle during the drag-aim transition.
+  // Right-click remains special only.
   if (!scene._mouseCombatAttached) {
     scene._mouseCombatAttached = true;
 
@@ -492,24 +468,7 @@ export function createPlayer(
         }
         return;
       }
-      if (pointer.button === 0) {
-        const dir = pointer.worldX < player.x ? -1 : 1;
-        startAttackCharge("pointer", dir, pointer.id);
-      }
     });
-
-    releaseChargePointerHandler = (pointer) => {
-      if (!chargeState.charging || chargeState.source !== "pointer") return;
-      if (
-        chargeState.pointerId !== null &&
-        pointer &&
-        pointer.id !== chargeState.pointerId
-      ) {
-        return;
-      }
-      releaseAttackCharge();
-    };
-    scene.input.on("pointerup", releaseChargePointerHandler);
 
     // Prevent the browser context menu on right-click over the canvas
     scene.game.canvas.addEventListener("contextmenu", (e) =>
@@ -558,7 +517,6 @@ export function createPlayer(
       wallSlideLoopPlaying = value;
     },
     onLocalDeath: () => {
-      resetChargeState();
       updateHealthBar();
       setLocalUiVisible(false);
     },
@@ -579,13 +537,6 @@ export function createPlayer(
         } catch (_) {}
         disposeLocalSocketEvents = null;
       }
-      try {
-        if (releaseChargePointerHandler) {
-          scene.input.off("pointerup", releaseChargePointerHandler);
-        }
-      } catch (_) {}
-      releaseChargePointerHandler = null;
-      resetChargeState();
       scene._localSocketEventsCleanupBound = false;
     });
     scene.events.once("destroy", () => {
@@ -595,13 +546,6 @@ export function createPlayer(
         } catch (_) {}
         disposeLocalSocketEvents = null;
       }
-      try {
-        if (releaseChargePointerHandler) {
-          scene.input.off("pointerup", releaseChargePointerHandler);
-        }
-      } catch (_) {}
-      releaseChargePointerHandler = null;
-      resetChargeState();
       scene._localSocketEventsCleanupBound = false;
     });
   }
@@ -633,19 +577,10 @@ function setLocalUiVisible(visible) {
     ammoBarBack?.setVisible(shouldShow);
   } catch (_) {}
   try {
-    chargeBar?.setVisible(shouldShow);
-  } catch (_) {}
-  try {
-    chargeBarBack?.setVisible(shouldShow);
-  } catch (_) {}
-  try {
     superBar?.setVisible(shouldShow);
   } catch (_) {}
   try {
     superBarBack?.setVisible(shouldShow);
-  } catch (_) {}
-  try {
-    rangeReticle?.setVisible(shouldShow);
   } catch (_) {}
   try {
     indicatorTriangle?.setVisible(shouldShow);
@@ -734,142 +669,17 @@ function updateHealthBar() {
   // Draw ammo bar underneath health (only for local player & when alive)
   drawAmmoBar(healthBarX, y + 11);
   drawSuperBar(healthBarX, y + 18);
-  drawChargeBar(healthBarX, y + 25);
 }
 
-function drawChargeBar(x, y) {
-  if (!chargeBar || !chargeBarBack) return;
-  chargeBarBack.clear();
-  chargeBar.clear();
-  if (!chargeState.charging || dead) return;
-
-  const width = 60;
-  const height = 5;
-  const ratio = Phaser.Math.Clamp(chargeState.ratio || 0, 0, 1);
-
-  chargeBarBack.fillStyle(0x222222, 0.65);
-  chargeBarBack.fillRoundedRect(x, y, width, height, 3);
-  chargeBarBack.lineStyle(1, 0x000000, 0.9);
-  chargeBarBack.strokeRoundedRect(x, y, width, height, 3);
-
-  const lerp = Phaser.Display.Color.Interpolate.ColorWithColor(
-    Phaser.Display.Color.ValueToColor(0xff9a3d),
-    Phaser.Display.Color.ValueToColor(0xff4242),
-    100,
-    Math.round(ratio * 100),
-  );
-  const fill = Phaser.Display.Color.GetColor(lerp.r, lerp.g, lerp.b);
-  chargeBar.fillStyle(fill, 0.98);
-  chargeBar.fillRoundedRect(x, y, width * ratio, height, 3);
-
-  chargeBar.setDepth(2);
-  chargeBarBack.setDepth(1);
-}
-
-function getCurrentChargeConfig() {
-  return getAttackChargeConfig(currentCharacter) || {};
-}
-
-function syncRangeReticle() {
-  if (!rangeReticle) return;
-  rangeReticle.clear();
-  if (!chargeState.charging || dead) return;
-  if (chargeState.holdMs < ATTACK_CHARGE_TAP_THRESHOLD_MS) return;
-  if (currentCharacter !== "ninja" && currentCharacter !== "thorg") return;
-
-  const cfg = getCurrentChargeConfig();
-  const baseLen = Number(cfg.reticleBaseRange) || 120;
-  const maxLen = Number(cfg.reticleMaxRange) || baseLen;
-  const length = Phaser.Math.Linear(baseLen, maxLen, chargeState.ratio);
-  const direction = chargeState.direction || 1;
-
-  const bodyTop = player?.body ? player.body.y : player.y - player.height / 2;
-  const startX = player.x;
-  const startY = bodyTop - 1;
-  const endX = startX + direction * length;
-  const endY = startY;
-
-  rangeReticle.lineStyle(2, 0xff6b4a, 0.9);
-  rangeReticle.strokeLineShape(
-    new Phaser.Geom.Line(startX, startY, endX, endY),
-  );
-  rangeReticle.fillStyle(0xffc26b, 0.75);
-  rangeReticle.fillCircle(endX, endY, 4);
-  rangeReticle.setDepth(4);
-}
-
-function fireAttackWithCharge(direction, holdMs) {
+function fireBasicAttack(direction) {
   if (dead) return;
-  const ratio = getChargeRatioFromHold(holdMs, ATTACK_CHARGE_MAX_HOLD_MS);
-  const context = {
-    holdMs,
-    maxHoldMs: ATTACK_CHARGE_MAX_HOLD_MS,
-    chargeRatio: holdMs >= ATTACK_CHARGE_TAP_THRESHOLD_MS ? ratio : 0,
-  };
   try {
     if (charCtrl && typeof charCtrl.attack === "function") {
-      charCtrl.attack(direction, context);
+      charCtrl.attack(direction);
     } else if (charCtrl && typeof charCtrl.handlePointerDown === "function") {
-      charCtrl.handlePointerDown(context);
+      charCtrl.handlePointerDown();
     }
   } catch (_) {}
-}
-
-function resetChargeState() {
-  if (typeof chargeState.lockRelease === "function") {
-    try {
-      chargeState.lockRelease();
-    } catch (_) {}
-  }
-  chargeState.charging = false;
-  chargeState.source = null;
-  chargeState.startedAt = 0;
-  chargeState.holdMs = 0;
-  chargeState.ratio = 0;
-  chargeState.direction = 1;
-  chargeState.pointerId = null;
-  chargeState.lockRelease = null;
-  if (rangeReticle) rangeReticle.clear();
-}
-
-function startAttackCharge(source, direction, pointerId = null) {
-  if (chargeState.charging || dead) return;
-  if (!player || (player?._movementLockedUntil || 0) > Date.now()) return;
-
-  const dir = direction === -1 ? -1 : 1;
-  player.flipX = dir < 0;
-  if (applyFlipOffsetLocal) applyFlipOffsetLocal();
-
-  chargeState.charging = true;
-  chargeState.source = source;
-  chargeState.startedAt = Date.now();
-  chargeState.holdMs = 0;
-  chargeState.ratio = 0;
-  chargeState.direction = dir;
-  chargeState.pointerId = pointerId;
-  chargeState.lockRelease = lockPlayerFlip(player);
-  updateHealthBar();
-}
-
-function releaseAttackCharge() {
-  if (!chargeState.charging) return;
-  const holdMs = Math.max(0, chargeState.holdMs || 0);
-  const direction = chargeState.direction || 1;
-  resetChargeState();
-  fireAttackWithCharge(direction, holdMs);
-  updateHealthBar();
-}
-
-function updateAttackChargeState() {
-  if (!chargeState.charging) return;
-  const now = Date.now();
-  const elapsed = Math.max(0, now - chargeState.startedAt);
-  chargeState.holdMs = Math.min(elapsed, ATTACK_CHARGE_MAX_HOLD_MS);
-  chargeState.ratio = getChargeRatioFromHold(
-    chargeState.holdMs,
-    ATTACK_CHARGE_MAX_HOLD_MS,
-  );
-  syncRangeReticle();
 }
 
 function drawSuperBar(x, y) {
@@ -977,7 +787,6 @@ function drawAmmoBar(forcedX, forcedY) {
 }
 
 export function handlePlayerMovement(scene) {
-  updateAttackChargeState();
   // Movement tuning knobs (edit to change the feel):
   // Enforce facing lock (e.g., Draven splash) BEFORE any movement logic mutates flip state
   if (player && player._lockFlip && player._lockedFlipX !== undefined) {
@@ -1159,17 +968,12 @@ export function handlePlayerMovement(scene) {
     }
   } catch (_) {}
 
-  // Handle attack charge on J
+  // Handle basic attack on J
   try {
     if (keyJ && Phaser.Input.Keyboard.JustDown(keyJ) && !dead) {
       if (!((player?._movementLockedUntil || 0) > Date.now())) {
         const dir = player && player.flipX ? -1 : 1;
-        startAttackCharge("keyboard", dir);
-      }
-    }
-    if (keyJ && Phaser.Input.Keyboard.JustUp(keyJ) && !dead) {
-      if (chargeState.charging && chargeState.source === "keyboard") {
-        releaseAttackCharge();
+        fireBasicAttack(dir);
       }
     }
     // Handle special on I

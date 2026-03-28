@@ -67,10 +67,6 @@ const DEATH_DROP_LAUNCH_VY_SPREAD_BONUS = 12;
 
 const NINJA_SWARM_HIT_DAMAGE = 300;
 const NINJA_SWARM_CHARGE_RATIO = 0.35;
-const ATTACK_CHARGE_MAX_HOLD_MS = 3500;
-const NINJA_CHARGE_RANGE_SCALE_MAX = 1.8;
-const THORG_CHARGE_RANGE_SCALE_MAX = 1.8;
-const DRAVEN_CHARGE_DAMAGE_SCALE_MAX = 1.8;
 
 const HIT_REWIND_MAX_MS = 200;
 const HIT_STALENESS_MAX_MS = 300;
@@ -113,17 +109,17 @@ const POWERUP_PLATFORM_POINTS = {
     { x: 1708, y: 468 },
   ],
   2: [
-    { x: 1090, y: 330 },
-    { x: 1210, y: 330 },
-    { x: 1150, y: 520 },
-    { x: 725, y: 560 },
-    { x: 1575, y: 560 },
-    { x: 870, y: 247 },
-    { x: 1430, y: 247 },
-    { x: 720, y: 122 },
-    { x: 1580, y: 122 },
-    { x: 1020, y: 72 },
-    { x: 1280, y: 72 },
+    { x: 1007, y: 496 },
+    { x: 1147, y: 364 },
+    { x: 1292, y: 512 },
+    { x: 725, y: 619.3499999999999 },
+    { x: 1664, y: 456 },
+    { x: 870, y: 306.34999999999997 },
+    { x: 611, y: 444 },
+    { x: 720, y: 181.34999999999997 },
+    { x: 1580, y: 181.34999999999997 },
+    { x: 1008, y: 55 },
+    { x: 1295, y: 61 },
   ],
   3: [
     { x: 950, y: 500 },
@@ -181,10 +177,6 @@ module.exports = {
   DEATH_DROP_LAUNCH_VY_SPREAD_BONUS,
   NINJA_SWARM_HIT_DAMAGE,
   NINJA_SWARM_CHARGE_RATIO,
-  ATTACK_CHARGE_MAX_HOLD_MS,
-  NINJA_CHARGE_RANGE_SCALE_MAX,
-  THORG_CHARGE_RANGE_SCALE_MAX,
-  DRAVEN_CHARGE_DAMAGE_SCALE_MAX,
   HIT_REWIND_MAX_MS,
   HIT_STALENESS_MAX_MS,
   HIT_FUTURE_TOLERANCE_MS,

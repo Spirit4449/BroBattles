@@ -1,19 +1,12 @@
 // Draven splash attack extracted
 import socket from "../../socket";
-import { getCharacterTuning } from "../../lib/characterStats.js";
 import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { rectsOverlap, getSpriteBounds } from "../shared/combatGeometry";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
 import { emitVaultHitForRect } from "../shared/vaultTargeting";
-import {
-  getChargeRatioFromContext,
-  scaleByCharge,
-} from "../shared/chargeAttack";
 
-const DRAVEN_TUNING = getCharacterTuning("draven");
 const SPLASH = getResolvedCharacterAttackConfig("draven", "splash");
-const SPLASH_CHARGE = DRAVEN_TUNING.attack?.charge || {};
 const SPLASH_W = SPLASH.width;
 const SPLASH_H = SPLASH.height;
 const ACTIVE_WINDOW_MS = SPLASH.activeWindowMs;
@@ -27,9 +20,8 @@ const CENTER_Y_FACTOR = SPLASH.centerYFactor;
 const HITBOX_INFLATE = SPLASH.hitboxInflate;
 var DEBUG_DRAW = false; // Draw debug rectangle of current hitbox
 
-export function performDravenSplashAttack(instance, attackContext = null) {
+export function performDravenSplashAttack(instance) {
   const { scene, player: p, username, gameId, opponentPlayersRef } = instance;
-  const chargeRatio = getChargeRatioFromContext(attackContext);
 
   // Lock facing direction for the whole attack window
   const direction = p.flipX ? -1 : 1; // -1 = facing left, 1 = facing right
@@ -61,18 +53,7 @@ export function performDravenSplashAttack(instance, attackContext = null) {
   // Play fireball SFX (local-only)
   try {
     if (scene.sound) {
-      scene.sound.play("draven-fireball", {
-        volume: scaleByCharge({
-          baseValue: 0.4,
-          chargeRatio,
-          maxScale: SPLASH_CHARGE.audioVolumeMax || 1,
-        }),
-        rate: scaleByCharge({
-          baseValue: 1,
-          chargeRatio,
-          maxScale: SPLASH_CHARGE.audioRateMax || 1,
-        }),
-      });
+      scene.sound.play("draven-fireball", { volume: 0.4, rate: 1 });
     }
   } catch (_) {}
 
@@ -98,7 +79,6 @@ export function performDravenSplashAttack(instance, attackContext = null) {
         centerY: cy,
         w: SPLASH_W,
         h: currentH,
-        chargeRatio,
         attacker: username,
         gameId,
         opponents: opponentPlayersRef,
@@ -140,7 +120,6 @@ export function performDravenSplashAttack(instance, attackContext = null) {
     type: "draven-splash",
     id: attackId,
     direction,
-    chargeRatio,
   };
 }
 
@@ -150,7 +129,6 @@ function applySplashDamage({
   centerY,
   w,
   h,
-  chargeRatio,
   attacker,
   gameId,
   opponents,

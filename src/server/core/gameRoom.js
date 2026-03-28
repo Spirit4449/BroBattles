@@ -4,7 +4,6 @@ const {
   POWERUP_STARTING_COUNT,
   NINJA_SWARM_HIT_DAMAGE,
   NINJA_SWARM_CHARGE_RATIO,
-  DRAVEN_CHARGE_DAMAGE_SCALE_MAX,
 } = require("./gameRoomConfig");
 const effectManager = require("./gameRoom/effects/effectManager");
 const powerupManager = require("./gameRoom/powerupManager");
@@ -196,18 +195,17 @@ class GameRoom {
     }
 
     if (mapId === 2) {
-      const centerX = 1150;
       const teamAnchors =
         team === "team1"
           ? [
-              { x: centerX + 430, y: 155 },
-              { x: centerX - 130, y: 105 },
-              { x: centerX + 130, y: 105 },
+              { x: 1631, y: 291 },
+              { x: 1004, y: 138 },
+              { x: 1298, y: 138 },
             ]
           : [
-              { x: centerX - 280, y: 280 },
-              { x: centerX + 280, y: 280 },
-              { x: centerX - 430, y: 155 },
+              { x: 843, y: 429 },
+              { x: 1457, y: 429 },
+              { x: 671, y: 291 },
             ];
       return teamAnchors[Math.max(0, Math.min(teamAnchors.length - 1, index))];
     }
@@ -988,9 +986,6 @@ class GameRoom {
 
       // Determine damage from server-side stats
       const attackType = String(payload.attackType || "basic").toLowerCase();
-      const chargeRatio = combatValidation.clampChargeRatio(
-        payload.chargeRatio,
-      );
       const isNinjaSwarm = attackType === "ninja-special-swarm";
       const base = isNinjaSwarm
         ? NINJA_SWARM_HIT_DAMAGE
@@ -998,10 +993,6 @@ class GameRoom {
           ? Number(attacker.specialDamage || 0)
           : Number(attacker.baseDamage || 0);
       let dmg = Number.isFinite(base) && base > 0 ? base : 0;
-
-      if (attackType === "basic" && attacker.char_class === "draven") {
-        dmg *= 1 + (DRAVEN_CHARGE_DAMAGE_SCALE_MAX - 1) * chargeRatio;
-      }
       if (targetVault && attackType !== "basic") {
         if (this.DEBUG_HIT_EVENTS) {
           console.log(
@@ -1064,7 +1055,6 @@ class GameRoom {
           attacker,
           target,
           attackType,
-          chargeRatio,
           attackTimeRaw,
           now,
         }));
