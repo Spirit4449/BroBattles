@@ -72,149 +72,149 @@ const EDITOR_TEXTURE_KEYS = [
 
 const USE_LAYOUT_CONFIG_ONLY = true;
 const MAP_LAYOUT_CONFIG = {
-  platforms: [
+"platforms": [
     {
-      textureKey: "mangrove-base-middle",
-      x: 1150,
-      y: 750,
-      scaleX: 0.6,
-      scaleY: 0.6,
-      flipX: false,
-      body: {
-        width: 613,
-        height: 230,
-        offsetX: 0,
-        offsetY: 0,
-      },
+      "textureKey": "mangrove-base-middle",
+      "x": 1150,
+      "y": 750,
+      "scaleX": 0.6,
+      "scaleY": 0.6,
+      "flipX": false,
+      "body": {
+        "width": 613,
+        "height": 230,
+        "offsetX": 0,
+        "offsetY": 0
+      }
     },
     {
-      textureKey: "mangrove-base-top",
-      x: 1150,
-      y: 559,
-      scaleX: 0.6,
-      scaleY: 0.6,
-      flipX: false,
-      body: {
-        width: 155,
-        height: 155,
-        offsetX: 0,
-        offsetY: 0,
-      },
+      "textureKey": "mangrove-base-top",
+      "x": 1150,
+      "y": 559,
+      "scaleX": 0.6,
+      "scaleY": 0.6,
+      "flipX": false,
+      "body": {
+        "width": 210,
+        "height": 210,
+        "offsetX": 0,
+        "offsetY": 0
+      }
     },
     {
-      textureKey: "mangrove-base-left",
-      x: 730,
-      y: 786,
-      scaleX: 0.6,
-      scaleY: 0.6,
-      flipX: false,
-      body: {
-        width: 230,
-        height: 150,
-        offsetX: 0,
-        offsetY: 0,
-      },
+      "textureKey": "mangrove-base-left",
+      "x": 730,
+      "y": 786,
+      "scaleX": 0.6,
+      "scaleY": 0.6,
+      "flipX": false,
+      "body": {
+        "width": 230,
+        "height": 150,
+        "offsetX": 0,
+        "offsetY": 0
+      }
     },
     {
-      textureKey: "mangrove-base-right",
-      x: 1572,
-      y: 787,
-      scaleX: 0.6,
-      scaleY: 0.6,
-      flipX: false,
-      body: {
-        width: 230,
-        height: 150,
-        offsetX: 0,
-        offsetY: 0,
-      },
+      "textureKey": "mangrove-base-right",
+      "x": 1572,
+      "y": 787,
+      "scaleX": 0.6,
+      "scaleY": 0.6,
+      "flipX": false,
+      "body": {
+        "width": 230,
+        "height": 150,
+        "offsetX": 0,
+        "offsetY": 0
+      }
     },
     {
-      textureKey: "mangrove-tiny-platform",
-      x: 843,
-      y: 451,
-      scaleX: 0.6,
-      scaleY: 0.6,
-      flipX: false,
-      body: {
-        width: 155,
-        height: 40,
-        offsetX: 0,
-        offsetY: 0,
-      },
+      "textureKey": "mangrove-tiny-platform",
+      "x": 843,
+      "y": 467,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "flipX": false,
+      "body": {
+        "width": 210,
+        "height": 40,
+        "offsetX": 60,
+        "offsetY": 90
+      }
     },
     {
-      textureKey: "mangrove-tiny-platform",
-      x: 1457,
-      y: 451,
-      scaleX: 0.6,
-      scaleY: 0.6,
-      flipX: false,
-      body: {
-        width: 155,
-        height: 40,
-        offsetX: 0,
-        offsetY: 0,
-      },
+      "textureKey": "mangrove-tiny-platform",
+      "x": 1457,
+      "y": 463,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "flipX": false,
+      "body": {
+        "width": 210,
+        "height": 40,
+        "offsetX": 60,
+        "offsetY": 90
+      }
     },
     {
-      textureKey: "mangrove-tiny-platform",
-      x: 672,
-      y: 313,
-      scaleX: 0.6,
-      scaleY: 0.6,
-      flipX: false,
-      body: {
-        width: 155,
-        height: 40,
-        offsetX: 0,
-        offsetY: 0,
-      },
+      "textureKey": "mangrove-tiny-platform",
+      "x": 615,
+      "y": 289,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "flipX": false,
+      "body": {
+        "width": 210,
+        "height": 40,
+        "offsetX": 60,
+        "offsetY": 90
+      }
     },
     {
-      textureKey: "mangrove-tiny-platform",
-      x: 1633,
-      y: 313,
-      scaleX: 0.6,
-      scaleY: 0.6,
-      flipX: false,
-      body: {
-        width: 155,
-        height: 40,
-        offsetX: 0,
-        offsetY: 0,
-      },
+      "textureKey": "mangrove-tiny-platform",
+      "x": 1665,
+      "y": 292,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "flipX": false,
+      "body": {
+        "width": 210,
+        "height": 40,
+        "offsetX": 60,
+        "offsetY": 90
+      }
     },
     {
-      textureKey: "mangrove-tiny-platform",
-      x: 1009,
-      y: 160,
-      scaleX: 0.6,
-      scaleY: 0.6,
-      flipX: false,
-      body: {
-        width: 155,
-        height: 40,
-        offsetX: 0,
-        offsetY: 0,
-      },
+      "textureKey": "mangrove-tiny-platform",
+      "x": 971,
+      "y": 160,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "flipX": false,
+      "body": {
+        "width": 210,
+        "height": 40,
+        "offsetX": 60,
+        "offsetY": 90
+      }
     },
     {
-      textureKey: "mangrove-tiny-platform",
-      x: 1295,
-      y: 160,
-      scaleX: 0.6,
-      scaleY: 0.6,
-      flipX: false,
-      body: {
-        width: 155,
-        height: 40,
-        offsetX: 0,
-        offsetY: 0,
-      },
-    },
+      "textureKey": "mangrove-tiny-platform",
+      "x": 1329,
+      "y": 160,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "flipX": false,
+      "body": {
+        "width": 210,
+        "height": 40,
+        "offsetX": 60,
+        "offsetY": 90
+      }
+    }
   ],
-  hitboxes: [],
+  "hitboxes": [],
 };
 
 const _objects = [];

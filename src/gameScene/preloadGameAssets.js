@@ -20,7 +20,11 @@ export function preloadGameAssets({
   );
   scene.load.image(
     "mangrove-tiny-platform",
-    `${staticPath}/mangrove/tinyPlatform.webp`,
+    `${staticPath}/mangrove/lobbyPlatform.webp`,
+  );
+  scene.load.image(
+    "mangrove-lobby-platform",
+    `${staticPath}/mangrove/lobbyPlatform.webp`,
   );
   scene.load.image(
     "mangrove-base-left",
