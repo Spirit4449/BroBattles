@@ -5,8 +5,7 @@ const DRAVEN_INFERNO_RISE_MS = 320;
 const DRAVEN_INFERNO_LIFT_PX = 125;
 const DRAVEN_INFERNO_BOB_PX = 8;
 const DRAVEN_INFERNO_DAMAGE_TICK_MS = 220;
-const DRAVEN_INFERNO_RADIUS_X = 215;
-const DRAVEN_INFERNO_RADIUS_Y = 145;
+const DRAVEN_INFERNO_RADIUS = 215;
 const DRAVEN_INFERNO_DAMAGE_SCALE = 0.22;
 
 function activate(player, now) {
@@ -79,9 +78,9 @@ function tick(room, caster, now) {
       continue;
     if (caster.team && target.team && caster.team === target.team) continue;
 
-    const dx = Math.abs((target.x || 0) - anchorX);
-    const dy = Math.abs((target.y || 0) - anchorY);
-    if (dx > DRAVEN_INFERNO_RADIUS_X || dy > DRAVEN_INFERNO_RADIUS_Y) continue;
+    const dx = Number(target.x || 0) - anchorX;
+    const dy = Number(target.y || 0) - anchorY;
+    if (Math.hypot(dx, dy) > DRAVEN_INFERNO_RADIUS) continue;
 
     let dmg = Math.round(
       perTickDmg * effectManager.getModifiers(target, now).damageTakenMult,

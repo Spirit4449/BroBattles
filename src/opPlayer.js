@@ -155,18 +155,6 @@ export default class OpPlayer {
           spawnHealthMarker(this.scene, this.opponent.x, bodyTop - 18, delta, {
             depth: 11,
           });
-          // Play damage sound for everyone (lower volume for remote players)
-          if (delta < 0) {
-            try {
-              // Use character-specific hit sound if available, else generic
-              const charHitKey = `${this.character}-hit`;
-              const key = this.scene.sound.get(charHitKey)
-                ? charHitKey
-                : "sfx-damage";
-              // If this is NOT the local player (which it isn't, since this is OpPlayer), play at lower volume
-              this.scene.sound.play(key, { volume: 0.4 });
-            } catch (_) {}
-          }
         }
         if (this.opCurrentHealth <= 0) {
           this.opCurrentHealth = 0;
@@ -199,6 +187,7 @@ export default class OpPlayer {
           this.username,
           null,
           false, // isOwner
+          data.aim || null,
         );
       }
     };

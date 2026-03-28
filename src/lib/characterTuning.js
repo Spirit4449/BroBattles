@@ -53,6 +53,16 @@ function getResolvedCharacterAttackConfig(character, attackKey = null) {
   return cloneValue(attackTuning?.[attackKey] || {});
 }
 
+function getResolvedCharacterAimConfig(character) {
+  const attackTuning = getCharacterTuning(character)?.attack || {};
+  return cloneValue(attackTuning?.aim || {});
+}
+
+function getResolvedCharacterSpecialAimConfig(character) {
+  const specialTuning = getCharacterTuning(character)?.special || {};
+  return cloneValue(specialTuning?.aim || {});
+}
+
 function getResolvedCharacterSpecialConfig(character, specialKey = null) {
   const specialTuning = getCharacterTuning(character)?.special || {};
   if (!specialKey) return cloneValue(specialTuning);
@@ -70,6 +80,8 @@ if (typeof module !== "undefined" && module.exports) {
     CHARACTER_BODY_DEFAULTS,
     getResolvedCharacterBodyConfig,
     getResolvedCharacterAttackConfig,
+    getResolvedCharacterAimConfig,
+    getResolvedCharacterSpecialAimConfig,
     getResolvedCharacterSpecialConfig,
     getResolvedCharacterEffectConfig,
   };

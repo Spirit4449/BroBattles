@@ -1,6 +1,7 @@
 const attackDescriptors = require("../../../shared/attackDescriptors.json");
 const {
   getResolvedCharacterAttackConfig,
+  getResolvedCharacterAimConfig,
 } = require("../../../lib/characterTuning.js");
 
 function cloneValue(value) {
@@ -68,11 +69,11 @@ function getRuntimeOverrides(actionType) {
       getResolvedCharacterAttackConfig("draven", "splash") || {};
     return {
       runtime: {
-        width: Number(splash.width) || 150,
-        height: Number(splash.height) || 108,
         activeWindowMs: Math.max(1, Number(splash.activeWindowMs) || 450),
         damageStartMs: Math.max(0, Number(splash.damageStartMs) || 0),
         damageTickMs: Math.max(1, Number(splash.damageTickMs) || 90),
+        width: Math.max(1, Number(splash.width) || 150),
+        height: Math.max(1, Number(splash.height) || 108),
         tipOffset: Number(splash.tipOffset) || 50,
         minHeight: Math.max(1, Number(splash.minHeight) || 20),
         growDurationMs: Math.max(1, Number(splash.growDurationMs) || 220),

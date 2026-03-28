@@ -17,6 +17,7 @@ export function performSpecial(
   username,
   gameId,
   isOwner = false,
+  specialData = null,
 ) {
   const module = specials[character];
   if (module && typeof module.perform === "function") {
@@ -28,6 +29,7 @@ export function performSpecial(
       username,
       gameId,
       isOwner,
+      specialData,
     );
   } else {
     console.warn(`No special attack defined for ${character}`);

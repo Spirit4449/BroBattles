@@ -10,10 +10,10 @@ function getAbility(character) {
   return abilitiesByCharacter[String(character || "").toLowerCase()] || null;
 }
 
-function activateSpecial(room, player, now) {
+function activateSpecial(room, player, now, payload = null) {
   const ability = getAbility(player?.char_class);
   if (!ability || typeof ability.activate !== "function") return;
-  ability.activate(player, now, room);
+  ability.activate(player, now, room, payload);
 }
 
 function tickActiveAbilities(room, now) {

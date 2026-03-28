@@ -115,9 +115,6 @@ class Draven extends CharacterEntityBase {
     if (!data) return false;
     if (data.type === "draven-splash-explode") {
       spawnExplosion(scene, Number(data.x) || 0, Number(data.y) || 0);
-      try {
-        scene.sound && scene.sound.play("draven-hit", { volume: 0.5 });
-      } catch (_) {}
       return true;
     }
     if (data.type !== "draven-splash") return false;
@@ -134,10 +131,7 @@ class Draven extends CharacterEntityBase {
     } catch (_) {}
     const delay = data.delay || SPLASH.remoteExplosionDelayMs;
     const tipOffset = data.tipOffset || SPLASH.remoteExplosionTipOffset;
-    const centerYFactor = SPLASH.centerYFactor;
-    const originX = Number(data?.origin?.x);
-    const originY = Number(data?.origin?.y);
-    const hasOrigin = Number.isFinite(originX) && Number.isFinite(originY);
+    const centerYFactor = data.centerYFactor || SPLASH.centerYFactor;
     // Removed opponent-side debug splash rectangle; only show final explosion now
     scene.time.delayedCall(delay, () => {
       if (!ownerSprite || !ownerSprite.active) return;
@@ -149,15 +143,9 @@ class Draven extends CharacterEntityBase {
           : ownerSprite.flipX
             ? -1
             : 1;
-      const anchorX = hasOrigin ? originX : ownerSprite.x;
-      const anchorY = hasOrigin ? originY : ownerSprite.y;
-      const ex = anchorX + (dir > 0 ? tipOffset : -tipOffset);
-      const ey = anchorY - ownerSprite.height * centerYFactor;
+      const ex = ownerSprite.x + (dir > 0 ? tipOffset : -tipOffset);
+      const ey = ownerSprite.y - ownerSprite.height * centerYFactor;
       spawnExplosion(scene, ex, ey);
-      // Optional impact SFX on remote explosion
-      try {
-        scene.sound && scene.sound.play("draven-hit", { volume: 0.5 });
-      } catch (_) {}
     });
     return true;
   }
@@ -165,9 +153,6 @@ class Draven extends CharacterEntityBase {
   static handleLocalAuthoritativeAttack(scene, data) {
     if (!data || data.type !== "draven-splash-explode") return false;
     spawnExplosion(scene, Number(data.x) || 0, Number(data.y) || 0);
-    try {
-      scene.sound && scene.sound.play("draven-hit", { volume: 0.5 });
-    } catch (_) {}
     return true;
   }
 
@@ -227,8 +212,11 @@ class Draven extends CharacterEntityBase {
   }
 
   // Draven splash attack trigger
-  handlePointerDown() {
-    return this.performDefaultAttack(() => performDravenSplashAttack(this));
+  handlePointerDown(attackContext = null) {
+    const context = attackContext || this.consumeAttackContext();
+    return this.performDefaultAttack(() =>
+      performDravenSplashAttack(this, context),
+    );
   }
 }
 

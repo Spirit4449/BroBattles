@@ -24,6 +24,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     this.cfg = Object.assign(
       {
         direction: 1,
+        angle: 0,
         forwardDistance: RETURNING_SHURIKEN_DEFAULTS.forwardDistance,
         endYOffset: RETURNING_SHURIKEN_DEFAULTS.endYOffset,
         outwardDuration: RETURNING_SHURIKEN_DEFAULTS.outwardDuration,
@@ -108,8 +109,17 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     // Path control points (slight dip then bulge)
     this.startX = startPos.x;
     this.startY = startPos.y;
-    this.endX = this.startX + this.cfg.direction * this.cfg.forwardDistance;
-    this.endY = this.startY + (this.cfg.endYOffset || 0);
+    const angle = Number.isFinite(Number(this.cfg.angle))
+      ? Number(this.cfg.angle)
+      : this.cfg.direction < 0
+        ? Math.PI
+        : 0;
+    const forwardX = Math.cos(angle);
+    const forwardY = Math.sin(angle);
+    const normalX = -forwardY;
+    const normalY = forwardX;
+    this.endX = this.startX + forwardX * this.cfg.forwardDistance;
+    this.endY = this.startY + forwardY * this.cfg.forwardDistance + (this.cfg.endYOffset || 0);
     const dipDown = Number.isFinite(this.cfg.ctrl1YOffset)
       ? this.cfg.ctrl1YOffset
       : 20;
@@ -117,11 +127,22 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       ? Math.abs(this.cfg.ctrl2YOffset)
       : 40;
     this.ctrl1X =
-      this.startX + this.cfg.direction * this.cfg.forwardDistance * 0.25;
-    this.ctrl1Y = this.startY + dipDown;
+      this.startX +
+      forwardX * this.cfg.forwardDistance * 0.25 +
+      normalX * dipDown;
+    this.ctrl1Y =
+      this.startY +
+      forwardY * this.cfg.forwardDistance * 0.25 +
+      normalY * dipDown;
     this.ctrl2X =
-      this.startX + this.cfg.direction * this.cfg.forwardDistance * 0.6;
-    this.ctrl2Y = this.startY - bulgeUp + (this.cfg.endYOffset || 0) * 0.45;
+      this.startX +
+      forwardX * this.cfg.forwardDistance * 0.6 -
+      normalX * bulgeUp;
+    this.ctrl2Y =
+      this.startY +
+      forwardY * this.cfg.forwardDistance * 0.6 -
+      normalY * bulgeUp +
+      (this.cfg.endYOffset || 0) * 0.45;
 
     // Unified subtle glow (blue if owner, red otherwise)
     const glowColor = this.cfg.isOwner ? 0x2e9bff : 0xff3a2e;

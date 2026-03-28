@@ -127,8 +127,8 @@ export default class CharacterEntityBase {
   }
 
   attachInput() {
-    if (!this.scene?.input || typeof this.handlePointerDown !== "function")
-      return;
-    this.scene.input.on("pointerdown", () => this.handlePointerDown());
+    // Local attack input is centrally owned by player.js so drag-aim, quick-fire,
+    // and map-editor interactions all flow through one consistent lifecycle.
+    return;
   }
 }

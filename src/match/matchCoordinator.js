@@ -8,6 +8,7 @@
 // hidden global state and can be tested or instantiated in isolation.
 import { normalizeMapId } from "../maps/manifest";
 import { spawnDamageImpact } from "../effects";
+import { playCharacterSound } from "../characters";
 import {
   configureClientNetTest,
   noteClientLifecycle,
@@ -639,15 +640,21 @@ export function createMatchCoordinator(config) {
       const isSelfPacket = playerName === getUsername();
       if (isSelfPacket && !action?.ownerEcho) return;
       noteClientRemoteAction(packet);
+      const actionType = String(action?.type || "").toLowerCase();
+      const gameData = getGameData();
+      const pd = (gameData.players || []).find((p) => p.name === playerName);
+      const charKey = (character || (pd && pd.char_class) || "").toLowerCase();
+
+      if (actionType === "character-hit-confirm") {
+        playCharacterSound(scene, charKey, "hit");
+        return;
+      }
+
       const actionWithPacketMeta = {
         ...(action || {}),
         origin: packet?.origin || action?.origin || null,
         flip: typeof packet?.flip === "boolean" ? packet.flip : action?.flip,
       };
-
-      const gameData = getGameData();
-      const pd = (gameData.players || []).find((p) => p.name === playerName);
-      const charKey = (character || (pd && pd.char_class) || "").toLowerCase();
       if (isSelfPacket) {
         const consumedLocal =
           typeof handleLocalAuthoritativeAttack === "function"

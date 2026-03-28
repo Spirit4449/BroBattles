@@ -140,6 +140,7 @@ export function perform(
   username,
   gameId,
   isOwner = false,
+  specialData = null,
 ) {
   if (!scene || !player || !player.active) return;
 

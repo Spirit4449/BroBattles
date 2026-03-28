@@ -440,7 +440,7 @@ class GameRoom {
     });
 
     // Handle special attack request
-    socket.on("game:special", () => {
+    socket.on("game:special", (payload = {}) => {
       const p = this.players.get(socket.id);
       if (!p || !p.isAlive) return;
       if (p.superCharge < p.maxSuperCharge) return;
@@ -448,7 +448,9 @@ class GameRoom {
       p.superCharge = 0;
       const now = Date.now();
       p.lastCombatAt = now;
-      activateSpecial(this, p, now);
+      const aimPayload =
+        payload && typeof payload === "object" ? payload.aim || null : null;
+      activateSpecial(this, p, now, aimPayload);
 
       this.io.to(`game:${this.matchId}`).emit("super-update", {
         username: p.name,
@@ -461,6 +463,7 @@ class GameRoom {
         character: p.char_class,
         origin: { x: p.x, y: p.y },
         flip: !!p.flip,
+        aim: aimPayload,
       });
     });
 
@@ -1202,6 +1205,22 @@ class GameRoom {
         const scoredKill = !isSelf && target.health === 0 && old > 0 ? 1 : 0;
         if (scoredKill) {
           this._recordCombatStat(attacker, { kills: scoredKill });
+        }
+        if (appliedDamage > 0) {
+          this.io.to(`game:${this.matchId}`).emit("game:action", {
+            playerId: attacker.user_id,
+            playerName: attacker.name,
+            origin: { x: attacker.x, y: attacker.y },
+            flip: !!attacker.flip,
+            character: attacker.char_class,
+            action: {
+              type: "character-hit-confirm",
+              attackType,
+              target: target.name,
+              ownerEcho: true,
+            },
+            t: now,
+          });
         }
         this._broadcastHealthUpdate(target, { cause: "combat" });
         if (target.health === 0 && old > 0) {

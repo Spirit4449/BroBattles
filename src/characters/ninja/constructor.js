@@ -25,7 +25,7 @@ class Ninja extends CharacterEntityBase {
 
   static sounds = {
     attack: { key: "shurikenThrow", volume: 0.5, rate: 1.3 },
-    hit: { key: "shurikenHit", volume: 0.6 },
+    hit: { key: "shurikenHit", volume: 1.25, rate: 1.0 },
     hitWood: { key: "shurikenHitWood", volume: 0.7 },
   };
 
@@ -82,6 +82,7 @@ class Ninja extends CharacterEntityBase {
         ownerSprite,
         {
           direction: data.direction,
+          angle: data.angle,
           forwardDistance:
             data.forwardDistance || RETURNING_SHURIKEN.forwardDistance,
           outwardDuration:
@@ -131,9 +132,25 @@ class Ninja extends CharacterEntityBase {
   }
 
   // Ninja-specific attack: spawn a returning shuriken with owner-side collisions
-  handlePointerDown() {
+  handlePointerDown(attackContext = null) {
+    const context = attackContext || this.consumeAttackContext() || {};
     const p = this.player;
-    const direction = p.flipX ? -1 : 1;
+    const angle = Number.isFinite(Number(context?.angle))
+      ? Number(context.angle)
+      : p.flipX
+        ? Math.PI
+        : 0;
+    const direction =
+      Number(context?.direction) === -1 ||
+      (Math.cos(angle) < -0.1 && Number(context?.direction) !== 1)
+        ? -1
+        : 1;
+    const startX = Number.isFinite(Number(context?.anchorX))
+      ? Number(context.anchorX)
+      : p.x;
+    const startY = Number.isFinite(Number(context?.anchorY))
+      ? Number(context.anchorY)
+      : p.y;
 
     // Prefer server-provided level-based damage; fallback to base stats
     const baseDamage = (
@@ -162,6 +179,7 @@ class Ninja extends CharacterEntityBase {
 
       const config = {
         direction,
+        angle,
         username: this.username,
         gameId: this.gameId,
         isOwner: true,
@@ -177,7 +195,7 @@ class Ninja extends CharacterEntityBase {
 
       const returning = new ReturningShuriken(
         this.scene,
-        { x: p.x, y: p.y },
+        { x: startX, y: startY },
         p,
         config,
       );
@@ -200,13 +218,14 @@ class Ninja extends CharacterEntityBase {
       return {
         type: "ninja-shuriken",
         id: attackId,
-        x: p.x,
-        y: p.y,
+        x: startX,
+        y: startY,
         scale: config.scale || 0.1,
         damage: config.damage,
         name: this.username,
         returning: true,
         direction,
+        angle,
         forwardDistance: config.forwardDistance,
         outwardDuration: config.outwardDuration,
         returnSpeed: config.returnSpeed,

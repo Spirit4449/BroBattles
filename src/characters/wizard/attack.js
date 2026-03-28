@@ -195,7 +195,7 @@ function playWizardCastWindup(scene, ownerSprite, volume = 0.3) {
   } catch (_) {}
 }
 
-function resolveProjectileStart(payload, ownerSprite, direction) {
+function resolveProjectileStart(payload, ownerSprite, angle, direction) {
   const startX = Number(payload?.start?.x);
   const startY = Number(payload?.start?.y);
   if (Number.isFinite(startX) && Number.isFinite(startY)) {
@@ -208,14 +208,23 @@ function resolveProjectileStart(payload, ownerSprite, direction) {
     return { x: originX, y: originY };
   }
 
+  const resolvedAngle = Number.isFinite(Number(angle))
+    ? Number(angle)
+    : direction < 0
+      ? Math.PI
+      : 0;
   return {
     x:
       (ownerSprite?.x || 0) +
-      direction * ((ownerSprite?.displayWidth || 80) * FIREBALL_FORWARD_OFFSET),
+      Math.cos(resolvedAngle) *
+        ((ownerSprite?.displayWidth || 80) * FIREBALL_FORWARD_OFFSET),
     y: ownerSprite
       ? ownerSprite.y -
-        (ownerSprite.displayHeight || ownerSprite.height || 120) *
-          FIREBALL_VERTICAL_OFFSET
+          (ownerSprite.displayHeight || ownerSprite.height || 120) *
+            FIREBALL_VERTICAL_OFFSET +
+        Math.sin(resolvedAngle) *
+          ((ownerSprite.displayWidth || ownerSprite.width || 80) *
+            FIREBALL_FORWARD_OFFSET)
       : 0,
   };
 }
@@ -230,7 +239,16 @@ function spawnWizardFireballProjectile(
   if (!scene?.add) return null;
 
   const direction = payload?.direction || 1;
-  const start = resolveProjectileStart(payload, ownerSprite, direction);
+  const angle = Number.isFinite(Number(payload?.angle))
+    ? Number(payload.angle)
+    : direction < 0
+      ? Math.PI
+      : 0;
+  const forwardX = Math.cos(angle);
+  const forwardY = Math.sin(angle);
+  const normalX = -forwardY;
+  const normalY = forwardX;
+  const start = resolveProjectileStart(payload, ownerSprite, angle, direction);
   const range = payload?.range || FIREBALL_RANGE;
   const travelDuration =
     payload?.duration || Math.round((range / FIREBALL_SPEED) * 1000);
@@ -241,9 +259,7 @@ function spawnWizardFireballProjectile(
 
   const sprite = createFireballSprite(scene, start.x, start.y, direction);
   if (sprite.setAngle) {
-    sprite.setAngle(
-      direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG,
-    );
+    sprite.setAngle(Phaser.Math.RadToDeg(angle) + FIREBALL_BASE_ANGLE_DEG);
   }
   scene.tweens.add({
     targets: sprite,
@@ -263,7 +279,7 @@ function spawnWizardFireballProjectile(
   if (followOwnerDuringStartup) {
     const updateStartupOrigin = () => {
       if (!sprite.active || !ownerSprite?.active) return;
-      const liveStart = resolveProjectileStart({}, ownerSprite, direction);
+      const liveStart = resolveProjectileStart({}, ownerSprite, angle, direction);
       sprite.x = liveStart.x;
       sprite.y = liveStart.y;
     };
@@ -282,24 +298,25 @@ function spawnWizardFireballProjectile(
     const launchY = sprite.y;
 
     scene.tweens.add({
-      targets: sprite,
-      x: launchX + direction * range,
+      targets: { t: 0 },
+      t: 1,
       ease: "Linear",
       duration: travelDuration,
+      onUpdate: (tween) => {
+        if (!sprite.active) return;
+        const progress = Number(tween?.targets?.[0]?.t) || 0;
+        const travel = range * progress;
+        const bobOffset =
+          Math.sin((travelDuration * progress) / FIREBALL_BOB_FREQ_MS) * bob;
+        sprite.x = launchX + forwardX * travel + normalX * bobOffset;
+        sprite.y = launchY + forwardY * travel + normalY * bobOffset;
+      },
       onComplete: () => {
         spawnImpact(scene, sprite.x, sprite.y, false);
         sprite.destroy();
         if (trail) trail.destroy();
         debugFollower?.destroy();
       },
-    });
-    scene.tweens.add({
-      targets: sprite,
-      y: launchY + bob,
-      ease: "Sine.easeInOut",
-      yoyo: true,
-      duration: FIREBALL_BOB_TWEEN_MS,
-      repeat: Math.ceil(travelDuration / FIREBALL_BOB_TWEEN_MS),
     });
   };
 
@@ -311,9 +328,19 @@ function spawnWizardFireballProjectile(
   return sprite;
 }
 
-export function performWizardFireball(instance) {
+export function performWizardFireball(instance, attackContext = null) {
   const { scene, player: p } = instance;
-  const direction = p.flipX ? -1 : 1;
+  const context = attackContext || instance.consumeAttackContext?.() || {};
+  const angle = Number.isFinite(Number(context?.angle))
+    ? Number(context.angle)
+    : p.flipX
+      ? Math.PI
+      : 0;
+  const direction =
+    Number(context?.direction) === -1 ||
+    (Math.cos(angle) < -0.1 && Number(context?.direction) !== 1)
+      ? -1
+      : 1;
   const attackId = createRuntimeId("wizardFireball");
 
   const unlockFlip = lockPlayerFlip(p);
@@ -328,6 +355,7 @@ export function performWizardFireball(instance) {
     type: "wizard-fireball",
     id: attackId,
     direction,
+    angle,
     range: FIREBALL_RANGE,
     duration: Math.round((FIREBALL_RANGE / FIREBALL_SPEED) * 1000),
     startup: FIREBALL_CAST_DELAY_MS,

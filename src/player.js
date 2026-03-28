@@ -16,7 +16,15 @@ import {
 import { spawnDust, spawnHealthMarker, spawnWallKickCloud } from "./effects";
 import { bindLocalSocketEvents } from "./players/localSocketEvents";
 import { createLocalStateSync } from "./players/localStateSync";
+import {
+  ATTACK_AIM_HOLD_ACTIVATE_MS,
+  ATTACK_AIM_DRAG_ACTIVATE_PX,
+  getPlayerAimBasePoint,
+  resolveAttackAimContext,
+} from "./characters/shared/attackAim";
 import { getResolvedCharacterBodyConfig } from "./lib/characterTuning.js";
+import { createAttackAimReticleController } from "./gameScene/attackAimReticle";
+import { createMobileControlsController } from "./gameScene/mobileControls";
 import MOVEMENT_PHYSICS from "./shared/movementPhysics.json";
 import { noteClientActionSent } from "./lib/netTestLogger.js";
 // Globals
@@ -94,6 +102,34 @@ let charEffects = null; // per-character, per-player effects handler (e.g., Drav
 let charCtrl = null; // active character controller instance
 let disposeLocalSocketEvents = null;
 let flushLocalNetState = null;
+let attackAimReticleController = null;
+let pointerAttackHandlers = null;
+let pointerAttackScene = null;
+let pointerContextMenuCanvas = null;
+let pointerContextMenuHandler = null;
+let mobileControlsController = null;
+
+const GAME_CROSSHAIR_CURSOR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.1" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.94)" stroke-width="1.4"/><circle cx="12" cy="12" r="1.45" fill="rgba(255,255,255,0.97)"/><path d="M12 1.7v4.25M12 18.05v4.25M1.7 12h4.25M18.05 12h4.25" stroke="rgba(32,32,32,0.55)" stroke-width="3.4" stroke-linecap="round"/><path d="M12 1.7v4.25M12 18.05v4.25M1.7 12h4.25M18.05 12h4.25" stroke="rgba(255,255,255,0.97)" stroke-width="1.55" stroke-linecap="round"/></svg>`;
+const GAME_CROSSHAIR_CURSOR = `url("data:image/svg+xml;utf8,${encodeURIComponent(
+  GAME_CROSSHAIR_CURSOR_SVG,
+)}") 12 12, crosshair`;
+
+const attackAimState = {
+  active: false,
+  pointerId: null,
+  startedAt: 0,
+  aiming: false,
+  family: "basic",
+  button: 0,
+  startWorldX: 0,
+  startWorldY: 0,
+  pointerWorldX: 0,
+  pointerWorldY: 0,
+  relativePointerX: 0,
+  relativePointerY: 0,
+  pointerDirty: false,
+  currentContext: null,
+};
 
 let networkInputState = {
   left: false,
@@ -170,6 +206,299 @@ const localStateSync = createLocalStateSync({
   updateHealthBar: () => updateHealthBar(),
 });
 
+function clearAttackAimReticle() {
+  try {
+    attackAimReticleController?.hide?.();
+  } catch (_) {}
+}
+
+function resetPointerAttackAim() {
+  attackAimState.active = false;
+  attackAimState.pointerId = null;
+  attackAimState.startedAt = 0;
+  attackAimState.aiming = false;
+  attackAimState.family = "basic";
+  attackAimState.button = 0;
+  attackAimState.startWorldX = 0;
+  attackAimState.startWorldY = 0;
+  attackAimState.pointerWorldX = 0;
+  attackAimState.pointerWorldY = 0;
+  attackAimState.relativePointerX = 0;
+  attackAimState.relativePointerY = 0;
+  attackAimState.pointerDirty = false;
+  attackAimState.currentContext = null;
+  clearAttackAimReticle();
+}
+
+function applyGameCursor(nextScene) {
+  try {
+    const canvas = nextScene?.game?.canvas;
+    if (canvas?.style) {
+      canvas.style.cursor = GAME_CROSSHAIR_CURSOR;
+    }
+  } catch (_) {}
+}
+
+function clearGameCursor(targetScene = pointerAttackScene || scene) {
+  try {
+    const canvas = targetScene?.game?.canvas;
+    if (canvas?.style) {
+      canvas.style.cursor = "";
+    }
+  } catch (_) {}
+}
+
+function detachPointerAttackBindings(targetScene = pointerAttackScene || scene) {
+  const sceneToDetach = targetScene || pointerAttackScene || scene;
+  if (!sceneToDetach) return;
+  const isTrackedScene =
+    !pointerAttackScene || pointerAttackScene === sceneToDetach;
+  clearGameCursor(sceneToDetach);
+  if (!isTrackedScene) return;
+  try {
+    if (pointerAttackHandlers?.down) {
+      sceneToDetach?.input?.off?.("pointerdown", pointerAttackHandlers.down);
+    }
+    if (pointerAttackHandlers?.move) {
+      sceneToDetach?.input?.off?.("pointermove", pointerAttackHandlers.move);
+    }
+    if (pointerAttackHandlers?.up) {
+      sceneToDetach?.input?.off?.("pointerup", pointerAttackHandlers.up);
+      sceneToDetach?.input?.off?.(
+        "pointerupoutside",
+        pointerAttackHandlers.up,
+      );
+    }
+    if (pointerAttackHandlers?.gameout) {
+      sceneToDetach?.input?.off?.("gameout", pointerAttackHandlers.gameout);
+    }
+  } catch (_) {}
+  try {
+    pointerContextMenuCanvas?.removeEventListener?.(
+      "contextmenu",
+      pointerContextMenuHandler,
+    );
+  } catch (_) {}
+  pointerAttackHandlers = null;
+  pointerAttackScene = null;
+  pointerContextMenuCanvas = null;
+  pointerContextMenuHandler = null;
+}
+
+function resolveQuickAttackContext(family = "basic") {
+  return resolveAttackAimContext({
+    character: currentCharacter,
+    player,
+    family,
+    quick: true,
+  });
+}
+
+function resolvePointerReleaseContext(family = "basic") {
+  return resolveAttackAimContext({
+    character: currentCharacter,
+    player,
+    family,
+    pointerWorldX: Number(attackAimState.pointerWorldX),
+    pointerWorldY: Number(attackAimState.pointerWorldY),
+    quick: true,
+    quickUsesPointerAngle: true,
+  });
+}
+
+function getAimBasePoint(family = attackAimState.family || "basic") {
+  return (
+    getPlayerAimBasePoint({
+      character: currentCharacter,
+      player,
+      family,
+    }) || { baseX: Number(player?.x) || 0, baseY: Number(player?.y) || 0 }
+  );
+}
+
+function syncPointerAttackRelativeOffset(family = attackAimState.family || "basic") {
+  const base = getAimBasePoint(family);
+  const pointerX = Number(attackAimState.pointerWorldX);
+  const pointerY = Number(attackAimState.pointerWorldY);
+  if (!Number.isFinite(pointerX) || !Number.isFinite(pointerY)) return;
+  attackAimState.relativePointerX = pointerX - Number(base.baseX || 0);
+  attackAimState.relativePointerY = pointerY - Number(base.baseY || 0);
+}
+
+function buildStickyAimPointerWorld() {
+  const base = getAimBasePoint();
+  return {
+    x: Number(base.baseX || 0) + Number(attackAimState.relativePointerX || 0),
+    y: Number(base.baseY || 0) + Number(attackAimState.relativePointerY || 0),
+  };
+}
+
+function resolveActiveAimContext(forceQuick = false) {
+  if (!player) return null;
+  if (forceQuick || !attackAimState.aiming) {
+    return resolveQuickAttackContext(attackAimState.family || "basic");
+  }
+  const pointerTarget = attackAimState.pointerDirty
+    ? {
+        x: Number(attackAimState.pointerWorldX),
+        y: Number(attackAimState.pointerWorldY),
+      }
+    : buildStickyAimPointerWorld();
+  return resolveAttackAimContext({
+    character: currentCharacter,
+    player,
+    family: attackAimState.family || "basic",
+    pointerWorldX: Number(pointerTarget?.x),
+    pointerWorldY: Number(pointerTarget?.y),
+    quick: false,
+  });
+}
+
+function serializeAimContext(context) {
+  if (!context || typeof context !== "object") return null;
+  const out = {
+    family: String(context.family || "basic").toLowerCase(),
+    kind: String(context.kind || "line").toLowerCase(),
+    direction: Number(context.direction) === -1 ? -1 : 1,
+  };
+  if (Number.isFinite(Number(context.angle))) out.angle = Number(context.angle);
+  if (Number.isFinite(Number(context.range))) out.range = Number(context.range);
+  if (Number.isFinite(Number(context.speedScale))) {
+    out.speedScale = Number(context.speedScale);
+  }
+  if (
+    Number.isFinite(Number(context.targetX)) &&
+    Number.isFinite(Number(context.targetY))
+  ) {
+    out.target = {
+      x: Number(context.targetX),
+      y: Number(context.targetY),
+    };
+  }
+  if (Number.isFinite(Number(context.coneRadius))) {
+    out.coneRadius = Number(context.coneRadius);
+  }
+  if (Number.isFinite(Number(context.coneSpreadDeg))) {
+    out.coneSpreadDeg = Number(context.coneSpreadDeg);
+  }
+  if (Number.isFinite(Number(context.coneInnerRadius))) {
+    out.coneInnerRadius = Number(context.coneInnerRadius);
+  }
+  if (Number.isFinite(Number(context.roundRadius))) {
+    out.roundRadius = Number(context.roundRadius);
+  }
+  return out;
+}
+
+function updatePointerAttackAimPointer(pointer = null) {
+  if (!attackAimState.active || !scene?.cameras?.main) return;
+  const livePointer =
+    pointer ||
+    scene?.input?.activePointer ||
+    scene?.input?.mousePointer ||
+    null;
+  if (!livePointer) return;
+  try {
+    livePointer.updateWorldPoint?.(scene.cameras.main);
+  } catch (_) {}
+  const nextX = Number(livePointer.worldX);
+  const nextY = Number(livePointer.worldY);
+  if (Number.isFinite(nextX)) {
+    attackAimState.pointerWorldX = nextX;
+  }
+  if (Number.isFinite(nextY)) {
+    attackAimState.pointerWorldY = nextY;
+  }
+  syncPointerAttackRelativeOffset();
+  attackAimState.pointerDirty = true;
+}
+
+function startPointerAttackAim(pointer, family = "basic", button = 0) {
+  if (!pointer || dead) return;
+  resetPointerAttackAim();
+  attackAimState.active = true;
+  attackAimState.family = family;
+  attackAimState.button = button;
+  attackAimState.pointerId = pointer.id;
+  attackAimState.startedAt = Date.now();
+  updatePointerAttackAimPointer(pointer);
+  attackAimState.startWorldX = attackAimState.pointerWorldX;
+  attackAimState.startWorldY = attackAimState.pointerWorldY;
+}
+
+function updatePointerAttackAimState() {
+  if (!attackAimState.active) {
+    clearAttackAimReticle();
+    return;
+  }
+  if (!player || dead || window.__BB_MAP_EDIT_ACTIVE) {
+    resetPointerAttackAim();
+    return;
+  }
+  const elapsed = Math.max(0, Date.now() - attackAimState.startedAt);
+  const dragDist = Math.hypot(
+    attackAimState.pointerWorldX - attackAimState.startWorldX,
+    attackAimState.pointerWorldY - attackAimState.startWorldY,
+  );
+  if (
+    !attackAimState.aiming &&
+    (elapsed >= ATTACK_AIM_HOLD_ACTIVATE_MS ||
+      dragDist >= ATTACK_AIM_DRAG_ACTIVATE_PX)
+  ) {
+    attackAimState.aiming = true;
+  }
+  if (!attackAimState.aiming) {
+    attackAimState.currentContext = null;
+    clearAttackAimReticle();
+    return;
+  }
+
+  attackAimState.currentContext = resolveActiveAimContext(false);
+  attackAimState.pointerDirty = false;
+  try {
+    attackAimReticleController?.update?.(attackAimState.currentContext);
+  } catch (_) {}
+}
+
+function finishPointerAttackAim(pointer) {
+  if (!attackAimState.active) return null;
+  if (
+    attackAimState.pointerId !== null &&
+    pointer &&
+    pointer.id !== attackAimState.pointerId
+  ) {
+    return null;
+  }
+  updatePointerAttackAimPointer(pointer);
+  const elapsed = Math.max(0, Date.now() - attackAimState.startedAt);
+  const dragDist = Math.hypot(
+    attackAimState.pointerWorldX - attackAimState.startWorldX,
+    attackAimState.pointerWorldY - attackAimState.startWorldY,
+  );
+  if (
+    !attackAimState.aiming &&
+    (elapsed >= ATTACK_AIM_HOLD_ACTIVATE_MS ||
+      dragDist >= ATTACK_AIM_DRAG_ACTIVATE_PX)
+  ) {
+    attackAimState.aiming = true;
+  }
+  const context = attackAimState.aiming
+    ? resolveAttackAimContext({
+        character: currentCharacter,
+        player,
+        family: attackAimState.family || "basic",
+        pointerWorldX: Number(attackAimState.pointerWorldX),
+        pointerWorldY: Number(attackAimState.pointerWorldY),
+        quick: false,
+      })
+    : resolvePointerReleaseContext(attackAimState.family || "basic");
+  if (context && typeof context === "object") {
+    context.family = attackAimState.family || context.family || "basic";
+  }
+  resetPointerAttackAim();
+  return context;
+}
+
 // Create player function
 export function createPlayer(
   sceneParam,
@@ -181,6 +510,44 @@ export function createPlayer(
   mapParam,
   opponentPlayersParam,
 ) {
+  resetPointerAttackAim();
+  detachPointerAttackBindings();
+  mobileControlsController?.destroy?.();
+  if (attackAimReticleController) {
+    try {
+      attackAimReticleController.destroy();
+    } catch (_) {}
+    attackAimReticleController = null;
+  }
+  attackAimReticleController = createAttackAimReticleController(sceneParam);
+  if (!mobileControlsController) {
+    mobileControlsController = createMobileControlsController({
+      Phaser,
+      getScene: () => scene,
+      getPlayer: () => player,
+      getPointerAimActive: () => !!attackAimState.active,
+      getAimBasePoint: (family = "basic") =>
+        getPlayerAimBasePoint({
+          character: currentCharacter,
+          player,
+          family,
+        }),
+      resolveAimContext: ({ family, pointerWorldX, pointerWorldY, quick }) =>
+        resolveAttackAimContext({
+          character: currentCharacter,
+          player,
+          family,
+          pointerWorldX,
+          pointerWorldY,
+          quick,
+        }),
+      onBasicFire: (context) => fireBasicAttack(context?.direction, context),
+      onSpecialFire: (context) => fireSpecialAttack(context),
+      onClearReticle: () => clearAttackAimReticle(),
+    });
+  }
+  mobileControlsController.ensure(sceneParam);
+
   if (disposeLocalSocketEvents) {
     try {
       disposeLocalSocketEvents();
@@ -442,39 +809,91 @@ export function createPlayer(
   charCtrl = ctrl;
   if (ctrl && ctrl.attachInput) ctrl.attachInput();
 
-  // Left-click is intentionally idle during the drag-aim transition.
-  // Right-click remains special only.
-  if (!scene._mouseCombatAttached) {
-    scene._mouseCombatAttached = true;
-
-    scene.input.on("pointerdown", (pointer) => {
-      if (window.__BB_MAP_EDIT_ACTIVE) return;
-      if (dead) return;
-      if ((player?._movementLockedUntil || 0) > Date.now()) return;
-      if (pointer.button === 2) {
-        // Right-click: special ONLY — never falls through to attack
-        if (superCharge >= maxSuperCharge) {
-          try {
-            flushLocalNetState?.({
-              dead,
-              gameEnded: false,
-              handlePlayerMovement,
-            });
-          } catch (_) {}
-          noteClientActionSent("special", { type: "special" });
-          socket.emit("game:special");
-        } else {
-          _specialNotReadyFlash = Date.now() + 500; // 500ms red flash on bar
-        }
-        return;
-      }
-    });
-
-    // Prevent the browser context menu on right-click over the canvas
-    scene.game.canvas.addEventListener("contextmenu", (e) =>
-      e.preventDefault(),
+  // Left-click supports quick-fire tap and hold-to-aim.
+  // Right-click mirrors that for supers using the special reticle theme.
+  const pointerDownHandler = (pointer) => {
+    if (window.__BB_MAP_EDIT_ACTIVE) return;
+    if (dead) return;
+    if ((player?._movementLockedUntil || 0) > Date.now()) return;
+    const mobilePointerHandled = !!mobileControlsController?.handlePointerDown?.(
+      pointer,
     );
-  }
+    if (mobilePointerHandled) return;
+    if (mobileControlsController?.isEnabled?.() && pointer?.pointerType === "touch")
+      return;
+    if (pointer.button === 0) {
+      startPointerAttackAim(pointer, "basic", 0);
+      return;
+    }
+    if (pointer.button === 2) {
+      if (superCharge >= maxSuperCharge) {
+        startPointerAttackAim(pointer, "special", 2);
+      } else {
+        _specialNotReadyFlash = Date.now() + 500;
+      }
+    }
+  };
+
+  const pointerMoveHandler = (pointer) => {
+    const mobilePointerHandled = !!mobileControlsController?.handlePointerMove?.(
+      pointer,
+    );
+    if (mobilePointerHandled) return;
+    if (mobileControlsController?.isEnabled?.() && pointer?.pointerType === "touch")
+      return;
+    if (!attackAimState.active) return;
+    if (
+      attackAimState.pointerId !== null &&
+      pointer &&
+      pointer.id !== attackAimState.pointerId
+    ) {
+      return;
+    }
+    updatePointerAttackAimPointer(pointer);
+    updatePointerAttackAimState();
+  };
+
+  const pointerUpHandler = (pointer) => {
+    const mobilePointerHandled = !!mobileControlsController?.handlePointerUp?.(
+      pointer,
+    );
+    if (mobilePointerHandled) return;
+    if (mobileControlsController?.isEnabled?.() && pointer?.pointerType === "touch")
+      return;
+    const movementLockedNow = (player?._movementLockedUntil || 0) > Date.now();
+    const context = finishPointerAttackAim(pointer);
+    if (!context || dead || movementLockedNow) return;
+    if (String(context.family || "basic").toLowerCase() === "special") {
+      fireSpecialAttack(context);
+      return;
+    }
+    fireBasicAttack(context.direction, context);
+  };
+
+  const pointerGameOutHandler = () => {
+    resetPointerAttackAim();
+  };
+
+  pointerAttackHandlers = {
+    down: pointerDownHandler,
+    move: pointerMoveHandler,
+    up: pointerUpHandler,
+    gameout: pointerGameOutHandler,
+  };
+  pointerAttackScene = sceneParam;
+  scene.input.on("pointerdown", pointerDownHandler);
+  scene.input.on("pointermove", pointerMoveHandler);
+  scene.input.on("pointerup", pointerUpHandler);
+  scene.input.on("pointerupoutside", pointerUpHandler);
+  scene.input.on("gameout", pointerGameOutHandler);
+  applyGameCursor(sceneParam);
+
+  pointerContextMenuCanvas = scene.game?.canvas || null;
+  pointerContextMenuHandler = (e) => e.preventDefault();
+  pointerContextMenuCanvas?.addEventListener?.(
+    "contextmenu",
+    pointerContextMenuHandler,
+  );
 
   // Per-character effects: instantiate if the character provides an Effects class
   const EffectsCls = getEffectsClass(currentCharacter);
@@ -517,6 +936,7 @@ export function createPlayer(
       wallSlideLoopPlaying = value;
     },
     onLocalDeath: () => {
+      resetPointerAttackAim();
       updateHealthBar();
       setLocalUiVisible(false);
     },
@@ -537,6 +957,14 @@ export function createPlayer(
         } catch (_) {}
         disposeLocalSocketEvents = null;
       }
+      resetPointerAttackAim();
+      mobileControlsController?.destroy?.();
+      detachPointerAttackBindings(sceneParam);
+      clearGameCursor(sceneParam);
+      try {
+        attackAimReticleController?.destroy?.();
+      } catch (_) {}
+      attackAimReticleController = null;
       scene._localSocketEventsCleanupBound = false;
     });
     scene.events.once("destroy", () => {
@@ -546,6 +974,14 @@ export function createPlayer(
         } catch (_) {}
         disposeLocalSocketEvents = null;
       }
+      resetPointerAttackAim();
+      mobileControlsController?.destroy?.();
+      detachPointerAttackBindings(sceneParam);
+      clearGameCursor(sceneParam);
+      try {
+        attackAimReticleController?.destroy?.();
+      } catch (_) {}
+      attackAimReticleController = null;
       scene._localSocketEventsCleanupBound = false;
     });
   }
@@ -586,6 +1022,9 @@ function setLocalUiVisible(visible) {
     indicatorTriangle?.setVisible(shouldShow);
     if (!shouldShow) indicatorTriangle?.clear?.();
   } catch (_) {}
+  if (!shouldShow) {
+    clearAttackAimReticle();
+  }
 }
 
 function drawIndicatorTriangle() {
@@ -671,15 +1110,34 @@ function updateHealthBar() {
   drawSuperBar(healthBarX, y + 18);
 }
 
-function fireBasicAttack(direction) {
+function fireBasicAttack(direction, context = null) {
   if (dead) return;
   try {
     if (charCtrl && typeof charCtrl.attack === "function") {
-      charCtrl.attack(direction);
+      charCtrl.attack(direction, context);
     } else if (charCtrl && typeof charCtrl.handlePointerDown === "function") {
-      charCtrl.handlePointerDown();
+      charCtrl.handlePointerDown(context);
     }
   } catch (_) {}
+}
+
+function fireSpecialAttack(context = null) {
+  if (dead) return;
+  if (superCharge < maxSuperCharge) {
+    _specialNotReadyFlash = Date.now() + 500;
+    return;
+  }
+  try {
+    flushLocalNetState?.({
+      dead,
+      gameEnded: false,
+      handlePlayerMovement,
+    });
+  } catch (_) {}
+  noteClientActionSent("special", { type: "special" });
+  socket.emit("game:special", {
+    aim: serializeAimContext(context),
+  });
 }
 
 function drawSuperBar(x, y) {
@@ -787,6 +1245,9 @@ function drawAmmoBar(forcedX, forcedY) {
 }
 
 export function handlePlayerMovement(scene) {
+  applyGameCursor(scene);
+  mobileControlsController?.ensure?.(scene);
+  mobileControlsController?.layout?.(scene);
   // Movement tuning knobs (edit to change the feel):
   // Enforce facing lock (e.g., Draven splash) BEFORE any movement logic mutates flip state
   if (player && player._lockFlip && player._lockedFlipX !== undefined) {
@@ -830,13 +1291,22 @@ export function handlePlayerMovement(scene) {
   const keyA = scene.input.keyboard.addKey("A");
   const keyD = scene.input.keyboard.addKey("D");
   const keyW = scene.input.keyboard.addKey("W");
-  let leftKey = cursors.left.isDown || keyA.isDown;
-  let rightKey = cursors.right.isDown || keyD.isDown;
-  let upKey = cursors.up.isDown || keyW.isDown || (keySpace && keySpace.isDown);
-  const upKeyFreshPress =
+  const mobileMoveLeft = !!mobileControlsController?.isMovingLeft?.();
+  const mobileMoveRight = !!mobileControlsController?.isMovingRight?.();
+  let leftKey = cursors.left.isDown || keyA.isDown || mobileMoveLeft;
+  let rightKey = cursors.right.isDown || keyD.isDown || mobileMoveRight;
+  let upKey =
+    cursors.up.isDown ||
+    keyW.isDown ||
+    (keySpace && keySpace.isDown) ||
+    !!mobileControlsController?.isJumpHeld?.();
+  let upKeyFreshPress =
     Phaser.Input.Keyboard.JustDown(cursors.up) ||
     Phaser.Input.Keyboard.JustDown(keyW) ||
     (!!keySpace && Phaser.Input.Keyboard.JustDown(keySpace));
+  if (mobileControlsController?.consumeJumpFreshPress?.()) {
+    upKeyFreshPress = true;
+  }
   if (upKeyFreshPress) {
     player._lastJumpPressTime = Date.now();
   }
@@ -972,24 +1442,14 @@ export function handlePlayerMovement(scene) {
   try {
     if (keyJ && Phaser.Input.Keyboard.JustDown(keyJ) && !dead) {
       if (!((player?._movementLockedUntil || 0) > Date.now())) {
-        const dir = player && player.flipX ? -1 : 1;
-        fireBasicAttack(dir);
+        const context = resolveQuickAttackContext("basic");
+        fireBasicAttack(context.direction, context);
       }
     }
     // Handle special on I
     if (keyI && Phaser.Input.Keyboard.JustDown(keyI) && !dead) {
       if (!((player?._movementLockedUntil || 0) > Date.now())) {
-        if (superCharge >= maxSuperCharge) {
-          try {
-            flushLocalNetState?.({
-              dead,
-              gameEnded: false,
-              handlePlayerMovement,
-            });
-          } catch (_) {}
-          noteClientActionSent("special", { type: "special" });
-          socket.emit("game:special");
-        }
+        fireSpecialAttack(resolveQuickAttackContext("special"));
       }
     }
     if (keyE && Phaser.Input.Keyboard.JustDown(keyE) && !dead) {
@@ -999,6 +1459,12 @@ export function handlePlayerMovement(scene) {
       }
     }
   } catch (_) {}
+
+  if (mobileControlsController?.isEnabled?.()) {
+    mobileControlsController.updateReticle(attackAimReticleController);
+  } else if (!attackAimState.active) {
+    clearAttackAimReticle();
+  }
 
   // Left movement
   if (leftKey) {
@@ -1152,6 +1618,7 @@ export function handlePlayerMovement(scene) {
     idle();
   }
 
+  updatePointerAttackAimState();
   syncLocalUiPosition();
 
   // Landing detection (transition airborne -> grounded)

@@ -21,6 +21,7 @@ export function perform(
   username,
   gameId,
   isOwner = false,
+  specialData = null,
 ) {
   if (!scene || !player) return;
   setLocalRageState(player, true);
@@ -79,6 +80,18 @@ export function perform(
     scene.sound?.play("thorg-throw", {
       volume: isOwner ? 0.6 : 0.28,
       rate: 0.88,
+    });
+  } catch (_) {}
+  try {
+    scene.sound?.play("pu-touch-rage", {
+      volume: isOwner ? 0.46 : 0.24,
+      rate: 0.8,
+    });
+  } catch (_) {}
+  try {
+    scene.sound?.play("pu-tick-rage", {
+      volume: isOwner ? 0.24 : 0.14,
+      rate: 0.78,
     });
   } catch (_) {}
 

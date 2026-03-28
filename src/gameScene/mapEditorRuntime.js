@@ -146,7 +146,7 @@ export function createMapEditorRuntime({
     h.setDepth(4200);
     h.setVisible(false);
     h.setStrokeStyle(1, 0x0e1f2f, 0.95);
-    h.setInteractive({ cursor: "pointer" });
+    h.setInteractive();
     scene.input.setDraggable(h);
     h._editorHandle = name;
   }
@@ -670,7 +670,7 @@ export function createMapEditorRuntime({
       const h = Number(go.height) || 20;
       setZoneInteractive(PhaserNs, go, w, h);
     } else {
-      go.setInteractive({ cursor: "move" });
+      go.setInteractive();
     }
     scene.input.setDraggable(go);
 
@@ -742,7 +742,7 @@ export function createMapEditorRuntime({
             0.95,
           );
           marker.setDepth(4100);
-          marker.setInteractive({ cursor: "pointer" });
+          marker.setInteractive();
           scene.input.setDraggable(marker);
           const id = `spawn-${team}-${mode}-${i}`;
           const meta = {
@@ -773,7 +773,7 @@ export function createMapEditorRuntime({
       if (!prev) continue;
       const marker = scene.add.circle(prev.x, prev.y, 7, colors.powerup, 0.9);
       marker.setDepth(4100);
-      marker.setInteractive({ cursor: "pointer" });
+      marker.setInteractive();
       scene.input.setDraggable(marker);
       const id = `powerup-${i}`;
       const meta = { id, type: "powerup", index: i, marker, point };

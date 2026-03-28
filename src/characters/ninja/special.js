@@ -31,9 +31,24 @@ function spawnSingleSwarmShuriken(
   gameId,
   isOwner,
   burstIndex,
+  specialData = null,
 ) {
   if (!player || !player.active) return;
-  const direction = player.flipX ? -1 : 1;
+  const resolvedAngle = Number.isFinite(Number(specialData?.angle))
+    ? Number(specialData.angle)
+    : null;
+  const direction =
+    Number(specialData?.direction) === -1 ||
+    (Number.isFinite(resolvedAngle) &&
+      Math.cos(resolvedAngle) < 0 &&
+      Number(specialData?.direction) !== 1)
+      ? -1
+      : Number(specialData?.direction) === 1
+        ? 1
+        : player.flipX
+          ? -1
+          : 1;
+  const angle = direction < 0 ? Math.PI : 0;
   const center = (SWARM_COUNT - 1) * 0.5;
   const spread = burstIndex - center;
   const yOffset = spread * (SWARM.yOffsetPerShard ?? 5.5);
@@ -46,6 +61,7 @@ function spawnSingleSwarmShuriken(
   const spawnY = player.y + (SWARM.spawnYBase ?? -12) + yOffset;
   const config = {
     direction,
+    angle,
     username,
     gameId,
     isOwner,
@@ -99,7 +115,24 @@ export function perform(
   username,
   gameId,
   isOwner = false,
+  specialData = null,
 ) {
+  const desiredAngle = Number.isFinite(Number(specialData?.angle))
+    ? Number(specialData.angle)
+    : null;
+  const desiredDirection =
+    Number(specialData?.direction) === -1
+      ? -1
+      : Number.isFinite(desiredAngle) && Math.cos(desiredAngle) < 0
+        ? -1
+      : Number(specialData?.direction) === 1
+        ? 1
+        : player?.flipX
+          ? -1
+          : 1;
+  if (player) {
+    player.flipX = desiredDirection < 0;
+  }
   lockFlipDuringRelease(scene, player);
 
   try {
@@ -125,6 +158,7 @@ export function perform(
         gameId,
         isOwner,
         index,
+        specialData,
       );
       if (isOwner && index % 4 === 0) {
         try {

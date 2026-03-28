@@ -18,6 +18,10 @@ import {
   THORG_FALL_END_Y_OFFSET,
   changeDebugState,
 } from "./attack";
+import {
+  buildThrowArcGeometry,
+  sampleThrowArcPoint,
+} from "../shared/attackAim";
 import CharacterEntityBase from "../shared/characterEntityBase";
 
 // Single source of truth for this character's name/key
@@ -91,8 +95,13 @@ class Thorg extends CharacterEntityBase {
       Thorg._spawnFallEffect(
         scene,
         ownerSprite,
-        data.direction,
-        Number(data.range) || THORG_FALL_RANGE,
+        {
+          direction: data.direction,
+          angle: data.angle,
+          range: Number(data.range) || THORG_FALL_RANGE,
+          target: data.target || null,
+          strikeMs: Number(data.strikeMs) || THORG_FALL_STRIKE_MS,
+        },
       );
       // Play attack sound for remote players (lower volume)
       try {
@@ -364,7 +373,10 @@ class Thorg extends CharacterEntityBase {
 
   static getEffectTickSounds() {
     return {
-      thorgRage: { key: "pu-tick-rage", options: { volume: 0.22, rate: 0.9 } },
+      thorgRage: {
+        key: "pu-tick-rage",
+        options: { volume: 0.24, rate: 0.78 },
+      },
     };
   }
 
@@ -385,46 +397,77 @@ class Thorg extends CharacterEntityBase {
     return !!result.fired;
   }
 
-  handlePointerDown() {
+  handlePointerDown(attackContext = null) {
+    const context = attackContext || this.consumeAttackContext();
     // Use the shared Thorg fall attack implementation (owner-side hits + payload)
-    return this.performDefaultAttack(() => performThorgFallAttack(this));
+    return this.performDefaultAttack(() =>
+      performThorgFallAttack(this, context),
+    );
   }
 
   // Spawn a simple rectangle visual attached to owner that mimics the falling arc
   static _spawnFallEffect(
     scene,
     sprite,
-    direction = 1,
-    rangeScale = THORG_FALL_RANGE,
+    {
+      direction = 1,
+      angle = null,
+      range = THORG_FALL_RANGE,
+      target = null,
+      strikeMs = THORG_FALL_STRIKE_MS,
+    } = {},
   ) {
     const baseAngle = 0;
+    const resolvedAngle = Number.isFinite(Number(angle))
+      ? Number(angle)
+      : direction >= 0
+        ? 0
+        : Math.PI;
     const getAnchor = () => ({
-      x: sprite.x + direction * FALL.originOffsetX,
+      x: sprite.x + Math.cos(resolvedAngle) * FALL.originOffsetX,
       y: sprite.y - sprite.height * FALL.originHeightFactor,
     });
-    let strikeStartX = 0;
-    let strikeStartY = 0;
-    const range = rangeScale;
-    let endX = 0;
-    let endY = 0;
-    const arcHeight = THORG_FALL_ARC_HEIGHT;
-    const curveMagnitude = THORG_FALL_CURVE_MAGNITUDE;
+    let strikeGeometry = null;
+    const resolvePathRotation = (progress, fallbackRotation = 0) => {
+      const tNow = Phaser.Math.Clamp(progress, 0, 1);
+      const delta = 0.04;
+      const from =
+        tNow >= 1 - delta
+          ? samplePath(Math.max(0, tNow - delta))
+          : samplePath(tNow);
+      const to =
+        tNow >= 1 - delta
+          ? samplePath(tNow)
+          : samplePath(Math.min(1, tNow + delta));
+      const dx = Number(to?.x) - Number(from?.x);
+      const dy = Number(to?.y) - Number(from?.y);
+      if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
+        return fallbackRotation;
+      }
+      return Math.atan2(dy, dx) + direction * 0.1 + Thorg.WEAPON_FORWARD_OFFSET;
+    };
     const resolveStrikePath = () => {
       const a = getAnchor();
-      strikeStartX = a.x + direction * FALL.startOffsetX;
-      strikeStartY = a.y + FALL.startOffsetY;
-      endX = strikeStartX + direction * range;
-      endY = a.y + THORG_FALL_END_Y_OFFSET;
+      strikeGeometry = buildThrowArcGeometry({
+        originX: a.x,
+        originY: a.y,
+        angle: resolvedAngle,
+        range,
+        targetX: Number.isFinite(Number(target?.x)) ? Number(target.x) : null,
+        targetY: Number.isFinite(Number(target?.y)) ? Number(target.y) : null,
+        startBackOffset: Math.abs(Number(FALL.startOffsetX) || 0),
+        startLiftY: FALL.startOffsetY,
+        endDropY: THORG_FALL_END_Y_OFFSET,
+        arcHeight: THORG_FALL_ARC_HEIGHT,
+        curveMagnitude: THORG_FALL_CURVE_MAGNITUDE,
+        samples: 28,
+      });
     };
-    const samplePath = (t) => {
-      const clamped = Phaser.Math.Clamp(t, 0, 1);
-      const curve = Math.sin(Math.PI * clamped) * (curveMagnitude * direction);
-      const x = Phaser.Math.Linear(strikeStartX, endX, clamped) + curve;
-      const y =
-        Phaser.Math.Linear(strikeStartY, endY, clamped) -
-        arcHeight * Math.sin(Math.PI * clamped);
-      return { x, y };
-    };
+    const samplePath = (t) =>
+      strikeGeometry
+        ? sampleThrowArcPoint(strikeGeometry, t)
+        : { x: sprite.x, y: sprite.y };
+    const totalDurationMs = THORG_FALL_WINDUP_MS + strikeMs;
 
     // Prefer an animated texture for the bat; if not available, create no visible hitbox
     try {
@@ -442,8 +485,8 @@ class Thorg extends CharacterEntityBase {
       eff.setDepth(7);
       eff.setScale(0.72);
       eff.setFlipX(false);
-      const baseAim = direction >= 0 ? 0 : Math.PI;
-      const baseRot = baseAim + Thorg.WEAPON_FORWARD_OFFSET + direction * 0.08;
+      const baseRot =
+        resolvedAngle + Thorg.WEAPON_FORWARD_OFFSET + direction * 0.08;
       const windupRot = baseRot - direction * 0.35;
       eff.rotation = baseRot;
       const animName = `${texKey}-fly`;
@@ -453,13 +496,32 @@ class Thorg extends CharacterEntityBase {
       scene.tweens.add({
         targets: eff,
         scale: 1.16,
-        duration: THORG_FALL_STRIKE_MS,
+        duration: strikeMs,
         delay: THORG_FALL_WINDUP_MS,
         ease: "Sine.easeOut",
       });
 
       let elapsed = 0;
       let strikeStarted = false;
+      let visualCleanupStarted = false;
+      const cleanupVisual = () => {
+        if (visualCleanupStarted) return;
+        visualCleanupStarted = true;
+        scene.events.off("update", renderVis);
+        if (sprite?.active) sprite.setAngle(0);
+        if (!eff.active) return;
+        scene.tweens?.add({
+          targets: eff,
+          alpha: 0,
+          scaleX: eff.scaleX * 0.72,
+          scaleY: eff.scaleY * 0.72,
+          duration: 160,
+          ease: "Quad.easeOut",
+          onComplete: () => {
+            if (eff.active) eff.destroy();
+          },
+        });
+      };
       const renderVis = () => {
         if (!eff.active) return;
 
@@ -490,7 +552,7 @@ class Thorg extends CharacterEntityBase {
 
         const strikeElapsed = Math.max(0, elapsed - THORG_FALL_WINDUP_MS);
         const tNow = Phaser.Math.Clamp(
-          strikeElapsed / THORG_FALL_STRIKE_MS,
+          strikeElapsed / strikeMs,
           0,
           1,
         );
@@ -501,29 +563,17 @@ class Thorg extends CharacterEntityBase {
           resolveStrikePath();
         }
         const pt = samplePath(tNow);
-        const nextPt = samplePath(Math.min(1, tNow + 0.035));
         eff.x = pt.x;
         eff.y = pt.y;
-        const targetRot =
-          Math.atan2(nextPt.y - pt.y, nextPt.x - pt.x) +
-          direction * 0.1 +
-          Thorg.WEAPON_FORWARD_OFFSET;
-        const delta = Phaser.Math.Angle.Wrap(targetRot - baseRot);
-        eff.rotation = baseRot + delta * 0.5;
+        eff.rotation = resolvePathRotation(tNow, eff.rotation);
 
-        if (elapsed >= THORG_FALL_DURATION_MS) {
-          scene.events.off("update", renderVis);
-          if (sprite?.active) sprite.setAngle(0);
-          if (eff.active) eff.destroy();
+        if (elapsed >= totalDurationMs) {
+          cleanupVisual();
         }
       };
 
       scene.events.on("update", renderVis);
-      scene.time.delayedCall(THORG_FALL_DURATION_MS + 30, () => {
-        scene.events.off("update", renderVis);
-        if (sprite?.active) sprite.setAngle(0);
-        if (eff.active) eff.destroy();
-      });
+      scene.time.delayedCall(totalDurationMs + 10, cleanupVisual);
       return eff;
     } catch (e) {
       return null;

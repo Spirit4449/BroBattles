@@ -195,6 +195,7 @@ export function bindLocalSocketEvents({
       getUsername(),
       getGameId(),
       true,
+      data.aim || null,
     );
   };
 

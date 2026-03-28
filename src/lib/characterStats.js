@@ -7,15 +7,15 @@ export const LEVEL_CAP = 5;
 
 export const characterStats = {
   ninja: {
-    baseHealth: 7000,
+    baseHealth: 6000,
     attackDescription: "Unleashes a shuriken that boomerangs back.",
-    baseDamage: 1500,
+    baseDamage: 1200,
     ammoCooldownMs: 200,
     ammoReloadMs: 1000,
     ammoCapacity: 1,
     specialDescription: "Releases a staggered swarm of returning shurikens.",
     specialBaseDamage: 2000,
-    specialChargeHits: 3,
+    specialChargeHits: 4,
     specialChargeDamage: 4500,
     spriteScale: 0.9,
     body: {
@@ -26,6 +26,15 @@ export const characterStats = {
     },
     tuning: {
       attack: {
+        aim: {
+          kind: "line",
+          attackKey: "returningShuriken",
+          defaultRange: 500,
+          anchorForwardOffset: 30,
+          anchorOffsetY: -8,
+          reticleThickness: 18,
+          angleMode: "free",
+        },
         returningShuriken: {
           rotationSpeed: 2000,
           forwardDistance: 500,
@@ -47,6 +56,15 @@ export const characterStats = {
         },
       },
       special: {
+        aim: {
+          kind: "line",
+          specialKey: "swarm",
+          defaultRange: 430,
+          anchorForwardOffset: 34,
+          anchorOffsetY: -10,
+          reticleThickness: 124,
+          angleMode: "horizontal-only",
+        },
         swarm: {
           count: 15,
           releaseMs: 36,
@@ -90,8 +108,8 @@ export const characterStats = {
     specialDescription:
       "Enters a purple rage that buffs weapon strikes and mobility.",
     specialBaseDamage: 2800,
-    specialChargeHits: 4,
-    specialChargeDamage: 4500,
+    specialChargeHits: 5,
+    specialChargeDamage: 6000,
     spriteScale: 0.7,
     body: {
       widthShrink: 40,
@@ -102,26 +120,56 @@ export const characterStats = {
     },
     tuning: {
       attack: {
+        aim: {
+          kind: "throw",
+          attackKey: "fall",
+          minRange: 120,
+          defaultRange: 132,
+          maxRange: 250,
+          anchorForwardOffset: 26,
+          anchorOffsetY: -10,
+          minSpeedScale: 1.2,
+          maxSpeedScale: 1.6,
+          trajectorySamples: 32,
+          previewStartBackOffset: 10,
+          previewStartLiftY: -8,
+          previewEndDropY: 0,
+          previewArcHeight: 90,
+          previewCurveMagnitude: 0,
+          throwMinOffsetX: -220,
+          throwMaxOffsetX: 220,
+          throwMinOffsetY: -125,
+          throwMaxOffsetY: 48,
+          quickTargetOffsetX: 132,
+          quickTargetOffsetY: 24,
+        },
         fall: {
           rectWidth: 94,
           rectHeight: 46,
           windupMs: 180,
-          strikeMs: 290,
+          strikeMs: 580,
           followAfterWindupMs: 70,
           originOffsetX: 10,
           originHeightFactor: 0.5,
-          startOffsetX: -14,
+          startOffsetX: -10,
           startOffsetY: -8,
           range: 120,
-          arcHeight: 120,
-          curveMagnitude: 20,
-          endYOffset: 300,
+          arcHeight: 90,
+          curveMagnitude: 0,
+          endYOffset: 320,
           damageTickMs: 90,
           hitboxInflate: 2,
           spriteForwardOffset: -Math.PI / 2,
         },
       },
       special: {
+        aim: {
+          kind: "round",
+          radius: 72,
+          defaultRange: 72,
+          anchorForwardOffset: 0,
+          anchorOffsetY: -8,
+        },
         rageDurationMs: 8000,
       },
     },
@@ -139,8 +187,8 @@ export const characterStats = {
     ammoCapacity: 3,
     specialDescription: "Unleashes a staff nova that expands outward.",
     specialBaseDamage: 2400,
-    specialChargeHits: 3,
-    specialChargeDamage: 5000,
+    specialChargeHits: 5,
+    specialChargeDamage: 10000,
     spriteScale: 1.2,
     body: {
       widthShrink: 230,
@@ -152,6 +200,17 @@ export const characterStats = {
     },
     tuning: {
       attack: {
+        aim: {
+          kind: "splash",
+          attackKey: "splash",
+          defaultRange: 175,
+          anchorForwardOffset: 8,
+          anchorOffsetY: -8,
+          coneRadius: 132,
+          coneSpreadDeg: 60,
+          coneInnerRadius: 6,
+          angleMode: "horizontal-only",
+        },
         splash: {
           width: 150,
           height: 108,
@@ -159,16 +218,23 @@ export const characterStats = {
           flipUnlockMs: 530,
           damageTickMs: 90,
           damageStartMs: 100,
-          tipOffset: 50,
+          tipOffset: 78,
           minHeight: 20,
           growDurationMs: 220,
-          centerYFactor: 0.15,
+          centerYFactor: 0.06,
           hitboxInflate: 2,
           remoteExplosionDelayMs: 500,
-          remoteExplosionTipOffset: 90,
+          remoteExplosionTipOffset: 78,
         },
       },
       special: {
+        aim: {
+          kind: "round",
+          radius: 215,
+          defaultRange: 215,
+          anchorForwardOffset: 0,
+          anchorOffsetY: -6,
+        },
         inferno: {
           durationMs: 3000,
           riseMs: 320,
@@ -236,6 +302,15 @@ export const characterStats = {
     },
     tuning: {
       attack: {
+        aim: {
+          kind: "line",
+          attackKey: "fireball",
+          defaultRange: 1050,
+          anchorForwardOffset: 38,
+          anchorOffsetY: -6,
+          reticleThickness: 55,
+          angleMode: "free",
+        },
         fireball: {
           speed: 450,
           range: 1050,

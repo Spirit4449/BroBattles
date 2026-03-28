@@ -16,6 +16,37 @@ body {
   overflow: hidden;
 }
 
+body.mobile-game-ui #game-timer-hud,
+body.mobile-game-ui #team-status-hud,
+body.mobile-game-ui #battle-keybind-hud {
+  transform: scale(0.82);
+  transform-origin: top center;
+}
+
+body.mobile-game-ui #game-timer-hud {
+  top: 8px;
+}
+
+body.mobile-game-ui #team-status-hud {
+  top: 8px;
+}
+
+body.mobile-game-ui #battle-keybind-hud {
+  bottom: 8px;
+  right: 8px;
+  opacity: 0.78;
+}
+
+body.mobile-game-ui #game-timer-display,
+body.mobile-game-ui .team-hud-player,
+body.mobile-game-ui .team-hud-player-name {
+  font-size: 0.88em;
+}
+
+body.mobile-game-ui #battle-start-overlay {
+  zoom: 0.9;
+}
+
 #lobby-bg-fade {
   position: fixed;
   inset: 0;

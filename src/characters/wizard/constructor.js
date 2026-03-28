@@ -147,8 +147,11 @@ class Wizard extends CharacterEntityBase {
     return true;
   }
 
-  handlePointerDown = () => {
-    return this.performDefaultAttack(() => performWizardFireball(this));
+  handlePointerDown = (attackContext = null) => {
+    const context = attackContext || this.consumeAttackContext();
+    return this.performDefaultAttack(() =>
+      performWizardFireball(this, context),
+    );
   };
 }
 

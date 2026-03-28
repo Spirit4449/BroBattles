@@ -20,15 +20,18 @@ const CENTER_Y_FACTOR = SPLASH.centerYFactor;
 const HITBOX_INFLATE = SPLASH.hitboxInflate;
 var DEBUG_DRAW = false; // Draw debug rectangle of current hitbox
 
-export function performDravenSplashAttack(instance) {
-  const { scene, player: p, username, gameId, opponentPlayersRef } = instance;
+export function performDravenSplashAttack(instance, attackContext = null) {
+  const { scene, player: p } = instance;
+  const context = attackContext || instance.consumeAttackContext?.() || {};
+  const direction =
+    Number(context?.direction) === -1 ||
+    (p.flipX && Number(context?.direction) !== 1)
+      ? -1
+      : 1;
 
   // Lock facing direction for the whole attack window
-  const direction = p.flipX ? -1 : 1; // -1 = facing left, 1 = facing right
   const unlockFlip = lockPlayerFlip(p); // remember original orientation
   const attackId = createRuntimeId("dravenSplash");
-  // Track which opponents have already been hit (each only once per attack instance)
-  const hitSet = new Set();
 
   // Play attack animation if present
   if (
@@ -44,7 +47,6 @@ export function performDravenSplashAttack(instance) {
   // Debug visuals removed (box no longer drawn)
   // Continuous damage ticking within active window (owner only)
   let elapsed = 0;
-  let damageAccum = 0; // accumulator for tick scheduling
   let dbg = null;
   if (DEBUG_DRAW && scene && scene.add) {
     dbg = scene.add.graphics();
@@ -60,51 +62,33 @@ export function performDravenSplashAttack(instance) {
   const updateListener = () => {
     const dt = scene.game.loop.delta || 16;
     elapsed += dt;
-    damageAccum += dt;
     // Reinforce visual flip lock every frame
     enforceLockedFlip(p);
-    if (elapsed >= DAMAGE_START_MS && damageAccum >= DAMAGE_TICK_MS) {
-      damageAccum = 0;
-      // Dynamic center (moves with player) using locked direction
-      const cx = p.x + (direction > 0 ? TIP_OFFSET : -TIP_OFFSET);
-      const baseCenterY = p.y - p.height * CENTER_Y_FACTOR; // original center reference
-      const growT = Math.min(1, elapsed / GROW_DURATION_MS);
-      const currentH = MIN_SPLASH_H + (SPLASH_H - MIN_SPLASH_H) * growT;
-      const finalBottom = baseCenterY + SPLASH_H / 2; // anchor bottom at final position
-      const rectTop = finalBottom - currentH; // grow upward by moving top upward
-      const cy = (rectTop + finalBottom) / 2; // derived center for current rectangle
-      const hitData = applySplashDamage({
-        scene,
-        centerX: cx,
-        centerY: cy,
-        w: SPLASH_W,
-        h: currentH,
-        attacker: username,
-        gameId,
-        opponents: opponentPlayersRef,
-        hitSet,
-      });
-      // For each newly hit target spawn an explosion immediately
-      if (hitData && hitData.newHits && hitData.newHits.length) {
-        for (const h of hitData.newHits) {
-          spawnExplosion(scene, h.x, h.y);
-          socket.emit("game:action", {
-            type: "draven-splash-explode",
-            id: attackId,
-            x: h.x,
-            y: h.y,
-            attacker: username,
-          });
-        }
-      }
-      if (DEBUG_DRAW && dbg) {
-        dbg.clear();
-        dbg.lineStyle(2, 0xffd28a, 0.9);
-        dbg.fillStyle(0xffd28a, 0.15);
-        const left = cx - SPLASH_W / 2;
-        dbg.strokeRect(left, rectTop, SPLASH_W, currentH);
-        dbg.fillRect(left, rectTop, SPLASH_W, currentH);
-      }
+    if (DEBUG_DRAW && dbg) {
+      dbg.clear();
+      const growT = Phaser.Math.Clamp(
+        elapsed / Math.max(1, GROW_DURATION_MS),
+        0,
+        1,
+      );
+      const currentHeight = MIN_SPLASH_H + (SPLASH_H - MIN_SPLASH_H) * growT;
+      const centerX = p.x + direction * TIP_OFFSET;
+      const baseCenterY = p.y - p.height * CENTER_Y_FACTOR;
+      const finalBottom = baseCenterY + SPLASH_H / 2;
+      dbg.fillStyle(0xff6f3c, 0.08);
+      dbg.fillRect(
+        centerX - SPLASH_W / 2,
+        finalBottom - currentHeight,
+        SPLASH_W,
+        currentHeight,
+      );
+      dbg.lineStyle(2, 0xff9a4d, 0.92);
+      dbg.strokeRect(
+        centerX - SPLASH_W / 2,
+        finalBottom - currentHeight,
+        SPLASH_W,
+        currentHeight,
+      );
     }
     if (elapsed >= ACTIVE_WINDOW_MS) {
       scene.events.off("update", updateListener);
@@ -120,6 +104,9 @@ export function performDravenSplashAttack(instance) {
     type: "draven-splash",
     id: attackId,
     direction,
+    tipOffset: TIP_OFFSET,
+    centerYFactor: CENTER_Y_FACTOR,
+    delay: SPLASH.remoteExplosionDelayMs,
   };
 }
 
