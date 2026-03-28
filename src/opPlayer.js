@@ -266,6 +266,16 @@ export default class OpPlayer {
     if (!this.opponent || this._corpseRemoved) return;
     this._spawnPresented = true;
     this._networkSnapUntil = performance.now() + 220;
+    if (!this._initialSpawnFxPlayed) {
+      try {
+        spawnSpawnBurst(this.scene, this.opponent, {
+          tint: 0xffffff,
+          accent: 0xb8ecff,
+          depth: 27,
+        });
+        this._initialSpawnFxPlayed = true;
+      } catch (_) {}
+    }
     this.updateUIPosition();
     this.setPresenceState(this.presenceConnected, this.presenceLoaded);
   }

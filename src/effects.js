@@ -358,97 +358,158 @@ export function spawnSpawnBurst(scene, sprite, opts = {}) {
   const body = sprite.body;
   const cx = Number(body?.center?.x) || Number(sprite.x) || 0;
   const cy = Number(body?.center?.y) || Number(sprite.y) || 0;
-  const baseRadius = Number(opts.radius) || 34;
+  const top = Number(body?.top) || cy - (Number(body?.height) || Number(sprite.height) || 82) * 0.5;
+  const bottom =
+    Number(body?.bottom) || cy + (Number(body?.height) || Number(sprite.height) || 82) * 0.5;
+  const halfWidth =
+    Math.max(
+      16,
+      (Number(body?.width) || Number(sprite.width) || 54) * 0.5 + 6,
+    );
+  const height = Math.max(52, bottom - top + 18);
+  const baseRadius = Number(opts.radius) || Math.max(28, halfWidth + 8);
   const tint = opts.tint || 0xf8fafc;
-  const accent = opts.accent || 0x9fe8ff;
+  const accent = opts.accent || 0xb8ecff;
   const depth = typeof opts.depth === "number" ? opts.depth : 25;
 
-  const flash = scene.add.circle(cx, cy, baseRadius * 0.72, tint, 0.22);
-  flash.setDepth(depth);
-  flash.setBlendMode(Phaser.BlendModes.ADD);
+  const column = scene.add.ellipse(
+    cx,
+    cy - 3,
+    halfWidth * 2.8,
+    height,
+    accent,
+    0.12,
+  );
+  column.setDepth(depth - 2);
+  column.setBlendMode(Phaser.BlendModes.ADD);
   scene.tweens.add({
-    targets: flash,
+    targets: column,
     alpha: 0,
-    scaleX: 1.9,
-    scaleY: 1.9,
-    duration: 260,
-    ease: "Cubic.easeOut",
-    onComplete: () => flash.destroy(),
-  });
-
-  const ring = scene.add.circle(cx, cy, baseRadius, accent, 0.1);
-  ring.setDepth(depth);
-  ring.setStrokeStyle(4, tint, 0.95);
-  ring.setBlendMode(Phaser.BlendModes.ADD);
-  scene.tweens.add({
-    targets: ring,
-    alpha: 0,
-    scaleX: 1.55,
-    scaleY: 1.55,
-    duration: 340,
-    ease: "Cubic.easeOut",
-    onComplete: () => ring.destroy(),
-  });
-
-  const halo = scene.add.circle(cx, cy, baseRadius + 18, accent, 0.08);
-  halo.setDepth(depth - 1);
-  halo.setBlendMode(Phaser.BlendModes.ADD);
-  scene.tweens.add({
-    targets: halo,
-    alpha: 0,
-    scaleX: 1.38,
-    scaleY: 1.38,
-    duration: 420,
+    scaleX: 1.18,
+    scaleY: 1.05,
+    duration: 440,
     ease: "Quad.easeOut",
-    onComplete: () => halo.destroy(),
+    onComplete: () => column.destroy(),
   });
 
-  for (let i = 0; i < 8; i++) {
-    const angle = (Math.PI * 2 * i) / 8 + Phaser.Math.FloatBetween(-0.1, 0.1);
-    const streak = scene.add.graphics();
-    streak.setDepth(depth + 1);
-    streak.fillStyle(i % 2 === 0 ? tint : accent, 0.92);
-    const w = Phaser.Math.Between(14, 22);
-    const h = Phaser.Math.Between(4, 6);
-    streak.fillRoundedRect(-w / 2, -h / 2, w, h, 2);
-    streak.x = cx;
-    streak.y = cy;
-    streak.rotation = angle;
-    streak.setBlendMode(Phaser.BlendModes.ADD);
+  const coreGlow = scene.add.ellipse(
+    cx,
+    cy,
+    halfWidth * 1.9,
+    height * 0.88,
+    tint,
+    0.16,
+  );
+  coreGlow.setDepth(depth - 1);
+  coreGlow.setBlendMode(Phaser.BlendModes.ADD);
+  scene.tweens.add({
+    targets: coreGlow,
+    alpha: 0,
+    scaleX: 0.94,
+    scaleY: 1.12,
+    duration: 320,
+    ease: "Cubic.easeOut",
+    onComplete: () => coreGlow.destroy(),
+  });
+
+  const groundFlash = scene.add.ellipse(
+    cx,
+    bottom - 4,
+    baseRadius * 2.2,
+    Math.max(12, baseRadius * 0.68),
+    accent,
+    0.2,
+  );
+  groundFlash.setDepth(depth - 1);
+  groundFlash.setBlendMode(Phaser.BlendModes.ADD);
+  scene.tweens.add({
+    targets: groundFlash,
+    alpha: 0,
+    scaleX: 1.35,
+    scaleY: 1.1,
+    duration: 380,
+    ease: "Quad.easeOut",
+    onComplete: () => groundFlash.destroy(),
+  });
+
+  const ringSteps = [0.04, 0.28, 0.52, 0.76, 0.94];
+  ringSteps.forEach((step, index) => {
+    const ringY = bottom - height * step;
+    const ring = scene.add.ellipse(
+      cx,
+      ringY,
+      baseRadius * (1.55 + step * 0.3),
+      Math.max(10, baseRadius * (0.32 + step * 0.04)),
+      accent,
+      0,
+    );
+    ring.setDepth(depth + index);
+    ring.setStrokeStyle(
+      index % 2 === 0 ? 5 : 3,
+      index % 2 === 0 ? tint : accent,
+      0.95 - index * 0.1,
+    );
+    ring.setBlendMode(Phaser.BlendModes.ADD);
+    ring.scaleX = 0.74;
+    ring.scaleY = 0.74;
     scene.tweens.add({
-      targets: streak,
-      x: cx + Math.cos(angle) * Phaser.Math.Between(40, 66),
-      y: cy + Math.sin(angle) * Phaser.Math.Between(40, 66),
+      targets: ring,
       alpha: 0,
-      scaleX: 1.6,
-      duration: Phaser.Math.Between(180, 260),
-      ease: "Sine.easeOut",
-      onComplete: () => streak.destroy(),
+      scaleX: 1.14 + index * 0.04,
+      scaleY: 1.06 + index * 0.03,
+      y: ringY - 10 + index * 2,
+      duration: 260 + index * 45,
+      delay: index * 26,
+      ease: "Cubic.easeOut",
+      onComplete: () => ring.destroy(),
+    });
+  });
+
+  for (let i = 0; i < 22; i++) {
+    const spark = scene.add.circle(
+      cx + Phaser.Math.Between(-halfWidth, halfWidth),
+      bottom - Phaser.Math.FloatBetween(0, height),
+      Phaser.Math.Between(1, 3),
+      i % 4 === 0 ? tint : accent,
+      Phaser.Math.FloatBetween(0.7, 0.96),
+    );
+    spark.setDepth(depth + 6);
+    spark.setBlendMode(Phaser.BlendModes.ADD);
+    const driftX = Phaser.Math.Between(-10, 10);
+    const rise = Phaser.Math.Between(18, 44);
+    scene.tweens.add({
+      targets: spark,
+      x: spark.x + driftX,
+      y: spark.y - rise,
+      alpha: 0,
+      scaleX: Phaser.Math.FloatBetween(0.8, 1.8),
+      scaleY: Phaser.Math.FloatBetween(1.2, 2.1),
+      duration: Phaser.Math.Between(180, 320),
+      delay: Phaser.Math.Between(0, 90),
+      ease: "Cubic.easeOut",
+      onComplete: () => spark.destroy(),
     });
   }
 
-  for (let i = 0; i < 10; i++) {
-    const mote = scene.add.circle(
-      cx + Phaser.Math.Between(-8, 8),
-      cy + Phaser.Math.Between(-8, 8),
-      Phaser.Math.Between(2, 5),
-      i % 3 === 0 ? accent : tint,
-      Phaser.Math.FloatBetween(0.72, 0.95),
-    );
-    mote.setDepth(depth + 1);
-    mote.setBlendMode(Phaser.BlendModes.ADD);
-    const angle = Phaser.Math.FloatBetween(-Math.PI, Math.PI);
-    const speed = Phaser.Math.Between(24, 58);
+  for (let i = 0; i < 12; i++) {
+    const strand = scene.add.graphics();
+    strand.setDepth(depth + 2);
+    strand.fillStyle(i % 3 === 0 ? tint : accent, 0.8);
+    const w = Phaser.Math.Between(2, 4);
+    const h = Phaser.Math.Between(18, 30);
+    strand.fillRoundedRect(-w / 2, -h / 2, w, h, 2);
+    strand.x = cx + Phaser.Math.Between(-halfWidth + 4, halfWidth - 4);
+    strand.y = bottom - Phaser.Math.Between(4, 20);
+    strand.setBlendMode(Phaser.BlendModes.ADD);
     scene.tweens.add({
-      targets: mote,
-      x: mote.x + Math.cos(angle) * speed,
-      y: mote.y + Math.sin(angle) * speed,
+      targets: strand,
+      y: strand.y - Phaser.Math.Between(height * 0.45, height * 0.85),
       alpha: 0,
-      scaleX: Phaser.Math.FloatBetween(0.8, 1.8),
-      scaleY: Phaser.Math.FloatBetween(0.8, 1.8),
-      duration: Phaser.Math.Between(220, 320),
-      ease: "Cubic.easeOut",
-      onComplete: () => mote.destroy(),
+      scaleY: Phaser.Math.FloatBetween(1.1, 1.8),
+      duration: Phaser.Math.Between(220, 360),
+      delay: Phaser.Math.Between(0, 60),
+      ease: "Sine.easeOut",
+      onComplete: () => strand.destroy(),
     });
   }
 }

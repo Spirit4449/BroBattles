@@ -46,6 +46,7 @@ export function createMobileControlsController({
         pressedAt: 0,
         consumedAt: 0,
       },
+      domLayout: null,
       ui: null,
     };
   }
@@ -78,7 +79,8 @@ export function createMobileControlsController({
         el.style.background = fill;
         el.style.border = border;
         el.style.boxShadow = "0 0 0 1px rgba(255,255,255,0.08) inset";
-        el.style.pointerEvents = "none";
+        el.style.pointerEvents = "auto";
+        el.style.touchAction = "none";
         el.style.backdropFilter = "blur(2px)";
         root.appendChild(el);
         return el;
@@ -120,6 +122,9 @@ export function createMobileControlsController({
         "rgba(255,232,117,0.28)",
         "2px solid rgba(255,245,186,0.84)",
       );
+      moveThumb.style.pointerEvents = "none";
+      basicThumb.style.pointerEvents = "none";
+      superThumb.style.pointerEvents = "none";
       const jump = makeCircle(
         "bb-mobile-jump",
         52,
@@ -152,6 +157,7 @@ export function createMobileControlsController({
         jump,
         jumpLabel,
       };
+      bindDomInput(root);
       return domRoot;
     } catch (_) {
       return null;
@@ -160,6 +166,25 @@ export function createMobileControlsController({
 
   function destroyDomRoot() {
     try {
+      const listeners = domRoot?._listeners;
+      if (listeners) {
+        listeners.moveBase?.removeEventListener?.(
+          "pointerdown",
+          listeners.onMoveDown,
+        );
+        listeners.basicBase?.removeEventListener?.(
+          "pointerdown",
+          listeners.onBasicDown,
+        );
+        listeners.superBase?.removeEventListener?.(
+          "pointerdown",
+          listeners.onSuperDown,
+        );
+        listeners.jump?.removeEventListener?.("pointerdown", listeners.onJumpDown);
+        window.removeEventListener("pointermove", listeners.onPointerMove);
+        window.removeEventListener("pointerup", listeners.onPointerUp);
+        window.removeEventListener("pointercancel", listeners.onPointerUp);
+      }
       domRoot?.remove?.();
     } catch (_) {}
     domRoot = null;
@@ -390,6 +415,19 @@ export function createMobileControlsController({
         const domSuperY = metrics.top + metrics.height - specialCfg.yPad;
         const domJumpX = metrics.left + metrics.width - 74;
         const domJumpY = metrics.top + metrics.height - 62;
+        state.domLayout = {
+          moveX: domMoveX,
+          moveY: domMoveY,
+          moveRadius: 46,
+          basicX: domBasicX,
+          basicY: domBasicY,
+          basicRadius: 40,
+          superX: domSuperX,
+          superY: domSuperY,
+          superRadius: 34,
+          jumpX: domJumpX,
+          jumpY: domJumpY,
+        };
 
         setDomCirclePosition(dom.moveBase, domMoveX, domMoveY, 92);
         setDomCirclePosition(
@@ -437,6 +475,123 @@ export function createMobileControlsController({
       dy: dist > 0.001 ? dy / dist : 0,
       strength: Phaser.Math.Clamp(dist / safeRadius, 0, 1),
     };
+  }
+
+  function bindDomInput(root) {
+    const els = root?._els;
+    if (!els) return;
+    const startFor = (kind, event) => {
+      if (!state.enabled) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      if (kind === "jump") {
+        state.jump.pointerId = event.pointerId;
+        state.jump.active = true;
+        state.jump.pressedAt = Date.now();
+        return;
+      }
+      updateDomStickState(kind, event);
+    };
+    const onMoveDown = (event) => startFor("movement", event);
+    const onBasicDown = (event) => startFor("basic", event);
+    const onSuperDown = (event) => startFor("special", event);
+    const onJumpDown = (event) => startFor("jump", event);
+    const onPointerMove = (event) => {
+      if (!state.enabled) return;
+      if (state.movement.pointerId === event.pointerId) {
+        updateDomStickState("movement", event);
+        event.preventDefault?.();
+      }
+      if (state.basic.pointerId === event.pointerId) {
+        updateDomStickState("basic", event);
+        event.preventDefault?.();
+      }
+      if (state.special.pointerId === event.pointerId) {
+        updateDomStickState("special", event);
+        event.preventDefault?.();
+      }
+    };
+    const onPointerUp = (event) => {
+      if (!state.enabled) return;
+      if (state.jump.pointerId === event.pointerId) {
+        state.jump.pointerId = null;
+        state.jump.active = false;
+        event.preventDefault?.();
+        return;
+      }
+      if (state.movement.pointerId === event.pointerId) {
+        releaseStick("movement", false);
+        event.preventDefault?.();
+        return;
+      }
+      if (state.basic.pointerId === event.pointerId) {
+        releaseStick("basic", true);
+        event.preventDefault?.();
+        return;
+      }
+      if (state.special.pointerId === event.pointerId) {
+        releaseStick("special", true);
+        event.preventDefault?.();
+      }
+    };
+    els.moveBase.addEventListener("pointerdown", onMoveDown, { passive: false });
+    els.basicBase.addEventListener("pointerdown", onBasicDown, { passive: false });
+    els.superBase.addEventListener("pointerdown", onSuperDown, { passive: false });
+    els.jump.addEventListener("pointerdown", onJumpDown, { passive: false });
+    window.addEventListener("pointermove", onPointerMove, { passive: false });
+    window.addEventListener("pointerup", onPointerUp, { passive: false });
+    window.addEventListener("pointercancel", onPointerUp, { passive: false });
+    root._listeners = {
+      moveBase: els.moveBase,
+      basicBase: els.basicBase,
+      superBase: els.superBase,
+      jump: els.jump,
+      onMoveDown,
+      onBasicDown,
+      onSuperDown,
+      onJumpDown,
+      onPointerMove,
+      onPointerUp,
+    };
+  }
+
+  function updateDomStickState(kind, event) {
+    const layout = state.domLayout;
+    if (!layout) return false;
+    if (kind === "movement") {
+      const sample = getStickDistanceNorm(
+        event.clientX,
+        event.clientY,
+        layout.moveX,
+        layout.moveY,
+        layout.moveRadius,
+      );
+      state.movement.active = true;
+      state.movement.pointerId = event.pointerId;
+      state.movement.dx = sample.dx;
+      state.movement.dy = sample.dy;
+      state.movement.strength = sample.strength;
+      return true;
+    }
+    const family = kind === "special" ? "special" : "basic";
+    const centerX = family === "special" ? layout.superX : layout.basicX;
+    const centerY = family === "special" ? layout.superY : layout.basicY;
+    const radius = family === "special" ? layout.superRadius : layout.basicRadius;
+    const sample = getStickDistanceNorm(
+      event.clientX,
+      event.clientY,
+      centerX,
+      centerY,
+      radius,
+    );
+    const stick = family === "special" ? state.special : state.basic;
+    stick.active = true;
+    stick.pointerId = event.pointerId;
+    stick.dx = sample.dx;
+    stick.dy = sample.dy;
+    stick.strength = sample.strength;
+    stick.context = resolveStickContext(family);
+    return true;
   }
 
   function resolveStickContext(kind = "basic") {

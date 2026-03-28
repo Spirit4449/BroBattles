@@ -13,7 +13,12 @@ import {
   getStats,
   getEffectsClass,
 } from "./characters";
-import { spawnDust, spawnHealthMarker, spawnWallKickCloud } from "./effects";
+import {
+  spawnDust,
+  spawnHealthMarker,
+  spawnSpawnBurst,
+  spawnWallKickCloud,
+} from "./effects";
 import { bindLocalSocketEvents } from "./players/localSocketEvents";
 import { createLocalStateSync } from "./players/localStateSync";
 import {
@@ -1060,6 +1065,16 @@ export function finalizeLocalSpawnPresentation() {
   try {
     player.setVisible(true);
   } catch (_) {}
+  if (!player._spawnIntroPresented) {
+    try {
+      spawnSpawnBurst(scene, player, {
+        tint: 0xffffff,
+        accent: 0xb8ecff,
+        depth: 28,
+      });
+      player._spawnIntroPresented = true;
+    } catch (_) {}
+  }
   setLocalUiVisible(!dead);
   if (!dead) {
     try {
