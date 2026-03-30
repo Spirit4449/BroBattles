@@ -127,7 +127,7 @@ function tickPowerupEffects(room) {
   if (room.status !== "active") return;
   const now = Date.now();
   for (const p of room.players.values()) {
-    if (!p.isAlive || p.connected === false || p.loaded !== true) continue;
+    if (!p.isAlive || p.loaded !== true) continue;
     effectManager.tickAll(p, room, now);
   }
 }

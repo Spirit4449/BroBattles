@@ -290,6 +290,7 @@ class GameRoom {
       this.io.to(`game:${this.matchId}`).emit("player:reconnected", {
         name: existingPlayer.name,
         username: existingPlayer.name,
+        loaded: existingPlayer.loaded === true,
       });
       if (!this._netTestEnabled) {
         console.log(`[GameRoom ${this.matchId}] Player ${user.name} reconnected`);
@@ -423,6 +424,7 @@ class GameRoom {
       this.io.to(`game:${this.matchId}`).emit("player:disconnected", {
         name: user.name,
         username: user.name,
+        loaded: playerData.loaded === true,
         playersRemaining: this.players.size,
       });
     }
@@ -952,8 +954,7 @@ class GameRoom {
       if (
         attacker.connected === false ||
         attacker.loaded !== true ||
-        (!targetVault &&
-          (target.connected === false || target.loaded !== true))
+        (!targetVault && target.loaded !== true)
       ) {
         if (this.DEBUG_HIT_EVENTS) {
           console.log(
@@ -1202,7 +1203,7 @@ class GameRoom {
 
         if (!isSelf) {
           const knockback = getKnockback(attacker, target, now);
-          if (knockback) {
+          if (knockback && target.connected !== false && target.socketId) {
             this.io.to(target.socketId).emit("player:knockback", {
               source: attacker.name,
               ...knockback,

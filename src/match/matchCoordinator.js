@@ -303,6 +303,7 @@ export function createMatchCoordinator(config) {
       setIsLiveGame(true);
       setStartingPhase(false);
       hud.hideWaitingForPlayersBanner?.();
+      hud.hideTopHudFade?.();
       hud.hideBattleStartOverlay();
       const scene = getGameScene();
       if (scene?.input) scene.input.enabled = true;
@@ -501,6 +502,7 @@ export function createMatchCoordinator(config) {
         _clearForceLiveInputTimer();
         _forceLiveClientState();
       } else if (status === "waiting" || status === "starting") {
+        hud.showTopHudFade?.({ immediate: true });
         hud.showWaitingForPlayersBanner?.();
         try {
           const gameData = getGameData();
@@ -612,6 +614,7 @@ export function createMatchCoordinator(config) {
       noteClientLifecycle("starting", `matchId=${payload?.matchId ?? "?"}`);
     }
     setStartingPhase(true);
+    hud.showTopHudFade?.();
     hud.showWaitingForPlayersBanner?.();
     if (!getIsLiveGame()) {
       const gameData = getGameData();
@@ -914,13 +917,24 @@ export function createMatchCoordinator(config) {
       noteClientLifecycle("player-disconnected", `name=${data?.name ?? "?"}`);
     }
     if (data?.name) {
+      const wrapper = opponentPlayers[data.name] || teamPlayers[data.name];
+      const shouldStayLoaded =
+        data.loaded === true || wrapper?.presenceLoaded === true;
       hud.setTeamHudPlayerPresence(data.name, false);
-      hud.setTeamHudPlayerLoaded(data.name, false);
+      hud.setTeamHudPlayerLoaded(data.name, shouldStayLoaded);
+      wrapper?.setPresenceState?.(false, shouldStayLoaded);
     }
   }
 
   function _onPlayerReconnected(data) {
-    if (data?.name) hud.setTeamHudPlayerPresence(data.name, true);
+    if (data?.name) {
+      const wrapper = opponentPlayers[data.name] || teamPlayers[data.name];
+      const shouldShowLoaded =
+        data.loaded === true || wrapper?.presenceLoaded === true;
+      hud.setTeamHudPlayerPresence(data.name, true);
+      hud.setTeamHudPlayerLoaded(data.name, shouldShowLoaded);
+      wrapper?.setPresenceState?.(true, shouldShowLoaded);
+    }
   }
 
   function _onGameOver(payload) {

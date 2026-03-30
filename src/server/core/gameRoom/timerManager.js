@@ -103,7 +103,7 @@ function tickTimerAndSuddenDeath(room) {
 
     const dmgPerTick = (SD_DAMAGE_PER_SEC * room.FIXED_DT_MS) / 1000;
     for (const p of room.players.values()) {
-      if (!p.isAlive || p.connected === false || p.loaded !== true) continue;
+      if (!p.isAlive || p.loaded !== true) continue;
       if (typeof p.y !== "number" || p.y < poisonY) continue;
 
       p.lastCombatAt = now;

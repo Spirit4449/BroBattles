@@ -65,7 +65,7 @@ function circleAabbOverlap(cx, cy, radius, bounds) {
 function buildTargetList(room, attackerName, attackerTeam) {
   return Array.from(room.players.values()).filter((target) => {
     if (!target || !target.isAlive) return false;
-    if (target.connected === false || target.loaded !== true) return false;
+    if (target.loaded !== true) return false;
     if (target.name === attackerName) return false;
     if (attackerTeam && target.team && attackerTeam === target.team) return false;
     return true;

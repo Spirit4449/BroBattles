@@ -10,7 +10,7 @@ const USE_SERVER_MOVEMENT_SIMULATION_V1 = false;
 const WORLD_BOUNDS = {
   width: 2300,
   height: 1000,
-  margin: 200,
+  margin: 400,
 };
 
 const GAME_DURATION_MS = 2.5 * 60 * 1000;

@@ -10,7 +10,9 @@ export function renderPoisonWater(scene, { player, dead }) {
 
   // Smooth-lerp toward server-sent Y so 500ms updates don't cause visible jumps
   const worldH =
-    Number(scene.scale?.height) || Number(scene.game.config.height) || 1000;
+    Number(scene.physics?.world?.bounds?.height) ||
+    Number(scene.game.config.height) ||
+    1000;
   if (scene._smoothPoisonY == null)
     scene._smoothPoisonY = scene._poisonWaterY ?? worldH + 60;
   const poisonTargetY = scene._poisonWaterY ?? worldH + 60;
@@ -21,7 +23,9 @@ export function renderPoisonWater(scene, { player, dead }) {
 
   if (py < worldH + 10) {
     const W =
-      Number(scene.scale?.width) || Number(scene.game.config.width) || 1300;
+      Number(scene.physics?.world?.bounds?.width) ||
+      Number(scene.game.config.width) ||
+      1300;
     const BOTTOM = worldH + 40;
     const t = scene.time.now / 1000;
 

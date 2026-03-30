@@ -71,6 +71,36 @@ window.Phaser = Phaser;
 
 // Path to get assets
 const staticPath = "/assets";
+const BASE_GAME_WIDTH = 2300;
+const BASE_GAME_HEIGHT = 1000;
+const MAX_TOP_PLAYFIELD_PADDING = 320;
+
+function getViewportAdaptiveGameHeight() {
+  const viewportWidth = Math.max(
+    1,
+    Number(window.innerWidth) ||
+      Number(document.documentElement?.clientWidth) ||
+      BASE_GAME_WIDTH,
+  );
+  const viewportHeight = Math.max(
+    1,
+    Number(window.innerHeight) ||
+      Number(document.documentElement?.clientHeight) ||
+      BASE_GAME_HEIGHT,
+  );
+  const fittedHeight = Math.round(
+    (BASE_GAME_WIDTH * viewportHeight) / viewportWidth,
+  );
+  return Math.max(
+    BASE_GAME_HEIGHT,
+    Math.min(BASE_GAME_HEIGHT + MAX_TOP_PLAYFIELD_PADDING, fittedHeight),
+  );
+}
+
+function getTopPlayfieldPadding() {
+  return Math.max(0, getViewportAdaptiveGameHeight() - BASE_GAME_HEIGHT);
+}
+
 const POWERUP_TICK_SOUNDS = createPowerupTickSounds(
   getCharacterEffectTickSounds(),
 );
@@ -655,6 +685,7 @@ window.__BOOT_GAME__ = () =>
 class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: "GameScene" });
+    this._topPlayfieldPadding = getTopPlayfieldPadding();
   }
 
   // Preloads assets
@@ -684,12 +715,12 @@ class GameScene extends Phaser.Scene {
   create() {
     // Store scene reference
     gameScene = this;
+    this._topPlayfieldPadding = getTopPlayfieldPadding();
     // Don't let players move until game is fully ready (unless late-joining a live game)
     this.input.keyboard.enabled = false;
     this.physics.world.setBoundsCollision(false, false, false, false);
     // Poison water overlay graphics (sudden death - drawn every frame in update)
-    const worldH =
-      Number(this.scale?.height) || Number(this.game.config.height) || 1000;
+    const worldH = BASE_GAME_HEIGHT;
     this._poisonWaterY = worldH + 60; // start off-screen below world
     this._smoothPoisonY = null; // interpolated, set on first use
     this._poisonGraphics = this.add.graphics();
@@ -775,13 +806,16 @@ class GameScene extends Phaser.Scene {
   initializeGameWorld() {
     // New spawn version for this scene
     SPAWN_VERSION = Math.max(SPAWN_VERSION, Date.now());
+    this._topPlayfieldPadding = getTopPlayfieldPadding();
     const activeMapId = normalizeMapId(gameData?.map);
     // No per-scene spawn plan needed now; map modules provide positioning helpers
     // Creates the map objects based on game data
     buildMap(this, activeMapId);
     mapObjects = getMapObjects(activeMapId);
     const mapBoundaryConfig = getMapBoundaryConfig(activeMapId);
-    applyMapBounds(this, mapBoundaryConfig);
+    applyMapBounds(this, mapBoundaryConfig, {
+      extraTopSpace: this._topPlayfieldPadding,
+    });
     this._spectatorBounds = {
       centerX:
         Number(this.physics?.world?.bounds?.centerX) ||
@@ -1074,8 +1108,13 @@ class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
     if (!mapBoundaryConfig?.camera) {
       cam.setZoom(1.7);
-      const contentCenterX = this.game.config.width / 2;
-      cam.setBounds(contentCenterX - 850, -40, 2000, this.game.config.height);
+      const contentCenterX = BASE_GAME_WIDTH / 2;
+      cam.setBounds(
+        contentCenterX - 850,
+        -40,
+        2000,
+        BASE_GAME_HEIGHT,
+      );
       cam.setDeadzone(50, 50);
       cam.setFollowOffset(0, 120);
     }
@@ -1555,19 +1594,17 @@ class GameScene extends Phaser.Scene {
       const isDeadBySnapshot =
         aPosData?.isAlive === false || bPosData?.isAlive === false;
       const isConnected =
-        (bPosData && typeof bPosData.connected === "boolean"
+        bPosData && typeof bPosData.connected === "boolean"
           ? bPosData.connected
-          : true) &&
-        (aPosData && typeof aPosData.connected === "boolean"
-          ? aPosData.connected
-          : true);
+          : aPosData && typeof aPosData.connected === "boolean"
+            ? aPosData.connected
+            : true;
       const isLoaded =
-        (bPosData && typeof bPosData.loaded === "boolean"
+        bPosData && typeof bPosData.loaded === "boolean"
           ? bPosData.loaded
-          : true) &&
-        (aPosData && typeof aPosData.loaded === "boolean"
-          ? aPosData.loaded
-          : true);
+          : aPosData && typeof aPosData.loaded === "boolean"
+            ? aPosData.loaded
+            : true;
 
       // Render remote players directly from the buffered snapshot timeline.
       // During a combat precision window (opened when we receive an attack from this
@@ -1801,8 +1838,8 @@ const config = {
     mode: Phaser.Scale.FIT,
     // We'll position the canvas via CSS, so disable Phaser auto centering
     autoCenter: Phaser.Scale.NO_CENTER,
-    width: 2300,
-    height: 1000,
+    width: BASE_GAME_WIDTH,
+    height: getViewportAdaptiveGameHeight(),
   },
   scene: GameScene,
   physics: {

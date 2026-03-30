@@ -235,7 +235,10 @@ export default class OpPlayer {
     this.presenceConnected = connected !== false;
     this.presenceLoaded = loaded !== false;
     const shouldRender =
-      !!this.opponent?.active && !this._corpseRemoved && this._spawnPresented;
+      !!this.opponent?.active &&
+      !this._corpseRemoved &&
+      this._spawnPresented &&
+      this.presenceLoaded;
     if (this.opponent) {
       this.opponent.setVisible(shouldRender);
       this.opponent.setAlpha(1);

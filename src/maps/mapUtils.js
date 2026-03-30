@@ -178,8 +178,9 @@ export function getSceneWorldCenterX(scene) {
   return 1150;
 }
 
-export function applyMapBounds(scene, boundsConfig = {}) {
+export function applyMapBounds(scene, boundsConfig = {}, options = {}) {
   if (!scene) return;
+  const extraTopSpace = Math.max(0, Number(options?.extraTopSpace) || 0);
 
   const world = boundsConfig?.world;
   if (world) {
@@ -193,7 +194,12 @@ export function applyMapBounds(scene, boundsConfig = {}) {
       Number.isFinite(width) &&
       Number.isFinite(height)
     ) {
-      scene.physics?.world?.setBounds(x, y, width, height);
+      scene.physics?.world?.setBounds(
+        x,
+        y - extraTopSpace,
+        width,
+        height + extraTopSpace,
+      );
     }
   }
 

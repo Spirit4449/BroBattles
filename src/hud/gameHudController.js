@@ -511,6 +511,27 @@ export function createGameHudController({
     }
   }
 
+  function _setTopHudFadeVisible(visible, { immediate = false } = {}) {
+    const fade = document.getElementById("top-hud-fade");
+    if (!fade) return;
+    if (immediate) fade.classList.add("no-transition");
+    else fade.classList.remove("no-transition");
+    fade.classList.toggle("is-faded", !visible);
+    if (immediate) {
+      requestAnimationFrame(() => {
+        fade.classList.remove("no-transition");
+      });
+    }
+  }
+
+  function showTopHudFade(options = {}) {
+    _setTopHudFadeVisible(true, options);
+  }
+
+  function hideTopHudFade(options = {}) {
+    _setTopHudFadeVisible(false, options);
+  }
+
   function hideSystemNotice() {
     const overlay = document.getElementById("game-notice-overlay");
     if (!overlay) return;
@@ -824,6 +845,8 @@ export function createGameHudController({
     hideWaitingForPlayersBanner,
     showSpectatingBanner,
     hideSpectatingBanner,
+    showTopHudFade,
+    hideTopHudFade,
     showSystemNotice,
     hideSystemNotice,
     initKeybindHud,
