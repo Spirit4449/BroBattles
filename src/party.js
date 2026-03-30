@@ -559,8 +559,14 @@ function animatePlatformsForMapSwitch() {
 }
 
 function canPersistSoloSelections() {
-  const host = String(window.location.hostname || "").toLowerCase();
-  return host === "localhost" || host === "127.0.0.1";
+  try {
+    const probeKey = "__bb_selection_probe__";
+    localStorage.setItem(probeKey, "1");
+    localStorage.removeItem(probeKey);
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 function setSoloSelection(key, value) {
@@ -576,6 +582,49 @@ function getSoloSelection(key) {
     return localStorage.getItem(key);
   } catch (_) {
     return null;
+  }
+}
+
+function getSavedSelectionFromUserData() {
+  const selection = window.__BRO_BATTLES_USERDATA__?.preferred_selection;
+  if (!selection || typeof selection !== "object") return null;
+  return normalizeGameSelection(selection);
+}
+
+async function persistSoloSelection(selection) {
+  const normalized = normalizeGameSelection(selection);
+  setSoloSelection(SOLO_MODE_ID_STORAGE_KEY, normalized.modeId);
+  setSoloSelection(
+    SOLO_MODE_VARIANT_STORAGE_KEY,
+    normalized.modeVariantId || "",
+  );
+  setSoloSelection(SOLO_MODE_STORAGE_KEY, selectionToLegacyMode(normalized));
+  if (normalized.mapId != null) {
+    setSoloSelection(SOLO_MAP_STORAGE_KEY, normalized.mapId);
+  }
+
+  try {
+    const response = await fetch("/selection-preferences", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({ selection: normalized }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.error || "Failed to save selection");
+    }
+    if (window.__BRO_BATTLES_USERDATA__) {
+      window.__BRO_BATTLES_USERDATA__.preferred_selection =
+        normalizeGameSelection(data?.selection || normalized);
+    }
+  } catch (error) {
+    console.warn("[party] failed to persist solo selection", {
+      selection: normalized,
+      message: error?.message || String(error),
+    });
   }
 }
 
@@ -1423,17 +1472,23 @@ export function initializeModeDropdown() {
 
   let initialSelection = getCurrentSelection();
   if (isSolo) {
+    const savedSelection = getSavedSelectionFromUserData();
     initialSelection = normalizeGameSelection({
       modeId:
+        savedSelection?.modeId ||
         getSoloSelection(SOLO_MODE_ID_STORAGE_KEY) ||
         document.getElementById("mode-id")?.value ||
         "duels",
       modeVariantId:
+        savedSelection?.modeVariantId ||
         getSoloSelection(SOLO_MODE_VARIANT_STORAGE_KEY) ||
         legacyModeToVariantId(getSoloSelection(SOLO_MODE_STORAGE_KEY)) ||
         document.getElementById("mode-variant-id")?.value ||
         "duels-1v1",
-      mapId: getSoloSelection(SOLO_MAP_STORAGE_KEY) || getCurrentMapValue(),
+      mapId:
+        savedSelection?.mapId ||
+        getSoloSelection(SOLO_MAP_STORAGE_KEY) ||
+        getCurrentMapValue(),
     });
   }
   applySelectionVisuals(initialSelection);
@@ -1487,7 +1542,8 @@ export function initializeModeDropdown() {
       return;
     }
 
-    applySelectionVisuals(nextSelection);
+    const applied = applySelectionVisuals(nextSelection);
+    await persistSoloSelection(applied);
   };
 
   setupModePickerControls(handleModeSelection);
@@ -1513,7 +1569,7 @@ export function initializeModeDropdown() {
           partyId,
         });
       } else if (selectedValue) {
-        setSoloSelection(SOLO_MAP_STORAGE_KEY, selectedValue);
+        void persistSoloSelection(applied);
       }
     });
   }

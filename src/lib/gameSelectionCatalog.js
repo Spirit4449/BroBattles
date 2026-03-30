@@ -1,7 +1,9 @@
 import gameModesCatalog from "../shared/gameModes.catalog.json";
 import mapsCatalog from "../shared/maps.catalog.json";
 
-const MODES = Array.isArray(gameModesCatalog?.modes) ? gameModesCatalog.modes : [];
+const MODES = Array.isArray(gameModesCatalog?.modes)
+  ? gameModesCatalog.modes
+  : [];
 const MAPS = Array.isArray(mapsCatalog?.maps) ? mapsCatalog.maps : [];
 
 const MODE_BY_ID = new Map(MODES.map((mode) => [String(mode?.id || ""), mode]));
@@ -14,7 +16,9 @@ for (const mode of MODES) {
   }
 }
 
-export const DEFAULT_MODE_ID = String(gameModesCatalog?.defaultModeId || "duels");
+export const DEFAULT_MODE_ID = String(
+  gameModesCatalog?.defaultModeId || "duels",
+);
 export const DEFAULT_VARIANT_ID = String(
   gameModesCatalog?.defaultVariantId || "duels-1v1",
 );
@@ -29,12 +33,19 @@ export function getAllMaps() {
 }
 
 export function getModeById(modeId) {
-  return MODE_BY_ID.get(String(modeId || "")) || MODE_BY_ID.get(DEFAULT_MODE_ID) || MODES[0] || null;
+  return (
+    MODE_BY_ID.get(String(modeId || "")) ||
+    MODE_BY_ID.get(DEFAULT_MODE_ID) ||
+    MODES[0] ||
+    null
+  );
 }
 
 export function getMapById(mapId) {
   const numeric = Number(mapId);
-  return MAP_BY_ID.get(numeric) || MAP_BY_ID.get(DEFAULT_MAP_ID) || MAPS[0] || null;
+  return (
+    MAP_BY_ID.get(numeric) || MAP_BY_ID.get(DEFAULT_MAP_ID) || MAPS[0] || null
+  );
 }
 
 export function getMapObjectiveLayout(mapId, objectiveKey = null) {
@@ -60,7 +71,9 @@ export function getVariantDescriptor(modeId, variantId = null) {
     variantId || mode.defaultVariantId || variants[0]?.id || "",
   );
   const variant =
-    variants.find((entry) => String(entry?.id || "") === wanted) || variants[0] || null;
+    variants.find((entry) => String(entry?.id || "") === wanted) ||
+    variants[0] ||
+    null;
   return { mode, variant };
 }
 
@@ -125,9 +138,11 @@ export function normalizeGameSelection(selection = {}) {
   });
 
   const selectedMapId = Number(selection?.mapId);
-  const mapId = compatibleMaps.some((entry) => Number(entry?.id) === selectedMapId)
+  const mapId = compatibleMaps.some(
+    (entry) => Number(entry?.id) === selectedMapId,
+  )
     ? selectedMapId
-    : compatibleMaps[0]?.id ?? null;
+    : (compatibleMaps[0]?.id ?? null);
 
   return {
     modeId: String(mode?.id || DEFAULT_MODE_ID),
@@ -159,21 +174,30 @@ export function getTotalPlayersForSelection(selection) {
     selection?.modeVariantId,
   );
   if (variant?.teamCount && variant?.playersPerTeam) {
-    return Math.max(1, Number(variant.teamCount)) * Math.max(1, Number(variant.playersPerTeam));
+    return (
+      Math.max(1, Number(variant.teamCount)) *
+      Math.max(1, Number(variant.playersPerTeam))
+    );
   }
   return Math.max(1, Number(variant?.maxPlayers) || 1);
 }
 
 export function isSelectionQueueable(selection) {
   const normalized = normalizeGameSelection(selection);
-  const { mode } = getVariantDescriptor(normalized.modeId, normalized.modeVariantId);
+  const { mode } = getVariantDescriptor(
+    normalized.modeId,
+    normalized.modeVariantId,
+  );
   if (!mode?.queueable || !mode?.implemented) return false;
   return normalized.mapId != null;
 }
 
 export function getSelectionBlockReason(selection) {
   const normalized = normalizeGameSelection(selection);
-  const { mode } = getVariantDescriptor(normalized.modeId, normalized.modeVariantId);
+  const { mode } = getVariantDescriptor(
+    normalized.modeId,
+    normalized.modeVariantId,
+  );
   if (!mode) return "Unknown mode.";
   if (!mode.queueable || !mode.implemented) {
     return mode.queueDisabledReason || `${mode.label} is not playable yet.`;

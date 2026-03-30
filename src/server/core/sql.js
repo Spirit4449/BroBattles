@@ -1,5 +1,8 @@
 // Database
 const mysql = require("mysql2/promise"); // Just mysql doesn't work
+const {
+  normalizeSelection,
+} = require("../helpers/gameSelectionCatalog");
 const pool = mysql.createPool({
   host: "localhost",
   user: "root",
@@ -208,6 +211,56 @@ async function fetchSelectedCardsByNames(names) {
   }
 }
 
+async function getUserPreferredSelection(userId) {
+  try {
+    const rows = await runQuery(
+      `SELECT preferred_mode_id, preferred_mode_variant_id, preferred_map_id
+         FROM users
+        WHERE user_id = ?
+        LIMIT 1`,
+      [userId],
+    );
+    return normalizeSelection({
+      modeId: rows[0]?.preferred_mode_id || null,
+      modeVariantId: rows[0]?.preferred_mode_variant_id || null,
+      mapId: rows[0]?.preferred_map_id ?? null,
+    });
+  } catch (error) {
+    if (error?.code === "ER_BAD_FIELD_ERROR") {
+      throw new Error(
+        "preferred selection columns missing in users table. Apply the solo-selection migration.",
+      );
+    }
+    throw error;
+  }
+}
+
+async function setUserPreferredSelection(userId, selection) {
+  const normalized = normalizeSelection(selection);
+  try {
+    return await runQuery(
+      `UPDATE users
+          SET preferred_mode_id = ?,
+              preferred_mode_variant_id = ?,
+              preferred_map_id = ?
+        WHERE user_id = ?`,
+      [
+        normalized.modeId,
+        normalized.modeVariantId,
+        normalized.mapId,
+        userId,
+      ],
+    );
+  } catch (error) {
+    if (error?.code === "ER_BAD_FIELD_ERROR") {
+      throw new Error(
+        "preferred selection columns missing in users table. Apply the solo-selection migration.",
+      );
+    }
+    throw error;
+  }
+}
+
 async function updateLastSeen(partyId, username) {
   const result = await runQuery(
     "UPDATE party_members SET last_seen = NOW() WHERE party_id = ? AND name = ?",
@@ -338,4 +391,6 @@ module.exports = {
   userOwnsCard,
   setUserSelectedCardId,
   fetchSelectedCardsByNames,
+  getUserPreferredSelection,
+  setUserPreferredSelection,
 };

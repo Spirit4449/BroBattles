@@ -673,20 +673,17 @@ async function bootstrapPartyData(partyId) {
         { persist: false },
       );
       try {
-        const host = String(window.location.hostname || "").toLowerCase();
-        if (host === "localhost" || host === "127.0.0.1") {
-          localStorage.setItem(
-            "bb_solo_mode",
-            String(document.getElementById("mode")?.value || "1"),
-          );
-          localStorage.setItem("bb_solo_mode_id", selection.modeId);
-          localStorage.setItem(
-            "bb_solo_mode_variant_id",
-            selection.modeVariantId || "",
-          );
-          if (selection.mapId != null) {
-            localStorage.setItem("bb_solo_map", String(selection.mapId));
-          }
+        localStorage.setItem(
+          "bb_solo_mode",
+          String(document.getElementById("mode")?.value || "1"),
+        );
+        localStorage.setItem("bb_solo_mode_id", selection.modeId);
+        localStorage.setItem(
+          "bb_solo_mode_variant_id",
+          selection.modeVariantId || "",
+        );
+        if (selection.mapId != null) {
+          localStorage.setItem("bb_solo_map", String(selection.mapId));
         }
       } catch (_) {}
       if (selection.mapId != null) {

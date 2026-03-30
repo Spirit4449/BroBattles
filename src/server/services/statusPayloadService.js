@@ -40,6 +40,7 @@ async function buildStatusPayload({
 
   let selectedCardId = null;
   let ownedCardIds = [];
+  let preferredSelection = null;
   if (userNormalized?.user_id) {
     try {
       selectedCardId = await db.getUserSelectedCardId(userNormalized.user_id);
@@ -51,10 +52,22 @@ async function buildStatusPayload({
     } catch (_) {
       ownedCardIds = [];
     }
+    try {
+      preferredSelection = await db.getUserPreferredSelection(
+        userNormalized.user_id,
+      );
+    } catch (error) {
+      console.warn(
+        "[status] unable to load preferred selection:",
+        error?.message || error,
+      );
+      preferredSelection = null;
+    }
   }
   if (userNormalized) {
     userNormalized.selected_card_id = selectedCardId;
     userNormalized.owned_card_ids = ownedCardIds;
+    userNormalized.preferred_selection = preferredSelection;
   }
 
   const partyRows = await db.runQuery(
