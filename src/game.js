@@ -452,8 +452,17 @@ async function fetchGameData() {
     return result.gameData;
   } catch (error) {
     console.error("Failed to fetch game data:", error);
-    alert("Failed to load game data. Redirecting to lobby...");
-    window.location.href = "/";
+    hud.showSystemNotice?.({
+      title: "Failed To Load Match",
+      message: "We couldn't load this match. Returning to the lobby.",
+      buttonText: "Lobby",
+      tone: "error",
+      autoCloseMs: 2200,
+      confirmOnAutoClose: true,
+      onConfirm: () => {
+        window.location.href = "/";
+      },
+    });
     throw error;
   }
 }

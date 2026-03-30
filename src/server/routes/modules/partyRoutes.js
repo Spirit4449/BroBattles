@@ -31,13 +31,37 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
     const username = user.name;
     const partyIdRaw = req.body?.partyId;
     const partyId = Number(partyIdRaw);
+    console.log("[party] /partydata request", {
+      username,
+      userId: user.user_id,
+      requestedPartyId: partyIdRaw,
+      parsedPartyId: partyId,
+      host: req.headers?.host,
+      origin: req.headers?.origin || null,
+      referer: req.headers?.referer || null,
+      forwardedProto: req.headers?.["x-forwarded-proto"] || null,
+      socketApiPresent: !!req.app?.locals?.socketApi,
+    });
     if (!Number.isFinite(partyId) || partyId <= 0) {
+      console.warn("[party] /partydata invalid party id", {
+        username,
+        requestedPartyId: partyIdRaw,
+      });
       return res.status(400).json({ error: "partyId is required" });
     }
     try {
       const result = await partyState.joinPartyAndGetData({
         partyId,
         username,
+      });
+      console.log("[party] /partydata joinPartyAndGetData result", {
+        username,
+        partyId,
+        ok: !!result?.ok,
+        joinedNow: !!result?.joinedNow,
+        statusCode: result?.statusCode || 200,
+        memberCount: Array.isArray(result?.members) ? result.members.length : 0,
+        ownerName: result?.ownerName || null,
       });
       if (!result.ok) {
         return res.status(result.statusCode || 500).json(result.payload || {});
@@ -53,6 +77,10 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
       } catch (_) {}
 
       await req.app.locals.socketApi.moveUserSocketToParty(username, partyId);
+      console.log("[party] /partydata moved socket to party", {
+        username,
+        partyId,
+      });
       if (result.joinedNow) {
         try {
           await req.app.locals.socketApi.cancelPartyQueue(
@@ -92,6 +120,12 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
         members: membersForEmit,
         ownerName: result.ownerName || null,
         viewer: username,
+      });
+      console.log("[party] /partydata response sent", {
+        username,
+        partyId,
+        emittedMemberCount: Array.isArray(membersForEmit) ? membersForEmit.length : 0,
+        selection,
       });
     } catch (err) {
       console.error("[party] /partydata error", err);

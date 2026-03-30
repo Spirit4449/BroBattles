@@ -544,14 +544,42 @@ function checkForLiveMatch(statusData) {
 
 const existingPartyId = checkIfInParty();
 
+function getJoinDebugMeta(extra = {}) {
+  return {
+    href: window.location.href,
+    origin: window.location.origin,
+    host: window.location.host,
+    hostname: window.location.hostname,
+    protocol: window.location.protocol,
+    existingPartyId: existingPartyId || null,
+    hasUserData: !!userData,
+    ...extra,
+  };
+}
+
 // Fetch user status upfront
 const statusPromise = fetch("/status", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   credentials: "same-origin",
 })
-  .then((res) => res.json())
+  .then((res) => {
+    console.log("[join-debug] /status response", getJoinDebugMeta({
+      ok: res.ok,
+      status: res.status,
+      statusText: res.statusText,
+    }));
+    return res.json();
+  })
   .then((data) => {
+    console.log("[join-debug] /status payload", getJoinDebugMeta({
+      userId: data?.userData?.user_id ?? null,
+      username: data?.userData?.name ?? null,
+      guest: data?.guest ?? null,
+      partyId: data?.party_id ?? null,
+      liveMatchId: data?.live_match_id ?? null,
+      isAdmin: data?.isAdmin ?? null,
+    }));
     if (data?.userData) {
       userData = data.userData;
       userData.isAdmin = !!data.isAdmin;
@@ -570,7 +598,11 @@ const statusPromise = fetch("/status", {
       }
     }
   })
-  .catch((err) => console.error("Error fetching /status:", err));
+  .catch((err) =>
+    console.error("[join-debug] Error fetching /status", getJoinDebugMeta({
+      message: err?.message || String(err),
+    })),
+  );
 
 // Wait for status before trying to bootstrap party data
 if (existingPartyId) {
@@ -582,7 +614,12 @@ if (existingPartyId) {
 }
 
 async function bootstrapPartyData(partyId) {
-  console.log("In a party:", partyId);
+  console.log("[join-debug] bootstrapPartyData starting", getJoinDebugMeta({
+    partyId,
+    userId: userData?.user_id ?? null,
+    username: userData?.name ?? null,
+    cookieEnabled: navigator.cookieEnabled,
+  }));
   try {
     const resp = await fetch("/partydata", {
       method: "POST",
@@ -590,6 +627,13 @@ async function bootstrapPartyData(partyId) {
       credentials: "same-origin",
       body: JSON.stringify({ partyId }),
     });
+
+    console.log("[join-debug] /partydata response", getJoinDebugMeta({
+      partyId,
+      ok: resp.ok,
+      status: resp.status,
+      statusText: resp.statusText,
+    }));
 
     if (!resp.ok) {
       if (resp.status === 409) {
@@ -608,6 +652,14 @@ async function bootstrapPartyData(partyId) {
     }
 
     const data = await resp.json();
+    console.log("[join-debug] /partydata payload", getJoinDebugMeta({
+      partyId,
+      responsePartyId: data?.party?.party_id ?? data?.party?.partyId ?? null,
+      ownerName: data?.ownerName ?? null,
+      membersCount: Array.isArray(data?.members) ? data.members.length : 0,
+      selection: data?.selection || null,
+      viewer: data?.viewer ?? null,
+    }));
     if (data?.party) {
       const selection = applyLobbySelection(
         data?.selection || {
@@ -655,7 +707,11 @@ async function bootstrapPartyData(partyId) {
       sound: "notification",
     });
   } catch (error) {
-    console.error("Error:", error);
+    console.error("[join-debug] bootstrapPartyData failed", getJoinDebugMeta({
+      partyId,
+      message: error?.message || String(error),
+      stack: error?.stack || null,
+    }));
   }
 }
 
@@ -825,8 +881,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   await statusPromise; // ensures guest user created + cookies set
   // NEW: connect socket now, deterministically after cookies are present
   try {
-    if (!ensureSocketConnected()) await waitForConnect();
-  } catch {}
+    const connectStarted = ensureSocketConnected();
+    console.log("[join-debug] socket connect requested after status", getJoinDebugMeta({
+      connectStarted,
+    }));
+    if (connectStarted) await waitForConnect();
+  } catch (error) {
+    console.error("[join-debug] socket connection bootstrap failed", getJoinDebugMeta({
+      message: error?.message || String(error),
+    }));
+  }
   if (!userData) return;
 
   socketInit(); // this can assume socket is connected or connecting with cookies

@@ -66,11 +66,30 @@ function makeAuthHelpers(db, cookieOpts) {
 
   async function requireCurrentUser(req, res) {
     const id = req.signedCookies?.user_id;
-    if (!id) return null;
+    if (!id) {
+      console.warn("[auth] requireCurrentUser missing signed user_id cookie", {
+        method: req?.method,
+        path: req?.originalUrl || req?.url,
+        host: req?.headers?.host,
+        origin: req?.headers?.origin || null,
+        referer: req?.headers?.referer || null,
+        cookieHeaderPresent: !!req?.headers?.cookie,
+        forwardedProto: req?.headers?.["x-forwarded-proto"] || null,
+      });
+      return null;
+    }
     const rows = await db.runQuery(
       "SELECT * FROM users WHERE user_id = ? LIMIT 1",
       [id]
     );
+    if (!rows[0]) {
+      console.warn("[auth] requireCurrentUser cookie did not resolve to a user", {
+        method: req?.method,
+        path: req?.originalUrl || req?.url,
+        host: req?.headers?.host,
+        userId: Number(id),
+      });
+    }
     return rows[0] || null;
   }
 

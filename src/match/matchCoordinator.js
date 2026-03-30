@@ -144,6 +144,7 @@ export function createMatchCoordinator(config) {
   let _startWatchdogTimer = null;
   let _startWatchdogDeadline = 0;
   let _forceLiveInputTimer = null;
+  let _startWatchdogRecoveryInFlight = false;
 
   // ---------------------------------------------------------------------------
   // Private helpers
@@ -301,11 +302,84 @@ export function createMatchCoordinator(config) {
     try {
       setIsLiveGame(true);
       setStartingPhase(false);
+      hud.hideWaitingForPlayersBanner?.();
       hud.hideBattleStartOverlay();
       const scene = getGameScene();
       if (scene?.input) scene.input.enabled = true;
       if (scene?.input?.keyboard) scene.input.keyboard.enabled = true;
     } catch (_) {}
+  }
+
+  function _emitJoinAck(joinPayload, timeoutMs = 2500) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const cleanup = (result) => {
+        if (settled) return;
+        settled = true;
+        setJoinInFlight(false);
+        clearTimeout(timer);
+        resolve(result);
+      };
+      const timer = setTimeout(() => {
+        cleanup({ ok: false, error: "timeout" });
+      }, timeoutMs);
+
+      try {
+        setJoinInFlight(true);
+        socket.emit("game:join", joinPayload, (ack) => {
+          cleanup(ack || { ok: false, error: "no_ack" });
+        });
+      } catch (error) {
+        cleanup({
+          ok: false,
+          error: error?.message || "emit_failed",
+        });
+      }
+    });
+  }
+
+  async function _recoverTimedOutStart(joinPayload) {
+    if (_startWatchdogRecoveryInFlight) return false;
+    _startWatchdogRecoveryInFlight = true;
+    try {
+      if (!shouldMuteClientDefaultLogs()) {
+        console.warn("[game] start watchdog expired, attempting recovery", {
+          matchId: joinPayload?.matchId ?? null,
+          hasJoined: getHasJoined(),
+        });
+      } else {
+        noteClientLifecycle(
+          "watchdog-expired",
+          `matchId=${joinPayload?.matchId ?? "?"}`,
+        );
+      }
+
+      const ack = await _emitJoinAck(joinPayload, 2500);
+      if (ack?.ok === true) {
+        setHasJoined(true);
+        _startWatchdogDeadline = Date.now() + START_WATCHDOG_TIMEOUT_MS;
+        hud.showSystemNotice?.({
+          title: "Syncing Match",
+          message: "Recovered your game connection. Resuming the match...",
+          buttonText: "OK",
+          autoCloseMs: 1600,
+          tone: "info",
+        });
+        return true;
+      }
+
+      if (!shouldMuteClientDefaultLogs()) {
+        console.warn("[game] start watchdog recovery failed", ack);
+      } else {
+        noteClientLifecycle(
+          "watchdog-recovery-fail",
+          `error=${String(ack?.error || "unknown")}`,
+        );
+      }
+      return false;
+    } finally {
+      _startWatchdogRecoveryInFlight = false;
+    }
   }
 
   function _startStartWatchdog() {
@@ -327,15 +401,41 @@ export function createMatchCoordinator(config) {
       if (Date.now() >= _startWatchdogDeadline) {
         _stopStartWatchdog();
         _clearForceLiveInputTimer();
-        try {
-          alert("Match start timed out. Returning to lobby.");
-        } catch (_) {}
-        window.location.href = "/";
+        Promise.resolve().then(async () => {
+          const recovered = await _recoverTimedOutStart(joinPayload);
+          if (recovered) {
+            _startStartWatchdog();
+            return;
+          }
+          hud.hideWaitingForPlayersBanner?.();
+          hud.showSystemNotice?.({
+            title: "Match Connection Failed",
+            message:
+              "We couldn't recover this match connection. Returning to the lobby.",
+            buttonText: "Lobby",
+            tone: "error",
+            autoCloseMs: 2200,
+            confirmOnAutoClose: true,
+            onConfirm: () => {
+              window.location.href = "/";
+            },
+          });
+        });
         return;
       }
 
       try {
-        socket.emit("game:join", joinPayload);
+        if (!getHasJoined() && !getJoinInFlight()) {
+          if (!shouldMuteClientDefaultLogs()) {
+            console.log("[game] watchdog re-emitting join", joinPayload);
+          } else {
+            noteClientLifecycle(
+              "watchdog-join",
+              `matchId=${joinPayload?.matchId ?? "?"}`,
+            );
+          }
+          socket.emit("game:join", joinPayload);
+        }
       } catch (_) {}
       try {
         const readyPayload = { matchId: joinMatchId };
@@ -346,6 +446,18 @@ export function createMatchCoordinator(config) {
           readyPayload.flip = !!localPlayer.flipX;
           readyPayload.animation =
             localPlayer.anims?.currentAnim?.key || null;
+        }
+        if (!shouldMuteClientDefaultLogs()) {
+          console.log("[game] watchdog re-emitting ready", {
+            matchId: joinMatchId,
+            hasJoined: getHasJoined(),
+            hasLocalPlayer: !!localPlayer,
+          });
+        } else {
+          noteClientLifecycle(
+            "watchdog-ready",
+            `matchId=${joinMatchId} joined=${getHasJoined() ? 1 : 0}`,
+          );
         }
         socket.emit("game:ready", readyPayload);
       } catch (_) {}
@@ -389,6 +501,7 @@ export function createMatchCoordinator(config) {
         _clearForceLiveInputTimer();
         _forceLiveClientState();
       } else if (status === "waiting" || status === "starting") {
+        hud.showWaitingForPlayersBanner?.();
         try {
           const gameData = getGameData();
           hud.showBattleStartOverlay(gameData.players);
@@ -476,6 +589,7 @@ export function createMatchCoordinator(config) {
     }
     _stopStartWatchdog();
     _clearForceLiveInputTimer();
+    hud.hideWaitingForPlayersBanner?.();
     const seconds = Math.max(1, Number(data?.countdown) || 3);
     // Late joiners skip the countdown because the game is already running
     if (!getIsLiveGame()) {
@@ -498,6 +612,7 @@ export function createMatchCoordinator(config) {
       noteClientLifecycle("starting", `matchId=${payload?.matchId ?? "?"}`);
     }
     setStartingPhase(true);
+    hud.showWaitingForPlayersBanner?.();
     if (!getIsLiveGame()) {
       const gameData = getGameData();
       hud.showBattleStartOverlay(gameData.players);
@@ -783,7 +898,13 @@ export function createMatchCoordinator(config) {
   function _onGameError(error) {
     console.error("Game error:", error);
     _stopStartWatchdog();
-    alert(`Game error: ${error.message}`);
+    hud.hideWaitingForPlayersBanner?.();
+    hud.showSystemNotice?.({
+      title: "Game Error",
+      message: String(error?.message || "Something went wrong in this match."),
+      buttonText: "OK",
+      tone: "error",
+    });
   }
 
   function _onPlayerDisconnected(data) {
@@ -806,6 +927,7 @@ export function createMatchCoordinator(config) {
     if (getGameEnded()) return; // idempotent guard
     _stopStartWatchdog();
     _clearForceLiveInputTimer();
+    hud.hideWaitingForPlayersBanner?.();
     setGameEnded(true);
     onStopSuddenDeathMusic();
     onPlayMatchEndSound(payload?.winnerTeam);

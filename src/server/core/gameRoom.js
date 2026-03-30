@@ -258,6 +258,16 @@ class GameRoom {
       (p) => p.user_id === user.user_id,
     );
     if (existingPlayer) {
+      if (existingPlayer.socketId === socket.id) {
+        if (!this._netTestEnabled) {
+          console.log(
+            `[GameRoom ${this.matchId}] Duplicate game:join ignored for ${user.name} on socket ${socket.id}`,
+          );
+        }
+        socket.join(`game:${this.matchId}`);
+        this.sendGameStateToPlayer(socket);
+        return;
+      }
       // Update socket for reconnection
       for (const [key, value] of this.players.entries()) {
         if (value?.user_id === user.user_id) this.players.delete(key);

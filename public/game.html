@@ -173,6 +173,22 @@
         transform: translateY(0);
       }
 
+      #top-hud-fade {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: min(180px, 28vh);
+        background: linear-gradient(
+          180deg,
+          rgba(5, 10, 20, 0.82) 0%,
+          rgba(8, 15, 30, 0.54) 42%,
+          rgba(8, 15, 30, 0) 100%
+        );
+        pointer-events: none;
+        z-index: 9996;
+      }
+
       /* ===== Battle Start Overlay (playful, blue-toned game card style) ===== */
       #battle-start-overlay {
         position: fixed;
@@ -343,7 +359,7 @@
 
       #battle-start-overlay .bs-header {
         position: absolute;
-        top: 14px;
+        top: 28px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 4;
@@ -540,7 +556,7 @@
 
       #game-timer-hud {
         position: fixed;
-        top: 10px;
+        top: 26px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 9998;
@@ -606,7 +622,7 @@
 
       #battle-keybind-hud {
         position: fixed;
-        top: 10px;
+        top: 26px;
         right: 10px;
         z-index: 9999;
         width: min(200px, calc(100vw - 20px));
@@ -714,7 +730,7 @@
       #team-status-hud {
         position: fixed;
         left: 10px;
-        top: 10px;
+        top: 26px;
         z-index: 9997;
         width: min(208px, calc(100vw - 20px));
         background: linear-gradient(
@@ -787,7 +803,7 @@
 
       #bank-bust-hud {
         position: fixed;
-        top: 10px;
+        top: 26px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 9997;
@@ -866,7 +882,7 @@
       }
       #bank-bust-alert {
         position: fixed;
-        top: 96px;
+        top: 116px;
         left: 50%;
         transform: translate(-50%, -16px);
         z-index: 9998;
@@ -907,24 +923,24 @@
           width: min(34vw, 200px);
         }
         #battle-keybind-hud {
-          top: 8px;
+          top: 18px;
           right: 8px;
           width: min(246px, calc(100vw - 16px));
         }
         #game-timer-hud {
-          top: 8px;
+          top: 18px;
           left: 50%;
           right: auto;
           transform: translateX(-50%);
         }
         #team-status-hud {
-          top: 8px;
+          top: 18px;
           left: 8px;
           bottom: auto;
           width: min(186px, calc(100vw - 16px));
         }
         #bank-bust-hud {
-          top: 82px;
+          top: 92px;
           display: grid;
           grid-template-columns: 1fr;
           width: min(320px, calc(100vw - 16px));
@@ -935,8 +951,130 @@
           min-width: 0;
         }
         #bank-bust-alert {
-          top: 168px;
+          top: 182px;
         }
+      }
+
+      .game-status-banner {
+        position: fixed;
+        bottom: 18px;
+        left: 50%;
+        transform: translate(-50%, -120px);
+        opacity: 0;
+        padding: 12px 20px;
+        border-radius: 10px;
+        border: 2px solid rgba(186, 230, 253, 0.9);
+        background: linear-gradient(
+          180deg,
+          rgba(11, 28, 47, 0.94),
+          rgba(20, 54, 87, 0.94)
+        );
+        color: #e0f2fe;
+        font-family: "Press Start 2P", cursive;
+        font-size: 14px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        text-shadow: 0 2px 0 rgba(8, 15, 30, 0.9);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+        z-index: 10000;
+        pointer-events: none;
+        transition:
+          transform 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 0.35s ease;
+      }
+      .game-status-banner.show {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+      .game-status-banner.variant-danger {
+        border-color: rgba(254, 202, 202, 0.92);
+        background: linear-gradient(
+          180deg,
+          rgba(63, 14, 14, 0.96),
+          rgba(109, 25, 25, 0.94)
+        );
+        color: #fee2e2;
+      }
+
+      .game-notice-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 10001;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+      .game-notice-overlay::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(
+            circle at 50% 20%,
+            rgba(96, 165, 250, 0.18),
+            transparent 34%
+          ),
+          rgba(4, 7, 16, 0.58);
+        backdrop-filter: blur(2px);
+      }
+      .game-notice-card {
+        position: relative;
+        width: min(420px, calc(100vw - 32px));
+        padding: 18px 20px 16px;
+        border-radius: 14px;
+        border: 3px solid #20437f;
+        background:
+          linear-gradient(145deg, rgba(18, 35, 70, 0.96), rgba(10, 20, 42, 0.98)),
+          rgba(10, 20, 42, 0.98);
+        box-shadow:
+          0 24px 48px rgba(0, 0, 0, 0.42),
+          0 0 0 4px rgba(123, 191, 255, 0.14);
+        color: #e5f3ff;
+        text-align: center;
+        transform: translateY(14px) scale(0.96);
+        opacity: 0;
+        transition:
+          transform 220ms ease,
+          opacity 220ms ease;
+      }
+      .game-notice-overlay.show .game-notice-card {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+      }
+      .game-notice-overlay.tone-error .game-notice-card {
+        border-color: #7f1d1d;
+        box-shadow:
+          0 24px 48px rgba(0, 0, 0, 0.42),
+          0 0 0 4px rgba(248, 113, 113, 0.18);
+      }
+      .game-notice-title {
+        margin: 0 0 10px;
+        font-family: "Press Start 2P", "Lato", sans-serif;
+        font-size: clamp(14px, 2vw, 18px);
+        color: #f8fbff;
+      }
+      .game-notice-message {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.55;
+        color: #cfe8ff;
+      }
+      .game-notice-actions {
+        margin-top: 16px;
+        display: flex;
+        justify-content: center;
+      }
+      .game-notice-btn {
+        min-height: 34px;
+        min-width: 120px;
+        padding: 0 16px;
+        background: linear-gradient(135deg, #4b95e6, #3678c3);
+        color: #fff;
+      }
+      .game-notice-overlay.tone-error .game-notice-btn {
+        background: linear-gradient(135deg, #d14b42, #ab2e2e);
       }
     </style>
   </head>
@@ -964,6 +1102,35 @@
     <!-- Red edge vignette shown while local player is submerged -->
     <div id="water-vignette"></div>
     <div id="hud"></div>
+    <div id="top-hud-fade" aria-hidden="true"></div>
+
+    <div
+      id="game-status-banner"
+      class="game-status-banner hidden"
+      aria-live="polite"
+    >
+      <span id="game-status-banner-text">Waiting for other players...</span>
+    </div>
+
+    <div
+      id="game-notice-overlay"
+      class="game-notice-overlay hidden"
+      aria-hidden="true"
+    >
+      <div class="game-notice-card" role="alertdialog" aria-live="assertive">
+        <h2 id="game-notice-title" class="game-notice-title">Notice</h2>
+        <p id="game-notice-message" class="game-notice-message"></p>
+        <div class="game-notice-actions">
+          <button
+            id="game-notice-button"
+            class="game-notice-btn pixel-menu-button"
+            type="button"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
 
     <aside id="team-status-hud" class="hidden" aria-live="polite">
       <div class="team-hud-grid" id="team-status-grid"></div>

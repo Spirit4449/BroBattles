@@ -654,7 +654,30 @@ export function socketInit() {
 
   // Connection lifecycle
   socket.on("connect", () => {
-    console.log("[socket] connected", socket.id);
+    console.log("[socket] connected", {
+      socketId: socket.id,
+      currentPartyId: currentPartyId || null,
+      href: window.location.href,
+      host: window.location.host,
+    });
+  });
+
+  socket.on("connect_error", (error) => {
+    console.error("[socket] connect_error", {
+      message: error?.message || String(error),
+      description: error?.description || null,
+      context: error?.context || null,
+      currentPartyId: currentPartyId || null,
+      href: window.location.href,
+      cookieEnabled: navigator.cookieEnabled,
+    });
+  });
+
+  socket.on("reconnect_attempt", (attempt) => {
+    console.warn("[socket] reconnect_attempt", {
+      attempt,
+      currentPartyId: currentPartyId || null,
+    });
   });
 
   socket.on("disconnect", (reason) => {
@@ -678,7 +701,11 @@ export function socketInit() {
 
   // Server tells us which room we're in (party or lobby)
   socket.on("party:joined", ({ partyId }) => {
-    console.log("[socket] joined room", partyId ?? "lobby");
+    console.log("[socket] joined room", {
+      joinedPartyId: partyId ?? null,
+      currentPartyId: currentPartyId || null,
+      socketId: socket.id || null,
+    });
     if (partyId) startHeartbeat(partyId);
     else stopHeartbeat();
     // Reset roster baseline when switching rooms
@@ -896,6 +923,11 @@ export function socketInit() {
   });
 
   socket.on("queue:joined", (payload) => {
+    console.log("[join-debug] queue:joined", {
+      currentPartyId: currentPartyId || null,
+      payloadPartyId: payload?.partyId ?? null,
+      selection: payload?.selection || null,
+    });
     const normalized = normalizeGameSelection(payload?.selection || getCurrentSelection());
     activeQueueContext = { selection: normalized };
     mmOverlayPlayers = [];
@@ -912,6 +944,12 @@ export function socketInit() {
 
   // When a match is found, update overlay and auto-ack ready for this client
   socket.on("match:found", (payload) => {
+    console.log("[join-debug] match:found", {
+      currentPartyId: currentPartyId || null,
+      matchId: payload?.matchId ?? null,
+      playerCount: Array.isArray(payload?.players) ? payload.players.length : 0,
+      selection: payload?.selection || null,
+    });
     const normalized = normalizeGameSelection(payload?.selection || getCurrentSelection());
     activeQueueContext = { selection: normalized };
     mmOverlayPlayers = Array.isArray(payload?.players) ? payload.players : [];
@@ -939,7 +977,11 @@ export function socketInit() {
         return;
       }
 
-      console.log("Match ready! Redirecting to game...", matchId);
+      console.log("[join-debug] match:gameReady redirecting", {
+        matchId,
+        currentPartyId: currentPartyId || null,
+        href: window.location.href,
+      });
 
       // Store match info for game page
       sessionStorage.setItem("matchId", matchId);
@@ -956,6 +998,11 @@ export function socketInit() {
   // Queue error -> notify and hide overlay (useful for solo flow)
   socket.on("queue:error", (err) => {
     try {
+      console.error("[join-debug] queue:error", {
+        currentPartyId: currentPartyId || null,
+        message: err?.message || null,
+        raw: err || null,
+      });
       hideMatchmakingOverlay();
       mmOverlayPlayers = [];
       mmOverlayPlayersSig = "";
@@ -998,6 +1045,10 @@ export function socketInit() {
 
   // Match cancelled (e.g., ready timeout) -> hide overlay
   socket.on("match:cancelled", (data) => {
+    console.warn("[join-debug] match:cancelled", {
+      currentPartyId: currentPartyId || null,
+      reason: data?.reason || null,
+    });
     const overlay = document.getElementById("matchmaking-overlay");
     if (data?.reason && overlay && !overlay.classList.contains("hidden")) {
       sonner("Cancelled matchmaking", data.reason, null, null, {

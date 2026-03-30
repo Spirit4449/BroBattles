@@ -98,17 +98,36 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
   // auth: attach user row from signed cookie (middleware)
   io.use(async (socket, next) => {
     try {
+      const header = socket.handshake?.headers?.cookie || "";
       const userIdStr = readSignedCookieFromHandshake(
         socket,
         "user_id", // this cookie stores the user ID
         COOKIE_SECRET,
       );
+      console.log("[socket-auth] handshake", {
+        socketId: socket.id,
+        host: socket.handshake?.headers?.host || null,
+        origin: socket.handshake?.headers?.origin || null,
+        referer: socket.handshake?.headers?.referer || null,
+        address: socket.handshake?.address || null,
+        url: socket.handshake?.url || null,
+        userAgent: socket.handshake?.headers?.["user-agent"] || null,
+        cookieHeaderPresent: !!header,
+        cookieHeaderLength: header.length,
+        resolvedUserId: userIdStr ? Number(userIdStr) : null,
+      });
       if (!userIdStr) {
         socket.data.user = null;
         return next();
       }
       const user = await db.getUserById(Number(userIdStr));
       socket.data.user = user || null;
+      if (!user) {
+        console.warn("[socket-auth] no user found for signed cookie", {
+          socketId: socket.id,
+          userId: Number(userIdStr),
+        });
+      }
       next();
     } catch (e) {
       console.error("Socket auth error:", e);
@@ -120,6 +139,15 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
     const user = socket.data.user; // returns from middleware
     const userId = user?.user_id;
     const username = user?.name;
+    console.log("[socket] connection opened", {
+      socketId: socket.id,
+      userId: userId || null,
+      username: username || null,
+      host: socket.handshake?.headers?.host || null,
+      origin: socket.handshake?.headers?.origin || null,
+      address: socket.handshake?.address || null,
+      transport: socket.conn?.transport?.name || null,
+    });
 
     if (DEBUG_SOCKET_EVENTS) {
       const eventCounts = new Map();
@@ -161,6 +189,11 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
     // store socket id and mark online
     try {
       if (userId) await db.setUserSocketId(userId, socket.id);
+      console.log("[socket] setUserSocketId complete", {
+        socketId: socket.id,
+        userId: userId || null,
+        username: username || null,
+      });
     } catch (e) {
       console.warn("Could not persist socket_id:", e?.message);
     }
@@ -192,9 +225,18 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
         if (partyId) {
           socket.join(`party:${partyId}`);
           socket.emit("party:joined", { partyId });
+          console.log("[socket] auto-joined party room", {
+            socketId: socket.id,
+            username,
+            partyId,
+          });
         } else {
           socket.join("lobby");
           socket.emit("party:joined", { partyId: null });
+          console.log("[socket] joined lobby room", {
+            socketId: socket.id,
+            username,
+          });
         }
       } catch (e) {
         console.warn(
@@ -254,13 +296,31 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
           [username],
         );
         const sid = rows[0]?.socket_id;
-        if (!sid) return;
+        if (!sid) {
+          console.warn("[socket] moveUserSocketToParty missing socket_id", {
+            username,
+            partyId,
+          });
+          return;
+        }
         const sock = io.sockets.sockets.get(sid);
-        if (!sock) return;
+        if (!sock) {
+          console.warn("[socket] moveUserSocketToParty socket not found in io map", {
+            username,
+            partyId,
+            socketId: sid,
+          });
+          return;
+        }
         for (const room of sock.rooms)
           if (room.startsWith("party:")) sock.leave(room);
         sock.join(`party:${partyId}`);
         sock.emit("party:joined", { partyId });
+        console.log("[socket] moveUserSocketToParty success", {
+          username,
+          partyId,
+          socketId: sid,
+        });
       } catch (e) {
         console.warn("moveUserSocketToParty failed:", e?.message);
       }

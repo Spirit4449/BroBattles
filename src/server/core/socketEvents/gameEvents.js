@@ -7,7 +7,7 @@ function registerGameEvents(socket, { db, gameHub }) {
     try {
       const user = socket.data.user;
       const matchId = Number(data?.matchId);
-      console.log("User attempting to join game:", { user, matchId });
+      console.log("User attempting to join game:");
 
       if (!user) {
         cb?.({ ok: false, error: "unauthorized" });

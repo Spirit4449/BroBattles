@@ -30,6 +30,14 @@ function registerMatchmakingEvents(socket, { db, io, mm, PARTY_STATUS }) {
         legacyMode: mode,
         mapId: selection?.mapId ?? map,
       });
+      console.log("[queue] queue:join request", {
+        socketId: socket.id,
+        username: uname || null,
+        userId,
+        providedPartyId: partyId || null,
+        resolvedSelection: normalizedSelection,
+        side: side || null,
+      });
       if (!isSelectionQueueable(normalizedSelection)) {
         throw new Error(getSelectionBlockReason(normalizedSelection));
       }
@@ -54,6 +62,13 @@ function registerMatchmakingEvents(socket, { db, io, mm, PARTY_STATUS }) {
         selection: normalizedSelection,
         map: normalizedSelection.mapId,
         partyId: pid || null,
+      });
+      console.log("[queue] queue:join success", {
+        socketId: socket.id,
+        username: uname || null,
+        userId,
+        partyId: pid || null,
+        selection: normalizedSelection,
       });
     } catch (e) {
       console.warn("queue:join error:", e?.message);

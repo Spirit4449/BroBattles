@@ -45,6 +45,7 @@ export function createGameHudController({
   let timerPaused = false;
   let lastModeAlertAt = 0;
   let lastModeAlertEventAt = 0;
+  let noticeAutoCloseTimer = null;
 
   function _fallbackCatalog() {
     return {
@@ -459,49 +460,119 @@ export function createGameHudController({
     }, 2500);
   }
 
-  function showSpectatingBanner() {
+  function showStatusBanner(text, { variant = "info" } = {}) {
     if (window.__BB_MAP_EDIT_ACTIVE) return;
-    let banner = document.getElementById("spectating-banner");
-    if (!banner) {
-      banner = document.createElement("div");
-      banner.id = "spectating-banner";
-      banner.textContent = "You Died";
-      Object.assign(banner.style, {
-        position: "fixed",
-        bottom: "18px",
-        left: "50%",
-        transform: "translate(-50%, -120px)",
-        opacity: "0",
-        padding: "12px 20px",
-        borderRadius: "10px",
-        border: "2px solid rgba(186, 230, 253, 0.9)",
-        background:
-          "linear-gradient(180deg, rgba(11,28,47,0.94), rgba(20,54,87,0.94))",
-        color: "#e0f2fe",
-        fontFamily: "'Press Start 2P', cursive",
-        fontSize: "14px",
-        letterSpacing: "2px",
-        textTransform: "uppercase",
-        textShadow: "0 2px 0 rgba(8,15,30,0.9)",
-        boxShadow: "0 12px 28px rgba(0,0,0,0.28)",
-        zIndex: "10000",
-        pointerEvents: "none",
-        transition:
-          "transform 0.5s cubic-bezier(0.22,1,0.36,1), opacity 0.35s ease",
-      });
-      document.body.appendChild(banner);
-    }
+    const banner = document.getElementById("game-status-banner");
+    const textEl = document.getElementById("game-status-banner-text");
+    if (!banner || !textEl) return;
+    textEl.textContent = String(text || "");
+    banner.classList.remove("hidden", "variant-info", "variant-danger");
+    banner.classList.add(
+      variant === "danger" ? "variant-danger" : "variant-info",
+    );
     requestAnimationFrame(() => {
-      banner.style.opacity = "1";
-      banner.style.transform = "translate(-50%, 0)";
+      banner.classList.add("show");
     });
   }
 
-  function hideSpectatingBanner() {
-    const banner = document.getElementById("spectating-banner");
+  function hideStatusBanner() {
+    const banner = document.getElementById("game-status-banner");
     if (!banner) return;
-    banner.style.opacity = "0";
-    banner.style.transform = "translate(-50%, -120px)";
+    banner.classList.remove("show");
+    setTimeout(() => {
+      if (!banner.classList.contains("show")) {
+        banner.classList.add("hidden");
+      }
+    }, 220);
+  }
+
+  function showWaitingForPlayersBanner() {
+    showStatusBanner("Waiting for other players...", { variant: "info" });
+  }
+
+  function hideWaitingForPlayersBanner() {
+    const banner = document.getElementById("game-status-banner");
+    const textEl = document.getElementById("game-status-banner-text");
+    if (!banner || !textEl) return;
+    if (textEl.textContent === "Waiting for other players...") {
+      hideStatusBanner();
+    }
+  }
+
+  function showSpectatingBanner() {
+    showStatusBanner("You Died", { variant: "danger" });
+  }
+
+  function hideSpectatingBanner() {
+    const textEl = document.getElementById("game-status-banner-text");
+    if (!textEl) return;
+    if (textEl.textContent === "You Died") {
+      hideStatusBanner();
+    }
+  }
+
+  function hideSystemNotice() {
+    const overlay = document.getElementById("game-notice-overlay");
+    if (!overlay) return;
+    overlay.classList.remove("show", "tone-error", "tone-info");
+    overlay.classList.add("hidden");
+    overlay.setAttribute("aria-hidden", "true");
+    if (noticeAutoCloseTimer) {
+      clearTimeout(noticeAutoCloseTimer);
+      noticeAutoCloseTimer = null;
+    }
+  }
+
+  function showSystemNotice({
+    title,
+    message,
+    buttonText = "OK",
+    tone = "info",
+    autoCloseMs = 0,
+    onConfirm = null,
+    confirmOnAutoClose = false,
+  } = {}) {
+    if (window.__BB_MAP_EDIT_ACTIVE) return null;
+    const overlay = document.getElementById("game-notice-overlay");
+    const titleEl = document.getElementById("game-notice-title");
+    const messageEl = document.getElementById("game-notice-message");
+    const buttonEl = document.getElementById("game-notice-button");
+    if (!overlay || !titleEl || !messageEl || !buttonEl) return null;
+
+    hideSystemNotice();
+
+    titleEl.textContent = String(title || "Notice");
+    messageEl.textContent = String(message || "");
+    buttonEl.textContent = String(buttonText || "OK");
+    overlay.classList.remove("hidden", "tone-error", "tone-info");
+    overlay.classList.add(tone === "error" ? "tone-error" : "tone-info");
+    overlay.setAttribute("aria-hidden", "false");
+
+    const finish = () => {
+      hideSystemNotice();
+      if (typeof onConfirm === "function") {
+        try {
+          onConfirm();
+        } catch (_) {}
+      }
+    };
+
+    buttonEl.onclick = finish;
+    requestAnimationFrame(() => {
+      overlay.classList.add("show");
+    });
+
+    if (autoCloseMs > 0) {
+      noticeAutoCloseTimer = setTimeout(() => {
+        if (confirmOnAutoClose) {
+          finish();
+          return;
+        }
+        hideSystemNotice();
+      }, Math.max(400, Number(autoCloseMs) || 0));
+    }
+
+    return { close: hideSystemNotice };
   }
 
   function initKeybindHud() {
@@ -647,6 +718,7 @@ export function createGameHudController({
       try {
         const timerHud = document.getElementById("game-timer-hud");
         const teamHud = document.getElementById("team-status-hud");
+        hideWaitingForPlayersBanner();
         timerHud?.classList.remove("hidden");
         teamHud?.classList.remove("hidden");
         requestAnimationFrame(() => {
@@ -746,8 +818,14 @@ export function createGameHudController({
     initTimerHud,
     updateTimerHud,
     showSuddenDeathBanner,
+    showStatusBanner,
+    hideStatusBanner,
+    showWaitingForPlayersBanner,
+    hideWaitingForPlayersBanner,
     showSpectatingBanner,
     hideSpectatingBanner,
+    showSystemNotice,
+    hideSystemNotice,
     initKeybindHud,
     initTeamStatusHud,
     setTeamHudPlayerAlive,

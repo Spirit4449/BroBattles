@@ -24,11 +24,11 @@ body.mobile-game-ui #battle-keybind-hud {
 }
 
 body.mobile-game-ui #game-timer-hud {
-  top: 8px;
+  top: 18px;
 }
 
 body.mobile-game-ui #team-status-hud {
-  top: 8px;
+  top: 18px;
 }
 
 body.mobile-game-ui #battle-keybind-hud {
