@@ -589,10 +589,16 @@ export function createMatchCoordinator(config) {
         `countdown=${Number(data?.countdown) || 0}`,
       );
     }
-    _stopStartWatchdog();
-    _clearForceLiveInputTimer();
     hud.hideWaitingForPlayersBanner?.();
     const seconds = Math.max(1, Number(data?.countdown) || 3);
+    _clearForceLiveInputTimer();
+    // Keep the watchdog alive through the countdown until we receive
+    // actual live evidence (snapshot/timer/world-state). This avoids a
+    // permanent client-side stall if `game:start` arrives but the first
+    // live packets are missed.
+    _startWatchdogDeadline =
+      Date.now() + Math.max(START_WATCHDOG_TIMEOUT_MS, seconds * 1000 + 6000);
+    _startStartWatchdog();
     // Late joiners skip the countdown because the game is already running
     if (!getIsLiveGame()) {
       hud.startCountdown(seconds);
@@ -627,7 +633,11 @@ export function createMatchCoordinator(config) {
   function _onHealthUpdate(payload) {
     if (!payload?.username) return;
     if (typeof payload.health === "number") {
-      hud.setTeamHudPlayerAlive(payload.username, payload.health > 0);
+      hud.setTeamHudPlayerHealth?.(
+        payload.username,
+        payload.health,
+        payload.maxHealth,
+      );
       const prev = lastHealthByPlayer[payload.username];
       lastHealthByPlayer[payload.username] = payload.health;
       if (
@@ -959,7 +969,12 @@ export function createMatchCoordinator(config) {
   }
 
   function _onGameTimer(payload) {
+    _stopStartWatchdog();
     hud.updateTimerHud(payload.remaining, payload.suddenDeath);
+    if (!getIsLiveGame()) {
+      _clearForceLiveInputTimer();
+      _forceLiveClientState();
+    }
     if (payload.suddenDeath && typeof payload.poisonY === "number") {
       const scene = getGameScene();
       if (scene) scene._poisonWaterY = payload.poisonY;
@@ -998,7 +1013,12 @@ export function createMatchCoordinator(config) {
   }
 
   function _onGameState(payload) {
+    _stopStartWatchdog();
     _applyWorldState(payload, getGameData()?.yourTeam);
+    if (!getIsLiveGame()) {
+      _clearForceLiveInputTimer();
+      _forceLiveClientState();
+    }
   }
 
   function _onPowerupTick(payload) {

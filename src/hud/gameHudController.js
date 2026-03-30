@@ -33,7 +33,7 @@ export function createGameHudController({
   onEnableInput,
   onCountdownFight,
   getScene,
-  battleHelpDismissedKey = "bb_hide_keybind_hud_v1",
+  controlsHudStateKey = "bb_controls_hud_state_v2",
 } = {}) {
   const teamRows = new Map(); // name -> { row }
   let cardCatalog = null;
@@ -245,22 +245,22 @@ export function createGameHudController({
         1,
         Number(gameData?.mode) || 1,
       )}`;
-      mapMode.textContent = `${mapName} • ${teamMode}`;
+      mapMode.textContent = `${mapName} - ${teamMode}`;
     }
 
     if (mapMode) {
       mapMode.textContent = `${getMapLabel(selection.mapId || gameData?.map)} - ${getSelectionDisplayLabel(selection)}`;
     }
 
-    deferGameplayHudReveal = true;
+    deferGameplayHudReveal = false;
 
     try {
       const timerHud = document.getElementById("game-timer-hud");
       const teamHud = document.getElementById("team-status-hud");
       timerHud?.classList.add("hidden", "hud-intro-enter");
-      teamHud?.classList.add("hidden", "hud-intro-enter");
+      teamHud?.classList.remove("hidden");
+      teamHud?.classList.add("hud-intro-enter", "in");
       timerHud?.classList.remove("in");
-      teamHud?.classList.remove("in");
     } catch (_) {}
 
     const yourCol = document.getElementById("bs-your");
@@ -598,33 +598,54 @@ export function createGameHudController({
 
   function initKeybindHud() {
     const hud = document.getElementById("battle-keybind-hud");
-    const dismissBtn = document.getElementById("battle-keybind-dismiss");
+    const toggleBtn = document.getElementById("battle-keybind-toggle");
+    const closeBtn = document.getElementById("battle-keybind-close");
     if (!hud) return;
 
-    let dismissed = false;
-    try {
-      dismissed = localStorage.getItem(battleHelpDismissedKey) === "1";
-    } catch (_) {}
-    hud.classList.toggle("hidden", dismissed);
-
-    if (!dismissBtn) return;
-    dismissBtn.addEventListener("click", () => {
-      hud.classList.add("hidden");
+    const applyExpandedState = (expanded, persist = true) => {
+      hud.classList.remove("hidden");
+      hud.dataset.state = expanded ? "expanded" : "collapsed";
+      if (toggleBtn) {
+        toggleBtn.setAttribute("aria-expanded", expanded ? "true" : "false");
+        toggleBtn.setAttribute(
+          "aria-label",
+          expanded ? "Controls expanded" : "Show controls",
+        );
+      }
+      if (!persist) return;
       try {
-        localStorage.setItem(battleHelpDismissedKey, "1");
+        localStorage.setItem(
+          controlsHudStateKey,
+          expanded ? "expanded" : "collapsed",
+        );
       } catch (_) {}
+    };
+
+    let expanded = true;
+    try {
+      expanded = localStorage.getItem(controlsHudStateKey) !== "collapsed";
+    } catch (_) {}
+    applyExpandedState(expanded, false);
+
+    toggleBtn?.addEventListener("click", () => {
+      applyExpandedState(hud.dataset.state !== "expanded");
+    });
+    closeBtn?.addEventListener("click", () => {
+      applyExpandedState(false);
     });
   }
 
   function initTeamStatusHud(players) {
     const root = document.getElementById("team-status-hud");
-    const grid = document.getElementById("team-status-grid");
-    if (!root || !grid) return;
+    const leftStack = document.getElementById("team-status-left");
+    const rightStack = document.getElementById("team-status-right");
+    if (!root || !leftStack || !rightStack) return;
 
     const gameData = _gameData();
     const username = _username();
 
-    grid.innerHTML = "";
+    leftStack.innerHTML = "";
+    rightStack.innerHTML = "";
     teamRows.clear();
 
     const list = Array.isArray(players) ? players : [];
@@ -634,62 +655,132 @@ export function createGameHudController({
       return String(a?.name || "").localeCompare(String(b?.name || ""));
     });
 
-    const makeCell = (p) => {
-      const cell = document.createElement("div");
-      cell.className = "team-hud-cell";
-      if (!p) return cell;
+    const healthColorForRatio = (ratio) => {
+      if (ratio <= 0.24) return "#f87171";
+      if (ratio <= 0.55) return "#fbbf24";
+      return "#34d399";
+    };
 
-      const row = document.createElement("li");
-      row.className = "team-hud-player";
-      if (p?.isAlive === false) row.classList.add("dead");
-
-      const img = document.createElement("img");
-      const cls = (p?.char_class || "ninja").toLowerCase();
-      img.src = `/assets/${cls}/body.webp`;
-      img.alt = cls;
-
-      const nameEl = document.createElement("div");
-      nameEl.className = "team-hud-player-name";
-      const name = String(p?.name || "Player");
-      nameEl.textContent = name + (name === username ? " (You)" : "");
-
-      row.appendChild(img);
-      row.appendChild(nameEl);
-      cell.appendChild(row);
-      teamRows.set(name, { row });
-      return cell;
+    const applyHealthState = (entry, health, maxHealth = null) => {
+      if (!entry?.row) return;
+      if (Number.isFinite(Number(maxHealth)) && Number(maxHealth) > 0) {
+        entry.maxHealth = Number(maxHealth);
+      }
+      if (Number.isFinite(Number(health))) {
+        entry.currentHealth = Number(health);
+      }
+      const current = Math.max(0, Number(entry.currentHealth) || 0);
+      const max = Math.max(1, Number(entry.maxHealth) || 1);
+      const ratio = Math.max(0, Math.min(1, current / max));
+      entry.row.style.setProperty("--health-ratio", String(ratio));
+      entry.row.style.setProperty("--health-accent", healthColorForRatio(ratio));
+      setTeamHudPlayerAlive(entry.name, current > 0);
     };
 
     const yourTeam = sorted.filter((p) => p?.team === gameData?.yourTeam);
     const oppTeam = sorted.filter((p) => p?.team !== gameData?.yourTeam);
 
-    const yourHeader = document.createElement("div");
-    yourHeader.className = "team-hud-title";
-    yourHeader.textContent = "Your Team";
-    const oppHeader = document.createElement("div");
-    oppHeader.className = "team-hud-title";
-    oppHeader.textContent = "Other Team";
-    grid.appendChild(yourHeader);
-    grid.appendChild(oppHeader);
+    const buildPlayerNode = (p) => {
+      const row = document.createElement("div");
+      row.className = "team-hud-player";
+      const isFriendly = p?.team === gameData?.yourTeam;
+      row.classList.add(isFriendly ? "friendly" : "enemy");
+      const avatarRing = document.createElement("div");
+      avatarRing.className = "team-hud-avatar-ring";
+      const avatarCore = document.createElement("div");
+      avatarCore.className = "team-hud-avatar-core";
+      const img = document.createElement("img");
+      const cls = (p?.char_class || "ninja").toLowerCase();
+      img.src = `/assets/${cls}/body.webp`;
+      img.alt = cls;
+      const cross = document.createElement("div");
+      cross.className = "team-hud-cross";
+      cross.textContent = "X";
+      const youTag = document.createElement("div");
+      youTag.className = "team-hud-you-tag";
+      youTag.textContent = "You";
+      const nameEl = document.createElement("div");
+      nameEl.className = "team-hud-player-name";
+      const name = String(p?.name || "Player");
+      nameEl.textContent = name;
 
-    const rows = Math.max(yourTeam.length, oppTeam.length);
-    for (let i = 0; i < rows; i++) {
-      grid.appendChild(makeCell(yourTeam[i]));
-      grid.appendChild(makeCell(oppTeam[i]));
-    }
+      avatarCore.appendChild(img);
+      avatarCore.appendChild(cross);
+      if (name === username) {
+        avatarCore.appendChild(youTag);
+      }
+      avatarRing.appendChild(avatarCore);
+      row.appendChild(avatarRing);
+      row.appendChild(nameEl);
 
-    if (deferGameplayHudReveal) {
-      root.classList.add("hidden");
-    } else {
-      root.classList.toggle("hidden", sorted.length === 0);
-    }
+      const entry = {
+        name,
+        row,
+        maxHealth:
+          Number(p?.stats?.health) ||
+          Number(p?.health) ||
+          1,
+        currentHealth:
+          typeof p?.health === "number"
+            ? Number(p.health)
+            : Number(p?.stats?.health) || 1,
+      };
+      teamRows.set(name, entry);
+
+      if (p?.connected === false) row.classList.add("disconnected");
+      if (p?.loaded !== true) row.classList.add("loading");
+      applyHealthState(entry, entry.currentHealth, entry.maxHealth);
+      return row;
+    };
+
+    yourTeam.forEach((playerData) => {
+      leftStack.appendChild(buildPlayerNode(playerData));
+    });
+    oppTeam.forEach((playerData) => {
+      rightStack.appendChild(buildPlayerNode(playerData));
+    });
+
+    root.classList.toggle("hidden", sorted.length === 0);
   }
 
   function setTeamHudPlayerAlive(name, isAlive) {
     if (!name) return;
     const entry = teamRows.get(String(name));
     if (!entry?.row) return;
-    entry.row.classList.toggle("dead", !isAlive);
+    const shouldBeDead = !isAlive;
+    const wasDead = entry.row.classList.contains("dead");
+    entry.row.classList.toggle("dead", shouldBeDead);
+    if (shouldBeDead) {
+      entry.row.style.setProperty("--health-ratio", "0");
+    }
+    if (shouldBeDead && !wasDead) {
+      entry.row.classList.remove("death-pop");
+      void entry.row.offsetWidth;
+      entry.row.classList.add("death-pop");
+      setTimeout(() => {
+        entry.row?.classList?.remove("death-pop");
+      }, 360);
+    }
+  }
+
+  function setTeamHudPlayerHealth(name, health, maxHealth = null) {
+    if (!name) return;
+    const entry = teamRows.get(String(name));
+    if (!entry?.row) return;
+    if (Number.isFinite(Number(maxHealth)) && Number(maxHealth) > 0) {
+      entry.maxHealth = Number(maxHealth);
+    }
+    if (!Number.isFinite(Number(health))) return;
+    entry.currentHealth = Number(health);
+    const current = Math.max(0, entry.currentHealth);
+    const max = Math.max(1, Number(entry.maxHealth) || 1);
+    const ratio = Math.max(0, Math.min(1, current / max));
+    let accent = "#34d399";
+    if (ratio <= 0.24) accent = "#f87171";
+    else if (ratio <= 0.55) accent = "#fbbf24";
+    entry.row.style.setProperty("--health-ratio", String(ratio));
+    entry.row.style.setProperty("--health-accent", accent);
+    setTeamHudPlayerAlive(name, current > 0);
   }
 
   function setTeamHudPlayerPresence(name, connected) {
@@ -710,7 +801,7 @@ export function createGameHudController({
     if (!playersByName || typeof playersByName !== "object") return;
     for (const [name, data] of Object.entries(playersByName)) {
       if (typeof data?.health === "number") {
-        setTeamHudPlayerAlive(name, data.health > 0);
+        setTeamHudPlayerHealth(name, data.health);
       }
       if (typeof data?.connected === "boolean") {
         setTeamHudPlayerPresence(name, data.connected);
@@ -852,6 +943,7 @@ export function createGameHudController({
     initKeybindHud,
     initTeamStatusHud,
     setTeamHudPlayerAlive,
+    setTeamHudPlayerHealth,
     setTeamHudPlayerPresence,
     setTeamHudPlayerLoaded,
     syncTeamHudFromSnapshot,

@@ -61,30 +61,43 @@ function startGame(room) {
   });
 
   setTimeout(() => {
-    const now = Date.now();
-    for (const playerData of room.players.values()) {
-      if (!playerData) continue;
-      if (playerData.isBot) continue;
-      effectManager.apply(
-        playerData,
-        "respawnShield",
-        now,
-        { durationMs: 3000 },
-        room,
-      );
-      room.io.to(`game:${room.matchId}`).emit("player:respawn", {
-        username: playerData.name,
-        x: Number(playerData.x) || 0,
-        y: Number(playerData.y) || 0,
-        team: playerData.team,
-        health: playerData.health,
-        maxHealth: playerData.maxHealth,
-        shieldMs: 3000,
-        at: now,
+    try {
+      const now = Date.now();
+      console.log(`[GameRoom ${room.matchId}] Countdown finished, bootstrapping live loop`, {
+        players: room.players.size,
+        readyAcks: room._readyAcks?.size || 0,
+        requiredReadyAcks: room._requiredUserIds?.size || 0,
       });
+      for (const playerData of room.players.values()) {
+        if (!playerData) continue;
+        if (playerData.isBot) continue;
+        effectManager.apply(
+          playerData,
+          "respawnShield",
+          now,
+          { durationMs: 3000 },
+          room,
+        );
+        room.io.to(`game:${room.matchId}`).emit("player:respawn", {
+          username: playerData.name,
+          x: Number(playerData.x) || 0,
+          y: Number(playerData.y) || 0,
+          team: playerData.team,
+          health: playerData.health,
+          maxHealth: playerData.maxHealth,
+          shieldMs: 3000,
+          at: now,
+        });
+      }
+      room.broadcastSnapshot();
+      room.startGameLoop();
+    } catch (error) {
+      console.warn(
+        `[GameRoom ${room.matchId}] Failed to bootstrap live loop`,
+        error?.message,
+        error,
+      );
     }
-    room.broadcastSnapshot();
-    room.startGameLoop();
   }, 6000);
 }
 

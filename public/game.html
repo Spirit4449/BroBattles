@@ -18,6 +18,18 @@
         font-display: swap;
       }
 
+      @property --health-ratio {
+        syntax: "<number>";
+        inherits: true;
+        initial-value: 1;
+      }
+
+      @property --health-accent {
+        syntax: "<color>";
+        inherits: true;
+        initial-value: #34d399;
+      }
+
       html,
       body {
         margin: 0;
@@ -179,12 +191,23 @@
         left: 0;
         right: 0;
         height: min(180px, 28vh);
-        background: linear-gradient(
-          180deg,
-          rgba(5, 10, 20, 0.82) 0%,
-          rgba(8, 15, 30, 0.54) 42%,
-          rgba(8, 15, 30, 0) 100%
-        );
+        background:
+          radial-gradient(
+            circle at 18% 10%,
+            rgba(96, 165, 250, 0.2),
+            transparent 30%
+          ),
+          radial-gradient(
+            circle at 82% 10%,
+            rgba(248, 113, 113, 0.18),
+            transparent 30%
+          ),
+          linear-gradient(
+            180deg,
+            rgba(5, 10, 20, 0.82) 0%,
+            rgba(8, 15, 30, 0.54) 42%,
+            rgba(8, 15, 30, 0) 100%
+          );
         pointer-events: none;
         z-index: 9996;
         opacity: 1;
@@ -633,89 +656,331 @@
         }
       }
 
-      #battle-keybind-hud {
+      #team-status-hud {
         position: fixed;
-        top: 26px;
-        right: 10px;
-        z-index: 9999;
-        width: min(200px, calc(100vw - 20px));
+        top: 34px;
+        left: 24px;
+        right: 24px;
+        z-index: 9998;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        pointer-events: none;
+      }
+      #team-status-hud .team-hud-side {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: min(92px, 18vw);
+        min-width: 0;
+      }
+      #team-status-hud .team-hud-side-right {
+        align-items: flex-end;
+      }
+      #team-status-hud .team-hud-player-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      #team-status-hud .team-hud-player {
+        --health-ratio: 1;
+        --health-accent: #34d399;
+        --team-core-start: #27436f;
+        --team-core-end: #091426;
+        width: 56px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        transition:
+          --health-ratio 220ms ease,
+          --health-accent 220ms ease,
+          transform 180ms ease,
+          opacity 180ms ease,
+          filter 180ms ease;
+      }
+      #team-status-hud .team-hud-side-right .team-hud-player {
+        align-self: flex-end;
+      }
+      #team-status-hud .team-hud-avatar-ring {
+        position: relative;
+        width: 46px;
+        height: 46px;
+        padding: 3px;
+        border-radius: 999px;
+        background:
+          conic-gradient(
+            from -90deg,
+            var(--health-accent) calc(var(--health-ratio) * 1turn),
+            rgba(5, 11, 22, 0.95) 0
+          );
+        box-shadow:
+          0 5px 10px rgba(0, 0, 0, 0.28),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+        transition:
+          --health-ratio 220ms ease,
+          --health-accent 220ms ease,
+          transform 180ms ease,
+          filter 180ms ease,
+          opacity 180ms ease;
+      }
+      #team-status-hud .team-hud-avatar-ring::after {
+        content: "";
+        position: absolute;
+        inset: 1px;
+        border-radius: inherit;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      #team-status-hud .team-hud-avatar-core {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        border-radius: inherit;
+        overflow: hidden;
         background: linear-gradient(
           180deg,
-          rgba(34, 40, 61, 0.9),
-          rgba(48, 53, 72, 0.6)
+          var(--team-core-start),
+          var(--team-core-end)
         );
-        border: 2px solid #1e3a8a;
-        border-radius: 10px;
-        color: #e2e8f0;
-        box-shadow:
-          0 8px 20px rgba(0, 0, 0, 0.45),
-          inset 0 0 0 1px rgba(96, 165, 250, 0.08);
-        padding: 8px 8px 7px;
-        text-align: left;
-      }
-      #battle-keybind-hud .hud-head {
+        border: 1px solid rgba(9, 14, 26, 0.92);
         display: flex;
         align-items: center;
+        justify-content: center;
+      }
+      #team-status-hud .team-hud-player.enemy {
+        --team-core-start: #493446;
+        --team-core-end: #0b1324;
+      }
+      #team-status-hud .team-hud-avatar-core img {
+        width: 62%;
+        height: 62%;
+        object-fit: contain;
+        image-rendering: pixelated;
+        filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.32));
+      }
+      #team-status-hud .team-hud-you-tag {
+        position: absolute;
+        left: 50%;
+        bottom: 1px;
+        transform: translateX(-50%);
+        padding: 1px 4px;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.88);
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        font-family: "Press Start 2P", "Lato", sans-serif;
+        font-size: 4px;
+        line-height: 1.2;
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 0.15px;
+      }
+      #team-status-hud .team-hud-cross {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Press Start 2P", "Lato", sans-serif;
+        font-size: 24px;
+        color: rgba(255, 228, 230, 0.95);
+        text-shadow:
+          0 0 12px rgba(127, 29, 29, 0.95),
+          0 3px 0 rgba(69, 10, 10, 0.9);
+        opacity: 0;
+        transform: scale(0.72) rotate(-12deg);
+        transition:
+          opacity 160ms ease,
+          transform 220ms cubic-bezier(0.22, 0.9, 0.32, 1);
+        pointer-events: none;
+      }
+      #team-status-hud .team-hud-player-name {
+        max-width: 88px;
+        text-align: center;
+        font-family: "Press Start 2P", "Lato", sans-serif;
+        font-size: 6px;
+        line-height: 1.35;
+        color: #ffffff;
+        text-shadow:
+          -1px 0 #000,
+          0 1px #000,
+          1px 0 #000,
+          0 -1px #000,
+          0 2px 6px rgba(0, 0, 0, 0.45);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #team-status-hud .team-hud-player.disconnected {
+        opacity: 0.58;
+      }
+      #team-status-hud .team-hud-player.loading .team-hud-avatar-core {
+        filter: grayscale(0.45) brightness(0.72);
+      }
+      #team-status-hud .team-hud-player.dead {
+        filter: grayscale(1) brightness(0.68);
+        opacity: 0.66;
+      }
+      #team-status-hud .team-hud-player.dead .team-hud-avatar-ring {
+        --health-ratio: 0;
+      }
+      #team-status-hud .team-hud-player.dead .team-hud-cross {
+        opacity: 1;
+        transform: scale(1) rotate(-12deg);
+      }
+      #team-status-hud .team-hud-player.dead .team-hud-player-name {
+        color: #dbe4f2;
+      }
+      #team-status-hud .team-hud-player.death-pop .team-hud-avatar-ring {
+        animation: team-hud-death-pop 320ms cubic-bezier(0.22, 0.9, 0.32, 1);
+      }
+      @keyframes team-hud-death-pop {
+        0% {
+          transform: scale(1);
+        }
+        40% {
+          transform: scale(1.16);
+        }
+        100% {
+          transform: scale(0.96);
+        }
+      }
+
+      #battle-keybind-hud {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 10001;
+        pointer-events: auto;
+        top: auto;
+        left: auto;
+        inset: auto 16px 16px auto;
+      }
+      #battle-keybind-hud .controls-mini-toggle {
+        width: 36px;
+        height: 36px;
+        border: 1px solid rgba(169, 215, 255, 0.72);
+        border-radius: 10px;
+        background: linear-gradient(
+          180deg,
+          rgba(26, 39, 66, 0.96),
+          rgba(18, 28, 49, 0.94)
+        );
+        color: #eff6ff;
+        cursor: pointer;
+        box-shadow:
+          0 10px 20px rgba(0, 0, 0, 0.38),
+          inset 0 0 0 1px rgba(125, 211, 252, 0.12);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition:
+          transform 160ms ease,
+          opacity 160ms ease,
+          box-shadow 160ms ease;
+      }
+      #battle-keybind-hud .controls-mini-toggle:hover {
+        transform: translateY(-1px);
+        box-shadow:
+          0 12px 24px rgba(0, 0, 0, 0.42),
+          inset 0 0 0 1px rgba(191, 219, 254, 0.18);
+      }
+      #battle-keybind-hud .controls-mini-glyph {
+        font-family: "Press Start 2P", "Lato", sans-serif;
+        font-size: 13px;
+        line-height: 1;
+      }
+      #battle-keybind-hud .controls-popover {
+        width: min(320px, calc(100vw - 24px));
+        position: absolute;
+        right: 0;
+        bottom: 48px;
+        top: auto;
+        padding: 14px;
+        border: 2px solid rgba(59, 130, 246, 0.62);
+        border-radius: 18px;
+        background:
+          radial-gradient(
+            circle at top,
+            rgba(96, 165, 250, 0.12),
+            transparent 42%
+          ),
+          linear-gradient(
+            180deg,
+            rgba(20, 31, 53, 0.98),
+            rgba(10, 16, 31, 0.96)
+          );
+        color: #e5efff;
+        box-shadow:
+          0 22px 34px rgba(0, 0, 0, 0.48),
+          inset 0 0 0 1px rgba(191, 219, 254, 0.08);
+        transform-origin: bottom right;
+        transition:
+          opacity 180ms ease,
+          transform 220ms cubic-bezier(0.22, 0.9, 0.32, 1);
+      }
+      #battle-keybind-hud[data-state="collapsed"] .controls-popover {
+        opacity: 0;
+        transform: translateY(8px) scale(0.96);
+        pointer-events: none;
+      }
+      #battle-keybind-hud[data-state="expanded"] .controls-popover {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+      #battle-keybind-hud[data-state="expanded"] .controls-mini-toggle {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.92);
+        pointer-events: none;
+      }
+      #battle-keybind-hud .controls-popover-head {
+        display: flex;
         justify-content: space-between;
-        gap: 6px;
-        margin-bottom: 6px;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 10px;
       }
       #battle-keybind-hud .bs-help-title {
         font-family: "Press Start 2P", "Lato", sans-serif;
-        font-size: 9px;
-        line-height: 1.35;
-        color: #60a5fa;
+        font-size: 10px;
+        line-height: 1.4;
+        color: #93c5fd;
       }
-      #battle-keybind-hud .bs-help-dismiss {
-        width: 20px;
-        height: 20px;
-        border: 1px solid #a9d7ff;
-        border-radius: 6px;
-        background: linear-gradient(180deg, #4b95e6, #3678c3);
+      #battle-keybind-hud .bs-help-close {
+        width: 24px;
+        height: 24px;
+        border: 1px solid rgba(127, 29, 29, 0.75);
+        border-radius: 7px;
+        background: linear-gradient(180deg, #ef4444, #b91c1c);
         color: #fff;
-        font-size: 12px;
-        font-weight: 700;
-        cursor: pointer;
+        font-family: "Press Start 2P", "Lato", sans-serif;
+        font-size: 10px;
         line-height: 1;
-        box-shadow: 0 2px 0 #214c7c;
+        cursor: pointer;
+        box-shadow:
+          0 3px 0 #7f1d1d,
+          0 8px 16px rgba(0, 0, 0, 0.28);
       }
-      #battle-keybind-hud .bs-help-dismiss:active {
-        transform: translateY(1px);
-        box-shadow: 0 1px 0 #214c7c;
-      }
-      #battle-keybind-hud .bs-help-list {
-        margin: 0;
-        padding: 0;
-        list-style: none;
+      #battle-keybind-hud .controls-panel-grid {
         display: grid;
-        gap: 4px;
-        font-size: 11px;
+        gap: 12px;
       }
-      #battle-keybind-hud .bs-help-row {
-        display: grid;
-        grid-template-columns: minmax(140px, 1fr) auto;
-        align-items: center;
-        gap: 6px;
+      #battle-keybind-hud .controls-section {
+        border: 1px solid rgba(96, 165, 250, 0.16);
+        border-radius: 14px;
+        background: rgba(14, 24, 44, 0.72);
+        padding: 12px;
       }
-      #battle-keybind-hud .bs-help-row kbd {
-        display: inline-block;
-        min-width: 22px;
-        border: 1px solid #cde9ff;
-        border-radius: 6px;
-        padding: 2px 6px;
-        background: linear-gradient(180deg, #eff8ff, #cfe8ff);
+      #battle-keybind-hud .controls-section-title {
+        margin: 0 0 10px;
         font-family: "Press Start 2P", "Lato", sans-serif;
         font-size: 8px;
-        text-align: center;
-        color: #14457a;
-        box-shadow:
-          0 2px 0 #7fb5e7,
-          0 3px 6px rgba(0, 0, 0, 0.18);
+        color: #bfdbfe;
+        letter-spacing: 0.4px;
       }
-      #battle-keybind-hud .bs-help-row .key-group {
-        display: inline-flex;
-        gap: 4px;
-        align-items: center;
+      #battle-keybind-hud .controls-move-layout {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
       }
       #battle-keybind-hud .keyboard-pair {
         display: inline-flex;
@@ -726,92 +991,67 @@
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         grid-template-rows: repeat(2, auto);
-        gap: 3px;
+        gap: 4px;
       }
       #battle-keybind-hud .keyboard-cluster .spacer {
-        width: 18px;
+        width: 19px;
         height: 1px;
       }
-      #battle-keybind-hud .keyboard-cluster kbd {
-        min-width: 18px;
-        padding: 2px 0;
-      }
-      #battle-keybind-hud .bs-help-row span {
-        color: #bfdbfe;
-      }
-
-      #team-status-hud {
-        position: fixed;
-        left: 10px;
-        top: 26px;
-        z-index: 9997;
-        width: min(208px, calc(100vw - 20px));
-        background: linear-gradient(
-          180deg,
-          rgba(42, 50, 78, 0.9),
-          rgba(24, 31, 62, 0.9)
-        );
-        border: 2px solid #1e3a8a;
-        border-radius: 10px;
-        color: #e2e8f0;
-        box-shadow:
-          0 8px 20px rgba(0, 0, 0, 0.45),
-          inset 0 0 0 1px rgba(96, 165, 250, 0.08);
-        padding: 7px;
-      }
-      #team-status-hud .team-hud-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        column-gap: 6px;
-        row-gap: 3px;
-        align-items: center;
-      }
-      #team-status-hud .team-hud-title {
-        margin: 0;
+      #battle-keybind-hud kbd {
+        display: inline-block;
+        min-width: 19px;
+        border: 1px solid #cde9ff;
+        border-radius: 6px;
+        padding: 3px 0;
+        background: linear-gradient(180deg, #eff8ff, #cfe8ff);
         font-family: "Press Start 2P", "Lato", sans-serif;
         font-size: 8px;
-        letter-spacing: 0.3px;
-        color: #60a5fa;
         text-align: center;
-        padding-bottom: 3px;
-        border-bottom: 1px solid rgba(96, 165, 250, 0.35);
+        color: #14457a;
+        box-shadow:
+          0 2px 0 #7fb5e7,
+          0 3px 6px rgba(0, 0, 0, 0.18);
       }
-      #team-status-hud .team-hud-cell {
-        min-height: 20px;
-        margin: 0;
-        padding: 0;
+      #battle-keybind-hud .controls-move-copy {
+        font-size: 11px;
+        line-height: 1.45;
+        color: #dbeafe;
       }
-      #team-status-hud .team-hud-player {
+      #battle-keybind-hud .controls-actions {
         display: grid;
-        grid-template-columns: 16px 1fr;
+        gap: 10px;
+      }
+      #battle-keybind-hud .bs-help-action-row {
+        display: grid;
+        grid-template-columns: 48px 1fr;
+        gap: 10px;
         align-items: center;
-        gap: 5px;
-        padding: 3px 5px;
-        border: 1px solid rgba(30, 58, 138, 0.7);
-        border-radius: 7px;
-        background: rgba(8, 18, 58, 0.65);
-        transition:
-          filter 140ms ease,
-          opacity 140ms ease;
       }
-      #team-status-hud .team-hud-player.disconnected {
-        opacity: 0.55;
+      #battle-keybind-hud .bs-help-mouse {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(10, 18, 32, 0.84);
+        border: 1px solid rgba(148, 163, 184, 0.26);
       }
-      #team-status-hud .team-hud-player img {
-        width: 14px;
-        height: 14px;
-        image-rendering: pixelated;
+      #battle-keybind-hud .bs-help-mouse img {
+        width: 28px;
+        height: 28px;
         object-fit: contain;
       }
-      #team-status-hud .team-hud-player-name {
-        font-size: 11px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+      #battle-keybind-hud .bs-help-action-label {
+        font-family: "Press Start 2P", "Lato", sans-serif;
+        font-size: 8px;
+        color: #f8fbff;
+        margin-bottom: 5px;
       }
-      #team-status-hud .team-hud-player.dead {
-        filter: grayscale(1);
-        opacity: 0.55;
+      #battle-keybind-hud .bs-help-action-copy {
+        font-size: 11px;
+        line-height: 1.45;
+        color: #d7e7ff;
       }
 
       #bank-bust-hud {
@@ -935,11 +1175,6 @@
         #battle-start-overlay .bs-player-card {
           width: min(34vw, 200px);
         }
-        #battle-keybind-hud {
-          top: 18px;
-          right: 8px;
-          width: min(246px, calc(100vw - 16px));
-        }
         #game-timer-hud {
           top: 18px;
           left: 50%;
@@ -947,10 +1182,34 @@
           transform: translateX(-50%);
         }
         #team-status-hud {
-          top: 18px;
-          left: 8px;
-          bottom: auto;
-          width: min(186px, calc(100vw - 16px));
+          top: 24px;
+          left: 16px;
+          right: 16px;
+        }
+        #team-status-hud .team-hud-side {
+          width: min(74px, 24vw);
+          gap: 8px;
+        }
+        #team-status-hud .team-hud-player {
+          width: 46px;
+        }
+        #team-status-hud .team-hud-avatar-ring {
+          width: 38px;
+          height: 38px;
+        }
+        #team-status-hud .team-hud-player-name {
+          max-width: 72px;
+          font-size: 5px;
+        }
+        #battle-keybind-hud .controls-popover {
+          width: min(286px, calc(100vw - 18px));
+          right: 0;
+          bottom: 44px;
+        }
+        #battle-keybind-hud .controls-mini-toggle {
+          width: 34px;
+          height: 34px;
+          border-radius: 10px;
         }
         #bank-bust-hud {
           top: 92px;
@@ -1146,7 +1405,91 @@
     </div>
 
     <aside id="team-status-hud" class="hidden" aria-live="polite">
-      <div class="team-hud-grid" id="team-status-grid"></div>
+      <div class="team-hud-side team-hud-side-left">
+        <div class="team-hud-player-stack" id="team-status-left"></div>
+      </div>
+      <div class="team-hud-side team-hud-side-right">
+        <div class="team-hud-player-stack" id="team-status-right"></div>
+      </div>
+    </aside>
+
+    <aside
+      id="battle-keybind-hud"
+      class="hidden"
+      aria-live="polite"
+      data-state="expanded"
+    >
+      <button
+        id="battle-keybind-toggle"
+        class="controls-mini-toggle"
+        type="button"
+        aria-label="Show controls"
+        aria-expanded="false"
+      >
+        <span class="controls-mini-glyph">?</span>
+      </button>
+      <div class="controls-popover">
+        <div class="controls-popover-head">
+          <div>
+            <div class="bs-help-title">Controls</div>
+          </div>
+          <button
+            id="battle-keybind-close"
+            class="bs-help-close"
+            type="button"
+            aria-label="Collapse controls"
+          >
+            X
+          </button>
+        </div>
+        <div class="controls-panel-grid">
+          <section class="controls-section">
+            <h3 class="controls-section-title">Movement</h3>
+            <div class="controls-move-layout">
+              <span class="keyboard-pair">
+                <span class="keyboard-cluster" aria-hidden="true">
+                  <span class="spacer"></span><kbd>W</kbd><span class="spacer"></span>
+                  <kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>
+                </span>
+                <span class="keyboard-cluster" aria-hidden="true">
+                  <span class="spacer"></span><kbd>&uarr;</kbd><span class="spacer"></span>
+                  <kbd>&larr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd>
+                </span>
+              </span>
+              <div class="controls-move-copy">
+                Choose either keyboard layout to move and reposition quickly.
+              </div>
+            </div>
+          </section>
+          <section class="controls-section">
+            <h3 class="controls-section-title">Actions</h3>
+            <div class="controls-actions">
+              <div class="bs-help-action-row">
+                <div class="bs-help-mouse">
+                  <img src="/assets/mouse_right.webp" alt="Right mouse button" />
+                </div>
+                <div>
+                  <div class="bs-help-action-label">Attack</div>
+                  <div class="bs-help-action-copy">
+                    Hold to aim and tap for a quick auto-aim attack.
+                  </div>
+                </div>
+              </div>
+              <div class="bs-help-action-row">
+                <div class="bs-help-mouse">
+                  <img src="/assets/mouse_left.webp" alt="Left mouse button" />
+                </div>
+                <div>
+                  <div class="bs-help-action-label">Special</div>
+                  <div class="bs-help-action-copy">
+                    Hold to aim and tap for a quick auto-aim special.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
     </aside>
 
     <div id="game-timer-hud" class="hidden" aria-live="polite">
@@ -1201,7 +1544,7 @@
               />
               <div class="bs-brand-title">Bro Battles</div>
             </div>
-            <div class="bs-map-mode" id="bs-map-mode">Lushy Peaks • 1v1</div>
+            <div class="bs-map-mode" id="bs-map-mode">Lushy Peaks - 1v1</div>
           </div>
           <div class="bs-grid">
             <div class="bs-col your" id="bs-your"></div>
@@ -1211,38 +1554,6 @@
         </div>
       </div>
     </div>
-
-    <aside id="battle-keybind-hud" class="hidden" aria-live="polite">
-      <div class="hud-head">
-        <div class="bs-help-title">Controls</div>
-        <button
-          id="battle-keybind-dismiss"
-          class="bs-help-dismiss"
-          type="button"
-          aria-label="Dismiss controls"
-        >
-          ×
-        </button>
-      </div>
-      <ul class="bs-help-list">
-        <li class="bs-help-row">
-          <span class="keyboard-pair">
-            <span class="keyboard-cluster" aria-hidden="true">
-              <span class="spacer"></span><kbd>W</kbd
-              ><span class="spacer"></span> <kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>
-            </span>
-            <span class="keyboard-cluster" aria-hidden="true">
-              <span class="spacer"></span><kbd>↑</kbd
-              ><span class="spacer"></span> <kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd>
-            </span>
-          </span>
-          <span>Move</span>
-        </li>
-
-        <li class="bs-help-row"><kbd>J</kbd><span>Attack</span></li>
-        <li class="bs-help-row"><kbd>I</kbd><span>Special</span></li>
-      </ul>
-    </aside>
 
     <!-- Loading UI -->
     <div
@@ -1330,7 +1641,7 @@
 
       (async () => {
         // Start creeping immediately during Phaser download
-        startCreep("Downloading engine…");
+        startCreep("Downloading engine...");
         await loadScript(
           "https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser-arcade-physics.min.js",
         );
@@ -1340,7 +1651,7 @@
         updateLoading(scriptPct, "Engine ready");
 
         // Keep creeping (still capped at 48%) during bundle download
-        updateLoading(scriptPct, "Downloading game…");
+        updateLoading(scriptPct, "Downloading game...");
         await loadScript("/bundles/game.bundle.js");
         window.__BOOT_GAME__ && window.__BOOT_GAME__();
         // Finish scripts slice cleanly
