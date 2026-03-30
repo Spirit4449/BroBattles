@@ -145,6 +145,7 @@ export function createMatchCoordinator(config) {
   let _startWatchdogDeadline = 0;
   let _forceLiveInputTimer = null;
   let _startWatchdogRecoveryInFlight = false;
+  let _joinedSocketId = null;
 
   // ---------------------------------------------------------------------------
   // Private helpers
@@ -222,6 +223,25 @@ export function createMatchCoordinator(config) {
     return op;
   }
 
+  function _markJoinStale(reason = "unknown") {
+    if (_joinedSocketId == null && !getHasJoined() && !getJoinInFlight()) return;
+    if (!shouldMuteClientDefaultLogs()) {
+      console.warn("[game] join state reset", {
+        reason,
+        joinedSocketId: _joinedSocketId,
+        currentSocketId: socket.id || null,
+      });
+    } else {
+      noteClientLifecycle(
+        "join-stale",
+        `reason=${reason} joined=${_joinedSocketId || "none"} current=${socket.id || "none"}`,
+      );
+    }
+    _joinedSocketId = null;
+    setHasJoined(false);
+    setJoinInFlight(false);
+  }
+
   // ---------------------------------------------------------------------------
   // Socket event handlers (named functions so dispose() can target them exactly)
   // ---------------------------------------------------------------------------
@@ -229,15 +249,31 @@ export function createMatchCoordinator(config) {
   /** Re-emit game:join when a socket connection is established or restored. */
   function _tryJoin() {
     const joinPayload = getJoinPayload();
+    const currentSocketId = socket.id || null;
     if (
-      !getGameInitialized() &&
+      currentSocketId &&
+      _joinedSocketId &&
+      currentSocketId !== _joinedSocketId
+    ) {
+      _markJoinStale("socket_id_changed");
+    }
+    if (
       joinPayload &&
       Number(joinPayload.matchId) > 0 &&
-      !getHasJoined() &&
-      !getJoinInFlight()
+      !getJoinInFlight() &&
+      (!getHasJoined() ||
+        !getGameInitialized() ||
+        !currentSocketId ||
+        currentSocketId !== _joinedSocketId)
     ) {
       if (!shouldMuteClientDefaultLogs()) {
-        console.log("[game] connect", joinPayload);
+        console.log("[game] connect", {
+          ...joinPayload,
+          socketId: currentSocketId,
+          joinedSocketId: _joinedSocketId,
+          gameInitialized: getGameInitialized(),
+          hasJoined: getHasJoined(),
+        });
       } else {
         noteClientLifecycle(
           "join-emit",
@@ -263,6 +299,7 @@ export function createMatchCoordinator(config) {
             } else {
               noteClientLifecycle("join-ack-ok", `matchId=${ack?.matchId ?? "?"}`);
             }
+            _joinedSocketId = socket.id || currentSocketId;
             setHasJoined(true);
           }
         });
@@ -280,7 +317,26 @@ export function createMatchCoordinator(config) {
   }
 
   function _onGameJoined() {
+    _joinedSocketId = socket.id || _joinedSocketId;
     setHasJoined(true);
+  }
+
+  function _onSocketDisconnect(reason) {
+    if (!shouldMuteClientDefaultLogs()) {
+      console.warn("[game] socket disconnected", {
+        reason,
+        socketId: _joinedSocketId || socket.id || null,
+        active: socket.active,
+      });
+    } else {
+      noteClientLifecycle(
+        "disconnect",
+        `reason=${String(reason || "unknown")}`,
+      );
+    }
+    if (!getGameEnded()) {
+      _markJoinStale(`disconnect:${String(reason || "unknown")}`);
+    }
   }
 
   function _stopStartWatchdog() {
@@ -485,6 +541,7 @@ export function createMatchCoordinator(config) {
     }
 
     setGameInitialized(true);
+    _joinedSocketId = socket.id || _joinedSocketId;
     setHasJoined(true);
 
     // Detect late-join into an already-running game
@@ -1049,6 +1106,7 @@ export function createMatchCoordinator(config) {
   function register() {
     socket.on("connect", _tryJoin);
     socket.on("reconnect", _tryJoin);
+    socket.on("disconnect", _onSocketDisconnect);
     socket.on("game:joined", _onGameJoined);
     socket.on("game:init", _onGameInit);
     socket.on("game:start", _onGameStart);
@@ -1082,6 +1140,7 @@ export function createMatchCoordinator(config) {
     _clearForceLiveInputTimer();
     socket.off("connect", _tryJoin);
     socket.off("reconnect", _tryJoin);
+    socket.off("disconnect", _onSocketDisconnect);
     socket.off("game:joined", _onGameJoined);
     socket.off("game:init", _onGameInit);
     socket.off("game:start", _onGameStart);
