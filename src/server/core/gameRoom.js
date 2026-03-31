@@ -806,8 +806,8 @@ class GameRoom {
     return powerupManager.computePoisonY(this, sdElapsedMs);
   }
 
-  _applyPowerupToPlayer(playerData, type, nowTs) {
-    powerupManager.applyPowerupToPlayer(this, playerData, type, nowTs);
+  _applyPowerupToPlayer(playerData, type, nowTs, params = null) {
+    powerupManager.applyPowerupToPlayer(this, playerData, type, nowTs, params);
   }
 
   _tickPowerups() {

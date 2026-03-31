@@ -35,6 +35,15 @@ const {
   WORLD_BOUNDS,
 } = require("../../gameRoomConfig");
 
+function getPowerScale(params = {}) {
+  const scale = Number(params?.powerScale);
+  return Number.isFinite(scale) && scale > 0 ? scale : 1;
+}
+
+function scaleDeltaFromOne(baseValue, scale) {
+  return 1 + (Number(baseValue || 1) - 1) * scale;
+}
+
 function _isInSuddenDeathWater(room, player, now) {
   if (!room._suddenDeathActive) return false;
   const elapsed = now - room._loopStartWallTime;
@@ -54,7 +63,12 @@ const effectDefs = {
   rage: {
     durationMs: POWERUP_DURATIONS_MS.rage || 10000,
     tickIntervalMs: POWERUP_AMBIENT_TICK_MS,
-    modifiers: { damageMult: POWERUP_RAGE_DAMAGE_MULT },
+    getModifiers(params = {}) {
+      const powerScale = getPowerScale(params);
+      return {
+        damageMult: scaleDeltaFromOne(POWERUP_RAGE_DAMAGE_MULT, powerScale),
+      };
+    },
     onApply: null,
     onTick(player, room) {
       room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
@@ -68,7 +82,15 @@ const effectDefs = {
   shield: {
     durationMs: POWERUP_DURATIONS_MS.shield || 10000,
     tickIntervalMs: 0,
-    modifiers: { damageTakenMult: POWERUP_SHIELD_DAMAGE_MULT },
+    getModifiers(params = {}) {
+      const powerScale = getPowerScale(params);
+      return {
+        damageTakenMult: Math.max(
+          0,
+          scaleDeltaFromOne(POWERUP_SHIELD_DAMAGE_MULT, powerScale),
+        ),
+      };
+    },
     onApply: null,
     onTick: null,
     snapshotKey: "shield",
@@ -94,11 +116,15 @@ const effectDefs = {
         room._broadcastHealthUpdate(player, { cause: "heal" });
       }
     },
-    onTick(player, room, now) {
+    onTick(player, room, now, params = {}) {
       if (_isInSuddenDeathWater(room, player, now)) return;
       const prev = player.health;
+      const powerScale = getPowerScale(params);
       const inc =
-        (POWERUP_HEALTH_REGEN_PER_SEC * POWERUP_EFFECT_TICK_MS) / 1000;
+        (POWERUP_HEALTH_REGEN_PER_SEC *
+          powerScale *
+          POWERUP_EFFECT_TICK_MS) /
+        1000;
       player.health = Math.min(player.maxHealth, player.health + inc);
       if (player.health !== prev) {
         room._maybeBroadcastHealth(player, now, { cause: "heal" });
@@ -116,9 +142,13 @@ const effectDefs = {
     tickIntervalMs: POWERUP_EFFECT_TICK_MS,
     modifiers: {},
     onApply: null,
-    onTick(player, room, now) {
+    onTick(player, room, now, params = {}) {
       const prev = player.health;
-      const dmg = (POWERUP_POISON_DPS * POWERUP_EFFECT_TICK_MS) / 1000;
+      const dmg =
+        (POWERUP_POISON_DPS *
+          getPowerScale(params) *
+          POWERUP_EFFECT_TICK_MS) /
+        1000;
       player.health = Math.max(0, player.health - dmg);
       player.lastCombatAt = now;
       if (player.health !== prev) {
@@ -138,7 +168,13 @@ const effectDefs = {
   gravityBoots: {
     durationMs: POWERUP_DURATIONS_MS.gravityBoots || 7000,
     tickIntervalMs: POWERUP_AMBIENT_TICK_MS,
-    modifiers: { jumpMult: 1.55, speedMult: 1.15 },
+    getModifiers(params = {}) {
+      const powerScale = getPowerScale(params);
+      return {
+        jumpMult: scaleDeltaFromOne(1.55, powerScale),
+        speedMult: scaleDeltaFromOne(1.15, powerScale),
+      };
+    },
     onApply: null,
     onTick(player, room) {
       room.io.to(`game:${room.matchId}`).emit("powerup:tick", {

@@ -1,9 +1,11 @@
 const thorgRageAbility = require("./abilities/thorgRageAbility");
 const dravenInfernoAbility = require("./abilities/dravenInfernoAbility");
+const wizardArcaneSurgeAbility = require("./abilities/wizardArcaneSurgeAbility");
 
 const abilitiesByCharacter = {
   [thorgRageAbility.key]: thorgRageAbility,
   [dravenInfernoAbility.key]: dravenInfernoAbility,
+  [wizardArcaneSurgeAbility.key]: wizardArcaneSurgeAbility,
 };
 
 function getAbility(character) {

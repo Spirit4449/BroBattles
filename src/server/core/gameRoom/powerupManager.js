@@ -14,6 +14,7 @@ const {
   POWERUP_PLATFORM_POINTS,
 } = require("../gameRoomConfig");
 const effectManager = require("./effects/effectManager");
+const { effectDefs } = require("./effects/effectDefs");
 
 function getPlatformSpawnPoints(room) {
   const mapId = Number(room.matchData?.map) || 1;
@@ -82,9 +83,17 @@ function isInSuddenDeathWater(room, playerData, nowTs) {
   return typeof playerData?.y === "number" && playerData.y >= poisonY;
 }
 
-function applyPowerupToPlayer(room, playerData, type, nowTs) {
+function applyPowerupToPlayer(room, playerData, type, nowTs, params = null) {
   if (!playerData) return;
-  effectManager.apply(playerData, type, nowTs, {}, room);
+  const durationScale = Number(params?.durationScale);
+  const nextParams = params && typeof params === "object" ? { ...params } : {};
+  if (Number.isFinite(durationScale) && durationScale > 0) {
+    const baseDuration = Number(effectDefs?.[type]?.durationMs);
+    if (Number.isFinite(baseDuration) && baseDuration > 0) {
+      nextParams.durationMs = Math.round(baseDuration * durationScale);
+    }
+  }
+  effectManager.apply(playerData, type, nowTs, nextParams, room);
 }
 
 function tickPowerups(room) {

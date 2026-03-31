@@ -1774,7 +1774,10 @@ class GameScene extends Phaser.Scene {
         ) {
           wrapper.applyFlipOffset();
         }
-        const lockUntil = Number(wrapper._animLockUntil || 0);
+        const lockUntil = Math.max(
+          Number(wrapper._animLockUntil || 0),
+          Number(spr._specialAnimLockUntilPerf || 0),
+        );
         if (performance.now() >= lockUntil) {
           const chosenAnim = chooseRemoteAnimation(wrapper.character, {
             animation: animSrc.animation || "idle",

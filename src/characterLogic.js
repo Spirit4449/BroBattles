@@ -245,7 +245,7 @@ function createCharacterCard(character, userData) {
     <div class="stat-section-title">Special</div>
     <div class="stat-main-value">${currentSpecial}</div>
     <div class="stat-bar special-bar"><div class="stat-fill" style="width: ${specialPercent}%"></div></div>
-    <div class="stat-details">${stats.specialChargeHits} hits to charge</div>`;
+    <div class="stat-details">${stats.specialChargeHits} hits to charge<br>${stats.specialDescription || ""}</div>`;
 
   // Actions
   const actionRow = document.createElement("div");

@@ -1149,6 +1149,9 @@ function fireSpecialAttack(context = null) {
       handlePlayerMovement,
     });
   } catch (_) {}
+  if (String(currentCharacter || "").toLowerCase() === "wizard" && player) {
+    player._specialAnimLockUntil = Date.now() + 2100;
+  }
   noteClientActionSent("special", { type: "special" });
   socket.emit("game:special", {
     aim: serializeAimContext(context),
@@ -1393,6 +1396,7 @@ export function handlePlayerMovement(scene) {
 
   const nowTs = Date.now();
   const movementLocked = (player?._movementLockedUntil || 0) > nowTs;
+  const specialAnimLocked = () => (player?._specialAnimLockUntil || 0) > Date.now();
   if (movementLocked) {
     leftKey = false;
     rightKey = false;
@@ -1507,7 +1511,7 @@ export function handlePlayerMovement(scene) {
     if (player.flipX !== wasFlip && applyFlipOffsetLocal)
       applyFlipOffsetLocal();
     isMoving = true; // Sets the isMoving to true
-    if (player.body.touching.down && !isAttacking && !dead) {
+    if (player.body.touching.down && !isAttacking && !dead && !specialAnimLocked()) {
       // If the player is not in the air or attacking or dead, it plays the running animation
       player.anims.play(
         resolveAnimKey(scene, currentCharacter, "running"),
@@ -1545,7 +1549,7 @@ export function handlePlayerMovement(scene) {
     }
     player.setDragX(onGroundRight ? dragGround : dragAir);
     isMoving = true; // Sets moving variable
-    if (player.body.touching.down && !isAttacking && !dead) {
+    if (player.body.touching.down && !isAttacking && !dead && !specialAnimLocked()) {
       // If the player is not in the air or attacking or dead, it plays the running animation
       player.anims.play(
         resolveAnimKey(scene, currentCharacter, "running"),
@@ -1594,7 +1598,7 @@ export function handlePlayerMovement(scene) {
     jump(); // Calls jump
     scene.sound.play("sfx-jump", { volume: 3 });
   }
-  if (!dead && wallSlideContact && !isAttacking) {
+  if (!dead && wallSlideContact && !isAttacking && !specialAnimLocked()) {
     player.anims.play(resolveAnimKey(scene, currentCharacter, "sliding"), true); // Plays sliding animation
   }
 
@@ -1721,7 +1725,7 @@ export function handlePlayerMovement(scene) {
   }
 
   function jump() {
-    if (!isAttacking) {
+    if (!isAttacking && !specialAnimLocked()) {
       player.anims.play(
         resolveAnimKey(scene, currentCharacter, "jumping"),
         true,
@@ -1756,7 +1760,7 @@ export function handlePlayerMovement(scene) {
     }
 
     // Play a jump-like animation
-    if (!isAttacking) {
+    if (!isAttacking && !specialAnimLocked()) {
       player.anims.play(
         resolveAnimKey(scene, currentCharacter, "jumping"),
         true,
@@ -1796,7 +1800,7 @@ export function handlePlayerMovement(scene) {
 
   function fall() {
     updateWallSlideAudio(false);
-    if (!isAttacking) {
+    if (!isAttacking && !specialAnimLocked()) {
       player.anims.play(
         resolveAnimKey(scene, currentCharacter, "falling"),
         true,
@@ -1808,6 +1812,7 @@ export function handlePlayerMovement(scene) {
 
   function idle() {
     updateWallSlideAudio(false);
+    if (specialAnimLocked()) return;
     player.anims.play(resolveAnimKey(scene, currentCharacter, "idle"), true);
     pdbg();
   }

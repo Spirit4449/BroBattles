@@ -8,6 +8,7 @@
 // hidden global state and can be tested or instantiated in isolation.
 import { normalizeMapId } from "../maps/manifest";
 import { spawnDamageImpact } from "../effects";
+import { playWizardArcaneSurge } from "../characters/wizard/effects.js";
 import { playCharacterSound } from "../characters";
 import {
   configureClientNetTest,
@@ -1089,6 +1090,20 @@ export function createMatchCoordinator(config) {
     } catch (_) {}
   }
 
+  function _onWizardArcaneSurge(payload) {
+    const scene = getGameScene();
+    if (!scene || !payload) return;
+    playWizardArcaneSurge(scene, payload, (name) => {
+      if (!name) return null;
+      if (name === getUsername()) return getPlayer();
+      return (
+        opponentPlayers[name]?.opponent ||
+        teamPlayers[name]?.opponent ||
+        null
+      );
+    });
+  }
+
   function _onDeathDropCollected(payload) {
     if (!payload || typeof payload.id === "undefined") return;
     deathdropCollectQueue.push(payload);
@@ -1125,6 +1140,7 @@ export function createMatchCoordinator(config) {
     socket.on("game:sudden-death:start", _onGameSuddenDeath);
     socket.on("powerup:collected", _onPowerupCollected);
     socket.on("powerup:tick", _onPowerupTick);
+    socket.on("wizard:arcane-surge", _onWizardArcaneSurge);
     socket.on("deathdrop:collected", _onDeathDropCollected);
 
     // If already connected when register() is called, attempt join right away
@@ -1159,6 +1175,7 @@ export function createMatchCoordinator(config) {
     socket.off("game:sudden-death:start", _onGameSuddenDeath);
     socket.off("powerup:collected", _onPowerupCollected);
     socket.off("powerup:tick", _onPowerupTick);
+    socket.off("wizard:arcane-surge", _onWizardArcaneSurge);
     socket.off("deathdrop:collected", _onDeathDropCollected);
   }
 

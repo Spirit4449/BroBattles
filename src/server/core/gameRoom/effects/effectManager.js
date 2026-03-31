@@ -52,6 +52,7 @@ function apply(player, effectKey, now, params = {}, room = null) {
   state[effectKey] = {
     until: now + durationMs,
     nextTickAt: now + (def.tickIntervalMs || 0),
+    params: params || {},
   };
 
   if (def.onApply) {
@@ -98,8 +99,12 @@ function getModifiers(player, now) {
   for (const [key, entry] of Object.entries(state)) {
     if (entry.until <= now) continue;
     const def = effectDefs[key];
-    if (!def || !def.modifiers) continue;
-    const m = def.modifiers;
+    if (!def) continue;
+    const m =
+      typeof def.getModifiers === "function"
+        ? def.getModifiers(entry.params || {})
+        : def.modifiers;
+    if (!m) continue;
     if (m.damageMult != null) damageMult *= m.damageMult;
     if (m.damageTakenMult != null) damageTakenMult *= m.damageTakenMult;
     if (m.speedMult != null) speedMult *= m.speedMult;
@@ -124,7 +129,7 @@ function tickAll(player, room, now) {
     const def = effectDefs[key];
     if (!def || !def.tickIntervalMs || !def.onTick) continue;
     if (now >= entry.nextTickAt) {
-      def.onTick(player, room, now);
+      def.onTick(player, room, now, entry.params || {});
       entry.nextTickAt = now + def.tickIntervalMs;
     }
   }

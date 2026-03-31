@@ -287,7 +287,8 @@ export const characterStats = {
     ammoCooldownMs: 800,
     ammoReloadMs: 3000,
     ammoCapacity: 3,
-    specialDescription: "Unleashes a staff nova that expands outward.",
+    specialDescription:
+      "Empowers the whole team with random powerups.",
     specialBaseDamage: 8000,
     specialChargeHits: 30,
     specialChargeDamage: 6000,
@@ -330,8 +331,18 @@ export const characterStats = {
           baseAngleDeg: -90,
         },
       },
+      special: {
+        aim: {
+          kind: "round",
+          radius: 60,
+          defaultRange: 55,
+          anchorForwardOffset: 0,
+          anchorOffsetY: 4,
+        },
+      },
     },
-    description: "A dark sorcerer who manipulates shadows.",
+    description:
+      "Master of the fireball, wielder of the powerups.",
     unlockPrice: 200,
   },
 };

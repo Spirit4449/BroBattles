@@ -178,6 +178,9 @@ export default class OpPlayer {
 
     this.specialListener = (data) => {
       if (data.username === this.username) {
+        if (String(data.character || "").toLowerCase() === "wizard") {
+          this._animLockUntil = performance.now() + 2200;
+        }
         performSpecial(
           data.character,
           this.scene,
