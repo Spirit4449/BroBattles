@@ -35,7 +35,7 @@ class Wizard extends CharacterEntityBase {
   static sounds = {
     attack: { key: "wizard-fireball", volume: 0.55 },
     hit: { key: "wizard-impact", volume: 0.45 },
-    special: { key: "wizard-fireball", volume: 0.4, rate: 0.75 },
+    special: { key: "wizard-special", volume: 0.5, rate: 1 },
   };
 
   static preload(scene, staticPath = "/assets") {
@@ -59,6 +59,10 @@ class Wizard extends CharacterEntityBase {
     scene.load.audio(
       "wizard-fireball",
       this.characterAssetPath(staticPath, "fireball.mp3"),
+    );
+    scene.load.audio(
+      "wizard-special",
+      this.characterAssetPath(staticPath, "special.mp3"),
     );
     if (!scene.cache?.audio?.exists("wizard-impact")) {
       scene.load.audio(

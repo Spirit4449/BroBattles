@@ -64,9 +64,9 @@ export function perform(scene, player) {
     }
   } catch (_) {}
   try {
-    scene.sound?.play?.("wizard-fireball", {
-      volume: 0.35,
-      rate: 0.68,
+    scene.sound?.play?.("wizard-special", {
+      volume: 0.5,
+      rate: 1,
     });
   } catch (_) {}
   pulseAura(scene, player, 0x93c5fd, 1.85, 0.28);

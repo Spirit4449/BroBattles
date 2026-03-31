@@ -289,9 +289,9 @@ export const characterStats = {
     ammoCapacity: 3,
     specialDescription:
       "Empowers the whole team with random powerups.",
-    specialBaseDamage: 8000,
-    specialChargeHits: 30,
-    specialChargeDamage: 6000,
+    specialBaseDamage: 0,
+    specialChargeHits: 5,
+    specialChargeDamage: 16000,
     spriteScale: 0.92,
     body: {
       widthShrink: 200,
@@ -334,7 +334,7 @@ export const characterStats = {
       special: {
         aim: {
           kind: "round",
-          radius: 60,
+          radius: 67,
           defaultRange: 55,
           anchorForwardOffset: 0,
           anchorOffsetY: 4,

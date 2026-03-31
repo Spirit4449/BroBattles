@@ -188,9 +188,9 @@ export function playWizardArcaneSurge(scene, payload, resolveSpriteByName) {
   pulseHtmlMatchBackgroundDarkness();
 
   try {
-    scene.sound?.play?.("wizard-fireball", {
-      volume: 0.42,
-      rate: 0.58,
+    scene.sound?.play?.("wizard-special", {
+      volume: 0.52,
+      rate: 1,
     });
   } catch (_) {}
 
