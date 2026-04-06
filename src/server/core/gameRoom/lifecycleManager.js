@@ -63,11 +63,14 @@ function startGame(room) {
   setTimeout(() => {
     try {
       const now = Date.now();
-      console.log(`[GameRoom ${room.matchId}] Countdown finished, bootstrapping live loop`, {
-        players: room.players.size,
-        readyAcks: room._readyAcks?.size || 0,
-        requiredReadyAcks: room._requiredUserIds?.size || 0,
-      });
+      console.log(
+        `[GameRoom ${room.matchId}] Countdown finished, bootstrapping live loop`,
+        {
+          players: room.players.size,
+          readyAcks: room._readyAcks?.size || 0,
+          requiredReadyAcks: room._requiredUserIds?.size || 0,
+        },
+      );
       for (const playerData of room.players.values()) {
         if (!playerData) continue;
         if (playerData.isBot) continue;
@@ -135,7 +138,7 @@ function checkVictoryCondition(room) {
   if (room.status !== "active") return;
   const victoryState = room.gameMode?.evaluateVictoryState?.() || null;
   const terminal = victoryState?.terminal === true;
-  const winner = terminal ? victoryState?.winnerTeam ?? null : null;
+  const winner = terminal ? (victoryState?.winnerTeam ?? null) : null;
 
   if (!terminal) {
     if (room._pendingVictoryFinishTimeout) {
@@ -180,10 +183,7 @@ function checkVictoryCondition(room) {
     });
   };
 
-  const delayMs = Math.max(
-    0,
-    Number(victoryState?.meta?.finishDelayMs),
-  );
+  const delayMs = Math.max(0, Number(victoryState?.meta?.finishDelayMs));
   if (delayMs === 0) {
     finishVictory();
     return;
@@ -310,6 +310,34 @@ async function finishGame(room, winnerTeam, meta = {}) {
     winnerTeam,
     meta: finalMeta,
   });
+
+  try {
+    const botRows = await room.db.runQuery(
+      `SELECT DISTINCT u.user_id
+         FROM match_participants mp
+         JOIN users u ON u.user_id = mp.user_id
+        WHERE mp.match_id = ?
+          AND u.name LIKE 'BOT %'`,
+      [room.matchId],
+    );
+    const botIds = botRows
+      .map((row) => Number(row.user_id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    if (botIds.length) {
+      const placeholders = botIds.map(() => "?").join(",");
+      await room.db.runQuery(
+        `DELETE FROM users
+          WHERE user_id IN (${placeholders})
+            AND name LIKE 'BOT %'`,
+        botIds,
+      );
+    }
+  } catch (error) {
+    console.warn(
+      `[GameRoom ${room.matchId}] bot cleanup failed`,
+      error?.message || error,
+    );
+  }
 
   setTimeout(() => {
     try {

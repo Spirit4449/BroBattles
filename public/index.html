@@ -31,6 +31,17 @@
           <p id="gem-count"></p>
         </div>
         <button
+          id="trophy-resource-button"
+          class="flex resources trophy-resource pixel-menu-button"
+          type="button"
+        >
+          <img src="/assets/trophy.webp" width="20px" alt="trophies" />
+          <p id="trophy-count"></p>
+          <span id="trophy-claim-badge" class="trophy-claim-badge hidden"
+            >0</span
+          >
+        </button>
+        <button
           id="username-button"
           class="account username-account pixel-menu-button"
         >
@@ -43,6 +54,12 @@
 
     <button id="create-party" class="party-button pixel-menu-button">
       <p>Create Party</p>
+    </button>
+    <button
+      id="leaderboard-button"
+      class="party-button leaderboard-button pixel-menu-button"
+    >
+      <p>Leaderboard</p>
     </button>
 
     <div id="lobby-area" class="mode-1">
@@ -286,6 +303,69 @@
           <h3>Player Cards</h3>
           <div id="profile-cards-grid" class="profile-cards-grid"></div>
         </section>
+      </section>
+    </div>
+
+    <div
+      id="trophy-track-overlay"
+      class="hidden trophy-overlay"
+      aria-hidden="true"
+    >
+      <div class="trophy-overlay-backdrop"></div>
+      <section
+        class="trophy-overlay-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="trophy-track-title"
+      >
+        <header class="trophy-overlay-head">
+          <div>
+            <h2 id="trophy-track-title">Trophy Rewards</h2>
+            <p>Reach milestones, then claim rewards.</p>
+          </div>
+          <button
+            id="trophy-track-close"
+            class="pixel-menu-button trophy-overlay-close"
+            type="button"
+          >
+            Close
+          </button>
+        </header>
+        <div class="trophy-overlay-summary">
+          <img src="/assets/trophy.webp" alt="trophies" />
+          <strong id="trophy-track-summary">0 trophies</strong>
+        </div>
+        <div id="trophy-track-rail-fill"></div>
+        <div id="trophy-track-list" class="trophy-track-list"></div>
+      </section>
+    </div>
+
+    <div
+      id="leaderboard-overlay"
+      class="hidden trophy-overlay"
+      aria-hidden="true"
+    >
+      <div class="trophy-overlay-backdrop"></div>
+      <section
+        class="trophy-overlay-panel leaderboard-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="leaderboard-title"
+      >
+        <header class="trophy-overlay-head">
+          <div>
+            <h2 id="leaderboard-title">Trophy Leaderboard</h2>
+            <p>Top players sorted by trophies.</p>
+          </div>
+          <button
+            id="leaderboard-close"
+            class="pixel-menu-button trophy-overlay-close"
+            type="button"
+          >
+            Close
+          </button>
+        </header>
+        <div id="leaderboard-list" class="leaderboard-list"></div>
       </section>
     </div>
 

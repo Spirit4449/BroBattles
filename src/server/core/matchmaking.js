@@ -85,8 +85,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     return {
       mode: matchRows[0].mode,
       modeId:
-        matchRows[0].mode_id ||
-        normalizeSelectionFromRow(matchRows[0]).modeId,
+        matchRows[0].mode_id || normalizeSelectionFromRow(matchRows[0]).modeId,
       modeVariantId:
         matchRows[0].mode_variant_id ||
         normalizeSelectionFromRow(matchRows[0]).modeVariantId,
@@ -331,7 +330,10 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
       }
     }
 
-    const mode = selectionToLegacyMode(selection.modeId, selection.modeVariantId);
+    const mode = selectionToLegacyMode(
+      selection.modeId,
+      selection.modeVariantId,
+    );
     const matchId = await runInTx(async (conn, q) => {
       const matchResult = await q(
         "INSERT INTO matches (mode,mode_id,mode_variant_id,map,status) VALUES (?,?,?,?, 'queued')",
@@ -352,7 +354,9 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
           values,
         );
       }
-      await q("DELETE FROM match_tickets WHERE ticket_id = ?", [ticket.ticket_id]);
+      await q("DELETE FROM match_tickets WHERE ticket_id = ?", [
+        ticket.ticket_id,
+      ]);
       if (ticket.party_id) {
         await q("UPDATE parties SET status=? WHERE party_id = ?", [
           PARTY_STATUS.READY_CHECK,
@@ -407,6 +411,33 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
       "UPDATE matches SET status='cancelled' WHERE match_id=?",
       [matchId],
     );
+    try {
+      const botRows = await db.runQuery(
+        `SELECT DISTINCT u.user_id
+           FROM match_participants mp
+           JOIN users u ON u.user_id = mp.user_id
+          WHERE mp.match_id = ?
+            AND u.name LIKE 'BOT %'`,
+        [matchId],
+      );
+      const botIds = botRows
+        .map((row) => Number(row.user_id))
+        .filter((id) => Number.isFinite(id) && id > 0);
+      if (botIds.length) {
+        const placeholders = botIds.map(() => "?").join(",");
+        await db.runQuery(
+          `DELETE FROM users
+            WHERE user_id IN (${placeholders})
+              AND name LIKE 'BOT %'`,
+          botIds,
+        );
+      }
+    } catch (error) {
+      console.warn(
+        `[match:cancel] bot cleanup failed for #${matchId}`,
+        error?.message || error,
+      );
+    }
     // Reset any involved parties to idle
     try {
       const rows = await db.runQuery(

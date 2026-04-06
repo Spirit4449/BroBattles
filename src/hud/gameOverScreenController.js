@@ -34,6 +34,7 @@ export function createGameOverScreenController({
             at: Date.now(),
             coinsAwarded: Number(myReward.coinsAwarded) || 0,
             gemsAwarded: Number(myReward.gemsAwarded) || 0,
+            trophiesDelta: Number(myReward.trophiesDelta) || 0,
           }),
         );
       }
@@ -104,6 +105,13 @@ export function createGameOverScreenController({
             }</span>
             <span style="display:flex;align-items:center;gap:8px;color:#67e8f9;"><img src="/assets/gem.webp" width="18" height="18" alt="gems" />${
               myReward.gemsAwarded ?? 0
+            }</span>
+            <span style="display:flex;align-items:center;gap:8px;color:${
+              Number(myReward.trophiesDelta) >= 0 ? "#f7d567" : "#ff9aa9"
+            };"><img src="/assets/trophy.webp" width="18" height="18" alt="trophies" />${
+              Number(myReward.trophiesDelta) >= 0
+                ? `+${Number(myReward.trophiesDelta) || 0}`
+                : Number(myReward.trophiesDelta) || 0
             }</span>
           </div>
           <div style="margin-top:6px;font-size:13px;color:#c8e6ff;">

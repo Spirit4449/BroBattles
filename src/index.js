@@ -29,6 +29,7 @@ import "./styles/sonner.css";
 let userData = null;
 let guest = false;
 const POST_MATCH_REWARD_STORAGE_KEY = "bb_post_match_rewards_v1";
+let trophyRoadLastScrollLeft = 0;
 const lobbyProfileState = {
   profile: null,
   catalog: null,
@@ -106,7 +107,9 @@ function renderProfilePopupStats() {
   setText("profile-hero-class", String(profile.charClass || "ninja"));
   setText(
     "profile-hero-tag",
-    lobbyProfileState.viewingSelf ? "Your Player Profile" : "Public Player Profile",
+    lobbyProfileState.viewingSelf
+      ? "Your Player Profile"
+      : "Public Player Profile",
   );
   const heroAvatar = document.getElementById("profile-hero-avatar");
   if (heroAvatar) {
@@ -151,9 +154,12 @@ function renderProfilePopupStats() {
   // Keep navbar resource counters in sync after buy operations.
   const coinCount = document.getElementById("coin-count");
   const gemCount = document.getElementById("gem-count");
+  const trophyCount = document.getElementById("trophy-count");
   if (lobbyProfileState.viewingSelf) {
     if (coinCount) coinCount.textContent = String(Number(profile.coins) || 0);
     if (gemCount) gemCount.textContent = String(Number(profile.gems) || 0);
+    if (trophyCount)
+      trophyCount.textContent = String(Number(profile.trophies) || 0);
   }
 }
 
@@ -297,6 +303,7 @@ async function loadProfilePopupData(force = false) {
         userData.name = profile.username || userData.name;
         userData.coins = Number(profile.coins ?? userData.coins) || 0;
         userData.gems = Number(profile.gems ?? userData.gems) || 0;
+        userData.trophies = Number(profile.trophies ?? userData.trophies) || 0;
       }
 
       const usernameText = document.getElementById("username-text");
@@ -417,7 +424,11 @@ async function handlePartyMemberAction(action, playerName, profilePopup) {
   }
   if (!Number.isFinite(partyId) || partyId <= 0) return;
   const endpoint =
-    action === "owner" ? "/party/make-owner" : action === "kick" ? "/party/kick" : "";
+    action === "owner"
+      ? "/party/make-owner"
+      : action === "kick"
+        ? "/party/kick"
+        : "";
   if (!endpoint) return;
   try {
     await profileFetchJson(endpoint, {
@@ -434,7 +445,9 @@ async function handlePartyMemberAction(action, playerName, profilePopup) {
     );
   } catch (err) {
     sonner(
-      action === "owner" ? "Could not transfer ownership" : "Could not kick player",
+      action === "owner"
+        ? "Could not transfer ownership"
+        : "Could not kick player",
       err?.message || "Please try again.",
       "error",
     );
@@ -495,8 +508,15 @@ function animateNumber(el, from, to, durationMs) {
   requestAnimationFrame(run);
 }
 
-function animatePostMatchRewardsIfPresent(coinEl, gemEl, coinsNow, gemsNow) {
-  if (!coinEl || !gemEl) return;
+function animatePostMatchRewardsIfPresent(
+  coinEl,
+  gemEl,
+  trophyEl,
+  coinsNow,
+  gemsNow,
+  trophiesNow,
+) {
+  if (!coinEl || !gemEl || !trophyEl) return;
   let payload = null;
   try {
     payload = JSON.parse(
@@ -509,18 +529,290 @@ function animatePostMatchRewardsIfPresent(coinEl, gemEl, coinsNow, gemsNow) {
   const ageMs = Date.now() - Number(payload.at || 0);
   const coinsAwarded = Math.max(0, Number(payload.coinsAwarded) || 0);
   const gemsAwarded = Math.max(0, Number(payload.gemsAwarded) || 0);
+  const trophiesDelta = Number(payload.trophiesDelta) || 0;
   try {
     sessionStorage.removeItem(POST_MATCH_REWARD_STORAGE_KEY);
   } catch (_) {}
   if (ageMs < 0 || ageMs > 2 * 60 * 1000) return;
-  if (coinsAwarded <= 0 && gemsAwarded <= 0) return;
+  if (coinsAwarded <= 0 && gemsAwarded <= 0 && trophiesDelta === 0) return;
 
   const coinsFrom = Math.max(0, Number(coinsNow) - coinsAwarded);
   const gemsFrom = Math.max(0, Number(gemsNow) - gemsAwarded);
+  const trophiesFrom = Math.max(0, Number(trophiesNow) - trophiesDelta);
   coinEl.textContent = String(coinsFrom);
   gemEl.textContent = String(gemsFrom);
+  trophyEl.textContent = String(trophiesFrom);
   animateNumber(coinEl, coinsFrom, Number(coinsNow), 1600);
   animateNumber(gemEl, gemsFrom, Number(gemsNow), 1600);
+  animateNumber(trophyEl, trophiesFrom, Number(trophiesNow), 1600);
+}
+
+async function fetchLobbyJson(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: "same-origin",
+    ...options,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || "Request failed");
+  }
+  return payload;
+}
+
+function openOverlay(id) {
+  const overlay = document.getElementById(id);
+  if (!overlay) return;
+  overlay.classList.remove("hidden");
+  overlay.setAttribute("aria-hidden", "false");
+}
+
+function closeOverlay(id) {
+  const overlay = document.getElementById(id);
+  if (!overlay) return;
+  overlay.classList.add("hidden");
+  overlay.setAttribute("aria-hidden", "true");
+}
+
+function setTrophyClaimBadge(count) {
+  const badge = document.getElementById("trophy-claim-badge");
+  const button = document.getElementById("trophy-resource-button");
+  const value = Math.max(0, Number(count) || 0);
+  if (!badge || !button) return;
+  if (value > 0) {
+    badge.textContent = value > 99 ? "99+" : String(value);
+    badge.classList.remove("hidden");
+    button.classList.add("has-claimable");
+  } else {
+    badge.textContent = "0";
+    badge.classList.add("hidden");
+    button.classList.remove("has-claimable");
+  }
+}
+
+function renderTrophyTrack(state) {
+  const container = document.getElementById("trophy-track-list");
+  const summary = document.getElementById("trophy-track-summary");
+  const shouldPreserveScroll = !!state?.__preserveScroll;
+  const previousScrollLeft = Number.isFinite(Number(state?.__scrollLeft))
+    ? Number(state.__scrollLeft)
+    : trophyRoadLastScrollLeft;
+  if (!container || !summary) return;
+
+  const player = state?.player || {};
+  const tiers = Array.isArray(state?.tiers) ? state.tiers : [];
+  const trophies = Number(player.trophies) || 0;
+  const availableClaimCount = Math.max(
+    0,
+    Number(state?.availableClaimCount) || 0,
+  );
+  setTrophyClaimBadge(availableClaimCount);
+  summary.textContent = `${trophies} trophies`;
+  container.innerHTML = "";
+
+  const maxTierRequirement = Math.max(
+    1,
+    ...tiers.map((tier) => Number(tier?.trophiesRequired) || 0),
+  );
+  const overallRatio = Math.max(0, Math.min(1, trophies / maxTierRequirement));
+  const trackWidth = Math.max(980, tiers.length * 240);
+  const laneInset = 28;
+  const laneWidth = Math.max(1, trackWidth - laneInset * 2);
+
+  const canvas = document.createElement("div");
+  canvas.className = "trophy-track-canvas";
+  canvas.style.width = `${trackWidth}px`;
+  canvas.innerHTML = `
+    <div class="trophy-track-line-bg"></div>
+    <div class="trophy-track-line-fill" style="width:${Math.round(overallRatio * 100)}%"></div>
+    <div class="trophy-track-card-row" id="trophy-track-card-row"></div>
+    <div class="trophy-track-marker-row" id="trophy-track-marker-row"></div>
+    <div class="trophy-track-player-pin" style="left:${Math.round(overallRatio * 100)}%">
+      <img src="/assets/trophy.webp" alt="current trophies" />
+      <span>${trophies}</span>
+    </div>
+  `;
+  container.appendChild(canvas);
+
+  const cardRow = canvas.querySelector("#trophy-track-card-row");
+  const markerRow = canvas.querySelector("#trophy-track-marker-row");
+
+  const ratioToX = (ratio) => laneInset + ratio * laneWidth;
+
+  for (const tier of tiers) {
+    const tierRatio = Math.max(
+      0,
+      Math.min(1, (Number(tier.trophiesRequired) || 0) / maxTierRequirement),
+    );
+    const statusClass = tier.claimed
+      ? "claimed"
+      : tier.canClaim
+        ? "claimable"
+        : "locked";
+
+    const rewards = Array.isArray(tier.rewards) ? tier.rewards : [];
+    const primaryReward = rewards[0] || {
+      image: "/assets/coin.webp",
+      name: "Reward",
+      amount: 0,
+    };
+    const extraRewards = Math.max(0, rewards.length - 1);
+    const primaryName = String(primaryReward?.name || "Reward");
+    const primaryImage = String(primaryReward?.image || "/assets/coin.webp");
+    const primaryAmount = Math.max(0, Number(primaryReward?.amount) || 0);
+
+    const card = document.createElement("article");
+    card.className = `trophy-lane-card ${statusClass}`;
+    card.style.left = `${Math.round(ratioToX(tierRatio))}px`;
+    card.innerHTML = `
+      <div class="trophy-lane-item-glow"></div>
+      <img class="trophy-lane-item" src="${primaryImage}" alt="${primaryName}" />
+      <div class="trophy-lane-meta">
+        <strong>${primaryAmount} ${primaryName}</strong>
+        <span>${tier.title || "Reward"}${extraRewards > 0 ? ` +${extraRewards} more` : ""}</span>
+      </div>
+      <button class="pixel-menu-button trophy-tier-claim" data-tier-id="${tier.tierId}" ${
+        tier.canClaim ? "" : "disabled"
+      }>${tier.claimed ? "Claimed" : tier.canClaim ? "Claim" : "Locked"}</button>
+    `;
+
+    const marker = document.createElement("div");
+    marker.className = `trophy-lane-marker ${statusClass}`;
+    marker.style.left = `${Math.round(ratioToX(tierRatio))}px`;
+    marker.innerHTML = `
+      <span class="trophy-lane-marker-dot"></span>
+      <span class="trophy-lane-marker-label">${tier.trophiesRequired}</span>
+    `;
+
+    const claimBtn = card.querySelector(".trophy-tier-claim");
+    claimBtn?.addEventListener("click", async (event) => {
+      event?.stopPropagation?.();
+      const tierId = String(claimBtn.dataset.tierId || "");
+      if (!tierId || claimBtn.disabled) return;
+      claimBtn.disabled = true;
+      try {
+        const result = await fetchLobbyJson("/trophies/claim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tierId }),
+        });
+        sonner("Reward claimed", "Trophy reward delivered.", "success");
+
+        if (userData) {
+          userData.coins = Number(result?.player?.coins ?? userData.coins) || 0;
+          userData.gems = Number(result?.player?.gems ?? userData.gems) || 0;
+          userData.trophies =
+            Number(result?.player?.trophies ?? userData.trophies) || 0;
+        }
+
+        const coinCount = document.getElementById("coin-count");
+        const gemCount = document.getElementById("gem-count");
+        const trophyCount = document.getElementById("trophy-count");
+        if (coinCount) coinCount.textContent = String(userData?.coins || 0);
+        if (gemCount) gemCount.textContent = String(userData?.gems || 0);
+        if (trophyCount)
+          trophyCount.textContent = String(userData?.trophies || 0);
+
+        await openTrophyProgressionOverlay({ preserveScroll: true });
+      } catch (error) {
+        sonner("Reward claim failed", error?.message || "Try again.", "error");
+        claimBtn.disabled = false;
+      }
+    });
+
+    cardRow?.appendChild(card);
+    markerRow?.appendChild(marker);
+  }
+
+  const ratioCenterTarget = Math.max(
+    0,
+    Math.min(
+      Math.max(0, canvas.scrollWidth - container.clientWidth),
+      ratioToX(overallRatio) - container.clientWidth / 2,
+    ),
+  );
+  const nextScrollLeft = shouldPreserveScroll
+    ? Math.max(
+        0,
+        Math.min(
+          Math.max(0, canvas.scrollWidth - container.clientWidth),
+          Number(previousScrollLeft) || 0,
+        ),
+      )
+    : ratioCenterTarget;
+  container.scrollLeft = nextScrollLeft;
+  trophyRoadLastScrollLeft = nextScrollLeft;
+}
+
+async function openTrophyProgressionOverlay(options = {}) {
+  openOverlay("trophy-track-overlay");
+  const list = document.getElementById("trophy-track-list");
+  const summary = document.getElementById("trophy-track-summary");
+  const preserveScroll = !!options?.preserveScroll;
+  if (list) {
+    trophyRoadLastScrollLeft =
+      Number(list.scrollLeft) || trophyRoadLastScrollLeft;
+    list.innerHTML = '<p class="trophy-overlay-loading">Loading rewards...</p>';
+  }
+  if (summary) summary.textContent = "Loading...";
+  const progression = await fetchLobbyJson("/trophies/progression");
+  progression.__preserveScroll = preserveScroll;
+  progression.__scrollLeft = trophyRoadLastScrollLeft;
+  renderTrophyTrack(progression);
+}
+
+function renderLeaderboardRows(rows, profilePopup) {
+  const container = document.getElementById("leaderboard-list");
+  if (!container) return;
+  container.innerHTML = "";
+
+  for (const row of rows) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "leaderboard-row";
+    if (Number(row.rank) <= 3) {
+      item.classList.add(`top-${Number(row.rank)}`);
+    }
+    const winRate =
+      Number(row.totalMatches) > 0
+        ? `${Math.round((Number(row.wins || 0) / Number(row.totalMatches || 1)) * 100)}%`
+        : "0%";
+    const charClass = String(row.charClass || "ninja");
+    item.innerHTML = `
+      <span class="leaderboard-rank">#${row.rank}</span>
+      <span class="leaderboard-avatar-wrap"><img class="leaderboard-avatar" src="/assets/${charClass}/body.webp" alt="${charClass}" /></span>
+      <span class="leaderboard-main">
+        <span class="leaderboard-name">${row.username}</span>
+        <span class="leaderboard-wins">${row.wins}W / ${row.totalMatches}M (${winRate})</span>
+      </span>
+      <span class="leaderboard-trophies"><img src="/assets/trophy.webp" alt="trophies" />${row.trophies}</span>
+    `;
+    item.addEventListener("click", () => {
+      profilePopup?.open?.({ username: row.username });
+    });
+    container.appendChild(item);
+  }
+}
+
+async function openLeaderboardOverlay(profilePopup) {
+  openOverlay("leaderboard-overlay");
+  const container = document.getElementById("leaderboard-list");
+  if (container)
+    container.innerHTML =
+      '<p class="trophy-overlay-loading">Loading leaderboard...</p>';
+  const data = await fetchLobbyJson("/leaderboard/trophies?limit=100");
+  renderLeaderboardRows(
+    Array.isArray(data?.leaderboard) ? data.leaderboard : [],
+    profilePopup,
+  );
+}
+
+async function refreshTrophyClaimAvailability() {
+  try {
+    const progression = await fetchLobbyJson("/trophies/progression");
+    setTrophyClaimBadge(Number(progression?.availableClaimCount) || 0);
+  } catch (_) {
+    setTrophyClaimBadge(0);
+  }
 }
 
 /**
@@ -564,22 +856,28 @@ const statusPromise = fetch("/status", {
   credentials: "same-origin",
 })
   .then((res) => {
-    console.log("[join-debug] /status response", getJoinDebugMeta({
-      ok: res.ok,
-      status: res.status,
-      statusText: res.statusText,
-    }));
+    console.log(
+      "[join-debug] /status response",
+      getJoinDebugMeta({
+        ok: res.ok,
+        status: res.status,
+        statusText: res.statusText,
+      }),
+    );
     return res.json();
   })
   .then((data) => {
-    console.log("[join-debug] /status payload", getJoinDebugMeta({
-      userId: data?.userData?.user_id ?? null,
-      username: data?.userData?.name ?? null,
-      guest: data?.guest ?? null,
-      partyId: data?.party_id ?? null,
-      liveMatchId: data?.live_match_id ?? null,
-      isAdmin: data?.isAdmin ?? null,
-    }));
+    console.log(
+      "[join-debug] /status payload",
+      getJoinDebugMeta({
+        userId: data?.userData?.user_id ?? null,
+        username: data?.userData?.name ?? null,
+        guest: data?.guest ?? null,
+        partyId: data?.party_id ?? null,
+        liveMatchId: data?.live_match_id ?? null,
+        isAdmin: data?.isAdmin ?? null,
+      }),
+    );
     if (data?.userData) {
       userData = data.userData;
       userData.isAdmin = !!data.isAdmin;
@@ -599,9 +897,12 @@ const statusPromise = fetch("/status", {
     }
   })
   .catch((err) =>
-    console.error("[join-debug] Error fetching /status", getJoinDebugMeta({
-      message: err?.message || String(err),
-    })),
+    console.error(
+      "[join-debug] Error fetching /status",
+      getJoinDebugMeta({
+        message: err?.message || String(err),
+      }),
+    ),
   );
 
 // Wait for status before trying to bootstrap party data
@@ -614,12 +915,15 @@ if (existingPartyId) {
 }
 
 async function bootstrapPartyData(partyId) {
-  console.log("[join-debug] bootstrapPartyData starting", getJoinDebugMeta({
-    partyId,
-    userId: userData?.user_id ?? null,
-    username: userData?.name ?? null,
-    cookieEnabled: navigator.cookieEnabled,
-  }));
+  console.log(
+    "[join-debug] bootstrapPartyData starting",
+    getJoinDebugMeta({
+      partyId,
+      userId: userData?.user_id ?? null,
+      username: userData?.name ?? null,
+      cookieEnabled: navigator.cookieEnabled,
+    }),
+  );
   try {
     const resp = await fetch("/partydata", {
       method: "POST",
@@ -628,12 +932,15 @@ async function bootstrapPartyData(partyId) {
       body: JSON.stringify({ partyId }),
     });
 
-    console.log("[join-debug] /partydata response", getJoinDebugMeta({
-      partyId,
-      ok: resp.ok,
-      status: resp.status,
-      statusText: resp.statusText,
-    }));
+    console.log(
+      "[join-debug] /partydata response",
+      getJoinDebugMeta({
+        partyId,
+        ok: resp.ok,
+        status: resp.status,
+        statusText: resp.statusText,
+      }),
+    );
 
     if (!resp.ok) {
       if (resp.status === 409) {
@@ -652,22 +959,23 @@ async function bootstrapPartyData(partyId) {
     }
 
     const data = await resp.json();
-    console.log("[join-debug] /partydata payload", getJoinDebugMeta({
-      partyId,
-      responsePartyId: data?.party?.party_id ?? data?.party?.partyId ?? null,
-      ownerName: data?.ownerName ?? null,
-      membersCount: Array.isArray(data?.members) ? data.members.length : 0,
-      selection: data?.selection || null,
-      viewer: data?.viewer ?? null,
-    }));
+    console.log(
+      "[join-debug] /partydata payload",
+      getJoinDebugMeta({
+        partyId,
+        responsePartyId: data?.party?.party_id ?? data?.party?.partyId ?? null,
+        ownerName: data?.ownerName ?? null,
+        membersCount: Array.isArray(data?.members) ? data.members.length : 0,
+        selection: data?.selection || null,
+        viewer: data?.viewer ?? null,
+      }),
+    );
     if (data?.party) {
       const selection = applyLobbySelection(
         data?.selection || {
           modeId: data?.party?.mode_id || data?.party?.modeId || "duels",
           modeVariantId:
-            data?.party?.mode_variant_id ||
-            data?.party?.modeVariantId ||
-            null,
+            data?.party?.mode_variant_id || data?.party?.modeVariantId || null,
           mapId: data?.party?.map ?? null,
         },
         { persist: false },
@@ -704,11 +1012,14 @@ async function bootstrapPartyData(partyId) {
       sound: "notification",
     });
   } catch (error) {
-    console.error("[join-debug] bootstrapPartyData failed", getJoinDebugMeta({
-      partyId,
-      message: error?.message || String(error),
-      stack: error?.stack || null,
-    }));
+    console.error(
+      "[join-debug] bootstrapPartyData failed",
+      getJoinDebugMeta({
+        partyId,
+        message: error?.message || String(error),
+        stack: error?.stack || null,
+      }),
+    );
   }
 }
 
@@ -728,7 +1039,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const coinCount = document.getElementById("coin-count");
   const gemCount = document.getElementById("gem-count");
+  const trophyCount = document.getElementById("trophy-count");
   const usernameButton = document.getElementById("username-button");
+  const trophyResourceButton = document.getElementById(
+    "trophy-resource-button",
+  );
+  const leaderboardButton = document.getElementById("leaderboard-button");
 
   document.getElementById("username-text").textContent = userData.name;
   const profilePopup = initProfilePopup();
@@ -747,12 +1063,58 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch {}
   coinCount.textContent = userData.coins;
   gemCount.textContent = userData.gems;
+  trophyCount.textContent = userData.trophies || 0;
   animatePostMatchRewardsIfPresent(
     coinCount,
     gemCount,
+    trophyCount,
     Number(userData.coins) || 0,
     Number(userData.gems) || 0,
+    Number(userData.trophies) || 0,
   );
+
+  trophyResourceButton?.addEventListener("click", async () => {
+    playSound("cursor4", 0.4);
+    try {
+      await openTrophyProgressionOverlay();
+    } catch (error) {
+      sonner(
+        "Could not load rewards",
+        error?.message || "Please try again.",
+        "error",
+      );
+      closeOverlay("trophy-track-overlay");
+    }
+  });
+
+  leaderboardButton?.addEventListener("click", async () => {
+    playSound("cursor4", 0.4);
+    try {
+      await openLeaderboardOverlay(profilePopup);
+    } catch (error) {
+      sonner(
+        "Could not load leaderboard",
+        error?.message || "Please try again.",
+        "error",
+      );
+      closeOverlay("leaderboard-overlay");
+    }
+  });
+
+  document
+    .getElementById("trophy-track-close")
+    ?.addEventListener("click", () => closeOverlay("trophy-track-overlay"));
+  document
+    .querySelector("#trophy-track-overlay .trophy-overlay-backdrop")
+    ?.addEventListener("click", () => closeOverlay("trophy-track-overlay"));
+  document
+    .getElementById("leaderboard-close")
+    ?.addEventListener("click", () => closeOverlay("leaderboard-overlay"));
+  document
+    .querySelector("#leaderboard-overlay .trophy-overlay-backdrop")
+    ?.addEventListener("click", () => closeOverlay("leaderboard-overlay"));
+
+  refreshTrophyClaimAvailability();
 
   // Initialize character select UI
   initializeCharacterSelect(userData);
@@ -770,8 +1132,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
       const playerName = String(slot.dataset.playerName || "").trim();
       if (!playerName || playerName.toLowerCase().startsWith("random")) return;
-      const wantsProfile =
-        !!e.target.closest(".character-sprite, .username, .slot-level-badge");
+      const wantsProfile = !!e.target.closest(
+        ".character-sprite, .username, .slot-level-badge",
+      );
       if (wantsProfile) {
         playSound("cursor4", 0.35);
         profilePopup?.open?.({ username: playerName });
@@ -879,14 +1242,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   // NEW: connect socket now, deterministically after cookies are present
   try {
     const connectStarted = ensureSocketConnected();
-    console.log("[join-debug] socket connect requested after status", getJoinDebugMeta({
-      connectStarted,
-    }));
+    console.log(
+      "[join-debug] socket connect requested after status",
+      getJoinDebugMeta({
+        connectStarted,
+      }),
+    );
     if (connectStarted) await waitForConnect();
   } catch (error) {
-    console.error("[join-debug] socket connection bootstrap failed", getJoinDebugMeta({
-      message: error?.message || String(error),
-    }));
+    console.error(
+      "[join-debug] socket connection bootstrap failed",
+      getJoinDebugMeta({
+        message: error?.message || String(error),
+      }),
+    );
   }
   if (!userData) return;
 

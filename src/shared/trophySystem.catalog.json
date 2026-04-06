@@ -1,0 +1,124 @@
+{
+  "modeTrophyRanges": {
+    "duels": { "min": 20, "max": 30 },
+    "bank-bust": { "min": 30, "max": 40 },
+    "default": { "min": 20, "max": 30 }
+  },
+  "lossRangeScale": 0.5,
+  "lossPerformanceMitigation": 0.35,
+  "performanceWeights": {
+    "damage": 0.55,
+    "kills": 0.3,
+    "hits": 0.15
+  },
+  "rewardTrack": {
+    "maxTrophies": 2000,
+    "step": 100,
+    "rewardPattern": [
+      {
+        "id": "coins",
+        "title": "Coin Bundle",
+        "rewards": [
+          {
+            "kind": "currency",
+            "currency": "coins",
+            "amount": 300,
+            "name": "Coins",
+            "image": "/assets/coin.webp"
+          }
+        ]
+      },
+      {
+        "id": "gems",
+        "title": "Gem Bundle",
+        "rewards": [
+          {
+            "kind": "currency",
+            "currency": "gems",
+            "amount": 25,
+            "name": "Gems",
+            "image": "/assets/gem.webp"
+          }
+        ]
+      }
+    ],
+    "majorMilestones": {
+      "500": {
+        "title": "Milestone Crate",
+        "rewards": [
+          {
+            "kind": "currency",
+            "currency": "coins",
+            "amount": 1200,
+            "name": "Coins",
+            "image": "/assets/coin.webp"
+          },
+          {
+            "kind": "currency",
+            "currency": "gems",
+            "amount": 80,
+            "name": "Gems",
+            "image": "/assets/gem.webp"
+          }
+        ]
+      },
+      "1000": {
+        "title": "Milestone Crate",
+        "rewards": [
+          {
+            "kind": "currency",
+            "currency": "coins",
+            "amount": 2200,
+            "name": "Coins",
+            "image": "/assets/coin.webp"
+          },
+          {
+            "kind": "currency",
+            "currency": "gems",
+            "amount": 160,
+            "name": "Gems",
+            "image": "/assets/gem.webp"
+          }
+        ]
+      },
+      "1500": {
+        "title": "Milestone Crate",
+        "rewards": [
+          {
+            "kind": "currency",
+            "currency": "coins",
+            "amount": 3200,
+            "name": "Coins",
+            "image": "/assets/coin.webp"
+          },
+          {
+            "kind": "currency",
+            "currency": "gems",
+            "amount": 240,
+            "name": "Gems",
+            "image": "/assets/gem.webp"
+          }
+        ]
+      },
+      "2000": {
+        "title": "Milestone Crate",
+        "rewards": [
+          {
+            "kind": "currency",
+            "currency": "coins",
+            "amount": 4500,
+            "name": "Coins",
+            "image": "/assets/coin.webp"
+          },
+          {
+            "kind": "currency",
+            "currency": "gems",
+            "amount": 320,
+            "name": "Gems",
+            "image": "/assets/gem.webp"
+          }
+        ]
+      }
+    }
+  }
+}

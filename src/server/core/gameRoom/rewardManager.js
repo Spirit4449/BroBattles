@@ -1,3 +1,9 @@
+const {
+  resolveMatchModeId,
+  buildPerformanceMaxima,
+  calculateTrophyDelta,
+} = require("../../helpers/trophySystem");
+
 function ensureRewardBucket(room, playerData) {
   if (!playerData || !playerData.name) return null;
   if (!room.rewardStats) room.rewardStats = new Map();
@@ -33,6 +39,38 @@ function recordCombatStat(room, playerData, delta = {}) {
 
 async function distributeMatchRewards(room, winnerTeam) {
   if (!room.rewardStats) room.rewardStats = new Map();
+  const modeId = resolveMatchModeId(room.matchData || {});
+  const userIdToTrophies = new Map();
+  const participantUserIds = Array.from(room.players.values())
+    .map((player) => Number(player?.user_id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+  if (participantUserIds.length) {
+    const placeholders = participantUserIds.map(() => "?").join(",");
+    try {
+      const rows = await room.db.runQuery(
+        `SELECT user_id, COALESCE(trophies, 0) AS trophies FROM users WHERE user_id IN (${placeholders})`,
+        participantUserIds,
+      );
+      for (const row of rows || []) {
+        userIdToTrophies.set(
+          Number(row.user_id),
+          Math.max(0, Number(row.trophies) || 0),
+        );
+      }
+    } catch (error) {
+      console.warn(
+        `[GameRoom ${room.matchId}] Failed to preload trophy values`,
+        error?.message,
+      );
+    }
+  }
+  const buckets = [];
+  for (const playerData of room.players.values()) {
+    const bucket = ensureRewardBucket(room, playerData);
+    if (!bucket) continue;
+    buckets.push(bucket);
+  }
+  const maxima = buildPerformanceMaxima(buckets);
   const summary = [];
   const updates = [];
 
@@ -45,6 +83,16 @@ async function distributeMatchRewards(room, winnerTeam) {
       kills: 0,
     };
     const reward = calculateRewards(room, bucket, winnerTeam, playerData.team);
+    const currentTrophies =
+      userIdToTrophies.get(Number(playerData?.user_id)) || 0;
+    const trophyInfo = calculateTrophyDelta({
+      modeId,
+      winnerTeam,
+      playerTeam: playerData.team,
+      bucket,
+      maxima,
+      currentTrophies,
+    });
     summary.push({
       username: bucket.username,
       team: bucket.team,
@@ -53,13 +101,26 @@ async function distributeMatchRewards(room, winnerTeam) {
       kills: bucket.kills,
       coinsAwarded: reward.coins,
       gemsAwarded: reward.gems,
+      trophiesDelta: trophyInfo.trophiesDelta,
+      trophiesAwarded: Math.max(0, Number(trophyInfo.trophiesDelta) || 0),
+      trophiesLost: Math.max(0, -(Number(trophyInfo.trophiesDelta) || 0)),
     });
-    if ((reward.coins > 0 || reward.gems > 0) && playerData.user_id) {
+    if (
+      (reward.coins > 0 ||
+        reward.gems > 0 ||
+        (Number(trophyInfo.trophiesDelta) || 0) !== 0) &&
+      playerData.user_id
+    ) {
       updates.push(
         room.db
           .runQuery(
-            "UPDATE users SET coins = coins + ?, gems = gems + ? WHERE user_id = ?",
-            [reward.coins, reward.gems, playerData.user_id],
+            "UPDATE users SET coins = coins + ?, gems = gems + ?, trophies = GREATEST(0, COALESCE(trophies, 0) + ?) WHERE user_id = ?",
+            [
+              reward.coins,
+              reward.gems,
+              Number(trophyInfo.trophiesDelta) || 0,
+              playerData.user_id,
+            ],
           )
           .catch((e) => {
             console.warn(
