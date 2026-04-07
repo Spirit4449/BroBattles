@@ -372,7 +372,7 @@ export function createGameHudController({
     const maxHp = Math.max(1, Number(vault?.maxHealth) || 1);
     const ratio = Math.max(0, Math.min(1, hp / maxHp));
     if (label) {
-      label.textContent = yourTeam === teamKey ? "Your Vault" : "Enemy Vault";
+      label.textContent = yourTeam === teamKey ? "Vault" : "Vault";
     }
     if (value) value.textContent = `${hp} / ${maxHp}`;
     if (fill) {

@@ -115,7 +115,7 @@ export default class OpPlayer {
       strokeThickness: 5,
     });
     this.opPlayerName.setOrigin(0.5, 0);
-    this.opPlayerName.setDepth(3); // above health text
+    this.opPlayerName.setDepth(42); // always above map objective props
 
     this.opHealthText = this.scene.add.text(0, 0, "", {
       fontFamily: "LilitaOne-Regular",
@@ -349,7 +349,7 @@ export default class OpPlayer {
       this.opponent.x - this.opHealthText.width / 2,
       y - 8,
     );
-    this.opHealthText.setDepth(2);
+    this.opHealthText.setDepth(42);
 
     this.drawSuperBar(healthBarX, y + 11);
   }
@@ -398,8 +398,8 @@ export default class OpPlayer {
       }
     }
 
-    this.opSuperBar.setDepth(2);
-    this.opSuperBarBack.setDepth(1);
+    this.opSuperBar.setDepth(41);
+    this.opSuperBarBack.setDepth(40);
   }
 
   hideWorldUi() {

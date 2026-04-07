@@ -594,12 +594,22 @@ function updateMatchBackgroundParallax(scene) {
     if (!cam) return;
     // Smooth parallax with clamped shift to prevent exposing white edges.
     const parallaxFactor = 0.35;
-    const worldW = Math.max(1, Number(scene?.physics?.world?.bounds?.width) || 2300);
-    const viewportW = Math.max(1, Number(window.innerWidth) || Number(scene?.scale?.width) || 1280);
+    const worldW = Math.max(
+      1,
+      Number(scene?.physics?.world?.bounds?.width) || 2300,
+    );
+    const viewportW = Math.max(
+      1,
+      Number(window.innerWidth) || Number(scene?.scale?.width) || 1280,
+    );
     const baseScale = 1.22;
     const effectiveBgW = Math.max(viewportW, viewportW * baseScale);
     const maxOverflow = Math.max(0, effectiveBgW - viewportW);
-    const progress = Phaser.Math.Clamp((Number(cam.scrollX) || 0) / worldW, 0, 1);
+    const progress = Phaser.Math.Clamp(
+      (Number(cam.scrollX) || 0) / worldW,
+      0,
+      1,
+    );
     const parallaxShift = -maxOverflow * progress * parallaxFactor;
     const shiftPx = Phaser.Math.Clamp(parallaxShift, -maxOverflow, 0);
     bgImg.style.transform = `translate3d(${shiftPx}px,0,0) scale(${baseScale})`;

@@ -708,6 +708,7 @@ export function createPlayer(
     strokeThickness: 5,
   });
   playerName.setOrigin(0.5, 0);
+  playerName.setDepth(42);
 
   // Health text
   healthText = scene.add.text(0, 0, "", {
@@ -1133,7 +1134,7 @@ function updateHealthBar() {
   healthBar.fillRoundedRect(healthBarX, y, displayedWidth, 9, 3);
 
   healthText.setPosition(player.x - healthText.width / 2, y - 8);
-  healthText.setDepth(2);
+  healthText.setDepth(42);
 
   // Draw ammo bar underneath health (only for local player & when alive)
   drawAmmoBar(healthBarX, y + 11);
@@ -1223,8 +1224,8 @@ function drawSuperBar(x, y) {
     }
   }
 
-  superBar.setDepth(2);
-  superBarBack.setDepth(1);
+  superBar.setDepth(41);
+  superBarBack.setDepth(40);
 }
 
 function drawAmmoBar(forcedX, forcedY) {
@@ -1273,8 +1274,8 @@ function drawAmmoBar(forcedX, forcedY) {
       ammoBar.fillRoundedRect(segX, y, segmentWidth * percent, 6, 2);
     }
   }
-  ammoBar.setDepth(2);
-  ammoBarBack.setDepth(1);
+  ammoBar.setDepth(41);
+  ammoBarBack.setDepth(40);
 }
 
 export function handlePlayerMovement(scene) {

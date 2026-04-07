@@ -73,8 +73,10 @@ function segmentIntersectsExpandedRect(
   height,
   expansion = 0,
 ) {
-  const halfW = Math.max(1, Number(width) || 0) / 2 + Math.max(0, Number(expansion) || 0);
-  const halfH = Math.max(1, Number(height) || 0) / 2 + Math.max(0, Number(expansion) || 0);
+  const halfW =
+    Math.max(1, Number(width) || 0) / 2 + Math.max(0, Number(expansion) || 0);
+  const halfH =
+    Math.max(1, Number(height) || 0) / 2 + Math.max(0, Number(expansion) || 0);
   const left = Number(cx) - halfW;
   const right = Number(cx) + halfW;
   const top = Number(cy) - halfH;
@@ -82,8 +84,14 @@ function segmentIntersectsExpandedRect(
 
   // Quick accept if either endpoint is inside.
   if (
-    (Number(x1) >= left && Number(x1) <= right && Number(y1) >= top && Number(y1) <= bottom) ||
-    (Number(x2) >= left && Number(x2) <= right && Number(y2) >= top && Number(y2) <= bottom)
+    (Number(x1) >= left &&
+      Number(x1) <= right &&
+      Number(y1) >= top &&
+      Number(y1) <= bottom) ||
+    (Number(x2) >= left &&
+      Number(x2) <= right &&
+      Number(y2) >= top &&
+      Number(y2) <= bottom)
   ) {
     return true;
   }
@@ -412,7 +420,8 @@ class BankBustGameMode extends BaseGameMode {
 
       const hitWall = builtWalls.some((wall) => {
         const width = Number(wall?.state?.width) || Number(wall?.width) || 120;
-        const height = Number(wall?.state?.height) || Number(wall?.height) || 46;
+        const height =
+          Number(wall?.state?.height) || Number(wall?.height) || 46;
         return segmentIntersectsExpandedRect(
           prevX,
           prevY,

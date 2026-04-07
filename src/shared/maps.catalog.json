@@ -40,7 +40,7 @@
       "label": "Bank Bust Test",
       "compatibleModeIds": ["bank-bust"],
       "compatibleVariantIds": ["bank-bust-3v3"],
-      "musicAsset": "/assets/lava.mp3",
+      "musicAsset": "/assets/bank-bust/bankbust-main.mp3",
       "mapSelectPreviewAsset": "/assets/serenity/preview.webp",
       "lobbyBgAsset": "/assets/serenity/lobbyBg.webp",
       "lobbyPlatformAsset": "/assets/serenity/lobbyPlatform.webp",
@@ -98,7 +98,7 @@
             {
               "id": "turret-slot-team1-front",
               "type": "claimableTurret",
-              "x": 1357.0966773567436,
+              "x": 1362.0966773567436,
               "y": -186.06156104606433,
               "claimRadius": 110,
               "claimCost": 120,

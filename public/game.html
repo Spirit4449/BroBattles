@@ -1059,17 +1059,17 @@
         left: 50%;
         transform: translateX(-50%);
         z-index: 9997;
-        width: min(1040px, calc(100vw - 32px));
+        width: min(880px, calc(100vw - 24px));
         display: flex;
         justify-content: space-between;
-        align-items: flex-start;
-        gap: clamp(220px, 24vw, 340px);
+        align-items: center;
+        gap: clamp(180px, 22vw, 280px);
         pointer-events: none;
       }
       .bank-bust-vault {
-        width: min(300px, calc(50vw - 180px));
-        min-width: 240px;
-        padding: 10px 12px;
+        width: min(250px, calc(50vw - 160px));
+        min-width: 220px;
+        padding: 7px 10px 8px;
         border-radius: 12px;
         border: 2px solid rgba(148, 163, 184, 0.35);
         background: linear-gradient(
@@ -1078,6 +1078,7 @@
           rgba(30, 41, 59, 0.9)
         );
         box-shadow: 0 8px 22px rgba(0, 0, 0, 0.32);
+        min-height: 68px;
       }
       .bank-bust-vault.friendly {
         border-color: rgba(96, 165, 250, 0.62);
@@ -1090,32 +1091,54 @@
         justify-content: space-between;
         align-items: center;
         gap: 8px;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
         color: #e5eefb;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 700;
+      }
+      .bank-bust-vault-top-left {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .bank-bust-gold-inline {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: #fff2b8;
       }
       .bank-bust-vault-value {
         font-family: "Press Start 2P", "Lato", sans-serif;
-        font-size: 10px;
+        font-size: 9px;
+      }
+      .bank-bust-vault-bar-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
       .bank-bust-vault-bar {
+        flex: 1;
         height: 12px;
         border-radius: 999px;
         background: rgba(15, 23, 42, 0.95);
         border: 1px solid rgba(148, 163, 184, 0.22);
         overflow: hidden;
       }
-      .bank-bust-vault-gold {
-        margin-top: 8px;
-        font-size: 11px;
-        color: #f8e38e;
-        display: flex;
+      .bank-bust-stat-icon {
+        width: 14px;
+        height: 14px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        background: rgba(15, 23, 42, 0.72);
+        color: #f8fafc;
+        font-size: 8px;
+        font-weight: 700;
+        line-height: 1;
+        display: inline-flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 10px;
+        justify-content: center;
       }
-      .bank-bust-vault-gold strong {
+      .bank-bust-gold-value {
         font-family: "Press Start 2P", "Lato", sans-serif;
         font-size: 9px;
         color: #fff2b8;
@@ -1508,28 +1531,36 @@
     <div id="bank-bust-hud" class="hidden" aria-live="polite">
       <div id="bank-bust-team1" class="bank-bust-vault">
         <div class="bank-bust-vault-top">
-          <span class="bank-bust-vault-label">Vault</span>
+          <div class="bank-bust-vault-top-left">
+            <span class="bank-bust-vault-label">Vault</span>
+            <span class="bank-bust-gold-inline"
+              ><span class="bank-bust-stat-icon">G</span
+              ><strong class="bank-bust-gold-value">0</strong></span
+            >
+          </div>
+        </div>
+        <div class="bank-bust-vault-bar-row">
+          <div class="bank-bust-vault-bar">
+            <div class="bank-bust-vault-fill"></div>
+          </div>
           <span class="bank-bust-vault-value">50000 / 50000</span>
-        </div>
-        <div class="bank-bust-vault-bar">
-          <div class="bank-bust-vault-fill"></div>
-        </div>
-        <div class="bank-bust-vault-gold">
-          <span>Team Gold</span>
-          <strong class="bank-bust-gold-value">0</strong>
         </div>
       </div>
       <div id="bank-bust-team2" class="bank-bust-vault">
         <div class="bank-bust-vault-top">
-          <span class="bank-bust-vault-label">Vault</span>
+          <div class="bank-bust-vault-top-left">
+            <span class="bank-bust-vault-label">Vault</span>
+            <span class="bank-bust-gold-inline"
+              ><span class="bank-bust-stat-icon">G</span
+              ><strong class="bank-bust-gold-value">0</strong></span
+            >
+          </div>
+        </div>
+        <div class="bank-bust-vault-bar-row">
+          <div class="bank-bust-vault-bar">
+            <div class="bank-bust-vault-fill"></div>
+          </div>
           <span class="bank-bust-vault-value">50000 / 50000</span>
-        </div>
-        <div class="bank-bust-vault-bar">
-          <div class="bank-bust-vault-fill"></div>
-        </div>
-        <div class="bank-bust-vault-gold">
-          <span>Team Gold</span>
-          <strong class="bank-bust-gold-value">0</strong>
         </div>
       </div>
     </div>

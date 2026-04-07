@@ -69,11 +69,11 @@ export function createBankBustRuntime({
     recentProjectileIds: new Set(),
   };
   const objectiveGraphics = scene.add.graphics();
-  objectiveGraphics.setDepth(8);
+  objectiveGraphics.setDepth(3);
   const uiGraphics = scene.add.graphics();
-  uiGraphics.setDepth(22);
+  uiGraphics.setDepth(4);
   const objectGraphics = scene.add.graphics();
-  objectGraphics.setDepth(7);
+  objectGraphics.setDepth(2);
   const markerGraphics = scene.add.graphics();
   markerGraphics.setDepth(23);
 
@@ -326,7 +326,7 @@ export function createBankBustRuntime({
     label.setOrigin(0.5);
     container = scene.add.container(-9999, -9999, [bg, label]);
     container.setSize(150, 90);
-    container.setDepth(10);
+    container.setDepth(5);
     container.setVisible(false);
     container._bg = bg;
     container._label = label;
@@ -387,19 +387,47 @@ export function createBankBustRuntime({
     );
     scene.physics.add.existing(zone, true);
     zone.setVisible(false);
-    wall = { zone, colliders: [] };
+    wall = { zone, colliders: [], builtByTeam: null };
     wallBodies.set(id, wall);
-    const attachCollider = (sprite) => {
-      if (!sprite?.body || !zone?.body) return;
-      try {
-        wall.colliders.push(scene.physics.add.collider(sprite, zone));
-      } catch (_) {}
-    };
-    for (const sprite of getAllRenderablePlayers()) attachCollider(sprite);
     return wall;
   }
 
-  function updateWallBody(id, entry, active) {
+  function rebuildWallColliders(wall, builtByTeam) {
+    if (!wall?.zone) return;
+    for (const collider of wall.colliders || []) {
+      try {
+        collider?.destroy?.();
+      } catch (_) {}
+    }
+    wall.colliders = [];
+    wall.builtByTeam = builtByTeam || null;
+    if (builtByTeam !== "team1" && builtByTeam !== "team2") return;
+
+    const local = currentLocalPlayer();
+    const localTeam = getLocalTeam();
+    const addCollider = (sprite) => {
+      if (!sprite?.body || !wall.zone?.body) return;
+      try {
+        wall.colliders.push(scene.physics.add.collider(sprite, wall.zone));
+      } catch (_) {}
+    };
+
+    // The owning team can pass through; only the opposing team collides.
+    const ownerIsLocalTeam = localTeam === builtByTeam;
+    if (!ownerIsLocalTeam) {
+      addCollider(local);
+      for (const wrap of Object.values(getTeamPlayers?.() || {})) {
+        addCollider(wrap?.opponent);
+      }
+    }
+    if (ownerIsLocalTeam) {
+      for (const wrap of Object.values(getOpponentPlayers?.() || {})) {
+        addCollider(wrap?.opponent);
+      }
+    }
+  }
+
+  function updateWallBody(id, entry, active, builtByTeam = null) {
     if (!active) {
       const existing = wallBodies.get(id);
       if (!existing) return;
@@ -427,6 +455,82 @@ export function createBankBustRuntime({
       true,
     );
     wall.zone.body?.updateFromGameObject?.();
+    rebuildWallColliders(wall, builtByTeam);
+  }
+
+  function resolveScenePointFromHud(selector) {
+    try {
+      const el = document.querySelector(selector);
+      const canvas = scene?.game?.canvas;
+      const cam = scene?.cameras?.main;
+      if (!el || !canvas || !cam) return null;
+      const er = el.getBoundingClientRect();
+      const cr = canvas.getBoundingClientRect();
+      const sx = er.left + er.width / 2 - cr.left;
+      const sy = er.top + er.height / 2 - cr.top;
+      return cam.getWorldPoint(sx, sy);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function playGoldFlyToHud({ fromX, fromY, team, amount = 1 }) {
+    const target = resolveScenePointFromHud(
+      `#bank-bust-${String(team || "").toLowerCase()} .bank-bust-gold-value`,
+    );
+    if (!target) return;
+    const coinCount = Math.max(3, Math.min(10, Math.round(Number(amount) || 1)));
+    const tex = scene.textures?.get?.("deathdrop-coin");
+    const src = tex?.getSourceImage?.();
+    const maxDim = Math.max(1, Number(src?.width) || 1, Number(src?.height) || 1);
+    const baseScale = 24 / maxDim;
+    for (let i = 0; i < coinCount; i++) {
+      const coin = scene.add.image(
+        Number(fromX) + Phaser.Math.Between(-12, 12),
+        Number(fromY) + Phaser.Math.Between(-8, 8),
+        "deathdrop-coin",
+      );
+      coin.setDepth(42);
+      coin.setScale(baseScale);
+      scene.tweens.add({
+        targets: coin,
+        x: Number(target.x) + Phaser.Math.Between(-8, 8),
+        y: Number(target.y) + Phaser.Math.Between(-6, 6),
+        alpha: 0.12,
+        duration: Phaser.Math.Between(420, 620),
+        delay: i * 34,
+        ease: "Cubic.easeInOut",
+        onComplete: () => {
+          try {
+            coin.destroy();
+          } catch (_) {}
+        },
+      });
+    }
+  }
+
+  function getObjectPositionById(id) {
+    const layout = getWorkingLayout();
+    const entry = (Array.isArray(layout?.objects) ? layout.objects : []).find(
+      (obj) => obj?.id === id,
+    );
+    if (!entry) return null;
+    return { x: Number(entry.x) || 0, y: Number(entry.y) || 0 };
+  }
+
+  function getPlayerPositionByName(name) {
+    const local = currentLocalPlayer();
+    const localName = String(getGameData?.()?.username || "");
+    if (name && local && localName && String(name) === localName) {
+      return { x: Number(local.x) || 0, y: Number(local.y) || 0 };
+    }
+    const wrap =
+      (getOpponentPlayers?.() || {})[String(name)] ||
+      (getTeamPlayers?.() || {})[String(name)] ||
+      null;
+    const spr = wrap?.opponent || null;
+    if (!spr) return null;
+    return { x: Number(spr.x) || 0, y: Number(spr.y) || 0 };
   }
 
   function cleanupUnused(map, usedIds) {
@@ -564,7 +668,7 @@ export function createBankBustRuntime({
           mineSprites,
           entry.id,
           owner ? "bank-bust-mine-claimed" : "bank-bust-mine-neutral",
-          10,
+            3,
         );
         if (mineSprite) {
           mineSprite.setVisible(true);
@@ -579,21 +683,22 @@ export function createBankBustRuntime({
         );
         label.setFontSize(13);
         label.setAlign("center");
+        label.setPosition(0, -66);
       } else if (entry.type === "claimableTurret") {
         const ownerTeam = runtime?.state?.claimedByTeam || null;
         label.setText(ownerTeam ? "Turret" : "Turret Slot");
-        label.setPosition(0, TURRET_RENDER_Y_OFFSET - 72);
+        label.setPosition(0, TURRET_RENDER_Y_OFFSET - 52);
         const turretBase = ensureTurretSprite(
           turretBaseSprites,
           entry.id,
           "bank-bust-turret-base",
-          11,
+          3,
         );
         const turretHead = ensureTurretSprite(
           turretHeadSprites,
           entry.id,
           "bank-bust-turret-head",
-          12,
+          4,
         );
         if (turretBase) {
           turretBase.setVisible(true);
@@ -652,7 +757,7 @@ export function createBankBustRuntime({
           wallSprites,
           entry.id,
           builtByTeam ? "bank-bust-wall-built" : "bank-bust-wall-slot",
-          10,
+          3,
         );
         if (wallSprite) {
           wallSprite.setVisible(true);
@@ -663,6 +768,7 @@ export function createBankBustRuntime({
           if (builtByTeam === "team2") wallSprite.setTint(0xffb4b4);
         }
         label.setText(builtByTeam ? "Built Wall" : "Wall Slot");
+        label.setPosition(0, -58);
         if (builtByTeam === "team1" || builtByTeam === "team2") {
           objectGraphics.lineStyle(
             3,
@@ -677,7 +783,7 @@ export function createBankBustRuntime({
             8,
           );
         }
-        updateWallBody(entry.id, entry, !!builtByTeam);
+        updateWallBody(entry.id, entry, !!builtByTeam, builtByTeam);
       } else {
         label.setText(entry.type || "Object");
       }
@@ -726,37 +832,45 @@ export function createBankBustRuntime({
       if (!visual?.sprite?.scene) {
         const x = Number(pickup.x) || 0;
         const y = Number(pickup.y) || 0;
-        const glowOuter = scene.add.circle(x, y, 22, 0xfacc15, 0.1);
-        glowOuter.setDepth(11);
-        glowOuter.setBlendMode(Phaser.BlendModes.ADD);
         const glow = scene.add.circle(x, y, 14, 0xfacc15, 0.22);
-        glow.setDepth(12);
+        glow.setDepth(6);
         glow.setBlendMode(Phaser.BlendModes.ADD);
+        const glowOuter = scene.add.circle(x, y, 22, 0xfacc15, 0.1);
+        glowOuter.setDepth(5);
+        glowOuter.setBlendMode(Phaser.BlendModes.ADD);
         const glowCore = scene.add.circle(x, y, 8, 0xffffff, 0.14);
-        glowCore.setDepth(12);
+        glowCore.setDepth(6);
         glowCore.setBlendMode(Phaser.BlendModes.ADD);
         const sprite = scene.add.image(x, y, "deathdrop-coin");
-        sprite.setScale(0.2);
-        sprite.setDepth(13);
+        sprite.setDepth(7);
+        const tex = scene.textures?.get?.("deathdrop-coin");
+        const src = tex?.getSourceImage?.();
+        const maxDim = Math.max(1, Number(src?.width) || 1, Number(src?.height) || 1);
+        const baseScale = maxDim > 0 ? 24 / maxDim : 1;
+        sprite.setScale(baseScale);
         visual = {
           sprite,
           glow,
           glowOuter,
           glowCore,
-          baseY: y,
+          baseScale,
+          settledX: x,
+          settledY: y,
           phase: Math.random() * Math.PI * 2,
         };
         pickupSprites.set(pickup.id, visual);
       }
       const x = Number(pickup.x) || 0;
       const y = Number(pickup.y) || 0;
+      visual.settledX = x;
+      visual.settledY = y;
       const bob = Math.sin(nowSec * 2.8 + visual.phase) * 5;
       const drawY = y - 6 + bob;
-      visual.baseY = y;
       visual.sprite.setVisible(true);
       visual.sprite.setPosition(x, drawY);
-      visual.sprite.scaleX = 0.2 * (0.88 + 0.12 * Math.sin(nowSec * 7.2 + visual.phase));
-      visual.sprite.scaleY = 0.2;
+      visual.sprite.scaleX =
+        visual.baseScale * (0.88 + 0.12 * Math.sin(nowSec * 7.2 + visual.phase));
+      visual.sprite.scaleY = visual.baseScale;
       visual.sprite.rotation = 0.08 * Math.sin(nowSec * 3.1 + visual.phase);
       const glowPulse = Math.abs(Math.sin(nowSec * 3.5 + visual.phase));
       visual.glow.setPosition(x, drawY + 1);
@@ -784,9 +898,14 @@ export function createBankBustRuntime({
   function renderTurretProjectiles(modeState) {
     const activeIds = new Set();
     const now = Date.now();
-    const dtMs = Math.max(1, Math.min(50, Number(scene?.game?.loop?.delta) || 16));
+    const dtMs = Math.max(
+      1,
+      Math.min(50, Number(scene?.game?.loop?.delta) || 16),
+    );
     const dtSec = dtMs / 1000;
-    const mapColliders = Array.isArray(getMapObjects?.()) ? getMapObjects() : [];
+    const mapColliders = Array.isArray(getMapObjects?.())
+      ? getMapObjects()
+      : [];
     for (const shot of Array.isArray(modeState?.turretProjectiles)
       ? modeState.turretProjectiles
       : []) {
@@ -829,7 +948,11 @@ export function createBankBustRuntime({
         visual.y += visual.vy * dtSec;
         visual.x = Phaser.Math.Linear(visual.x, serverX, 0.08);
         visual.y = Phaser.Math.Linear(visual.y, serverY, 0.08);
-        visual.rotation = Phaser.Math.Angle.RotateTo(visual.rotation, targetAngle, 0.6);
+        visual.rotation = Phaser.Math.Angle.RotateTo(
+          visual.rotation,
+          targetAngle,
+          0.6,
+        );
         sprite.setPosition(visual.x, visual.y);
         sprite.setRotation(visual.rotation);
 
@@ -881,6 +1004,16 @@ export function createBankBustRuntime({
       if (!at || at <= state.lastCollectionEventAt) continue;
       if (event?.type === "goldMine") {
         safePlaySfx("sfx-bankbust-mine-collect", { volume: 0.15 });
+        const sourcePos = getObjectPositionById(event?.source) ||
+          getPlayerPositionByName(event?.collectedBy);
+        if (sourcePos && (event?.team === "team1" || event?.team === "team2")) {
+          playGoldFlyToHud({
+            fromX: sourcePos.x,
+            fromY: sourcePos.y,
+            team: event.team,
+            amount: Number(event?.amount) || 1,
+          });
+        }
         if (
           event?.source &&
           (event?.team === "team1" || event?.team === "team2")
@@ -891,6 +1024,16 @@ export function createBankBustRuntime({
       }
       if (event?.type === "randomGold") {
         safePlaySfx("sfx-coin-pickup", { volume: 0.1 });
+        const sourcePos =
+          getPlayerPositionByName(event?.collectedBy) || currentLocalPlayer();
+        if (sourcePos && (event?.team === "team1" || event?.team === "team2")) {
+          playGoldFlyToHud({
+            fromX: sourcePos.x,
+            fromY: sourcePos.y,
+            team: event.team,
+            amount: Number(event?.amount) || 1,
+          });
+        }
       }
       state.lastCollectionEventAt = Math.max(state.lastCollectionEventAt, at);
     }

@@ -170,9 +170,10 @@ class GameRoom {
     const team = matchPlayer?.team === "team2" ? "team2" : "team1";
     const teamSize = Math.max(
       1,
-      (Array.isArray(this.matchData?.players) ? this.matchData.players : []).filter(
-        (player) => player?.team === team,
-      ).length,
+      (Array.isArray(this.matchData?.players)
+        ? this.matchData.players
+        : []
+      ).filter((player) => player?.team === team).length,
     );
     const index = Math.max(
       0,
@@ -184,7 +185,9 @@ class GameRoom {
       3: [-180, 0, 180],
     };
     const pickDx = (fallback = 0, bySize = slotsBySize) => {
-      const list = bySize[String(Math.max(1, Math.min(3, teamSize)))] || [fallback];
+      const list = bySize[String(Math.max(1, Math.min(3, teamSize)))] || [
+        fallback,
+      ];
       return Number(list[Math.max(0, Math.min(list.length - 1, index))]) || 0;
     };
 
@@ -293,7 +296,9 @@ class GameRoom {
         loaded: existingPlayer.loaded === true,
       });
       if (!this._netTestEnabled) {
-        console.log(`[GameRoom ${this.matchId}] Player ${user.name} reconnected`);
+        console.log(
+          `[GameRoom ${this.matchId}] Player ${user.name} reconnected`,
+        );
       }
     } else {
       // New player joining
@@ -701,7 +706,10 @@ class GameRoom {
     if (!actionData || !actionData.type) return;
 
     try {
-      const modeResult = this.gameMode?.handlePlayerAction?.(playerData, actionData);
+      const modeResult = this.gameMode?.handlePlayerAction?.(
+        playerData,
+        actionData,
+      );
       if (modeResult?.handled) {
         if (modeResult?.broadcast) {
           this.io.to(`game:${this.matchId}`).emit("game:action", {
@@ -747,7 +755,12 @@ class GameRoom {
 
     // Process action (implement specific action handling later)
     // For now, just broadcast to other players
-    characterActionRegistry.broadcastAction(this, playerData, actionData, Date.now());
+    characterActionRegistry.broadcastAction(
+      this,
+      playerData,
+      actionData,
+      Date.now(),
+    );
   }
 
   /**
@@ -939,7 +952,9 @@ class GameRoom {
         (p) => p.name === targetName,
       );
       const vaultMatch = targetName.match(/^vault:(team1|team2)$/i);
-      const targetVaultTeam = vaultMatch ? String(vaultMatch[1]).toLowerCase() : null;
+      const targetVaultTeam = vaultMatch
+        ? String(vaultMatch[1]).toLowerCase()
+        : null;
       const targetVault = targetVaultTeam
         ? this.gameMode?.getVaultState?.(targetVaultTeam) || null
         : null;
@@ -1053,20 +1068,14 @@ class GameRoom {
           maxDist = Math.max(maxDist, 2400);
         }
       } else {
-        ({
-          attackTimeClamped,
-          aPos,
-          tPos,
-          dist,
-          maxDist,
-          attackWasFuture,
-        } = combatValidation.evaluateHitRange({
-          attacker,
-          target,
-          attackType,
-          attackTimeRaw,
-          now,
-        }));
+        ({ attackTimeClamped, aPos, tPos, dist, maxDist, attackWasFuture } =
+          combatValidation.evaluateHitRange({
+            attacker,
+            target,
+            attackType,
+            attackTimeRaw,
+            now,
+          }));
       }
       if (attackWasFuture) {
         if (this.DEV_TIMING_DIAG) {
@@ -1091,11 +1100,8 @@ class GameRoom {
       // Facing-direction check for melee attacks (Draven splash, Thorg fall).
       // The target must be on the side the attacker is facing; a generous tolerance
       // prevents false rejections at the boundary.
-      const isMeleeFacing = !targetVault && requiresMeleeFacingCheck(
-        attacker,
-        attackType,
-        isSelf,
-      );
+      const isMeleeFacing =
+        !targetVault && requiresMeleeFacingCheck(attacker, attackType, isSelf);
       if (isMeleeFacing) {
         const validFacing = combatValidation.isMeleeFacingValid({
           attacker,
@@ -1115,9 +1121,17 @@ class GameRoom {
       // Basic per-attacker->target rate limit to avoid accidental double submissions
       this._recentHits = this._recentHits || new Map(); // key: attacker|target -> timestamp
       const instanceId = payload.instanceId ? String(payload.instanceId) : "";
-      const hitTargetKey = targetVault ? `vault:${targetVaultTeam}` : target.name;
+      const hitTargetKey = targetVault
+        ? `vault:${targetVaultTeam}`
+        : target.name;
       const keySafe =
-        attacker.name + "|" + hitTargetKey + "|" + attackType + "|" + instanceId;
+        attacker.name +
+        "|" +
+        hitTargetKey +
+        "|" +
+        attackType +
+        "|" +
+        instanceId;
       const last = this._recentHits.get(keySafe) || 0;
       const DUP_WINDOW_MS = 80; // hits within 80ms considered duplicate
       if (!isSelf && now - last < DUP_WINDOW_MS) {
@@ -1146,17 +1160,6 @@ class GameRoom {
           attacker.lastAttackAt = now;
           attacker.lastCombatAt = now;
           this._recordCombatStat(attacker, { damage: appliedDamage });
-          if (attacker.maxSuperCharge > 0) {
-            attacker.superCharge = Math.min(
-              attacker.maxSuperCharge,
-              (attacker.superCharge || 0) + appliedDamage,
-            );
-            this.io.to(`game:${this.matchId}`).emit("super-update", {
-              username: attacker.name,
-              charge: attacker.superCharge,
-              maxCharge: attacker.maxSuperCharge,
-            });
-          }
           this.broadcastSnapshot();
           this._checkVictoryCondition();
         }
@@ -1383,8 +1386,12 @@ class GameRoom {
       const now = Date.now();
       const spawnX = Number(plan?.position?.x);
       const spawnY = Number(plan?.position?.y);
-      const nextX = Number.isFinite(spawnX) ? spawnX : Number(playerData.x) || 0;
-      const nextY = Number.isFinite(spawnY) ? spawnY : Number(playerData.y) || 0;
+      const nextX = Number.isFinite(spawnX)
+        ? spawnX
+        : Number(playerData.x) || 0;
+      const nextY = Number.isFinite(spawnY)
+        ? spawnY
+        : Number(playerData.y) || 0;
       playerData.isAlive = true;
       playerData._deathHandled = false;
       playerData.health = Math.max(1, Number(playerData.maxHealth) || 1);

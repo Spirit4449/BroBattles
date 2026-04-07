@@ -86,7 +86,10 @@ function tick(room, caster, now) {
         sourceTeam: caster.team,
         attackType: "special",
       });
-      const appliedVault = Math.max(0, oldVaultHp - (Number(vault.health) || 0));
+      const appliedVault = Math.max(
+        0,
+        oldVaultHp - (Number(vault.health) || 0),
+      );
       if (appliedVault > 0) {
         room._recordCombatStat(caster, { damage: appliedVault, hits: 1 });
         room.broadcastSnapshot?.();
