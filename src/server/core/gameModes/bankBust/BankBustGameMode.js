@@ -1,5 +1,7 @@
 const { BaseGameMode } = require("../BaseGameMode");
-const { getMapObjectiveLayout } = require("../../../helpers/gameSelectionCatalog");
+const {
+  getMapObjectiveLayout,
+} = require("../../../helpers/gameSelectionCatalog");
 const effectManager = require("../../gameRoom/effects/effectManager");
 const {
   RANDOM_GOLD_PICKUP_CAP,
@@ -14,14 +16,18 @@ const {
 } = require("./state");
 
 const DEFAULT_VAULT_MAX_HEALTH = 12000;
-const DEFAULT_MATCH_DURATION_MS = 180000;
-const DEFAULT_RESPAWN_DELAY_MS = 3500;
+const DEFAULT_MATCH_DURATION_MS = 1800000;
+const DEFAULT_RESPAWN_DELAY_MS = 500;
 const DEFAULT_RESPAWN_SHIELD_MS = 3000;
 const ALERT_RETENTION_MS = 2200;
 const TURRET_PROJECTILE_RADIUS = 18;
 const TURRET_PROJECTILE_MAX_LIFETIME_MS = 2200;
 
-function buildVaultState(team, layoutVault = null, maxHealth = DEFAULT_VAULT_MAX_HEALTH) {
+function buildVaultState(
+  team,
+  layoutVault = null,
+  maxHealth = DEFAULT_VAULT_MAX_HEALTH,
+) {
   return {
     team,
     label:
@@ -39,14 +45,29 @@ function buildVaultState(team, layoutVault = null, maxHealth = DEFAULT_VAULT_MAX
 }
 
 function distance(aX, aY, bX, bY) {
-  return Math.hypot((Number(aX) || 0) - (Number(bX) || 0), (Number(aY) || 0) - (Number(bY) || 0));
+  return Math.hypot(
+    (Number(aX) || 0) - (Number(bX) || 0),
+    (Number(aY) || 0) - (Number(bY) || 0),
+  );
+}
+
+function pointInRect(px, py, cx, cy, width, height) {
+  const halfW = Math.max(1, Number(width) || 0) / 2;
+  const halfH = Math.max(1, Number(height) || 0) / 2;
+  return (
+    Number(px) >= Number(cx) - halfW &&
+    Number(px) <= Number(cx) + halfW &&
+    Number(py) >= Number(cy) - halfH &&
+    Number(py) <= Number(cy) + halfH
+  );
 }
 
 class BankBustGameMode extends BaseGameMode {
   getSettings() {
     return {
       vaultMaxHp:
-        Number(this.descriptor?.settings?.vaultMaxHp) || DEFAULT_VAULT_MAX_HEALTH,
+        Number(this.descriptor?.settings?.vaultMaxHp) ||
+        DEFAULT_VAULT_MAX_HEALTH,
       matchDurationMs:
         Number(this.descriptor?.settings?.matchDurationMs) ||
         DEFAULT_MATCH_DURATION_MS,
@@ -89,8 +110,16 @@ class BankBustGameMode extends BaseGameMode {
       turretProjectiles: [],
       lastProjectileTickAt: Date.now(),
       vaults: {
-        team1: buildVaultState("team1", layout?.vaults?.team1, settings.vaultMaxHp),
-        team2: buildVaultState("team2", layout?.vaults?.team2, settings.vaultMaxHp),
+        team1: buildVaultState(
+          "team1",
+          layout?.vaults?.team1,
+          settings.vaultMaxHp,
+        ),
+        team2: buildVaultState(
+          "team2",
+          layout?.vaults?.team2,
+          settings.vaultMaxHp,
+        ),
       },
       lastVaultDamageEvent: null,
       recentAlerts: [],
@@ -133,7 +162,8 @@ class BankBustGameMode extends BaseGameMode {
     if (!state?.teamGold?.[team]) state.teamGold[team] = 0;
     const gold = Math.max(0, Number(amount) || 0);
     if (gold <= 0 || (team !== "team1" && team !== "team2")) return 0;
-    state.teamGold[team] = Math.max(0, Number(state.teamGold[team]) || 0) + gold;
+    state.teamGold[team] =
+      Math.max(0, Number(state.teamGold[team]) || 0) + gold;
     state.collectionEvents = Array.isArray(state.collectionEvents)
       ? state.collectionEvents
       : [];
@@ -164,7 +194,8 @@ class BankBustGameMode extends BaseGameMode {
     const py = Number(playerData?.y) || 0;
     let best = null;
     for (const entry of Array.isArray(state?.objects) ? state.objects : []) {
-      if (entry?.type !== "claimableTurret" && entry?.type !== "wallSlot") continue;
+      if (entry?.type !== "claimableTurret" && entry?.type !== "wallSlot")
+        continue;
       const radius =
         entry?.type === "claimableTurret"
           ? Number(entry?.state?.claimRadius) || 110
@@ -222,7 +253,10 @@ class BankBustGameMode extends BaseGameMode {
           (alert) => now - (Number(alert?.at) || 0) <= ALERT_RETENTION_MS,
         )
       : [];
-    state.collectionEvents = expireCollectionEvents(state.collectionEvents, now);
+    state.collectionEvents = expireCollectionEvents(
+      state.collectionEvents,
+      now,
+    );
 
     this._tickGoldMines(now);
     this._tickRandomGold(now);
@@ -247,7 +281,9 @@ class BankBustGameMode extends BaseGameMode {
             distance(a.x, a.y, entry.x, entry.y) -
             distance(b.x, b.y, entry.x, entry.y),
         )
-        .find((player) => distance(player.x, player.y, entry.x, entry.y) <= range);
+        .find(
+          (player) => distance(player.x, player.y, entry.x, entry.y) <= range,
+        );
 
       if (!target) continue;
       const aimAngle = Math.atan2(
@@ -261,7 +297,10 @@ class BankBustGameMode extends BaseGameMode {
       entry.state.lastTargetName = target.name;
       entry.state.lastTargetX = Number(target.x) || 0;
       entry.state.lastTargetY = Number(target.y) || 0;
-      const projectileSpeed = Math.max(120, Number(entry?.state?.projectileSpeed) || 520);
+      const projectileSpeed = Math.max(
+        120,
+        Number(entry?.state?.projectileSpeed) || 520,
+      );
       const rawDamage = Math.max(1, Number(entry?.state?.damage) || 700);
       state.turretProjectiles = Array.isArray(state.turretProjectiles)
         ? state.turretProjectiles
@@ -285,11 +324,22 @@ class BankBustGameMode extends BaseGameMode {
 
   _tickTurretProjectiles(now) {
     const state = this.getModeState();
-    if (!Array.isArray(state?.turretProjectiles) || !state.turretProjectiles.length) {
+    if (
+      !Array.isArray(state?.turretProjectiles) ||
+      !state.turretProjectiles.length
+    ) {
       state.lastProjectileTickAt = now;
       return;
     }
     const players = this._eligiblePlayers();
+    const builtWalls = (
+      Array.isArray(state?.objects) ? state.objects : []
+    ).filter(
+      (entry) =>
+        entry?.type === "wallSlot" &&
+        (entry?.state?.builtByTeam === "team1" ||
+          entry?.state?.builtByTeam === "team2"),
+    );
     const remaining = [];
     for (const shot of state.turretProjectiles) {
       const lastUpdatedAt = Number(shot?.lastUpdatedAt) || now;
@@ -301,10 +351,28 @@ class BankBustGameMode extends BaseGameMode {
 
       const expired =
         now - (Number(shot?.spawnedAt) || now) >
-        Math.max(200, Number(shot?.maxLifetimeMs) || TURRET_PROJECTILE_MAX_LIFETIME_MS);
+        Math.max(
+          200,
+          Number(shot?.maxLifetimeMs) || TURRET_PROJECTILE_MAX_LIFETIME_MS,
+        );
       if (expired) continue;
 
-      const hitRadius = Math.max(8, Number(shot?.radius) || TURRET_PROJECTILE_RADIUS);
+      const hitWall = builtWalls.some((wall) =>
+        pointInRect(
+          shot.x,
+          shot.y,
+          wall.x,
+          wall.y,
+          Number(wall?.state?.width) || Number(wall?.width) || 120,
+          Number(wall?.state?.height) || Number(wall?.height) || 46,
+        ),
+      );
+      if (hitWall) continue;
+
+      const hitRadius = Math.max(
+        8,
+        Number(shot?.radius) || TURRET_PROJECTILE_RADIUS,
+      );
       const target = players.find((player) => {
         if (player.team === shot.ownerTeam) return false;
         return distance(player.x, player.y, shot.x, shot.y) <= hitRadius + 26;
@@ -349,7 +417,8 @@ class BankBustGameMode extends BaseGameMode {
       const steps = Math.max(1, Math.floor(elapsed / mine.yieldIntervalMs));
       mine.storedGold = Math.min(
         Number(mine.maxStoredGold) || 60,
-        (Number(mine.storedGold) || 0) + steps * (Number(mine.yieldAmount) || 0),
+        (Number(mine.storedGold) || 0) +
+          steps * (Number(mine.yieldAmount) || 0),
       );
       mine.lastGeneratedAt = now;
     }
@@ -360,7 +429,10 @@ class BankBustGameMode extends BaseGameMode {
     const randomGold = state?.randomGold;
     if (!randomGold) return;
     if (!Array.isArray(randomGold.pickups)) randomGold.pickups = [];
-    if (!Array.isArray(randomGold.spawnPoints) || !randomGold.spawnPoints.length) {
+    if (
+      !Array.isArray(randomGold.spawnPoints) ||
+      !randomGold.spawnPoints.length
+    ) {
       return;
     }
     if (randomGold.pickups.length >= RANDOM_GOLD_PICKUP_CAP) return;
@@ -370,8 +442,7 @@ class BankBustGameMode extends BaseGameMode {
       randomGold.spawnPoints[
         randomGold.nextSpawnIdx % randomGold.spawnPoints.length
       ] || null;
-    randomGold.nextSpawnIdx =
-      (Number(randomGold.nextSpawnIdx) || 0) + 1;
+    randomGold.nextSpawnIdx = (Number(randomGold.nextSpawnIdx) || 0) + 1;
     randomGold.nextSpawnAt = now + RANDOM_GOLD_SPAWN_INTERVAL_MS;
     if (!spawnPoint) return;
 
@@ -428,7 +499,8 @@ class BankBustGameMode extends BaseGameMode {
       let collected = false;
       for (const player of players) {
         const dist = distance(player.x, player.y, pickup.x, pickup.y);
-        if (dist > (Number(pickup.radius) || RANDOM_GOLD_PICKUP_RADIUS)) continue;
+        if (dist > (Number(pickup.radius) || RANDOM_GOLD_PICKUP_RADIUS))
+          continue;
         this.addTeamGold(player.team, pickup.value, {
           type: "randomGold",
           source: pickup.id,
@@ -479,7 +551,9 @@ class BankBustGameMode extends BaseGameMode {
       at: now,
     };
 
-    state.recentAlerts = Array.isArray(state.recentAlerts) ? state.recentAlerts : [];
+    state.recentAlerts = Array.isArray(state.recentAlerts)
+      ? state.recentAlerts
+      : [];
     state.recentAlerts.push({
       type: "vault-under-attack",
       targetTeam,
@@ -513,7 +587,11 @@ class BankBustGameMode extends BaseGameMode {
         terminal: true,
         winnerTeam: "team2",
         outcomeKey: "team2",
-        meta: { outcome: "team2", destroyedObjective: "team1", finishDelayMs: 0 },
+        meta: {
+          outcome: "team2",
+          destroyedObjective: "team1",
+          finishDelayMs: 0,
+        },
       };
     }
     if (team2Vault.health <= 0) {
@@ -521,7 +599,11 @@ class BankBustGameMode extends BaseGameMode {
         terminal: true,
         winnerTeam: "team1",
         outcomeKey: "team1",
-        meta: { outcome: "team1", destroyedObjective: "team2", finishDelayMs: 0 },
+        meta: {
+          outcome: "team1",
+          destroyedObjective: "team2",
+          finishDelayMs: 0,
+        },
       };
     }
     return null;
@@ -560,7 +642,8 @@ class BankBustGameMode extends BaseGameMode {
       };
     }
 
-    const winnerTeam = team1Vault.health < team2Vault.health ? "team2" : "team1";
+    const winnerTeam =
+      team1Vault.health < team2Vault.health ? "team2" : "team1";
     return {
       terminal: true,
       winnerTeam,
@@ -584,7 +667,8 @@ class BankBustGameMode extends BaseGameMode {
       topology: "team-vs-team",
       phase: state?.phase || "setup",
       objectiveLabel: "Destroy the enemy vault",
-      matchDurationMs: Number(state?.matchDurationMs) || settings.matchDurationMs,
+      matchDurationMs:
+        Number(state?.matchDurationMs) || settings.matchDurationMs,
       startedAt: state?.startedAt || null,
       endsAt: state?.endsAt || null,
       respawns: true,
@@ -606,7 +690,9 @@ class BankBustGameMode extends BaseGameMode {
           }))
         : [],
       randomGoldPickups: Array.isArray(state?.randomGold?.pickups)
-        ? state.randomGold.pickups.map((entry) => serializeRandomGoldPickup(entry))
+        ? state.randomGold.pickups.map((entry) =>
+            serializeRandomGoldPickup(entry),
+          )
         : [],
       turretProjectiles: Array.isArray(state?.turretProjectiles)
         ? state.turretProjectiles.map((entry) => ({
@@ -615,7 +701,11 @@ class BankBustGameMode extends BaseGameMode {
             sourceId: entry.sourceId || null,
             x: Number(entry.x) || 0,
             y: Number(entry.y) || 0,
-            radius: Math.max(8, Number(entry.radius) || TURRET_PROJECTILE_RADIUS),
+            angle: Math.atan2(Number(entry.vy) || 0, Number(entry.vx) || 0),
+            radius: Math.max(
+              8,
+              Number(entry.radius) || TURRET_PROJECTILE_RADIUS,
+            ),
             spawnedAt: Number(entry.spawnedAt) || null,
           }))
         : [],
@@ -663,7 +753,9 @@ class BankBustGameMode extends BaseGameMode {
         team2: layout?.respawnPoints?.team2 || null,
       },
       lastVaultDamageEvent: state?.lastVaultDamageEvent || null,
-      recentAlerts: Array.isArray(state?.recentAlerts) ? state.recentAlerts : [],
+      recentAlerts: Array.isArray(state?.recentAlerts)
+        ? state.recentAlerts
+        : [],
     };
   }
 }

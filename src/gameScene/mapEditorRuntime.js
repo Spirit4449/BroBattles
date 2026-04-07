@@ -93,6 +93,16 @@ function clampNum(v, min, max) {
   return n;
 }
 
+function emitMapEditorUiState(enabled, minimized) {
+  try {
+    window.dispatchEvent(
+      new CustomEvent("bb:map-editor-ui-state", {
+        detail: { enabled: !!enabled, minimized: !!minimized },
+      }),
+    );
+  } catch (_) {}
+}
+
 export function createMapEditorRuntime({
   scene,
   mapId,
@@ -557,12 +567,14 @@ export function createMapEditorRuntime({
       state.snapGuideX = null;
       state.snapGuideY = null;
       onEditModeChange?.(false);
+      emitMapEditorUiState(false, state.minimized);
       return;
     }
     setPanelVisibility(true);
     graphics.setVisible(true);
     for (const m of state.markers) m.marker.setVisible(shouldShowMarker(m));
     onEditModeChange?.(true);
+    emitMapEditorUiState(true, state.minimized);
   }
 
   function refreshSelect() {
@@ -1173,7 +1185,9 @@ export function createMapEditorRuntime({
     );
     const currDist = Math.max(
       1,
-      axis === "x" ? Math.abs(snapped.x - go.x) : Math.abs(snapped.y - go.y),
+      axis === "x"
+        ? Math.abs(snapped.x - Number(start.centerX || go.x))
+        : Math.abs(snapped.y - Number(start.centerY || go.y)),
     );
     const uniformScale = clampNum(currDist / startDist, 0.05, 50);
 
@@ -1436,6 +1450,8 @@ export function createMapEditorRuntime({
           right: bounds.right,
           top: bounds.top,
           bottom: bounds.bottom,
+          centerX: bounds.centerX,
+          centerY: bounds.centerY,
           scaleX: Math.max(0.05, Number(target?.scaleX) || 1),
           scaleY: Math.max(0.05, Number(target?.scaleY) || 1),
         };
@@ -1465,7 +1481,7 @@ export function createMapEditorRuntime({
         shiftSnap: !!pointer?.event?.shiftKey,
         excludeGo: go,
       });
-      go.setPosition(Math.round(snapped.x), Math.round(snapped.y));
+      go.setPosition(snapped.x, snapped.y);
       if (ent.type === "zone") {
         updateBodyFromGameObject(go);
       } else if (go.body && typeof go.body.reset === "function") {
@@ -1483,7 +1499,7 @@ export function createMapEditorRuntime({
       shiftSnap: !!pointer?.event?.shiftKey,
       excludeGo: null,
     });
-    marker.point.x = Math.round(snapped.x);
+    marker.point.x = snapped.x;
     delete marker.point.dx;
     const anchorHit =
       marker.type === "spawn"
@@ -1502,7 +1518,7 @@ export function createMapEditorRuntime({
       else go.setPosition(marker.point.x, go.y);
     } else {
       delete marker.point.anchorId;
-      marker.point.y = Math.round(snapped.y);
+      marker.point.y = snapped.y;
       go.setPosition(marker.point.x, marker.point.y);
     }
     syncInputsFromSelection();
@@ -1531,6 +1547,7 @@ export function createMapEditorRuntime({
     state.minimized = !state.minimized;
     el.panel.classList.toggle("min", state.minimized);
     el.min.textContent = state.minimized ? "Expand" : "Minimize";
+    emitMapEditorUiState(state.enabled, state.minimized);
   });
 
   el.select.addEventListener("change", () =>

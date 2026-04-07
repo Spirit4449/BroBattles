@@ -253,7 +253,9 @@ function clearGameCursor(targetScene = pointerAttackScene || scene) {
   } catch (_) {}
 }
 
-function detachPointerAttackBindings(targetScene = pointerAttackScene || scene) {
+function detachPointerAttackBindings(
+  targetScene = pointerAttackScene || scene,
+) {
   const sceneToDetach = targetScene || pointerAttackScene || scene;
   if (!sceneToDetach) return;
   const isTrackedScene =
@@ -269,10 +271,7 @@ function detachPointerAttackBindings(targetScene = pointerAttackScene || scene) 
     }
     if (pointerAttackHandlers?.up) {
       sceneToDetach?.input?.off?.("pointerup", pointerAttackHandlers.up);
-      sceneToDetach?.input?.off?.(
-        "pointerupoutside",
-        pointerAttackHandlers.up,
-      );
+      sceneToDetach?.input?.off?.("pointerupoutside", pointerAttackHandlers.up);
     }
     if (pointerAttackHandlers?.gameout) {
       sceneToDetach?.input?.off?.("gameout", pointerAttackHandlers.gameout);
@@ -321,7 +320,9 @@ function getAimBasePoint(family = attackAimState.family || "basic") {
   );
 }
 
-function syncPointerAttackRelativeOffset(family = attackAimState.family || "basic") {
+function syncPointerAttackRelativeOffset(
+  family = attackAimState.family || "basic",
+) {
   const base = getAimBasePoint(family);
   const pointerX = Number(attackAimState.pointerWorldX);
   const pointerY = Number(attackAimState.pointerWorldY);
@@ -692,7 +693,8 @@ export function createPlayer(
   // reconnect position restore. That removes the first-frame pop from -100,-100.
   player.setVisible(false);
 
-  // Frame/body already configured above prior to spawn for correct initial grounding
+  // Set depth so player renders above all map objects (bank bust graphics are at depths 7-24)
+  player.setDepth(25);
 
   // Player name text anchored to physics body top (not frame height)
   const bodyTop = player.body ? player.body.y : player.y - player.height / 2;
@@ -820,11 +822,13 @@ export function createPlayer(
     if (window.__BB_MAP_EDIT_ACTIVE) return;
     if (dead) return;
     if ((player?._movementLockedUntil || 0) > Date.now()) return;
-    const mobilePointerHandled = !!mobileControlsController?.handlePointerDown?.(
-      pointer,
-    );
+    const mobilePointerHandled =
+      !!mobileControlsController?.handlePointerDown?.(pointer);
     if (mobilePointerHandled) return;
-    if (mobileControlsController?.isEnabled?.() && pointer?.pointerType === "touch")
+    if (
+      mobileControlsController?.isEnabled?.() &&
+      pointer?.pointerType === "touch"
+    )
       return;
     if (pointer.button === 0) {
       startPointerAttackAim(pointer, "basic", 0);
@@ -840,11 +844,13 @@ export function createPlayer(
   };
 
   const pointerMoveHandler = (pointer) => {
-    const mobilePointerHandled = !!mobileControlsController?.handlePointerMove?.(
-      pointer,
-    );
+    const mobilePointerHandled =
+      !!mobileControlsController?.handlePointerMove?.(pointer);
     if (mobilePointerHandled) return;
-    if (mobileControlsController?.isEnabled?.() && pointer?.pointerType === "touch")
+    if (
+      mobileControlsController?.isEnabled?.() &&
+      pointer?.pointerType === "touch"
+    )
       return;
     if (!attackAimState.active) return;
     if (
@@ -859,11 +865,13 @@ export function createPlayer(
   };
 
   const pointerUpHandler = (pointer) => {
-    const mobilePointerHandled = !!mobileControlsController?.handlePointerUp?.(
-      pointer,
-    );
+    const mobilePointerHandled =
+      !!mobileControlsController?.handlePointerUp?.(pointer);
     if (mobilePointerHandled) return;
-    if (mobileControlsController?.isEnabled?.() && pointer?.pointerType === "touch")
+    if (
+      mobileControlsController?.isEnabled?.() &&
+      pointer?.pointerType === "touch"
+    )
       return;
     const movementLockedNow = (player?._movementLockedUntil || 0) > Date.now();
     const context = finishPointerAttackAim(pointer);
@@ -944,6 +952,13 @@ export function createPlayer(
       resetPointerAttackAim();
       updateHealthBar();
       setLocalUiVisible(false);
+    },
+    onLocalRespawn: () => {
+      setLocalUiVisible(true);
+      try {
+        indicatorTriangle?.setVisible(true);
+        drawIndicatorTriangle();
+      } catch (_) {}
     },
     removeLocalCorpse: () => {
       try {
@@ -1390,13 +1405,14 @@ export function handlePlayerMovement(scene) {
       ? "right"
       : nearLeftWall
         ? "left"
-      : nearRightWall
-        ? "right"
-        : null;
+        : nearRightWall
+          ? "right"
+          : null;
 
   const nowTs = Date.now();
   const movementLocked = (player?._movementLockedUntil || 0) > nowTs;
-  const specialAnimLocked = () => (player?._specialAnimLockUntil || 0) > Date.now();
+  const specialAnimLocked = () =>
+    (player?._specialAnimLockUntil || 0) > Date.now();
   if (movementLocked) {
     leftKey = false;
     rightKey = false;
@@ -1511,7 +1527,12 @@ export function handlePlayerMovement(scene) {
     if (player.flipX !== wasFlip && applyFlipOffsetLocal)
       applyFlipOffsetLocal();
     isMoving = true; // Sets the isMoving to true
-    if (player.body.touching.down && !isAttacking && !dead && !specialAnimLocked()) {
+    if (
+      player.body.touching.down &&
+      !isAttacking &&
+      !dead &&
+      !specialAnimLocked()
+    ) {
       // If the player is not in the air or attacking or dead, it plays the running animation
       player.anims.play(
         resolveAnimKey(scene, currentCharacter, "running"),
@@ -1549,7 +1570,12 @@ export function handlePlayerMovement(scene) {
     }
     player.setDragX(onGroundRight ? dragGround : dragAir);
     isMoving = true; // Sets moving variable
-    if (player.body.touching.down && !isAttacking && !dead && !specialAnimLocked()) {
+    if (
+      player.body.touching.down &&
+      !isAttacking &&
+      !dead &&
+      !specialAnimLocked()
+    ) {
       // If the player is not in the air or attacking or dead, it plays the running animation
       player.anims.play(
         resolveAnimKey(scene, currentCharacter, "running"),

@@ -592,11 +592,11 @@ function updateMatchBackgroundParallax(scene) {
     }
     const cam = scene?.cameras?.main;
     if (!cam) return;
-    const boundsWidth = Number(cam.bounds?.width) || 0;
-    const travel = Math.max(1, boundsWidth - cam.width);
-    const progress = Phaser.Math.Clamp((cam.scrollX - (cam.bounds?.x || 0)) / travel, 0, 1);
-    const shiftPercent = (progress - 0.5) * 18;
-    bgImg.style.transform = `translate3d(${shiftPercent}%,0,0) scale(1.14)`;
+    // Smooth parallax: background moves at ~0.35x the camera's movement
+    // scrollX is in world space, we shift the bg dynamically with parallax factor
+    const parallaxFactor = 0.35;
+    const shiftPx = -cam.scrollX * parallaxFactor;
+    bgImg.style.transform = `translate3d(${shiftPx}px,0,0) scale(1.14)`;
     bgImg.style.transformOrigin = "50% 100%";
   } catch (_) {}
 }
@@ -1109,12 +1109,7 @@ class GameScene extends Phaser.Scene {
     if (!mapBoundaryConfig?.camera) {
       cam.setZoom(1.7);
       const contentCenterX = BASE_GAME_WIDTH / 2;
-      cam.setBounds(
-        contentCenterX - 850,
-        -40,
-        2000,
-        BASE_GAME_HEIGHT,
-      );
+      cam.setBounds(contentCenterX - 850, -40, 2000, BASE_GAME_HEIGHT);
       cam.setDeadzone(50, 50);
       cam.setFollowOffset(0, 120);
     }
@@ -1173,15 +1168,15 @@ class GameScene extends Phaser.Scene {
     }
     if (!this._bankBustRuntime) {
       this._bankBustRuntime = createBankBustRuntime({
-          scene: this,
-          Phaser,
-          getGameData: () => gameData,
-          getModeState: () => latestModeState,
-          getLocalPlayer: () => player,
-          getOpponentPlayers: () => opponentPlayers,
-          getTeamPlayers: () => teamPlayers,
-          canEdit: !!gameData?.isAdmin,
-        });
+        scene: this,
+        Phaser,
+        getGameData: () => gameData,
+        getModeState: () => latestModeState,
+        getLocalPlayer: () => player,
+        getOpponentPlayers: () => opponentPlayers,
+        getTeamPlayers: () => teamPlayers,
+        canEdit: !!gameData?.isAdmin,
+      });
       this._bankBustRuntime.setEditMode?.(!!this._editModeActive);
     }
     // End camera setup
@@ -1337,16 +1332,24 @@ class GameScene extends Phaser.Scene {
 
     const bounds = this._spectatorBounds || {};
     const targetX =
-      Number(bounds.centerX) || Number(this.physics?.world?.bounds?.centerX) || 1150;
+      Number(bounds.centerX) ||
+      Number(this.physics?.world?.bounds?.centerX) ||
+      1150;
     const targetY =
-      Number(bounds.centerY) || Number(this.physics?.world?.bounds?.centerY) || 500;
+      Number(bounds.centerY) ||
+      Number(this.physics?.world?.bounds?.centerY) ||
+      500;
     const width = Math.max(
       1,
-      Number(bounds.width) || Number(this.physics?.world?.bounds?.width) || 2300,
+      Number(bounds.width) ||
+        Number(this.physics?.world?.bounds?.width) ||
+        2300,
     );
     const height = Math.max(
       1,
-      Number(bounds.height) || Number(this.physics?.world?.bounds?.height) || 1000,
+      Number(bounds.height) ||
+        Number(this.physics?.world?.bounds?.height) ||
+        1000,
     );
     const zoomX = (Number(this.scale?.width) || width) / width;
     const zoomY = (Number(this.scale?.height) || height) / height;
@@ -1367,10 +1370,11 @@ class GameScene extends Phaser.Scene {
   }
 
   update() {
-      updateMatchBackgroundParallax(this);
-      if (this._editModeActive) {
-        try {
-          this._poisonGraphics?.clear?.();
+    updateMatchBackgroundParallax(this);
+    const isBankBustMode = String(latestModeState?.type || "") === "bank-bust";
+    if (this._editModeActive || isBankBustMode) {
+      try {
+        this._poisonGraphics?.clear?.();
       } catch (_) {}
       try {
         const cssDiv = document.getElementById("poison-water-bg");
@@ -1450,20 +1454,13 @@ class GameScene extends Phaser.Scene {
    * 2. If snapshot also sets: player.x = snapshot.x
    * 3. Result: Position applied twice, then corrected → jitter/rubber-banding
    *
-  * When server-side movement simulation (Phase 2B) is enabled, it will ONLY
-  * be used for hit validation via stored position history. Snapshots will NOT
-  * update the local player's position.
+   * When server-side movement simulation (Phase 2B) is enabled, it will ONLY
+   * be used for hit validation via stored position history. Snapshots will NOT
+   * update the local player's position.
    */
   interpolatePlayerStates(aState, bState, alpha, frame = null) {
     const extrapolationMs = Math.max(0, Number(frame?.extrapolationMs) || 0);
-    const hermiteAxis = (
-      aValue,
-      bValue,
-      aVelocity,
-      bVelocity,
-      t,
-      spanMs,
-    ) => {
+    const hermiteAxis = (aValue, bValue, aVelocity, bVelocity, t, spanMs) => {
       const p0 = Number(aValue);
       const p1 = Number(bValue);
       const v0 = Number(aVelocity);
@@ -1509,7 +1506,9 @@ class GameScene extends Phaser.Scene {
             velocityNum > 0
               ? Number(MOVEMENT_PHYSICS.fallGravityFactor) || 1
               : 1;
-          return bNum + velocityNum * tSec + 0.5 * gravity * fallMult * tSec * tSec;
+          return (
+            bNum + velocityNum * tSec + 0.5 * gravity * fallMult * tSec * tSec
+          );
         }
         return bNum + velocityNum * (extrapolationMs / 1000);
       }
@@ -1543,7 +1542,8 @@ class GameScene extends Phaser.Scene {
           : Number.isFinite(snapshotDx) && Math.abs(snapshotDx) > 1.25
             ? Math.sign(snapshotDx)
             : 0;
-      const incomingDir = Math.abs(incomingDx) > 0.75 ? Math.sign(incomingDx) : 0;
+      const incomingDir =
+        Math.abs(incomingDx) > 0.75 ? Math.sign(incomingDx) : 0;
       const reverseAgainstTrend =
         stableDir !== 0 &&
         incomingDir !== 0 &&
@@ -1615,9 +1615,7 @@ class GameScene extends Phaser.Scene {
       if (isLoaded) {
         const inPrecision =
           (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
-        const airborne = !(
-          bPosData?.grounded ?? aPosData?.grounded ?? false
-        );
+        const airborne = !(bPosData?.grounded ?? aPosData?.grounded ?? false);
         const effectiveAlpha = inPrecision
           ? Math.max(alpha, 0.85)
           : airborne
@@ -1716,7 +1714,9 @@ class GameScene extends Phaser.Scene {
             const inPrecision =
               (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
             const airborne = !(
-              bPosData?.grounded ?? aPosData?.grounded ?? false
+              bPosData?.grounded ??
+              aPosData?.grounded ??
+              false
             );
             const dtMs = Math.max(1, Number(this.game?.loop?.delta) || 16.7);
             const followSpeedPxPerSec = inPrecision
@@ -1745,6 +1745,23 @@ class GameScene extends Phaser.Scene {
       }
       setTeamHudPlayerPresence(name, isConnected);
       setTeamHudPlayerLoaded(name, isLoaded);
+      setTeamHudPlayerAlive(name, !isDeadBySnapshot);
+
+      if (
+        !isDeadBySnapshot &&
+        isConnected &&
+        isLoaded &&
+        (wrapper._deathPresentationActive || wrapper._corpseRemoved)
+      ) {
+        wrapper.handleRespawn?.({
+          x: targetX,
+          y: targetY,
+          at:
+            Number(bState?.timestamp) ||
+            Number(aState?.timestamp) ||
+            Date.now(),
+        });
+      }
 
       // Orientation/animation: take from newer if present (prefer b then a)
       const animSrc = bPosData && bPosData.animation ? bPosData : aPosData;

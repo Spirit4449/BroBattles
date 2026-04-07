@@ -18,6 +18,7 @@ function ensureHostHtml() {
       #bank-bust-interact-prompt.open{display:block}
       #bank-bust-edit-panel{display:none;width:min(360px,92vw);background:rgba(9,16,28,.94);border:1px solid rgba(99,102,241,.45);border-radius:12px;padding:10px;color:#dbeafe;box-shadow:0 12px 28px rgba(0,0,0,.34)}
       #bank-bust-edit-panel.open{display:block}
+      #bank-bust-edit-panel.min{display:none}
       #bank-bust-edit-panel h4{margin:0 0 8px 0;font-size:13px}
       #bank-bust-edit-panel .tiny{font-size:11px;opacity:.8;line-height:1.35;margin:6px 0}
       #bank-bust-edit-panel textarea{width:100%;min-height:130px;box-sizing:border-box;background:#0f172a;border:1px solid rgba(148,163,184,.28);border-radius:8px;color:#e2e8f0;padding:8px;font:11px Consolas,monospace}
@@ -59,6 +60,11 @@ export function createBankBustRuntime({
     editMode: false,
     localLayout: null,
     draggable: new Map(),
+    mapEditorMinimized: false,
+    lastCollectionEventAt: 0,
+    previousObjectStates: new Map(),
+    mineOwnerById: new Map(),
+    recentProjectileIds: new Set(),
   };
   const objectiveGraphics = scene.add.graphics();
   objectiveGraphics.setDepth(8);
@@ -77,6 +83,9 @@ export function createBankBustRuntime({
   const wallBodies = new Map();
   const turretBaseSprites = new Map();
   const turretHeadSprites = new Map();
+  const mineSprites = new Map();
+  const wallSprites = new Map();
+  const turretProjectileSprites = new Map();
 
   const editorUi = ensureHostHtml();
 
@@ -107,19 +116,19 @@ export function createBankBustRuntime({
           height: Number(vault?.height) || existing.height || 180,
           radius: Number(vault?.radius) || existing.radius || 90,
           label: vault?.label || existing.label || null,
-          x:
-            Number.isFinite(Number(existing?.x))
-              ? Number(existing.x)
-              : Number(vault?.x) || 0,
-          y:
-            Number.isFinite(Number(existing?.y))
-              ? Number(existing.y)
-              : Number(vault?.y) || 0,
+          x: Number.isFinite(Number(existing?.x))
+            ? Number(existing.x)
+            : Number(vault?.x) || 0,
+          y: Number.isFinite(Number(existing?.y))
+            ? Number(existing.y)
+            : Number(vault?.y) || 0,
         };
       }
     }
     if (Array.isArray(modeState?.objects) && modeState.objects.length) {
-      const byId = new Map((working.objects || []).map((entry) => [entry.id, entry]));
+      const byId = new Map(
+        (working.objects || []).map((entry) => [entry.id, entry]),
+      );
       for (const obj of modeState.objects) {
         const current = byId.get(obj.id) || {};
         byId.set(obj.id, {
@@ -127,14 +136,12 @@ export function createBankBustRuntime({
           ...cloneJson(obj?.config || {}),
           id: obj.id,
           type: obj.type,
-          x:
-            Number.isFinite(Number(current?.x))
-              ? Number(current.x)
-              : Number(obj?.x) || 0,
-          y:
-            Number.isFinite(Number(current?.y))
-              ? Number(current.y)
-              : Number(obj?.y) || 0,
+          x: Number.isFinite(Number(current?.x))
+            ? Number(current.x)
+            : Number(obj?.x) || 0,
+          y: Number.isFinite(Number(current?.y))
+            ? Number(current.y)
+            : Number(obj?.y) || 0,
         });
       }
       working.objects = Array.from(byId.values());
@@ -151,14 +158,12 @@ export function createBankBustRuntime({
           const existing = byId.get(entry.id) || {};
           return {
             id: entry.id,
-            x:
-              Number.isFinite(Number(existing?.x))
-                ? Number(existing.x)
-                : Number(entry.x) || 0,
-            y:
-              Number.isFinite(Number(existing?.y))
-                ? Number(existing.y)
-                : Number(entry.y) || 0,
+            x: Number.isFinite(Number(existing?.x))
+              ? Number(existing.x)
+              : Number(entry.x) || 0,
+            y: Number.isFinite(Number(existing?.y))
+              ? Number(existing.y)
+              : Number(entry.y) || 0,
           };
         },
       );
@@ -167,7 +172,18 @@ export function createBankBustRuntime({
 
   function setEditorVisible(visible) {
     if (!editorUi) return;
-    editorUi.panel.classList.toggle("open", !!visible);
+    editorUi.panel.classList.toggle(
+      "open",
+      !!visible && !state.mapEditorMinimized,
+    );
+    editorUi.panel.classList.toggle("min", !!state.mapEditorMinimized);
+  }
+
+  function onMapEditorUiState(ev) {
+    const enabled = ev?.detail?.enabled !== false;
+    state.mapEditorMinimized = !!ev?.detail?.minimized;
+    if (!enabled) state.mapEditorMinimized = false;
+    setEditorVisible(canEdit && state.editMode);
   }
 
   function setEditMode(enabled) {
@@ -220,7 +236,8 @@ export function createBankBustRuntime({
     for (const entry of Array.isArray(getWorkingLayout()?.objects)
       ? getWorkingLayout().objects
       : []) {
-      if (entry?.type !== "claimableTurret" && entry?.type !== "wallSlot") continue;
+      if (entry?.type !== "claimableTurret" && entry?.type !== "wallSlot")
+        continue;
       const dx = (Number(entry?.x) || 0) - localPlayer.x;
       const dy = (Number(entry?.y) || 0) - localPlayer.y;
       const distance = Math.hypot(dx, dy);
@@ -255,14 +272,10 @@ export function createBankBustRuntime({
     return {
       ...layoutVault,
       ...cloneJson(vault || {}),
-      x:
-        Number(layoutVault?.x) || Number(vault?.x) || 0,
-      y:
-        Number(layoutVault?.y) || Number(vault?.y) || 0,
-      width:
-        Number(layoutVault?.width) || Number(vault?.width) || 150,
-      height:
-        Number(layoutVault?.height) || Number(vault?.height) || 180,
+      x: Number(layoutVault?.x) || Number(vault?.x) || 0,
+      y: Number(layoutVault?.y) || Number(vault?.y) || 0,
+      width: Number(layoutVault?.width) || Number(vault?.width) || 150,
+      height: Number(layoutVault?.height) || Number(vault?.height) || 180,
     };
   }
 
@@ -297,11 +310,7 @@ export function createBankBustRuntime({
   function ensureObjectContainer(id, type) {
     let container = objectContainers.get(id) || null;
     if (container?.scene) return container;
-    const bg =
-      type === "goldMine"
-        ? scene.add.ellipse(0, 0, 140, 140, 0xfbbf24, 0.18)
-        : scene.add.rectangle(0, 0, 130, 62, 0x38bdf8, 0.14);
-    bg.setStrokeStyle?.(3, 0xe2e8f0, 0.8);
+    const bg = scene.add.rectangle(0, 0, 130, 62, 0x000000, 0);
     const label = scene.add.text(0, 0, type, {
       fontFamily: "Lato, sans-serif",
       fontSize: "13px",
@@ -320,6 +329,17 @@ export function createBankBustRuntime({
     ensureDraggable(container, { kind: "object", id });
     objectContainers.set(id, container);
     return container;
+  }
+
+  function ensureObjectSprite(map, id, textureKey, depth = 10) {
+    let sprite = map.get(id) || null;
+    if (sprite?.scene) return sprite;
+    if (!scene.textures?.exists?.(textureKey)) return null;
+    sprite = scene.add.image(-9999, -9999, textureKey);
+    sprite.setDepth(depth);
+    sprite.setVisible(false);
+    map.set(id, sprite);
+    return sprite;
   }
 
   function ensureSpawnPointMarker(id) {
@@ -343,6 +363,13 @@ export function createBankBustRuntime({
     sprite.setVisible(false);
     map.set(id, sprite);
     return sprite;
+  }
+
+  function safePlaySfx(key, config = {}) {
+    try {
+      if (!scene.cache?.audio?.exists?.(key)) return;
+      scene.sound?.play?.(key, config);
+    } catch (_) {}
   }
 
   function ensureWallBody(id, entry) {
@@ -407,7 +434,8 @@ export function createBankBustRuntime({
 
   function spawnVaultCoins(team, vault, damage) {
     const count = Math.min(24, Math.max(1, Math.round(Number(damage) || 1)));
-    const topY = Number(vault.y) - Math.max(40, Number(vault.height) || 180) / 2 - 10;
+    const topY =
+      Number(vault.y) - Math.max(40, Number(vault.height) || 180) / 2 - 10;
     const originX = Number(vault.x);
     for (let i = 0; i < count; i++) {
       const coin = scene.add.image(originX, topY, "deathdrop-coin");
@@ -450,14 +478,17 @@ export function createBankBustRuntime({
 
       const event = modeState?.lastVaultDamageEvent;
       const eventAt = Number(event?.at) || 0;
-      const shakeAge = event?.targetTeam === team ? scene.time.now - eventAt : Infinity;
-      const shaking = Number.isFinite(shakeAge) && shakeAge >= 0 && shakeAge <= 220;
+      const shakeAge =
+        event?.targetTeam === team ? scene.time.now - eventAt : Infinity;
+      const shaking =
+        Number.isFinite(shakeAge) && shakeAge >= 0 && shakeAge <= 220;
       const shakeStrength = shaking ? 1 - shakeAge / 220 : 0;
       const pulse = shaking ? Math.sin(shakeAge / 24) * 3 * shakeStrength : 0;
       const drawWidth = width * (shaking ? 1 + Math.abs(pulse) * 0.002 : 1);
       const drawHeight = height * (shaking ? 1 - Math.abs(pulse) * 0.0015 : 1);
       const drawX = x + (shaking ? pulse * 0.4 : 0);
-      const drawY = y + (shaking ? Math.cos(shakeAge / 26) * 1.5 * shakeStrength : 0);
+      const drawY =
+        y + (shaking ? Math.cos(shakeAge / 26) * 1.5 * shakeStrength : 0);
 
       const sprite = ensureVaultSprite(team);
       if (sprite) {
@@ -472,10 +503,14 @@ export function createBankBustRuntime({
       const top = drawY - drawHeight / 2;
       const frameColor = team === "team1" ? 0xbfdbfe : 0xfecaca;
       objectiveGraphics.lineStyle(4, frameColor, 0.95);
-      objectiveGraphics.strokeRoundedRect(left, top, drawWidth, drawHeight, 20);
+      //objectiveGraphics.strokeRoundedRect(left, top, drawWidth, drawHeight, 20);
       if (shaking) {
         objectiveGraphics.fillStyle(0xffffff, 0.08);
-        objectiveGraphics.fillCircle(drawX - drawWidth * 0.15, drawY - drawHeight * 0.16, 18);
+        objectiveGraphics.fillCircle(
+          drawX - drawWidth * 0.15,
+          drawY - drawHeight * 0.16,
+          18,
+        );
       }
 
       const healthRatio = Phaser.Math.Clamp(health / maxHealth, 0, 1);
@@ -502,38 +537,63 @@ export function createBankBustRuntime({
   function renderObjects(modeState) {
     const layout = getWorkingLayout();
     const objectStateById = new Map(
-      (Array.isArray(modeState?.objects) ? modeState.objects : []).map((entry) => [
-        entry.id,
-        entry,
-      ]),
+      (Array.isArray(modeState?.objects) ? modeState.objects : []).map(
+        (entry) => [entry.id, entry],
+      ),
     );
     const usedObjectIds = new Set();
     for (const entry of Array.isArray(layout?.objects) ? layout.objects : []) {
       usedObjectIds.add(entry.id);
-      const runtime = objectStateById.get(entry.id) || { state: {}, type: entry.type };
+      const runtime = objectStateById.get(entry.id) || {
+        state: {},
+        type: entry.type,
+      };
       const container = ensureObjectContainer(entry.id, entry.type);
       container.setVisible(true);
       container.x = Number(entry.x) || 0;
-      container.y = Number(entry.y) || 0;
+      // For turrets, position label above the visual; otherwise at object center
+      container.y =
+        entry.type === "claimableTurret"
+          ? (Number(entry.y) || 0) - 90
+          : Number(entry.y) || 0;
       const label = container._label;
-      const bg = container._bg;
       if (entry.type === "goldMine") {
-        bg.setSize?.(140, 140);
-        bg.fillColor = 0xf59e0b;
-        bg.fillAlpha = 0.22;
-        label.setText(`Mine\n${Math.max(0, Number(runtime?.state?.storedGold) || 0)}g`);
+        const owner = state.mineOwnerById.get(entry.id) || null;
+        const mineSprite = ensureObjectSprite(
+          mineSprites,
+          entry.id,
+          owner ? "bank-bust-mine-claimed" : "bank-bust-mine-neutral",
+          10,
+        );
+        if (mineSprite) {
+          mineSprite.setVisible(true);
+          mineSprite.setPosition(container.x, container.y);
+          mineSprite.setScale(0.4);
+          mineSprite.clearTint();
+          if (owner === "team1") mineSprite.setTint(0xa5d8ff);
+          if (owner === "team2") mineSprite.setTint(0xffb4b4);
+        }
+        // Draw claimed mine circle
+        if (owner === "team1" || owner === "team2") {
+          objectGraphics.lineStyle(
+            3,
+            owner === "team1" ? 0x60a5fa : 0xf87171,
+            0.95,
+          );
+          objectGraphics.strokeCircle(container.x, container.y, 74);
+        } else {
+          // Draw unclaimed mine glow
+          objectGraphics.lineStyle(2, 0xfbbf24, 0.6);
+          objectGraphics.strokeCircle(container.x, container.y, 74);
+        }
+        label.setText(
+          `Mine\n${Math.max(0, Number(runtime?.state?.storedGold) || 0)}g`,
+        );
         label.setFontSize(13);
         label.setAlign("center");
       } else if (entry.type === "claimableTurret") {
-        bg.setSize?.(144, 62);
-        bg.fillColor =
-          runtime?.state?.claimedByTeam === "team1"
-            ? 0x3b82f6
-            : runtime?.state?.claimedByTeam === "team2"
-              ? 0xef4444
-              : 0x38bdf8;
-        bg.fillAlpha = 0.18;
-        label.setText(runtime?.state?.claimedByTeam ? "Turret" : "Turret Slot");
+        const ownerTeam = runtime?.state?.claimedByTeam || null;
+        label.setText(ownerTeam ? "Turret" : "Turret Slot");
         const turretBase = ensureTurretSprite(
           turretBaseSprites,
           entry.id,
@@ -548,49 +608,69 @@ export function createBankBustRuntime({
         );
         if (turretBase) {
           turretBase.setVisible(true);
-          turretBase.setPosition(container.x, container.y + 12);
-          turretBase.setScale(0.7);
+          turretBase.setPosition(container.x, container.y - 90);
+          turretBase.setDisplaySize(64, 64);
           turretBase.setTint(
-            runtime?.state?.claimedByTeam === "team1"
+            ownerTeam === "team1"
               ? 0xbcdcff
-              : runtime?.state?.claimedByTeam === "team2"
+              : ownerTeam === "team2"
                 ? 0xffc2c2
                 : 0xffffff,
           );
         }
         if (turretHead) {
           turretHead.setVisible(true);
-          turretHead.setPosition(container.x, container.y - 2);
-          turretHead.setScale(0.7);
-          turretHead.rotation =
-            Number(runtime?.state?.aimAngle) ||
-            (runtime?.state?.claimedByTeam === "team2" ? Math.PI : 0);
+          turretHead.setPosition(container.x, container.y - 110);
+          turretHead.setScale(0.13);
+          const aim = Number(runtime?.state?.aimAngle);
+          turretHead.rotation = Number.isFinite(aim)
+            ? aim + Math.PI
+            : ownerTeam === "team2"
+              ? 0
+              : Math.PI;
+          turretHead.setFlipY(Number.isFinite(aim) ? Math.sin(aim) < 0 : false);
           turretHead.setTint(
-            runtime?.state?.claimedByTeam === "team1"
+            ownerTeam === "team1"
               ? 0xbcdcff
-              : runtime?.state?.claimedByTeam === "team2"
+              : ownerTeam === "team2"
                 ? 0xffc2c2
                 : 0xffffff,
           );
         }
+        if (ownerTeam === "team1" || ownerTeam === "team2") {
+          objectGraphics.lineStyle(
+            3,
+            ownerTeam === "team1" ? 0x60a5fa : 0xf87171,
+            0.9,
+          );
+          objectGraphics.strokeCircle(container.x, container.y + 10, 46);
+        }
       } else if (entry.type === "wallSlot") {
-        bg.setSize?.(
-          Math.max(80, Number(entry.width) || 120),
-          Math.max(34, Number(entry.height) || 46),
-        );
-        bg.fillColor =
-          runtime?.state?.builtByTeam === "team1"
-            ? 0x3b82f6
-            : runtime?.state?.builtByTeam === "team2"
-              ? 0xef4444
-              : 0x64748b;
-        bg.fillAlpha = runtime?.state?.builtByTeam ? 0.26 : 0.16;
-        label.setText(runtime?.state?.builtByTeam ? "Built Wall" : "Wall Slot");
+        const builtByTeam = runtime?.state?.builtByTeam || null;
         const wallWidth = Math.max(80, Number(entry.width) || 120);
         const wallHeight = Math.max(34, Number(entry.height) || 46);
-        if (runtime?.state?.builtByTeam) {
-          objectGraphics.fillStyle(bg.fillColor, 0.9);
-          objectGraphics.fillRoundedRect(
+        const wallSprite = ensureObjectSprite(
+          wallSprites,
+          entry.id,
+          builtByTeam ? "bank-bust-wall-built" : "bank-bust-wall-slot",
+          10,
+        );
+        if (wallSprite) {
+          wallSprite.setVisible(true);
+          wallSprite.setPosition(container.x, container.y);
+          wallSprite.setDisplaySize(wallWidth, wallHeight);
+          wallSprite.clearTint();
+          if (builtByTeam === "team1") wallSprite.setTint(0xa5d8ff);
+          if (builtByTeam === "team2") wallSprite.setTint(0xffb4b4);
+        }
+        label.setText(builtByTeam ? "Built Wall" : "Wall Slot");
+        if (builtByTeam === "team1" || builtByTeam === "team2") {
+          objectGraphics.lineStyle(
+            3,
+            builtByTeam === "team1" ? 0x60a5fa : 0xf87171,
+            0.9,
+          );
+          objectGraphics.strokeRoundedRect(
             container.x - wallWidth / 2,
             container.y - wallHeight / 2,
             wallWidth,
@@ -598,12 +678,14 @@ export function createBankBustRuntime({
             8,
           );
         }
-        updateWallBody(entry.id, entry, !!runtime?.state?.builtByTeam);
+        updateWallBody(entry.id, entry, !!builtByTeam);
       } else {
         label.setText(entry.type || "Object");
       }
     }
     cleanupUnused(objectContainers, usedObjectIds);
+    cleanupUnused(mineSprites, usedObjectIds);
+    cleanupUnused(wallSprites, usedObjectIds);
     cleanupUnused(turretBaseSprites, usedObjectIds);
     cleanupUnused(turretHeadSprites, usedObjectIds);
 
@@ -623,7 +705,9 @@ export function createBankBustRuntime({
   function hideUnusedWallBodies(modeState) {
     const activeWallIds = new Set(
       (Array.isArray(modeState?.objects) ? modeState.objects : [])
-        .filter((entry) => entry?.type === "wallSlot" && entry?.state?.builtByTeam)
+        .filter(
+          (entry) => entry?.type === "wallSlot" && entry?.state?.builtByTeam,
+        )
         .map((entry) => entry.id),
     );
     for (const id of Array.from(wallBodies.keys())) {
@@ -657,20 +741,94 @@ export function createBankBustRuntime({
   }
 
   function renderTurretProjectiles(modeState) {
+    const activeIds = new Set();
     for (const shot of Array.isArray(modeState?.turretProjectiles)
       ? modeState.turretProjectiles
       : []) {
+      activeIds.add(shot.id);
+      const sprite = ensureObjectSprite(
+        turretProjectileSprites,
+        shot.id,
+        "bank-bust-bullet",
+        14,
+      );
+      if (!sprite) continue;
       const ownerTeam = shot?.ownerTeam || null;
-      objectGraphics.fillStyle(
-        ownerTeam === "team1" ? 0x93c5fd : ownerTeam === "team2" ? 0xfca5a5 : 0xf8fafc,
-        0.95,
-      );
-      objectGraphics.fillCircle(
-        Number(shot?.x) || 0,
-        Number(shot?.y) || 0,
-        Math.max(4, Number(shot?.radius) || 10) * 0.45,
-      );
+      sprite.setVisible(true);
+      sprite.setPosition(Number(shot?.x) || 0, Number(shot?.y) || 0);
+      sprite.setDisplaySize(22, 14);
+      sprite.setRotation(Number(shot?.angle) || 0);
+      sprite.clearTint();
+      if (ownerTeam === "team1") sprite.setTint(0x93c5fd);
+      if (ownerTeam === "team2") sprite.setTint(0xfca5a5);
     }
+    for (const [id, sprite] of turretProjectileSprites.entries()) {
+      if (activeIds.has(id)) continue;
+      sprite.destroy();
+      turretProjectileSprites.delete(id);
+    }
+  }
+
+  function processModeEvents(modeState) {
+    for (const event of Array.isArray(modeState?.collectionEvents)
+      ? modeState.collectionEvents
+      : []) {
+      const at = Number(event?.at) || 0;
+      if (!at || at <= state.lastCollectionEventAt) continue;
+      if (event?.type === "goldMine") {
+        safePlaySfx("sfx-bankbust-mine-collect", { volume: 0.15 });
+        if (
+          event?.source &&
+          (event?.team === "team1" || event?.team === "team2")
+        ) {
+          const previousOwner = state.mineOwnerById.get(event.source) || null;
+          if (previousOwner !== event.team) {
+            safePlaySfx("sfx-bankbust-mine-claim", { volume: 0.22 });
+          }
+          state.mineOwnerById.set(event.source, event.team);
+        }
+      }
+      if (event?.type === "randomGold") {
+        safePlaySfx("sfx-coin-pickup", { volume: 0.1 });
+      }
+      state.lastCollectionEventAt = Math.max(state.lastCollectionEventAt, at);
+    }
+
+    const nextStates = new Map();
+    for (const entry of Array.isArray(modeState?.objects)
+      ? modeState.objects
+      : []) {
+      const prev = state.previousObjectStates.get(entry.id) || {};
+      const cur = entry?.state || {};
+      if (
+        entry?.type === "claimableTurret" &&
+        !prev?.claimedByTeam &&
+        cur?.claimedByTeam
+      ) {
+        safePlaySfx("sfx-bankbust-turret-claim", { volume: 0.35 });
+      }
+      if (
+        entry?.type === "wallSlot" &&
+        !prev?.builtByTeam &&
+        cur?.builtByTeam
+      ) {
+        safePlaySfx("sfx-bankbust-wall-claim", { volume: 0.35 });
+      }
+      nextStates.set(entry.id, cloneJson(cur) || {});
+    }
+    state.previousObjectStates = nextStates;
+
+    const nextProjectileIds = new Set(
+      (Array.isArray(modeState?.turretProjectiles)
+        ? modeState.turretProjectiles
+        : []
+      ).map((entry) => entry.id),
+    );
+    for (const id of nextProjectileIds) {
+      if (state.recentProjectileIds.has(id)) continue;
+      safePlaySfx("sfx-bankbust-turret-shoot", { volume: 0.16 });
+    }
+    state.recentProjectileIds = nextProjectileIds;
   }
 
   function buildExportPayload() {
@@ -702,23 +860,26 @@ export function createBankBustRuntime({
     if (meta.kind === "vault") {
       const vault = layout?.vaults?.[meta.id];
       if (!vault) return;
-      vault.x = Math.round(dragX);
-      vault.y = Math.round(dragY);
+      vault.x = dragX;
+      vault.y = dragY;
     } else if (meta.kind === "object") {
-      const target = (layout?.objects || []).find((entry) => entry.id === meta.id);
+      const target = (layout?.objects || []).find(
+        (entry) => entry.id === meta.id,
+      );
       if (!target) return;
-      target.x = Math.round(dragX);
-      target.y = Math.round(dragY);
+      target.x = dragX;
+      target.y = dragY;
     } else if (meta.kind === "randomGoldSpawnPoint") {
       const target = (layout?.randomGoldSpawnPoints || []).find(
         (entry) => entry.id === meta.id,
       );
       if (!target) return;
-      target.x = Math.round(dragX);
-      target.y = Math.round(dragY);
+      target.x = dragX;
+      target.y = dragY;
     }
   };
   scene.input.on("drag", dragHandler);
+  window.addEventListener("bb:map-editor-ui-state", onMapEditorUiState);
 
   function render() {
     objectiveGraphics.clear();
@@ -732,15 +893,20 @@ export function createBankBustRuntime({
       setPrompt("");
       cleanupUnused(vaultSprites, new Set());
       cleanupUnused(objectContainers, new Set());
+      cleanupUnused(mineSprites, new Set());
+      cleanupUnused(wallSprites, new Set());
       cleanupUnused(turretBaseSprites, new Set());
       cleanupUnused(turretHeadSprites, new Set());
       cleanupUnused(spawnPointMarkers, new Set());
       for (const sprite of pickupSprites.values()) sprite.setVisible(false);
+      for (const sprite of turretProjectileSprites.values())
+        sprite.setVisible(false);
       hideUnusedWallBodies(null);
       return;
     }
 
     syncLayoutFromModeState(modeState);
+    processModeEvents(modeState);
 
     const event = modeState?.lastVaultDamageEvent;
     const eventAt = Number(event?.at) || 0;
@@ -765,6 +931,9 @@ export function createBankBustRuntime({
       scene.input.off("drag", dragHandler);
     } catch (_) {}
     try {
+      window.removeEventListener("bb:map-editor-ui-state", onMapEditorUiState);
+    } catch (_) {}
+    try {
       objectiveGraphics.destroy();
       uiGraphics.destroy();
       objectGraphics.destroy();
@@ -776,6 +945,10 @@ export function createBankBustRuntime({
     for (const entry of objectContainers.values()) destroyContainer(entry);
     for (const sprite of turretBaseSprites.values()) destroyContainer(sprite);
     for (const sprite of turretHeadSprites.values()) destroyContainer(sprite);
+    for (const sprite of mineSprites.values()) destroyContainer(sprite);
+    for (const sprite of wallSprites.values()) destroyContainer(sprite);
+    for (const sprite of turretProjectileSprites.values())
+      destroyContainer(sprite);
     for (const coin of floatingCoins) destroyContainer(coin);
     for (const id of Array.from(wallBodies.keys())) {
       updateWallBody(id, null, false);

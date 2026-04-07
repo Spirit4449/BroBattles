@@ -40,7 +40,7 @@ export default class OpPlayer {
     this.movementTween = null; // Store reference to current movement tween
     this.effects = null; // per-opponent effects (e.g., Draven fire)
     this.presenceConnected = true;
-    this.presenceLoaded = true;
+    this.presenceLoaded = false;
     this._worldUiHidden = false;
     this._spawnPresented = false;
     this._networkSnapUntil = 0;
@@ -83,6 +83,9 @@ export default class OpPlayer {
       this.opFrame.height - heightShrink,
     );
     this.applyFlipOffset();
+
+    // Set depth so opponent renders above all map objects (bank bust graphics are at depths 7-24)
+    this.opponent.setDepth(25);
 
     // Per-character effects: instantiate if available for this character
     const EffectsCls = getEffectsClass(this.character);
@@ -422,7 +425,11 @@ export default class OpPlayer {
   }
 
   startDeathPresentation(meta = {}) {
-    if (!this.opponent || !this.opponent.active || this._deathPresentationActive)
+    if (
+      !this.opponent ||
+      !this.opponent.active ||
+      this._deathPresentationActive
+    )
       return;
 
     this._deathPresentationActive = true;

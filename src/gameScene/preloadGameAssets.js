@@ -56,16 +56,61 @@ export function preloadGameAssets({
     `${staticPath}/serenity/smallRock.webp`,
   );
   scene.load.image("deathdrop-coin", `${staticPath}/coin.webp`);
-    scene.load.image("deathdrop-gem", `${staticPath}/gem.webp`);
-    scene.load.image("bank-bust-vault", `${staticPath}/bank-bust/vault.webp`);
-    scene.load.image(
-      "bank-bust-turret-base",
-      `${staticPath}/bank-bust/turret-base.webp`,
-    );
-    scene.load.image(
-      "bank-bust-turret-head",
-      `${staticPath}/bank-bust/turret-head.webp`,
-    );
+  scene.load.image("deathdrop-gem", `${staticPath}/gem.webp`);
+  scene.load.image("bank-bust-vault", `${staticPath}/bank-bust/vault.webp`);
+  scene.load.image("bank-bust-base", `${staticPath}/bank-bust/base.webp`);
+  scene.load.image("bank-bust-topcase", `${staticPath}/bank-bust/topcase.webp`);
+  scene.load.image(
+    "bank-bust-staircase",
+    `${staticPath}/bank-bust/staircase.png`,
+  );
+  scene.load.image("bank-bust-middle", `${staticPath}/bank-bust/middle.png`);
+  scene.load.image(
+    "bank-bust-middlebottom",
+    `${staticPath}/bank-bust/middlebottom.png`,
+  );
+  scene.load.image(
+    "bank-bust-middledetail",
+    `${staticPath}/bank-bust/middledetail.png`,
+  );
+  scene.load.image(
+    "bank-bust-longplatform",
+    `${staticPath}/bank-bust/longplatform.png`,
+  );
+  scene.load.image(
+    "bank-bust-tallplatform",
+    `${staticPath}/bank-bust/tallplatform.png`,
+  );
+  scene.load.image(
+    "bank-bust-bigblock",
+    `${staticPath}/bank-bust/bigblock.png`,
+  );
+  scene.load.image("bank-bust-2x2", `${staticPath}/bank-bust/2x2square.png`);
+  scene.load.image("bank-bust-3x3", `${staticPath}/bank-bust/3x3square.png`);
+  scene.load.image("bank-bust-abyss", `${staticPath}/bank-bust/abyss.webp`);
+  scene.load.image("bank-bust-pipe", `${staticPath}/bank-bust/pipe.png`);
+  scene.load.image(
+    "bank-bust-turret-base",
+    `${staticPath}/bank-bust/mount.webp`,
+  );
+  scene.load.image(
+    "bank-bust-turret-head",
+    `${staticPath}/bank-bust/barrel.webp`,
+  );
+  scene.load.image("bank-bust-bullet", `${staticPath}/bank-bust/bullet.webp`);
+  scene.load.image(
+    "bank-bust-wall-slot",
+    `${staticPath}/bank-bust/not-built.png`,
+  );
+  scene.load.image("bank-bust-wall-built", `${staticPath}/bank-bust/built.png`);
+  scene.load.image(
+    "bank-bust-mine-neutral",
+    `${staticPath}/bank-bust/mine.webp`,
+  );
+  scene.load.image(
+    "bank-bust-mine-claimed",
+    `${staticPath}/bank-bust/mine-claimed.webp`,
+  );
 
   // Movement SFX (place files under /assets/audio)
   scene.load.audio("sfx-step", `${staticPath}/step.mp3`);
@@ -86,6 +131,23 @@ export function preloadGameAssets({
   // Combat/health SFX
   scene.load.audio("sfx-damage", `${staticPath}/damage.mp3`);
   scene.load.audio("sfx-heal", `${staticPath}/heal.mp3`);
+  scene.load.audio("sfx-bankbust-turret-shoot", `${staticPath}/damage.mp3`);
+  scene.load.audio(
+    "sfx-bankbust-turret-claim",
+    `${staticPath}/ui-sound/notification.mp3`,
+  );
+  scene.load.audio(
+    "sfx-bankbust-mine-collect",
+    `${staticPath}/bank-bust/collect.mp3`,
+  );
+  scene.load.audio(
+    "sfx-bankbust-mine-claim",
+    `${staticPath}/ui-sound/ready.mp3`,
+  );
+  scene.load.audio(
+    "sfx-bankbust-wall-claim",
+    `${staticPath}/ui-sound/party.mp3`,
+  );
 
   // Music (non-blocking BGM: handled via HTMLAudio at runtime)
   scene.load.audio("win", `${staticPath}/win.mp3`);

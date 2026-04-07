@@ -51,24 +51,24 @@
             "height": 1200
           },
           "respawnPoints": {
-            "team1": { "x": 290, "y": 835 },
-            "team2": { "x": 2710, "y": 835 }
+            "team1": { "x": 589.1816903862998, "y": 71.84226784916666 },
+            "team2": { "x": 3008.8183096137, "y": 71.84226784916666 }
           },
           "vaults": {
             "team1": {
-              "x": 480,
-              "y": 820,
-              "radius": 90,
-              "width": 150,
-              "height": 180,
+              "x": 186.70111335299245,
+              "y": 82.45519869548012,
+              "radius": 82,
+              "width": 98,
+              "height": 118,
               "label": "Blue Vault"
             },
             "team2": {
-              "x": 2520,
-              "y": 820,
-              "radius": 90,
-              "width": 150,
-              "height": 180,
+              "x": 3436.743429851755,
+              "y": 79.93725924207524,
+              "radius": 82,
+              "width": 98,
+              "height": 118,
               "label": "Red Vault"
             }
           },
@@ -76,8 +76,8 @@
             {
               "id": "mine-mid-left",
               "type": "goldMine",
-              "x": 1120,
-              "y": 800,
+              "x": 175.696164059155,
+              "y": -148.97343377306913,
               "radius": 86,
               "collectionRadius": 110,
               "yieldAmount": 15,
@@ -87,8 +87,8 @@
             {
               "id": "mine-mid-right",
               "type": "goldMine",
-              "x": 1880,
-              "y": 800,
+              "x": 3437.657664985322,
+              "y": -148.39000645490847,
               "radius": 86,
               "collectionRadius": 110,
               "yieldAmount": 15,
@@ -98,8 +98,8 @@
             {
               "id": "turret-slot-team1-front",
               "type": "claimableTurret",
-              "x": 840,
-              "y": 790,
+              "x": 1382.0966773567435,
+              "y": -66.06156104606433,
               "claimRadius": 110,
               "claimCost": 120,
               "range": 520,
@@ -111,8 +111,8 @@
             {
               "id": "turret-slot-team2-front",
               "type": "claimableTurret",
-              "x": 2160,
-              "y": 790,
+              "x": 2217.9033226432567,
+              "y": -66.06156104606433,
               "claimRadius": 110,
               "claimCost": 120,
               "range": 520,
@@ -124,8 +124,8 @@
             {
               "id": "wall-slot-team1-lane",
               "type": "wallSlot",
-              "x": 1020,
-              "y": 820,
+              "x": 368.1981360856347,
+              "y": -49.88561913229876,
               "buildRadius": 100,
               "cost": 90,
               "width": 120,
@@ -134,8 +134,8 @@
             {
               "id": "wall-slot-team2-lane",
               "type": "wallSlot",
-              "x": 1980,
-              "y": 820,
+              "x": 3288.047223990208,
+              "y": -6.627263864647631,
               "buildRadius": 100,
               "cost": 90,
               "width": 120,
@@ -143,13 +143,41 @@
             }
           ],
           "randomGoldSpawnPoints": [
-            { "id": "gold-top-left", "x": 920, "y": 620 },
-            { "id": "gold-top-mid", "x": 1500, "y": 500 },
-            { "id": "gold-top-right", "x": 2080, "y": 620 },
-            { "id": "gold-mid-left", "x": 1240, "y": 760 },
-            { "id": "gold-mid-right", "x": 1760, "y": 760 },
-            { "id": "gold-low-left", "x": 760, "y": 910 },
-            { "id": "gold-low-right", "x": 2240, "y": 910 }
+            {
+              "id": "gold-top-left",
+              "x": 713.1277382894484,
+              "y": -58.958400042081294
+            },
+            {
+              "id": "gold-top-mid",
+              "x": 1935.619419087003,
+              "y": 81.72297749960276
+            },
+            {
+              "id": "gold-top-right",
+              "x": 2889.4830712561197,
+              "y": -46.93773106821885
+            },
+            {
+              "id": "gold-mid-left",
+              "x": 1198.1636623370937,
+              "y": 200.9170620943563
+            },
+            {
+              "id": "gold-mid-right",
+              "x": 2397.5801361834147,
+              "y": 206.02456988376133
+            },
+            {
+              "id": "gold-low-left",
+              "x": 1659.9526942779821,
+              "y": 84.5249919949502
+            },
+            {
+              "id": "gold-low-right",
+              "x": 1802.1184548958554,
+              "y": 331.5928502813859
+            }
           ]
         }
       }

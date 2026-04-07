@@ -372,11 +372,12 @@ export function createGameHudController({
     const maxHp = Math.max(1, Number(vault?.maxHealth) || 1);
     const ratio = Math.max(0, Math.min(1, hp / maxHp));
     if (label) {
-      label.textContent =
-        yourTeam === teamKey ? "Your Vault" : "Enemy Vault";
+      label.textContent = yourTeam === teamKey ? "Your Vault" : "Enemy Vault";
     }
     if (value) value.textContent = `${hp} / ${maxHp}`;
-    if (fill) fill.style.width = `${(ratio * 100).toFixed(1)}%`;
+    if (fill) {
+      fill.style.width = hp <= 0 ? "0%" : `${(ratio * 100).toFixed(1)}%`;
+    }
   }
 
   function _setTeamGold(teamKey, amount) {
@@ -391,7 +392,7 @@ export function createGameHudController({
     const eventAt = Number(event?.at) || 0;
     if (eventAt && eventAt <= lastModeAlertEventAt) return;
     const now = Date.now();
-    if (now - lastModeAlertAt < 700) return;
+    if (now - lastModeAlertAt < 20000) return;
     lastModeAlertAt = now;
     lastModeAlertEventAt = eventAt || now;
     const attackedOwnVault = yourTeam && event?.targetTeam === yourTeam;
@@ -584,13 +585,16 @@ export function createGameHudController({
     });
 
     if (autoCloseMs > 0) {
-      noticeAutoCloseTimer = setTimeout(() => {
-        if (confirmOnAutoClose) {
-          finish();
-          return;
-        }
-        hideSystemNotice();
-      }, Math.max(400, Number(autoCloseMs) || 0));
+      noticeAutoCloseTimer = setTimeout(
+        () => {
+          if (confirmOnAutoClose) {
+            finish();
+            return;
+          }
+          hideSystemNotice();
+        },
+        Math.max(400, Number(autoCloseMs) || 0),
+      );
     }
 
     return { close: hideSystemNotice };
@@ -673,7 +677,10 @@ export function createGameHudController({
       const max = Math.max(1, Number(entry.maxHealth) || 1);
       const ratio = Math.max(0, Math.min(1, current / max));
       entry.row.style.setProperty("--health-ratio", String(ratio));
-      entry.row.style.setProperty("--health-accent", healthColorForRatio(ratio));
+      entry.row.style.setProperty(
+        "--health-accent",
+        healthColorForRatio(ratio),
+      );
       setTeamHudPlayerAlive(entry.name, current > 0);
     };
 
@@ -716,10 +723,7 @@ export function createGameHudController({
       const entry = {
         name,
         row,
-        maxHealth:
-          Number(p?.stats?.health) ||
-          Number(p?.health) ||
-          1,
+        maxHealth: Number(p?.stats?.health) || Number(p?.health) || 1,
         currentHealth:
           typeof p?.health === "number"
             ? Number(p.health)

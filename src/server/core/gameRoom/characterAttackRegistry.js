@@ -55,6 +55,28 @@ function emitServerHit(room, attack, targetName, payload = {}) {
   });
 }
 
+function getEnemyVaultTarget(room, attacker) {
+  if (!room?.gameMode?.getVaultState || !attacker?.team) return null;
+  const enemyTeam = attacker.team === "team1" ? "team2" : "team1";
+  const vault = room.gameMode.getVaultState(enemyTeam);
+  if (!vault) return null;
+  const x = Number(vault.x);
+  const y = Number(vault.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const width = Math.max(40, Number(vault.width) || 150);
+  const height = Math.max(40, Number(vault.height) || 180);
+  return {
+    team: enemyTeam,
+    targetName: `vault:${enemyTeam}`,
+    bounds: {
+      left: x - width / 2,
+      right: x + width / 2,
+      top: y - height / 2,
+      bottom: y + height / 2,
+    },
+  };
+}
+
 function circleAabbOverlap(cx, cy, radius, bounds) {
   const nearestX = Math.max(bounds.left, Math.min(Number(cx), bounds.right));
   const nearestY = Math.max(bounds.top, Math.min(Number(cy), bounds.bottom));
@@ -67,7 +89,8 @@ function buildTargetList(room, attackerName, attackerTeam) {
     if (!target || !target.isAlive) return false;
     if (target.loaded !== true) return false;
     if (target.name === attackerName) return false;
-    if (attackerTeam && target.team && attackerTeam === target.team) return false;
+    if (attackerTeam && target.team && attackerTeam === target.team)
+      return false;
     return true;
   });
 }
@@ -109,6 +132,20 @@ function hitCircleTargets(
   if (!attacker || !attacker.isAlive) return;
   attack.hitTimes = attack.hitTimes || Object.create(null);
 
+  const vaultTarget = getEnemyVaultTarget(room, attacker);
+  if (vaultTarget && !attack.hitSet?.has(vaultTarget.targetName)) {
+    const lastVaultHitAt = Number(attack.hitTimes[vaultTarget.targetName]) || 0;
+    if (repeatCooldownMs <= 0 || now - lastVaultHitAt >= repeatCooldownMs) {
+      if (circleAabbOverlap(cx, cy, radius, vaultTarget.bounds)) {
+        attack.hitSet?.add(vaultTarget.targetName);
+        attack.hitTimes[vaultTarget.targetName] = now;
+        emitServerHit(room, attack, vaultTarget.targetName, {
+          damage: attack.damage,
+        });
+      }
+    }
+  }
+
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
     const lastHitAt = Number(attack.hitTimes[target.name]) || 0;
@@ -125,6 +162,20 @@ function hitCircleTargets(
 function hitRectTargets(room, attack, descriptor, rect, now) {
   const attacker = room.players.get(attack.attackerSocketId);
   if (!attacker || !attacker.isAlive) return;
+  const vaultTarget = getEnemyVaultTarget(room, attacker);
+  if (vaultTarget && !attack.hitSet?.has(vaultTarget.targetName)) {
+    const overlap =
+      rect.left <= vaultTarget.bounds.right &&
+      rect.right >= vaultTarget.bounds.left &&
+      rect.top <= vaultTarget.bounds.bottom &&
+      rect.bottom >= vaultTarget.bounds.top;
+    if (overlap) {
+      attack.hitSet?.add(vaultTarget.targetName);
+      emitServerHit(room, attack, vaultTarget.targetName, {
+        damage: attack.damage,
+      });
+    }
+  }
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
     const targetBounds = getPlayerBounds(target);
@@ -246,10 +297,12 @@ function buildPathRectAttack(playerData, actionData, descriptor, now) {
   const targetY = Number(actionData?.target?.y);
   const geometry = buildThrowArcGeometry({
     originX:
-      Number(playerData.x) + Math.cos(angle) * (Number(runtime.originOffsetX) || 0),
+      Number(playerData.x) +
+      Math.cos(angle) * (Number(runtime.originOffsetX) || 0),
     originY:
       Number(playerData.y) -
-      resolvePlayerHeight(playerData) * (Number(runtime.originHeightFactor) || 0),
+      resolvePlayerHeight(playerData) *
+        (Number(runtime.originHeightFactor) || 0),
     angle,
     range,
     targetX: Number.isFinite(targetX) ? targetX : null,
@@ -274,7 +327,10 @@ function buildPathRectAttack(playerData, actionData, descriptor, now) {
     range,
     targetX: Number.isFinite(targetX) ? targetX : null,
     targetY: Number.isFinite(targetY) ? targetY : null,
-    windupMs: Math.max(0, Number(actionData?.windupMs) || Number(runtime.windupMs) || 0),
+    windupMs: Math.max(
+      0,
+      Number(actionData?.windupMs) || Number(runtime.windupMs) || 0,
+    ),
     activeWindowMs: Math.max(
       1,
       Number(actionData?.strikeMs) ||
@@ -313,7 +369,10 @@ function buildAttachedConeAttack(playerData, actionData, descriptor, now) {
     instanceId: String(actionData?.id || `${playerData.name}:${now}`),
     angle,
     direction,
-    radius: Math.max(1, Number(actionData?.coneRadius) || Number(runtime.radius) || 1),
+    radius: Math.max(
+      1,
+      Number(actionData?.coneRadius) || Number(runtime.radius) || 1,
+    ),
     spreadDeg: Math.max(
       1,
       Number(actionData?.coneSpreadDeg) || Number(runtime.spreadDeg) || 1,
@@ -328,7 +387,12 @@ function buildAttachedConeAttack(playerData, actionData, descriptor, now) {
   };
 }
 
-function buildReturningProjectileAttack(playerData, actionData, descriptor, now) {
+function buildReturningProjectileAttack(
+  playerData,
+  actionData,
+  descriptor,
+  now,
+) {
   const runtime = descriptor?.runtime || {};
   const direction = Number(actionData?.direction) === -1 ? -1 : 1;
   const angle = Number.isFinite(Number(actionData?.angle))
@@ -359,10 +423,12 @@ function buildReturningProjectileAttack(playerData, actionData, descriptor, now)
   const ctrl2YOffset = Number.isFinite(Number(actionData?.ctrl2YOffset))
     ? Number(actionData.ctrl2YOffset)
     : Number(runtime.defaultCtrl2YOffset) || -40;
-  const resolvedStartX =
-    Number.isFinite(startX) ? startX : Number(playerData.x) || 0;
-  const resolvedStartY =
-    Number.isFinite(startY) ? startY : Number(playerData.y) || 0;
+  const resolvedStartX = Number.isFinite(startX)
+    ? startX
+    : Number(playerData.x) || 0;
+  const resolvedStartY = Number.isFinite(startY)
+    ? startY
+    : Number(playerData.y) || 0;
   const forwardX = Math.cos(angle);
   const forwardY = Math.sin(angle);
   const normalX = -forwardY;
@@ -394,9 +460,7 @@ function buildReturningProjectileAttack(playerData, actionData, descriptor, now)
       forwardY * forwardDistance * 0.25 +
       normalY * ctrl1YOffset,
     ctrl2X:
-      resolvedStartX +
-      forwardX * forwardDistance * 0.6 -
-      normalX * bulgeUp,
+      resolvedStartX + forwardX * forwardDistance * 0.6 - normalX * bulgeUp,
     ctrl2Y:
       resolvedStartY +
       forwardY * forwardDistance * 0.6 -
@@ -439,7 +503,12 @@ function buildRuntimeAttack(playerData, actionData, now = Date.now()) {
     return buildPathRectAttack(playerData, actionData, descriptor, now);
   }
   if (runtimeKind === "returning-projectile") {
-    return buildReturningProjectileAttack(playerData, actionData, descriptor, now);
+    return buildReturningProjectileAttack(
+      playerData,
+      actionData,
+      descriptor,
+      now,
+    );
   }
   return null;
 }
@@ -483,11 +552,10 @@ function tickAttachedRect(room, attack, descriptor, now) {
   const baseCenterY =
     Number(attacker.y) -
     resolvePlayerHeight(attacker) * (Number(runtime.centerYFactor) || 0);
-  const growT =
-    Math.min(
-      1,
-      sampleElapsed / Math.max(1, Number(runtime.growDurationMs) || 1),
-    );
+  const growT = Math.min(
+    1,
+    sampleElapsed / Math.max(1, Number(runtime.growDurationMs) || 1),
+  );
   const currentHeight =
     Math.max(1, Number(runtime.minHeight) || 1) +
     (height - Math.max(1, Number(runtime.minHeight) || 1)) * growT;
@@ -518,22 +586,39 @@ function tickAttachedCone(room, attack, descriptor, now) {
     return elapsed >= totalDurationMs;
   }
 
-  const baseAnchorX =
-    Number.isFinite(Number(attack.anchorX))
-      ? Number(attack.anchorX)
-      : Number(attacker.x) || 0;
-  const baseAnchorY =
-    Number.isFinite(Number(attack.anchorY))
-      ? Number(attack.anchorY)
-      : Number(attacker.y) || 0;
+  const baseAnchorX = Number.isFinite(Number(attack.anchorX))
+    ? Number(attack.anchorX)
+    : Number(attacker.x) || 0;
+  const baseAnchorY = Number.isFinite(Number(attack.anchorY))
+    ? Number(attack.anchorY)
+    : Number(attacker.y) || 0;
   const angle = Number(attack.angle) || 0;
   const halfSpread =
     (Number(attack.spreadDeg || runtime.spreadDeg || 56) * Math.PI) / 360;
-  const radius = Math.max(1, Number(attack.radius) || Number(runtime.radius) || 1);
+  const radius = Math.max(
+    1,
+    Number(attack.radius) || Number(runtime.radius) || 1,
+  );
   const innerRadius = Math.max(
     0,
     Number(attack.innerRadius) || Number(runtime.innerRadius) || 0,
   );
+
+  const vaultTarget = getEnemyVaultTarget(room, attacker);
+  if (vaultTarget && !attack.hitSet?.has(vaultTarget.targetName)) {
+    const vaultCenter = getBoundsCenter(vaultTarget.bounds);
+    const dx = vaultCenter.x - baseAnchorX;
+    const dy = vaultCenter.y - baseAnchorY;
+    const dist = Math.hypot(dx, dy);
+    const theta = Math.atan2(dy, dx);
+    const delta = Math.abs(normalizeAngleDelta(theta, angle));
+    if (dist >= innerRadius && dist <= radius + 24 && delta <= halfSpread) {
+      attack.hitSet?.add(vaultTarget.targetName);
+      emitServerHit(room, attack, vaultTarget.targetName, {
+        damage: attack.damage,
+      });
+    }
+  }
 
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
@@ -559,7 +644,10 @@ function tickPathRect(room, attack, descriptor, now) {
   if (!attacker || !attacker.isAlive) return true;
   const runtime = descriptor?.runtime || {};
   const elapsed = now - attack.createdAt;
-  const windupMs = Math.max(0, Number(attack.windupMs) || Number(runtime.windupMs) || 0);
+  const windupMs = Math.max(
+    0,
+    Number(attack.windupMs) || Number(runtime.windupMs) || 0,
+  );
   const activeWindowMs = Math.max(
     1,
     Number(attack.activeWindowMs) || Number(runtime.activeWindowMs) || 1,
@@ -574,21 +662,24 @@ function tickPathRect(room, attack, descriptor, now) {
   );
   if (sampleElapsed < windupMs) return elapsed >= totalDurationMs;
 
-  if (
-    !attack.geometry ||
-    sampleElapsed <= windupMs + followAfterWindupMs
-  ) {
+  if (!attack.geometry || sampleElapsed <= windupMs + followAfterWindupMs) {
     attack.geometry = buildThrowArcGeometry({
       originX:
         Number(attacker.x) +
-        Math.cos(Number(attack.angle) || 0) * (Number(runtime.originOffsetX) || 0),
+        Math.cos(Number(attack.angle) || 0) *
+          (Number(runtime.originOffsetX) || 0),
       originY:
         Number(attacker.y) -
-        resolvePlayerHeight(attacker) * (Number(runtime.originHeightFactor) || 0),
+        resolvePlayerHeight(attacker) *
+          (Number(runtime.originHeightFactor) || 0),
       angle: Number(attack.angle) || 0,
       range: attack.range,
-      targetX: Number.isFinite(Number(attack.targetX)) ? Number(attack.targetX) : null,
-      targetY: Number.isFinite(Number(attack.targetY)) ? Number(attack.targetY) : null,
+      targetX: Number.isFinite(Number(attack.targetX))
+        ? Number(attack.targetX)
+        : null,
+      targetY: Number.isFinite(Number(attack.targetY))
+        ? Number(attack.targetY)
+        : null,
       startBackOffset: Math.abs(Number(runtime.startOffsetX) || 0),
       startLiftY: Number(runtime.startOffsetY) || 0,
       endDropY: Number(runtime.endYOffset) || 0,
@@ -634,8 +725,20 @@ function tickReturningProjectile(room, attack, descriptor) {
       Math.min(1, attack.phaseElapsed / Math.max(1, attack.outwardDurationMs)),
     );
     const easedT = (1 - Math.cos(Math.PI * rawT)) / 2;
-    attack.x = cubic(easedT, attack.startX, attack.ctrl1X, attack.ctrl2X, attack.endX);
-    attack.y = cubic(easedT, attack.startY, attack.ctrl1Y, attack.ctrl2Y, attack.endY);
+    attack.x = cubic(
+      easedT,
+      attack.startX,
+      attack.ctrl1X,
+      attack.ctrl2X,
+      attack.endX,
+    );
+    attack.y = cubic(
+      easedT,
+      attack.startY,
+      attack.ctrl1Y,
+      attack.ctrl2Y,
+      attack.endY,
+    );
     if (rawT >= 1) {
       attack.phase = "hover";
       attack.phaseElapsed = 0;

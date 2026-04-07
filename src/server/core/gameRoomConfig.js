@@ -8,7 +8,7 @@ const MOVEMENT_PHYSICS = require("../../shared/movementPhysics.json");
 const USE_SERVER_MOVEMENT_SIMULATION_V1 = false;
 
 const WORLD_BOUNDS = {
-  width: 2300,
+  width: 3600,
   height: 1000,
   margin: 400,
 };

@@ -32,6 +32,7 @@ export function bindLocalSocketEvents({
   setWallSlideLoopPlaying,
   getIsEditMode,
   onLocalDeath,
+  onLocalRespawn,
   removeLocalCorpse,
   onDebug,
 }) {
@@ -252,6 +253,10 @@ export function bindLocalSocketEvents({
     try {
       scene.input.enabled = true;
       if (scene.input?.keyboard) scene.input.keyboard.enabled = true;
+    } catch (_) {}
+
+    try {
+      onLocalRespawn?.();
     } catch (_) {}
 
     updateHealthBar();

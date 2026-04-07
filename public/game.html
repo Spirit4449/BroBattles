@@ -708,12 +708,11 @@
         height: 46px;
         padding: 3px;
         border-radius: 999px;
-        background:
-          conic-gradient(
-            from -90deg,
-            var(--health-accent) calc(var(--health-ratio) * 1turn),
-            rgba(5, 11, 22, 0.95) 0
-          );
+        background: conic-gradient(
+          from -90deg,
+          var(--health-accent) calc(var(--health-ratio) * 1turn),
+          rgba(5, 11, 22, 0.95) 0
+        );
         box-shadow:
           0 5px 10px rgba(0, 0, 0, 0.28),
           inset 0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -1298,7 +1297,11 @@
         border-radius: 14px;
         border: 3px solid #20437f;
         background:
-          linear-gradient(145deg, rgba(18, 35, 70, 0.96), rgba(10, 20, 42, 0.98)),
+          linear-gradient(
+            145deg,
+            rgba(18, 35, 70, 0.96),
+            rgba(10, 20, 42, 0.98)
+          ),
           rgba(10, 20, 42, 0.98);
         box-shadow:
           0 24px 48px rgba(0, 0, 0, 0.42),
@@ -1448,12 +1451,14 @@
             <div class="controls-move-layout">
               <span class="keyboard-pair">
                 <span class="keyboard-cluster" aria-hidden="true">
-                  <span class="spacer"></span><kbd>W</kbd><span class="spacer"></span>
-                  <kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>
+                  <span class="spacer"></span><kbd>W</kbd
+                  ><span class="spacer"></span> <kbd>A</kbd><kbd>S</kbd
+                  ><kbd>D</kbd>
                 </span>
                 <span class="keyboard-cluster" aria-hidden="true">
-                  <span class="spacer"></span><kbd>&uarr;</kbd><span class="spacer"></span>
-                  <kbd>&larr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd>
+                  <span class="spacer"></span><kbd>&uarr;</kbd
+                  ><span class="spacer"></span> <kbd>&larr;</kbd
+                  ><kbd>&darr;</kbd><kbd>&rarr;</kbd>
                 </span>
               </span>
               <div class="controls-move-copy">
@@ -1466,7 +1471,10 @@
             <div class="controls-actions">
               <div class="bs-help-action-row">
                 <div class="bs-help-mouse">
-                  <img src="/assets/mouse_right.webp" alt="Right mouse button" />
+                  <img
+                    src="/assets/mouse_right.webp"
+                    alt="Right mouse button"
+                  />
                 </div>
                 <div>
                   <div class="bs-help-action-label">Attack</div>

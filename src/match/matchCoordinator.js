@@ -225,7 +225,8 @@ export function createMatchCoordinator(config) {
   }
 
   function _markJoinStale(reason = "unknown") {
-    if (_joinedSocketId == null && !getHasJoined() && !getJoinInFlight()) return;
+    if (_joinedSocketId == null && !getHasJoined() && !getJoinInFlight())
+      return;
     if (!shouldMuteClientDefaultLogs()) {
       console.warn("[game] join state reset", {
         reason,
@@ -298,7 +299,10 @@ export function createMatchCoordinator(config) {
             if (!shouldMuteClientDefaultLogs()) {
               console.log("[game] join ack ok", ack);
             } else {
-              noteClientLifecycle("join-ack-ok", `matchId=${ack?.matchId ?? "?"}`);
+              noteClientLifecycle(
+                "join-ack-ok",
+                `matchId=${ack?.matchId ?? "?"}`,
+              );
             }
             _joinedSocketId = socket.id || currentSocketId;
             setHasJoined(true);
@@ -308,10 +312,7 @@ export function createMatchCoordinator(config) {
         if (!shouldMuteClientDefaultLogs()) {
           console.warn("[game] join emit error", e);
         } else {
-          noteClientLifecycle(
-            "join-emit-error",
-            String(e?.message || e || ""),
-          );
+          noteClientLifecycle("join-emit-error", String(e?.message || e || ""));
         }
       }
     }
@@ -502,8 +503,7 @@ export function createMatchCoordinator(config) {
           if (Number.isFinite(localPlayer.x)) readyPayload.x = localPlayer.x;
           if (Number.isFinite(localPlayer.y)) readyPayload.y = localPlayer.y;
           readyPayload.flip = !!localPlayer.flipX;
-          readyPayload.animation =
-            localPlayer.anims?.currentAnim?.key || null;
+          readyPayload.animation = localPlayer.anims?.currentAnim?.key || null;
         }
         if (!shouldMuteClientDefaultLogs()) {
           console.log("[game] watchdog re-emitting ready", {
@@ -531,7 +531,9 @@ export function createMatchCoordinator(config) {
     });
     if (!shouldMuteClientDefaultLogs()) {
       console.log("Game initialized:", {
-        players: Array.isArray(gameState?.players) ? gameState.players.length : 0,
+        players: Array.isArray(gameState?.players)
+          ? gameState.players.length
+          : 0,
         status: gameState?.status,
       });
     } else {
@@ -642,10 +644,7 @@ export function createMatchCoordinator(config) {
     if (!shouldMuteClientDefaultLogs()) {
       console.log("Game starting:", data);
     } else {
-      noteClientLifecycle(
-        "start",
-        `countdown=${Number(data?.countdown) || 0}`,
-      );
+      noteClientLifecycle("start", `countdown=${Number(data?.countdown) || 0}`);
     }
     hud.hideWaitingForPlayersBanner?.();
     const seconds = Math.max(1, Number(data?.countdown) || 3);
@@ -715,8 +714,9 @@ export function createMatchCoordinator(config) {
       if (
         typeof prev === "number" &&
         payload.health < prev &&
-        (((getLatestPlayerEffects()?.[payload.username]?.shield || 0) > 0 ||
-          (getLatestPlayerEffects()?.[payload.username]?.respawnShield || 0) > 0) ||
+        ((getLatestPlayerEffects()?.[payload.username]?.shield || 0) > 0 ||
+          (getLatestPlayerEffects()?.[payload.username]?.respawnShield || 0) >
+            0 ||
           Date.now() - (lastShieldActiveAt[payload.username] || 0) <= 900)
       ) {
         shieldImpactQueue.push({ username: payload.username, at: Date.now() });
@@ -773,7 +773,9 @@ export function createMatchCoordinator(config) {
     const ingest = snapshotBuffer.ingestSnapshot(snapshot, performance.now());
     if (ingest.activated) {
       if (!shouldMuteClientDefaultLogs()) {
-        console.log("Started receiving server snapshots (tMono/tickId enabled)");
+        console.log(
+          "Started receiving server snapshots (tMono/tickId enabled)",
+        );
       } else {
         noteClientLifecycle("snapshots-live", "");
       }
@@ -844,12 +846,17 @@ export function createMatchCoordinator(config) {
       if (isSelfPacket) {
         const consumedLocal =
           typeof handleLocalAuthoritativeAttack === "function"
-            ? handleLocalAuthoritativeAttack(scene, charKey, actionWithPacketMeta, {
-                ownerSprite: getPlayer(),
-                username: getUsername(),
-                opponentPlayersRef: opponentPlayers,
-                teamPlayersRef: teamPlayers,
-              })
+            ? handleLocalAuthoritativeAttack(
+                scene,
+                charKey,
+                actionWithPacketMeta,
+                {
+                  ownerSprite: getPlayer(),
+                  username: getUsername(),
+                  opponentPlayersRef: opponentPlayers,
+                  teamPlayersRef: teamPlayers,
+                },
+              )
             : false;
         if (!consumedLocal && !shouldMuteClientDefaultLogs()) {
           console.debug("Unhandled local authoritative action", {
@@ -1033,6 +1040,9 @@ export function createMatchCoordinator(config) {
       _clearForceLiveInputTimer();
       _forceLiveClientState();
     }
+    const isBankBust =
+      String(getLatestModeState?.()?.type || "") === "bank-bust";
+    if (isBankBust) return;
     if (payload.suddenDeath && typeof payload.poisonY === "number") {
       const scene = getGameScene();
       if (scene) scene._poisonWaterY = payload.poisonY;
@@ -1041,6 +1051,9 @@ export function createMatchCoordinator(config) {
   }
 
   function _onGameSuddenDeath(payload) {
+    const isBankBust =
+      String(getLatestModeState?.()?.type || "") === "bank-bust";
+    if (isBankBust) return;
     hud.showSuddenDeathBanner();
     onStartSuddenDeathMusic();
     const scene = getGameScene();
@@ -1097,9 +1110,7 @@ export function createMatchCoordinator(config) {
       if (!name) return null;
       if (name === getUsername()) return getPlayer();
       return (
-        opponentPlayers[name]?.opponent ||
-        teamPlayers[name]?.opponent ||
-        null
+        opponentPlayers[name]?.opponent || teamPlayers[name]?.opponent || null
       );
     });
   }
@@ -1107,7 +1118,9 @@ export function createMatchCoordinator(config) {
   function _onDeathDropCollected(payload) {
     if (!payload || typeof payload.id === "undefined") return;
     deathdropCollectQueue.push(payload);
-    const known = Array.isArray(getLatestDeathDrops()) ? getLatestDeathDrops() : [];
+    const known = Array.isArray(getLatestDeathDrops())
+      ? getLatestDeathDrops()
+      : [];
     setLatestDeathDrops(
       known.filter((drop) => String(drop?.id) !== String(payload.id)),
     );
