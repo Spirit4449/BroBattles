@@ -479,10 +479,17 @@ export function createBankBustRuntime({
       `#bank-bust-${String(team || "").toLowerCase()} .bank-bust-gold-value`,
     );
     if (!target) return;
-    const coinCount = Math.max(3, Math.min(10, Math.round(Number(amount) || 1)));
+    const coinCount = Math.max(
+      3,
+      Math.min(10, Math.round(Number(amount) || 1)),
+    );
     const tex = scene.textures?.get?.("deathdrop-coin");
     const src = tex?.getSourceImage?.();
-    const maxDim = Math.max(1, Number(src?.width) || 1, Number(src?.height) || 1);
+    const maxDim = Math.max(
+      1,
+      Number(src?.width) || 1,
+      Number(src?.height) || 1,
+    );
     const baseScale = 24 / maxDim;
     for (let i = 0; i < coinCount; i++) {
       const coin = scene.add.image(
@@ -668,7 +675,7 @@ export function createBankBustRuntime({
           mineSprites,
           entry.id,
           owner ? "bank-bust-mine-claimed" : "bank-bust-mine-neutral",
-            3,
+          3,
         );
         if (mineSprite) {
           mineSprite.setVisible(true);
@@ -845,7 +852,11 @@ export function createBankBustRuntime({
         sprite.setDepth(7);
         const tex = scene.textures?.get?.("deathdrop-coin");
         const src = tex?.getSourceImage?.();
-        const maxDim = Math.max(1, Number(src?.width) || 1, Number(src?.height) || 1);
+        const maxDim = Math.max(
+          1,
+          Number(src?.width) || 1,
+          Number(src?.height) || 1,
+        );
         const baseScale = maxDim > 0 ? 24 / maxDim : 1;
         sprite.setScale(baseScale);
         visual = {
@@ -869,7 +880,8 @@ export function createBankBustRuntime({
       visual.sprite.setVisible(true);
       visual.sprite.setPosition(x, drawY);
       visual.sprite.scaleX =
-        visual.baseScale * (0.88 + 0.12 * Math.sin(nowSec * 7.2 + visual.phase));
+        visual.baseScale *
+        (0.88 + 0.12 * Math.sin(nowSec * 7.2 + visual.phase));
       visual.sprite.scaleY = visual.baseScale;
       visual.sprite.rotation = 0.08 * Math.sin(nowSec * 3.1 + visual.phase);
       const glowPulse = Math.abs(Math.sin(nowSec * 3.5 + visual.phase));
@@ -1004,7 +1016,8 @@ export function createBankBustRuntime({
       if (!at || at <= state.lastCollectionEventAt) continue;
       if (event?.type === "goldMine") {
         safePlaySfx("sfx-bankbust-mine-collect", { volume: 0.15 });
-        const sourcePos = getObjectPositionById(event?.source) ||
+        const sourcePos =
+          getObjectPositionById(event?.source) ||
           getPlayerPositionByName(event?.collectedBy);
         if (sourcePos && (event?.team === "team1" || event?.team === "team2")) {
           playGoldFlyToHud({
