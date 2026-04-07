@@ -608,7 +608,7 @@ export function createBankBustRuntime({
         );
         if (turretBase) {
           turretBase.setVisible(true);
-          turretBase.setPosition(container.x, container.y - 90);
+          turretBase.setPosition(container.x, container.y - 60);
           turretBase.setDisplaySize(64, 64);
           turretBase.setTint(
             ownerTeam === "team1"
@@ -620,7 +620,7 @@ export function createBankBustRuntime({
         }
         if (turretHead) {
           turretHead.setVisible(true);
-          turretHead.setPosition(container.x, container.y - 110);
+          turretHead.setPosition(container.x, container.y - 80);
           turretHead.setScale(0.13);
           const aim = Number(runtime?.state?.aimAngle);
           turretHead.rotation = Number.isFinite(aim)

@@ -43,8 +43,8 @@ const MAP_LAYOUT_CONFIG = {
   platforms: [
     {
       textureKey: "bank-bust-base",
-      x: 271.38,
-      y: 176.37,
+      x: 271,
+      y: 176,
       scaleX: 1,
       scaleY: 1,
       flipX: false,
@@ -52,8 +52,8 @@ const MAP_LAYOUT_CONFIG = {
     },
     {
       textureKey: "bank-bust-base",
-      x: 3349.77,
-      y: 173.55,
+      x: 3329,
+      y: 176,
       scaleX: 1,
       scaleY: 1,
       flipX: true,
@@ -61,12 +61,12 @@ const MAP_LAYOUT_CONFIG = {
     },
     {
       textureKey: "bank-bust-topcase",
-      x: 1844.39,
-      y: -371.44,
+      x: 1844,
+      y: -371,
       scaleX: 1,
       scaleY: 1,
       flipX: false,
-      body: { width: 416, height: 32, offsetX: 0, offsetY: 0 },
+      body: { width: 440, height: 40, offsetX: 0, offsetY: 0 },
     },
     {
       textureKey: "bank-bust-staircase",
@@ -178,8 +178,8 @@ const MAP_LAYOUT_CONFIG = {
     },
     {
       textureKey: "bank-bust-2x2",
-      x: 1413.03,
-      y: 261.2,
+      x: 1413,
+      y: 261,
       scaleX: 1,
       scaleY: 1,
       flipX: false,
@@ -187,8 +187,8 @@ const MAP_LAYOUT_CONFIG = {
     },
     {
       textureKey: "bank-bust-2x2",
-      x: 2186.97,
-      y: 261.2,
+      x: 2187,
+      y: 261,
       scaleX: 1,
       scaleY: 1,
       flipX: true,
@@ -214,8 +214,8 @@ const MAP_LAYOUT_CONFIG = {
     },
     {
       textureKey: "bank-bust-abyss",
-      x: 808.15,
-      y: 536.02,
+      x: 808,
+      y: 536,
       scaleX: 1,
       scaleY: 1,
       flipX: false,
@@ -223,8 +223,8 @@ const MAP_LAYOUT_CONFIG = {
     },
     {
       textureKey: "bank-bust-abyss",
-      x: 2791.85,
-      y: 485.07,
+      x: 2792,
+      y: 485,
       scaleX: 1,
       scaleY: 1,
       flipX: true,
@@ -232,8 +232,8 @@ const MAP_LAYOUT_CONFIG = {
     },
     {
       textureKey: "bank-bust-tallplatform",
-      x: 1381.03,
-      y: -67.3,
+      x: 1381,
+      y: -67,
       scaleX: 1,
       scaleY: 1,
       flipX: false,
@@ -242,7 +242,7 @@ const MAP_LAYOUT_CONFIG = {
     {
       textureKey: "bank-bust-tallplatform",
       x: 2214.97,
-      y: -67.3,
+      y: -67,
       scaleX: 1,
       scaleY: 1,
       flipX: false,
@@ -378,7 +378,7 @@ const MAP_LAYOUT_CONFIG = {
     },
     {
       x: 1844.39,
-      y: -373,
+      y: -371,
       width: 440,
       height: 40,
       collision: { up: true, down: true, left: true, right: true },
@@ -504,3 +504,5 @@ export const definition = {
     return _spawnAnchors;
   },
 };
+
+export { definition as bankBustTest };

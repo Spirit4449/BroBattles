@@ -51,21 +51,21 @@
             "height": 1200
           },
           "respawnPoints": {
-            "team1": { "x": 589.1816903862998, "y": 71.84226784916666 },
-            "team2": { "x": 3008.8183096137, "y": 71.84226784916666 }
+            "team1": { "x": 589, "y": 72 },
+            "team2": { "x": 3011, "y": 72 }
           },
           "vaults": {
             "team1": {
-              "x": 186.70111335299245,
-              "y": 82.45519869548012,
+              "x": 187,
+              "y": 82,
               "radius": 82,
               "width": 98,
               "height": 118,
               "label": "Blue Vault"
             },
             "team2": {
-              "x": 3436.743429851755,
-              "y": 79.93725924207524,
+              "x": 3413,
+              "y": 80,
               "radius": 82,
               "width": 98,
               "height": 118,
@@ -76,8 +76,8 @@
             {
               "id": "mine-mid-left",
               "type": "goldMine",
-              "x": 175.696164059155,
-              "y": -148.97343377306913,
+              "x": 176,
+              "y": -149,
               "radius": 86,
               "collectionRadius": 110,
               "yieldAmount": 15,
@@ -87,8 +87,8 @@
             {
               "id": "mine-mid-right",
               "type": "goldMine",
-              "x": 3437.657664985322,
-              "y": -148.39000645490847,
+              "x": 3424,
+              "y": -149,
               "radius": 86,
               "collectionRadius": 110,
               "yieldAmount": 15,
@@ -98,8 +98,8 @@
             {
               "id": "turret-slot-team1-front",
               "type": "claimableTurret",
-              "x": 1382.0966773567435,
-              "y": -66.06156104606433,
+              "x": 1382,
+              "y": -67,
               "claimRadius": 110,
               "claimCost": 120,
               "range": 520,
@@ -111,8 +111,8 @@
             {
               "id": "turret-slot-team2-front",
               "type": "claimableTurret",
-              "x": 2217.9033226432567,
-              "y": -66.06156104606433,
+              "x": 2218,
+              "y": -67,
               "claimRadius": 110,
               "claimCost": 120,
               "range": 520,
@@ -124,8 +124,8 @@
             {
               "id": "wall-slot-team1-lane",
               "type": "wallSlot",
-              "x": 368.1981360856347,
-              "y": -49.88561913229876,
+              "x": 368,
+              "y": -50,
               "buildRadius": 100,
               "cost": 90,
               "width": 120,
@@ -134,8 +134,8 @@
             {
               "id": "wall-slot-team2-lane",
               "type": "wallSlot",
-              "x": 3288.047223990208,
-              "y": -6.627263864647631,
+              "x": 3232,
+              "y": -50,
               "buildRadius": 100,
               "cost": 90,
               "width": 120,

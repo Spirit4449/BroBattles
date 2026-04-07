@@ -146,7 +146,7 @@ export function preloadGameAssets({
   );
   scene.load.audio(
     "sfx-bankbust-wall-claim",
-    `${staticPath}/ui-sound/party.mp3`,
+    `${staticPath}/bank-bust/wall-claim.mp3`,
   );
 
   // Music (non-blocking BGM: handled via HTMLAudio at runtime)
