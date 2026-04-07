@@ -131,7 +131,12 @@ export function preloadGameAssets({
   // Combat/health SFX
   scene.load.audio("sfx-damage", `${staticPath}/damage.mp3`);
   scene.load.audio("sfx-heal", `${staticPath}/heal.mp3`);
-  scene.load.audio("sfx-bankbust-turret-shoot", `${staticPath}/damage.mp3`);
+  // Allow a map-specific turret shoot sound to be used if present (preferred),
+  // otherwise fall back to the shared damage sound.
+  scene.load.audio("sfx-bankbust-turret-shoot", [
+    `${staticPath}/bank-bust/turret-shoot.mp3`,
+    `${staticPath}/damage.mp3`,
+  ]);
   scene.load.audio(
     "sfx-bankbust-turret-claim",
     `${staticPath}/ui-sound/notification.mp3`,

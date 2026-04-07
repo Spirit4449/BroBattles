@@ -487,6 +487,7 @@ export default class OpPlayer {
     if (!this.opponent) return;
     this._deathPresentationActive = false;
     this._corpseRemoved = false;
+    this._worldUiHidden = false;
     this._spawnPresented = true;
     this._networkSnapUntil = performance.now() + 220;
     if (typeof meta?.maxHealth === "number" && meta.maxHealth > 0) {

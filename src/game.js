@@ -592,11 +592,17 @@ function updateMatchBackgroundParallax(scene) {
     }
     const cam = scene?.cameras?.main;
     if (!cam) return;
-    // Smooth parallax: background moves at ~0.35x the camera's movement
-    // scrollX is in world space, we shift the bg dynamically with parallax factor
+    // Smooth parallax with clamped shift to prevent exposing white edges.
     const parallaxFactor = 0.35;
-    const shiftPx = -cam.scrollX * parallaxFactor;
-    bgImg.style.transform = `translate3d(${shiftPx}px,0,0) scale(1.14)`;
+    const worldW = Math.max(1, Number(scene?.physics?.world?.bounds?.width) || 2300);
+    const viewportW = Math.max(1, Number(window.innerWidth) || Number(scene?.scale?.width) || 1280);
+    const baseScale = 1.22;
+    const effectiveBgW = Math.max(viewportW, viewportW * baseScale);
+    const maxOverflow = Math.max(0, effectiveBgW - viewportW);
+    const progress = Phaser.Math.Clamp((Number(cam.scrollX) || 0) / worldW, 0, 1);
+    const parallaxShift = -maxOverflow * progress * parallaxFactor;
+    const shiftPx = Phaser.Math.Clamp(parallaxShift, -maxOverflow, 0);
+    bgImg.style.transform = `translate3d(${shiftPx}px,0,0) scale(${baseScale})`;
     bgImg.style.transformOrigin = "50% 100%";
   } catch (_) {}
 }
@@ -1172,6 +1178,7 @@ class GameScene extends Phaser.Scene {
         Phaser,
         getGameData: () => gameData,
         getModeState: () => latestModeState,
+        getMapObjects: () => mapObjects,
         getLocalPlayer: () => player,
         getOpponentPlayers: () => opponentPlayers,
         getTeamPlayers: () => teamPlayers,
@@ -1354,13 +1361,14 @@ class GameScene extends Phaser.Scene {
     const zoomX = (Number(this.scale?.width) || width) / width;
     const zoomY = (Number(this.scale?.height) || height) / height;
     const targetZoom = Phaser.Math.Clamp(
-      Math.min(1, Math.min(zoomX, zoomY) * 0.94),
-      0.72,
+      Math.min(1, Math.min(zoomX, zoomY) * 0.985),
+      0.82,
       1,
     );
+    const raisedTargetY = targetY - Math.min(140, height * 0.12);
 
     try {
-      cam.pan(targetX, targetY, 900, "Cubic.easeOut");
+      cam.pan(targetX, raisedTargetY, 900, "Cubic.easeOut");
     } catch (_) {}
     try {
       cam.zoomTo(targetZoom, 900, "Quad.easeOut");

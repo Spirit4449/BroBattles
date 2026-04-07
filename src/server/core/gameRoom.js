@@ -1007,15 +1007,6 @@ class GameRoom {
           ? Number(attacker.specialDamage || 0)
           : Number(attacker.baseDamage || 0);
       let dmg = Number.isFinite(base) && base > 0 ? base : 0;
-      if (targetVault && attackType !== "basic") {
-        if (this.DEBUG_HIT_EVENTS) {
-          console.log(
-            `[HitDebug ${this.matchId}] reject reason=vault_attack_type attacker=${attacker.name} type=${attackType}`,
-          );
-        }
-        return;
-      }
-
       // Outgoing damage modifiers (rage powerup, thorgRage ability, damageBoost, etc.)
       const now = Date.now();
       dmg *= effectManager.getModifiers(attacker, now).damageMult;
@@ -1057,6 +1048,10 @@ class GameRoom {
           Number(aPos?.y || 0) - tPos.y,
         );
         maxDist += Math.max(20, Number(targetVault.radius) || 90);
+        if (attackType === "special" || isNinjaSwarm) {
+          // Super attacks can hit vaults from farther than basic melee/projectile ranges.
+          maxDist = Math.max(maxDist, 2400);
+        }
       } else {
         ({
           attackTimeClamped,

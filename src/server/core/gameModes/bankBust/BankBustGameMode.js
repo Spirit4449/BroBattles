@@ -15,7 +15,7 @@ const {
   expireCollectionEvents,
 } = require("./state");
 
-const DEFAULT_VAULT_MAX_HEALTH = 12000;
+const DEFAULT_VAULT_MAX_HEALTH = 50000;
 const DEFAULT_MATCH_DURATION_MS = 1800000;
 const DEFAULT_RESPAWN_DELAY_MS = 500;
 const DEFAULT_RESPAWN_SHIELD_MS = 3000;
@@ -59,6 +59,57 @@ function pointInRect(px, py, cx, cy, width, height) {
     Number(px) <= Number(cx) + halfW &&
     Number(py) >= Number(cy) - halfH &&
     Number(py) <= Number(cy) + halfH
+  );
+}
+
+function segmentIntersectsExpandedRect(
+  x1,
+  y1,
+  x2,
+  y2,
+  cx,
+  cy,
+  width,
+  height,
+  expansion = 0,
+) {
+  const halfW = Math.max(1, Number(width) || 0) / 2 + Math.max(0, Number(expansion) || 0);
+  const halfH = Math.max(1, Number(height) || 0) / 2 + Math.max(0, Number(expansion) || 0);
+  const left = Number(cx) - halfW;
+  const right = Number(cx) + halfW;
+  const top = Number(cy) - halfH;
+  const bottom = Number(cy) + halfH;
+
+  // Quick accept if either endpoint is inside.
+  if (
+    (Number(x1) >= left && Number(x1) <= right && Number(y1) >= top && Number(y1) <= bottom) ||
+    (Number(x2) >= left && Number(x2) <= right && Number(y2) >= top && Number(y2) <= bottom)
+  ) {
+    return true;
+  }
+
+  const dx = Number(x2) - Number(x1);
+  const dy = Number(y2) - Number(y1);
+  let t0 = 0;
+  let t1 = 1;
+  const clip = (p, q) => {
+    if (Math.abs(p) < 1e-9) return q >= 0;
+    const r = q / p;
+    if (p < 0) {
+      if (r > t1) return false;
+      if (r > t0) t0 = r;
+    } else {
+      if (r < t0) return false;
+      if (r < t1) t1 = r;
+    }
+    return true;
+  };
+
+  return (
+    clip(-dx, Number(x1) - left) &&
+    clip(dx, right - Number(x1)) &&
+    clip(-dy, Number(y1) - top) &&
+    clip(dy, bottom - Number(y1))
   );
 }
 
@@ -342,6 +393,8 @@ class BankBustGameMode extends BaseGameMode {
     );
     const remaining = [];
     for (const shot of state.turretProjectiles) {
+      const prevX = Number(shot?.x) || 0;
+      const prevY = Number(shot?.y) || 0;
       const lastUpdatedAt = Number(shot?.lastUpdatedAt) || now;
       const dtMs = Math.max(0, now - lastUpdatedAt);
       const dt = dtMs / 1000;
@@ -357,16 +410,21 @@ class BankBustGameMode extends BaseGameMode {
         );
       if (expired) continue;
 
-      const hitWall = builtWalls.some((wall) =>
-        pointInRect(
+      const hitWall = builtWalls.some((wall) => {
+        const width = Number(wall?.state?.width) || Number(wall?.width) || 120;
+        const height = Number(wall?.state?.height) || Number(wall?.height) || 46;
+        return segmentIntersectsExpandedRect(
+          prevX,
+          prevY,
           shot.x,
           shot.y,
           wall.x,
           wall.y,
-          Number(wall?.state?.width) || Number(wall?.width) || 120,
-          Number(wall?.state?.height) || Number(wall?.height) || 46,
-        ),
-      );
+          width,
+          height,
+          Number(shot?.radius) || TURRET_PROJECTILE_RADIUS,
+        );
+      });
       if (hitWall) continue;
 
       const hitRadius = Math.max(
@@ -701,12 +759,15 @@ class BankBustGameMode extends BaseGameMode {
             sourceId: entry.sourceId || null,
             x: Number(entry.x) || 0,
             y: Number(entry.y) || 0,
+            vx: Number(entry.vx) || 0,
+            vy: Number(entry.vy) || 0,
             angle: Math.atan2(Number(entry.vy) || 0, Number(entry.vx) || 0),
             radius: Math.max(
               8,
               Number(entry.radius) || TURRET_PROJECTILE_RADIUS,
             ),
             spawnedAt: Number(entry.spawnedAt) || null,
+            lastUpdatedAt: Number(entry.lastUpdatedAt) || null,
           }))
         : [],
       collectionEvents: Array.isArray(state?.collectionEvents)

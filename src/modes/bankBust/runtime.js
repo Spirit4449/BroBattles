@@ -50,11 +50,13 @@ export function createBankBustRuntime({
   Phaser,
   getGameData,
   getModeState,
+  getMapObjects,
   getLocalPlayer,
   getOpponentPlayers,
   getTeamPlayers,
   canEdit = false,
 } = {}) {
+  const TURRET_RENDER_Y_OFFSET = 0;
   const state = {
     damageEventAt: 0,
     editMode: false,
@@ -86,6 +88,8 @@ export function createBankBustRuntime({
   const mineSprites = new Map();
   const wallSprites = new Map();
   const turretProjectileSprites = new Map();
+  const turretProjectileVisualState = new Map();
+  const turretProjectileLocallyDestroyed = new Set();
 
   const editorUi = ensureHostHtml();
 
@@ -551,12 +555,9 @@ export function createBankBustRuntime({
       const container = ensureObjectContainer(entry.id, entry.type);
       container.setVisible(true);
       container.x = Number(entry.x) || 0;
-      // For turrets, position label above the visual; otherwise at object center
-      container.y =
-        entry.type === "claimableTurret"
-          ? (Number(entry.y) || 0) - 90
-          : Number(entry.y) || 0;
+      container.y = Number(entry.y) || 0;
       const label = container._label;
+      label.setPosition(0, 0);
       if (entry.type === "goldMine") {
         const owner = state.mineOwnerById.get(entry.id) || null;
         const mineSprite = ensureObjectSprite(
@@ -573,19 +574,6 @@ export function createBankBustRuntime({
           if (owner === "team1") mineSprite.setTint(0xa5d8ff);
           if (owner === "team2") mineSprite.setTint(0xffb4b4);
         }
-        // Draw claimed mine circle
-        if (owner === "team1" || owner === "team2") {
-          objectGraphics.lineStyle(
-            3,
-            owner === "team1" ? 0x60a5fa : 0xf87171,
-            0.95,
-          );
-          objectGraphics.strokeCircle(container.x, container.y, 74);
-        } else {
-          // Draw unclaimed mine glow
-          objectGraphics.lineStyle(2, 0xfbbf24, 0.6);
-          objectGraphics.strokeCircle(container.x, container.y, 74);
-        }
         label.setText(
           `Mine\n${Math.max(0, Number(runtime?.state?.storedGold) || 0)}g`,
         );
@@ -594,6 +582,7 @@ export function createBankBustRuntime({
       } else if (entry.type === "claimableTurret") {
         const ownerTeam = runtime?.state?.claimedByTeam || null;
         label.setText(ownerTeam ? "Turret" : "Turret Slot");
+        label.setPosition(0, TURRET_RENDER_Y_OFFSET - 72);
         const turretBase = ensureTurretSprite(
           turretBaseSprites,
           entry.id,
@@ -608,7 +597,10 @@ export function createBankBustRuntime({
         );
         if (turretBase) {
           turretBase.setVisible(true);
-          turretBase.setPosition(container.x, container.y - 60);
+          turretBase.setPosition(
+            container.x,
+            container.y + TURRET_RENDER_Y_OFFSET,
+          );
           turretBase.setDisplaySize(64, 64);
           turretBase.setTint(
             ownerTeam === "team1"
@@ -620,7 +612,10 @@ export function createBankBustRuntime({
         }
         if (turretHead) {
           turretHead.setVisible(true);
-          turretHead.setPosition(container.x, container.y - 80);
+          turretHead.setPosition(
+            container.x,
+            container.y + TURRET_RENDER_Y_OFFSET - 16,
+          );
           turretHead.setScale(0.13);
           const aim = Number(runtime?.state?.aimAngle);
           turretHead.rotation = Number.isFinite(aim)
@@ -643,7 +638,11 @@ export function createBankBustRuntime({
             ownerTeam === "team1" ? 0x60a5fa : 0xf87171,
             0.9,
           );
-          objectGraphics.strokeCircle(container.x, container.y + 10, 46);
+          objectGraphics.strokeCircle(
+            container.x,
+            container.y + TURRET_RENDER_Y_OFFSET,
+            46,
+          );
         }
       } else if (entry.type === "wallSlot") {
         const builtByTeam = runtime?.state?.builtByTeam || null;
@@ -718,34 +717,81 @@ export function createBankBustRuntime({
 
   function renderPickups(modeState) {
     const used = new Set();
+    const nowSec = scene.time.now / 1000;
     for (const pickup of Array.isArray(modeState?.randomGoldPickups)
       ? modeState.randomGoldPickups
       : []) {
       used.add(pickup.id);
-      let sprite = pickupSprites.get(pickup.id) || null;
-      if (!sprite?.scene) {
-        sprite = scene.add.image(pickup.x, pickup.y, "deathdrop-coin");
-        sprite.setScale(0.18);
+      let visual = pickupSprites.get(pickup.id) || null;
+      if (!visual?.sprite?.scene) {
+        const x = Number(pickup.x) || 0;
+        const y = Number(pickup.y) || 0;
+        const glowOuter = scene.add.circle(x, y, 22, 0xfacc15, 0.1);
+        glowOuter.setDepth(11);
+        glowOuter.setBlendMode(Phaser.BlendModes.ADD);
+        const glow = scene.add.circle(x, y, 14, 0xfacc15, 0.22);
+        glow.setDepth(12);
+        glow.setBlendMode(Phaser.BlendModes.ADD);
+        const glowCore = scene.add.circle(x, y, 8, 0xffffff, 0.14);
+        glowCore.setDepth(12);
+        glowCore.setBlendMode(Phaser.BlendModes.ADD);
+        const sprite = scene.add.image(x, y, "deathdrop-coin");
+        sprite.setScale(0.2);
         sprite.setDepth(13);
-        pickupSprites.set(pickup.id, sprite);
+        visual = {
+          sprite,
+          glow,
+          glowOuter,
+          glowCore,
+          baseY: y,
+          phase: Math.random() * Math.PI * 2,
+        };
+        pickupSprites.set(pickup.id, visual);
       }
-      sprite.setVisible(true);
-      sprite.setPosition(Number(pickup.x) || 0, Number(pickup.y) || 0);
-      sprite.angle = (scene.time.now / 12) % 360;
+      const x = Number(pickup.x) || 0;
+      const y = Number(pickup.y) || 0;
+      const bob = Math.sin(nowSec * 2.8 + visual.phase) * 5;
+      const drawY = y - 6 + bob;
+      visual.baseY = y;
+      visual.sprite.setVisible(true);
+      visual.sprite.setPosition(x, drawY);
+      visual.sprite.scaleX = 0.2 * (0.88 + 0.12 * Math.sin(nowSec * 7.2 + visual.phase));
+      visual.sprite.scaleY = 0.2;
+      visual.sprite.rotation = 0.08 * Math.sin(nowSec * 3.1 + visual.phase);
+      const glowPulse = Math.abs(Math.sin(nowSec * 3.5 + visual.phase));
+      visual.glow.setPosition(x, drawY + 1);
+      visual.glowOuter.setPosition(x, drawY + 1);
+      visual.glowCore.setPosition(x, drawY + 1);
+      visual.glow.alpha = 0.22 + 0.18 * glowPulse;
+      visual.glow.radius = 15 + 4 * glowPulse;
+      visual.glowOuter.alpha = 0.1 + 0.1 * glowPulse;
+      visual.glowOuter.radius = visual.glow.radius + 7;
+      visual.glowCore.alpha = 0.12 + 0.08 * glowPulse;
+      visual.glowCore.radius = 7 + 2 * glowPulse;
     }
-    for (const [id, sprite] of pickupSprites.entries()) {
+    for (const [id, visual] of pickupSprites.entries()) {
       if (used.has(id)) continue;
-      sprite.destroy();
+      try {
+        visual?.sprite?.destroy?.();
+        visual?.glow?.destroy?.();
+        visual?.glowOuter?.destroy?.();
+        visual?.glowCore?.destroy?.();
+      } catch (_) {}
       pickupSprites.delete(id);
     }
   }
 
   function renderTurretProjectiles(modeState) {
     const activeIds = new Set();
+    const now = Date.now();
+    const dtMs = Math.max(1, Math.min(50, Number(scene?.game?.loop?.delta) || 16));
+    const dtSec = dtMs / 1000;
+    const mapColliders = Array.isArray(getMapObjects?.()) ? getMapObjects() : [];
     for (const shot of Array.isArray(modeState?.turretProjectiles)
       ? modeState.turretProjectiles
       : []) {
       activeIds.add(shot.id);
+      if (turretProjectileLocallyDestroyed.has(shot.id)) continue;
       const sprite = ensureObjectSprite(
         turretProjectileSprites,
         shot.id,
@@ -755,9 +801,65 @@ export function createBankBustRuntime({
       if (!sprite) continue;
       const ownerTeam = shot?.ownerTeam || null;
       sprite.setVisible(true);
-      sprite.setPosition(Number(shot?.x) || 0, Number(shot?.y) || 0);
+      const serverX = Number(shot?.x) || 0;
+      const serverY = Number(shot?.y) || 0;
+      const serverVx = Number(shot?.vx) || 0;
+      const serverVy = Number(shot?.vy) || 0;
+      const targetAngle = Number(shot?.angle) || 0;
       sprite.setDisplaySize(22, 14);
-      sprite.setRotation(Number(shot?.angle) || 0);
+      if (!turretProjectileVisualState.has(shot.id)) {
+        turretProjectileVisualState.set(shot.id, {
+          x: serverX,
+          y: serverY,
+          vx: serverVx,
+          vy: serverVy,
+          lastServerX: serverX,
+          lastServerY: serverY,
+          bornAt: now,
+          rotation: targetAngle,
+        });
+      }
+
+      const visual = turretProjectileVisualState.get(shot.id);
+      if (visual) {
+        // Client-side ballistic sim: use authoritative velocity and only softly correct drift.
+        visual.vx = Phaser.Math.Linear(visual.vx, serverVx, 0.2);
+        visual.vy = Phaser.Math.Linear(visual.vy, serverVy, 0.2);
+        visual.x += visual.vx * dtSec;
+        visual.y += visual.vy * dtSec;
+        visual.x = Phaser.Math.Linear(visual.x, serverX, 0.08);
+        visual.y = Phaser.Math.Linear(visual.y, serverY, 0.08);
+        visual.rotation = Phaser.Math.Angle.RotateTo(visual.rotation, targetAngle, 0.6);
+        sprite.setPosition(visual.x, visual.y);
+        sprite.setRotation(visual.rotation);
+
+        let hitBarrier = false;
+        for (const mapObject of mapColliders) {
+          if (!mapObject?.body) continue;
+          if (scene.physics.overlap(sprite, mapObject)) {
+            hitBarrier = true;
+            break;
+          }
+        }
+        if (!hitBarrier) {
+          for (const wall of wallBodies.values()) {
+            const zone = wall?.zone;
+            if (!zone?.body) continue;
+            if (scene.physics.overlap(sprite, zone)) {
+              hitBarrier = true;
+              break;
+            }
+          }
+        }
+        if (hitBarrier) {
+          turretProjectileLocallyDestroyed.add(shot.id);
+          sprite.setVisible(false);
+          continue;
+        }
+      } else {
+        sprite.setPosition(serverX, serverY);
+        sprite.setRotation(targetAngle);
+      }
       sprite.clearTint();
       if (ownerTeam === "team1") sprite.setTint(0x93c5fd);
       if (ownerTeam === "team2") sprite.setTint(0xfca5a5);
@@ -766,6 +868,8 @@ export function createBankBustRuntime({
       if (activeIds.has(id)) continue;
       sprite.destroy();
       turretProjectileSprites.delete(id);
+      turretProjectileVisualState.delete(id);
+      turretProjectileLocallyDestroyed.delete(id);
     }
   }
 
@@ -782,9 +886,6 @@ export function createBankBustRuntime({
           (event?.team === "team1" || event?.team === "team2")
         ) {
           const previousOwner = state.mineOwnerById.get(event.source) || null;
-          if (previousOwner !== event.team) {
-            safePlaySfx("sfx-bankbust-mine-claim", { volume: 0.22 });
-          }
           state.mineOwnerById.set(event.source, event.team);
         }
       }
@@ -940,7 +1041,14 @@ export function createBankBustRuntime({
       markerGraphics.destroy();
     } catch (_) {}
     for (const sprite of vaultSprites.values()) destroyContainer(sprite);
-    for (const sprite of pickupSprites.values()) destroyContainer(sprite);
+    for (const visual of pickupSprites.values()) {
+      try {
+        visual?.sprite?.destroy?.();
+        visual?.glow?.destroy?.();
+        visual?.glowOuter?.destroy?.();
+        visual?.glowCore?.destroy?.();
+      } catch (_) {}
+    }
     for (const sprite of spawnPointMarkers.values()) destroyContainer(sprite);
     for (const entry of objectContainers.values()) destroyContainer(entry);
     for (const sprite of turretBaseSprites.values()) destroyContainer(sprite);
@@ -949,6 +1057,8 @@ export function createBankBustRuntime({
     for (const sprite of wallSprites.values()) destroyContainer(sprite);
     for (const sprite of turretProjectileSprites.values())
       destroyContainer(sprite);
+    turretProjectileVisualState.clear();
+    turretProjectileLocallyDestroyed.clear();
     for (const coin of floatingCoins) destroyContainer(coin);
     for (const id of Array.from(wallBodies.keys())) {
       updateWallBody(id, null, false);

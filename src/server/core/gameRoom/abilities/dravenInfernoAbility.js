@@ -72,6 +72,29 @@ function tick(room, caster, now) {
     perTickDmg * effectManager.getModifiers(caster, now).damageMult,
   );
 
+  // Apply inferno pressure to enemy vault/safe when it is inside inferno radius.
+  const enemyTeam = caster.team === "team1" ? "team2" : "team1";
+  const vault = room?.gameMode?.getVaultState?.(enemyTeam) || null;
+  if (vault && Number(vault.health) > 0) {
+    const vx = Number(vault.x) || 0;
+    const vy = Number(vault.y) || 0;
+    const vr = Math.max(30, Number(vault.radius) || 90);
+    if (Math.hypot(vx - anchorX, vy - anchorY) <= DRAVEN_INFERNO_RADIUS + vr) {
+      const oldVaultHp = Number(vault.health) || 0;
+      room?.gameMode?.damageVault?.(enemyTeam, perTickDmg, {
+        sourcePlayer: caster.name,
+        sourceTeam: caster.team,
+        attackType: "special",
+      });
+      const appliedVault = Math.max(0, oldVaultHp - (Number(vault.health) || 0));
+      if (appliedVault > 0) {
+        room._recordCombatStat(caster, { damage: appliedVault, hits: 1 });
+        room.broadcastSnapshot?.();
+        room._checkVictoryCondition?.();
+      }
+    }
+  }
+
   for (const target of room.players.values()) {
     if (!target || target.name === caster.name) continue;
     if (!target.isAlive || target.connected === false || target.loaded !== true)
