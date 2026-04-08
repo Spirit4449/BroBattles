@@ -392,6 +392,18 @@
       #battle-start-overlay[data-team-size="3"] .bs-player-card {
         width: min(15vw, 172px);
       }
+      #battle-start-overlay.cards-wrapped .bs-player-card {
+        width: min(13.5vw, 158px);
+      }
+      #battle-start-overlay.cards-wrapped[data-team-size="1"] .bs-player-card {
+        width: min(18vw, 198px);
+      }
+      #battle-start-overlay.cards-wrapped[data-team-size="2"] .bs-player-card {
+        width: min(14.5vw, 168px);
+      }
+      #battle-start-overlay.cards-wrapped[data-team-size="3"] .bs-player-card {
+        width: min(12.2vw, 148px);
+      }
 
       #battle-start-overlay .bs-header {
         position: absolute;
@@ -405,6 +417,11 @@
         gap: 4px;
         text-align: center;
         pointer-events: none;
+        opacity: 0;
+        transition: opacity 200ms ease;
+      }
+      #battle-start-overlay.phase-cards .bs-header {
+        opacity: 1;
       }
 
       #battle-start-overlay .bs-brand-row {
@@ -1055,7 +1072,7 @@
 
       #bank-bust-hud {
         position: fixed;
-        top: 26px;
+        top: 30px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 9997;
@@ -1078,7 +1095,6 @@
           rgba(30, 41, 59, 0.9)
         );
         box-shadow: 0 8px 22px rgba(0, 0, 0, 0.32);
-        min-height: 68px;
       }
       .bank-bust-vault.friendly {
         border-color: rgba(96, 165, 250, 0.62);
@@ -1110,6 +1126,7 @@
       .bank-bust-vault-value {
         font-family: "Press Start 2P", "Lato", sans-serif;
         font-size: 9px;
+        color: white;
       }
       .bank-bust-vault-bar-row {
         display: flex;
@@ -1400,7 +1417,7 @@
     <!-- Red edge vignette shown while local player is submerged -->
     <div id="water-vignette"></div>
     <div id="hud"></div>
-    <div id="top-hud-fade" aria-hidden="true"></div>
+    <div id="top-hud-fade" class="is-faded" aria-hidden="true"></div>
 
     <div
       id="game-status-banner"
@@ -1533,9 +1550,10 @@
         <div class="bank-bust-vault-top">
           <div class="bank-bust-vault-top-left">
             <span class="bank-bust-vault-label">Vault</span>
-            <span class="bank-bust-gold-inline"
-              ><span class="bank-bust-stat-icon">G</span
-              ><strong class="bank-bust-gold-value">0</strong></span
+            <span class="bank-bust-gold-inline">
+              <image src="/assets/coin.webp" width="16" height="16" />
+
+              <strong class="bank-bust-gold-value">0</strong></span
             >
           </div>
         </div>
@@ -1550,9 +1568,10 @@
         <div class="bank-bust-vault-top">
           <div class="bank-bust-vault-top-left">
             <span class="bank-bust-vault-label">Vault</span>
-            <span class="bank-bust-gold-inline"
-              ><span class="bank-bust-stat-icon">G</span
-              ><strong class="bank-bust-gold-value">0</strong></span
+            <span class="bank-bust-gold-inline">
+              <image src="/assets/coin.webp" width="16" height="16" />
+
+              <strong class="bank-bust-gold-value">0</strong></span
             >
           </div>
         </div>

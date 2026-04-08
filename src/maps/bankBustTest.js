@@ -371,7 +371,7 @@ const MAP_LAYOUT_CONFIG = {
   ],
 };
 
-const BANK_BUST_CONFIG = {
+const IRON_JUNCTION_CONFIG = {
   spawns: SPAWN_CONFIG,
   boundaries: {
     world: { x: 0, y: -320, width: 3600, height: 860 },
@@ -410,11 +410,11 @@ const _spawnAnchors = Object.create(null);
 
 export const definition = {
   id: 4,
-  name: "Bank Bust Test",
+  name: "Iron Junction",
   bgAsset: "/assets/bank-bust/gameBg.webp",
-  mapSelectPreviewAsset: "/assets/serenity/preview.webp",
-  lobbyBgAsset: "/assets/serenity/lobbyBg.webp",
-  lobbyPlatformAsset: "/assets/serenity/lobbyPlatform.webp",
+  mapSelectPreviewAsset: "/assets/bank-bust/preview.webp",
+  lobbyBgAsset: "/assets/bank-bust/lobbyBg.webp",
+  lobbyPlatformAsset: "/assets/bank-bust/lobbyPlatform.webp",
   lobbyCharacterOffsetY: 12,
 
   build(scene) {
@@ -464,7 +464,7 @@ export const definition = {
 
   positionSpawn(scene, sprite, team, index, teamSize) {
     const point = getSpawnPointForTeam(
-      BANK_BUST_CONFIG.spawns,
+      IRON_JUNCTION_CONFIG.spawns,
       team,
       index,
       teamSize,
@@ -474,15 +474,15 @@ export const definition = {
   },
 
   getSpawnConfig() {
-    return BANK_BUST_CONFIG.spawns;
+    return IRON_JUNCTION_CONFIG.spawns;
   },
 
   getBoundaryConfig() {
-    return BANK_BUST_CONFIG.boundaries;
+    return IRON_JUNCTION_CONFIG.boundaries;
   },
 
   getEditorTextureKeys() {
-    return BANK_BUST_CONFIG.editorTextureKeys;
+    return IRON_JUNCTION_CONFIG.editorTextureKeys;
   },
 
   getSpawnAnchors() {
@@ -490,4 +490,4 @@ export const definition = {
   },
 };
 
-export { definition as bankBustTest };
+export { definition as ironJunction };

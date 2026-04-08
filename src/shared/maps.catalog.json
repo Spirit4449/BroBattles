@@ -36,14 +36,14 @@
     },
     {
       "id": 4,
-      "key": "bank-bust-test",
-      "label": "Bank Bust Test",
+      "key": "iron-junction",
+      "label": "Iron Junction",
       "compatibleModeIds": ["bank-bust"],
       "compatibleVariantIds": ["bank-bust-3v3"],
       "musicAsset": "/assets/bank-bust/bankbust-main.mp3",
-      "mapSelectPreviewAsset": "/assets/serenity/preview.webp",
-      "lobbyBgAsset": "/assets/serenity/lobbyBg.webp",
-      "lobbyPlatformAsset": "/assets/serenity/lobbyPlatform.webp",
+      "mapSelectPreviewAsset": "/assets/bank-bust/preview.webp",
+      "lobbyBgAsset": "/assets/bank-bust/lobbyBg.webp",
+      "lobbyPlatformAsset": "/assets/bank-bust/lobbyPlatform.webp",
       "objectiveLayout": {
         "bankBust": {
           "world": {

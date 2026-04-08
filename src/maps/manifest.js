@@ -9,12 +9,12 @@
 import { definition as lushyDef } from "./lushyPeaks";
 import { definition as mangroveDef } from "./mangroveMeadow";
 import { definition as serenityDef } from "./serenity";
-import { definition as bankBustTestDef } from "./bankBustTest";
+import { definition as ironJunctionDef } from "./bankBustTest";
 import mapsCatalog from "../shared/maps.catalog.json";
 
 // Registry: numeric mapId -> definition
 const MAPS = {};
-for (const d of [lushyDef, mangroveDef, serenityDef, bankBustTestDef]) {
+for (const d of [lushyDef, mangroveDef, serenityDef, ironJunctionDef]) {
   MAPS[d.id] = d;
 }
 const MAP_META = new Map(
@@ -137,7 +137,9 @@ export function getMapSelectPreviewAsset(mapId) {
   const meta = MAP_META.get(normalized);
   return (
     meta?.mapSelectPreviewAsset ||
-    def?.mapSelectPreviewAsset || def?.bgAsset || "/assets/lushy/gameBg.webp"
+    def?.mapSelectPreviewAsset ||
+    def?.bgAsset ||
+    "/assets/lushy/gameBg.webp"
   );
 }
 

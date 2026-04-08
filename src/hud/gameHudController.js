@@ -165,6 +165,24 @@ export function createGameHudController({
     });
   }
 
+  function _syncCardWrapState(root) {
+    if (!root) return;
+    const columns = Array.from(root.querySelectorAll(".bs-col"));
+    let wrapped = false;
+    for (const col of columns) {
+      const cards = Array.from(col.querySelectorAll(".bs-player-card"));
+      if (!cards.length) continue;
+      const tops = new Set(
+        cards.map((node) => Math.round(node.offsetTop || 0)),
+      );
+      if (tops.size > 1) {
+        wrapped = true;
+        break;
+      }
+    }
+    root.classList.toggle("cards-wrapped", wrapped);
+  }
+
   function _sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -188,6 +206,16 @@ export function createGameHudController({
       await _sleep(1000);
 
       root.classList.add("phase-darkened", "phase-cards");
+      showTopHudFade();
+      showWaitingForPlayersBanner();
+      try {
+        const teamHud = document.getElementById("team-status-hud");
+        teamHud?.classList.remove("hidden");
+        teamHud?.classList.add("hud-intro-enter");
+        requestAnimationFrame(() => {
+          teamHud?.classList.add("in");
+        });
+      } catch (_) {}
       await _sleep(40);
       _animateCardsIn(currentCardNodes);
     })();
@@ -258,8 +286,9 @@ export function createGameHudController({
       const timerHud = document.getElementById("game-timer-hud");
       const teamHud = document.getElementById("team-status-hud");
       timerHud?.classList.add("hidden", "hud-intro-enter");
-      teamHud?.classList.remove("hidden");
-      teamHud?.classList.add("hud-intro-enter", "in");
+      teamHud?.classList.add("hidden");
+      teamHud?.classList.remove("in");
+      teamHud?.classList.add("hud-intro-enter");
       timerHud?.classList.remove("in");
     } catch (_) {}
 
@@ -306,6 +335,7 @@ export function createGameHudController({
       });
 
       currentCardNodes = [...yourNodes, ...oppNodes];
+      requestAnimationFrame(() => _syncCardWrapState(root));
     };
 
     renderPlayers(cardCatalog || _fallbackCatalog());
@@ -319,6 +349,7 @@ export function createGameHudController({
     if (c) c.textContent = "5";
 
     root.classList.remove("hidden");
+    root.classList.remove("cards-wrapped");
     root.classList.remove("phase-darkened", "phase-cards");
     root.classList.add("phase-cinematic");
     root.setAttribute("aria-hidden", "false");

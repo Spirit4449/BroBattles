@@ -698,7 +698,7 @@ export function createPlayer(
 
   // Player name text anchored to physics body top (not frame height)
   const bodyTop = player.body ? player.body.y : player.y - player.height / 2;
-  playerName = scene.add.text(player.x, bodyTop - 50, username);
+  playerName = scene.add.text(player.x, bodyTop - 40, username);
   playerName.setStyle({
     fontFamily: "LilitaOne-Regular",
     fontSize: "10px",
@@ -1068,7 +1068,7 @@ function syncLocalUiPosition() {
   if (!player) return;
   const uiTop = player.body ? player.body.y : player.y - player.height / 2;
   try {
-    playerName?.setPosition(player.x, uiTop - 22);
+    playerName?.setPosition(player.x, uiTop - 40);
   } catch (_) {}
   try {
     if (indicatorTriangle?.visible) drawIndicatorTriangle();

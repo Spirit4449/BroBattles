@@ -479,6 +479,7 @@ export function createBankBustRuntime({
       `#bank-bust-${String(team || "").toLowerCase()} .bank-bust-gold-value`,
     );
     if (!target) return;
+    const teamXOffset = team === "team1" ? 10 : team === "team2" ? -16 : 0;
     const coinCount = Math.max(
       3,
       Math.min(10, Math.round(Number(amount) || 1)),
@@ -501,11 +502,11 @@ export function createBankBustRuntime({
       coin.setScale(baseScale);
       scene.tweens.add({
         targets: coin,
-        x: Number(target.x) + Phaser.Math.Between(-8, 8),
+        x: Number(target.x) + teamXOffset + Phaser.Math.Between(-6, 6),
         y: Number(target.y) + Phaser.Math.Between(-6, 6),
         alpha: 0.12,
-        duration: Phaser.Math.Between(420, 620),
-        delay: i * 34,
+        duration: Phaser.Math.Between(360, 520),
+        delay: 0,
         ease: "Cubic.easeInOut",
         onComplete: () => {
           try {

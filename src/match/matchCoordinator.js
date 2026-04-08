@@ -562,8 +562,6 @@ export function createMatchCoordinator(config) {
         _clearForceLiveInputTimer();
         _forceLiveClientState();
       } else if (status === "waiting" || status === "starting") {
-        hud.showTopHudFade?.({ immediate: true });
-        hud.showWaitingForPlayersBanner?.();
         try {
           const gameData = getGameData();
           hud.showBattleStartOverlay(gameData.players);
@@ -677,8 +675,6 @@ export function createMatchCoordinator(config) {
       noteClientLifecycle("starting", `matchId=${payload?.matchId ?? "?"}`);
     }
     setStartingPhase(true);
-    hud.showTopHudFade?.();
-    hud.showWaitingForPlayersBanner?.();
     if (!getIsLiveGame()) {
       const gameData = getGameData();
       hud.showBattleStartOverlay(gameData.players);
@@ -1043,10 +1039,16 @@ export function createMatchCoordinator(config) {
     const isBankBust =
       String(getLatestModeState?.()?.type || "") === "bank-bust";
     if (isBankBust) return;
+    const scene = getGameScene();
     if (payload.suddenDeath && typeof payload.poisonY === "number") {
-      const scene = getGameScene();
       if (scene) scene._poisonWaterY = payload.poisonY;
       onStartSuddenDeathMusic();
+    } else if (scene) {
+      const worldH =
+        Number(scene.physics?.world?.bounds?.height) ||
+        Number(scene.game?.config?.height) ||
+        1000;
+      scene._poisonWaterY = worldH + 60;
     }
   }
 

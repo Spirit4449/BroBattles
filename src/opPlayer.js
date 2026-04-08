@@ -103,7 +103,7 @@ export default class OpPlayer {
       : this.opponent.y - this.opponent.height / 2;
     this.opPlayerName = this.scene.add.text(
       this.opponent.x,
-      bodyTop - 44,
+      bodyTop - 60,
       this.username,
     );
     this.opPlayerName.setStyle({
@@ -115,7 +115,7 @@ export default class OpPlayer {
       strokeThickness: 5,
     });
     this.opPlayerName.setOrigin(0.5, 0);
-    this.opPlayerName.setDepth(42); // always above map objective props
+    this.opPlayerName.setDepth(50); // always above map objective props
 
     this.opHealthText = this.scene.add.text(0, 0, "", {
       fontFamily: "LilitaOne-Regular",
@@ -232,7 +232,7 @@ export default class OpPlayer {
       ? this.opponent.body.y
       : this.opponent.y - this.opponent.height / 2;
     if (this.opPlayerName) {
-      this.opPlayerName.setPosition(this.opponent.x, bodyTop - 44);
+      this.opPlayerName.setPosition(this.opponent.x, bodyTop - 60);
     }
     this.updateHealthBar(false);
   }
