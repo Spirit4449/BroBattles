@@ -88,8 +88,7 @@ class Ninja extends CharacterEntityBase {
           outwardDuration:
             data.outwardDuration || RETURNING_SHURIKEN.outwardDuration,
           returnSpeed: data.returnSpeed || RETURNING_SHURIKEN.returnSpeed,
-          rotationSpeed:
-            data.rotationSpeed || RETURNING_SHURIKEN.rotationSpeed,
+          rotationSpeed: data.rotationSpeed || RETURNING_SHURIKEN.rotationSpeed,
           scale: data.scale || RETURNING_SHURIKEN.scale,
           damage: data.damage,
           isOwner: false,

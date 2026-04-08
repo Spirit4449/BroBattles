@@ -32,8 +32,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
         rotationSpeed: RETURNING_SHURIKEN_DEFAULTS.rotationSpeed,
         scale: RETURNING_SHURIKEN_DEFAULTS.scale,
         collisionSizeScale: RETURNING_SHURIKEN_DEFAULTS.collisionSizeScale,
-        collisionRadiusScale:
-          RETURNING_SHURIKEN_DEFAULTS.collisionRadiusScale,
+        collisionRadiusScale: RETURNING_SHURIKEN_DEFAULTS.collisionRadiusScale,
         damage: 1000,
         glowScale: 1,
         attackType: "basic",
@@ -119,7 +118,10 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     const normalX = -forwardY;
     const normalY = forwardX;
     this.endX = this.startX + forwardX * this.cfg.forwardDistance;
-    this.endY = this.startY + forwardY * this.cfg.forwardDistance + (this.cfg.endYOffset || 0);
+    this.endY =
+      this.startY +
+      forwardY * this.cfg.forwardDistance +
+      (this.cfg.endYOffset || 0);
     const dipDown = Number.isFinite(this.cfg.ctrl1YOffset)
       ? this.cfg.ctrl1YOffset
       : 20;
@@ -235,7 +237,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       radius: Math.max(
         10,
         (this.displayWidth || this.width || 24) *
-          (Math.max(0.1, Number(this.cfg.collisionRadiusScale) || 0.26)),
+          Math.max(0.1, Number(this.cfg.collisionRadiusScale) || 0.26),
       ),
       attackType: this.cfg.attackType || "basic",
       instanceId: this.cfg.instanceId,
