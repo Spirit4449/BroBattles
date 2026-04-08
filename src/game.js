@@ -1827,10 +1827,9 @@ class GameScene extends Phaser.Scene {
         }
       }
 
-      // Update name tag position
-      if (wrapper.opPlayerName && !wrapper._worldUiHidden) {
-        const bodyTop = spr.body ? spr.body.y : spr.y - spr.height / 2;
-        wrapper.opPlayerName.setPosition(spr.x, bodyTop - 36);
+      // Keep remote UI positioning centralized in OpPlayer so one offset controls all updates.
+      if (typeof wrapper.updateUIPosition === "function") {
+        wrapper.updateUIPosition();
       }
     };
 

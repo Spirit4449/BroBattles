@@ -12,6 +12,8 @@ import { player } from "./player";
 import socket from "./socket";
 import { spawnDeathBurst, spawnHealthMarker, spawnSpawnBurst } from "./effects";
 
+const OP_PLAYER_NAME_OFFSET_Y = 42;
+
 export default class OpPlayer {
   constructor(
     scene,
@@ -103,7 +105,7 @@ export default class OpPlayer {
       : this.opponent.y - this.opponent.height / 2;
     this.opPlayerName = this.scene.add.text(
       this.opponent.x,
-      bodyTop - 60,
+      bodyTop - OP_PLAYER_NAME_OFFSET_Y,
       this.username,
     );
     this.opPlayerName.setStyle({
@@ -112,7 +114,7 @@ export default class OpPlayer {
       fontStyle: "bold",
       fill: "#ffffff",
       stroke: "#000000",
-      strokeThickness: 5,
+      strokeThickness: 4,
     });
     this.opPlayerName.setOrigin(0.5, 0);
     this.opPlayerName.setDepth(50); // always above map objective props
@@ -232,7 +234,10 @@ export default class OpPlayer {
       ? this.opponent.body.y
       : this.opponent.y - this.opponent.height / 2;
     if (this.opPlayerName) {
-      this.opPlayerName.setPosition(this.opponent.x, bodyTop - 60);
+      this.opPlayerName.setPosition(
+        this.opponent.x,
+        bodyTop - OP_PLAYER_NAME_OFFSET_Y,
+      );
     }
     this.updateHealthBar(false);
   }

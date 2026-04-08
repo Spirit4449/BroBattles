@@ -1068,7 +1068,7 @@ function syncLocalUiPosition() {
   if (!player) return;
   const uiTop = player.body ? player.body.y : player.y - player.height / 2;
   try {
-    playerName?.setPosition(player.x, uiTop - 40);
+    playerName?.setPosition(player.x, uiTop - 42);
   } catch (_) {}
   try {
     if (indicatorTriangle?.visible) drawIndicatorTriangle();
