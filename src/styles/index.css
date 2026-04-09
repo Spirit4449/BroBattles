@@ -92,11 +92,11 @@ h3 {
   box-sizing: border-box;
   background: linear-gradient(
     135deg,
-    rgba(17, 17, 48, 0.95),
-    rgba(8, 8, 16, 0.95)
+    rgba(17, 17, 48, 0.9),
+    rgba(8, 8, 16, 0.9)   
   );
   color: white;
-  border-bottom: 3px solid #00d4ff;
+  border-bottom: 2px solid #363c0f;
   box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
   z-index: 1000;
   position: relative;
@@ -458,6 +458,10 @@ h3 {
   min-height: 80px;
   transform: translateY(var(--lobby-character-offset-y, 0px));
   overflow: visible;
+}
+
+.character-slot:not([data-is-current-user="true"]):hover {
+  transform: translateY(calc(var(--lobby-character-offset-y, 0px) - 4px));
 }
 
 .character-slot::before,
@@ -1313,6 +1317,46 @@ h3 {
   transition: all 0.3s ease;
 }
 
+.party-button p {
+  margin: 0;
+}
+
+.party-search-button {
+  left: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 45px;
+  padding: 0;
+  background:
+    linear-gradient(135deg, rgba(43, 99, 152, 0.94), rgba(45, 95, 188, 0.86)),
+    rgba(12, 43, 38, 0.4);
+}
+
+.party-search-button:hover {
+  background:
+    linear-gradient(135deg, rgba(34, 120, 93, 0.94), rgba(31, 124, 107, 0.86)),
+    rgba(11, 44, 39, 0.4);
+}
+
+.party-settings-button {
+  left: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 45px;
+  padding: 0;
+  background:
+    linear-gradient(135deg, rgba(111, 111, 111, 0.9), rgba(75, 75, 75, 0.82)),
+    rgba(89, 89, 89, 0.36);
+}
+
+.party-settings-button:hover {
+  background:
+    linear-gradient(135deg, rgba(71, 71, 71, 0.94), rgba(75, 75, 75, 0.82)),
+    rgba(89, 89, 89, 0.36);
+}
+
 .leaderboard-button {
   left: auto;
   right: 20px;
@@ -1717,6 +1761,270 @@ h3 {
   width: min(840px, 96vw);
 }
 
+.party-discovery-panel {
+  width: min(940px, 96vw);
+  max-height: min(760px, 92vh);
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  gap: 10px;
+}
+
+.party-discovery-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.party-discovery-search-row input {
+  box-sizing: border-box;
+}
+
+.party-discovery-input,
+.party-public-name-input {
+  width: 100%;
+  height: 48px;
+  background: rgba(0, 0, 0, 0.2);
+  border: none;
+  padding: 0 16px;
+  font-size: 12px;
+  letter-spacing: -1px;
+  color: #e2e8f0;
+  font-family: "Press Start 2P", "Lato", sans-serif;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+  box-shadow:
+    0px 5px black,
+    0px -5px black,
+    5px 0px black,
+    -5px 0px black,
+    inset 0px 5px #00000038;
+}
+
+.party-discovery-input:focus,
+.party-public-name-input:focus {
+  outline: none;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.party-discovery-input::placeholder,
+.party-public-name-input::placeholder {
+  color: #a0aec0;
+}
+
+.party-discovery-refresh {
+  min-height: 38px;
+  padding: 0 14px;
+  background: linear-gradient(135deg, #2d78d5, #1f59af);
+  color: #fff;
+}
+
+.party-discovery-status,
+.party-settings-status {
+  min-height: 18px;
+  color: #b7d8ff;
+  font-size: 12px;
+}
+
+.party-discovery-list {
+  display: grid;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.party-discovery-card {
+  border-radius: 12px;
+  border: 1px solid rgba(121, 182, 240, 0.3);
+  background: linear-gradient(150deg, rgba(13, 32, 59, 0.9), rgba(8, 20, 42, 0.94));
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.party-discovery-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.party-discovery-card-head > div:first-child {
+  display: grid;
+  gap: 12px;
+}
+
+.party-discovery-title {
+  margin: 0;
+  font-size: 16px;
+  color: #f2f8ff;
+  font-weight: 700;
+}
+
+.party-discovery-info-row {
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.party-discovery-meta {
+  color: #b7d8ff;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.party-discovery-meta-label {
+  color: #8eb8e8;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-weight: 600;
+}
+
+.party-discovery-meta-value {
+  color: #ecf6ff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.party-discovery-members {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.party-discovery-member {
+  border-radius: 8px;
+  border: 1px solid rgba(115, 180, 235, 0.28);
+  background: rgba(10, 24, 45, 0.76);
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.party-discovery-member img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.party-discovery-member-name {
+  color: #ecf6ff;
+  font-size: 11px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.party-discovery-member-char {
+  color: #a5cdf8;
+  font-size: 9px;
+  text-transform: capitalize;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.party-discovery-join {
+  justify-self: end;
+  min-height: 34px;
+  padding: 0 14px;
+  color: #fff;
+  background: linear-gradient(135deg, #2a9650, #1f7640);
+  align-self: start;
+}
+
+.party-settings-panel {
+  width: min(540px, 94vw);
+  display: grid;
+  gap: 10px;
+}
+
+.party-settings-panel .form-group {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.party-visibility-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #e2f3ff;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.party-visibility-toggle input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  accent-color: #4fc3f7;
+  appearance: none;
+  -webkit-appearance: none;
+  background: linear-gradient(135deg, rgba(15, 76, 129, 0.9), rgba(8, 48, 81, 0.9));
+  border: 2px solid rgba(79, 195, 247, 0.5);
+  border-radius: 3px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.party-visibility-toggle input[type="checkbox"]:hover {
+  border-color: rgba(79, 195, 247, 0.8);
+  box-shadow: 0 0 8px rgba(79, 195, 247, 0.3);
+}
+
+.party-visibility-toggle input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.92), rgba(56, 142, 60, 0.92));
+  border-color: rgba(129, 199, 132, 0.8);
+  box-shadow: 0 0 12px rgba(129, 199, 132, 0.4);
+}
+
+.party-visibility-toggle input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.party-public-name-label,
+.party-visibility-toggle-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #f7fafc;
+  font-size: 14px;
+}
+
+.party-settings-hint {
+  margin: 0;
+  color: #8eb8e8;
+  font-size: 11px;
+}
+
+.party-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.party-settings-save {
+  min-height: 34px;
+  padding: 0 14px;
+  color: #fff;
+  background: linear-gradient(135deg, #2a9650, #1f7640);
+}
+
 .leaderboard-list {
   display: grid;
   gap: 8px;
@@ -1777,19 +2085,19 @@ h3 {
 .leaderboard-row.top-1 {
   border-color: rgba(255, 215, 110, 0.58);
   box-shadow: 0 0 12px rgba(255, 215, 110, 0.18);
-  background: linear-gradient(145deg, rgba(77, 58, 11, 0.6), rgba(74, 54, 8, 0.6));
+  background: linear-gradient(145deg, rgba(77, 58, 11, 0.25), rgba(121, 93, 27, 0.25));
 }
 
 .leaderboard-row.top-3 {
   border-color: rgba(212, 220, 233, 0.55);
   box-shadow: 0 0 12px rgba(212, 220, 233, 0.14);
-  background: linear-gradient(145deg, rgba(32, 53, 79, 0.94), rgba(16, 36, 63, 0.94));
+  background: linear-gradient(145deg, rgba(62, 50, 13, 0.2), rgba(60, 48, 7, 0.2));
 }
 
 .leaderboard-row.top-2 {
   border-color: rgba(198, 137, 88, 0.56);
   box-shadow: 0 0 12px rgba(198, 137, 88, 0.16);
-  background: linear-gradient(145deg, rgba(38, 22, 12, 0.6), rgba(18, 10, 6, 0.6));
+  background: linear-gradient(145deg, rgba(98, 54, 27, 0.15), rgba(90, 49, 29, 0.15));
 }
 
 @keyframes leaderboardTopGlowDrift {
@@ -1870,6 +2178,14 @@ h3 {
     top: 68px;
     font-size: 9px;
     height: 30px;
+  }
+
+  .party-search-button {
+    left: 145px;
+  }
+
+  .party-settings-button {
+    left: 280px;
   }
 
   .leaderboard-row {
@@ -2084,6 +2400,19 @@ h3 {
 }
 
 @media (max-width: 480px) {
+  .party-search-button,
+  .party-settings-button {
+    top: 106px;
+  }
+
+  .party-settings-button {
+    left: 20px;
+  }
+
+  .party-discovery-members {
+    grid-template-columns: 1fr;
+  }
+
   .mode-1 .platform {
     --platform-width: clamp(190px, 45vw, 260px);
   }
@@ -2474,6 +2803,10 @@ h3 {
   padding: 0 12px;
   font-size: 10px;
   color: #fff;
+}
+
+.profile-slot-menu-btn[hidden] {
+  display: none;
 }
 
 .profile-slot-menu-btn.view {

@@ -8,7 +8,7 @@
       "compatibleModeIds": ["duels"],
       "compatibleVariantIds": ["duels-1v1", "duels-2v2", "duels-3v3"],
       "musicAsset": "/assets/main.mp3",
-      "mapSelectPreviewAsset": "/assets/lushy/gameBg.webp",
+      "mapSelectPreviewAsset": "/assets/lushy/preview.webp",
       "lobbyBgAsset": "/assets/lushy/lobbyBg.webp",
       "lobbyPlatformAsset": "/assets/lushy/lobbyPlatform.webp"
     },
@@ -80,8 +80,8 @@
               "y": -148.97343377306913,
               "radius": 86,
               "collectionRadius": 110,
-              "yieldAmount": 15,
-              "yieldIntervalMs": 3500,
+              "yieldAmount": 10,
+              "yieldIntervalMs": 4000,
               "maxStoredGold": 60
             },
             {
@@ -91,8 +91,8 @@
               "y": -148.39000645490847,
               "radius": 86,
               "collectionRadius": 110,
-              "yieldAmount": 15,
-              "yieldIntervalMs": 3500,
+              "yieldAmount": 10,
+              "yieldIntervalMs": 4000,
               "maxStoredGold": 60
             },
             {

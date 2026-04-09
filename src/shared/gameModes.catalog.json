@@ -60,7 +60,7 @@
       "id": "capture-flag",
       "label": "Capture the Flag",
       "description": "Steal the enemy flag and return it home.",
-      "artAsset": "/assets/capture-flag.webp",
+      "artAsset": "/assets/capture-the-flag.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
       "queueable": false,
       "implemented": false,
@@ -147,7 +147,7 @@
       "defaultVariantId": "bank-bust-3v3",
       "settings": {
         "vaultMaxHp": 50000,
-        "matchDurationMs": 180000,
+        "matchDurationMs": 200000,
         "respawnDelayMs": 3500,
         "respawnShieldMs": 3000
       },

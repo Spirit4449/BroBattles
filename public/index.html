@@ -56,6 +56,24 @@
       <p>Create Party</p>
     </button>
     <button
+      id="search-parties"
+      class="party-button party-search-button pixel-menu-button"
+      type="button"
+      aria-label="Search Parties"
+      title="Search Parties"
+    >
+      <img src="/assets/search.webp" alt="" width="20" height="20" />
+    </button>
+    <button
+      id="party-settings-button"
+      class="party-button party-settings-button pixel-menu-button hidden"
+      type="button"
+      aria-label="Party Settings"
+      title="Party Settings"
+    >
+      <img src="/assets/settings.webp" alt="" width="20" height="20" />
+    </button>
+    <button
       id="leaderboard-button"
       class="party-button leaderboard-button pixel-menu-button"
     >
@@ -366,6 +384,111 @@
           </button>
         </header>
         <div id="leaderboard-list" class="leaderboard-list"></div>
+      </section>
+    </div>
+
+    <div
+      id="party-discovery-overlay"
+      class="hidden trophy-overlay"
+      aria-hidden="true"
+    >
+      <div class="trophy-overlay-backdrop"></div>
+      <section
+        class="trophy-overlay-panel party-discovery-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="party-discovery-title"
+      >
+        <header class="trophy-overlay-head">
+          <div>
+            <h2 id="party-discovery-title">Discover Public Parties</h2>
+            <p>Search by party name, owner, or member username.</p>
+          </div>
+          <button
+            id="party-discovery-close"
+            class="pixel-menu-button trophy-overlay-close"
+            type="button"
+          >
+            Close
+          </button>
+        </header>
+        <div class="party-discovery-search-row">
+          <input
+            id="party-discovery-input"
+            class="party-discovery-input"
+            type="text"
+            maxlength="40"
+            placeholder="Search public parties"
+          />
+          <button
+            id="party-discovery-refresh"
+            class="pixel-menu-button party-discovery-refresh"
+            type="button"
+          >
+            Refresh
+          </button>
+        </div>
+        <div id="party-discovery-status" class="party-discovery-status"></div>
+        <div id="party-discovery-list" class="party-discovery-list"></div>
+      </section>
+    </div>
+
+    <div
+      id="party-settings-overlay"
+      class="hidden trophy-overlay"
+      aria-hidden="true"
+    >
+      <div class="trophy-overlay-backdrop"></div>
+      <section
+        class="trophy-overlay-panel party-settings-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="party-settings-title"
+      >
+        <header class="trophy-overlay-head">
+          <div>
+            <h2 id="party-settings-title">Party Settings</h2>
+            <p>Control visibility and discovery details for your party.</p>
+          </div>
+          <button
+            id="party-settings-close"
+            class="pixel-menu-button trophy-overlay-close"
+            type="button"
+          >
+            Close
+          </button>
+        </header>
+        <div id="party-settings-status" class="party-settings-status"></div>
+        <div class="form-group">
+          <label class="party-visibility-toggle" for="party-public-toggle">
+            <input id="party-public-toggle" type="checkbox" />
+            <span>Public Party</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="party-public-name-label" for="party-public-name">
+            Public Party Name
+          </label>
+          <input
+            id="party-public-name"
+            class="party-public-name-input"
+            type="text"
+            maxlength="32"
+            placeholder="Give your public party a name"
+          />
+        </div>
+        <p class="party-settings-hint">
+          Only public parties appear in discovery. Keep the name short and clear.
+        </p>
+        <div class="party-settings-actions">
+          <button
+            id="party-settings-save"
+            class="pixel-menu-button party-settings-save"
+            type="button"
+          >
+            Save Settings
+          </button>
+        </div>
       </section>
     </div>
 

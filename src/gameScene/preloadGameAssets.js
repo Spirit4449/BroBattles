@@ -139,7 +139,7 @@ export function preloadGameAssets({
   ]);
   scene.load.audio(
     "sfx-bankbust-turret-claim",
-    `${staticPath}/ui-sound/notification.mp3`,
+    `${staticPath}/bank-bust/turret-claim.mp3`,
   );
   scene.load.audio(
     "sfx-bankbust-mine-collect",

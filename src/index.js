@@ -12,12 +12,17 @@ import {
   initReadyToggle,
   setSlotLevelBadge,
 } from "./party.js";
-import { ensureSocketConnected, waitForConnect } from "./socket.js";
+import socket, { ensureSocketConnected, waitForConnect } from "./socket.js";
 import {
   initializeCharacterSelect,
   openCharacterSelect,
 } from "./characterLogic.js";
 import { getLobbyBgAsset } from "./maps/manifest";
+import {
+  getMapLabel,
+  getSelectionDisplayLabel,
+  normalizeGameSelection,
+} from "./lib/gameSelectionCatalog.js";
 import { initUISounds, playSound } from "./lib/uiSounds.js";
 import { showUiConfirm } from "./lib/uiConfirm.js";
 import "./styles/characterSelect.css";
@@ -41,6 +46,36 @@ const lobbyProfileState = {
 };
 
 let partySlotMenu = null;
+let __partyDiscoveryState = {
+  query: "",
+  loading: false,
+  lastResult: [],
+};
+let __partySettingsState = {
+  isOwner: false,
+  isPublic: false,
+  publicName: "",
+  visibilitySupported: true,
+};
+
+function escapeHtml(value) {
+  const raw = String(value ?? "");
+  return raw
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function getDiscoveryModeLabel(party) {
+  const selection = normalizeGameSelection({
+    modeId: party?.modeId,
+    modeVariantId: party?.modeVariantId,
+    mapId: party?.map,
+  });
+  return getSelectionDisplayLabel(selection);
+}
 
 function setProfilePopupMessage(text, isError = false) {
   const msg = document.getElementById("profile-message");
@@ -69,9 +104,9 @@ function ensurePartySlotMenu() {
   menu.innerHTML = `
     <div class="profile-slot-menu-head" id="party-slot-menu-name">Player</div>
     <div class="profile-slot-menu-actions">
-      <button type="button" class="profile-slot-menu-btn view pixel-menu-button" data-action="view">View Profile</button>
-      <button type="button" class="profile-slot-menu-btn owner pixel-menu-button" data-action="owner">Make Owner</button>
       <button type="button" class="profile-slot-menu-btn kick pixel-menu-button" data-action="kick">Kick</button>
+      <button type="button" class="profile-slot-menu-btn owner pixel-menu-button" data-action="owner">Make Owner</button>
+      <button type="button" class="profile-slot-menu-btn view pixel-menu-button" data-action="view">View Profile</button>
     </div>
   `;
   document.body.appendChild(menu);
@@ -468,9 +503,10 @@ function openPartySlotMenu(slot, anchorEvent, profilePopup) {
   const title = menu.querySelector("#party-slot-menu-name");
   if (title) {
     title.textContent =
-      playerName === party.ownerName ? `${playerName} (Owner)` : playerName;
+      playerName === party.ownerName ? `${playerName} 👑` : playerName;
   }
   if (viewBtn) {
+    viewBtn.hidden = false;
     viewBtn.onclick = async () => {
       menu.hidden = true;
       await handlePartyMemberAction("view", playerName, profilePopup);
@@ -571,6 +607,298 @@ function closeOverlay(id) {
   if (!overlay) return;
   overlay.classList.add("hidden");
   overlay.setAttribute("aria-hidden", "true");
+}
+
+function setPartyDiscoveryStatus(text, isError = false) {
+  const status = document.getElementById("party-discovery-status");
+  if (!status) return;
+  status.textContent = text || "";
+  status.style.color = isError ? "#ffb0b8" : "#b7d8ff";
+}
+
+function renderPartyDiscoveryList(parties) {
+  const container = document.getElementById("party-discovery-list");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (!Array.isArray(parties) || parties.length === 0) {
+    container.innerHTML =
+      '<p class="trophy-overlay-loading">No public parties found right now.</p>';
+    return;
+  }
+
+  parties.forEach((party) => {
+    const members = Array.isArray(party?.members) ? party.members : [];
+    const card = document.createElement("article");
+    card.className = "party-discovery-card";
+    const partyTitle = String(party?.publicName || "").trim();
+    const ownerName = String(party?.ownerName || "Unknown");
+    card.innerHTML = `
+      <div class="party-discovery-card-head">
+        <div>
+          <h3 class="party-discovery-title">${escapeHtml(
+            partyTitle || `${ownerName}'s Party`,
+          )}</h3>
+          <div class="party-discovery-info-row">
+            <div>
+              <div class="party-discovery-meta-label">Owner</div>
+              <div class="party-discovery-meta">
+                <img src="/assets/crown.webp" alt="" width="12" height="12" />
+                ${escapeHtml(ownerName)}
+              </div>
+            </div>
+            <div>
+              <div class="party-discovery-meta-label">Mode</div>
+              <div class="party-discovery-meta-value">${escapeHtml(
+                getDiscoveryModeLabel(party),
+              )}</div>
+            </div>
+            <div>
+              <div class="party-discovery-meta-label">Map</div>
+              <div class="party-discovery-meta-value">${escapeHtml(
+                getMapLabel(party?.map),
+              )}</div>
+            </div>
+            <div>
+              <div class="party-discovery-meta-label">Players</div>
+              <div class="party-discovery-meta-value">${members.length}</div>
+            </div>
+          </div>
+        </div>
+        <button type="button" class="pixel-menu-button party-discovery-join" data-party-id="${Number(
+          party?.partyId,
+        )}">Join</button>
+      </div>
+      <div class="party-discovery-members"></div>
+    `;
+
+    const memberWrap = card.querySelector(".party-discovery-members");
+    members.forEach((member) => {
+      const name = String(member?.name || "Player");
+      const charClass = String(member?.char_class || "ninja");
+      const entry = document.createElement("div");
+      entry.className = "party-discovery-member";
+      entry.innerHTML = `
+        <img src="/assets/${escapeHtml(charClass)}/body.webp" alt="${escapeHtml(
+          charClass,
+        )}" />
+        <div>
+          <div class="party-discovery-member-name">${escapeHtml(name)}</div>
+          <div class="party-discovery-member-char">${escapeHtml(charClass)}</div>
+        </div>
+      `;
+      memberWrap?.appendChild(entry);
+    });
+
+    const joinBtn = card.querySelector(".party-discovery-join");
+    joinBtn?.addEventListener("click", async () => {
+      const targetPartyId = Number(joinBtn.dataset.partyId);
+      if (!Number.isFinite(targetPartyId) || targetPartyId <= 0) return;
+      const currentPartyId = Number(checkIfInParty());
+      if (Number.isFinite(currentPartyId) && currentPartyId > 0) {
+        const ok = await showUiConfirm({
+          title: "Leave current party?",
+          message: "Joining this party will move you out of your current party.",
+          confirmLabel: "Join Party",
+        });
+        if (!ok) return;
+      }
+      window.location.href = `/party/${targetPartyId}`;
+    });
+
+    container.appendChild(card);
+  });
+}
+
+async function loadPartyDiscovery(query = "") {
+  if (__partyDiscoveryState.loading) return;
+  __partyDiscoveryState.loading = true;
+  setPartyDiscoveryStatus("Loading public parties...");
+  try {
+    const payload = await fetchLobbyJson("/party/discover", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: String(query || "").trim() }),
+    });
+    if (payload?.visibilitySupported === false) {
+      setPartyDiscoveryStatus(
+        "Party discovery is unavailable until the latest DB migration is applied.",
+        true,
+      );
+      renderPartyDiscoveryList([]);
+      return;
+    }
+    const parties = Array.isArray(payload?.parties) ? payload.parties : [];
+    __partyDiscoveryState.lastResult = parties;
+    setPartyDiscoveryStatus(
+      parties.length
+        ? `Found ${parties.length} public ${parties.length === 1 ? "party" : "parties"}.`
+        : "",
+    );
+    renderPartyDiscoveryList(parties);
+  } catch (error) {
+    setPartyDiscoveryStatus(error?.message || "Failed to load party list.", true);
+    renderPartyDiscoveryList([]);
+  } finally {
+    __partyDiscoveryState.loading = false;
+  }
+}
+
+async function openPartyDiscoveryOverlay() {
+  const input = document.getElementById("party-discovery-input");
+  const query = String(input?.value || __partyDiscoveryState.query || "").trim();
+  __partyDiscoveryState.query = query;
+  openOverlay("party-discovery-overlay");
+  await loadPartyDiscovery(query);
+}
+
+function setPartySettingsStatus(text, isError = false) {
+  const status = document.getElementById("party-settings-status");
+  if (!status) return;
+  status.textContent = text || "";
+  status.style.color = isError ? "#ffb0b8" : "#b7d8ff";
+}
+
+function syncPartySettingsButtonVisibility() {
+  const button = document.getElementById("party-settings-button");
+  if (!button) return;
+  const inParty = !!checkIfInParty();
+  if (!inParty) {
+    button.classList.add("hidden");
+    return;
+  }
+  const context = getPartyInteractionContext();
+  const currentUserName = String(userData?.name || "");
+  const isOwner =
+    String(context?.ownerName || "") === currentUserName && !!currentUserName;
+  __partySettingsState.isOwner = isOwner;
+  button.classList.toggle("hidden", !isOwner);
+}
+
+async function loadPartySettings() {
+  const partyId = Number(checkIfInParty());
+  if (!Number.isFinite(partyId) || partyId <= 0) return null;
+
+  const payload = await fetchLobbyJson("/party/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ partyId }),
+  });
+
+  __partySettingsState = {
+    isOwner: !!payload?.isOwner,
+    isPublic: !!payload?.isPublic,
+    publicName: String(payload?.publicName || ""),
+    visibilitySupported: payload?.visibilitySupported !== false,
+  };
+
+  const toggle = document.getElementById("party-public-toggle");
+  const nameInput = document.getElementById("party-public-name");
+  const saveBtn = document.getElementById("party-settings-save");
+  if (toggle) toggle.checked = __partySettingsState.isPublic;
+  if (nameInput) nameInput.value = __partySettingsState.publicName;
+  const canEdit = __partySettingsState.isOwner && __partySettingsState.visibilitySupported;
+  if (toggle) toggle.disabled = !canEdit;
+  if (nameInput) nameInput.disabled = !canEdit || !toggle?.checked;
+  if (saveBtn) saveBtn.disabled = !canEdit;
+
+  if (!__partySettingsState.visibilitySupported) {
+    setPartySettingsStatus(
+      "Party visibility requires the latest DB migration before this can be used.",
+      true,
+    );
+  } else if (!__partySettingsState.isOwner) {
+    setPartySettingsStatus("Only the party owner can edit these settings.", true);
+  } else {
+    setPartySettingsStatus("");
+  }
+
+  return payload;
+}
+
+async function openPartySettingsOverlay() {
+  if (!checkIfInParty()) return;
+  openOverlay("party-settings-overlay");
+  try {
+    await loadPartySettings();
+  } catch (error) {
+    setPartySettingsStatus(error?.message || "Failed to load party settings.", true);
+  }
+}
+
+async function savePartySettings() {
+  const partyId = Number(checkIfInParty());
+  if (!Number.isFinite(partyId) || partyId <= 0) return;
+  const toggle = document.getElementById("party-public-toggle");
+  const nameInput = document.getElementById("party-public-name");
+  const isPublic = !!toggle?.checked;
+  const publicName = String(nameInput?.value || "").trim();
+
+  if (isPublic && publicName.length < 3) {
+    setPartySettingsStatus("Public party names need at least 3 characters.", true);
+    return;
+  }
+
+  try {
+    const payload = await fetchLobbyJson("/party/settings/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        partyId,
+        isPublic,
+        publicName,
+      }),
+    });
+    __partySettingsState.isPublic = !!payload?.settings?.isPublic;
+    __partySettingsState.publicName = String(payload?.settings?.publicName || "");
+    setPartySettingsStatus("Party settings updated.");
+    sonner("Party settings updated", undefined, "success");
+  } catch (error) {
+    setPartySettingsStatus(error?.message || "Could not save settings.", true);
+  }
+}
+
+function wirePartyOverlayControls() {
+  const discoveryClose = document.getElementById("party-discovery-close");
+  discoveryClose?.addEventListener("click", () =>
+    closeOverlay("party-discovery-overlay"),
+  );
+  document
+    .querySelector("#party-discovery-overlay .trophy-overlay-backdrop")
+    ?.addEventListener("click", () => closeOverlay("party-discovery-overlay"));
+
+  const discoveryRefresh = document.getElementById("party-discovery-refresh");
+  discoveryRefresh?.addEventListener("click", () => {
+    const input = document.getElementById("party-discovery-input");
+    __partyDiscoveryState.query = String(input?.value || "").trim();
+    void loadPartyDiscovery(__partyDiscoveryState.query);
+  });
+  const discoveryInput = document.getElementById("party-discovery-input");
+  discoveryInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    __partyDiscoveryState.query = String(discoveryInput.value || "").trim();
+    void loadPartyDiscovery(__partyDiscoveryState.query);
+  });
+
+  const settingsClose = document.getElementById("party-settings-close");
+  settingsClose?.addEventListener("click", () => closeOverlay("party-settings-overlay"));
+  document
+    .querySelector("#party-settings-overlay .trophy-overlay-backdrop")
+    ?.addEventListener("click", () => closeOverlay("party-settings-overlay"));
+
+  const settingsSave = document.getElementById("party-settings-save");
+  settingsSave?.addEventListener("click", () => {
+    void savePartySettings();
+  });
+
+  const partyPublicToggle = document.getElementById("party-public-toggle");
+  const partyPublicName = document.getElementById("party-public-name");
+  partyPublicToggle?.addEventListener("change", () => {
+    if (partyPublicName) {
+      partyPublicName.disabled = !partyPublicToggle.checked;
+    }
+  });
 }
 
 function setTrophyClaimBadge(count) {
@@ -1006,7 +1334,9 @@ async function bootstrapPartyData(partyId) {
         selection: data?.selection || null,
         mode: data?.party?.mode,
         map: data?.selection?.mapId ?? data?.party?.map,
+        ownerName: data?.ownerName || null,
       });
+    syncPartySettingsButtonVisibility();
     sonner("Joined party", undefined, undefined, undefined, {
       duration: 1500,
       sound: "notification",
@@ -1035,6 +1365,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const characterBodyElement = document.getElementById("sprite");
   const characterSelect = document.getElementById("your-slot-1");
   const createPartyButton = document.getElementById("create-party");
+  const searchPartiesButton = document.getElementById("search-parties");
+  const partySettingsButton = document.getElementById("party-settings-button");
   const inviteStatus = document.querySelectorAll(".invite");
 
   const coinCount = document.getElementById("coin-count");
@@ -1115,6 +1447,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     ?.addEventListener("click", () => closeOverlay("leaderboard-overlay"));
 
   refreshTrophyClaimAvailability();
+  wirePartyOverlayControls();
+
+  searchPartiesButton?.addEventListener("click", () => {
+    playSound("cursor4", 0.4);
+    void openPartyDiscoveryOverlay();
+  });
+  partySettingsButton?.addEventListener("click", () => {
+    playSound("cursor4", 0.4);
+    void openPartySettingsOverlay();
+  });
 
   // Initialize character select UI
   initializeCharacterSelect(userData);
@@ -1132,16 +1474,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
       const playerName = String(slot.dataset.playerName || "").trim();
       if (!playerName || playerName.toLowerCase().startsWith("random")) return;
-      const wantsProfile = !!e.target.closest(
-        ".character-sprite, .username, .slot-level-badge",
-      );
-      if (wantsProfile) {
-        playSound("cursor4", 0.35);
-        profilePopup?.open?.({ username: playerName });
-        return;
-      }
       const inParty = !!checkIfInParty();
       if (inParty) {
+        e.preventDefault();
+        e.stopPropagation();
         playSound("cursor4", 0.35);
         openPartySlotMenu(slot, e, profilePopup);
         return;
@@ -1200,6 +1536,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
       initReadyToggle();
     } catch {}
+
+    try {
+      await loadPartySettings();
+    } catch (_) {}
+    syncPartySettingsButtonVisibility();
   } else {
     createPartyButton.addEventListener("click", createParty);
 
@@ -1234,7 +1575,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
       initReadyToggle();
     } catch {}
+    syncPartySettingsButtonVisibility();
   }
+
+  socket.off("party:members", syncPartySettingsButtonVisibility);
+  socket.on("party:members", syncPartySettingsButtonVisibility);
 });
 
 document.addEventListener("DOMContentLoaded", async () => {

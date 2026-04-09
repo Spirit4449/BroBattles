@@ -17,6 +17,15 @@ function createPartyStateService({ db, io }) {
     );
   }
 
+  function isMissingPartyVisibilityColumn(error) {
+    return (
+      error?.code === "ER_BAD_FIELD_ERROR" &&
+      /is_public|public_name/i.test(
+        String(error?.sqlMessage || error?.message || ""),
+      )
+    );
+  }
+
   async function updatePartySelectionWithFallback(partyId, normalizedSelection) {
     const legacyMode = selectionToLegacyMode(
       normalizedSelection.modeId,
@@ -50,25 +59,52 @@ function createPartyStateService({ db, io }) {
       let insertParty;
       try {
         insertParty = await q(
-          "INSERT INTO parties (status, mode, map, mode_id, mode_variant_id) VALUES (?, ?, ?, ?, ?)",
+          "INSERT INTO parties (status, mode, map, mode_id, mode_variant_id, is_public, public_name) VALUES (?, ?, ?, ?, ?, ?, ?)",
           [
             PARTY_STATUS.IDLE,
             selectionToLegacyMode(DEFAULT_MODE_ID, DEFAULT_VARIANT_ID),
             DEFAULT_MAP_ID,
             DEFAULT_MODE_ID,
             DEFAULT_VARIANT_ID,
+            0,
+            null,
           ],
         );
       } catch (error) {
-        if (!isMissingModeSelectionColumn(error)) throw error;
-        insertParty = await q(
-          "INSERT INTO parties (status, mode, map) VALUES (?, ?, ?)",
-          [
-            PARTY_STATUS.IDLE,
-            selectionToLegacyMode(DEFAULT_MODE_ID, DEFAULT_VARIANT_ID),
-            DEFAULT_MAP_ID,
-          ],
-        );
+        if (!isMissingModeSelectionColumn(error)) {
+          if (!isMissingPartyVisibilityColumn(error)) throw error;
+          try {
+            insertParty = await q(
+              "INSERT INTO parties (status, mode, map, mode_id, mode_variant_id) VALUES (?, ?, ?, ?, ?)",
+              [
+                PARTY_STATUS.IDLE,
+                selectionToLegacyMode(DEFAULT_MODE_ID, DEFAULT_VARIANT_ID),
+                DEFAULT_MAP_ID,
+                DEFAULT_MODE_ID,
+                DEFAULT_VARIANT_ID,
+              ],
+            );
+          } catch (nestedError) {
+            if (!isMissingModeSelectionColumn(nestedError)) throw nestedError;
+            insertParty = await q(
+              "INSERT INTO parties (status, mode, map) VALUES (?, ?, ?)",
+              [
+                PARTY_STATUS.IDLE,
+                selectionToLegacyMode(DEFAULT_MODE_ID, DEFAULT_VARIANT_ID),
+                DEFAULT_MAP_ID,
+              ],
+            );
+          }
+        } else {
+          insertParty = await q(
+            "INSERT INTO parties (status, mode, map) VALUES (?, ?, ?)",
+            [
+              PARTY_STATUS.IDLE,
+              selectionToLegacyMode(DEFAULT_MODE_ID, DEFAULT_VARIANT_ID),
+              DEFAULT_MAP_ID,
+            ],
+          );
+        }
       }
       const partyId = insertParty.insertId;
       await q(
@@ -193,6 +229,67 @@ function createPartyStateService({ db, io }) {
     );
     await updateOrDeleteParty(io, db, partyId);
     return { ok: true };
+  }
+
+  async function setPartyVisibility({
+    partyId,
+    actorName,
+    isPublic,
+    publicName,
+  }) {
+    if (!partyId || !actorName) {
+      return { ok: false, error: "Missing party action data." };
+    }
+
+    const ownerName = await getPartyOwnerName(partyId);
+    if (ownerName !== actorName) {
+      return { ok: false, error: "Only the party owner can update party settings." };
+    }
+
+    const normalizedPublic = !!isPublic;
+    const normalizedName = String(publicName || "").trim();
+    if (normalizedPublic && normalizedName.length < 3) {
+      return {
+        ok: false,
+        error: "Public party names must be at least 3 characters.",
+      };
+    }
+    if (normalizedPublic && normalizedName.length > 32) {
+      return {
+        ok: false,
+        error: "Public party names must be 32 characters or fewer.",
+      };
+    }
+
+    try {
+      await db.runQuery(
+        "UPDATE parties SET is_public = ?, public_name = ? WHERE party_id = ?",
+        [normalizedPublic ? 1 : 0, normalizedPublic ? normalizedName : null, partyId],
+      );
+    } catch (error) {
+      if (isMissingPartyVisibilityColumn(error)) {
+        return {
+          ok: false,
+          statusCode: 500,
+          error:
+            "Party visibility columns are missing. Apply the party discovery migration first.",
+        };
+      }
+      throw error;
+    }
+
+    await updateOrDeleteParty(io, db, partyId);
+    const rows = await db.runQuery(
+      "SELECT is_public, public_name FROM parties WHERE party_id = ? LIMIT 1",
+      [partyId],
+    );
+    return {
+      ok: true,
+      settings: {
+        isPublic: Number(rows?.[0]?.is_public || 0) === 1,
+        publicName: String(rows?.[0]?.public_name || "").trim(),
+      },
+    };
   }
 
   async function joinPartyAndGetData({ partyId, username }) {
@@ -335,6 +432,7 @@ function createPartyStateService({ db, io }) {
     leaveParty,
     kickMember,
     makeOwner,
+    setPartyVisibility,
     joinPartyAndGetData,
   };
 }

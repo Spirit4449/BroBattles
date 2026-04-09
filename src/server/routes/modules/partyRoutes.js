@@ -119,6 +119,9 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
         capacity: result.capacity,
         members: membersForEmit,
         ownerName: result.ownerName || null,
+        isOwner: String(result.ownerName || "") === String(username || ""),
+        isPublic: Number(result.party?.is_public || 0) === 1,
+        publicName: String(result.party?.public_name || "").trim(),
         viewer: username,
       });
       console.log("[party] /partydata response sent", {
@@ -240,6 +243,83 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
       return res.json({ success: true });
     } catch (error) {
       console.error("[party] /party/make-owner error", error);
+      return res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  app.post("/party/settings", async (req, res) => {
+    try {
+      const user = await requireCurrentUser(req, res);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+      const partyId = Number(req.body?.partyId);
+      if (!Number.isFinite(partyId) || partyId <= 0) {
+        return res.status(400).json({ error: "partyId is required" });
+      }
+
+      const result = await partyRoute.getPartySettingsView({
+        username: user.name,
+        partyId,
+      });
+      if (!result.ok) {
+        return res.status(result.statusCode || 400).json(result.payload || {});
+      }
+      return res.json(result.payload);
+    } catch (error) {
+      console.error("[party] /party/settings error", error);
+      return res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  app.post("/party/settings/update", async (req, res) => {
+    try {
+      const user = await requireCurrentUser(req, res);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+      const partyId = Number(req.body?.partyId);
+      const isPublic = req.body?.isPublic === true;
+      const publicName = String(req.body?.publicName || "").trim();
+      if (!Number.isFinite(partyId) || partyId <= 0) {
+        return res.status(400).json({ error: "partyId is required" });
+      }
+
+      const result = await partyState.setPartyVisibility({
+        partyId,
+        actorName: user.name,
+        isPublic,
+        publicName,
+      });
+      if (!result.ok) {
+        const statusCode = Number(result.statusCode) || 403;
+        return res.status(statusCode).json({
+          error: result.error || "Unable to update party settings",
+        });
+      }
+      return res.json({
+        success: true,
+        settings: result.settings,
+      });
+    } catch (error) {
+      console.error("[party] /party/settings/update error", error);
+      return res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  app.post("/party/discover", async (req, res) => {
+    try {
+      const user = await requireCurrentUser(req, res);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+
+      const query = String(req.body?.query || "").trim();
+      const result = await partyRoute.discoverPublicParties({
+        query,
+        requesterName: user.name,
+        limit: 30,
+      });
+      if (!result.ok) {
+        return res.status(result.statusCode || 400).json(result.payload || {});
+      }
+      return res.json(result.payload);
+    } catch (error) {
+      console.error("[party] /party/discover error", error);
       return res.status(500).json({ error: "Internal error" });
     }
   });
