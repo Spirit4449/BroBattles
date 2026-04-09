@@ -1235,6 +1235,7 @@ class GameScene extends Phaser.Scene {
               .length,
           );
           if (
+            isLiveGame &&
             playerData.loaded === true &&
             Number.isFinite(playerData.x) &&
             Number.isFinite(playerData.y)
@@ -1286,6 +1287,7 @@ class GameScene extends Phaser.Scene {
             .length,
         );
         if (
+          isLiveGame &&
           playerData.loaded === true &&
           Number.isFinite(playerData.x) &&
           Number.isFinite(playerData.y)

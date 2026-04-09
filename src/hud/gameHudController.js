@@ -177,8 +177,14 @@ export function createGameHudController({
 
     const statsRow = document.createElement("div");
     statsRow.className = "bs-card-stats";
-    const healthValue = Math.max(0, Math.round(Number(player?.stats?.health) || 0));
-    const damageValue = Math.max(0, Math.round(Number(player?.stats?.damage) || 0));
+    const healthValue = Math.max(
+      0,
+      Math.round(Number(player?.stats?.health) || 0),
+    );
+    const damageValue = Math.max(
+      0,
+      Math.round(Number(player?.stats?.damage) || 0),
+    );
     const specialValue = Math.max(
       0,
       Math.round(Number(player?.stats?.specialDamage) || 0),
@@ -226,7 +232,9 @@ export function createGameHudController({
       if (!cards.length) continue;
 
       const colWidth =
-        Number(col.clientWidth) || Number(col.getBoundingClientRect().width) || 0;
+        Number(col.clientWidth) ||
+        Number(col.getBoundingClientRect().width) ||
+        0;
       if (colWidth <= 0) continue;
 
       const styles = window.getComputedStyle(col);

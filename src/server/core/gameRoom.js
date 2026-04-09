@@ -26,6 +26,7 @@ const {
   requiresMeleeFacingCheck,
   getKnockback,
 } = require("./gameRoom/abilityRuntimeManager");
+const { getMapObjectiveLayout } = require("../helpers/gameSelectionCatalog");
 
 class GameRoom {
   constructor(matchId, matchData, { io, db, runtimeConfig = null }) {
@@ -232,7 +233,16 @@ class GameRoom {
     }
 
     if (mapId === 4) {
-      const base = team === "team1" ? { x: 290, y: 835 } : { x: 2710, y: 835 };
+      const layout = getMapObjectiveLayout(mapId, "bankBust") || null;
+      const respawn = layout?.respawnPoints?.[team] || null;
+      const base =
+        respawn &&
+        Number.isFinite(Number(respawn.x)) &&
+        Number.isFinite(Number(respawn.y))
+          ? { x: Number(respawn.x), y: Number(respawn.y) }
+          : team === "team1"
+            ? { x: 151, y: 100 }
+            : { x: 3455, y: 100 };
       const dxBySize = {
         1: [0],
         2: [-65, 65],

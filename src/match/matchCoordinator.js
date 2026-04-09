@@ -175,6 +175,7 @@ export function createMatchCoordinator(config) {
         teamRoster.length,
       );
       if (
+        getIsLiveGame() &&
         pd.loaded === true &&
         Number.isFinite(pd.x) &&
         Number.isFinite(pd.y)
@@ -598,9 +599,24 @@ export function createMatchCoordinator(config) {
       );
       const mergedRoster = gameData.players.map((p) => {
         const live = initByName.get(p.name) || null;
+        const mergedStats = {
+          ...(p?.stats && typeof p.stats === "object" ? p.stats : {}),
+          ...(live?.stats && typeof live.stats === "object" ? live.stats : {}),
+        };
+        if (!Number.isFinite(Number(mergedStats.damage))) {
+          const liveDamage = Number(live?.baseDamage);
+          if (Number.isFinite(liveDamage)) mergedStats.damage = liveDamage;
+        }
+        if (!Number.isFinite(Number(mergedStats.specialDamage))) {
+          const liveSpecialDamage = Number(live?.specialDamage);
+          if (Number.isFinite(liveSpecialDamage)) {
+            mergedStats.specialDamage = liveSpecialDamage;
+          }
+        }
         return {
           ...p,
           ...(live || {}),
+          stats: mergedStats,
           name: p.name,
           team: p.team,
           char_class: p.char_class,

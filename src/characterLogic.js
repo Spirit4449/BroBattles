@@ -74,20 +74,10 @@ export function initializeCharacterSelect(userData) {
   const charactersGrid = document.createElement("div");
   charactersGrid.className = "characters-grid";
 
-  const selectedCharacter = String(userData?.char_class || "")
-    .trim()
-    .toLowerCase();
   const characters = getAllCharacters();
-  characters
-    .filter(
-      (char) =>
-        String(char || "")
-          .trim()
-          .toLowerCase() !== selectedCharacter,
-    )
-    .forEach((char) =>
-      charactersGrid.appendChild(createCharacterCard(char, userData)),
-    );
+  characters.forEach((char) =>
+    charactersGrid.appendChild(createCharacterCard(char, userData)),
+  );
 
   const mountCharacterPopup = () => {
     popupShell.mount({

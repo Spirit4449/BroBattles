@@ -47,9 +47,7 @@ function initializeSpawnPositions(room) {
     p.spawnIndex = spawnIndex;
     p.loaded =
       p.loaded === true ||
-      (p._sceneReady === true &&
-        Number.isFinite(p.x) &&
-        Number.isFinite(p.y));
+      (p._sceneReady === true && Number.isFinite(p.x) && Number.isFinite(p.y));
   }
 }
 
@@ -89,7 +87,13 @@ function sendGameStateToPlayer(room, socket) {
         maxSuperCharge: Number.isFinite(p?.maxSuperCharge)
           ? p.maxSuperCharge
           : 100,
-        stats: { health: Number.isFinite(p?.maxHealth) ? p.maxHealth : null },
+        stats: {
+          health: Number.isFinite(p?.maxHealth) ? p.maxHealth : null,
+          damage: Number.isFinite(p?.baseDamage) ? p.baseDamage : null,
+          specialDamage: Number.isFinite(p?.specialDamage)
+            ? p.specialDamage
+            : null,
+        },
         level: Number.isFinite(p?.level) ? p.level : 1,
         isAlive: p ? p.isAlive !== false : true,
         spawnIndex: computeSpawnIndex(room, mp.name, mp.team),
