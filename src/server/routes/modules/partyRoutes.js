@@ -1,7 +1,9 @@
 const { emitRoster } = require("../../helpers/party");
 const { createPartyStateService } = require("../../services/partyStateService");
 const { createPartyRouteService } = require("../../services/partyRouteService");
-const { normalizeSelectionFromRow } = require("../../helpers/gameSelectionCatalog");
+const {
+  normalizeSelectionFromRow,
+} = require("../../helpers/gameSelectionCatalog");
 
 function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
   const partyState = createPartyStateService({ db, io });
@@ -127,7 +129,9 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
       console.log("[party] /partydata response sent", {
         username,
         partyId,
-        emittedMemberCount: Array.isArray(membersForEmit) ? membersForEmit.length : 0,
+        emittedMemberCount: Array.isArray(membersForEmit)
+          ? membersForEmit.length
+          : 0,
         selection,
       });
     } catch (err) {
@@ -187,7 +191,9 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
       const partyId = Number(req.body?.partyId);
       const targetName = String(req.body?.targetName || "").trim();
       if (!Number.isFinite(partyId) || partyId <= 0 || !targetName) {
-        return res.status(400).json({ error: "partyId and targetName are required" });
+        return res
+          .status(400)
+          .json({ error: "partyId and targetName are required" });
       }
       const result = await partyState.kickMember({
         partyId,
@@ -195,7 +201,9 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
         targetName,
       });
       if (!result.ok) {
-        return res.status(403).json({ error: result.error || "Unable to kick member" });
+        return res
+          .status(403)
+          .json({ error: result.error || "Unable to kick member" });
       }
       try {
         const rows = await db.runQuery(
@@ -228,7 +236,9 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
       const partyId = Number(req.body?.partyId);
       const targetName = String(req.body?.targetName || "").trim();
       if (!Number.isFinite(partyId) || partyId <= 0 || !targetName) {
-        return res.status(400).json({ error: "partyId and targetName are required" });
+        return res
+          .status(400)
+          .json({ error: "partyId and targetName are required" });
       }
       const result = await partyState.makeOwner({
         partyId,

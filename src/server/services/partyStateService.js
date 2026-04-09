@@ -13,7 +13,9 @@ function createPartyStateService({ db, io }) {
   function isMissingModeSelectionColumn(error) {
     return (
       error?.code === "ER_BAD_FIELD_ERROR" &&
-      /mode_id|mode_variant_id/i.test(String(error?.sqlMessage || error?.message || ""))
+      /mode_id|mode_variant_id/i.test(
+        String(error?.sqlMessage || error?.message || ""),
+      )
     );
   }
 
@@ -26,7 +28,10 @@ function createPartyStateService({ db, io }) {
     );
   }
 
-  async function updatePartySelectionWithFallback(partyId, normalizedSelection) {
+  async function updatePartySelectionWithFallback(
+    partyId,
+    normalizedSelection,
+  ) {
     const legacyMode = selectionToLegacyMode(
       normalizedSelection.modeId,
       normalizedSelection.modeVariantId,
@@ -200,7 +205,10 @@ function createPartyStateService({ db, io }) {
     }
     const ownerName = await getPartyOwnerName(partyId);
     if (ownerName !== actorName) {
-      return { ok: false, error: "Only the party owner can transfer ownership." };
+      return {
+        ok: false,
+        error: "Only the party owner can transfer ownership.",
+      };
     }
     if (ownerName === targetName) {
       return { ok: true };
@@ -243,7 +251,10 @@ function createPartyStateService({ db, io }) {
 
     const ownerName = await getPartyOwnerName(partyId);
     if (ownerName !== actorName) {
-      return { ok: false, error: "Only the party owner can update party settings." };
+      return {
+        ok: false,
+        error: "Only the party owner can update party settings.",
+      };
     }
 
     const normalizedPublic = !!isPublic;
@@ -264,7 +275,11 @@ function createPartyStateService({ db, io }) {
     try {
       await db.runQuery(
         "UPDATE parties SET is_public = ?, public_name = ? WHERE party_id = ?",
-        [normalizedPublic ? 1 : 0, normalizedPublic ? normalizedName : null, partyId],
+        [
+          normalizedPublic ? 1 : 0,
+          normalizedPublic ? normalizedName : null,
+          partyId,
+        ],
       );
     } catch (error) {
       if (isMissingPartyVisibilityColumn(error)) {
@@ -313,9 +328,8 @@ function createPartyStateService({ db, io }) {
 
       const party = partyRows[0];
       const selection = normalizeSelectionFromRow(party || {});
-      const { total: totalCap, perTeam: perTeamCap } = capacityFromSelection(
-        selection,
-      );
+      const { total: totalCap, perTeam: perTeamCap } =
+        capacityFromSelection(selection);
 
       const [existing] = await conn.query(
         "SELECT team FROM party_members WHERE party_id = ? AND name = ? LIMIT 1",

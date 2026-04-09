@@ -698,7 +698,8 @@ function renderPartyDiscoveryList(parties) {
       if (Number.isFinite(currentPartyId) && currentPartyId > 0) {
         const ok = await showUiConfirm({
           title: "Leave current party?",
-          message: "Joining this party will move you out of your current party.",
+          message:
+            "Joining this party will move you out of your current party.",
           confirmLabel: "Join Party",
         });
         if (!ok) return;
@@ -737,7 +738,10 @@ async function loadPartyDiscovery(query = "") {
     );
     renderPartyDiscoveryList(parties);
   } catch (error) {
-    setPartyDiscoveryStatus(error?.message || "Failed to load party list.", true);
+    setPartyDiscoveryStatus(
+      error?.message || "Failed to load party list.",
+      true,
+    );
     renderPartyDiscoveryList([]);
   } finally {
     __partyDiscoveryState.loading = false;
@@ -746,7 +750,9 @@ async function loadPartyDiscovery(query = "") {
 
 async function openPartyDiscoveryOverlay() {
   const input = document.getElementById("party-discovery-input");
-  const query = String(input?.value || __partyDiscoveryState.query || "").trim();
+  const query = String(
+    input?.value || __partyDiscoveryState.query || "",
+  ).trim();
   __partyDiscoveryState.query = query;
   openOverlay("party-discovery-overlay");
   await loadPartyDiscovery(query);
@@ -797,7 +803,8 @@ async function loadPartySettings() {
   const saveBtn = document.getElementById("party-settings-save");
   if (toggle) toggle.checked = __partySettingsState.isPublic;
   if (nameInput) nameInput.value = __partySettingsState.publicName;
-  const canEdit = __partySettingsState.isOwner && __partySettingsState.visibilitySupported;
+  const canEdit =
+    __partySettingsState.isOwner && __partySettingsState.visibilitySupported;
   if (toggle) toggle.disabled = !canEdit;
   if (nameInput) nameInput.disabled = !canEdit || !toggle?.checked;
   if (saveBtn) saveBtn.disabled = !canEdit;
@@ -808,7 +815,10 @@ async function loadPartySettings() {
       true,
     );
   } else if (!__partySettingsState.isOwner) {
-    setPartySettingsStatus("Only the party owner can edit these settings.", true);
+    setPartySettingsStatus(
+      "Only the party owner can edit these settings.",
+      true,
+    );
   } else {
     setPartySettingsStatus("");
   }
@@ -822,7 +832,10 @@ async function openPartySettingsOverlay() {
   try {
     await loadPartySettings();
   } catch (error) {
-    setPartySettingsStatus(error?.message || "Failed to load party settings.", true);
+    setPartySettingsStatus(
+      error?.message || "Failed to load party settings.",
+      true,
+    );
   }
 }
 
@@ -835,7 +848,10 @@ async function savePartySettings() {
   const publicName = String(nameInput?.value || "").trim();
 
   if (isPublic && publicName.length < 3) {
-    setPartySettingsStatus("Public party names need at least 3 characters.", true);
+    setPartySettingsStatus(
+      "Public party names need at least 3 characters.",
+      true,
+    );
     return;
   }
 
@@ -850,7 +866,9 @@ async function savePartySettings() {
       }),
     });
     __partySettingsState.isPublic = !!payload?.settings?.isPublic;
-    __partySettingsState.publicName = String(payload?.settings?.publicName || "");
+    __partySettingsState.publicName = String(
+      payload?.settings?.publicName || "",
+    );
     setPartySettingsStatus("Party settings updated.");
     sonner("Party settings updated", undefined, "success");
   } catch (error) {
@@ -882,7 +900,9 @@ function wirePartyOverlayControls() {
   });
 
   const settingsClose = document.getElementById("party-settings-close");
-  settingsClose?.addEventListener("click", () => closeOverlay("party-settings-overlay"));
+  settingsClose?.addEventListener("click", () =>
+    closeOverlay("party-settings-overlay"),
+  );
   document
     .querySelector("#party-settings-overlay .trophy-overlay-backdrop")
     ?.addEventListener("click", () => closeOverlay("party-settings-overlay"));

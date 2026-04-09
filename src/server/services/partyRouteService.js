@@ -1,6 +1,8 @@
 const { capacityFromSelection } = require("../helpers/utils");
 const { selectPartyById, getPartyOwnerName } = require("../helpers/party");
-const { normalizeSelectionFromRow } = require("../helpers/gameSelectionCatalog");
+const {
+  normalizeSelectionFromRow,
+} = require("../helpers/gameSelectionCatalog");
 
 function createPartyRouteService({ db }) {
   function isMissingPartyVisibilityColumn(error) {
@@ -229,17 +231,16 @@ function createPartyRouteService({ db }) {
     }
 
     if (requesterName) {
-      parties = parties.filter((party) =>
-        !party.members.some((member) => member.name === requesterName),
+      parties = parties.filter(
+        (party) =>
+          !party.members.some((member) => member.name === requesterName),
       );
     }
 
-    parties = parties
-      .slice(0, maxRows)
-      .map((party) => ({
-        ...party,
-        membersCount: party.members.length,
-      }));
+    parties = parties.slice(0, maxRows).map((party) => ({
+      ...party,
+      membersCount: party.members.length,
+    }));
 
     return {
       ok: true,
