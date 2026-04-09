@@ -70,7 +70,7 @@ const MAP_LAYOUT_CONFIG = {
     },
     {
       textureKey: "bank-bust-staircase",
-      x: 1294.03,
+      x: 1254.03,
       y: 350.69,
       scaleX: 1,
       scaleY: 1,
@@ -79,7 +79,7 @@ const MAP_LAYOUT_CONFIG = {
     },
     {
       textureKey: "bank-bust-staircase",
-      x: 2305.97,
+      x: 2345.97,
       y: 350.69,
       scaleX: 1,
       scaleY: 1,
@@ -293,14 +293,14 @@ const MAP_LAYOUT_CONFIG = {
       collision: { up: true, down: true, left: true, right: true },
     },
     {
-      x: 1248.87,
+      x: 1208.87,
       y: 397.55,
       width: 67.17,
       height: 26,
       collision: { up: true, down: true, left: true, right: true },
     },
     {
-      x: 1182.91,
+      x: 1142.91,
       y: 429.51,
       width: 61.61,
       height: 27.19,
@@ -349,14 +349,14 @@ const MAP_LAYOUT_CONFIG = {
       collision: { up: true, down: true, left: true, right: true },
     },
     {
-      x: 2351.13,
+      x: 2391.13,
       y: 397.55,
       width: 67.17,
       height: 29.79,
       collision: { up: true, down: true, left: true, right: true },
     },
     {
-      x: 2417.09,
+      x: 2457.09,
       y: 429.51,
       width: 61.61,
       height: 27.19,

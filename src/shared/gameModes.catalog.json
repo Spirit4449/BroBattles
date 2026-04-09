@@ -147,7 +147,7 @@
       "defaultVariantId": "bank-bust-3v3",
       "settings": {
         "vaultMaxHp": 50000,
-        "matchDurationMs": 200000,
+        "matchDurationMs": 210000,
         "respawnDelayMs": 3500,
         "respawnShieldMs": 3000
       },

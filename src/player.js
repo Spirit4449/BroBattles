@@ -1305,6 +1305,12 @@ export function handlePlayerMovement(scene) {
   const wallSlideMaxFallSpeed = MOVEMENT_PHYSICS.wallSlideMaxFallSpeed;
   const wallKickLockMs = MOVEMENT_PHYSICS.wallKickLockMs;
   const wallKickFull = MOVEMENT_PHYSICS.wallKickFull;
+  const wallKickInputGraceMs = MOVEMENT_PHYSICS.wallKickInputGraceMs || 130;
+  const wallContactGraceMs = MOVEMENT_PHYSICS.wallContactGraceMs || 130;
+  const wallJumpHorizontalGracePx =
+    MOVEMENT_PHYSICS.wallJumpHorizontalGracePx || 14;
+  const wallSlideReentryDelayMs =
+    MOVEMENT_PHYSICS.wallSlideReentryDelayMs || 220;
   const wallSlideSnapDistance = 10;
   const wallSlideVerticalPadding = 6;
   const wallJumpPressBufferMs = 120;
@@ -1360,6 +1366,8 @@ export function handlePlayerMovement(scene) {
   const playerBodyBottom = player.body.y + player.body.height;
   let nearLeftWall = false;
   let nearRightWall = false;
+  let leftWallGap = Number.POSITIVE_INFINITY;
+  let rightWallGap = Number.POSITIVE_INFINITY;
   if (Array.isArray(mapObjects)) {
     for (const obj of mapObjects) {
       const body = obj?.body;
@@ -1379,17 +1387,23 @@ export function handlePlayerMovement(scene) {
 
       if (
         body.checkCollision?.right !== false &&
-        playerBodyLeft >= objRight &&
-        playerBodyLeft - objRight <= wallSlideSnapDistance
+        playerBodyLeft >= objRight
       ) {
-        nearLeftWall = true;
+        const gap = playerBodyLeft - objRight;
+        leftWallGap = Math.min(leftWallGap, gap);
+        if (gap <= wallSlideSnapDistance) {
+          nearLeftWall = true;
+        }
       }
       if (
         body.checkCollision?.left !== false &&
-        objLeft >= playerBodyRight &&
-        objLeft - playerBodyRight <= wallSlideSnapDistance
+        objLeft >= playerBodyRight
       ) {
-        nearRightWall = true;
+        const gap = objLeft - playerBodyRight;
+        rightWallGap = Math.min(rightWallGap, gap);
+        if (gap <= wallSlideSnapDistance) {
+          nearRightWall = true;
+        }
       }
       if (nearLeftWall && nearRightWall) break;
     }
@@ -1397,6 +1411,23 @@ export function handlePlayerMovement(scene) {
   const nowWallTs = Date.now();
   const bufferedJumpPressActive =
     nowWallTs - (player._lastJumpPressTime || 0) <= wallJumpPressBufferMs;
+  const horizontalKickReachPx =
+    wallSlideSnapDistance +
+    (bufferedJumpPressActive ? wallJumpHorizontalGracePx : 0);
+  const bufferedNearLeftWall =
+    Number.isFinite(leftWallGap) && leftWallGap <= horizontalKickReachPx;
+  const bufferedNearRightWall =
+    Number.isFinite(rightWallGap) && rightWallGap <= horizontalKickReachPx;
+  const bufferedKickSide =
+    bufferedNearLeftWall && !bufferedNearRightWall
+      ? "left"
+      : bufferedNearRightWall && !bufferedNearLeftWall
+        ? "right"
+        : bufferedNearLeftWall && bufferedNearRightWall
+          ? leftWallGap <= rightWallGap
+            ? "left"
+            : "right"
+          : null;
   const wallSlideLeft = touchingLeftNow || nearLeftWall;
   const wallSlideRight = touchingRightNow || nearRightWall;
   const wallSlideContact = wallSlideLeft || wallSlideRight;
@@ -1409,6 +1440,27 @@ export function handlePlayerMovement(scene) {
         : nearRightWall
           ? "right"
           : null;
+  const wallJumpSide = wallSide || bufferedKickSide;
+  if (wallJumpSide) {
+    player._lastWallContactTs = nowWallTs;
+    player._lastWallSide = wallJumpSide;
+  }
+  const effectiveWallSide =
+    wallJumpSide ||
+    nowWallTs - (player._lastWallContactTs || 0) <= wallContactGraceMs
+      ? player._lastWallSide || wallJumpSide
+      : null;
+  const wallSlideSuppressed =
+    (player._wallSlideSuppressedUntil || 0) > nowWallTs;
+  const wallKickAwayNow =
+    (effectiveWallSide === "left" && rightKey && !leftKey) ||
+    (effectiveWallSide === "right" && leftKey && !rightKey);
+  if (wallKickAwayNow) {
+    player._lastWallKickAwayInputTs = nowWallTs;
+  }
+  const wallKickAwayRequested =
+    wallKickAwayNow ||
+    nowWallTs - (player._lastWallKickAwayInputTs || 0) <= wallKickInputGraceMs;
 
   const nowTs = Date.now();
   const movementLocked = (player?._movementLockedUntil || 0) > nowTs;
@@ -1465,7 +1517,12 @@ export function handlePlayerMovement(scene) {
     const worldG = scene.physics?.world?.gravity?.y || 0;
     const isAirborne = !player.body.touching.down;
     const isFalling = (player.body.velocity.y || 0) > 5;
-    if (isAirborne && isFalling && !wallSlideContact && fallGravityFactor > 1) {
+    if (
+      isAirborne &&
+      isFalling &&
+      (!wallSlideContact || wallSlideSuppressed) &&
+      fallGravityFactor > 1
+    ) {
       // Additive per-body gravity so total ~= worldG * fallGravityFactor
       player.body.setGravityY(worldG * (fallGravityFactor - 1));
     } else {
@@ -1597,12 +1654,13 @@ export function handlePlayerMovement(scene) {
   const now = Date.now();
   if (
     !dead &&
-    wallSide &&
+    effectiveWallSide &&
     !player.body.touching.down &&
     canWallJump &&
-    bufferedJumpPressActive
+    bufferedJumpPressActive &&
+    wallKickAwayRequested
   ) {
-    wallJump(wallSide); // Calls walljump
+    wallJump(effectiveWallSide); // Calls walljump
     scene.sound.play("sfx-walljump", { volume: 4 });
     player._lastJumpPressTime = 0;
   } else if (
@@ -1624,8 +1682,17 @@ export function handlePlayerMovement(scene) {
       Math.max(MOVEMENT_PHYSICS.minSpeedMult, movementJumpMult || 1);
     jump(); // Calls jump
     scene.sound.play("sfx-jump", { volume: 3 });
+    if (wallSlideContact || effectiveWallSide) {
+      player._wallSlideSuppressedUntil = Date.now() + wallSlideReentryDelayMs;
+    }
   }
-  if (!dead && wallSlideContact && !isAttacking && !specialAnimLocked()) {
+  if (
+    !dead &&
+    wallSlideContact &&
+    !wallSlideSuppressed &&
+    !isAttacking &&
+    !specialAnimLocked()
+  ) {
     player.anims.play(resolveAnimKey(scene, currentCharacter, "sliding"), true); // Plays sliding animation
   }
 
@@ -1633,11 +1700,12 @@ export function handlePlayerMovement(scene) {
     !dead &&
     !player.body.touching.down &&
     wallSlideContact &&
+    !wallSlideSuppressed &&
     (player.body.velocity.y || 0) > 20;
   updateWallSlideAudio(isWallSliding);
 
   // Wall slide: when touching a wall and airborne, limit fall speed for a slower slide
-  if (!player.body.touching.down && wallSlideContact) {
+  if (!player.body.touching.down && wallSlideContact && !wallSlideSuppressed) {
     if (player.body.velocity.y > wallSlideMaxFallSpeed) {
       player.setVelocityY(wallSlideMaxFallSpeed);
     }
@@ -1647,7 +1715,7 @@ export function handlePlayerMovement(scene) {
   if (
     !player.anims.isPlaying &&
     !player.body.touching.down &&
-    !wallSlideContact &&
+    (!wallSlideContact || wallSlideSuppressed) &&
     !isAttacking
   ) {
     fall(); // Plays falling animation if the player is not touching a wall or if any other animation is playing
