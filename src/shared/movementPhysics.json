@@ -14,6 +14,7 @@
   "wallSlideMaxFallSpeed": 160,
   "wallKickLockMs": 160,
   "wallKickFull": 360,
+  "wallKickVerticalMult": 1.2,
   "wallKickInputGraceMs": 130,
   "wallContactGraceMs": 130,
   "wallJumpHorizontalGracePx": 14,

@@ -74,10 +74,20 @@ export function initializeCharacterSelect(userData) {
   const charactersGrid = document.createElement("div");
   charactersGrid.className = "characters-grid";
 
+  const selectedCharacter = String(userData?.char_class || "")
+    .trim()
+    .toLowerCase();
   const characters = getAllCharacters();
-  characters.forEach((char) =>
-    charactersGrid.appendChild(createCharacterCard(char, userData)),
-  );
+  characters
+    .filter(
+      (char) =>
+        String(char || "")
+          .trim()
+          .toLowerCase() !== selectedCharacter,
+    )
+    .forEach((char) =>
+      charactersGrid.appendChild(createCharacterCard(char, userData)),
+    );
 
   const mountCharacterPopup = () => {
     popupShell.mount({
@@ -350,7 +360,8 @@ function selectCharacter(character) {
       yourSlot.dataset.character = charClass;
       yourSlot.classList.remove("empty");
       const charLevels =
-        typeof _userDataRef?.char_levels === "object" && _userDataRef?.char_levels
+        typeof _userDataRef?.char_levels === "object" &&
+        _userDataRef?.char_levels
           ? _userDataRef.char_levels
           : {};
       setLobbySlotLevelIcon(

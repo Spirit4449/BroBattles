@@ -58,7 +58,7 @@ const SERENITY_CONFIG = {
           { dx: 100, anchorId: "log-mid" },
         ],
         3: [
-          { dx: -145, anchorId: "log-mid" },
+          { anchorId: "log-mid", x: 1350.8948745203786 },
           { dx: 0, anchorId: "log-mid" },
           { dx: 145, anchorId: "log-mid" },
         ],
@@ -78,14 +78,14 @@ const SERENITY_CONFIG = {
     },
     powerups: [
       { x: 950, y: 500 },
-      { x: 1150, y: 500 },
-      { x: 1350, y: 500 },
-      { x: 760, y: 260 },
-      { x: 1490, y: 340 },
+      { x: 1063.1971715232796, y: 490.1564423216863 },
+      { x: 1133.170852941433, y: 356.82097922452846 },
+      { x: 646.3509359119226, y: 91.76465058882098 },
+      { x: 1463.1537643886436, y: 453.6483477405304 },
       { x: 1000, y: 230 },
-      { x: 1225, y: 230 },
-      { x: 1500, y: 230 },
-      { x: 860, y: 340 },
+      { x: 1187.4152701441005, y: 164.6745717711911 },
+      { x: 1441.8331561753937, y: 195.10011368597884 },
+      { x: 800.938281655015, y: 374.89988631402116 },
     ],
   },
   boundaries: {
@@ -111,10 +111,166 @@ const SERENITY_CONFIG = {
 
 // Optional editor-driven layout config. Set `USE_LAYOUT_CONFIG_ONLY=true`
 // and paste exported platforms/hitboxes below to build this map from config.
-const USE_LAYOUT_CONFIG_ONLY = false;
+const USE_LAYOUT_CONFIG_ONLY = true;
 const MAP_LAYOUT_CONFIG = {
-  platforms: [],
-  hitboxes: [],
+  platforms: [
+    {
+      textureKey: "serenity-large-platform",
+      x: 1150,
+      y: 700,
+      scaleX: 0.45,
+      scaleY: 0.45,
+      flipX: false,
+      body: {
+        width: 582.3,
+        height: 216,
+        offsetX: 0,
+        offsetY: 70,
+      },
+    },
+    {
+      textureKey: "serenity-side-platform",
+      x: 648.27,
+      y: 270,
+      scaleX: 0.86,
+      scaleY: 0.86,
+      flipX: true,
+      body: {
+        width: 228.76,
+        height: 81.7,
+        offsetX: 0,
+        offsetY: 25,
+      },
+    },
+    {
+      textureKey: "serenity-side-platform",
+      x: 1000,
+      y: 370,
+      scaleX: 0.76,
+      scaleY: 0.76,
+      flipX: false,
+      body: {
+        width: 202.16,
+        height: 91.2,
+        offsetX: 0,
+        offsetY: 25,
+      },
+    },
+    {
+      textureKey: "serenity-small-rock",
+      x: 800,
+      y: 490,
+      scaleX: 0.45,
+      scaleY: 0.45,
+      flipX: false,
+      body: {
+        width: 103.05,
+        height: 40.5,
+        offsetX: 0,
+        offsetY: 25,
+      },
+    },
+    {
+      textureKey: "serenity-log-platform",
+      x: 1500,
+      y: 260,
+      scaleX: 0.6,
+      scaleY: 0.6,
+      flipX: false,
+      body: {
+        width: 0,
+        height: 0,
+        offsetX: 0,
+        offsetY: 0,
+      },
+    },
+  ],
+  hitboxes: [
+    {
+      x: 543.93,
+      y: 236.04,
+      width: 16,
+      height: 160,
+      collision: {
+        up: false,
+        down: false,
+        left: true,
+        right: true,
+      },
+    },
+    {
+      x: 754.56,
+      y: 199.55,
+      width: 16,
+      height: 70,
+      collision: {
+        up: false,
+        down: false,
+        left: true,
+        right: true,
+      },
+    },
+    {
+      x: 905.92,
+      y: 309.26,
+      width: 16,
+      height: 70,
+      collision: {
+        up: false,
+        down: false,
+        left: true,
+        right: true,
+      },
+    },
+    {
+      x: 1094.08,
+      y: 357.26,
+      width: 16,
+      height: 160,
+      collision: {
+        up: false,
+        down: false,
+        left: true,
+        right: true,
+      },
+    },
+    {
+      x: 1350,
+      y: 350,
+      width: 175,
+      height: 16,
+      collision: {
+        up: true,
+        down: false,
+        left: false,
+        right: false,
+      },
+    },
+    {
+      x: 1500,
+      y: 270,
+      width: 330,
+      height: 16,
+      collision: {
+        up: true,
+        down: false,
+        left: false,
+        right: false,
+      },
+    },
+    {
+      x: 1655,
+      y: 350,
+      width: 177,
+      height: 16,
+      collision: {
+        up: true,
+        down: false,
+        left: false,
+        right: false,
+      },
+    },
+  ],
 };
 
 // ── Runtime platform references (set during build) ───────────────────────────
@@ -148,6 +304,28 @@ export const definition = {
 
     if (USE_LAYOUT_CONFIG_ONLY) {
       appendLayoutObjectsFromConfig(scene, _objects, MAP_LAYOUT_CONFIG);
+      for (const obj of _objects) {
+        if (obj?.texture?.key === "serenity-large-platform") {
+          _spawnAnchors.large = obj;
+          continue;
+        }
+
+        // Log platform is visual-only; one-way bar hitboxes handle collision.
+        if (obj?.texture?.key === "serenity-log-platform" && obj?.body) {
+          obj.body.enable = false;
+        }
+
+        // Match the middle one-way log bar exported from editor hitboxes.
+        if (
+          obj?.type === "Zone" &&
+          Math.abs(Number(obj?.x) - 1500) < 1 &&
+          Math.abs(Number(obj?.y) - 270) < 1 &&
+          Math.abs(Number(obj?.width) - 330) < 1 &&
+          Math.abs(Number(obj?.height) - 16) < 1
+        ) {
+          _spawnAnchors["log-mid"] = obj;
+        }
+      }
       return;
     }
 

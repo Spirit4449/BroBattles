@@ -1,4 +1,6 @@
 import { getMapObjectiveLayout } from "../../lib/gameSelectionCatalog";
+import { getMapSpawnConfig } from "../../maps/manifest";
+import { getSpawnPreviewPoint } from "../../maps/mapUtils";
 
 function cloneJson(v) {
   try {
@@ -32,7 +34,7 @@ function ensureHostHtml() {
         <button id="bank-bust-export-layout" type="button">Export Layout</button>
       </div>
       <textarea id="bank-bust-export-json" placeholder="Exported Bank Bust layout appears here"></textarea>
-      <p class="tiny">While map edit mode is on, drag Bank Bust vaults, mines, slots, and gold spawn markers. Export this JSON and reuse it in the shared map layout.</p>
+      <p class="tiny">While map edit mode is on, drag Bank Bust vaults, mines, slots, gold spawn markers, and powerup spawn markers. Export this JSON and reuse it in the shared map layout.</p>
     </div>
   `;
   document.body.appendChild(host);
@@ -82,6 +84,7 @@ export function createBankBustRuntime({
   const objectContainers = new Map();
   const pickupSprites = new Map();
   const spawnPointMarkers = new Map();
+  const powerupSpawnMarkers = new Map();
   const wallBodies = new Map();
   const turretBaseSprites = new Map();
   const turretHeadSprites = new Map();
@@ -356,6 +359,37 @@ export function createBankBustRuntime({
     ensureDraggable(marker, { kind: "randomGoldSpawnPoint", id });
     spawnPointMarkers.set(id, marker);
     return marker;
+  }
+
+  function ensurePowerupSpawnMarker(index) {
+    let marker = powerupSpawnMarkers.get(index) || null;
+    if (marker?.scene) return marker;
+    marker = scene.add.circle(-9999, -9999, 10, 0x99ff77, 0.75);
+    marker.setStrokeStyle(3, 0x1e293b, 0.95);
+    marker.setDepth(24);
+    marker.setVisible(false);
+    ensureDraggable(marker, { kind: "powerupSpawnPoint", index });
+    powerupSpawnMarkers.set(index, marker);
+    return marker;
+  }
+
+  function getWorkingPowerupSpawns() {
+    if (Array.isArray(state.localLayout?.powerups))
+      return state.localLayout.powerups;
+    const mapId = Number(getGameData?.()?.map) || 1;
+    const mapSpawnConfig = getMapSpawnConfig(mapId);
+    const powerups = Array.isArray(mapSpawnConfig?.powerups)
+      ? cloneJson(mapSpawnConfig.powerups)
+      : [];
+    if (!state.localLayout) {
+      state.localLayout = cloneJson(getBaseLayout()) || {
+        vaults: {},
+        objects: [],
+        randomGoldSpawnPoints: [],
+      };
+    }
+    state.localLayout.powerups = powerups;
+    return state.localLayout.powerups;
   }
 
   function ensureTurretSprite(map, id, textureKey, depth = 11) {
@@ -812,6 +846,19 @@ export function createBankBustRuntime({
       marker.setVisible(!!state.editMode);
     }
     cleanupUnused(spawnPointMarkers, usedSpawnPoints);
+
+    const usedPowerupIndices = new Set();
+    const powerups = getWorkingPowerupSpawns();
+    for (let i = 0; i < powerups.length; i++) {
+      const entry = powerups[i];
+      const preview = getSpawnPreviewPoint(scene, entry, {}, 0);
+      if (!preview) continue;
+      usedPowerupIndices.add(i);
+      const marker = ensurePowerupSpawnMarker(i);
+      marker.setPosition(preview.x, preview.y);
+      marker.setVisible(!!state.editMode);
+    }
+    cleanupUnused(powerupSpawnMarkers, usedPowerupIndices);
     hideUnusedWallBodies(modeState);
   }
 
@@ -1096,6 +1143,7 @@ export function createBankBustRuntime({
       vaults: cloneJson(layout?.vaults || {}),
       objects: cloneJson(layout?.objects || []),
       randomGoldSpawnPoints: cloneJson(layout?.randomGoldSpawnPoints || []),
+      powerups: cloneJson(getWorkingPowerupSpawns() || []),
     };
   }
 
@@ -1134,6 +1182,14 @@ export function createBankBustRuntime({
       if (!target) return;
       target.x = dragX;
       target.y = dragY;
+    } else if (meta.kind === "powerupSpawnPoint") {
+      const powerups = getWorkingPowerupSpawns();
+      const target = powerups?.[meta.index] || null;
+      if (!target) return;
+      target.x = dragX;
+      target.y = dragY;
+      delete target.dx;
+      delete target.anchorId;
     }
   };
   scene.input.on("drag", dragHandler);
@@ -1156,6 +1212,7 @@ export function createBankBustRuntime({
       cleanupUnused(turretBaseSprites, new Set());
       cleanupUnused(turretHeadSprites, new Set());
       cleanupUnused(spawnPointMarkers, new Set());
+      cleanupUnused(powerupSpawnMarkers, new Set());
       for (const sprite of pickupSprites.values()) sprite.setVisible(false);
       for (const sprite of turretProjectileSprites.values())
         sprite.setVisible(false);
@@ -1207,6 +1264,7 @@ export function createBankBustRuntime({
       } catch (_) {}
     }
     for (const sprite of spawnPointMarkers.values()) destroyContainer(sprite);
+    for (const sprite of powerupSpawnMarkers.values()) destroyContainer(sprite);
     for (const entry of objectContainers.values()) destroyContainer(entry);
     for (const sprite of turretBaseSprites.values()) destroyContainer(sprite);
     for (const sprite of turretHeadSprites.values()) destroyContainer(sprite);

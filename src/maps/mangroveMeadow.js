@@ -95,7 +95,7 @@ const MAP_LAYOUT_CONFIG = {
       "scaleY": 0.6,
       "flipX": false,
       "body": {
-        "width": 210,
+        "width": 150,
         "height": 210,
         "offsetX": 0,
         "offsetY": 0

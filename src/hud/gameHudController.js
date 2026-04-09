@@ -124,6 +124,35 @@ export function createGameHudController({
     const nm = String(player?.name || "Player");
     nameEl.textContent = nm + (nm === username ? " (You)" : "");
 
+    const trophyRow = document.createElement("div");
+    trophyRow.className = "bs-card-trophies";
+    const trophyIcon = document.createElement("img");
+    trophyIcon.className = "bs-card-trophy-icon";
+    trophyIcon.src = "/assets/trophy.webp";
+    trophyIcon.alt = "Trophies";
+    trophyIcon.onerror = () => {
+      trophyIcon.onerror = null;
+      trophyIcon.style.display = "none";
+    };
+    const trophyValue = document.createElement("span");
+    trophyValue.className = "bs-card-trophy-value";
+    trophyValue.textContent = String(Number(player?.trophies) || 0);
+    trophyRow.appendChild(trophyIcon);
+    trophyRow.appendChild(trophyValue);
+
+    const levelBadge = document.createElement("div");
+    levelBadge.className = "bs-card-level-badge";
+    const levelIcon = document.createElement("img");
+    const level = Math.max(1, Math.min(5, Number(player?.level) || 1));
+    levelIcon.src = `/assets/levels/${level}.webp`;
+    levelIcon.alt = `Character level ${level}`;
+    levelIcon.onerror = () => {
+      levelIcon.onerror = null;
+      levelIcon.style.display = "none";
+      levelBadge.textContent = String(level);
+    };
+    levelBadge.appendChild(levelIcon);
+
     const charNameEl = document.createElement("div");
     charNameEl.className = "bs-card-character-name";
     charNameEl.textContent = String(player?.char_class || "default");
@@ -148,10 +177,31 @@ export function createGameHudController({
 
     const statsRow = document.createElement("div");
     statsRow.className = "bs-card-stats";
-    statsRow.innerHTML = `<div class="bs-card-stat-label">Character Level</div><div class="bs-card-stat-value">${Number(player?.level) || 1}</div>`;
+    const healthValue = Math.max(0, Math.round(Number(player?.stats?.health) || 0));
+    const damageValue = Math.max(0, Math.round(Number(player?.stats?.damage) || 0));
+    const specialValue = Math.max(
+      0,
+      Math.round(Number(player?.stats?.specialDamage) || 0),
+    );
+
+    statsRow.innerHTML = `
+      <div class="bs-card-stat-pill" title="Health">
+        <img src="/assets/heart.webp" alt="Health" class="bs-card-stat-icon" onerror="this.style.display='none'">
+        <span class="bs-card-stat-number">${healthValue}</span>
+      </div>
+      <div class="bs-card-stat-pill" title="Attack">
+        <img src="/assets/attack.webp" alt="Attack" class="bs-card-stat-icon" onerror="this.style.display='none'">
+        <span class="bs-card-stat-number">${damageValue}</span>
+      </div>
+      <div class="bs-card-stat-pill" title="Special">
+        <img src="/assets/special.webp" alt="Special" class="bs-card-stat-icon" onerror="this.style.display='none'">
+        <span class="bs-card-stat-number">${specialValue}</span>
+      </div>`;
 
     root.appendChild(frame);
     root.appendChild(nameEl);
+    root.appendChild(trophyRow);
+    root.appendChild(levelBadge);
     root.appendChild(charNameEl);
     root.appendChild(spriteWrap);
     root.appendChild(statsRow);
@@ -168,19 +218,40 @@ export function createGameHudController({
   function _syncCardWrapState(root) {
     if (!root) return;
     const columns = Array.from(root.querySelectorAll(".bs-col"));
-    let wrapped = false;
+    let resolvedSize = null;
+    const targetSlots = 3;
+
     for (const col of columns) {
       const cards = Array.from(col.querySelectorAll(".bs-player-card"));
       if (!cards.length) continue;
-      const tops = new Set(
-        cards.map((node) => Math.round(node.offsetTop || 0)),
-      );
-      if (tops.size > 1) {
-        wrapped = true;
-        break;
-      }
+
+      const colWidth =
+        Number(col.clientWidth) || Number(col.getBoundingClientRect().width) || 0;
+      if (colWidth <= 0) continue;
+
+      const styles = window.getComputedStyle(col);
+      const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
+      const candidate =
+        (colWidth - gap * (targetSlots - 1)) / Math.max(1, targetSlots);
+      if (!Number.isFinite(candidate) || candidate <= 0) continue;
+
+      resolvedSize =
+        resolvedSize == null ? candidate : Math.min(resolvedSize, candidate);
     }
-    root.classList.toggle("cards-wrapped", wrapped);
+
+    if (resolvedSize == null) {
+      root.style.removeProperty("--bs-card-size");
+      return;
+    }
+
+    const px = Math.max(88, Math.min(245, Math.floor(resolvedSize)));
+    root.style.setProperty("--bs-card-size", `${px}px`);
+  }
+
+  function _syncVisibleOverlayCardSize() {
+    const root = document.getElementById("battle-start-overlay");
+    if (!root || root.classList.contains("hidden")) return;
+    _syncCardWrapState(root);
   }
 
   function _sleep(ms) {
@@ -336,6 +407,7 @@ export function createGameHudController({
 
       currentCardNodes = [...yourNodes, ...oppNodes];
       requestAnimationFrame(() => _syncCardWrapState(root));
+      requestAnimationFrame(() => _syncCardWrapState(root));
     };
 
     renderPlayers(cardCatalog || _fallbackCatalog());
@@ -349,12 +421,12 @@ export function createGameHudController({
     if (c) c.textContent = "5";
 
     root.classList.remove("hidden");
-    root.classList.remove("cards-wrapped");
     root.classList.remove("phase-darkened", "phase-cards");
     root.classList.add("phase-cinematic");
     root.setAttribute("aria-hidden", "false");
     const wrap = root.querySelector(".bs-wrap");
     if (wrap) requestAnimationFrame(() => (wrap.style.opacity = "1"));
+    requestAnimationFrame(_syncVisibleOverlayCardSize);
     return root;
   }
 
@@ -959,6 +1031,8 @@ export function createGameHudController({
       if (label) label.textContent = "Time Remaining";
     }
   }
+
+  window.addEventListener("resize", _syncVisibleOverlayCardSize);
 
   return {
     showBattleStartOverlay,

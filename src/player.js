@@ -1305,10 +1305,12 @@ export function handlePlayerMovement(scene) {
   const wallSlideMaxFallSpeed = MOVEMENT_PHYSICS.wallSlideMaxFallSpeed;
   const wallKickLockMs = MOVEMENT_PHYSICS.wallKickLockMs;
   const wallKickFull = MOVEMENT_PHYSICS.wallKickFull;
+  const wallKickVerticalMult =
+    Number(MOVEMENT_PHYSICS.wallKickVerticalMult) || 1;
   const wallKickInputGraceMs = MOVEMENT_PHYSICS.wallKickInputGraceMs || 130;
   const wallContactGraceMs = MOVEMENT_PHYSICS.wallContactGraceMs || 130;
   const wallJumpHorizontalGracePx =
-    MOVEMENT_PHYSICS.wallJumpHorizontalGracePx || 14;
+    MOVEMENT_PHYSICS.wallJumpHorizontalGracePx || 34;
   const wallSlideReentryDelayMs =
     MOVEMENT_PHYSICS.wallSlideReentryDelayMs || 220;
   const wallSlideSnapDistance = 10;
@@ -1832,7 +1834,8 @@ export function handlePlayerMovement(scene) {
     canWallJump = false;
     const fromLeft = wallSideParam === "left";
     const horizKick = fromLeft ? wallKickFull : -wallKickFull;
-    const vertKick = Math.max(jumpSpeed + 30, 220); // slightly less vertical pop
+    const vertKick =
+      Math.max(jumpSpeed + 30, 220) * Math.max(0.1, wallKickVerticalMult); // slightly less vertical pop
 
     // Face away from the wall and fix body offset
     if (!player._lockFlip) {
