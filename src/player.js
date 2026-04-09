@@ -1385,20 +1385,14 @@ export function handlePlayerMovement(scene) {
         playerBodyTop < objBottom - wallSlideVerticalPadding;
       if (!verticallyAligned) continue;
 
-      if (
-        body.checkCollision?.right !== false &&
-        playerBodyLeft >= objRight
-      ) {
+      if (body.checkCollision?.right !== false && playerBodyLeft >= objRight) {
         const gap = playerBodyLeft - objRight;
         leftWallGap = Math.min(leftWallGap, gap);
         if (gap <= wallSlideSnapDistance) {
           nearLeftWall = true;
         }
       }
-      if (
-        body.checkCollision?.left !== false &&
-        objLeft >= playerBodyRight
-      ) {
+      if (body.checkCollision?.left !== false && objLeft >= playerBodyRight) {
         const gap = objLeft - playerBodyRight;
         rightWallGap = Math.min(rightWallGap, gap);
         if (gap <= wallSlideSnapDistance) {
