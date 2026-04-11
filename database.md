@@ -168,3 +168,46 @@ ALTER TABLE parties
 CREATE INDEX idx_parties_is_public ON parties (is_public);
 CREATE INDEX idx_parties_public_name ON parties (public_name);
 ```
+
+## Party Chat
+
+Apply [migrations/2026-04-11_party_chat.sql](migrations/2026-04-11_party_chat.sql)
+to store persistent party chat history, replies, reactions, and read receipts.
+
+### Migration
+
+```sql
+CREATE TABLE IF NOT EXISTS party_chat_messages (
+	message_id INT NOT NULL AUTO_INCREMENT,
+	party_id INT NOT NULL,
+	user_id INT NOT NULL,
+	reply_to_message_id INT NULL,
+	body TEXT NOT NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	PRIMARY KEY (message_id),
+	INDEX idx_party_chat_messages_party_message (party_id, message_id),
+	INDEX idx_party_chat_messages_user_id (user_id)
+);
+
+CREATE TABLE IF NOT EXISTS party_chat_message_reactions (
+	party_id INT NOT NULL,
+	message_id INT NOT NULL,
+	user_id INT NOT NULL,
+	reaction VARCHAR(16) NOT NULL,
+	created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (party_id, message_id, user_id),
+	INDEX idx_party_chat_message_reactions_message (message_id),
+	INDEX idx_party_chat_message_reactions_user (user_id)
+);
+
+CREATE TABLE IF NOT EXISTS party_chat_message_reads (
+	party_id INT NOT NULL,
+	message_id INT NOT NULL,
+	user_id INT NOT NULL,
+	read_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (party_id, message_id, user_id),
+	INDEX idx_party_chat_message_reads_party_user (party_id, user_id),
+	INDEX idx_party_chat_message_reads_message (message_id)
+);
+```

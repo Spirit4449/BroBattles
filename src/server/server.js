@@ -33,6 +33,7 @@ const { startCleanupJobs } = require("./jobs/cleanup.js");
 const { initSocket } = require("./core/socket.js");
 const { createRuntimeConfig } = require("./helpers/runtimeConfig.js");
 const { registerAdminRoutes } = require("./routes/admin.js");
+const { createPartyChatService } = require("./services/chatService.js");
 
 const app = express();
 const server = http.createServer(app);
@@ -83,6 +84,8 @@ app.locals.DISPLAY_COOKIE_OPTS = DISPLAY_COOKIE_OPTS;
 // Runtime overrides editable via admin dashboard
 const runtimeConfig = createRuntimeConfig({ rootDir: ROOT_DIR });
 app.locals.runtimeConfig = runtimeConfig;
+const chatService = createPartyChatService({ db, io });
+app.locals.chatService = chatService;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -101,7 +104,7 @@ if (!IS_PROD) {
     webpackDevMiddleware(compiler, {
       publicPath: config.output.publicPath,
       serverSideRender: false,
-    })
+    }),
   );
   app.use(webpackHotMiddleware(compiler));
   app.use(express.static(PUBLIC_DIR));
@@ -124,6 +127,7 @@ const socketApi = initSocket({
     runQuery: db.runQuery,
   },
   runtimeConfig,
+  chatService,
 });
 app.locals.socketApi = socketApi;
 
@@ -140,7 +144,15 @@ registerAdminRoutes({
   distDir: DIST_DIR,
   runtimeConfig,
 });
-registerRoutes({ app, io, db, auth, pageRoot: PAGE_ROOT, distDir: DIST_DIR });
+registerRoutes({
+  app,
+  io,
+  db,
+  auth,
+  pageRoot: PAGE_ROOT,
+  distDir: DIST_DIR,
+  chatService,
+});
 
 // Server start
 (async function startServer() {
@@ -151,7 +163,7 @@ registerRoutes({ app, io, db, auth, pageRoot: PAGE_ROOT, distDir: DIST_DIR });
       console.log(
         `Server listening on 0.0.0.0:${port} (cookies secure=${SECURE_COOKIES}, env=${
           process.env.NODE_ENV || "undefined"
-        })`
+        })`,
       );
     });
   } catch (e) {

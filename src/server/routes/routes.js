@@ -9,8 +9,9 @@ const { registerAuthRoutes } = require("./modules/authRoutes");
 const { registerPlayerCardsRoutes } = require("./modules/playerCardsRoutes");
 const { registerProfileRoutes } = require("./modules/profileRoutes");
 const { registerTrophyRoutes } = require("./modules/trophyRoutes");
+const { registerChatRoutes } = require("./modules/chatRoutes");
 
-function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
+function registerRoutes({ app, io, db, auth, pageRoot, distDir, chatService }) {
   const { getOrCreateCurrentUser, requireCurrentUser, isGuest, isAdminUser } =
     auth;
 
@@ -67,6 +68,12 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir }) {
     app,
     db,
     requireCurrentUser,
+  });
+
+  registerChatRoutes({
+    app,
+    requireCurrentUser,
+    chatService,
   });
 
   registerNotFoundRoute({ app, pageRoot });

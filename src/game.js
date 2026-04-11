@@ -12,6 +12,10 @@ import {
 import { applyMapBounds } from "./maps/mapUtils";
 import { createGameHudController } from "./hud/gameHudController";
 import { createGameOverScreenController } from "./hud/gameOverScreenController";
+import { wireFullscreenToggles } from "./lib/fullscreen.js";
+import { createGameChatController } from "./lib/chatController.js";
+import { isChatInputActive, setChatInputActive } from "./player";
+import "./styles/chat.css";
 import { createSnapshotBuffer } from "./match/snapshotBuffer";
 import { createMatchCoordinator } from "./match/matchCoordinator";
 import { preloadGameAssets } from "./gameScene/preloadGameAssets";
@@ -65,6 +69,17 @@ import {
   shouldMuteClientDefaultLogs,
 } from "./lib/netTestLogger.js";
 import MOVEMENT_PHYSICS from "./shared/movementPhysics.json";
+
+wireFullscreenToggles();
+
+createGameChatController({
+  socket,
+  getGameData: () => gameData,
+  getUsername: () => username,
+  setChatInputActive,
+  isChatInputActive,
+  getScene: () => gameScene,
+});
 
 // Make Phaser globally available for character modules
 window.Phaser = Phaser;

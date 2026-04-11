@@ -150,6 +150,7 @@ let networkInputState = {
   movementLocked: false,
   loaded: false,
 };
+let chatInputActive = false;
 let localMovementReconcileState = {
   lastAckSeq: -1,
   lastAckAt: 0,
@@ -822,6 +823,7 @@ export function createPlayer(
   const pointerDownHandler = (pointer) => {
     if (window.__BB_MAP_EDIT_ACTIVE) return;
     if (dead) return;
+    if (chatInputActive) return;
     if ((player?._movementLockedUntil || 0) > Date.now()) return;
     const mobilePointerHandled =
       !!mobileControlsController?.handlePointerDown?.(pointer);
@@ -845,6 +847,7 @@ export function createPlayer(
   };
 
   const pointerMoveHandler = (pointer) => {
+    if (chatInputActive) return;
     const mobilePointerHandled =
       !!mobileControlsController?.handlePointerMove?.(pointer);
     if (mobilePointerHandled) return;
@@ -866,6 +869,7 @@ export function createPlayer(
   };
 
   const pointerUpHandler = (pointer) => {
+    if (chatInputActive) return;
     const mobilePointerHandled =
       !!mobileControlsController?.handlePointerUp?.(pointer);
     if (mobilePointerHandled) return;
@@ -1282,6 +1286,34 @@ export function handlePlayerMovement(scene) {
   applyGameCursor(scene);
   mobileControlsController?.ensure?.(scene);
   mobileControlsController?.layout?.(scene);
+  if (chatInputActive) {
+    try {
+      if (player?.body) {
+        player.setVelocityX(0);
+        player.setAccelerationX(0);
+        player.setDragX(0);
+      }
+    } catch (_) {}
+    networkInputState = {
+      left: false,
+      right: false,
+      direction: 0,
+      jumpHeld: false,
+      jumpPressed: false,
+      grounded: !!player?.body?.touching?.down,
+      vx: Number(player?.body?.velocity?.x) || 0,
+      vy: Number(player?.body?.velocity?.y) || 0,
+      facing: player?.flipX ? -1 : 1,
+      animation: player?.anims?.currentAnim?.key || null,
+      movementLocked: true,
+      loaded:
+        !dead &&
+        Number.isFinite(player?.x) &&
+        Number.isFinite(player?.y) &&
+        player?.visible !== false,
+    };
+    return;
+  }
   // Movement tuning knobs (edit to change the feel):
   // Enforce facing lock (e.g., Draven splash) BEFORE any movement logic mutates flip state
   if (player && player._lockFlip && player._lockedFlipX !== undefined) {
@@ -1947,6 +1979,31 @@ export function getNetworkInputState() {
 
 export function setLocalNetStateFlusher(fn) {
   flushLocalNetState = typeof fn === "function" ? fn : null;
+}
+
+export function setChatInputActive(active) {
+  chatInputActive = !!active;
+  if (chatInputActive) {
+    try {
+      if (player?.body) {
+        player.setVelocityX(0);
+        player.setAccelerationX(0);
+      }
+    } catch (_) {}
+    networkInputState = {
+      ...networkInputState,
+      left: false,
+      right: false,
+      direction: 0,
+      jumpHeld: false,
+      jumpPressed: false,
+      movementLocked: true,
+    };
+  }
+}
+
+export function isChatInputActive() {
+  return chatInputActive;
 }
 
 export function reconcileLocalMovement(snapshot = {}) {

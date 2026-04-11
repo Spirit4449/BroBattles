@@ -8,6 +8,7 @@ export function createGameOverScreenController({
   function showGameOverScreen(payload) {
     const gameData = getGameData();
     const username = getUsername();
+    const isMobile = !!document?.body?.classList?.contains("mobile-game-ui");
 
     const existing = document.getElementById("game-over-overlay");
     if (existing) existing.remove();
@@ -49,7 +50,7 @@ export function createGameOverScreenController({
         .replace(/'/g, "&#39;");
 
     const baseRowStyle =
-      "display:grid;grid-template-columns:2fr 1.1fr repeat(3,1fr);gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid rgba(176,219,255,0.18);font-size:13px;";
+      "display:grid;grid-template-columns:2fr 1.1fr repeat(3,1fr);gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid rgba(176,219,255,0.18);font-size:clamp(11px, 2.4vw, 13px);";
 
     const headerRow = `
       <div style="${baseRowStyle}font-weight:600;border-bottom:1px solid rgba(176,219,255,0.3);text-transform:uppercase;font-size:11px;color:#cce8ff;font-family: "Press Start 2P", "Lato", sans-serif;">
@@ -84,8 +85,9 @@ export function createGameOverScreenController({
       })
       .join("");
 
-    const rewardSectionHtml = rewards.length
-      ? `
+    const rewardSectionHtml =
+      !isMobile && rewards.length
+        ? `
         <div style="margin-top:28px;text-align:left;">
           <h2 style="margin:0 0 10px;font-size:18px;color:#e8f4ff;font-family: "Press Start 2P", "Lato", sans-serif;">Match Results</h2>
           <div style="border:1px solid rgba(123,191,255,0.35);border-radius:10px;overflow:hidden;background:rgba(14,34,58,0.75);">
@@ -93,10 +95,11 @@ export function createGameOverScreenController({
             ${rewardRowsHtml}
           </div>
         </div>`
-      : "";
+        : "";
 
-    const personalSummaryHtml = myReward
-      ? `
+    const personalSummaryHtml =
+      !isMobile && myReward
+        ? `
         <div style="margin-top:16px;padding:16px 18px;border-radius:10px;background:rgba(76,146,214,0.16);border:1px solid rgba(125,189,255,0.45);text-align:center;">
           <div style="font-size:15px;font-weight:600;margin-bottom:10px;color:#d7eeff;">You Earned</div>
           <div style="display:flex;justify-content:center;gap:26px;align-items:center;font-size:20px;font-weight:600;">
@@ -120,18 +123,18 @@ export function createGameOverScreenController({
             } kills
           </div>
         </div>`
-      : "";
+        : "";
 
     div.innerHTML = `
-      <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:9999;background:radial-gradient(circle at 12% 14%, rgba(146,205,255,0.22), transparent 38%), rgba(5,12,20,0.72);font-family: "Press Start 2P", "Lato", sans-serif;">
-        <div style="position:relative;background:linear-gradient(180deg,#204874f2,#153357f2);padding:32px 48px;border:3px solid #78bdff;border-radius:14px;min-width:320px;max-width:min(980px,92vw);text-align:center;box-shadow:0 16px 38px rgba(0,0,0,0.5), inset 0 0 0 2px rgba(220,240,255,0.2);color:#fff;">
+      <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:${isMobile ? "calc(env(safe-area-inset-top) + 8px) 10px calc(env(safe-area-inset-bottom) + 10px)" : "20px"};z-index:9999;overflow:auto;background:radial-gradient(circle at 12% 14%, rgba(146,205,255,0.22), transparent 38%), rgba(5,12,20,0.72);font-family: "Press Start 2P", "Lato", sans-serif;">
+        <div style="position:relative;background:linear-gradient(180deg,#204874f2,#153357f2);padding:${isMobile ? "18px 16px 16px" : "32px 48px"};border:3px solid #78bdff;border-radius:14px;width:${isMobile ? "min(520px,96vw)" : "min(980px,92vw)"};max-width:${isMobile ? "96vw" : "min(980px,92vw)"};max-height:${isMobile ? "min(82vh,760px)" : "min(760px,92vh)"};overflow:auto;text-align:center;box-shadow:0 16px 38px rgba(0,0,0,0.5), inset 0 0 0 2px rgba(220,240,255,0.2);color:#fff;">
           <div style="position:absolute;inset:8px;border:1px dashed rgba(199,230,255,0.45);border-radius:10px;pointer-events:none;"></div>
-          <h1 style="margin:0 0 16px;font-size:48px;letter-spacing:2px;font-family:'Press Start 2P','Lato',sans-serif;line-height:1.24;text-transform:uppercase;${
+          <h1 style="margin:0 0 ${isMobile ? "10px" : "16px"};font-size:${isMobile ? "clamp(22px, 7vw, 34px)" : "48px"};letter-spacing:2px;font-family:'Press Start 2P','Lato',sans-serif;line-height:1.24;text-transform:uppercase;${
             winner === gameData?.yourTeam ? "color:#9fffc3;" : ""
           }${winner && winner !== gameData?.yourTeam ? "color:#ff9a9a;" : ""}">${heading}</h1>
           ${personalSummaryHtml || ""}
           ${rewardSectionHtml || ""}
-          <button id="go-lobby" style="background:linear-gradient(180deg,#5bb2ff,#3d87df);color:#fff;font-size:16px;font-family:'Press Start 2P','Lato',sans-serif;padding:18px 28px;border:1px solid #d5ecff;border-radius:12px;box-shadow:0 5px 0 #1f4f83, 0 14px 24px rgba(0,0,0,0.24);cursor:pointer;margin-top:24px;min-width:300px;min-height:64px;">Back to Lobby (10)</button>
+          <button id="go-lobby" style="background:linear-gradient(180deg,#5bb2ff,#3d87df);color:#fff;font-size:${isMobile ? "12px" : "16px"};font-family:'Press Start 2P','Lato',sans-serif;padding:${isMobile ? "12px 18px" : "18px 28px"};border:1px solid #d5ecff;border-radius:12px;box-shadow:0 5px 0 #1f4f83, 0 14px 24px rgba(0,0,0,0.24);cursor:pointer;margin-top:${isMobile ? "14px" : "24px"};min-width:${isMobile ? "min(240px,82vw)" : "300px"};min-height:${isMobile ? "48px" : "64px"};">Back to Lobby (10)</button>
         </div>
       </div>`;
 

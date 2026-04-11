@@ -21,6 +21,7 @@ const { createPartyStateService } = require("../services/partyStateService");
 const {
   createPartyQueueTransitionService,
 } = require("../services/partyQueueTransitionService");
+const { registerChatEvents } = require("./socketEvents/chatEvents");
 
 const DEBUG_SOCKET_EVENTS =
   String(process.env.DEBUG_SOCKET_EVENTS || "").toLowerCase() === "1" ||
@@ -76,7 +77,7 @@ function readSignedCookieFromHandshake(socket, cookieName, secret) {
  *      updateLastSeen
  *    }
  */
-function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
+function initSocket({ io, COOKIE_SECRET, db, runtimeConfig, chatService }) {
   // Game hub for managing active game rooms
   const gameHub = createGameHub({ io, db, runtimeConfig });
 
@@ -224,6 +225,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
         // auto-join room
         if (partyId) {
           socket.join(`party:${partyId}`);
+          socket.data.partyId = partyId;
           socket.emit("party:joined", { partyId });
           console.log("[socket] auto-joined party room", {
             socketId: socket.id,
@@ -232,6 +234,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
           });
         } else {
           socket.join("lobby");
+          socket.data.partyId = null;
           socket.emit("party:joined", { partyId: null });
           console.log("[socket] joined lobby room", {
             socketId: socket.id,
@@ -254,6 +257,10 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
       partyState,
       partyQueueTransition,
       PARTY_STATUS,
+    });
+
+    registerChatEvents(socket, {
+      chatService,
     });
 
     registerMatchmakingEvents(socket, {
@@ -305,16 +312,20 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
         }
         const sock = io.sockets.sockets.get(sid);
         if (!sock) {
-          console.warn("[socket] moveUserSocketToParty socket not found in io map", {
-            username,
-            partyId,
-            socketId: sid,
-          });
+          console.warn(
+            "[socket] moveUserSocketToParty socket not found in io map",
+            {
+              username,
+              partyId,
+              socketId: sid,
+            },
+          );
           return;
         }
         for (const room of sock.rooms)
           if (room.startsWith("party:")) sock.leave(room);
         sock.join(`party:${partyId}`);
+        sock.data.partyId = Number(partyId) || null;
         sock.emit("party:joined", { partyId });
         console.log("[socket] moveUserSocketToParty success", {
           username,
@@ -338,6 +349,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig }) {
         for (const room of sock.rooms)
           if (room.startsWith("party:")) sock.leave(room);
         sock.join("lobby");
+        sock.data.partyId = null;
         sock.emit("party:joined", { partyId: null });
       } catch (e) {
         console.warn("moveUserSocketToLobby failed:", e?.message);

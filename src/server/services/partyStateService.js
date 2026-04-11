@@ -113,7 +113,7 @@ function createPartyStateService({ db, io }) {
       }
       const partyId = insertParty.insertId;
       await q(
-        "INSERT INTO party_members (party_id, name, team) VALUES (?, ?, ?)",
+        "INSERT INTO party_members (party_id, name, team, joined_at) VALUES (?, ?, ?, DATE_SUB(NOW(), INTERVAL 1 SECOND))",
         [partyId, username, "team1"],
       );
       return partyId;

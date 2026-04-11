@@ -18,6 +18,7 @@ const roomStateManager = require("./gameRoom/roomStateManager");
 const netTestLogger = require("./gameRoom/netTestLogger");
 const attackRuntimeManager = require("./gameRoom/attackRuntimeManager");
 const characterActionRegistry = require("./gameRoom/characterActionRegistry");
+const { registerGameChatEvents } = require("./socketEvents/gameChatEvents");
 const { createGameModeRuntime } = require("./gameModes");
 const {
   activateSpecial,
@@ -52,6 +53,7 @@ class GameRoom {
     this._lastSnapshotMono = 0;
     this._snapshotIntervals = []; // diagnostics (ms spacing between snapshots)
     this._diagLastLogMono = 0;
+    this._chatSeq = 1;
     this.FIXED_DT_MS = 1000 / 60; // 60 Hz fixed step
     this.SNAPSHOT_EVERY_TICKS = 1; // 60/2 = 30 Hz snapshots
     this.WORLD_STATE_EVERY_TICKS = 8; // 7.5 Hz world-state packets
@@ -549,6 +551,8 @@ class GameRoom {
         );
       }
     });
+
+    registerGameChatEvents(this, socket);
   }
 
   /**

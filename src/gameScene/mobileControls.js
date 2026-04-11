@@ -23,6 +23,8 @@ export function createMobileControlsController({
         dx: 0,
         dy: 0,
         strength: 0,
+        baseX: null,
+        baseY: null,
       },
       basic: {
         pointerId: null,
@@ -86,39 +88,51 @@ export function createMobileControlsController({
         return el;
       };
 
+      const moveZone = document.createElement("div");
+      moveZone.id = "bb-mobile-move-zone";
+      moveZone.style.position = "fixed";
+      moveZone.style.left = "0";
+      moveZone.style.top = "0";
+      moveZone.style.width = "58vw";
+      moveZone.style.height = "100vh";
+      moveZone.style.pointerEvents = "auto";
+      moveZone.style.background = "transparent";
+      moveZone.style.touchAction = "none";
+      root.appendChild(moveZone);
+
       const moveBase = makeCircle(
         "bb-mobile-move-base",
-        92,
+        84,
         "rgba(255,255,255,0.16)",
         "2px solid rgba(255,255,255,0.48)",
       );
       const moveThumb = makeCircle(
         "bb-mobile-move-thumb",
-        38,
+        36,
         "rgba(255,255,255,0.28)",
         "2px solid rgba(255,255,255,0.78)",
       );
       const basicBase = makeCircle(
         "bb-mobile-basic-base",
-        80,
+        74,
         "rgba(255,255,255,0.14)",
         "2px solid rgba(255,255,255,0.54)",
       );
       const basicThumb = makeCircle(
         "bb-mobile-basic-thumb",
-        34,
+        32,
         "rgba(255,255,255,0.30)",
         "2px solid rgba(255,255,255,0.78)",
       );
       const superBase = makeCircle(
         "bb-mobile-super-base",
-        68,
+        64,
         "rgba(255,232,117,0.14)",
         "2px solid rgba(255,235,140,0.58)",
       );
       const superThumb = makeCircle(
         "bb-mobile-super-thumb",
-        30,
+        28,
         "rgba(255,232,117,0.28)",
         "2px solid rgba(255,245,186,0.84)",
       );
@@ -148,6 +162,7 @@ export function createMobileControlsController({
       document.body.appendChild(root);
       domRoot = root;
       domRoot._els = {
+        moveZone,
         moveBase,
         moveThumb,
         basicBase,
@@ -168,6 +183,10 @@ export function createMobileControlsController({
     try {
       const listeners = domRoot?._listeners;
       if (listeners) {
+        listeners.moveZone?.removeEventListener?.(
+          "pointerdown",
+          listeners.onMoveDown,
+        );
         listeners.moveBase?.removeEventListener?.(
           "pointerdown",
           listeners.onMoveDown,
@@ -180,7 +199,10 @@ export function createMobileControlsController({
           "pointerdown",
           listeners.onSuperDown,
         );
-        listeners.jump?.removeEventListener?.("pointerdown", listeners.onJumpDown);
+        listeners.jump?.removeEventListener?.(
+          "pointerdown",
+          listeners.onJumpDown,
+        );
         window.removeEventListener("pointermove", listeners.onPointerMove);
         window.removeEventListener("pointerup", listeners.onPointerUp);
         window.removeEventListener("pointercancel", listeners.onPointerUp);
@@ -217,6 +239,14 @@ export function createMobileControlsController({
     };
   }
 
+  function getSceneBounds(scene = state.scene) {
+    const metrics = getDomLayoutMetrics(scene);
+    return {
+      width: Number(metrics.width) || Number(window?.innerWidth || 0),
+      height: Number(metrics.height) || Number(window?.innerHeight || 0),
+    };
+  }
+
   function isPreferred() {
     try {
       if (typeof window === "undefined") return false;
@@ -236,12 +266,36 @@ export function createMobileControlsController({
   function getStickConfig(kind = "movement") {
     switch (kind) {
       case "basic":
-        return { radius: 40, thumbRadius: 17, alpha: 0.18, xPad: 92, yPad: 122 };
+        return {
+          radius: 37,
+          thumbRadius: 16,
+          alpha: 0.18,
+          xPad: 90,
+          yPad: 118,
+        };
       case "special":
-        return { radius: 34, thumbRadius: 15, alpha: 0.18, xPad: 174, yPad: 84 };
+        return {
+          radius: 32,
+          thumbRadius: 14,
+          alpha: 0.18,
+          xPad: 168,
+          yPad: 80,
+        };
       default:
-        return { radius: 46, thumbRadius: 19, alpha: 0.2, xPad: 86, yPad: 92 };
+        return { radius: 42, thumbRadius: 18, alpha: 0.2, xPad: 84, yPad: 88 };
     }
+  }
+
+  function getMovementBasePosition(pointer, width, height) {
+    const cfg = getStickConfig("movement");
+    const minX = cfg.radius + 28;
+    const maxX = Math.max(minX, width * 0.58);
+    const minY = cfg.radius + 24;
+    const maxY = Math.max(minY, height - cfg.radius - 24);
+    return {
+      x: Phaser.Math.Clamp(Number(pointer?.x) || 0, minX, maxX),
+      y: Phaser.Math.Clamp(Number(pointer?.y) || 0, minY, maxY),
+    };
   }
 
   function createControlCircle(scene, radius, fillAlpha = 0.18) {
@@ -326,12 +380,32 @@ export function createMobileControlsController({
     const moveCfg = getStickConfig("movement");
     const basicCfg = getStickConfig("basic");
     const specialCfg = getStickConfig("special");
-    const moveBase = createControlCircle(nextScene, moveCfg.radius, moveCfg.alpha);
+    const moveBase = createControlCircle(
+      nextScene,
+      moveCfg.radius,
+      moveCfg.alpha,
+    );
     const moveThumb = createControlCircle(nextScene, moveCfg.thumbRadius, 0.24);
-    const basicBase = createControlCircle(nextScene, basicCfg.radius, basicCfg.alpha);
-    const basicThumb = createControlCircle(nextScene, basicCfg.thumbRadius, 0.24);
-    const superBase = createControlCircle(nextScene, specialCfg.radius, specialCfg.alpha);
-    const superThumb = createControlCircle(nextScene, specialCfg.thumbRadius, 0.24);
+    const basicBase = createControlCircle(
+      nextScene,
+      basicCfg.radius,
+      basicCfg.alpha,
+    );
+    const basicThumb = createControlCircle(
+      nextScene,
+      basicCfg.thumbRadius,
+      0.24,
+    );
+    const superBase = createControlCircle(
+      nextScene,
+      specialCfg.radius,
+      specialCfg.alpha,
+    );
+    const superThumb = createControlCircle(
+      nextScene,
+      specialCfg.thumbRadius,
+      0.24,
+    );
     const jumpButton = createControlCircle(nextScene, 26, 0.2);
     const jumpLabel = nextScene.add
       .text(0, 0, "JUMP", {
@@ -362,7 +436,9 @@ export function createMobileControlsController({
     const scene = nextScene || state.scene;
     if (!state.enabled || !state.ui || !scene?.scale) return;
     const width = Number(scene.scale.gameSize?.width || scene.scale.width || 0);
-    const height = Number(scene.scale.gameSize?.height || scene.scale.height || 0);
+    const height = Number(
+      scene.scale.gameSize?.height || scene.scale.height || 0,
+    );
     const moveCfg = getStickConfig("movement");
     const basicCfg = getStickConfig("basic");
     const specialCfg = getStickConfig("special");
@@ -375,28 +451,44 @@ export function createMobileControlsController({
       }
     } catch (_) {}
 
-    const moveX = moveCfg.xPad;
-    const moveY = height - moveCfg.yPad;
+    const moveHomeX = moveCfg.xPad;
+    const moveHomeY = height - moveCfg.yPad;
+    if (!Number.isFinite(state.movement.baseX))
+      state.movement.baseX = moveHomeX;
+    if (!Number.isFinite(state.movement.baseY))
+      state.movement.baseY = moveHomeY;
+    if (!state.movement.active) {
+      state.movement.baseX = moveHomeX;
+      state.movement.baseY = moveHomeY;
+    }
+    const moveX = Number(state.movement.baseX) || moveHomeX;
+    const moveY = Number(state.movement.baseY) || moveHomeY;
     ui.moveBase.x = moveX;
     ui.moveBase.y = moveY;
-    ui.moveThumb.x = moveX + clampUnit(state.movement.dx) * moveCfg.radius * 0.62;
-    ui.moveThumb.y = moveY + clampUnit(state.movement.dy) * moveCfg.radius * 0.62;
+    ui.moveThumb.x =
+      moveX + clampUnit(state.movement.dx) * moveCfg.radius * 0.62;
+    ui.moveThumb.y =
+      moveY + clampUnit(state.movement.dy) * moveCfg.radius * 0.62;
     drawStick(ui.moveBase, ui.moveThumb, moveCfg);
 
     const basicX = width - basicCfg.xPad;
     const basicY = height - basicCfg.yPad;
     ui.basicBase.x = basicX;
     ui.basicBase.y = basicY;
-    ui.basicThumb.x = basicX + clampUnit(state.basic.dx) * basicCfg.radius * 0.62;
-    ui.basicThumb.y = basicY + clampUnit(state.basic.dy) * basicCfg.radius * 0.62;
+    ui.basicThumb.x =
+      basicX + clampUnit(state.basic.dx) * basicCfg.radius * 0.62;
+    ui.basicThumb.y =
+      basicY + clampUnit(state.basic.dy) * basicCfg.radius * 0.62;
     drawStick(ui.basicBase, ui.basicThumb, basicCfg, 0xffffff);
 
     const superX = width - specialCfg.xPad;
     const superY = height - specialCfg.yPad;
     ui.superBase.x = superX;
     ui.superBase.y = superY;
-    ui.superThumb.x = superX + clampUnit(state.special.dx) * specialCfg.radius * 0.62;
-    ui.superThumb.y = superY + clampUnit(state.special.dy) * specialCfg.radius * 0.62;
+    ui.superThumb.x =
+      superX + clampUnit(state.special.dx) * specialCfg.radius * 0.62;
+    ui.superThumb.y =
+      superY + clampUnit(state.special.dy) * specialCfg.radius * 0.62;
     drawStick(ui.superBase, ui.superThumb, specialCfg, 0xffea75);
 
     ui.jumpButton.x = width - 74;
@@ -407,52 +499,88 @@ export function createMobileControlsController({
       const dom = ensureDomRoot()?._els;
       if (dom) {
         const metrics = getDomLayoutMetrics(scene);
-        const domMoveX = metrics.left + moveCfg.xPad;
-        const domMoveY = metrics.top + metrics.height - moveCfg.yPad;
-        const domBasicX = metrics.left + metrics.width - basicCfg.xPad;
-        const domBasicY = metrics.top + metrics.height - basicCfg.yPad;
-        const domSuperX = metrics.left + metrics.width - specialCfg.xPad;
-        const domSuperY = metrics.top + metrics.height - specialCfg.yPad;
-        const domJumpX = metrics.left + metrics.width - 74;
-        const domJumpY = metrics.top + metrics.height - 62;
+        const domMoveX = moveX;
+        const domMoveY = moveY;
+        const domBasicX = metrics.width - basicCfg.xPad;
+        const domBasicY = metrics.height - basicCfg.yPad;
+        const domSuperX = metrics.width - specialCfg.xPad;
+        const domSuperY = metrics.height - specialCfg.yPad;
+        const domJumpX = metrics.width - 74;
+        const domJumpY = metrics.height - 62;
         state.domLayout = {
+          left: metrics.left,
+          top: metrics.top,
+          width: metrics.width,
+          height: metrics.height,
           moveX: domMoveX,
           moveY: domMoveY,
-          moveRadius: 46,
+          moveRadius: moveCfg.radius,
           basicX: domBasicX,
           basicY: domBasicY,
-          basicRadius: 40,
+          basicRadius: basicCfg.radius,
           superX: domSuperX,
           superY: domSuperY,
-          superRadius: 34,
+          superRadius: specialCfg.radius,
           jumpX: domJumpX,
           jumpY: domJumpY,
         };
 
-        setDomCirclePosition(dom.moveBase, domMoveX, domMoveY, 92);
+        setDomCirclePosition(
+          dom.moveBase,
+          metrics.left + domMoveX,
+          metrics.top + domMoveY,
+          84,
+        );
         setDomCirclePosition(
           dom.moveThumb,
-          domMoveX + clampUnit(state.movement.dx) * moveCfg.radius * 0.62,
-          domMoveY + clampUnit(state.movement.dy) * moveCfg.radius * 0.62,
-          38,
+          metrics.left +
+            domMoveX +
+            clampUnit(state.movement.dx) * moveCfg.radius * 0.62,
+          metrics.top +
+            domMoveY +
+            clampUnit(state.movement.dy) * moveCfg.radius * 0.62,
+          36,
         );
-        setDomCirclePosition(dom.basicBase, domBasicX, domBasicY, 80);
+        setDomCirclePosition(
+          dom.basicBase,
+          metrics.left + domBasicX,
+          metrics.top + domBasicY,
+          74,
+        );
         setDomCirclePosition(
           dom.basicThumb,
-          domBasicX + clampUnit(state.basic.dx) * basicCfg.radius * 0.62,
-          domBasicY + clampUnit(state.basic.dy) * basicCfg.radius * 0.62,
-          34,
+          metrics.left +
+            domBasicX +
+            clampUnit(state.basic.dx) * basicCfg.radius * 0.62,
+          metrics.top +
+            domBasicY +
+            clampUnit(state.basic.dy) * basicCfg.radius * 0.62,
+          32,
         );
-        setDomCirclePosition(dom.superBase, domSuperX, domSuperY, 68);
+        setDomCirclePosition(
+          dom.superBase,
+          metrics.left + domSuperX,
+          metrics.top + domSuperY,
+          64,
+        );
         setDomCirclePosition(
           dom.superThumb,
-          domSuperX + clampUnit(state.special.dx) * specialCfg.radius * 0.62,
-          domSuperY + clampUnit(state.special.dy) * specialCfg.radius * 0.62,
-          30,
+          metrics.left +
+            domSuperX +
+            clampUnit(state.special.dx) * specialCfg.radius * 0.62,
+          metrics.top +
+            domSuperY +
+            clampUnit(state.special.dy) * specialCfg.radius * 0.62,
+          28,
         );
-        setDomCirclePosition(dom.jump, domJumpX, domJumpY, 52);
-        dom.jumpLabel.style.left = `${Math.round(domJumpX)}px`;
-        dom.jumpLabel.style.top = `${Math.round(domJumpY)}px`;
+        setDomCirclePosition(
+          dom.jump,
+          metrics.left + domJumpX,
+          metrics.top + domJumpY,
+          52,
+        );
+        dom.jumpLabel.style.left = `${Math.round(metrics.left + domJumpX)}px`;
+        dom.jumpLabel.style.top = `${Math.round(metrics.top + domJumpY)}px`;
         dom.moveBase.style.display = "block";
         dom.moveThumb.style.display = "block";
         dom.basicBase.style.display = "block";
@@ -489,6 +617,33 @@ export function createMobileControlsController({
         state.jump.active = true;
         state.jump.pressedAt = Date.now();
         return;
+      }
+      if (kind === "movement") {
+        const metrics = getDomLayoutMetrics(state.scene);
+        const moveCfg = getStickConfig("movement");
+        const localX = (Number(event.clientX) || 0) - Number(metrics.left || 0);
+        const localY = (Number(event.clientY) || 0) - Number(metrics.top || 0);
+        const baseX = Phaser.Math.Clamp(
+          localX,
+          moveCfg.radius + 28,
+          Math.max(moveCfg.radius + 28, metrics.width * 0.58),
+        );
+        const baseY = Phaser.Math.Clamp(
+          localY,
+          moveCfg.radius + 24,
+          Math.max(moveCfg.radius + 24, metrics.height - 24),
+        );
+        state.movement.baseX = baseX;
+        state.movement.baseY = baseY;
+        state.domLayout = {
+          ...(state.domLayout || {}),
+          left: Number(metrics.left || 0),
+          top: Number(metrics.top || 0),
+          width: Number(metrics.width || 0),
+          height: Number(metrics.height || 0),
+        };
+        state.domLayout.moveX = baseX;
+        state.domLayout.moveY = baseY;
       }
       updateDomStickState(kind, event);
     };
@@ -534,14 +689,21 @@ export function createMobileControlsController({
         event.preventDefault?.();
       }
     };
-    els.moveBase.addEventListener("pointerdown", onMoveDown, { passive: false });
-    els.basicBase.addEventListener("pointerdown", onBasicDown, { passive: false });
-    els.superBase.addEventListener("pointerdown", onSuperDown, { passive: false });
+    els.moveZone.addEventListener("pointerdown", onMoveDown, {
+      passive: false,
+    });
+    els.basicBase.addEventListener("pointerdown", onBasicDown, {
+      passive: false,
+    });
+    els.superBase.addEventListener("pointerdown", onSuperDown, {
+      passive: false,
+    });
     els.jump.addEventListener("pointerdown", onJumpDown, { passive: false });
     window.addEventListener("pointermove", onPointerMove, { passive: false });
     window.addEventListener("pointerup", onPointerUp, { passive: false });
     window.addEventListener("pointercancel", onPointerUp, { passive: false });
     root._listeners = {
+      moveZone: els.moveZone,
       moveBase: els.moveBase,
       basicBase: els.basicBase,
       superBase: els.superBase,
@@ -559,9 +721,11 @@ export function createMobileControlsController({
     const layout = state.domLayout;
     if (!layout) return false;
     if (kind === "movement") {
+      const localX = Number(event.clientX) - Number(layout.left || 0);
+      const localY = Number(event.clientY) - Number(layout.top || 0);
       const sample = getStickDistanceNorm(
-        event.clientX,
-        event.clientY,
+        localX,
+        localY,
         layout.moveX,
         layout.moveY,
         layout.moveRadius,
@@ -576,10 +740,13 @@ export function createMobileControlsController({
     const family = kind === "special" ? "special" : "basic";
     const centerX = family === "special" ? layout.superX : layout.basicX;
     const centerY = family === "special" ? layout.superY : layout.basicY;
-    const radius = family === "special" ? layout.superRadius : layout.basicRadius;
+    const radius =
+      family === "special" ? layout.superRadius : layout.basicRadius;
+    const localX = Number(event.clientX) - Number(layout.left || 0);
+    const localY = Number(event.clientY) - Number(layout.top || 0);
     const sample = getStickDistanceNorm(
-      event.clientX,
-      event.clientY,
+      localX,
+      localY,
       centerX,
       centerY,
       radius,
@@ -599,11 +766,12 @@ export function createMobileControlsController({
     if (!player) return null;
     const family = kind === "special" ? "special" : "basic";
     const stick = family === "special" ? state.special : state.basic;
-    const base =
-      (typeof getAimBasePoint === "function" ? getAimBasePoint(family) : null) || {
-        baseX: Number(player?.x) || 0,
-        baseY: Number(player?.y) || 0,
-      };
+    const base = (typeof getAimBasePoint === "function"
+      ? getAimBasePoint(family)
+      : null) || {
+      baseX: Number(player?.x) || 0,
+      baseY: Number(player?.y) || 0,
+    };
     const defaultDir = player?.flipX ? -1 : 1;
     const dx = Number(stick.dx) || defaultDir;
     const dy = Number(stick.dy) || 0;
@@ -622,7 +790,8 @@ export function createMobileControlsController({
 
   function clearAimIfIdle() {
     if (state.basic.active || state.special.active) return;
-    if (typeof getPointerAimActive === "function" && getPointerAimActive()) return;
+    if (typeof getPointerAimActive === "function" && getPointerAimActive())
+      return;
     try {
       onClearReticle?.();
     } catch (_) {}
@@ -633,7 +802,13 @@ export function createMobileControlsController({
     const ui = state.ui;
     if (kind === "movement") {
       const cfg = getStickConfig("movement");
-      const sample = getStickDistanceNorm(pointer.x, pointer.y, ui.moveBase.x, ui.moveBase.y, cfg.radius);
+      const sample = getStickDistanceNorm(
+        pointer.x,
+        pointer.y,
+        ui.moveBase.x,
+        ui.moveBase.y,
+        cfg.radius,
+      );
       state.movement.active = true;
       state.movement.pointerId = pointer.id;
       state.movement.dx = sample.dx;
@@ -644,7 +819,13 @@ export function createMobileControlsController({
     const family = kind === "special" ? "special" : "basic";
     const cfg = getStickConfig(family);
     const baseObj = family === "special" ? ui.superBase : ui.basicBase;
-    const sample = getStickDistanceNorm(pointer.x, pointer.y, baseObj.x, baseObj.y, cfg.radius);
+    const sample = getStickDistanceNorm(
+      pointer.x,
+      pointer.y,
+      baseObj.x,
+      baseObj.y,
+      cfg.radius,
+    );
     const stick = family === "special" ? state.special : state.basic;
     stick.active = true;
     stick.pointerId = pointer.id;
@@ -657,7 +838,10 @@ export function createMobileControlsController({
 
   function pointerDistanceTo(baseObj, pointer) {
     if (!baseObj || !pointer) return Infinity;
-    return Math.hypot(Number(pointer.x) - Number(baseObj.x), Number(pointer.y) - Number(baseObj.y));
+    return Math.hypot(
+      Number(pointer.x) - Number(baseObj.x),
+      Number(pointer.y) - Number(baseObj.y),
+    );
   }
 
   function handlePointerDown(pointer) {
@@ -666,9 +850,11 @@ export function createMobileControlsController({
     const moveCfg = getStickConfig("movement");
     const basicCfg = getStickConfig("basic");
     const specialCfg = getStickConfig("special");
+    const bounds = getSceneBounds(state.scene);
     if (
       state.jump.pointerId === null &&
-      pointerDistanceTo(ui.jumpButton, pointer) <= Number(ui.jumpButton._radius || 26) + 8
+      pointerDistanceTo(ui.jumpButton, pointer) <=
+        Number(ui.jumpButton._radius || 26) + 8
     ) {
       state.jump.pointerId = pointer.id;
       state.jump.active = true;
@@ -677,8 +863,17 @@ export function createMobileControlsController({
     }
     if (
       state.movement.pointerId === null &&
-      pointerDistanceTo(ui.moveBase, pointer) <= moveCfg.radius + 32
+      Number(pointer?.x) <= bounds.width * 0.58
     ) {
+      const base = getMovementBasePosition(
+        pointer,
+        bounds.width,
+        bounds.height,
+      );
+      state.movement.baseX = base.x;
+      state.movement.baseY = base.y;
+      ui.moveBase.x = base.x;
+      ui.moveBase.y = base.y;
       updateStickState("movement", pointer);
       return true;
     }
@@ -730,6 +925,19 @@ export function createMobileControlsController({
     stick.dy = 0;
     stick.strength = 0;
     stick.context = null;
+    if (kind === "movement") {
+      const bounds = getSceneBounds(state.scene);
+      const cfg = getStickConfig("movement");
+      stick.baseX = cfg.xPad;
+      stick.baseY = bounds.height - cfg.yPad;
+      state.domLayout = state.domLayout || {};
+      state.domLayout.moveX = stick.baseX;
+      state.domLayout.moveY = stick.baseY;
+      if (state.ui?.moveBase) {
+        state.ui.moveBase.x = stick.baseX;
+        state.ui.moveBase.y = stick.baseY;
+      }
+    }
     if (kind === "basic" && shouldFire && context) {
       onBasicFire?.(context);
     } else if (kind === "special" && shouldFire && context) {

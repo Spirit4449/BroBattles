@@ -25,11 +25,23 @@ import {
 } from "./lib/gameSelectionCatalog.js";
 import { initUISounds, playSound } from "./lib/uiSounds.js";
 import { showUiConfirm } from "./lib/uiConfirm.js";
+import { wireFullscreenToggles } from "./lib/fullscreen.js";
+import { createLobbyChatController } from "./lib/chatController.js";
 import "./styles/characterSelect.css";
 import "./styles/index.css";
+import "./styles/chat.css";
 import "./styles/profile.css";
 import "./styles/selectionPopup.css";
 import "./styles/sonner.css";
+
+wireFullscreenToggles();
+
+createLobbyChatController({
+  socket,
+  getPartyContext: getPartyInteractionContext,
+  getCurrentUserName: () =>
+    document.getElementById("username-text")?.textContent || "",
+});
 
 let userData = null;
 let guest = false;
