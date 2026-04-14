@@ -63,8 +63,10 @@ function createPartyChatService({ db, io }) {
     if (!ids.length) {
       return {
         reactionsByMessageId: new Map(),
+        reactionUsersByMessageId: new Map(),
         viewerReactionByMessageId: new Map(),
         readCountByMessageId: new Map(),
+        readersByMessageId: new Map(),
       };
     }
 
@@ -93,6 +95,24 @@ function createPartyChatService({ db, io }) {
           AND message_id IN (${inClause})`,
       [partyId, userId, ...ids],
     );
+    const reactionUserRows = await db.runQuery(
+      `SELECT r.message_id, r.reaction, r.user_id, u.name AS reactor_name
+         FROM party_chat_message_reactions r
+         JOIN users u ON u.user_id = r.user_id
+        WHERE r.party_id = ?
+          AND r.message_id IN (${inClause})
+        ORDER BY r.message_id ASC, r.reaction ASC, u.name ASC`,
+      [partyId, ...ids],
+    );
+    const readerRows = await db.runQuery(
+      `SELECT r.message_id, r.user_id, u.name AS reader_name, u.char_class AS reader_char_class, r.read_at
+         FROM party_chat_message_reads r
+         JOIN users u ON u.user_id = r.user_id
+        WHERE r.party_id = ?
+          AND r.message_id IN (${inClause})
+        ORDER BY r.message_id ASC, r.read_at ASC, u.name ASC`,
+      [partyId, ...ids],
+    );
 
     const reactionsByMessageId = new Map();
     for (const row of reactionRows) {
@@ -119,6 +139,23 @@ function createPartyChatService({ db, io }) {
       );
     }
 
+    const reactionUsersByMessageId = new Map();
+    for (const row of reactionUserRows) {
+      const messageId = Number(row.message_id);
+      const reaction = String(row.reaction || "");
+      if (!reactionUsersByMessageId.has(messageId)) {
+        reactionUsersByMessageId.set(messageId, {});
+      }
+      const byReaction = reactionUsersByMessageId.get(messageId);
+      if (!Array.isArray(byReaction[reaction])) {
+        byReaction[reaction] = [];
+      }
+      byReaction[reaction].push({
+        userId: Number(row.user_id) || null,
+        name: String(row.reactor_name || ""),
+      });
+    }
+
     const readCountByMessageId = new Map();
     for (const row of readRows) {
       readCountByMessageId.set(
@@ -127,10 +164,26 @@ function createPartyChatService({ db, io }) {
       );
     }
 
+    const readersByMessageId = new Map();
+    for (const row of readerRows) {
+      const messageId = Number(row.message_id);
+      if (!readersByMessageId.has(messageId)) {
+        readersByMessageId.set(messageId, []);
+      }
+      readersByMessageId.get(messageId).push({
+        userId: Number(row.user_id),
+        name: String(row.reader_name || ""),
+        charClass: String(row.reader_char_class || "ninja"),
+        readAt: row.read_at ? new Date(row.read_at).toISOString() : null,
+      });
+    }
+
     return {
       reactionsByMessageId,
+      reactionUsersByMessageId,
       viewerReactionByMessageId,
       readCountByMessageId,
+      readersByMessageId,
     };
   }
 
@@ -161,9 +214,13 @@ function createPartyChatService({ db, io }) {
           }
         : null,
       viewCount: Number(aggregates?.readCountByMessageId?.get(messageId)) || 0,
+      viewers: Array.isArray(aggregates?.readersByMessageId?.get(messageId))
+        ? aggregates.readersByMessageId.get(messageId)
+        : [],
       reactions: Array.isArray(aggregates?.reactionsByMessageId?.get(messageId))
         ? aggregates.reactionsByMessageId.get(messageId)
         : [],
+      reactionUsers: aggregates?.reactionUsersByMessageId?.get(messageId) || {},
       myReaction:
         String(aggregates?.viewerReactionByMessageId?.get(messageId) || "") ||
         null,
@@ -394,7 +451,7 @@ function createPartyChatService({ db, io }) {
       messageId: targetId,
       user,
     });
-    io?.to?.(`party:${membership.partyId}`)?.emit?.("party-chat:invalidate", {
+    io?.to?.(`party:${membership.partyId}`)?.emit?.("party-chat:message", {
       partyId: membership.partyId,
       messageId: targetId,
       message,
@@ -443,10 +500,12 @@ function createPartyChatService({ db, io }) {
           AND user_id <> ?`,
       [membership.partyId, lastReadMessageId, Number(user.user_id) || 0],
     );
-    io?.to?.(`party:${membership.partyId}`)?.emit?.("party-chat:invalidate", {
+    io?.to?.(`party:${membership.partyId}`)?.emit?.("party-chat:read", {
       partyId: membership.partyId,
       messageId: maxMessageId,
       viewerName: user.name,
+      viewerUserId: Number(user.user_id) || null,
+      viewerCharClass: String(user.char_class || "ninja"),
       type: "read",
     });
 
