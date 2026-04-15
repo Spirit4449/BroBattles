@@ -151,9 +151,13 @@ function renderProfilePopupStats() {
     const selectedId = String(
       lobbyProfileState.selectedCardId || profile.selectedCardId || "",
     );
-    const selectedCard = cards.find((card) => String(card?.id || "") === selectedId);
+    const selectedCard = cards.find(
+      (card) => String(card?.id || "") === selectedId,
+    );
     if (selectedCard?.assetUrl) return selectedCard;
-    const defaultCard = cards.find((card) => String(card?.id || "") === "default");
+    const defaultCard = cards.find(
+      (card) => String(card?.id || "") === "default",
+    );
     if (defaultCard?.assetUrl) return defaultCard;
     return {
       name: "Player Card",
@@ -228,7 +232,10 @@ function renderProfilePopupStats() {
     "profile-character-levels-panel",
   );
   if (characterLevelsPanel) {
-    characterLevelsPanel.classList.toggle("is-hidden", lobbyProfileState.viewingSelf);
+    characterLevelsPanel.classList.toggle(
+      "is-hidden",
+      lobbyProfileState.viewingSelf,
+    );
   }
   const cardsPanel = document.getElementById("profile-cards-panel");
   const iconsPanel = document.getElementById("profile-icons-panel");
