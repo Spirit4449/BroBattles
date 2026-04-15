@@ -1,6 +1,10 @@
 import { buildProfileIconUrl } from "./profileIconAssets.js";
 
 const GAME_CHAT_RECENT_LIMIT = 8;
+const LOBBY_TYPING_IDLE_STOP_MS = 1000;
+const LOBBY_TYPING_HEARTBEAT_MS = 850;
+const LOBBY_TYPING_STALE_MS = 4000;
+const LOBBY_CHAT_BUBBLE_MS = 3800;
 
 function escapeHtml(value) {
   const raw = String(value ?? "");
@@ -119,6 +123,13 @@ function makeChatShell({
           <textarea class="bb-chat-textarea" rows="2" maxlength="500" placeholder="Write a message..."></textarea>
           <button type="button" class="bb-chat-send">Send</button>
         </div>
+        <div class="bb-chat-typing hidden" aria-live="polite">
+          <div class="bb-chat-typing-icons"></div>
+          <div class="bb-chat-typing-label">
+            <span class="bb-chat-typing-text"></span>
+            <img class="bb-chat-typing-dots" src="/assets/typing.svg" alt="" width="18" height="12" />
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -135,12 +146,17 @@ function makeChatShell({
     badge,
     reactionBadge,
     panel,
+    titleEl: panel.querySelector(".bb-chat-title"),
+    subtitleEl: panel.querySelector(".bb-chat-subtitle"),
     messagesEl: panel.querySelector(".bb-chat-messages"),
     textarea: panel.querySelector(".bb-chat-textarea"),
     sendBtn: panel.querySelector(".bb-chat-send"),
     closeBtn: panel.querySelector(".bb-chat-close"),
     clearReplyBtn: panel.querySelector(".bb-chat-reply-cancel"),
     replyBanner: panel.querySelector(".bb-chat-reply-banner"),
+    typingEl: panel.querySelector(".bb-chat-typing"),
+    typingIconsEl: panel.querySelector(".bb-chat-typing-icons"),
+    typingTextEl: panel.querySelector(".bb-chat-typing-text"),
   };
 }
 
@@ -313,6 +329,12 @@ export function createLobbyChatController({
     hasReactionNotice: false,
     replyTo: null,
     loading: false,
+    typingByUser: new Map(),
+    typingStopTimer: null,
+    typingHeartbeatTimer: null,
+    typingSweepTimer: null,
+    isLocalTyping: false,
+    bubbleTimers: new Map(),
   };
 
   const ui = makeChatShell({
@@ -329,6 +351,184 @@ export function createLobbyChatController({
     const fromContext = Number(context?.partyId) || 0;
     if (fromContext > 0) return fromContext;
     return Number(state.partyId) || 0;
+  }
+
+  function getPartyContextSnapshot() {
+    return typeof getPartyContext === "function" ? getPartyContext() : null;
+  }
+
+  function isOnlineStatus(status) {
+    const normalized = String(status || "online")
+      .trim()
+      .toLowerCase();
+    return normalized !== "offline";
+  }
+
+  function buildPartyTitle(context) {
+    const publicName = String(context?.publicName || "").trim();
+    const ownerName = String(context?.ownerName || "").trim();
+    const isPublic = !!context?.isPublic;
+    if (isPublic && publicName) return publicName;
+    if (ownerName) return `${ownerName}'s Party`;
+    return "Party";
+  }
+
+  function syncHeader() {
+    const context = getPartyContextSnapshot();
+    const partyId = Number(context?.partyId) || 0;
+    if (!partyId) {
+      ui.titleEl.textContent = "Chat";
+      ui.subtitleEl.textContent = "Party only";
+      return;
+    }
+    const members = Array.isArray(context?.members) ? context.members : [];
+    const onlineCount = members.reduce(
+      (count, member) => count + (isOnlineStatus(member?.status) ? 1 : 0),
+      0,
+    );
+    const capacity = Math.max(
+      Number(context?.capacity?.total) || 0,
+      members.length,
+      1,
+    );
+    ui.titleEl.textContent = buildPartyTitle(context);
+    ui.subtitleEl.textContent = `${onlineCount}/${capacity} online`;
+  }
+
+  function hideTypingIndicator() {
+    state.typingByUser.clear();
+    ui.typingEl.classList.add("hidden");
+    ui.typingIconsEl.innerHTML = "";
+    ui.typingTextEl.textContent = "";
+  }
+
+  function renderTypingIndicator() {
+    const now = Date.now();
+    for (const [key, entry] of state.typingByUser.entries()) {
+      if (!entry || Number(entry.expiresAt) <= now) {
+        state.typingByUser.delete(key);
+      }
+    }
+    const typers = Array.from(state.typingByUser.values());
+    if (!typers.length) {
+      ui.typingEl.classList.add("hidden");
+      ui.typingIconsEl.innerHTML = "";
+      ui.typingTextEl.textContent = "";
+      return;
+    }
+    ui.typingEl.classList.remove("hidden");
+    ui.typingIconsEl.innerHTML = typers
+      .map(
+        (typer) =>
+          `<span class="bb-chat-typing-icon"><img src="${escapeHtml(buildAvatarUrl(typer?.charClass, typer?.profileIconId))}" alt="${escapeHtml(typer?.name || "Player")}" loading="lazy" decoding="async" /></span>`,
+      )
+      .join("");
+    if (typers.length === 1) {
+      ui.typingTextEl.textContent = `${typers[0]?.name || "Player"} is typing`;
+      return;
+    }
+    if (typers.length === 2) {
+      ui.typingTextEl.textContent = `${typers[0]?.name || "Player"} and ${typers[1]?.name || "Player"} are typing`;
+      return;
+    }
+    ui.typingTextEl.textContent = `${typers.length} people are typing`;
+  }
+
+  function emitTyping(isTyping) {
+    const partyId = currentPartyId();
+    if (!partyId) return;
+    socket?.emit?.("party-chat:typing", {
+      partyId,
+      isTyping: !!isTyping,
+    });
+  }
+
+  function setLocalTyping(isTyping) {
+    const next = !!isTyping;
+    if (!next) {
+      if (state.typingStopTimer) {
+        window.clearTimeout(state.typingStopTimer);
+        state.typingStopTimer = null;
+      }
+      if (state.typingHeartbeatTimer) {
+        window.clearInterval(state.typingHeartbeatTimer);
+        state.typingHeartbeatTimer = null;
+      }
+      if (state.isLocalTyping) {
+        state.isLocalTyping = false;
+        emitTyping(false);
+      }
+      return;
+    }
+
+    if (state.typingStopTimer) {
+      window.clearTimeout(state.typingStopTimer);
+      state.typingStopTimer = null;
+    }
+
+    if (!state.isLocalTyping) {
+      state.isLocalTyping = true;
+      emitTyping(true);
+    }
+    if (!state.typingHeartbeatTimer) {
+      state.typingHeartbeatTimer = window.setInterval(() => {
+        if (!state.isLocalTyping) return;
+        emitTyping(true);
+      }, LOBBY_TYPING_HEARTBEAT_MS);
+    }
+  }
+
+  function scheduleTypingStop() {
+    if (state.typingStopTimer) {
+      window.clearTimeout(state.typingStopTimer);
+    }
+    state.typingStopTimer = window.setTimeout(() => {
+      setLocalTyping(false);
+    }, LOBBY_TYPING_IDLE_STOP_MS);
+  }
+
+  function showLobbyMessageBubble(message) {
+    const bodyText = String(message?.body || "").replace(/\s+/g, " ").trim();
+    const senderName = String(message?.sender?.name || "").trim();
+    if (!bodyText || !senderName) return;
+    const slot = Array.from(
+      document.querySelectorAll(".character-slot[data-player-name]"),
+    ).find((candidate) => sameName(candidate?.dataset?.playerName, senderName));
+    if (!slot) return;
+    let bubble = slot.querySelector(".bb-lobby-chat-bubble");
+    if (!bubble) {
+      bubble = document.createElement("div");
+      bubble.className = "bb-lobby-chat-bubble";
+      slot.appendChild(bubble);
+    }
+    bubble.textContent = bodyText;
+    bubble.classList.add("is-visible");
+
+    const key = String(slot?.dataset?.playerName || senderName)
+      .trim()
+      .toLowerCase();
+    const existingTimer = state.bubbleTimers.get(key);
+    if (existingTimer) {
+      window.clearTimeout(existingTimer);
+    }
+    const timer = window.setTimeout(() => {
+      bubble.classList.remove("is-visible");
+      state.bubbleTimers.delete(key);
+    }, LOBBY_CHAT_BUBBLE_MS);
+    state.bubbleTimers.set(key, timer);
+  }
+
+  function syncLobbyChatVisibility() {
+    const visible = currentPartyId() > 0;
+    ui.root.style.display = visible ? "block" : "none";
+    if (visible) return;
+    setOpen(false);
+    setUnreadBadge(0);
+    setReactionBadge(false);
+    setLocalTyping(false);
+    state.messages = [];
+    renderMessages();
+    hideTypingIndicator();
   }
 
   function setUnreadBadge(count) {
@@ -391,6 +591,7 @@ export function createLobbyChatController({
       if (latestId > 0) {
         void markMessagesRead(latestId);
       }
+      setLocalTyping(false);
     }
     ui.panel.classList.toggle("is-open", state.isOpen);
     ui.backdrop.classList.toggle("is-visible", state.isOpen);
@@ -696,6 +897,7 @@ export function createLobbyChatController({
     const partyId = currentPartyId();
     const body = String(ui.textarea.value || "").trim();
     if (!partyId || !body) return;
+    setLocalTyping(false);
     const payload = {
       partyId,
       body,
@@ -749,6 +951,14 @@ export function createLobbyChatController({
   ui.closeBtn.addEventListener("click", () => setOpen(false));
   ui.clearReplyBtn.addEventListener("click", () => setReplyTo(null));
   ui.sendBtn.addEventListener("click", () => void sendMessage());
+  ui.textarea.addEventListener("input", () => {
+    if (!currentPartyId()) return;
+    setLocalTyping(true);
+    scheduleTypingStop();
+  });
+  ui.textarea.addEventListener("blur", () => {
+    setLocalTyping(false);
+  });
   ui.textarea.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -758,12 +968,16 @@ export function createLobbyChatController({
 
   socket?.on?.("party:joined", ({ partyId }) => {
     state.partyId = Number(partyId) || null;
+    syncHeader();
+    syncLobbyChatVisibility();
     if (!state.partyId) {
       setOpen(false);
       setUnreadBadge(0);
       setReactionBadge(false);
+      setLocalTyping(false);
       state.messages = [];
       renderMessages();
+      hideTypingIndicator();
       return;
     }
   });
@@ -786,6 +1000,7 @@ export function createLobbyChatController({
     if (!existing && !message?.type) {
       const appendAtBottom = state.isOpen;
       upsertMessage(nextMessage, { forceScroll: appendAtBottom });
+      showLobbyMessageBubble(message);
     } else if (existing) {
       upsertMessage(nextMessage);
     }
@@ -855,11 +1070,39 @@ export function createLobbyChatController({
     }
   });
 
+  socket?.on?.("party-chat:typing", (payload = {}) => {
+    const partyId = Number(payload?.partyId) || 0;
+    if (!partyId || partyId !== currentPartyId()) return;
+    const now = Date.now();
+    const typers = Array.isArray(payload?.typers) ? payload.typers : [];
+    const currentName = String(getCurrentUserName?.() || "").trim();
+    const next = new Map();
+    for (const typer of typers) {
+      const name = String(typer?.name || "").trim();
+      if (!name) continue;
+      if (currentName && sameName(name, currentName)) continue;
+      const userId = Number(typer?.userId) || 0;
+      const key = userId > 0 ? `u:${userId}` : `n:${name.toLowerCase()}`;
+      next.set(key, {
+        userId: userId || null,
+        name,
+        charClass: String(typer?.charClass || "ninja"),
+        profileIconId: String(typer?.profileIconId || "") || null,
+        expiresAt: now + LOBBY_TYPING_STALE_MS,
+      });
+    }
+    state.typingByUser = next;
+    renderTypingIndicator();
+  });
+
   socket?.on?.("party:members", () => {
+    syncHeader();
+    syncLobbyChatVisibility();
     const partyId = currentPartyId();
     if (!partyId) {
       setOpen(false);
       setUnreadBadge(0);
+      hideTypingIndicator();
       return;
     }
     if (!state.isOpen) {
@@ -867,8 +1110,18 @@ export function createLobbyChatController({
     }
   });
 
+  socket?.on?.("status:update", (payload = {}) => {
+    const partyId = Number(payload?.partyId) || 0;
+    if (partyId && partyId !== currentPartyId()) return;
+    syncHeader();
+  });
+
   const initialPartyId = currentPartyId();
-  ui.root.style.display = "block";
+  syncHeader();
+  syncLobbyChatVisibility();
+  state.typingSweepTimer = window.setInterval(() => {
+    renderTypingIndicator();
+  }, 500);
   if (initialPartyId) {
     state.partyId = initialPartyId;
     void loadHistory();
@@ -891,6 +1144,15 @@ export function createLobbyChatController({
     open: () => setOpen(true),
     close: () => setOpen(false),
     destroy: () => {
+      setLocalTyping(false);
+      if (state.typingSweepTimer) {
+        window.clearInterval(state.typingSweepTimer);
+        state.typingSweepTimer = null;
+      }
+      for (const timerId of state.bubbleTimers.values()) {
+        window.clearTimeout(timerId);
+      }
+      state.bubbleTimers.clear();
       ui.root.remove();
       viewersPopup.remove();
     },

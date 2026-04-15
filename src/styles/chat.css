@@ -176,6 +176,28 @@
   padding: 12px;
   overflow: auto;
   align-content: flex-start;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(126, 211, 255, 0.72) transparent;
+}
+
+.bb-chat-messages::-webkit-scrollbar {
+  width: 9px;
+}
+
+.bb-chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bb-chat-messages::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  background-color: rgba(126, 211, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.bb-chat-messages::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(147, 224, 255, 0.92);
 }
 
 .bb-chat-divider {
@@ -239,12 +261,12 @@
   padding: 10px 11px 9px;
   border-radius: 14px;
   border: 1px solid rgba(126, 211, 255, 0.14);
-  background: rgba(17, 28, 47, 0.94);
+  background: rgba(19, 31, 52, 0.94);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 .bb-chat-message.is-self .bb-chat-bubble {
-  background: rgba(29, 71, 117, 0.95);
+  background: rgba(23, 57, 92, 0.95);
   border-color: rgba(125, 189, 255, 0.34);
 }
 
@@ -260,10 +282,18 @@
 
 .bb-chat-author {
   color: #f6fbff;
+  font-family: "Press Start 2P", system-ui;
+  font-size: 8px;
+  line-height: 1.3;
+  letter-spacing: 0.1px;
 }
 
 .bb-chat-time {
   color: #7fb7df;
+  font-family: "Press Start 2P", system-ui;
+  font-size: 7px;
+  line-height: 1.3;
+  letter-spacing: 0.1px;
 }
 
 .bb-chat-reply-preview {
@@ -554,6 +584,7 @@
 }
 
 .bb-chat-composer {
+  position: relative;
   padding: 10px;
   border-top: 1px solid rgba(126, 211, 255, 0.16);
   display: grid;
@@ -579,6 +610,70 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: end;
+}
+
+.bb-chat-typing {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% + 6px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  pointer-events: none;
+}
+
+.bb-chat-typing.hidden {
+  display: none;
+}
+
+.bb-chat-typing-icons {
+  display: flex;
+  align-items: center;
+  min-width: 18px;
+}
+
+.bb-chat-typing-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(197, 227, 255, 0.6);
+  background: rgba(14, 25, 46, 0.95);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.24);
+}
+
+.bb-chat-typing-icon + .bb-chat-typing-icon {
+  margin-left: -7px;
+}
+
+.bb-chat-typing-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bb-chat-typing-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bb-chat-typing-text {
+  font-size: 10px;
+  color: #8fc4f4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bb-chat-typing-dots {
+  width: 18px;
+  height: 12px;
+  object-fit: contain;
+  opacity: 0.9;
 }
 
 .bb-chat-textarea {
@@ -681,9 +776,11 @@
   right: 0;
   width: min(390px, calc(100vw - 18px));
   height: 100dvh;
+  border-radius: 13px 0 0 13px;
   transform: translateX(100%);
   transition: transform 240ms cubic-bezier(0.22, 0.9, 0.32, 1);
   pointer-events: auto;
+  overflow: hidden;
 }
 
 .bb-chat-lobby-panel.is-open {
@@ -698,6 +795,48 @@
 .bb-chat-lobby-panel .bb-chat-messages {
   flex: 1 1 auto;
   max-height: none;
+}
+
+.bb-lobby-chat-bubble {
+  position: absolute;
+  left: 50%;
+  top: -70px;
+  transform: translateX(-50%) translateY(4px);
+  max-width: 152px;
+  padding: 4px 8px;
+  border: 2px dashed rgba(250, 250, 250, 0.7);
+  background: rgba(10, 22, 37, 0.92);
+  border-radius: 10px;
+  color: #f3fbff;
+  font-size: min(2vw, 14px);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 58;
+  opacity: 0;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.bb-lobby-chat-bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 8px;
+  height: 8px;
+  background: rgba(10, 22, 37, 0.92);
+  border-right: 1px solid rgba(205, 233, 255, 0.7);
+  border-bottom: 1px solid rgba(205, 233, 255, 0.7);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.bb-lobby-chat-bubble.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .bb-chat-game-wrap {
@@ -787,6 +926,12 @@
 
   .bb-chat-lobby-panel {
     width: min(100vw, 100vw);
+  }
+
+  .bb-lobby-chat-bubble {
+    max-width: 126px;
+    top: -48px;
+    font-size: 9px;
   }
 
   .bb-chat-game-wrap {

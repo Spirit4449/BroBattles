@@ -42,6 +42,9 @@ let __modePopupUi = null;
 let __partyContext = {
   partyId: null,
   ownerName: null,
+  isPublic: false,
+  publicName: "",
+  capacity: null,
   members: [],
 };
 let __joinRequestProfilePopup = null;
@@ -1324,6 +1327,9 @@ export function socketInit(options = {}) {
     __partyContext.partyId = partyId || null;
     if (!partyId) {
       __partyContext.ownerName = null;
+      __partyContext.isPublic = false;
+      __partyContext.publicName = "";
+      __partyContext.capacity = null;
       __partyContext.members = [];
     }
   });
@@ -1485,6 +1491,20 @@ export function socketInit(options = {}) {
   socket.on("status:update", (evt) => {
     if (currentPartyId && String(evt.partyId) !== String(currentPartyId))
       return;
+    const normalized = normalizeStatusLabel(evt.status || "online");
+    const targetName = String(evt.name || "").trim();
+    if (targetName) {
+      const member = Array.isArray(__partyContext.members)
+        ? __partyContext.members.find(
+            (item) =>
+              String(item?.name || "").trim().toLowerCase() ===
+              targetName.toLowerCase(),
+          )
+        : null;
+      if (member) {
+        member.status = normalized;
+      }
+    }
     const slots = document.querySelectorAll(".character-slot");
     for (const slot of slots) {
       if (!slot) continue;
@@ -1493,7 +1513,6 @@ export function socketInit(options = {}) {
       if (!nameEl || !statusEl) continue;
       const text = nameEl.textContent || "";
       if (text === evt.name || text === `${evt.name} (You)`) {
-        const normalized = normalizeStatusLabel(evt.status || "online");
         statusEl.textContent = normalized;
         statusEl.className = `status ${statusToClass(normalized)}`;
         // If this status belongs to current user, reflect it on the Ready button
@@ -1854,10 +1873,15 @@ export function socketInit(options = {}) {
 
 export function renderPartyMembers(data) {
   const members = Array.isArray(data.members) ? data.members : [];
+  const capacity =
+    data?.capacity && typeof data.capacity === "object" ? data.capacity : null;
   __partyContext = {
     partyId:
       data?.partyId || __partyContext.partyId || checkIfInParty() || null,
     ownerName: data?.ownerName || __partyContext.ownerName || null,
+    isPublic: Number(data?.isPublic ? 1 : 0) === 1,
+    publicName: String(data?.publicName || "").trim(),
+    capacity,
     members,
   };
   const currentUserName =
@@ -2668,6 +2692,12 @@ export function getPartyInteractionContext() {
   return {
     partyId: __partyContext.partyId || checkIfInParty() || null,
     ownerName: __partyContext.ownerName || null,
+    isPublic: !!__partyContext.isPublic,
+    publicName: String(__partyContext.publicName || "").trim(),
+    capacity:
+      __partyContext.capacity && typeof __partyContext.capacity === "object"
+        ? { ...__partyContext.capacity }
+        : null,
     members: Array.isArray(__partyContext.members)
       ? __partyContext.members.slice()
       : [],
