@@ -55,6 +55,7 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
       const result = await partyState.joinPartyAndGetData({
         partyId,
         username,
+        userId: user.user_id,
       });
       console.log("[party] /partydata joinPartyAndGetData result", {
         username,
@@ -330,6 +331,91 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
       return res.json(result.payload);
     } catch (error) {
       console.error("[party] /party/discover error", error);
+      return res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  app.post("/party/join-requests", async (req, res) => {
+    try {
+      const user = await requireCurrentUser(req, res);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+
+      const partyId = Number(req.body?.partyId);
+      if (!Number.isFinite(partyId) || partyId <= 0) {
+        return res.status(400).json({ error: "partyId is required" });
+      }
+
+      const result = await partyState.getPendingJoinRequests({
+        partyId,
+        actorName: user.name,
+      });
+      if (!result.ok) {
+        return res.status(result.statusCode || 400).json(result.payload || {});
+      }
+      return res.json(result.payload);
+    } catch (error) {
+      console.error("[party] /party/join-requests error", error);
+      return res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  app.post("/party/join-request", async (req, res) => {
+    try {
+      const user = await requireCurrentUser(req, res);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+
+      const partyId = Number(req.body?.partyId);
+      if (!Number.isFinite(partyId) || partyId <= 0) {
+        return res.status(400).json({ error: "partyId is required" });
+      }
+
+      const result = await partyState.submitJoinRequest({
+        partyId,
+        requesterUserId: user.user_id,
+        requesterName: user.name,
+      });
+      if (!result.ok) {
+        return res.status(result.statusCode || 400).json(result.payload || {});
+      }
+      return res.json(result.payload);
+    } catch (error) {
+      console.error("[party] /party/join-request error", error);
+      return res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  app.post("/party/join-request/respond", async (req, res) => {
+    try {
+      const user = await requireCurrentUser(req, res);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+
+      const partyId = Number(req.body?.partyId);
+      const requestId = Number(req.body?.requestId);
+      const response = String(req.body?.response || "")
+        .trim()
+        .toLowerCase();
+      if (!Number.isFinite(partyId) || partyId <= 0) {
+        return res.status(400).json({ error: "partyId is required" });
+      }
+      if (!Number.isFinite(requestId) || requestId <= 0) {
+        return res.status(400).json({ error: "requestId is required" });
+      }
+      if (!response) {
+        return res.status(400).json({ error: "response is required" });
+      }
+
+      const result = await partyState.respondToJoinRequest({
+        partyId,
+        actorName: user.name,
+        requestId,
+        response,
+      });
+      if (!result.ok) {
+        return res.status(result.statusCode || 400).json(result.payload || {});
+      }
+      return res.json(result.payload);
+    } catch (error) {
+      console.error("[party] /party/join-request/respond error", error);
       return res.status(500).json({ error: "Internal error" });
     }
   });

@@ -96,3 +96,6 @@ Keep edits aligned with these contracts and file locations; when changing a publ
 - Create new files when features differ from existing ones, but try to keep related features together. For example, if you are adding a new socket event related to matchmaking, it should probably go in `core/matchmaking.js` rather than a new file.
 
 - A lot of the times I reference assets I upload in the public folder. I will usually upload before prompting, but if I forget to upload an asset before asking for a change related to it, please create a name for it that uses the existing conventions in the public folder and have me upload as that file name.
+
+
+Sometimes I forget to apply a database migration. In that case, check with mysql terminal commands whether the migration is applied and confirm with me. This avoids wasting time debugging something very simple. 

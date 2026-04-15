@@ -398,6 +398,97 @@
     </div>
 
     <div
+      id="party-join-request-overlay"
+      class="hidden trophy-overlay party-join-request-overlay"
+      aria-hidden="true"
+    >
+      <div class="trophy-overlay-backdrop"></div>
+      <section
+        class="trophy-overlay-panel party-join-request-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="party-join-request-title"
+      >
+        <header class="trophy-overlay-head">
+          <div>
+            <h2 id="party-join-request-title">Private Party</h2>
+          </div>
+        </header>
+
+        <div
+          id="party-join-request-banner"
+          class="party-request-banner"
+          role="status"
+          aria-live="polite"
+        >
+          This party is private.
+        </div>
+
+        <div class="party-request-summary-grid">
+          <article class="party-request-summary-card">
+            <span>Party Owner</span>
+            <strong id="party-join-request-owner">Unknown</strong>
+          </article>
+          <article class="party-request-summary-card">
+            <span>Players</span>
+            <strong id="party-join-request-players">0</strong>
+          </article>
+        </div>
+
+        <div class="party-request-foot">
+          <div class="party-request-actions-row">
+            <button
+              id="party-join-request-submit"
+              class="pixel-menu-button party-request-submit"
+              type="button"
+            >
+              Request to Join
+            </button>
+            <button
+              id="party-join-request-return"
+              class="pixel-menu-button party-request-return"
+              type="button"
+            >
+              Return Home
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div
+      id="party-join-request-owner-overlay"
+      class="hidden trophy-overlay party-join-request-owner-overlay"
+      aria-hidden="true"
+    >
+      <div class="trophy-overlay-backdrop"></div>
+      <section
+        class="trophy-overlay-panel party-join-request-owner-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="party-join-request-owner-title"
+      >
+        <header class="trophy-overlay-head">
+          <div>
+            <h2 id="party-join-request-owner-title">Party Request</h2>
+          </div>
+          <button
+            id="party-join-request-owner-ignore"
+            class="pixel-menu-button trophy-overlay-close"
+            type="button"
+            aria-label="Ignore request"
+          >
+            X
+          </button>
+        </header>
+        <div
+          id="party-join-request-owner-list"
+          class="party-request-owner-list"
+        ></div>
+      </section>
+    </div>
+
+    <div
       id="party-discovery-overlay"
       class="hidden trophy-overlay"
       aria-hidden="true"

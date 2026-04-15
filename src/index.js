@@ -11,6 +11,7 @@ import {
   showMatchmakingOverlay,
   initReadyToggle,
   setSlotLevelBadge,
+  showPartyJoinRequestScreen,
 } from "./party.js";
 import socket, { ensureSocketConnected, waitForConnect } from "./socket.js";
 import {
@@ -69,6 +70,7 @@ let __partySettingsState = {
   publicName: "",
   visibilitySupported: true,
 };
+let __lobbyProfilePopup = null;
 
 function escapeHtml(value) {
   const raw = String(value ?? "");
@@ -1303,19 +1305,32 @@ async function bootstrapPartyData(partyId) {
     );
 
     if (!resp.ok) {
+      let errorData = null;
+      try {
+        errorData = await resp.json();
+      } catch (_) {}
+
+      if (resp.status === 403 && errorData?.requestRequired) {
+        if (typeof showPartyJoinRequestScreen === "function") {
+          showPartyJoinRequestScreen(errorData);
+        }
+        return;
+      }
+
       if (resp.status === 409) {
         // Party might be full, try to get JSON response
         try {
-          const errorData = await resp.json();
-          if (errorData.redirect) {
-            window.location.href = errorData.redirect;
+          const fullErrorData =
+            errorData || (await resp.json().catch(() => null));
+          if (fullErrorData?.redirect) {
+            window.location.href = fullErrorData.redirect;
             return;
           }
         } catch (e) {
           // If JSON parsing fails, fall back to generic error
         }
       }
-      throw new Error("Failed to fetch party data");
+      throw new Error(errorData?.error || "Failed to fetch party data");
     }
 
     const data = await resp.json();
@@ -1412,6 +1427,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   document.getElementById("username-text").textContent = userData.name;
   const profilePopup = initProfilePopup();
+  __lobbyProfilePopup = profilePopup;
   if (usernameButton) {
     usernameButton.addEventListener("click", () => {
       if (profilePopup?.open) {
@@ -1636,7 +1652,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   if (!userData) return;
 
-  socketInit(); // this can assume socket is connected or connecting with cookies
+  socketInit({ profilePopup: __lobbyProfilePopup }); // this can assume socket is connected or connecting with cookies
 });
 
 function signUpOut(guest) {
