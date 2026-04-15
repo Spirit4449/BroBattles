@@ -57,6 +57,7 @@ export function getSharedSelectionPopupShell() {
     onClose,
     zIndex,
     closeButtonAttrs,
+    closeButtonText,
     contentNode,
     backgroundNode,
   } = {}) => {
@@ -79,6 +80,13 @@ export function getSharedSelectionPopupShell() {
         state.closeAttrKeys.push(attr);
       });
     }
+
+    const closeText = String(closeButtonText || "×");
+    closeButton.textContent = closeText;
+    closeButton.classList.toggle(
+      "profile-close",
+      closeText.toLowerCase() !== "×",
+    );
 
     if (state.backgroundNode && state.backgroundNode !== backgroundNode) {
       try {

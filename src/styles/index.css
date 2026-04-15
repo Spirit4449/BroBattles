@@ -2050,7 +2050,7 @@ h3 {
 }
 
 .party-discovery-panel {
-  width: min(940px, 96vw);
+  width: min(640px, 46vw);
   max-height: min(760px, 92vh);
   display: grid;
   grid-template-rows: auto auto auto 1fr;
@@ -2060,7 +2060,7 @@ h3 {
 .party-discovery-search-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 20px;
 }
 
 .party-discovery-search-row input {
@@ -2070,8 +2070,8 @@ h3 {
 .party-discovery-input,
 .party-public-name-input {
   width: 100%;
-  height: 48px;
-  background: rgba(0, 0, 0, 0.2);
+  height: 30px;
+  background: rgba(54, 54, 54, 0.5);
   border: none;
   padding: 0 16px;
   font-size: 12px;
@@ -2091,7 +2091,7 @@ h3 {
 .party-discovery-input:focus,
 .party-public-name-input:focus {
   outline: none;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(86, 86, 86, 0.4);
 }
 
 .party-discovery-input::placeholder,
@@ -2100,7 +2100,7 @@ h3 {
 }
 
 .party-discovery-refresh {
-  min-height: 38px;
+  height: 30px;
   padding: 0 14px;
   background: linear-gradient(135deg, #2d78d5, #1f59af);
   color: #fff;

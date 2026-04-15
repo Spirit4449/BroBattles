@@ -13,6 +13,480 @@ import { playSound } from "./lib/uiSounds.js";
 
 // Keep a reference to user data for confirmations and currency display
 let _userDataRef = null;
+let _characterDetailsUi = null;
+
+function getCharacterSkinList(character) {
+  const stats = getCharacterStats(character) || {};
+  const skins = Array.isArray(stats.skins) ? stats.skins : [];
+  const normalized = skins
+    .map((skin, index) => ({
+      id:
+        String(skin?.id || skin?.skinId || skin?.key || "").trim() ||
+        (index === 0 ? "default" : `skin-${index + 1}`),
+      label:
+        String(skin?.label || skin?.name || skin?.title || "").trim() ||
+        (index === 0 ? "Default" : `Skin ${index + 1}`),
+      previewSrc:
+        String(skin?.previewSrc || skin?.bodySrc || skin?.src || "").trim() ||
+        `/assets/${character}/body.webp`,
+    }))
+    .filter((skin) => skin.id);
+
+  if (normalized.length === 0) {
+    normalized.push({
+      id: "default",
+      label: "Default",
+      previewSrc: `/assets/${character}/body.webp`,
+    });
+  }
+
+  return normalized;
+}
+
+function getSelectedSkin(character) {
+  const skinId = String(
+    _characterDetailsUi?.selectedSkinByCharacter?.[character] || "",
+  ).trim();
+  const skins = getCharacterSkinList(character);
+  return skins.find((skin) => skin.id === skinId) || skins[0];
+}
+
+function setSelectedSkin(character, skinId) {
+  if (!_characterDetailsUi) return;
+  const skins = getCharacterSkinList(character);
+  const nextSkin =
+    skins.find((skin) => skin.id === String(skinId || "")) || skins[0];
+  _characterDetailsUi.selectedSkinByCharacter[character] = nextSkin.id;
+  if (_characterDetailsUi.currentCharacter === character) {
+    renderCharacterDetails(character);
+  }
+}
+
+function resolveCharacterPreviewAsset(character, skinId) {
+  const skins = getCharacterSkinList(character);
+  const skin =
+    skins.find((entry) => entry.id === String(skinId || "")) || skins[0];
+  return skin?.previewSrc || `/assets/${character}/body.webp`;
+}
+
+function getCharacterCardState(character, userData) {
+  const stats = getCharacterStats(character);
+  const level =
+    (userData?.char_levels && (userData.char_levels[character] ?? 0)) ?? 0;
+  const isLocked = level === 0;
+  const isMaxed = level >= LEVEL_CAP;
+  const currentLevel = Math.max(1, level);
+  const currentHealth = getHealth(character, currentLevel);
+  const currentDamage = getDamage(character, currentLevel);
+  const currentSpecial = getSpecialDamage(character, currentLevel);
+  const maxHealth = getHealth(character, LEVEL_CAP);
+  const maxDamage = getDamage(character, LEVEL_CAP);
+  const maxSpecial = getSpecialDamage(character, LEVEL_CAP);
+  const price = !isLocked && !isMaxed ? upgradePrice(level) : null;
+  const coins = Number(userData?.coins || 0);
+  const canUpgrade =
+    !isLocked && !isMaxed && Number.isFinite(price) && coins >= price;
+
+  return {
+    stats,
+    level,
+    isLocked,
+    isMaxed,
+    currentLevel,
+    currentHealth,
+    currentDamage,
+    currentSpecial,
+    maxHealth,
+    maxDamage,
+    maxSpecial,
+    price,
+    canUpgrade,
+    skin: getSelectedSkin(character),
+  };
+}
+
+function getCharacterDetailStatBounds() {
+  const characters = getAllCharacters();
+  let maxHealth = 1;
+  let maxDamage = 1;
+  let maxAmmo = 1;
+  let maxReload = 1;
+
+  characters.forEach((character) => {
+    const stats = getCharacterStats(character);
+    if (!stats) return;
+    maxHealth = Math.max(maxHealth, getHealth(character, LEVEL_CAP));
+    maxDamage = Math.max(maxDamage, getDamage(character, LEVEL_CAP));
+    maxAmmo = Math.max(maxAmmo, Number(stats.ammoCapacity || 0));
+    maxReload = Math.max(maxReload, Number(stats.ammoReloadMs || 0));
+  });
+
+  return { maxHealth, maxDamage, maxAmmo, maxReload };
+}
+
+function createStatBar({ label, value, percent, detail, className }) {
+  const section = document.createElement("div");
+  section.className = `character-detail-stat ${className || ""}`.trim();
+  section.innerHTML = `
+    <div class="character-detail-stat-header">
+      <span class="character-detail-stat-label">${label}</span>
+      <span class="character-detail-stat-value">${value}</span>
+    </div>
+    <div class="character-detail-stat-bar"><span style="width: ${Math.max(0, Math.min(100, percent))}%"></span></div>
+    <div class="character-detail-stat-detail">${detail}</div>
+  `;
+  return section;
+}
+
+function getCharacterDetailsTarget(character) {
+  if (!_characterDetailsUi) return null;
+  if (_characterDetailsUi.currentCharacter !== character) return null;
+  return _characterDetailsUi.previewStage || _characterDetailsUi.popup;
+}
+
+function hideCharacterDetails() {
+  if (!_characterDetailsUi) return;
+  _characterDetailsUi.overlay.style.display = "none";
+  _characterDetailsUi.currentCharacter = null;
+}
+
+function ensureCharacterDetailsUi() {
+  if (_characterDetailsUi) return _characterDetailsUi;
+
+  const overlay = document.createElement("div");
+  overlay.className = "character-details-overlay";
+  const popup = document.createElement("div");
+  popup.className = "character-details-popup";
+
+  const header = document.createElement("div");
+  header.className = "character-details-header";
+
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "character-details-title-wrap";
+  const title = document.createElement("h3");
+  title.className = "character-details-title";
+
+  const subtitle = document.createElement("p");
+  subtitle.className = "character-details-header-description";
+
+  titleWrap.appendChild(title);
+  titleWrap.appendChild(subtitle);
+
+  const closeButton = document.createElement("button");
+  closeButton.className = "character-details-close";
+  closeButton.type = "button";
+  closeButton.innerHTML = "×";
+
+  const content = document.createElement("div");
+  content.className = "character-details-content";
+
+  const preview = document.createElement("div");
+  preview.className = "character-details-preview";
+
+  const info = document.createElement("div");
+  info.className = "character-details-info";
+
+  const stickyFooter = document.createElement("div");
+  stickyFooter.className = "character-details-sticky-footer";
+
+  content.appendChild(preview);
+  content.appendChild(info);
+  header.appendChild(titleWrap);
+  header.appendChild(closeButton);
+  popup.appendChild(header);
+  popup.appendChild(content);
+  popup.appendChild(stickyFooter);
+  overlay.appendChild(popup);
+
+  const state = {
+    overlay,
+    popup,
+    header,
+    title,
+    subtitle,
+    closeButton,
+    content,
+    preview,
+    info,
+    stickyFooter,
+    previewStage: null,
+    selectedSkinByCharacter: {},
+    currentCharacter: null,
+  };
+
+  const closeDetails = () => {
+    playSound("cancel2", 0.3);
+    hideCharacterDetails();
+  };
+
+  closeButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeDetails();
+  });
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeDetails();
+  });
+
+  popup.addEventListener("click", (e) => e.stopPropagation());
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (overlay.style.display === "none" || !overlay.isConnected) return;
+    closeDetails();
+  });
+
+  _characterDetailsUi = state;
+  return state;
+}
+
+function renderCharacterDetails(character) {
+  const ui = ensureCharacterDetailsUi();
+  const stats = getCharacterStats(character);
+  if (!stats) return;
+
+  const cardState = getCharacterCardState(character, _userDataRef);
+  const selectedSkin = getSelectedSkin(character);
+
+  ui.currentCharacter = character;
+  ui.selectedSkinByCharacter[character] = selectedSkin.id;
+
+  ui.title.textContent = character.toUpperCase();
+  ui.subtitle.textContent = stats.description || "";
+
+  ui.preview.innerHTML = "";
+  ui.info.innerHTML = "";
+  ui.stickyFooter.innerHTML = "";
+
+  // Smaller preview frame (game style - no rounded corners)
+  const previewFrame = document.createElement("div");
+  previewFrame.className =
+    `character-details-preview-frame ${cardState.isLocked ? "is-locked" : ""}`.trim();
+
+  const previewGlow = document.createElement("div");
+  previewGlow.className = "character-details-preview-glow";
+
+  const previewImg = document.createElement("img");
+  previewImg.className = "character-details-preview-image";
+  previewImg.src = resolveCharacterPreviewAsset(character, selectedSkin.id);
+  previewImg.alt = `${character} ${selectedSkin.label}`;
+
+  if (!cardState.isLocked && cardState.level > 0 && cardState.level <= 5) {
+    const levelBadge = document.createElement("img");
+    levelBadge.className = "character-details-preview-level-badge";
+    levelBadge.src = `/assets/levels/${cardState.level}.webp`;
+    levelBadge.alt = `Level ${cardState.level}`;
+    previewFrame.appendChild(levelBadge);
+  }
+
+  previewFrame.appendChild(previewGlow);
+  previewFrame.appendChild(previewImg);
+
+  ui.preview.appendChild(previewFrame);
+  ui.previewStage = previewFrame;
+
+  // Three main stat boxes: Health (full width top), Attack and Special (side by side)
+  const statsContainer = document.createElement("div");
+  statsContainer.className = "character-details-stats-container";
+
+  // Health box (full width)
+  const healthBox = document.createElement("div");
+  healthBox.className = "character-details-stat-box health-box";
+  const healthMax = Math.max(1, Number(cardState.maxHealth || 1));
+  healthBox.innerHTML = `
+    <div class="stat-box-header">
+      <img class="stat-box-icon" src="/assets/heart.webp" alt="Health" />
+      <span class="stat-box-label">Health</span>
+      <span class="stat-box-value">${cardState.currentHealth}</span>
+    </div>
+    <div class="stat-box-track"><div class="stat-box-fill" style="width:${Math.max(0, Math.min(100, (cardState.currentHealth / healthMax) * 100))}%"></div></div>
+  `;
+  statsContainer.appendChild(healthBox);
+
+  // Attack and Special boxes (side by side)
+  const attackSpecialRow = document.createElement("div");
+  attackSpecialRow.className = "character-details-stat-boxes-row";
+
+  // Attack box
+  const attackBox = document.createElement("div");
+  attackBox.className = "character-details-stat-box attack-box";
+  const attackMax = Math.max(1, Number(cardState.maxDamage || 1));
+  attackBox.innerHTML = `
+    <div class="stat-box-header">
+      <img class="stat-box-icon" src="/assets/attack.webp" alt="Attack" />
+      <span class="stat-box-label">Attack</span>
+      <span class="stat-box-value">${cardState.currentDamage}</span>
+    </div>
+    <div class="stat-box-content">
+      ${stats.attackDescription ? `<div class="stat-box-desc">${stats.attackDescription}</div>` : ""}
+      <div class="stat-box-detail">Reload: ${(Number(stats.ammoReloadMs || 0) / 1000).toFixed(1)}s</div>
+      <div class="stat-box-detail">Ammo: ${stats.ammoCapacity || 0}</div>
+    </div>
+    <div class="stat-box-track"><div class="stat-box-fill" style="width:${Math.max(0, Math.min(100, (cardState.currentDamage / attackMax) * 100))}%"></div></div>
+  `;
+  attackSpecialRow.appendChild(attackBox);
+
+  // Special box
+  const specialBox = document.createElement("div");
+  specialBox.className = "character-details-stat-box special-box";
+  const specialMax = Math.max(1, Number(cardState.maxSpecial || 1));
+  specialBox.innerHTML = `
+    <div class="stat-box-header">
+      <img class="stat-box-icon" src="/assets/special.webp" alt="Special" />
+      <span class="stat-box-label">Special</span>
+      <span class="stat-box-value">${cardState.currentSpecial}</span>
+    </div>
+    <div class="stat-box-content">
+      ${stats.specialDescription ? `<div class="stat-box-desc">${stats.specialDescription}</div>` : ""}
+      <div class="stat-box-detail">Charge: ${stats.specialChargeHits || 0} hits</div>
+    </div>
+    <div class="stat-box-track"><div class="stat-box-fill" style="width:${Math.max(0, Math.min(100, (cardState.currentSpecial / specialMax) * 100))}%"></div></div>
+  `;
+  attackSpecialRow.appendChild(specialBox);
+
+  statsContainer.appendChild(attackSpecialRow);
+  ui.info.appendChild(statsContainer);
+
+  // Sticky footer: skins and actions in one line
+  const footerLine = document.createElement("div");
+  footerLine.className = "character-details-footer-line";
+
+  const skinRow = document.createElement("div");
+  skinRow.className = "character-details-inline-skin";
+
+  const skins = getCharacterSkinList(character);
+  const activeSkinIndex = Math.max(
+    0,
+    skins.findIndex((skin) => skin.id === selectedSkin.id),
+  );
+  const prevSkin = skins[(activeSkinIndex - 1 + skins.length) % skins.length];
+  const nextSkin = skins[(activeSkinIndex + 1) % skins.length];
+
+  const prevButton = document.createElement("button");
+  prevButton.type = "button";
+  prevButton.className = "character-details-skin-stepper";
+  prevButton.textContent = "◀";
+  prevButton.disabled = skins.length <= 1;
+  prevButton.addEventListener("click", () => {
+    if (skins.length <= 1) return;
+    playSound("cursor4", 0.2);
+    setSelectedSkin(character, prevSkin.id);
+  });
+
+  const skinChip = document.createElement("div");
+  skinChip.className = "character-details-skin-name-box";
+  skinChip.textContent = selectedSkin.label;
+
+  const nextButton = document.createElement("button");
+  nextButton.type = "button";
+  nextButton.className = "character-details-skin-stepper";
+  nextButton.textContent = "▶";
+  nextButton.disabled = skins.length <= 1;
+  nextButton.addEventListener("click", () => {
+    if (skins.length <= 1) return;
+    playSound("cursor4", 0.2);
+    setSelectedSkin(character, nextSkin.id);
+  });
+
+  skinRow.appendChild(prevButton);
+  skinRow.appendChild(skinChip);
+  skinRow.appendChild(nextButton);
+
+  const footer = document.createElement("div");
+  footer.className = "character-details-inline-actions";
+
+  if (cardState.isLocked) {
+    const buyButton = document.createElement("button");
+    buyButton.type = "button";
+    buyButton.className =
+      "character-details-action buy-button pixel-menu-button";
+    buyButton.innerHTML = `<img class="upgrade-icon" src="/assets/lock.webp" alt="" /> <span>Buy</span> <span class="button-price"><img class="cs-currency" src="/assets/gem.webp" alt="" /> ${stats.unlockPrice || 0}</span>`;
+    buyButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      playSound("cursor4", 0.2);
+      showConfirmDialog(
+        {
+          type: "unlock",
+          character,
+          level: cardState.level,
+          price: stats.unlockPrice,
+        },
+        () => applyUnlock(character, stats.unlockPrice),
+      );
+    });
+    footer.appendChild(buyButton);
+  } else {
+    if (!cardState.isMaxed) {
+      const upgradeButton = document.createElement("button");
+      upgradeButton.type = "button";
+      upgradeButton.className = `character-details-action upgrade-button pixel-menu-button${cardState.canUpgrade ? "" : " disabled"}`;
+      upgradeButton.innerHTML = `<img class="upgrade-icon" src="/assets/upgrade.webp" alt="" /> <span>Upgrade</span> <span class="button-price"><img class="cs-currency" src="/assets/coin.webp" alt="" /> ${cardState.price}</span>`;
+      if (!cardState.canUpgrade) {
+        upgradeButton.title = "Not enough coins";
+        upgradeButton.disabled = true;
+      }
+      upgradeButton.addEventListener("click", (e) => {
+        e.stopPropagation();
+        playSound("cursor4", 0.2);
+        showConfirmDialog(
+          {
+            type: "upgrade",
+            character,
+            level: cardState.level,
+            price: cardState.price,
+          },
+          () => applyUpgrade(character, cardState.level),
+        );
+      });
+      footer.appendChild(upgradeButton);
+    } else {
+      const maxedLabel = document.createElement("div");
+      maxedLabel.className = "character-details-maxed-label";
+      maxedLabel.textContent = "Max Level";
+      footer.appendChild(maxedLabel);
+    }
+
+    const selectButton = document.createElement("button");
+    selectButton.type = "button";
+    selectButton.className =
+      "character-details-action select-button pixel-menu-button";
+    selectButton.textContent = "Select";
+    selectButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      playSound("cursor4", 0.2);
+      selectCharacter(character);
+    });
+    footer.appendChild(selectButton);
+  }
+
+  footerLine.appendChild(skinRow);
+  footerLine.appendChild(footer);
+  ui.stickyFooter.appendChild(footerLine);
+}
+
+function playCharacterDetailsSuccessAnimation(type) {
+  if (!_characterDetailsUi || !_characterDetailsUi.currentCharacter) return;
+  const target = getCharacterDetailsTarget(
+    _characterDetailsUi.currentCharacter,
+  );
+  if (!target) return;
+
+  const overlay = document.createElement("div");
+  overlay.className = "character-details-success";
+  const beams = document.createElement("div");
+  beams.className = `character-details-success-beams ${type === "unlock" ? "gem" : "coin"}`;
+  const label = document.createElement("div");
+  label.className = "character-details-success-label";
+  label.textContent = type === "unlock" ? "Unlocked!" : "Upgraded!";
+  overlay.appendChild(beams);
+  overlay.appendChild(label);
+  target.appendChild(overlay);
+  playSound("success", 0.6);
+  setTimeout(() => {
+    overlay.classList.add("fade-out");
+    setTimeout(() => overlay.remove(), 350);
+  }, 900);
+}
 
 function setLobbySlotLevelIcon(slot, level) {
   if (!slot) return;
@@ -84,6 +558,7 @@ export function initializeCharacterSelect(userData) {
       titleText: "Choose Your Fighter",
       onClose: () => closeCharacterSelect(),
       closeButtonAttrs: { "data-sound": "cancel" },
+      closeButtonText: "Close",
       contentNode: charactersGrid,
       backgroundNode: particlesCanvas,
     });
@@ -154,6 +629,7 @@ export function initializeCharacterSelect(userData) {
     startParticles();
   }
   function closeCharacterSelect() {
+    hideCharacterDetails();
     popupShell.hide();
     emitCharacterMenuStatus(false);
     stopParticles();
@@ -164,149 +640,122 @@ export function initializeCharacterSelect(userData) {
 
 // Build a single character card
 function createCharacterCard(character, userData) {
-  const card = document.createElement("div");
+  const card = document.createElement("button");
+  card.type = "button";
   card.className = "character-card";
-  // Tag card for easy lookup/re-render later
   card.dataset.char = character;
 
-  const stats = getCharacterStats(character);
-  const level =
-    (userData?.char_levels && (userData.char_levels[character] ?? 0)) ?? 0;
-  const isLocked = level === 0;
-  const isMaxed = level >= LEVEL_CAP;
+  const cardState = getCharacterCardState(character, userData);
+  const stats = cardState.stats || getCharacterStats(character) || {};
 
-  const currentHealth = getHealth(character, Math.max(1, level));
-  const currentDamage = getDamage(character, Math.max(1, level));
-  const currentSpecial = getSpecialDamage(character, Math.max(1, level));
-  const maxHealth = getHealth(character, LEVEL_CAP);
-  const maxDamage = getDamage(character, LEVEL_CAP);
-  const maxSpecial = getSpecialDamage(character, LEVEL_CAP);
+  card.classList.toggle(
+    "selected",
+    String(userData?.char_class || "") === String(character),
+  );
+  card.classList.toggle("locked", cardState.isLocked);
+  card.classList.toggle("is-maxed", cardState.isMaxed);
+  card.classList.toggle("is-upgrade-ready", cardState.canUpgrade);
 
-  // Header
-  const header = document.createElement("div");
-  header.className = "character-header";
-  const img = document.createElement("img");
-  img.className = "character-image";
-  img.src = `/assets/${character}/body.webp`;
-  img.alt = character;
-  const info = document.createElement("div");
-  info.className = "character-info";
-  const name = document.createElement("h3");
-  name.className = "character-name";
-  name.textContent = character;
-  const description = document.createElement("p");
-  description.className = "character-description";
-  description.textContent = stats.description;
-  info.appendChild(name);
-  info.appendChild(description);
-  header.appendChild(img);
-  header.appendChild(info);
+  // Card layout: fixed-size icon column + stacked info column
+  const profileIconUrl = `/assets/profile-icons/${character}.webp`;
 
-  // Level badge
-  const levelBadge = document.createElement("img");
-  levelBadge.className = "level-badge";
-  levelBadge.src = `/assets/levels/${level}.webp`;
-  levelBadge.alt = `Level ${level}`;
-  levelBadge.onerror = function () {
-    this.style.display = "none";
-  };
-  card.appendChild(levelBadge);
+  const imageWrap = document.createElement("div");
+  imageWrap.className = "character-card-image-wrap";
 
-  // Stats
-  const statsDiv = document.createElement("div");
-  statsDiv.className = "character-stats";
-  const healthPercent = Math.min(100, (currentHealth / maxHealth) * 100);
-  const damagePercent = Math.min(100, (currentDamage / maxDamage) * 100);
-  const specialPercent = Math.min(100, (currentSpecial / maxSpecial) * 100);
+  if (!cardState.isLocked && cardState.level > 0 && cardState.level <= 5) {
+    const levelIcon = document.createElement("img");
+    levelIcon.className = "character-card-level-icon";
+    levelIcon.src = `/assets/levels/${cardState.level}.webp`;
+    levelIcon.alt = `Level ${cardState.level}`;
+    card.appendChild(levelIcon);
+  }
 
-  const healthSection = document.createElement("div");
-  healthSection.className = "stat-section";
-  healthSection.innerHTML = `
-    <img src="/assets/heart.webp" alt="Health" class="stat-icon" onerror="this.style.display='none'">
-    <div class="stat-section-title">Health</div>
-    <div class="stat-main-value">${currentHealth}</div>
-    <div class="stat-bar health-bar"><div class="stat-fill" style="width: ${healthPercent}%"></div></div>`;
+  const profileIcon = document.createElement("img");
+  profileIcon.className = "character-profile-icon";
+  profileIcon.src = profileIconUrl;
+  profileIcon.alt = character;
+  imageWrap.appendChild(profileIcon);
 
-  const attackSection = document.createElement("div");
-  attackSection.className = "stat-section";
-  attackSection.innerHTML = `
-    <img src="/assets/attack.webp" alt="Attack" class="stat-icon" onerror="this.style.display='none'">
-    <div class="stat-section-title">Attack</div>
-    <div class="stat-main-value">${currentDamage}</div>
-    <div class="stat-bar attack-bar"><div class="stat-fill" style="width: ${damagePercent}%"></div></div>
-    <div class="stat-details">${stats.ammoCapacity} ammo<br>${(
-      stats.ammoReloadMs / 1000
-    ).toFixed(1)}s reload</div>`;
+  if (cardState.isLocked) {
+    const lockOverlay = document.createElement("div");
+    lockOverlay.className = "character-card-lock-overlay";
+    lockOverlay.innerHTML = '<img src="/assets/lock.webp" alt="Locked" />';
+    imageWrap.appendChild(lockOverlay);
+  }
 
-  const specialSection = document.createElement("div");
-  specialSection.className = "stat-section";
-  specialSection.innerHTML = `
-    <img src="/assets/special.webp" alt="Special" class="stat-icon" onerror="this.style.display='none'">
-    <div class="stat-section-title">Special</div>
-    <div class="stat-main-value">${currentSpecial}</div>
-    <div class="stat-bar special-bar"><div class="stat-fill" style="width: ${specialPercent}%"></div></div>
-    <div class="stat-details">${stats.specialChargeHits} hits to charge<br>${stats.specialDescription || ""}</div>`;
+  const statusSection = document.createElement("div");
+  statusSection.className = "character-card-status";
 
-  // Actions
-  const actionRow = document.createElement("div");
-  actionRow.className = "action-row";
-  if (isLocked) {
-    const price = stats.unlockPrice;
-    const lockBtn = document.createElement("button");
-    lockBtn.className = "locked-button pixel-menu-button";
-    const priceHtml =
-      typeof price === "number"
-        ? `<span class="button-price"><img class="cs-currency" src="/assets/gem.webp" alt=""/> ${price}</span>`
-        : "";
-    lockBtn.innerHTML = `<img class="lock-icon" src="/assets/lock.webp" alt="" onerror="this.style.display='none'"/> <span>Locked</span> ${priceHtml}`;
-    lockBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      showConfirmDialog({ type: "unlock", character, level, price }, () =>
-        applyUnlock(character, price),
-      );
-    });
-    actionRow.appendChild(lockBtn);
-    card.classList.add("locked");
-  } else if (!isMaxed) {
-    const price = upgradePrice(level);
-    const coins = Number(userData?.coins || 0);
-    const affordable = coins >= price;
-    const upgradeBtn = document.createElement("button");
-    upgradeBtn.className = `upgrade-button pixel-menu-button${
-      affordable ? " gleam" : " disabled"
-    }`;
-    upgradeBtn.innerHTML = `<img class="upgrade-icon" src="/assets/upgrade.webp" alt="" onerror="this.style.display='none'"/> <span>Upgrade</span> <span class="button-price"><img class="cs-currency" src="/assets/coin.webp" alt=""/> ${price}</span>`;
-    if (!affordable) {
-      // Keep clickable to show insufficient funds dialog; only change visuals
-      upgradeBtn.title = "Not enough coins";
-    }
-    upgradeBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      playSound("cursor4", 0.2);
-      showConfirmDialog({ type: "upgrade", character, level, price }, () =>
-        applyUpgrade(character, level),
-      );
-    });
-    actionRow.appendChild(upgradeBtn);
+  const statusText = document.createElement("div");
+  statusText.className = "character-card-status-text";
+
+  if (cardState.isLocked) {
+    statusText.innerHTML = `<img src="/assets/gem.webp" alt="" /> <span class="character-card-status-price">${stats.unlockPrice || 0}</span>`;
+  } else if (cardState.isMaxed) {
+    statusText.classList.add("maxed");
+    statusText.textContent = "MAX";
   } else {
-    const maxed = document.createElement("div");
-    maxed.className = "maxed-button pixel-menu-button";
-    maxed.textContent = "Maxed Out";
-    actionRow.appendChild(maxed);
+    statusText.classList.add("upgradable");
+    statusText.classList.toggle("insufficient", !cardState.canUpgrade);
+    statusText.innerHTML = `<img src="/assets/coin.webp" alt="" /> <span class="character-card-status-price">${cardState.price}</span>`;
   }
 
-  // Assemble card
-  statsDiv.appendChild(healthSection);
-  statsDiv.appendChild(attackSection);
-  statsDiv.appendChild(specialSection);
-  card.appendChild(header);
-  card.appendChild(statsDiv);
-  card.appendChild(actionRow);
+  statusSection.appendChild(statusText);
+  imageWrap.appendChild(statusSection);
 
-  // Card click selects unless locked
-  if (!isLocked) {
-    card.addEventListener("click", () => selectCharacter(character));
-  }
+  // Info section: name, stats, status
+  const info = document.createElement("div");
+  info.className = "character-card-info";
+
+  const nameSection = document.createElement("div");
+  nameSection.className = "character-card-name-section";
+
+  const nameRow = document.createElement("div");
+  nameRow.className = "character-card-name-row";
+
+  const name = document.createElement("h3");
+  name.className = "character-card-name";
+  name.textContent = character.toUpperCase();
+  nameRow.appendChild(name);
+  nameSection.appendChild(nameRow);
+
+  // HP and ATK blocks with value + bar
+  const statsRow = document.createElement("div");
+  statsRow.className = "character-card-stats-row";
+
+  const healthStat = document.createElement("div");
+  healthStat.className = "character-card-stat";
+  healthStat.innerHTML = `
+    <span class="stat-label">HEALTH</span>
+    <span class="stat-value">${cardState.currentHealth}</span>
+  `;
+
+  const damageStat = document.createElement("div");
+  damageStat.className = "character-card-stat";
+  damageStat.innerHTML = `
+    <span class="stat-label">ATTACK</span>
+    <span class="stat-value">${cardState.currentDamage}</span>
+  `;
+
+  statsRow.appendChild(healthStat);
+  statsRow.appendChild(damageStat);
+
+  info.appendChild(nameSection);
+  info.appendChild(statsRow);
+
+  card.appendChild(imageWrap);
+  card.appendChild(info);
+
+  card.addEventListener("click", () => {
+    playSound("cursor5", 0.3);
+    openCharacterDetails(character);
+  });
+
+  card.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    openCharacterDetails(character);
+  });
 
   return card;
 }
@@ -317,7 +766,16 @@ export function openCharacterSelect() {
   overlay.style.display = "flex";
   emitCharacterMenuStatus(true);
 }
-playSound("click", 0.4);
+
+function openCharacterDetails(character) {
+  renderCharacterDetails(character);
+  const ui = ensureCharacterDetailsUi();
+  if (!ui.overlay.isConnected) {
+    document.body.appendChild(ui.overlay);
+  }
+  ui.overlay.style.display = "flex";
+  playSound("ready", 0.4);
+}
 
 function selectCharacter(character) {
   try {
@@ -376,6 +834,8 @@ function selectCharacter(character) {
     console.warn("selectCharacter failed:", e?.message);
   } finally {
     playSound("cursor4", 0.4);
+
+    hideCharacterDetails();
 
     const overlay = document.querySelector(".character-select-overlay");
     if (overlay) overlay.style.display = "none";
@@ -590,31 +1050,14 @@ function rerenderCharacterCard(character, userData, animType) {
   if (!oldCard || !grid) return;
   const newCard = createCharacterCard(character, userData);
   grid.replaceChild(newCard, oldCard);
-  playCardSuccessAnimation(newCard, animType);
-  // After any change, also refresh other buttons' affordability
+  if (_characterDetailsUi?.currentCharacter === character) {
+    renderCharacterDetails(character);
+    playCharacterDetailsSuccessAnimation(animType);
+  }
+  // After any change, also refresh other cards' affordability/state
   try {
     refreshUpgradeButtonAffordability();
   } catch {}
-}
-
-function playCardSuccessAnimation(cardEl, type) {
-  if (!cardEl) return;
-  // Overlay with rays + label
-  const overlay = document.createElement("div");
-  overlay.className = "cs-card-success";
-  const beams = document.createElement("div");
-  beams.className = `cs-card-beams ${type === "unlock" ? "gem" : "coin"}`;
-  const label = document.createElement("div");
-  label.className = "cs-card-success-label";
-  label.textContent = type === "unlock" ? "Unlocked!" : "Upgraded!";
-  overlay.appendChild(beams);
-  overlay.appendChild(label);
-  cardEl.appendChild(overlay);
-  // Auto-remove after animation
-  setTimeout(() => {
-    overlay.classList.add("fade-out");
-    setTimeout(() => overlay.remove(), 350);
-  }, 900);
 }
 
 // Upgrade / unlock stubs
@@ -628,35 +1071,40 @@ function applyUpgrade(character, currentLevel) {
   })
     .then((response) => response.json())
     .then((data) => {
-      if (data.success) {
-        // Update client state
-        try {
-          if (_userDataRef) {
-            const spent = Number(data.spent || 0);
-            const newLevel = Number(data.newLevel);
-            _userDataRef.coins = Math.max(
-              0,
-              Number(_userDataRef.coins || 0) - spent,
-            );
-            _userDataRef.char_levels = _userDataRef.char_levels || {};
+      if (!data.success) {
+        showErrorDialog(data.message || "Upgrade failed.");
+        return;
+      }
+
+      try {
+        if (_userDataRef) {
+          const spent = Number(data.spent || 0);
+          const newLevel = Number(data.newLevel);
+          _userDataRef.coins = Math.max(
+            0,
+            Number(_userDataRef.coins || 0) - spent,
+          );
+          if (
+            !_userDataRef.char_levels ||
+            typeof _userDataRef.char_levels !== "object"
+          ) {
+            _userDataRef.char_levels = {};
+          }
+          if (!Number.isNaN(newLevel)) {
             _userDataRef.char_levels[character] = newLevel;
           }
-        } catch (_) {}
-        // Re-render the specific card and play animation
-        rerenderCharacterCard(character, _userDataRef || {}, "upgrade");
-        document.getElementById("coin-count").textContent = _userDataRef.coins;
-        // After coins change, ensure other upgrade buttons reflect affordability
-        try {
-          refreshUpgradeButtonAffordability();
-        } catch {}
-      } else {
-        showErrorDialog(data.error || "Upgrade failed.");
-      }
+        }
+      } catch {}
+
+      rerenderCharacterCard(character, _userDataRef, "upgrade");
+      refreshUpgradeButtonAffordability();
+      playCharacterDetailsSuccessAnimation("upgrade");
     })
     .catch((error) => {
       showErrorDialog(error?.message || "Network error.");
     });
 }
+
 function applyUnlock(character, price) {
   fetch("/buy", {
     method: "POST",
@@ -667,65 +1115,68 @@ function applyUnlock(character, price) {
   })
     .then((response) => response.json())
     .then((data) => {
-      if (data.success) {
-        try {
-          if (_userDataRef) {
-            // server returns new gems balance and new level
-            if (typeof data.gems !== "undefined") {
-              _userDataRef.gems = Number(data.gems);
-            } else {
-              // fallback: subtract spent
-              _userDataRef.gems = Math.max(
-                0,
-                Number(_userDataRef.gems || 0) - Number(data.spent || 0),
-              );
-            }
-            _userDataRef.char_levels = _userDataRef.char_levels || {};
-            _userDataRef.char_levels[character] = Number(data.newLevel || 1);
-          }
-        } catch (_) {}
-        rerenderCharacterCard(character, _userDataRef || {}, "unlock");
-        document.getElementById("gem-count").textContent = _userDataRef.gems;
-        // Unlock can change coins indirectly in some flows; refresh anyway
-        try {
-          refreshUpgradeButtonAffordability();
-        } catch {}
-      } else {
-        showErrorDialog(data.error || "Unlock failed.");
+      if (!data.success) {
+        showErrorDialog(data.message || "Unlock failed.");
+        return;
       }
+
+      try {
+        if (_userDataRef) {
+          const spent = Number(data.spent || price || 0);
+          const unlockedLevel = Number(data.newLevel || 1);
+          _userDataRef.gems = Math.max(
+            0,
+            Number(_userDataRef.gems || 0) - spent,
+          );
+          if (
+            !_userDataRef.char_levels ||
+            typeof _userDataRef.char_levels !== "object"
+          ) {
+            _userDataRef.char_levels = {};
+          }
+          _userDataRef.char_levels[character] = unlockedLevel;
+        }
+      } catch {}
+
+      rerenderCharacterCard(character, _userDataRef, "unlock");
+      refreshUpgradeButtonAffordability();
+      playCharacterDetailsSuccessAnimation("unlock");
     })
     .catch((error) => {
       showErrorDialog(error?.message || "Network error.");
     });
 }
 
-// Re-evaluate all visible upgrade buttons against current coin balance
+// Re-evaluate visible cards against current coin balance
 function refreshUpgradeButtonAffordability() {
-  const coins = Number(_userDataRef?.coins || 0);
-  const grid = document.querySelector(".characters-grid");
-  if (!grid) return;
-  const cards = grid.querySelectorAll(".character-card");
+  const cards = document.querySelectorAll(".character-card");
   cards.forEach((card) => {
     try {
-      const char = card.dataset.char;
-      if (!char) return;
-      const levels = (_userDataRef && _userDataRef.char_levels) || {};
-      const level = Number(levels[char] ?? 0);
-      if (level <= 0) return; // locked handled by its own button
-      if (level >= LEVEL_CAP) return; // maxed, no upgrade button
-      const price = upgradePrice(level);
-      const btn = card.querySelector(".upgrade-button");
-      if (!btn) return;
-      const affordable = coins >= price;
-      if (affordable) {
-        btn.classList.add("gleam");
-        btn.classList.remove("disabled");
-        btn.title = "";
-      } else {
-        btn.classList.remove("gleam");
-        btn.classList.add("disabled");
-        btn.title = "Not enough coins";
+      const character = card.dataset.char;
+      if (!character) return;
+      const state = getCharacterCardState(character, _userDataRef);
+      const statusText = card.querySelector(".character-card-status-text");
+      if (!statusText) return;
+
+      card.classList.toggle("locked", state.isLocked);
+      card.classList.toggle("is-maxed", state.isMaxed);
+      card.classList.toggle("is-upgrade-ready", state.canUpgrade);
+
+      if (state.isLocked) {
+        statusText.className = "character-card-status-text";
+        statusText.innerHTML = `<img src="/assets/gem.webp" alt="" /> <span class="character-card-status-price">${state.stats?.unlockPrice || 0}</span>`;
+        return;
       }
+
+      if (state.isMaxed) {
+        statusText.className = "character-card-status-text maxed";
+        statusText.textContent = "MAX";
+        return;
+      }
+
+      statusText.className =
+        `character-card-status-text upgradable ${state.canUpgrade ? "" : "insufficient"}`.trim();
+      statusText.innerHTML = `<img src="/assets/coin.webp" alt="" /> <span class="character-card-status-price">${state.price || 0}</span>`;
     } catch {}
   });
 }
