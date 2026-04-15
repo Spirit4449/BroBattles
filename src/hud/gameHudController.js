@@ -8,6 +8,10 @@ import {
   normalizeGameSelection,
   selectionToLegacyMode,
 } from "../lib/gameSelectionCatalog.js";
+import {
+  buildProfileIconAlt,
+  buildProfileIconUrl,
+} from "../lib/profileIconAssets.js";
 
 function legacyModeToVariantId(mode) {
   const numeric = Number(mode);
@@ -809,8 +813,9 @@ export function createGameHudController({
       avatarCore.className = "team-hud-avatar-core";
       const img = document.createElement("img");
       const cls = (p?.char_class || "ninja").toLowerCase();
-      img.src = `/assets/${cls}/body.webp`;
-      img.alt = cls;
+      const profileIconId = String(p?.profile_icon_id || "") || null;
+      img.src = buildProfileIconUrl(profileIconId, cls);
+      img.alt = buildProfileIconAlt(profileIconId, cls);
       const cross = document.createElement("div");
       cross.className = "team-hud-cross";
       cross.textContent = "X";
@@ -940,7 +945,6 @@ export function createGameHudController({
         "phase-darkened",
         "phase-cards",
       );
-
       deferGameplayHudReveal = false;
       try {
         const timerHud = document.getElementById("game-timer-hud");

@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "defaultIconId": "ninja",
+  "icons": [
+    {
+      "id": "ninja",
+      "name": "Ninja",
+      "assetUrl": "/assets/profile-icons/ninja.webp",
+      "rarity": "common",
+      "limited": true,
+      "showInPicker": true,
+      "cost": {
+        "gems": 0
+      },
+      "unlock": {
+        "type": "character",
+        "character": "ninja"
+      }
+    },
+    {
+      "id": "thorg",
+      "name": "Thorg",
+      "assetUrl": "/assets/profile-icons/thorg.webp",
+      "rarity": "common",
+      "limited": true,
+      "showInPicker": true,
+      "cost": {
+        "gems": 0
+      },
+      "unlock": {
+        "type": "character",
+        "character": "thorg"
+      }
+    },
+    {
+      "id": "draven",
+      "name": "Draven",
+      "assetUrl": "/assets/profile-icons/draven.webp",
+      "rarity": "rare",
+      "limited": true,
+      "showInPicker": true,
+      "cost": {
+        "gems": 0
+      },
+      "unlock": {
+        "type": "character",
+        "character": "draven"
+      }
+    },
+    {
+      "id": "wizard",
+      "name": "Wizard",
+      "assetUrl": "/assets/profile-icons/wizard.webp",
+      "rarity": "rare",
+      "limited": true,
+      "showInPicker": true,
+      "cost": {
+        "gems": 0
+      },
+      "unlock": {
+        "type": "character",
+        "character": "wizard"
+      }
+    },
+    {
+      "id": "200trophies",
+      "name": "200 Trophies",
+      "assetUrl": "/assets/profile-icons/200trophies.webp",
+      "rarity": "epic",
+      "limited": true,
+      "showInPicker": false,
+      "cost": {
+        "gems": 0
+      },
+      "unlock": {
+        "type": "trophies",
+        "min": 200
+      }
+    }
+  ]
+}

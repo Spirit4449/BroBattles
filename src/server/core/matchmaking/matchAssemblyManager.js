@@ -7,7 +7,9 @@ function createMatchAssemblyManager({
   lastProgress,
   readyCheckCoordinator,
 }) {
-  const { selectionToLegacyMode } = require("../../helpers/gameSelectionCatalog");
+  const {
+    selectionToLegacyMode,
+  } = require("../../helpers/gameSelectionCatalog");
 
   async function assembleAndReady(modeId, modeVariantId, map, picks) {
     const ids = picks.map((p) => p.ticket.ticket_id);
@@ -26,7 +28,7 @@ function createMatchAssemblyManager({
       const flipped = !!pick.flip;
       if (t.party_id) {
         const rows = await db.runQuery(
-          "SELECT u.user_id, u.name, u.char_class, pm.party_id, pm.team FROM party_members pm JOIN users u ON u.name = pm.name WHERE pm.party_id = ?",
+          "SELECT u.user_id, u.name, u.char_class, u.selected_profile_icon_id AS profile_icon_id, pm.party_id, pm.team FROM party_members pm JOIN users u ON u.name = pm.name WHERE pm.party_id = ?",
           [t.party_id],
         );
         rows.forEach((u) => {
@@ -38,6 +40,7 @@ function createMatchAssemblyManager({
             party_id: u.party_id,
             team,
             char_class: u.char_class || null,
+            profile_icon_id: String(u.profile_icon_id || "") || null,
           });
         });
       } else if (t.user_id) {
@@ -51,6 +54,7 @@ function createMatchAssemblyManager({
           party_id: null,
           team,
           char_class: u.char_class || null,
+          profile_icon_id: String(u.selected_profile_icon_id || "") || null,
         });
       }
     }
@@ -120,6 +124,7 @@ function createMatchAssemblyManager({
           name: x.name,
           team: x.team,
           char_class: x.char_class,
+          profile_icon_id: x.profile_icon_id || null,
         })),
       });
     }

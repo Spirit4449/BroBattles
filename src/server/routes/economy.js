@@ -3,6 +3,7 @@ const {
   upgradePrice,
   unlockPrice,
 } = require("../../lib/characterStats");
+const { unlockProfileIconForUser } = require("../helpers/profileIconOwnership");
 
 function registerEconomyRoutes({ app, db, auth }) {
   app.post("/upgrade", async (req, res) => {
@@ -24,7 +25,7 @@ function registerEconomyRoutes({ app, db, auth }) {
       const result = await db.withTransaction(async (conn, q) => {
         const rows = await q(
           "SELECT coins, JSON_EXTRACT(char_levels, ?) AS lvl FROM users WHERE name = ? FOR UPDATE",
-          [jsonPath, username]
+          [jsonPath, username],
         );
         if (rows.length === 0) {
           return { status: 404, body: { error: "User not found" } };
@@ -52,7 +53,7 @@ function registerEconomyRoutes({ app, db, auth }) {
            WHERE name = ?
              AND coins >= ?
              AND COALESCE(JSON_EXTRACT(char_levels, ?), 0) = ?`,
-          [price, jsonPath, dbLevel + 1, username, price, jsonPath, dbLevel]
+          [price, jsonPath, dbLevel + 1, username, price, jsonPath, dbLevel],
         );
         if (!ok || !ok.affectedRows) {
           return { status: 409, body: { error: "Upgrade conflict, retry" } };
@@ -71,7 +72,7 @@ function registerEconomyRoutes({ app, db, auth }) {
         return res.status(result.status).json(result.body);
 
       console.log(
-        `${username} upgrade ${character} to level ${result.body.newLevel} for ${result.body.spent} coins`
+        `${username} upgrade ${character} to level ${result.body.newLevel} for ${result.body.spent} coins`,
       );
       return res.status(200).json(result.body);
     } catch (err) {
@@ -111,7 +112,7 @@ function registerEconomyRoutes({ app, db, auth }) {
             WHERE name = ?
               AND gems >= ?
               AND IFNULL(CAST(JSON_UNQUOTE(JSON_EXTRACT(char_levels, ?)) AS UNSIGNED), 0) < 1`,
-          [price, jsonPath, username, price, jsonPath]
+          [price, jsonPath, username, price, jsonPath],
         );
 
         if (!ok || !ok.affectedRows) {
@@ -119,7 +120,7 @@ function registerEconomyRoutes({ app, db, auth }) {
             `SELECT gems,
                     IFNULL(CAST(JSON_UNQUOTE(JSON_EXTRACT(char_levels, ?)) AS UNSIGNED), 0) AS lvl
                FROM users WHERE name = ?`,
-            [jsonPath, username]
+            [jsonPath, username],
           );
           if (!rows.length)
             return { status: 404, body: { error: "User not found" } };
@@ -141,7 +142,7 @@ function registerEconomyRoutes({ app, db, auth }) {
           `SELECT gems,
                   CAST(JSON_UNQUOTE(JSON_EXTRACT(char_levels, ?)) AS UNSIGNED) AS lvl
              FROM users WHERE name = ?`,
-          [jsonPath, username]
+          [jsonPath, username],
         );
         const newGems = after[0]?.gems;
         const newLevel = after[0]?.lvl ?? 1;
@@ -163,6 +164,20 @@ function registerEconomyRoutes({ app, db, auth }) {
       }
       if (result.status !== 200)
         return res.status(result.status).json(result.body);
+
+      try {
+        await unlockProfileIconForUser(
+          db,
+          user.user_id,
+          character,
+          "character_unlock",
+        );
+      } catch (error) {
+        console.warn(
+          `[economy] profile icon unlock skipped for ${character}:`,
+          error?.message || error,
+        );
+      }
 
       console.log(`${username} unlocked ${character} for ${price} gems`);
       return res.status(200).json(result.body);

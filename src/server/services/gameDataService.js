@@ -48,7 +48,7 @@ async function buildGameDataForMatch({
   }
 
   const allParticipants = await db.runQuery(
-    `SELECT mp.user_id, mp.party_id, mp.team, mp.char_class, u.name, u.char_levels, u.trophies
+    `SELECT mp.user_id, mp.party_id, mp.team, mp.char_class, u.name, u.char_levels, u.trophies, u.selected_profile_icon_id AS profile_icon_id
        FROM match_participants mp
        JOIN users u ON u.user_id = mp.user_id
       WHERE mp.match_id = ?`,
@@ -93,6 +93,7 @@ async function buildGameDataForMatch({
         name: p.name,
         team: p.team,
         char_class: p.char_class,
+        profile_icon_id: String(p.profile_icon_id || "") || null,
         selected_card_id: selectedByName[p.name] ?? null,
         trophies: Number(p.trophies) || 0,
         level,

@@ -201,7 +201,7 @@
           <div class="profile-head-copy">
             <h2 id="profile-popup-title">Your Profile</h2>
             <p id="profile-popup-subtitle" class="profile-popup-subtitle">
-              Loadout, progression, and account overview
+              Loadout and progression overview
             </p>
           </div>
           <button
@@ -216,63 +216,95 @@
         <div class="profile-popup-grid">
           <article class="profile-panel profile-hero-panel">
             <div class="profile-hero-top">
-              <div class="profile-hero-avatar">
-                <img
-                  id="profile-hero-avatar"
-                  src="/assets/ninja/body.webp"
-                  alt=""
-                />
-              </div>
-              <div class="profile-hero-copy">
-                <div id="profile-hero-name" class="profile-hero-name">-</div>
-                <div id="profile-hero-class" class="profile-hero-class">
-                  Ninja
+              <div class="profile-hero-side profile-hero-side-left">
+                <div class="profile-metric-card">
+                  <span>Wins</span><strong id="profile-wins">0</strong>
                 </div>
-                <div id="profile-hero-tag" class="profile-hero-tag">
-                  Player Profile
+                <div class="profile-metric-card">
+                  <span>Trophies</span><strong id="profile-trophies">0</strong>
+                </div>
+                <div class="profile-metric-card">
+                  <span>Avg Char Level</span
+                  ><strong id="profile-avg-level">1</strong>
                 </div>
               </div>
-            </div>
-            <div class="profile-hero-metrics">
-              <div class="profile-metric-card">
-                <span>Wins</span><strong id="profile-wins">0</strong>
+
+              <div class="profile-hero-center">
+                <div class="profile-hero-copy">
+                  <div id="profile-hero-name" class="profile-hero-name">-</div>
+                  <div id="profile-hero-class" class="profile-hero-class">
+                    Ninja
+                  </div>
+                </div>
+
+                <div class="profile-card-showcase">
+                  <button
+                    id="profile-hero-card-trigger"
+                    class="profile-card-edit-trigger"
+                    type="button"
+                    aria-label="Change player card"
+                  >
+                    <span class="profile-card-edit-badge" aria-hidden="true">
+                      <img
+                        src="/assets/edit.svg"
+                        alt=""
+                        width="14"
+                        height="14"
+                      />
+                    </span>
+                  </button>
+                  <img
+                    id="profile-hero-card-frame"
+                    class="profile-hero-card-frame"
+                    src="/assets/player-cards/default.webp"
+                    alt="Selected player card"
+                  />
+                  <div class="profile-hero-avatar">
+                    <button
+                      id="profile-hero-avatar-trigger"
+                      class="profile-hero-avatar-trigger"
+                      type="button"
+                      aria-label="Change profile icon"
+                    >
+                      <img
+                        id="profile-hero-avatar"
+                        src="/assets/ninja/body.webp"
+                        alt=""
+                      />
+                      <span
+                        id="profile-icon-edit-badge"
+                        class="profile-icon-edit-badge"
+                        aria-hidden="true"
+                      >
+                        <img
+                          src="/assets/edit.svg"
+                          alt=""
+                          width="14"
+                          height="14"
+                        />
+                      </span>
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div class="profile-metric-card">
-                <span>Total Matches</span
-                ><strong id="profile-matches">0</strong>
-              </div>
-              <div class="profile-metric-card">
-                <span>Trophies</span><strong id="profile-trophies">0</strong>
-              </div>
-              <div class="profile-metric-card">
-                <span>Avg Char Level</span
-                ><strong id="profile-avg-level">1</strong>
+
+              <div class="profile-hero-side profile-hero-side-right">
+                <div class="profile-metric-card">
+                  <span>Coins</span><strong id="profile-hero-coins">0</strong>
+                </div>
+                <div class="profile-metric-card">
+                  <span>Gems</span><strong id="profile-hero-gems">0</strong>
+                </div>
               </div>
             </div>
           </article>
 
-          <article class="profile-panel profile-stats-panel">
-            <h3>Stats</h3>
-            <div class="profile-stat-row">
-              <span>Username</span><strong id="profile-username">-</strong>
-            </div>
-            <div id="profile-coins-row" class="profile-stat-row">
-              <span>Coins</span><strong id="profile-coins">0</strong>
-            </div>
-            <div id="profile-gems-row" class="profile-stat-row">
-              <span>Gems</span><strong id="profile-gems">0</strong>
-            </div>
-            <div class="profile-stat-row">
-              <span>Trophies</span
-              ><strong id="profile-stats-trophies">0</strong>
-            </div>
-            <div class="profile-stat-row">
-              <span>Wins</span><strong id="profile-stats-wins">0</strong>
-            </div>
-            <div class="profile-stat-row">
-              <span>Main Character</span
-              ><strong id="profile-main-class">Ninja</strong>
-            </div>
+          <article
+            id="profile-character-levels-panel"
+            class="profile-panel profile-character-levels-panel is-hidden"
+          >
+            <h3>Character Levels</h3>
+            <div id="profile-character-levels-grid" class="profile-character-levels-grid"></div>
           </article>
 
           <article
@@ -324,14 +356,46 @@
           </article>
         </div>
 
-        <section
-          id="profile-cards-panel"
-          class="profile-panel profile-cards-panel"
-        >
-          <h3>Player Cards</h3>
-          <div id="profile-cards-grid" class="profile-cards-grid"></div>
-        </section>
       </section>
+
+      <div
+        id="profile-loadout-overlay"
+        class="profile-loadout-overlay hidden"
+        aria-hidden="true"
+      >
+        <div class="profile-loadout-backdrop"></div>
+        <section
+          class="profile-loadout-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="profile-loadout-title"
+        >
+          <div class="profile-loadout-head">
+            <h3 id="profile-loadout-title">Edit Profile Icon</h3>
+            <button
+              id="profile-loadout-close"
+              class="profile-close pixel-menu-button"
+              type="button"
+            >
+              Close
+            </button>
+          </div>
+
+          <section
+            id="profile-icons-panel"
+            class="profile-loadout-section"
+          >
+            <div id="profile-icons-grid" class="profile-cards-grid"></div>
+          </section>
+
+          <section
+            id="profile-cards-panel"
+            class="profile-loadout-section"
+          >
+            <div id="profile-cards-grid" class="profile-cards-grid"></div>
+          </section>
+        </section>
+      </div>
     </div>
 
     <div

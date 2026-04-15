@@ -70,7 +70,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     );
 
     const participantRows = await db.runQuery(
-      `SELECT mp.user_id, mp.party_id, mp.team, mp.char_class, u.name,
+      `SELECT mp.user_id, mp.party_id, mp.team, mp.char_class, u.name, u.selected_profile_icon_id AS profile_icon_id,
               CASE WHEN u.name LIKE 'BOT %' THEN 1 ELSE 0 END AS is_bot
        FROM match_participants mp 
        JOIN users u ON u.user_id = mp.user_id 
@@ -96,6 +96,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
         party_id: p.party_id,
         team: p.team,
         char_class: p.char_class,
+        profile_icon_id: String(p.profile_icon_id || "") || null,
         isBot: !!Number(p.is_bot),
       })),
     };
@@ -283,7 +284,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     const players = [];
     if (ticket.party_id) {
       const members = await db.runQuery(
-        "SELECT u.user_id, u.name, u.char_class, pm.party_id, pm.team FROM party_members pm JOIN users u ON u.name = pm.name WHERE pm.party_id = ? ORDER BY pm.joined_at, pm.name",
+        "SELECT u.user_id, u.name, u.char_class, u.selected_profile_icon_id AS profile_icon_id, pm.party_id, pm.team FROM party_members pm JOIN users u ON u.name = pm.name WHERE pm.party_id = ? ORDER BY pm.joined_at, pm.name",
         [ticket.party_id],
       );
       players.push(...members.map((member) => ({ ...member, isBot: false })));
@@ -296,6 +297,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
         party_id: null,
         team: ticket.team1_count === 1 ? "team1" : "team2",
         char_class: user.char_class || "ninja",
+        profile_icon_id: String(user.selected_profile_icon_id || "") || null,
         isBot: false,
       });
     }
@@ -323,6 +325,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
           party_id: null,
           team,
           char_class: charClass,
+          profile_icon_id: charClass,
           isBot: true,
         });
         teamCounts[team] += 1;
@@ -393,6 +396,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
             name: entry.name,
             team: entry.team,
             char_class: entry.char_class,
+            profile_icon_id: entry.profile_icon_id || null,
             isBot: !!entry.isBot,
           })),
         });

@@ -1,8 +1,6 @@
 // Database
 const mysql = require("mysql2/promise"); // Just mysql doesn't work
-const {
-  normalizeSelection,
-} = require("../helpers/gameSelectionCatalog");
+const { normalizeSelection } = require("../helpers/gameSelectionCatalog");
 const pool = mysql.createPool({
   host: "localhost",
   user: "root",
@@ -72,7 +70,7 @@ async function getPartyIdByName(name) {
 
 async function fetchPartyMembersDetailed(partyId) {
   return runQuery(
-    `SELECT pm.name, pm.team, u.char_class, u.status, u.char_levels
+    `SELECT pm.name, pm.team, u.char_class, u.status, u.char_levels, u.selected_profile_icon_id AS profile_icon_id
        FROM party_members pm
        LEFT JOIN users u ON u.name = pm.name
       WHERE pm.party_id = ?
@@ -189,6 +187,61 @@ async function setUserSelectedCardId(userId, cardId) {
   }
 }
 
+async function getUserSelectedProfileIconId(userId) {
+  try {
+    const rows = await runQuery(
+      "SELECT selected_profile_icon_id FROM users WHERE user_id = ? LIMIT 1",
+      [userId],
+    );
+    return rows[0]?.selected_profile_icon_id ?? null;
+  } catch (error) {
+    if (error?.code === "ER_BAD_FIELD_ERROR") return null;
+    throw error;
+  }
+}
+
+async function getUserOwnedProfileIconIds(userId) {
+  try {
+    const rows = await runQuery(
+      "SELECT icon_id FROM user_profile_icons WHERE user_id = ?",
+      [userId],
+    );
+    return rows.map((row) => String(row.icon_id));
+  } catch (error) {
+    if (error?.code === "ER_NO_SUCH_TABLE") return [];
+    throw error;
+  }
+}
+
+async function userOwnsProfileIcon(userId, iconId) {
+  try {
+    const rows = await runQuery(
+      "SELECT 1 AS ok FROM user_profile_icons WHERE user_id = ? AND icon_id = ? LIMIT 1",
+      [userId, String(iconId)],
+    );
+    return !!rows[0];
+  } catch (error) {
+    if (error?.code === "ER_NO_SUCH_TABLE") return false;
+    throw error;
+  }
+}
+
+async function setUserSelectedProfileIconId(userId, iconId) {
+  try {
+    return await runQuery(
+      "UPDATE users SET selected_profile_icon_id = ? WHERE user_id = ?",
+      [String(iconId), userId],
+    );
+  } catch (error) {
+    if (error?.code === "ER_BAD_FIELD_ERROR") {
+      throw new Error(
+        "selected_profile_icon_id column missing in users table. Apply the profile-icons migration.",
+      );
+    }
+    throw error;
+  }
+}
+
 async function fetchSelectedCardsByNames(names) {
   const unique = Array.from(
     new Set((Array.isArray(names) ? names : []).map((n) => String(n || ""))),
@@ -244,12 +297,7 @@ async function setUserPreferredSelection(userId, selection) {
               preferred_mode_variant_id = ?,
               preferred_map_id = ?
         WHERE user_id = ?`,
-      [
-        normalized.modeId,
-        normalized.modeVariantId,
-        normalized.mapId,
-        userId,
-      ],
+      [normalized.modeId, normalized.modeVariantId, normalized.mapId, userId],
     );
   } catch (error) {
     if (error?.code === "ER_BAD_FIELD_ERROR") {
@@ -391,6 +439,10 @@ module.exports = {
   userOwnsCard,
   setUserSelectedCardId,
   fetchSelectedCardsByNames,
+  getUserSelectedProfileIconId,
+  getUserOwnedProfileIconIds,
+  userOwnsProfileIcon,
+  setUserSelectedProfileIconId,
   getUserPreferredSelection,
   setUserPreferredSelection,
 };

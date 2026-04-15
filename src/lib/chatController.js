@@ -1,3 +1,5 @@
+import { buildProfileIconUrl } from "./profileIconAssets.js";
+
 const GAME_CHAT_RECENT_LIMIT = 8;
 
 function escapeHtml(value) {
@@ -20,18 +22,15 @@ function formatChatTime(isoValue) {
   });
 }
 
-function buildAvatarUrl(charClass) {
-  const cls = String(charClass || "ninja")
-    .trim()
-    .toLowerCase();
-  return `/assets/${cls}/body.webp`;
+function buildAvatarUrl(charClass, profileIconId = null) {
+  return buildProfileIconUrl(profileIconId, charClass || "ninja");
 }
 
-function createAvatarEl(name, charClass) {
+function createAvatarEl(name, charClass, profileIconId = null) {
   const avatar = document.createElement("div");
   avatar.className = "bb-chat-avatar";
   const img = document.createElement("img");
-  img.src = buildAvatarUrl(charClass);
+  img.src = buildAvatarUrl(charClass, profileIconId);
   img.alt = String(name || "Player");
   img.loading = "lazy";
   img.decoding = "async";
@@ -166,6 +165,7 @@ function renderPartyChatMessage(
   const avatar = createAvatarEl(
     message?.sender?.name,
     message?.sender?.charClass,
+    message?.sender?.profileIconId,
   );
 
   const bubble = document.createElement("div");
@@ -450,7 +450,7 @@ export function createLobbyChatController({
         const row = document.createElement("div");
         row.className = "bb-chat-viewer-row";
         row.innerHTML = `
-          <span class="bb-chat-viewer-avatar"><img src="${escapeHtml(buildAvatarUrl(viewer?.charClass))}" alt="${escapeHtml(viewer?.name || "Player")}" loading="lazy" decoding="async" /></span>
+          <span class="bb-chat-viewer-avatar"><img src="${escapeHtml(buildAvatarUrl(viewer?.charClass, viewer?.profileIconId))}" alt="${escapeHtml(viewer?.name || "Player")}" loading="lazy" decoding="async" /></span>
           <span class="bb-chat-viewer-name">${escapeHtml(formatNameWithYou(viewer?.name || "Player", currentName))}</span>
           <span class="bb-chat-viewer-time">${escapeHtml(formatChatTime(viewer?.readAt))}</span>
         `;
@@ -843,6 +843,7 @@ export function createLobbyChatController({
           name: viewerName,
           userId: Number(payload?.viewerUserId) || null,
           charClass: String(payload?.viewerCharClass || "ninja"),
+          profileIconId: String(payload?.viewerProfileIconId || "") || null,
           readAt: new Date().toISOString(),
         });
       }

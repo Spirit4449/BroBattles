@@ -154,6 +154,7 @@ function createPartyRouteService({ db }) {
            pm.name,
            pm.team,
            u.char_class,
+           u.selected_profile_icon_id AS profile_icon_id,
            u.status,
            CASE
              WHEN pm.joined_at = (
@@ -205,6 +206,7 @@ function createPartyRouteService({ db }) {
         name: String(row.name || ""),
         team: String(row.team || "team1"),
         char_class: String(row.char_class || "ninja"),
+        profile_icon_id: String(row.profile_icon_id || "") || null,
         status: String(row.status || "online"),
       };
       if (member.name) {

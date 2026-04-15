@@ -1,3 +1,7 @@
+const {
+  syncProfileIconOwnershipForUser,
+} = require("../helpers/profileIconOwnership");
+
 function normalizeUserForStatus(user) {
   const out = user ? { ...user } : null;
   if (out && typeof out.char_levels === "string") {
@@ -40,8 +44,23 @@ async function buildStatusPayload({
 
   let selectedCardId = null;
   let ownedCardIds = [];
+  let selectedProfileIconId = null;
+  let ownedProfileIconIds = [];
   let preferredSelection = null;
   if (userNormalized?.user_id) {
+    try {
+      const iconState = await syncProfileIconOwnershipForUser(
+        db,
+        userNormalized,
+      );
+      selectedProfileIconId = iconState.selectedProfileIconId || null;
+      ownedProfileIconIds = Array.isArray(iconState.ownedIconIds)
+        ? iconState.ownedIconIds
+        : [];
+    } catch (_) {
+      selectedProfileIconId = null;
+      ownedProfileIconIds = [];
+    }
     try {
       selectedCardId = await db.getUserSelectedCardId(userNormalized.user_id);
     } catch (_) {
@@ -67,6 +86,8 @@ async function buildStatusPayload({
   if (userNormalized) {
     userNormalized.selected_card_id = selectedCardId;
     userNormalized.owned_card_ids = ownedCardIds;
+    userNormalized.selected_profile_icon_id = selectedProfileIconId;
+    userNormalized.owned_profile_icon_ids = ownedProfileIconIds;
     userNormalized.preferred_selection = preferredSelection;
   }
 

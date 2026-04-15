@@ -23,6 +23,25 @@
       <main class="profile-grid">
         <section class="profile-card overview">
           <h2 id="profile-username">Loading...</h2>
+          <div class="profile-icon-row">
+            <button
+              id="change-icon-btn"
+              class="profile-icon-trigger"
+              type="button"
+              aria-label="Change profile icon"
+            >
+              <img
+                id="profile-icon-preview"
+                src="/assets/profile-icons/ninja.webp"
+                alt="Profile icon"
+                width="96"
+                height="96"
+              />
+              <span class="profile-icon-edit-badge" aria-hidden="true">
+                <img src="/assets/edit.svg" alt="" width="16" height="16" />
+              </span>
+            </button>
+          </div>
           <div class="stat-row">
             <span>Coins</span>
             <strong id="profile-coins">0</strong>
@@ -82,6 +101,17 @@
           <button id="close-cards-modal" class="profile-btn">Close</button>
         </div>
         <div id="cards-grid" class="cards-grid"></div>
+      </div>
+    </div>
+
+    <div id="icons-modal" class="cards-modal hidden" aria-hidden="true">
+      <div class="cards-modal-backdrop"></div>
+      <div class="cards-modal-panel">
+        <div class="cards-modal-head">
+          <h2>Profile Icons</h2>
+          <button id="close-icons-modal" class="profile-btn">Close</button>
+        </div>
+        <div id="icons-grid" class="cards-grid"></div>
       </div>
     </div>
 

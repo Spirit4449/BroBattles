@@ -39,6 +39,7 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
           `SELECT u.user_id AS userId,
                   u.name AS username,
                   u.char_class AS charClass,
+              u.selected_profile_icon_id AS profileIconId,
                   COALESCE(u.trophies, 0) AS trophies,
                   (
                     SELECT COUNT(*)
@@ -65,6 +66,7 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
           `SELECT u.user_id AS userId,
                   u.name AS username,
                   u.char_class AS charClass,
+              u.selected_profile_icon_id AS profileIconId,
                   COALESCE(u.trophies, 0) AS trophies,
                   0 AS wins,
                   (
@@ -85,6 +87,7 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
         userId: Number(row.userId),
         username: String(row.username || "Unknown"),
         charClass: String(row.charClass || "ninja"),
+        profileIconId: String(row.profileIconId || "") || null,
         trophies: Number(row.trophies) || 0,
         wins: Number(row.wins) || 0,
         totalMatches: Number(row.totalMatches) || 0,

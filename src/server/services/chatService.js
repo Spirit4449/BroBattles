@@ -105,7 +105,7 @@ function createPartyChatService({ db, io }) {
       [partyId, ...ids],
     );
     const readerRows = await db.runQuery(
-      `SELECT r.message_id, r.user_id, u.name AS reader_name, u.char_class AS reader_char_class, r.read_at
+      `SELECT r.message_id, r.user_id, u.name AS reader_name, u.char_class AS reader_char_class, u.selected_profile_icon_id AS reader_profile_icon_id, r.read_at
          FROM party_chat_message_reads r
          JOIN users u ON u.user_id = r.user_id
         WHERE r.party_id = ?
@@ -174,6 +174,7 @@ function createPartyChatService({ db, io }) {
         userId: Number(row.user_id),
         name: String(row.reader_name || ""),
         charClass: String(row.reader_char_class || "ninja"),
+        profileIconId: String(row.reader_profile_icon_id || "") || null,
         readAt: row.read_at ? new Date(row.read_at).toISOString() : null,
       });
     }
@@ -201,6 +202,7 @@ function createPartyChatService({ db, io }) {
         userId: Number(row.user_id),
         name: senderName,
         charClass: String(row.char_class || "ninja"),
+        profileIconId: String(row.profile_icon_id || "") || null,
         selectedCardId: row.selected_card_id || null,
       },
       replyTo: replyToMessageId
@@ -251,6 +253,7 @@ function createPartyChatService({ db, io }) {
          m.updated_at,
          u.name AS sender_name,
          u.char_class,
+         u.selected_profile_icon_id AS profile_icon_id,
          u.selected_card_id,
          rm.body AS reply_body,
          rm.created_at AS reply_created_at,
@@ -309,6 +312,7 @@ function createPartyChatService({ db, io }) {
          m.updated_at,
          u.name AS sender_name,
          u.char_class,
+         u.selected_profile_icon_id AS profile_icon_id,
          u.selected_card_id,
          rm.body AS reply_body,
          rm.created_at AS reply_created_at,
@@ -506,6 +510,7 @@ function createPartyChatService({ db, io }) {
       viewerName: user.name,
       viewerUserId: Number(user.user_id) || null,
       viewerCharClass: String(user.char_class || "ninja"),
+      viewerProfileIconId: String(user.selected_profile_icon_id || "") || null,
       type: "read",
     });
 

@@ -21,6 +21,7 @@ function registerGameChatEvents(gameRoom, socket) {
         sender: {
           name: player.name,
           charClass: String(player.char_class || "ninja"),
+          profileIconId: String(player.profile_icon_id || "") || null,
           team: String(player.team || "team1"),
         },
       };

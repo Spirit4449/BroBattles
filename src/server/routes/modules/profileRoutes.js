@@ -1,4 +1,7 @@
 const bcrypt = require("bcrypt");
+const {
+  syncProfileIconOwnershipForUser,
+} = require("../../helpers/profileIconOwnership");
 
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,14}$/;
 const MIN_PW = 6;
@@ -6,6 +9,7 @@ const MAX_PW = 32;
 
 function registerProfileRoutes({ app, db, requireCurrentUser }) {
   async function buildProfileViewForUser(userRow) {
+    const profileIconState = await syncProfileIconOwnershipForUser(db, userRow);
     const ownedCardIds = await db.getUserOwnedCardIds(userRow.user_id);
     const selectedCardId = await db.getUserSelectedCardId(userRow.user_id);
     const matchesRows = await db.runQuery(
@@ -57,12 +61,15 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       gems: Number(userRow.gems) || 0,
       trophies: Number(userRow.trophies) || 0,
       charClass: userRow.char_class || "ninja",
+      profileIconId: profileIconState.selectedProfileIconId || null,
       charLevels,
       avgCharLevel: avgLevel,
       totalMatches: Number(matchesRows?.[0]?.total) || 0,
       wins,
       selectedCardId,
       ownedCardIds,
+      selectedProfileIconId: profileIconState.selectedProfileIconId || null,
+      ownedProfileIconIds: profileIconState.ownedIconIds || [],
     };
   }
 
@@ -119,8 +126,12 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
         profile: {
           userId: profile.userId,
           username: profile.username,
+          coins: profile.coins,
+          gems: profile.gems,
           trophies: profile.trophies,
           charClass: profile.charClass,
+          profileIconId: profile.profileIconId,
+          selectedCardId: profile.selectedCardId || null,
           charLevels: profile.charLevels,
           avgCharLevel: profile.avgCharLevel,
           totalMatches: profile.totalMatches,

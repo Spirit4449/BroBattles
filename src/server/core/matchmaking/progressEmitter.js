@@ -56,6 +56,7 @@ function createProgressEmitter({ db, io, lastProgress }) {
               players.push({
                 name: m.name,
                 char_class: m.char_class || "ninja",
+                profile_icon_id: String(m.profile_icon_id || "") || null,
               });
               if (players.length >= teamSize * 2) break;
             }
@@ -66,7 +67,7 @@ function createProgressEmitter({ db, io, lastProgress }) {
         if (t.user_id) {
           try {
             const rows = await db.runQuery(
-              "SELECT name, char_class FROM users WHERE user_id = ? LIMIT 1",
+              "SELECT name, char_class, selected_profile_icon_id AS profile_icon_id FROM users WHERE user_id = ? LIMIT 1",
               [t.user_id],
             );
             const u = rows?.[0];
@@ -75,6 +76,7 @@ function createProgressEmitter({ db, io, lastProgress }) {
               players.push({
                 name: u.name,
                 char_class: u.char_class || "ninja",
+                profile_icon_id: String(u.profile_icon_id || "") || null,
               });
             }
           } catch (_) {}

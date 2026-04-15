@@ -28,6 +28,10 @@ import { initUISounds, playSound } from "./lib/uiSounds.js";
 import { showUiConfirm } from "./lib/uiConfirm.js";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
 import { createLobbyChatController } from "./lib/chatController.js";
+import {
+  buildProfileIconAlt,
+  buildProfileIconUrl,
+} from "./lib/profileIconAssets.js";
 import "./styles/characterSelect.css";
 import "./styles/index.css";
 import "./styles/chat.css";
@@ -51,8 +55,11 @@ let trophyRoadLastScrollLeft = 0;
 const lobbyProfileState = {
   profile: null,
   catalog: null,
+  iconCatalog: null,
   ownedCardIds: [],
   selectedCardId: null,
+  ownedProfileIconIds: [],
+  selectedProfileIconId: null,
   loadingPromise: null,
   viewingSelf: true,
   viewingUsername: null,
@@ -137,62 +144,100 @@ function renderProfilePopupStats() {
   const profile = lobbyProfileState.profile;
   if (!profile) return;
 
+  const resolveSelectedCard = () => {
+    const cards = Array.isArray(lobbyProfileState.catalog?.cards)
+      ? lobbyProfileState.catalog.cards
+      : [];
+    const selectedId = String(
+      lobbyProfileState.selectedCardId || profile.selectedCardId || "",
+    );
+    const selectedCard = cards.find((card) => String(card?.id || "") === selectedId);
+    if (selectedCard?.assetUrl) return selectedCard;
+    const defaultCard = cards.find((card) => String(card?.id || "") === "default");
+    if (defaultCard?.assetUrl) return defaultCard;
+    return {
+      name: "Player Card",
+      assetUrl: "/assets/player-cards/default.webp",
+    };
+  };
+
   const setText = (id, value) => {
     const el = document.getElementById(id);
     if (el) el.textContent = String(value ?? "");
   };
 
   setText("profile-username", profile.username || "-");
-  setText("profile-coins", Number(profile.coins) || 0);
-  setText("profile-gems", Number(profile.gems) || 0);
+  setText("profile-hero-coins", Number(profile.coins) || 0);
+  setText("profile-hero-gems", Number(profile.gems) || 0);
   setText("profile-trophies", Number(profile.trophies) || 0);
-  setText("profile-stats-trophies", Number(profile.trophies) || 0);
-  setText("profile-matches", Number(profile.totalMatches) || 0);
   setText("profile-avg-level", Number(profile.avgCharLevel) || 1);
   setText("profile-wins", Number(profile.wins) || 0);
-  setText("profile-stats-wins", Number(profile.wins) || 0);
-  setText("profile-main-class", String(profile.charClass || "ninja"));
   setText("profile-hero-name", profile.username || "-");
   setText("profile-hero-class", String(profile.charClass || "ninja"));
-  setText(
-    "profile-hero-tag",
-    lobbyProfileState.viewingSelf
-      ? "Your Player Profile"
-      : "Public Player Profile",
-  );
   const heroAvatar = document.getElementById("profile-hero-avatar");
   if (heroAvatar) {
-    const cls = String(profile.charClass || "ninja");
-    heroAvatar.src = `/assets/${cls}/body.webp`;
-    heroAvatar.alt = cls;
+    heroAvatar.src = buildProfileIconUrl(
+      profile.profileIconId,
+      profile.charClass,
+    );
+    heroAvatar.alt = buildProfileIconAlt(
+      profile.profileIconId,
+      profile.charClass,
+    );
+  }
+  const heroCardFrame = document.getElementById("profile-hero-card-frame");
+  if (heroCardFrame) {
+    const selectedCard = resolveSelectedCard();
+    heroCardFrame.src =
+      selectedCard?.assetUrl || "/assets/player-cards/default.webp";
+    heroCardFrame.alt = selectedCard?.name || "Selected player card";
+  }
+  const avatarTrigger = document.getElementById("profile-hero-avatar-trigger");
+  const cardTrigger = document.getElementById("profile-hero-card-trigger");
+  if (avatarTrigger) {
+    avatarTrigger.disabled = !lobbyProfileState.viewingSelf;
+    avatarTrigger.style.cursor = lobbyProfileState.viewingSelf
+      ? "pointer"
+      : "default";
+  }
+  if (cardTrigger) {
+    cardTrigger.disabled = !lobbyProfileState.viewingSelf;
+    cardTrigger.hidden = !lobbyProfileState.viewingSelf;
+  }
+  const editBadge = document.getElementById("profile-icon-edit-badge");
+  if (editBadge) {
+    editBadge.hidden = !lobbyProfileState.viewingSelf;
+  }
+  const cardEditBadge = document.querySelector(".profile-card-edit-badge");
+  if (cardEditBadge) {
+    cardEditBadge.hidden = !lobbyProfileState.viewingSelf;
   }
   const subtitle = document.getElementById("profile-popup-subtitle");
   if (subtitle) {
-    subtitle.textContent = lobbyProfileState.viewingSelf
-      ? "Loadout, progression, and account overview"
-      : `${profile.username || "Player"}'s public stats`;
+    subtitle.textContent = "Loadout and progression overview";
   }
   const title = document.getElementById("profile-popup-title");
   if (title) {
-    title.textContent = lobbyProfileState.viewingSelf
-      ? "Your Profile"
-      : `${profile.username || "Player"} Profile`;
+    title.textContent = `${profile.username || "Player"} Profile`;
   }
   const accountPanel = document.getElementById("profile-account-panel");
   if (accountPanel) {
     accountPanel.classList.toggle("is-hidden", !lobbyProfileState.viewingSelf);
   }
+  const characterLevelsPanel = document.getElementById(
+    "profile-character-levels-panel",
+  );
+  if (characterLevelsPanel) {
+    characterLevelsPanel.classList.toggle("is-hidden", lobbyProfileState.viewingSelf);
+  }
   const cardsPanel = document.getElementById("profile-cards-panel");
-  if (cardsPanel) {
-    cardsPanel.classList.toggle("is-hidden", !lobbyProfileState.viewingSelf);
-  }
-  const coinsRow = document.getElementById("profile-coins-row");
-  if (coinsRow) {
-    coinsRow.classList.toggle("is-hidden", !lobbyProfileState.viewingSelf);
-  }
-  const gemsRow = document.getElementById("profile-gems-row");
-  if (gemsRow) {
-    gemsRow.classList.toggle("is-hidden", !lobbyProfileState.viewingSelf);
+  const iconsPanel = document.getElementById("profile-icons-panel");
+  const loadoutOverlay = document.getElementById("profile-loadout-overlay");
+  if (loadoutOverlay && !lobbyProfileState.viewingSelf) {
+    loadoutOverlay.classList.add("hidden");
+    loadoutOverlay.setAttribute("aria-hidden", "true");
+    if (cardsPanel) cardsPanel.classList.add("is-hidden");
+    if (iconsPanel) iconsPanel.classList.add("is-hidden");
   }
 
   const usernameInput = document.getElementById("profile-new-username");
@@ -210,6 +255,60 @@ function renderProfilePopupStats() {
     if (trophyCount)
       trophyCount.textContent = String(Number(profile.trophies) || 0);
   }
+
+  renderProfileCharacterLevels();
+}
+
+function renderProfileCharacterLevels() {
+  const panel = document.getElementById("profile-character-levels-panel");
+  const grid = document.getElementById("profile-character-levels-grid");
+  const profile = lobbyProfileState.profile || {};
+  if (!panel || !grid) return;
+  grid.innerHTML = "";
+
+  if (lobbyProfileState.viewingSelf) {
+    panel.classList.add("is-hidden");
+    return;
+  }
+
+  panel.classList.remove("is-hidden");
+
+  const toDisplayName = (id) =>
+    String(id || "")
+      .split(/[_-]+/g)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+
+  const entries = Object.entries(profile.charLevels || {})
+    .map(([charId, rawLevel]) => ({
+      charId: String(charId || "").trim(),
+      level: Number(rawLevel) || 0,
+    }))
+    .filter((entry) => entry.charId && entry.level > 0)
+    .sort((a, b) => b.level - a.level || a.charId.localeCompare(b.charId));
+
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "profile-character-level-empty";
+    empty.textContent = "No unlocked characters available.";
+    grid.appendChild(empty);
+    return;
+  }
+
+  entries.forEach((entry) => {
+    const iconLevel = Math.max(1, Math.min(5, Number(entry.level) || 1));
+    const card = document.createElement("article");
+    card.className = "profile-character-level-card";
+    card.innerHTML = `
+      <div class="profile-character-level-badge" aria-hidden="true">
+        <img src="/assets/levels/${iconLevel}.webp" alt="" />
+      </div>
+      <img src="/assets/${entry.charId}/body.webp" alt="${toDisplayName(entry.charId)}" />
+      <div class="profile-character-level-name">${toDisplayName(entry.charId)}</div>
+    `;
+    grid.appendChild(card);
+  });
 }
 
 function renderProfilePopupCards() {
@@ -289,11 +388,9 @@ function renderProfilePopupCards() {
           });
 
           await loadProfilePopupData(true);
-          sonner(
-            action === "buy" ? "Card purchased" : "Card equipped",
-            undefined,
-            "success",
-          );
+          if (action === "buy") {
+            sonner("Card purchased", undefined, "success");
+          }
         } catch (err) {
           const msg = String(err?.message || "Card action failed.");
           sonner(
@@ -312,20 +409,130 @@ function renderProfilePopupCards() {
   });
 }
 
+function renderProfilePopupIcons() {
+  const grid = document.getElementById("profile-icons-grid");
+  if (!grid) return;
+  grid.innerHTML = "";
+
+  const catalogIcons = Array.isArray(lobbyProfileState.iconCatalog?.icons)
+    ? lobbyProfileState.iconCatalog.icons
+    : [];
+  const owned = new Set(
+    (lobbyProfileState.ownedProfileIconIds || []).map(String),
+  );
+  const selected = String(
+    lobbyProfileState.selectedProfileIconId ||
+      lobbyProfileState.profile?.profileIconId ||
+      "",
+  );
+
+  const visibleIcons = catalogIcons.filter((icon) => {
+    const iconId = String(icon?.id || "");
+    return icon?.showInPicker !== false || owned.has(iconId);
+  });
+
+  visibleIcons.forEach((icon) => {
+    const id = String(icon?.id || "");
+    const isOwned = owned.has(id);
+    const isSelected = isOwned && selected === id;
+    const isLimited = icon?.limited === true;
+    const gemCost = Math.max(0, Number(icon?.cost?.gems || 0));
+    const isLocked = !isOwned && isLimited;
+
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = `profile-icon-choice-tile${isSelected ? " is-selected" : ""}${!isOwned ? " is-unowned" : ""}${isLocked ? " is-locked" : ""}`;
+    tile.dataset.iconId = id;
+    tile.innerHTML = `
+      <img src="${icon.assetUrl}" alt="${icon.name}" />
+      <span class="profile-icon-name-badge">${icon.name}</span>
+      ${gemCost > 0 && !isOwned ? `<span class="profile-icon-gem-badge"><img src="/assets/gem.webp" alt="gems" /> ${gemCost}</span>` : ""}
+      ${isLimited ? '<span class="profile-icon-limited-tag">LIMITED</span>' : ""}
+      ${!isOwned ? '<span class="profile-icon-lock-overlay"><img src="/assets/lock.webp" alt="Locked" /></span>' : ""}
+    `;
+
+    if (isLocked || isSelected) tile.disabled = true;
+
+    tile.addEventListener("click", async () => {
+      try {
+        tile.disabled = true;
+        const iconId = String(tile.dataset.iconId || "");
+        if (!iconId) return;
+
+        if (!isOwned) {
+          const ok = await showUiConfirm({
+            title: "Confirm Purchase",
+            message:
+              gemCost > 0
+                ? `Buy ${icon.name} for ${gemCost} gems?`
+                : `Unlock ${icon.name}?`,
+            confirmLabel: `${gemCost}`,
+            confirmIcon: "/assets/gem.webp",
+          });
+          if (!ok) {
+            tile.disabled = false;
+            return;
+          }
+          await profileFetchJson("/profile-icons/buy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ iconId }),
+          });
+        }
+
+        await profileFetchJson("/profile-icons/select", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ iconId }),
+        });
+
+        await loadProfilePopupData(true);
+        if (!isOwned) {
+          sonner("Profile icon purchased", undefined, "success");
+        }
+      } catch (err) {
+        const msg = String(err?.message || "Profile icon action failed.");
+        sonner(
+          msg.includes("Not enough")
+            ? "Not enough gems"
+            : "Profile icon action failed",
+          msg,
+          "error",
+        );
+        tile.disabled = false;
+      }
+    });
+
+    grid.appendChild(tile);
+  });
+}
+
 async function loadProfilePopupData(force = false) {
   if (!lobbyProfileState.viewingSelf && lobbyProfileState.viewingUsername) {
     const profileRes = await profileFetchJson(
       `/profile/view?username=${encodeURIComponent(lobbyProfileState.viewingUsername)}`,
     );
+    if (!lobbyProfileState.catalog) {
+      const catalogRes = await profileFetchJson("/player-cards/catalog");
+      lobbyProfileState.catalog =
+        catalogRes?.catalog && Array.isArray(catalogRes.catalog.cards)
+          ? catalogRes.catalog
+          : { cards: [] };
+    }
     lobbyProfileState.profile = profileRes?.profile || {};
+    lobbyProfileState.selectedCardId =
+      lobbyProfileState.profile?.selectedCardId || null;
     renderProfilePopupStats();
     const grid = document.getElementById("profile-cards-grid");
     if (grid) grid.innerHTML = "";
+    const iconGrid = document.getElementById("profile-icons-grid");
+    if (iconGrid) iconGrid.innerHTML = "";
     return;
   }
   if (!force && lobbyProfileState.profile && lobbyProfileState.catalog) {
     renderProfilePopupStats();
     renderProfilePopupCards();
+    renderProfilePopupIcons();
     return;
   }
   if (lobbyProfileState.loadingPromise) return lobbyProfileState.loadingPromise;
@@ -334,33 +541,55 @@ async function loadProfilePopupData(force = false) {
     profileFetchJson("/profile/data"),
     profileFetchJson("/player-cards/catalog"),
     profileFetchJson("/player-cards/owned"),
+    profileFetchJson("/profile-icons/catalog"),
+    profileFetchJson("/profile-icons/owned"),
   ])
-    .then(([profileRes, catalogRes, ownedRes]) => {
-      const profile = profileRes?.profile || {};
-      lobbyProfileState.profile = profile;
-      lobbyProfileState.catalog =
-        catalogRes?.catalog && Array.isArray(catalogRes.catalog.cards)
-          ? catalogRes.catalog
-          : { cards: [] };
-      lobbyProfileState.ownedCardIds = Array.isArray(ownedRes?.ownedCardIds)
-        ? ownedRes.ownedCardIds
-        : [];
-      lobbyProfileState.selectedCardId =
-        ownedRes?.selectedCardId || profile?.selectedCardId || null;
+    .then(
+      ([profileRes, catalogRes, ownedRes, iconCatalogRes, iconOwnedRes]) => {
+        const profile = profileRes?.profile || {};
+        lobbyProfileState.profile = profile;
+        lobbyProfileState.catalog =
+          catalogRes?.catalog && Array.isArray(catalogRes.catalog.cards)
+            ? catalogRes.catalog
+            : { cards: [] };
+        lobbyProfileState.iconCatalog =
+          iconCatalogRes?.catalog && Array.isArray(iconCatalogRes.catalog.icons)
+            ? iconCatalogRes.catalog
+            : { icons: [] };
+        lobbyProfileState.ownedCardIds = Array.isArray(ownedRes?.ownedCardIds)
+          ? ownedRes.ownedCardIds
+          : [];
+        lobbyProfileState.selectedCardId =
+          ownedRes?.selectedCardId || profile?.selectedCardId || null;
+        lobbyProfileState.ownedProfileIconIds = Array.isArray(
+          iconOwnedRes?.ownedIconIds,
+        )
+          ? iconOwnedRes.ownedIconIds
+          : Array.isArray(profile?.ownedProfileIconIds)
+            ? profile.ownedProfileIconIds
+            : [];
+        lobbyProfileState.selectedProfileIconId =
+          iconOwnedRes?.selectedProfileIconId ||
+          profile?.selectedProfileIconId ||
+          profile?.profileIconId ||
+          null;
 
-      if (userData) {
-        userData.name = profile.username || userData.name;
-        userData.coins = Number(profile.coins ?? userData.coins) || 0;
-        userData.gems = Number(profile.gems ?? userData.gems) || 0;
-        userData.trophies = Number(profile.trophies ?? userData.trophies) || 0;
-      }
+        if (userData) {
+          userData.name = profile.username || userData.name;
+          userData.coins = Number(profile.coins ?? userData.coins) || 0;
+          userData.gems = Number(profile.gems ?? userData.gems) || 0;
+          userData.trophies =
+            Number(profile.trophies ?? userData.trophies) || 0;
+        }
 
-      const usernameText = document.getElementById("username-text");
-      if (usernameText) usernameText.textContent = profile.username || "";
+        const usernameText = document.getElementById("username-text");
+        if (usernameText) usernameText.textContent = profile.username || "";
 
-      renderProfilePopupStats();
-      renderProfilePopupCards();
-    })
+        renderProfilePopupStats();
+        renderProfilePopupCards();
+        renderProfilePopupIcons();
+      },
+    )
     .finally(() => {
       lobbyProfileState.loadingPromise = null;
     });
@@ -379,11 +608,42 @@ function initProfilePopup() {
     "profile-current-password",
   );
   const newPasswordInput = document.getElementById("profile-new-password");
+  const avatarTrigger = document.getElementById("profile-hero-avatar-trigger");
+  const cardTrigger = document.getElementById("profile-hero-card-trigger");
+  const loadoutClose = document.getElementById("profile-loadout-close");
+  const loadoutOverlay = document.getElementById("profile-loadout-overlay");
+  const loadoutBackdrop = loadoutOverlay?.querySelector(
+    ".profile-loadout-backdrop",
+  );
+  const loadoutTitle = document.getElementById("profile-loadout-title");
+  const iconsPanel = document.getElementById("profile-icons-panel");
+  const cardsPanel = document.getElementById("profile-cards-panel");
 
   if (!overlay) return;
 
+  const openLoadoutModal = (mode = "icons") => {
+    if (!lobbyProfileState.viewingSelf || !loadoutOverlay) return;
+    const showIcons = mode === "icons";
+    if (loadoutTitle) {
+      loadoutTitle.textContent = showIcons
+        ? "Edit Profile Icon"
+        : "Edit Player Card";
+    }
+    if (iconsPanel) iconsPanel.classList.toggle("is-hidden", !showIcons);
+    if (cardsPanel) cardsPanel.classList.toggle("is-hidden", showIcons);
+    loadoutOverlay.classList.remove("hidden");
+    loadoutOverlay.setAttribute("aria-hidden", "false");
+  };
+
+  const closeLoadoutModal = () => {
+    if (!loadoutOverlay) return;
+    loadoutOverlay.classList.add("hidden");
+    loadoutOverlay.setAttribute("aria-hidden", "true");
+  };
+
   const close = () => {
     playSound("cancel", 0.4);
+    closeLoadoutModal();
     overlay.classList.add("hidden");
     overlay.setAttribute("aria-hidden", "true");
     setProfilePopupMessage("");
@@ -397,13 +657,18 @@ function initProfilePopup() {
       ? String(userData?.name || "")
       : targetUsername;
     playSound("cursor4", 0.4);
-    overlay.classList.remove("hidden");
-    overlay.setAttribute("aria-hidden", "false");
+    overlay.classList.add("hidden");
+    overlay.setAttribute("aria-hidden", "true");
+    closeLoadoutModal();
     setProfilePopupMessage("Loading profile...");
     try {
       await loadProfilePopupData(true);
+      overlay.classList.remove("hidden");
+      overlay.setAttribute("aria-hidden", "false");
       setProfilePopupMessage("");
     } catch (err) {
+      overlay.classList.remove("hidden");
+      overlay.setAttribute("aria-hidden", "false");
       setProfilePopupMessage(err.message || "Failed to load profile.", true);
     }
   };
@@ -413,6 +678,10 @@ function initProfilePopup() {
 
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
+    if (loadoutOverlay && !loadoutOverlay.classList.contains("hidden")) {
+      closeLoadoutModal();
+      return;
+    }
     if (!overlay.classList.contains("hidden")) close();
   });
 
@@ -458,6 +727,19 @@ function initProfilePopup() {
     } catch (err) {
       setProfilePopupMessage(err.message || "Unable to update password.", true);
     }
+  });
+
+  avatarTrigger?.addEventListener("click", () => {
+    openLoadoutModal("icons");
+  });
+  cardTrigger?.addEventListener("click", () => {
+    openLoadoutModal("cards");
+  });
+  loadoutClose?.addEventListener("click", () => {
+    closeLoadoutModal();
+  });
+  loadoutBackdrop?.addEventListener("click", () => {
+    closeLoadoutModal();
   });
 
   return { open, close };
@@ -690,11 +972,12 @@ function renderPartyDiscoveryList(parties) {
     members.forEach((member) => {
       const name = String(member?.name || "Player");
       const charClass = String(member?.char_class || "ninja");
+      const profileIconId = String(member?.profile_icon_id || "") || null;
       const entry = document.createElement("div");
       entry.className = "party-discovery-member";
       entry.innerHTML = `
-        <img src="/assets/${escapeHtml(charClass)}/body.webp" alt="${escapeHtml(
-          charClass,
+        <img src="${escapeHtml(buildProfileIconUrl(profileIconId, charClass))}" alt="${escapeHtml(
+          buildProfileIconAlt(profileIconId, charClass),
         )}" />
         <div>
           <div class="party-discovery-member-name">${escapeHtml(name)}</div>
@@ -1139,9 +1422,10 @@ function renderLeaderboardRows(rows, profilePopup) {
         ? `${Math.round((Number(row.wins || 0) / Number(row.totalMatches || 1)) * 100)}%`
         : "0%";
     const charClass = String(row.charClass || "ninja");
+    const profileIconId = String(row.profileIconId || "") || null;
     item.innerHTML = `
       <span class="leaderboard-rank">#${row.rank}</span>
-      <span class="leaderboard-avatar-wrap"><img class="leaderboard-avatar" src="/assets/${charClass}/body.webp" alt="${charClass}" /></span>
+      <img class="leaderboard-avatar" src="${buildProfileIconUrl(profileIconId, charClass)}" alt="${buildProfileIconAlt(profileIconId, charClass)}" />
       <span class="leaderboard-main">
         <span class="leaderboard-name">${row.username}</span>
         <span class="leaderboard-wins">${row.wins}W / ${row.totalMatches}M (${winRate})</span>

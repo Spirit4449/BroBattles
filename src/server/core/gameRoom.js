@@ -129,6 +129,9 @@ class GameRoom {
         name: matchPlayer.name,
         team: matchPlayer.team,
         char_class: matchPlayer.char_class || "ninja",
+        profile_icon_id:
+          String(matchPlayer.profile_icon_id || "") ||
+          String(matchPlayer.char_class || "ninja"),
         isBot: true,
         connected: true,
         loaded: true,
@@ -338,6 +341,9 @@ class GameRoom {
         name: user.name,
         team: matchPlayer.team,
         char_class: matchPlayer.char_class,
+        profile_icon_id:
+          String(matchPlayer.profile_icon_id || "") ||
+          String(matchPlayer.char_class || "ninja"),
         connected: true,
         loaded: false,
         spawnIndex: this._computeSpawnIndex(user.name, matchPlayer.team),
