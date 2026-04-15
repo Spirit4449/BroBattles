@@ -1,7 +1,4 @@
-const {
-  HTTP_BUCKETS,
-  HTTP_ROUTE_POLICIES,
-} = require("../helpers/abusePolicy");
+const { HTTP_BUCKETS, HTTP_ROUTE_POLICIES } = require("../helpers/abusePolicy");
 const { setBanHoldCookies } = require("../helpers/banHold");
 
 function getClientIp(req) {
@@ -20,7 +17,9 @@ function createAbuseHttpMiddleware({ abuseControl, db }) {
       const policy = HTTP_ROUTE_POLICIES[routeKey];
       if (!policy) return next();
 
-      const bucket = HTTP_BUCKETS[String(policy.bucket || "lenient")] || HTTP_BUCKETS.lenient;
+      const bucket =
+        HTTP_BUCKETS[String(policy.bucket || "lenient")] ||
+        HTTP_BUCKETS.lenient;
       const signedUserId = Number(req.signedCookies?.user_id) || 0;
       let user = null;
       if (signedUserId > 0) {
@@ -36,9 +35,14 @@ function createAbuseHttpMiddleware({ abuseControl, db }) {
         });
         try {
           res.clearCookie("user_id", req.app.locals?.SIGNED_COOKIE_OPTS || {});
-          res.clearCookie("display_name", req.app.locals?.DISPLAY_COOKIE_OPTS || {});
+          res.clearCookie(
+            "display_name",
+            req.app.locals?.DISPLAY_COOKIE_OPTS || {},
+          );
         } catch (_) {}
-        return res.status(403).json({ success: false, error: "Your account has been banned." });
+        return res
+          .status(403)
+          .json({ success: false, error: "Your account has been banned." });
       }
 
       const identityKey = user?.user_id
@@ -71,7 +75,10 @@ function createAbuseHttpMiddleware({ abuseControl, db }) {
         }
         try {
           res.clearCookie("user_id", req.app.locals?.SIGNED_COOKIE_OPTS || {});
-          res.clearCookie("display_name", req.app.locals?.DISPLAY_COOKIE_OPTS || {});
+          res.clearCookie(
+            "display_name",
+            req.app.locals?.DISPLAY_COOKIE_OPTS || {},
+          );
         } catch (_) {}
       }
 

@@ -52,7 +52,9 @@ async function buildStatusPayload({
     return {
       success: false,
       banned: true,
-      message: String(userNormalized?.ban_reason || "Your account has been banned."),
+      message: String(
+        userNormalized?.ban_reason || "Your account has been banned.",
+      ),
     };
   }
 

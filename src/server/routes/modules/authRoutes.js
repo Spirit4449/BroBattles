@@ -18,7 +18,11 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
         setBanHoldCookies({
           req,
           res,
-          reason: String(result?.payload?.reason || result?.payload?.error || "Your account has been banned."),
+          reason: String(
+            result?.payload?.reason ||
+              result?.payload?.error ||
+              "Your account has been banned.",
+          ),
         });
       }
       return res.status(result.statusCode || 400).json(result.payload || {});
@@ -38,7 +42,11 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
           setBanHoldCookies({
             req,
             res,
-            reason: String(result?.payload?.reason || result?.payload?.error || "Your account has been banned."),
+            reason: String(
+              result?.payload?.reason ||
+                result?.payload?.error ||
+                "Your account has been banned.",
+            ),
           });
         }
         return res.status(result.statusCode || 401).json(result.payload || {});

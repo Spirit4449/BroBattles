@@ -1,4 +1,9 @@
-function registerChatRoutes({ app, requireCurrentUser, chatService, abuseControl }) {
+function registerChatRoutes({
+  app,
+  requireCurrentUser,
+  chatService,
+  abuseControl,
+}) {
   app.post("/party-chat/history", async (req, res) => {
     try {
       const user = await requireCurrentUser(req, res);

@@ -9,7 +9,11 @@ const { getAllCharacters } = require("../../../lib/characterStats");
 
 const VALID_CHARACTER_IDS = new Set(
   (Array.isArray(getAllCharacters?.()) ? getAllCharacters() : [])
-    .map((entry) => String(entry || "").trim().toLowerCase())
+    .map((entry) =>
+      String(entry || "")
+        .trim()
+        .toLowerCase(),
+    )
     .filter(Boolean),
 );
 
@@ -160,7 +164,8 @@ function registerPartyEvents(
       );
       const currentSelection = normalizeSelectionFromRow(rows[0] || {});
       const nextSelection = normalizeSelection({
-        modeId: data?.selection?.modeId || data?.modeId || currentSelection.modeId,
+        modeId:
+          data?.selection?.modeId || data?.modeId || currentSelection.modeId,
         modeVariantId:
           data?.selection?.modeVariantId ||
           data?.modeVariantId ||
@@ -247,7 +252,9 @@ function registerPartyEvents(
       .toLowerCase();
     if (!charClass || !/^[a-zA-Z_-]{2,20}$/.test(charClass)) return;
     if (!VALID_CHARACTER_IDS.has(charClass)) {
-      console.warn(`[party:${partyId ?? "-"}] rejected unknown character ${charClass} for ${uname}`);
+      console.warn(
+        `[party:${partyId ?? "-"}] rejected unknown character ${charClass} for ${uname}`,
+      );
       return;
     }
 

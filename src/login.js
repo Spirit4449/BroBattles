@@ -42,7 +42,6 @@ function showSuccess(msg) {
   errorMessage.style.display = "none";
 }
 
-
 // Basic client validation (keep it light; server does the real check)
 function validate(username, password) {
   if (!username || !password) return "Username and password are required.";

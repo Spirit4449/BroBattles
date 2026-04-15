@@ -37,7 +37,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null }) {
     activeRooms.set(matchId, room);
 
     console.log(
-      `[GameHub] Created game room ${matchId} for ${matchData.players.length} players`
+      `[GameHub] Created game room ${matchId} for ${matchData.players.length} players`,
     );
     return room;
   }
@@ -87,7 +87,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null }) {
     } catch (error) {
       console.error(
         `[GameHub] Error adding player ${user.name} to room ${matchId}:`,
-        error
+        error,
       );
       socket.emit("game:error", { message: error.message });
       return false;
@@ -113,7 +113,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null }) {
     } catch (error) {
       console.error(
         `[GameHub] Error removing player ${user.name} from room ${matchId}:`,
-        error
+        error,
       );
     }
   }

@@ -63,14 +63,18 @@ function markValidity() {
   // Username
   const u = usernameInput.value.trim();
   if (!u || !USERNAME_RE.test(u)) {
-    usernameInput.setCustomValidity("Username must be 3–14 chars: letters, numbers, _ . - only.");
+    usernameInput.setCustomValidity(
+      "Username must be 3–14 chars: letters, numbers, _ . - only.",
+    );
   } else {
     usernameInput.setCustomValidity("");
   }
   // Password
   const p = passwordInput.value;
   if (!p || p.length < MIN_PW || p.length > MAX_PW) {
-    passwordInput.setCustomValidity(`Password must be ${MIN_PW}–${MAX_PW} characters.`);
+    passwordInput.setCustomValidity(
+      `Password must be ${MIN_PW}–${MAX_PW} characters.`,
+    );
   } else {
     passwordInput.setCustomValidity("");
   }
@@ -137,8 +141,8 @@ form.addEventListener("submit", async (e) => {
       (response.status === 409
         ? "That username is taken. Try another."
         : response.status === 400
-        ? "Invalid signup request."
-        : "Failed to create account.");
+          ? "Invalid signup request."
+          : "Failed to create account.");
 
     // Fine-grained messages from your server’s /signup code
     switch (data?.error) {

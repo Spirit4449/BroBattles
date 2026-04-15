@@ -34,7 +34,11 @@ const {
 const { getMapObjectiveLayout } = require("../helpers/gameSelectionCatalog");
 
 class GameRoom {
-  constructor(matchId, matchData, { io, db, runtimeConfig = null, abuseControl = null }) {
+  constructor(
+    matchId,
+    matchData,
+    { io, db, runtimeConfig = null, abuseControl = null },
+  ) {
     this.matchId = matchId;
     this.matchData = matchData; // { mode, map, players }
     this.io = io;

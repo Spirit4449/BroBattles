@@ -1,8 +1,9 @@
 const { buildStatusPayload } = require("../../services/statusPayloadService");
-const { setBanHoldCookies, getBanHoldFromRequest } = require("../../helpers/banHold");
 const {
-  normalizeSelection,
-} = require("../../helpers/gameSelectionCatalog");
+  setBanHoldCookies,
+  getBanHoldFromRequest,
+} = require("../../helpers/banHold");
+const { normalizeSelection } = require("../../helpers/gameSelectionCatalog");
 
 function registerStatusRoutes({
   app,
@@ -39,7 +40,10 @@ function registerStatusRoutes({
         });
         try {
           res.clearCookie("user_id", req.app.locals?.SIGNED_COOKIE_OPTS || {});
-          res.clearCookie("display_name", req.app.locals?.DISPLAY_COOKIE_OPTS || {});
+          res.clearCookie(
+            "display_name",
+            req.app.locals?.DISPLAY_COOKIE_OPTS || {},
+          );
         } catch (_) {}
         return res.status(403).json(payload);
       }
@@ -56,10 +60,14 @@ function registerStatusRoutes({
     try {
       const user = await requireCurrentUser(req, res);
       if (!user) {
-        return res.status(401).json({ success: false, error: "Not authenticated" });
+        return res
+          .status(401)
+          .json({ success: false, error: "Not authenticated" });
       }
 
-      const selection = normalizeSelection(req.body?.selection || req.body || {});
+      const selection = normalizeSelection(
+        req.body?.selection || req.body || {},
+      );
       await db.setUserPreferredSelection(user.user_id, selection);
 
       return res.json({

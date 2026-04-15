@@ -6,7 +6,10 @@ const {
   HTTP_ESCALATION_STEPS,
 } = require("../helpers/abusePolicy");
 
-const MISSING_SCHEMA_CODES = new Set(["ER_BAD_FIELD_ERROR", "ER_NO_SUCH_TABLE"]);
+const MISSING_SCHEMA_CODES = new Set([
+  "ER_BAD_FIELD_ERROR",
+  "ER_NO_SUCH_TABLE",
+]);
 
 function parseMs(value) {
   if (!value) return 0;
@@ -41,7 +44,13 @@ function createAbuseControlService({ db, io }) {
 
   function logDecision(category, payload = {}) {
     if (!ABUSE_LOG_DECISIONS) return;
-    const { userId = 0, source = "", action = "", type = "", level = 0 } = payload;
+    const {
+      userId = 0,
+      source = "",
+      action = "",
+      type = "",
+      level = 0,
+    } = payload;
     console.warn(
       `[abuse] ${category} denied user=${Number(userId) || 0} source=${String(source || "")} action=${String(action || "")} type=${String(type || "")} level=${Number(level) || 0}`,
     );
@@ -172,7 +181,11 @@ function createAbuseControlService({ db, io }) {
               banned_at = ?,
               ban_reason = ?
         WHERE user_id = ?`,
-      [bannedAt, String(reason || "Abuse policy violation").slice(0, 255), userId],
+      [
+        bannedAt,
+        String(reason || "Abuse policy violation").slice(0, 255),
+        userId,
+      ],
     );
 
     const socketId = String(state?.socket_id || "").trim();
@@ -253,7 +266,8 @@ function createAbuseControlService({ db, io }) {
 
     const nextLevel = Math.max(1, Number(levelResult.level) + 1);
     const banLevel = getBanLevel(CHAT_ESCALATION_STEPS);
-    const step = findStep(CHAT_ESCALATION_STEPS, nextLevel) ||
+    const step =
+      findStep(CHAT_ESCALATION_STEPS, nextLevel) ||
       CHAT_ESCALATION_STEPS[CHAT_ESCALATION_STEPS.length - 1];
 
     if (step.type === "ban") {
@@ -279,13 +293,7 @@ function createAbuseControlService({ db, io }) {
               chat_suspended_until = ?,
               chat_decay_anchor_at = ?
         WHERE user_id = ?`,
-      [
-        nextLevel,
-        new Date(now),
-        chatSuspendedUntil,
-        chatDecayAnchorAt,
-        userId,
-      ],
+      [nextLevel, new Date(now), chatSuspendedUntil, chatDecayAnchorAt, userId],
     );
 
     await logEvent({
@@ -372,7 +380,8 @@ function createAbuseControlService({ db, io }) {
     }
 
     const nextLevel = Math.max(1, Number(levelResult.level) + 1);
-    const step = findStep(HTTP_ESCALATION_STEPS, nextLevel) ||
+    const step =
+      findStep(HTTP_ESCALATION_STEPS, nextLevel) ||
       HTTP_ESCALATION_STEPS[HTTP_ESCALATION_STEPS.length - 1];
 
     if (step.type === "ban") {
@@ -520,7 +529,11 @@ function createAbuseControlService({ db, io }) {
         }
 
         const mmSuspendedUntilMs = parseMs(state.mm_suspended_until);
-        if (enforceActiveSuspension && mmSuspendedUntilMs && mmSuspendedUntilMs > now) {
+        if (
+          enforceActiveSuspension &&
+          mmSuspendedUntilMs &&
+          mmSuspendedUntilMs > now
+        ) {
           logDecision("http", {
             userId,
             source,
@@ -538,7 +551,9 @@ function createAbuseControlService({ db, io }) {
       }
     }
 
-    const appliedLimit = userId ? Number(limit) : Number(anonLimit || limit || 1);
+    const appliedLimit = userId
+      ? Number(limit)
+      : Number(anonLimit || limit || 1);
     const count = markBucketAndGetCount(
       `http:${identityKey}`,
       Number(windowMs) || 10000,

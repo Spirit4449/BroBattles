@@ -5,13 +5,10 @@ const {
   selectionToLegacyMode,
 } = require("../../helpers/gameSelectionCatalog");
 
-function registerMatchmakingEvents(socket, {
-  db,
-  io,
-  mm,
-  PARTY_STATUS,
-  abuseControl,
-}) {
+function registerMatchmakingEvents(
+  socket,
+  { db, io, mm, PARTY_STATUS, abuseControl },
+) {
   async function setPartyStatusSafe(partyId, status) {
     if (!partyId) return;
     if (typeof db.setPartyStatus === "function") {
@@ -34,13 +31,15 @@ function registerMatchmakingEvents(socket, {
 
       if (abuseControl && userId) {
         const evaluateUserPenalty = async (targetUserId) => {
-          const penalties = await abuseControl.getActivePenaltyState(targetUserId);
+          const penalties =
+            await abuseControl.getActivePenaltyState(targetUserId);
           const mmSuspendedUntilMs = Number(penalties?.mmSuspendedUntilMs || 0);
           if (penalties?.isBanned) {
             return {
               blocked: true,
               payload: {
-                message: penalties?.banReason || "Your account has been banned.",
+                message:
+                  penalties?.banReason || "Your account has been banned.",
               },
             };
           }

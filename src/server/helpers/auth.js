@@ -30,12 +30,12 @@ function makeAuthHelpers(db, cookieOpts) {
         "online",
         new Date(expiresAtMs),
         charLevelsJson,
-      ]
+      ],
     );
     const userId = result.insertId;
     const rows = await db.runQuery(
       "SELECT * FROM users WHERE user_id = ? LIMIT 1",
-      [userId]
+      [userId],
     );
     const user = rows[0];
 
@@ -57,7 +57,7 @@ function makeAuthHelpers(db, cookieOpts) {
     if (id) {
       const rows = await db.runQuery(
         "SELECT * FROM users WHERE user_id = ? LIMIT 1",
-        [id]
+        [id],
       );
       if (rows.length > 0) return [rows[0], "existing"];
     }
@@ -72,7 +72,9 @@ function makeAuthHelpers(db, cookieOpts) {
         setBanHoldCookies({
           req,
           res,
-          reason: String(cachedUser?.ban_reason || "Your account has been banned."),
+          reason: String(
+            cachedUser?.ban_reason || "Your account has been banned.",
+          ),
         });
         try {
           res.clearCookie("user_id", SIGNED_COOKIE_OPTS);
@@ -96,16 +98,20 @@ function makeAuthHelpers(db, cookieOpts) {
       });
       return null;
     }
-    const rows = await db.runQuery("SELECT * FROM users WHERE user_id = ? LIMIT 1", [
-      id,
-    ]);
+    const rows = await db.runQuery(
+      "SELECT * FROM users WHERE user_id = ? LIMIT 1",
+      [id],
+    );
     if (!rows[0]) {
-      console.warn("[auth] requireCurrentUser cookie did not resolve to a user", {
-        method: req?.method,
-        path: req?.originalUrl || req?.url,
-        host: req?.headers?.host,
-        userId: Number(id),
-      });
+      console.warn(
+        "[auth] requireCurrentUser cookie did not resolve to a user",
+        {
+          method: req?.method,
+          path: req?.originalUrl || req?.url,
+          host: req?.headers?.host,
+          userId: Number(id),
+        },
+      );
     }
     const user = rows[0] || null;
     if (user && Number(user.is_banned || 0) === 1) {

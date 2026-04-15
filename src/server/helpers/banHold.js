@@ -13,13 +13,18 @@ function getBanHoldFromRequest(req) {
   if (!untilMs) return null;
   return {
     untilMs,
-    reason: String(cookies[BAN_HOLD_REASON_COOKIE] || "Your account has been banned.").trim(),
+    reason: String(
+      cookies[BAN_HOLD_REASON_COOKIE] || "Your account has been banned.",
+    ).trim(),
   };
 }
 
 function setBanHoldCookies({ req, res, reason }) {
   if (!res) return;
-  const secure = String(req?.app?.locals?.DISPLAY_COOKIE_OPTS?.secure || "").toLowerCase() === "true";
+  const secure =
+    String(
+      req?.app?.locals?.DISPLAY_COOKIE_OPTS?.secure || "",
+    ).toLowerCase() === "true";
   const untilMs = Date.now() + BAN_HOLD_DURATION_MS;
   const safeReason = String(reason || "Your account has been banned.")
     .replace(/\s+/g, " ")

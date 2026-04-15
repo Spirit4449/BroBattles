@@ -43,7 +43,8 @@ function noteMovementClampViolation(room, playerData, now) {
     playerData._movementClampWindowStart = now;
     playerData._movementClampCount = 0;
   }
-  playerData._movementClampCount = Number(playerData._movementClampCount || 0) + 1;
+  playerData._movementClampCount =
+    Number(playerData._movementClampCount || 0) + 1;
   if (playerData._movementClampCount >= MOVE_CLAMP_MAX_IN_WINDOW) {
     playerData._movementViolationUntil = now + MOVE_CLAMP_SUPPRESS_MS;
     playerData._movementClampWindowStart = now;
@@ -108,7 +109,10 @@ function handlePlayerInput(room, socketId, inputData) {
       playerData._bodyHalfWidth = Math.max(4, Number(inputData.bodyHalfWidth));
     }
     if (Number.isFinite(Number(inputData.bodyHalfHeight))) {
-      playerData._bodyHalfHeight = Math.max(8, Number(inputData.bodyHalfHeight));
+      playerData._bodyHalfHeight = Math.max(
+        8,
+        Number(inputData.bodyHalfHeight),
+      );
     }
     if (Number.isFinite(Number(inputData.bodyCenterOffsetX))) {
       playerData._bodyCenterOffsetX = Number(inputData.bodyCenterOffsetX);
@@ -196,7 +200,8 @@ function handlePlayerInput(room, socketId, inputData) {
       playerData.y = rawY;
     }
 
-    if (typeof inputData.flip !== "undefined") playerData.flip = !!inputData.flip;
+    if (typeof inputData.flip !== "undefined")
+      playerData.flip = !!inputData.flip;
     if (typeof inputData.animation === "string") {
       playerData.animation = inputData.animation;
     }
@@ -233,7 +238,10 @@ function handlePlayerInput(room, socketId, inputData) {
       playerData._bodyHalfWidth = Math.max(4, Number(inputData.bodyHalfWidth));
     }
     if (Number.isFinite(Number(inputData.bodyHalfHeight))) {
-      playerData._bodyHalfHeight = Math.max(8, Number(inputData.bodyHalfHeight));
+      playerData._bodyHalfHeight = Math.max(
+        8,
+        Number(inputData.bodyHalfHeight),
+      );
     }
     if (Number.isFinite(Number(inputData.bodyCenterOffsetX))) {
       playerData._bodyCenterOffsetX = Number(inputData.bodyCenterOffsetX);
@@ -288,7 +296,9 @@ function handlePlayerInputIntent(room, socketId, intentData) {
     jumpHeld: !!intentData.jumpHeld,
     jumpPressed: !!intentData.jumpPressed,
     grounded:
-      typeof intentData.grounded === "boolean" ? intentData.grounded : undefined,
+      typeof intentData.grounded === "boolean"
+        ? intentData.grounded
+        : undefined,
     facing: Number(intentData.facing) === -1 ? -1 : 1,
     vx: Number(intentData.vx) || 0,
     vy: Number(intentData.vy) || 0,
@@ -313,8 +323,12 @@ function handlePlayerInputIntent(room, socketId, intentData) {
 function drainLatestIntent(playerData) {
   if (!playerData) return null;
   let latest = playerData._currentInputIntent || null;
-  if (Array.isArray(playerData._inputIntentQueue) && playerData._inputIntentQueue.length) {
-    latest = playerData._inputIntentQueue[playerData._inputIntentQueue.length - 1];
+  if (
+    Array.isArray(playerData._inputIntentQueue) &&
+    playerData._inputIntentQueue.length
+  ) {
+    latest =
+      playerData._inputIntentQueue[playerData._inputIntentQueue.length - 1];
     playerData._inputIntentQueue.length = 0;
     playerData._currentInputIntent = latest;
   }
@@ -333,10 +347,7 @@ function advancePlayerKinematics(room, playerData, dtMs) {
 
   const x = Number(playerData.x);
   const y = Number(playerData.y);
-  if (
-    !Number.isFinite(x) ||
-    !Number.isFinite(y)
-  ) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
     return;
   }
 

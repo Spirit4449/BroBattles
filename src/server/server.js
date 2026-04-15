@@ -35,7 +35,9 @@ const { createRuntimeConfig } = require("./helpers/runtimeConfig.js");
 const { registerAdminRoutes } = require("./routes/admin.js");
 const { createPartyChatService } = require("./services/chatService.js");
 const { createAbuseControlService } = require("./services/abuseControlService");
-const { createAbuseHttpMiddleware } = require("./middleware/abuseHttpMiddleware");
+const {
+  createAbuseHttpMiddleware,
+} = require("./middleware/abuseHttpMiddleware");
 
 const app = express();
 const server = http.createServer(app);

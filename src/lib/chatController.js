@@ -91,7 +91,9 @@ function showChatRequestError(error, fallbackTitle = "Chat") {
   const message = String(error?.message || "Request failed");
   const suspendedUntilMs = Number(error?.payload?.suspendedUntilMs) || 0;
   const timeLeft = formatSuspensionTime(suspendedUntilMs);
-  const finalMessage = timeLeft ? `${message} (${timeLeft} remaining)` : message;
+  const finalMessage = timeLeft
+    ? `${message} (${timeLeft} remaining)`
+    : message;
   sonner(fallbackTitle, finalMessage, "OK", undefined, {
     duration: 4500,
     sound: "notification",
