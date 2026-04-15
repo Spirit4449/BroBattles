@@ -12,7 +12,7 @@
  * Create game hub controller
  * @param {GameHubDeps} deps
  */
-function createGameHub({ io, db, runtimeConfig = null }) {
+function createGameHub({ io, db, runtimeConfig = null, abuseControl = null }) {
   // Map of matchId -> GameRoom instance
   const activeRooms = new Map();
 
@@ -32,6 +32,7 @@ function createGameHub({ io, db, runtimeConfig = null }) {
       io,
       db,
       runtimeConfig,
+      abuseControl,
     });
     activeRooms.set(matchId, room);
 

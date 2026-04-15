@@ -90,6 +90,11 @@ form.addEventListener("submit", async (e) => {
       return;
     }
 
+    if (resp.status === 403 && (data?.banned || data?.redirect === "/banned")) {
+      window.location.href = "/banned";
+      return;
+    }
+
     // Map server errors → friendly message
     let msg =
       data?.error ||

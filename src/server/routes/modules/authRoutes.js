@@ -2,6 +2,7 @@ const {
   completeSignupFromGuest,
   loginPermanentUser,
 } = require("../../services/authAccountService");
+const { setBanHoldCookies } = require("../../helpers/banHold");
 
 function registerAuthRoutes({ app, db, requireCurrentUser }) {
   app.post("/signup", async (req, res) => {
@@ -13,6 +14,13 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
         req,
         res,
       });
+      if (result?.payload?.banned) {
+        setBanHoldCookies({
+          req,
+          res,
+          reason: String(result?.payload?.reason || result?.payload?.error || "Your account has been banned."),
+        });
+      }
       return res.status(result.statusCode || 400).json(result.payload || {});
     } catch (error) {
       console.error("[auth] signup error:", error);
@@ -26,6 +34,13 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
     try {
       const result = await loginPermanentUser({ app, db, req });
       if (!result.ok) {
+        if (result?.payload?.banned) {
+          setBanHoldCookies({
+            req,
+            res,
+            reason: String(result?.payload?.reason || result?.payload?.error || "Your account has been banned."),
+          });
+        }
         return res.status(result.statusCode || 401).json(result.payload || {});
       }
 

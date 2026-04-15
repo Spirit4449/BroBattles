@@ -1,11 +1,32 @@
 function registerGameChatEvents(gameRoom, socket) {
-  socket.on("game:chat:send", (payload = {}, cb) => {
+  socket.on("game:chat:send", async (payload = {}, cb) => {
     try {
       const player = gameRoom.players.get(socket.id);
       if (!player || !player.name) {
         cb?.({ ok: false, error: "not_in_game" });
         return;
       }
+
+      if (gameRoom.abuseControl && Number(player.user_id) > 0) {
+        const guard = await gameRoom.abuseControl.guardChatAction({
+          userId: Number(player.user_id),
+          actionType: "message",
+          source: "socket:game-chat:send",
+        });
+        if (!guard?.allowed) {
+          cb?.({
+            ok: false,
+            error: guard?.message || "You are sending messages too fast.",
+            type: guard?.type || "chat_limited",
+            suspendedUntilMs: Number(guard?.suspendedUntilMs || 0) || null,
+            level: Number(guard?.level || 0) || null,
+            violationsUntilBan: Number(guard?.violationsUntilBan || 0) || null,
+            banWarning: guard?.banWarning || null,
+          });
+          return;
+        }
+      }
+
       const body = String(payload?.body || "")
         .trim()
         .slice(0, 220);

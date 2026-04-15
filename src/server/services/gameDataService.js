@@ -6,11 +6,42 @@ async function buildGameDataForMatch({
   db,
   requireCurrentUser,
   isAdminUser,
+  abuseControl,
   req,
   res,
 }) {
   const user = await requireCurrentUser(req, res);
   if (!user) return { ok: false, handled: true };
+
+  if (abuseControl && Number(user?.user_id) > 0) {
+    const penalties = await abuseControl.getActivePenaltyState(
+      Number(user.user_id),
+    );
+    const mmSuspendedUntilMs = Number(penalties?.mmSuspendedUntilMs || 0);
+    if (penalties?.isBanned) {
+      return {
+        ok: false,
+        statusCode: 403,
+        payload: {
+          success: false,
+          error: penalties?.banReason || "Your account has been banned.",
+        },
+      };
+    }
+    if (mmSuspendedUntilMs && mmSuspendedUntilMs > Date.now()) {
+      return {
+        ok: false,
+        statusCode: 429,
+        payload: {
+          success: false,
+          error:
+            "Matchmaking suspension is active. You cannot join matches right now.",
+          type: "mm_suspended",
+          suspendedUntilMs: mmSuspendedUntilMs,
+        },
+      };
+    }
+  }
 
   const { matchId } = req.body || {};
   if (!matchId) {

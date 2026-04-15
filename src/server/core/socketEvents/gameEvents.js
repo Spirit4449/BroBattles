@@ -1,4 +1,4 @@
-function registerGameEvents(socket, { db, gameHub }) {
+function registerGameEvents(socket, { db, gameHub, abuseControl }) {
   const {
     normalizeSelectionFromRow,
   } = require("../../helpers/gameSelectionCatalog");
@@ -20,6 +20,29 @@ function registerGameEvents(socket, { db, gameHub }) {
         socket.emit("game:error", { message: "Match ID required" });
         console.warn("[game:join] bad matchId", { sid: socket.id, data });
         return;
+      }
+
+      if (abuseControl && Number(user?.user_id) > 0) {
+        const penalties = await abuseControl.getActivePenaltyState(
+          Number(user.user_id),
+        );
+        const mmSuspendedUntilMs = Number(penalties?.mmSuspendedUntilMs || 0);
+        if (penalties?.isBanned) {
+          cb?.({ ok: false, error: "banned" });
+          socket.emit("game:error", {
+            message: penalties?.banReason || "Your account has been banned.",
+          });
+          return;
+        }
+        if (mmSuspendedUntilMs && mmSuspendedUntilMs > Date.now()) {
+          cb?.({ ok: false, error: "mm_suspended" });
+          socket.emit("game:error", {
+            message:
+              "Matchmaking suspension is active. You cannot join matches right now.",
+            suspendedUntilMs: mmSuspendedUntilMs,
+          });
+          return;
+        }
       }
 
       try {

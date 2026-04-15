@@ -12,7 +12,16 @@ const { registerProfileRoutes } = require("./modules/profileRoutes");
 const { registerTrophyRoutes } = require("./modules/trophyRoutes");
 const { registerChatRoutes } = require("./modules/chatRoutes");
 
-function registerRoutes({ app, io, db, auth, pageRoot, distDir, chatService }) {
+function registerRoutes({
+  app,
+  io,
+  db,
+  auth,
+  pageRoot,
+  distDir,
+  chatService,
+  abuseControl,
+}) {
   const { getOrCreateCurrentUser, requireCurrentUser, isGuest, isAdminUser } =
     auth;
 
@@ -45,6 +54,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir, chatService }) {
     db,
     requireCurrentUser,
     isAdminUser,
+    abuseControl,
   });
 
   registerAuthRoutes({
@@ -81,6 +91,7 @@ function registerRoutes({ app, io, db, auth, pageRoot, distDir, chatService }) {
     app,
     requireCurrentUser,
     chatService,
+    abuseControl,
   });
 
   registerNotFoundRoute({ app, pageRoot });

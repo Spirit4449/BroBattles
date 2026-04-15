@@ -5,7 +5,13 @@ const {
   selectionToLegacyMode,
 } = require("../../helpers/gameSelectionCatalog");
 
-function registerMatchmakingEvents(socket, { db, io, mm, PARTY_STATUS }) {
+function registerMatchmakingEvents(socket, {
+  db,
+  io,
+  mm,
+  PARTY_STATUS,
+  abuseControl,
+}) {
   async function setPartyStatusSafe(partyId, status) {
     if (!partyId) return;
     if (typeof db.setPartyStatus === "function") {
@@ -24,6 +30,55 @@ function registerMatchmakingEvents(socket, { db, io, mm, PARTY_STATUS }) {
       const userId = socket.data.user?.user_id || null;
       const { mode, modeId, modeVariantId, selection, map, side, partyId } =
         data || {};
+      const pid = partyId || (uname ? await db.getPartyIdByName(uname) : null);
+
+      if (abuseControl && userId) {
+        const evaluateUserPenalty = async (targetUserId) => {
+          const penalties = await abuseControl.getActivePenaltyState(targetUserId);
+          const mmSuspendedUntilMs = Number(penalties?.mmSuspendedUntilMs || 0);
+          if (penalties?.isBanned) {
+            return {
+              blocked: true,
+              payload: {
+                message: penalties?.banReason || "Your account has been banned.",
+              },
+            };
+          }
+          if (mmSuspendedUntilMs && mmSuspendedUntilMs > Date.now()) {
+            return {
+              blocked: true,
+              payload: {
+                message:
+                  "Too many requests. Matchmaking is temporarily suspended.",
+                suspendedUntilMs: mmSuspendedUntilMs,
+              },
+            };
+          }
+          return { blocked: false };
+        };
+
+        const selfDecision = await evaluateUserPenalty(userId);
+        if (selfDecision.blocked) {
+          socket.emit("queue:error", selfDecision.payload);
+          return;
+        }
+
+        if (pid) {
+          const members = await db.fetchPartyMembersDetailed(pid);
+          for (const member of members || []) {
+            const memberUserId = Number(member?.user_id) || 0;
+            if (!memberUserId) continue;
+            const memberDecision = await evaluateUserPenalty(memberUserId);
+            if (!memberDecision.blocked) continue;
+            socket.emit("queue:error", {
+              ...memberDecision.payload,
+              message: `${member?.name || "A party member"} is currently suspended from matchmaking.`,
+            });
+            return;
+          }
+        }
+      }
+
       const normalizedSelection = normalizeSelection({
         modeId: selection?.modeId || modeId || null,
         modeVariantId: selection?.modeVariantId || modeVariantId || null,
@@ -45,7 +100,6 @@ function registerMatchmakingEvents(socket, { db, io, mm, PARTY_STATUS }) {
         normalizedSelection.modeId,
         normalizedSelection.modeVariantId,
       );
-      const pid = partyId || (uname ? await db.getPartyIdByName(uname) : null);
       await mm.queueJoin({
         partyId: pid || null,
         userId: pid ? null : userId,

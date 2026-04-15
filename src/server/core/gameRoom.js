@@ -4,6 +4,10 @@ const {
   POWERUP_STARTING_COUNT,
   NINJA_SWARM_HIT_DAMAGE,
   NINJA_SWARM_CHARGE_RATIO,
+  ACTION_MIN_INTERVAL_MS,
+  ACTION_SPAM_WINDOW_MS,
+  ACTION_SPAM_MAX_IN_WINDOW,
+  ACTION_SPAM_SUPPRESS_MS,
 } = require("./gameRoomConfig");
 const effectManager = require("./gameRoom/effects/effectManager");
 const powerupManager = require("./gameRoom/powerupManager");
@@ -30,12 +34,13 @@ const {
 const { getMapObjectiveLayout } = require("../helpers/gameSelectionCatalog");
 
 class GameRoom {
-  constructor(matchId, matchData, { io, db, runtimeConfig = null }) {
+  constructor(matchId, matchData, { io, db, runtimeConfig = null, abuseControl = null }) {
     this.matchId = matchId;
     this.matchData = matchData; // { mode, map, players }
     this.io = io;
     this.db = db;
     this.runtimeConfig = runtimeConfig;
+    this.abuseControl = abuseControl;
 
     // Room state
     this.status = "waiting"; // waiting, active, finished
@@ -471,6 +476,33 @@ class GameRoom {
 
     // Handle player actions (attacks, abilities, etc.)
     socket.on("game:action", (actionData) => {
+      const player = this.players.get(socket.id);
+      if (!player) return;
+      const now = Date.now();
+      if (Number(player._actionSuppressedUntil || 0) > now) return;
+
+      const lastActionAt = Number(player._lastActionAt || 0);
+      if (lastActionAt > 0 && now - lastActionAt < ACTION_MIN_INTERVAL_MS) {
+        const windowStart = Number(player._actionWindowStart || 0);
+        if (!windowStart || now - windowStart > ACTION_SPAM_WINDOW_MS) {
+          player._actionWindowStart = now;
+          player._actionInWindow = 0;
+        }
+        player._actionInWindow = Number(player._actionInWindow || 0) + 1;
+        if (player._actionInWindow >= ACTION_SPAM_MAX_IN_WINDOW) {
+          player._actionSuppressedUntil = now + ACTION_SPAM_SUPPRESS_MS;
+          player._actionWindowStart = now;
+          player._actionInWindow = 0;
+          if (this.DEV_TIMING_DIAG && !this._netTestEnabled) {
+            console.warn(
+              `[GameRoom ${this.matchId}] action stream temporarily suppressed for ${player.name}`,
+            );
+          }
+        }
+        return;
+      }
+
+      player._lastActionAt = now;
       this.handlePlayerAction(socket.id, actionData);
     });
 
@@ -722,13 +754,13 @@ class GameRoom {
     )
       return;
 
-    // Basic action validation
-    if (!actionData || !actionData.type) return;
+    const sanitizedAction = this._sanitizeActionPayload(actionData);
+    if (!sanitizedAction) return;
 
     try {
       const modeResult = this.gameMode?.handlePlayerAction?.(
         playerData,
-        actionData,
+        sanitizedAction,
       );
       if (modeResult?.handled) {
         if (modeResult?.broadcast) {
@@ -738,7 +770,7 @@ class GameRoom {
             origin: { x: playerData.x, y: playerData.y },
             flip: !!playerData.flip,
             character: playerData.char_class,
-            action: actionData,
+            action: sanitizedAction,
             t: Date.now(),
           });
         }
@@ -754,10 +786,10 @@ class GameRoom {
       );
     }
 
-    netTestLogger.noteAction(this, playerData, actionData.type);
+    netTestLogger.noteAction(this, playerData, sanitizedAction.type);
     if (!this._netTestEnabled) {
       console.log(
-        `[GameRoom ${this.matchId}] Player ${playerData.name} action: ${actionData.type}`,
+        `[GameRoom ${this.matchId}] Player ${playerData.name} action: ${sanitizedAction.type}`,
       );
     }
 
@@ -768,7 +800,7 @@ class GameRoom {
     const characterActionResult = characterActionRegistry.handleCharacterAction(
       this,
       playerData,
-      actionData,
+      sanitizedAction,
       actionNow,
     );
     if (characterActionResult?.handled) return;
@@ -778,9 +810,79 @@ class GameRoom {
     characterActionRegistry.broadcastAction(
       this,
       playerData,
-      actionData,
+      sanitizedAction,
       Date.now(),
     );
+  }
+
+  _sanitizeActionPayload(actionData) {
+    if (!actionData || typeof actionData !== "object") return null;
+    const typeRaw = String(actionData.type || "").trim();
+    if (!typeRaw) return null;
+
+    const sanitized = {
+      type: typeRaw,
+    };
+
+    if (actionData.id != null) {
+      sanitized.id = String(actionData.id).slice(0, 128);
+    }
+    if (Number.isFinite(Number(actionData.sequence))) {
+      sanitized.sequence = Number(actionData.sequence);
+    }
+    if (Number.isFinite(Number(actionData.timestamp))) {
+      sanitized.timestamp = Number(actionData.timestamp);
+    }
+    if (Number.isFinite(Number(actionData.direction))) {
+      sanitized.direction = Number(actionData.direction) < 0 ? -1 : 1;
+    }
+    if (Number.isFinite(Number(actionData.angle))) {
+      sanitized.angle = Number(actionData.angle);
+    }
+    if (typeof actionData.flip === "boolean") {
+      sanitized.flip = !!actionData.flip;
+    }
+    if (typeof actionData.animation === "string") {
+      sanitized.animation = String(actionData.animation).slice(0, 80);
+    }
+
+    const copyVec2 = (key) => {
+      const entry = actionData[key];
+      if (!entry || typeof entry !== "object") return;
+      const x = Number(entry.x);
+      const y = Number(entry.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      sanitized[key] = { x, y };
+    };
+
+    copyVec2("origin");
+    copyVec2("start");
+    copyVec2("target");
+    copyVec2("anchor");
+
+    const passThroughNumeric = [
+      "range",
+      "windupMs",
+      "strikeMs",
+      "activeWindowMs",
+      "followAfterWindupMs",
+      "forwardDistance",
+      "outwardDuration",
+      "returnSpeed",
+      "endYOffset",
+      "ctrl1YOffset",
+      "ctrl2YOffset",
+      "coneRadius",
+      "coneSpreadDeg",
+      "coneInnerRadius",
+    ];
+    for (const key of passThroughNumeric) {
+      if (Number.isFinite(Number(actionData[key]))) {
+        sanitized[key] = Number(actionData[key]);
+      }
+    }
+
+    return sanitized;
   }
 
   /**
@@ -1354,7 +1456,7 @@ class GameRoom {
    * Handle heal proposal from client. Applies clamped heal to target.
    */
   handleHeal(socketId, payload) {
-    healthManager.handleHeal(this, payload);
+    healthManager.handleHeal(this, socketId, payload);
   }
 
   /**

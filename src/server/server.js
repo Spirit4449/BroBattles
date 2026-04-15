@@ -34,6 +34,8 @@ const { initSocket } = require("./core/socket.js");
 const { createRuntimeConfig } = require("./helpers/runtimeConfig.js");
 const { registerAdminRoutes } = require("./routes/admin.js");
 const { createPartyChatService } = require("./services/chatService.js");
+const { createAbuseControlService } = require("./services/abuseControlService");
+const { createAbuseHttpMiddleware } = require("./middleware/abuseHttpMiddleware");
 
 const app = express();
 const server = http.createServer(app);
@@ -86,6 +88,8 @@ const runtimeConfig = createRuntimeConfig({ rootDir: ROOT_DIR });
 app.locals.runtimeConfig = runtimeConfig;
 const chatService = createPartyChatService({ db, io });
 app.locals.chatService = chatService;
+const abuseControl = createAbuseControlService({ db, io });
+app.locals.abuseControl = abuseControl;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -128,11 +132,19 @@ const socketApi = initSocket({
   },
   runtimeConfig,
   chatService,
+  abuseControl,
 });
 app.locals.socketApi = socketApi;
 
 // Prepare auth helpers
 const auth = makeAuthHelpers(db, { SIGNED_COOKIE_OPTS, DISPLAY_COOKIE_OPTS });
+
+app.use(
+  createAbuseHttpMiddleware({
+    abuseControl,
+    db,
+  }),
+);
 
 // Register routes
 registerEconomyRoutes({ app, db, auth });
@@ -152,6 +164,7 @@ registerRoutes({
   pageRoot: PAGE_ROOT,
   distDir: DIST_DIR,
   chatService,
+  abuseControl,
 });
 
 // Server start

@@ -1,4 +1,4 @@
-function registerChatRoutes({ app, requireCurrentUser, chatService }) {
+function registerChatRoutes({ app, requireCurrentUser, chatService, abuseControl }) {
   app.post("/party-chat/history", async (req, res) => {
     try {
       const user = await requireCurrentUser(req, res);
@@ -26,6 +26,25 @@ function registerChatRoutes({ app, requireCurrentUser, chatService }) {
     try {
       const user = await requireCurrentUser(req, res);
       if (!user) return res.status(401).json({ error: "Not authenticated" });
+      if (abuseControl) {
+        const guard = await abuseControl.guardChatAction({
+          userId: Number(user.user_id) || 0,
+          actionType: "message",
+          source: "POST /party-chat/send",
+        });
+        if (!guard?.allowed) {
+          const status = guard?.type === "ban" ? 403 : 429;
+          return res.status(status).json({
+            success: false,
+            error: guard?.message || "You are sending messages too fast.",
+            type: guard?.type || "chat_limited",
+            suspendedUntilMs: Number(guard?.suspendedUntilMs || 0) || null,
+            level: Number(guard?.level || 0) || null,
+            violationsUntilBan: Number(guard?.violationsUntilBan || 0) || null,
+            banWarning: guard?.banWarning || null,
+          });
+        }
+      }
       const partyId = Number(req.body?.partyId);
       if (!Number.isFinite(partyId) || partyId <= 0) {
         return res.status(400).json({ error: "partyId is required" });
@@ -49,6 +68,25 @@ function registerChatRoutes({ app, requireCurrentUser, chatService }) {
     try {
       const user = await requireCurrentUser(req, res);
       if (!user) return res.status(401).json({ error: "Not authenticated" });
+      if (abuseControl) {
+        const guard = await abuseControl.guardChatAction({
+          userId: Number(user.user_id) || 0,
+          actionType: "reaction",
+          source: "POST /party-chat/react",
+        });
+        if (!guard?.allowed) {
+          const status = guard?.type === "ban" ? 403 : 429;
+          return res.status(status).json({
+            success: false,
+            error: guard?.message || "You are sending messages too fast.",
+            type: guard?.type || "chat_limited",
+            suspendedUntilMs: Number(guard?.suspendedUntilMs || 0) || null,
+            level: Number(guard?.level || 0) || null,
+            violationsUntilBan: Number(guard?.violationsUntilBan || 0) || null,
+            banWarning: guard?.banWarning || null,
+          });
+        }
+      }
       const partyId = Number(req.body?.partyId);
       const messageId = Number(req.body?.messageId);
       if (

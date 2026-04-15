@@ -1,4 +1,5 @@
 import { buildProfileIconUrl } from "./profileIconAssets.js";
+import { sonner } from "./sonner.js";
 
 const GAME_CHAT_RECENT_LIMIT = 8;
 const LOBBY_TYPING_IDLE_STOP_MS = 1000;
@@ -65,10 +66,42 @@ function postJson(url, body) {
   }).then(async (response) => {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data?.error || "Request failed");
+      const error = new Error(data?.error || "Request failed");
+      error.statusCode = Number(response.status) || 0;
+      error.payload = data || {};
+      throw error;
     }
     return data;
   });
+}
+
+function formatSuspensionTime(suspendedUntilMs) {
+  const ms = Number(suspendedUntilMs) || 0;
+  if (!ms) return "";
+  const delta = Math.max(0, ms - Date.now());
+  const seconds = Math.ceil(delta / 1000);
+  if (seconds <= 0) return "";
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const rem = seconds % 60;
+  return rem ? `${mins}m ${rem}s` : `${mins}m`;
+}
+
+function showChatRequestError(error, fallbackTitle = "Chat") {
+  const message = String(error?.message || "Request failed");
+  const suspendedUntilMs = Number(error?.payload?.suspendedUntilMs) || 0;
+  const timeLeft = formatSuspensionTime(suspendedUntilMs);
+  const finalMessage = timeLeft ? `${message} (${timeLeft} remaining)` : message;
+  sonner(fallbackTitle, finalMessage, "OK", undefined, {
+    duration: 4500,
+    sound: "notification",
+  });
+}
+
+function buildInlineCooldownMessage(error, fallback = "Slow down.") {
+  const message = String(error?.message || fallback);
+  const extra = String(error?.payload?.banWarning || "").trim();
+  return extra ? `${message} ${extra}` : message;
 }
 
 function makeChatShell({
@@ -168,6 +201,7 @@ function renderPartyChatMessage(
     onReact,
     onOpenViewers,
     onJumpToMessage,
+    canReact = true,
     compact = false,
   } = {},
 ) {
@@ -226,6 +260,7 @@ function renderPartyChatMessage(
     replyButton.type = "button";
     replyButton.className = "bb-chat-hover-btn";
     replyButton.textContent = "Reply";
+    replyButton.disabled = !canReact;
     replyButton.addEventListener("click", () => onReply?.(message));
     actions.appendChild(replyButton);
 
@@ -259,6 +294,7 @@ function renderPartyChatMessage(
       button.type = "button";
       button.className = `bb-chat-hover-btn${message?.myReaction === reaction ? " is-active" : ""}`;
       button.textContent = reaction;
+      button.disabled = !canReact;
       button.addEventListener("click", () => onReact?.(message, reaction));
       reactionRow.appendChild(button);
     }
@@ -274,6 +310,7 @@ function renderPartyChatMessage(
         message?._reactionPulse === reaction ? " is-pop" : ""
       }`;
       button.textContent = `${reaction} ${count}`;
+      button.disabled = !canReact;
       const reactors = Array.isArray(reactionUsers?.[reaction])
         ? reactionUsers[reaction]
         : [];
@@ -335,6 +372,10 @@ export function createLobbyChatController({
     typingSweepTimer: null,
     isLocalTyping: false,
     bubbleTimers: new Map(),
+    chatSuspendedUntilMs: 0,
+    cooldownTimer: null,
+    localCooldownUntilMs: 0,
+    cooldownDraftValue: "",
   };
 
   const ui = makeChatShell({
@@ -351,6 +392,88 @@ export function createLobbyChatController({
     const fromContext = Number(context?.partyId) || 0;
     if (fromContext > 0) return fromContext;
     return Number(state.partyId) || 0;
+  }
+
+  function getGlobalChatSuspensionMs() {
+    return Number(window.__BRO_BATTLES_SUSPENSION__?.chat) || 0;
+  }
+
+  function getActiveChatSuspensionMs() {
+    const now = Date.now();
+    const localMs = Number(state.chatSuspendedUntilMs) || 0;
+    const globalMs = getGlobalChatSuspensionMs();
+    const active = Math.max(localMs, globalMs);
+    return active > now ? active : 0;
+  }
+
+  function isChatSuspended() {
+    return getActiveChatSuspensionMs() > 0;
+  }
+
+  function isLocalCooldownActive() {
+    return Number(state.localCooldownUntilMs) > Date.now();
+  }
+
+  function applyLocalCooldown(message, durationMs = 2000) {
+    const duration = Math.max(250, Number(durationMs) || 2000);
+    const now = Date.now();
+    if (!isLocalCooldownActive()) {
+      state.cooldownDraftValue = String(ui.textarea.value || "");
+    }
+    state.localCooldownUntilMs = now + duration;
+    ui.textarea.value = String(message || "Slow down.");
+    ui.textarea.placeholder = ui.textarea.value;
+    ui.textarea.disabled = true;
+    ui.sendBtn.disabled = true;
+
+    if (state.cooldownTimer) {
+      window.clearTimeout(state.cooldownTimer);
+      state.cooldownTimer = null;
+    }
+
+    state.cooldownTimer = window.setTimeout(() => {
+      state.cooldownTimer = null;
+      state.localCooldownUntilMs = 0;
+      if (isChatSuspended()) {
+        syncChatSuspensionUi();
+        return;
+      }
+      ui.textarea.disabled = false;
+      ui.sendBtn.disabled = false;
+      ui.textarea.value = String(state.cooldownDraftValue || "");
+      ui.textarea.placeholder = "Write a message...";
+      ui.textarea.focus();
+      state.cooldownDraftValue = "";
+    }, duration);
+  }
+
+  function syncChatSuspensionUi() {
+    const activeMs = getActiveChatSuspensionMs();
+    if (!activeMs) {
+      if (isLocalCooldownActive()) {
+        return;
+      }
+      ui.textarea.disabled = false;
+      ui.sendBtn.disabled = false;
+      if (ui.textarea.dataset.suspensionText === "1") {
+        ui.textarea.value = "";
+        ui.textarea.dataset.suspensionText = "0";
+      }
+      ui.textarea.placeholder = "Write a message...";
+      ui.root.classList.remove("bb-chat-is-suspended");
+      return;
+    }
+
+    const timeLeft = formatSuspensionTime(activeMs);
+    const text = timeLeft
+      ? `Chat suspended (${timeLeft} remaining)`
+      : "Chat suspended";
+    ui.textarea.disabled = true;
+    ui.sendBtn.disabled = true;
+    ui.textarea.value = text;
+    ui.textarea.dataset.suspensionText = "1";
+    ui.textarea.placeholder = text;
+    ui.root.classList.add("bb-chat-is-suspended");
   }
 
   function getPartyContextSnapshot() {
@@ -771,6 +894,7 @@ export function createLobbyChatController({
       onReact: (target, reaction) => void reactToMessage(target?.id, reaction),
       onOpenViewers: openViewersPopup,
       onJumpToMessage: jumpToMessage,
+      canReact: !isChatSuspended(),
       compact: false,
     });
     row.replaceWith(replacement);
@@ -802,6 +926,7 @@ export function createLobbyChatController({
             void reactToMessage(target?.id, reaction),
           onOpenViewers: openViewersPopup,
           onJumpToMessage: jumpToMessage,
+          canReact: !isChatSuspended(),
           compact: false,
         }),
       );
@@ -841,6 +966,7 @@ export function createLobbyChatController({
             void reactToMessage(target?.id, reaction),
           onOpenViewers: openViewersPopup,
           onJumpToMessage: jumpToMessage,
+          canReact: !isChatSuspended(),
           compact: false,
         }),
       );
@@ -898,6 +1024,11 @@ export function createLobbyChatController({
   async function sendMessage() {
     const partyId = currentPartyId();
     const body = String(ui.textarea.value || "").trim();
+    if (isChatSuspended()) {
+      syncChatSuspensionUi();
+      return;
+    }
+    if (isLocalCooldownActive()) return;
     if (!partyId || !body) return;
     setLocalTyping(false);
     const payload = {
@@ -916,14 +1047,38 @@ export function createLobbyChatController({
       }
     } catch (error) {
       console.warn("[chat] send failed", error?.message || error);
+      const suspendedUntilMs = Number(error?.payload?.suspendedUntilMs) || 0;
+      if (suspendedUntilMs > Date.now()) {
+        state.chatSuspendedUntilMs = Math.max(
+          state.chatSuspendedUntilMs || 0,
+          suspendedUntilMs,
+        );
+        syncChatSuspensionUi();
+        renderMessages();
+        showChatRequestError(error, "Chat blocked");
+        return;
+      }
+      const type = String(error?.payload?.type || "").toLowerCase();
+      if (type === "warn" || type === "chat_limited") {
+        applyLocalCooldown(buildInlineCooldownMessage(error), 2000);
+        return;
+      }
+      showChatRequestError(error, "Chat blocked");
     } finally {
-      ui.sendBtn.disabled = false;
-      ui.textarea.focus();
+      if (!isChatSuspended() && !isLocalCooldownActive()) {
+        ui.sendBtn.disabled = false;
+        ui.textarea.focus();
+      }
     }
   }
 
   async function reactToMessage(messageId, reaction) {
     const partyId = currentPartyId();
+    if (isChatSuspended()) {
+      syncChatSuspensionUi();
+      return;
+    }
+    if (isLocalCooldownActive()) return;
     if (!partyId || !messageId) return;
     try {
       await postJson("/party-chat/react", {
@@ -934,6 +1089,23 @@ export function createLobbyChatController({
       // Socket event is the source of truth so all clients animate/resolve consistently.
     } catch (error) {
       console.warn("[chat] reaction failed", error?.message || error);
+      const suspendedUntilMs = Number(error?.payload?.suspendedUntilMs) || 0;
+      if (suspendedUntilMs > Date.now()) {
+        state.chatSuspendedUntilMs = Math.max(
+          state.chatSuspendedUntilMs || 0,
+          suspendedUntilMs,
+        );
+        syncChatSuspensionUi();
+        renderMessages();
+        showChatRequestError(error, "Reaction blocked");
+        return;
+      }
+      const type = String(error?.payload?.type || "").toLowerCase();
+      if (type === "warn" || type === "chat_limited") {
+        applyLocalCooldown(buildInlineCooldownMessage(error), 2000);
+        return;
+      }
+      showChatRequestError(error, "Reaction blocked");
     }
   }
 
@@ -943,7 +1115,10 @@ export function createLobbyChatController({
     if (!nextOpen) return;
     if (currentPartyId()) {
       await loadHistory();
-      ui.textarea.focus();
+      syncChatSuspensionUi();
+      if (!isChatSuspended()) {
+        ui.textarea.focus();
+      }
     } else {
       state.messages = [];
       renderMessages();
@@ -1100,6 +1275,7 @@ export function createLobbyChatController({
   socket?.on?.("party:members", () => {
     syncHeader();
     syncLobbyChatVisibility();
+    syncChatSuspensionUi();
     const partyId = currentPartyId();
     if (!partyId) {
       setOpen(false);
@@ -1121,7 +1297,9 @@ export function createLobbyChatController({
   const initialPartyId = currentPartyId();
   syncHeader();
   syncLobbyChatVisibility();
+  syncChatSuspensionUi();
   state.typingSweepTimer = window.setInterval(() => {
+    syncChatSuspensionUi();
     renderTypingIndicator();
   }, 500);
   if (initialPartyId) {
@@ -1150,6 +1328,10 @@ export function createLobbyChatController({
       if (state.typingSweepTimer) {
         window.clearInterval(state.typingSweepTimer);
         state.typingSweepTimer = null;
+      }
+      if (state.cooldownTimer) {
+        window.clearTimeout(state.cooldownTimer);
+        state.cooldownTimer = null;
       }
       for (const timerId of state.bubbleTimers.values()) {
         window.clearTimeout(timerId);

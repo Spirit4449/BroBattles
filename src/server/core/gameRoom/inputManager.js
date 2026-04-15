@@ -5,6 +5,9 @@ const {
   MOVE_PLAUSIBLE_SPEED_V,
   MOVE_PLAUSIBLE_LAG_PAD_H,
   MOVE_PLAUSIBLE_LAG_PAD_V,
+  MOVE_CLAMP_WINDOW_MS,
+  MOVE_CLAMP_MAX_IN_WINDOW,
+  MOVE_CLAMP_SUPPRESS_MS,
 } = require("../gameRoomConfig");
 const { isMovementSuppressed } = require("./abilityRuntimeManager");
 const netTestLogger = require("./netTestLogger");
@@ -34,6 +37,25 @@ function pushPositionHistory(playerData, now = Date.now()) {
   }
 }
 
+function noteMovementClampViolation(room, playerData, now) {
+  const windowStart = Number(playerData._movementClampWindowStart || 0);
+  if (!windowStart || now - windowStart > MOVE_CLAMP_WINDOW_MS) {
+    playerData._movementClampWindowStart = now;
+    playerData._movementClampCount = 0;
+  }
+  playerData._movementClampCount = Number(playerData._movementClampCount || 0) + 1;
+  if (playerData._movementClampCount >= MOVE_CLAMP_MAX_IN_WINDOW) {
+    playerData._movementViolationUntil = now + MOVE_CLAMP_SUPPRESS_MS;
+    playerData._movementClampWindowStart = now;
+    playerData._movementClampCount = 0;
+    if (room.DEV_TIMING_DIAG && !room._netTestEnabled) {
+      console.warn(
+        `[GameRoom ${room.matchId}] movement temporarily suppressed for ${playerData.name} due to repeated clamp violations`,
+      );
+    }
+  }
+}
+
 function handlePlayerInput(room, socketId, inputData) {
   const playerData = room.players.get(socketId);
   if (!playerData || !playerData.isAlive || playerData.connected === false) {
@@ -43,6 +65,7 @@ function handlePlayerInput(room, socketId, inputData) {
   if (!inputData || typeof inputData !== "object") return;
 
   const now = Date.now();
+  if (Number(playerData._movementViolationUntil || 0) > now) return;
   const infernoActive = isMovementSuppressed(playerData, now);
   const packetSeq = Number(inputData?.sequence);
   const packetTimestamp = Number(inputData?.timestamp);
@@ -143,6 +166,7 @@ function handlePlayerInput(room, socketId, inputData) {
       const absDX = Math.abs(rawX - playerData.x);
       const absDY = Math.abs(rawY - playerData.y);
       if (absDX > maxDX || absDY > maxDY) {
+        noteMovementClampViolation(room, playerData, now);
         netTestLogger.noteInputClamp(room, playerData, {
           absDX,
           maxDX,
@@ -218,18 +242,6 @@ function handlePlayerInput(room, socketId, inputData) {
       playerData._bodyCenterOffsetY = Number(inputData.bodyCenterOffsetY);
     }
     playerData._lastPositionPacketAt = now;
-
-    if (inputData.ammoState && typeof inputData.ammoState === "object") {
-      const a = inputData.ammoState;
-      playerData.ammoState = {
-        capacity: Math.max(1, Number(a.capacity) || 1),
-        charges: Math.max(0, Number(a.charges) || 0),
-        cooldownMs: Math.max(50, Number(a.cooldownMs) || 1200),
-        reloadMs: Math.max(100, Number(a.reloadMs) || 1200),
-        reloadTimerMs: Math.max(0, Number(a.reloadTimerMs) || 0),
-        nextFireInMs: Math.max(0, Number(a.nextFireInMs) || 0),
-      };
-    }
 
     pushPositionHistory(playerData, now);
     netTestLogger.noteInput(room, playerData, now, {

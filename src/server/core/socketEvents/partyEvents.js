@@ -5,6 +5,13 @@ const {
   getSelectionBlockReason,
   selectionToLegacyMode,
 } = require("../../helpers/gameSelectionCatalog");
+const { getAllCharacters } = require("../../../lib/characterStats");
+
+const VALID_CHARACTER_IDS = new Set(
+  (Array.isArray(getAllCharacters?.()) ? getAllCharacters() : [])
+    .map((entry) => String(entry || "").trim().toLowerCase())
+    .filter(Boolean),
+);
 
 function registerPartyEvents(
   socket,
@@ -236,8 +243,13 @@ function registerPartyEvents(
     const partyId = data?.partyId ? Number(data.partyId) : null;
     const charClass = (data?.character || data?.charClass || "")
       .toString()
-      .trim();
+      .trim()
+      .toLowerCase();
     if (!charClass || !/^[a-zA-Z_-]{2,20}$/.test(charClass)) return;
+    if (!VALID_CHARACTER_IDS.has(charClass)) {
+      console.warn(`[party:${partyId ?? "-"}] rejected unknown character ${charClass} for ${uname}`);
+      return;
+    }
 
     try {
       if (partyId) {

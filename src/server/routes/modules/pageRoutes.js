@@ -1,4 +1,5 @@
 const path = require("path");
+const { getBanHoldFromRequest } = require("../../helpers/banHold");
 
 function registerPageRoutes({
   app,
@@ -7,6 +8,19 @@ function registerPageRoutes({
   pageRoot,
   distDir,
 }) {
+  function redirectIfBanHold(req, res) {
+    const hold = getBanHoldFromRequest(req);
+    if (!hold) return false;
+    if (req.path === "/banned") return false;
+    return res.redirect("/banned");
+  }
+
+  app.get("/banned", (req, res) => {
+    const hold = getBanHoldFromRequest(req);
+    if (!hold) return res.redirect("/");
+    res.sendFile(path.join(pageRoot, "Errors", "banned.html"));
+  });
+
   app.get("/partyfull", (req, res) => {
     res.sendFile(path.join(pageRoot, "Errors", "partyfull.html"));
   });
@@ -20,9 +34,11 @@ function registerPageRoutes({
     res.sendFile(path.join(pageRoot, "Errors", "signed-out.html"));
   });
   app.get("/signup", (req, res) => {
+    if (redirectIfBanHold(req, res)) return;
     res.sendFile(path.join(pageRoot, "signup.html"));
   });
   app.get("/login", (req, res) => {
+    if (redirectIfBanHold(req, res)) return;
     res.sendFile(path.join(pageRoot, "login.html"));
   });
   app.get("/profile", (_req, res) => {
@@ -30,6 +46,7 @@ function registerPageRoutes({
   });
 
   app.get("/", async (req, res) => {
+    if (redirectIfBanHold(req, res)) return;
     try {
       const [user] = await getOrCreateCurrentUser(req, res, {
         autoCreate: true,
@@ -47,6 +64,7 @@ function registerPageRoutes({
   });
 
   app.get("/party/:partyid", async (req, res) => {
+    if (redirectIfBanHold(req, res)) return;
     try {
       await getOrCreateCurrentUser(req, res, {
         autoCreate: true,
@@ -65,6 +83,7 @@ function registerPageRoutes({
   });
 
   app.get("/game/:matchid", async (req, res) => {
+    if (redirectIfBanHold(req, res)) return;
     try {
       const rows = await db.runQuery(
         "SELECT 1 FROM matches WHERE match_id = ? LIMIT 1",

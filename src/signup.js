@@ -122,6 +122,14 @@ form.addEventListener("submit", async (e) => {
       return;
     }
 
+    if (
+      response.status === 403 &&
+      (data?.banned || data?.redirect === "/banned")
+    ) {
+      window.location.href = "/banned";
+      return;
+    }
+
     // Map known server responses to user-friendly messages
     // Status-driven defaults:
     let msg =

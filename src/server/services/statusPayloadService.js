@@ -14,6 +14,12 @@ function normalizeUserForStatus(user) {
   return out;
 }
 
+function parseMs(value) {
+  if (!value) return 0;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
 async function getUserLiveMatch(db, userId) {
   if (!userId) return null;
 
@@ -41,6 +47,14 @@ async function buildStatusPayload({
     autoCreate: true,
   });
   const userNormalized = normalizeUserForStatus(user);
+
+  if (Number(userNormalized?.is_banned || 0) === 1) {
+    return {
+      success: false,
+      banned: true,
+      message: String(userNormalized?.ban_reason || "Your account has been banned."),
+    };
+  }
 
   let selectedCardId = null;
   let ownedCardIds = [];
@@ -91,6 +105,14 @@ async function buildStatusPayload({
     userNormalized.preferred_selection = preferredSelection;
   }
 
+  const mmSuspendedUntilMs = parseMs(userNormalized?.mm_suspended_until);
+  const chatSuspendedUntilMs = parseMs(userNormalized?.chat_suspended_until);
+  const now = Date.now();
+  const suspension = {
+    matchmaking: mmSuspendedUntilMs > now ? mmSuspendedUntilMs : null,
+    chat: chatSuspendedUntilMs > now ? chatSuspendedUntilMs : null,
+  };
+
   const partyRows = await db.runQuery(
     "SELECT party_id FROM party_members WHERE name = ? LIMIT 1",
     [userNormalized?.name],
@@ -101,6 +123,7 @@ async function buildStatusPayload({
   return {
     success: true,
     userData: userNormalized,
+    suspension,
     isAdmin:
       typeof isAdminUser === "function" ? !!isAdminUser(userNormalized) : false,
     newlyCreated: userType === "new",

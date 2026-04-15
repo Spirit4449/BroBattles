@@ -1,4 +1,5 @@
 const { buildStatusPayload } = require("../../services/statusPayloadService");
+const { setBanHoldCookies, getBanHoldFromRequest } = require("../../helpers/banHold");
 const {
   normalizeSelection,
 } = require("../../helpers/gameSelectionCatalog");
@@ -13,6 +14,15 @@ function registerStatusRoutes({
 }) {
   app.post("/status", async (req, res) => {
     try {
+      const hold = getBanHoldFromRequest(req);
+      if (hold) {
+        return res.status(403).json({
+          success: false,
+          banned: true,
+          message: String(hold.reason || "Your account has been banned."),
+        });
+      }
+
       const payload = await buildStatusPayload({
         db,
         getOrCreateCurrentUser,
@@ -21,6 +31,18 @@ function registerStatusRoutes({
         req,
         res,
       });
+      if (payload?.banned) {
+        setBanHoldCookies({
+          req,
+          res,
+          reason: String(payload?.message || "Your account has been banned."),
+        });
+        try {
+          res.clearCookie("user_id", req.app.locals?.SIGNED_COOKIE_OPTS || {});
+          res.clearCookie("display_name", req.app.locals?.DISPLAY_COOKIE_OPTS || {});
+        } catch (_) {}
+        return res.status(403).json(payload);
+      }
       res.json(payload);
     } catch (e) {
       console.error(e);

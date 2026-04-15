@@ -85,7 +85,13 @@ function replaceLayoutToggle(source, enabled) {
   return source;
 }
 
-function registerGameRoutes({ app, db, requireCurrentUser, isAdminUser }) {
+function registerGameRoutes({
+  app,
+  db,
+  requireCurrentUser,
+  isAdminUser,
+  abuseControl,
+}) {
   app.post("/gamedata", async (req, res) => {
     console.log("Fetching game data for match:", req.body);
     try {
@@ -93,6 +99,7 @@ function registerGameRoutes({ app, db, requireCurrentUser, isAdminUser }) {
         db,
         requireCurrentUser,
         isAdminUser,
+        abuseControl,
         req,
         res,
       });

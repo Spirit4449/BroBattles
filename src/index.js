@@ -1487,6 +1487,35 @@ function checkForLiveMatch(statusData) {
   return false;
 }
 
+function formatSuspensionTime(suspendedUntilMs) {
+  const ms = Number(suspendedUntilMs) || 0;
+  if (!ms) return "";
+  const delta = Math.max(0, ms - Date.now());
+  const seconds = Math.ceil(delta / 1000);
+  if (seconds <= 0) return "";
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const rem = seconds % 60;
+  return rem ? `${mins}m ${rem}s` : `${mins}m`;
+}
+
+function showSuspensionPopupFromStatus(statusData) {
+  const mmSuspendedUntilMs = Number(statusData?.suspension?.matchmaking) || 0;
+  const chatSuspendedUntilMs = Number(statusData?.suspension?.chat) || 0;
+  const mmText = formatSuspensionTime(mmSuspendedUntilMs);
+  const chatText = formatSuspensionTime(chatSuspendedUntilMs);
+
+  if (!mmText && !chatText) return;
+
+  const parts = [];
+  if (mmText) parts.push(`Matchmaking suspended for ${mmText}.`);
+  if (chatText) parts.push(`Lobby chat suspended for ${chatText}.`);
+  sonner("Account suspension active", parts.join(" "), "OK", undefined, {
+    duration: 7000,
+    sound: "notification",
+  });
+}
+
 const existingPartyId = checkIfInParty();
 
 function getJoinDebugMeta(extra = {}) {
@@ -1531,6 +1560,19 @@ const statusPromise = fetch("/status", {
         isAdmin: data?.isAdmin ?? null,
       }),
     );
+    if (data?.banned) {
+      window.location.href = "/banned";
+      return;
+    }
+
+    if (data?.suspension) {
+      window.__BRO_BATTLES_SUSPENSION__ = {
+        ...(window.__BRO_BATTLES_SUSPENSION__ || {}),
+        ...data.suspension,
+      };
+      showSuspensionPopupFromStatus(data);
+    }
+
     if (data?.userData) {
       userData = data.userData;
       userData.isAdmin = !!data.isAdmin;

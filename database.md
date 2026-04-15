@@ -265,3 +265,48 @@ CREATE TABLE IF NOT EXISTS user_profile_icons (
 
 CREATE INDEX idx_user_profile_icons_user_id ON user_profile_icons(user_id);
 ```
+
+## Abuse Controls (Chat + HTTP Flood)
+
+Apply [migrations/2026-04-15_abuse_controls.sql](migrations/2026-04-15_abuse_controls.sql)
+to add offense levels, suspension timestamps, and account ban fields.
+
+### Migration
+
+```sql
+ALTER TABLE users
+	ADD COLUMN IF NOT EXISTS chat_offense_level INT NOT NULL DEFAULT 0,
+	ADD COLUMN IF NOT EXISTS chat_last_violation_at DATETIME NULL,
+	ADD COLUMN IF NOT EXISTS chat_suspended_until DATETIME NULL,
+	ADD COLUMN IF NOT EXISTS chat_decay_anchor_at DATETIME NULL,
+	ADD COLUMN IF NOT EXISTS http_offense_level INT NOT NULL DEFAULT 0,
+	ADD COLUMN IF NOT EXISTS http_last_violation_at DATETIME NULL,
+	ADD COLUMN IF NOT EXISTS mm_suspended_until DATETIME NULL,
+	ADD COLUMN IF NOT EXISTS http_decay_anchor_at DATETIME NULL,
+	ADD COLUMN IF NOT EXISTS is_banned TINYINT(1) NOT NULL DEFAULT 0,
+	ADD COLUMN IF NOT EXISTS banned_at DATETIME NULL,
+	ADD COLUMN IF NOT EXISTS ban_reason VARCHAR(255) NULL;
+
+CREATE TABLE IF NOT EXISTS user_abuse_events (
+	event_id BIGINT NOT NULL AUTO_INCREMENT,
+	user_id INT NOT NULL,
+	category VARCHAR(40) NOT NULL,
+	source VARCHAR(120) NOT NULL,
+	action_taken VARCHAR(64) NOT NULL,
+	offense_level INT NOT NULL DEFAULT 0,
+	detail JSON NULL,
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (event_id),
+	INDEX idx_user_abuse_events_user_created (user_id, created_at),
+	INDEX idx_user_abuse_events_category_created (category, created_at),
+	CONSTRAINT fk_user_abuse_events_user
+		FOREIGN KEY (user_id) REFERENCES users(user_id)
+		ON DELETE CASCADE
+);
+```
+
+### Behavior Notes
+
+- Offense decay window is 5 minutes.
+- Decay is evaluated only when the relevant suspension is not active.
+- Suspension-safe decay uses `*_decay_anchor_at` so levels cannot wear off while suspended.

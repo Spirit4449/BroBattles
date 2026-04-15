@@ -77,9 +77,16 @@ function readSignedCookieFromHandshake(socket, cookieName, secret) {
  *      updateLastSeen
  *    }
  */
-function initSocket({ io, COOKIE_SECRET, db, runtimeConfig, chatService }) {
+function initSocket({
+  io,
+  COOKIE_SECRET,
+  db,
+  runtimeConfig,
+  chatService,
+  abuseControl,
+}) {
   // Game hub for managing active game rooms
-  const gameHub = createGameHub({ io, db, runtimeConfig });
+  const gameHub = createGameHub({ io, db, runtimeConfig, abuseControl });
 
   // Matchmaking controller (power-saved loop inside)
   const mm = createMatchmaking({
@@ -128,6 +135,9 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig, chatService }) {
           socketId: socket.id,
           userId: Number(userIdStr),
         });
+      } else if (Number(user.is_banned || 0) === 1) {
+        socket.data.user = null;
+        return next(new Error("Account banned"));
       }
       next();
     } catch (e) {
@@ -158,7 +168,6 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig, chatService }) {
         eventCounts.set(eventName, n);
         return n % NOISY_EVENT_SAMPLE_EVERY === 0;
       };
-
       socket.onAny((eventName, ...args) => {
         if (!shouldLogEvent(eventName)) return;
         const sample = args.slice(0, 1).map(summarizeArg);
@@ -185,6 +194,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig, chatService }) {
     registerGameEvents(socket, {
       db,
       gameHub,
+      abuseControl,
     });
 
     // store socket id and mark online
@@ -261,6 +271,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig, chatService }) {
 
     registerChatEvents(socket, {
       chatService,
+      abuseControl,
     });
 
     registerMatchmakingEvents(socket, {
@@ -268,6 +279,7 @@ function initSocket({ io, COOKIE_SECRET, db, runtimeConfig, chatService }) {
       io,
       mm,
       PARTY_STATUS,
+      abuseControl,
     });
     registerPresenceEvents(socket, {
       db,

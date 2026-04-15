@@ -3,6 +3,7 @@ const {
   defaultCharacterList,
 } = require("../../lib/characterStats");
 const { randomString } = require("./utils");
+const { setBanHoldCookies } = require("./banHold");
 
 const ADMIN_TOKENS = (process.env.ADMIN_USERS || "nishay")
   .split(",")
@@ -65,6 +66,23 @@ function makeAuthHelpers(db, cookieOpts) {
   }
 
   async function requireCurrentUser(req, res) {
+    if (Object.prototype.hasOwnProperty.call(req || {}, "abuseResolvedUser")) {
+      const cachedUser = req.abuseResolvedUser || null;
+      if (cachedUser && Number(cachedUser.is_banned || 0) === 1) {
+        setBanHoldCookies({
+          req,
+          res,
+          reason: String(cachedUser?.ban_reason || "Your account has been banned."),
+        });
+        try {
+          res.clearCookie("user_id", SIGNED_COOKIE_OPTS);
+          res.clearCookie("display_name", DISPLAY_COOKIE_OPTS);
+        } catch (_) {}
+        return null;
+      }
+      return cachedUser;
+    }
+
     const id = req.signedCookies?.user_id;
     if (!id) {
       console.warn("[auth] requireCurrentUser missing signed user_id cookie", {
@@ -78,10 +96,9 @@ function makeAuthHelpers(db, cookieOpts) {
       });
       return null;
     }
-    const rows = await db.runQuery(
-      "SELECT * FROM users WHERE user_id = ? LIMIT 1",
-      [id]
-    );
+    const rows = await db.runQuery("SELECT * FROM users WHERE user_id = ? LIMIT 1", [
+      id,
+    ]);
     if (!rows[0]) {
       console.warn("[auth] requireCurrentUser cookie did not resolve to a user", {
         method: req?.method,
@@ -90,7 +107,20 @@ function makeAuthHelpers(db, cookieOpts) {
         userId: Number(id),
       });
     }
-    return rows[0] || null;
+    const user = rows[0] || null;
+    if (user && Number(user.is_banned || 0) === 1) {
+      setBanHoldCookies({
+        req,
+        res,
+        reason: String(user?.ban_reason || "Your account has been banned."),
+      });
+      try {
+        res.clearCookie("user_id", SIGNED_COOKIE_OPTS);
+        res.clearCookie("display_name", DISPLAY_COOKIE_OPTS);
+      } catch (_) {}
+      return null;
+    }
+    return user;
   }
 
   function isAdminUser(user) {

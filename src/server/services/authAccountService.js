@@ -1,4 +1,5 @@
 const bcrypt = require("bcrypt");
+const { getBanHoldFromRequest } = require("../helpers/banHold");
 
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,14}$/;
 const MIN_PW = 6;
@@ -45,6 +46,21 @@ async function completeSignupFromGuest({
   req,
   res,
 }) {
+  const hold = getBanHoldFromRequest(req);
+  if (hold) {
+    return {
+      ok: false,
+      statusCode: 403,
+      payload: {
+        success: false,
+        error: "This browser is temporarily blocked from creating accounts.",
+        banned: true,
+        reason: hold.reason,
+        redirect: "/banned",
+      },
+    };
+  }
+
   const validated = validateCredentials(req.body?.username, req.body?.password);
   if (!validated.ok) return validated;
 
@@ -109,6 +125,21 @@ async function completeSignupFromGuest({
 }
 
 async function loginPermanentUser({ app, db, req }) {
+  const hold = getBanHoldFromRequest(req);
+  if (hold) {
+    return {
+      ok: false,
+      statusCode: 403,
+      payload: {
+        success: false,
+        error: "This browser is temporarily blocked.",
+        banned: true,
+        reason: hold.reason,
+        redirect: "/banned",
+      },
+    };
+  }
+
   const username =
     typeof req.body?.username === "string" ? req.body.username.trim() : "";
   const password =
@@ -122,10 +153,22 @@ async function loginPermanentUser({ app, db, req }) {
     };
   }
 
-  const rows = await db.runQuery(
-    "SELECT user_id, name, password FROM users WHERE name = ? AND expires_at IS NULL LIMIT 1",
-    [username],
-  );
+  let rows = [];
+  try {
+    rows = await db.runQuery(
+      "SELECT user_id, name, password, is_banned, ban_reason FROM users WHERE name = ? AND expires_at IS NULL LIMIT 1",
+      [username],
+    );
+  } catch (error) {
+    if (error?.code === "ER_BAD_FIELD_ERROR") {
+      rows = await db.runQuery(
+        "SELECT user_id, name, password FROM users WHERE name = ? AND expires_at IS NULL LIMIT 1",
+        [username],
+      );
+    } else {
+      throw error;
+    }
+  }
   if (rows.length === 0) {
     return {
       ok: false,
@@ -135,6 +178,19 @@ async function loginPermanentUser({ app, db, req }) {
   }
 
   const user = rows[0];
+  if (Number(user?.is_banned || 0) === 1) {
+    return {
+      ok: false,
+      statusCode: 403,
+      payload: {
+        success: false,
+        error: String(user?.ban_reason || "Your account has been banned."),
+        banned: true,
+        reason: String(user?.ban_reason || "Your account has been banned."),
+        redirect: "/banned",
+      },
+    };
+  }
   const ok = await bcrypt.compare(password, user.password || "");
   if (!ok) {
     return {

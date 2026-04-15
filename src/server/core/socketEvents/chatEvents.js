@@ -81,9 +81,25 @@ function clearUserTypingFromAllParties(io, user, keepPartyId = 0) {
   }
 }
 
-function registerChatEvents(socket, { chatService }) {
+function registerChatEvents(socket, { chatService, abuseControl }) {
   socket.on("party-chat:send", async (payload = {}, cb) => {
     try {
+      if (abuseControl) {
+        const guard = await abuseControl.guardChatAction({
+          userId: Number(socket.data?.user?.user_id) || 0,
+          actionType: "message",
+          source: "socket:party-chat:send",
+        });
+        if (!guard?.allowed) {
+          cb?.({
+            ok: false,
+            error: guard?.message || "You are sending messages too fast.",
+            type: guard?.type || "chat_limited",
+            suspendedUntilMs: Number(guard?.suspendedUntilMs || 0) || null,
+          });
+          return;
+        }
+      }
       const partyId = Number(payload?.partyId || socket.data?.partyId || 0);
       const message = await chatService.sendPartyChatMessage({
         partyId,
@@ -99,6 +115,22 @@ function registerChatEvents(socket, { chatService }) {
 
   socket.on("party-chat:react", async (payload = {}, cb) => {
     try {
+      if (abuseControl) {
+        const guard = await abuseControl.guardChatAction({
+          userId: Number(socket.data?.user?.user_id) || 0,
+          actionType: "reaction",
+          source: "socket:party-chat:react",
+        });
+        if (!guard?.allowed) {
+          cb?.({
+            ok: false,
+            error: guard?.message || "You are sending messages too fast.",
+            type: guard?.type || "chat_limited",
+            suspendedUntilMs: Number(guard?.suspendedUntilMs || 0) || null,
+          });
+          return;
+        }
+      }
       const partyId = Number(payload?.partyId || socket.data?.partyId || 0);
       const message = await chatService.reactToPartyChatMessage({
         partyId,

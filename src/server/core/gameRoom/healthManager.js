@@ -53,16 +53,16 @@ function maybeBroadcastHealth(room, playerData, nowTs, meta = {}) {
   }
 }
 
-function handleHeal(room, payload) {
+function handleHeal(room, socketId, payload) {
   try {
     if (!payload || typeof payload !== "object") return;
-    const sourceName = String(payload.source || payload.attacker || "").trim();
-    const targetName = String(payload.target || "").trim();
+    const source = room.players.get(socketId);
+    if (!source || !source.isAlive) return;
+    if (source.connected === false || source.loaded !== true) return;
+
+    const targetName = String(payload.target || source.name || "").trim();
     if (!targetName) return;
 
-    const source = sourceName
-      ? Array.from(room.players.values()).find((p) => p.name === sourceName)
-      : null;
     const target = Array.from(room.players.values()).find(
       (p) => p.name === targetName,
     );
@@ -73,13 +73,8 @@ function handleHeal(room, payload) {
       return;
     }
 
-    let amount = 0;
-    if (source) {
-      const ref = Math.max(0, Number(source.baseDamage || 0));
-      amount = Math.round(ref * 0.5);
-    } else {
-      amount = 200;
-    }
+    const ref = Math.max(0, Number(source.baseDamage || 0));
+    const amount = Math.round(ref * 0.5);
     if (amount <= 0) return;
 
     const now = Date.now();

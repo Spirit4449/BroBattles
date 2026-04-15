@@ -55,6 +55,18 @@
   background: rgba(34, 104, 170, 0.98);
 }
 
+.bb-chat-is-suspended .bb-chat-send,
+.bb-chat-is-suspended .bb-chat-textarea,
+.bb-chat-is-suspended .bb-chat-hover-btn,
+.bb-chat-is-suspended .bb-chat-inline-reaction {
+  opacity: 0.6;
+}
+
+.bb-chat-is-suspended .bb-chat-textarea {
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.55);
+}
+
 .bb-chat-button .bb-chat-badge,
 .bb-chat-launcher .bb-chat-badge {
   position: absolute;
