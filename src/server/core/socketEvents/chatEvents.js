@@ -128,7 +128,9 @@ function registerChatEvents(socket, { chatService }) {
 
   socket.on("party-chat:typing", (payload = {}, cb) => {
     try {
-      const partyId = normalizePartyId(payload?.partyId || socket.data?.partyId);
+      const partyId = normalizePartyId(
+        payload?.partyId || socket.data?.partyId,
+      );
       const user = socket.data?.user || {};
       const key = normalizeTypingKey(user);
       if (!partyId || !key) {
@@ -172,7 +174,10 @@ function registerChatEvents(socket, { chatService }) {
   });
 
   socket.on("disconnect", () => {
-    clearUserTypingFromAllParties(chatService?.io || socket.nsp?.server, socket.data?.user || {});
+    clearUserTypingFromAllParties(
+      chatService?.io || socket.nsp?.server,
+      socket.data?.user || {},
+    );
   });
 }
 

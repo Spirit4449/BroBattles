@@ -488,7 +488,9 @@ export function createLobbyChatController({
   }
 
   function showLobbyMessageBubble(message) {
-    const bodyText = String(message?.body || "").replace(/\s+/g, " ").trim();
+    const bodyText = String(message?.body || "")
+      .replace(/\s+/g, " ")
+      .trim();
     const senderName = String(message?.sender?.name || "").trim();
     if (!bodyText || !senderName) return;
     const slot = Array.from(

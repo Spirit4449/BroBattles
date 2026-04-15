@@ -1497,8 +1497,9 @@ export function socketInit(options = {}) {
       const member = Array.isArray(__partyContext.members)
         ? __partyContext.members.find(
             (item) =>
-              String(item?.name || "").trim().toLowerCase() ===
-              targetName.toLowerCase(),
+              String(item?.name || "")
+                .trim()
+                .toLowerCase() === targetName.toLowerCase(),
           )
         : null;
       if (member) {
