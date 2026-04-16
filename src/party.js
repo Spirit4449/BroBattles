@@ -1209,6 +1209,18 @@ export function checkIfInParty() {
   return false;
 }
 
+function getActivePartyId() {
+  const contextPartyId = Number(__partyContext.partyId || 0);
+  if (Number.isFinite(contextPartyId) && contextPartyId > 0) {
+    return contextPartyId;
+  }
+  const routePartyId = Number(checkIfInParty() || 0);
+  if (Number.isFinite(routePartyId) && routePartyId > 0) {
+    return routePartyId;
+  }
+  return null;
+}
+
 export function createParty() {
   fetch("/create-party", {
     method: "POST",
@@ -1258,7 +1270,6 @@ export function stopHeartbeat() {
 // ---------------------------
 
 export function socketInit(options = {}) {
-  const currentPartyId = checkIfInParty();
   __joinRequestProfilePopup = options?.profilePopup || null;
   wireJoinRequestOverlayControls();
 
@@ -1267,6 +1278,7 @@ export function socketInit(options = {}) {
 
   // Connection lifecycle
   socket.on("connect", () => {
+    const currentPartyId = getActivePartyId();
     console.log("[socket] connected", {
       socketId: socket.id,
       currentPartyId: currentPartyId || null,
@@ -1279,6 +1291,7 @@ export function socketInit(options = {}) {
   });
 
   socket.on("connect_error", (error) => {
+    const currentPartyId = getActivePartyId();
     console.error("[socket] connect_error", {
       message: error?.message || String(error),
       description: error?.description || null,
@@ -1290,6 +1303,7 @@ export function socketInit(options = {}) {
   });
 
   socket.on("reconnect_attempt", (attempt) => {
+    const currentPartyId = getActivePartyId();
     console.warn("[socket] reconnect_attempt", {
       attempt,
       currentPartyId: currentPartyId || null,
@@ -1317,6 +1331,7 @@ export function socketInit(options = {}) {
 
   // Server tells us which room we're in (party or lobby)
   socket.on("party:joined", ({ partyId }) => {
+    const currentPartyId = getActivePartyId();
     console.log("[socket] joined room", {
       joinedPartyId: partyId ?? null,
       currentPartyId: currentPartyId || null,
@@ -1340,6 +1355,7 @@ export function socketInit(options = {}) {
   // Live roster updates for the party
   socket.on("party:members", (data) => {
     try {
+      const currentPartyId = getActivePartyId();
       console.log("[party] party:members", {
         partyId: data?.partyId,
         mode: data?.mode,
@@ -1435,6 +1451,7 @@ export function socketInit(options = {}) {
   });
 
   socket.on("party:join-request", (request) => {
+    const currentPartyId = getActivePartyId();
     const requestPartyId = Number(request?.partyId || request?.party_id || 0);
     if (
       !requestPartyId ||
@@ -1492,6 +1509,7 @@ export function socketInit(options = {}) {
 
   // Presence/status changes: update the matching slot if visible
   socket.on("status:update", (evt) => {
+    const currentPartyId = getActivePartyId();
     if (currentPartyId && String(evt.partyId) !== String(currentPartyId))
       return;
     const normalized = normalizeStatusLabel(evt.status || "online");
@@ -1535,6 +1553,7 @@ export function socketInit(options = {}) {
 
   // Mode change updates
   socket.on("mode-change", (data) => {
+    const currentPartyId = getActivePartyId();
     if (currentPartyId && String(data.partyId) !== String(currentPartyId))
       return;
 
@@ -1576,6 +1595,7 @@ export function socketInit(options = {}) {
 
   // Map change updates
   socket.on("map-change", (data) => {
+    const currentPartyId = getActivePartyId();
     if (currentPartyId && String(data.partyId) !== String(currentPartyId))
       return;
 
@@ -1604,6 +1624,7 @@ export function socketInit(options = {}) {
   });
 
   socket.on("party:notice", (data) => {
+    const currentPartyId = getActivePartyId();
     if (currentPartyId && String(data?.partyId) !== String(currentPartyId))
       return;
     const title = String(data?.title || "Party update").trim();
@@ -1616,6 +1637,7 @@ export function socketInit(options = {}) {
 
   // Party-wide: everyone ready -> show matchmaking overlay
   socket.on("party:matchmaking:start", ({ partyId, selection }) => {
+    const currentPartyId = getActivePartyId();
     if (currentPartyId && String(partyId) !== String(currentPartyId)) return;
     const normalized = normalizeGameSelection(
       selection || getCurrentSelection(),
@@ -1634,6 +1656,7 @@ export function socketInit(options = {}) {
   });
 
   socket.on("queue:joined", (payload) => {
+    const currentPartyId = getActivePartyId();
     console.log("[join-debug] queue:joined", {
       currentPartyId: currentPartyId || null,
       payloadPartyId: payload?.partyId ?? null,
@@ -1657,6 +1680,7 @@ export function socketInit(options = {}) {
 
   // When a match is found, update overlay and auto-ack ready for this client
   socket.on("match:found", (payload) => {
+    const currentPartyId = getActivePartyId();
     console.log("[join-debug] match:found", {
       currentPartyId: currentPartyId || null,
       matchId: payload?.matchId ?? null,
@@ -1692,6 +1716,7 @@ export function socketInit(options = {}) {
         return;
       }
 
+      const currentPartyId = getActivePartyId();
       console.log("[join-debug] match:gameReady redirecting", {
         matchId,
         currentPartyId: currentPartyId || null,
@@ -1713,6 +1738,7 @@ export function socketInit(options = {}) {
   // Queue error -> notify and hide overlay (useful for solo flow)
   socket.on("queue:error", (err) => {
     try {
+      const currentPartyId = getActivePartyId();
       console.error("[join-debug] queue:error", {
         currentPartyId: currentPartyId || null,
         message: err?.message || null,
@@ -1761,6 +1787,7 @@ export function socketInit(options = {}) {
 
   // Match cancelled (e.g., ready timeout) -> hide overlay
   socket.on("match:cancelled", (data) => {
+    const currentPartyId = getActivePartyId();
     console.warn("[join-debug] match:cancelled", {
       currentPartyId: currentPartyId || null,
       reason: data?.reason || null,
@@ -2458,7 +2485,6 @@ import { setLobbyBackground } from "./index.js";
 
 // Attach a click handler to current user's status to toggle ready.
 export function initReadyToggle() {
-  const partyId = checkIfInParty();
   const readyBtn = document.getElementById("ready");
   if (!readyBtn) return;
   // Avoid duplicate bindings when UI re-renders
@@ -2482,6 +2508,7 @@ export function initReadyToggle() {
     // Update Ready button appearance/label
     setReadyButtonState(nextReady);
 
+    const partyId = getActivePartyId();
     if (partyId) {
       // Party flow: server will show overlay when all ready
       socket.emit("ready:status", { partyId, ready: nextReady });
@@ -2663,7 +2690,7 @@ function wireCancelButton() {
   btn.dataset.bound = "1";
   btn.addEventListener("click", () => {
     hideMatchmakingOverlay();
-    const partyId = checkIfInParty();
+    const partyId = getActivePartyId();
     if (partyId) {
       socket.emit("ready:status", { partyId, ready: false });
     } else {

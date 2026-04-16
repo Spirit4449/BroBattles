@@ -115,8 +115,55 @@ function registerPartyEvents(
         "SELECT * FROM parties WHERE party_id = ? LIMIT 1",
         [partyId],
       );
-      const partyStatus = String(partyRows[0]?.status || "").toLowerCase();
-      if (partyStatus === PARTY_STATUS.LIVE) return;
+      let partyStatus = String(partyRows[0]?.status || "").toLowerCase();
+      if (partyStatus === PARTY_STATUS.LIVE) {
+        const liveRows = await db.runQuery(
+          `SELECT m.match_id
+             FROM matches m
+             JOIN match_participants mp ON mp.match_id = m.match_id
+            WHERE mp.party_id = ? AND m.status = 'live'
+            LIMIT 1`,
+          [partyId],
+        );
+        if (!liveRows.length) {
+          await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
+          partyStatus = PARTY_STATUS.IDLE;
+          console.warn(
+            `[party:${partyId}] recovered stale live status during ready toggle`,
+          );
+        } else {
+          const liveMatchId = Number(liveRows[0]?.match_id || 0);
+          const participantRows = liveMatchId
+            ? await db.runQuery(
+                `SELECT u.name, u.status
+                   FROM match_participants mp
+                   JOIN users u ON u.user_id = mp.user_id
+                  WHERE mp.match_id = ? AND mp.party_id = ?`,
+                [liveMatchId, partyId],
+              )
+            : [];
+          const hasActiveBattleParticipant = participantRows.some((row) =>
+            String(row?.status || "")
+              .trim()
+              .toLowerCase()
+              .includes("in battle"),
+          );
+
+          if (liveMatchId && !hasActiveBattleParticipant) {
+            await db.runQuery(
+              "UPDATE matches SET status = 'cancelled' WHERE match_id = ? AND status = 'live'",
+              [liveMatchId],
+            );
+            await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
+            partyStatus = PARTY_STATUS.IDLE;
+            console.warn(
+              `[party:${partyId}] cancelled stale live match ${liveMatchId} during ready toggle`,
+            );
+          } else {
+            return;
+          }
+        }
+      }
 
       await partyPresence.setUserPresence(
         uname,

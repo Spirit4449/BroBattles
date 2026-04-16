@@ -93,6 +93,8 @@ class GameRoom {
     );
     this._readyAcks = new Set(); // user_id set
     this._startTimeout = null; // NodeJS timer for starting phase
+    this._abandonTimer = null;
+    this.ABANDON_MATCH_GRACE_MS = 15000;
 
     // Powerups + timed effects (server authoritative)
     this._powerups = new Map(); // id -> { id, type, x, y, spawnedAt, expiresAt }
@@ -426,6 +428,7 @@ class GameRoom {
     this.sendGameStateToPlayer(socket);
 
     // Start game if all players are present
+    this._cancelAbandonTimer("player_joined");
     if (
       this.players.size === this.matchData.players.length &&
       this.status === "waiting"
@@ -468,6 +471,152 @@ class GameRoom {
         playersRemaining: this.players.size,
       });
     }
+
+    this._scheduleAbandonIfNoHumansConnected();
+  }
+
+  _hasConnectedHumanPlayers() {
+    for (const playerData of this.players.values()) {
+      if (!playerData || playerData.isBot) continue;
+      if (playerData.connected === false) continue;
+      return true;
+    }
+    return false;
+  }
+
+  _cancelAbandonTimer(reason = "clear") {
+    if (!this._abandonTimer) return;
+    try {
+      clearTimeout(this._abandonTimer);
+    } catch (_) {}
+    this._abandonTimer = null;
+    if (!this._netTestEnabled) {
+      console.log(
+        `[GameRoom ${this.matchId}] abandon timer cleared (${reason})`,
+      );
+    }
+  }
+
+  _scheduleAbandonIfNoHumansConnected() {
+    if (this.status === "finished") return;
+    if (this._hasConnectedHumanPlayers()) {
+      this._cancelAbandonTimer("humans_still_connected");
+      return;
+    }
+    if (this._abandonTimer) return;
+
+    if (!this._netTestEnabled) {
+      console.warn(
+        `[GameRoom ${this.matchId}] no connected humans; scheduling abandonment in ${this.ABANDON_MATCH_GRACE_MS}ms`,
+      );
+    }
+
+    this._abandonTimer = setTimeout(() => {
+      this._abandonTimer = null;
+      if (this.status === "finished") return;
+      if (this._hasConnectedHumanPlayers()) return;
+      void this._cancelMatchAsAbandoned("All players left the match");
+    }, this.ABANDON_MATCH_GRACE_MS);
+  }
+
+  async _cancelMatchAsAbandoned(reason) {
+    if (this.status === "finished") return;
+    this.status = "finished";
+    this._loopRunning = false;
+
+    if (this._pendingVictoryFinishTimeout) {
+      try {
+        clearTimeout(this._pendingVictoryFinishTimeout);
+      } catch (_) {}
+      this._pendingVictoryFinishTimeout = null;
+      this._pendingVictoryOutcomeKey = null;
+    }
+    if (this._startTimeout) {
+      try {
+        clearTimeout(this._startTimeout);
+      } catch (_) {}
+      this._startTimeout = null;
+    }
+
+    try {
+      await this.db.runQuery(
+        "UPDATE matches SET status = 'cancelled' WHERE match_id = ? AND status = 'live'",
+        [this.matchId],
+      );
+    } catch (e) {
+      console.warn(
+        `[GameRoom ${this.matchId}] failed to mark match cancelled on abandonment`,
+        e?.message,
+      );
+    }
+
+    try {
+      const participants = await this.db.runQuery(
+        `SELECT mp.user_id, mp.party_id, u.name
+           FROM match_participants mp
+           JOIN users u ON u.user_id = mp.user_id
+          WHERE mp.match_id = ?`,
+        [this.matchId],
+      );
+
+      if (participants.length) {
+        const userIds = participants
+          .map((p) => Number(p.user_id))
+          .filter((id) => Number.isFinite(id));
+        if (userIds.length) {
+          const placeholders = userIds.map(() => "?").join(",");
+          await this.db.runQuery(
+            `UPDATE users SET status='online' WHERE user_id IN (${placeholders})`,
+            userIds,
+          );
+        }
+
+        const partyIds = [
+          ...new Set(
+            participants
+              .map((p) => Number(p.party_id))
+              .filter((id) => Number.isFinite(id) && id > 0),
+          ),
+        ];
+        if (partyIds.length) {
+          if (typeof this.db.setPartiesStatus === "function") {
+            await this.db.setPartiesStatus(partyIds, "idle");
+          } else {
+            const ph = partyIds.map(() => "?").join(",");
+            await this.db.runQuery(
+              `UPDATE parties SET status='idle' WHERE party_id IN (${ph})`,
+              partyIds,
+            );
+          }
+        }
+
+        for (const p of participants) {
+          const pid = Number(p.party_id);
+          if (!Number.isFinite(pid) || pid <= 0) continue;
+          this.io.to(`party:${pid}`).emit("status:update", {
+            partyId: pid,
+            name: p.name,
+            status: "online",
+          });
+          this.io.to(`party:${pid}`).emit("match:cancelled", {
+            reason: reason || "Match cancelled",
+          });
+        }
+      }
+    } catch (e) {
+      console.warn(
+        `[GameRoom ${this.matchId}] failed to restore post-abandonment state`,
+        e?.message,
+      );
+    }
+
+    if (!this._netTestEnabled) {
+      console.warn(
+        `[GameRoom ${this.matchId}] cancelled abandoned live match (${reason || "no reason"})`,
+      );
+    }
+
+    this.cleanup();
   }
 
   /**
@@ -1014,6 +1163,7 @@ class GameRoom {
    * Clean up room resources
    */
   cleanup() {
+    this._cancelAbandonTimer("cleanup");
     // Stop fixed-step loop
     this._loopRunning = false;
     if (this.gameLoop) {
