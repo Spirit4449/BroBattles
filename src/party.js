@@ -1,6 +1,7 @@
 import { sonner } from "./lib/sonner.js";
 import socket, { ensureSocketConnected, waitForConnect } from "./socket";
 import { getSharedSelectionPopupShell } from "./lib/selectionPopupShell.js";
+import { wireFullscreenToggles } from "./lib/fullscreen.js";
 import {
   getLobbyCharacterOffsetY,
   getMapSelectPreviewAsset,
@@ -24,6 +25,8 @@ import {
   normalizeGameSelection,
   selectionToLegacyMode,
 } from "./lib/gameSelectionCatalog.js";
+
+wireFullscreenToggles();
 
 // Track last known party roster to detect joins/leaves
 let __partyRosterNames = null; // Set<string> of member names

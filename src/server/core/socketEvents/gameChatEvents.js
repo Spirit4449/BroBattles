@@ -34,10 +34,15 @@ function registerGameChatEvents(gameRoom, socket) {
         cb?.({ ok: false, error: "empty_message" });
         return;
       }
+      const audience =
+        String(payload?.scope || "team").toLowerCase() === "all"
+          ? "all"
+          : "team";
       const message = {
         id: `${Date.now()}-${gameRoom._chatSeq++}`,
         matchId: Number(gameRoom.matchId),
         body,
+        scope: audience,
         createdAt: new Date().toISOString(),
         sender: {
           name: player.name,
@@ -46,9 +51,14 @@ function registerGameChatEvents(gameRoom, socket) {
           team: String(player.team || "team1"),
         },
       };
-      gameRoom.io
-        .to(`game:${gameRoom.matchId}`)
-        .emit("game:chat:message", message);
+      if (audience === "all") {
+        gameRoom.io
+          .to(`game:${gameRoom.matchId}`)
+          .emit("game:chat:message", message);
+      } else {
+        const teamRoom = `game:${gameRoom.matchId}:team:${String(player.team || "team1")}`;
+        gameRoom.io.to(teamRoom).emit("game:chat:message", message);
+      }
       cb?.({ ok: true, message });
     } catch (error) {
       cb?.({ ok: false, error: error?.message || "Failed to send game chat" });

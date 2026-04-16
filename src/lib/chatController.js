@@ -1,7 +1,7 @@
 import { buildProfileIconUrl } from "./profileIconAssets.js";
 import { sonner } from "./sonner.js";
 
-const GAME_CHAT_RECENT_LIMIT = 8;
+const GAME_CHAT_RECENT_LIMIT = 40;
 const LOBBY_TYPING_IDLE_STOP_MS = 1000;
 const LOBBY_TYPING_HEARTBEAT_MS = 850;
 const LOBBY_TYPING_STALE_MS = 4000;
@@ -142,7 +142,7 @@ function makeChatShell({
   panel.innerHTML = `
     <div class="bb-chat-header">
       <div>
-        <h2 class="bb-chat-title">Chat</h2>
+        <h2 class="bb-chat-title">Chat (/)</h2>
         <div class="bb-chat-subtitle">Party only</div>
       </div>
       <div class="bb-chat-header-actions">
@@ -155,7 +155,7 @@ function makeChatShell({
       <div class="bb-chat-composer">
         <div class="bb-chat-reply-banner hidden"></div>
         <div class="bb-chat-input-row">
-          <textarea class="bb-chat-textarea" rows="2" maxlength="500" placeholder="Write a message..."></textarea>
+          <textarea class="bb-chat-textarea" rows="1" maxlength="500" placeholder="Write a message..."></textarea>
           <button type="button" class="bb-chat-send">Send</button>
         </div>
         <div class="bb-chat-typing hidden" aria-live="polite">
@@ -170,9 +170,9 @@ function makeChatShell({
   `;
 
   root.appendChild(backdrop);
-  root.appendChild(launcher);
   root.appendChild(panel);
   document.body.appendChild(root);
+  document.body.appendChild(launcher);
 
   return {
     root,
@@ -348,6 +348,49 @@ function renderPartyChatMessage(
     row.appendChild(bubble);
   }
 
+  return row;
+}
+
+function normalizeGameTeam(team) {
+  const raw = String(team || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (raw === "1" || raw === "team1" || raw === "blue") return "team1";
+  if (raw === "2" || raw === "team2" || raw === "red") return "team2";
+  return raw;
+}
+
+function renderGameChatLineMessage(message, currentUserName, localTeam) {
+  const row = document.createElement("article");
+  const senderName = String(message?.sender?.name || "Player");
+  const bodyText = String(message?.body || "").trim();
+  const scope = String(message?.scope || "team").toLowerCase() === "all" ? "all" : "team";
+  const isSelf =
+    senderName.trim().toLowerCase() ===
+    String(currentUserName || "")
+      .trim()
+      .toLowerCase();
+  const senderTeam = normalizeGameTeam(message?.sender?.team);
+  const userTeam = normalizeGameTeam(localTeam || "team1") || "team1";
+  const teamClass =
+    scope === "all"
+      ? senderTeam && senderTeam === userTeam
+        ? " is-team-blue"
+        : isSelf
+          ? " is-team-blue"
+          : " is-team-red"
+      : " is-team-blue";
+  row.className = `bb-chat-game-line${isSelf ? " is-self" : ""}${teamClass}`;
+
+  const name = document.createElement("span");
+  name.className = "bb-chat-game-line-name";
+  name.textContent = isSelf ? `${senderName} (You):` : `${senderName}:`;
+
+  const body = document.createElement("span");
+  body.className = "bb-chat-game-line-body";
+  body.textContent = bodyText;
+
+  row.appendChild(name);
+  row.appendChild(body);
   return row;
 }
 
@@ -1340,6 +1383,7 @@ export function createLobbyChatController({
       }
       state.bubbleTimers.clear();
       ui.root.remove();
+      ui.launcher.remove();
       viewersPopup.remove();
     },
   };
@@ -1356,10 +1400,24 @@ export function createGameChatController({
   const state = {
     isOpen: false,
     suppressed: false,
-    unreadCount: 0,
-    messages: [],
-    idleTimer: null,
-    pruneTimer: null,
+    inputCaptureActive: false,
+    audience: "team",
+    hovering: false,
+    hoverUntil: 0,
+    typingUntil: 0,
+    noticeUntil: 0,
+    sentUntil: 0,
+    unreadByScope: {
+      team: 0,
+      all: 0,
+    },
+    cooldownTimer: null,
+    cooldownDraftValue: "",
+    messagesByScope: {
+      team: [],
+      all: [],
+    },
+    opacityTimer: null,
   };
 
   const ui = makeChatShell({
@@ -1370,16 +1428,72 @@ export function createGameChatController({
   });
   ui.clearReplyBtn.style.display = "none";
   ui.replyBanner.style.display = "none";
+  ui.titleEl.textContent = "Team Chat";
+  if (ui.subtitleEl) ui.subtitleEl.style.display = "none";
+  ui.textarea.placeholder = 'Write a message... (Press "/" to focus)';
+
+  const headerActions = ui.panel.querySelector(".bb-chat-header-actions");
+  const audienceSelect = document.createElement("select");
+  audienceSelect.className = "bb-chat-audience-select";
+  audienceSelect.setAttribute("aria-label", "Chat audience");
+  audienceSelect.innerHTML = `
+    <option value="team">Team</option>
+    <option value="all">All Players</option>
+  `;
+  if (headerActions) {
+    headerActions.insertBefore(audienceSelect, ui.closeBtn || null);
+  }
+
+  function normalizeScope(scope) {
+    return String(scope || "team").toLowerCase() === "all" ? "all" : "team";
+  }
 
   function setUnreadBadge(count) {
-    state.unreadCount = Math.max(0, Number(count) || 0);
-    if (state.unreadCount > 0) {
-      ui.badge.textContent = String(state.unreadCount);
+    const total = Math.max(0, Number(count) || 0);
+    if (total > 0) {
+      ui.badge.textContent = String(total);
       ui.badge.classList.remove("hidden");
     } else {
       ui.badge.textContent = "";
       ui.badge.classList.add("hidden");
     }
+  }
+
+  function syncUnreadUi() {
+    const teamCount = Math.max(0, Number(state.unreadByScope.team) || 0);
+    const allCount = Math.max(0, Number(state.unreadByScope.all) || 0);
+    const teamOpt = audienceSelect.querySelector('option[value="team"]');
+    const allOpt = audienceSelect.querySelector('option[value="all"]');
+    if (teamOpt) {
+      teamOpt.textContent = teamCount > 0 ? `Team (${teamCount})` : "Team";
+    }
+    if (allOpt) {
+      allOpt.textContent = allCount > 0 ? `All Players (${allCount})` : "All Players";
+    }
+    setUnreadBadge(teamCount + allCount);
+  }
+
+  function incrementUnread(scope) {
+    const key = normalizeScope(scope);
+    state.unreadByScope[key] = Math.max(
+      0,
+      (Number(state.unreadByScope[key]) || 0) + 1,
+    );
+    syncUnreadUi();
+  }
+
+  function clearUnread(scope) {
+    const key = normalizeScope(scope);
+    if ((Number(state.unreadByScope[key]) || 0) <= 0) return;
+    state.unreadByScope[key] = 0;
+    syncUnreadUi();
+  }
+
+  function syncAudienceUi() {
+    audienceSelect.value = state.audience;
+    ui.titleEl.textContent =
+      state.audience === "all" ? "All Players Chat" : "Team Chat";
+    syncUnreadUi();
   }
 
   function syncSceneKeyboardEnabled() {
@@ -1389,74 +1503,116 @@ export function createGameChatController({
     }
   }
 
+  function setInputCapture(active) {
+    state.inputCaptureActive = !!active;
+    if (setChatInputActive) setChatInputActive(state.inputCaptureActive);
+    syncSceneKeyboardEnabled();
+    syncGameChatOpacity();
+    scheduleOpacityTick();
+  }
+
+  function clearOpacityTimer() {
+    if (state.opacityTimer) {
+      window.clearTimeout(state.opacityTimer);
+      state.opacityTimer = null;
+    }
+  }
+
+  function scheduleOpacityTick() {
+    clearOpacityTimer();
+    const now = Date.now();
+    const deadlines = [
+      Number(state.hoverUntil) || 0,
+      Number(state.typingUntil) || 0,
+      Number(state.noticeUntil) || 0,
+      Number(state.sentUntil) || 0,
+    ].filter((ts) => ts > now);
+    if (!deadlines.length) return;
+    const nextAt = Math.min(...deadlines);
+    const waitMs = Math.max(16, nextAt - now + 8);
+    state.opacityTimer = window.setTimeout(() => {
+      state.opacityTimer = null;
+      syncGameChatOpacity();
+      scheduleOpacityTick();
+    }, waitMs);
+  }
+
+  function bumpOpacity(kind = "notice", durationMs = 500) {
+    const until = Date.now() + Math.max(0, Number(durationMs) || 0);
+    if (kind === "hover") {
+      state.hoverUntil = Math.max(Number(state.hoverUntil) || 0, until);
+    } else if (kind === "typing") {
+      state.typingUntil = Math.max(Number(state.typingUntil) || 0, until);
+    } else if (kind === "sent") {
+      state.sentUntil = Math.max(Number(state.sentUntil) || 0, until);
+    } else {
+      state.noticeUntil = Math.max(Number(state.noticeUntil) || 0, until);
+    }
+    syncGameChatOpacity();
+    scheduleOpacityTick();
+  }
+
+  function syncGameChatOpacity() {
+    const now = Date.now();
+    const shouldBeFull =
+      !!state.inputCaptureActive ||
+      !!state.hovering ||
+      now < Number(state.hoverUntil || 0) ||
+      now < Number(state.typingUntil || 0) ||
+      now < Number(state.sentUntil || 0);
+    const shouldBeNoticed =
+      !shouldBeFull && state.isOpen && now < Number(state.noticeUntil || 0);
+    ui.panel.classList.toggle("is-active", shouldBeFull);
+    ui.panel.classList.toggle("is-notice", shouldBeNoticed);
+    ui.panel.classList.toggle(
+      "is-idle",
+      state.isOpen && !shouldBeFull && !shouldBeNoticed && !state.suppressed,
+    );
+  }
+
   function setActive(active) {
     state.isOpen = !!active;
     ui.panel.classList.toggle("is-open", state.isOpen);
     ui.panel.classList.toggle("is-muted", !state.isOpen && state.suppressed);
     ui.panel.classList.toggle("is-idle", !state.isOpen && !state.suppressed);
-    if (setChatInputActive) setChatInputActive(state.isOpen);
-    syncSceneKeyboardEnabled();
+    syncGameChatOpacity();
     if (state.isOpen) {
+      clearUnread(state.audience);
       ui.textarea.focus();
-      ui.panel.classList.remove("is-idle");
-      ui.panel.classList.remove("is-muted");
+      setInputCapture(true);
+      return;
     }
+    setInputCapture(false);
+    ui.textarea.blur();
   }
 
   function setSuppressed(suppressed) {
     state.suppressed = !!suppressed;
     if (state.suppressed) {
       state.isOpen = false;
-      if (setChatInputActive) setChatInputActive(false);
+      setInputCapture(false);
+      ui.textarea.blur();
       ui.panel.classList.add("is-muted");
       ui.panel.classList.remove("is-open");
-      setUnreadBadge(0);
+      syncGameChatOpacity();
     } else {
       ui.panel.classList.remove("is-muted");
-      if (!state.isOpen) {
-        ui.panel.classList.add("is-idle");
-      }
+      syncGameChatOpacity();
     }
-    syncSceneKeyboardEnabled();
-  }
-
-  function resetIdleTimer() {
-    clearTimeout(state.idleTimer);
-    clearTimeout(state.pruneTimer);
-    if (state.suppressed) {
-      ui.panel.classList.add("is-muted");
-      ui.panel.classList.remove("is-open", "is-idle");
-      return;
-    }
-    ui.panel.classList.remove("is-idle");
-    ui.panel.classList.remove("is-muted");
-    state.idleTimer = setTimeout(() => {
-      if (state.suppressed) return;
-      if (!state.isOpen) {
-        ui.panel.classList.add("is-idle");
-      }
-    }, 3000);
-    state.pruneTimer = setTimeout(() => {
-      if (!state.suppressed) {
-        ui.panel.classList.add("is-idle");
-      }
-    }, 4500);
   }
 
   function renderMessages() {
     ui.messagesEl.innerHTML = "";
-    const now = Date.now();
     const currentUser = String(getUsername?.() || "");
-    const visibleMessages = state.messages.filter(
-      (message) => Number(message?.expiresAt || 0) > now,
-    );
-    state.messages = visibleMessages;
-    for (const message of visibleMessages) {
+    const localTeam = getGameData?.()?.yourTeam || "team1";
+    const selectedAudience = String(state.audience || "team").toLowerCase();
+    const list =
+      selectedAudience === "all"
+        ? state.messagesByScope.all
+        : state.messagesByScope.team;
+    for (const message of list) {
       ui.messagesEl.appendChild(
-        renderPartyChatMessage(message, {
-          currentUserName: currentUser,
-          compact: true,
-        }),
+        renderGameChatLineMessage(message, currentUser, localTeam),
       );
     }
     ui.messagesEl.scrollTop = ui.messagesEl.scrollHeight;
@@ -1464,18 +1620,57 @@ export function createGameChatController({
 
   function addMessage(message) {
     const id = String(message?.id || "");
-    if (!id) return;
-    const exists = state.messages.some((item) => String(item?.id || "") === id);
-    if (exists) return;
-    state.messages.push({
-      ...message,
-      expiresAt: Date.now() + 12000,
-    });
-    state.messages = state.messages.slice(-GAME_CHAT_RECENT_LIMIT);
-    renderMessages();
-    if (!state.suppressed) {
-      resetIdleTimer();
+    if (!id) return false;
+    const scope =
+      String(message?.scope || "team").toLowerCase() === "all"
+        ? "all"
+        : "team";
+    const bucket =
+      scope === "all" ? state.messagesByScope.all : state.messagesByScope.team;
+    const exists = bucket.some((item) => String(item?.id || "") === id);
+    if (exists) return false;
+    bucket.push({ ...message, scope });
+    if (bucket.length > GAME_CHAT_RECENT_LIMIT) {
+      bucket.splice(0, bucket.length - GAME_CHAT_RECENT_LIMIT);
     }
+    return true;
+  }
+
+  function clearCooldownFeedback() {
+    if (state.cooldownTimer) {
+      window.clearTimeout(state.cooldownTimer);
+      state.cooldownTimer = null;
+    }
+    if (!ui.textarea.disabled) return;
+    ui.textarea.disabled = false;
+    ui.sendBtn.disabled = false;
+    ui.textarea.value = String(state.cooldownDraftValue || "");
+    ui.textarea.placeholder = 'Write a message... (Press "/" to focus)';
+    state.cooldownDraftValue = "";
+  }
+
+  function applyInlineRateLimitMessage(message, durationMs = 2200) {
+    const duration = Math.max(900, Number(durationMs) || 2200);
+    if (!ui.textarea.disabled) {
+      state.cooldownDraftValue = String(ui.textarea.value || "");
+    }
+    ui.textarea.disabled = true;
+    ui.sendBtn.disabled = true;
+    ui.textarea.value = String(message || "Slow down.");
+    ui.textarea.placeholder = ui.textarea.value;
+
+    if (state.cooldownTimer) {
+      window.clearTimeout(state.cooldownTimer);
+      state.cooldownTimer = null;
+    }
+    state.cooldownTimer = window.setTimeout(() => {
+      state.cooldownTimer = null;
+      ui.textarea.disabled = false;
+      ui.sendBtn.disabled = false;
+      ui.textarea.value = String(state.cooldownDraftValue || "");
+      ui.textarea.placeholder = 'Write a message... (Press "/" to focus)';
+      state.cooldownDraftValue = "";
+    }, duration);
   }
 
   async function sendMessage() {
@@ -1484,41 +1679,58 @@ export function createGameChatController({
     const payload = {
       body,
       matchId: Number(getGameData?.()?.gameId || 0) || null,
+      scope: state.audience,
     };
     ui.sendBtn.disabled = true;
     try {
       const ack = await new Promise((resolve, reject) => {
         socket?.emit?.("game:chat:send", payload, (result) => {
-          if (result?.ok) resolve(result.message);
-          else reject(new Error(result?.error || "Failed to send chat"));
+          if (result?.ok) {
+            resolve(result.message);
+            return;
+          }
+          const error = new Error(result?.error || "Failed to send chat");
+          error.payload = result || {};
+          reject(error);
         });
       });
       ui.textarea.value = "";
       addMessage(ack);
+      renderMessages();
+      clearUnread(state.audience);
+      bumpOpacity("sent", 2000);
     } catch (error) {
+      const errType = String(error?.payload?.type || "").toLowerCase();
+      const banWarning = String(error?.payload?.banWarning || "").trim();
+      const base = String(error?.message || "Failed to send chat");
+      const finalMessage = banWarning ? `${base} ${banWarning}` : base;
+      if (errType === "warn" || errType === "chat_limited") {
+        applyInlineRateLimitMessage(finalMessage, 2200);
+      } else {
+        applyInlineRateLimitMessage(base, 1800);
+      }
       console.warn("[chat] game send failed", error?.message || error);
     } finally {
-      ui.sendBtn.disabled = false;
+      if (!ui.textarea.disabled) {
+        ui.sendBtn.disabled = false;
+      }
+      ui.textarea.blur();
+      setInputCapture(false);
     }
   }
 
   function openComposer() {
     setSuppressed(false);
     setActive(true);
-    resetIdleTimer();
   }
 
   function closeComposer() {
     setActive(false);
-    if (setChatInputActive) setChatInputActive(false);
-    syncSceneKeyboardEnabled();
-    resetIdleTimer();
   }
 
   ui.launcher.addEventListener("click", () => {
     if (state.suppressed) {
       setSuppressed(false);
-      setUnreadBadge(0);
       openComposer();
       return;
     }
@@ -1528,7 +1740,35 @@ export function createGameChatController({
   ui.sendBtn.addEventListener("click", () => void sendMessage());
   ui.closeBtn.addEventListener("click", () => setSuppressed(true));
   ui.clearReplyBtn.addEventListener("click", () => {});
+  audienceSelect.addEventListener("change", () => {
+    state.audience = normalizeScope(audienceSelect.value);
+    syncAudienceUi();
+    renderMessages();
+    if (state.isOpen && !state.suppressed) {
+      clearUnread(state.audience);
+    }
+    bumpOpacity("notice", 500);
+  });
+  ui.panel.addEventListener("mouseenter", () => {
+    state.hovering = true;
+    bumpOpacity("hover", 500);
+  });
+  ui.panel.addEventListener("mouseleave", () => {
+    state.hovering = false;
+    bumpOpacity("hover", 500);
+  });
+  ui.textarea.addEventListener("focus", () => {
+    setInputCapture(true);
+    bumpOpacity("typing", 500);
+  });
+  ui.textarea.addEventListener("blur", () => {
+    setInputCapture(false);
+  });
+  ui.textarea.addEventListener("input", () => {
+    bumpOpacity("typing", 500);
+  });
   ui.textarea.addEventListener("keydown", (event) => {
+    event.stopPropagation();
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void sendMessage();
@@ -1538,9 +1778,40 @@ export function createGameChatController({
       setSuppressed(true);
     }
   });
+  ui.textarea.addEventListener("keyup", (event) => {
+    event.stopPropagation();
+  });
+
+  const outsidePointerHandler = (event) => {
+    if (!state.isOpen) return;
+    const target = event.target;
+    if (ui.panel.contains(target) || ui.launcher.contains(target)) return;
+    if (document.activeElement === ui.textarea) {
+      ui.textarea.blur();
+    }
+    setInputCapture(false);
+    syncGameChatOpacity();
+  };
+  document.addEventListener("pointerdown", outsidePointerHandler, true);
 
   const keyHandler = (event) => {
     const target = event.target;
+    if (event.key === "/" || event.code === "Slash") {
+      const isChatTextarea =
+        target === ui.textarea ||
+        (target && target.tagName === "TEXTAREA");
+      if (isChatTextarea) return;
+      event.preventDefault();
+      if (!state.isOpen || state.suppressed) {
+        setSuppressed(false);
+        openComposer();
+      } else {
+        ui.textarea.focus();
+        setInputCapture(true);
+      }
+      bumpOpacity("typing", 500);
+      return;
+    }
     if (
       target &&
       (target.tagName === "INPUT" ||
@@ -1551,15 +1822,6 @@ export function createGameChatController({
       return;
     }
     if (event.defaultPrevented) return;
-    if ((event.key === "/" || event.code === "Slash") && !state.isOpen) {
-      event.preventDefault();
-      if (state.suppressed) {
-        setSuppressed(false);
-        setUnreadBadge(0);
-      }
-      openComposer();
-      return;
-    }
     if (event.key === "Escape" && state.isOpen) {
       event.preventDefault();
       setSuppressed(true);
@@ -1568,25 +1830,39 @@ export function createGameChatController({
   document.addEventListener("keydown", keyHandler, true);
 
   socket?.on?.("game:chat:message", (message) => {
-    addMessage(message);
+    const added = addMessage(message);
+    if (!added) return;
+    const incomingScope = normalizeScope(message?.scope);
+    const currentScope = normalizeScope(state.audience);
     if (state.suppressed) {
-      setUnreadBadge(state.unreadCount + 1);
+      incrementUnread(incomingScope);
+      bumpOpacity("notice", 500);
       return;
     }
-    if (!state.isOpen) {
-      ui.panel.classList.add("is-idle");
+    if (incomingScope === currentScope) {
+      renderMessages();
+      clearUnread(currentScope);
+      bumpOpacity("notice", 500);
+      return;
     }
+    incrementUnread(incomingScope);
   });
 
-  setSuppressed(false);
-  resetIdleTimer();
+  syncAudienceUi();
+  setSuppressed(true);
+  syncGameChatOpacity();
 
   return {
     open: openComposer,
     suppress: () => setSuppressed(true),
     destroy: () => {
       document.removeEventListener("keydown", keyHandler, true);
+      document.removeEventListener("pointerdown", outsidePointerHandler, true);
+      setInputCapture(false);
+      clearCooldownFeedback();
+      clearOpacityTimer();
       ui.root.remove();
+      ui.launcher.remove();
     },
   };
 }

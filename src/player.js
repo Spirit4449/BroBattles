@@ -1982,14 +1982,37 @@ export function setLocalNetStateFlusher(fn) {
 }
 
 export function setChatInputActive(active) {
+  const resetKeyState = (key) => {
+    try {
+      key?.reset?.();
+      if (key) {
+        key.isDown = false;
+        key.isUp = true;
+      }
+    } catch (_) {}
+  };
+
   chatInputActive = !!active;
   if (chatInputActive) {
+    resetPointerAttackAim();
     try {
       if (player?.body) {
         player.setVelocityX(0);
         player.setAccelerationX(0);
+        player.setDragX(0);
       }
     } catch (_) {}
+    try {
+      scene?.input?.keyboard?.resetKeys?.();
+    } catch (_) {}
+    resetKeyState(cursors?.left);
+    resetKeyState(cursors?.right);
+    resetKeyState(cursors?.up);
+    resetKeyState(cursors?.down);
+    resetKeyState(keySpace);
+    resetKeyState(keyJ);
+    resetKeyState(keyI);
+    resetKeyState(keyE);
     networkInputState = {
       ...networkInputState,
       left: false,

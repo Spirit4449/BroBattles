@@ -2,10 +2,13 @@ import "./styles/profile.css";
 import "./styles/selectionPopup.css";
 import { showUiConfirm } from "./lib/uiConfirm.js";
 import { sonner } from "./lib/sonner.js";
+import { wireFullscreenToggles } from "./lib/fullscreen.js";
 import {
   buildProfileIconAlt,
   buildProfileIconUrl,
 } from "./lib/profileIconAssets.js";
+
+wireFullscreenToggles();
 
 let profileData = null;
 let cardsCatalog = null;

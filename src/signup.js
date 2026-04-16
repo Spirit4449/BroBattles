@@ -1,5 +1,8 @@
 import { getDisplayName } from "./lib/cookies.js";
+import { wireFullscreenToggles } from "./lib/fullscreen.js";
 import "./styles/accounts.css";
+
+wireFullscreenToggles();
 
 // -----------------------------
 // Config (mirror server rules)

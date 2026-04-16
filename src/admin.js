@@ -1,4 +1,7 @@
 import "./styles/admin.css";
+import { wireFullscreenToggles } from "./lib/fullscreen.js";
+
+wireFullscreenToggles();
 
 const state = {
   stats: null,

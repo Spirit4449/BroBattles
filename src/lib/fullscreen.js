@@ -1,4 +1,19 @@
 let fullscreenWirePromise = null;
+const FULLSCREEN_INTENT_KEY = "bb_fullscreen_intent";
+
+function readFullscreenIntent() {
+  try {
+    return localStorage.getItem(FULLSCREEN_INTENT_KEY) === "1";
+  } catch (_) {
+    return false;
+  }
+}
+
+function writeFullscreenIntent(enabled) {
+  try {
+    localStorage.setItem(FULLSCREEN_INTENT_KEY, enabled ? "1" : "0");
+  } catch (_) {}
+}
 
 function getFullscreenElement() {
   return (
@@ -60,6 +75,73 @@ function syncFullscreenButtons() {
   });
 }
 
+function armFullscreenRestoreOnInteraction() {
+  const events = ["pointerdown", "keydown", "touchstart"];
+  let restoreComplete = false;
+
+  const tryRestore = async () => {
+    if (restoreComplete) return;
+    if (!readFullscreenIntent()) {
+      cleanup();
+      return;
+    }
+    if (getFullscreenElement()) {
+      cleanup();
+      syncFullscreenButtons();
+      return;
+    }
+
+    try {
+      const didEnter = await requestFullscreen(
+        document.documentElement || document.body,
+      );
+      if (didEnter) {
+        cleanup();
+        syncFullscreenButtons();
+      }
+    } catch (_) {}
+  };
+
+  const onInteraction = () => {
+    void tryRestore();
+  };
+
+  const cleanup = () => {
+    if (restoreComplete) return;
+    restoreComplete = true;
+    events.forEach((name) => {
+      document.removeEventListener(name, onInteraction, true);
+    });
+  };
+
+  events.forEach((name) => {
+    document.addEventListener(name, onInteraction, {
+      once: true,
+      capture: true,
+      passive: true,
+    });
+  });
+}
+
+async function restoreFullscreenFromIntent() {
+  if (!readFullscreenIntent() || getFullscreenElement()) {
+    syncFullscreenButtons();
+    return;
+  }
+
+  try {
+    const didEnter = await requestFullscreen(
+      document.documentElement || document.body,
+    );
+    if (didEnter) {
+      syncFullscreenButtons();
+      return;
+    }
+  } catch (_) {}
+
+  armFullscreenRestoreOnInteraction();
+}
+
 function bindFullscreenButton(button) {
   if (!button || button.dataset.bbFullscreenBound === "true") return;
   button.dataset.bbFullscreenBound = "true";
@@ -69,8 +151,14 @@ function bindFullscreenButton(button) {
     try {
       if (getFullscreenElement()) {
         await exitFullscreen();
+        writeFullscreenIntent(false);
       } else {
-        await requestFullscreen(document.documentElement || document.body);
+        const didEnter = await requestFullscreen(
+          document.documentElement || document.body,
+        );
+        if (didEnter) {
+          writeFullscreenIntent(true);
+        }
       }
     } catch (_) {}
     syncFullscreenButtons();
@@ -94,6 +182,7 @@ export function wireFullscreenToggles() {
     document.addEventListener("webkitfullscreenchange", syncFullscreenButtons);
     document.addEventListener("mozfullscreenchange", syncFullscreenButtons);
     document.addEventListener("MSFullscreenChange", syncFullscreenButtons);
+    void restoreFullscreenFromIntent();
   };
 
   if (document.readyState === "loading") {

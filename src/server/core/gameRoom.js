@@ -285,6 +285,7 @@ class GameRoom {
       (p) => p.user_id === user.user_id,
     );
     if (existingPlayer) {
+      const teamRoom = `game:${this.matchId}:team:${existingPlayer.team || "team1"}`;
       if (existingPlayer.socketId === socket.id) {
         if (!this._netTestEnabled) {
           console.log(
@@ -292,6 +293,7 @@ class GameRoom {
           );
         }
         socket.join(`game:${this.matchId}`);
+        socket.join(teamRoom);
         this.sendGameStateToPlayer(socket);
         return;
       }
@@ -314,6 +316,7 @@ class GameRoom {
       existingPlayer._lastInputIntent = null;
       this.players.set(socket.id, existingPlayer);
       this._ensureRewardBucket(existingPlayer);
+      socket.join(teamRoom);
       this.io.to(`game:${this.matchId}`).emit("player:reconnected", {
         name: existingPlayer.name,
         username: existingPlayer.name,
@@ -412,6 +415,9 @@ class GameRoom {
 
     // Join socket to game room
     socket.join(`game:${this.matchId}`);
+    socket.join(
+      `game:${this.matchId}:team:${this.players.get(socket.id)?.team || "team1"}`,
+    );
 
     // Set up socket event handlers for this room
     this.setupPlayerSocket(socket);
@@ -438,6 +444,8 @@ class GameRoom {
     if (!playerData) return;
 
     socket.leave(`game:${this.matchId}`);
+    const teamRoom = `game:${this.matchId}:team:${playerData.team || "team1"}`;
+    socket.leave(teamRoom);
     this.players.delete(socket.id);
     playerData.socketId = null;
     playerData.connected = false;
