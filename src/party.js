@@ -1828,7 +1828,9 @@ export function socketInit(options = {}) {
       0,
       Math.min(foundCount, totalCount),
     );
-    const nextPlayers = incomingPlayers.length ? incomingPlayers : fallbackLocalPlayers;
+    const nextPlayers = incomingPlayers.length
+      ? incomingPlayers
+      : fallbackLocalPlayers;
     if (Array.isArray(nextPlayers)) {
       const nextSig = JSON.stringify(
         nextPlayers.map((p) => `${p?.name || ""}:${p?.char_class || ""}`),

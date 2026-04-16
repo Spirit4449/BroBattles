@@ -101,7 +101,8 @@ function createProgressEmitter({ db, io, lastProgress }) {
     for (const viewerTicket of sortedItems) {
       const window = mmrWindowForTicket(viewerTicket);
       const visibleItems = sortedItems.filter(
-        (candidate) => Math.abs(mmrOf(candidate) - mmrOf(viewerTicket)) <= window,
+        (candidate) =>
+          Math.abs(mmrOf(candidate) - mmrOf(viewerTicket)) <= window,
       );
 
       const foundPlayers = Math.min(

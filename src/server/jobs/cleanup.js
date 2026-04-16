@@ -18,7 +18,7 @@ function startCleanupJobs({ db, io }) {
         console.log(
           `[inactive] Removed ${
             names.length
-          } member(s) from party ${partyId}: ${names.join(", ")}`
+          } member(s) from party ${partyId}: ${names.join(", ")}`,
         );
       }
       console.log(`[cleanup] Processing ${byParty.size} affected parties`);
@@ -37,7 +37,7 @@ function startCleanupJobs({ db, io }) {
           console.log(
             `[inactive] Deleted ${
               expired.count
-            } expired guest account(s): ${expired.names.join(", ")}`
+            } expired guest account(s): ${expired.names.join(", ")}`,
           );
           for (const partyId of expired.partyIds || []) {
             await updateOrDeleteParty(io, db, partyId);
@@ -64,9 +64,11 @@ function startCleanupJobs({ db, io }) {
     try {
       const marked = await db.setOfflineIfLastSeenOlderThan(1);
       if (Array.isArray(marked) && marked.length > 0) {
-        const partyIds = [...new Set(marked.map((row) => Number(row.party_id)).filter(Boolean))];
+        const partyIds = [
+          ...new Set(marked.map((row) => Number(row.party_id)).filter(Boolean)),
+        ];
         console.log(
-          `[inactive] Marked ${marked.length} user(s) offline due to last_seen > 1 minute`
+          `[inactive] Marked ${marked.length} user(s) offline due to last_seen > 1 minute`,
         );
         for (const partyId of partyIds) {
           await updateOrDeleteParty(io, db, partyId);
@@ -89,7 +91,7 @@ function startCleanupJobs({ db, io }) {
     try {
       // Find live matches older than 5 minutes
       const old = await db.runQuery(
-        "SELECT match_id FROM matches WHERE status='live' AND created_at < (NOW() - INTERVAL 5 MINUTE)"
+        "SELECT match_id FROM matches WHERE status='live' AND created_at < (NOW() - INTERVAL 5 MINUTE)",
       );
       if (!old || !old.length) return;
 
@@ -99,7 +101,7 @@ function startCleanupJobs({ db, io }) {
       // Mark matches completed
       await db.runQuery(
         `UPDATE matches SET status='completed' WHERE match_id IN (${ph})`,
-        ids
+        ids,
       );
 
       // Reset any involved parties back to idle
@@ -107,14 +109,14 @@ function startCleanupJobs({ db, io }) {
       try {
         const parties = await db.runQuery(
           `SELECT DISTINCT party_id FROM match_participants WHERE match_id IN (${ph}) AND party_id IS NOT NULL`,
-          ids
+          ids,
         );
         partyIds = parties.map((p) => p.party_id).filter(Boolean);
         if (partyIds.length) {
           const ph2 = partyIds.map(() => "?").join(",");
           await db.runQuery(
             `UPDATE parties SET status='idle' WHERE party_id IN (${ph2})`,
-            partyIds
+            partyIds,
           );
         }
       } catch (_) {}
@@ -122,11 +124,11 @@ function startCleanupJobs({ db, io }) {
       // Remove participants for these matches to reflect completion
       await db.runQuery(
         `DELETE FROM match_participants WHERE match_id IN (${ph})`,
-        ids
+        ids,
       );
 
       console.log(
-        `[match:cleanup] Completed ${ids.length} match(es) >5m; reset ${partyIds.length} party(ies)`
+        `[match:cleanup] Completed ${ids.length} match(es) >5m; reset ${partyIds.length} party(ies)`,
       );
     } catch (e) {
       console.warn("match cleanup failed:", e?.message || e);
