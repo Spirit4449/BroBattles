@@ -175,6 +175,11 @@
   line-height: 1;
 }
 
+.bb-chat-close {
+  background: linear-gradient(135deg, #d14b42, #ab2e2e);
+  color: #fff;
+}
+
 .bb-chat-body {
   display: flex;
   flex-direction: column;

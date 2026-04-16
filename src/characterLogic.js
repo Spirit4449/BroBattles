@@ -173,7 +173,7 @@ function ensureCharacterDetailsUi() {
   titleWrap.appendChild(subtitle);
 
   const closeButton = document.createElement("button");
-  closeButton.className = "character-details-close";
+  closeButton.className = "close pixel-menu-button profile-close";
   closeButton.type = "button";
   closeButton.innerHTML = "×";
 
@@ -212,10 +212,11 @@ function ensureCharacterDetailsUi() {
     previewStage: null,
     selectedSkinByCharacter: {},
     currentCharacter: null,
+    keydownHandler: null,
   };
 
   const closeDetails = () => {
-    playSound("cancel2", 0.3);
+    playSound("cursor4", 0.3);
     hideCharacterDetails();
   };
 
@@ -230,11 +231,20 @@ function ensureCharacterDetailsUi() {
 
   popup.addEventListener("click", (e) => e.stopPropagation());
 
-  document.addEventListener("keydown", (e) => {
+  // Remove any old keyboard handler to avoid duplicates
+  if (state.keydownHandler) {
+    document.removeEventListener("keydown", state.keydownHandler);
+  }
+
+  state.keydownHandler = (e) => {
     if (e.key !== "Escape") return;
     if (overlay.style.display === "none" || !overlay.isConnected) return;
+    e.preventDefault();
+    e.stopPropagation();
     closeDetails();
-  });
+  };
+
+  document.addEventListener("keydown", state.keydownHandler);
 
   _characterDetailsUi = state;
   return state;
@@ -317,12 +327,12 @@ function renderCharacterDetails(character) {
       <span class="stat-box-label">Attack</span>
       <span class="stat-box-value">${cardState.currentDamage}</span>
     </div>
+    <div class="stat-box-track"><div class="stat-box-fill" style="width:${Math.max(0, Math.min(100, (cardState.currentDamage / attackMax) * 100))}%"></div></div>
     <div class="stat-box-content">
       ${stats.attackDescription ? `<div class="stat-box-desc">${stats.attackDescription}</div>` : ""}
       <div class="stat-box-detail">Reload: ${(Number(stats.ammoReloadMs || 0) / 1000).toFixed(1)}s</div>
       <div class="stat-box-detail">Ammo: ${stats.ammoCapacity || 0}</div>
     </div>
-    <div class="stat-box-track"><div class="stat-box-fill" style="width:${Math.max(0, Math.min(100, (cardState.currentDamage / attackMax) * 100))}%"></div></div>
   `;
   attackSpecialRow.appendChild(attackBox);
 
@@ -336,11 +346,11 @@ function renderCharacterDetails(character) {
       <span class="stat-box-label">Special</span>
       <span class="stat-box-value">${cardState.currentSpecial}</span>
     </div>
+    <div class="stat-box-track"><div class="stat-box-fill" style="width:${Math.max(0, Math.min(100, (cardState.currentSpecial / specialMax) * 100))}%"></div></div>
     <div class="stat-box-content">
       ${stats.specialDescription ? `<div class="stat-box-desc">${stats.specialDescription}</div>` : ""}
       <div class="stat-box-detail">Charge: ${stats.specialChargeHits || 0} hits</div>
     </div>
-    <div class="stat-box-track"><div class="stat-box-fill" style="width:${Math.max(0, Math.min(100, (cardState.currentSpecial / specialMax) * 100))}%"></div></div>
   `;
   attackSpecialRow.appendChild(specialBox);
 
@@ -555,10 +565,10 @@ export function initializeCharacterSelect(userData) {
 
   const mountCharacterPopup = () => {
     popupShell.mount({
-      titleText: "Choose Your Fighter",
+      titleText: "Choose Your Bro",
       onClose: () => closeCharacterSelect(),
       closeButtonAttrs: { "data-sound": "cancel" },
-      closeButtonText: "Close",
+      closeButtonText: "×",
       contentNode: charactersGrid,
       backgroundNode: particlesCanvas,
     });
@@ -624,6 +634,8 @@ export function initializeCharacterSelect(userData) {
 
   function openCharacterSelect() {
     mountCharacterPopup();
+    // Sync classes (selected/locked/maxed/pricing) whenever chooser opens.
+    refreshUpgradeButtonAffordability();
     popupShell.show();
     emitCharacterMenuStatus(true);
     startParticles();
@@ -650,7 +662,8 @@ function createCharacterCard(character, userData) {
 
   card.classList.toggle(
     "selected",
-    String(userData?.char_class || "") === String(character),
+    String(userData?.char_class || "").toLowerCase() ===
+      String(character).toLowerCase(),
   );
   card.classList.toggle("locked", cardState.isLocked);
   card.classList.toggle("is-maxed", cardState.isMaxed);
@@ -662,6 +675,12 @@ function createCharacterCard(character, userData) {
   const imageWrap = document.createElement("div");
   imageWrap.className = "character-card-image-wrap";
 
+  const profileIcon = document.createElement("img");
+  profileIcon.className = "character-profile-icon";
+  profileIcon.src = profileIconUrl;
+  profileIcon.alt = character;
+  imageWrap.appendChild(profileIcon);
+
   if (!cardState.isLocked && cardState.level > 0 && cardState.level <= 5) {
     const levelIcon = document.createElement("img");
     levelIcon.className = "character-card-level-icon";
@@ -669,12 +688,6 @@ function createCharacterCard(character, userData) {
     levelIcon.alt = `Level ${cardState.level}`;
     card.appendChild(levelIcon);
   }
-
-  const profileIcon = document.createElement("img");
-  profileIcon.className = "character-profile-icon";
-  profileIcon.src = profileIconUrl;
-  profileIcon.alt = character;
-  imageWrap.appendChild(profileIcon);
 
   if (cardState.isLocked) {
     const lockOverlay = document.createElement("div");
@@ -726,19 +739,27 @@ function createCharacterCard(character, userData) {
   const healthStat = document.createElement("div");
   healthStat.className = "character-card-stat";
   healthStat.innerHTML = `
-    <span class="stat-label">HEALTH</span>
-    <span class="stat-value">${cardState.currentHealth}</span>
+    <span class="stat-label"><img height="17" src="/assets/heart.webp" alt="Health" />HEALTH</span>
+    <span class="stat-value health">${cardState.currentHealth}</span>
   `;
 
   const damageStat = document.createElement("div");
   damageStat.className = "character-card-stat";
   damageStat.innerHTML = `
-    <span class="stat-label">ATTACK</span>
-    <span class="stat-value">${cardState.currentDamage}</span>
+    <span class="stat-label"><img height="17" src="/assets/attack.webp" alt="Attack" />ATTACK</span>
+    <span class="stat-value damage">${cardState.currentDamage}</span>
+  `;
+
+  const specialStat = document.createElement("div");
+  specialStat.className = "character-card-stat";
+  specialStat.innerHTML = `
+    <span class="stat-label"><img height="17" src="/assets/special.webp" alt="Special" />SPECIAL</span>
+    <span class="stat-value special">${cardState.currentSpecial}</span>
   `;
 
   statsRow.appendChild(healthStat);
   statsRow.appendChild(damageStat);
+  statsRow.appendChild(specialStat);
 
   info.appendChild(nameSection);
   info.appendChild(statsRow);
@@ -774,7 +795,6 @@ function openCharacterDetails(character) {
     document.body.appendChild(ui.overlay);
   }
   ui.overlay.style.display = "flex";
-  playSound("ready", 0.4);
 }
 
 function selectCharacter(character) {
@@ -830,6 +850,9 @@ function selectCharacter(character) {
       // Use the same socket channel without partyId; server will update only the user row
       socket.emit("char-change", { character: charClass });
     }
+
+    // Keep chooser card highlight synced immediately after selection.
+    refreshUpgradeButtonAffordability();
   } catch (e) {
     console.warn("selectCharacter failed:", e?.message);
   } finally {
@@ -993,7 +1016,7 @@ function showInsufficientDialog(currency) {
   const actions = document.createElement("div");
   actions.className = "cs-confirm-actions";
   const closeBtn = document.createElement("button");
-  closeBtn.className = "cs-btn cancel pixel-menu-button";
+  closeBtn.className = "close pixel-menu-button profile-close";
   closeBtn.textContent = "Close";
   closeBtn.onclick = () => backdrop.remove();
   actions.appendChild(closeBtn);
@@ -1026,7 +1049,7 @@ function showErrorDialog(message) {
   const actions = document.createElement("div");
   actions.className = "cs-confirm-actions";
   const closeBtn = document.createElement("button");
-  closeBtn.className = "cs-btn cancel pixel-menu-button";
+  closeBtn.className = "close pixel-menu-button profile-close";
   closeBtn.textContent = "Close";
   closeBtn.onclick = () => backdrop.remove();
   actions.appendChild(closeBtn);
@@ -1158,6 +1181,11 @@ function refreshUpgradeButtonAffordability() {
       const statusText = card.querySelector(".character-card-status-text");
       if (!statusText) return;
 
+      card.classList.toggle(
+        "selected",
+        String(_userDataRef?.char_class || "").toLowerCase() ===
+          String(character).toLowerCase(),
+      );
       card.classList.toggle("locked", state.isLocked);
       card.classList.toggle("is-maxed", state.isMaxed);
       card.classList.toggle("is-upgrade-ready", state.canUpgrade);

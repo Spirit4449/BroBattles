@@ -17,7 +17,7 @@ export function getSharedSelectionPopupShell() {
   title.textContent = "Choose";
 
   const closeButton = document.createElement("button");
-  closeButton.className = "close-popup";
+  closeButton.className = "close-popup pixel-menu-button";
   closeButton.type = "button";
   closeButton.innerHTML = "×";
 

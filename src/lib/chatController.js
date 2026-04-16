@@ -147,7 +147,7 @@ function makeChatShell({
       </div>
       <div class="bb-chat-header-actions">
         <button type="button" class="bb-chat-mini-btn bb-chat-reply-cancel" aria-label="Clear reply">↩</button>
-        <button type="button" class="bb-chat-mini-btn bb-chat-close" aria-label="Close chat">X</button>
+        <button type="button" class="bb-chat-mini-btn pixel-menu-button bb-chat-close" aria-label="Close chat">×</button>
       </div>
     </div>
     <div class="bb-chat-body">

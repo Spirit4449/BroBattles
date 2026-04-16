@@ -188,6 +188,7 @@ h3 {
 .trophy-resource {
   height: 30px;
   padding: 0 10px;
+  margin-left: 10px;
   margin-right: 0;
   color: #fff4c8;
   background:
@@ -248,6 +249,12 @@ h3 {
   50% {
     filter: drop-shadow(0 0 10px rgba(255, 213, 122, 0.74));
   }
+}
+
+#gem-count,
+#coin-count {
+  font-family: "Press Start 2P", "Lato", sans-serif;
+  font-size: 12px;
 }
 
 #party {
