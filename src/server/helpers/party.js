@@ -58,6 +58,18 @@ async function emitRoster(io, partyId, party, members, db = null) {
   });
 }
 
+async function emitPartyNotice(io, partyId, notice) {
+  if (!partyId) return;
+  io.to(`party:${partyId}`).emit("party:notice", {
+    partyId,
+    type: String(notice?.type || "update"),
+    actorName: String(notice?.actorName || "").trim(),
+    title: String(notice?.title || "Party update"),
+    message: String(notice?.message || ""),
+    selection: notice?.selection || null,
+  });
+}
+
 async function updateOrDeleteParty(io, db, partyId) {
   const members = await db.fetchPartyMembersDetailed(partyId);
   const party = await selectPartyById(db, partyId);
@@ -74,5 +86,6 @@ module.exports = {
   selectPartyById,
   getPartyOwnerName,
   emitRoster,
+  emitPartyNotice,
   updateOrDeleteParty,
 };

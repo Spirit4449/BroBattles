@@ -11,6 +11,7 @@ import { performSpecial } from "./characters/special";
 import { player } from "./player";
 import socket from "./socket";
 import { spawnDeathBurst, spawnHealthMarker, spawnSpawnBurst } from "./effects";
+import { RENDER_LAYERS } from "./gameScene/renderLayers";
 
 const OP_PLAYER_NAME_OFFSET_Y = 42;
 
@@ -87,7 +88,7 @@ export default class OpPlayer {
     this.applyFlipOffset();
 
     // Set depth so opponent renders above all map objects (bank bust graphics are at depths 7-24)
-    this.opponent.setDepth(25);
+    this.opponent.setDepth(RENDER_LAYERS.PLAYER);
 
     // Per-character effects: instantiate if available for this character
     const EffectsCls = getEffectsClass(this.character);

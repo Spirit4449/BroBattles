@@ -65,8 +65,7 @@ function getRuntimeOverrides(actionType) {
   }
 
   if (key === "draven-splash") {
-    const splash =
-      getResolvedCharacterAttackConfig("draven", "splash") || {};
+    const splash = getResolvedCharacterAttackConfig("draven", "splash") || {};
     return {
       runtime: {
         activeWindowMs: Math.max(1, Number(splash.activeWindowMs) || 450),
@@ -90,10 +89,7 @@ function getRuntimeOverrides(actionType) {
         height: Number(fall.rectHeight) || 46,
         windupMs: Math.max(0, Number(fall.windupMs) || 180),
         activeWindowMs: Math.max(1, Number(fall.strikeMs) || 290),
-        followAfterWindupMs: Math.max(
-          0,
-          Number(fall.followAfterWindupMs) || 0,
-        ),
+        followAfterWindupMs: Math.max(0, Number(fall.followAfterWindupMs) || 0),
         damageTickMs: Math.max(1, Number(fall.damageTickMs) || 90),
         originOffsetX: Number(fall.originOffsetX) || 0,
         originHeightFactor: Number(fall.originHeightFactor) || 0,
@@ -123,10 +119,15 @@ function getRuntimeOverrides(actionType) {
           Number(shuriken.returnStartSpeedFactor) || 0,
         ),
         maxLifetimeMs: Math.max(250, Number(shuriken.maxLifetimeMs) || 7000),
-        defaultForwardDistance:
-          Math.max(1, Number(shuriken.forwardDistance) || 500),
-        defaultOutwardDurationMs:
-          Math.max(1, Number(shuriken.outwardDuration) || 380),
+        hitArmMs: Math.max(0, Number(shuriken.hitArmMs) || 60),
+        defaultForwardDistance: Math.max(
+          1,
+          Number(shuriken.forwardDistance) || 500,
+        ),
+        defaultOutwardDurationMs: Math.max(
+          1,
+          Number(shuriken.outwardDuration) || 380,
+        ),
         defaultReturnSpeed: Math.max(1, Number(shuriken.returnSpeed) || 900),
         defaultEndYOffset: Number(shuriken.endYOffset) || 0,
         defaultCtrl1YOffset: Number(shuriken.ctrl1YOffset) || 20,

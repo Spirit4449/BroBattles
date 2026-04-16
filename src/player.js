@@ -30,6 +30,7 @@ import {
 import { getResolvedCharacterBodyConfig } from "./lib/characterTuning.js";
 import { createAttackAimReticleController } from "./gameScene/attackAimReticle";
 import { createMobileControlsController } from "./gameScene/mobileControls";
+import { RENDER_LAYERS } from "./gameScene/renderLayers";
 import MOVEMENT_PHYSICS from "./shared/movementPhysics.json";
 import { noteClientActionSent } from "./lib/netTestLogger.js";
 // Globals
@@ -695,7 +696,7 @@ export function createPlayer(
   player.setVisible(false);
 
   // Set depth so player renders above all map objects (bank bust graphics are at depths 7-24)
-  player.setDepth(25);
+  player.setDepth(RENDER_LAYERS.PLAYER);
 
   // Player name text anchored to physics body top (not frame height)
   const bodyTop = player.body ? player.body.y : player.y - player.height / 2;
@@ -1286,6 +1287,34 @@ export function handlePlayerMovement(scene) {
   applyGameCursor(scene);
   mobileControlsController?.ensure?.(scene);
   mobileControlsController?.layout?.(scene);
+  if (scene?.input?.keyboard?.enabled === false) {
+    try {
+      if (player?.body) {
+        player.setVelocityX(0);
+        player.setAccelerationX(0);
+        player.setDragX(0);
+      }
+    } catch (_) {}
+    networkInputState = {
+      left: false,
+      right: false,
+      direction: 0,
+      jumpHeld: false,
+      jumpPressed: false,
+      grounded: !!player?.body?.touching?.down,
+      vx: Number(player?.body?.velocity?.x) || 0,
+      vy: Number(player?.body?.velocity?.y) || 0,
+      facing: player?.flipX ? -1 : 1,
+      animation: player?.anims?.currentAnim?.key || null,
+      movementLocked: true,
+      loaded:
+        !dead &&
+        Number.isFinite(player?.x) &&
+        Number.isFinite(player?.y) &&
+        player?.visible !== false,
+    };
+    return;
+  }
   if (chatInputActive) {
     try {
       if (player?.body) {

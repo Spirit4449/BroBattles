@@ -17,6 +17,14 @@ function registerPresenceEvents(
     if (!uname || !partyId) return;
     try {
       await db.updateLastSeen(partyId, uname);
+      const rows = await db.runQuery(
+        "SELECT status FROM users WHERE name = ? LIMIT 1",
+        [uname],
+      );
+      const currentStatus = String(rows?.[0]?.status || "online").toLowerCase();
+      if (currentStatus === "offline") {
+        await setPresence(uname, "online", partyId);
+      }
     } catch (e) {
       console.warn("heartbeat error:", e?.message);
     }

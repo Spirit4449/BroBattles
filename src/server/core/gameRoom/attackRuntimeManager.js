@@ -1,4 +1,7 @@
-const { createRuntimeAttack, tickRuntimeAttack } = require("./characterAttackRegistry");
+const {
+  createRuntimeAttack,
+  tickRuntimeAttack,
+} = require("./characterAttackRegistry");
 
 function ensureAttackState(room) {
   if (!room._activeAttacks) room._activeAttacks = [];
@@ -23,7 +26,12 @@ function claimAttackInstance(room, playerData, actionData, now = Date.now()) {
   return true;
 }
 
-function registerAttackFromAction(room, playerData, actionData, now = Date.now()) {
+function registerAttackFromAction(
+  room,
+  playerData,
+  actionData,
+  now = Date.now(),
+) {
   if (!claimAttackInstance(room, playerData, actionData, now)) return false;
   const runtimeAttack = createRuntimeAttack(playerData, actionData, now);
   if (!runtimeAttack) return false;
@@ -44,8 +52,37 @@ function tickActiveAttacks(room, now = Date.now()) {
   });
 }
 
+function requestReturningProjectilePhase(room, playerData, actionData) {
+  const attacks = ensureAttackState(room);
+  if (!attacks.length) return false;
+  const socketId = String(playerData?.socketId || "");
+  const instanceId = String(actionData?.id || "").trim();
+  if (!socketId || !instanceId) return false;
+
+  let applied = false;
+  for (const attack of attacks) {
+    if (
+      !attack ||
+      String(attack.runtimeKind || "") !== "returning-projectile"
+    ) {
+      continue;
+    }
+    if (String(attack.attackerSocketId || "") !== socketId) continue;
+    if (String(attack.instanceId || "") !== instanceId) continue;
+    if (String(attack.phase || "") === "return") {
+      applied = true;
+      continue;
+    }
+    attack.phase = "return";
+    attack.phaseElapsed = 0;
+    applied = true;
+  }
+  return applied;
+}
+
 module.exports = {
   ensureAttackState,
   registerAttackFromAction,
   tickActiveAttacks,
+  requestReturningProjectilePhase,
 };

@@ -1,3 +1,5 @@
+import { RENDER_LAYERS } from "./renderLayers";
+
 const RETICLE_RENDERERS = new Map();
 
 const RETICLE_PALETTES = {
@@ -24,7 +26,9 @@ const RETICLE_PALETTES = {
 };
 
 function getPalette(state) {
-  return RETICLE_PALETTES[state?.paletteKey === "special" ? "special" : "basic"];
+  return RETICLE_PALETTES[
+    state?.paletteKey === "special" ? "special" : "basic"
+  ];
 }
 
 class BaseAttackReticleRenderer {
@@ -35,10 +39,10 @@ class BaseAttackReticleRenderer {
     this.accent = scene.add.graphics();
     this.crosshair = scene.add.graphics();
     this.setVisible(false);
-    this.setDepth(36);
+    this.setDepth(RENDER_LAYERS.RETICLES);
   }
 
-  setDepth(depth = 36) {
+  setDepth(depth = RENDER_LAYERS.RETICLES) {
     this.shadow.setDepth(depth);
     this.main.setDepth(depth + 0.1);
     this.accent.setDepth(depth + 0.2);
@@ -244,7 +248,10 @@ class RoundAttackReticleRenderer extends BaseAttackReticleRenderer {
     super.render(state);
     if (!state) return;
     const palette = getPalette(state);
-    const radius = Math.max(16, Number(state.roundRadius) || Number(state.range) || 60);
+    const radius = Math.max(
+      16,
+      Number(state.roundRadius) || Number(state.range) || 60,
+    );
     const cx = Number(state.baseX) || Number(state.anchorX) || 0;
     const cy = Number(state.baseY) || Number(state.anchorY) || 0;
 
@@ -277,13 +284,17 @@ class CustomAttackReticleRenderer extends BaseAttackReticleRenderer {
 }
 
 function registerAttackReticleRenderer(kind, RendererClass) {
-  const key = String(kind || "").toLowerCase().trim();
+  const key = String(kind || "")
+    .toLowerCase()
+    .trim();
   if (!key || typeof RendererClass !== "function") return;
   RETICLE_RENDERERS.set(key, RendererClass);
 }
 
 function resolveRenderer(kind) {
-  const key = String(kind || "").toLowerCase().trim();
+  const key = String(kind || "")
+    .toLowerCase()
+    .trim();
   return (
     RETICLE_RENDERERS.get(key) ||
     (key === "throw"
@@ -292,9 +303,9 @@ function resolveRenderer(kind) {
         ? SplashAttackReticleRenderer
         : key === "round"
           ? RoundAttackReticleRenderer
-        : key === "custom"
-          ? CustomAttackReticleRenderer
-          : LineAttackReticleRenderer)
+          : key === "custom"
+            ? CustomAttackReticleRenderer
+            : LineAttackReticleRenderer)
   );
 }
 
@@ -342,7 +353,4 @@ registerAttackReticleRenderer("splash", SplashAttackReticleRenderer);
 registerAttackReticleRenderer("round", RoundAttackReticleRenderer);
 registerAttackReticleRenderer("custom", CustomAttackReticleRenderer);
 
-module.exports = {
-  registerAttackReticleRenderer,
-  createAttackAimReticleController,
-};
+export { registerAttackReticleRenderer, createAttackAimReticleController };

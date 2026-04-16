@@ -6,6 +6,7 @@ import {
   buildThrowArcGeometry,
   sampleThrowArcPoint,
 } from "../shared/attackAim";
+import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 
 const FALL = getResolvedCharacterAttackConfig("thorg", "fall");
 
@@ -201,7 +202,7 @@ export function performThorgFallAttack(instance, attackContext = null) {
       try {
         if (!dbg && scene.add) {
           dbg = scene.add.graphics();
-          dbg.setDepth(9);
+          dbg.setDepth(RENDER_LAYERS.ATTACKS);
         }
         if (dbg) {
           dbg.clear();
@@ -229,7 +230,7 @@ export function performThorgFallAttack(instance, attackContext = null) {
         : null;
     if (texKey && scene.add) {
       const sprite = scene.add.sprite(startAnchor.x, startAnchor.y, texKey);
-      sprite.setDepth(7);
+      sprite.setDepth(RENDER_LAYERS.ATTACKS);
       sprite.setScale(rageActive ? 0.82 : 0.72);
       sprite.setFlipX(false);
       const baseRot = angle + SPRITE_FORWARD_OFFSET + direction * 0.08;
@@ -284,11 +285,7 @@ export function performThorgFallAttack(instance, attackContext = null) {
         }
 
         const strikeElapsed = Math.max(0, elapsed - THORG_FALL_WINDUP_MS);
-        const tNow = Phaser.Math.Clamp(
-          strikeElapsed / strikeMs,
-          0,
-          1,
-        );
+        const tNow = Phaser.Math.Clamp(strikeElapsed / strikeMs, 0, 1);
         if (
           elapsed <=
           THORG_FALL_WINDUP_MS + THORG_FALL_FOLLOW_AFTER_WINDUP_MS
@@ -316,9 +313,10 @@ export function performThorgFallAttack(instance, attackContext = null) {
     direction,
     angle,
     range,
-    target: Number.isFinite(targetX) && Number.isFinite(targetY)
-      ? { x: targetX, y: targetY }
-      : null,
+    target:
+      Number.isFinite(targetX) && Number.isFinite(targetY)
+        ? { x: targetX, y: targetY }
+        : null,
     strikeMs,
     duration: totalDurationMs,
   };

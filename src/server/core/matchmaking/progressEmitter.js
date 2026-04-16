@@ -1,31 +1,36 @@
 function createProgressEmitter({ db, io, lastProgress }) {
+  function ageSeconds(row) {
+    return Math.floor((Date.now() - new Date(row.created_at).getTime()) / 1000);
+  }
+
+  function mmrWindowForTicket(ticket) {
+    return Math.min(400, 100 + Math.floor(ageSeconds(ticket) * 15));
+  }
+
+  function mmrOf(ticket) {
+    return Number(ticket?.mmr) || 0;
+  }
+
+  function ticketSize(ticket) {
+    return Number(ticket.size || ticket.team1_count + ticket.team2_count || 0);
+  }
+
   async function emitProgressForBucket(
     modeId,
     modeVariantId,
     map,
     items,
     teamSize,
+    options = {},
   ) {
     if (!items || !items.length) return;
 
-    const totalPlayers = Math.min(
-      items.reduce(
-        (acc, t) => acc + Number(t.size || t.team1_count + t.team2_count || 0),
-        0,
-      ),
-      teamSize * 2,
-    );
-    const payload = {
-      modeId,
-      modeVariantId,
-      selection: { modeId, modeVariantId, mapId: Number(map) },
-      map,
-      found: totalPlayers,
-      total: teamSize * 2,
-    };
-    const signature = `${modeId}:${modeVariantId}:${map}:${payload.found}:${payload.total}`;
+    const totalRequired = teamSize * 2;
+    const sortedItems = items
+      .slice()
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
-    const soloIds = items.filter((t) => t.user_id).map((t) => t.user_id);
+    const soloIds = sortedItems.filter((t) => t.user_id).map((t) => t.user_id);
     let soloSockets = new Map();
     if (soloIds.length) {
       try {
@@ -38,62 +43,108 @@ function createProgressEmitter({ db, io, lastProgress }) {
       } catch (_) {}
     }
 
-    // Lightweight roster preview for overlay rendering.
-    // Keep bounded by bucket capacity so payloads stay small.
-    try {
-      const players = [];
-      const seen = new Set();
+    const partyMembersCache = new Map();
+    const soloUserCache = new Map();
 
-      for (const t of items) {
-        if (players.length >= teamSize * 2) break;
-
-        if (t.party_id) {
-          try {
-            const members = await db.fetchPartyMembersDetailed(t.party_id);
-            for (const m of members || []) {
-              if (!m?.name || seen.has(m.name)) continue;
-              seen.add(m.name);
-              players.push({
-                name: m.name,
-                char_class: m.char_class || "ninja",
-                profile_icon_id: String(m.profile_icon_id || "") || null,
-              });
-              if (players.length >= teamSize * 2) break;
-            }
-          } catch (_) {}
-          continue;
+    async function previewPlayersForTicket(ticket) {
+      if (ticket.party_id) {
+        if (partyMembersCache.has(ticket.party_id)) {
+          return partyMembersCache.get(ticket.party_id);
         }
-
-        if (t.user_id) {
-          try {
-            const rows = await db.runQuery(
-              "SELECT name, char_class, selected_profile_icon_id AS profile_icon_id FROM users WHERE user_id = ? LIMIT 1",
-              [t.user_id],
-            );
-            const u = rows?.[0];
-            if (u?.name && !seen.has(u.name)) {
-              seen.add(u.name);
-              players.push({
-                name: u.name,
-                char_class: u.char_class || "ninja",
-                profile_icon_id: String(u.profile_icon_id || "") || null,
-              });
-            }
-          } catch (_) {}
+        try {
+          const members = await db.fetchPartyMembersDetailed(ticket.party_id);
+          const normalized = (members || [])
+            .filter((m) => !!m?.name)
+            .map((m) => ({
+              name: m.name,
+              char_class: m.char_class || "ninja",
+              profile_icon_id: String(m.profile_icon_id || "") || null,
+            }));
+          partyMembersCache.set(ticket.party_id, normalized);
+          return normalized;
+        } catch (_) {
+          partyMembersCache.set(ticket.party_id, []);
+          return [];
         }
       }
 
-      payload.players = players;
-    } catch (_) {}
+      if (ticket.user_id) {
+        if (soloUserCache.has(ticket.user_id)) {
+          return soloUserCache.get(ticket.user_id);
+        }
+        try {
+          const rows = await db.runQuery(
+            "SELECT name, char_class, selected_profile_icon_id AS profile_icon_id FROM users WHERE user_id = ? LIMIT 1",
+            [ticket.user_id],
+          );
+          const u = rows?.[0];
+          const normalized = u?.name
+            ? [
+                {
+                  name: u.name,
+                  char_class: u.char_class || "ninja",
+                  profile_icon_id: String(u.profile_icon_id || "") || null,
+                },
+              ]
+            : [];
+          soloUserCache.set(ticket.user_id, normalized);
+          return normalized;
+        } catch (_) {
+          soloUserCache.set(ticket.user_id, []);
+          return [];
+        }
+      }
 
-    for (const t of items) {
-      const prev = lastProgress.get(t.ticket_id);
+      return [];
+    }
+
+    for (const viewerTicket of sortedItems) {
+      const window = mmrWindowForTicket(viewerTicket);
+      const visibleItems = sortedItems.filter(
+        (candidate) => Math.abs(mmrOf(candidate) - mmrOf(viewerTicket)) <= window,
+      );
+
+      const foundPlayers = Math.min(
+        visibleItems.reduce((acc, t) => acc + ticketSize(t), 0),
+        totalRequired,
+      );
+
+      const players = [];
+      const seenNames = new Set();
+      for (const ticket of visibleItems) {
+        if (players.length >= totalRequired) break;
+        const entries = await previewPlayersForTicket(ticket);
+        for (const entry of entries) {
+          if (!entry?.name || seenNames.has(entry.name)) continue;
+          seenNames.add(entry.name);
+          players.push(entry);
+          if (players.length >= totalRequired) break;
+        }
+      }
+
+      const payload = {
+        modeId,
+        modeVariantId,
+        selection: { modeId, modeVariantId, mapId: Number(map) },
+        map,
+        found: foundPlayers,
+        total: totalRequired,
+        players,
+      };
+
+      const rosterSig = players
+        .map((p) => `${p.name}:${p.char_class || ""}`)
+        .join("|");
+      const signature = `${modeId}:${modeVariantId}:${map}:${payload.found}:${payload.total}:${rosterSig}`;
+
+      const prev = lastProgress.get(viewerTicket.ticket_id);
       if (prev === signature) continue;
-      lastProgress.set(t.ticket_id, signature);
-      if (t.party_id) {
-        io.to(`party:${t.party_id}`).emit("match:progress", payload);
-      } else if (t.user_id) {
-        const sid = soloSockets.get(t.user_id);
+      lastProgress.set(viewerTicket.ticket_id, signature);
+
+      if (viewerTicket.party_id) {
+        io.to(`party:${viewerTicket.party_id}`).emit("match:progress", payload);
+      } else if (viewerTicket.user_id) {
+        const sid = soloSockets.get(viewerTicket.user_id);
         if (!sid) continue;
         const sock = io.sockets.sockets.get(sid);
         if (sock) sock.emit("match:progress", payload);

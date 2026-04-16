@@ -5,6 +5,7 @@ import { rectsOverlap, getSpriteBounds } from "../shared/combatGeometry";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
 import { emitVaultHitForRect } from "../shared/vaultTargeting";
+import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 
 const SPLASH = getResolvedCharacterAttackConfig("draven", "splash");
 const SPLASH_W = SPLASH.width;
@@ -50,7 +51,7 @@ export function performDravenSplashAttack(instance, attackContext = null) {
   let dbg = null;
   if (DEBUG_DRAW && scene && scene.add) {
     dbg = scene.add.graphics();
-    dbg.setDepth(8);
+    dbg.setDepth(RENDER_LAYERS.ATTACKS);
   }
   // Play fireball SFX (local-only)
   try {
@@ -155,7 +156,7 @@ export function spawnExplosion(scene, x, y) {
       return null;
     }
     const e = scene.add.sprite(x, y, "draven-explosion");
-    e.setDepth(9);
+    e.setDepth(RENDER_LAYERS.ATTACKS);
     e.setScale(2.2);
     if (scene.anims?.exists("draven-explosion")) {
       e.anims.play("draven-explosion");

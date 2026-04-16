@@ -352,7 +352,9 @@ function renderPartyChatMessage(
 }
 
 function normalizeGameTeam(team) {
-  const raw = String(team || "").trim().toLowerCase();
+  const raw = String(team || "")
+    .trim()
+    .toLowerCase();
   if (!raw) return "";
   if (raw === "1" || raw === "team1" || raw === "blue") return "team1";
   if (raw === "2" || raw === "team2" || raw === "red") return "team2";
@@ -363,7 +365,8 @@ function renderGameChatLineMessage(message, currentUserName, localTeam) {
   const row = document.createElement("article");
   const senderName = String(message?.sender?.name || "Player");
   const bodyText = String(message?.body || "").trim();
-  const scope = String(message?.scope || "team").toLowerCase() === "all" ? "all" : "team";
+  const scope =
+    String(message?.scope || "team").toLowerCase() === "all" ? "all" : "team";
   const isSelf =
     senderName.trim().toLowerCase() ===
     String(currentUserName || "")
@@ -1468,7 +1471,8 @@ export function createGameChatController({
       teamOpt.textContent = teamCount > 0 ? `Team (${teamCount})` : "Team";
     }
     if (allOpt) {
-      allOpt.textContent = allCount > 0 ? `All Players (${allCount})` : "All Players";
+      allOpt.textContent =
+        allCount > 0 ? `All Players (${allCount})` : "All Players";
     }
     setUnreadBadge(teamCount + allCount);
   }
@@ -1622,9 +1626,7 @@ export function createGameChatController({
     const id = String(message?.id || "");
     if (!id) return false;
     const scope =
-      String(message?.scope || "team").toLowerCase() === "all"
-        ? "all"
-        : "team";
+      String(message?.scope || "team").toLowerCase() === "all" ? "all" : "team";
     const bucket =
       scope === "all" ? state.messagesByScope.all : state.messagesByScope.team;
     const exists = bucket.some((item) => String(item?.id || "") === id);
@@ -1798,8 +1800,7 @@ export function createGameChatController({
     const target = event.target;
     if (event.key === "/" || event.code === "Slash") {
       const isChatTextarea =
-        target === ui.textarea ||
-        (target && target.tagName === "TEXTAREA");
+        target === ui.textarea || (target && target.tagName === "TEXTAREA");
       if (isChatTextarea) return;
       event.preventDefault();
       if (!state.isOpen || state.suppressed) {

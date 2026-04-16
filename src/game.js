@@ -33,6 +33,7 @@ import {
   createPowerupTickSounds,
 } from "./powerups/powerupConfig";
 import { createPowerupRenderer } from "./powerups/powerupRenderer";
+import { RENDER_LAYERS } from "./gameScene/renderLayers";
 import {
   createPlayer,
   finalizeLocalSpawnPresentation,
@@ -755,7 +756,7 @@ class GameScene extends Phaser.Scene {
     this._poisonWaterY = worldH + 60; // start off-screen below world
     this._smoothPoisonY = null; // interpolated, set on first use
     this._poisonGraphics = this.add.graphics();
-    this._poisonGraphics.setDepth(12);
+    this._poisonGraphics.setDepth(RENDER_LAYERS.POISON);
     // Pre-generate bubble positions (22 bubbles, deterministic so no jitter on re-use)
     const poisonWidth =
       Number(this.scale?.width) || Number(this.game.config.width) || 1300;
@@ -771,13 +772,13 @@ class GameScene extends Phaser.Scene {
     this._deathDropVisuals = Object.create(null); // id -> visual bundle
     this._pendingDeathDropPickups = new Set();
     this._powerupAuraGraphics = this.add.graphics();
-    this._powerupAuraGraphics.setDepth(21);
+    this._powerupAuraGraphics.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
     this._powerupFxGraphics = this.add.graphics();
-    this._powerupFxGraphics.setDepth(20);
+    this._powerupFxGraphics.setDepth(RENDER_LAYERS.PLAYER_HUD);
     this._modeObjectiveGraphics = this.add.graphics();
-    this._modeObjectiveGraphics.setDepth(8);
+    this._modeObjectiveGraphics.setDepth(RENDER_LAYERS.GAME_OBJECTS);
     this._modeObjectiveUiGraphics = this.add.graphics();
-    this._modeObjectiveUiGraphics.setDepth(22);
+    this._modeObjectiveUiGraphics.setDepth(RENDER_LAYERS.PLAYER_HUD);
     this._bankBustRuntime = null;
     this._powerupRenderer = createPowerupRenderer({
       scene: this,
@@ -843,6 +844,7 @@ class GameScene extends Phaser.Scene {
     // Creates the map objects based on game data
     buildMap(this, activeMapId);
     mapObjects = getMapObjects(activeMapId);
+    this._mapObjects = mapObjects;
     const mapBoundaryConfig = getMapBoundaryConfig(activeMapId);
     applyMapBounds(this, mapBoundaryConfig, {
       extraTopSpace: this._topPlayfieldPadding,
@@ -870,6 +872,7 @@ class GameScene extends Phaser.Scene {
     try {
       if (Array.isArray(PENDING_ACTIONS) && PENDING_ACTIONS.length) {
         const queued = PENDING_ACTIONS.splice(0, PENDING_ACTIONS.length);
+        const retryActions = [];
         for (const pkt of queued) {
           try {
             const { playerName, character, action } = pkt || {};
@@ -881,6 +884,10 @@ class GameScene extends Phaser.Scene {
             const isTeammate = pd && pd.team === gameData.yourTeam;
             const container = isTeammate ? teamPlayers : opponentPlayers;
             const wrapper = container[playerName];
+            if (!wrapper?.opponent) {
+              retryActions.push(pkt);
+              continue;
+            }
             const charKey = (
               character ||
               (pd && pd.char_class) ||
@@ -896,6 +903,9 @@ class GameScene extends Phaser.Scene {
             }
             handleRemoteAttack(this, charKey, act, wrapper);
           } catch (_) {}
+        }
+        if (retryActions.length) {
+          PENDING_ACTIONS.push(...retryActions);
         }
       }
     } catch (_) {}
@@ -1407,7 +1417,12 @@ class GameScene extends Phaser.Scene {
   update() {
     updateMatchBackgroundParallax(this);
     const isBankBustMode = String(latestModeState?.type || "") === "bank-bust";
-    if (this._editModeActive || isBankBustMode) {
+    const poisonAllowed =
+      hasJoined &&
+      gameInitialized &&
+      !gameEnded &&
+      !hud.isBattleIntroActive?.();
+    if (!poisonAllowed || this._editModeActive || isBankBustMode) {
       try {
         this._poisonGraphics?.clear?.();
       } catch (_) {}

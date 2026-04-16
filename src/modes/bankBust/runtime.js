@@ -1,6 +1,7 @@
 import { getMapObjectiveLayout } from "../../lib/gameSelectionCatalog";
 import { getMapSpawnConfig } from "../../maps/manifest";
 import { getSpawnPreviewPoint } from "../../maps/mapUtils";
+import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 
 function cloneJson(v) {
   try {
@@ -71,13 +72,13 @@ export function createBankBustRuntime({
     recentProjectileIds: new Set(),
   };
   const objectiveGraphics = scene.add.graphics();
-  objectiveGraphics.setDepth(3);
+  objectiveGraphics.setDepth(RENDER_LAYERS.GAME_OBJECTS);
   const uiGraphics = scene.add.graphics();
-  uiGraphics.setDepth(4);
+  uiGraphics.setDepth(RENDER_LAYERS.GAME_OBJECTS + 1);
   const objectGraphics = scene.add.graphics();
-  objectGraphics.setDepth(2);
+  objectGraphics.setDepth(RENDER_LAYERS.GAME_OBJECTS - 1);
   const markerGraphics = scene.add.graphics();
-  markerGraphics.setDepth(23);
+  markerGraphics.setDepth(RENDER_LAYERS.PLAYER_HUD);
 
   const vaultSprites = new Map();
   const floatingCoins = [];
@@ -301,7 +302,7 @@ export function createBankBustRuntime({
     if (sprite?.scene) return sprite;
     if (!scene.textures?.exists?.("bank-bust-vault")) return null;
     sprite = scene.add.image(-9999, -9999, "bank-bust-vault");
-    sprite.setDepth(9);
+    sprite.setDepth(RENDER_LAYERS.GAME_OBJECTS + 1);
     sprite.setVisible(false);
     ensureDraggable(sprite, { kind: "vault", id: team });
     vaultSprites.set(team, sprite);
@@ -329,7 +330,7 @@ export function createBankBustRuntime({
     label.setOrigin(0.5);
     container = scene.add.container(-9999, -9999, [bg, label]);
     container.setSize(150, 90);
-    container.setDepth(5);
+    container.setDepth(RENDER_LAYERS.GAME_OBJECTS + 1);
     container.setVisible(false);
     container._bg = bg;
     container._label = label;
@@ -338,7 +339,12 @@ export function createBankBustRuntime({
     return container;
   }
 
-  function ensureObjectSprite(map, id, textureKey, depth = 10) {
+  function ensureObjectSprite(
+    map,
+    id,
+    textureKey,
+    depth = RENDER_LAYERS.GAME_OBJECTS + 2,
+  ) {
     let sprite = map.get(id) || null;
     if (sprite?.scene) return sprite;
     if (!scene.textures?.exists?.(textureKey)) return null;
@@ -354,7 +360,7 @@ export function createBankBustRuntime({
     if (marker?.scene) return marker;
     marker = scene.add.circle(-9999, -9999, 12, 0xf8e16c, 0.65);
     marker.setStrokeStyle(3, 0x1e293b, 0.95);
-    marker.setDepth(24);
+    marker.setDepth(RENDER_LAYERS.PLAYER_HUD);
     marker.setVisible(false);
     ensureDraggable(marker, { kind: "randomGoldSpawnPoint", id });
     spawnPointMarkers.set(id, marker);
@@ -366,7 +372,7 @@ export function createBankBustRuntime({
     if (marker?.scene) return marker;
     marker = scene.add.circle(-9999, -9999, 10, 0x99ff77, 0.75);
     marker.setStrokeStyle(3, 0x1e293b, 0.95);
-    marker.setDepth(24);
+    marker.setDepth(RENDER_LAYERS.PLAYER_HUD);
     marker.setVisible(false);
     ensureDraggable(marker, { kind: "powerupSpawnPoint", index });
     powerupSpawnMarkers.set(index, marker);
@@ -392,7 +398,12 @@ export function createBankBustRuntime({
     return state.localLayout.powerups;
   }
 
-  function ensureTurretSprite(map, id, textureKey, depth = 11) {
+  function ensureTurretSprite(
+    map,
+    id,
+    textureKey,
+    depth = RENDER_LAYERS.GAME_OBJECTS + 3,
+  ) {
     let sprite = map.get(id) || null;
     if (sprite?.scene) return sprite;
     if (!scene.textures?.exists?.(textureKey)) return null;
@@ -532,7 +543,7 @@ export function createBankBustRuntime({
         Number(fromY) + Phaser.Math.Between(-8, 8),
         "deathdrop-coin",
       );
-      coin.setDepth(42);
+      coin.setDepth(RENDER_LAYERS.PLAYER_HUD);
       coin.setScale(baseScale);
       scene.tweens.add({
         targets: coin,
@@ -589,7 +600,7 @@ export function createBankBustRuntime({
     const originX = Number(vault.x);
     for (let i = 0; i < count; i++) {
       const coin = scene.add.image(originX, topY, "deathdrop-coin");
-      coin.setDepth(24);
+      coin.setDepth(RENDER_LAYERS.POWERUPS);
       coin.setScale(0.18 + Math.random() * 0.08);
       coin.setTint(team === "team1" ? 0x93c5fd : 0xfde68a);
       scene.tweens.add({
@@ -710,7 +721,7 @@ export function createBankBustRuntime({
           mineSprites,
           entry.id,
           owner ? "bank-bust-mine-claimed" : "bank-bust-mine-neutral",
-          3,
+          RENDER_LAYERS.GAME_OBJECTS,
         );
         if (mineSprite) {
           mineSprite.setVisible(true);
@@ -734,13 +745,13 @@ export function createBankBustRuntime({
           turretBaseSprites,
           entry.id,
           "bank-bust-turret-base",
-          3,
+          RENDER_LAYERS.GAME_OBJECTS,
         );
         const turretHead = ensureTurretSprite(
           turretHeadSprites,
           entry.id,
           "bank-bust-turret-head",
-          4,
+          RENDER_LAYERS.GAME_OBJECTS + 1,
         );
         if (turretBase) {
           turretBase.setVisible(true);
@@ -799,7 +810,7 @@ export function createBankBustRuntime({
           wallSprites,
           entry.id,
           builtByTeam ? "bank-bust-wall-built" : "bank-bust-wall-slot",
-          3,
+          RENDER_LAYERS.GAME_OBJECTS,
         );
         if (wallSprite) {
           wallSprite.setVisible(true);
@@ -888,16 +899,16 @@ export function createBankBustRuntime({
         const x = Number(pickup.x) || 0;
         const y = Number(pickup.y) || 0;
         const glow = scene.add.circle(x, y, 14, 0xfacc15, 0.22);
-        glow.setDepth(6);
+        glow.setDepth(RENDER_LAYERS.POWERUPS);
         glow.setBlendMode(Phaser.BlendModes.ADD);
         const glowOuter = scene.add.circle(x, y, 22, 0xfacc15, 0.1);
-        glowOuter.setDepth(5);
+        glowOuter.setDepth(RENDER_LAYERS.POWERUPS - 1);
         glowOuter.setBlendMode(Phaser.BlendModes.ADD);
         const glowCore = scene.add.circle(x, y, 8, 0xffffff, 0.14);
-        glowCore.setDepth(6);
+        glowCore.setDepth(RENDER_LAYERS.POWERUPS);
         glowCore.setBlendMode(Phaser.BlendModes.ADD);
         const sprite = scene.add.image(x, y, "deathdrop-coin");
-        sprite.setDepth(7);
+        sprite.setDepth(RENDER_LAYERS.POWERUPS);
         const tex = scene.textures?.get?.("deathdrop-coin");
         const src = tex?.getSourceImage?.();
         const maxDim = Math.max(
@@ -975,7 +986,7 @@ export function createBankBustRuntime({
         turretProjectileSprites,
         shot.id,
         "bank-bust-bullet",
-        14,
+        RENDER_LAYERS.ATTACKS,
       );
       if (!sprite) continue;
       const ownerTeam = shot?.ownerTeam || null;

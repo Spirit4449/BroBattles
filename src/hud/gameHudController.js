@@ -8,10 +8,6 @@ import {
   normalizeGameSelection,
   selectionToLegacyMode,
 } from "../lib/gameSelectionCatalog.js";
-import {
-  buildProfileIconAlt,
-  buildProfileIconUrl,
-} from "../lib/profileIconAssets.js";
 
 function legacyModeToVariantId(mode) {
   const numeric = Number(mode);
@@ -50,6 +46,7 @@ export function createGameHudController({
   let lastModeAlertAt = 0;
   let lastModeAlertEventAt = 0;
   let noticeAutoCloseTimer = null;
+  let waitingBannerTimer = null;
 
   function _fallbackCatalog() {
     return {
@@ -290,15 +287,6 @@ export function createGameHudController({
 
       root.classList.add("phase-darkened", "phase-cards");
       showTopHudFade();
-      showWaitingForPlayersBanner();
-      try {
-        const teamHud = document.getElementById("team-status-hud");
-        teamHud?.classList.remove("hidden");
-        teamHud?.classList.add("hud-intro-enter");
-        requestAnimationFrame(() => {
-          teamHud?.classList.add("in");
-        });
-      } catch (_) {}
       await _sleep(40);
       _animateCardsIn(currentCardNodes);
     })();
@@ -316,6 +304,23 @@ export function createGameHudController({
 
   function _enableInput() {
     if (typeof onEnableInput === "function") onEnableInput();
+  }
+
+  function _clearWaitingBannerTimer() {
+    if (waitingBannerTimer) {
+      clearTimeout(waitingBannerTimer);
+      waitingBannerTimer = null;
+    }
+  }
+
+  function _scheduleWaitingBanner() {
+    _clearWaitingBannerTimer();
+    waitingBannerTimer = setTimeout(() => {
+      waitingBannerTimer = null;
+      if (countdownRunning) return;
+      if (!_isOverlayVisible()) return;
+      showWaitingForPlayersBanner();
+    }, 1000);
   }
 
   function showBattleStartOverlay(players) {
@@ -364,6 +369,7 @@ export function createGameHudController({
     }
 
     deferGameplayHudReveal = false;
+    _scheduleWaitingBanner();
 
     try {
       const timerHud = document.getElementById("game-timer-hud");
@@ -530,7 +536,10 @@ export function createGameHudController({
       hud.classList.add("hidden");
       return;
     }
-    hud.classList.remove("hidden");
+    const introBlocking = countdownRunning || _isOverlayVisible();
+    if (!introBlocking) {
+      hud.classList.remove("hidden");
+    }
     _setVaultRow("team1", modeState?.vaults?.team1, yourTeam);
     _setVaultRow("team2", modeState?.vaults?.team2, yourTeam);
     _setTeamGold("team1", modeState?.teamGold?.team1);
@@ -813,9 +822,12 @@ export function createGameHudController({
       avatarCore.className = "team-hud-avatar-core";
       const img = document.createElement("img");
       const cls = (p?.char_class || "ninja").toLowerCase();
-      const profileIconId = String(p?.profile_icon_id || "") || null;
-      img.src = buildProfileIconUrl(profileIconId, cls);
-      img.alt = buildProfileIconAlt(profileIconId, cls);
+      img.src = `/assets/${cls}/body.webp`;
+      img.alt = `${cls} body`;
+      img.onerror = () => {
+        img.onerror = null;
+        img.src = "/assets/ninja/body.webp";
+      };
       const cross = document.createElement("div");
       cross.className = "team-hud-cross";
       cross.textContent = "X";
@@ -860,7 +872,9 @@ export function createGameHudController({
       rightStack.appendChild(buildPlayerNode(playerData));
     });
 
-    root.classList.toggle("hidden", sorted.length === 0);
+    if (sorted.length <= 0) {
+      root.classList.add("hidden");
+    }
   }
 
   function setTeamHudPlayerAlive(name, isAlive) {
@@ -935,6 +949,7 @@ export function createGameHudController({
   function hideBattleStartOverlay() {
     const overlay = document.getElementById("battle-start-overlay");
     if (!overlay) return;
+    _clearWaitingBannerTimer();
     const wrap = overlay.querySelector(".bs-wrap");
     if (wrap) wrap.style.opacity = "0";
     setTimeout(() => {
@@ -963,6 +978,8 @@ export function createGameHudController({
   function startCountdown(seconds = 7) {
     if (countdownRunning) return;
     countdownRunning = true;
+    _clearWaitingBannerTimer();
+    hideWaitingForPlayersBanner();
 
     const countdownEl = document.getElementById("countdown-display");
     if (!countdownEl) {

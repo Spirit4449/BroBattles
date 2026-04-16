@@ -13,7 +13,8 @@ function ageSeconds(row) {
   return Math.floor((Date.now() - new Date(row.created_at).getTime()) / 1000);
 }
 
-function pickCompositeGroup(items, teamSize) {
+function pickCompositeGroup(items, teamSize, options = {}) {
+  const { suppressNoComboLog = false } = options;
   if (!items.length) return null;
   const sorted = items
     .slice()
@@ -24,7 +25,7 @@ function pickCompositeGroup(items, teamSize) {
 
   const used = new Set();
   const best = dfs(0, { t1: 0, t2: 0, t1mmr: 0, t2mmr: 0, picks: [] });
-  if (!best) {
+  if (!best && !suppressNoComboLog) {
     console.log(
       `[mm] no-combo S=${teamSize} window=${window} pool=${sorted
         .map((t) => `${t.team1_count}/${t.team2_count}`)

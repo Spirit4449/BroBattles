@@ -474,6 +474,7 @@ function buildReturningProjectileAttack(
     currentReturnSpeed:
       returnSpeed * Math.max(0, Number(runtime.returnStartSpeedFactor) || 0.08),
     maxLifetimeMs: Math.max(250, Number(runtime.maxLifetimeMs) || 7000),
+    hitArmMs: Math.max(0, Number(runtime.hitArmMs) || 0),
     hitSet: new Set(),
     hitTimes: Object.create(null),
     phaseHitSets: {
@@ -766,6 +767,9 @@ function tickReturningProjectile(room, attack, descriptor) {
     attack.phase === "return"
       ? attack.phaseHitSets?.return || attack.hitSet
       : attack.phaseHitSets?.outward || attack.hitSet;
+  if (attack.totalElapsed < Math.max(0, Number(attack.hitArmMs) || 0)) {
+    return false;
+  }
   hitCircleTargets(
     room,
     attack,

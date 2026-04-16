@@ -1,4 +1,5 @@
 // powerups/powerupRenderer.js
+import { RENDER_LAYERS } from "../gameScene/renderLayers";
 
 export function createPowerupRenderer({
   scene,
@@ -83,7 +84,7 @@ export function createPowerupRenderer({
 
   function spawnTrailParticle(x, y, color, r = 5, life = 260) {
     const c = scene.add.circle(x, y, r, color, 0.75);
-    c.setDepth(19);
+    c.setDepth(RENDER_LAYERS.PLAYER_HUD);
     scene.tweens.add({
       targets: c,
       y: y - Phaser.Math.Between(10, 24),
@@ -106,7 +107,7 @@ export function createPowerupRenderer({
 
   function spawnPlusParticle(x, y, color, size = 7, life = 380) {
     const g = scene.add.graphics();
-    g.setDepth(19);
+    g.setDepth(RENDER_LAYERS.PLAYER_HUD);
     g.fillStyle(color, 0.88);
     g.fillRect(-size * 0.5, -size * 0.18, size, size * 0.36);
     g.fillRect(-size * 0.18, -size * 0.5, size * 0.36, size);
@@ -135,7 +136,7 @@ export function createPowerupRenderer({
     life = 260,
   ) {
     const g = scene.add.graphics();
-    g.setDepth(19);
+    g.setDepth(RENDER_LAYERS.PLAYER_HUD);
     g.fillStyle(color, 0.9);
     g.fillRect(-size * 0.5, -size * 0.12, size * 0.62, size * 0.24);
     g.beginPath();
@@ -320,7 +321,7 @@ export function createPowerupRenderer({
           colors[evt.type] || 0xffffff,
           0.9,
         );
-        puff.setDepth(6);
+        puff.setDepth(RENDER_LAYERS.PLAYER_HUD);
         scene.tweens.add({
           targets: puff,
           alpha: 0,
@@ -375,7 +376,7 @@ export function createPowerupRenderer({
           deathDropColorFor(evt.type),
           0.88,
         );
-        puff.setDepth(8);
+        puff.setDepth(RENDER_LAYERS.PLAYER_HUD);
         puff.setBlendMode(Phaser.BlendModes.ADD);
         scene.tweens.add({
           targets: puff,
@@ -403,7 +404,7 @@ export function createPowerupRenderer({
       if (!visual) {
         const tint = deathDropColorFor(drop.type);
         const glow = scene.add.circle(drop.spawnX, drop.spawnY, 14, tint, 0.22);
-        glow.setDepth(6);
+        glow.setDepth(RENDER_LAYERS.POWERUPS);
         glow.setBlendMode(Phaser.BlendModes.ADD);
         const glowOuter = scene.add.circle(
           drop.spawnX,
@@ -412,7 +413,7 @@ export function createPowerupRenderer({
           tint,
           0.1,
         );
-        glowOuter.setDepth(5);
+        glowOuter.setDepth(RENDER_LAYERS.POWERUPS - 1);
         glowOuter.setBlendMode(Phaser.BlendModes.ADD);
         const glowCore = scene.add.circle(
           drop.spawnX,
@@ -421,7 +422,7 @@ export function createPowerupRenderer({
           0xffffff,
           0.14,
         );
-        glowCore.setDepth(6);
+        glowCore.setDepth(RENDER_LAYERS.POWERUPS);
         glowCore.setBlendMode(Phaser.BlendModes.ADD);
 
         const sprite = scene.physics.add.image(
@@ -429,7 +430,7 @@ export function createPowerupRenderer({
           drop.spawnY,
           deathDropTextureFor(drop.type),
         );
-        sprite.setDepth(7);
+        sprite.setDepth(RENDER_LAYERS.POWERUPS);
         sprite.setCollideWorldBounds(false);
         sprite.setBounce(0.16, 0.08);
         sprite.setDrag(0, 0);
@@ -494,11 +495,7 @@ export function createPowerupRenderer({
         1,
         Number(visual.expiresAt || 0) - Number(visual.blinkAt || 0) || 3000,
       );
-      const pulseT = Phaser.Math.Clamp(
-        1 - remainingMs / pulseWindowMs,
-        0,
-        1,
-      );
+      const pulseT = Phaser.Math.Clamp(1 - remainingMs / pulseWindowMs, 0, 1);
       const pulseSpeed = 8 + pulseT * 26;
       const pulseWave = Math.abs(
         Math.sin(nowSec * pulseSpeed + visual.phase * 1.7),
@@ -522,7 +519,8 @@ export function createPowerupRenderer({
       visual.glowCore.y = y + 1;
 
       const glowPulse = Math.abs(Math.sin(nowSec * 3.5 + visual.phase));
-      visual.glow.alpha = (0.22 + 0.18 * glowPulse + pulseT * 0.08) * blinkAlpha;
+      visual.glow.alpha =
+        (0.22 + 0.18 * glowPulse + pulseT * 0.08) * blinkAlpha;
       visual.glow.radius = 15 + 4 * glowPulse + pulseT * 2;
       visual.glowOuter.alpha =
         (0.1 + 0.1 * glowPulse + pulseT * 0.06) * blinkAlpha;
@@ -573,7 +571,12 @@ export function createPowerupRenderer({
       if (seenIds.has(id) || visual.despawning) continue;
       visual.despawning = true;
       scene.tweens.add({
-        targets: [visual.sprite, visual.glow, visual.glowOuter, visual.glowCore],
+        targets: [
+          visual.sprite,
+          visual.glow,
+          visual.glowOuter,
+          visual.glowCore,
+        ],
         alpha: 0,
         scaleX: 0.35,
         scaleY: 0.35,
@@ -738,7 +741,7 @@ export function createPowerupRenderer({
           colors.shield,
           0.22 - i * 0.05,
         );
-        ring.setDepth(22);
+        ring.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
         ring.setStrokeStyle(3, 0xffedd5, 0.85);
         scene.tweens.add({
           targets: ring,
@@ -769,23 +772,23 @@ export function createPowerupRenderer({
       if (!visual) {
         const glowColor = colors[pu.type] || 0xffffff;
         const glow = scene.add.circle(pu.x, pu.y, 16, glowColor, 0.28);
-        glow.setDepth(4);
+        glow.setDepth(RENDER_LAYERS.POWERUPS);
         glow.setBlendMode(Phaser.BlendModes.ADD);
         const glowOuter = scene.add.circle(pu.x, pu.y, 24, glowColor, 0.12);
-        glowOuter.setDepth(3);
+        glowOuter.setDepth(RENDER_LAYERS.POWERUPS - 1);
         glowOuter.setBlendMode(Phaser.BlendModes.ADD);
         const glowCore = scene.add.circle(pu.x, pu.y, 10, 0xffffff, 0.16);
-        glowCore.setDepth(4);
+        glowCore.setDepth(RENDER_LAYERS.POWERUPS);
         glowCore.setBlendMode(Phaser.BlendModes.ADD);
         const omenBase = scene.add.circle(pu.x, pu.y + 4, 16, glowColor, 0.34);
-        omenBase.setDepth(3);
+        omenBase.setDepth(RENDER_LAYERS.POWERUPS - 1);
         omenBase.setBlendMode(Phaser.BlendModes.ADD);
         const omenRing = scene.add.circle(pu.x, pu.y + 4, 24, glowColor, 0.24);
-        omenRing.setDepth(4);
+        omenRing.setDepth(RENDER_LAYERS.POWERUPS);
         omenRing.setStrokeStyle(4, 0xffffff, 0.72);
         omenRing.setBlendMode(Phaser.BlendModes.ADD);
         const omenEcho = scene.add.circle(pu.x, pu.y + 4, 36, glowColor, 0.14);
-        omenEcho.setDepth(2);
+        omenEcho.setDepth(RENDER_LAYERS.POWERUPS - 2);
         omenEcho.setBlendMode(Phaser.BlendModes.ADD);
         const iconKey = powerupTextureFor(pu.type);
         const children = [];
@@ -817,7 +820,7 @@ export function createPowerupRenderer({
           children.push(badge, lbl);
         }
         const container = scene.add.container(pu.x, pu.y, children);
-        container.setDepth(5);
+        container.setDepth(RENDER_LAYERS.POWERUPS);
         visual = {
           id,
           type: pu.type,
@@ -851,7 +854,10 @@ export function createPowerupRenderer({
       if (!visual.despawning) {
         const nowMs = Date.now();
         visual.activeAt =
-          Number(pu.activeAt) || visual.activeAt || Number(pu.spawnedAt) || nowMs;
+          Number(pu.activeAt) ||
+          visual.activeAt ||
+          Number(pu.spawnedAt) ||
+          nowMs;
         visual.expiresAt = Number(pu.expiresAt) || visual.expiresAt || 0;
         visual.x = pu.x;
         visual.y = pu.y;
@@ -886,9 +892,11 @@ export function createPowerupRenderer({
             visual.glowOuter.setScale(0.72);
             visual.glowCore.setScale(0.72);
             scene.tweens.add({
-              targets: [visual.omenBase, visual.omenRing, visual.omenEcho].filter(
-                Boolean,
-              ),
+              targets: [
+                visual.omenBase,
+                visual.omenRing,
+                visual.omenEcho,
+              ].filter(Boolean),
               alpha: 0,
               scaleX: 1.28,
               scaleY: 1.28,
@@ -896,7 +904,12 @@ export function createPowerupRenderer({
               ease: "Quad.easeIn",
             });
             scene.tweens.add({
-              targets: [visual.container, visual.glow, visual.glowOuter, visual.glowCore],
+              targets: [
+                visual.container,
+                visual.glow,
+                visual.glowOuter,
+                visual.glowCore,
+              ],
               alpha: 1,
               y: "-=22",
               scaleX: 1,
@@ -965,10 +978,12 @@ export function createPowerupRenderer({
         visual.glowCore.y = visual.glow.y;
         const glowPulse = Math.abs(Math.sin(nowSec * 3.5 + visual.phase));
         visual.glow.alpha = 0.28 + 0.22 * glowPulse;
-        visual.glow.radius = 17 + 5 * Math.abs(Math.sin(nowSec * 2.7 + visual.phase));
+        visual.glow.radius =
+          17 + 5 * Math.abs(Math.sin(nowSec * 2.7 + visual.phase));
         visual.glowOuter.alpha = 0.14 + 0.12 * glowPulse;
         visual.glowOuter.radius = visual.glow.radius + 8;
-        visual.glowCore.alpha = 0.14 + 0.1 * Math.abs(Math.sin(nowSec * 5.2 + visual.phase));
+        visual.glowCore.alpha =
+          0.14 + 0.1 * Math.abs(Math.sin(nowSec * 5.2 + visual.phase));
         visual.glowCore.radius = 9 + 2 * glowPulse;
         if (visual.sprite) {
           const baseS = visual.sprite.scaleY || 1;
@@ -1049,7 +1064,7 @@ export function createPowerupRenderer({
           } catch (_) {}
           delete scene._powerupVisuals[id];
         },
-        });
+      });
     }
 
     renderDeathDrops(nowSec);

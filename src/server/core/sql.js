@@ -70,7 +70,18 @@ async function getPartyIdByName(name) {
 
 async function fetchPartyMembersDetailed(partyId) {
   return runQuery(
-    `SELECT pm.name, pm.team, u.char_class, u.status, u.char_levels, u.selected_profile_icon_id AS profile_icon_id
+    `SELECT pm.name,
+            pm.team,
+            pm.last_seen,
+            u.char_class,
+            CASE
+              WHEN pm.last_seen IS NULL
+                OR pm.last_seen < DATE_SUB(NOW(), INTERVAL 35 SECOND)
+              THEN 'offline'
+              ELSE COALESCE(u.status, 'online')
+            END AS status,
+            u.char_levels,
+            u.selected_profile_icon_id AS profile_icon_id
        FROM party_members pm
        LEFT JOIN users u ON u.name = pm.name
       WHERE pm.party_id = ?
@@ -402,17 +413,29 @@ async function deleteExpiredGuestsAndMemberships() {
 // Returns the number of rows affected.
 async function setOfflineIfLastSeenOlderThan(minutes = 3) {
   const mins = Math.max(1, Number(minutes) || 3);
-  const result = await runQuery(
-    `UPDATE users u
+  const staleRows = await runQuery(
+    `SELECT DISTINCT u.name, pm.party_id
+       FROM users u
        LEFT JOIN party_members pm ON pm.name = u.name
-        SET u.status = 'offline'
       WHERE u.status <> 'offline'
         AND (
           pm.last_seen IS NULL OR pm.last_seen < DATE_SUB(NOW(), INTERVAL ? MINUTE)
         )`,
     [mins],
   );
-  return result?.affectedRows || 0;
+  if (!staleRows.length) return [];
+  const names = staleRows.map((row) => row.name).filter(Boolean);
+  if (names.length) {
+    const placeholders = names.map(() => "?").join(",");
+    await runQuery(
+      `UPDATE users
+          SET status = 'offline'
+        WHERE name IN (${placeholders})
+          AND status <> 'offline'`,
+      names,
+    );
+  }
+  return staleRows;
 }
 
 module.exports = {

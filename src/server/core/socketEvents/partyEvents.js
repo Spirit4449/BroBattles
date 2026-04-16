@@ -4,8 +4,19 @@ const {
   isSelectionQueueable,
   getSelectionBlockReason,
   selectionToLegacyMode,
+  getMapById,
+  getVariantDescriptor,
 } = require("../../helpers/gameSelectionCatalog");
 const { getAllCharacters } = require("../../../lib/characterStats");
+
+function formatSelectionLabel(selection) {
+  const { mode, variant } = getVariantDescriptor(
+    selection?.modeId,
+    selection?.modeVariantId,
+  );
+  if (!mode) return "Unknown mode";
+  return variant ? `${mode.label} ${variant.label}` : mode.label;
+}
 
 const VALID_CHARACTER_IDS = new Set(
   (Array.isArray(getAllCharacters?.()) ? getAllCharacters() : [])
@@ -31,6 +42,20 @@ function registerPartyEvents(
       status,
       partyId,
     ]);
+  }
+
+  async function broadcastSelectionNotice(partyId, actorName, selection, kind) {
+    const label =
+      kind === "map"
+        ? `map to ${getMapById(selection?.mapId)?.label || String(selection?.mapId || "unknown")}`
+        : `mode to ${formatSelectionLabel(selection)}`;
+    await partyPresence.emitPartyNotice?.(partyId, {
+      type: kind,
+      actorName,
+      title: `${actorName} changed ${label}`,
+      message: "",
+      selection,
+    });
   }
 
   socket.on("char-menu:status", async (data) => {
@@ -192,6 +217,13 @@ function registerPartyEvents(
         members: data.members,
       });
 
+      await broadcastSelectionNotice(
+        data.partyId,
+        uname,
+        savedSelection,
+        "mode",
+      );
+
       console.log(
         `[party:${data.partyId}] Mode changed to ${savedSelection.modeId}:${savedSelection.modeVariantId} by ${uname}`,
       );
@@ -233,6 +265,13 @@ function registerPartyEvents(
         selection: savedSelection,
         username: uname,
       });
+
+      await broadcastSelectionNotice(
+        data.partyId,
+        uname,
+        savedSelection,
+        "map",
+      );
 
       console.log(
         `[party:${data.partyId}] Map changed to ${savedSelection.mapId} by ${uname}`,

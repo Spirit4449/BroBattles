@@ -4,6 +4,7 @@
 import socket from "../../socket"; // owner-only hit events
 import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { emitVaultHitForCircle } from "../shared/vaultTargeting";
+import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 
 const RETURNING_SHURIKEN_DEFAULTS = getResolvedCharacterAttackConfig(
   "ninja",
@@ -67,6 +68,9 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     this.trailAccum = 0;
     this.trails = [];
     this.maxTrails = 40;
+    this.mapOverlaps = [];
+    this._lastMapBlockAt = 0;
+    this._returnSignalSent = false;
 
     // If texture isn't ready yet (edge case), keep invisible and set once available
     try {
@@ -102,7 +106,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       (this.displayWidth || this.width || 24) * collisionSizeScale,
     );
     this.body.setSize(collisionSize, collisionSize, true);
-    this.setDepth(5);
+    this.setDepth(RENDER_LAYERS.ATTACKS);
     this.setAngularVelocity(this.cfg.rotationSpeed * this.cfg.direction);
 
     // Path control points (slight dip then bulge)
@@ -149,7 +153,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     // Unified subtle glow (blue if owner, red otherwise)
     const glowColor = this.cfg.isOwner ? 0x2e9bff : 0xff3a2e;
     this.glow = scene.add.graphics();
-    this.glow.setDepth(this.depth - 1);
+    this.glow.setDepth(RENDER_LAYERS.ATTACKS - 1);
     this.glow.setBlendMode(Phaser.BlendModes.ADD);
     this._drawGlow(glowColor);
     scene.tweens.add({
@@ -260,15 +264,49 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     });
   }
 
-  attachMapOverlap() {
-    // Intentionally blank (projectile ignores map now)
+  attachMapOverlap(objects = null) {
+    const mapObjects =
+      Array.isArray(objects) && objects.length
+        ? objects
+        : Array.isArray(this.scene?._mapObjects)
+          ? this.scene._mapObjects
+          : [];
+    if (!mapObjects.length || !this.scene?.physics?.add?.overlap) return;
+    for (const obj of mapObjects) {
+      if (!obj?.body || obj === this || obj.body.enable === false) continue;
+      const collider = this.scene.physics.add.overlap(this, obj, () => {
+        this._onMapBlocked();
+      });
+      if (collider) this.mapOverlaps.push(collider);
+    }
+  }
+
+  _onMapBlocked() {
+    if (!this.active) return;
+    if (this.phase === "return") return;
+    const now = Number(this.scene?.time?.now) || 0;
+    if (now - this._lastMapBlockAt < 45) return;
+    this._lastMapBlockAt = now;
+    if (this.cfg.isOwner && this.cfg.instanceId && !this._returnSignalSent) {
+      this._returnSignalSent = true;
+      try {
+        socket.emit("game:action", {
+          type: "ninja-shuriken-return",
+          id: this.cfg.instanceId,
+          reason: "map-block",
+        });
+      } catch (_) {}
+    }
+    this.phase = "return";
+    this.elapsed = 0;
+    this.setAngularVelocity(this.cfg.rotationSpeed * 1.15 * this.cfg.direction);
   }
 
   spawnTrail() {
     if (!this.scene.textures.exists("shuriken")) return;
     const s = this.scene.add.image(this.x, this.y, "shuriken");
     s.setScale(this.cfg.scale * 0.48);
-    s.setDepth(4);
+    s.setDepth(RENDER_LAYERS.ATTACKS - 1);
     s.alpha = 0.35;
     this.scene.tweens.add({
       targets: s,
@@ -288,6 +326,12 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
   destroyShuriken() {
     if (!this.scene) return;
     this.scene.events.off("update", this.updateShuriken, this);
+    this.mapOverlaps.forEach((c) => {
+      try {
+        c?.destroy?.();
+      } catch (_) {}
+    });
+    this.mapOverlaps.length = 0;
     this.trails.forEach((t) => t && t.destroy && t.destroy());
     this.trails.length = 0;
     if (this.glow && this.glow.destroy) this.glow.destroy();

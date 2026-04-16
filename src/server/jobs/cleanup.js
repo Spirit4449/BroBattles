@@ -56,17 +56,21 @@ function startCleanupJobs({ db, io }) {
   setInterval(cleanupInactiveMembers, 1000 * 60 * 30);
   cleanupInactiveMembers();
 
-  // Update status to offline (every minute)
+  // Update status to offline (every 15 seconds)
   let _offlineMarkRunning = false;
   async function inactiveStatus() {
     if (_offlineMarkRunning) return;
     _offlineMarkRunning = true;
     try {
-      const marked = await db.setOfflineIfLastSeenOlderThan(3);
-      if (marked > 0) {
+      const marked = await db.setOfflineIfLastSeenOlderThan(1);
+      if (Array.isArray(marked) && marked.length > 0) {
+        const partyIds = [...new Set(marked.map((row) => Number(row.party_id)).filter(Boolean))];
         console.log(
-          `[inactive] Marked ${marked} user(s) offline due to last_seen > 3 minutes`
+          `[inactive] Marked ${marked.length} user(s) offline due to last_seen > 1 minute`
         );
+        for (const partyId of partyIds) {
+          await updateOrDeleteParty(io, db, partyId);
+        }
       }
     } catch (e) {
       console.warn("offline status mark failed:", e?.message || e);
@@ -74,7 +78,7 @@ function startCleanupJobs({ db, io }) {
       _offlineMarkRunning = false;
     }
   }
-  setInterval(inactiveStatus, 1000 * 60);
+  setInterval(inactiveStatus, 1000 * 15);
   inactiveStatus();
 
   // Cleanup long-running matches (> 5 minutes) every 30 minutes and on start

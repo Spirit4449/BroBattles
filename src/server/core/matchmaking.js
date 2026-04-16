@@ -147,6 +147,9 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
           modeVariantId,
           mapId: Number(mapStr),
         });
+        const hasReadyComposite = !!pickCompositeGroup(items, S, {
+          suppressNoComboLog: true,
+        });
         console.log(
           `[mm] consider mode=${modeId}:${modeVariantId} map=${mapStr} S=${S} tickets=${items
             .map(
@@ -162,6 +165,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
           Number(mapStr),
           items,
           S,
+          { hasReadyComposite },
         );
 
         // try repeatedly while possible in this bucket
@@ -178,12 +182,16 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
           await assembleAndReady(modeId, modeVariantId, Number(mapStr), group);
           // Update progress for remaining tickets in this bucket
           if (items.length) {
+            const hasReadyCompositeAfter = !!pickCompositeGroup(items, S, {
+              suppressNoComboLog: true,
+            });
             await progressEmitter.emitProgressForBucket(
               modeId,
               modeVariantId,
               Number(mapStr),
               items,
               S,
+              { hasReadyComposite: hasReadyCompositeAfter },
             );
           }
         }

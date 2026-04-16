@@ -851,6 +851,10 @@ function selectCharacter(character) {
       socket.emit("char-change", { character: charClass });
     }
 
+    // Restore presence immediately on successful selection so other clients
+    // do not get stuck on "Selecting Character" until the next status update.
+    emitCharacterMenuStatus(false);
+
     // Keep chooser card highlight synced immediately after selection.
     refreshUpgradeButtonAffordability();
   } catch (e) {

@@ -1,0 +1,11 @@
+export const RENDER_LAYERS = Object.freeze({
+  WORLD: 0,
+  GAME_OBJECTS: 10,
+  POWERUPS: 20,
+  PLAYER: 30,
+  PLAYER_HUD: 40,
+  RETICLES: 50,
+  ATTACKS: 60,
+  POISON: 70,
+  MOBILE_CONTROLS: 10000,
+});

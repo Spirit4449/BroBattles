@@ -1,6 +1,20 @@
 const attackRuntimeManager = require("./attackRuntimeManager");
 const { getResolvedAttackDescriptor } = require("./attackDescriptorResolver");
 
+function maybeHandleNinjaReturnSignal(room, playerData, actionData) {
+  const actionType = String(actionData?.type || "").toLowerCase();
+  if (actionType !== "ninja-shuriken-return") return null;
+  if (String(playerData?.char_class || "").toLowerCase() !== "ninja") {
+    return { handled: true };
+  }
+  attackRuntimeManager.requestReturningProjectilePhase(
+    room,
+    playerData,
+    actionData,
+  );
+  return { handled: true };
+}
+
 function broadcastAction(room, playerData, action, timestamp = Date.now()) {
   room.io.to(`game:${room.matchId}`).emit("game:action", {
     playerId: playerData.user_id,
@@ -35,7 +49,13 @@ function claimActionInstance(room, playerData, actionData, now = Date.now()) {
   return true;
 }
 
-function scheduleWindupRelease(room, playerData, actionData, actionNow, descriptor) {
+function scheduleWindupRelease(
+  room,
+  playerData,
+  actionData,
+  actionNow,
+  descriptor,
+) {
   const flow = descriptor?.actionFlow || {};
   const startupMs = Math.max(0, Number(flow.startupMs) || 0);
   broadcastAction(
@@ -60,7 +80,9 @@ function scheduleWindupRelease(room, playerData, actionData, actionNow, descript
     }
     const releaseAction = {
       ...actionData,
-      type: String(flow.releaseActionType || actionData?.type || "").toLowerCase(),
+      type: String(
+        flow.releaseActionType || actionData?.type || "",
+      ).toLowerCase(),
       startup: 0,
       ownerEcho: flow.releaseOwnerEcho === true,
     };
@@ -93,7 +115,21 @@ function registerRuntimeAttack(room, playerData, actionData, actionNow) {
   return { handled: false };
 }
 
-function handleCharacterAction(room, playerData, actionData, actionNow = Date.now()) {
+function handleCharacterAction(
+  room,
+  playerData,
+  actionData,
+  actionNow = Date.now(),
+) {
+  const ninjaReturnResult = maybeHandleNinjaReturnSignal(
+    room,
+    playerData,
+    actionData,
+  );
+  if (ninjaReturnResult?.handled) {
+    return ninjaReturnResult;
+  }
+
   const descriptor = getDescriptor(actionData?.type);
   if (!descriptor) return null;
 

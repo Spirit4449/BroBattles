@@ -66,8 +66,12 @@ class Ninja extends CharacterEntityBase {
   // Handle remote attack events for opponents using this character
   static handleRemoteAttack(scene, data, ownerWrapper) {
     // Support returning shuriken as emitted by local Ninja.attack()
-    if (data.returning) {
+    const actionType = String(data?.type || "").toLowerCase();
+    if (data.returning || actionType === "ninja-shuriken") {
       const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
+      const mapObjects = Array.isArray(scene?._mapObjects)
+        ? scene._mapObjects
+        : [];
       // Play remote throw SFX for other players
       try {
         const sfx = scene.sound.add("shurikenThrow");
@@ -94,6 +98,7 @@ class Ninja extends CharacterEntityBase {
           isOwner: false,
         },
       );
+      shuriken.attachMapOverlap(mapObjects);
       // Remote collision intentionally omitted (owner authoritative)
       return true;
     }
@@ -199,12 +204,13 @@ class Ninja extends CharacterEntityBase {
         config,
       );
 
-      // Owner-only collisions
+      // Enemy hit reporting is server-authoritative, but map blocking is
+      // visual simulation and should run on every client.
       if (!config.serverAuthoritativeHits) {
         const enemyList = Object.values(this.opponentPlayersRef || {});
         returning.attachEnemyOverlap(enemyList);
-        returning.attachMapOverlap(this.mapObjects);
       }
+      returning.attachMapOverlap(this.mapObjects);
 
       // Perk: grant ammo on return
       const { grantCharge, setCanAttack, drawAmmoBar } = this.ammo;

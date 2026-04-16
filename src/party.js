@@ -1553,6 +1553,14 @@ export function socketInit(options = {}) {
 
     // Update platforms for new mode
     updatePlatformsForMode(getPlayersPerTeamForSelection(selection));
+    if (selection.mapId != null) {
+      setLobbyBackground(selection.mapId);
+      applyPlatformImageForMap(selection.mapId);
+      applyLobbyCharacterOffsetForMap(
+        selection.mapId,
+        getPlayersPerTeamForSelection(selection),
+      );
+    }
 
     // Re-render members in new platform layout
     if (data.members) {
@@ -1593,6 +1601,17 @@ export function socketInit(options = {}) {
       getPlayersPerTeamForSelection(selection),
     );
     animatePlatformsForMapSwitch();
+  });
+
+  socket.on("party:notice", (data) => {
+    if (currentPartyId && String(data?.partyId) !== String(currentPartyId))
+      return;
+    const title = String(data?.title || "Party update").trim();
+    const message = String(data?.message || "").trim();
+    sonner(title, message || undefined, "OK", undefined, {
+      duration: 2500,
+      sound: "notification",
+    });
   });
 
   // Party-wide: everyone ready -> show matchmaking overlay
@@ -1800,20 +1819,28 @@ export function socketInit(options = {}) {
     if (overlay && overlay.classList.contains("hidden")) {
       showMatchmakingOverlay();
     }
-    const incomingPlayers = Array.isArray(data?.players) ? data.players : null;
-    if (incomingPlayers) {
+    const foundCount = Number(data?.found) || 0;
+    const totalCount =
+      Number(data?.total) || getTotalPlayersForSelection(incomingSelection);
+
+    const incomingPlayers = Array.isArray(data?.players) ? data.players : [];
+    const fallbackLocalPlayers = collectCurrentPartyMembers().slice(
+      0,
+      Math.min(foundCount, totalCount),
+    );
+    const nextPlayers = incomingPlayers.length ? incomingPlayers : fallbackLocalPlayers;
+    if (Array.isArray(nextPlayers)) {
       const nextSig = JSON.stringify(
-        incomingPlayers.map((p) => `${p?.name || ""}:${p?.char_class || ""}`),
+        nextPlayers.map((p) => `${p?.name || ""}:${p?.char_class || ""}`),
       );
       if (nextSig !== mmOverlayPlayersSig) {
         mmOverlayPlayersSig = nextSig;
-        mmOverlayPlayers = incomingPlayers;
+        mmOverlayPlayers = nextPlayers;
       }
     }
-    mmOverlayTotal =
-      Number(data?.total) || getTotalPlayersForSelection(incomingSelection);
+    mmOverlayTotal = totalCount;
     updateMMOverlay({
-      found: Number(data?.found) || 0,
+      found: foundCount,
       total: mmOverlayTotal,
       selection: incomingSelection,
       players: mmOverlayPlayers,

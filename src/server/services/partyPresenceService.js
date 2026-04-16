@@ -4,6 +4,11 @@ function createPartyPresenceService({ db, io }) {
   async function setUserPresence(name, status, partyId = null) {
     try {
       await db.setUserStatus(name, status);
+      if (partyId) {
+        try {
+          await db.updateLastSeen(partyId, name);
+        } catch (_) {}
+      }
       const targetPartyId = partyId || (await db.getPartyIdByName(name));
       if (targetPartyId) {
         io.to(`party:${targetPartyId}`).emit("status:update", {
@@ -11,6 +16,7 @@ function createPartyPresenceService({ db, io }) {
           name,
           status,
         });
+        await emitPartyRosterById(targetPartyId);
       }
     } catch (_) {}
   }
@@ -40,6 +46,10 @@ function createPartyPresenceService({ db, io }) {
     setUserPresence,
     setTransientPresence,
     emitPartyRosterById,
+    emitPartyNotice: (partyId, notice) => {
+      if (!partyId) return;
+      io.to(`party:${partyId}`).emit("party:notice", notice);
+    },
   };
 }
 

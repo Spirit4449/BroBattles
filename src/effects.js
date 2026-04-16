@@ -1,5 +1,6 @@
 // effects.js
 // Shared lightweight VFX helpers (dust / smoke puffs for running)
+import { RENDER_LAYERS } from "./gameScene/renderLayers";
 
 const dustPool = [];
 const dustPoolMax = 120;
@@ -130,7 +131,8 @@ export function spawnHealthMarker(scene, x, y, delta, opts = {}) {
   const color = positive ? "#23d88c" : "#ff5c5c";
   const strokeColor = positive ? "#0a3f28" : "#5a0a0a";
   const label = `${positive ? "+" : "-"}${Math.abs(rounded)}`;
-  const depth = typeof opts.depth === "number" ? opts.depth : 12;
+  const depth =
+    typeof opts.depth === "number" ? opts.depth : RENDER_LAYERS.PLAYER_HUD;
   const fontSize = opts.fontSize || "13px";
   const marker = scene.add.text(x, y, label, {
     fontFamily: "Poppins, 'Arial Black', sans-serif",
@@ -174,7 +176,8 @@ export function spawnDamageImpact(scene, sprite, opts = {}) {
   const right = Number(body?.right) || cx + (sprite.width || 60) * 0.5;
   const color = opts.color || 0xff4d6d;
   const glowColor = opts.glowColor || 0xff9aa2;
-  const depth = typeof opts.depth === "number" ? opts.depth : 24;
+  const depth =
+    typeof opts.depth === "number" ? opts.depth : RENDER_LAYERS.PLAYER_HUD;
 
   const flash = scene.add.ellipse(
     cx,
@@ -274,7 +277,8 @@ export function spawnDeathBurst(scene, sprite, opts = {}) {
   const cy = Number(body?.center?.y) || Number(sprite.y) || 0;
   const color = opts.color || 0xff8fb1;
   const glowColor = opts.glowColor || 0xffd3df;
-  const depth = typeof opts.depth === "number" ? opts.depth : 26;
+  const depth =
+    typeof opts.depth === "number" ? opts.depth : RENDER_LAYERS.PLAYER_HUD;
 
   const core = scene.add.circle(cx, cy, 26, color, 0.24);
   core.setDepth(depth);
@@ -313,7 +317,8 @@ export function spawnDeathBurst(scene, sprite, opts = {}) {
     );
     spark.setDepth(depth);
     spark.setBlendMode(Phaser.BlendModes.ADD);
-    const angle = (Math.PI * 2 * i) / 12 + Phaser.Math.FloatBetween(-0.12, 0.12);
+    const angle =
+      (Math.PI * 2 * i) / 12 + Phaser.Math.FloatBetween(-0.12, 0.12);
     const speed = Phaser.Math.Between(44, 96);
     scene.tweens.add({
       targets: spark,
@@ -358,19 +363,22 @@ export function spawnSpawnBurst(scene, sprite, opts = {}) {
   const body = sprite.body;
   const cx = Number(body?.center?.x) || Number(sprite.x) || 0;
   const cy = Number(body?.center?.y) || Number(sprite.y) || 0;
-  const top = Number(body?.top) || cy - (Number(body?.height) || Number(sprite.height) || 82) * 0.5;
+  const top =
+    Number(body?.top) ||
+    cy - (Number(body?.height) || Number(sprite.height) || 82) * 0.5;
   const bottom =
-    Number(body?.bottom) || cy + (Number(body?.height) || Number(sprite.height) || 82) * 0.5;
-  const halfWidth =
-    Math.max(
-      16,
-      (Number(body?.width) || Number(sprite.width) || 54) * 0.5 + 6,
-    );
+    Number(body?.bottom) ||
+    cy + (Number(body?.height) || Number(sprite.height) || 82) * 0.5;
+  const halfWidth = Math.max(
+    16,
+    (Number(body?.width) || Number(sprite.width) || 54) * 0.5 + 6,
+  );
   const height = Math.max(52, bottom - top + 18);
   const baseRadius = Number(opts.radius) || Math.max(28, halfWidth + 8);
   const tint = opts.tint || 0xf8fafc;
   const accent = opts.accent || 0xb8ecff;
-  const depth = typeof opts.depth === "number" ? opts.depth : 25;
+  const depth =
+    typeof opts.depth === "number" ? opts.depth : RENDER_LAYERS.PLAYER_HUD;
 
   const column = scene.add.ellipse(
     cx,
@@ -541,7 +549,10 @@ export function triggerDamageScreenPulse(scene, opts = {}) {
     onComplete: () => {
       if (
         (scene._poisonWaterY ?? Infinity) >
-        (Number(scene.scale?.height) || Number(scene.game?.config?.height) || 1000) + 10
+        (Number(scene.scale?.height) ||
+          Number(scene.game?.config?.height) ||
+          1000) +
+          10
       ) {
         vigEl.classList.remove("water-danger-active");
       }

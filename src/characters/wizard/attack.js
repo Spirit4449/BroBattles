@@ -1,6 +1,7 @@
 import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
+import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 
 const FIREBALL = getResolvedCharacterAttackConfig("wizard", "fireball");
 
@@ -44,7 +45,7 @@ function createDebugCircle(scene) {
     0.08,
   );
   circle.setStrokeStyle(1, 0x00ffff, 0.8);
-  circle.setDepth(9999);
+  circle.setDepth(RENDER_LAYERS.ATTACKS + 10);
   return registerDebugShape(circle);
 }
 
@@ -82,7 +83,7 @@ function createFireballSprite(scene, x, y, direction) {
   const sprite = key
     ? scene.add.sprite(x, y, key)
     : scene.add.circle(x, y, FIREBALL_VISUAL_RADIUS, 0xff8b3d, 0.9);
-  sprite.setDepth(FIREBALL_DEPTH);
+  sprite.setDepth(Math.max(FIREBALL_DEPTH, RENDER_LAYERS.ATTACKS));
   if (sprite.setScale) sprite.setScale(FIREBALL_INITIAL_SCALE);
   if (sprite.setAngle)
     sprite.setAngle(
@@ -190,7 +191,9 @@ function playWizardCastWindup(scene, ownerSprite, volume = 0.3) {
   try {
     const played = scene.sound?.play("wizard-fireball", { volume });
     if (!played) {
-      scene.sound?.play("draven-fireball", { volume: Math.max(0.2, volume * 0.8) });
+      scene.sound?.play("draven-fireball", {
+        volume: Math.max(0.2, volume * 0.8),
+      });
     }
   } catch (_) {}
 }
@@ -220,8 +223,8 @@ function resolveProjectileStart(payload, ownerSprite, angle, direction) {
         ((ownerSprite?.displayWidth || 80) * FIREBALL_FORWARD_OFFSET),
     y: ownerSprite
       ? ownerSprite.y -
-          (ownerSprite.displayHeight || ownerSprite.height || 120) *
-            FIREBALL_VERTICAL_OFFSET +
+        (ownerSprite.displayHeight || ownerSprite.height || 120) *
+          FIREBALL_VERTICAL_OFFSET +
         Math.sin(resolvedAngle) *
           ((ownerSprite.displayWidth || ownerSprite.width || 80) *
             FIREBALL_FORWARD_OFFSET)
@@ -232,9 +235,7 @@ function resolveProjectileStart(payload, ownerSprite, angle, direction) {
 function spawnWizardFireballProjectile(
   scene,
   payload,
-  {
-    ownerSprite = null,
-  } = {},
+  { ownerSprite = null } = {},
 ) {
   if (!scene?.add) return null;
 
@@ -279,7 +280,12 @@ function spawnWizardFireballProjectile(
   if (followOwnerDuringStartup) {
     const updateStartupOrigin = () => {
       if (!sprite.active || !ownerSprite?.active) return;
-      const liveStart = resolveProjectileStart({}, ownerSprite, angle, direction);
+      const liveStart = resolveProjectileStart(
+        {},
+        ownerSprite,
+        angle,
+        direction,
+      );
       sprite.x = liveStart.x;
       sprite.y = liveStart.y;
     };
@@ -374,7 +380,11 @@ export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
   });
 }
 
-export function spawnWizardFireballAuthoritative(scene, payload, localContext = {}) {
+export function spawnWizardFireballAuthoritative(
+  scene,
+  payload,
+  localContext = {},
+) {
   return spawnWizardFireballProjectile(scene, payload, {
     ownerSprite: localContext?.ownerSprite || null,
   });

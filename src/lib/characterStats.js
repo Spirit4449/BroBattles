@@ -100,13 +100,13 @@ export const characterStats = {
   thorg: {
     baseHealth: 13000,
     attackDescription:
-      "Swings a heavy axe in a short arc, pushing back nearby enemies.",
+      "Swings a heavy axe in a short arc.",
     baseDamage: 1500,
     ammoCooldownMs: 400,
     ammoReloadMs: 800,
     ammoCapacity: 3,
     specialDescription:
-      "Enters a purple rage that buffs weapon strikes and mobility.",
+      "Enters a purple rage that buffs damage and gives knockback ability. ",
     specialBaseDamage: 2800,
     specialChargeHits: 5,
     specialChargeDamage: 6000,
@@ -180,7 +180,7 @@ export const characterStats = {
   draven: {
     baseHealth: 6500,
     attackDescription:
-      "Puffs out a magical smoke that deals splash baseDamage to everyone in the path.",
+      "Puffs out a magical smoke that deals splash damage to everyone in the path.",
     baseDamage: 2500,
     ammoCooldownMs: 450,
     ammoReloadMs: 1600,
@@ -282,7 +282,7 @@ export const characterStats = {
   wizard: {
     baseHealth: 5000,
     attackDescription:
-      "Puffs out a magical smoke that deals splash baseDamage to everyone in the path.",
+      "Releases a fireball that deals splash damage to everyone in the path.",
     baseDamage: 3000,
     ammoCooldownMs: 800,
     ammoReloadMs: 3000,

@@ -490,11 +490,17 @@ class GameRoom {
     socket.on("game:action", (actionData) => {
       const player = this.players.get(socket.id);
       if (!player) return;
+      const actionType = String(actionData?.type || "").toLowerCase();
+      const isReturnControlAction = actionType === "ninja-shuriken-return";
       const now = Date.now();
       if (Number(player._actionSuppressedUntil || 0) > now) return;
 
       const lastActionAt = Number(player._lastActionAt || 0);
-      if (lastActionAt > 0 && now - lastActionAt < ACTION_MIN_INTERVAL_MS) {
+      if (
+        !isReturnControlAction &&
+        lastActionAt > 0 &&
+        now - lastActionAt < ACTION_MIN_INTERVAL_MS
+      ) {
         const windowStart = Number(player._actionWindowStart || 0);
         if (!windowStart || now - windowStart > ACTION_SPAM_WINDOW_MS) {
           player._actionWindowStart = now;
@@ -514,7 +520,9 @@ class GameRoom {
         return;
       }
 
-      player._lastActionAt = now;
+      if (!isReturnControlAction) {
+        player._lastActionAt = now;
+      }
       this.handlePlayerAction(socket.id, actionData);
     });
 
@@ -857,6 +865,9 @@ class GameRoom {
     if (typeof actionData.animation === "string") {
       sanitized.animation = String(actionData.animation).slice(0, 80);
     }
+    if (typeof actionData.returning === "boolean") {
+      sanitized.returning = actionData.returning;
+    }
 
     const copyVec2 = (key) => {
       const entry = actionData[key];
@@ -878,6 +889,8 @@ class GameRoom {
       "strikeMs",
       "activeWindowMs",
       "followAfterWindupMs",
+      "rotationSpeed",
+      "scale",
       "forwardDistance",
       "outwardDuration",
       "returnSpeed",
