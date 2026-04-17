@@ -41,7 +41,7 @@ import "./styles/sonner.css";
 
 wireFullscreenToggles();
 
-createLobbyChatController({
+const lobbyChatController = createLobbyChatController({
   socket,
   getPartyContext: getPartyInteractionContext,
   getCurrentUserName: () =>
@@ -912,6 +912,43 @@ function closeOverlay(id) {
   overlay.setAttribute("aria-hidden", "true");
 }
 
+function isOverlayOpen(id) {
+  const overlay = document.getElementById(id);
+  return !!overlay && !overlay.classList.contains("hidden");
+}
+
+function closeTransientLobbyUiOnEscape() {
+  const overlayIds = [
+    "party-settings-overlay",
+    "party-discovery-overlay",
+    "trophy-track-overlay",
+    "leaderboard-overlay",
+  ];
+  for (const overlayId of overlayIds) {
+    if (!isOverlayOpen(overlayId)) continue;
+    closeOverlay(overlayId);
+    return true;
+  }
+
+  if (document.querySelector(".bb-chat-lobby-panel.is-open")) {
+    lobbyChatController?.close?.();
+    return true;
+  }
+
+  return false;
+}
+
+document.addEventListener(
+  "keydown",
+  (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    if (!closeTransientLobbyUiOnEscape()) return;
+    event.preventDefault();
+    event.stopPropagation();
+  },
+  true,
+);
+
 function setPartyDiscoveryStatus(text, isError = false) {
   const status = document.getElementById("party-discovery-status");
   if (!status) return;
@@ -1241,6 +1278,50 @@ function setTrophyClaimBadge(count) {
   }
 }
 
+function spawnTrophyClaimParticles(host, options = {}) {
+  if (!host) return;
+  const count = Math.max(6, Math.min(22, Number(options?.count) || 12));
+  const tone = String(options?.tone || "gold");
+  for (let i = 0; i < count; i += 1) {
+    const spark = document.createElement("span");
+    spark.className = `trophy-claim-spark tone-${tone}`;
+    const dx = (Math.random() * 2 - 1) * 86;
+    const dy = -18 - Math.random() * 88;
+    const dur = 420 + Math.round(Math.random() * 280);
+    const delay = Math.round(Math.random() * 110);
+    spark.style.setProperty("--spark-dx", `${Math.round(dx)}px`);
+    spark.style.setProperty("--spark-dy", `${Math.round(dy)}px`);
+    spark.style.setProperty("--spark-dur", `${dur}ms`);
+    spark.style.setProperty("--spark-delay", `${delay}ms`);
+    host.appendChild(spark);
+    setTimeout(() => spark.remove(), dur + delay + 80);
+  }
+}
+
+function animateTrophyClaimSuccess({ card, marker, canvas, summary }) {
+  if (!card || !marker) return Promise.resolve();
+  card.classList.add("claim-success");
+  marker.classList.add("claim-success");
+  canvas?.classList.add("claim-flash");
+  summary?.classList.add("reward-pop");
+
+  spawnTrophyClaimParticles(card, { count: 14, tone: "gold" });
+  spawnTrophyClaimParticles(marker, { count: 8, tone: "blue" });
+  if (summary) {
+    spawnTrophyClaimParticles(summary, { count: 7, tone: "gold" });
+  }
+
+  return new Promise((resolve) => {
+    window.setTimeout(() => {
+      card.classList.remove("claim-success");
+      marker.classList.remove("claim-success");
+      canvas?.classList.remove("claim-flash");
+      summary?.classList.remove("reward-pop");
+      resolve();
+    }, 760);
+  });
+}
+
 function renderTrophyTrack(state) {
   const container = document.getElementById("trophy-track-list");
   const summary = document.getElementById("trophy-track-summary");
@@ -1266,19 +1347,23 @@ function renderTrophyTrack(state) {
     ...tiers.map((tier) => Number(tier?.trophiesRequired) || 0),
   );
   const overallRatio = Math.max(0, Math.min(1, trophies / maxTierRequirement));
-  const trackWidth = Math.max(980, tiers.length * 240);
+  const trackWidth = Math.max(1080, tiers.length * 252);
   const laneInset = 28;
   const laneWidth = Math.max(1, trackWidth - laneInset * 2);
 
   const canvas = document.createElement("div");
   canvas.className = "trophy-track-canvas";
   canvas.style.width = `${trackWidth}px`;
+  canvas.style.setProperty("--trophy-progress", `${Math.round(overallRatio * 100)}%`);
   canvas.innerHTML = `
-    <div class="trophy-track-line-bg"></div>
-    <div class="trophy-track-line-fill" style="width:${Math.round(overallRatio * 100)}%"></div>
+    <div class="trophy-track-line-shell">
+      <div class="trophy-track-line-bg"></div>
+      <div class="trophy-track-line-fill" style="width:${Math.round(overallRatio * 100)}%"></div>
+      <div class="trophy-track-line-glint"></div>
+    </div>
     <div class="trophy-track-card-row" id="trophy-track-card-row"></div>
     <div class="trophy-track-marker-row" id="trophy-track-marker-row"></div>
-    <div class="trophy-track-player-pin" style="left:${Math.round(overallRatio * 100)}%">
+    <div class="trophy-track-player-pin" style="left:${Math.round(overallRatio * 100)}%" aria-label="Current trophy position">
       <img src="/assets/trophy.webp" alt="current trophies" />
       <span>${trophies}</span>
     </div>
@@ -1300,6 +1385,9 @@ function renderTrophyTrack(state) {
       : tier.canClaim
         ? "claimable"
         : "locked";
+    const isMajorMilestone =
+      (Array.isArray(tier?.rewards) ? tier.rewards.length : 0) > 1 ||
+      (Number(tier?.trophiesRequired) || 0) % 500 === 0;
 
     const rewards = Array.isArray(tier.rewards) ? tier.rewards : [];
     const primaryReward = rewards[0] || {
@@ -1311,16 +1399,17 @@ function renderTrophyTrack(state) {
     const primaryName = String(primaryReward?.name || "Reward");
     const primaryImage = String(primaryReward?.image || "/assets/coin.webp");
     const primaryAmount = Math.max(0, Number(primaryReward?.amount) || 0);
-
     const card = document.createElement("article");
-    card.className = `trophy-lane-card ${statusClass}`;
+    card.className = `trophy-lane-card ${statusClass}${isMajorMilestone ? " major" : ""}`;
     card.style.left = `${Math.round(ratioToX(tierRatio))}px`;
     card.innerHTML = `
-      <div class="trophy-lane-item-glow"></div>
-      <img class="trophy-lane-item" src="${primaryImage}" alt="${primaryName}" />
+      <div class="trophy-lane-card-sheen"></div>
+      <div class="trophy-lane-item-wrap">
+        <img class="trophy-lane-item" src="${primaryImage}" alt="${escapeHtml(primaryName)}" />
+      </div>
       <div class="trophy-lane-meta">
-        <strong>${primaryAmount} ${primaryName}</strong>
-        <span>${tier.title || "Reward"}${extraRewards > 0 ? ` +${extraRewards} more` : ""}</span>
+        <strong>${primaryAmount} ${escapeHtml(primaryName)}</strong>
+        <span>${escapeHtml(tier.title || "Reward")}${extraRewards > 0 ? ` +${extraRewards} more` : ""}</span>
       </div>
       <button class="pixel-menu-button trophy-tier-claim" data-tier-id="${tier.tierId}" ${
         tier.canClaim ? "" : "disabled"
@@ -1328,11 +1417,13 @@ function renderTrophyTrack(state) {
     `;
 
     const marker = document.createElement("div");
-    marker.className = `trophy-lane-marker ${statusClass}`;
+    marker.className = `trophy-lane-marker ${statusClass}${isMajorMilestone ? " major" : ""}`;
     marker.style.left = `${Math.round(ratioToX(tierRatio))}px`;
     marker.innerHTML = `
-      <span class="trophy-lane-marker-dot"></span>
-      <span class="trophy-lane-marker-label">${tier.trophiesRequired}</span>
+      <span class="trophy-lane-marker-chip">
+        <img src="/assets/trophy.webp" alt="" />
+        <span>${tier.trophiesRequired}</span>
+      </span>
     `;
 
     const claimBtn = card.querySelector(".trophy-tier-claim");
@@ -1341,6 +1432,8 @@ function renderTrophyTrack(state) {
       const tierId = String(claimBtn.dataset.tierId || "");
       if (!tierId || claimBtn.disabled) return;
       claimBtn.disabled = true;
+      claimBtn.classList.add("is-busy");
+      claimBtn.textContent = "Claiming...";
       try {
         const result = await fetchLobbyJson("/trophies/claim", {
           method: "POST",
@@ -1364,9 +1457,17 @@ function renderTrophyTrack(state) {
         if (trophyCount)
           trophyCount.textContent = String(userData?.trophies || 0);
 
+        await animateTrophyClaimSuccess({
+          card,
+          marker,
+          canvas,
+          summary,
+        });
         await openTrophyProgressionOverlay({ preserveScroll: true });
       } catch (error) {
         sonner("Reward claim failed", error?.message || "Try again.", "error");
+        claimBtn.classList.remove("is-busy");
+        claimBtn.textContent = tier.canClaim ? "Claim" : "Locked";
         claimBtn.disabled = false;
       }
     });

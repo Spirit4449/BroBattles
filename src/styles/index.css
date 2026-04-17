@@ -1453,8 +1453,8 @@ h3 {
 .trophy-overlay-panel {
   position: relative;
   z-index: 1;
-  width: min(980px, 96vw);
-  max-height: min(760px, 92vh);
+  width: min(1100px, 97vw);
+  max-height: min(860px, 95vh);
   overflow: hidden;
   border-radius: 14px;
   border: 3px solid #183362;
@@ -1746,8 +1746,8 @@ h3 {
 .trophy-track-list {
   position: relative;
   width: 100%;
-  min-height: 330px;
-  max-height: 62vh;
+  min-height: 380px;
+  max-height: 72vh;
   overflow-y: auto;
   overflow-x: auto;
   padding: 16px 16px 26px;
@@ -1762,30 +1762,81 @@ h3 {
   position: absolute;
   left: 0;
   top: 0;
-  min-height: 310px;
+  min-height: 360px;
+  --trophy-progress: 0%;
+}
+
+.trophy-track-line-shell {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  bottom: 66px;
+  height: 14px;
 }
 
 .trophy-track-line-bg {
   position: absolute;
-  left: 28px;
-  right: 28px;
-  bottom: 70px;
+  left: 0;
+  right: 0;
+  top: 0;
   height: 14px;
   border-radius: 999px;
-  background: linear-gradient(180deg, #ff7b11 0%, #d35a06 100%);
-  border: 2px solid rgba(56, 19, 2, 0.7);
-  box-shadow: inset 0 2px 0 rgba(255, 198, 142, 0.36);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.09) 0,
+      rgba(255, 255, 255, 0.09) 22px,
+      rgba(255, 255, 255, 0) 22px,
+      rgba(255, 255, 255, 0) 44px
+    ),
+    linear-gradient(180deg, #f59b1c 0%, #cf6808 100%);
+  border: 2px solid rgba(67, 26, 3, 0.78);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 220, 172, 0.46),
+    0 8px 16px rgba(12, 6, 1, 0.46);
 }
 
 .trophy-track-line-fill {
   position: absolute;
-  left: 30px;
-  bottom: 72px;
+  left: 2px;
+  top: 2px;
   height: 10px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #4ac7ff, #1c87e4);
-  box-shadow: 0 0 12px rgba(64, 187, 255, 0.62);
-  transition: width 260ms ease;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.34),
+      rgba(255, 255, 255, 0.06) 25%,
+      rgba(255, 255, 255, 0.34) 50%,
+      rgba(255, 255, 255, 0.06) 75%,
+      rgba(255, 255, 255, 0.34)
+    ),
+    linear-gradient(90deg, #64e8ff, #2fa3ff 52%, #1a6be1);
+  background-size:
+    100% 100%,
+    100% 100%;
+  box-shadow:
+    0 0 16px rgba(78, 202, 255, 0.76),
+    inset 0 1px 0 rgba(235, 252, 255, 0.58);
+  transition: width 320ms ease;
+}
+
+.trophy-track-line-glint {
+  position: absolute;
+  top: -3px;
+  left: max(4px, var(--trophy-progress));
+  transform: translateX(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle,
+    rgba(180, 240, 255, 0.98) 0%,
+    rgba(116, 219, 255, 0.72) 35%,
+    rgba(80, 176, 255, 0) 75%
+  );
+  pointer-events: none;
+  filter: drop-shadow(0 0 9px rgba(99, 202, 255, 0.86));
 }
 
 .trophy-track-card-row {
@@ -1797,23 +1848,26 @@ h3 {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 35px;
-  height: 38px;
+  bottom: 18px;
+  height: 44px;
 }
 
 .trophy-track-player-pin {
   position: absolute;
-  bottom: 8px;
+  bottom: 4px;
   transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: linear-gradient(145deg, #f7ac21, #de7f11);
+  background: linear-gradient(145deg, #ffd56b, #f09c1a 48%, #d87910 100%);
   border: 2px solid #402100;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 5px 10px;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.32);
+  box-shadow:
+    0 8px 16px rgba(0, 0, 0, 0.32),
+    0 0 16px rgba(255, 192, 94, 0.38);
   z-index: 7;
+  animation: trophyPinBob 2.4s ease-in-out infinite;
 }
 
 .trophy-track-player-pin::before {
@@ -1841,23 +1895,38 @@ h3 {
   font-size: 16px;
 }
 
+@keyframes trophyPinBob {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-3px);
+  }
+}
+
 .trophy-lane-card {
   position: absolute;
-  bottom: 108px;
-  width: 184px;
+  bottom: 132px;
+  width: 196px;
   transform: translateX(-50%);
-  border-radius: 12px;
+  border-radius: 14px;
   border: 2px solid rgba(13, 52, 94, 0.95);
   background: linear-gradient(145deg, #1a4d8d 0%, #113664 50%, #0a2547 100%);
   box-shadow:
     0 10px 18px rgba(0, 0, 0, 0.3),
     inset 0 2px 0 rgba(255, 255, 255, 0.2);
-  padding: 8px;
+  padding: 10px;
   display: grid;
   justify-items: center;
-  gap: 6px;
+  gap: 8px;
   z-index: 3;
   overflow: hidden;
+  transition:
+    transform 180ms ease,
+    filter 180ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease;
 }
 
 .trophy-lane-card::before {
@@ -1866,9 +1935,37 @@ h3 {
   inset: 0;
   background-size: 240% 240%;
   background-position: 0% 50%;
-  opacity: 0.6;
+  opacity: 0.5;
   animation: trophyCardGradientDrift 18s ease-in-out infinite;
   pointer-events: none;
+}
+
+.trophy-lane-card-sheen {
+  position: absolute;
+  top: -58%;
+  left: -44%;
+  width: 84%;
+  height: 210%;
+  transform: rotate(22deg);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.22) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: trophyCardSheen 4.2s ease-in-out infinite;
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+@keyframes trophyCardSheen {
+  0%,
+  100% {
+    transform: translateX(-130%) rotate(22deg);
+  }
+  35% {
+    transform: translateX(180%) rotate(22deg);
+  }
 }
 
 @keyframes trophyCardGradientDrift {
@@ -1911,19 +2008,7 @@ h3 {
 }
 
 .trophy-lane-item-glow {
-  position: absolute;
-  left: 50%;
-  top: 14px;
-  width: 74px;
-  height: 74px;
-  transform: translateX(-50%);
-  border-radius: 999px;
-  background: radial-gradient(
-    circle,
-    rgba(255, 244, 172, 0.66),
-    rgba(255, 244, 172, 0)
-  );
-  pointer-events: none;
+  display: none;
 }
 
 .trophy-lane-item {
@@ -1935,25 +2020,33 @@ h3 {
   filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.32));
 }
 
+.trophy-lane-item-wrap {
+  position: relative;
+  width: 84px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+}
+
 .trophy-lane-meta {
   display: grid;
   justify-items: center;
-  gap: 2px;
+  gap: 3px;
   text-align: center;
 }
 
 .trophy-lane-meta strong {
   color: #fff;
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1.1;
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
 }
 
 .trophy-lane-meta span {
   color: #d7edff;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.25;
-  min-height: 24px;
+  min-height: 16px;
 }
 
 .trophy-tier-claim {
@@ -1968,6 +2061,10 @@ h3 {
 .trophy-tier-claim:disabled {
   opacity: 0.66;
   cursor: not-allowed;
+}
+
+.trophy-tier-claim.is-busy {
+  background: linear-gradient(135deg, #9a7d2c, #7a611d);
 }
 
 .trophy-lane-card.locked .trophy-tier-claim {
@@ -1991,41 +2088,179 @@ h3 {
   background: linear-gradient(145deg, #133152 0%, #0e2540 50%, #08182b 100%);
 }
 
+.trophy-lane-card.claimable:hover {
+  transform: translateX(-50%) translateY(-3px);
+  filter: brightness(1.05);
+}
+
+.trophy-lane-card.major {
+  border-color: rgba(255, 218, 119, 0.95);
+  box-shadow:
+    0 12px 20px rgba(0, 0, 0, 0.35),
+    0 0 20px rgba(255, 210, 110, 0.32),
+    inset 0 2px 0 rgba(255, 255, 255, 0.24);
+}
+
 .trophy-lane-marker {
   position: absolute;
   transform: translateX(-50%);
-  display: grid;
-  justify-items: center;
-  gap: 5px;
-  width: 70px;
+  width: auto;
 }
 
-.trophy-lane-marker-dot {
-  width: 16px;
-  height: 16px;
+.trophy-lane-marker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 3px 10px;
   border-radius: 999px;
   border: 2px solid rgba(14, 42, 74, 0.95);
-  background: #4bc5ff;
-  box-shadow: 0 0 0 3px rgba(8, 23, 46, 0.45);
-}
-
-.trophy-lane-marker.claimable .trophy-lane-marker-dot {
-  background: #ffd774;
+  background: linear-gradient(165deg, #74d8ff, #2b9fe8);
+  color: #e8f7ff;
   box-shadow:
-    0 0 0 3px rgba(8, 23, 46, 0.45),
-    0 0 10px rgba(255, 215, 110, 0.75);
+    0 0 0 2px rgba(8, 23, 46, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+  font-size: 11px;
+  font-weight: 900;
 }
 
-.trophy-lane-marker.claimed .trophy-lane-marker-dot {
-  background: #62d8a2;
+.trophy-lane-marker-chip img {
+  width: 12px;
+  height: 12px;
+  object-fit: contain;
 }
 
-.trophy-lane-marker-label {
-  color: #d9eeff;
-  font-size: 13px;
-  font-weight: 800;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
-  white-space: nowrap;
+.trophy-lane-marker.claimable .trophy-lane-marker-chip {
+  background: linear-gradient(165deg, #ffe39b, #f6b329);
+  color: #3b2100;
+  box-shadow:
+    0 0 0 2px rgba(8, 23, 46, 0.45),
+    0 0 14px rgba(255, 215, 110, 0.75);
+}
+
+.trophy-lane-marker.claimed .trophy-lane-marker-chip {
+  background: linear-gradient(165deg, #9ff0c5, #49be83);
+  color: #0d311e;
+}
+
+.trophy-lane-marker.locked .trophy-lane-marker-chip {
+  background: linear-gradient(165deg, #76b9ea, #3b88c8);
+}
+
+.trophy-lane-marker.major .trophy-lane-marker-chip {
+  border-color: rgba(93, 55, 0, 0.92);
+}
+
+.trophy-lane-card.claim-success {
+  animation: trophyClaimCardBurst 520ms ease;
+}
+
+.trophy-lane-marker.claim-success {
+  animation: trophyClaimMarkerPulse 540ms ease;
+}
+
+.trophy-overlay-summary {
+  position: relative;
+  overflow: hidden;
+}
+
+.trophy-overlay-summary.reward-pop {
+  animation: trophySummaryRewardPop 520ms ease;
+}
+
+.trophy-track-canvas.claim-flash .trophy-track-line-fill {
+  animation: trophyRailClaimPulse 640ms ease;
+}
+
+.trophy-claim-spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  animation: trophyClaimSpark var(--spark-dur, 520ms) ease-out forwards;
+  animation-delay: var(--spark-delay, 0ms);
+}
+
+.trophy-claim-spark.tone-gold {
+  background: radial-gradient(circle, #fff7c6 0%, #ffc95c 64%, #ffb42f 100%);
+}
+
+.trophy-claim-spark.tone-blue {
+  background: radial-gradient(circle, #dbf5ff 0%, #74d2ff 62%, #3a96ff 100%);
+}
+
+@keyframes trophyClaimSpark {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--spark-dx)), calc(-50% + var(--spark-dy)))
+      scale(0.9);
+  }
+}
+
+@keyframes trophyClaimCardBurst {
+  0% {
+    transform: translateX(-50%) scale(1);
+  }
+  35% {
+    transform: translateX(-50%) scale(1.06);
+  }
+  100% {
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+@keyframes trophyClaimMarkerPulse {
+  0% {
+    transform: translateX(-50%) scale(1);
+  }
+  45% {
+    transform: translateX(-50%) scale(1.14);
+  }
+  100% {
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+@keyframes trophyRailClaimPulse {
+  0% {
+    box-shadow:
+      0 0 16px rgba(78, 202, 255, 0.76),
+      inset 0 1px 0 rgba(235, 252, 255, 0.58);
+  }
+  50% {
+    box-shadow:
+      0 0 28px rgba(140, 226, 255, 0.92),
+      inset 0 1px 0 rgba(235, 252, 255, 0.86);
+  }
+  100% {
+    box-shadow:
+      0 0 16px rgba(78, 202, 255, 0.76),
+      inset 0 1px 0 rgba(235, 252, 255, 0.58);
+  }
+}
+
+@keyframes trophySummaryRewardPop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .trophy-track-list::-webkit-scrollbar,
@@ -2511,6 +2746,52 @@ h3 {
 
   .leaderboard-wins {
     grid-column: 3;
+  }
+
+  .trophy-track-list {
+    min-height: 380px;
+    padding: 12px 10px 22px;
+  }
+
+  .trophy-track-canvas {
+    min-height: 360px;
+  }
+
+  .trophy-lane-card {
+    width: 176px;
+    bottom: 134px;
+    padding: 8px;
+  }
+
+  .trophy-track-player-pin {
+    padding: 4px 8px;
+  }
+
+  .trophy-track-player-pin span {
+    font-size: 14px;
+  }
+
+  .trophy-lane-marker {
+    width: auto;
+  }
+
+  .trophy-lane-marker-chip {
+    font-size: 10px;
+    min-height: 22px;
+    padding: 3px 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trophy-track-player-pin,
+  .trophy-lane-card::before,
+  .trophy-lane-card-sheen,
+  .trophy-lane-card.claim-success,
+  .trophy-lane-marker.claim-success,
+  .trophy-track-canvas.claim-flash .trophy-track-line-fill,
+  .trophy-overlay-summary.reward-pop,
+  .trophy-claim-spark {
+    animation: none !important;
   }
 }
 .party-button:hover {
