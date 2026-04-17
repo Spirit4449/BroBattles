@@ -1354,7 +1354,10 @@ function renderTrophyTrack(state) {
   const canvas = document.createElement("div");
   canvas.className = "trophy-track-canvas";
   canvas.style.width = `${trackWidth}px`;
-  canvas.style.setProperty("--trophy-progress", `${Math.round(overallRatio * 100)}%`);
+  canvas.style.setProperty(
+    "--trophy-progress",
+    `${Math.round(overallRatio * 100)}%`,
+  );
   canvas.innerHTML = `
     <div class="trophy-track-line-shell">
       <div class="trophy-track-line-bg"></div>
