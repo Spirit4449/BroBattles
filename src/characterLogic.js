@@ -10,33 +10,129 @@ import {
 import { getSharedSelectionPopupShell } from "./lib/selectionPopupShell.js";
 import socket from "./socket.js";
 import { playSound } from "./lib/uiSounds.js";
+import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
 
 // Keep a reference to user data for confirmations and currency display
 let _userDataRef = null;
 let _characterDetailsUi = null;
+let _skinsCatalog = null;
+let _ownedSkinIds = new Set();
+let _skinBootstrapPromise = null;
+
+async function fetchJsonSafe(path) {
+  try {
+    const response = await fetch(path, { credentials: "same-origin" });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (_) {
+    return null;
+  }
+}
+
+async function bootstrapSkinState() {
+  if (_skinBootstrapPromise) return _skinBootstrapPromise;
+  _skinBootstrapPromise = Promise.all([
+    fetchJsonSafe("/skins/catalog"),
+    fetchJsonSafe("/skins/owned"),
+  ])
+    .then(([catalogRes, ownedRes]) => {
+      _skinsCatalog =
+        catalogRes?.catalog && typeof catalogRes.catalog === "object"
+          ? catalogRes.catalog
+          : { characters: {} };
+      _ownedSkinIds = new Set(
+        Array.isArray(ownedRes?.ownedSkinIds) ? ownedRes.ownedSkinIds : [],
+      );
+
+      const selectedMap =
+        ownedRes?.selectedSkinIdByCharacter &&
+        typeof ownedRes.selectedSkinIdByCharacter === "object"
+          ? ownedRes.selectedSkinIdByCharacter
+          : _userDataRef?.selected_skin_id_by_char || {};
+
+      if (_characterDetailsUi) {
+        _characterDetailsUi.selectedSkinByCharacter = {
+          ..._characterDetailsUi.selectedSkinByCharacter,
+          ...selectedMap,
+        };
+      }
+      if (_userDataRef) {
+        _userDataRef.selected_skin_id_by_char = {
+          ...(_userDataRef.selected_skin_id_by_char || {}),
+          ...selectedMap,
+        };
+        _userDataRef.owned_skin_ids = Array.from(_ownedSkinIds);
+      }
+    })
+    .finally(() => {
+      _skinBootstrapPromise = null;
+    });
+  return _skinBootstrapPromise;
+}
+
+function getCatalogCharacterSkins(character) {
+  const chars = _skinsCatalog?.characters;
+  if (!chars || typeof chars !== "object") return [];
+  const entry = chars[String(character || "").toLowerCase()] || {};
+  return Array.isArray(entry.skins) ? entry.skins : [];
+}
 
 function getCharacterSkinList(character) {
-  const stats = getCharacterStats(character) || {};
-  const skins = Array.isArray(stats.skins) ? stats.skins : [];
-  const normalized = skins
-    .map((skin, index) => ({
-      id:
+  const catalogSkins = getCatalogCharacterSkins(character);
+  let normalized = catalogSkins
+    .map((skin, index) => {
+      const id =
         String(skin?.id || skin?.skinId || skin?.key || "").trim() ||
-        (index === 0 ? "default" : `skin-${index + 1}`),
-      label:
-        String(skin?.label || skin?.name || skin?.title || "").trim() ||
-        (index === 0 ? "Default" : `Skin ${index + 1}`),
-      previewSrc:
-        String(skin?.previewSrc || skin?.bodySrc || skin?.src || "").trim() ||
-        `/assets/${character}/body.webp`,
-    }))
-    .filter((skin) => skin.id);
+        (index === 0 ? "default" : `skin-${index + 1}`);
+      const available = skin?.available !== false;
+      const owned = _ownedSkinIds.has(id);
+      if (!owned && !available) return null;
+      return {
+        id,
+        label:
+          String(skin?.label || skin?.name || skin?.title || "").trim() ||
+          (index === 0 ? "Default" : `Skin ${index + 1}`),
+        previewSrc:
+          String(
+            skin?.assetUrl ||
+              skin?.previewSrc ||
+              skin?.bodySrc ||
+              skin?.src ||
+              "",
+          ).trim() || buildCharacterSkinBodyUrl(character, id),
+        owned,
+        locked: !owned,
+      };
+    })
+    .filter(Boolean);
+
+  if (normalized.length === 0) {
+    const stats = getCharacterStats(character) || {};
+    const skins = Array.isArray(stats.skins) ? stats.skins : [];
+    normalized = skins
+      .map((skin, index) => ({
+        id:
+          String(skin?.id || skin?.skinId || skin?.key || "").trim() ||
+          (index === 0 ? "default" : `skin-${index + 1}`),
+        label:
+          String(skin?.label || skin?.name || skin?.title || "").trim() ||
+          (index === 0 ? "Default" : `Skin ${index + 1}`),
+        previewSrc:
+          String(skin?.previewSrc || skin?.bodySrc || skin?.src || "").trim() ||
+          buildCharacterSkinBodyUrl(character, ""),
+        owned: true,
+        locked: false,
+      }))
+      .filter((skin) => skin.id);
+  }
 
   if (normalized.length === 0) {
     normalized.push({
       id: "default",
       label: "Default",
-      previewSrc: `/assets/${character}/body.webp`,
+      previewSrc: buildCharacterSkinBodyUrl(character, ""),
+      owned: true,
+      locked: false,
     });
   }
 
@@ -44,8 +140,12 @@ function getCharacterSkinList(character) {
 }
 
 function getSelectedSkin(character) {
+  const selectedByUserData = String(
+    _userDataRef?.selected_skin_id_by_char?.[character] || "",
+  ).trim();
   const skinId = String(
-    _characterDetailsUi?.selectedSkinByCharacter?.[character] || "",
+    _characterDetailsUi?.selectedSkinByCharacter?.[character] ||
+      selectedByUserData,
   ).trim();
   const skins = getCharacterSkinList(character);
   return skins.find((skin) => skin.id === skinId) || skins[0];
@@ -57,6 +157,11 @@ function setSelectedSkin(character, skinId) {
   const nextSkin =
     skins.find((skin) => skin.id === String(skinId || "")) || skins[0];
   _characterDetailsUi.selectedSkinByCharacter[character] = nextSkin.id;
+  if (_userDataRef) {
+    _userDataRef.selected_skin_id_by_char =
+      _userDataRef.selected_skin_id_by_char || {};
+    _userDataRef.selected_skin_id_by_char[character] = nextSkin.id;
+  }
   if (_characterDetailsUi.currentCharacter === character) {
     renderCharacterDetails(character);
   }
@@ -66,7 +171,7 @@ function resolveCharacterPreviewAsset(character, skinId) {
   const skins = getCharacterSkinList(character);
   const skin =
     skins.find((entry) => entry.id === String(skinId || "")) || skins[0];
-  return skin?.previewSrc || `/assets/${character}/body.webp`;
+  return skin?.previewSrc || buildCharacterSkinBodyUrl(character, skin?.id);
 }
 
 function getCharacterCardState(character, userData) {
@@ -103,6 +208,50 @@ function getCharacterCardState(character, userData) {
     canUpgrade,
     skin: getSelectedSkin(character),
   };
+}
+
+function getSortedCharacters(userData) {
+  const characters = getAllCharacters();
+  return characters.slice().sort((a, b) => {
+    const aState = getCharacterCardState(a, userData);
+    const bState = getCharacterCardState(b, userData);
+
+    // Show unlocked first, then locked.
+    if (aState.isLocked !== bState.isLocked) {
+      return aState.isLocked ? 1 : -1;
+    }
+
+    // Within unlocked: non-max first, then lower upgrade price.
+    if (!aState.isLocked && !bState.isLocked) {
+      if (aState.isMaxed !== bState.isMaxed) {
+        return aState.isMaxed ? 1 : -1;
+      }
+      const aPrice = Number(aState.price || 0);
+      const bPrice = Number(bState.price || 0);
+      if (aPrice !== bPrice) return aPrice - bPrice;
+      return String(a).localeCompare(String(b));
+    }
+
+    // Within locked: lower unlock price first.
+    const aUnlock = Number(aState?.stats?.unlockPrice || 0);
+    const bUnlock = Number(bState?.stats?.unlockPrice || 0);
+    if (aUnlock !== bUnlock) return aUnlock - bUnlock;
+    return String(a).localeCompare(String(b));
+  });
+}
+
+function sortCharacterCardsInGrid(userData) {
+  const grid = document.querySelector(".characters-grid");
+  if (!grid) return;
+  const existing = new Map();
+  for (const child of Array.from(grid.children)) {
+    const char = String(child?.dataset?.char || "").trim();
+    if (char) existing.set(char, child);
+  }
+  for (const character of getSortedCharacters(userData)) {
+    const card = existing.get(character) || createCharacterCard(character, userData);
+    grid.appendChild(card);
+  }
 }
 
 function getCharacterDetailStatBounds() {
@@ -385,7 +534,9 @@ function renderCharacterDetails(character) {
 
   const skinChip = document.createElement("div");
   skinChip.className = "character-details-skin-name-box";
-  skinChip.textContent = selectedSkin.label;
+  skinChip.textContent = selectedSkin.locked
+    ? `${selectedSkin.label} (Locked)`
+    : selectedSkin.label;
 
   const nextButton = document.createElement("button");
   nextButton.type = "button";
@@ -460,9 +611,11 @@ function renderCharacterDetails(character) {
     selectButton.type = "button";
     selectButton.className =
       "character-details-action select-button pixel-menu-button";
-    selectButton.textContent = "Select";
+    selectButton.textContent = selectedSkin.locked ? "Locked" : "Select";
+    selectButton.disabled = !!selectedSkin.locked;
     selectButton.addEventListener("click", (e) => {
       e.stopPropagation();
+      if (selectedSkin.locked) return;
       playSound("cursor4", 0.2);
       selectCharacter(character);
     });
@@ -550,6 +703,14 @@ function emitCharacterMenuStatus(open) {
 
 export function initializeCharacterSelect(userData) {
   _userDataRef = userData;
+  bootstrapSkinState().then(() => {
+    try {
+      refreshUpgradeButtonAffordability();
+      if (_characterDetailsUi?.currentCharacter) {
+        renderCharacterDetails(_characterDetailsUi.currentCharacter);
+      }
+    } catch (_) {}
+  });
   const popupShell = getSharedSelectionPopupShell();
 
   const particlesCanvas = document.createElement("canvas");
@@ -558,7 +719,7 @@ export function initializeCharacterSelect(userData) {
   const charactersGrid = document.createElement("div");
   charactersGrid.className = "characters-grid";
 
-  const characters = getAllCharacters();
+  const characters = getSortedCharacters(userData);
   characters.forEach((char) =>
     charactersGrid.appendChild(createCharacterCard(char, userData)),
   );
@@ -800,13 +961,24 @@ function openCharacterDetails(character) {
 function selectCharacter(character) {
   try {
     const charClass = String(character);
+    const selectedSkin = getSelectedSkin(charClass);
+    const selectedSkinId = String(selectedSkin?.id || "").trim() || "default";
+    const selectedSkinAsset = resolveCharacterPreviewAsset(
+      charClass,
+      selectedSkinId,
+    );
     // Optimistically update local user data
     if (_userDataRef) _userDataRef.char_class = charClass;
+    if (_userDataRef) {
+      _userDataRef.selected_skin_id_by_char =
+        _userDataRef.selected_skin_id_by_char || {};
+      _userDataRef.selected_skin_id_by_char[charClass] = selectedSkinId;
+    }
 
     // Update the main body sprite image immediately
     const mainSprite = document.getElementById("sprite");
     if (mainSprite) {
-      mainSprite.src = `/assets/${charClass}/body.webp`;
+      mainSprite.src = selectedSkinAsset;
       mainSprite.alt = charClass;
       try {
         mainSprite.classList.remove("random");
@@ -821,7 +993,7 @@ function selectCharacter(character) {
       const spriteEl = yourSlot.querySelector(".character-sprite");
       const prevCharacter = String(yourSlot.dataset.character || "").trim();
       if (spriteEl) {
-        spriteEl.src = `/assets/${charClass}/body.webp`;
+        spriteEl.src = selectedSkinAsset;
         spriteEl.alt = charClass;
         spriteEl.classList.remove("random");
       }
@@ -844,12 +1016,27 @@ function selectCharacter(character) {
     // If in a party, emit socket event so others update
     const partyId = getActivePartyIdFromPath();
     if (partyId) {
-      socket.emit("char-change", { partyId, character: charClass });
+      socket.emit("char-change", {
+        partyId,
+        character: charClass,
+        selectedSkinId,
+      });
     } else {
       // Not in party: still persist to server so future sessions load it
       // Use the same socket channel without partyId; server will update only the user row
-      socket.emit("char-change", { character: charClass });
+      socket.emit("char-change", { character: charClass, selectedSkinId });
     }
+
+    // Persist skin selection via HTTP as a fallback, so reload restores the chosen skin
+    // even if the socket event is delayed or dropped.
+    try {
+      fetch("/skins/select", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ character: charClass, skinId: selectedSkinId }),
+      }).catch(() => {});
+    } catch (_) {}
 
     // Restore presence immediately on successful selection so other clients
     // do not get stuck on "Selecting Character" until the next status update.
@@ -907,7 +1094,7 @@ function showConfirmDialog(opts, onConfirm) {
     heroBeams.className = "cs-hero-beams gem"; // gem theme (bluish)
     const heroImg = document.createElement("img");
     heroImg.className = "cs-hero-img";
-    heroImg.src = `/assets/${character}/body.webp`;
+    heroImg.src = resolveCharacterPreviewAsset(character, getSelectedSkin(character)?.id);
     heroImg.alt = character;
     hero.appendChild(heroBeams);
     hero.appendChild(heroImg);
@@ -1081,6 +1268,7 @@ function rerenderCharacterCard(character, userData, animType) {
     renderCharacterDetails(character);
     playCharacterDetailsSuccessAnimation(animType);
   }
+  sortCharacterCardsInGrid(userData);
   // After any change, also refresh other cards' affordability/state
   try {
     refreshUpgradeButtonAffordability();

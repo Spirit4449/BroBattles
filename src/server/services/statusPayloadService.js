@@ -1,6 +1,7 @@
 const {
   syncProfileIconOwnershipForUser,
 } = require("../helpers/profileIconOwnership");
+const { syncSkinOwnershipForUser } = require("../helpers/skinOwnership");
 
 function normalizeUserForStatus(user) {
   const out = user ? { ...user } : null;
@@ -62,6 +63,8 @@ async function buildStatusPayload({
   let ownedCardIds = [];
   let selectedProfileIconId = null;
   let ownedProfileIconIds = [];
+  let selectedSkinIdByCharacter = {};
+  let ownedSkinIds = [];
   let preferredSelection = null;
   if (userNormalized?.user_id) {
     try {
@@ -76,6 +79,16 @@ async function buildStatusPayload({
     } catch (_) {
       selectedProfileIconId = null;
       ownedProfileIconIds = [];
+    }
+    try {
+      const skinState = await syncSkinOwnershipForUser(db, userNormalized);
+      selectedSkinIdByCharacter = skinState.selectedSkinIdByCharacter || {};
+      ownedSkinIds = Array.isArray(skinState.ownedSkinIds)
+        ? skinState.ownedSkinIds
+        : [];
+    } catch (_) {
+      selectedSkinIdByCharacter = {};
+      ownedSkinIds = [];
     }
     try {
       selectedCardId = await db.getUserSelectedCardId(userNormalized.user_id);
@@ -104,6 +117,8 @@ async function buildStatusPayload({
     userNormalized.owned_card_ids = ownedCardIds;
     userNormalized.selected_profile_icon_id = selectedProfileIconId;
     userNormalized.owned_profile_icon_ids = ownedProfileIconIds;
+    userNormalized.selected_skin_id_by_char = selectedSkinIdByCharacter;
+    userNormalized.owned_skin_ids = ownedSkinIds;
     userNormalized.preferred_selection = preferredSelection;
   }
 

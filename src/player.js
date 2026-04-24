@@ -91,6 +91,7 @@ let gameId = window.location.pathname.split("/").filter(Boolean).pop();
 let scene;
 // Persist the selected character so movement helpers can resolve anim keys
 let currentCharacter;
+let currentSkinId = "";
 
 let spawn;
 let playersInTeam;
@@ -517,6 +518,7 @@ export function createPlayer(
   playersInTeamParam,
   mapParam,
   opponentPlayersParam,
+  selectedSkinIdParam = "",
 ) {
   resetPointerAttackAim();
   detachPointerAttackBindings();
@@ -572,6 +574,7 @@ export function createPlayer(
   opponentPlayersRef = opponentPlayersParam;
   // Remember the chosen character for animation resolution in update loop
   currentCharacter = character;
+  currentSkinId = String(selectedSkinIdParam || "").trim();
   pdbg();
   cursors = scene.input.keyboard.createCursorKeys();
   // Bind additional keys once
@@ -613,11 +616,22 @@ export function createPlayer(
   // owns its own texture key without duplicating it here.
   const CharCls = getCharacterClassByKey(character);
   player = CharCls
-    ? CharCls.createSprite(scene)
-    : scene.physics.add.sprite(-100, -100, getTextureKey(character));
+    ? scene.physics.add.sprite(
+        -100,
+        -100,
+        getTextureKey(character, currentSkinId),
+      )
+    : scene.physics.add.sprite(
+        -100,
+        -100,
+        getTextureKey(character, currentSkinId),
+      );
   player.username = username; // Attach username for collision detection
   player.setCollideWorldBounds(true);
-  player.anims.play(resolveAnimKey(scene, currentCharacter, "idle"), true); // Play idle animation
+  player.anims.play(
+    resolveAnimKey(scene, currentCharacter, "idle", "idle", currentSkinId),
+    true,
+  ); // Play idle animation
   // Hide until we've configured frame/body and spawn to avoid a mid-air first render
   player.setVisible(false);
   localMovementReconcileState = {
@@ -1650,7 +1664,13 @@ export function handlePlayerMovement(scene) {
     ) {
       // If the player is not in the air or attacking or dead, it plays the running animation
       player.anims.play(
-        resolveAnimKey(scene, currentCharacter, "running"),
+        resolveAnimKey(
+          scene,
+          currentCharacter,
+          "running",
+          "idle",
+          currentSkinId,
+        ),
         true,
       );
       // Footstep SFX throttled
@@ -1693,7 +1713,13 @@ export function handlePlayerMovement(scene) {
     ) {
       // If the player is not in the air or attacking or dead, it plays the running animation
       player.anims.play(
-        resolveAnimKey(scene, currentCharacter, "running"),
+        resolveAnimKey(
+          scene,
+          currentCharacter,
+          "running",
+          "idle",
+          currentSkinId,
+        ),
         true,
       );
       // Footstep SFX throttled
@@ -1750,7 +1776,10 @@ export function handlePlayerMovement(scene) {
     !isAttacking &&
     !specialAnimLocked()
   ) {
-    player.anims.play(resolveAnimKey(scene, currentCharacter, "sliding"), true); // Plays sliding animation
+    player.anims.play(
+      resolveAnimKey(scene, currentCharacter, "sliding", "idle", currentSkinId),
+      true,
+    ); // Plays sliding animation
   }
 
   const isWallSliding =
@@ -1879,7 +1908,13 @@ export function handlePlayerMovement(scene) {
   function jump() {
     if (!isAttacking && !specialAnimLocked()) {
       player.anims.play(
-        resolveAnimKey(scene, currentCharacter, "jumping"),
+        resolveAnimKey(
+          scene,
+          currentCharacter,
+          "jumping",
+          "idle",
+          currentSkinId,
+        ),
         true,
       );
     }
@@ -1915,7 +1950,13 @@ export function handlePlayerMovement(scene) {
     // Play a jump-like animation
     if (!isAttacking && !specialAnimLocked()) {
       player.anims.play(
-        resolveAnimKey(scene, currentCharacter, "jumping"),
+        resolveAnimKey(
+          scene,
+          currentCharacter,
+          "jumping",
+          "idle",
+          currentSkinId,
+        ),
         true,
       );
     }
@@ -1955,7 +1996,13 @@ export function handlePlayerMovement(scene) {
     updateWallSlideAudio(false);
     if (!isAttacking && !specialAnimLocked()) {
       player.anims.play(
-        resolveAnimKey(scene, currentCharacter, "falling"),
+        resolveAnimKey(
+          scene,
+          currentCharacter,
+          "falling",
+          "idle",
+          currentSkinId,
+        ),
         true,
       );
     }
@@ -1966,7 +2013,10 @@ export function handlePlayerMovement(scene) {
   function idle() {
     updateWallSlideAudio(false);
     if (specialAnimLocked()) return;
-    player.anims.play(resolveAnimKey(scene, currentCharacter, "idle"), true);
+    player.anims.play(
+      resolveAnimKey(scene, currentCharacter, "idle", "idle", currentSkinId),
+      true,
+    );
     pdbg();
   }
 

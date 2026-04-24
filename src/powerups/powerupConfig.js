@@ -23,6 +23,7 @@ export const POWERUP_COLORS = {
   shield: 0xf97316,
   poison: 0xfacc15,
   gravityBoots: 0xef4444,
+  huntressBurn: 0xff7a1f,
 };
 
 export function createPowerupTickSounds(characterTickSounds = {}) {

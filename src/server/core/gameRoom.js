@@ -140,6 +140,11 @@ class GameRoom {
         name: matchPlayer.name,
         team: matchPlayer.team,
         char_class: matchPlayer.char_class || "ninja",
+        selected_skin_id: String(matchPlayer.selected_skin_id || "") || null,
+        selected_skin_asset_url:
+          String(matchPlayer.selected_skin_asset_url || "") || null,
+        selected_skin_game_assets:
+          matchPlayer.selected_skin_game_assets || null,
         profile_icon_id:
           String(matchPlayer.profile_icon_id || "") ||
           String(matchPlayer.char_class || "ninja"),
@@ -355,6 +360,11 @@ class GameRoom {
         name: user.name,
         team: matchPlayer.team,
         char_class: matchPlayer.char_class,
+        selected_skin_id: String(matchPlayer.selected_skin_id || "") || null,
+        selected_skin_asset_url:
+          String(matchPlayer.selected_skin_asset_url || "") || null,
+        selected_skin_game_assets:
+          matchPlayer.selected_skin_game_assets || null,
         profile_icon_id:
           String(matchPlayer.profile_icon_id || "") ||
           String(matchPlayer.char_class || "ninja"),
@@ -1017,6 +1027,12 @@ class GameRoom {
     if (typeof actionData.returning === "boolean") {
       sanitized.returning = actionData.returning;
     }
+    if (typeof actionData.ownerEcho === "boolean") {
+      sanitized.ownerEcho = actionData.ownerEcho;
+    }
+    if (typeof actionData.destroyOnHit === "boolean") {
+      sanitized.destroyOnHit = actionData.destroyOnHit;
+    }
 
     const copyVec2 = (key) => {
       const entry = actionData[key];
@@ -1033,13 +1049,23 @@ class GameRoom {
     copyVec2("anchor");
 
     const passThroughNumeric = [
+      "speed",
       "range",
+      "startup",
+      "releaseMs",
+      "count",
+      "spreadDeg",
+      "collisionRadius",
+      "damage",
       "windupMs",
       "strikeMs",
       "activeWindowMs",
       "followAfterWindupMs",
       "rotationSpeed",
       "scale",
+      "gravity",
+      "maxLifetimeMs",
+      "embedMs",
       "forwardDistance",
       "outwardDuration",
       "returnSpeed",
@@ -1054,6 +1080,53 @@ class GameRoom {
       if (Number.isFinite(Number(actionData[key]))) {
         sanitized[key] = Number(actionData[key]);
       }
+    }
+
+    if (actionData?.burn && typeof actionData.burn === "object") {
+      const burn = {};
+      const burnDurationMs = Number(actionData.burn.durationMs);
+      const burnTotalDamage = Number(actionData.burn.totalDamage);
+      const burnGroundMs = Number(actionData.burn.groundBurnMs);
+      if (Number.isFinite(burnDurationMs)) burn.durationMs = burnDurationMs;
+      if (Number.isFinite(burnTotalDamage)) burn.totalDamage = burnTotalDamage;
+      if (Number.isFinite(burnGroundMs)) burn.groundBurnMs = burnGroundMs;
+      if (Object.keys(burn).length) sanitized.burn = burn;
+    }
+
+    if (Array.isArray(actionData?.projectiles)) {
+      const projectiles = [];
+      for (const entry of actionData.projectiles) {
+        if (!entry || typeof entry !== "object") continue;
+        const item = {};
+        const numericKeys = [
+          "index",
+          "angle",
+          "range",
+          "speed",
+          "collisionRadius",
+          "damage",
+          "scale",
+          "gravity",
+          "maxLifetimeMs",
+          "embedMs",
+        ];
+        for (const key of numericKeys) {
+          const value = Number(entry[key]);
+          if (Number.isFinite(value)) item[key] = value;
+        }
+        if (entry?.burn && typeof entry.burn === "object") {
+          const burn = {};
+          const burnDurationMs = Number(entry.burn.durationMs);
+          const burnTotalDamage = Number(entry.burn.totalDamage);
+          const burnGroundMs = Number(entry.burn.groundBurnMs);
+          if (Number.isFinite(burnDurationMs)) burn.durationMs = burnDurationMs;
+          if (Number.isFinite(burnTotalDamage)) burn.totalDamage = burnTotalDamage;
+          if (Number.isFinite(burnGroundMs)) burn.groundBurnMs = burnGroundMs;
+          if (Object.keys(burn).length) item.burn = burn;
+        }
+        if (Object.keys(item).length) projectiles.push(item);
+      }
+      if (projectiles.length) sanitized.projectiles = projectiles;
     }
 
     return sanitized;
@@ -1313,11 +1386,17 @@ class GameRoom {
       // Determine damage from server-side stats
       const attackType = String(payload.attackType || "basic").toLowerCase();
       const isNinjaSwarm = attackType === "ninja-special-swarm";
+      const isHuntressArrow = attackType === "huntress-arrow";
+      const isHuntressBurningArrow = attackType === "huntress-burning-arrow";
       const base = isNinjaSwarm
         ? NINJA_SWARM_HIT_DAMAGE
-        : attackType === "special"
-          ? Number(attacker.specialDamage || 0)
-          : Number(attacker.baseDamage || 0);
+        : isHuntressArrow
+          ? 1000 + (Math.max(1, Number(attacker.level) || 1) - 1) * 100
+          : isHuntressBurningArrow
+            ? 1500 + (Math.max(1, Number(attacker.level) || 1) - 1) * 150
+            : attackType === "special"
+              ? Number(attacker.specialDamage || 0)
+              : Number(attacker.baseDamage || 0);
       let dmg = Number.isFinite(base) && base > 0 ? base : 0;
       // Outgoing damage modifiers (rage powerup, thorgRage ability, damageBoost, etc.)
       const now = Date.now();
@@ -1360,7 +1439,7 @@ class GameRoom {
           Number(aPos?.y || 0) - tPos.y,
         );
         maxDist += Math.max(20, Number(targetVault.radius) || 90);
-        if (attackType === "special" || isNinjaSwarm) {
+        if (attackType === "special" || isNinjaSwarm || isHuntressBurningArrow) {
           // Super attacks can hit vaults from farther than basic melee/projectile ranges.
           maxDist = Math.max(maxDist, 2400);
         }
@@ -1477,6 +1556,23 @@ class GameRoom {
       target.lastDamagedAt = now;
       attacker.lastCombatAt = now;
       target.lastCombatAt = now;
+      if (!isSelf && isHuntressBurningArrow && target.health > 0) {
+        try {
+          effectManager.apply(
+            target,
+            "huntressBurn",
+            now,
+            {
+              durationMs: 5000,
+              totalDamage: 500,
+              sourceSocketId: attacker?.socketId,
+              sourceName: attacker?.name,
+              sourceTeam: attacker?.team,
+            },
+            this,
+          );
+        } catch (_) {}
+      }
       if (appliedDamage > 0) {
         this._recordCombatStat(attacker, { damage: appliedDamage });
 

@@ -38,6 +38,9 @@ Your change should include:
 
 This is the required path for adding a playable class.
 
+For the exact design/art/audio information needed before implementation, use
+docs/ADDING_CHARACTERS.md.
+
 ### Step 1: Add character stats
 
 Edit src/lib/characterStats.js:

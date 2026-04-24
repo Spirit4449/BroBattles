@@ -1,3 +1,5 @@
+import { buildCharacterSkinBodyUrl } from "./skinAssets.js";
+
 function normalizeProfileIconId(iconId) {
   const id = String(iconId || "")
     .trim()
@@ -15,7 +17,7 @@ export function buildProfileIconUrl(profileIconId, charClass = "ninja") {
   const fallbackClass = String(charClass || "ninja")
     .trim()
     .toLowerCase();
-  return `/assets/${fallbackClass || "ninja"}/body.webp`;
+  return buildCharacterSkinBodyUrl(fallbackClass || "ninja", "");
 }
 
 export function buildProfileIconAlt(profileIconId, charClass = "ninja") {

@@ -63,6 +63,21 @@
       }
     },
     {
+      "id": "huntress",
+      "name": "Huntress",
+      "assetUrl": "/assets/huntress/spritesheet.webp",
+      "rarity": "rare",
+      "limited": true,
+      "showInPicker": true,
+      "cost": {
+        "gems": 0
+      },
+      "unlock": {
+        "type": "character",
+        "character": "hunteress"
+      }
+    },
+    {
       "id": "200trophies",
       "name": "200 Trophies",
       "assetUrl": "/assets/profile-icons/200trophies.webp",

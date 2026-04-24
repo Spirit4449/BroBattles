@@ -8,6 +8,7 @@ const { registerGameRoutes } = require("./modules/gameRoutes");
 const { registerAuthRoutes } = require("./modules/authRoutes");
 const { registerPlayerCardsRoutes } = require("./modules/playerCardsRoutes");
 const { registerProfileIconsRoutes } = require("./modules/profileIconsRoutes");
+const { registerSkinsRoutes } = require("./modules/skinsRoutes");
 const { registerProfileRoutes } = require("./modules/profileRoutes");
 const { registerTrophyRoutes } = require("./modules/trophyRoutes");
 const { registerChatRoutes } = require("./modules/chatRoutes");
@@ -70,6 +71,12 @@ function registerRoutes({
   });
 
   registerProfileIconsRoutes({
+    app,
+    db,
+    requireCurrentUser,
+  });
+
+  registerSkinsRoutes({
     app,
     db,
     requireCurrentUser,

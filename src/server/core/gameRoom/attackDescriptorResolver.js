@@ -2,6 +2,7 @@ const attackDescriptors = require("../../../shared/attackDescriptors.json");
 const {
   getResolvedCharacterAttackConfig,
   getResolvedCharacterAimConfig,
+  getResolvedCharacterSpecialConfig,
 } = require("../../../lib/characterTuning.js");
 
 function cloneValue(value) {
@@ -132,6 +133,56 @@ function getRuntimeOverrides(actionType) {
         defaultEndYOffset: Number(shuriken.endYOffset) || 0,
         defaultCtrl1YOffset: Number(shuriken.ctrl1YOffset) || 20,
         defaultCtrl2YOffset: Number(shuriken.ctrl2YOffset) || -40,
+      },
+    };
+  }
+
+  if (key === "hunteress-arrow" || key === "hunteress-arrow-release") {
+    const arrows =
+      getResolvedCharacterAttackConfig("hunteress", "arrowSpread") || {};
+    const runtime = {
+      speed: Number(arrows.speed) || 980,
+      range: Number(arrows.range) || 900,
+      collisionRadius: Number(arrows.collisionRadius) || 16,
+      forwardOffsetWidthFactor: Number(arrows.forwardOffset) || 0.28,
+      verticalOffsetHeightFactor: Number(arrows.verticalOffset) || 0.12,
+      count: Math.max(1, Number(arrows.count) || 3),
+      spreadDeg: Number(arrows.spreadDeg) || 9,
+      damagePerProjectile: Math.max(1, Number(arrows.damagePerArrow) || 1000),
+      destroyOnHit: true,
+    };
+    if (key === "hunteress-arrow") {
+      return {
+        actionFlow: {
+          startupMs: Math.max(0, Number(arrows.castDelayMs) || 0),
+        },
+      };
+    }
+    return { runtime };
+  }
+
+  if (key === "hunteress-burning-arrow") {
+    const volley =
+      getResolvedCharacterSpecialConfig("hunteress", "burningVolley") || {};
+    return {
+      runtime: {
+        speed: Number(volley.speed) || 930,
+        range: Number(volley.range) || 960,
+        collisionRadius: Number(volley.collisionRadius) || 18,
+        count: Math.max(1, Number(volley.count) || 6),
+        spreadDeg: Number(volley.spreadDeg) || 26,
+        damagePerProjectile: Math.max(
+          1,
+          Number(volley.damagePerArrow) || 1500,
+        ),
+        destroyOnHit: true,
+      },
+      events: {
+        onHitEffect: {
+          type: "huntressBurn",
+          durationMs: Math.max(1, Number(volley.burnDurationMs) || 5000),
+          totalDamage: Math.max(0, Number(volley.burnTotalDamage) || 500),
+        },
       },
     };
   }

@@ -2,6 +2,12 @@ function registerGameEvents(socket, { db, gameHub, abuseControl }) {
   const {
     normalizeSelectionFromRow,
   } = require("../../helpers/gameSelectionCatalog");
+  const {
+    normalizeSelectedSkinMap,
+    resolveSelectedSkinId,
+    buildSkinAssetUrl,
+    getSkinGameAssets,
+  } = require("../../helpers/skinsCatalog");
 
   socket.on("game:join", async (data, cb) => {
     try {
@@ -54,7 +60,7 @@ function registerGameEvents(socket, { db, gameHub, abuseControl }) {
           );
           if (rows?.length && String(rows[0].status).toLowerCase() === "live") {
             const partRows = await db.runQuery(
-              `SELECT mp.user_id, mp.party_id, mp.team, mp.char_class, u.name, u.selected_profile_icon_id AS profile_icon_id
+              `SELECT mp.user_id, mp.party_id, mp.team, mp.char_class, u.name, u.selected_profile_icon_id AS profile_icon_id, u.selected_skin_id_by_char
                  FROM match_participants mp
                  JOIN users u ON u.user_id = mp.user_id
                 WHERE mp.match_id = ?`,
@@ -73,6 +79,30 @@ function registerGameEvents(socket, { db, gameHub, abuseControl }) {
                   party_id: p.party_id,
                   team: p.team,
                   char_class: p.char_class,
+                  selected_skin_id: resolveSelectedSkinId({
+                    character: p.char_class,
+                    selectedSkinMap: normalizeSelectedSkinMap(
+                      p.selected_skin_id_by_char,
+                    ),
+                  }),
+                  selected_skin_asset_url: buildSkinAssetUrl(
+                    p.char_class,
+                    resolveSelectedSkinId({
+                      character: p.char_class,
+                      selectedSkinMap: normalizeSelectedSkinMap(
+                        p.selected_skin_id_by_char,
+                      ),
+                    }),
+                  ),
+                  selected_skin_game_assets: getSkinGameAssets(
+                    p.char_class,
+                    resolveSelectedSkinId({
+                      character: p.char_class,
+                      selectedSkinMap: normalizeSelectedSkinMap(
+                        p.selected_skin_id_by_char,
+                      ),
+                    }),
+                  ),
                   profile_icon_id: String(p.profile_icon_id || "") || null,
                 })),
               };

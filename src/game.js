@@ -48,10 +48,11 @@ import {
   setLocalNetStateFlusher,
 } from "./player";
 import {
-  preloadAll,
+  preloadForRoster,
   handleLocalAuthoritativeAttack,
   handleRemoteAttack,
   setupAll,
+  setupVariantAnimationsForRoster,
   resolveAnimKey,
   chooseRemoteAnimation,
   setAttackDebugState,
@@ -680,6 +681,7 @@ function initializePlayers(players) {
     playerContainer[playerData.name] = {
       name: playerData.name,
       character: playerData.char_class,
+      skinId: playerData.selected_skin_id || "",
       team: playerData.team,
       x: playerData.x || 100,
       y: playerData.y || 100,
@@ -706,11 +708,15 @@ function attachMapCollidersToSprite(scene, sprite, objects) {
 }
 
 // Initialize game when page loads
+let game = null;
 window.__BOOT_GAME__ = () =>
-  onReady(() => {
+  onReady(async () => {
     initKeybindHud();
     initTimerHud();
-    initializeGame();
+    await initializeGame();
+    if (!game) {
+      game = new Phaser.Game(config);
+    }
   });
 
 // Phaser class to setup the game
@@ -740,7 +746,12 @@ class GameScene extends Phaser.Scene {
       staticPath,
       powerupTypes: POWERUP_TYPES,
       powerupAssetDir: POWERUP_ASSET_DIR,
-      preloadAllCharacters: preloadAll,
+      preloadAllCharacters: (activeScene, activeStaticPath) =>
+        preloadForRoster(
+          activeScene,
+          gameData?.players || [],
+          activeStaticPath,
+        ),
     });
   }
 
@@ -867,6 +878,7 @@ class GameScene extends Phaser.Scene {
 
     // Ensure all character animations are registered for this scene
     setupAll(this);
+    setupVariantAnimationsForRoster(this, gameData?.players || []);
 
     // Replay any queued remote actions now that the scene is ready
     try {
@@ -1017,6 +1029,8 @@ class GameScene extends Phaser.Scene {
         .length,
       activeMapId,
       opponentPlayers,
+      (gameData.players || []).find((p) => p.name === username)
+        ?.selected_skin_id || "",
     );
 
     attachMapCollidersToSprite(this, player, mapObjects);
@@ -1278,6 +1292,7 @@ class GameScene extends Phaser.Scene {
       const opPlayer = new OpPlayer(
         this, // scene
         playerData.char_class, // character
+        playerData.selected_skin_id || "", // skin
         playerData.name, // username
         isTeammate ? "teammate" : playerData.team, // team or teammate flag for ally coloring
         null,
@@ -1853,7 +1868,13 @@ class GameScene extends Phaser.Scene {
             sprite: spr,
           });
           spr.anims.play(
-            resolveAnimKey(this, wrapper.character, chosenAnim, "idle"),
+            resolveAnimKey(
+              this,
+              wrapper.character,
+              chosenAnim,
+              "idle",
+              wrapper.skinId || "",
+            ),
             true,
           );
         }
@@ -1919,8 +1940,6 @@ const config = {
     },
   },
 };
-
-const game = new Phaser.Game(config);
 
 export { opponentPlayers, teamPlayers };
 

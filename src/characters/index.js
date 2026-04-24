@@ -1,6 +1,11 @@
 // src/characters/index.js
 import CHARACTER_MANIFEST from "./manifest";
 import { characterStats } from "../lib/characterStats.js";
+import {
+  normalizeSkinId,
+  buildCharacterSkinTextureKey,
+  buildCharacterSkinAtlasUrls,
+} from "../lib/skinAssets.js";
 
 // Build the registry automatically from the manifest.
 // Each class must have a static `key` string.
@@ -34,6 +39,65 @@ export function preloadAll(scene, staticPath) {
   }
 }
 
+function collectRosterVariants(roster = []) {
+  const variants = new Map();
+  for (const player of Array.isArray(roster) ? roster : []) {
+    const character = normalizeCharacterKey(
+      player?.char_class || player?.character,
+    );
+    if (!character) continue;
+    const skinId = normalizeSkinId(player?.selected_skin_id);
+    const key = `${character}:${skinId || "default"}`;
+    if (!variants.has(key)) {
+      variants.set(key, {
+        character,
+        skinId,
+        gameAssets: player?.selected_skin_game_assets || null,
+      });
+    }
+  }
+  return Array.from(variants.values());
+}
+
+export function preloadForRoster(scene, roster = [], staticPath = "/assets") {
+  const variants = collectRosterVariants(roster);
+  const variantsByCharacter = new Map();
+  for (const entry of variants) {
+    if (!variantsByCharacter.has(entry.character)) {
+      variantsByCharacter.set(entry.character, []);
+    }
+    variantsByCharacter.get(entry.character).push(entry);
+  }
+
+  for (const [character, entries] of variantsByCharacter.entries()) {
+    const Cls = getCharacterClass(character);
+    if (!Cls || typeof Cls.preload !== "function") continue;
+    const needsDefaultAtlas = entries.some((entry) => !entry.skinId);
+    Cls.preload(scene, staticPath, { includeBaseAtlas: needsDefaultAtlas });
+
+    for (const entry of entries) {
+      if (!entry.skinId) continue;
+      const textureKey = buildCharacterSkinTextureKey(character, entry.skinId);
+      const atlasUrls = entry.gameAssets?.spritesheetUrl
+        ? {
+            spritesheetUrl: String(entry.gameAssets.spritesheetUrl),
+            animationsUrl:
+              String(entry.gameAssets.animationsUrl || "").trim() ||
+              `${staticPath}/${character}/animations.json`,
+          }
+        : buildCharacterSkinAtlasUrls(character, entry.skinId);
+
+      if (!scene.textures.exists(textureKey)) {
+        scene.load.atlas(
+          textureKey,
+          atlasUrls.spritesheetUrl,
+          atlasUrls.animationsUrl,
+        );
+      }
+    }
+  }
+}
+
 export function setupFor(scene, character) {
   const Cls = getCharacterClass(character);
   if (Cls && Cls.setupAnimations) Cls.setupAnimations(scene);
@@ -46,6 +110,52 @@ export function setupAll(scene) {
   }
 }
 
+function cloneBaseAnimationToVariant(scene, character, skinId) {
+  const animManager = scene?.anims;
+  if (!animManager || !character || !skinId) return;
+
+  const textureKey = buildCharacterSkinTextureKey(character, skinId);
+  if (!scene.textures.exists(textureKey)) return;
+
+  const entries = animManager?.anims?.entries;
+  if (!entries || typeof entries.forEach !== "function") return;
+
+  entries.forEach((anim, key) => {
+    if (!String(key || "").startsWith(`${character}-`)) return;
+    const suffix = String(key).slice(character.length + 1);
+    const variantKey = `${textureKey}-${suffix}`;
+    if (animManager.exists(variantKey)) return;
+    const frames = (Array.isArray(anim?.frames) ? anim.frames : [])
+      .map((frameRef) => {
+        const frameName = frameRef?.frame?.name;
+        if (!frameName) return null;
+        return { key: textureKey, frame: frameName };
+      })
+      .filter(Boolean);
+    if (!frames.length) return;
+
+    animManager.create({
+      key: variantKey,
+      frames,
+      frameRate: Number(anim?.frameRate) || 12,
+      repeat: Number(anim?.repeat) || 0,
+      yoyo: !!anim?.yoyo,
+      delay: Number(anim?.delay) || 0,
+      repeatDelay: Number(anim?.repeatDelay) || 0,
+      showOnStart: !!anim?.showOnStart,
+      hideOnComplete: !!anim?.hideOnComplete,
+    });
+  });
+}
+
+export function setupVariantAnimationsForRoster(scene, roster = []) {
+  const variants = collectRosterVariants(roster);
+  for (const entry of variants) {
+    if (!entry.skinId) continue;
+    cloneBaseAnimationToVariant(scene, entry.character, entry.skinId);
+  }
+}
+
 export function createFor(character, deps) {
   const Cls = getCharacterClass(character);
   if (!Cls) return null;
@@ -53,7 +163,11 @@ export function createFor(character, deps) {
 }
 
 // Returns the Phaser texture key for a given character's main sprite/atlas
-export function getTextureKey(character) {
+export function getTextureKey(character, skinId = "") {
+  const normalizedSkinId = normalizeSkinId(skinId);
+  if (normalizedSkinId) {
+    return buildCharacterSkinTextureKey(character, normalizedSkinId);
+  }
   const Cls = getCharacterClass(character);
   // Prefer an explicit textureKey static, fallback to common "sprite"
   return (
@@ -111,10 +225,22 @@ export function resolveAnimKey(
   character,
   genericKey,
   fallback = "idle",
+  skinId = "",
 ) {
   const char = (character || "").toLowerCase();
+  const normalizedSkinId = normalizeSkinId(skinId);
+  const skinTextureKey = normalizedSkinId
+    ? buildCharacterSkinTextureKey(char, normalizedSkinId)
+    : "";
   const anims = scene && scene.anims;
   if (!anims) return genericKey;
+
+  if (skinTextureKey) {
+    const variantPreferred = `${skinTextureKey}-${genericKey}`;
+    if (anims.exists(variantPreferred)) return variantPreferred;
+    const variantFallback = `${skinTextureKey}-${fallback}`;
+    if (anims.exists(variantFallback)) return variantFallback;
+  }
 
   // If a fully-qualified key is provided (e.g., "ninja-running"):
   if (genericKey && genericKey.includes("-")) {

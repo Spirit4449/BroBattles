@@ -7,6 +7,7 @@ import {
   getMapSelectPreviewAsset,
   getLobbyPlatformAsset,
 } from "./maps/manifest";
+import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
 import {
   getAllGameModes,
   getCompatibleMapsForSelection,
@@ -2075,8 +2076,11 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
 
   if (spriteEl) {
     const cls = member.char_class || "ninja";
+    const skinAsset =
+      String(member.selected_skin_asset_url || "").trim() ||
+      buildCharacterSkinBodyUrl(cls, "");
     const prevCharacter = String(slot.dataset.character || "").trim();
-    spriteEl.src = `/assets/${cls}/body.webp`;
+    spriteEl.src = skinAsset;
     spriteEl.alt = cls;
     spriteEl.classList.remove("random");
     spriteEl.className = "character-sprite";
@@ -2628,7 +2632,9 @@ function updateMMOverlay({ found, total, selection, players }) {
       if (p) {
         const img = document.createElement("img");
         const cls = p.char_class || "ninja";
-        img.src = `/assets/${cls}/body.webp`;
+        img.src =
+          String(p.selected_skin_asset_url || "").trim() ||
+          buildCharacterSkinBodyUrl(cls, "");
         img.alt = cls;
         const name = document.createElement("div");
         name.className = "mm-name";

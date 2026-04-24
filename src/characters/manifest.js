@@ -6,8 +6,9 @@ import Ninja from "./ninja/constructor";
 import Thorg from "./thorg/constructor";
 import Draven from "./draven/constructor";
 import Wizard from "./wizard/constructor";
+import Huntress from "./hunteress/constructor";
 
 /** @type {import("./shared/characterEntityBase").default[]} */
-const CHARACTER_MANIFEST = [Ninja, Thorg, Draven, Wizard];
+const CHARACTER_MANIFEST = [Ninja, Thorg, Draven, Wizard, Huntress];
 
 export default CHARACTER_MANIFEST;

@@ -1,5 +1,10 @@
 const { capacityFromSelection } = require("./utils");
 const { normalizeSelectionFromRow } = require("./gameSelectionCatalog");
+const {
+  normalizeSelectedSkinMap,
+  resolveSelectedSkinId,
+  buildSkinAssetUrl,
+} = require("./skinsCatalog");
 
 async function selectPartyById(db, partyId) {
   const rows = await db.runQuery(
@@ -35,9 +40,19 @@ async function emitRoster(io, partyId, party, members, db = null) {
 
   const roster = (Array.isArray(members) ? members : []).map((m) => {
     const fallback = m?.selected_card_id ?? null;
+    const character = String(m?.char_class || "ninja").toLowerCase();
+    const selectedSkinMap = normalizeSelectedSkinMap(
+      m?.selected_skin_id_by_char,
+    );
+    const selectedSkinId = resolveSelectedSkinId({
+      character,
+      selectedSkinMap,
+    });
     return {
       ...m,
       selected_card_id: selectedByName[m?.name] ?? fallback,
+      selected_skin_id: selectedSkinId || null,
+      selected_skin_asset_url: buildSkinAssetUrl(character, selectedSkinId),
     };
   });
   const selection = normalizeSelectionFromRow(party || {});

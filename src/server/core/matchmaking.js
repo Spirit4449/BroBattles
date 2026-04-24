@@ -26,6 +26,12 @@ const {
 } = require("../../server/helpers/gameSelectionCatalog");
 const { getAllCharacters } = require("../../lib/characterStats.js");
 const {
+  normalizeSelectedSkinMap,
+  resolveSelectedSkinId,
+  buildSkinAssetUrl,
+  getSkinGameAssets,
+} = require("../../server/helpers/skinsCatalog");
+const {
   createReadyCheckCoordinator,
 } = require("./matchmaking/readyCheckCoordinator");
 const {
@@ -70,7 +76,7 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     );
 
     const participantRows = await db.runQuery(
-      `SELECT mp.user_id, mp.party_id, mp.team, mp.char_class, u.name, u.selected_profile_icon_id AS profile_icon_id,
+      `SELECT mp.user_id, mp.party_id, mp.team, mp.char_class, u.name, u.selected_profile_icon_id AS profile_icon_id, u.selected_skin_id_by_char,
               CASE WHEN u.name LIKE 'BOT %' THEN 1 ELSE 0 END AS is_bot
        FROM match_participants mp 
        JOIN users u ON u.user_id = mp.user_id 
@@ -90,15 +96,30 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
         matchRows[0].mode_variant_id ||
         normalizeSelectionFromRow(matchRows[0]).modeVariantId,
       map: normalizeSelectionFromRow(matchRows[0]).mapId,
-      players: participantRows.map((p) => ({
-        user_id: p.user_id,
-        name: p.name,
-        party_id: p.party_id,
-        team: p.team,
-        char_class: p.char_class,
-        profile_icon_id: String(p.profile_icon_id || "") || null,
-        isBot: !!Number(p.is_bot),
-      })),
+      players: participantRows.map((p) => {
+        const selectedSkinId = resolveSelectedSkinId({
+          character: p.char_class,
+          selectedSkinMap: normalizeSelectedSkinMap(p.selected_skin_id_by_char),
+        });
+        return {
+          user_id: p.user_id,
+          name: p.name,
+          party_id: p.party_id,
+          team: p.team,
+          char_class: p.char_class,
+          selected_skin_id: selectedSkinId,
+          selected_skin_asset_url: buildSkinAssetUrl(
+            p.char_class,
+            selectedSkinId,
+          ),
+          selected_skin_game_assets: getSkinGameAssets(
+            p.char_class,
+            selectedSkinId,
+          ),
+          profile_icon_id: String(p.profile_icon_id || "") || null,
+          isBot: !!Number(p.is_bot),
+        };
+      }),
     };
   }
 
@@ -292,19 +313,34 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     const players = [];
     if (ticket.party_id) {
       const members = await db.runQuery(
-        "SELECT u.user_id, u.name, u.char_class, u.selected_profile_icon_id AS profile_icon_id, pm.party_id, pm.team FROM party_members pm JOIN users u ON u.name = pm.name WHERE pm.party_id = ? ORDER BY pm.joined_at, pm.name",
+        "SELECT u.user_id, u.name, u.char_class, u.selected_profile_icon_id AS profile_icon_id, u.selected_skin_id_by_char, pm.party_id, pm.team FROM party_members pm JOIN users u ON u.name = pm.name WHERE pm.party_id = ? ORDER BY pm.joined_at, pm.name",
         [ticket.party_id],
       );
       players.push(...members.map((member) => ({ ...member, isBot: false })));
     } else {
       const user = await db.getUserById(ticket.user_id);
       if (!user) throw new Error("Queued player not found.");
+      const selectedSkinId = resolveSelectedSkinId({
+        character: user.char_class || "ninja",
+        selectedSkinMap: normalizeSelectedSkinMap(
+          user.selected_skin_id_by_char,
+        ),
+      });
       players.push({
         user_id: user.user_id,
         name: user.name,
         party_id: null,
         team: ticket.team1_count === 1 ? "team1" : "team2",
         char_class: user.char_class || "ninja",
+        selected_skin_id: selectedSkinId,
+        selected_skin_asset_url: buildSkinAssetUrl(
+          user.char_class || "ninja",
+          selectedSkinId,
+        ),
+        selected_skin_game_assets: getSkinGameAssets(
+          user.char_class || "ninja",
+          selectedSkinId,
+        ),
         profile_icon_id: String(user.selected_profile_icon_id || "") || null,
         isBot: false,
       });
@@ -400,10 +436,43 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
           map: selection.mapId,
           yourTeam: player.team,
           players: players.map((entry) => ({
+            ...(entry || {}),
             user_id: entry.user_id,
             name: entry.name,
             team: entry.team,
             char_class: entry.char_class,
+            selected_skin_id:
+              entry.selected_skin_id ||
+              resolveSelectedSkinId({
+                character: entry.char_class,
+                selectedSkinMap: normalizeSelectedSkinMap(
+                  entry.selected_skin_id_by_char,
+                ),
+              }),
+            selected_skin_asset_url:
+              entry.selected_skin_asset_url ||
+              buildSkinAssetUrl(
+                entry.char_class,
+                entry.selected_skin_id ||
+                  resolveSelectedSkinId({
+                    character: entry.char_class,
+                    selectedSkinMap: normalizeSelectedSkinMap(
+                      entry.selected_skin_id_by_char,
+                    ),
+                  }),
+              ),
+            selected_skin_game_assets:
+              entry.selected_skin_game_assets ||
+              getSkinGameAssets(
+                entry.char_class,
+                entry.selected_skin_id ||
+                  resolveSelectedSkinId({
+                    character: entry.char_class,
+                    selectedSkinMap: normalizeSelectedSkinMap(
+                      entry.selected_skin_id_by_char,
+                    ),
+                  }),
+              ),
             profile_icon_id: entry.profile_icon_id || null,
             isBot: !!entry.isBot,
           })),

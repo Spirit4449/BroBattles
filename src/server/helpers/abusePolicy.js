@@ -42,6 +42,8 @@ const HTTP_ROUTE_POLICIES = {
   "POST /player-cards/buy": { bucket: "medium" },
   "POST /profile-icons/select": { bucket: "medium" },
   "POST /profile-icons/buy": { bucket: "medium" },
+  "POST /skins/select": { bucket: "medium" },
+  "POST /skins/buy": { bucket: "medium" },
   "POST /trophies/claim": { bucket: "medium" },
   "POST /gamedata": { bucket: "medium" },
 

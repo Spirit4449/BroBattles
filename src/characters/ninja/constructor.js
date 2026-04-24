@@ -29,13 +29,16 @@ class Ninja extends CharacterEntityBase {
     hitWood: { key: "shurikenHitWood", volume: 0.7 },
   };
 
-  static preload(scene, staticPath = "/assets") {
+  static preload(scene, staticPath = "/assets", options = {}) {
+    const includeBaseAtlas = options?.includeBaseAtlas !== false;
     // Load atlas and projectile/sounds
-    scene.load.atlas(
-      NAME,
-      this.characterAssetPath(staticPath, "spritesheet.webp"),
-      this.characterAssetPath(staticPath, "animations.json"),
-    );
+    if (includeBaseAtlas) {
+      scene.load.atlas(
+        NAME,
+        this.characterAssetPath(staticPath, "spritesheet.webp"),
+        this.characterAssetPath(staticPath, "animations.json"),
+      );
+    }
     scene.load.image(
       "shuriken",
       this.characterAssetPath(staticPath, "shuriken.webp"),

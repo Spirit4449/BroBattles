@@ -77,6 +77,11 @@ function sendGameStateToPlayer(room, socket) {
         name: mp.name,
         team: mp.team,
         char_class: p?.char_class || mp.char_class,
+        selected_skin_id: p?.selected_skin_id || mp.selected_skin_id || null,
+        selected_skin_asset_url:
+          p?.selected_skin_asset_url || mp.selected_skin_asset_url || null,
+        selected_skin_game_assets:
+          p?.selected_skin_game_assets || mp.selected_skin_game_assets || null,
         x: roundPosition(p?.x),
         y: roundPosition(p?.y),
         vx: Number.isFinite(p?.vx) ? p.vx : 0,

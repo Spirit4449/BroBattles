@@ -19,6 +19,7 @@ export default class OpPlayer {
   constructor(
     scene,
     character,
+    skinId,
     username,
     team,
     spawnPlatform,
@@ -28,6 +29,7 @@ export default class OpPlayer {
   ) {
     this.scene = scene;
     this.character = character;
+    this.skinId = String(skinId || "").trim();
     this.username = username;
     this.team = team;
     this.spawnPlatform = spawnPlatform;
@@ -54,7 +56,7 @@ export default class OpPlayer {
 
   createOpPlayer() {
     // Creates the sprite
-    const textureKey = getTextureKey(this.character);
+    const textureKey = getTextureKey(this.character, this.skinId);
     this.opponent = this.scene.physics.add.sprite(-100, -100, textureKey);
     this.opponent.username = this.username; // Attach username for collision detection
     // Avoid first-frame pop: hide until frame/body configured and spawn applied
@@ -72,7 +74,7 @@ export default class OpPlayer {
     this.opponent.body.allowGravity = false;
     this.opponent.setCollideWorldBounds(false); // no world-bounds collision for remote visuals
     this.opponent.anims.play(
-      resolveAnimKey(this.scene, this.character, "idle"),
+      resolveAnimKey(this.scene, this.character, "idle", "idle", this.skinId),
       true,
     );
 
@@ -472,7 +474,13 @@ export default class OpPlayer {
       this.opponent.alpha = 1;
       this.opponent.setVisible(true);
       this.opponent.anims.play(
-        resolveAnimKey(this.scene, this.character, "dying", "idle"),
+        resolveAnimKey(
+          this.scene,
+          this.character,
+          "dying",
+          "idle",
+          this.skinId,
+        ),
         true,
       );
     } catch (_) {}
@@ -513,7 +521,7 @@ export default class OpPlayer {
       this.opponent.setAlpha(1);
       this.opponent.body.enable = true;
       this.opponent.anims.play(
-        resolveAnimKey(this.scene, this.character, "idle", "idle"),
+        resolveAnimKey(this.scene, this.character, "idle", "idle", this.skinId),
         true,
       );
       spawnSpawnBurst(this.scene, this.opponent, {

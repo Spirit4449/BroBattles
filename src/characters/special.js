@@ -2,12 +2,14 @@ import * as NinjaSpecial from "./ninja/special";
 import * as ThorgSpecial from "./thorg/special";
 import * as DravenSpecial from "./draven/special";
 import * as WizardSpecial from "./wizard/special";
+import * as HuntressSpecial from "./hunteress/special";
 
 const specials = {
   ninja: NinjaSpecial,
   thorg: ThorgSpecial,
   draven: DravenSpecial,
   wizard: WizardSpecial,
+  hunteress: HuntressSpecial,
 };
 
 export function performSpecial(

@@ -38,13 +38,16 @@ class Wizard extends CharacterEntityBase {
     special: { key: "wizard-special", volume: 0.5, rate: 1 },
   };
 
-  static preload(scene, staticPath = "/assets") {
+  static preload(scene, staticPath = "/assets", options = {}) {
+    const includeBaseAtlas = options?.includeBaseAtlas !== false;
     if (!scene?.load) return;
-    scene.load.atlas(
-      NAME,
-      this.characterAssetPath(staticPath, "spritesheet.webp"),
-      this.characterAssetPath(staticPath, "animations.json"),
-    );
+    if (includeBaseAtlas) {
+      scene.load.atlas(
+        NAME,
+        this.characterAssetPath(staticPath, "spritesheet.webp"),
+        this.characterAssetPath(staticPath, "animations.json"),
+      );
+    }
     scene.load.atlas(
       "wizard-aura",
       this.characterAssetPath(staticPath, "aura.png"),

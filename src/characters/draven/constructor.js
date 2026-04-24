@@ -1,8 +1,6 @@
 // src/characters/draven/draven.js
 import socket from "../../socket";
-import {
-  characterStats,
-} from "../../lib/characterStats.js";
+import { characterStats } from "../../lib/characterStats.js";
 import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { animations } from "./anim";
 import DravenEffects from "./effects";
@@ -31,13 +29,16 @@ class Draven extends CharacterEntityBase {
     special: { key: "draven-special", volume: 0.6, rate: 0.8 },
   };
 
-  static preload(scene, staticPath = "/assets") {
+  static preload(scene, staticPath = "/assets", options = {}) {
+    const includeBaseAtlas = options?.includeBaseAtlas !== false;
     // Load atlas and projectile/sounds
-    scene.load.atlas(
-      NAME,
-      this.characterAssetPath(staticPath, "spritesheet.webp"),
-      this.characterAssetPath(staticPath, "animations.json"),
-    );
+    if (includeBaseAtlas) {
+      scene.load.atlas(
+        NAME,
+        this.characterAssetPath(staticPath, "spritesheet.webp"),
+        this.characterAssetPath(staticPath, "animations.json"),
+      );
+    }
     // Explosion atlas (separate) for splash attack visual
     scene.load.atlas(
       `${NAME}-explosion`,

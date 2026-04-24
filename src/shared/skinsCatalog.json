@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "characters": {
+    "ninja": {
+      "defaultSkinId": "ninja-default",
+      "skins": [
+        {
+          "id": "ninja-default",
+          "name": "Default",
+          "character": "ninja",
+          "available": true,
+          "assetUrl": "/assets/ninja/body.webp",
+          "rarity": "common",
+          "price": { "gems": 0 },
+          "unlockMethod": {
+            "type": "character",
+            "character": "ninja",
+            "limited": true
+          },
+          "showInPicker": true,
+          "gameAssets": {
+            "spritesheetUrl": "/assets/ninja/spritesheet.webp",
+            "animationsUrl": "/assets/ninja/animations.json"
+          }
+        }
+      ]
+    },
+    "thorg": {
+      "defaultSkinId": "thorg-default",
+      "skins": [
+        {
+          "id": "thorg-default",
+          "name": "Default",
+          "character": "thorg",
+          "available": true,
+          "assetUrl": "/assets/thorg/body.webp",
+          "rarity": "common",
+          "price": { "gems": 0 },
+          "unlockMethod": {
+            "type": "character",
+            "character": "thorg",
+            "limited": true
+          },
+          "showInPicker": true,
+          "gameAssets": {
+            "spritesheetUrl": "/assets/thorg/spritesheet.webp",
+            "animationsUrl": "/assets/thorg/animations.json"
+          }
+        },
+        {
+          "id": "thorg-storm",
+          "name": "Stormforged",
+          "character": "thorg",
+          "available": true,
+          "assetUrl": "/assets/thorg/skins/thorg-storm/body.webp",
+          "rarity": "rare",
+          "price": { "gems": 150 },
+          "unlockMethod": {
+            "type": "character",
+            "character": "thorg",
+            "limited": true
+          },
+          "showInPicker": true,
+          "gameAssets": {
+            "spritesheetUrl": "/assets/thorg/skins/thorg-storm/spritesheet.webp",
+            "animationsUrl": "/assets/thorg/animations.json"
+          }
+        },
+        {
+          "id": "thorg-iron",
+          "name": "Ironbound",
+          "character": "thorg",
+          "available": true,
+          "assetUrl": "/assets/thorg/skins/thorg-iron/body.webp",
+          "rarity": "epic",
+          "price": { "gems": 250 },
+          "unlockMethod": {
+            "type": "shop",
+            "limited": false
+          },
+          "showInPicker": true,
+          "gameAssets": {
+            "spritesheetUrl": "/assets/thorg/skins/thorg-iron/spritesheet.webp",
+            "animationsUrl": "/assets/thorg/animations.json"
+          }
+        }
+      ]
+    },
+    "draven": {
+      "defaultSkinId": "draven-default",
+      "skins": [
+        {
+          "id": "draven-default",
+          "name": "Default",
+          "character": "draven",
+          "available": true,
+          "assetUrl": "/assets/draven/body.webp",
+          "rarity": "rare",
+          "price": { "gems": 0 },
+          "unlockMethod": {
+            "type": "character",
+            "character": "draven",
+            "limited": true
+          },
+          "showInPicker": true,
+          "gameAssets": {
+            "spritesheetUrl": "/assets/draven/spritesheet.webp",
+            "animationsUrl": "/assets/draven/animations.json"
+          }
+        }
+      ]
+    },
+    "wizard": {
+      "defaultSkinId": "wizard-default",
+      "skins": [
+        {
+          "id": "wizard-default",
+          "name": "Default",
+          "character": "wizard",
+          "available": true,
+          "assetUrl": "/assets/wizard/body.webp",
+          "rarity": "rare",
+          "price": { "gems": 0 },
+          "unlockMethod": {
+            "type": "character",
+            "character": "wizard",
+            "limited": true
+          },
+          "showInPicker": true,
+          "gameAssets": {
+            "spritesheetUrl": "/assets/wizard/spritesheet.webp",
+            "animationsUrl": "/assets/wizard/animations.json"
+          }
+        }
+      ]
+    },
+    "hunteress": {
+      "defaultSkinId": "hunteress-default",
+      "skins": [
+        {
+          "id": "hunteress-default",
+          "name": "Default",
+          "character": "hunteress",
+          "available": true,
+          "assetUrl": "/assets/huntress/body.webp",
+          "rarity": "rare",
+          "price": { "gems": 0 },
+          "unlockMethod": {
+            "type": "character",
+            "character": "hunteress",
+            "limited": true
+          },
+          "showInPicker": true,
+          "gameAssets": {
+            "spritesheetUrl": "/assets/huntress/spritesheet.webp",
+            "animationsUrl": "/assets/huntress/animations.json"
+          }
+        }
+      ]
+    }
+  }
+}

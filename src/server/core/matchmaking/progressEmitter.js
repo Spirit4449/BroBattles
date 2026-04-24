@@ -1,4 +1,10 @@
 function createProgressEmitter({ db, io, lastProgress }) {
+  const {
+    normalizeSelectedSkinMap,
+    resolveSelectedSkinId,
+    buildSkinAssetUrl,
+  } = require("../../helpers/skinsCatalog");
+
   function ageSeconds(row) {
     return Math.floor((Date.now() - new Date(row.created_at).getTime()) / 1000);
   }
@@ -55,11 +61,25 @@ function createProgressEmitter({ db, io, lastProgress }) {
           const members = await db.fetchPartyMembersDetailed(ticket.party_id);
           const normalized = (members || [])
             .filter((m) => !!m?.name)
-            .map((m) => ({
-              name: m.name,
-              char_class: m.char_class || "ninja",
-              profile_icon_id: String(m.profile_icon_id || "") || null,
-            }));
+            .map((m) => {
+              const character = m.char_class || "ninja";
+              const selectedSkinId = resolveSelectedSkinId({
+                character,
+                selectedSkinMap: normalizeSelectedSkinMap(
+                  m.selected_skin_id_by_char,
+                ),
+              });
+              return {
+                name: m.name,
+                char_class: character,
+                selected_skin_id: selectedSkinId,
+                selected_skin_asset_url: buildSkinAssetUrl(
+                  character,
+                  selectedSkinId,
+                ),
+                profile_icon_id: String(m.profile_icon_id || "") || null,
+              };
+            });
           partyMembersCache.set(ticket.party_id, normalized);
           return normalized;
         } catch (_) {
@@ -74,7 +94,7 @@ function createProgressEmitter({ db, io, lastProgress }) {
         }
         try {
           const rows = await db.runQuery(
-            "SELECT name, char_class, selected_profile_icon_id AS profile_icon_id FROM users WHERE user_id = ? LIMIT 1",
+            "SELECT name, char_class, selected_profile_icon_id AS profile_icon_id, selected_skin_id_by_char FROM users WHERE user_id = ? LIMIT 1",
             [ticket.user_id],
           );
           const u = rows?.[0];
@@ -83,6 +103,21 @@ function createProgressEmitter({ db, io, lastProgress }) {
                 {
                   name: u.name,
                   char_class: u.char_class || "ninja",
+                  selected_skin_id: resolveSelectedSkinId({
+                    character: u.char_class || "ninja",
+                    selectedSkinMap: normalizeSelectedSkinMap(
+                      u.selected_skin_id_by_char,
+                    ),
+                  }),
+                  selected_skin_asset_url: buildSkinAssetUrl(
+                    u.char_class || "ninja",
+                    resolveSelectedSkinId({
+                      character: u.char_class || "ninja",
+                      selectedSkinMap: normalizeSelectedSkinMap(
+                        u.selected_skin_id_by_char,
+                      ),
+                    }),
+                  ),
                   profile_icon_id: String(u.profile_icon_id || "") || null,
                 },
               ]

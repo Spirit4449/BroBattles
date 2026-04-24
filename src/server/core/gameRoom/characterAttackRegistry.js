@@ -1,8 +1,10 @@
 const { getResolvedAttackDescriptor } = require("./attackDescriptorResolver");
+const effectManager = require("./effects/effectManager");
 const {
   buildThrowArcGeometry,
   sampleThrowArcPoint,
 } = require("../../../characters/shared/attackAim.js");
+const { WORLD_BOUNDS } = require("../gameRoomConfig");
 
 const DEFAULT_TARGET_HALF_WIDTH = 28;
 const DEFAULT_TARGET_HALF_HEIGHT = 60;
@@ -53,6 +55,36 @@ function emitServerHit(room, attack, targetName, payload = {}) {
     attackTime: Date.now(),
     damage: payload.damage,
   });
+}
+
+function applyDescriptorHitEffect(room, attack, descriptor, attacker, target, now) {
+  const effectCfg = descriptor?.events?.onHitEffect;
+  if (!effectCfg?.type || !target || String(target.name || "").startsWith("vault:")) {
+    return;
+  }
+  try {
+    const durationMs =
+      Number(attack?.burn?.durationMs) ||
+      Number(effectCfg.durationMs) ||
+      undefined;
+    const totalDamage =
+      Number(attack?.burn?.totalDamage) ||
+      Number(effectCfg.totalDamage) ||
+      undefined;
+    effectManager.apply(
+      target,
+      String(effectCfg.type),
+      now,
+      {
+        durationMs,
+        totalDamage,
+        sourceSocketId: attacker?.socketId,
+        sourceName: attacker?.name,
+        sourceTeam: attacker?.team,
+      },
+      room,
+    );
+  } catch (_) {}
 }
 
 function getEnemyVaultTarget(room, attacker) {
@@ -129,8 +161,9 @@ function hitCircleTargets(
   repeatCooldownMs = 0,
 ) {
   const attacker = room.players.get(attack.attackerSocketId);
-  if (!attacker || !attacker.isAlive) return;
+  if (!attacker || !attacker.isAlive) return 0;
   attack.hitTimes = attack.hitTimes || Object.create(null);
+  let hitCount = 0;
 
   const vaultTarget = getEnemyVaultTarget(room, attacker);
   if (vaultTarget && !attack.hitSet?.has(vaultTarget.targetName)) {
@@ -142,6 +175,8 @@ function hitCircleTargets(
         emitServerHit(room, attack, vaultTarget.targetName, {
           damage: attack.damage,
         });
+        hitCount += 1;
+        if (attack.destroyOnHit) return hitCount;
       }
     }
   }
@@ -155,8 +190,12 @@ function hitCircleTargets(
     attack.hitSet?.add(target.name);
     attack.hitTimes[target.name] = now;
     emitServerHit(room, attack, target.name, { damage: attack.damage });
+    applyDescriptorHitEffect(room, attack, descriptor, attacker, target, now);
     emitHitAction(room, attack, descriptor, attacker, target, now);
+    hitCount += 1;
+    if (attack.destroyOnHit) return hitCount;
   }
+  return hitCount;
 }
 
 function hitRectTargets(room, attack, descriptor, rect, now) {
@@ -256,16 +295,91 @@ function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
     instanceId: String(actionData?.id || `${playerData.name}:${now}`),
     direction,
     angle,
-    vx: Math.cos(angle) * (Number(runtime.speed) || 0),
-    vy: Math.sin(angle) * (Number(runtime.speed) || 0),
+    speed: resolvePositiveNumber(actionData?.speed, Math.max(1, Number(runtime.speed) || 1)),
+    range: resolvePositiveNumber(actionData?.range, Math.max(1, Number(runtime.range) || 1)),
+    vx:
+      Math.cos(angle) *
+      resolvePositiveNumber(actionData?.speed, Math.max(1, Number(runtime.speed) || 1)),
+    vy:
+      Math.sin(angle) *
+      resolvePositiveNumber(actionData?.speed, Math.max(1, Number(runtime.speed) || 1)),
+    gravity: Math.max(
+      0,
+      Number(actionData?.gravity) || Number(runtime.gravity) || 0,
+    ),
     x: startX,
     y: startY,
     startY,
     traveled: 0,
     elapsed: 0,
+    maxLifetimeMs: Math.max(
+      150,
+      Number(actionData?.maxLifetimeMs) || Number(runtime.maxLifetimeMs) || 2500,
+    ),
     damage: Number(actionData?.damage) || Number(playerData.baseDamage) || 1,
+    collisionRadius: Math.max(
+      1,
+      Number(actionData?.collisionRadius) || Number(runtime.collisionRadius) || 1,
+    ),
+    burn: actionData?.burn || null,
+    destroyOnHit: actionData?.destroyOnHit === true || runtime.destroyOnHit === true,
     hitSet: new Set(),
   };
+}
+
+function buildProjectileSpreadAttacks(playerData, actionData, descriptor, now) {
+  const runtime = descriptor?.runtime || {};
+  const baseAngle = Number.isFinite(Number(actionData?.angle))
+    ? Number(actionData.angle)
+    : Number(actionData?.direction) === -1
+      ? Math.PI
+      : 0;
+  const configured = Array.isArray(actionData?.projectiles)
+    ? actionData.projectiles
+    : [];
+  const count = configured.length || Math.max(1, Number(runtime.count) || 1);
+  const spreadRad =
+    ((Number(actionData?.spreadDeg) || Number(runtime.spreadDeg) || 0) * Math.PI) / 180;
+  const center = (count - 1) / 2;
+  const baseDamage =
+    Number(actionData?.damage) ||
+    Number(runtime.damagePerProjectile) ||
+    Number(playerData.baseDamage) ||
+    1;
+
+  return Array.from({ length: count }, (_, index) => {
+    const provided = configured[index] || {};
+    const offset =
+      count === 1 ? 0 : ((index - center) / Math.max(1, center)) * (spreadRad / 2);
+    const projectileAction = {
+      ...actionData,
+      id: `${String(actionData?.id || `${playerData.name}:${now}`)}:${index}`,
+      angle: Number.isFinite(Number(provided.angle))
+        ? Number(provided.angle)
+        : baseAngle + offset,
+      range: Number(provided.range) || Number(actionData?.range) || Number(runtime.range),
+      speed: Number(provided.speed) || Number(actionData?.speed) || Number(runtime.speed),
+      collisionRadius:
+        Number(provided.collisionRadius) ||
+        Number(actionData?.collisionRadius) ||
+        Number(runtime.collisionRadius),
+      damage: Number(provided.damage) || baseDamage,
+      gravity:
+        Number(provided.gravity) ||
+        Number(actionData?.gravity) ||
+        Number(runtime.gravity),
+      maxLifetimeMs:
+        Number(provided.maxLifetimeMs) ||
+        Number(actionData?.maxLifetimeMs) ||
+        Number(runtime.maxLifetimeMs),
+      burn: provided.burn || actionData?.burn || null,
+      destroyOnHit:
+        provided.destroyOnHit === true ||
+        actionData?.destroyOnHit === true ||
+        runtime.destroyOnHit === true,
+    };
+    return buildProjectileLinearAttack(playerData, projectileAction, descriptor, now);
+  }).filter(Boolean);
 }
 
 function buildAttachedRectAttack(playerData, actionData, descriptor, now) {
@@ -494,6 +608,9 @@ function buildRuntimeAttack(playerData, actionData, now = Date.now()) {
   if (runtimeKind === "projectile-linear") {
     return buildProjectileLinearAttack(playerData, actionData, descriptor, now);
   }
+  if (runtimeKind === "projectile-spread") {
+    return buildProjectileSpreadAttacks(playerData, actionData, descriptor, now);
+  }
   if (runtimeKind === "attached-rect") {
     return buildAttachedRectAttack(playerData, actionData, descriptor, now);
   }
@@ -520,19 +637,57 @@ function tickLinearProjectile(room, attack, descriptor) {
   const runtime = descriptor?.runtime || {};
   const dtSec = room.FIXED_DT_MS / 1000;
   attack.elapsed += room.FIXED_DT_MS;
-  attack.traveled += Number(runtime.speed) * dtSec;
+  attack.traveled += Number(attack.speed || runtime.speed) * dtSec;
   attack.x += Number(attack.vx) * dtSec;
   attack.y += Number(attack.vy) * dtSec;
-  hitCircleTargets(
+  const hitCount = hitCircleTargets(
     room,
     attack,
     descriptor,
     attack.x,
     attack.y,
-    Math.max(1, Number(runtime.collisionRadius) || 1),
+    Math.max(1, Number(attack.collisionRadius || runtime.collisionRadius) || 1),
     Date.now(),
   );
-  return attack.traveled >= Math.max(1, Number(runtime.range) || 1);
+  if (attack.destroyOnHit && hitCount > 0) return true;
+  return attack.traveled >= Math.max(1, Number(attack.range || runtime.range) || 1);
+}
+
+function tickBallisticProjectile(room, attack, descriptor) {
+  const attacker = room.players.get(attack.attackerSocketId);
+  if (!attacker || !attacker.isAlive) return true;
+  const runtime = descriptor?.runtime || {};
+  const dtSec = room.FIXED_DT_MS / 1000;
+  attack.elapsed += room.FIXED_DT_MS;
+  const prevX = Number(attack.x) || 0;
+  const prevY = Number(attack.y) || 0;
+  attack.vy += (Number(attack.gravity) || 0) * dtSec;
+  attack.x += Number(attack.vx) * dtSec;
+  attack.y += Number(attack.vy) * dtSec;
+  attack.traveled += Math.hypot(Number(attack.x) - prevX, Number(attack.y) - prevY);
+  if (
+    attack.y >=
+    Math.max(
+      100,
+      Number(WORLD_BOUNDS?.height) || Number(room?.worldHeight) || 1000,
+    )
+  ) {
+    return true;
+  }
+  const hitCount = hitCircleTargets(
+    room,
+    attack,
+    descriptor,
+    attack.x,
+    attack.y,
+    Math.max(1, Number(attack.collisionRadius || runtime.collisionRadius) || 1),
+    Date.now(),
+  );
+  if (attack.destroyOnHit && hitCount > 0) return true;
+  if (attack.elapsed >= Math.max(150, Number(attack.maxLifetimeMs) || 2500)) {
+    return true;
+  }
+  return false;
 }
 
 function tickAttachedRect(room, attack, descriptor, now) {
@@ -794,6 +949,9 @@ function tickRuntimeAttack(room, attack, now = Date.now()) {
   if (!descriptor?.runtime || !runtimeKind) return true;
   if (runtimeKind === "projectile-linear") {
     return tickLinearProjectile(room, attack, descriptor);
+  }
+  if (runtimeKind === "projectile-spread") {
+    return tickBallisticProjectile(room, attack, descriptor);
   }
   if (runtimeKind === "attached-rect") {
     return tickAttachedRect(room, attack, descriptor, now);

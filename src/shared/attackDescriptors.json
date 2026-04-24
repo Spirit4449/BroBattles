@@ -55,5 +55,41 @@
     "runtime": {
       "kind": "returning-projectile"
     }
+  },
+  "hunteress-arrow": {
+    "character": "hunteress",
+    "actionFlow": {
+      "kind": "windup-release",
+      "broadcastType": "hunteress-arrow",
+      "releaseActionType": "hunteress-arrow-release",
+      "releaseOwnerEcho": true
+    }
+  },
+  "hunteress-arrow-release": {
+    "character": "hunteress",
+    "actionFlow": {
+      "kind": "server-runtime-only"
+    },
+    "attackType": "huntress-arrow",
+    "runtime": {
+      "kind": "projectile-spread",
+      "destroyOnHit": true
+    }
+  },
+  "hunteress-burning-arrow": {
+    "character": "hunteress",
+    "actionFlow": {
+      "kind": "server-runtime-only"
+    },
+    "attackType": "huntress-burning-arrow",
+    "runtime": {
+      "kind": "projectile-spread",
+      "destroyOnHit": true
+    },
+    "events": {
+      "onHitEffect": {
+        "type": "huntressBurn"
+      }
+    }
   }
 }

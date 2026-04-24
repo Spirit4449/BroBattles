@@ -1,6 +1,12 @@
 const {
   normalizeSelectionFromRow,
 } = require("../helpers/gameSelectionCatalog");
+const {
+  normalizeSelectedSkinMap,
+  resolveSelectedSkinId,
+  buildSkinAssetUrl,
+  getSkinGameAssets,
+} = require("../helpers/skinsCatalog");
 
 async function buildGameDataForMatch({
   db,
@@ -79,7 +85,7 @@ async function buildGameDataForMatch({
   }
 
   const allParticipants = await db.runQuery(
-    `SELECT mp.user_id, mp.party_id, mp.team, mp.char_class, u.name, u.char_levels, u.trophies, u.selected_profile_icon_id AS profile_icon_id
+    `SELECT mp.user_id, mp.party_id, mp.team, mp.char_class, u.name, u.char_levels, u.trophies, u.selected_profile_icon_id AS profile_icon_id, u.selected_skin_id_by_char
        FROM match_participants mp
        JOIN users u ON u.user_id = mp.user_id
       WHERE mp.match_id = ?`,
@@ -124,6 +130,10 @@ async function buildGameDataForMatch({
         name: p.name,
         team: p.team,
         char_class: p.char_class,
+        selected_skin_id: resolveSelectedSkinId({
+          character: p.char_class,
+          selectedSkinMap: normalizeSelectedSkinMap(p.selected_skin_id_by_char),
+        }),
         profile_icon_id: String(p.profile_icon_id || "") || null,
         selected_card_id: selectedByName[p.name] ?? null,
         trophies: Number(p.trophies) || 0,
@@ -133,6 +143,24 @@ async function buildGameDataForMatch({
           damage: getDamage(p.char_class, level),
           specialDamage: getSpecialDamage(p.char_class, level),
         },
+        selected_skin_asset_url: buildSkinAssetUrl(
+          p.char_class,
+          resolveSelectedSkinId({
+            character: p.char_class,
+            selectedSkinMap: normalizeSelectedSkinMap(
+              p.selected_skin_id_by_char,
+            ),
+          }),
+        ),
+        selected_skin_game_assets: getSkinGameAssets(
+          p.char_class,
+          resolveSelectedSkinId({
+            character: p.char_class,
+            selectedSkinMap: normalizeSelectedSkinMap(
+              p.selected_skin_id_by_char,
+            ),
+          }),
+        ),
       };
     }),
   };

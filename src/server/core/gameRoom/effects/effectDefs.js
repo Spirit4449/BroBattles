@@ -201,6 +201,52 @@ const effectDefs = {
     snapshotKey: "thorgRage",
   },
 
+  huntressBurn: {
+    durationMs: 5000,
+    tickIntervalMs: 1000,
+    modifiers: {},
+    onApply: null,
+    onTick(player, room, now, params = {}) {
+      const totalDamage = Math.max(0, Number(params.totalDamage) || 500);
+      const durationMs = Math.max(1, Number(params.durationMs) || 5000);
+      const prev = Number(player.health || 0);
+      const dmg = Math.max(1, Math.round((totalDamage * 1000) / durationMs));
+      player.health = Math.max(0, prev - dmg);
+      player.lastCombatAt = now;
+
+      const sourceName = String(params.sourceName || "");
+      const source = sourceName
+        ? Array.from(room.players.values()).find(
+            (entry) => entry?.name === sourceName,
+          )
+        : null;
+      const applied = Math.max(0, prev - player.health);
+      if (source && source !== player && applied > 0) {
+        source.lastCombatAt = now;
+        room._recordCombatStat?.(source, { damage: applied, hits: 1 });
+      }
+
+      if (player.health !== prev) {
+        room._broadcastHealthUpdate(player, { cause: "burn" });
+        room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
+          type: "huntressBurn",
+          username: player.name,
+        });
+        if (player.health <= 0 && prev > 0) {
+          if (source && source !== player) {
+            room._recordCombatStat?.(source, { kills: 1 });
+          }
+          room._handlePlayerDeath(player, {
+            cause: "burn",
+            killedBy: sourceName || undefined,
+            at: now,
+          });
+        }
+      }
+    },
+    snapshotKey: "huntressBurn",
+  },
+
   // ── Available for future powerups / abilities ────────────────────────────────
   // Grant via: effectManager.apply(player, "slow", now)
 

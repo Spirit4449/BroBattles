@@ -81,7 +81,8 @@ async function fetchPartyMembersDetailed(partyId) {
               ELSE COALESCE(u.status, 'online')
             END AS status,
             u.char_levels,
-            u.selected_profile_icon_id AS profile_icon_id
+            u.selected_profile_icon_id AS profile_icon_id,
+            u.selected_skin_id_by_char
        FROM party_members pm
        LEFT JOIN users u ON u.name = pm.name
       WHERE pm.party_id = ?
@@ -249,6 +250,61 @@ async function setUserSelectedProfileIconId(userId, iconId) {
         "selected_profile_icon_id column missing in users table. Apply the profile-icons migration.",
       );
     }
+    throw error;
+  }
+}
+
+async function getUserSelectedSkinMap(userId) {
+  try {
+    const rows = await runQuery(
+      "SELECT selected_skin_id_by_char FROM users WHERE user_id = ? LIMIT 1",
+      [userId],
+    );
+    return rows[0]?.selected_skin_id_by_char ?? null;
+  } catch (error) {
+    if (error?.code === "ER_BAD_FIELD_ERROR") return null;
+    throw error;
+  }
+}
+
+async function setUserSelectedSkinMap(userId, selectedSkinMap) {
+  try {
+    return await runQuery(
+      "UPDATE users SET selected_skin_id_by_char = ? WHERE user_id = ?",
+      [JSON.stringify(selectedSkinMap || {}), userId],
+    );
+  } catch (error) {
+    if (error?.code === "ER_BAD_FIELD_ERROR") {
+      throw new Error(
+        "selected_skin_id_by_char column missing in users table. Apply the skins migration.",
+      );
+    }
+    throw error;
+  }
+}
+
+async function getUserOwnedSkinIds(userId) {
+  try {
+    const rows = await runQuery(
+      "SELECT skin_id FROM user_skins WHERE user_id = ?",
+      [userId],
+    );
+    return rows.map((row) => String(row.skin_id));
+  } catch (error) {
+    if (error?.code === "ER_NO_SUCH_TABLE") return [];
+    throw error;
+  }
+}
+
+async function userOwnsSkin(userId, skinId) {
+  try {
+    const rows = await runQuery(
+      "SELECT 1 AS ok FROM user_skins WHERE user_id = ? AND skin_id = ? LIMIT 1",
+      [userId, String(skinId)],
+    );
+    return !!rows[0];
+  } catch (error) {
+    if (error?.code === "ER_NO_SUCH_TABLE") return false;
     throw error;
   }
 }
@@ -466,6 +522,10 @@ module.exports = {
   getUserOwnedProfileIconIds,
   userOwnsProfileIcon,
   setUserSelectedProfileIconId,
+  getUserSelectedSkinMap,
+  setUserSelectedSkinMap,
+  getUserOwnedSkinIds,
+  userOwnsSkin,
   getUserPreferredSelection,
   setUserPreferredSelection,
 };

@@ -7,6 +7,7 @@ const {
   getMapById,
   getVariantDescriptor,
 } = require("../../helpers/gameSelectionCatalog");
+const { normalizeSelectedSkinMap } = require("../../helpers/skinsCatalog");
 const { getAllCharacters } = require("../../../lib/characterStats");
 
 function formatSelectionLabel(selection) {
@@ -336,6 +337,7 @@ function registerPartyEvents(
       .toString()
       .trim()
       .toLowerCase();
+    const selectedSkinId = String(data?.selectedSkinId || "").trim();
     if (!charClass || !/^[a-zA-Z_-]{2,20}$/.test(charClass)) return;
     if (!VALID_CHARACTER_IDS.has(charClass)) {
       console.warn(
@@ -351,18 +353,48 @@ function registerPartyEvents(
           [partyId, uname],
         );
         if (!mem?.length) {
-          await db.runQuery("UPDATE users SET char_class = ? WHERE name = ?", [
-            charClass,
-            uname,
-          ]);
+          if (selectedSkinId) {
+            const selectedRows = await db.runQuery(
+              "SELECT selected_skin_id_by_char FROM users WHERE name = ? LIMIT 1",
+              [uname],
+            );
+            const selectedMap = normalizeSelectedSkinMap(
+              selectedRows?.[0]?.selected_skin_id_by_char,
+            );
+            selectedMap[charClass] = selectedSkinId;
+            await db.runQuery(
+              "UPDATE users SET char_class = ?, selected_skin_id_by_char = ? WHERE name = ?",
+              [charClass, JSON.stringify(selectedMap), uname],
+            );
+          } else {
+            await db.runQuery(
+              "UPDATE users SET char_class = ? WHERE name = ?",
+              [charClass, uname],
+            );
+          }
           return;
         }
       }
 
-      await db.runQuery("UPDATE users SET char_class = ? WHERE name = ?", [
-        charClass,
-        uname,
-      ]);
+      if (selectedSkinId) {
+        const selectedRows = await db.runQuery(
+          "SELECT selected_skin_id_by_char FROM users WHERE name = ? LIMIT 1",
+          [uname],
+        );
+        const selectedMap = normalizeSelectedSkinMap(
+          selectedRows?.[0]?.selected_skin_id_by_char,
+        );
+        selectedMap[charClass] = selectedSkinId;
+        await db.runQuery(
+          "UPDATE users SET char_class = ?, selected_skin_id_by_char = ? WHERE name = ?",
+          [charClass, JSON.stringify(selectedMap), uname],
+        );
+      } else {
+        await db.runQuery("UPDATE users SET char_class = ? WHERE name = ?", [
+          charClass,
+          uname,
+        ]);
+      }
 
       if (partyId) {
         await partyPresence.emitPartyRosterById(partyId);

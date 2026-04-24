@@ -1,8 +1,6 @@
 // src/characters/thorg/thorg.js
 import socket from "../../socket";
-import {
-  characterStats,
-} from "../../lib/characterStats.js";
+import { characterStats } from "../../lib/characterStats.js";
 import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { animations } from "./anim";
 import { executeDefaultAttack } from "../shared/attackFlow";
@@ -40,13 +38,16 @@ class Thorg extends CharacterEntityBase {
     special: { key: "thorg-throw", volume: 0.5, rate: 0.85 },
   };
 
-  static preload(scene, staticPath = "/assets") {
+  static preload(scene, staticPath = "/assets", options = {}) {
+    const includeBaseAtlas = options?.includeBaseAtlas !== false;
     // Load atlas and projectile/sounds
-    scene.load.atlas(
-      NAME,
-      this.characterAssetPath(staticPath, "spritesheet.webp"),
-      this.characterAssetPath(staticPath, "animations.json"),
-    );
+    if (includeBaseAtlas) {
+      scene.load.atlas(
+        NAME,
+        this.characterAssetPath(staticPath, "spritesheet.webp"),
+        this.characterAssetPath(staticPath, "animations.json"),
+      );
+    }
     scene.load.image(
       `${NAME}-weapon`,
       this.characterAssetPath(staticPath, "weapon.webp"),
@@ -92,17 +93,13 @@ class Thorg extends CharacterEntityBase {
           ownerSprite.anims.play(`${NAME}-throw`, true);
         }
       } catch (_) {}
-      Thorg._spawnFallEffect(
-        scene,
-        ownerSprite,
-        {
-          direction: data.direction,
-          angle: data.angle,
-          range: Number(data.range) || THORG_FALL_RANGE,
-          target: data.target || null,
-          strikeMs: Number(data.strikeMs) || THORG_FALL_STRIKE_MS,
-        },
-      );
+      Thorg._spawnFallEffect(scene, ownerSprite, {
+        direction: data.direction,
+        angle: data.angle,
+        range: Number(data.range) || THORG_FALL_RANGE,
+        target: data.target || null,
+        strikeMs: Number(data.strikeMs) || THORG_FALL_STRIKE_MS,
+      });
       // Play attack sound for remote players (lower volume)
       try {
         scene.sound?.play("thorg-throw", { volume: 0.25 });
@@ -551,11 +548,7 @@ class Thorg extends CharacterEntityBase {
         }
 
         const strikeElapsed = Math.max(0, elapsed - THORG_FALL_WINDUP_MS);
-        const tNow = Phaser.Math.Clamp(
-          strikeElapsed / strikeMs,
-          0,
-          1,
-        );
+        const tNow = Phaser.Math.Clamp(strikeElapsed / strikeMs, 0, 1);
         if (
           elapsed <=
           THORG_FALL_WINDUP_MS + THORG_FALL_FOLLOW_AFTER_WINDUP_MS

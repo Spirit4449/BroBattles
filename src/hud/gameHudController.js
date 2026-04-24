@@ -8,6 +8,7 @@ import {
   normalizeGameSelection,
   selectionToLegacyMode,
 } from "../lib/gameSelectionCatalog.js";
+import { buildCharacterSkinBodyUrl } from "../lib/skinAssets.js";
 
 function legacyModeToVariantId(mode) {
   const numeric = Number(mode);
@@ -163,8 +164,14 @@ export function createGameHudController({
     const sprite = document.createElement("img");
     sprite.className = "bs-card-sprite";
     const cls = String(player?.char_class || "").toLowerCase();
-    if (cls) {
-      sprite.src = `/assets/${cls}/body.webp`;
+    const selectedSkinAsset = String(
+      player?.selected_skin_asset_url || "",
+    ).trim();
+    if (selectedSkinAsset) {
+      sprite.src = selectedSkinAsset;
+      sprite.alt = cls || "character";
+    } else if (cls) {
+      sprite.src = buildCharacterSkinBodyUrl(cls, "");
       sprite.alt = cls;
     } else {
       sprite.src = card?.assetUrl || "/assets/player-cards/default.webp";
@@ -822,7 +829,9 @@ export function createGameHudController({
       avatarCore.className = "team-hud-avatar-core";
       const img = document.createElement("img");
       const cls = (p?.char_class || "ninja").toLowerCase();
-      img.src = `/assets/${cls}/body.webp`;
+      img.src =
+        String(p?.selected_skin_asset_url || "").trim() ||
+        buildCharacterSkinBodyUrl(cls, "");
       img.alt = `${cls} body`;
       img.onerror = () => {
         img.onerror = null;

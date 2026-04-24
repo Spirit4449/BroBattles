@@ -32,6 +32,7 @@ import {
   buildProfileIconAlt,
   buildProfileIconUrl,
 } from "./lib/profileIconAssets.js";
+import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
 import "./styles/characterSelect.css";
 import "./styles/index.css";
 import "./styles/chat.css";
@@ -311,7 +312,7 @@ function renderProfileCharacterLevels() {
       <div class="profile-character-level-badge" aria-hidden="true">
         <img src="/assets/levels/${iconLevel}.webp" alt="" />
       </div>
-      <img src="/assets/${entry.charId}/body.webp" alt="${toDisplayName(entry.charId)}" />
+      <img src="${buildCharacterSkinBodyUrl(entry.charId, "")}" alt="${toDisplayName(entry.charId)}" />
       <div class="profile-character-level-name">${toDisplayName(entry.charId)}</div>
     `;
     grid.appendChild(card);
@@ -1873,7 +1874,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
   setLobbyBackground("1");
-  characterBodyElement.src = `/assets/${userData.char_class}/body.webp`;
+  const initialCharClass = String(userData.char_class || "ninja").toLowerCase();
+  const initialSkinId = String(
+    userData?.selected_skin_id_by_char?.[initialCharClass] || "",
+  ).trim();
+  characterBodyElement.src = buildCharacterSkinBodyUrl(
+    initialCharClass,
+    initialSkinId,
+  );
   // Ensure non-random styling on initial sprite
   try {
     characterBodyElement.classList.remove("random");

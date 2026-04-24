@@ -3,6 +3,11 @@ const { selectPartyById, getPartyOwnerName } = require("../helpers/party");
 const {
   normalizeSelectionFromRow,
 } = require("../helpers/gameSelectionCatalog");
+const {
+  normalizeSelectedSkinMap,
+  resolveSelectedSkinId,
+  buildSkinAssetUrl,
+} = require("../helpers/skinsCatalog");
 
 function createPartyRouteService({ db }) {
   function isMissingPartyVisibilityColumn(error) {
@@ -44,7 +49,19 @@ function createPartyRouteService({ db }) {
       };
     }
 
-    const members = await db.fetchPartyMembersDetailed(partyId);
+    const membersRaw = await db.fetchPartyMembersDetailed(partyId);
+    const members = (Array.isArray(membersRaw) ? membersRaw : []).map((m) => {
+      const character = String(m?.char_class || "ninja").toLowerCase();
+      const selectedSkinId = resolveSelectedSkinId({
+        character,
+        selectedSkinMap: normalizeSelectedSkinMap(m?.selected_skin_id_by_char),
+      });
+      return {
+        ...m,
+        selected_skin_id: selectedSkinId || null,
+        selected_skin_asset_url: buildSkinAssetUrl(character, selectedSkinId),
+      };
+    });
     const selection = normalizeSelectionFromRow(party || {});
     const ownerName = await getPartyOwnerName(db, partyId);
     return {
@@ -154,6 +171,7 @@ function createPartyRouteService({ db }) {
            pm.name,
            pm.team,
            u.char_class,
+           u.selected_skin_id_by_char,
            u.selected_profile_icon_id AS profile_icon_id,
            u.status,
            CASE
@@ -206,9 +224,23 @@ function createPartyRouteService({ db }) {
         name: String(row.name || ""),
         team: String(row.team || "team1"),
         char_class: String(row.char_class || "ninja"),
+        selected_skin_id: null,
+        selected_skin_asset_url: null,
         profile_icon_id: String(row.profile_icon_id || "") || null,
         status: String(row.status || "online"),
       };
+      const selectedSkinMap = normalizeSelectedSkinMap(
+        row.selected_skin_id_by_char,
+      );
+      const selectedSkinId = resolveSelectedSkinId({
+        character: member.char_class,
+        selectedSkinMap,
+      });
+      member.selected_skin_id = selectedSkinId || null;
+      member.selected_skin_asset_url = buildSkinAssetUrl(
+        member.char_class,
+        selectedSkinId,
+      );
       if (member.name) {
         party.members.push(member);
       }

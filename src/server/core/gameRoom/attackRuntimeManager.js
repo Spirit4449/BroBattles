@@ -32,11 +32,24 @@ function registerAttackFromAction(
   actionData,
   now = Date.now(),
 ) {
+  const actionType = String(actionData?.type || "").toLowerCase();
+  // Huntress projectiles are client-collision authoritative for now.
+  if (
+    actionType === "hunteress-arrow-release" ||
+    actionType === "hunteress-burning-arrow"
+  ) {
+    return false;
+  }
   if (!claimAttackInstance(room, playerData, actionData, now)) return false;
   const runtimeAttack = createRuntimeAttack(playerData, actionData, now);
   if (!runtimeAttack) return false;
-  runtimeAttack.sourceType = String(actionData?.type || "").toLowerCase();
-  ensureAttackState(room).push(runtimeAttack);
+  const attacks = Array.isArray(runtimeAttack) ? runtimeAttack : [runtimeAttack];
+  const sourceType = String(actionData?.type || "").toLowerCase();
+  for (const attack of attacks) {
+    if (!attack) continue;
+    attack.sourceType = sourceType;
+    ensureAttackState(room).push(attack);
+  }
   return true;
 }
 
