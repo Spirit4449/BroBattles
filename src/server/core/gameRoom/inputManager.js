@@ -67,6 +67,12 @@ function handlePlayerInput(room, socketId, inputData) {
 
   const now = Date.now();
   if (Number(playerData._movementViolationUntil || 0) > now) return;
+  if (Number(playerData._controlLockUntil || 0) > now) {
+    playerData.vx = 0;
+    playerData.vy = 0;
+    playerData.lastInput = now;
+    return;
+  }
   const infernoActive = isMovementSuppressed(playerData, now);
   const packetSeq = Number(inputData?.sequence);
   const packetTimestamp = Number(inputData?.timestamp);
@@ -286,6 +292,9 @@ function handlePlayerInputIntent(room, socketId, intentData) {
   const playerData = room.players.get(socketId);
   if (!playerData) return;
   if (!intentData || typeof intentData !== "object") return;
+  if (Number(playerData._controlLockUntil || 0) > Date.now()) {
+    return;
+  }
 
   if (!playerData._inputIntentQueue) playerData._inputIntentQueue = [];
   const sequence = Number(intentData.sequence);

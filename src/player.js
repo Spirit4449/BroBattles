@@ -1368,7 +1368,9 @@ export function handlePlayerMovement(scene) {
   // Shared movement constants are mirrored on the server for prediction.
   const maxSpeed =
     MOVEMENT_PHYSICS.maxSpeed *
-    Math.max(MOVEMENT_PHYSICS.minSpeedMult, movementSpeedMult || 1);
+    (Number(movementSpeedMult) <= 0
+      ? 0
+      : Math.max(MOVEMENT_PHYSICS.minSpeedMult, movementSpeedMult || 1));
   const accel = MOVEMENT_PHYSICS.accel;
   const airAccel = MOVEMENT_PHYSICS.airAccel;
   const dragGround = MOVEMENT_PHYSICS.dragGround;
@@ -1762,7 +1764,9 @@ export function handlePlayerMovement(scene) {
     const boost = Phaser.Math.Clamp((vx / maxSpeed) * jumpBoost, 0, jumpBoost);
     jumpSpeed =
       (MOVEMENT_PHYSICS.jumpSpeed + boost) *
-      Math.max(MOVEMENT_PHYSICS.minSpeedMult, movementJumpMult || 1);
+      (Number(movementJumpMult) <= 0
+        ? 0
+        : Math.max(MOVEMENT_PHYSICS.minSpeedMult, movementJumpMult || 1));
     jump(); // Calls jump
     scene.sound.play("sfx-jump", { volume: 3 });
     if (wallSlideContact || effectiveWallSide) {

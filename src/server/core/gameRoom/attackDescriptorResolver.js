@@ -171,10 +171,7 @@ function getRuntimeOverrides(actionType) {
         collisionRadius: Number(volley.collisionRadius) || 18,
         count: Math.max(1, Number(volley.count) || 6),
         spreadDeg: Number(volley.spreadDeg) || 26,
-        damagePerProjectile: Math.max(
-          1,
-          Number(volley.damagePerArrow) || 1500,
-        ),
+        damagePerProjectile: Math.max(1, Number(volley.damagePerArrow) || 1500),
         destroyOnHit: true,
       },
       events: {
@@ -183,6 +180,63 @@ function getRuntimeOverrides(actionType) {
           durationMs: Math.max(1, Number(volley.burnDurationMs) || 5000),
           totalDamage: Math.max(0, Number(volley.burnTotalDamage) || 500),
         },
+      },
+    };
+  }
+
+  if (key === "gloop-slimeball" || key === "gloop-slimeball-release") {
+    const slimeball =
+      getResolvedCharacterAttackConfig("gloop", "slimeball") || {};
+    const runtime = {
+      collisionRadius: Math.max(1, Number(slimeball.collisionRadius) || 28),
+      speed: Math.max(1, Number(slimeball.speed) || 390),
+      range: Math.max(1, Number(slimeball.range) || 930),
+      forwardOffsetWidthFactor: Number(slimeball.forwardOffset) || 0.32,
+      verticalOffsetHeightFactor: Number(slimeball.verticalOffset) || 0.1,
+      gravity: Math.max(0, Number(slimeball.gravity) || 380),
+      initialVy: Number(slimeball.initialVy) || -70,
+      maxBounces: Math.max(0, Number(slimeball.maxBounces) || 2),
+      bounceDampingY: Math.max(0.1, Number(slimeball.bounceDampingY) || 0.74),
+      bounceDampingX: Math.max(0.1, Number(slimeball.bounceDampingX) || 0.92),
+      bounceFloorOffsetY: Number(slimeball.bounceFloorOffsetY) || 185,
+      maxLifetimeMs: Math.max(250, Number(slimeball.maxLifetimeMs) || 4200),
+      destroyOnHit: false,
+      slowDurationMs: 2000,
+      slowSpeedMult: 0.7,
+      slowJumpMult: 0.7,
+    };
+    if (key === "gloop-slimeball") {
+      return {
+        actionFlow: {
+          startupMs: Math.max(0, Number(slimeball.castDelayMs) || 0),
+        },
+      };
+    }
+    return { runtime };
+  }
+
+  if (key === "gloop-hook-release") {
+    const hook = getResolvedCharacterSpecialConfig("gloop", "hook") || {};
+    return {
+      runtime: {
+        speed: Math.max(1, Number(hook.speed) || 900),
+        range: Math.max(1, Number(hook.range) || 780),
+        collisionRadius: Math.max(1, Number(hook.collisionRadius) || 34),
+        maxLifetimeMs: Math.max(
+          200,
+          Math.ceil(
+            ((Number(hook.range) || 780) /
+              Math.max(1, Number(hook.speed) || 900)) *
+              1000 *
+              1.5,
+          ),
+        ),
+        pullDurationMs: Math.max(120, Number(hook.pullDurationMs) || 640),
+        pullLockPaddingMs: Math.max(0, Number(hook.pullLockPaddingMs) || 120),
+        pulledStopDistance: Math.max(1, Number(hook.pulledStopDistance) || 54),
+        slowDurationMs: Math.max(1, Number(hook.slowDurationMs) || 2200),
+        slowSpeedMult: Math.max(0.1, Number(hook.slowSpeedMult) || 0.5),
+        slowJumpMult: Math.max(0.1, Number(hook.slowJumpMult) || 0.5),
       },
     };
   }

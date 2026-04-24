@@ -157,6 +157,30 @@
           }
         }
       ]
+    },
+    "gloop": {
+      "defaultSkinId": "gloop-default",
+      "skins": [
+        {
+          "id": "gloop-default",
+          "name": "Default",
+          "character": "gloop",
+          "available": true,
+          "assetUrl": "/assets/gloop/body.webp",
+          "rarity": "rare",
+          "price": { "gems": 0 },
+          "unlockMethod": {
+            "type": "character",
+            "character": "gloop",
+            "limited": true
+          },
+          "showInPicker": true,
+          "gameAssets": {
+            "spritesheetUrl": "/assets/gloop/spritesheet.webp",
+            "animationsUrl": "/assets/gloop/animations.json"
+          }
+        }
+      ]
     }
   }
 }

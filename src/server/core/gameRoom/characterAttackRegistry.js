@@ -57,20 +57,38 @@ function emitServerHit(room, attack, targetName, payload = {}) {
   });
 }
 
-function applyDescriptorHitEffect(room, attack, descriptor, attacker, target, now) {
+function applyDescriptorHitEffect(
+  room,
+  attack,
+  descriptor,
+  attacker,
+  target,
+  now,
+) {
   const effectCfg = descriptor?.events?.onHitEffect;
-  if (!effectCfg?.type || !target || String(target.name || "").startsWith("vault:")) {
+  if (
+    !effectCfg?.type ||
+    !target ||
+    String(target.name || "").startsWith("vault:")
+  ) {
     return;
   }
   try {
-    const durationMs =
-      Number(attack?.burn?.durationMs) ||
-      Number(effectCfg.durationMs) ||
-      undefined;
+    const durationMs = Number.isFinite(Number(attack?.effectDurationMs))
+      ? Number(attack.effectDurationMs)
+      : Number(attack?.burn?.durationMs) ||
+        Number(effectCfg.durationMs) ||
+        undefined;
     const totalDamage =
       Number(attack?.burn?.totalDamage) ||
       Number(effectCfg.totalDamage) ||
       undefined;
+    const speedMult = Number.isFinite(Number(attack?.effectSpeedMult))
+      ? Number(attack.effectSpeedMult)
+      : Number(effectCfg.speedMult);
+    const jumpMult = Number.isFinite(Number(attack?.effectJumpMult))
+      ? Number(attack.effectJumpMult)
+      : Number(effectCfg.jumpMult);
     effectManager.apply(
       target,
       String(effectCfg.type),
@@ -78,6 +96,8 @@ function applyDescriptorHitEffect(room, attack, descriptor, attacker, target, no
       {
         durationMs,
         totalDamage,
+        speedMult: Number.isFinite(speedMult) ? speedMult : undefined,
+        jumpMult: Number.isFinite(jumpMult) ? jumpMult : undefined,
         sourceSocketId: attacker?.socketId,
         sourceName: attacker?.name,
         sourceTeam: attacker?.team,
@@ -254,6 +274,135 @@ function resolvePositiveNumber(value, fallback) {
   return fallback;
 }
 
+function clampToWorld(value, axis = "x") {
+  const margin = Number(WORLD_BOUNDS?.margin) || 0;
+  if (axis === "y") {
+    const minY = -margin;
+    const maxY = (Number(WORLD_BOUNDS?.height) || 1000) + margin;
+    return Math.max(minY, Math.min(maxY, Number(value) || 0));
+  }
+  const minX = -margin;
+  const maxX = (Number(WORLD_BOUNDS?.width) || 3600) + margin;
+  return Math.max(minX, Math.min(maxX, Number(value) || 0));
+}
+
+function applyGloopPull(room, attacker, target, attack, now) {
+  if (!room || !attacker || !target || !target.isAlive) return;
+  const stopDistance = Math.max(1, Number(attack.pulledStopDistance) || 54);
+  const pullDurationMs = Math.max(120, Number(attack.pullDurationMs) || 640);
+  const lockPaddingMs = Math.max(0, Number(attack.pullLockPaddingMs) || 120);
+  const ax = Number(attacker.x) || 0;
+  const ay = Number(attacker.y) || 0;
+  const tx = Number(target.x) || 0;
+  const ty = Number(target.y) || 0;
+  const dx = tx - ax;
+  const dy = ty - ay;
+  const dist = Math.hypot(dx, dy) || 1;
+  const ux = dx / dist;
+  const uy = dy / dist;
+
+  target._gloopPullState = {
+    sourceSocketId: attacker.socketId,
+    sourceName: attacker.name,
+    startedAt: now,
+    until: now + pullDurationMs,
+    fromX: tx,
+    fromY: ty,
+    toX: clampToWorld(ax + ux * stopDistance, "x"),
+    toY: clampToWorld(ay + uy * stopDistance, "y"),
+    slowDurationMs: Math.max(1, Number(attack.slowDurationMs) || 2200),
+    slowSpeedMult: Math.max(0.1, Number(attack.slowSpeedMult) || 0.5),
+    slowJumpMult: Math.max(0.1, Number(attack.slowJumpMult) || 0.5),
+  };
+  target._controlLockUntil = now + pullDurationMs + lockPaddingMs;
+  target.vx = 0;
+  target.vy = 0;
+  target.inputBuffer = [];
+  if (Array.isArray(target._inputIntentQueue)) {
+    target._inputIntentQueue.length = 0;
+  }
+  try {
+    effectManager.apply(
+      target,
+      "stun",
+      now,
+      { durationMs: pullDurationMs },
+      room,
+    );
+  } catch (_) {}
+
+  room.io.to(`game:${room.matchId}`).emit("game:action", {
+    playerName: attacker.name,
+    character: attacker.char_class,
+    origin: { x: attacker.x, y: attacker.y },
+    flip: !!attacker.flip,
+    action: {
+      type: "gloop-hook-catch",
+      id: attack.instanceId,
+      target: target.name,
+      ownerEcho: true,
+      start: { x: Number(attack.x) || ax, y: Number(attack.y) || ay },
+      end: { x: target._gloopPullState.toX, y: target._gloopPullState.toY },
+      pullDurationMs,
+    },
+    t: now,
+  });
+}
+
+function tickRuntimeControlEffects(room, now = Date.now()) {
+  if (!room?.players) return;
+  for (const target of room.players.values()) {
+    const pull = target?._gloopPullState;
+    if (!pull) continue;
+    if (
+      !target.isAlive ||
+      target.connected === false ||
+      target.loaded !== true
+    ) {
+      delete target._gloopPullState;
+      continue;
+    }
+    if (
+      now >= Number(pull.until) ||
+      !room.players.has(String(pull.sourceSocketId || ""))
+    ) {
+      delete target._gloopPullState;
+      try {
+        effectManager.apply(
+          target,
+          "gloopHookSlow",
+          now,
+          {
+            durationMs: Math.max(1, Number(pull.slowDurationMs) || 2200),
+            speedMult: Math.max(0.1, Number(pull.slowSpeedMult) || 0.5),
+            jumpMult: Math.max(0.1, Number(pull.slowJumpMult) || 0.5),
+          },
+          room,
+        );
+      } catch (_) {}
+      continue;
+    }
+
+    const startedAt = Number(pull.startedAt) || now;
+    const duration = Math.max(1, Number(pull.until) - startedAt);
+    const t = Math.max(0, Math.min(1, (now - startedAt) / duration));
+    const eased = 1 - Math.pow(1 - t, 3);
+    target.x = clampToWorld(
+      (Number(pull.fromX) || 0) +
+        ((Number(pull.toX) || 0) - (Number(pull.fromX) || 0)) * eased,
+      "x",
+    );
+    target.y = clampToWorld(
+      (Number(pull.fromY) || 0) +
+        ((Number(pull.toY) || 0) - (Number(pull.fromY) || 0)) * eased,
+      "y",
+    );
+    target.vx = 0;
+    target.vy = 0;
+    target.lastInput = now;
+  }
+}
+
 function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
   const runtime = descriptor?.runtime || {};
   const direction = Number(actionData?.direction) === -1 ? -1 : 1;
@@ -295,14 +444,26 @@ function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
     instanceId: String(actionData?.id || `${playerData.name}:${now}`),
     direction,
     angle,
-    speed: resolvePositiveNumber(actionData?.speed, Math.max(1, Number(runtime.speed) || 1)),
-    range: resolvePositiveNumber(actionData?.range, Math.max(1, Number(runtime.range) || 1)),
+    speed: resolvePositiveNumber(
+      actionData?.speed,
+      Math.max(1, Number(runtime.speed) || 1),
+    ),
+    range: resolvePositiveNumber(
+      actionData?.range,
+      Math.max(1, Number(runtime.range) || 1),
+    ),
     vx:
       Math.cos(angle) *
-      resolvePositiveNumber(actionData?.speed, Math.max(1, Number(runtime.speed) || 1)),
+      resolvePositiveNumber(
+        actionData?.speed,
+        Math.max(1, Number(runtime.speed) || 1),
+      ),
     vy:
       Math.sin(angle) *
-      resolvePositiveNumber(actionData?.speed, Math.max(1, Number(runtime.speed) || 1)),
+      resolvePositiveNumber(
+        actionData?.speed,
+        Math.max(1, Number(runtime.speed) || 1),
+      ),
     gravity: Math.max(
       0,
       Number(actionData?.gravity) || Number(runtime.gravity) || 0,
@@ -314,15 +475,20 @@ function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
     elapsed: 0,
     maxLifetimeMs: Math.max(
       150,
-      Number(actionData?.maxLifetimeMs) || Number(runtime.maxLifetimeMs) || 2500,
+      Number(actionData?.maxLifetimeMs) ||
+        Number(runtime.maxLifetimeMs) ||
+        2500,
     ),
     damage: Number(actionData?.damage) || Number(playerData.baseDamage) || 1,
     collisionRadius: Math.max(
       1,
-      Number(actionData?.collisionRadius) || Number(runtime.collisionRadius) || 1,
+      Number(actionData?.collisionRadius) ||
+        Number(runtime.collisionRadius) ||
+        1,
     ),
     burn: actionData?.burn || null,
-    destroyOnHit: actionData?.destroyOnHit === true || runtime.destroyOnHit === true,
+    destroyOnHit:
+      actionData?.destroyOnHit === true || runtime.destroyOnHit === true,
     hitSet: new Set(),
   };
 }
@@ -339,7 +505,9 @@ function buildProjectileSpreadAttacks(playerData, actionData, descriptor, now) {
     : [];
   const count = configured.length || Math.max(1, Number(runtime.count) || 1);
   const spreadRad =
-    ((Number(actionData?.spreadDeg) || Number(runtime.spreadDeg) || 0) * Math.PI) / 180;
+    ((Number(actionData?.spreadDeg) || Number(runtime.spreadDeg) || 0) *
+      Math.PI) /
+    180;
   const center = (count - 1) / 2;
   const baseDamage =
     Number(actionData?.damage) ||
@@ -350,15 +518,23 @@ function buildProjectileSpreadAttacks(playerData, actionData, descriptor, now) {
   return Array.from({ length: count }, (_, index) => {
     const provided = configured[index] || {};
     const offset =
-      count === 1 ? 0 : ((index - center) / Math.max(1, center)) * (spreadRad / 2);
+      count === 1
+        ? 0
+        : ((index - center) / Math.max(1, center)) * (spreadRad / 2);
     const projectileAction = {
       ...actionData,
       id: `${String(actionData?.id || `${playerData.name}:${now}`)}:${index}`,
       angle: Number.isFinite(Number(provided.angle))
         ? Number(provided.angle)
         : baseAngle + offset,
-      range: Number(provided.range) || Number(actionData?.range) || Number(runtime.range),
-      speed: Number(provided.speed) || Number(actionData?.speed) || Number(runtime.speed),
+      range:
+        Number(provided.range) ||
+        Number(actionData?.range) ||
+        Number(runtime.range),
+      speed:
+        Number(provided.speed) ||
+        Number(actionData?.speed) ||
+        Number(runtime.speed),
       collisionRadius:
         Number(provided.collisionRadius) ||
         Number(actionData?.collisionRadius) ||
@@ -378,8 +554,117 @@ function buildProjectileSpreadAttacks(playerData, actionData, descriptor, now) {
         actionData?.destroyOnHit === true ||
         runtime.destroyOnHit === true,
     };
-    return buildProjectileLinearAttack(playerData, projectileAction, descriptor, now);
+    return buildProjectileLinearAttack(
+      playerData,
+      projectileAction,
+      descriptor,
+      now,
+    );
   }).filter(Boolean);
+}
+
+function buildProjectileBounceAttack(playerData, actionData, descriptor, now) {
+  const runtime = descriptor?.runtime || {};
+  const base = buildProjectileLinearAttack(
+    playerData,
+    actionData,
+    descriptor,
+    now,
+  );
+  const floorFromAction = Number(actionData?.floorY);
+  const floorFromRuntime =
+    (Number(playerData.y) || 0) + (Number(runtime.bounceFloorOffsetY) || 185);
+  return {
+    ...base,
+    runtimeKind: "projectile-bounce",
+    vy: Number.isFinite(Number(actionData?.initialVy))
+      ? Number(actionData.initialVy)
+      : Number(runtime.initialVy) || -70,
+    maxBounces: Math.max(
+      0,
+      Number(actionData?.maxBounces) || Number(runtime.maxBounces) || 2,
+    ),
+    bounceDampingY: Math.max(
+      0.1,
+      Number(actionData?.bounceDampingY) ||
+        Number(runtime.bounceDampingY) ||
+        0.74,
+    ),
+    bounceDampingX: Math.max(
+      0.1,
+      Number(actionData?.bounceDampingX) ||
+        Number(runtime.bounceDampingX) ||
+        0.92,
+    ),
+    floorY: Number.isFinite(floorFromAction)
+      ? floorFromAction
+      : floorFromRuntime,
+    bounceCount: 0,
+    worldMinX: Number.isFinite(Number(actionData?.worldMinX))
+      ? Number(actionData.worldMinX)
+      : -((Number(WORLD_BOUNDS?.margin) || 0) + 20),
+    worldMaxX: Number.isFinite(Number(actionData?.worldMaxX))
+      ? Number(actionData.worldMaxX)
+      : (Number(WORLD_BOUNDS?.width) || 3600) +
+        (Number(WORLD_BOUNDS?.margin) || 0) +
+        20,
+    effectDurationMs:
+      Number(actionData?.slowDurationMs) ||
+      Number(runtime.slowDurationMs) ||
+      2000,
+    effectSpeedMult:
+      Number(actionData?.slowSpeedMult) || Number(runtime.slowSpeedMult) || 0.7,
+    effectJumpMult:
+      Number(actionData?.slowJumpMult) || Number(runtime.slowJumpMult) || 0.7,
+  };
+}
+
+function buildHookProjectileAttack(playerData, actionData, descriptor, now) {
+  const runtime = descriptor?.runtime || {};
+  const base = buildProjectileLinearAttack(
+    playerData,
+    actionData,
+    descriptor,
+    now,
+  );
+  return {
+    ...base,
+    runtimeKind: "hook-projectile",
+    pullDurationMs: Math.max(
+      120,
+      Number(actionData?.pullDurationMs) ||
+        Number(runtime.pullDurationMs) ||
+        640,
+    ),
+    pullLockPaddingMs: Math.max(
+      0,
+      Number(actionData?.pullLockPaddingMs) ||
+        Number(runtime.pullLockPaddingMs) ||
+        120,
+    ),
+    pulledStopDistance: Math.max(
+      1,
+      Number(actionData?.pulledStopDistance) ||
+        Number(runtime.pulledStopDistance) ||
+        54,
+    ),
+    slowDurationMs: Math.max(
+      1,
+      Number(actionData?.slowDurationMs) ||
+        Number(runtime.slowDurationMs) ||
+        2200,
+    ),
+    slowSpeedMult: Math.max(
+      0.1,
+      Number(actionData?.slowSpeedMult) || Number(runtime.slowSpeedMult) || 0.5,
+    ),
+    slowJumpMult: Math.max(
+      0.1,
+      Number(actionData?.slowJumpMult) || Number(runtime.slowJumpMult) || 0.5,
+    ),
+    hitSet: new Set(),
+    destroyOnHit: true,
+  };
 }
 
 function buildAttachedRectAttack(playerData, actionData, descriptor, now) {
@@ -609,7 +894,15 @@ function buildRuntimeAttack(playerData, actionData, now = Date.now()) {
     return buildProjectileLinearAttack(playerData, actionData, descriptor, now);
   }
   if (runtimeKind === "projectile-spread") {
-    return buildProjectileSpreadAttacks(playerData, actionData, descriptor, now);
+    return buildProjectileSpreadAttacks(
+      playerData,
+      actionData,
+      descriptor,
+      now,
+    );
+  }
+  if (runtimeKind === "projectile-bounce") {
+    return buildProjectileBounceAttack(playerData, actionData, descriptor, now);
   }
   if (runtimeKind === "attached-rect") {
     return buildAttachedRectAttack(playerData, actionData, descriptor, now);
@@ -627,6 +920,9 @@ function buildRuntimeAttack(playerData, actionData, now = Date.now()) {
       descriptor,
       now,
     );
+  }
+  if (runtimeKind === "hook-projectile") {
+    return buildHookProjectileAttack(playerData, actionData, descriptor, now);
   }
   return null;
 }
@@ -650,7 +946,9 @@ function tickLinearProjectile(room, attack, descriptor) {
     Date.now(),
   );
   if (attack.destroyOnHit && hitCount > 0) return true;
-  return attack.traveled >= Math.max(1, Number(attack.range || runtime.range) || 1);
+  return (
+    attack.traveled >= Math.max(1, Number(attack.range || runtime.range) || 1)
+  );
 }
 
 function tickBallisticProjectile(room, attack, descriptor) {
@@ -664,7 +962,10 @@ function tickBallisticProjectile(room, attack, descriptor) {
   attack.vy += (Number(attack.gravity) || 0) * dtSec;
   attack.x += Number(attack.vx) * dtSec;
   attack.y += Number(attack.vy) * dtSec;
-  attack.traveled += Math.hypot(Number(attack.x) - prevX, Number(attack.y) - prevY);
+  attack.traveled += Math.hypot(
+    Number(attack.x) - prevX,
+    Number(attack.y) - prevY,
+  );
   if (
     attack.y >=
     Math.max(
@@ -687,6 +988,118 @@ function tickBallisticProjectile(room, attack, descriptor) {
   if (attack.elapsed >= Math.max(150, Number(attack.maxLifetimeMs) || 2500)) {
     return true;
   }
+  return false;
+}
+
+function tickBouncingProjectile(room, attack, descriptor, now) {
+  const attacker = room.players.get(attack.attackerSocketId);
+  if (!attacker || !attacker.isAlive) return true;
+  const runtime = descriptor?.runtime || {};
+  const dtSec = room.FIXED_DT_MS / 1000;
+  attack.elapsed += room.FIXED_DT_MS;
+  const prevX = Number(attack.x) || 0;
+  const prevY = Number(attack.y) || 0;
+  attack.vy += (Number(attack.gravity) || Number(runtime.gravity) || 0) * dtSec;
+  attack.x += Number(attack.vx || 0) * dtSec;
+  attack.y += Number(attack.vy || 0) * dtSec;
+  attack.traveled += Math.hypot(
+    Number(attack.x) - prevX,
+    Number(attack.y) - prevY,
+  );
+
+  const radius = Math.max(
+    1,
+    Number(attack.collisionRadius || runtime.collisionRadius) || 1,
+  );
+  const floorY = Number(attack.floorY);
+  if (
+    Number.isFinite(floorY) &&
+    attack.y + radius >= floorY &&
+    Number(attack.vy) > 0
+  ) {
+    attack.bounceCount = Number(attack.bounceCount || 0) + 1;
+    if (attack.bounceCount > Math.max(0, Number(attack.maxBounces) || 0)) {
+      return true;
+    }
+    attack.y = floorY - radius;
+    attack.vy =
+      -Math.abs(Number(attack.vy) || 0) *
+      Math.max(0.1, Number(attack.bounceDampingY) || 0.74);
+    attack.vx =
+      Number(attack.vx || 0) *
+      Math.max(0.1, Number(attack.bounceDampingX) || 0.92);
+  }
+
+  const hitCount = hitCircleTargets(
+    room,
+    attack,
+    descriptor,
+    attack.x,
+    attack.y,
+    radius,
+    now,
+  );
+  if (attack.destroyOnHit && hitCount > 0) return true;
+
+  const minX = Number(attack.worldMinX);
+  const maxX = Number(attack.worldMaxX);
+  if (Number.isFinite(minX) && Number(attack.x) + radius < minX) return true;
+  if (Number.isFinite(maxX) && Number(attack.x) - radius > maxX) return true;
+  if (attack.elapsed >= Math.max(150, Number(attack.maxLifetimeMs) || 2500))
+    return true;
+  if (
+    attack.traveled >= Math.max(1, Number(attack.range || runtime.range) || 1)
+  )
+    return true;
+  return false;
+}
+
+function tickHookProjectile(room, attack, descriptor, now) {
+  const attacker = room.players.get(attack.attackerSocketId);
+  if (!attacker || !attacker.isAlive) return true;
+  const runtime = descriptor?.runtime || {};
+  const dtSec = room.FIXED_DT_MS / 1000;
+  attack.elapsed += room.FIXED_DT_MS;
+  const prevX = Number(attack.x) || 0;
+  const prevY = Number(attack.y) || 0;
+  attack.x += Number(attack.vx || 0) * dtSec;
+  attack.y += Number(attack.vy || 0) * dtSec;
+  attack.traveled += Math.hypot(
+    Number(attack.x) - prevX,
+    Number(attack.y) - prevY,
+  );
+
+  const radius = Math.max(
+    1,
+    Number(attack.collisionRadius || runtime.collisionRadius) || 1,
+  );
+  const vaultTarget = getEnemyVaultTarget(room, attacker);
+  if (vaultTarget && !attack.hitSet?.has(vaultTarget.targetName)) {
+    if (circleAabbOverlap(attack.x, attack.y, radius, vaultTarget.bounds)) {
+      attack.hitSet?.add(vaultTarget.targetName);
+      emitServerHit(room, attack, vaultTarget.targetName, {
+        damage: attack.damage,
+      });
+      return true;
+    }
+  }
+
+  for (const target of buildTargetList(room, attacker.name, attacker.team)) {
+    if (attack.hitSet?.has(target.name)) continue;
+    const targetBounds = getPlayerBounds(target);
+    if (!circleAabbOverlap(attack.x, attack.y, radius, targetBounds)) continue;
+    attack.hitSet?.add(target.name);
+    emitServerHit(room, attack, target.name, { damage: attack.damage });
+    applyGloopPull(room, attacker, target, attack, now);
+    return true;
+  }
+
+  if (attack.elapsed >= Math.max(150, Number(attack.maxLifetimeMs) || 2500))
+    return true;
+  if (
+    attack.traveled >= Math.max(1, Number(attack.range || runtime.range) || 1)
+  )
+    return true;
   return false;
 }
 
@@ -953,6 +1366,9 @@ function tickRuntimeAttack(room, attack, now = Date.now()) {
   if (runtimeKind === "projectile-spread") {
     return tickBallisticProjectile(room, attack, descriptor);
   }
+  if (runtimeKind === "projectile-bounce") {
+    return tickBouncingProjectile(room, attack, descriptor, now);
+  }
   if (runtimeKind === "attached-rect") {
     return tickAttachedRect(room, attack, descriptor, now);
   }
@@ -965,10 +1381,14 @@ function tickRuntimeAttack(room, attack, now = Date.now()) {
   if (runtimeKind === "returning-projectile") {
     return tickReturningProjectile(room, attack, descriptor);
   }
+  if (runtimeKind === "hook-projectile") {
+    return tickHookProjectile(room, attack, descriptor, now);
+  }
   return true;
 }
 
 module.exports = {
   createRuntimeAttack,
   tickRuntimeAttack,
+  tickRuntimeControlEffects,
 };

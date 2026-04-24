@@ -652,12 +652,34 @@ export function createPowerupRenderer({
 
     const baseSpeedMult = (me.rage || 0) > 0 ? 1.25 : 1;
     const baseJumpMult = (me.gravityBoots || 0) > 0 ? 1.5 : 1;
+    const effectSpeedMult =
+      (me.freeze || 0) > 0 || (me.stun || 0) > 0
+        ? 0
+        : (me.gloopHookSlow || 0) > 0
+          ? 0.5
+          : (me.gloopSlimeSlow || 0) > 0
+            ? 0.7
+            : (me.slow || 0) > 0
+              ? 0.45
+              : 1;
+    const effectJumpMult =
+      (me.freeze || 0) > 0 || (me.stun || 0) > 0
+        ? 0
+        : (me.gloopHookSlow || 0) > 0
+          ? 0.5
+          : (me.gloopSlimeSlow || 0) > 0
+            ? 0.7
+            : (me.slow || 0) > 0
+              ? 0.7
+              : 1;
     const charMobility = getCharacterPowerupMobilityModifier(
       gameData?.yourCharacter,
       me,
     );
-    const speedMult = baseSpeedMult * (charMobility?.speedMult || 1);
-    const jumpMult = baseJumpMult * (charMobility?.jumpMult || 1);
+    const speedMult =
+      baseSpeedMult * effectSpeedMult * (charMobility?.speedMult || 1);
+    const jumpMult =
+      baseJumpMult * effectJumpMult * (charMobility?.jumpMult || 1);
     setPowerupMobility(speedMult, jumpMult);
 
     const drawAura = (spr, fx) => {

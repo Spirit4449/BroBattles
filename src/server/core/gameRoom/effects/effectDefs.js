@@ -121,9 +121,7 @@ const effectDefs = {
       const prev = player.health;
       const powerScale = getPowerScale(params);
       const inc =
-        (POWERUP_HEALTH_REGEN_PER_SEC *
-          powerScale *
-          POWERUP_EFFECT_TICK_MS) /
+        (POWERUP_HEALTH_REGEN_PER_SEC * powerScale * POWERUP_EFFECT_TICK_MS) /
         1000;
       player.health = Math.min(player.maxHealth, player.health + inc);
       if (player.health !== prev) {
@@ -145,9 +143,7 @@ const effectDefs = {
     onTick(player, room, now, params = {}) {
       const prev = player.health;
       const dmg =
-        (POWERUP_POISON_DPS *
-          getPowerScale(params) *
-          POWERUP_EFFECT_TICK_MS) /
+        (POWERUP_POISON_DPS * getPowerScale(params) * POWERUP_EFFECT_TICK_MS) /
         1000;
       player.health = Math.max(0, player.health - dmg);
       player.lastCombatAt = now;
@@ -253,10 +249,43 @@ const effectDefs = {
   slow: {
     durationMs: 3000,
     tickIntervalMs: 0,
-    modifiers: { speedMult: 0.45, jumpMult: 0.7 },
+    getModifiers(params = {}) {
+      return {
+        speedMult: Math.max(0, Number(params?.speedMult) || 0.45),
+        jumpMult: Math.max(0, Number(params?.jumpMult) || 0.7),
+      };
+    },
     onApply: null,
     onTick: null,
     snapshotKey: "slow",
+  },
+
+  gloopSlimeSlow: {
+    durationMs: 2000,
+    tickIntervalMs: 0,
+    getModifiers(params = {}) {
+      return {
+        speedMult: Math.max(0, Number(params?.speedMult) || 0.7),
+        jumpMult: Math.max(0, Number(params?.jumpMult) || 0.7),
+      };
+    },
+    onApply: null,
+    onTick: null,
+    snapshotKey: "gloopSlimeSlow",
+  },
+
+  gloopHookSlow: {
+    durationMs: 2200,
+    tickIntervalMs: 0,
+    getModifiers(params = {}) {
+      return {
+        speedMult: Math.max(0, Number(params?.speedMult) || 0.5),
+        jumpMult: Math.max(0, Number(params?.jumpMult) || 0.5),
+      };
+    },
+    onApply: null,
+    onTick: null,
+    snapshotKey: "gloopHookSlow",
   },
 
   stun: {

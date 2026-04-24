@@ -95,6 +95,8 @@ const ATTACK_MAX_DIST_MAP = {
   "wizard|basic": 1250,
   "ninja|basic": 720,
   "ninja|special": 800,
+  "gloop|basic": 1200,
+  "gloop|special": 1500,
   "hunteress|huntress-arrow": 1050,
   "hunteress|huntress-burning-arrow": 1150,
   "any|basic": 520,

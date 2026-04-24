@@ -2,12 +2,14 @@ const thorgRageAbility = require("./abilities/thorgRageAbility");
 const dravenInfernoAbility = require("./abilities/dravenInfernoAbility");
 const wizardArcaneSurgeAbility = require("./abilities/wizardArcaneSurgeAbility");
 const huntressBurningVolleyAbility = require("./abilities/huntressBurningVolleyAbility");
+const gloopHookAbility = require("./abilities/gloopHookAbility");
 
 const abilitiesByCharacter = {
   [thorgRageAbility.key]: thorgRageAbility,
   [dravenInfernoAbility.key]: dravenInfernoAbility,
   [wizardArcaneSurgeAbility.key]: wizardArcaneSurgeAbility,
   [huntressBurningVolleyAbility.key]: huntressBurningVolleyAbility,
+  [gloopHookAbility.key]: gloopHookAbility,
 };
 
 function getAbility(character) {

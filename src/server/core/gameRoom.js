@@ -649,6 +649,7 @@ class GameRoom {
     socket.on("game:action", (actionData) => {
       const player = this.players.get(socket.id);
       if (!player) return;
+      if (Number(player._controlLockUntil || 0) > Date.now()) return;
       const actionType = String(actionData?.type || "").toLowerCase();
       const isReturnControlAction = actionType === "ninja-shuriken-return";
       const now = Date.now();
@@ -689,6 +690,7 @@ class GameRoom {
     socket.on("game:special", (payload = {}) => {
       const p = this.players.get(socket.id);
       if (!p || !p.isAlive) return;
+      if (Number(p._controlLockUntil || 0) > Date.now()) return;
       if (p.superCharge < p.maxSuperCharge) return;
 
       p.superCharge = 0;
@@ -704,13 +706,15 @@ class GameRoom {
         maxCharge: p.maxSuperCharge,
       });
 
-      this.io.to(`game:${this.matchId}`).emit("player:special", {
-        username: p.name,
-        character: p.char_class,
-        origin: { x: p.x, y: p.y },
-        flip: !!p.flip,
-        aim: aimPayload,
-      });
+      if (String(p.char_class || "").toLowerCase() !== "gloop") {
+        this.io.to(`game:${this.matchId}`).emit("player:special", {
+          username: p.name,
+          character: p.char_class,
+          origin: { x: p.x, y: p.y },
+          flip: !!p.flip,
+          aim: aimPayload,
+        });
+      }
     });
 
     // Owner-side hit proposal (server authoritative application)
@@ -932,6 +936,7 @@ class GameRoom {
       playerData.loaded !== true
     )
       return;
+    if (Number(playerData._controlLockUntil || 0) > Date.now()) return;
 
     const sanitizedAction = this._sanitizeActionPayload(actionData);
     if (!sanitizedAction) return;
@@ -1075,6 +1080,19 @@ class GameRoom {
       "coneRadius",
       "coneSpreadDeg",
       "coneInnerRadius",
+      "initialVy",
+      "maxBounces",
+      "bounceDampingY",
+      "bounceDampingX",
+      "floorY",
+      "worldMinX",
+      "worldMaxX",
+      "pullDurationMs",
+      "pullLockPaddingMs",
+      "pulledStopDistance",
+      "slowDurationMs",
+      "slowSpeedMult",
+      "slowJumpMult",
     ];
     for (const key of passThroughNumeric) {
       if (Number.isFinite(Number(actionData[key]))) {
@@ -1120,7 +1138,8 @@ class GameRoom {
           const burnTotalDamage = Number(entry.burn.totalDamage);
           const burnGroundMs = Number(entry.burn.groundBurnMs);
           if (Number.isFinite(burnDurationMs)) burn.durationMs = burnDurationMs;
-          if (Number.isFinite(burnTotalDamage)) burn.totalDamage = burnTotalDamage;
+          if (Number.isFinite(burnTotalDamage))
+            burn.totalDamage = burnTotalDamage;
           if (Number.isFinite(burnGroundMs)) burn.groundBurnMs = burnGroundMs;
           if (Object.keys(burn).length) item.burn = burn;
         }
@@ -1439,7 +1458,11 @@ class GameRoom {
           Number(aPos?.y || 0) - tPos.y,
         );
         maxDist += Math.max(20, Number(targetVault.radius) || 90);
-        if (attackType === "special" || isNinjaSwarm || isHuntressBurningArrow) {
+        if (
+          attackType === "special" ||
+          isNinjaSwarm ||
+          isHuntressBurningArrow
+        ) {
           // Super attacks can hit vaults from farther than basic melee/projectile ranges.
           maxDist = Math.max(maxDist, 2400);
         }

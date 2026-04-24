@@ -1,6 +1,7 @@
 const {
   createRuntimeAttack,
   tickRuntimeAttack,
+  tickRuntimeControlEffects,
 } = require("./characterAttackRegistry");
 
 function ensureAttackState(room) {
@@ -43,7 +44,9 @@ function registerAttackFromAction(
   if (!claimAttackInstance(room, playerData, actionData, now)) return false;
   const runtimeAttack = createRuntimeAttack(playerData, actionData, now);
   if (!runtimeAttack) return false;
-  const attacks = Array.isArray(runtimeAttack) ? runtimeAttack : [runtimeAttack];
+  const attacks = Array.isArray(runtimeAttack)
+    ? runtimeAttack
+    : [runtimeAttack];
   const sourceType = String(actionData?.type || "").toLowerCase();
   for (const attack of attacks) {
     if (!attack) continue;
@@ -55,14 +58,16 @@ function registerAttackFromAction(
 
 function tickActiveAttacks(room, now = Date.now()) {
   const attacks = ensureAttackState(room);
-  if (!attacks.length) return;
-  room._activeAttacks = attacks.filter((attack) => {
-    try {
-      return !tickRuntimeAttack(room, attack, now);
-    } catch (_) {
-      return false;
-    }
-  });
+  if (attacks.length) {
+    room._activeAttacks = attacks.filter((attack) => {
+      try {
+        return !tickRuntimeAttack(room, attack, now);
+      } catch (_) {
+        return false;
+      }
+    });
+  }
+  tickRuntimeControlEffects(room, now);
 }
 
 function requestReturningProjectilePhase(room, playerData, actionData) {

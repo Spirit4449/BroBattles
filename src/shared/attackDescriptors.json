@@ -91,5 +91,39 @@
         "type": "huntressBurn"
       }
     }
+  },
+  "gloop-slimeball": {
+    "character": "gloop",
+    "actionFlow": {
+      "kind": "windup-release",
+      "broadcastType": "gloop-slimeball",
+      "releaseActionType": "gloop-slimeball-release",
+      "releaseOwnerEcho": true
+    }
+  },
+  "gloop-slimeball-release": {
+    "character": "gloop",
+    "actionFlow": {
+      "kind": "server-runtime-only"
+    },
+    "attackType": "basic",
+    "runtime": {
+      "kind": "projectile-bounce"
+    },
+    "events": {
+      "onHitEffect": {
+        "type": "gloopSlimeSlow"
+      }
+    }
+  },
+  "gloop-hook-release": {
+    "character": "gloop",
+    "actionFlow": {
+      "kind": "server-runtime-only"
+    },
+    "attackType": "special",
+    "runtime": {
+      "kind": "hook-projectile"
+    }
   }
 }

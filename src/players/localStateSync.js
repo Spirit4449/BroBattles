@@ -109,11 +109,9 @@ export function createLocalStateSync({
 
   function setPowerupMobility(speedMult = 1, jumpMult = 1) {
     setMovementSpeedMult(
-      Number.isFinite(speedMult) ? Math.max(0.5, speedMult) : 1,
+      Number.isFinite(speedMult) ? Math.max(0, speedMult) : 1,
     );
-    setMovementJumpMult(
-      Number.isFinite(jumpMult) ? Math.max(0.5, jumpMult) : 1,
-    );
+    setMovementJumpMult(Number.isFinite(jumpMult) ? Math.max(0, jumpMult) : 1);
   }
 
   return {

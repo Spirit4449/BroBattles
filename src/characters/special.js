@@ -3,6 +3,7 @@ import * as ThorgSpecial from "./thorg/special";
 import * as DravenSpecial from "./draven/special";
 import * as WizardSpecial from "./wizard/special";
 import * as HuntressSpecial from "./hunteress/special";
+import * as GloopSpecial from "./gloop/special";
 
 const specials = {
   ninja: NinjaSpecial,
@@ -10,6 +11,7 @@ const specials = {
   draven: DravenSpecial,
   wizard: WizardSpecial,
   hunteress: HuntressSpecial,
+  gloop: GloopSpecial,
 };
 
 export function performSpecial(
