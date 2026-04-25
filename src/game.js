@@ -46,6 +46,7 @@ import {
   getAmmoSyncState,
   getNetworkInputState,
   setLocalNetStateFlusher,
+  setExternalControlLockUntil,
 } from "./player";
 import {
   preloadForRoster,
@@ -93,15 +94,18 @@ const BASE_GAME_HEIGHT = 1000;
 const MAX_TOP_PLAYFIELD_PADDING = 320;
 
 function getViewportAdaptiveGameHeight() {
+  const visualViewport = window.visualViewport;
   const viewportWidth = Math.max(
     1,
-    Number(window.innerWidth) ||
+    Number(visualViewport?.width) ||
+      Number(window.innerWidth) ||
       Number(document.documentElement?.clientWidth) ||
       BASE_GAME_WIDTH,
   );
   const viewportHeight = Math.max(
     1,
-    Number(window.innerHeight) ||
+    Number(visualViewport?.height) ||
+      Number(window.innerHeight) ||
       Number(document.documentElement?.clientHeight) ||
       BASE_GAME_HEIGHT,
   );
@@ -277,6 +281,7 @@ matchCoordinator = createMatchCoordinator({
   getJoinPayload: () => __joinPayload,
   getGameScene: () => gameScene,
   getPlayer: () => player,
+  setExternalControlLockUntil,
   getGameInitialized: () => gameInitialized,
   setGameInitialized: (v) => {
     gameInitialized = v;
@@ -617,7 +622,10 @@ function updateMatchBackgroundParallax(scene) {
     );
     const viewportW = Math.max(
       1,
-      Number(window.innerWidth) || Number(scene?.scale?.width) || 1280,
+      Number(window.visualViewport?.width) ||
+        Number(window.innerWidth) ||
+        Number(scene?.scale?.width) ||
+        1280,
     );
     const baseScale = 1.22;
     const effectiveBgW = Math.max(viewportW, viewportW * baseScale);

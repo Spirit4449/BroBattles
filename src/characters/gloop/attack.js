@@ -5,6 +5,8 @@ import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 
 const NAME = "gloop";
 const SLIMEBALL = getResolvedCharacterAttackConfig(NAME, "slimeball");
+const SLIMEBALL_ATTACK_TEXTURE = `${NAME}-slimeball-attack`;
+const SLIMEBALL_ATTACK_ANIM = `${NAME}-slimeball-attack-loop`;
 const WORLD_MIN_X = -400;
 const WORLD_MAX_X = 4000;
 
@@ -63,7 +65,9 @@ function resolveStart(payload = {}, ownerSprite = null, angle = 0) {
     const width = ownerSprite?.displayWidth || ownerSprite?.width || 80;
     const height = ownerSprite?.displayHeight || ownerSprite?.height || 100;
     return {
-      x: originX + Math.cos(angle) * width * (Number(SLIMEBALL.forwardOffset) || 0.32),
+      x:
+        originX +
+        Math.cos(angle) * width * (Number(SLIMEBALL.forwardOffset) || 0.32),
       y: originY - height * (Number(SLIMEBALL.verticalOffset) || 0.1),
     };
   }
@@ -71,25 +75,66 @@ function resolveStart(payload = {}, ownerSprite = null, angle = 0) {
   const width = ownerSprite?.displayWidth || ownerSprite?.width || 80;
   const height = ownerSprite?.displayHeight || ownerSprite?.height || 100;
   return {
-    x: (ownerSprite?.x || 0) + Math.cos(angle) * width * (Number(SLIMEBALL.forwardOffset) || 0.32),
-    y: (ownerSprite?.y || 0) - height * (Number(SLIMEBALL.verticalOffset) || 0.1),
+    x:
+      (ownerSprite?.x || 0) +
+      Math.cos(angle) * width * (Number(SLIMEBALL.forwardOffset) || 0.32),
+    y:
+      (ownerSprite?.y || 0) -
+      height * (Number(SLIMEBALL.verticalOffset) || 0.1),
   };
 }
 
 function createSlimeballSprite(scene, x, y, scale) {
-  const key = scene?.textures?.exists(`${NAME}-slimeball`)
-    ? `${NAME}-slimeball`
-    : scene?.textures?.exists("wizard-fireball")
-      ? "wizard-fireball"
+  const attackFrames = ensureSlimeballAttackAnimation(scene);
+  const key = scene?.textures?.exists(SLIMEBALL_ATTACK_TEXTURE)
+    ? SLIMEBALL_ATTACK_TEXTURE
+    : scene?.textures?.exists(`${NAME}-slimeball`)
+      ? `${NAME}-slimeball`
       : null;
+  const firstFrame = attackFrames?.[0] || undefined;
   const sprite = key
-    ? scene.add.sprite(x, y, key)
+    ? scene.add.sprite(x, y, key, firstFrame)
     : scene.add.circle(x, y, 18, 0x55c7ff, 0.95);
   sprite.setDepth(RENDER_LAYERS.ATTACKS + 6);
-  if (sprite.setScale) sprite.setScale(Math.max(0.05, Number(scale) || 0.24));
+  if (sprite.setScale) sprite.setScale(Math.max(1, Number(scale) || 0.24));
   if (sprite.setTint) sprite.setTint(0x7de7ff);
   if (sprite.setBlendMode) sprite.setBlendMode(Phaser.BlendModes.NORMAL);
+  if (
+    key === SLIMEBALL_ATTACK_TEXTURE &&
+    attackFrames?.length &&
+    scene?.anims?.exists(SLIMEBALL_ATTACK_ANIM) &&
+    sprite?.anims
+  ) {
+    try {
+      sprite.anims.play(SLIMEBALL_ATTACK_ANIM, true);
+    } catch (_) {}
+  }
   return sprite;
+}
+
+function ensureSlimeballAttackAnimation(scene) {
+  if (!scene?.textures?.exists(SLIMEBALL_ATTACK_TEXTURE)) return null;
+  const texture = scene.textures.get(SLIMEBALL_ATTACK_TEXTURE);
+  const frameNames = texture?.getFrameNames?.() || [];
+  if (!frameNames.length) return null;
+  const orderedFrames = [...frameNames].sort((a, b) => {
+    const ra = /([0-9]+)(?!.*[0-9])/.exec(String(a));
+    const rb = /([0-9]+)(?!.*[0-9])/.exec(String(b));
+    if (ra && rb) return Number(ra[1]) - Number(rb[1]);
+    return String(a).localeCompare(String(b));
+  });
+  if (!scene.anims?.exists(SLIMEBALL_ATTACK_ANIM)) {
+    scene.anims.create({
+      key: SLIMEBALL_ATTACK_ANIM,
+      frames: orderedFrames.map((frame) => ({
+        key: SLIMEBALL_ATTACK_TEXTURE,
+        frame,
+      })),
+      frameRate: 20,
+      repeat: 1,
+    });
+  }
+  return orderedFrames;
 }
 
 function spawnSlimeParticle(scene, x, y, size = null) {
@@ -136,7 +181,11 @@ function spawnSlimeSplat(scene, x, y) {
   }
 }
 
-export function spawnGloopSlimeballVisual(scene, payload = {}, ownerSprite = null) {
+export function spawnGloopSlimeballVisual(
+  scene,
+  payload = {},
+  ownerSprite = null,
+) {
   if (!scene?.events || !scene?.add) return null;
 
   const direction = Number(payload.direction) === -1 ? -1 : 1;
@@ -153,25 +202,51 @@ export function spawnGloopSlimeballVisual(scene, payload = {}, ownerSprite = nul
     Number(payload.scale) || Number(SLIMEBALL.visualScale) || 0.24,
   );
   const debug = createDebugCircle(scene, radius);
-  const glow = scene.add.circle(start.x, start.y, radius * 1.65, 0x55c7ff, 0.18);
+  const glow = scene.add.circle(
+    start.x,
+    start.y,
+    radius * 1.65,
+    0x55c7ff,
+    0.18,
+  );
   glow.setDepth(RENDER_LAYERS.ATTACKS + 1);
   glow.setBlendMode(Phaser.BlendModes.ADD);
 
   const cfg = {
     speed: Math.max(1, Number(payload.speed) || Number(SLIMEBALL.speed) || 390),
     range: Math.max(1, Number(payload.range) || Number(SLIMEBALL.range) || 930),
-    gravity: Math.max(0, Number(payload.gravity) || Number(SLIMEBALL.gravity) || 380),
+    gravity: Math.max(
+      0,
+      Number(payload.gravity) || Number(SLIMEBALL.gravity) || 380,
+    ),
     initialVy: Number.isFinite(Number(payload.initialVy))
       ? Number(payload.initialVy)
       : Number(SLIMEBALL.initialVy) || -70,
-    maxBounces: Math.max(0, Number(payload.maxBounces) || Number(SLIMEBALL.maxBounces) || 2),
-    bounceDampingY: Math.max(0.1, Number(payload.bounceDampingY) || Number(SLIMEBALL.bounceDampingY) || 0.74),
-    bounceDampingX: Math.max(0.1, Number(payload.bounceDampingX) || Number(SLIMEBALL.bounceDampingX) || 0.92),
+    maxBounces: Math.max(
+      0,
+      Number(payload.maxBounces) || Number(SLIMEBALL.maxBounces) || 2,
+    ),
+    bounceDampingY: Math.max(
+      0.1,
+      Number(payload.bounceDampingY) ||
+        Number(SLIMEBALL.bounceDampingY) ||
+        0.74,
+    ),
+    bounceDampingX: Math.max(
+      0.1,
+      Number(payload.bounceDampingX) ||
+        Number(SLIMEBALL.bounceDampingX) ||
+        0.92,
+    ),
     floorY: Math.min(
-      Number(payload.floorY) || start.y + (Number(SLIMEBALL.bounceFloorOffsetY) || 185),
+      Number(payload.floorY) ||
+        start.y + (Number(SLIMEBALL.bounceFloorOffsetY) || 185),
       Number(scene?.physics?.world?.bounds?.height) || 1000,
     ),
-    maxLifetimeMs: Math.max(250, Number(payload.maxLifetimeMs) || Number(SLIMEBALL.maxLifetimeMs) || 4200),
+    maxLifetimeMs: Math.max(
+      250,
+      Number(payload.maxLifetimeMs) || Number(SLIMEBALL.maxLifetimeMs) || 4200,
+    ),
     trailIntervalMs: Math.max(18, Number(SLIMEBALL.trailIntervalMs) || 42),
     worldMinX: Number(payload.worldMinX) || WORLD_MIN_X,
     worldMaxX: Number(payload.worldMaxX) || WORLD_MAX_X,
@@ -210,7 +285,7 @@ export function spawnGloopSlimeballVisual(scene, payload = {}, ownerSprite = nul
     sprite.x += vx * dt;
     sprite.y += vy * dt;
     traveled += Math.abs(sprite.x - prevX);
-    sprite.rotation += direction * dt * 5.2;
+    // sprite.rotation += direction * dt * 5.2;
 
     if (sprite.y + radius >= cfg.floorY && vy > 0) {
       bounces += 1;
@@ -224,14 +299,21 @@ export function spawnGloopSlimeballVisual(scene, payload = {}, ownerSprite = nul
       spawnSlimeSplat(scene, sprite.x, cfg.floorY);
     }
 
-    if (sprite.x - radius <= cfg.worldMinX || sprite.x + radius >= cfg.worldMaxX) {
+    if (
+      sprite.x - radius <= cfg.worldMinX ||
+      sprite.x + radius >= cfg.worldMaxX
+    ) {
       cleanup(true);
       return;
     }
 
     if (elapsed >= nextTrailAt) {
       nextTrailAt = elapsed + cfg.trailIntervalMs;
-      spawnSlimeParticle(scene, sprite.x - Math.sign(vx || direction) * 7, sprite.y);
+      spawnSlimeParticle(
+        scene,
+        sprite.x - Math.sign(vx || direction) * 7,
+        sprite.y,
+      );
     }
 
     if (glow?.active) {
@@ -257,6 +339,9 @@ export function spawnGloopSlimeballVisual(scene, payload = {}, ownerSprite = nul
 export function performGloopSlimeball(instance, attackContext = null) {
   const { scene, player: p } = instance;
   const context = attackContext || instance.consumeAttackContext?.() || {};
+  const slowDurationMs = Math.max(1, Number(SLIMEBALL.slowDurationMs) || 2000);
+  const slowSpeedMult = Math.max(0.1, Number(SLIMEBALL.slowSpeedMult) || 0.7);
+  const slowJumpMult = Math.max(0.1, Number(SLIMEBALL.slowJumpMult) || 0.7);
   const direction = Number(context?.direction) === -1 ? -1 : 1;
   const attackId = createRuntimeId("gloopSlimeball");
   const unlockFlip = lockPlayerFlip(p);
@@ -286,6 +371,9 @@ export function performGloopSlimeball(instance, attackContext = null) {
     bounceDampingY: Number(SLIMEBALL.bounceDampingY) || 0.74,
     bounceDampingX: Number(SLIMEBALL.bounceDampingX) || 0.92,
     maxLifetimeMs: Number(SLIMEBALL.maxLifetimeMs) || 4200,
+    slowDurationMs,
+    slowSpeedMult,
+    slowJumpMult,
     damage: Math.max(
       1,
       Math.round(instance.constructor?.getStats?.()?.baseDamage || 0),

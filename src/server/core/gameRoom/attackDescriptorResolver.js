@@ -137,9 +137,9 @@ function getRuntimeOverrides(actionType) {
     };
   }
 
-  if (key === "hunteress-arrow" || key === "hunteress-arrow-release") {
+  if (key === "huntress-arrow" || key === "huntress-arrow-release") {
     const arrows =
-      getResolvedCharacterAttackConfig("hunteress", "arrowSpread") || {};
+      getResolvedCharacterAttackConfig("huntress", "arrowSpread") || {};
     const runtime = {
       speed: Number(arrows.speed) || 980,
       range: Number(arrows.range) || 900,
@@ -151,7 +151,7 @@ function getRuntimeOverrides(actionType) {
       damagePerProjectile: Math.max(1, Number(arrows.damagePerArrow) || 1000),
       destroyOnHit: true,
     };
-    if (key === "hunteress-arrow") {
+    if (key === "huntress-arrow") {
       return {
         actionFlow: {
           startupMs: Math.max(0, Number(arrows.castDelayMs) || 0),
@@ -161,9 +161,9 @@ function getRuntimeOverrides(actionType) {
     return { runtime };
   }
 
-  if (key === "hunteress-burning-arrow") {
+  if (key === "huntress-burning-arrow") {
     const volley =
-      getResolvedCharacterSpecialConfig("hunteress", "burningVolley") || {};
+      getResolvedCharacterSpecialConfig("huntress", "burningVolley") || {};
     return {
       runtime: {
         speed: Number(volley.speed) || 930,
@@ -187,6 +187,12 @@ function getRuntimeOverrides(actionType) {
   if (key === "gloop-slimeball" || key === "gloop-slimeball-release") {
     const slimeball =
       getResolvedCharacterAttackConfig("gloop", "slimeball") || {};
+    const slowDurationMs = Math.max(
+      1,
+      Number(slimeball.slowDurationMs) || 2000,
+    );
+    const slowSpeedMult = Math.max(0.1, Number(slimeball.slowSpeedMult) || 0.7);
+    const slowJumpMult = Math.max(0.1, Number(slimeball.slowJumpMult) || 0.7);
     const runtime = {
       collisionRadius: Math.max(1, Number(slimeball.collisionRadius) || 28),
       speed: Math.max(1, Number(slimeball.speed) || 390),
@@ -201,9 +207,9 @@ function getRuntimeOverrides(actionType) {
       bounceFloorOffsetY: Number(slimeball.bounceFloorOffsetY) || 185,
       maxLifetimeMs: Math.max(250, Number(slimeball.maxLifetimeMs) || 4200),
       destroyOnHit: false,
-      slowDurationMs: 2000,
-      slowSpeedMult: 0.7,
-      slowJumpMult: 0.7,
+      slowDurationMs,
+      slowSpeedMult,
+      slowJumpMult,
     };
     if (key === "gloop-slimeball") {
       return {

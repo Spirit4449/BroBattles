@@ -56,17 +56,17 @@
       "kind": "returning-projectile"
     }
   },
-  "hunteress-arrow": {
-    "character": "hunteress",
+  "huntress-arrow": {
+    "character": "huntress",
     "actionFlow": {
       "kind": "windup-release",
-      "broadcastType": "hunteress-arrow",
-      "releaseActionType": "hunteress-arrow-release",
+      "broadcastType": "huntress-arrow",
+      "releaseActionType": "huntress-arrow-release",
       "releaseOwnerEcho": true
     }
   },
-  "hunteress-arrow-release": {
-    "character": "hunteress",
+  "huntress-arrow-release": {
+    "character": "huntress",
     "actionFlow": {
       "kind": "server-runtime-only"
     },
@@ -76,8 +76,8 @@
       "destroyOnHit": true
     }
   },
-  "hunteress-burning-arrow": {
-    "character": "hunteress",
+  "huntress-burning-arrow": {
+    "character": "huntress",
     "actionFlow": {
       "kind": "server-runtime-only"
     },

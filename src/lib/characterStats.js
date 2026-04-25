@@ -99,8 +99,7 @@ export const characterStats = {
 
   thorg: {
     baseHealth: 13000,
-    attackDescription:
-      "Swings a heavy axe in a short arc.",
+    attackDescription: "Swings a heavy axe in a short arc.",
     baseDamage: 1500,
     ammoCooldownMs: 400,
     ammoReloadMs: 800,
@@ -287,8 +286,7 @@ export const characterStats = {
     ammoCooldownMs: 800,
     ammoReloadMs: 3000,
     ammoCapacity: 3,
-    specialDescription:
-      "Empowers the whole team with random powerups.",
+    specialDescription: "Empowers the whole team with random powerups.",
     specialBaseDamage: 0,
     specialChargeHits: 5,
     specialChargeDamage: 16000,
@@ -341,12 +339,11 @@ export const characterStats = {
         },
       },
     },
-    description:
-      "Master of the fireball, wielder of the powerups.",
+    description: "Master of the fireball, wielder of the powerups.",
     unlockPrice: 200,
   },
 
-  hunteress: {
+  huntress: {
     baseHealth: 5500,
     attackDescription:
       "Fires three arrows in a slight spread, each dealing damage on impact.",
@@ -401,8 +398,8 @@ export const characterStats = {
           collisionRadius: 16,
           damagePerArrow: 1000,
           visualScale: 0.22,
-          castDelayMs: 100,
-          flipLockMs: 460,
+          castDelayMs: 600,
+          flipLockMs: 600,
           forwardOffset: 0.28,
           verticalOffset: 0.12,
           embedMs: 2000,
@@ -442,7 +439,7 @@ export const characterStats = {
           speed: 800,
           range: 960,
           collisionRadius: 18,
-          damagePerArrow: 1500,
+          damagePerArrow: 1000,
           visualScale: 0.24,
           castDelayMs: 130,
           releaseMs: 0,
@@ -474,10 +471,10 @@ export const characterStats = {
     specialChargeDamage: 12000,
     spriteScale: 1.2,
     body: {
-      widthShrink: 42,
-      heightShrink: 12,
-      offsetXFromHalf: 0,
-      offsetY: 8,
+      widthShrink: 100,
+      heightShrink: 90,
+      offsetXFromHalf: 5,
+      offsetY: 89,
     },
     tuning: {
       attack: {
@@ -494,7 +491,7 @@ export const characterStats = {
           speed: 390,
           range: 930,
           collisionRadius: 28,
-          visualScale: 0.24,
+          visualScale: 0.1,
           castDelayMs: 300,
           flipLockMs: 520,
           forwardOffset: 0.32,
@@ -506,6 +503,9 @@ export const characterStats = {
           bounceDampingX: 0.92,
           bounceFloorOffsetY: 185,
           maxLifetimeMs: 4200,
+          slowDurationMs: 2000,
+          slowSpeedMult: 0.7,
+          slowJumpMult: 0.7,
           trailIntervalMs: 42,
           trailColor: 0x55c7ff,
         },
@@ -521,9 +521,9 @@ export const characterStats = {
           angleMode: "free",
         },
         hook: {
-          speed: 900,
+          speed: 700,
           range: 780,
-          collisionRadius: 34,
+          collisionRadius: 50,
           damage: 500,
           pullDurationMs: 640,
           pullLockPaddingMs: 120,
@@ -536,7 +536,8 @@ export const characterStats = {
         },
       },
     },
-    description: "A sticky control fighter who slows enemies and reels them in.",
+    description:
+      "A sticky control fighter who slows enemies and reels them in.",
     unlockPrice: 100,
   },
 };

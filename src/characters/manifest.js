@@ -6,7 +6,7 @@ import Ninja from "./ninja/constructor";
 import Thorg from "./thorg/constructor";
 import Draven from "./draven/constructor";
 import Wizard from "./wizard/constructor";
-import Huntress from "./hunteress/constructor";
+import Huntress from "./huntress/constructor";
 import Gloop from "./gloop/constructor";
 
 /** @type {import("./shared/characterEntityBase").default[]} */

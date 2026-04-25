@@ -15,7 +15,7 @@ function resolveCharacterAssetFolder(character) {
     .trim()
     .toLowerCase();
   if (!key) return "ninja";
-  if (key === "hunteress") return "huntress";
+  if (key === "huntress") return "huntress";
   return key;
 }
 
@@ -79,7 +79,9 @@ function buildSkinAssetUrl(character, skinId) {
   const defaultSkinId = getDefaultSkinId(char);
   const skin = normalizedSkinId ? getSkinById(normalizedSkinId) : null;
   if (skin && String(skin.character || "") === char) {
-    return String(skin.assetUrl || "").trim() || `/assets/${assetFolder}/body.webp`;
+    return (
+      String(skin.assetUrl || "").trim() || `/assets/${assetFolder}/body.webp`
+    );
   }
   const defaultSkin = defaultSkinId ? getSkinById(defaultSkinId) : null;
   const defaultAssetUrl = String(defaultSkin?.assetUrl || "").trim();

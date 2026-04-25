@@ -1412,7 +1412,7 @@ class GameRoom {
         : isHuntressArrow
           ? 1000 + (Math.max(1, Number(attacker.level) || 1) - 1) * 100
           : isHuntressBurningArrow
-            ? 1500 + (Math.max(1, Number(attacker.level) || 1) - 1) * 150
+            ? 1000 + (Math.max(1, Number(attacker.level) || 1) - 1) * 100
             : attackType === "special"
               ? Number(attacker.specialDamage || 0)
               : Number(attacker.baseDamage || 0);

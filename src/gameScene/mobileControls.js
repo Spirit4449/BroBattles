@@ -94,7 +94,7 @@ export function createMobileControlsController({
       moveZone.style.left = "0";
       moveZone.style.top = "0";
       moveZone.style.width = "58vw";
-      moveZone.style.height = "100vh";
+      moveZone.style.height = "var(--bb-viewport-height, 100vh)";
       moveZone.style.pointerEvents = "auto";
       moveZone.style.background = "transparent";
       moveZone.style.touchAction = "none";

@@ -1,11 +1,11 @@
 import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
-import socket from "../../socket";
-import { createRuntimeId } from "../shared/runtimeId";
-import { lockPlayerFlip } from "../shared/flipLock";
-import { emitVaultHitForCircle } from "../shared/vaultTargeting";
-import { RENDER_LAYERS } from "../../gameScene/renderLayers";
+import socket from "../../socket.js";
+import { createRuntimeId } from "../shared/runtimeId.js";
+import { lockPlayerFlip } from "../shared/flipLock.js";
+import { emitVaultHitForCircle } from "../shared/vaultTargeting.js";
+import { RENDER_LAYERS } from "../../gameScene/renderLayers.js";
 
-const NAME = "hunteress";
+const NAME = "huntress";
 const ARROWS = getResolvedCharacterAttackConfig(NAME, "arrowSpread");
 const DEFAULT_GRAVITY = 1100;
 const DEFAULT_MAX_LIFETIME_MS = 2600;
@@ -87,7 +87,9 @@ function resolveStart(payload, ownerSprite, angle, defaults = ARROWS) {
   const width = ownerSprite?.displayWidth || ownerSprite?.width || 80;
   const height = ownerSprite?.displayHeight || ownerSprite?.height || 120;
   return {
-    x: (ownerSprite?.x || 0) + Math.cos(angle) * width * (Number(defaults.forwardOffset) || 0.28),
+    x:
+      (ownerSprite?.x || 0) +
+      Math.cos(angle) * width * (Number(defaults.forwardOffset) || 0.28),
     y:
       (ownerSprite?.y || 0) -
       height * (Number(defaults.verticalOffset) || 0.12) +
@@ -96,6 +98,7 @@ function resolveStart(payload, ownerSprite, angle, defaults = ARROWS) {
 }
 
 function buildSpreadProjectiles({
+  baseInstanceId = "",
   angle,
   count,
   spreadDeg,
@@ -116,6 +119,7 @@ function buildSpreadProjectiles({
     const offset =
       total === 1 ? 0 : ((index - center) / Math.max(1, center)) * (spread / 2);
     return {
+      id: `${String(baseInstanceId || "huntress")}:${index}`,
       index,
       angle: angle + offset,
       speed,
@@ -232,9 +236,7 @@ function normalizeSpriteTargets(targetSprites = [], ownerSprite = null) {
     })
     .filter(
       (entry) =>
-        entry?.sprite &&
-        entry.sprite !== ownerSprite &&
-        entry.sprite.active,
+        entry?.sprite && entry.sprite !== ownerSprite && entry.sprite.active,
     );
 }
 
@@ -290,7 +292,10 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     this.ownerSprite = ownerSprite || null;
     this.cfg = {
       angle,
-      speed: Math.max(1, Number(projectile?.speed) || Number(payload?.speed) || ARROWS.speed),
+      speed: Math.max(
+        1,
+        Number(projectile?.speed) || Number(payload?.speed) || ARROWS.speed,
+      ),
       collisionRadius: Math.max(
         1,
         Number(projectile?.collisionRadius) ||
@@ -311,8 +316,12 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
         Number(ARROWS.visualScale) ||
         0.22,
       burn: projectile?.burn || payload?.burn || null,
-      gravity:
-        Math.max(0, Number(projectile?.gravity) || Number(payload?.gravity) || DEFAULT_GRAVITY),
+      gravity: Math.max(
+        0,
+        Number(projectile?.gravity) ||
+          Number(payload?.gravity) ||
+          DEFAULT_GRAVITY,
+      ),
       maxLifetimeMs: Math.max(
         200,
         Number(projectile?.maxLifetimeMs) ||
@@ -372,7 +381,9 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     this.cleanupTrail = spawnArrowTrail(scene, this, !!this.cfg.burn);
     this.debug = createDebugCircle(scene, this.cfg.collisionRadius);
     this.attachMapOverlap(this.mapObjectsRef);
-    this.attachTargetOverlap(normalizeSpriteTargets(targetSprites, ownerSprite));
+    this.attachTargetOverlap(
+      normalizeSpriteTargets(targetSprites, ownerSprite),
+    );
     scene.events.on("update", this.updateArrow, this);
   }
 
@@ -472,6 +483,9 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
       this.embedAt(this.x, this.y, this.rotation);
       return;
     }
+    if (!this.isMeaningfulTargetHit(targetSprite)) {
+      return;
+    }
     const targetName =
       String(
         targetEntry?.username ||
@@ -498,6 +512,31 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     }
     const expire = () => this.destroyArrow();
     this.scene.time.delayedCall(this.cfg.embedMs, expire);
+  }
+
+  isMeaningfulTargetHit(targetSprite) {
+    const body = targetSprite?.body;
+    if (!body) return true;
+    const left = Number(body.left);
+    const right = Number(body.right);
+    const top = Number(body.top);
+    const bottom = Number(body.bottom);
+    const width = Math.max(1, right - left);
+    const height = Math.max(1, bottom - top);
+    if (![left, right, top, bottom].every(Number.isFinite)) return true;
+
+    const insetX = Math.min(10, width * 0.16);
+    const insetY = Math.min(12, height * 0.14);
+    const tightLeft = left + insetX;
+    const tightRight = right - insetX;
+    const tightTop = top + insetY;
+    const tightBottom = bottom - insetY;
+
+    const nearestX = Math.max(tightLeft, Math.min(this.x, tightRight));
+    const nearestY = Math.max(tightTop, Math.min(this.y, tightBottom));
+    const dist = Math.hypot(this.x - nearestX, this.y - nearestY);
+    const allowed = Math.max(6, Number(this.cfg.collisionRadius) * 0.72);
+    return dist <= allowed;
   }
 
   embedAt(x, y, rotation = this.rotation, options = {}) {
@@ -684,13 +723,17 @@ function buildProjectileDefaults(payload = {}, defaults = ARROWS) {
     1,
     Number(payload?.range) || Number(defaults.range) || 1,
   );
-  const rangeLifetimeMs = Math.ceil((resolvedRange / resolvedSpeed) * 1000 * 1.35);
+  const rangeLifetimeMs = Math.ceil(
+    (resolvedRange / resolvedSpeed) * 1000 * 1.35,
+  );
   return {
     speed: resolvedSpeed,
     range: resolvedRange,
     collisionRadius: Math.max(
       1,
-      Number(payload?.collisionRadius) || Number(defaults.collisionRadius) || 16,
+      Number(payload?.collisionRadius) ||
+        Number(defaults.collisionRadius) ||
+        16,
     ),
     damage: Math.max(
       1,
@@ -720,7 +763,12 @@ function buildProjectileDefaults(payload = {}, defaults = ARROWS) {
   };
 }
 
-function spawnArrowSpread(scene, payload, ownerSprite = null, localContext = {}) {
+function spawnArrowSpread(
+  scene,
+  payload,
+  ownerSprite = null,
+  localContext = {},
+) {
   const defaults = payload?.burn
     ? {
         count: Number(payload?.count) || 6,
@@ -739,6 +787,7 @@ function spawnArrowSpread(scene, payload, ownerSprite = null, localContext = {})
   const projectiles = Array.isArray(payload?.projectiles)
     ? payload.projectiles
     : buildSpreadProjectiles({
+        baseInstanceId: String(payload?.id || createRuntimeId("huntressArrow")),
         angle: Number(payload?.angle) || 0,
         count: payload?.count || defaults.count,
         spreadDeg: payload?.spreadDeg || defaults.spreadDeg,
@@ -753,7 +802,14 @@ function spawnArrowSpread(scene, payload, ownerSprite = null, localContext = {})
         embedMs: projectileDefaults.embedMs,
       });
 
-  projectiles.forEach((projectile, index) => {
+  const normalizedProjectiles = projectiles.map((projectile, index) => ({
+    ...projectile,
+    id:
+      String(projectile?.id || "").trim() ||
+      `${String(payload?.id || "huntress")}:${index}`,
+  }));
+
+  normalizedProjectiles.forEach((projectile, index) => {
     const delay =
       Math.max(
         0,
@@ -763,10 +819,22 @@ function spawnArrowSpread(scene, payload, ownerSprite = null, localContext = {})
       ) * index;
     if (delay > 0) {
       scene.time.delayedCall(delay, () =>
-        spawnArrowProjectile(scene, payload, projectile, ownerSprite, localContext),
+        spawnArrowProjectile(
+          scene,
+          payload,
+          projectile,
+          ownerSprite,
+          localContext,
+        ),
       );
     } else {
-      spawnArrowProjectile(scene, payload, projectile, ownerSprite, localContext);
+      spawnArrowProjectile(
+        scene,
+        payload,
+        projectile,
+        ownerSprite,
+        localContext,
+      );
     }
   });
 }

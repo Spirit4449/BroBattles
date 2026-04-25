@@ -36,8 +36,8 @@ function registerAttackFromAction(
   const actionType = String(actionData?.type || "").toLowerCase();
   // Huntress projectiles are client-collision authoritative for now.
   if (
-    actionType === "hunteress-arrow-release" ||
-    actionType === "hunteress-burning-arrow"
+    actionType === "huntress-arrow-release" ||
+    actionType === "huntress-burning-arrow"
   ) {
     return false;
   }

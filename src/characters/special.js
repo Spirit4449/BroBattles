@@ -2,7 +2,7 @@ import * as NinjaSpecial from "./ninja/special";
 import * as ThorgSpecial from "./thorg/special";
 import * as DravenSpecial from "./draven/special";
 import * as WizardSpecial from "./wizard/special";
-import * as HuntressSpecial from "./hunteress/special";
+import * as HuntressSpecial from "./huntress/special";
 import * as GloopSpecial from "./gloop/special";
 
 const specials = {
@@ -10,7 +10,7 @@ const specials = {
   thorg: ThorgSpecial,
   draven: DravenSpecial,
   wizard: WizardSpecial,
-  hunteress: HuntressSpecial,
+  huntress: HuntressSpecial,
   gloop: GloopSpecial,
 };
 

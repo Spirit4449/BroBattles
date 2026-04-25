@@ -1,5 +1,5 @@
 export function animations(scene) {
-  const NAME = "hunteress";
+  const NAME = "huntress";
   if (!scene?.textures?.exists(NAME)) return;
 
   const tex = scene.textures.get(NAME);

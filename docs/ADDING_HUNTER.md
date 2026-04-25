@@ -7,7 +7,7 @@ Use this file when you want to add a playable character. It lists the exact info
 Copy this section into a request and fill in what you know. Unknown values can be marked `use a sensible default`.
 
 ```md
-Character key: hunteress
+Character key: huntress
 Display name: Huntress
 Short description: use a sensible default
 Is the character free or locked? locked
@@ -20,7 +20,7 @@ Ammo cooldown: 1000 ms
 Ammo reload time: 1000 ms
 
 Basic attack name: use a sensible default
-Basic attack behavior: Fires 3 arrows in a slight spread dealing damage on impact. Arrows do not go through enemies or walls. 
+Basic attack behavior: Fires 3 arrows in a slight spread dealing damage on impact. Arrows do not go through enemies or walls.
 Projectile or hitbox asset: /assets/huntress/arrow.webp
 Projectile speed: use a sensible default
 Projectile range: use a sensible default
@@ -31,7 +31,7 @@ Hit behavior: Damage on hit, projectile embeds itself in the target for 2s, no b
 Recticle: Arced (similar to thorg. I am forgetting the exact name). But it has more range and less restriction than thorgs recticle
 
 Special name: use a sensible default
-Special behavior: fires 6 burning arrows in a wider spread that deal more damage and apply a burn effect and tick damage over 5 seconds. Arrows do not go through enemies or walls. If it hits the ground, it burns the ground. 
+Special behavior: fires 6 burning arrows in a wider spread that deal more damage and apply a burn effect and tick damage over 5 seconds. Arrows do not go through enemies or walls. If it hits the ground, it burns the ground.
 Special charge hits: 3
 Special charge damage requirement: 6000
 Special damage or effect: 1500 damage per arrow, burn for 500 damage over 5 seconds
@@ -67,7 +67,6 @@ These are the details required before a new character can be added cleanly.
 ## Implementation Checklist
 
 When the information above is available, add the character in this order.
-
 
 1. Add a stats/tuning entry in `src/lib/characterStats.js`.
 2. Create `src/characters/<character-key>/constructor.js`.

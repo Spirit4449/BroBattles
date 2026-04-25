@@ -63,9 +63,22 @@ class Gloop extends CharacterEntityBase {
       `${NAME}-slimeball`,
       this.characterAssetPath(staticPath, "slimeball.webp"),
     );
+    scene.load.atlas(
+      `${NAME}-slimeball-attack`,
+      this.characterAssetPath(staticPath, "attack.webp"),
+      this.characterAssetPath(staticPath, "attack.json"),
+    );
     scene.load.image(
       `${NAME}-hand`,
       this.characterAssetPath(staticPath, "hand.webp"),
+    );
+    scene.load.image(
+      `${NAME}-hand-open`,
+      this.characterAssetPath(staticPath, "openHand.webp"),
+    );
+    scene.load.image(
+      `${NAME}-hand-closed`,
+      this.characterAssetPath(staticPath, "closedHand.webp"),
     );
     scene.load.audio(
       `${NAME}-attack`,

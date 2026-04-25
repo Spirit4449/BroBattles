@@ -27,6 +27,7 @@ import {
  * @property {() => object}        getJoinPayload
  * @property {() => object|null}   getGameScene
  * @property {() => object|null}   getPlayer
+ * @property {(untilMs: number) => void} setExternalControlLockUntil
  * // ---- mutable game-phase flags ----
  * @property {() => boolean}       getGameInitialized
  * @property {(v: boolean) => void} setGameInitialized
@@ -94,6 +95,7 @@ export function createMatchCoordinator(config) {
     getJoinPayload,
     getGameScene,
     getPlayer,
+    setExternalControlLockUntil,
     getGameInitialized,
     setGameInitialized,
     getHasJoined,
@@ -855,6 +857,7 @@ export function createMatchCoordinator(config) {
         origin: packet?.origin || action?.origin || null,
         flip: typeof packet?.flip === "boolean" ? packet.flip : action?.flip,
       };
+      _applyLocalGloopHookCatch(actionWithPacketMeta);
       if (isSelfPacket) {
         const consumedLocal =
           typeof handleLocalAuthoritativeAttack === "function"
@@ -1142,6 +1145,62 @@ export function createMatchCoordinator(config) {
     setLatestDeathDrops(
       known.filter((drop) => String(drop?.id) !== String(payload.id)),
     );
+  }
+
+  function _applyLocalGloopHookCatch(action) {
+    const username = String(getUsername() || "");
+    if (!username) return;
+    if (String(action?.type || "").toLowerCase() !== "gloop-hook-catch") {
+      return;
+    }
+    if (String(action?.target || "") !== username) return;
+
+    const scene = getGameScene();
+    const localPlayer = getPlayer();
+    if (!scene?.tweens || !localPlayer?.body || !localPlayer?.active) return;
+
+    const endX = Number(action?.end?.x);
+    const endY = Number(action?.end?.y);
+    if (!Number.isFinite(endX) || !Number.isFinite(endY)) return;
+
+    const pullDurationMs = Math.max(100, Number(action?.pullDurationMs) || 640);
+    const lockUntil = Date.now() + pullDurationMs + 120;
+    try {
+      setExternalControlLockUntil?.(lockUntil);
+    } catch (_) {}
+
+    const startX = Number.isFinite(Number(localPlayer.x))
+      ? Number(localPlayer.x)
+      : endX;
+    const startY = Number.isFinite(Number(localPlayer.y))
+      ? Number(localPlayer.y)
+      : endY;
+
+    try {
+      if (localPlayer._gloopHookPullTween?.isPlaying?.()) {
+        localPlayer._gloopHookPullTween.stop();
+      }
+    } catch (_) {}
+
+    const motion = { x: startX, y: startY };
+    const tween = scene.tweens.add({
+      targets: motion,
+      x: endX,
+      y: endY,
+      duration: pullDurationMs,
+      ease: "Cubic.easeOut",
+      onUpdate: () => {
+        if (!localPlayer?.active || !localPlayer?.body) return;
+        localPlayer.body.reset(motion.x, motion.y);
+        localPlayer.setVelocity?.(0, 0);
+      },
+      onComplete: () => {
+        if (!localPlayer?.active || !localPlayer?.body) return;
+        localPlayer.body.reset(endX, endY);
+        localPlayer.setVelocity?.(0, 0);
+      },
+    });
+    localPlayer._gloopHookPullTween = tween;
   }
 
   // ---------------------------------------------------------------------------

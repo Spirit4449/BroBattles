@@ -11,10 +11,10 @@ export function perform(
   player._specialAnimLockUntil = Date.now() + 900;
 
   try {
-    if (scene.anims?.exists("hunteress-special")) {
-      player.anims?.play?.("hunteress-special", true);
-    } else if (scene.anims?.exists("hunteress-throw")) {
-      player.anims?.play?.("hunteress-throw", true);
+    if (scene.anims?.exists("huntress-special")) {
+      player.anims?.play?.("huntress-special", true);
+    } else if (scene.anims?.exists("huntress-throw")) {
+      player.anims?.play?.("huntress-throw", true);
     }
   } catch (_) {}
 

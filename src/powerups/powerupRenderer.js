@@ -727,6 +727,34 @@ export function createPowerupRenderer({
         g.lineStyle(3, burnColor, 0.72 * pulse);
         g.strokeCircle(x, y, Math.max(16, r + 4 + 3 * pulse));
       }
+      if ((fx.gloopHookSlow || 0) > 0) {
+        const slowColor = 0x54c7ff;
+        g.fillStyle(slowColor, 0.16 + 0.06 * pulse);
+        g.fillCircle(x, y, Math.max(16, r - 2 + 4 * pulse));
+        g.lineStyle(3.5, 0xa6e8ff, 0.8 * pulse);
+        g.strokeCircle(x, y, Math.max(16, r + 5 + 4 * pulse));
+
+        const arrowCount = 3;
+        const arrowTop = frame.top - 18 - 5 * pulse;
+        const spacing = 14;
+        for (let i = 0; i < arrowCount; i += 1) {
+          const ax = x + (i - 1) * spacing;
+          const ay = arrowTop - Math.sin(nowSec * 7 + i * 0.9) * 3;
+          const arrowHeight = 15;
+          const arrowHalf = 5;
+          g.fillStyle(0x7ad9ff, 0.9);
+          g.fillTriangle(
+            ax - arrowHalf,
+            ay,
+            ax + arrowHalf,
+            ay,
+            ax,
+            ay + arrowHeight,
+          );
+          g.fillStyle(0xc9f3ff, 0.75);
+          g.fillRect(ax - 1.5, ay - 10, 3, 9);
+        }
+      }
       if ((fx.rage || 0) > 0) {
         g.fillStyle(colors.rage, 0.2 + 0.08 * pulse);
         g.fillCircle(x, y, Math.max(16, r - 4 + 4 * pulse));

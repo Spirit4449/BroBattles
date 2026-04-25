@@ -3,6 +3,7 @@ import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 
 const NAME = "gloop";
 const HOOK = getResolvedCharacterSpecialConfig(NAME, "hook");
+const ACTIVE_HOOK_VISUALS = new WeakMap();
 
 function playSpecialAnimation(scene, player) {
   if (!scene?.anims || !player?.anims) return;
@@ -41,8 +42,22 @@ function resolveActionStart(player, specialData = null, angle = 0) {
   return resolveStart(player, angle);
 }
 
-function createHand(scene, x, y, angle, scale) {
-  const key = scene?.textures?.exists(`${NAME}-hand`) ? `${NAME}-hand` : null;
+function resolveHandTextureKey(scene, variant = "open") {
+  const wantClosed = String(variant || "").toLowerCase() === "closed";
+  if (wantClosed && scene?.textures?.exists(`${NAME}-hand-closed`)) {
+    return `${NAME}-hand-closed`;
+  }
+  if (!wantClosed && scene?.textures?.exists(`${NAME}-hand-open`)) {
+    return `${NAME}-hand-open`;
+  }
+  if (scene?.textures?.exists(`${NAME}-hand`)) {
+    return `${NAME}-hand`;
+  }
+  return null;
+}
+
+function createHand(scene, x, y, angle, scale, variant = "open") {
+  const key = resolveHandTextureKey(scene, variant);
   const hand = key
     ? scene.add.sprite(x, y, key)
     : scene.add.ellipse(x, y, 44, 26, 0x72f0ff, 0.9);
@@ -53,25 +68,55 @@ function createHand(scene, x, y, angle, scale) {
   return hand;
 }
 
-function spawnTrailDot(scene, x, y, alpha = 0.72) {
-  const dot = scene.add.circle(
-    x + Phaser.Math.Between(-4, 4),
-    y + Phaser.Math.Between(-4, 4),
-    Phaser.Math.FloatBetween(3.2, 6.2),
-    Phaser.Math.RND.pick([0x55c7ff, 0x87f6ff, 0x2d9cff]),
-    alpha,
-  );
-  dot.setDepth(RENDER_LAYERS.ATTACKS + 3);
-  dot.setBlendMode(Phaser.BlendModes.ADD);
-  scene.tweens.add({
-    targets: dot,
-    alpha: 0,
-    scaleX: 0.35,
-    scaleY: 0.35,
-    duration: Phaser.Math.Between(220, 340),
-    ease: "Quad.easeOut",
-    onComplete: () => dot.destroy(),
-  });
+function spawnTrailDot(scene, x, y, alpha = 0.72, intensity = "normal") {
+  const heavy = String(intensity).toLowerCase() === "heavy";
+  const count = heavy ? 2 : 1;
+  for (let i = 0; i < count; i += 1) {
+    const dot = scene.add.circle(
+      x + Phaser.Math.Between(heavy ? -7 : -4, heavy ? 7 : 4),
+      y + Phaser.Math.Between(heavy ? -7 : -4, heavy ? 7 : 4),
+      Phaser.Math.FloatBetween(heavy ? 4.2 : 3.2, heavy ? 7.8 : 6.2),
+      Phaser.Math.RND.pick([0x55c7ff, 0x87f6ff, 0x2d9cff, 0xb7f6ff]),
+      alpha,
+    );
+    dot.setDepth(RENDER_LAYERS.ATTACKS + 3);
+    dot.setBlendMode(Phaser.BlendModes.ADD);
+    scene.tweens.add({
+      targets: dot,
+      alpha: 0,
+      scaleX: heavy ? 0.28 : 0.35,
+      scaleY: heavy ? 0.28 : 0.35,
+      duration: Phaser.Math.Between(heavy ? 240 : 220, heavy ? 420 : 340),
+      ease: "Quad.easeOut",
+      onComplete: () => dot.destroy(),
+    });
+  }
+}
+
+function cleanupHookVisual(ownerPlayer, visual) {
+  try {
+    visual?.travelTween?.stop?.();
+  } catch (_) {}
+  try {
+    visual?.returnTween?.stop?.();
+  } catch (_) {}
+  try {
+    visual?.hand?.destroy?.();
+    visual?.tether?.destroy?.();
+  } catch (_) {}
+  if (ownerPlayer) {
+    const current = ACTIVE_HOOK_VISUALS.get(ownerPlayer);
+    if (current === visual) ACTIVE_HOOK_VISUALS.delete(ownerPlayer);
+  }
+}
+
+function setHandVariant(scene, hand, variant = "open") {
+  if (!hand?.setTexture) return;
+  const key = resolveHandTextureKey(scene, variant);
+  if (!key || hand.texture?.key === key) return;
+  try {
+    hand.setTexture(key);
+  } catch (_) {}
 }
 
 export function playHookAction(
@@ -108,6 +153,7 @@ export function playHookAction(
     start.y,
     angle,
     Number(HOOK.visualScale) || 0.28,
+    "open",
   );
   const tether = scene.add.graphics();
   tether.setDepth(RENDER_LAYERS.ATTACKS + 4);
@@ -116,12 +162,12 @@ export function playHookAction(
   const drawTether = () => {
     if (!hand?.active || !tether?.active) return;
     tether.clear();
-    tether.lineStyle(8, 0x55c7ff, isOwner ? 0.45 : 0.32);
+    tether.lineStyle(12, 0x55c7ff, isOwner ? 0.55 : 0.4);
     tether.beginPath();
     tether.moveTo(start.x, start.y);
     tether.lineTo(hand.x, hand.y);
     tether.strokePath();
-    tether.lineStyle(2, 0xd8fbff, isOwner ? 0.9 : 0.62);
+    tether.lineStyle(4, 0xd8fbff, isOwner ? 0.95 : 0.72);
     tether.beginPath();
     tether.moveTo(start.x, start.y);
     tether.lineTo(hand.x, hand.y);
@@ -139,12 +185,12 @@ export function playHookAction(
       drawTether();
       const now = scene.time?.now || 0;
       if (now >= nextTrailAt) {
-        nextTrailAt = now + Math.max(18, Number(HOOK.trailIntervalMs) || 28);
-        spawnTrailDot(scene, hand.x, hand.y);
+        nextTrailAt = now + Math.max(14, Number(HOOK.trailIntervalMs) || 24);
+        spawnTrailDot(scene, hand.x, hand.y, 0.86, "heavy");
       }
     },
     onComplete: () => {
-      scene.tweens.add({
+      const returnTween = scene.tweens.add({
         targets: hand,
         x: start.x,
         y: start.y,
@@ -154,19 +200,36 @@ export function playHookAction(
         onUpdate: drawTether,
         onComplete: () => {
           try {
-            hand.destroy();
-            tether.destroy();
+            cleanupHookVisual(player, ACTIVE_HOOK_VISUALS.get(player));
           } catch (_) {}
         },
       });
+      const visual = ACTIVE_HOOK_VISUALS.get(player);
+      if (visual) visual.returnTween = returnTween;
     },
   });
+
+  const visual = {
+    hand,
+    tether,
+    drawTether,
+    start,
+    owner: player,
+    travelTween: travel,
+    returnTween: null,
+    phase: "out",
+  };
+  ACTIVE_HOOK_VISUALS.set(player, visual);
 
   hand.once("destroy", () => {
     try {
       travel?.remove?.();
       tether?.destroy?.();
     } catch (_) {}
+    const current = ACTIVE_HOOK_VISUALS.get(player);
+    if (current?.hand === hand) {
+      ACTIVE_HOOK_VISUALS.delete(player);
+    }
   });
 }
 
@@ -193,53 +256,92 @@ export function playHookCatchAction(
     Number(actionData?.pullDurationMs) || 640,
   );
   const angle = Math.atan2(endY - startY, endX - startX);
-  const hand = createHand(
-    scene,
-    startX,
-    startY,
-    angle,
-    Number(HOOK.visualScale) || 0.28,
-  );
-  const tether = scene.add.graphics();
-  tether.setDepth(RENDER_LAYERS.ATTACKS + 4);
-  tether.setBlendMode(Phaser.BlendModes.ADD);
+  let visual = ACTIVE_HOOK_VISUALS.get(ownerPlayer);
+  let hand = visual?.hand || null;
+  let tether = visual?.tether || null;
+
+  if (!hand?.active || !tether?.active) {
+    hand = createHand(
+      scene,
+      startX,
+      startY,
+      angle,
+      Number(HOOK.visualScale) || 0.28,
+      "closed",
+    );
+    tether = scene.add.graphics();
+    tether.setDepth(RENDER_LAYERS.ATTACKS + 4);
+    tether.setBlendMode(Phaser.BlendModes.ADD);
+    visual = {
+      hand,
+      tether,
+      owner: ownerPlayer,
+      start: { x: startX, y: startY },
+      drawTether: null,
+      travelTween: null,
+      returnTween: null,
+      phase: "catch",
+    };
+    ACTIVE_HOOK_VISUALS.set(ownerPlayer, visual);
+  }
+
+  visual.start = { x: startX, y: startY };
+  setHandVariant(scene, hand, "closed");
+  try {
+    visual?.travelTween?.stop?.();
+    visual?.returnTween?.stop?.();
+  } catch (_) {}
 
   const drawTether = () => {
     if (!hand?.active || !tether?.active) return;
     tether.clear();
-    tether.lineStyle(8, 0x55c7ff, isOwner ? 0.45 : 0.32);
+    tether.lineStyle(13, 0x55c7ff, isOwner ? 0.58 : 0.44);
     tether.beginPath();
     tether.moveTo(startX, startY);
     tether.lineTo(hand.x, hand.y);
     tether.strokePath();
-    tether.lineStyle(2, 0xd8fbff, isOwner ? 0.92 : 0.66);
+    tether.lineStyle(4, 0xd8fbff, isOwner ? 0.95 : 0.74);
     tether.beginPath();
     tether.moveTo(startX, startY);
     tether.lineTo(hand.x, hand.y);
     tether.strokePath();
   };
+  visual.drawTether = drawTether;
+  visual.phase = "catch";
+
+  if (hand?.setRotation) hand.setRotation(angle);
+  drawTether();
 
   let nextTrailAt = 0;
-  scene.tweens.add({
+  const pauseMs = Math.max(40, Number(HOOK.catchPauseMs) || 110);
+  const catchTravelMs = Math.max(
+    120,
+    Math.round(
+      pullDurationMs * (Number(HOOK.catchPullDurationMult) || 1.18),
+    ),
+  );
+
+  scene.time.delayedCall(pauseMs, () => {
+    if (!hand?.active) return;
+    const returnTween = scene.tweens.add({
     targets: hand,
     x: endX,
     y: endY,
-    duration: pullDurationMs,
-    ease: "Cubic.easeOut",
-    onUpdate: () => {
-      drawTether();
-      const now = scene.time?.now || 0;
-      if (now >= nextTrailAt) {
-        nextTrailAt = now + Math.max(16, Number(HOOK.trailIntervalMs) || 28);
-        spawnTrailDot(scene, hand.x, hand.y, 0.9);
-      }
-    },
-    onComplete: () => {
-      try {
-        hand.destroy();
-        tether.destroy();
-      } catch (_) {}
-    },
+      duration: catchTravelMs,
+      ease: "Cubic.easeOut",
+      onUpdate: () => {
+        drawTether();
+        const now = scene.time?.now || 0;
+        if (now >= nextTrailAt) {
+          nextTrailAt = now + Math.max(13, Number(HOOK.trailIntervalMs) || 22);
+          spawnTrailDot(scene, hand.x, hand.y, 0.94, "heavy");
+        }
+      },
+      onComplete: () => {
+        cleanupHookVisual(ownerPlayer, visual);
+      },
+    });
+    visual.returnTween = returnTween;
   });
 }
 

@@ -134,20 +134,20 @@
         }
       ]
     },
-    "hunteress": {
-      "defaultSkinId": "hunteress-default",
+    "huntress": {
+      "defaultSkinId": "huntress-default",
       "skins": [
         {
-          "id": "hunteress-default",
+          "id": "huntress-default",
           "name": "Default",
-          "character": "hunteress",
+          "character": "huntress",
           "available": true,
           "assetUrl": "/assets/huntress/body.webp",
           "rarity": "rare",
           "price": { "gems": 0 },
           "unlockMethod": {
             "type": "character",
-            "character": "hunteress",
+            "character": "huntress",
             "limited": true
           },
           "showInPicker": true,

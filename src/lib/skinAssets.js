@@ -9,7 +9,7 @@ export function resolveCharacterAssetFolder(character) {
     .trim()
     .toLowerCase();
   if (!key) return "ninja";
-  if (key === "hunteress") return "huntress";
+  if (key === "huntress") return "huntress";
   return key;
 }
 

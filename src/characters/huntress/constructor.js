@@ -9,7 +9,7 @@ import {
 import { executeDefaultAttack } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
 
-const NAME = "hunteress";
+const NAME = "huntress";
 
 class Huntress extends CharacterEntityBase {
   static key = NAME;
@@ -40,6 +40,22 @@ class Huntress extends CharacterEntityBase {
       `${NAME}-arrow`,
       this.characterAssetPath(staticPath, "arrow.webp"),
     );
+    scene.load.audio(
+      `${NAME}-attack`,
+      this.characterAssetPath(staticPath, "attack.mp3"),
+    );
+    scene.load.audio(
+      `${NAME}-hit`,
+      this.characterAssetPath(staticPath, "hit.mp3"),
+    );
+    scene.load.audio(
+      `${NAME}-special`,
+      this.characterAssetPath(staticPath, "special.mp3"),
+    );
+    scene.load.audio(
+      `${NAME}-burn-tick`,
+      this.characterAssetPath(staticPath, "burn-tick.mp3"),
+    );
   }
 
   static setupAnimations(scene) {
@@ -51,7 +67,7 @@ class Huntress extends CharacterEntityBase {
   }
 
   static getStats() {
-    return characterStats.hunteress;
+    return characterStats.huntress;
   }
 
   static handleRemoteAttack(scene, data, ownerWrapper) {
@@ -72,8 +88,11 @@ class Huntress extends CharacterEntityBase {
       try {
         if (ownerSprite?.anims) {
           const animKey =
-            type === `${NAME}-burning-arrow` ? `${NAME}-special` : `${NAME}-throw`;
-          if (scene.anims?.exists(animKey)) ownerSprite.anims.play(animKey, true);
+            type === `${NAME}-burning-arrow`
+              ? `${NAME}-special`
+              : `${NAME}-throw`;
+          if (scene.anims?.exists(animKey))
+            ownerSprite.anims.play(animKey, true);
         }
       } catch (_) {}
       spawnHuntressArrowVisual(scene, data, ownerSprite, {

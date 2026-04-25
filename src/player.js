@@ -839,7 +839,14 @@ export function createPlayer(
     if (window.__BB_MAP_EDIT_ACTIVE) return;
     if (dead) return;
     if (chatInputActive) return;
-    if ((player?._movementLockedUntil || 0) > Date.now()) return;
+    if (
+      Math.max(
+        Number(player?._movementLockedUntil || 0),
+        Number(player?._externalControlLockUntil || 0),
+      ) > Date.now()
+    ) {
+      return;
+    }
     const mobilePointerHandled =
       !!mobileControlsController?.handlePointerDown?.(pointer);
     if (mobilePointerHandled) return;
@@ -893,7 +900,11 @@ export function createPlayer(
       pointer?.pointerType === "touch"
     )
       return;
-    const movementLockedNow = (player?._movementLockedUntil || 0) > Date.now();
+    const movementLockedNow =
+      Math.max(
+        Number(player?._movementLockedUntil || 0),
+        Number(player?._externalControlLockUntil || 0),
+      ) > Date.now();
     const context = finishPointerAttackAim(pointer);
     if (!context || dead || movementLockedNow) return;
     if (String(context.family || "basic").toLowerCase() === "special") {
@@ -1536,10 +1547,38 @@ export function handlePlayerMovement(scene) {
     nowWallTs - (player._lastWallKickAwayInputTs || 0) <= wallKickInputGraceMs;
 
   const nowTs = Date.now();
-  const movementLocked = (player?._movementLockedUntil || 0) > nowTs;
+  const movementLockedByAbility = (player?._movementLockedUntil || 0) > nowTs;
+  const movementLockedByExternal =
+    (player?._externalControlLockUntil || 0) > nowTs;
+  const movementLocked = movementLockedByAbility || movementLockedByExternal;
   const specialAnimLocked = () =>
     (player?._specialAnimLockUntil || 0) > Date.now();
-  if (movementLocked) {
+  if (movementLockedByExternal) {
+    leftKey = false;
+    rightKey = false;
+    upKey = false;
+    if (player.body) {
+      player.setAccelerationX(0);
+      player.setVelocityX(0);
+      if (player._externalControlPrevGravity === undefined) {
+        player._externalControlPrevGravity = !!player.body.allowGravity;
+      }
+      player.body.allowGravity = false;
+    }
+  } else if (
+    player &&
+    player.body &&
+    player._externalControlPrevGravity !== undefined
+  ) {
+    const prevGravity =
+      typeof player._externalControlPrevGravity === "boolean"
+        ? player._externalControlPrevGravity
+        : true;
+    player.body.allowGravity = prevGravity;
+    delete player._externalControlPrevGravity;
+  }
+
+  if (movementLockedByAbility) {
     leftKey = false;
     rightKey = false;
     upKey = false;
@@ -1607,19 +1646,34 @@ export function handlePlayerMovement(scene) {
   // Handle basic attack on J
   try {
     if (keyJ && Phaser.Input.Keyboard.JustDown(keyJ) && !dead) {
-      if (!((player?._movementLockedUntil || 0) > Date.now())) {
+      if (
+        Math.max(
+          Number(player?._movementLockedUntil || 0),
+          Number(player?._externalControlLockUntil || 0),
+        ) <= Date.now()
+      ) {
         const context = resolveQuickAttackContext("basic");
         fireBasicAttack(context.direction, context);
       }
     }
     // Handle special on I
     if (keyI && Phaser.Input.Keyboard.JustDown(keyI) && !dead) {
-      if (!((player?._movementLockedUntil || 0) > Date.now())) {
+      if (
+        Math.max(
+          Number(player?._movementLockedUntil || 0),
+          Number(player?._externalControlLockUntil || 0),
+        ) <= Date.now()
+      ) {
         fireSpecialAttack(resolveQuickAttackContext("special"));
       }
     }
     if (keyE && Phaser.Input.Keyboard.JustDown(keyE) && !dead) {
-      if (!((player?._movementLockedUntil || 0) > Date.now())) {
+      if (
+        Math.max(
+          Number(player?._movementLockedUntil || 0),
+          Number(player?._externalControlLockUntil || 0),
+        ) <= Date.now()
+      ) {
         noteClientActionSent("mode-interact", { type: "mode-interact" });
         socket.emit("game:action", { type: "mode-interact" });
       }
@@ -2129,6 +2183,14 @@ export function reconcileLocalMovement(snapshot = {}) {
 
 export function setPowerupMobility(speedMult = 1, jumpMult = 1) {
   return localStateSync.setPowerupMobility(speedMult, jumpMult);
+}
+
+export function setExternalControlLockUntil(untilMs = 0) {
+  if (!player) return;
+  const until = Number(untilMs);
+  player._externalControlLockUntil = Number.isFinite(until)
+    ? Math.max(0, until)
+    : 0;
 }
 
 export { player, frame, currentHealth, setCurrentHealth, dead };

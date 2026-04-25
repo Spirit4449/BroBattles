@@ -1,5 +1,7 @@
 let fullscreenWirePromise = null;
+let viewportVarsWired = false;
 const FULLSCREEN_INTENT_KEY = "bb_fullscreen_intent";
+const IOS_IMMERSIVE_CLASS = "bb-ios-immersive-mode";
 
 function readFullscreenIntent() {
   try {
@@ -23,6 +25,101 @@ function getFullscreenElement() {
     document.msFullscreenElement ||
     null
   );
+}
+
+function isAppleMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  const platform = navigator.platform || "";
+  const touchPoints = Number(navigator.maxTouchPoints || 0);
+  return (
+    /iPhone|iPad|iPod/i.test(ua) || (platform === "MacIntel" && touchPoints > 1)
+  );
+}
+
+function supportsDocumentFullscreen() {
+  const target = document.documentElement || document.body;
+  if (!target) return false;
+  return (
+    typeof target.requestFullscreen === "function" ||
+    typeof target.webkitRequestFullscreen === "function" ||
+    typeof target.mozRequestFullScreen === "function" ||
+    typeof target.msRequestFullscreen === "function"
+  );
+}
+
+function shouldUseImmersiveFallback() {
+  return isAppleMobileDevice() && !supportsDocumentFullscreen();
+}
+
+function isImmersiveFallbackActive() {
+  return (
+    document.documentElement?.classList?.contains?.(IOS_IMMERSIVE_CLASS) ||
+    document.body?.classList?.contains?.(IOS_IMMERSIVE_CLASS) ||
+    false
+  );
+}
+
+function getVisualViewportSize() {
+  const vv = window.visualViewport;
+  const width = Math.max(
+    1,
+    Number(vv?.width) ||
+      Number(window.innerWidth) ||
+      Number(document.documentElement?.clientWidth) ||
+      1,
+  );
+  const height = Math.max(
+    1,
+    Number(vv?.height) ||
+      Number(window.innerHeight) ||
+      Number(document.documentElement?.clientHeight) ||
+      1,
+  );
+  return {
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+}
+
+function applyViewportCssVars() {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  if (!root) return;
+  const size = getVisualViewportSize();
+  root.style.setProperty("--bb-viewport-width", `${size.width}px`);
+  root.style.setProperty("--bb-viewport-height", `${size.height}px`);
+}
+
+function wireViewportCssVars() {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  if (viewportVarsWired) return;
+  viewportVarsWired = true;
+  applyViewportCssVars();
+  const onChange = () => applyViewportCssVars();
+  window.addEventListener("resize", onChange, { passive: true });
+  window.addEventListener("orientationchange", onChange, { passive: true });
+  window.visualViewport?.addEventListener?.("resize", onChange, {
+    passive: true,
+  });
+  window.visualViewport?.addEventListener?.("scroll", onChange, {
+    passive: true,
+  });
+}
+
+function setImmersiveFallbackActive(enabled) {
+  const active = !!enabled;
+  document.documentElement?.classList?.toggle?.(IOS_IMMERSIVE_CLASS, active);
+  document.body?.classList?.toggle?.(IOS_IMMERSIVE_CLASS, active);
+  if (active) {
+    try {
+      window.scrollTo(0, 0);
+    } catch (_) {}
+  }
+  applyViewportCssVars();
+  try {
+    window.dispatchEvent(new Event("resize"));
+  } catch (_) {}
 }
 
 async function requestFullscreen(target) {
@@ -67,12 +164,25 @@ async function exitFullscreen() {
 }
 
 function syncFullscreenButtons() {
-  const isActive = !!getFullscreenElement();
+  const usingFallback = shouldUseImmersiveFallback();
+  const isActive = !!getFullscreenElement() || isImmersiveFallbackActive();
+  const activeLabel = usingFallback ? "Exit immersive mode" : "Exit fullscreen";
+  const idleLabel = usingFallback ? "Enter immersive mode" : "Fullscreen";
   document.querySelectorAll("[data-fullscreen-toggle]").forEach((button) => {
     button.classList.toggle("is-active", isActive);
     button.setAttribute("aria-pressed", isActive ? "true" : "false");
-    button.title = isActive ? "Exit fullscreen" : "Fullscreen";
+    button.title = isActive ? activeLabel : idleLabel;
+    button.setAttribute("aria-label", isActive ? activeLabel : idleLabel);
   });
+}
+
+function handleFullscreenStateChange() {
+  const isActive = !!getFullscreenElement() || isImmersiveFallbackActive();
+  // If fullscreen was exited externally (e.g. ESC), stop future auto-restore.
+  if (!isActive && readFullscreenIntent()) {
+    writeFullscreenIntent(false);
+  }
+  syncFullscreenButtons();
 }
 
 function armFullscreenRestoreOnInteraction() {
@@ -124,7 +234,18 @@ function armFullscreenRestoreOnInteraction() {
 }
 
 async function restoreFullscreenFromIntent() {
-  if (!readFullscreenIntent() || getFullscreenElement()) {
+  if (!readFullscreenIntent()) {
+    setImmersiveFallbackActive(false);
+    syncFullscreenButtons();
+    return;
+  }
+  if (getFullscreenElement() || isImmersiveFallbackActive()) {
+    syncFullscreenButtons();
+    return;
+  }
+
+  if (shouldUseImmersiveFallback()) {
+    setImmersiveFallbackActive(true);
     syncFullscreenButtons();
     return;
   }
@@ -152,11 +273,19 @@ function bindFullscreenButton(button) {
       if (getFullscreenElement()) {
         await exitFullscreen();
         writeFullscreenIntent(false);
+        setImmersiveFallbackActive(false);
+      } else if (isImmersiveFallbackActive()) {
+        setImmersiveFallbackActive(false);
+        writeFullscreenIntent(false);
       } else {
         const didEnter = await requestFullscreen(
           document.documentElement || document.body,
         );
         if (didEnter) {
+          writeFullscreenIntent(true);
+          setImmersiveFallbackActive(false);
+        } else if (shouldUseImmersiveFallback()) {
+          setImmersiveFallbackActive(true);
           writeFullscreenIntent(true);
         }
       }
@@ -177,11 +306,21 @@ export function wireFullscreenToggles() {
   if (fullscreenWirePromise) return fullscreenWirePromise;
 
   const start = () => {
+    wireViewportCssVars();
     bindFullscreenToggles();
-    document.addEventListener("fullscreenchange", syncFullscreenButtons);
-    document.addEventListener("webkitfullscreenchange", syncFullscreenButtons);
-    document.addEventListener("mozfullscreenchange", syncFullscreenButtons);
-    document.addEventListener("MSFullscreenChange", syncFullscreenButtons);
+    document.addEventListener("fullscreenchange", handleFullscreenStateChange);
+    document.addEventListener(
+      "webkitfullscreenchange",
+      handleFullscreenStateChange,
+    );
+    document.addEventListener(
+      "mozfullscreenchange",
+      handleFullscreenStateChange,
+    );
+    document.addEventListener(
+      "MSFullscreenChange",
+      handleFullscreenStateChange,
+    );
     void restoreFullscreenFromIntent();
   };
 

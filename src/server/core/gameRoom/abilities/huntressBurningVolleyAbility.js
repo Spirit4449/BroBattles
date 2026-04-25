@@ -4,7 +4,7 @@ const {
   getResolvedCharacterSpecialConfig,
 } = require("../../../../lib/characterTuning.js");
 
-const KEY = "hunteress";
+const KEY = "huntress";
 const VOLLEY = getResolvedCharacterSpecialConfig(KEY, "burningVolley") || {};
 
 function toFiniteNumber(value, fallback) {
@@ -35,7 +35,10 @@ function buildProjectiles(angle, payload = {}, profile = null) {
   const spread = degToRad(VOLLEY.spreadDeg || 26);
   const center = (count - 1) / 2;
   const baseSpeed = Math.max(1, toFiniteNumber(VOLLEY.speed, 930));
-  const baseRange = Math.max(1, toFiniteNumber(payload?.range, VOLLEY.range || 960));
+  const baseRange = Math.max(
+    1,
+    toFiniteNumber(payload?.range, VOLLEY.range || 960),
+  );
   const resolved = profile || resolveAimBallistics(angle, baseSpeed, baseRange);
   const speed = resolved.speed;
   const range = resolved.range;
@@ -125,7 +128,12 @@ function activate(caster, now, room, payload = null) {
     ) {
       return;
     }
-    attackRuntimeManager.registerAttackFromAction(room, caster, action, Date.now());
+    attackRuntimeManager.registerAttackFromAction(
+      room,
+      caster,
+      action,
+      Date.now(),
+    );
     broadcastAction(room, caster, action, Date.now());
   };
 
