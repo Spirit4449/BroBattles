@@ -316,17 +316,15 @@ export function playHookCatchAction(
   const pauseMs = Math.max(40, Number(HOOK.catchPauseMs) || 110);
   const catchTravelMs = Math.max(
     120,
-    Math.round(
-      pullDurationMs * (Number(HOOK.catchPullDurationMult) || 1.18),
-    ),
+    Math.round(pullDurationMs * (Number(HOOK.catchPullDurationMult) || 1.18)),
   );
 
   scene.time.delayedCall(pauseMs, () => {
     if (!hand?.active) return;
     const returnTween = scene.tweens.add({
-    targets: hand,
-    x: endX,
-    y: endY,
+      targets: hand,
+      x: endX,
+      y: endY,
       duration: catchTravelMs,
       ease: "Cubic.easeOut",
       onUpdate: () => {
