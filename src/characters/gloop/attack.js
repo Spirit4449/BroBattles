@@ -10,6 +10,19 @@ const SLIMEBALL_ATTACK_ANIM = `${NAME}-slimeball-attack-loop`;
 const WORLD_MIN_X = -400;
 const WORLD_MAX_X = 4000;
 
+function resolveWorldBounds(scene) {
+  const bounds = scene?.physics?.world?.bounds;
+  const rawX = Number(bounds?.x);
+  const rawY = Number(bounds?.y);
+  const rawW = Number(bounds?.width);
+  const rawH = Number(bounds?.height);
+  const minX = Number.isFinite(rawX) ? rawX : WORLD_MIN_X;
+  const minY = Number.isFinite(rawY) ? rawY : 0;
+  const maxX = Number.isFinite(rawW) ? minX + rawW : WORLD_MAX_X;
+  const maxY = Number.isFinite(rawH) ? minY + rawH : 1000;
+  return { minX, maxX, minY, maxY };
+}
+
 let DEBUG_DRAW = false;
 const ACTIVE_DEBUG_SHAPES = new Set();
 
@@ -52,6 +65,79 @@ function playSound(scene, key, options = {}) {
   return false;
 }
 
+function getMapCollisionRects(scene, fallbackRects = null) {
+  const source =
+    Array.isArray(fallbackRects) && fallbackRects.length
+      ? fallbackRects
+      : Array.isArray(scene?._mapObjects)
+        ? scene._mapObjects
+        : [];
+  const rects = [];
+  for (const obj of source) {
+    const body = obj?.body;
+    if (!body || body.enable === false) continue;
+    const left = Number(body.left);
+    const right = Number(body.right);
+    const top = Number(body.top);
+    const bottom = Number(body.bottom);
+    if (![left, right, top, bottom].every(Number.isFinite)) continue;
+    rects.push({ left, right, top, bottom });
+  }
+  return rects;
+}
+
+function sweptCircleOverlapsRect(prevX, prevY, nextX, nextY, rect, radius = 0) {
+  const left = Number(rect?.left);
+  const right = Number(rect?.right);
+  const top = Number(rect?.top);
+  const bottom = Number(rect?.bottom);
+  if (![left, right, top, bottom].every(Number.isFinite)) return false;
+  const minX = Math.min(prevX, nextX) - radius;
+  const maxX = Math.max(prevX, nextX) + radius;
+  const minY = Math.min(prevY, nextY) - radius;
+  const maxY = Math.max(prevY, nextY) + radius;
+  return !(maxX < left || minX > right || maxY < top || minY > bottom);
+}
+
+function isFiniteRect(rect) {
+  const left = Number(rect?.left);
+  const right = Number(rect?.right);
+  const top = Number(rect?.top);
+  const bottom = Number(rect?.bottom);
+  if (![left, right, top, bottom].every(Number.isFinite)) return null;
+  return { left, right, top, bottom };
+}
+
+function isHorizontalPlatform(rect) {
+  const parsed = isFiniteRect(rect);
+  if (!parsed) return false;
+  return parsed.right - parsed.left >= parsed.bottom - parsed.top;
+}
+
+function hasTopPlatformContact(prevX, prevY, nextX, nextY, rect, radius = 0) {
+  const parsed = isFiniteRect(rect);
+  if (!parsed) return false;
+  const crossedTop =
+    prevY + radius <= parsed.top && nextY + radius >= parsed.top;
+  if (!crossedTop) return false;
+  const minX = Math.min(prevX, nextX);
+  const maxX = Math.max(prevX, nextX);
+  return !(maxX + radius < parsed.left || minX - radius > parsed.right);
+}
+
+function hasWallCenterContact(prevX, nextX, y, rect, vx = 0, radius = 0) {
+  const parsed = isFiniteRect(rect);
+  if (!parsed) return false;
+  const width = parsed.right - parsed.left;
+  const height = parsed.bottom - parsed.top;
+  if (height < width) return false;
+  const centerX = (parsed.left + parsed.right) / 2;
+  const yOverlap = y + radius >= parsed.top && y - radius <= parsed.bottom;
+  if (!yOverlap) return false;
+  if (vx >= 0) return prevX <= centerX && nextX >= centerX;
+  return prevX >= centerX && nextX <= centerX;
+}
+
 function resolveStart(payload = {}, ownerSprite = null, angle = 0) {
   const startX = Number(payload?.start?.x);
   const startY = Number(payload?.start?.y);
@@ -84,7 +170,7 @@ function resolveStart(payload = {}, ownerSprite = null, angle = 0) {
   };
 }
 
-function createSlimeballSprite(scene, x, y, scale) {
+function createSlimeballSprite(scene, x, y, radius, visualScale = 1) {
   const attackFrames = ensureSlimeballAttackAnimation(scene);
   const key = scene?.textures?.exists(SLIMEBALL_ATTACK_TEXTURE)
     ? SLIMEBALL_ATTACK_TEXTURE
@@ -96,7 +182,14 @@ function createSlimeballSprite(scene, x, y, scale) {
     ? scene.add.sprite(x, y, key, firstFrame)
     : scene.add.circle(x, y, 18, 0x55c7ff, 0.95);
   sprite.setDepth(RENDER_LAYERS.ATTACKS + 6);
-  if (sprite.setScale) sprite.setScale(Math.max(1, Number(scale) || 0.24));
+  if (sprite.setScale) {
+    const baseW = Math.max(1, Number(sprite.width) || Number(radius * 2) || 1);
+    const baseH = Math.max(1, Number(sprite.height) || Number(radius * 2) || 1);
+    const desiredDiameter = Math.max(2, Number(radius) * 2);
+    const fitScale = desiredDiameter / Math.max(baseW, baseH);
+    const scaleMult = Math.max(0.1, Number(visualScale) || 1);
+    sprite.setScale(fitScale * scaleMult);
+  }
   if (sprite.setTint) sprite.setTint(0x7de7ff);
   if (sprite.setBlendMode) sprite.setBlendMode(Phaser.BlendModes.NORMAL);
   if (
@@ -130,8 +223,8 @@ function ensureSlimeballAttackAnimation(scene) {
         key: SLIMEBALL_ATTACK_TEXTURE,
         frame,
       })),
-      frameRate: 20,
-      repeat: 1,
+      frameRate: 10,
+      repeat: -1,
     });
   }
   return orderedFrames;
@@ -195,11 +288,17 @@ export function spawnGloopSlimeballVisual(
     1,
     Number(payload.collisionRadius) || Number(SLIMEBALL.collisionRadius) || 28,
   );
+  const mapCollisionRects = getMapCollisionRects(
+    scene,
+    payload.mapCollisionRects,
+  );
+  const worldBounds = resolveWorldBounds(scene);
   const sprite = createSlimeballSprite(
     scene,
     start.x,
     start.y,
-    Number(payload.scale) || Number(SLIMEBALL.visualScale) || 0.24,
+    radius,
+    Number(payload.scale) || Number(SLIMEBALL.visualScale) || 1,
   );
   const debug = createDebugCircle(scene, radius);
   const glow = scene.add.circle(
@@ -218,6 +317,10 @@ export function spawnGloopSlimeballVisual(
     gravity: Math.max(
       0,
       Number(payload.gravity) || Number(SLIMEBALL.gravity) || 380,
+    ),
+    airDrag: Math.max(
+      0,
+      Number(payload.airDrag) || Number(SLIMEBALL.airDrag) || 0,
     ),
     initialVy: Number.isFinite(Number(payload.initialVy))
       ? Number(payload.initialVy)
@@ -238,18 +341,26 @@ export function spawnGloopSlimeballVisual(
         Number(SLIMEBALL.bounceDampingX) ||
         0.92,
     ),
+    minBounceSpeed: Math.max(
+      0,
+      Number(payload.minBounceSpeed) || Number(SLIMEBALL.minBounceSpeed) || 0,
+    ),
     floorY: Math.min(
-      Number(payload.floorY) ||
-        start.y + (Number(SLIMEBALL.bounceFloorOffsetY) || 185),
-      Number(scene?.physics?.world?.bounds?.height) || 1000,
+      Number(payload.floorY) || Number(worldBounds.maxY) || 1000,
+      Number(worldBounds.maxY) || 1000,
     ),
     maxLifetimeMs: Math.max(
       250,
       Number(payload.maxLifetimeMs) || Number(SLIMEBALL.maxLifetimeMs) || 4200,
     ),
     trailIntervalMs: Math.max(18, Number(SLIMEBALL.trailIntervalMs) || 42),
-    worldMinX: Number(payload.worldMinX) || WORLD_MIN_X,
-    worldMaxX: Number(payload.worldMaxX) || WORLD_MAX_X,
+    worldMinX: Number.isFinite(Number(payload.worldMinX))
+      ? Number(payload.worldMinX)
+      : Number(worldBounds.minX) || WORLD_MIN_X,
+    worldMaxX: Number.isFinite(Number(payload.worldMaxX))
+      ? Number(payload.worldMaxX)
+      : Number(worldBounds.maxX) || WORLD_MAX_X,
+    mapCollisionRects,
   };
 
   let vx = direction * cfg.speed;
@@ -264,7 +375,10 @@ export function spawnGloopSlimeballVisual(
     if (disposed) return;
     disposed = true;
     scene.events.off("update", update);
-    if (withSplat) spawnSlimeSplat(scene, sprite.x, sprite.y);
+    if (withSplat) {
+      playSound(scene, "gloop-hit", { volume: 0.5 });
+      spawnSlimeSplat(scene, sprite.x, sprite.y);
+    }
     try {
       sprite.destroy();
       glow.destroy();
@@ -282,10 +396,52 @@ export function spawnGloopSlimeballVisual(
     const prevX = sprite.x;
     const prevY = sprite.y;
     vy += cfg.gravity * dt;
+    if (cfg.airDrag > 0 && vx !== 0) {
+      const dragFactor = Math.max(0, 1 - cfg.airDrag * dt);
+      vx *= dragFactor;
+    }
     sprite.x += vx * dt;
     sprite.y += vy * dt;
-    traveled += Math.abs(sprite.x - prevX);
+    traveled += Math.hypot(sprite.x - prevX, sprite.y - prevY);
     // sprite.rotation += direction * dt * 5.2;
+
+    const collisionRects =
+      Array.isArray(cfg.mapCollisionRects) && cfg.mapCollisionRects.length
+        ? cfg.mapCollisionRects
+        : getMapCollisionRects(scene);
+    for (const rect of collisionRects) {
+      if (
+        !sweptCircleOverlapsRect(prevX, prevY, sprite.x, sprite.y, rect, radius)
+      ) {
+        continue;
+      }
+      if (
+        vy > 0 &&
+        isHorizontalPlatform(rect) &&
+        hasTopPlatformContact(prevX, prevY, sprite.x, sprite.y, rect, radius)
+      ) {
+        const platformTop = Number(rect?.top);
+        bounces += 1;
+        if (bounces > cfg.maxBounces) {
+          cleanup(true);
+          return;
+        }
+        sprite.y = platformTop - radius;
+        const bounceVy = Math.abs(vy) * cfg.bounceDampingY;
+        if (bounceVy < cfg.minBounceSpeed) {
+          cleanup(true);
+          return;
+        }
+        vy = -bounceVy;
+        vx *= cfg.bounceDampingX;
+        spawnSlimeSplat(scene, sprite.x, platformTop);
+        break;
+      }
+      if (hasWallCenterContact(prevX, sprite.x, sprite.y, rect, vx, radius)) {
+        cleanup(true);
+        return;
+      }
+    }
 
     if (sprite.y + radius >= cfg.floorY && vy > 0) {
       bounces += 1;
@@ -294,7 +450,12 @@ export function spawnGloopSlimeballVisual(
         return;
       }
       sprite.y = cfg.floorY - radius;
-      vy = -Math.abs(vy) * cfg.bounceDampingY;
+      const bounceVy = Math.abs(vy) * cfg.bounceDampingY;
+      if (bounceVy < cfg.minBounceSpeed) {
+        cleanup(true);
+        return;
+      }
+      vy = -bounceVy;
       vx *= cfg.bounceDampingX;
       spawnSlimeSplat(scene, sprite.x, cfg.floorY);
     }
@@ -344,6 +505,7 @@ export function performGloopSlimeball(instance, attackContext = null) {
   const slowJumpMult = Math.max(0.1, Number(SLIMEBALL.slowJumpMult) || 0.7);
   const direction = Number(context?.direction) === -1 ? -1 : 1;
   const attackId = createRuntimeId("gloopSlimeball");
+  const worldBounds = resolveWorldBounds(scene);
   const unlockFlip = lockPlayerFlip(p);
 
   p.flipX = direction < 0;
@@ -366,11 +528,18 @@ export function performGloopSlimeball(instance, attackContext = null) {
     collisionRadius: Number(SLIMEBALL.collisionRadius) || 28,
     scale: Number(SLIMEBALL.visualScale) || 0.24,
     gravity: Number(SLIMEBALL.gravity) || 380,
+    airDrag: Number(SLIMEBALL.airDrag) || 0,
     initialVy: Number(SLIMEBALL.initialVy) || -70,
     maxBounces: Number(SLIMEBALL.maxBounces) || 2,
     bounceDampingY: Number(SLIMEBALL.bounceDampingY) || 0.74,
     bounceDampingX: Number(SLIMEBALL.bounceDampingX) || 0.92,
+    minBounceSpeed: Number(SLIMEBALL.minBounceSpeed) || 0,
     maxLifetimeMs: Number(SLIMEBALL.maxLifetimeMs) || 4200,
+    floorY:
+      Number(worldBounds.maxY) || Number(SLIMEBALL.bounceFloorOffsetY) || 1000,
+    worldMinX: Number(worldBounds.minX) || WORLD_MIN_X,
+    worldMaxX: Number(worldBounds.maxX) || WORLD_MAX_X,
+    mapCollisionRects: getMapCollisionRects(scene),
     slowDurationMs,
     slowSpeedMult,
     slowJumpMult,

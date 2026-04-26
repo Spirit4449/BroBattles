@@ -1084,6 +1084,8 @@ class GameRoom {
       "maxBounces",
       "bounceDampingY",
       "bounceDampingX",
+      "airDrag",
+      "minBounceSpeed",
       "floorY",
       "worldMinX",
       "worldMaxX",
@@ -1146,6 +1148,21 @@ class GameRoom {
         if (Object.keys(item).length) projectiles.push(item);
       }
       if (projectiles.length) sanitized.projectiles = projectiles;
+    }
+
+    if (Array.isArray(actionData?.mapCollisionRects)) {
+      const mapCollisionRects = [];
+      for (const rect of actionData.mapCollisionRects) {
+        if (!rect || typeof rect !== "object") continue;
+        const left = Number(rect.left);
+        const right = Number(rect.right);
+        const top = Number(rect.top);
+        const bottom = Number(rect.bottom);
+        if (![left, right, top, bottom].every(Number.isFinite)) continue;
+        mapCollisionRects.push({ left, right, top, bottom });
+      }
+      if (mapCollisionRects.length)
+        sanitized.mapCollisionRects = mapCollisionRects;
     }
 
     return sanitized;

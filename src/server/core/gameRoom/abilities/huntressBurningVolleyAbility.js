@@ -2,10 +2,14 @@ const attackRuntimeManager = require("../attackRuntimeManager");
 const { broadcastAction } = require("../characterActionRegistry");
 const {
   getResolvedCharacterSpecialConfig,
+  getResolvedCharacterSpecialAimConfig,
 } = require("../../../../lib/characterTuning.js");
 
 const KEY = "huntress";
 const VOLLEY = getResolvedCharacterSpecialConfig(KEY, "burningVolley") || {};
+const VOLLEY_AIM = getResolvedCharacterSpecialAimConfig(KEY) || {};
+const VOLLEY_ANGLE_OFFSET_RAD =
+  ((Number(VOLLEY_AIM.projectileAngleOffsetDeg) || 0) * Math.PI) / 180;
 
 function toFiniteNumber(value, fallback) {
   const n = Number(value);
@@ -77,7 +81,8 @@ function activate(caster, now, room, payload = null) {
   if (!caster || !room) return;
   const aim = payload && typeof payload === "object" ? payload : {};
   const fallbackAngle = caster.flip ? Math.PI : 0;
-  const angle = toFiniteNumber(aim.angle, fallbackAngle);
+  const angle =
+    toFiniteNumber(aim.angle, fallbackAngle) + Number(VOLLEY_ANGLE_OFFSET_RAD);
   const direction =
     Number(aim.direction) === -1 ||
     (Math.cos(angle) < -0.1 && Number(aim.direction) !== 1)

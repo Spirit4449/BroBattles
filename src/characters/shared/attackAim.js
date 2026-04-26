@@ -113,7 +113,10 @@ function getAimConfig(character, family = "basic") {
 
 function getAimTuning(character, config = {}, family = "basic") {
   if (isSpecialFamily(family)) {
-    return getResolvedCharacterSpecialConfig(character, config.specialKey || null);
+    return getResolvedCharacterSpecialConfig(
+      character,
+      config.specialKey || null,
+    );
   }
   return getResolvedCharacterAttackConfig(character, config.attackKey || null);
 }
@@ -211,7 +214,10 @@ function buildThrowArcGeometry({
     Number.isFinite(resolvedTargetX) && Number.isFinite(resolvedTargetY);
   const safeRange = Math.max(1, Number(range) || 120);
   const resolvedAngle = hasTarget
-    ? Math.atan2(resolvedTargetY - Number(originY), resolvedTargetX - Number(originX))
+    ? Math.atan2(
+        resolvedTargetY - Number(originY),
+        resolvedTargetX - Number(originX),
+      )
     : normalizeAngle(angle, 0);
   const forwardX = Math.cos(resolvedAngle);
   const forwardY = Math.sin(resolvedAngle);
@@ -296,11 +302,12 @@ function resolveThrowTarget(
   );
   const hasPointer =
     Number.isFinite(Number(targetX)) && Number.isFinite(Number(targetY));
+  const facingSign = Math.cos(Number(defaultAngle) || 0) < 0 ? -1 : 1;
   const fallbackDx =
     quick && quickUsesPointerAngle && hasPointer
       ? Math.cos(defaultAngle) * defaultRange
       : Number.isFinite(Number(config.quickTargetOffsetX))
-        ? Number(config.quickTargetOffsetX)
+        ? Math.abs(Number(config.quickTargetOffsetX)) * facingSign
         : Math.cos(defaultAngle) * defaultRange;
   const fallbackDy =
     quick && quickUsesPointerAngle && hasPointer
@@ -426,7 +433,10 @@ function resolveAttackAimContext({
     resolvedTargetX = throwTarget.targetX;
     resolvedTargetY = throwTarget.targetY;
     appliedRange = throwTarget.range;
-    angle = Math.atan2(resolvedTargetY - base.anchorY, resolvedTargetX - base.anchorX);
+    angle = Math.atan2(
+      resolvedTargetY - base.anchorY,
+      resolvedTargetX - base.anchorX,
+    );
     throwPreview = buildThrowArcGeometry({
       originX: base.anchorX,
       originY: base.anchorY,
@@ -446,8 +456,7 @@ function resolveAttackAimContext({
       Number.isFinite(targetX) && Number.isFinite(targetY)
         ? Math.hypot(targetX - base.anchorX, targetY - base.anchorY)
         : defaultRange;
-    const allowDragRange =
-      kind === "throw" || config.allowDragRange === true;
+    const allowDragRange = kind === "throw" || config.allowDragRange === true;
     appliedRange =
       !quick && allowDragRange
         ? clamp(rawDistance, minRange, maxRange)

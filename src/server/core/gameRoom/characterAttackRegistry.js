@@ -286,6 +286,31 @@ function clampToWorld(value, axis = "x") {
   return Math.max(minX, Math.min(maxX, Number(value) || 0));
 }
 
+function resolveLiveGloopPullDestination(room, target, pull) {
+  const source = room?.players?.get?.(String(pull?.sourceSocketId || ""));
+  const stopDistance = Math.max(1, Number(pull?.stopDistance) || 54);
+  const ax = Number(source?.x);
+  const ay = Number(source?.y);
+  if (!Number.isFinite(ax) || !Number.isFinite(ay)) {
+    return {
+      x: clampToWorld(Number(pull?.toX) || Number(target?.x) || 0, "x"),
+      y: clampToWorld(Number(pull?.toY) || Number(target?.y) || 0, "y"),
+    };
+  }
+
+  const tx = Number(target?.x) || ax;
+  const ty = Number(target?.y) || ay;
+  const dx = tx - ax;
+  const dy = ty - ay;
+  const dist = Math.hypot(dx, dy) || 1;
+  const ux = dx / dist;
+  const uy = dy / dist;
+  return {
+    x: clampToWorld(ax + ux * stopDistance, "x"),
+    y: clampToWorld(ay + uy * stopDistance, "y"),
+  };
+}
+
 function applyGloopPull(room, attacker, target, attack, now) {
   if (!room || !attacker || !target || !target.isAlive) return;
   const stopDistance = Math.max(1, Number(attack.pulledStopDistance) || 54);
@@ -308,8 +333,10 @@ function applyGloopPull(room, attacker, target, attack, now) {
     until: now + pullDurationMs,
     fromX: tx,
     fromY: ty,
+    stopDistance,
     toX: clampToWorld(ax + ux * stopDistance, "x"),
     toY: clampToWorld(ay + uy * stopDistance, "y"),
+    lastStepAt: now,
     slowDurationMs: Math.max(1, Number(attack.slowDurationMs) || 2200),
     slowSpeedMult: Math.max(0.1, Number(attack.slowSpeedMult) || 0.5),
     slowJumpMult: Math.max(0.1, Number(attack.slowJumpMult) || 0.5),
@@ -344,6 +371,8 @@ function applyGloopPull(room, attacker, target, attack, now) {
       start: { x: Number(attack.x) || ax, y: Number(attack.y) || ay },
       end: { x: target._gloopPullState.toX, y: target._gloopPullState.toY },
       pullDurationMs,
+      sourceName: attacker.name,
+      pulledStopDistance: stopDistance,
     },
     t: now,
   });
@@ -386,15 +415,29 @@ function tickRuntimeControlEffects(room, now = Date.now()) {
     const startedAt = Number(pull.startedAt) || now;
     const duration = Math.max(1, Number(pull.until) - startedAt);
     const t = Math.max(0, Math.min(1, (now - startedAt) / duration));
-    const eased = 1 - Math.pow(1 - t, 3);
+    const destination = resolveLiveGloopPullDestination(room, target, pull);
+    const stepDt = Math.max(1, now - (Number(pull.lastStepAt) || now - 16));
+    pull.lastStepAt = now;
+    pull.toX = destination.x;
+    pull.toY = destination.y;
+    const remainingMs = Math.max(1, Number(pull.until) - now);
+    const baseAlpha = stepDt / Math.max(16, remainingMs);
+    const easedAlpha = Math.max(
+      0.12,
+      Math.min(0.75, baseAlpha * (1.15 + t * 2.4)),
+    );
     target.x = clampToWorld(
-      (Number(pull.fromX) || 0) +
-        ((Number(pull.toX) || 0) - (Number(pull.fromX) || 0)) * eased,
+      (Number(target.x) || Number(pull.fromX) || 0) +
+        ((Number(destination.x) || 0) -
+          (Number(target.x) || Number(pull.fromX) || 0)) *
+          easedAlpha,
       "x",
     );
     target.y = clampToWorld(
-      (Number(pull.fromY) || 0) +
-        ((Number(pull.toY) || 0) - (Number(pull.fromY) || 0)) * eased,
+      (Number(target.y) || Number(pull.fromY) || 0) +
+        ((Number(destination.y) || 0) -
+          (Number(target.y) || Number(pull.fromY) || 0)) *
+          easedAlpha,
       "y",
     );
     target.vx = 0;
@@ -572,8 +615,7 @@ function buildProjectileBounceAttack(playerData, actionData, descriptor, now) {
     now,
   );
   const floorFromAction = Number(actionData?.floorY);
-  const floorFromRuntime =
-    (Number(playerData.y) || 0) + (Number(runtime.bounceFloorOffsetY) || 185);
+  const floorFromRuntime = Number(WORLD_BOUNDS?.height) || 1000;
   return {
     ...base,
     runtimeKind: "projectile-bounce",
@@ -596,9 +638,30 @@ function buildProjectileBounceAttack(playerData, actionData, descriptor, now) {
         Number(runtime.bounceDampingX) ||
         0.92,
     ),
+    airDrag: Math.max(
+      0,
+      Number(actionData?.airDrag) || Number(runtime.airDrag) || 0,
+    ),
+    minBounceSpeed: Math.max(
+      0,
+      Number(actionData?.minBounceSpeed) || Number(runtime.minBounceSpeed) || 0,
+    ),
     floorY: Number.isFinite(floorFromAction)
       ? floorFromAction
       : floorFromRuntime,
+    mapCollisionRects: Array.isArray(actionData?.mapCollisionRects)
+      ? actionData.mapCollisionRects
+          .map((rect) => {
+            if (!rect || typeof rect !== "object") return null;
+            const left = Number(rect.left);
+            const right = Number(rect.right);
+            const top = Number(rect.top);
+            const bottom = Number(rect.bottom);
+            if (![left, right, top, bottom].every(Number.isFinite)) return null;
+            return { left, right, top, bottom };
+          })
+          .filter(Boolean)
+      : [],
     bounceCount: 0,
     worldMinX: Number.isFinite(Number(actionData?.worldMinX))
       ? Number(actionData.worldMinX)
@@ -617,6 +680,58 @@ function buildProjectileBounceAttack(playerData, actionData, descriptor, now) {
     effectJumpMult:
       Number(actionData?.slowJumpMult) || Number(runtime.slowJumpMult) || 0.7,
   };
+}
+
+function sweptCircleOverlapsRect(prevX, prevY, nextX, nextY, rect, radius = 0) {
+  const left = Number(rect?.left);
+  const right = Number(rect?.right);
+  const top = Number(rect?.top);
+  const bottom = Number(rect?.bottom);
+  if (![left, right, top, bottom].every(Number.isFinite)) return false;
+  const minX = Math.min(prevX, nextX) - radius;
+  const maxX = Math.max(prevX, nextX) + radius;
+  const minY = Math.min(prevY, nextY) - radius;
+  const maxY = Math.max(prevY, nextY) + radius;
+  return !(maxX < left || minX > right || maxY < top || minY > bottom);
+}
+
+function parseRect(rect) {
+  const left = Number(rect?.left);
+  const right = Number(rect?.right);
+  const top = Number(rect?.top);
+  const bottom = Number(rect?.bottom);
+  if (![left, right, top, bottom].every(Number.isFinite)) return null;
+  return { left, right, top, bottom };
+}
+
+function isHorizontalPlatform(rect) {
+  const parsed = parseRect(rect);
+  if (!parsed) return false;
+  return parsed.right - parsed.left >= parsed.bottom - parsed.top;
+}
+
+function hitsPlatformTop(prevX, prevY, nextX, nextY, rect, radius = 0) {
+  const parsed = parseRect(rect);
+  if (!parsed) return false;
+  const crossedTop =
+    prevY + radius <= parsed.top && nextY + radius >= parsed.top;
+  if (!crossedTop) return false;
+  const minX = Math.min(prevX, nextX);
+  const maxX = Math.max(prevX, nextX);
+  return !(maxX + radius < parsed.left || minX - radius > parsed.right);
+}
+
+function hitsWallCenter(prevX, nextX, y, rect, vx = 0, radius = 0) {
+  const parsed = parseRect(rect);
+  if (!parsed) return false;
+  const width = parsed.right - parsed.left;
+  const height = parsed.bottom - parsed.top;
+  if (height < width) return false;
+  const centerX = (parsed.left + parsed.right) / 2;
+  const yOverlap = y + radius >= parsed.top && y - radius <= parsed.bottom;
+  if (!yOverlap) return false;
+  if (vx >= 0) return prevX <= centerX && nextX >= centerX;
+  return prevX >= centerX && nextX <= centerX;
 }
 
 function buildHookProjectileAttack(playerData, actionData, descriptor, now) {
@@ -1000,6 +1115,10 @@ function tickBouncingProjectile(room, attack, descriptor, now) {
   const prevX = Number(attack.x) || 0;
   const prevY = Number(attack.y) || 0;
   attack.vy += (Number(attack.gravity) || Number(runtime.gravity) || 0) * dtSec;
+  if (Number(attack.airDrag) > 0 && Number(attack.vx) !== 0) {
+    const dragFactor = Math.max(0, 1 - Number(attack.airDrag) * dtSec);
+    attack.vx = Number(attack.vx) * dragFactor;
+  }
   attack.x += Number(attack.vx || 0) * dtSec;
   attack.y += Number(attack.vy || 0) * dtSec;
   attack.traveled += Math.hypot(
@@ -1011,6 +1130,51 @@ function tickBouncingProjectile(room, attack, descriptor, now) {
     1,
     Number(attack.collisionRadius || runtime.collisionRadius) || 1,
   );
+  const mapCollisionRects = Array.isArray(attack.mapCollisionRects)
+    ? attack.mapCollisionRects
+    : [];
+  for (const rect of mapCollisionRects) {
+    if (
+      !sweptCircleOverlapsRect(prevX, prevY, attack.x, attack.y, rect, radius)
+    ) {
+      continue;
+    }
+    if (
+      Number(attack.vy) > 0 &&
+      isHorizontalPlatform(rect) &&
+      hitsPlatformTop(prevX, prevY, attack.x, attack.y, rect, radius)
+    ) {
+      const platformTop = Number(rect?.top);
+      attack.bounceCount = Number(attack.bounceCount || 0) + 1;
+      if (attack.bounceCount > Math.max(0, Number(attack.maxBounces) || 0)) {
+        return true;
+      }
+      attack.y = platformTop - radius;
+      const bounceVy =
+        Math.abs(Number(attack.vy) || 0) *
+        Math.max(0.1, Number(attack.bounceDampingY) || 0.74);
+      if (bounceVy < Math.max(0, Number(attack.minBounceSpeed) || 0)) {
+        return true;
+      }
+      attack.vy = -bounceVy;
+      attack.vx =
+        Number(attack.vx || 0) *
+        Math.max(0.1, Number(attack.bounceDampingX) || 0.92);
+      break;
+    }
+    if (
+      hitsWallCenter(
+        prevX,
+        Number(attack.x) || 0,
+        Number(attack.y) || 0,
+        rect,
+        Number(attack.vx) || 0,
+        radius,
+      )
+    ) {
+      return true;
+    }
+  }
   const floorY = Number(attack.floorY);
   if (
     Number.isFinite(floorY) &&
@@ -1022,9 +1186,13 @@ function tickBouncingProjectile(room, attack, descriptor, now) {
       return true;
     }
     attack.y = floorY - radius;
-    attack.vy =
-      -Math.abs(Number(attack.vy) || 0) *
+    const bounceVy =
+      Math.abs(Number(attack.vy) || 0) *
       Math.max(0.1, Number(attack.bounceDampingY) || 0.74);
+    if (bounceVy < Math.max(0, Number(attack.minBounceSpeed) || 0)) {
+      return true;
+    }
+    attack.vy = -bounceVy;
     attack.vx =
       Number(attack.vx || 0) *
       Math.max(0.1, Number(attack.bounceDampingX) || 0.92);

@@ -192,14 +192,7 @@ export function createPowerupRenderer({
       spawnTrailParticle,
     });
     const rageLikeOn = rageOn || !!custom?.rageLike;
-
-    if (rageLikeOn && !spr._rageLiftApplied) {
-      spr.y -= 6;
-      if (spr.body && typeof spr.body.updateFromGameObject === "function") {
-        spr.body.updateFromGameObject();
-      }
-      spr._rageLiftApplied = true;
-    } else if (!rageLikeOn && spr._rageLiftApplied) {
+    if (!rageLikeOn && spr._rageLiftApplied) {
       spr._rageLiftApplied = false;
     }
 
@@ -727,7 +720,7 @@ export function createPowerupRenderer({
         g.lineStyle(3, burnColor, 0.72 * pulse);
         g.strokeCircle(x, y, Math.max(16, r + 4 + 3 * pulse));
       }
-      if ((fx.gloopHookSlow || 0) > 0) {
+      if ((fx.gloopHookSlow || 0) > 0 || (fx.gloopSlimeSlow || 0) > 0) {
         const slowColor = 0x54c7ff;
         g.fillStyle(slowColor, 0.16 + 0.06 * pulse);
         g.fillCircle(x, y, Math.max(16, r - 2 + 4 * pulse));
