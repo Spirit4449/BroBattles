@@ -156,7 +156,7 @@ export function spawnExplosion(scene, x, y) {
       return null;
     }
     const e = scene.add.sprite(x, y, "draven-explosion");
-    e.setDepth(RENDER_LAYERS.ATTACKS);
+    e.setDepth(RENDER_LAYERS.PLAYER - 1);
     e.setScale(2.2);
     if (scene.anims?.exists("draven-explosion")) {
       e.anims.play("draven-explosion");

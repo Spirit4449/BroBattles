@@ -1,19 +1,64 @@
 import { spawnExplosion } from "./attack";
 import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js";
+import { getResolvedCharacterSpecialAimConfig } from "../../lib/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
+import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 
 const INFERNO = getResolvedCharacterSpecialConfig("draven", "inferno");
+const INFERNO_AIM = getResolvedCharacterSpecialAimConfig("draven");
 
 const DRAVEN_INFERNO_DURATION_MS = INFERNO.durationMs ?? 3000;
 const DRAVEN_INFERNO_RISE_MS = INFERNO.riseMs ?? 320;
 const DRAVEN_INFERNO_LIFT_PX = INFERNO.liftPx ?? 125;
 const DRAVEN_INFERNO_BOB_PX = INFERNO.bobPx ?? 8;
-const DRAVEN_FIRE_RING_RADIUS = INFERNO.fireRingRadius ?? 185;
+const DRAVEN_INFERNO_RADIUS =
+  INFERNO_AIM.radius ?? INFERNO.fireRingRadius ?? 215;
 const DRAVEN_FIRE_PULSE_MS = INFERNO.firePulseMs ?? 120;
 const DRAVEN_EXPLOSION_PULSE_MS = INFERNO.explosionPulseMs ?? 260;
+const DRAVEN_SPECIAL_FX_TEXTURE_KEY = "draven-special-fx";
+const DRAVEN_SPECIAL_FX_ANIM_KEY = "draven-special-fx";
 
 const FIRE_COLORS = [0xff5a2f, 0xff8a00, 0xb13cff, 0xff2f5d];
+
+function syncInfernoOverlay(player, overlay) {
+  if (!player || !overlay || !overlay.active) return;
+  overlay.x = player.x;
+  overlay.y = player.y;
+  overlay.flipX = !!player.flipX;
+  overlay.setDepth(RENDER_LAYERS.PLAYER - 1);
+}
+
+function destroyInfernoOverlay(player) {
+  if (!player || !player._dravenInfernoOverlay) return;
+  try {
+    player._dravenInfernoOverlay.destroy();
+  } catch (_) {}
+  delete player._dravenInfernoOverlay;
+}
+
+function ensureInfernoOverlay(scene, player) {
+  if (!scene?.add || !player?.active) return null;
+  if (
+    !scene.textures?.exists(DRAVEN_SPECIAL_FX_TEXTURE_KEY) ||
+    !scene.anims?.exists(DRAVEN_SPECIAL_FX_ANIM_KEY)
+  ) {
+    return null;
+  }
+
+  destroyInfernoOverlay(player);
+
+  const overlay = scene.add.sprite(player.x, player.y, DRAVEN_SPECIAL_FX_TEXTURE_KEY);
+  overlay.setBlendMode(Phaser.BlendModes.ADD);
+  const scaleBase = player.displayWidth || player.width || 72;
+  overlay.setScale(Math.max(0.45, (scaleBase / 92) * 1.7));
+  syncInfernoOverlay(player, overlay);
+  try {
+    overlay.anims.play(DRAVEN_SPECIAL_FX_ANIM_KEY, true);
+  } catch (_) {}
+  player._dravenInfernoOverlay = overlay;
+  return overlay;
+}
 
 function spawnFireParticle(scene, x, y) {
   const color = FIRE_COLORS[Phaser.Math.Between(0, FIRE_COLORS.length - 1)];
@@ -34,11 +79,11 @@ function spawnFireParticle(scene, x, y) {
   });
 }
 
-function spawnInfernoPulse(scene, cx, groundY, strength = 1) {
+function spawnInfernoPulse(scene, cx, cy, strength = 1) {
   const ring = scene.add.circle(
     cx,
-    groundY,
-    DRAVEN_FIRE_RING_RADIUS * 0.75,
+    cy,
+    DRAVEN_INFERNO_RADIUS * 0.75,
     0xff4d2f,
     0.22,
   );
@@ -56,10 +101,10 @@ function spawnInfernoPulse(scene, cx, groundY, strength = 1) {
 
   const sparks = Math.floor(10 * strength);
   for (let i = 0; i < sparks; i++) {
-    const angle = Phaser.Math.FloatBetween(-Math.PI * 0.95, -0.05);
-    const radius = Phaser.Math.FloatBetween(20, DRAVEN_FIRE_RING_RADIUS);
+    const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    const radius = Phaser.Math.FloatBetween(20, DRAVEN_INFERNO_RADIUS);
     const px = cx + Math.cos(angle) * radius;
-    const py = groundY + Math.sin(angle) * Phaser.Math.FloatBetween(0.3, 0.9);
+    const py = cy + Math.sin(angle) * radius;
     spawnFireParticle(scene, px, py);
   }
 }
@@ -91,19 +136,20 @@ function startInfernoVisualLoop(scene, player, token, isOwner) {
     const baseY = Number.isFinite(player._dravenInfernoBaseY)
       ? player._dravenInfernoBaseY
       : player.y;
-    const groundY = baseY + (player.body ? player.body.height * 0.42 : 24);
+    const centerX = player.x;
+    const centerY = player.y;
 
     if (now >= nextFireAt) {
       nextFireAt = now + DRAVEN_FIRE_PULSE_MS;
-      spawnInfernoPulse(scene, baseX, groundY, 1);
+      spawnInfernoPulse(scene, centerX, centerY, 1);
     }
 
     if (now >= nextExplosionAt) {
       nextExplosionAt = now + DRAVEN_EXPLOSION_PULSE_MS;
-      const ex =
-        baseX +
-        Phaser.Math.Between(-DRAVEN_FIRE_RING_RADIUS, DRAVEN_FIRE_RING_RADIUS);
-      const ey = groundY + Phaser.Math.Between(-34, 12);
+      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      const distance = Phaser.Math.FloatBetween(0, DRAVEN_INFERNO_RADIUS);
+      const ex = centerX + Math.cos(angle) * distance;
+      const ey = centerY + Math.sin(angle) * distance;
       spawnExplosion(scene, ex, ey);
     }
 
@@ -125,6 +171,8 @@ function startInfernoVisualLoop(scene, player, token, isOwner) {
         player.setVelocity(0, 0);
       }
     }
+
+    syncInfernoOverlay(player, player._dravenInfernoOverlay);
 
     scene.time.delayedCall(16, tick);
   };
@@ -175,6 +223,8 @@ export function perform(
     } catch (_) {}
   }
 
+  ensureInfernoOverlay(scene, player);
+
   try {
     scene.sound?.play("draven-special", {
       volume: isOwner ? 0.65 : 0.35,
@@ -190,6 +240,7 @@ export function perform(
     player._movementLockedUntil = 0;
     player._dravenInfernoUntil = 0;
     unlockFlip();
+    destroyInfernoOverlay(player);
 
     if (player.body) {
       const prevGravity =

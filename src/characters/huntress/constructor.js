@@ -143,6 +143,39 @@ class Huntress extends CharacterEntityBase {
     return true;
   }
 
+  static applyPowerupFx({
+    sprite,
+    effects,
+    nowSec,
+    colors,
+    spawnTrailParticle,
+  } = {}) {
+    if (!sprite || !effects) return { handled: false, rageLike: false };
+    if ((effects.rage || 0) <= 0) return { handled: false, rageLike: false };
+
+    const pulse = 0.5 + 0.5 * Math.sin(nowSec * 8 + (sprite.x || 0) * 0.01);
+    sprite.setTint(pulse > 0.52 ? 0xc084fc : 0x9333ea);
+
+    // Keep base scale under rage so the physics body does not desync and tunnel.
+    const baseX = sprite._puBaseScaleX || 1;
+    const baseY = sprite._puBaseScaleY || 1;
+    const baseOriginX = sprite._puBaseOriginX ?? 0.5;
+    const baseOriginY = sprite._puBaseOriginY ?? 0.5;
+    sprite.setScale(baseX, baseY);
+    sprite.setOrigin(baseOriginX, baseOriginY);
+
+    if (typeof spawnTrailParticle === "function" && Math.random() < 0.34) {
+      spawnTrailParticle(
+        (sprite.x || 0) + (Math.random() * 28 - 14),
+        (sprite.y || 0) + (Math.random() * 44 - 26),
+        colors?.rage || 0xa855f7,
+        3.5,
+        300,
+      );
+    }
+    return { handled: true, rageLike: true };
+  }
+
   constructor(deps) {
     super(deps);
   }

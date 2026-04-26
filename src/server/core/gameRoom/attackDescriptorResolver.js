@@ -171,7 +171,7 @@ function getRuntimeOverrides(actionType) {
         collisionRadius: Number(volley.collisionRadius) || 18,
         count: Math.max(1, Number(volley.count) || 6),
         spreadDeg: Number(volley.spreadDeg) || 26,
-        damagePerProjectile: Math.max(1, Number(volley.damagePerArrow) || 1500),
+        damagePerProjectile: Math.max(1, Number(volley.damagePerArrow) || 1000),
         destroyOnHit: true,
       },
       events: {

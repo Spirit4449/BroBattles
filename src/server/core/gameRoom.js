@@ -1427,9 +1427,9 @@ class GameRoom {
       const base = isNinjaSwarm
         ? NINJA_SWARM_HIT_DAMAGE
         : isHuntressArrow
-          ? 1000 + (Math.max(1, Number(attacker.level) || 1) - 1) * 100
+          ? 1000
           : isHuntressBurningArrow
-            ? 1000 + (Math.max(1, Number(attacker.level) || 1) - 1) * 100
+            ? 1000
             : attackType === "special"
               ? Number(attacker.specialDamage || 0)
               : Number(attacker.baseDamage || 0);

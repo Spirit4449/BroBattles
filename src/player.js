@@ -737,6 +737,7 @@ export function createPlayer(
 
   // Health bar
   healthBar = scene.add.graphics();
+  healthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
   // Ammo bar background & fill (render order: background, fill)
   ammoBarBack = scene.add.graphics();
   ammoBar = scene.add.graphics();
@@ -1162,9 +1163,10 @@ function updateHealthBar() {
   // Draw the filled part of the health bar (green)
   healthBar.fillStyle(0x99ab2c);
   healthBar.fillRoundedRect(healthBarX, y, displayedWidth, 9, 3);
+  healthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
 
   healthText.setPosition(player.x - healthText.width / 2, y - 8);
-  healthText.setDepth(42);
+  healthText.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
 
   // Draw ammo bar underneath health (only for local player & when alive)
   drawAmmoBar(healthBarX, y + 11);

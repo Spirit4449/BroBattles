@@ -196,12 +196,14 @@ export function createPowerupRenderer({
       spr._rageLiftApplied = false;
     }
 
-    if (custom?.handled) return;
+    if (custom?.handled) {
+      return;
+    }
 
     if (rageOn) {
       const pulse = Math.sin(nowSec * 8 + (spr.x || 0) * 0.01);
       spr.setTint(pulse > 0 ? 0xc084fc : 0x9333ea);
-      spr.setScale(baseX * 1.22, baseY * 1.22);
+      spr.setScale(baseX, baseY);
       spr.setOrigin(baseOriginX, baseOriginY);
       if (Math.random() < 0.32) {
         spawnTrailParticle(

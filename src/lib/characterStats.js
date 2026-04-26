@@ -239,7 +239,7 @@ export const characterStats = {
           riseMs: 320,
           liftPx: 125,
           bobPx: 8,
-          fireRingRadius: 185,
+          fireRingRadius: 215,
           firePulseMs: 120,
           explosionPulseMs: 260,
         },
@@ -348,7 +348,7 @@ export const characterStats = {
     attackDescription:
       "Fires three arrows in a slight spread, each dealing damage on impact.",
     baseDamage: 3000,
-    ammoCooldownMs: 1000,
+    ammoCooldownMs: 300,
     ammoReloadMs: 1000,
     ammoCapacity: 3,
     specialDescription:

@@ -131,6 +131,7 @@ export default class OpPlayer {
     });
 
     this.opHealthBar = this.scene.add.graphics();
+    this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
     this.opSuperBarBack = this.scene.add.graphics();
     this.opSuperBar = this.scene.add.graphics();
 
@@ -352,12 +353,13 @@ export default class OpPlayer {
       this.team === "teammate" || this.team === "ally" || this.team === true;
     this.opHealthBar.fillStyle(isTeammate ? 0x99ab2c : 0xbb5c39);
     this.opHealthBar.fillRoundedRect(healthBarX, y, displayedWidth, 9, 3);
+    this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
 
     this.opHealthText.setPosition(
       this.opponent.x - this.opHealthText.width / 2,
       y - 8,
     );
-    this.opHealthText.setDepth(42);
+    this.opHealthText.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
 
     this.drawSuperBar(healthBarX, y + 11);
   }

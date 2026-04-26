@@ -775,7 +775,7 @@ function spawnArrowSpread(
         spreadDeg: Number(payload?.spreadDeg) || 26,
         speed: Number(payload?.speed) || 930,
         collisionRadius: Number(payload?.collisionRadius) || 18,
-        damagePerArrow: Number(payload?.damage) || 1500,
+        damagePerArrow: Number(payload?.damage) || 1000,
         visualScale: Number(payload?.scale) || 0.24,
         gravity: Number(payload?.gravity) || 980,
         maxLifetimeMs: Number(payload?.maxLifetimeMs) || 2800,

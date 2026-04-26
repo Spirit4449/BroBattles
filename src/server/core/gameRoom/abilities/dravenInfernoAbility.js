@@ -1,11 +1,15 @@
 const effectManager = require("../effects/effectManager");
+const { getCharacterTuning } = require("../../../../lib/characterStats");
 
 const DRAVEN_INFERNO_DURATION_MS = 5000;
 const DRAVEN_INFERNO_RISE_MS = 320;
 const DRAVEN_INFERNO_LIFT_PX = 125;
 const DRAVEN_INFERNO_BOB_PX = 8;
 const DRAVEN_INFERNO_DAMAGE_TICK_MS = 220;
-const DRAVEN_INFERNO_RADIUS = 215;
+const DRAVEN_INFERNO_RADIUS = Math.max(
+  80,
+  Number(getCharacterTuning("draven")?.special?.aim?.radius) || 215,
+);
 const DRAVEN_INFERNO_DAMAGE_SCALE = 0.22;
 
 function activate(player, now) {
@@ -56,6 +60,8 @@ function tick(room, caster, now) {
 
   caster.x = anchorX;
   caster.y = anchorY - liftNow + bob;
+  const infernoCenterX = Number(caster.x) || anchorX;
+  const infernoCenterY = Number(caster.y) || anchorY;
   caster.animation = "draven-special";
   caster.lastCombatAt = now;
 
@@ -79,7 +85,10 @@ function tick(room, caster, now) {
     const vx = Number(vault.x) || 0;
     const vy = Number(vault.y) || 0;
     const vr = Math.max(30, Number(vault.radius) || 90);
-    if (Math.hypot(vx - anchorX, vy - anchorY) <= DRAVEN_INFERNO_RADIUS + vr) {
+    if (
+      Math.hypot(vx - infernoCenterX, vy - infernoCenterY) <=
+      DRAVEN_INFERNO_RADIUS + vr
+    ) {
       const oldVaultHp = Number(vault.health) || 0;
       room?.gameMode?.damageVault?.(enemyTeam, perTickDmg, {
         sourcePlayer: caster.name,
@@ -104,8 +113,8 @@ function tick(room, caster, now) {
       continue;
     if (caster.team && target.team && caster.team === target.team) continue;
 
-    const dx = Number(target.x || 0) - anchorX;
-    const dy = Number(target.y || 0) - anchorY;
+    const dx = Number(target.x || 0) - infernoCenterX;
+    const dy = Number(target.y || 0) - infernoCenterY;
     if (Math.hypot(dx, dy) > DRAVEN_INFERNO_RADIUS) continue;
 
     let dmg = Math.round(

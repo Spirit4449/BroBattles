@@ -45,6 +45,12 @@ class Draven extends CharacterEntityBase {
       this.characterAssetPath(staticPath, "explosion.webp"),
       this.characterAssetPath(staticPath, "explosion.json"),
     );
+    // Inferno overlay atlas (separate) for special VFX layer
+    scene.load.atlas(
+      `${NAME}-special-fx`,
+      this.characterAssetPath(staticPath, "special.webp"),
+      this.characterAssetPath(staticPath, "special.json"),
+    );
     // Fireball / splash SFX
     scene.load.audio(
       `${NAME}-fireball`,
@@ -100,6 +106,32 @@ class Draven extends CharacterEntityBase {
               })),
               frameRate: 28,
               repeat: 0,
+            });
+          }
+        }
+      } catch (_) {}
+    }
+    if (!scene.anims.exists(`${NAME}-special-fx`)) {
+      try {
+        const tex = scene.textures.get(`${NAME}-special-fx`);
+        if (tex && typeof tex.getFrameNames === "function") {
+          let names = tex.getFrameNames();
+          if (!Array.isArray(names)) names = [];
+          names.sort((a, b) => {
+            const ra = /(\d+)(?=\D*$)/.exec(String(a));
+            const rb = /(\d+)(?=\D*$)/.exec(String(b));
+            if (ra && rb) return parseInt(ra[1], 10) - parseInt(rb[1], 10);
+            return String(a).localeCompare(String(b));
+          });
+          if (names.length) {
+            scene.anims.create({
+              key: `${NAME}-special-fx`,
+              frames: names.map((f) => ({
+                key: `${NAME}-special-fx`,
+                frame: f,
+              })),
+              frameRate: 14,
+              repeat: -1,
             });
           }
         }
