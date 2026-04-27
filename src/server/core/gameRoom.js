@@ -19,6 +19,7 @@ const rewardManager = require("./gameRoom/rewardManager");
 const lifecycleManager = require("./gameRoom/lifecycleManager");
 const roomStateManager = require("./gameRoom/roomStateManager");
 const netTestLogger = require("./gameRoom/netTestLogger");
+const { createTimingDiagnostics } = require("./gameRoom/timingDiagnostics");
 const attackRuntimeManager = require("./gameRoom/attackRuntimeManager");
 const characterActionRegistry = require("./gameRoom/characterActionRegistry");
 const { registerGameChatEvents } = require("./socketEvents/gameChatEvents");
@@ -69,6 +70,9 @@ class GameRoom {
     this.SNAPSHOT_EVERY_TICKS = 1; // 60/2 = 30 Hz snapshots
     this.WORLD_STATE_EVERY_TICKS = 8; // 7.5 Hz world-state packets
     this.DEV_TIMING_DIAG = true; // temporary diagnostics flag
+    this._timingDiagnostics = createTimingDiagnostics(this, {
+      fixedDtMs: this.FIXED_DT_MS,
+    });
     this.DEBUG_HIT_EVENTS =
       String(process.env.DEBUG_HIT_EVENTS || "").toLowerCase() === "1" ||
       String(process.env.DEBUG_HIT_EVENTS || "").toLowerCase() === "true";
@@ -900,10 +904,13 @@ class GameRoom {
       if (delta < 0) delta = 0; // guard
       if (delta > 1000) delta = 1000; // clamp huge pause (avoid spiral)
       lastMono = nowMono;
+      const accBefore = acc;
       acc += delta;
+      let stepsThisFrame = 0;
       while (acc >= this.FIXED_DT_MS) {
         step(nowMono);
         acc -= this.FIXED_DT_MS;
+        stepsThisFrame += 1;
       }
       // Yield a bit to avoid busy-spinning the CPU.
       // Sleep roughly until the next tick is due (at least 0–1ms).
@@ -913,6 +920,14 @@ class GameRoom {
         // Ensure we yield to the event loop at least briefly
         if (sleepMs === 0) sleepMs = 1;
       }
+      this._timingDiagnostics?.noteLoopFrame({
+        nowMono,
+        deltaMs: delta,
+        stepsThisFrame,
+        sleepMs,
+        accBefore,
+        accAfter: acc,
+      });
       setTimeout(loop, sleepMs);
     };
     setTimeout(loop, 0);
@@ -927,6 +942,18 @@ class GameRoom {
   }
 
   _emitSnapshotWithTiming(snapMono) {
+    const nowMono =
+      typeof performance !== "undefined" &&
+      performance &&
+      typeof performance.now === "function"
+        ? performance.now()
+        : Date.now();
+    this._timingDiagnostics?.noteSnapshot({
+      nowMono,
+      snapMono,
+      tickId: this._tickId,
+      burstSize: 1,
+    });
     timerManager.emitSnapshotWithTiming(this, snapMono);
   }
 
