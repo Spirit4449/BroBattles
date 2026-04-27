@@ -184,7 +184,7 @@ function registerMatchmakingEvents(
     }
   });
 
-  socket.on("queue:fill-bots", async () => {
+  socket.on("queue:fill-bots", async (payload = {}) => {
     try {
       const requester = socket.data.user;
       if (!requester?.name || !requester?.user_id) {
@@ -198,9 +198,17 @@ function registerMatchmakingEvents(
         throw new Error("Admins only.");
       }
       const partyId = await db.getPartyIdByName(requester.name);
+      const requestedBotHealth = Number(payload?.botHealthOverride);
+      const botHealthOverride =
+        payload?.mode === "unlimited-health" &&
+        Number.isFinite(requestedBotHealth) &&
+        requestedBotHealth > 0
+          ? Math.round(requestedBotHealth)
+          : null;
       const result = await mm.createBotFilledMatch({
         userId: requester.user_id,
         partyId: partyId || null,
+        botHealthOverride,
       });
       socket.emit("queue:fill-bots:ok", { matchId: result.matchId });
     } catch (e) {

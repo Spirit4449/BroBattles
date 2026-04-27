@@ -29,6 +29,14 @@ const DEFAULT_AIM_CONFIG = Object.freeze({
   previewEndDropY: 300,
   previewArcHeight: 120,
   previewCurveMagnitude: 20,
+  previewCurveMode: "normal",
+  previewCurveUpwardScale: 1,
+  previewCurveMidBoost: 0,
+  previewCurveVerticalScale: 1,
+  previewArcHeightMinScale: 1,
+  previewArcHeightUpwardScale: 1,
+  previewEndDropMinScale: 1,
+  previewEndDropUpwardScale: 1,
   throwMinOffsetX: null,
   throwMaxOffsetX: null,
   throwMinOffsetY: null,
@@ -181,15 +189,25 @@ function getPlayerAimBase(player, config = {}, angle = 0) {
 function sampleThrowArcPoint(geometry, t) {
   const clampedT = clamp(t, 0, 1);
   const curve = Math.sin(Math.PI * clampedT) * geometry.curveMagnitude;
+  const curveMode = String(geometry.curveMode || "normal").toLowerCase();
+  const curveVerticalScale = Number(geometry.curveVerticalScale) || 0;
+  const curveOffsetX =
+    curveMode === "facing"
+      ? (geometry.curveFacingSign || 1) * curve
+      : geometry.normalX * curve;
+  const curveOffsetY =
+    curveMode === "facing"
+      ? curve * curveVerticalScale
+      : geometry.normalY * curve * curveVerticalScale;
   return {
     x:
       geometry.startX +
       (geometry.endX - geometry.startX) * clampedT +
-      geometry.normalX * curve,
+      curveOffsetX,
     y:
       geometry.startY +
       (geometry.endY - geometry.startY) * clampedT +
-      geometry.normalY * curve -
+      curveOffsetY -
       geometry.arcHeight * Math.sin(Math.PI * clampedT),
   };
 }
@@ -206,6 +224,8 @@ function buildThrowArcGeometry({
   endDropY = 300,
   arcHeight = 120,
   curveMagnitude = 20,
+  curveMode = "normal",
+  curveVerticalScale = 1,
   samples = 24,
 } = {}) {
   const resolvedTargetX = Number(targetX);
@@ -241,6 +261,10 @@ function buildThrowArcGeometry({
       : Number(originY) + forwardY * safeRange + (Number(endDropY) || 0),
     arcHeight: Number(arcHeight) || 0,
     curveMagnitude: Number(curveMagnitude) || 0,
+    curveMode: String(curveMode || "normal").toLowerCase(),
+    curveFacingSign:
+      Math.cos(resolvedAngle) < -0.001 ? -1 : 1,
+    curveVerticalScale: Number(curveVerticalScale) || 0,
     points: [],
   };
 
@@ -437,6 +461,40 @@ function resolveAttackAimContext({
       resolvedTargetY - base.anchorY,
       resolvedTargetX - base.anchorX,
     );
+    const upFactor = clamp(-Math.sin(angle), 0, 1);
+    const arcHeightBase = Number(config.previewArcHeight) || 0;
+    const endDropBase = Number(config.previewEndDropY) || 0;
+    const curveBase = Number(config.previewCurveMagnitude) || 0;
+    const arcRangeScale = lerp(
+      Number(config.previewArcHeightMinScale) || 1,
+      1,
+      rangeRatio,
+    );
+    const arcUpScale = lerp(
+      1,
+      Number(config.previewArcHeightUpwardScale) || 1,
+      upFactor,
+    );
+    const endDropRangeScale = lerp(
+      Number(config.previewEndDropMinScale) || 1,
+      1,
+      rangeRatio,
+    );
+    const endDropUpScale = lerp(
+      1,
+      Number(config.previewEndDropUpwardScale) || 1,
+      upFactor,
+    );
+    // Emphasize curvature around mid-angle shots, while allowing steep upward
+    // shots to flatten (prevents top-end curve direction artifacts).
+    const midFactor = Math.sin(Math.PI * upFactor); // 0 at low/high, 1 at mid
+    const curveMidScale =
+      1 + midFactor * (Number(config.previewCurveMidBoost) || 0);
+    const curveUpScale = lerp(
+      1,
+      Number(config.previewCurveUpwardScale) || 1,
+      upFactor,
+    );
     throwPreview = buildThrowArcGeometry({
       originX: base.anchorX,
       originY: base.anchorY,
@@ -446,9 +504,11 @@ function resolveAttackAimContext({
       targetY: resolvedTargetY,
       startBackOffset: Number(config.previewStartBackOffset) || 0,
       startLiftY: Number(config.previewStartLiftY) || 0,
-      endDropY: Number(config.previewEndDropY) || 0,
-      arcHeight: Number(config.previewArcHeight) || 0,
-      curveMagnitude: Number(config.previewCurveMagnitude) || 0,
+      endDropY: endDropBase * endDropRangeScale * endDropUpScale,
+      arcHeight: arcHeightBase * arcRangeScale * arcUpScale,
+      curveMagnitude: curveBase * curveMidScale * curveUpScale,
+      curveMode: String(config.previewCurveMode || "normal"),
+      curveVerticalScale: Number(config.previewCurveVerticalScale) || 1,
       samples: Number(config.trajectorySamples) || 24,
     });
   } else {

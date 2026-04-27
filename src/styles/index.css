@@ -4414,15 +4414,25 @@ h3 {
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
   gap: 12px;
+}
+
+.mm-fill-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .mm-btn {
   background:
     linear-gradient(135deg, rgba(234, 200, 9, 0.92), rgba(212, 176, 0, 0.84)),
     rgba(41, 31, 2, 0.26);
-  padding: 16px 88px;
+  padding: 14px 26px;
+  min-width: 220px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -4446,6 +4456,18 @@ h3 {
   background:
     linear-gradient(135deg, rgba(31, 205, 255, 0.94), rgba(13, 152, 234, 0.86)),
     rgba(7, 34, 56, 0.3);
+}
+
+.mm-fill-bots-unlimited {
+  background:
+    linear-gradient(135deg, rgba(233, 89, 89, 0.92), rgba(190, 45, 45, 0.84)),
+    rgba(52, 8, 8, 0.26);
+}
+
+.mm-fill-bots-unlimited:hover {
+  background:
+    linear-gradient(135deg, rgba(247, 108, 108, 0.94), rgba(216, 58, 58, 0.86)),
+    rgba(70, 10, 10, 0.3);
 }
 
 /* Animations */

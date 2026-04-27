@@ -93,8 +93,14 @@ class LineAttackReticleRenderer extends BaseAttackReticleRenderer {
     const ny = Number(state.unitX) || 0;
     const startX = Number(state.anchorX) || 0;
     const startY = Number(state.anchorY) || 0;
-    const endX = Number(state.endX) || startX;
-    const endY = Number(state.endY) || startY;
+    const reticleRange = Number(state?.config?.reticleRange);
+    const usesReticleRange = Number.isFinite(reticleRange) && reticleRange > 0;
+    const endX = usesReticleRange
+      ? startX + (Number(state.unitX) || 0) * reticleRange
+      : Number(state.endX) || startX;
+    const endY = usesReticleRange
+      ? startY + (Number(state.unitY) || 0) * reticleRange
+      : Number(state.endY) || startY;
     const points = [
       new Phaser.Geom.Point(startX + nx * half, startY + ny * half),
       new Phaser.Geom.Point(endX + nx * half, endY + ny * half),

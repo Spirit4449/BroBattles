@@ -3,7 +3,6 @@
 const {
   POWERUP_STARTING_COUNT,
   NINJA_SWARM_HIT_DAMAGE,
-  NINJA_SWARM_CHARGE_RATIO,
   ACTION_MIN_INTERVAL_MS,
   ACTION_SPAM_WINDOW_MS,
   ACTION_SPAM_MAX_IN_WINDOW,
@@ -32,6 +31,9 @@ const {
   getKnockback,
 } = require("./gameRoom/abilityRuntimeManager");
 const { getMapObjectiveLayout } = require("../helpers/gameSelectionCatalog");
+
+const UNLIMITED_HEALTH_BOT_NAME_PREFIX = "BOT ULTRA";
+const UNLIMITED_HEALTH_BOT_HP = 9999999;
 
 class GameRoom {
   constructor(
@@ -133,6 +135,7 @@ class GameRoom {
         ammoCooldownMs,
         ammoReloadMs,
       } = this._computeStats(matchPlayer.char_class || "ninja", level);
+      const botMaxHealth = this._resolveBotMaxHealth(matchPlayer, maxHealth);
       const key = `bot:${matchPlayer.user_id || matchPlayer.name}`;
       this.players.set(key, {
         socketId: null,
@@ -157,8 +160,8 @@ class GameRoom {
         vx: 0,
         vy: 0,
         grounded: true,
-        maxHealth,
-        health: maxHealth,
+        maxHealth: botMaxHealth,
+        health: botMaxHealth,
         superCharge: 0,
         maxSuperCharge: specialChargeDamage,
         isAlive: true,
@@ -185,6 +188,20 @@ class GameRoom {
         },
       });
     }
+  }
+
+  _resolveBotMaxHealth(matchPlayer, fallbackMaxHealth) {
+    const explicitOverride = Number(matchPlayer?.botHealthOverride);
+    if (Number.isFinite(explicitOverride) && explicitOverride > 0) {
+      return Math.round(explicitOverride);
+    }
+    const name = String(matchPlayer?.name || "")
+      .trim()
+      .toUpperCase();
+    if (name.startsWith(`${UNLIMITED_HEALTH_BOT_NAME_PREFIX} `)) {
+      return UNLIMITED_HEALTH_BOT_HP;
+    }
+    return Math.max(1, Number(fallbackMaxHealth) || 1);
   }
 
   _getBotSpawnState(matchPlayer) {
@@ -1618,9 +1635,7 @@ class GameRoom {
 
         // Update super charge
         if (!isSelf && attacker.maxSuperCharge > 0) {
-          const chargeGain = isNinjaSwarm
-            ? Math.round(appliedDamage * NINJA_SWARM_CHARGE_RATIO)
-            : appliedDamage;
+          const chargeGain = appliedDamage;
           attacker.superCharge = Math.min(
             attacker.maxSuperCharge,
             (attacker.superCharge || 0) + chargeGain,
@@ -1659,6 +1674,7 @@ class GameRoom {
               type: "character-hit-confirm",
               attackType,
               target: target.name,
+              appliedDamage,
               ownerEcho: true,
             },
             t: now,

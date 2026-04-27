@@ -79,13 +79,19 @@ function getCatalogCharacterSkins(character) {
 
 function getCharacterSkinList(character) {
   const catalogSkins = getCatalogCharacterSkins(character);
+  const characterUnlocked =
+    Number(_userDataRef?.char_levels?.[String(character || "").toLowerCase()] ??
+      _userDataRef?.char_levels?.[character] ??
+      0) >= 1;
   let normalized = catalogSkins
     .map((skin, index) => {
       const id =
         String(skin?.id || skin?.skinId || skin?.key || "").trim() ||
         (index === 0 ? "default" : `skin-${index + 1}`);
       const available = skin?.available !== false;
-      const owned = _ownedSkinIds.has(id);
+      // Always allow the base/default skin once the character is unlocked,
+      // even if the skins service hasn't refreshed ownership yet.
+      const owned = (index === 0 && characterUnlocked) || _ownedSkinIds.has(id);
       if (!owned && !available) return null;
       return {
         id,
@@ -99,7 +105,7 @@ function getCharacterSkinList(character) {
               skin?.bodySrc ||
               skin?.src ||
               "",
-          ).trim() || buildCharacterSkinBodyUrl(character, id),
+        ).trim() || buildCharacterSkinBodyUrl(character, id),
         owned,
         locked: !owned,
       };
@@ -498,7 +504,7 @@ function renderCharacterDetails(character) {
     <div class="stat-box-track"><div class="stat-box-fill" style="width:${Math.max(0, Math.min(100, (cardState.currentSpecial / specialMax) * 100))}%"></div></div>
     <div class="stat-box-content">
       ${stats.specialDescription ? `<div class="stat-box-desc">${stats.specialDescription}</div>` : ""}
-      <div class="stat-box-detail">Charge: ${stats.specialChargeHits || 0} hits</div>
+      <div class="stat-box-detail">Charge: ${stats.specialChargeDamage || 0} damage</div>
     </div>
   `;
   attackSpecialRow.appendChild(specialBox);

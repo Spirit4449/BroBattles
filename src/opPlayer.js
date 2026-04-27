@@ -131,7 +131,7 @@ export default class OpPlayer {
     });
 
     this.opHealthBar = this.scene.add.graphics();
-    this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
+    this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
     this.opSuperBarBack = this.scene.add.graphics();
     this.opSuperBar = this.scene.add.graphics();
 
@@ -353,7 +353,7 @@ export default class OpPlayer {
       this.team === "teammate" || this.team === "ally" || this.team === true;
     this.opHealthBar.fillStyle(isTeammate ? 0x99ab2c : 0xbb5c39);
     this.opHealthBar.fillRoundedRect(healthBarX, y, displayedWidth, 9, 3);
-    this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
+    this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
 
     this.opHealthText.setPosition(
       this.opponent.x - this.opHealthText.width / 2,
@@ -516,7 +516,16 @@ export default class OpPlayer {
     }
     try {
       if (Number.isFinite(meta?.x) && Number.isFinite(meta?.y)) {
-        this.opponent.body?.reset?.(Number(meta.x), Number(meta.y));
+        const serverX = Number(meta.x);
+        const serverY = Number(meta.y);
+        if (this.isBot === true && !Number.isFinite(this._authoritativeYOffset)) {
+          const currentY = Number(this?.opponent?.y);
+          if (Number.isFinite(currentY)) {
+            this._authoritativeYOffset = currentY - serverY;
+          }
+        }
+        const yOffset = Number(this._authoritativeYOffset) || 0;
+        this.opponent.body?.reset?.(serverX, serverY + yOffset);
       }
       this.opponent.setVelocity?.(0, 0);
       this.opponent.setVisible(true);
@@ -582,6 +591,14 @@ export default class OpPlayer {
     }
     if (this.opSuperBarBack) {
       this.opSuperBarBack.destroy();
+    }
+    if (Array.isArray(this._botColliders)) {
+      for (const collider of this._botColliders) {
+        try {
+          collider?.destroy?.();
+        } catch (_) {}
+      }
+      this._botColliders = [];
     }
   }
 }

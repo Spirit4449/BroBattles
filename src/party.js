@@ -2569,10 +2569,12 @@ export function showMatchmakingOverlay() {
     players: mmOverlayPlayers,
   });
   wireCancelButton();
-  wireAdminFillBotsButton();
+  wireAdminFillBotsButtons();
   const fillBtn = document.getElementById("mm-fill-bots");
+  const fillUnlimitedBtn = document.getElementById("mm-fill-bots-unlimited");
   const isAdmin = !!window.__BRO_BATTLES_USERDATA__?.isAdmin;
   if (fillBtn) fillBtn.classList.toggle("hidden", !isAdmin);
+  if (fillUnlimitedBtn) fillUnlimitedBtn.classList.toggle("hidden", !isAdmin);
 }
 
 export function hideMatchmakingOverlay() {
@@ -2722,13 +2724,25 @@ function wireCancelButton() {
   });
 }
 
-function wireAdminFillBotsButton() {
+function wireAdminFillBotsButtons() {
   const btn = document.getElementById("mm-fill-bots");
-  if (!btn || btn.dataset.bound === "1") return;
-  btn.dataset.bound = "1";
-  btn.addEventListener("click", () => {
-    socket.emit("queue:fill-bots");
-  });
+  if (btn && btn.dataset.bound !== "1") {
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", () => {
+      socket.emit("queue:fill-bots");
+    });
+  }
+
+  const unlimitedBtn = document.getElementById("mm-fill-bots-unlimited");
+  if (unlimitedBtn && unlimitedBtn.dataset.bound !== "1") {
+    unlimitedBtn.dataset.bound = "1";
+    unlimitedBtn.addEventListener("click", () => {
+      socket.emit("queue:fill-bots", {
+        mode: "unlimited-health",
+        botHealthOverride: 9999999,
+      });
+    });
+  }
 }
 
 // ---------------------------

@@ -7,7 +7,7 @@
 // Dependencies are injected via the config object so this module has zero
 // hidden global state and can be tested or instantiated in isolation.
 import { normalizeMapId } from "../maps/manifest";
-import { spawnDamageImpact } from "../effects";
+import { spawnDamageImpact, spawnHealthMarker } from "../effects";
 import { playWizardArcaneSurge } from "../characters/wizard/effects.js";
 import { playCharacterSound } from "../characters";
 import {
@@ -150,6 +150,52 @@ export function createMatchCoordinator(config) {
   let _startWatchdogRecoveryInFlight = false;
   let _joinedSocketId = null;
 
+  function _isLikelyBotName(name) {
+    return String(name || "")
+      .trim()
+      .toUpperCase()
+      .startsWith("BOT ");
+  }
+
+  function _isBotPlayer(pd) {
+    return pd?.isBot === true || _isLikelyBotName(pd?.name);
+  }
+
+  function _enableBotPhysics(op) {
+    const scene = getGameScene();
+    if (!scene?.physics || !op?.opponent?.body) return;
+    if (op._botPhysicsApplied === true) return;
+    op._botPhysicsApplied = true;
+    op._botColliders = [];
+    try {
+      op.opponent.body.allowGravity = true;
+      op.opponent.setCollideWorldBounds(true);
+    } catch (_) {}
+    const objects = Array.isArray(scene?._mapObjects) ? scene._mapObjects : [];
+    for (const mapObject of objects) {
+      if (!mapObject) continue;
+      try {
+        const collider = scene.physics.add.collider(op.opponent, mapObject);
+        if (collider) op._botColliders.push(collider);
+      } catch (_) {}
+    }
+  }
+
+  function _applyAuthoritativeRemotePosition(op, pd) {
+    if (!op?.opponent?.body) return;
+    const serverX = Number(pd?.x);
+    const serverY = Number(pd?.y);
+    if (!Number.isFinite(serverX) || !Number.isFinite(serverY)) return;
+    if (_isBotPlayer(pd) && !Number.isFinite(op._authoritativeYOffset)) {
+      const currentY = Number(op?.opponent?.y);
+      if (Number.isFinite(currentY)) {
+        op._authoritativeYOffset = currentY - serverY;
+      }
+    }
+    const yOffset = Number(op._authoritativeYOffset) || 0;
+    op.opponent.body.reset(serverX, serverY + yOffset);
+  }
+
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
@@ -161,6 +207,8 @@ export function createMatchCoordinator(config) {
   function _positionOpPlayer(op, pd) {
     const gameData = getGameData();
     try {
+      op.isBot = _isBotPlayer(pd);
+      if (op.isBot) _enableBotPhysics(op);
       const teamRoster = (gameData.players || []).filter(
         (p) => p.team === pd.team,
       );
@@ -182,7 +230,7 @@ export function createMatchCoordinator(config) {
         Number.isFinite(pd.x) &&
         Number.isFinite(pd.y)
       ) {
-        op.opponent.body?.reset?.(pd.x, pd.y);
+        _applyAuthoritativeRemotePosition(op, pd);
       }
       op.finalizeSpawnPresentation?.();
       op.updateUIPosition?.();
@@ -214,6 +262,7 @@ export function createMatchCoordinator(config) {
     const op = new OpPlayer(
       scene,
       pd.char_class,
+      pd.selected_skin_id || "",
       pd.name,
       isTeammate ? "teammate" : pd.team,
       null,
@@ -849,6 +898,28 @@ export function createMatchCoordinator(config) {
 
       if (actionType === "character-hit-confirm") {
         playCharacterSound(scene, charKey, "hit");
+        // Show attacker-side damage marker for every confirmed hit.
+        try {
+          if (isSelfPacket) {
+            const targetName = String(action?.target || "").trim();
+            const appliedDamage = Math.max(
+              0,
+              Math.round(Number(action?.appliedDamage) || 0),
+            );
+            if (targetName && appliedDamage > 0) {
+              const wrap = opponentPlayers[targetName] || teamPlayers[targetName];
+              const targetSprite = wrap?.opponent;
+              if (scene && targetSprite?.active) {
+                const markerY = targetSprite.body
+                  ? targetSprite.body.y - 14
+                  : targetSprite.y - (targetSprite.height || 80) * 0.5;
+                spawnHealthMarker(scene, targetSprite.x, markerY, -appliedDamage, {
+                  depth: 18,
+                });
+              }
+            }
+          }
+        } catch (_) {}
         return;
       }
 

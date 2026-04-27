@@ -48,6 +48,16 @@ const {
 const { createProgressEmitter } = require("./matchmaking/progressEmitter");
 const { groupBy, pickCompositeGroup } = require("./matchmaking/teamBalancer");
 
+const UNLIMITED_HEALTH_BOT_NAME_PREFIX = "BOT ULTRA";
+const UNLIMITED_HEALTH_BOT_HP = 9999999;
+
+function isUnlimitedHealthBotName(name) {
+  return String(name || "")
+    .trim()
+    .toUpperCase()
+    .startsWith(`${UNLIMITED_HEALTH_BOT_NAME_PREFIX} `);
+}
+
 function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
   let loop = null;
   const lastProgress = new Map(); // ticket_id -> lastFound
@@ -118,6 +128,10 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
           ),
           profile_icon_id: String(p.profile_icon_id || "") || null,
           isBot: !!Number(p.is_bot),
+          botHealthOverride:
+            Number(p.is_bot) && isUnlimitedHealthBotName(p.name)
+              ? UNLIMITED_HEALTH_BOT_HP
+              : null,
         };
       }),
     };
@@ -286,7 +300,11 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
     readyCheckCoordinator.handleReadyAck(userId, matchId);
   }
 
-  async function createBotFilledMatch({ userId, partyId = null }) {
+  async function createBotFilledMatch({
+    userId,
+    partyId = null,
+    botHealthOverride = null,
+  }) {
     const ticketRows = await db.runQuery(
       `SELECT * FROM match_tickets
         WHERE status='queued'
@@ -350,10 +368,16 @@ function createMatchmaking({ io, db, teamSizeByMode, gameHub = null }) {
       team1: players.filter((player) => player.team === "team1").length,
       team2: players.filter((player) => player.team === "team2").length,
     };
+    const requestedBotHealth = Number(botHealthOverride);
+    const shouldUseUnlimitedHealthBots =
+      Number.isFinite(requestedBotHealth) &&
+      Math.round(requestedBotHealth) === UNLIMITED_HEALTH_BOT_HP;
     let botIndex = 0;
     for (const team of ["team1", "team2"]) {
       while (teamCounts[team] < targetPerTeam) {
-        const botName = `BOT ${Date.now().toString().slice(-6)} ${botIndex + 1}`;
+        const botName = shouldUseUnlimitedHealthBots
+          ? `${UNLIMITED_HEALTH_BOT_NAME_PREFIX} ${Date.now().toString().slice(-6)} ${botIndex + 1}`
+          : `BOT ${Date.now().toString().slice(-6)} ${botIndex + 1}`;
         const charClass =
           availableChars[
             (botIndex + teamCounts.team1 + teamCounts.team2) %

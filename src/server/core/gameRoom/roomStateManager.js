@@ -101,6 +101,7 @@ function sendGameStateToPlayer(room, socket) {
         },
         level: Number.isFinite(p?.level) ? p.level : 1,
         isAlive: p ? p.isAlive !== false : true,
+        isBot: p ? p.isBot === true : mp?.isBot === true,
         spawnIndex: computeSpawnIndex(room, mp.name, mp.team),
         connected: p ? p.connected !== false : false,
         loaded: p ? p.loaded === true : false,

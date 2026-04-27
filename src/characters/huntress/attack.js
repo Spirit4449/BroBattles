@@ -241,10 +241,31 @@ function normalizeSpriteTargets(targetSprites = [], ownerSprite = null) {
 }
 
 function getMapObjects(scene, explicitObjects = null) {
+  const out = [];
+  const seen = new Set();
+  const add = (obj) => {
+    if (!obj || seen.has(obj)) return;
+    seen.add(obj);
+    out.push(obj);
+  };
+
   if (Array.isArray(explicitObjects) && explicitObjects.length) {
-    return explicitObjects;
+    for (const obj of explicitObjects) add(obj);
+  } else if (Array.isArray(scene?._mapObjects)) {
+    for (const obj of scene._mapObjects) add(obj);
   }
-  return Array.isArray(scene?._mapObjects) ? scene._mapObjects : [];
+
+  // Include static collider game objects as a safety net so collision checks
+  // cover map colliders even if they were not added to scene._mapObjects.
+  const staticEntries = scene?.physics?.world?.staticBodies?.entries;
+  if (Array.isArray(staticEntries)) {
+    for (const body of staticEntries) {
+      const gameObject = body?.gameObject;
+      if (gameObject?.body) add(gameObject);
+    }
+  }
+
+  return out;
 }
 
 export function spawnGroundBurn(scene, x, y, durationMs = 2200) {
@@ -392,6 +413,7 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     for (const obj of objects) {
       if (!obj?.body || obj.body.enable === false || obj === this) continue;
       const overlap = this.scene.physics.add.overlap(this, obj, () => {
+        if (!this.isPointInsideMapBody(obj.body, this.x, this.y)) return;
         this.embedAt(this.x, this.y, this.rotation, {
           groundBurn: !!this.cfg.burn,
           groundBurnMs: this.cfg.burn?.groundBurnMs,
@@ -401,26 +423,36 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     }
   }
 
-  checkSweptMapCollision(prevX, prevY, nextX, nextY) {
+  isPointInsideMapBody(body, x, y) {
+    const left = Number(body?.left);
+    const right = Number(body?.right);
+    const top = Number(body?.top);
+    const bottom = Number(body?.bottom);
+    if (![left, right, top, bottom].every(Number.isFinite)) return false;
+    return x >= left && x <= right && y >= top && y <= bottom;
+  }
+
+  findSweptMapCollisionPoint(prevX, prevY, nextX, nextY) {
     const objects = this.mapObjectsRef;
-    if (!Array.isArray(objects) || !objects.length) return false;
-    const r = this.cfg.collisionRadius;
-    const minX = Math.min(prevX, nextX) - r;
-    const maxX = Math.max(prevX, nextX) + r;
-    const minY = Math.min(prevY, nextY) - r;
-    const maxY = Math.max(prevY, nextY) + r;
-    for (const obj of objects) {
-      const body = obj?.body;
-      if (!body || body.enable === false) continue;
-      const left = Number(body.left);
-      const right = Number(body.right);
-      const top = Number(body.top);
-      const bottom = Number(body.bottom);
-      if (![left, right, top, bottom].every(Number.isFinite)) continue;
-      if (maxX < left || minX > right || maxY < top || minY > bottom) continue;
-      return true;
+    if (!Array.isArray(objects) || !objects.length) return null;
+    const dx = nextX - prevX;
+    const dy = nextY - prevY;
+    const distance = Math.hypot(dx, dy);
+    const steps = Math.max(1, Math.ceil(distance / 2));
+
+    for (let i = 0; i <= steps; i += 1) {
+      const t = i / steps;
+      const x = prevX + dx * t;
+      const y = prevY + dy * t;
+      for (const obj of objects) {
+        const body = obj?.body;
+        if (!body || body.enable === false) continue;
+        if (this.isPointInsideMapBody(body, x, y)) {
+          return { x, y, body, object: obj };
+        }
+      }
     }
-    return false;
+    return null;
   }
 
   attachTargetOverlap(entries = []) {
@@ -603,8 +635,10 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     this.vy += this.cfg.gravity * dtSec;
     const nextX = prevX + this.vx * dtSec;
     const nextY = prevY + this.vy * dtSec;
-    if (this.checkSweptMapCollision(prevX, prevY, nextX, nextY)) {
-      this.embedAt(prevX, prevY, this.rotation, {
+    const nextRotation = Math.atan2(this.vy, this.vx);
+    const mapImpact = this.findSweptMapCollisionPoint(prevX, prevY, nextX, nextY);
+    if (mapImpact) {
+      this.embedAt(mapImpact.x, mapImpact.y, nextRotation, {
         groundBurn: !!this.cfg.burn,
         groundBurnMs: this.cfg.burn?.groundBurnMs,
       });
@@ -612,7 +646,7 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     }
     this.x = nextX;
     this.y = nextY;
-    this.rotation = Math.atan2(this.vy, this.vx);
+    this.rotation = nextRotation;
     this.body?.updateFromGameObject?.();
     this.lastX = this.x;
     this.lastY = this.y;

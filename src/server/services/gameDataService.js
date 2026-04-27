@@ -8,6 +8,9 @@ const {
   getSkinGameAssets,
 } = require("../helpers/skinsCatalog");
 
+const UNLIMITED_HEALTH_BOT_NAME_PREFIX = "BOT ULTRA";
+const UNLIMITED_HEALTH_BOT_HP = 9999999;
+
 async function buildGameDataForMatch({
   db,
   requireCurrentUser,
@@ -125,6 +128,13 @@ async function buildGameDataForMatch({
       } catch (_) {
         level = 1;
       }
+      const baseHealth = getHealth(p.char_class, level);
+      const isUnlimitedHealthBot =
+        String(p?.name || "")
+          .trim()
+          .toUpperCase()
+          .startsWith(`${UNLIMITED_HEALTH_BOT_NAME_PREFIX} `) &&
+        Number(p?.user_id) > 0;
       return {
         user_id: p.user_id,
         name: p.name,
@@ -139,7 +149,7 @@ async function buildGameDataForMatch({
         trophies: Number(p.trophies) || 0,
         level,
         stats: {
-          health: getHealth(p.char_class, level),
+          health: isUnlimitedHealthBot ? UNLIMITED_HEALTH_BOT_HP : baseHealth,
           damage: getDamage(p.char_class, level),
           specialDamage: getSpecialDamage(p.char_class, level),
         },
