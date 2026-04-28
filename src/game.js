@@ -1322,7 +1322,10 @@ class GameScene extends Phaser.Scene {
           ) {
             const serverX = Number(playerData.x);
             const serverY = Number(playerData.y);
-            if (isBotPlayer && !Number.isFinite(existing._authoritativeYOffset)) {
+            if (
+              isBotPlayer &&
+              !Number.isFinite(existing._authoritativeYOffset)
+            ) {
               const currentY = Number(existing?.opponent?.y);
               if (Number.isFinite(currentY)) {
                 existing._authoritativeYOffset = currentY - serverY;
