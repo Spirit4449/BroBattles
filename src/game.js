@@ -1855,14 +1855,23 @@ class GameScene extends Phaser.Scene {
               false
             );
             const dtMs = Math.max(1, Number(this.game?.loop?.delta) || 16.7);
-            const followSpeedPxPerSec = inPrecision
-              ? 3000
-              : airborne
-                ? 2300
-                : 1500;
+            const followSpeedPxPerSec =
+              dist > 520
+                ? 5200
+                : dist > 260
+                  ? 3600
+                  : inPrecision
+                    ? 3000
+                    : airborne
+                      ? 2300
+                      : 1500;
             const maxStep = (followSpeedPxPerSec * dtMs) / 1000;
             const snapDistance = inPrecision ? 1.5 : airborne ? 1.25 : 0.9;
-            if (dist > 520 || dist <= snapDistance) {
+            const microJitterDeadband = airborne ? 0.45 : 0.75;
+            const teleportSnapDistance = inPrecision ? 900 : 1600;
+            if (dist <= microJitterDeadband) {
+              // Ignore tiny buffered-target movement that reads as shimmer.
+            } else if (dist > teleportSnapDistance || dist <= snapDistance) {
               spr.x = targetX;
               spr.y = targetY;
             } else {

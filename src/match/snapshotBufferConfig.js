@@ -1,9 +1,9 @@
 export const DEFAULT_SNAPSHOT_BUFFER_CONFIG = Object.freeze({
   maxStateBuffer: 90,
-  initialInterpDelayMs: 50,
-  minInterpDelayMs: 20,
-  maxInterpDelayMs: 50,
-  snapIntervalMs: 50,
+  initialInterpDelayMs: 100,
+  minInterpDelayMs: 66,
+  maxInterpDelayMs: 160,
+  snapIntervalMs: 1000 / 30,
   maxSpacingMs: 500,
   lateSnapshotThresholdMs: 140,
   largePositionDeltaPx: 90,

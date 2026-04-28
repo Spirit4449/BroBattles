@@ -108,8 +108,26 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null }) {
 
     try {
       await room.removePlayer(socket, user);
-      // If room is empty, clean it up immediately
-      if (room.getPlayerCount() === 0) removeGameRoom(matchId);
+      if (
+        room.getPlayerCount() === 0 ||
+        room.hasConnectedHumanPlayers?.() === false
+      ) {
+        const graceMs = Math.max(
+          0,
+          Number(room.ABANDON_MATCH_GRACE_MS) || 0,
+        );
+        setTimeout(() => {
+          const latestRoom = activeRooms.get(matchId);
+          if (!latestRoom) return;
+          if (latestRoom.hasConnectedHumanPlayers?.() === true) return;
+          if (
+            latestRoom.getStatus() === "finished" ||
+            latestRoom.getPlayerCount() === 0
+          ) {
+            removeGameRoom(matchId);
+          }
+        }, graceMs + 1000);
+      }
     } catch (error) {
       console.error(
         `[GameHub] Error removing player ${user.name} from room ${matchId}:`,

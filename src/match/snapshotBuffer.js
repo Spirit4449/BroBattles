@@ -1,6 +1,8 @@
 import { shouldMuteClientDefaultLogs } from "../lib/netTestLogger.js";
 import { DEFAULT_SNAPSHOT_BUFFER_CONFIG } from "./snapshotBufferConfig";
 
+const SERVER_TICK_MS = 1000 / 60;
+
 export function createSnapshotBuffer(options = {}) {
   const {
     maxStateBuffer,
@@ -78,6 +80,19 @@ export function createSnapshotBuffer(options = {}) {
     if (stateBuffer.length > 0) {
       const prevState = stateBuffer[stateBuffer.length - 1];
       const prev = prevState.tMono;
+      if (Number.isFinite(snapMono) && snapMono <= prev) {
+        const prevTickId =
+          typeof prevState?.tickId === "number" ? prevState.tickId : null;
+        const tickDelta =
+          typeof currentTickId === "number" && typeof prevTickId === "number"
+            ? currentTickId - prevTickId
+            : null;
+        const syntheticGap =
+          Number.isFinite(tickDelta) && tickDelta > 0
+            ? tickDelta * SERVER_TICK_MS
+            : snapIntervalMs;
+        snapMono = prev + Math.max(1, syntheticGap);
+      }
       const d = snapMono - prev;
       spacingMs = d;
       if (d >= 0 && d < maxSpacingMs) {

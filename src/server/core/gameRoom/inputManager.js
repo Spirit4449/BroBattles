@@ -12,6 +12,8 @@ const {
 const { isMovementSuppressed } = require("./abilityRuntimeManager");
 const netTestLogger = require("./netTestLogger");
 
+const LAG_RECOVERY_INPUT_GAP_MS = 250;
+
 function clampToRoomBounds(x, y) {
   const margin = Number(WORLD_BOUNDS?.margin) || 0;
   const minX = -margin;
@@ -168,7 +170,7 @@ function handlePlayerInput(room, socketId, inputData) {
       }
     }
 
-    if (dtMove > 5 && dtMove < 2000) {
+    if (dtMove > 5 && dtMove < LAG_RECOVERY_INPUT_GAP_MS) {
       const maxDX =
         MOVE_PLAUSIBLE_SPEED_H * (dtMove / 1000) + MOVE_PLAUSIBLE_LAG_PAD_H;
       const maxDY =

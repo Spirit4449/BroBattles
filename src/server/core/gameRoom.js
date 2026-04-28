@@ -67,7 +67,7 @@ class GameRoom {
     this._diagLastLogMono = 0;
     this._chatSeq = 1;
     this.FIXED_DT_MS = 1000 / 60; // 60 Hz fixed step
-    this.SNAPSHOT_EVERY_TICKS = 1; // 60/2 = 30 Hz snapshots
+    this.SNAPSHOT_EVERY_TICKS = 2; // 60/2 = 30 Hz snapshots
     this.WORLD_STATE_EVERY_TICKS = 8; // 7.5 Hz world-state packets
     this.DEV_TIMING_DIAG = true; // temporary diagnostics flag
     this._timingDiagnostics = createTimingDiagnostics(this, {
@@ -441,7 +441,7 @@ class GameRoom {
       this._ensureRewardBucket(playerData);
       if (!this._netTestEnabled) {
         console.log(
-          `[GameRoom ${this.matchId}] Player ${user.name} joined (${this.players.size}/${this.matchData.players.length})`,
+          `[GameRoom ${this.matchId}] Player ${user.name} joined (${this.getPlayerCount()}/${this.matchData.players.length})`,
         );
       }
     }
@@ -461,7 +461,7 @@ class GameRoom {
     // Start game if all players are present
     this._cancelAbandonTimer("player_joined");
     if (
-      this.players.size === this.matchData.players.length &&
+      this.getPlayerCount() === this.matchData.players.length &&
       this.status === "waiting"
     ) {
       this.potentialStartGame();
@@ -487,7 +487,7 @@ class GameRoom {
 
     if (!this._netTestEnabled) {
       console.log(
-        `[GameRoom ${this.matchId}] Player ${user.name} left (${this.players.size} remaining)`,
+        `[GameRoom ${this.matchId}] Player ${user.name} left (${this.getPlayerCount()} connected remaining)`,
       );
     }
 
@@ -499,7 +499,7 @@ class GameRoom {
         name: user.name,
         username: user.name,
         loaded: playerData.loaded === true,
-        playersRemaining: this.players.size,
+        playersRemaining: this.getPlayerCount(),
       });
     }
 
@@ -513,6 +513,20 @@ class GameRoom {
       return true;
     }
     return false;
+  }
+
+  hasConnectedHumanPlayers() {
+    return this._hasConnectedHumanPlayers();
+  }
+
+  _isConnectedPlayer(playerData) {
+    return !!playerData && playerData.connected !== false;
+  }
+
+  _getConnectedPlayers() {
+    return Array.from(this.players.values()).filter((playerData) =>
+      this._isConnectedPlayer(playerData),
+    );
   }
 
   _cancelAbandonTimer(reason = "clear") {
@@ -869,6 +883,7 @@ class GameRoom {
     const monoNow = () =>
       perf && typeof perf.now === "function" ? perf.now() : Date.now();
     let lastMono = monoNow();
+    let simulatedMono = lastMono;
     let acc = 0;
 
     const step = (currentMono) => {
@@ -908,7 +923,8 @@ class GameRoom {
       acc += delta;
       let stepsThisFrame = 0;
       while (acc >= this.FIXED_DT_MS) {
-        step(nowMono);
+        simulatedMono += this.FIXED_DT_MS;
+        step(simulatedMono);
         acc -= this.FIXED_DT_MS;
         stepsThisFrame += 1;
       }
@@ -1351,7 +1367,7 @@ class GameRoom {
 
   // Getters
   getPlayerCount() {
-    return this.players.size;
+    return this._getConnectedPlayers().length;
   }
   getStatus() {
     return this.status;

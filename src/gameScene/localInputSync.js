@@ -7,6 +7,9 @@ import {
   noteClientIntentSent,
 } from "../lib/netTestLogger.js";
 
+const RELIABLE_KEYFRAME_INTERVAL_MS = 250;
+const RELIABLE_KEYFRAME_DISTANCE_PX = 140;
+
 export function createLocalInputSync({
   socket,
   getAmmoSyncState,
@@ -14,7 +17,9 @@ export function createLocalInputSync({
   throttleMs = 20,
 }) {
   let lastMovementSent = 0;
+  let lastReliableMovementSent = 0;
   let lastPlayerState = { x: 0, y: 0, flip: false, animation: null };
+  let lastReliablePlayerState = null;
   let lastIntentState = {
     direction: 0,
     jumpHeld: false,
@@ -117,7 +122,24 @@ export function createLocalInputSync({
     };
     if (includeAnimation) currentState.animation = animation;
     if (includeAmmoState) currentState.ammoState = ammoState;
-    const movementEmitter = reliable
+
+    const reliableDx =
+      lastReliablePlayerState && Number.isFinite(lastReliablePlayerState.x)
+        ? currentState.x - lastReliablePlayerState.x
+        : 0;
+    const reliableDy =
+      lastReliablePlayerState && Number.isFinite(lastReliablePlayerState.y)
+        ? currentState.y - lastReliablePlayerState.y
+        : 0;
+    const shouldSendReliable =
+      reliable ||
+      force ||
+      now - lastReliableMovementSent >= RELIABLE_KEYFRAME_INTERVAL_MS ||
+      !lastReliablePlayerState ||
+      Math.hypot(reliableDx, reliableDy) >= RELIABLE_KEYFRAME_DISTANCE_PX;
+    if (shouldSendReliable) currentState.keyframe = true;
+
+    const movementEmitter = shouldSendReliable
       ? socket.compress(false)
       : socket.volatile.compress(false);
 
@@ -136,6 +158,10 @@ export function createLocalInputSync({
     noteClientIntentSent(inputIntent);
 
     lastPlayerState = { ...currentState };
+    if (shouldSendReliable) {
+      lastReliablePlayerState = { ...currentState };
+      lastReliableMovementSent = now;
+    }
     lastIntentState = {
       direction: inputIntent.direction,
       jumpHeld: inputIntent.jumpHeld,

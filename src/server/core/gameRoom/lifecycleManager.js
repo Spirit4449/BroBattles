@@ -42,7 +42,7 @@ function finalizeStart(room, reason = "timeout") {
 
 function startGame(room) {
   console.log(
-    `[GameRoom ${room.matchId}] Starting game with ${room.players.size} players`,
+    `[GameRoom ${room.matchId}] Starting game with ${room.getPlayerCount()} connected players`,
   );
 
   room.status = "active";
@@ -67,6 +67,7 @@ function startGame(room) {
         `[GameRoom ${room.matchId}] Countdown finished, bootstrapping live loop`,
         {
           players: room.players.size,
+          connectedPlayers: room.getPlayerCount(),
           readyAcks: room._readyAcks?.size || 0,
           requiredReadyAcks: room._requiredUserIds?.size || 0,
         },
