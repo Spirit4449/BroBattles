@@ -27,6 +27,16 @@ import {
   getPlayerAimBasePoint,
   resolveAttackAimContext,
 } from "./characters/shared/attackAim";
+import {
+  deriveMovementAnimation,
+  getAnimationDurationMs,
+  getPresentedAnimation,
+  markOneShotAnimation,
+  noteAnimationPlayed,
+  playCharacterAnimation,
+  resetAirborneJumpAnimation,
+  toLogicalAnimation,
+} from "./characters/shared/animationState.js";
 import { getResolvedCharacterBodyConfig } from "./lib/characterTuning.js";
 import { createAttackAimReticleController } from "./gameScene/attackAimReticle";
 import { createMobileControlsController } from "./gameScene/mobileControls";
@@ -632,6 +642,7 @@ export function createPlayer(
     resolveAnimKey(scene, currentCharacter, "idle", "idle", currentSkinId),
     true,
   ); // Play idle animation
+  noteAnimationPlayed(player, "idle");
   // Hide until we've configured frame/body and spawn to avoid a mid-air first render
   player.setVisible(false);
   localMovementReconcileState = {
@@ -808,7 +819,23 @@ export function createPlayer(
       drawAmmoBar();
     },
     setCanAttack: (v) => (canAttack = v),
-    setIsAttacking: (v) => (isAttacking = v),
+    setIsAttacking: (v) => {
+      isAttacking = v;
+      if (v && player) {
+        const throwKey = resolveAnimKey(
+          scene,
+          currentCharacter,
+          "throw",
+          "idle",
+          currentSkinId,
+        );
+        markOneShotAnimation(
+          player,
+          "throw",
+          getAnimationDurationMs(scene, throwKey, 420),
+        );
+      }
+    },
     flushNetState: () => {
       try {
         flushLocalNetState?.({
@@ -1205,6 +1232,9 @@ function fireSpecialAttack(context = null) {
   if (String(currentCharacter || "").toLowerCase() === "wizard" && player) {
     player._specialAnimLockUntil = Date.now() + 2100;
   }
+  if (player) {
+    markOneShotAnimation(player, "special", 1100);
+  }
   try {
     if (player?.scene) {
       player.scene._localAttackPrecisionUntil = performance.now() + 520;
@@ -1342,7 +1372,7 @@ export function handlePlayerMovement(scene) {
       vx: Number(player?.body?.velocity?.x) || 0,
       vy: Number(player?.body?.velocity?.y) || 0,
       facing: player?.flipX ? -1 : 1,
-      animation: player?.anims?.currentAnim?.key || null,
+      animation: getPresentedAnimation(player, "idle"),
       movementLocked: true,
       loaded:
         !dead &&
@@ -1370,7 +1400,7 @@ export function handlePlayerMovement(scene) {
       vx: Number(player?.body?.velocity?.x) || 0,
       vy: Number(player?.body?.velocity?.y) || 0,
       facing: player?.flipX ? -1 : 1,
-      animation: player?.anims?.currentAnim?.key || null,
+      animation: getPresentedAnimation(player, "idle"),
       movementLocked: true,
       loaded:
         !dead &&
@@ -1724,23 +1754,7 @@ export function handlePlayerMovement(scene) {
     if (player.flipX !== wasFlip && applyFlipOffsetLocal)
       applyFlipOffsetLocal();
     isMoving = true; // Sets the isMoving to true
-    if (
-      player.body.touching.down &&
-      !isAttacking &&
-      !dead &&
-      !specialAnimLocked()
-    ) {
-      // If the player is not in the air or attacking or dead, it plays the running animation
-      player.anims.play(
-        resolveAnimKey(
-          scene,
-          currentCharacter,
-          "running",
-          "idle",
-          currentSkinId,
-        ),
-        true,
-      );
+    if (player.body.touching.down && !isAttacking && !dead) {
       // Footstep SFX throttled
       sfxWalkCooldown += scene.game.loop.delta;
       if (sfxWalkCooldown >= 280) {
@@ -1773,23 +1787,7 @@ export function handlePlayerMovement(scene) {
     }
     player.setDragX(onGroundRight ? dragGround : dragAir);
     isMoving = true; // Sets moving variable
-    if (
-      player.body.touching.down &&
-      !isAttacking &&
-      !dead &&
-      !specialAnimLocked()
-    ) {
-      // If the player is not in the air or attacking or dead, it plays the running animation
-      player.anims.play(
-        resolveAnimKey(
-          scene,
-          currentCharacter,
-          "running",
-          "idle",
-          currentSkinId,
-        ),
-        true,
-      );
+    if (player.body.touching.down && !isAttacking && !dead) {
       // Footstep SFX throttled
       sfxWalkCooldown += scene.game.loop.delta;
       if (sfxWalkCooldown >= 280) {
@@ -1839,19 +1837,6 @@ export function handlePlayerMovement(scene) {
       player._wallSlideSuppressedUntil = Date.now() + wallSlideReentryDelayMs;
     }
   }
-  if (
-    !dead &&
-    wallSlideContact &&
-    !wallSlideSuppressed &&
-    !isAttacking &&
-    !specialAnimLocked()
-  ) {
-    player.anims.play(
-      resolveAnimKey(scene, currentCharacter, "sliding", "idle", currentSkinId),
-      true,
-    ); // Plays sliding animation
-  }
-
   const isWallSliding =
     !dead &&
     !player.body.touching.down &&
@@ -1874,7 +1859,7 @@ export function handlePlayerMovement(scene) {
     (!wallSlideContact || wallSlideSuppressed) &&
     !isAttacking
   ) {
-    fall(); // Plays falling animation if the player is not touching a wall or if any other animation is playing
+    fall(); // Updates jump state once the jump animation has completed.
   }
 
   // If no movement animations are playing, play the 'idle' animation
@@ -1944,6 +1929,54 @@ export function handlePlayerMovement(scene) {
     }
   }
 
+  let desiredMovementAnimation = deriveMovementAnimation({
+    grounded: !!player?.body?.touching?.down,
+    moving: !!isMoving,
+    wallSliding: !!isWallSliding,
+    vx: Number(player?.body?.velocity?.x) || 0,
+    vy: Number(player?.body?.velocity?.y) || 0,
+    dead,
+    movementLocked,
+    specialLocked: specialAnimLocked(),
+    fallback: getPresentedAnimation(player, "idle"),
+  });
+  if (
+    movementLockedByAbility &&
+    String(currentCharacter || "").toLowerCase() === "draven"
+  ) {
+    desiredMovementAnimation = "special";
+  }
+  const currentLogicalAnimation = toLogicalAnimation(
+    player?.anims?.currentAnim?.key || "",
+    currentCharacter,
+  );
+  if (
+    !player?.body?.touching?.down &&
+    currentLogicalAnimation === "jumping" &&
+    player?.anims?.isPlaying &&
+    desiredMovementAnimation === "falling"
+  ) {
+    desiredMovementAnimation = "jumping";
+  }
+  const presentedAnimation = getPresentedAnimation(
+    player,
+    desiredMovementAnimation,
+  );
+  const desiredAnimation =
+    presentedAnimation === "throw" || presentedAnimation === "special"
+      ? presentedAnimation
+      : desiredMovementAnimation;
+  playCharacterAnimation({
+    scene,
+    sprite: player,
+    character: currentCharacter,
+    skinId: currentSkinId,
+    resolveAnimKey,
+    logical: desiredAnimation,
+    fallback: "idle",
+    force: true,
+  });
+
   networkInputState = {
     left: !!leftKey,
     right: !!rightKey,
@@ -1954,7 +1987,7 @@ export function handlePlayerMovement(scene) {
     vx: Number(player?.body?.velocity?.x) || 0,
     vy: Number(player?.body?.velocity?.y) || 0,
     facing: player?.flipX ? -1 : 1,
-    animation: player?.anims?.currentAnim?.key || null,
+    animation: getPresentedAnimation(player, "idle"),
     movementLocked,
     loaded:
       !dead &&
@@ -1977,16 +2010,17 @@ export function handlePlayerMovement(scene) {
 
   function jump() {
     if (!isAttacking && !specialAnimLocked()) {
-      player.anims.play(
-        resolveAnimKey(
-          scene,
-          currentCharacter,
-          "jumping",
-          "idle",
-          currentSkinId,
-        ),
-        true,
-      );
+      resetAirborneJumpAnimation(player);
+      playCharacterAnimation({
+        scene,
+        sprite: player,
+        character: currentCharacter,
+        skinId: currentSkinId,
+        resolveAnimKey,
+        logical: "jumping",
+        fallback: "idle",
+        force: true,
+      });
     }
     pdbg();
     player.setVelocityY(-jumpSpeed);
@@ -2019,16 +2053,17 @@ export function handlePlayerMovement(scene) {
 
     // Play a jump-like animation
     if (!isAttacking && !specialAnimLocked()) {
-      player.anims.play(
-        resolveAnimKey(
-          scene,
-          currentCharacter,
-          "jumping",
-          "idle",
-          currentSkinId,
-        ),
-        true,
-      );
+      resetAirborneJumpAnimation(player);
+      playCharacterAnimation({
+        scene,
+        sprite: player,
+        character: currentCharacter,
+        skinId: currentSkinId,
+        resolveAnimKey,
+        logical: "jumping",
+        fallback: "idle",
+        force: true,
+      });
     }
     pdbg();
 
@@ -2064,29 +2099,12 @@ export function handlePlayerMovement(scene) {
 
   function fall() {
     updateWallSlideAudio(false);
-    if (!isAttacking && !specialAnimLocked()) {
-      player.anims.play(
-        resolveAnimKey(
-          scene,
-          currentCharacter,
-          "falling",
-          "idle",
-          currentSkinId,
-        ),
-        true,
-      );
-    }
     pdbg();
     isJumping = false;
   }
 
   function idle() {
     updateWallSlideAudio(false);
-    if (specialAnimLocked()) return;
-    player.anims.play(
-      resolveAnimKey(scene, currentCharacter, "idle", "idle", currentSkinId),
-      true,
-    );
     pdbg();
   }
 

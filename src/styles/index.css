@@ -1417,6 +1417,10 @@ h3 {
 .leaderboard-button {
   left: auto;
   right: 20px;
+  width: max-content;
+  min-width: 0;
+  padding: 0 10px;
+  white-space: nowrap;
   background:
     linear-gradient(135deg, rgba(26, 105, 167, 0.9), rgba(14, 80, 138, 0.82)),
     rgba(10, 23, 48, 0.36);
@@ -2300,6 +2304,12 @@ h3 {
   width: min(840px, 96vw);
 }
 
+@media (max-width: 640px) {
+  .leaderboard-panel {
+    width: min(520px, 88vw);
+  }
+}
+
 .party-discovery-panel {
   width: min(640px, 46vw);
   max-height: min(760px, 92vh);
@@ -2736,11 +2746,11 @@ h3 {
   }
 
   .party-search-button {
-    left: 145px;
+    left: 160px;
   }
 
   .party-settings-button {
-    left: 280px;
+    left: 300px;
   }
 
   .leaderboard-row {
@@ -2953,8 +2963,8 @@ h3 {
 @media (hover: none) and (pointer: coarse) and (max-height: 520px) and (orientation: landscape) {
   #navbar {
     height: 42px;
-    padding: 3px calc(8px + env(safe-area-inset-right))
-      3px calc(8px + env(safe-area-inset-left));
+    padding: 3px calc(8px + env(safe-area-inset-right)) 3px
+      calc(8px + env(safe-area-inset-left));
   }
 
   #navbar h2 {
@@ -3003,16 +3013,17 @@ h3 {
   }
 
   .party-search-button {
-    left: 102px;
+    left: 122px;
     width: 38px;
   }
 
   .party-settings-button {
-    left: 146px;
+    left: 170px;
     width: 38px;
   }
 
   .leaderboard-button {
+    left: auto;
     right: 8px;
   }
 
@@ -3023,8 +3034,8 @@ h3 {
 
   #bottom-bar {
     height: 48px;
-    padding: 0 calc(8px + env(safe-area-inset-right)) env(safe-area-inset-bottom)
-      calc(8px + env(safe-area-inset-left));
+    padding: 0 calc(8px + env(safe-area-inset-right))
+      env(safe-area-inset-bottom) calc(8px + env(safe-area-inset-left));
   }
 
   .dropdown-group {
@@ -3179,14 +3190,15 @@ h3 {
   }
 
   .party-search-button {
-    left: 120px;
+    left: 142px;
   }
 
   .party-settings-button {
-    left: 176px;
+    left: 200px;
   }
 
   .leaderboard-button {
+    left: auto;
     right: 10px;
   }
 
@@ -3413,14 +3425,15 @@ h3 {
   }
 
   .party-search-button {
-    left: 108px;
+    left: 132px;
   }
 
   .party-settings-button {
-    left: 158px;
+    left: 184px;
   }
 
   .leaderboard-button {
+    left: auto;
     right: 8px;
   }
 }

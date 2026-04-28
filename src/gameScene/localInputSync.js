@@ -85,7 +85,7 @@ export function createLocalInputSync({
     inputIntent.sequence = packetSequence;
 
     const ammoState = getAmmoSyncState();
-    const animation = player.anims?.currentAnim?.key || null;
+    const animation = inputIntent.animation || null;
     const includeAmmoState =
       !sameAmmoState(ammoState, lastAmmoState) ||
       now - lastAmmoStateSentAt >= 250;

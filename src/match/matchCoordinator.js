@@ -11,6 +11,11 @@ import { spawnDamageImpact, spawnHealthMarker } from "../effects";
 import { playWizardArcaneSurge } from "../characters/wizard/effects.js";
 import { playCharacterSound } from "../characters";
 import {
+  getAnimationDurationMs,
+  markOneShotAnimation,
+  toLogicalAnimation,
+} from "../characters/shared/animationState.js";
+import {
   configureClientNetTest,
   noteClientLifecycle,
   noteClientRemoteAction,
@@ -1052,7 +1057,17 @@ export function createMatchCoordinator(config) {
       // Prevent snapshot animation from immediately overwriting attack animation,
       // and open a precision window so interpolation blends toward hit position.
       if (consumed && wrapper) {
-        wrapper._animLockUntil = performance.now() + 520;
+        const currentKey = wrapper.opponent?.anims?.currentAnim?.key || "";
+        const logical = toLogicalAnimation(currentKey || act.type, charKey);
+        const duration = getAnimationDurationMs(
+          scene,
+          currentKey,
+          logical === "special" ? 900 : 520,
+        );
+        markOneShotAnimation(wrapper.opponent, logical, duration, {
+          remote: true,
+        });
+        wrapper._animLockUntil = performance.now() + duration;
         wrapper._attackPrecisionUntil =
           performance.now() + REMOTE_ATTACK_PRECISION_WINDOW_MS;
       }
@@ -1129,7 +1144,11 @@ export function createMatchCoordinator(config) {
     } catch (_) {}
     try {
       const p = getPlayer();
-      if (p?.body) p.body.enable = false;
+      if (p) p._matchEnded = true;
+      if (p?.body) {
+        p.setVelocity?.(0, 0);
+        p.body.enable = false;
+      }
     } catch (_) {}
     try {
       document.getElementById("game-timer-hud")?.classList.add("hidden");

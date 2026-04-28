@@ -6,6 +6,7 @@ import {
   buildCharacterSkinTextureKey,
   buildCharacterSkinAtlasUrls,
 } from "../lib/skinAssets.js";
+import { chooseRemoteAnimationState } from "./shared/animationState.js";
 
 // Build the registry automatically from the manifest.
 // Each class must have a static `key` string.
@@ -213,7 +214,10 @@ export function chooseRemoteAnimation(character, context = {}) {
   if (Cls && typeof Cls.chooseRemoteAnimation === "function") {
     return Cls.chooseRemoteAnimation(context);
   }
-  return context.animation || "idle";
+  return chooseRemoteAnimationState({
+    ...context,
+    character,
+  });
 }
 
 export function setAttackDebugState(enabled) {

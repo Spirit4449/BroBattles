@@ -63,6 +63,12 @@ import {
   getCharacterPowerupMobilityModifier,
   getCharacterEffectTickSounds,
 } from "./characters";
+import {
+  getAnimationDurationMs,
+  markOneShotAnimation,
+  playCharacterAnimation,
+  toLogicalAnimation,
+} from "./characters/shared/animationState.js";
 import socket, { waitForConnect } from "./socket";
 import OpPlayer from "./opPlayer";
 import { spawnDust, prewarmDust } from "./effects";
@@ -952,7 +958,20 @@ class GameScene extends Phaser.Scene {
                 act.direction = wrapper.opponent.flipX ? -1 : 1;
               }
             }
-            handleRemoteAttack(this, charKey, act, wrapper);
+            const consumed = handleRemoteAttack(this, charKey, act, wrapper);
+            if (consumed && wrapper?.opponent) {
+              const currentKey = wrapper.opponent.anims?.currentAnim?.key || "";
+              const logical = toLogicalAnimation(currentKey || act.type, charKey);
+              const duration = getAnimationDurationMs(
+                this,
+                currentKey,
+                logical === "special" ? 900 : 520,
+              );
+              markOneShotAnimation(wrapper.opponent, logical, duration, {
+                remote: true,
+              });
+              wrapper._animLockUntil = performance.now() + duration;
+            }
           } catch (_) {}
         }
         if (retryActions.length) {
@@ -1963,16 +1982,16 @@ class GameScene extends Phaser.Scene {
             currentPosition: bPosData,
             sprite: spr,
           });
-          spr.anims.play(
-            resolveAnimKey(
-              this,
-              wrapper.character,
-              chosenAnim,
-              "idle",
-              wrapper.skinId || "",
-            ),
-            true,
-          );
+          playCharacterAnimation({
+            scene: this,
+            sprite: spr,
+            character: wrapper.character,
+            skinId: wrapper.skinId || "",
+            resolveAnimKey,
+            logical: chosenAnim,
+            fallback: "idle",
+            force: true,
+          });
         }
       }
 

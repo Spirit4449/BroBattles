@@ -18,6 +18,21 @@ const RETURNING_SHURIKEN = getResolvedCharacterAttackConfig(
   "returningShuriken",
 );
 
+function consumeRemoteNinjaAction(scene, id) {
+  const key = String(id || "").trim();
+  if (!key) return true;
+  if (!scene._ninjaRemoteActionSeen) {
+    scene._ninjaRemoteActionSeen = new Map();
+  }
+  const now = Date.now();
+  for (const [seenKey, seenAt] of scene._ninjaRemoteActionSeen.entries()) {
+    if (now - seenAt > 5000) scene._ninjaRemoteActionSeen.delete(seenKey);
+  }
+  if (scene._ninjaRemoteActionSeen.has(key)) return false;
+  scene._ninjaRemoteActionSeen.set(key, now);
+  return true;
+}
+
 class Ninja extends CharacterEntityBase {
   static key = NAME;
   // Main texture key used for this character's sprite
@@ -70,7 +85,16 @@ class Ninja extends CharacterEntityBase {
   static handleRemoteAttack(scene, data, ownerWrapper) {
     // Support returning shuriken as emitted by local Ninja.attack()
     const actionType = String(data?.type || "").toLowerCase();
+    if (actionType === "character-hit-confirm") {
+      return false;
+    }
+    if (actionType === "ninja-shuriken-return") {
+      return true;
+    }
     if (data.returning || actionType === "ninja-shuriken") {
+      if (!consumeRemoteNinjaAction(scene, data.id || data.instanceId)) {
+        return true;
+      }
       const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
       const mapObjects = Array.isArray(scene?._mapObjects)
         ? scene._mapObjects
@@ -81,6 +105,11 @@ class Ninja extends CharacterEntityBase {
         sfx.setVolume(0.5); // Lower volume for remote players
         sfx.setRate(1.3);
         sfx.play();
+      } catch (_) {}
+      try {
+        if (ownerSprite?.anims && scene.anims?.exists(`${NAME}-throw`)) {
+          ownerSprite.anims.play(`${NAME}-throw`, true);
+        }
       } catch (_) {}
       // Instantiate a non-owner returning shuriken so visuals match
       const shuriken = new ReturningShuriken(
@@ -107,6 +136,7 @@ class Ninja extends CharacterEntityBase {
     }
 
     // Fallback for simple projectiles if ever used
+    if (!data?.weapon) return false;
     const key = data.weapon || "shuriken";
     if (scene.textures?.exists(key)) {
       const proj = scene.physics.add.image(data.x, data.y, key);

@@ -3,6 +3,7 @@ import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js"
 import { getResolvedCharacterSpecialAimConfig } from "../../lib/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
+import { markOneShotAnimation } from "../shared/animationState.js";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 
 const INFERNO = getResolvedCharacterSpecialConfig("draven", "inferno");
@@ -204,6 +205,7 @@ export function perform(
   player._dravenInfernoBaseY = baseY;
   player._dravenInfernoLift = DRAVEN_INFERNO_LIFT_PX;
   player._movementLockedUntil = now + DRAVEN_INFERNO_DURATION_MS;
+  markOneShotAnimation(player, "special", DRAVEN_INFERNO_DURATION_MS);
 
   const unlockFlip = lockPlayerFlip(player);
 
@@ -241,6 +243,13 @@ export function perform(
     player._dravenInfernoUntil = 0;
     unlockFlip();
     destroyInfernoOverlay(player);
+
+    if (player._matchEnded) {
+      if (player.body) {
+        player.setVelocity(0, 0);
+      }
+      return;
+    }
 
     if (player.body) {
       const prevGravity =

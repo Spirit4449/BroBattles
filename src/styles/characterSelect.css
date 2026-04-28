@@ -798,7 +798,6 @@
     inset 0px 5px #ffffff1f;
   padding: 12px;
   border-radius: 10px;
-
 }
 
 .stat-box-header {
@@ -1249,6 +1248,16 @@
     max-width: 95vw;
   }
 
+  .character-details-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .character-details-close {
+    align-self: flex-end;
+  }
+
   .character-details-title {
     font-size: 16px;
   }
@@ -1259,11 +1268,31 @@
 
   .character-details-inline-skin {
     width: 100%;
+    justify-content: center;
   }
 
   .character-details-inline-actions {
     width: 100%;
+    flex-wrap: wrap;
     justify-content: space-between;
+    gap: 10px;
+  }
+
+  .character-details-footer-line {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .character-details-action,
+  .character-details-maxed-label {
+    flex: 1 1 46%;
+    min-width: 140px;
+    height: 44px;
+  }
+
+  .character-details-skin-stepper,
+  .character-details-skin-name-box {
+    height: 44px;
   }
 
   .character-details-preview-frame {
