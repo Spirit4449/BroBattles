@@ -1716,6 +1716,7 @@ class GameRoom {
             action: {
               type: "character-hit-confirm",
               attackType,
+              instanceId,
               target: target.name,
               appliedDamage,
               ownerEcho: true,

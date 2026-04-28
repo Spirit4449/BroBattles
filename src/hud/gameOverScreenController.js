@@ -5,10 +5,23 @@ export function createGameOverScreenController({
   getUsername,
   rewardStorageKey,
 }) {
+  function isMobileDevice() {
+    try {
+      const coarsePointer =
+        typeof window !== "undefined" &&
+        window.matchMedia?.("(pointer: coarse)")?.matches;
+      const touchPoints = Number(navigator?.maxTouchPoints || 0);
+      const narrowViewport = Number(window?.innerWidth || 0) <= 980;
+      return !!(coarsePointer || (touchPoints > 0 && narrowViewport));
+    } catch (_) {
+      return !!document?.body?.classList?.contains("mobile-game-ui");
+    }
+  }
+
   function showGameOverScreen(payload) {
     const gameData = getGameData();
     const username = getUsername();
-    const isMobile = !!document?.body?.classList?.contains("mobile-game-ui");
+    const isMobile = isMobileDevice();
 
     const existing = document.getElementById("game-over-overlay");
     if (existing) existing.remove();

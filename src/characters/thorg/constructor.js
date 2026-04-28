@@ -315,7 +315,9 @@ class Thorg extends CharacterEntityBase {
     const baseY = sprite._puBaseScaleY || 1;
     const baseOriginX = sprite._puBaseOriginX ?? 0.5;
     const baseOriginY = sprite._puBaseOriginY ?? 0.5;
-    sprite.setScale(baseX * 1.14, baseY * 1.14);
+    // Keep the collider/body aligned with the ground by avoiding a rage-only
+    // sprite scale bump; the rage effect is visual-only here.
+    sprite.setScale(baseX, baseY);
     sprite.setOrigin(baseOriginX, baseOriginY);
 
     if (typeof spawnTrailParticle === "function" && Math.random() < 0.72) {

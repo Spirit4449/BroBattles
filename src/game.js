@@ -47,6 +47,7 @@ import {
   getNetworkInputState,
   setLocalNetStateFlusher,
   setExternalControlLockUntil,
+  destroyMobileControls,
 } from "./player";
 import {
   preloadForRoster,
@@ -1740,8 +1741,12 @@ class GameScene extends Phaser.Scene {
       let targetX = spr.x;
       let targetY = spr.y;
       if (isLoaded) {
+        const nowPerf = performance.now();
+        const localAttackPrecision =
+          (Number(this._localAttackPrecisionUntil) || 0) > nowPerf;
         const inPrecision =
-          (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
+          localAttackPrecision ||
+          (Number(wrapper._attackPrecisionUntil) || 0) > nowPerf;
         const airborne = !(bPosData?.grounded ?? aPosData?.grounded ?? false);
         const effectiveAlpha = inPrecision
           ? Math.max(alpha, 0.85)
@@ -1847,8 +1852,12 @@ class GameScene extends Phaser.Scene {
           const dy = targetY - spr.y;
           const dist = Math.hypot(dx, dy);
           if (dist > 0.35) {
+            const nowPerf = performance.now();
+            const localAttackPrecision =
+              (Number(this._localAttackPrecisionUntil) || 0) > nowPerf;
             const inPrecision =
-              (Number(wrapper._attackPrecisionUntil) || 0) > performance.now();
+              localAttackPrecision ||
+              (Number(wrapper._attackPrecisionUntil) || 0) > nowPerf;
             const airborne = !(
               bPosData?.grounded ??
               aPosData?.grounded ??
@@ -1867,7 +1876,11 @@ class GameScene extends Phaser.Scene {
                       : 1500;
             const maxStep = (followSpeedPxPerSec * dtMs) / 1000;
             const snapDistance = inPrecision ? 1.5 : airborne ? 1.25 : 0.9;
-            const microJitterDeadband = airborne ? 0.45 : 0.75;
+            const microJitterDeadband = inPrecision
+              ? 0
+              : airborne
+                ? 0.45
+                : 0.75;
             const teleportSnapDistance = inPrecision ? 900 : 1600;
             if (dist <= microJitterDeadband) {
               // Ignore tiny buffered-target movement that reads as shimmer.
@@ -2076,5 +2089,8 @@ function hideBattleStartOverlay() {
 // -----------------------------
 function showGameOverScreen(payload) {
   if (window.__BB_MAP_EDIT_ACTIVE) return;
+  try {
+    destroyMobileControls?.();
+  } catch (_) {}
   gameOverScreenController.showGameOverScreen(payload);
 }

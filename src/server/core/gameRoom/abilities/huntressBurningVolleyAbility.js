@@ -67,6 +67,12 @@ function buildProjectiles(angle, payload = {}, profile = null) {
       range,
       speed,
       collisionRadius: Math.max(1, Number(VOLLEY.collisionRadius) || 18),
+      playerCollisionRadius: Math.max(
+        1,
+        Number(VOLLEY.playerCollisionRadius) ||
+          Number(VOLLEY.collisionRadius) ||
+          18,
+      ),
       damage: Math.max(1, Number(VOLLEY.damagePerArrow) || 1000),
       scale: Math.max(0.05, Number(VOLLEY.visualScale) || 0.24),
       gravity,
@@ -110,6 +116,12 @@ function activate(caster, now, room, payload = null) {
     speed,
     releaseMs: 0,
     collisionRadius: Math.max(1, Number(VOLLEY.collisionRadius) || 18),
+    playerCollisionRadius: Math.max(
+      1,
+      Number(VOLLEY.playerCollisionRadius) ||
+        Number(VOLLEY.collisionRadius) ||
+        18,
+    ),
     damage: Math.max(1, Number(VOLLEY.damagePerArrow) || 1000),
     scale: Math.max(0.05, Number(VOLLEY.visualScale) || 0.24),
     gravity,

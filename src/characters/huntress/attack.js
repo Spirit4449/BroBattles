@@ -13,6 +13,7 @@ const DEFAULT_SPECIAL_RELEASE_MS = 0;
 
 let DEBUG_DRAW = false;
 const ACTIVE_DEBUG_SHAPES = new Set();
+const ACTIVE_ARROWS_BY_ID = new Map();
 
 function degToRad(degrees) {
   return (Number(degrees) || 0) * (Math.PI / 180);
@@ -105,6 +106,7 @@ function buildSpreadProjectiles({
   speed,
   range,
   collisionRadius,
+  playerCollisionRadius,
   damage,
   visualScale,
   burn = null,
@@ -125,6 +127,7 @@ function buildSpreadProjectiles({
       speed,
       range,
       collisionRadius,
+      playerCollisionRadius,
       damage,
       scale: visualScale,
       burn,
@@ -268,6 +271,20 @@ function getMapObjects(scene, explicitObjects = null) {
   return out;
 }
 
+function registerActiveArrow(arrow) {
+  const id = String(arrow?.cfg?.instanceId || "").trim();
+  if (!id) return;
+  ACTIVE_ARROWS_BY_ID.set(id, arrow);
+}
+
+function unregisterActiveArrow(arrow) {
+  const id = String(arrow?.cfg?.instanceId || "").trim();
+  if (!id) return;
+  if (ACTIVE_ARROWS_BY_ID.get(id) === arrow) {
+    ACTIVE_ARROWS_BY_ID.delete(id);
+  }
+}
+
 export function spawnGroundBurn(scene, x, y, durationMs = 2200) {
   if (!scene?.add) return;
   const ring = scene.add.circle(x, y, 26, 0xff6a1a, 0.22);
@@ -321,6 +338,16 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
         1,
         Number(projectile?.collisionRadius) ||
           Number(payload?.collisionRadius) ||
+          Number(ARROWS.collisionRadius) ||
+          16,
+      ),
+      playerCollisionRadius: Math.max(
+        1,
+        Number(projectile?.playerCollisionRadius) ||
+          Number(payload?.playerCollisionRadius) ||
+          Number(projectile?.collisionRadius) ||
+          Number(payload?.collisionRadius) ||
+          Number(ARROWS.playerCollisionRadius) ||
           Number(ARROWS.collisionRadius) ||
           16,
       ),
@@ -405,6 +432,7 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     this.attachTargetOverlap(
       normalizeSpriteTargets(targetSprites, ownerSprite),
     );
+    registerActiveArrow(this);
     scene.events.on("update", this.updateArrow, this);
   }
 
@@ -509,13 +537,16 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     return !!hit;
   }
 
-  embedIntoTarget(targetEntry) {
+  embedIntoTarget(
+    targetEntry,
+    { emitHit = true, requireMeaningful = true } = {},
+  ) {
     const targetSprite = targetEntry?.sprite || targetEntry;
     if (!targetSprite?.active) {
       this.embedAt(this.x, this.y, this.rotation);
       return;
     }
-    if (!this.isMeaningfulTargetHit(targetSprite)) {
+    if (requireMeaningful && !this.isMeaningfulTargetHit(targetSprite)) {
       return;
     }
     const targetName =
@@ -525,7 +556,9 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
           targetSprite?.username ||
           "",
       ).trim() || null;
-    this.emitHitForTarget(targetName);
+    if (emitHit) {
+      this.emitHitForTarget(targetName);
+    }
     this._hitSomething = true;
     this.cleanupTrail?.();
     this.targetSprite = targetSprite;
@@ -567,7 +600,12 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     const nearestX = Math.max(tightLeft, Math.min(this.x, tightRight));
     const nearestY = Math.max(tightTop, Math.min(this.y, tightBottom));
     const dist = Math.hypot(this.x - nearestX, this.y - nearestY);
-    const allowed = Math.max(6, Number(this.cfg.collisionRadius) * 0.72);
+    const allowed = Math.max(
+      6,
+      Number(this.cfg.playerCollisionRadius) ||
+        Number(this.cfg.collisionRadius) ||
+        6,
+    );
     return dist <= allowed;
   }
 
@@ -707,26 +745,65 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     });
     this.mapOverlaps.length = 0;
     this.targetOverlaps.length = 0;
+    unregisterActiveArrow(this);
     if (this.debug?.active) this.debug.destroy();
     this.destroy();
   }
 }
 
+export function stopHuntressArrowOnConfirmedHit(
+  instanceId,
+  targetSprite = null,
+  targetUsername = "",
+) {
+  const arrow = ACTIVE_ARROWS_BY_ID.get(String(instanceId || "").trim());
+  if (!arrow?.active || arrow._disposed || arrow.embedded) return false;
+  if (targetSprite?.active) {
+    arrow.embedIntoTarget(
+      {
+        sprite: targetSprite,
+        username: String(targetUsername || "").trim(),
+      },
+      { emitHit: false, requireMeaningful: false },
+    );
+  } else {
+    arrow.embedAt(arrow.x, arrow.y, arrow.rotation);
+  }
+  return true;
+}
+
 function buildTargetSprites(context = {}) {
   const entries = [];
+  const attacker = String(context?.attackerUsername || "").trim();
+  const attackerTeam = String(context?.attackerTeam || "").trim();
+  const playerTeams = new Map();
+  for (const player of Array.isArray(context?.players) ? context.players : []) {
+    const name = String(player?.name || player?.username || "").trim();
+    if (!name) continue;
+    playerTeams.set(name, String(player?.team || "").trim());
+  }
+  const isValidTargetName = (username) => {
+    const name = String(username || "").trim();
+    if (!name || name === attacker) return false;
+    if (!attackerTeam) return true;
+    const team = playerTeams.get(name);
+    return !team || team !== attackerTeam;
+  };
+  const addTarget = (username, sprite) => {
+    if (!sprite || !isValidTargetName(username)) return;
+    entries.push({ sprite, username });
+  };
+
+  addTarget(context?.localUsername, context?.localPlayer);
   for (const [username, wrapper] of Object.entries(
     context?.opponentPlayersRef || {},
   )) {
-    if (wrapper?.opponent) {
-      entries.push({ sprite: wrapper.opponent, username });
-    }
+    addTarget(username, wrapper?.opponent);
   }
   for (const [username, wrapper] of Object.entries(
     context?.teamPlayersRef || {},
   )) {
-    if (wrapper?.opponent) {
-      entries.push({ sprite: wrapper.opponent, username });
-    }
+    addTarget(username, wrapper?.opponent);
   }
   return entries;
 }
@@ -739,9 +816,11 @@ function spawnArrowProjectile(
   localContext = {},
 ) {
   if (!scene?.physics?.add) return null;
+  const targetSprites =
+    localContext?.targetSprites || buildTargetSprites(localContext);
   return new HuntressArrow(scene, payload, projectile, ownerSprite, {
     mapObjects: localContext?.mapObjects || null,
-    targetSprites: localContext?.targetSprites || null,
+    targetSprites,
     isOwner: localContext?.isOwner === true,
     username: String(localContext?.username || "").trim(),
     gameId: String(localContext?.gameId || "").trim(),
@@ -766,6 +845,14 @@ function buildProjectileDefaults(payload = {}, defaults = ARROWS) {
     collisionRadius: Math.max(
       1,
       Number(payload?.collisionRadius) ||
+        Number(defaults.collisionRadius) ||
+        16,
+    ),
+    playerCollisionRadius: Math.max(
+      1,
+      Number(payload?.playerCollisionRadius) ||
+        Number(defaults.playerCollisionRadius) ||
+        Number(payload?.collisionRadius) ||
         Number(defaults.collisionRadius) ||
         16,
     ),
@@ -809,6 +896,10 @@ function spawnArrowSpread(
         spreadDeg: Number(payload?.spreadDeg) || 26,
         speed: Number(payload?.speed) || 930,
         collisionRadius: Number(payload?.collisionRadius) || 18,
+        playerCollisionRadius:
+          Number(payload?.playerCollisionRadius) ||
+          Number(payload?.collisionRadius) ||
+          18,
         damagePerArrow: Number(payload?.damage) || 1000,
         visualScale: Number(payload?.scale) || 0.24,
         gravity: Number(payload?.gravity) || 980,
@@ -828,6 +919,7 @@ function spawnArrowSpread(
         speed: projectileDefaults.speed,
         range: projectileDefaults.range,
         collisionRadius: projectileDefaults.collisionRadius,
+        playerCollisionRadius: projectileDefaults.playerCollisionRadius,
         damage: projectileDefaults.damage,
         visualScale: projectileDefaults.visualScale,
         burn: projectileDefaults.burn,
@@ -923,6 +1015,10 @@ export function performHuntressArrowSpread(instance, attackContext = null) {
     count: Number(ARROWS.count) || 3,
     spreadDeg: Number(ARROWS.spreadDeg) || 9,
     collisionRadius: Number(ARROWS.collisionRadius) || 16,
+    playerCollisionRadius:
+      Number(ARROWS.playerCollisionRadius) ||
+      Number(ARROWS.collisionRadius) ||
+      16,
     damage: Number(ARROWS.damagePerArrow) || 1000,
     scale: Number(ARROWS.visualScale) || 0.22,
     gravity: Number(ARROWS.gravity) || DEFAULT_GRAVITY,

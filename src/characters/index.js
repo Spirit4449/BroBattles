@@ -179,10 +179,16 @@ export function getTextureKey(character, skinId = "") {
 }
 
 // Delegate handling of a remotely received attack to the character module
-export function handleRemoteAttack(scene, character, data, ownerWrapper) {
+export function handleRemoteAttack(
+  scene,
+  character,
+  data,
+  ownerWrapper,
+  remoteContext = {},
+) {
   const Cls = getCharacterClass(character);
   if (Cls && typeof Cls.handleRemoteAttack === "function") {
-    Cls.handleRemoteAttack(scene, data, ownerWrapper);
+    Cls.handleRemoteAttack(scene, data, ownerWrapper, remoteContext);
     return true;
   }
   return false;

@@ -5,6 +5,7 @@ import {
   changeDebugState,
   performHuntressArrowSpread,
   spawnHuntressArrowVisual,
+  stopHuntressArrowOnConfirmedHit,
 } from "./attack";
 import { executeDefaultAttack } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
@@ -70,10 +71,20 @@ class Huntress extends CharacterEntityBase {
     return characterStats.huntress;
   }
 
-  static handleRemoteAttack(scene, data, ownerWrapper) {
+  static handleRemoteAttack(scene, data, ownerWrapper, remoteContext = {}) {
     if (!data) return false;
     const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
     const type = String(data.type || "").toLowerCase();
+    if (
+      type === "character-hit-confirm" &&
+      String(data?.attackType || "").toLowerCase().startsWith(`${NAME}-`)
+    ) {
+      return stopHuntressArrowOnConfirmedHit(
+        data?.instanceId,
+        remoteContext?.targetSprite || null,
+        remoteContext?.targetUsername || data?.target || "",
+      );
+    }
     if (type === `${NAME}-arrow`) {
       try {
         if (ownerSprite?.anims) {
@@ -97,6 +108,13 @@ class Huntress extends CharacterEntityBase {
       } catch (_) {}
       spawnHuntressArrowVisual(scene, data, ownerSprite, {
         mapObjects: Array.isArray(scene?._mapObjects) ? scene._mapObjects : [],
+        opponentPlayersRef: remoteContext?.opponentPlayersRef || {},
+        teamPlayersRef: remoteContext?.teamPlayersRef || {},
+        localPlayer: remoteContext?.localPlayer || null,
+        localUsername: remoteContext?.localUsername || "",
+        attackerUsername: remoteContext?.attackerUsername || "",
+        attackerTeam: remoteContext?.attackerTeam || "",
+        players: remoteContext?.players || [],
       });
       return true;
     }

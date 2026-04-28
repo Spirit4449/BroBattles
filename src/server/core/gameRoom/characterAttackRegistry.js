@@ -525,7 +525,9 @@ function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
     damage: Number(actionData?.damage) || Number(playerData.baseDamage) || 1,
     collisionRadius: Math.max(
       1,
-      Number(actionData?.collisionRadius) ||
+      Number(actionData?.playerCollisionRadius) ||
+        Number(actionData?.collisionRadius) ||
+        Number(runtime.playerCollisionRadius) ||
         Number(runtime.collisionRadius) ||
         1,
     ),
@@ -582,6 +584,10 @@ function buildProjectileSpreadAttacks(playerData, actionData, descriptor, now) {
         Number(provided.collisionRadius) ||
         Number(actionData?.collisionRadius) ||
         Number(runtime.collisionRadius),
+      playerCollisionRadius:
+        Number(provided.playerCollisionRadius) ||
+        Number(actionData?.playerCollisionRadius) ||
+        Number(runtime.playerCollisionRadius),
       damage: Number(provided.damage) || baseDamage,
       gravity:
         Number(provided.gravity) ||

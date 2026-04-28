@@ -1176,6 +1176,11 @@ function updateHealthBar() {
 function fireBasicAttack(direction, context = null) {
   if (dead) return;
   try {
+    if (player?.scene) {
+      player.scene._localAttackPrecisionUntil = performance.now() + 420;
+    }
+  } catch (_) {}
+  try {
     if (charCtrl && typeof charCtrl.attack === "function") {
       charCtrl.attack(direction, context);
     } else if (charCtrl && typeof charCtrl.handlePointerDown === "function") {
@@ -1200,6 +1205,11 @@ function fireSpecialAttack(context = null) {
   if (String(currentCharacter || "").toLowerCase() === "wizard" && player) {
     player._specialAnimLockUntil = Date.now() + 2100;
   }
+  try {
+    if (player?.scene) {
+      player.scene._localAttackPrecisionUntil = performance.now() + 520;
+    }
+  } catch (_) {}
   noteClientActionSent("special", { type: "special" });
   socket.emit("game:special", {
     aim: serializeAimContext(context),
@@ -2193,6 +2203,13 @@ export function setExternalControlLockUntil(untilMs = 0) {
   player._externalControlLockUntil = Number.isFinite(until)
     ? Math.max(0, until)
     : 0;
+}
+
+export function destroyMobileControls() {
+  try {
+    mobileControlsController?.destroy?.();
+  } catch (_) {}
+  mobileControlsController = null;
 }
 
 export { player, frame, currentHealth, setCurrentHealth, dead };

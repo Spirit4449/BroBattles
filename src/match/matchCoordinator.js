@@ -898,17 +898,27 @@ export function createMatchCoordinator(config) {
 
       if (actionType === "character-hit-confirm") {
         playCharacterSound(scene, charKey, "hit");
+        const targetName = String(action?.target || "").trim();
+        const targetSprite =
+          targetName === getUsername()
+            ? getPlayer()
+            : opponentPlayers[targetName]?.opponent ||
+              teamPlayers[targetName]?.opponent ||
+              null;
+        if (typeof handleRemoteAttack === "function") {
+          handleRemoteAttack(scene, charKey, action, null, {
+            targetSprite,
+            targetUsername: targetName,
+          });
+        }
         // Show attacker-side damage marker for every confirmed hit.
         try {
           if (isSelfPacket) {
-            const targetName = String(action?.target || "").trim();
             const appliedDamage = Math.max(
               0,
               Math.round(Number(action?.appliedDamage) || 0),
             );
             if (targetName && appliedDamage > 0) {
-              const wrap = opponentPlayers[targetName] || teamPlayers[targetName];
-              const targetSprite = wrap?.opponent;
               if (scene && targetSprite?.active) {
                 const markerY = targetSprite.body
                   ? targetSprite.body.y - 14
@@ -1030,7 +1040,15 @@ export function createMatchCoordinator(config) {
         }
       }
 
-      const consumed = handleRemoteAttack(scene, charKey, act, wrapper);
+      const consumed = handleRemoteAttack(scene, charKey, act, wrapper, {
+        opponentPlayersRef: opponentPlayers,
+        teamPlayersRef: teamPlayers,
+        localPlayer: getPlayer(),
+        localUsername: getUsername(),
+        attackerUsername: playerName,
+        attackerTeam: pd?.team || "",
+        players: gameData.players || [],
+      });
       // Prevent snapshot animation from immediately overwriting attack animation,
       // and open a precision window so interpolation blends toward hit position.
       if (consumed && wrapper) {

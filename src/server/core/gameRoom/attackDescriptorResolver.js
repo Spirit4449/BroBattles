@@ -144,6 +144,10 @@ function getRuntimeOverrides(actionType) {
       speed: Number(arrows.speed) || 980,
       range: Number(arrows.range) || 900,
       collisionRadius: Number(arrows.collisionRadius) || 16,
+      playerCollisionRadius:
+        Number(arrows.playerCollisionRadius) ||
+        Number(arrows.collisionRadius) ||
+        16,
       forwardOffsetWidthFactor: Number(arrows.forwardOffset) || 0.28,
       verticalOffsetHeightFactor: Number(arrows.verticalOffset) || 0.12,
       count: Math.max(1, Number(arrows.count) || 3),
@@ -169,6 +173,10 @@ function getRuntimeOverrides(actionType) {
         speed: Number(volley.speed) || 930,
         range: Number(volley.range) || 960,
         collisionRadius: Number(volley.collisionRadius) || 18,
+        playerCollisionRadius:
+          Number(volley.playerCollisionRadius) ||
+          Number(volley.collisionRadius) ||
+          18,
         count: Math.max(1, Number(volley.count) || 6),
         spreadDeg: Number(volley.spreadDeg) || 26,
         damagePerProjectile: Math.max(1, Number(volley.damagePerArrow) || 1000),
