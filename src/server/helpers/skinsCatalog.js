@@ -103,14 +103,24 @@ function getSkinGameAssets(character, skinId) {
     skin.gameAssets && typeof skin.gameAssets === "object"
       ? skin.gameAssets
       : {};
-  return {
+  const defaultSkinId = getDefaultSkinId(char);
+  const normalizedSkinId = String(skinId || "").trim();
+  const usesDefaultAtlas =
+    !normalizedSkinId || normalizedSkinId === defaultSkinId;
+  const skinAssetDir = usesDefaultAtlas
+    ? `/assets/${assetFolder}`
+    : `/assets/${assetFolder}/skins/${normalizedSkinId}`;
+  const result = {
     spritesheetUrl:
       String(assets.spritesheetUrl || "").trim() ||
-      `/assets/${assetFolder}/spritesheet.webp`,
+      `${skinAssetDir}/spritesheet.webp`,
     animationsUrl:
       String(assets.animationsUrl || "").trim() ||
-      `/assets/${assetFolder}/animations.json`,
+      `${skinAssetDir}/animations.json`,
   };
+  const weaponUrl = String(assets.weaponUrl || "").trim();
+  if (weaponUrl) result.weaponUrl = weaponUrl;
+  return result;
 }
 
 function normalizeSelectedSkinMap(raw) {

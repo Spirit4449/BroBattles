@@ -44,6 +44,8 @@ export function buildCharacterSkinAtlasUrls(character, skinId) {
     spritesheetUrl: skin
       ? `/assets/${char}/skins/${skin}/spritesheet.webp`
       : `/assets/${char}/spritesheet.webp`,
-    animationsUrl: `/assets/${char}/animations.json`,
+    animationsUrl: skin
+      ? `/assets/${char}/skins/${skin}/animations.json`
+      : `/assets/${char}/animations.json`,
   };
 }

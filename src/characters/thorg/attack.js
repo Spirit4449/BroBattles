@@ -223,11 +223,16 @@ export function performThorgFallAttack(instance, attackContext = null) {
   // Spawn a local visual 'bat' if texture exists. Do not show any hitbox by default.
   try {
     const startAnchor = getAnchor();
+    const skinWeaponKey =
+      p?.texture?.key && scene.textures.exists(`${p.texture.key}-weapon`)
+        ? `${p.texture.key}-weapon`
+        : null;
+    const defaultWeaponKey = scene.textures.exists("thorg-weapon")
+      ? "thorg-weapon"
+      : null;
     const texKey = scene.textures.exists("thorg-bat")
       ? "thorg-bat"
-      : scene.textures.exists("thorg-weapon")
-        ? "thorg-weapon"
-        : null;
+      : skinWeaponKey || defaultWeaponKey;
     if (texKey && scene.add) {
       const sprite = scene.add.sprite(startAnchor.x, startAnchor.y, texKey);
       sprite.setDepth(RENDER_LAYERS.ATTACKS);

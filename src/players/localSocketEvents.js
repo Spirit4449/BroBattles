@@ -5,6 +5,7 @@ import {
   spawnSpawnBurst,
   triggerDamageScreenPulse,
 } from "../effects";
+import { triggerDamageCameraShake } from "../gameScene/cameraDynamics";
 
 export function bindLocalSocketEvents({
   socket,
@@ -81,6 +82,7 @@ export function bindLocalSocketEvents({
         if (data.cause !== "poison") {
           spawnDamageImpact(scene, player);
           triggerDamageScreenPulse(scene);
+          triggerDamageCameraShake(scene, -delta, getMaxHealth());
         }
       } else if (delta > 0) {
         const s = scene.sound.add("sfx-heal", { volume: 0.1 });

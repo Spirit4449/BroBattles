@@ -2620,7 +2620,10 @@ function updateMMOverlay({ found, total, selection, players }) {
     const playersArr = Array.isArray(players) ? players : [];
     const nextSig = JSON.stringify({
       total: Number(total) || getTotalPlayersForSelection(normalized) || 0,
-      players: playersArr.map((p) => `${p?.name || ""}:${p?.char_class || ""}`),
+      players: playersArr.map(
+        (p) =>
+          `${p?.name || ""}:${p?.char_class || ""}:${p?.selected_skin_id || ""}:${p?.selected_skin_asset_url || ""}`,
+      ),
     });
     if (nextSig === grid.dataset.renderSig) return;
     grid.dataset.renderSig = nextSig;

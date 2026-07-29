@@ -63,7 +63,8 @@
           "showInPicker": true,
           "gameAssets": {
             "spritesheetUrl": "/assets/thorg/skins/thorg-storm/spritesheet.webp",
-            "animationsUrl": "/assets/thorg/animations.json"
+            "animationsUrl": "/assets/thorg/skins/thorg-storm/animations.json",
+            "weaponUrl": "/assets/thorg/skins/thorg-storm/weapon.webp"
           }
         },
         {
@@ -81,7 +82,7 @@
           "showInPicker": true,
           "gameAssets": {
             "spritesheetUrl": "/assets/thorg/skins/thorg-iron/spritesheet.webp",
-            "animationsUrl": "/assets/thorg/animations.json"
+            "animationsUrl": "/assets/thorg/skins/thorg-iron/animations.json"
           }
         }
       ]

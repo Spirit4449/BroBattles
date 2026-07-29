@@ -73,8 +73,7 @@ export function preloadForRoster(scene, roster = [], staticPath = "/assets") {
   for (const [character, entries] of variantsByCharacter.entries()) {
     const Cls = getCharacterClass(character);
     if (!Cls || typeof Cls.preload !== "function") continue;
-    const needsDefaultAtlas = entries.some((entry) => !entry.skinId);
-    Cls.preload(scene, staticPath, { includeBaseAtlas: needsDefaultAtlas });
+    Cls.preload(scene, staticPath);
 
     for (const entry of entries) {
       if (!entry.skinId) continue;
@@ -94,6 +93,10 @@ export function preloadForRoster(scene, roster = [], staticPath = "/assets") {
           atlasUrls.spritesheetUrl,
           atlasUrls.animationsUrl,
         );
+      }
+      const weaponUrl = String(entry.gameAssets?.weaponUrl || "").trim();
+      if (weaponUrl && !scene.textures.exists(`${textureKey}-weapon`)) {
+        scene.load.image(`${textureKey}-weapon`, weaponUrl);
       }
     }
   }

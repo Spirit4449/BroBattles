@@ -119,7 +119,13 @@ class Thorg extends CharacterEntityBase {
     duration = 300,
   ) {
     // If we have an image, animate it along an overhead oval path. Otherwise, fallback to vector band.
-    const hasTex = scene.textures.exists(`${NAME}-weapon`);
+    const skinWeaponKey =
+      sprite?.texture?.key &&
+      scene.textures.exists(`${sprite.texture.key}-weapon`)
+        ? `${sprite.texture.key}-weapon`
+        : null;
+    const weaponKey = skinWeaponKey || `${NAME}-weapon`;
+    const hasTex = scene.textures.exists(weaponKey);
     const originOffsetY = sprite.height * 0.1;
     const cx = () => sprite.x + (direction >= 0 ? 10 : -10);
     const cy = () => sprite.y - originOffsetY;
@@ -129,7 +135,7 @@ class Thorg extends CharacterEntityBase {
     const endRad = Phaser.Math.DegToRad(90);
 
     if (hasTex) {
-      const eff = scene.add.image(cx(), cy(), `${NAME}-weapon`);
+      const eff = scene.add.image(cx(), cy(), weaponKey);
       eff.setDepth(6);
       eff.setScale(0.9);
       eff.setOrigin(direction >= 0 ? 0.1 : 0.9, 0.5); // pivot near the sword
@@ -423,11 +429,17 @@ class Thorg extends CharacterEntityBase {
 
     // Prefer an animated texture for the bat; if not available, create no visible hitbox
     try {
+      const skinWeaponKey =
+        sprite?.texture?.key &&
+        scene.textures.exists(`${sprite.texture.key}-weapon`)
+          ? `${sprite.texture.key}-weapon`
+          : null;
+      const defaultWeaponKey = scene.textures.exists(`${NAME}-weapon`)
+        ? `${NAME}-weapon`
+        : null;
       const texKey = scene.textures.exists(`${NAME}-bat`)
         ? `${NAME}-bat`
-        : scene.textures.exists(`${NAME}-weapon`)
-          ? `${NAME}-weapon`
-          : null;
+        : skinWeaponKey || defaultWeaponKey;
       if (!texKey) {
         // Invisible placeholder (no visible hitbox)
         return null;

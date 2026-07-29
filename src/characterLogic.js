@@ -163,11 +163,6 @@ function setSelectedSkin(character, skinId) {
   const nextSkin =
     skins.find((skin) => skin.id === String(skinId || "")) || skins[0];
   _characterDetailsUi.selectedSkinByCharacter[character] = nextSkin.id;
-  if (_userDataRef) {
-    _userDataRef.selected_skin_id_by_char =
-      _userDataRef.selected_skin_id_by_char || {};
-    _userDataRef.selected_skin_id_by_char[character] = nextSkin.id;
-  }
   if (_characterDetailsUi.currentCharacter === character) {
     renderCharacterDetails(character);
   }
@@ -301,6 +296,11 @@ function getCharacterDetailsTarget(character) {
 
 function hideCharacterDetails() {
   if (!_characterDetailsUi) return;
+  if (_characterDetailsUi.currentCharacter) {
+    delete _characterDetailsUi.selectedSkinByCharacter[
+      _characterDetailsUi.currentCharacter
+    ];
+  }
   _characterDetailsUi.overlay.style.display = "none";
   _characterDetailsUi.currentCharacter = null;
 }
