@@ -2,6 +2,7 @@ import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
+import { playSpriteAnimation } from "../shared/animationState";
 
 const FIREBALL = getResolvedCharacterAttackConfig("wizard", "fireball");
 
@@ -178,15 +179,14 @@ function spawnImpact(scene, x, y, playSound = true) {
 }
 
 function playWizardCastWindup(scene, ownerSprite, volume = 0.3) {
-  try {
-    if (ownerSprite?.anims) {
-      if (scene.anims?.exists("wizard-throw")) {
-        ownerSprite.anims.play("wizard-throw", false);
-      } else if (scene.anims?.exists("throw")) {
-        ownerSprite.anims.play("throw", false);
-      }
-    }
-  } catch (_) {}
+  playSpriteAnimation({
+    scene,
+    sprite: ownerSprite,
+    character: "wizard",
+    logical: "throw",
+    fallback: "idle",
+    force: false,
+  });
 
   try {
     const played = scene.sound?.play("wizard-fireball", { volume });

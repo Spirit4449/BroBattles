@@ -11,13 +11,16 @@ import { getSharedSelectionPopupShell } from "./lib/selectionPopupShell.js";
 import socket from "./socket.js";
 import { playSound } from "./lib/uiSounds.js";
 import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
+import SKINS_CATALOG from "./shared/skinsCatalog.json";
 
 // Keep a reference to user data for confirmations and currency display
 let _userDataRef = null;
 let _characterDetailsUi = null;
-let _skinsCatalog = null;
+let _skinsCatalog = SKINS_CATALOG;
 let _ownedSkinIds = new Set();
 let _skinBootstrapPromise = null;
+let _characterSelectionPromise = null;
+let _confirmedSkinSelections = Object.create(null);
 
 async function fetchJsonSafe(path) {
   try {
@@ -31,17 +34,15 @@ async function fetchJsonSafe(path) {
 
 async function bootstrapSkinState() {
   if (_skinBootstrapPromise) return _skinBootstrapPromise;
-  _skinBootstrapPromise = Promise.all([
-    fetchJsonSafe("/skins/catalog"),
-    fetchJsonSafe("/skins/owned"),
-  ])
-    .then(([catalogRes, ownedRes]) => {
-      _skinsCatalog =
-        catalogRes?.catalog && typeof catalogRes.catalog === "object"
-          ? catalogRes.catalog
-          : { characters: {} };
+  _skinBootstrapPromise = fetchJsonSafe("/skins/owned")
+    .then((ownedRes) => {
+      const ownedSkinIds = Array.isArray(ownedRes?.ownedSkinIds)
+        ? ownedRes.ownedSkinIds
+        : Array.isArray(_userDataRef?.owned_skin_ids)
+          ? _userDataRef.owned_skin_ids
+          : [];
       _ownedSkinIds = new Set(
-        Array.isArray(ownedRes?.ownedSkinIds) ? ownedRes.ownedSkinIds : [],
+        ownedSkinIds.map((skinId) => String(skinId || "").trim()).filter(Boolean),
       );
 
       const selectedMap =
@@ -49,17 +50,25 @@ async function bootstrapSkinState() {
         typeof ownedRes.selectedSkinIdByCharacter === "object"
           ? ownedRes.selectedSkinIdByCharacter
           : _userDataRef?.selected_skin_id_by_char || {};
+      const currentSelectedMap = {
+        ...selectedMap,
+        // A selection POST may finish while this earlier GET is still in
+        // flight. Confirmed local writes must win over that stale response.
+        ..._confirmedSkinSelections,
+      };
 
       if (_characterDetailsUi) {
         _characterDetailsUi.selectedSkinByCharacter = {
+          ...currentSelectedMap,
+          // Never replace a skin the user is actively previewing with a late
+          // bootstrap response from before the picker was opened.
           ..._characterDetailsUi.selectedSkinByCharacter,
-          ...selectedMap,
         };
       }
       if (_userDataRef) {
         _userDataRef.selected_skin_id_by_char = {
           ...(_userDataRef.selected_skin_id_by_char || {}),
-          ...selectedMap,
+          ...currentSelectedMap,
         };
         _userDataRef.owned_skin_ids = Array.from(_ownedSkinIds);
       }
@@ -77,10 +86,17 @@ function getCatalogCharacterSkins(character) {
   return Array.isArray(entry.skins) ? entry.skins : [];
 }
 
+function normalizeCharacterId(character) {
+  return String(character || "")
+    .trim()
+    .toLowerCase();
+}
+
 function getCharacterSkinList(character) {
-  const catalogSkins = getCatalogCharacterSkins(character);
+  const characterId = normalizeCharacterId(character);
+  const catalogSkins = getCatalogCharacterSkins(characterId);
   const characterUnlocked =
-    Number(_userDataRef?.char_levels?.[String(character || "").toLowerCase()] ??
+    Number(_userDataRef?.char_levels?.[characterId] ??
       _userDataRef?.char_levels?.[character] ??
       0) >= 1;
   let normalized = catalogSkins
@@ -105,7 +121,7 @@ function getCharacterSkinList(character) {
               skin?.bodySrc ||
               skin?.src ||
               "",
-        ).trim() || buildCharacterSkinBodyUrl(character, id),
+        ).trim() || buildCharacterSkinBodyUrl(characterId, id),
         owned,
         locked: !owned,
       };
@@ -125,7 +141,7 @@ function getCharacterSkinList(character) {
           (index === 0 ? "Default" : `Skin ${index + 1}`),
         previewSrc:
           String(skin?.previewSrc || skin?.bodySrc || skin?.src || "").trim() ||
-          buildCharacterSkinBodyUrl(character, ""),
+          buildCharacterSkinBodyUrl(characterId, ""),
         owned: true,
         locked: false,
       }))
@@ -136,7 +152,7 @@ function getCharacterSkinList(character) {
     normalized.push({
       id: "default",
       label: "Default",
-      previewSrc: buildCharacterSkinBodyUrl(character, ""),
+      previewSrc: buildCharacterSkinBodyUrl(characterId, ""),
       owned: true,
       locked: false,
     });
@@ -146,25 +162,27 @@ function getCharacterSkinList(character) {
 }
 
 function getSelectedSkin(character) {
+  const characterId = normalizeCharacterId(character);
   const selectedByUserData = String(
-    _userDataRef?.selected_skin_id_by_char?.[character] || "",
+    _userDataRef?.selected_skin_id_by_char?.[characterId] || "",
   ).trim();
   const skinId = String(
-    _characterDetailsUi?.selectedSkinByCharacter?.[character] ||
+    _characterDetailsUi?.selectedSkinByCharacter?.[characterId] ||
       selectedByUserData,
   ).trim();
-  const skins = getCharacterSkinList(character);
+  const skins = getCharacterSkinList(characterId);
   return skins.find((skin) => skin.id === skinId) || skins[0];
 }
 
 function setSelectedSkin(character, skinId) {
   if (!_characterDetailsUi) return;
-  const skins = getCharacterSkinList(character);
+  const characterId = normalizeCharacterId(character);
+  const skins = getCharacterSkinList(characterId);
   const nextSkin =
     skins.find((skin) => skin.id === String(skinId || "")) || skins[0];
-  _characterDetailsUi.selectedSkinByCharacter[character] = nextSkin.id;
-  if (_characterDetailsUi.currentCharacter === character) {
-    renderCharacterDetails(character);
+  _characterDetailsUi.selectedSkinByCharacter[characterId] = nextSkin.id;
+  if (_characterDetailsUi.currentCharacter === characterId) {
+    renderCharacterDetails(characterId);
   }
 }
 
@@ -619,11 +637,16 @@ function renderCharacterDetails(character) {
       "character-details-action select-button pixel-menu-button";
     selectButton.textContent = selectedSkin.locked ? "Locked" : "Select";
     selectButton.disabled = !!selectedSkin.locked;
-    selectButton.addEventListener("click", (e) => {
+    selectButton.addEventListener("click", async (e) => {
       e.stopPropagation();
       if (selectedSkin.locked) return;
       playSound("cursor4", 0.2);
-      selectCharacter(character);
+      selectButton.disabled = true;
+      selectButton.textContent = "Selecting...";
+      const selected = await selectCharacter(character);
+      if (!selected && _characterDetailsUi?.currentCharacter === character) {
+        renderCharacterDetails(character);
+      }
     });
     footer.appendChild(selectButton);
   }
@@ -709,6 +732,13 @@ function emitCharacterMenuStatus(open) {
 
 export function initializeCharacterSelect(userData) {
   _userDataRef = userData;
+  _skinsCatalog = SKINS_CATALOG;
+  _ownedSkinIds = new Set(
+    (Array.isArray(userData?.owned_skin_ids) ? userData.owned_skin_ids : [])
+      .map((skinId) => String(skinId || "").trim())
+      .filter(Boolean),
+  );
+  _confirmedSkinSelections = Object.create(null);
   bootstrapSkinState().then(() => {
     try {
       refreshUpgradeButtonAffordability();
@@ -964,22 +994,69 @@ function openCharacterDetails(character) {
   ui.overlay.style.display = "flex";
 }
 
-function selectCharacter(character) {
+async function persistActiveCharacterSelection(character, skinId) {
+  const response = await fetch("/skins/select", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      character,
+      skinId,
+      activateCharacter: true,
+    }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || payload?.success !== true) {
+    throw new Error(
+      String(payload?.error || "Unable to save this character and skin."),
+    );
+  }
+  return payload;
+}
+
+function closeCharacterSelectAfterSelection() {
+  if (typeof window.__closeCharacterSelect === "function") {
+    window.__closeCharacterSelect();
+    return;
+  }
+  hideCharacterDetails();
+  const overlay = document.querySelector(".character-select-overlay");
+  if (overlay) overlay.style.display = "none";
+  emitCharacterMenuStatus(false);
+}
+
+async function selectCharacter(character) {
+  if (_characterSelectionPromise) return false;
+  const charClass = normalizeCharacterId(character);
+  const selectedSkin = getSelectedSkin(charClass);
+  const selectedSkinId = String(selectedSkin?.id || "").trim();
+  if (!charClass || !selectedSkinId || selectedSkin?.locked) return false;
+
+  _characterSelectionPromise = persistActiveCharacterSelection(
+    charClass,
+    selectedSkinId,
+  );
+
   try {
-    const charClass = String(character);
-    const selectedSkin = getSelectedSkin(charClass);
-    const selectedSkinId = String(selectedSkin?.id || "").trim() || "default";
+    const persisted = await _characterSelectionPromise;
     const selectedSkinAsset = resolveCharacterPreviewAsset(
       charClass,
       selectedSkinId,
     );
-    // Optimistically update local user data
-    if (_userDataRef) _userDataRef.char_class = charClass;
+
+    // Update local state only after the server has atomically saved both the
+    // active character and its selected skin.
     if (_userDataRef) {
+      _userDataRef.char_class = charClass;
       _userDataRef.selected_skin_id_by_char =
         _userDataRef.selected_skin_id_by_char || {};
-      _userDataRef.selected_skin_id_by_char[charClass] = selectedSkinId;
+      Object.assign(
+        _userDataRef.selected_skin_id_by_char,
+        persisted?.selectedSkinIdByCharacter || {},
+        { [charClass]: selectedSkinId },
+      );
     }
+    _confirmedSkinSelections[charClass] = selectedSkinId;
 
     // Update the main body sprite image immediately
     const mainSprite = document.getElementById("sprite");
@@ -1019,7 +1096,7 @@ function selectCharacter(character) {
       }
     }
 
-    // If in a party, emit socket event so others update
+    // Broadcast the already-persisted selection so party rosters update now.
     const partyId = getActivePartyIdFromPath();
     if (partyId) {
       socket.emit("char-change", {
@@ -1028,37 +1105,23 @@ function selectCharacter(character) {
         selectedSkinId,
       });
     } else {
-      // Not in party: still persist to server so future sessions load it
-      // Use the same socket channel without partyId; server will update only the user row
       socket.emit("char-change", { character: charClass, selectedSkinId });
     }
 
-    // Persist skin selection via HTTP as a fallback, so reload restores the chosen skin
-    // even if the socket event is delayed or dropped.
-    try {
-      fetch("/skins/select", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ character: charClass, skinId: selectedSkinId }),
-      }).catch(() => {});
-    } catch (_) {}
-
-    // Restore presence immediately on successful selection so other clients
-    // do not get stuck on "Selecting Character" until the next status update.
-    emitCharacterMenuStatus(false);
-
     // Keep chooser card highlight synced immediately after selection.
     refreshUpgradeButtonAffordability();
+    closeCharacterSelectAfterSelection();
+    playSound("cursor4", 0.4);
+    return true;
   } catch (e) {
     console.warn("selectCharacter failed:", e?.message);
+    showErrorDialog(
+      e?.message || "Unable to save this character and skin.",
+      "Selection Not Saved",
+    );
+    return false;
   } finally {
-    playSound("cursor4", 0.4);
-
-    hideCharacterDetails();
-
-    const overlay = document.querySelector(".character-select-overlay");
-    if (overlay) overlay.style.display = "none";
+    _characterSelectionPromise = null;
   }
 }
 
@@ -1229,7 +1292,7 @@ function showInsufficientDialog(currency) {
 }
 
 // Generic error dialog for server-side errors
-function showErrorDialog(message) {
+function showErrorDialog(message, titleText = "Purchase failed") {
   const backdrop = document.createElement("div");
   backdrop.className = "cs-confirm-backdrop";
   const dialog = document.createElement("div");
@@ -1237,7 +1300,7 @@ function showErrorDialog(message) {
   dialog.addEventListener("click", (e) => e.stopPropagation());
   const title = document.createElement("div");
   title.className = "cs-confirm-title";
-  title.textContent = "Purchase failed";
+  title.textContent = titleText;
   const body = document.createElement("div");
   body.className = "cs-confirm-body";
   const p = document.createElement("p");

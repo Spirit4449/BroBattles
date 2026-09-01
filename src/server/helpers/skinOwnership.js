@@ -111,6 +111,59 @@ async function unlockSkinForUser(db, userId, skinId, source = "grant") {
   }
 }
 
+async function syncSkinOwnershipWithRunner(db, userRow) {
+  const userId = Number(userRow?.user_id) || 0;
+  const autoUnlockIds = getAutoUnlockSkinIds(userRow);
+
+  if (autoUnlockIds.length) {
+    const placeholders = autoUnlockIds.map(() => "(?, ?, 'auto')").join(",");
+    const params = autoUnlockIds.flatMap((skinId) => [userId, skinId]);
+    await db.runQuery(
+      `INSERT IGNORE INTO user_skins (user_id, skin_id, source) VALUES ${placeholders}`,
+      params,
+    );
+  }
+
+  const ownedRows = await db.runQuery(
+    "SELECT skin_id FROM user_skins WHERE user_id = ?",
+    [userId],
+  );
+
+  const ownedSet = new Set(
+    ownedRows.map((row) => String(row.skin_id || "")).filter(Boolean),
+  );
+
+  const selectedMapRaw = normalizeSelectedSkinMap(
+    userRow?.selected_skin_id_by_char,
+  );
+
+  const catalog = getSkinsCatalog();
+  const characters =
+    catalog?.characters && typeof catalog.characters === "object"
+      ? Object.keys(catalog.characters)
+      : [];
+
+  const nextSelectedMap = {};
+  for (const character of characters) {
+    const selected = resolveSelectedSkinId({
+      character,
+      selectedSkinMap: selectedMapRaw,
+      ownedSkinIds: Array.from(ownedSet),
+    });
+    if (selected) nextSelectedMap[character] = selected;
+  }
+
+  await db.runQuery(
+    "UPDATE users SET selected_skin_id_by_char = ? WHERE user_id = ?",
+    [JSON.stringify(nextSelectedMap), userId],
+  );
+
+  return {
+    ownedSkinIds: Array.from(ownedSet),
+    selectedSkinIdByCharacter: nextSelectedMap,
+  };
+}
+
 async function syncSkinOwnershipForUser(db, userRow) {
   const userId = Number(userRow?.user_id) || 0;
   if (!userId) {
@@ -120,63 +173,29 @@ async function syncSkinOwnershipForUser(db, userRow) {
     };
   }
 
-  const autoUnlockIds = getAutoUnlockSkinIds(userRow);
-
   try {
-    if (autoUnlockIds.length) {
-      const placeholders = autoUnlockIds.map(() => "(?, ?, 'auto')").join(",");
-      const params = autoUnlockIds.flatMap((skinId) => [userId, skinId]);
-      await db.runQuery(
-        `INSERT IGNORE INTO user_skins (user_id, skin_id, source) VALUES ${placeholders}`,
-        params,
-      );
-    }
-
-    const ownedRows = await db.runQuery(
-      "SELECT skin_id FROM user_skins WHERE user_id = ?",
-      [userId],
-    );
-
-    const ownedSet = new Set(
-      ownedRows.map((row) => String(row.skin_id || "")).filter(Boolean),
-    );
-
-    const selectedMapRaw = normalizeSelectedSkinMap(
-      userRow?.selected_skin_id_by_char,
-    );
-
-    const catalog = getSkinsCatalog();
-    const characters =
-      catalog?.characters && typeof catalog.characters === "object"
-        ? Object.keys(catalog.characters)
-        : [];
-
-    const nextSelectedMap = {};
-    for (const character of characters) {
-      const selected = resolveSelectedSkinId({
-        character,
-        selectedSkinMap: selectedMapRaw,
-        ownedSkinIds: Array.from(ownedSet),
+    if (typeof db?.withTransaction === "function") {
+      return await db.withTransaction(async (_conn, q) => {
+        // Serialize normalization with skin/character selection writes. Using
+        // the caller's earlier user snapshot here can otherwise undo a newer
+        // selection when two lobby requests overlap.
+        const rows = await q(
+          "SELECT * FROM users WHERE user_id = ? FOR UPDATE",
+          [userId],
+        );
+        const currentUser = rows?.[0] || userRow;
+        return syncSkinOwnershipWithRunner({ runQuery: q }, currentUser);
       });
-      if (selected) nextSelectedMap[character] = selected;
     }
 
-    await db.runQuery(
-      "UPDATE users SET selected_skin_id_by_char = ? WHERE user_id = ?",
-      [JSON.stringify(nextSelectedMap), userId],
-    );
-
-    return {
-      ownedSkinIds: Array.from(ownedSet),
-      selectedSkinIdByCharacter: nextSelectedMap,
-    };
+    return await syncSkinOwnershipWithRunner(db, userRow);
   } catch (error) {
     if (
       error?.code === "ER_NO_SUCH_TABLE" ||
       error?.code === "ER_BAD_FIELD_ERROR"
     ) {
       return {
-        ownedSkinIds: autoUnlockIds,
+        ownedSkinIds: getAutoUnlockSkinIds(userRow),
         selectedSkinIdByCharacter: {},
         schemaMissing: true,
       };

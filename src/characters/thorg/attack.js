@@ -7,6 +7,7 @@ import {
   sampleThrowArcPoint,
 } from "../shared/attackAim";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
+import { playSpriteAnimation } from "../shared/animationState";
 
 const FALL = getResolvedCharacterAttackConfig("thorg", "fall");
 
@@ -71,11 +72,13 @@ export function performThorgFallAttack(instance, attackContext = null) {
   const attackId = createRuntimeId("thorgFall");
   const hitSet = new Set();
 
-  // play simple throw animation if present
-  if (scene.anims) {
-    if (scene.anims.exists("thorg-throw")) p.anims.play("thorg-throw", true);
-    else if (scene.anims.exists("throw")) p.anims.play("throw", true);
-  }
+  playSpriteAnimation({
+    scene,
+    sprite: p,
+    character: "thorg",
+    logical: "throw",
+    fallback: "idle",
+  });
 
   // Visual SFX local-only
   try {
@@ -223,9 +226,10 @@ export function performThorgFallAttack(instance, attackContext = null) {
   // Spawn a local visual 'bat' if texture exists. Do not show any hitbox by default.
   try {
     const startAnchor = getAnchor();
+    const playerTextureKey = p?._bbSkinTextureKey || p?.texture?.key || "";
     const skinWeaponKey =
-      p?.texture?.key && scene.textures.exists(`${p.texture.key}-weapon`)
-        ? `${p.texture.key}-weapon`
+      playerTextureKey && scene.textures.exists(`${playerTextureKey}-weapon`)
+        ? `${playerTextureKey}-weapon`
         : null;
     const defaultWeaponKey = scene.textures.exists("thorg-weapon")
       ? "thorg-weapon"

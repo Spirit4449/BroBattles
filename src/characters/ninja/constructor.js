@@ -9,6 +9,7 @@ import {
   resolveSessionDamage,
 } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
+import { playSpriteAnimation } from "../shared/animationState";
 import { createRuntimeId } from "../shared/runtimeId";
 
 // Single source of truth for this character's name/key
@@ -106,11 +107,13 @@ class Ninja extends CharacterEntityBase {
         sfx.setRate(1.3);
         sfx.play();
       } catch (_) {}
-      try {
-        if (ownerSprite?.anims && scene.anims?.exists(`${NAME}-throw`)) {
-          ownerSprite.anims.play(`${NAME}-throw`, true);
-        }
-      } catch (_) {}
+      playSpriteAnimation({
+        scene,
+        sprite: ownerSprite,
+        character: NAME,
+        logical: "throw",
+        fallback: "idle",
+      });
       // Instantiate a non-owner returning shuriken so visuals match
       const shuriken = new ReturningShuriken(
         scene,
@@ -203,16 +206,13 @@ class Ninja extends CharacterEntityBase {
       sfx.setVolume(1);
       sfx.setRate(1.3);
       sfx.play();
-      if (
-        this.scene.anims &&
-        (this.scene.anims.exists(`${NAME}-throw`) ||
-          this.scene.anims.exists("throw"))
-      ) {
-        p.anims.play(
-          this.scene.anims.exists(`${NAME}-throw`) ? `${NAME}-throw` : "throw",
-          true,
-        );
-      }
+      playSpriteAnimation({
+        scene: this.scene,
+        sprite: p,
+        character: NAME,
+        logical: "throw",
+        fallback: "idle",
+      });
 
       const config = {
         direction,

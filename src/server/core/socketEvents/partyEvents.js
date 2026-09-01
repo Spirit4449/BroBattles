@@ -7,7 +7,14 @@ const {
   getMapById,
   getVariantDescriptor,
 } = require("../../helpers/gameSelectionCatalog");
-const { normalizeSelectedSkinMap } = require("../../helpers/skinsCatalog");
+const {
+  getSkinById,
+  normalizeSelectedSkinMap,
+  resolveSelectedSkinId,
+} = require("../../helpers/skinsCatalog");
+const {
+  syncSkinOwnershipForUser,
+} = require("../../helpers/skinOwnership");
 const { getAllCharacters } = require("../../../lib/characterStats");
 
 function formatSelectionLabel(selection) {
@@ -28,6 +35,18 @@ const VALID_CHARACTER_IDS = new Set(
     )
     .filter(Boolean),
 );
+
+function getCharacterLevel(user, character) {
+  let levels = user?.char_levels || {};
+  if (typeof levels === "string") {
+    try {
+      levels = JSON.parse(levels || "{}");
+    } catch (_) {
+      levels = {};
+    }
+  }
+  return Math.max(0, Number(levels?.[character]) || 0);
+}
 
 function registerPartyEvents(
   socket,
@@ -329,79 +348,130 @@ function registerPartyEvents(
     }
   });
 
-  socket.on("char-change", async (data) => {
-    const uname = socket.data.user?.name;
-    if (!uname) return;
+  socket.on("char-change", async (data, ack) => {
+    const socketUser = socket.data.user;
+    const uname = socketUser?.name;
+    const userId = Number(socketUser?.user_id) || 0;
+    if (!uname || !userId) {
+      ack?.({ ok: false, error: "unauthorized" });
+      return;
+    }
     const partyId = data?.partyId ? Number(data.partyId) : null;
     const charClass = (data?.character || data?.charClass || "")
       .toString()
       .trim()
       .toLowerCase();
     const selectedSkinId = String(data?.selectedSkinId || "").trim();
-    if (!charClass || !/^[a-zA-Z_-]{2,20}$/.test(charClass)) return;
+    if (!charClass || !/^[a-zA-Z_-]{2,20}$/.test(charClass)) {
+      ack?.({ ok: false, error: "invalid_character" });
+      return;
+    }
     if (!VALID_CHARACTER_IDS.has(charClass)) {
       console.warn(
         `[party:${partyId ?? "-"}] rejected unknown character ${charClass} for ${uname}`,
       );
+      ack?.({ ok: false, error: "unknown_character" });
       return;
     }
 
     try {
-      if (partyId) {
-        const mem = await db.runQuery(
-          "SELECT 1 FROM party_members WHERE party_id = ? AND name = ? LIMIT 1",
-          [partyId, uname],
-        );
-        if (!mem?.length) {
-          if (selectedSkinId) {
-            const selectedRows = await db.runQuery(
-              "SELECT selected_skin_id_by_char FROM users WHERE name = ? LIMIT 1",
-              [uname],
-            );
-            const selectedMap = normalizeSelectedSkinMap(
-              selectedRows?.[0]?.selected_skin_id_by_char,
-            );
-            selectedMap[charClass] = selectedSkinId;
-            await db.runQuery(
-              "UPDATE users SET char_class = ?, selected_skin_id_by_char = ? WHERE name = ?",
-              [charClass, JSON.stringify(selectedMap), uname],
-            );
-          } else {
-            await db.runQuery(
-              "UPDATE users SET char_class = ? WHERE name = ?",
-              [charClass, uname],
-            );
-          }
+      const userRows = await db.runQuery(
+        "SELECT * FROM users WHERE user_id = ? LIMIT 1",
+        [userId],
+      );
+      const freshUser = userRows?.[0];
+      if (!freshUser) {
+        ack?.({ ok: false, error: "user_not_found" });
+        return;
+      }
+      if (getCharacterLevel(freshUser, charClass) < 1) {
+        ack?.({ ok: false, error: "character_locked" });
+        return;
+      }
+
+      const skinState = await syncSkinOwnershipForUser(db, freshUser);
+      const ownedSkinIds = Array.isArray(skinState?.ownedSkinIds)
+        ? skinState.ownedSkinIds.map(String)
+        : [];
+      const owned = new Set(ownedSkinIds);
+      let nextSkinId = selectedSkinId;
+
+      if (nextSkinId) {
+        const skin = getSkinById(nextSkinId);
+        if (
+          !skin ||
+          String(skin.character || "") !== charClass ||
+          !owned.has(nextSkinId)
+        ) {
+          ack?.({ ok: false, error: "skin_not_unlocked" });
           return;
         }
-      }
-
-      if (selectedSkinId) {
-        const selectedRows = await db.runQuery(
-          "SELECT selected_skin_id_by_char FROM users WHERE name = ? LIMIT 1",
-          [uname],
-        );
-        const selectedMap = normalizeSelectedSkinMap(
-          selectedRows?.[0]?.selected_skin_id_by_char,
-        );
-        selectedMap[charClass] = selectedSkinId;
-        await db.runQuery(
-          "UPDATE users SET char_class = ?, selected_skin_id_by_char = ? WHERE name = ?",
-          [charClass, JSON.stringify(selectedMap), uname],
-        );
       } else {
-        await db.runQuery("UPDATE users SET char_class = ? WHERE name = ?", [
-          charClass,
-          uname,
-        ]);
+        nextSkinId =
+          resolveSelectedSkinId({
+            character: charClass,
+            selectedSkinMap: skinState?.selectedSkinIdByCharacter,
+            ownedSkinIds,
+          }) || "";
       }
 
-      if (partyId) {
-        await partyPresence.emitPartyRosterById(partyId);
+      let selectedMap;
+      if (typeof db.withTransaction === "function") {
+        selectedMap = await db.withTransaction(async (_conn, q) => {
+          const rows = await q(
+            "SELECT selected_skin_id_by_char FROM users WHERE user_id = ? FOR UPDATE",
+            [userId],
+          );
+          const nextMap = normalizeSelectedSkinMap(
+            rows?.[0]?.selected_skin_id_by_char,
+          );
+          if (nextSkinId && (selectedSkinId || !nextMap[charClass])) {
+            nextMap[charClass] = nextSkinId;
+          }
+          await q(
+            "UPDATE users SET char_class = ?, selected_skin_id_by_char = ? WHERE user_id = ?",
+            [charClass, JSON.stringify(nextMap), userId],
+          );
+          return nextMap;
+        });
+      } else {
+        selectedMap = normalizeSelectedSkinMap(
+          skinState?.selectedSkinIdByCharacter ||
+            freshUser.selected_skin_id_by_char,
+        );
+        if (nextSkinId && (selectedSkinId || !selectedMap[charClass])) {
+          selectedMap[charClass] = nextSkinId;
+        }
+        await db.runQuery(
+          "UPDATE users SET char_class = ?, selected_skin_id_by_char = ? WHERE user_id = ?",
+          [charClass, JSON.stringify(selectedMap), userId],
+        );
+      }
+      nextSkinId = selectedMap[charClass] || nextSkinId;
+      socket.data.user = {
+        ...socket.data.user,
+        char_class: charClass,
+        selected_skin_id_by_char: selectedMap,
+      };
+
+      // Always derive the broadcast target from authoritative membership. A
+      // stale page URL must not prevent the user's real party from refreshing.
+      const rosterPartyId = await db.getPartyIdByName(uname);
+      if (rosterPartyId) {
+        await partyPresence.emitPartyRosterById(rosterPartyId);
       }
 
-      console.log(`[party:${partyId ?? "-"}] ${uname} selected ${charClass}`);
+      ack?.({
+        ok: true,
+        character: charClass,
+        selectedSkinId: nextSkinId || null,
+      });
+
+      console.log(
+        `[party:${rosterPartyId ?? "-"}] ${uname} selected ${charClass}:${nextSkinId || "default"}`,
+      );
     } catch (e) {
+      ack?.({ ok: false, error: "selection_failed" });
       console.warn("char-change error:", e?.message);
     }
   });

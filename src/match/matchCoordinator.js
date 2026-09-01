@@ -676,6 +676,20 @@ export function createMatchCoordinator(config) {
           name: p.name,
           team: p.team,
           char_class: p.char_class,
+          // The HTTP roster is the asset manifest used during Phaser preload.
+          // Keep those identity fields stable if the room snapshot was created
+          // from an older selection, otherwise the client can request a texture
+          // key that was never loaded.
+          selected_skin_id:
+            p.selected_skin_id ?? live?.selected_skin_id ?? null,
+          selected_skin_asset_url:
+            p.selected_skin_asset_url ??
+            live?.selected_skin_asset_url ??
+            null,
+          selected_skin_game_assets:
+            p.selected_skin_game_assets ??
+            live?.selected_skin_game_assets ??
+            null,
         };
       });
       gameData.players = mergedRoster;
@@ -829,7 +843,20 @@ export function createMatchCoordinator(config) {
       if (Array.isArray(gameData?.players)) {
         gameData.players = gameData.players.map((p) => {
           const live = snapshot.players?.[p.name];
-          return live ? { ...p, ...live, name: p.name } : p;
+          return live
+            ? {
+                ...p,
+                ...live,
+                name: p.name,
+                team: p.team,
+                char_class: p.char_class,
+                selected_skin_id: p.selected_skin_id ?? null,
+                selected_skin_asset_url:
+                  p.selected_skin_asset_url ?? null,
+                selected_skin_game_assets:
+                  p.selected_skin_game_assets ?? null,
+              }
+            : p;
         });
       }
     } catch (_) {}

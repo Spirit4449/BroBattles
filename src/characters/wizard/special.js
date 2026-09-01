@@ -1,3 +1,5 @@
+import { playSpriteAnimation } from "../shared/animationState.js";
+
 function pulseAura(scene, sprite, tint = 0x7dd3fc, scale = 1.6, alpha = 0.34) {
   if (!scene?.add || !sprite?.active) return;
   const aura = scene.add.circle(sprite.x, sprite.y, 34, tint, alpha);
@@ -56,13 +58,13 @@ function pulseRing(scene, sprite, radius = 48, color = 0x60a5fa, width = 5) {
 export function perform(scene, player) {
   if (!scene || !player) return;
   player._specialAnimLockUntil = Date.now() + 2100;
-  try {
-    if (scene.anims?.exists("wizard-special")) {
-      player.anims?.play?.("wizard-special", true);
-    } else if (scene.anims?.exists("wizard-throw")) {
-      player.anims?.play?.("wizard-throw", true);
-    }
-  } catch (_) {}
+  playSpriteAnimation({
+    scene,
+    sprite: player,
+    character: "wizard",
+    logical: "special",
+    fallback: "throw",
+  });
   try {
     scene.sound?.play?.("wizard-special", {
       volume: 0.5,

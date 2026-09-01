@@ -196,6 +196,18 @@ function initSocket({
       gameHub,
       abuseControl,
     });
+    // Lobby selection can be emitted as soon as the client sees `connect`.
+    // Register party/character handlers before the presence DB work below so a
+    // fast character or skin selection is never dropped during connection setup.
+    registerPartyEvents(socket, {
+      db,
+      io,
+      mm,
+      partyPresence,
+      partyState,
+      partyQueueTransition,
+      PARTY_STATUS,
+    });
 
     // store socket id and mark online
     try {
@@ -258,16 +270,6 @@ function initSocket({
         );
       }
     }
-
-    registerPartyEvents(socket, {
-      db,
-      io,
-      mm,
-      partyPresence,
-      partyState,
-      partyQueueTransition,
-      PARTY_STATUS,
-    });
 
     registerChatEvents(socket, {
       chatService,

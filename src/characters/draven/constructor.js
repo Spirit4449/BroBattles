@@ -11,6 +11,7 @@ import {
 } from "./attack";
 import { executeDefaultAttack } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
+import { playSpriteAnimation } from "../shared/animationState";
 
 // Single source of truth for this character's name/key
 const NAME = "draven";
@@ -153,11 +154,13 @@ class Draven extends CharacterEntityBase {
     if (data.type !== "draven-splash") return false;
     const ownerSprite = ownerWrapper && ownerWrapper.opponent;
     if (!ownerSprite) return true; // nothing to draw
-    try {
-      if (scene.anims?.exists("draven-throw")) {
-        ownerSprite.anims.play("draven-throw", true);
-      }
-    } catch (_) {}
+    playSpriteAnimation({
+      scene,
+      sprite: ownerSprite,
+      character: NAME,
+      logical: "throw",
+      fallback: "idle",
+    });
     // Play remote attack start SFX (mirror owner's throw)
     try {
       scene.sound && scene.sound.play("draven-fireball", { volume: 0.4 });

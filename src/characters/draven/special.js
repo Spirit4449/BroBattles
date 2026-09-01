@@ -3,7 +3,11 @@ import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js"
 import { getResolvedCharacterSpecialAimConfig } from "../../lib/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
-import { markOneShotAnimation } from "../shared/animationState.js";
+import {
+  markOneShotAnimation,
+  playSpriteAnimation,
+  resolveSpriteAnimationKey,
+} from "../shared/animationState.js";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 
 const INFERNO = getResolvedCharacterSpecialConfig("draven", "inferno");
@@ -154,13 +158,21 @@ function startInfernoVisualLoop(scene, player, token, isOwner) {
       spawnExplosion(scene, ex, ey);
     }
 
-    if (
-      scene.anims?.exists("draven-special") &&
-      player.anims?.currentAnim?.key !== "draven-special"
-    ) {
-      try {
-        player.anims.play("draven-special", true);
-      } catch (_) {}
+    const specialKey = resolveSpriteAnimationKey({
+      scene,
+      sprite: player,
+      character: "draven",
+      logical: "special",
+      fallback: "throw",
+    });
+    if (specialKey && player.anims?.currentAnim?.key !== specialKey) {
+      playSpriteAnimation({
+        scene,
+        sprite: player,
+        character: "draven",
+        logical: "special",
+        fallback: "throw",
+      });
     }
 
     // Keep the owner fully anchored while channeling.
@@ -215,15 +227,13 @@ export function perform(
     player.setVelocity(0, 0);
   }
 
-  if (scene.anims?.exists("draven-special")) {
-    try {
-      player.anims.play("draven-special", true);
-    } catch (_) {}
-  } else if (scene.anims?.exists("draven-throw")) {
-    try {
-      player.anims.play("draven-throw", true);
-    } catch (_) {}
-  }
+  playSpriteAnimation({
+    scene,
+    sprite: player,
+    character: "draven",
+    logical: "special",
+    fallback: "throw",
+  });
 
   ensureInfernoOverlay(scene, player);
 

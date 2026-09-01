@@ -79,16 +79,20 @@ function buildSkinAssetUrl(character, skinId) {
   const defaultSkinId = getDefaultSkinId(char);
   const skin = normalizedSkinId ? getSkinById(normalizedSkinId) : null;
   if (skin && String(skin.character || "") === char) {
-    return (
-      String(skin.assetUrl || "").trim() || `/assets/${assetFolder}/body.webp`
-    );
+    const declaredUrl = String(skin.assetUrl || "").trim();
+    if (declaredUrl) return declaredUrl;
+    return normalizedSkinId === defaultSkinId
+      ? `/assets/${assetFolder}/body.webp`
+      : `/assets/${assetFolder}/skins/${normalizedSkinId}/body.webp`;
   }
   const defaultSkin = defaultSkinId ? getSkinById(defaultSkinId) : null;
   const defaultAssetUrl = String(defaultSkin?.assetUrl || "").trim();
   if (!normalizedSkinId || normalizedSkinId === defaultSkinId) {
     return defaultAssetUrl || `/assets/${assetFolder}/body.webp`;
   }
-  return `/assets/${assetFolder}/skins/${normalizedSkinId}/body.webp`;
+  // Never manufacture a URL for an unknown or cross-character skin id. A
+  // stale selection should render the character's base body, not a broken img.
+  return defaultAssetUrl || `/assets/${assetFolder}/body.webp`;
 }
 
 function getSkinGameAssets(character, skinId) {
@@ -150,8 +154,9 @@ function resolveSelectedSkinId({ character, selectedSkinMap, ownedSkinIds }) {
     .toLowerCase();
   if (!char) return null;
   const map = normalizeSelectedSkinMap(selectedSkinMap);
+  const ownershipProvided = Array.isArray(ownedSkinIds);
   const owned = new Set(
-    (Array.isArray(ownedSkinIds) ? ownedSkinIds : []).map(String),
+    (ownershipProvided ? ownedSkinIds : []).map(String),
   );
   const desired = String(map[char] || "").trim();
   const defaultSkinId = getDefaultSkinId(char);
@@ -161,13 +166,13 @@ function resolveSelectedSkinId({ character, selectedSkinMap, ownedSkinIds }) {
     if (
       skin &&
       skin.character === char &&
-      (owned.size === 0 || owned.has(desired))
+      (!ownershipProvided || owned.has(desired))
     ) {
       return desired;
     }
   }
 
-  if (defaultSkinId && (owned.size === 0 || owned.has(defaultSkinId))) {
+  if (defaultSkinId && (!ownershipProvided || owned.has(defaultSkinId))) {
     return defaultSkinId;
   }
 

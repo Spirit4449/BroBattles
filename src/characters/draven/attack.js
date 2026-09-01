@@ -6,6 +6,7 @@ import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
 import { emitVaultHitForRect } from "../shared/vaultTargeting";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
+import { playSpriteAnimation } from "../shared/animationState";
 
 const SPLASH = getResolvedCharacterAttackConfig("draven", "splash");
 const SPLASH_W = SPLASH.width;
@@ -34,16 +35,13 @@ export function performDravenSplashAttack(instance, attackContext = null) {
   const unlockFlip = lockPlayerFlip(p); // remember original orientation
   const attackId = createRuntimeId("dravenSplash");
 
-  // Play attack animation if present
-  if (
-    scene.anims &&
-    (scene.anims.exists("draven-throw") || scene.anims.exists("throw"))
-  ) {
-    p.anims.play(
-      scene.anims.exists("draven-throw") ? "draven-throw" : "throw",
-      true,
-    );
-  }
+  playSpriteAnimation({
+    scene,
+    sprite: p,
+    character: "draven",
+    logical: "throw",
+    fallback: "idle",
+  });
 
   // Debug visuals removed (box no longer drawn)
   // Continuous damage ticking within active window (owner only)

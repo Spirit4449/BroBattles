@@ -4,6 +4,7 @@ import { createRuntimeId } from "../shared/runtimeId.js";
 import { lockPlayerFlip } from "../shared/flipLock.js";
 import { emitVaultHitForCircle } from "../shared/vaultTargeting.js";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers.js";
+import { playSpriteAnimation } from "../shared/animationState.js";
 
 const NAME = "huntress";
 const ARROWS = getResolvedCharacterAttackConfig(NAME, "arrowSpread");
@@ -53,13 +54,13 @@ function createDebugCircle(scene, radius) {
 }
 
 function playAttackAnimation(scene, sprite, special = false) {
-  if (!scene?.anims || !sprite?.anims) return;
-  const preferred = special ? `${NAME}-special` : `${NAME}-throw`;
-  const fallback = `${NAME}-throw`;
-  try {
-    if (scene.anims.exists(preferred)) sprite.anims.play(preferred, true);
-    else if (scene.anims.exists(fallback)) sprite.anims.play(fallback, true);
-  } catch (_) {}
+  playSpriteAnimation({
+    scene,
+    sprite,
+    character: NAME,
+    logical: special ? "special" : "throw",
+    fallback: "throw",
+  });
 }
 
 function playSound(scene, key, options = {}) {

@@ -1,3 +1,5 @@
+import { playSpriteAnimation } from "../shared/animationState.js";
+
 export function perform(
   scene,
   player,
@@ -10,13 +12,13 @@ export function perform(
   if (!scene || !player || !player.active) return;
   player._specialAnimLockUntil = Date.now() + 900;
 
-  try {
-    if (scene.anims?.exists("huntress-special")) {
-      player.anims?.play?.("huntress-special", true);
-    } else if (scene.anims?.exists("huntress-throw")) {
-      player.anims?.play?.("huntress-throw", true);
-    }
-  } catch (_) {}
+  playSpriteAnimation({
+    scene,
+    sprite: player,
+    character: "huntress",
+    logical: "special",
+    fallback: "throw",
+  });
 
   try {
     scene.sound?.play?.("huntress-special", {

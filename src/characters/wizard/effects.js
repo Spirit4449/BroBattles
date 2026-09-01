@@ -1,3 +1,8 @@
+import {
+  playSpriteAnimation,
+  resolveSpriteAnimationKey,
+} from "../shared/animationState.js";
+
 const POWERUP_TINTS = {
   rage: 0xa855f7,
   health: 0x34d399,
@@ -147,34 +152,44 @@ function attachWizardAura(scene, sprite) {
 
 function playCasterSpecialAnimation(scene, sprite) {
   if (!scene?.time || !sprite?.active || !sprite?.anims) return;
-  const specialKey = scene.anims?.exists("wizard-special")
-    ? "wizard-special"
-    : scene.anims?.exists("wizard-throw")
-      ? "wizard-throw"
-      : scene.anims?.exists("special")
-        ? "special"
-        : scene.anims?.exists("throw")
-          ? "throw"
-          : null;
-  const idleKey = scene.anims?.exists("wizard-idle")
-    ? "wizard-idle"
-    : scene.anims?.exists("idle")
-      ? "idle"
-      : null;
+  const specialKey = resolveSpriteAnimationKey({
+    scene,
+    sprite,
+    character: "wizard",
+    logical: "special",
+    fallback: "throw",
+  });
+  const idleKey = resolveSpriteAnimationKey({
+    scene,
+    sprite,
+    character: "wizard",
+    logical: "idle",
+    fallback: "idle",
+  });
   if (!specialKey) return;
   sprite._specialAnimLockUntil = Date.now() + ARCANE_SURGE_DARK_MS + 120;
   sprite._specialAnimLockUntilPerf = performance.now() + ARCANE_SURGE_DARK_MS + 120;
 
-  try {
-    sprite.anims.play(specialKey, true);
-  } catch (_) {}
+  playSpriteAnimation({
+    scene,
+    sprite,
+    character: "wizard",
+    logical: "special",
+    fallback: "throw",
+  });
 
   scene.time.delayedCall(Math.max(450, ARCANE_SURGE_DARK_MS - 120), () => {
     if (!sprite?.active || !idleKey) return;
     try {
       const current = sprite.anims?.currentAnim?.key || "";
       if (current === specialKey) {
-        sprite.anims.play(idleKey, true);
+        playSpriteAnimation({
+          scene,
+          sprite,
+          character: "wizard",
+          logical: "idle",
+          fallback: "idle",
+        });
       }
     } catch (_) {}
   });

@@ -81,6 +81,85 @@ export function noteAnimationPlayed(sprite, logical = "idle") {
   sprite._bbAnimationState = state;
 }
 
+/**
+ * Resolve an animation against the texture the sprite was created for.
+ *
+ * Phaser changes a sprite's texture to the texture referenced by an animation's
+ * frames. Playing a base key such as `thorg-throw` on a skinned sprite therefore
+ * swaps the character back to the default atlas. `_bbSkinTextureKey` is kept on
+ * player sprites so we can also recover the intended skin after any legacy/base
+ * animation has already changed `sprite.texture.key`.
+ */
+export function resolveSpriteAnimationKey({
+  scene,
+  sprite,
+  character,
+  logical = "idle",
+  fallback = "idle",
+} = {}) {
+  const anims = scene?.anims;
+  if (!anims) return null;
+
+  const char = String(character || sprite?._bbCharacter || "")
+    .trim()
+    .toLowerCase();
+  const wanted = toLogicalAnimation(logical, char);
+  const fallbackLogical = toLogicalAnimation(fallback, char);
+  const textureKeys = [];
+  const addTextureKey = (value) => {
+    const key = String(value || "").trim();
+    if (key && !textureKeys.includes(key)) textureKeys.push(key);
+  };
+
+  addTextureKey(sprite?._bbSkinTextureKey);
+  addTextureKey(sprite?.texture?.key);
+
+  const candidates = [];
+  const addCandidate = (value) => {
+    const key = String(value || "").trim();
+    if (key && !candidates.includes(key)) candidates.push(key);
+  };
+
+  for (const textureKey of textureKeys) {
+    addCandidate(`${textureKey}-${wanted}`);
+    addCandidate(`${textureKey}-${fallbackLogical}`);
+  }
+  if (char) {
+    addCandidate(`${char}-${wanted}`);
+    addCandidate(`${char}-${fallbackLogical}`);
+  }
+  addCandidate(logical);
+  addCandidate(fallback);
+
+  return candidates.find((key) => anims.exists(key)) || null;
+}
+
+export function playSpriteAnimation({
+  scene,
+  sprite,
+  character,
+  logical = "idle",
+  fallback = "idle",
+  force = true,
+} = {}) {
+  if (!sprite?.anims) return null;
+  const key = resolveSpriteAnimationKey({
+    scene,
+    sprite,
+    character,
+    logical,
+    fallback,
+  });
+  if (!key) return null;
+  try {
+    sprite.anims.play(key, force);
+    noteAnimationPlayed(sprite, logical);
+    return key;
+  } catch (_) {
+    return null;
+  }
+}
+
 export function resetAirborneJumpAnimation(sprite) {
   if (!sprite) return;
   const state = sprite._bbAnimationState || {};

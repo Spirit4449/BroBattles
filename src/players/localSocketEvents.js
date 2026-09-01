@@ -6,6 +6,7 @@ import {
   triggerDamageScreenPulse,
 } from "../effects";
 import { triggerDamageCameraShake } from "../gameScene/cameraDynamics";
+import { playSpriteAnimation } from "../characters/shared/animationState.js";
 
 export function bindLocalSocketEvents({
   socket,
@@ -16,7 +17,6 @@ export function bindLocalSocketEvents({
   getGameId,
   getPlayersInTeam,
   getOpponentPlayersRef,
-  resolveAnimKey,
   spawnHealthMarker,
   updateHealthBar,
   getCurrentHealth,
@@ -142,10 +142,13 @@ export function bindLocalSocketEvents({
     try {
       player.alpha = 1;
       player.setVisible(true);
-      player.anims.play(
-        resolveAnimKey(scene, getCurrentCharacter(), "dying", "idle"),
-        true,
-      );
+      playSpriteAnimation({
+        scene,
+        sprite: player,
+        character: getCurrentCharacter(),
+        logical: "dying",
+        fallback: "idle",
+      });
     } catch (_) {}
     try {
       scene.input.enabled = false;
@@ -241,10 +244,13 @@ export function bindLocalSocketEvents({
       }
       player.setVelocity?.(0, 0);
       player.setAcceleration?.(0, 0);
-      player.anims?.play?.(
-        resolveAnimKey(scene, getCurrentCharacter(), "idle", "idle"),
-        true,
-      );
+      playSpriteAnimation({
+        scene,
+        sprite: player,
+        character: getCurrentCharacter(),
+        logical: "idle",
+        fallback: "idle",
+      });
       spawnSpawnBurst(scene, player, {
         tint: 0xffffff,
         accent: 0xb8ecff,

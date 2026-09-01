@@ -1,19 +1,19 @@
 import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
+import { playSpriteAnimation } from "../shared/animationState";
 
 const NAME = "gloop";
 const HOOK = getResolvedCharacterSpecialConfig(NAME, "hook");
 const ACTIVE_HOOK_VISUALS = new WeakMap();
 
 function playSpecialAnimation(scene, player) {
-  if (!scene?.anims || !player?.anims) return;
-  try {
-    if (scene.anims.exists(`${NAME}-special`)) {
-      player.anims.play(`${NAME}-special`, true);
-    } else if (scene.anims.exists(`${NAME}-throw`)) {
-      player.anims.play(`${NAME}-throw`, true);
-    }
-  } catch (_) {}
+  playSpriteAnimation({
+    scene,
+    sprite: player,
+    character: NAME,
+    logical: "special",
+    fallback: "throw",
+  });
 }
 
 function resolveAngle(player, specialData = null) {

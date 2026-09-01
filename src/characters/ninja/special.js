@@ -2,6 +2,7 @@ import ReturningShuriken from "./attack";
 import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
+import { playSpriteAnimation } from "../shared/animationState";
 
 const SWARM = getResolvedCharacterSpecialConfig("ninja", "swarm");
 const SWARM_COUNT = SWARM.count ?? 15;
@@ -142,11 +143,13 @@ export function perform(
     });
   } catch (_) {}
 
-  try {
-    if (scene.anims?.exists("ninja-throw")) {
-      player.anims.play("ninja-throw", true);
-    }
-  } catch (_) {}
+  playSpriteAnimation({
+    scene,
+    sprite: player,
+    character: "ninja",
+    logical: "throw",
+    fallback: "idle",
+  });
 
   for (let index = 0; index < SWARM_COUNT; index++) {
     scene.time.delayedCall(index * SWARM_RELEASE_MS, () => {

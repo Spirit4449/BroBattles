@@ -9,6 +9,7 @@ import {
 } from "./attack";
 import { executeDefaultAttack } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
+import { playSpriteAnimation } from "../shared/animationState";
 
 const NAME = "huntress";
 
@@ -86,26 +87,24 @@ class Huntress extends CharacterEntityBase {
       );
     }
     if (type === `${NAME}-arrow`) {
-      try {
-        if (ownerSprite?.anims) {
-          if (scene.anims?.exists(`${NAME}-throw`)) {
-            ownerSprite.anims.play(`${NAME}-throw`, true);
-          }
-        }
-      } catch (_) {}
+      playSpriteAnimation({
+        scene,
+        sprite: ownerSprite,
+        character: NAME,
+        logical: "throw",
+        fallback: "idle",
+      });
       return true;
     }
     if (type === `${NAME}-arrow-release` || type === `${NAME}-burning-arrow`) {
-      try {
-        if (ownerSprite?.anims) {
-          const animKey =
-            type === `${NAME}-burning-arrow`
-              ? `${NAME}-special`
-              : `${NAME}-throw`;
-          if (scene.anims?.exists(animKey))
-            ownerSprite.anims.play(animKey, true);
-        }
-      } catch (_) {}
+      playSpriteAnimation({
+        scene,
+        sprite: ownerSprite,
+        character: NAME,
+        logical:
+          type === `${NAME}-burning-arrow` ? "special" : "throw",
+        fallback: "throw",
+      });
       spawnHuntressArrowVisual(scene, data, ownerSprite, {
         mapObjects: Array.isArray(scene?._mapObjects) ? scene._mapObjects : [],
         opponentPlayersRef: remoteContext?.opponentPlayersRef || {},

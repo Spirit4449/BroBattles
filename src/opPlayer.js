@@ -72,6 +72,9 @@ export default class OpPlayer {
     // Creates the sprite
     const textureKey = getTextureKey(this.character, this.skinId);
     this.opponent = this.scene.physics.add.sprite(-100, -100, textureKey);
+    this.opponent._bbCharacter = String(this.character || "").toLowerCase();
+    this.opponent._bbSkinId = this.skinId;
+    this.opponent._bbSkinTextureKey = textureKey;
     this.opponent.username = this.username; // Attach username for collision detection
     // Avoid first-frame pop: hide until frame/body configured and spawn applied
     this.opponent.setVisible(false);

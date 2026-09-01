@@ -36,6 +36,7 @@ import {
   playCharacterAnimation,
   resetAirborneJumpAnimation,
   toLogicalAnimation,
+  playSpriteAnimation,
 } from "./characters/shared/animationState.js";
 import { getResolvedCharacterBodyConfig } from "./lib/characterTuning.js";
 import { createAttackAimReticleController } from "./gameScene/attackAimReticle";
@@ -636,6 +637,9 @@ export function createPlayer(
         -100,
         getTextureKey(character, currentSkinId),
       );
+  player._bbCharacter = String(currentCharacter || "").toLowerCase();
+  player._bbSkinId = currentSkinId;
+  player._bbSkinTextureKey = getTextureKey(character, currentSkinId);
   player.username = username; // Attach username for collision detection
   player.setCollideWorldBounds(true);
   player.anims.play(
@@ -980,7 +984,6 @@ export function createPlayer(
     getGameId: () => gameId,
     getPlayersInTeam: () => playersInTeam,
     getOpponentPlayersRef: () => opponentPlayersRef,
-    resolveAnimKey,
     spawnHealthMarker,
     updateHealthBar,
     getCurrentHealth: () => currentHealth,
@@ -1646,13 +1649,13 @@ export function handlePlayerMovement(scene) {
     player.x = baseX;
     player.y = hoverY;
 
-    if (scene.anims?.exists("draven-special")) {
-      try {
-        if (player.anims?.currentAnim?.key !== "draven-special") {
-          player.anims.play("draven-special", true);
-        }
-      } catch (_) {}
-    }
+    playSpriteAnimation({
+      scene,
+      sprite: player,
+      character: currentCharacter,
+      logical: "special",
+      fallback: "throw",
+    });
   } else if (
     player &&
     player.body &&

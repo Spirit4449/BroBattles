@@ -21,7 +21,10 @@ import {
   sampleThrowArcPoint,
 } from "../shared/attackAim";
 import CharacterEntityBase from "../shared/characterEntityBase";
-import { chooseRemoteAnimationState } from "../shared/animationState";
+import {
+  chooseRemoteAnimationState,
+  playSpriteAnimation,
+} from "../shared/animationState";
 
 // Single source of truth for this character's name/key
 const NAME = "thorg";
@@ -89,11 +92,13 @@ class Thorg extends CharacterEntityBase {
       return true;
     }
     if (data.type === `${NAME}-fall`) {
-      try {
-        if (scene.anims?.exists(`${NAME}-throw`)) {
-          ownerSprite.anims.play(`${NAME}-throw`, true);
-        }
-      } catch (_) {}
+      playSpriteAnimation({
+        scene,
+        sprite: ownerSprite,
+        character: NAME,
+        logical: "throw",
+        fallback: "idle",
+      });
       Thorg._spawnFallEffect(scene, ownerSprite, {
         direction: data.direction,
         angle: data.angle,
@@ -119,10 +124,11 @@ class Thorg extends CharacterEntityBase {
     duration = 300,
   ) {
     // If we have an image, animate it along an overhead oval path. Otherwise, fallback to vector band.
+    const spriteTextureKey =
+      sprite?._bbSkinTextureKey || sprite?.texture?.key || "";
     const skinWeaponKey =
-      sprite?.texture?.key &&
-      scene.textures.exists(`${sprite.texture.key}-weapon`)
-        ? `${sprite.texture.key}-weapon`
+      spriteTextureKey && scene.textures.exists(`${spriteTextureKey}-weapon`)
+        ? `${spriteTextureKey}-weapon`
         : null;
     const weaponKey = skinWeaponKey || `${NAME}-weapon`;
     const hasTex = scene.textures.exists(weaponKey);
@@ -429,10 +435,11 @@ class Thorg extends CharacterEntityBase {
 
     // Prefer an animated texture for the bat; if not available, create no visible hitbox
     try {
+      const spriteTextureKey =
+        sprite?._bbSkinTextureKey || sprite?.texture?.key || "";
       const skinWeaponKey =
-        sprite?.texture?.key &&
-        scene.textures.exists(`${sprite.texture.key}-weapon`)
-          ? `${sprite.texture.key}-weapon`
+        spriteTextureKey && scene.textures.exists(`${spriteTextureKey}-weapon`)
+          ? `${spriteTextureKey}-weapon`
           : null;
       const defaultWeaponKey = scene.textures.exists(`${NAME}-weapon`)
         ? `${NAME}-weapon`

@@ -9,6 +9,7 @@ import {
 import { playHookAction, playHookCatchAction } from "./special";
 import { executeDefaultAttack } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
+import { playSpriteAnimation } from "../shared/animationState";
 
 const NAME = "gloop";
 
@@ -28,14 +29,13 @@ function consumeGloopRelease(scene, packetId) {
 }
 
 function playOwnerThrow(scene, sprite) {
-  if (!scene?.anims || !sprite?.anims) return;
-  try {
-    if (scene.anims.exists(`${NAME}-throw`)) {
-      sprite.anims.play(`${NAME}-throw`, true);
-    } else if (scene.anims.exists(`${NAME}-special`)) {
-      sprite.anims.play(`${NAME}-special`, true);
-    }
-  } catch (_) {}
+  playSpriteAnimation({
+    scene,
+    sprite,
+    character: NAME,
+    logical: "throw",
+    fallback: "special",
+  });
 }
 
 class Gloop extends CharacterEntityBase {

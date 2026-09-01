@@ -2,6 +2,7 @@ import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
+import { playSpriteAnimation } from "../shared/animationState";
 
 const NAME = "gloop";
 const SLIMEBALL = getResolvedCharacterAttackConfig(NAME, "slimeball");
@@ -45,14 +46,13 @@ function createDebugCircle(scene, radius) {
 }
 
 function playAttackAnimation(scene, sprite) {
-  if (!scene?.anims || !sprite?.anims) return;
-  try {
-    if (scene.anims.exists(`${NAME}-throw`)) {
-      sprite.anims.play(`${NAME}-throw`, true);
-    } else if (scene.anims.exists(`${NAME}-special`)) {
-      sprite.anims.play(`${NAME}-special`, true);
-    }
-  } catch (_) {}
+  playSpriteAnimation({
+    scene,
+    sprite,
+    character: NAME,
+    logical: "throw",
+    fallback: "special",
+  });
 }
 
 function playSound(scene, key, options = {}) {

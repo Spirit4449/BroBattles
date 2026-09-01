@@ -13,6 +13,18 @@ function getGemCost(skin) {
   return Math.max(0, Number(skin?.price?.gems) || 0);
 }
 
+function getUserCharacterLevel(user, character) {
+  let levels = user?.char_levels || {};
+  if (typeof levels === "string") {
+    try {
+      levels = JSON.parse(levels || "{}");
+    } catch (_) {
+      levels = {};
+    }
+  }
+  return Math.max(0, Number(levels?.[character]) || 0);
+}
+
 function registerSkinsRoutes({ app, db, requireCurrentUser }) {
   app.get("/skins/catalog", (_req, res) => {
     return res.json({ success: true, catalog: getSkinsCatalog() });
@@ -64,6 +76,12 @@ function registerSkinsRoutes({ app, db, requireCurrentUser }) {
       if (!skin || String(skin.character || "") !== character) {
         return res.status(404).json({ success: false, error: "Unknown skin" });
       }
+      if (getUserCharacterLevel(user, character) < 1) {
+        return res.status(403).json({
+          success: false,
+          error: "Unlock this character before selecting one of its skins.",
+        });
+      }
 
       const sync = await syncSkinOwnershipForUser(db, user);
       const owns = new Set((sync.ownedSkinIds || []).map(String));
@@ -73,16 +91,52 @@ function registerSkinsRoutes({ app, db, requireCurrentUser }) {
           .json({ success: false, error: "Skin is not unlocked" });
       }
 
-      const currentMap = normalizeSelectedSkinMap(
-        sync.selectedSkinIdByCharacter || user.selected_skin_id_by_char,
-      );
-      currentMap[character] = skinId;
-
-      await db.setUserSelectedSkinMap(user.user_id, currentMap);
+      const activateCharacter = req.body?.activateCharacter === true;
+      let savedMap;
+      if (typeof db.withTransaction === "function") {
+        savedMap = await db.withTransaction(async (_conn, q) => {
+          const rows = await q(
+            "SELECT selected_skin_id_by_char FROM users WHERE user_id = ? FOR UPDATE",
+            [user.user_id],
+          );
+          const nextMap = normalizeSelectedSkinMap(
+            rows?.[0]?.selected_skin_id_by_char,
+          );
+          nextMap[character] = skinId;
+          if (activateCharacter) {
+            // Save the active character and skin together. This prevents a fast
+            // Ready click from capturing only half of the new selection.
+            await q(
+              "UPDATE users SET char_class = ?, selected_skin_id_by_char = ? WHERE user_id = ?",
+              [character, JSON.stringify(nextMap), user.user_id],
+            );
+          } else {
+            await q(
+              "UPDATE users SET selected_skin_id_by_char = ? WHERE user_id = ?",
+              [JSON.stringify(nextMap), user.user_id],
+            );
+          }
+          return nextMap;
+        });
+      } else {
+        savedMap = normalizeSelectedSkinMap(
+          sync.selectedSkinIdByCharacter || user.selected_skin_id_by_char,
+        );
+        savedMap[character] = skinId;
+        if (activateCharacter) {
+          await db.runQuery(
+            "UPDATE users SET char_class = ?, selected_skin_id_by_char = ? WHERE user_id = ?",
+            [character, JSON.stringify(savedMap), user.user_id],
+          );
+        } else {
+          await db.setUserSelectedSkinMap(user.user_id, savedMap);
+        }
+      }
 
       return res.json({
         success: true,
-        selectedSkinIdByCharacter: currentMap,
+        selectedSkinIdByCharacter: savedMap,
+        activeCharacter: activateCharacter ? character : user.char_class,
       });
     } catch (error) {
       console.error("[skins] /skins/select error", error);
@@ -115,6 +169,12 @@ function registerSkinsRoutes({ app, db, requireCurrentUser }) {
       if (!skin || String(skin.character || "") !== character) {
         return res.status(404).json({ success: false, error: "Unknown skin" });
       }
+      if (skin.available === false) {
+        return res.status(400).json({
+          success: false,
+          error: "This skin is not currently available.",
+        });
+      }
 
       const limited = !!skin?.unlockMethod?.limited;
       if (limited) {
@@ -145,6 +205,20 @@ function registerSkinsRoutes({ app, db, requireCurrentUser }) {
         if (!userRows[0]) return { ok: false, reason: "missing_user" };
 
         const currentGems = Number(userRows[0].gems) || 0;
+        const ownedRows = await q(
+          "SELECT 1 AS ok FROM user_skins WHERE user_id = ? AND skin_id = ? LIMIT 1",
+          [user.user_id, skinId],
+        );
+        if (ownedRows.length) {
+          return {
+            ok: true,
+            alreadyOwned: true,
+            gems: currentGems,
+            selectedSkinIdByCharacter: normalizeSelectedSkinMap(
+              userRows[0].selected_skin_id_by_char,
+            ),
+          };
+        }
         if (currentGems < gemCost) {
           return { ok: false, reason: "insufficient", gems: currentGems };
         }
@@ -157,6 +231,16 @@ function registerSkinsRoutes({ app, db, requireCurrentUser }) {
         );
         if (!unlocked?.success) {
           return { ok: false, reason: unlocked?.reason || "unlock_failed" };
+        }
+        if (!unlocked.inserted) {
+          return {
+            ok: true,
+            alreadyOwned: true,
+            gems: currentGems,
+            selectedSkinIdByCharacter: normalizeSelectedSkinMap(
+              userRows[0].selected_skin_id_by_char,
+            ),
+          };
         }
 
         const nextGems = currentGems - gemCost;

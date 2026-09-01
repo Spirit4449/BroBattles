@@ -5,6 +5,7 @@ import {
   normalizeSkinId,
   buildCharacterSkinTextureKey,
   buildCharacterSkinAtlasUrls,
+  buildCharacterSkinWeaponUrl,
 } from "../lib/skinAssets.js";
 import { chooseRemoteAnimationState } from "./shared/animationState.js";
 
@@ -78,14 +79,18 @@ export function preloadForRoster(scene, roster = [], staticPath = "/assets") {
     for (const entry of entries) {
       if (!entry.skinId) continue;
       const textureKey = buildCharacterSkinTextureKey(character, entry.skinId);
-      const atlasUrls = entry.gameAssets?.spritesheetUrl
-        ? {
-            spritesheetUrl: String(entry.gameAssets.spritesheetUrl),
-            animationsUrl:
-              String(entry.gameAssets.animationsUrl || "").trim() ||
-              `${staticPath}/${character}/animations.json`,
-          }
-        : buildCharacterSkinAtlasUrls(character, entry.skinId);
+      const fallbackAtlasUrls = buildCharacterSkinAtlasUrls(
+        character,
+        entry.skinId,
+      );
+      const atlasUrls = {
+        spritesheetUrl:
+          String(entry.gameAssets?.spritesheetUrl || "").trim() ||
+          fallbackAtlasUrls.spritesheetUrl,
+        animationsUrl:
+          String(entry.gameAssets?.animationsUrl || "").trim() ||
+          fallbackAtlasUrls.animationsUrl,
+      };
 
       if (!scene.textures.exists(textureKey)) {
         scene.load.atlas(
@@ -94,7 +99,9 @@ export function preloadForRoster(scene, roster = [], staticPath = "/assets") {
           atlasUrls.animationsUrl,
         );
       }
-      const weaponUrl = String(entry.gameAssets?.weaponUrl || "").trim();
+      const weaponUrl =
+        String(entry.gameAssets?.weaponUrl || "").trim() ||
+        buildCharacterSkinWeaponUrl(character, entry.skinId);
       if (weaponUrl && !scene.textures.exists(`${textureKey}-weapon`)) {
         scene.load.image(`${textureKey}-weapon`, weaponUrl);
       }
@@ -122,21 +129,37 @@ function cloneBaseAnimationToVariant(scene, character, skinId) {
   if (!scene.textures.exists(textureKey)) return;
 
   const entries = animManager?.anims?.entries;
-  if (!entries || typeof entries.forEach !== "function") return;
+  if (!entries) return;
+  const baseAnimations = [];
+  if (typeof entries.forEach === "function") {
+    entries.forEach((anim, key) => baseAnimations.push([key, anim]));
+  } else {
+    // Phaser.Structs.Map exposes its backing entries as a plain object.
+    baseAnimations.push(...Object.entries(entries));
+  }
 
-  entries.forEach((anim, key) => {
-    if (!String(key || "").startsWith(`${character}-`)) return;
+  for (const [key, anim] of baseAnimations) {
+    if (!String(key || "").startsWith(`${character}-`)) continue;
     const suffix = String(key).slice(character.length + 1);
     const variantKey = `${textureKey}-${suffix}`;
-    if (animManager.exists(variantKey)) return;
+    if (animManager.exists(variantKey)) continue;
+    const variantTexture = scene.textures.get(textureKey);
     const frames = (Array.isArray(anim?.frames) ? anim.frames : [])
       .map((frameRef) => {
         const frameName = frameRef?.frame?.name;
-        if (!frameName) return null;
-        return { key: textureKey, frame: frameName };
+        const hasFrame =
+          !!frameName &&
+          (typeof variantTexture?.has === "function"
+            ? variantTexture.has(frameName)
+            : variantTexture?.get?.(frameName)?.name === frameName);
+        if (!hasFrame) return null;
+        const frame = { key: textureKey, frame: frameName };
+        const duration = Number(frameRef?.duration) || 0;
+        if (duration > 0) frame.duration = duration;
+        return frame;
       })
       .filter(Boolean);
-    if (!frames.length) return;
+    if (!frames.length) continue;
 
     animManager.create({
       key: variantKey,
@@ -149,7 +172,7 @@ function cloneBaseAnimationToVariant(scene, character, skinId) {
       showOnStart: !!anim?.showOnStart,
       hideOnComplete: !!anim?.hideOnComplete,
     });
-  });
+  }
 }
 
 export function setupVariantAnimationsForRoster(scene, roster = []) {

@@ -10,6 +10,7 @@ import {
 } from "./attack";
 import { executeDefaultAttack } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
+import { playSpriteAnimation } from "../shared/animationState";
 
 const NAME = "wizard";
 
@@ -91,15 +92,14 @@ class Wizard extends CharacterEntityBase {
     if (!data) return false;
     const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
     if (data.type === `${NAME}-fireball`) {
-      try {
-        if (ownerSprite?.anims) {
-          if (scene.anims?.exists("wizard-throw")) {
-            ownerSprite.anims.play("wizard-throw", false);
-          } else if (scene.anims?.exists("throw")) {
-            ownerSprite.anims.play("throw", false);
-          }
-        }
-      } catch (_) {}
+      playSpriteAnimation({
+        scene,
+        sprite: ownerSprite,
+        character: NAME,
+        logical: "throw",
+        fallback: "idle",
+        force: false,
+      });
       return true;
     }
     if (data.type === `${NAME}-fireball-release`) {
