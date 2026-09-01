@@ -87,6 +87,19 @@ mysql> describe party_members;
 
 mysql>
 
+## Unified Shop and Stripe Commerce
+
+Apply [migrations/2026-08-31_shop_commerce.sql](migrations/2026-08-31_shop_commerce.sql)
+to add global daily/sales rotation state, atomic virtual redemptions, Stripe
+orders, processed-webhook idempotency, the currency audit ledger, and the stored
+Stripe customer reference. The migration must be applied before opening the
+Shop or using its admin controls.
+
+The catalog itself remains source-controlled at
+`src/shared/shopCatalog.json`; database rows store cycle, redemption, order,
+and ledger state rather than client-supplied product definitions. Stripe setup
+is documented in [docs/PAYMENTS.md](docs/PAYMENTS.md).
+
 ## Game Mode Registry Scaffold
 
 Apply [migrations/2026-03-25_game_mode_registry_scaffold.sql](migrations/2026-03-25_game_mode_registry_scaffold.sql)
@@ -97,7 +110,7 @@ to add `mode_id` and `mode_variant_id` to `parties`, `matches`, and
 ## Player Cards (Planned Feature)
 
 Card metadata (name, asset URL, costs, render zones) is sourced from
-`src/config/player-cards.catalog.json`.
+`src/shared/playerCardsCatalog.json`.
 Database stores ownership and equipped selection only.
 
 ### Migration
@@ -124,11 +137,11 @@ CREATE INDEX idx_user_cards_user_id ON user_cards(user_id);
 
 ```sql
 INSERT IGNORE INTO user_cards (user_id, card_id, source)
-SELECT user_id, 'starter_ninja_frame', 'starter'
+SELECT user_id, 'default', 'default'
 FROM users;
 
 UPDATE users
-SET selected_card_id = COALESCE(selected_card_id, 'starter_ninja_frame');
+SET selected_card_id = COALESCE(selected_card_id, 'default');
 ```
 
 ## Trophy Reward Claims (Progression Track)

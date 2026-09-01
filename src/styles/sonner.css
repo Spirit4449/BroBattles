@@ -38,6 +38,21 @@
   grid-auto-rows: auto;
 }
 
+.sonner--success {
+  border-color: rgba(83, 214, 139, 0.34);
+  background: linear-gradient(135deg, #172d2b, #1f2030);
+}
+
+.sonner--error {
+  border-color: rgba(244, 112, 112, 0.38);
+  background: linear-gradient(135deg, #382126, #22202e);
+}
+
+.sonner--info {
+  border-color: rgba(111, 166, 240, 0.32);
+  background: linear-gradient(135deg, #18283a, #22202e);
+}
+
 /* Entered state */
 .sonner.show {
   opacity: 1;
@@ -97,6 +112,12 @@
   background: linear-gradient(to right, #18a0fb, #53f);
   width: 100%;
 }
+.sonner--success .sonner__progress {
+  background: linear-gradient(to right, #43d58c, #8ee8b5);
+}
+.sonner--error .sonner__progress {
+  background: linear-gradient(to right, #ef6464, #f5a66f);
+}
 .sonner__progress.anim {
   animation: sonnerBar var(--sonner-duration, 5s) linear forwards;
 }
@@ -106,15 +127,5 @@
   }
   to {
     width: 0;
-  }
-}
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .sonner {
-    transition: none;
-  }
-  .sonner__progress.anim {
-    animation: none;
   }
 }

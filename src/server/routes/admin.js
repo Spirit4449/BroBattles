@@ -7,6 +7,8 @@ function registerAdminRoutes({
   pageRoot,
   distDir,
   runtimeConfig,
+  shopService,
+  stripeShopService,
 }) {
   const { requireAdminUser } = auth;
 
@@ -57,6 +59,18 @@ function registerAdminRoutes({
         runtimeConfig && typeof runtimeConfig.get === "function"
           ? runtimeConfig.get()
           : runtimeConfig || {};
+      let shop = null;
+      try {
+        shop = {
+          ...(await shopService.getAdminStatus()),
+          payment: stripeShopService.getConfigurationStatus(),
+        };
+      } catch (error) {
+        shop = {
+          error: error?.message || "Shop schema is unavailable",
+          payment: stripeShopService.getConfigurationStatus(),
+        };
+      }
       return res.json({
         success: true,
         admin: { name: user.name, userId: user.user_id },
@@ -69,6 +83,7 @@ function registerAdminRoutes({
         recentMatches,
         recentUsers,
         runtime: runtimeData,
+        shop,
       });
     } catch (err) {
       console.error("[admin] bootstrap error", err);
@@ -219,6 +234,32 @@ function registerAdminRoutes({
       return res
         .status(500)
         .json({ success: false, error: "Failed to update runtime" });
+    }
+  });
+
+  app.post("/api/admin/shop/refresh", async (req, res) => {
+    const admin = await requireAdminUser(req, res);
+    if (!admin) return sendUnauthorized(res);
+    try {
+      const section = String(req.body?.section || "").trim();
+      if (!new Set(["dailies", "sales"]).has(section)) {
+        return res.status(400).json({
+          success: false,
+          error: "section must be dailies or sales",
+        });
+      }
+      const rotation = await shopService.rotationService.forceRefresh(
+        section,
+        admin.user_id,
+      );
+      console.log(`[admin] ${admin.name} refreshed shop ${section}`);
+      return res.json({ success: true, section, rotation });
+    } catch (error) {
+      console.error("[admin] shop refresh error", error);
+      return res.status(500).json({
+        success: false,
+        error: "Failed to refresh the shop",
+      });
     }
   });
 }

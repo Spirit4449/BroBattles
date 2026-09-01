@@ -2,8 +2,11 @@ const {
   getPlayerCardById,
   getPlayerCardsCatalog,
 } = require("../../helpers/playerCardsCatalog");
+const {
+  syncPlayerCardOwnershipForUser,
+} = require("../../helpers/playerCardOwnership");
 
-function registerPlayerCardsRoutes({ app, db, requireCurrentUser }) {
+function registerPlayerCardsRoutes({ app, db, requireCurrentUser, shopService }) {
   app.get("/player-cards/catalog", (req, res) => {
     const catalog = getPlayerCardsCatalog();
     return res.json({ success: true, catalog });
@@ -17,13 +20,12 @@ function registerPlayerCardsRoutes({ app, db, requireCurrentUser }) {
           .status(401)
           .json({ success: false, error: "Not authenticated" });
 
-      const ownedCardIds = await db.getUserOwnedCardIds(user.user_id);
-      const selectedCardId = await db.getUserSelectedCardId(user.user_id);
+      const cardState = await syncPlayerCardOwnershipForUser(db, user);
 
       return res.json({
         success: true,
-        ownedCardIds,
-        selectedCardId,
+        ownedCardIds: cardState.ownedCardIds || [],
+        selectedCardId: cardState.selectedCardId || null,
       });
     } catch (error) {
       console.error("[cards] /player-cards/owned error", error);
@@ -98,80 +100,43 @@ function registerPlayerCardsRoutes({ app, db, requireCurrentUser }) {
           .json({ success: false, error: "Unknown cardId" });
       }
 
-      const alreadyOwned = await db.userOwnsCard(user.user_id, cardId);
-      if (alreadyOwned) {
-        return res.json({ success: true, owned: true, cardId });
-      }
-
-      const coinCost = Math.max(0, Number(card?.cost?.coins) || 0);
-      const gemCost = Math.max(0, Number(card?.cost?.gems) || 0);
-
-      const txResult = await db.withTransaction(async (_conn, q) => {
-        const rows = await q(
-          "SELECT coins, gems FROM users WHERE user_id = ? FOR UPDATE",
-          [user.user_id],
-        );
-        if (!rows[0]) {
-          throw new Error("User not found");
-        }
-        const coins = Number(rows[0].coins) || 0;
-        const gems = Number(rows[0].gems) || 0;
-
-        if (coins < coinCost || gems < gemCost) {
-          return { ok: false, reason: "insufficient", coins, gems };
-        }
-
-        const insertResult = await q(
-          "INSERT IGNORE INTO user_cards (user_id, card_id, source) VALUES (?, ?, 'purchase')",
-          [user.user_id, cardId],
-        );
-
-        const boughtNow = Number(insertResult?.affectedRows) > 0;
-        if (!boughtNow) {
-          return { ok: true, coins, gems, owned: true };
-        }
-
-        const nextCoins = coins - coinCost;
-        const nextGems = gems - gemCost;
-
-        await q("UPDATE users SET coins = ?, gems = ? WHERE user_id = ?", [
-          nextCoins,
-          nextGems,
-          user.user_id,
-        ]);
-
-        const selectedRows = await q(
-          "SELECT selected_card_id FROM users WHERE user_id = ? LIMIT 1",
-          [user.user_id],
-        );
-        if (!selectedRows[0]?.selected_card_id) {
-          await q("UPDATE users SET selected_card_id = ? WHERE user_id = ?", [
-            cardId,
-            user.user_id,
-          ]);
-        }
-
-        return { ok: true, coins: nextCoins, gems: nextGems, owned: true };
-      });
-
-      if (!txResult?.ok && txResult?.reason === "insufficient") {
-        return res.status(400).json({
-          success: false,
-          error: "Not enough coins/gems for this card.",
-          coins: txResult.coins,
-          gems: txResult.gems,
+      const shopOffer = shopService?.findOfferForGrant?.("card", cardId);
+      if (shopOffer) {
+        const idempotencyKey =
+          String(req.body?.idempotencyKey || "").trim() ||
+          `legacy-card:${user.user_id}:${cardId}:${Date.now()}`;
+        const result = await shopService.purchaseVirtual({
+          userId: user.user_id,
+          offerId: shopOffer.id,
+          idempotencyKey,
+        });
+        return res.json({
+          ...result,
+          cardId,
+          owned: true,
+          coins: result?.wallet?.coins,
+          gems: result?.wallet?.gems,
         });
       }
 
-      return res.json({
-        success: true,
-        cardId,
-        owned: true,
-        coins: txResult?.coins,
-        gems: txResult?.gems,
+      const cardState = await syncPlayerCardOwnershipForUser(db, user);
+      if (new Set((cardState.ownedCardIds || []).map(String)).has(cardId)) {
+        return res.json({ success: true, owned: true, cardId });
+      }
+      return res.status(409).json({
+        success: false,
+        error: "This card is not currently for sale in the Shop.",
       });
     } catch (error) {
       console.error("[cards] /player-cards/buy error", error);
+      if (Number(error?.status) >= 400 && Number(error?.status) < 600) {
+        return res.status(Number(error.status)).json({
+          success: false,
+          code: error.code || "shop_error",
+          error: error.message || "Unable to purchase card",
+          wallet: error.wallet || undefined,
+        });
+      }
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });

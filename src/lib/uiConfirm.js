@@ -6,6 +6,8 @@ export function showUiConfirm({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   confirmIcon = null,
+  confirmSound = "cursor4",
+  cancelSound = "cursor4",
 } = {}) {
   return new Promise((resolve) => {
     const backdrop = document.createElement("div");
@@ -56,11 +58,11 @@ export function showUiConfirm({
     };
 
     cancelBtn.onclick = () => {
-      playSound("cursor4", 0.2);
+      playSound(cancelSound, 0.24);
       cleanup(false);
     };
     okBtn.onclick = () => {
-      playSound("cursor4", 0.2);
+      playSound(confirmSound, 0.32);
       cleanup(true);
     };
 

@@ -6,12 +6,7 @@ const {
 } = require("../../helpers/skinsCatalog");
 const {
   syncSkinOwnershipForUser,
-  unlockSkinForUser,
 } = require("../../helpers/skinOwnership");
-
-function getGemCost(skin) {
-  return Math.max(0, Number(skin?.price?.gems) || 0);
-}
 
 function getUserCharacterLevel(user, character) {
   let levels = user?.char_levels || {};
@@ -25,7 +20,7 @@ function getUserCharacterLevel(user, character) {
   return Math.max(0, Number(levels?.[character]) || 0);
 }
 
-function registerSkinsRoutes({ app, db, requireCurrentUser }) {
+function registerSkinsRoutes({ app, db, requireCurrentUser, shopService }) {
   app.get("/skins/catalog", (_req, res) => {
     return res.json({ success: true, catalog: getSkinsCatalog() });
   });
@@ -176,14 +171,6 @@ function registerSkinsRoutes({ app, db, requireCurrentUser }) {
         });
       }
 
-      const limited = !!skin?.unlockMethod?.limited;
-      if (limited) {
-        return res.status(400).json({
-          success: false,
-          error: "This skin cannot be purchased directly.",
-        });
-      }
-
       const sync = await syncSkinOwnershipForUser(db, user);
       const owns = new Set((sync.ownedSkinIds || []).map(String));
       if (owns.has(skinId)) {
@@ -195,105 +182,39 @@ function registerSkinsRoutes({ app, db, requireCurrentUser }) {
         });
       }
 
-      const gemCost = getGemCost(skin);
-
-      const txResult = await db.withTransaction(async (_conn, q) => {
-        const userRows = await q(
-          "SELECT gems, selected_skin_id_by_char FROM users WHERE user_id = ? FOR UPDATE",
-          [user.user_id],
-        );
-        if (!userRows[0]) return { ok: false, reason: "missing_user" };
-
-        const currentGems = Number(userRows[0].gems) || 0;
-        const ownedRows = await q(
-          "SELECT 1 AS ok FROM user_skins WHERE user_id = ? AND skin_id = ? LIMIT 1",
-          [user.user_id, skinId],
-        );
-        if (ownedRows.length) {
-          return {
-            ok: true,
-            alreadyOwned: true,
-            gems: currentGems,
-            selectedSkinIdByCharacter: normalizeSelectedSkinMap(
-              userRows[0].selected_skin_id_by_char,
-            ),
-          };
-        }
-        if (currentGems < gemCost) {
-          return { ok: false, reason: "insufficient", gems: currentGems };
-        }
-
-        const unlocked = await unlockSkinForUser(
-          { runQuery: q },
-          user.user_id,
+      const shopOffer = shopService?.findOfferForGrant?.("skin", skinId);
+      if (shopOffer) {
+        const idempotencyKey =
+          String(req.body?.idempotencyKey || "").trim() ||
+          `legacy-skin:${user.user_id}:${skinId}:${Date.now()}`;
+        const result = await shopService.purchaseVirtual({
+          userId: user.user_id,
+          offerId: shopOffer.id,
+          idempotencyKey,
+        });
+        return res.json({
+          ...result,
           skinId,
-          "purchase",
-        );
-        if (!unlocked?.success) {
-          return { ok: false, reason: unlocked?.reason || "unlock_failed" };
-        }
-        if (!unlocked.inserted) {
-          return {
-            ok: true,
-            alreadyOwned: true,
-            gems: currentGems,
-            selectedSkinIdByCharacter: normalizeSelectedSkinMap(
-              userRows[0].selected_skin_id_by_char,
-            ),
-          };
-        }
-
-        const nextGems = currentGems - gemCost;
-        await q("UPDATE users SET gems = ? WHERE user_id = ?", [
-          nextGems,
-          user.user_id,
-        ]);
-
-        const selectedMap = normalizeSelectedSkinMap(
-          userRows[0].selected_skin_id_by_char,
-        );
-        selectedMap[character] = skinId;
-        await q(
-          "UPDATE users SET selected_skin_id_by_char = ? WHERE user_id = ?",
-          [JSON.stringify(selectedMap), user.user_id],
-        );
-
-        return {
-          ok: true,
-          gems: nextGems,
-          selectedSkinIdByCharacter: selectedMap,
-        };
-      });
-
-      if (!txResult?.ok) {
-        if (txResult?.reason === "insufficient") {
-          return res
-            .status(400)
-            .json({
-              success: false,
-              error: "Not enough gems for this skin.",
-              gems: txResult.gems,
-            });
-        }
-        if (txResult?.reason === "missing_user") {
-          return res
-            .status(404)
-            .json({ success: false, error: "User not found" });
-        }
-        return res
-          .status(409)
-          .json({ success: false, error: "Unable to unlock skin right now." });
+          owned: true,
+          coins: result?.wallet?.coins,
+          gems: result?.wallet?.gems,
+        });
       }
 
-      return res.json({
-        success: true,
-        skinId,
-        owned: true,
-        gems: txResult.gems,
-        selectedSkinIdByCharacter: txResult.selectedSkinIdByCharacter,
+      return res.status(409).json({
+        success: false,
+        error: "This skin is not currently for sale in the Shop.",
       });
     } catch (error) {
       console.error("[skins] /skins/buy error", error);
+      if (Number(error?.status) >= 400 && Number(error?.status) < 600) {
+        return res.status(Number(error.status)).json({
+          success: false,
+          code: error.code || "shop_error",
+          error: error.message || "Unable to purchase skin",
+          wallet: error.wallet || undefined,
+        });
+      }
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });

@@ -124,6 +124,7 @@ function getCharacterSkinList(character) {
         ).trim() || buildCharacterSkinBodyUrl(characterId, id),
         owned,
         locked: !owned,
+        rarity: String(skin?.rarity || "common").trim().toLowerCase(),
       };
     })
     .filter(Boolean);
@@ -144,6 +145,7 @@ function getCharacterSkinList(character) {
           buildCharacterSkinBodyUrl(characterId, ""),
         owned: true,
         locked: false,
+        rarity: String(skin?.rarity || "common").trim().toLowerCase(),
       }))
       .filter((skin) => skin.id);
   }
@@ -155,6 +157,7 @@ function getCharacterSkinList(character) {
       previewSrc: buildCharacterSkinBodyUrl(characterId, ""),
       owned: true,
       locked: false,
+      rarity: "common",
     });
   }
 
@@ -430,6 +433,11 @@ function renderCharacterDetails(character) {
 
   const cardState = getCharacterCardState(character, _userDataRef);
   const selectedSkin = getSelectedSkin(character);
+  const selectedSkinRarity = ["common", "rare", "epic", "legendary"].includes(
+    selectedSkin.rarity,
+  )
+    ? selectedSkin.rarity
+    : "common";
 
   ui.currentCharacter = character;
   ui.selectedSkinByCharacter[character] = selectedSkin.id;
@@ -444,7 +452,7 @@ function renderCharacterDetails(character) {
   // Smaller preview frame (game style - no rounded corners)
   const previewFrame = document.createElement("div");
   previewFrame.className =
-    `character-details-preview-frame ${cardState.isLocked ? "is-locked" : ""}`.trim();
+    `character-details-preview-frame skin-rarity-${selectedSkinRarity} ${cardState.isLocked ? "is-locked" : ""}`.trim();
 
   const previewGlow = document.createElement("div");
   previewGlow.className = "character-details-preview-glow";
@@ -535,7 +543,20 @@ function renderCharacterDetails(character) {
   footerLine.className = "character-details-footer-line";
 
   const skinRow = document.createElement("div");
-  skinRow.className = "character-details-inline-skin";
+  skinRow.className = `character-details-inline-skin skin-rarity-${selectedSkinRarity}${selectedSkin.locked ? " is-locked" : ""}`;
+
+  const skinLabel = document.createElement("div");
+  skinLabel.className = "character-details-skin-label";
+  skinLabel.innerHTML = `
+    <svg class="character-details-hanger-icon" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path d="M13 7.5a3 3 0 1 1 4.7 2.5c-1.1.8-1.7 1.3-1.7 2.5v1.1" />
+      <path d="M16 13.6 4.3 22.2c-1.3 1-.6 3.1 1.1 3.1h21.2c1.7 0 2.4-2.1 1.1-3.1L16 13.6Z" />
+    </svg>
+    <span>Skin</span>
+  `;
+
+  const skinControls = document.createElement("div");
+  skinControls.className = "character-details-skin-controls";
 
   const skins = getCharacterSkinList(character);
   const activeSkinIndex = Math.max(
@@ -548,7 +569,8 @@ function renderCharacterDetails(character) {
   const prevButton = document.createElement("button");
   prevButton.type = "button";
   prevButton.className = "character-details-skin-stepper";
-  prevButton.textContent = "◀";
+  prevButton.textContent = "‹";
+  prevButton.setAttribute("aria-label", "Previous skin");
   prevButton.disabled = skins.length <= 1;
   prevButton.addEventListener("click", () => {
     if (skins.length <= 1) return;
@@ -558,14 +580,27 @@ function renderCharacterDetails(character) {
 
   const skinChip = document.createElement("div");
   skinChip.className = "character-details-skin-name-box";
-  skinChip.textContent = selectedSkin.locked
-    ? `${selectedSkin.label} (Locked)`
-    : selectedSkin.label;
+  skinChip.setAttribute("aria-live", "polite");
+  const skinName = document.createElement("strong");
+  if (selectedSkin.locked) {
+    const lockIcon = document.createElement("img");
+    lockIcon.className = "character-details-skin-lock";
+    lockIcon.src = "/assets/lock.webp";
+    lockIcon.alt = "Locked";
+    skinName.appendChild(lockIcon);
+  }
+  skinName.appendChild(document.createTextNode(selectedSkin.label));
+  const skinRarity = document.createElement("span");
+  skinRarity.className = "character-details-skin-rarity";
+  skinRarity.textContent = selectedSkinRarity;
+  skinChip.appendChild(skinName);
+  skinChip.appendChild(skinRarity);
 
   const nextButton = document.createElement("button");
   nextButton.type = "button";
   nextButton.className = "character-details-skin-stepper";
-  nextButton.textContent = "▶";
+  nextButton.textContent = "›";
+  nextButton.setAttribute("aria-label", "Next skin");
   nextButton.disabled = skins.length <= 1;
   nextButton.addEventListener("click", () => {
     if (skins.length <= 1) return;
@@ -573,9 +608,11 @@ function renderCharacterDetails(character) {
     setSelectedSkin(character, nextSkin.id);
   });
 
-  skinRow.appendChild(prevButton);
-  skinRow.appendChild(skinChip);
-  skinRow.appendChild(nextButton);
+  skinControls.appendChild(prevButton);
+  skinControls.appendChild(skinChip);
+  skinControls.appendChild(nextButton);
+  skinRow.appendChild(skinLabel);
+  skinRow.appendChild(skinControls);
 
   const footer = document.createElement("div");
   footer.className = "character-details-inline-actions";
@@ -992,6 +1029,11 @@ function openCharacterDetails(character) {
     document.body.appendChild(ui.overlay);
   }
   ui.overlay.style.display = "flex";
+  ui.popup.classList.remove("is-opening");
+  // Restart the entrance when reopening the cached dialog. A translate-only
+  // animation keeps the sticky footer on the same compositing plane.
+  void ui.popup.offsetWidth;
+  ui.popup.classList.add("is-opening");
 }
 
 async function persistActiveCharacterSelection(character, skinId) {

@@ -7,7 +7,8 @@
     "dev": "cross-env NODE_ENV=development PORT=3002 nodemon --watch src/server --ext js,json --exec node src/server/server.js",
     "build": "webpack --mode production",
     "sourcemap": "cross-env NODE_ENV=production webpack --mode=production --devtool=source-map",
-    "start": "cross-env NODE_ENV=production node src/server/server.js"
+    "start": "cross-env NODE_ENV=production node src/server/server.js",
+    "test:shop": "node --test tests/shopCatalog.test.js tests/shopCommerce.test.js tests/shopRotation.test.js tests/shopStaticContracts.test.js"
   },
   "author": "",
   "license": "ISC",
@@ -22,6 +23,7 @@
     "phaser": "^3.70.0",
     "socket.io": "^4.7.4",
     "socket.io-client": "^4.7.4",
+    "stripe": "^22.6.0",
     "webfontloader": "^1.6.28",
     "webpack": "^5.89.0",
     "webpack-bundle-analyzer": "^4.10.2",

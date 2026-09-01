@@ -27,12 +27,23 @@ const soundFiles = {
   notification: "notification",
   beep: "beep",
   start: "start",
+  shopOpen: "shop-open.ogg",
+  shopClose: "shop-close.ogg",
+  shopHover: "shop-hover.ogg",
+  shopPress: "shop-press.ogg",
+  shopBuy: "shop-buy.ogg",
+  shopConfirm: "shop-confirm.ogg",
+  shopBigSuccess: "shop-big-success.ogg",
+  shopError: "shop-error.ogg",
+  shopReveal: "shop-reveal.ogg",
+  shopCurrencyImpact: "shop-currency-impact.wav",
 };
 
 function createAudioWithFallback(filename) {
-  const sources = [".mp3", ".wav"].map(
-    (ext) => `${soundPath}${filename}${ext}`,
-  );
+  const hasExtension = /\.[a-z0-9]+$/i.test(filename);
+  const sources = hasExtension
+    ? [`${soundPath}${filename}`]
+    : [".mp3", ".wav", ".ogg"].map((ext) => `${soundPath}${filename}${ext}`);
   const audio = new Audio();
   audio.preload = "auto";
 
@@ -82,11 +93,13 @@ function getOrLoadSound(soundName) {
 }
 
 // Play a sound
-export function playSound(soundName, volume = 0.5) {
-  const sound = getOrLoadSound(soundName);
-  if (!sound) return;
+export function playSound(soundName, volume = 0.5, options = {}) {
+  const source = getOrLoadSound(soundName);
+  if (!source) return;
+  const sound = options.overlap ? source.cloneNode(true) : source;
   sound.currentTime = 0;
   sound.volume = volume;
+  sound.playbackRate = Math.max(0.5, Math.min(2, Number(options.playbackRate) || 1));
   sound.play().catch((e) => {
     if (!shouldMuteClientDefaultLogs()) {
       console.warn(`Sound ${soundName} failed:`, e);
@@ -119,14 +132,13 @@ export function initUISounds() {
 
   // Optional: hover sounds
   document.addEventListener(
-    "mouseenter",
+    "pointerover",
     (e) => {
       const target = safeClosest(e.target, "[data-sound-hover]");
-      if (target) {
-        const soundName = target.getAttribute("data-sound-hover");
-        const volume = parseFloat(target.getAttribute("data-volume")) || 0.3;
-        playSound(soundName, volume);
-      }
+      if (!target || target.matches(":disabled") || target.contains(e.relatedTarget)) return;
+      const soundName = target.getAttribute("data-sound-hover");
+      const volume = parseFloat(target.getAttribute("data-volume")) || 0.3;
+      playSound(soundName, volume);
     },
     true,
   );

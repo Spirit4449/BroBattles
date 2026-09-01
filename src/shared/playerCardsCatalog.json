@@ -28,7 +28,7 @@
       "assetUrl": "/assets/player-cards/shuriken-strike.webp",
       "rarity": "rare",
       "cost": {
-        "coins": 400,
+        "coins": 0,
         "gems": 20
       }
     }

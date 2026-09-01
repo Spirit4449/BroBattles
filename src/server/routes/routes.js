@@ -12,6 +12,7 @@ const { registerSkinsRoutes } = require("./modules/skinsRoutes");
 const { registerProfileRoutes } = require("./modules/profileRoutes");
 const { registerTrophyRoutes } = require("./modules/trophyRoutes");
 const { registerChatRoutes } = require("./modules/chatRoutes");
+const { registerShopRoutes } = require("./modules/shopRoutes");
 
 function registerRoutes({
   app,
@@ -22,6 +23,8 @@ function registerRoutes({
   distDir,
   chatService,
   abuseControl,
+  shopService,
+  stripeShopService,
 }) {
   const { getOrCreateCurrentUser, requireCurrentUser, isGuest, isAdminUser } =
     auth;
@@ -68,18 +71,28 @@ function registerRoutes({
     app,
     db,
     requireCurrentUser,
+    shopService,
   });
 
   registerProfileIconsRoutes({
     app,
     db,
     requireCurrentUser,
+    shopService,
   });
 
   registerSkinsRoutes({
     app,
     db,
     requireCurrentUser,
+    shopService,
+  });
+
+  registerShopRoutes({
+    app,
+    requireCurrentUser,
+    shopService,
+    stripeShopService,
   });
 
   registerProfileRoutes({

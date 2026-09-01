@@ -16,7 +16,7 @@ This document is the structural source of truth for the repository. Use it to de
 
 - Client: Phaser scenes + UI orchestration in src/.
 - Server: Express + Socket.IO + server-authoritative simulation in src/server/.
-- Database: MySQL schema and migrations in server/migrations/.
+- Database: MySQL schema and migrations in migrations/.
 
 Main runtime loop:
 
@@ -60,6 +60,10 @@ Main runtime loop:
   - Authoritative simulation, combat, timed effects, snapshots.
 - src/server/services/
   - Reusable mutation and response-building business logic used by routes and socket paths.
+- src/shared/shopCatalog.json + src/server/services/shopService.js
+  - Validated storefront offers, rotation-backed availability, and atomic virtual commerce.
+- src/server/services/stripeShopService.js
+  - Embedded Checkout sessions, signed webhook fulfillment, and refund/dispute reversals.
 - src/server/routes/
   - HTTP adapters; should delegate business logic to services.
 

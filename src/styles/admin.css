@@ -86,6 +86,124 @@ body {
   font-size: 20px;
 }
 
+.panel-kicker {
+  margin: 0 0 5px;
+  color: #f5b642;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.shop-admin-panel {
+  margin-bottom: 32px;
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.07), transparent 45%),
+    var(--panel);
+}
+
+.shop-admin-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.shop-payment-status {
+  max-width: 48%;
+  padding: 7px 10px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 999px;
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.1);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.shop-payment-status.is-enabled {
+  border-color: rgba(34, 197, 94, 0.48);
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.shop-cycle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 16px 0;
+}
+
+.shop-cycle-card {
+  display: grid;
+  gap: 9px;
+  padding: 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: rgba(4, 8, 18, 0.48);
+}
+
+.shop-cycle-card > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.shop-cycle-card > strong {
+  overflow-wrap: anywhere;
+  color: #fde68a;
+  font-size: 14px;
+}
+
+.shop-cycle-card > small,
+.shop-admin-meta {
+  color: var(--muted);
+}
+
+.shop-cycle-card button {
+  justify-self: start;
+  margin-top: 4px;
+}
+
+.shop-cycle-card button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.shop-admin-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+}
+
+.shop-admin-error {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 8px;
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+@media (max-width: 680px) {
+  .shop-admin-heading,
+  .shop-admin-meta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .shop-payment-status {
+    max-width: none;
+    text-align: left;
+  }
+
+  .shop-cycle-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 label {
   font-size: 13px;
   color: var(--muted);

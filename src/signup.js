@@ -21,6 +21,16 @@ const buttonText = document.getElementById("buttonText");
 const errorMessage = document.getElementById("errorMessage");
 const usernameInput = document.getElementById("username");
 const passwordInput = document.getElementById("password");
+const requestedNext = new URLSearchParams(window.location.search).get("next");
+let safeNext = "/";
+if (requestedNext?.startsWith("/") && !requestedNext.includes("\\")) {
+  try {
+    const target = new URL(requestedNext, window.location.origin);
+    if (target.origin === window.location.origin) {
+      safeNext = `${target.pathname}${target.search}${target.hash}`;
+    }
+  } catch (_) {}
+}
 
 // Display current guest name (server uses "display_name")
 document.getElementById("guestName").textContent = getDisplayName();
@@ -124,7 +134,7 @@ form.addEventListener("submit", async (e) => {
       buttonText.textContent = "Account Created!";
       // Give cookies a tick to update, then go home
       setTimeout(() => {
-        window.location.href = "/";
+        window.location.href = safeNext;
       }, 600);
       return;
     }

@@ -33,6 +33,7 @@ import {
   buildProfileIconUrl,
 } from "./lib/profileIconAssets.js";
 import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
+import { initializeShop } from "./shop.js";
 import "./styles/characterSelect.css";
 import "./styles/index.css";
 import "./styles/chat.css";
@@ -53,6 +54,9 @@ let userData = null;
 let guest = false;
 const POST_MATCH_REWARD_STORAGE_KEY = "bb_post_match_rewards_v1";
 let trophyRoadLastScrollLeft = 0;
+let trophyProgressionState = null;
+let trophyProgressionRefreshPromise = null;
+const trophyClaimsInFlight = new Set();
 const lobbyProfileState = {
   profile: null,
   catalog: null,
@@ -330,17 +334,20 @@ function renderProfilePopupCards() {
   const owned = new Set((lobbyProfileState.ownedCardIds || []).map(String));
   const selected = String(lobbyProfileState.selectedCardId || "");
 
-  catalogCards.forEach((card) => {
+  const ownedCards = catalogCards.filter((card) =>
+    owned.has(String(card?.id || "")),
+  );
+
+  if (!ownedCards.length) {
+    grid.innerHTML =
+      '<p class="profile-loadout-empty">No player cards owned yet. Find them in the Shop.</p>';
+    return;
+  }
+
+  ownedCards.forEach((card) => {
     const id = String(card?.id || "");
-    const isOwned = owned.has(id);
-    const isSelected = isOwned && selected === id;
+    const isSelected = selected === id;
     const rarity = String(card?.rarity || "common").toLowerCase();
-    const coinCost = Math.max(0, Number(card?.cost?.coins || 0));
-    const gemCost = Math.max(0, Number(card?.cost?.gems || 0));
-    const useGems = gemCost > 0;
-    const price = useGems ? gemCost : coinCost;
-    const currencyIcon = useGems ? "/assets/gem.webp" : "/assets/coin.webp";
-    const currencyLabel = useGems ? "gems" : "coins";
 
     const tile = document.createElement("article");
     tile.className = `profile-card-tile ${rarity}`;
@@ -349,12 +356,11 @@ function renderProfilePopupCards() {
       <div class="profile-card-meta">
         <strong>${card.name}</strong>
         <span class="profile-card-rarity ${rarity}">${rarity}</span>
-        <span class="profile-cost"><img src="${currencyIcon}" alt="${currencyLabel}" /> ${price}</span>
       </div>
       <div class="profile-card-actions">
-        <span class="profile-card-state">${isSelected ? "Equipped" : isOwned ? "Owned" : "Locked"}</span>
-        <button class="profile-card-btn pixel-menu-button" type="button" data-card-id="${id}" data-action="${isOwned ? "equip" : "buy"}">
-          ${isOwned ? (isSelected ? "Selected" : "Equip") : "Buy"}
+        <span class="profile-card-state">${isSelected ? "Equipped" : "Owned"}</span>
+        <button class="profile-card-btn pixel-menu-button" type="button" data-card-id="${id}">
+          ${isSelected ? "Selected" : "Equip"}
         </button>
       </div>
     `;
@@ -366,28 +372,6 @@ function renderProfilePopupCards() {
         try {
           actionBtn.disabled = true;
           const cardId = String(actionBtn.dataset.cardId || "");
-          const action = String(actionBtn.dataset.action || "equip");
-
-          if (action === "buy") {
-            const ok = await showUiConfirm({
-              title: "Confirm Purchase",
-              message: `Buy ${card.name} for ${price} ${currencyLabel}?`,
-              confirmLabel: `${price}`,
-              confirmIcon: currencyIcon,
-            });
-            if (!ok) {
-              actionBtn.disabled = false;
-              return;
-            }
-          }
-
-          if (action === "buy") {
-            await profileFetchJson("/player-cards/buy", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ cardId }),
-            });
-          }
 
           await profileFetchJson("/player-cards/select", {
             method: "POST",
@@ -396,18 +380,9 @@ function renderProfilePopupCards() {
           });
 
           await loadProfilePopupData(true);
-          if (action === "buy") {
-            sonner("Card purchased", undefined, "success");
-          }
         } catch (err) {
           const msg = String(err?.message || "Card action failed.");
-          sonner(
-            msg.includes("Not enough")
-              ? "Not enough coins/gems"
-              : "Card action failed",
-            msg,
-            "error",
-          );
+          sonner("Card action failed", msg, "error");
           actionBtn.disabled = false;
         }
       });
@@ -436,7 +411,7 @@ function renderProfilePopupIcons() {
 
   const visibleIcons = catalogIcons.filter((icon) => {
     const iconId = String(icon?.id || "");
-    return icon?.showInPicker !== false || owned.has(iconId);
+    return owned.has(iconId) || Boolean(icon?.unlock);
   });
 
   visibleIcons.forEach((icon) => {
@@ -444,8 +419,14 @@ function renderProfilePopupIcons() {
     const isOwned = owned.has(id);
     const isSelected = isOwned && selected === id;
     const isLimited = icon?.limited === true;
-    const gemCost = Math.max(0, Number(icon?.cost?.gems || 0));
-    const isLocked = !isOwned && isLimited;
+    const isLocked = !isOwned;
+    const unlock = icon?.unlock || {};
+    const requirement =
+      unlock.type === "trophies"
+        ? `Reach ${Number(unlock.min) || 0} trophies`
+        : unlock.type === "character"
+          ? `Unlock ${String(unlock.character || icon.name)}`
+          : "Progression reward";
 
     const tile = document.createElement("button");
     tile.type = "button";
@@ -454,8 +435,8 @@ function renderProfilePopupIcons() {
     tile.innerHTML = `
       <img src="${icon.assetUrl}" alt="${icon.name}" />
       <span class="profile-icon-name-badge">${icon.name}</span>
-      ${gemCost > 0 && !isOwned ? `<span class="profile-icon-gem-badge"><img src="/assets/gem.webp" alt="gems" /> ${gemCost}</span>` : ""}
-      ${isLimited ? '<span class="profile-icon-limited-tag">LIMITED</span>' : ""}
+      ${isLocked ? `<span class="profile-icon-gem-badge">${requirement}</span>` : ""}
+      ${isLimited && isLocked ? '<span class="profile-icon-limited-tag">PROGRESSION</span>' : ""}
       ${!isOwned ? '<span class="profile-icon-lock-overlay"><img src="/assets/lock.webp" alt="Locked" /></span>' : ""}
     `;
 
@@ -467,27 +448,6 @@ function renderProfilePopupIcons() {
         const iconId = String(tile.dataset.iconId || "");
         if (!iconId) return;
 
-        if (!isOwned) {
-          const ok = await showUiConfirm({
-            title: "Confirm Purchase",
-            message:
-              gemCost > 0
-                ? `Buy ${icon.name} for ${gemCost} gems?`
-                : `Unlock ${icon.name}?`,
-            confirmLabel: `${gemCost}`,
-            confirmIcon: "/assets/gem.webp",
-          });
-          if (!ok) {
-            tile.disabled = false;
-            return;
-          }
-          await profileFetchJson("/profile-icons/buy", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ iconId }),
-          });
-        }
-
         await profileFetchJson("/profile-icons/select", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -495,18 +455,9 @@ function renderProfilePopupIcons() {
         });
 
         await loadProfilePopupData(true);
-        if (!isOwned) {
-          sonner("Profile icon purchased", undefined, "success");
-        }
       } catch (err) {
         const msg = String(err?.message || "Profile icon action failed.");
-        sonner(
-          msg.includes("Not enough")
-            ? "Not enough gems"
-            : "Profile icon action failed",
-          msg,
-          "error",
-        );
+        sonner("Profile icon action failed", msg, "error");
         tile.disabled = false;
       }
     });
@@ -919,6 +870,20 @@ function isOverlayOpen(id) {
 }
 
 function closeTransientLobbyUiOnEscape() {
+  const loadoutOverlay = document.getElementById("profile-loadout-overlay");
+  if (loadoutOverlay && !loadoutOverlay.classList.contains("hidden")) {
+    loadoutOverlay.classList.add("hidden");
+    loadoutOverlay.setAttribute("aria-hidden", "true");
+    return true;
+  }
+
+  const profileOverlay = document.getElementById("profile-overlay");
+  if (profileOverlay && !profileOverlay.classList.contains("hidden")) {
+    profileOverlay.classList.add("hidden");
+    profileOverlay.setAttribute("aria-hidden", "true");
+    return true;
+  }
+
   const overlayIds = [
     "party-settings-overlay",
     "party-discovery-overlay",
@@ -1299,38 +1264,186 @@ function spawnTrophyClaimParticles(host, options = {}) {
   }
 }
 
-function animateTrophyClaimSuccess({ card, marker, canvas, summary }) {
-  if (!card || !marker) return Promise.resolve();
-  card.classList.add("claim-success");
-  marker.classList.add("claim-success");
-  canvas?.classList.add("claim-flash");
-  summary?.classList.add("reward-pop");
+function getTrophyTierStatus(tier) {
+  if (tier?.claimed) return "claimed";
+  if (tier?.canClaim) return "claimable";
+  return "locked";
+}
 
-  spawnTrophyClaimParticles(card, { count: 14, tone: "gold" });
-  spawnTrophyClaimParticles(marker, { count: 8, tone: "blue" });
-  if (summary) {
-    spawnTrophyClaimParticles(summary, { count: 7, tone: "gold" });
+function applyTrophyTierVisualState({ card, marker, button, tier, pending }) {
+  const status = getTrophyTierStatus(tier);
+  for (const statusClass of ["claimed", "claimable", "locked"]) {
+    card?.classList.toggle(statusClass, status === statusClass);
+    marker?.classList.toggle(statusClass, status === statusClass);
   }
 
-  return new Promise((resolve) => {
-    window.setTimeout(() => {
-      card.classList.remove("claim-success");
-      marker.classList.remove("claim-success");
-      canvas?.classList.remove("claim-flash");
-      summary?.classList.remove("reward-pop");
-      resolve();
-    }, 760);
+  if (!button) return;
+  button.dataset.state = status;
+  button.disabled = status !== "claimable";
+  button.textContent =
+    status === "claimed" ? "Claimed" : status === "claimable" ? "Claim" : "Locked";
+  button.classList.remove("is-busy");
+  button.classList.toggle("is-pending", !!pending);
+  if (pending) button.setAttribute("aria-busy", "true");
+  else button.removeAttribute("aria-busy");
+}
+
+function summarizeTrophyCurrencyRewards(rewards) {
+  const totals = { coins: 0, gems: 0 };
+  for (const reward of Array.isArray(rewards) ? rewards : []) {
+    if (String(reward?.kind || "") !== "currency") continue;
+    const currency = String(reward?.currency || "");
+    const amount = Math.max(0, Number(reward?.amount) || 0);
+    if (currency === "coins" || currency === "gems") {
+      totals[currency] += amount;
+    }
+  }
+  return totals;
+}
+
+function updateLobbyResourceCounts() {
+  const coinCount = document.getElementById("coin-count");
+  const gemCount = document.getElementById("gem-count");
+  const trophyCount = document.getElementById("trophy-count");
+  if (coinCount) coinCount.textContent = String(userData?.coins || 0);
+  if (gemCount) gemCount.textContent = String(userData?.gems || 0);
+  if (trophyCount) trophyCount.textContent = String(userData?.trophies || 0);
+}
+
+function playTrophyClaimFeedback({ card, marker, canvas }) {
+  playSound("shopBigSuccess", 0.65);
+  playSound("shopReveal", 0.55);
+  spawnTrophyClaimParticles(card, { count: 12, tone: "gold" });
+  spawnTrophyClaimParticles(marker, { count: 6, tone: "blue" });
+  canvas?.classList.add("claim-flash");
+  window.setTimeout(() => canvas?.classList.remove("claim-flash"), 520);
+}
+
+function updateTrophyTrackControls(container) {
+  const track =
+    container || document.getElementById("trophy-track-list") || null;
+  const previousButton = document.getElementById("trophy-track-prev");
+  const nextButton = document.getElementById("trophy-track-next");
+  if (!track) return;
+  const maxScroll = Math.max(0, track.scrollWidth - track.clientWidth);
+  const currentScroll = Math.max(0, Number(track.scrollLeft) || 0);
+  if (previousButton) previousButton.disabled = currentScroll <= 2;
+  if (nextButton) nextButton.disabled = currentScroll >= maxScroll - 2;
+}
+
+function scrollTrophyTrack(direction) {
+  const container = document.getElementById("trophy-track-list");
+  if (!container) return;
+  const distance = Math.max(260, Math.round(container.clientWidth * 0.72));
+  container.scrollBy({
+    left: (Number(direction) < 0 ? -1 : 1) * distance,
+    behavior: "smooth",
   });
+}
+
+function reconcileTrophyTrackState(state) {
+  const container = document.getElementById("trophy-track-list");
+  const incomingTiers = Array.isArray(state?.tiers) ? state.tiers : [];
+  const existingTiers = new Map(
+    (Array.isArray(trophyProgressionState?.tiers)
+      ? trophyProgressionState.tiers
+      : []
+    ).map((tier) => [String(tier?.tierId || ""), tier]),
+  );
+  const mergedTiers = incomingTiers.map((tier) => {
+    const tierId = String(tier?.tierId || "");
+    if (!trophyClaimsInFlight.has(tierId)) return tier;
+    return {
+      ...tier,
+      ...(existingTiers.get(tierId) || {}),
+      claimed: true,
+      canClaim: false,
+    };
+  });
+  const optimisticClaims = incomingTiers.filter(
+    (tier) =>
+      trophyClaimsInFlight.has(String(tier?.tierId || "")) && tier?.canClaim,
+  ).length;
+  const mergedState = {
+    ...state,
+    tiers: mergedTiers,
+    availableClaimCount: Math.max(
+      0,
+      (Number(state?.availableClaimCount) || 0) - optimisticClaims,
+    ),
+  };
+  trophyProgressionState = mergedState;
+  setTrophyClaimBadge(mergedState.availableClaimCount);
+
+  if (!container?.querySelector(".trophy-track-canvas")) return false;
+  const cards = new Map(
+    [...container.querySelectorAll(".trophy-lane-card[data-tier-id]")].map(
+      (card) => [String(card.dataset.tierId || ""), card],
+    ),
+  );
+  const markers = new Map(
+    [...container.querySelectorAll(".trophy-lane-marker[data-tier-id]")].map(
+      (marker) => [String(marker.dataset.tierId || ""), marker],
+    ),
+  );
+  if (cards.size !== mergedTiers.length) return false;
+
+  for (const tier of mergedTiers) {
+    const tierId = String(tier?.tierId || "");
+    const card = cards.get(tierId);
+    const marker = markers.get(tierId);
+    applyTrophyTierVisualState({
+      card,
+      marker,
+      button: card?.querySelector(".trophy-tier-claim"),
+      tier,
+      pending: trophyClaimsInFlight.has(tierId),
+    });
+  }
+
+  const trophies = Math.max(0, Number(mergedState?.player?.trophies) || 0);
+  const pin = container.querySelector(".trophy-track-player-pin");
+  const pinValue = pin?.querySelector("span");
+  if (pinValue) pinValue.textContent = trophies.toLocaleString();
+  if (pin) {
+    pin.setAttribute(
+      "aria-label",
+      `Current position: ${trophies.toLocaleString()} trophies`,
+    );
+  }
+  updateTrophyTrackControls(container);
+  return true;
+}
+
+async function refreshTrophyProgressionInBackground() {
+  if (trophyProgressionRefreshPromise) {
+    return trophyProgressionRefreshPromise;
+  }
+  trophyProgressionRefreshPromise = fetchLobbyJson("/trophies/progression")
+    .then((progression) => {
+      const reconciled = reconcileTrophyTrackState(progression);
+      if (!reconciled && isOverlayOpen("trophy-track-overlay")) {
+        const list = document.getElementById("trophy-track-list");
+        progression.__preserveScroll = true;
+        progression.__scrollLeft = Number(list?.scrollLeft) || 0;
+        progression.__skipAnimation = true;
+        renderTrophyTrack(progression);
+      }
+      return progression;
+    })
+    .finally(() => {
+      trophyProgressionRefreshPromise = null;
+    });
+  return trophyProgressionRefreshPromise;
 }
 
 function renderTrophyTrack(state) {
   const container = document.getElementById("trophy-track-list");
-  const summary = document.getElementById("trophy-track-summary");
   const shouldPreserveScroll = !!state?.__preserveScroll;
   const previousScrollLeft = Number.isFinite(Number(state?.__scrollLeft))
     ? Number(state.__scrollLeft)
     : trophyRoadLastScrollLeft;
-  if (!container || !summary) return;
+  if (!container) return;
 
   const player = state?.player || {};
   const tiers = Array.isArray(state?.tiers) ? state.tiers : [];
@@ -1339,37 +1452,59 @@ function renderTrophyTrack(state) {
     0,
     Number(state?.availableClaimCount) || 0,
   );
+  trophyProgressionState = state;
   setTrophyClaimBadge(availableClaimCount);
-  summary.textContent = `${trophies} trophies`;
   container.innerHTML = "";
+
+  if (!tiers.length) {
+    container.innerHTML = `
+      <div class="trophy-rewards-state">
+        <span class="trophy-rewards-state-icon" aria-hidden="true">?</span>
+        <strong>No reward milestones yet</strong>
+        <span>New rewards will appear here when they are available.</span>
+      </div>
+    `;
+    updateTrophyTrackControls(container);
+    return;
+  }
 
   const maxTierRequirement = Math.max(
     1,
     ...tiers.map((tier) => Number(tier?.trophiesRequired) || 0),
   );
   const overallRatio = Math.max(0, Math.min(1, trophies / maxTierRequirement));
-  const trackWidth = Math.max(1080, tiers.length * 252);
-  const laneInset = 28;
+  const compactTrack = window.matchMedia?.("(max-width: 700px)")?.matches;
+  const laneInset = compactTrack ? 108 : 124;
+  const tierSpacing = compactTrack ? 218 : 244;
+  const trackWidth = Math.max(
+    container.clientWidth || 900,
+    laneInset * 2 + Math.max(0, tiers.length - 1) * tierSpacing,
+  );
   const laneWidth = Math.max(1, trackWidth - laneInset * 2);
+  const ratioToX = (ratio) => laneInset + ratio * laneWidth;
+  const railInteriorWidth = Math.max(0, laneWidth - 8);
+  const progressWidth = Math.round(railInteriorWidth * overallRatio);
+  const progressX = 4 + progressWidth;
+  const playerX = Math.round(ratioToX(overallRatio));
 
   const canvas = document.createElement("div");
   canvas.className = "trophy-track-canvas";
+  canvas.classList.toggle("has-progress", overallRatio > 0);
   canvas.style.width = `${trackWidth}px`;
-  canvas.style.setProperty(
-    "--trophy-progress",
-    `${Math.round(overallRatio * 100)}%`,
-  );
+  canvas.style.setProperty("--trophy-lane-inset", `${laneInset}px`);
+  canvas.style.setProperty("--trophy-progress-x", `${progressX}px`);
   canvas.innerHTML = `
     <div class="trophy-track-line-shell">
       <div class="trophy-track-line-bg"></div>
-      <div class="trophy-track-line-fill" style="width:${Math.round(overallRatio * 100)}%"></div>
+      <div class="trophy-track-line-fill" style="width:${progressWidth}px"></div>
       <div class="trophy-track-line-glint"></div>
     </div>
     <div class="trophy-track-card-row" id="trophy-track-card-row"></div>
     <div class="trophy-track-marker-row" id="trophy-track-marker-row"></div>
-    <div class="trophy-track-player-pin" style="left:${Math.round(overallRatio * 100)}%" aria-label="Current trophy position">
-      <img src="/assets/trophy.webp" alt="current trophies" />
-      <span>${trophies}</span>
+    <div class="trophy-track-player-pin" style="left:${playerX}px" aria-label="Current position: ${trophies.toLocaleString()} trophies">
+      <small>You</small>
+      <img src="/assets/trophy.webp" alt="" />
+      <span>${trophies.toLocaleString()}</span>
     </div>
   `;
   container.appendChild(canvas);
@@ -1377,8 +1512,7 @@ function renderTrophyTrack(state) {
   const cardRow = canvas.querySelector("#trophy-track-card-row");
   const markerRow = canvas.querySelector("#trophy-track-marker-row");
 
-  const ratioToX = (ratio) => laneInset + ratio * laneWidth;
-
+  let tierIndex = 0;
   for (const tier of tiers) {
     const tierRatio = Math.max(
       0,
@@ -1399,23 +1533,31 @@ function renderTrophyTrack(state) {
       name: "Reward",
       amount: 0,
     };
-    const extraRewards = Math.max(0, rewards.length - 1);
     const primaryName = String(primaryReward?.name || "Reward");
-    const primaryImage = String(primaryReward?.image || "/assets/coin.webp");
     const primaryAmount = Math.max(0, Number(primaryReward?.amount) || 0);
+    const rewardPreviews = (rewards.length ? rewards : [primaryReward]).slice(
+      0,
+      2,
+    );
     const card = document.createElement("article");
     card.className = `trophy-lane-card ${statusClass}${isMajorMilestone ? " major" : ""}`;
     card.style.left = `${Math.round(ratioToX(tierRatio))}px`;
+    card.style.setProperty("--trophy-tier-index", String(Math.min(tierIndex, 10)));
     card.innerHTML = `
       <div class="trophy-lane-card-sheen"></div>
-      <div class="trophy-lane-item-wrap">
-        <img class="trophy-lane-item" src="${primaryImage}" alt="${escapeHtml(primaryName)}" />
+      <div class="trophy-lane-item-wrap${rewardPreviews.length > 1 ? " multi-reward" : ""}">
+        ${rewardPreviews
+          .map(
+            (reward) =>
+              `<img class="trophy-lane-item" src="${escapeHtml(reward?.image || "/assets/coin.webp")}" alt="${escapeHtml(reward?.name || "Reward")}" />`,
+          )
+          .join("")}
       </div>
       <div class="trophy-lane-meta">
-        <strong>${primaryAmount} ${escapeHtml(primaryName)}</strong>
-        <span>${escapeHtml(tier.title || "Reward")}${extraRewards > 0 ? ` +${extraRewards} more` : ""}</span>
+        <strong>${primaryAmount.toLocaleString()} ${escapeHtml(primaryName)}</strong>
+        <span>${escapeHtml(tier.title || "Trophy Milestone")}${rewards.length > 1 ? ` • ${rewards.length} Rewards` : ""}</span>
       </div>
-      <button class="pixel-menu-button trophy-tier-claim" data-tier-id="${tier.tierId}" ${
+      <button type="button" class="pixel-menu-button trophy-tier-claim" data-tier-id="${escapeHtml(tier.tierId)}" ${
         tier.canClaim ? "" : "disabled"
       }>${tier.claimed ? "Claimed" : tier.canClaim ? "Claim" : "Locked"}</button>
     `;
@@ -1426,7 +1568,7 @@ function renderTrophyTrack(state) {
     marker.innerHTML = `
       <span class="trophy-lane-marker-chip">
         <img src="/assets/trophy.webp" alt="" />
-        <span>${tier.trophiesRequired}</span>
+        <span>${Math.max(0, Number(tier.trophiesRequired) || 0).toLocaleString()}</span>
       </span>
     `;
 
@@ -1434,50 +1576,115 @@ function renderTrophyTrack(state) {
     claimBtn?.addEventListener("click", async (event) => {
       event?.stopPropagation?.();
       const tierId = String(claimBtn.dataset.tierId || "");
-      if (!tierId || claimBtn.disabled) return;
-      claimBtn.disabled = true;
-      claimBtn.classList.add("is-busy");
-      claimBtn.textContent = "Claiming...";
+      if (!tierId || claimBtn.disabled || trophyClaimsInFlight.has(tierId)) return;
+
+      trophyClaimsInFlight.add(tierId);
+
+      // 1. Optimistically calculate and apply currency rewards
+      const rewards = Array.isArray(tier.rewards) ? tier.rewards : [];
+      const currencyRewards = summarizeTrophyCurrencyRewards(rewards);
+      const prevCoins = userData ? Number(userData.coins) || 0 : 0;
+      const prevGems = userData ? Number(userData.gems) || 0 : 0;
+
+      if (userData) {
+        userData.coins = prevCoins + currencyRewards.coins;
+        userData.gems = prevGems + currencyRewards.gems;
+        updateLobbyResourceCounts();
+      }
+
+      // 2. Optimistically update local tier state and notification badge
+      tier.claimed = true;
+      tier.canClaim = false;
+      if (trophyProgressionState?.tiers) {
+        const localTier = trophyProgressionState.tiers.find(
+          (t) => String(t?.tierId) === tierId,
+        );
+        if (localTier) {
+          localTier.claimed = true;
+          localTier.canClaim = false;
+        }
+        trophyProgressionState.availableClaimCount = Math.max(
+          0,
+          (Number(trophyProgressionState.availableClaimCount) || 1) - 1,
+        );
+        setTrophyClaimBadge(trophyProgressionState.availableClaimCount);
+      }
+
+      // 3. Immediately apply claimed visual state (no "Claiming..." text)
+      applyTrophyTierVisualState({
+        card,
+        marker,
+        button: claimBtn,
+        tier,
+        pending: false,
+      });
+      playTrophyClaimFeedback({ card, marker, canvas });
+      sonner("Reward claimed", "Trophy reward collected!", "success");
+
+      // 4. Send background claim request to backend
       try {
         const result = await fetchLobbyJson("/trophies/claim", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ tierId }),
         });
-        sonner("Reward claimed", "Trophy reward delivered.", "success");
 
-        if (userData) {
-          userData.coins = Number(result?.player?.coins ?? userData.coins) || 0;
-          userData.gems = Number(result?.player?.gems ?? userData.gems) || 0;
+        trophyClaimsInFlight.delete(tierId);
+
+        if (result?.player && userData) {
+          userData.coins = Number(result.player.coins ?? userData.coins) || 0;
+          userData.gems = Number(result.player.gems ?? userData.gems) || 0;
           userData.trophies =
-            Number(result?.player?.trophies ?? userData.trophies) || 0;
+            Number(result.player.trophies ?? userData.trophies) || 0;
+          updateLobbyResourceCounts();
         }
 
-        const coinCount = document.getElementById("coin-count");
-        const gemCount = document.getElementById("gem-count");
-        const trophyCount = document.getElementById("trophy-count");
-        if (coinCount) coinCount.textContent = String(userData?.coins || 0);
-        if (gemCount) gemCount.textContent = String(userData?.gems || 0);
-        if (trophyCount)
-          trophyCount.textContent = String(userData?.trophies || 0);
+        if (result?.progression) {
+          reconcileTrophyTrackState(result.progression);
+        }
+      } catch (error) {
+        trophyClaimsInFlight.delete(tierId);
 
-        await animateTrophyClaimSuccess({
+        // Rollback optimistic state on error
+        tier.claimed = false;
+        tier.canClaim = true;
+        if (trophyProgressionState?.tiers) {
+          const localTier = trophyProgressionState.tiers.find(
+            (t) => String(t?.tierId) === tierId,
+          );
+          if (localTier) {
+            localTier.claimed = false;
+            localTier.canClaim = true;
+          }
+          trophyProgressionState.availableClaimCount = Math.max(
+            0,
+            (Number(trophyProgressionState.availableClaimCount) || 0) + 1,
+          );
+          setTrophyClaimBadge(trophyProgressionState.availableClaimCount);
+        }
+        if (userData) {
+          userData.coins = prevCoins;
+          userData.gems = prevGems;
+          updateLobbyResourceCounts();
+        }
+        applyTrophyTierVisualState({
           card,
           marker,
-          canvas,
-          summary,
+          button: claimBtn,
+          tier,
+          pending: false,
         });
-        await openTrophyProgressionOverlay({ preserveScroll: true });
-      } catch (error) {
-        sonner("Reward claim failed", error?.message || "Try again.", "error");
-        claimBtn.classList.remove("is-busy");
-        claimBtn.textContent = tier.canClaim ? "Claim" : "Locked";
-        claimBtn.disabled = false;
+        sonner(
+          "Reward claim failed",
+          error?.message || "Please try again.",
+          "error",
+        );
       }
     });
 
     cardRow?.appendChild(card);
     markerRow?.appendChild(marker);
+    tierIndex += 1;
   }
 
   const ratioCenterTarget = Math.max(
@@ -1498,23 +1705,41 @@ function renderTrophyTrack(state) {
     : ratioCenterTarget;
   container.scrollLeft = nextScrollLeft;
   trophyRoadLastScrollLeft = nextScrollLeft;
+  window.requestAnimationFrame(() => updateTrophyTrackControls(container));
 }
 
 async function openTrophyProgressionOverlay(options = {}) {
   openOverlay("trophy-track-overlay");
   const list = document.getElementById("trophy-track-list");
-  const summary = document.getElementById("trophy-track-summary");
   const preserveScroll = !!options?.preserveScroll;
-  if (list) {
-    trophyRoadLastScrollLeft =
-      Number(list.scrollLeft) || trophyRoadLastScrollLeft;
-    list.innerHTML = '<p class="trophy-overlay-loading">Loading rewards...</p>';
+  const hasExistingCanvas = Boolean(list?.querySelector(".trophy-track-canvas"));
+
+  if (list && !hasExistingCanvas) {
+    list.innerHTML = `<div class="trophy-rewards-state trophy-rewards-loading">
+      <span class="trophy-rewards-loading-mark" aria-hidden="true"></span>
+      <strong>Loading reward road</strong>
+      <span>Checking your latest milestones...</span>
+    </div>`;
+    updateTrophyTrackControls(list);
   }
-  if (summary) summary.textContent = "Loading...";
-  const progression = await fetchLobbyJson("/trophies/progression");
-  progression.__preserveScroll = preserveScroll;
-  progression.__scrollLeft = trophyRoadLastScrollLeft;
-  renderTrophyTrack(progression);
+
+  try {
+    const progression = await fetchLobbyJson("/trophies/progression");
+    if (hasExistingCanvas && reconcileTrophyTrackState(progression)) {
+      return;
+    }
+    progression.__preserveScroll = preserveScroll || hasExistingCanvas;
+    progression.__scrollLeft = Number(list?.scrollLeft) || trophyRoadLastScrollLeft;
+    renderTrophyTrack(progression);
+  } catch (err) {
+    if (!hasExistingCanvas && list) {
+      list.innerHTML = `<div class="trophy-rewards-state">
+        <span class="trophy-rewards-state-icon" aria-hidden="true">!</span>
+        <strong>Failed to load rewards</strong>
+        <span>${escapeHtml(err?.message || "Please check your connection.")}</span>
+      </div>`;
+    }
+  }
 }
 
 function renderLeaderboardRows(rows, profilePopup) {
@@ -1522,33 +1747,60 @@ function renderLeaderboardRows(rows, profilePopup) {
   if (!container) return;
   container.innerHTML = "";
 
-  for (const row of rows) {
+  if (!rows.length) {
+    container.innerHTML = `
+      <div class="leaderboard-state leaderboard-empty-state">
+        <span class="leaderboard-state-icon" aria-hidden="true">?</span>
+        <strong>No ranked players yet</strong>
+        <span>Finish a battle to claim the first spot.</span>
+      </div>
+    `;
+    return;
+  }
+
+  rows.forEach((row, index) => {
+    const rank = Math.max(1, Number.parseInt(row.rank, 10) || index + 1);
+    const wins = Math.max(0, Number(row.wins) || 0);
+    const trophies = Math.max(0, Number(row.trophies) || 0);
+    const username = String(row.username || "Unknown Player");
     const item = document.createElement("button");
     item.type = "button";
     item.className = "leaderboard-row";
-    if (Number(row.rank) <= 3) {
-      item.classList.add(`top-${Number(row.rank)}`);
+    item.style.setProperty(
+      "--leaderboard-row-index",
+      String(Math.min(index, 10)),
+    );
+    item.setAttribute("aria-label", `View ${username}'s profile`);
+    if (rank <= 3) {
+      item.classList.add(`top-${rank}`);
     }
-    const winRate =
-      Number(row.totalMatches) > 0
-        ? `${Math.round((Number(row.wins || 0) / Number(row.totalMatches || 1)) * 100)}%`
-        : "0%";
     const charClass = String(row.charClass || "ninja");
     const profileIconId = String(row.profileIconId || "") || null;
     item.innerHTML = `
-      <span class="leaderboard-rank">#${row.rank}</span>
-      <img class="leaderboard-avatar" src="${buildProfileIconUrl(profileIconId, charClass)}" alt="${buildProfileIconAlt(profileIconId, charClass)}" />
-      <span class="leaderboard-main">
-        <span class="leaderboard-name">${row.username}</span>
-        <span class="leaderboard-wins">${row.wins}W / ${row.totalMatches}M (${winRate})</span>
+      <span class="leaderboard-rank">#${rank}</span>
+      <span class="leaderboard-player">
+        <span class="leaderboard-avatar-frame">
+          <img class="leaderboard-avatar" src="${escapeHtml(buildProfileIconUrl(profileIconId, charClass))}" alt="${escapeHtml(buildProfileIconAlt(profileIconId, charClass))}" />
+        </span>
+        <span class="leaderboard-main">
+          <span class="leaderboard-name">${escapeHtml(username)}</span>
+          <span class="leaderboard-character">${escapeHtml(charClass)} fighter</span>
+        </span>
       </span>
-      <span class="leaderboard-trophies"><img src="/assets/trophy.webp" alt="trophies" />${row.trophies}</span>
+      <span class="leaderboard-wins" aria-label="${wins.toLocaleString()} wins">
+        <strong>${wins.toLocaleString()}</strong>
+        <small>Wins</small>
+      </span>
+      <span class="leaderboard-trophies">
+        <img src="/assets/trophy.webp" alt="" />
+        <span><strong>${trophies.toLocaleString()}</strong><small>Trophies</small></span>
+      </span>
     `;
     item.addEventListener("click", () => {
-      profilePopup?.open?.({ username: row.username });
+      profilePopup?.open?.({ username });
     });
     container.appendChild(item);
-  }
+  });
 }
 
 async function openLeaderboardOverlay(profilePopup) {
@@ -1556,7 +1808,11 @@ async function openLeaderboardOverlay(profilePopup) {
   const container = document.getElementById("leaderboard-list");
   if (container)
     container.innerHTML =
-      '<p class="trophy-overlay-loading">Loading leaderboard...</p>';
+      `<div class="leaderboard-state leaderboard-loading-state">
+        <span class="leaderboard-loading-mark" aria-hidden="true"></span>
+        <strong>Loading standings</strong>
+        <span>Checking the latest rankings...</span>
+      </div>`;
   const data = await fetchLobbyJson("/leaderboard/trophies?limit=100");
   renderLeaderboardRows(
     Array.isArray(data?.leaderboard) ? data.leaderboard : [],
@@ -1862,10 +2118,37 @@ document.addEventListener("DOMContentLoaded", async () => {
     "trophy-resource-button",
   );
   const leaderboardButton = document.getElementById("leaderboard-button");
+  const shopButton = document.getElementById("shop-button");
+  const coinResourceButton = document.getElementById("coin-resource-button");
+  const gemResourceButton = document.getElementById("gem-resource-button");
 
   document.getElementById("username-text").textContent = userData.name;
   const profilePopup = initProfilePopup();
   __lobbyProfilePopup = profilePopup;
+  const shop = initializeShop({
+    userData,
+    guest,
+    onWalletChange: (wallet) => {
+      userData.coins = wallet.coins;
+      userData.gems = wallet.gems;
+      if (coinCount) coinCount.textContent = String(wallet.coins);
+      if (gemCount) gemCount.textContent = String(wallet.gems);
+      if (lobbyProfileState.profile && lobbyProfileState.viewingSelf) {
+        lobbyProfileState.profile.coins = wallet.coins;
+        lobbyProfileState.profile.gems = wallet.gems;
+      }
+    },
+    onProfileInvalidate: () => {
+      lobbyProfileState.loadingPromise = null;
+    },
+  });
+  shopButton?.addEventListener("click", () => void shop.open("sales"));
+  coinResourceButton?.addEventListener("click", () => void shop.open("currency"));
+  gemResourceButton?.addEventListener("click", () => void shop.open("currency"));
+  document.getElementById("profile-loadout-shop")?.addEventListener("click", () => {
+    profilePopup?.close?.();
+    void shop.open("profile");
+  });
   if (usernameButton) {
     usernameButton.addEventListener("click", () => {
       if (profilePopup?.open) {
@@ -1924,6 +2207,37 @@ document.addEventListener("DOMContentLoaded", async () => {
       );
       closeOverlay("leaderboard-overlay");
     }
+  });
+
+  const trophyTrackList = document.getElementById("trophy-track-list");
+  document
+    .getElementById("trophy-track-prev")
+    ?.addEventListener("click", () => scrollTrophyTrack(-1));
+  document
+    .getElementById("trophy-track-next")
+    ?.addEventListener("click", () => scrollTrophyTrack(1));
+  trophyTrackList?.addEventListener(
+    "scroll",
+    () => {
+      trophyRoadLastScrollLeft = Number(trophyTrackList.scrollLeft) || 0;
+      updateTrophyTrackControls(trophyTrackList);
+    },
+    { passive: true },
+  );
+  trophyTrackList?.addEventListener(
+    "wheel",
+    (event) => {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      if (trophyTrackList.scrollWidth <= trophyTrackList.clientWidth) return;
+      event.preventDefault();
+      trophyTrackList.scrollLeft += event.deltaY;
+    },
+    { passive: false },
+  );
+  trophyTrackList?.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    scrollTrophyTrack(event.key === "ArrowLeft" ? -1 : 1);
   });
 
   document

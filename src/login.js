@@ -15,6 +15,16 @@ const errorMessage = document.getElementById("errorMessage");
 const successMessage = document.getElementById("successMessage");
 const usernameInput = document.getElementById("username");
 const passwordInput = document.getElementById("password");
+const requestedNext = new URLSearchParams(window.location.search).get("next");
+let safeNext = "/";
+if (requestedNext?.startsWith("/") && !requestedNext.includes("\\")) {
+  try {
+    const target = new URL(requestedNext, window.location.origin);
+    if (target.origin === window.location.origin) {
+      safeNext = `${target.pathname}${target.search}${target.hash}`;
+    }
+  } catch (_) {}
+}
 
 // Accessibility for live messages
 errorMessage.setAttribute("role", "alert");
@@ -87,7 +97,7 @@ form.addEventListener("submit", async (e) => {
       showSuccess("Logged in! Redirecting…");
       // quick pause so cookies settle and users see feedback
       setTimeout(() => {
-        window.location.href = "/";
+        window.location.href = safeNext;
       }, 500);
       return;
     }

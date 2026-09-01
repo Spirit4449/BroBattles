@@ -2,6 +2,9 @@ const bcrypt = require("bcrypt");
 const {
   syncProfileIconOwnershipForUser,
 } = require("../../helpers/profileIconOwnership");
+const {
+  syncPlayerCardOwnershipForUser,
+} = require("../../helpers/playerCardOwnership");
 
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,14}$/;
 const MIN_PW = 6;
@@ -10,8 +13,7 @@ const MAX_PW = 32;
 function registerProfileRoutes({ app, db, requireCurrentUser }) {
   async function buildProfileViewForUser(userRow) {
     const profileIconState = await syncProfileIconOwnershipForUser(db, userRow);
-    const ownedCardIds = await db.getUserOwnedCardIds(userRow.user_id);
-    const selectedCardId = await db.getUserSelectedCardId(userRow.user_id);
+    const cardState = await syncPlayerCardOwnershipForUser(db, userRow);
     const matchesRows = await db.runQuery(
       "SELECT COUNT(*) AS total FROM match_participants WHERE user_id = ?",
       [userRow.user_id],
@@ -66,8 +68,8 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       avgCharLevel: avgLevel,
       totalMatches: Number(matchesRows?.[0]?.total) || 0,
       wins,
-      selectedCardId,
-      ownedCardIds,
+      selectedCardId: cardState.selectedCardId || null,
+      ownedCardIds: cardState.ownedCardIds || [],
       selectedProfileIconId: profileIconState.selectedProfileIconId || null,
       ownedProfileIconIds: profileIconState.ownedIconIds || [],
     };

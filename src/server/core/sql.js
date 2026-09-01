@@ -2,11 +2,12 @@
 const mysql = require("mysql2/promise"); // Just mysql doesn't work
 const { normalizeSelection } = require("../helpers/gameSelectionCatalog");
 const pool = mysql.createPool({
-  host: "localhost",
-  user: "root",
-  password: "Akshardhamsql",
-  database: "game",
-  connectionLimit: 10,
+  host: process.env.DB_HOST || "localhost",
+  port: Math.max(1, Number(process.env.DB_PORT) || 3306),
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_NAME || "game",
+  connectionLimit: Math.max(1, Number(process.env.DB_CONNECTION_LIMIT) || 10),
   queueLimit: 0,
 });
 

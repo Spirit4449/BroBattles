@@ -28,6 +28,10 @@ const HTTP_ROUTE_POLICIES = {
   "POST /api/admin/user-search": { bucket: "strict" },
   "POST /api/admin/user-update": { bucket: "strict" },
   "POST /api/admin/runtime": { bucket: "strict" },
+  "POST /api/admin/shop/refresh": { bucket: "strict" },
+  "POST /api/shop/claim-daily": { bucket: "strict" },
+  "POST /api/shop/purchase": { bucket: "strict" },
+  "POST /api/shop/checkout-session": { bucket: "strict" },
 
   "POST /create-party": { bucket: "medium" },
   "POST /partydata": { bucket: "medium" },

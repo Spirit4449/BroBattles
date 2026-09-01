@@ -35,6 +35,9 @@ const { createRuntimeConfig } = require("./helpers/runtimeConfig.js");
 const { registerAdminRoutes } = require("./routes/admin.js");
 const { createPartyChatService } = require("./services/chatService.js");
 const { createAbuseControlService } = require("./services/abuseControlService");
+const { createShopService } = require("./services/shopService");
+const { createStripeShopService } = require("./services/stripeShopService");
+const { registerStripeWebhookRoute } = require("./routes/stripeWebhook");
 const {
   createAbuseHttpMiddleware,
 } = require("./middleware/abuseHttpMiddleware");
@@ -92,6 +95,13 @@ const chatService = createPartyChatService({ db, io });
 app.locals.chatService = chatService;
 const abuseControl = createAbuseControlService({ db, io });
 app.locals.abuseControl = abuseControl;
+const shopService = createShopService({ db });
+const stripeShopService = createStripeShopService({ db, shopService });
+app.locals.shopService = shopService;
+app.locals.stripeShopService = stripeShopService;
+
+// Stripe signature verification requires the unparsed request body.
+registerStripeWebhookRoute({ app, stripeShopService });
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -157,6 +167,8 @@ registerAdminRoutes({
   pageRoot: PAGE_ROOT,
   distDir: DIST_DIR,
   runtimeConfig,
+  shopService,
+  stripeShopService,
 });
 registerRoutes({
   app,
@@ -167,6 +179,8 @@ registerRoutes({
   distDir: DIST_DIR,
   chatService,
   abuseControl,
+  shopService,
+  stripeShopService,
 });
 
 // Server start

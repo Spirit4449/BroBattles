@@ -26,15 +26,25 @@
         <h2>Bro Battles</h2>
       </div>
       <div class="flex" id="navbar-right">
-        <div class="flex resources">
+        <button
+          id="coin-resource-button"
+          class="flex resources currency-resource"
+          type="button"
+          aria-label="Open coin shop"
+        >
           <img src="/assets/coin.webp" width="20px" alt="coins" />
           <p id="coin-count"></p>
-        </div>
+        </button>
 
-        <div class="flex resources">
+        <button
+          id="gem-resource-button"
+          class="flex resources currency-resource"
+          type="button"
+          aria-label="Open gem shop"
+        >
           <img src="/assets/gem.webp" width="20px" alt="gems" />
           <p id="gem-count"></p>
-        </div>
+        </button>
         <button
           id="trophy-resource-button"
           class="flex resources trophy-resource pixel-menu-button"
@@ -88,12 +98,29 @@
     >
       <img src="/assets/settings.webp" alt="" width="20" height="20" />
     </button>
-    <button
-      id="leaderboard-button"
-      class="party-button leaderboard-button pixel-menu-button"
-    >
-      <p>Leaderboard</p>
-    </button>
+    <div class="lobby-quick-actions" role="group" aria-label="Lobby actions">
+      <button
+        id="shop-button"
+        class="party-button shop-button pixel-menu-button"
+        type="button"
+      >
+        <img
+          class="shop-button-icon"
+          src="/assets/shop/icons/shop-v2.png"
+          alt=""
+          width="26"
+          height="26"
+        />
+        <p>Shop</p>
+      </button>
+      <button
+        id="leaderboard-button"
+        class="party-button leaderboard-button pixel-menu-button"
+        type="button"
+      >
+        <p>Leaderboard</p>
+      </button>
+    </div>
 
     <div id="lobby-area" class="mode-1">
       <div class="platform your-team-1" data-team="your-team" data-slot="1">
@@ -380,6 +407,13 @@
           <div class="profile-loadout-head">
             <h3 id="profile-loadout-title">Edit Profile Icon</h3>
             <button
+              id="profile-loadout-shop"
+              class="profile-action-btn pixel-menu-button"
+              type="button"
+            >
+              Get More in Shop
+            </button>
+            <button
               id="profile-loadout-close"
               class="profile-close pixel-menu-button"
               type="button"
@@ -406,30 +440,62 @@
     >
       <div class="trophy-overlay-backdrop"></div>
       <section
-        class="trophy-overlay-panel"
+        class="trophy-overlay-panel trophy-rewards-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="trophy-track-title"
       >
-        <header class="trophy-overlay-head">
-          <div>
-            <h2 id="trophy-track-title">Trophy Rewards</h2>
+        <header class="trophy-overlay-head trophy-rewards-head">
+          <div class="trophy-rewards-head-copy">
+            <div class="trophy-rewards-title-line">
+              <img src="/assets/trophy.webp" alt="" />
+              <h2 id="trophy-track-title">Trophy Rewards</h2>
+            </div>
             <p>Reach milestones, then claim rewards.</p>
           </div>
           <button
             id="trophy-track-close"
             class="pixel-menu-button trophy-overlay-close"
             type="button"
+            aria-label="Close trophy rewards"
+            title="Close"
           >
-            Close
+            <span aria-hidden="true">X</span>
           </button>
         </header>
-        <div class="trophy-overlay-summary">
-          <img src="/assets/trophy.webp" alt="trophies" />
-          <strong id="trophy-track-summary">0 trophies</strong>
+        <div class="trophy-rewards-body">
+          <div class="trophy-track-stage">
+            <div
+              id="trophy-track-list"
+              class="trophy-track-list"
+              role="region"
+              aria-label="Trophy reward road"
+              tabindex="0"
+            ></div>
+            <div class="trophy-track-controls" aria-label="Reward road controls">
+              <button
+                id="trophy-track-prev"
+                class="pixel-menu-button trophy-track-control"
+                type="button"
+                aria-label="View earlier rewards"
+                data-sound="cursor4"
+                disabled
+              >
+                &lt;
+              </button>
+              <button
+                id="trophy-track-next"
+                class="pixel-menu-button trophy-track-control"
+                type="button"
+                aria-label="View later rewards"
+                data-sound="cursor4"
+                disabled
+              >
+                &gt;
+              </button>
+            </div>
+          </div>
         </div>
-        <div id="trophy-track-rail-fill"></div>
-        <div id="trophy-track-list" class="trophy-track-list"></div>
       </section>
     </div>
 
@@ -445,20 +511,37 @@
         aria-modal="true"
         aria-labelledby="leaderboard-title"
       >
-        <header class="trophy-overlay-head">
-          <div>
-            <h2 id="leaderboard-title">Trophy Leaderboard</h2>
-            <p>Top players sorted by trophies.</p>
+        <header class="trophy-overlay-head leaderboard-head">
+          <div class="leaderboard-head-copy">
+            <div class="leaderboard-title-line">
+              <img src="/assets/trophy.webp" alt="" />
+              <h2 id="leaderboard-title">Trophy Leaderboard</h2>
+            </div>
+            <p>Climb the ranks. Become the champion.</p>
           </div>
           <button
             id="leaderboard-close"
             class="pixel-menu-button trophy-overlay-close"
             type="button"
+            aria-label="Close leaderboard"
+            title="Close"
           >
-            Close
+            <span aria-hidden="true">X</span>
           </button>
         </header>
-        <div id="leaderboard-list" class="leaderboard-list"></div>
+        <div class="leaderboard-body">
+          <div class="leaderboard-column-head" aria-hidden="true">
+            <span>Rank</span>
+            <span>Player</span>
+            <span>Wins</span>
+            <span>Trophies</span>
+          </div>
+          <div
+            id="leaderboard-list"
+            class="leaderboard-list"
+            aria-live="polite"
+          ></div>
+        </div>
       </section>
     </div>
 

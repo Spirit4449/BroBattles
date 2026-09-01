@@ -694,6 +694,8 @@ export function createLobbyChatController({
   function syncLobbyChatVisibility() {
     const visible = currentPartyId() > 0;
     ui.root.style.display = visible ? "block" : "none";
+    ui.launcher.style.display = visible ? "inline-flex" : "none";
+    ui.launcher.disabled = !visible;
     if (visible) return;
     setOpen(false);
     setUnreadBadge(0);

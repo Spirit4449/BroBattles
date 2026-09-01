@@ -16,7 +16,7 @@ The game features a matchmaking system, party management, character progression,
 
 ## Prerequisites
 
-- **Node.js** (v14 or higher recommended)
+- **Node.js** (v18 or higher; required by the Stripe SDK)
 - **MySQL** (v5.7 or higher)
 - A modern web browser (Chrome, Firefox, Edge, Safari)
 
@@ -43,22 +43,30 @@ Create a MySQL database and run the migration scripts:
 CREATE DATABASE game;
 ```
 
-Then execute the migration files in order from `server/migrations/`:
+Then execute the migration files in order from `migrations/`. The unified Shop
+requires:
 
-- `2025-09-05_matchmaking.sql`
-- `2025-09-06_party_status_enum.sql`
+- `migrations/2026-08-31_shop_commerce.sql`
 
 Refer to `database.md` for detailed schema information.
 
 ### 4. Environment Configuration
 
-The server will auto-generate a `.cookie-secret` file on first run. You can optionally set these environment variables:
+Copy `.env.example` to `.env`. The server auto-generates a `.cookie-secret`
+file when `COOKIE_SECRET` is empty. Database configuration is environment-only.
 
 - `PORT` - Server port (default: 3002)
 - `NODE_ENV` - Environment mode (development/production)
 - `SECURE_COOKIES` - Set to `true` for HTTPS (default: false)
 - `COOKIE_SECRET` - Custom cookie secret (auto-generated if not set)
 - `ADMIN_USERS` - All the users who can access admin panel on /admin
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` - MySQL connection
+- `STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` - Stripe Checkout and webhook credentials
+- `PUBLIC_BASE_URL` - Canonical application origin used by Stripe return URLs
+- `STRIPE_AUTOMATIC_TAX` - Keep `false` until tax registrations are confirmed
+
+See [`docs/PAYMENTS.md`](docs/PAYMENTS.md) for sandbox setup, webhook events,
+secret protection, refunds, disputes, and the production checklist.
 
 ### 5. Build and Run
 
@@ -199,7 +207,7 @@ The project structure follows:
 - `src/` - Client-side game code and server code
 - `public/` - Static assets and HTML pages
 - `src/server/` - Server-side logic (matchmaking, game rooms, routes)
-- `server/migrations/` - Database migrations
+- `migrations/` - Database migrations
 
 ## Architecture and Contribution Docs
 

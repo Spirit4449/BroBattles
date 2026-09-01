@@ -106,6 +106,9 @@ body.profile-page-body {
 }
 
 .actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 14px;
 }
 
@@ -176,8 +179,14 @@ body.profile-page-body {
 
 .cards-modal-head {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+}
+
+.cards-modal-head h2 {
+  margin-right: auto;
 }
 
 .cards-grid {

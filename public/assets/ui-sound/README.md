@@ -66,3 +66,18 @@ Default sounds (edit `soundFiles` in `uiSounds.js` to add more):
 - Sounds are preloaded on page load for instant playback
 - Failed sounds log to console but don't break the UI
 - Uses event delegation for optimal performance
+
+## Shop sound sources
+
+The `shop-open`, `shop-close`, `shop-hover`, `shop-press`, `shop-buy`,
+`shop-confirm`, `shop-big-success`, `shop-error`, and `shop-reveal` OGG files
+are selected from Kenney's **Interface Sounds 1.0**
+pack. Kenney distributes the pack under Creative Commons Zero (CC0):
+https://kenney.nl/assets/interface-sounds
+
+`shop-currency-impact.wav` is the stereo **Gem collect SFX** by Bobjt on
+OpenGameArt, also released under CC0:
+https://opengameart.org/content/gem-collect-sfx
+
+Credit is not required by either license, but the sources are retained here
+for provenance.

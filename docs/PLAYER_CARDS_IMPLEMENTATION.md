@@ -6,7 +6,7 @@ This guide explains how player cards are configured and integrated.
 
 All card metadata lives in:
 
-- src/config/player-cards.catalog.json
+- src/shared/playerCardsCatalog.json
 
 Database stores only:
 
@@ -30,7 +30,8 @@ Per-card keys:
 - `name`: display label
 - `assetUrl`: card frame asset URL
 - `rarity`
-- `cost.coins` and `cost.gems`
+- `cost.coins` and `cost.gems` (display/legacy metadata; sale prices are
+  authoritative in `src/shared/shopCatalog.json`)
 
 ## Layout Standardization
 
@@ -45,20 +46,23 @@ in the same 650x1250 template with consistent inner content area.
 
 2. Add card entry in:
 
-- src/config/player-cards.catalog.json
+- src/shared/playerCardsCatalog.json
 
 3. Ensure `id` is stable and unique. Never rename ids that are already owned by users.
 
-4. Grant ownership by inserting into `user_cards` or through a route/service.
+4. Add a validated Shop offer when the card should be purchasable, or grant
+   ownership through a progression/service path.
 
 ## API Endpoints (Current)
 
 - GET `/player-cards/catalog`
 - GET `/player-cards/owned`
 - POST `/player-cards/select` with body `{ "cardId": "..." }`
-- POST `/player-cards/buy` with body `{ "cardId": "..." }`
+- POST `/player-cards/buy` with body `{ "cardId": "..." }` (legacy
+  compatibility wrapper around the Shop commerce service)
 
-Selection is allowed only if user owns the card.
+Selection is allowed only if the user owns the card. New purchases belong in
+Shop; profile interfaces only equip owned cards.
 
 ## Migration Notes
 

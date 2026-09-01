@@ -47,6 +47,41 @@
         </div>
       </section>
 
+      <section class="panel shop-admin-panel">
+        <div class="shop-admin-heading">
+          <div>
+            <p class="panel-kicker">Store Operations</p>
+            <h2>Shop Rotations & Payments</h2>
+          </div>
+          <span id="shopPaymentStatus" class="shop-payment-status">Checking Stripe…</span>
+        </div>
+        <div id="shopAdminError" class="shop-admin-error hidden"></div>
+        <div class="shop-cycle-grid">
+          <article class="shop-cycle-card">
+            <span>Daily Rewards</span>
+            <strong id="shopDailiesCycle">—</strong>
+            <small id="shopDailiesReset">Next reset: —</small>
+            <button type="button" data-shop-refresh="dailies">
+              Refresh Dailies
+            </button>
+          </article>
+          <article class="shop-cycle-card">
+            <span>Featured Sales</span>
+            <strong id="shopSalesCycle">—</strong>
+            <small id="shopSalesReset">Next reset: —</small>
+            <button type="button" data-shop-refresh="sales">
+              Refresh Sales
+            </button>
+          </article>
+        </div>
+        <div class="shop-admin-meta">
+          <p id="shopTimezone">Reset timezone: —</p>
+          <p id="shopCatalogHealth">Catalog: checking…</p>
+        </div>
+        <h3>Recent Shop Orders</h3>
+        <ul id="recentShopOrders" class="recent-list"></ul>
+      </section>
+
       <section class="panels">
         <article class="panel">
           <h2>Player Editor</h2>

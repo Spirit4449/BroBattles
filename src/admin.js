@@ -6,6 +6,7 @@ wireFullscreenToggles();
 const state = {
   stats: null,
   runtime: null,
+  shop: null,
   selectedUser: null,
 };
 
@@ -78,6 +79,83 @@ function populateRuntimeForm(runtime) {
   if (ceiling) ceiling.value = runtime?.rewardCeiling ?? 500;
 }
 
+function formatAdminDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(date);
+}
+
+function renderShopAdmin(shop) {
+  state.shop = shop || null;
+  const error = $("#shopAdminError");
+  if (error) {
+    error.textContent = shop?.error || "";
+    error.classList.toggle("hidden", !shop?.error);
+  }
+
+  const payment = shop?.payment || {};
+  const paymentStatus = $("#shopPaymentStatus");
+  if (paymentStatus) {
+    paymentStatus.textContent = payment.enabled
+      ? "Stripe enabled"
+      : `Stripe disabled${payment.missing?.length ? ` · ${payment.missing.join(", ")}` : ""}`;
+    paymentStatus.classList.toggle("is-enabled", !!payment.enabled);
+  }
+
+  const rotations = shop?.rotations || {};
+  const dailies = rotations.dailies || {};
+  const sales = rotations.sales || {};
+  if ($("#shopDailiesCycle")) {
+    $("#shopDailiesCycle").textContent = dailies.cycleKey || "Unavailable";
+  }
+  if ($("#shopSalesCycle")) {
+    $("#shopSalesCycle").textContent = sales.cycleKey || "Unavailable";
+  }
+  if ($("#shopDailiesReset")) {
+    $("#shopDailiesReset").textContent = `Next reset: ${formatAdminDate(dailies.nextRefreshAt)}`;
+  }
+  if ($("#shopSalesReset")) {
+    $("#shopSalesReset").textContent = `Next reset: ${formatAdminDate(sales.nextRefreshAt)}`;
+  }
+  if ($("#shopTimezone")) {
+    $("#shopTimezone").textContent = `Reset timezone: ${rotations.timezone || "America/New_York"}`;
+  }
+  const catalogErrors = Array.isArray(shop?.catalogErrors)
+    ? shop.catalogErrors
+    : [];
+  if ($("#shopCatalogHealth")) {
+    $("#shopCatalogHealth").textContent = catalogErrors.length
+      ? `Catalog: ${catalogErrors.length} invalid offer(s) failed closed`
+      : "Catalog: healthy";
+  }
+
+  const orderList = $("#recentShopOrders");
+  if (!orderList) return;
+  orderList.innerHTML = "";
+  const orders = Array.isArray(shop?.recentOrders) ? shop.recentOrders : [];
+  if (!orders.length) {
+    orderList.innerHTML = '<li class="muted">No shop orders</li>';
+    return;
+  }
+  orders.forEach((order) => {
+    const li = document.createElement("li");
+    const title = document.createElement("strong");
+    const detail = document.createElement("span");
+    title.textContent = `${order.offer_id} · user #${order.user_id}`;
+    detail.textContent = `${order.status} · $${(Number(order.amount_cents || 0) / 100).toFixed(2)} ${String(order.currency || "usd").toUpperCase()}`;
+    li.append(title, detail);
+    orderList.appendChild(li);
+  });
+}
+
 function populateUserEditor(user) {
   state.selectedUser = user;
   const card = $("#userEditor");
@@ -99,10 +177,12 @@ async function handleBootstrap() {
     const data = await fetchJson("/api/admin/bootstrap");
     state.stats = data.stats;
     state.runtime = data.runtime;
+    state.shop = data.shop;
     renderStats(data.stats);
     renderRecent(data.recentUsers, $("#recentUsers"));
     renderRecent(data.recentMatches, $("#recentMatches"));
     populateRuntimeForm(data.runtime);
+    renderShopAdmin(data.shop);
     if ($("#adminName")) {
       $("#adminName").textContent = data.admin?.name || "Admin";
     }
@@ -113,6 +193,28 @@ async function handleBootstrap() {
       banner.textContent = err.message || "Failed to load dashboard";
       banner.classList.remove("hidden");
     }
+  }
+}
+
+async function handleShopRefresh(event) {
+  const button = event.currentTarget;
+  const section = String(button?.dataset?.shopRefresh || "");
+  if (!section) return;
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = "Refreshing…";
+  try {
+    await fetchJson("/api/admin/shop/refresh", {
+      method: "POST",
+      body: { section },
+    });
+    showToast(section === "sales" ? "Sales refreshed" : "Dailies refreshed");
+    await handleBootstrap();
+  } catch (err) {
+    showToast(err.message || "Shop refresh failed", true);
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
   }
 }
 
@@ -199,6 +301,9 @@ function init() {
   if (userForm) userForm.addEventListener("submit", handleUserUpdate);
   const runtimeForm = $("#runtimeForm");
   if (runtimeForm) runtimeForm.addEventListener("submit", handleRuntimeSave);
+  document.querySelectorAll("[data-shop-refresh]").forEach((button) => {
+    button.addEventListener("click", handleShopRefresh);
+  });
   handleBootstrap();
 }
 

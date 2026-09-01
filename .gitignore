@@ -1,4 +1,7 @@
 dist/
 node_modules/
 .cookie-secret
+.env
+.env.*
+!.env.example
 todo.md

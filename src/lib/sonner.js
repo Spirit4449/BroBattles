@@ -1,6 +1,6 @@
 import { playSound } from "./uiSounds.js";
 // Exported function: sonner(header, message, buttonText = "OK", onClick?, options?)
-// options: { duration?: number, containerId?: string }
+// options: { duration?: number, containerId?: string, tone?: "info"|"success"|"error" }
 export function sonner(
   header,
   message,
@@ -10,6 +10,9 @@ export function sonner(
 ) {
   const duration = Math.max(800, Number(options.duration || 5000));
   const containerId = options.containerId || "sonner-wrap";
+  const tone = ["info", "success", "error"].includes(String(options.tone || ""))
+    ? String(options.tone)
+    : "info";
 
   // Ensure container exists (top center)
   let wrap = document.getElementById(containerId);
@@ -21,7 +24,7 @@ export function sonner(
   }
 
   const el = document.createElement("div");
-  el.className = "sonner";
+  el.className = `sonner sonner--${tone}`;
   el.setAttribute("role", "alert");
   el.setAttribute("aria-live", "polite");
   el.innerHTML = `

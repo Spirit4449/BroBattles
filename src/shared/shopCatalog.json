@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "timezone": "America/New_York",
+  "sections": [
+    { "id": "sales", "name": "Sales" },
+    { "id": "dailies", "name": "Dailies" },
+    { "id": "skins", "name": "Skins" },
+    { "id": "profile", "name": "Profile" },
+    { "id": "currency", "name": "Gems & Coins" }
+  ],
+  "rotation": {
+    "dailies": {
+      "rewards": [
+        {
+          "id": "daily-coins-75",
+          "name": "Coin Drop",
+          "description": "Today's on us. Add 75 coins to your battle fund.",
+          "rarity": "common",
+          "banner": "/assets/shop/banners/daily-coins.webp",
+          "grants": [{ "kind": "currency", "currency": "coins", "amount": 75 }]
+        },
+        {
+          "id": "daily-gems-5",
+          "name": "Gem Spark",
+          "description": "A little midnight luck: 5 gems, free for today.",
+          "rarity": "rare",
+          "banner": "/assets/shop/banners/daily-gems.webp",
+          "grants": [{ "kind": "currency", "currency": "gems", "amount": 5 }]
+        }
+      ]
+    },
+    "sales": {
+      "pinnedOfferIds": ["ironbound-arsenal"],
+      "promotedOfferIds": [
+        "coins-1000-usd",
+        "gems-250-usd",
+        "gems-700-usd",
+        "gems-1500-usd"
+      ],
+      "promotedCount": 2
+    }
+  },
+  "offers": [
+    {
+      "id": "ironbound-arsenal",
+      "section": "sales",
+      "kind": "bundle",
+      "name": "Ironbound Arsenal",
+      "description": "Forge a complete Thorg loadout with Ironbound, Shuriken Strike, and a 500 coin battle fund.",
+      "rarity": "epic",
+      "badge": "BUNDLE",
+      "banner": "/assets/shop/banners/ironbound-arsenal.webp",
+      "price": { "type": "virtual", "currency": "gems", "amount": 250 },
+      "purchaseLimit": "lifetime",
+      "eligibility": { "requiresNotOwned": { "kind": "skin", "id": "thorg-iron" } },
+      "grants": [
+        { "kind": "skin", "id": "thorg-iron" },
+        { "kind": "card", "id": "shuriken-strike" },
+        { "kind": "currency", "currency": "coins", "amount": 500 }
+      ]
+    },
+    {
+      "id": "skin-thorg-iron",
+      "section": "skins",
+      "kind": "item",
+      "name": "Ironbound",
+      "description": "A battle-worn epic armor set forged for Thorg.",
+      "rarity": "epic",
+      "banner": "/assets/shop/banners/ironbound.webp",
+      "price": { "type": "virtual", "currency": "gems", "amount": 250 },
+      "purchaseLimit": "lifetime",
+      "grants": [{ "kind": "skin", "id": "thorg-iron" }]
+    },
+    {
+      "id": "card-shuriken-strike",
+      "section": "profile",
+      "kind": "item",
+      "name": "Shuriken Strike",
+      "description": "A rare player card framed by a storm of steel.",
+      "rarity": "rare",
+      "banner": "/assets/shop/banners/shuriken-strike.webp",
+      "price": { "type": "virtual", "currency": "gems", "amount": 20 },
+      "purchaseLimit": "lifetime",
+      "grants": [{ "kind": "card", "id": "shuriken-strike" }]
+    },
+    {
+      "id": "coins-1000-usd",
+      "section": "currency",
+      "kind": "currency-pack",
+      "name": "1,000 Coins",
+      "description": "A quick 1,000-coin boost for upgrades and your next winning streak.",
+      "rarity": "common",
+      "badge": "QUICK START",
+      "banner": "/assets/shop/banners/coin-satchel.webp",
+      "price": { "type": "money", "currency": "usd", "amountCents": 99 },
+      "purchaseLimit": "unlimited",
+      "grants": [{ "kind": "currency", "currency": "coins", "amount": 1000 }]
+    },
+    {
+      "id": "gems-250-usd",
+      "section": "currency",
+      "kind": "currency-pack",
+      "name": "250 Gems",
+      "description": "250 gems for a fresh skin, card, or something shiny later.",
+      "rarity": "rare",
+      "banner": "/assets/shop/banners/gem-pouch.webp",
+      "price": { "type": "money", "currency": "usd", "amountCents": 199 },
+      "purchaseLimit": "unlimited",
+      "grants": [{ "kind": "currency", "currency": "gems", "amount": 250 }]
+    },
+    {
+      "id": "gems-700-usd",
+      "section": "currency",
+      "kind": "currency-pack",
+      "name": "700 Gems",
+      "description": "700 gems to open up the good stuff without holding back.",
+      "rarity": "epic",
+      "badge": "POPULAR",
+      "banner": "/assets/shop/banners/gem-cache.webp",
+      "price": { "type": "money", "currency": "usd", "amountCents": 499 },
+      "purchaseLimit": "unlimited",
+      "grants": [{ "kind": "currency", "currency": "gems", "amount": 700 }]
+    },
+    {
+      "id": "gems-1500-usd",
+      "section": "currency",
+      "kind": "currency-pack",
+      "name": "1,500 Gems",
+      "description": "1,500 gems for collectors who always want the next great drop.",
+      "rarity": "legendary",
+      "badge": "BEST VALUE",
+      "banner": "/assets/shop/banners/gem-vault.webp",
+      "price": { "type": "money", "currency": "usd", "amountCents": 999 },
+      "purchaseLimit": "unlimited",
+      "grants": [{ "kind": "currency", "currency": "gems", "amount": 1500 }]
+    }
+  ]
+}

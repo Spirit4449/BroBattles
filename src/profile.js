@@ -1,6 +1,5 @@
 import "./styles/profile.css";
 import "./styles/selectionPopup.css";
-import { showUiConfirm } from "./lib/uiConfirm.js";
 import { sonner } from "./lib/sonner.js";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
 import {
@@ -73,17 +72,19 @@ function renderCardsGrid() {
   );
   const selected = String(profileData?.selectedCardId || "");
 
-  (cardsCatalog?.cards || []).forEach((card) => {
+  const ownedCards = (cardsCatalog?.cards || []).filter((card) =>
+    owned.has(String(card?.id || "")),
+  );
+  if (!ownedCards.length) {
+    grid.innerHTML = "<p>No player cards owned yet. Find them in the Shop.</p>";
+    return;
+  }
+
+  ownedCards.forEach((card) => {
     const id = String(card.id);
     const isOwned = owned.has(id);
     const isSelected = isOwned && selected === id;
     const rarity = String(card?.rarity || "common").toLowerCase();
-    const coinCost = Math.max(0, Number(card?.cost?.coins || 0));
-    const gemCost = Math.max(0, Number(card?.cost?.gems || 0));
-    const useGems = gemCost > 0;
-    const price = useGems ? gemCost : coinCost;
-    const currencyIcon = useGems ? "/assets/gem.webp" : "/assets/coin.webp";
-    const currencyLabel = useGems ? "gems" : "coins";
 
     const tile = document.createElement("div");
     tile.className = `card-tile ${rarity}`;
@@ -92,12 +93,11 @@ function renderCardsGrid() {
       <div class="card-meta">
         <strong>${card.name}</strong>
         <span class="profile-card-rarity ${rarity}">${rarity}</span>
-        <span class="profile-cost"><img src="${currencyIcon}" alt="${currencyLabel}" /> ${price}</span>
       </div>
       <div class="card-actions">
-        <span>${isSelected ? "Equipped" : isOwned ? "Owned" : "Locked"}</span>
-        <button class="profile-btn" data-card-id="${id}" data-action="${isOwned ? "equip" : "buy"}">
-          ${isOwned ? (isSelected ? "Selected" : "Equip") : "Buy"}
+        <span>${isSelected ? "Equipped" : "Owned"}</span>
+        <button class="profile-btn" data-card-id="${id}">
+          ${isSelected ? "Selected" : "Equip"}
         </button>
       </div>
     `;
@@ -107,22 +107,6 @@ function renderCardsGrid() {
       if (isSelected) btn.disabled = true;
       btn.addEventListener("click", async () => {
         try {
-          if (btn.dataset.action === "buy") {
-            const ok = await showUiConfirm({
-              title: "Confirm Purchase",
-              message: `Buy ${card.name} for ${price} ${currencyLabel}?`,
-              confirmLabel: `${price}`,
-              confirmIcon: currencyIcon,
-            });
-            if (!ok) return;
-          }
-          if (btn.dataset.action === "buy") {
-            await fetchJson("/player-cards/buy", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ cardId: id }),
-            });
-          }
           await fetchJson("/player-cards/select", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -142,18 +126,9 @@ function renderCardsGrid() {
           };
           renderProfile(profileData);
           renderCardsGrid();
-          if (btn.dataset.action === "buy") {
-            sonner("Card purchased", undefined, "success");
-          }
         } catch (err) {
           const msg = String(err?.message || "Card action failed.");
-          sonner(
-            msg.includes("Not enough")
-              ? "Not enough coins/gems"
-              : "Card action failed",
-            msg,
-            "error",
-          );
+          sonner("Card action failed", msg, "error");
         }
       });
     }
@@ -176,7 +151,7 @@ function renderIconsGrid() {
   const icons = Array.isArray(iconsCatalog?.icons) ? iconsCatalog.icons : [];
   const visibleIcons = icons.filter((icon) => {
     const iconId = String(icon?.id || "");
-    return icon?.showInPicker !== false || owned.has(iconId);
+    return owned.has(iconId) || Boolean(icon?.unlock);
   });
 
   visibleIcons.forEach((icon) => {
@@ -185,20 +160,15 @@ function renderIconsGrid() {
     const isSelected = isOwned && selected === id;
     const isLimited = icon?.limited === true;
     const rarity = String(icon?.rarity || "common").toLowerCase();
-    const gemCost = Math.max(0, Number(icon?.cost?.gems || 0));
-
-    let action = "";
-    let actionLabel = "";
-    if (isOwned) {
-      action = "equip";
-      actionLabel = isSelected ? "Selected" : "Equip";
-    } else if (!isLimited) {
-      action = "buy";
-      actionLabel = gemCost > 0 ? "Buy" : "Unlock";
-    } else {
-      action = "locked";
-      actionLabel = "Limited";
-    }
+    const unlock = icon?.unlock || {};
+    const requirement =
+      unlock.type === "trophies"
+        ? `Reach ${Number(unlock.min) || 0} trophies`
+        : unlock.type === "character"
+          ? `Unlock ${String(unlock.character || icon.name)}`
+          : "Progression reward";
+    const action = isOwned ? "equip" : "locked";
+    const actionLabel = isOwned ? (isSelected ? "Selected" : "Equip") : requirement;
 
     const tile = document.createElement("div");
     tile.className = `card-tile icon-tile ${rarity}`;
@@ -207,7 +177,7 @@ function renderIconsGrid() {
       <div class="card-meta">
         <strong>${icon.name}</strong>
         <span class="profile-card-rarity ${rarity}">${rarity}</span>
-        <span class="profile-cost"><img src="/assets/gem.webp" alt="gems" /> ${gemCost}</span>
+        ${!isOwned ? `<span class="profile-cost">${requirement}</span>` : ""}
       </div>
       <div class="card-actions">
         <span>${isSelected ? "Equipped" : isOwned ? "Owned" : isLimited ? "Limited" : "Locked"}</span>
@@ -224,24 +194,6 @@ function renderIconsGrid() {
         const currentAction = btn.dataset.action;
         if (!currentAction || currentAction === "locked") return;
         try {
-          if (currentAction === "buy") {
-            const ok = await showUiConfirm({
-              title: "Confirm Purchase",
-              message:
-                gemCost > 0
-                  ? `Buy ${icon.name} for ${gemCost} gems?`
-                  : `Unlock ${icon.name}?`,
-              confirmLabel: `${gemCost}`,
-              confirmIcon: "/assets/gem.webp",
-            });
-            if (!ok) return;
-            await fetchJson("/profile-icons/buy", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ iconId: id }),
-            });
-          }
-
           await fetchJson("/profile-icons/select", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -267,18 +219,9 @@ function renderIconsGrid() {
           };
           renderProfile(profileData);
           renderIconsGrid();
-          if (currentAction === "buy") {
-            sonner("Profile icon purchased", undefined, "success");
-          }
         } catch (error) {
           const msg = String(error?.message || "Profile icon action failed.");
-          sonner(
-            msg.includes("Not enough")
-              ? "Not enough gems"
-              : "Profile icon action failed",
-            msg,
-            "error",
-          );
+          sonner("Profile icon action failed", msg, "error");
         }
       });
     }
@@ -326,6 +269,14 @@ async function boot() {
     document.getElementById("back-btn")?.addEventListener("click", () => {
       window.location.href = "/";
     });
+
+    document
+      .querySelectorAll("#browse-shop-btn, .browse-shop-link")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          window.location.href = "/?shop=profile";
+        });
+      });
 
     document
       .getElementById("change-card-btn")
