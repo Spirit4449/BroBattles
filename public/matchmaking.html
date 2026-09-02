@@ -11,12 +11,16 @@
       href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="/styles/ui-system.css" />
+    <link rel="stylesheet" href="/styles/status-pages.css" />
   </head>
-  <body>
-    <div class="container">
-      <h1>Online Matchmaking</h1>
-      <div id="status" class="text">Connecting...</div>
-    </div>
+  <body class="status-page">
+    <main class="status-card">
+      <img class="status-logo" src="/assets/sword.svg" alt="" />
+      <h1 class="status-title">Online Matchmaking</h1>
+      <p id="status" class="status-copy">Connecting...</p>
+      <div class="status-spinner" aria-hidden="true"></div>
+    </main>
 
     <script src="/bundles/matchmaking.bundle.js"></script>
   </body>

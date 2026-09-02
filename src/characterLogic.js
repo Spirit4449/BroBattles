@@ -11,6 +11,7 @@ import { getSharedSelectionPopupShell } from "./lib/selectionPopupShell.js";
 import socket from "./socket.js";
 import { playSound } from "./lib/uiSounds.js";
 import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
+import { dismissPopup } from "./lib/popupMotion.js";
 import SKINS_CATALOG from "./shared/skinsCatalog.json";
 
 // Keep a reference to user data for confirmations and currency display
@@ -21,6 +22,18 @@ let _ownedSkinIds = new Set();
 let _skinBootstrapPromise = null;
 let _characterSelectionPromise = null;
 let _confirmedSkinSelections = Object.create(null);
+
+const SUPPORTED_RARITIES = new Set([
+  "common",
+  "rare",
+  "epic",
+  "legendary",
+]);
+
+function normalizeRarity(rarity) {
+  const normalized = String(rarity || "common").trim().toLowerCase();
+  return SUPPORTED_RARITIES.has(normalized) ? normalized : "common";
+}
 
 async function fetchJsonSafe(path) {
   try {
@@ -322,7 +335,8 @@ function hideCharacterDetails() {
       _characterDetailsUi.currentCharacter
     ];
   }
-  _characterDetailsUi.overlay.style.display = "none";
+  _characterDetailsUi.overlay.classList.add("is-hidden");
+  _characterDetailsUi.overlay.setAttribute("aria-hidden", "true");
   _characterDetailsUi.currentCharacter = null;
 }
 
@@ -330,7 +344,8 @@ function ensureCharacterDetailsUi() {
   if (_characterDetailsUi) return _characterDetailsUi;
 
   const overlay = document.createElement("div");
-  overlay.className = "character-details-overlay";
+  overlay.className = "character-details-overlay is-hidden";
+  overlay.setAttribute("aria-hidden", "true");
   const popup = document.createElement("div");
   popup.className = "character-details-popup";
 
@@ -349,7 +364,8 @@ function ensureCharacterDetailsUi() {
   titleWrap.appendChild(subtitle);
 
   const closeButton = document.createElement("button");
-  closeButton.className = "close pixel-menu-button profile-close";
+  closeButton.className =
+    "close character-details-close bb-close pixel-menu-button";
   closeButton.type = "button";
   closeButton.innerHTML = "×";
 
@@ -414,13 +430,13 @@ function ensureCharacterDetailsUi() {
 
   state.keydownHandler = (e) => {
     if (e.key !== "Escape") return;
-    if (overlay.style.display === "none" || !overlay.isConnected) return;
+    if (overlay.classList.contains("is-hidden") || !overlay.isConnected) return;
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
     closeDetails();
   };
 
-  document.addEventListener("keydown", state.keydownHandler);
+  document.addEventListener("keydown", state.keydownHandler, true);
 
   _characterDetailsUi = state;
   return state;
@@ -433,11 +449,7 @@ function renderCharacterDetails(character) {
 
   const cardState = getCharacterCardState(character, _userDataRef);
   const selectedSkin = getSelectedSkin(character);
-  const selectedSkinRarity = ["common", "rare", "epic", "legendary"].includes(
-    selectedSkin.rarity,
-  )
-    ? selectedSkin.rarity
-    : "common";
+  const selectedSkinRarity = normalizeRarity(selectedSkin.rarity);
 
   ui.currentCharacter = character;
   ui.selectedSkinByCharacter[character] = selectedSkin.id;
@@ -1018,22 +1030,21 @@ function createCharacterCard(character, userData) {
 export function openCharacterSelect() {
   if (window.__openCharacterSelect) return window.__openCharacterSelect();
   const overlay = document.querySelector(".character-select-overlay");
-  overlay.style.display = "flex";
+  overlay?.classList.remove("is-hidden");
+  overlay?.setAttribute("aria-hidden", "false");
   emitCharacterMenuStatus(true);
 }
 
 function openCharacterDetails(character) {
   renderCharacterDetails(character);
   const ui = ensureCharacterDetailsUi();
+  const wasDetached = !ui.overlay.isConnected;
   if (!ui.overlay.isConnected) {
     document.body.appendChild(ui.overlay);
   }
-  ui.overlay.style.display = "flex";
-  ui.popup.classList.remove("is-opening");
-  // Restart the entrance when reopening the cached dialog. A translate-only
-  // animation keeps the sticky footer on the same compositing plane.
-  void ui.popup.offsetWidth;
-  ui.popup.classList.add("is-opening");
+  if (wasDetached) void ui.overlay.offsetWidth;
+  ui.overlay.classList.remove("is-hidden");
+  ui.overlay.setAttribute("aria-hidden", "false");
 }
 
 async function persistActiveCharacterSelection(character, skinId) {
@@ -1063,7 +1074,10 @@ function closeCharacterSelectAfterSelection() {
   }
   hideCharacterDetails();
   const overlay = document.querySelector(".character-select-overlay");
-  if (overlay) overlay.style.display = "none";
+  if (overlay) {
+    overlay.classList.add("is-hidden");
+    overlay.setAttribute("aria-hidden", "true");
+  }
   emitCharacterMenuStatus(false);
 }
 
@@ -1267,16 +1281,17 @@ function showConfirmDialog(opts, onConfirm) {
 
   cancelBtn.onclick = () => {
     playSound("cursor4", 0.2);
-
-    backdrop.remove();
+    dismissPopup(backdrop, () => backdrop.remove());
   };
   // Click-out to close confirm
   backdrop.addEventListener("click", (e) => {
-    if (e.target === backdrop) backdrop.remove();
+    if (e.target === backdrop) {
+      dismissPopup(backdrop, () => backdrop.remove());
+    }
     e.stopPropagation();
   });
   okBtn.onclick = () => {
-    backdrop.remove();
+    dismissPopup(backdrop, () => backdrop.remove());
     playSound("cursor4", 0.2);
 
     onConfirm && onConfirm();
@@ -1318,16 +1333,20 @@ function showInsufficientDialog(currency) {
   const actions = document.createElement("div");
   actions.className = "cs-confirm-actions";
   const closeBtn = document.createElement("button");
-  closeBtn.className = "close pixel-menu-button profile-close";
+  closeBtn.className = "cs-btn cancel pixel-menu-button";
   closeBtn.textContent = "Close";
-  closeBtn.onclick = () => backdrop.remove();
+  closeBtn.onclick = () => {
+    dismissPopup(backdrop, () => backdrop.remove());
+  };
   actions.appendChild(closeBtn);
   dialog.appendChild(title);
   dialog.appendChild(body);
   dialog.appendChild(actions);
   backdrop.appendChild(dialog);
   backdrop.addEventListener("click", (e) => {
-    if (e.target === backdrop) backdrop.remove();
+    if (e.target === backdrop) {
+      dismissPopup(backdrop, () => backdrop.remove());
+    }
     e.stopPropagation();
   });
   document.body.appendChild(backdrop);
@@ -1351,16 +1370,20 @@ function showErrorDialog(message, titleText = "Purchase failed") {
   const actions = document.createElement("div");
   actions.className = "cs-confirm-actions";
   const closeBtn = document.createElement("button");
-  closeBtn.className = "close pixel-menu-button profile-close";
+  closeBtn.className = "cs-btn cancel pixel-menu-button";
   closeBtn.textContent = "Close";
-  closeBtn.onclick = () => backdrop.remove();
+  closeBtn.onclick = () => {
+    dismissPopup(backdrop, () => backdrop.remove());
+  };
   actions.appendChild(closeBtn);
   dialog.appendChild(title);
   dialog.appendChild(body);
   dialog.appendChild(actions);
   backdrop.appendChild(dialog);
   backdrop.addEventListener("click", (e) => {
-    if (e.target === backdrop) backdrop.remove();
+    if (e.target === backdrop) {
+      dismissPopup(backdrop, () => backdrop.remove());
+    }
     e.stopPropagation();
   });
   document.body.appendChild(backdrop);

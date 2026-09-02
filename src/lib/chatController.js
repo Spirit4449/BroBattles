@@ -147,7 +147,7 @@ function makeChatShell({
       </div>
       <div class="bb-chat-header-actions">
         <button type="button" class="bb-chat-mini-btn bb-chat-reply-cancel" aria-label="Clear reply">↩</button>
-        <button type="button" class="bb-chat-mini-btn pixel-menu-button bb-chat-close" aria-label="Close chat">×</button>
+        <button type="button" class="bb-chat-mini-btn bb-chat-close" aria-label="Close chat">×</button>
       </div>
     </div>
     <div class="bb-chat-body">
@@ -797,21 +797,33 @@ export function createLobbyChatController({
     <div class="bb-chat-viewers-card" role="dialog" aria-modal="true" aria-label="Message views">
       <div class="bb-chat-viewers-head">
         <div class="bb-chat-viewers-title">Viewed by</div>
-        <button type="button" class="bb-chat-mini-btn" data-chat-viewers-close aria-label="Close viewers">X</button>
+        <button type="button" class="bb-chat-mini-btn bb-close pixel-menu-button" data-chat-viewers-close aria-label="Close viewers">×</button>
       </div>
       <div class="bb-chat-viewers-list"></div>
     </div>
   `;
   document.body.appendChild(viewersPopup);
   const viewersListEl = viewersPopup.querySelector(".bb-chat-viewers-list");
+  let viewersCloseTimer = null;
+  const closeViewersPopup = () => {
+    const card = viewersPopup.querySelector(".bb-chat-viewers-card");
+    card?.classList.remove("is-visible");
+    if (viewersCloseTimer) window.clearTimeout(viewersCloseTimer);
+    viewersCloseTimer = window.setTimeout(() => {
+      viewersPopup.classList.add("hidden");
+      viewersCloseTimer = null;
+    }, 150);
+  };
   viewersPopup
     .querySelectorAll("[data-chat-viewers-close]")
-    .forEach((el) =>
-      el.addEventListener("click", () => viewersPopup.classList.add("hidden")),
-    );
+    .forEach((el) => el.addEventListener("click", closeViewersPopup));
 
   function openViewersPopup(message, anchorEl) {
     if (!viewersListEl) return;
+    if (viewersCloseTimer) {
+      window.clearTimeout(viewersCloseTimer);
+      viewersCloseTimer = null;
+    }
     const currentName = getCurrentUserName?.() || "";
     const viewers = Array.isArray(message?.viewers) ? message.viewers : [];
     viewersListEl.innerHTML = "";

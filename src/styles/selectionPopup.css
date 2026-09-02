@@ -1,75 +1,100 @@
 .cs-confirm-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  z-index: 12050;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 12050;
+  padding: 20px;
+  background: var(--bb-overlay, rgba(3, 8, 16, 0.72));
+  -webkit-backdrop-filter: blur(var(--bb-overlay-blur, 5px));
+  backdrop-filter: blur(var(--bb-overlay-blur, 5px));
 }
 
 .cs-confirm {
-  width: 90%;
-  max-width: 420px;
-  background: #1f2937;
-  color: #f3f4f6;
-  padding: 16px 18px;
+  width: min(100%, 440px);
+  padding: 22px;
+  border: 3px solid var(--bb-border, #385478);
+  border-radius: var(--bb-radius-window, 10px);
+  color: var(--bb-text, #f7f9ff);
+  background: var(--bb-surface-gradient, linear-gradient(180deg, #111f37, #0b1629));
+  box-shadow: var(--bb-frame-shadow);
 }
 
 .cs-confirm-title {
-  font-weight: 800;
-  font-size: 18px;
-  margin-bottom: 8px;
+  margin: 0 0 12px;
+  color: #fff;
+  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-transform: uppercase;
+  text-shadow: 2px 3px 0 rgba(2, 5, 12, 0.62);
 }
 
 .cs-confirm-body p {
-  margin: 6px 0;
-  font-size: 14px;
-  color: #e5e7eb;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  margin: 6px 0;
+  color: var(--bb-text-soft, #c9d6e8);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .cs-confirm-actions {
-  margin-top: 14px;
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 14px;
+  margin-top: 22px;
 }
 
 .cs-btn {
+  min-width: 112px;
+  min-height: 42px;
   padding: 8px 14px;
+  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-size: 9px;
   font-weight: 700;
-  border: none;
-  cursor: pointer;
+  text-transform: uppercase;
 }
 
 .cs-btn.cancel {
-  background: #374151;
-  color: #e5e7eb;
-}
-
-.cs-btn.cancel:hover {
-  filter: brightness(1.05);
+  color: var(--bb-text, #f7f9ff);
+  background: linear-gradient(180deg, #43536b, #2d3b50);
 }
 
 .cs-btn.confirm {
-  background: linear-gradient(145deg, #4a9eff, #3182ce);
-  color: #fff;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-}
-
-.cs-btn.confirm:hover {
-  filter: brightness(1.06);
+  color: #fff;
+  background: var(--bb-primary-gradient, linear-gradient(180deg, #438feb, #285fc0));
 }
 
 .cs-currency {
-  width: 18px;
-  height: 18px;
-  object-fit: contain;
+  width: 20px;
+  height: 20px;
   display: inline-block;
+  object-fit: contain;
   vertical-align: middle;
+}
+
+@media (max-width: 480px) {
+  .cs-confirm {
+    padding: 18px;
+  }
+
+  .cs-confirm-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .cs-btn {
+    min-width: 0;
+    width: 100%;
+  }
 }

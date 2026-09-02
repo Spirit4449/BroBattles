@@ -4,7 +4,7 @@ export function getSharedSelectionPopupShell() {
   if (__sharedShell) return __sharedShell;
 
   const overlay = document.createElement("div");
-  overlay.className = "character-select-overlay";
+  overlay.className = "character-select-overlay is-hidden";
 
   const popup = document.createElement("div");
   popup.className = "character-select-popup";
@@ -17,7 +17,7 @@ export function getSharedSelectionPopupShell() {
   title.textContent = "Choose";
 
   const closeButton = document.createElement("button");
-  closeButton.className = "close-popup pixel-menu-button";
+  closeButton.className = "close-popup bb-close pixel-menu-button";
   closeButton.type = "button";
   closeButton.innerHTML = "×";
 
@@ -33,7 +33,7 @@ export function getSharedSelectionPopupShell() {
       state.onClose();
       return;
     }
-    overlay.style.display = "none";
+    overlay.classList.add("is-hidden");
   };
 
   closeButton.onclick = doClose;
@@ -43,7 +43,13 @@ export function getSharedSelectionPopupShell() {
   popup.addEventListener("click", (e) => e.stopPropagation());
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (overlay.style.display === "none" || !overlay.isConnected) return;
+    if (overlay.classList.contains("is-hidden") || !overlay.isConnected) return;
+    // A character details dialog is layered above this shared picker. Its
+    // capture-phase Escape handler owns the first key press.
+    const characterDetails = document.querySelector(
+      ".character-details-overlay:not(.is-hidden)",
+    );
+    if (characterDetails) return;
     doClose();
   });
 
@@ -114,15 +120,19 @@ export function getSharedSelectionPopupShell() {
   };
 
   const show = () => {
+    const wasDetached = !overlay.isConnected;
     if (!overlay.isConnected) {
       document.body.appendChild(overlay);
     }
-    overlay.style.display = "flex";
+    if (wasDetached) void overlay.offsetWidth;
+    overlay.classList.remove("is-hidden");
+    overlay.setAttribute("aria-hidden", "false");
     return api;
   };
 
   const hide = () => {
-    overlay.style.display = "none";
+    overlay.classList.add("is-hidden");
+    overlay.setAttribute("aria-hidden", "true");
     return api;
   };
 

@@ -1,4 +1,5 @@
 import { playSound } from "./uiSounds.js";
+import { dismissPopup } from "./popupMotion.js";
 
 export function showUiConfirm({
   title = "Confirm",
@@ -51,10 +52,12 @@ export function showUiConfirm({
     okBtn.appendChild(okText);
 
     const cleanup = (answer) => {
-      try {
-        backdrop.remove();
-      } catch (_) {}
-      resolve(!!answer);
+      dismissPopup(backdrop, () => {
+        try {
+          backdrop.remove();
+        } catch (_) {}
+        resolve(!!answer);
+      });
     };
 
     cancelBtn.onclick = () => {

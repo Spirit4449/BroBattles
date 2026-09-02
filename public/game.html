@@ -124,51 +124,72 @@
 
       .fullscreen-toggle {
         position: fixed;
-        top: calc(5px + env(safe-area-inset-top));
-        right: calc(5px + env(safe-area-inset-right));
+        top: calc(8px + env(safe-area-inset-top));
+        right: calc(8px + env(safe-area-inset-right));
         z-index: 10005;
-        width: 30px;
-        height: 30px;
-        background-color: transparent;
-        display: flex;
+        width: 32px;
+        min-width: 32px;
+        height: 32px;
+        min-height: 32px;
+        box-sizing: border-box;
+        display: inline-flex;
         align-items: center;
-        justify-self: center;
+        justify-content: center;
+        padding: 0;
+        border: 2px solid #385478;
+        border-radius: 2px;
+        color: #fff;
+        background: linear-gradient(180deg, #438feb, #285fc0);
+        box-shadow:
+          0 0 0 2px #03060b,
+          0 3px 0 #03060b,
+          inset 0 2px rgba(255, 255, 255, 0.18);
         cursor: pointer;
-        padding: 0 10px;
-        border: 0;
-        border-radius: 8px;
-        transition: transform 200ms ease;
+        transition:
+          transform 130ms cubic-bezier(0.2, 0.75, 0.25, 1),
+          filter 130ms ease;
       }
       .fullscreen-toggle:hover {
-        transform: scale(1.3);
+        filter: brightness(1.12) saturate(1.06);
+        transform: translateY(-1px);
       }
 
       .fullscreen-toggle.is-active {
-        transform: scale(1.18);
+        background: linear-gradient(180deg, #6a43bd, #493094);
+      }
+
+      .fullscreen-toggle:active {
+        transform: translateY(3px);
+        box-shadow:
+          0 0 0 2px #03060b,
+          0 1px 0 #03060b,
+          inset 0 2px rgba(0, 0, 0, 0.24);
       }
 
       .fullscreen-toggle img {
-        width: 18px;
-        height: 18px;
+        width: 14px;
+        height: 14px;
         display: block;
         object-fit: contain;
       }
 
       @media (max-width: 768px) {
         .fullscreen-toggle {
-          top: calc(10px + env(safe-area-inset-top));
-          right: calc(10px + env(safe-area-inset-right));
-          min-width: 40px;
-          min-height: 30px;
-          font-size: 9px;
+          top: calc(8px + env(safe-area-inset-top));
+          right: calc(8px + env(safe-area-inset-right));
+          width: 32px;
+          min-width: 32px;
+          height: 32px;
+          min-height: 32px;
         }
       }
 
       @media (max-width: 480px) {
         .fullscreen-toggle {
-          min-width: 38px;
-          min-height: 28px;
-          padding: 0 8px;
+          width: 30px;
+          min-width: 30px;
+          height: 30px;
+          min-height: 30px;
         }
       }
       #game-bg {
@@ -739,24 +760,23 @@
 
       #game-timer-hud {
         position: fixed;
-        top: 26px;
+        top: 14px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 9998;
-        background: linear-gradient(
-          180deg,
-          rgba(40, 44, 62, 0.94),
-          rgba(42, 47, 64, 0.96)
-        );
-        border: 2px solid #1e3a8a;
-        border-radius: 12px;
-        color: #e2e8f0;
+        box-sizing: border-box;
+        min-width: 142px;
+        padding: 7px 14px 8px;
+        border: 2px solid #385478;
+        border-radius: 2px;
+        color: #f7f9ff;
+        background: linear-gradient(180deg, #182942, #0b1629);
         box-shadow:
-          0 8px 24px rgba(0, 0, 0, 0.45),
-          inset 0 0 0 1px rgba(96, 165, 250, 0.1);
-        padding: 8px 20px 10px;
+          0 0 0 3px rgba(3, 6, 11, 0.76),
+          0 4px 0 rgba(3, 6, 11, 0.62),
+          0 9px 18px rgba(0, 0, 0, 0.18),
+          inset 0 2px rgba(255, 255, 255, 0.09);
         text-align: center;
-        min-width: 130px;
         pointer-events: none;
       }
       #game-timer-hud.hud-intro-enter,
@@ -771,19 +791,27 @@
       }
       #game-timer-hud .timer-display {
         font-family: "Press Start 2P", "Lato", sans-serif;
-        font-size: clamp(22px, 3.8vw, 30px);
-        letter-spacing: 3px;
-        color: #e2e8f0;
+        font-size: clamp(18px, 2.6vw, 23px);
+        letter-spacing: 1.5px;
+        color: #f7f9ff;
         line-height: 1;
         display: block;
+        text-shadow: 2px 2px 0 rgba(3, 6, 11, 0.72);
       }
       #game-timer-hud .timer-label {
-        font-size: 8px;
+        font-size: 6px;
         font-family: "Press Start 2P", "Lato", sans-serif;
-        color: #60a5fa;
-        letter-spacing: 0.3px;
+        color: #7aa9e5;
+        letter-spacing: 0.4px;
+        line-height: 1.35;
         margin-top: 5px;
         display: block;
+        text-transform: uppercase;
+        text-shadow: 1px 1px 0 rgba(3, 6, 11, 0.62);
+      }
+      #game-timer-hud.sudden-death {
+        border-color: #a92833;
+        background: linear-gradient(180deg, #44202b, #24111a);
       }
       #game-timer-hud.sudden-death .timer-display {
         color: #f87171;
@@ -807,7 +835,7 @@
         position: fixed;
         top: 34px;
         left: 24px;
-        right: 24px;
+        right: 76px;
         z-index: 9998;
         display: flex;
         justify-content: space-between;
@@ -1002,20 +1030,21 @@
         inset: auto 16px 16px auto;
       }
       #battle-keybind-hud .controls-mini-toggle {
-        width: 36px;
-        height: 36px;
-        border: 1px solid rgba(169, 215, 255, 0.72);
-        border-radius: 10px;
-        background: linear-gradient(
-          180deg,
-          rgba(26, 39, 66, 0.96),
-          rgba(18, 28, 49, 0.94)
-        );
-        color: #eff6ff;
+        width: 32px;
+        min-width: 32px;
+        height: 32px;
+        min-height: 32px;
+        padding: 0;
+        border: 2px solid #385478;
+        border-radius: 2px;
+        background: linear-gradient(180deg, #438feb, #285fc0);
+        color: #f7f9ff;
         cursor: pointer;
         box-shadow:
-          0 10px 20px rgba(0, 0, 0, 0.38),
-          inset 0 0 0 1px rgba(125, 211, 252, 0.12);
+          0 0 0 2px #03060b,
+          0 3px 0 #03060b,
+          0 7px 14px rgba(0, 0, 0, 0.22),
+          inset 0 2px rgba(255, 255, 255, 0.18);
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -1025,40 +1054,38 @@
           box-shadow 160ms ease;
       }
       #battle-keybind-hud .controls-mini-toggle:hover {
+        filter: brightness(1.12) saturate(1.06);
         transform: translateY(-1px);
+      }
+      #battle-keybind-hud .controls-mini-toggle:active {
+        transform: translateY(3px);
         box-shadow:
-          0 12px 24px rgba(0, 0, 0, 0.42),
-          inset 0 0 0 1px rgba(191, 219, 254, 0.18);
+          0 0 0 2px #03060b,
+          0 1px 0 #03060b,
+          inset 0 2px rgba(0, 0, 0, 0.24);
       }
       #battle-keybind-hud .controls-mini-glyph {
         font-family: "Press Start 2P", "Lato", sans-serif;
-        font-size: 13px;
+        font-size: 10px;
         line-height: 1;
+        text-shadow: 2px 2px 0 #03060b;
       }
       #battle-keybind-hud .controls-popover {
         width: min(320px, calc(100vw - 24px));
         position: absolute;
         right: 0;
-        bottom: 48px;
+        bottom: 42px;
         top: auto;
         padding: 14px;
-        border: 2px solid rgba(59, 130, 246, 0.62);
-        border-radius: 18px;
-        background:
-          radial-gradient(
-            circle at top,
-            rgba(96, 165, 250, 0.12),
-            transparent 42%
-          ),
-          linear-gradient(
-            180deg,
-            rgba(20, 31, 53, 0.98),
-            rgba(10, 16, 31, 0.96)
-          );
+        border: 3px solid #385478;
+        border-radius: 3px;
+        background: linear-gradient(180deg, #152640, #0b1629);
         color: #e5efff;
         box-shadow:
-          0 22px 34px rgba(0, 0, 0, 0.48),
-          inset 0 0 0 1px rgba(191, 219, 254, 0.08);
+          0 0 0 4px #03060b,
+          0 7px 0 #03060b,
+          0 18px 30px rgba(0, 0, 0, 0.42),
+          inset 0 3px rgba(255, 255, 255, 0.08);
         transform-origin: bottom right;
         transition:
           opacity 180ms ease,
@@ -1092,27 +1119,37 @@
         color: #93c5fd;
       }
       #battle-keybind-hud .bs-help-close {
-        width: 24px;
-        height: 24px;
-        border: 1px solid rgba(127, 29, 29, 0.75);
-        border-radius: 7px;
-        background: linear-gradient(180deg, #ef4444, #b91c1c);
+        width: 22px;
+        min-width: 22px;
+        max-width: 22px;
+        height: 22px;
+        min-height: 22px;
+        max-height: 22px;
+        flex: 0 0 22px;
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 2px solid #03060b;
+        border-radius: 0;
+        background: linear-gradient(180deg, #d95a52, #a92833);
         color: #fff;
         font-family: "Press Start 2P", "Lato", sans-serif;
-        font-size: 10px;
+        font-size: 7px;
         line-height: 1;
         cursor: pointer;
         box-shadow:
-          0 3px 0 #7f1d1d,
-          0 8px 16px rgba(0, 0, 0, 0.28);
+          0 2px 0 #03060b,
+          inset 0 2px rgba(255, 255, 255, 0.16);
       }
       #battle-keybind-hud .controls-panel-grid {
         display: grid;
         gap: 12px;
       }
       #battle-keybind-hud .controls-section {
-        border: 1px solid rgba(96, 165, 250, 0.16);
-        border-radius: 14px;
+        border: 2px solid #263b59;
+        border-radius: 0;
         background: rgba(14, 24, 44, 0.72);
         padding: 12px;
       }
@@ -1124,44 +1161,43 @@
         letter-spacing: 0.4px;
       }
       #battle-keybind-hud .controls-move-layout {
-        display: flex;
-        align-items: flex-end;
-        gap: 10px;
+        width: 100%;
       }
       #battle-keybind-hud .keyboard-pair {
-        display: inline-flex;
-        gap: 8px;
+        display: flex;
+        width: 100%;
+        justify-content: center;
         align-items: flex-end;
+        gap: 16px;
       }
       #battle-keybind-hud .keyboard-cluster {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        flex: 1 1 0;
+        max-width: 122px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         grid-template-rows: repeat(2, auto);
-        gap: 4px;
+        gap: 6px;
       }
       #battle-keybind-hud .keyboard-cluster .spacer {
-        width: 19px;
+        width: 100%;
         height: 1px;
       }
       #battle-keybind-hud kbd {
-        display: inline-block;
-        min-width: 19px;
+        min-width: 0;
+        min-height: 28px;
+        display: grid;
+        place-items: center;
         border: 1px solid #cde9ff;
         border-radius: 6px;
-        padding: 3px 0;
+        padding: 4px 0;
         background: linear-gradient(180deg, #eff8ff, #cfe8ff);
         font-family: "Press Start 2P", "Lato", sans-serif;
-        font-size: 8px;
+        font-size: 9px;
         text-align: center;
         color: #14457a;
         box-shadow:
           0 2px 0 #7fb5e7,
           0 3px 6px rgba(0, 0, 0, 0.18);
-      }
-      #battle-keybind-hud .controls-move-copy {
-        font-size: 11px;
-        line-height: 1.45;
-        color: #dbeafe;
       }
       #battle-keybind-hud .controls-actions {
         display: grid;
@@ -1349,7 +1385,7 @@
           width: min(34vw, 200px);
         }
         #game-timer-hud {
-          top: 18px;
+          top: 12px;
           left: 50%;
           right: auto;
           transform: translateX(-50%);
@@ -1357,7 +1393,7 @@
         #team-status-hud {
           top: 24px;
           left: 16px;
-          right: 16px;
+          right: 64px;
         }
         #team-status-hud .team-hud-side {
           width: min(74px, 24vw);
@@ -1377,12 +1413,14 @@
         #battle-keybind-hud .controls-popover {
           width: min(286px, calc(100vw - 18px));
           right: 0;
-          bottom: 44px;
+          bottom: 40px;
         }
         #battle-keybind-hud .controls-mini-toggle {
-          width: 34px;
-          height: 34px;
-          border-radius: 10px;
+          width: 30px;
+          height: 30px;
+          min-width: 30px;
+          min-height: 30px;
+          border-radius: 2px;
         }
         #bank-bust-hud {
           top: 92px;
@@ -1526,6 +1564,7 @@
         background: linear-gradient(135deg, #d14b42, #ab2e2e);
       }
     </style>
+    <link rel="stylesheet" href="/styles/ui-system.css" />
   </head>
 
   <body>
@@ -1602,6 +1641,7 @@
         type="button"
         aria-label="Show controls"
         aria-expanded="false"
+        title="Controls"
       >
         <span class="controls-mini-glyph">?</span>
       </button>
@@ -1616,7 +1656,7 @@
             type="button"
             aria-label="Collapse controls"
           >
-            X
+            ×
           </button>
         </div>
         <div class="controls-panel-grid">
@@ -1635,9 +1675,6 @@
                   ><kbd>&darr;</kbd><kbd>&rarr;</kbd>
                 </span>
               </span>
-              <div class="controls-move-copy">
-                Choose either keyboard layout to move and reposition quickly.
-              </div>
             </div>
           </section>
           <section class="controls-section">
@@ -1857,7 +1894,7 @@
     </script>
     <button
       id="fullscreen-toggle"
-      class="fullscreen-toggle pixel-menu-button"
+      class="fullscreen-toggle"
       type="button"
       data-fullscreen-toggle
       aria-label="Fullscreen"

@@ -356,7 +356,7 @@ export function initializeShop({
             <span data-shop-wallet-shell="coins"><small>COINS</small><img src="/assets/coin.webp" alt="" /><strong data-shop-wallet="coins">0</strong></span>
             <span data-shop-wallet-shell="gems"><small>GEMS</small><img src="/assets/gem.webp" alt="" /><strong data-shop-wallet="gems">0</strong></span>
           </div>
-          <button class="shop-close" type="button" aria-label="Close shop">×</button>
+          <button class="shop-close bb-close pixel-menu-button" type="button" aria-label="Close shop">×</button>
         </header>
         <nav class="shop-tabs" aria-label="Jump to a shop section">
           ${SECTION_META.map((meta) => `<button type="button" data-shop-jump="${meta.id}" data-sound="cursor4" data-volume="0.22"><img class="shop-tab-icon" src="${escapeHtml(meta.icon)}" alt="" /><span>${escapeHtml(meta.title)}</span></button>`).join("")}
@@ -366,7 +366,7 @@ export function initializeShop({
       <div class="shop-checkout" aria-hidden="true">
         <div class="shop-checkout-backdrop"></div>
         <section class="shop-checkout-panel" role="dialog" aria-modal="true" aria-labelledby="shop-checkout-title">
-          <header><h2 id="shop-checkout-title">Secure Checkout</h2><button type="button" class="shop-checkout-close" aria-label="Close checkout">×</button></header>
+          <header><h2 id="shop-checkout-title">Secure Checkout</h2><button type="button" class="shop-checkout-close bb-close pixel-menu-button" aria-label="Close checkout">×</button></header>
           <div class="shop-checkout-host"></div>
         </section>
       </div>`;
@@ -438,7 +438,7 @@ export function initializeShop({
     if (notify) onWalletChange?.(normalized);
   }
 
-  function render({ preserveScroll = true, animateOffers = true } = {}) {
+  function render({ preserveScroll = true, animateOffers = false } = {}) {
     if (!state.data || !state.scroll) return;
     const previousTop = preserveScroll ? state.scroll.scrollTop : 0;
     updateWallet(state.data.wallet, false);
@@ -605,6 +605,7 @@ export function initializeShop({
   function open(section = "sales") {
     ensureShell();
     state.open = true;
+    void state.overlay.offsetWidth;
     state.overlay.classList.add("is-open");
     state.overlay.setAttribute("aria-hidden", "false");
     document.body.classList.add("shop-is-open");

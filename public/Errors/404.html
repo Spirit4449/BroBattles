@@ -1,51 +1,25 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="shortcut icon" href="/assets/sword.svg" type="image/x-icon" />
-    <title>Page Not Found</title>
-    <style>
-        body {
-            font-family: "Press Start 2P", "Lato", sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 80vh;
-            background-color: #dfe4cf;
-        }
-        .container {
-            text-align: center;
-            margin: auto;
-
-        }
-        h1 {
-            font-size: 130px;
-            margin-bottom: 20px;
-            color: #333;
-        }
-        p {
-            font-size: 20px;
-            margin-bottom: 30px;
-            color: #555;
-        }
-        a {
-            text-decoration: none;
-            color: #007bff;
-            font-weight: bold;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>404</h1>
-        <p>Oops! The page you're looking for could not be found.</p>
-        <a href="/">Go to Home</a>
-    </div>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Page Not Found · Bro Battles</title>
+    <link rel="shortcut icon" href="/assets/sword.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles/ui-system.css" />
+    <link rel="stylesheet" href="/styles/status-pages.css" />
+  </head>
+  <body class="status-page">
+    <main class="status-card">
+      <img class="status-logo" src="/assets/sword.svg" alt="" />
+      <p class="status-code">404</p>
+      <h1 class="status-title">Page Not Found</h1>
+      <p class="status-copy">The page you were looking for does not exist or has moved.</p>
+      <div class="status-actions">
+        <a class="status-action" href="/">Return Home</a>
+      </div>
+    </main>
+  </body>
 </html>

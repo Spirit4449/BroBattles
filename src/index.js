@@ -590,6 +590,7 @@ function initProfilePopup() {
     }
     if (iconsPanel) iconsPanel.classList.toggle("is-hidden", !showIcons);
     if (cardsPanel) cardsPanel.classList.toggle("is-hidden", showIcons);
+    loadoutOverlay.dataset.loadoutMode = showIcons ? "icons" : "cards";
     loadoutOverlay.classList.remove("hidden");
     loadoutOverlay.setAttribute("aria-hidden", "false");
   };

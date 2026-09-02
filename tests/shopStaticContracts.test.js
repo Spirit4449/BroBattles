@@ -147,6 +147,11 @@ test("post-purchase updates do not bounce or replay card entrances", () => {
     source,
     /refresh\(\{ preserveScroll: true, animateOffers: false \}\)/,
   );
+  assert.match(
+    source,
+    /function render\(\{ preserveScroll = true, animateOffers = false \} = \{\}\)/,
+  );
+  assert.match(styles, /\.shop-offer\s*\{[\s\S]+?opacity:\s*1;/);
   assert.match(styles, /overflow-anchor: none/);
   assert.doesNotMatch(styles, /shopRevealPanelIn[\s\S]{0,500}scale\(1\.0[1-9]/);
 });
@@ -200,7 +205,7 @@ test("shop navigation, icons, sales glimmer, and checkout chrome stay consistent
   );
   assert.match(
     styles,
-    /shop-sales-grid \.shop-offer[\s\S]+grid-template-rows: 278px minmax\(63px, auto\) auto/,
+    /shop-sales-grid \.shop-offer[\s\S]+grid-template-rows: 226px minmax\(50px, auto\) auto/,
   );
   assert.match(
     source,
