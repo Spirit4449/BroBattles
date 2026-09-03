@@ -14,9 +14,16 @@ import {
   getEffectsClass,
 } from "./characters";
 import {
-  spawnDust,
+  MOVEMENT_VFX_CONFIG,
+  spawnDirectionChangeBurst,
+  spawnFastFallTrail,
   spawnHealthMarker,
+  spawnJumpTakeoff,
+  spawnLandingImpact,
+  spawnRunDust,
   spawnSpawnBurst,
+  spawnWallSlideBurst,
+  spawnWallSlideTrail,
   spawnWallKickCloud,
 } from "./effects";
 import { bindLocalSocketEvents } from "./players/localSocketEvents";
@@ -57,8 +64,29 @@ let canAttack = true;
 // SFX state
 let sfxWalkCooldown = 0;
 let wasOnGround = false;
+let movementVfxInitialized = false;
+let lastAirborneVelocityY = 0;
+let airbornePeakBottomY = null;
+let wasWallSliding = false;
+let wallSlideVfxElapsed = 0;
+let fastFallVfxElapsed = 0;
+let lastGroundInputDirection = 0;
+let lastDirectionChangeAt = 0;
 let wallSlideLoopSfx = null;
 let wallSlideLoopPlaying = false;
+let fallAirLoopSfx = null;
+let fallAirLoopPlaying = false;
+let fallAirStartedAt = 0;
+let footstepVariantCursor = 0;
+let movementFxSequence = 0;
+let latestMovementFxEvent = {
+  seq: 0,
+  type: null,
+  direction: 0,
+  wallSide: null,
+  fallDistance: 0,
+  impactVelocity: 0,
+};
 
 let frame;
 
@@ -91,6 +119,7 @@ let keyE;
 let _specialNotReadyFlash = 0; // timestamp until "not ready" red flash expires
 let movementSpeedMult = 1;
 let movementJumpMult = 1;
+let powerupInvisible = false;
 
 let playerName;
 
@@ -111,7 +140,6 @@ let mapObjects;
 let map;
 let opponentPlayersRef; // injected from game.js to avoid circular import
 let dustTimer = 0;
-const dustInterval = 70; // ms between dust puffs when running
 
 // Body config and flip-offset applier hoisted for use across functions
 let bodyConfig = null;
@@ -126,6 +154,78 @@ let pointerAttackScene = null;
 let pointerContextMenuCanvas = null;
 let pointerContextMenuHandler = null;
 let mobileControlsController = null;
+
+const MOVEMENT_STEP_KEYS = ["sfx-step-1", "sfx-step-2", "sfx-step-3"];
+
+function noteMovementFxEvent(type, details = {}) {
+  movementFxSequence = (movementFxSequence + 1) % 2147483647;
+  latestMovementFxEvent = {
+    seq: movementFxSequence,
+    type,
+    direction: Math.sign(Number(details.direction) || 0),
+    wallSide:
+      details.wallSide === "left" || details.wallSide === "right"
+        ? details.wallSide
+        : null,
+    fallDistance: Math.max(0, Math.round(Number(details.fallDistance) || 0)),
+    impactVelocity: Math.max(
+      0,
+      Math.round(Number(details.impactVelocity) || 0),
+    ),
+  };
+}
+
+function getMovementFxNetworkState() {
+  return {
+    movementFxSeq: latestMovementFxEvent.seq,
+    movementFxType: latestMovementFxEvent.type,
+    movementFxDirection: latestMovementFxEvent.direction,
+    movementFxWallSide: latestMovementFxEvent.wallSide,
+    movementFxFallDistance: latestMovementFxEvent.fallDistance,
+    movementFxImpactVelocity: latestMovementFxEvent.impactVelocity,
+  };
+}
+
+function stopMovementLoopSfx() {
+  if (wallSlideLoopPlaying) {
+    try {
+      wallSlideLoopSfx?.stop?.();
+    } catch (_) {}
+    wallSlideLoopPlaying = false;
+  }
+  if (fallAirLoopPlaying) {
+    try {
+      fallAirLoopSfx?.stop?.();
+    } catch (_) {}
+    fallAirLoopPlaying = false;
+  }
+  fallAirStartedAt = 0;
+}
+
+function disposeMovementLoopSfx() {
+  stopMovementLoopSfx();
+  try {
+    wallSlideLoopSfx?.destroy?.();
+  } catch (_) {}
+  try {
+    fallAirLoopSfx?.destroy?.();
+  } catch (_) {}
+  wallSlideLoopSfx = null;
+  fallAirLoopSfx = null;
+}
+
+function resetMovementVfxTracking() {
+  stopMovementLoopSfx();
+  wasOnGround = false;
+  movementVfxInitialized = false;
+  lastAirborneVelocityY = 0;
+  airbornePeakBottomY = null;
+  wasWallSliding = false;
+  wallSlideVfxElapsed = 0;
+  fastFallVfxElapsed = 0;
+  lastGroundInputDirection = 0;
+  lastDirectionChangeAt = 0;
+}
 
 const GAME_CROSSHAIR_CURSOR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.1" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.94)" stroke-width="1.4"/><circle cx="12" cy="12" r="1.45" fill="rgba(255,255,255,0.97)"/><path d="M12 1.7v4.25M12 18.05v4.25M1.7 12h4.25M18.05 12h4.25" stroke="rgba(32,32,32,0.55)" stroke-width="3.4" stroke-linecap="round"/><path d="M12 1.7v4.25M12 18.05v4.25M1.7 12h4.25M18.05 12h4.25" stroke="rgba(255,255,255,0.97)" stroke-width="1.55" stroke-linecap="round"/></svg>`;
 const GAME_CROSSHAIR_CURSOR = `url("data:image/svg+xml;utf8,${encodeURIComponent(
@@ -531,6 +631,7 @@ export function createPlayer(
   opponentPlayersParam,
   selectedSkinIdParam = "",
 ) {
+  resetMovementVfxTracking();
   resetPointerAttackAim();
   detachPointerAttackBindings();
   mobileControlsController?.destroy?.();
@@ -611,14 +712,23 @@ export function createPlayer(
   }
 
   try {
+    disposeMovementLoopSfx();
     wallSlideLoopSfx = scene.sound?.add("sfx-sliding", {
       loop: true,
-      volume: 0.3,
+      volume: 0,
+    });
+    fallAirLoopSfx = scene.sound?.add("sfx-fall-air", {
+      loop: true,
+      volume: 0,
+      rate: 0.72,
     });
     wallSlideLoopPlaying = false;
+    fallAirLoopPlaying = false;
   } catch (_) {
     wallSlideLoopSfx = null;
+    fallAirLoopSfx = null;
     wallSlideLoopPlaying = false;
+    fallAirLoopPlaying = false;
   }
 
   // Animations are registered globally in game.js via setupAll(scene)
@@ -1011,11 +1121,13 @@ export function createPlayer(
       wallSlideLoopPlaying = value;
     },
     onLocalDeath: () => {
+      resetMovementVfxTracking();
       resetPointerAttackAim();
       updateHealthBar();
       setLocalUiVisible(false);
     },
     onLocalRespawn: () => {
+      resetMovementVfxTracking();
       setLocalUiVisible(true);
       try {
         indicatorTriangle?.setVisible(true);
@@ -1040,6 +1152,7 @@ export function createPlayer(
         disposeLocalSocketEvents = null;
       }
       resetPointerAttackAim();
+      disposeMovementLoopSfx();
       mobileControlsController?.destroy?.();
       detachPointerAttackBindings(sceneParam);
       clearGameCursor(sceneParam);
@@ -1057,6 +1170,7 @@ export function createPlayer(
         disposeLocalSocketEvents = null;
       }
       resetPointerAttackAim();
+      disposeMovementLoopSfx();
       mobileControlsController?.destroy?.();
       detachPointerAttackBindings(sceneParam);
       clearGameCursor(sceneParam);
@@ -1107,6 +1221,31 @@ function setLocalUiVisible(visible) {
   if (!shouldShow) {
     clearAttackAimReticle();
   }
+}
+
+function setLocalUiAlpha(alpha = 1) {
+  const safeAlpha = Math.max(0, Math.min(1, Number(alpha) || 0));
+  for (const item of [
+    playerName,
+    healthText,
+    healthBar,
+    ammoBar,
+    ammoBarBack,
+    superBar,
+    superBarBack,
+    indicatorTriangle,
+  ]) {
+    try {
+      item?.setAlpha?.(safeAlpha);
+    } catch (_) {}
+  }
+  try {
+    const hudRoot = document.getElementById("hud");
+    if (hudRoot) {
+      hudRoot.style.transition = "opacity 180ms ease";
+      hudRoot.style.opacity = powerupInvisible ? "0.48" : "";
+    }
+  } catch (_) {}
 }
 
 function drawIndicatorTriangle() {
@@ -1358,6 +1497,7 @@ export function handlePlayerMovement(scene) {
   mobileControlsController?.ensure?.(scene);
   mobileControlsController?.layout?.(scene);
   if (scene?.input?.keyboard?.enabled === false) {
+    stopMovementLoopSfx();
     try {
       if (player?.body) {
         player.setVelocityX(0);
@@ -1376,6 +1516,9 @@ export function handlePlayerMovement(scene) {
       vy: Number(player?.body?.velocity?.y) || 0,
       facing: player?.flipX ? -1 : 1,
       animation: getPresentedAnimation(player, "idle"),
+      wallSliding: false,
+      wallSide: null,
+      ...getMovementFxNetworkState(),
       movementLocked: true,
       loaded:
         !dead &&
@@ -1386,6 +1529,7 @@ export function handlePlayerMovement(scene) {
     return;
   }
   if (chatInputActive) {
+    stopMovementLoopSfx();
     try {
       if (player?.body) {
         player.setVelocityX(0);
@@ -1404,6 +1548,9 @@ export function handlePlayerMovement(scene) {
       vy: Number(player?.body?.velocity?.y) || 0,
       facing: player?.flipX ? -1 : 1,
       animation: getPresentedAnimation(player, "idle"),
+      wallSliding: false,
+      wallSide: null,
+      ...getMovementFxNetworkState(),
       movementLocked: true,
       loaded:
         !dead &&
@@ -1757,14 +1904,6 @@ export function handlePlayerMovement(scene) {
     if (player.flipX !== wasFlip && applyFlipOffsetLocal)
       applyFlipOffsetLocal();
     isMoving = true; // Sets the isMoving to true
-    if (player.body.touching.down && !isAttacking && !dead) {
-      // Footstep SFX throttled
-      sfxWalkCooldown += scene.game.loop.delta;
-      if (sfxWalkCooldown >= 280) {
-        sfxWalkCooldown = 0;
-        scene.sound.play("sfx-step", { volume: 2 });
-      }
-    }
     // Right movement
   } else if (rightKey) {
     if (indicatorTriangle) {
@@ -1790,16 +1929,56 @@ export function handlePlayerMovement(scene) {
     }
     player.setDragX(onGroundRight ? dragGround : dragAir);
     isMoving = true; // Sets moving variable
-    if (player.body.touching.down && !isAttacking && !dead) {
-      // Footstep SFX throttled
-      sfxWalkCooldown += scene.game.loop.delta;
-      if (sfxWalkCooldown >= 280) {
-        sfxWalkCooldown = 0;
-        scene.sound.play("sfx-step", { volume: 2 });
-      }
-    }
   } else {
     stopMoving(); // If no key is being pressed, it calls the stop moving function
+  }
+
+  const inputDirection =
+    leftKey && !rightKey ? -1 : rightKey && !leftKey ? 1 : 0;
+  const groundSpeed = Math.abs(Number(player.body.velocity.x) || 0);
+  const groundSpeedRatio = Phaser.Math.Clamp(groundSpeed / maxSpeed, 0, 1);
+  if (
+    !dead &&
+    !powerupInvisible &&
+    player.body.touching.down &&
+    inputDirection !== 0 &&
+    lastGroundInputDirection !== 0 &&
+    inputDirection !== lastGroundInputDirection &&
+    groundSpeed >= MOVEMENT_VFX_CONFIG.directionChangeMinSpeed &&
+    Date.now() - lastDirectionChangeAt >= 130
+  ) {
+    const body = player.body;
+    spawnDirectionChangeBurst(
+      scene,
+      Number(body.center?.x) || player.x,
+      (Number(body.bottom) || player.y + player.height * 0.5) - 2,
+      {
+        previousDirection: lastGroundInputDirection,
+        speedRatio: groundSpeedRatio,
+      },
+    );
+    noteMovementFxEvent("turn", {
+      direction: lastGroundInputDirection,
+    });
+    playMovementStep(Math.max(0.62, groundSpeedRatio), true);
+    lastDirectionChangeAt = Date.now();
+  }
+  if (inputDirection !== 0) lastGroundInputDirection = inputDirection;
+
+  if (
+    !dead &&
+    player.body.touching.down &&
+    inputDirection !== 0 &&
+    !isAttacking
+  ) {
+    sfxWalkCooldown += scene.game.loop.delta;
+    const stepInterval = Phaser.Math.Linear(285, 150, groundSpeedRatio);
+    if (sfxWalkCooldown >= stepInterval) {
+      sfxWalkCooldown = 0;
+      playMovementStep(groundSpeedRatio, false);
+    }
+  } else if (!player.body.touching.down) {
+    sfxWalkCooldown = 0;
   }
 
   // Jumping
@@ -1813,10 +1992,19 @@ export function handlePlayerMovement(scene) {
     wallKickAwayRequested
   ) {
     wallJump(effectiveWallSide); // Calls walljump
-    scene.sound.play("sfx-walljump", { volume: 4 });
+    scene.sound.play("sfx-walljump", {
+      volume: 0.5,
+      rate:
+        0.96 +
+        Phaser.Math.Clamp(
+          Math.abs(player.body.velocity.x) / 720,
+          0,
+          0.08,
+        ),
+    });
     player._lastJumpPressTime = 0;
   } else if (
-    upKey &&
+    bufferedJumpPressActive &&
     (player.body.touching.down ||
       now - (player._lastGroundTime || 0) <= coyoteTimeMs) &&
     !dead
@@ -1835,7 +2023,11 @@ export function handlePlayerMovement(scene) {
         ? 0
         : Math.max(MOVEMENT_PHYSICS.minSpeedMult, movementJumpMult || 1));
     jump(); // Calls jump
-    scene.sound.play("sfx-jump", { volume: 3 });
+    scene.sound.play("sfx-jump", {
+      volume: 0.36 + groundSpeedRatio * 0.1,
+      rate: 0.96 + groundSpeedRatio * 0.08,
+    });
+    player._lastJumpPressTime = 0;
     if (wallSlideContact || effectiveWallSide) {
       player._wallSlideSuppressedUntil = Date.now() + wallSlideReentryDelayMs;
     }
@@ -1846,7 +2038,69 @@ export function handlePlayerMovement(scene) {
     wallSlideContact &&
     !wallSlideSuppressed &&
     (player.body.velocity.y || 0) > 20;
-  updateWallSlideAudio(isWallSliding);
+  const wallSlideSpeedRatio = Phaser.Math.Clamp(
+    (Number(player.body.velocity.y) || 0) / wallSlideMaxFallSpeed,
+    0,
+    1,
+  );
+  updateWallSlideAudio(isWallSliding, wallSlideSpeedRatio);
+
+  // Wall sliding gets a strong entry accent and a lighter continuous scrape.
+  if (isWallSliding) {
+    const slideSide = wallSide || (player.flipX ? "left" : "right");
+    const body = player.body;
+    const contactX = body
+      ? body.x + (slideSide === "left" ? 0 : body.width)
+      : player.x + (slideSide === "left" ? -24 : 24);
+    const contactY = body ? body.y + body.height * 0.68 : player.y + 12;
+    if (!wasWallSliding && !powerupInvisible) {
+      spawnWallSlideBurst(scene, contactX, contactY, slideSide);
+      wallSlideVfxElapsed = MOVEMENT_VFX_CONFIG.wallTrailIntervalMs;
+    }
+    wallSlideVfxElapsed += scene.game.loop.delta;
+    if (wallSlideVfxElapsed >= MOVEMENT_VFX_CONFIG.wallTrailIntervalMs) {
+      wallSlideVfxElapsed = 0;
+      if (!powerupInvisible) {
+        spawnWallSlideTrail(scene, contactX, contactY, slideSide);
+      }
+    }
+  } else {
+    wallSlideVfxElapsed = 0;
+  }
+  wasWallSliding = isWallSliding;
+
+  const fallVelocity = Number(player.body.velocity.y) || 0;
+  const fastFallRatio = Phaser.Math.Clamp(
+    (fallVelocity - MOVEMENT_VFX_CONFIG.fastFallStartVelocity) /
+      (MOVEMENT_VFX_CONFIG.fastFallMaxVelocity -
+        MOVEMENT_VFX_CONFIG.fastFallStartVelocity),
+    0,
+    1,
+  );
+  const shouldPlayFallAir =
+    !dead &&
+    !player.body.touching.down &&
+    !isWallSliding &&
+    fallVelocity > 85;
+  updateFallingAirAudio(shouldPlayFallAir, fallVelocity);
+  if (
+    shouldPlayFallAir &&
+    !powerupInvisible &&
+    fallVelocity >= MOVEMENT_VFX_CONFIG.fastFallStartVelocity
+  ) {
+    fastFallVfxElapsed += scene.game.loop.delta;
+    const fastFallInterval = Phaser.Math.Linear(
+      MOVEMENT_VFX_CONFIG.fastFallTrailMaxIntervalMs,
+      MOVEMENT_VFX_CONFIG.fastFallTrailMinIntervalMs,
+      fastFallRatio,
+    );
+    if (fastFallVfxElapsed >= fastFallInterval) {
+      fastFallVfxElapsed = 0;
+      spawnFastFallTrail(scene, player, { velocityY: fallVelocity });
+    }
+  } else {
+    fastFallVfxElapsed = 0;
+  }
 
   // Wall slide: when touching a wall and airborne, limit fall speed for a slower slide
   if (!player.body.touching.down && wallSlideContact && !wallSlideSuppressed) {
@@ -1881,10 +2135,70 @@ export function handlePlayerMovement(scene) {
 
   // Landing detection (transition airborne -> grounded)
   const onGround = player.body.touching.down;
-  if (!wasOnGround && onGround && !dead) {
-    scene.sound.play("sfx-land", { volume: 4 });
+  const currentBodyBottom =
+    Number(player.body?.bottom) || player.y + player.height * 0.5;
+  if (!onGround && !dead) {
+    if (!Number.isFinite(airbornePeakBottomY) || wasOnGround) {
+      airbornePeakBottomY = currentBodyBottom;
+    } else {
+      airbornePeakBottomY = Math.min(airbornePeakBottomY, currentBodyBottom);
+    }
+  }
+  if (movementVfxInitialized && !wasOnGround && onGround && !dead) {
+    const fallDistance = Math.max(
+      0,
+      currentBodyBottom -
+        (Number.isFinite(airbornePeakBottomY)
+          ? airbornePeakBottomY
+          : currentBodyBottom),
+    );
+    const landingVelocityRatio = Phaser.Math.Clamp(
+      lastAirborneVelocityY / MOVEMENT_VFX_CONFIG.landingMaxVelocity,
+      0,
+      1,
+    );
+    const landingHeightRatio = Phaser.Math.Clamp(
+      fallDistance / (MOVEMENT_VFX_CONFIG.landingShockwaveMinFallPx * 2),
+      0,
+      1,
+    );
+    const landingStrength =
+      landingVelocityRatio * 0.65 + landingHeightRatio * 0.35;
+    const shapedLandingStrength = landingStrength * landingStrength;
+    scene.sound.play("sfx-land", {
+      volume: 0.28 + shapedLandingStrength * 0.5,
+      rate: 0.93 - shapedLandingStrength * 0.02,
+    });
+    const body = player.body;
+    if (!powerupInvisible) {
+      spawnLandingImpact(
+        scene,
+        Number(body?.center?.x) || player.x,
+        (Number(body?.bottom) || player.y + player.height * 0.5) - 2,
+        {
+          impactVelocity: lastAirborneVelocityY,
+          fallDistance,
+          bodyWidth: Number(body?.width) || player.displayWidth,
+          cameraShake: true,
+        },
+      );
+    }
+    noteMovementFxEvent("land", {
+      fallDistance,
+      impactVelocity: lastAirborneVelocityY,
+    });
+  }
+  if (!onGround && !dead) {
+    lastAirborneVelocityY = Math.max(
+      lastAirborneVelocityY,
+      Number(player.body.velocity.y) || 0,
+    );
+  } else if (onGround) {
+    lastAirborneVelocityY = 0;
+    airbornePeakBottomY = null;
   }
   wasOnGround = onGround;
+  movementVfxInitialized = true;
   if (onGround) player._lastGroundTime = Date.now();
 
   // Ammo reload tick
@@ -1901,18 +2215,27 @@ export function handlePlayerMovement(scene) {
   if (!dead) drawAmmoBar();
 
   // Per-character effects update (e.g., Draven fire trail)
-  if (charEffects) {
+  if (charEffects && !powerupInvisible) {
     charEffects.update(scene.game.loop.delta, isMoving, dead);
   }
 
   dustTimer += scene.game.loop.delta;
 
-  // Ground running dust (only while on ground & moving)
+  // Ground running dust becomes denser and more frequent with actual speed.
+  const runSpeed = Math.abs(Number(player.body.velocity.x) || 0);
+  const runSpeedRatio = Phaser.Math.Clamp(runSpeed / maxSpeed, 0, 1);
+  const runDustInterval = Phaser.Math.Linear(
+    MOVEMENT_VFX_CONFIG.runDustMaxIntervalMs,
+    MOVEMENT_VFX_CONFIG.runDustMinIntervalMs,
+    runSpeedRatio,
+  );
   if (
     !dead &&
+    !powerupInvisible &&
     isMoving &&
     player.body.touching.down &&
-    dustTimer >= dustInterval
+    runSpeed > 35 &&
+    dustTimer >= runDustInterval
   ) {
     dustTimer = 0;
     // Spawn at the physics body's bottom to account for per-character frame sizing
@@ -1920,16 +2243,14 @@ export function handlePlayerMovement(scene) {
       ? player.body.y + player.body.height
       : player.y + player.height / 2;
     const dustY = bodyBottom - 2; // slight lift to avoid z-fighting
-    const dustX = player.x + (player.flipX ? -18 : 18) * 0.3;
-    spawnDust(scene, dustX, dustY);
-    if (Math.random() < 0.3) {
-      // occasional extra puff for variability
-      spawnDust(
-        scene,
-        dustX + Phaser.Math.Between(-6, 6),
-        dustY + Phaser.Math.Between(-2, 2),
-      );
-    }
+    const runDirection =
+      Math.sign(Number(player.body.velocity.x) || 0) ||
+      (player.flipX ? -1 : 1);
+    const dustX = player.x - runDirection * 10;
+    spawnRunDust(scene, dustX, dustY, {
+      direction: runDirection,
+      intensity: runSpeedRatio,
+    });
   }
 
   let desiredMovementAnimation = deriveMovementAnimation({
@@ -1991,6 +2312,11 @@ export function handlePlayerMovement(scene) {
     vy: Number(player?.body?.velocity?.y) || 0,
     facing: player?.flipX ? -1 : 1,
     animation: getPresentedAnimation(player, "idle"),
+    wallSliding: !!isWallSliding,
+    wallSide: isWallSliding
+      ? wallSide || (player.flipX ? "left" : "right")
+      : null,
+    ...getMovementFxNetworkState(),
     movementLocked,
     loaded:
       !dead &&
@@ -2011,7 +2337,90 @@ export function handlePlayerMovement(scene) {
     isMoving = false;
   }
 
+  function playMovementStep(speedRatio, isDirectionChange) {
+    const normalizedSpeed = Phaser.Math.Clamp(
+      Number(speedRatio) || 0,
+      0,
+      1,
+    );
+    footstepVariantCursor =
+      (footstepVariantCursor + Phaser.Math.Between(1, 2)) %
+      MOVEMENT_STEP_KEYS.length;
+    const key = MOVEMENT_STEP_KEYS[footstepVariantCursor];
+    try {
+      scene.sound.play(key, {
+        volume:
+          (isDirectionChange ? 0.52 : 0.4) +
+          normalizedSpeed * (isDirectionChange ? 0.13 : 0.15),
+        rate:
+          (isDirectionChange ? 0.88 : 0.94) + normalizedSpeed * 0.14,
+      });
+    } catch (_) {}
+  }
+
+  function updateFallingAirAudio(shouldPlay, velocityY) {
+    if (!fallAirLoopSfx) return;
+    if (!shouldPlay) {
+      if (fallAirLoopPlaying) {
+        const currentVolume = Number(fallAirLoopSfx.volume) || 0;
+        const fadedVolume = Phaser.Math.Linear(currentVolume, 0, 0.12);
+        fallAirLoopSfx.setVolume?.(fadedVolume);
+        if (fadedVolume <= 0.006) {
+          try {
+            fallAirLoopSfx.stop();
+          } catch (_) {}
+          fallAirLoopPlaying = false;
+          fallAirStartedAt = 0;
+        }
+      } else {
+        fallAirStartedAt = 0;
+      }
+      return;
+    }
+
+    if (!fallAirLoopPlaying) {
+      try {
+        fallAirLoopSfx.setVolume?.(0);
+        fallAirLoopSfx.play();
+        fallAirLoopPlaying = true;
+        fallAirStartedAt = Date.now();
+      } catch (_) {}
+    }
+    const speedRatio = Phaser.Math.Clamp(
+      (Number(velocityY) - 85) /
+        (MOVEMENT_VFX_CONFIG.fastFallMaxVelocity - 85),
+      0,
+      1,
+    );
+    const timeRatio = Phaser.Math.Clamp(
+      (Date.now() - (fallAirStartedAt || Date.now())) / 950,
+      0,
+      1,
+    );
+    const targetVolume = 0.06 + speedRatio * (0.16 + timeRatio * 0.14);
+    const currentVolume = Number(fallAirLoopSfx.volume) || 0;
+    fallAirLoopSfx.setVolume?.(
+      Phaser.Math.Linear(currentVolume, targetVolume, 0.075),
+    );
+    fallAirLoopSfx.setRate?.(0.72 + speedRatio * 0.24 + timeRatio * 0.04);
+  }
+
   function jump() {
+    if (player.body?.touching?.down && !powerupInvisible) {
+      const body = player.body;
+      spawnJumpTakeoff(
+        scene,
+        Number(body.center?.x) || player.x,
+        (Number(body.bottom) || player.y + player.height * 0.5) - 2,
+        {
+          bodyWidth: Number(body.width) || player.displayWidth,
+          velocityX: Number(body.velocity?.x) || 0,
+        },
+      );
+      noteMovementFxEvent("jump", {
+        direction: Math.sign(Number(body.velocity?.x) || 0),
+      });
+    }
     if (!isAttacking && !specialAnimLocked()) {
       resetAirborneJumpAnimation(player);
       playCharacterAnimation({
@@ -2084,8 +2493,14 @@ export function handlePlayerMovement(scene) {
         ? body.y + body.height * 0.62
         : player.y + player.height * 0.18;
       // direction indicates kick direction away from wall.
-      spawnWallKickCloud(scene, contactX, contactY, fromLeft ? 1 : -1);
+      if (!powerupInvisible) {
+        spawnWallKickCloud(scene, contactX, contactY, fromLeft ? 1 : -1);
+      }
     } catch (_) {}
+    noteMovementFxEvent("wall-jump", {
+      direction: fromLeft ? 1 : -1,
+      wallSide: fromLeft ? "left" : "right",
+    });
 
     player.x += fromLeft ? sep : -sep;
     player.setVelocityX(horizKick);
@@ -2111,9 +2526,16 @@ export function handlePlayerMovement(scene) {
     pdbg();
   }
 
-  function updateWallSlideAudio(shouldPlay) {
+  function updateWallSlideAudio(shouldPlay, speedRatio = 0) {
     if (!wallSlideLoopSfx) return;
     if (shouldPlay) {
+      const normalizedSpeed = Phaser.Math.Clamp(
+        Number(speedRatio) || 0,
+        0,
+        1,
+      );
+      wallSlideLoopSfx.setVolume?.(0.28 + normalizedSpeed * 0.17);
+      wallSlideLoopSfx.setRate?.(0.84 + normalizedSpeed * 0.22);
       if (!wallSlideLoopPlaying) {
         try {
           wallSlideLoopSfx.play();
@@ -2145,6 +2567,23 @@ export function getAmmoSyncState() {
 
 export function getNetworkInputState() {
   return { ...networkInputState };
+}
+
+export function getPlayerTutorialState() {
+  return {
+    health: Number(currentHealth) || 0,
+    maxHealth: Math.max(1, Number(maxHealth) || 1),
+    healthRatio: Math.max(
+      0,
+      Math.min(1, (Number(currentHealth) || 0) / Math.max(1, Number(maxHealth) || 1)),
+    ),
+    superCharge: Number(superCharge) || 0,
+    maxSuperCharge: Math.max(1, Number(maxSuperCharge) || 1),
+    superRatio: Math.max(
+      0,
+      Math.min(1, (Number(superCharge) || 0) / Math.max(1, Number(maxSuperCharge) || 1)),
+    ),
+  };
 }
 
 export function setLocalNetStateFlusher(fn) {
@@ -2216,6 +2655,22 @@ export function reconcileLocalMovement(snapshot = {}) {
 
 export function setPowerupMobility(speedMult = 1, jumpMult = 1) {
   return localStateSync.setPowerupMobility(speedMult, jumpMult);
+}
+
+export function setPowerupInvisible(active = false) {
+  const nextInvisible = active === true;
+  const changed = nextInvisible !== powerupInvisible;
+  powerupInvisible = nextInvisible;
+  if (player?.active) {
+    player._powerupInvisible = powerupInvisible;
+    if (powerupInvisible || changed) {
+      player.setAlpha(powerupInvisible ? 0.2 : 1);
+    }
+  }
+  if (changed) {
+    setLocalUiVisible(!dead);
+    setLocalUiAlpha(powerupInvisible ? 0.42 : 1);
+  }
 }
 
 export function setExternalControlLockUntil(untilMs = 0) {

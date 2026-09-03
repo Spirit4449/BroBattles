@@ -21,6 +21,45 @@
     <link rel="stylesheet" href="/styles/ui-system.css" />
   </head>
   <body>
+    <script>
+      // Restore the most recently confirmed map before the first paint. Party
+      // state replaces this once its authoritative selection arrives.
+      (function () {
+        try {
+          var backgrounds = {
+            1: "/assets/lushy/lobbyBg.webp",
+            2: "/assets/mangrove/lobbyBg.webp",
+            3: "/assets/serenity/lobbyBg.webp",
+            4: "/assets/bank-bust/lobbyBg.webp",
+          };
+          var partyMatch = window.location.pathname.match(
+            /^\/party\/([^/?#]+)/,
+          );
+          var backgroundScope = partyMatch
+            ? "party:" + partyMatch[1]
+            : "solo";
+          var cachedUrl = localStorage.getItem(
+            "bb_lobby_background_url:" + backgroundScope,
+          );
+          if (
+            cachedUrl &&
+            !/^\/assets\/[a-z0-9/_-]+\.(webp|png|jpe?g)$/i.test(cachedUrl)
+          ) {
+            cachedUrl = null;
+          }
+          var cachedMap = partyMatch
+            ? null
+            : localStorage.getItem("bb_solo_map");
+          var initialUrl = cachedUrl || backgrounds[cachedMap];
+
+          if (!initialUrl && !partyMatch) initialUrl = backgrounds[1];
+          if (!initialUrl) return;
+
+          document.body.style.backgroundImage = 'url("' + initialUrl + '")';
+          document.body.dataset.lobbyBackgroundUrl = initialUrl;
+        } catch (_) {}
+      })();
+    </script>
     <div id="navbar">
       <div class="flex">
         <img src="/assets/sword.svg" width="20px" />
@@ -769,62 +808,80 @@
       </section>
     </div>
 
-    <!-- Matchmaking Overlay (static element) -->
+    <!-- Matchmaking becomes a cinematic lobby state instead of a popup. -->
     <div id="matchmaking-overlay" class="mm-overlay hidden" aria-hidden="true">
       <div class="mm-bg" aria-hidden="true"></div>
+      <div id="mm-particles" class="mm-particles" aria-hidden="true"></div>
+      <div class="mm-speed-lines" aria-hidden="true"></div>
+      <div class="mm-success-burst" aria-hidden="true"></div>
       <div
         class="mm-card"
         role="dialog"
         aria-modal="true"
         aria-labelledby="mm-heading"
       >
-        <h1 id="mm-heading" class="mm-heading">Matchmaking</h1>
-        <div class="mm-progress">
-          <div class="mm-label">Players Found</div>
-          <div class="mm-count">
-            <span id="mm-found">0</span> / <span id="mm-total">2</span>
+        <header class="mm-header">
+          <h1 id="mm-heading" class="mm-heading">Matchmaking</h1>
+          <div class="mm-progress" aria-label="Players found">
+            <div class="mm-count">
+              <span id="mm-found">0</span><span class="mm-count-divider">/</span
+              ><span id="mm-total">2</span>
+            </div>
+            <div class="mm-label">Players</div>
           </div>
-        </div>
-        <div class="mm-info">
           <div class="mm-meta">
-            <div><strong>Mode:</strong> <span id="mm-mode">1v1</span></div>
             <div>
-              <strong>Map:</strong> <span id="mm-map">Lushy Peaks</span>
+              <span class="mm-meta-label">Mode</span>
+              <strong id="mm-mode">1v1</strong>
+            </div>
+            <span class="mm-meta-separator" aria-hidden="true"></span>
+            <div>
+              <span class="mm-meta-label">Arena</span>
+              <strong id="mm-map">Lushy Peaks</strong>
             </div>
           </div>
+        </header>
+
+        <section class="mm-lobby" aria-label="Matchmaking lobby">
           <div id="mm-players" class="mm-players-grid" aria-live="polite"></div>
-        </div>
-        <div id="mm-tips">
-          <span id="tips-text"></span>
-        </div>
-        <div class="mm-actions">
-          <div class="mm-fill-actions">
+        </section>
+
+        <footer class="mm-footer">
+          <div id="mm-tips">
+            <span class="mm-tip-label">Battle Tip</span>
+            <span id="tips-text">
+              Stay unpredictable—save your movement options for the opening.
+            </span>
+          </div>
+          <div class="mm-actions">
+            <div class="mm-fill-actions">
+              <button
+                id="mm-fill-bots"
+                class="mm-btn mm-fill-bots pixel-menu-button hidden"
+                type="button"
+                data-sound="cursor4"
+              >
+                Fill With Bots
+              </button>
+              <button
+                id="mm-fill-bots-unlimited"
+                class="mm-btn mm-fill-bots-unlimited pixel-menu-button hidden"
+                type="button"
+                data-sound="cursor4"
+              >
+                Big Bots
+              </button>
+            </div>
             <button
-              id="mm-fill-bots"
-              class="mm-btn mm-fill-bots pixel-menu-button hidden"
+              id="mm-cancel"
+              class="mm-btn pixel-menu-button"
               type="button"
-              data-sound="cursor4"
+              data-sound="cancel"
             >
-              Fill With Bots
-            </button>
-            <button
-              id="mm-fill-bots-unlimited"
-              class="mm-btn mm-fill-bots-unlimited pixel-menu-button hidden"
-              type="button"
-              data-sound="cursor4"
-            >
-              Big Bots
+              Cancel
             </button>
           </div>
-          <button
-            id="mm-cancel"
-            class="mm-btn pixel-menu-button"
-            type="button"
-            data-sound="cancel"
-          >
-            Cancel
-          </button>
-        </div>
+        </footer>
       </div>
     </div>
 

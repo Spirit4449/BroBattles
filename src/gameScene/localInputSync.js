@@ -110,6 +110,35 @@ export function createLocalInputSync({
       vx: quantizeVelocity(player.body?.velocity?.x),
       vy: quantizeVelocity(player.body?.velocity?.y),
       grounded: !!player.body?.touching?.down,
+      wallSliding: !!rawInput?.wallSliding,
+      wallSide:
+        rawInput?.wallSide === "left" || rawInput?.wallSide === "right"
+          ? rawInput.wallSide
+          : null,
+      movementFxSeq: Math.max(
+        0,
+        Math.floor(Number(rawInput?.movementFxSeq) || 0),
+      ),
+      movementFxType:
+        typeof rawInput?.movementFxType === "string"
+          ? rawInput.movementFxType
+          : null,
+      movementFxDirection: Math.sign(
+        Number(rawInput?.movementFxDirection) || 0,
+      ),
+      movementFxWallSide:
+        rawInput?.movementFxWallSide === "left" ||
+        rawInput?.movementFxWallSide === "right"
+          ? rawInput.movementFxWallSide
+          : null,
+      movementFxFallDistance: Math.max(
+        0,
+        Math.round(Number(rawInput?.movementFxFallDistance) || 0),
+      ),
+      movementFxImpactVelocity: Math.max(
+        0,
+        Math.round(Number(rawInput?.movementFxImpactVelocity) || 0),
+      ),
       loaded: true,
       sequence: packetSequence,
       timestamp: now,

@@ -112,12 +112,24 @@ export function preloadGameAssets({
     `${staticPath}/bank-bust/mine-claimed.webp`,
   );
 
-  // Movement SFX (place files under /assets/audio)
-  scene.load.audio("sfx-step", `${staticPath}/step.mp3`);
-  scene.load.audio("sfx-jump", `${staticPath}/jump.mp3`);
-  scene.load.audio("sfx-land", `${staticPath}/land.mp3`);
-  scene.load.audio("sfx-walljump", `${staticPath}/walljump.mp3`);
-  scene.load.audio("sfx-sliding", `${staticPath}/sliding.mp3`);
+  // Level-balanced movement SFX and small randomized footstep set.
+  scene.load.audio("sfx-step-1", [
+    `${staticPath}/movement/step-1.ogg`,
+    `${staticPath}/movement/step-1.mp3`,
+  ]);
+  scene.load.audio("sfx-step-2", [
+    `${staticPath}/movement/step-2.ogg`,
+    `${staticPath}/movement/step-2.mp3`,
+  ]);
+  scene.load.audio("sfx-step-3", [
+    `${staticPath}/movement/step-3.ogg`,
+    `${staticPath}/movement/step-3.mp3`,
+  ]);
+  scene.load.audio("sfx-jump", `${staticPath}/movement/jump.mp3`);
+  scene.load.audio("sfx-land", `${staticPath}/movement/landing.mp3`);
+  scene.load.audio("sfx-walljump", `${staticPath}/movement/wall-jump.mp3`);
+  scene.load.audio("sfx-sliding", `${staticPath}/movement/wall-slide.mp3`);
+  scene.load.audio("sfx-fall-air", `${staticPath}/movement/fall-wind.mp3`);
   scene.load.audio("sfx-sudden-death", `${staticPath}/suddendeath.mp3`);
   scene.load.audio("sfx-death", `${staticPath}/death.wav`);
   scene.load.audio("sfx-you-death", `${staticPath}/you-death.wav`);
@@ -131,6 +143,13 @@ export function preloadGameAssets({
   // Combat/health SFX
   scene.load.audio("sfx-damage", `${staticPath}/damage.mp3`);
   scene.load.audio("sfx-heal", `${staticPath}/heal.mp3`);
+  // Shockwave reuses Draven's animated explosion art under its own key so the
+  // effect is available even when no Draven is present in the match roster.
+  scene.load.atlas(
+    "pu-shockwave-explosion",
+    `${staticPath}/draven/explosion.webp`,
+    `${staticPath}/draven/explosion.json`,
+  );
   // Allow a map-specific turret shoot sound to be used if present (preferred),
   // otherwise fall back to the shared damage sound.
   scene.load.audio("sfx-bankbust-turret-shoot", [

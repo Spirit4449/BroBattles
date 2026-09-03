@@ -48,6 +48,8 @@ export function createGameHudController({
   let lastModeAlertEventAt = 0;
   let noticeAutoCloseTimer = null;
   let waitingBannerTimer = null;
+  let keybindAutoDismissTimer = null;
+  let collapseKeybindHud = null;
 
   function _fallbackCatalog() {
     return {
@@ -768,6 +770,56 @@ export function createGameHudController({
     closeBtn?.addEventListener("click", () => {
       applyExpandedState(false);
     });
+
+    collapseKeybindHud = () => applyExpandedState(false, false);
+
+    const keyCodeByLabel = {
+      W: "KeyW",
+      A: "KeyA",
+      S: "KeyS",
+      D: "KeyD",
+      "↑": "ArrowUp",
+      "←": "ArrowLeft",
+      "↓": "ArrowDown",
+      "→": "ArrowRight",
+    };
+    hud.querySelectorAll("kbd").forEach((key) => {
+      key.dataset.code = keyCodeByLabel[String(key.textContent || "").trim()] || "";
+    });
+
+    const setPressed = (code, pressed) => {
+      hud.querySelectorAll(`kbd[data-code="${code}"]`).forEach((key) => {
+        key.classList.toggle("is-pressed", pressed);
+      });
+    };
+    window.addEventListener("keydown", (event) => setPressed(event.code, true), true);
+    window.addEventListener("keyup", (event) => setPressed(event.code, false), true);
+
+    const actionRows = hud.querySelectorAll(".bs-help-action-row");
+    window.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (event.button === 0) actionRows[0]?.classList.add("is-pressed");
+        if (event.button === 2) actionRows[1]?.classList.add("is-pressed");
+      },
+      true,
+    );
+    window.addEventListener(
+      "pointerup",
+      (event) => {
+        if (event.button === 0) actionRows[0]?.classList.remove("is-pressed");
+        if (event.button === 2) actionRows[1]?.classList.remove("is-pressed");
+      },
+      true,
+    );
+  }
+
+  function scheduleKeybindAutoDismiss() {
+    if (keybindAutoDismissTimer) clearTimeout(keybindAutoDismissTimer);
+    keybindAutoDismissTimer = setTimeout(() => {
+      keybindAutoDismissTimer = null;
+      collapseKeybindHud?.();
+    }, 5000);
   }
 
   function initTeamStatusHud(players) {
@@ -980,6 +1032,7 @@ export function createGameHudController({
           timerHud?.classList.add("in");
           teamHud?.classList.add("in");
         });
+        scheduleKeybindAutoDismiss();
       } catch (_) {}
     }, 300);
   }

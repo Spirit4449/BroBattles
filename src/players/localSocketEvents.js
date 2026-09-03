@@ -82,7 +82,7 @@ export function bindLocalSocketEvents({
         if (data.cause !== "poison") {
           spawnDamageImpact(scene, player);
           triggerDamageScreenPulse(scene);
-          triggerDamageCameraShake(scene, -delta, getMaxHealth());
+          triggerDamageCameraShake(scene, -delta);
         }
       } else if (delta > 0) {
         const s = scene.sound.add("sfx-heal", { volume: 0.1 });
@@ -213,7 +213,7 @@ export function bindLocalSocketEvents({
     const amountX = Number(data?.amountX) || 0;
     const amountY = Number(data?.amountY) || 0;
     player.setVelocityX(amountX);
-    player.setVelocityY(-Math.abs(amountY));
+    player.setVelocityY(data?.radial === true ? amountY : -Math.abs(amountY));
     player._wallKickLockUntil = Date.now() + 120;
   };
 

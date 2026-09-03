@@ -108,7 +108,7 @@ function createFireballSprite(scene, x, y, direction) {
         scene.anims.create({
           key: animKey,
           frames: frames.map((f) => ({ key: "wizard-fireball", frame: f })),
-          frameRate: 20,
+          frameRate: 10,
           repeat: -1,
         });
       }

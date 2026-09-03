@@ -464,7 +464,7 @@ function renderCharacterDetails(character) {
   // Smaller preview frame (game style - no rounded corners)
   const previewFrame = document.createElement("div");
   previewFrame.className =
-    `character-details-preview-frame skin-rarity-${selectedSkinRarity} ${cardState.isLocked ? "is-locked" : ""}`.trim();
+    `character-details-preview-frame skin-rarity-${selectedSkinRarity} ${cardState.isLocked ? "is-locked" : ""} ${cardState.isMaxed ? "is-maxed" : ""}`.trim();
 
   const previewGlow = document.createElement("div");
   previewGlow.className = "character-details-preview-glow";
@@ -676,7 +676,8 @@ function renderCharacterDetails(character) {
     } else {
       const maxedLabel = document.createElement("div");
       maxedLabel.className = "character-details-maxed-label";
-      maxedLabel.textContent = "Max Level";
+      maxedLabel.innerHTML =
+        '<img src="/assets/crown.webp" alt="" /> <span>Max Level</span>';
       footer.appendChild(maxedLabel);
     }
 
@@ -770,6 +771,17 @@ function getActivePartyIdFromPath() {
 
 function emitCharacterMenuStatus(open) {
   try {
+    const selfSlot =
+      document.querySelector('.character-slot[data-is-current-user="true"]') ||
+      document.getElementById("your-slot-1");
+    if (selfSlot && !selfSlot.querySelector(":scope > .lobby-selecting-ring")) {
+      const ring = document.createElement("div");
+      ring.className = "lobby-selecting-ring";
+      ring.setAttribute("aria-hidden", "true");
+      selfSlot.appendChild(ring);
+    }
+    selfSlot?.classList.toggle("is-selecting-character", !!open);
+
     const partyId = getActivePartyIdFromPath();
     if (!partyId) return;
     socket.emit("char-menu:status", {
@@ -827,16 +839,20 @@ export function initializeCharacterSelect(userData) {
   const P_COUNT = 100;
   const P_COLOR = "rgba(255,255,255,0.35)";
   const P_COLOR2 = "rgba(120,180,255,0.25)";
+  let canvasWidth = 0;
+  let canvasHeight = 0;
   function resizeCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    particlesCanvas.width = particlesCanvas.clientWidth * dpr;
-    particlesCanvas.height = particlesCanvas.clientHeight * dpr;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvasWidth = particlesCanvas.clientWidth;
+    canvasHeight = particlesCanvas.clientHeight;
+    particlesCanvas.width = canvasWidth * dpr;
+    particlesCanvas.height = canvasHeight * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   function initParticles() {
     particles = new Array(P_COUNT).fill(0).map(() => ({
-      x: Math.random() * particlesCanvas.clientWidth,
-      y: Math.random() * particlesCanvas.clientHeight,
+      x: Math.random() * canvasWidth,
+      y: Math.random() * canvasHeight,
       vx: (Math.random() - 0.5) * 0.4,
       vy: (Math.random() - 0.5) * 0.4,
       r: Math.random() * 2 + 0.5,
@@ -844,16 +860,14 @@ export function initializeCharacterSelect(userData) {
     }));
   }
   function step() {
-    const w = particlesCanvas.clientWidth;
-    const h = particlesCanvas.clientHeight;
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
     ctx.fillStyle = "rgba(0,0,0,0.15)";
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
     for (const p of particles) {
       p.x += p.vx;
       p.y += p.vy;
-      if (p.x < 0 || p.x > w) p.vx *= -1;
-      if (p.y < 0 || p.y > h) p.vy *= -1;
+      if (p.x < 0 || p.x > canvasWidth) p.vx *= -1;
+      if (p.y < 0 || p.y > canvasHeight) p.vy *= -1;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
       ctx.fillStyle = p.c;
@@ -872,8 +886,8 @@ export function initializeCharacterSelect(userData) {
     ctx.clearRect(
       0,
       0,
-      particlesCanvas.clientWidth,
-      particlesCanvas.clientHeight,
+      canvasWidth,
+      canvasHeight,
     );
   }
   window.addEventListener("resize", resizeCanvas);
@@ -952,7 +966,8 @@ function createCharacterCard(character, userData) {
     statusText.innerHTML = `<img src="/assets/gem.webp" alt="" /> <span class="character-card-status-price">${stats.unlockPrice || 0}</span>`;
   } else if (cardState.isMaxed) {
     statusText.classList.add("maxed");
-    statusText.textContent = "MAX";
+    statusText.innerHTML =
+      '<img src="/assets/crown.webp" alt="" /> <span>Max Level</span>';
   } else {
     statusText.classList.add("upgradable");
     statusText.classList.toggle("insufficient", !cardState.canUpgrade);
@@ -1389,8 +1404,8 @@ function showErrorDialog(message, titleText = "Purchase failed") {
   document.body.appendChild(backdrop);
 }
 
-// Replace a specific character card with a freshly rendered one and play a success animation
-function rerenderCharacterCard(character, userData, animType) {
+// Replace a specific character card with a freshly rendered one.
+function rerenderCharacterCard(character, userData) {
   const grid = document.querySelector(".characters-grid");
   const oldCard =
     grid &&
@@ -1400,7 +1415,6 @@ function rerenderCharacterCard(character, userData, animType) {
   grid.replaceChild(newCard, oldCard);
   if (_characterDetailsUi?.currentCharacter === character) {
     renderCharacterDetails(character);
-    playCharacterDetailsSuccessAnimation(animType);
   }
   sortCharacterCardsInGrid(userData);
   // After any change, also refresh other cards' affordability/state
@@ -1445,7 +1459,8 @@ function applyUpgrade(character, currentLevel) {
         }
       } catch {}
 
-      rerenderCharacterCard(character, _userDataRef, "upgrade");
+      playSound("upgrade", 0.6);
+      rerenderCharacterCard(character, _userDataRef);
       refreshUpgradeButtonAffordability();
       playCharacterDetailsSuccessAnimation("upgrade");
     })
@@ -1487,7 +1502,7 @@ function applyUnlock(character, price) {
         }
       } catch {}
 
-      rerenderCharacterCard(character, _userDataRef, "unlock");
+      rerenderCharacterCard(character, _userDataRef);
       refreshUpgradeButtonAffordability();
       playCharacterDetailsSuccessAnimation("unlock");
     })
@@ -1524,7 +1539,8 @@ function refreshUpgradeButtonAffordability() {
 
       if (state.isMaxed) {
         statusText.className = "character-card-status-text maxed";
-        statusText.textContent = "MAX";
+        statusText.innerHTML =
+          '<img src="/assets/crown.webp" alt="" /> <span>Max Level</span>';
         return;
       }
 

@@ -27,6 +27,7 @@ const soundFiles = {
   notification: "notification",
   beep: "beep",
   start: "start",
+  upgrade: "/assets/upgrade.wav",
   shopOpen: "shop-open.ogg",
   shopClose: "shop-close.ogg",
   shopHover: "shop-hover.ogg",
@@ -42,7 +43,7 @@ const soundFiles = {
 function createAudioWithFallback(filename) {
   const hasExtension = /\.[a-z0-9]+$/i.test(filename);
   const sources = hasExtension
-    ? [`${soundPath}${filename}`]
+    ? [filename.startsWith("/") ? filename : `${soundPath}${filename}`]
     : [".mp3", ".wav", ".ogg"].map((ext) => `${soundPath}${filename}${ext}`);
   const audio = new Audio();
   audio.preload = "auto";

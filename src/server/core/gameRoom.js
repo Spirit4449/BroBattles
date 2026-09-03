@@ -106,8 +106,11 @@ class GameRoom {
     this._powerups = new Map(); // id -> { id, type, x, y, spawnedAt, expiresAt }
     this._nextPowerupId = 1;
     this._lastPowerupSpawnAt = 0;
-    this._nextPowerupSpawnPointIdx = 0;
-    this._nextPowerupTypeIdx = 0;
+    this._powerupSpawnBag = [];
+    this._powerupTypeBag = [];
+    this._recentPowerupSpawnKeys = [];
+    this._lastPowerupType = null;
+    this._lastPowerupTypeBySpawnKey = Object.create(null);
     this._deathDrops = new Map(); // id -> authoritative drop plan
     this._nextDeathDropId = 1;
     this._netTestEnabled = netTestLogger.isServerNetTestEnabled();
@@ -872,8 +875,11 @@ class GameRoom {
     this._powerups.clear();
     this._nextPowerupId = 1;
     this._lastPowerupSpawnAt = this._loopStartWallTime;
-    this._nextPowerupSpawnPointIdx = 0;
-    this._nextPowerupTypeIdx = 0;
+    this._powerupSpawnBag = [];
+    this._powerupTypeBag = [];
+    this._recentPowerupSpawnKeys = [];
+    this._lastPowerupType = null;
+    this._lastPowerupTypeBySpawnKey = Object.create(null);
     this._deathDrops.clear();
     this._nextDeathDropId = 1;
     for (let i = 0; i < POWERUP_STARTING_COUNT; i++) {

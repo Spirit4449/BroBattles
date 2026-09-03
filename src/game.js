@@ -12,10 +12,12 @@ import {
 import { applyMapBounds } from "./maps/mapUtils";
 import { createGameHudController } from "./hud/gameHudController";
 import { createGameOverScreenController } from "./hud/gameOverScreenController";
+import { createBattleTutorialController } from "./hud/battleTutorialController";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
 import { createGameChatController } from "./lib/chatController.js";
 import { isChatInputActive, setChatInputActive } from "./player";
 import "./styles/chat.css";
+import "./styles/tutorialTips.css";
 import { createSnapshotBuffer } from "./match/snapshotBuffer";
 import { createMatchCoordinator } from "./match/matchCoordinator";
 import { preloadGameAssets } from "./gameScene/preloadGameAssets";
@@ -42,9 +44,11 @@ import {
   dead,
   setSuperStats,
   setPowerupMobility,
+  setPowerupInvisible,
   applyAuthoritativeState,
   getAmmoSyncState,
   getNetworkInputState,
+  getPlayerTutorialState,
   setLocalNetStateFlusher,
   setExternalControlLockUntil,
   destroyMobileControls,
@@ -79,6 +83,8 @@ import {
   shouldMuteClientDefaultLogs,
 } from "./lib/netTestLogger.js";
 import MOVEMENT_PHYSICS from "./shared/movementPhysics.json";
+
+const POST_BATTLE_LOBBY_RETURN_KEY = "bb_post_battle_lobby_return";
 
 wireFullscreenToggles();
 
@@ -199,6 +205,13 @@ const matchId = getMatchIdFromUrl();
 if (!matchId) {
   console.error("No match ID found, redirecting to lobby");
   window.location.href = "/";
+} else {
+  // Mark every battle session, not only completed ones. If the player leaves
+  // early or uses browser Back, the lobby can discard its cached match-found
+  // state instead of restoring it from the back/forward cache.
+  try {
+    sessionStorage.setItem(POST_BATTLE_LOBBY_RETURN_KEY, "1");
+  } catch (_) {}
 }
 
 // Variables to store game session data
@@ -302,6 +315,20 @@ const hud = createGameHudController({
   },
 });
 
+const battleTutorial = createBattleTutorialController({
+  socket,
+  getGameData: () => gameData,
+  getScene: () => gameScene,
+  getPlayer: () => player,
+  getPlayerState: getPlayerTutorialState,
+  getNetworkInputState,
+  getOpponentPlayers: () => opponentPlayers,
+  getLatestPowerups: () => latestPowerups,
+  getDead: () => dead,
+  isBattleReady: () =>
+    hasJoined && gameInitialized && !gameEnded && !hud.isBattleIntroActive?.(),
+});
+
 const gameOverScreenController = createGameOverScreenController({
   getGameData: () => gameData,
   getUsername: () => username,
@@ -396,6 +423,9 @@ window.addEventListener(
   () => {
     try {
       matchCoordinator?.dispose();
+    } catch (_) {}
+    try {
+      battleTutorial?.destroy();
     } catch (_) {}
   },
   { once: true },
@@ -568,6 +598,10 @@ async function initializeGame() {
       noteClientLifecycle("fetch-gamedata", `matchId=${matchId}`);
     }
     gameData = await fetchGameData();
+    battleTutorial.initialize();
+    // Start fetching the authoritative map background as soon as match data
+    // arrives. The loading screen stays visible until this image is ready.
+    applyMatchBackground(gameData?.map);
     if (!shouldMuteClientDefaultLogs()) {
       console.log("Game data received:", gameData);
     } else {
@@ -635,10 +669,25 @@ function applyMatchBackground(mapId) {
     const bgUrl = getMapBgAsset(mapId);
     const bgImg = document.querySelector("#game-bg img");
     if (bgImg && bgUrl) {
+      const markReady = () => {
+        bgImg.onload = null;
+        bgImg.onerror = null;
+        window.markMatchBackgroundReady?.();
+      };
+
+      document.getElementById("game-bg")?.classList.remove("visible");
+      bgImg.onload = markReady;
+      bgImg.onerror = markReady;
       bgImg.setAttribute("src", bgUrl);
       bgImg.style.transform = "translate3d(0,0,0) scale(1)";
+
+      // Cached images can already be complete before the load handler runs.
+      if (bgImg.complete) queueMicrotask(markReady);
     }
-  } catch (_) {}
+  } catch (_) {
+    // A missing decorative background must not leave the loading screen stuck.
+    window.markMatchBackgroundReady?.();
+  }
 }
 
 function updateMatchBackgroundParallax(scene) {
@@ -855,6 +904,7 @@ class GameScene extends Phaser.Scene {
       getMapObjects: () => mapObjects,
       getDead: () => dead,
       setPowerupMobility,
+      setLocalPowerupInvisible: setPowerupInvisible,
       applyCharacterPowerupFx,
       drawCharacterPowerupAura,
       getCharacterPowerupMobilityModifier,
@@ -994,7 +1044,6 @@ class GameScene extends Phaser.Scene {
     // Background music: create only the active map's track and start it
     // as soon as the match scene is live.
     this._bgmStarted = false;
-    applyMatchBackground(gameData?.map);
     const bgmSrc = getMapMusicAsset(gameData?.map);
     const startBgm = () => {
       if (this._bgmStarted) return;
@@ -1544,6 +1593,7 @@ class GameScene extends Phaser.Scene {
     // Powerup visuals/effects are rendered for all players every frame.
     this._renderPowerupsAndEffects();
     this._renderModeObjectives();
+    battleTutorial.update();
 
     if (this._editModeActive) {
       try {
@@ -1995,6 +2045,15 @@ class GameScene extends Phaser.Scene {
         }
       }
 
+      if (
+        !isDeadBySnapshot &&
+        !wrapper._deathPresentationActive &&
+        isConnected &&
+        isLoaded
+      ) {
+        wrapper.updateMovementVfx?.(bPosData || aPosData, animSrc);
+      }
+
       // Keep remote UI positioning centralized in OpPlayer so one offset controls all updates.
       if (typeof wrapper.updateUIPosition === "function") {
         wrapper.updateUIPosition();
@@ -2050,7 +2109,7 @@ const config = {
   physics: {
     default: "arcade",
     arcade: {
-      gravity: { y: 800 },
+      gravity: { y: MOVEMENT_PHYSICS.gravity },
       debug: false,
     },
   },

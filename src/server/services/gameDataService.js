@@ -113,6 +113,7 @@ async function buildGameDataForMatch({
     selection,
     map: selection.mapId,
     yourName: user.name,
+    isGuest: !!user.expires_at,
     isAdmin: typeof isAdminUser === "function" ? !!isAdminUser(user) : false,
     yourTeam: participant.team,
     yourCharacter: participant.char_class,

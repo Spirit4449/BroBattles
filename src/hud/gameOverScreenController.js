@@ -20,6 +20,8 @@ const REWARD_TYPES = {
   },
 };
 
+const POST_BATTLE_LOBBY_RETURN_KEY = "bb_post_battle_lobby_return";
+
 const delay = (duration) =>
   new Promise((resolve) => window.setTimeout(resolve, duration));
 
@@ -500,12 +502,16 @@ export function createGameOverScreenController({
       if (leaving) return;
       leaving = true;
       try {
+        sessionStorage.removeItem("matchId");
+        sessionStorage.setItem(POST_BATTLE_LOBBY_RETURN_KEY, "1");
+      } catch (_) {}
+      try {
         const res = await fetch("/status", { method: "POST" });
         if (res.ok) {
           const data = await res.json();
           const pid = Number(data?.party_id);
           if (Number.isFinite(pid) && pid > 0) {
-            window.location.href = `/party/${pid}`;
+            window.location.replace(`/party/${pid}`);
             return;
           }
         }
@@ -516,12 +522,12 @@ export function createGameOverScreenController({
           (gameData?.players || []).find((p) => p.name === username)?.party_id,
         );
         if (Number.isFinite(myPartyId) && myPartyId > 0) {
-          window.location.href = `/party/${myPartyId}`;
+          window.location.replace(`/party/${myPartyId}`);
           return;
         }
       } catch (_) {}
 
-      window.location.href = "/";
+      window.location.replace("/");
     };
 
     const timer = setInterval(() => {

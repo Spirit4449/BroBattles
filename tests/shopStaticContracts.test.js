@@ -179,6 +179,65 @@ test("shop sound effects are locally bundled with source provenance", () => {
   assert.match(provenance, /CC0/);
 });
 
+test("successful character upgrades play the dedicated upgrade sound", () => {
+  const sounds = read("src/lib/uiSounds.js");
+  const characterLogic = read("src/characterLogic.js");
+
+  assert.match(sounds, /upgrade:\s*"\/assets\/upgrade\.wav"/);
+  assert.ok(fs.existsSync(path.join(root, "public/assets/upgrade.wav")));
+  assert.match(
+    characterLogic,
+    /if \(!data\.success\)[\s\S]+playSound\("upgrade", 0\.6\);[\s\S]+rerenderCharacterCard\(character, _userDataRef\)/,
+  );
+});
+
+test("character upgrade success animation runs once and holds its final frame", () => {
+  const characterLogic = read("src/characterLogic.js");
+  const styles = read("src/styles/characterSelect.css");
+  const rerender = characterLogic.slice(
+    characterLogic.indexOf("function rerenderCharacterCard"),
+    characterLogic.indexOf("// Upgrade / unlock stubs"),
+  );
+
+  assert.doesNotMatch(rerender, /playCharacterDetailsSuccessAnimation/);
+  assert.match(styles, /animation:\s*successBeamsSpin 1\.2s linear forwards/);
+  assert.match(styles, /animation:\s*successLabelPop 1\.2s ease-out forwards/);
+});
+
+test("character card hover avoids full-card filter repaints", () => {
+  const characterLogic = read("src/characterLogic.js");
+  const styles = read("src/styles/characterSelect.css");
+  const cardRules = styles.slice(
+    styles.indexOf(".character-card {"),
+    styles.indexOf("/* Image wrapper - profile icon */"),
+  );
+  const particleStep = characterLogic.slice(
+    characterLogic.indexOf("function step()"),
+    characterLogic.indexOf("function startParticles()"),
+  );
+
+  assert.doesNotMatch(cardRules, /transition:[\s\S]*?filter/);
+  assert.doesNotMatch(cardRules, /\.character-card:hover\s*\{[^}]*filter:/);
+  assert.match(cardRules, /will-change:\s*transform/);
+  assert.match(cardRules, /transform 240ms ease-out/);
+  assert.match(cardRules, /translate3d\(0, -1px, 0\) scale\(1\.002\)/);
+  assert.doesNotMatch(styles, /\.character-card:hover \.character-profile-icon/);
+  assert.doesNotMatch(styles, /\.character-card:hover \.character-card-info/);
+  assert.doesNotMatch(particleStep, /clientWidth|clientHeight/);
+});
+
+test("max-level characters use the mastery visual treatment", () => {
+  const characterLogic = read("src/characterLogic.js");
+  const styles = read("src/styles/characterSelect.css");
+
+  assert.match(characterLogic, /cardState\.isMaxed \? "is-maxed"/);
+  assert.match(characterLogic, /crown\.webp[^;]+Max Level/);
+  assert.doesNotMatch(characterLogic, /Mastered/);
+  assert.match(styles, /\.character-card\.is-maxed\s*\{/);
+  assert.match(styles, /@keyframes maxLevelSheen/);
+  assert.match(styles, /\.character-details-preview-frame\.is-maxed/);
+});
+
 test("shop navigation, icons, sales glimmer, and checkout chrome stay consistent", () => {
   const source = read("src/shop.js");
   const styles = read("src/styles/shop.css");

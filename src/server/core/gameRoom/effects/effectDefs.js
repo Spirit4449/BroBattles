@@ -28,6 +28,11 @@ const {
   POWERUP_EFFECT_TICK_MS,
   POWERUP_AMBIENT_TICK_MS,
   POWERUP_DURATIONS_MS,
+  POWERUP_SHOCKWAVE_RADIUS,
+  POWERUP_SHOCKWAVE_FORCE_X,
+  POWERUP_SHOCKWAVE_FORCE_Y,
+  POWERUP_FREEZE_SPEED_MULT,
+  POWERUP_FREEZE_JUMP_MULT,
   GAME_DURATION_MS,
   SD_RISE_SPEED,
   SD_RISE_FAST_PHASE_MS,
@@ -181,6 +186,82 @@ const effectDefs = {
     snapshotKey: "gravityBoots",
   },
 
+  invisibility: {
+    durationMs: POWERUP_DURATIONS_MS.invisibility || 8000,
+    tickIntervalMs: 0,
+    modifiers: {},
+    onApply: null,
+    onTick: null,
+    snapshotKey: "invisibility",
+  },
+
+  shockwave: {
+    durationMs: POWERUP_DURATIONS_MS.shockwave || 1,
+    tickIntervalMs: 0,
+    modifiers: {},
+    onApply(player, room) {
+      if (!player || !room?.players) return;
+      const sourceX = Number(player.x) || 0;
+      const sourceY = Number(player.y) || 0;
+      let centeredTargetIndex = 0;
+
+      for (const target of room.players.values()) {
+        if (
+          !target ||
+          target === player ||
+          !target.isAlive ||
+          target.connected === false ||
+          target.loaded !== true ||
+          !target.socketId
+        ) {
+          continue;
+        }
+
+        const dx = (Number(target.x) || 0) - sourceX;
+        const dy = (Number(target.y) || 0) - sourceY;
+        const distance = Math.hypot(dx, dy);
+        if (distance > POWERUP_SHOCKWAVE_RADIUS) continue;
+
+        const safeDistance = Math.max(1, distance);
+        const centeredDirection = centeredTargetIndex % 2 === 0 ? 1 : -1;
+        const nx = distance < 1 ? centeredDirection : dx / safeDistance;
+        const ny = distance < 1 ? -0.35 : dy / safeDistance;
+        const falloff = Math.max(
+          0.55,
+          1 - distance / POWERUP_SHOCKWAVE_RADIUS,
+        );
+        centeredTargetIndex += 1;
+
+        room.io.to(target.socketId).emit("player:knockback", {
+          source: player.name,
+          cause: "shockwave",
+          radial: true,
+          amountX: Math.round(nx * POWERUP_SHOCKWAVE_FORCE_X * falloff),
+          amountY: Math.round(ny * POWERUP_SHOCKWAVE_FORCE_Y * falloff),
+        });
+      }
+    },
+    onTick: null,
+    snapshotKey: "shockwave",
+  },
+
+  freeze: {
+    durationMs: POWERUP_DURATIONS_MS.freeze || 7000,
+    tickIntervalMs: POWERUP_AMBIENT_TICK_MS,
+    modifiers: {
+      speedMult: POWERUP_FREEZE_SPEED_MULT,
+      jumpMult: POWERUP_FREEZE_JUMP_MULT,
+    },
+    onApply: null,
+    onTick(player, room) {
+      room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
+        type: "freeze",
+        username: player.name,
+      });
+    },
+    snapshotKey: "freeze",
+  },
+
   // ── Character ability effects ────────────────────────────────────────────────
 
   thorgRage: {
@@ -295,15 +376,6 @@ const effectDefs = {
     onApply: null,
     onTick: null,
     snapshotKey: "stun",
-  },
-
-  freeze: {
-    durationMs: 2000,
-    tickIntervalMs: 0,
-    modifiers: { speedMult: 0, jumpMult: 0, damageMult: 0 },
-    onApply: null,
-    onTick: null,
-    snapshotKey: "freeze",
   },
 
   damageBoost: {

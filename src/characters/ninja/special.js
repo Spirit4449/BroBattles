@@ -2,7 +2,12 @@ import ReturningShuriken from "./attack";
 import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
-import { playSpriteAnimation } from "../shared/animationState";
+import {
+  getAnimationDurationMs,
+  markOneShotAnimation,
+  playSpriteAnimation,
+  resolveSpriteAnimationKey,
+} from "../shared/animationState";
 
 const SWARM = getResolvedCharacterSpecialConfig("ninja", "swarm");
 const SWARM_COUNT = SWARM.count ?? 15;
@@ -143,6 +148,19 @@ export function perform(
     });
   } catch (_) {}
 
+  const throwAnimationKey = resolveSpriteAnimationKey({
+    scene,
+    sprite: player,
+    character: "ninja",
+    logical: "throw",
+    fallback: "idle",
+  });
+  markOneShotAnimation(
+    player,
+    "throw",
+    getAnimationDurationMs(scene, throwAnimationKey, 300),
+    { remote: !isOwner },
+  );
   playSpriteAnimation({
     scene,
     sprite: player,

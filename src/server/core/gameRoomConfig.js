@@ -29,13 +29,25 @@ const POWERUP_PICKUP_RADIUS = 70;
 const POWERUP_DESPAWN_MS = 10000;
 const POWERUP_OMEN_MS = 2000;
 const POWERUP_SPAWN_Y_LIFT = 22;
-const POWERUP_TYPES = ["rage", "health", "shield", "poison", "gravityBoots"];
+const POWERUP_TYPES = [
+  "rage",
+  "health",
+  "shield",
+  "poison",
+  "gravityBoots",
+  "invisibility",
+  "shockwave",
+  "freeze",
+];
 const POWERUP_TYPE_ROTATION = [
   "rage",
   "health",
   "shield",
   "poison",
   "gravityBoots",
+  "invisibility",
+  "shockwave",
+  "freeze",
 ];
 const POWERUP_DURATIONS_MS = {
   rage: 10000,
@@ -43,6 +55,9 @@ const POWERUP_DURATIONS_MS = {
   shield: 10000,
   poison: 8000,
   gravityBoots: 7000,
+  invisibility: 8000,
+  shockwave: 1,
+  freeze: 7000,
 };
 const POWERUP_RAGE_DAMAGE_MULT = 1.35;
 const POWERUP_SHIELD_DAMAGE_MULT = 0.7;
@@ -50,6 +65,11 @@ const POWERUP_HEALTH_REGEN_PER_SEC = 600;
 const POWERUP_POISON_DPS = 600;
 const POWERUP_EFFECT_TICK_MS = 500;
 const POWERUP_AMBIENT_TICK_MS = 1200;
+const POWERUP_SHOCKWAVE_RADIUS = 420;
+const POWERUP_SHOCKWAVE_FORCE_X = 1650;
+const POWERUP_SHOCKWAVE_FORCE_Y = 1250;
+const POWERUP_FREEZE_SPEED_MULT = 0.45;
+const POWERUP_FREEZE_JUMP_MULT = 0.6;
 
 const DEATH_DROP_DESPAWN_MS = 12000;
 const DEATH_DROP_BLINK_MS = 3000;
@@ -186,6 +206,11 @@ module.exports = {
   POWERUP_POISON_DPS,
   POWERUP_EFFECT_TICK_MS,
   POWERUP_AMBIENT_TICK_MS,
+  POWERUP_SHOCKWAVE_RADIUS,
+  POWERUP_SHOCKWAVE_FORCE_X,
+  POWERUP_SHOCKWAVE_FORCE_Y,
+  POWERUP_FREEZE_SPEED_MULT,
+  POWERUP_FREEZE_JUMP_MULT,
   DEATH_DROP_DESPAWN_MS,
   DEATH_DROP_BLINK_MS,
   DEATH_DROP_PICKUP_RADIUS,

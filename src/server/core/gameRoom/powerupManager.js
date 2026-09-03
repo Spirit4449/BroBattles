@@ -29,12 +29,113 @@ function getPlatformSpawnPoints(room) {
     .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
 }
 
+function randomForRoom(room) {
+  const value =
+    typeof room?._powerupRandom === "function"
+      ? Number(room._powerupRandom())
+      : Math.random();
+  if (!Number.isFinite(value)) return Math.random();
+  return Math.max(0, Math.min(0.999999999, value));
+}
+
+function shuffledCopy(room, values) {
+  const copy = Array.isArray(values) ? values.slice() : [];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(randomForRoom(room) * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function spawnPointKey(point) {
+  return `${Number(point?.x)},${Number(point?.y)}`;
+}
+
+function activeSpawnPointKeys(room) {
+  const active = new Set();
+  for (const powerup of room?._powerups?.values?.() || []) {
+    if (powerup?._spawnPointKey) {
+      active.add(powerup._spawnPointKey);
+      continue;
+    }
+    const x = Number(powerup?.x);
+    const y = Number(powerup?.y) + POWERUP_SPAWN_Y_LIFT;
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      active.add(spawnPointKey({ x, y }));
+    }
+  }
+  return active;
+}
+
 function pickSpawnPoint(room) {
   const points = getPlatformSpawnPoints(room);
   if (!points.length) return null;
-  const idx = room._nextPowerupSpawnPointIdx % points.length;
-  room._nextPowerupSpawnPointIdx += 1;
-  return points[idx];
+
+  const pointsByKey = new Map(points.map((point) => [spawnPointKey(point), point]));
+  const allKeys = Array.from(pointsByKey.keys());
+  const activeKeys = activeSpawnPointKeys(room);
+  const recentLimit = Math.min(3, Math.max(0, points.length - 1));
+  const recentKeys = recentLimit > 0 && Array.isArray(room._recentPowerupSpawnKeys)
+    ? room._recentPowerupSpawnKeys.slice(-recentLimit)
+    : [];
+  const recentSet = new Set(recentKeys);
+
+  let eligibleKeys = allKeys.filter((key) => !activeKeys.has(key));
+  const withoutRecent = eligibleKeys.filter((key) => !recentSet.has(key));
+  if (withoutRecent.length) eligibleKeys = withoutRecent;
+  if (!eligibleKeys.length) return null;
+
+  const validKeySet = new Set(allKeys);
+  let bag = Array.isArray(room._powerupSpawnBag)
+    ? room._powerupSpawnBag.filter((key) => validKeySet.has(key))
+    : [];
+  let bagIndex = bag.findIndex((key) => eligibleKeys.includes(key));
+  if (bagIndex < 0) {
+    bag = shuffledCopy(room, allKeys);
+    bagIndex = bag.findIndex((key) => eligibleKeys.includes(key));
+  }
+
+  const selectedKey =
+    bagIndex >= 0
+      ? bag.splice(bagIndex, 1)[0]
+      : eligibleKeys[Math.floor(randomForRoom(room) * eligibleKeys.length)];
+  room._powerupSpawnBag = bag;
+  room._recentPowerupSpawnKeys =
+    recentLimit > 0
+      ? [...recentKeys, selectedKey].slice(-recentLimit)
+      : [];
+
+  const selected = pointsByKey.get(selectedKey);
+  return selected ? { ...selected, _spawnPointKey: selectedKey } : null;
+}
+
+function pickPowerupType(room, typeList, point = null) {
+  const types = Array.from(new Set(typeList || [])).filter(Boolean);
+  if (!types.length) return null;
+
+  const spawnKey = point?._spawnPointKey || spawnPointKey(point);
+  const lastAtPoint = room._lastPowerupTypeBySpawnKey?.[spawnKey] || null;
+  const lastOverall = room._lastPowerupType || null;
+  const validTypes = new Set(types);
+  let bag = Array.isArray(room._powerupTypeBag)
+    ? room._powerupTypeBag.filter((type) => validTypes.has(type))
+    : [];
+  if (!bag.length) bag = shuffledCopy(room, types);
+
+  let index = bag.findIndex(
+    (type) => type !== lastOverall && type !== lastAtPoint,
+  );
+  if (index < 0) index = bag.findIndex((type) => type !== lastOverall);
+  if (index < 0) index = 0;
+
+  const type = bag.splice(index, 1)[0] || types[0];
+  room._powerupTypeBag = bag;
+  room._lastPowerupType = type;
+  if (!room._lastPowerupTypeBySpawnKey) {
+    room._lastPowerupTypeBySpawnKey = Object.create(null);
+  }
+  room._lastPowerupTypeBySpawnKey[spawnKey] = type;
+  return type;
 }
 
 function spawnPowerup(room) {
@@ -43,9 +144,16 @@ function spawnPowerup(room) {
   const typeList =
     Array.isArray(POWERUP_TYPE_ROTATION) && POWERUP_TYPE_ROTATION.length
       ? POWERUP_TYPE_ROTATION
-      : ["rage", "health", "shield", "poison", "gravityBoots"];
-  const type = typeList[room._nextPowerupTypeIdx % typeList.length];
-  room._nextPowerupTypeIdx += 1;
+    : [
+        "rage",
+        "health",
+        "shield",
+        "poison",
+        "gravityBoots",
+        "invisibility",
+        "shockwave",
+        "freeze",
+      ];
   const point = pickSpawnPoint(room);
   if (!point) {
     console.warn(
@@ -53,12 +161,15 @@ function spawnPowerup(room) {
     );
     return;
   }
+  const type = pickPowerupType(room, typeList, point);
+  if (!type) return;
   const now = Date.now();
   const powerup = {
     id: room._nextPowerupId++,
     type,
     x: point.x,
     y: point.y - POWERUP_SPAWN_Y_LIFT,
+    _spawnPointKey: point._spawnPointKey,
     spawnedAt: now,
     activeAt: now + POWERUP_OMEN_MS,
     expiresAt: now + POWERUP_OMEN_MS + POWERUP_DESPAWN_MS,
@@ -153,6 +264,7 @@ function buildPlayerEffectsSnapshot(room) {
 module.exports = {
   getPlatformSpawnPoints,
   pickSpawnPoint,
+  pickPowerupType,
   spawnPowerup,
   computePoisonY,
   isInSuddenDeathWater,

@@ -10,7 +10,20 @@ import { getResolvedCharacterBodyConfig } from "./lib/characterTuning.js";
 import { performSpecial } from "./characters/special";
 import { player } from "./player";
 import socket from "./socket";
-import { spawnDeathBurst, spawnHealthMarker, spawnSpawnBurst } from "./effects";
+import {
+  MOVEMENT_VFX_CONFIG,
+  spawnDeathBurst,
+  spawnDirectionChangeBurst,
+  spawnFastFallTrail,
+  spawnHealthMarker,
+  spawnJumpTakeoff,
+  spawnLandingImpact,
+  spawnRunDust,
+  spawnSpawnBurst,
+  spawnWallKickCloud,
+  spawnWallSlideBurst,
+  spawnWallSlideTrail,
+} from "./effects";
 import { RENDER_LAYERS } from "./gameScene/renderLayers";
 
 const OP_PLAYER_NAME_OFFSET_Y = 42;
@@ -59,10 +72,16 @@ export default class OpPlayer {
     this.presenceConnected = true;
     this.presenceLoaded = false;
     this._worldUiHidden = false;
+    this._powerupInvisible = false;
     this._spawnPresented = false;
     this._networkSnapUntil = 0;
     this._deathPresentationActive = false;
     this._corpseRemoved = false;
+    this._movementVfxState = null;
+    this._wallSlideVfxAt = 0;
+    this._runDustVfxAt = 0;
+    this._fastFallVfxAt = 0;
+    this._lastMovementFxSeq = null;
     this._hudAnchorX = null;
     this._hudAnchorY = null;
     this.createOpPlayer();
@@ -224,7 +243,7 @@ export default class OpPlayer {
   }
 
   _onSceneUpdate() {
-    if (this.effects && this.opponent) {
+    if (this.effects && this.opponent && !this._powerupInvisible) {
       // Determine simple moving state: horizontal velocity or recent tweening
       const moving =
         (this.opponent.body && Math.abs(this.opponent.body.velocity.x) > 5) ||
@@ -232,6 +251,262 @@ export default class OpPlayer {
       const isDead = this.opCurrentHealth <= 0;
       this.effects.update(this.scene.game.loop.delta, moving, isDead);
     }
+  }
+
+  updateMovementVfx(movementState, animationState = movementState) {
+    if (
+      !this.scene?.add ||
+      !this.opponent?.active ||
+      !movementState ||
+      this._powerupInvisible
+    ) {
+      return;
+    }
+    const grounded = !!movementState.grounded;
+    const velocityY = Number(movementState.vy) || 0;
+    const velocityX = Number(movementState.vx) || 0;
+    const animation = String(animationState?.animation || "").toLowerCase();
+    const reportedWallSide =
+      movementState.wallSide === "left" || movementState.wallSide === "right"
+        ? movementState.wallSide
+        : movementState.flip
+          ? "left"
+          : "right";
+    const wallSliding =
+      !grounded &&
+      (typeof movementState.wallSliding === "boolean"
+        ? movementState.wallSliding
+        : animation.includes("wallslid"));
+    const body = this.opponent.body;
+    const centerX = Number(body?.center?.x) || this.opponent.x;
+    const bottom =
+      Number(body?.bottom) ||
+      this.opponent.y +
+        (this.opponent.displayHeight || this.opponent.height) * 0.5;
+    const bodyWidth = Number(body?.width) || this.opponent.displayWidth;
+    const previous = this._movementVfxState;
+    const airbornePeakBottomY = grounded
+      ? null
+      : Math.min(
+          Number.isFinite(previous?.airbornePeakBottomY)
+            ? previous.airbornePeakBottomY
+            : bottom,
+          bottom,
+        );
+    let handledNetworkFx = null;
+    const movementFxSeq = Number(movementState.movementFxSeq);
+    if (Number.isFinite(movementFxSeq)) {
+      if (this._lastMovementFxSeq === null) {
+        this._lastMovementFxSeq = movementFxSeq;
+      } else if (movementFxSeq > this._lastMovementFxSeq) {
+        this._lastMovementFxSeq = movementFxSeq;
+        handledNetworkFx = String(movementState.movementFxType || "");
+
+        if (handledNetworkFx === "jump") {
+          spawnJumpTakeoff(this.scene, centerX, bottom - 2, {
+            bodyWidth,
+            velocityX,
+          });
+        } else if (handledNetworkFx === "land") {
+          spawnLandingImpact(this.scene, centerX, bottom - 2, {
+            bodyWidth,
+            impactVelocity: Number(movementState.movementFxImpactVelocity) || 0,
+            fallDistance: Number(movementState.movementFxFallDistance) || 0,
+            cameraShake: false,
+          });
+        } else if (handledNetworkFx === "turn") {
+          spawnDirectionChangeBurst(this.scene, centerX, bottom - 2, {
+            previousDirection:
+              Number(movementState.movementFxDirection) || -Math.sign(velocityX),
+            speedRatio: Phaser.Math.Clamp(
+              Math.abs(velocityX) / MOVEMENT_VFX_CONFIG.runSpeedReference,
+              0,
+              1,
+            ),
+          });
+        } else if (handledNetworkFx === "wall-jump") {
+          const eventWallSide =
+            movementState.movementFxWallSide === "left" ||
+            movementState.movementFxWallSide === "right"
+              ? movementState.movementFxWallSide
+              : reportedWallSide;
+          const contactX = body
+            ? body.x + (eventWallSide === "left" ? 0 : body.width)
+            : centerX +
+              (eventWallSide === "left" ? -bodyWidth * 0.5 : bodyWidth * 0.5);
+          const contactY = body
+            ? body.y + body.height * 0.62
+            : this.opponent.y + 12;
+          spawnWallKickCloud(
+            this.scene,
+            contactX,
+            contactY,
+            Number(movementState.movementFxDirection) < 0 ? -1 : 1,
+          );
+        }
+      } else if (movementFxSeq < this._lastMovementFxSeq) {
+        // A respawned/reconnected sender starts a fresh event sequence.
+        this._lastMovementFxSeq = movementFxSeq;
+      }
+    }
+
+    if (previous) {
+      if (
+        handledNetworkFx !== "jump" &&
+        previous.grounded &&
+        !grounded &&
+        velocityY < -40
+      ) {
+        spawnJumpTakeoff(this.scene, centerX, bottom - 2, {
+          bodyWidth,
+          velocityX,
+        });
+      } else if (
+        handledNetworkFx !== "land" &&
+        !previous.grounded &&
+        grounded
+      ) {
+        spawnLandingImpact(this.scene, centerX, bottom - 2, {
+          bodyWidth,
+          impactVelocity: Math.max(previous.airborneVelocityY, velocityY),
+          fallDistance: Math.max(
+            0,
+            bottom -
+              (Number.isFinite(previous.airbornePeakBottomY)
+                ? previous.airbornePeakBottomY
+                : bottom),
+          ),
+          cameraShake: false,
+        });
+      }
+    }
+
+    if (
+      previous?.wallSliding &&
+      !wallSliding &&
+      !grounded &&
+      handledNetworkFx !== "wall-jump" &&
+      Math.abs(velocityX) > 220
+    ) {
+      const previousWallSide = previous.wallSide || "left";
+      const contactX = body
+        ? body.x + (previousWallSide === "left" ? 0 : body.width)
+        : centerX +
+          (previousWallSide === "left" ? -bodyWidth * 0.5 : bodyWidth * 0.5);
+      const contactY = body
+        ? body.y + body.height * 0.62
+        : this.opponent.y + 12;
+      spawnWallKickCloud(
+        this.scene,
+        contactX,
+        contactY,
+        velocityX < 0 ? -1 : 1,
+      );
+    }
+
+    const runSpeedRatio = Phaser.Math.Clamp(
+      Math.abs(velocityX) / MOVEMENT_VFX_CONFIG.runSpeedReference,
+      0,
+      1,
+    );
+    const runDirection = Math.sign(velocityX);
+    const now = performance.now();
+    if (grounded && runDirection !== 0 && Math.abs(velocityX) > 35) {
+      if (
+        previous?.grounded &&
+        previous.runDirection &&
+        runDirection !== previous.runDirection &&
+        handledNetworkFx !== "turn" &&
+        Math.abs(velocityX) >= MOVEMENT_VFX_CONFIG.directionChangeMinSpeed
+      ) {
+        spawnDirectionChangeBurst(this.scene, centerX, bottom - 2, {
+          previousDirection: previous.runDirection,
+          speedRatio: runSpeedRatio,
+        });
+      }
+      const runInterval = Phaser.Math.Linear(
+        MOVEMENT_VFX_CONFIG.runDustMaxIntervalMs,
+        MOVEMENT_VFX_CONFIG.runDustMinIntervalMs,
+        runSpeedRatio,
+      );
+      if (!this._runDustVfxAt || now - this._runDustVfxAt >= runInterval) {
+        this._runDustVfxAt = now;
+        spawnRunDust(this.scene, centerX - runDirection * 10, bottom - 2, {
+          direction: runDirection,
+          intensity: runSpeedRatio,
+        });
+      }
+    } else {
+      this._runDustVfxAt = 0;
+    }
+
+    if (
+      !grounded &&
+      !wallSliding &&
+      velocityY >= MOVEMENT_VFX_CONFIG.fastFallStartVelocity
+    ) {
+      const fastFallRatio = Phaser.Math.Clamp(
+        (velocityY - MOVEMENT_VFX_CONFIG.fastFallStartVelocity) /
+          (MOVEMENT_VFX_CONFIG.fastFallMaxVelocity -
+            MOVEMENT_VFX_CONFIG.fastFallStartVelocity),
+        0,
+        1,
+      );
+      const fastFallInterval = Phaser.Math.Linear(
+        MOVEMENT_VFX_CONFIG.fastFallTrailMaxIntervalMs,
+        MOVEMENT_VFX_CONFIG.fastFallTrailMinIntervalMs,
+        fastFallRatio,
+      );
+      if (
+        !this._fastFallVfxAt ||
+        now - this._fastFallVfxAt >= fastFallInterval
+      ) {
+        this._fastFallVfxAt = now;
+        spawnFastFallTrail(this.scene, this.opponent, { velocityY });
+      }
+    } else {
+      this._fastFallVfxAt = 0;
+    }
+
+    if (wallSliding) {
+      const side = reportedWallSide;
+      const contactX = body
+        ? body.x + (side === "left" ? 0 : body.width)
+        : centerX + (side === "left" ? -bodyWidth * 0.5 : bodyWidth * 0.5);
+      const contactY = body
+        ? body.y + body.height * 0.68
+        : this.opponent.y + 12;
+      if (!previous?.wallSliding) {
+        spawnWallSlideBurst(this.scene, contactX, contactY, side);
+        this._wallSlideVfxAt = 0;
+      }
+      if (
+        !this._wallSlideVfxAt ||
+        now - this._wallSlideVfxAt >= MOVEMENT_VFX_CONFIG.wallTrailIntervalMs
+      ) {
+        this._wallSlideVfxAt = now;
+        spawnWallSlideTrail(this.scene, contactX, contactY, side);
+      }
+    } else {
+      this._wallSlideVfxAt = 0;
+    }
+
+    this._movementVfxState = {
+      grounded,
+      wallSliding,
+      airborneVelocityY: grounded
+        ? 0
+        : Math.max(Number(previous?.airborneVelocityY) || 0, velocityY),
+      airbornePeakBottomY,
+      runDirection:
+        grounded &&
+        Math.abs(velocityX) < MOVEMENT_VFX_CONFIG.directionChangeMinSpeed
+          ? previous?.runDirection || runDirection
+          : runDirection,
+      wallSide: wallSliding
+        ? reportedWallSide
+        : previous?.wallSide || null,
+    };
   }
 
   // Adjust body offset depending on facing; uses optional flipOffset from body config
@@ -280,28 +555,46 @@ export default class OpPlayer {
       this.presenceLoaded;
     if (this.opponent) {
       this.opponent.setVisible(shouldRender);
-      this.opponent.setAlpha(1);
+      this.opponent.setAlpha(this._powerupInvisible ? 0 : 1);
     }
     if (this.opPlayerName) {
-      this.opPlayerName.setVisible(shouldRender && !this._worldUiHidden);
+      this.opPlayerName.setVisible(
+        shouldRender && !this._worldUiHidden && !this._powerupInvisible,
+      );
       this.opPlayerName.setAlpha(1);
     }
     if (this.opHealthText) {
-      this.opHealthText.setVisible(shouldRender && !this._worldUiHidden);
+      this.opHealthText.setVisible(
+        shouldRender && !this._worldUiHidden && !this._powerupInvisible,
+      );
       this.opHealthText.setAlpha(1);
     }
     if (this.opHealthBar) {
-      this.opHealthBar.setVisible(shouldRender && !this._worldUiHidden);
+      this.opHealthBar.setVisible(
+        shouldRender && !this._worldUiHidden && !this._powerupInvisible,
+      );
       this.opHealthBar.setAlpha(1);
     }
     if (this.opSuperBarBack) {
-      this.opSuperBarBack.setVisible(shouldRender && !this._worldUiHidden);
+      this.opSuperBarBack.setVisible(
+        shouldRender && !this._worldUiHidden && !this._powerupInvisible,
+      );
       this.opSuperBarBack.setAlpha(1);
     }
     if (this.opSuperBar) {
-      this.opSuperBar.setVisible(shouldRender && !this._worldUiHidden);
+      this.opSuperBar.setVisible(
+        shouldRender && !this._worldUiHidden && !this._powerupInvisible,
+      );
       this.opSuperBar.setAlpha(1);
     }
+  }
+
+  setPowerupInvisible(active = false) {
+    this._powerupInvisible = active === true;
+    if (this.opponent?.active) {
+      this.opponent._powerupInvisible = this._powerupInvisible;
+    }
+    this.setPresenceState(this.presenceConnected, this.presenceLoaded);
   }
 
   finalizeSpawnPresentation() {
@@ -473,6 +766,10 @@ export default class OpPlayer {
       return;
 
     this._deathPresentationActive = true;
+    this._movementVfxState = null;
+    this._wallSlideVfxAt = 0;
+    this._runDustVfxAt = 0;
+    this._fastFallVfxAt = 0;
     this._spawnPresented = true;
     this.opCurrentHealth = 0;
     if (Number.isFinite(meta?.x) && Number.isFinite(meta?.y)) {
@@ -535,6 +832,10 @@ export default class OpPlayer {
     this._corpseRemoved = false;
     this._worldUiHidden = false;
     this._spawnPresented = true;
+    this._movementVfxState = null;
+    this._wallSlideVfxAt = 0;
+    this._runDustVfxAt = 0;
+    this._fastFallVfxAt = 0;
     this._networkSnapUntil = performance.now() + 220;
     if (typeof meta?.maxHealth === "number" && meta.maxHealth > 0) {
       this.opMaxHealth = meta.maxHealth;

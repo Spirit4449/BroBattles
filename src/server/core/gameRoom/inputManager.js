@@ -13,6 +13,53 @@ const { isMovementSuppressed } = require("./abilityRuntimeManager");
 const netTestLogger = require("./netTestLogger");
 
 const LAG_RECOVERY_INPUT_GAP_MS = 250;
+const MOVEMENT_FX_TYPES = new Set(["jump", "land", "turn", "wall-jump"]);
+
+function applyMovementVfxState(playerData, inputData) {
+  if (!playerData || !inputData) return;
+  if (typeof inputData.wallSliding === "boolean") {
+    playerData.wallSliding = inputData.wallSliding;
+  }
+  if (
+    inputData.wallSide === null ||
+    inputData.wallSide === "left" ||
+    inputData.wallSide === "right"
+  ) {
+    playerData.wallSide = inputData.wallSide;
+  }
+
+  const rawSequence = Number(inputData.movementFxSeq);
+  if (!Number.isFinite(rawSequence)) return;
+  const sequence = Math.max(
+    0,
+    Math.min(2147483646, Math.floor(rawSequence)),
+  );
+  if (sequence === playerData.movementFxSeq) return;
+
+  const type = MOVEMENT_FX_TYPES.has(inputData.movementFxType)
+    ? inputData.movementFxType
+    : null;
+  const rawDirection = Number(inputData.movementFxDirection) || 0;
+  playerData.movementFxSeq = sequence;
+  playerData.movementFxType = type;
+  playerData.movementFxDirection = Math.sign(rawDirection);
+  playerData.movementFxWallSide =
+    inputData.movementFxWallSide === "left" ||
+    inputData.movementFxWallSide === "right"
+      ? inputData.movementFxWallSide
+      : null;
+  playerData.movementFxFallDistance = Math.max(
+    0,
+    Math.min(5000, Math.round(Number(inputData.movementFxFallDistance) || 0)),
+  );
+  playerData.movementFxImpactVelocity = Math.max(
+    0,
+    Math.min(
+      3000,
+      Math.round(Number(inputData.movementFxImpactVelocity) || 0),
+    ),
+  );
+}
 
 function clampToRoomBounds(x, y) {
   const margin = Number(WORLD_BOUNDS?.margin) || 0;
@@ -94,6 +141,7 @@ function handlePlayerInput(room, socketId, inputData) {
   }
 
   if (infernoActive) {
+    applyMovementVfxState(playerData, inputData);
     if (inputData.loaded === true) playerData.loaded = true;
     if (typeof inputData.animation === "string") {
       playerData.animation = inputData.animation;
@@ -139,6 +187,7 @@ function handlePlayerInput(room, socketId, inputData) {
     Number.isFinite(inputData.x) &&
     Number.isFinite(inputData.y)
   ) {
+    applyMovementVfxState(playerData, inputData);
     const prevInputX = Number(playerData.x);
     const prevInputY = Number(playerData.y);
     const bounded = clampToRoomBounds(inputData.x, inputData.y);

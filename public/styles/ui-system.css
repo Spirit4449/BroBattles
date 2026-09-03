@@ -878,6 +878,7 @@ button.bb-close.bb-close:active:not(:disabled) {
   text-shadow:
     0 4px 0 #641e32,
     0 0 25px rgba(255, 117, 139, 0.25);
+  animation: bb-game-over-defeat-in 820ms 80ms cubic-bezier(0.22, 0.7, 0.3, 1) both;
 }
 
 .bb-game-over-title.is-draw {
@@ -1245,9 +1246,11 @@ button.bb-close.bb-close:active:not(:disabled) {
 }
 
 .bb-game-over-card.is-defeat .bb-game-over-celebration i {
+  left: calc(12% + var(--spark-index) * 5.8%);
+  top: 42px;
   color: #e990a1;
   background: #e990a1;
-  opacity: 0.7;
+  animation: bb-game-over-defeat-fall 1100ms calc(160ms + var(--spark-index) * 36ms) ease-in both;
 }
 
 .bb-game-over-flying-reward {
@@ -1312,6 +1315,23 @@ button.bb-close.bb-close:active:not(:disabled) {
   }
 }
 
+@keyframes bb-game-over-defeat-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-14px) rotate(-1deg);
+    letter-spacing: 4px;
+  }
+  62% {
+    opacity: 1;
+    transform: translateY(5px) rotate(0.5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(3px) rotate(0);
+    letter-spacing: 2px;
+  }
+}
+
 @keyframes bb-game-over-rise {
   from {
     opacity: 0;
@@ -1337,6 +1357,18 @@ button.bb-close.bb-close:active:not(:disabled) {
   100% {
     opacity: 0;
     transform: translate(-50%, -50%) rotate(var(--spark-angle)) translateY(-155px) scale(0.55);
+  }
+}
+
+@keyframes bb-game-over-defeat-fall {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -12px) rotate(-8deg) scaleY(0.7);
+  }
+  18% { opacity: 0.58; }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 150px) rotate(16deg) scaleY(1.15);
   }
 }
 

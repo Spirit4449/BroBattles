@@ -12,6 +12,7 @@ import {
   initReadyToggle,
   setSlotLevelBadge,
   showPartyJoinRequestScreen,
+  playLobbySpawnAnimation,
 } from "./party.js";
 import socket, { ensureSocketConnected, waitForConnect } from "./socket.js";
 import {
@@ -83,6 +84,7 @@ let __partySettingsState = {
   visibilitySupported: true,
 };
 let __lobbyProfilePopup = null;
+let lobbyBackgroundRequestSequence = 0;
 
 function escapeHtml(value) {
   const raw = String(value ?? "");
@@ -2157,7 +2159,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     });
   }
-  setLobbyBackground("1");
   const initialCharClass = String(userData.char_class || "ninja").toLowerCase();
   const initialSkinId = String(
     userData?.selected_skin_id_by_char?.[initialCharClass] || "",
@@ -2378,6 +2379,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           : {};
       const level = Math.max(1, Number(charLevels?.[userData.char_class]) || 1);
       if (levelBadge) setSlotLevelBadge(yourSlot, level);
+      playLobbySpawnAnimation(yourSlot, "enter");
     }
     // Bind Ready button in solo flow
     try {
@@ -2433,22 +2435,56 @@ function signUpOut(guest) {
 
 export function setLobbyBackground(mapValue) {
   const nextUrl = getLobbyBgAsset(mapValue);
-  const current = document.body.style.backgroundImage || "";
+  const current = document.body.dataset.lobbyBackgroundUrl || "";
   const target = `url("${nextUrl}")`;
-  if (current === target) return;
+  const requestId = String(++lobbyBackgroundRequestSequence);
+  const existingOverlay = document.getElementById("lobby-bg-fade");
+  if (current === nextUrl) {
+    if (existingOverlay) {
+      existingOverlay.dataset.backgroundRequestId = requestId;
+      existingOverlay.classList.remove("active");
+    }
+    return;
+  }
 
-  let overlay = document.getElementById("lobby-bg-fade");
+  let overlay = existingOverlay;
   if (!overlay) {
     overlay = document.createElement("div");
     overlay.id = "lobby-bg-fade";
     document.body.appendChild(overlay);
   }
 
-  overlay.style.backgroundImage = target;
-  overlay.classList.add("active");
+  const preload = new Image();
+  let applied = false;
+  overlay.dataset.backgroundRequestId = requestId;
 
-  setTimeout(() => {
-    document.body.style.backgroundImage = target;
-    overlay.classList.remove("active");
-  }, 240);
+  const applyLoadedBackground = () => {
+    if (applied || overlay.dataset.backgroundRequestId !== requestId) return;
+    applied = true;
+    overlay.style.backgroundImage = target;
+    overlay.classList.add("active");
+
+    setTimeout(() => {
+      if (overlay.dataset.backgroundRequestId !== requestId) return;
+      document.body.style.backgroundImage = target;
+      document.body.dataset.lobbyBackgroundUrl = nextUrl;
+      try {
+        const partyMatch = window.location.pathname.match(
+          /^\/party\/([^/?#]+)/,
+        );
+        const backgroundScope = partyMatch
+          ? `party:${partyMatch[1]}`
+          : "solo";
+        localStorage.setItem(
+          `bb_lobby_background_url:${backgroundScope}`,
+          nextUrl,
+        );
+      } catch (_) {}
+      overlay.classList.remove("active");
+    }, 240);
+  };
+
+  preload.onload = applyLoadedBackground;
+  preload.src = nextUrl;
+  if (preload.complete) queueMicrotask(applyLoadedBackground);
 }

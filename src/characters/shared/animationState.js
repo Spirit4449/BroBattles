@@ -196,8 +196,7 @@ export function playCharacterAnimation({
     if (
       wanted === "jumping" &&
       sprite._bbAnimationState?.jumpPlayedAirborne &&
-      !sprite.body?.touching?.down &&
-      currentKey !== key
+      !sprite.body?.touching?.down
     ) {
       return key;
     }
