@@ -7,9 +7,10 @@ export function normalizeSkinId(skinId) {
 }
 
 function resolveCatalogSkin(character, skinId) {
-  const char = String(character || "")
+  let char = String(character || "")
     .trim()
     .toLowerCase();
+  if (char === "hunteress") char = "huntress";
   const entry = SKINS_CATALOG?.characters?.[char] || null;
   const skins = Array.isArray(entry?.skins) ? entry.skins : [];
   const defaultSkinId =
@@ -38,7 +39,7 @@ export function resolveCharacterAssetFolder(character) {
     .trim()
     .toLowerCase();
   if (!key) return "ninja";
-  if (key === "huntress") return "huntress";
+  if (key === "huntress" || key === "hunteress") return "huntress";
   return key;
 }
 

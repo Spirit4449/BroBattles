@@ -271,3 +271,33 @@ test("shop navigation, icons, sales glimmer, and checkout chrome stay consistent
     /isBigPurchase\(item\) \? "shopBigSuccess" : "shopConfirm"/,
   );
 });
+
+test("huntress profile icon uses the portrait icon asset instead of spritesheet", () => {
+  const catalog = JSON.parse(read("src/shared/profileIconsCatalog.json"));
+  const huntressIcon = catalog.icons.find((i) => i.id === "huntress");
+  assert.ok(huntressIcon, "huntress icon must exist in catalog");
+  assert.equal(huntressIcon.assetUrl, "/assets/profile-icons/huntress.webp");
+  assert.ok(
+    fs.existsSync(path.join(root, "public/assets/profile-icons/huntress.webp")),
+  );
+});
+
+test("profile loadout headers match 'Get More in Shop' and close button height", () => {
+  const indexStyles = read("src/styles/index.css");
+  const uiStyles = read("public/styles/ui-system.css");
+  const profileStyles = read("src/styles/profile.css");
+
+  assert.match(
+    indexStyles,
+    /\.profile-loadout-head #profile-loadout-shop[\s\S]+?height:\s*42px;/,
+  );
+  assert.match(
+    uiStyles,
+    /\.profile-loadout-head #profile-loadout-shop[\s\S]+?height:\s*42px !important;/,
+  );
+  assert.match(
+    profileStyles,
+    /\.cards-modal-head \.browse-shop-link[\s\S]+?height:\s*42px;/,
+  );
+});
+

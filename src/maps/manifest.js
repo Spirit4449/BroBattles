@@ -123,7 +123,7 @@ export function getMapSpawnAnchors(mapId) {
  * @returns {string}
  */
 export function getMapBgAsset(mapId) {
-  return "/assets/lushy/gameBg.mp4";
+  return MAPS[normalizeMapId(mapId)]?.bgAsset ?? "/assets/lushy/gameBg.webp";
 }
 
 /**

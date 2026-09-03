@@ -34,6 +34,7 @@ import {
   buildProfileIconUrl,
 } from "./lib/profileIconAssets.js";
 import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
+import { getAllCharacters } from "./lib/characterStats.js";
 import { initializeShop } from "./shop.js";
 import "./styles/characterSelect.css";
 import "./styles/index.css";
@@ -294,12 +295,27 @@ function renderProfileCharacterLevels() {
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(" ");
 
-  const entries = Object.entries(profile.charLevels || {})
-    .map(([charId, rawLevel]) => ({
-      charId: String(charId || "").trim(),
-      level: Number(rawLevel) || 0,
-    }))
-    .filter((entry) => entry.charId && entry.level > 0)
+  const validChars = new Set(
+    typeof getAllCharacters === "function" ? getAllCharacters() : [],
+  );
+
+  const mergedLevels = {};
+  Object.entries(profile.charLevels || {}).forEach(([charId, rawLevel]) => {
+    let id = String(charId || "").trim().toLowerCase();
+    if (id === "hunteress") {
+      id = "huntress";
+    }
+    if (validChars.size > 0 && !validChars.has(id)) {
+      return;
+    }
+    const level = Number(rawLevel) || 0;
+    if (level > 0) {
+      mergedLevels[id] = Math.max(mergedLevels[id] || 0, level);
+    }
+  });
+
+  const entries = Object.entries(mergedLevels)
+    .map(([charId, level]) => ({ charId, level }))
     .sort((a, b) => b.level - a.level || a.charId.localeCompare(b.charId));
 
   if (!entries.length) {

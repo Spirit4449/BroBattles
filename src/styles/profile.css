@@ -256,6 +256,18 @@ body.profile-page-body .cards-modal-head h2 {
   text-shadow: var(--bb-title-shadow, 3px 4px 0 rgba(2, 5, 12, 0.72));
 }
 
+body.profile-page-body .cards-modal-head .browse-shop-link {
+  height: 42px;
+  min-height: 42px;
+  padding: 0 16px;
+  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
 body.profile-page-body .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

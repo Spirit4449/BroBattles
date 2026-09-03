@@ -528,7 +528,6 @@ h3 {
   align-items: center;
   justify-content: flex-end; /* push content to bottom so sprite sits on platform */
   cursor: pointer;
-  transition: all 0.2s ease;
   margin-top: 0;
   /* Keep character feet merged with platform across responsive scales. */
   margin-bottom: calc(-1 * var(--lobby-character-seam-overlap));
@@ -538,10 +537,6 @@ h3 {
   min-height: 80px;
   transform: translateY(var(--lobby-character-offset-y, 0px));
   overflow: visible;
-}
-
-.character-slot:not([data-is-current-user="true"]):hover {
-  transform: translateY(calc(var(--lobby-character-offset-y, 0px) - 4px));
 }
 
 .character-slot::before,
@@ -618,11 +613,10 @@ h3 {
   display: block;
   margin-top: auto; /* push sprite to bottom within the slot */
   margin-bottom: 0;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  filter: none;
   object-fit: contain;
   flex-shrink: 0; /* Prevent shrinking */
   transform-origin: 50% 100%;
-  transition: transform 220ms ease;
 }
 
 /* Status feedback lives behind the character so the sprite remains readable. */
@@ -641,86 +635,56 @@ h3 {
 .lobby-ready-fx {
   --ready-fx: #53dd63;
   --ready-fx-bright: #d8ff9c;
-  --ready-fx-dark: #17642b;
   z-index: 17;
   opacity: 0;
 }
 
-.lobby-ready-fx-ring,
-.lobby-ready-fx-core {
+.lobby-ready-fx-line {
   position: absolute;
-  inset: 9%;
-  border: 4px solid var(--ready-fx);
-  border-radius: 2px;
-  box-shadow:
-    0 0 0 3px var(--ready-fx-dark),
-    inset 0 0 0 2px var(--ready-fx-bright);
-  image-rendering: pixelated;
-}
-
-.lobby-ready-fx-core {
-  inset: 24%;
-  border-width: 3px;
-  background: transparent;
-  box-shadow:
-    0 0 0 2px var(--ready-fx-dark),
-    inset 0 0 0 2px var(--ready-fx-bright);
-}
-
-.lobby-ready-fx-ray {
-  position: absolute;
-  left: calc(50% - 3px);
-  top: 4%;
-  width: 6px;
-  height: 6px;
+  left: 50%;
+  top: 50%;
+  width: var(--ready-line-width);
+  height: var(--ready-line-height);
   border-radius: 0;
-  background: var(--ready-fx-bright);
+  background: linear-gradient(
+    180deg,
+    transparent 0,
+    var(--ready-line-color) 18%,
+    var(--ready-line-bright) 68%,
+    var(--ready-line-color) 100%
+  );
   box-shadow:
-    0 9px 0 var(--ready-fx),
-    0 18px 0 var(--ready-fx-dark);
+    0 0 4px var(--ready-line-bright),
+    0 0 9px var(--ready-line-color);
   opacity: 0;
-  transform: rotate(var(--ready-ray-angle)) translateY(-4px);
-  transform-origin: 3px 58px;
+  image-rendering: pixelated;
+  transform: translate(var(--ready-line-x), var(--ready-start-y)) scaleY(0.18);
+  transform-origin: 50% 100%;
 }
 
 .character-slot.lobby-ready-burst > .lobby-ready-fx,
 .character-slot.lobby-unready-burst > .lobby-ready-fx {
-  opacity: 0.72;
+  opacity: 0.86;
 }
 
-.character-slot.lobby-ready-burst > .lobby-ready-fx .lobby-ready-fx-ring {
-  animation: lobbyReadyRing 620ms steps(6, end) both;
-}
-
-.character-slot.lobby-ready-burst > .lobby-ready-fx .lobby-ready-fx-core {
-  animation: lobbyReadyCore 520ms steps(5, end) both;
-}
-
-.character-slot.lobby-ready-burst > .lobby-ready-fx .lobby-ready-fx-ray {
-  animation: lobbyReadyRay 460ms steps(4, end) var(--ready-ray-delay) both;
-}
-
-.character-slot.lobby-ready-burst > .character-sprite {
-  animation: lobbyReadySprite 440ms steps(4, end);
+.character-slot.lobby-ready-burst > .lobby-ready-fx .lobby-ready-fx-line {
+  animation: lobbyReadyLine var(--ready-line-duration) steps(4, end)
+    var(--ready-line-delay) both;
 }
 
 .character-slot.lobby-unready-burst > .lobby-ready-fx {
-  --ready-fx: #df5360;
-  --ready-fx-bright: #ffb0a3;
-  --ready-fx-dark: #74232c;
-  opacity: 0.46;
+  opacity: 0.38;
 }
 
-.character-slot.lobby-unready-burst > .lobby-ready-fx .lobby-ready-fx-ring {
-  animation: lobbyUnreadyRing 340ms steps(4, end) both;
+.character-slot.lobby-unready-burst > .lobby-ready-fx .lobby-ready-fx-line {
+  --ready-line-color: #e55364 !important;
+  --ready-line-bright: #ffc0b5 !important;
+  box-shadow: 0 0 5px rgba(229, 83, 100, 0.58);
 }
 
-.character-slot.lobby-unready-burst > .lobby-ready-fx .lobby-ready-fx-core {
-  animation: lobbyUnreadyCore 300ms steps(3, end) both;
-}
-
-.character-slot.lobby-unready-burst > .character-sprite {
-  animation: lobbyUnreadySprite 280ms steps(3, end);
+.character-slot.lobby-unready-burst > .lobby-ready-fx .lobby-ready-fx-line {
+  animation: lobbyUnreadyLine var(--unready-line-duration) steps(3, end)
+    var(--unready-line-delay) both;
 }
 
 .lobby-selecting-ring {
@@ -767,93 +731,39 @@ h3 {
   transform: translateX(-50%) scale(1);
 }
 
-@keyframes lobbyReadyRing {
+@keyframes lobbyReadyLine {
   0% {
     opacity: 0;
-    transform: scale(0.76);
+    transform: translate(var(--ready-line-x), var(--ready-start-y)) scaleY(0.12);
   }
-  34% {
-    opacity: 0.72;
-    transform: scale(0.92);
+  18% {
+    opacity: 1;
+    transform: translate(var(--ready-line-x), var(--ready-start-y)) scaleY(0.72);
+  }
+  58% {
+    opacity: 0.92;
+    transform: translate(var(--ready-line-x), var(--ready-end-y)) scaleY(1);
   }
   100% {
     opacity: 0;
-    transform: scale(1.16);
+    transform: translate(var(--ready-line-x), calc(var(--ready-end-y) + 7px))
+      scaleY(0.28);
   }
 }
 
-@keyframes lobbyReadyCore {
+@keyframes lobbyUnreadyLine {
   0% {
     opacity: 0;
-    transform: scale(0.82);
+    transform: translate(var(--ready-line-x), calc(var(--ready-end-y) + 4px))
+      scaleY(0.24);
   }
-  38% {
-    opacity: 0.52;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.08);
-  }
-}
-
-@keyframes lobbyReadyRay {
-  0% {
-    opacity: 0;
-    scale: 0.4;
-  }
-  28% {
-    opacity: 0.62;
-    scale: 0.82;
+  26% {
+    opacity: 0.56;
+    transform: translate(var(--ready-line-x), var(--ready-end-y)) scaleY(0.7);
   }
   100% {
     opacity: 0;
-    translate: 0 -8px;
-    scale: 0.62;
-  }
-}
-
-@keyframes lobbyReadySprite {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  42% {
-    transform: translateY(-3px) scale(1.025);
-    filter: drop-shadow(2px 2px 0 rgba(23, 100, 43, 0.48)) brightness(1.04);
-  }
-}
-
-@keyframes lobbyUnreadyRing {
-  0% {
-    opacity: 0.42;
-    transform: scale(1.02);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.82);
-  }
-}
-
-@keyframes lobbyUnreadyCore {
-  0% {
-    opacity: 0.3;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.86);
-  }
-}
-
-@keyframes lobbyUnreadySprite {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  48% {
-    transform: translateY(1px) scale(0.99);
-    filter: drop-shadow(2px 2px 0 rgba(116, 35, 44, 0.32)) saturate(0.9);
+    transform: translate(var(--ready-line-x), var(--ready-start-y)) scaleY(0.16);
   }
 }
 
@@ -893,12 +803,6 @@ h3 {
 .character-slot.lobby-spawn-enter,
 .character-slot.lobby-spawn-exit {
   pointer-events: none;
-  animation: lobbySpawnSlotFlash 980ms ease-out both;
-}
-
-.character-slot.lobby-spawn-exit {
-  animation-name: lobbyDespawnSlotFlash;
-  animation-duration: 820ms;
 }
 
 .character-slot.lobby-spawn-enter > .lobby-spawn-fx,
@@ -1061,26 +965,6 @@ h3 {
   animation: lobbySpawnUiOut 240ms ease-in both;
 }
 
-@keyframes lobbySpawnSlotFlash {
-  0%,
-  100% {
-    filter: brightness(1);
-  }
-  38% {
-    filter: brightness(1.48) saturate(1.25);
-  }
-}
-
-@keyframes lobbyDespawnSlotFlash {
-  0%,
-  100% {
-    filter: brightness(1);
-  }
-  48% {
-    filter: brightness(1.38) saturate(1.7) hue-rotate(-14deg);
-  }
-}
-
 @keyframes lobbySpawnColumnIn {
   0% {
     opacity: 0;
@@ -1241,12 +1125,10 @@ h3 {
   18% {
     opacity: 0;
     transform: translateY(5px) scale(0.98);
-    filter: brightness(1.9) saturate(0.45) drop-shadow(0 0 16px #d9fbff);
   }
   58% {
     opacity: 0.84;
     transform: translateY(-2px) scale(1.01);
-    filter: brightness(1.48) saturate(1.08) drop-shadow(0 0 19px #11dfff);
   }
   78% {
     opacity: 1;
@@ -1255,7 +1137,6 @@ h3 {
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
   }
 }
 
@@ -1267,12 +1148,10 @@ h3 {
   42% {
     opacity: 0.86;
     transform: translateY(-2px) scale(1.01);
-    filter: brightness(1.48) saturate(1.55) drop-shadow(0 0 19px #ff314e);
   }
   100% {
     opacity: 0;
     transform: translateY(5px) scale(0.98);
-    filter: brightness(1.9) saturate(0.5) drop-shadow(0 0 16px #ff314e);
   }
 }
 
@@ -4867,11 +4746,6 @@ h3 {
   filter: brightness(1.05);
 }
 
-.character-slot:hover .character-sprite {
-  transform: translateY(-3px) scale(1.04);
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
-}
-
 .character-slot.character-splash::before {
   opacity: 1;
   animation: lobbySplashSheen 520ms ease-out forwards;
@@ -4911,16 +4785,23 @@ h3 {
 @keyframes lobbySplashSprite {
   0% {
     transform: scale(0.88) translateY(8px);
-    filter: drop-shadow(0 0 0 rgba(255, 255, 255, 0)) brightness(1.18);
   }
   48% {
     transform: scale(1.12) translateY(-6px);
-    filter: drop-shadow(0 0 22px rgba(255, 243, 195, 0.55)) brightness(1.08);
   }
   100% {
     transform: scale(1) translateY(0);
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) brightness(1);
   }
+}
+
+/* Never leave a composited animation filter on an idle lobby sprite. */
+.character-slot:not(.lobby-spawn-enter):not(.lobby-spawn-exit):not(
+    .lobby-ready-burst
+  ):not(.lobby-unready-burst):not(.character-splash)
+  > .character-sprite {
+  opacity: 1;
+  filter: none;
+  animation: none;
 }
 
 @media (hover: none) and (pointer: coarse) and (max-height: 520px) and (orientation: landscape) {
@@ -6032,6 +5913,32 @@ h3 {
   letter-spacing: 0.4px;
   text-transform: uppercase;
   text-shadow: var(--bb-title-shadow, 3px 4px 0 rgba(2, 5, 12, 0.72));
+}
+
+.profile-loadout-head #profile-loadout-shop,
+.profile-loadout-head .profile-action-btn {
+  height: 42px;
+  min-height: 42px;
+  padding: 0 16px;
+  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.profile-loadout-head #profile-loadout-close,
+.profile-loadout-head .profile-close {
+  height: 42px !important;
+  width: 42px !important;
+  min-height: 42px !important;
+  min-width: 42px !important;
+  padding: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 .profile-cards-grid {

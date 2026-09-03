@@ -800,21 +800,41 @@ function ensureLobbyReadyEffect(slot) {
   effect.className = "lobby-ready-fx";
   effect.setAttribute("aria-hidden", "true");
 
-  const ring = document.createElement("span");
-  ring.className = "lobby-ready-fx-ring";
-  effect.appendChild(ring);
+  const lineLayout = [
+    [-26, -88, -32, 2, 22, "#50d9ff", "#ddf8ff", 270, 80],
+    [-19, -72, -20, 4, 47, "#7dff68", "#e7ffdc", 350, 18],
+    [-12, -104, -39, 3, 31, "#ffd95a", "#fff5c2", 300, 112],
+    [-5, -91, -13, 5, 58, "#42efcf", "#d5fff6", 390, 0],
+    [3, -76, -29, 2, 27, "#b68cff", "#eee2ff", 285, 57],
+    [10, -98, -5, 4, 43, "#8dff45", "#ebffcf", 365, 33],
+    [17, -68, -24, 3, 19, "#70b9ff", "#e0f1ff", 250, 126],
+    [24, -86, -35, 2, 52, "#ffe879", "#fff9d4", 330, 91],
+  ];
 
-  const core = document.createElement("span");
-  core.className = "lobby-ready-fx-core";
-  effect.appendChild(core);
-
-  for (let index = 0; index < 6; index += 1) {
-    const ray = document.createElement("i");
-    ray.className = "lobby-ready-fx-ray";
-    ray.style.setProperty("--ready-ray-angle", `${index * 60}deg`);
-    ray.style.setProperty("--ready-ray-delay", `${index * 20}ms`);
-    effect.appendChild(ray);
-  }
+  lineLayout.forEach(
+    ([x, startY, endY, width, height, color, bright, duration, delay]) => {
+      const line = document.createElement("i");
+      line.className = "lobby-ready-fx-line";
+      line.style.setProperty("--ready-line-x", `${x}px`);
+      line.style.setProperty("--ready-start-y", `${startY}px`);
+      line.style.setProperty("--ready-end-y", `${endY}px`);
+      line.style.setProperty("--ready-line-width", `${width}px`);
+      line.style.setProperty("--ready-line-height", `${height}px`);
+      line.style.setProperty("--ready-line-color", color);
+      line.style.setProperty("--ready-line-bright", bright);
+      line.style.setProperty("--ready-line-duration", `${duration}ms`);
+      line.style.setProperty("--ready-line-delay", `${delay}ms`);
+      line.style.setProperty(
+        "--unready-line-duration",
+        `${Math.round(duration * 0.72)}ms`,
+      );
+      line.style.setProperty(
+        "--unready-line-delay",
+        `${Math.round(delay * 0.45)}ms`,
+      );
+      effect.appendChild(line);
+    },
+  );
 
   slot.appendChild(effect);
   return effect;
@@ -846,7 +866,7 @@ function playLobbyReadyEffect(slot, isReady) {
   const cleanupTimer = window.setTimeout(() => {
     slot.classList.remove(effectClass);
     __lobbyReadyEffectCleanupTimers.delete(slot);
-  }, isReady ? 900 : 560);
+  }, isReady ? 560 : 400);
   __lobbyReadyEffectCleanupTimers.set(slot, cleanupTimer);
 }
 

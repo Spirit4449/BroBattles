@@ -1,4 +1,5 @@
 const bcrypt = require("bcrypt");
+const { getAllCharacters } = require("../../../lib/characterStats");
 const {
   syncProfileIconOwnershipForUser,
 } = require("../../helpers/profileIconOwnership");
@@ -45,6 +46,29 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       charLevels = {};
     }
 
+    if (charLevels && typeof charLevels === "object") {
+      const normalizedCharLevels = {};
+      const validChars = new Set(getAllCharacters());
+      for (const [key, val] of Object.entries(charLevels)) {
+        let normalizedKey = String(key || "").trim().toLowerCase();
+        if (normalizedKey === "hunteress") {
+          normalizedKey = "huntress";
+        }
+        if (!validChars.has(normalizedKey)) continue;
+        const levelNum = Number(val) || 0;
+        normalizedCharLevels[normalizedKey] = Math.max(
+          normalizedCharLevels[normalizedKey] || 0,
+          levelNum,
+        );
+      }
+      charLevels = normalizedCharLevels;
+    }
+
+    let charClass = String(userRow.char_class || "ninja").trim().toLowerCase();
+    if (charClass === "hunteress") {
+      charClass = "huntress";
+    }
+
     const levelValues = Object.values(charLevels)
       .map((n) => Number(n) || 0)
       .filter((n) => n > 0);
@@ -62,7 +86,7 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       coins: Number(userRow.coins) || 0,
       gems: Number(userRow.gems) || 0,
       trophies: Number(userRow.trophies) || 0,
-      charClass: userRow.char_class || "ninja",
+      charClass,
       profileIconId: profileIconState.selectedProfileIconId || null,
       charLevels,
       avgCharLevel: avgLevel,
