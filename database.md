@@ -354,6 +354,15 @@ Apply `migrations/2026-09-03_party_member_selection.sql` to add
 `parties.allow_member_selection` (defaults to `1`). Party owners can disable
 member map and mode changes in Party Settings; the owner keeps access.
 
+## Battle Log
+
+Apply [migrations/2026-09-03_match_battle_log.sql](migrations/2026-09-03_match_battle_log.sql)
+before deploying battle-log result recording. It safely adds missing winner,
+summary, and participant-stat columns. New matches save the complete roster
+(including bots), combat stats, and reward deltas before bot cleanup.
+Historical results that were never stored cannot be reconstructed; the UI
+shows unavailable values instead of inventing draws, zero stats, or rewards.
+
 ## Adaptive Duel Bots
 
 Apply [migrations/2026-09-03_adaptive_bots.sql](migrations/2026-09-03_adaptive_bots.sql)

@@ -1,6 +1,7 @@
 const { deleteMatchBots } = require("../../services/matchRosterService");
 const { ALL_DEAD_GAME_OVER_DELAY_MS } = require("../gameRoomConfig");
 const effectManager = require("./effects/effectManager");
+const { recordMatchOutcome } = require("../../helpers/battleLog");
 
 function potentialStartGame(room) {
   if (room.status !== "waiting") return;
@@ -326,6 +327,13 @@ async function finishGame(room, winnerTeam, meta = {}) {
   }
 
   const finalMeta = { ...(meta || {}), rewards: rewardSummary };
+
+  // Save the full roster before bot cleanup, including the awarded rewards.
+  try {
+    await recordMatchOutcome(room.db, room, winnerTeam, rewardSummary);
+  } catch (error) {
+    console.error(`[GameRoom ${room.matchId}] battle log save failed`, error);
+  }
 
   room.io.to(`game:${room.matchId}`).emit("game:over", {
     matchId: room.matchId,

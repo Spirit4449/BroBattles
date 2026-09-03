@@ -92,7 +92,9 @@ function requestSpecial(room, p, target, now) {
   const aim = getResolvedCharacterSpecialAimConfig(p.char_class) || {};
   const distance = Math.hypot(target.x - p.x, target.y - p.y);
   const range = p.char_class === "wizard" ? (getResolvedCharacterAimConfig("wizard")?.defaultRange || 1000) : aim.defaultRange || aim.radius || (p.char_class === "thorg" ? 250 : 700);
-  if (distance > range + 40) return false;
+  // These supers buff the caster/allies; their visual radius is not an enemy
+  // targeting limit. The tactical evaluator decides when the buff is useful.
+  if (!['thorg', 'wizard'].includes(p.char_class) && distance > range + 40) return false;
   const direction = target.x < p.x ? -1 : 1;
   const angle = aim.angleMode === "horizontal-only" ? (direction < 0 ? Math.PI : 0) : Math.atan2(target.y - p.y, target.x - p.x);
   p.flip = direction < 0;

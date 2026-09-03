@@ -32,7 +32,10 @@ class BotController {
     this.nextHopAt = 0;
     this.nextWallPlayAt = 0;
     this.kiteUntil = 0;
+    this.nextKiteAt = 0;
     this.idleUntil = 0;
+    this.pursuit = null;
+    this.ineffectivePositions = [];
     this.intent = { direction: 0 };
     this.graph = buildGraph(room.geometry, player.char_class);
     this.visited = new Map();
@@ -140,11 +143,18 @@ class BotController {
       if (this.targetId && target) this.metrics.targetSwitches++;
       this.targetId = target?.participantId;
       this.nextDecisionAt = 0;
+      this.pursuit = null;
+      this.combatProgress = null;
+      this.ineffectivePositions.length = 0;
     }
     this.target = target;
     updateSuperPlan(this, enemies, now);
+    this.trackCombatProgress(target, now);
     if (target) this.lastSeen = { ...target, at: observed.at };
-    if (wasRetreating !== this.retreating || recentlyHurt || threatened) this.idleUntil = 0;
+    if (wasRetreating !== this.retreating || recentlyHurt || threatened) {
+      this.idleUntil = 0;
+      this.pursuit = null;
+    }
     const newRetreatHit = this.retreating && p.lastDamagedAt > (this.lastRetreatDamageAt || 0);
     if (newRetreatHit) {
       this.lastRetreatDamageAt = p.lastDamagedAt;
@@ -168,9 +178,10 @@ class BotController {
     if (!this.decision || now >= this.nextDecisionAt || pickupGone) {
       // Occasionally fight while backing away; keep the choice long enough to read clearly.
       if (target && !this.retreating && healthFraction(p) < healthFraction(target) + 0.12 &&
-          now >= this.kiteUntil && this.random() < 0.16 &&
-          Math.hypot(p.x - target.x, p.y - target.y) < preferredRange(this, target) * 1.25) {
+          now >= this.nextKiteAt && now >= this.kiteUntil && this.random() < 0.16 &&
+          Math.hypot(p.x - target.x, p.y - target.y) < preferredRange(this, target) * 0.85) {
         this.kiteUntil = now + this.between(900, 1800);
+        this.nextKiteAt = this.kiteUntil + this.between(5000, 8500);
       }
       const previousGoal = this.decision?.goal?.surfaceId;
       this.decision = chooseDecision(this, context, target, enemies, now);
@@ -180,6 +191,7 @@ class BotController {
         this.lastPickupGoalId = this.decision.pickupId;
       } else if (this.decision.mode !== 'pickup') this.lastPickupGoalId = null;
       if (previousGoal !== this.decision.goal?.surfaceId) this.approachEdge = null;
+      if (this.decision.mode !== 'fight') this.pursuit = null;
     }
     const immediatePressure = threatened || recentlyHurt || enemies.some((e) => Math.hypot(e.x - p.x, e.y - p.y) < 200);
     if (p.grounded && !this.traversal && !this.maneuver && !immediatePressure &&
@@ -189,7 +201,7 @@ class BotController {
       this.approachEdge = null;
     }
     this.navigate(context, now);
-    if (this.superPlan?.charged && target && !this.intent.direction && p._botActionUntil <= now) {
+    if (target && !this.intent.direction && p._botActionUntil <= now) {
       p.flip = target.x < p.x;
     }
     if (now < this.idleUntil && !immediatePressure && p.grounded && !this.traversal && !this.maneuver) {
@@ -227,16 +239,20 @@ class BotController {
         return aim.canHit && hasClearShot(this.room, p, e, aim);
       })
       .sort((a, b) => (a.health / a.maxHealth) - (b.health / b.maxHealth));
-    const candidate = candidates[0];
-    if (!candidate) return;
     const age = Math.min(0.3, Math.max(0, now - (observed?.at || now)) / 1000) * this.profile.prediction;
-    const aimTarget = { ...candidate, x: candidate.x + candidate.vx * age, y: candidate.y + candidate.vy * age };
+    const predict = (enemy) => ({ ...enemy, x: enemy.x + (enemy.vx || 0) * age, y: enemy.y + (enemy.vy || 0) * age });
+    // Supers have their own ranges and targeting rules. A missing basic shot
+    // must not prevent a hook, swarm, or self buff from being considered.
+    const superTarget = [target, ...enemies.filter((e) => e !== target)].map(predict)
+      .find((enemy) => shouldUseSuper(this, enemy, enemies, now));
+    const candidate = candidates[0];
+    if (!candidate && !superTarget) return;
     this.nextOpportunity = now + this.between(180, 320) * (1.1 - this.profile.tacticalAwareness * 0.28);
     if (this.random() < this.profile.mistakeChance / this.aggression) { this.nextOpportunity += this.between(180, 400); return; }
-    if (shouldUseSuper(this, aimTarget, enemies, now) && requestSpecial(this.room, p, aimTarget, now)) {
+    if (superTarget && requestSpecial(this.room, p, superTarget, now)) {
       this.metrics.specials++;
       this.superPlan = { charged: false, preferredRange: null };
-    } else if (now >= (this.ammoReadyAfter || 0) && requestBasic(this.room, p, aimTarget, this.profile, this.random, now)) {
+    } else if (candidate && now >= (this.ammoReadyAfter || 0) && requestBasic(this.room, p, predict(candidate), this.profile, this.random, now)) {
       this.metrics.attacks++;
       // Wait after the mechanical cooldown/reload completes. This prevents the
       // bot from firing on the exact frame ammo becomes available every cycle.
@@ -253,6 +269,59 @@ class BotController {
     // A rare quick follow-up creates bursts without returning to frame-perfect spam.
     if (this.random() < 0.12 * aggression) return this.between(35, 90);
     return this.between(min, max) / Math.min(1.2, aggression);
+  }
+
+  trackCombatProgress(target, now) {
+    this.ineffectivePositions = this.ineffectivePositions.filter((point) => point.until > now);
+    if (!target || this.retreating || this.decision?.mode !== 'fight') {
+      this.combatProgress = null;
+      return;
+    }
+    const p = this.player;
+    const distance = Math.hypot(target.x - p.x, target.y - p.y);
+    const damage = this.room.rewardStats.get(p.name)?.damage || 0;
+    const progress = this.combatProgress;
+    if (!progress || damage > progress.damage || distance < progress.distance - 60) {
+      this.combatProgress = { at: now, distance, damage, trail: [] };
+      return;
+    }
+    const last = progress.trail.at(-1);
+    if (p.grounded && (!last || last.surfaceId !== p.platformId || Math.abs(last.x - p.x) > 90)) {
+      progress.trail.push({ x: p.x, surfaceId: p.platformId });
+      if (progress.trail.length > 6) progress.trail.shift();
+    }
+    // Actual hits or closing distance count as progress; pacing back and forth
+    // does not. Briefly avoid the unproductive positions and seek another angle.
+    if (now - progress.at < 5000 || this.superPlan?.holding) return;
+    for (const point of progress.trail) this.ineffectivePositions.push({ ...point, until: now + 8000 });
+    this.ineffectivePositions = this.ineffectivePositions.slice(-8);
+    this.combatProgress = null;
+    this.pursuit = null;
+    this.nextDecisionAt = 0;
+  }
+
+  pursuitDirection(x, now, takeoff = false) {
+    const p = this.player, direction = Math.sign(x - p.x);
+    if (this.decision?.mode !== 'fight' || !this.target || Math.abs(x - p.x) < 80) {
+      this.pursuit = null;
+      return this.walkDirection(x, takeoff);
+    }
+    let stage = this.pursuit;
+    if (!stage || stage.surfaceId !== p.platformId || stage.direction !== direction) {
+      stage = this.pursuit = { surfaceId: p.platformId, direction,
+        x: p.x + direction * Math.min(Math.abs(x - p.x), this.between(190, 280)), holdUntil: null };
+    }
+    if (Math.abs(stage.x - p.x) <= 24 && Math.abs(p.vx) < 35 && stage.holdUntil === null) {
+      stage.holdUntil = now + this.between(220, 380);
+    }
+    if (stage.holdUntil !== null) {
+      if (now < stage.holdUntil) { this.wantsProgress = false; return 0; }
+      this.pursuit = null;
+      return this.pursuitDirection(x, now, takeoff);
+    }
+    // Never overshoot a target/goal that moved closer while taking this step.
+    const stepX = direction > 0 ? Math.min(x, stage.x) : Math.max(x, stage.x);
+    return this.walkDirection(stepX, takeoff);
   }
 
   navigate(context, now) {
@@ -272,14 +341,17 @@ class BotController {
     } else if (route) {
       this.approachEdge = null;
       this.walkGoalX = goal.x;
-      this.intent.direction = this.walkDirection(goal.x);
+      this.intent.direction = this.pursuitDirection(goal.x, now);
       if (!this.wantsProgress && ['patrol', 'search'].includes(this.decision.mode) && !this.decision.arrived) {
         this.visited.set(context.current.id, now);
         this.decision.arrived = true;
         this.idleUntil = now + this.between(300, 650);
         this.nextDecisionAt = this.idleUntil;
       }
-      if (this.decision.mode === 'fight' && this.target && !basicAim(p, this.target, this.profile, () => 0.5).canHit) this.wantsProgress = true;
+      if (this.decision.mode === 'fight' && this.target && !(this.pursuit?.holdUntil > now)) {
+        const aim = basicAim(p, this.target, this.profile, () => 0.5);
+        if (!aim.canHit || !hasClearShot(this.room, p, this.target, aim)) this.wantsProgress = true;
+      }
     }
   }
 
@@ -299,9 +371,9 @@ class BotController {
       if (Math.abs(edge.takeoffX - p.x) <= 4 && Math.abs(p.vx || 0) < 12 && now >= (p._nextWallJump || 0)) {
         this.traversal = { ...edge, cursor: 0, until: now + edge.duration + 800 };
         this.approachEdge = null;
-      } else this.intent = { direction: this.walkDirection(edge.takeoffX, true) };
+      } else this.intent = { direction: this.pursuitDirection(edge.takeoffX, now, true) };
     } else if (p.grounded && Number.isFinite(this.walkGoalX) && !this.traversal && !this.maneuver) {
-      this.intent = { direction: this.walkDirection(this.walkGoalX) };
+      this.intent = { direction: this.pursuitDirection(this.walkGoalX, now) };
     } else if (!p.grounded) this.approachEdge = null;
     const travel = this.maneuver || this.traversal;
     if (!travel) return;
@@ -407,13 +479,15 @@ class BotController {
     this.lastProgressAt = now;
   }
 
-  clearTravel() { this.traversal = null; this.approachEdge = null; this.maneuver = null; this.walkGoalX = null; }
+  clearTravel() { this.traversal = null; this.approachEdge = null; this.maneuver = null; this.walkGoalX = null; this.pursuit = null; }
   dispose() {
     this.observations.length = 0;
     this.clearTravel();
     this.visited.clear();
     this.blockedEdges.clear();
     this.routePreferences.clear();
+    this.ineffectivePositions.length = 0;
+    this.combatProgress = null;
     this.projectileSamples = new WeakMap();
     this.decision = null;
   }

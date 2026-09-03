@@ -5,7 +5,7 @@ const { bounds } = require('../src/server/core/bots/physics');
 const { standOn } = require('../src/server/core/bots/navigation');
 const { observe, incomingThreat } = require('../src/server/core/bots/perception');
 const { preferredRange } = require('../src/server/core/bots/tactics');
-const { basicAim } = require('../src/server/core/bots/combat');
+const { basicAim, hasClearShot } = require('../src/server/core/bots/combat');
 const { SUPER_RANGES, updateSuperPlan, shouldUseSuper } = require('../src/server/core/bots/supers');
 const { difficultyForTrophies } = require('../src/server/core/bots/config');
 const { registerAttackFromAction, tickActiveAttacks } = require('../src/server/core/gameRoom/attackRuntimeManager');
@@ -159,6 +159,93 @@ test('a healthier bot closes distance instead of kiting a wounded target', (t) =
   h.advance(60);
   assert.ok(Math.abs(target.x - h.p.x) < initialDistance);
 });
+
+test('pursuit advances in stages, briefly holds ground, then resumes without rushing into melee', (t) => {
+  const h = setup(t, ['ninja', 'wizard']);
+  const floor = { id: 'floor', x: 1100, left: 100, right: 2100, top: 900, bottom: 940,
+    collision: { up: true, down: true, left: true, right: true } };
+  h.room.geometry = { ...h.room.geometry, mapId: 992, colliders: [floor] };
+  const enemy = h.players[1];
+  h.place(h.p, 300, floor);
+  h.place(enemy, 1700, floor);
+  enemy.health = enemy.maxHealth = 1000000;
+  h.brain.openingUntil = 0;
+  h.brain.random = () => 0.5;
+  let heldAt = null, resumed = false;
+  for (let i = 0; i < 600; i++) {
+    h.advance(1);
+    if (h.brain.pursuit?.holdUntil > h.now() && heldAt === null) heldAt = h.p.x;
+    if (heldAt !== null && h.p.x > heldAt + 100) resumed = true;
+  }
+  assert.ok(heldAt > 400 && heldAt < 1400, 'takes ground before deliberately holding it');
+  assert.ok(resumed, 'a tactical hold has a deadline and pursuit resumes');
+  assert.ok(h.p.x > 1000, 'makes sustained progress toward a distant target');
+  assert.ok(enemy.x - h.p.x > 180, 'retains ranged fighting space');
+  assert.ok(h.brain.metrics.attacks > 0);
+  assert.equal(h.brain.metrics.unforcedFalls, 0);
+  const previousX = h.p.x;
+  h.place(enemy, 2000, floor);
+  h.advance(180);
+  assert.ok(h.p.x > previousX + 80, 'follows when the opponent gives up more ground');
+});
+
+test('ineffective pacing changes position, while successful pressure keeps its ground', (t) => {
+  const h = setup(t), enemy = h.players[1];
+  h.brain.random = () => 0.5;
+  h.place(enemy, h.p.x + preferredRange(h.brain, enemy));
+  h.think();
+  const x = h.p.x, start = h.now();
+  h.brain.trackCombatProgress(enemy, start);
+  // Moving a little back and forth must not reset the tactical progress timer.
+  for (let i = 1; i <= 6; i++) {
+    h.p.x = x + (i % 2 ? 25 : 0);
+    h.brain.trackCombatProgress(enemy, start + i * 1000);
+  }
+  assert.ok(h.brain.ineffectivePositions.length > 0);
+  h.think();
+  assert.ok(Math.abs(h.brain.decision.goal.x - x) > 80, 'seeks a different firing position after no progress');
+  h.brain.ineffectivePositions.length = 0;
+  h.brain.combatProgress = null;
+  for (let i = 0; i <= 8; i++) {
+    h.room.rewardStats.set(h.p.name, { damage: i * 100 });
+    h.brain.trackCombatProgress(enemy, start + i * 1000);
+  }
+  assert.equal(h.brain.ineffectivePositions.length, 0, 'repeated successful attacks do not force arbitrary movement');
+});
+
+test('ranged positioning rejects ground whose firing line is blocked', (t) => {
+  const h = setup(t), enemy = h.players[1];
+  const floor = { id: 'floor', x: 1100, left: 100, right: 2100, top: 900, bottom: 940,
+    collision: { up: true, down: true, left: true, right: true } };
+  const wall = { id: 'wall', x: 1200, left: 1190, right: 1210, top: 500, bottom: 900,
+    collision: { up: false, down: false, left: true, right: true } };
+  h.room.geometry = { ...h.room.geometry, mapId: 993, colliders: [floor, wall] };
+  h.place(h.p, 1000, floor);
+  h.place(enemy, 1400, floor);
+  h.brain.random = () => 0.5;
+  assert.equal(hasClearShot(h.room, h.p, enemy), false);
+  h.think();
+  assert.ok(Math.abs(h.brain.decision.goal.x - h.p.x) > 80, 'blocked firing ground is not treated as a useful hold');
+});
+
+for (const [character, separation] of [['huntress', 600], ['thorg', 200]]) {
+  test(`${character} can execute a useful super independently of basic attack range`, (t) => {
+    const h = setup(t, [character, 'wizard']), enemy = h.players[1];
+    h.place(enemy, h.p.x + separation);
+    enemy.health = enemy.maxHealth * 0.4;
+    h.brain.random = () => 0.5;
+    h.p.superCharge = h.p.maxSuperCharge;
+    h.brain.ammoReadyAfter = h.now() + 10000;
+    const observed = h.snapshot();
+    updateSuperPlan(h.brain, observed.enemies, h.now() - 5000);
+    updateSuperPlan(h.brain, observed.enemies, h.now());
+    assert.equal(basicAim(h.p, enemy, h.brain.profile, () => 0.5).canHit, false);
+    h.brain.tryCombat(observed.enemies, observed.enemies[0], observed, h.now());
+    assert.equal(h.brain.metrics.specials, 1);
+    assert.equal(h.brain.metrics.attacks, 0);
+    assert.ok(h.p.superCharge < h.p.maxSuperCharge);
+  });
+}
 
 test('perception distinguishes approaching, departing, friendly, and curved projectiles', (t) => {
   const h = setup(t), enemy = h.players[1], body = bounds(h.p);

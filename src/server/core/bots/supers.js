@@ -53,7 +53,8 @@ function shouldUseSuper(brain, target, enemies, now) {
     case 'ninja': {
       const linedUp = enemies.filter((enemy) =>
         Math.abs(enemy.y - player.y) < 105 && Math.hypot(enemy.x - player.x, enemy.y - player.y) <= 470);
-      return linedUp.length >= 2 || (distance <= 440 && (healthFraction(target) < 0.58 || heldMs > 2600));
+      return linedUp.length >= 2 || (distance <= 440 && Math.abs(target.y - player.y) < 105 &&
+        (healthFraction(target) < 0.58 || heldMs > 2600));
     }
     case 'thorg':
       // Rage lasts several seconds, so activate at the start of a real melee

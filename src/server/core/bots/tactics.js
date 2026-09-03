@@ -1,4 +1,4 @@
-const { basicAim } = require('./combat');
+const { basicAim, hasClearShot } = require('./combat');
 const { nearestSurface } = require('./navigation');
 const { bounds } = require('./physics');
 const effects = require('../gameRoom/effects/effectManager');
@@ -77,7 +77,10 @@ function chooseDecision(brain, context, target, enemies, now) {
         (effects.isActive(p, pickup.type, now) ? 200 : 0);
       if (score > value) { bestPickup = { ...pickup, surfaceId: surface.id }; value = score; }
     }
-    if (bestPickup && value > (target ? 155 - (brain.profile.tacticalAwareness ?? 0.5) * 65 : 0)) {
+    // Finish an engagement before taking a long detour for an incidental buff.
+    // Healing and defensive pickups still win when the bot needs to recover.
+    const pursuitCost = target && !brain.retreating && bestPickup?.type !== 'health' ? 120 : 0;
+    if (bestPickup && value > (target ? 155 - (brain.profile.tacticalAwareness ?? 0.5) * 65 + pursuitCost : 0)) {
       return { mode: 'pickup', goal: bestPickup, pickupId: bestPickup.id };
     }
   }
@@ -93,6 +96,7 @@ function chooseDecision(brain, context, target, enemies, now) {
       const clampX = (x) => Math.max(surface.left + margin, Math.min(surface.right - margin, x));
       const side = target && p.x < target.x ? -1 : 1;
       const xs = [clampX(p.x), clampX(surface.x)];
+      if (target && !wantsSpace) xs.push(clampX(p.x - 160), clampX(p.x + 160));
       if (target) xs.push(clampX(target.x + side * combatRange), clampX(target.x - side * combatRange));
       if (target && wantsSpace) xs.push(clampX(target.x + side * Math.max(500, preferred * 1.4)), clampX(target.x - side * Math.max(500, preferred * 1.4)));
       for (const x of xs) {
@@ -112,7 +116,12 @@ function chooseDecision(brain, context, target, enemies, now) {
           score += Math.abs(distance(point, target) - combatRange) * 0.75;
           if (pressAdvantage) score += Math.max(0, distance(point, target) - combatRange) * 0.45;
           score += Math.max(0, Math.abs(point.y - target.y) - style.height) * 1.3;
-          if (!aim.canHit) score += 180;
+          if (!aim.canHit || !hasClearShot(brain.room, { ...p, ...point }, target, aim)) score += 300;
+          for (const failed of brain.ineffectivePositions || []) {
+            if (failed.until > now && failed.surfaceId === surface.id) {
+              score += Math.max(0, 1 - Math.abs(x - failed.x) / 180) * 340;
+            }
+          }
           score -= Math.min(style.height, Math.max(0, target.y - point.y)) * 0.15;
         }
         if (surface.id === current?.id && !brain.retreating) score -= 55; // Keep useful ground instead of hopping between equal options.
