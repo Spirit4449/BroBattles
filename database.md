@@ -353,3 +353,11 @@ CREATE TABLE IF NOT EXISTS user_abuse_events (
 Apply `migrations/2026-09-03_party_member_selection.sql` to add
 `parties.allow_member_selection` (defaults to `1`). Party owners can disable
 member map and mode changes in Party Settings; the owner keeps access.
+
+## Adaptive Duel Bots
+
+Apply [migrations/2026-09-03_adaptive_bots.sql](migrations/2026-09-03_adaptive_bots.sql)
+before enabling the `bots` runtime flag. Bot participants are stored in
+`match_bot_participants` for their match only and have no `users` row. The
+migration also recalculates existing queue ratings from account trophies.
+See [docs/ADAPTIVE_BOTS.md](docs/ADAPTIVE_BOTS.md) for rollout and verification.

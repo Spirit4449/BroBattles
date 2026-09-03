@@ -42,6 +42,7 @@ async function distributeMatchRewards(room, winnerTeam) {
   const modeId = resolveMatchModeId(room.matchData || {});
   const userIdToTrophies = new Map();
   const participantUserIds = Array.from(room.players.values())
+    .filter((player) => !player.isBot)
     .map((player) => Number(player?.user_id))
     .filter((id) => Number.isFinite(id) && id > 0);
   if (participantUserIds.length) {
@@ -99,17 +100,17 @@ async function distributeMatchRewards(room, winnerTeam) {
       hits: bucket.hits,
       damage: bucket.damage,
       kills: bucket.kills,
-      coinsAwarded: reward.coins,
-      gemsAwarded: reward.gems,
-      trophiesDelta: trophyInfo.trophiesDelta,
-      trophiesAwarded: Math.max(0, Number(trophyInfo.trophiesDelta) || 0),
-      trophiesLost: Math.max(0, -(Number(trophyInfo.trophiesDelta) || 0)),
+      coinsAwarded: playerData.isBot ? 0 : reward.coins,
+      gemsAwarded: playerData.isBot ? 0 : reward.gems,
+      trophiesDelta: playerData.isBot ? 0 : trophyInfo.trophiesDelta,
+      trophiesAwarded: playerData.isBot ? 0 : Math.max(0, Number(trophyInfo.trophiesDelta) || 0),
+      trophiesLost: playerData.isBot ? 0 : Math.max(0, -(Number(trophyInfo.trophiesDelta) || 0)),
     });
     if (
       (reward.coins > 0 ||
         reward.gems > 0 ||
         (Number(trophyInfo.trophiesDelta) || 0) !== 0) &&
-      playerData.user_id
+      playerData.user_id && !playerData.isBot
     ) {
       updates.push(
         room.db

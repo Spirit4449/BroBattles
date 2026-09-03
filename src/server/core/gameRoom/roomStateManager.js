@@ -75,6 +75,8 @@ function sendGameStateToPlayer(room, socket) {
       const p = liveByName.get(mp.name);
       return {
         name: mp.name,
+        participantId: mp.participantId,
+        user_id: mp.user_id,
         team: mp.team,
         char_class: p?.char_class || mp.char_class,
         selected_skin_id: p?.selected_skin_id || mp.selected_skin_id || null,
@@ -139,6 +141,8 @@ function broadcastSnapshot(room, extraTiming = null) {
 
   for (const playerData of room.players.values()) {
     const playerSnapshot = {
+      participantId: playerData.participantId,
+      isBot: playerData.isBot === true,
       x: roundPosition(playerData.x),
       y: roundPosition(playerData.y),
       vx: roundVelocity(playerData.vx),

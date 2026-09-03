@@ -67,7 +67,7 @@ function createQueueTicketManager({
 
     const res = await db.runQuery(
       "INSERT INTO match_tickets (party_id,user_id,mode,mode_id,mode_variant_id,map,size,mmr,team1_count,team2_count) VALUES (?,?,?,?,?,?,?,?,?,?) " +
-        "ON DUPLICATE KEY UPDATE mode=VALUES(mode), mode_id=VALUES(mode_id), mode_variant_id=VALUES(mode_variant_id), map=VALUES(map), size=VALUES(size), mmr=VALUES(mmr), team1_count=VALUES(team1_count), team2_count=VALUES(team2_count), status='queued', claimed_by=NULL",
+        "ON DUPLICATE KEY UPDATE created_at=IF(status<>'queued' OR mode_id<>VALUES(mode_id) OR mode_variant_id<>VALUES(mode_variant_id) OR map<>VALUES(map), NOW(), created_at), mode=VALUES(mode), mode_id=VALUES(mode_id), mode_variant_id=VALUES(mode_variant_id), map=VALUES(map), size=VALUES(size), mmr=VALUES(mmr), team1_count=VALUES(team1_count), team2_count=VALUES(team2_count), status='queued', claimed_by=NULL",
       [
         partyId || null,
         userId || null,
@@ -105,7 +105,7 @@ function createQueueTicketManager({
       `DELETE FROM match_tickets WHERE ${field} = ?`,
       [id],
     );
-    if (partyId) {
+    if (partyId && r?.affectedRows > 0) {
       await db.runQuery("UPDATE parties SET status=? WHERE party_id=?", [
         partyStatus.IDLE,
         partyId,

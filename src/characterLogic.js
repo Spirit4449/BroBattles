@@ -1502,6 +1502,7 @@ function applyUnlock(character, price) {
         }
       } catch {}
 
+      playSound("unlock", 0.6);
       rerenderCharacterCard(character, _userDataRef);
       refreshUpgradeButtonAffordability();
       playCharacterDetailsSuccessAnimation("unlock");

@@ -1,3 +1,4 @@
+const { deleteMatchBots } = require('../../services/matchRosterService');
 const { ALL_DEAD_GAME_OVER_DELAY_MS } = require("../gameRoomConfig");
 const effectManager = require("./effects/effectManager");
 
@@ -60,7 +61,9 @@ function startGame(room) {
     countdown: 6,
   });
 
-  setTimeout(() => {
+  room._countdownTimeout = setTimeout(() => {
+    if (room._disposed || room.status !== "active") return;
+    room._countdownTimeout = null;
     try {
       const now = Date.now();
       console.log(
@@ -74,7 +77,7 @@ function startGame(room) {
       );
       for (const playerData of room.players.values()) {
         if (!playerData) continue;
-        if (playerData.isBot) continue;
+
         effectManager.apply(
           playerData,
           "respawnShield",
@@ -204,6 +207,11 @@ async function finishGame(room, winnerTeam, meta = {}) {
   );
 
   room._loopRunning = false;
+  room._scheduledActions.length = 0;
+  console.log('[bots:match-result]', JSON.stringify({ matchId: room.matchId, winnerTeam,
+    humans: [...room.players.values()].filter((p) => !p.isBot).map((p) => ({ team: p.team, trophies: Number(p.trophies) || 0 })),
+    bots: [...room.botControllers.values()].map((c) => ({ character: c.player.char_class, team: c.player.team, trophies: c.profile.trophies, ...c.metrics })),
+    timing: room._botTickStats || null }));
   if (room._pendingVictoryFinishTimeout) {
     clearTimeout(room._pendingVictoryFinishTimeout);
     room._pendingVictoryFinishTimeout = null;
@@ -313,26 +321,7 @@ async function finishGame(room, winnerTeam, meta = {}) {
   });
 
   try {
-    const botRows = await room.db.runQuery(
-      `SELECT DISTINCT u.user_id
-         FROM match_participants mp
-         JOIN users u ON u.user_id = mp.user_id
-        WHERE mp.match_id = ?
-          AND u.name LIKE 'BOT %'`,
-      [room.matchId],
-    );
-    const botIds = botRows
-      .map((row) => Number(row.user_id))
-      .filter((id) => Number.isFinite(id) && id > 0);
-    if (botIds.length) {
-      const placeholders = botIds.map(() => "?").join(",");
-      await room.db.runQuery(
-        `DELETE FROM users
-          WHERE user_id IN (${placeholders})
-            AND name LIKE 'BOT %'`,
-        botIds,
-      );
-    }
+    await deleteMatchBots(room.db, room.matchId);
   } catch (error) {
     console.warn(
       `[GameRoom ${room.matchId}] bot cleanup failed`,
@@ -342,7 +331,8 @@ async function finishGame(room, winnerTeam, meta = {}) {
 
   setTimeout(() => {
     try {
-      room.cleanup();
+      if (room.onFinished) room.onFinished();
+      else room.cleanup();
     } catch (_) {}
   }, 15000);
 }

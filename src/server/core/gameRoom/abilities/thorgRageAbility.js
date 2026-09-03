@@ -14,7 +14,7 @@ function applyOutgoingDamageMultiplier(attacker, damage /*, now */) {
 
 function getKnockback(attacker, target, now) {
   if (!effectManager.isActive(attacker, "thorgRage", now)) return null;
-  if (!target?.socketId) return null;
+  if (!target) return null;
   const knockDirection = (target.x || 0) >= (attacker.x || 0) ? 1 : -1;
   return {
     amountX: THORG_RAGE_KNOCKBACK_X * knockDirection,

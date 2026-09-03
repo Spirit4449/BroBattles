@@ -1,5 +1,6 @@
 {
   "maintenanceMode": true,
+  "bots": { "enabled": true, "rolloutPercent": 100 },
   "announcements": "Help me",
   "rewardMultipliers": {
     "coins": 1,

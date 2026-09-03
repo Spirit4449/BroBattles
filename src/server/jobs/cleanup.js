@@ -1,3 +1,4 @@
+const { deleteMatchBots } = require('../services/matchRosterService');
 const { updateOrDeleteParty } = require("../helpers/party");
 
 function startCleanupJobs({ db, io }) {
@@ -121,6 +122,8 @@ function startCleanupJobs({ db, io }) {
         }
       } catch (_) {}
 
+      for (const id of ids) await deleteMatchBots(db, id);
+
       // Remove participants for these matches to reflect completion
       await db.runQuery(
         `DELETE FROM match_participants WHERE match_id IN (${ph})`,
@@ -139,6 +142,14 @@ function startCleanupJobs({ db, io }) {
 
   setInterval(cleanupLongMatches, 1000 * 60 * 30);
   cleanupLongMatches();
+  async function cleanupStaleBots() {
+    try {
+      await db.runQuery(`DELETE b FROM match_bot_participants b JOIN matches m ON m.match_id = b.match_id
+        WHERE m.status IN ('completed','cancelled') OR m.created_at < NOW() - INTERVAL 10 MINUTE`);
+    } catch (error) { if (error.code !== 'ER_NO_SUCH_TABLE') console.warn('[bots] stale cleanup failed:', error.message); }
+  }
+  cleanupStaleBots();
+  setInterval(cleanupStaleBots, 60000).unref?.();
 
   return { cleanupInactiveMembers, inactiveStatus, cleanupLongMatches };
 }

@@ -18,7 +18,7 @@ const { effectDefs } = require("./effects/effectDefs");
 
 function getPlatformSpawnPoints(room) {
   const mapId = Number(room.matchData?.map) || 1;
-  const raw = POWERUP_PLATFORM_POINTS[mapId] || POWERUP_PLATFORM_POINTS[1];
+  const raw = room.geometry?.spawns?.powerups || POWERUP_PLATFORM_POINTS[mapId] || POWERUP_PLATFORM_POINTS[1];
   const points =
     Array.isArray(raw) && raw.length ? raw : POWERUP_PLATFORM_POINTS[1];
   return points

@@ -123,6 +123,7 @@ export default class OpPlayer {
       this.opFrame.width - widthShrink,
       this.opFrame.height - heightShrink,
     );
+    this.opponent.body.updateFromGameObject?.();
     this.applyFlipOffset();
 
     // Set depth so opponent renders above all map objects (bank bust graphics are at depths 7-24)
@@ -849,14 +850,8 @@ export default class OpPlayer {
       if (Number.isFinite(meta?.x) && Number.isFinite(meta?.y)) {
         const serverX = Number(meta.x);
         const serverY = Number(meta.y);
-        if (this.isBot === true && !Number.isFinite(this._authoritativeYOffset)) {
-          const currentY = Number(this?.opponent?.y);
-          if (Number.isFinite(currentY)) {
-            this._authoritativeYOffset = currentY - serverY;
-          }
-        }
-        const yOffset = Number(this._authoritativeYOffset) || 0;
-        this.opponent.body?.reset?.(serverX, serverY + yOffset);
+
+        this.opponent.body?.reset?.(serverX, serverY);
       }
       this.opponent.setVelocity?.(0, 0);
       this.opponent.setVisible(true);

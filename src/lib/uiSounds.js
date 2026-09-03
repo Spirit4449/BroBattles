@@ -28,6 +28,7 @@ const soundFiles = {
   beep: "beep",
   start: "start",
   upgrade: "/assets/upgrade.wav",
+  unlock: "/assets/unlock.mp3",
   shopOpen: "shop-open.ogg",
   shopClose: "shop-close.ogg",
   shopHover: "shop-hover.ogg",

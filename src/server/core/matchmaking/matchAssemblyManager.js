@@ -1,183 +1,69 @@
-function createMatchAssemblyManager({
-  db,
-  io,
-  worker,
-  runInTx,
-  partyStatus,
-  lastProgress,
-  readyCheckCoordinator,
-}) {
-  const {
-    selectionToLegacyMode,
-  } = require("../../helpers/gameSelectionCatalog");
+const { selectionToLegacyMode } = require('../../helpers/gameSelectionCatalog');
+const { decorateParticipant } = require('../../services/matchRosterService');
+const { createBotParticipants } = require('../bots/identity');
 
-  async function assembleAndReady(modeId, modeVariantId, map, picks) {
-    const ids = picks.map((p) => p.ticket.ticket_id);
-    const placeholders = ids.map(() => "?").join(",");
-    const r = await db.runQuery(
-      `UPDATE match_tickets SET claimed_by = ? WHERE ticket_id IN (${placeholders}) AND status='queued' AND (claimed_by IS NULL OR claimed_by='')`,
-      [worker, ...ids],
-    );
-    if ((r?.affectedRows || 0) !== ids.length) {
-      return;
+async function playersForPicks(q, picks, lock = false) {
+  const players = [];
+  for (const { ticket, flip } of picks) {
+    const suffix = lock ? ' FOR UPDATE' : '';
+    const rows = ticket.party_id
+      ? await q(`SELECT u.user_id, u.name, u.char_class, u.char_levels, u.trophies, u.selected_profile_icon_id AS profile_icon_id, u.selected_skin_id_by_char, pm.party_id, pm.team
+          FROM party_members pm JOIN users u ON u.name = pm.name WHERE pm.party_id = ? ORDER BY u.user_id${suffix}`, [ticket.party_id])
+      : await q(`SELECT user_id, name, char_class, char_levels, trophies, selected_profile_icon_id AS profile_icon_id, selected_skin_id_by_char FROM users WHERE user_id = ?${suffix}`, [ticket.user_id]);
+    const counts = { team1: 0, team2: 0 };
+    for (const row of rows) {
+      let team = row.team || (Number(ticket.team1_count) === 1 ? 'team1' : 'team2');
+      counts[team]++;
+      if (flip) team = team === 'team1' ? 'team2' : 'team1';
+      players.push(decorateParticipant({ ...row, party_id: ticket.party_id || null, team, char_class: row.char_class || 'ninja' }));
     }
-
-    const players = [];
-    for (const pick of picks) {
-      const t = pick.ticket;
-      const flipped = !!pick.flip;
-      if (t.party_id) {
-        const rows = await db.runQuery(
-          "SELECT u.user_id, u.name, u.char_class, u.selected_profile_icon_id AS profile_icon_id, pm.party_id, pm.team FROM party_members pm JOIN users u ON u.name = pm.name WHERE pm.party_id = ?",
-          [t.party_id],
-        );
-        rows.forEach((u) => {
-          let team = u.team;
-          if (flipped) team = team === "team1" ? "team2" : "team1";
-          players.push({
-            user_id: u.user_id,
-            name: u.name,
-            party_id: u.party_id,
-            team,
-            char_class: u.char_class || null,
-            profile_icon_id: String(u.profile_icon_id || "") || null,
-          });
-        });
-      } else if (t.user_id) {
-        const u = await db.getUserById(t.user_id);
-        if (!u) continue;
-        let team = t.team1_count === 1 ? "team1" : "team2";
-        if (flipped) team = team === "team1" ? "team2" : "team1";
-        players.push({
-          user_id: u.user_id,
-          name: u.name,
-          party_id: null,
-          team,
-          char_class: u.char_class || null,
-          profile_icon_id: String(u.selected_profile_icon_id || "") || null,
-        });
-      }
-    }
-
-    const tickets = picks.map((p) => p.ticket);
-    const matchId = await commitMatch({
-      mode: selectionToLegacyMode(modeId, modeVariantId),
-      modeId,
-      modeVariantId,
-      map,
-      tickets,
-      players,
-    });
-
-    ids.forEach((id) => lastProgress.delete(id));
-    const size1 = players.filter((p) => p.team === "team1").length;
-    const size2 = players.filter((p) => p.team === "team2").length;
-    const mmrDelta = Math.abs(
-      averageTicketMMR(tickets, "team1") - averageTicketMMR(tickets, "team2"),
-    );
-    console.log(
-      `[match:new] #${matchId} mode=${modeId}:${modeVariantId} map=${map} ${size1}v${size2} mmrDelta=${mmrDelta} tickets=${tickets.length}`,
-    );
-
-    await emitMatchFound(matchId, modeId, modeVariantId, map, players);
-    readyCheckCoordinator.startReadyCheck(
-      matchId,
-      players.map((p) => p.user_id),
-    );
+    if (rows.length !== Number(ticket.size) || counts.team1 !== Number(ticket.team1_count) || counts.team2 !== Number(ticket.team2_count)) throw new Error('Queued party changed; queue again.');
   }
-
-  function averageTicketMMR(tickets, which) {
-    let sum = 0;
-    let count = 0;
-    for (const t of tickets) {
-      const c = which === "team1" ? t.team1_count : t.team2_count;
-      sum += t.mmr * c;
-      count += c;
-    }
-    return count ? sum / count : 0;
-  }
-
-  async function emitMatchFound(matchId, modeId, modeVariantId, map, players) {
-    console.log("[match:found] notifying players...");
-    const userIds = players.map((p) => p.user_id);
-    if (!userIds.length) return;
-    const placeholders = userIds.map(() => "?").join(",");
-    const rows = await db.runQuery(
-      `SELECT user_id, socket_id FROM users WHERE user_id IN (${placeholders})`,
-      userIds,
-    );
-    const socketByUser = new Map(rows.map((r) => [r.user_id, r.socket_id]));
-    for (const p of players) {
-      const sid = socketByUser.get(p.user_id);
-      if (!sid) continue;
-      const sock = io.sockets.sockets.get(sid);
-      if (!sock) continue;
-      sock.emit("match:found", {
-        matchId,
-        modeId,
-        modeVariantId,
-        selection: { modeId, modeVariantId, mapId: Number(map) },
-        map,
-        yourTeam: p.team,
-        players: players.map((x) => ({
-          user_id: x.user_id,
-          name: x.name,
-          team: x.team,
-          char_class: x.char_class,
-          profile_icon_id: x.profile_icon_id || null,
-        })),
-      });
-    }
-  }
-
-  async function commitMatch({
-    mode,
-    modeId,
-    modeVariantId,
-    map,
-    tickets,
-    players,
-  }) {
-    const ids = tickets.map((t) => t.ticket_id);
-    const partyIds = tickets.filter((t) => !!t.party_id).map((t) => t.party_id);
-    return runInTx(async (conn, q) => {
-      const { insertId: matchId } = await q(
-        "INSERT INTO matches (mode,mode_id,mode_variant_id,map,status) VALUES (?,?,?,?, 'queued')",
-        [mode, modeId, modeVariantId, map],
-      );
-      if (players.length) {
-        const placeholders = players.map(() => "(?,?,?,?,?)").join(",");
-        const values = players.flatMap((p) => [
-          matchId,
-          p.user_id,
-          p.party_id,
-          p.team,
-          p.char_class || null,
-        ]);
-        await q(
-          `INSERT INTO match_participants (match_id,user_id,party_id,team,char_class) VALUES ${placeholders}`,
-          values,
-        );
-      }
-      if (ids.length) {
-        const ph = ids.map(() => "?").join(",");
-        await q(`DELETE FROM match_tickets WHERE ticket_id IN (${ph})`, ids);
-      }
-      if (partyIds.length) {
-        await q(
-          `UPDATE parties SET status=? WHERE party_id IN (${partyIds
-            .map(() => "?")
-            .join(",")})`,
-          [partyStatus.READY_CHECK, ...partyIds],
-        );
-      }
-      return matchId;
-    });
-  }
-
-  return {
-    assembleAndReady,
-  };
+  if (new Set(players.map((p) => p.user_id)).size !== players.length) throw new Error('Duplicate match participant.');
+  return players;
 }
 
-module.exports = { createMatchAssemblyManager };
+function createMatchAssemblyManager({ db, io, partyStatus, lastProgress, readyCheckCoordinator }) {
+  async function assembleAndReady(modeId, modeVariantId, map, picks, options = {}) {
+    if (!picks.length) return null;
+    const ids = picks.map((p) => p.ticket.ticket_id).sort((a, b) => a - b);
+    const ph = ids.map(() => '?').join(',');
+    const result = await db.withTransaction(async (_conn, q) => {
+      const tickets = await q(`SELECT * FROM match_tickets WHERE ticket_id IN (${ph}) ORDER BY ticket_id FOR UPDATE`, ids);
+      if (tickets.length !== ids.length || tickets.some((t) => t.status !== 'queued' || t.claimed_by)) return null;
+      const current = picks.map((p) => ({ ...p, ticket: tickets.find((t) => t.ticket_id === p.ticket.ticket_id) }));
+      if (current.some(({ ticket: t }) => t.mode_id !== modeId || t.mode_variant_id !== modeVariantId || Number(t.map) !== Number(map))) return null;
+      const humans = await playersForPicks(q, current, true);
+      if (!humans.length) return null;
+      const teamSize = options.teamSize;
+      for (const team of ['team1', 'team2']) if (humans.filter((p) => p.team === team).length > teamSize) throw new Error('Team capacity changed.');
+      const bots = options.fillBots ? createBotParticipants(humans, teamSize, { seed: options.seed, healthOverride: options.healthOverride }) : [];
+      // Keep staged identities/names, with final level and difficulty recalculated from locked humans.
+      if (options.bots) bots.forEach((bot, i) => { const staged = options.bots[i]; if (staged && staged.team === bot.team) Object.assign(bot, { participantId: staged.participantId, name: staged.name, char_class: staged.char_class, seed: staged.seed, profile_icon_id: staged.profile_icon_id }); });
+      const players = [...humans, ...bots.map(decorateParticipant)];
+      if (players.length !== teamSize * 2) return null;
+      const mode = selectionToLegacyMode(modeId, modeVariantId);
+      const { insertId: matchId } = await q("INSERT INTO matches (mode,mode_id,mode_variant_id,map,status) VALUES (?,?,?,?, 'queued')", [mode, modeId, modeVariantId, map]);
+      for (const p of humans) await q('INSERT INTO match_participants (match_id,user_id,party_id,team,char_class) VALUES (?,?,?,?,?)', [matchId, p.user_id, p.party_id, p.team, p.char_class]);
+      for (const b of bots) await q(`INSERT INTO match_bot_participants (participant_id,match_id,name,team,char_class,level,trophies,seed,difficulty,health_override) VALUES (?,?,?,?,?,?,?,?,?,?)`, [b.participantId, matchId, b.name, b.team, b.char_class, b.level, b.trophies, b.seed, JSON.stringify(b.difficulty), b.botHealthOverride]);
+      await q(`DELETE FROM match_tickets WHERE ticket_id IN (${ph})`, ids);
+      const partyIds = [...new Set(humans.map((p) => p.party_id).filter(Boolean))];
+      for (const id of partyIds) await q('UPDATE parties SET status=? WHERE party_id=?', [partyStatus.READY_CHECK, id]);
+      return { matchId, players, selection: { modeId, modeVariantId, mapId: Number(map) } };
+    });
+    if (!result) return null;
+    ids.forEach((id) => lastProgress.delete(id));
+    const humans = result.players.filter((p) => !p.isBot);
+    // Install the ready state before notifying browsers, so an immediate ACK is retained.
+    readyCheckCoordinator.startReadyCheck(result.matchId, humans.map((p) => p.user_id));
+    const rows = await db.runQuery(`SELECT user_id, socket_id FROM users WHERE user_id IN (${humans.map(() => '?').join(',')})`, humans.map((p) => p.user_id));
+    for (const row of rows) {
+      const p = humans.find((p) => p.user_id === row.user_id);
+      io.sockets.sockets.get(row.socket_id)?.emit('match:found', { ...result, modeId, modeVariantId, map, yourTeam: p.team });
+    }
+    console.log('[match:assembled]', JSON.stringify({ matchId: result.matchId, humans: humans.length, bots: result.players.length - humans.length, waitMs: Date.now() - new Date(picks[0].ticket.created_at).getTime() }));
+    return result;
+  }
+  return { assembleAndReady };
+}
+module.exports = { createMatchAssemblyManager, playersForPicks };

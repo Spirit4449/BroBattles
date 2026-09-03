@@ -132,16 +132,7 @@ if (!IS_PROD) {
 const socketApi = initSocket({
   io,
   COOKIE_SECRET,
-  db: {
-    getUserById: db.getUserById,
-    getPartyIdByName: db.getPartyIdByName,
-    fetchPartyMembersDetailed: db.fetchPartyMembersDetailed,
-    setUserStatus: db.setUserStatus,
-    setUserSocketId: db.setUserSocketId,
-    clearUserSocketIfMatch: db.clearUserSocketIfMatch,
-    updateLastSeen: db.updateLastSeen,
-    runQuery: db.runQuery,
-  },
+  db,
   runtimeConfig,
   chatService,
   abuseControl,

@@ -106,35 +106,9 @@ const BASE_GAME_WIDTH = 2300;
 const BASE_GAME_HEIGHT = 1000;
 const MAX_TOP_PLAYFIELD_PADDING = 320;
 
-function isLikelyBotName(name) {
-  return String(name || "")
-    .trim()
-    .toUpperCase()
-    .startsWith("BOT ");
-}
 
-function enableRemoteBotPhysics(scene, wrapper, objects) {
-  if (!scene?.physics || !wrapper?.opponent?.body) return;
-  if (wrapper._botPhysicsApplied === true) return;
 
-  const sprite = wrapper.opponent;
-  wrapper._botPhysicsApplied = true;
-  wrapper._botColliders = [];
 
-  try {
-    sprite.body.allowGravity = true;
-    sprite.setCollideWorldBounds(true);
-  } catch (_) {}
-
-  if (!Array.isArray(objects)) return;
-  for (const mapObject of objects) {
-    if (!mapObject) continue;
-    try {
-      const collider = scene.physics.add.collider(sprite, mapObject);
-      if (collider) wrapper._botColliders.push(collider);
-    } catch (_) {}
-  }
-}
 
 function getViewportAdaptiveGameHeight() {
   const visualViewport = window.visualViewport;
@@ -1356,7 +1330,7 @@ class GameScene extends Phaser.Scene {
       const isTeammate = playerData.team === gameData.yourTeam;
       const playerContainer = isTeammate ? teamPlayers : opponentPlayers;
       const isBotPlayer =
-        playerData?.isBot === true || isLikelyBotName(playerData?.name);
+        playerData?.isBot === true;
 
       // If an instance already exists for this name in this spawn version, upsert instead of re-create
       const existing = playerContainer[playerData.name];
@@ -1390,20 +1364,11 @@ class GameScene extends Phaser.Scene {
           ) {
             const serverX = Number(playerData.x);
             const serverY = Number(playerData.y);
-            if (
-              isBotPlayer &&
-              !Number.isFinite(existing._authoritativeYOffset)
-            ) {
-              const currentY = Number(existing?.opponent?.y);
-              if (Number.isFinite(currentY)) {
-                existing._authoritativeYOffset = currentY - serverY;
-              }
-            }
-            const yOffset = Number(existing._authoritativeYOffset) || 0;
-            existing.opponent.body?.reset?.(serverX, serverY + yOffset);
+
+            existing.opponent.body?.reset?.(serverX, serverY);
           }
           existing.isBot = isBotPlayer;
-          if (isBotPlayer) enableRemoteBotPhysics(this, existing, mapObjects);
+
           existing.finalizeSpawnPresentation?.();
           if (existing.updateUIPosition) existing.updateUIPosition();
         } catch (_) {}
@@ -1431,7 +1396,7 @@ class GameScene extends Phaser.Scene {
         opPlayer.spawnIndex = SERVER_SPAWN_INDEX[playerData.name];
       }
       opPlayer.isBot = isBotPlayer;
-      if (isBotPlayer) enableRemoteBotPhysics(this, opPlayer, mapObjects);
+
 
       // Snap opponent sprite to its map-specific spawn immediately
       try {
@@ -1459,14 +1424,8 @@ class GameScene extends Phaser.Scene {
         ) {
           const serverX = Number(playerData.x);
           const serverY = Number(playerData.y);
-          if (isBotPlayer && !Number.isFinite(opPlayer._authoritativeYOffset)) {
-            const currentY = Number(opPlayer?.opponent?.y);
-            if (Number.isFinite(currentY)) {
-              opPlayer._authoritativeYOffset = currentY - serverY;
-            }
-          }
-          const yOffset = Number(opPlayer._authoritativeYOffset) || 0;
-          opPlayer.opponent.body?.reset?.(serverX, serverY + yOffset);
+
+          opPlayer.opponent.body?.reset?.(serverX, serverY);
         }
         opPlayer.finalizeSpawnPresentation?.();
         if (opPlayer.updateUIPosition) opPlayer.updateUIPosition();
@@ -1884,15 +1843,6 @@ class GameScene extends Phaser.Scene {
           targetX = aX;
           targetY = aY;
         }
-      }
-      const authoritativeYOffset = Number(wrapper?._authoritativeYOffset);
-      if (Number.isFinite(authoritativeYOffset) && authoritativeYOffset !== 0) {
-        targetY += authoritativeYOffset;
-      }
-      if (wrapper?.isBot === true && spr?.body) {
-        // Bot sprites are now locally gravity/collision-driven on Y.
-        // Keep snapshot authority on X while preserving local vertical physics.
-        targetY = Number(spr.y);
       }
       const shouldSnapToTarget =
         Number(wrapper._networkSnapUntil) > performance.now();

@@ -72,7 +72,7 @@ function activate(caster, now, room, payload = null) {
     broadcastAction(room, caster, action, Date.now());
   };
 
-  if (startup > 0) setTimeout(release, startup);
+  if (startup > 0) room.scheduleAction(release, startup);
   else release();
 }
 

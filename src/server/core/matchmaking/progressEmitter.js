@@ -9,9 +9,7 @@ function createProgressEmitter({ db, io, lastProgress }) {
     return Math.floor((Date.now() - new Date(row.created_at).getTime()) / 1000);
   }
 
-  function mmrWindowForTicket(ticket) {
-    return Math.min(400, 100 + Math.floor(ageSeconds(ticket) * 15));
-  }
+  const { ratingWindow: mmrWindowForTicket } = require('./mmrUtils');
 
   function mmrOf(ticket) {
     return Number(ticket?.mmr) || 0;
@@ -140,12 +138,12 @@ function createProgressEmitter({ db, io, lastProgress }) {
           Math.abs(mmrOf(candidate) - mmrOf(viewerTicket)) <= window,
       );
 
-      const foundPlayers = Math.min(
+      let foundPlayers = Math.min(
         visibleItems.reduce((acc, t) => acc + ticketSize(t), 0),
         totalRequired,
       );
 
-      const players = [];
+      let players = [];
       const seenNames = new Set();
       for (const ticket of visibleItems) {
         if (players.length >= totalRequired) break;
@@ -157,6 +155,8 @@ function createProgressEmitter({ db, io, lastProgress }) {
           if (players.length >= totalRequired) break;
         }
       }
+
+      if (options.roster) { players = options.roster; foundPlayers = players.length; }
 
       const payload = {
         modeId,

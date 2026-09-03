@@ -280,6 +280,7 @@ function createConfiguredPlatform(scene, row) {
   if (sprite.body && Number.isFinite(ox) && Number.isFinite(oy)) {
     sprite.body.setOffset(ox, oy);
   }
+  if (row.collisionEnabled === false) sprite.body.enable = false;
   return sprite;
 }
 

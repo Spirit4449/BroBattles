@@ -1,3 +1,4 @@
+const { participantId } = require('./participants');
 const {
   createRuntimeAttack,
   tickRuntimeAttack,
@@ -14,7 +15,7 @@ function claimAttackInstance(room, playerData, actionData, now = Date.now()) {
   if (!instanceId) return true;
   room._recentAttackInstances = room._recentAttackInstances || new Map();
   const key =
-    `${String(playerData?.socketId || "")}|` +
+    `${String(participantId(playerData) || "")}|` +
     `${String(actionData?.type || "").toLowerCase()}|` +
     instanceId;
   for (const [seenKey, seenAt] of room._recentAttackInstances.entries()) {
@@ -36,8 +37,8 @@ function registerAttackFromAction(
   const actionType = String(actionData?.type || "").toLowerCase();
   // Huntress projectiles are client-collision authoritative for now.
   if (
-    actionType === "huntress-arrow-release" ||
-    actionType === "huntress-burning-arrow"
+    !playerData.isBot && (actionType === "huntress-arrow-release" ||
+    actionType === "huntress-burning-arrow")
   ) {
     return false;
   }
@@ -51,6 +52,7 @@ function registerAttackFromAction(
   for (const attack of attacks) {
     if (!attack) continue;
     attack.sourceType = sourceType;
+    if (playerData.isBot && playerData.char_class === 'huntress') attack.runtimeKind = 'projectile-spread';
     ensureAttackState(room).push(attack);
   }
   return true;
@@ -73,7 +75,7 @@ function tickActiveAttacks(room, now = Date.now()) {
 function requestReturningProjectilePhase(room, playerData, actionData) {
   const attacks = ensureAttackState(room);
   if (!attacks.length) return false;
-  const socketId = String(playerData?.socketId || "");
+  const socketId = String(participantId(playerData) || "");
   const instanceId = String(actionData?.id || "").trim();
   if (!socketId || !instanceId) return false;
 
@@ -85,7 +87,7 @@ function requestReturningProjectilePhase(room, playerData, actionData) {
     ) {
       continue;
     }
-    if (String(attack.attackerSocketId || "") !== socketId) continue;
+    if (String(attack.attackerParticipantId || "") !== socketId) continue;
     if (String(attack.instanceId || "") !== instanceId) continue;
     if (String(attack.phase || "") === "return") {
       applied = true;

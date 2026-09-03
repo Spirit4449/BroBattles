@@ -93,6 +93,7 @@ function initSocket({
     io,
     db,
     gameHub, // Pass game hub to matchmaking
+    runtimeConfig,
     teamSizeByMode: TEAM_SIZE_BY_MODE,
   });
   const partyPresence = createPartyPresenceService({ db, io });

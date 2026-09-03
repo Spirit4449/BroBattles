@@ -1,3 +1,4 @@
+const { applyParticipantKnockback } = require('../participants');
 // src/server/core/gameRoom/effects/effectDefs.js
 //
 // Every status effect is defined here. To add a new effect:
@@ -212,7 +213,7 @@ const effectDefs = {
           !target.isAlive ||
           target.connected === false ||
           target.loaded !== true ||
-          !target.socketId
+          (!target.socketId && !target.isBot)
         ) {
           continue;
         }
@@ -232,7 +233,7 @@ const effectDefs = {
         );
         centeredTargetIndex += 1;
 
-        room.io.to(target.socketId).emit("player:knockback", {
+        applyParticipantKnockback(room, target, {
           source: player.name,
           cause: "shockwave",
           radial: true,

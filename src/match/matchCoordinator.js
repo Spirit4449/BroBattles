@@ -155,50 +155,21 @@ export function createMatchCoordinator(config) {
   let _startWatchdogRecoveryInFlight = false;
   let _joinedSocketId = null;
 
-  function _isLikelyBotName(name) {
-    return String(name || "")
-      .trim()
-      .toUpperCase()
-      .startsWith("BOT ");
-  }
+
 
   function _isBotPlayer(pd) {
-    return pd?.isBot === true || _isLikelyBotName(pd?.name);
+    return pd?.isBot === true;
   }
 
-  function _enableBotPhysics(op) {
-    const scene = getGameScene();
-    if (!scene?.physics || !op?.opponent?.body) return;
-    if (op._botPhysicsApplied === true) return;
-    op._botPhysicsApplied = true;
-    op._botColliders = [];
-    try {
-      op.opponent.body.allowGravity = true;
-      op.opponent.setCollideWorldBounds(true);
-    } catch (_) {}
-    const objects = Array.isArray(scene?._mapObjects) ? scene._mapObjects : [];
-    for (const mapObject of objects) {
-      if (!mapObject) continue;
-      try {
-        const collider = scene.physics.add.collider(op.opponent, mapObject);
-        if (collider) op._botColliders.push(collider);
-      } catch (_) {}
-    }
-  }
+
 
   function _applyAuthoritativeRemotePosition(op, pd) {
     if (!op?.opponent?.body) return;
     const serverX = Number(pd?.x);
     const serverY = Number(pd?.y);
     if (!Number.isFinite(serverX) || !Number.isFinite(serverY)) return;
-    if (_isBotPlayer(pd) && !Number.isFinite(op._authoritativeYOffset)) {
-      const currentY = Number(op?.opponent?.y);
-      if (Number.isFinite(currentY)) {
-        op._authoritativeYOffset = currentY - serverY;
-      }
-    }
-    const yOffset = Number(op._authoritativeYOffset) || 0;
-    op.opponent.body.reset(serverX, serverY + yOffset);
+
+    op.opponent.body.reset(serverX, serverY);
   }
 
   // ---------------------------------------------------------------------------
@@ -213,7 +184,7 @@ export function createMatchCoordinator(config) {
     const gameData = getGameData();
     try {
       op.isBot = _isBotPlayer(pd);
-      if (op.isBot) _enableBotPhysics(op);
+
       const teamRoster = (gameData.players || []).filter(
         (p) => p.team === pd.team,
       );

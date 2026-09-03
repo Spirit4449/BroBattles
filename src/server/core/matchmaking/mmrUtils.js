@@ -1,18 +1,10 @@
 function computeUserMMRFromRow(user) {
-  try {
-    const levels = user?.char_levels ? JSON.parse(user.char_levels) : {};
-    const vals = Object.values(levels).map((n) => Number(n) || 0);
-    const unlocked = vals.filter((n) => n >= 1).length;
-    const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-    return Math.round(avg * 100 + unlocked * 20);
-  } catch (_) {
-    return 0;
-  }
+  return Math.max(0, Math.round(Number(user?.trophies) || 0));
 }
 
 async function computePartyMMR(db, partyId) {
   const rows = await db.runQuery(
-    "SELECT u.user_id, u.char_levels FROM party_members pm JOIN users u ON u.name = pm.name WHERE pm.party_id = ?",
+    "SELECT u.user_id, u.trophies FROM party_members pm JOIN users u ON u.name = pm.name WHERE pm.party_id = ?",
     [partyId],
   );
   if (!rows.length) return 0;
@@ -35,3 +27,8 @@ module.exports = {
   computePartyMMR,
   getPartyTeamCounts,
 };
+
+function ratingWindow(ticket, now = Date.now()) {
+  return Math.min(400, 100 + Math.floor(Math.max(0, now - new Date(ticket.created_at).getTime()) / 1000) * 15);
+}
+module.exports.ratingWindow = ratingWindow;

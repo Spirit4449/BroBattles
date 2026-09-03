@@ -31,10 +31,13 @@ const {
   requiresMeleeFacingCheck,
   getKnockback,
 } = require("./gameRoom/abilityRuntimeManager");
-const { getMapObjectiveLayout } = require("../helpers/gameSelectionCatalog");
 
-const UNLIMITED_HEALTH_BOT_NAME_PREFIX = "BOT ULTRA";
-const UNLIMITED_HEALTH_BOT_HP = 9999999;
+const { getDuelGeometry, spawnForParticipant } = require('../../shared/duelGeometry');
+const { BotController } = require('./bots/controller');
+const { startNinjaSwarm } = require('./bots/combat');
+const { applyImpulse } = require('./bots/physics');
+const { getParticipant, participantId } = require('./gameRoom/participants');
+const { deleteMatchBots } = require('../services/matchRosterService');
 
 class GameRoom {
   constructor(
@@ -123,7 +126,14 @@ class GameRoom {
       netTestLogger.noteRoomCreated(this);
     }
 
+    this.geometry = getDuelGeometry(matchData.map);
+    this.botControllers = new Map();
+    this._scheduledActions = [];
+    this._socketBindings = [];
     this._seedBotPlayers();
+    if (this.geometry) for (const player of this.players.values()) {
+      if (player.isBot) this.botControllers.set(player.participantId, new BotController(this, player));
+    }
   }
 
   _seedBotPlayers() {
@@ -132,7 +142,7 @@ class GameRoom {
       : []) {
       if (!matchPlayer?.isBot) continue;
       const spawn = this._getBotSpawnState(matchPlayer);
-      const level = 1;
+      const level = matchPlayer.level || 1;
       const {
         maxHealth,
         baseDamage,
@@ -143,9 +153,15 @@ class GameRoom {
         ammoReloadMs,
       } = this._computeStats(matchPlayer.char_class || "ninja", level);
       const botMaxHealth = this._resolveBotMaxHealth(matchPlayer, maxHealth);
-      const key = `bot:${matchPlayer.user_id || matchPlayer.name}`;
+      const key = matchPlayer.participantId;
       this.players.set(key, {
         socketId: null,
+        participantId: matchPlayer.participantId,
+        seed: matchPlayer.seed,
+        difficulty: matchPlayer.difficulty,
+        trophies: matchPlayer.trophies,
+        _botActionSeq: 0,
+        _botActionUntil: 0,
         user_id: matchPlayer.user_id,
         name: matchPlayer.name,
         team: matchPlayer.team,
@@ -202,201 +218,63 @@ class GameRoom {
     if (Number.isFinite(explicitOverride) && explicitOverride > 0) {
       return Math.round(explicitOverride);
     }
-    const name = String(matchPlayer?.name || "")
-      .trim()
-      .toUpperCase();
-    if (name.startsWith(`${UNLIMITED_HEALTH_BOT_NAME_PREFIX} `)) {
-      return UNLIMITED_HEALTH_BOT_HP;
-    }
     return Math.max(1, Number(fallbackMaxHealth) || 1);
   }
 
   _getBotSpawnState(matchPlayer) {
-    const mapId = Number(this.matchData?.map) || 1;
-    const team = matchPlayer?.team === "team2" ? "team2" : "team1";
-    const teamSize = Math.max(
-      1,
-      (Array.isArray(this.matchData?.players)
-        ? this.matchData.players
-        : []
-      ).filter((player) => player?.team === team).length,
-    );
-    const index = Math.max(
-      0,
-      Number(this._computeSpawnIndex(matchPlayer?.name, team)) || 0,
-    );
-    const slotsBySize = {
-      1: [0],
-      2: [-120, 120],
-      3: [-180, 0, 180],
-    };
-    const pickDx = (fallback = 0, bySize = slotsBySize) => {
-      const list = bySize[String(Math.max(1, Math.min(3, teamSize)))] || [
-        fallback,
-      ];
-      return Number(list[Math.max(0, Math.min(list.length - 1, index))]) || 0;
-    };
-
-    if (mapId === 1) {
-      const centerX = 1150;
-      const y = team === "team1" ? 490 : 227;
-      return { x: centerX + pickDx(), y };
-    }
-
-    if (mapId === 2) {
-      const teamAnchors =
-        team === "team1"
-          ? [
-              { x: 1631, y: 291 },
-              { x: 1004, y: 138 },
-              { x: 1298, y: 138 },
-            ]
-          : [
-              { x: 843, y: 429 },
-              { x: 1457, y: 429 },
-              { x: 671, y: 291 },
-            ];
-      return teamAnchors[Math.max(0, Math.min(teamAnchors.length - 1, index))];
-    }
-
-    if (mapId === 3) {
-      const centerX = 1150;
-      if (team === "team1") {
-        const dxBySize = {
-          1: [0],
-          2: [-100, 100],
-          3: [-145, 0, 145],
-        };
-        return { x: centerX + 350 + pickDx(0, dxBySize), y: 262 };
-      }
-      const dxBySize = {
-        1: [0],
-        2: [-130, 130],
-        3: [-200, 0, 200],
-      };
-      return { x: centerX + pickDx(0, dxBySize), y: 500 };
-    }
-
-    if (mapId === 4) {
-      const layout = getMapObjectiveLayout(mapId, "bankBust") || null;
-      const respawn = layout?.respawnPoints?.[team] || null;
-      const base =
-        respawn &&
-        Number.isFinite(Number(respawn.x)) &&
-        Number.isFinite(Number(respawn.y))
-          ? { x: Number(respawn.x), y: Number(respawn.y) }
-          : team === "team1"
-            ? { x: 151, y: 100 }
-            : { x: 3455, y: 100 };
-      const dxBySize = {
-        1: [0],
-        2: [-65, 65],
-        3: [-130, 0, 130],
-      };
-      return { x: base.x + pickDx(0, dxBySize), y: base.y };
-    }
-
-    return {
-      x: team === "team1" ? 1000 : 1300,
-      y: 500,
-    };
+    if (!this.geometry) throw new Error('Bot navigation is unavailable for this map.');
+    const team = this.matchData.players.filter((p) => p.team === matchPlayer.team);
+    return spawnForParticipant(this.geometry, matchPlayer, team.findIndex((p) => p.participantId === matchPlayer.participantId), team.length);
   }
 
   async addPlayer(socket, user) {
-    // Verify this user is actually supposed to be in this match
-    const isParticipant = this.matchData.players.some(
-      (p) => p.user_id === user.user_id,
+    const userId = Number(user?.user_id);
+    const matchPlayer = this.matchData.players.find(
+      (p) => !p.isBot && Number(p.user_id) === userId,
     );
-    if (!isParticipant) {
+    if (!Number.isFinite(userId) || userId <= 0 || !matchPlayer) {
       throw new Error("You are not a participant in this match");
     }
+    if (this._disposed || this.status === "finished") {
+      throw new Error("This match has finished");
+    }
 
-    // Check if player is already in the room (reconnection)
-    const existingPlayer = Array.from(this.players.values()).find(
-      (p) => p.user_id === user.user_id,
+    const gameRoom = `game:${this.matchId}`;
+    const teamRoom = `${gameRoom}:team:${matchPlayer.team}`;
+    const findExisting = () => Array.from(this.players.values()).find(
+      (p) => !p.isBot && Number(p.user_id) === userId,
     );
-    if (existingPlayer) {
-      const teamRoom = `game:${this.matchId}:team:${existingPlayer.team || "team1"}`;
-      if (existingPlayer.socketId === socket.id) {
-        if (!this._netTestEnabled) {
-          console.log(
-            `[GameRoom ${this.matchId}] Duplicate game:join ignored for ${user.name} on socket ${socket.id}`,
-          );
-        }
-        socket.join(`game:${this.matchId}`);
-        socket.join(teamRoom);
-        this.sendGameStateToPlayer(socket);
-        return;
+    let playerData = findExisting();
+    if (!playerData) {
+      const level = Number(matchPlayer.level) > 0
+        ? Number(matchPlayer.level)
+        : await this._fetchLevelForUser(userId, matchPlayer.char_class);
+      // Another join may have completed while the legacy level lookup awaited IO.
+      if (findExisting()) return this.addPlayer(socket, user);
+      if (this._disposed || this.status === "finished") {
+        throw new Error("This match has finished");
       }
-      // Update socket for reconnection
-      for (const [key, value] of this.players.entries()) {
-        if (value?.user_id === user.user_id) this.players.delete(key);
-      }
-      existingPlayer.socketId = socket.id;
-      existingPlayer.connected = true;
-      // Reconnection/new page load resets client packet sequencing.
-      // If we keep the old sequence counters, the server will reject fresh
-      // movement packets until the new client sequence number catches up.
-      existingPlayer._lastPositionSeq = -1;
-      existingPlayer._lastPositionClientTs = 0;
-      existingPlayer._lastInputSeq = -1;
-      if (Array.isArray(existingPlayer._inputIntentQueue)) {
-        existingPlayer._inputIntentQueue.length = 0;
-      }
-      existingPlayer._currentInputIntent = null;
-      existingPlayer._lastInputIntent = null;
-      this.players.set(socket.id, existingPlayer);
-      this._ensureRewardBucket(existingPlayer);
-      socket.join(teamRoom);
-      this.io.to(`game:${this.matchId}`).emit("player:reconnected", {
-        name: existingPlayer.name,
-        username: existingPlayer.name,
-        loaded: existingPlayer.loaded === true,
-      });
-      if (!this._netTestEnabled) {
-        console.log(
-          `[GameRoom ${this.matchId}] Player ${user.name} reconnected`,
-        );
-      }
-    } else {
-      // New player joining
-      const matchPlayer = this.matchData.players.find(
-        (p) => p.user_id === user.user_id,
-      );
-      // Fetch player's character level for current class to compute health/damage
-      const level = await this._fetchLevelForUser(
-        user.user_id,
-        matchPlayer.char_class,
-      );
       const {
-        maxHealth,
-        baseDamage,
-        specialDamage,
-        specialChargeDamage,
-        ammoCapacity,
-        ammoCooldownMs,
-        ammoReloadMs,
+        maxHealth, baseDamage, specialDamage, specialChargeDamage,
+        ammoCapacity, ammoCooldownMs, ammoReloadMs,
       } = this._computeStats(matchPlayer.char_class, level);
-
-      const playerData = {
+      const now = Date.now();
+      playerData = {
         socketId: socket.id,
-        user_id: user.user_id,
-        name: user.name,
+        participantId: participantId(matchPlayer),
+        user_id: userId,
+        name: matchPlayer.name || user.name,
         team: matchPlayer.team,
         char_class: matchPlayer.char_class,
         selected_skin_id: String(matchPlayer.selected_skin_id || "") || null,
-        selected_skin_asset_url:
-          String(matchPlayer.selected_skin_asset_url || "") || null,
-        selected_skin_game_assets:
-          matchPlayer.selected_skin_game_assets || null,
-        profile_icon_id:
-          String(matchPlayer.profile_icon_id || "") ||
-          String(matchPlayer.char_class || "ninja"),
+        selected_skin_asset_url: String(matchPlayer.selected_skin_asset_url || "") || null,
+        selected_skin_game_assets: matchPlayer.selected_skin_game_assets || null,
+        profile_icon_id: String(matchPlayer.profile_icon_id || matchPlayer.char_class || "ninja"),
+        isBot: false,
+        trophies: Number(matchPlayer.trophies) || 0,
         connected: true,
         loaded: false,
-        spawnIndex: this._computeSpawnIndex(user.name, matchPlayer.team),
-
-        // Game state
+        spawnIndex: this._computeSpawnIndex(matchPlayer.name || user.name, matchPlayer.team),
         x: null,
         y: null,
         vx: 0,
@@ -407,29 +285,19 @@ class GameRoom {
         superCharge: 0,
         maxSuperCharge: specialChargeDamage,
         isAlive: true,
-        lastInput: Date.now(),
+        lastInput: now,
         _lastPositionPacketAt: 0,
-
-        // Input buffer for server authority
         inputBuffer: [],
-
-        // Combat stats (server-side authoritative)
         level,
         baseDamage,
         specialDamage,
-
-        // Combat timestamps for regen and anti-spam
-        lastCombatAt: Date.now(), // updated when attacking or being hit
+        lastCombatAt: now,
         lastAttackAt: 0,
         lastDamagedAt: 0,
-        _regenCarry: 0, // fractional regen accumulator
+        _regenCarry: 0,
         _lastHealthBroadcastAt: 0,
-
-        // Timed powerup state (managed by effectManager via player.activeEffects)
-        // player.effects is reserved for ability-specific state (e.g. dravenInferno*)
         effects: {},
         activeEffects: {},
-
         ammoState: {
           capacity: ammoCapacity,
           charges: ammoCapacity,
@@ -439,36 +307,76 @@ class GameRoom {
           nextFireInMs: 0,
         },
       };
-
       this.players.set(socket.id, playerData);
       this._ensureRewardBucket(playerData);
-      if (!this._netTestEnabled) {
-        console.log(
-          `[GameRoom ${this.matchId}] Player ${user.name} joined (${this.getPlayerCount()}/${this.matchData.players.length})`,
-        );
+    } else if (playerData.socketId === socket.id) {
+      // Repeated game:join requests resend state without registering duplicate handlers.
+      await socket.join(gameRoom);
+      await socket.join(teamRoom);
+      this.sendGameStateToPlayer(socket);
+      this._cancelAbandonTimer("player_joined");
+      return;
+    } else {
+      const previousSocket = this.io.sockets.sockets.get(playerData.socketId);
+      if (previousSocket) {
+        this.removePlayerSocket(previousSocket);
+        await previousSocket.leave(gameRoom);
+        await previousSocket.leave(teamRoom);
       }
+      for (const [key, value] of this.players) {
+        if (value === playerData) this.players.delete(key);
+      }
+      playerData.socketId = socket.id;
+      playerData.connected = true;
+      playerData._lastPositionSeq = -1;
+      playerData._lastPositionClientTs = 0;
+      playerData._lastInputSeq = -1;
+      playerData.inputBuffer.length = 0;
+      if (Array.isArray(playerData._inputIntentQueue)) playerData._inputIntentQueue.length = 0;
+      playerData._currentInputIntent = null;
+      playerData._lastInputIntent = null;
+      this.players.set(socket.id, playerData);
+      this._ensureRewardBucket(playerData);
+      this.io.to(gameRoom).emit("player:reconnected", {
+        name: playerData.name,
+        username: playerData.name,
+        loaded: playerData.loaded === true,
+      });
     }
 
-    // Join socket to game room
-    socket.join(`game:${this.matchId}`);
-    socket.join(
-      `game:${this.matchId}:team:${this.players.get(socket.id)?.team || "team1"}`,
-    );
-
-    // Set up socket event handlers for this room
+    await socket.join(gameRoom);
+    await socket.join(teamRoom);
     this.setupPlayerSocket(socket);
-
-    // Send initial game state to the player
     this.sendGameStateToPlayer(socket);
-
-    // Start game if all players are present
     this._cancelAbandonTimer("player_joined");
-    if (
-      this.getPlayerCount() === this.matchData.players.length &&
-      this.status === "waiting"
-    ) {
+    if (this.getPlayerCount() === this.matchData.players.length && this.status === "waiting") {
       this.potentialStartGame();
     }
+  }
+
+  scheduleAction(callback, delayMs, now = Date.now()) {
+    this._scheduledActions.push({ callback, at: now + Math.max(0, delayMs) });
+  }
+
+  applyKnockback(player, impulse) {
+    if (player.isBot) applyImpulse(player, impulse, this._botNow || Date.now());
+    else if (player.socketId) this.io.to(player.socketId).emit('player:knockback', impulse);
+  }
+
+  requestSpecial(id, payload = {}) {
+    const p = getParticipant(this, id);
+    if (!p || !p.isAlive || !p.loaded || this.status !== 'active') return false;
+    const now = Date.now();
+    if (p._controlLockUntil > now || p.superCharge < p.maxSuperCharge) return false;
+    p.superCharge = 0; p.lastCombatAt = now;
+    const aimPayload = payload?.aim || null;
+    if (p.isBot && p.char_class === 'ninja') startNinjaSwarm(this, p, now, aimPayload || {});
+    else activateSpecial(this, p, now, aimPayload);
+    this.io.to(`game:${this.matchId}`).emit('super-update', { username: p.name, charge: 0, maxCharge: p.maxSuperCharge });
+    if (p.char_class !== 'gloop') this.io.to(`game:${this.matchId}`).emit('player:special', {
+      username: p.name, character: p.char_class, origin: { x: p.x, y: p.y }, flip: !!p.flip, aim: aimPayload,
+    });
+    return true;
   }
 
   /**
@@ -480,6 +388,7 @@ class GameRoom {
     const playerData = this.players.get(socket.id);
     if (!playerData) return;
 
+    this.removePlayerSocket(socket);
     socket.leave(`game:${this.matchId}`);
     const teamRoom = `game:${this.matchId}:team:${playerData.team || "team1"}`;
     socket.leave(teamRoom);
@@ -664,27 +573,41 @@ class GameRoom {
       );
     }
 
-    this.cleanup();
+    try { await deleteMatchBots(this.db, this.matchId); }
+    finally { if (this.onFinished) this.onFinished(); else this.cleanup(); }
   }
 
   /**
    * Set up socket event handlers for a player in this room
    * @param {object} socket
    */
+  onSocket(socket, event, listener) {
+    socket.on(event, listener);
+    this._socketBindings.push({ socket, event, listener });
+  }
+
+  removePlayerSocket(socket) {
+    this._socketBindings = this._socketBindings.filter((binding) => {
+      if (binding.socket !== socket) return true;
+      socket.off(binding.event, binding.listener);
+      return false;
+    });
+  }
+
   setupPlayerSocket(socket) {
     // Handle player input
-    socket.on("game:input", (inputData) => {
+    this.onSocket(socket, "game:input", (inputData) => {
       this.handlePlayerInput(socket.id, inputData);
     });
 
     // NEW: Handle input intent (Phase 2 server-side movement simulation)
     // Non-breaking; queued but not used unless USE_SERVER_MOVEMENT_SIMULATION_V1 enabled
-    socket.on("game:input-intent", (intentData) => {
+    this.onSocket(socket, "game:input-intent", (intentData) => {
       inputManager.handlePlayerInputIntent(this, socket.id, intentData);
     });
 
     // Handle player actions (attacks, abilities, etc.)
-    socket.on("game:action", (actionData) => {
+    this.onSocket(socket, "game:action", (actionData) => {
       const player = this.players.get(socket.id);
       if (!player) return;
       if (Number(player._controlLockUntil || 0) > Date.now()) return;
@@ -725,58 +648,30 @@ class GameRoom {
     });
 
     // Handle special attack request
-    socket.on("game:special", (payload = {}) => {
-      const p = this.players.get(socket.id);
-      if (!p || !p.isAlive) return;
-      if (Number(p._controlLockUntil || 0) > Date.now()) return;
-      if (p.superCharge < p.maxSuperCharge) return;
-
-      p.superCharge = 0;
-      const now = Date.now();
-      p.lastCombatAt = now;
-      const aimPayload =
-        payload && typeof payload === "object" ? payload.aim || null : null;
-      activateSpecial(this, p, now, aimPayload);
-
-      this.io.to(`game:${this.matchId}`).emit("super-update", {
-        username: p.name,
-        charge: 0,
-        maxCharge: p.maxSuperCharge,
-      });
-
-      if (String(p.char_class || "").toLowerCase() !== "gloop") {
-        this.io.to(`game:${this.matchId}`).emit("player:special", {
-          username: p.name,
-          character: p.char_class,
-          origin: { x: p.x, y: p.y },
-          flip: !!p.flip,
-          aim: aimPayload,
-        });
-      }
-    });
+    this.onSocket(socket, "game:special", (payload = {}) => this.requestSpecial(socket.id, payload));
 
     // Owner-side hit proposal (server authoritative application)
-    socket.on("hit", (payload) => {
+    this.onSocket(socket, "hit", (payload) => {
       this.handleHit(socket.id, payload);
     });
 
     // Heal proposal (e.g., abilities/pickups) - server clamps and applies
-    socket.on("heal", (payload) => {
+    this.onSocket(socket, "heal", (payload) => {
       this.handleHeal(socket.id, payload);
     });
 
-    socket.on("deathdrop:pickup", (payload) => {
+    this.onSocket(socket, "deathdrop:pickup", (payload) => {
       this._handleDeathDropPickup(socket.id, payload);
     });
 
     // Handle disconnection
-    socket.on("disconnect", () => {
+    this.onSocket(socket, "disconnect", () => {
       // This will be handled by the main socket disconnect handler
       // which calls gameHub.handlePlayerLeave
     });
 
     // Client signals they're ready to start (assets + scene loaded)
-    socket.on("game:ready", (payload = {}) => {
+    this.onSocket(socket, "game:ready", (payload = {}) => {
       try {
         const p = this.players.get(socket.id);
         if (!p || !p.user_id) return;
@@ -864,7 +759,7 @@ class GameRoom {
    * Start the server game loop
    */
   startGameLoop() {
-    if (this._loopRunning) return; // already running
+    if (this._loopRunning || this._disposed || this.status !== "active") return;
     if (!this._netTestEnabled) {
       console.log(`[GameRoom ${this.matchId}] Fixed-step loop started`);
     }
@@ -994,7 +889,7 @@ class GameRoom {
    * @param {object} actionData
    */
   handlePlayerAction(socketId, actionData) {
-    const playerData = this.players.get(socketId);
+    const playerData = getParticipant(this, socketId);
     if (
       !playerData ||
       !playerData.isAlive ||
@@ -1238,7 +1133,19 @@ class GameRoom {
    * Process a single game tick
    */
   processTick() {
-    tickActiveAbilities(this, Date.now());
+    const now = Date.now();
+    this._botNow = now;
+    const due = this._scheduledActions.filter((a) => a.at <= now);
+    this._scheduledActions = this._scheduledActions.filter((a) => a.at > now);
+    for (const action of due) if (this.status === 'active') action.callback();
+    tickActiveAbilities(this, now);
+    const botStart = performance.now();
+    for (const controller of this.botControllers.values()) controller.tick(this.FIXED_DT_MS, now);
+    if (this.botControllers.size) {
+      const elapsed = performance.now() - botStart;
+      const stats = this._botTickStats ||= { ticks: 0, totalMs: 0, maxMs: 0 };
+      stats.ticks++; stats.totalMs += elapsed; stats.maxMs = Math.max(stats.maxMs, elapsed);
+    }
 
     // For Phase 1, just process basic movement inputs
     for (const playerData of this.players.values()) {
@@ -1338,6 +1245,18 @@ class GameRoom {
    * Clean up room resources
    */
   cleanup() {
+    this._disposed = true;
+    if (this._countdownTimeout) clearTimeout(this._countdownTimeout);
+    this._countdownTimeout = null;
+    for (const { socket, event, listener } of this._socketBindings) socket.off(event, listener);
+    this._socketBindings.length = 0;
+    for (const controller of this.botControllers.values()) controller.dispose();
+    this.botControllers.clear();
+    this._scheduledActions.length = 0;
+    this._activeAttacks = [];
+    this._recentHits?.clear();
+    this._recentCharacterActions?.clear();
+    this._recentAttackInstances?.clear();
     this._cancelAbandonTimer("cleanup");
     // Stop fixed-step loop
     this._loopRunning = false;
@@ -1364,6 +1283,10 @@ class GameRoom {
     }
 
     this.players.clear();
+    this.matchData.players = [];
+    this.rewardStats.clear();
+    this._readyAcks.clear();
+    this._requiredUserIds.clear();
     this._powerups.clear();
     this._deathDrops.clear();
     if (!this._netTestEnabled) {
@@ -1403,7 +1326,7 @@ class GameRoom {
    * @param {string} socketId
    * @param {object} payload { attacker, target, attackType?, instanceId?, attackTime?, damage? }
    */
-  handleHit(socketId, payload) {
+  handleHit(socketId, payload, { server = false } = {}) {
     try {
       if (!payload || typeof payload !== "object") return;
       const attackerName = String(payload.attacker || "").trim();
@@ -1420,6 +1343,7 @@ class GameRoom {
       const attacker = Array.from(this.players.values()).find(
         (p) => p.name === attackerName,
       );
+      if (!server && (getParticipant(this, socketId) !== attacker || attacker?.isBot)) return;
       const target = Array.from(this.players.values()).find(
         (p) => p.name === targetName,
       );
@@ -1698,8 +1622,8 @@ class GameRoom {
 
         if (!isSelf) {
           const knockback = getKnockback(attacker, target, now);
-          if (knockback && target.connected !== false && target.socketId) {
-            this.io.to(target.socketId).emit("player:knockback", {
+          if (knockback && target.connected !== false) {
+            this.applyKnockback(target, {
               source: attacker.name,
               ...knockback,
             });

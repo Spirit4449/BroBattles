@@ -25,6 +25,7 @@ function createRuntimeConfig({ rootDir }) {
   const filePath = path.join(rootDir, "runtime-overrides.json");
   const defaults = {
     maintenanceMode: false,
+    bots: { enabled: false, rolloutPercent: 0 },
     announcements: "",
     rewardMultipliers: {
       coins: 1,

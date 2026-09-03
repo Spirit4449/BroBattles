@@ -798,6 +798,7 @@ export function createPlayer(
   const bw = Math.max(4, frame.width - widthShrink);
   const bh = Math.max(4, frame.height - heightShrink);
   player.body.setSize(bw, bh);
+  player.body.updateFromGameObject?.();
   // Helper to adjust body offset when flipping
   applyFlipOffsetLocal = () => {
     if (!player || !player.body) return;

@@ -1,3 +1,4 @@
+const { loadMatchRoster } = require('./matchRosterService');
 const {
   normalizeSelectionFromRow,
 } = require("../helpers/gameSelectionCatalog");
@@ -8,8 +9,7 @@ const {
   getSkinGameAssets,
 } = require("../helpers/skinsCatalog");
 
-const UNLIMITED_HEALTH_BOT_NAME_PREFIX = "BOT ULTRA";
-const UNLIMITED_HEALTH_BOT_HP = 9999999;
+
 
 async function buildGameDataForMatch({
   db,
@@ -87,16 +87,10 @@ async function buildGameDataForMatch({
     };
   }
 
-  const allParticipants = await db.runQuery(
-    `SELECT mp.user_id, mp.party_id, mp.team, mp.char_class, u.name, u.char_levels, u.trophies, u.selected_profile_icon_id AS profile_icon_id, u.selected_skin_id_by_char
-       FROM match_participants mp
-       JOIN users u ON u.user_id = mp.user_id
-      WHERE mp.match_id = ?`,
-    [matchId],
-  );
+  const allParticipants = await loadMatchRoster(db, matchId);
 
   const selectedByName = await db.fetchSelectedCardsByNames(
-    allParticipants.map((p) => p.name),
+    allParticipants.filter((p) => !p.isBot).map((p) => p.name),
   );
 
   const {
@@ -118,26 +112,22 @@ async function buildGameDataForMatch({
     yourTeam: participant.team,
     yourCharacter: participant.char_class,
     players: allParticipants.map((p) => {
-      let level = 1;
+      let level = p.level || 1;
       try {
         const levels =
           typeof p.char_levels === "string"
             ? JSON.parse(p.char_levels || "{}")
             : p.char_levels || {};
         const lv = levels && levels[p.char_class];
-        level = Number(lv) > 0 ? Number(lv) : 1;
+        level = p.isBot ? p.level : Number(lv) > 0 ? Number(lv) : 1;
       } catch (_) {
         level = 1;
       }
       const baseHealth = getHealth(p.char_class, level);
-      const isUnlimitedHealthBot =
-        String(p?.name || "")
-          .trim()
-          .toUpperCase()
-          .startsWith(`${UNLIMITED_HEALTH_BOT_NAME_PREFIX} `) &&
-        Number(p?.user_id) > 0;
       return {
         user_id: p.user_id,
+        participantId: p.participantId,
+        isBot: p.isBot,
         name: p.name,
         team: p.team,
         char_class: p.char_class,
@@ -150,7 +140,7 @@ async function buildGameDataForMatch({
         trophies: Number(p.trophies) || 0,
         level,
         stats: {
-          health: isUnlimitedHealthBot ? UNLIMITED_HEALTH_BOT_HP : baseHealth,
+          health: p.isBot && p.botHealthOverride ? p.botHealthOverride : baseHealth,
           damage: getDamage(p.char_class, level),
           specialDamage: getSpecialDamage(p.char_class, level),
         },

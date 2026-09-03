@@ -1,3 +1,4 @@
+import duelMaps from "../shared/duelMaps.json";
 import {
   getMapEditorTextureKeys,
   getMapSpawnAnchors,
@@ -1045,6 +1046,7 @@ export function createMapEditorRuntime({
           scaleX: round2(go.scaleX || 1),
           scaleY: round2(go.scaleY || 1),
           flipX: !!go.flipX,
+          collisionEnabled: body?.enable !== false,
           body: body
             ? {
                 width: round2(body.width),
@@ -1090,6 +1092,18 @@ export function createMapEditorRuntime({
   function exportMapSnippets() {
     const parsed = buildExportPayload();
 
+    if (duelMaps[mapId]) {
+      const textureSizes = {};
+      for (const platform of parsed.platforms || []) {
+        const source = scene.textures.get(platform.textureKey).getSourceImage();
+        textureSizes[platform.textureKey] = { width: source.width, height: source.height };
+      }
+      const entry = { ...duelMaps[mapId], layout: { platforms: parsed.platforms, hitboxes: parsed.hitboxes }, spawns: parsed.spawns, textureSizes };
+      const snippet = JSON.stringify({ [mapId]: entry }, null, 2);
+      el.json.value = snippet;
+      navigator?.clipboard?.writeText?.(snippet).catch(() => {});
+      return;
+    }
     const snippet = [
       "// Paste this into your map module",
       `const SPAWN_CONFIG = ${JSON.stringify(parsed.spawns || {}, null, 2)};`,

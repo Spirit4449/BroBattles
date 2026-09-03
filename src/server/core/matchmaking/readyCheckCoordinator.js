@@ -15,10 +15,14 @@ function createReadyCheckCoordinator({
       ready: new Set(),
       deadline,
       timer: null,
+      checking: false,
     };
 
     const check = async () => {
-      if (Date.now() >= state.deadline) {
+      if (state.checking) return;
+      state.checking = true;
+      try {
+      if (Date.now() >= state.deadline && state.ready.size !== state.userIds.size) {
         clearInterval(state.timer);
         readyStates.delete(matchId);
         if (state.ready.size !== state.userIds.size) {
@@ -90,10 +94,16 @@ function createReadyCheckCoordinator({
           `[match:live] Failed to create game room for match ${matchId}:`,
           error,
         );
+        await cancelMatch(matchId, "Unable to start match");
       }
+      } catch (error) {
+        clearInterval(state.timer); readyStates.delete(matchId);
+        await cancelMatch(matchId, 'Unable to complete ready check');
+      } finally { state.checking = false; }
     };
 
-    state.timer = setInterval(check, 250);
+    state.timer = setInterval(() => { void check().catch((error) => console.warn("[ready] cancellation failed:", error.message)); }, 250);
+    state.timer.unref?.();
     readyStates.set(matchId, state);
   }
 

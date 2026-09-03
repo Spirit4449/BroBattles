@@ -1,65 +1,13 @@
+import duelMaps from "../shared/duelMaps.json";
 import {
   appendLayoutObjectsFromConfig,
   getSpawnPointForTeam,
   placeSpriteAtConfiguredSpawn,
 } from "./mapUtils";
 
-const SPAWN_CONFIG = {
-  players: {
-    team1: {
-      1: [{ dx: 0, anchorId: "base" }],
-      2: [
-        { dx: -120, anchorId: "base" },
-        { dx: 120, anchorId: "base" },
-      ],
-      3: [
-        { dx: -180, anchorId: "base" },
-        { dx: 0, anchorId: "base" },
-        { dx: 180, anchorId: "base" },
-      ],
-    },
-    team2: {
-      1: [{ dx: 0, anchorId: "top" }],
-      2: [
-        { dx: -120, anchorId: "top" },
-        { dx: 120, anchorId: "top" },
-      ],
-      3: [
-        { dx: -180, anchorId: "top" },
-        { dx: 0, anchorId: "top" },
-        { dx: 180, anchorId: "top" },
-      ],
-    },
-  },
-  powerups: [
-    { x: 935, y: 487.15 },
-    { x: 1150, y: 487.15 },
-    { x: 1365, y: 487.15 },
-    { x: 1005, y: 147.14999999999998 },
-    { x: 1150, y: 147.14999999999998 },
-    { x: 1295, y: 147.14999999999998 },
-    { x: 645, y: 169.14999999999998 },
-    { x: 814, y: 249 },
-    { x: 1489, y: 255 },
-    { x: 1646, y: 137 },
-    { x: 574, y: 500 },
-    { x: 1727, y: 498 },
-  ],
-};
+const SPAWN_CONFIG = duelMaps[1].spawns;
 
-const BOUNDARY_CONFIG = {
-  world: { x: 0, y: 0, width: 2300, height: 1000 },
-  camera: {
-    x: 0,
-    y: -40,
-    width: 2300,
-    height: 1000,
-    zoom: 1.7,
-    deadzoneWidth: 50,
-    deadzoneHeight: 50,
-    followOffsetY: 120,
-  },
-};
+const BOUNDARY_CONFIG = duelMaps[1].bounds;
 
 const EDITOR_TEXTURE_KEYS = [
   "lushy-base",
@@ -68,95 +16,7 @@ const EDITOR_TEXTURE_KEYS = [
 ];
 
 const USE_LAYOUT_CONFIG_ONLY = true;
-const MAP_LAYOUT_CONFIG = {
-  platforms: [
-    {
-      textureKey: "lushy-base",
-      x: 1150,
-      y: 670,
-      scaleX: 0.8,
-      scaleY: 0.8,
-      flipX: false,
-      body: {
-        width: 800,
-        height: 100,
-        offsetX: 0,
-        offsetY: 50,
-      },
-    },
-    {
-      textureKey: "lushy-platform",
-      x: 1150,
-      y: 250,
-      scaleX: 0.7,
-      scaleY: 0.7,
-      flipX: false,
-      body: {
-        width: 490,
-        height: 50,
-        offsetX: 0,
-        offsetY: 40,
-      },
-    },
-    {
-      textureKey: "lushy-side-platform",
-      x: 670,
-      y: 321,
-      scaleX: 0.3,
-      scaleY: 0.3,
-      flipX: false,
-      body: {
-        width: 156.9,
-        height: 185,
-        offsetX: 0,
-        offsetY: 140,
-      },
-    },
-    {
-      textureKey: "lushy-side-platform",
-      x: 1619,
-      y: 321,
-      scaleX: 0.3,
-      scaleY: 0.3,
-      flipX: false,
-      body: {
-        width: 156.9,
-        height: 185,
-        offsetX: 0,
-        offsetY: 140,
-      },
-    },
-    {
-      textureKey: "lushy-base",
-      x: 575,
-      y: 575,
-      scaleX: 0.18,
-      scaleY: 0.18,
-      flipX: false,
-      body: {
-        width: 180,
-        height: 40,
-        offsetX: 0,
-        offsetY: 30,
-      },
-    },
-    {
-      textureKey: "lushy-base",
-      x: 1725,
-      y: 575,
-      scaleX: 0.18,
-      scaleY: 0.18,
-      flipX: false,
-      body: {
-        width: 180,
-        height: 40,
-        offsetX: 0,
-        offsetY: 30,
-      },
-    },
-  ],
-  hitboxes: [],
-};
+const MAP_LAYOUT_CONFIG = duelMaps[1].layout;
 
 let _base = null;
 let _platform = null;

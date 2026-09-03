@@ -35,6 +35,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null }) {
       abuseControl,
     });
     activeRooms.set(matchId, room);
+    room.onFinished = () => removeGameRoom(matchId);
 
     console.log(
       `[GameHub] Created game room ${matchId} for ${matchData.players.length} players`,
@@ -145,6 +146,8 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null }) {
       rooms.push({
         matchId,
         playerCount: room.getPlayerCount(),
+        botCount: room.botControllers?.size || 0,
+        botTickStats: room._botTickStats || null,
         status: room.getStatus(),
         uptime: Date.now() - room.getStartTime(),
       });

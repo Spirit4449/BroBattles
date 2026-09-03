@@ -1,5 +1,5 @@
 function registerGameChatEvents(gameRoom, socket) {
-  socket.on("game:chat:send", async (payload = {}, cb) => {
+  gameRoom.onSocket(socket, "game:chat:send", async (payload = {}, cb) => {
     try {
       const player = gameRoom.players.get(socket.id);
       if (!player || !player.name) {

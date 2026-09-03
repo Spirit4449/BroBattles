@@ -1,3 +1,4 @@
+const { participantId } = require('./participants');
 const attackRuntimeManager = require("./attackRuntimeManager");
 const { getResolvedAttackDescriptor } = require("./attackDescriptorResolver");
 
@@ -36,7 +37,7 @@ function claimActionInstance(room, playerData, actionData, now = Date.now()) {
   if (!actionId) return true;
   room._recentCharacterActions = room._recentCharacterActions || new Map();
   const key =
-    `${String(playerData?.socketId || "")}|` +
+    `${String(participantId(playerData) || "")}|` +
     `${String(actionData?.type || "").toLowerCase()}|` +
     actionId;
   for (const [entryKey, seenAt] of room._recentCharacterActions.entries()) {
@@ -96,7 +97,7 @@ function scheduleWindupRelease(
   };
 
   if (startupMs > 0) {
-    setTimeout(emitRelease, startupMs);
+    room.scheduleAction(emitRelease, startupMs);
   } else {
     emitRelease();
   }

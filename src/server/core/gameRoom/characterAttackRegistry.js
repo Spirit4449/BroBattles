@@ -1,3 +1,4 @@
+const { getParticipant, participantId } = require('./participants');
 const { getResolvedAttackDescriptor } = require("./attackDescriptorResolver");
 const effectManager = require("./effects/effectManager");
 const {
@@ -47,14 +48,14 @@ function normalizeAngleDelta(a, b) {
 }
 
 function emitServerHit(room, attack, targetName, payload = {}) {
-  room.handleHit(attack.attackerSocketId, {
+  room.handleHit(attack.attackerParticipantId, {
     attacker: attack.attackerName,
     target: targetName,
     attackType: attack.attackType,
     instanceId: attack.instanceId,
     attackTime: Date.now(),
     damage: payload.damage,
-  });
+  }, { server: true });
 }
 
 function applyDescriptorHitEffect(
@@ -180,7 +181,7 @@ function hitCircleTargets(
   now,
   repeatCooldownMs = 0,
 ) {
-  const attacker = room.players.get(attack.attackerSocketId);
+  const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return 0;
   attack.hitTimes = attack.hitTimes || Object.create(null);
   let hitCount = 0;
@@ -219,7 +220,7 @@ function hitCircleTargets(
 }
 
 function hitRectTargets(room, attack, descriptor, rect, now) {
-  const attacker = room.players.get(attack.attackerSocketId);
+  const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return;
   const vaultTarget = getEnemyVaultTarget(room, attacker);
   if (vaultTarget && !attack.hitSet?.has(vaultTarget.targetName)) {
@@ -287,7 +288,7 @@ function clampToWorld(value, axis = "x") {
 }
 
 function resolveLiveGloopPullDestination(room, target, pull) {
-  const source = room?.players?.get?.(String(pull?.sourceSocketId || ""));
+  const source = getParticipant(room, String(pull?.sourceSocketId || ""));
   const stopDistance = Math.max(1, Number(pull?.stopDistance) || 54);
   const ax = Number(source?.x);
   const ay = Number(source?.y);
@@ -327,7 +328,7 @@ function applyGloopPull(room, attacker, target, attack, now) {
   const uy = dy / dist;
 
   target._gloopPullState = {
-    sourceSocketId: attacker.socketId,
+    sourceSocketId: participantId(attacker),
     sourceName: attacker.name,
     startedAt: now,
     until: now + pullDurationMs,
@@ -481,7 +482,7 @@ function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
     descriptorKey: String(actionData?.type || "").toLowerCase(),
     runtimeKind: String(runtime.kind || "").toLowerCase(),
     createdAt: now,
-    attackerSocketId: playerData.socketId,
+    attackerParticipantId: participantId(playerData),
     attackerName: playerData.name,
     attackType: String(descriptor?.attackType || "basic").toLowerCase(),
     instanceId: String(actionData?.id || `${playerData.name}:${now}`),
@@ -793,7 +794,7 @@ function buildAttachedRectAttack(playerData, actionData, descriptor, now) {
     descriptorKey: String(actionData?.type || "").toLowerCase(),
     runtimeKind: String(descriptor?.runtime?.kind || "").toLowerCase(),
     createdAt: now,
-    attackerSocketId: playerData.socketId,
+    attackerParticipantId: participantId(playerData),
     attackerName: playerData.name,
     attackType: String(descriptor?.attackType || "basic").toLowerCase(),
     instanceId: String(actionData?.id || `${playerData.name}:${now}`),
@@ -838,7 +839,7 @@ function buildPathRectAttack(playerData, actionData, descriptor, now) {
     descriptorKey: String(actionData?.type || "").toLowerCase(),
     runtimeKind: String(descriptor?.runtime?.kind || "").toLowerCase(),
     createdAt: now,
-    attackerSocketId: playerData.socketId,
+    attackerParticipantId: participantId(playerData),
     attackerName: playerData.name,
     attackType: String(descriptor?.attackType || "basic").toLowerCase(),
     instanceId: String(actionData?.id || `${playerData.name}:${now}`),
@@ -883,7 +884,7 @@ function buildAttachedConeAttack(playerData, actionData, descriptor, now) {
     descriptorKey: String(actionData?.type || "").toLowerCase(),
     runtimeKind: String(descriptor?.runtime?.kind || "").toLowerCase(),
     createdAt: now,
-    attackerSocketId: playerData.socketId,
+    attackerParticipantId: participantId(playerData),
     attackerName: playerData.name,
     attackType: String(descriptor?.attackType || "basic").toLowerCase(),
     instanceId: String(actionData?.id || `${playerData.name}:${now}`),
@@ -959,7 +960,7 @@ function buildReturningProjectileAttack(
     descriptorKey: String(actionData?.type || "").toLowerCase(),
     runtimeKind: String(runtime.kind || "").toLowerCase(),
     createdAt: now,
-    attackerSocketId: playerData.socketId,
+    attackerParticipantId: participantId(playerData),
     attackerName: playerData.name,
     attackType: String(descriptor?.attackType || "basic").toLowerCase(),
     instanceId: String(actionData?.id || `${playerData.name}:${now}`),
@@ -1049,7 +1050,7 @@ function buildRuntimeAttack(playerData, actionData, now = Date.now()) {
 }
 
 function tickLinearProjectile(room, attack, descriptor) {
-  const attacker = room.players.get(attack.attackerSocketId);
+  const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return true;
   const runtime = descriptor?.runtime || {};
   const dtSec = room.FIXED_DT_MS / 1000;
@@ -1073,7 +1074,7 @@ function tickLinearProjectile(room, attack, descriptor) {
 }
 
 function tickBallisticProjectile(room, attack, descriptor) {
-  const attacker = room.players.get(attack.attackerSocketId);
+  const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return true;
   const runtime = descriptor?.runtime || {};
   const dtSec = room.FIXED_DT_MS / 1000;
@@ -1083,6 +1084,7 @@ function tickBallisticProjectile(room, attack, descriptor) {
   attack.vy += (Number(attack.gravity) || 0) * dtSec;
   attack.x += Number(attack.vx) * dtSec;
   attack.y += Number(attack.vy) * dtSec;
+  if (attacker.isBot && room.geometry?.colliders.some((r) => sweptCircleOverlapsRect(prevX, prevY, attack.x, attack.y, r, attack.collisionRadius || 8))) return true;
   attack.traveled += Math.hypot(
     Number(attack.x) - prevX,
     Number(attack.y) - prevY,
@@ -1113,7 +1115,7 @@ function tickBallisticProjectile(room, attack, descriptor) {
 }
 
 function tickBouncingProjectile(room, attack, descriptor, now) {
-  const attacker = room.players.get(attack.attackerSocketId);
+  const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return true;
   const runtime = descriptor?.runtime || {};
   const dtSec = room.FIXED_DT_MS / 1000;
@@ -1229,7 +1231,7 @@ function tickBouncingProjectile(room, attack, descriptor, now) {
 }
 
 function tickHookProjectile(room, attack, descriptor, now) {
-  const attacker = room.players.get(attack.attackerSocketId);
+  const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return true;
   const runtime = descriptor?.runtime || {};
   const dtSec = room.FIXED_DT_MS / 1000;
@@ -1278,7 +1280,7 @@ function tickHookProjectile(room, attack, descriptor, now) {
 }
 
 function tickAttachedRect(room, attack, descriptor, now) {
-  const attacker = room.players.get(attack.attackerSocketId);
+  const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return true;
   const runtime = descriptor?.runtime || {};
   const elapsed = now - attack.createdAt;
@@ -1319,7 +1321,7 @@ function tickAttachedRect(room, attack, descriptor, now) {
 }
 
 function tickAttachedCone(room, attack, descriptor, now) {
-  const attacker = room.players.get(attack.attackerSocketId);
+  const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return true;
   const runtime = descriptor?.runtime || {};
   const elapsed = now - attack.createdAt;
@@ -1383,7 +1385,7 @@ function tickAttachedCone(room, attack, descriptor, now) {
 }
 
 function tickPathRect(room, attack, descriptor, now) {
-  const attacker = room.players.get(attack.attackerSocketId);
+  const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return true;
   const runtime = descriptor?.runtime || {};
   const elapsed = now - attack.createdAt;
@@ -1453,7 +1455,7 @@ function tickPathRect(room, attack, descriptor, now) {
 }
 
 function tickReturningProjectile(room, attack, descriptor) {
-  const attacker = room.players.get(attack.attackerSocketId);
+  const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return true;
   const runtime = descriptor?.runtime || {};
   const dtMs = room.FIXED_DT_MS;
