@@ -1254,6 +1254,7 @@ class GameRoom {
     this.botControllers.clear();
     this._scheduledActions.length = 0;
     this._activeAttacks = [];
+    this._botVisualProjectiles = [];
     this._recentHits?.clear();
     this._recentCharacterActions?.clear();
     this._recentAttackInstances?.clear();
@@ -1584,6 +1585,7 @@ class GameRoom {
       }
       attacker.lastAttackAt = now;
       target.lastDamagedAt = now;
+      target._lastAttackerParticipantId = participantId(attacker);
       attacker.lastCombatAt = now;
       target.lastCombatAt = now;
       if (!isSelf && isHuntressBurningArrow && target.health > 0) {

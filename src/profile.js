@@ -2,11 +2,15 @@ import "./styles/profile.css";
 import "./styles/selectionPopup.css";
 import { sonner } from "./lib/sonner.js";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
-import { renderAccountAccess, wireAccountSettings } from "./lib/accountSettings.js";
+import {
+  renderAccountAccess,
+  wireAccountSettings,
+} from "./lib/accountSettings.js";
 import {
   buildProfileIconAlt,
   buildProfileIconUrl,
 } from "./lib/profileIconAssets.js";
+import { renderBattleLog } from "./lib/battleLogView.js";
 
 wireFullscreenToggles();
 
@@ -34,7 +38,10 @@ async function fetchJson(url, options) {
 }
 
 function renderProfile(profile) {
-  renderAccountAccess(document.querySelector(".account"), profile.guest === true);
+  renderAccountAccess(
+    document.querySelector(".account"),
+    profile.guest === true,
+  );
   document.getElementById("profile-username").textContent = profile.username;
   document.getElementById("profile-coins").textContent = String(
     profile.coins || 0,
@@ -61,6 +68,14 @@ function renderProfile(profile) {
       profile.selectedProfileIconId || profile.profileIconId,
       profile.charClass,
     );
+  }
+
+  const battleLogContainer = document.getElementById("battle-log-container");
+  if (battleLogContainer) {
+    renderBattleLog(battleLogContainer, profile.battles || [], {
+      currentUserId: profile.userId,
+      viewingSelf: true,
+    });
   }
 }
 
@@ -170,7 +185,11 @@ function renderIconsGrid() {
           ? `Unlock ${String(unlock.character || icon.name)}`
           : "Progression reward";
     const action = isOwned ? "equip" : "locked";
-    const actionLabel = isOwned ? (isSelected ? "Selected" : "Equip") : requirement;
+    const actionLabel = isOwned
+      ? isSelected
+        ? "Selected"
+        : "Equip"
+      : requirement;
 
     const tile = document.createElement("div");
     tile.className = `card-tile icon-tile ${rarity}`;
@@ -233,7 +252,9 @@ function renderIconsGrid() {
 }
 
 async function boot() {
-  const accountSettings = wireAccountSettings(document.querySelector(".account"));
+  const accountSettings = wireAccountSettings(
+    document.querySelector(".account"),
+  );
   try {
     const [profileRes, catalogRes, ownedRes, iconsCatalogRes, iconsOwnedRes] =
       await Promise.all([

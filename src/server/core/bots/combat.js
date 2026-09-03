@@ -3,6 +3,36 @@ const { getResolvedAttackDescriptor } = require("../gameRoom/attackDescriptorRes
 const attackRuntime = require("../gameRoom/attackRuntimeManager");
 const attackTypes = { ninja: "ninja-shuriken", thorg: "thorg-fall", draven: "draven-splash", wizard: "wizard-fireball", huntress: "huntress-arrow", gloop: "gloop-slimeball" };
 
+function interceptTime(dx, dy, vx, vy, speed) {
+  const a = vx * vx + vy * vy - speed * speed;
+  const b = 2 * (dx * vx + dy * vy), c = dx * dx + dy * dy;
+  if (Math.abs(a) < 0.001) return b < 0 ? -c / b : Math.sqrt(c) / speed;
+  const discriminant = b * b - 4 * a * c;
+  if (discriminant < 0) return Math.sqrt(c) / speed;
+  const roots = [(-b - Math.sqrt(discriminant)) / (2 * a), (-b + Math.sqrt(discriminant)) / (2 * a)].filter((t) => t >= 0);
+  return roots.length ? Math.min(...roots) : Math.sqrt(c) / speed;
+}
+
+function segmentCrossesRect(ax, ay, bx, by, rect, padding = 8) {
+  const left = rect.left - padding, right = rect.right + padding;
+  const top = rect.top - padding, bottom = rect.bottom + padding;
+  let lo = 0, hi = 1;
+  const dx = bx - ax, dy = by - ay;
+  for (const [p, q] of [[-dx, ax - left], [dx, right - ax], [-dy, ay - top], [dy, bottom - ay]]) {
+    if (p === 0) { if (q < 0) return false; continue; }
+    const t = q / p;
+    if (p < 0) lo = Math.max(lo, t); else hi = Math.min(hi, t);
+    if (lo > hi) return false;
+  }
+  return hi > 0.04 && lo < 0.96;
+}
+
+function hasClearShot(room, player, target, aim = basicAim(player, target, player.difficulty || {}, () => 0.5)) {
+  if (!['wizard', 'gloop'].includes(player.char_class)) return true;
+  return !(room.geometry?.colliders || []).some((rect) =>
+    segmentCrossesRect(player.x, player.y, aim.target.x, aim.target.y, rect));
+}
+
 function advanceAmmo(player, dt) {
   const a = player.ammoState;
   if (!a) return;
@@ -23,7 +53,9 @@ function basicAim(player, target, profile, random) {
   const runtime = { ...cfg, ...(release?.runtime || {}) };
   const range = aim.defaultRange || runtime.range || runtime.defaultForwardDistance || 200;
   const distance = Math.hypot(target.x - player.x, target.y - player.y);
-  const flight = Math.min(0.7, distance / (runtime.speed || 800)) * profile.prediction;
+  const startup = (Number(descriptor?.actionFlow?.startupMs) || Number(runtime.windupMs) || 0) / 1000;
+  const flight = Math.min(0.9, startup + interceptTime(target.x - player.x, target.y - player.y,
+    target.vx || 0, target.vy || 0, runtime.speed || 800)) * profile.prediction;
   const dx = target.x + (target.vx || 0) * flight - player.x;
   let dy = target.y + (target.vy || 0) * flight - player.y;
   // Lead gravity-driven shots upward by the projected drop during flight.
@@ -34,14 +66,15 @@ function basicAim(player, target, profile, random) {
   let angle = Math.atan2(dy, dx) + (random() * 2 - 1) * profile.aimError;
   const direction = Math.cos(angle) < 0 ? -1 : 1;
   if (aim.angleMode === "horizontal-only") angle = direction < 0 ? Math.PI : 0;
-  return { type, angle, direction, range, distance, gravity: runtime.gravity || 0, maxLifetimeMs: runtime.maxLifetimeMs || 3000, target: { x: player.x + Math.cos(angle) * Math.min(range, distance), y: player.y + Math.sin(angle) * Math.min(range, distance) } };
+  const canHit = distance <= range + 30 && (aim.angleMode !== 'horizontal-only' || Math.abs(target.y - player.y) < 90);
+  return { type, angle, direction, range, distance, canHit, gravity: runtime.gravity || 0, maxLifetimeMs: runtime.maxLifetimeMs || 3000, target: { x: player.x + Math.cos(angle) * Math.min(range, Math.hypot(dx, dy)), y: player.y + Math.sin(angle) * Math.min(range, Math.hypot(dx, dy)) } };
 }
 
 function requestBasic(room, p, target, profile, random, now) {
   const ammo = p.ammoState;
   if (!p.isAlive || p._botActionUntil > now || p._controlLockUntil > now || !ammo || ammo.charges <= 0 || ammo.nextFireInMs > 0) return false;
   const aim = basicAim(p, target, profile, random);
-  if (aim.distance > aim.range + 30) return false;
+  if (!aim.canHit) return false;
   p.flip = aim.direction < 0;
   const id = `${p.participantId}:${++p._botActionSeq}`;
   const action = { ...aim, id, x: p.x, y: p.y, forwardDistance: Math.min(aim.range, aim.distance + 40),
@@ -91,4 +124,4 @@ function startNinjaSwarm(room, p, now, aim = {}) {
     if (attack?.instanceId === action.id) attack.attackType = "ninja-special-swarm";
   }, i * releaseMs, now);
 }
-module.exports = { advanceAmmo, basicAim, requestBasic, requestSpecial, startNinjaSwarm };
+module.exports = { advanceAmmo, basicAim, hasClearShot, requestBasic, requestSpecial, startNinjaSwarm };

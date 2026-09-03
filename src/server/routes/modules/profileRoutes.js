@@ -6,6 +6,7 @@ const {
 const {
   syncPlayerCardOwnershipForUser,
 } = require("../../helpers/playerCardOwnership");
+const { getBattleLogForUser } = require("../../helpers/battleLog");
 
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,14}$/;
 const MIN_PW = 6;
@@ -50,7 +51,9 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       const normalizedCharLevels = {};
       const validChars = new Set(getAllCharacters());
       for (const [key, val] of Object.entries(charLevels)) {
-        let normalizedKey = String(key || "").trim().toLowerCase();
+        let normalizedKey = String(key || "")
+          .trim()
+          .toLowerCase();
         if (normalizedKey === "hunteress") {
           normalizedKey = "huntress";
         }
@@ -64,7 +67,9 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       charLevels = normalizedCharLevels;
     }
 
-    let charClass = String(userRow.char_class || "ninja").trim().toLowerCase();
+    let charClass = String(userRow.char_class || "ninja")
+      .trim()
+      .toLowerCase();
     if (charClass === "hunteress") {
       charClass = "huntress";
     }
@@ -78,6 +83,14 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
             (levelValues.reduce((a, b) => a + b, 0) / levelValues.length) * 100,
           ) / 100
         : 1;
+
+    let battles = [];
+    try {
+      battles = await getBattleLogForUser(db, userRow.user_id, 10);
+    } catch (err) {
+      console.error("[profile] getBattleLogForUser error", err);
+      battles = [];
+    }
 
     return {
       userId: userRow.user_id,
@@ -96,6 +109,7 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       ownedCardIds: cardState.ownedCardIds || [],
       selectedProfileIconId: profileIconState.selectedProfileIconId || null,
       ownedProfileIconIds: profileIconState.ownedIconIds || [],
+      battles,
     };
   }
 
@@ -162,10 +176,50 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
           avgCharLevel: profile.avgCharLevel,
           totalMatches: profile.totalMatches,
           wins: profile.wins,
+          battles: profile.battles || [],
         },
       });
     } catch (error) {
       console.error("[profile] /profile/view error", error);
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  });
+
+  app.get("/profile/battles", async (req, res) => {
+    try {
+      const viewer = await requireCurrentUser(req, res);
+      if (!viewer) {
+        return res
+          .status(401)
+          .json({ success: false, error: "Not authenticated" });
+      }
+
+      let targetUserId = viewer.user_id;
+      const username = String(req.query?.username || "").trim();
+      if (username) {
+        const rows = await db.runQuery(
+          "SELECT user_id FROM users WHERE name = ? LIMIT 1",
+          [username],
+        );
+        if (!rows?.[0]) {
+          return res
+            .status(404)
+            .json({ success: false, error: "Player not found." });
+        }
+        targetUserId = rows[0].user_id;
+      }
+
+      const limit = Math.min(20, Math.max(1, Number(req.query?.limit) || 10));
+      const battles = await getBattleLogForUser(db, targetUserId, limit);
+
+      return res.json({
+        success: true,
+        battles,
+      });
+    } catch (error) {
+      console.error("[profile] /profile/battles error", error);
       return res
         .status(500)
         .json({ success: false, error: "Internal server error" });

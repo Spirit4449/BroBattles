@@ -6,7 +6,7 @@
   "dragAir": 260,
   "gravity": 825,
   "fallGravityFactor": 1.35,
-  "jumpSpeed": 375,
+  "jumpSpeed": 390,
   "jumpBoost": 10,
   "coyoteTimeMs": 130,
   "coyoteSpeedThreshold": 130,

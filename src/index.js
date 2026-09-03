@@ -28,12 +28,16 @@ import {
 import { initUISounds, playSound } from "./lib/uiSounds.js";
 import { showUiConfirm } from "./lib/uiConfirm.js";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
-import { renderAccountAccess, wireAccountSettings } from "./lib/accountSettings.js";
+import {
+  renderAccountAccess,
+  wireAccountSettings,
+} from "./lib/accountSettings.js";
 import { createLobbyChatController } from "./lib/chatController.js";
 import {
   buildProfileIconAlt,
   buildProfileIconUrl,
 } from "./lib/profileIconAssets.js";
+import { renderBattleLog } from "./lib/battleLogView.js";
 import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
 import { getAllCharacters } from "./lib/characterStats.js";
 import { initializeShop } from "./shop.js";
@@ -211,9 +215,10 @@ function renderProfilePopupStats() {
   const cardTrigger = document.getElementById("profile-hero-card-trigger");
   if (avatarTrigger) {
     avatarTrigger.disabled = !lobbyProfileState.viewingSelf;
-    avatarTrigger.setAttribute("aria-label", lobbyProfileState.viewingSelf
-      ? "Change profile icon"
-      : "Profile icon");
+    avatarTrigger.setAttribute(
+      "aria-label",
+      lobbyProfileState.viewingSelf ? "Change profile icon" : "Profile icon",
+    );
     avatarTrigger.style.cursor = lobbyProfileState.viewingSelf
       ? "pointer"
       : "default";
@@ -278,6 +283,16 @@ function renderProfilePopupStats() {
       trophyCount.textContent = String(Number(profile.trophies) || 0);
   }
 
+  const battleLogContainer = document.getElementById(
+    "profile-popup-battle-log",
+  );
+  if (battleLogContainer) {
+    renderBattleLog(battleLogContainer, profile.battles || [], {
+      currentUserId: profile.userId,
+      viewingSelf: lobbyProfileState.viewingSelf,
+    });
+  }
+
   renderProfileCharacterLevels();
 }
 
@@ -308,7 +323,9 @@ function renderProfileCharacterLevels() {
 
   const mergedLevels = {};
   Object.entries(profile.charLevels || {}).forEach(([charId, rawLevel]) => {
-    let id = String(charId || "").trim().toLowerCase();
+    let id = String(charId || "")
+      .trim()
+      .toLowerCase();
     if (id === "hunteress") {
       id = "huntress";
     }
@@ -445,7 +462,9 @@ function renderProfilePopupIcons() {
     ["locked", "Locked", "Keep playing to unlock these icons."],
   ]) {
     const count = visibleIcons.filter((icon) =>
-      key === "owned" ? owned.has(String(icon.id)) : !owned.has(String(icon.id)),
+      key === "owned"
+        ? owned.has(String(icon.id))
+        : !owned.has(String(icon.id)),
     ).length;
     const section = document.createElement("section");
     section.className = `profile-icon-group is-${key}`;
@@ -461,9 +480,10 @@ function renderProfilePopupIcons() {
     if (!count) {
       const empty = document.createElement("p");
       empty.className = "profile-loadout-empty";
-      empty.textContent = key === "owned"
-        ? "No icons owned yet. Unlock a character to get started."
-        : "All progression icons unlocked!";
+      empty.textContent =
+        key === "owned"
+          ? "No icons owned yet. Unlock a character to get started."
+          : "All progression icons unlocked!";
       sections[key].appendChild(empty);
     }
     grid.appendChild(section);
@@ -487,7 +507,10 @@ function renderProfilePopupIcons() {
     tile.className = `profile-icon-choice-tile${isSelected ? " is-selected" : ""}${!isOwned ? " is-unowned" : ""}${isLocked ? " is-locked" : ""}`;
     tile.dataset.iconId = id;
     tile.setAttribute("aria-pressed", String(isSelected));
-    tile.setAttribute("aria-label", `${icon.name}. ${isSelected ? "Selected" : isLocked ? `Locked. ${requirement}` : "Owned. Select icon"}`);
+    tile.setAttribute(
+      "aria-label",
+      `${icon.name}. ${isSelected ? "Selected" : isLocked ? `Locked. ${requirement}` : "Owned. Select icon"}`,
+    );
     tile.innerHTML = `
       <span class="profile-icon-art">
         <img src="${escapeHtml(icon.assetUrl)}" alt="" />
@@ -714,7 +737,11 @@ function initProfilePopup() {
 
   usernameForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!lobbyProfileState.viewingSelf || lobbyProfileState.profile?.guest !== false) return;
+    if (
+      !lobbyProfileState.viewingSelf ||
+      lobbyProfileState.profile?.guest !== false
+    )
+      return;
     const username = String(usernameInput?.value || "").trim();
     if (!username) return;
     try {
@@ -741,7 +768,11 @@ function initProfilePopup() {
 
   passwordForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!lobbyProfileState.viewingSelf || lobbyProfileState.profile?.guest !== false) return;
+    if (
+      !lobbyProfileState.viewingSelf ||
+      lobbyProfileState.profile?.guest !== false
+    )
+      return;
     const currentPassword = String(currentPasswordInput?.value || "");
     const newPassword = String(newPasswordInput?.value || "");
     if (!newPassword) return;
@@ -1172,7 +1203,8 @@ async function loadPartySettings() {
   if (memberToggle) {
     memberToggle.checked = __partySettingsState.allowMemberSelection;
     memberToggle.disabled =
-      !__partySettingsState.isOwner || !__partySettingsState.memberSelectionSupported;
+      !__partySettingsState.isOwner ||
+      !__partySettingsState.memberSelectionSupported;
   }
   if (toggle) toggle.checked = __partySettingsState.isPublic;
   if (nameInput) nameInput.value = __partySettingsState.publicName;
@@ -1241,12 +1273,17 @@ async function savePartySettings() {
         partyId,
         isPublic,
         publicName,
-        ...(__partySettingsState.memberSelectionSupported ? {
-          allowMemberSelection: !!document.getElementById("party-member-selection-toggle")?.checked,
-        } : {}),
+        ...(__partySettingsState.memberSelectionSupported
+          ? {
+              allowMemberSelection: !!document.getElementById(
+                "party-member-selection-toggle",
+              )?.checked,
+            }
+          : {}),
       }),
     });
-    __partySettingsState.allowMemberSelection = payload?.settings?.allowMemberSelection !== false;
+    __partySettingsState.allowMemberSelection =
+      payload?.settings?.allowMemberSelection !== false;
     __partySettingsState.isPublic = !!payload?.settings?.isPublic;
     __partySettingsState.publicName = String(
       payload?.settings?.publicName || "",
@@ -1261,7 +1298,9 @@ async function savePartySettings() {
 function syncPublicPartyNameVisibility() {
   const toggle = document.getElementById("party-public-toggle");
   const isPublic = !!toggle?.checked;
-  document.getElementById("party-public-name-group")?.classList.toggle("hidden", !isPublic);
+  document
+    .getElementById("party-public-name-group")
+    ?.classList.toggle("hidden", !isPublic);
   const input = document.getElementById("party-public-name");
   if (input) input.disabled = !isPublic || !!toggle?.disabled;
 }
@@ -1359,7 +1398,11 @@ function applyTrophyTierVisualState({ card, marker, button, tier, pending }) {
   button.dataset.state = status;
   button.disabled = status !== "claimable";
   button.textContent =
-    status === "claimed" ? "Claimed" : status === "claimable" ? "Claim" : "Locked";
+    status === "claimed"
+      ? "Claimed"
+      : status === "claimable"
+        ? "Claim"
+        : "Locked";
   button.classList.remove("is-busy");
   button.classList.toggle("is-pending", !!pending);
   if (pending) button.setAttribute("aria-busy", "true");
@@ -1620,7 +1663,10 @@ function renderTrophyTrack(state) {
     const card = document.createElement("article");
     card.className = `trophy-lane-card ${statusClass}${isMajorMilestone ? " major" : ""}`;
     card.style.left = `${Math.round(ratioToX(tierRatio))}px`;
-    card.style.setProperty("--trophy-tier-index", String(Math.min(tierIndex, 10)));
+    card.style.setProperty(
+      "--trophy-tier-index",
+      String(Math.min(tierIndex, 10)),
+    );
     card.innerHTML = `
       <div class="trophy-lane-card-sheen"></div>
       <div class="trophy-lane-item-wrap${rewardPreviews.length > 1 ? " multi-reward" : ""}">
@@ -1654,7 +1700,8 @@ function renderTrophyTrack(state) {
     claimBtn?.addEventListener("click", async (event) => {
       event?.stopPropagation?.();
       const tierId = String(claimBtn.dataset.tierId || "");
-      if (!tierId || claimBtn.disabled || trophyClaimsInFlight.has(tierId)) return;
+      if (!tierId || claimBtn.disabled || trophyClaimsInFlight.has(tierId))
+        return;
 
       trophyClaimsInFlight.add(tierId);
 
@@ -1790,7 +1837,9 @@ async function openTrophyProgressionOverlay(options = {}) {
   openOverlay("trophy-track-overlay");
   const list = document.getElementById("trophy-track-list");
   const preserveScroll = !!options?.preserveScroll;
-  const hasExistingCanvas = Boolean(list?.querySelector(".trophy-track-canvas"));
+  const hasExistingCanvas = Boolean(
+    list?.querySelector(".trophy-track-canvas"),
+  );
 
   if (list && !hasExistingCanvas) {
     list.innerHTML = `<div class="trophy-rewards-state trophy-rewards-loading">
@@ -1807,7 +1856,8 @@ async function openTrophyProgressionOverlay(options = {}) {
       return;
     }
     progression.__preserveScroll = preserveScroll || hasExistingCanvas;
-    progression.__scrollLeft = Number(list?.scrollLeft) || trophyRoadLastScrollLeft;
+    progression.__scrollLeft =
+      Number(list?.scrollLeft) || trophyRoadLastScrollLeft;
     renderTrophyTrack(progression);
   } catch (err) {
     if (!hasExistingCanvas && list) {
@@ -1885,8 +1935,7 @@ async function openLeaderboardOverlay(profilePopup) {
   openOverlay("leaderboard-overlay");
   const container = document.getElementById("leaderboard-list");
   if (container)
-    container.innerHTML =
-      `<div class="leaderboard-state leaderboard-loading-state">
+    container.innerHTML = `<div class="leaderboard-state leaderboard-loading-state">
         <span class="leaderboard-loading-mark" aria-hidden="true"></span>
         <strong>Loading standings</strong>
         <span>Checking the latest rankings...</span>
@@ -2224,12 +2273,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     },
   });
   shopButton?.addEventListener("click", () => void shop.open("sales"));
-  coinResourceButton?.addEventListener("click", () => void shop.open("currency"));
-  gemResourceButton?.addEventListener("click", () => void shop.open("currency"));
-  document.getElementById("profile-loadout-shop")?.addEventListener("click", () => {
-    profilePopup?.close?.();
-    void shop.open("profile");
-  });
+  coinResourceButton?.addEventListener(
+    "click",
+    () => void shop.open("currency"),
+  );
+  gemResourceButton?.addEventListener(
+    "click",
+    () => void shop.open("currency"),
+  );
+  document
+    .getElementById("profile-loadout-shop")
+    ?.addEventListener("click", () => {
+      profilePopup?.close?.();
+      void shop.open("profile");
+    });
   if (usernameButton) {
     usernameButton.addEventListener("click", () => {
       if (profilePopup?.open) {
@@ -2547,12 +2604,9 @@ export function setLobbyBackground(mapValue) {
       document.body.style.backgroundImage = target;
       document.body.dataset.lobbyBackgroundUrl = nextUrl;
       try {
-        const partyMatch = window.location.pathname.match(
-          /^\/party\/([^/?#]+)/,
-        );
-        const backgroundScope = partyMatch
-          ? `party:${partyMatch[1]}`
-          : "solo";
+        const partyMatch =
+          window.location.pathname.match(/^\/party\/([^/?#]+)/);
+        const backgroundScope = partyMatch ? `party:${partyMatch[1]}` : "solo";
         localStorage.setItem(
           `bb_lobby_background_url:${backgroundScope}`,
           nextUrl,

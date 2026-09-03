@@ -14,6 +14,8 @@ try {
   for (const map of args.map ? [Number(args.map)] : [1, 2, 3]) {
     const h = makeRoom({ map, seed, trophies: Number(args.trophies) || 2000, characters: ['ninja', 'thorg', 'draven', 'wizard', 'huntress', 'gloop'].slice(0, counts) });
     h.room._powerupRandom = createRandom(seed);
+    h.room._lastPowerupSpawnAt = clock;
+    for (let i = 0; i < 3; i++) h.room._spawnPowerup();
     let packets = 0, bytes = 0;
     h.room.io.to = () => ({ emit(type, payload) { packets++; bytes += Buffer.byteLength(JSON.stringify({ type, payload })); }, compress() { return this; } });
     const samples = [], start = performance.now();
@@ -22,6 +24,7 @@ try {
       clock += 1000 / 60;
       const tickStart = performance.now();
       h.tick(clock);
+      h.room._tickPowerups();
       if (i % 2 === 0) snapshot(h.room);
       samples.push(performance.now() - tickStart);
     }

@@ -17,6 +17,10 @@ function maybeHandleNinjaReturnSignal(room, playerData, actionData) {
 }
 
 function broadcastAction(room, playerData, action, timestamp = Date.now()) {
+  if (getDescriptor(action?.type)?.character === playerData.char_class && action?.type !== 'ninja-shuriken-return') {
+    playerData._visibleAttack = { at: timestamp, startupMs: Number(action.startup) || 0,
+      angle: Number.isFinite(action.angle) ? action.angle : (playerData.flip ? Math.PI : 0) };
+  }
   room.io.to(`game:${room.matchId}`).emit("game:action", {
     playerId: playerData.user_id,
     playerName: playerData.name,

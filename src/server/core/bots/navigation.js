@@ -32,8 +32,13 @@ function buildGraph(geometry, character, modifiers = {}) {
         if (!p.grounded) airborne = true;
         if (result.fell) break;
         if (p.grounded && airborne) {
-          if (p.platformId !== from.id && !edges.get(from.id).some((e) => e.to === p.platformId)) {
-            edges.get(from.id).push({ to: p.platformId, takeoffX: x - body.offsetX, direction, jump, frames, duration: (i + 1) * DT });
+          if (p.platformId !== from.id) {
+            const list = edges.get(from.id);
+            const edge = { to: p.platformId, takeoffX: x - body.offsetX, direction, jump, frames, duration: (i + 1) * DT };
+            const existing = list.findIndex((e) => e.to === edge.to && e.jump === jump);
+            // Keep a walking/drop alternative when a jump reaches the same platform.
+            if (existing < 0) list.push(edge);
+            else if (edge.duration < list[existing].duration) list[existing] = edge;
           }
           break;
         }
@@ -55,8 +60,9 @@ function nearestSurface(graph, point) {
   }, null)?.surface;
 }
 
-function findRoute(graph, from, to, poisonY = Infinity) {
-  if (!from || !to || from === to) return [];
+function findRoute(graph, from, to, poisonY = Infinity, options = {}) {
+  if (!from || !to) return null;
+  if (from === to) return [];
   const queue = [{ id: from, route: [], cost: 0 }], visited = new Set();
   while (queue.length) {
     queue.sort((a, b) => a.cost - b.cost);
@@ -65,13 +71,34 @@ function findRoute(graph, from, to, poisonY = Infinity) {
     if (visited.has(item.id)) continue;
     visited.add(item.id);
     for (const edge of graph.edges.get(item.id) || []) {
+      if (options.blocked?.has(`${item.id}:${edge.to}`)) continue;
       const surface = graph.surfaces.find((s) => s.id === edge.to);
       if (!surface || surface.top >= poisonY - 25) continue;
       if (Number.isFinite(poisonY) && edge.frames.some((f) => f.y + graph.body.offsetY + graph.body.halfHeight >= poisonY - 15)) continue;
-      queue.push({ id: edge.to, route: [...item.route, edge], cost: item.cost + edge.duration });
+      const penalty = Math.max(0, Number(options.edgeCost?.(edge, item.id)) || 0);
+      queue.push({ id: edge.to, route: [...item.route, edge], cost: item.cost + edge.duration + penalty });
     }
   }
   return null;
+}
+
+// Check optional hops/dodges with the real solver before committing to them.
+// Walks brake at ledges; jumps must actually land within the preview window.
+function previewManeuver(player, intent, geometry, modifiers, now, poisonY = Infinity) {
+  const p = { ...player };
+  const frames = [];
+  let airborne = !p.grounded;
+  for (let i = 0; i < 78; i++) {
+    const direction = safeWalkDirection(p, intent.direction, geometry);
+    const input = { direction, jumpPressed: i === 0 && !!intent.jumpPressed };
+    frames.push({ ...input, x: p.x, y: p.y });
+    const result = stepBody(p, input, geometry, DT, now + i * DT, modifiers);
+    if (result.fell || bounds(p).bottom >= poisonY - 25) return null;
+    airborne ||= !p.grounded;
+    if (airborne && p.grounded && i > 8) return { frames, end: p };
+    if (!intent.jumpPressed && !airborne && i >= 32) return { frames, end: p };
+  }
+  return p.grounded ? { frames, end: p } : null;
 }
 
 function safeWalkDirection(player, direction, geometry) {
@@ -81,4 +108,4 @@ function safeWalkDirection(player, direction, geometry) {
   const supported = geometry.colliders.some((r) => r.collision.up && probeX >= r.left && probeX <= r.right && Math.abs(r.top - b.bottom) < 5);
   return supported ? direction : 0;
 }
-module.exports = { buildGraph, findRoute, nearestSurface, standOn, safeWalkDirection };
+module.exports = { buildGraph, findRoute, nearestSurface, standOn, safeWalkDirection, previewManeuver };

@@ -1,4 +1,4 @@
-const { deleteMatchBots } = require('../../services/matchRosterService');
+const { deleteMatchBots } = require("../../services/matchRosterService");
 const { ALL_DEAD_GAME_OVER_DELAY_MS } = require("../gameRoomConfig");
 const effectManager = require("./effects/effectManager");
 
@@ -208,10 +208,23 @@ async function finishGame(room, winnerTeam, meta = {}) {
 
   room._loopRunning = false;
   room._scheduledActions.length = 0;
-  console.log('[bots:match-result]', JSON.stringify({ matchId: room.matchId, winnerTeam,
-    humans: [...room.players.values()].filter((p) => !p.isBot).map((p) => ({ team: p.team, trophies: Number(p.trophies) || 0 })),
-    bots: [...room.botControllers.values()].map((c) => ({ character: c.player.char_class, team: c.player.team, trophies: c.profile.trophies, ...c.metrics })),
-    timing: room._botTickStats || null }));
+  console.log(
+    "[bots:match-result]",
+    JSON.stringify({
+      matchId: room.matchId,
+      winnerTeam,
+      humans: [...room.players.values()]
+        .filter((p) => !p.isBot)
+        .map((p) => ({ team: p.team, trophies: Number(p.trophies) || 0 })),
+      bots: [...room.botControllers.values()].map((c) => ({
+        character: c.player.char_class,
+        team: c.player.team,
+        trophies: c.profile.trophies,
+        ...c.metrics,
+      })),
+      timing: room._botTickStats || null,
+    }),
+  );
   if (room._pendingVictoryFinishTimeout) {
     clearTimeout(room._pendingVictoryFinishTimeout);
     room._pendingVictoryFinishTimeout = null;

@@ -1,4 +1,5 @@
 const { participantId } = require('./participants');
+const { tickVisualProjectiles } = require('../bots/perception');
 const {
   createRuntimeAttack,
   tickRuntimeAttack,
@@ -40,6 +41,12 @@ function registerAttackFromAction(
     !playerData.isBot && (actionType === "huntress-arrow-release" ||
     actionType === "huntress-burning-arrow")
   ) {
+    if (room.botControllers?.size && claimAttackInstance(room, playerData, actionData, now)) {
+      const visual = createRuntimeAttack(playerData, actionData, now);
+      room._botVisualProjectiles ||= [];
+      for (const attack of [visual].flat().filter(Boolean)) room._botVisualProjectiles.push(attack);
+      if (room._botVisualProjectiles.length > 128) room._botVisualProjectiles.splice(0, room._botVisualProjectiles.length - 128);
+    }
     return false;
   }
   if (!claimAttackInstance(room, playerData, actionData, now)) return false;
@@ -59,6 +66,7 @@ function registerAttackFromAction(
 }
 
 function tickActiveAttacks(room, now = Date.now()) {
+  if (room._botVisualProjectiles?.length) tickVisualProjectiles(room);
   const attacks = ensureAttackState(room);
   if (attacks.length) {
     room._activeAttacks = attacks.filter((attack) => {

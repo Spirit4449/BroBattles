@@ -1,6 +1,10 @@
 // hud/gameOverScreenController.js
 
 import { playSound } from "../lib/uiSounds.js";
+import {
+  END_BATTLE_MESSAGES,
+  getEndBattleMessage,
+} from "./gameOverMessages.js";
 
 const REWARD_TYPES = {
   coins: {
@@ -102,8 +106,7 @@ function burstWalletTarget(target, counter, type, impactIndex, totalImpacts) {
   const pitchRange = totalImpacts > 1 ? impactIndex / (totalImpacts - 1) : 0.5;
   playSound("shopCurrencyImpact", 0.12, {
     overlap: true,
-    playbackRate:
-      0.88 + pitchRange * 0.28 + (type === "gems" ? 0.08 : 0),
+    playbackRate: 0.88 + pitchRange * 0.28 + (type === "gems" ? 0.08 : 0),
   });
 }
 
@@ -117,70 +120,73 @@ function flyRewardParticle({
   onImpact,
 }) {
   return new Promise((resolve) => {
-    window.setTimeout(() => {
-      const icon = document.createElement("img");
-      icon.className = `bb-game-over-flying-reward is-${type}`;
-      icon.src = REWARD_TYPES[type].image;
-      icon.alt = "";
-      document.body.appendChild(icon);
+    window.setTimeout(
+      () => {
+        const icon = document.createElement("img");
+        icon.className = `bb-game-over-flying-reward is-${type}`;
+        icon.src = REWARD_TYPES[type].image;
+        icon.alt = "";
+        document.body.appendChild(icon);
 
-      const spread = index - (count - 1) / 2;
-      let x = sourceRect.left + sourceRect.width / 2 + spread * 3;
-      let y = sourceRect.top + sourceRect.height / 2;
-      let vx = spread * 46 + (Math.random() - 0.5) * 80;
-      let vy = -340 - Math.random() * 125;
-      let rotation = spread * 9;
-      let startedAt = null;
-      let previousAt = null;
+        const spread = index - (count - 1) / 2;
+        let x = sourceRect.left + sourceRect.width / 2 + spread * 3;
+        let y = sourceRect.top + sourceRect.height / 2;
+        let vx = spread * 46 + (Math.random() - 0.5) * 80;
+        let vy = -340 - Math.random() * 125;
+        let rotation = spread * 9;
+        let startedAt = null;
+        let previousAt = null;
 
-      const finish = () => {
-        icon.remove();
-        onImpact();
-        resolve();
-      };
+        const finish = () => {
+          icon.remove();
+          onImpact();
+          resolve();
+        };
 
-      const frame = (now) => {
-        if (!startedAt) {
-          startedAt = now;
+        const frame = (now) => {
+          if (!startedAt) {
+            startedAt = now;
+            previousAt = now;
+          }
+          const elapsed = (now - startedAt) / 1000;
+          const dt = Math.min(
+            0.032,
+            Math.max(0.001, (now - previousAt) / 1000),
+          );
           previousAt = now;
-        }
-        const elapsed = (now - startedAt) / 1000;
-        const dt = Math.min(
-          0.032,
-          Math.max(0.001, (now - previousAt) / 1000),
-        );
-        previousAt = now;
-        const targetRect = target.getBoundingClientRect();
-        const targetX = targetRect.left + targetRect.width / 2;
-        const targetY = targetRect.top + targetRect.height / 2;
+          const targetRect = target.getBoundingClientRect();
+          const targetX = targetRect.left + targetRect.width / 2;
+          const targetY = targetRect.top + targetRect.height / 2;
 
-        if (elapsed < 0.24) {
-          vy += 1160 * dt;
-        } else {
-          const pull = Math.min(50, 18 + (elapsed - 0.24) * 36);
-          vx += (targetX - x) * pull * dt;
-          vy += (targetY - y) * pull * dt;
-          const drag = Math.exp(-5.2 * dt);
-          vx *= drag;
-          vy *= drag;
-        }
+          if (elapsed < 0.24) {
+            vy += 1160 * dt;
+          } else {
+            const pull = Math.min(50, 18 + (elapsed - 0.24) * 36);
+            vx += (targetX - x) * pull * dt;
+            vy += (targetY - y) * pull * dt;
+            const drag = Math.exp(-5.2 * dt);
+            vx *= drag;
+            vy *= drag;
+          }
 
-        x += vx * dt;
-        y += vy * dt;
-        rotation += (165 + index * 12) * dt * (index % 2 ? -1 : 1);
-        const distance = Math.hypot(targetX - x, targetY - y);
-        const scale =
-          elapsed < 0.14
-            ? Math.min(1, elapsed / 0.14)
-            : Math.max(0.32, Math.min(1, distance / 90));
-        icon.style.opacity = String(Math.min(1, elapsed / 0.07));
-        icon.style.transform = `translate3d(${x - 16}px, ${y - 16}px, 0) rotate(${rotation}deg) scale(${scale})`;
+          x += vx * dt;
+          y += vy * dt;
+          rotation += (165 + index * 12) * dt * (index % 2 ? -1 : 1);
+          const distance = Math.hypot(targetX - x, targetY - y);
+          const scale =
+            elapsed < 0.14
+              ? Math.min(1, elapsed / 0.14)
+              : Math.max(0.32, Math.min(1, distance / 90));
+          icon.style.opacity = String(Math.min(1, elapsed / 0.07));
+          icon.style.transform = `translate3d(${x - 16}px, ${y - 16}px, 0) rotate(${rotation}deg) scale(${scale})`;
 
-        if ((elapsed > 0.34 && distance < 17) || elapsed > 1.55) finish();
-        else window.requestAnimationFrame(frame);
-      };
-      window.requestAnimationFrame(frame);
-    }, launchDelay + index * 70);
+          if ((elapsed > 0.34 && distance < 17) || elapsed > 1.55) finish();
+          else window.requestAnimationFrame(frame);
+        };
+        window.requestAnimationFrame(frame);
+      },
+      launchDelay + index * 70,
+    );
   });
 }
 
@@ -188,6 +194,7 @@ export function createGameOverScreenController({
   getGameData,
   getUsername,
   rewardStorageKey,
+  getMessage = getEndBattleMessage,
 }) {
   function isMobileDevice() {
     try {
@@ -359,9 +366,10 @@ export function createGameOverScreenController({
       : [];
     const myReward = rewards.find((reward) => reward.username === username);
     const yourTeam = myReward?.team || gameData?.yourTeam;
-    const squadRewards = (yourTeam
-      ? rewards.filter((reward) => reward.team === yourTeam)
-      : rewards.filter((reward) => reward.username === username)
+    const squadRewards = (
+      yourTeam
+        ? rewards.filter((reward) => reward.team === yourTeam)
+        : rewards.filter((reward) => reward.username === username)
     ).sort((left, right) => {
       if (left.username === username) return -1;
       if (right.username === username) return 1;
@@ -453,11 +461,9 @@ export function createGameOverScreenController({
           ? "is-victory"
           : "is-defeat";
     const resultMessage =
-      resultTone === "is-victory"
-        ? "Your squad owned the arena"
-        : resultTone === "is-defeat"
-          ? "Gear up for the rematch"
-          : "Nobody backed down";
+      typeof getMessage === "function"
+        ? getMessage(resultTone)
+        : getEndBattleMessage(resultTone);
 
     const walletMarkup = Object.entries(REWARD_TYPES)
       .map(
@@ -481,7 +487,7 @@ export function createGameOverScreenController({
           <header class="bb-game-over-hero">
             <span class="bb-game-over-kicker">Battle Complete</span>
             <h1 class="bb-game-over-title ${resultTone}">${heading}</h1>
-            <p>${resultMessage}</p>
+            <p>${escapeHtml(resultMessage)}</p>
           </header>
           <div class="bb-game-over-content">
             ${personalSummaryHtml}
@@ -550,3 +556,5 @@ export function createGameOverScreenController({
     showGameOverScreen,
   };
 }
+
+export { END_BATTLE_MESSAGES, getEndBattleMessage };
