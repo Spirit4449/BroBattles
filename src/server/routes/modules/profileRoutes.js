@@ -181,6 +181,13 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
           .json({ success: false, error: "Not authenticated" });
       }
 
+      if (user.expires_at) {
+        return res.status(403).json({
+          success: false,
+          error: "Sign up or log in to change your name.",
+        });
+      }
+
       const next = String(req.body?.username || "").trim();
       if (!USERNAME_RE.test(next)) {
         return res.status(400).json({
@@ -231,9 +238,9 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
           .json({ success: false, error: "Not authenticated" });
       }
       if (user.expires_at) {
-        return res.status(400).json({
+        return res.status(403).json({
           success: false,
-          error: "Guest accounts cannot change password. Sign up first.",
+          error: "Sign up or log in to change your password.",
         });
       }
 

@@ -28,6 +28,7 @@ import {
 import { initUISounds, playSound } from "./lib/uiSounds.js";
 import { showUiConfirm } from "./lib/uiConfirm.js";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
+import { renderAccountAccess, wireAccountSettings } from "./lib/accountSettings.js";
 import { createLobbyChatController } from "./lib/chatController.js";
 import {
   buildProfileIconAlt,
@@ -83,6 +84,8 @@ let __partySettingsState = {
   isPublic: false,
   publicName: "",
   visibilitySupported: true,
+  allowMemberSelection: true,
+  memberSelectionSupported: true,
 };
 let __lobbyProfilePopup = null;
 let lobbyBackgroundRequestSequence = 0;
@@ -208,6 +211,9 @@ function renderProfilePopupStats() {
   const cardTrigger = document.getElementById("profile-hero-card-trigger");
   if (avatarTrigger) {
     avatarTrigger.disabled = !lobbyProfileState.viewingSelf;
+    avatarTrigger.setAttribute("aria-label", lobbyProfileState.viewingSelf
+      ? "Change profile icon"
+      : "Profile icon");
     avatarTrigger.style.cursor = lobbyProfileState.viewingSelf
       ? "pointer"
       : "default";
@@ -235,6 +241,7 @@ function renderProfilePopupStats() {
   const accountPanel = document.getElementById("profile-account-panel");
   if (accountPanel) {
     accountPanel.classList.toggle("is-hidden", !lobbyProfileState.viewingSelf);
+    renderAccountAccess(accountPanel, profile.guest === true);
   }
   const characterLevelsPanel = document.getElementById(
     "profile-character-levels-panel",
@@ -368,7 +375,7 @@ function renderProfilePopupCards() {
     const rarity = String(card?.rarity || "common").toLowerCase();
 
     const tile = document.createElement("article");
-    tile.className = `profile-card-tile ${rarity}`;
+    tile.className = `profile-card-tile ${rarity}${isSelected ? " is-selected" : ""}`;
     tile.innerHTML = `
       <img src="${card.assetUrl}" alt="${card.name}" />
       <div class="profile-card-meta">
@@ -432,35 +439,71 @@ function renderProfilePopupIcons() {
     return owned.has(iconId) || Boolean(icon?.unlock);
   });
 
+  const sections = {};
+  for (const [key, title, description] of [
+    ["owned", "Owned", "Choose an icon to make it yours."],
+    ["locked", "Locked", "Keep playing to unlock these icons."],
+  ]) {
+    const count = visibleIcons.filter((icon) =>
+      key === "owned" ? owned.has(String(icon.id)) : !owned.has(String(icon.id)),
+    ).length;
+    const section = document.createElement("section");
+    section.className = `profile-icon-group is-${key}`;
+    section.setAttribute("aria-labelledby", `profile-icons-${key}-title`);
+    section.innerHTML = `
+      <div class="profile-icon-group-heading">
+        <h3 id="profile-icons-${key}-title">${title} <span>${count}</span></h3>
+        <p>${description}</p>
+      </div>
+      <div class="profile-icon-group-grid"></div>
+    `;
+    sections[key] = section.querySelector(".profile-icon-group-grid");
+    if (!count) {
+      const empty = document.createElement("p");
+      empty.className = "profile-loadout-empty";
+      empty.textContent = key === "owned"
+        ? "No icons owned yet. Unlock a character to get started."
+        : "All progression icons unlocked!";
+      sections[key].appendChild(empty);
+    }
+    grid.appendChild(section);
+  }
+
   visibleIcons.forEach((icon) => {
     const id = String(icon?.id || "");
     const isOwned = owned.has(id);
     const isSelected = isOwned && selected === id;
-    const isLimited = icon?.limited === true;
     const isLocked = !isOwned;
     const unlock = icon?.unlock || {};
     const requirement =
       unlock.type === "trophies"
         ? `Reach ${Number(unlock.min) || 0} trophies`
         : unlock.type === "character"
-          ? `Unlock ${String(unlock.character || icon.name)}`
+          ? `Unlock ${String(unlock.character || icon.name).replace(/\b\w/g, (char) => char.toUpperCase())}`
           : "Progression reward";
 
     const tile = document.createElement("button");
     tile.type = "button";
     tile.className = `profile-icon-choice-tile${isSelected ? " is-selected" : ""}${!isOwned ? " is-unowned" : ""}${isLocked ? " is-locked" : ""}`;
     tile.dataset.iconId = id;
+    tile.setAttribute("aria-pressed", String(isSelected));
+    tile.setAttribute("aria-label", `${icon.name}. ${isSelected ? "Selected" : isLocked ? `Locked. ${requirement}` : "Owned. Select icon"}`);
     tile.innerHTML = `
-      <img src="${icon.assetUrl}" alt="${icon.name}" />
-      <span class="profile-icon-name-badge">${icon.name}</span>
-      ${isLocked ? `<span class="profile-icon-gem-badge">${requirement}</span>` : ""}
-      ${isLimited && isLocked ? '<span class="profile-icon-limited-tag">PROGRESSION</span>' : ""}
-      ${!isOwned ? '<span class="profile-icon-lock-overlay"><img src="/assets/lock.webp" alt="Locked" /></span>' : ""}
+      <span class="profile-icon-art">
+        <img src="${escapeHtml(icon.assetUrl)}" alt="" />
+        ${isSelected ? '<span class="profile-icon-selected-badge">Selected</span>' : ""}
+        ${isLocked ? '<span class="profile-icon-lock-overlay"><img src="/assets/lock.webp" alt="" /></span>' : ""}
+      </span>
+      <span class="profile-icon-details">
+        <strong>${escapeHtml(icon.name)}</strong>
+        ${isLocked ? `<span class="profile-icon-requirement">${escapeHtml(requirement)}</span>` : ""}
+      </span>
     `;
 
-    if (isLocked || isSelected) tile.disabled = true;
+    if (isLocked) tile.disabled = true;
 
     tile.addEventListener("click", async () => {
+      if (isSelected || isLocked) return;
       try {
         tile.disabled = true;
         const iconId = String(tile.dataset.iconId || "");
@@ -480,7 +523,7 @@ function renderProfilePopupIcons() {
       }
     });
 
-    grid.appendChild(tile);
+    sections[isOwned ? "owned" : "locked"].appendChild(tile);
   });
 }
 
@@ -598,13 +641,17 @@ function initProfilePopup() {
 
   if (!overlay) return;
 
+  const accountSettings = wireAccountSettings(
+    document.getElementById("profile-account-panel"),
+  );
+
   const openLoadoutModal = (mode = "icons") => {
     if (!lobbyProfileState.viewingSelf || !loadoutOverlay) return;
     const showIcons = mode === "icons";
     if (loadoutTitle) {
       loadoutTitle.textContent = showIcons
         ? "Edit Profile Icon"
-        : "Edit Player Card";
+        : "Select Battle Card";
     }
     if (iconsPanel) iconsPanel.classList.toggle("is-hidden", !showIcons);
     if (cardsPanel) cardsPanel.classList.toggle("is-hidden", showIcons);
@@ -621,6 +668,7 @@ function initProfilePopup() {
 
   const close = () => {
     playSound("cancel", 0.4);
+    accountSettings.close();
     closeLoadoutModal();
     overlay.classList.add("hidden");
     overlay.setAttribute("aria-hidden", "true");
@@ -628,6 +676,7 @@ function initProfilePopup() {
   };
 
   const open = async (options = {}) => {
+    accountSettings.close();
     const targetUsername = String(options?.username || "").trim();
     lobbyProfileState.viewingSelf =
       !targetUsername || targetUsername === String(userData?.name || "");
@@ -665,6 +714,7 @@ function initProfilePopup() {
 
   usernameForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (!lobbyProfileState.viewingSelf || lobbyProfileState.profile?.guest !== false) return;
     const username = String(usernameInput?.value || "").trim();
     if (!username) return;
     try {
@@ -683,6 +733,7 @@ function initProfilePopup() {
 
       renderProfilePopupStats();
       setProfilePopupMessage("Username updated.");
+      accountSettings.close("profile-username-form");
     } catch (err) {
       setProfilePopupMessage(err.message || "Unable to update username.", true);
     }
@@ -690,6 +741,7 @@ function initProfilePopup() {
 
   passwordForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (!lobbyProfileState.viewingSelf || lobbyProfileState.profile?.guest !== false) return;
     const currentPassword = String(currentPasswordInput?.value || "");
     const newPassword = String(newPasswordInput?.value || "");
     if (!newPassword) return;
@@ -702,6 +754,7 @@ function initProfilePopup() {
       if (currentPasswordInput) currentPasswordInput.value = "";
       if (newPasswordInput) newPasswordInput.value = "";
       setProfilePopupMessage("Password updated.");
+      accountSettings.close("profile-password-form");
     } catch (err) {
       setProfilePopupMessage(err.message || "Unable to update password.", true);
     }
@@ -938,7 +991,7 @@ function setPartyDiscoveryStatus(text, isError = false) {
   const status = document.getElementById("party-discovery-status");
   if (!status) return;
   status.textContent = text || "";
-  status.style.color = isError ? "#ffb0b8" : "#b7d8ff";
+  status.classList.toggle("is-error", isError);
 }
 
 function renderPartyDiscoveryList(parties) {
@@ -964,37 +1017,23 @@ function renderPartyDiscoveryList(parties) {
           <h3 class="party-discovery-title">${escapeHtml(
             partyTitle || `${ownerName}'s Party`,
           )}</h3>
-          <div class="party-discovery-info-row">
-            <div>
-              <div class="party-discovery-meta-label">Owner</div>
-              <div class="party-discovery-meta">
-                <img src="/assets/crown.webp" alt="" width="12" height="12" />
-                ${escapeHtml(ownerName)}
-              </div>
-            </div>
-            <div>
-              <div class="party-discovery-meta-label">Mode</div>
-              <div class="party-discovery-meta-value">${escapeHtml(
-                getDiscoveryModeLabel(party),
-              )}</div>
-            </div>
-            <div>
-              <div class="party-discovery-meta-label">Map</div>
-              <div class="party-discovery-meta-value">${escapeHtml(
-                getMapLabel(party?.map),
-              )}</div>
-            </div>
-            <div>
-              <div class="party-discovery-meta-label">Players</div>
-              <div class="party-discovery-meta-value">${members.length}</div>
-            </div>
+          <div class="party-discovery-meta" title="${escapeHtml(ownerName)}">
+            <img src="/assets/crown.webp" alt="Owner" width="12" height="12" />
+            <span>Hosted by ${escapeHtml(ownerName)}</span>
           </div>
         </div>
         <button type="button" class="pixel-menu-button party-discovery-join" data-party-id="${Number(
           party?.partyId,
         )}">Join</button>
       </div>
-      <div class="party-discovery-members"></div>
+      <div class="party-discovery-info-row">
+        <span class="party-discovery-detail"><span class="party-discovery-meta-label">Mode</span> ${escapeHtml(getDiscoveryModeLabel(party))}</span>
+        <span class="party-discovery-detail"><span class="party-discovery-meta-label">Map</span> ${escapeHtml(getMapLabel(party?.map))}</span>
+      </div>
+      <div class="party-discovery-roster">
+        <div class="party-discovery-meta-label">${members.length} ${members.length === 1 ? "player" : "players"}</div>
+        <div class="party-discovery-members"></div>
+      </div>
     `;
 
     const memberWrap = card.querySelector(".party-discovery-members");
@@ -1004,13 +1043,13 @@ function renderPartyDiscoveryList(parties) {
       const profileIconId = String(member?.profile_icon_id || "") || null;
       const entry = document.createElement("div");
       entry.className = "party-discovery-member";
+      entry.title = `${name} · ${charClass}`;
       entry.innerHTML = `
         <img src="${escapeHtml(buildProfileIconUrl(profileIconId, charClass))}" alt="${escapeHtml(
           buildProfileIconAlt(profileIconId, charClass),
         )}" />
         <div>
           <div class="party-discovery-member-name">${escapeHtml(name)}</div>
-          <div class="party-discovery-member-char">${escapeHtml(charClass)}</div>
         </div>
       `;
       memberWrap?.appendChild(entry);
@@ -1088,7 +1127,7 @@ function setPartySettingsStatus(text, isError = false) {
   const status = document.getElementById("party-settings-status");
   if (!status) return;
   status.textContent = text || "";
-  status.style.color = isError ? "#ffb0b8" : "#b7d8ff";
+  status.classList.toggle("is-error", isError);
 }
 
 function syncPartySettingsButtonVisibility() {
@@ -1122,22 +1161,35 @@ async function loadPartySettings() {
     isPublic: !!payload?.isPublic,
     publicName: String(payload?.publicName || ""),
     visibilitySupported: payload?.visibilitySupported !== false,
+    allowMemberSelection: payload?.allowMemberSelection !== false,
+    memberSelectionSupported: payload?.memberSelectionSupported !== false,
   };
 
   const toggle = document.getElementById("party-public-toggle");
   const nameInput = document.getElementById("party-public-name");
   const saveBtn = document.getElementById("party-settings-save");
+  const memberToggle = document.getElementById("party-member-selection-toggle");
+  if (memberToggle) {
+    memberToggle.checked = __partySettingsState.allowMemberSelection;
+    memberToggle.disabled =
+      !__partySettingsState.isOwner || !__partySettingsState.memberSelectionSupported;
+  }
   if (toggle) toggle.checked = __partySettingsState.isPublic;
   if (nameInput) nameInput.value = __partySettingsState.publicName;
   const canEdit =
     __partySettingsState.isOwner && __partySettingsState.visibilitySupported;
   if (toggle) toggle.disabled = !canEdit;
-  if (nameInput) nameInput.disabled = !canEdit || !toggle?.checked;
+  syncPublicPartyNameVisibility();
   if (saveBtn) saveBtn.disabled = !canEdit;
 
   if (!__partySettingsState.visibilitySupported) {
     setPartySettingsStatus(
       "Party visibility requires the latest DB migration before this can be used.",
+      true,
+    );
+  } else if (!__partySettingsState.memberSelectionSupported) {
+    setPartySettingsStatus(
+      "Map and mode permissions require the latest party migration.",
       true,
     );
   } else if (!__partySettingsState.isOwner) {
@@ -1189,8 +1241,12 @@ async function savePartySettings() {
         partyId,
         isPublic,
         publicName,
+        ...(__partySettingsState.memberSelectionSupported ? {
+          allowMemberSelection: !!document.getElementById("party-member-selection-toggle")?.checked,
+        } : {}),
       }),
     });
+    __partySettingsState.allowMemberSelection = payload?.settings?.allowMemberSelection !== false;
     __partySettingsState.isPublic = !!payload?.settings?.isPublic;
     __partySettingsState.publicName = String(
       payload?.settings?.publicName || "",
@@ -1200,6 +1256,14 @@ async function savePartySettings() {
   } catch (error) {
     setPartySettingsStatus(error?.message || "Could not save settings.", true);
   }
+}
+
+function syncPublicPartyNameVisibility() {
+  const toggle = document.getElementById("party-public-toggle");
+  const isPublic = !!toggle?.checked;
+  document.getElementById("party-public-name-group")?.classList.toggle("hidden", !isPublic);
+  const input = document.getElementById("party-public-name");
+  if (input) input.disabled = !isPublic || !!toggle?.disabled;
 }
 
 function wirePartyOverlayControls() {
@@ -1239,12 +1303,7 @@ function wirePartyOverlayControls() {
   });
 
   const partyPublicToggle = document.getElementById("party-public-toggle");
-  const partyPublicName = document.getElementById("party-public-name");
-  partyPublicToggle?.addEventListener("change", () => {
-    if (partyPublicName) {
-      partyPublicName.disabled = !partyPublicToggle.checked;
-    }
-  });
+  partyPublicToggle?.addEventListener("change", syncPublicPartyNameVisibility);
 }
 
 function setTrophyClaimBadge(count) {
@@ -2095,6 +2154,9 @@ async function bootstrapPartyData(partyId) {
         mode: data?.party?.mode,
         map: data?.selection?.mapId ?? data?.party?.map,
         ownerName: data?.ownerName || null,
+        allowMemberSelection: data?.allowMemberSelection !== false,
+        isPublic: data?.isPublic,
+        publicName: data?.publicName,
       });
     syncPartySettingsButtonVisibility();
     sonner("Joined party", undefined, undefined, undefined, {

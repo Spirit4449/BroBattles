@@ -330,7 +330,7 @@
                     type="button"
                     aria-label="Change player card"
                   >
-                    <span class="profile-card-edit-badge" aria-hidden="true">
+                    <span class="profile-card-edit-badge profile-edit-badge" aria-hidden="true">
                       <img
                         src="/assets/edit.svg"
                         alt=""
@@ -359,7 +359,7 @@
                       />
                       <span
                         id="profile-icon-edit-badge"
-                        class="profile-icon-edit-badge"
+                        class="profile-icon-edit-badge profile-edit-badge"
                         aria-hidden="true"
                       >
                         <img
@@ -406,8 +406,26 @@
             id="profile-account-panel"
             class="profile-panel profile-account-panel"
           >
+            <section class="profile-guest-card" data-account-guest hidden aria-labelledby="profile-guest-title">
+              <div class="profile-guest-art" aria-hidden="true"><img src="/assets/trophy.webp" alt="" /></div>
+              <div class="profile-guest-copy">
+                <span class="profile-guest-tag">Playing as a guest</span>
+                <h3 id="profile-guest-title">Make your progress permanent</h3>
+                <p>Sign up to keep your trophies and unlocks, choose your own name, and return to your account anytime.</p>
+                <div class="profile-guest-actions">
+                  <a class="pixel-menu-button profile-guest-signup" href="/signup">Sign Up</a>
+                  <a class="pixel-menu-button profile-guest-login" href="/login">Log In</a>
+                </div>
+                <p class="profile-guest-note">Already have an account? Log in to pick up where you left off.</p>
+              </div>
+            </section>
+            <div data-account-member hidden>
             <h3>Account Settings</h3>
-            <form id="profile-username-form" class="profile-form">
+            <div class="profile-account-actions">
+              <button class="profile-action-btn pixel-menu-button" type="button" data-account-toggle aria-controls="profile-username-form" aria-expanded="false">Change Name</button>
+              <button class="profile-action-btn pixel-menu-button" type="button" data-account-toggle aria-controls="profile-password-form" aria-expanded="false">Change Password</button>
+            </div>
+            <form id="profile-username-form" class="profile-form" hidden>
               <label for="profile-new-username">Change Username</label>
               <input
                 id="profile-new-username"
@@ -421,8 +439,9 @@
               >
                 Update Name
               </button>
+              <button class="profile-action-btn pixel-menu-button" type="button" data-account-cancel>Cancel</button>
             </form>
-            <form id="profile-password-form" class="profile-form">
+            <form id="profile-password-form" class="profile-form" hidden>
               <label for="profile-current-password">Current Password</label>
               <input
                 id="profile-current-password"
@@ -442,7 +461,9 @@
               >
                 Update Password
               </button>
+              <button class="profile-action-btn pixel-menu-button" type="button" data-account-cancel>Cancel</button>
             </form>
+            </div>
             <p
               id="profile-message"
               class="profile-message"
@@ -466,13 +487,15 @@
         >
           <div class="profile-loadout-head bb-popup-header">
             <h2 id="profile-loadout-title" class="popup-title">Edit Profile Icon</h2>
-            <div style="display: flex; gap: 8px; align-items: center;">
+            <div class="profile-loadout-head-actions">
               <button
                 id="profile-loadout-shop"
                 class="profile-action-btn pixel-menu-button"
                 type="button"
+                aria-label="Get more in Shop"
               >
-                Get More in Shop
+                <span class="profile-loadout-shop-full">Get More in Shop</span>
+                <span class="profile-loadout-shop-short" aria-hidden="true">Shop</span>
               </button>
               <button
                 id="profile-loadout-close"
@@ -487,7 +510,7 @@
           </div>
 
           <section id="profile-icons-panel" class="profile-loadout-section">
-            <div id="profile-icons-grid" class="profile-cards-grid"></div>
+            <div id="profile-icons-grid" class="profile-icon-collection"></div>
           </section>
 
           <section id="profile-cards-panel" class="profile-loadout-section">
@@ -733,7 +756,8 @@
             class="party-discovery-input"
             type="text"
             maxlength="40"
-            placeholder="Search public parties"
+            placeholder="Search parties"
+            aria-label="Search public parties"
           />
           <button
             id="party-discovery-refresh"
@@ -743,7 +767,7 @@
             <img src="/assets/refresh.svg" alt="Refresh" />
           </button>
         </div>
-        <div id="party-discovery-status" class="party-discovery-status"></div>
+        <div id="party-discovery-status" class="party-discovery-status" role="status" aria-live="polite"></div>
         <div id="party-discovery-list" class="party-discovery-list"></div>
       </section>
     </div>
@@ -763,7 +787,7 @@
         <header class="trophy-overlay-head">
           <div>
             <h2 id="party-settings-title">Party Settings</h2>
-            <p>Control visibility and discovery details for your party.</p>
+            <p>Choose who can find your party and change its map and mode.</p>
           </div>
           <button
             id="party-settings-close"
@@ -775,14 +799,17 @@
             <span aria-hidden="true">×</span>
           </button>
         </header>
-        <!-- <div id="party-settings-status" class="party-settings-status"></div> -->
+        <div id="party-settings-status" class="party-settings-status" role="status" aria-live="polite"></div>
         <div class="form-group">
           <label class="party-visibility-toggle" for="party-public-toggle">
-            <input id="party-public-toggle" type="checkbox" />
+            <input id="party-public-toggle" type="checkbox" aria-describedby="party-public-hint" />
             <span>Public Party</span>
           </label>
+          <p id="party-public-hint" class="party-settings-hint">
+            Let other players find your party in discovery.
+          </p>
         </div>
-        <div class="form-group">
+        <div id="party-public-name-group" class="form-group hidden">
           <label class="party-public-name-label" for="party-public-name">
             Public Party Name
           </label>
@@ -794,10 +821,15 @@
             placeholder="Give your public party a name"
           />
         </div>
-        <p class="party-settings-hint">
-          Only public parties appear in discovery. Keep the name short and
-          clear.
-        </p>
+        <div class="form-group">
+          <label class="party-visibility-toggle" for="party-member-selection-toggle">
+            <input id="party-member-selection-toggle" type="checkbox" checked aria-describedby="party-member-selection-hint" />
+            <span>Allow members to change map and mode</span>
+          </label>
+          <p id="party-member-selection-hint" class="party-settings-hint">
+            When off, only the party owner can change the map and mode.
+          </p>
+        </div>
         <div class="party-settings-actions">
           <button
             id="party-settings-save"

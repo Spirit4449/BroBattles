@@ -123,6 +123,7 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
         members: membersForEmit,
         ownerName: result.ownerName || null,
         isOwner: String(result.ownerName || "") === String(username || ""),
+        allowMemberSelection: Number(result.party?.allow_member_selection ?? 1) === 1,
         isPublic: Number(result.party?.is_public || 0) === 1,
         publicName: String(result.party?.public_name || "").trim(),
         viewer: username,
@@ -297,6 +298,7 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
         actorName: user.name,
         isPublic,
         publicName,
+        allowMemberSelection: req.body?.allowMemberSelection,
       });
       if (!result.ok) {
         const statusCode = Number(result.statusCode) || 403;

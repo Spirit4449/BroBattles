@@ -69,6 +69,7 @@ function createPartyRouteService({ db }) {
       payload: {
         partyId: party.party_id,
         ownerName,
+        allowMemberSelection: Number(party?.allow_member_selection ?? 1) === 1,
         mode: party.mode,
         modeId: selection.modeId,
         modeVariantId: selection.modeVariantId,
@@ -116,7 +117,7 @@ function createPartyRouteService({ db }) {
 
     try {
       const rows = await db.runQuery(
-        "SELECT is_public, public_name FROM parties WHERE party_id = ? LIMIT 1",
+        "SELECT * FROM parties WHERE party_id = ? LIMIT 1",
         [partyId],
       );
       if (!rows.length) {
@@ -132,6 +133,9 @@ function createPartyRouteService({ db }) {
           partyId,
           ownerName,
           isOwner: ownerName === username,
+          allowMemberSelection: Number(rows[0]?.allow_member_selection ?? 1) === 1,
+          memberSelectionSupported: rows[0]?.allow_member_selection != null,
+          visibilitySupported: rows[0]?.is_public != null,
           isPublic: Number(rows[0]?.is_public || 0) === 1,
           publicName: String(rows[0]?.public_name || "").trim(),
         },

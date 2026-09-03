@@ -76,6 +76,7 @@ let __modePopupUi = null;
 let __partyContext = {
   partyId: null,
   ownerName: null,
+  allowMemberSelection: true,
   isPublic: false,
   publicName: "",
   capacity: null,
@@ -918,6 +919,14 @@ function getCurrentSelection() {
   });
 }
 
+function canChangePartySelection() {
+  if (!checkIfInParty()) return true;
+  return (
+    __partyContext.allowMemberSelection !== false ||
+    __partyContext.ownerName === getCurrentLobbyUserName()
+  );
+}
+
 function rebuildMapDropdown(selection) {
   const mapDropdown = document.getElementById("map");
   if (!mapDropdown) return [];
@@ -933,7 +942,7 @@ function rebuildMapDropdown(selection) {
     mapDropdown.appendChild(opt);
   });
 
-  mapDropdown.disabled = compatibleMaps.length === 0;
+  mapDropdown.disabled = !canChangePartySelection() || compatibleMaps.length === 0;
   mapDropdown.value =
     compatibleMaps.find((map) => Number(map.id) === Number(normalized.mapId))
       ?.id != null
@@ -968,11 +977,17 @@ function syncModePickerUi(selection = getCurrentSelection()) {
     };
   }
   if (openBtn) {
+    openBtn.disabled = !canChangePartySelection();
     openBtn.classList.toggle(
       "is-disabled",
-      !isSelectionQueueable(normalized) && normalized.modeId !== "duels",
+      openBtn.disabled ||
+        (!isSelectionQueueable(normalized) && normalized.modeId !== "duels"),
     );
-    openBtn.title = mode?.description || "";
+    openBtn.title = openBtn.disabled
+      ? "Only the party owner can change the map and mode."
+      : mode?.description || "";
+    const modeDropdown = document.getElementById("mode");
+    if (modeDropdown) modeDropdown.disabled = openBtn.disabled;
   }
 }
 
@@ -1007,10 +1022,11 @@ function syncMapPickerUi(mapValue, selection = getCurrentSelection()) {
         : "/assets/map.webp";
   }
   if (openBtn) {
-    openBtn.disabled = compatibleMaps.length === 0;
-    openBtn.classList.toggle("is-disabled", compatibleMaps.length === 0);
-    openBtn.title =
-      compatibleMaps.length === 0
+    openBtn.disabled = !canChangePartySelection() || compatibleMaps.length === 0;
+    openBtn.classList.toggle("is-disabled", openBtn.disabled);
+    openBtn.title = !canChangePartySelection()
+      ? "Only the party owner can change the map and mode."
+      : compatibleMaps.length === 0
         ? "No compatible maps are available for this mode yet."
         : "";
   }
@@ -1089,6 +1105,7 @@ function setupMapPickerControls(onSelect = null) {
   };
 
   const openMapPopup = () => {
+    if (!canChangePartySelection()) return;
     const popupUi = ensureMapPopup();
     const { popupShell, content, grid, closePopup } = popupUi;
     grid.innerHTML = "";
@@ -1167,6 +1184,7 @@ function setupModePickerControls(onSelect = null) {
   };
 
   const openModeGrid = () => {
+    if (!canChangePartySelection()) return;
     const popupUi = ensureModePopup();
     const { popupShell, closePopup, content } = popupUi;
     const grid = document.createElement("div");
@@ -1607,6 +1625,7 @@ export function socketInit(options = {}) {
     __partyContext.partyId = partyId || null;
     if (!partyId) {
       __partyContext.ownerName = null;
+      __partyContext.allowMemberSelection = true;
       __partyContext.isPublic = false;
       __partyContext.publicName = "";
       __partyContext.capacity = null;
@@ -1814,6 +1833,31 @@ export function socketInit(options = {}) {
           setReadyButtonState(!!isReady);
         }
       }
+    }
+  });
+
+  socket.on("party:selection-denied", async (data) => {
+    if (String(data?.partyId) !== String(getActivePartyId())) return;
+    sonner("Could not change map or mode", data?.error, "error");
+    try {
+      const response = await fetch("/party-members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ partyId: getActivePartyId() }),
+      });
+      if (!response.ok) return;
+      const party = await response.json();
+      if (String(party.partyId) !== String(getActivePartyId())) return;
+      writeSelectionToDom(party.selection);
+      setLobbyBackground(party.selection.mapId);
+      applyPlatformImageForMap(party.selection.mapId);
+      applyLobbyCharacterOffsetForMap(
+        party.selection.mapId,
+        getPlayersPerTeamForSelection(party.selection),
+      );
+      renderPartyMembers(party);
+    } catch (error) {
+      console.warn("Could not refresh party selection", error);
     }
   });
 
@@ -2334,12 +2378,20 @@ export function renderPartyMembers(data) {
     partyId:
       data?.partyId || __partyContext.partyId || checkIfInParty() || null,
     ownerName: data?.ownerName || __partyContext.ownerName || null,
-    isPublic: Number(data?.isPublic ? 1 : 0) === 1,
-    publicName: String(data?.publicName || "").trim(),
+    allowMemberSelection:
+      data?.allowMemberSelection ?? __partyContext.allowMemberSelection,
+    isPublic: data?.isPublic ?? __partyContext.isPublic,
+    publicName: String(data?.publicName ?? __partyContext.publicName).trim(),
     capacity,
     members,
   };
 
+  syncModePickerUi();
+  syncMapPickerUi(getCurrentMapValue());
+  if (!canChangePartySelection()) {
+    __mapPopupUi?.closePopup();
+    __modePopupUi?.closePopup();
+  }
   const currentUserName = getCurrentLobbyUserName();
   const currentSelection = normalizeGameSelection(
     data?.selection || getCurrentSelection(),
@@ -2493,6 +2545,7 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
     const st = normalizeStatusLabel(member.status || "online");
     statusEl.textContent = st;
     statusEl.className = `status ${statusToClass(st)}`;
+    if (checkIfInParty()) statusEl.style.display = "";
     if (previousPlayerKey === getLobbyMemberKey(member)) {
       applyLobbyStatusVisualState(slot, previousStatus, st);
     } else {
@@ -2623,6 +2676,7 @@ export function initializeModeDropdown() {
   applySelectionVisuals(initialSelection, { updateBackground: isSolo });
 
   const handleModeSelection = async (selection) => {
+    if (!canChangePartySelection()) return;
     const username = document.getElementById("username-text")?.textContent;
     const previousSelection = getCurrentSelection();
     const nextSelection = normalizeGameSelection(selection);
@@ -2652,6 +2706,7 @@ export function initializeModeDropdown() {
           return;
         }
 
+        if (!canChangePartySelection()) return;
         const applied = applySelectionVisuals(nextSelection);
         socket.emit("mode-change", {
           selection: applied,
@@ -2681,6 +2736,7 @@ export function initializeModeDropdown() {
   if (mapDropdown.dataset.bound !== "1") {
     mapDropdown.dataset.bound = "1";
     mapDropdown.addEventListener("change", (event) => {
+      if (!canChangePartySelection()) return;
       const selectedValue = event.target.value;
       const username = document.getElementById("username-text")?.textContent;
       const applied = applySelectionVisuals(
@@ -2800,13 +2856,14 @@ function createPlatform(team, slotNumber) {
   const status = document.createElement("div");
   status.className = "status invite";
   status.textContent = "Invite";
+  status.style.display = checkIfInParty() ? "" : "none";
   status.style.cursor = "pointer";
   status.style.pointerEvents = "auto";
 
   // Add invite click functionality
   status.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (status.classList.contains("invite")) {
+    if (status.classList.contains("invite") && checkIfInParty()) {
       copyInviteToClipboard();
       status.textContent = "Copied!";
       setTimeout(() => {
@@ -2864,6 +2921,7 @@ function resetSlotToRandom(slot) {
   sprite.classList.add("random");
   statusEl.className = "status invite";
   statusEl.textContent = "Invite";
+  statusEl.style.display = checkIfInParty() ? "" : "none";
   statusEl.style.cursor = "pointer";
   statusEl.style.pointerEvents = "auto";
   slot.classList.remove(
@@ -2894,7 +2952,7 @@ function resetSlotToRandom(slot) {
 
   newStatusEl.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (newStatusEl.classList.contains("invite")) {
+    if (newStatusEl.classList.contains("invite") && checkIfInParty()) {
       copyInviteToClipboard();
       newStatusEl.textContent = "Copied!";
       setTimeout(() => {
@@ -3408,6 +3466,7 @@ export function getPartyInteractionContext() {
   return {
     partyId: __partyContext.partyId || checkIfInParty() || null,
     ownerName: __partyContext.ownerName || null,
+    allowMemberSelection: __partyContext.allowMemberSelection !== false,
     isPublic: !!__partyContext.isPublic,
     publicName: String(__partyContext.publicName || "").trim(),
     capacity:

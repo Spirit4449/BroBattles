@@ -347,3 +347,9 @@ CREATE TABLE IF NOT EXISTS user_abuse_events (
 - Offense decay window is 5 minutes.
 - Decay is evaluated only when the relevant suspension is not active.
 - Suspension-safe decay uses `*_decay_anchor_at` so levels cannot wear off while suspended.
+
+## Party map and mode permissions
+
+Apply `migrations/2026-09-03_party_member_selection.sql` to add
+`parties.allow_member_selection` (defaults to `1`). Party owners can disable
+member map and mode changes in Party Settings; the owner keeps access.

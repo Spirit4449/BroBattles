@@ -61,6 +61,7 @@ async function emitRoster(io, partyId, party, members, db = null) {
   io.to(`party:${partyId}`).emit("party:members", {
     partyId,
     ownerName,
+    allowMemberSelection: Number(party?.allow_member_selection ?? 1) === 1,
     isPublic: Number(party?.is_public || 0) === 1,
     publicName: String(party?.public_name || "").trim(),
     mode: party.mode,

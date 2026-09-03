@@ -350,7 +350,25 @@ function createPartyStateService({ db, io }) {
     ]);
   }
 
-  async function setPartySelection({ partyId, selection }) {
+  async function setPartySelection({ partyId, selection, actorName }) {
+    const membership = actorName
+      ? await db.runQuery(
+          "SELECT 1 FROM party_members WHERE party_id = ? AND name = ? LIMIT 1",
+          [partyId, actorName],
+        )
+      : [];
+    if (!membership.length) throw new Error("Not a member of this party.");
+    const rows = await db.runQuery(
+      "SELECT * FROM parties WHERE party_id = ? LIMIT 1",
+      [partyId],
+    );
+    if (!rows.length) throw new Error("Party not found.");
+    if (
+      Number(rows[0].allow_member_selection ?? 1) !== 1 &&
+      (await getPartyOwnerName(partyId)) !== actorName
+    ) {
+      throw new Error("Only the party owner can change the map and mode.");
+    }
     const normalized = normalizeSelectionFromRow({
       mode_id: selection?.modeId,
       mode_variant_id: selection?.modeVariantId,
@@ -451,6 +469,7 @@ function createPartyStateService({ db, io }) {
     actorName,
     isPublic,
     publicName,
+    allowMemberSelection,
   }) {
     if (!partyId || !actorName) {
       return { ok: false, error: "Missing party action data." };
@@ -481,14 +500,31 @@ function createPartyStateService({ db, io }) {
 
     try {
       await db.runQuery(
-        "UPDATE parties SET is_public = ?, public_name = ? WHERE party_id = ?",
+        `UPDATE parties SET is_public = ?, public_name = ?${
+          typeof allowMemberSelection === "boolean"
+            ? ", allow_member_selection = ?"
+            : ""
+        } WHERE party_id = ?`,
         [
           normalizedPublic ? 1 : 0,
           normalizedPublic ? normalizedName : null,
+          ...(typeof allowMemberSelection === "boolean"
+            ? [allowMemberSelection ? 1 : 0]
+            : []),
           partyId,
         ],
       );
     } catch (error) {
+      if (
+        error?.code === "ER_BAD_FIELD_ERROR" &&
+        /allow_member_selection/i.test(String(error.sqlMessage || error.message))
+      ) {
+        return {
+          ok: false,
+          statusCode: 503,
+          error: "Apply the party member selection migration before changing this setting.",
+        };
+      }
       if (isMissingPartyVisibilityColumn(error)) {
         return {
           ok: false,
@@ -502,7 +538,7 @@ function createPartyStateService({ db, io }) {
 
     await updateOrDeleteParty(io, db, partyId);
     const rows = await db.runQuery(
-      "SELECT is_public, public_name FROM parties WHERE party_id = ? LIMIT 1",
+      "SELECT * FROM parties WHERE party_id = ? LIMIT 1",
       [partyId],
     );
     return {
@@ -510,6 +546,7 @@ function createPartyStateService({ db, io }) {
       settings: {
         isPublic: Number(rows?.[0]?.is_public || 0) === 1,
         publicName: String(rows?.[0]?.public_name || "").trim(),
+        allowMemberSelection: Number(rows?.[0]?.allow_member_selection ?? 1) === 1,
       },
     };
   }

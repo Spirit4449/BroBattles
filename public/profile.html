@@ -74,14 +74,33 @@
         </section>
 
         <section class="profile-card account">
+          <section class="profile-guest-card" data-account-guest hidden aria-labelledby="profile-guest-title">
+            <div class="profile-guest-art" aria-hidden="true"><img src="/assets/trophy.webp" alt="" /></div>
+            <div class="profile-guest-copy">
+              <span class="profile-guest-tag">Playing as a guest</span>
+              <h3 id="profile-guest-title">Make your progress permanent</h3>
+              <p>Sign up to keep your trophies and unlocks, choose your own name, and return to your account anytime.</p>
+              <div class="profile-guest-actions">
+                <a class="pixel-menu-button profile-guest-signup" href="/signup">Sign Up</a>
+                <a class="pixel-menu-button profile-guest-login" href="/login">Log In</a>
+              </div>
+              <p class="profile-guest-note">Already have an account? Log in to pick up where you left off.</p>
+            </div>
+          </section>
+          <div data-account-member hidden>
           <h3>Account Settings</h3>
-          <form id="username-form" class="profile-form">
+          <div class="profile-account-actions">
+            <button class="profile-btn" type="button" data-account-toggle aria-controls="username-form" aria-expanded="false">Change Name</button>
+            <button class="profile-btn" type="button" data-account-toggle aria-controls="password-form" aria-expanded="false">Change Password</button>
+          </div>
+          <form id="username-form" class="profile-form" hidden>
             <label for="new-username">Change Username</label>
             <input id="new-username" name="new-username" type="text" />
             <button type="submit" class="profile-btn">Save Username</button>
+            <button type="button" class="profile-btn" data-account-cancel>Cancel</button>
           </form>
 
-          <form id="password-form" class="profile-form">
+          <form id="password-form" class="profile-form" hidden>
             <label for="current-password">Current Password</label>
             <input
               id="current-password"
@@ -91,7 +110,9 @@
             <label for="new-password">New Password</label>
             <input id="new-password" name="new-password" type="password" />
             <button type="submit" class="profile-btn">Change Password</button>
+            <button type="button" class="profile-btn" data-account-cancel>Cancel</button>
           </form>
+          </div>
           <p id="account-message" class="account-message"></p>
         </section>
       </main>

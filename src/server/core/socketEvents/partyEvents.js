@@ -247,7 +247,7 @@ function registerPartyEvents(
 
   socket.on("mode-change", async (data) => {
     const uname = socket.data.user?.name;
-    if (!uname || !data.partyId) return;
+    if (!uname || !data?.partyId) return;
 
     try {
       const rows = await db.runQuery(
@@ -268,6 +268,7 @@ function registerPartyEvents(
       const savedSelection = await partyState.setPartySelection({
         partyId: data.partyId,
         selection: nextSelection,
+        actorName: uname,
       });
 
       io.to(`party:${data.partyId}`).emit("mode-change", {
@@ -295,13 +296,17 @@ function registerPartyEvents(
         `[party:${data.partyId}] Mode changed to ${savedSelection.modeId}:${savedSelection.modeVariantId} by ${uname}`,
       );
     } catch (e) {
+      socket.emit("party:selection-denied", {
+        partyId: data.partyId,
+        error: e?.message || "Could not change selection.",
+      });
       console.warn("mode-change error:", e?.message);
     }
   });
 
   socket.on("map-change", async (data) => {
     const uname = socket.data.user?.name;
-    if (!uname || !data.partyId) return;
+    if (!uname || !data?.partyId) return;
 
     try {
       const rows = await db.runQuery(
@@ -321,6 +326,7 @@ function registerPartyEvents(
       const savedSelection = await partyState.setPartySelection({
         partyId: data.partyId,
         selection: nextSelection,
+        actorName: uname,
       });
 
       io.to(`party:${data.partyId}`).emit("map-change", {
@@ -344,6 +350,10 @@ function registerPartyEvents(
         `[party:${data.partyId}] Map changed to ${savedSelection.mapId} by ${uname}`,
       );
     } catch (e) {
+      socket.emit("party:selection-denied", {
+        partyId: data.partyId,
+        error: e?.message || "Could not change selection.",
+      });
       console.warn("map-change error:", e?.message);
     }
   });

@@ -297,6 +297,128 @@ input:-webkit-autofill:focus {
   opacity: 0.58;
 }
 
+/* Lobby players keep the scenery visible inside the shared pixel frame. */
+#lobby-area .character-slot {
+  --lobby-frame-color: var(--bb-border);
+  border: var(--bb-border-width) solid var(--lobby-frame-color);
+  border-radius: var(--bb-radius-card);
+  background: transparent;
+  box-shadow:
+    0 2px 0 rgba(3, 6, 11, 0.25),
+    inset 0 1px rgba(255, 255, 255, 0.3);
+  transition:
+    background-color var(--bb-motion-fast) ease,
+    box-shadow var(--bb-motion-fast) ease;
+}
+
+@media (hover: hover) {
+  #lobby-area .character-slot:is(.player-display, .op-display):hover {
+    background-color: rgba(247, 249, 255, 0.1);
+    box-shadow:
+      0 0 0 2px rgba(247, 249, 255, 0.35),
+      0 3px 0 rgba(3, 6, 11, 0.2),
+      inset 0 0 0 1px rgba(247, 249, 255, 0.3);
+  }
+}
+
+#lobby-area .character-slot.player-display {
+  --lobby-frame-color: var(--bb-blue);
+}
+
+#lobby-area .character-slot.op-display {
+  --lobby-frame-color: var(--bb-red);
+}
+
+#lobby-area .character-slot.empty {
+  --lobby-frame-color: rgba(247, 249, 255, 0.45);
+  border-width: 2px;
+  border-style: dashed;
+  background: rgba(247, 249, 255, 0.06);
+  box-shadow: none;
+}
+
+#lobby-area .status {
+  --lobby-status-color: var(--bb-blue);
+  border: 2px solid var(--lobby-status-color);
+  border-radius: var(--bb-radius-tag);
+  background: var(--bb-surface-gradient);
+  box-shadow: 0 0 0 2px var(--bb-ink), 0 4px 0 var(--bb-ink);
+  color: var(--bb-text);
+  font-family: var(--bb-font-display);
+  font-size: clamp(7px, 0.65vw, 8px);
+  font-weight: 400;
+  line-height: 1.6;
+  text-transform: uppercase;
+  text-shadow: 1px 2px 0 var(--bb-ink);
+}
+
+#lobby-area .status:is(.ready, .selecting-character) {
+  --lobby-status-color: var(--bb-green);
+}
+
+#lobby-area .status.not-ready {
+  --lobby-status-color: var(--bb-red);
+}
+
+#lobby-area .status.offline {
+  --lobby-status-color: var(--bb-text-muted);
+  color: var(--bb-text-muted);
+}
+
+#lobby-area .status.in-battle {
+  --lobby-status-color: var(--bb-purple);
+}
+
+#lobby-area .status.end-screen {
+  --lobby-status-color: var(--bb-gold);
+}
+
+#lobby-area :is(.switch-character, .status.invite) {
+  border: 0;
+  border-radius: var(--bb-radius-control);
+  box-shadow: var(--bb-control-shadow);
+  color: var(--bb-text);
+  cursor: pointer;
+  transition:
+    transform var(--bb-motion-fast) var(--bb-ease),
+    filter var(--bb-motion-fast) ease;
+}
+
+#lobby-area .switch-character {
+  background: var(--bb-primary-gradient);
+}
+
+#lobby-area .status.invite {
+  background: linear-gradient(180deg, var(--bb-gold), var(--bb-orange));
+  color: var(--bb-ink);
+  text-shadow: none;
+}
+
+#lobby-area :is(.switch-character, .status.invite):hover {
+  filter: brightness(1.12) saturate(1.06);
+}
+
+#lobby-area .switch-character:hover {
+  transform: translateY(-2px);
+}
+
+#lobby-area .status.invite:hover {
+  transform: translate(-50%, -2px);
+}
+
+#lobby-area :is(.switch-character, .status.invite):active {
+  filter: brightness(0.97);
+  box-shadow: var(--bb-control-shadow-pressed);
+}
+
+#lobby-area .switch-character:active {
+  transform: translateY(5px);
+}
+
+#lobby-area .status.invite:active {
+  transform: translate(-50%, 5px);
+}
+
 /* Reusable presets for new UI. Existing components below are mapped to the same contract. */
 .bb-popup {
   overflow: hidden;
@@ -658,6 +780,284 @@ button.bb-close.bb-close:active:not(:disabled) {
   box-sizing: border-box !important;
 }
 
+.profile-guest-card[hidden],
+[data-account-member][hidden],
+.profile-form[hidden],
+body.profile-page-body .profile-form[hidden] {
+  display: none;
+}
+
+.profile-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bb-space-4);
+  margin: var(--bb-space-2) 0 var(--bb-space-5);
+}
+
+.profile-account-actions button {
+  min-height: 40px;
+}
+
+.profile-account-actions button[aria-expanded="true"] {
+  outline: 2px solid var(--bb-border-highlight);
+  outline-offset: 4px;
+}
+
+.profile-account-actions ~ .profile-form {
+  padding-top: var(--bb-space-4);
+  border-top: 2px solid var(--bb-border-soft);
+}
+
+.profile-form button[data-account-cancel] {
+  color: var(--bb-text-soft);
+  background: var(--bb-surface-raised);
+}
+
+.profile-guest-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--bb-space-5);
+  padding: var(--bb-space-5);
+  border: 2px solid var(--bb-border);
+  border-top-color: var(--bb-gold);
+  border-radius: var(--bb-radius-card);
+  background: radial-gradient(ellipse at top left, rgba(61, 145, 235, 0.16), transparent 65%), var(--bb-card-gradient);
+  box-shadow: var(--bb-inset-shadow);
+}
+
+.profile-guest-art {
+  flex: 0 0 64px;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 2px solid var(--bb-border);
+  background: var(--bb-surface-1);
+  box-shadow: var(--bb-card-shadow);
+}
+
+.profile-guest-art img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.profile-guest-copy {
+  min-width: 0;
+}
+
+.profile-guest-tag {
+  display: inline-block;
+  margin-bottom: var(--bb-space-3);
+  color: var(--bb-gold);
+  font-family: var(--bb-font-display);
+  font-size: 8px;
+  line-height: 1.6;
+  text-transform: uppercase;
+}
+
+.profile-guest-card .profile-guest-copy h3 {
+  margin: 0 0 var(--bb-space-3);
+  color: var(--bb-text);
+  font-family: var(--bb-font-display);
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 var(--bb-ink);
+}
+
+.profile-guest-copy p {
+  max-width: 52ch;
+  margin: 0;
+  color: var(--bb-text-soft);
+  font-family: var(--bb-font-body);
+  font-size: var(--bb-text-md);
+  line-height: 1.6;
+}
+
+.profile-guest-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bb-space-5);
+  margin: var(--bb-space-5) 5px var(--bb-space-6);
+}
+
+.profile-guest-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: var(--bb-space-3) var(--bb-space-4);
+  text-decoration: none;
+}
+
+.profile-guest-signup {
+  background: var(--bb-success-gradient);
+}
+
+.profile-guest-login {
+  background: var(--bb-primary-gradient);
+}
+
+.profile-guest-copy .profile-guest-note {
+  color: var(--bb-text-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .profile-guest-card {
+    flex-direction: column;
+    padding: var(--bb-space-4);
+  }
+}
+
+/* Matching edit controls for the profile portrait and player card. */
+.profile-card-showcase .profile-edit-badge {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--bb-radius-control);
+  color: var(--bb-text);
+  background: var(--bb-primary-gradient);
+  box-shadow: var(--bb-control-shadow), 0 0 12px rgba(61, 145, 235, 0.35);
+  pointer-events: none;
+  transition:
+    filter var(--bb-motion-fast) ease,
+    box-shadow var(--bb-motion-fast) ease;
+}
+
+.profile-card-showcase .profile-edit-badge > img {
+  display: block;
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  filter: none;
+}
+
+.profile-card-showcase button:is(:hover, :focus-visible):not(:disabled) .profile-edit-badge {
+  filter: brightness(1.12) saturate(1.06);
+  box-shadow: var(--bb-control-shadow), 0 0 20px rgba(61, 145, 235, 0.6);
+}
+
+.profile-card-showcase button:active:not(:disabled) .profile-edit-badge {
+  box-shadow: var(--bb-control-shadow-pressed);
+}
+
+.profile-card-showcase .profile-edit-badge[hidden],
+.profile-card-showcase .profile-card-edit-trigger[hidden] {
+  display: none;
+}
+
+.profile-card-showcase .profile-hero-avatar-trigger:disabled {
+  opacity: 1;
+  filter: none;
+}
+
+/* Profile loadout: use the same square frames and pixel tags as the shop. */
+.profile-loadout-modal .profile-icon-group + .profile-icon-group {
+  border-top: 2px solid var(--bb-border-soft);
+}
+
+.profile-loadout-modal .profile-icon-group-heading h3 {
+  color: var(--bb-text);
+  font-family: var(--bb-font-display);
+  font-size: var(--bb-text-sm);
+  font-weight: 700;
+  line-height: 1.5;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 var(--bb-ink);
+}
+
+.profile-loadout-modal .profile-icon-group-heading h3 span {
+  border: 1px solid var(--bb-border);
+  border-radius: var(--bb-radius-tag);
+  color: var(--bb-text-soft);
+  background: var(--bb-surface-raised);
+  box-shadow: 0 3px 0 var(--bb-ink);
+  font-size: var(--bb-text-xs);
+  text-shadow: none;
+}
+
+.profile-loadout-modal .profile-icon-group-heading p,
+.profile-loadout-modal .profile-loadout-empty,
+.profile-loadout-modal .profile-icon-status {
+  color: var(--bb-text-muted);
+  font-family: var(--bb-font-body);
+}
+
+.profile-loadout-modal .profile-icon-choice-tile,
+.profile-loadout-modal .profile-card-tile {
+  border: 2px solid var(--bb-border);
+  border-radius: var(--bb-radius-card);
+  color: var(--bb-text);
+  background: var(--bb-card-gradient);
+  box-shadow: var(--bb-card-shadow);
+  font-family: var(--bb-font-body);
+  transition:
+    transform var(--bb-motion-fast) var(--bb-ease),
+    border-color var(--bb-motion-fast) ease,
+    box-shadow var(--bb-motion-fast) ease;
+}
+
+.profile-loadout-modal .profile-icon-art {
+  border-radius: var(--bb-radius-media);
+  background: var(--bb-bg-deep);
+}
+
+.profile-loadout-modal .profile-icon-choice-tile:hover:not(:disabled):not(.is-selected),
+.profile-loadout-modal .profile-card-tile:hover:not(.is-selected) {
+  border-color: var(--bb-border-highlight);
+  box-shadow: var(--bb-card-shadow);
+  transform: translateY(-2px);
+}
+
+.profile-loadout-modal .profile-icon-choice-tile:active:not(:disabled):not(.is-selected) {
+  transform: translateY(2px);
+  box-shadow: var(--bb-inset-shadow);
+}
+
+.profile-loadout-modal .profile-icon-choice-tile:focus-visible {
+  outline: 2px solid var(--bb-border-highlight);
+  outline-offset: 5px;
+}
+
+.profile-loadout-modal .profile-icon-choice-tile.is-selected,
+.profile-loadout-modal .profile-card-tile.is-selected {
+  border-color: var(--bb-green);
+  background: var(--bb-card-gradient);
+  box-shadow: var(--bb-card-shadow), inset 0 -3px 0 var(--bb-green-deep);
+}
+
+.profile-loadout-modal .profile-icon-selected-badge {
+  border: 2px solid var(--bb-ink);
+  border-radius: var(--bb-radius-tag);
+  color: var(--bb-text);
+  background: var(--bb-success-gradient);
+  box-shadow: 0 3px 0 var(--bb-ink);
+  font-family: var(--bb-font-display);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.profile-loadout-modal .is-selected .profile-icon-status {
+  color: var(--bb-text-soft);
+}
+
+.profile-loadout-modal .profile-icon-requirement {
+  color: var(--bb-gold);
+}
+
 /* Map established UI to the presets without changing layout or behavior. */
 :is(
   .profile-popup,
@@ -767,6 +1167,161 @@ button.bb-close.bb-close:active:not(:disabled) {
   body.admin-page textarea
 ) {
   border-radius: var(--bb-radius-control);
+}
+
+/* Party discovery and settings use the shared palette and control treatments. */
+.party-discovery-input,
+.party-public-name-input {
+  font-size: var(--bb-text-sm);
+  letter-spacing: 0;
+  font-family: var(--bb-font-display);
+}
+
+.party-discovery-refresh {
+  background: var(--bb-primary-gradient);
+  color: var(--bb-text);
+}
+
+.party-discovery-status,
+.party-settings-status {
+  color: var(--bb-text-soft);
+  font-size: var(--bb-text-md);
+}
+
+.party-discovery-card {
+  border-radius: var(--bb-radius-card);
+  border: 1px solid var(--bb-border-soft);
+  background: var(--bb-card-gradient);
+}
+
+.party-discovery-title {
+  font-size: var(--bb-text-lg);
+  color: var(--bb-text);
+  font-weight: 700;
+}
+
+.party-discovery-detail {
+  background: var(--bb-surface-2);
+  border: 1px solid var(--bb-border-soft);
+  color: var(--bb-text);
+  font-size: var(--bb-text-md);
+}
+
+.party-discovery-roster {
+  border-top: 1px solid var(--bb-border-soft);
+}
+
+.party-discovery-meta {
+  color: var(--bb-text-soft);
+  font-size: var(--bb-text-sm);
+}
+
+.party-discovery-meta-label {
+  color: var(--bb-text-muted);
+  font-size: var(--bb-text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-weight: 600;
+}
+
+.party-discovery-member img {
+  border-radius: var(--bb-radius-media);
+  background: var(--bb-bg-deep);
+}
+
+.party-discovery-member-name {
+  color: var(--bb-text-soft);
+  font-size: var(--bb-text-sm);
+  font-weight: 600;
+}
+
+.party-discovery-join {
+  color: var(--bb-text);
+  background: var(--bb-success-gradient);
+}
+
+.party-visibility-toggle {
+  color: var(--bb-text);
+  font-weight: 700;
+  font-size: var(--bb-text-md);
+}
+
+.party-public-name-label,
+.party-visibility-toggle-label {
+  font-weight: 600;
+  color: var(--bb-text);
+  font-size: var(--bb-text-md);
+}
+
+.party-settings-hint {
+  color: var(--bb-text-muted);
+  font-size: var(--bb-text-sm);
+}
+
+.party-settings-save {
+  color: var(--bb-text);
+  background: var(--bb-success-gradient);
+}
+
+.party-visibility-toggle input[type="checkbox"] {
+  appearance: none;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--bb-border);
+  border-radius: var(--bb-radius-control);
+  background: var(--bb-surface-1);
+  box-shadow: var(--bb-inset-shadow);
+  color: var(--bb-text);
+  cursor: pointer;
+  transition:
+    border-color var(--bb-motion-fast) ease,
+    background-color var(--bb-motion-fast) ease;
+}
+
+.party-visibility-toggle input[type="checkbox"]:hover:not(:disabled) {
+  border-color: var(--bb-border-highlight);
+}
+
+.party-visibility-toggle input[type="checkbox"]:checked {
+  background: var(--bb-success-gradient);
+  border-color: var(--bb-green);
+}
+
+.party-visibility-toggle input[type="checkbox"]:checked::after {
+  content: "✓";
+  font: 900 var(--bb-text-lg)/1 var(--bb-font-body);
+}
+
+.party-visibility-toggle input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--bb-field-focus);
+  outline-offset: 3px;
+}
+
+.party-visibility-toggle input[type="checkbox"]:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+:is(.party-discovery-status, .party-settings-status).is-error {
+  color: var(--bb-red);
+}
+
+:is(.party-discovery-panel, .party-settings-panel) {
+  font-family: var(--bb-font-body);
+  background: var(--bb-surface-gradient);
+}
+
+:is(.party-discovery-panel, .party-settings-panel) .trophy-overlay-head p {
+  color: var(--bb-text-soft);
+}
+
+
+:is(.party-discovery-panel, .party-settings-panel) .trophy-overlay-head h2 {
+  line-height: 1.5;
 }
 
 /* Match completion is a compact reward reveal, not a dense scoreboard. */

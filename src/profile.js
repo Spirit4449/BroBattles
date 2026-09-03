@@ -2,6 +2,7 @@ import "./styles/profile.css";
 import "./styles/selectionPopup.css";
 import { sonner } from "./lib/sonner.js";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
+import { renderAccountAccess, wireAccountSettings } from "./lib/accountSettings.js";
 import {
   buildProfileIconAlt,
   buildProfileIconUrl,
@@ -33,6 +34,7 @@ async function fetchJson(url, options) {
 }
 
 function renderProfile(profile) {
+  renderAccountAccess(document.querySelector(".account"), profile.guest === true);
   document.getElementById("profile-username").textContent = profile.username;
   document.getElementById("profile-coins").textContent = String(
     profile.coins || 0,
@@ -231,6 +233,7 @@ function renderIconsGrid() {
 }
 
 async function boot() {
+  const accountSettings = wireAccountSettings(document.querySelector(".account"));
   try {
     const [profileRes, catalogRes, ownedRes, iconsCatalogRes, iconsOwnedRes] =
       await Promise.all([
@@ -303,6 +306,7 @@ async function boot() {
       .getElementById("username-form")
       ?.addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (profileData?.guest !== false) return;
         const username = String(
           document.getElementById("new-username")?.value || "",
         ).trim();
@@ -316,6 +320,7 @@ async function boot() {
           profileData.username = data.username || username;
           renderProfile(profileData);
           setMessage("Username updated.");
+          accountSettings.close("username-form");
         } catch (err) {
           setMessage(err.message || "Unable to update username.", true);
         }
@@ -325,6 +330,7 @@ async function boot() {
       .getElementById("password-form")
       ?.addEventListener("submit", async (e) => {
         e.preventDefault();
+        if (profileData?.guest !== false) return;
         const currentPassword = String(
           document.getElementById("current-password")?.value || "",
         );
@@ -340,6 +346,7 @@ async function boot() {
           document.getElementById("current-password").value = "";
           document.getElementById("new-password").value = "";
           setMessage("Password changed.");
+          accountSettings.close("password-form");
         } catch (err) {
           setMessage(err.message || "Unable to change password.", true);
         }
