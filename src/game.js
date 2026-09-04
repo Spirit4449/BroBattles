@@ -19,6 +19,7 @@ import { isChatInputActive, setChatInputActive } from "./player";
 import "./styles/chat.css";
 import "./styles/tutorialTips.css";
 import { createSnapshotBuffer } from "./match/snapshotBuffer";
+import { readNetworkExperiments, sampleRemoteFrame, followRemotePosition } from "./gameScene/remoteSmoothing.js";
 import { createMatchCoordinator } from "./match/matchCoordinator";
 import { preloadGameAssets } from "./gameScene/preloadGameAssets";
 import { renderPoisonWater } from "./gameScene/poisonWaterRenderer";
@@ -39,6 +40,7 @@ import { RENDER_LAYERS } from "./gameScene/renderLayers";
 import {
   createPlayer,
   finalizeLocalSpawnPresentation,
+  syncLocalUiPosition,
   player,
   handlePlayerMovement,
   dead,
@@ -75,6 +77,7 @@ import {
 } from "./characters/shared/animationState.js";
 import socket, { waitForConnect } from "./socket";
 import OpPlayer from "./opPlayer";
+import { prepareSpawnIntro, finishSpawnIntro } from './gameScene/spawnIntro';
 import { spawnDust, prewarmDust } from "./effects";
 import {
   configureClientNetTest,
@@ -261,7 +264,12 @@ setLocalNetStateFlusher((state) =>
 );
 
 // Server snapshot interpolation
-const snapshotBuffer = createSnapshotBuffer();
+const networkExperiments = readNetworkExperiments(window.location.search);
+const snapshotBuffer = createSnapshotBuffer(networkExperiments);
+window.__BB_NETWORK_DIAGNOSTICS__ = () => ({
+  experiments: { ...networkExperiments },
+  ...snapshotBuffer.getDiagnostics(),
+});
 
 // Game scene reference
 let gameScene = null;
@@ -276,6 +284,7 @@ const hud = createGameHudController({
   getMapBgAsset,
   getScene: () => gameScene,
   onCountdownFight: () => {
+    finishSpawnIntro(gameScene);
     try {
       gameScene?._startMainBgm?.();
     } catch (_) {}
@@ -796,6 +805,8 @@ class GameScene extends Phaser.Scene {
 
   // Preloads assets
   preload() {
+    this.load.image('spawn-parachute-blue', '/assets/parachute-blue.png');
+    this.load.image('spawn-parachute-red', '/assets/parachute-red.png');
     this.load.on("progress", (p) => {
       // 50% - 90%
       const pct = Math.floor(50 + p * 40); // maps 0-1 -> 50-90
@@ -1197,6 +1208,10 @@ class GameScene extends Phaser.Scene {
     } catch (_) {}
 
     try {
+      if (!isLiveGame) {
+        player._spawnIntroPending = true;
+        prepareSpawnIntro(this, player, gameData.yourCharacter, me?.selected_skin_id);
+      }
       finalizeLocalSpawnPresentation();
     } catch (_) {}
 
@@ -1427,6 +1442,10 @@ class GameScene extends Phaser.Scene {
 
           opPlayer.opponent.body?.reset?.(serverX, serverY);
         }
+        if (!isLiveGame) {
+          opPlayer.opponent._spawnIntroPending = true;
+          prepareSpawnIntro(this, opPlayer.opponent, playerData.char_class, playerData.selected_skin_id, true, isTeammate);
+        }
         opPlayer.finalizeSpawnPresentation?.();
         if (opPlayer.updateUIPosition) opPlayer.updateUIPosition();
       } catch (_) {}
@@ -1562,6 +1581,12 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
+    if (!isLiveGame && (this._spawnIntroEntries?.length || this._spawnIntroActive)) {
+      syncLocalUiPosition();
+      updateDynamicCamera(this, player, Phaser);
+      updateHealthBars({ opponentPlayers, teamPlayers, syncPositions: true });
+      return;
+    }
     // Only process if game is initialized
     if (!hasJoined || !gameInitialized || gameEnded) return;
 
@@ -1618,7 +1643,7 @@ class GameScene extends Phaser.Scene {
    * update the local player's position.
    */
   interpolatePlayerStates(aState, bState, alpha, frame = null) {
-    const extrapolationMs = Math.max(0, Number(frame?.extrapolationMs) || 0);
+    const baseFrame = frame || { aState, bState, alpha, extrapolationMs: 0 };
     const hermiteAxis = (aValue, bValue, aVelocity, bVelocity, t, spanMs) => {
       const p0 = Number(aValue);
       const p1 = Number(bValue);
@@ -1657,6 +1682,7 @@ class GameScene extends Phaser.Scene {
         return Number.isFinite(bNum) ? bNum : aNum;
       }
       const velocityNum = Number(velocityValue);
+      const extrapolationMs = Math.max(0, Number(options.extrapolationMs) || 0);
       if (Number.isFinite(velocityNum) && extrapolationMs > 0) {
         if (options?.vertical && options?.airborne) {
           const tSec = extrapolationMs / 1000;
@@ -1739,6 +1765,20 @@ class GameScene extends Phaser.Scene {
     const applyInterp = (wrapper, name) => {
       if (!wrapper || !wrapper.opponent) return;
 
+      const continuous = networkExperiments.continuousSmoothing;
+      const now = performance.now();
+      const sample = continuous ? sampleRemoteFrame(
+        snapshotBuffer, baseFrame, (wrapper._continuousSmoothing ||= {}), {
+          attack: (Number(this._localAttackPrecisionUntil) || 0) > now ||
+            (Number(wrapper._attackPrecisionUntil) || 0) > now,
+          airborne: baseFrame.bState?.players?.[name]?.grounded === false,
+          deltaMs: this.game?.loop?.delta || 16.67,
+          snap: Number(wrapper._networkSnapUntil) > now,
+        },
+      ) : baseFrame;
+      const { aState, bState, alpha } = sample;
+      const extrapolationMs = Math.max(0, Number(sample.extrapolationMs) || 0);
+
       const spr = wrapper.opponent;
       const aPosData = aState.players[name];
       const bPosData = bState.players[name];
@@ -1779,7 +1819,7 @@ class GameScene extends Phaser.Scene {
           localAttackPrecision ||
           (Number(wrapper._attackPrecisionUntil) || 0) > nowPerf;
         const airborne = !(bPosData?.grounded ?? aPosData?.grounded ?? false);
-        const effectiveAlpha = inPrecision
+        const effectiveAlpha = continuous ? alpha : inPrecision
           ? Math.max(alpha, 0.85)
           : airborne
             ? Math.max(alpha, 0.72)
@@ -1809,10 +1849,11 @@ class GameScene extends Phaser.Scene {
               1,
               Number(bState?.tMono) - Number(aState?.tMono),
             );
-            targetX = projectAxis(aX, bX, stateDeltaMs, bPosData?.vx);
+            targetX = projectAxis(aX, bX, stateDeltaMs, bPosData?.vx, { extrapolationMs });
             targetY = projectAxis(aY, bY, stateDeltaMs, bPosData?.vy, {
               vertical: true,
               airborne,
+              extrapolationMs,
             });
           } else {
             const stateDeltaMs = Math.max(
@@ -1851,7 +1892,7 @@ class GameScene extends Phaser.Scene {
         wrapper._filteredTargetY = targetY;
         wrapper._stableTargetDirX = 0;
         wrapper._reverseTargetCandidate = null;
-      } else {
+      } else if (!continuous) {
         const filteredTarget = filterRemoteTarget(
           wrapper,
           targetX,
@@ -1867,6 +1908,13 @@ class GameScene extends Phaser.Scene {
         if (shouldSnapToTarget) {
           spr.x = targetX;
           spr.y = targetY;
+        } else if (continuous) {
+          followRemotePosition(spr, targetX, targetY, {
+            deltaMs: this.game?.loop?.delta ?? 16.67,
+            attack: (Number(this._localAttackPrecisionUntil) || 0) > now ||
+              (Number(wrapper._attackPrecisionUntil) || 0) > now,
+            airborne: !(bPosData?.grounded ?? aPosData?.grounded ?? false),
+          });
         } else {
           // Move toward interpolated target with a bounded step.
           // This prevents visible twitch from sudden target jumps while still catching up fast.

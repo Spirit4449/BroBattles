@@ -10,6 +10,8 @@ import { getResolvedCharacterBodyConfig } from "./lib/characterTuning.js";
 import { performSpecial } from "./characters/special";
 import { player } from "./player";
 import socket from "./socket";
+import { drawSuperChargeBar, resetSuperBarAnimation } from "./gameScene/superBarRenderer";
+import { drawHealthBar, resetHealthBarAnimation } from "./gameScene/healthBarRenderer";
 import {
   MOVEMENT_VFX_CONFIG,
   spawnDeathBurst,
@@ -200,6 +202,7 @@ export default class OpPlayer {
             : this.opponent.y - this.opponent.height / 2;
           spawnHealthMarker(this.scene, this.opponent.x, bodyTop - 18, delta, {
             depth: 11,
+            team: this.team,
           });
         }
         if (this.opCurrentHealth <= 0) {
@@ -530,7 +533,8 @@ export default class OpPlayer {
     const bodyTop = this.opponent.body
       ? this.opponent.body.y
       : this.opponent.y - this.opponent.height / 2;
-    const snapHud = Number(this._networkSnapUntil) > performance.now();
+    const snapHud = this.opponent._spawnIntroPending === true ||
+      Number(this._networkSnapUntil) > performance.now();
     this._hudAnchorX = stabilizeHudAxis(
       this._hudAnchorX,
       this.opponent.x,
@@ -602,7 +606,7 @@ export default class OpPlayer {
     if (!this.opponent || this._corpseRemoved) return;
     this._spawnPresented = true;
     this._networkSnapUntil = performance.now() + 220;
-    if (!this._initialSpawnFxPlayed) {
+    if (!this._initialSpawnFxPlayed && !this.opponent._spawnIntroPending) {
       try {
         spawnSpawnBurst(this.scene, this.opponent, {
           tint: 0xffffff,
@@ -628,16 +632,6 @@ export default class OpPlayer {
       // Prevents health from going negative
       this.opCurrentHealth = 0;
     }
-    // Sets percentage of health
-    const healthPercentage = Math.max(
-      0,
-      Math.min(1, this.opCurrentHealth / this.opMaxHealth),
-    );
-    const displayedWidth = this.opHealthBarWidth * healthPercentage;
-
-    // Clears previous health bar graphics
-    this.opHealthBar.clear();
-
     // Sets x in the center
     const hudX = Number.isFinite(Number(this._hudAnchorX))
       ? Number(this._hudAnchorX)
@@ -659,24 +653,14 @@ export default class OpPlayer {
     } else {
       this.opHealthText.setText(`0`);
     }
-    this.opHealthBar.fillStyle(0x595959);
-    this.opHealthBar.fillRect(healthBarX, y, this.opHealthBarWidth, 9);
-
-    // Creates a black border around healthbar
-    this.opHealthBar.lineStyle(3, 0x000000);
-    this.opHealthBar.strokeRoundedRect(
-      healthBarX,
-      y,
-      this.opHealthBarWidth,
-      9,
-      3,
-    );
-
     // Teammates should be green, opponents red
     const isTeammate =
       this.team === "teammate" || this.team === "ally" || this.team === true;
-    this.opHealthBar.fillStyle(isTeammate ? 0x99ab2c : 0xbb5c39);
-    this.opHealthBar.fillRoundedRect(healthBarX, y, displayedWidth, 9, 3);
+    drawHealthBar(this.opHealthBar, {
+      x: healthBarX, y, width: this.opHealthBarWidth,
+      health: this.opCurrentHealth, maxHealth: this.opMaxHealth,
+      color: isTeammate ? 0x99ab2c : 0xbb5c39,
+    });
     this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
 
     this.opHealthText.setPosition(
@@ -691,53 +675,16 @@ export default class OpPlayer {
   drawSuperBar(x, y) {
     if (!this.opSuperBar || !this.opSuperBarBack) return;
     if (this._worldUiHidden) return;
-    this.opSuperBarBack.clear();
-    this.opSuperBar.clear();
-
-    const width = 60;
-    const height = 4;
-
-    // Background
-    this.opSuperBarBack.fillStyle(0x222222, 0.65);
-    this.opSuperBarBack.fillRect(x, y, width, height);
-
-    // Fill
-    const percent =
-      this.opMaxSuperCharge > 0
-        ? Phaser.Math.Clamp(this.opSuperCharge / this.opMaxSuperCharge, 0, 1)
-        : 0;
-    if (percent > 0) {
-      const isFull = percent >= 1;
-
-      if (isFull) {
-        const time = this.scene.time.now;
-        // Cool pulse effect: Gold glow breathing
-        const glowAlpha = 0.3 + 0.3 * Math.sin(time / 200);
-
-        // Outer glow
-        this.opSuperBar.fillStyle(0xffd700, glowAlpha);
-        this.opSuperBar.fillRect(x - 2, y - 2, width + 4, height + 4);
-
-        // Main bar solid gold
-        this.opSuperBar.fillStyle(0xffd700, 1);
-        this.opSuperBar.fillRect(x, y, width, height);
-
-        // White rim pulse
-        this.opSuperBar.lineStyle(1, 0xffffff, glowAlpha + 0.2);
-        this.opSuperBar.strokeRect(x, y, width, height);
-      } else {
-        // Charging yellow
-        this.opSuperBar.fillStyle(0xffff00, 1);
-        this.opSuperBar.fillRect(x, y, width * percent, height);
-      }
-    }
-
-    this.opSuperBar.setDepth(41);
-    this.opSuperBarBack.setDepth(40);
+    drawSuperChargeBar(this.opSuperBar, this.opSuperBarBack, {
+      x, y, charge: this.opSuperCharge, maxCharge: this.opMaxSuperCharge,
+      player: this.opponent,
+    });
   }
 
   hideWorldUi() {
     this._worldUiHidden = true;
+    resetHealthBarAnimation(this.opHealthBar);
+    resetSuperBarAnimation(this.opSuperBar, this.opponent);
     try {
       this.opPlayerName?.setVisible(false);
     } catch (_) {}

@@ -150,6 +150,8 @@ function getRuntimeOverrides(actionType) {
         16,
       forwardOffsetWidthFactor: Number(arrows.forwardOffset) || 0.28,
       verticalOffsetHeightFactor: Number(arrows.verticalOffset) || 0.12,
+      gravity: Number(arrows.gravity) || 460,
+      maxLifetimeMs: Number(arrows.maxLifetimeMs) || 3000,
       count: Math.max(1, Number(arrows.count) || 3),
       spreadDeg: Number(arrows.spreadDeg) || 9,
       damagePerProjectile: Math.max(1, Number(arrows.damagePerArrow) || 1000),
@@ -166,11 +168,16 @@ function getRuntimeOverrides(actionType) {
   }
 
   if (key === "huntress-burning-arrow") {
+    const arrows = getResolvedCharacterAttackConfig("huntress", "arrowSpread") || {};
     const volley =
       getResolvedCharacterSpecialConfig("huntress", "burningVolley") || {};
     return {
       runtime: {
         speed: Number(volley.speed) || 930,
+        forwardOffsetWidthFactor: Number(arrows.forwardOffset) || 0.12,
+        verticalOffsetHeightFactor: Number(arrows.verticalOffset) || -0.16,
+        gravity: Number(volley.gravity) || 360,
+        maxLifetimeMs: Number(volley.maxLifetimeMs) || 3200,
         range: Number(volley.range) || 960,
         collisionRadius: Number(volley.collisionRadius) || 18,
         playerCollisionRadius:

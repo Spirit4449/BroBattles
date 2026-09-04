@@ -2,6 +2,8 @@
 // NOTE: Refactored to remove circular dependency on game.js.
 // socket now comes from standalone socket.js and opponentPlayers are passed into createPlayer.
 import socket from "./socket";
+import { drawSuperChargeBar, resetSuperBarAnimation } from "./gameScene/superBarRenderer";
+import { drawHealthBar, resetHealthBarAnimation } from "./gameScene/healthBarRenderer";
 function pdbg() {
   /* logging disabled */
 }
@@ -1194,6 +1196,10 @@ function setCurrentHealth(damage) {
 
 function setLocalUiVisible(visible) {
   const shouldShow = visible !== false;
+  if (!shouldShow) {
+    resetHealthBarAnimation(healthBar);
+    resetSuperBarAnimation(superBar, player);
+  }
   try {
     playerName?.setVisible(shouldShow);
   } catch (_) {}
@@ -1265,7 +1271,7 @@ function drawIndicatorTriangle() {
   indicatorTriangle.fillTriangleShape(triangle);
 }
 
-function syncLocalUiPosition() {
+export function syncLocalUiPosition() {
   if (!player) return;
   const uiTop = player.body ? player.body.y : player.y - player.height / 2;
   try {
@@ -1282,7 +1288,7 @@ export function finalizeLocalSpawnPresentation() {
   try {
     player.setVisible(true);
   } catch (_) {}
-  if (!player._spawnIntroPresented) {
+  if (!player._spawnIntroPresented && !player._spawnIntroPending) {
     try {
       spawnSpawnBurst(scene, player, {
         tint: 0xffffff,
@@ -1304,11 +1310,7 @@ export function finalizeLocalSpawnPresentation() {
 
 function updateHealthBar() {
   if (currentHealth <= 0) currentHealth = 0;
-  const healthPercentage = currentHealth / maxHealth;
-  const displayedWidth = healthBarWidth * healthPercentage;
   pdbg();
-
-  healthBar.clear(); // Clear the graphics before redrawing
 
   const healthBarX = player.x - healthBarWidth / 2;
   const bodyTop = player.body ? player.body.y : player.y - player.height / 2;
@@ -1322,17 +1324,10 @@ function updateHealthBar() {
     healthText.setText(`0`);
   }
 
-  // Draw the background rectangle with the default fill color
-  healthBar.fillStyle(0x595959);
-  healthBar.fillRect(healthBarX, y, healthBarWidth, 9);
-
-  // Draw the health bar background (stroke)
-  healthBar.lineStyle(3, 0x000000);
-  healthBar.strokeRoundedRect(healthBarX, y, healthBarWidth, 9, 3);
-
-  // Draw the filled part of the health bar (green)
-  healthBar.fillStyle(0x99ab2c);
-  healthBar.fillRoundedRect(healthBarX, y, displayedWidth, 9, 3);
+  drawHealthBar(healthBar, {
+    x: healthBarX, y, width: healthBarWidth,
+    health: currentHealth, maxHealth, color: 0x99ab2c,
+  });
   healthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
 
   healthText.setPosition(player.x - healthText.width / 2, y - 8);
@@ -1391,56 +1386,10 @@ function fireSpecialAttack(context = null) {
 
 function drawSuperBar(x, y) {
   if (!superBar || !superBarBack) return;
-  superBarBack.clear();
-  superBar.clear();
-
-  const width = 60;
-  const height = 4;
-
-  // Background
-  superBarBack.fillStyle(0x222222, 0.65);
-  superBarBack.fillRect(x, y, width, height);
-  superBarBack.strokeRoundedRect(x, y, width, height, 3);
-
-  // Fill
-  const percent =
-    maxSuperCharge > 0
-      ? Phaser.Math.Clamp(superCharge / maxSuperCharge, 0, 1)
-      : 0;
-  const isFlashing = Date.now() < _specialNotReadyFlash;
-  if (isFlashing && percent < 1) {
-    // Red flash when right-clicked while special isn't charged
-    const pulse = 0.65 + 0.35 * Math.abs(Math.sin(Date.now() / 75));
-    superBar.fillStyle(0xff4444, pulse);
-    superBar.fillRect(x, y, width * Math.max(percent, 0.18), height);
-  } else if (percent > 0) {
-    const isFull = percent >= 1;
-
-    if (isFull) {
-      const time = scene.time.now;
-      // Cool pulse effect: Gold glow breathing
-      const glowAlpha = 0.3 + 0.3 * Math.sin(time / 200);
-
-      // Outer glow
-      superBar.fillStyle(0xffd700, glowAlpha);
-      superBar.fillRect(x - 2, y - 2, width + 4, height + 4);
-
-      // Main bar solid gold
-      superBar.fillStyle(0xffd700, 1);
-      superBar.fillRect(x, y, width, height);
-
-      // White rim pulse
-      superBar.lineStyle(1, 0xffffff, glowAlpha + 0.2);
-      superBar.strokeRect(x, y, width, height);
-    } else {
-      // Charging yellow
-      superBar.fillStyle(0xffff00, 1);
-      superBar.fillRect(x, y, width * percent, height);
-    }
-  }
-
-  superBar.setDepth(41);
-  superBarBack.setDepth(40);
+  drawSuperChargeBar(superBar, superBarBack, {
+    x, y, charge: superCharge, maxCharge: maxSuperCharge, player,
+    notReady: Date.now() < _specialNotReadyFlash,
+  });
 }
 
 function drawAmmoBar(forcedX, forcedY) {
@@ -1501,6 +1450,7 @@ export function handlePlayerMovement(scene) {
     stopMovementLoopSfx();
     try {
       if (player?.body) {
+        player._jumpLaunch = null;
         player.setVelocityX(0);
         player.setAccelerationX(0);
         player.setDragX(0);
@@ -1533,6 +1483,7 @@ export function handlePlayerMovement(scene) {
     stopMovementLoopSfx();
     try {
       if (player?.body) {
+        player._jumpLaunch = null;
         player.setVelocityX(0);
         player.setAccelerationX(0);
         player.setDragX(0);
@@ -1788,7 +1739,8 @@ export function handlePlayerMovement(scene) {
     const baseY = Number.isFinite(player._dravenInfernoBaseY)
       ? player._dravenInfernoBaseY
       : player.y;
-    const riseT = Phaser.Math.Clamp((nowTs - startedAt) / 320, 0, 1);
+    const riseMs = Number(player._dravenInfernoRiseMs || 650);
+    const riseT = Phaser.Math.Clamp((nowTs - startedAt) / riseMs, 0, 1);
     const lift = Number(player._dravenInfernoLift || 125);
     const hoverY =
       baseY -
@@ -1986,6 +1938,7 @@ export function handlePlayerMovement(scene) {
   const now = Date.now();
   if (
     !dead &&
+    !movementLocked &&
     effectiveWallSide &&
     !player.body.touching.down &&
     canWallJump &&
@@ -2006,6 +1959,7 @@ export function handlePlayerMovement(scene) {
     player._lastJumpPressTime = 0;
   } else if (
     bufferedJumpPressActive &&
+    !movementLocked &&
     (player.body.touching.down ||
       now - (player._lastGroundTime || 0) <= coyoteTimeMs) &&
     !dead
@@ -2031,6 +1985,21 @@ export function handlePlayerMovement(scene) {
     player._lastJumpPressTime = 0;
     if (wallSlideContact || effectiveWallSide) {
       player._wallSlideSuppressedUntil = Date.now() + wallSlideReentryDelayMs;
+    }
+  }
+  const launch = player._jumpLaunch;
+  if (launch) {
+    const elapsed = Date.now() - launch.startedAt;
+    // Floor contact can still be set on the first frame after takeoff.
+    if (dead || movementLocked || player.body.blocked.up || player.body.touching.up ||
+        player.body.velocity.y >= 0) {
+      player._jumpLaunch = null;
+    } else {
+      const t = Math.min(1, elapsed / MOVEMENT_PHYSICS.jumpRampMs);
+      const ratio = MOVEMENT_PHYSICS.jumpStartSpeedRatio +
+        (1 - MOVEMENT_PHYSICS.jumpStartSpeedRatio) * t;
+      player.setVelocityY(launch.vy * ratio);
+      if (t >= 1) player._jumpLaunch = null;
     }
   }
   const isWallSliding =
@@ -2436,12 +2405,16 @@ export function handlePlayerMovement(scene) {
       });
     }
     pdbg();
-    player.setVelocityY(-jumpSpeed);
+    player._jumpLaunch = {
+      startedAt: Date.now(), vy: -jumpSpeed * MOVEMENT_PHYSICS.jumpLaunchSpeedMult,
+    };
+    player.setVelocityY(player._jumpLaunch.vy * MOVEMENT_PHYSICS.jumpStartSpeedRatio);
     isMoving = true;
     isJumping = true;
   }
 
   function wallJump(wallSideParam) {
+    player._jumpLaunch = null;
     updateWallSlideAudio(false);
     // More powerful wall jump using physics impulses (no tween)
     canWallJump = false;
@@ -2607,6 +2580,7 @@ export function setChatInputActive(active) {
     resetPointerAttackAim();
     try {
       if (player?.body) {
+        player._jumpLaunch = null;
         player.setVelocityX(0);
         player.setAccelerationX(0);
         player.setDragX(0);

@@ -1,3 +1,6 @@
+const { randomUUID } = require("node:crypto");
+const { getDuelGeometry, spawnForParticipant } = require('../../../shared/duelGeometry');
+
 function roundPosition(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return null;
@@ -45,6 +48,11 @@ function initializeSpawnPositions(room) {
   for (const p of room.players.values()) {
     const spawnIndex = computeSpawnIndex(room, p.name, p.team);
     p.spawnIndex = spawnIndex;
+    const geometry = getDuelGeometry(room.matchData.map);
+    if (geometry) {
+      const teamSize = room.matchData.players.filter(mp => mp.team === p.team).length;
+      Object.assign(p, spawnForParticipant(geometry, p, spawnIndex, teamSize), { vx: 0, vy: 0, grounded: true });
+    }
     p.loaded =
       p.loaded === true ||
       (p._sceneReady === true && Number.isFinite(p.x) && Number.isFinite(p.y));
@@ -127,17 +135,25 @@ function sendGameStateToPlayer(room, socket) {
 
 function broadcastSnapshot(room, extraTiming = null) {
   const { USE_SERVER_MOVEMENT_SIMULATION_V1 } = require("../gameRoomConfig");
+  const sentMono = performance.now();
+  const wall = Date.now();
+  const tMono = extraTiming?.tMono ?? room._simulationMono ?? sentMono;
+  // Several state changes can occur in one simulation tick. Order emissions
+  // independently, without inventing elapsed simulation time for those changes.
+  room._snapshotSeq = (room._snapshotSeq || 0) + 1;
+  room._snapshotEpoch ??= randomUUID();
 
   const snapshot = {
-    timestamp: Date.now(),
+    timestamp: wall,
+    sentAtWallMs: wall,
+    sentMono,
+    tMono,
+    tickId: room._tickId || 0,
+    snapshotSeq: room._snapshotSeq,
+    snapshotEpoch: room._snapshotEpoch,
+    snapshotKind: extraTiming ? "periodic" : "event",
     players: {},
   };
-
-  if (extraTiming) {
-    snapshot.tickId = extraTiming.tickId;
-    snapshot.tMono = extraTiming.tMono;
-    snapshot.sentAtWallMs = extraTiming.sentAtWallMs;
-  }
 
   for (const playerData of room.players.values()) {
     const playerSnapshot = {

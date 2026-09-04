@@ -82,18 +82,15 @@ function resolveStart(payload, ownerSprite, angle, defaults = ARROWS) {
 
   const originX = Number(payload?.origin?.x);
   const originY = Number(payload?.origin?.y);
-  if (Number.isFinite(originX) && Number.isFinite(originY)) {
-    return { x: originX, y: originY };
-  }
-
+  // Network origin is the owner's center, not the projectile's muzzle.
   const width = ownerSprite?.displayWidth || ownerSprite?.width || 80;
   const height = ownerSprite?.displayHeight || ownerSprite?.height || 120;
   return {
     x:
-      (ownerSprite?.x || 0) +
+      (Number.isFinite(originX) ? originX : ownerSprite?.x || 0) +
       Math.cos(angle) * width * (Number(defaults.forwardOffset) || 0.28),
     y:
-      (ownerSprite?.y || 0) -
+      (Number.isFinite(originY) ? originY : ownerSprite?.y || 0) -
       height * (Number(defaults.verticalOffset) || 0.12) +
       Math.sin(angle) * width * (Number(defaults.forwardOffset) || 0.28),
   };
@@ -156,13 +153,27 @@ function createArrowSprite(scene, x, y, angle, scale, burning = false) {
 }
 
 function spawnArrowTrail(scene, arrow, burning = false) {
-  if (!burning || !scene?.add) return null;
+  if (!scene?.add) return null;
   let nextAt = 0;
   const update = () => {
     if (!arrow?.active) return;
     const now = scene.time?.now || Date.now();
     if (now < nextAt) return;
     nextAt = now + 45;
+    if (!burning) {
+      const tail = Math.max(6, (arrow.displayWidth || 32) * 0.4);
+      const streak = scene.add.line(arrow.x, arrow.y, -tail, 0, -tail - 18, 0, 0xffe6ad, 0.38);
+      streak.setOrigin(0, 0);
+      streak.setRotation(arrow.rotation);
+      streak.setDepth(RENDER_LAYERS.ATTACKS + 2);
+      scene.tweens.add({
+        targets: streak,
+        alpha: 0,
+        duration: 150,
+        onComplete: () => streak.destroy(),
+      });
+      return;
+    }
     const spark = scene.add.circle(
       arrow.x + Phaser.Math.Between(-5, 5),
       arrow.y + Phaser.Math.Between(-5, 5),
@@ -485,6 +496,7 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
   }
 
   attachTargetOverlap(entries = []) {
+    this.targetEntries = entries;
     if (!this.scene?.physics?.add?.overlap) return;
     for (const entry of entries) {
       const sprite = entry?.sprite;
@@ -542,6 +554,7 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     targetEntry,
     { emitHit = true, requireMeaningful = true } = {},
   ) {
+    if (this.embedded || this._disposed) return;
     const targetSprite = targetEntry?.sprite || targetEntry;
     if (!targetSprite?.active) {
       this.embedAt(this.x, this.y, this.rotation);
@@ -580,7 +593,7 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     this.scene.time.delayedCall(this.cfg.embedMs, expire);
   }
 
-  isMeaningfulTargetHit(targetSprite) {
+  isMeaningfulTargetHit(targetSprite, x = this.x, y = this.y) {
     const body = targetSprite?.body;
     if (!body) return true;
     const left = Number(body.left);
@@ -598,9 +611,9 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     const tightTop = top + insetY;
     const tightBottom = bottom - insetY;
 
-    const nearestX = Math.max(tightLeft, Math.min(this.x, tightRight));
-    const nearestY = Math.max(tightTop, Math.min(this.y, tightBottom));
-    const dist = Math.hypot(this.x - nearestX, this.y - nearestY);
+    const nearestX = Math.max(tightLeft, Math.min(x, tightRight));
+    const nearestY = Math.max(tightTop, Math.min(y, tightBottom));
+    const dist = Math.hypot(x - nearestX, y - nearestY);
     const allowed = Math.max(
       6,
       Number(this.cfg.playerCollisionRadius) ||
@@ -610,7 +623,21 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     return dist <= allowed;
   }
 
+  findSweptTargetCollisionPoint(prevX, prevY, nextX, nextY) {
+    const steps = Math.max(1, Math.ceil(Math.hypot(nextX - prevX, nextY - prevY) / 2));
+    for (let i = 0; i <= steps; i += 1) {
+      const x = prevX + (nextX - prevX) * i / steps;
+      const y = prevY + (nextY - prevY) * i / steps;
+      for (const entry of this.targetEntries || []) {
+        if (!entry.sprite?.active || !entry.sprite.body || entry.sprite.body.enable === false) continue;
+        if (this.isMeaningfulTargetHit(entry.sprite, x, y)) return { x, y, entry };
+      }
+    }
+    return null;
+  }
+
   embedAt(x, y, rotation = this.rotation, options = {}) {
+    if (this.embedded || this._disposed) return;
     this._hitSomething = true;
     this.cleanupTrail?.();
     this.freezeMotion();
@@ -676,6 +703,17 @@ class HuntressArrow extends Phaser.Physics.Arcade.Image {
     const nextY = prevY + this.vy * dtSec;
     const nextRotation = Math.atan2(this.vy, this.vx);
     const mapImpact = this.findSweptMapCollisionPoint(prevX, prevY, nextX, nextY);
+    // Sweep from the spawn point too: close targets must not be skipped on
+    // the first frame or when a fast falling arrow crosses a body in one tick.
+    const targetImpact = this.findSweptTargetCollisionPoint(prevX, prevY, nextX, nextY);
+    if (targetImpact && (!mapImpact ||
+      Math.hypot(targetImpact.x - prevX, targetImpact.y - prevY) <
+      Math.hypot(mapImpact.x - prevX, mapImpact.y - prevY))) {
+      this.setPosition(targetImpact.x, targetImpact.y);
+      this.setRotation(nextRotation);
+      this.embedIntoTarget(targetImpact.entry);
+      return;
+    }
     if (mapImpact) {
       this.embedAt(mapImpact.x, mapImpact.y, nextRotation, {
         groundBurn: !!this.cfg.burn,

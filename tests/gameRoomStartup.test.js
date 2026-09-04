@@ -96,7 +96,10 @@ for (const teamSize of [1, 2, 3]) {
     assert.equal(h.room._loopRunning, false);
     t.mock.timers.tick(6000);
     assert.equal(h.room._loopRunning, true, 'countdown starts the real loop');
-    assert.equal(h.events.filter((e) => e.type === 'player:respawn').length, teamSize * 2);
+    assert.equal(h.events.filter((e) => e.type === 'player:respawn').length, 0, 'fight does not teleport players');
+    const intro = h.events.find(e => e.type === 'game:start').payload;
+    assert.equal(Object.keys(intro.spawns).length, teamSize * 2);
+    assert.ok(h.events.some(e => e.type === 'game:state'), 'shield state is sent at fight');
     h.room.processTick();
     h.room.broadcastSnapshot();
     const snapshot = h.events.findLast((e) => e.type === 'game:snapshot').payload;

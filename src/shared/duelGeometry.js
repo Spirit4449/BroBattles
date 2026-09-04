@@ -1,4 +1,6 @@
 const maps = require("./duelMaps.json");
+const bankGeometry = require('./bankSpawnGeometry.json');
+const { resolveLanding } = require('./spawnPlacement');
 const frames = require("./characterFrames.json");
 const { getCharacterStats } = require("../lib/characterStats.js");
 const { getResolvedCharacterBodyConfig } = require("../lib/characterTuning.js");
@@ -6,7 +8,7 @@ const cache = new Map();
 
 function getDuelGeometry(mapId) {
   if (cache.has(Number(mapId))) return cache.get(Number(mapId));
-  const data = maps[mapId];
+  const data = Number(mapId) === 4 ? bankGeometry : maps[mapId];
   if (!data) return null;
   const platforms = data.layout.platforms.map((p, i) => {
     const size = data.textureSizes[p.textureKey];
@@ -42,12 +44,14 @@ function characterBody(character, flip = false) {
 }
 
 function spawnForParticipant(geometry, player, index, teamSize) {
-  const choices = geometry.spawns.players[player.team]?.[Math.max(1, Math.min(3, teamSize))];
+  const team = geometry.spawns.players[player.team];
+  const choices = team?.[Math.max(1, Math.min(3, teamSize))] || team?.[3];
   const point = choices?.[Math.min(index, choices.length - 1)];
-  const anchor = geometry.anchors[point?.anchorId] || geometry.colliders.find((p) => p.collision.up);
+  const anchor = geometry.anchors[point?.anchorId];
   const body = characterBody(player.char_class, player.flip);
-  return { x: Number.isFinite(point?.x) ? point.x : anchor.x + (point?.dx || 0),
-    y: anchor.top - body.offsetY - body.halfHeight - 2 };
+  const landing = resolveLanding(point, anchor, geometry.colliders, body);
+  return { x: landing.x - body.offsetX,
+    y: landing.y - body.offsetY - body.halfHeight };
 }
 
 module.exports = { getDuelGeometry, characterBody, spawnForParticipant };

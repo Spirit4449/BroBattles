@@ -73,7 +73,9 @@ export function bindLocalSocketEvents({
       const markerY = player.body
         ? player.body.y - 16
         : player.y - player.height / 2;
-      spawnHealthMarker(scene, player.x, markerY, delta, { depth: 18 });
+      spawnHealthMarker(scene, player.x, markerY, delta, {
+        depth: 18, team: "ally", isSelf: true,
+      });
     }
 
     if (scene && scene.sound && !getDead()) {

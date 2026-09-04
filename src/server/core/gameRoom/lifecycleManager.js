@@ -52,6 +52,7 @@ function startGame(room) {
   void room._broadcastParticipantStatus("In Battle");
 
   room.initializeSpawnPositions();
+  for (const p of room.players.values()) p._controlLockUntil = Date.now() + 6000;
   try {
     room.gameMode?.onStart?.();
   } catch (e) {
@@ -60,6 +61,7 @@ function startGame(room) {
 
   room.io.to(`game:${room.matchId}`).emit("game:start", {
     countdown: 6,
+    spawns: Object.fromEntries(Array.from(room.players.values(), p => [p.name, { x: p.x, y: p.y }])),
   });
 
   room._countdownTimeout = setTimeout(() => {
@@ -86,17 +88,8 @@ function startGame(room) {
           { durationMs: 3000 },
           room,
         );
-        room.io.to(`game:${room.matchId}`).emit("player:respawn", {
-          username: playerData.name,
-          x: Number(playerData.x) || 0,
-          y: Number(playerData.y) || 0,
-          team: playerData.team,
-          health: playerData.health,
-          maxHealth: playerData.maxHealth,
-          shieldMs: 3000,
-          at: now,
-        });
       }
+      room.broadcastWorldState();
       room.broadcastSnapshot();
       room.startGameLoop();
     } catch (error) {

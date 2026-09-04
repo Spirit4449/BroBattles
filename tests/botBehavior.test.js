@@ -213,8 +213,8 @@ test('ineffective pacing changes position, while successful pressure keeps its g
   assert.equal(h.brain.ineffectivePositions.length, 0, 'repeated successful attacks do not force arbitrary movement');
 });
 
-test('ranged positioning rejects ground whose firing line is blocked', (t) => {
-  const h = setup(t), enemy = h.players[1];
+test('gloop positioning rejects ground whose firing line is blocked', (t) => {
+  const h = setup(t, ['gloop', 'ninja']), enemy = h.players[1];
   const floor = { id: 'floor', x: 1100, left: 100, right: 2100, top: 900, bottom: 940,
     collision: { up: true, down: true, left: true, right: true } };
   const wall = { id: 'wall', x: 1200, left: 1190, right: 1210, top: 500, bottom: 900,
@@ -369,4 +369,64 @@ test('an unreachable target cannot leave a bot waiting forever with zero movemen
   assert.ok(h.brain.metrics.recoveries > 0);
   assert.ok(maxDisplacement > 35, 'searches another position even without a complete route');
   assert.equal(h.brain.metrics.unforcedFalls, 0);
+});
+
+test('bots keep a safe platform route when the tactical decision timer expires', (t) => {
+  const h = setup(t);
+  h.think();
+  const context = h.brain.context(effects.getModifiers(h.p, h.now()), h.now());
+  const destination = context.graph.surfaces.find((s) => context.routeTo(s.id)?.length);
+  assert.ok(destination);
+  h.brain.decision = { mode: 'reposition', goal: { x: destination.x, y: destination.top, surfaceId: destination.id } };
+  h.brain.navigate(context, h.now());
+  const decision = h.brain.decision;
+  assert.ok(h.brain.approachEdge);
+  h.brain.nextDecisionAt = 0;
+  h.think();
+  assert.equal(h.brain.decision, decision);
+});
+
+test('holding a platform eventually encourages a reachable alternative firing angle', (t) => {
+  const { chooseDecision } = require('../src/server/core/bots/tactics');
+  const h = setup(t), enemy = h.players[1];
+  h.think();
+  const original = h.brain.context(effects.getModifiers(h.p, h.now()), h.now());
+  const current = original.current;
+  const alternate = { ...current, id: 'alternate', left: h.p.x - 150, right: h.p.x + 150,
+    x: h.p.x, top: current.top - 80 };
+  const context = { ...original, graph: { ...original.graph, surfaces: [current, alternate] },
+    routeTo: (id) => id === current.id ? [] : [{ to: alternate.id, duration: 500 }] };
+  h.brain.surfaceEnteredAt = h.now();
+  h.brain.visited.clear();
+  h.brain.superPlan = null;
+  h.brain.kiteUntil = 0;
+  h.brain.retreating = false;
+  assert.equal(chooseDecision(h.brain, context, enemy, [enemy], h.now()).goal.surfaceId, current.id);
+  h.brain.surfaceEnteredAt = h.now() - 16000;
+  const decision = chooseDecision(h.brain, context, enemy, [enemy], h.now());
+  assert.equal(decision.goal.surfaceId, alternate.id);
+  assert.ok(context.routeTo(decision.goal.surfaceId)?.length);
+});
+
+test('sampled navigation routes land on their advertised platforms under real physics', () => {
+  const { buildGraph, standOn } = require('../src/server/core/bots/navigation');
+  const { getDuelGeometry } = require('../src/shared/duelGeometry');
+  const { stepBody } = require('../src/server/core/bots/physics');
+  let replayed = 0;
+  for (const map of [1, 2, 3]) {
+    const geometry = getDuelGeometry(map), graph = buildGraph(geometry, 'huntress');
+    for (const [from, edges] of graph.edges) {
+      for (const edge of edges) {
+        const p = standOn(graph.surfaces.find((s) => s.id === from), 'huntress', edge.takeoffX);
+        edge.frames.forEach((input, i) => {
+          p.flip = input.direction < 0;
+          assert.equal(stepBody(p, input, geometry, 1000 / 60, i * 1000 / 60).fell, false);
+        });
+        assert.equal(p.grounded, true);
+        assert.equal(p.platformId, edge.to);
+        replayed++;
+      }
+    }
+  }
+  assert.ok(replayed > 10);
 });

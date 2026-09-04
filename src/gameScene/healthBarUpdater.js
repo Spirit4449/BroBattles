@@ -1,17 +1,17 @@
 // gameScene/healthBarUpdater.js
 
-export function updateHealthBars({ opponentPlayers, teamPlayers }) {
-  for (const name in opponentPlayers) {
-    const opponentPlayer = opponentPlayers[name];
-    if (opponentPlayer?.updateHealthBar) {
-      opponentPlayer.updateHealthBar();
-    }
-  }
-
-  for (const name in teamPlayers) {
-    const teamPlayer = teamPlayers[name];
-    if (teamPlayer?.updateHealthBar) {
-      teamPlayer.updateHealthBar();
+export function updateHealthBars({ opponentPlayers, teamPlayers, syncPositions = false }) {
+  const players = new Set([
+    ...Object.values(opponentPlayers || {}),
+    ...Object.values(teamPlayers || {}),
+  ]);
+  for (const wrapper of players) {
+    if (syncPositions && wrapper?.updateUIPosition) {
+      // Countdown physics runs without network interpolation. Refresh cached
+      // HUD anchors and the name before drawing health/super bars.
+      wrapper.updateUIPosition();
+    } else {
+      wrapper?.updateHealthBar?.();
     }
   }
 }

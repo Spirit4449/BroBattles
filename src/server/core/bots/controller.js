@@ -2,12 +2,13 @@ const { createRandom } = require('./random');
 const { difficultyForTrophies } = require('./config');
 const { bounds, stepBody } = require('./physics');
 const { buildGraph, findRoute, nearestSurface, safeWalkDirection, previewManeuver } = require('./navigation');
-const { advanceAmmo, basicAim, hasClearShot, requestBasic, requestSpecial } = require('./combat');
+const { advanceAmmo, basicAim, hasClearShot, pressureAim, requestBasic, requestSpecial } = require('./combat');
 const { observe, incomingThreat, maneuverDanger } = require('./perception');
 const { healthFraction, preferredRange, selectTarget, chooseDecision } = require('./tactics');
 const { updateSuperPlan, shouldUseSuper } = require('./supers');
 const effects = require('../gameRoom/effects/effectManager');
 const { isMovementSuppressed } = require('../gameRoom/abilityRuntimeManager');
+const { updateTeamwork } = require('./teamwork');
 const movement = require('../../../shared/movementPhysics.json');
 
 class BotController {
@@ -119,7 +120,7 @@ class BotController {
         edgeCost: (edge, from) => {
           const key = `${from}:${edge.to}`;
           if (!this.routePreferences.has(key)) this.routePreferences.set(key, this.random() * 240);
-          return (edge.jump ? 220 : 0) + this.routePreferences.get(key);
+          return (edge.jump ? 70 : 0) + this.routePreferences.get(key);
         },
       }));
       return routes.get(id);
@@ -132,14 +133,28 @@ class BotController {
     const p = this.player, enemies = observed?.enemies || [];
     const context = this.context(mods, now);
     this.poisonY = context.poisonY;
+    if (p.grounded && this.occupiedSurface !== p.platformId) {
+      this.occupiedSurface = p.platformId;
+      this.surfaceEnteredAt = now;
+      this.visited.set(p.platformId, now);
+    }
     const threatened = incomingThreat(observed, p, now);
     const recentlyHurt = p.lastDamagedAt > 0 && now - p.lastDamagedAt < 850;
+    const previousRole = this.teamPlan?.role;
+    this.teamPlan = updateTeamwork(this, observed, now);
+    const roleChanged = previousRole !== this.teamPlan?.role;
+    if (roleChanged) {
+      this.nextDecisionAt = 0;
+      this.approachEdge = null;
+      this.metrics.roleChanges = (this.metrics.roleChanges || 0) + 1;
+    }
     const wasRetreating = this.retreating;
     const awareness = this.profile.tacticalAwareness;
-    this.retreating = healthFraction(p) < (this.retreating ? 0.65 + awareness * 0.1 : 0.35 + awareness * 0.08);
+    this.retreating = this.teamPlan?.role === 'recover' || healthFraction(p) < (this.retreating ? 0.65 + awareness * 0.1 : 0.35 + awareness * 0.08 + (this.teamPlan ? (0.5 - this.teamPlan.morale) * 0.12 : 0));
     if (this.retreating && !wasRetreating) this.metrics.retreats++;
     const target = selectTarget(this, enemies, context.routeTo, now);
-    if (target?.participantId !== this.targetId) {
+    const targetChanged = target?.participantId !== this.targetId;
+    if (targetChanged) {
       if (this.targetId && target) this.metrics.targetSwitches++;
       this.targetId = target?.participantId;
       this.nextDecisionAt = 0;
@@ -175,7 +190,9 @@ class BotController {
       return;
     }
     const pickupGone = this.decision?.mode === 'pickup' && !this.room._powerups.has(this.decision.pickupId);
-    if (!this.decision || now >= this.nextDecisionAt || pickupGone) {
+    const committedRoute = (this.approachEdge || this.traversal) && !targetChanged && !roleChanged && !recentlyHurt && !threatened &&
+      !newRetreatHit && wasRetreating === this.retreating && bounds(p).bottom < context.poisonY - 100;
+    if (!this.decision || (now >= this.nextDecisionAt && !committedRoute) || pickupGone) {
       // Occasionally fight while backing away; keep the choice long enough to read clearly.
       if (target && !this.retreating && healthFraction(p) < healthFraction(target) + 0.12 &&
           now >= this.nextKiteAt && now >= this.kiteUntil && this.random() < 0.16 &&
@@ -235,8 +252,9 @@ class BotController {
     }
     const candidates = [target, ...enemies.filter((e) => e !== target)]
       .filter((e) => {
-        const aim = basicAim(p, e, this.profile, () => 0.5);
-        return aim.canHit && hasClearShot(this.room, p, e, aim);
+        const aim = basicAim(p, e, this.profile, () => 0.5, this.room);
+        return (aim.canHit && hasClearShot(this.room, p, e, aim)) ||
+          (p.ammoState?.charges >= 2 && now >= (p._botPressureUntil || 0) && pressureAim(this.room, p, e, this.profile));
       })
       .sort((a, b) => (a.health / a.maxHealth) - (b.health / b.maxHealth));
     const age = Math.min(0.3, Math.max(0, now - (observed?.at || now)) / 1000) * this.profile.prediction;
@@ -248,7 +266,7 @@ class BotController {
     const candidate = candidates[0];
     if (!candidate && !superTarget) return;
     this.nextOpportunity = now + this.between(180, 320) * (1.1 - this.profile.tacticalAwareness * 0.28);
-    if (this.random() < this.profile.mistakeChance / this.aggression) { this.nextOpportunity += this.between(180, 400); return; }
+    if (this.random() < this.profile.mistakeChance / (this.aggression * (this.teamPlan ? 0.7 + this.teamPlan.morale * 0.6 : 1))) { this.nextOpportunity += this.between(180, 400); return; }
     if (superTarget && requestSpecial(this.room, p, superTarget, now)) {
       this.metrics.specials++;
       this.superPlan = { charged: false, preferredRange: null };
@@ -336,7 +354,7 @@ class BotController {
     if (route?.length) {
       const edge = route[0];
       if (!this.approachEdge || this.approachEdge.to !== edge.to) {
-        this.approachEdge = { ...edge, from: context.current.id, startedAt: now };
+        this.approachEdge = { ...edge, from: context.current.id, startedAt: now, approachBudget: 2200 + Math.abs(edge.takeoffX - p.x) / Math.max(80, movement.maxSpeed * 0.65) * 1000 };
       }
     } else if (route) {
       this.approachEdge = null;
@@ -350,7 +368,8 @@ class BotController {
       }
       if (this.decision.mode === 'fight' && this.target && !(this.pursuit?.holdUntil > now)) {
         const aim = basicAim(p, this.target, this.profile, () => 0.5);
-        if (!aim.canHit || !hasClearShot(this.room, p, this.target, aim)) this.wantsProgress = true;
+        if ((!aim.canHit || !hasClearShot(this.room, p, this.target, aim)) &&
+            !pressureAim(this.room, p, this.target, this.profile)) this.wantsProgress = true;
       }
     }
   }
@@ -453,7 +472,7 @@ class BotController {
       return;
     }
     if (Math.abs(p.vx) < 12 && p.grounded) this.metrics.stuckMs += dt;
-    const approachTimedOut = this.approachEdge && now - this.approachEdge.startedAt > 2600;
+    const approachTimedOut = this.approachEdge && now - this.approachEdge.startedAt > this.approachEdge.approachBudget;
     if (now - this.lastProgressAt < 2000 && !approachTimedOut) return;
     this.metrics.recoveries++;
     if (this.approachEdge) this.blockedEdges.set(`${this.approachEdge.from}:${this.approachEdge.to}`, now + 3500);

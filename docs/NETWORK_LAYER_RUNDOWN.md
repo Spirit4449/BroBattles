@@ -4,7 +4,8 @@ Use this document as high-context input when asking an AI to change multiplayer 
 
 ## 1) Architecture in one pass
 
-This game uses a server-authoritative real-time model over Socket.IO:
+This game uses a hybrid real-time model over Socket.IO: human movement is
+client-controlled, while combat validation, match state, and bots run server-side.
 
 - Server owns match lifecycle, room membership, tick progression, combat validation, health, deaths, and snapshots.
 - Client sends intent/state updates and renders local + remote entities.
@@ -57,8 +58,8 @@ Client core:
   - Consumes game:init, game:start, game:starting, game:snapshot, health/death/timer/over, etc.
   - Maintains live replicated state slices and updates HUD pipelines.
 - src/gameScene/localInputSync.js
-  - Sends game:input (volatile, compress false).
-  - Sends game:input-intent (volatile, compress false).
+  - Sends game:input (volatile with reliable keyframes and pre-attack flushes, compress false).
+  - Sends game:input-intent (non-volatile, compress false).
   - Throttled movement publish path.
 - src/match/snapshotBuffer.js
   - Snapshot buffering, monotonic time calibration, interpolation frame selection.
@@ -89,7 +90,7 @@ Client core:
 
 5. Active simulation and broadcast
 - Server fixed-step loop runs at 60 Hz.
-- Movement/actions/combat/timer/powerups resolved server-side.
+- Human position reports are validated; bots, combat, timers, and powerups advance server-side.
 - Snapshot emission occurs on cadence (every N ticks; currently 30 Hz with SNAPSHOT_EVERY_TICKS=2 at 60 Hz loop).
 - Snapshots include timing metadata tickId and tMono.
 
@@ -241,3 +242,77 @@ Deliverables:
 - Event contract changes summarized.
 - Risk notes for desync/regression.
 - Manual verification steps for join/start/active/reconnect/end.
+
+## 9) Snapshot timing and controlled comparisons (2026-09-04)
+
+Human movement remains client-controlled. Local physics, reliable pre-attack
+movement flushes, periodic reliable input keyframes, and combat authority are
+unchanged. Bots continue to run every fixed simulation step on the server.
+
+Every `game:snapshot`, including immediate respawn/action snapshots, now carries:
+
+- `snapshotEpoch`: unique room-instance identifier, stable until that room is replaced.
+- `snapshotSeq`: increasing emission sequence, independent of `tickId`.
+- `tMono`: the latest simulation instant (or monotonic time before the loop starts).
+- `sentMono`: actual server monotonic publication time, separate from simulation time.
+- `snapshotKind`: `periodic` or `event`.
+- Existing `tickId`, `timestamp`, and `sentAtWallMs` timing fields.
+
+New clients reject duplicate/stale emission sequences before applying roster or
+HUD changes. Newer emissions at the same simulation instant replace that buffered
+instant without synthesizing an extra frame interval. Reconnect and room-instance
+changes reset interpolation history; timestamp-only legacy bootstrap frames are
+cleared when monotonic timing first becomes available. Clients still accept older
+servers without the additive sequence fields. Deploy/reload both ends to benefit
+from the new handling; older clients ignore new metadata and retain their original
+same-time fallback behavior.
+
+The server coalesces periodic snapshots and world-state publications within each
+catch-up callback. It preserves every simulation step and discrete event, and
+still emits immediate action/respawn snapshots in order. Normal cadence stays
+60 Hz simulation / 30 Hz player snapshots / 7.5 Hz world state. For a comparison,
+start the server with `BB_COALESCE_SNAPSHOTS=0`; this affects newly created rooms.
+Snapshot delivery remains non-volatile.
+
+Client measurements are always available from the browser console:
+
+```js
+window.__BB_NETWORK_DIAGNOSTICS__()
+```
+
+`arrivalJitterEma` measures the variation between consecutive arrival intervals
+and actual server publication intervals. `arrivalGapMs` and `sourceGapMs` show the
+latest such intervals separately, so a server pause is not mislabeled as network
+jitter. Only periodic snapshots feed cadence/jitter estimates. `underrunFrames`,
+`renderedFrames`, and `maxExtrapolationMs` describe the base render timeline and
+reset on reconnect. They do not measure end-to-end input latency or per-player
+visual hit alignment. Browser main-thread stalls can also delay arrival handlers.
+
+Continuous remote smoothing is now the default. It replaces the alpha floors
+and reverse-target filter with a continuous sampling timeline. Attack and airborne
+lead are 12 ms and 9 ms respectively, transitioned over 80 ms, approximating the
+old floors' average lead at 30 Hz. Remote sprites follow small interpolated
+movements without a deadband. Position recovery speed limits, spawn snapping,
+and extrapolation caps remain. Buffer catch-up uses elapsed time and smoothly
+corrects excess lag, rather than applying a fixed correction per rendered frame.
+
+For a visual comparison, add `netSmoothing=legacy` to the game URL to restore the
+old alpha floors, reverse-target filter, and movement deadbands. This does not
+roll back the shared buffer timing fixes. `netSmoothing=continuous` remains valid;
+a plain URL also enables continuous smoothing. Parameters affect only that
+browser and are not persistent account preferences.
+
+Arrival-based adaptive delay remains opt-in: add `netArrivalDelay=1` to base it
+on nominal cadence plus measured arrival jitter. The existing 45–115 ms bounds
+remain in force. Compare this separately from smoothing.
+
+Run `npm run test:network` for timing/sequence/epoch, jitter, continuous sampling,
+catch-up publication, and terminal-loop regression tests. Tests also exercise
+sprite motion and clock recovery at 60, 120, 144, and 240 Hz. These deterministic
+tests do not establish real browser frame pacing or perceptual smoothness.
+Compare two real clients under steady latency, variable latency, 250 ms and 1 s
+stalls, and reconnects. Exercise running attacks, wall jumps, reversals, knockback,
+death/respawn, and Bank Bust. Record underrun ratio, frame pacing, and visible hit
+alignment; less extrapolation alone is not evidence of a better experience if
+the extra delay makes hits look worse. Local-player blur reported in Chrome/Edge
+has not been reproduced; this change does not alter local physics or rendering.

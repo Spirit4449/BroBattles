@@ -72,6 +72,8 @@ class GameRoom {
     this.FIXED_DT_MS = 1000 / 60; // 60 Hz fixed step
     this.SNAPSHOT_EVERY_TICKS = 2; // 60/2 = 30 Hz snapshots
     this.WORLD_STATE_EVERY_TICKS = 8; // 7.5 Hz world-state packets
+    // Rollback switch for comparing publication pacing; simulation is unchanged.
+    this.COALESCE_SNAPSHOTS = process.env.BB_COALESCE_SNAPSHOTS !== "0";
     this.DEV_TIMING_DIAG = true; // temporary diagnostics flag
     this._timingDiagnostics = createTimingDiagnostics(this, {
       fixedDtMs: this.FIXED_DT_MS,
@@ -786,8 +788,11 @@ class GameRoom {
     let lastMono = monoNow();
     let simulatedMono = lastMono;
     let acc = 0;
+    let snapshotDue = false;
+    let worldStateDue = false;
 
     const step = (currentMono) => {
+      this._simulationMono = currentMono;
       this._tickId++;
       this.processTick();
       attackRuntimeManager.tickActiveAttacks(this, Date.now());
@@ -806,10 +811,12 @@ class GameRoom {
       }
       // Snapshot cadence: deterministic every N ticks
       if (this._tickId % this.SNAPSHOT_EVERY_TICKS === 0) {
-        this._emitSnapshotWithTiming(currentMono);
+        if (this.COALESCE_SNAPSHOTS) snapshotDue = true;
+        else this._emitSnapshotWithTiming(currentMono);
       }
       if (this._tickId % this.WORLD_STATE_EVERY_TICKS === 0) {
-        this.broadcastWorldState();
+        if (this.COALESCE_SNAPSHOTS) worldStateDue = true;
+        else this.broadcastWorldState();
       }
     };
 
@@ -823,11 +830,19 @@ class GameRoom {
       const accBefore = acc;
       acc += delta;
       let stepsThisFrame = 0;
-      while (acc >= this.FIXED_DT_MS) {
+      snapshotDue = false;
+      worldStateDue = false;
+      while (acc >= this.FIXED_DT_MS && this._loopRunning) {
         simulatedMono += this.FIXED_DT_MS;
         step(simulatedMono);
         acc -= this.FIXED_DT_MS;
         stepsThisFrame += 1;
+      }
+      // Publish the final state, not every intermediate catch-up state. Immediate
+      // respawn/action snapshots and discrete events retain their existing order.
+      if (this._loopRunning) {
+        if (snapshotDue) this._emitSnapshotWithTiming(simulatedMono);
+        if (worldStateDue) this.broadcastWorldState();
       }
       // Yield a bit to avoid busy-spinning the CPU.
       // Sleep roughly until the next tick is due (at least 0–1ms).
@@ -845,7 +860,7 @@ class GameRoom {
         accBefore,
         accAfter: acc,
       });
-      setTimeout(loop, sleepMs);
+      if (this._loopRunning) setTimeout(loop, sleepMs);
     };
     setTimeout(loop, 0);
   }

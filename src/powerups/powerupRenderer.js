@@ -1,5 +1,6 @@
 // powerups/powerupRenderer.js
 import { RENDER_LAYERS } from "../gameScene/renderLayers";
+import { createDeathLootEffects, handleDeathLootContact } from "./deathLootEffects";
 
 export function createPowerupRenderer({
   scene,
@@ -26,6 +27,8 @@ export function createPowerupRenderer({
   getCharacterPowerupMobilityModifier,
 }) {
   const auraBubbleStates = new Map();
+  const deathLootFx = createDeathLootEffects(scene, Phaser);
+  const deathBursts = new Map();
 
   function powerupTextureFor(type) {
     const webpKey = `pu-icon-${type}-webp`;
@@ -67,21 +70,6 @@ export function createPowerupRenderer({
     delete scene._deathDropVisuals[id];
     try {
       scene._pendingDeathDropPickups?.delete?.(id);
-    } catch (_) {}
-  }
-
-  function markDeathDropLanded(visual) {
-    if (!visual || visual.settled || !visual.sprite?.body) return;
-    const body = visual.sprite.body;
-    if (!body.blocked.down && !body.touching.down) return;
-    visual.settled = true;
-    visual.settledX = visual.sprite.x;
-    visual.settledY = visual.sprite.y;
-    try {
-      visual.sprite.setVelocity(0, 0);
-      visual.sprite.body.setAllowGravity(false);
-      visual.sprite.body.moves = false;
-      visual.sprite.body.immovable = true;
     } catch (_) {}
   }
 
@@ -737,27 +725,18 @@ export function createPowerupRenderer({
 
       if (!visual) {
         const tint = deathDropColorFor(drop.type);
-        const glow = scene.add.circle(drop.spawnX, drop.spawnY, 14, tint, 0.22);
-        glow.setDepth(RENDER_LAYERS.POWERUPS);
-        glow.setBlendMode(Phaser.BlendModes.ADD);
-        const glowOuter = scene.add.circle(
-          drop.spawnX,
-          drop.spawnY,
-          22,
-          tint,
-          0.1,
-        );
-        glowOuter.setDepth(RENDER_LAYERS.POWERUPS - 1);
-        glowOuter.setBlendMode(Phaser.BlendModes.ADD);
-        const glowCore = scene.add.circle(
-          drop.spawnX,
-          drop.spawnY,
-          8,
-          0xffffff,
-          0.14,
-        );
-        glowCore.setDepth(RENDER_LAYERS.POWERUPS);
-        glowCore.setBlendMode(Phaser.BlendModes.ADD);
+        const burstKey = `${drop.spawnedAt}:${drop.spawnX}:${drop.spawnY}`;
+        if (!deathBursts.has(burstKey)) {
+          deathBursts.set(burstKey, scene.time.now);
+          // Reconnected clients should not replay old death flashes.
+          if (Date.now() - Number(drop.spawnedAt) < 1500) {
+            deathLootFx.burst(drop.spawnX, drop.spawnY);
+          }
+        }
+        const glow = deathLootFx.glow(drop.spawnX, drop.spawnY, 54, tint, 0.65);
+        const glowOuter = deathLootFx.glow(drop.spawnX, drop.spawnY, 86, tint, 0.28,
+          RENDER_LAYERS.POWERUPS - 1);
+        const glowCore = deathLootFx.glow(drop.spawnX, drop.spawnY, 22, 0xffffff, 0.5);
 
         const sprite = scene.physics.add.image(
           drop.spawnX,
@@ -766,8 +745,8 @@ export function createPowerupRenderer({
         );
         sprite.setDepth(RENDER_LAYERS.POWERUPS);
         sprite.setCollideWorldBounds(false);
-        sprite.setBounce(0.16, 0.08);
-        sprite.setDrag(0, 0);
+        sprite.setBounce(0.45, 0.42);
+        sprite.setDrag(35, 0);
         sprite.setVelocity(Number(drop.vx) || 0, Number(drop.vy) || 0);
         const maxDim = Math.max(sprite.width || 1, sprite.height || 1);
         const targetSize = drop.type === "gem" ? 26 : 24;
@@ -780,7 +759,9 @@ export function createPowerupRenderer({
           if (!mapObject) continue;
           colliders.push(
             scene.physics.add.collider(sprite, mapObject, () => {
-              markDeathDropLanded(visual);
+              handleDeathLootContact(visual, scene.time.now, (landed) => {
+                deathLootFx.impact(landed, tint);
+              });
             }),
           );
         }
@@ -798,6 +779,10 @@ export function createPowerupRenderer({
           blinkAt: Number(drop.blinkAt) || 0,
           expiresAt: Number(drop.expiresAt) || 0,
           settled: false,
+          bounces: 0,
+          nextTrailAt: scene.time.now,
+          bornAt: scene.time.now,
+          spin: (Number(drop.vx) < 0 ? -1 : 1) * (drop.type === "gem" ? 4 : 7),
           settledX: drop.spawnX,
           settledY: drop.spawnY,
           despawning: false,
@@ -818,8 +803,11 @@ export function createPowerupRenderer({
         scene._pendingDeathDropPickups.delete(id);
       }
 
-      if (!visual.settled) {
-        markDeathDropLanded(visual);
+      const deathAgeMs = Math.max(0, Date.now() - visual.spawnedAt);
+      if (!visual.settled && deathAgeMs < 650 && scene.time.now >= visual.nextTrailAt) {
+        // Bounded cadence; never catch up by emitting a backlog after a slow frame.
+        visual.nextTrailAt = scene.time.now + 65;
+        deathLootFx.trail(visual, deathDropColorFor(visual.type));
       }
 
       const baseScale = Number(visual.sprite?._baseDeathDropScale) || 1;
@@ -840,7 +828,8 @@ export function createPowerupRenderer({
       if (visual.settled) {
         const bob = Math.sin(nowSec * 2.8 + visual.phase) * 5;
         visual.sprite.x = visual.settledX;
-        visual.sprite.y = visual.settledY - 6 + bob;
+        const lift = Math.min(1, (scene.time.now - visual.settledAt) / 220);
+        visual.sprite.y = visual.settledY + (-6 + bob) * lift;
       }
 
       const x = visual.sprite.x;
@@ -853,15 +842,18 @@ export function createPowerupRenderer({
       visual.glowCore.y = y + 1;
 
       const glowPulse = Math.abs(Math.sin(nowSec * 3.5 + visual.phase));
+      // Keep the glow on the initial burst, then fade it out within 850 ms.
+      const glowFade = 1 - Phaser.Math.Clamp((deathAgeMs - 150) / 700, 0, 1);
       visual.glow.alpha =
-        (0.22 + 0.18 * glowPulse + pulseT * 0.08) * blinkAlpha;
-      visual.glow.radius = 15 + 4 * glowPulse + pulseT * 2;
+        (0.6 + 0.2 * glowPulse + pulseT * 0.08) * blinkAlpha * glowFade;
+      const glowSize = 54 + 10 * glowPulse + pulseT * 4;
+      visual.glow.setDisplaySize(glowSize, glowSize);
       visual.glowOuter.alpha =
-        (0.1 + 0.1 * glowPulse + pulseT * 0.06) * blinkAlpha;
-      visual.glowOuter.radius = visual.glow.radius + 7 + pulseT * 2;
+        (0.24 + 0.1 * glowPulse + pulseT * 0.06) * blinkAlpha * glowFade;
+      visual.glowOuter.setDisplaySize(glowSize + 30, glowSize + 30);
       visual.glowCore.alpha =
-        (0.12 + 0.08 * glowPulse + pulseT * 0.05) * blinkAlpha;
-      visual.glowCore.radius = 7 + 2 * glowPulse + pulseT;
+        (0.35 + 0.12 * glowPulse + pulseT * 0.05) * blinkAlpha * glowFade;
+      visual.glowCore.setDisplaySize(20 + 4 * glowPulse, 20 + 4 * glowPulse);
       visual.sprite.alpha = blinkAlpha;
 
       if (visual.type === "coin") {
@@ -873,6 +865,14 @@ export function createPowerupRenderer({
         const scalePulse = 0.94 + 0.08 * Math.sin(nowSec * 3.6 + visual.phase);
         visual.sprite.setScale(baseScale * scalePulse);
         visual.sprite.rotation = 0.06 * Math.sin(nowSec * 2.4 + visual.phase);
+      }
+
+      if (!visual.settled) {
+        const flightAge = (scene.time.now - visual.bornAt) / 1000;
+        visual.sprite.rotation = flightAge * visual.spin / (1 + visual.bounces);
+        if (visual.type === "coin") {
+          visual.sprite.scaleX = baseScale * (0.3 + 0.7 * Math.abs(Math.cos(flightAge * 10 + visual.phase)));
+        }
       }
 
       if (
@@ -899,6 +899,10 @@ export function createPowerupRenderer({
           });
         }
       }
+    }
+
+    for (const [key, at] of deathBursts) {
+      if (scene.time.now - at > 15000) deathBursts.delete(key);
     }
 
     for (const [id, visual] of Object.entries(scene._deathDropVisuals || {})) {

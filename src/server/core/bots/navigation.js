@@ -17,8 +17,11 @@ function buildGraph(geometry, character, modifiers = {}) {
   for (const from of surfaces) {
     const body = characterBody(character);
     const margin = Math.min((from.right - from.left) / 3, body.halfWidth + 4);
-    const starts = [from.left + margin, (from.left + from.right) / 2, from.right - margin];
-    for (const x of starts) for (const direction of [-1, 1]) for (const jump of [false, true]) {
+    const span = from.right - from.left - margin * 2;
+    const samples = Math.max(2, Math.min(12, Math.ceil(span / 120)));
+    const starts = Array.from({ length: samples + 1 }, (_, i) => from.left + margin + span * i / samples);
+    for (const x of starts) for (const direction of [-1, 0, 1]) for (const jump of [false, true]) {
+      if (!direction && !jump) continue;
       const p = standOn(from, character, x - body.offsetX);
       let airborne = false;
       const frames = [];

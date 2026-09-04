@@ -13,8 +13,8 @@ import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 const INFERNO = getResolvedCharacterSpecialConfig("draven", "inferno");
 const INFERNO_AIM = getResolvedCharacterSpecialAimConfig("draven");
 
-const DRAVEN_INFERNO_DURATION_MS = INFERNO.durationMs ?? 3000;
-const DRAVEN_INFERNO_RISE_MS = INFERNO.riseMs ?? 320;
+const DRAVEN_INFERNO_DURATION_MS = INFERNO.durationMs ?? 5000;
+const DRAVEN_INFERNO_RISE_MS = INFERNO.riseMs ?? 650;
 const DRAVEN_INFERNO_LIFT_PX = INFERNO.liftPx ?? 125;
 const DRAVEN_INFERNO_BOB_PX = INFERNO.bobPx ?? 8;
 const DRAVEN_INFERNO_RADIUS =
@@ -54,6 +54,7 @@ function ensureInfernoOverlay(scene, player) {
   destroyInfernoOverlay(player);
 
   const overlay = scene.add.sprite(player.x, player.y, DRAVEN_SPECIAL_FX_TEXTURE_KEY);
+  overlay.setAlpha(0);
   overlay.setBlendMode(Phaser.BlendModes.ADD);
   const scaleBase = player.displayWidth || player.width || 72;
   overlay.setScale(Math.max(0.45, (scaleBase / 92) * 1.7));
@@ -61,6 +62,12 @@ function ensureInfernoOverlay(scene, player) {
   try {
     overlay.anims.play(DRAVEN_SPECIAL_FX_ANIM_KEY, true);
   } catch (_) {}
+  scene.tweens.add({
+    targets: overlay,
+    alpha: 1,
+    duration: DRAVEN_INFERNO_RISE_MS,
+    ease: "Sine.easeInOut",
+  });
   player._dravenInfernoOverlay = overlay;
   return overlay;
 }
@@ -216,6 +223,7 @@ export function perform(
   player._dravenInfernoBaseX = baseX;
   player._dravenInfernoBaseY = baseY;
   player._dravenInfernoLift = DRAVEN_INFERNO_LIFT_PX;
+  player._dravenInfernoRiseMs = DRAVEN_INFERNO_RISE_MS;
   player._movementLockedUntil = now + DRAVEN_INFERNO_DURATION_MS;
   markOneShotAnimation(player, "special", DRAVEN_INFERNO_DURATION_MS);
 
@@ -238,9 +246,23 @@ export function perform(
   ensureInfernoOverlay(scene, player);
 
   try {
-    scene.sound?.play("draven-special", {
-      volume: isOwner ? 0.65 : 0.35,
-    });
+    const sound = scene.sound?.add("draven-special", { volume: 0 });
+    if (sound) {
+      const fade = scene.tweens.add({
+        targets: sound,
+        volume: isOwner ? 0.65 : 0.35,
+        duration: DRAVEN_INFERNO_RISE_MS,
+        ease: "Sine.easeInOut",
+      });
+      sound.once("complete", () => {
+        fade.remove();
+        sound.destroy();
+      });
+      if (!sound.play()) {
+        fade.remove();
+        sound.destroy();
+      }
+    }
   } catch (_) {}
 
   startInfernoVisualLoop(scene, player, token, isOwner);

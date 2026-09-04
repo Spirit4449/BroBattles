@@ -1,4 +1,5 @@
 import duelMaps from "../shared/duelMaps.json";
+import bankGeometry from '../shared/bankSpawnGeometry.json';
 import {
   getMapEditorTextureKeys,
   getMapSpawnAnchors,
@@ -246,6 +247,7 @@ export function createMapEditorRuntime({
         <div class="row">
           <div><label>Body Offset X</label><input id="map-edit-ox" type="number" step="1"></div>
           <div><label>Body Offset Y</label><input id="map-edit-oy" type="number" step="1"></div>
+          <div><label>Spawn drop height (0–320 px)</label><input id="map-edit-drop" type="number" min="0" max="320" step="10"></div>
         </div>
 
         <div class="btns">
@@ -296,6 +298,7 @@ export function createMapEditorRuntime({
     h: host.querySelector("#map-edit-h"),
     ox: host.querySelector("#map-edit-ox"),
     oy: host.querySelector("#map-edit-oy"),
+    drop: host.querySelector('#map-edit-drop'),
     json: host.querySelector("#map-edit-json"),
     sideUp: host.querySelector("#map-edit-side-up"),
     sideDown: host.querySelector("#map-edit-side-down"),
@@ -596,6 +599,9 @@ export function createMapEditorRuntime({
   }
 
   function syncInputsFromSelection() {
+    const spawn = findSelected()?.ref;
+    el.drop.disabled = spawn?.type !== 'spawn';
+    el.drop.value = spawn?.point?.dropHeight ?? 180;
     const selEntities = selectedEntities();
     if (selEntities.length > 1) {
       const go = selEntities[selEntities.length - 1].go;
@@ -745,7 +751,7 @@ export function createMapEditorRuntime({
         const list = Array.isArray(byMode[mode]) ? byMode[mode] : [];
         for (let i = 0; i < list.length; i++) {
           const point = list[i];
-          const prev = getSpawnPreviewPoint(scene, point, spawnAnchors, 2);
+          const prev = getSpawnPreviewPoint(scene, point, spawnAnchors, 2, true);
           if (!prev) continue;
           const marker = scene.add.circle(
             prev.x,
@@ -895,6 +901,7 @@ export function createMapEditorRuntime({
     }
 
     const point = selected.ref.point;
+    if (selected.ref.type === 'spawn') point.dropHeight = clampNum(el.drop.value, 0, 320);
     if (Number.isFinite(x)) point.x = x;
     if (!point.anchorId && Number.isFinite(y)) point.y = y;
     delete point.dx;
@@ -1092,14 +1099,14 @@ export function createMapEditorRuntime({
   function exportMapSnippets() {
     const parsed = buildExportPayload();
 
-    if (duelMaps[mapId]) {
+    if (duelMaps[mapId] || mapId === 4) {
       const textureSizes = {};
       for (const platform of parsed.platforms || []) {
         const source = scene.textures.get(platform.textureKey).getSourceImage();
         textureSizes[platform.textureKey] = { width: source.width, height: source.height };
       }
-      const entry = { ...duelMaps[mapId], layout: { platforms: parsed.platforms, hitboxes: parsed.hitboxes }, spawns: parsed.spawns, textureSizes };
-      const snippet = JSON.stringify({ [mapId]: entry }, null, 2);
+      const entry = { ...(duelMaps[mapId] || bankGeometry), layout: { platforms: parsed.platforms, hitboxes: parsed.hitboxes }, spawns: parsed.spawns, textureSizes };
+      const snippet = JSON.stringify(mapId === 4 ? entry : { [mapId]: entry }, null, 2);
       el.json.value = snippet;
       navigator?.clipboard?.writeText?.(snippet).catch(() => {});
       return;
@@ -1134,6 +1141,8 @@ export function createMapEditorRuntime({
       return;
     }
     if (!parsed || typeof parsed !== "object") return;
+    parsed = parsed[mapId] || parsed;
+    if (parsed.layout) parsed = { ...parsed, ...parsed.layout };
 
     const platformRows = Array.isArray(parsed.platforms)
       ? parsed.platforms
@@ -1377,8 +1386,8 @@ export function createMapEditorRuntime({
       marker.marker.setVisible(show);
       if (!show) continue;
       const isSelected = marker.id === state.selectedId;
-      if (marker.point.anchorId) {
-        const p = getSpawnPreviewPoint(scene, marker.point, spawnAnchors, 2);
+      if (marker.type === 'spawn' || marker.point.anchorId) {
+        const p = getSpawnPreviewPoint(scene, marker.point, spawnAnchors, 2, marker.type === 'spawn');
         if (p) marker.marker.setPosition(p.x, p.y);
       }
       marker.marker.setRadius(isSelected ? 10 : 8);
@@ -1527,6 +1536,7 @@ export function createMapEditorRuntime({
         marker.point,
         spawnAnchors,
         2,
+        true,
       );
       if (preview) go.setPosition(preview.x, preview.y);
       else go.setPosition(marker.point.x, go.y);
@@ -1534,6 +1544,14 @@ export function createMapEditorRuntime({
       delete marker.point.anchorId;
       marker.point.y = snapped.y;
       go.setPosition(marker.point.x, marker.point.y);
+    }
+    if (marker.type === 'spawn') {
+      const preview = getSpawnPreviewPoint(scene, marker.point, spawnAnchors, 2, true);
+      if (preview) {
+        go.setPosition(preview.x, preview.y);
+        marker.point.x = preview.x;
+        if (!marker.point.anchorId) marker.point.y = preview.y;
+      }
     }
     syncInputsFromSelection();
   });
@@ -1590,7 +1608,7 @@ export function createMapEditorRuntime({
   el.sideLeft?.addEventListener("click", () => toggleBoundarySide("left"));
   el.sideRight?.addEventListener("click", () => toggleBoundarySide("right"));
 
-  const editCommitFields = [el.x, el.y, el.sx, el.sy, el.w, el.h, el.ox, el.oy];
+  const editCommitFields = [el.x, el.y, el.sx, el.sy, el.w, el.h, el.ox, el.oy, el.drop];
   for (const input of editCommitFields) {
     if (!input) continue;
     input.addEventListener("focus", () => {

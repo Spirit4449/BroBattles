@@ -32,7 +32,7 @@ try {
     results.push({ map, seed, players: counts, simulatedSeconds: seconds, elapsedMs: Math.round(performance.now() - start),
       p95TickMs: +samples[Math.floor(samples.length * 0.95)].toFixed(3), maxTickMs: +samples.at(-1).toFixed(3), packets, bytes,
       bots: h.players.map((p) => ({ character: p.char_class, alive: p.isAlive, health: p.health, damage: h.room.rewardStats.get(p.name)?.damage || 0,
-        x: Math.round(p.x), y: Math.round(p.y), ...h.room.botControllers.get(p.participantId).metrics })) });
+        x: Math.round(p.x), y: Math.round(p.y), teamPlan: h.room.botControllers.get(p.participantId).teamPlan, ...h.room.botControllers.get(p.participantId).metrics })) });
     h.room.cleanup();
   }
 } finally { Date.now = originalNow; console.log = originalLog; }

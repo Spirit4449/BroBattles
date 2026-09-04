@@ -1,8 +1,10 @@
 const effectManager = require("../effects/effectManager");
 const { getCharacterTuning } = require("../../../../lib/characterStats");
 
-const DRAVEN_INFERNO_DURATION_MS = 5000;
-const DRAVEN_INFERNO_RISE_MS = 320;
+const DRAVEN_INFERNO_DURATION_MS =
+  getCharacterTuning("draven")?.special?.inferno?.durationMs ?? 5000;
+const DRAVEN_INFERNO_RISE_MS =
+  getCharacterTuning("draven")?.special?.inferno?.riseMs ?? 650;
 const DRAVEN_INFERNO_LIFT_PX = 125;
 const DRAVEN_INFERNO_BOB_PX = 8;
 const DRAVEN_INFERNO_DAMAGE_TICK_MS = 220;

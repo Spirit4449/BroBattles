@@ -27,6 +27,7 @@ export function performSpecial(
 ) {
   const module = specials[character];
   if (module && typeof module.perform === "function") {
+    if (player) player._superBarLaunch = (player._superBarLaunch || 0) + 1;
     module.perform(
       scene,
       player,

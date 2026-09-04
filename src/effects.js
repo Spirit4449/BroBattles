@@ -705,35 +705,96 @@ export function spawnHealthMarker(scene, x, y, delta, opts = {}) {
   const rounded = Math.round(delta);
   if (rounded === 0) return null;
   const positive = rounded > 0;
-  const color = positive ? "#23d88c" : "#ff5c5c";
-  const strokeColor = positive ? "#0a3f28" : "#5a0a0a";
-  const label = `${positive ? "+" : "-"}${Math.abs(rounded)}`;
-  const depth =
-    typeof opts.depth === "number" ? opts.depth : RENDER_LAYERS.PLAYER_HUD;
-  const fontSize = opts.fontSize || "13px";
-  const marker = scene.add.text(x, y, label, {
-    fontFamily: "Poppins, 'Arial Black', sans-serif",
-    fontSize,
-    fontStyle: "400",
+  const self = opts.isSelf === true;
+  const teammate = !self &&
+    (opts.team === "ally" || opts.team === "teammate" || opts.team === true);
+  const color = positive
+    ? teammate ? "#91ffd0" : self ? "#f1f5f9" : "#ffb3b3"
+    : self ? "#ffb3b3" : "#ff5050";
+  const strokeColor = positive
+    ? teammate ? "#123e35" : self ? "#303744" : "#451a24"
+    : "#451a24";
+  const glowColor = positive
+    ? teammate ? "#23d88c" : self ? "#cbd5e1" : "#ff9292"
+    : self ? "#ff9292" : "#ff3030";
+  const label = `${positive ? "+" : "−"}${Math.abs(rounded)}`;
+  // Combat numbers should remain legible above sprites, attacks, and HUD text.
+  const depth = Math.max(
+    RENDER_LAYERS.ATTACKS + 2,
+    typeof opts.depth === "number" ? opts.depth : 0,
+  );
+  const marker = scene.add.text(x, y - 5, label, {
+    fontFamily: "LilitaOne-Regular, 'Arial Black', sans-serif",
+    fontSize: opts.fontSize || "16px",
+    fontStyle: "bold",
     color,
     stroke: strokeColor,
-    strokeThickness: 6,
-    padding: { x: 10, y: 4 },
+    strokeThickness: 4,
+    padding: { x: 8, y: 6 },
   });
   marker.setOrigin(0.5);
   marker.setDepth(depth);
-  marker.setShadow(0, 4, "rgba(0,0,0,0.35)", 4, true, true);
+  marker.setShadow(0, 2, glowColor, 5, false, true);
+  marker.setScale(0.65);
+  const float = opts.floatDistance || 46;
+  const duration = opts.duration || 820;
+  // Reserve the whole floating path at the largest pop scale. Live numbers
+  // keep their space until destroyed, including hits on nearby players.
+  const halfWidth = marker.width * 0.7 + 6;
+  const halfHeight = marker.height * 0.7 + 6;
+  let markerX = x;
+  let markerY = y - 5;
+  let bounds;
+  for (let slot = 0; ; slot++) {
+    const column = [0, -1, 1, -2, 2][slot % 5];
+    markerX = x + column * (halfWidth * 2 + 8);
+    markerY = y - 5 - Math.floor(slot / 5) * (halfHeight * 2 + float + 8);
+    bounds = {
+      left: markerX - halfWidth, right: markerX + halfWidth,
+      top: markerY - float - halfHeight, bottom: markerY + halfHeight,
+    };
+    const overlaps = [...markerPool].some((other) => {
+      if (!other.active || other.scene !== scene) return false;
+      const reserved = other._healthMarkerBounds;
+      return reserved && bounds.left < reserved.right && bounds.right > reserved.left &&
+        bounds.top < reserved.bottom && bounds.bottom > reserved.top;
+    });
+    if (!overlaps) break;
+  }
+  marker.setPosition(markerX, markerY);
+  marker._healthMarkerBounds = bounds;
   markerPool.add(marker);
-  const float = opts.floatDistance || 38;
-  const duration = opts.duration || 620;
+  marker.once("destroy", () => markerPool.delete(marker));
   scene.tweens.add({
     targets: marker,
-    y: y - float,
-    alpha: 0.2,
-    scale: 1.18,
+    scale: 1.15,
+    duration: 110,
+    ease: "Back.easeOut",
+    onComplete: () => {
+      if (!marker.active) return;
+      scene.tweens.add({
+        targets: marker,
+        scale: 1,
+        angle: 0,
+        duration: 160,
+        ease: "Sine.easeOut",
+      });
+    },
+  });
+  scene.tweens.add({
+    targets: marker,
+    y: markerY - float,
     duration,
     ease: "Cubic.easeOut",
+  });
+  scene.tweens.add({
+    targets: marker,
+    alpha: 0,
+    delay: duration * 0.5,
+    duration: duration * 0.5,
+    ease: "Sine.easeIn",
     onComplete: () => {
+      scene.tweens.killTweensOf(marker);
       markerPool.delete(marker);
       marker.destroy();
     },

@@ -57,6 +57,9 @@ export function preloadGameAssets({
   );
   scene.load.image("deathdrop-coin", `${staticPath}/coin.webp`);
   scene.load.image("deathdrop-gem", `${staticPath}/gem.webp`);
+  for (let i = 1; i <= 3; i++) {
+    scene.load.image(`tombstone-${i}`, `${staticPath}/tombstone-${i}.webp`);
+  }
   scene.load.image("bank-bust-vault", `${staticPath}/bank-bust/vault.webp`);
   scene.load.image("bank-bust-base", `${staticPath}/bank-bust/base.webp`);
   scene.load.image("bank-bust-topcase", `${staticPath}/bank-bust/topcase.webp`);
@@ -130,6 +133,7 @@ export function preloadGameAssets({
   scene.load.audio("sfx-walljump", `${staticPath}/movement/wall-jump.mp3`);
   scene.load.audio("sfx-sliding", `${staticPath}/movement/wall-slide.mp3`);
   scene.load.audio("sfx-fall-air", `${staticPath}/movement/fall-wind.mp3`);
+  scene.load.audio("sfx-parachute-open", `${staticPath}/movement/parachute-open.mp3`);
   scene.load.audio("sfx-sudden-death", `${staticPath}/suddendeath.mp3`);
   scene.load.audio("sfx-death", `${staticPath}/death.wav`);
   scene.load.audio("sfx-you-death", `${staticPath}/you-death.wav`);

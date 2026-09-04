@@ -7,7 +7,9 @@
 // Dependencies are injected via the config object so this module has zero
 // hidden global state and can be tested or instantiated in isolation.
 import { normalizeMapId } from "../maps/manifest";
-import { spawnDamageImpact, spawnHealthMarker } from "../effects";
+import { startSpawnIntro, finishSpawnIntro } from '../gameScene/spawnIntro';
+import { spawnDamageImpact } from "../effects";
+import { spawnDeathTombstone } from "../gameScene/deathTombstone";
 import { playWizardArcaneSurge } from "../characters/wizard/effects.js";
 import { playCharacterSound } from "../characters";
 import {
@@ -268,6 +270,7 @@ export function createMatchCoordinator(config) {
       );
     }
     _joinedSocketId = null;
+    snapshotBuffer.reset();
     setHasJoined(false);
     setJoinInFlight(false);
   }
@@ -385,6 +388,7 @@ export function createMatchCoordinator(config) {
   }
 
   function _forceLiveClientState() {
+    finishSpawnIntro(getGameScene());
     try {
       setIsLiveGame(true);
       setStartingPhase(false);
@@ -713,6 +717,11 @@ export function createMatchCoordinator(config) {
     _startStartWatchdog();
     // Late joiners skip the countdown because the game is already running
     if (!getIsLiveGame()) {
+      for (const name of Object.keys(data?.spawns || {})) {
+        const wrapper = opponentPlayers[name] || teamPlayers[name];
+        wrapper?.setPresenceState?.(true, true);
+      }
+      startSpawnIntro(getGameScene(), data?.spawns);
       hud.startCountdown(seconds);
     }
     _forceLiveInputTimer = setTimeout(
@@ -779,6 +788,10 @@ export function createMatchCoordinator(config) {
 
   function _onPlayerDead(payload) {
     if (!payload?.username) return;
+    const dyingPlayer = payload.username === getUsername()
+      ? getPlayer()
+      : (opponentPlayers[payload.username] || teamPlayers[payload.username])?.opponent;
+    spawnDeathTombstone(getGameScene(), payload, dyingPlayer);
     hud.setTeamHudPlayerAlive(payload.username, false);
     if (Array.isArray(payload.drops) && payload.drops.length) {
       const known = Array.isArray(getLatestDeathDrops())
@@ -808,6 +821,8 @@ export function createMatchCoordinator(config) {
 
   function _onGameSnapshot(snapshot) {
     if (!snapshot || !snapshot.players) return;
+    const ingest = snapshotBuffer.ingestSnapshot(snapshot, performance.now());
+    if (ingest.accepted === false) return;
 
     try {
       const gameData = getGameData();
@@ -836,7 +851,6 @@ export function createMatchCoordinator(config) {
 
     hud.syncTeamHudFromSnapshot(snapshot.players);
 
-    const ingest = snapshotBuffer.ingestSnapshot(snapshot, performance.now());
     if (ingest.activated) {
       if (!shouldMuteClientDefaultLogs()) {
         console.log(
@@ -914,25 +928,8 @@ export function createMatchCoordinator(config) {
             targetUsername: targetName,
           });
         }
-        // Show attacker-side damage marker for every confirmed hit.
-        try {
-          if (isSelfPacket) {
-            const appliedDamage = Math.max(
-              0,
-              Math.round(Number(action?.appliedDamage) || 0),
-            );
-            if (targetName && appliedDamage > 0) {
-              if (scene && targetSprite?.active) {
-                const markerY = targetSprite.body
-                  ? targetSprite.body.y - 14
-                  : targetSprite.y - (targetSprite.height || 80) * 0.5;
-                spawnHealthMarker(scene, targetSprite.x, markerY, -appliedDamage, {
-                  depth: 18,
-                });
-              }
-            }
-          }
-        } catch (_) {}
+        // Health updates emit the damage number once for every observer.
+        // Hit confirmations still drive attack sounds and impact effects.
         return;
       }
 

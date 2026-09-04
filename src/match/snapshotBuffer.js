@@ -1,7 +1,20 @@
 import { shouldMuteClientDefaultLogs } from "../lib/netTestLogger.js";
-import { DEFAULT_SNAPSHOT_BUFFER_CONFIG } from "./snapshotBufferConfig";
+import { DEFAULT_SNAPSHOT_BUFFER_CONFIG } from "./snapshotBufferConfig.js";
 
 const SERVER_TICK_MS = 1000 / 60;
+
+// Correct only the excess outside the tolerated range. Time-based gains and
+// speed limits avoid refresh-rate-dependent catch-up and abrupt threshold steps.
+export function getRenderClockCorrection(lagMs, deltaMs) {
+  const dt = Math.max(0, Math.min(250, deltaMs));
+  if (lagMs > 120) {
+    return Math.min((lagMs - 120) * (1 - Math.exp(-dt / 130)), dt * 0.6);
+  }
+  if (lagMs < -60) {
+    return -Math.min((-lagMs - 60) * (1 - Math.exp(-dt / 200)), dt * 0.48);
+  }
+  return 0;
+}
 
 export function createSnapshotBuffer(options = {}) {
   const {
@@ -15,6 +28,7 @@ export function createSnapshotBuffer(options = {}) {
     largePositionDeltaPx,
     spacingEmaAlpha,
     enableAdaptiveDelay,
+    enableArrivalAdaptiveDelay,
     enableClockCorrection,
     enableBacklogCatchup,
     extrapolationLimitMs,
@@ -35,6 +49,39 @@ export function createSnapshotBuffer(options = {}) {
   let jitterEma = null;
   let lastAdaptivePrint = 0;
   let lastTickId = null;
+  let lastSequence = null;
+  let epoch = null;
+  let lastPeriodic = null;
+  let arrivalJitterEma = 0;
+  let arrivalGapMs = 0;
+  let sourceGapMs = 0;
+  let underrunFrames = 0;
+  let renderedFrames = 0;
+  let rejectedSnapshots = 0;
+  let maxExtrapolationMs = 0;
+  let generation = 0;
+
+  function reset() {
+    generation++;
+    active = false;
+    stateBuffer.length = 0;
+    snapshotSpacings.length = 0;
+    interpDelayMs = initialInterpDelayMs;
+    serverMonoOffset = 0;
+    monoCalibrated = false;
+    renderClockMono = lastFramePerfNow = null;
+    spacingEma = jitterEma = null;
+    lastTickId = lastSequence = epoch = lastPeriodic = null;
+    arrivalJitterEma = arrivalGapMs = sourceGapMs = 0;
+    underrunFrames = renderedFrames = rejectedSnapshots = maxExtrapolationMs = 0;
+    lastAdaptivePrint = lastDiagLogMono = 0;
+  }
+
+  function getDiagnostics() {
+    return { interpDelayMs, spacingEma, jitterEma, arrivalJitterEma,
+      arrivalGapMs, sourceGapMs, underrunFrames, renderedFrames,
+      rejectedSnapshots, maxExtrapolationMs, bufferLength: stateBuffer.length };
+  }
 
   function hasData() {
     return active && stateBuffer.length > 0;
@@ -45,6 +92,27 @@ export function createSnapshotBuffer(options = {}) {
   }
 
   function ingestSnapshot(snapshot, clientMonoNow = performance.now()) {
+    const incomingEpoch = typeof snapshot?.snapshotEpoch === "string"
+      ? snapshot.snapshotEpoch : null;
+    if (incomingEpoch && epoch && incomingEpoch !== epoch) reset();
+    if (incomingEpoch) epoch = incomingEpoch;
+    const sequence = Number.isSafeInteger(snapshot?.snapshotSeq)
+      ? snapshot.snapshotSeq : null;
+    const sequenced = incomingEpoch !== null && sequence !== null;
+    if (sequenced && lastSequence !== null && sequence <= lastSequence) {
+      rejectedSnapshots++;
+      return { accepted: false, reason: "stale-sequence", activated: false };
+    }
+    // Legacy snapshots remain supported. On the first real monotonic timestamp,
+    // discard any wall-clock-only bootstrap frames instead of mixing domains.
+    if (!monoCalibrated && Number.isFinite(snapshot?.tMono) && stateBuffer.length) {
+      generation++;
+      stateBuffer.length = 0;
+      renderClockMono = lastFramePerfNow = null;
+      lastPeriodic = null;
+      spacingEma = jitterEma = null;
+      snapshotSpacings.length = 0;
+    }
     let activated = false;
     if (!active) {
       active = true;
@@ -80,7 +148,11 @@ export function createSnapshotBuffer(options = {}) {
     if (stateBuffer.length > 0) {
       const prevState = stateBuffer[stateBuffer.length - 1];
       const prev = prevState.tMono;
-      if (Number.isFinite(snapMono) && snapMono <= prev) {
+      if (sequenced && snapMono < prev) {
+        rejectedSnapshots++;
+        return { accepted: false, reason: "stale-time", activated: false };
+      }
+      if (!sequenced && Number.isFinite(snapMono) && snapMono <= prev) {
         const prevTickId =
           typeof prevState?.tickId === "number" ? prevState.tickId : null;
         const tickDelta =
@@ -95,30 +167,6 @@ export function createSnapshotBuffer(options = {}) {
       }
       const d = snapMono - prev;
       spacingMs = d;
-      if (d >= 0 && d < maxSpacingMs) {
-        snapshotSpacings.push(d);
-        if (snapshotSpacings.length > 400) snapshotSpacings.splice(0, 200);
-
-        spacingEma =
-          spacingEma == null
-            ? d
-            : spacingEma + (d - spacingEma) * spacingEmaAlpha;
-        const dev = Math.abs(d - (spacingEma || d));
-        jitterEma =
-          jitterEma == null
-            ? dev
-            : jitterEma + (dev - jitterEma) * spacingEmaAlpha;
-
-        if (enableAdaptiveDelay && spacingEma != null && jitterEma != null) {
-          let targetDelay = spacingEma * 3 + jitterEma * 2;
-          if (targetDelay < minInterpDelayMs) targetDelay = minInterpDelayMs;
-          if (targetDelay > maxInterpDelayMs) targetDelay = maxInterpDelayMs;
-          interpDelayMs += (targetDelay - interpDelayMs) * 0.1;
-        }
-        if (d >= Math.max(lateSnapshotThresholdMs, snapIntervalMs * 2)) {
-          lateSnapshot = true;
-        }
-      }
 
       const prevPlayers =
         prevState?.players && typeof prevState.players === "object"
@@ -161,10 +209,36 @@ export function createSnapshotBuffer(options = {}) {
       }
     }
 
+    if (snapshot?.snapshotKind !== "event") {
+      const sendMono = Number.isFinite(snapshot?.sentMono) ? snapshot.sentMono : snapMono;
+      if (lastPeriodic) {
+        const d = snapMono - lastPeriodic.simMono;
+        arrivalGapMs = Math.max(0, clientMonoNow - lastPeriodic.arrival);
+        sourceGapMs = Math.max(0, sendMono - lastPeriodic.sendMono);
+        const jitter = Math.abs(arrivalGapMs - sourceGapMs);
+        arrivalJitterEma += (jitter - arrivalJitterEma) * spacingEmaAlpha;
+        lateSnapshot = arrivalGapMs >= Math.max(lateSnapshotThresholdMs, snapIntervalMs * 2);
+        if (d > 0 && d < maxSpacingMs) {
+          snapshotSpacings.push(d);
+          if (snapshotSpacings.length > 240) snapshotSpacings.shift();
+          spacingEma = spacingEma == null ? d : spacingEma + (d - spacingEma) * spacingEmaAlpha;
+          const dev = Math.abs(d - spacingEma);
+          jitterEma = jitterEma == null ? dev : jitterEma + (dev - jitterEma) * spacingEmaAlpha;
+          if (enableAdaptiveDelay) {
+            const target = enableArrivalAdaptiveDelay
+              ? snapIntervalMs * 3 + arrivalJitterEma * 2
+              : spacingEma * 3 + jitterEma * 2;
+            interpDelayMs += (Math.max(minInterpDelayMs, Math.min(maxInterpDelayMs, target)) - interpDelayMs) * 0.1;
+          }
+        }
+      }
+      lastPeriodic = { arrival: clientMonoNow, sendMono, simMono: snapMono };
+    }
+
     if (
       typeof currentTickId === "number" &&
       typeof lastTickId === "number" &&
-      currentTickId <= lastTickId
+      currentTickId < lastTickId
     ) {
       outOfOrderTick = true;
     }
@@ -174,6 +248,12 @@ export function createSnapshotBuffer(options = {}) {
       lastFramePerfNow = clientMonoNow;
     }
 
+    // A later emission at the same simulation instant replaces that instant's
+    // state; it does not advance the render timeline by an invented interval.
+    if (sequenced && stateBuffer[stateBuffer.length - 1]?.tMono === snapMono) {
+      stateBuffer.pop();
+    }
+    if (sequenced) lastSequence = sequence;
     stateBuffer.push({
       tMono: snapMono,
       tickId: typeof snapshot?.tickId === "number" ? snapshot.tickId : null,
@@ -199,6 +279,7 @@ export function createSnapshotBuffer(options = {}) {
     }
 
     return {
+      accepted: true,
       activated,
       snapMono,
       calibrationLog,
@@ -283,15 +364,9 @@ export function createSnapshotBuffer(options = {}) {
         const desired = headT - interpDelayMs;
         lagMs = desired - targetMono;
 
-        if (lagMs > 120) {
-          const step = Math.min(lagMs * 0.12, 10);
-          targetMono += step;
-          renderClockMono = targetMono + interpDelayMs;
-        }
-
-        if (lagMs < -60) {
-          const step = Math.min(-lagMs * 0.08, 8);
-          targetMono -= step;
+        const correction = getRenderClockCorrection(lagMs, dt);
+        if (correction !== 0) {
+          targetMono += correction;
           renderClockMono = targetMono + interpDelayMs;
         }
 
@@ -311,6 +386,18 @@ export function createSnapshotBuffer(options = {}) {
       }
     }
 
+    renderedFrames++;
+    const frame = sampleAt(targetMono);
+    if (frame.extrapolationMs > 0) underrunFrames++;
+    maxExtrapolationMs = Math.max(maxExtrapolationMs, frame.extrapolationMs);
+    return frame;
+  }
+
+  function sampleAt(targetMono) {
+    if (!hasData()) return null;
+    const oldest = stateBuffer[0].tMono;
+    const newest = stateBuffer[stateBuffer.length - 1].tMono;
+    targetMono = Math.max(oldest, Math.min(newest + extrapolationLimitMs, targetMono));
     let aState = null;
     let bState = null;
     for (let i = 0; i < stateBuffer.length - 1; i++) {
@@ -364,11 +451,15 @@ export function createSnapshotBuffer(options = {}) {
     if (spacingEma == null) return null;
     if (perfNow - lastAdaptivePrint <= 5000) return null;
     lastAdaptivePrint = perfNow;
-    return `[adaptive] delay=${interpDelayMs.toFixed(1)}ms spacingEma=${spacingEma?.toFixed(2)} jitterEma=${jitterEma?.toFixed(2)} buffer=${stateBuffer.length}`;
+    return `[adaptive] delay=${interpDelayMs.toFixed(1)}ms spacingEma=${spacingEma?.toFixed(2)} jitterEma=${jitterEma?.toFixed(2)} arrivalJitter=${arrivalJitterEma.toFixed(2)}ms arrivalGap=${arrivalGapMs.toFixed(1)}ms sourceGap=${sourceGapMs.toFixed(1)}ms underruns=${underrunFrames}/${renderedFrames} maxExtrap=${maxExtrapolationMs.toFixed(1)}ms buffer=${stateBuffer.length}`;
   }
 
   return {
     ingestSnapshot,
+    reset,
+    sampleAt,
+    getDiagnostics,
+    getGeneration: () => generation,
     getInterpolationFrame,
     consumeAdaptiveDebugLine,
     hasData,

@@ -9,8 +9,9 @@
     "sourcemap": "cross-env NODE_ENV=production webpack --mode=production --devtool=source-map",
     "start": "cross-env NODE_ENV=production node src/server/server.js",
     "test:shop": "node --test tests/shopCatalog.test.js tests/shopCommerce.test.js tests/shopRotation.test.js tests/shopStaticContracts.test.js",
-    "test:bots": "node --test tests/adaptiveBots.test.js tests/gameRoomStartup.test.js tests/botBehavior.test.js",
+    "test:bots": "node --test tests/adaptiveBots.test.js tests/gameRoomStartup.test.js tests/botBehavior.test.js tests/botAiming.test.js tests/botTeamwork.test.js",
     "test:battle-log": "node --test tests/battleLog.test.js",
+    "test:network": "node --test tests/networkTiming.test.mjs",
     "simulate:bots": "node scripts/simulate-bots.cjs"
   },
   "author": "",

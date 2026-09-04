@@ -1,6 +1,18 @@
 // src/maps/mapUtils.js
 // Shared client utility for placing sprites precisely on top of a platform.
 // Imported by every map module — eliminates the copy-paste duplication.
+import { resolveLanding } from '../shared/spawnPlacement';
+
+function spawnGeometry(scene, anchors) {
+  const objects = [...new Set([...(scene?._mapObjects || []), ...Object.values(anchors)])];
+  const entries = objects.filter(o => o?.body).map(o => {
+    o.body.updateFromGameObject?.();
+    const b = o.body;
+    return { object: o, left: b.left, right: b.right, top: b.top, bottom: b.bottom,
+      enabled: b.enable, collision: b.checkCollision };
+  });
+  return entries;
+}
 
 /**
  * Snap a sprite so its bottom lands exactly on top of a platform.
@@ -110,24 +122,25 @@ export function placeSpriteAtConfiguredSpawn(
   const anchorId = String(point?.anchorId || "").trim();
   const anchor = anchorId ? anchors?.[anchorId] : null;
 
-  const x = resolveSpawnX(scene, point, anchor);
-  if (!Number.isFinite(x)) return;
-
-  if (anchor) {
-    snapSpriteToPlatform(sprite, anchor, x, epsilon);
-    return;
-  }
-
-  const y = resolveSpawnY(point);
-  if (!Number.isFinite(y)) return;
-  if (sprite.body && typeof sprite.body.reset === "function") {
-    sprite.body.reset(x, y);
-    return;
-  }
-  sprite.setPosition(x, y);
+  sprite.body?.updateFromGameObject?.();
+  const geometry = spawnGeometry(scene, anchors);
+  const landing = resolveLanding(point, geometry.find(p => p.object === anchor), geometry,
+    { width: sprite.body?.width || sprite.displayWidth, height: sprite.body?.height || sprite.displayHeight });
+  const bottomOffset = sprite.body ? sprite.body.bottom - sprite.y : sprite.displayHeight / 2;
+  const centerOffset = sprite.body ? sprite.body.center.x - sprite.x : 0;
+  sprite.body.reset(landing.x - centerOffset, landing.y - bottomOffset);
+  const requestedHeight = Number(point.dropHeight ?? 180);
+  sprite._spawnLanding = { x: sprite.x, y: sprite.y, dropHeight: Number.isFinite(requestedHeight) ? Math.max(0, Math.min(320, requestedHeight)) : 180 };
 }
 
-export function getSpawnPreviewPoint(scene, point, anchors = {}, epsilon = 2) {
+export function getSpawnPreviewPoint(scene, point, anchors = {}, epsilon = 2, snapToSurface = false) {
+  if (snapToSurface && scene?._mapObjects?.length) {
+    const geometry = spawnGeometry(scene, anchors);
+    try {
+      const landing = resolveLanding(point, geometry.find(p => p.object === anchors[point?.anchorId]), geometry, { width: 48, height: 80 });
+      return { x: landing.x, y: landing.y };
+    } catch (_) { return null; }
+  }
   const anchorId = String(point?.anchorId || "").trim();
   const anchor = anchorId ? anchors?.[anchorId] : null;
 
@@ -281,6 +294,7 @@ function createConfiguredPlatform(scene, row) {
     sprite.body.setOffset(ox, oy);
   }
   if (row.collisionEnabled === false) sprite.body.enable = false;
+  sprite.body.updateFromGameObject();
   return sprite;
 }
 

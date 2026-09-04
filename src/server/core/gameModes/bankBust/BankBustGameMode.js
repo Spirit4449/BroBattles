@@ -196,6 +196,8 @@ class BankBustGameMode extends BaseGameMode {
   }
 
   getRespawnPlan(playerData) {
+    const { getDuelGeometry, spawnForParticipant } = require('../../../../shared/duelGeometry');
+    const geometry = getDuelGeometry(this.room?.matchData?.map);
     const state = this.getModeState();
     const layout = this.getLayout();
     const respawn = layout?.respawnPoints?.[playerData?.team] || null;
@@ -205,7 +207,8 @@ class BankBustGameMode extends BaseGameMode {
       shieldMs: Number(state?.respawnShieldMs) || DEFAULT_RESPAWN_SHIELD_MS,
       spawn: "team-base",
       team: playerData?.team || null,
-      position: respawn
+      position: geometry ? spawnForParticipant(geometry, playerData, Number(playerData.spawnIndex) || 0,
+        this.room.matchData.players.filter(p => p.team === playerData.team).length) : respawn
         ? { x: Number(respawn.x) || 0, y: Number(respawn.y) || 0 }
         : null,
     };

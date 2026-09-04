@@ -137,6 +137,7 @@ function emitSnapshotWithTiming(room, snapMono) {
   if (room._lastSnapshotMono > 0) {
     const spacing = snapMono - room._lastSnapshotMono;
     if (spacing >= 0) room._snapshotIntervals.push(spacing);
+    if (room._snapshotIntervals.length > 240) room._snapshotIntervals.shift();
   }
   room._lastSnapshotMono = snapMono;
   room.broadcastSnapshot({

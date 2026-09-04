@@ -1,6 +1,7 @@
-const { basicAim, hasClearShot } = require('./combat');
+const { basicAim, hasClearShot, pressureAim } = require('./combat');
 const { nearestSurface } = require('./navigation');
 const { bounds } = require('./physics');
+const { teamPosition } = require('./teamwork');
 const effects = require('../gameRoom/effects/effectManager');
 
 const STYLES = {
@@ -39,6 +40,7 @@ function selectTarget(brain, enemies, routeTo, now = Date.now()) {
     // A bot with a health lead recognizes the chance to finish a wounded enemy.
     score -= Math.max(0, ownHealth - hp) * (140 + awareness * 180);
     if (route === null && range > preferredRange(brain, target)) score += 220;
+    if (target.participantId === brain.teamPlan?.targetId) score -= brain.teamPlan.role === 'defend' ? 320 : 160;
     if (target.participantId === brain.targetId) score -= 120;
     if (target.participantId === brain.player._lastAttackerParticipantId && now - brain.player.lastDamagedAt < 1400) score -= 100 + awareness * 100;
     // An attacker at melee range matters even while focusing a weaker opponent.
@@ -52,10 +54,11 @@ function chooseDecision(brain, context, target, enemies, now) {
   const p = brain.player, { graph, current, poisonY, routeTo } = context;
   const style = STYLES[p.char_class] || STYLES.ninja;
   const preferred = target ? preferredRange(brain, target) : style.cap;
+  const formation = teamPosition(brain, target);
   const hazard = bounds(p).bottom >= poisonY - 100;
   const near = enemies.filter((e) => distance(e, p) < 320).length;
   const healthLead = target ? healthFraction(p) - healthFraction(target) : 0;
-  const pressAdvantage = !brain.retreating && healthLead >= 0.12;
+  const pressAdvantage = !brain.retreating && (brain.teamPlan ? brain.teamPlan.role === 'vanguard' && brain.teamPlan.strategy === 'push' : healthLead >= 0.12);
   const combatRange = preferred * (pressAdvantage ? 0.75 : 1);
   const wantsSpace = brain.retreating || (near > 1 && healthFraction(p) < 0.65) || (!pressAdvantage && now < brain.kiteUntil);
   const reachable = graph.surfaces.map((surface) => ({ surface, route: routeTo(surface.id) }))
@@ -79,8 +82,9 @@ function chooseDecision(brain, context, target, enemies, now) {
     }
     // Finish an engagement before taking a long detour for an incidental buff.
     // Healing and defensive pickups still win when the bot needs to recover.
+    const roleCost = brain.teamPlan && ['defend', 'support'].includes(brain.teamPlan.role) && bestPickup?.type !== 'health' ? 180 : 0;
     const pursuitCost = target && !brain.retreating && bestPickup?.type !== 'health' ? 120 : 0;
-    if (bestPickup && value > (target ? 155 - (brain.profile.tacticalAwareness ?? 0.5) * 65 + pursuitCost : 0)) {
+    if (bestPickup && value > (target ? 155 - (brain.profile.tacticalAwareness ?? 0.5) * 65 + pursuitCost + roleCost : 0)) {
       return { mode: 'pickup', goal: bestPickup, pickupId: bestPickup.id };
     }
   }
@@ -96,6 +100,7 @@ function chooseDecision(brain, context, target, enemies, now) {
       const clampX = (x) => Math.max(surface.left + margin, Math.min(surface.right - margin, x));
       const side = target && p.x < target.x ? -1 : 1;
       const xs = [clampX(p.x), clampX(surface.x)];
+      if (formation) xs.push(clampX(formation.x));
       if (target && !wantsSpace) xs.push(clampX(p.x - 160), clampX(p.x + 160));
       if (target) xs.push(clampX(target.x + side * combatRange), clampX(target.x - side * combatRange));
       if (target && wantsSpace) xs.push(clampX(target.x + side * Math.max(500, preferred * 1.4)), clampX(target.x - side * Math.max(500, preferred * 1.4)));
@@ -105,6 +110,12 @@ function chooseDecision(brain, context, target, enemies, now) {
         const nearestEnemy = enemies.length ? Math.min(...enemies.map((e) => distance(point, e))) : Infinity;
         const crowding = enemies.reduce((sum, e) => sum + Math.max(0, (wantsSpace ? 500 : style.clearance) - distance(point, e)), 0);
         let score = travel + crowding * (wantsSpace ? 1.5 : 0.85);
+        if (formation && !hazard && !brain.retreating) score += distance(point, formation) * formation.weight;
+        if (brain.teamPlan && !hazard) {
+          for (const ally of brain.room.players.values()) {
+            if (ally !== p && ally.team === p.team && ally.isAlive) score += Math.max(0, 110 - distance(point, ally)) * 0.7;
+          }
+        }
         if (brain.retreating) {
           score += Math.max(0, 650 - nearestEnemy) * 1.8;
           score -= Math.min(650, nearestEnemy) * 0.2;
@@ -112,11 +123,20 @@ function chooseDecision(brain, context, target, enemies, now) {
         }
         if (hazard) score += surface.top * 2;
         else if (target && !wantsSpace) {
-          const aim = basicAim({ ...p, ...point }, target, brain.profile, () => 0.5);
-          score += Math.abs(distance(point, target) - combatRange) * 0.75;
+          const aim = basicAim({ ...p, ...point }, target, brain.profile, () => 0.5, brain.room);
+          const direct = aim.canHit && hasClearShot(brain.room, { ...p, ...point }, target, aim);
+          const pressure = !direct && pressureAim(brain.room, { ...p, ...point }, target, brain.profile);
+          score += Math.abs(distance(point, target) - combatRange) * (pressure ? 0.35 : 0.75);
           if (pressAdvantage) score += Math.max(0, distance(point, target) - combatRange) * 0.45;
-          score += Math.max(0, Math.abs(point.y - target.y) - style.height) * 1.3;
-          if (!aim.canHit || !hasClearShot(brain.room, { ...p, ...point }, target, aim)) score += 300;
+          score += Math.max(0, Math.abs(point.y - target.y) - style.height) * (direct || pressure ? 0.25 : 1.3);
+          if (!direct) score += pressure ? 65 : 300;
+          // After holding one platform for a while, try another usable angle.
+          // Travel and danger still compete with this preference.
+          const dwell = now - (brain.surfaceEnteredAt ?? now);
+          if (brain.teamPlan?.role !== 'anchor' && dwell > 6500 && surface.id !== current?.id && (direct || pressure)) {
+            const lastVisit = brain.visited.get(surface.id);
+            if (!lastVisit || now - lastVisit > 10000) score -= Math.min(260, (dwell - 6500) * 0.06);
+          }
           for (const failed of brain.ineffectivePositions || []) {
             if (failed.until > now && failed.surfaceId === surface.id) {
               score += Math.max(0, 1 - Math.abs(x - failed.x) / 180) * 340;
@@ -124,7 +144,7 @@ function chooseDecision(brain, context, target, enemies, now) {
           }
           score -= Math.min(style.height, Math.max(0, target.y - point.y)) * 0.15;
         }
-        if (surface.id === current?.id && !brain.retreating) score -= 55; // Keep useful ground instead of hopping between equal options.
+        if (surface.id === current?.id && !brain.retreating) score -= 25; // Briefly hold useful ground before considering another angle.
         if (score < bestScore) { bestScore = score; best = { x, y: surface.top, surfaceId: surface.id }; }
       }
     }
