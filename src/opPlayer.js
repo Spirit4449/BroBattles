@@ -10,8 +10,19 @@ import { getResolvedCharacterBodyConfig } from "./lib/characterTuning.js";
 import { performSpecial } from "./characters/special";
 import { player } from "./player";
 import socket from "./socket";
-import { drawSuperChargeBar, resetSuperBarAnimation } from "./gameScene/superBarRenderer";
-import { drawHealthBar, resetHealthBarAnimation } from "./gameScene/healthBarRenderer";
+import {
+  drawSuperChargeBar,
+  resetSuperBarAnimation,
+} from "./gameScene/superBarRenderer";
+import {
+  drawHealthBar,
+  resetHealthBarAnimation,
+} from "./gameScene/healthBarRenderer";
+import {
+  destroyStatusIconStack,
+  setStatusIconStackVisible,
+  syncStatusIconStack,
+} from "./gameScene/statusIconStack";
 import {
   MOVEMENT_VFX_CONFIG,
   spawnDeathBurst,
@@ -27,6 +38,7 @@ import {
   spawnWallSlideTrail,
 } from "./effects";
 import { RENDER_LAYERS } from "./gameScene/renderLayers";
+import { playDuckTransitionSound } from "./gameScene/duckAudio.js";
 
 const OP_PLAYER_NAME_OFFSET_Y = 42;
 const HUD_SMOOTH_ALPHA = 0.35;
@@ -75,6 +87,7 @@ export default class OpPlayer {
     this.presenceLoaded = false;
     this._worldUiHidden = false;
     this._powerupInvisible = false;
+    this._powerupStatusIcons = [];
     this._spawnPresented = false;
     this._networkSnapUntil = 0;
     this._deathPresentationActive = false;
@@ -142,9 +155,11 @@ export default class OpPlayer {
     this.opponent.setVisible(false);
 
     // Sets the text of the name to username
-    const bodyTop = this.opponent.body
-      ? this.opponent.body.y
-      : this.opponent.y - this.opponent.height / 2;
+    const bodyTop =
+      (this.opponent.body
+        ? this.opponent.body.y
+        : this.opponent.y - this.opponent.height / 2) +
+      (this.opponent._ducking ? 8 : 0);
     this.opPlayerName = this.scene.add.text(
       this.opponent.x,
       bodyTop - OP_PLAYER_NAME_OFFSET_Y,
@@ -156,8 +171,9 @@ export default class OpPlayer {
       fontStyle: "bold",
       fill: "#ffffff",
       stroke: "#000000",
-      strokeThickness: 4,
+      strokeThickness: 5,
     });
+    this.opPlayerName.setShadow(2, 3, "rgba(0, 0, 0, 0.95)", 3, true, true);
     this.opPlayerName.setOrigin(0.5, 0);
     this.opPlayerName.setDepth(50); // always above map objective props
 
@@ -171,6 +187,28 @@ export default class OpPlayer {
 
     this.opHealthBar = this.scene.add.graphics();
     this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
+    this.opDuckShieldGlow = this.scene.add.image(0, 0, "pu-icon-shield-webp");
+    this.opDuckShieldGlow
+      .setDisplaySize(20, 23)
+      .setTint(0xff8d32)
+      .setAlpha(0.4)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(RENDER_LAYERS.PLAYER_HUD + 1.5)
+      .setVisible(false);
+    this.opDuckShieldIcon = this.scene.add.image(0, 0, "pu-icon-shield-webp");
+    this.opDuckShieldIcon
+      .setDisplaySize(13, 15)
+      .setDepth(RENDER_LAYERS.PLAYER_HUD + 3)
+      .setVisible(false);
+    this._duckShieldGlowTween = this.scene.tweens.add({
+      targets: this.opDuckShieldGlow,
+      displayWidth: { from: 18, to: 22 },
+      displayHeight: { from: 21, to: 26 },
+      duration: 520,
+      ease: "Sine.InOut",
+      yoyo: true,
+      repeat: -1,
+    });
     this.opSuperBarBack = this.scene.add.graphics();
     this.opSuperBar = this.scene.add.graphics();
 
@@ -321,7 +359,8 @@ export default class OpPlayer {
         } else if (handledNetworkFx === "turn") {
           spawnDirectionChangeBurst(this.scene, centerX, bottom - 2, {
             previousDirection:
-              Number(movementState.movementFxDirection) || -Math.sign(velocityX),
+              Number(movementState.movementFxDirection) ||
+              -Math.sign(velocityX),
             speedRatio: Phaser.Math.Clamp(
               Math.abs(velocityX) / MOVEMENT_VFX_CONFIG.runSpeedReference,
               0,
@@ -507,10 +546,21 @@ export default class OpPlayer {
         Math.abs(velocityX) < MOVEMENT_VFX_CONFIG.directionChangeMinSpeed
           ? previous?.runDirection || runDirection
           : runDirection,
-      wallSide: wallSliding
-        ? reportedWallSide
-        : previous?.wallSide || null,
+      wallSide: wallSliding ? reportedWallSide : previous?.wallSide || null,
     };
+  }
+
+  setDucking(ducking) {
+    if (!this.opponent) return;
+    const nextDucking = ducking === true;
+    const previousDucking = this.opponent._ducking;
+    this.opponent._ducking = nextDucking;
+    if (
+      typeof previousDucking === "boolean" &&
+      previousDucking !== nextDucking
+    ) {
+      playDuckTransitionSound(this.scene, nextDucking);
+    }
   }
 
   // Adjust body offset depending on facing; uses optional flipOffset from body config
@@ -530,10 +580,13 @@ export default class OpPlayer {
   updateUIPosition() {
     if (!this.opponent) return;
     if (this._worldUiHidden) return;
-    const bodyTop = this.opponent.body
-      ? this.opponent.body.y
-      : this.opponent.y - this.opponent.height / 2;
-    const snapHud = this.opponent._spawnIntroPending === true ||
+    const bodyTop =
+      (this.opponent.body
+        ? this.opponent.body.y
+        : this.opponent.y - this.opponent.height / 2) +
+      (this.opponent._ducking ? 8 : 0);
+    const snapHud =
+      this.opponent._spawnIntroPending === true ||
       Number(this._networkSnapUntil) > performance.now();
     this._hudAnchorX = stabilizeHudAxis(
       this._hudAnchorX,
@@ -579,6 +632,22 @@ export default class OpPlayer {
         shouldRender && !this._worldUiHidden && !this._powerupInvisible,
       );
       this.opHealthBar.setAlpha(1);
+    }
+    const showDuckShield =
+      shouldRender &&
+      !this._worldUiHidden &&
+      !this._powerupInvisible &&
+      !!this.opponent?._ducking &&
+      !this._deathPresentationActive;
+    this.opDuckShieldIcon?.setVisible(showDuckShield).setAlpha(1);
+    this.opDuckShieldGlow?.setVisible(showDuckShield).setAlpha(0.4);
+    const showStatusIcons =
+      shouldRender &&
+      !this._worldUiHidden &&
+      !this._powerupInvisible &&
+      !this._deathPresentationActive;
+    if (!showStatusIcons) {
+      setStatusIconStackVisible(this._powerupStatusIcons, false);
     }
     if (this.opSuperBarBack) {
       this.opSuperBarBack.setVisible(
@@ -657,16 +726,49 @@ export default class OpPlayer {
     const isTeammate =
       this.team === "teammate" || this.team === "ally" || this.team === true;
     drawHealthBar(this.opHealthBar, {
-      x: healthBarX, y, width: this.opHealthBarWidth,
-      health: this.opCurrentHealth, maxHealth: this.opMaxHealth,
+      x: healthBarX,
+      y,
+      width: this.opHealthBarWidth,
+      health: this.opCurrentHealth,
+      maxHealth: this.opMaxHealth,
       color: isTeammate ? 0x99ab2c : 0xbb5c39,
+      guarded: !!this.opponent?._ducking,
     });
     this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
 
-    this.opHealthText.setPosition(
-      hudX - this.opHealthText.width / 2,
-      y - 8,
-    );
+    const showDuckShield =
+      !dead &&
+      !!this.opponent?._ducking &&
+      this.opHealthBar.visible !== false &&
+      !this._powerupInvisible &&
+      !this._deathPresentationActive &&
+      !this._corpseRemoved;
+    const shieldX = healthBarX + this.opHealthBarWidth + 1;
+    const powerupX = healthBarX - 1;
+    const shieldY = y + 4.5;
+    this.opDuckShieldGlow
+      ?.setPosition(shieldX, shieldY)
+      .setVisible(showDuckShield);
+    this.opDuckShieldIcon
+      ?.setPosition(shieldX, shieldY)
+      .setVisible(showDuckShield);
+    syncStatusIconStack({
+      scene: this.scene,
+      icons: this._powerupStatusIcons,
+      effects: this.opponent?._powerupEffects,
+      recentEffects: this.opponent?._recentPowerupEffects,
+      x: powerupX,
+      y: shieldY,
+      visible:
+        !dead &&
+        this.opHealthBar.visible !== false &&
+        !this._powerupInvisible &&
+        !this._deathPresentationActive &&
+        !this._corpseRemoved,
+      startIndex: 0,
+    });
+
+    this.opHealthText.setPosition(hudX - this.opHealthText.width / 2, y - 8);
     this.opHealthText.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
 
     this.drawSuperBar(healthBarX, y + 11);
@@ -676,7 +778,10 @@ export default class OpPlayer {
     if (!this.opSuperBar || !this.opSuperBarBack) return;
     if (this._worldUiHidden) return;
     drawSuperChargeBar(this.opSuperBar, this.opSuperBarBack, {
-      x, y, charge: this.opSuperCharge, maxCharge: this.opMaxSuperCharge,
+      x,
+      y,
+      charge: this.opSuperCharge,
+      maxCharge: this.opMaxSuperCharge,
       player: this.opponent,
     });
   }
@@ -694,6 +799,10 @@ export default class OpPlayer {
     try {
       this.opHealthBar?.setVisible(false);
       this.opHealthBar?.clear?.();
+    } catch (_) {}
+    try {
+      this.opDuckShieldIcon?.setVisible(false);
+      this.opDuckShieldGlow?.setVisible(false);
     } catch (_) {}
     try {
       this.opSuperBarBack?.setVisible(false);
@@ -843,6 +952,10 @@ export default class OpPlayer {
       this.movementTween.remove();
       this.movementTween = null;
     }
+    if (this._duckShieldGlowTween) {
+      this._duckShieldGlowTween.remove();
+      this._duckShieldGlowTween = null;
+    }
     if (this.effects) {
       this.scene.events.off("update", this._onSceneUpdate, this);
       this.effects = null;
@@ -859,6 +972,13 @@ export default class OpPlayer {
     if (this.opHealthBar) {
       this.opHealthBar.destroy();
     }
+    if (this.opDuckShieldIcon) {
+      this.opDuckShieldIcon.destroy();
+    }
+    if (this.opDuckShieldGlow) {
+      this.opDuckShieldGlow.destroy();
+    }
+    destroyStatusIconStack(this._powerupStatusIcons);
     if (this.opSuperBar) {
       this.opSuperBar.destroy();
     }

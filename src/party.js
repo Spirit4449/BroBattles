@@ -9,6 +9,7 @@ import {
   getLobbyPlatformAsset,
 } from "./maps/manifest";
 import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
+import { getAllCharacters } from "./lib/characterStats.js";
 import {
   getAllGameModes,
   getCompatibleMapsForSelection,
@@ -73,6 +74,7 @@ let __postBattleLobbyReturn = consumeBattleLobbyReturnFlag();
 let __lobbyOffsetResizeBound = false;
 let __mapPopupUi = null;
 let __modePopupUi = null;
+let __botPopupUi = null;
 let __partyContext = {
   partyId: null,
   ownerName: null,
@@ -81,6 +83,7 @@ let __partyContext = {
   publicName: "",
   capacity: null,
   members: [],
+  botSlots: [],
 };
 let __joinRequestProfilePopup = null;
 let __joinRequestRequesterState = {
@@ -1472,13 +1475,21 @@ function getActivePartyId() {
 }
 
 export function createParty() {
+  const selection = normalizeGameSelection(getCurrentSelection());
   fetch("/create-party", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
+    body: JSON.stringify({ selection }),
   })
-    .then((response) => response.json())
+    .then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to create party");
+      }
+      return data;
+    })
     .then((data) => {
       window.location.href = `/party/${data.partyId}`;
     })
@@ -1541,6 +1552,7 @@ export function stopHeartbeat() {
 export function socketInit(options = {}) {
   __joinRequestProfilePopup = options?.profilePopup || null;
   wireJoinRequestOverlayControls();
+  wirePartyBotSlotControls();
   let byeSent = false;
 
   // Safety: if code runs before index.js triggered connection (e.g., alternate entry), ensure connect once.
@@ -1630,6 +1642,7 @@ export function socketInit(options = {}) {
       __partyContext.publicName = "";
       __partyContext.capacity = null;
       __partyContext.members = [];
+      __partyContext.botSlots = [];
     }
   });
 
@@ -1729,6 +1742,12 @@ export function socketInit(options = {}) {
     } catch (e) {
       console.warn("[socket] party:members render failed", e);
     }
+  });
+
+  socket.on("party:bot-slots", (data) => {
+    if (String(data?.partyId) !== String(getActivePartyId())) return;
+    __partyContext.botSlots = Array.isArray(data?.botSlots) ? data.botSlots : [];
+    renderPartyMembers({ ...__partyContext, botSlots: __partyContext.botSlots });
   });
 
   socket.on("party:join-request", (request) => {
@@ -1946,23 +1965,39 @@ export function socketInit(options = {}) {
   });
 
   // Party-wide: everyone ready -> show matchmaking overlay
-  socket.on("party:matchmaking:start", ({ partyId, selection }) => {
+  socket.on("party:matchmaking:start", ({ partyId, selection, botSlots }) => {
     if (__postBattleLobbyReturn) return;
     const currentPartyId = getActivePartyId();
     if (currentPartyId && String(partyId) !== String(currentPartyId)) return;
     const normalized = normalizeGameSelection(
       selection || getCurrentSelection(),
     );
-    activeQueueContext = { selection: normalized };
-    mmOverlayPlayers = [];
-    mmOverlayPlayersSig = "";
+    if (Array.isArray(botSlots)) {
+      __partyContext.botSlots = botSlots;
+    }
+    const currentMember = (__partyContext.members || []).find(
+      (member) =>
+        getLobbyMemberKey(member) ===
+        getLobbyMemberKey(getCurrentLobbyUserName()),
+    );
+    activeQueueContext = {
+      selection: normalized,
+      yourTeam: currentMember?.team || null,
+    };
     mmOverlayTotal = getTotalPlayersForSelection(normalized);
+    mmOverlayPlayers = collectCurrentPartyMembers().slice(0, mmOverlayTotal);
+    mmOverlayPlayersSig = JSON.stringify(
+      mmOverlayPlayers.map(
+        (player) =>
+          `${player?.botSlotKey || player?.name || ""}:${player?.char_class || ""}`,
+      ),
+    );
     showMatchmakingOverlay();
     updateMMOverlay({
-      found: 0,
+      found: mmOverlayPlayers.length,
       total: mmOverlayTotal,
       selection: normalized,
-      players: [],
+      players: mmOverlayPlayers,
     });
   });
 
@@ -2200,16 +2235,40 @@ export function socketInit(options = {}) {
       Number(data?.total) || getTotalPlayersForSelection(incomingSelection);
 
     const incomingPlayers = Array.isArray(data?.players) ? data.players : [];
-    const fallbackLocalPlayers = collectCurrentPartyMembers().slice(
+    const localPlayers = collectCurrentPartyMembers();
+    const localHumansByName = new Map(
+      localPlayers
+        .filter((player) => !player?.isConfiguredBot)
+        .map((player) => [getLobbyMemberKey(player?.name), player]),
+    );
+    const hydratedIncomingPlayers = incomingPlayers.map((player) => ({
+      ...(localHumansByName.get(getLobbyMemberKey(player?.name)) || {}),
+      ...player,
+    }));
+    const configuredBotPreviews = localPlayers.filter(
+      (player) => player?.isConfiguredBot,
+    );
+    const visiblePlayerTarget = Math.min(foundCount, totalCount);
+    const missingPreviewCount = Math.max(
+      0,
+      visiblePlayerTarget - hydratedIncomingPlayers.length,
+    );
+    const fallbackLocalPlayers = localPlayers.slice(
       0,
       Math.min(foundCount, totalCount),
     );
     const nextPlayers = incomingPlayers.length
-      ? incomingPlayers
+      ? [
+          ...hydratedIncomingPlayers,
+          ...configuredBotPreviews.slice(0, missingPreviewCount),
+        ]
       : fallbackLocalPlayers;
     if (Array.isArray(nextPlayers)) {
       const nextSig = JSON.stringify(
-        nextPlayers.map((p) => `${p?.name || ""}:${p?.char_class || ""}`),
+        nextPlayers.map(
+          (p) =>
+            `${p?.botSlotKey || p?.name || ""}:${p?.char_class || ""}`,
+        ),
       );
       if (nextSig !== mmOverlayPlayersSig) {
         mmOverlayPlayersSig = nextSig;
@@ -2368,6 +2427,13 @@ function commitPartyRosterLayout({
     applyMemberToSlot(desired.member, slot.id, desired.isYourTeam);
     if (shouldSpawn) playLobbySpawnAnimation(slot, "enter");
   });
+
+  for (const bot of __partyContext.botSlots || []) {
+    const isYourTeam = bot.team === currentUserTeam;
+    const slotId = `${isYourTeam ? "your" : "op"}-slot-${Number(bot.index) + 1}`;
+    const slot = document.getElementById(slotId);
+    if (slot && !slot.dataset.playerName) applyBotToSlot(bot, slot, isYourTeam);
+  }
 }
 
 export function renderPartyMembers(data) {
@@ -2384,6 +2450,9 @@ export function renderPartyMembers(data) {
     publicName: String(data?.publicName ?? __partyContext.publicName).trim(),
     capacity,
     members,
+    botSlots: Array.isArray(data?.botSlots)
+      ? data.botSlots
+      : __partyContext.botSlots || [],
   };
 
   syncModePickerUi();
@@ -2528,7 +2597,7 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
       buildCharacterSkinBodyUrl(cls, "");
     spriteEl.src = skinAsset;
     spriteEl.alt = cls;
-    spriteEl.classList.remove("random");
+    spriteEl.classList.remove("random", "bot-shuffle-icon");
     if (
       previousPlayerKey === getLobbyMemberKey(member) &&
       previousCharacter &&
@@ -2593,6 +2662,39 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
   slot.style.pointerEvents = "auto";
   // Only current user’s slot should look clickable
   slot.style.cursor = isCurrentUser ? "pointer" : "default";
+}
+
+function applyBotToSlot(bot, slot, isYourTeam) {
+  const character = String(bot?.character || "shuffle").toLowerCase();
+  const isShuffle = character === "shuffle";
+  const usernameEl = slot.querySelector(".username");
+  const spriteEl = slot.querySelector(".character-sprite");
+  const statusEl = slot.querySelector(".status");
+  if (!usernameEl || !spriteEl || !statusEl) return;
+
+  usernameEl.textContent = isShuffle
+    ? "Bot"
+    : `Bot · ${character[0].toUpperCase()}${character.slice(1)}`;
+  usernameEl.className = `username${isYourTeam ? "" : " op-player"}`;
+  spriteEl.src = isShuffle
+    ? "/assets/shuffle1.webp"
+    : buildCharacterSkinBodyUrl(character, "");
+  spriteEl.alt = isShuffle ? "Shuffle bot" : `${character} bot`;
+  spriteEl.classList.remove("random");
+  spriteEl.classList.toggle("bot-shuffle-icon", isShuffle);
+  statusEl.textContent =
+    __partyContext.ownerName === getCurrentLobbyUserName() ? "Change Bot" : "Bot";
+  statusEl.className = "status bot-status";
+  statusEl.style.display = "";
+  statusEl.style.pointerEvents = "none";
+  slot.classList.remove("empty", "player-display", "op-display");
+  slot.classList.add("bot-display", isYourTeam ? "player-display" : "op-display");
+  slot.dataset.botCharacter = character;
+  slot.dataset.character = isShuffle ? "Random" : character;
+  slot.dataset.playerName = "";
+  slot.dataset.isCurrentUser = "false";
+  slot.style.cursor =
+    __partyContext.ownerName === getCurrentLobbyUserName() ? "pointer" : "default";
 }
 
 function statusToClass(status) {
@@ -2919,6 +3021,7 @@ function resetSlotToRandom(slot) {
   sprite.src = "/assets/random.webp";
   sprite.alt = "Random";
   sprite.classList.add("random");
+  sprite.classList.remove("bot-shuffle-icon");
   statusEl.className = "status invite";
   statusEl.textContent = "Invite";
   statusEl.style.display = checkIfInParty() ? "" : "none";
@@ -2933,6 +3036,7 @@ function resetSlotToRandom(slot) {
     "lobby-ready-burst",
     "lobby-unready-burst",
     "is-selecting-character",
+    "bot-display",
   );
   slot.classList.add("empty");
   slot.dataset.character = "Random";
@@ -2940,6 +3044,7 @@ function resetSlotToRandom(slot) {
   slot.dataset.playerName = "";
   slot.dataset.playerTeam = "";
   slot.dataset.isOwner = "false";
+  delete slot.dataset.botCharacter;
   setSlotLevelBadge(slot, null);
   // Hide switch-character if present
   const switchEl = slot.querySelector(".switch-character");
@@ -2960,6 +3065,117 @@ function resetSlotToRandom(slot) {
       }, 1000);
     }
   });
+}
+
+function getBotSlotTarget(slot) {
+  const current = (__partyContext.members || []).find(
+    (member) => getLobbyMemberKey(member) === getLobbyMemberKey(getCurrentLobbyUserName()),
+  );
+  if (!current?.team) return null;
+  const match = String(slot?.id || "").match(/^(your|op)-slot-(\d+)$/);
+  if (!match) return null;
+  const team = match[1] === "your"
+    ? current.team
+    : current.team === "team1" ? "team2" : "team1";
+  return { team, index: Number(match[2]) - 1 };
+}
+
+function ensureBotPicker() {
+  if (__botPopupUi) return __botPopupUi;
+
+  const popupShell = getSharedSelectionPopupShell();
+  const closePopup = () => popupShell.hide();
+  const content = document.createElement("div");
+  content.id = "party-bot-picker";
+  content.className = "selection-popup-scroll party-bot-picker-scroll";
+
+  const description = document.createElement("p");
+  description.className = "party-bot-picker-description";
+  description.textContent = "Leave the slot random, or add a bot fighter.";
+
+  const grid = document.createElement("div");
+  grid.className = "party-bot-picker-grid";
+  content.append(description, grid);
+
+  __botPopupUi = { popupShell, closePopup, content, grid };
+  return __botPopupUi;
+}
+
+function openBotPicker(slot) {
+  const target = getBotSlotTarget(slot);
+  if (!target) return;
+  const { popupShell, closePopup, content, grid } = ensureBotPicker();
+  const selectedCharacter = String(slot.dataset.botCharacter || "random");
+  const choices = [
+    { id: "random", label: "Random", image: "/assets/random.webp" },
+    { id: "shuffle", label: "Bot", image: "/assets/shuffle1.webp" },
+    ...getAllCharacters().map((id) => ({
+      id,
+      label: `Bot · ${id[0].toUpperCase()}${id.slice(1)}`,
+      image: buildCharacterSkinBodyUrl(id, ""),
+    })),
+  ];
+  grid.innerHTML = "";
+  for (const choice of choices) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `party-bot-choice map-select-card pixel-menu-button${
+      selectedCharacter === choice.id ? " active" : ""
+    }`;
+    button.dataset.botCharacter = choice.id;
+
+    const image = document.createElement("img");
+    image.src = choice.image;
+    image.alt = "";
+    if (choice.id === "shuffle") image.classList.add("bot-shuffle-icon");
+
+    const label = document.createElement("span");
+    label.className = "map-select-name";
+    label.textContent = choice.label;
+    button.append(image, label);
+    button.addEventListener("click", () => {
+      button.disabled = true;
+      socket.emit(
+        "party:bot-slot:update",
+        { partyId: getActivePartyId(), ...target, character: choice.id },
+        (result) => {
+          button.disabled = false;
+          if (!result?.ok) {
+            sonner("Could not update bot", result?.error || "Please try again.", "error");
+            return;
+          }
+          closePopup();
+        },
+      );
+    });
+    grid.appendChild(button);
+  }
+
+  popupShell
+    .mount({
+      titleText: "Configure Slot",
+      onClose: closePopup,
+      zIndex: 12020,
+      contentNode: content,
+      backgroundNode: null,
+    })
+    .show();
+}
+
+function wirePartyBotSlotControls() {
+  const lobby = document.getElementById("lobby-area");
+  if (!lobby || lobby.dataset.botSlotsBound === "1") return;
+  lobby.dataset.botSlotsBound = "1";
+  lobby.addEventListener("click", (event) => {
+    const slot = event.target?.closest?.(".character-slot");
+    if (!slot || !getActivePartyId() || slot.dataset.isCurrentUser === "true") return;
+    if (event.target?.closest?.(".status.invite")) return;
+    if (__partyContext.ownerName !== getCurrentLobbyUserName()) return;
+    if (slot.dataset.playerName) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    openBotPicker(slot);
+  }, true);
 }
 
 // Import setLobbyBackground function
@@ -3291,7 +3507,9 @@ function updateMMOverlay({ found, total, selection, players }) {
       visual.className = "mm-player-visual";
 
       if (p) {
-        const playerKey = `${String(p.name || "player").trim().toLowerCase()}:${i}`;
+        const playerKey = `${String(
+          p.botSlotKey || p.name || "player",
+        ).trim().toLowerCase()}:${i}`;
         item.dataset.playerKey = playerKey;
         if (!previousPlayerKeys.has(playerKey)) {
           item.classList.add("mm-player-arriving");
@@ -3305,11 +3523,15 @@ function updateMMOverlay({ found, total, selection, players }) {
 
         const img = document.createElement("img");
         const cls = p.char_class || "ninja";
-        img.src =
-          String(p.selected_skin_asset_url || "").trim() ||
-          buildCharacterSkinBodyUrl(cls, "");
-        img.alt = cls;
-        img.className = "mm-character";
+        const isShuffleBot = p.isConfiguredBot && cls === "shuffle";
+        img.src = isShuffleBot
+          ? "/assets/shuffle1.webp"
+          : String(p.selected_skin_asset_url || "").trim() ||
+            buildCharacterSkinBodyUrl(cls, "");
+        img.alt = isShuffleBot ? "Shuffle bot" : cls;
+        img.className = `mm-character${
+          isShuffleBot ? " bot-shuffle-icon mm-bot-shuffle-icon" : ""
+        }`;
         const name = document.createElement("div");
         name.className = "mm-name";
         name.textContent = p.name || "Player";
@@ -3369,21 +3591,60 @@ function syncReadyAvailability(selection = getCurrentSelection()) {
 }
 
 function collectCurrentPartyMembers() {
-  // Build a list from current DOM-rendered party roster if available
-  const cards = [];
-  const slots = document.querySelectorAll(".character-slot");
-  for (const slot of slots) {
-    const uname = slot.querySelector(".username")?.textContent || "";
-    const isRandom = uname.trim().toLowerCase().startsWith("random");
-    if (isRandom) continue;
-    const name = uname.replace(" (You)", "");
-    const cls =
-      slot.dataset.character && slot.dataset.character !== "Random"
-        ? slot.dataset.character
-        : null;
-    cards.push({ name, char_class: cls || "ninja" });
+  const contextMembers = Array.isArray(__partyContext.members)
+    ? __partyContext.members
+    : [];
+  const players = contextMembers.map((member) => ({
+    name: member?.name || "Player",
+    char_class: member?.char_class || "ninja",
+    selected_skin_id: member?.selected_skin_id || null,
+    selected_skin_asset_url: member?.selected_skin_asset_url || "",
+    team: member?.team || null,
+  }));
+
+  // Solo mode may not have party context, so retain the DOM fallback there.
+  if (!players.length) {
+    const slots = document.querySelectorAll(".character-slot");
+    for (const slot of slots) {
+      if (slot.dataset.botCharacter) continue;
+      const uname = slot.querySelector(".username")?.textContent || "";
+      if (uname.trim().toLowerCase().startsWith("random")) continue;
+      const name = uname.replace(" (You)", "");
+      const cls =
+        slot.dataset.character && slot.dataset.character !== "Random"
+          ? slot.dataset.character
+          : "ninja";
+      players.push({ name, char_class: cls });
+    }
   }
-  return cards;
+
+  const botPreviews = (__partyContext.botSlots || []).map((slot) => {
+    const character = String(slot?.character || "shuffle").toLowerCase();
+    const isShuffle = character === "shuffle";
+    return {
+      name: isShuffle
+        ? "Bot"
+        : `Bot · ${character[0].toUpperCase()}${character.slice(1)}`,
+      char_class: character,
+      selected_skin_asset_url: isShuffle
+        ? "/assets/shuffle1.webp"
+        : buildCharacterSkinBodyUrl(character, ""),
+      team: slot?.team || null,
+      isConfiguredBot: true,
+      botSlotKey: `bot:${slot?.team || "team"}:${Number(slot?.index) || 0}`,
+    };
+  });
+
+  const currentMember = contextMembers.find(
+    (member) =>
+      getLobbyMemberKey(member) ===
+      getLobbyMemberKey(getCurrentLobbyUserName()),
+  );
+  const yourTeam = currentMember?.team || null;
+  return [...players, ...botPreviews].sort((a, b) => {
+    if (!yourTeam) return 0;
+    return Number(b?.team === yourTeam) - Number(a?.team === yourTeam);
+  });
 }
 
 function wireCancelButton() {

@@ -1,5 +1,6 @@
 const tuning = require("../../../shared/movementPhysics.json");
 const { characterBody } = require("../../../shared/duelGeometry");
+const { DUCK_SPEED_RATIO } = require("../../../shared/ducking");
 
 function bounds(player) {
   const body = characterBody(player.char_class, player.flip);
@@ -41,7 +42,8 @@ function stepBody(p, intent, geometry, dtMs, now, modifiers = {}) {
   }
   const impulseLocked = now < (p._wallKickUntil || 0) || now < (p._knockbackUntil || 0);
   if (!impulseLocked) {
-    const maxSpeed = tuning.maxSpeed * (speedMult <= 0 ? 0 : Math.max(tuning.minSpeedMult, speedMult));
+    const duckSpeed = p.ducking && p.grounded ? DUCK_SPEED_RATIO : 1;
+    const maxSpeed = tuning.maxSpeed * duckSpeed * (speedMult <= 0 ? 0 : Math.max(tuning.minSpeedMult, speedMult));
     if (speedMult <= 0) p.vx = 0;
     else if (direction && speedMult > 0) p.vx = approach(p.vx, direction * maxSpeed, (p.grounded ? tuning.accel : tuning.airAccel) * dt);
     else p.vx = approach(p.vx, 0, (p.grounded ? tuning.dragGround : tuning.dragAir) * dt);

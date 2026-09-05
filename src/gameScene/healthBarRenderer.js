@@ -7,7 +7,7 @@ export function resetHealthBarAnimation(graphics) {
   if (graphics) barStates.delete(graphics);
 }
 
-export function drawHealthBar(graphics, { x, y, width, health, maxHealth, color }) {
+export function drawHealthBar(graphics, { x, y, width, health, maxHealth, color, guarded = false }) {
   const fraction = maxHealth > 0
     ? Math.max(0, Math.min(1, health / maxHealth))
     : 0;
@@ -35,7 +35,7 @@ export function drawHealthBar(graphics, { x, y, width, health, maxHealth, color 
   graphics.fillRect(x, y, width, 9);
   graphics.lineStyle(3, 0x000000, 1);
   graphics.strokeRoundedRect(x, y, width, 9, 3);
-  graphics.fillStyle(color, 1);
+  graphics.fillStyle(guarded ? 0xd58a35 : color, 1);
   if (fraction > 0) graphics.fillRoundedRect(x, y, width * fraction, 9, 3);
 
   for (const chunk of state.chunks) {

@@ -2,9 +2,8 @@ const { updateOrDeleteParty } = require("../helpers/party");
 const { PARTY_STATUS } = require("../helpers/partyRules");
 const { capacityFromSelection } = require("../helpers/utils");
 const {
-  DEFAULT_MODE_ID,
-  DEFAULT_VARIANT_ID,
   DEFAULT_MAP_ID,
+  normalizeSelection,
   normalizeSelectionFromRow,
   selectionToLegacyMode,
 } = require("../helpers/gameSelectionCatalog");
@@ -265,7 +264,14 @@ function createPartyStateService({ db, io }) {
     }
   }
 
-  async function createPartyForUser(username) {
+  async function createPartyForUser(username, selection = null) {
+    const initialSelection = normalizeSelection(selection || {});
+    const initialLegacyMode = selectionToLegacyMode(
+      initialSelection.modeId,
+      initialSelection.modeVariantId,
+    );
+    const initialMapId = initialSelection.mapId ?? DEFAULT_MAP_ID;
+
     return db.withTransaction(async (conn, q) => {
       await q("DELETE FROM party_members WHERE name = ?", [username]);
       let insertParty;
@@ -274,10 +280,10 @@ function createPartyStateService({ db, io }) {
           "INSERT INTO parties (status, mode, map, mode_id, mode_variant_id, is_public, public_name) VALUES (?, ?, ?, ?, ?, ?, ?)",
           [
             PARTY_STATUS.IDLE,
-            selectionToLegacyMode(DEFAULT_MODE_ID, DEFAULT_VARIANT_ID),
-            DEFAULT_MAP_ID,
-            DEFAULT_MODE_ID,
-            DEFAULT_VARIANT_ID,
+            initialLegacyMode,
+            initialMapId,
+            initialSelection.modeId,
+            initialSelection.modeVariantId,
             0,
             null,
           ],
@@ -290,10 +296,10 @@ function createPartyStateService({ db, io }) {
               "INSERT INTO parties (status, mode, map, mode_id, mode_variant_id) VALUES (?, ?, ?, ?, ?)",
               [
                 PARTY_STATUS.IDLE,
-                selectionToLegacyMode(DEFAULT_MODE_ID, DEFAULT_VARIANT_ID),
-                DEFAULT_MAP_ID,
-                DEFAULT_MODE_ID,
-                DEFAULT_VARIANT_ID,
+                initialLegacyMode,
+                initialMapId,
+                initialSelection.modeId,
+                initialSelection.modeVariantId,
               ],
             );
           } catch (nestedError) {
@@ -302,8 +308,8 @@ function createPartyStateService({ db, io }) {
               "INSERT INTO parties (status, mode, map) VALUES (?, ?, ?)",
               [
                 PARTY_STATUS.IDLE,
-                selectionToLegacyMode(DEFAULT_MODE_ID, DEFAULT_VARIANT_ID),
-                DEFAULT_MAP_ID,
+                initialLegacyMode,
+                initialMapId,
               ],
             );
           }
@@ -312,8 +318,8 @@ function createPartyStateService({ db, io }) {
             "INSERT INTO parties (status, mode, map) VALUES (?, ?, ?)",
             [
               PARTY_STATUS.IDLE,
-              selectionToLegacyMode(DEFAULT_MODE_ID, DEFAULT_VARIANT_ID),
-              DEFAULT_MAP_ID,
+              initialLegacyMode,
+              initialMapId,
             ],
           );
         }

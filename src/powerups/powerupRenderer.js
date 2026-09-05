@@ -594,6 +594,12 @@ export function createPowerupRenderer({
     while (powerupCollectQueue.length > 0) {
       const evt = powerupCollectQueue.shift();
       if (!evt) continue;
+      const collector = getSpriteByUsername(evt.username);
+      if (collector) {
+        collector._recentPowerupEffects ||= Object.create(null);
+        // Instant pickups (notably shockwave) still get a readable HUD beat.
+        collector._recentPowerupEffects[evt.type] = Date.now() + 900;
+      }
       const id = String(evt.id);
       const visual = scene._powerupVisuals[id];
       try {
@@ -1348,6 +1354,15 @@ export function createPowerupRenderer({
     };
 
     const localPlayer = getLocalPlayer();
+    if (localPlayer) localPlayer._powerupEffects = me;
+    for (const wrapper of [
+      ...Object.values(getOpponentPlayers() || {}),
+      ...Object.values(getTeamPlayers() || {}),
+    ]) {
+      if (wrapper?.opponent) {
+        wrapper.opponent._powerupEffects = latestPlayerEffects[wrapper.username] || {};
+      }
+    }
     if (!localInvisible) {
       drawBubblyAura(g, username, localPlayer, latestPlayerEffects[username] || {}, nowSec);
       drawAura(localPlayer, latestPlayerEffects[username] || {});

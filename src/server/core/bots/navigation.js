@@ -1,7 +1,10 @@
 const { characterBody } = require("../../../shared/duelGeometry");
 const { bounds, stepBody } = require("./physics");
+const movement = require("../../../shared/movementPhysics.json");
 const graphs = new Map();
 const DT = 1000 / 60;
+const EDGE_STANCE_INSET = 14;
+const EDGE_BRAKE_MIN_SPEED = 35;
 
 function standOn(surface, character, x) {
   const b = characterBody(character);
@@ -77,7 +80,18 @@ function findRoute(graph, from, to, poisonY = Infinity, options = {}) {
       if (options.blocked?.has(`${item.id}:${edge.to}`)) continue;
       const surface = graph.surfaces.find((s) => s.id === edge.to);
       if (!surface || surface.top >= poisonY - 25) continue;
-      if (Number.isFinite(poisonY) && edge.frames.some((f) => f.y + graph.body.offsetY + graph.body.halfHeight >= poisonY - 15)) continue;
+      if (Number.isFinite(poisonY)) {
+        const frameBottoms = edge.frames.map((f) => f.y + graph.body.offsetY + graph.body.halfHeight);
+        const startBottom = frameBottoms[0] ?? -Infinity;
+        const unsafeLine = poisonY - 15;
+        if (startBottom < unsafeLine) {
+          if (frameBottoms.some((bottom) => bottom >= unsafeLine)) continue;
+        } else if (frameBottoms.some((bottom) => bottom > startBottom + 20)) {
+          // A bot already caught by the rising poison may still take a route
+          // that immediately climbs out, but must not dive farther into it.
+          continue;
+        }
+      }
       const penalty = Math.max(0, Number(options.edgeCost?.(edge, item.id)) || 0);
       queue.push({ id: edge.to, route: [...item.route, edge], cost: item.cost + edge.duration + penalty });
     }
@@ -105,10 +119,57 @@ function previewManeuver(player, intent, geometry, modifiers, now, poisonY = Inf
 }
 
 function safeWalkDirection(player, direction, geometry) {
-  if (!player.grounded || !direction) return direction;
+  if (!player.grounded) return direction;
   const b = bounds(player);
-  const probeX = player.x + b.offsetX + direction * (b.halfWidth + Math.abs(player.vx || 0) * 0.12 + 12);
-  const supported = geometry.colliders.some((r) => r.collision.up && probeX >= r.left && probeX <= r.right && Math.abs(r.top - b.bottom) < 5);
-  return supported ? direction : 0;
+  const normal = characterBody(player.char_class, false);
+  const flipped = characterBody(player.char_class, true);
+  // Facing changes can shift asymmetric character hitboxes. Use the widest
+  // possible footprint so turning around at a ledge cannot remove support.
+  const envelopeLeft = player.x + Math.min(
+    normal.offsetX - normal.halfWidth,
+    flipped.offsetX - flipped.halfWidth,
+  );
+  const envelopeRight = player.x + Math.max(
+    normal.offsetX + normal.halfWidth,
+    flipped.offsetX + flipped.halfWidth,
+  );
+  const supports = geometry.colliders.filter(
+    (r) =>
+      r.collision.up &&
+      envelopeRight > r.left &&
+      envelopeLeft < r.right &&
+      Math.abs(r.top - b.bottom) < 5,
+  );
+  const support = supports.find((r) => r.id === player.platformId) ||
+    supports.sort(
+      (a, c) =>
+        Math.min(envelopeRight, c.right) - Math.max(envelopeLeft, c.left) -
+        (Math.min(envelopeRight, a.right) - Math.max(envelopeLeft, a.left)),
+    )[0];
+  if (!support) return direction;
+
+  if (envelopeRight > support.right - EDGE_STANCE_INSET) return -1;
+  if (envelopeLeft < support.left + EDGE_STANCE_INSET) return 1;
+
+  const velocity = Number(player.vx) || 0;
+  const momentumDirection = Math.sign(velocity);
+  if (momentumDirection && Math.abs(velocity) >= EDGE_BRAKE_MIN_SPEED) {
+    const stoppingDistance =
+      velocity * velocity / (2 * Math.max(1, Number(movement.dragGround) || 1));
+    const momentumProbe = momentumDirection > 0
+      ? envelopeRight + stoppingDistance + EDGE_STANCE_INSET
+      : envelopeLeft - stoppingDistance - EDGE_STANCE_INSET;
+    const momentumSupported =
+      momentumProbe >= support.left && momentumProbe <= support.right;
+    if (!momentumSupported && Math.sign(direction) !== -momentumDirection) {
+      return -momentumDirection;
+    }
+  }
+
+  if (!direction) return 0;
+  const probeX = direction > 0
+    ? envelopeRight + Math.abs(player.vx || 0) * 0.12 + 12
+    : envelopeLeft - Math.abs(player.vx || 0) * 0.12 - 12;
+  return probeX >= support.left && probeX <= support.right ? direction : -direction;
 }
 module.exports = { buildGraph, findRoute, nearestSurface, standOn, safeWalkDirection, previewManeuver };

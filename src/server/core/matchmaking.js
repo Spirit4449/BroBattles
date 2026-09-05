@@ -61,6 +61,11 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
     ensureLoop,
     maybeStopLoop,
   });
+  const withBotSlots = (picks = []) =>
+    picks.map((pick) => ({
+      ...pick,
+      botSlots: queueTicketManager.getBotSlotsForTicket(pick.ticket),
+    }));
 
   let cachedRealUsernames = [];
   let lastRealUsernameFetch = 0;
@@ -126,6 +131,7 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
         const teamSize = teamSizeForSelection(selection);
         let picks;
         while ((picks = pickCompositeGroup(items, teamSize))) {
+          picks = withBotSlots(picks);
           await assembly.assembleAndReady(modeId, modeVariantId, mapId, picks, {
             teamSize,
           });
@@ -133,7 +139,7 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
         }
         const config = getBotConfig(runtimeConfig);
         const claimedPreview = new Set();
-        if (modeId === "duels" && config.enabled)
+        if (config.enabled)
           for (const anchor of [...items]) {
             if (
               claimedPreview.has(anchor.ticket_id) ||
@@ -150,6 +156,7 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
               { partial: true, anchorId: anchor.ticket_id },
             );
             if (!picks) continue;
+            picks = withBotSlots(picks);
             const humans = await playersForPicks(db.runQuery.bind(db), picks);
             const signature = humans
               .map(
@@ -239,8 +246,6 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
       modeVariantId: anchor.mode_variant_id,
       mapId: anchor.map,
     });
-    if (selection.modeId !== "duels")
-      throw new Error("Playing bots currently support Duels only.");
     const teamSize = teamSizeForSelection(selection);
     const items = tickets.filter(
       (t) =>
@@ -252,12 +257,13 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
       partial: true,
       anchorId: anchor.ticket_id,
     });
+    const configuredPicks = withBotSlots(picks || []);
     const realNames = await getRealUsernames();
     const result = await assembly.assembleAndReady(
       selection.modeId,
       selection.modeVariantId,
       selection.mapId,
-      picks,
+      configuredPicks,
       {
         teamSize,
         fillBots: true,

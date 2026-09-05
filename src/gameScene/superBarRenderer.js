@@ -32,8 +32,11 @@ export function drawSuperChargeBar(graphics, background, {
   state.fraction = fraction;
   state.launch = launch;
 
-  graphics.clear();
-  background.clear();
+  // Coordinates are drawn in world space. Keep both Graphics objects at the
+  // same neutral transform so state changes (including ducking) cannot leave
+  // either layer with an additional positional or scale offset.
+  graphics.setPosition(0, 0).setScale(1).setRotation(0).clear();
+  background.setPosition(0, 0).setScale(1).setRotation(0).clear();
   background.fillStyle(0x222222, 0.65);
   background.fillRect(x, y, width, height);
 

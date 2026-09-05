@@ -9,7 +9,9 @@ const { updateSuperPlan, shouldUseSuper } = require('./supers');
 const effects = require('../gameRoom/effects/effectManager');
 const { isMovementSuppressed } = require('../gameRoom/abilityRuntimeManager');
 const { updateTeamwork } = require('./teamwork');
+const { resolveBotObjective } = require('./objectives');
 const movement = require('../../../shared/movementPhysics.json');
+const { DEATH_DROP_PICKUP_RADIUS } = require('../gameRoomConfig');
 
 class BotController {
   constructor(room, player) {
@@ -30,6 +32,10 @@ class BotController {
     this.nextOpportunity = 0;
     this.nextDecisionAt = 0;
     this.nextDodgeAt = 0;
+    this.duckUntil = 0;
+    this.duckDirection = 0;
+    this.nextStrategicDuckAt = 0;
+    this.nextFlavorDuckAt = 0;
     this.nextHopAt = 0;
     this.nextWallPlayAt = 0;
     this.kiteUntil = 0;
@@ -38,13 +44,14 @@ class BotController {
     this.pursuit = null;
     this.ineffectivePositions = [];
     this.intent = { direction: 0 };
+    this.objective = resolveBotObjective(room, player);
     this.graph = buildGraph(room.geometry, player.char_class);
     this.visited = new Map();
     this.blockedEdges = new Map();
     this.routePreferences = new Map();
     this.metrics = { thinks: 0, attacks: 0, specials: 0, recoveries: 0, falls: 0, unforcedFalls: 0,
-      idleMs: 0, stuckMs: 0, dodges: 0, jumps: 0, optionalHops: 0, wallPauses: 0, targetSwitches: 0, retreats: 0, pickupGoals: 0,
-      superSaves: 0, superThreatMs: 0 };
+      idleMs: 0, stuckMs: 0, dodges: 0, strategicDucks: 0, flavorDucks: 0, jumps: 0, optionalHops: 0, wallPauses: 0, targetSwitches: 0, retreats: 0, pickupGoals: 0,
+      lootGoals: 0, lootCollected: 0, obstacleRecoveries: 0, superSaves: 0, superThreatMs: 0 };
   }
 
   between(min, max) { return min + this.random() * (max - min); }
@@ -56,6 +63,7 @@ class BotController {
       this.openingUntil = now + this.openingDelay;
       this.nextIdleAt = now + this.between(7000, 12000);
       this.nextHopAt = now + this.between(4000, 8000);
+      this.nextFlavorDuckAt = now + this.between(6500, 13000);
     }
     const chargesBeforeReload = Number(p.ammoState?.charges) || 0;
     advanceAmmo(p, dt);
@@ -74,6 +82,9 @@ class BotController {
     const mods = effects.getModifiers(p, now);
     if (p._controlLockUntil > now || isMovementSuppressed(p, now)) {
       this.intent = { direction: 0 };
+      this.duckUntil = 0;
+      this.duckDirection = 0;
+      p.ducking = false;
       this.clearTravel();
       return;
     }
@@ -82,7 +93,14 @@ class BotController {
       const observed = this.observations.findLast((s) => s.at <= now - this.reactionMs);
       this.think(observed, mods, now);
     }
+    p.ducking = p.grounded && now < this.duckUntil;
+    if (p.ducking) {
+      this.intent = { direction: this.getDuckDirection(), jumpPressed: false };
+    }
     this.executeTravel(now, mods);
+    if (p.ducking) {
+      this.intent = { direction: this.getDuckDirection(), jumpPressed: false };
+    }
     if (p._botActionUntil <= now && this.intent.direction) p.flip = this.intent.direction < 0;
     const result = stepBody(p, this.intent, room.geometry, dt, now, mods);
     this.intent.jumpPressed = false;
@@ -96,7 +114,9 @@ class BotController {
       return;
     }
     if (p.grounded && this.traversal && (p.platformId === this.traversal.to || now > this.traversal.until)) this.traversal = null;
-    if (p._botActionUntil <= now) p.animation = p.grounded ? (Math.abs(p.vx) > 12 ? 'running' : 'idle') : (p.vy < 0 ? 'jumping' : 'falling');
+    p.ducking = p.grounded && now < this.duckUntil;
+    if (!p.ducking) this.duckDirection = 0;
+    if (p._botActionUntil <= now) p.animation = p.ducking ? 'ducking' : p.grounded ? (Math.abs(p.vx) > 12 ? 'running' : 'idle') : (p.vy < 0 ? 'jumping' : 'falling');
     for (const event of result.events) {
       if (event === 'jump' || event === 'wall-jump') { this.metrics.jumps++; this.lastJumpAt = now; }
       p.movementFxSeq = (p.movementFxSeq || 0) + 1;
@@ -131,8 +151,25 @@ class BotController {
   think(observed, mods, now) {
     this.metrics.thinks++;
     const p = this.player, enemies = observed?.enemies || [];
+    this.collectNearbyDeathDrops(now);
     const context = this.context(mods, now);
+    this.objective = resolveBotObjective(this.room, p, {
+      now,
+      observed,
+      navigation: context,
+    });
     this.poisonY = context.poisonY;
+    const suddenDeathStarted = this.room._suddenDeathActive && !this.suddenDeathActive;
+    this.suddenDeathActive = !!this.room._suddenDeathActive;
+    if (suddenDeathStarted) {
+      // Drop stale combat, opening, and idle commitments as soon as the duel's
+      // survival phase begins so navigation can seek high ground this think.
+      this.clearTravel();
+      this.decision = null;
+      this.openingUntil = 0;
+      this.idleUntil = 0;
+      this.nextDecisionAt = 0;
+    }
     if (p.grounded && this.occupiedSurface !== p.platformId) {
       this.occupiedSurface = p.platformId;
       this.surfaceEnteredAt = now;
@@ -185,14 +222,22 @@ class BotController {
       this.wantsProgress = false;
       return;
     }
-    if (threatened && p.grounded && !this.maneuver && this.tryDodge(observed, mods, now, context.poisonY)) {
-      this.tryCombat(enemies, target, observed, now);
-      return;
+    if (threatened && p.grounded && !this.maneuver) {
+      const dodge = this.findDodgeManeuver(observed, mods, now, context.poisonY);
+      if (this.tryDodge(observed, mods, now, context.poisonY, dodge)) {
+        this.tryCombat(enemies, target, observed, now);
+        return;
+      }
+      if (!dodge.best && this.tryStrategicDuck(threatened, now)) {
+        this.tryCombat(enemies, target, observed, now);
+        return;
+      }
     }
     const pickupGone = this.decision?.mode === 'pickup' && !this.room._powerups.has(this.decision.pickupId);
+    const lootGone = this.decision?.mode === 'loot' && !this.room._deathDrops.has(this.decision.dropId);
     const committedRoute = (this.approachEdge || this.traversal) && !targetChanged && !roleChanged && !recentlyHurt && !threatened &&
       !newRetreatHit && wasRetreating === this.retreating && bounds(p).bottom < context.poisonY - 100;
-    if (!this.decision || (now >= this.nextDecisionAt && !committedRoute) || pickupGone) {
+    if (!this.decision || (now >= this.nextDecisionAt && !committedRoute) || pickupGone || lootGone) {
       // Occasionally fight while backing away; keep the choice long enough to read clearly.
       if (target && !this.retreating && healthFraction(p) < healthFraction(target) + 0.12 &&
           now >= this.nextKiteAt && now >= this.kiteUntil && this.random() < 0.16 &&
@@ -207,10 +252,15 @@ class BotController {
         this.metrics.pickupGoals++;
         this.lastPickupGoalId = this.decision.pickupId;
       } else if (this.decision.mode !== 'pickup') this.lastPickupGoalId = null;
+      if (this.decision.mode === 'loot' && this.decision.dropId !== this.lastLootGoalId) {
+        this.metrics.lootGoals++;
+        this.lastLootGoalId = this.decision.dropId;
+      } else if (this.decision.mode !== 'loot') this.lastLootGoalId = null;
       if (previousGoal !== this.decision.goal?.surfaceId) this.approachEdge = null;
       if (this.decision.mode !== 'fight') this.pursuit = null;
     }
     const immediatePressure = threatened || recentlyHurt || enemies.some((e) => Math.hypot(e.x - p.x, e.y - p.y) < 200);
+    if (this.maybeFlavorDuck(immediatePressure, now)) return;
     if (p.grounded && !this.traversal && !this.maneuver && !immediatePressure &&
         ['patrol', 'search'].includes(this.decision.mode) && now >= this.nextIdleAt) {
       this.idleUntil = now + this.between(180, 420);
@@ -256,7 +306,12 @@ class BotController {
         return (aim.canHit && hasClearShot(this.room, p, e, aim)) ||
           (p.ammoState?.charges >= 2 && now >= (p._botPressureUntil || 0) && pressureAim(this.room, p, e, this.profile));
       })
-      .sort((a, b) => (a.health / a.maxHealth) - (b.health / b.maxHealth));
+      .sort((a, b) => {
+        const contestId = this.decision?.contestTargetId;
+        if (contestId && a.participantId === contestId) return -1;
+        if (contestId && b.participantId === contestId) return 1;
+        return (a.health / a.maxHealth) - (b.health / b.maxHealth);
+      });
     const age = Math.min(0.3, Math.max(0, now - (observed?.at || now)) / 1000) * this.profile.prediction;
     const predict = (enemy) => ({ ...enemy, x: enemy.x + (enemy.vx || 0) * age, y: enemy.y + (enemy.vy || 0) * age });
     // Supers have their own ranges and targeting rules. A missing basic shot
@@ -282,11 +337,29 @@ class BotController {
   attackHesitationMs() {
     const awareness = this.profile.tacticalAwareness ?? 0.5;
     const aggression = Math.max(0.8, this.aggression || 1);
+    if (this.player.char_class === 'huntress') {
+      // Her three-arrow spread is already forgiving, so give opponents a
+      // readable punish window instead of chaining every available charge.
+      return this.between(360, 620) + (1 - awareness) * 120;
+    }
     const min = 65 + (1 - awareness) * 55;
     const max = 190 + (1 - awareness) * 170;
     // A rare quick follow-up creates bursts without returning to frame-perfect spam.
     if (this.random() < 0.12 * aggression) return this.between(35, 90);
     return this.between(min, max) / Math.min(1.2, aggression);
+  }
+
+  collectNearbyDeathDrops(now) {
+    const p = this.player;
+    if (!this.room._deathDrops?.size || !p.isAlive) return;
+    const radius = Number(DEATH_DROP_PICKUP_RADIUS) || 110;
+    for (const drop of [...this.room._deathDrops.values()]) {
+      if (!drop || drop.claimedBy || Number(drop.expiresAt || 0) <= now) continue;
+      if (Math.hypot((Number(drop.x) || 0) - p.x, (Number(drop.y) || 0) - p.y) > radius) continue;
+      const before = this.room._deathDrops.size;
+      this.room._handleDeathDropPickup(p.participantId, { id: drop.id, x: p.x, y: p.y });
+      if (this.room._deathDrops.size < before) this.metrics.lootCollected++;
+    }
   }
 
   trackCombatProgress(target, now) {
@@ -347,8 +420,21 @@ class BotController {
     this.walkGoalX = null;
     if (this.traversal || this.maneuver) { this.wantsProgress = true; return; }
     if (!p.grounded) { this.airRecovery(context, now); this.wantsProgress = true; return; }
+    // Keep backing up to a sampled takeoff once an obstruction recovery has
+    // begun. The wall contact disappears as soon as the bot steps away, but
+    // abandoning the recovery then would send it straight back into the wall.
+    if (this.approachEdge?.obstacleRecovery && this.approachEdge.from === context.current?.id) {
+      this.wantsProgress = true;
+      return;
+    }
     this.intent = { direction: 0 };
     if (!goal) { this.wantsProgress = false; return; }
+    const intendedX = Number.isFinite(this.approachEdge?.takeoffX) ? this.approachEdge.takeoffX : goal.x;
+    const intendedDirection = Math.sign(intendedX - p.x);
+    const wallDirection = p.wallSide === 'right' ? 1 : p.wallSide === 'left' ? -1 : 0;
+    const obstacleDirection = this.groundObstacleDirection(intendedDirection);
+    if (intendedDirection && (intendedDirection === wallDirection || intendedDirection === obstacleDirection) &&
+        this.startObstacleRecovery(context, intendedDirection, now)) return;
     const route = context.routeTo(goal.surfaceId);
     this.wantsProgress = route === null || route.length > 0 || Math.abs(goal.x - p.x) > 28;
     if (route?.length) {
@@ -368,10 +454,72 @@ class BotController {
       }
       if (this.decision.mode === 'fight' && this.target && !(this.pursuit?.holdUntil > now)) {
         const aim = basicAim(p, this.target, this.profile, () => 0.5);
-        if ((!aim.canHit || !hasClearShot(this.room, p, this.target, aim)) &&
-            !pressureAim(this.room, p, this.target, this.profile)) this.wantsProgress = true;
+        const blockedFight = (!aim.canHit || !hasClearShot(this.room, p, this.target, aim)) &&
+          !pressureAim(this.room, p, this.target, this.profile);
+        if (blockedFight) {
+          this.wantsProgress = true;
+          const targetDirection = Math.sign(this.target.x - p.x);
+          if (targetDirection === this.groundObstacleDirection(targetDirection) &&
+              this.startObstacleRecovery(context, targetDirection, now)) return;
+        }
       }
     }
+  }
+
+  groundObstacleDirection(direction) {
+    const p = this.player;
+    if (!p.grounded || !direction) return 0;
+    const body = bounds(p);
+    const blocked = this.room.geometry.colliders.some((rect) => {
+      if (rect.id === p.platformId || body.bottom <= rect.top + 2 || body.top >= rect.bottom - 2) return false;
+      if (direction > 0 && rect.collision.left) {
+        const gap = rect.left - body.right;
+        return gap >= -1 && gap <= 30;
+      }
+      if (direction < 0 && rect.collision.right) {
+        const gap = body.left - rect.right;
+        return gap >= -1 && gap <= 30;
+      }
+      return false;
+    });
+    return blocked ? direction : 0;
+  }
+
+  startObstacleRecovery(context, direction, now) {
+    const p = this.player, current = context.current;
+    if (!p.grounded || !current || !direction) return false;
+    // Small steps and low walls can be cleared immediately. Only commit when
+    // the real movement solver proves that the hop lands safely.
+    const hop = previewManeuver(p, { direction, jumpPressed: true }, this.room.geometry,
+      effects.getModifiers(p, now), now, context.poisonY);
+    if (hop && (hop.end.platformId !== current.id || (hop.end.x - p.x) * direction > 35)) {
+      this.clearTravel();
+      this.maneuver = { ...hop, cursor: 0, obstacleRecovery: true };
+      this.wantsProgress = true;
+      this.metrics.obstacleRecoveries++;
+      return true;
+    }
+    const body = bounds(p);
+    const candidates = (context.graph.edges.get(current.id) || [])
+      .filter((edge) => Math.sign(edge.direction) === direction &&
+        !this.blockedEdges.has(`${current.id}:${edge.to}`) &&
+        Math.abs(edge.takeoffX - p.x) <= 420 &&
+        (p.x - edge.takeoffX) * direction >= -8)
+      .map((edge) => ({ edge, surface: context.graph.surfaces.find((surface) => surface.id === edge.to) }))
+      .filter(({ surface }) => surface && surface.top < context.poisonY - 25 &&
+        (direction > 0 ? surface.right > body.right + 8 : surface.left < body.left - 8))
+      .sort((a, b) =>
+        Math.abs(a.edge.takeoffX - p.x) + a.edge.duration * 0.08 + (a.edge.jump ? 20 : 0) -
+        (Math.abs(b.edge.takeoffX - p.x) + b.edge.duration * 0.08 + (b.edge.jump ? 20 : 0)));
+    const edge = candidates[0]?.edge;
+    if (!edge) return false;
+    this.approachEdge = { ...edge, from: current.id, startedAt: now,
+      approachBudget: 2200 + Math.abs(edge.takeoffX - p.x) / Math.max(80, movement.maxSpeed * 0.65) * 1000,
+      obstacleRecovery: true };
+    this.pursuit = null;
+    this.wantsProgress = true;
+    this.metrics.obstacleRecoveries++;
+    return true;
   }
 
   walkDirection(x, takeoff = false) {
@@ -436,13 +584,10 @@ class BotController {
     }
   }
 
-  tryDodge(observed, mods, now, poisonY) {
-    if (now < this.nextDodgeAt) return false;
-    this.nextDodgeAt = now + this.between(900, 1500);
-    if (this.random() > this.profile.dodgeChance) return false;
+  findDodgeManeuver(observed, mods, now, poisonY) {
     const p = this.player;
     const baseline = previewManeuver(p, { direction: this.intent.direction }, this.room.geometry, mods, now, poisonY);
-    if (!baseline) return false;
+    if (!baseline) return { best: null, baseDanger: Infinity, bestScore: Infinity };
     const baseDanger = maneuverDanger(baseline, observed, now, p.char_class);
     let best = null, bestScore = baseDanger - 20;
     for (const direction of [-1, 0, 1]) for (const jumpPressed of [false, true]) {
@@ -452,6 +597,14 @@ class BotController {
       const score = maneuverDanger(candidate, observed, now, p.char_class) + (jumpPressed ? 35 : 0);
       if (score < bestScore) { best = candidate; bestScore = score; }
     }
+    return { best, baseDanger, bestScore };
+  }
+
+  tryDodge(observed, mods, now, poisonY, evaluated = null) {
+    if (now < this.nextDodgeAt) return false;
+    this.nextDodgeAt = now + this.between(900, 1500);
+    if (this.random() > this.profile.dodgeChance) return false;
+    const { best } = evaluated || this.findDodgeManeuver(observed, mods, now, poisonY);
     if (!best) return false;
     this.clearTravel();
     this.maneuver = { ...best, cursor: 0 };
@@ -459,6 +612,64 @@ class BotController {
     this.metrics.dodges++;
     this.nextDecisionAt = 0;
     return true;
+  }
+
+  startDuck(now, duration, kind) {
+    const p = this.player;
+    if (!p.grounded || p._controlLockUntil > now || isMovementSuppressed(p, now)) return false;
+    const priorDirection = Math.sign(this.intent.direction || 0);
+    const longHold = this.random() < 0.28;
+    const resolvedDuration = longHold
+      ? Math.max(duration, this.between(750, 1300))
+      : duration;
+    const movingChance = kind === 'strategic' ? 0.34 : 0.6;
+    this.duckDirection = this.random() < movingChance
+      ? priorDirection || (p.flip ? -1 : 1)
+      : 0;
+    this.clearTravel();
+    this.intent = { direction: this.getDuckDirection(), jumpPressed: false };
+    this.duckUntil = now + resolvedDuration;
+    p.ducking = true;
+    this.idleUntil = Math.max(this.idleUntil || 0, this.duckUntil);
+    this.metrics[kind === 'strategic' ? 'strategicDucks' : 'flavorDucks']++;
+    return true;
+  }
+
+  getDuckDirection() {
+    if (!this.duckDirection) return 0;
+    const safeDirection = safeWalkDirection(
+      this.player,
+      this.duckDirection,
+      this.room.geometry,
+    );
+    if (safeDirection) this.duckDirection = safeDirection;
+    return safeDirection;
+  }
+
+  tryStrategicDuck(threat, now) {
+    if (now < this.nextStrategicDuckAt || Number(threat?.impactIn) > 0.42) return false;
+    const awareness = this.profile.tacticalAwareness ?? 0.5;
+    // Even strong bots occasionally mistime a block; this keeps ducking from
+    // becoming a guaranteed response to every unavoidable hit.
+    if (this.random() > 0.74 + awareness * 0.22) return false;
+    const duration = Math.max(300, Math.min(680, Number(threat.impactIn || 0) * 1000 + 260));
+    if (!this.startDuck(now, duration, 'strategic')) return false;
+    this.nextStrategicDuckAt = this.duckUntil + this.between(1400, 2600);
+    this.nextFlavorDuckAt = Math.max(this.nextFlavorDuckAt, this.duckUntil + this.between(4000, 7000));
+    return true;
+  }
+
+  maybeFlavorDuck(immediatePressure, now) {
+    if (now < this.nextFlavorDuckAt) return false;
+    const p = this.player;
+    if (immediatePressure || !p.grounded || this.traversal || this.maneuver || this.approachEdge ||
+        p._botActionUntil > now || Math.abs(p.vx || 0) > 18) {
+      this.nextFlavorDuckAt = now + this.between(1200, 2600);
+      return false;
+    }
+    this.nextFlavorDuckAt = now + this.between(7500, 15000);
+    if (this.random() > 0.46) return false;
+    return this.startDuck(now, this.between(220, 560), 'flavor');
   }
 
   checkProgress(now, dt, mods) {
@@ -509,6 +720,9 @@ class BotController {
     this.combatProgress = null;
     this.projectileSamples = new WeakMap();
     this.decision = null;
+    this.objective = null;
+    this.duckDirection = 0;
+    this.player.ducking = false;
   }
 }
 module.exports = { BotController };

@@ -2,6 +2,7 @@ const { getResolvedCharacterAttackConfig, getResolvedCharacterAimConfig, getReso
 const { getResolvedAttackDescriptor } = require("../gameRoom/attackDescriptorResolver");
 const attackRuntime = require("../gameRoom/attackRuntimeManager");
 const attackTypes = { ninja: "ninja-shuriken", thorg: "thorg-fall", draven: "draven-splash", wizard: "wizard-fireball", huntress: "huntress-arrow", gloop: "gloop-slimeball" };
+const BOT_ATTACK_TO_SUPER_COOLDOWN_MS = 400;
 
 function interceptTime(dx, dy, vx, vy, speed) {
   const a = vx * vx + vy * vy - speed * speed;
@@ -73,9 +74,19 @@ function clearTrajectory(room, shot, radius) {
 
 function hasClearShot(room, player, target, aim = basicAim(player, target, player.difficulty || {}, () => 0.5)) {
   if (player.char_class === 'huntress') return basicAim(player, target, player.difficulty || {}, () => 0.5, room).canHit;
-  if (player.char_class !== 'gloop') return true;
+  if (!['ninja', 'gloop'].includes(player.char_class)) return true;
+  const collisionRadius = player.char_class === 'ninja'
+    ? getResolvedAttackDescriptor('ninja-shuriken')?.runtime?.collisionRadius || 18
+    : 8;
   return !(room.geometry?.colliders || []).some((rect) =>
-    segmentCrossesRect(player.x, player.y, aim.target.x, aim.target.y, rect));
+    segmentCrossesRect(
+      player.x,
+      player.y,
+      aim.target.x,
+      aim.target.y,
+      rect,
+      collisionRadius,
+    ));
 }
 
 function advanceAmmo(player, dt) {
@@ -124,7 +135,11 @@ function basicAim(player, target, profile, random, room) {
         .find((shot) => clearTrajectory(room, shot, runtime.playerCollisionRadius || runtime.collisionRadius || 16));
     }
   }
-  let angle = (solution?.angle ?? Math.atan2(dy, dx)) + (random() * 2 - 1) * (profile.aimError || 0);
+  const baseAimError = profile.aimError || 0;
+  const aimError = player.char_class === 'huntress'
+    ? Math.min(0.22, Math.max(baseAimError * 1.45, baseAimError + 0.025))
+    : baseAimError;
+  let angle = (solution?.angle ?? Math.atan2(dy, dx)) + (random() * 2 - 1) * aimError;
   const direction = Math.cos(angle) < 0 ? -1 : 1;
   if (aim.angleMode === "horizontal-only") angle = direction < 0 ? Math.PI : 0;
   const canHit = (!['wizard', 'huntress'].includes(player.char_class) || !!solution) && distance <= range + 30 && (aim.angleMode !== 'horizontal-only' || Math.abs(target.y - player.y) < 90);
@@ -172,11 +187,14 @@ function requestBasic(room, p, target, profile, random, now) {
   ammo.charges--; ammo.nextFireInMs = ammo.cooldownMs;
   p._botActionUntil = now + lockMs; p.animation = "throw";
   room.handlePlayerAction(p.participantId, action);
+  p._botLastAttackAt = now;
   return true;
 }
 
 function requestSpecial(room, p, target, now) {
-  if (p._botActionUntil > now || p.superCharge < p.maxSuperCharge) return false;
+  const lastAttackAt = Number(p._botLastAttackAt);
+  if (p._botActionUntil > now || p.superCharge < p.maxSuperCharge ||
+    (Number.isFinite(lastAttackAt) && now - lastAttackAt < BOT_ATTACK_TO_SUPER_COOLDOWN_MS)) return false;
   const aim = getResolvedCharacterSpecialAimConfig(p.char_class) || {};
   const distance = Math.hypot(target.x - p.x, target.y - p.y);
   const range = p.char_class === "wizard" ? (getResolvedCharacterAimConfig("wizard")?.defaultRange || 1000) : aim.defaultRange || aim.radius || (p.char_class === "thorg" ? 250 : 700);
@@ -214,4 +232,4 @@ function startNinjaSwarm(room, p, now, aim = {}) {
     if (attack?.instanceId === action.id) attack.attackType = "ninja-special-swarm";
   }, i * releaseMs, now);
 }
-module.exports = { advanceAmmo, basicAim, hasClearShot, pressureAim, requestBasic, requestSpecial, startNinjaSwarm };
+module.exports = { BOT_ATTACK_TO_SUPER_COOLDOWN_MS, advanceAmmo, basicAim, hasClearShot, pressureAim, requestBasic, requestSpecial, startNinjaSwarm };

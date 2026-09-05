@@ -17,6 +17,9 @@ const MOVEMENT_FX_TYPES = new Set(["jump", "land", "turn", "wall-jump"]);
 
 function applyMovementVfxState(playerData, inputData) {
   if (!playerData || !inputData) return;
+  if (typeof inputData.ducking === "boolean") {
+    playerData.ducking = inputData.ducking === true && inputData.grounded === true;
+  }
   if (typeof inputData.wallSliding === "boolean") {
     playerData.wallSliding = inputData.wallSliding;
   }
@@ -359,6 +362,7 @@ function handlePlayerInputIntent(room, socketId, intentData) {
       typeof intentData.grounded === "boolean"
         ? intentData.grounded
         : undefined,
+    ducking: intentData.ducking === true && intentData.grounded === true,
     facing: Number(intentData.facing) === -1 ? -1 : 1,
     vx: Number(intentData.vx) || 0,
     vy: Number(intentData.vy) || 0,
@@ -375,6 +379,7 @@ function handlePlayerInputIntent(room, socketId, intentData) {
   }
 
   playerData._currentInputIntent = normalizedIntent;
+  playerData.ducking = normalizedIntent.ducking;
   playerData._lastInputIntent = normalizedIntent;
   playerData._lastInputSeq = normalizedIntent.sequence;
   netTestLogger.noteIntent(room, playerData, intentData);

@@ -1,4 +1,5 @@
 // gameScene/preloadGameAssets.js
+import { preloadTerrainAudio } from './movementAudio';
 
 export function preloadGameAssets({
   scene,
@@ -116,23 +117,16 @@ export function preloadGameAssets({
   );
 
   // Level-balanced movement SFX and small randomized footstep set.
-  scene.load.audio("sfx-step-1", [
-    `${staticPath}/movement/step-1.ogg`,
-    `${staticPath}/movement/step-1.mp3`,
-  ]);
-  scene.load.audio("sfx-step-2", [
-    `${staticPath}/movement/step-2.ogg`,
-    `${staticPath}/movement/step-2.mp3`,
-  ]);
-  scene.load.audio("sfx-step-3", [
-    `${staticPath}/movement/step-3.ogg`,
-    `${staticPath}/movement/step-3.mp3`,
-  ]);
+  preloadTerrainAudio(scene, staticPath);
   scene.load.audio("sfx-jump", `${staticPath}/movement/jump.mp3`);
-  scene.load.audio("sfx-land", `${staticPath}/movement/landing.mp3`);
   scene.load.audio("sfx-walljump", `${staticPath}/movement/wall-jump.mp3`);
   scene.load.audio("sfx-sliding", `${staticPath}/movement/wall-slide.mp3`);
   scene.load.audio("sfx-fall-air", `${staticPath}/movement/fall-wind.mp3`);
+  scene.load.audio(
+    "sfx-duck-transition",
+    `${staticPath}/movement/duck-transition.mp3`,
+  );
+  scene.load.audio("sfx-duck-block", `${staticPath}/movement/duck-block.wav`);
   scene.load.audio("sfx-parachute-open", `${staticPath}/movement/parachute-open.mp3`);
   scene.load.audio("sfx-sudden-death", `${staticPath}/suddendeath.mp3`);
   scene.load.audio("sfx-death", `${staticPath}/death.wav`);

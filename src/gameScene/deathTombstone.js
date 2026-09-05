@@ -1,5 +1,7 @@
 import { RENDER_LAYERS } from "./renderLayers";
 
+export const TOMBSTONE_LIFETIME_MS = 45000;
+
 export function findTombstoneGround(x, feetY, objects) {
   if (!Number.isFinite(x) || !Number.isFinite(feetY)) return null;
   let nearest = null;
@@ -53,7 +55,18 @@ export function spawnDeathTombstone(scene, payload, player) {
   scene.events.on("update", anchor);
   const cleanup = () => stone.destroy();
   scene.events.once("shutdown", cleanup);
+  const expiry = scene.time.delayedCall(TOMBSTONE_LIFETIME_MS - 500, () => {
+    if (!stone.active) return;
+    scene.tweens.add({
+      targets: stone,
+      alpha: 0,
+      duration: 500,
+      ease: "Quad.easeIn",
+      onComplete: () => stone.destroy(),
+    });
+  });
   stone.once("destroy", () => {
+    expiry.remove(false);
     scene.events.off("update", anchor);
     scene.events.off("shutdown", cleanup);
     stones.delete(key);

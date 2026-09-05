@@ -8,6 +8,34 @@ import {
   buildCharacterSkinWeaponUrl,
 } from "../lib/skinAssets.js";
 import { chooseRemoteAnimationState } from "./shared/animationState.js";
+import CHARACTER_FRAMES from "../shared/characterFrames.json";
+import { DUCK_FRAME_CELLS } from "../shared/ducking.js";
+
+function setupDuckFrame(scene, character, textureKey = character) {
+  const cell = DUCK_FRAME_CELLS[character];
+  const dimensions = CHARACTER_FRAMES[character];
+  if (!cell || !dimensions || !scene.textures.exists(textureKey)) return;
+  const texture = scene.textures.get(textureKey);
+  if (!texture.has("duck00")) {
+    texture.add(
+      "duck00",
+      0,
+      (cell[0] - 1) * dimensions.w,
+      (cell[1] - 1) * dimensions.h,
+      dimensions.w,
+      dimensions.h,
+    );
+  }
+  const animationKey = `${textureKey}-ducking`;
+  if (!scene.anims.exists(animationKey)) {
+    scene.anims.create({
+      key: animationKey,
+      frames: [{ key: textureKey, frame: "duck00" }],
+      frameRate: 1,
+      repeat: -1,
+    });
+  }
+}
 
 // Build the registry automatically from the manifest.
 // Each class must have a static `key` string.
@@ -112,12 +140,14 @@ export function preloadForRoster(scene, roster = [], staticPath = "/assets") {
 export function setupFor(scene, character) {
   const Cls = getCharacterClass(character);
   if (Cls && Cls.setupAnimations) Cls.setupAnimations(scene);
+  setupDuckFrame(scene, character);
 }
 
 export function setupAll(scene) {
   for (const key of Object.keys(registry)) {
     const Cls = registry[key];
     if (Cls && Cls.setupAnimations) Cls.setupAnimations(scene);
+    setupDuckFrame(scene, key);
   }
 }
 
@@ -127,6 +157,7 @@ function cloneBaseAnimationToVariant(scene, character, skinId) {
 
   const textureKey = buildCharacterSkinTextureKey(character, skinId);
   if (!scene.textures.exists(textureKey)) return;
+  setupDuckFrame(scene, character, textureKey);
 
   const entries = animManager?.anims?.entries;
   if (!entries) return;

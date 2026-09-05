@@ -84,6 +84,46 @@ test('bots hesitate after ammo becomes technically ready instead of frame-perfec
   assert.equal(h.brain.metrics.attacks, 2);
 });
 
+test('huntress leaves a longer punish window between arrow spreads', (t) => {
+  const h = setup(t, ['huntress', 'ninja']);
+  h.brain.random = () => 0.5;
+  const hesitation = h.brain.attackHesitationMs();
+  assert.ok(hesitation >= 360, `hesitation was ${hesitation}ms`);
+  assert.ok(hesitation > h.p.ammoState.cooldownMs);
+});
+
+test('sudden death immediately sends bots toward reachable high ground', (t) => {
+  const h = setup(t, ['ninja', 'wizard']);
+  const currentTop = h.room.geometry.colliders.find((surface) => surface.id === h.p.platformId).top;
+  h.brain.openingUntil = h.now() + 10000;
+  h.brain.decision = { mode: 'fight', goal: { x: h.p.x, y: currentTop, surfaceId: h.p.platformId } };
+  h.room._suddenDeathActive = true;
+  h.room._loopStartWallTime = h.now() - h.room.gameMode.getMatchDurationMs();
+  h.think();
+  assert.equal(h.brain.decision.mode, 'escape');
+  assert.ok(h.brain.decision.goal.y < currentTop, 'chooses a platform above its starting ground');
+  assert.equal(h.brain.openingUntil, 0, 'opening pause cannot suppress survival movement');
+});
+
+test('a bot already reached by poison can still take an upward escape route', () => {
+  const { findRoute } = require('../src/server/core/bots/navigation');
+  const low = { id: 'low', top: 920 };
+  const high = { id: 'high', top: 650 };
+  const climb = { to: high.id, duration: 600, frames: [
+    { y: 900 }, { y: 890 }, { y: 840 }, { y: 760 }, { y: 680 },
+  ] };
+  const graph = {
+    body: { offsetY: 0, halfHeight: 20 },
+    surfaces: [low, high],
+    edges: new Map([[low.id, [climb]], [high.id, []]]),
+  };
+  assert.deepEqual(findRoute(graph, low.id, high.id, 900), [climb]);
+
+  const dive = { ...climb, frames: [{ y: 900 }, { y: 930 }, { y: 840 }] };
+  graph.edges.set(low.id, [dive]);
+  assert.equal(findRoute(graph, low.id, high.id, 900), null, 'will not dive deeper into poison');
+});
+
 test('hurt bots retreat and counterfire, retaining retreat until sufficiently healed', (t) => {
   const h = setup(t, ['ninja', 'wizard']);
   h.brain.random = () => 0.5;
@@ -128,6 +168,103 @@ test('bots detour to useful healing beyond immediate pickup range and collect it
   h.advance(150, true);
   assert.equal(h.room._powerups.has(7), false);
   assert.equal(h.p.health, h.p.maxHealth);
+});
+
+test('bots contest a useful shockwave and focus the nearby rival while approaching it', (t) => {
+  const h = setup(t), enemy = h.players[1];
+  const floor = { id: 'shock-floor', x: 1000, left: 0, right: 2000, top: 700, bottom: 740,
+    collision: { up: true, down: true, left: true, right: true } };
+  h.room.geometry = { ...h.room.geometry, mapId: 9911, colliders: [floor] };
+  h.place(h.p, 700, floor);
+  h.place(enemy, 1050, floor);
+  h.brain.openingUntil = 0;
+  h.brain.random = () => 0.5;
+  h.room._powerups.set(81, { id: 81, type: 'shockwave', x: 850, y: h.p.y,
+    activeAt: h.now(), expiresAt: h.now() + 10000 });
+  h.think();
+  assert.equal(h.brain.decision.mode, 'pickup');
+  assert.equal(h.brain.decision.pickupId, 81);
+  assert.equal(h.brain.decision.contestTargetId, enemy.participantId);
+  assert.ok(h.brain.metrics.attacks > 0, 'continues fighting the rival while contesting');
+});
+
+test('bots contest a useful ordinary powerup but ignore pickups that harm the collector', (t) => {
+  const h = setup(t), enemy = h.players[1];
+  const floor = { id: 'powerup-floor', x: 1250, left: 0, right: 2500, top: 700, bottom: 740,
+    collision: { up: true, down: true, left: true, right: true } };
+  h.room.geometry = { ...h.room.geometry, mapId: 9914, colliders: [floor] };
+  h.place(h.p, 700, floor);
+  h.place(enemy, 1000, floor);
+  h.brain.openingUntil = 0;
+  h.brain.random = () => 0.5;
+  h.room._powerups.set(83, { id: 83, type: 'shield', x: 850, y: h.p.y,
+    activeAt: h.now(), expiresAt: h.now() + 10000 });
+  h.think();
+  assert.equal(h.brain.decision.mode, 'pickup');
+  assert.equal(h.brain.decision.contestTargetId, enemy.participantId);
+
+  h.room._powerups.clear();
+  h.place(enemy, 2400, floor);
+  h.brain.decision = null;
+  h.room._powerups.set(84, { id: 84, type: 'poison', x: 760, y: h.p.y,
+    activeAt: h.now(), expiresAt: h.now() + 10000 });
+  h.think();
+  assert.notEqual(h.brain.decision.mode, 'pickup');
+});
+
+test('bots concede a shockwave race already won by an opponent and leave its blast area', (t) => {
+  const h = setup(t), enemy = h.players[1];
+  const floor = { id: 'escape-floor', x: 1000, left: 0, right: 2000, top: 700, bottom: 740,
+    collision: { up: true, down: true, left: true, right: true } };
+  h.room.geometry = { ...h.room.geometry, mapId: 9912, colliders: [floor] };
+  h.place(h.p, 500, floor);
+  h.place(enemy, 950, floor);
+  h.brain.openingUntil = 0;
+  h.brain.random = () => 0.5;
+  const shockwave = { id: 82, type: 'shockwave', x: 1000, y: h.p.y,
+    activeAt: h.now() + 500, expiresAt: h.now() + 10000 };
+  h.room._powerups.set(shockwave.id, shockwave);
+  h.think();
+  assert.equal(h.brain.decision.mode, 'evade-powerup');
+  assert.ok(Math.abs(h.brain.decision.goal.x - shockwave.x) > 420,
+    'chooses ground outside the shockwave radius');
+});
+
+test('bots collect nearby death coins and gems through the authoritative reward path', (t) => {
+  const h = setup(t);
+  h.brain.openingUntil = 0;
+  for (const [id, type, offset] of [[91, 'coin', 20], [92, 'gem', -20]]) {
+    h.room._deathDrops.set(id, { id, type, value: 1, x: h.p.x + offset, y: h.p.y,
+      spawnX: h.p.x + offset, spawnY: h.p.y, spawnedAt: h.now(), expiresAt: h.now() + 10000,
+      claimedBy: null });
+  }
+  h.think();
+  assert.equal(h.room._deathDrops.size, 0);
+  assert.equal(h.brain.metrics.lootCollected, 2);
+  assert.deepEqual(h.events.filter((event) => event.type === 'deathdrop:collected').map((event) => event.payload.type).sort(), ['coin', 'gem']);
+});
+
+test('loose loot is an opportunistic goal, but only over a modest safe detour', (t) => {
+  const h = setup(t), enemy = h.players[1];
+  const floor = { id: 'loot-floor', x: 1250, left: 0, right: 2500, top: 700, bottom: 740,
+    collision: { up: true, down: true, left: true, right: true } };
+  h.room.geometry = { ...h.room.geometry, mapId: 9913, colliders: [floor] };
+  h.place(h.p, 500, floor);
+  h.place(enemy, 2400, floor);
+  h.brain.openingUntil = 0;
+  h.brain.random = () => 0.5;
+  h.room._deathDrops.set(93, { id: 93, type: 'coin', value: 1, x: 735, y: h.p.y,
+    spawnX: 735, spawnY: h.p.y, spawnedAt: h.now(), expiresAt: h.now() + 10000, claimedBy: null });
+  h.think();
+  assert.equal(h.brain.decision.mode, 'loot');
+  assert.equal(h.brain.decision.dropId, 93);
+
+  h.room._deathDrops.clear();
+  h.brain.decision = null;
+  h.room._deathDrops.set(94, { id: 94, type: 'coin', value: 1, x: 1200, y: h.p.y,
+    spawnX: 1200, spawnY: h.p.y, spawnedAt: h.now(), expiresAt: h.now() + 10000, claimedBy: null });
+  h.think();
+  assert.notEqual(h.brain.decision.mode, 'loot', 'does not center play around a distant coin');
 });
 
 test('a reachable weakened opponent can replace a healthy current target', (t) => {
@@ -276,6 +413,86 @@ for (const trophies of [0, 2000]) {
   });
 }
 
+test('bots duck an imminent hit only when no safer dodge exists', (t) => {
+  const h = setup(t, ['ninja', 'wizard'], 1250), enemy = h.players[1];
+  h.brain.random = () => 0;
+  h.brain.openingUntil = 0;
+  h.brain.findDodgeManeuver = () => ({ best: null, baseDanger: 100, bestScore: 100 });
+  h.room._activeAttacks = [{
+    attackerParticipantId: enemy.participantId,
+    x: h.p.x + 100,
+    y: h.p.y + bounds(h.p).offsetY,
+    vx: -500,
+    vy: 0,
+    collisionRadius: 14,
+  }];
+  h.think();
+  assert.equal(h.p.ducking, true);
+  assert.equal(h.brain.metrics.strategicDucks, 1);
+  assert.ok(h.brain.duckUntil > h.now());
+  assert.ok(h.brain.nextStrategicDuckAt > h.brain.duckUntil);
+});
+
+test('bots prefer an available dodge instead of stacking a duck', (t) => {
+  const h = setup(t, ['ninja', 'wizard'], 2000), enemy = h.players[1];
+  h.brain.random = () => 0;
+  h.room._activeAttacks = [{
+    attackerParticipantId: enemy.participantId,
+    x: h.p.x + 240,
+    y: h.p.y + bounds(h.p).offsetY,
+    vx: -450,
+    vy: 0,
+    collisionRadius: 12,
+  }];
+  const observed = h.snapshot();
+  const threat = incomingThreat(observed, h.p, h.now());
+  const dodge = h.brain.findDodgeManeuver(observed, {}, h.now(), Infinity);
+  assert.ok(dodge.best);
+  assert.equal(h.brain.tryDodge(observed, {}, h.now(), Infinity, dodge), true);
+  assert.notEqual(h.p.ducking, true);
+  assert.equal(h.brain.metrics.strategicDucks, 0);
+  assert.ok(threat);
+});
+
+test('occasional flavor ducks stay spaced out and never start under pressure', (t) => {
+  const h = setup(t);
+  h.brain.random = () => 0;
+  h.brain.nextFlavorDuckAt = h.now();
+  h.p.vx = 0;
+  assert.equal(h.brain.maybeFlavorDuck(false, h.now()), true);
+  assert.equal(h.brain.metrics.flavorDucks, 1);
+  const firstDeadline = h.brain.nextFlavorDuckAt;
+  assert.ok(firstDeadline >= h.now() + 7500);
+  h.brain.duckUntil = 0;
+  h.p.ducking = false;
+  assert.equal(h.brain.maybeFlavorDuck(false, h.now() + 1000), false);
+  h.brain.nextFlavorDuckAt = h.now();
+  assert.equal(h.brain.maybeFlavorDuck(true, h.now()), false);
+  assert.equal(h.brain.metrics.flavorDucks, 1);
+});
+
+test('some bot ducks move safely and sometimes hold for longer', (t) => {
+  const h = setup(t);
+  h.brain.random = () => 0;
+  h.brain.intent = { direction: 1 };
+  const startedAt = h.now();
+  const x = h.p.x;
+  assert.equal(h.brain.startDuck(startedAt, 300, 'flavor'), true);
+  assert.equal(h.brain.duckDirection, 1);
+  assert.ok(h.brain.duckUntil >= startedAt + 750);
+  h.brain.openingUntil = 0;
+  h.brain.nextThink = Infinity;
+  h.brain.tick(1000 / 60, startedAt + 1000 / 60);
+  assert.ok(h.p.x > x, 'moving duck advances at reduced speed');
+
+  h.brain.duckUntil = 0;
+  h.p.ducking = false;
+  h.brain.random = () => 0.99;
+  assert.equal(h.brain.startDuck(startedAt + 2000, 300, 'flavor'), true);
+  assert.equal(h.brain.duckDirection, 0, 'not every duck has to move');
+  assert.equal(h.brain.duckUntil, startedAt + 2300, 'ordinary ducks stay brief');
+});
+
 test('aim anticipates a moving target more strongly at higher trophies', (t) => {
   const h = setup(t), target = { ...h.players[1], y: h.p.y + 70, vx: 200, vy: 120 };
   const noLead = basicAim(h.p, { ...target, vx: 0, vy: 0 }, difficultyForTrophies(2000), () => 0.5);
@@ -368,6 +585,70 @@ test('an unreachable target cannot leave a bot waiting forever with zero movemen
   }
   assert.ok(h.brain.metrics.recoveries > 0);
   assert.ok(maxDisplacement > 35, 'searches another position even without a complete route');
+  assert.equal(h.brain.metrics.unforcedFalls, 0);
+});
+
+test('bots back up and climb when a route takeoff is hidden behind a solid obstruction', (t) => {
+  const { getDuelGeometry } = require('../src/shared/duelGeometry');
+  const h = setup(t, ['ninja', 'wizard']);
+  h.room.geometry = getDuelGeometry(2);
+  const floor = h.room.geometry.colliders.find((surface) => surface.id === 'p0');
+  const centerBlock = h.room.geometry.colliders.find((surface) => surface.id === 'p1');
+  const destination = h.room.geometry.colliders.find((surface) => surface.id === 'p3');
+  const enemy = h.players[1];
+  h.place(h.p, centerBlock.left - 75, floor);
+  h.place(enemy, centerBlock.right + 75, floor);
+  enemy.health = enemy.maxHealth = 1000000;
+  h.brain.openingUntil = 0;
+  h.brain.nextIdleAt = Infinity;
+  h.brain.random = () => 0.5;
+  h.brain.decision = { mode: 'reposition', goal: {
+    x: destination.x,
+    y: destination.top,
+    surfaceId: destination.id,
+  } };
+  h.brain.nextDecisionAt = Infinity;
+
+  let climbed = false;
+  for (let i = 0; i < 360; i++) {
+    h.advance(1);
+    climbed ||= h.p.platformId === centerBlock.id || bounds(h.p).bottom < centerBlock.top + 20;
+  }
+
+  assert.ok(h.brain.metrics.obstacleRecoveries > 0, 'recognizes the blocking wall');
+  assert.equal(climbed, true, 'uses a simulated climb instead of standing against the wall');
+  assert.ok(h.brain.metrics.stuckMs < 1800, `only stalled for ${h.brain.metrics.stuckMs}ms`);
+  assert.equal(h.brain.metrics.unforcedFalls, 0);
+});
+
+test('bots hop over Bank Bust steps instead of pushing against their sides', (t) => {
+  const { getDuelGeometry } = require('../src/shared/duelGeometry');
+  const h = setup(t, ['ninja', 'wizard']);
+  h.room.geometry = getDuelGeometry(4);
+  const floor = h.room.geometry.colliders.find((surface) => surface.id === 'p19');
+  const step = h.room.geometry.colliders.find((surface) => surface.id === 'h7');
+  const destination = h.room.geometry.colliders.find((surface) => surface.id === 'p3');
+  h.place(h.p, step.left - 90, floor);
+  h.place(h.players[1], destination.x, destination);
+  h.players[1].health = h.players[1].maxHealth = 1000000;
+  h.brain.openingUntil = 0;
+  h.brain.nextIdleAt = Infinity;
+  h.brain.random = () => 0.5;
+  h.brain.decision = { mode: 'reposition', goal: {
+    x: destination.x,
+    y: destination.top,
+    surfaceId: destination.id,
+  } };
+  h.brain.nextDecisionAt = Infinity;
+
+  let clearedStep = false;
+  for (let i = 0; i < 180; i++) {
+    h.advance(1);
+    clearedStep ||= bounds(h.p).left > step.right + 4;
+  }
+
+  assert.ok(h.brain.metrics.obstacleRecoveries > 0, 'recognizes the step as an obstruction');
+  assert.equal(clearedStep, true, 'lands beyond the step');
   assert.equal(h.brain.metrics.unforcedFalls, 0);
 });
 

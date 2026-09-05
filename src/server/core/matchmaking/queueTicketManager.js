@@ -9,6 +9,17 @@ function createQueueTicketManager({
   ensureLoop,
   maybeStopLoop,
 }) {
+  const reservedBotSlots = new Map();
+  const ticketKey = (ticket) =>
+    ticket?.party_id ? `p:${Number(ticket.party_id)}` : `u:${Number(ticket?.user_id)}`;
+  const normalizeBotSlots = (slots, teamSize) =>
+    (Array.isArray(slots) ? slots : []).filter(
+      (slot) =>
+        (slot?.team === "team1" || slot?.team === "team2") &&
+        Number.isInteger(Number(slot?.index)) &&
+        Number(slot.index) >= 0 &&
+        Number(slot.index) < teamSize,
+    );
   const {
     normalizeSelection,
     isSelectionQueueable,
@@ -24,6 +35,7 @@ function createQueueTicketManager({
     mode,
     map,
     side = null,
+    botSlots = [],
   }) {
     const selection = normalizeSelection({
       modeId,
@@ -42,6 +54,11 @@ function createQueueTicketManager({
 
     if (partyId) {
       counts = await getPartyTeamCounts(db, partyId);
+      const selectedBots = normalizeBotSlots(botSlots, S);
+      for (const bot of selectedBots) {
+        if (bot.team === "team1") counts.t1++;
+        else counts.t2++;
+      }
       if (counts.t1 > S || counts.t2 > S) {
         throw new Error("team overflow for mode");
       }
@@ -81,6 +98,10 @@ function createQueueTicketManager({
         counts.t2,
       ],
     );
+    const key = partyId ? `p:${Number(partyId)}` : `u:${Number(userId)}`;
+    const normalizedBots = partyId ? normalizeBotSlots(botSlots, S) : [];
+    if (normalizedBots.length) reservedBotSlots.set(key, normalizedBots);
+    else reservedBotSlots.delete(key);
 
     if (partyId) {
       await db.runQuery("UPDATE parties SET status=? WHERE party_id=?", [
@@ -105,6 +126,7 @@ function createQueueTicketManager({
       `DELETE FROM match_tickets WHERE ${field} = ?`,
       [id],
     );
+    reservedBotSlots.delete(partyId ? `p:${Number(partyId)}` : `u:${Number(userId)}`);
     if (partyId && r?.affectedRows > 0) {
       await db.runQuery("UPDATE parties SET status=? WHERE party_id=?", [
         partyStatus.IDLE,
@@ -128,6 +150,7 @@ function createQueueTicketManager({
       await db.runQuery("DELETE FROM match_tickets WHERE party_id=?", [
         partyId,
       ]);
+      reservedBotSlots.delete(`p:${Number(partyId)}`);
       console.log(`[queue] remove p=${partyId} reason=disconnect name=${name}`);
       await maybeStopLoop();
     }
@@ -155,6 +178,7 @@ function createQueueTicketManager({
 
   async function invalidatePartyTicket(partyId) {
     await db.runQuery("DELETE FROM match_tickets WHERE party_id=?", [partyId]);
+    reservedBotSlots.delete(`p:${Number(partyId)}`);
     console.log(`[queue] invalidate p=${partyId} reason=team-change`);
     await maybeStopLoop();
   }
@@ -164,6 +188,9 @@ function createQueueTicketManager({
     queueLeave,
     handleDisconnect,
     invalidatePartyTicket,
+    getBotSlotsForTicket(ticket) {
+      return (reservedBotSlots.get(ticketKey(ticket)) || []).map((slot) => ({ ...slot }));
+    },
   };
 }
 

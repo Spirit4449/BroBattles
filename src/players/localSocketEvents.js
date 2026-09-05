@@ -1,6 +1,7 @@
 import { performSpecial } from "../characters/special";
 import {
   spawnDamageImpact,
+  spawnDuckGuardImpact,
   spawnDeathBurst,
   spawnSpawnBurst,
   triggerDamageScreenPulse,
@@ -36,6 +37,7 @@ export function bindLocalSocketEvents({
   onLocalRespawn,
   removeLocalCorpse,
   onDebug,
+  onDuckBlocked,
 }) {
   const isEditModeActive = () => {
     try {
@@ -81,6 +83,10 @@ export function bindLocalSocketEvents({
     if (scene && scene.sound && !getDead()) {
       if (delta < 0) {
         scene.sound.play("sfx-damage", { volume: 5 });
+        if (data.duckBlocked === true || player._ducking === true) {
+          onDuckBlocked?.();
+          spawnDuckGuardImpact(scene, player);
+        }
         if (data.cause !== "poison") {
           spawnDamageImpact(scene, player);
           triggerDamageScreenPulse(scene);

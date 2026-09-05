@@ -42,6 +42,7 @@ export function normalizeMapId(mapId) {
  * @param {number|string} mapId
  */
 export function buildMap(scene, mapId) {
+  scene._terrainType = MAP_META.get(normalizeMapId(mapId))?.terrain || 'hard';
   MAPS[normalizeMapId(mapId)]?.build(scene);
 }
 
@@ -179,6 +180,19 @@ export function getLobbyPlatformAsset(mapId) {
 export function getMapMusicAsset(mapId) {
   const meta = MAP_META.get(normalizeMapId(mapId));
   return meta?.musicAsset || "/assets/main.mp3";
+}
+
+/**
+ * Battle music gain for the given map. Kept in the shared map catalog so
+ * unusually quiet tracks can be balanced without special-casing game code.
+ * @param {number|string} mapId
+ * @returns {number}
+ */
+export function getMapMusicVolume(mapId) {
+  const configured = Number(MAP_META.get(normalizeMapId(mapId))?.musicVolume);
+  return Number.isFinite(configured)
+    ? Math.max(0, Math.min(1, configured))
+    : 0.11;
 }
 
 /**

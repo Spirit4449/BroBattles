@@ -164,6 +164,7 @@ function broadcastSnapshot(room, extraTiming = null) {
       vx: roundVelocity(playerData.vx),
       vy: roundVelocity(playerData.vy),
       grounded: !!playerData.grounded,
+      ducking: !!playerData.ducking && !!playerData.grounded,
       wallSliding: !!playerData.wallSliding,
       wallSide: playerData.wallSide || null,
       movementFxSeq: Number(playerData.movementFxSeq) || 0,

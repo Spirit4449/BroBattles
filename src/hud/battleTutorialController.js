@@ -58,6 +58,7 @@ export function createBattleTutorialController({
   const showCounts = new Map();
 
   const actionTips = {
+    duck: { label: "Duck", copy: "Hold to guard and lower your hitbox" },
     wallJump: { label: "Wall jump", copy: "Jump + move away" },
     attack: { label: "Fight back", copy: "Attack now" },
     special: { label: "Super ready", copy: "Use your super" },
@@ -140,6 +141,11 @@ export function createBattleTutorialController({
   }
 
   function keysFor(id, wallSide = null) {
+    if (id === "duck") {
+      return inputScheme === "arrows"
+        ? [{ label: "↓", codes: ["ArrowDown"] }]
+        : [{ label: "S", codes: ["KeyS"] }];
+    }
     if (id === "wallJump") {
       const awayLeft = wallSide === "right";
       return inputScheme === "arrows"
@@ -255,7 +261,7 @@ export function createBattleTutorialController({
       actionEl.querySelectorAll("kbd, .tutorial-mouse-key").forEach((key) => {
         key.classList.add("is-success");
       });
-      if (previous.id === "attack") {
+      if (previous.id === "attack" || previous.id === "duck") {
         const label = actionEl.querySelector(".tutorial-action-text strong");
         if (label) label.textContent = "Perfected ✓";
       }
@@ -528,6 +534,10 @@ export function createBattleTutorialController({
 
   function evaluateActiveTip(now, state, network, gas) {
     if (!activeTip) return false;
+    if (activeTip.id === "duck" && network.ducking === true) {
+      hideActive({ complete: true, success: true });
+      return true;
+    }
     if (activeTip.id === "wallJump") {
       const seq = Number(network.movementFxSeq) || 0;
       if (
@@ -584,6 +594,12 @@ export function createBattleTutorialController({
       network.wallSliding &&
       canShow("wallJump") &&
       showAction("wallJump", { wallSide: network.wallSide }, now)
+    )
+      return;
+    if (
+      now - battleStartedAt > 2500 &&
+      canShow("duck") &&
+      showAction("duck", {}, now)
     )
       return;
     if (

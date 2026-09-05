@@ -37,6 +37,7 @@ const {
   applyImpulse,
 } = require("../src/server/core/bots/physics");
 const {
+  BOT_ATTACK_TO_SUPER_COOLDOWN_MS,
   requestBasic,
   requestSpecial,
   advanceAmmo,
@@ -240,7 +241,7 @@ test("safe patrol brakes at edges; jump, one-way collision, wall jump and knockb
   const g = getDuelGeometry(3),
     surface = g.colliders.find((s) => s.id === "h5");
   const p = standOn(surface, "ninja", surface.right - 18);
-  assert.equal(safeWalkDirection(p, 1, g), 0);
+  assert.equal(safeWalkDirection(p, 1, g), -1);
   stepBody(p, { jumpPressed: true }, g, 1000 / 60, 1000);
   assert.ok(p.vy < 0);
   assert.equal(p.grounded, false);
@@ -262,7 +263,23 @@ test("safe patrol brakes at edges; jump, one-way collision, wall jump and knockb
   assert.equal(p.vy, -200);
 });
 
-test("all six characters attack and use specials without a browser; ammo and charge are enforced", () => {
+test("Serenity right vantage pulls bots into a stable stance before a turn can drop them", () => {
+  const g = getDuelGeometry(3);
+  const vantage = g.colliders.find((surface) => surface.id === "h6");
+  const p = standOn(vantage, "thorg", vantage.right - 25);
+  p.vx = 220;
+  for (let i = 0; i < 90; i++) {
+    const direction = safeWalkDirection(p, 0, g);
+    if (direction) p.flip = direction < 0;
+    const result = stepBody(p, { direction }, g, 1000 / 60, 1000 + i * 1000 / 60);
+    assert.equal(result.fell, false);
+  }
+  assert.equal(p.grounded, true);
+  assert.equal(p.platformId, vantage.id);
+  assert.ok(bounds(p).right <= vantage.right - 10, "keeps the full facing envelope away from the edge");
+});
+
+test("all six characters attack ducking opponents and use specials without a browser; ammo and charge are enforced", () => {
   const originalNow = Date.now;
   let clock = 1000000;
   Date.now = () => clock;
@@ -280,6 +297,10 @@ test("all six characters attack and use specials without a browser; ammo and cha
       h.room.botControllers.clear();
       h.place(p, 1080);
       h.place(target, 1190);
+      target.isBot = false;
+      target.ducking = true;
+      delete target._bodyHalfHeight;
+      delete target._bodyCenterOffsetY;
       target.health = target.maxHealth = 100000;
       const initial = target.health;
       assert.equal(
@@ -340,6 +361,81 @@ test("all six characters attack and use specials without a browser; ammo and cha
   } finally {
     Date.now = originalNow;
   }
+});
+
+test("bots wait at least 400ms after a basic attack before using a super", (t) => {
+  const h = makeRoom({ characters: ["gloop", "ninja"] });
+  t.after(() => h.room.cleanup());
+  const [p, target] = h.players;
+  h.room.botControllers.clear();
+  h.place(p, 1080);
+  h.place(target, 1190);
+
+  const attackedAt = 1000;
+  assert.equal(
+    requestBasic(h.room, p, target, p.difficulty, () => 0.5, attackedAt),
+    true,
+  );
+  p.superCharge = p.maxSuperCharge;
+  p._botActionUntil = 0;
+
+  assert.equal(
+    requestSpecial(
+      h.room,
+      p,
+      target,
+      attackedAt + BOT_ATTACK_TO_SUPER_COOLDOWN_MS - 1,
+    ),
+    false,
+  );
+  assert.equal(p.superCharge, p.maxSuperCharge);
+  assert.equal(
+    requestSpecial(
+      h.room,
+      p,
+      target,
+      attackedAt + BOT_ATTACK_TO_SUPER_COOLDOWN_MS,
+    ),
+    true,
+  );
+});
+
+test("a human Gloop hook keeps its server pull attached to a bot target", (t) => {
+  const h = makeRoom({ characters: ["gloop", "ninja"], map: 1, seed: 73 });
+  t.after(() => h.room.cleanup());
+  const [gloop, bot] = h.players;
+  const oldKey = gloop.participantId;
+  h.room.players.delete(oldKey);
+  h.room.botControllers.delete(oldKey);
+  Object.assign(gloop, {
+    participantId: null,
+    user_id: 73,
+    socketId: "human-gloop-socket",
+    isBot: false,
+    connected: true,
+    loaded: true,
+  });
+  h.room.players.set(gloop.socketId, gloop);
+  h.place(gloop, 950);
+  h.place(bot, 1180);
+  const initialX = bot.x;
+  const { registerAttackFromAction, tickActiveAttacks } = require("../src/server/core/gameRoom/attackRuntimeManager");
+  assert.equal(
+    registerAttackFromAction(
+      h.room,
+      gloop,
+      { type: "gloop-hook-release", id: "human-gloop-hook", angle: 0, direction: 1 },
+      1000,
+    ),
+    true,
+  );
+  for (let i = 1; i <= 30 && !bot._gloopPullState; i++) {
+    tickActiveAttacks(h.room, 1000 + i * h.room.FIXED_DT_MS);
+  }
+  assert.ok(bot._gloopPullState, "bot remains attached after the hook catches");
+  tickActiveAttacks(h.room, 1300);
+  assert.ok(bot.x < initialX - 5, "server moves the bot toward the human caster");
+  assert.ok(Number(bot._controlLockUntil) > 1300, "bot movement stays locked during the pull");
 });
 
 test("socket clients cannot submit hits on behalf of a bot and identities survive reconnect", () => {

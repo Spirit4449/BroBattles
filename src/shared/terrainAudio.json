@@ -1,0 +1,27 @@
+{
+  "defaultTerrain": "hard",
+  "footstepVolumeScale": 0.6,
+  "terrains": {
+    "hard": {
+      "label": "Hard / industrial",
+      "volumeScale": 1,
+      "landing": { "key": "sfx-hard-land", "files": ["movement/hard-landing.mp3"], "volumeScale": 0.9 },
+      "steps": [
+        { "key": "sfx-step-1", "files": ["movement/step-1.ogg", "movement/step-1.mp3"] },
+        { "key": "sfx-step-2", "files": ["movement/step-2.ogg", "movement/step-2.mp3"] },
+        { "key": "sfx-step-3", "files": ["movement/step-3.ogg", "movement/step-3.mp3"] }
+      ]
+    },
+    "grass": {
+      "label": "Grass",
+      "volumeScale": 0.65,
+      "landing": { "key": "sfx-grass-land", "files": ["movement/landing.mp3"], "volumeScale": 0.65 },
+      "steps": [
+        { "key": "sfx-grass-step-1", "files": ["movement/grass-footstep-1.ogg", "movement/grass-footstep-1.mp3"] },
+        { "key": "sfx-grass-step-2", "files": ["movement/grass-footstep-2.ogg", "movement/grass-footstep-2.mp3"] },
+        { "key": "sfx-grass-step-3", "files": ["movement/grass-footstep-3.ogg", "movement/grass-footstep-3.mp3"] },
+        { "key": "sfx-grass-step-4", "files": ["movement/grass-footstep-4.ogg", "movement/grass-footstep-4.mp3"] }
+      ]
+    }
+  }
+}

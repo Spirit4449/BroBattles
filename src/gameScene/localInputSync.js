@@ -26,6 +26,7 @@ export function createLocalInputSync({
     jumpPressed: false,
     facing: 1,
     grounded: false,
+    ducking: false,
     movementLocked: false,
   };
   let inputIntentSeq = 0; // sequence number for intent tracking
@@ -53,6 +54,7 @@ export function createLocalInputSync({
     !!a.jumpPressed === !!b.jumpPressed &&
     Number(a.facing) === Number(b.facing) &&
     !!a.grounded === !!b.grounded &&
+    !!a.ducking === !!b.ducking &&
     !!a.movementLocked === !!b.movementLocked;
 
   function sync(
@@ -72,6 +74,7 @@ export function createLocalInputSync({
       jumpPressed: !!rawInput?.jumpPressed,
       facing: Number(rawInput?.facing) === -1 ? -1 : 1,
       grounded: !!rawInput?.grounded,
+      ducking: !!rawInput?.ducking,
       vx: quantizeVelocity(rawInput?.vx),
       vy: quantizeVelocity(rawInput?.vy),
       animation:
@@ -110,6 +113,7 @@ export function createLocalInputSync({
       vx: quantizeVelocity(player.body?.velocity?.x),
       vy: quantizeVelocity(player.body?.velocity?.y),
       grounded: !!player.body?.touching?.down,
+      ducking: !!rawInput?.ducking,
       wallSliding: !!rawInput?.wallSliding,
       wallSide:
         rawInput?.wallSide === "left" || rawInput?.wallSide === "right"
@@ -197,6 +201,7 @@ export function createLocalInputSync({
       jumpPressed: inputIntent.jumpPressed,
       facing: inputIntent.facing,
       grounded: inputIntent.grounded,
+      ducking: inputIntent.ducking,
       movementLocked: inputIntent.movementLocked,
     };
     lastMovementSent = now;

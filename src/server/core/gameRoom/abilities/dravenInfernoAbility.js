@@ -1,4 +1,5 @@
 const effectManager = require("../effects/effectManager");
+const { reduceDuckDamage } = require("../../../../shared/ducking");
 const { getCharacterTuning } = require("../../../../lib/characterStats");
 
 const DRAVEN_INFERNO_DURATION_MS =
@@ -122,6 +123,8 @@ function tick(room, caster, now) {
     let dmg = Math.round(
       perTickDmg * effectManager.getModifiers(target, now).damageTakenMult,
     );
+    const duckBlocked = target.ducking === true;
+    dmg = Math.round(reduceDuckDamage(target, dmg));
     if (dmg <= 0) continue;
 
     const old = Number(target.health || 0);
@@ -137,7 +140,7 @@ function tick(room, caster, now) {
       room._recordCombatStat(caster, { kills: 1 });
     }
 
-    room._broadcastHealthUpdate(target, { cause: "combat" });
+    room._broadcastHealthUpdate(target, { cause: "combat", duckBlocked });
 
     if (target.health === 0 && old > 0) {
       room._handlePlayerDeath(target, {

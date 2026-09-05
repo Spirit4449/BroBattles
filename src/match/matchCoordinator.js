@@ -8,7 +8,7 @@
 // hidden global state and can be tested or instantiated in isolation.
 import { normalizeMapId } from "../maps/manifest";
 import { startSpawnIntro, finishSpawnIntro } from '../gameScene/spawnIntro';
-import { spawnDamageImpact } from "../effects";
+import { spawnDamageImpact, spawnDuckGuardImpact } from "../effects";
 import { spawnDeathTombstone } from "../gameScene/deathTombstone";
 import { playWizardArcaneSurge } from "../characters/wizard/effects.js";
 import { playCharacterSound } from "../characters";
@@ -769,7 +769,15 @@ export function createMatchCoordinator(config) {
           opponentPlayers[payload.username] || teamPlayers[payload.username];
         if (wrapper?.opponent) {
           const scene = getGameScene();
-          if (scene) spawnDamageImpact(scene, wrapper.opponent);
+          if (scene) {
+            spawnDamageImpact(scene, wrapper.opponent);
+            if (
+              payload.duckBlocked === true ||
+              wrapper.opponent._ducking === true
+            ) {
+              spawnDuckGuardImpact(scene, wrapper.opponent);
+            }
+          }
         }
       }
       // Flash shield-impact particle if health dropped while shield was active

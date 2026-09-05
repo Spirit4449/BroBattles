@@ -3,6 +3,7 @@ const {
   getMapObjectiveLayout,
 } = require("../../../helpers/gameSelectionCatalog");
 const effectManager = require("../../gameRoom/effects/effectManager");
+const { reduceDuckDamage } = require("../../../../shared/ducking");
 const {
   RANDOM_GOLD_PICKUP_CAP,
   RANDOM_GOLD_PICKUP_VALUE,
@@ -217,6 +218,29 @@ class BankBustGameMode extends BaseGameMode {
   getVaultState(targetTeam) {
     const state = this.getModeState();
     return state?.vaults?.[targetTeam] || null;
+  }
+
+  getBotObjective(playerData) {
+    const team = playerData?.team || null;
+    const targetTeam =
+      team === "team1" ? "team2" : team === "team2" ? "team1" : null;
+    const vault = targetTeam ? this.getVaultState(targetTeam) : null;
+    return {
+      ...super.getBotObjective(playerData),
+      team,
+      targetTeam,
+      target: vault
+        ? {
+            id: `${targetTeam}-vault`,
+            type: "vault",
+            team: targetTeam,
+            x: vault.x,
+            y: vault.y,
+          }
+        : null,
+      goal: vault ? { x: vault.x, y: vault.y } : null,
+      interaction: "damage",
+    };
   }
 
   addTeamGold(team, amount, meta = {}) {
@@ -453,17 +477,22 @@ class BankBustGameMode extends BaseGameMode {
       }
 
       const previousHealth = Math.max(0, Number(target.health) || 0);
-      const appliedRawDamage = Math.round(
+      let appliedRawDamage = Math.round(
         Math.max(1, Number(shot?.damage) || 0) *
           (effectManager.getModifiers(target, now).damageTakenMult || 1),
       );
+      const duckBlocked = target.ducking === true;
+      appliedRawDamage = Math.round(reduceDuckDamage(target, appliedRawDamage));
       target.health = Math.max(0, previousHealth - appliedRawDamage);
       const appliedDamage = previousHealth - target.health;
       if (appliedDamage <= 0) continue;
 
       target.lastDamagedAt = now;
       target.lastCombatAt = now;
-      this.room._broadcastHealthUpdate(target, { cause: "turret-projectile" });
+      this.room._broadcastHealthUpdate(target, {
+        cause: "turret-projectile",
+        duckBlocked,
+      });
       if (target.health <= 0 && previousHealth > 0) {
         this.room._handlePlayerDeath(target, {
           cause: "turret-projectile",

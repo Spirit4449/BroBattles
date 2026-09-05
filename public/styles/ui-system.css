@@ -334,7 +334,16 @@ input:-webkit-autofill:focus {
   border-width: 2px;
   border-style: dashed;
   background: rgba(247, 249, 255, 0.06);
-  box-shadow: none;
+  box-shadow:
+    0 2px 0 rgba(3, 6, 11, 0.48),
+    0 4px 9px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+#lobby-area .character-slot.empty > .character-sprite.random {
+  filter:
+    drop-shadow(0 3px 0 rgba(3, 6, 11, 0.82))
+    drop-shadow(0 7px 7px rgba(0, 0, 0, 0.58));
 }
 
 #lobby-area .status {

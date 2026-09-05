@@ -228,6 +228,7 @@ export function clearExpiredOneShot(sprite) {
 
 export function deriveMovementAnimation({
   grounded = false,
+  ducking = false,
   moving = false,
   wallSliding = false,
   vx = 0,
@@ -241,6 +242,7 @@ export function deriveMovementAnimation({
   if (movementLocked || specialLocked) return fallback;
   if (wallSliding && !grounded) return "sliding";
   if (!grounded) return Number(vy) < -20 ? "jumping" : "falling";
+  if (ducking) return "ducking";
   if (moving || Math.abs(Number(vx) || 0) > 20) return "running";
   return "idle";
 }
@@ -286,6 +288,9 @@ export function chooseRemoteAnimationState({
   }
   if (logical === "sliding") {
     return grounded === false ? "sliding" : "idle";
+  }
+  if (logical === "ducking") {
+    return grounded === false ? "falling" : "ducking";
   }
   if (logical === "jumping" || logical === "falling") {
     return grounded === false ? logical : "idle";

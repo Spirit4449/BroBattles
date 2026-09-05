@@ -38,6 +38,7 @@ function broadcastHealthUpdate(room, playerData, meta = {}) {
       Math.round(playerData.maxHealth || playerData.health || 1),
     ),
     cause: meta.cause || null,
+    duckBlocked: meta.duckBlocked === true,
     gameId: room.matchId,
   });
   playerData._lastHealthBroadcastAt = Date.now();

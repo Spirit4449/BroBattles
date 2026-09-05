@@ -5,6 +5,12 @@ const {
   resolveSelectedSkinId,
   buildSkinAssetUrl,
 } = require("./skinsCatalog");
+const { getPlayersPerTeamForSelection } = require("./gameSelectionCatalog");
+const {
+  getPartyBotSlots,
+  prunePartyBotSlots,
+  clearPartyBotSlots,
+} = require("./partyBotSlots");
 
 async function selectPartyById(db, partyId) {
   const rows = await db.runQuery(
@@ -56,6 +62,10 @@ async function emitRoster(io, partyId, party, members, db = null) {
     };
   });
   const selection = normalizeSelectionFromRow(party || {});
+  const botSlots = prunePartyBotSlots(partyId, {
+    teamSize: getPlayersPerTeamForSelection(selection),
+    members: roster,
+  });
   const capacity = capacityFromSelection(selection);
   const ownerName = db ? await getPartyOwnerName(db, partyId) : null;
   io.to(`party:${partyId}`).emit("party:members", {
@@ -71,6 +81,7 @@ async function emitRoster(io, partyId, party, members, db = null) {
     map: selection.mapId,
     capacity,
     members: roster,
+    botSlots,
   });
 }
 
@@ -91,6 +102,7 @@ async function updateOrDeleteParty(io, db, partyId) {
   const party = await selectPartyById(db, partyId);
   if (!party) return true; // already gone
   if (!members || members.length === 0) {
+    clearPartyBotSlots(partyId);
     await db.runQuery("DELETE FROM parties WHERE party_id = ?", [partyId]);
     return true;
   }

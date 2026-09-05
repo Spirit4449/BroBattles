@@ -4,7 +4,7 @@ const { createBotParticipants } = require("../bots/identity");
 
 async function playersForPicks(q, picks, lock = false) {
   const players = [];
-  for (const { ticket, flip } of picks) {
+  for (const { ticket, flip, botSlots = [] } of picks) {
     const suffix = lock ? " FOR UPDATE" : "";
     const rows = ticket.party_id
       ? await q(
@@ -31,10 +31,14 @@ async function playersForPicks(q, picks, lock = false) {
         }),
       );
     }
+    const botCounts = {
+      team1: botSlots.filter((slot) => slot.team === "team1").length,
+      team2: botSlots.filter((slot) => slot.team === "team2").length,
+    };
     if (
-      rows.length !== Number(ticket.size) ||
-      counts.team1 !== Number(ticket.team1_count) ||
-      counts.team2 !== Number(ticket.team2_count)
+      rows.length + botSlots.length !== Number(ticket.size) ||
+      counts.team1 + botCounts.team1 !== Number(ticket.team1_count) ||
+      counts.team2 + botCounts.team2 !== Number(ticket.team2_count)
     )
       throw new Error("Queued party changed; queue again.");
   }
@@ -96,9 +100,24 @@ function createMatchAssemblyManager({
             realNames: options.realNames,
           })
         : [];
+      const configuredSlots = current.flatMap(({ botSlots = [], flip }) =>
+        botSlots.map((slot) => ({
+          ...slot,
+          team: flip ? (slot.team === "team1" ? "team2" : "team1") : slot.team,
+        })),
+      );
+      const shouldCreateConfiguredBots = configuredSlots.length > 0;
+      const selectedBots = shouldCreateConfiguredBots
+        ? createBotParticipants(humans, teamSize, {
+            seed: options.seed,
+            healthOverride: options.healthOverride,
+            realNames: options.realNames,
+          })
+        : bots;
+      const finalBots = shouldCreateConfiguredBots ? selectedBots : bots;
       // Keep staged identities/names, with final level and difficulty recalculated from locked humans.
       if (options.bots)
-        bots.forEach((bot, i) => {
+        finalBots.forEach((bot, i) => {
           const staged = options.bots[i];
           if (staged && staged.team === bot.team)
             Object.assign(bot, {
@@ -109,7 +128,22 @@ function createMatchAssemblyManager({
               profile_icon_id: staged.profile_icon_id,
             });
         });
-      const players = [...humans, ...bots.map(decorateParticipant)];
+      if (shouldCreateConfiguredBots) {
+        for (const team of ["team1", "team2"]) {
+          const specs = configuredSlots
+            .filter((slot) => slot.team === team)
+            .sort((a, b) => a.index - b.index);
+          const teamBots = finalBots.filter((bot) => bot.team === team);
+          teamBots.forEach((bot, index) => {
+            const character = specs[index]?.character;
+            if (character && character !== "shuffle") {
+              bot.char_class = character;
+              bot.profile_icon_id = character;
+            }
+          });
+        }
+      }
+      const players = [...humans, ...finalBots.map(decorateParticipant)];
       if (players.length !== teamSize * 2) return null;
       const mode = selectionToLegacyMode(modeId, modeVariantId);
       const { insertId: matchId } = await q(
@@ -121,7 +155,7 @@ function createMatchAssemblyManager({
           "INSERT INTO match_participants (match_id,user_id,party_id,team,char_class) VALUES (?,?,?,?,?)",
           [matchId, p.user_id, p.party_id, p.team, p.char_class],
         );
-      for (const b of bots)
+      for (const b of finalBots)
         await q(
           `INSERT INTO match_bot_participants (participant_id,match_id,name,team,char_class,level,trophies,seed,difficulty,health_override) VALUES (?,?,?,?,?,?,?,?,?,?)`,
           [

@@ -5,6 +5,7 @@ import {
   positionSpawn,
   getMapBgAsset,
   getMapMusicAsset,
+  getMapMusicVolume,
   getMapObjects,
   getMapBoundaryConfig,
   normalizeMapId,
@@ -19,7 +20,11 @@ import { isChatInputActive, setChatInputActive } from "./player";
 import "./styles/chat.css";
 import "./styles/tutorialTips.css";
 import { createSnapshotBuffer } from "./match/snapshotBuffer";
-import { readNetworkExperiments, sampleRemoteFrame, followRemotePosition } from "./gameScene/remoteSmoothing.js";
+import {
+  readNetworkExperiments,
+  sampleRemoteFrame,
+  followRemotePosition,
+} from "./gameScene/remoteSmoothing.js";
 import { createMatchCoordinator } from "./match/matchCoordinator";
 import { preloadGameAssets } from "./gameScene/preloadGameAssets";
 import { renderPoisonWater } from "./gameScene/poisonWaterRenderer";
@@ -77,7 +82,7 @@ import {
 } from "./characters/shared/animationState.js";
 import socket, { waitForConnect } from "./socket";
 import OpPlayer from "./opPlayer";
-import { prepareSpawnIntro, finishSpawnIntro } from './gameScene/spawnIntro';
+import { prepareSpawnIntro, finishSpawnIntro } from "./gameScene/spawnIntro";
 import { spawnDust, prewarmDust } from "./effects";
 import {
   configureClientNetTest,
@@ -108,10 +113,6 @@ const staticPath = "/assets";
 const BASE_GAME_WIDTH = 2300;
 const BASE_GAME_HEIGHT = 1000;
 const MAX_TOP_PLAYFIELD_PADDING = 320;
-
-
-
-
 
 function getViewportAdaptiveGameHeight() {
   const visualViewport = window.visualViewport;
@@ -805,8 +806,8 @@ class GameScene extends Phaser.Scene {
 
   // Preloads assets
   preload() {
-    this.load.image('spawn-parachute-blue', '/assets/parachute-blue.png');
-    this.load.image('spawn-parachute-red', '/assets/parachute-red.png');
+    this.load.image("spawn-parachute-blue", "/assets/parachute-blue.png");
+    this.load.image("spawn-parachute-red", "/assets/parachute-red.png");
     this.load.on("progress", (p) => {
       // 50% - 90%
       const pct = Math.floor(50 + p * 40); // maps 0-1 -> 50-90
@@ -996,7 +997,10 @@ class GameScene extends Phaser.Scene {
             const consumed = handleRemoteAttack(this, charKey, act, wrapper);
             if (consumed && wrapper?.opponent) {
               const currentKey = wrapper.opponent.anims?.currentAnim?.key || "";
-              const logical = toLogicalAnimation(currentKey || act.type, charKey);
+              const logical = toLogicalAnimation(
+                currentKey || act.type,
+                charKey,
+              );
               const duration = getAnimationDurationMs(
                 this,
                 currentKey,
@@ -1030,6 +1034,7 @@ class GameScene extends Phaser.Scene {
     // as soon as the match scene is live.
     this._bgmStarted = false;
     const bgmSrc = getMapMusicAsset(gameData?.map);
+    const bgmVolume = getMapMusicVolume(gameData?.map);
     const startBgm = () => {
       if (this._bgmStarted) return;
       this._bgmStarted = true;
@@ -1044,7 +1049,7 @@ class GameScene extends Phaser.Scene {
           const el = new Audio(bgmSrc);
           el.preload = "auto";
           el.loop = true;
-          el.volume = 0.05;
+          el.volume = bgmVolume;
           this._bgmSrc = bgmSrc;
           this._bgmEl = el;
           // Hook into scene lifecycle for cleanup
@@ -1210,7 +1215,12 @@ class GameScene extends Phaser.Scene {
     try {
       if (!isLiveGame) {
         player._spawnIntroPending = true;
-        prepareSpawnIntro(this, player, gameData.yourCharacter, me?.selected_skin_id);
+        prepareSpawnIntro(
+          this,
+          player,
+          gameData.yourCharacter,
+          me?.selected_skin_id,
+        );
       }
       finalizeLocalSpawnPresentation();
     } catch (_) {}
@@ -1344,8 +1354,7 @@ class GameScene extends Phaser.Scene {
 
       const isTeammate = playerData.team === gameData.yourTeam;
       const playerContainer = isTeammate ? teamPlayers : opponentPlayers;
-      const isBotPlayer =
-        playerData?.isBot === true;
+      const isBotPlayer = playerData?.isBot === true;
 
       // If an instance already exists for this name in this spawn version, upsert instead of re-create
       const existing = playerContainer[playerData.name];
@@ -1412,7 +1421,6 @@ class GameScene extends Phaser.Scene {
       }
       opPlayer.isBot = isBotPlayer;
 
-
       // Snap opponent sprite to its map-specific spawn immediately
       try {
         const idx =
@@ -1444,7 +1452,14 @@ class GameScene extends Phaser.Scene {
         }
         if (!isLiveGame) {
           opPlayer.opponent._spawnIntroPending = true;
-          prepareSpawnIntro(this, opPlayer.opponent, playerData.char_class, playerData.selected_skin_id, true, isTeammate);
+          prepareSpawnIntro(
+            this,
+            opPlayer.opponent,
+            playerData.char_class,
+            playerData.selected_skin_id,
+            true,
+            isTeammate,
+          );
         }
         opPlayer.finalizeSpawnPresentation?.();
         if (opPlayer.updateUIPosition) opPlayer.updateUIPosition();
@@ -1581,7 +1596,10 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (!isLiveGame && (this._spawnIntroEntries?.length || this._spawnIntroActive)) {
+    if (
+      !isLiveGame &&
+      (this._spawnIntroEntries?.length || this._spawnIntroActive)
+    ) {
       syncLocalUiPosition();
       updateDynamicCamera(this, player, Phaser);
       updateHealthBars({ opponentPlayers, teamPlayers, syncPositions: true });
@@ -1767,15 +1785,21 @@ class GameScene extends Phaser.Scene {
 
       const continuous = networkExperiments.continuousSmoothing;
       const now = performance.now();
-      const sample = continuous ? sampleRemoteFrame(
-        snapshotBuffer, baseFrame, (wrapper._continuousSmoothing ||= {}), {
-          attack: (Number(this._localAttackPrecisionUntil) || 0) > now ||
-            (Number(wrapper._attackPrecisionUntil) || 0) > now,
-          airborne: baseFrame.bState?.players?.[name]?.grounded === false,
-          deltaMs: this.game?.loop?.delta || 16.67,
-          snap: Number(wrapper._networkSnapUntil) > now,
-        },
-      ) : baseFrame;
+      const sample = continuous
+        ? sampleRemoteFrame(
+            snapshotBuffer,
+            baseFrame,
+            (wrapper._continuousSmoothing ||= {}),
+            {
+              attack:
+                (Number(this._localAttackPrecisionUntil) || 0) > now ||
+                (Number(wrapper._attackPrecisionUntil) || 0) > now,
+              airborne: baseFrame.bState?.players?.[name]?.grounded === false,
+              deltaMs: this.game?.loop?.delta || 16.67,
+              snap: Number(wrapper._networkSnapUntil) > now,
+            },
+          )
+        : baseFrame;
       const { aState, bState, alpha } = sample;
       const extrapolationMs = Math.max(0, Number(sample.extrapolationMs) || 0);
 
@@ -1819,11 +1843,13 @@ class GameScene extends Phaser.Scene {
           localAttackPrecision ||
           (Number(wrapper._attackPrecisionUntil) || 0) > nowPerf;
         const airborne = !(bPosData?.grounded ?? aPosData?.grounded ?? false);
-        const effectiveAlpha = continuous ? alpha : inPrecision
-          ? Math.max(alpha, 0.85)
-          : airborne
-            ? Math.max(alpha, 0.72)
-            : alpha;
+        const effectiveAlpha = continuous
+          ? alpha
+          : inPrecision
+            ? Math.max(alpha, 0.85)
+            : airborne
+              ? Math.max(alpha, 0.72)
+              : alpha;
         const aX = Number(aPosData?.x);
         const aY = Number(aPosData?.y);
         const bX = Number(bPosData?.x);
@@ -1849,7 +1875,9 @@ class GameScene extends Phaser.Scene {
               1,
               Number(bState?.tMono) - Number(aState?.tMono),
             );
-            targetX = projectAxis(aX, bX, stateDeltaMs, bPosData?.vx, { extrapolationMs });
+            targetX = projectAxis(aX, bX, stateDeltaMs, bPosData?.vx, {
+              extrapolationMs,
+            });
             targetY = projectAxis(aY, bY, stateDeltaMs, bPosData?.vy, {
               vertical: true,
               airborne,
@@ -1911,7 +1939,8 @@ class GameScene extends Phaser.Scene {
         } else if (continuous) {
           followRemotePosition(spr, targetX, targetY, {
             deltaMs: this.game?.loop?.delta ?? 16.67,
-            attack: (Number(this._localAttackPrecisionUntil) || 0) > now ||
+            attack:
+              (Number(this._localAttackPrecisionUntil) || 0) > now ||
               (Number(wrapper._attackPrecisionUntil) || 0) > now,
             airborne: !(bPosData?.grounded ?? aPosData?.grounded ?? false),
           });
@@ -2011,6 +2040,11 @@ class GameScene extends Phaser.Scene {
         isConnected &&
         isLoaded
       ) {
+        if (typeof wrapper.setDucking === "function") {
+          wrapper.setDucking(animSrc.ducking === true);
+        } else {
+          spr._ducking = animSrc.ducking === true;
+        }
         const prevFlip = spr.flipX;
         spr.flipX = !!animSrc.flip;
         if (

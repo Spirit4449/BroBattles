@@ -4,6 +4,7 @@ const { createPartyRouteService } = require("../../services/partyRouteService");
 const {
   normalizeSelectionFromRow,
 } = require("../../helpers/gameSelectionCatalog");
+const { getPartyBotSlots } = require("../../helpers/partyBotSlots");
 
 function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
   const partyState = createPartyStateService({ db, io });
@@ -15,7 +16,10 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
       if (!user) return res.status(401).json({ error: "Not authenticated" });
       const username = user.name;
 
-      const partyId = await partyState.createPartyForUser(username);
+      const partyId = await partyState.createPartyForUser(
+        username,
+        req.body?.selection,
+      );
 
       console.log(`[party] Party ${partyId} created by ${username}`);
       res.status(201).json({ partyId });
@@ -127,6 +131,7 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
         isPublic: Number(result.party?.is_public || 0) === 1,
         publicName: String(result.party?.public_name || "").trim(),
         viewer: username,
+        botSlots: getPartyBotSlots(partyId),
       });
       console.log("[party] /partydata response sent", {
         username,

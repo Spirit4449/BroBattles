@@ -4,10 +4,12 @@
     {
       "id": 1,
       "key": "lushy-peaks",
+      "terrain": "grass",
       "label": "Lushy Peaks",
       "compatibleModeIds": ["duels"],
       "compatibleVariantIds": ["duels-1v1", "duels-2v2", "duels-3v3"],
       "musicAsset": "/assets/main.mp3",
+      "musicVolume": 0.11,
       "mapSelectPreviewAsset": "/assets/lushy/preview.webp",
       "lobbyBgAsset": "/assets/lushy/lobbyBg.webp",
       "lobbyPlatformAsset": "/assets/lushy/lobbyPlatform.webp"
@@ -15,10 +17,12 @@
     {
       "id": 2,
       "key": "mangrove-meadow",
+      "terrain": "grass",
       "label": "Mangrove Meadow",
       "compatibleModeIds": ["duels"],
       "compatibleVariantIds": ["duels-1v1", "duels-2v2", "duels-3v3"],
       "musicAsset": "/assets/mangrove/mangrove_main.mp3",
+      "musicVolume": 0.11,
       "mapSelectPreviewAsset": "/assets/mangrove/gameBg.webp",
       "lobbyBgAsset": "/assets/mangrove/lobbyBg.webp",
       "lobbyPlatformAsset": "/assets/mangrove/lobbyPlatform.webp"
@@ -26,10 +30,12 @@
     {
       "id": 3,
       "key": "serenity",
+      "terrain": "grass",
       "label": "Serenity",
       "compatibleModeIds": ["duels"],
       "compatibleVariantIds": ["duels-1v1", "duels-2v2", "duels-3v3"],
       "musicAsset": "/assets/serenity/serenity_main.mp3",
+      "musicVolume": 0.11,
       "mapSelectPreviewAsset": "/assets/serenity/preview.webp",
       "lobbyBgAsset": "/assets/serenity/lobbyBg.webp",
       "lobbyPlatformAsset": "/assets/serenity/lobbyPlatform.webp"
@@ -37,10 +43,12 @@
     {
       "id": 4,
       "key": "iron-junction",
+      "terrain": "hard",
       "label": "Iron Junction",
       "compatibleModeIds": ["bank-bust"],
       "compatibleVariantIds": ["bank-bust-3v3"],
       "musicAsset": "/assets/bank-bust/bankbust-main.mp3",
+      "musicVolume": 0.22,
       "mapSelectPreviewAsset": "/assets/bank-bust/preview.webp",
       "lobbyBgAsset": "/assets/bank-bust/lobbyBg.webp",
       "lobbyPlatformAsset": "/assets/bank-bust/lobbyPlatform.webp",

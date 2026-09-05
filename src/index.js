@@ -2206,6 +2206,7 @@ async function bootstrapPartyData(partyId) {
         allowMemberSelection: data?.allowMemberSelection !== false,
         isPublic: data?.isPublic,
         publicName: data?.publicName,
+        botSlots: data?.botSlots,
       });
     syncPartySettingsButtonVisibility();
     sonner("Joined party", undefined, undefined, undefined, {

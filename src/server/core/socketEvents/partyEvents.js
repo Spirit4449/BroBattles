@@ -16,6 +16,11 @@ const {
   syncSkinOwnershipForUser,
 } = require("../../helpers/skinOwnership");
 const { getAllCharacters } = require("../../../lib/characterStats");
+const {
+  getPartyBotSlots,
+  setPartyBotSlot,
+  prunePartyBotSlots,
+} = require("../../helpers/partyBotSlots");
 
 function formatSelectionLabel(selection) {
   const { mode, variant } = getVariantDescriptor(
@@ -218,16 +223,19 @@ function registerPartyEvents(
           if (!isSelectionQueueable(selection)) {
             throw new Error(getSelectionBlockReason(selection));
           }
+          const botSlots = getPartyBotSlots(partyId);
           await setPartyStatusSafe(partyId, PARTY_STATUS.QUEUED);
           await mm.queueJoin({
             partyId,
             modeId: selection.modeId,
             modeVariantId: selection.modeVariantId,
             map: selection.mapId,
+            botSlots,
           });
           io.to(`party:${partyId}`).emit("party:matchmaking:start", {
             partyId,
             selection,
+            botSlots,
           });
           console.log(`[party:${partyId}] all-ready -> matchmaking`);
         } catch (err) {
@@ -242,6 +250,47 @@ function registerPartyEvents(
       }
     } catch (e) {
       console.warn("ready:status error:", e?.message);
+    }
+  });
+
+  socket.on("party:bot-slot:update", async (data, ack) => {
+    const actorName = socket.data.user?.name;
+    const partyId = Number(data?.partyId);
+    try {
+      if (!actorName || !partyId) throw new Error("Party ID required.");
+      const ownerRows = await db.runQuery(
+        `SELECT name FROM party_members WHERE party_id = ? ORDER BY joined_at ASC, name ASC LIMIT 1`,
+        [partyId],
+      );
+      if (ownerRows?.[0]?.name !== actorName) {
+        throw new Error("Only the party owner can configure bots.");
+      }
+      const [partyRows, members] = await Promise.all([
+        db.runQuery("SELECT * FROM parties WHERE party_id = ? LIMIT 1", [partyId]),
+        db.fetchPartyMembersDetailed(partyId),
+      ]);
+      if (!partyRows.length) throw new Error("Party not found.");
+      const selection = normalizeSelectionFromRow(partyRows[0]);
+      const teamSize = getVariantDescriptor(
+        selection.modeId,
+        selection.modeVariantId,
+      ).variant?.playersPerTeam || Number(partyRows[0].mode) || 1;
+      const team = data?.team;
+      const index = Number(data?.index);
+      const occupied = (members || []).filter((member) => member.team === team).length;
+      if (!Number.isInteger(index) || index < occupied || index >= teamSize) {
+        throw new Error("That party slot is not available.");
+      }
+      setPartyBotSlot(partyId, {
+        team,
+        index,
+        character: data?.character,
+      });
+      const botSlots = prunePartyBotSlots(partyId, { teamSize, members });
+      io.to(`party:${partyId}`).emit("party:bot-slots", { partyId, botSlots });
+      ack?.({ ok: true, botSlots });
+    } catch (error) {
+      ack?.({ ok: false, error: error?.message || "Could not update bot slot." });
     }
   });
 
@@ -271,6 +320,13 @@ function registerPartyEvents(
         actorName: uname,
       });
 
+      const members = await db.fetchPartyMembersDetailed(data.partyId);
+      const teamSize = getVariantDescriptor(
+        savedSelection.modeId,
+        savedSelection.modeVariantId,
+      ).variant?.playersPerTeam || 1;
+      const botSlots = prunePartyBotSlots(data.partyId, { teamSize, members });
+
       io.to(`party:${data.partyId}`).emit("mode-change", {
         partyId: data.partyId,
         selectedValue: savedSelection.modeVariantId,
@@ -283,6 +339,11 @@ function registerPartyEvents(
         selection: savedSelection,
         username: uname,
         members: data.members,
+        botSlots,
+      });
+      io.to(`party:${data.partyId}`).emit("party:bot-slots", {
+        partyId: data.partyId,
+        botSlots,
       });
 
       await broadcastSelectionNotice(

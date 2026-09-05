@@ -3,6 +3,7 @@ const { nearestSurface } = require('./navigation');
 const { bounds } = require('./physics');
 const { teamPosition } = require('./teamwork');
 const effects = require('../gameRoom/effects/effectManager');
+const { POWERUP_SHOCKWAVE_RADIUS } = require('../gameRoomConfig');
 
 const STYLES = {
   thorg: { fraction: 0.65, cap: 125, clearance: 60, height: 20 },
@@ -14,6 +15,58 @@ const STYLES = {
 };
 const healthFraction = (p) => Math.max(0, Math.min(1, p.health / Math.max(1, p.maxHealth)));
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+function routeCost(route) {
+  return route?.reduce((sum, edge) => sum + Number(edge.duration || 0), 0) || 0;
+}
+
+function pickupTravel(brain, pickup, route) {
+  return distance(brain.player, pickup) + routeCost(route) * 0.32;
+}
+
+function closestEnemyTo(point, enemies) {
+  let enemy = null, range = Infinity;
+  for (const candidate of enemies) {
+    const next = distance(point, candidate);
+    if (next < range) { enemy = candidate; range = next; }
+  }
+  return { enemy, range };
+}
+
+function shockwaveUtility(brain, pickup, enemies) {
+  const radius = Number(POWERUP_SHOCKWAVE_RADIUS) || 420;
+  let enemyValue = 0, allyCost = 0;
+  for (const enemy of enemies) {
+    const range = distance(pickup, enemy);
+    if (range < radius) enemyValue += 170 + (1 - range / radius) * 210;
+  }
+  for (const ally of brain.room.players.values()) {
+    if (ally === brain.player || ally.team !== brain.player.team || !ally.isAlive) continue;
+    const range = distance(pickup, ally);
+    if (range < radius) allyCost += 140 + (1 - range / radius) * 170;
+  }
+  return 90 + enemyValue - allyCost;
+}
+
+function shockwaveEvadeGoal(brain, pickup, reachable, enemies) {
+  const radius = Number(POWERUP_SHOCKWAVE_RADIUS) || 420;
+  let best = null, bestScore = Infinity;
+  for (const { surface, route } of reachable) {
+    const margin = Math.min((surface.right - surface.left) / 3, brain.graph.body.halfWidth + 25);
+    for (const rawX of [brain.player.x, surface.x, surface.left + margin, surface.right - margin]) {
+      const x = Math.max(surface.left + margin, Math.min(surface.right - margin, rawX));
+      const point = { x, y: surface.top, surfaceId: surface.id };
+      const blastRange = distance(point, pickup);
+      const enemyRange = enemies.length ? Math.min(...enemies.map((enemy) => distance(point, enemy))) : Infinity;
+      const travel = routeCost(route) * 0.06 + Math.abs(brain.player.x - x) * 0.12;
+      const blastDanger = Math.max(0, radius + 90 - blastRange) * 3;
+      const combatDanger = Math.max(0, 190 - enemyRange) * 0.5;
+      const score = travel + blastDanger + combatDanger;
+      if (score < bestScore) { best = point; bestScore = score; }
+    }
+  }
+  return best;
+}
 
 function preferredRange(brain, target) {
   if (brain.superPlan?.charged && Number.isFinite(brain.superPlan.preferredRange)) {
@@ -55,6 +108,7 @@ function chooseDecision(brain, context, target, enemies, now) {
   const style = STYLES[p.char_class] || STYLES.ninja;
   const preferred = target ? preferredRange(brain, target) : style.cap;
   const formation = teamPosition(brain, target);
+  const suddenDeath = Number.isFinite(poisonY);
   const hazard = bounds(p).bottom >= poisonY - 100;
   const near = enemies.filter((e) => distance(e, p) < 320).length;
   const healthLead = target ? healthFraction(p) - healthFraction(target) : 0;
@@ -65,27 +119,74 @@ function chooseDecision(brain, context, target, enemies, now) {
     .filter(({ surface, route }) => route !== null && surface.top < poisonY - 40);
 
   // Pickup value competes with fighting, distance, and pressure from every enemy.
-  if (!hazard) {
+  if (!suddenDeath) {
+    // A shockwave detonates immediately. If an opponent has clearly won the race,
+    // concede it and leave the blast radius instead of feeding the pickup.
+    for (const pickup of brain.room._powerups?.values?.() || []) {
+      if (pickup.type !== 'shockwave' || Number(pickup.expiresAt || Infinity) <= now || pickup.y >= poisonY - 40) continue;
+      const surface = nearestSurface(graph, pickup), route = routeTo(surface?.id);
+      if (route === null) continue;
+      const ownTravel = pickupTravel(brain, pickup, route);
+      const closest = closestEnemyTo(pickup, enemies);
+      const activatesIn = Math.max(0, Number(pickup.activeAt || 0) - now);
+      const enemyWillClaim = closest.enemy && closest.range < Math.min(280, ownTravel - 110) && activatesIn < 1300;
+      if (enemyWillClaim && distance(p, pickup) < (Number(POWERUP_SHOCKWAVE_RADIUS) || 420) + 170) {
+        const goal = shockwaveEvadeGoal(brain, pickup, reachable, enemies);
+        if (goal) return { mode: 'evade-powerup', goal, pickupId: pickup.id, contestTargetId: closest.enemy.participantId };
+      }
+    }
+
     let bestPickup = null, value = -Infinity;
-    for (const pickup of brain.room._powerups.values()) {
+    for (const pickup of brain.room._powerups?.values?.() || []) {
       if (Number(pickup.activeAt || 0) > now || Number(pickup.expiresAt || Infinity) <= now || pickup.y >= poisonY - 40) continue;
       const surface = nearestSurface(graph, pickup), route = routeTo(surface?.id);
       if (route === null) continue;
       const missing = 1 - healthFraction(p);
       const utility = pickup.type === 'health' ? missing * 850 :
+        pickup.type === 'shockwave' ? shockwaveUtility(brain, pickup, enemies) :
+        ['poison', 'freeze'].includes(pickup.type) ? -500 :
         ['shield', 'invisibility'].includes(pickup.type) ? 240 + missing * 160 : 220;
       const pressure = enemies.reduce((sum, e) => sum + Math.max(0, 190 - distance(pickup, e)), 0);
       const awareness = brain.profile.tacticalAwareness ?? 0.5;
       const score = utility * (0.85 + awareness * 0.35) - distance(p, pickup) * 0.24 - route.length * 42 - pressure * (brain.retreating ? 1.2 : 0.5) -
         (effects.isActive(p, pickup.type, now) ? 200 : 0);
-      if (score > value) { bestPickup = { ...pickup, surfaceId: surface.id }; value = score; }
+      const contender = closestEnemyTo(pickup, enemies);
+      if (score > value) {
+        bestPickup = { ...pickup, surfaceId: surface.id, contestTargetId: contender.range < 430 ? contender.enemy?.participantId : null };
+        value = score;
+      }
+    }
+
+    // Loose rewards are a small, human-looking opportunity: nearby gems matter
+    // more than coins, but danger and an active fight quickly outweigh either.
+    for (const drop of brain.room._deathDrops?.values?.() || []) {
+      if (!drop || drop.claimedBy || Number(drop.expiresAt || 0) <= now || drop.y >= poisonY - 40) continue;
+      const surface = nearestSurface(graph, drop), route = routeTo(surface?.id);
+      if (route === null) continue;
+      const range = distance(p, drop);
+      if (range > (drop.type === 'gem' ? 520 : 390)) continue;
+      const contender = closestEnemyTo(drop, enemies);
+      const danger = enemies.reduce((sum, enemy) => sum + Math.max(0, 230 - distance(drop, enemy)), 0);
+      const utility = drop.type === 'gem' ? 185 : 105;
+      const score = utility - range * 0.22 - route.length * 38 - danger * 0.65 - (target ? 65 : 0);
+      if (score > value) {
+        bestPickup = { ...drop, surfaceId: surface.id, loot: true, contestTargetId: contender.range < 360 ? contender.enemy?.participantId : null };
+        value = score;
+      }
     }
     // Finish an engagement before taking a long detour for an incidental buff.
     // Healing and defensive pickups still win when the bot needs to recover.
     const roleCost = brain.teamPlan && ['defend', 'support'].includes(brain.teamPlan.role) && bestPickup?.type !== 'health' ? 180 : 0;
-    const pursuitCost = target && !brain.retreating && bestPickup?.type !== 'health' ? 120 : 0;
-    if (bestPickup && value > (target ? 155 - (brain.profile.tacticalAwareness ?? 0.5) * 65 + pursuitCost + roleCost : 0)) {
-      return { mode: 'pickup', goal: bestPickup, pickupId: bestPickup.id };
+    const pursuitCost = target && !brain.retreating && bestPickup?.type !== 'health'
+      ? (bestPickup?.contestTargetId ? 30 : 120) : 0;
+    const threshold = bestPickup?.loot
+      ? (target ? 60 : 25)
+      : (target ? 155 - (brain.profile.tacticalAwareness ?? 0.5) * 65 + pursuitCost + roleCost : 0);
+    if (bestPickup && value > threshold) {
+      return { mode: bestPickup.loot ? 'loot' : 'pickup', goal: bestPickup,
+        pickupId: bestPickup.loot ? null : bestPickup.id,
+        dropId: bestPickup.loot ? bestPickup.id : null,
+        contestTargetId: bestPickup.contestTargetId || null };
     }
   }
 
@@ -121,7 +222,11 @@ function chooseDecision(brain, context, target, enemies, now) {
           score -= Math.min(650, nearestEnemy) * 0.2;
           if (surface.id === current?.id && nearestEnemy < 500) score += 140;
         }
-        if (hazard) score += surface.top * 2;
+        if (suddenDeath) {
+          // Rising poison changes the duel objective immediately. Favor vertical
+          // clearance even before the water is touching the current platform.
+          score += surface.top * 3;
+        }
         else if (target && !wantsSpace) {
           const aim = basicAim({ ...p, ...point }, target, brain.profile, () => 0.5, brain.room);
           const direct = aim.canHit && hasClearShot(brain.room, { ...p, ...point }, target, aim);
@@ -148,7 +253,7 @@ function chooseDecision(brain, context, target, enemies, now) {
         if (score < bestScore) { bestScore = score; best = { x, y: surface.top, surfaceId: surface.id }; }
       }
     }
-    if (best) return { mode: hazard ? 'escape' : brain.retreating ? 'retreat' : wantsSpace ? 'kite' : 'fight', goal: best };
+    if (best) return { mode: suddenDeath ? 'escape' : brain.retreating ? 'retreat' : wantsSpace ? 'kite' : 'fight', goal: best };
   }
 
   if (brain.lastSeen && now - brain.lastSeen.at < 3500) {

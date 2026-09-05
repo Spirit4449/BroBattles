@@ -2,8 +2,14 @@
 // NOTE: Refactored to remove circular dependency on game.js.
 // socket now comes from standalone socket.js and opponentPlayers are passed into createPlayer.
 import socket from "./socket";
+import { getTerrainSteps, footstepVolume, terrainLandingSound, shouldPlayLandingSound } from './gameScene/movementAudio';
 import { drawSuperChargeBar, resetSuperBarAnimation } from "./gameScene/superBarRenderer";
 import { drawHealthBar, resetHealthBarAnimation } from "./gameScene/healthBarRenderer";
+import {
+  setStatusIconStackAlpha,
+  setStatusIconStackVisible,
+  syncStatusIconStack,
+} from "./gameScene/statusIconStack";
 function pdbg() {
   /* logging disabled */
 }
@@ -52,7 +58,18 @@ import { createAttackAimReticleController } from "./gameScene/attackAimReticle";
 import { createMobileControlsController } from "./gameScene/mobileControls";
 import { RENDER_LAYERS } from "./gameScene/renderLayers";
 import MOVEMENT_PHYSICS from "./shared/movementPhysics.json";
+import {
+  DUCK_HEIGHT_RATIO,
+  DUCK_SPEED_RATIO,
+  findGroundSpan,
+  hasStandingClearance,
+  clampBodyToGroundSpan,
+} from "./shared/ducking.js";
 import { noteClientActionSent } from "./lib/netTestLogger.js";
+import {
+  playDuckTransitionSound,
+  playDuckBlockSound,
+} from "./gameScene/duckAudio.js";
 // Globals
 let player;
 let cursors;
@@ -74,6 +91,7 @@ let wallSlideVfxElapsed = 0;
 let fastFallVfxElapsed = 0;
 let lastGroundInputDirection = 0;
 let lastDirectionChangeAt = 0;
+let wasGroundWalking = false;
 let wallSlideLoopSfx = null;
 let wallSlideLoopPlaying = false;
 let fallAirLoopSfx = null;
@@ -99,6 +117,9 @@ let dead = false;
 let healthBarWidth = 60;
 let healthBar;
 let healthText;
+let duckShieldIcon;
+let duckShieldGlow;
+let powerupStatusIcons = [];
 // Ammo/Cooldown bar (client-side only)
 let ammoBar; // graphics
 let ammoBarBack; // background graphics
@@ -146,6 +167,7 @@ let dustTimer = 0;
 // Body config and flip-offset applier hoisted for use across functions
 let bodyConfig = null;
 let applyFlipOffsetLocal = null;
+let resizeForDuckLocal = null;
 let charEffects = null; // per-character, per-player effects handler (e.g., Draven fire)
 let charCtrl = null; // active character controller instance
 let disposeLocalSocketEvents = null;
@@ -157,7 +179,6 @@ let pointerContextMenuCanvas = null;
 let pointerContextMenuHandler = null;
 let mobileControlsController = null;
 
-const MOVEMENT_STEP_KEYS = ["sfx-step-1", "sfx-step-2", "sfx-step-3"];
 
 function noteMovementFxEvent(type, details = {}) {
   movementFxSequence = (movementFxSequence + 1) % 2147483647;
@@ -227,6 +248,53 @@ function resetMovementVfxTracking() {
   fastFallVfxElapsed = 0;
   lastGroundInputDirection = 0;
   lastDirectionChangeAt = 0;
+  wasGroundWalking = false;
+}
+
+function resetMovementInputState() {
+  const resetKeyState = (key) => {
+    try {
+      key?.reset?.();
+      if (key) {
+        key.isDown = false;
+        key.isUp = true;
+      }
+    } catch (_) {}
+  };
+
+  try {
+    scene?.input?.keyboard?.resetKeys?.();
+  } catch (_) {}
+  resetKeyState(cursors?.left);
+  resetKeyState(cursors?.right);
+  resetKeyState(cursors?.up);
+  resetKeyState(cursors?.down);
+  resetKeyState(keySpace);
+  resetKeyState(keyJ);
+  resetKeyState(keyI);
+  resetKeyState(keyE);
+  mobileControlsController?.resetInput?.();
+
+  if (player?.body) {
+    player._jumpLaunch = null;
+    player._lastJumpPressTime = 0;
+    player._lastWallKickAwayInputTs = 0;
+    player.setVelocity?.(0, 0);
+    player.setAcceleration?.(0, 0);
+  }
+
+  networkInputState = {
+    ...networkInputState,
+    left: false,
+    right: false,
+    direction: 0,
+    jumpHeld: false,
+    jumpPressed: false,
+    vx: 0,
+    vy: 0,
+    wallSliding: false,
+    wallSide: null,
+  };
 }
 
 const GAME_CROSSHAIR_CURSOR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.1" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.94)" stroke-width="1.4"/><circle cx="12" cy="12" r="1.45" fill="rgba(255,255,255,0.97)"/><path d="M12 1.7v4.25M12 18.05v4.25M1.7 12h4.25M18.05 12h4.25" stroke="rgba(32,32,32,0.55)" stroke-width="3.4" stroke-linecap="round"/><path d="M12 1.7v4.25M12 18.05v4.25M1.7 12h4.25M18.05 12h4.25" stroke="rgba(255,255,255,0.97)" stroke-width="1.55" stroke-linecap="round"/></svg>`;
@@ -753,6 +821,7 @@ export function createPlayer(
   player._bbSkinId = currentSkinId;
   player._bbSkinTextureKey = getTextureKey(character, currentSkinId);
   player.username = username; // Attach username for collision detection
+  player._suppressSpawnLandingSound = true;
   player.setCollideWorldBounds(true);
   player.anims.play(
     resolveAnimKey(scene, currentCharacter, "idle", "idle", currentSkinId),
@@ -801,6 +870,10 @@ export function createPlayer(
   const bh = Math.max(4, frame.height - heightShrink);
   player.body.setSize(bw, bh);
   player.body.updateFromGameObject?.();
+  player._ducking = false;
+  player._duckRequested = false;
+  player._duckGroundSpan = null;
+  player._duckGroundY = null;
   // Helper to adjust body offset when flipping
   applyFlipOffsetLocal = () => {
     if (!player || !player.body) return;
@@ -810,10 +883,69 @@ export function createPlayer(
     const frameW = frame ? frame.width : player.width;
     const bodyW = player.body.width;
     const ox = frameW / 2 - bodyW / 2 + (cfg.offsetXFromHalf ?? 0) + extra;
-    const oy = cfg.offsetY;
+    const standingHeight = Math.max(4, frame.height - cfg.heightShrink);
+    const currentSourceHeight = player.body.sourceHeight || standingHeight;
+    const oy = cfg.offsetY + standingHeight - currentSourceHeight;
     player.body.setOffset(ox, oy);
   };
   applyFlipOffsetLocal();
+
+  resizeForDuckLocal = (ducking) => {
+    if (!player?.body || player._ducking === !!ducking) return;
+    const body = player.body;
+    const standingHeight = Math.max(4, frame.height - bodyConfig.heightShrink);
+    const nextHeight = ducking
+      ? Math.max(4, standingHeight * DUCK_HEIGHT_RATIO)
+      : standingHeight;
+    const previousWorldHeight = body.height;
+    body.setSize(body.sourceWidth, nextHeight, false);
+    body.setOffset(body.offset.x, bodyConfig.offsetY + standingHeight - nextHeight);
+    const heightDelta = previousWorldHeight - body.height;
+    body.position.y += heightDelta;
+    if (body.prev) body.prev.y += heightDelta;
+    if (body.prevFrame) body.prevFrame.y += heightDelta;
+    if (body.autoFrame) body.autoFrame.y += heightDelta;
+    body.updateCenter?.();
+    player._ducking = !!ducking;
+    body.touching.down = true;
+    body.wasTouching.down = true;
+    wasOnGround = true;
+    lastAirborneVelocityY = 0;
+    airbornePeakBottomY = null;
+    if (fallAirLoopPlaying) {
+      try { fallAirLoopSfx?.stop?.(); } catch (_) {}
+      fallAirLoopPlaying = false;
+      fallAirStartedAt = 0;
+    }
+    playDuckTransitionSound(scene, !!ducking);
+  };
+
+  const protectDuckEdge = () => {
+    if (
+      !player?._ducking ||
+      !player._duckRequested ||
+      !player._duckGroundSpan ||
+      dead
+    ) return;
+    const body = player.body;
+    if (body.velocity.y < 0) return;
+    // Confirm the remembered platform still exists before anchoring to it.
+    const probe = {
+      x: (player._duckGroundSpan[0] + player._duckGroundSpan[1]) / 2 - body.width / 2,
+      y: player._duckGroundY - body.height,
+      width: body.width,
+      height: body.height,
+    };
+    if (!findGroundSpan(probe, scene._mapObjects || [])) {
+      player._duckGroundSpan = null;
+      return;
+    }
+    clampBodyToGroundSpan(body, player._duckGroundSpan, player._duckGroundY);
+  };
+  scene.physics.world.on("worldstep", protectDuckEdge);
+  scene.events.once("shutdown", () => {
+    scene.physics.world.off("worldstep", protectDuckEdge);
+  });
 
   // Listener to detect if player leaves the world bounds
   scene.events.on("update", () => {
@@ -851,6 +983,7 @@ export function createPlayer(
     stroke: "#000000",
     strokeThickness: 5,
   });
+  playerName.setShadow(2, 3, "rgba(0, 0, 0, 0.95)", 3, true, true);
   playerName.setOrigin(0.5, 0);
   playerName.setDepth(42);
 
@@ -866,6 +999,28 @@ export function createPlayer(
   // Health bar
   healthBar = scene.add.graphics();
   healthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
+  duckShieldGlow = scene.add.image(0, 0, "pu-icon-shield-webp");
+  duckShieldGlow
+    .setDisplaySize(20, 23)
+    .setTint(0xff8d32)
+    .setAlpha(0.4)
+    .setBlendMode(Phaser.BlendModes.ADD)
+    .setDepth(RENDER_LAYERS.PLAYER_HUD + 1.5)
+    .setVisible(false);
+  duckShieldIcon = scene.add.image(0, 0, "pu-icon-shield-webp");
+  duckShieldIcon
+    .setDisplaySize(13, 15)
+    .setDepth(RENDER_LAYERS.PLAYER_HUD + 3)
+    .setVisible(false);
+  scene.tweens.add({
+    targets: duckShieldGlow,
+    displayWidth: { from: 18, to: 22 },
+    displayHeight: { from: 21, to: 26 },
+    duration: 520,
+    ease: "Sine.InOut",
+    yoyo: true,
+    repeat: -1,
+  });
   // Ammo bar background & fill (render order: background, fill)
   ammoBarBack = scene.add.graphics();
   ammoBar = scene.add.graphics();
@@ -1124,12 +1279,14 @@ export function createPlayer(
       wallSlideLoopPlaying = value;
     },
     onLocalDeath: () => {
+      resetMovementInputState();
       resetMovementVfxTracking();
       resetPointerAttackAim();
       updateHealthBar();
       setLocalUiVisible(false);
     },
     onLocalRespawn: () => {
+      resetMovementInputState();
       resetMovementVfxTracking();
       setLocalUiVisible(true);
       try {
@@ -1143,6 +1300,7 @@ export function createPlayer(
       } catch (_) {}
     },
     onDebug: pdbg,
+    onDuckBlocked: () => playDuckBlockSound(scene),
   });
 
   if (!scene._localSocketEventsCleanupBound) {
@@ -1210,6 +1368,12 @@ function setLocalUiVisible(visible) {
     healthBar?.setVisible(shouldShow);
   } catch (_) {}
   try {
+    const showDuckShield = shouldShow && !dead && !!player?._ducking;
+    duckShieldIcon?.setVisible(showDuckShield);
+    duckShieldGlow?.setVisible(showDuckShield);
+    if (!shouldShow) setStatusIconStackVisible(powerupStatusIcons, false);
+  } catch (_) {}
+  try {
     ammoBar?.setVisible(shouldShow);
   } catch (_) {}
   try {
@@ -1236,6 +1400,8 @@ function setLocalUiAlpha(alpha = 1) {
     playerName,
     healthText,
     healthBar,
+    duckShieldIcon,
+    duckShieldGlow,
     ammoBar,
     ammoBarBack,
     superBar,
@@ -1246,6 +1412,7 @@ function setLocalUiAlpha(alpha = 1) {
       item?.setAlpha?.(safeAlpha);
     } catch (_) {}
   }
+  setStatusIconStackAlpha(powerupStatusIcons, safeAlpha);
   try {
     const hudRoot = document.getElementById("hud");
     if (hudRoot) {
@@ -1258,7 +1425,7 @@ function setLocalUiAlpha(alpha = 1) {
 function drawIndicatorTriangle() {
   if (!indicatorTriangle || !player) return;
   indicatorTriangle.clear();
-  const bodyTop = player.body ? player.body.y : player.y - player.height / 2;
+  const bodyTop = getStableLocalUiTop();
   const triangle = new Phaser.Geom.Triangle(
     player.x,
     bodyTop - 10,
@@ -1273,7 +1440,7 @@ function drawIndicatorTriangle() {
 
 export function syncLocalUiPosition() {
   if (!player) return;
-  const uiTop = player.body ? player.body.y : player.y - player.height / 2;
+  const uiTop = getStableLocalUiTop();
   try {
     playerName?.setPosition(player.x, uiTop - 42);
   } catch (_) {}
@@ -1281,6 +1448,13 @@ export function syncLocalUiPosition() {
     if (indicatorTriangle?.visible) drawIndicatorTriangle();
   } catch (_) {}
   updateHealthBar();
+}
+
+function getStableLocalUiTop() {
+  if (!player?.body) return player.y - player.height / 2;
+  if (!player._ducking || !bodyConfig || !frame) return player.body.y;
+  const standingHeight = Math.max(4, frame.height - bodyConfig.heightShrink);
+  return player.body.bottom - standingHeight * Math.abs(player.scaleY || 1) + 8;
 }
 
 export function finalizeLocalSpawnPresentation() {
@@ -1313,7 +1487,7 @@ function updateHealthBar() {
   pdbg();
 
   const healthBarX = player.x - healthBarWidth / 2;
-  const bodyTop = player.body ? player.body.y : player.y - player.height / 2;
+  const bodyTop = getStableLocalUiTop();
   // Always anchor to bodyTop so it doesn't jump when dead
   const y = bodyTop - 20; // just above body
 
@@ -1327,8 +1501,26 @@ function updateHealthBar() {
   drawHealthBar(healthBar, {
     x: healthBarX, y, width: healthBarWidth,
     health: currentHealth, maxHealth, color: 0x99ab2c,
+    guarded: !!player._ducking,
   });
   healthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
+
+  const showDuckShield = !dead && !!player._ducking && healthBar.visible !== false;
+  const shieldX = healthBarX + healthBarWidth + 1;
+  const powerupX = healthBarX - 1;
+  const shieldY = y + 4.5;
+  duckShieldGlow?.setPosition(shieldX, shieldY).setVisible(showDuckShield);
+  duckShieldIcon?.setPosition(shieldX, shieldY).setVisible(showDuckShield);
+  syncStatusIconStack({
+    scene,
+    icons: powerupStatusIcons,
+    effects: player?._powerupEffects,
+    recentEffects: player?._recentPowerupEffects,
+    x: powerupX,
+    y: shieldY,
+    visible: !dead && healthBar.visible !== false,
+    startIndex: 0,
+  });
 
   healthText.setPosition(player.x - healthText.width / 2, y - 8);
   healthText.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
@@ -1398,7 +1590,7 @@ function drawAmmoBar(forcedX, forcedY) {
     Date.now() < ammoBarShakeUntil ? Phaser.Math.Between(-3, 3) : 0;
   const x =
     (forcedX !== undefined ? forcedX : player.x - ammoBarWidth / 2) + shakeX;
-  const bodyTop = player.body ? player.body.y : player.y - player.height / 2;
+  const bodyTop = getStableLocalUiTop();
   const y = forcedY !== undefined ? forcedY : bodyTop - 9; // just under health bar
   ammoBarBack.clear();
   ammoBar.clear();
@@ -1565,6 +1757,7 @@ export function handlePlayerMovement(scene) {
   const keyA = scene.input.keyboard.addKey("A");
   const keyD = scene.input.keyboard.addKey("D");
   const keyW = scene.input.keyboard.addKey("W");
+  const keyS = scene.input.keyboard.addKey("S");
   const mobileMoveLeft = !!mobileControlsController?.isMovingLeft?.();
   const mobileMoveRight = !!mobileControlsController?.isMovingRight?.();
   let leftKey = cursors.left.isDown || keyA.isDown || mobileMoveLeft;
@@ -1584,6 +1777,7 @@ export function handlePlayerMovement(scene) {
   if (upKeyFreshPress) {
     player._lastJumpPressTime = Date.now();
   }
+  let ducking = false;
 
   const touchingWallNow =
     !!player.body.touching.left ||
@@ -1831,7 +2025,59 @@ export function handlePlayerMovement(scene) {
     clearAttackAimReticle();
   }
 
+  const groundedForDuck = !!(
+    player.body.touching.down || player.body.blocked.down
+  );
+  const groundSpan = groundedForDuck
+    ? findGroundSpan(player.body, scene._mapObjects || [])
+    : null;
+  const wantsToDuck =
+    (cursors.down.isDown || keyS.isDown) && !upKey && !movementLocked && !dead;
+  player._duckRequested = wantsToDuck;
+  ducking = !!player._ducking;
+  if (!ducking && wantsToDuck && groundedForDuck && groundSpan) {
+    ducking = true;
+    player._duckGroundSpan = groundSpan;
+    player._duckGroundY = player.body.bottom;
+  } else if (
+    ducking &&
+    !player._duckGroundSpan &&
+    wantsToDuck &&
+    groundedForDuck &&
+    groundSpan
+  ) {
+    player._duckGroundSpan = groundSpan;
+    player._duckGroundY = player.body.bottom;
+  } else if (ducking && (!wantsToDuck || player.body.velocity.y < -5)) {
+    ducking = false;
+  } else if (ducking && !player._duckGroundSpan && !groundedForDuck) {
+    ducking = false;
+  }
+  if (player._ducking && !ducking && groundedForDuck && !dead) {
+    const standingHeight = Math.max(4, frame.height - bodyConfig.heightShrink);
+    const standingWorldHeight = standingHeight * Math.abs(player.scaleY || 1);
+    const extraHeight = standingWorldHeight - player.body.height;
+    if (!hasStandingClearance(player.body, scene._mapObjects || [], extraHeight)) {
+      ducking = true;
+      upKey = false;
+      upKeyFreshPress = false;
+      player._lastJumpPressTime = 0;
+    }
+  }
+  resizeForDuckLocal?.(ducking);
+  if (!ducking) {
+    player._duckGroundSpan = null;
+    player._duckGroundY = null;
+  }
+
   // Left movement
+  if (ducking) {
+    const duckMaxSpeed = maxSpeed * DUCK_SPEED_RATIO;
+    player.setMaxVelocity(duckMaxSpeed, 1000);
+    if (Math.abs(player.body.velocity.x) > duckMaxSpeed) {
+      player.setVelocityX(Math.sign(player.body.velocity.x) * duckMaxSpeed);
+    }
+  }
   if (leftKey) {
     if (indicatorTriangle) {
       indicatorTriangle.clear(); // Removes indicator triangle if the player has moved
@@ -1918,21 +2164,28 @@ export function handlePlayerMovement(scene) {
   }
   if (inputDirection !== 0) lastGroundInputDirection = inputDirection;
 
-  if (
+  const isGroundWalking =
     !dead &&
     player.body.touching.down &&
     inputDirection !== 0 &&
-    !isAttacking
-  ) {
+    !isAttacking;
+  if (isGroundWalking) {
+    // Play on the first grounded movement frame so a quick key tap is audible.
+    // The cooldown continues to space footsteps during sustained movement.
+    if (!wasGroundWalking) {
+      playMovementStep(groundSpeedRatio, false);
+      sfxWalkCooldown = 0;
+    }
     sfxWalkCooldown += scene.game.loop.delta;
     const stepInterval = Phaser.Math.Linear(285, 150, groundSpeedRatio);
     if (sfxWalkCooldown >= stepInterval) {
       sfxWalkCooldown = 0;
       playMovementStep(groundSpeedRatio, false);
     }
-  } else if (!player.body.touching.down) {
+  } else {
     sfxWalkCooldown = 0;
   }
+  wasGroundWalking = isGroundWalking;
 
   // Jumping
   const now = Date.now();
@@ -2105,6 +2358,7 @@ export function handlePlayerMovement(scene) {
 
   // Landing detection (transition airborne -> grounded)
   const onGround = player.body.touching.down;
+  const playLandingSound = shouldPlayLandingSound(player, onGround);
   const currentBodyBottom =
     Number(player.body?.bottom) || player.y + player.height * 0.5;
   if (!onGround && !dead) {
@@ -2135,8 +2389,12 @@ export function handlePlayerMovement(scene) {
     const landingStrength =
       landingVelocityRatio * 0.65 + landingHeightRatio * 0.35;
     const shapedLandingStrength = landingStrength * landingStrength;
-    scene.sound.play("sfx-land", {
-      volume: 0.28 + shapedLandingStrength * 0.5,
+    const landingAudio = terrainLandingSound(
+      scene._terrainType,
+      0.28 + shapedLandingStrength * 0.5,
+    );
+    if (playLandingSound) scene.sound.play(landingAudio.key, {
+      volume: landingAudio.volume,
       rate: 0.93 - shapedLandingStrength * 0.02,
     });
     const body = player.body;
@@ -2225,6 +2483,7 @@ export function handlePlayerMovement(scene) {
 
   let desiredMovementAnimation = deriveMovementAnimation({
     grounded: !!player?.body?.touching?.down,
+    ducking: !!player?._ducking,
     moving: !!isMoving,
     wallSliding: !!isWallSliding,
     vx: Number(player?.body?.velocity?.x) || 0,
@@ -2268,6 +2527,8 @@ export function handlePlayerMovement(scene) {
     resolveAnimKey,
     logical: desiredAnimation,
     fallback: "idle",
+    // Phaser's second play argument means "ignore if already playing".
+    // Keep it enabled so the one-frame duck pose is not restarted every tick.
     force: true,
   });
 
@@ -2278,6 +2539,7 @@ export function handlePlayerMovement(scene) {
     jumpHeld: !!upKey,
     jumpPressed: !!upKeyFreshPress,
     grounded: !!player?.body?.touching?.down,
+    ducking: !!player?._ducking,
     vx: Number(player?.body?.velocity?.x) || 0,
     vy: Number(player?.body?.velocity?.y) || 0,
     facing: player?.flipX ? -1 : 1,
@@ -2313,15 +2575,13 @@ export function handlePlayerMovement(scene) {
       0,
       1,
     );
+    const steps = getTerrainSteps(scene._terrainType);
     footstepVariantCursor =
-      (footstepVariantCursor + Phaser.Math.Between(1, 2)) %
-      MOVEMENT_STEP_KEYS.length;
-    const key = MOVEMENT_STEP_KEYS[footstepVariantCursor];
+      (footstepVariantCursor + (steps.length > 1 ? Phaser.Math.Between(1, steps.length - 1) : 1)) % steps.length;
+    const key = steps[footstepVariantCursor].key;
     try {
       scene.sound.play(key, {
-        volume:
-          (isDirectionChange ? 0.52 : 0.4) +
-          normalizedSpeed * (isDirectionChange ? 0.13 : 0.15),
+        volume: footstepVolume(normalizedSpeed, isDirectionChange, scene._terrainType),
         rate:
           (isDirectionChange ? 0.88 : 0.94) + normalizedSpeed * 0.14,
       });
@@ -2565,38 +2825,11 @@ export function setLocalNetStateFlusher(fn) {
 }
 
 export function setChatInputActive(active) {
-  const resetKeyState = (key) => {
-    try {
-      key?.reset?.();
-      if (key) {
-        key.isDown = false;
-        key.isUp = true;
-      }
-    } catch (_) {}
-  };
-
   chatInputActive = !!active;
   if (chatInputActive) {
     resetPointerAttackAim();
-    try {
-      if (player?.body) {
-        player._jumpLaunch = null;
-        player.setVelocityX(0);
-        player.setAccelerationX(0);
-        player.setDragX(0);
-      }
-    } catch (_) {}
-    try {
-      scene?.input?.keyboard?.resetKeys?.();
-    } catch (_) {}
-    resetKeyState(cursors?.left);
-    resetKeyState(cursors?.right);
-    resetKeyState(cursors?.up);
-    resetKeyState(cursors?.down);
-    resetKeyState(keySpace);
-    resetKeyState(keyJ);
-    resetKeyState(keyI);
-    resetKeyState(keyE);
+    resetMovementInputState();
+    player?.setDragX?.(0);
     networkInputState = {
       ...networkInputState,
       left: false,

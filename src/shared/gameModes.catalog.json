@@ -12,6 +12,10 @@
       "implemented": true,
       "topology": "team-vs-team",
       "runtimeClass": "duels",
+      "botObjective": {
+        "kind": "eliminate-opponents",
+        "label": "Eliminate the opposing team"
+      },
       "defaultVariantId": "duels-1v1",
       "lobbyPresentation": {
         "selectionStyle": "subcards",
@@ -22,7 +26,7 @@
         "objectiveEntities": false,
         "scoreboard": false,
         "verticalScrolling": false,
-        "aiBots": false,
+        "aiBots": true,
         "economy": false,
         "modeState": false
       },
@@ -66,6 +70,10 @@
       "implemented": false,
       "topology": "team-vs-team",
       "runtimeClass": "unimplemented",
+      "botObjective": {
+        "kind": "capture-flag",
+        "label": "Capture the enemy flag"
+      },
       "queueDisabledReason": "Capture the Flag is not playable yet.",
       "lobbyPresentation": {
         "selectionStyle": "direct",
@@ -76,7 +84,7 @@
         "objectiveEntities": true,
         "scoreboard": true,
         "verticalScrolling": false,
-        "aiBots": false,
+        "aiBots": true,
         "economy": false,
         "modeState": true
       },
@@ -92,6 +100,10 @@
       "implemented": false,
       "topology": "free-for-all",
       "runtimeClass": "unimplemented",
+      "botObjective": {
+        "kind": "climb-tower",
+        "label": "Reach the top of the tower"
+      },
       "queueDisabledReason": "Tower is not playable yet.",
       "lobbyPresentation": {
         "selectionStyle": "direct",
@@ -102,7 +114,7 @@
         "objectiveEntities": true,
         "scoreboard": true,
         "verticalScrolling": true,
-        "aiBots": false,
+        "aiBots": true,
         "economy": false,
         "modeState": true
       },
@@ -118,6 +130,10 @@
       "implemented": false,
       "topology": "free-for-all",
       "runtimeClass": "unimplemented",
+      "botObjective": {
+        "kind": "collect-airdrops",
+        "label": "Collect falling loot"
+      },
       "queueDisabledReason": "Airdrop is not playable yet.",
       "lobbyPresentation": {
         "selectionStyle": "direct",
@@ -128,7 +144,7 @@
         "objectiveEntities": true,
         "scoreboard": true,
         "verticalScrolling": false,
-        "aiBots": false,
+        "aiBots": true,
         "economy": false,
         "modeState": true
       },
@@ -144,6 +160,10 @@
       "implemented": true,
       "topology": "team-vs-team",
       "runtimeClass": "bank-bust",
+      "botObjective": {
+        "kind": "destroy-vault",
+        "label": "Destroy the enemy vault"
+      },
       "defaultVariantId": "bank-bust-3v3",
       "settings": {
         "vaultMaxHp": 50000,
@@ -160,7 +180,7 @@
         "objectiveEntities": true,
         "scoreboard": true,
         "verticalScrolling": false,
-        "aiBots": false,
+        "aiBots": true,
         "economy": false,
         "modeState": true
       },
@@ -186,6 +206,10 @@
       "implemented": false,
       "topology": "pve-survival",
       "runtimeClass": "unimplemented",
+      "botObjective": {
+        "kind": "survive-waves",
+        "label": "Survive the enemy waves"
+      },
       "queueDisabledReason": "Bot Survival is not playable yet.",
       "lobbyPresentation": {
         "selectionStyle": "direct",
@@ -212,6 +236,10 @@
       "implemented": false,
       "topology": "team-vs-team",
       "runtimeClass": "unimplemented",
+      "botObjective": {
+        "kind": "score-goals",
+        "label": "Score against the opposing team"
+      },
       "queueDisabledReason": "Soccer is not playable yet.",
       "lobbyPresentation": {
         "selectionStyle": "direct",
@@ -222,7 +250,7 @@
         "objectiveEntities": true,
         "scoreboard": true,
         "verticalScrolling": false,
-        "aiBots": false,
+        "aiBots": true,
         "economy": false,
         "modeState": true
       },
@@ -238,6 +266,10 @@
       "implemented": false,
       "topology": "team-vs-team",
       "runtimeClass": "unimplemented",
+      "botObjective": {
+        "kind": "destroy-bed",
+        "label": "Destroy the enemy bed"
+      },
       "queueDisabledReason": "Bedwars is not playable yet.",
       "lobbyPresentation": {
         "selectionStyle": "direct",
@@ -248,7 +280,7 @@
         "objectiveEntities": true,
         "scoreboard": true,
         "verticalScrolling": false,
-        "aiBots": false,
+        "aiBots": true,
         "economy": true,
         "modeState": true
       },

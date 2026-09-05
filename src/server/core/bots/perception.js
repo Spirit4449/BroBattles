@@ -9,7 +9,10 @@ function observe(room, player, now, samples) {
   ).map((p) => ({
     participantId: participantId(p), char_class: p.char_class, x: p.x, y: p.y,
     vx: p.vx || 0, vy: p.vy || 0, flip: !!p.flip, health: p.health, maxHealth: p.maxHealth,
-    grounded: p.grounded, platformId: p.platformId, attack: p._visibleAttack && { ...p._visibleAttack },
+    grounded: p.grounded, ducking: p.ducking === true,
+    bodyHalfHeight: p._bodyHalfHeight,
+    bodyCenterOffsetY: p._bodyCenterOffsetY,
+    platformId: p.platformId, attack: p._visibleAttack && { ...p._visibleAttack },
   }));
   const projectiles = [];
   for (const attack of [...(room._activeAttacks || []), ...(room._botVisualProjectiles || [])]) {

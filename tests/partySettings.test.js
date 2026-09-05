@@ -81,6 +81,39 @@ test("omitted permission leaves the saved setting unchanged", async () => {
   assert.equal(f.party.allow_member_selection, 0);
 });
 
+test("new parties use the creator's current lobby selection", async () => {
+  const queries = [];
+  const db = {
+    async withTransaction(callback) {
+      const q = async (sql, params) => {
+        queries.push({ sql: sql.replace(/\s+/g, " ").trim(), params });
+        if (sql.includes("INSERT INTO parties")) return { insertId: 42 };
+        return { affectedRows: 1 };
+      };
+      return callback({}, q);
+    },
+  };
+  const state = createPartyStateService({ db, io: {} });
+
+  const partyId = await state.createPartyForUser("Owner", {
+    modeId: "bank-bust",
+    modeVariantId: "bank-bust-3v3",
+    mapId: 4,
+  });
+
+  assert.equal(partyId, 42);
+  const insert = queries.find(({ sql }) => sql.startsWith("INSERT INTO parties"));
+  assert.deepEqual(insert.params, [
+    "idle",
+    1,
+    4,
+    "bank-bust",
+    "bank-bust-3v3",
+    0,
+    null,
+  ]);
+});
+
 test("old schemas retain selection access and report the missing setting", async () => {
   const f = fixture();
   delete f.party.allow_member_selection;

@@ -9,6 +9,7 @@ const {
   ACTION_SPAM_SUPPRESS_MS,
 } = require("./gameRoomConfig");
 const effectManager = require("./gameRoom/effects/effectManager");
+const { reduceDuckDamage } = require("../../shared/ducking");
 const powerupManager = require("./gameRoom/powerupManager");
 const deathDropManager = require("./gameRoom/deathDropManager");
 const combatValidation = require("./gameRoom/combatValidation");
@@ -1590,6 +1591,8 @@ class GameRoom {
 
       // Apply damage (incoming modifier covers shield powerup, freeze stun, etc.)
       dmg *= effectManager.getModifiers(target, now).damageTakenMult;
+      const duckBlocked = !isSelf && target.ducking === true;
+      dmg = reduceDuckDamage(target, dmg);
       const old = target.health;
       target.health = Math.max(0, target.health - Math.round(dmg));
       const appliedDamage = Math.max(0, old - target.health);
@@ -1671,7 +1674,7 @@ class GameRoom {
             t: now,
           });
         }
-        this._broadcastHealthUpdate(target, { cause: "combat" });
+        this._broadcastHealthUpdate(target, { cause: "combat", duckBlocked });
         if (target.health === 0 && old > 0) {
           console.log(
             `%c[GameRoom ${this.matchId}] Player ${target.name} was killed by ${attacker.name}`,
@@ -1837,6 +1840,16 @@ class GameRoom {
       playerData.health = Math.max(1, Number(playerData.maxHealth) || 1);
       playerData.x = nextX;
       playerData.y = nextY;
+      playerData.vx = 0;
+      playerData.vy = 0;
+      playerData.ducking = false;
+      playerData.wallSliding = false;
+      playerData.wallSide = null;
+      if (Array.isArray(playerData._inputIntentQueue)) {
+        playerData._inputIntentQueue.length = 0;
+      }
+      playerData._currentInputIntent = null;
+      playerData._lastInputIntent = null;
       playerData.lastDamagedAt = 0;
       playerData.lastCombatAt = now;
       if (Number(plan.shieldMs) > 0) {

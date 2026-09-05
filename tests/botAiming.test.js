@@ -8,6 +8,20 @@ const room = { FIXED_DT_MS: 1000 / 60, geometry: { colliders: [] } };
 const player = (char_class) => ({ char_class, x: 0, y: 500, difficulty: profile });
 const target = { x: 400, y: 500, vx: 0, vy: 0 };
 
+test('ducking does not change whether a bot considers the target attackable', () => {
+  const p = player('ninja');
+  const standingAim = basicAim(p, target, profile, () => 0.5, room);
+  const duckAim = basicAim(p, {
+    ...target,
+    ducking: true,
+    bodyHalfHeight: 24,
+    bodyCenterOffsetY: 28,
+  }, profile, () => 0.5, room);
+  assert.equal(duckAim.canHit, standingAim.canHit);
+  assert.equal(duckAim.angle, standingAim.angle);
+  assert.deepEqual(duckAim.target, standingAim.target);
+});
+
 // Independently step the same velocity-first integration used by live attacks.
 function missDistance(p, enemy, angle, speed) {
   const huntress = p.char_class === 'huntress';
@@ -37,6 +51,106 @@ test('wizard shoots through walls while leading both movement components', () =>
   }
 });
 
+test('ninja only considers a shuriken shot clear when terrain leaves room for it', () => {
+  const ninja = player('ninja');
+  const aim = basicAim(ninja, target, profile, () => 0.5, room);
+  const blocked = {
+    ...room,
+    geometry: {
+      colliders: [{ left: 180, right: 220, top: 0, bottom: 1000 }],
+    },
+  };
+  const overhead = {
+    ...room,
+    geometry: {
+      colliders: [{ left: 180, right: 220, top: 0, bottom: 400 }],
+    },
+  };
+
+  assert.equal(hasClearShot(blocked, ninja, target, aim), false);
+  assert.equal(hasClearShot(overhead, ninja, target, aim), true);
+});
+
+test('ninja preserves ammo instead of firing a basic shuriken into a wall', () => {
+  const ninja = {
+    ...player('ninja'),
+    participantId: 'blocked-ninja',
+    isAlive: true,
+    _botActionSeq: 0,
+    ammoState: { charges: 1, nextFireInMs: 0, cooldownMs: 100 },
+  };
+  const actions = [];
+  const blocked = {
+    FIXED_DT_MS: room.FIXED_DT_MS,
+    geometry: {
+      colliders: [{ left: 180, right: 220, top: 0, bottom: 1000 }],
+    },
+    handlePlayerAction: (id, action) => actions.push(action),
+  };
+
+  assert.equal(requestBasic(blocked, ninja, target, profile, () => 0.5, 1000), false);
+  assert.equal(ninja.ammoState.charges, 1);
+  assert.equal(actions.length, 0);
+});
+
+test('ninja can shoot a ducking human without mistaking their floor for cover', () => {
+  const ninja = {
+    ...player('ninja'),
+    participantId: 'duck-shot-ninja',
+    isAlive: true,
+    _botActionSeq: 0,
+    ammoState: { charges: 1, nextFireInMs: 0, cooldownMs: 100 },
+  };
+  const duckingHuman = {
+    ...target,
+    char_class: 'ninja',
+    ducking: true,
+  };
+  const actions = [];
+  const floorRoom = {
+    FIXED_DT_MS: room.FIXED_DT_MS,
+    geometry: {
+      colliders: [{ left: -100, right: 500, top: 528, bottom: 560 }],
+    },
+    handlePlayerAction: (id, action) => actions.push(action),
+  };
+
+  assert.equal(requestBasic(floorRoom, ninja, duckingHuman, profile, () => 0.5, 1000), true);
+  assert.equal(ninja.ammoState.charges, 0);
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].target.y, ninja.y);
+});
+
+test('ninja can shoot a ducking Gloop despite its large sprite-to-body offset', () => {
+  const ninja = {
+    ...player('ninja'),
+    y: 511.7,
+    participantId: 'ducked-gloop-shot-ninja',
+    isAlive: true,
+    _botActionSeq: 0,
+    ammoState: { charges: 1, nextFireInMs: 0, cooldownMs: 100 },
+  };
+  const duckingGloop = {
+    ...target,
+    x: 250,
+    y: 467.6,
+    char_class: 'gloop',
+    ducking: true,
+  };
+  const actions = [];
+  const floorRoom = {
+    FIXED_DT_MS: room.FIXED_DT_MS,
+    geometry: {
+      colliders: [{ left: -100, right: 500, top: 539.6, bottom: 640 }],
+    },
+    handlePlayerAction: (id, action) => actions.push(action),
+  };
+
+  assert.equal(requestBasic(floorRoom, ninja, duckingGloop, profile, () => 0.5, 1000), true);
+  assert.equal(actions.length, 1);
+  assert.ok(actions[0].target.y < 539.6 - 18, 'aim leaves the shuriken clear of the floor');
+});
+
 test('huntress selects a high arc over cover and rejects fully blocked trajectories', () => {
   const p = player('huntress');
   const cover = { ...room, geometry: { colliders: [{ left: 180, right: 220, top: 400, bottom: 1000 }] } };
@@ -50,6 +164,16 @@ test('huntress selects a high arc over cover and rejects fully blocked trajector
   Object.assign(p, { isAlive: true, ammoState: { charges: 3, nextFireInMs: 0 } });
   assert.equal(requestBasic(sealed, p, target, profile, () => 0.5, 1000), false);
   assert.equal(p.ammoState.charges, 3);
+});
+
+test('huntress bot aim has extra inaccuracy for its forgiving arrow spread', () => {
+  const ordinary = basicAim(player('ninja'), target, profile, () => 1, room);
+  const huntress = basicAim(player('huntress'), target, profile, () => 1, room);
+  const perfectHuntress = basicAim(player('huntress'), target, { ...profile, aimError: 0 }, () => 0.5, room);
+  const ordinaryError = Math.abs(ordinary.angle);
+  const huntressError = Math.abs(huntress.angle - perfectHuntress.angle);
+  assert.ok(huntressError > ordinaryError + 0.02,
+    `huntress error ${huntressError} should exceed ordinary error ${ordinaryError}`);
 });
 
 test('huntress intercepts moving targets more accurately than the previous gravity estimate', (t) => {
@@ -135,4 +259,38 @@ test('huntress varies power by distance and angle and sends it into every runtim
       assert.ok(Math.abs(Math.hypot(arrow.vx, arrow.vy) - aim.speed) < 0.001);
     }
   }
+});
+
+test('ninja bot shurikens stop when their swept path crosses a wall', () => {
+  const {
+    createRuntimeAttack,
+    tickRuntimeAttack,
+  } = require('../src/server/core/gameRoom/characterAttackRegistry');
+  const ninja = {
+    ...player('ninja'),
+    participantId: 'wall-test-ninja',
+    name: 'Ninja Bot',
+    isAlive: true,
+    isBot: true,
+  };
+  const attack = createRuntimeAttack(ninja, {
+    type: 'ninja-shuriken',
+    id: 'wall-test-shuriken',
+    x: 0,
+    y: 200,
+    direction: 1,
+    angle: 0,
+    forwardDistance: 500,
+    outwardDuration: 380,
+  }, 1000);
+  const wallRoom = {
+    FIXED_DT_MS: 200,
+    players: new Map([[ninja.participantId, ninja]]),
+    geometry: {
+      colliders: [{ left: 100, right: 110, top: 0, bottom: 400 }],
+    },
+  };
+
+  assert.equal(tickRuntimeAttack(wallRoom, attack, 1200), true);
+  assert.ok(attack.x > 110, 'the test crosses the entire wall in one server tick');
 });

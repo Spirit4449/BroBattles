@@ -394,7 +394,7 @@ function tickRuntimeControlEffects(room, now = Date.now()) {
     }
     if (
       now >= Number(pull.until) ||
-      !room.players.has(String(pull.sourceSocketId || ""))
+      !getParticipant(room, String(pull.sourceSocketId || ""))
     ) {
       delete target._gloopPullState;
       try {
@@ -1460,6 +1460,8 @@ function tickReturningProjectile(room, attack, descriptor) {
   const runtime = descriptor?.runtime || {};
   const dtMs = room.FIXED_DT_MS;
   const dtSec = dtMs / 1000;
+  const prevX = Number(attack.x) || 0;
+  const prevY = Number(attack.y) || 0;
   attack.phaseElapsed += dtMs;
   attack.totalElapsed += dtMs;
   if (attack.totalElapsed > attack.maxLifetimeMs) return true;
@@ -1505,6 +1507,22 @@ function tickReturningProjectile(room, attack, descriptor) {
     attack.x += (dx / dist) * step;
     attack.y += (dy / dist) * step;
     if (dist < 30) return true;
+  }
+
+  if (
+    attacker.isBot &&
+    room.geometry?.colliders.some((rect) =>
+      sweptCircleOverlapsRect(
+        prevX,
+        prevY,
+        attack.x,
+        attack.y,
+        rect,
+        Math.max(1, Number(runtime.collisionRadius) || 1),
+      ),
+    )
+  ) {
+    return true;
   }
 
   attack.hitSet =

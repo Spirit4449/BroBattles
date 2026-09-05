@@ -40,6 +40,7 @@ const {
   SD_RISE_FAST_MULT,
   WORLD_BOUNDS,
 } = require("../../gameRoomConfig");
+const { reduceDuckDamage } = require("../../../../shared/ducking");
 
 function getPowerScale(params = {}) {
   const scale = Number(params?.powerScale);
@@ -288,7 +289,9 @@ const effectDefs = {
       const totalDamage = Math.max(0, Number(params.totalDamage) || 500);
       const durationMs = Math.max(1, Number(params.durationMs) || 5000);
       const prev = Number(player.health || 0);
-      const dmg = Math.max(1, Math.round((totalDamage * 1000) / durationMs));
+      const rawDamage = Math.max(1, Math.round((totalDamage * 1000) / durationMs));
+      const duckBlocked = player.ducking === true;
+      const dmg = Math.max(1, Math.round(reduceDuckDamage(player, rawDamage)));
       player.health = Math.max(0, prev - dmg);
       player.lastCombatAt = now;
 
@@ -305,7 +308,7 @@ const effectDefs = {
       }
 
       if (player.health !== prev) {
-        room._broadcastHealthUpdate(player, { cause: "burn" });
+        room._broadcastHealthUpdate(player, { cause: "burn", duckBlocked });
         room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
           type: "huntressBurn",
           username: player.name,

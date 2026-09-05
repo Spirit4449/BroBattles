@@ -968,6 +968,16 @@ export function createMobileControlsController({
     return false;
   }
 
+  function resetInput() {
+    releaseStick("movement", false);
+    releaseStick("basic", false);
+    releaseStick("special", false);
+    state.jump.pointerId = null;
+    state.jump.active = false;
+    state.jump.pressedAt = 0;
+    state.jump.consumedAt = 0;
+  }
+
   function updateReticle(reticleController) {
     if (state.basic.active) {
       state.basic.context = resolveStickContext("basic");
@@ -997,6 +1007,7 @@ export function createMobileControlsController({
     handlePointerDown,
     handlePointerMove,
     handlePointerUp,
+    resetInput,
     updateReticle,
     isEnabled: () => !!state.enabled,
     isMovingLeft: () =>
