@@ -163,6 +163,16 @@ class ThrowAttackReticleRenderer extends BaseAttackReticleRenderer {
     this.shadow.strokePath();
     this.main.strokePath();
     this.accent.strokePath();
+    if (state.character === "gloop") {
+      const impacts = state.throwPreview.impacts || [];
+      impacts.forEach((hit, i) => {
+        this.crosshair.lineStyle(1.5, 0x9aebd2, 0.85);
+        this.crosshair.strokeEllipse(hit.x, hit.y, Math.abs(hit.nx) > 0.5 ? 8 : 22 - i * 3,
+          Math.abs(hit.nx) > 0.5 ? 22 - i * 3 : 8);
+      });
+      this.crosshair.lineStyle(1.5, 0xf0f4ad, 0.9);
+      this.crosshair.strokeCircle(state.endX, state.endY, 7);
+    }
   }
 }
 
@@ -254,19 +264,23 @@ class RoundAttackReticleRenderer extends BaseAttackReticleRenderer {
     super.render(state);
     if (!state) return;
     const palette = getPalette(state);
-    const radius = Math.max(
+    const visualScale = Number(state.visualScale) || 1;
+    const radius = visualScale * Math.max(
       16,
       Number(state.roundRadius) || Number(state.range) || 60,
     );
-    const cx = Number(state.baseX) || Number(state.anchorX) || 0;
-    const cy = Number(state.baseY) || Number(state.anchorY) || 0;
+    const radiusY = Math.max(16, Number(state.config?.radiusY) * visualScale || radius);
+    const cx = Number(state.baseX ?? state.anchorX) || 0;
+    const cy = (Number(state.baseY ?? state.anchorY) || 0) +
+      (Number(state.config?.reticleOffsetY) || 0) * visualScale -
+      (state.character === "thorg" ? 37.8 * (visualScale - 1) : 0);
 
     this.shadow.fillStyle(palette.shadowColor, palette.shadowAlpha);
-    this.shadow.fillCircle(cx, cy, radius + 4);
+    this.shadow.fillEllipse(cx, cy, (radius + 4) * 2, (radiusY + 4) * 2);
     this.main.fillStyle(palette.fillColor, palette.fillAlpha);
-    this.main.fillCircle(cx, cy, radius);
+    this.main.fillEllipse(cx, cy, radius * 2, radiusY * 2);
     this.accent.lineStyle(2.4, palette.accentColor, palette.accentAlpha);
-    this.accent.strokeCircle(cx, cy, radius);
+    this.accent.strokeEllipse(cx, cy, radius * 2, radiusY * 2);
   }
 }
 

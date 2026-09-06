@@ -1,5 +1,6 @@
 import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import socket from "../../socket.js";
+import { attachmentPoint } from '../../shared/huntressProjectile';
 import { createRuntimeId } from "../shared/runtimeId.js";
 import { lockPlayerFlip } from "../shared/flipLock.js";
 import { emitVaultHitForCircle } from "../shared/vaultTargeting.js";
@@ -26,10 +27,9 @@ function clamp(value, min, max) {
 
 function resolveAimBallistics(angle, speed, range) {
   const upFactor = clamp(-Math.sin(Number(angle) || 0), 0, 1);
-  const speedScale = 1 - upFactor * 0.32;
   const rangeScale = 1 + upFactor * 0.45;
   return {
-    speed: Math.max(1, Number(speed) * speedScale),
+    speed: Math.max(1, Number(speed)),
     range: Math.max(120, Number(range) * rangeScale),
     upFactor,
   };
@@ -798,6 +798,11 @@ export function stopHuntressArrowOnConfirmedHit(
   const arrow = ACTIVE_ARROWS_BY_ID.get(String(instanceId || "").trim());
   if (!arrow?.active || arrow._disposed || arrow.embedded) return false;
   if (targetSprite?.active) {
+    const body = targetSprite.body;
+    if (body && [body.left, body.right, body.top, body.bottom].every(Number.isFinite)) {
+      const attachment = attachmentPoint(arrow, body);
+      arrow.setPosition(attachment.x, attachment.y);
+    }
     arrow.embedIntoTarget(
       {
         sprite: targetSprite,

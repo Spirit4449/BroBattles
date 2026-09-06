@@ -5,6 +5,7 @@ import {
   changeDebugState,
   performGloopSlimeball,
   spawnGloopSlimeballVisual,
+  handleGloopSlimeSplat,
 } from "./attack";
 import { playHookAction, playHookCatchAction } from "./special";
 import { executeDefaultAttack } from "../shared/attackFlow";
@@ -118,6 +119,10 @@ class Gloop extends CharacterEntityBase {
       playOwnerThrow(scene, ownerSprite);
       return true;
     }
+    if (type === `${NAME}-slimeball-splat`) {
+      handleGloopSlimeSplat(scene, data);
+      return true;
+    }
     if (type === `${NAME}-slimeball-release`) {
       if (!consumeGloopRelease(scene, data.id)) return true;
       spawnGloopSlimeballVisual(scene, data, ownerSprite);
@@ -138,6 +143,10 @@ class Gloop extends CharacterEntityBase {
   static handleLocalAuthoritativeAttack(scene, data, localContext = {}) {
     const type = String(data?.type || "").toLowerCase();
     const ownerSprite = localContext?.ownerSprite || null;
+    if (type === `${NAME}-slimeball-splat`) {
+      handleGloopSlimeSplat(scene, data);
+      return true;
+    }
     if (type === `${NAME}-slimeball-release`) {
       if (!consumeGloopRelease(scene, data.id)) return true;
       spawnGloopSlimeballVisual(scene, data, ownerSprite);

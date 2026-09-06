@@ -26,10 +26,9 @@ function clamp(value, min, max) {
 
 function resolveAimBallistics(angle, speed, range) {
   const upFactor = clamp(-Math.sin(Number(angle) || 0), 0, 1);
-  const speedScale = 1 - upFactor * 0.32;
   const rangeScale = 1 + upFactor * 0.45;
   return {
-    speed: Math.max(1, Number(speed) * speedScale),
+    speed: Math.max(1, Number(speed)),
     range: Math.max(180, Number(range) * rangeScale),
   };
 }

@@ -171,9 +171,9 @@ export default class OpPlayer {
       fontStyle: "bold",
       fill: "#ffffff",
       stroke: "#000000",
-      strokeThickness: 5,
+      strokeThickness: 3,
     });
-    this.opPlayerName.setShadow(2, 3, "rgba(0, 0, 0, 0.95)", 3, true, true);
+    this.opPlayerName.setShadow(1, 1, "rgba(0, 0, 0, 0.65)", 1, true, true);
     this.opPlayerName.setOrigin(0.5, 0);
     this.opPlayerName.setDepth(50); // always above map objective props
 
@@ -731,7 +731,7 @@ export default class OpPlayer {
       width: this.opHealthBarWidth,
       health: this.opCurrentHealth,
       maxHealth: this.opMaxHealth,
-      color: isTeammate ? 0x99ab2c : 0xbb5c39,
+      color: isTeammate ? 0x99ab2c : 0xc64d38,
       guarded: !!this.opponent?._ducking,
     });
     this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);

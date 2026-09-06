@@ -1,3 +1,5 @@
+const { slimeLaunch, sampleSlimePath } = require("../../shared/gloopProjectile");
+const { aimAtTarget } = require("../../shared/huntressProjectile");
 const {
   getResolvedCharacterAimConfig,
   getResolvedCharacterSpecialAimConfig,
@@ -412,6 +414,34 @@ function resolveAttackAimContext({
 } = {}) {
   const config = getAimConfig(character, family);
   const defaultAngle = getDefaultFacingAngle(player);
+  if (character === "gloop" && !isSpecialFamily(family)) {
+    const cfg = getAimTuning(character, config, family);
+    const x = Number(player?.x) || 0, y = Number(player?.y) || 0;
+    const pointer = pointerWorldX != null && pointerWorldY != null &&
+      Number.isFinite(Number(pointerWorldX)) && Number.isFinite(Number(pointerWorldY));
+    let dx = pointer && (!quick || quickUsesPointerAngle) ? Number(pointerWorldX) - x : Math.cos(defaultAngle) * config.defaultRange;
+    let dy = pointer && (!quick || quickUsesPointerAngle) ? Number(pointerWorldY) - y : 40;
+    const distance = Math.hypot(dx, dy) || 1;
+    const range = clamp(distance, config.minRange, config.maxRange);
+    dx *= range / distance; dy *= range / distance;
+    const target = { x: x + dx, y: y + dy };
+    const launch = slimeLaunch({ x, y, width: player?.displayWidth || player?.width,
+      height: player?.displayHeight || player?.height }, target, cfg);
+    const scene = player?.scene;
+    const bounds = scene?.physics?.world?.bounds;
+    const rects = (scene?._mapObjects || []).map(o => o.body || o).filter(b => b.enable !== false)
+      .map(b => ({ left: b.left, right: b.right, top: b.top, bottom: b.bottom }));
+    const throwPreview = sampleSlimePath(launch, { ...cfg,
+      floorY: bounds ? bounds.y + bounds.height : 1000,
+      worldMinX: bounds?.x ?? -400, worldMaxX: bounds ? bounds.x + bounds.width : 4000 }, rects, { stopAtFirstImpact: true });
+    return { character, family: "basic", kind: "throw", config, quick, paletteKey: "basic",
+      ...launch, targetX: target.x, targetY: target.y, pointerWorldX: target.x, pointerWorldY: target.y,
+      baseX: x, baseY: y, anchorX: launch.start.x, anchorY: launch.start.y,
+      unitX: Math.cos(launch.angle), unitY: Math.sin(launch.angle), range,
+      minRange: config.minRange, maxRange: config.maxRange, defaultRange: config.defaultRange,
+      rangeRatio: (range - config.minRange) / (config.maxRange - config.minRange), speedScale: 1,
+      endX: throwPreview.endX, endY: throwPreview.endY, throwPreview };
+  }
   const initialBase = getPlayerAimBase(player, config, defaultAngle);
   const targetX = Number(pointerWorldX);
   const targetY = Number(pointerWorldY);
@@ -461,6 +491,7 @@ function resolveAttackAimContext({
       resolvedTargetY - base.anchorY,
       resolvedTargetX - base.anchorX,
     );
+    const rangeRatio = maxRange > minRange ? (appliedRange - minRange) / (maxRange - minRange) : 0;
     const upFactor = clamp(-Math.sin(angle), 0, 1);
     const arcHeightBase = Number(config.previewArcHeight) || 0;
     const endDropBase = Number(config.previewEndDropY) || 0;
@@ -532,6 +563,17 @@ function resolveAttackAimContext({
     Number(config.maxSpeedScale) || 1,
     rangeRatio,
   );
+  if (character === "huntress") {
+    const flight = aimAtTarget({ x: Number(player?.x) || 0, y: Number(player?.y) || 0,
+      width: player?.displayWidth || player?.width || 150,
+      height: player?.displayHeight || player?.height || 150 },
+    { x: resolvedTargetX, y: resolvedTargetY }, isSpecialFamily(family) ? 0.5 : rangeRatio,
+    isSpecialFamily(family), Number(config.trajectorySamples) || 32);
+    angle = flight.angle;
+    throwPreview = flight.preview;
+    base.anchorX = flight.projectile.x;
+    base.anchorY = flight.projectile.y;
+  }
   const unitX = Math.cos(angle);
   const unitY = Math.sin(angle);
   const direction =
@@ -576,6 +618,7 @@ function resolveAttackAimContext({
     coneSpreadDeg: Math.max(1, Number(config.coneSpreadDeg) || 56),
     coneInnerRadius: Math.max(0, Number(config.coneInnerRadius) || 0),
     roundRadius,
+    visualScale: character === "thorg" && !isSpecialFamily(family) ? (Number(player?._thorgVisualScale) || 1) : 1,
     throwPreview,
   };
 }

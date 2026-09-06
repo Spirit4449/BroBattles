@@ -2163,11 +2163,21 @@ h3 {
   right: 20px;
   width: max-content;
   min-width: 0;
-  padding: 0 10px;
+  gap: 7px;
+  padding: 0 12px 0 8px;
   white-space: nowrap;
   background:
     linear-gradient(135deg, rgba(26, 105, 167, 0.9), rgba(14, 80, 138, 0.82)),
     rgba(10, 23, 48, 0.36);
+}
+
+.leaderboard-button-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  image-rendering: pixelated;
+  object-fit: contain;
 }
 
 .leaderboard-button:hover {

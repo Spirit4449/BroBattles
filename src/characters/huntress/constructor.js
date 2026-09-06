@@ -1,4 +1,5 @@
 import socket from "../../socket";
+import { predictHuntressShot } from './network';
 import { characterStats } from "../../lib/characterStats.js";
 import { animations } from "./anim";
 import {
@@ -56,7 +57,7 @@ class Huntress extends CharacterEntityBase {
     );
     scene.load.audio(
       `${NAME}-burn-tick`,
-      this.characterAssetPath(staticPath, "burn-tick.mp3"),
+      this.characterAssetPath(staticPath, "tick.mp3"),
     );
   }
 
@@ -201,7 +202,8 @@ class Huntress extends CharacterEntityBase {
     const result = executeDefaultAttack({
       scene: this.scene,
       ammo: this.ammo,
-      emitAction: (payload) => socket.emit("game:action", payload),
+      emitAction: (payload) => socket.emit("game:action",
+        predictHuntressShot(this.scene, this.player, this.username, payload)),
       payloadBuilder,
       onAfterFire,
       attackResetMs: 520,

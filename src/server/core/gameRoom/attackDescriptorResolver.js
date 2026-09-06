@@ -223,7 +223,7 @@ function getRuntimeOverrides(actionType) {
       minBounceSpeed: Math.max(0, Number(slimeball.minBounceSpeed) || 0),
       bounceFloorOffsetY: Number(slimeball.bounceFloorOffsetY) || 185,
       maxLifetimeMs: Math.max(250, Number(slimeball.maxLifetimeMs) || 4200),
-      destroyOnHit: false,
+      destroyOnHit: true,
       slowDurationMs,
       slowSpeedMult,
       slowJumpMult,

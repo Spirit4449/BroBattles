@@ -4,22 +4,22 @@ import { showUiConfirm } from "./lib/uiConfirm.js";
 import "./styles/shop.css";
 
 const SECTION_META = [
-  { id: "sales", title: "Sales", icon: "/assets/shop/icons/sales-v2.png" },
+  { id: "sales", title: "Sales", icon: "/assets/shop/icons/sales-v2.webp" },
   {
     id: "dailies",
     title: "Dailies",
-    icon: "/assets/shop/icons/dailies-v2.png",
+    icon: "/assets/shop/icons/dailies-v2.webp",
   },
-  { id: "skins", title: "Skins", icon: "/assets/shop/icons/skins-v2.png" },
+  { id: "skins", title: "Skins", icon: "/assets/shop/icons/skins-v2.webp" },
   {
     id: "profile",
     title: "Profile",
-    icon: "/assets/shop/icons/profile-v2.png",
+    icon: "/assets/shop/icons/profile-v2.webp",
   },
   {
     id: "currency",
     title: "Gems & Coins",
-    icon: "/assets/shop/icons/currency-v2.png",
+    icon: "/assets/shop/icons/currency-v2.webp",
   },
 ];
 
@@ -169,16 +169,16 @@ function getItemTypeLabel(item, grants) {
 
 function getItemIcon(item, grants) {
   const primary = grants[0] || {};
-  if (item.kind === "bundle") return "/assets/shop/icons/bundle-v2.png";
+  if (item.kind === "bundle") return "/assets/shop/icons/bundle-v2.webp";
   if (primary.kind === "currency") {
     return primary.currency === "gems"
       ? "/assets/gem.webp"
       : "/assets/coin.webp";
   }
-  if (primary.kind === "skin") return "/assets/shop/icons/skins-v2.png";
+  if (primary.kind === "skin") return "/assets/shop/icons/skins-v2.webp";
   if (primary.kind === "card" || primary.kind === "profileIcon")
-    return "/assets/shop/icons/profile-v2.png";
-  return "/assets/shop/icons/shop-v2.png";
+    return "/assets/shop/icons/profile-v2.webp";
+  return "/assets/shop/icons/shop-v2.webp";
 }
 
 function isBigPurchase(item) {
@@ -350,7 +350,7 @@ export function initializeShop({
       <section class="shop-window" role="dialog" aria-modal="true" aria-labelledby="shop-title">
         <header class="shop-header">
           <div class="shop-brand">
-            <img class="shop-title-icon" src="/assets/shop/icons/shop-v2.png" alt="" /><h1 id="shop-title">Bro Shop</h1>
+            <img class="shop-title-icon" src="/assets/shop/icons/shop-v2.webp" alt="" /><h1 id="shop-title">Bro Shop</h1>
           </div>
           <div class="shop-header-wallet" aria-label="Your wallet">
             <span data-shop-wallet-shell="coins"><small>COINS</small><img src="/assets/coin.webp" alt="" /><strong data-shop-wallet="coins">0</strong></span>

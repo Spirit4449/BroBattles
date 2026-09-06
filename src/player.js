@@ -2,6 +2,7 @@
 // NOTE: Refactored to remove circular dependency on game.js.
 // socket now comes from standalone socket.js and opponentPlayers are passed into createPlayer.
 import socket from "./socket";
+import { predictHuntressShot } from './characters/huntress/network';
 import { getTerrainSteps, footstepVolume, terrainLandingSound, shouldPlayLandingSound } from './gameScene/movementAudio';
 import { drawSuperChargeBar, resetSuperBarAnimation } from "./gameScene/superBarRenderer";
 import { drawHealthBar, resetHealthBarAnimation } from "./gameScene/healthBarRenderer";
@@ -981,9 +982,9 @@ export function createPlayer(
     fontStyle: "bold",
     fill: "#ffffff",
     stroke: "#000000",
-    strokeThickness: 5,
+    strokeThickness: 3,
   });
-  playerName.setShadow(2, 3, "rgba(0, 0, 0, 0.95)", 3, true, true);
+  playerName.setShadow(1, 1, "rgba(0, 0, 0, 0.65)", 1, true, true);
   playerName.setOrigin(0.5, 0);
   playerName.setDepth(42);
 
@@ -1571,9 +1572,10 @@ function fireSpecialAttack(context = null) {
     }
   } catch (_) {}
   noteClientActionSent("special", { type: "special" });
-  socket.emit("game:special", {
-    aim: serializeAimContext(context),
-  });
+  const specialRequest = { aim: serializeAimContext(context) };
+  socket.emit("game:special", currentCharacter === 'huntress'
+    ? predictHuntressShot(player.scene, player, username, specialRequest, true)
+    : specialRequest);
 }
 
 function drawSuperBar(x, y) {

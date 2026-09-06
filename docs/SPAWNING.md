@@ -13,7 +13,7 @@ Both export formats can be imported back into the editor. Exporting does not aut
 
 The server establishes landing positions before sending `game:start`. During the countdown, clients use Arcade gravity, capped descent velocity, and map collision for the parachute drop. Falling animation and a swaying canopy play until contact; contact triggers the existing spawn burst. Input and remote interpolation do not move characters during this phase. Fight start restores normal movement and broadcasts shield effects, **without issuing another respawn**. Live reconnects skip the intro. Ordinary Bank Bust death respawns use validated landing slots; parachutes are the initial match entrance only.
 
-The parachutes use the single-frame `parachute-blue.png` (you/allies) and `parachute-red.png` (opponents), drawn at 89 pixels high with their original proportions. Descent is capped at 88 px/s. Tuning constants live at the top of `src/gameScene/spawnIntro.js`.
+The parachutes use the single-frame `parachute-blue.webp` (you/allies) and `parachute-red.webp` (opponents), drawn at 89 pixels high with their original proportions. Descent is capped at 88 px/s. Tuning constants live at the top of `src/gameScene/spawnIntro.js`.
 
 A gentle one-way glide starts each character upwind of the landing spot (up to 36 pixels horizontally). A slightly curved approach eases into the spawn X without reversing direction. The canopy smoothly leans toward actual horizontal velocity instead of oscillating on a timer. Launch side and distance vary deterministically per player; nearby walls and narrow platform edges reduce the offset or choose the safer side. Vertical clearance and the editor's drop height still control the launch altitude.
 

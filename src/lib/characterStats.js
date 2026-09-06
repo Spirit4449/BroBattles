@@ -98,13 +98,13 @@ export const characterStats = {
 
   thorg: {
     baseHealth: 13000,
-    attackDescription: "Swings a heavy axe in a short arc.",
+    attackDescription: "Revolves his heavy weapon around his body, striking both sides with light knockback.",
     baseDamage: 1500,
-    ammoCooldownMs: 400,
+    ammoCooldownMs: 700,
     ammoReloadMs: 800,
     ammoCapacity: 3,
     specialDescription:
-      "Enters a purple rage that buffs damage and gives knockback ability. ",
+      "Enters a purple rage that buffs damage and strengthens knockback.",
     specialBaseDamage: 2800,
     specialChargeDamage: 4500,
     spriteScale: 0.7,
@@ -118,44 +118,35 @@ export const characterStats = {
     tuning: {
       attack: {
         aim: {
-          kind: "throw",
+          kind: "round",
           attackKey: "fall",
-          minRange: 50,
-          defaultRange: 132,
-          maxRange: 250,
-          anchorForwardOffset: 26,
-          anchorOffsetY: -10,
-          minSpeedScale: 1.7,
-          maxSpeedScale: 2.6,
-          trajectorySamples: 32,
-          previewStartBackOffset: 10,
-          previewStartLiftY: -8,
-          previewEndDropY: 0,
-          previewArcHeight: 90,
-          previewCurveMagnitude: 0,
-          throwMinOffsetX: -220,
-          throwMaxOffsetX: 190,
-          throwMinOffsetY: -125,
-          throwMaxOffsetY: 60,
-          quickTargetOffsetX: 80,
-          quickTargetOffsetY: 10,
+          minRange: 102,
+          defaultRange: 102,
+          maxRange: 102,
+          radius: 102,
+          radiusY: 46,
+          reticleOffsetY: 13,
+          anchorForwardOffset: 0,
+          anchorOffsetY: 13,
+          minSpeedScale: 1,
+          maxSpeedScale: 1,
         },
         fall: {
-          rectWidth: 94,
-          rectHeight: 46,
-          windupMs: 180,
-          strikeMs: 1000,
-          followAfterWindupMs: 70,
-          originOffsetX: 10,
-          originHeightFactor: 0.5,
-          startOffsetX: -10,
-          startOffsetY: -8,
-          range: 200,
-          arcHeight: 90,
+          rectWidth: 54,
+          rectHeight: 40,
+          windupMs: 140,
+          strikeMs: 460,
+          followAfterWindupMs: 460,
+          originOffsetX: 0,
+          originHeightFactor: 0,
+          startOffsetX: 0,
+          startOffsetY: 13,
+          range: 75,
+          arcHeight: 26,
           curveMagnitude: 0,
-          endYOffset: 320,
-          damageTickMs: 90,
-          hitboxInflate: 2,
+          endYOffset: 13,
+          damageTickMs: 16,
+          hitboxInflate: 0,
           spriteForwardOffset: -Math.PI / 2,
         },
       },
@@ -345,7 +336,7 @@ export const characterStats = {
       "Fires three arrows in a slight spread, each dealing damage on impact.",
     baseDamage: 3000,
     ammoCooldownMs: 300,
-    ammoReloadMs: 1000,
+    ammoReloadMs: 1667,
     ammoCapacity: 3,
     specialDescription:
       "Unleashes a wide volley of burning arrows that ignite enemies.",
@@ -370,8 +361,8 @@ export const characterStats = {
           anchorOffsetY: 40,
           reticleThickness: 18,
           angleMode: "free",
-          minSpeedScale: 0.82,
-          maxSpeedScale: 1.18,
+          minSpeedScale: 459.2 / 900,
+          maxSpeedScale: 1,
           trajectorySamples: 32,
           previewStartBackOffset: 4,
           previewStartLiftY: -6,
@@ -396,7 +387,7 @@ export const characterStats = {
         arrowSpread: {
           count: 3,
           spreadDeg: 6,
-          speed: 560,
+          speed: 900,
           range: 1000,
           collisionRadius: 16,
           damagePerArrow: 1000,
@@ -407,7 +398,7 @@ export const characterStats = {
           verticalOffset: -0.16,
           embedMs: 2000,
           gravity: 460,
-          maxLifetimeMs: 3000,
+          maxLifetimeMs: 5000,
         },
       },
       special: {
@@ -448,7 +439,7 @@ export const characterStats = {
         burningVolley: {
           count: 6,
           spreadDeg: 20,
-          speed: 600,
+          speed: 960,
           range: 960,
           collisionRadius: 18,
           damagePerArrow: 1000,
@@ -459,7 +450,7 @@ export const characterStats = {
           burnTotalDamage: 500,
           groundBurnMs: 2200,
           gravity: 360,
-          maxLifetimeMs: 3200,
+          maxLifetimeMs: 6000,
           embedMs: 2200,
         },
       },
@@ -471,7 +462,7 @@ export const characterStats = {
   gloop: {
     baseHealth: 7000,
     attackDescription:
-      "Lobs a heavy slimeball that pierces enemies, bounces twice, and coats targets in slowing slime.",
+      "Lobs a heavy slimeball that bounces twice and splats on the first enemy, coating them in slowing slime.",
     baseDamage: 2000,
     ammoCooldownMs: 400,
     ammoReloadMs: 1500,
@@ -490,16 +481,20 @@ export const characterStats = {
     tuning: {
       attack: {
         aim: {
-          kind: "line",
+          kind: "throw",
           attackKey: "slimeball",
-          defaultRange: 900,
-          reticleRange: 400,
-          anchorForwardOffset: 34,
-          anchorOffsetY: 30,
-          reticleThickness: 20,
-          angleMode: "horizontal-only",
+          defaultRange: 320,
+          minRange: 60,
+          maxRange: 400,
+          anchorForwardOffset: 0,
+          anchorOffsetY: 0,
+          reticleThickness: 8,
+          angleMode: "free",
         },
         slimeball: {
+          maxThrowRange: 400,
+          maxLaunchSpeed: 330,
+          maxUpwardSpeed: 270,
           speed: 390,
           range: 900,
           collisionRadius: 18,
@@ -510,11 +505,11 @@ export const characterStats = {
           verticalOffset: -0.16,
           initialVy: -45,
           gravity: 340,
-          maxBounces: 1,
-          bounceDampingY: 0.58,
-          bounceDampingX: 0.84,
+          maxBounces: 2,
+          bounceDampingY: 0.66,
+          bounceDampingX: 0.68,
           airDrag: 0.2,
-          minBounceSpeed: 40,
+          minBounceSpeed: 25,
           bounceFloorOffsetY: 80,
           maxLifetimeMs: 4200,
           slowDurationMs: 2000,
@@ -592,6 +587,21 @@ export function getDamage(character, level) {
   return characterStats[character].baseDamage + (level - 1) * 100;
 }
 
+export function getSuperChargeDamage(character, level) {
+  const stats = characterStats[character];
+  const baseAttackDamage = Math.max(1, Number(stats.baseDamage) || 1);
+  const targetChargeDamage = Math.max(
+    baseAttackDamage,
+    Number(stats.specialChargeDamage) || baseAttackDamage,
+  );
+  const attacksToCharge = Math.max(
+    1,
+    Math.round(targetChargeDamage / baseAttackDamage),
+  );
+
+  return attacksToCharge * getDamage(character, level);
+}
+
 export function getSpecialDamage(character, level) {
   return characterStats[character].specialBaseDamage + (level - 1) * 200;
 }
@@ -619,6 +629,7 @@ if (typeof module !== "undefined" && module.exports) {
     defaultCharacterList,
     getHealth,
     getDamage,
+    getSuperChargeDamage,
     getSpecialDamage,
     upgradePrice,
     unlockPrice,

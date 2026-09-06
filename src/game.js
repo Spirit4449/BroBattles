@@ -26,6 +26,7 @@ import {
   followRemotePosition,
 } from "./gameScene/remoteSmoothing.js";
 import { createMatchCoordinator } from "./match/matchCoordinator";
+import { attachHuntressScene } from './characters/huntress/network';
 import { preloadGameAssets } from "./gameScene/preloadGameAssets";
 import { renderPoisonWater } from "./gameScene/poisonWaterRenderer";
 import { updateDynamicCamera } from "./gameScene/cameraDynamics";
@@ -324,6 +325,7 @@ const gameOverScreenController = createGameOverScreenController({
 // can safely reference them even though they appear later in the file.
 matchCoordinator = createMatchCoordinator({
   socket,
+  onHuntressAmmo: (ammoState) => applyAuthoritativeState({ ammoState }),
   getGameData: () => gameData,
   getUsername: () => username,
   getJoinPayload: () => __joinPayload,
@@ -806,8 +808,8 @@ class GameScene extends Phaser.Scene {
 
   // Preloads assets
   preload() {
-    this.load.image("spawn-parachute-blue", "/assets/parachute-blue.png");
-    this.load.image("spawn-parachute-red", "/assets/parachute-red.png");
+    this.load.image("spawn-parachute-blue", "/assets/parachute-blue.webp");
+    this.load.image("spawn-parachute-red", "/assets/parachute-red.webp");
     this.load.on("progress", (p) => {
       // 50% - 90%
       const pct = Math.floor(50 + p * 40); // maps 0-1 -> 50-90
@@ -1557,6 +1559,8 @@ class GameScene extends Phaser.Scene {
   }
 
   update() {
+    attachHuntressScene(this, { localPlayer: player, localUsername: username,
+      opponentPlayersRef: opponentPlayers, teamPlayersRef: teamPlayers });
     updateMatchBackgroundParallax(this);
     const isBankBustMode = String(latestModeState?.type || "") === "bank-bust";
     const poisonAllowed =

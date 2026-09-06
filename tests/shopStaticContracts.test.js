@@ -183,8 +183,8 @@ test("successful character upgrades play the dedicated upgrade sound", () => {
   const sounds = read("src/lib/uiSounds.js");
   const characterLogic = read("src/characterLogic.js");
 
-  assert.match(sounds, /upgrade:\s*"\/assets\/upgrade\.wav"/);
-  assert.ok(fs.existsSync(path.join(root, "public/assets/upgrade.wav")));
+  assert.match(sounds, /upgrade:\s*"\/assets\/upgrade\.mp3"/);
+  assert.ok(fs.existsSync(path.join(root, "public/assets/upgrade.mp3")));
   assert.match(
     characterLogic,
     /if \(!data\.success\)[\s\S]+playSound\("upgrade", 0\.6\);[\s\S]+rerenderCharacterCard\(character, _userDataRef\)/,
@@ -242,13 +242,13 @@ test("shop navigation, icons, sales glimmer, and checkout chrome stay consistent
   const source = read("src/shop.js");
   const styles = read("src/styles/shop.css");
   for (const icon of [
-    "sales-v2.png",
-    "dailies-v2.png",
-    "skins-v2.png",
-    "profile-v2.png",
-    "currency-v2.png",
-    "bundle-v2.png",
-    "shop-v2.png",
+    "sales-v2.webp",
+    "dailies-v2.webp",
+    "skins-v2.webp",
+    "profile-v2.webp",
+    "currency-v2.webp",
+    "bundle-v2.webp",
+    "shop-v2.webp",
   ]) {
     assert.ok(fs.existsSync(path.join(root, "public/assets/shop/icons", icon)));
   }
@@ -300,4 +300,3 @@ test("profile loadout headers match 'Get More in Shop' and close button height",
     /\.cards-modal-head \.browse-shop-link[\s\S]+?height:\s*42px;/,
   );
 });
-

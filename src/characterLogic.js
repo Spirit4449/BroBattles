@@ -3,6 +3,7 @@ import {
   getAllCharacters,
   getHealth,
   getDamage,
+  getSuperChargeDamage,
   getSpecialDamage,
   LEVEL_CAP,
   upgradePrice,
@@ -218,6 +219,7 @@ function getCharacterCardState(character, userData) {
   const currentLevel = Math.max(1, level);
   const currentHealth = getHealth(character, currentLevel);
   const currentDamage = getDamage(character, currentLevel);
+  const currentSuperChargeDamage = getSuperChargeDamage(character, currentLevel);
   const currentSpecial = getSpecialDamage(character, currentLevel);
   const maxHealth = getHealth(character, LEVEL_CAP);
   const maxDamage = getDamage(character, LEVEL_CAP);
@@ -235,6 +237,7 @@ function getCharacterCardState(character, userData) {
     currentLevel,
     currentHealth,
     currentDamage,
+    currentSuperChargeDamage,
     currentSpecial,
     maxHealth,
     maxDamage,
@@ -542,7 +545,7 @@ function renderCharacterDetails(character) {
     <div class="stat-box-track"><div class="stat-box-fill" style="width:${Math.max(0, Math.min(100, (cardState.currentSpecial / specialMax) * 100))}%"></div></div>
     <div class="stat-box-content">
       ${stats.specialDescription ? `<div class="stat-box-desc">${stats.specialDescription}</div>` : ""}
-      <div class="stat-box-detail">Charge: ${stats.specialChargeDamage || 0} damage</div>
+      <div class="stat-box-detail">Charge: ${cardState.currentSuperChargeDamage} damage</div>
     </div>
   `;
   attackSpecialRow.appendChild(specialBox);

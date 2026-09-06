@@ -114,13 +114,11 @@ function basicAim(player, target, profile, random, room) {
     target.vx || 0, target.vy || 0, runtime.speed || 800)) * (profile.prediction ?? 0.5);
   const dx = target.x + (target.vx || 0) * flight - player.x;
   const dy = target.y + (target.vy || 0) * flight - player.y;
-  // Match the Huntress's drag-distance power limits and upward-shot slowdown.
-  // Speed depends on launch angle, so solve it together with the intercept.
+  // Match Huntress drag-distance power; aiming upward no longer reduces speed.
   const distanceRatio = Math.max(0, Math.min(1, (distance - (aim.minRange || 160)) /
     Math.max(1, (aim.maxRange || range) - (aim.minRange || 160))));
   const huntressSpeed = (ratio) => (angle) => (runtime.speed || 560) *
-    ((aim.minSpeedScale || 0.82) + ((aim.maxSpeedScale || 1.18) - (aim.minSpeedScale || 0.82)) * ratio) *
-    (1 - Math.max(0, -Math.sin(angle)) * 0.32);
+    ((aim.minSpeedScale || 0.82) + ((aim.maxSpeedScale || 1.18) - (aim.minSpeedScale || 0.82)) * ratio);
   let speedAtAngle = player.char_class === 'huntress' ? huntressSpeed(distanceRatio) : null;
   let solution;
   if (['wizard', 'huntress'].includes(player.char_class)) {
@@ -184,7 +182,11 @@ function requestBasic(room, p, target, profile, random, now) {
     mapCollisionRects: room.geometry?.colliders || [] };
   const descriptor = getResolvedAttackDescriptor(aim.type);
   const lockMs = Math.max(150, Number(descriptor?.actionFlow?.startupMs) || Number(descriptor?.runtime?.windupMs) || 0);
-  ammo.charges--; ammo.nextFireInMs = ammo.cooldownMs;
+  if (p.char_class === 'huntress' && room.huntressCombatVersion === 2) {
+    action.power = require('../../../shared/huntressProjectile').powerFromSpeed(action.angle, action.speed);
+  } else {
+    ammo.charges--; ammo.nextFireInMs = ammo.cooldownMs;
+  }
   p._botActionUntil = now + lockMs; p.animation = "throw";
   room.handlePlayerAction(p.participantId, action);
   p._botLastAttackAt = now;

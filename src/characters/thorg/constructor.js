@@ -1,25 +1,12 @@
+import { setThorgRageVisual } from "./rageVisual";
 // src/characters/thorg/thorg.js
 import socket from "../../socket";
 import { characterStats } from "../../lib/characterStats.js";
 import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
 import { animations } from "./anim";
 import { executeDefaultAttack } from "../shared/attackFlow";
-import {
-  performThorgFallAttack,
-  THORG_FALL_WINDUP_MS,
-  THORG_FALL_STRIKE_MS,
-  THORG_FALL_DURATION_MS,
-  THORG_FALL_FOLLOW_AFTER_WINDUP_MS,
-  THORG_FALL_RANGE,
-  THORG_FALL_ARC_HEIGHT,
-  THORG_FALL_CURVE_MAGNITUDE,
-  THORG_FALL_END_Y_OFFSET,
-  changeDebugState,
-} from "./attack";
-import {
-  buildThrowArcGeometry,
-  sampleThrowArcPoint,
-} from "../shared/attackAim";
+import { performThorgFallAttack, THORG_FALL_DURATION_MS, changeDebugState } from "./attack";
+import { ensureThorgWeapon, startThorgSweep } from "./weapon";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import {
   chooseRemoteAnimationState,
@@ -61,6 +48,7 @@ class Thorg extends CharacterEntityBase {
       "thorg-throw",
       this.characterAssetPath(staticPath, "swoosh.mp3"),
     );
+    scene.load.audio("thorg-sweep", this.characterAssetPath(staticPath, "sweep.wav"));
     if (!scene.sound.get("thorg-hit")) {
       scene.load.audio(
         "thorg-hit",
@@ -92,24 +80,7 @@ class Thorg extends CharacterEntityBase {
       return true;
     }
     if (data.type === `${NAME}-fall`) {
-      playSpriteAnimation({
-        scene,
-        sprite: ownerSprite,
-        character: NAME,
-        logical: "throw",
-        fallback: "idle",
-      });
-      Thorg._spawnFallEffect(scene, ownerSprite, {
-        direction: data.direction,
-        angle: data.angle,
-        range: Number(data.range) || THORG_FALL_RANGE,
-        target: data.target || null,
-        strikeMs: Number(data.strikeMs) || THORG_FALL_STRIKE_MS,
-      });
-      // Play attack sound for remote players (lower volume)
-      try {
-        scene.sound?.play("thorg-throw", { volume: 0.25 });
-      } catch (_) {}
+      startThorgSweep(scene, ownerSprite, { direction: data.direction });
       return true;
     }
     return false;
@@ -251,6 +222,7 @@ class Thorg extends CharacterEntityBase {
     currentPosition,
     sprite,
   } = {}) {
+    if (sprite?.scene) ensureThorgWeapon(sprite.scene, sprite);
     return chooseRemoteAnimationState({
       animation,
       previousPosition,
@@ -271,19 +243,11 @@ class Thorg extends CharacterEntityBase {
     if (!scene || !sprite || !effects)
       return { handled: false, rageLike: false };
     const thorgRageOn = (effects.thorgRage || 0) > 0;
+    setThorgRageVisual(scene, sprite, thorgRageOn);
     if (!thorgRageOn) return { handled: false, rageLike: false };
 
     const pulse = 0.5 + 0.5 * Math.sin(nowSec * 10 + (sprite.x || 0) * 0.012);
     sprite.setTint(pulse > 0.52 ? 0xc084fc : 0x7e22ce);
-
-    const baseX = sprite._puBaseScaleX || 1;
-    const baseY = sprite._puBaseScaleY || 1;
-    const baseOriginX = sprite._puBaseOriginX ?? 0.5;
-    const baseOriginY = sprite._puBaseOriginY ?? 0.5;
-    // Keep the collider/body aligned with the ground by avoiding a rage-only
-    // sprite scale bump; the rage effect is visual-only here.
-    sprite.setScale(baseX, baseY);
-    sprite.setOrigin(baseOriginX, baseOriginY);
 
     if (typeof spawnTrailParticle === "function" && Math.random() < 0.72) {
       spawnTrailParticle(
@@ -346,6 +310,7 @@ class Thorg extends CharacterEntityBase {
 
   constructor(deps) {
     super(deps);
+    ensureThorgWeapon(this.scene, this.player);
   }
 
   // Common default behavior for firing attacks
@@ -356,7 +321,7 @@ class Thorg extends CharacterEntityBase {
       emitAction: (payload) => socket.emit("game:action", payload),
       payloadBuilder,
       onAfterFire,
-      attackResetMs: 250,
+      attackResetMs: THORG_FALL_DURATION_MS,
     });
     return !!result.fired;
   }
@@ -369,183 +334,6 @@ class Thorg extends CharacterEntityBase {
     );
   }
 
-  // Spawn a simple rectangle visual attached to owner that mimics the falling arc
-  static _spawnFallEffect(
-    scene,
-    sprite,
-    {
-      direction = 1,
-      angle = null,
-      range = THORG_FALL_RANGE,
-      target = null,
-      strikeMs = THORG_FALL_STRIKE_MS,
-    } = {},
-  ) {
-    const baseAngle = 0;
-    const resolvedAngle = Number.isFinite(Number(angle))
-      ? Number(angle)
-      : direction >= 0
-        ? 0
-        : Math.PI;
-    const getAnchor = () => ({
-      x: sprite.x + Math.cos(resolvedAngle) * FALL.originOffsetX,
-      y: sprite.y - sprite.height * FALL.originHeightFactor,
-    });
-    let strikeGeometry = null;
-    const resolvePathRotation = (progress, fallbackRotation = 0) => {
-      const tNow = Phaser.Math.Clamp(progress, 0, 1);
-      const delta = 0.04;
-      const from =
-        tNow >= 1 - delta
-          ? samplePath(Math.max(0, tNow - delta))
-          : samplePath(tNow);
-      const to =
-        tNow >= 1 - delta
-          ? samplePath(tNow)
-          : samplePath(Math.min(1, tNow + delta));
-      const dx = Number(to?.x) - Number(from?.x);
-      const dy = Number(to?.y) - Number(from?.y);
-      if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
-        return fallbackRotation;
-      }
-      return Math.atan2(dy, dx) + direction * 0.1 + Thorg.WEAPON_FORWARD_OFFSET;
-    };
-    const resolveStrikePath = () => {
-      const a = getAnchor();
-      strikeGeometry = buildThrowArcGeometry({
-        originX: a.x,
-        originY: a.y,
-        angle: resolvedAngle,
-        range,
-        targetX: Number.isFinite(Number(target?.x)) ? Number(target.x) : null,
-        targetY: Number.isFinite(Number(target?.y)) ? Number(target.y) : null,
-        startBackOffset: Math.abs(Number(FALL.startOffsetX) || 0),
-        startLiftY: FALL.startOffsetY,
-        endDropY: THORG_FALL_END_Y_OFFSET,
-        arcHeight: THORG_FALL_ARC_HEIGHT,
-        curveMagnitude: THORG_FALL_CURVE_MAGNITUDE,
-        samples: 28,
-      });
-    };
-    const samplePath = (t) =>
-      strikeGeometry
-        ? sampleThrowArcPoint(strikeGeometry, t)
-        : { x: sprite.x, y: sprite.y };
-    const totalDurationMs = THORG_FALL_WINDUP_MS + strikeMs;
-
-    // Prefer an animated texture for the bat; if not available, create no visible hitbox
-    try {
-      const spriteTextureKey =
-        sprite?._bbSkinTextureKey || sprite?.texture?.key || "";
-      const skinWeaponKey =
-        spriteTextureKey && scene.textures.exists(`${spriteTextureKey}-weapon`)
-          ? `${spriteTextureKey}-weapon`
-          : null;
-      const defaultWeaponKey = scene.textures.exists(`${NAME}-weapon`)
-        ? `${NAME}-weapon`
-        : null;
-      const texKey = scene.textures.exists(`${NAME}-bat`)
-        ? `${NAME}-bat`
-        : skinWeaponKey || defaultWeaponKey;
-      if (!texKey) {
-        // Invisible placeholder (no visible hitbox)
-        return null;
-      }
-      const startAnchor = getAnchor();
-      const eff = scene.add.sprite(startAnchor.x, startAnchor.y, texKey);
-      eff.setDepth(7);
-      eff.setScale(0.72);
-      eff.setFlipX(false);
-      const baseRot =
-        resolvedAngle + Thorg.WEAPON_FORWARD_OFFSET + direction * 0.08;
-      const windupRot = baseRot - direction * 0.35;
-      eff.rotation = baseRot;
-      const animName = `${texKey}-fly`;
-      if (scene.anims && scene.anims.exists(animName)) {
-        eff.anims.play(animName);
-      }
-      scene.tweens.add({
-        targets: eff,
-        scale: 1.16,
-        duration: strikeMs,
-        delay: THORG_FALL_WINDUP_MS,
-        ease: "Sine.easeOut",
-      });
-
-      let elapsed = 0;
-      let strikeStarted = false;
-      let visualCleanupStarted = false;
-      const cleanupVisual = () => {
-        if (visualCleanupStarted) return;
-        visualCleanupStarted = true;
-        scene.events.off("update", renderVis);
-        if (sprite?.active) sprite.setAngle(0);
-        if (!eff.active) return;
-        scene.tweens?.add({
-          targets: eff,
-          alpha: 0,
-          scaleX: eff.scaleX * 0.72,
-          scaleY: eff.scaleY * 0.72,
-          duration: 160,
-          ease: "Quad.easeOut",
-          onComplete: () => {
-            if (eff.active) eff.destroy();
-          },
-        });
-      };
-      const renderVis = () => {
-        if (!eff.active) return;
-
-        const dt = scene.game?.loop?.delta || 16;
-        elapsed += dt;
-
-        if (!strikeStarted) {
-          const windupT = Phaser.Math.Clamp(
-            elapsed / THORG_FALL_WINDUP_MS,
-            0,
-            1,
-          );
-          if (sprite?.active) {
-            const leanDeg = Phaser.Math.Linear(0, -8 * direction, windupT);
-            sprite.setAngle(baseAngle + leanDeg);
-          }
-          const followAnchor = getAnchor();
-          const windupBackX = followAnchor.x - direction * 18;
-          const windupBackY = followAnchor.y - 12;
-          eff.x = Phaser.Math.Linear(followAnchor.x, windupBackX, windupT);
-          eff.y = Phaser.Math.Linear(followAnchor.y, windupBackY, windupT);
-          eff.rotation = Phaser.Math.Linear(baseRot, windupRot, windupT);
-          if (elapsed < THORG_FALL_WINDUP_MS) return;
-          strikeStarted = true;
-          if (sprite?.active) sprite.setAngle(baseAngle + 4 * direction);
-          resolveStrikePath();
-        }
-
-        const strikeElapsed = Math.max(0, elapsed - THORG_FALL_WINDUP_MS);
-        const tNow = Phaser.Math.Clamp(strikeElapsed / strikeMs, 0, 1);
-        if (
-          elapsed <=
-          THORG_FALL_WINDUP_MS + THORG_FALL_FOLLOW_AFTER_WINDUP_MS
-        ) {
-          resolveStrikePath();
-        }
-        const pt = samplePath(tNow);
-        eff.x = pt.x;
-        eff.y = pt.y;
-        eff.rotation = resolvePathRotation(tNow, eff.rotation);
-
-        if (elapsed >= totalDurationMs) {
-          cleanupVisual();
-        }
-      };
-
-      scene.events.on("update", renderVis);
-      scene.time.delayedCall(totalDurationMs + 10, cleanupVisual);
-      return eff;
-    } catch (e) {
-      return null;
-    }
-  }
 }
 
 export default Thorg;

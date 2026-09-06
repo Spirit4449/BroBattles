@@ -15,7 +15,7 @@ function observe(room, player, now, samples) {
     platformId: p.platformId, attack: p._visibleAttack && { ...p._visibleAttack },
   }));
   const projectiles = [];
-  for (const attack of [...(room._activeAttacks || []), ...(room._botVisualProjectiles || [])]) {
+  for (const attack of [...(room._activeAttacks || []), ...(room._botVisualProjectiles || []), ...(room._huntress?.active.values() || [])]) {
     const owner = getParticipant(room, attack.attackerParticipantId) ||
       [...room.players.values()].find((p) => p.name === attack.attackerName);
     if (!owner || owner.team === player.team || !Number.isFinite(attack.x) || !Number.isFinite(attack.y)) continue;

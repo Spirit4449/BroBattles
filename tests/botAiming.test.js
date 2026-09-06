@@ -32,7 +32,7 @@ function missDistance(p, enemy, angle, speed) {
   let x = p.x + Math.cos(angle) * 80 * runtime.forwardOffsetWidthFactor;
   let y = p.y - 120 * runtime.verticalOffsetHeightFactor + Math.sin(angle) * 80 * runtime.forwardOffsetWidthFactor;
   let vy = Math.sin(angle) * speed, best = Infinity;
-  for (let t = dt; t <= (huntress ? 3 : runtime.range / runtime.speed); t += dt) {
+  for (let t = dt; t <= (huntress ? runtime.maxLifetimeMs / 1000 : runtime.range / runtime.speed); t += dt) {
     vy += g * dt; x += Math.cos(angle) * speed * dt; y += vy * dt;
     best = Math.min(best, Math.hypot(x - enemy.x - enemy.vx * (startup + t), y - enemy.y - enemy.vy * (startup + t)));
   }
@@ -237,7 +237,7 @@ test('huntress rarely lobs at level targets but freely aims high at elevated tar
   function roomWithActions() { return { ...room, handlePlayerAction() {} }; }
 });
 
-test('huntress varies power by distance and angle and sends it into every runtime arrow', () => {
+test('huntress varies power by distance without penalizing upward aim and sends it into every runtime arrow', () => {
   const { createRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
   const p = { ...player('huntress'), participantId: 'adaptive-archer', name: 'Archer', isBot: true };
   const near = basicAim(p, { ...target, x: 160 }, profile, () => 0.5, room);
@@ -247,7 +247,7 @@ test('huntress varies power by distance and angle and sends it into every runtim
   const lowerTarget = { ...target, x: Math.sqrt(300 ** 2 - 80 ** 2), y: 580 };
   const level = basicAim(p, levelTarget, profile, () => 0.5, room);
   const lower = basicAim(p, lowerTarget, profile, () => 0.5, room);
-  assert.ok(Math.abs(level.speed - lower.speed) > 10, 'angle affects power at the same distance');
+  assert.ok(Math.abs(level.speed - lower.speed) < 0.001, 'angle preserves power at the same distance');
   for (const enemy of [{ ...target, x: 160 }, { ...target, x: 500 }, levelTarget, lowerTarget, { ...target, vx: 120 }]) {
     const aim = basicAim(p, enemy, profile, () => 0.5, room);
     assert.equal(aim.canHit, true);

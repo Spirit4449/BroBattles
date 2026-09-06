@@ -424,7 +424,7 @@
   "meta": {
     "app": "OpenAI sprite cleanup",
     "version": "1.0",
-    "image": "fireball_spritesheet_clean.png",
+    "image": "fireball_spritesheet_clean.webp",
     "size": {
       "w": 2400,
       "h": 740

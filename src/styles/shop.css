@@ -1148,6 +1148,30 @@ body.shop-is-open .sonner-wrap {
   color: #7ff0a2;
 }
 
+/* The active daily reward is always free: give its CTA a distinct claimable
+   treatment without affecting paid or already-claimed offers. */
+.shop-section-dailies .shop-buy-button:not(:disabled) {
+  color: #fff;
+  background: linear-gradient(180deg, #23d994 0%, #09a96f 54%, #07895f 100%);
+  text-shadow: 0 2px 0 rgba(1, 61, 42, 0.56);
+  box-shadow:
+    0 5px #03050a,
+    0 -5px #03050a,
+    5px 0 #03050a,
+    -5px 0 #03050a,
+    0 0 12px rgba(47, 255, 174, 0.74),
+    0 0 28px rgba(32, 218, 145, 0.42),
+    0 8px rgba(0, 0, 0, 0.28),
+    5px 5px rgba(0, 0, 0, 0.28),
+    -5px 5px rgba(0, 0, 0, 0.28),
+    inset 0 5px rgba(255, 255, 255, 0.28);
+  animation: shop-daily-claim-glow 1.9s ease-in-out infinite;
+}
+
+.shop-section-dailies .shop-buy-button:not(:disabled) .shop-price-free {
+  color: #fff;
+}
+
 .shop-buy-button {
   position: relative;
   width: calc(100% - 10px);
@@ -1208,6 +1232,22 @@ body.shop-is-open .sonner-wrap {
   transition: opacity 220ms ease;
 }
 
+.shop-section-dailies .shop-buy-button:not(:disabled)::before {
+  inset: -30% auto -30% -45%;
+  width: 28%;
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 22%,
+    rgba(255, 255, 255, 0.74) 50%,
+    rgba(255, 255, 255, 0.06) 78%,
+    transparent 100%
+  );
+  opacity: 0;
+  transform: skewX(-18deg) translateX(0);
+  animation: shop-daily-claim-glint 2.8s ease-in-out infinite;
+}
+
 .shop-buy-button > * {
   position: relative;
   z-index: 1;
@@ -1228,6 +1268,39 @@ body.shop-is-open .sonner-wrap {
 .shop-buy-button:hover:not(:disabled)::before {
   transform: translateX(110%);
   opacity: 1;
+}
+
+@keyframes shop-daily-claim-glow {
+  0%,
+  100% {
+    filter: brightness(1) saturate(1);
+  }
+  50% {
+    filter: brightness(1.14) saturate(1.16);
+  }
+}
+
+@keyframes shop-daily-claim-glint {
+  0%,
+  18% {
+    opacity: 0;
+    transform: skewX(-18deg) translateX(0);
+  }
+  30% {
+    opacity: 1;
+  }
+  54%,
+  100% {
+    opacity: 0;
+    transform: skewX(-18deg) translateX(560%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-section-dailies .shop-buy-button:not(:disabled),
+  .shop-section-dailies .shop-buy-button:not(:disabled)::before {
+    animation: none;
+  }
 }
 
 .shop-buy-button:active:not(:disabled) {

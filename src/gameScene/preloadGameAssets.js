@@ -66,33 +66,33 @@ export function preloadGameAssets({
   scene.load.image("bank-bust-topcase", `${staticPath}/bank-bust/topcase.webp`);
   scene.load.image(
     "bank-bust-staircase",
-    `${staticPath}/bank-bust/staircase.png`,
+    `${staticPath}/bank-bust/staircase.webp`,
   );
-  scene.load.image("bank-bust-middle", `${staticPath}/bank-bust/middle.png`);
+  scene.load.image("bank-bust-middle", `${staticPath}/bank-bust/middle.webp`);
   scene.load.image(
     "bank-bust-middlebottom",
-    `${staticPath}/bank-bust/middlebottom.png`,
+    `${staticPath}/bank-bust/middlebottom.webp`,
   );
   scene.load.image(
     "bank-bust-middledetail",
-    `${staticPath}/bank-bust/middledetail.png`,
+    `${staticPath}/bank-bust/middledetail.webp`,
   );
   scene.load.image(
     "bank-bust-longplatform",
-    `${staticPath}/bank-bust/longplatform.png`,
+    `${staticPath}/bank-bust/longplatform.webp`,
   );
   scene.load.image(
     "bank-bust-tallplatform",
-    `${staticPath}/bank-bust/tallplatform.png`,
+    `${staticPath}/bank-bust/tallplatform.webp`,
   );
   scene.load.image(
     "bank-bust-bigblock",
-    `${staticPath}/bank-bust/bigblock.png`,
+    `${staticPath}/bank-bust/bigblock.webp`,
   );
-  scene.load.image("bank-bust-2x2", `${staticPath}/bank-bust/2x2square.png`);
-  scene.load.image("bank-bust-3x3", `${staticPath}/bank-bust/3x3square.png`);
+  scene.load.image("bank-bust-2x2", `${staticPath}/bank-bust/2x2square.webp`);
+  scene.load.image("bank-bust-3x3", `${staticPath}/bank-bust/3x3square.webp`);
   scene.load.image("bank-bust-abyss", `${staticPath}/bank-bust/abyss.webp`);
-  scene.load.image("bank-bust-pipe", `${staticPath}/bank-bust/pipe.png`);
+  scene.load.image("bank-bust-pipe", `${staticPath}/bank-bust/pipe.webp`);
   scene.load.image(
     "bank-bust-turret-base",
     `${staticPath}/bank-bust/mount.webp`,
@@ -129,8 +129,8 @@ export function preloadGameAssets({
   scene.load.audio("sfx-duck-block", `${staticPath}/movement/duck-block.wav`);
   scene.load.audio("sfx-parachute-open", `${staticPath}/movement/parachute-open.mp3`);
   scene.load.audio("sfx-sudden-death", `${staticPath}/suddendeath.mp3`);
-  scene.load.audio("sfx-death", `${staticPath}/death.wav`);
-  scene.load.audio("sfx-you-death", `${staticPath}/you-death.wav`);
+  scene.load.audio("sfx-death", `${staticPath}/death.mp3`);
+  scene.load.audio("sfx-you-death", `${staticPath}/you-death.mp3`);
   scene.load.audio("sfx-coin-pickup", `${staticPath}/coin.mp3`);
   scene.load.audio("sfx-gem-pickup", `${staticPath}/gem.mp3`);
   scene.load.audio("sfx-noammo", [

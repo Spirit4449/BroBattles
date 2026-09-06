@@ -70,6 +70,7 @@ function sendGameStateToPlayer(room, socket) {
   }
 
   const gameStateForPlayer = {
+    huntressCombat: require('./huntressCombat').bootstrap(room),
     matchId: room.matchId,
     mode: room.matchData.mode,
     modeId: room.matchData.modeId || "duels",

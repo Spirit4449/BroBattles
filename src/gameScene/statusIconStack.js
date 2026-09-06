@@ -17,6 +17,18 @@ const BADGE_LIGHT_COLORS = {
   shockwave: 0xfbc891, freeze: 0xb8eef5,
 };
 
+const EFFECT_DURATIONS_MS = {
+  rage: 10000,
+  health: 10000,
+  shield: 10000,
+  poison: 8000,
+  gravityBoots: 7000,
+  invisibility: 8000,
+  shockwave: 1,
+  freeze: 7000,
+  thorgRage: 8000,
+};
+
 function textureFor(scene, type) {
   const webp = `pu-icon-${type}-webp`;
   const png = `pu-icon-${type}-png`;
@@ -49,11 +61,11 @@ function activeIconTypes(effects = {}, recentEffects = {}) {
 
 function createBadge(scene) {
   const shadow = scene.add.circle(1, 1.5, 11, 0x000000, 0.55);
-  const background = scene.add.circle(0, 0, 10.5, 0xffd7b5, 0.97)
-    .setStrokeStyle(2, 0xffffff, 0.9);
+  const background = scene.add.circle(0, 0, 10.5, 0xffd7b5, 0.97);
   const glow = scene.add.circle(0, 0, 8.5, 0xffffff, 0.2);
   const icon = scene.add.image(0, 0, "pu-icon-shield-webp");
-  const container = scene.add.container(0, 0, [shadow, background, glow, icon])
+  const timer = scene.add.graphics();
+  const container = scene.add.container(0, 0, [shadow, background, glow, icon, timer])
     .setDepth(RENDER_LAYERS.PLAYER_HUD + 3)
     .setVisible(false);
   const pulseTween = scene.tweens.add({
@@ -67,9 +79,31 @@ function createBadge(scene) {
     repeat: -1,
   });
   return {
-    container, background, glow, icon, pulseTween,
+    container, background, glow, icon, timer, pulseTween,
     type: null, shown: false, transitionTween: null,
   };
+}
+
+function drawTimerRing(badge, type, effects = {}, recentEffects = {}) {
+  const remainingMs = Number(
+    type === "rage" && (Number(effects.thorgRage) || 0) > (Number(effects.rage) || 0)
+      ? effects.thorgRage
+      : effects[type],
+  ) || 0;
+  const hasRecentEffect = (Number(recentEffects[type]) || 0) > Date.now();
+  const durationMs = EFFECT_DURATIONS_MS[
+    type === "rage" && remainingMs === Number(effects.thorgRage) ? "thorgRage" : type
+  ] || 1;
+  const progress = remainingMs > 0
+    ? Phaser.Math.Clamp(remainingMs / durationMs, 0, 1)
+    : (hasRecentEffect ? 1 : 0);
+
+  badge.timer.clear();
+  if (progress <= 0) return;
+  badge.timer.lineStyle(2.2, BADGE_COLORS[type] || 0xffffff, 1);
+  badge.timer.beginPath();
+  badge.timer.arc(0, 0, 11.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress, false);
+  badge.timer.strokePath();
 }
 
 function showBadge(scene, badge, type, texture) {
@@ -88,8 +122,7 @@ function showBadge(scene, badge, type, texture) {
     badge.icon.setTexture(texture);
     containImage(badge.icon, 16, 16);
     badge.background
-      .setFillStyle(BADGE_LIGHT_COLORS[type] || 0xf8fafc, 0.97)
-      .setStrokeStyle(2, color, 1);
+      .setFillStyle(BADGE_LIGHT_COLORS[type] || 0xf8fafc, 0.97);
     badge.glow.setFillStyle(0xffffff, 0.3);
     badge.type = type;
   }
@@ -159,6 +192,7 @@ export function syncStatusIconStack({
       y,
     );
     showBadge(scene, badge, type, texture);
+    drawTimerRing(badge, type, effects, recentEffects);
   });
   return icons;
 }

@@ -51,13 +51,13 @@ class Wizard extends CharacterEntityBase {
     }
     scene.load.atlas(
       "wizard-aura",
-      this.characterAssetPath(staticPath, "aura.png"),
+      this.characterAssetPath(staticPath, "aura.webp"),
       this.characterAssetPath(staticPath, "aura.json"),
     );
     // Load animated fireball atlas (frames defined in fireball.json)
     scene.load.atlas(
       "wizard-fireball",
-      this.characterAssetPath(staticPath, "fireball_spritesheet_clean.png"),
+      this.characterAssetPath(staticPath, "fireball_spritesheet_clean.webp"),
       this.characterAssetPath(staticPath, "fireball_spritesheet_clean.json"),
     );
     scene.load.audio(

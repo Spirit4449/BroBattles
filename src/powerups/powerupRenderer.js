@@ -1260,7 +1260,21 @@ export function createPowerupRenderer({
         g.strokeCircle(x, y, Math.max(16, r + 4 + 3 * pulse));
       }
       if ((fx.gloopHookSlow || 0) > 0 || (fx.gloopSlimeSlow || 0) > 0) {
-        const slowColor = 0x54c7ff;
+        const slime = (fx.gloopSlimeSlow || 0) > 0;
+        const slowColor = slime ? 0x12bbaa : 0x54c7ff;
+        if (slime) {
+          g.fillStyle(0x0868b6, 0.55);
+          g.fillEllipse(x, frame.bottom - 2, r * 1.8, 9);
+          for (let i = 0; i < 7; i++) {
+            const sx = x + (i - 3) * r * 0.23;
+            const sy = y - r * 0.45 + Math.sin(i * 2.4) * r * 0.28;
+            const length = 8 + 11 * (0.5 + 0.5 * Math.sin(nowSec * 3 + i));
+            g.lineStyle(5, 0x12bbaa, 0.8);
+            g.lineBetween(sx, sy, sx + Math.sin(i) * 2, sy + length);
+            g.fillStyle(0x99e9c9, 0.65);
+            g.fillEllipse(sx - 1, sy + 1, 2, 5);
+          }
+        }
         g.fillStyle(slowColor, 0.16 + 0.06 * pulse);
         g.fillCircle(x, y, Math.max(16, r - 2 + 4 * pulse));
         g.lineStyle(3.5, 0xa6e8ff, 0.8 * pulse);
@@ -1274,7 +1288,7 @@ export function createPowerupRenderer({
           const ay = arrowTop - Math.sin(nowSec * 7 + i * 0.9) * 3;
           const arrowHeight = 15;
           const arrowHalf = 5;
-          g.fillStyle(0x7ad9ff, 0.9);
+          g.fillStyle(slime ? 0x25cbb4 : 0x7ad9ff, 0.9);
           g.fillTriangle(
             ax - arrowHalf,
             ay,

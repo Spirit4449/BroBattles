@@ -113,6 +113,10 @@
     "events": {
       "onHitEffect": {
         "type": "gloopSlimeSlow"
+      },
+      "onHitAction": {
+        "type": "gloop-slimeball-splat",
+        "ownerEcho": true
       }
     }
   },

@@ -23,6 +23,7 @@ const netTestLogger = require("./gameRoom/netTestLogger");
 const { createTimingDiagnostics } = require("./gameRoom/timingDiagnostics");
 const attackRuntimeManager = require("./gameRoom/attackRuntimeManager");
 const characterActionRegistry = require("./gameRoom/characterActionRegistry");
+const huntressCombat = require('./gameRoom/huntressCombat');
 const { registerGameChatEvents } = require("./socketEvents/gameChatEvents");
 const { createGameModeRuntime } = require("./gameModes");
 const {
@@ -130,6 +131,7 @@ class GameRoom {
     }
 
     this.geometry = getDuelGeometry(matchData.map);
+    huntressCombat.initialize(this);
     this.botControllers = new Map();
     this._scheduledActions = [];
     this._socketBindings = [];
@@ -368,6 +370,9 @@ class GameRoom {
 
   requestSpecial(id, payload = {}) {
     const p = getParticipant(this, id);
+    if (p?.char_class === 'huntress' && huntressCombat.enabled(this)) {
+      return huntressCombat.request(this, p, p.isBot ? { ...payload, id: `special:${++p._botActionSeq}` } : payload, true);
+    }
     if (!p || !p.isAlive || !p.loaded || this.status !== 'active') return false;
     const now = Date.now();
     if (p._controlLockUntil > now || p.superCharge < p.maxSuperCharge) return false;
@@ -598,6 +603,9 @@ class GameRoom {
   }
 
   setupPlayerSocket(socket) {
+    this.onSocket(socket, 'game:clock', (data, ack) => {
+      if (typeof ack === 'function') ack(huntressCombat.timing(this));
+    });
     // Handle player input
     this.onSocket(socket, "game:input", (inputData) => {
       this.handlePlayerInput(socket.id, inputData);
@@ -613,6 +621,10 @@ class GameRoom {
     this.onSocket(socket, "game:action", (actionData) => {
       const player = this.players.get(socket.id);
       if (!player) return;
+      if (player.char_class === 'huntress' && huntressCombat.enabled(this) && String(actionData?.type || '').startsWith('huntress-')) {
+        this.handlePlayerAction(socket.id, actionData);
+        return;
+      }
       if (Number(player._controlLockUntil || 0) > Date.now()) return;
       const actionType = String(actionData?.type || "").toLowerCase();
       const isReturnControlAction = actionType === "ninja-shuriken-return";
@@ -797,6 +809,7 @@ class GameRoom {
       this._tickId++;
       this.processTick();
       attackRuntimeManager.tickActiveAttacks(this, Date.now());
+      huntressCombat.tick(this);
       this._tickPowerupEffects();
       this.processRegen();
       this._tickTimerAndSuddenDeath();
@@ -906,6 +919,11 @@ class GameRoom {
    */
   handlePlayerAction(socketId, actionData) {
     const playerData = getParticipant(this, socketId);
+    if (playerData?.char_class === 'huntress' && huntressCombat.enabled(this)) {
+      if (actionData?.type === 'huntress-arrow') return huntressCombat.request(this, playerData, actionData);
+      // Huntress release and derived runtime properties are server-only in v2.
+      if (String(actionData?.type || '').startsWith('huntress-')) return false;
+    }
     if (
       !playerData ||
       !playerData.isAlive ||
@@ -1270,6 +1288,12 @@ class GameRoom {
     this.botControllers.clear();
     this._scheduledActions.length = 0;
     this._activeAttacks = [];
+    this._huntress?.active.clear();
+    if (this._huntress) {
+      this._huntress.pending.length = 0;
+      this._huntress.terminals.length = 0;
+      this._huntress.requests.clear();
+    }
     this._botVisualProjectiles = [];
     this._recentHits?.clear();
     this._recentCharacterActions?.clear();
@@ -1343,7 +1367,7 @@ class GameRoom {
    * @param {string} socketId
    * @param {object} payload { attacker, target, attackType?, instanceId?, attackTime?, damage? }
    */
-  handleHit(socketId, payload, { server = false } = {}) {
+  handleHit(socketId, payload, { server = false, huntressProjectile = null } = {}) {
     try {
       if (!payload || typeof payload !== "object") return;
       const attackerName = String(payload.attacker || "").trim();
@@ -1360,6 +1384,9 @@ class GameRoom {
       const attacker = Array.from(this.players.values()).find(
         (p) => p.name === attackerName,
       );
+      const trustedHuntress = server && huntressCombat.isTrustedContact(this, huntressProjectile, payload);
+      if (huntressCombat.enabled(this) && attacker?.char_class === 'huntress' &&
+          attackerName !== targetName && !trustedHuntress) return;
       if (!server && (getParticipant(this, socketId) !== attacker || attacker?.isBot)) return;
       const target = Array.from(this.players.values()).find(
         (p) => p.name === targetName,
@@ -1431,7 +1458,9 @@ class GameRoom {
       const isNinjaSwarm = attackType === "ninja-special-swarm";
       const isHuntressArrow = attackType === "huntress-arrow";
       const isHuntressBurningArrow = attackType === "huntress-burning-arrow";
-      const base = isNinjaSwarm
+      const base = trustedHuntress
+        ? require('../../shared/huntressProjectile').attackConfig(isHuntressBurningArrow).damagePerArrow
+        : isNinjaSwarm
         ? NINJA_SWARM_HIT_DAMAGE
         : isHuntressArrow
           ? 1000
@@ -1472,7 +1501,10 @@ class GameRoom {
       let dist = 0;
       let maxDist = this._getAttackMaxDist(attacker.char_class, attackType);
       let attackWasFuture = false;
-      if (targetVault) {
+      if (trustedHuntress) {
+        aPos = { x: attacker.x, y: attacker.y };
+        tPos = targetVault ? { x: targetVault.x, y: targetVault.y } : { x: target.x, y: target.y };
+      } else if (targetVault) {
         aPos = this._getHistoricalPosition(attacker, attackTimeRaw);
         tPos = { x: Number(targetVault.x) || 0, y: Number(targetVault.y) || 0 };
         attackTimeClamped = Math.min(now, attackTimeRaw);
@@ -1586,7 +1618,7 @@ class GameRoom {
           this.broadcastSnapshot();
           this._checkVictoryCondition();
         }
-        return;
+        return { accepted: true, appliedDamage };
       }
 
       // Apply damage (incoming modifier covers shield powerup, freeze stun, etc.)
@@ -1656,7 +1688,7 @@ class GameRoom {
         if (scoredKill) {
           this._recordCombatStat(attacker, { kills: scoredKill });
         }
-        if (appliedDamage > 0) {
+        if (appliedDamage > 0 && !trustedHuntress) {
           this.io.to(`game:${this.matchId}`).emit("game:action", {
             playerId: attacker.user_id,
             playerName: attacker.name,
@@ -1687,6 +1719,7 @@ class GameRoom {
           });
         }
       }
+      return { accepted: true, appliedDamage };
     } catch (e) {
       console.warn(`[GameRoom ${this.matchId}] handleHit error:`, e?.message);
     }
@@ -1719,6 +1752,7 @@ class GameRoom {
       const {
         getHealth,
         getDamage,
+        getSuperChargeDamage,
         getSpecialDamage,
         getCharacterStats,
       } = require("../../lib/characterStats.js");
@@ -1729,7 +1763,7 @@ class GameRoom {
         Number(getSpecialDamage(charClass, level)) || 0,
       );
       const stats = getCharacterStats(charClass) || {};
-      const specialChargeDamage = stats.specialChargeDamage || 3000;
+      const specialChargeDamage = getSuperChargeDamage(charClass, level);
       const ammoCapacity = stats.ammoCapacity || 1;
       const ammoCooldownMs = stats.ammoCooldownMs || 1200;
       const ammoReloadMs = stats.ammoReloadMs || 1200;

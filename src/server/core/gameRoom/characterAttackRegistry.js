@@ -1,10 +1,8 @@
+const { THORG_SWEEP, sampleThorgSweep } = require("../../../shared/thorgSweep");
+const { advanceSlimeball } = require("../../../shared/gloopProjectile");
 const { getParticipant, participantId } = require('./participants');
 const { getResolvedAttackDescriptor } = require("./attackDescriptorResolver");
 const effectManager = require("./effects/effectManager");
-const {
-  buildThrowArcGeometry,
-  sampleThrowArcPoint,
-} = require("../../../characters/shared/attackAim.js");
 const { WORLD_BOUNDS } = require("../gameRoomConfig");
 
 const DEFAULT_TARGET_HALF_WIDTH = 28;
@@ -702,45 +700,6 @@ function sweptCircleOverlapsRect(prevX, prevY, nextX, nextY, rect, radius = 0) {
   return !(maxX < left || minX > right || maxY < top || minY > bottom);
 }
 
-function parseRect(rect) {
-  const left = Number(rect?.left);
-  const right = Number(rect?.right);
-  const top = Number(rect?.top);
-  const bottom = Number(rect?.bottom);
-  if (![left, right, top, bottom].every(Number.isFinite)) return null;
-  return { left, right, top, bottom };
-}
-
-function isHorizontalPlatform(rect) {
-  const parsed = parseRect(rect);
-  if (!parsed) return false;
-  return parsed.right - parsed.left >= parsed.bottom - parsed.top;
-}
-
-function hitsPlatformTop(prevX, prevY, nextX, nextY, rect, radius = 0) {
-  const parsed = parseRect(rect);
-  if (!parsed) return false;
-  const crossedTop =
-    prevY + radius <= parsed.top && nextY + radius >= parsed.top;
-  if (!crossedTop) return false;
-  const minX = Math.min(prevX, nextX);
-  const maxX = Math.max(prevX, nextX);
-  return !(maxX + radius < parsed.left || minX - radius > parsed.right);
-}
-
-function hitsWallCenter(prevX, nextX, y, rect, vx = 0, radius = 0) {
-  const parsed = parseRect(rect);
-  if (!parsed) return false;
-  const width = parsed.right - parsed.left;
-  const height = parsed.bottom - parsed.top;
-  if (height < width) return false;
-  const centerX = (parsed.left + parsed.right) / 2;
-  const yOverlap = y + radius >= parsed.top && y - radius <= parsed.bottom;
-  if (!yOverlap) return false;
-  if (vx >= 0) return prevX <= centerX && nextX >= centerX;
-  return prevX >= centerX && nextX <= centerX;
-}
-
 function buildHookProjectileAttack(playerData, actionData, descriptor, now) {
   const runtime = descriptor?.runtime || {};
   const base = buildProjectileLinearAttack(
@@ -803,70 +762,17 @@ function buildAttachedRectAttack(playerData, actionData, descriptor, now) {
 }
 
 function buildPathRectAttack(playerData, actionData, descriptor, now) {
-  const runtime = descriptor?.runtime || {};
-  const direction = Number(actionData?.direction) === -1 ? -1 : 1;
-  const angle = Number.isFinite(Number(actionData?.angle))
-    ? Number(actionData.angle)
-    : direction < 0
-      ? Math.PI
-      : 0;
-  const range = resolvePositiveNumber(
-    actionData?.range,
-    Math.max(1, Number(runtime?.range) || 120),
-  );
-  const targetX = Number(actionData?.target?.x);
-  const targetY = Number(actionData?.target?.y);
-  const geometry = buildThrowArcGeometry({
-    originX:
-      Number(playerData.x) +
-      Math.cos(angle) * (Number(runtime.originOffsetX) || 0),
-    originY:
-      Number(playerData.y) -
-      resolvePlayerHeight(playerData) *
-        (Number(runtime.originHeightFactor) || 0),
-    angle,
-    range,
-    targetX: Number.isFinite(targetX) ? targetX : null,
-    targetY: Number.isFinite(targetY) ? targetY : null,
-    startBackOffset: Math.abs(Number(runtime.startOffsetX) || 0),
-    startLiftY: Number(runtime.startOffsetY) || 0,
-    endDropY: Number(runtime.endYOffset) || 0,
-    arcHeight: Number(runtime.arcHeight) || 0,
-    curveMagnitude: Number(runtime.curveMagnitude) || 0,
-    samples: 28,
-  });
   return {
     descriptorKey: String(actionData?.type || "").toLowerCase(),
-    runtimeKind: String(descriptor?.runtime?.kind || "").toLowerCase(),
+    runtimeKind: "path-rect",
     createdAt: now,
     attackerParticipantId: participantId(playerData),
     attackerName: playerData.name,
     attackType: String(descriptor?.attackType || "basic").toLowerCase(),
     instanceId: String(actionData?.id || `${playerData.name}:${now}`),
-    direction,
-    angle,
-    range,
-    targetX: Number.isFinite(targetX) ? targetX : null,
-    targetY: Number.isFinite(targetY) ? targetY : null,
-    windupMs: Math.max(
-      0,
-      Number(actionData?.windupMs) || Number(runtime.windupMs) || 0,
-    ),
-    activeWindowMs: Math.max(
-      1,
-      Number(actionData?.strikeMs) ||
-        Number(actionData?.activeWindowMs) ||
-        Number(runtime.activeWindowMs) ||
-        1,
-    ),
-    followAfterWindupMs: Math.max(
-      0,
-      Number(actionData?.followAfterWindupMs) ||
-        Number(runtime.followAfterWindupMs) ||
-        0,
-    ),
-    geometry,
+    direction: Number(actionData?.direction) === -1 ? -1 : 1,
     hitSet: new Set(),
+    previousProgress: 0,
   };
 }
 
@@ -1117,117 +1023,14 @@ function tickBallisticProjectile(room, attack, descriptor) {
 function tickBouncingProjectile(room, attack, descriptor, now) {
   const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return true;
-  const runtime = descriptor?.runtime || {};
-  const dtSec = room.FIXED_DT_MS / 1000;
-  attack.elapsed += room.FIXED_DT_MS;
-  const prevX = Number(attack.x) || 0;
-  const prevY = Number(attack.y) || 0;
-  attack.vy += (Number(attack.gravity) || Number(runtime.gravity) || 0) * dtSec;
-  if (Number(attack.airDrag) > 0 && Number(attack.vx) !== 0) {
-    const dragFactor = Math.max(0, 1 - Number(attack.airDrag) * dtSec);
-    attack.vx = Number(attack.vx) * dragFactor;
-  }
-  attack.x += Number(attack.vx || 0) * dtSec;
-  attack.y += Number(attack.vy || 0) * dtSec;
-  attack.traveled += Math.hypot(
-    Number(attack.x) - prevX,
-    Number(attack.y) - prevY,
-  );
-
-  const radius = Math.max(
-    1,
-    Number(attack.collisionRadius || runtime.collisionRadius) || 1,
-  );
-  const mapCollisionRects = Array.isArray(attack.mapCollisionRects)
-    ? attack.mapCollisionRects
-    : [];
-  for (const rect of mapCollisionRects) {
-    if (
-      !sweptCircleOverlapsRect(prevX, prevY, attack.x, attack.y, rect, radius)
-    ) {
-      continue;
-    }
-    if (
-      Number(attack.vy) > 0 &&
-      isHorizontalPlatform(rect) &&
-      hitsPlatformTop(prevX, prevY, attack.x, attack.y, rect, radius)
-    ) {
-      const platformTop = Number(rect?.top);
-      attack.bounceCount = Number(attack.bounceCount || 0) + 1;
-      if (attack.bounceCount > Math.max(0, Number(attack.maxBounces) || 0)) {
-        return true;
-      }
-      attack.y = platformTop - radius;
-      const bounceVy =
-        Math.abs(Number(attack.vy) || 0) *
-        Math.max(0.1, Number(attack.bounceDampingY) || 0.74);
-      if (bounceVy < Math.max(0, Number(attack.minBounceSpeed) || 0)) {
-        return true;
-      }
-      attack.vy = -bounceVy;
-      attack.vx =
-        Number(attack.vx || 0) *
-        Math.max(0.1, Number(attack.bounceDampingX) || 0.92);
-      break;
-    }
-    if (
-      hitsWallCenter(
-        prevX,
-        Number(attack.x) || 0,
-        Number(attack.y) || 0,
-        rect,
-        Number(attack.vx) || 0,
-        radius,
-      )
-    ) {
-      return true;
-    }
-  }
-  const floorY = Number(attack.floorY);
-  if (
-    Number.isFinite(floorY) &&
-    attack.y + radius >= floorY &&
-    Number(attack.vy) > 0
-  ) {
-    attack.bounceCount = Number(attack.bounceCount || 0) + 1;
-    if (attack.bounceCount > Math.max(0, Number(attack.maxBounces) || 0)) {
-      return true;
-    }
-    attack.y = floorY - radius;
-    const bounceVy =
-      Math.abs(Number(attack.vy) || 0) *
-      Math.max(0.1, Number(attack.bounceDampingY) || 0.74);
-    if (bounceVy < Math.max(0, Number(attack.minBounceSpeed) || 0)) {
-      return true;
-    }
-    attack.vy = -bounceVy;
-    attack.vx =
-      Number(attack.vx || 0) *
-      Math.max(0.1, Number(attack.bounceDampingX) || 0.92);
-  }
-
-  const hitCount = hitCircleTargets(
-    room,
-    attack,
-    descriptor,
-    attack.x,
-    attack.y,
-    radius,
-    now,
-  );
-  if (attack.destroyOnHit && hitCount > 0) return true;
-
-  const minX = Number(attack.worldMinX);
-  const maxX = Number(attack.worldMaxX);
-  if (Number.isFinite(minX) && Number(attack.x) + radius < minX) return true;
-  if (Number.isFinite(maxX) && Number(attack.x) - radius > maxX) return true;
-  if (attack.elapsed >= Math.max(150, Number(attack.maxLifetimeMs) || 2500))
-    return true;
-  if (
-    attack.traveled >= Math.max(1, Number(attack.range || runtime.range) || 1)
-  )
-    return true;
-  return false;
+  advanceSlimeball(attack, room.FIXED_DT_MS,
+    room.geometry?.colliders || attack.mapCollisionRects || [],
+    () => {
+      const hits = hitCircleTargets(room, attack, descriptor, attack.x, attack.y,
+        Math.max(1, Number(attack.collisionRadius) || 18), now);
+      return attack.destroyOnHit && hits > 0;
+    });
+  return !!attack.done;
 }
 
 function tickHookProjectile(room, attack, descriptor, now) {
@@ -1387,71 +1190,25 @@ function tickAttachedCone(room, attack, descriptor, now) {
 function tickPathRect(room, attack, descriptor, now) {
   const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return true;
-  const runtime = descriptor?.runtime || {};
+  const scale = effectManager.isActive(attacker, "thorgRage", now) ? THORG_SWEEP.rageScale : 1;
   const elapsed = now - attack.createdAt;
-  const windupMs = Math.max(
-    0,
-    Number(attack.windupMs) || Number(runtime.windupMs) || 0,
-  );
-  const activeWindowMs = Math.max(
-    1,
-    Number(attack.activeWindowMs) || Number(runtime.activeWindowMs) || 1,
-  );
-  const totalDurationMs = windupMs + activeWindowMs;
-  const sampleElapsed = Math.min(elapsed, totalDurationMs);
-  const followAfterWindupMs = Math.max(
-    0,
-    Number(attack.followAfterWindupMs) ||
-      Number(runtime.followAfterWindupMs) ||
-      0,
-  );
-  if (sampleElapsed < windupMs) return elapsed >= totalDurationMs;
-
-  if (!attack.geometry || sampleElapsed <= windupMs + followAfterWindupMs) {
-    attack.geometry = buildThrowArcGeometry({
-      originX:
-        Number(attacker.x) +
-        Math.cos(Number(attack.angle) || 0) *
-          (Number(runtime.originOffsetX) || 0),
-      originY:
-        Number(attacker.y) -
-        resolvePlayerHeight(attacker) *
-          (Number(runtime.originHeightFactor) || 0),
-      angle: Number(attack.angle) || 0,
-      range: attack.range,
-      targetX: Number.isFinite(Number(attack.targetX))
-        ? Number(attack.targetX)
-        : null,
-      targetY: Number.isFinite(Number(attack.targetY))
-        ? Number(attack.targetY)
-        : null,
-      startBackOffset: Math.abs(Number(runtime.startOffsetX) || 0),
-      startLiftY: Number(runtime.startOffsetY) || 0,
-      endDropY: Number(runtime.endYOffset) || 0,
-      arcHeight: Number(runtime.arcHeight) || 0,
-      curveMagnitude: Number(runtime.curveMagnitude) || 0,
-      samples: 28,
-    });
+  if (elapsed < THORG_SWEEP.windupMs) return false;
+  const progress = Math.min(1, (elapsed - THORG_SWEEP.windupMs) / THORG_SWEEP.strikeMs);
+  const previous = attack.previousProgress || 0;
+  // Subsample the curved sweep even after a delayed tick, so neither side can tunnel.
+  const steps = Math.max(1, Math.ceil((progress - previous) * 96));
+  for (let i = 0; i <= steps; i++) {
+    const point = sampleThorgSweep({ x: Number(attacker.x), y: Number(attacker.y), direction: attack.direction, scale },
+      previous + (progress - previous) * i / steps);
+    hitRectTargets(room, attack, descriptor, {
+      left: point.x - THORG_SWEEP.headWidth * scale / 2,
+      right: point.x + THORG_SWEEP.headWidth * scale / 2,
+      top: point.y - THORG_SWEEP.headHeight * scale / 2,
+      bottom: point.y + THORG_SWEEP.headHeight * scale / 2,
+    }, now);
   }
-
-  const progress = Math.min(1, (sampleElapsed - windupMs) / activeWindowMs);
-  const point = sampleThrowArcPoint(attack.geometry, progress);
-  const centerX = Number(point?.x) || Number(attacker.x) || 0;
-  const centerY = Number(point?.y) || Number(attacker.y) || 0;
-
-  hitRectTargets(
-    room,
-    attack,
-    descriptor,
-    {
-      left: centerX - (Number(runtime.width) || 1) / 2,
-      right: centerX + (Number(runtime.width) || 1) / 2,
-      top: centerY - (Number(runtime.height) || 1) / 2,
-      bottom: centerY + (Number(runtime.height) || 1) / 2,
-    },
-    now,
-  );
-  return elapsed >= totalDurationMs;
+  attack.previousProgress = progress;
+  return progress >= 1;
 }
 
 function tickReturningProjectile(room, attack, descriptor) {

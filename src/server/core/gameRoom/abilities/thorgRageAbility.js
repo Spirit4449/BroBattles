@@ -13,17 +13,17 @@ function applyOutgoingDamageMultiplier(attacker, damage /*, now */) {
 }
 
 function getKnockback(attacker, target, now) {
-  if (!effectManager.isActive(attacker, "thorgRage", now)) return null;
+  const rage = effectManager.isActive(attacker, "thorgRage", now);
   if (!target) return null;
   const knockDirection = (target.x || 0) >= (attacker.x || 0) ? 1 : -1;
   return {
-    amountX: THORG_RAGE_KNOCKBACK_X * knockDirection,
-    amountY: THORG_RAGE_KNOCKBACK_Y,
+    amountX: (rage ? THORG_RAGE_KNOCKBACK_X : 140) * knockDirection,
+    amountY: rage ? THORG_RAGE_KNOCKBACK_Y : 60,
   };
 }
 
 function requiresMeleeFacingCheck(attackType, isSelf) {
-  return !isSelf && attackType === "basic";
+  return false; // The mace completes a full revolution, including behind Thorg.
 }
 
 module.exports = {

@@ -38,7 +38,7 @@ export function animations(scene) {
     });
   };
 
-  const makeThrowLiftSlam = () => {
+  const makeSweep = () => {
     const ordered = ["throw00", "throw01", "throw02", "throw03", "throw04"]
       .map((n) => getFrame(n))
       .filter(Boolean);
@@ -47,28 +47,31 @@ export function animations(scene) {
     }
     if (!ordered.length) return;
 
-    // Hold the lift frames longer, then accelerate through the downswing.
-    const durations = [150, 100, 95, 100, 100];
+    // Phaser adds per-frame duration to its base interval. A single total
+    // duration keeps this body cycle on the 600ms weapon sweep clock.
     scene.anims.create({
       key: `${NAME}-throw`,
-      frames: ordered.map((f, i) => ({
+      frames: ordered.map((f) => ({
         key: NAME,
         frame: f,
-        duration: durations[Math.min(i, durations.length - 1)],
       })),
-      frameRate: 10,
+      duration: 600,
       repeat: 0,
     });
   };
 
   // Try reasonable prefix variants for robustness across atlases
-  make(`${NAME}-running`, ["running", "run"], 9, 0);
-  make(`${NAME}-idle`, ["idle", "stand", "idle_"], 3, -1);
-  make(`${NAME}-jumping`, ["jumping", "jump"], 7, 0);
+  make(`${NAME}-running`, ["running", "run"], 12, -1);
+  make(`${NAME}-idle`, ["idle", "stand", "idle_"], 8, -1);
+  make(`${NAME}-jumping`, ["jumping", "jump"], 16, 0);
   // Thorg only has a single sliding frame, so keep it held instead of
   // letting the non-looping animation complete and disappear between updates.
   make(`${NAME}-sliding`, ["wall", "slide", "sliding"], 10, -1);
-  make(`${NAME}-falling`, ["falling", "fall"], 8, 0);
-  makeThrowLiftSlam();
+  // Keep both hands raised and gently alternate the two airborne poses.
+  make(`${NAME}-falling`, ["falling00", "falling01"], 6, -1);
+  make(`${NAME}-powerup`, ["powerup"], 10, 0);
+  make(`${NAME}-special`, ["powerup"], 10, 0);
+  make(`${NAME}-ducking`, ["duck"], 1, -1);
+  makeSweep();
   make(`${NAME}-dying`, ["dying", "death", "dead"], 10, 0);
 }

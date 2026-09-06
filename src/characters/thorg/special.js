@@ -1,3 +1,5 @@
+import { setThorgRageVisual } from "./rageVisual";
+import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState";
 import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js";
 
 const THORG_SPECIAL = getResolvedCharacterSpecialConfig("thorg");
@@ -25,6 +27,10 @@ export function perform(
 ) {
   if (!scene || !player) return;
   setLocalRageState(player, true);
+  player._thorgAttackCleanup?.();
+  setThorgRageVisual(scene, player, true);
+  playSpriteAnimation({ scene, sprite: player, character: "thorg", logical: "special", fallback: "idle", force: false });
+  markOneShotAnimation(player, "special", 600);
 
   const aura = scene.add.circle(player.x, player.y - 10, 42, 0x9333ea, 0.22);
   aura.setDepth(14);
@@ -99,6 +105,7 @@ export function perform(
     if (!player || !player.active) return;
     if ((player._thorgRageUntil || 0) <= Date.now()) {
       setLocalRageState(player, false);
+      setThorgRageVisual(scene, player, false);
     }
   });
 }

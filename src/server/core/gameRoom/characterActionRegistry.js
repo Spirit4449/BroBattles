@@ -1,3 +1,5 @@
+const { slimeLaunch } = require("../../../shared/gloopProjectile");
+const { getResolvedCharacterAttackConfig } = require("../../../lib/characterTuning");
 const { participantId } = require('./participants');
 const attackRuntimeManager = require("./attackRuntimeManager");
 const { getResolvedAttackDescriptor } = require("./attackDescriptorResolver");
@@ -63,6 +65,24 @@ function scheduleWindupRelease(
 ) {
   const flow = descriptor?.actionFlow || {};
   const startupMs = Math.max(0, Number(flow.startupMs) || 0);
+  // Preserve the aimed impulse; translate its origin with the caster during windup.
+  let slimeCast = null;
+  const castOrigin = { x: playerData.x, y: playerData.y };
+  if (actionData.type === "gloop-slimeball") {
+    const cfg = getResolvedCharacterAttackConfig("gloop", "slimeball");
+    const target = actionData.target || { x: playerData.x + (actionData.direction === -1 ? -320 : 320), y: playerData.y + 40 };
+    const fallback = slimeLaunch({ x: playerData.x, y: playerData.y,
+      width: playerData._lastWidth || 80, height: playerData._lastHeight || 100 }, target, cfg);
+    const { start, angle, speed, initialVy } = actionData;
+    const valid = start && [start.x, start.y, angle, speed, initialVy].every(Number.isFinite)
+      && Math.hypot(start.x - playerData.x, start.y - playerData.y) <= 100
+      && speed > 0 && speed <= cfg.maxLaunchSpeed + 0.001
+      && initialVy >= -cfg.maxUpwardSpeed - 0.001
+      && Math.abs(Math.sin(angle) * speed - initialVy) < 0.001;
+    slimeCast = { ...cfg, ...(valid ? { start: { ...start }, angle, speed, initialVy,
+      direction: Math.cos(angle) < 0 ? -1 : 1, target } : fallback) };
+  }
+
   broadcastAction(
     room,
     playerData,
@@ -91,6 +111,14 @@ function scheduleWindupRelease(
       startup: 0,
       ownerEcho: flow.releaseOwnerEcho === true,
     };
+    if (releaseAction.type === "gloop-slimeball-release") {
+      Object.assign(releaseAction, slimeCast, { start: {
+        x: slimeCast.start.x + playerData.x - castOrigin.x,
+        y: slimeCast.start.y + playerData.y - castOrigin.y,
+      } });
+      if (room.geometry?.colliders) releaseAction.mapCollisionRects = room.geometry.colliders.map(
+        ({ left, right, top, bottom }) => ({ left, right, top, bottom }));
+    }
     attackRuntimeManager.registerAttackFromAction(
       room,
       playerData,

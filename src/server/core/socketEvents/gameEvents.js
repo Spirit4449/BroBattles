@@ -58,6 +58,12 @@ function registerGameEvents(socket, { db, gameHub, abuseControl }) {
         console.warn("[socket] ensure room failed:", e?.message);
       }
 
+      const room = gameHub.getGameRoom(matchId);
+      if (room?.huntressCombatVersion === 2 && data?.huntressCombatVersion !== 2) {
+        cb?.({ ok: false, error: 'client_update_required' });
+        socket.emit('game:error', { message: 'Please reload the game to join this match.' });
+        return;
+      }
       const ok = await gameHub.handlePlayerJoin(socket, matchId);
       if (ok) {
         cb?.({ ok: true, matchId });

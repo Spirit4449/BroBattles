@@ -736,27 +736,44 @@ export function spawnHealthMarker(scene, x, y, delta, opts = {}) {
   marker.setDepth(depth);
   marker.setShadow(0, 2, glowColor, 5, false, true);
   marker.setScale(0.65);
-  const float = opts.floatDistance || 46;
+  const float = opts.floatDistance || 28;
   const duration = opts.duration || 820;
-  // Reserve the whole floating path at the largest pop scale. Live numbers
-  // keep their space until destroyed, including hits on nearby players.
-  const halfWidth = marker.width * 0.7 + 6;
-  const halfHeight = marker.height * 0.7 + 6;
+  // Exclude transparent text padding, but allow for the pop overshoot and
+  // a small glow gap. Reserve the full drift so numbers cannot cross later.
+  const halfWidth = (marker.width - 16) * 0.625 + 3;
+  const halfHeight = (marker.height - 12) * 0.625 + 3;
+  const occupied = [...markerPool]
+    .filter((other) => other.active && other.scene === scene)
+    .map((other) => other._healthMarkerBounds)
+    .filter(Boolean);
+  // A closest free position lies at the hit point or at an occupied edge.
+  // Try those positions by radius instead of spreading hits across wide columns.
+  const xs = new Set([x]);
+  const ys = new Set([y - 5]);
+  for (const reserved of occupied) {
+    xs.add(reserved.left - halfWidth);
+    xs.add(reserved.right + halfWidth);
+    ys.add(reserved.top - halfHeight);
+    ys.add(reserved.bottom + float + halfHeight);
+  }
+  const positions = [...xs].flatMap((px) => [...ys].map((py) => ({
+    x: px,
+    y: py,
+    distance: (px - x) ** 2 + (py - (y - 5)) ** 2,
+  })));
+  positions.sort((a, b) => a.distance - b.distance || a.y - b.y || a.x - b.x);
   let markerX = x;
   let markerY = y - 5;
   let bounds;
-  for (let slot = 0; ; slot++) {
-    const column = [0, -1, 1, -2, 2][slot % 5];
-    markerX = x + column * (halfWidth * 2 + 8);
-    markerY = y - 5 - Math.floor(slot / 5) * (halfHeight * 2 + float + 8);
+  for (const position of positions) {
+    markerX = position.x;
+    markerY = position.y;
     bounds = {
       left: markerX - halfWidth, right: markerX + halfWidth,
       top: markerY - float - halfHeight, bottom: markerY + halfHeight,
     };
-    const overlaps = [...markerPool].some((other) => {
-      if (!other.active || other.scene !== scene) return false;
-      const reserved = other._healthMarkerBounds;
-      return reserved && bounds.left < reserved.right && bounds.right > reserved.left &&
+    const overlaps = occupied.some((reserved) => {
+      return bounds.left < reserved.right && bounds.right > reserved.left &&
         bounds.top < reserved.bottom && bounds.bottom > reserved.top;
     });
     if (!overlaps) break;
