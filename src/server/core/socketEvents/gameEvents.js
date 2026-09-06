@@ -59,7 +59,7 @@ function registerGameEvents(socket, { db, gameHub, abuseControl }) {
       }
 
       const room = gameHub.getGameRoom(matchId);
-      if (room?.huntressCombatVersion === 2 && data?.huntressCombatVersion !== 2) {
+      if ((room?.ninjaCombatVersion === 1 && data?.ninjaCombatVersion !== 1) || (room?.huntressCombatVersion === 2 && data?.huntressCombatVersion !== 2)) {
         cb?.({ ok: false, error: 'client_update_required' });
         socket.emit('game:error', { message: 'Please reload the game to join this match.' });
         return;

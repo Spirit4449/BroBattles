@@ -49,8 +49,6 @@ function startGame(room) {
 
   room.status = "active";
 
-  void room._broadcastParticipantStatus("In Battle");
-
   room.initializeSpawnPositions();
   for (const p of room.players.values()) p._controlLockUntil = Date.now() + 6000;
   try {
@@ -196,6 +194,7 @@ function checkVictoryCondition(room) {
 async function finishGame(room, winnerTeam, meta = {}) {
   if (room.status === "finished") return;
   room.status = "finished";
+  room.playerActivity?.finishMatch(room.matchId);
   console.log(
     `[GameRoom ${room.matchId}] Game finished. Winner: ${winnerTeam || "draw"}`,
   );
@@ -252,8 +251,6 @@ async function finishGame(room, winnerTeam, meta = {}) {
   }
 
   try {
-    await room._broadcastParticipantStatus("End Screen");
-
     const participants = await room.db.runQuery(
       `SELECT mp.user_id, mp.party_id, u.name
          FROM match_participants mp
@@ -262,17 +259,6 @@ async function finishGame(room, winnerTeam, meta = {}) {
       [room.matchId],
     );
     if (participants.length) {
-      const userIds = participants
-        .map((p) => Number(p.user_id))
-        .filter((id) => Number.isFinite(id));
-      if (userIds.length) {
-        const placeholders = userIds.map(() => "?").join(",");
-        await room.db.runQuery(
-          `UPDATE users SET status='online' WHERE user_id IN (${placeholders})`,
-          userIds,
-        );
-      }
-
       const partyIds = [
         ...new Set(
           participants
@@ -290,16 +276,6 @@ async function finishGame(room, winnerTeam, meta = {}) {
             partyIds,
           );
         }
-      }
-
-      for (const p of participants) {
-        const pid = Number(p.party_id);
-        if (!Number.isFinite(pid) || pid <= 0) continue;
-        room.io.to(`party:${pid}`).emit("status:update", {
-          partyId: pid,
-          name: p.name,
-          status: "online",
-        });
       }
     }
   } catch (e) {

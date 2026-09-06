@@ -1998,7 +1998,7 @@ h3 {
 #ready {
   background: linear-gradient(135deg, #b49e20, #bda322);
   padding: 13px 35px;
-  font-size: 18px;
+  font-size: calc(18px * var(--ready-text-scale, 1));
   cursor: pointer;
   transition: all 0.3s ease;
   color: #ffffff;
@@ -2021,6 +2021,15 @@ h3 {
 #ready.cancel:hover {
   background: linear-gradient(135deg, #dc3545, #c82333);
 }
+
+#ready.battle-in-progress {
+  --ready-text-scale: 0.8;
+  background: linear-gradient(135deg, #2879df, #1856b8);
+}
+#ready.battle-in-progress:hover {
+  background: linear-gradient(135deg, #398bf0, #2468ce);
+}
+
 
 #username-text {
   margin-right: 0;
@@ -4942,7 +4951,7 @@ h3 {
   #ready {
     min-width: 72px;
     height: 34px;
-    font-size: 10px;
+    font-size: calc(10px * var(--ready-text-scale, 1));
     padding: 8px 14px;
   }
 
@@ -5128,7 +5137,7 @@ h3 {
   #ready {
     min-width: 84px;
     height: 38px;
-    font-size: 11px;
+    font-size: calc(11px * var(--ready-text-scale, 1));
   }
 
   .fullscreen-toggle {
@@ -5279,7 +5288,7 @@ h3 {
   #ready {
     min-width: 70px;
     height: 34px;
-    font-size: 10px;
+    font-size: calc(10px * var(--ready-text-scale, 1));
   }
 
   .party-button {

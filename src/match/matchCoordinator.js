@@ -1,3 +1,4 @@
+import { configureNinjaNetwork, resetNinjaNetwork, handleNinjaPacket, observeNinjaSnapshot } from '../characters/ninja/network';
 // match/matchCoordinator.js
 //
 // Owns all server socket event handlers for a live match session.
@@ -284,7 +285,7 @@ export function createMatchCoordinator(config) {
   /** Re-emit game:join when a socket connection is established or restored. */
   function _tryJoin() {
     const joinPayload = getJoinPayload();
-    if (joinPayload) joinPayload.huntressCombatVersion = 2;
+    if (joinPayload) { joinPayload.huntressCombatVersion = 2; joinPayload.ninjaCombatVersion = 1; }
     const currentSocketId = socket.id || null;
     if (
       currentSocketId &&
@@ -359,6 +360,7 @@ export function createMatchCoordinator(config) {
 
   function _onSocketDisconnect(reason) {
     resetHuntressNetwork();
+    resetNinjaNetwork();
     if (!shouldMuteClientDefaultLogs()) {
       console.warn("[game] socket disconnected", {
         reason,
@@ -435,6 +437,7 @@ export function createMatchCoordinator(config) {
 
   async function _recoverTimedOutStart(joinPayload) {
     joinPayload.huntressCombatVersion = 2;
+    joinPayload.ninjaCombatVersion = 1;
     if (_startWatchdogRecoveryInFlight) return false;
     _startWatchdogRecoveryInFlight = true;
     try {
@@ -482,7 +485,7 @@ export function createMatchCoordinator(config) {
     if (getIsLiveGame() || getGameEnded()) return;
     if (_startWatchdogTimer) return;
 
-    const joinPayload = { ...getJoinPayload(), huntressCombatVersion: 2 };
+    const joinPayload = { ...getJoinPayload(), huntressCombatVersion: 2, ninjaCombatVersion: 1 };
     const joinMatchId = Number(joinPayload.matchId);
     if (!Number.isFinite(joinMatchId) || joinMatchId <= 0) return;
 
@@ -561,6 +564,7 @@ export function createMatchCoordinator(config) {
 
   function _onGameInit(gameState) {
     configureHuntressNetwork(gameState.huntressCombat);
+    configureNinjaNetwork(gameState.ninjaCombat);
     const gameData = getGameData();
     const username = getUsername();
     configureClientNetTest({
@@ -838,6 +842,7 @@ export function createMatchCoordinator(config) {
     const ingest = snapshotBuffer.ingestSnapshot(snapshot, performance.now());
     if (ingest.accepted === false) return;
     observeHuntressSnapshot(snapshot);
+    observeNinjaSnapshot(snapshot);
 
     try {
       const gameData = getGameData();
@@ -920,6 +925,7 @@ export function createMatchCoordinator(config) {
 
       const { playerName, character, action } = packet;
       if (!playerName || !action) return;
+      if (handleNinjaPacket(scene, packet, {localPlayer:getPlayer(),localUsername:getUsername(),opponentPlayersRef:opponentPlayers,teamPlayersRef:teamPlayers,onAmmo:config.onHuntressAmmo})) return;
       if (handleHuntressPacket(scene, packet, {
         localPlayer: getPlayer(), localUsername: getUsername(),
         opponentPlayersRef: opponentPlayers, teamPlayersRef: teamPlayers,
@@ -1148,6 +1154,7 @@ export function createMatchCoordinator(config) {
 
   function _onGameOver(payload) {
     resetHuntressNetwork();
+    resetNinjaNetwork();
     if (getGameEnded()) return; // idempotent guard
     _stopStartWatchdog();
     _clearForceLiveInputTimer();
@@ -1364,7 +1371,13 @@ export function createMatchCoordinator(config) {
   // ---------------------------------------------------------------------------
 
   /** Attach all match socket listeners. Call once after game data is fetched. */
+  function onPresenceProbe(data, ack) {
+    const matchId = Number(getJoinPayload()?.matchId);
+    if (typeof ack === "function" && Number(data?.matchId) === Number(matchId)) ack({ matchId: Number(matchId) });
+  }
+
   function register() {
+    socket.on("game:presence-probe", onPresenceProbe);
     socket.on("connect", _tryJoin);
     socket.on("reconnect", _tryJoin);
     socket.on("disconnect", _onSocketDisconnect);
@@ -1398,7 +1411,9 @@ export function createMatchCoordinator(config) {
 
   /** Remove all match socket listeners. Safe to call multiple times. */
   function dispose() {
+    socket.off("game:presence-probe", onPresenceProbe);
     resetHuntressNetwork();
+    resetNinjaNetwork();
     _stopStartWatchdog();
     _clearForceLiveInputTimer();
     socket.off("connect", _tryJoin);

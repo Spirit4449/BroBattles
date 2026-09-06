@@ -184,7 +184,7 @@ function requestBasic(room, p, target, profile, random, now) {
   const lockMs = Math.max(150, Number(descriptor?.actionFlow?.startupMs) || Number(descriptor?.runtime?.windupMs) || 0);
   if (p.char_class === 'huntress' && room.huntressCombatVersion === 2) {
     action.power = require('../../../shared/huntressProjectile').powerFromSpeed(action.angle, action.speed);
-  } else {
+  } else if (p.char_class !== 'ninja' || !room.ninjaCombatVersion) {
     ammo.charges--; ammo.nextFireInMs = ammo.cooldownMs;
   }
   p._botActionUntil = now + lockMs; p.animation = "throw";

@@ -57,7 +57,7 @@ function getCharacterLevel(user, character) {
 
 function registerPartyEvents(
   socket,
-  { db, io, mm, partyPresence, partyState, partyQueueTransition, PARTY_STATUS },
+  { db, io, mm, partyPresence, partyState, partyQueueTransition, gameHub, PARTY_STATUS },
 ) {
   async function setPartyStatusSafe(partyId, status) {
     if (!partyId) return;
@@ -106,7 +106,7 @@ function registerPartyEvents(
             [uname],
           );
           const current = String(statusRows[0]?.status || "").toLowerCase();
-          if (current === "ready") return;
+          if (["ready", "in battle", "end screen"].includes(current)) return;
           socket.data.charMenuPrevStatus =
             current === "selecting character"
               ? socket.data.charMenuPrevStatus || "online"
@@ -174,39 +174,14 @@ function registerPartyEvents(
             console.warn(
               `[party:${partyId}] recovered stale live status during ready toggle`,
             );
+          } else if (await gameHub?.endEmptyMatch(Number(liveRows[0].match_id))) {
+            await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
+            partyStatus = PARTY_STATUS.IDLE;
           } else {
-            const liveMatchId = Number(liveRows[0]?.match_id || 0);
-            const participantRows = liveMatchId
-              ? await db.runQuery(
-                  `SELECT u.name, u.status
-                     FROM match_participants mp
-                     JOIN users u ON u.user_id = mp.user_id
-                    WHERE mp.match_id = ? AND mp.party_id = ?`,
-                  [liveMatchId, partyId],
-                )
-              : [];
-            const hasActiveBattleParticipant = participantRows.some((row) =>
-              String(row?.status || "")
-                .trim()
-                .toLowerCase()
-                .includes("in battle"),
-            );
-
-            if (liveMatchId && !hasActiveBattleParticipant) {
-              await db.runQuery(
-                "UPDATE matches SET status = 'cancelled' WHERE match_id = ? AND status = 'live'",
-                [liveMatchId],
-              );
-              await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
-              partyStatus = PARTY_STATUS.IDLE;
-              console.warn(
-                `[party:${partyId}] cancelled stale live match ${liveMatchId} during ready toggle`,
-              );
-            } else {
-              throw new Error("Your party is still in battle.");
-            }
+            throw new Error("Your party is still in battle.");
           }
         }
+
         if ([PARTY_STATUS.QUEUED, PARTY_STATUS.READY_CHECK].includes(partyStatus)) {
           const tickets = await db.runQuery(
             "SELECT 1 FROM match_tickets WHERE party_id = ? LIMIT 1", [partyId],

@@ -24,6 +24,7 @@ const { createTimingDiagnostics } = require("./gameRoom/timingDiagnostics");
 const attackRuntimeManager = require("./gameRoom/attackRuntimeManager");
 const characterActionRegistry = require("./gameRoom/characterActionRegistry");
 const huntressCombat = require('./gameRoom/huntressCombat');
+const ninjaCombat = require('./gameRoom/ninjaCombat');
 const { registerGameChatEvents } = require("./socketEvents/gameChatEvents");
 const { createGameModeRuntime } = require("./gameModes");
 const {
@@ -45,7 +46,7 @@ class GameRoom {
   constructor(
     matchId,
     matchData,
-    { io, db, runtimeConfig = null, abuseControl = null },
+    { io, db, runtimeConfig = null, abuseControl = null, playerActivity = null },
   ) {
     this.matchId = matchId;
     this.matchData = matchData; // { mode, map, players }
@@ -53,6 +54,7 @@ class GameRoom {
     this.db = db;
     this.runtimeConfig = runtimeConfig;
     this.abuseControl = abuseControl;
+    this.playerActivity = playerActivity;
 
     // Room state
     this.status = "waiting"; // waiting, active, finished
@@ -132,6 +134,7 @@ class GameRoom {
 
     this.geometry = getDuelGeometry(matchData.map);
     huntressCombat.initialize(this);
+    ninjaCombat.initialize(this);
     this.botControllers = new Map();
     this._scheduledActions = [];
     this._socketBindings = [];
@@ -370,6 +373,7 @@ class GameRoom {
 
   requestSpecial(id, payload = {}) {
     const p = getParticipant(this, id);
+    if (p?.char_class === 'ninja') return ninjaCombat.request(this, p, p.isBot ? { ...payload, id: `swarm:${++p._botActionSeq}`, aim: { angle: p.flip ? Math.PI : 0, ...payload.aim } } : payload, true);
     if (p?.char_class === 'huntress' && huntressCombat.enabled(this)) {
       return huntressCombat.request(this, p, p.isBot ? { ...payload, id: `special:${++p._botActionSeq}` } : payload, true);
     }
@@ -487,6 +491,7 @@ class GameRoom {
   async _cancelMatchAsAbandoned(reason) {
     if (this.status === "finished") return;
     this.status = "finished";
+    this.playerActivity?.finishMatch(this.matchId, { endScreen: false });
     this._loopRunning = false;
 
     if (this._pendingVictoryFinishTimeout) {
@@ -525,17 +530,6 @@ class GameRoom {
       );
 
       if (participants.length) {
-        const userIds = participants
-          .map((p) => Number(p.user_id))
-          .filter((id) => Number.isFinite(id));
-        if (userIds.length) {
-          const placeholders = userIds.map(() => "?").join(",");
-          await this.db.runQuery(
-            `UPDATE users SET status='online' WHERE user_id IN (${placeholders})`,
-            userIds,
-          );
-        }
-
         const partyIds = [
           ...new Set(
             participants
@@ -558,11 +552,6 @@ class GameRoom {
         for (const p of participants) {
           const pid = Number(p.party_id);
           if (!Number.isFinite(pid) || pid <= 0) continue;
-          this.io.to(`party:${pid}`).emit("status:update", {
-            partyId: pid,
-            name: p.name,
-            status: "online",
-          });
           this.io.to(`party:${pid}`).emit("match:cancelled", {
             reason: reason || "Match cancelled",
           });
@@ -608,12 +597,18 @@ class GameRoom {
     });
     // Handle player input
     this.onSocket(socket, "game:input", (inputData) => {
+      if (this.status !== "finished" && this.players.has(socket.id) && Number.isFinite(inputData?.x) && Number.isFinite(inputData?.y)) {
+        this.playerActivity?.gameActivity(socket, this.matchId);
+      }
       this.handlePlayerInput(socket.id, inputData);
     });
 
     // NEW: Handle input intent (Phase 2 server-side movement simulation)
     // Non-breaking; queued but not used unless USE_SERVER_MOVEMENT_SIMULATION_V1 enabled
     this.onSocket(socket, "game:input-intent", (intentData) => {
+      if (this.status !== "finished" && this.players.has(socket.id) && Number.isFinite(intentData?.seq)) {
+        this.playerActivity?.gameActivity(socket, this.matchId);
+      }
       inputManager.handlePlayerInputIntent(this, socket.id, intentData);
     });
 
@@ -621,6 +616,7 @@ class GameRoom {
     this.onSocket(socket, "game:action", (actionData) => {
       const player = this.players.get(socket.id);
       if (!player) return;
+      if (player.char_class === 'ninja' && String(actionData?.type || '').startsWith('ninja-')) { this.handlePlayerAction(socket.id, actionData); return; }
       if (player.char_class === 'huntress' && huntressCombat.enabled(this) && String(actionData?.type || '').startsWith('huntress-')) {
         this.handlePlayerAction(socket.id, actionData);
         return;
@@ -810,6 +806,7 @@ class GameRoom {
       this.processTick();
       attackRuntimeManager.tickActiveAttacks(this, Date.now());
       huntressCombat.tick(this);
+      ninjaCombat.tick(this);
       this._tickPowerupEffects();
       this.processRegen();
       this._tickTimerAndSuddenDeath();
@@ -919,6 +916,10 @@ class GameRoom {
    */
   handlePlayerAction(socketId, actionData) {
     const playerData = getParticipant(this, socketId);
+    if (playerData?.char_class === 'ninja' && String(actionData?.type || '').startsWith('ninja-')) {
+      if (actionData.type === 'ninja-shuriken') return ninjaCombat.request(this, playerData, actionData);
+      return false;
+    }
     if (playerData?.char_class === 'huntress' && huntressCombat.enabled(this)) {
       if (actionData?.type === 'huntress-arrow') return huntressCombat.request(this, playerData, actionData);
       // Huntress release and derived runtime properties are server-only in v2.
@@ -1288,6 +1289,8 @@ class GameRoom {
     this.botControllers.clear();
     this._scheduledActions.length = 0;
     this._activeAttacks = [];
+    this._ninja?.active.clear();
+    if (this._ninja) { this._ninja.pending.length=0; this._ninja.terminals.length=0; this._ninja.requests.clear(); }
     this._huntress?.active.clear();
     if (this._huntress) {
       this._huntress.pending.length = 0;
@@ -1367,7 +1370,7 @@ class GameRoom {
    * @param {string} socketId
    * @param {object} payload { attacker, target, attackType?, instanceId?, attackTime?, damage? }
    */
-  handleHit(socketId, payload, { server = false, huntressProjectile = null } = {}) {
+  handleHit(socketId, payload, { server = false, huntressProjectile = null, ninjaProjectile = null } = {}) {
     try {
       if (!payload || typeof payload !== "object") return;
       const attackerName = String(payload.attacker || "").trim();
@@ -1384,6 +1387,8 @@ class GameRoom {
       const attacker = Array.from(this.players.values()).find(
         (p) => p.name === attackerName,
       );
+      const trustedNinja = server && ninjaCombat.trusted(this, ninjaProjectile, payload);
+      if (attacker?.char_class === 'ninja' && attackerName !== targetName && !trustedNinja) return;
       const trustedHuntress = server && huntressCombat.isTrustedContact(this, huntressProjectile, payload);
       if (huntressCombat.enabled(this) && attacker?.char_class === 'huntress' &&
           attackerName !== targetName && !trustedHuntress) return;
@@ -1501,7 +1506,7 @@ class GameRoom {
       let dist = 0;
       let maxDist = this._getAttackMaxDist(attacker.char_class, attackType);
       let attackWasFuture = false;
-      if (trustedHuntress) {
+      if (trustedHuntress || trustedNinja) {
         aPos = { x: attacker.x, y: attacker.y };
         tPos = targetVault ? { x: targetVault.x, y: targetVault.y } : { x: target.x, y: target.y };
       } else if (targetVault) {
@@ -1688,7 +1693,7 @@ class GameRoom {
         if (scoredKill) {
           this._recordCombatStat(attacker, { kills: scoredKill });
         }
-        if (appliedDamage > 0 && !trustedHuntress) {
+        if (appliedDamage > 0 && !trustedHuntress && !trustedNinja) {
           this.io.to(`game:${this.matchId}`).emit("game:action", {
             playerId: attacker.user_id,
             playerName: attacker.name,

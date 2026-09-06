@@ -4,7 +4,7 @@ const { bounds } = require('./physics');
 
 function observe(room, player, now, samples) {
   const enemies = [...room.players.values()].filter((p) =>
-    p !== player && p.team !== player.team && p.isAlive && p.loaded && p.connected !== false &&
+    p !== player && p.team !== player.team && p.isAlive && p.loaded &&
     !effects.isActive(p, 'invisibility', now) && Math.hypot(p.x - player.x, p.y - player.y) < 1600,
   ).map((p) => ({
     participantId: participantId(p), char_class: p.char_class, x: p.x, y: p.y,
@@ -15,7 +15,10 @@ function observe(room, player, now, samples) {
     platformId: p.platformId, attack: p._visibleAttack && { ...p._visibleAttack },
   }));
   const projectiles = [];
-  for (const attack of [...(room._activeAttacks || []), ...(room._botVisualProjectiles || []), ...(room._huntress?.active.values() || [])]) {
+  const ninja = [...(room._ninja?.active.values() || [])].map(e => {
+    const p=e.projectile; p.attackerParticipantId=e.owner; p.collisionRadius=p.cfg.collisionRadius; return p;
+  });
+  for (const attack of [...ninja, ...(room._activeAttacks || []), ...(room._botVisualProjectiles || []), ...(room._huntress?.active.values() || [])]) {
     const owner = getParticipant(room, attack.attackerParticipantId) ||
       [...room.players.values()].find((p) => p.name === attack.attackerName);
     if (!owner || owner.team === player.team || !Number.isFinite(attack.x) || !Number.isFinite(attack.y)) continue;

@@ -12,7 +12,7 @@
  * Create game hub controller
  * @param {GameHubDeps} deps
  */
-function createGameHub({ io, db, runtimeConfig = null, abuseControl = null }) {
+function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, playerActivity = null }) {
   // Map of matchId -> GameRoom instance
   const activeRooms = new Map();
 
@@ -33,8 +33,10 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null }) {
       db,
       runtimeConfig,
       abuseControl,
+      playerActivity,
     });
     activeRooms.set(matchId, room);
+    playerActivity?.registerMatch(matchId, matchData.players);
     room.onFinished = () => removeGameRoom(matchId);
 
     console.log(
@@ -58,6 +60,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null }) {
   function removeGameRoom(matchId) {
     const room = activeRooms.get(matchId);
     if (room) {
+      playerActivity?.finishMatch(matchId, { endScreen: false });
       room.cleanup();
       activeRooms.delete(matchId);
       console.log(`[GameHub] Removed game room ${matchId}`);
@@ -84,6 +87,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null }) {
 
     try {
       await room.addPlayer(socket, user);
+      playerActivity?.joinGame(socket, matchId);
       return true;
     } catch (error) {
       console.error(
@@ -137,6 +141,22 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null }) {
     }
   }
 
+  // A lobby may ready again once the old room is finished or has no humans.
+  async function endEmptyMatch(matchId) {
+    const room = activeRooms.get(Number(matchId));
+    if (room && room.status !== "finished") {
+      if (room.hasConnectedHumanPlayers()) return false;
+      await room._cancelMatchAsAbandoned("No human players remain in the match");
+    } else if (!room) {
+      await db.runQuery(
+        "UPDATE matches SET status = 'cancelled' WHERE match_id = ? AND status = 'live'",
+        [matchId],
+      );
+      playerActivity?.finishMatch(matchId, { endScreen: false });
+    }
+    return true;
+  }
+
   /**
    * Get all active room stats (for debugging/monitoring)
    */
@@ -161,6 +181,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null }) {
     removeGameRoom,
     handlePlayerJoin,
     handlePlayerLeave,
+    endEmptyMatch,
     getStats,
   };
 }

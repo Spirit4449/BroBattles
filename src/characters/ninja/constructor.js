@@ -1,3 +1,4 @@
+import { ninjaEnabled, predictNinja } from './network';
 // src/characters/ninja/ninja.js
 import socket from "../../socket";
 import { characterStats } from "../../lib/characterStats.js";
@@ -229,6 +230,8 @@ class Ninja extends CharacterEntityBase {
         outwardDuration: RETURNING_SHURIKEN.outwardDuration,
         returnSpeed: RETURNING_SHURIKEN.returnSpeed,
       };
+
+      if (ninjaEnabled()) return predictNinja(this.scene, p, this.username, { type: 'ninja-shuriken', id: attackId, angle });
 
       const returning = new ReturningShuriken(
         this.scene,

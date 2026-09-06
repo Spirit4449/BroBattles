@@ -54,6 +54,7 @@ let __matchmakingHideTimer = null;
 let __matchmakingCountTimer = null;
 let __matchmakingReadyAckTimer = null;
 let __partyReadyPending = false;
+let __activeBattleMatchId = null;
 let __matchmakingReadyAt = 0;
 const MATCHMAKING_EXIT_MS = 190;
 const MATCHMAKING_SUCCESS_HOLD_MS = 2400;
@@ -1539,8 +1540,9 @@ export async function leaveParty() {
 let hbTimer;
 export function startHeartbeat(partyId) {
   clearInterval(hbTimer);
-  if (!partyId) return;
-  hbTimer = setInterval(() => socket.emit("heartbeat", partyId), 10000);
+  const ping = () => { if (socket.connected) socket.emit("lobby:heartbeat"); };
+  ping();
+  hbTimer = setInterval(ping, 4000);
 }
 export function stopHeartbeat() {
   clearInterval(hbTimer);
@@ -1563,12 +1565,25 @@ export function socketInit(options = {}) {
     __battleReturnPageshowBound = true;
     window.addEventListener("pageshow", () => {
       byeSent = false;
+      // Browser Back can restore this page without the results screen's OK flag.
+      __activeBattleMatchId = null;
+      syncReadyButtonFromSelfSlot();
+      syncReadyAvailability();
+      if (socket.connected) startHeartbeat(getActivePartyId());
+      else ensureSocketConnected();
       if (!consumeBattleLobbyReturnFlag()) return;
       restoreLobbyAfterBattleReturn();
     });
   }
 
   if (__postBattleLobbyReturn) restoreLobbyAfterBattleReturn();
+
+  socket.on("presence:self", ({ matchId }) => {
+    __activeBattleMatchId = Number(matchId) > 0 ? Number(matchId) : null;
+    syncReadyButtonFromSelfSlot();
+    syncReadyAvailability();
+  });
+  if (socket.connected) startHeartbeat(getActivePartyId());
 
   // Connection lifecycle
   socket.on("connect", () => {
@@ -1579,6 +1594,7 @@ export function socketInit(options = {}) {
       href: window.location.href,
       host: window.location.host,
     });
+    startHeartbeat(currentPartyId);
     if (currentPartyId) {
       void loadPendingJoinRequests(currentPartyId);
     }
@@ -1606,6 +1622,8 @@ export function socketInit(options = {}) {
 
   socket.on("disconnect", (reason) => {
     console.log("[socket] disconnected", reason);
+    __activeBattleMatchId = null;
+    syncReadyAvailability();
     stopHeartbeat();
   });
 
@@ -1630,8 +1648,7 @@ export function socketInit(options = {}) {
       currentPartyId: currentPartyId || null,
       socketId: socket.id || null,
     });
-    if (partyId) startHeartbeat(partyId);
-    else stopHeartbeat();
+    startHeartbeat(partyId);
     // Reset roster baseline when switching rooms
     __partyRosterNames = null;
     __partyRosterPartyId = partyId || null;
@@ -3194,6 +3211,11 @@ export function initReadyToggle() {
   readyBtn.dataset.bound = "1";
 
   readyBtn.addEventListener("click", () => {
+    if (getActivePartyId() && __activeBattleMatchId) {
+      sessionStorage.setItem("matchId", String(__activeBattleMatchId));
+      window.location.href = `/game/${__activeBattleMatchId}`;
+      return;
+    }
     __postBattleLobbyReturn = false;
     // Find current user's status element to update optimistically
     const selfSlot = Array.from(
@@ -3416,9 +3438,7 @@ function restoreLobbyAfterBattleReturn() {
   mmOverlayTotal = 0;
   hideMatchmakingOverlay({ immediate: true });
 
-  const partyId = getActivePartyId();
-  if (partyId) socket.emit("ready:status", { partyId, ready: false });
-  else socket.emit("queue:leave");
+  socket.emit("lobby:heartbeat");
 
   const selfSlot = Array.from(
     document.querySelectorAll(".character-slot"),
@@ -3608,6 +3628,15 @@ function syncReadyAvailability(selection = getCurrentSelection()) {
   if (!btn) return { blocked: false, reason: "" };
 
   const normalized = normalizeGameSelection(selection);
+  const partyBattleInProgress = Boolean(getActivePartyId() && __activeBattleMatchId);
+  btn.classList.toggle("battle-in-progress", partyBattleInProgress);
+  if (partyBattleInProgress) {
+    btn.value = "Battle In Progress";
+    btn.disabled = false;
+    btn.title = "Return to your battle";
+    btn.classList.remove("is-disabled", "cancel");
+    return { blocked: false, reason: "", selection: normalized };
+  }
   const reason = getSelectionBlockReason(normalized);
   const blocked = Boolean(reason);
   const isCancelState = btn.classList.contains("cancel");

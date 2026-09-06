@@ -1,3 +1,4 @@
+import { predictNinja } from './characters/ninja/network';
 // player.js
 // NOTE: Refactored to remove circular dependency on game.js.
 // socket now comes from standalone socket.js and opponentPlayers are passed into createPlayer.
@@ -1575,7 +1576,7 @@ function fireSpecialAttack(context = null) {
   const specialRequest = { aim: serializeAimContext(context) };
   socket.emit("game:special", currentCharacter === 'huntress'
     ? predictHuntressShot(player.scene, player, username, specialRequest, true)
-    : specialRequest);
+    : currentCharacter === 'ninja' ? predictNinja(player.scene, player, username, specialRequest, true) : specialRequest);
 }
 
 function drawSuperBar(x, y) {

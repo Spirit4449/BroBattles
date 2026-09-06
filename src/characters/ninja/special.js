@@ -1,3 +1,4 @@
+import { ninjaEnabled } from './network';
 import ReturningShuriken from "./attack";
 import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
@@ -169,6 +170,7 @@ export function perform(
     fallback: "idle",
   });
 
+  if (ninjaEnabled()) return;
   for (let index = 0; index < SWARM_COUNT; index++) {
     scene.time.delayedCall(index * SWARM_RELEASE_MS, () => {
       spawnSingleSwarmShuriken(

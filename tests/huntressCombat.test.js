@@ -190,7 +190,7 @@ test('the room feature flag is immutable and incompatible clients cannot join v2
   let ack;
   await handlers.get('game:join')({matchId:1},a=>{ack=a;});
   assert.equal(ack.error,'client_update_required');assert.equal(joined,0);
-  await handlers.get('game:join')({matchId:1,huntressCombatVersion:2},a=>{ack=a;});
+  await handlers.get('game:join')({matchId:1,huntressCombatVersion:2,ninjaCombatVersion:1},a=>{ack=a;});
   assert.equal(ack.ok,true);assert.equal(joined,1);
   const prior=process.env.BB_HUNTRESS_COMBAT_V2;
   process.env.BB_HUNTRESS_COMBAT_V2='0';assert.equal(combat.enabled(room),true);
@@ -227,4 +227,17 @@ test('two client timelines age identical launch packets under 50/100/150 ms RTT,
     assert.ok(stalled-before<=250);
     assert.equal(clock.observe({epoch:'old',sentMono:9999,simMono:9999},5000),false);
   }
+});
+
+test('arrows still damage a player after their socket disconnects', t => {
+  const { room, players: [p, target], step } = fixture(t);
+  room.handlePlayerAction(p.participantId, { type: 'huntress-arrow', id: 'offline-target', angle: 0 });
+  step(6);
+  const arrow = [...room._huntress.active.values()][1];
+  for (const [id, a] of room._huntress.active) if (a !== arrow) room._huntress.active.delete(id);
+  target.x = arrow.x + 100; target.y = arrow.y;
+  target.connected = false; target.socketId = null;
+  const hp = target.health;
+  step(20);
+  assert.equal(target.health, hp - 1000);
 });

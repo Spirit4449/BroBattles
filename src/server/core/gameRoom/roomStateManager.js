@@ -70,6 +70,7 @@ function sendGameStateToPlayer(room, socket) {
   }
 
   const gameStateForPlayer = {
+    ninjaCombat: require('./ninjaCombat').bootstrap(room),
     huntressCombat: require('./huntressCombat').bootstrap(room),
     matchId: room.matchId,
     mode: room.matchData.mode,

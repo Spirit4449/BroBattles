@@ -1,3 +1,4 @@
+const { createPlayerActivityService } = require("../services/playerActivityService");
 // socket.js
 const cookie = require("cookie");
 const cookieSignature = require("cookie-signature");
@@ -85,8 +86,14 @@ function initSocket({
   chatService,
   abuseControl,
 }) {
+  const partyPresence = createPartyPresenceService({ db, io });
+  let gameHub;
+  const playerActivity = createPlayerActivityService({
+    db, io, setPresence: partyPresence.setUserPresence,
+    getGameRoom: matchId => gameHub?.getGameRoom(matchId),
+  });
   // Game hub for managing active game rooms
-  const gameHub = createGameHub({ io, db, runtimeConfig, abuseControl });
+  gameHub = createGameHub({ io, db, runtimeConfig, abuseControl, playerActivity });
 
   // Matchmaking controller (power-saved loop inside)
   const mm = createMatchmaking({
@@ -96,7 +103,6 @@ function initSocket({
     runtimeConfig,
     teamSizeByMode: TEAM_SIZE_BY_MODE,
   });
-  const partyPresence = createPartyPresenceService({ db, io });
   const partyState = createPartyStateService({ db, io });
   const partyQueueTransition = createPartyQueueTransitionService({
     db,
@@ -207,6 +213,7 @@ function initSocket({
       partyPresence,
       partyState,
       partyQueueTransition,
+      gameHub,
       PARTY_STATUS,
     });
 
@@ -240,13 +247,6 @@ function initSocket({
       try {
         // mark online if not already and emit to others
         const partyId = await db.getPartyIdByName(username);
-        const presenceRows = await db.runQuery(
-          "SELECT status FROM users WHERE name = ? LIMIT 1", [username],
-        );
-        const currentPresence = String(presenceRows[0]?.status || "offline").toLowerCase();
-        if (currentPresence === "offline" || currentPresence === "selecting character") {
-          await partyPresence.setUserPresence(username, "online", partyId || null);
-        }
         // auto-join room
         if (partyId) {
           socket.join(`party:${partyId}`);
@@ -292,6 +292,7 @@ function initSocket({
       mm,
       gameHub,
       setPresence: partyPresence.setUserPresence,
+      playerActivity,
       partyQueueTransition,
       userSockets,
       pendingOffline,

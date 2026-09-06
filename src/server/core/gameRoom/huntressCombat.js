@@ -75,7 +75,7 @@ function packetFor(attack) {
 function targetList(room, owner) {
   const targets = [];
   for (const p of room.players.values()) {
-    if (!p.isAlive || !p.loaded || p.connected === false || p === owner || p.team === owner.team) continue;
+    if (!p.isAlive || !p.loaded || p === owner || p.team === owner.team) continue;
     const body = characterBody(p.char_class, p.flip);
     const x = p.x + (p._bodyCenterOffsetX ?? body.offsetX), y = p.y + (p._bodyCenterOffsetY ?? body.offsetY);
     const hw = p._bodyHalfWidth ?? body.halfWidth, hh = p._bodyHalfHeight ?? body.halfHeight;

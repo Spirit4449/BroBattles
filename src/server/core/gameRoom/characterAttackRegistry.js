@@ -384,7 +384,6 @@ function tickRuntimeControlEffects(room, now = Date.now()) {
     if (!pull) continue;
     if (
       !target.isAlive ||
-      target.connected === false ||
       target.loaded !== true
     ) {
       delete target._gloopPullState;

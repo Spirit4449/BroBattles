@@ -5,7 +5,7 @@ const { registerPresenceEvents } = require('../src/server/core/socketEvents/pres
 const { createPartyQueueTransitionService } = require('../src/server/services/partyQueueTransitionService');
 const { PARTY_STATUS } = require('../src/server/helpers/partyRules');
 
-function fixture(names = ['Owner']) {
+function fixture(names = ['Owner'], gameHub = undefined) {
   const party = { party_id: 7, status: 'idle', mode: 1, map: 1 };
   const members = names.map(name => ({ name, status: 'online', team: 'team1' }));
   const events = [];
@@ -40,7 +40,7 @@ function fixture(names = ['Owner']) {
   function client(name) {
     const handlers = {};
     const socket = { data: { user: { name } }, on: (event, handler) => { handlers[event] = handler; } };
-    registerPartyEvents(socket, { db, io, mm, partyPresence, partyQueueTransition, PARTY_STATUS });
+    registerPartyEvents(socket, { db, io, mm, partyPresence, partyQueueTransition, gameHub, PARTY_STATUS });
     return {
       handlers,
       ready: async (ready, partyId = 7) => { let reply; await handlers['ready:status']({ ready, partyId }, result => { reply = result; }); return reply; },
@@ -152,4 +152,25 @@ test('failed presence writes reject readiness instead of acknowledging success',
   const { createPartyPresenceService } = require('../src/server/services/partyPresenceService');
   const presence = createPartyPresenceService({ db: { setUserStatus: async () => { throw new Error('DB unavailable'); } }, io: {} });
   await assert.rejects(presence.setUserPresence('Owner', 'ready', 7, { strict: true }), /DB unavailable/);
+});
+
+test('an offline participant does not make a live battle cancellable from ready', async () => {
+  const f = fixture(); f.party.status = 'live';
+  const query = f.db.runQuery;
+  f.db.runQuery = async (sql, params) => sql.includes('FROM matches') ? [{ match_id: 77 }] : query(sql, params);
+  assert.equal((await f.client('Owner').ready(true)).ok, false);
+  assert.equal(f.party.status, 'live');
+  assert.equal(f.joins, 0);
+});
+
+test('ready recovers from an empty old battle and joins a new queue', async () => {
+  const ended = [];
+  const f = fixture(['Owner'], { endEmptyMatch: async id => { ended.push(id); return true; } });
+  f.party.status = 'live';
+  const query = f.db.runQuery;
+  f.db.runQuery = async (sql, params) => sql.includes('FROM matches') ? [{ match_id: 77 }] : query(sql, params);
+  assert.equal((await f.client('Owner').ready(true)).ok, true);
+  assert.deepEqual(ended, [77]);
+  assert.equal(f.party.status, 'queued');
+  assert.equal(f.joins, 1);
 });

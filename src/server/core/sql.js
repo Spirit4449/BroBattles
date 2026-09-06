@@ -98,7 +98,7 @@ async function setUserStatus(name, status) {
 
 async function setUserSocketId(userId, socketId) {
   return runQuery(
-    "UPDATE users SET socket_id = ?, status = 'online' WHERE user_id = ?",
+    "UPDATE users SET socket_id = ? WHERE user_id = ?",
     [socketId, userId],
   );
 }

@@ -6,13 +6,23 @@ function registerPresenceEvents(
     mm,
     gameHub,
     setPresence,
+    playerActivity,
     partyQueueTransition,
     userSockets,
     pendingOffline,
     DISCONNECT_GRACE_MS,
   },
 ) {
+  socket.on("lobby:heartbeat", async () => {
+    if (!socket.data.user || !playerActivity) return;
+    try { await playerActivity.lobbyPing(socket); }
+    catch (error) { console.warn("lobby heartbeat failed:", error?.message); }
+  });
   socket.on("heartbeat", async (partyId) => {
+    if (playerActivity && socket.data.user) {
+      try { await playerActivity.lobbyPing(socket); } catch (_) {}
+      return;
+    }
     const uname = socket.data.user?.name;
     if (!uname || !partyId) return;
     try {
@@ -52,12 +62,14 @@ function registerPresenceEvents(
     if (!set || set.size === 0) {
       const timer = setTimeout(async () => {
         const s = userSockets.get(uname);
-        if (!s || s.size === 0) await setPresence(uname, "offline");
+        if (!playerActivity && (!s || s.size === 0)) await setPresence(uname, "offline");
         pendingOffline.delete(uname);
       }, DISCONNECT_GRACE_MS);
       pendingOffline.set(uname, timer);
     }
 
+    playerActivity?.disconnect(socket);
+    if (playerActivity?.hasMatchPresence(uname)) return;
     if (userSockets.get(uname)?.size) return;
     await partyQueueTransition.cancelForDisconnectedUser({
       username: uname,
@@ -111,12 +123,14 @@ function registerPresenceEvents(
     if (!hasAny) {
       const timer = setTimeout(async () => {
         const s = userSockets.get(username);
-        if (!s || s.size === 0) await setPresence(username, "offline");
+        if (!playerActivity && (!s || s.size === 0)) await setPresence(username, "offline");
         pendingOffline.delete(username);
       }, DISCONNECT_GRACE_MS);
       pendingOffline.set(username, timer);
     }
 
+    playerActivity?.disconnect(socket);
+    if (playerActivity?.hasMatchPresence(username)) return;
     if (hasAny) return;
     await partyQueueTransition.cancelForDisconnectedUser({
       username,

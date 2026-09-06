@@ -1,3 +1,4 @@
+import { attachNinjaScene } from './characters/ninja/network';
 // game.js
 
 import {
@@ -1646,6 +1647,8 @@ class GameScene extends Phaser.Scene {
   }
 
   update() {
+    attachNinjaScene(this, { localPlayer: player, localUsername: username,
+      opponentPlayersRef: opponentPlayers, teamPlayersRef: teamPlayers });
     attachHuntressScene(this, { localPlayer: player, localUsername: username,
       opponentPlayersRef: opponentPlayers, teamPlayersRef: teamPlayers });
     updateMatchBackgroundParallax(this);
