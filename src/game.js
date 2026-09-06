@@ -298,6 +298,8 @@ const hud = createGameHudController({
       }
     } catch (_) {}
   },
+  onSpectatePrevious: () => gameScene?._cycleSpectatedPlayer?.(-1),
+  onSpectateNext: () => gameScene?._cycleSpectatedPlayer?.(1),
 });
 
 const battleTutorial = createBattleTutorialController({
@@ -792,6 +794,7 @@ let game = null;
 window.__BOOT_GAME__ = () =>
   onReady(async () => {
     initKeybindHud();
+    hud.initSpectateHud?.();
     initTimerHud();
     await initializeGame();
     if (!game) {
@@ -958,6 +961,11 @@ class GameScene extends Phaser.Scene {
         Number(this.game.config.height),
     };
     this._spectatorModeActive = false;
+    this._spectatedPlayerName = null;
+    this._spectatorCandidateCount = 0;
+    this._spectatorFallbackActive = false;
+    this._spectatorCameraTarget = { x: 0, y: 0 };
+    this._spectatorCameraFollowing = false;
 
     // Ensure all character animations are registered for this scene
     setupAll(this);
@@ -1507,55 +1515,134 @@ class GameScene extends Phaser.Scene {
   }
 
   _enterSpectatorMode() {
-    if (this._spectatorModeActive) return;
-    this._spectatorModeActive = true;
-    this._spectatorVignette = true;
-    hud.showSpectatingBanner?.();
+    if (!this._spectatorModeActive) {
+      this._spectatorModeActive = true;
+      this._spectatorVignette = true;
+      hud.showSpectatingBanner?.();
+    }
+    this._syncSpectatedPlayer();
+  }
+
+  _getSpectatablePlayers() {
+    const roster = Array.isArray(gameData?.players) ? gameData.players : [];
+    return roster
+      .filter((entry) => {
+        if (!entry?.name || entry.name === username) return false;
+        const wrapper = opponentPlayers[entry.name] || teamPlayers[entry.name];
+        return (
+          entry.isAlive !== false &&
+          entry.connected !== false &&
+          entry.loaded !== false &&
+          !!wrapper?.opponent?.active &&
+          !wrapper._deathPresentationActive &&
+          !wrapper._corpseRemoved
+        );
+      })
+      .map((entry) => ({
+        name: String(entry.name),
+        wrapper: opponentPlayers[entry.name] || teamPlayers[entry.name],
+      }));
+  }
+
+  _setSpectatedPlayer(name) {
+    const candidates = this._getSpectatablePlayers();
+    const selected =
+      candidates.find((entry) => entry.name === name) || candidates[0] || null;
+    const nextName = selected?.name || null;
+    const changed = nextName !== this._spectatedPlayerName;
+    const candidateCountChanged =
+      candidates.length !== this._spectatorCandidateCount;
+
+    if (changed) {
+      for (const wrapper of [
+        ...Object.values(opponentPlayers),
+        ...Object.values(teamPlayers),
+      ]) {
+        wrapper?.setSpectated?.(!!nextName && wrapper.username === nextName);
+      }
+    }
+
+    this._spectatedPlayerName = nextName;
+    this._spectatorCandidateCount = candidates.length;
+    if (changed || candidateCountChanged) {
+      hud.setSpectatingPlayer?.(nextName, { canSwitch: candidates.length > 1 });
+    }
 
     const cam = this.cameras.main;
     if (!cam) return;
-    try {
-      cam.stopFollow();
-    } catch (_) {}
-
-    const bounds = this._spectatorBounds || {};
-    const targetX =
-      Number(bounds.centerX) ||
-      Number(this.physics?.world?.bounds?.centerX) ||
-      1150;
-    const targetY =
-      Number(bounds.centerY) ||
-      Number(this.physics?.world?.bounds?.centerY) ||
-      500;
-    const width = Math.max(
-      1,
-      Number(bounds.width) ||
-        Number(this.physics?.world?.bounds?.width) ||
-        2300,
-    );
-    const height = Math.max(
-      1,
-      Number(bounds.height) ||
-        Number(this.physics?.world?.bounds?.height) ||
-        1000,
-    );
-    const zoomX = (Number(this.scale?.width) || width) / width;
-    const zoomY = (Number(this.scale?.height) || height) / height;
-    const targetZoom = Phaser.Math.Clamp(
-      Math.min(1, Math.min(zoomX, zoomY) * 0.985),
-      0.82,
-      1,
-    );
-    const raisedTargetY = targetY - Math.min(140, height * 0.12);
-
-    try {
-      cam.pan(targetX, raisedTargetY, 900, "Cubic.easeOut");
-    } catch (_) {}
-    try {
-      cam.zoomTo(targetZoom, 900, "Quad.easeOut");
-    } catch (_) {
-      cam.setZoom(targetZoom);
+    if (!selected?.wrapper?.opponent) {
+      if (!this._spectatorFallbackActive) {
+        this._spectatorFallbackActive = true;
+        this._spectatorCameraFollowing = false;
+        const bounds = this._spectatorBounds || {};
+        try {
+          cam.stopFollow();
+          cam.pan(
+            Number(bounds.centerX) || 1150,
+            (Number(bounds.centerY) || 500) - 120,
+            500,
+            "Cubic.easeOut",
+          );
+        } catch (_) {}
+      }
+      cam.setZoom(cam.zoom + (1.2 - cam.zoom) * 0.075);
+      return;
     }
+    this._spectatorFallbackActive = false;
+    const watchedPlayer = selected.wrapper.opponent;
+    const cameraTarget = this._spectatorCameraTarget ||
+      (this._spectatorCameraTarget = { x: 0, y: 0 });
+    if (!this._spectatorCameraFollowing) {
+      // startFollow immediately centers on its target. Seed the proxy from the
+      // camera's current midpoint so entering (or resuming) spectate never snaps.
+      cameraTarget.x = cam.midPoint.x + cam.followOffset.x;
+      cameraTarget.y = cam.midPoint.y + cam.followOffset.y;
+      try {
+        cam.stopFollow();
+        cam.startFollow(
+          cameraTarget,
+          false,
+          0.075,
+          0.06,
+          cam.followOffset.x,
+          cam.followOffset.y,
+        );
+        this._spectatorCameraFollowing = true;
+      } catch (_) {}
+    }
+    // The camera remains attached to this proxy across player changes. Updating
+    // its destination lets Phaser's follow lerp glide between fighters instead
+    // of startFollow snapping straight to the newly selected sprite.
+    cameraTarget.x = watchedPlayer.x;
+    cameraTarget.y = watchedPlayer.y;
+    // Keep the watched fighter lower in frame, revealing more of the platforms
+    // above them, while staying substantially closer than the old map overview.
+    cam.setFollowOffset(
+      0,
+      cam.followOffset.y + (180 - cam.followOffset.y) * 0.1,
+    );
+    cam.setZoom(cam.zoom + (1.55 - cam.zoom) * 0.075);
+  }
+
+  _syncSpectatedPlayer() {
+    this._setSpectatedPlayer(this._spectatedPlayerName);
+  }
+
+  _cycleSpectatedPlayer(direction = 1) {
+    const candidates = this._getSpectatablePlayers();
+    if (!candidates.length) {
+      this._setSpectatedPlayer(null);
+      return;
+    }
+    const currentIndex = candidates.findIndex(
+      (entry) => entry.name === this._spectatedPlayerName,
+    );
+    const step = direction < 0 ? -1 : 1;
+    const nextIndex =
+      currentIndex < 0
+        ? 0
+        : (currentIndex + step + candidates.length) % candidates.length;
+    this._setSpectatedPlayer(candidates[nextIndex].name);
   }
 
   update() {
@@ -1622,7 +1709,18 @@ class GameScene extends Phaser.Scene {
         } catch (_) {}
       }
       this._spectatorModeActive = false;
+      this._spectatedPlayerName = null;
+      this._spectatorCandidateCount = 0;
+      this._spectatorFallbackActive = false;
+      this._spectatorCameraFollowing = false;
+      for (const wrapper of [
+        ...Object.values(opponentPlayers),
+        ...Object.values(teamPlayers),
+      ]) {
+        wrapper?.setSpectated?.(false);
+      }
       hud.hideSpectatingBanner?.();
+      hud.hideSpectatingPlayer?.();
       updateDynamicCamera(this, player, Phaser);
       localInputSync.sync(this, player, {
         dead,

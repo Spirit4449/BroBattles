@@ -6,13 +6,13 @@ const {
 const { difficultyForTrophies } = require("./config");
 const { createRandom } = require("./random");
 
-// 64 x 48 = 3,072 distinct player-style names, without a bot prefix.
+// Combinatorial player-style names, without legacy numbered/Ultra bot labels.
 const first =
-  "Amber Arctic Astro Azure Blazing Blue Bold Breezy Bronze Cedar Cherry Cloud Cobalt Copper Cosmic Crimson Crystal Daring Dawn Desert Dusk Echo Electric Ember Emerald Frost Golden Granite Hidden Indigo Iron Jade Jungle Lunar Maple Midnight Misty Neon Noble Nova Obsidian Ocean Olive Onyx Opal Orange Peach Pearl Pixel Polar Quiet Rapid Red River Rose Royal Ruby Sandy Scarlet Silver Solar Storm Sunny Velvet".split(
+  "Amber Arctic Astro Azure Blazing Blue Bold Breezy Bronze Cedar Cherry Cloud Cobalt Copper Cosmic Crimson Crystal Daring Dawn Desert Dusk Echo Electric Ember Emerald Frost Golden Granite Hidden Indigo Iron Jade Jungle Lunar Maple Midnight Misty Neon Noble Nova Obsidian Ocean Olive Onyx Opal Orange Peach Pearl Pixel Polar Quiet Rapid Red River Rose Royal Ruby Sandy Scarlet Silver Solar Storm Sunny Velvet Aurora Violet Wild Winter Mossy Rusty Glowing Wandering".split(
     " ",
   );
 const last =
-  "Badger Bear Beetle Birch Blossom Breeze Comet Coyote Crane Cricket Crow Deer Dolphin Dragon Eagle Falcon Fern Finch Firefly Fox Gecko Hawk Heron Jaguar Jay Kestrel Koala Lynx Mantis Maple Moth Otter Owl Panda Panther Pebble Pine Puma Raven Robin Sparrow Sprout Star Tiger Turtle Viper Willow Wolf".split(
+  "Badger Bear Beetle Birch Blossom Breeze Comet Coyote Crane Cricket Crow Deer Dolphin Dragon Eagle Falcon Fern Finch Firefly Fox Gecko Hawk Heron Jaguar Jay Kestrel Koala Lynx Mantis Maple Moth Otter Owl Panda Panther Pebble Pine Puma Raven Robin Sparrow Sprout Star Tiger Turtle Viper Willow Wolf Axolotl Capybara Osprey Puffin Wombat Meteor Lantern Voyager".split(
     " ",
   );
 
@@ -305,7 +305,7 @@ function createBotParticipants(
 
   // Filter candidate real names to only those not reserved
   const availableRealNames = (Array.isArray(realNames) ? realNames : []).filter(
-    (name) => name && !reserved.has(String(name).toLowerCase()),
+    (name) => typeof name === 'string' && name.trim() && !/^bot[\s_-]*(?:\d+|ultra)$/i.test(name.trim()) && !reserved.has(name.toLowerCase()),
   );
 
   for (const team of ["team1", "team2"]) {

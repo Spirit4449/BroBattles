@@ -177,6 +177,14 @@ export default class OpPlayer {
     this.opPlayerName.setOrigin(0.5, 0);
     this.opPlayerName.setDepth(50); // always above map objective props
 
+    this.spectateIcon = this.scene.add.image(0, 0, "spectate-icon");
+    this.spectateIcon
+      .setDisplaySize(18, 13)
+      .setOrigin(0, 0.5)
+      .setDepth(RENDER_LAYERS.PLAYER_HUD + 4)
+      .setVisible(false);
+    this._isSpectated = false;
+
     this.opHealthText = this.scene.add.text(0, 0, "", {
       fontFamily: "LilitaOne-Regular",
       fontSize: "10px",
@@ -600,7 +608,31 @@ export default class OpPlayer {
         this._hudAnchorY - OP_PLAYER_NAME_OFFSET_Y,
       );
     }
+    if (this.spectateIcon) {
+      const nameRight = this.opPlayerName
+        ? this.opPlayerName.x + this.opPlayerName.displayWidth / 2
+        : this._hudAnchorX;
+      this.spectateIcon.setPosition(
+        nameRight + 4,
+        this._hudAnchorY - OP_PLAYER_NAME_OFFSET_Y + 7,
+      );
+    }
     this.updateHealthBar(false);
+  }
+
+  setSpectated(active = false) {
+    this._isSpectated = active === true;
+    const shouldShow =
+      this._isSpectated &&
+      !!this.opponent?.active &&
+      !this._corpseRemoved &&
+      !this._deathPresentationActive &&
+      this._spawnPresented &&
+      this.presenceLoaded &&
+      !this._worldUiHidden &&
+      !this._powerupInvisible;
+    this.spectateIcon?.setVisible(shouldShow);
+    if (shouldShow) this.updateUIPosition();
   }
 
   setPresenceState(connected, loaded) {
@@ -621,6 +653,13 @@ export default class OpPlayer {
       );
       this.opPlayerName.setAlpha(1);
     }
+    this.spectateIcon?.setVisible(
+      this._isSpectated &&
+        shouldRender &&
+        !this._worldUiHidden &&
+        !this._powerupInvisible &&
+        !this._deathPresentationActive,
+    );
     if (this.opHealthText) {
       this.opHealthText.setVisible(
         shouldRender && !this._worldUiHidden && !this._powerupInvisible,
@@ -792,6 +831,7 @@ export default class OpPlayer {
     resetSuperBarAnimation(this.opSuperBar, this.opponent);
     try {
       this.opPlayerName?.setVisible(false);
+      this.spectateIcon?.setVisible(false);
     } catch (_) {}
     try {
       this.opHealthText?.setVisible(false);
@@ -965,6 +1005,9 @@ export default class OpPlayer {
     }
     if (this.opPlayerName) {
       this.opPlayerName.destroy();
+    }
+    if (this.spectateIcon) {
+      this.spectateIcon.destroy();
     }
     if (this.opHealthText) {
       this.opHealthText.destroy();

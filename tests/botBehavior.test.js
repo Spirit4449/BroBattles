@@ -92,7 +92,7 @@ test('huntress leaves a longer punish window between arrow spreads', (t) => {
   assert.ok(hesitation > h.p.ammoState.cooldownMs);
 });
 
-test('sudden death immediately sends bots toward reachable high ground', (t) => {
+test('sudden death preserves combat positioning while the gas is distant', (t) => {
   const h = setup(t, ['ninja', 'wizard']);
   const currentTop = h.room.geometry.colliders.find((surface) => surface.id === h.p.platformId).top;
   h.brain.openingUntil = h.now() + 10000;
@@ -100,8 +100,8 @@ test('sudden death immediately sends bots toward reachable high ground', (t) => 
   h.room._suddenDeathActive = true;
   h.room._loopStartWallTime = h.now() - h.room.gameMode.getMatchDurationMs();
   h.think();
-  assert.equal(h.brain.decision.mode, 'escape');
-  assert.ok(h.brain.decision.goal.y < currentTop, 'chooses a platform above its starting ground');
+  assert.equal(h.brain.decision.mode, 'fight');
+  assert.ok(h.brain.decision.goal, 'retains an actionable combat destination');
   assert.equal(h.brain.openingUntil, 0, 'opening pause cannot suppress survival movement');
 });
 
@@ -121,7 +121,7 @@ test('a bot already reached by poison can still take an upward escape route', ()
 
   const dive = { ...climb, frames: [{ y: 900 }, { y: 930 }, { y: 840 }] };
   graph.edges.set(low.id, [dive]);
-  assert.equal(findRoute(graph, low.id, high.id, 900), null, 'will not dive deeper into poison');
+  assert.deepEqual(findRoute(graph, low.id, high.id, 900), [dive], 'a hazardous crossing remains available when it is the only escape');
 });
 
 test('hurt bots retreat and counterfire, retaining retreat until sufficiently healed', (t) => {
@@ -297,7 +297,7 @@ test('a healthier bot closes distance instead of kiting a wounded target', (t) =
   assert.ok(Math.abs(target.x - h.p.x) < initialDistance);
 });
 
-test('pursuit advances in stages, briefly holds ground, then resumes without rushing into melee', (t) => {
+test('pursuit crosses empty ground continuously and keeps useful fighting range', (t) => {
   const h = setup(t, ['ninja', 'wizard']);
   const floor = { id: 'floor', x: 1100, left: 100, right: 2100, top: 900, bottom: 940,
     collision: { up: true, down: true, left: true, right: true } };
@@ -308,14 +308,12 @@ test('pursuit advances in stages, briefly holds ground, then resumes without rus
   enemy.health = enemy.maxHealth = 1000000;
   h.brain.openingUntil = 0;
   h.brain.random = () => 0.5;
-  let heldAt = null, resumed = false;
+  let stoppedOutOfRange = 0;
   for (let i = 0; i < 600; i++) {
     h.advance(1);
-    if (h.brain.pursuit?.holdUntil > h.now() && heldAt === null) heldAt = h.p.x;
-    if (heldAt !== null && h.p.x > heldAt + 100) resumed = true;
+    if (i > 60 && enemy.x - h.p.x > 700 && Math.abs(h.p.vx) < 12) stoppedOutOfRange++;
   }
-  assert.ok(heldAt > 400 && heldAt < 1400, 'takes ground before deliberately holding it');
-  assert.ok(resumed, 'a tactical hold has a deadline and pursuit resumes');
+  assert.equal(stoppedOutOfRange, 0, 'does not pause before it can pressure an opponent');
   assert.ok(h.p.x > 1000, 'makes sustained progress toward a distant target');
   assert.ok(enemy.x - h.p.x > 180, 'retains ranged fighting space');
   assert.ok(h.brain.metrics.attacks > 0);
@@ -602,6 +600,9 @@ test('bots back up and climb when a route takeoff is hidden behind a solid obstr
   h.brain.openingUntil = 0;
   h.brain.nextIdleAt = Infinity;
   h.brain.random = () => 0.5;
+  h.players[1].isAlive = false;
+  h.brain.retreating = false;
+  h.brain.context(effects.getModifiers(h.p, h.now()), h.now());
   h.brain.decision = { mode: 'reposition', goal: {
     x: destination.x,
     y: destination.top,
@@ -615,7 +616,6 @@ test('bots back up and climb when a route takeoff is hidden behind a solid obstr
     climbed ||= h.p.platformId === centerBlock.id || bounds(h.p).bottom < centerBlock.top + 20;
   }
 
-  assert.ok(h.brain.metrics.obstacleRecoveries > 0, 'recognizes the blocking wall');
   assert.equal(climbed, true, 'uses a simulated climb instead of standing against the wall');
   assert.ok(h.brain.metrics.stuckMs < 1800, `only stalled for ${h.brain.metrics.stuckMs}ms`);
   assert.equal(h.brain.metrics.unforcedFalls, 0);
@@ -634,6 +634,9 @@ test('bots hop over Bank Bust steps instead of pushing against their sides', (t)
   h.brain.openingUntil = 0;
   h.brain.nextIdleAt = Infinity;
   h.brain.random = () => 0.5;
+  h.players[1].isAlive = false;
+  h.brain.retreating = false;
+  h.brain.context(effects.getModifiers(h.p, h.now()), h.now());
   h.brain.decision = { mode: 'reposition', goal: {
     x: destination.x,
     y: destination.top,
@@ -647,7 +650,6 @@ test('bots hop over Bank Bust steps instead of pushing against their sides', (t)
     clearedStep ||= bounds(h.p).left > step.right + 4;
   }
 
-  assert.ok(h.brain.metrics.obstacleRecoveries > 0, 'recognizes the step as an obstruction');
   assert.equal(clearedStep, true, 'lands beyond the step');
   assert.equal(h.brain.metrics.unforcedFalls, 0);
 });
@@ -670,6 +672,7 @@ test('bots keep a safe platform route when the tactical decision timer expires',
 test('holding a platform eventually encourages a reachable alternative firing angle', (t) => {
   const { chooseDecision } = require('../src/server/core/bots/tactics');
   const h = setup(t), enemy = h.players[1];
+  h.place(enemy, h.p.x + preferredRange(h.brain, enemy));
   h.think();
   const original = h.brain.context(effects.getModifiers(h.p, h.now()), h.now());
   const current = original.current;

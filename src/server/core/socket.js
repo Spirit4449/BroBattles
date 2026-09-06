@@ -240,11 +240,13 @@ function initSocket({
       try {
         // mark online if not already and emit to others
         const partyId = await db.getPartyIdByName(username);
-        await partyPresence.setUserPresence(
-          username,
-          "online",
-          partyId || null,
+        const presenceRows = await db.runQuery(
+          "SELECT status FROM users WHERE name = ? LIMIT 1", [username],
         );
+        const currentPresence = String(presenceRows[0]?.status || "offline").toLowerCase();
+        if (currentPresence === "offline" || currentPresence === "selecting character") {
+          await partyPresence.setUserPresence(username, "online", partyId || null);
+        }
         // auto-join room
         if (partyId) {
           socket.join(`party:${partyId}`);

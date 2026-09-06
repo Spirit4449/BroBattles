@@ -1,7 +1,7 @@
 const { emitRoster, selectPartyById } = require("../helpers/party");
 
 function createPartyPresenceService({ db, io }) {
-  async function setUserPresence(name, status, partyId = null) {
+  async function setUserPresence(name, status, partyId = null, { strict = false } = {}) {
     try {
       await db.setUserStatus(name, status);
       if (partyId) {
@@ -18,7 +18,9 @@ function createPartyPresenceService({ db, io }) {
         });
         await emitPartyRosterById(targetPartyId);
       }
-    } catch (_) {}
+    } catch (error) {
+      if (strict) throw error;
+    }
   }
 
   async function setTransientPresence({

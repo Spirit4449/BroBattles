@@ -1,7 +1,7 @@
 const { createRandom } = require('./random');
-const { difficultyForTrophies } = require('./config');
+const { difficultyForTrophies, recoveryThreshold } = require('./config');
 const { bounds, stepBody } = require('./physics');
-const { buildGraph, findRoute, nearestSurface, safeWalkDirection, previewManeuver } = require('./navigation');
+const { buildGraph, findRoute, prepareTraversal, edgeKey, nearestSurface, safeWalkDirection, previewManeuver, walkLimits, poisonDamage } = require('./navigation');
 const { advanceAmmo, basicAim, hasClearShot, pressureAim, requestBasic, requestSpecial } = require('./combat');
 const { observe, incomingThreat, maneuverDanger } = require('./perception');
 const { healthFraction, preferredRange, selectTarget, chooseDecision } = require('./tactics');
@@ -11,7 +11,7 @@ const { isMovementSuppressed } = require('../gameRoom/abilityRuntimeManager');
 const { updateTeamwork } = require('./teamwork');
 const { resolveBotObjective } = require('./objectives');
 const movement = require('../../../shared/movementPhysics.json');
-const { DEATH_DROP_PICKUP_RADIUS } = require('../gameRoomConfig');
+const { DEATH_DROP_PICKUP_RADIUS, POWERUP_PICKUP_RADIUS, WORLD_BOUNDS } = require('../gameRoomConfig');
 
 class BotController {
   constructor(room, player) {
@@ -22,7 +22,7 @@ class BotController {
     this.profile.dodgeChance ??= 0.4 + (this.profile.prediction || 0) * 0.45;
     this.profile.tacticalAwareness ??= Math.min(1, 0.3 + (this.profile.prediction || 0) * 0.7);
     this.reactionMs = this.between(this.profile.reactionMinMs, this.profile.reactionMaxMs);
-    this.aggression = this.between(0.9, 1.2) + this.profile.tacticalAwareness * 0.12;
+    this.aggression = this.between(0.9, 1.2);
     this.spacing = this.between(0.85, 1.1);
     this.openingDelay = this.between(350, 800);
     this.observations = [];
@@ -37,9 +37,6 @@ class BotController {
     this.nextStrategicDuckAt = 0;
     this.nextFlavorDuckAt = 0;
     this.nextHopAt = 0;
-    this.nextWallPlayAt = 0;
-    this.kiteUntil = 0;
-    this.nextKiteAt = 0;
     this.idleUntil = 0;
     this.pursuit = null;
     this.ineffectivePositions = [];
@@ -61,7 +58,6 @@ class BotController {
     if (!p.isAlive || room.status !== 'active') return;
     if (this.openingUntil === undefined) {
       this.openingUntil = now + this.openingDelay;
-      this.nextIdleAt = now + this.between(7000, 12000);
       this.nextHopAt = now + this.between(4000, 8000);
       this.nextFlavorDuckAt = now + this.between(6500, 13000);
     }
@@ -101,7 +97,7 @@ class BotController {
     if (p.ducking) {
       this.intent = { direction: this.getDuckDirection(), jumpPressed: false };
     }
-    if (p._botActionUntil <= now && this.intent.direction) p.flip = this.intent.direction < 0;
+    if (this.traversal || this.maneuver || (p._botActionUntil <= now && this.intent.direction)) p.flip = this.intent.direction < 0;
     const result = stepBody(p, this.intent, room.geometry, dt, now, mods);
     this.intent.jumpPressed = false;
     p.lastInput = now;
@@ -113,7 +109,11 @@ class BotController {
       room._handlePlayerDeath(p, { cause: 'fall', at: now });
       return;
     }
-    if (p.grounded && this.traversal && (p.platformId === this.traversal.to || now > this.traversal.until)) this.traversal = null;
+    if (p.grounded && this.traversal && (this.traversal.cursor >= this.traversal.frames.length || now > this.traversal.until)) {
+      this.traversal = null;
+      this.intent = { direction: safeWalkDirection(p, 0, room.geometry) };
+      this.nextThink = 0;
+    }
     p.ducking = p.grounded && now < this.duckUntil;
     if (!p.ducking) this.duckDirection = 0;
     if (p._botActionUntil <= now) p.animation = p.ducking ? 'ducking' : p.grounded ? (Math.abs(p.vx) > 12 ? 'running' : 'idle') : (p.vy < 0 ? 'jumping' : 'falling');
@@ -131,21 +131,28 @@ class BotController {
     const graph = buildGraph(room.geometry, p.char_class, { speedMult: mods.speedMult, jumpMult: mods.jumpMult });
     if (graph !== this.graph) { this.graph = graph; this.clearTravel(); this.nextDecisionAt = 0; }
     const current = graph.surfaces.find((s) => s.id === p.platformId) || nearestSurface(graph, { x: p.x, y: bounds(p).bottom });
-    const poisonY = room._suddenDeathActive ? room._computePoisonY(now - room._loopStartWallTime - room.gameMode.getMatchDurationMs()) : Infinity;
+    const actualPoisonY = room._suddenDeathActive ? room._computePoisonY(now - room._loopStartWallTime - room.gameMode.getMatchDurationMs()) : Infinity;
+    const gasSaturated = Number.isFinite(actualPoisonY) && actualPoisonY <= WORLD_BOUNDS.height * 0.1;
+    const poisonY = gasSaturated ? Infinity : actualPoisonY;
+    const poisonAt = (offset) => room._suddenDeathActive && !gasSaturated ? room._computePoisonY(now + offset - room._loopStartWallTime - room.gameMode.getMatchDurationMs()) : Infinity;
     for (const [key, until] of this.blockedEdges) if (until <= now) this.blockedEdges.delete(key);
     const routes = new Map();
-    const routeTo = (id) => {
-      if (!routes.has(id)) routes.set(id, findRoute(graph, current?.id, id, poisonY, {
+    const routeTo = (id, goalX) => {
+      const routeKey = `${id}:${goalX ?? ""}`;
+      if (!routes.has(routeKey)) routes.set(routeKey, findRoute(graph, current?.id, id, poisonY, {
+        poisonAt,
         blocked: this.blockedEdges,
+        startX: p.x,
+        goalX,
         edgeCost: (edge, from) => {
           const key = `${from}:${edge.to}`;
           if (!this.routePreferences.has(key)) this.routePreferences.set(key, this.random() * 240);
           return (edge.jump ? 70 : 0) + this.routePreferences.get(key);
         },
       }));
-      return routes.get(id);
+      return routes.get(routeKey);
     };
-    return { graph, current, poisonY, routeTo };
+    return { graph, current, poisonY, poisonAt, gasSaturated, routeTo };
   }
 
   think(observed, mods, now) {
@@ -161,9 +168,11 @@ class BotController {
     this.poisonY = context.poisonY;
     const suddenDeathStarted = this.room._suddenDeathActive && !this.suddenDeathActive;
     this.suddenDeathActive = !!this.room._suddenDeathActive;
-    if (suddenDeathStarted) {
+    const saturationChanged = context.gasSaturated !== !!this.gasSaturated;
+    this.gasSaturated = context.gasSaturated;
+    if (suddenDeathStarted || saturationChanged) {
       // Drop stale combat, opening, and idle commitments as soon as the duel's
-      // survival phase begins so navigation can seek high ground this think.
+      // gas phase changes so the new routing policy applies this think.
       this.clearTravel();
       this.decision = null;
       this.openingUntil = 0;
@@ -187,7 +196,7 @@ class BotController {
     }
     const wasRetreating = this.retreating;
     const awareness = this.profile.tacticalAwareness;
-    this.retreating = this.teamPlan?.role === 'recover' || healthFraction(p) < (this.retreating ? 0.65 + awareness * 0.1 : 0.35 + awareness * 0.08 + (this.teamPlan ? (0.5 - this.teamPlan.morale) * 0.12 : 0));
+    this.retreating = this.teamPlan?.role === 'recover' || healthFraction(p) < recoveryThreshold(awareness, this.retreating, this.teamPlan?.morale);
     if (this.retreating && !wasRetreating) this.metrics.retreats++;
     const target = selectTarget(this, enemies, context.routeTo, now);
     const targetChanged = target?.participantId !== this.targetId;
@@ -203,6 +212,13 @@ class BotController {
     updateSuperPlan(this, enemies, now);
     this.trackCombatProgress(target, now);
     if (target) this.lastSeen = { ...target, at: observed.at };
+    else if (this.teamPlan?.targetId) {
+      const reports = this.room._botTeamwork.get(p.team)?.reports.values() || [];
+      for (const report of reports) {
+        const activity = report.enemies.find((enemy) => enemy.participantId === this.teamPlan.targetId);
+        if (activity && (!this.lastSeen || report.at > this.lastSeen.at)) this.lastSeen = { ...activity, at: report.at };
+      }
+    }
     if (wasRetreating !== this.retreating || recentlyHurt || threatened) {
       this.idleUntil = 0;
       this.pursuit = null;
@@ -213,7 +229,7 @@ class BotController {
       this.nextDecisionAt = 0;
       this.approachEdge = null;
     }
-    if (wasRetreating !== this.retreating || bounds(p).bottom >= context.poisonY - 100) {
+    if (wasRetreating !== this.retreating) {
       this.nextDecisionAt = 0;
       this.approachEdge = null;
     }
@@ -235,16 +251,12 @@ class BotController {
     }
     const pickupGone = this.decision?.mode === 'pickup' && !this.room._powerups.has(this.decision.pickupId);
     const lootGone = this.decision?.mode === 'loot' && !this.room._deathDrops.has(this.decision.dropId);
+    const emergency = wasRetreating !== this.retreating || newRetreatHit;
+    if (p.grounded && emergency) { this.clearTravel(); this.duckUntil = 0; }
+    const goalUnsafe = p.grounded && !this.traversal && this.decision?.goal && context.routeTo(this.decision.goal.surfaceId, this.decision.goal.x) === null;
     const committedRoute = (this.approachEdge || this.traversal) && !targetChanged && !roleChanged && !recentlyHurt && !threatened &&
-      !newRetreatHit && wasRetreating === this.retreating && bounds(p).bottom < context.poisonY - 100;
-    if (!this.decision || (now >= this.nextDecisionAt && !committedRoute) || pickupGone || lootGone) {
-      // Occasionally fight while backing away; keep the choice long enough to read clearly.
-      if (target && !this.retreating && healthFraction(p) < healthFraction(target) + 0.12 &&
-          now >= this.nextKiteAt && now >= this.kiteUntil && this.random() < 0.16 &&
-          Math.hypot(p.x - target.x, p.y - target.y) < preferredRange(this, target) * 0.85) {
-        this.kiteUntil = now + this.between(900, 1800);
-        this.nextKiteAt = this.kiteUntil + this.between(5000, 8500);
-      }
+      !newRetreatHit && !goalUnsafe && !(this.retreating && enemies.some((enemy) => Math.hypot(enemy.x - p.x, enemy.y - p.y) < 320)) && wasRetreating === this.retreating && bounds(p).bottom < context.poisonY - 100;
+    if (!this.decision || (now >= this.nextDecisionAt && !committedRoute) || pickupGone || lootGone || emergency || goalUnsafe) {
       const previousGoal = this.decision?.goal?.surfaceId;
       this.decision = chooseDecision(this, context, target, enemies, now);
       this.nextDecisionAt = now + this.between(800, 1400) * (1.08 - this.profile.tacticalAwareness * 0.18);
@@ -260,13 +272,7 @@ class BotController {
       if (this.decision.mode !== 'fight') this.pursuit = null;
     }
     const immediatePressure = threatened || recentlyHurt || enemies.some((e) => Math.hypot(e.x - p.x, e.y - p.y) < 200);
-    if (this.maybeFlavorDuck(immediatePressure, now)) return;
-    if (p.grounded && !this.traversal && !this.maneuver && !immediatePressure &&
-        ['patrol', 'search'].includes(this.decision.mode) && now >= this.nextIdleAt) {
-      this.idleUntil = now + this.between(180, 420);
-      this.nextIdleAt = now + this.between(7000, 12000);
-      this.approachEdge = null;
-    }
+    if (!this.wantsProgress && ['recover', 'fight'].includes(this.decision.mode) && this.maybeFlavorDuck(immediatePressure, now)) return;
     this.navigate(context, now);
     if (target && !this.intent.direction && p._botActionUntil <= now) {
       p.flip = target.x < p.x;
@@ -293,24 +299,27 @@ class BotController {
     const p = this.player;
     if (now < (this.ammoReadyAfter || 0) && p.superCharge < p.maxSuperCharge) return;
     const nearest = Math.min(...enemies.map((e) => Math.hypot(e.x - p.x, e.y - p.y)));
-    // Retreating takes priority over damage output. Counterfire is occasional and
-    // limited to close pressure so the bot can create space and begin regenerating.
+    // Use ordinary ammo/cooldown limits to push back a pursuer. Once clear of
+    // pressure, stop firing so regeneration can begin.
+    let counterfire = true;
     if (this.retreating) {
-      if (now < (this.retreatFireCooldownUntil || 0)) return;
-      const closePressure = Math.max(150, preferredRange(this, target) * 0.65);
-      if (nearest > closePressure && now - (p.lastDamagedAt || 0) > 550) return;
+      const closePressure = Math.max(300, preferredRange(this, target) * 1.25);
+      if (nearest > closePressure && now - (p.lastDamagedAt || 0) > 550) counterfire = false;
     }
     const candidates = [target, ...enemies.filter((e) => e !== target)]
       .filter((e) => {
+        if (!counterfire) return false;
         const aim = basicAim(p, e, this.profile, () => 0.5, this.room);
         return (aim.canHit && hasClearShot(this.room, p, e, aim)) ||
           (p.ammoState?.charges >= 2 && now >= (p._botPressureUntil || 0) && pressureAim(this.room, p, e, this.profile));
       })
       .sort((a, b) => {
+        if (this.retreating) return Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y);
         const contestId = this.decision?.contestTargetId;
         if (contestId && a.participantId === contestId) return -1;
         if (contestId && b.participantId === contestId) return 1;
-        return (a.health / a.maxHealth) - (b.health / b.maxHealth);
+        const value = (enemy) => healthFraction(enemy) - (enemy.participantId === target.participantId ? 0.6 : 0);
+        return value(a) - value(b);
       });
     const age = Math.min(0.3, Math.max(0, now - (observed?.at || now)) / 1000) * this.profile.prediction;
     const predict = (enemy) => ({ ...enemy, x: enemy.x + (enemy.vx || 0) * age, y: enemy.y + (enemy.vy || 0) * age });
@@ -331,22 +340,22 @@ class BotController {
       // bot from firing on the exact frame ammo becomes available every cycle.
       this.ammoReadyAfter = now + (Number(p.ammoState?.cooldownMs) || 0) + this.attackHesitationMs();
     }
-    if (this.retreating) this.retreatFireCooldownUntil = now + this.between(900, 1400);
   }
 
   attackHesitationMs() {
     const awareness = this.profile.tacticalAwareness ?? 0.5;
     const aggression = Math.max(0.8, this.aggression || 1);
+    const urgency = this.retreating ? 0.55 : 1;
     if (this.player.char_class === 'huntress') {
       // Her three-arrow spread is already forgiving, so give opponents a
       // readable punish window instead of chaining every available charge.
-      return this.between(360, 620) + (1 - awareness) * 120;
+      return (this.between(360, 620) + (1 - awareness) * 120) * urgency;
     }
     const min = 65 + (1 - awareness) * 55;
     const max = 190 + (1 - awareness) * 170;
     // A rare quick follow-up creates bursts without returning to frame-perfect spam.
     if (this.random() < 0.12 * aggression) return this.between(35, 90);
-    return this.between(min, max) / Math.min(1.2, aggression);
+    return this.between(min, max) / Math.min(1.2, aggression) * urgency;
   }
 
   collectNearbyDeathDrops(now) {
@@ -393,7 +402,8 @@ class BotController {
 
   pursuitDirection(x, now, takeoff = false) {
     const p = this.player, direction = Math.sign(x - p.x);
-    if (this.decision?.mode !== 'fight' || !this.target || Math.abs(x - p.x) < 80) {
+    if (takeoff || this.decision?.mode !== 'fight' || !this.target || Math.abs(x - p.x) < 80 ||
+        !basicAim(p, this.target, this.profile, () => 0.5, this.room).canHit) {
       this.pursuit = null;
       return this.walkDirection(x, takeoff);
     }
@@ -433,9 +443,9 @@ class BotController {
     const intendedDirection = Math.sign(intendedX - p.x);
     const wallDirection = p.wallSide === 'right' ? 1 : p.wallSide === 'left' ? -1 : 0;
     const obstacleDirection = this.groundObstacleDirection(intendedDirection);
-    if (intendedDirection && (intendedDirection === wallDirection || intendedDirection === obstacleDirection) &&
+    if (!this.approachEdge && intendedDirection && (intendedDirection === wallDirection || intendedDirection === obstacleDirection) &&
         this.startObstacleRecovery(context, intendedDirection, now)) return;
-    const route = context.routeTo(goal.surfaceId);
+    const route = context.routeTo(goal.surfaceId, goal.x);
     this.wantsProgress = route === null || route.length > 0 || Math.abs(goal.x - p.x) > 28;
     if (route?.length) {
       const edge = route[0];
@@ -445,6 +455,20 @@ class BotController {
     } else if (route) {
       this.approachEdge = null;
       this.walkGoalX = goal.x;
+      if (['pickup', 'loot'].includes(this.decision.mode)) {
+        const pickup = this.decision.mode === 'pickup' ? this.room._powerups.get(this.decision.pickupId) : this.room._deathDrops.get(this.decision.dropId);
+        const radius = this.decision.mode === 'pickup' ? POWERUP_PICKUP_RADIUS : DEATH_DROP_PICKUP_RADIUS;
+        if (pickup && Math.abs(p.x - pickup.x) < radius / 2 &&
+            Math.hypot(p.x - pickup.x, p.y - pickup.y) >= radius - 2 && pickup.y < p.y) {
+          const hop = previewManeuver(p, { direction: 0, jumpPressed: true }, this.room.geometry,
+            effects.getModifiers(p, now), now, context.poisonY);
+          if (hop?.frames.some((frame) => Math.hypot(frame.x - pickup.x, frame.y - pickup.y) < radius - 5)) {
+            this.maneuver = { ...hop, cursor: 0 };
+            this.wantsProgress = true;
+            return;
+          }
+        }
+      }
       this.intent.direction = this.pursuitDirection(goal.x, now);
       if (!this.wantsProgress && ['patrol', 'search'].includes(this.decision.mode) && !this.decision.arrived) {
         this.visited.set(context.current.id, now);
@@ -453,7 +477,7 @@ class BotController {
         this.nextDecisionAt = this.idleUntil;
       }
       if (this.decision.mode === 'fight' && this.target && !(this.pursuit?.holdUntil > now)) {
-        const aim = basicAim(p, this.target, this.profile, () => 0.5);
+        const aim = basicAim(p, this.target, this.profile, () => 0.5, this.room);
         const blockedFight = (!aim.canHit || !hasClearShot(this.room, p, this.target, aim)) &&
           !pressureAim(this.room, p, this.target, this.profile);
         if (blockedFight) {
@@ -502,11 +526,11 @@ class BotController {
     const body = bounds(p);
     const candidates = (context.graph.edges.get(current.id) || [])
       .filter((edge) => Math.sign(edge.direction) === direction &&
-        !this.blockedEdges.has(`${current.id}:${edge.to}`) &&
+        !this.blockedEdges.has(edgeKey(edge, current.id)) &&
         Math.abs(edge.takeoffX - p.x) <= 420 &&
         (p.x - edge.takeoffX) * direction >= -8)
       .map((edge) => ({ edge, surface: context.graph.surfaces.find((surface) => surface.id === edge.to) }))
-      .filter(({ surface }) => surface && surface.top < context.poisonY - 25 &&
+      .filter(({ surface }) => surface &&
         (direction > 0 ? surface.right > body.right + 8 : surface.left < body.left - 8))
       .sort((a, b) =>
         Math.abs(a.edge.takeoffX - p.x) + a.edge.duration * 0.08 + (a.edge.jump ? 20 : 0) -
@@ -523,8 +547,18 @@ class BotController {
   }
 
   walkDirection(x, takeoff = false) {
-    const p = this.player, dx = x - p.x, speed = Math.abs(p.vx || 0);
-    const deadband = takeoff ? 3 : 20;
+    const p = this.player;
+    if (!takeoff) {
+      const surface = this.graph.surfaces.find((s) => s.id === p.platformId);
+      if (surface) { const limits = walkLimits(surface, p.char_class); x = Math.max(limits.left, Math.min(limits.right, x)); }
+    }
+    const dx = x - p.x, speed = Math.abs(p.vx || 0);
+    const pickup = this.decision?.mode === 'pickup' ? this.room._powerups.get(this.decision.pickupId) :
+      this.decision?.mode === 'loot' ? this.room._deathDrops.get(this.decision.dropId) : null;
+    const radius = this.decision?.mode === 'loot' ? DEATH_DROP_PICKUP_RADIUS : POWERUP_PICKUP_RADIUS;
+    const pickupTolerance = pickup ? Math.max(1, Math.sqrt(Math.max(0,
+      radius ** 2 - (p.y - pickup.y) ** 2)) * 0.5) : 20;
+    const deadband = takeoff ? 3 : Math.min(20, pickupTolerance);
     const stopping = speed * speed / (2 * movement.dragGround);
     const coasting = Math.sign(p.vx) === Math.sign(dx) && Math.abs(dx) <= stopping + deadband;
     const direction = coasting || Math.abs(dx) <= deadband ? 0 : Math.sign(dx);
@@ -536,8 +570,15 @@ class BotController {
     if (this.approachEdge && p.grounded && !this.traversal && !this.maneuver) {
       const edge = this.approachEdge;
       if (Math.abs(edge.takeoffX - p.x) <= 4 && Math.abs(p.vx || 0) < 12 && now >= (p._nextWallJump || 0)) {
-        this.traversal = { ...edge, cursor: 0, until: now + edge.duration + 800 };
+        const prepared = prepareTraversal(p, edge, this.room.geometry, mods, now, this.poisonY);
         this.approachEdge = null;
+        if (!prepared) {
+          this.blockedEdges.set(edgeKey(edge), now + 2500);
+          this.intent = { direction: safeWalkDirection(p, 0, this.room.geometry) };
+          this.nextThink = 0;
+          return;
+        }
+        this.traversal = { ...prepared, cursor: 0, until: now + prepared.duration + 800 };
       } else this.intent = { direction: this.pursuitDirection(edge.takeoffX, now, true) };
     } else if (p.grounded && Number.isFinite(this.walkGoalX) && !this.traversal && !this.maneuver) {
       this.intent = { direction: this.pursuitDirection(this.walkGoalX, now) };
@@ -546,19 +587,10 @@ class BotController {
     if (!travel) return;
     const frame = travel.frames[travel.cursor++];
     if (!frame || Math.hypot(p.x - frame.x, p.y - frame.y) > 65) {
-      if (frame && this.traversal) this.blockedEdges.set(`${this.traversal.from}:${this.traversal.to}`, now + 2500);
+      if (frame && this.traversal) this.blockedEdges.set(edgeKey(this.traversal), now + 2500);
       this.maneuver = null;
       this.traversal = null;
       this.nextThink = 0;
-      return;
-    }
-    if (this.traversal && frame.jumpPressed && p.wallSide && now >= this.nextWallPlayAt &&
-        bounds(p).bottom < this.poisonY - 160 && this.graph.surfaces.some((s) => s.top > bounds(p).bottom) && this.random() < 0.2) {
-      this.traversal = null;
-      this.wallWaitUntil = now + this.between(120, 350);
-      this.nextWallPlayAt = now + this.between(7000, 11000);
-      this.metrics.wallPauses++;
-      this.airRecovery(this.context(mods, now), now);
       return;
     }
     this.intent = { direction: frame.direction, jumpPressed: frame.jumpPressed };
@@ -566,7 +598,7 @@ class BotController {
 
   airRecovery(context, now) {
     const p = this.player, foot = bounds(p);
-    const landing = context.graph.surfaces.filter((s) => s.top >= foot.bottom - 12 && s.top < context.poisonY - 25)
+    const landing = context.graph.surfaces.filter((s) => s.top >= foot.bottom - 12)
       .sort((a, b) => Math.max(a.left - p.x, 0, p.x - a.right) - Math.max(b.left - p.x, 0, p.x - b.right))[0];
     if (p.wallSide) {
       if (this.lastWallSide !== p.wallSide) {
@@ -588,13 +620,15 @@ class BotController {
     const p = this.player;
     const baseline = previewManeuver(p, { direction: this.intent.direction }, this.room.geometry, mods, now, poisonY);
     if (!baseline) return { best: null, baseDanger: Infinity, bestScore: Infinity };
-    const baseDanger = maneuverDanger(baseline, observed, now, p.char_class);
+    const poisonAt = this.context(mods, now).poisonAt;
+    const hazardCost = (maneuver) => poisonDamage(maneuver.frames, maneuver.frames.length * 1000 / 60, poisonY, poisonAt) * 1200 / Math.max(1, p.health);
+    const baseDanger = maneuverDanger(baseline, observed, now, p.char_class) + hazardCost(baseline);
     let best = null, bestScore = baseDanger - 20;
     for (const direction of [-1, 0, 1]) for (const jumpPressed of [false, true]) {
       if (jumpPressed && now - (this.lastJumpAt || 0) < 1800) continue;
       const candidate = previewManeuver(p, { direction, jumpPressed }, this.room.geometry, mods, now, poisonY);
       if (!candidate) continue;
-      const score = maneuverDanger(candidate, observed, now, p.char_class) + (jumpPressed ? 35 : 0);
+      const score = maneuverDanger(candidate, observed, now, p.char_class) + hazardCost(candidate) + (jumpPressed ? 35 : 0);
       if (score < bestScore) { best = candidate; bestScore = score; }
     }
     return { best, baseDanger, bestScore };
@@ -686,23 +720,13 @@ class BotController {
     const approachTimedOut = this.approachEdge && now - this.approachEdge.startedAt > this.approachEdge.approachBudget;
     if (now - this.lastProgressAt < 2000 && !approachTimedOut) return;
     this.metrics.recoveries++;
-    if (this.approachEdge) this.blockedEdges.set(`${this.approachEdge.from}:${this.approachEdge.to}`, now + 3500);
+    if (this.approachEdge) this.blockedEdges.set(edgeKey(this.approachEdge), now + 3500);
     this.clearTravel();
     const context = this.context(mods, now);
-    const reachable = context.graph.surfaces.filter((s) => s.id !== context.current?.id && context.routeTo(s.id)?.length);
-    reachable.sort((a, b) => (this.visited.get(a.id) || 0) - (this.visited.get(b.id) || 0));
-    const surface = reachable[Math.floor(this.random() * Math.min(2, reachable.length))] || context.current;
-    if (surface) {
-      let x = surface.x;
-      if (surface.id === context.current?.id) {
-        const margin = context.graph.body.halfWidth + 25;
-        const clamp = (value) => Math.max(surface.left + margin, Math.min(surface.right - margin, value));
-        const direction = this.random() < 0.5 ? -1 : 1;
-        x = clamp(p.x + direction * 220);
-        if (Math.abs(x - p.x) < 40) x = clamp(p.x - direction * 220);
-      }
-      this.decision = { mode: 'reposition', goal: { x, y: surface.top, surfaceId: surface.id } };
-      this.visited.set(surface.id, now);
+    // Recovery uses the same reachable, collision-free goals as exploration.
+    // A raw platform center may be inside a wall and cannot be a fallback.
+    this.decision = chooseDecision(this, context, null, [], now);
+    if (this.decision.goal) {
       this.nextDecisionAt = now + 2200;
       this.navigate(context, now);
     } else this.nextDecisionAt = 0;

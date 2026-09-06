@@ -34,11 +34,12 @@ function difficultyForTrophies(trophies) {
     [0, 420, 300, 0.18, 0.16, 0.25, 0.5, 0.35],
     [500, 310, 220, 0.11, 0.1, 0.5, 0.62, 0.55],
     [1250, 220, 150, 0.055, 0.055, 0.82, 0.76, 0.8],
-    [2000, 170, 105, 0.02, 0.018, 1.08, 0.9, 1],
+    [2000, 190, 130, 0.04, 0.035, 0.9, 0.82, 0.88],
+    [4000, 170, 105, 0.025, 0.018, 1, 0.9, 1],
   ];
-  const t = Math.max(0, Number(trophies) || 0);
+  const t = Math.max(0, Math.min(4000, Number(trophies) || 0));
   const upper = points.findIndex((p) => p[0] > t);
-  const lo = upper < 0 ? points[3] : points[Math.max(0, upper - 1)];
+  const lo = upper < 0 ? points[points.length - 1] : points[Math.max(0, upper - 1)];
   const hi = upper < 0 ? lo : points[upper];
   const f = hi[0] === lo[0] ? 0 : (t - lo[0]) / (hi[0] - lo[0]);
   const lerp = (i) => lo[i] + (hi[i] - lo[i]) * f;
@@ -52,6 +53,10 @@ function difficultyForTrophies(trophies) {
     dodgeChance: lerp(6),
     tacticalAwareness: lerp(7),
   };
+}
+
+function recoveryThreshold(awareness = 0.5, recovering = false, morale = 0.5) {
+  return recovering ? 0.65 + awareness * 0.1 : 0.35 + awareness * 0.08 + (0.5 - morale) * 0.12;
 }
 
 function getSeatSchedule(ticket, config = defaults, maxSeats = 5) {
@@ -101,6 +106,7 @@ module.exports = {
   defaults,
   getBotConfig,
   difficultyForTrophies,
+  recoveryThreshold,
   getSeatSchedule,
   stagedSeatCount,
 };

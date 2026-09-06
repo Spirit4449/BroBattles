@@ -90,8 +90,8 @@ test('all atlas grip tracks and locomotion transitions remain finite and ease wi
   }
 });
 
-test('looping idle and running grip interpolation is continuous across frame boundaries', () => {
-  for (const logical of ['idle', 'running']) {
+test('looping idle grip interpolation is continuous across frame boundaries', () => {
+  for (const logical of ['idle']) {
     const keys = Object.keys(anchors).filter(key => key.startsWith(logical)).sort();
     assert.ok(keys.length > 1);
     for (let index = 0; index < keys.length; index++) {
@@ -175,4 +175,35 @@ test('both facing directions and rage scales keep finite sweep placement and rec
     assert.ok(Math.hypot(weapon.x - end.x, weapon.y - end.y) < 0.01);
     assert.ok(Math.abs(weapon.rotation - end.rotation) < 0.01);
   }
+});
+
+test('running grip stays on the displayed fist throughout each reordered frame', () => {
+  const keys = ['running01', 'running00', 'running03', 'running04', 'running02', 'running05'];
+  const body = { frame: { name: keys[0] }, anims: { isPlaying: true, nextTick: 100,
+    currentAnim: { repeat: -1, frames: keys.map(textureFrame => ({ textureFrame })) } } };
+  motion.thorgGripPose(body);
+  for (let i = 0; i < keys.length; i++) {
+    body.frame.name = keys[i]; body.anims.currentFrame = { index: i + 1 };
+    for (const fraction of [0, 0.5, 0.99]) {
+      body.anims.accumulator = fraction * 100;
+      const pose = motion.thorgGripPose(body);
+      assert.equal(pose.x, (anchors[keys[i]][0] - 64) * 0.7);
+      assert.equal(pose.y, (anchors[keys[i]][1] - 64) * 0.7);
+    }
+  }
+});
+
+test('attack frames do not drift the carry grip or rock the body', () => {
+  const h = harness();
+  weaponModule.ensureThorgWeapon(h.scene, h.body);
+  const carry = { ...h.body._thorgGripPose };
+  weaponModule.startThorgSweep(h.scene, h.body);
+  for (let i = 0; i < 5; i++) {
+    h.body.frame.name = `throw0${i}`;
+    h.tick(140);
+    assert.deepEqual({ ...h.body._thorgGripPose }, carry);
+    assert.equal(h.body.angle || 0, 0);
+  }
+  h.tick(16);
+  assert.deepEqual({ ...h.body._thorgGripPose }, carry);
 });

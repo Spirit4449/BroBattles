@@ -127,3 +127,44 @@ test('roles produce different reachable movement goals, not just labels', () => 
   assert.ok(goals.get('vanguard') < h.enemy.x);
   assert.ok(goals.get('support') < goals.get('vanguard'));
 });
+
+test('a healthy second opponent receives split pressure while a vulnerable focus stays shared', () => {
+  const h = setup();
+  const other = { ...h.enemy, participantId: 'other', x: 900, health: 1000 };
+  let plans = h.plan(10000, [h.enemy, other]);
+  assert.equal(new Set(plans.map((p) => p.targetId)).size, 2);
+  h.enemy.health = 150;
+  plans = h.plan(15000, [h.enemy, other]);
+  assert.ok(plans.every((p) => p.targetId === h.enemy.participantId));
+});
+
+test('team recovery uses the same health hysteresis as individual recovery', () => {
+  const h = setup();
+  h.allies[0].health = 200;
+  assert.equal(h.plan()[0].role, 'recover');
+  h.allies[0].health = 450;
+  assert.equal(h.plan(15000)[0].role, 'recover');
+  h.allies[0].health = 850;
+  assert.notEqual(h.plan(20000)[0].role, 'recover');
+});
+
+test('an anchor rotates toward activity instead of defending an empty starting position', () => {
+  const h = setup(2);
+  h.allies.forEach((p) => p.ammoState.charges = 0);
+  h.enemy.x = 1800;
+  h.plan();
+  const anchor = h.brains.find((brain) => brain.teamPlan.role === 'anchor');
+  const goal = teamPosition(anchor, h.enemy);
+  assert.ok(goal.x > anchor.player.x + 500);
+});
+
+test('higher trophy teams use stronger formation guidance and update their plans sooner', () => {
+  const { difficultyForTrophies } = require('../src/server/core/bots/config');
+  const low = setup(), high = setup();
+  low.allies.forEach((p) => p.difficulty = difficultyForTrophies(0));
+  high.allies.forEach((p) => p.difficulty = difficultyForTrophies(4000));
+  low.plan(); high.plan();
+  const weight = (h) => teamPosition(h.brains.find((b) => b.teamPlan.role === 'support'), h.enemy).weight;
+  assert.ok(weight(high) > weight(low));
+  assert.ok(high.room._botTeamwork.get('blue').nextPlanAt < low.room._botTeamwork.get('blue').nextPlanAt);
+});

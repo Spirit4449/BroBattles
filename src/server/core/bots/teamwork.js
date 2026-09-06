@@ -3,6 +3,8 @@ const { participantId } = require('../gameRoom/participants');
 const hp = (p) => Math.max(0, Math.min(1, p.health / Math.max(1, p.maxHealth)));
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const active = (p) => p.isAlive && p.loaded && p.connected !== false;
+const { difficultyForTrophies, recoveryThreshold } = require('./config');
+const skill = (p) => p.difficulty?.tacticalAwareness ?? (p.trophies == null ? 0.8 : difficultyForTrophies(p.trophies).tacticalAwareness);
 const melee = (p) => ['thorg', 'draven'].includes(p.char_class);
 
 function temperament(id) {
@@ -40,7 +42,7 @@ function updateTeamwork(brain, observed, now) {
     '/' + enemies.map((p) => p.participantId).sort().join('|');
   if (now < board.nextPlanAt && board.signature === signature) return board.plans.get(id) || null;
   board.signature = signature;
-  board.nextPlanAt = now + 2400;
+  board.nextPlanAt = now + 1400 + (1 - bots.reduce((sum, p) => sum + skill(p), 0) / bots.length) * 1800;
   const previousPlans = board.plans;
   board.plans = new Map();
   for (const bot of bots) {
@@ -53,11 +55,11 @@ function updateTeamwork(brain, observed, now) {
       Math.max(-2, Math.min(2, friends - threats)) * 0.09 - (hurt ? 0.15 : 0) +
       (enemies.some((p) => hp(p) < 0.35) ? 0.08 : 0)));
     const morale = previous ? previous.morale * 0.35 + desired * 0.65 : desired;
-    board.plans.set(botId, { role: hp(bot) < 0.4 ? 'recover' : null, morale, assignedAt: now });
+    board.plans.set(botId, { role: hp(bot) < recoveryThreshold(skill(bot), previous?.role === 'recover', morale) ? 'recover' : null, morale, awareness: skill(bot), assignedAt: now });
   }
   const available = () => bots.filter((p) => !board.plans.get(participantId(p)).role);
   const assign = (p, fields) => Object.assign(board.plans.get(participantId(p)), fields);
-  const wounded = allies.filter((p) => hp(p) < 0.4 &&
+  const wounded = allies.filter((p) => (board.plans.get(participantId(p))?.role === 'recover' || hp(p) < 0.4) &&
     enemies.some((e) => distance(e, p) < 650)).sort((a, b) => hp(a) - hp(b))[0];
   if (wounded) {
     const defender = available().filter((p) => p !== wounded)
@@ -90,8 +92,13 @@ function updateTeamwork(brain, observed, now) {
     // A pair attacks from opposite angles; with three, one stays near the lead.
     fighters.forEach((bot, i) => {
       const support = fighters.length > 1 && i === 0;
+      // Split healthy opponents when another reachable threat is being ignored.
+      // A vulnerable focus target still draws the whole team's pressure.
+      const alternative = !support && target && hp(target) > 0.4
+        ? enemies.filter((e) => e.participantId !== target.participantId && distance(bot, e) < distance(bot, target) + 180 * skill(bot))
+          .sort((a, b) => distance(bot, a) - distance(bot, b))[0] : null;
       assign(bot, { role: support ? 'support' : 'flank', buddyId: participantId(leader),
-        targetId: target?.participantId, side: support ? side : -side });
+        targetId: alternative?.participantId || target?.participantId, side: alternative ? (bot.x <= alternative.x ? -1 : 1) : support ? side : -side });
       if (support || !board.plans.get(participantId(leader)).buddyId) {
         board.plans.get(participantId(leader)).buddyId = participantId(bot);
       }
@@ -101,24 +108,31 @@ function updateTeamwork(brain, observed, now) {
   return board.plans.get(id) || null;
 }
 
-function teamPosition(brain, target) {
+function teamPosition(brain, target, kitRange) {
   const plan = brain.teamPlan;
   if (!plan || !target || brain.retreating) return null;
   const buddy = [...brain.room.players.values()].find((p) => participantId(p) === plan.buddyId && active(p));
-  const preferred = melee(brain.player) ? 160 : 340;
+  const preferred = kitRange || (melee(brain.player) ? 160 : 340);
+  const coordination = plan.awareness ?? 0.8;
   if (plan.role === 'defend' && buddy) {
     const d = Math.max(1, distance(buddy, target));
-    return { x: buddy.x + (target.x - buddy.x) / d * Math.min(140, d * 0.4), y: buddy.y, weight: 0.85 };
+    return { x: buddy.x + (target.x - buddy.x) / d * Math.min(140, d * 0.4), y: buddy.y, weight: 0.85 * coordination };
   }
   if (plan.role === 'support' && buddy) {
-    return { x: buddy.x + (plan.side || 1) * 170, y: buddy.y, weight: 0.55 };
+    return { x: buddy.x + (plan.side || 1) * 170, y: buddy.y, weight: 0.55 * coordination };
   }
-  if (plan.role === 'flank') return { x: target.x + plan.side * preferred, y: target.y, weight: 0.8 };
+  if (plan.role === 'flank') return { x: target.x + plan.side * preferred, y: target.y, weight: 0.8 * coordination };
   if (plan.role === 'vanguard') {
     const buddyReady = !buddy || distance(buddy, brain.player) < 550;
-    return { x: target.x + plan.side * (buddyReady ? preferred * 0.7 : preferred * 1.35), y: target.y, weight: 0.55 };
+    return { x: target.x + plan.side * (buddyReady ? preferred * 0.7 : preferred * 1.35), y: target.y, weight: 0.55 * coordination };
   }
-  if (plan.role === 'anchor') return { ...plan.anchor, weight: 0.45 };
+  if (plan.role === 'anchor') {
+    // Anchor the team's fighting range, not its spawn. A distant enemy should
+    // cause a rotation even when the team isn't ready for a coordinated push.
+    const side = brain.player.x <= target.x ? -1 : 1;
+    const inRange = distance(plan.anchor, target) <= preferred * 1.2;
+    return { ...(inRange ? plan.anchor : { x: target.x + side * preferred, y: target.y }), weight: 0.45 * coordination };
+  }
   return null;
 }
 

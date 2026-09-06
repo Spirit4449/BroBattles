@@ -53,6 +53,7 @@ let mmOverlayTotal = 0;
 let __matchmakingHideTimer = null;
 let __matchmakingCountTimer = null;
 let __matchmakingReadyAckTimer = null;
+let __partyReadyPending = false;
 let __matchmakingReadyAt = 0;
 const MATCHMAKING_EXIT_MS = 190;
 const MATCHMAKING_SUCCESS_HOLD_MS = 2400;
@@ -1847,8 +1848,7 @@ export function socketInit(options = {}) {
         const isSelf = evt.name === currentUserName;
         if (isSelf) {
           const isReady = String(normalized || "")
-            .toLowerCase()
-            .includes("ready");
+            .trim().toLowerCase() === "ready";
           setReadyButtonState(!!isReady);
         }
       }
@@ -3203,7 +3203,7 @@ export function initReadyToggle() {
     if (!statusEl) return;
 
     const cur = (statusEl.textContent || "").toLowerCase();
-    const nextReady = !cur.includes("ready");
+    const nextReady = cur.trim() !== "ready";
     const partyId = getActivePartyId();
 
     if (nextReady && !partyId) {
@@ -3214,7 +3214,40 @@ export function initReadyToggle() {
       }
     }
 
-    // Optimistic local update
+    if (partyId) {
+      if (__partyReadyPending) return;
+      if (!socket.connected) {
+        sonner("Could not ready up", "Reconnecting to the server. Please try again shortly.", "error");
+        return;
+      }
+      __partyReadyPending = true;
+      syncReadyAvailability();
+      socket.timeout(8000).emit("ready:status", { partyId, ready: nextReady }, async (error, reply) => {
+        __partyReadyPending = false;
+        syncReadyAvailability();
+        if (String(partyId) !== String(getActivePartyId())) return;
+        if (error || !reply?.ok) {
+          sonner("Could not update readiness", reply?.error || "The server did not confirm. Please try again.", "error");
+        }
+        if (!error && reply?.ok) return;
+        // Refresh after a failed acknowledgement or timeout; never leave an unconfirmed
+        // optimistic ready state on screen.
+        try {
+          const response = await fetch("/party-members", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ partyId }),
+          });
+          const roster = await response.json();
+          if (response.ok && String(partyId) === String(getActivePartyId())) {
+            renderPartyMembers(roster);
+            syncReadyButtonFromSelfSlot();
+          }
+        } catch (_) {}
+      });
+      return;
+    }
+
+    // Solo queue feedback is local until the matchmaking response arrives.
     statusEl.textContent = nextReady ? "ready" : "online";
     statusEl.className = `status ${nextReady ? "ready" : "online"}`;
     applyLobbyStatusVisualState(
@@ -3579,7 +3612,7 @@ function syncReadyAvailability(selection = getCurrentSelection()) {
   const blocked = Boolean(reason);
   const isCancelState = btn.classList.contains("cancel");
 
-  btn.disabled = blocked && !isCancelState;
+  btn.disabled = __partyReadyPending || (blocked && !isCancelState);
   btn.title = blocked ? reason : "";
   btn.classList.toggle("is-disabled", blocked && !isCancelState);
 
@@ -3719,7 +3752,7 @@ function syncReadyButtonFromSelfSlot() {
   ).find((s) => s.dataset.isCurrentUser === "true");
   const statusEl = selfSlot?.querySelector(".status");
   if (!statusEl) return;
-  const isReady = (statusEl.textContent || "").toLowerCase().includes("ready");
+  const isReady = (statusEl.textContent || "").trim().toLowerCase() === "ready";
   setReadyButtonState(isReady);
 }
 

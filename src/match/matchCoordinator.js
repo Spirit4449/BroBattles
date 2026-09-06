@@ -1157,6 +1157,13 @@ export function createMatchCoordinator(config) {
     onPlayMatchEndSound(payload?.winnerTeam);
     try {
       hud.hideSpectatingBanner?.();
+      hud.hideSpectatingPlayer?.();
+      for (const wrapper of [
+        ...Object.values(opponentPlayers),
+        ...Object.values(teamPlayers),
+      ]) {
+        wrapper?.setSpectated?.(false);
+      }
     } catch (_) {}
     try {
       const p = getPlayer();

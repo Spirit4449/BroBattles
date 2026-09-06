@@ -9,7 +9,8 @@ function makeRoom({ characters = ['ninja', 'wizard'], map = 1, trophies = 1000, 
   const db = { runQuery: async (sql, params) => { queries.push({ sql, params }); return []; } };
   const players = characters.map((char_class, i) => ({ participantId: `bot:test:${i}`, user_id: null, name: `Player${i}`, team: i % 2 ? 'team2' : 'team1', char_class,
     isBot: true, level: 1, trophies, seed: seed + i, difficulty: difficultyForTrophies(trophies) }));
-  const room = new GameRoom(1, { mode: 1, modeId: 'duels', modeVariantId: 'duels-1v1', map, players }, { io, db });
+  const teamSize = Math.max(1, Math.ceil(characters.length / 2));
+  const room = new GameRoom(1, { mode: teamSize, modeId: 'duels', modeVariantId: `duels-${teamSize}v${teamSize}`, map, players }, { io, db });
   room.status = 'active'; room._loopStartWallTime = Date.now(); room._checkVictoryCondition = () => {};
   room.broadcastSnapshot = () => {}; room.DEV_TIMING_DIAG = false; room._netTestEnabled = true;
   room._requiredUserIds.clear();

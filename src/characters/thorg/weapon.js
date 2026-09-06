@@ -17,10 +17,10 @@ export function ensureThorgWeapon(scene, body) {
     const legacySkin = /thorg-(storm|iron)/.test(String(body._bbSkinTextureKey || body.texture?.key));
     weapon.setVisible(body.visible && (!legacySkin || body._thorgSweepActive) && !String(body.frame?.name).startsWith("dying"));
     weapon.setAlpha(body.alpha);
-    const grip = thorgGripPose(body, Number(delta) || 16);
     const scale = body._thorgVisualScale || 1;
     weapon.setDisplaySize(30 * scale, 71 * scale);
     if (body._thorgSweepActive) return;
+    const grip = thorgGripPose(body, Number(delta) || 16);
     const direction = body.flipX ? -1 : 1;
     weapon.setPosition(body.x + direction * grip.x * scale, body.y - 37.8 * (scale - 1) + grip.y * scale);
     weapon.rotation = direction * grip.angle;
@@ -48,6 +48,8 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
   if (!weapon) return null;
   body.flipX = direction < 0;
   const unlock = lockPlayerFlip(body);
+  // Keep recovery tied to the carry grip, not the moving throw-frame hands.
+  const carryGrip = { ...thorgGripPose(body, 0) };
   body._thorgSweepActive = true;
   playSpriteAnimation({ scene, sprite: body, character: "thorg", logical: "throw", fallback: "idle" });
   const strikeEnd = THORG_SWEEP.windupMs + THORG_SWEEP.strikeMs;
@@ -86,7 +88,7 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
     const scale = body._thorgVisualScale || 1;
     const centerY = body.y - 37.8 * (scale - 1);
     weapon.setDisplaySize(30 * scale, 71 * scale);
-    const grip = thorgGripPose(body, Number(delta) || 16);
+    const grip = carryGrip;
     const windup = Math.min(1, elapsed / THORG_SWEEP.windupMs);
     if (elapsed < THORG_SWEEP.windupMs) {
       const ease = windup * windup * (3 - 2 * windup);
@@ -95,7 +97,6 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
       const targetAngle = -direction * Math.PI / 2;
       const angleDelta = Math.atan2(Math.sin(targetAngle - startPose.angle), Math.cos(targetAngle - startPose.angle));
       weapon.rotation = startPose.angle + angleDelta * ease;
-      body.setAngle(-direction * 5 * ease);
     } else {
       const t = Math.min(1, (elapsed - THORG_SWEEP.windupMs) / THORG_SWEEP.strikeMs);
       const head = sampleThorgSweep({ x: body.x, y: body.y, direction, scale }, t);
@@ -104,8 +105,6 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
       weapon.setPosition(head.x - Math.cos(head.rotation + Math.PI / 2) * 51 * scale,
         head.y - Math.sin(head.rotation + Math.PI / 2) * 51 * scale);
       weapon.setDepth((body.depth || 30) + (head.behind ? -0.1 : 0.1));
-      // Anticipation flows into a visible shoulder turn, then settles upright.
-      body.setAngle(direction * (-5 * (1 - t) + 8 * Math.sin(t * Math.PI * 2)));
       if (elapsed <= strikeEnd) samples.push({ x: head.x - body.x, y: head.y - body.y, age: elapsed });
       while (samples.length && elapsed - samples[0].age > 115) samples.shift();
       trail.clear();

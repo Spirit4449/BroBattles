@@ -58,6 +58,7 @@ export function preloadGameAssets({
   );
   scene.load.image("deathdrop-coin", `${staticPath}/coin.webp`);
   scene.load.image("deathdrop-gem", `${staticPath}/gem.webp`);
+  scene.load.image("spectate-icon", `${staticPath}/spectate.webp`);
   for (let i = 1; i <= 3; i++) {
     scene.load.image(`tombstone-${i}`, `${staticPath}/tombstone-${i}.webp`);
   }

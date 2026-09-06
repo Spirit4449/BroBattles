@@ -26,9 +26,11 @@ export function animations(scene) {
     return matched;
   };
 
-  const make = (key, prefixes, frameRate, repeat) => {
+  const make = (key, prefixes, frameRate, repeat, order) => {
     if (scene.anims.exists(key)) return; // don't duplicate
-    const frames = findFrames(prefixes);
+    const found = findFrames(prefixes);
+    const frames = order && order.every((name) => getFrame(name))
+      ? order.map(getFrame) : found;
     if (!frames.length) return; // skip if not present
     scene.anims.create({
       key,
@@ -61,8 +63,10 @@ export function animations(scene) {
   };
 
   // Try reasonable prefix variants for robustness across atlases
-  make(`${NAME}-running`, ["running", "run"], 12, -1);
-  make(`${NAME}-idle`, ["idle", "stand", "idle_"], 8, -1);
+  // Alternate lifted strides and planted contact poses, including the loop seam.
+  make(`${NAME}-running`, ["running", "run"], 12, -1,
+    ["running01", "running00", "running03", "running04", "running02", "running05"]);
+  make(`${NAME}-idle`, ["idle", "stand", "idle_"], 6, -1);
   make(`${NAME}-jumping`, ["jumping", "jump"], 16, 0);
   // Thorg only has a single sliding frame, so keep it held instead of
   // letting the non-looping animation complete and disappear between updates.

@@ -22,6 +22,8 @@ const {
   prunePartyBotSlots,
 } = require("../../helpers/partyBotSlots");
 
+const { inPartyOrder } = require("../../helpers/partyOperations");
+
 function formatSelectionLabel(selection) {
   const { mode, variant } = getVariantDescriptor(
     selection?.modeId,
@@ -91,164 +93,207 @@ function registerPartyEvents(
     if (!partyId) return;
 
     try {
-      const mem = await db.runQuery(
-        "SELECT 1 FROM party_members WHERE party_id = ? AND name = ? LIMIT 1",
-        [partyId, uname],
-      );
-      if (!mem?.length) return;
+      await inPartyOrder(db, partyId, async () => {
+        const mem = await db.runQuery(
+          "SELECT 1 FROM party_members WHERE party_id = ? AND name = ? LIMIT 1",
+          [partyId, uname],
+        );
+        if (!mem?.length) return;
 
-      if (open) {
+        if (open) {
+          const statusRows = await db.runQuery(
+            "SELECT status FROM users WHERE name = ? LIMIT 1",
+            [uname],
+          );
+          const current = String(statusRows[0]?.status || "").toLowerCase();
+          if (current === "ready") return;
+          socket.data.charMenuPrevStatus =
+            current === "selecting character"
+              ? socket.data.charMenuPrevStatus || "online"
+              : statusRows[0]?.status || "online";
+          await partyPresence.setUserPresence(
+            uname,
+            "Selecting Character",
+            partyId,
+          );
+          return;
+        }
+
         const statusRows = await db.runQuery(
-          "SELECT status FROM users WHERE name = ? LIMIT 1",
-          [uname],
+          "SELECT status FROM users WHERE name = ? LIMIT 1", [uname],
         );
-        const current = String(statusRows[0]?.status || "").toLowerCase();
-        socket.data.charMenuPrevStatus =
-          current === "selecting character"
-            ? socket.data.charMenuPrevStatus || "online"
-            : statusRows[0]?.status || "online";
-        await partyPresence.setUserPresence(
-          uname,
-          "Selecting Character",
-          partyId,
-        );
-        return;
-      }
-
-      const previous = String(socket.data.charMenuPrevStatus || "online");
-      socket.data.charMenuPrevStatus = null;
-      const restore =
-        String(previous).toLowerCase() === "selecting character"
-          ? "online"
-          : previous;
-      await partyPresence.setUserPresence(uname, restore, partyId);
+        if (String(statusRows[0]?.status || "").toLowerCase() !== "selecting character") return;
+        const previous = String(socket.data.charMenuPrevStatus || "online");
+        socket.data.charMenuPrevStatus = null;
+        const restore =
+          String(previous).toLowerCase() === "selecting character"
+            ? "online"
+            : previous;
+        await partyPresence.setUserPresence(uname, restore, partyId);
+      });
     } catch (e) {
       console.warn("char-menu:status error:", e?.message);
     }
   });
 
-  socket.on("ready:status", async (data) => {
+  socket.on("ready:status", async (data, ack) => {
+    let partyId;
     try {
       const uname = socket.data.user?.name;
-      if (!uname) return;
-      const isReady = !!data?.ready;
+      if (!uname) throw new Error("Please reconnect before readying up.");
+      if (typeof data?.ready !== "boolean") throw new Error("Invalid ready state.");
+      const isReady = data.ready;
       const providedPartyId = data?.partyId ? Number(data.partyId) : null;
-      const partyId = providedPartyId || (await db.getPartyIdByName(uname));
-      if (!partyId) return;
+      partyId = Number(await db.getPartyIdByName(uname));
+      if (!partyId || (providedPartyId && providedPartyId !== partyId)) {
+        throw new Error("Your party changed. Please refresh the lobby.");
+      }
+      await inPartyOrder(db, partyId, async () => {
 
-      const partyRows = await db.runQuery(
-        "SELECT * FROM parties WHERE party_id = ? LIMIT 1",
-        [partyId],
-      );
-      let partyStatus = String(partyRows[0]?.status || "").toLowerCase();
-      if (partyStatus === PARTY_STATUS.LIVE) {
-        const liveRows = await db.runQuery(
-          `SELECT m.match_id
-             FROM matches m
-             JOIN match_participants mp ON mp.match_id = m.match_id
-            WHERE mp.party_id = ? AND m.status = 'live'
-            LIMIT 1`,
+        if (Number(await db.getPartyIdByName(uname)) !== partyId) {
+          throw new Error("Your party changed. Please refresh the lobby.");
+        }
+        const partyRows = await db.runQuery(
+          "SELECT * FROM parties WHERE party_id = ? LIMIT 1",
           [partyId],
         );
-        if (!liveRows.length) {
-          await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
-          partyStatus = PARTY_STATUS.IDLE;
-          console.warn(
-            `[party:${partyId}] recovered stale live status during ready toggle`,
+        if (!partyRows.length) throw new Error("Party not found.");
+        let partyStatus = String(partyRows[0]?.status || PARTY_STATUS.IDLE).toLowerCase();
+        if (partyStatus === PARTY_STATUS.LIVE) {
+          const liveRows = await db.runQuery(
+            `SELECT m.match_id
+               FROM matches m
+               JOIN match_participants mp ON mp.match_id = m.match_id
+              WHERE mp.party_id = ? AND m.status = 'live'
+              LIMIT 1`,
+            [partyId],
           );
-        } else {
-          const liveMatchId = Number(liveRows[0]?.match_id || 0);
-          const participantRows = liveMatchId
-            ? await db.runQuery(
-                `SELECT u.name, u.status
-                   FROM match_participants mp
-                   JOIN users u ON u.user_id = mp.user_id
-                  WHERE mp.match_id = ? AND mp.party_id = ?`,
-                [liveMatchId, partyId],
-              )
-            : [];
-          const hasActiveBattleParticipant = participantRows.some((row) =>
-            String(row?.status || "")
-              .trim()
-              .toLowerCase()
-              .includes("in battle"),
-          );
-
-          if (liveMatchId && !hasActiveBattleParticipant) {
-            await db.runQuery(
-              "UPDATE matches SET status = 'cancelled' WHERE match_id = ? AND status = 'live'",
-              [liveMatchId],
-            );
+          if (!liveRows.length) {
             await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
             partyStatus = PARTY_STATUS.IDLE;
             console.warn(
-              `[party:${partyId}] cancelled stale live match ${liveMatchId} during ready toggle`,
+              `[party:${partyId}] recovered stale live status during ready toggle`,
             );
           } else {
-            return;
+            const liveMatchId = Number(liveRows[0]?.match_id || 0);
+            const participantRows = liveMatchId
+              ? await db.runQuery(
+                  `SELECT u.name, u.status
+                     FROM match_participants mp
+                     JOIN users u ON u.user_id = mp.user_id
+                    WHERE mp.match_id = ? AND mp.party_id = ?`,
+                  [liveMatchId, partyId],
+                )
+              : [];
+            const hasActiveBattleParticipant = participantRows.some((row) =>
+              String(row?.status || "")
+                .trim()
+                .toLowerCase()
+                .includes("in battle"),
+            );
+
+            if (liveMatchId && !hasActiveBattleParticipant) {
+              await db.runQuery(
+                "UPDATE matches SET status = 'cancelled' WHERE match_id = ? AND status = 'live'",
+                [liveMatchId],
+              );
+              await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
+              partyStatus = PARTY_STATUS.IDLE;
+              console.warn(
+                `[party:${partyId}] cancelled stale live match ${liveMatchId} during ready toggle`,
+              );
+            } else {
+              throw new Error("Your party is still in battle.");
+            }
           }
         }
-      }
-
-      await partyPresence.setUserPresence(
-        uname,
-        isReady ? "ready" : "online",
-        partyId,
-      );
-
-      if (!isReady) {
-        if (
-          partyStatus === PARTY_STATUS.QUEUED ||
-          partyStatus === PARTY_STATUS.READY_CHECK
-        ) {
-          await partyQueueTransition.cancelPartyQueue({
-            partyId,
-            userId: null,
-            reason: `${uname} cancelled matchmaking`,
-          });
-        }
-      }
-
-      const members = await db.fetchPartyMembersDetailed(partyId);
-      const allReady =
-        members.length > 0 &&
-        members.every((m) => String(m.status || "").toLowerCase() === "ready");
-      if (
-        allReady &&
-        (partyStatus === PARTY_STATUS.IDLE ||
-          partyStatus === PARTY_STATUS.QUEUED)
-      ) {
-        try {
-          const selection = normalizeSelectionFromRow(partyRows[0] || {});
-          if (!isSelectionQueueable(selection)) {
-            throw new Error(getSelectionBlockReason(selection));
-          }
-          const botSlots = getPartyBotSlots(partyId);
-          await setPartyStatusSafe(partyId, PARTY_STATUS.QUEUED);
-          await mm.queueJoin({
-            partyId,
-            modeId: selection.modeId,
-            modeVariantId: selection.modeVariantId,
-            map: selection.mapId,
-            botSlots,
-          });
-          io.to(`party:${partyId}`).emit("party:matchmaking:start", {
-            partyId,
-            selection,
-            botSlots,
-          });
-          console.log(`[party:${partyId}] all-ready -> matchmaking`);
-        } catch (err) {
-          console.warn("enqueue failed:", err?.message);
-          try {
+        if ([PARTY_STATUS.QUEUED, PARTY_STATUS.READY_CHECK].includes(partyStatus)) {
+          const tickets = await db.runQuery(
+            "SELECT 1 FROM match_tickets WHERE party_id = ? LIMIT 1", [partyId],
+          );
+          const matches = await db.runQuery(
+            `SELECT m.match_id FROM matches m
+             JOIN match_participants mp ON mp.match_id = m.match_id
+             WHERE mp.party_id = ? AND m.status IN ('queued', 'live') LIMIT 1`, [partyId],
+          );
+          if (!tickets.length && !matches.length) {
             await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
-          } catch (_) {}
-          io.to(`party:${partyId}`).emit("match:cancelled", {
-            reason: err?.message || "Failed to join matchmaking",
-          });
+            partyStatus = PARTY_STATUS.IDLE;
+          }
         }
-      }
+        // Repeated ready requests must not requeue a claimed ticket.
+        if (isReady && [PARTY_STATUS.QUEUED, PARTY_STATUS.READY_CHECK].includes(partyStatus)) {
+          await partyPresence.emitPartyRosterById(partyId);
+          ack?.({ ok: true, ready: true });
+          return;
+        }
+        socket.data.charMenuPrevStatus = null;
+
+        await partyPresence.setUserPresence(
+          uname,
+          isReady ? "ready" : "online",
+          partyId,
+          { strict: true },
+        );
+
+        if (!isReady) {
+          if (
+            partyStatus === PARTY_STATUS.QUEUED ||
+            partyStatus === PARTY_STATUS.READY_CHECK
+          ) {
+            await partyQueueTransition.cancelPartyQueue({
+              partyId,
+              userId: null,
+              reason: `${uname} cancelled matchmaking`,
+            });
+          }
+        }
+
+        const members = await db.fetchPartyMembersDetailed(partyId);
+        const allReady =
+          members.length > 0 &&
+          members.every((m) => String(m.status || "").trim().toLowerCase() === "ready");
+        if (
+          allReady &&
+          partyStatus === PARTY_STATUS.IDLE
+        ) {
+          try {
+            const selection = normalizeSelectionFromRow(partyRows[0] || {});
+            if (!isSelectionQueueable(selection)) {
+              throw new Error(getSelectionBlockReason(selection));
+            }
+            const botSlots = getPartyBotSlots(partyId);
+            await setPartyStatusSafe(partyId, PARTY_STATUS.QUEUED);
+            await mm.queueJoin({
+              partyId,
+              modeId: selection.modeId,
+              modeVariantId: selection.modeVariantId,
+              map: selection.mapId,
+              botSlots,
+            });
+            io.to(`party:${partyId}`).emit("party:matchmaking:start", {
+              partyId,
+              selection,
+              botSlots,
+            });
+            console.log(`[party:${partyId}] all-ready -> matchmaking`);
+          } catch (err) {
+            console.warn("enqueue failed:", err?.message);
+            try {
+              await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
+            } catch (_) {}
+            await partyQueueTransition.cancelPartyQueue({
+              partyId,
+              reason: err?.message || "Failed to join matchmaking",
+            });
+            throw err;
+          }
+        }
+        ack?.({ ok: true, ready: isReady });
+      });
     } catch (e) {
+      ack?.({ ok: false, error: e?.message || "Could not update readiness." });
+      if (partyId) await partyPresence.emitPartyRosterById(partyId).catch(() => {});
       console.warn("ready:status error:", e?.message);
     }
   });

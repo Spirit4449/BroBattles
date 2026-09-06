@@ -42,7 +42,9 @@ function updateSuperPlan(brain, enemies, now) {
 function shouldUseSuper(brain, target, enemies, now) {
   const plan = brain.superPlan;
   const player = brain.player;
-  if (!plan?.charged || !target || brain.retreating) return false;
+  if (!plan?.charged || !target) return false;
+  // Defensive self/team buffs remain available during recovery.
+  if (brain.retreating && !['wizard', 'thorg'].includes(player.char_class)) return false;
   const distance = Math.hypot(target.x - player.x, target.y - player.y);
   const heldMs = now - (brain.superReadyAt || now);
   const emergency = healthFraction(player) < 0.18 && ['thorg', 'wizard'].includes(player.char_class);

@@ -58,6 +58,7 @@ function registerPresenceEvents(
       pendingOffline.set(uname, timer);
     }
 
+    if (userSockets.get(uname)?.size) return;
     await partyQueueTransition.cancelForDisconnectedUser({
       username: uname,
       socket,
@@ -116,6 +117,7 @@ function registerPresenceEvents(
       pendingOffline.set(username, timer);
     }
 
+    if (hasAny) return;
     await partyQueueTransition.cancelForDisconnectedUser({
       username,
       socket: null,

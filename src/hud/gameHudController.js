@@ -33,6 +33,8 @@ export function createGameHudController({
   getMapBgAsset,
   onEnableInput,
   onCountdownFight,
+  onSpectatePrevious,
+  onSpectateNext,
   getScene,
   controlsHudStateKey = "bb_controls_hud_state_v2",
 } = {}) {
@@ -50,6 +52,7 @@ export function createGameHudController({
   let waitingBannerTimer = null;
   let keybindAutoDismissTimer = null;
   let collapseKeybindHud = null;
+  let spectatedPlayerName = null;
 
   function _fallbackCatalog() {
     return {
@@ -114,7 +117,7 @@ export function createGameHudController({
     const card = _resolveCard(catalog, player?.selected_card_id);
 
     const floatDuration = 3.8 + Math.random() * 2.2;
-    const floatDelay = Math.random() * 1.9;
+    const floatDelay = -Math.random() * floatDuration;
     root.style.setProperty("--float-duration", `${floatDuration.toFixed(2)}s`);
     root.style.setProperty("--float-delay", `${floatDelay.toFixed(2)}s`);
 
@@ -221,6 +224,9 @@ export function createGameHudController({
     root.appendChild(charNameEl);
     root.appendChild(spriteWrap);
     root.appendChild(statsRow);
+    root.draggable = false;
+    root.addEventListener("dragstart", (event) => event.preventDefault());
+    root.querySelectorAll("img").forEach((image) => { image.draggable = false; });
     return root;
   }
 
@@ -235,26 +241,21 @@ export function createGameHudController({
     if (!root) return;
     const columns = Array.from(root.querySelectorAll(".bs-col"));
     let resolvedSize = null;
-    const targetSlots = 3;
-
     for (const col of columns) {
       const cards = Array.from(col.querySelectorAll(".bs-player-card"));
       if (!cards.length) continue;
-
-      const colWidth =
-        Number(col.clientWidth) ||
-        Number(col.getBoundingClientRect().width) ||
-        0;
-      if (colWidth <= 0) continue;
-
       const styles = window.getComputedStyle(col);
-      const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
-      const candidate =
-        (colWidth - gap * (targetSlots - 1)) / Math.max(1, targetSlots);
+      const padding = (key) => Number.parseFloat(styles[key]) || 0;
+      const width = col.clientWidth - padding("paddingLeft") - padding("paddingRight");
+      const height = col.clientHeight - padding("paddingTop") - padding("paddingBottom") - 10;
+      const stacked = styles.flexDirection === "column";
+      const gap = padding(stacked ? "rowGap" : "columnGap");
+      const count = cards.length;
+      const widthLimit = stacked ? width : (width - gap * (count - 1)) / count;
+      const heightLimit = (stacked ? (height - gap * (count - 1)) / count : height) * 650 / 1250;
+      const candidate = Math.min(widthLimit, heightLimit);
       if (!Number.isFinite(candidate) || candidate <= 0) continue;
-
-      resolvedSize =
-        resolvedSize == null ? candidate : Math.min(resolvedSize, candidate);
+      resolvedSize = resolvedSize == null ? candidate : Math.min(resolvedSize, candidate);
     }
 
     if (resolvedSize == null) {
@@ -262,7 +263,7 @@ export function createGameHudController({
       return;
     }
 
-    const px = Math.max(88, Math.min(245, Math.floor(resolvedSize)));
+    const px = Math.max(1, Math.min(245, Math.floor(resolvedSize)));
     root.style.setProperty("--bs-card-size", `${px}px`);
   }
 
@@ -645,6 +646,56 @@ export function createGameHudController({
     }
   }
 
+  function setSpectatingPlayer(name, { canSwitch = false } = {}) {
+    const root = document.getElementById("spectate-hud");
+    const nameEl = document.getElementById("spectate-player-name");
+    if (!root || !nameEl) return;
+
+    spectatedPlayerName = name ? String(name) : null;
+    root.classList.toggle("hidden", !spectatedPlayerName);
+    root.setAttribute("aria-hidden", spectatedPlayerName ? "false" : "true");
+    nameEl.textContent = spectatedPlayerName || "No player available";
+    root.querySelectorAll(".spectate-arrow").forEach((button) => {
+      button.disabled = !canSwitch;
+    });
+    document.body.classList.toggle("spectating-active", !!spectatedPlayerName);
+
+    for (const [playerName, entry] of teamRows) {
+      entry.row?.classList?.toggle(
+        "is-spectated",
+        !!spectatedPlayerName && playerName === spectatedPlayerName,
+      );
+    }
+  }
+
+  function hideSpectatingPlayer() {
+    setSpectatingPlayer(null);
+  }
+
+  function initSpectateHud() {
+    const previous = document.getElementById("spectate-previous");
+    const next = document.getElementById("spectate-next");
+    previous?.addEventListener("click", () => onSpectatePrevious?.());
+    next?.addEventListener("click", () => onSpectateNext?.());
+    document.addEventListener("keydown", (event) => {
+      if (!spectatedPlayerName || event.repeat) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
+      ) {
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        onSpectatePrevious?.();
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        onSpectateNext?.();
+      }
+    });
+  }
+
   function _setTopHudFadeVisible(visible, { immediate = false } = {}) {
     const fade = document.getElementById("top-hud-fade");
     if (!fade) return;
@@ -900,6 +951,15 @@ export function createGameHudController({
       const name = String(p?.name || "Player");
       nameEl.textContent = name;
 
+      const nameWrap = document.createElement("div");
+      nameWrap.className = "team-hud-player-name-wrap";
+      const spectateMarker = document.createElement("img");
+      spectateMarker.className = "team-hud-spectate-icon";
+      spectateMarker.src = "/assets/spectate.webp";
+      spectateMarker.alt = "Currently spectating";
+      nameWrap.appendChild(spectateMarker);
+      nameWrap.appendChild(nameEl);
+
       avatarCore.appendChild(img);
       avatarCore.appendChild(cross);
       if (name === username) {
@@ -907,7 +967,7 @@ export function createGameHudController({
       }
       avatarRing.appendChild(avatarCore);
       row.appendChild(avatarRing);
-      row.appendChild(nameEl);
+      row.appendChild(nameWrap);
 
       const entry = {
         name,
@@ -919,6 +979,7 @@ export function createGameHudController({
             : Number(p?.stats?.health) || 1,
       };
       teamRows.set(name, entry);
+      row.classList.toggle("is-spectated", name === spectatedPlayerName);
 
       if (p?.connected === false) row.classList.add("disconnected");
       if (p?.loaded !== true) row.classList.add("loading");
@@ -1136,6 +1197,9 @@ export function createGameHudController({
     hideWaitingForPlayersBanner,
     showSpectatingBanner,
     hideSpectatingBanner,
+    initSpectateHud,
+    setSpectatingPlayer,
+    hideSpectatingPlayer,
     showTopHudFade,
     hideTopHudFade,
     showSystemNotice,
