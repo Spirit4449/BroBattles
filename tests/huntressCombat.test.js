@@ -136,7 +136,7 @@ test('burning arrows consume charge once, apply burn once, and publish precise t
   for(const [id,a] of room._huntress.active) if(a!==arrow) room._huntress.active.delete(id);
   target.x=arrow.x+40;target.y=arrow.y;
   step(10);
-  assert.equal(p.superCharge,1000);
+  assert.equal(p.superCharge,1);
   const terminal=actions('huntress-terminal')[0];
   assert.equal(terminal.appliedDamage,1000); assert.ok(terminal.targetOffset);
   assert.ok(Math.abs(terminal.targetOffset.x) <= target._bodyHalfWidth);

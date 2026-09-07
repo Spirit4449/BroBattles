@@ -1,33 +1,12 @@
-const maps = require("./duelMaps.json");
-const bankGeometry = require('./bankSpawnGeometry.json');
+const defaults = require('./mapDefaults');
+const { geometryFromMap, variantKey } = require('./mapDocument');
 const { resolveLanding } = require('./spawnPlacement');
-const frames = require("./characterFrames.json");
-const { getCharacterStats } = require("../lib/characterStats.js");
-const { getResolvedCharacterBodyConfig } = require("../lib/characterTuning.js");
-const cache = new Map();
-
-function getDuelGeometry(mapId) {
-  if (cache.has(Number(mapId))) return cache.get(Number(mapId));
-  const data = Number(mapId) === 4 ? bankGeometry : maps[mapId];
-  if (!data) return null;
-  const platforms = data.layout.platforms.map((p, i) => {
-    const size = data.textureSizes[p.textureKey];
-    const sx = Math.abs(p.scaleX || 1), sy = Math.abs(p.scaleY || 1);
-    const left = p.x - size.width * sx / 2 + (p.body?.offsetX || 0) * sx;
-    const top = p.y - size.height * sy / 2 + (p.body?.offsetY || 0) * sy;
-    return { id: `p${i}`, x: p.x, y: p.y, left, top,
-      right: left + (p.body?.width || size.width * sx), bottom: top + (p.body?.height || size.height * sy),
-      enabled: p.collisionEnabled !== false, collision: { up: true, down: true, left: true, right: true } };
-  });
-  const hitboxes = data.layout.hitboxes.map((p, i) => ({ id: `h${i}`, x: p.x, y: p.y,
-    left: p.x - p.width / 2, right: p.x + p.width / 2,
-    top: p.y - p.height / 2, bottom: p.y + p.height / 2, enabled: true,
-    collision: { up: true, down: true, left: true, right: true, ...p.collision } }));
-  const anchors = Object.fromEntries(Object.entries(data.anchors).map(([name, ref]) => [name, (ref.kind === "platform" ? platforms : hitboxes)[ref.index]]));
-  const geometry = { mapId: Number(mapId), world: data.bounds.world, spawns: data.spawns,
-    anchors, colliders: [...platforms, ...hitboxes].filter((p) => p.enabled) };
-  cache.set(Number(mapId), geometry);
-  return geometry;
+const frames = require('./characterFrames.json');
+const { getCharacterStats } = require('../lib/characterStats.js');
+const { getResolvedCharacterBodyConfig } = require('../lib/characterTuning.js');
+function getDuelGeometry(mapId, variant = '1v1', snapshot = null) {
+  const data = snapshot || defaults.find(d => d.id === Number(mapId))?.variants[variantKey(variant)];
+  return data ? geometryFromMap(data, Number(mapId)) : null;
 }
 
 function characterBody(character, flip = false) {

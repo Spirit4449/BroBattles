@@ -2,7 +2,7 @@ const gameModesCatalog = require("../../shared/gameModes.catalog.json");
 const mapsCatalog = require("../../shared/maps.catalog.json");
 
 const MODES = Array.isArray(gameModesCatalog?.modes) ? gameModesCatalog.modes : [];
-const MAPS = Array.isArray(mapsCatalog?.maps) ? mapsCatalog.maps : [];
+function allMaps() { return require("../services/mapRepository").mapRepository.list().map(({document}) => ({...document.metadata,id:document.id,label:document.label})); }
 
 const DEFAULT_MODE_ID = String(gameModesCatalog?.defaultModeId || "duels");
 const DEFAULT_VARIANT_ID = String(
@@ -11,7 +11,7 @@ const DEFAULT_VARIANT_ID = String(
 const DEFAULT_MAP_ID = Number(mapsCatalog?.defaultMapId) || 1;
 
 const MODE_BY_ID = new Map(MODES.map((mode) => [String(mode?.id || ""), mode]));
-const MAP_BY_ID = new Map(MAPS.map((map) => [Number(map?.id), map]));
+
 
 function legacyModeToVariantId(mode) {
   const numeric = Number(mode);
@@ -33,7 +33,8 @@ function getModeById(modeId) {
 
 function getMapById(mapId) {
   const numeric = Number(mapId);
-  return MAP_BY_ID.get(numeric) || MAP_BY_ID.get(DEFAULT_MAP_ID) || MAPS[0] || null;
+  const maps = allMaps();
+  return maps.find(m=>m.id === numeric) || maps.find(m=>m.id === DEFAULT_MAP_ID) || maps[0] || null;
 }
 
 function getMapObjectiveLayout(mapId, objectiveKey = null) {
@@ -72,7 +73,7 @@ function getCompatibleMapsForSelection(selection) {
 
   const modeId = String(mode.id);
   const variantId = String(variant?.id || "");
-  return MAPS.filter((map) => {
+  return allMaps().filter((map) => {
     const compatibleModeIds = Array.isArray(map?.compatibleModeIds)
       ? map.compatibleModeIds.map(String)
       : [];

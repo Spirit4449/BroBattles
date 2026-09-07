@@ -69,7 +69,10 @@ function getSeatSchedule(ticket, config = defaults, maxSeats = 5) {
           ? new Date(ticket.created_at).getTime() >>> 0
           : 42;
   const rng = createRandom(seed);
-  const startAfter = Number(config?.startAfterMs ?? defaults.startAfterMs);
+  const startAfter = Math.max(
+    Number(config?.startAfterMs ?? defaults.startAfterMs),
+    Number(ticket?.mmr) > 3000 ? 20000 : 0,
+  );
   const randomWindow = Number(
     config?.randomWindowMs ?? defaults.randomWindowMs,
   );

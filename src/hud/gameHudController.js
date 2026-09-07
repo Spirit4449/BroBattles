@@ -9,6 +9,7 @@ import {
   selectionToLegacyMode,
 } from "../lib/gameSelectionCatalog.js";
 import { buildCharacterSkinBodyUrl } from "../lib/skinAssets.js";
+import { LEVEL_CAP } from "../lib/characterStats.js";
 
 function legacyModeToVariantId(mode) {
   const numeric = Number(mode);
@@ -150,7 +151,7 @@ export function createGameHudController({
     const levelBadge = document.createElement("div");
     levelBadge.className = "bs-card-level-badge";
     const levelIcon = document.createElement("img");
-    const level = Math.max(1, Math.min(5, Number(player?.level) || 1));
+    const level = Math.max(1, Math.min(LEVEL_CAP, Number(player?.level) || 1));
     levelIcon.src = `/assets/levels/${level}.webp`;
     levelIcon.alt = `Character level ${level}`;
     levelIcon.onerror = () => {
@@ -829,6 +830,9 @@ export function createGameHudController({
       A: "KeyA",
       S: "KeyS",
       D: "KeyD",
+      J: "KeyJ",
+      I: "KeyI",
+      ESC: "Escape",
       "↑": "ArrowUp",
       "←": "ArrowLeft",
       "↓": "ArrowDown",

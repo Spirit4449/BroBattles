@@ -25,9 +25,37 @@ export function updateDynamicCamera(scene, player, Phaser) {
   // Bias the camera down when higher up to reduce empty sky framing.
   const highFactor = 1 - t;
   const targetFollowOffsetY = 120 + 80 * highFactor;
+  const aim = scene._combatAimLook || { x: 0, y: 0 };
+  const blend = 1 - Math.exp(-Math.min(100, scene.game.loop.delta || 16.67) / 140);
+  // Camera follow already eases movement; keep this extra aim filter brief.
+  const aimBlend = 1 - Math.exp(-Math.min(100, scene.game.loop.delta || 16.67) / 160);
+  const previous = scene._aimCameraShift || { x: 0, y: 0 };
+  const shift = {
+    x: previous.x + (aim.x - previous.x) * aimBlend,
+    y: previous.y + (aim.y - previous.y) * aimBlend,
+  };
+  // Move the clamp window with the seek as well as the follow point. Otherwise
+  // bounds erase the entire aim offset when the player is at either map edge.
+  if (cam.useBounds && cam._bounds) {
+    const bounds = cam._bounds;
+    cam.setBounds(bounds.x - previous.x + shift.x, bounds.y - previous.y + shift.y,
+      bounds.width, bounds.height);
+  }
+  scene._aimCameraShift = shift;
+  scene._resetAimCameraBounds = () => {
+    const offset = scene._aimCameraShift;
+    if (!offset) return;
+    if (cam.useBounds && cam._bounds) {
+      const bounds = cam._bounds;
+      cam.setBounds(bounds.x - offset.x, bounds.y - offset.y, bounds.width, bounds.height);
+    }
+    cam.setFollowOffset(0, cam.followOffset.y + offset.y);
+    scene._aimCameraShift = null;
+  };
   cam.setFollowOffset(
-    0,
-    cam.followOffset.y + (targetFollowOffsetY - cam.followOffset.y) * 0.08,
+    -shift.x,
+    cam.followOffset.y + previous.y +
+      (targetFollowOffsetY - (cam.followOffset.y + previous.y)) * blend - shift.y,
   );
 }
 

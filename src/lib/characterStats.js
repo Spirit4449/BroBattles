@@ -3,7 +3,36 @@
 
 // Default character for new users
 export const DEFAULT_CHARACTER = "ninja";
-export const LEVEL_CAP = 5;
+export const LEVEL_CAP = 10;
+
+// Levels 1–5 retain the original progression. Mastery levels (6–10) are
+// deliberately gentler so reaching the new cap is rewarding without
+// invalidating the balance players already know.
+const STANDARD_LEVEL_STAT_GAINS = {
+  health: 500,
+  damage: 100,
+  specialDamage: 200,
+};
+const MASTERY_LEVEL_STAT_GAINS = {
+  health: 400,
+  damage: 80,
+  specialDamage: 100,
+};
+
+// Indexed by the character's current level; each value buys the next level.
+// The first four entries preserve the existing economy exactly.
+const UPGRADE_PRICES = [
+  null,
+  200,
+  400,
+  800,
+  1600,
+  2400,
+  3300,
+  4500,
+  6100,
+  8200,
+];
 
 export const characterStats = {
   ninja: {
@@ -15,7 +44,8 @@ export const characterStats = {
     ammoCapacity: 1,
     specialDescription: "Releases a staggered swarm of returning shurikens.",
     specialBaseDamage: 2000,
-    specialChargeDamage: 7000,
+    specialChargeHits: 6,
+    specialChargePerHit: 0.25,
     spriteScale: 0.9,
     body: {
       widthShrink: 42,
@@ -106,7 +136,8 @@ export const characterStats = {
     specialDescription:
       "Enters a purple rage that buffs damage and strengthens knockback.",
     specialBaseDamage: 2800,
-    specialChargeDamage: 4500,
+    specialChargeHits: 3,
+    specialChargePerHit: 0,
     spriteScale: 0.7,
     body: {
       widthShrink: 40,
@@ -175,7 +206,8 @@ export const characterStats = {
     ammoCapacity: 3,
     specialDescription: "Unleashes a staff nova that expands outward.",
     specialBaseDamage: 2400,
-    specialChargeDamage: 10000,
+    specialChargeHits: 4,
+    specialChargePerHit: 0.25,
     spriteScale: 1.2,
     body: {
       widthShrink: 230,
@@ -276,7 +308,8 @@ export const characterStats = {
     ammoCapacity: 3,
     specialDescription: "Empowers the whole team with random powerups.",
     specialBaseDamage: 0,
-    specialChargeDamage: 16000,
+    specialChargeHits: 5,
+    specialChargePerHit: 0,
     spriteScale: 0.92,
     body: {
       widthShrink: 200,
@@ -341,7 +374,8 @@ export const characterStats = {
     specialDescription:
       "Unleashes a wide volley of burning arrows that ignite enemies.",
     specialBaseDamage: 9000,
-    specialChargeDamage: 6000,
+    specialChargeHits: 6,
+    specialChargePerHit: 1,
     spriteScale: 1.5,
     body: {
       widthShrink: 80,
@@ -359,6 +393,7 @@ export const characterStats = {
           maxRange: 500,
           anchorForwardOffset: 20,
           anchorOffsetY: 40,
+          reticlePathOffsetY: 14,
           reticleThickness: 18,
           angleMode: "free",
           minSpeedScale: 459.2 / 900,
@@ -410,6 +445,7 @@ export const characterStats = {
           maxRange: 1050,
           anchorForwardOffset: 34,
           anchorOffsetY: 14,
+          reticlePathOffsetY: 14,
           reticleThickness: 42,
           angleMode: "free",
           minSpeedScale: 0.84,
@@ -470,7 +506,8 @@ export const characterStats = {
     specialDescription:
       "Launches a slime hand that catches an enemy, pulls them close, and leaves them heavily slowed.",
     specialBaseDamage: 500,
-    specialChargeDamage: 12000,
+    specialChargeHits: 6,
+    specialChargePerHit: 0,
     spriteScale: 1.2,
     body: {
       widthShrink: 100,
@@ -488,6 +525,8 @@ export const characterStats = {
           maxRange: 400,
           anchorForwardOffset: 0,
           anchorOffsetY: 0,
+          reticlePathOffsetY: 22,
+          previewBounceThreshold: 120,
           reticleThickness: 8,
           angleMode: "free",
         },
@@ -527,6 +566,7 @@ export const characterStats = {
           anchorForwardOffset: 10,
           anchorOffsetY: 16,
           reticleThickness: 48,
+          showFullReticleRange: true,
           angleMode: "free",
         },
         hook: {
@@ -580,36 +620,62 @@ export function defaultCharacterList() {
 }
 
 export function getHealth(character, level) {
-  return characterStats[character].baseHealth + (level - 1) * 500;
+  const safeLevel = Math.max(1, Number(level) || 1);
+  const standardLevels = Math.min(safeLevel, 5) - 1;
+  const masteryLevels = Math.max(0, safeLevel - 5);
+  return (
+    characterStats[character].baseHealth +
+    standardLevels * STANDARD_LEVEL_STAT_GAINS.health +
+    masteryLevels * MASTERY_LEVEL_STAT_GAINS.health
+  );
 }
 
 export function getDamage(character, level) {
-  return characterStats[character].baseDamage + (level - 1) * 100;
+  const safeLevel = Math.max(1, Number(level) || 1);
+  const standardLevels = Math.min(safeLevel, 5) - 1;
+  const masteryLevels = Math.max(0, safeLevel - 5);
+  return (
+    characterStats[character].baseDamage +
+    standardLevels * STANDARD_LEVEL_STAT_GAINS.damage +
+    masteryLevels * MASTERY_LEVEL_STAT_GAINS.damage
+  );
 }
 
-export function getSuperChargeDamage(character, level) {
-  const stats = characterStats[character];
-  const baseAttackDamage = Math.max(1, Number(stats.baseDamage) || 1);
-  const targetChargeDamage = Math.max(
-    baseAttackDamage,
-    Number(stats.specialChargeDamage) || baseAttackDamage,
-  );
-  const attacksToCharge = Math.max(
-    1,
-    Math.round(targetChargeDamage / baseAttackDamage),
-  );
+// Charge is measured in landed hits, independent of level and damage modifiers.
+export function getSuperChargeHits(character) {
+  return Math.max(1, Number(characterStats[character]?.specialChargeHits) || 1);
+}
 
-  return attacksToCharge * getDamage(character, level);
+// Each accepted projectile contact counts separately. Supers can contribute a
+// fraction of a normal hit; unconfigured attack types never grant charge.
+export function getSuperChargePerHit(character, attackType = "basic") {
+  const stats = characterStats[character];
+  if (!stats) return 0;
+  if (attackType === "basic" ||
+      (character === "huntress" && attackType === "huntress-arrow")) return 1;
+  if (attackType === "special" ||
+      (character === "ninja" && attackType === "ninja-special-swarm") ||
+      (character === "huntress" && attackType === "huntress-burning-arrow")) {
+    return Math.max(0, Number(stats.specialChargePerHit) || 0);
+  }
+  return 0;
 }
 
 export function getSpecialDamage(character, level) {
-  return characterStats[character].specialBaseDamage + (level - 1) * 200;
+  const safeLevel = Math.max(1, Number(level) || 1);
+  const standardLevels = Math.min(safeLevel, 5) - 1;
+  const masteryLevels = Math.max(0, safeLevel - 5);
+  return (
+    characterStats[character].specialBaseDamage +
+    standardLevels * STANDARD_LEVEL_STAT_GAINS.specialDamage +
+    masteryLevels * MASTERY_LEVEL_STAT_GAINS.specialDamage
+  );
 }
 
 // The level upgrade price reflects the current level the character is at
 // If the character was at level 1 it would cost 200 to go to level 2
 export function upgradePrice(level) {
-  return 200 * 2 ** (level - 1); // Doubles every level
+  return UPGRADE_PRICES[Math.floor(Number(level))] ?? undefined;
 }
 
 export function unlockPrice(character) {
@@ -629,7 +695,8 @@ if (typeof module !== "undefined" && module.exports) {
     defaultCharacterList,
     getHealth,
     getDamage,
-    getSuperChargeDamage,
+    getSuperChargeHits,
+    getSuperChargePerHit,
     getSpecialDamage,
     upgradePrice,
     unlockPrice,

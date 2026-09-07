@@ -1,8 +1,13 @@
+import './styles/mapPlaytest.css';
+const editorSession = window.location.pathname === '/map-editor/playtest' ? new URLSearchParams(window.location.search).get('session') : null;
+if (editorSession) document.body.classList.add('editor-playtest');
+import { preloadMapDocument } from './maps/documentRuntime';
 import { attachNinjaScene } from './characters/ninja/network';
 // game.js
 
 import {
   buildMap,
+  registerMapMetadata,
   positionSpawn,
   getMapBgAsset,
   getMapMusicAsset,
@@ -354,6 +359,7 @@ matchCoordinator = createMatchCoordinator({
   getGameEnded: () => gameEnded,
   setGameEnded: (v) => {
     gameEnded = v;
+    if (gameScene) gameScene._battleEnded = !!v;
   },
   setStartingPhase: (v) => {
     startingPhase = v;
@@ -540,12 +546,12 @@ function prewarmTextures(scene) {
 // Fetch game data from server
 async function fetchGameData() {
   try {
-    const response = await fetch("/gamedata", {
-      method: "POST",
+    const response = await fetch(editorSession ? `/api/admin/map-playtests/${editorSession}` : "/gamedata", {
+      method: editorSession ? "GET" : "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ matchId: Number(matchId) }),
+      body: editorSession ? undefined : JSON.stringify({ matchId: Number(matchId) }),
     });
 
     if (!response.ok) {
@@ -587,9 +593,10 @@ async function initializeGame() {
       noteClientLifecycle("fetch-gamedata", `matchId=${matchId}`);
     }
     gameData = await fetchGameData();
-    battleTutorial.initialize();
+    if (!editorSession) battleTutorial.initialize();
     // Start fetching the authoritative map background as soon as match data
     // arrives. The loading screen stays visible until this image is ready.
+    if (gameData?.mapSnapshot?.metadata) registerMapMetadata([gameData.mapSnapshot.metadata]);
     applyMatchBackground(gameData?.map);
     if (!shouldMuteClientDefaultLogs()) {
       console.log("Game data received:", gameData);
@@ -655,7 +662,7 @@ function initTeamStatusHud(players) {
 
 function applyMatchBackground(mapId) {
   try {
-    const bgUrl = getMapBgAsset(mapId);
+    const bgUrl = gameData?.mapSnapshot?.map?.background || getMapBgAsset(mapId);
     const bgImg = document.querySelector("#game-bg img");
     if (bgImg && bgUrl) {
       const markReady = () => {
@@ -795,6 +802,7 @@ let game = null;
 window.__BOOT_GAME__ = () =>
   onReady(async () => {
     initKeybindHud();
+    if (editorSession) { const controls=document.getElementById("battle-keybind-hud"); if(controls){controls.dataset.state="collapsed";controls.style.display="none";} }
     hud.initSpectateHud?.();
     initTimerHud();
     await initializeGame();
@@ -827,6 +835,7 @@ class GameScene extends Phaser.Scene {
       // Input will be enabled on game:start or immediately if already live.
     });
 
+    preloadMapDocument(this, gameData?.mapSnapshot?.map);
     preloadGameAssets({
       scene: this,
       staticPath,
@@ -940,7 +949,8 @@ class GameScene extends Phaser.Scene {
     const activeMapId = normalizeMapId(gameData?.map);
     // No per-scene spawn plan needed now; map modules provide positioning helpers
     // Creates the map objects based on game data
-    buildMap(this, activeMapId);
+    this._mapVariantTeamSize = Number(gameData?.mapSnapshot?.variant?.[0]) || null;
+    buildMap(this, gameData?.mapSnapshot?.mapId || activeMapId, gameData?.mapSnapshot?.map);
     mapObjects = getMapObjects(activeMapId);
     this._mapObjects = mapObjects;
     const mapBoundaryConfig = getMapBoundaryConfig(activeMapId);
@@ -1044,8 +1054,8 @@ class GameScene extends Phaser.Scene {
     // Background music: create only the active map's track and start it
     // as soon as the match scene is live.
     this._bgmStarted = false;
-    const bgmSrc = getMapMusicAsset(gameData?.map);
-    const bgmVolume = getMapMusicVolume(gameData?.map);
+    const bgmSrc = gameData?.mapSnapshot?.metadata?.musicAsset || getMapMusicAsset(gameData?.map);
+    const bgmVolume = gameData?.mapSnapshot?.metadata?.musicVolume ?? getMapMusicVolume(gameData?.map);
     const startBgm = () => {
       if (this._bgmStarted) return;
       this._bgmStarted = true;
@@ -1307,7 +1317,7 @@ class GameScene extends Phaser.Scene {
         scene: this,
         mapId: activeMapId,
         mapObjects,
-        canEdit: !!gameData?.isAdmin,
+        canEdit: false,
         onCreateMapObject: (mapObject) => {
           if (!mapObject) return;
           try {
@@ -1348,7 +1358,7 @@ class GameScene extends Phaser.Scene {
         getLocalPlayer: () => player,
         getOpponentPlayers: () => opponentPlayers,
         getTeamPlayers: () => teamPlayers,
-        canEdit: !!gameData?.isAdmin,
+        canEdit: false,
       });
       this._bankBustRuntime.setEditMode?.(!!this._editModeActive);
     }
@@ -2307,8 +2317,17 @@ function hideBattleStartOverlay() {
 // -----------------------------
 function showGameOverScreen(payload) {
   if (window.__BB_MAP_EDIT_ACTIVE) return;
+  if (gameScene) gameScene._battleEnded = true;
   try {
     destroyMobileControls?.();
   } catch (_) {}
   gameOverScreenController.showGameOverScreen(payload);
+}
+
+if (editorSession) {
+  window.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();event.stopImmediatePropagation();
+    window.parent.postMessage({type:'bb-map-playtest-exit'},window.location.origin);
+  },true);
 }

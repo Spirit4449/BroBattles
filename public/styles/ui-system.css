@@ -42,7 +42,22 @@
   --bb-red-deep: #a92833;
   --bb-orange: #e6923b;
 
-  --bb-header-gradient: linear-gradient(100deg, #3e95ed 0%, #5268d8 48%, #6841ba 100%);
+  /* Fixed-size mosaic cells stay square on wide and compact popup headers. */
+  --bb-chroma-mosaic: url("/assets/ui/chroma-mosaic.svg") top left / 576px 96px repeat;
+  --bb-chroma-header-veil: linear-gradient(90deg, transparent, #2856be 34%, #3045b9 66%, transparent);
+  --bb-header-gradient: var(--bb-chroma-header-veil), var(--bb-chroma-mosaic), linear-gradient(100deg, #159dc9 0%, #2865c5 30%, #304bc4 62%, #3926a4 100%);
+  --bb-chroma-button-corners:
+    url("/assets/ui/chroma-corner-light.svg") left top / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat,
+    url("/assets/ui/chroma-corner-shade.svg") right bottom / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat;
+  --bb-chroma-button-trail:
+    linear-gradient(rgba(255,255,255,.20), rgba(255,255,255,.20)) left 12% top 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(255,255,255,.15), rgba(255,255,255,.15)) left 20% top var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(255,255,255,.10), rgba(255,255,255,.10)) left 28% top 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(255,255,255,.06), rgba(255,255,255,.06)) left 35% top var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(8,16,32,.20), rgba(8,16,32,.20)) right 12% bottom 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(8,16,32,.15), rgba(8,16,32,.15)) right 20% bottom var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(8,16,32,.10), rgba(8,16,32,.10)) right 28% bottom 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(8,16,32,.06), rgba(8,16,32,.06)) right 35% bottom var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat;
   --bb-surface-gradient: linear-gradient(180deg, var(--bb-surface-2), var(--bb-surface-1));
   --bb-card-gradient: linear-gradient(180deg, #14243c, #0b172a);
   --bb-success-gradient: linear-gradient(180deg, #19c890, #079063);
@@ -403,11 +418,13 @@ input:-webkit-autofill:focus {
   text-shadow: none;
 }
 
-#lobby-area :is(.switch-character, .status.invite):hover {
+#lobby-area :is(.switch-character, .status.invite):hover,
+#lobby-area .character-slot:has(> .character-sprite:hover) > .switch-character {
   filter: brightness(1.12) saturate(1.06);
 }
 
-#lobby-area .switch-character:hover {
+#lobby-area .switch-character:hover,
+#lobby-area .character-slot:has(> .character-sprite:hover) > .switch-character {
   transform: translateY(-2px);
 }
 
@@ -2109,15 +2126,42 @@ body.profile-page-body .profile-form[hidden] {
 
 #battle-keybind-hud .controls-section {
   border: 2px solid var(--bb-border-soft);
-  border-radius: 6px;
+  border-radius: var(--bb-radius-card);
   background: rgba(8, 18, 36, 0.76);
   box-shadow: var(--bb-inset-shadow);
 }
 
+#battle-keybind-hud kbd,
 #battle-keybind-hud .bs-help-mouse {
-  border: 2px solid var(--bb-border-soft);
-  border-radius: 6px;
-  background: rgba(5, 12, 25, 0.88);
+  border: 2px solid var(--bb-ink);
+  border-radius: var(--bb-radius-control);
+  color: var(--bb-text);
+  background: var(--bb-chroma-button-corners), var(--bb-primary-gradient);
+  box-shadow:
+    0 3px 0 var(--bb-ink),
+    inset 0 2px rgba(255, 255, 255, 0.16);
+}
+
+#battle-keybind-hud kbd {
+  font-family: var(--bb-font-display);
+  text-shadow: 1px 2px 0 rgba(2, 5, 12, 0.7);
+}
+
+#battle-keybind-hud .controls-input-or {
+  color: var(--bb-text-muted);
+  font-family: var(--bb-font-body);
+  font-size: 10px;
+}
+
+#battle-keybind-hud kbd.is-pressed,
+#battle-keybind-hud .bs-help-action-row.is-pressed .bs-help-mouse {
+  transform: translateY(2px);
+  border-color: var(--bb-ink);
+  color: var(--bb-text);
+  background: var(--bb-chroma-button-corners), var(--bb-success-gradient);
+  box-shadow:
+    0 1px 0 var(--bb-ink),
+    inset 0 2px rgba(0, 0, 0, 0.24);
 }
 
 @media (max-width: 600px) {
@@ -2141,4 +2185,168 @@ body.profile-page-body .profile-form[hidden] {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
+}
+
+/* Chroma surfaces: the texture is a background, so titles remain crisp above it. */
+:is(.leaderboard-head, .trophy-rewards-head, .cards-modal-head,
+    .shop-checkout-panel > header, .shop-reveal-heading,
+    .bb-chat-header, .bb-chat-viewers-head) {
+  background: var(--bb-header-gradient);
+}
+
+.bb-game-over-card.is-victory .bb-game-over-hero {
+  background: var(--bb-chroma-mosaic), linear-gradient(100deg, #16775c, #228e70 48%, #3569a9);
+}
+
+.bb-game-over-card.is-defeat .bb-game-over-hero {
+  background: var(--bb-chroma-mosaic), linear-gradient(100deg, #6d2940, #88434c 48%, #45457f);
+}
+
+/* Compact dialogs have a title instead of a separate header element. */
+.cs-confirm {
+  --bb-confirm-padding: 22px;
+  padding: var(--bb-confirm-padding);
+  overflow: hidden;
+}
+
+.cs-confirm .cs-confirm-title {
+  margin: calc(-1 * var(--bb-confirm-padding)) calc(-1 * var(--bb-confirm-padding)) 16px;
+  padding: 18px var(--bb-confirm-padding);
+  background: var(--bb-header-gradient);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.14);
+}
+
+.game-notice-card .game-notice-title {
+  margin: -18px -20px 16px;
+  padding: 18px 20px;
+  border-radius: 7px 7px 0 0;
+  background: var(--bb-header-gradient);
+}
+
+/* Four stepped cells at each opposing corner. Translucent light and shade
+   blend with the actual control fill, including hover and disabled variants.
+   Use a low-specificity positioning default to retain absolute close controls. */
+:where(.pixel-menu-button:not(.map-select-card), .bb-button, .profile-btn,
+  .bb-close, .shop-close, .shop-buy-button, .shop-checkout-close,
+  .shop-reveal-panel > button, .shop-load-error button, .bb-chat-send,
+  .sonner__btn, .status-action, .cs-btn, .switch-character, .status.invite,
+  .character-card-status-text, .character-details-action,
+  .profile-action-btn, .shop-tabs button) {
+  position: relative;
+}
+
+:is(.pixel-menu-button:not(.map-select-card), .bb-button, .profile-btn,
+  .bb-close, .shop-close, .shop-checkout-close,
+  .shop-reveal-panel > button, .shop-load-error button, .bb-chat-send,
+  .sonner__btn, .status-action, .cs-btn, .switch-character, .status.invite,
+  .character-card-status-text, .character-details-action,
+  .profile-action-btn, .shop-tabs button)::before,
+.shop-buy-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    url("/assets/ui/chroma-corner-light.svg") left top / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat,
+    url("/assets/ui/chroma-corner-shade.svg") right bottom / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat;
+  opacity: 1;
+  transform: none;
+  filter: none;
+  box-shadow: none;
+}
+
+.character-card-status-text {
+  --bb-chroma-corner-size: 12px;
+}
+
+@media (max-width: 480px) {
+  .cs-confirm { --bb-confirm-padding: 18px; }
+}
+
+.character-details-popup.is-character-locked .character-details-header {
+  background: var(--bb-chroma-mosaic), linear-gradient(90deg, #515865, #343a45);
+}
+
+/* Left-aligned headings need a quiet, darker field beneath their copy. */
+:is(.shop-header, .profile-popup-head, .profile-loadout-head,
+    .cards-modal-head, .character-details-header, .cs-confirm-title,
+    .shop-checkout-panel > header, .bb-chat-header, .bb-chat-viewers-head,
+    .party-join-request-panel, .party-join-request-owner-panel,
+    .party-discovery-panel, .party-settings-panel) {
+  --bb-chroma-header-veil: linear-gradient(90deg, rgba(30, 133, 185, .82) 0%, rgba(42, 103, 193, .94) 42%, rgba(48, 77, 188, .65) 65%, transparent 90%);
+  --bb-header-gradient: var(--bb-chroma-header-veil), var(--bb-chroma-mosaic), linear-gradient(100deg, #159dc9, #304bc4 62%, #3926a4);
+}
+
+/* Longer actions carry a few extra, progressively quieter cells along the edge. */
+:is(.character-details-action, .bb-game-over-action, .profile-action-btn,
+    .cs-btn, .party-request-submit, .party-request-return,
+    .party-button:not(.party-search-button):not(.party-settings-button),
+    .shop-tabs button, .shop-reveal-panel > button)::before,
+.shop-buy-button::after {
+  background: var(--bb-chroma-button-trail), var(--bb-chroma-button-corners);
+}
+
+/* Ready is an input: browsers do not paint pseudo-elements on input controls.
+   Paint the same accents into its background and retain all state colors. */
+#ready {
+  --bb-ready-fill: linear-gradient(135deg, #b49e20, #bda322);
+  background: var(--bb-chroma-button-trail), var(--bb-chroma-button-corners), var(--bb-ready-fill) !important;
+}
+#ready:hover { --bb-ready-fill: linear-gradient(135deg, #d4ba3a, #c6991b); }
+#ready.cancel { --bb-ready-fill: linear-gradient(135deg, #ff4757, #dc3545); }
+#ready.cancel:hover { --bb-ready-fill: linear-gradient(135deg, #dc3545, #c82333); }
+#ready.battle-in-progress { --bb-ready-fill: linear-gradient(135deg, #2879df, #1856b8); }
+#ready.battle-in-progress:hover { --bb-ready-fill: linear-gradient(135deg, #398bf0, #2468ce); }
+
+/* Varied mineral-toned pixels over the lobby’s separate midnight palette. */
+#navbar {
+  background:
+    linear-gradient(90deg, rgba(16, 29, 47, .76), rgba(23, 26, 42, .94) 38%, rgba(34, 24, 40, .88) 72%, rgba(43, 27, 39, .76)),
+    linear-gradient(100deg, #243d50, #262b40 48%, #493042);
+  border-bottom: 2px solid #424052;
+  box-shadow: 0 4px 16px rgba(5, 13, 35, .35), inset 0 2px rgba(182, 186, 208, .09);
+}
+
+#navbar > .flex:first-child h2 {
+  text-shadow: 0 2px 0 #090e19;
+}
+
+/* Sparse color at the edges, with a quiet center and clear foreground text. */
+#navbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: url("/assets/ui/lobby-chroma-mosaic.svg") top left / 576px 96px repeat;
+  mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, .65) 9%, transparent 25%, transparent 93%, rgba(0, 0, 0, .45) 100%);
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, .65) 9%, transparent 25%, transparent 93%, rgba(0, 0, 0, .45) 100%);
+}
+#navbar > * {
+  position: relative;
+}
+
+/* Shop actions use larger square cells and wider corner clusters. */
+.shop-buy-button,
+.shop-reveal-panel > button,
+.party-button.shop-button {
+  --bb-chroma-corner-size: 27px;
+  --bb-chroma-trail-cell: 9px;
+  --bb-chroma-button-corners:
+    url("/assets/ui/chroma-corner-light.svg") left top / 27px 27px no-repeat,
+    url("/assets/ui/chroma-corner-shade.svg") right bottom / 27px 27px no-repeat;
+}
+.shop-buy-button, .shop-reveal-panel > button, .party-button.shop-button {
+  --bb-chroma-button-trail:
+    linear-gradient(rgba(255,255,255,.20), rgba(255,255,255,.20)) left 12% top 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(255,255,255,.15), rgba(255,255,255,.15)) left 20% top var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(255,255,255,.10), rgba(255,255,255,.10)) left 28% top 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(255,255,255,.06), rgba(255,255,255,.06)) left 35% top var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(8,16,32,.20), rgba(8,16,32,.20)) right 12% bottom 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(8,16,32,.15), rgba(8,16,32,.15)) right 20% bottom var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(8,16,32,.10), rgba(8,16,32,.10)) right 28% bottom 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
+    linear-gradient(rgba(8,16,32,.06), rgba(8,16,32,.06)) right 35% bottom var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat;
 }

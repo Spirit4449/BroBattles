@@ -92,6 +92,7 @@ export default class OpPlayer {
     this._networkSnapUntil = 0;
     this._deathPresentationActive = false;
     this._corpseRemoved = false;
+    this._corpseRemovalTimer = null;
     this._movementVfxState = null;
     this._wallSlideVfxAt = 0;
     this._runDustVfxAt = 0;
@@ -914,7 +915,10 @@ export default class OpPlayer {
       this.opponent.body.enable = false;
     }
 
-    this.scene.time.delayedCall(1500, () => {
+    this._corpseRemovalTimer?.remove?.(false);
+    this._corpseRemovalTimer = this.scene.time.delayedCall(1500, () => {
+      this._corpseRemovalTimer = null;
+      if (!this._deathPresentationActive) return;
       if (!this.opponent) return;
       this._corpseRemoved = true;
       try {
@@ -925,6 +929,8 @@ export default class OpPlayer {
 
   handleRespawn(meta = {}) {
     if (!this.opponent) return;
+    this._corpseRemovalTimer?.remove?.(false);
+    this._corpseRemovalTimer = null;
     this._deathPresentationActive = false;
     this._corpseRemoved = false;
     this._worldUiHidden = false;
@@ -957,6 +963,9 @@ export default class OpPlayer {
         resolveAnimKey(this.scene, this.character, "idle", "idle", this.skinId),
         true,
       );
+      this.opponent._ducking = false;
+      this.applyFlipOffset();
+      this.opponent.body?.updateFromGameObject?.();
       spawnSpawnBurst(this.scene, this.opponent, {
         tint: 0xffffff,
         accent: 0xb8ecff,
@@ -976,6 +985,8 @@ export default class OpPlayer {
 
   // Clean up method to stop any active tweens and remove sprites
   destroy() {
+    this._corpseRemovalTimer?.remove?.(false);
+    this._corpseRemovalTimer = null;
     if (this.healthUpdateListener) {
       socket.off("health-update", this.healthUpdateListener);
       this.healthUpdateListener = null;

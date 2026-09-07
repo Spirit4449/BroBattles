@@ -94,7 +94,7 @@ test('reachable aimed throws reach the requested point with the discrete integra
   }
 });
 
-test('reticle stops at the server first impact while the projectile keeps bouncing', () => {
+test('normal reticle stops at the server first impact while the projectile keeps bouncing', () => {
   const { resolveAttackAimContext } = require('../src/characters/shared/attackAim');
   const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
   const cfg = require('../src/lib/characterTuning').getResolvedCharacterAttackConfig('gloop', 'slimeball');
@@ -115,6 +115,28 @@ test('reticle stops at the server first impact while the projectile keeps bounci
     for (let i = 0; i < 720 && !attack.done; i++) tickRuntimeAttack(room, attack, i * room.FIXED_DT_MS);
     assert.equal(attack.bounceCount, 2);
   }
+});
+
+test('a very short Gloop reticle continues through its bounce', () => {
+  const { resolveAttackAimContext } = require('../src/characters/shared/attackAim');
+  const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
+  const cfg = require('../src/lib/characterTuning').getResolvedCharacterAttackConfig('gloop', 'slimeball');
+  const rects = [{ left: 400, right: 600, top: 340, bottom: 370 }];
+  const player = { x: 500, y: 250, displayWidth: 150, displayHeight: 150, scene: {
+    physics: { world: { bounds: { x: 0, y: 0, width: 1100, height: 500 } } }, _mapObjects: rects } };
+  const aim = resolveAttackAimContext({ character: 'gloop', player,
+    pointerWorldX: player.x, pointerWorldY: player.y + 320 });
+  assert.equal(aim.throwPreview.impacts.length, 3);
+  assert.equal(aim.throwPreview.impacts.at(-1).terminal, true);
+  const owner = { ...player, name: 'Gloop', participantId: 'short-preview', isAlive: true, team: 'team1' };
+  const attack = createRuntimeAttack(owner, { ...cfg, start: aim.start, angle: aim.angle,
+    speed: aim.speed, initialVy: aim.initialVy, direction: aim.direction,
+    type: 'gloop-slimeball-release', floorY: 500, worldMinX: 0, worldMaxX: 1100 }, 0);
+  const room = { players: new Map([[owner.participantId, owner]]), FIXED_DT_MS: 1000 / 120,
+    geometry: { colliders: rects } };
+  for (let i = 0; i < 720 && !attack.done; i++) tickRuntimeAttack(room, attack, i * room.FIXED_DT_MS);
+  assert.equal(attack.x, aim.throwPreview.endX);
+  assert.equal(attack.y, aim.throwPreview.endY);
 });
 
 test('authoritative release publishes the same launch and terrain used for damage', () => {
@@ -187,7 +209,9 @@ test('release translates the preview with windup movement without changing its i
     owner.x += 40;
     release();
     const attack=room._activeAttacks[0];
-    for (let i=0;i<720&&!attack.bounceCount&&!attack.done;i++) tickRuntimeAttack(room,attack,i*room.FIXED_DT_MS);
+    const showsBounce = aim.throwPreview.impacts.length > 1;
+    for (let i = 0; i < 720 && !attack.done && (showsBounce || !attack.bounceCount); i++)
+      tickRuntimeAttack(room, attack, i * room.FIXED_DT_MS);
     assert.ok(Math.abs(attack.x - aim.endX - 40) < 1e-8);
     assert.equal(attack.y,aim.endY);
   }

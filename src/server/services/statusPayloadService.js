@@ -140,6 +140,7 @@ async function buildStatusPayload({
   return {
     success: true,
     userData: userNormalized,
+    mapCatalog: require("./mapRepository").mapRepository.list().map(({document})=>({...document.metadata,id:document.id,label:document.label})),
     suspension,
     isAdmin:
       typeof isAdminUser === "function" ? !!isAdminUser(userNormalized) : false,

@@ -1,0 +1,1136 @@
+{
+  "schemaVersion": 1,
+  "id": 3,
+  "label": "Serenity",
+  "metadata": {
+    "id": 3,
+    "key": "serenity",
+    "terrain": "grass",
+    "label": "Serenity",
+    "compatibleModeIds": [
+      "duels"
+    ],
+    "compatibleVariantIds": [
+      "duels-1v1",
+      "duels-2v2",
+      "duels-3v3"
+    ],
+    "musicAsset": "/assets/serenity/serenity_main.mp3",
+    "musicVolume": 0.11,
+    "mapSelectPreviewAsset": "/assets/serenity/preview.webp",
+    "lobbyBgAsset": "/assets/serenity/lobbyBg.webp",
+    "lobbyPlatformAsset": "/assets/serenity/lobbyPlatform.webp"
+  },
+  "variants": {
+    "1v1": {
+      "layout": {
+        "platforms": [
+          {
+            "textureKey": "serenity-large-platform",
+            "x": 1150,
+            "y": 700,
+            "scaleX": 0.45,
+            "scaleY": 0.45,
+            "flipX": false,
+            "body": {
+              "width": 582.3,
+              "height": 216,
+              "offsetX": 0,
+              "offsetY": 70
+            },
+            "id": "p0"
+          },
+          {
+            "textureKey": "serenity-side-platform",
+            "x": 648.27,
+            "y": 270,
+            "scaleX": 0.86,
+            "scaleY": 0.86,
+            "flipX": true,
+            "body": {
+              "width": 228.76,
+              "height": 81.7,
+              "offsetX": 0,
+              "offsetY": 25
+            },
+            "id": "p1"
+          },
+          {
+            "textureKey": "serenity-side-platform",
+            "x": 1000,
+            "y": 370,
+            "scaleX": 0.76,
+            "scaleY": 0.76,
+            "flipX": false,
+            "body": {
+              "width": 202.16,
+              "height": 91.2,
+              "offsetX": 0,
+              "offsetY": 25
+            },
+            "id": "p2"
+          },
+          {
+            "textureKey": "serenity-small-rock",
+            "x": 800,
+            "y": 490,
+            "scaleX": 0.45,
+            "scaleY": 0.45,
+            "flipX": false,
+            "body": {
+              "width": 103.05,
+              "height": 40.5,
+              "offsetX": 0,
+              "offsetY": 25
+            },
+            "id": "p3"
+          },
+          {
+            "textureKey": "serenity-log-platform",
+            "x": 1500,
+            "y": 260,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "collisionEnabled": false,
+            "id": "p4"
+          }
+        ],
+        "hitboxes": [
+          {
+            "x": 543.93,
+            "y": 236.04,
+            "width": 16,
+            "height": 160,
+            "collision": {
+              "up": false,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "id": "h0"
+          },
+          {
+            "x": 754.56,
+            "y": 199.55,
+            "width": 16,
+            "height": 70,
+            "collision": {
+              "up": false,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "id": "h1"
+          },
+          {
+            "x": 905.92,
+            "y": 309.26,
+            "width": 16,
+            "height": 70,
+            "collision": {
+              "up": false,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "id": "h2"
+          },
+          {
+            "x": 1094.08,
+            "y": 357.26,
+            "width": 16,
+            "height": 160,
+            "collision": {
+              "up": false,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "id": "h3"
+          },
+          {
+            "x": 1350,
+            "y": 350,
+            "width": 175,
+            "height": 16,
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": false,
+              "right": false
+            },
+            "id": "h4"
+          },
+          {
+            "x": 1500,
+            "y": 270,
+            "width": 330,
+            "height": 16,
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": false,
+              "right": false
+            },
+            "id": "h5"
+          },
+          {
+            "x": 1655,
+            "y": 350,
+            "width": 177,
+            "height": 16,
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": false,
+              "right": false
+            },
+            "id": "h6"
+          }
+        ]
+      },
+      "spawns": {
+        "players": {
+          "team1": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "h5"
+              }
+            ],
+            "2": [
+              {
+                "dx": -100,
+                "anchorId": "h5"
+              },
+              {
+                "dx": 100,
+                "anchorId": "h5"
+              }
+            ],
+            "3": [
+              {
+                "anchorId": "h5",
+                "dx": -131
+              },
+              {
+                "dx": 0,
+                "anchorId": "h5"
+              },
+              {
+                "dx": 131,
+                "anchorId": "h5"
+              }
+            ]
+          },
+          "team2": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "p0"
+              }
+            ],
+            "2": [
+              {
+                "dx": -130,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 130,
+                "anchorId": "p0"
+              }
+            ],
+            "3": [
+              {
+                "dx": -200,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 0,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 200,
+                "anchorId": "p0"
+              }
+            ]
+          }
+        },
+        "powerups": [
+          {
+            "id": "powerup-0",
+            "x": 950,
+            "y": 534
+          },
+          {
+            "id": "powerup-1",
+            "x": 1063,
+            "y": 534
+          },
+          {
+            "id": "powerup-2",
+            "x": 1133,
+            "y": 534
+          },
+          {
+            "id": "powerup-3",
+            "x": 646,
+            "y": 129
+          },
+          {
+            "id": "powerup-4",
+            "x": 1463,
+            "y": 238
+          },
+          {
+            "id": "powerup-5",
+            "x": 1000,
+            "y": 242
+          },
+          {
+            "id": "powerup-6",
+            "x": 1187,
+            "y": 534
+          },
+          {
+            "id": "powerup-7",
+            "x": 1442,
+            "y": 238
+          },
+          {
+            "id": "powerup-8",
+            "x": 801,
+            "y": 447
+          }
+        ]
+      },
+      "bounds": {
+        "world": {
+          "x": 0,
+          "y": 0,
+          "width": 2300,
+          "height": 1000
+        },
+        "camera": {
+          "x": 0,
+          "y": -40,
+          "width": 2300,
+          "height": 1000,
+          "zoom": 1.7,
+          "deadzoneWidth": 50,
+          "deadzoneHeight": 50,
+          "followOffsetY": 120
+        }
+      },
+      "textureSizes": {
+        "serenity-large-platform": {
+          "width": 1294,
+          "height": 770
+        },
+        "serenity-side-platform": {
+          "width": 266,
+          "height": 323
+        },
+        "serenity-small-rock": {
+          "width": 229,
+          "height": 135
+        },
+        "serenity-log-platform": {
+          "width": 807,
+          "height": 361
+        }
+      },
+      "anchors": {
+        "large": {
+          "objectId": "p0"
+        },
+        "log-mid": {
+          "objectId": "h5"
+        }
+      },
+      "assets": {
+        "serenity-large-platform": {
+          "type": "image",
+          "url": "/assets/serenity/largePlatform.webp"
+        },
+        "serenity-side-platform": {
+          "type": "image",
+          "url": "/assets/serenity/sidePlatform.webp"
+        },
+        "serenity-small-rock": {
+          "type": "image",
+          "url": "/assets/serenity/smallRock.webp"
+        },
+        "serenity-log-platform": {
+          "type": "image",
+          "url": "/assets/serenity/logPlatform.webp"
+        }
+      },
+      "powerups": {
+        "spawnIntervalMs": 25000,
+        "maxActive": 3,
+        "despawnMs": 10000,
+        "pickupRadius": 70,
+        "omenMs": 2000,
+        "spawnLift": 22,
+        "types": [
+          "rage",
+          "health",
+          "shield",
+          "poison",
+          "gravityBoots",
+          "invisibility",
+          "shockwave",
+          "freeze"
+        ]
+      },
+      "objectiveLayout": {},
+      "background": "/assets/serenity/gameBg.webp"
+    },
+    "2v2": {
+      "layout": {
+        "platforms": [
+          {
+            "textureKey": "serenity-large-platform",
+            "x": 1150,
+            "y": 700,
+            "scaleX": 0.45,
+            "scaleY": 0.45,
+            "flipX": false,
+            "body": {
+              "width": 582.3,
+              "height": 216,
+              "offsetX": 0,
+              "offsetY": 70
+            },
+            "id": "p0"
+          },
+          {
+            "textureKey": "serenity-side-platform",
+            "x": 648.27,
+            "y": 270,
+            "scaleX": 0.86,
+            "scaleY": 0.86,
+            "flipX": true,
+            "body": {
+              "width": 228.76,
+              "height": 81.7,
+              "offsetX": 0,
+              "offsetY": 25
+            },
+            "id": "p1"
+          },
+          {
+            "textureKey": "serenity-side-platform",
+            "x": 1000,
+            "y": 370,
+            "scaleX": 0.76,
+            "scaleY": 0.76,
+            "flipX": false,
+            "body": {
+              "width": 202.16,
+              "height": 91.2,
+              "offsetX": 0,
+              "offsetY": 25
+            },
+            "id": "p2"
+          },
+          {
+            "textureKey": "serenity-small-rock",
+            "x": 800,
+            "y": 490,
+            "scaleX": 0.45,
+            "scaleY": 0.45,
+            "flipX": false,
+            "body": {
+              "width": 103.05,
+              "height": 40.5,
+              "offsetX": 0,
+              "offsetY": 25
+            },
+            "id": "p3"
+          },
+          {
+            "textureKey": "serenity-log-platform",
+            "x": 1500,
+            "y": 260,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "collisionEnabled": false,
+            "id": "p4"
+          }
+        ],
+        "hitboxes": [
+          {
+            "x": 543.93,
+            "y": 236.04,
+            "width": 16,
+            "height": 160,
+            "collision": {
+              "up": false,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "id": "h0"
+          },
+          {
+            "x": 754.56,
+            "y": 199.55,
+            "width": 16,
+            "height": 70,
+            "collision": {
+              "up": false,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "id": "h1"
+          },
+          {
+            "x": 905.92,
+            "y": 309.26,
+            "width": 16,
+            "height": 70,
+            "collision": {
+              "up": false,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "id": "h2"
+          },
+          {
+            "x": 1094.08,
+            "y": 357.26,
+            "width": 16,
+            "height": 160,
+            "collision": {
+              "up": false,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "id": "h3"
+          },
+          {
+            "x": 1350,
+            "y": 350,
+            "width": 175,
+            "height": 16,
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": false,
+              "right": false
+            },
+            "id": "h4"
+          },
+          {
+            "x": 1500,
+            "y": 270,
+            "width": 330,
+            "height": 16,
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": false,
+              "right": false
+            },
+            "id": "h5"
+          },
+          {
+            "x": 1655,
+            "y": 350,
+            "width": 177,
+            "height": 16,
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": false,
+              "right": false
+            },
+            "id": "h6"
+          }
+        ]
+      },
+      "spawns": {
+        "players": {
+          "team1": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "h5"
+              }
+            ],
+            "2": [
+              {
+                "dx": -100,
+                "anchorId": "h5"
+              },
+              {
+                "dx": 100,
+                "anchorId": "h5"
+              }
+            ],
+            "3": [
+              {
+                "anchorId": "h5",
+                "dx": -131
+              },
+              {
+                "dx": 0,
+                "anchorId": "h5"
+              },
+              {
+                "dx": 131,
+                "anchorId": "h5"
+              }
+            ]
+          },
+          "team2": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "p0"
+              }
+            ],
+            "2": [
+              {
+                "dx": -130,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 130,
+                "anchorId": "p0"
+              }
+            ],
+            "3": [
+              {
+                "dx": -200,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 0,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 200,
+                "anchorId": "p0"
+              }
+            ]
+          }
+        },
+        "powerups": [
+          {
+            "id": "powerup-0",
+            "x": 950,
+            "y": 534
+          },
+          {
+            "id": "powerup-1",
+            "x": 1063,
+            "y": 534
+          },
+          {
+            "id": "powerup-2",
+            "x": 1133,
+            "y": 534
+          },
+          {
+            "id": "powerup-3",
+            "x": 646,
+            "y": 129
+          },
+          {
+            "id": "powerup-4",
+            "x": 1463,
+            "y": 238
+          },
+          {
+            "id": "powerup-5",
+            "x": 1000,
+            "y": 242
+          },
+          {
+            "id": "powerup-6",
+            "x": 1187,
+            "y": 534
+          },
+          {
+            "id": "powerup-7",
+            "x": 1442,
+            "y": 238
+          },
+          {
+            "id": "powerup-8",
+            "x": 801,
+            "y": 447
+          }
+        ]
+      },
+      "bounds": {
+        "world": {
+          "x": 0,
+          "y": 0,
+          "width": 2300,
+          "height": 1000
+        },
+        "camera": {
+          "x": 0,
+          "y": -40,
+          "width": 2300,
+          "height": 1000,
+          "zoom": 1.7,
+          "deadzoneWidth": 50,
+          "deadzoneHeight": 50,
+          "followOffsetY": 120
+        }
+      },
+      "textureSizes": {
+        "serenity-large-platform": {
+          "width": 1294,
+          "height": 770
+        },
+        "serenity-side-platform": {
+          "width": 266,
+          "height": 323
+        },
+        "serenity-small-rock": {
+          "width": 229,
+          "height": 135
+        },
+        "serenity-log-platform": {
+          "width": 807,
+          "height": 361
+        }
+      },
+      "anchors": {
+        "large": {
+          "objectId": "p0"
+        },
+        "log-mid": {
+          "objectId": "h5"
+        }
+      },
+      "assets": {
+        "serenity-large-platform": {
+          "type": "image",
+          "url": "/assets/serenity/largePlatform.webp"
+        },
+        "serenity-side-platform": {
+          "type": "image",
+          "url": "/assets/serenity/sidePlatform.webp"
+        },
+        "serenity-small-rock": {
+          "type": "image",
+          "url": "/assets/serenity/smallRock.webp"
+        },
+        "serenity-log-platform": {
+          "type": "image",
+          "url": "/assets/serenity/logPlatform.webp"
+        }
+      },
+      "powerups": {
+        "spawnIntervalMs": 25000,
+        "maxActive": 3,
+        "despawnMs": 10000,
+        "pickupRadius": 70,
+        "omenMs": 2000,
+        "spawnLift": 22,
+        "types": [
+          "rage",
+          "health",
+          "shield",
+          "poison",
+          "gravityBoots",
+          "invisibility",
+          "shockwave",
+          "freeze"
+        ]
+      },
+      "objectiveLayout": {},
+      "background": "/assets/serenity/gameBg.webp"
+    },
+    "3v3": {
+      "layout": {
+        "platforms": [
+          {
+            "textureKey": "serenity-large-platform",
+            "x": 1150,
+            "y": 700,
+            "scaleX": 0.45,
+            "scaleY": 0.45,
+            "flipX": false,
+            "body": {
+              "width": 582.3,
+              "height": 216,
+              "offsetX": 0,
+              "offsetY": 70
+            },
+            "id": "p0"
+          },
+          {
+            "textureKey": "serenity-side-platform",
+            "x": 648.27,
+            "y": 270,
+            "scaleX": 0.86,
+            "scaleY": 0.86,
+            "flipX": true,
+            "body": {
+              "width": 228.76,
+              "height": 81.7,
+              "offsetX": 0,
+              "offsetY": 25
+            },
+            "id": "p1"
+          },
+          {
+            "textureKey": "serenity-side-platform",
+            "x": 1000,
+            "y": 370,
+            "scaleX": 0.76,
+            "scaleY": 0.76,
+            "flipX": false,
+            "body": {
+              "width": 202.16,
+              "height": 91.2,
+              "offsetX": 0,
+              "offsetY": 25
+            },
+            "id": "p2"
+          },
+          {
+            "textureKey": "serenity-small-rock",
+            "x": 800,
+            "y": 490,
+            "scaleX": 0.45,
+            "scaleY": 0.45,
+            "flipX": false,
+            "body": {
+              "width": 103.05,
+              "height": 40.5,
+              "offsetX": 0,
+              "offsetY": 25
+            },
+            "id": "p3"
+          },
+          {
+            "textureKey": "serenity-log-platform",
+            "x": 1500,
+            "y": 260,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "collisionEnabled": false,
+            "id": "p4"
+          }
+        ],
+        "hitboxes": [
+          {
+            "x": 543.93,
+            "y": 236.04,
+            "width": 16,
+            "height": 160,
+            "collision": {
+              "up": false,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "id": "h0"
+          },
+          {
+            "x": 754.56,
+            "y": 199.55,
+            "width": 16,
+            "height": 70,
+            "collision": {
+              "up": false,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "id": "h1"
+          },
+          {
+            "x": 905.92,
+            "y": 309.26,
+            "width": 16,
+            "height": 70,
+            "collision": {
+              "up": false,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "id": "h2"
+          },
+          {
+            "x": 1094.08,
+            "y": 357.26,
+            "width": 16,
+            "height": 160,
+            "collision": {
+              "up": false,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "id": "h3"
+          },
+          {
+            "x": 1350,
+            "y": 350,
+            "width": 175,
+            "height": 16,
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": false,
+              "right": false
+            },
+            "id": "h4"
+          },
+          {
+            "x": 1500,
+            "y": 270,
+            "width": 330,
+            "height": 16,
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": false,
+              "right": false
+            },
+            "id": "h5"
+          },
+          {
+            "x": 1655,
+            "y": 350,
+            "width": 177,
+            "height": 16,
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": false,
+              "right": false
+            },
+            "id": "h6"
+          }
+        ]
+      },
+      "spawns": {
+        "players": {
+          "team1": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "h5"
+              }
+            ],
+            "2": [
+              {
+                "dx": -100,
+                "anchorId": "h5"
+              },
+              {
+                "dx": 100,
+                "anchorId": "h5"
+              }
+            ],
+            "3": [
+              {
+                "anchorId": "h5",
+                "dx": -131
+              },
+              {
+                "dx": 0,
+                "anchorId": "h5"
+              },
+              {
+                "dx": 131,
+                "anchorId": "h5"
+              }
+            ]
+          },
+          "team2": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "p0"
+              }
+            ],
+            "2": [
+              {
+                "dx": -130,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 130,
+                "anchorId": "p0"
+              }
+            ],
+            "3": [
+              {
+                "dx": -200,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 0,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 200,
+                "anchorId": "p0"
+              }
+            ]
+          }
+        },
+        "powerups": [
+          {
+            "id": "powerup-0",
+            "x": 950,
+            "y": 534
+          },
+          {
+            "id": "powerup-1",
+            "x": 1063,
+            "y": 534
+          },
+          {
+            "id": "powerup-2",
+            "x": 1133,
+            "y": 534
+          },
+          {
+            "id": "powerup-3",
+            "x": 646,
+            "y": 129
+          },
+          {
+            "id": "powerup-4",
+            "x": 1463,
+            "y": 238
+          },
+          {
+            "id": "powerup-5",
+            "x": 1000,
+            "y": 242
+          },
+          {
+            "id": "powerup-6",
+            "x": 1187,
+            "y": 534
+          },
+          {
+            "id": "powerup-7",
+            "x": 1442,
+            "y": 238
+          },
+          {
+            "id": "powerup-8",
+            "x": 801,
+            "y": 447
+          }
+        ]
+      },
+      "bounds": {
+        "world": {
+          "x": 0,
+          "y": 0,
+          "width": 2300,
+          "height": 1000
+        },
+        "camera": {
+          "x": 0,
+          "y": -40,
+          "width": 2300,
+          "height": 1000,
+          "zoom": 1.7,
+          "deadzoneWidth": 50,
+          "deadzoneHeight": 50,
+          "followOffsetY": 120
+        }
+      },
+      "textureSizes": {
+        "serenity-large-platform": {
+          "width": 1294,
+          "height": 770
+        },
+        "serenity-side-platform": {
+          "width": 266,
+          "height": 323
+        },
+        "serenity-small-rock": {
+          "width": 229,
+          "height": 135
+        },
+        "serenity-log-platform": {
+          "width": 807,
+          "height": 361
+        }
+      },
+      "anchors": {
+        "large": {
+          "objectId": "p0"
+        },
+        "log-mid": {
+          "objectId": "h5"
+        }
+      },
+      "assets": {
+        "serenity-large-platform": {
+          "type": "image",
+          "url": "/assets/serenity/largePlatform.webp"
+        },
+        "serenity-side-platform": {
+          "type": "image",
+          "url": "/assets/serenity/sidePlatform.webp"
+        },
+        "serenity-small-rock": {
+          "type": "image",
+          "url": "/assets/serenity/smallRock.webp"
+        },
+        "serenity-log-platform": {
+          "type": "image",
+          "url": "/assets/serenity/logPlatform.webp"
+        }
+      },
+      "powerups": {
+        "spawnIntervalMs": 25000,
+        "maxActive": 3,
+        "despawnMs": 10000,
+        "pickupRadius": 70,
+        "omenMs": 2000,
+        "spawnLift": 22,
+        "types": [
+          "rage",
+          "health",
+          "shield",
+          "poison",
+          "gravityBoots",
+          "invisibility",
+          "shockwave",
+          "freeze"
+        ]
+      },
+      "objectiveLayout": {},
+      "background": "/assets/serenity/gameBg.webp"
+    }
+  }
+}

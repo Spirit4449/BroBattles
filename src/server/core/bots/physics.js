@@ -1,3 +1,4 @@
+const { resolveShockwaveImpulse, SHOCKWAVE_MOMENTUM_MS } = require("../../../shared/shockwaveImpulse");
 const tuning = require("../../../shared/movementPhysics.json");
 const { characterBody } = require("../../../shared/duelGeometry");
 const { DUCK_SPEED_RATIO } = require("../../../shared/ducking");
@@ -22,7 +23,7 @@ function stepBody(p, intent, geometry, dtMs, now, modifiers = {}) {
   if (wasGrounded) { p._lastGroundTime = now; p._jumpConsumed = false; }
   const wallSide = p.wallSide;
   const canWallJump = wallSide && now >= (p._nextWallJump || 0) && !wasGrounded;
-  if (intent.jumpPressed && jumpMult > 0) {
+  if (intent.jumpPressed && jumpMult > 0 && now >= (p._knockbackUntil || 0)) {
     if (canWallJump) {
       p._jumpLaunch = null;
       const kick = wallSide === "left" ? 1 : -1;
@@ -93,6 +94,14 @@ function applyImpulse(player, impulse, now = Date.now()) {
   player._jumpLaunch = null;
   if (impulse.radial) { player.vx = Number(impulse.amountX) || 0; player.vy = Number(impulse.amountY) || 0; }
   else { player.vx = (Number(impulse.direction) || 1) * (Number(impulse.amountX) || 0); player.vy = -(Number(impulse.amountY) || 0); }
-  player._knockbackUntil = now + 180; player.grounded = false;
+  if (impulse.cause === "shockwave") {
+    const resolved = resolveShockwaveImpulse(player.vx, player.vy, {
+      down: player.grounded, left: player.wallSide === "left", right: player.wallSide === "right",
+    });
+    player.vx = resolved.x; player.vy = resolved.y;
+    player._slideSuppressedUntil = now + SHOCKWAVE_MOMENTUM_MS;
+  }
+  player._knockbackUntil = now + (impulse.cause === "shockwave" ? SHOCKWAVE_MOMENTUM_MS : 180);
+  player.grounded = false;
 }
 module.exports = { bounds, stepBody, applyImpulse };

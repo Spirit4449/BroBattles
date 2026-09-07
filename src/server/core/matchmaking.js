@@ -151,7 +151,10 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
               100;
             if (cohort >= config.rolloutPercent) continue;
             picks = pickGroup(
-              items.filter((t) => !claimedPreview.has(t.ticket_id)),
+              items.filter((t) =>
+                !claimedPreview.has(t.ticket_id) &&
+                (Number(t.mmr) <= 3000 || Date.now() - new Date(t.created_at).getTime() >= 20000),
+              ),
               teamSize,
               { partial: true, anchorId: anchor.ticket_id },
             );

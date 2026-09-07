@@ -106,6 +106,7 @@ async function buildGameDataForMatch({
     modeVariantId: selection.modeVariantId,
     selection,
     map: selection.mapId,
+    mapSnapshot: require("./mapRepository").mapRepository.forMatch(matchId, selection.mapId, selection.modeVariantId || participant.mode),
     yourName: user.name,
     isGuest: !!user.expires_at,
     isAdmin: typeof isAdminUser === "function" ? !!isAdminUser(user) : false,

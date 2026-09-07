@@ -64,12 +64,13 @@ function applyMovementVfxState(playerData, inputData) {
   );
 }
 
-function clampToRoomBounds(x, y) {
+function clampToRoomBounds(x, y, room = null) {
+  const world = room?.geometry?.world;
   const margin = Number(WORLD_BOUNDS?.margin) || 0;
-  const minX = -margin;
-  const maxX = Number(WORLD_BOUNDS?.width) + margin;
-  const minY = -margin;
-  const maxY = Number(WORLD_BOUNDS?.height) + margin;
+  const minX = (world?.x || 0) - margin;
+  const maxX = world ? world.x + world.width + margin : Number(WORLD_BOUNDS?.width) + margin;
+  const minY = (world?.y || 0) - margin;
+  const maxY = world ? world.y + world.height + margin : Number(WORLD_BOUNDS?.height) + margin;
   return {
     x: Math.max(minX, Math.min(maxX, Number(x) || 0)),
     y: Math.max(minY, Math.min(maxY, Number(y) || 0)),
@@ -193,15 +194,11 @@ function handlePlayerInput(room, socketId, inputData) {
     applyMovementVfxState(playerData, inputData);
     const prevInputX = Number(playerData.x);
     const prevInputY = Number(playerData.y);
-    const bounded = clampToRoomBounds(inputData.x, inputData.y);
+    const bounded = clampToRoomBounds(inputData.x, inputData.y, room);
     let rawX = bounded.x;
     const rawY = bounded.y;
-    const minX = -(Number(WORLD_BOUNDS?.margin) || 0);
-    const maxX =
-      Number(WORLD_BOUNDS?.width) + (Number(WORLD_BOUNDS?.margin) || 0);
-    const minY = -(Number(WORLD_BOUNDS?.margin) || 0);
-    const maxY =
-      Number(WORLD_BOUNDS?.height) + (Number(WORLD_BOUNDS?.margin) || 0);
+    const {x:minX, y:minY} = clampToRoomBounds(-Infinity, -Infinity, room);
+    const {x:maxX, y:maxY} = clampToRoomBounds(Infinity, Infinity, room);
     const dtMove = playerData.lastInput > 0 ? now - playerData.lastInput : 9999;
 
     const reportedVx = Number(inputData.vx);

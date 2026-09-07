@@ -98,7 +98,7 @@ export function createBankBustRuntime({
   const editorUi = ensureHostHtml();
 
   function getBaseLayout() {
-    return getMapObjectiveLayout(getGameData?.()?.map, "bankBust") || null;
+    return getGameData?.()?.mapSnapshot?.map?.objectiveLayout?.bankBust || getMapObjectiveLayout(getGameData?.()?.map, "bankBust") || null;
   }
 
   function getWorkingLayout() {

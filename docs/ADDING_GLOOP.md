@@ -32,7 +32,7 @@ Hit behavior: normal
 Special name: use a sensible default
 Special behavior: A hand comes out and pulls the enemy it catches to him. The hand travels outward and if it doesn't catch anyone in a certain range nothing happens. If it does, it pulls that person to them and they can't do anything while being pulled. Once they are pulled to gloop, they get slowed by 50%. The hand also has a visual effect of a blue slime trail. Have a nice blue effect trail for the hand.
 Special charge hits: 6
-Special charge damage requirement: 12000
+Special charge requirement: 6 hits; super attacks do not recharge the next super.
 Special damage or effect: Hand does 500 damage on hit
 Special duration/range/radius: use a sensible default
 Special asset: /asset/gloop/hand.webp

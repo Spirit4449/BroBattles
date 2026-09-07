@@ -1,3 +1,4 @@
+const { PICKUP_DELAY_MS } = require("../../../shared/pickupTiming");
 const {
   WORLD_BOUNDS,
   GAME_DURATION_MS,
@@ -17,6 +18,7 @@ const effectManager = require("./effects/effectManager");
 const { effectDefs } = require("./effects/effectDefs");
 
 function getPlatformSpawnPoints(room) {
+  if (room.geometry?.spawns?.powerups) return require("../../../shared/mapDocument").resolvePowerupPoints(room.geometry);
   const mapId = Number(room.matchData?.map) || 1;
   const raw = room.geometry?.spawns?.powerups || POWERUP_PLATFORM_POINTS[mapId] || POWERUP_PLATFORM_POINTS[1];
   const points =
@@ -140,8 +142,8 @@ function pickPowerupType(room, typeList, point = null) {
 
 function spawnPowerup(room) {
   if (room.status !== "active") return;
-  if (room._powerups.size >= POWERUP_MAX_ACTIVE) return;
-  const typeList =
+  if (room._powerups.size >= (room.geometry?.settings?.maxActive ?? POWERUP_MAX_ACTIVE)) return;
+  const typeList = room.geometry?.settings?.types ||
     Array.isArray(POWERUP_TYPE_ROTATION) && POWERUP_TYPE_ROTATION.length
       ? POWERUP_TYPE_ROTATION
     : [
@@ -161,29 +163,29 @@ function spawnPowerup(room) {
     );
     return;
   }
-  const type = pickPowerupType(room, typeList, point);
+  const type = pickPowerupType(room, point.type ? [point.type] : typeList, point);
   if (!type) return;
   const now = Date.now();
   const powerup = {
     id: room._nextPowerupId++,
     type,
     x: point.x,
-    y: point.y - POWERUP_SPAWN_Y_LIFT,
+    y: point.freePosition ? point.y : point.y - (room.geometry?.settings?.spawnLift ?? POWERUP_SPAWN_Y_LIFT),
     _spawnPointKey: point._spawnPointKey,
     spawnedAt: now,
-    activeAt: now + POWERUP_OMEN_MS,
-    expiresAt: now + POWERUP_OMEN_MS + POWERUP_DESPAWN_MS,
+    activeAt: now + (room.geometry?.settings?.omenMs ?? POWERUP_OMEN_MS),
+    expiresAt: now + (room.geometry?.settings?.omenMs ?? POWERUP_OMEN_MS) + (room.geometry?.settings?.despawnMs ?? POWERUP_DESPAWN_MS),
   };
   room._powerups.set(powerup.id, powerup);
 }
 
 function computePoisonY(room, sdElapsedMs) {
-  const worldBottomY = Number(WORLD_BOUNDS.height) || 1000;
+  const worldBottomY = room.geometry?.world ? room.geometry.world.y + room.geometry.world.height : Number(WORLD_BOUNDS.height) || 1000;
   const earlySec = Math.min(sdElapsedMs, SD_RISE_FAST_PHASE_MS) / 1000;
   const lateSec = Math.max(0, sdElapsedMs - SD_RISE_FAST_PHASE_MS) / 1000;
   const rise =
     earlySec * SD_RISE_SPEED * SD_RISE_FAST_MULT + lateSec * SD_RISE_SPEED;
-  return Math.max(0, worldBottomY - rise);
+  return Math.max(room.geometry?.world?.y || 0, worldBottomY - rise);
 }
 
 function isInSuddenDeathWater(room, playerData, nowTs) {
@@ -211,7 +213,7 @@ function tickPowerups(room) {
   if (room.status !== "active") return;
   const now = Date.now();
 
-  if (now - room._lastPowerupSpawnAt >= POWERUP_SPAWN_INTERVAL_MS) {
+  if (now - room._lastPowerupSpawnAt >= (room.geometry?.settings?.spawnIntervalMs ?? POWERUP_SPAWN_INTERVAL_MS)) {
     room._lastPowerupSpawnAt = now;
     spawnPowerup(room);
   }
@@ -221,12 +223,12 @@ function tickPowerups(room) {
       room._powerups.delete(id);
       continue;
     }
-    if (now < Number(pu.activeAt || 0)) continue;
+    if (now < Number(pu.activeAt ?? pu.spawnedAt ?? 0) + PICKUP_DELAY_MS) continue;
     for (const p of room.players.values()) {
       if (!p.isAlive || p.connected === false || p.loaded !== true) continue;
       const dx = (p.x || 0) - pu.x;
       const dy = (p.y || 0) - pu.y;
-      if (Math.hypot(dx, dy) > POWERUP_PICKUP_RADIUS) continue;
+      if (Math.hypot(dx, dy) > (room.geometry?.settings?.pickupRadius ?? POWERUP_PICKUP_RADIUS)) continue;
 
       applyPowerupToPlayer(room, p, pu.type, now);
       room._powerups.delete(id);

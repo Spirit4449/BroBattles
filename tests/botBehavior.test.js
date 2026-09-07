@@ -235,7 +235,7 @@ test('bots collect nearby death coins and gems through the authoritative reward 
   h.brain.openingUntil = 0;
   for (const [id, type, offset] of [[91, 'coin', 20], [92, 'gem', -20]]) {
     h.room._deathDrops.set(id, { id, type, value: 1, x: h.p.x + offset, y: h.p.y,
-      spawnX: h.p.x + offset, spawnY: h.p.y, spawnedAt: h.now(), expiresAt: h.now() + 10000,
+      spawnX: h.p.x + offset, spawnY: h.p.y, spawnedAt: h.now() - 500, expiresAt: h.now() + 10000,
       claimedBy: null });
   }
   h.think();

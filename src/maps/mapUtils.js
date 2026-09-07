@@ -267,7 +267,14 @@ function createConfiguredPlatform(scene, row) {
   const y = Number(row?.y);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
 
-  const sprite = scene.physics.add.sprite(x, y, key);
+  const sprite = scene.physics.add.sprite(x, y, key, row.frame);
+  return configureMapPlatform(sprite,row);
+}
+
+export function configureMapPlatform(sprite,row) {
+  sprite.setTexture(row.textureKey,row.frame);
+  sprite.setPosition(row.x,row.y);
+  sprite.body.enable = row.collisionEnabled !== false;
   sprite.body.allowGravity = false;
   sprite.setImmovable(true);
   sprite.setScale(Number(row?.scaleX) || 1, Number(row?.scaleY) || 1);
@@ -277,22 +284,18 @@ function createConfiguredPlatform(scene, row) {
     sprite.body.updateFromGameObject();
   }
 
-  const bw = Number(row?.body?.width);
-  const bh = Number(row?.body?.height);
-  if (
-    sprite.body &&
-    Number.isFinite(bw) &&
-    Number.isFinite(bh) &&
-    bw > 0 &&
-    bh > 0
-  ) {
-    setSpriteBodySizeFromDisplaySize(sprite, bw, bh);
-  }
+  const bw = Number(row?.body?.width) || sprite.displayWidth;
+  const bh = Number(row?.body?.height) || sprite.displayHeight;
+  setSpriteBodySizeFromDisplaySize(sprite, bw, bh);
   const ox = Number(row?.body?.offsetX);
   const oy = Number(row?.body?.offsetY);
-  if (sprite.body && Number.isFinite(ox) && Number.isFinite(oy)) {
-    sprite.body.setOffset(ox, oy);
-  }
+  // The shared geometry contract measures offsets from the artwork's top left.
+  sprite.body.setOffset(Number.isFinite(ox) ? ox : 0, Number.isFinite(oy) ? oy : 0);
+  sprite._mapObjectId = row.id;
+  sprite.setDepth(Number(row.depth) || 0);
+  sprite.setAlpha(row.alpha ?? 1);
+  sprite.setFlipY(!!row.flipY);
+  for (const side of ['up','down','left','right']) sprite.body.checkCollision[side] = row.collision?.[side] !== false;
   if (row.collisionEnabled === false) sprite.body.enable = false;
   sprite.body.updateFromGameObject();
   return sprite;
@@ -309,6 +312,8 @@ function createConfiguredBoundary(scene, row) {
 
   const zone = scene.add.zone(x, y, w, h);
   scene.physics.add.existing(zone, true);
+  zone._mapObjectId = row.id;
+  zone.body.enable = row.collisionEnabled !== false;
   zone.body.checkCollision.up = row?.collision?.up !== false;
   zone.body.checkCollision.down = row?.collision?.down !== false;
   zone.body.checkCollision.left = row?.collision?.left !== false;

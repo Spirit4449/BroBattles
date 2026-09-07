@@ -48,7 +48,7 @@ function initializeSpawnPositions(room) {
   for (const p of room.players.values()) {
     const spawnIndex = computeSpawnIndex(room, p.name, p.team);
     p.spawnIndex = spawnIndex;
-    const geometry = getDuelGeometry(room.matchData.map);
+    const geometry = room.geometry || getDuelGeometry(room.matchData.map);
     if (geometry) {
       const teamSize = room.matchData.players.filter(mp => mp.team === p.team).length;
       Object.assign(p, spawnForParticipant(geometry, p, spawnIndex, teamSize), { vx: 0, vy: 0, grounded: true });

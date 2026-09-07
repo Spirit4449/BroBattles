@@ -1,0 +1,1178 @@
+{
+  "schemaVersion": 1,
+  "id": 2,
+  "label": "Mangrove Meadow",
+  "metadata": {
+    "id": 2,
+    "key": "mangrove-meadow",
+    "terrain": "grass",
+    "label": "Mangrove Meadow",
+    "compatibleModeIds": [
+      "duels"
+    ],
+    "compatibleVariantIds": [
+      "duels-1v1",
+      "duels-2v2",
+      "duels-3v3"
+    ],
+    "musicAsset": "/assets/mangrove/mangrove_main.mp3",
+    "musicVolume": 0.11,
+    "mapSelectPreviewAsset": "/assets/mangrove/gameBg.webp",
+    "lobbyBgAsset": "/assets/mangrove/lobbyBg.webp",
+    "lobbyPlatformAsset": "/assets/mangrove/lobbyPlatform.webp"
+  },
+  "variants": {
+    "1v1": {
+      "layout": {
+        "platforms": [
+          {
+            "textureKey": "mangrove-base-middle",
+            "x": 1150,
+            "y": 750,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "width": 613,
+              "height": 230,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "id": "p0"
+          },
+          {
+            "textureKey": "mangrove-base-top",
+            "x": 1150,
+            "y": 559,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "width": 150,
+              "height": 210,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "id": "p1"
+          },
+          {
+            "textureKey": "mangrove-base-left",
+            "x": 730,
+            "y": 786,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "width": 230,
+              "height": 150,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "id": "p2"
+          },
+          {
+            "textureKey": "mangrove-base-right",
+            "x": 1572,
+            "y": 787,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "width": 230,
+              "height": 150,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "id": "p3"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 843,
+            "y": 467,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p4"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 1457,
+            "y": 463,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p5"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 615,
+            "y": 289,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p6"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 1665,
+            "y": 292,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p7"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 971,
+            "y": 160,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p8"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 1329,
+            "y": 160,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p9"
+          }
+        ],
+        "hitboxes": []
+      },
+      "spawns": {
+        "players": {
+          "team1": {
+            "1": [
+              {
+                "anchorId": "p7",
+                "dx": -33.40000000000009
+              }
+            ],
+            "2": [
+              {
+                "anchorId": "p5",
+                "dx": -2.400000000000091
+              },
+              {
+                "anchorId": "p8",
+                "dx": 31.59999999999991
+              }
+            ],
+            "3": [
+              {
+                "anchorId": "p7",
+                "dx": -35.40000000000009
+              },
+              {
+                "anchorId": "p8",
+                "dx": 31.59999999999991
+              },
+              {
+                "anchorId": "p9",
+                "dx": -32.40000000000009
+              }
+            ]
+          },
+          "team2": {
+            "1": [
+              {
+                "anchorId": "p4",
+                "dx": -7.399999999999977
+              }
+            ],
+            "2": [
+              {
+                "anchorId": "p4",
+                "dx": -4.399999999999977
+              },
+              {
+                "anchorId": "p9",
+                "dx": -30.40000000000009
+              }
+            ],
+            "3": [
+              {
+                "anchorId": "p4",
+                "dx": -1.3999999999999773
+              },
+              {
+                "anchorId": "p5",
+                "dx": -1.400000000000091
+              },
+              {
+                "anchorId": "p6",
+                "dx": 54.60000000000002
+              }
+            ]
+          }
+        },
+        "powerups": [
+          {
+            "id": "powerup-0",
+            "x": 1007,
+            "y": 611
+          },
+          {
+            "id": "powerup-1",
+            "x": 1147,
+            "y": 458
+          },
+          {
+            "id": "powerup-2",
+            "x": 1292,
+            "y": 611
+          },
+          {
+            "id": "powerup-3",
+            "x": 725,
+            "y": 685
+          },
+          {
+            "id": "powerup-4",
+            "x": 1664,
+            "y": 244
+          },
+          {
+            "id": "powerup-5",
+            "x": 870,
+            "y": 419
+          },
+          {
+            "id": "powerup-6",
+            "x": 611,
+            "y": 241
+          },
+          {
+            "id": "powerup-7",
+            "x": 703,
+            "y": 241
+          },
+          {
+            "id": "powerup-8",
+            "x": 1580,
+            "y": 244
+          },
+          {
+            "id": "powerup-9",
+            "x": 1008,
+            "y": 112
+          },
+          {
+            "id": "powerup-10",
+            "x": 1295,
+            "y": 112
+          }
+        ]
+      },
+      "bounds": {
+        "world": {
+          "x": 0,
+          "y": 0,
+          "width": 2300,
+          "height": 1000
+        },
+        "camera": {
+          "x": 0,
+          "y": -40,
+          "width": 2300,
+          "height": 1000,
+          "zoom": 1.7,
+          "deadzoneWidth": 50,
+          "deadzoneHeight": 50,
+          "followOffsetY": 120
+        }
+      },
+      "textureSizes": {
+        "mangrove-base-middle": {
+          "width": 1024,
+          "height": 384
+        },
+        "mangrove-base-top": {
+          "width": 256,
+          "height": 256
+        },
+        "mangrove-base-left": {
+          "width": 384,
+          "height": 256
+        },
+        "mangrove-base-right": {
+          "width": 384,
+          "height": 256
+        },
+        "mangrove-tiny-platform": {
+          "width": 638,
+          "height": 300
+        }
+      },
+      "anchors": {
+        "tiny-0": {
+          "objectId": "p4"
+        },
+        "tiny-1": {
+          "objectId": "p5"
+        },
+        "tiny-2": {
+          "objectId": "p6"
+        },
+        "tiny-3": {
+          "objectId": "p7"
+        },
+        "tiny-4": {
+          "objectId": "p8"
+        },
+        "tiny-5": {
+          "objectId": "p9"
+        }
+      },
+      "assets": {
+        "mangrove-base-middle": {
+          "type": "image",
+          "url": "/assets/mangrove/baseMiddle.webp"
+        },
+        "mangrove-base-top": {
+          "type": "image",
+          "url": "/assets/mangrove/baseTop.webp"
+        },
+        "mangrove-base-left": {
+          "type": "image",
+          "url": "/assets/mangrove/baseLeft.webp"
+        },
+        "mangrove-base-right": {
+          "type": "image",
+          "url": "/assets/mangrove/baseRight.webp"
+        },
+        "mangrove-tiny-platform": {
+          "type": "image",
+          "url": "/assets/mangrove/lobbyPlatform.webp"
+        }
+      },
+      "powerups": {
+        "spawnIntervalMs": 25000,
+        "maxActive": 3,
+        "despawnMs": 10000,
+        "pickupRadius": 70,
+        "omenMs": 2000,
+        "spawnLift": 22,
+        "types": [
+          "rage",
+          "health",
+          "shield",
+          "poison",
+          "gravityBoots",
+          "invisibility",
+          "shockwave",
+          "freeze"
+        ]
+      },
+      "objectiveLayout": {},
+      "background": "/assets/mangrove/gameBg.webp"
+    },
+    "2v2": {
+      "layout": {
+        "platforms": [
+          {
+            "textureKey": "mangrove-base-middle",
+            "x": 1150,
+            "y": 750,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "width": 613,
+              "height": 230,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "id": "p0"
+          },
+          {
+            "textureKey": "mangrove-base-top",
+            "x": 1150,
+            "y": 559,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "width": 150,
+              "height": 210,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "id": "p1"
+          },
+          {
+            "textureKey": "mangrove-base-left",
+            "x": 730,
+            "y": 786,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "width": 230,
+              "height": 150,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "id": "p2"
+          },
+          {
+            "textureKey": "mangrove-base-right",
+            "x": 1572,
+            "y": 787,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "width": 230,
+              "height": 150,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "id": "p3"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 843,
+            "y": 467,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p4"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 1457,
+            "y": 463,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p5"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 615,
+            "y": 289,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p6"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 1665,
+            "y": 292,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p7"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 971,
+            "y": 160,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p8"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 1329,
+            "y": 160,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p9"
+          }
+        ],
+        "hitboxes": []
+      },
+      "spawns": {
+        "players": {
+          "team1": {
+            "1": [
+              {
+                "anchorId": "p7",
+                "dx": -33.40000000000009
+              }
+            ],
+            "2": [
+              {
+                "anchorId": "p5",
+                "dx": -2.400000000000091
+              },
+              {
+                "anchorId": "p8",
+                "dx": 31.59999999999991
+              }
+            ],
+            "3": [
+              {
+                "anchorId": "p7",
+                "dx": -35.40000000000009
+              },
+              {
+                "anchorId": "p8",
+                "dx": 31.59999999999991
+              },
+              {
+                "anchorId": "p9",
+                "dx": -32.40000000000009
+              }
+            ]
+          },
+          "team2": {
+            "1": [
+              {
+                "anchorId": "p4",
+                "dx": -7.399999999999977
+              }
+            ],
+            "2": [
+              {
+                "anchorId": "p4",
+                "dx": -4.399999999999977
+              },
+              {
+                "anchorId": "p9",
+                "dx": -30.40000000000009
+              }
+            ],
+            "3": [
+              {
+                "anchorId": "p4",
+                "dx": -1.3999999999999773
+              },
+              {
+                "anchorId": "p5",
+                "dx": -1.400000000000091
+              },
+              {
+                "anchorId": "p6",
+                "dx": 54.60000000000002
+              }
+            ]
+          }
+        },
+        "powerups": [
+          {
+            "id": "powerup-0",
+            "x": 1007,
+            "y": 611
+          },
+          {
+            "id": "powerup-1",
+            "x": 1147,
+            "y": 458
+          },
+          {
+            "id": "powerup-2",
+            "x": 1292,
+            "y": 611
+          },
+          {
+            "id": "powerup-3",
+            "x": 725,
+            "y": 685
+          },
+          {
+            "id": "powerup-4",
+            "x": 1664,
+            "y": 244
+          },
+          {
+            "id": "powerup-5",
+            "x": 870,
+            "y": 419
+          },
+          {
+            "id": "powerup-6",
+            "x": 611,
+            "y": 241
+          },
+          {
+            "id": "powerup-7",
+            "x": 703,
+            "y": 241
+          },
+          {
+            "id": "powerup-8",
+            "x": 1580,
+            "y": 244
+          },
+          {
+            "id": "powerup-9",
+            "x": 1008,
+            "y": 112
+          },
+          {
+            "id": "powerup-10",
+            "x": 1295,
+            "y": 112
+          }
+        ]
+      },
+      "bounds": {
+        "world": {
+          "x": 0,
+          "y": 0,
+          "width": 2300,
+          "height": 1000
+        },
+        "camera": {
+          "x": 0,
+          "y": -40,
+          "width": 2300,
+          "height": 1000,
+          "zoom": 1.7,
+          "deadzoneWidth": 50,
+          "deadzoneHeight": 50,
+          "followOffsetY": 120
+        }
+      },
+      "textureSizes": {
+        "mangrove-base-middle": {
+          "width": 1024,
+          "height": 384
+        },
+        "mangrove-base-top": {
+          "width": 256,
+          "height": 256
+        },
+        "mangrove-base-left": {
+          "width": 384,
+          "height": 256
+        },
+        "mangrove-base-right": {
+          "width": 384,
+          "height": 256
+        },
+        "mangrove-tiny-platform": {
+          "width": 638,
+          "height": 300
+        }
+      },
+      "anchors": {
+        "tiny-0": {
+          "objectId": "p4"
+        },
+        "tiny-1": {
+          "objectId": "p5"
+        },
+        "tiny-2": {
+          "objectId": "p6"
+        },
+        "tiny-3": {
+          "objectId": "p7"
+        },
+        "tiny-4": {
+          "objectId": "p8"
+        },
+        "tiny-5": {
+          "objectId": "p9"
+        }
+      },
+      "assets": {
+        "mangrove-base-middle": {
+          "type": "image",
+          "url": "/assets/mangrove/baseMiddle.webp"
+        },
+        "mangrove-base-top": {
+          "type": "image",
+          "url": "/assets/mangrove/baseTop.webp"
+        },
+        "mangrove-base-left": {
+          "type": "image",
+          "url": "/assets/mangrove/baseLeft.webp"
+        },
+        "mangrove-base-right": {
+          "type": "image",
+          "url": "/assets/mangrove/baseRight.webp"
+        },
+        "mangrove-tiny-platform": {
+          "type": "image",
+          "url": "/assets/mangrove/lobbyPlatform.webp"
+        }
+      },
+      "powerups": {
+        "spawnIntervalMs": 25000,
+        "maxActive": 3,
+        "despawnMs": 10000,
+        "pickupRadius": 70,
+        "omenMs": 2000,
+        "spawnLift": 22,
+        "types": [
+          "rage",
+          "health",
+          "shield",
+          "poison",
+          "gravityBoots",
+          "invisibility",
+          "shockwave",
+          "freeze"
+        ]
+      },
+      "objectiveLayout": {},
+      "background": "/assets/mangrove/gameBg.webp"
+    },
+    "3v3": {
+      "layout": {
+        "platforms": [
+          {
+            "textureKey": "mangrove-base-middle",
+            "x": 1150,
+            "y": 750,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "width": 613,
+              "height": 230,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "id": "p0"
+          },
+          {
+            "textureKey": "mangrove-base-top",
+            "x": 1150,
+            "y": 559,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "width": 150,
+              "height": 210,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "id": "p1"
+          },
+          {
+            "textureKey": "mangrove-base-left",
+            "x": 730,
+            "y": 786,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "width": 230,
+              "height": 150,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "id": "p2"
+          },
+          {
+            "textureKey": "mangrove-base-right",
+            "x": 1572,
+            "y": 787,
+            "scaleX": 0.6,
+            "scaleY": 0.6,
+            "flipX": false,
+            "body": {
+              "width": 230,
+              "height": 150,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            "id": "p3"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 843,
+            "y": 467,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p4"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 1457,
+            "y": 463,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p5"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 615,
+            "y": 289,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p6"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 1665,
+            "y": 292,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p7"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 971,
+            "y": 160,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p8"
+          },
+          {
+            "textureKey": "mangrove-tiny-platform",
+            "x": 1329,
+            "y": 160,
+            "scaleX": 0.4,
+            "scaleY": 0.4,
+            "flipX": false,
+            "body": {
+              "width": 210,
+              "height": 40,
+              "offsetX": 60,
+              "offsetY": 90
+            },
+            "id": "p9"
+          }
+        ],
+        "hitboxes": []
+      },
+      "spawns": {
+        "players": {
+          "team1": {
+            "1": [
+              {
+                "anchorId": "p7",
+                "dx": -33.40000000000009
+              }
+            ],
+            "2": [
+              {
+                "anchorId": "p5",
+                "dx": -2.400000000000091
+              },
+              {
+                "anchorId": "p8",
+                "dx": 31.59999999999991
+              }
+            ],
+            "3": [
+              {
+                "anchorId": "p7",
+                "dx": -35.40000000000009
+              },
+              {
+                "anchorId": "p8",
+                "dx": 31.59999999999991
+              },
+              {
+                "anchorId": "p9",
+                "dx": -32.40000000000009
+              }
+            ]
+          },
+          "team2": {
+            "1": [
+              {
+                "anchorId": "p4",
+                "dx": -7.399999999999977
+              }
+            ],
+            "2": [
+              {
+                "anchorId": "p4",
+                "dx": -4.399999999999977
+              },
+              {
+                "anchorId": "p9",
+                "dx": -30.40000000000009
+              }
+            ],
+            "3": [
+              {
+                "anchorId": "p4",
+                "dx": -1.3999999999999773
+              },
+              {
+                "anchorId": "p5",
+                "dx": -1.400000000000091
+              },
+              {
+                "anchorId": "p6",
+                "dx": 54.60000000000002
+              }
+            ]
+          }
+        },
+        "powerups": [
+          {
+            "id": "powerup-0",
+            "x": 1007,
+            "y": 611
+          },
+          {
+            "id": "powerup-1",
+            "x": 1147,
+            "y": 458
+          },
+          {
+            "id": "powerup-2",
+            "x": 1292,
+            "y": 611
+          },
+          {
+            "id": "powerup-3",
+            "x": 725,
+            "y": 685
+          },
+          {
+            "id": "powerup-4",
+            "x": 1664,
+            "y": 244
+          },
+          {
+            "id": "powerup-5",
+            "x": 870,
+            "y": 419
+          },
+          {
+            "id": "powerup-6",
+            "x": 611,
+            "y": 241
+          },
+          {
+            "id": "powerup-7",
+            "x": 703,
+            "y": 241
+          },
+          {
+            "id": "powerup-8",
+            "x": 1580,
+            "y": 244
+          },
+          {
+            "id": "powerup-9",
+            "x": 1008,
+            "y": 112
+          },
+          {
+            "id": "powerup-10",
+            "x": 1295,
+            "y": 112
+          }
+        ]
+      },
+      "bounds": {
+        "world": {
+          "x": 0,
+          "y": 0,
+          "width": 2300,
+          "height": 1000
+        },
+        "camera": {
+          "x": 0,
+          "y": -40,
+          "width": 2300,
+          "height": 1000,
+          "zoom": 1.7,
+          "deadzoneWidth": 50,
+          "deadzoneHeight": 50,
+          "followOffsetY": 120
+        }
+      },
+      "textureSizes": {
+        "mangrove-base-middle": {
+          "width": 1024,
+          "height": 384
+        },
+        "mangrove-base-top": {
+          "width": 256,
+          "height": 256
+        },
+        "mangrove-base-left": {
+          "width": 384,
+          "height": 256
+        },
+        "mangrove-base-right": {
+          "width": 384,
+          "height": 256
+        },
+        "mangrove-tiny-platform": {
+          "width": 638,
+          "height": 300
+        }
+      },
+      "anchors": {
+        "tiny-0": {
+          "objectId": "p4"
+        },
+        "tiny-1": {
+          "objectId": "p5"
+        },
+        "tiny-2": {
+          "objectId": "p6"
+        },
+        "tiny-3": {
+          "objectId": "p7"
+        },
+        "tiny-4": {
+          "objectId": "p8"
+        },
+        "tiny-5": {
+          "objectId": "p9"
+        }
+      },
+      "assets": {
+        "mangrove-base-middle": {
+          "type": "image",
+          "url": "/assets/mangrove/baseMiddle.webp"
+        },
+        "mangrove-base-top": {
+          "type": "image",
+          "url": "/assets/mangrove/baseTop.webp"
+        },
+        "mangrove-base-left": {
+          "type": "image",
+          "url": "/assets/mangrove/baseLeft.webp"
+        },
+        "mangrove-base-right": {
+          "type": "image",
+          "url": "/assets/mangrove/baseRight.webp"
+        },
+        "mangrove-tiny-platform": {
+          "type": "image",
+          "url": "/assets/mangrove/lobbyPlatform.webp"
+        }
+      },
+      "powerups": {
+        "spawnIntervalMs": 25000,
+        "maxActive": 3,
+        "despawnMs": 10000,
+        "pickupRadius": 70,
+        "omenMs": 2000,
+        "spawnLift": 22,
+        "types": [
+          "rage",
+          "health",
+          "shield",
+          "poison",
+          "gravityBoots",
+          "invisibility",
+          "shockwave",
+          "freeze"
+        ]
+      },
+      "objectiveLayout": {},
+      "background": "/assets/mangrove/gameBg.webp"
+    }
+  }
+}

@@ -22,6 +22,7 @@ const DEFAULT_AIM_CONFIG = Object.freeze({
   anchorForwardOffset: 24,
   anchorOffsetY: -6,
   reticleThickness: 18,
+  reticlePathOffsetY: 0,
   angleMode: "free",
   minSpeedScale: 1,
   maxSpeedScale: 1,
@@ -98,6 +99,17 @@ function lerp(a, b, t) {
   return start + (end - start) * clamp(t, 0, 1);
 }
 
+function getPolylineLength(points = []) {
+  let length = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    length += Math.hypot(
+      Number(points[i]?.x) - Number(points[i - 1]?.x),
+      Number(points[i]?.y) - Number(points[i - 1]?.y),
+    );
+  }
+  return length;
+}
+
 function normalizeAngle(angle, fallback = 0) {
   const n = Number(angle);
   return Number.isFinite(n) ? n : fallback;
@@ -105,6 +117,24 @@ function normalizeAngle(angle, fallback = 0) {
 
 function getDefaultFacingAngle(player) {
   return player?.flipX ? Math.PI : 0;
+}
+
+// Select a side only: opponent height and distance never steer the trajectory.
+function getNearestOpponentDirection(player, opponents = {}) {
+  let direction = player?.flipX ? -1 : 1;
+  let nearest = Infinity;
+  for (const entry of Object.values(opponents || {})) {
+    const target = entry?.opponent;
+    if (!target || target === player || target.active === false || target.visible === false ||
+        entry.opCurrentHealth <= 0 || entry._deathPresentationActive || entry._powerupInvisible) continue;
+    const dx = target.x - player.x;
+    const dy = target.y - player.y;
+    const distance = dx * dx + dy * dy;
+    if (!Number.isFinite(distance) || distance >= nearest) continue;
+    nearest = distance;
+    direction = dx < 0 ? -1 : dx > 0 ? 1 : (player?.flipX ? -1 : 1);
+  }
+  return direction;
 }
 
 function isSpecialFamily(family) {
@@ -411,9 +441,11 @@ function resolveAttackAimContext({
   pointerWorldY = null,
   quick = false,
   quickUsesPointerAngle = false,
+  quickFacingDirection = null,
 } = {}) {
   const config = getAimConfig(character, family);
-  const defaultAngle = getDefaultFacingAngle(player);
+  const defaultAngle = quick && (quickFacingDirection === -1 || quickFacingDirection === 1)
+    ? (quickFacingDirection < 0 ? Math.PI : 0) : getDefaultFacingAngle(player);
   if (character === "gloop" && !isSpecialFamily(family)) {
     const cfg = getAimTuning(character, config, family);
     const x = Number(player?.x) || 0, y = Number(player?.y) || 0;
@@ -431,9 +463,28 @@ function resolveAttackAimContext({
     const bounds = scene?.physics?.world?.bounds;
     const rects = (scene?._mapObjects || []).map(o => o.body || o).filter(b => b.enable !== false)
       .map(b => ({ left: b.left, right: b.right, top: b.top, bottom: b.bottom }));
-    const throwPreview = sampleSlimePath(launch, { ...cfg,
+    const previewConfig = { ...cfg,
       floorY: bounds ? bounds.y + bounds.height : 1000,
-      worldMinX: bounds?.x ?? -400, worldMaxX: bounds ? bounds.x + bounds.width : 4000 }, rects, { stopAtFirstImpact: true });
+      worldMinX: bounds?.x ?? -400,
+      worldMaxX: bounds ? bounds.x + bounds.width : 4000,
+    };
+    const firstImpactPreview = sampleSlimePath(
+      launch,
+      previewConfig,
+      rects,
+      { stopAtFirstImpact: true },
+    );
+    const bounceThreshold = Math.max(
+      0,
+      Number(config.previewBounceThreshold) || 0,
+    );
+    const throwPreview =
+      bounceThreshold > 0 &&
+      getPolylineLength(firstImpactPreview.points) < bounceThreshold
+        ? sampleSlimePath(launch, previewConfig, rects, {
+            stopAtFirstImpact: false,
+          })
+        : firstImpactPreview;
     return { character, family: "basic", kind: "throw", config, quick, paletteKey: "basic",
       ...launch, targetX: target.x, targetY: target.y, pointerWorldX: target.x, pointerWorldY: target.y,
       baseX: x, baseY: y, anchorX: launch.start.x, anchorY: launch.start.y,
@@ -632,4 +683,5 @@ module.exports = {
   buildThrowArcGeometry,
   sampleThrowArcPoint,
   resolveAttackAimContext,
+  getNearestOpponentDirection,
 };

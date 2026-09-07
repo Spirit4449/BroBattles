@@ -56,12 +56,12 @@ function createAbuseControlService({ db, io }) {
     );
   }
 
-  function markBucketAndGetCount(key, windowMs, now = Date.now()) {
+  function markBucketAndGetCount(key, windowMs, now = Date.now(), mark = true) {
     let bucket = requestWindows.get(key);
     if (!Array.isArray(bucket)) bucket = [];
     const floor = now - windowMs;
     while (bucket.length && bucket[0] <= floor) bucket.shift();
-    bucket.push(now);
+    if (mark) bucket.push(now);
     requestWindows.set(key, bucket);
     return bucket.length;
   }
@@ -504,6 +504,7 @@ function createAbuseControlService({ db, io }) {
     windowMs,
     anonLimit,
     enforceActiveSuspension = true,
+    countFailuresOnly = false,
   }) {
     const now = Date.now();
 
@@ -555,11 +556,13 @@ function createAbuseControlService({ db, io }) {
       ? Number(limit)
       : Number(anonLimit || limit || 1);
     const count = markBucketAndGetCount(
-      `http:${identityKey}`,
+      countFailuresOnly ? `http:failures:${source}:${identityKey}` : `http:${identityKey}`,
       Number(windowMs) || 10000,
       now,
+      !countFailuresOnly,
     );
-    if (count <= Math.max(1, appliedLimit || 1)) {
+    const threshold = Math.max(1, appliedLimit || 1);
+    if (countFailuresOnly ? count < threshold : count <= threshold) {
       return { allowed: true, count };
     }
 
@@ -571,6 +574,13 @@ function createAbuseControlService({ db, io }) {
       };
     }
     return applyHttpViolation({ userId, source });
+  }
+
+  function recordHttpFailure({ identityKey, source, windowMs }) {
+    markBucketAndGetCount(
+      `http:failures:${source}:${identityKey}`,
+      Number(windowMs) || 10000,
+    );
   }
 
   async function getActivePenaltyState(userId) {
@@ -588,6 +598,7 @@ function createAbuseControlService({ db, io }) {
   return {
     ensureSchema,
     guardChatAction,
+    recordHttpFailure,
     guardHttpAction,
     getActivePenaltyState,
   };

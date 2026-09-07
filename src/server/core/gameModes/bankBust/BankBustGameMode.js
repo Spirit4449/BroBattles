@@ -1,3 +1,4 @@
+const { PICKUP_DELAY_MS } = require("../../../../shared/pickupTiming");
 const { BaseGameMode } = require("../BaseGameMode");
 const {
   getMapObjectiveLayout,
@@ -141,7 +142,7 @@ class BankBustGameMode extends BaseGameMode {
   }
 
   getLayout() {
-    return getMapObjectiveLayout(this.room?.matchData?.map, "bankBust") || null;
+    return this.room?.mapSnapshot?.map?.objectiveLayout?.bankBust || getMapObjectiveLayout(this.room?.matchData?.map, "bankBust") || null;
   }
 
   getMatchDurationMs() {
@@ -198,7 +199,7 @@ class BankBustGameMode extends BaseGameMode {
 
   getRespawnPlan(playerData) {
     const { getDuelGeometry, spawnForParticipant } = require('../../../../shared/duelGeometry');
-    const geometry = getDuelGeometry(this.room?.matchData?.map);
+    const geometry = this.room?.geometry || getDuelGeometry(this.room?.matchData?.map);
     const state = this.getModeState();
     const layout = this.getLayout();
     const respawn = layout?.respawnPoints?.[playerData?.team] || null;
@@ -595,6 +596,10 @@ class BankBustGameMode extends BaseGameMode {
     const players = this._eligiblePlayers();
     const remaining = [];
     for (const pickup of randomGold.pickups) {
+      if (now < Number(pickup.spawnedAt ?? 0) + PICKUP_DELAY_MS) {
+        remaining.push(pickup);
+        continue;
+      }
       let collected = false;
       for (const player of players) {
         const dist = distance(player.x, player.y, pickup.x, pickup.y);

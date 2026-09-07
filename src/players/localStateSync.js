@@ -47,10 +47,10 @@ export function createLocalStateSync({
       );
     }
     if (typeof state.superCharge === "number") {
-      setSuperCharge(Math.max(0, Math.round(state.superCharge)));
+      setSuperCharge(Math.max(0, state.superCharge));
     }
     if (typeof state.maxSuperCharge === "number" && state.maxSuperCharge > 0) {
-      setMaxSuperCharge(Math.round(state.maxSuperCharge));
+      setMaxSuperCharge(state.maxSuperCharge);
     }
 
     const ammo = state.ammoState;

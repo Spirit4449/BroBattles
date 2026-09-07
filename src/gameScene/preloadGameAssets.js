@@ -8,111 +8,112 @@ export function preloadGameAssets({
   powerupAssetDir,
   preloadAllCharacters,
 }) {
+  const loadImage = (key, ...args) => { if (!scene._mapAssetKeys?.has(key)) scene.load.image(key,...args); };
   // Character assets (preload all registered characters)
   preloadAllCharacters(scene, staticPath);
 
-  scene.load.image("tiles-image", `${staticPath}/map.webp`);
+  loadImage("tiles-image", `${staticPath}/map.webp`);
   scene.load.tilemapTiledJSON("tiles", `${staticPath}/tilesheet.json`);
-  scene.load.image("lushy-base", `${staticPath}/lushy/base.webp`);
-  scene.load.image("lushy-platform", `${staticPath}/lushy/largePlatform.webp`);
-  scene.load.image(
+  loadImage("lushy-base", `${staticPath}/lushy/base.webp`);
+  loadImage("lushy-platform", `${staticPath}/lushy/largePlatform.webp`);
+  loadImage(
     "lushy-side-platform",
     `${staticPath}/lushy/sidePlatform.webp`,
   );
-  scene.load.image(
+  loadImage(
     "mangrove-tiny-platform",
     `${staticPath}/mangrove/lobbyPlatform.webp`,
   );
-  scene.load.image(
+  loadImage(
     "mangrove-lobby-platform",
     `${staticPath}/mangrove/lobbyPlatform.webp`,
   );
-  scene.load.image(
+  loadImage(
     "mangrove-base-left",
     `${staticPath}/mangrove/baseLeft.webp`,
   );
-  scene.load.image(
+  loadImage(
     "mangrove-base-middle",
     `${staticPath}/mangrove/baseMiddle.webp`,
   );
-  scene.load.image(
+  loadImage(
     "mangrove-base-right",
     `${staticPath}/mangrove/baseRight.webp`,
   );
-  scene.load.image("mangrove-base-top", `${staticPath}/mangrove/baseTop.webp`);
-  scene.load.image(
+  loadImage("mangrove-base-top", `${staticPath}/mangrove/baseTop.webp`);
+  loadImage(
     "serenity-large-platform",
     `${staticPath}/serenity/largePlatform.webp`,
   );
-  scene.load.image(
+  loadImage(
     "serenity-side-platform",
     `${staticPath}/serenity/sidePlatform.webp`,
   );
-  scene.load.image(
+  loadImage(
     "serenity-log-platform",
     `${staticPath}/serenity/logPlatform.webp`,
   );
-  scene.load.image(
+  loadImage(
     "serenity-small-rock",
     `${staticPath}/serenity/smallRock.webp`,
   );
-  scene.load.image("deathdrop-coin", `${staticPath}/coin.webp`);
-  scene.load.image("deathdrop-gem", `${staticPath}/gem.webp`);
-  scene.load.image("spectate-icon", `${staticPath}/spectate.webp`);
+  loadImage("deathdrop-coin", `${staticPath}/coin.webp`);
+  loadImage("deathdrop-gem", `${staticPath}/gem.webp`);
+  loadImage("spectate-icon", `${staticPath}/spectate.webp`);
   for (let i = 1; i <= 3; i++) {
-    scene.load.image(`tombstone-${i}`, `${staticPath}/tombstone-${i}.webp`);
+    loadImage(`tombstone-${i}`, `${staticPath}/tombstone-${i}.webp`);
   }
-  scene.load.image("bank-bust-vault", `${staticPath}/bank-bust/vault.webp`);
-  scene.load.image("bank-bust-base", `${staticPath}/bank-bust/base.webp`);
-  scene.load.image("bank-bust-topcase", `${staticPath}/bank-bust/topcase.webp`);
-  scene.load.image(
+  loadImage("bank-bust-vault", `${staticPath}/bank-bust/vault.webp`);
+  loadImage("bank-bust-base", `${staticPath}/bank-bust/base.webp`);
+  loadImage("bank-bust-topcase", `${staticPath}/bank-bust/topcase.webp`);
+  loadImage(
     "bank-bust-staircase",
     `${staticPath}/bank-bust/staircase.webp`,
   );
-  scene.load.image("bank-bust-middle", `${staticPath}/bank-bust/middle.webp`);
-  scene.load.image(
+  loadImage("bank-bust-middle", `${staticPath}/bank-bust/middle.webp`);
+  loadImage(
     "bank-bust-middlebottom",
     `${staticPath}/bank-bust/middlebottom.webp`,
   );
-  scene.load.image(
+  loadImage(
     "bank-bust-middledetail",
     `${staticPath}/bank-bust/middledetail.webp`,
   );
-  scene.load.image(
+  loadImage(
     "bank-bust-longplatform",
     `${staticPath}/bank-bust/longplatform.webp`,
   );
-  scene.load.image(
+  loadImage(
     "bank-bust-tallplatform",
     `${staticPath}/bank-bust/tallplatform.webp`,
   );
-  scene.load.image(
+  loadImage(
     "bank-bust-bigblock",
     `${staticPath}/bank-bust/bigblock.webp`,
   );
-  scene.load.image("bank-bust-2x2", `${staticPath}/bank-bust/2x2square.webp`);
-  scene.load.image("bank-bust-3x3", `${staticPath}/bank-bust/3x3square.webp`);
-  scene.load.image("bank-bust-abyss", `${staticPath}/bank-bust/abyss.webp`);
-  scene.load.image("bank-bust-pipe", `${staticPath}/bank-bust/pipe.webp`);
-  scene.load.image(
+  loadImage("bank-bust-2x2", `${staticPath}/bank-bust/2x2square.webp`);
+  loadImage("bank-bust-3x3", `${staticPath}/bank-bust/3x3square.webp`);
+  loadImage("bank-bust-abyss", `${staticPath}/bank-bust/abyss.webp`);
+  loadImage("bank-bust-pipe", `${staticPath}/bank-bust/pipe.webp`);
+  loadImage(
     "bank-bust-turret-base",
     `${staticPath}/bank-bust/mount.webp`,
   );
-  scene.load.image(
+  loadImage(
     "bank-bust-turret-head",
     `${staticPath}/bank-bust/barrel.webp`,
   );
-  scene.load.image("bank-bust-bullet", `${staticPath}/bank-bust/bullet.webp`);
-  scene.load.image(
+  loadImage("bank-bust-bullet", `${staticPath}/bank-bust/bullet.webp`);
+  loadImage(
     "bank-bust-wall-slot",
     `${staticPath}/bank-bust/not-built.png`,
   );
-  scene.load.image("bank-bust-wall-built", `${staticPath}/bank-bust/built.png`);
-  scene.load.image(
+  loadImage("bank-bust-wall-built", `${staticPath}/bank-bust/built.png`);
+  loadImage(
     "bank-bust-mine-neutral",
     `${staticPath}/bank-bust/mine.webp`,
   );
-  scene.load.image(
+  loadImage(
     "bank-bust-mine-claimed",
     `${staticPath}/bank-bust/mine-claimed.webp`,
   );
@@ -179,7 +180,7 @@ export function preloadGameAssets({
   // Powerup assets (support common icon/audio extensions)
   for (const type of powerupTypes) {
     const dir = powerupAssetDir[type] || type;
-    scene.load.image(
+    loadImage(
       `pu-icon-${type}-webp`,
       `${staticPath}/powerups/${dir}/icon.webp`,
     );
@@ -192,9 +193,5 @@ export function preloadGameAssets({
       `${staticPath}/powerups/${dir}/tick.wav`,
     ]);
   }
-  scene.load.font(
-    "PressStart2P",
-    `${staticPath}/LilitaOne-Regular.ttf`,
-    "truetype",
-  );
+  // Fonts are declared and preloaded by game.html. Phaser 3.70 has no load.font API.
 }

@@ -4,8 +4,28 @@ const {
   unlockPrice,
 } = require("../../lib/characterStats");
 const { unlockProfileIconForUser } = require("../helpers/profileIconOwnership");
+const { selectPartyById, emitRoster } = require("../helpers/party");
 
-function registerEconomyRoutes({ app, db, auth }) {
+async function emitUpdatedPartyRoster(io, db, username) {
+  if (!io || !username) return;
+  try {
+    const partyId = await db.getPartyIdByName(username);
+    if (!partyId) return;
+    const [party, members] = await Promise.all([
+      selectPartyById(db, partyId),
+      db.fetchPartyMembersDetailed(partyId),
+    ]);
+    if (party && Array.isArray(members)) {
+      await emitRoster(io, partyId, party, members, db);
+    }
+  } catch (error) {
+    // The purchase already committed. A later presence refresh will recover
+    // from a transient broadcast failure without making the upgrade fail.
+    console.warn("[economy] party roster refresh after upgrade failed:", error?.message);
+  }
+}
+
+function registerEconomyRoutes({ app, db, auth, io }) {
   app.post("/upgrade", async (req, res) => {
     try {
       const user = await auth.requireCurrentUser(req, res);
@@ -74,6 +94,7 @@ function registerEconomyRoutes({ app, db, auth }) {
       console.log(
         `${username} upgrade ${character} to level ${result.body.newLevel} for ${result.body.spent} coins`,
       );
+      await emitUpdatedPartyRoster(io, db, username);
       return res.status(200).json(result.body);
     } catch (err) {
       console.error("[economy] upgrade error", err);

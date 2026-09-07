@@ -26,6 +26,14 @@ body {
   overscroll-behavior: none;
 }
 
+/* Images are display-only throughout the lobby UI. Prevent the browser's
+   native drag ghost from competing with click and tap interactions. */
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 input,
 textarea,
 select {
@@ -4720,10 +4728,10 @@ h3 {
 
 .slot-level-badge {
   position: absolute;
-  top: -10px;
-  left: -10px;
-  width: 45px;
-  height: 45px;
+  top: -30px;
+  left: -30px;
+  width: 88px;
+  height: 88px;
   z-index: 14;
   opacity: 0;
   transform: translateY(-3px) scale(0.96);
@@ -5761,10 +5769,10 @@ h3 {
 
 .profile-character-level-badge {
   position: absolute;
-  top: -14px;
-  left: -12px;
-  width: 42px;
-  height: 42px;
+  top: -39px;
+  left: -37px;
+  width: 96px;
+  height: 96px;
   z-index: 2;
   pointer-events: none;
 }
@@ -6660,48 +6668,6 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   text-transform: uppercase;
 }
 
-.mm-meta {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  justify-self: center;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  margin-top: 8px;
-  padding: 8px 18px;
-  border: 1px solid rgba(174, 222, 255, 0.2);
-  border-radius: 999px;
-  background: rgba(3, 11, 25, 0.36);
-  box-shadow: inset 0 0 22px rgba(63, 175, 255, 0.05);
-  backdrop-filter: blur(8px);
-}
-
-.mm-meta > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.mm-meta-label {
-  color: rgba(178, 204, 226, 0.58);
-  font-family: "Press Start 2P", system-ui;
-  font-size: 6px;
-  text-transform: uppercase;
-}
-
-.mm-meta strong {
-  color: #eefaff;
-  font-family: "Press Start 2P", system-ui;
-  font-size: 8px;
-  font-weight: 400;
-}
-
-.mm-meta-separator {
-  width: 1px;
-  height: 16px;
-  background: rgba(190, 225, 255, 0.22);
-}
-
 .mm-lobby {
   position: relative;
   display: grid;
@@ -6814,7 +6780,8 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   align-items: center;
   justify-content: flex-end;
   box-sizing: border-box;
-  padding-bottom: clamp(96px, 14vh, 118px);
+  /* Stack the artwork so character feet share the platform top at every size. */
+  padding-bottom: 22px;
   animation: mm-platform-float 5.2s ease-in-out infinite;
   animation-delay: calc(var(--mm-slot-index) * -0.72s);
 }
@@ -6828,18 +6795,6 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   height: clamp(300px, 47vh, 410px);
 }
 
-.mm-players-grid[data-slots="2"] .mm-player-visual {
-  padding-bottom: clamp(132px, 18vh, 152px);
-}
-
-.mm-players-grid[data-slots="4"] .mm-player-visual {
-  padding-bottom: clamp(106px, 15vh, 122px);
-}
-
-.mm-players-grid[data-slots="6"] .mm-player-visual {
-  padding-bottom: clamp(82px, 12vh, 98px);
-}
-
 .mm-character {
   position: relative;
   z-index: 4;
@@ -6847,6 +6802,8 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   height: clamp(76px, 13vh, 138px);
   display: block;
   object-fit: contain;
+  object-position: center bottom;
+  flex-shrink: 0;
   transform-origin: 50% 100%;
   filter:
     drop-shadow(0 7px 0 rgba(0, 0, 0, 0.24))
@@ -6864,10 +6821,9 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
 }
 
 .mm-platform {
-  position: absolute;
+  position: relative;
+  flex-shrink: 0;
   z-index: 2;
-  left: 50%;
-  bottom: 22px;
   width: 108%;
   max-width: 258px;
   aspect-ratio: 638 / 300;
@@ -6875,7 +6831,6 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   background-repeat: no-repeat;
   background-position: center bottom;
   background-size: contain;
-  transform: translateX(-50%);
   filter:
     drop-shadow(0 14px 13px rgba(0, 0, 0, 0.48))
     drop-shadow(0 0 12px var(--mm-team-glow));
@@ -7273,8 +7228,6 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
 
 .mm-overlay[data-state="ready"] .mm-bg {
   filter: saturate(1.18) contrast(1.04) brightness(1.08);
-  animation: mm-background-success-kick 860ms cubic-bezier(0.16, 0.84, 0.31, 1)
-    both;
 }
 
 .mm-overlay[data-state="ready"] .mm-bg::before {
@@ -7306,8 +7259,6 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
     0 4px 0 rgba(20, 10, 0, 0.82),
     0 0 18px rgba(255, 219, 92, 0.82),
     0 0 42px rgba(255, 153, 45, 0.42);
-  animation: mm-success-title-bounce 720ms cubic-bezier(0.16, 0.84, 0.31, 1)
-    both;
 }
 
 .mm-overlay[data-state="ready"] .mm-heading::after {
@@ -7327,32 +7278,9 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
     0 0 16px rgba(255, 229, 111, 0.9),
     0 0 36px rgba(255, 158, 42, 0.52);
 }
-
-.mm-overlay[data-state="ready"] .mm-progress {
-  animation: mm-success-copy-bounce 760ms cubic-bezier(0.16, 0.84, 0.31, 1)
-    80ms both;
-}
-
-.mm-overlay[data-state="ready"] .mm-label,
-.mm-overlay[data-state="ready"] .mm-meta strong {
+.mm-overlay[data-state="ready"] .mm-label {
   color: #fff0ac;
 }
-
-.mm-overlay[data-state="ready"] .mm-meta {
-  border-color: rgba(255, 220, 99, 0.42);
-  background: rgba(31, 18, 3, 0.52);
-  box-shadow:
-    inset 0 0 24px rgba(255, 199, 62, 0.08),
-    0 0 24px rgba(255, 181, 50, 0.1);
-  animation: mm-success-copy-bounce 720ms cubic-bezier(0.16, 0.84, 0.31, 1)
-    150ms both;
-}
-
-.mm-overlay[data-state="ready"] .mm-player .mm-player-visual {
-  animation: mm-player-success-bounce 820ms cubic-bezier(0.16, 0.84, 0.31, 1)
-    var(--mm-success-visual-delay, 120ms) both;
-}
-
 .mm-overlay[data-state="ready"]
   .mm-player:not(.mm-player-arriving)
   .mm-platform {
@@ -7375,14 +7303,6 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
     inset 0 0 10px rgba(255, 218, 92, 0.08),
     0 0 12px rgba(255, 187, 50, 0.18);
 }
-
-.mm-overlay[data-state="ready"]
-  .mm-player:not(.mm-player-arriving)
-  .mm-name {
-  animation: mm-success-name-pop 560ms cubic-bezier(0.16, 0.84, 0.31, 1)
-    var(--mm-success-name-delay, 260ms) both;
-}
-
 .mm-overlay[data-state="ready"] .mm-particles i {
   background: linear-gradient(180deg, transparent, #fff2aa 55%, #ffc640);
   box-shadow:
@@ -7510,6 +7430,7 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   }
 }
 
+
 @keyframes mm-gold-gradient-burst {
   0% {
     opacity: 0;
@@ -7529,101 +7450,16 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   }
 }
 
-@keyframes mm-background-success-kick {
-  0%,
-  100% {
-    transform: scale(1);
-    filter: saturate(1.18) contrast(1.04) brightness(1.08);
-  }
-  38% {
-    transform: scale(1.035);
-    filter: saturate(1.28) contrast(1.04) brightness(1.16);
-  }
-  68% {
-    transform: scale(0.994);
-  }
-}
-
-@keyframes mm-success-title-bounce {
-  0% {
-    transform: translateY(0) scale(1);
-  }
-  34% {
-    transform: translateY(-11px) scale(1.09);
-  }
-  58% {
-    transform: translateY(3px) scale(0.98);
-  }
-  78% {
-    transform: translateY(-3px) scale(1.02);
-  }
-  100% {
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes mm-success-copy-bounce {
-  0% {
-    transform: translateY(0) scale(1);
-  }
-  38% {
-    transform: translateY(-7px) scale(1.075);
-  }
-  66% {
-    transform: translateY(2px) scale(0.99);
-  }
-  100% {
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes mm-player-success-bounce {
-  0% {
-    transform: translateY(0) scale(1);
-  }
-  34% {
-    transform: translateY(-13px) scale(1.035);
-  }
-  58% {
-    transform: translateY(4px) scale(0.99);
-  }
-  78% {
-    transform: translateY(-4px) scale(1.012);
-  }
-  100% {
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes mm-success-name-pop {
-  0% {
-    opacity: 0.72;
-    transform: translateX(-50%) translateY(0) scale(1);
-  }
-  42% {
-    opacity: 1;
-    transform: translateX(-50%) translateY(-5px) scale(1.08);
-  }
-  70% {
-    transform: translateX(-50%) translateY(2px) scale(0.99);
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
-  }
-}
 
 @keyframes mm-platform-success {
   0%,
   100% {
-    transform: translateX(-50%) scale(1);
     filter:
       brightness(1)
       drop-shadow(0 14px 13px rgba(0, 0, 0, 0.48))
       drop-shadow(0 0 12px var(--mm-team-glow));
   }
   48% {
-    transform: translate(-50%, -7px) scale(1.045);
     filter:
       brightness(1.32)
       drop-shadow(0 14px 13px rgba(0, 0, 0, 0.4))
@@ -7631,23 +7467,23 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   }
 }
 
+
 @keyframes mm-character-success {
   0%,
   100% {
-    transform: translateY(0) scale(1);
     filter:
       brightness(1)
       drop-shadow(0 7px 0 rgba(0, 0, 0, 0.24))
       drop-shadow(0 16px 18px rgba(0, 0, 0, 0.48));
   }
   48% {
-    transform: translateY(-6px) scale(1.065);
     filter:
       brightness(1.24)
       drop-shadow(0 7px 0 rgba(0, 0, 0, 0.2))
       drop-shadow(0 0 24px rgba(255, 219, 90, 0.68));
   }
 }
+
 
 @keyframes mm-arrival-beam {
   0% {
@@ -7720,16 +7556,16 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
 @keyframes mm-platform-lock-in {
   0% {
     opacity: 0.25;
-    transform: translate(-50%, 18px) scale(0.76);
+    transform: translateY(18px) scale(0.76);
     filter: brightness(1.8) drop-shadow(0 0 30px var(--mm-team-color));
   }
   62% {
     opacity: 1;
-    transform: translate(-50%, -5px) scale(1.06);
+    transform: translateY(-5px) scale(1.06);
   }
   100% {
     opacity: 1;
-    transform: translateX(-50%) scale(1);
+    transform: translateY(0) scale(1);
     filter:
       drop-shadow(0 14px 13px rgba(0, 0, 0, 0.48))
       drop-shadow(0 0 12px var(--mm-team-glow));
@@ -7753,12 +7589,6 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   .mm-progress {
     grid-column: 2;
     grid-row: 1;
-  }
-
-  .mm-meta {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    margin-top: 0;
   }
 
   .mm-players-grid[data-slots="4"],
@@ -7803,15 +7633,6 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
     display: none;
   }
 
-  .mm-meta {
-    gap: 10px;
-    padding: 6px 11px;
-  }
-
-  .mm-meta-label {
-    display: none;
-  }
-
   .mm-lobby {
     padding: 0 10px;
   }
@@ -7834,7 +7655,7 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   .mm-players-grid[data-slots="2"] .mm-player-visual,
   .mm-players-grid[data-slots="4"] .mm-player-visual,
   .mm-players-grid[data-slots="6"] .mm-player-visual {
-    padding-bottom: 78px;
+    padding-bottom: 18px;
   }
 
   .mm-character,
@@ -7844,7 +7665,6 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   }
 
   .mm-platform {
-    bottom: 18px;
     width: 100%;
   }
 
@@ -7927,13 +7747,6 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
     grid-row: 1;
   }
 
-  .mm-meta {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    padding-top: 5px;
-    padding-bottom: 5px;
-  }
-
   .mm-player,
   .mm-players-grid[data-slots="2"] .mm-player {
     height: clamp(132px, 47vh, 220px);
@@ -7943,17 +7756,13 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   .mm-players-grid[data-slots="2"] .mm-player-visual,
   .mm-players-grid[data-slots="4"] .mm-player-visual,
   .mm-players-grid[data-slots="6"] .mm-player-visual {
-    padding-bottom: 92px;
+    padding-bottom: 16px;
   }
 
   .mm-character,
   .mm-players-grid[data-slots="2"] .mm-character {
     width: clamp(58px, 7vw, 88px);
     height: clamp(66px, 20vh, 112px);
-  }
-
-  .mm-platform {
-    bottom: 16px;
   }
 
   .mm-name {
@@ -7992,7 +7801,6 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   .mm-overlay[data-state="ready"] .mm-success-burst,
   .mm-overlay[data-state="ready"] .mm-heading,
   .mm-overlay[data-state="ready"] .mm-progress,
-  .mm-overlay[data-state="ready"] .mm-meta,
   .mm-particles i,
   .mm-speed-lines,
   .mm-lobby::before,
@@ -8080,3 +7888,11 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
     display: none;
   }
 }
+
+/* Admin actions are siblings of the map choice, avoiding nested click targets. */
+.map-choice { display: flex; flex-direction: column; width: 100%; min-width: 0; gap: 8px; }
+.map-choice .map-select-card { width: 100%; flex: 1; }
+.map-choice-edit { display: inline-flex; align-items: center; justify-content: center; gap: 8px; align-self: flex-end; padding: 9px 13px; border: 1px solid #718aa6; border-radius: 7px; background: #18293e; color: #d9edff; font: 600 12px/1.3 system-ui, sans-serif; text-decoration: none; transition: background .15s, border-color .15s; }
+.map-choice-edit svg { width: 16px; height: 16px; }
+.map-choice-edit:hover { background: #29435e; border-color: #aed5ff; }
+.map-choice-edit:focus-visible { outline: 2px solid #baf36b; outline-offset: 3px; }

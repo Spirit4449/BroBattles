@@ -17,7 +17,15 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/bundles/game.css" />
+    <link rel="preload" href="/assets/LilitaOne-Regular.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href="/assets/PressStart2P.woff2" as="font" type="font/woff2" crossorigin />
     <style>
+      @font-face {
+        font-family: "LilitaOne-Regular";
+        src: url("/assets/LilitaOne-Regular.ttf") format("truetype");
+        font-display: swap;
+      }
+
       @font-face {
         font-family: "Press Start 2P";
         src: url("/assets/PressStart2P.woff2") format("woff2");
@@ -598,9 +606,9 @@
         filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
       }
       #battle-start-overlay .bs-card-level-badge {
-        top: 37.5%;
-        width: 18%;
-        height: 9%;
+        top: 40%;
+        width: 32%;
+        height: 22%;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -617,7 +625,7 @@
       }
       #battle-start-overlay .bs-card-character-name {
         left: 50%;
-        top: 44%;
+        top: 52%;
         max-width: 66%;
         font-family: var(--bb-font-display);
         font-size: 3.2cqw;
@@ -1231,7 +1239,7 @@
       }
       #battle-keybind-hud .bs-help-action-row {
         display: grid;
-        grid-template-columns: 48px 1fr;
+        grid-template-columns: 88px minmax(0, 1fr);
         gap: 10px;
         align-items: center;
       }
@@ -1244,6 +1252,17 @@
         justify-content: center;
         background: rgba(10, 18, 32, 0.84);
         border: 1px solid rgba(148, 163, 184, 0.26);
+      }
+      #battle-keybind-hud .controls-action-inputs {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      #battle-keybind-hud .controls-action-inputs kbd,
+      #battle-keybind-hud .controls-action-inputs .bs-help-mouse {
+        width: 32px;
+        height: 32px;
+        flex: 0 0 32px;
       }
       #battle-keybind-hud .bs-help-mouse img {
         width: 28px;
@@ -1821,34 +1840,47 @@
           </section>
           <section class="controls-section">
             <h3 class="controls-section-title">Actions</h3>
+
             <div class="controls-actions">
               <div class="bs-help-action-row">
-                <div class="bs-help-mouse">
-                  <img
-                    src="/assets/mouse_left.webp"
-                    alt="Left mouse button"
-                  />
+                <div class="controls-action-inputs">
+                  <kbd>J</kbd>
+                  <span class="controls-input-or">or</span>
+                  <div class="bs-help-mouse">
+                    <img
+                      src="/assets/mouse_left.webp"
+                      alt="Left mouse button"
+                    />
+                  </div>
                 </div>
                 <div>
                   <div class="bs-help-action-label">Attack</div>
                   <div class="bs-help-action-copy">
-                    Hold to aim and tap for a quick auto-aim attack.
+                    Click for quick aim. Drag for precise aim.
                   </div>
                 </div>
               </div>
               <div class="bs-help-action-row">
-                <div class="bs-help-mouse">
-                  <img src="/assets/mouse_right.webp" alt="Right mouse button" />
+                <div class="controls-action-inputs">
+                  <kbd>I</kbd>
+                  <span class="controls-input-or">or</span>
+                  <div class="bs-help-mouse">
+                    <img src="/assets/mouse_right.webp" alt="Right mouse button" />
+                  </div>
                 </div>
                 <div>
                   <div class="bs-help-action-label">Special</div>
                   <div class="bs-help-action-copy">
-                    Hold to aim and tap for a quick auto-aim special.
+                    Drag to aim. Hold right-click to show the special’s shape; release to fire.
                   </div>
                 </div>
               </div>
             </div>
           </section>
+          <div id="battle-cursor-hint" class="controls-section bs-help-action-row" style="display: none">
+            <kbd>ESC</kbd>
+            <span class="bs-help-action-label">to show cursor</span>
+          </div>
         </div>
       </div>
     </aside>
@@ -2031,7 +2063,7 @@
         // Start creeping immediately during Phaser download
         startCreep("Downloading engine...");
         await loadScript(
-          "https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser-arcade-physics.min.js",
+          "/bundles/phaser-arcade-physics.min.js",
         );
 
         // Ensure we show some progress after engine arrives

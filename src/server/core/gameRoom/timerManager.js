@@ -62,7 +62,7 @@ function tickTimerAndSuddenDeath(room) {
   const suddenDeath = shouldUseSuddenDeath && elapsed >= totalDurationMs;
 
   const sdElapsed = suddenDeath ? elapsed - totalDurationMs : 0;
-  const worldBottomY = Number(WORLD_BOUNDS.height) || 1000;
+  const worldBottomY = room.geometry?.world ? room.geometry.world.y + room.geometry.world.height : Number(WORLD_BOUNDS.height) || 1000;
   const poisonY = suddenDeath
     ? room._computePoisonY(sdElapsed)
     : worldBottomY + 60;

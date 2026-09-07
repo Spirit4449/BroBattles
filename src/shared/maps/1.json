@@ -1,0 +1,929 @@
+{
+  "schemaVersion": 1,
+  "id": 1,
+  "label": "Lushy Peaks",
+  "metadata": {
+    "id": 1,
+    "key": "lushy-peaks",
+    "terrain": "grass",
+    "label": "Lushy Peaks",
+    "compatibleModeIds": [
+      "duels"
+    ],
+    "compatibleVariantIds": [
+      "duels-1v1",
+      "duels-2v2",
+      "duels-3v3"
+    ],
+    "musicAsset": "/assets/main.mp3",
+    "musicVolume": 0.11,
+    "mapSelectPreviewAsset": "/assets/lushy/preview.webp",
+    "lobbyBgAsset": "/assets/lushy/lobbyBg.webp",
+    "lobbyPlatformAsset": "/assets/lushy/lobbyPlatform.webp"
+  },
+  "variants": {
+    "1v1": {
+      "layout": {
+        "platforms": [
+          {
+            "textureKey": "lushy-base",
+            "x": 1150,
+            "y": 670,
+            "scaleX": 0.8,
+            "scaleY": 0.8,
+            "flipX": false,
+            "body": {
+              "width": 800,
+              "height": 100,
+              "offsetX": 0,
+              "offsetY": 50
+            },
+            "id": "p0"
+          },
+          {
+            "textureKey": "lushy-platform",
+            "x": 1150,
+            "y": 250,
+            "scaleX": 0.7,
+            "scaleY": 0.7,
+            "flipX": false,
+            "body": {
+              "width": 490,
+              "height": 50,
+              "offsetX": 0,
+              "offsetY": 40
+            },
+            "id": "p1"
+          },
+          {
+            "textureKey": "lushy-side-platform",
+            "x": 670,
+            "y": 321,
+            "scaleX": 0.3,
+            "scaleY": 0.3,
+            "flipX": false,
+            "body": {
+              "width": 156.9,
+              "height": 185,
+              "offsetX": 0,
+              "offsetY": 140
+            },
+            "id": "p2"
+          },
+          {
+            "textureKey": "lushy-side-platform",
+            "x": 1619,
+            "y": 321,
+            "scaleX": 0.3,
+            "scaleY": 0.3,
+            "flipX": false,
+            "body": {
+              "width": 156.9,
+              "height": 185,
+              "offsetX": 0,
+              "offsetY": 140
+            },
+            "id": "p3"
+          },
+          {
+            "textureKey": "lushy-base",
+            "x": 575,
+            "y": 575,
+            "scaleX": 0.18,
+            "scaleY": 0.18,
+            "flipX": false,
+            "body": {
+              "width": 180,
+              "height": 40,
+              "offsetX": 0,
+              "offsetY": 30
+            },
+            "id": "p4"
+          },
+          {
+            "textureKey": "lushy-base",
+            "x": 1725,
+            "y": 575,
+            "scaleX": 0.18,
+            "scaleY": 0.18,
+            "flipX": false,
+            "body": {
+              "width": 180,
+              "height": 40,
+              "offsetX": 0,
+              "offsetY": 30
+            },
+            "id": "p5"
+          }
+        ],
+        "hitboxes": []
+      },
+      "spawns": {
+        "players": {
+          "team1": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "p0"
+              }
+            ],
+            "2": [
+              {
+                "dx": -120,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 120,
+                "anchorId": "p0"
+              }
+            ],
+            "3": [
+              {
+                "dx": -180,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 0,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 180,
+                "anchorId": "p0"
+              }
+            ]
+          },
+          "team2": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "p1"
+              }
+            ],
+            "2": [
+              {
+                "dx": -120,
+                "anchorId": "p1"
+              },
+              {
+                "dx": 120,
+                "anchorId": "p1"
+              }
+            ],
+            "3": [
+              {
+                "dx": -180,
+                "anchorId": "p1"
+              },
+              {
+                "dx": 0,
+                "anchorId": "p1"
+              },
+              {
+                "dx": 180,
+                "anchorId": "p1"
+              }
+            ]
+          }
+        },
+        "powerups": [
+          {
+            "id": "powerup-0",
+            "x": 935,
+            "y": 516
+          },
+          {
+            "id": "powerup-1",
+            "x": 1150,
+            "y": 516
+          },
+          {
+            "id": "powerup-2",
+            "x": 1365,
+            "y": 516
+          },
+          {
+            "id": "powerup-3",
+            "x": 1005,
+            "y": 212
+          },
+          {
+            "id": "powerup-4",
+            "x": 1150,
+            "y": 212
+          },
+          {
+            "id": "powerup-5",
+            "x": 1295,
+            "y": 212
+          },
+          {
+            "id": "powerup-6",
+            "x": 645,
+            "y": 207
+          },
+          {
+            "id": "powerup-7",
+            "x": 814,
+            "y": 516
+          },
+          {
+            "id": "powerup-8",
+            "x": 1489,
+            "y": 516
+          },
+          {
+            "id": "powerup-9",
+            "x": 1646,
+            "y": 207
+          },
+          {
+            "id": "powerup-10",
+            "x": 574,
+            "y": 518
+          },
+          {
+            "id": "powerup-11",
+            "x": 1727,
+            "y": 518
+          }
+        ]
+      },
+      "bounds": {
+        "world": {
+          "x": 0,
+          "y": 0,
+          "width": 2300,
+          "height": 1000
+        },
+        "camera": {
+          "x": 0,
+          "y": -40,
+          "width": 2300,
+          "height": 1000,
+          "zoom": 1.7,
+          "deadzoneWidth": 50,
+          "deadzoneHeight": 50,
+          "followOffsetY": 120
+        }
+      },
+      "textureSizes": {
+        "lushy-base": {
+          "width": 1000,
+          "height": 426
+        },
+        "lushy-platform": {
+          "width": 700,
+          "height": 121
+        },
+        "lushy-side-platform": {
+          "width": 523,
+          "height": 878
+        }
+      },
+      "anchors": {
+        "base": {
+          "objectId": "p0"
+        },
+        "top": {
+          "objectId": "p1"
+        }
+      },
+      "assets": {
+        "lushy-base": {
+          "type": "image",
+          "url": "/assets/lushy/base.webp"
+        },
+        "lushy-platform": {
+          "type": "image",
+          "url": "/assets/lushy/largePlatform.webp"
+        },
+        "lushy-side-platform": {
+          "type": "image",
+          "url": "/assets/lushy/sidePlatform.webp"
+        }
+      },
+      "powerups": {
+        "spawnIntervalMs": 25000,
+        "maxActive": 3,
+        "despawnMs": 10000,
+        "pickupRadius": 70,
+        "omenMs": 2000,
+        "spawnLift": 22,
+        "types": [
+          "rage",
+          "health",
+          "shield",
+          "poison",
+          "gravityBoots",
+          "invisibility",
+          "shockwave",
+          "freeze"
+        ]
+      },
+      "objectiveLayout": {},
+      "background": "/assets/lushy/gameBg.webp"
+    },
+    "2v2": {
+      "layout": {
+        "platforms": [
+          {
+            "textureKey": "lushy-base",
+            "x": 1150,
+            "y": 670,
+            "scaleX": 0.8,
+            "scaleY": 0.8,
+            "flipX": false,
+            "body": {
+              "width": 800,
+              "height": 100,
+              "offsetX": 0,
+              "offsetY": 50
+            },
+            "id": "p0"
+          },
+          {
+            "textureKey": "lushy-platform",
+            "x": 1150,
+            "y": 250,
+            "scaleX": 0.7,
+            "scaleY": 0.7,
+            "flipX": false,
+            "body": {
+              "width": 490,
+              "height": 50,
+              "offsetX": 0,
+              "offsetY": 40
+            },
+            "id": "p1"
+          },
+          {
+            "textureKey": "lushy-side-platform",
+            "x": 670,
+            "y": 321,
+            "scaleX": 0.3,
+            "scaleY": 0.3,
+            "flipX": false,
+            "body": {
+              "width": 156.9,
+              "height": 185,
+              "offsetX": 0,
+              "offsetY": 140
+            },
+            "id": "p2"
+          },
+          {
+            "textureKey": "lushy-side-platform",
+            "x": 1619,
+            "y": 321,
+            "scaleX": 0.3,
+            "scaleY": 0.3,
+            "flipX": false,
+            "body": {
+              "width": 156.9,
+              "height": 185,
+              "offsetX": 0,
+              "offsetY": 140
+            },
+            "id": "p3"
+          },
+          {
+            "textureKey": "lushy-base",
+            "x": 575,
+            "y": 575,
+            "scaleX": 0.18,
+            "scaleY": 0.18,
+            "flipX": false,
+            "body": {
+              "width": 180,
+              "height": 40,
+              "offsetX": 0,
+              "offsetY": 30
+            },
+            "id": "p4"
+          },
+          {
+            "textureKey": "lushy-base",
+            "x": 1725,
+            "y": 575,
+            "scaleX": 0.18,
+            "scaleY": 0.18,
+            "flipX": false,
+            "body": {
+              "width": 180,
+              "height": 40,
+              "offsetX": 0,
+              "offsetY": 30
+            },
+            "id": "p5"
+          }
+        ],
+        "hitboxes": []
+      },
+      "spawns": {
+        "players": {
+          "team1": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "p0"
+              }
+            ],
+            "2": [
+              {
+                "dx": -120,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 120,
+                "anchorId": "p0"
+              }
+            ],
+            "3": [
+              {
+                "dx": -180,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 0,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 180,
+                "anchorId": "p0"
+              }
+            ]
+          },
+          "team2": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "p1"
+              }
+            ],
+            "2": [
+              {
+                "dx": -120,
+                "anchorId": "p1"
+              },
+              {
+                "dx": 120,
+                "anchorId": "p1"
+              }
+            ],
+            "3": [
+              {
+                "dx": -180,
+                "anchorId": "p1"
+              },
+              {
+                "dx": 0,
+                "anchorId": "p1"
+              },
+              {
+                "dx": 180,
+                "anchorId": "p1"
+              }
+            ]
+          }
+        },
+        "powerups": [
+          {
+            "id": "powerup-0",
+            "x": 935,
+            "y": 516
+          },
+          {
+            "id": "powerup-1",
+            "x": 1150,
+            "y": 516
+          },
+          {
+            "id": "powerup-2",
+            "x": 1365,
+            "y": 516
+          },
+          {
+            "id": "powerup-3",
+            "x": 1005,
+            "y": 212
+          },
+          {
+            "id": "powerup-4",
+            "x": 1150,
+            "y": 212
+          },
+          {
+            "id": "powerup-5",
+            "x": 1295,
+            "y": 212
+          },
+          {
+            "id": "powerup-6",
+            "x": 645,
+            "y": 207
+          },
+          {
+            "id": "powerup-7",
+            "x": 814,
+            "y": 516
+          },
+          {
+            "id": "powerup-8",
+            "x": 1489,
+            "y": 516
+          },
+          {
+            "id": "powerup-9",
+            "x": 1646,
+            "y": 207
+          },
+          {
+            "id": "powerup-10",
+            "x": 574,
+            "y": 518
+          },
+          {
+            "id": "powerup-11",
+            "x": 1727,
+            "y": 518
+          }
+        ]
+      },
+      "bounds": {
+        "world": {
+          "x": 0,
+          "y": 0,
+          "width": 2300,
+          "height": 1000
+        },
+        "camera": {
+          "x": 0,
+          "y": -40,
+          "width": 2300,
+          "height": 1000,
+          "zoom": 1.7,
+          "deadzoneWidth": 50,
+          "deadzoneHeight": 50,
+          "followOffsetY": 120
+        }
+      },
+      "textureSizes": {
+        "lushy-base": {
+          "width": 1000,
+          "height": 426
+        },
+        "lushy-platform": {
+          "width": 700,
+          "height": 121
+        },
+        "lushy-side-platform": {
+          "width": 523,
+          "height": 878
+        }
+      },
+      "anchors": {
+        "base": {
+          "objectId": "p0"
+        },
+        "top": {
+          "objectId": "p1"
+        }
+      },
+      "assets": {
+        "lushy-base": {
+          "type": "image",
+          "url": "/assets/lushy/base.webp"
+        },
+        "lushy-platform": {
+          "type": "image",
+          "url": "/assets/lushy/largePlatform.webp"
+        },
+        "lushy-side-platform": {
+          "type": "image",
+          "url": "/assets/lushy/sidePlatform.webp"
+        }
+      },
+      "powerups": {
+        "spawnIntervalMs": 25000,
+        "maxActive": 3,
+        "despawnMs": 10000,
+        "pickupRadius": 70,
+        "omenMs": 2000,
+        "spawnLift": 22,
+        "types": [
+          "rage",
+          "health",
+          "shield",
+          "poison",
+          "gravityBoots",
+          "invisibility",
+          "shockwave",
+          "freeze"
+        ]
+      },
+      "objectiveLayout": {},
+      "background": "/assets/lushy/gameBg.webp"
+    },
+    "3v3": {
+      "layout": {
+        "platforms": [
+          {
+            "textureKey": "lushy-base",
+            "x": 1150,
+            "y": 670,
+            "scaleX": 0.8,
+            "scaleY": 0.8,
+            "flipX": false,
+            "body": {
+              "width": 800,
+              "height": 100,
+              "offsetX": 0,
+              "offsetY": 50
+            },
+            "id": "p0"
+          },
+          {
+            "textureKey": "lushy-platform",
+            "x": 1150,
+            "y": 250,
+            "scaleX": 0.7,
+            "scaleY": 0.7,
+            "flipX": false,
+            "body": {
+              "width": 490,
+              "height": 50,
+              "offsetX": 0,
+              "offsetY": 40
+            },
+            "id": "p1"
+          },
+          {
+            "textureKey": "lushy-side-platform",
+            "x": 670,
+            "y": 321,
+            "scaleX": 0.3,
+            "scaleY": 0.3,
+            "flipX": false,
+            "body": {
+              "width": 156.9,
+              "height": 185,
+              "offsetX": 0,
+              "offsetY": 140
+            },
+            "id": "p2"
+          },
+          {
+            "textureKey": "lushy-side-platform",
+            "x": 1619,
+            "y": 321,
+            "scaleX": 0.3,
+            "scaleY": 0.3,
+            "flipX": false,
+            "body": {
+              "width": 156.9,
+              "height": 185,
+              "offsetX": 0,
+              "offsetY": 140
+            },
+            "id": "p3"
+          },
+          {
+            "textureKey": "lushy-base",
+            "x": 575,
+            "y": 575,
+            "scaleX": 0.18,
+            "scaleY": 0.18,
+            "flipX": false,
+            "body": {
+              "width": 180,
+              "height": 40,
+              "offsetX": 0,
+              "offsetY": 30
+            },
+            "id": "p4"
+          },
+          {
+            "textureKey": "lushy-base",
+            "x": 1725,
+            "y": 575,
+            "scaleX": 0.18,
+            "scaleY": 0.18,
+            "flipX": false,
+            "body": {
+              "width": 180,
+              "height": 40,
+              "offsetX": 0,
+              "offsetY": 30
+            },
+            "id": "p5"
+          }
+        ],
+        "hitboxes": []
+      },
+      "spawns": {
+        "players": {
+          "team1": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "p0"
+              }
+            ],
+            "2": [
+              {
+                "dx": -120,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 120,
+                "anchorId": "p0"
+              }
+            ],
+            "3": [
+              {
+                "dx": -180,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 0,
+                "anchorId": "p0"
+              },
+              {
+                "dx": 180,
+                "anchorId": "p0"
+              }
+            ]
+          },
+          "team2": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "p1"
+              }
+            ],
+            "2": [
+              {
+                "dx": -120,
+                "anchorId": "p1"
+              },
+              {
+                "dx": 120,
+                "anchorId": "p1"
+              }
+            ],
+            "3": [
+              {
+                "dx": -180,
+                "anchorId": "p1"
+              },
+              {
+                "dx": 0,
+                "anchorId": "p1"
+              },
+              {
+                "dx": 180,
+                "anchorId": "p1"
+              }
+            ]
+          }
+        },
+        "powerups": [
+          {
+            "id": "powerup-0",
+            "x": 935,
+            "y": 516
+          },
+          {
+            "id": "powerup-1",
+            "x": 1150,
+            "y": 516
+          },
+          {
+            "id": "powerup-2",
+            "x": 1365,
+            "y": 516
+          },
+          {
+            "id": "powerup-3",
+            "x": 1005,
+            "y": 212
+          },
+          {
+            "id": "powerup-4",
+            "x": 1150,
+            "y": 212
+          },
+          {
+            "id": "powerup-5",
+            "x": 1295,
+            "y": 212
+          },
+          {
+            "id": "powerup-6",
+            "x": 645,
+            "y": 207
+          },
+          {
+            "id": "powerup-7",
+            "x": 814,
+            "y": 516
+          },
+          {
+            "id": "powerup-8",
+            "x": 1489,
+            "y": 516
+          },
+          {
+            "id": "powerup-9",
+            "x": 1646,
+            "y": 207
+          },
+          {
+            "id": "powerup-10",
+            "x": 574,
+            "y": 518
+          },
+          {
+            "id": "powerup-11",
+            "x": 1727,
+            "y": 518
+          }
+        ]
+      },
+      "bounds": {
+        "world": {
+          "x": 0,
+          "y": 0,
+          "width": 2300,
+          "height": 1000
+        },
+        "camera": {
+          "x": 0,
+          "y": -40,
+          "width": 2300,
+          "height": 1000,
+          "zoom": 1.7,
+          "deadzoneWidth": 50,
+          "deadzoneHeight": 50,
+          "followOffsetY": 120
+        }
+      },
+      "textureSizes": {
+        "lushy-base": {
+          "width": 1000,
+          "height": 426
+        },
+        "lushy-platform": {
+          "width": 700,
+          "height": 121
+        },
+        "lushy-side-platform": {
+          "width": 523,
+          "height": 878
+        }
+      },
+      "anchors": {
+        "base": {
+          "objectId": "p0"
+        },
+        "top": {
+          "objectId": "p1"
+        }
+      },
+      "assets": {
+        "lushy-base": {
+          "type": "image",
+          "url": "/assets/lushy/base.webp"
+        },
+        "lushy-platform": {
+          "type": "image",
+          "url": "/assets/lushy/largePlatform.webp"
+        },
+        "lushy-side-platform": {
+          "type": "image",
+          "url": "/assets/lushy/sidePlatform.webp"
+        }
+      },
+      "powerups": {
+        "spawnIntervalMs": 25000,
+        "maxActive": 3,
+        "despawnMs": 10000,
+        "pickupRadius": 70,
+        "omenMs": 2000,
+        "spawnLift": 22,
+        "types": [
+          "rage",
+          "health",
+          "shield",
+          "poison",
+          "gravityBoots",
+          "invisibility",
+          "shockwave",
+          "freeze"
+        ]
+      },
+      "objectiveLayout": {},
+      "background": "/assets/lushy/gameBg.webp"
+    }
+  }
+}

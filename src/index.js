@@ -1,3 +1,5 @@
+import { registerMapCatalog } from './lib/gameSelectionCatalog';
+import { registerMapMetadata } from './maps/manifest';
 import { sonner } from "./lib/sonner.js";
 import {
   checkIfInParty,
@@ -39,10 +41,18 @@ import {
 } from "./lib/profileIconAssets.js";
 import { renderBattleLog } from "./lib/battleLogView.js";
 import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
-import { getAllCharacters } from "./lib/characterStats.js";
+import { getAllCharacters, LEVEL_CAP } from "./lib/characterStats.js";
 import { initializeShop } from "./shop.js";
 import "./styles/characterSelect.css";
 import "./styles/index.css";
+
+// Images in the lobby and its menus are interactive artwork, not draggable
+// content. Delegation also covers images rendered after a popup is opened.
+document.addEventListener("dragstart", (event) => {
+  if (event.target instanceof Element && event.target.closest("img")) {
+    event.preventDefault();
+  }
+});
 import "./styles/chat.css";
 import "./styles/profile.css";
 import "./styles/selectionPopup.css";
@@ -351,7 +361,7 @@ function renderProfileCharacterLevels() {
   }
 
   entries.forEach((entry) => {
-    const iconLevel = Math.max(1, Math.min(5, Number(entry.level) || 1));
+    const iconLevel = Math.max(1, Math.min(LEVEL_CAP, Number(entry.level) || 1));
     const card = document.createElement("article");
     card.className = "profile-character-level-card";
     card.innerHTML = `
@@ -2061,6 +2071,7 @@ const statusPromise = fetch("/status", {
       showSuspensionPopupFromStatus(data);
     }
 
+    if (data?.mapCatalog) { registerMapCatalog(data.mapCatalog); registerMapMetadata(data.mapCatalog); }
     if (data?.userData) {
       userData = data.userData;
       userData.isAdmin = !!data.isAdmin;

@@ -1,3 +1,4 @@
+import { resolveShockwaveImpulse, SHOCKWAVE_MOMENTUM_MS } from "../shared/shockwaveImpulse";
 import { performSpecial } from "../characters/special";
 import {
   spawnDamageImpact,
@@ -39,6 +40,13 @@ export function bindLocalSocketEvents({
   onDebug,
   onDuckBlocked,
 }) {
+  let corpseRemovalTimer = null;
+  let deathGeneration = 0;
+  const cancelCorpseRemoval = () => {
+    deathGeneration += 1;
+    corpseRemovalTimer?.remove?.(false);
+    corpseRemovalTimer = null;
+  };
   const isEditModeActive = () => {
     try {
       if (typeof getIsEditMode === "function") return !!getIsEditMode();
@@ -172,8 +180,11 @@ export function bindLocalSocketEvents({
       player.body.enable = false;
     }
 
-    scene.time.delayedCall(1500, () => {
-      if (!player) return;
+    cancelCorpseRemoval();
+    const generation = deathGeneration;
+    corpseRemovalTimer = scene.time.delayedCall(1500, () => {
+      if (generation !== deathGeneration || getPlayer() !== player || !player._deathPresentationActive) return;
+      corpseRemovalTimer = null;
       try {
         removeLocalCorpse?.();
       } catch (_) {}
@@ -220,8 +231,24 @@ export function bindLocalSocketEvents({
 
     const amountX = Number(data?.amountX) || 0;
     const amountY = Number(data?.amountY) || 0;
-    player.setVelocityX(amountX);
-    player.setVelocityY(data?.radial === true ? amountY : -Math.abs(amountY));
+    if (data?.cause === "shockwave") {
+      const body = player.body;
+      const contacts = Object.fromEntries(["up", "down", "left", "right"].map(
+        side => [side, !!(body.blocked?.[side] || body.touching?.[side])],
+      ));
+      const impulse = resolveShockwaveImpulse(amountX, amountY, contacts);
+      player._jumpLaunch = null;
+      player._shockwaveUntil = Date.now() + SHOCKWAVE_MOMENTUM_MS;
+      player._wallSlideSuppressedUntil = player._shockwaveUntil;
+      player.setMaxVelocity(Math.max(1, Math.abs(impulse.x)), Math.max(1000, Math.abs(impulse.y)));
+      player.setAccelerationX(0);
+      player.setDragX(0);
+      player.setVelocityX(impulse.x);
+      player.setVelocityY(impulse.y);
+    } else {
+      player.setVelocityX(amountX);
+      player.setVelocityY(data?.radial === true ? amountY : -Math.abs(amountY));
+    }
     player._wallKickLockUntil = Date.now() + 120;
   };
 
@@ -231,6 +258,7 @@ export function bindLocalSocketEvents({
     const player = getPlayer();
     if (!scene || !player) return;
 
+    cancelCorpseRemoval();
     setDead(false);
     if (typeof payload?.maxHealth === "number" && payload.maxHealth > 0) {
       setMaxHealth(payload.maxHealth);
@@ -259,6 +287,9 @@ export function bindLocalSocketEvents({
         logical: "idle",
         fallback: "idle",
       });
+      // Animation frames can change the display origin; refresh the body before
+      // drawing UI anchored to its top edge.
+      player.body?.updateFromGameObject?.();
       spawnSpawnBurst(scene, player, {
         tint: 0xffffff,
         accent: 0xb8ecff,
@@ -286,6 +317,7 @@ export function bindLocalSocketEvents({
   socket.on("player:respawn", playerRespawnHandler);
 
   return () => {
+    cancelCorpseRemoval();
     socket.off("health-update", healthUpdateHandler);
     socket.off("super-update", superUpdateHandler);
     socket.off("player:special", specialHandler);

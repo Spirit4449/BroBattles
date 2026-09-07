@@ -33,7 +33,7 @@ Recticle: Arced (similar to thorg. I am forgetting the exact name). But it has m
 Special name: use a sensible default
 Special behavior: fires 6 burning arrows in a wider spread that deal more damage and apply a burn effect and tick damage over 5 seconds. Arrows do not go through enemies or walls. If it hits the ground, it burns the ground.
 Special charge hits: 3
-Special charge damage requirement: 6000
+Special charge requirement: 6 projectile hits; each super arrow contributes 1 hit.
 Special damage or effect: 1500 damage per arrow, burn for 500 damage over 5 seconds
 Special duration/range/radius: use a sensible default
 

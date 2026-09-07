@@ -29,6 +29,8 @@ function registerRoutes({
   const { getOrCreateCurrentUser, requireCurrentUser, isGuest, isAdminUser } =
     auth;
 
+  require("./modules/mapEditorRoutes").registerMapEditorRoutes({app, requireCurrentUser, isAdminUser, pageRoot});
+
   registerPageRoutes({
     app,
     db,

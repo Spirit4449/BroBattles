@@ -228,10 +228,7 @@ const effectDefs = {
         const centeredDirection = centeredTargetIndex % 2 === 0 ? 1 : -1;
         const nx = distance < 1 ? centeredDirection : dx / safeDistance;
         const ny = distance < 1 ? -0.35 : dy / safeDistance;
-        const falloff = Math.max(
-          0.55,
-          1 - distance / POWERUP_SHOCKWAVE_RADIUS,
-        );
+        const falloff = 0.8 + 0.8 * (1 - distance / POWERUP_SHOCKWAVE_RADIUS);
         centeredTargetIndex += 1;
 
         applyParticipantKnockback(room, target, {
@@ -239,7 +236,7 @@ const effectDefs = {
           cause: "shockwave",
           radial: true,
           amountX: Math.round(nx * POWERUP_SHOCKWAVE_FORCE_X * falloff),
-          amountY: Math.round(ny * POWERUP_SHOCKWAVE_FORCE_Y * falloff),
+          amountY: Math.round((Math.abs(ny) < 0.45 ? -0.45 : ny) * POWERUP_SHOCKWAVE_FORCE_Y * falloff),
         });
       }
     },

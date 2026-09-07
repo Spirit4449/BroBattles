@@ -20,7 +20,7 @@ const HTTP_BUCKETS = {
 const HTTP_ROUTE_POLICIES = {
   "POST /signup": { bucket: "strict" },
   "POST /login": { bucket: "strict" },
-  "POST /upgrade": { bucket: "strict" },
+  "POST /upgrade": { bucket: "strict", countFailuresOnly: true },
   "POST /buy": { bucket: "strict" },
   "POST /profile/change-username": { bucket: "strict" },
   "POST /profile/change-password": { bucket: "strict" },

@@ -5,6 +5,7 @@ const CopyWebpackPlugin = require("copy-webpack-plugin");
 module.exports = {
   entry: {
     game: "./src/game.js",
+    mapEditor: "./src/editor/mapEditor.js",
     party: "./src/party.js",
     index: "./src/index.js",
     signup: "./src/signup.js",
@@ -69,6 +70,7 @@ module.exports = {
     }),
     new CopyWebpackPlugin({
       patterns: [
+        {from:path.resolve(__dirname,"node_modules/phaser/dist/phaser-arcade-physics.min.js"),to:"bundles/phaser-arcade-physics.min.js"},
         {
           from: path.resolve(__dirname, "public"),
           to: path.resolve(__dirname, "dist"),

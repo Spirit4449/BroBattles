@@ -121,7 +121,40 @@ test("fill starts from 5 seconds with randomized join times, disabled until conf
     computeUserMMRFromRow({ trophies: 750, char_levels: '{"ninja":5}' }),
     750,
   );
-  assert.equal(ratingWindow(t1, 10000), 250);
+  assert.equal(ratingWindow(t1, 10000), 800);
+});
+
+test("trophy search accelerates over time without a fixed difference cap", () => {
+  const queued = { created_at: new Date(0) };
+  const ranges = [0, 10000, 20000, 30000].map((time) => ratingWindow(queued, time));
+  assert.deepEqual(ranges, [100, 800, 6400, 51200]);
+  assert.equal(ratingWindow(queued, -1000), 100);
+  assert.equal(ratingWindow({ created_at: "invalid" }, 10000), 100);
+});
+
+test("distant players become eligible in full and partial matchmaking after waiting", () => {
+  const pool = [ticket(1, 600), ticket(2, 4000)];
+  assert.equal(pickCompositeGroup(pool, 1, { now }), null);
+  assert.equal(pickGroup(pool, 1, { partial: true, anchorId: 1, now }).length, 1);
+  const later = now + 10000;
+  assert.equal(pickCompositeGroup(pool, 1, { now: later }).length, 2);
+  assert.equal(pickGroup(pool, 1, { partial: true, anchorId: 1, now: later }).length, 2);
+});
+
+test("bot filling waits at least 20 seconds above 3000 trophies", () => {
+  for (const mmr of [3001, 6000]) {
+    const queued = { ticket_id: 101, mmr, created_at: new Date(0) };
+    const schedule = getSeatSchedule(queued);
+    assert.ok(schedule[0] >= 20000 && schedule[0] < 23500);
+    assert.equal(stagedSeatCount(queued, 19999), 0);
+    assert.equal(stagedSeatCount(queued, schedule[0]), 1);
+    assert.equal(stagedSeatCount(queued, schedule[4]), 5);
+    assert.ok(schedule.every((time, i) => i === 0 || time > schedule[i - 1]));
+  }
+  const boundary = { ticket_id: 101, mmr: 3000, created_at: new Date(0) };
+  assert.ok(getSeatSchedule(boundary)[0] < 8500);
+  assert.ok(getSeatSchedule({ ...boundary, mmr: 3001 }, { startAfterMs: 1000 })[0] >= 20000);
+  assert.ok(getSeatSchedule({ ...boundary, mmr: 3001 }, { startAfterMs: 25000 })[0] >= 25000);
 });
 
 test("partial assembly maximizes humans, preserves party sides, excludes incompatible ratings", () => {

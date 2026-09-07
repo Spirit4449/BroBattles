@@ -23,7 +23,9 @@ function getSocketDebugMeta(socket) {
 // Use normal autoConnect so matchmaking/game listeners work immediately.
 // Party code can optionally await ensureSocketConnected() if it wants to
 // guarantee the handshake finished after /status completed.
-const socket = io({
+const editorSession = window.location.pathname === '/map-editor/playtest' ? new URLSearchParams(window.location.search).get('session') : null;
+const socket = io(editorSession ? '/map-playtest' : '/', {
+  ...(editorSession ? {auth:{session:editorSession}} : {}),
   withCredentials: true,
   autoConnect: false,
   transports: ["websocket"],

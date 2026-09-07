@@ -1,3 +1,4 @@
+import { PICKUP_DELAY_MS } from "../shared/pickupTiming";
 // powerups/powerupRenderer.js
 import { RENDER_LAYERS } from "../gameScene/renderLayers";
 import { createDeathLootEffects, handleDeathLootContact } from "./deathLootEffects";
@@ -883,6 +884,7 @@ export function createPowerupRenderer({
 
       if (
         visual.settled &&
+        deathAgeMs >= PICKUP_DELAY_MS &&
         !getDead?.() &&
         !scene._pendingDeathDropPickups?.has(id) &&
         !visual.despawning

@@ -14,13 +14,13 @@ const RETICLE_PALETTES = {
     accentAlpha: 0.92,
   },
   special: {
-    shadowColor: 0x2a1b00,
+    shadowColor: 0xffaa00,
     shadowAlpha: 0.16,
-    fillColor: 0xffef9c,
+    fillColor: 0xffc52e,
     fillAlpha: 0.18,
     lineColor: 0xffef9c,
     lineAlpha: 0.22,
-    accentColor: 0xfff8c9,
+    accentColor: 0xffdd55,
     accentAlpha: 0.98,
   },
 };
@@ -78,50 +78,56 @@ class BaseAttackReticleRenderer {
   }
 }
 
+// Preserve attack identity while keeping the preview local enough to read in motion.
+export function getAttackGuideStyle(state) {
+  const range = Number(state.config?.reticleRange) || Number(state.range) || 240;
+  return {
+    length: state.config?.showFullReticleRange === true
+      ? range
+      : Math.min(state.kind === "throw" ? 400 : 420, range * (state.kind === "throw" ? 0.85 : 0.5)),
+    width: Math.max(4, Math.min(16, (Number(state.config?.reticleThickness) || 18) * 0.28)),
+  };
+}
+
+function drawDirectionGuide(renderer, points, palette, limit = 240, width = 5) {
+  let travelled = 0;
+  for (let i = 1; i < points.length && travelled < limit; i += 1) {
+    const start = points[i - 1], end = points[i];
+    const length = Math.hypot(end.x - start.x, end.y - start.y);
+    if (!length) continue;
+    const visibleLength = Math.min(length, limit - travelled);
+    // Subdivide straight lines too, so their opacity fades with distance.
+    for (let d = 0; d < visibleLength; d += 8) {
+      const next = Math.min(d + 8, visibleLength);
+      const alpha = 0.18 + 0.82 * Math.pow(1 - (travelled + d) / limit, 0.65);
+      const line = new Phaser.Geom.Line(
+        start.x + (end.x - start.x) * d / length,
+        start.y + (end.y - start.y) * d / length,
+        start.x + (end.x - start.x) * next / length,
+        start.y + (end.y - start.y) * next / length,
+      );
+      renderer.shadow.lineStyle(width + (palette.shadowColor === 0xffaa00 ? 10 : 4), palette.shadowColor === 0xffaa00 ? 0xffaa00 : 0x101725, alpha * 0.55);
+      renderer.shadow.strokeLineShape(line);
+      renderer.main.lineStyle(width, palette.accentColor, alpha * 0.5);
+      renderer.main.strokeLineShape(line);
+      renderer.accent.lineStyle(3, palette.accentColor, alpha);
+      renderer.accent.strokeLineShape(line);
+    }
+    travelled += visibleLength;
+  }
+}
+
 class LineAttackReticleRenderer extends BaseAttackReticleRenderer {
   render(state) {
     super.render(state);
     if (!state) return;
-    const palette = getPalette(state);
-
-    const thickness = Math.max(
-      12,
-      Number(state?.config?.reticleThickness) || 18,
-    );
-    const half = thickness / 2;
-    const nx = -Number(state.unitY) || 0;
-    const ny = Number(state.unitX) || 0;
-    const startX = Number(state.anchorX) || 0;
-    const startY = Number(state.anchorY) || 0;
-    const reticleRange = Number(state?.config?.reticleRange);
-    const usesReticleRange = Number.isFinite(reticleRange) && reticleRange > 0;
-    const endX = usesReticleRange
-      ? startX + (Number(state.unitX) || 0) * reticleRange
-      : Number(state.endX) || startX;
-    const endY = usesReticleRange
-      ? startY + (Number(state.unitY) || 0) * reticleRange
-      : Number(state.endY) || startY;
-    const points = [
-      new Phaser.Geom.Point(startX + nx * half, startY + ny * half),
-      new Phaser.Geom.Point(endX + nx * half, endY + ny * half),
-      new Phaser.Geom.Point(endX - nx * half, endY - ny * half),
-      new Phaser.Geom.Point(startX - nx * half, startY - ny * half),
-    ];
-
-    this.shadow.fillStyle(palette.shadowColor, palette.shadowAlpha);
-    this.shadow.fillPoints(points, true);
-    this.shadow.lineStyle(thickness + 4, palette.shadowColor, 0.1);
-    this.shadow.strokeLineShape(
-      new Phaser.Geom.Line(startX, startY, endX, endY),
-    );
-
-    this.main.fillStyle(palette.fillColor, palette.fillAlpha);
-    this.main.fillPoints(points, true);
-    this.main.lineStyle(thickness, palette.lineColor, palette.lineAlpha);
-    this.main.strokeLineShape(new Phaser.Geom.Line(startX, startY, endX, endY));
-
-    this.accent.lineStyle(2.2, palette.accentColor, palette.accentAlpha);
-    this.accent.strokePoints(points, true);
+    const { length, width } = getAttackGuideStyle(state);
+    const startX = state.baseX + (state.anchorX - state.baseX) * 0.65;
+    const startY = state.baseY + (state.anchorY - state.baseY) * 0.65;
+    drawDirectionGuide(this, [
+      { x: startX, y: startY },
+      { x: startX + state.unitX * length, y: startY + state.unitY * length },
+    ], getPalette(state), length, width);
   }
 }
 
@@ -129,49 +135,28 @@ class ThrowAttackReticleRenderer extends BaseAttackReticleRenderer {
   render(state) {
     super.render(state);
     if (!state) return;
-    const palette = getPalette(state);
-
-    const points = Array.isArray(state?.throwPreview?.points)
-      ? state.throwPreview.points
-      : [];
-    if (!points.length) return;
-
-    const thickness = Math.max(
-      12,
-      Number(state?.config?.reticleThickness) || 16,
-    );
-    this.shadow.lineStyle(thickness + 5, palette.shadowColor, 0.1);
-    this.main.lineStyle(thickness, palette.lineColor, palette.lineAlpha);
-    this.accent.lineStyle(2.4, palette.accentColor, palette.accentAlpha);
-
-    this.shadow.beginPath();
-    this.main.beginPath();
-    this.accent.beginPath();
-    points.forEach((point, index) => {
-      const x = Number(point?.x) || 0;
-      const y = Number(point?.y) || 0;
-      if (index === 0) {
-        this.shadow.moveTo(x, y);
-        this.main.moveTo(x, y);
-        this.accent.moveTo(x, y);
-      } else {
-        this.shadow.lineTo(x, y);
-        this.main.lineTo(x, y);
-        this.accent.lineTo(x, y);
+    const { length, width } = getAttackGuideStyle(state);
+    // Use the actual sampled trajectory, preserving gravity and the launch curvature.
+    const points = state.throwPreview?.points || [];
+    const offsetY = Number(state.config?.reticlePathOffsetY) || 0;
+    // A uniform visual offset lowers the attachment point without bending the
+    // sampled physical trajectory near the character.
+    const displayed = offsetY
+      ? points.map(point => ({ x: point.x, y: point.y + offsetY }))
+      : points;
+    drawDirectionGuide(this, displayed, getPalette(state), length, width);
+    const cue = state.centerCue;
+    if (cue?.proximity > 0) {
+      const palette = getPalette(state);
+      const x = state.baseX;
+      const y = state.baseY + offsetY;
+      const radius = 7 + cue.proximity * 3;
+      this.crosshair.lineStyle(2, palette.accentColor, 0.18 + cue.proximity * 0.42);
+      this.crosshair.strokeEllipse(x, y, radius * 2, radius * 2);
+      if (cue.held) {
+        this.crosshair.fillStyle(palette.accentColor, 0.65);
+        this.crosshair.fillEllipse(x, y, 4, 4);
       }
-    });
-    this.shadow.strokePath();
-    this.main.strokePath();
-    this.accent.strokePath();
-    if (state.character === "gloop") {
-      const impacts = state.throwPreview.impacts || [];
-      impacts.forEach((hit, i) => {
-        this.crosshair.lineStyle(1.5, 0x9aebd2, 0.85);
-        this.crosshair.strokeEllipse(hit.x, hit.y, Math.abs(hit.nx) > 0.5 ? 8 : 22 - i * 3,
-          Math.abs(hit.nx) > 0.5 ? 22 - i * 3 : 8);
-      });
-      this.crosshair.lineStyle(1.5, 0xf0f4ad, 0.9);
-      this.crosshair.strokeCircle(state.endX, state.endY, 7);
     }
   }
 }
@@ -182,7 +167,7 @@ class SplashAttackReticleRenderer extends BaseAttackReticleRenderer {
     if (!state) return;
     const palette = getPalette(state);
 
-    const radius = Math.max(20, Number(state.coneRadius) || 150);
+    const radius = Math.max(8, Number(state.coneRadius) || 150);
     const innerRadius = Math.max(0, Number(state.coneInnerRadius) || 0);
     const spreadDeg = Math.max(8, Number(state.coneSpreadDeg) || 56);
     const halfSpread = Phaser.Math.DegToRad(spreadDeg / 2);
@@ -193,7 +178,6 @@ class SplashAttackReticleRenderer extends BaseAttackReticleRenderer {
     const cy = Number(state.anchorY) || 0;
     const steps = 24;
     const outerPoints = [];
-    const innerPoints = [];
 
     for (let i = 0; i <= steps; i += 1) {
       const t = i / steps;
@@ -204,58 +188,37 @@ class SplashAttackReticleRenderer extends BaseAttackReticleRenderer {
           cy + Math.sin(current) * radius,
         ),
       );
-      if (innerRadius > 0) {
-        innerPoints.push(
-          new Phaser.Geom.Point(
-            cx + Math.cos(current) * innerRadius,
-            cy + Math.sin(current) * innerRadius,
-          ),
-        );
+
+    }
+
+    // Radial bands retain the actual cone angle and reach, fading out from the player.
+    const bands = 12;
+    for (let band = 0; band < bands; band += 1) {
+      const near = innerRadius + (radius - innerRadius) * band / bands;
+      const far = innerRadius + (radius - innerRadius) * (band + 1) / bands;
+      const points = [];
+      for (let i = 0; i <= steps; i += 1) {
+        const a = startAngle + (endAngle - startAngle) * i / steps;
+        points.push(new Phaser.Geom.Point(cx + Math.cos(a) * far, cy + Math.sin(a) * far));
       }
+      for (let i = steps; i >= 0; i -= 1) {
+        const a = startAngle + (endAngle - startAngle) * i / steps;
+        points.push(new Phaser.Geom.Point(cx + Math.cos(a) * near, cy + Math.sin(a) * near));
+      }
+      this.shadow.fillStyle(0x101725, 0.12 * (1 - band / bands));
+      this.shadow.fillPoints(points, true);
+      this.main.fillStyle(palette.fillColor, 0.3 * (1 - band / bands));
+      this.main.fillPoints(points, true);
     }
-
-    const polygon = [
-      ...(innerRadius > 0 ? innerPoints : [new Phaser.Geom.Point(cx, cy)]),
-      ...outerPoints.slice().reverse(),
-    ];
-
-    this.shadow.fillStyle(palette.shadowColor, palette.shadowAlpha);
-    this.shadow.fillPoints(polygon, true);
-
-    this.main.fillStyle(palette.fillColor, palette.fillAlpha);
-    this.main.fillPoints(polygon, true);
-
-    this.accent.lineStyle(2.2, palette.accentColor, palette.accentAlpha);
-    this.accent.beginPath();
-    outerPoints.forEach((point, index) => {
-      if (index === 0) this.accent.moveTo(point.x, point.y);
-      else this.accent.lineTo(point.x, point.y);
-    });
-    this.accent.strokePath();
-    if (innerRadius > 0) {
-      this.accent.beginPath();
-      innerPoints.forEach((point, index) => {
-        if (index === 0) this.accent.moveTo(point.x, point.y);
-        else this.accent.lineTo(point.x, point.y);
-      });
-      this.accent.strokePath();
+    for (const a of [startAngle, endAngle]) {
+      drawDirectionGuide(this, [
+        { x: cx + Math.cos(a) * innerRadius, y: cy + Math.sin(a) * innerRadius },
+        { x: cx + Math.cos(a) * radius, y: cy + Math.sin(a) * radius },
+      ], palette, radius - innerRadius, 4);
     }
-    this.accent.strokeLineShape(
-      new Phaser.Geom.Line(
-        cx + Math.cos(startAngle) * innerRadius,
-        cy + Math.sin(startAngle) * innerRadius,
-        cx + Math.cos(startAngle) * radius,
-        cy + Math.sin(startAngle) * radius,
-      ),
-    );
-    this.accent.strokeLineShape(
-      new Phaser.Geom.Line(
-        cx + Math.cos(endAngle) * innerRadius,
-        cy + Math.sin(endAngle) * innerRadius,
-        cx + Math.cos(endAngle) * radius,
-        cy + Math.sin(endAngle) * radius,
-      ),
-    );
+    // A quiet outer arc still communicates the precise reach of the cone.
+    this.accent.lineStyle(2, palette.accentColor, 0.38);
+    this.accent.strokePoints(outerPoints, false);
   }
 }
 
@@ -265,21 +228,26 @@ class RoundAttackReticleRenderer extends BaseAttackReticleRenderer {
     if (!state) return;
     const palette = getPalette(state);
     const visualScale = Number(state.visualScale) || 1;
-    const radius = visualScale * Math.max(
+    const reveal = 1;
+    const radius = reveal * visualScale * Math.max(
       16,
       Number(state.roundRadius) || Number(state.range) || 60,
     );
-    const radiusY = Math.max(16, Number(state.config?.radiusY) * visualScale || radius);
+    const radiusY = Math.max(16, Number(state.config?.radiusY) * visualScale * reveal || radius);
     const cx = Number(state.baseX ?? state.anchorX) || 0;
     const cy = (Number(state.baseY ?? state.anchorY) || 0) +
       (Number(state.config?.reticleOffsetY) || 0) * visualScale -
       (state.character === "thorg" ? 37.8 * (visualScale - 1) : 0);
 
-    this.shadow.fillStyle(palette.shadowColor, palette.shadowAlpha);
-    this.shadow.fillEllipse(cx, cy, (radius + 4) * 2, (radiusY + 4) * 2);
-    this.main.fillStyle(palette.fillColor, palette.fillAlpha);
-    this.main.fillEllipse(cx, cy, radius * 2, radiusY * 2);
-    this.accent.lineStyle(2.4, palette.accentColor, palette.accentAlpha);
+    // Concentric fills fade radially; the outer ellipse marks the true attack footprint.
+    this.shadow.lineStyle(palette.shadowColor === 0xffaa00 ? 12 : 5, palette.shadowColor === 0xffaa00 ? 0xffaa00 : 0x101725, 0.45);
+    this.shadow.strokeEllipse(cx, cy, radius * 2, radiusY * 2);
+    for (let band = 10; band >= 1; band -= 1) {
+      const scale = band / 10;
+      this.main.fillStyle(palette.fillColor, 0.035);
+      this.main.fillEllipse(cx, cy, radius * scale * 2, radiusY * scale * 2);
+    }
+    this.accent.lineStyle(3, palette.accentColor, 0.85);
     this.accent.strokeEllipse(cx, cy, radius * 2, radiusY * 2);
   }
 }

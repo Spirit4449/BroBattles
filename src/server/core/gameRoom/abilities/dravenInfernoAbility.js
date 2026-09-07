@@ -1,3 +1,4 @@
+const { chargeSuperForHit } = require("../superCharge");
 const effectManager = require("../effects/effectManager");
 const { reduceDuckDamage } = require("../../../../shared/ducking");
 const { getCharacterTuning } = require("../../../../lib/characterStats");
@@ -135,6 +136,7 @@ function tick(room, caster, now) {
     target.lastDamagedAt = now;
     target.lastCombatAt = now;
     room._recordCombatStat(caster, { damage: applied, hits: 1 });
+    chargeSuperForHit(room, caster, "special");
 
     if (target.health === 0 && old > 0) {
       room._recordCombatStat(caster, { kills: 1 });

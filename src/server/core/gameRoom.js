@@ -8,6 +8,7 @@ const {
   ACTION_SPAM_MAX_IN_WINDOW,
   ACTION_SPAM_SUPPRESS_MS,
 } = require("./gameRoomConfig");
+const { chargeSuperForHit } = require("./gameRoom/superCharge");
 const effectManager = require("./gameRoom/effects/effectManager");
 const { reduceDuckDamage } = require("../../shared/ducking");
 const powerupManager = require("./gameRoom/powerupManager");
@@ -62,6 +63,8 @@ class GameRoom {
     this.players = new Map(); // socketId -> playerData
     this.rewardStats = new Map(); // name -> { userId, team, hits, damage, kills }
     this.gameState = null;
+    this.mapSnapshot = matchData.editorMapSnapshot || require('../services/mapRepository').mapRepository.forMatch(matchId, matchData.map, matchData.modeVariantId || matchData.mode);
+    this.geometry = getDuelGeometry(matchData.map, this.mapSnapshot.variant, this.mapSnapshot.map);
     this.gameMode = createGameModeRuntime(this);
     this.modeState = this.gameMode?.createRoomState?.() ?? null;
 
@@ -132,7 +135,6 @@ class GameRoom {
       netTestLogger.noteRoomCreated(this);
     }
 
-    this.geometry = getDuelGeometry(matchData.map);
     huntressCombat.initialize(this);
     ninjaCombat.initialize(this);
     this.botControllers = new Map();
@@ -155,7 +157,7 @@ class GameRoom {
         maxHealth,
         baseDamage,
         specialDamage,
-        specialChargeDamage,
+        specialChargeHits,
         ammoCapacity,
         ammoCooldownMs,
         ammoReloadMs,
@@ -194,7 +196,7 @@ class GameRoom {
         maxHealth: botMaxHealth,
         health: botMaxHealth,
         superCharge: 0,
-        maxSuperCharge: specialChargeDamage,
+        maxSuperCharge: specialChargeHits,
         isAlive: true,
         lastInput: Date.now(),
         _lastPositionPacketAt: 0,
@@ -263,7 +265,7 @@ class GameRoom {
         throw new Error("This match has finished");
       }
       const {
-        maxHealth, baseDamage, specialDamage, specialChargeDamage,
+        maxHealth, baseDamage, specialDamage, specialChargeHits,
         ammoCapacity, ammoCooldownMs, ammoReloadMs,
       } = this._computeStats(matchPlayer.char_class, level);
       const now = Date.now();
@@ -291,7 +293,7 @@ class GameRoom {
         maxHealth,
         health: maxHealth,
         superCharge: 0,
-        maxSuperCharge: specialChargeDamage,
+        maxSuperCharge: specialChargeHits,
         isAlive: true,
         lastInput: now,
         _lastPositionPacketAt: 0,
@@ -1663,19 +1665,7 @@ class GameRoom {
       if (appliedDamage > 0) {
         this._recordCombatStat(attacker, { damage: appliedDamage });
 
-        // Update super charge
-        if (!isSelf && attacker.maxSuperCharge > 0) {
-          const chargeGain = appliedDamage;
-          attacker.superCharge = Math.min(
-            attacker.maxSuperCharge,
-            (attacker.superCharge || 0) + chargeGain,
-          );
-          this.io.to(`game:${this.matchId}`).emit("super-update", {
-            username: attacker.name,
-            charge: attacker.superCharge,
-            maxCharge: attacker.maxSuperCharge,
-          });
-        }
+        if (!isSelf) chargeSuperForHit(this, attacker, attackType);
 
         if (!isSelf) {
           const knockback = getKnockback(attacker, target, now);
@@ -1757,7 +1747,7 @@ class GameRoom {
       const {
         getHealth,
         getDamage,
-        getSuperChargeDamage,
+        getSuperChargeHits,
         getSpecialDamage,
         getCharacterStats,
       } = require("../../lib/characterStats.js");
@@ -1768,7 +1758,7 @@ class GameRoom {
         Number(getSpecialDamage(charClass, level)) || 0,
       );
       const stats = getCharacterStats(charClass) || {};
-      const specialChargeDamage = getSuperChargeDamage(charClass, level);
+      const specialChargeHits = getSuperChargeHits(charClass);
       const ammoCapacity = stats.ammoCapacity || 1;
       const ammoCooldownMs = stats.ammoCooldownMs || 1200;
       const ammoReloadMs = stats.ammoReloadMs || 1200;
@@ -1776,7 +1766,7 @@ class GameRoom {
         maxHealth,
         baseDamage,
         specialDamage,
-        specialChargeDamage,
+        specialChargeHits,
         ammoCapacity,
         ammoCooldownMs,
         ammoReloadMs,
@@ -1790,7 +1780,7 @@ class GameRoom {
         maxHealth: 100,
         baseDamage: 100,
         specialDamage: 200,
-        specialChargeDamage: 3000,
+        specialChargeHits: 6,
         ammoCapacity: 1,
         ammoCooldownMs: 1200,
         ammoReloadMs: 1200,

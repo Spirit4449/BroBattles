@@ -1,0 +1,4 @@
+body.editor-playtest #battle-keybind-hud,
+body.editor-playtest #battle-tutorial-overlay {
+  display: none !important;
+}

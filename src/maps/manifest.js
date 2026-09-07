@@ -1,10 +1,9 @@
+import defaults from '../shared/mapDefaults';
+import { buildMapDocument, getDocumentRuntime, spawnOnMapDocument } from './documentRuntime';
 // src/maps/manifest.js
 //
-// Central map registry.  To add a new map:
-//   1. Create src/maps/yourMap.js following the same pattern as lushyPeaks.js.
-//   2. Import its `definition` here and add it to the MAPS object.
-//   3. That's it — buildMap / positionSpawn / getMapBgAsset / getMapObjects
-//      all work automatically for the new map ID.
+// Built-in fallbacks and runtime map documents. New maps are created in Map
+// Studio and discovered through the backend catalog; see docs/MAP_EDITOR.md.
 
 import { definition as lushyDef } from "./lushyPeaks";
 import { definition as mangroveDef } from "./mangroveMeadow";
@@ -24,6 +23,10 @@ const MAP_META = new Map(
   ]),
 );
 
+export function registerMapMetadata(entries) {
+  for (const entry of entries || []) MAP_META.set(Number(entry.id), entry);
+}
+
 const LOBBY_OFFSET_MODE_SCALE = {
   1: 1,
   2: 0.72,
@@ -32,7 +35,7 @@ const LOBBY_OFFSET_MODE_SCALE = {
 
 export function normalizeMapId(mapId) {
   const n = Number(mapId);
-  if (Number.isFinite(n) && MAPS[n]) return n;
+  if (Number.isFinite(n) && (MAPS[n] || MAP_META.has(n) || getDocumentRuntime(n))) return n;
   return lushyDef.id;
 }
 
@@ -41,9 +44,11 @@ export function normalizeMapId(mapId) {
  * @param {Phaser.Scene} scene
  * @param {number|string} mapId
  */
-export function buildMap(scene, mapId) {
+export function buildMap(scene, mapId, snapshot = null) {
   scene._terrainType = MAP_META.get(normalizeMapId(mapId))?.terrain || 'hard';
-  MAPS[normalizeMapId(mapId)]?.build(scene);
+  const data = snapshot || defaults.find(d=>d.id === Number(mapId))?.variants['1v1'];
+  if (data) buildMapDocument(scene, mapId, data);
+  else MAPS[normalizeMapId(mapId)]?.build(scene);
 }
 
 /**
@@ -58,6 +63,8 @@ export function buildMap(scene, mapId) {
  * @param {number}       teamSize  — total players on that team
  */
 export function positionSpawn(scene, sprite, mapId, team, index, teamSize) {
+  const runtime = getDocumentRuntime(mapId);
+  if (runtime) return spawnOnMapDocument(scene,sprite,runtime,team,index,teamSize);
   MAPS[normalizeMapId(mapId)]?.positionSpawn(
     scene,
     sprite,
@@ -74,7 +81,7 @@ export function positionSpawn(scene, sprite, mapId, team, index, teamSize) {
  * @returns {object[]}
  */
 export function getMapObjects(mapId) {
-  return MAPS[normalizeMapId(mapId)]?.getObjects() ?? [];
+  return getDocumentRuntime(mapId)?.objects || MAPS[normalizeMapId(mapId)]?.getObjects() || [];
 }
 
 /**
@@ -83,6 +90,7 @@ export function getMapObjects(mapId) {
  * @returns {object}
  */
 export function getMapSpawnConfig(mapId) {
+  if (getDocumentRuntime(mapId)) return getDocumentRuntime(mapId).data.spawns;
   return (
     MAPS[normalizeMapId(mapId)]?.getSpawnConfig?.() ?? {
       players: {},
@@ -97,6 +105,7 @@ export function getMapSpawnConfig(mapId) {
  * @returns {object}
  */
 export function getMapBoundaryConfig(mapId) {
+  if (getDocumentRuntime(mapId)) return getDocumentRuntime(mapId).data.bounds;
   return MAPS[normalizeMapId(mapId)]?.getBoundaryConfig?.() ?? {};
 }
 
@@ -115,6 +124,7 @@ export function getMapEditorTextureKeys(mapId) {
  * @returns {object}
  */
 export function getMapSpawnAnchors(mapId) {
+  if (getDocumentRuntime(mapId)) return getDocumentRuntime(mapId).anchors;
   return MAPS[normalizeMapId(mapId)]?.getSpawnAnchors?.() ?? {};
 }
 
@@ -124,7 +134,7 @@ export function getMapSpawnAnchors(mapId) {
  * @returns {string}
  */
 export function getMapBgAsset(mapId) {
-  return MAPS[normalizeMapId(mapId)]?.bgAsset ?? "/assets/lushy/gameBg.webp";
+  return getDocumentRuntime(mapId)?.data?.background || MAP_META.get(Number(mapId))?.mapSelectPreviewAsset || MAPS[normalizeMapId(mapId)]?.bgAsset || "/assets/lushy/gameBg.webp";
 }
 
 /**

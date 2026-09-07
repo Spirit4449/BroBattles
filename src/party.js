@@ -1,3 +1,4 @@
+import { createMapEditorLink } from './lib/mapEditorLink';
 import { sonner } from "./lib/sonner.js";
 import socket, { ensureSocketConnected, waitForConnect } from "./socket";
 import { getSharedSelectionPopupShell } from "./lib/selectionPopupShell.js";
@@ -9,7 +10,7 @@ import {
   getLobbyPlatformAsset,
 } from "./maps/manifest";
 import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
-import { getAllCharacters } from "./lib/characterStats.js";
+import { getAllCharacters, LEVEL_CAP } from "./lib/characterStats.js";
 import {
   getAllGameModes,
   getCompatibleMapsForSelection,
@@ -671,7 +672,7 @@ function setSlotLevelBadge(slot, level) {
     slot.insertBefore(badge, slot.firstChild);
   }
   if (Number.isFinite(Number(level)) && Number(level) > 0) {
-    const iconLevel = Math.max(1, Math.min(5, Number(level)));
+    const iconLevel = Math.max(1, Math.min(LEVEL_CAP, Number(level)));
     badge.innerHTML = `<img src="/assets/levels/${iconLevel}.webp" alt="" />`;
     badge.dataset.level = String(iconLevel);
     slot.classList.add("has-level");
@@ -1130,10 +1131,13 @@ function setupMapPickerControls(onSelect = null) {
         card.className = `map-select-card pixel-menu-button${
           String(mapDropdown.value) === value ? " active" : ""
         }`;
-        card.innerHTML = `
-          <img src="${getMapSelectPreviewAsset(value)}" alt="${opt.textContent || "Map"}" />
-          <div class="map-select-name">${opt.textContent || "Map"}</div>
-        `;
+        const image = document.createElement('img');
+        image.src = getMapSelectPreviewAsset(value);
+        image.alt = opt.textContent || 'Map';
+        const name = document.createElement('div');
+        name.className = 'map-select-name';
+        name.textContent = opt.textContent || 'Map';
+        card.append(image, name);
         card.addEventListener("click", () => {
           mapDropdown.value = value;
           mapDropdown.dispatchEvent(new Event("change", { bubbles: true }));
@@ -1142,7 +1146,16 @@ function setupMapPickerControls(onSelect = null) {
           }
           closePopup();
         });
-        grid.appendChild(card);
+        const editLink = createMapEditorLink({
+          user: window.__BRO_BATTLES_USERDATA__, mapId: value,
+          mapLabel: opt.textContent, teamSize: getPlayersPerTeamForSelection(getCurrentSelection()),
+        });
+        if (editLink) {
+          const choice = document.createElement('div');
+          choice.className = 'map-choice';
+          choice.append(card, editLink);
+          grid.appendChild(choice);
+        } else grid.appendChild(card);
       });
     }
 
@@ -3451,24 +3464,12 @@ function restoreLobbyAfterBattleReturn() {
   setReadyButtonState(false);
 }
 
-function mapNameFromId(id) {
-  return getMapLabel(id);
-}
-
-function modeNameFromSelection(selection) {
-  return getSelectionDisplayLabel(
-    normalizeGameSelection(selection || getCurrentSelection()),
-  );
-}
-
 function updateMMOverlay({ found, total, selection, players }) {
   const overlay = ensureOverlay();
   const headingEl = document.getElementById("mm-heading");
   const labelEl = document.querySelector(".mm-progress .mm-label");
   const foundEl = document.getElementById("mm-found");
   const totalEl = document.getElementById("mm-total");
-  const modeEl = document.getElementById("mm-mode");
-  const mapEl = document.getElementById("mm-map");
   const grid = document.getElementById("mm-players");
   const normalized = normalizeGameSelection(
     selection || activeQueueContext?.selection || getCurrentSelection(),
@@ -3508,13 +3509,6 @@ function updateMMOverlay({ found, total, selection, players }) {
   if (totalEl) {
     totalEl.textContent = String(totalCount);
   }
-  if (modeEl) modeEl.textContent = modeNameFromSelection(normalized);
-  if (mapEl) {
-    mapEl.textContent =
-      normalized.mapId != null
-        ? mapNameFromId(normalized.mapId)
-        : "No Compatible Maps";
-  }
   if (grid) {
     const playersArr = Array.isArray(players) ? players : [];
     const nextSig = JSON.stringify({
@@ -3546,8 +3540,6 @@ function updateMMOverlay({ found, total, selection, players }) {
       const item = document.createElement("div");
       item.className = "mm-player" + (p ? "" : " placeholder");
       item.style.setProperty("--mm-slot-index", String(i));
-      item.style.setProperty("--mm-success-visual-delay", `${120 + i * 55}ms`);
-      item.style.setProperty("--mm-success-name-delay", `${260 + i * 45}ms`);
       item.dataset.team = p?.team
         ? p.team === activeQueueContext?.yourTeam
           ? "blue"

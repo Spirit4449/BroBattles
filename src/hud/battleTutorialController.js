@@ -83,7 +83,7 @@ export function createBattleTutorialController({
       icon: "⚡",
       tone: "super",
       title: "Charge your super",
-      copy: "Deal damage to fill the yellow bar.",
+      copy: "Land hits to fill the yellow bar. Each projectile counts.",
     },
     teammateChat: {
       icon: "●",

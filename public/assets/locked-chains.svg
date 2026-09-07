@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" preserveAspectRatio="none">
+<defs><pattern id="links" width="24" height="18" patternUnits="userSpaceOnUse">
+<path d="M2 2h18v2h2v10h-2v2H2v-2H0V4h2z" fill="#080e18"/>
+<path d="M4 4h14v2h2v6h-2v2H4v-2H2V6h2z" fill="#8193a7"/>
+<path d="M6 7h10v4H6z" fill="#172231"/>
+<path d="M4 4h14v2H4zM2 6h2v6H2z" fill="#c3ced8"/>
+<path d="M4 12h14v2H4z" fill="#46576c"/>
+<path d="M18 7h6v4h-6z" fill="#101a28"/>
+<path d="M18 7h6v2h-6z" fill="#a5b3c2"/>
+</pattern></defs>
+<g transform="rotate(35 100 100)"><path d="M-80 90h360v18H-80z" fill="url(#links)"/></g>
+<g transform="rotate(-35 100 100)"><path d="M-80 90h360v18H-80z" fill="url(#links)"/></g>
+</svg>

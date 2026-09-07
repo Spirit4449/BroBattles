@@ -32,7 +32,7 @@ Hit behavior:
 Special name:
 Special behavior:
 Special charge hits:
-Special charge damage requirement:
+Special charge hit requirement (specialChargeHits), plus super-hit contribution (specialChargePerHit; 0 disables super recharge):
 Special damage or effect:
 Special duration/range/radius:
 

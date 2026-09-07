@@ -133,8 +133,8 @@ test("freeze slows horizontal movement and jump without disabling either", () =>
 });
 
 test("shockwave launches every other eligible player inside its radius", () => {
-  assert.ok(POWERUP_SHOCKWAVE_FORCE_X >= 1_500);
-  assert.ok(POWERUP_SHOCKWAVE_FORCE_Y >= 1_000);
+  assert.equal(POWERUP_SHOCKWAVE_FORCE_X, 990);
+  assert.equal(POWERUP_SHOCKWAVE_FORCE_Y, 750);
   const emitted = [];
   const collector = {
     name: "collector",
@@ -205,4 +205,23 @@ test("shockwave launches every other eligible player inside its radius", () => {
         Number.isFinite(entry.payload.amountY),
     ),
   );
+});
+
+test('shockwave smoothly scales from a huge close blast to a strong edge blast with lift', () => {
+  const collector = { name: 'source', x: 0, y: 0 };
+  const hits = [];
+  const targets = [0, POWERUP_SHOCKWAVE_RADIUS / 2, POWERUP_SHOCKWAVE_RADIUS].map((x, i) => ({
+    x, y: 0, socketId: String(i), isAlive: true, connected: true, loaded: true,
+  }));
+  const room = {
+    players: new Map([['source', collector], ...targets.map(t => [t.socketId, t])]),
+    io: { to: () => ({ emit: (event, payload) => hits.push(payload) }) },
+  };
+  effectManager.apply(collector, 'shockwave', 20_000, {}, room);
+  assert.equal(hits.length, 3);
+  assert.ok(hits[0].amountX > hits[1].amountX);
+  assert.ok(hits[1].amountX > hits[2].amountX);
+  assert.ok(hits[0].amountX >= POWERUP_SHOCKWAVE_FORCE_X * 1.5);
+  assert.ok(hits[2].amountX >= POWERUP_SHOCKWAVE_FORCE_X * 0.8);
+  assert.ok(hits.every(hit => hit.amountY <= -270));
 });

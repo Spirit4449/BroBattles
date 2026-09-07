@@ -103,6 +103,7 @@ app.locals.stripeShopService = stripeShopService;
 // Stripe signature verification requires the unparsed request body.
 registerStripeWebhookRoute({ app, stripeShopService });
 
+app.use(["/api/admin/maps", "/api/admin/map-playtests"], express.json({ limit: "12mb" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser(COOKIE_SECRET));
@@ -141,6 +142,11 @@ app.locals.socketApi = socketApi;
 
 // Prepare auth helpers
 const auth = makeAuthHelpers(db, { SIGNED_COOKIE_OPTS, DISPLAY_COOKIE_OPTS });
+require('./services/mapPlaytestService').mapPlaytests.attach(io, async socket => {
+  const cookies = require('cookie').parse(socket.handshake.headers.cookie || '');
+  return auth.requireCurrentUser({signedCookies:cookieParser.signedCookies(cookies,COOKIE_SECRET)}, {cookie(){},clearCookie(){}});
+}, auth.isAdminUser);
+
 
 app.use(
   createAbuseHttpMiddleware({
@@ -150,7 +156,7 @@ app.use(
 );
 
 // Register routes
-registerEconomyRoutes({ app, db, auth });
+registerEconomyRoutes({ app, db, auth, io });
 registerAdminRoutes({
   app,
   db,

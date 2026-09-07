@@ -1,3 +1,4 @@
+const { PICKUP_DELAY_MS } = require("../../../shared/pickupTiming");
 const {
   DEATH_DROP_DESPAWN_MS,
   DEATH_DROP_BLINK_MS,
@@ -180,6 +181,8 @@ function handleDeathDropPickup(room, socketId, payload) {
     room._deathDrops.delete(id);
     return;
   }
+
+  if (now < Number(drop.spawnedAt ?? 0) + PICKUP_DELAY_MS) return;
 
   const clientX = Number(payload.x);
   const clientY = Number(payload.y);

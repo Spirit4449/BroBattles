@@ -57,9 +57,25 @@ function createAbuseHttpMiddleware({ abuseControl, db }) {
         windowMs: bucket.windowMs,
         anonLimit: bucket.anonLimit,
         enforceActiveSuspension: policy.enforceActiveSuspension !== false,
+        countFailuresOnly: policy.countFailuresOnly === true,
       });
 
-      if (decision?.allowed) return next();
+      if (decision?.allowed) {
+        if (policy.countFailuresOnly) {
+          // Count completed client failures only, never successful purchases or
+          // server errors. Register after the guard so blocked retries don't count.
+          res.once("finish", () => {
+            if (res.statusCode >= 400 && res.statusCode < 500) {
+              abuseControl.recordHttpFailure({
+                identityKey,
+                source: routeKey,
+                windowMs: bucket.windowMs,
+              });
+            }
+          });
+        }
+        return next();
+      }
 
       console.warn(
         `[abuse] http blocked route=${routeKey} user=${Number(user?.user_id) || 0} identity=${identityKey} type=${String(decision?.type || "rate_limited")}`,

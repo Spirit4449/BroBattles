@@ -39,10 +39,9 @@ import {
 import { bindLocalSocketEvents } from "./players/localSocketEvents";
 import { createLocalStateSync } from "./players/localStateSync";
 import {
-  ATTACK_AIM_HOLD_ACTIVATE_MS,
-  ATTACK_AIM_DRAG_ACTIVATE_PX,
   getPlayerAimBasePoint,
   resolveAttackAimContext,
+  getNearestOpponentDirection,
 } from "./characters/shared/attackAim";
 import {
   deriveMovementAnimation,
@@ -57,6 +56,7 @@ import {
 } from "./characters/shared/animationState.js";
 import { getResolvedCharacterBodyConfig } from "./lib/characterTuning.js";
 import { createAttackAimReticleController } from "./gameScene/attackAimReticle";
+import { createCombatMouseController } from "./gameScene/combatMouse";
 import { createMobileControlsController } from "./gameScene/mobileControls";
 import { RENDER_LAYERS } from "./gameScene/renderLayers";
 import MOVEMENT_PHYSICS from "./shared/movementPhysics.json";
@@ -299,25 +299,13 @@ function resetMovementInputState() {
   };
 }
 
-const GAME_CROSSHAIR_CURSOR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.1" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.94)" stroke-width="1.4"/><circle cx="12" cy="12" r="1.45" fill="rgba(255,255,255,0.97)"/><path d="M12 1.7v4.25M12 18.05v4.25M1.7 12h4.25M18.05 12h4.25" stroke="rgba(32,32,32,0.55)" stroke-width="3.4" stroke-linecap="round"/><path d="M12 1.7v4.25M12 18.05v4.25M1.7 12h4.25M18.05 12h4.25" stroke="rgba(255,255,255,0.97)" stroke-width="1.55" stroke-linecap="round"/></svg>`;
-const GAME_CROSSHAIR_CURSOR = `url("data:image/svg+xml;utf8,${encodeURIComponent(
-  GAME_CROSSHAIR_CURSOR_SVG,
-)}") 12 12, crosshair`;
+let combatMouseController = null;
 
 const attackAimState = {
   active: false,
   pointerId: null,
-  startedAt: 0,
-  aiming: false,
   family: "basic",
   button: 0,
-  startWorldX: 0,
-  startWorldY: 0,
-  pointerWorldX: 0,
-  pointerWorldY: 0,
-  relativePointerX: 0,
-  relativePointerY: 0,
-  pointerDirty: false,
   currentContext: null,
 };
 
@@ -404,30 +392,13 @@ function clearAttackAimReticle() {
 }
 
 function resetPointerAttackAim() {
+  combatMouseController?.endDrag();
   attackAimState.active = false;
   attackAimState.pointerId = null;
-  attackAimState.startedAt = 0;
-  attackAimState.aiming = false;
   attackAimState.family = "basic";
   attackAimState.button = 0;
-  attackAimState.startWorldX = 0;
-  attackAimState.startWorldY = 0;
-  attackAimState.pointerWorldX = 0;
-  attackAimState.pointerWorldY = 0;
-  attackAimState.relativePointerX = 0;
-  attackAimState.relativePointerY = 0;
-  attackAimState.pointerDirty = false;
   attackAimState.currentContext = null;
   clearAttackAimReticle();
-}
-
-function applyGameCursor(nextScene) {
-  try {
-    const canvas = nextScene?.game?.canvas;
-    if (canvas?.style) {
-      canvas.style.cursor = GAME_CROSSHAIR_CURSOR;
-    }
-  } catch (_) {}
 }
 
 function clearGameCursor(targetScene = pointerAttackScene || scene) {
@@ -448,6 +419,8 @@ function detachPointerAttackBindings(
     !pointerAttackScene || pointerAttackScene === sceneToDetach;
   clearGameCursor(sceneToDetach);
   if (!isTrackedScene) return;
+  combatMouseController?.destroy();
+  combatMouseController = null;
   try {
     if (pointerAttackHandlers?.down) {
       sceneToDetach?.input?.off?.("pointerdown", pointerAttackHandlers.down);
@@ -476,23 +449,13 @@ function detachPointerAttackBindings(
 }
 
 function resolveQuickAttackContext(family = "basic") {
+  if (combatMouseController?.shouldShowReticle()) return resolveDirectionalAttackContext(family);
   return resolveAttackAimContext({
     character: currentCharacter,
     player,
     family,
     quick: true,
-  });
-}
-
-function resolvePointerReleaseContext(family = "basic") {
-  return resolveAttackAimContext({
-    character: currentCharacter,
-    player,
-    family,
-    pointerWorldX: Number(attackAimState.pointerWorldX),
-    pointerWorldY: Number(attackAimState.pointerWorldY),
-    quick: true,
-    quickUsesPointerAngle: true,
+    quickFacingDirection: getNearestOpponentDirection(player, opponentPlayersRef),
   });
 }
 
@@ -506,43 +469,24 @@ function getAimBasePoint(family = attackAimState.family || "basic") {
   );
 }
 
-function syncPointerAttackRelativeOffset(
-  family = attackAimState.family || "basic",
-) {
-  const base = getAimBasePoint(family);
-  const pointerX = Number(attackAimState.pointerWorldX);
-  const pointerY = Number(attackAimState.pointerWorldY);
-  if (!Number.isFinite(pointerX) || !Number.isFinite(pointerY)) return;
-  attackAimState.relativePointerX = pointerX - Number(base.baseX || 0);
-  attackAimState.relativePointerY = pointerY - Number(base.baseY || 0);
-}
-
-function buildStickyAimPointerWorld() {
-  const base = getAimBasePoint();
-  return {
-    x: Number(base.baseX || 0) + Number(attackAimState.relativePointerX || 0),
-    y: Number(base.baseY || 0) + Number(attackAimState.relativePointerY || 0),
-  };
-}
-
-function resolveActiveAimContext(forceQuick = false) {
-  if (!player) return null;
-  if (forceQuick || !attackAimState.aiming) {
-    return resolveQuickAttackContext(attackAimState.family || "basic");
+function resolveDirectionalAttackContext(family = "basic") {
+  if (!player || !combatMouseController) return null;
+  if (combatMouseController.isDefaultAim()) {
+    return resolveAttackAimContext({ character: currentCharacter, player, family, quick: true,
+      quickFacingDirection: getNearestOpponentDirection(player, opponentPlayersRef) });
   }
-  const pointerTarget = attackAimState.pointerDirty
-    ? {
-        x: Number(attackAimState.pointerWorldX),
-        y: Number(attackAimState.pointerWorldY),
-      }
-    : buildStickyAimPointerWorld();
+  const base = getAimBasePoint(family);
+  const direction = combatMouseController.getDirection();
+  const defaultRange = Number(base.config?.defaultRange) || 120;
+  const minRange = Number(base.config?.minRange) || defaultRange;
+  const maxRange = Number(base.config?.maxRange) || defaultRange;
+  const range = base.config?.kind === "throw"
+    ? minRange + (maxRange - minRange) * combatMouseController.getDistanceRatio()
+    : defaultRange;
   return resolveAttackAimContext({
-    character: currentCharacter,
-    player,
-    family: attackAimState.family || "basic",
-    pointerWorldX: Number(pointerTarget?.x),
-    pointerWorldY: Number(pointerTarget?.y),
-    quick: false,
+    character: currentCharacter, player, family, quick: false,
+    pointerWorldX: base.baseX + direction.x * range,
+    pointerWorldY: base.baseY + direction.y * range,
   });
 }
 
@@ -582,111 +526,37 @@ function serializeAimContext(context) {
   return out;
 }
 
-function updatePointerAttackAimPointer(pointer = null) {
-  if (!attackAimState.active || !scene?.cameras?.main) return;
-  const livePointer =
-    pointer ||
-    scene?.input?.activePointer ||
-    scene?.input?.mousePointer ||
-    null;
-  if (!livePointer) return;
-  try {
-    livePointer.updateWorldPoint?.(scene.cameras.main);
-  } catch (_) {}
-  const nextX = Number(livePointer.worldX);
-  const nextY = Number(livePointer.worldY);
-  if (Number.isFinite(nextX)) {
-    attackAimState.pointerWorldX = nextX;
-  }
-  if (Number.isFinite(nextY)) {
-    attackAimState.pointerWorldY = nextY;
-  }
-  syncPointerAttackRelativeOffset();
-  attackAimState.pointerDirty = true;
-}
-
 function startPointerAttackAim(pointer, family = "basic", button = 0) {
   if (!pointer || dead) return;
   resetPointerAttackAim();
+  combatMouseController?.beginDrag(player?.flipX ? -1 : 1, getAimBasePoint(family).config?.kind === "throw");
   attackAimState.active = true;
   attackAimState.family = family;
   attackAimState.button = button;
   attackAimState.pointerId = pointer.id;
-  attackAimState.startedAt = Date.now();
-  updatePointerAttackAimPointer(pointer);
-  attackAimState.startWorldX = attackAimState.pointerWorldX;
-  attackAimState.startWorldY = attackAimState.pointerWorldY;
+  updatePointerAttackAimState();
 }
 
 function updatePointerAttackAimState() {
-  if (!attackAimState.active) {
+  if (mobileControlsController?.isEnabled?.()) return;
+  if (!player || dead || window.__BB_MAP_EDIT_ACTIVE || !combatMouseController?.shouldShowReticle()) {
     clearAttackAimReticle();
     return;
   }
-  if (!player || dead || window.__BB_MAP_EDIT_ACTIVE) {
-    resetPointerAttackAim();
-    return;
-  }
-  const elapsed = Math.max(0, Date.now() - attackAimState.startedAt);
-  const dragDist = Math.hypot(
-    attackAimState.pointerWorldX - attackAimState.startWorldX,
-    attackAimState.pointerWorldY - attackAimState.startWorldY,
-  );
-  if (
-    !attackAimState.aiming &&
-    (elapsed >= ATTACK_AIM_HOLD_ACTIVATE_MS ||
-      dragDist >= ATTACK_AIM_DRAG_ACTIVATE_PX)
-  ) {
-    attackAimState.aiming = true;
-  }
-  if (!attackAimState.aiming) {
-    attackAimState.currentContext = null;
-    clearAttackAimReticle();
-    return;
-  }
-
-  attackAimState.currentContext = resolveActiveAimContext(false);
-  attackAimState.pointerDirty = false;
-  try {
-    attackAimReticleController?.update?.(attackAimState.currentContext);
-  } catch (_) {}
+  const family = attackAimState.active ? attackAimState.family : "basic";
+  attackAimState.currentContext = resolveDirectionalAttackContext(family);
+  attackAimReticleController?.update({ ...attackAimState.currentContext,
+    previewStrength: combatMouseController.getStrength(),
+    centerCue: combatMouseController.getCenterCue() });
 }
 
 function finishPointerAttackAim(pointer) {
-  if (!attackAimState.active) return null;
-  if (
-    attackAimState.pointerId !== null &&
-    pointer &&
-    pointer.id !== attackAimState.pointerId
-  ) {
-    return null;
-  }
-  updatePointerAttackAimPointer(pointer);
-  const elapsed = Math.max(0, Date.now() - attackAimState.startedAt);
-  const dragDist = Math.hypot(
-    attackAimState.pointerWorldX - attackAimState.startWorldX,
-    attackAimState.pointerWorldY - attackAimState.startWorldY,
-  );
-  if (
-    !attackAimState.aiming &&
-    (elapsed >= ATTACK_AIM_HOLD_ACTIVATE_MS ||
-      dragDist >= ATTACK_AIM_DRAG_ACTIVATE_PX)
-  ) {
-    attackAimState.aiming = true;
-  }
-  const context = attackAimState.aiming
-    ? resolveAttackAimContext({
-        character: currentCharacter,
-        player,
-        family: attackAimState.family || "basic",
-        pointerWorldX: Number(attackAimState.pointerWorldX),
-        pointerWorldY: Number(attackAimState.pointerWorldY),
-        quick: false,
-      })
-    : resolvePointerReleaseContext(attackAimState.family || "basic");
-  if (context && typeof context === "object") {
-    context.family = attackAimState.family || context.family || "basic";
-  }
+  if (!attackAimState.active ||
+      (pointer && pointer.id !== attackAimState.pointerId)) return null;
+  // Resolve from the current player position with the same direction as the preview.
+  const context = combatMouseController?.isAiming()
+    ? resolveDirectionalAttackContext(attackAimState.family)
+    : resolveQuickAttackContext(attackAimState.family);
   resetPointerAttackAim();
   return context;
 }
@@ -734,6 +604,7 @@ export function createPlayer(
           pointerWorldX,
           pointerWorldY,
           quick,
+          quickFacingDirection: quick ? getNearestOpponentDirection(player, opponentPlayersRef) : null,
         }),
       onBasicFire: (context) => fireBasicAttack(context?.direction, context),
       onSpecialFire: (context) => fireSpecialAttack(context),
@@ -1135,7 +1006,7 @@ export function createPlayer(
   charCtrl = ctrl;
   if (ctrl && ctrl.attachInput) ctrl.attachInput();
 
-  // Left-click supports quick-fire tap and hold-to-aim.
+  // Mouse movement selects direction; left-click releases the basic attack.
   // Right-click mirrors that for supers using the special reticle theme.
   const pointerDownHandler = (pointer) => {
     if (window.__BB_MAP_EDIT_ACTIVE) return;
@@ -1157,6 +1028,7 @@ export function createPlayer(
       pointer?.pointerType === "touch"
     )
       return;
+    if (!combatMouseController?.beginInput()) return;
     if (pointer.button === 0) {
       startPointerAttackAim(pointer, "basic", 0);
       return;
@@ -1188,7 +1060,6 @@ export function createPlayer(
     ) {
       return;
     }
-    updatePointerAttackAimPointer(pointer);
     updatePointerAttackAimState();
   };
 
@@ -1232,7 +1103,19 @@ export function createPlayer(
   scene.input.on("pointerup", pointerUpHandler);
   scene.input.on("pointerupoutside", pointerUpHandler);
   scene.input.on("gameout", pointerGameOutHandler);
-  applyGameCursor(sceneParam);
+  combatMouseController = createCombatMouseController({
+    scene: sceneParam,
+    canCapture: () => !!player && !sceneParam._battleEnded && !chatInputActive &&
+      !window.__BB_MAP_EDIT_ACTIVE && !mobileControlsController?.isEnabled?.() &&
+      sceneParam.input.keyboard?.enabled !== false && sceneParam.sys.isActive(),
+    canPlay: () => !!player && !dead && !chatInputActive &&
+      !window.__BB_MAP_EDIT_ACTIVE && !mobileControlsController?.isEnabled?.() &&
+      sceneParam.input.keyboard?.enabled !== false && sceneParam.sys.isActive(),
+    onRelease: () => {
+      resetPointerAttackAim();
+      resetMovementInputState();
+    },
+  });
 
   pointerContextMenuCanvas = scene.game?.canvas || null;
   pointerContextMenuHandler = (e) => e.preventDefault();
@@ -1281,6 +1164,7 @@ export function createPlayer(
       wallSlideLoopPlaying = value;
     },
     onLocalDeath: () => {
+      combatMouseController?.endDrag();
       resetMovementInputState();
       resetMovementVfxTracking();
       resetPointerAttackAim();
@@ -1290,7 +1174,11 @@ export function createPlayer(
     onLocalRespawn: () => {
       resetMovementInputState();
       resetMovementVfxTracking();
+      resizeForDuckLocal?.(false);
+      applyFlipOffsetLocal?.();
+      player.body?.updateFromGameObject?.();
       setLocalUiVisible(true);
+      syncLocalUiPosition();
       try {
         indicatorTriangle?.setVisible(true);
         drawIndicatorTriangle();
@@ -1638,10 +1526,10 @@ function drawAmmoBar(forcedX, forcedY) {
 }
 
 export function handlePlayerMovement(scene) {
-  applyGameCursor(scene);
   mobileControlsController?.ensure?.(scene);
   mobileControlsController?.layout?.(scene);
-  if (scene?.input?.keyboard?.enabled === false) {
+  if (scene?.input?.keyboard?.enabled === false ||
+      (combatMouseController && !mobileControlsController?.isEnabled?.() && !combatMouseController.isActive())) {
     stopMovementLoopSfx();
     try {
       if (player?.body) {
@@ -1734,22 +1622,22 @@ export function handlePlayerMovement(scene) {
   const wallKickFull = MOVEMENT_PHYSICS.wallKickFull;
   const wallKickVerticalMult =
     Number(MOVEMENT_PHYSICS.wallKickVerticalMult) || 1;
-  const wallKickInputGraceMs = MOVEMENT_PHYSICS.wallKickInputGraceMs || 130;
-  const wallContactGraceMs = MOVEMENT_PHYSICS.wallContactGraceMs || 130;
   const wallJumpHorizontalGracePx =
-    MOVEMENT_PHYSICS.wallJumpHorizontalGracePx || 34;
+    MOVEMENT_PHYSICS.wallJumpHorizontalGracePx ?? 2;
   const wallSlideReentryDelayMs =
     MOVEMENT_PHYSICS.wallSlideReentryDelayMs || 220;
-  const wallSlideSnapDistance = 10;
+  const wallSlideSnapDistance = MOVEMENT_PHYSICS.wallSlideSnapDistance;
   const wallSlideVerticalPadding = 6;
   const wallJumpPressBufferMs = 120;
   // - fallGravityFactor: gravity multiplier while falling (fast-fall). 1.0 = off.
   const fallGravityFactor = MOVEMENT_PHYSICS.fallGravityFactor;
+  const shockwaveActive = (player._shockwaveUntil || 0) > Date.now();
   // Ensure body uses our drag settings once
   if (player.body) {
     const onGround = player.body.touching.down;
     player.setDragX(onGround ? dragGround : dragAir);
-    player.setMaxVelocity(maxSpeed, 1000);
+    player.setMaxVelocity(shockwaveActive ? Math.max(maxSpeed, Math.abs(player.body.velocity.x)) : maxSpeed,
+      shockwaveActive ? Math.max(1000, Math.abs(player.body.velocity.y)) : 1000);
   }
   // Track last grounded time for coyote jumping
   player._lastGroundTime = player.body.touching.down
@@ -1770,23 +1658,15 @@ export function handlePlayerMovement(scene) {
     keyW.isDown ||
     (keySpace && keySpace.isDown) ||
     !!mobileControlsController?.isJumpHeld?.();
-  let upKeyFreshPress =
+  const directionalUpFreshPress =
     Phaser.Input.Keyboard.JustDown(cursors.up) ||
-    Phaser.Input.Keyboard.JustDown(keyW) ||
-    (!!keySpace && Phaser.Input.Keyboard.JustDown(keySpace));
-  if (mobileControlsController?.consumeJumpFreshPress?.()) {
-    upKeyFreshPress = true;
-  }
-  if (upKeyFreshPress) {
-    player._lastJumpPressTime = Date.now();
-  }
+    Phaser.Input.Keyboard.JustDown(keyW);
+  const jumpButtonFreshPress =
+    (!!keySpace && Phaser.Input.Keyboard.JustDown(keySpace)) ||
+    !!mobileControlsController?.consumeJumpFreshPress?.();
+  let upKeyFreshPress = directionalUpFreshPress || jumpButtonFreshPress;
   let ducking = false;
 
-  const touchingWallNow =
-    !!player.body.touching.left ||
-    !!player.body.touching.right ||
-    !!player.body.blocked.left ||
-    !!player.body.blocked.right;
   const touchingLeftNow =
     !!player.body.touching.left || !!player.body.blocked.left;
   const touchingRightNow =
@@ -1799,8 +1679,9 @@ export function handlePlayerMovement(scene) {
   let nearRightWall = false;
   let leftWallGap = Number.POSITIVE_INFINITY;
   let rightWallGap = Number.POSITIVE_INFINITY;
-  if (Array.isArray(mapObjects)) {
-    for (const obj of mapObjects) {
+  const wallObjects = scene._mapObjects || [];
+  if (Array.isArray(wallObjects)) {
+    for (const obj of wallObjects) {
       const body = obj?.body;
       if (!body || body === player.body || body.enable === false) continue;
       const bodyWidth = Number(body.width) || 0;
@@ -1834,6 +1715,13 @@ export function handlePlayerMovement(scene) {
     }
   }
   const nowWallTs = Date.now();
+
+  // A fresh jump press detaches; an already-held Up input brakes the slide.
+  const wallBrakeHeld = (cursors.up.isDown || keyW.isDown) &&
+    !player.body.touching.down &&
+    (touchingLeftNow || touchingRightNow || nearLeftWall || nearRightWall);
+  upKeyFreshPress = jumpButtonFreshPress || directionalUpFreshPress;
+  if (upKeyFreshPress) player._lastJumpPressTime = nowWallTs;
   const bufferedJumpPressActive =
     nowWallTs - (player._lastJumpPressTime || 0) <= wallJumpPressBufferMs;
   const horizontalKickReachPx =
@@ -1865,28 +1753,16 @@ export function handlePlayerMovement(scene) {
         : nearRightWall
           ? "right"
           : null;
-  const wallJumpSide = wallSide || bufferedKickSide;
-  if (wallJumpSide) {
-    player._lastWallContactTs = nowWallTs;
-    player._lastWallSide = wallJumpSide;
+  // Buffered presses still work, but remembered contact cannot extend jump reach.
+  const effectiveWallSide = wallSide || bufferedKickSide;
+  const movingAwayFromWall =
+    (wallSide === "left" && rightKey && !leftKey) ||
+    (wallSide === "right" && leftKey && !rightKey);
+  if (movingAwayFromWall) {
+    player._wallSlideSuppressedUntil = nowWallTs + wallSlideReentryDelayMs;
   }
-  const effectiveWallSide =
-    wallJumpSide ||
-    nowWallTs - (player._lastWallContactTs || 0) <= wallContactGraceMs
-      ? player._lastWallSide || wallJumpSide
-      : null;
   const wallSlideSuppressed =
     (player._wallSlideSuppressedUntil || 0) > nowWallTs;
-  const wallKickAwayNow =
-    (effectiveWallSide === "left" && rightKey && !leftKey) ||
-    (effectiveWallSide === "right" && leftKey && !rightKey);
-  if (wallKickAwayNow) {
-    player._lastWallKickAwayInputTs = nowWallTs;
-  }
-  const wallKickAwayRequested =
-    wallKickAwayNow ||
-    nowWallTs - (player._lastWallKickAwayInputTs || 0) <= wallKickInputGraceMs;
-
   const nowTs = Date.now();
   const movementLockedByAbility = (player?._movementLockedUntil || 0) > nowTs;
   const movementLockedByExternal =
@@ -2074,7 +1950,7 @@ export function handlePlayerMovement(scene) {
   }
 
   // Left movement
-  if (ducking) {
+  if (ducking && !shockwaveActive) {
     const duckMaxSpeed = maxSpeed * DUCK_SPEED_RATIO;
     player.setMaxVelocity(duckMaxSpeed, 1000);
     if (Math.abs(player.body.velocity.x) > duckMaxSpeed) {
@@ -2133,6 +2009,11 @@ export function handlePlayerMovement(scene) {
     isMoving = true; // Sets moving variable
   } else {
     stopMoving(); // If no key is being pressed, it calls the stop moving function
+  }
+
+  if (shockwaveActive) {
+    player.setAccelerationX(0);
+    player.setDragX(0);
   }
 
   const inputDirection =
@@ -2197,9 +2078,9 @@ export function handlePlayerMovement(scene) {
     !movementLocked &&
     effectiveWallSide &&
     !player.body.touching.down &&
+    !shockwaveActive &&
     canWallJump &&
-    bufferedJumpPressActive &&
-    wallKickAwayRequested
+    bufferedJumpPressActive
   ) {
     wallJump(effectiveWallSide); // Calls walljump
     scene.sound.play("sfx-walljump", {
@@ -2215,6 +2096,7 @@ export function handlePlayerMovement(scene) {
     player._lastJumpPressTime = 0;
   } else if (
     bufferedJumpPressActive &&
+    !shockwaveActive &&
     !movementLocked &&
     (player.body.touching.down ||
       now - (player._lastGroundTime || 0) <= coyoteTimeMs) &&
@@ -2258,12 +2140,33 @@ export function handlePlayerMovement(scene) {
       if (t >= 1) player._jumpLaunch = null;
     }
   }
-  const isWallSliding =
+  const wallAttachNow = Date.now();
+  const wallAttachEligible =
     !dead &&
+    !movementLocked &&
     !player.body.touching.down &&
     wallSlideContact &&
-    !wallSlideSuppressed &&
-    (player.body.velocity.y || 0) > 20;
+    (player._wallSlideSuppressedUntil || 0) <= wallAttachNow;
+  if (!wallAttachEligible) {
+    player._wallAttachSide = null;
+    player._wallAttachStartedAt = null;
+  } else if (player._wallAttachSide !== wallSide) {
+    player._wallAttachSide = wallSide;
+    player._wallAttachStartedAt = wallAttachNow;
+  }
+  const isWallSliding = wallAttachEligible &&
+    wallAttachNow - player._wallAttachStartedAt >= MOVEMENT_PHYSICS.wallSlideAttachDelayMs;
+  if (isWallSliding) {
+    // Keep horizontal attachment while upward momentum runs its natural course.
+    player.setAccelerationX(0);
+    player.setVelocityX(wallSide === "left"
+      ? -MOVEMENT_PHYSICS.wallSlideAttachSpeed
+      : MOVEMENT_PHYSICS.wallSlideAttachSpeed);
+    if (player.body.velocity.y >= 0) {
+      player.setVelocityY(Math.min(player.body.velocity.y,
+        wallBrakeHeld ? MOVEMENT_PHYSICS.wallSlideBrakeFallSpeed : wallSlideMaxFallSpeed));
+    }
+  }
   const wallSlideSpeedRatio = Phaser.Math.Clamp(
     (Number(player.body.velocity.y) || 0) / wallSlideMaxFallSpeed,
     0,
@@ -2328,18 +2231,11 @@ export function handlePlayerMovement(scene) {
     fastFallVfxElapsed = 0;
   }
 
-  // Wall slide: when touching a wall and airborne, limit fall speed for a slower slide
-  if (!player.body.touching.down && wallSlideContact && !wallSlideSuppressed) {
-    if (player.body.velocity.y > wallSlideMaxFallSpeed) {
-      player.setVelocityY(wallSlideMaxFallSpeed);
-    }
-  }
-
   // Check if the jump animation has completed
   if (
     !player.anims.isPlaying &&
     !player.body.touching.down &&
-    (!wallSlideContact || wallSlideSuppressed) &&
+    !isWallSliding &&
     !isAttacking
   ) {
     fall(); // Updates jump state once the jump animation has completed.
@@ -2677,6 +2573,7 @@ export function handlePlayerMovement(scene) {
   }
 
   function wallJump(wallSideParam) {
+    player._wallSlideSuppressedUntil = Date.now() + wallSlideReentryDelayMs;
     player._jumpLaunch = null;
     updateWallSlideAudio(false);
     // More powerful wall jump using physics impulses (no tween)
@@ -2830,6 +2727,7 @@ export function setLocalNetStateFlusher(fn) {
 export function setChatInputActive(active) {
   chatInputActive = !!active;
   if (chatInputActive) {
+    combatMouseController?.release();
     resetPointerAttackAim();
     resetMovementInputState();
     player?.setDragX?.(0);
@@ -2893,6 +2791,8 @@ export function setExternalControlLockUntil(untilMs = 0) {
 }
 
 export function destroyMobileControls() {
+  combatMouseController?.destroy();
+  combatMouseController = null;
   try {
     mobileControlsController?.destroy?.();
   } catch (_) {}

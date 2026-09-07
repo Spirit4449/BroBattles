@@ -273,15 +273,16 @@ function resolvePositiveNumber(value, fallback) {
   return fallback;
 }
 
-function clampToWorld(value, axis = "x") {
+function clampToWorld(value, axis = "x", room = null) {
+  const world = room?.geometry?.world;
   const margin = Number(WORLD_BOUNDS?.margin) || 0;
   if (axis === "y") {
-    const minY = -margin;
-    const maxY = (Number(WORLD_BOUNDS?.height) || 1000) + margin;
+    const minY = (world?.y || 0) - margin;
+    const maxY = (world ? world.y + world.height : Number(WORLD_BOUNDS?.height) || 1000) + margin;
     return Math.max(minY, Math.min(maxY, Number(value) || 0));
   }
-  const minX = -margin;
-  const maxX = (Number(WORLD_BOUNDS?.width) || 3600) + margin;
+  const minX = (world?.x || 0) - margin;
+  const maxX = (world ? world.x + world.width : Number(WORLD_BOUNDS?.width) || 3600) + margin;
   return Math.max(minX, Math.min(maxX, Number(value) || 0));
 }
 
@@ -292,8 +293,8 @@ function resolveLiveGloopPullDestination(room, target, pull) {
   const ay = Number(source?.y);
   if (!Number.isFinite(ax) || !Number.isFinite(ay)) {
     return {
-      x: clampToWorld(Number(pull?.toX) || Number(target?.x) || 0, "x"),
-      y: clampToWorld(Number(pull?.toY) || Number(target?.y) || 0, "y"),
+      x: clampToWorld(Number(pull?.toX) || Number(target?.x) || 0, "x", room),
+      y: clampToWorld(Number(pull?.toY) || Number(target?.y) || 0, "y", room),
     };
   }
 
@@ -305,8 +306,8 @@ function resolveLiveGloopPullDestination(room, target, pull) {
   const ux = dx / dist;
   const uy = dy / dist;
   return {
-    x: clampToWorld(ax + ux * stopDistance, "x"),
-    y: clampToWorld(ay + uy * stopDistance, "y"),
+    x: clampToWorld(ax + ux * stopDistance, "x", room),
+    y: clampToWorld(ay + uy * stopDistance, "y", room),
   };
 }
 
@@ -333,8 +334,8 @@ function applyGloopPull(room, attacker, target, attack, now) {
     fromX: tx,
     fromY: ty,
     stopDistance,
-    toX: clampToWorld(ax + ux * stopDistance, "x"),
-    toY: clampToWorld(ay + uy * stopDistance, "y"),
+    toX: clampToWorld(ax + ux * stopDistance, "x", room),
+    toY: clampToWorld(ay + uy * stopDistance, "y", room),
     lastStepAt: now,
     slowDurationMs: Math.max(1, Number(attack.slowDurationMs) || 2200),
     slowSpeedMult: Math.max(0.1, Number(attack.slowSpeedMult) || 0.5),
@@ -429,14 +430,14 @@ function tickRuntimeControlEffects(room, now = Date.now()) {
         ((Number(destination.x) || 0) -
           (Number(target.x) || Number(pull.fromX) || 0)) *
           easedAlpha,
-      "x",
+      "x", room,
     );
     target.y = clampToWorld(
       (Number(target.y) || Number(pull.fromY) || 0) +
         ((Number(destination.y) || 0) -
           (Number(target.y) || Number(pull.fromY) || 0)) *
           easedAlpha,
-      "y",
+      "y", room,
     );
     target.vx = 0;
     target.vy = 0;
@@ -998,7 +999,7 @@ function tickBallisticProjectile(room, attack, descriptor) {
     attack.y >=
     Math.max(
       100,
-      Number(WORLD_BOUNDS?.height) || Number(room?.worldHeight) || 1000,
+      room.geometry?.world ? room.geometry.world.y + room.geometry.world.height : Number(WORLD_BOUNDS?.height) || Number(room?.worldHeight) || 1000,
     )
   ) {
     return true;

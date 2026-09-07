@@ -24,6 +24,13 @@ export const DEFAULT_VARIANT_ID = String(
 );
 export const DEFAULT_MAP_ID = Number(mapsCatalog?.defaultMapId) || 1;
 
+export function registerMapCatalog(entries) {
+  if (!Array.isArray(entries)) return;
+  MAPS.splice(0, MAPS.length, ...entries);
+  MAP_BY_ID.clear();
+  for (const entry of entries) MAP_BY_ID.set(Number(entry.id),entry);
+}
+
 export function getAllGameModes() {
   return MODES.slice();
 }
