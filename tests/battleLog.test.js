@@ -413,7 +413,11 @@ test("finishing a game persists results before game-over and bot cleanup, once o
     } },
     io: { to() { return { emit(type) { events.push({ type }); } }; } },
     async _broadcastParticipantStatus() {},
-    async _distributeMatchRewards() { return [{ username: "Hero", kills: 2, damage: 950, hits: 12, trophiesDelta: 18 }]; },
+    matchResults: { async complete(room, winner) {
+      const rewards = [{ username: "Hero", kills: 2, damage: 950, hits: 12, trophiesDelta: 18 }];
+      await recordMatchOutcome(room.db, room, winner, rewards);
+      return rewards;
+    } },
   };
   await finishGame(room, "team1");
   await finishGame(room, "team1");

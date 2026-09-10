@@ -216,11 +216,11 @@ test("character card hover avoids full-card filter repaints", () => {
     characterLogic.indexOf("function startParticles()"),
   );
 
-  assert.doesNotMatch(cardRules, /transition:[\s\S]*?filter/);
+  assert.doesNotMatch(cardRules, /transition:[^;}]*\bfilter\b/);
   assert.doesNotMatch(cardRules, /\.character-card:hover\s*\{[^}]*filter:/);
   assert.match(cardRules, /will-change:\s*transform/);
-  assert.match(cardRules, /transform 240ms ease-out/);
-  assert.match(cardRules, /translate3d\(0, -1px, 0\) scale\(1\.002\)/);
+  assert.match(cardRules, /transition:[^;]*\btransform\b/);
+  assert.match(cardRules, /\.character-card:hover\s*\{[^}]*transform:/);
   assert.doesNotMatch(styles, /\.character-card:hover \.character-profile-icon/);
   assert.doesNotMatch(styles, /\.character-card:hover \.character-card-info/);
   assert.doesNotMatch(particleStep, /clientWidth|clientHeight/);

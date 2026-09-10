@@ -8,7 +8,7 @@ const rage = require('../src/server/core/gameRoom/abilities/thorgRageAbility');
 test('sweep is continuous, body-relative, mirrored and visits both sides', () => {
   const body = { x: 300, y: 200, direction: 1 };
   assert.deepEqual(sampleThorgSweep(body, 0), sampleThorgSweep(body, 1));
-  assert.equal(sampleThorgSweep(body, 0.5).x, 225);
+  assert.equal(sampleThorgSweep(body, 0.5).x, body.x - THORG_SWEEP.radiusX);
   for (let i = 0; i <= 100; i++) {
     const a = sampleThorgSweep(body, i / 100), b = sampleThorgSweep({ ...body, direction: -1 }, i / 100);
     assert.ok(Math.abs(a.x + b.x - body.x * 2) < 1e-9);
@@ -49,7 +49,15 @@ test('rage grows sweep around fixed feet and expands authoritative hit reach', t
   const { room, players: [p, target] } = makeRoom({ characters: ['thorg', 'ninja'] });
   t.after(() => room.cleanup());
   Object.assign(p, { x: 500, y: 300 });
-  Object.assign(target, { x: 620, y: 300, connected: true, _bodyHalfWidth: 2, _bodyHalfHeight: 2, _bodyCenterOffsetX: 0, _bodyCenterOffsetY: 0 });
+  Object.assign(target, {
+    x: p.x + THORG_SWEEP.radiusX + THORG_SWEEP.headWidth / 2 + 10,
+    y: 300,
+    connected: true,
+    _bodyHalfWidth: 2,
+    _bodyHalfHeight: 2,
+    _bodyCenterOffsetX: 0,
+    _bodyCenterOffsetY: 0,
+  });
   const now = Date.now(), before = target.health;
   const normal = createRuntimeAttack(p, { type: 'thorg-fall', id: 'normal' }, now);
   tickRuntimeAttack(room, normal, now + 600);
@@ -60,7 +68,7 @@ test('rage grows sweep around fixed feet and expands authoritative hit reach', t
   assert.ok(target.health < before);
   const scale = THORG_SWEEP.rageScale;
   const head = sampleThorgSweep({x:500,y:300,scale},0);
-  assert.equal(head.x, 500 + 75 * scale);
+  assert.equal(head.x, 500 + THORG_SWEEP.radiusX * scale);
   const visualCenterY = 300 - THORG_SWEEP.footOffset * (scale - 1);
   assert.equal(visualCenterY + THORG_SWEEP.footOffset * scale, 300 + THORG_SWEEP.footOffset);
 });

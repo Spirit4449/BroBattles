@@ -87,7 +87,7 @@ async function completeSignupFromGuest({
     const result = await db.runQuery(
       `UPDATE users
          SET name = ?, password = ?, expires_at = NULL
-       WHERE user_id = ?`,
+       WHERE user_id = ? AND expires_at IS NOT NULL`,
       [validated.username, hash, user.user_id],
     );
     if (!result || result.affectedRows !== 1) {
@@ -110,6 +110,9 @@ async function completeSignupFromGuest({
     }
     throw err;
   }
+
+  await app.locals.authSessions.revokeRequest(req, res);
+  await app.locals.authSessions.create({ ...user, expires_at: null, password: hash }, res);
 
   res.cookie(
     "display_name",

@@ -1,7 +1,6 @@
 const { deleteMatchBots } = require("../../services/matchRosterService");
 const { ALL_DEAD_GAME_OVER_DELAY_MS } = require("../gameRoomConfig");
 const effectManager = require("./effects/effectManager");
-const { recordMatchOutcome } = require("../../helpers/battleLog");
 
 function potentialStartGame(room) {
   if (room.status !== "waiting") return;
@@ -194,6 +193,7 @@ function checkVictoryCondition(room) {
 async function finishGame(room, winnerTeam, meta = {}) {
   if (room.status === "finished") return;
   room.status = "finished";
+  room._resultPending = true;
   room.playerActivity?.finishMatch(room.matchId);
   console.log(
     `[GameRoom ${room.matchId}] Game finished. Winner: ${winnerTeam || "draw"}`,
@@ -230,79 +230,18 @@ async function finishGame(room, winnerTeam, meta = {}) {
     room.gameLoop = null;
   }
 
-  try {
-    try {
-      await room.db.runQuery(
-        "UPDATE matches SET status = 'completed', winner_team = ? WHERE match_id = ?",
-        [winnerTeam, room.matchId],
-      );
-    } catch (error) {
-      if (error?.code !== "ER_BAD_FIELD_ERROR") throw error;
-      await room.db.runQuery(
-        "UPDATE matches SET status = 'completed' WHERE match_id = ?",
-        [room.matchId],
-      );
-    }
-  } catch (e) {
-    console.warn(
-      `[GameRoom ${room.matchId}] failed to update match status`,
-      e?.message,
-    );
-  }
-
-  try {
-    const participants = await room.db.runQuery(
-      `SELECT mp.user_id, mp.party_id, u.name
-         FROM match_participants mp
-         JOIN users u ON u.user_id = mp.user_id
-        WHERE mp.match_id = ?`,
-      [room.matchId],
-    );
-    if (participants.length) {
-      const partyIds = [
-        ...new Set(
-          participants
-            .map((p) => Number(p.party_id))
-            .filter((id) => Number.isFinite(id) && id > 0),
-        ),
-      ];
-      if (partyIds.length) {
-        if (typeof room.db.setPartiesStatus === "function") {
-          await room.db.setPartiesStatus(partyIds, "idle");
-        } else {
-          const ph = partyIds.map(() => "?").join(",");
-          await room.db.runQuery(
-            `UPDATE parties SET status='idle' WHERE party_id IN (${ph})`,
-            partyIds,
-          );
-        }
-      }
-    }
-  } catch (e) {
-    console.warn(
-      `[GameRoom ${room.matchId}] failed to reset post-match presence`,
-      e?.message,
-    );
-  }
-
   let rewardSummary = [];
+  let rewardsPending = false;
   try {
-    rewardSummary = await room._distributeMatchRewards(winnerTeam);
-  } catch (e) {
-    console.warn(
-      `[GameRoom ${room.matchId}] reward distribution failed`,
-      e?.message,
-    );
-  }
-
-  const finalMeta = { ...(meta || {}), rewards: rewardSummary };
-
-  // Save the full roster before bot cleanup, including the awarded rewards.
-  try {
-    await recordMatchOutcome(room.db, room, winnerTeam, rewardSummary);
+    rewardSummary = room.matchResults
+      ? await room.matchResults.complete(room, winnerTeam)
+      : await room._distributeMatchRewards(winnerTeam);
+    room._resultPending = false;
   } catch (error) {
-    console.error(`[GameRoom ${room.matchId}] battle log save failed`, error);
+    rewardsPending = true;
+    console.error(`[GameRoom ${room.matchId}] result settlement pending`, error?.message);
   }
+  const finalMeta = { ...(meta || {}), rewards: rewardSummary, rewardsPending };
 
   room.io.to(`game:${room.matchId}`).emit("game:over", {
     matchId: room.matchId,
@@ -317,6 +256,23 @@ async function finishGame(room, winnerTeam, meta = {}) {
       `[GameRoom ${room.matchId}] bot cleanup failed`,
       error?.message || error,
     );
+  }
+
+  if (rewardsPending && room.matchResults) {
+    const retry = async () => {
+      try {
+        await room.matchResults.complete(room, winnerTeam);
+        room._resultPending = false;
+        if (room.onFinished) room.onFinished(); else room.cleanup();
+      } catch (error) {
+        console.error(`[GameRoom ${room.matchId}] result retry pending`, error?.message);
+        room._resultRetry = setTimeout(retry, 30000);
+        room._resultRetry.unref?.();
+      }
+    };
+    room._resultRetry = setTimeout(retry, 30000);
+    room._resultRetry.unref?.();
+    return;
   }
 
   setTimeout(() => {

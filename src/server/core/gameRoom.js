@@ -47,7 +47,7 @@ class GameRoom {
   constructor(
     matchId,
     matchData,
-    { io, db, runtimeConfig = null, abuseControl = null, playerActivity = null },
+    { io, db, runtimeConfig = null, abuseControl = null, playerActivity = null, matchResults = null },
   ) {
     this.matchId = matchId;
     this.matchData = matchData; // { mode, map, players }
@@ -56,6 +56,7 @@ class GameRoom {
     this.runtimeConfig = runtimeConfig;
     this.abuseControl = abuseControl;
     this.playerActivity = playerActivity;
+    this.matchResults = matchResults;
 
     // Room state
     this.status = "waiting"; // waiting, active, finished
@@ -317,6 +318,12 @@ class GameRoom {
           nextFireInMs: 0,
         },
       };
+      if (!Number.isFinite(playerData.x) || !Number.isFinite(playerData.y)) {
+        const team = this.matchData.players.filter(p => p.team === playerData.team);
+        Object.assign(playerData, spawnForParticipant(this.geometry, playerData, playerData.spawnIndex, team.length));
+      }
+      inputManager.resetMovementBudget(playerData);
+      inputManager.updateBodyGeometry(playerData, this);
       this.players.set(socket.id, playerData);
       this._ensureRewardBucket(playerData);
     } else if (playerData.socketId === socket.id) {
@@ -345,6 +352,12 @@ class GameRoom {
       if (Array.isArray(playerData._inputIntentQueue)) playerData._inputIntentQueue.length = 0;
       playerData._currentInputIntent = null;
       playerData._lastInputIntent = null;
+      if (!Number.isFinite(playerData.x) || !Number.isFinite(playerData.y)) {
+        const team = this.matchData.players.filter(p => p.team === playerData.team);
+        Object.assign(playerData, spawnForParticipant(this.geometry, playerData, playerData.spawnIndex, team.length));
+      }
+      inputManager.resetMovementBudget(playerData);
+      inputManager.updateBodyGeometry(playerData, this);
       this.players.set(socket.id, playerData);
       this._ensureRewardBucket(playerData);
       this.io.to(gameRoom).emit("player:reconnected", {
@@ -369,8 +382,7 @@ class GameRoom {
   }
 
   applyKnockback(player, impulse) {
-    if (player.isBot) applyImpulse(player, impulse, this._botNow || Date.now());
-    else if (player.socketId) this.io.to(player.socketId).emit('player:knockback', impulse);
+    require("./gameRoom/participants").applyParticipantKnockback(this, player, impulse);
   }
 
   requestSpecial(id, payload = {}) {
@@ -688,15 +700,10 @@ class GameRoom {
       try {
         const p = this.players.get(socket.id);
         if (!p || !p.user_id) return;
+        if (this.status !== "starting" || p._sceneReady) return;
         p._sceneReady = true;
-        if (Number.isFinite(Number(payload?.x))) p.x = Number(payload.x);
-        if (Number.isFinite(Number(payload?.y))) p.y = Number(payload.y);
-        if (typeof payload?.flip === "boolean") p.flip = !!payload.flip;
-        if (typeof payload?.animation === "string") {
-          p.animation = payload.animation;
-        }
         p.loaded = Number.isFinite(p.x) && Number.isFinite(p.y);
-        if (this.status !== "starting") return;
+        inputManager.updateBodyGeometry(p, this);
         // Track by user_id (robust to reconnection)
         if (!this._readyAcks.has(p.user_id)) {
           this._readyAcks.add(p.user_id);
@@ -1282,6 +1289,7 @@ class GameRoom {
    * Clean up room resources
    */
   cleanup() {
+    clearTimeout(this._resultRetry);
     this._disposed = true;
     if (this._countdownTimeout) clearTimeout(this._countdownTimeout);
     this._countdownTimeout = null;
@@ -1869,6 +1877,8 @@ class GameRoom {
       playerData.health = Math.max(1, Number(playerData.maxHealth) || 1);
       playerData.x = nextX;
       playerData.y = nextY;
+      inputManager.resetMovementBudget(playerData, now);
+      inputManager.updateBodyGeometry(playerData, this);
       playerData.vx = 0;
       playerData.vy = 0;
       playerData.ducking = false;

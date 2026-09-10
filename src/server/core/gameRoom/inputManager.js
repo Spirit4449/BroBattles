@@ -12,7 +12,42 @@ const {
 const { isMovementSuppressed } = require("./abilityRuntimeManager");
 const netTestLogger = require("./netTestLogger");
 
-const LAG_RECOVERY_INPUT_GAP_MS = 250;
+const { characterBody } = require("../../../shared/duelGeometry");
+const { DUCK_HEIGHT_RATIO } = require("../../../shared/ducking");
+const MAX_MOVEMENT_CREDIT_MS = 500;
+const movementPhysics = require("../../../shared/movementPhysics.json");
+const effectManager = require("./effects/effectManager");
+
+function updateBodyGeometry(player, room) {
+  const body = characterBody(player.char_class, player.flip);
+  // Ground contact is derived from the map, not the client's grounded flag.
+  const feet = player.y + body.offsetY + body.halfHeight;
+  player.grounded = (room.geometry?.colliders || []).some(surface =>
+    surface.enabled !== false && surface.collision?.none !== true &&
+    surface.collision?.up !== false && Math.abs(feet - surface.top) <= 8 &&
+    player.x + body.offsetX + body.halfWidth > surface.left &&
+    player.x + body.offsetX - body.halfWidth < surface.right);
+  player.ducking = player.ducking === true && player.grounded;
+  const height = body.height * (player.ducking ? DUCK_HEIGHT_RATIO : 1);
+  player._bodyHalfWidth = body.halfWidth;
+  player._bodyHalfHeight = height / 2;
+  player._bodyCenterOffsetX = body.offsetX;
+  player._bodyCenterOffsetY = body.offsetY + (body.height - height) / 2;
+  player._lastWidth = body.displayWidth;
+  player._lastHeight = body.displayHeight;
+}
+
+function resetMovementBudget(player, now = Date.now()) {
+  player._movementBudget = { at: now, x: MOVE_PLAUSIBLE_LAG_PAD_H, y: MOVE_PLAUSIBLE_LAG_PAD_V };
+  player.lastInput = now;
+}
+
+function correctPosition(room, player, sequence) {
+  if (!player.socketId) return;
+  room.io?.to(player.socketId).emit("game:correction", {
+    x: player.x, y: player.y, sequence,
+  });
+}
 const MOVEMENT_FX_TYPES = new Set(["jump", "land", "turn", "wall-jump"]);
 
 function applyMovementVfxState(playerData, inputData) {
@@ -111,6 +146,7 @@ function noteMovementClampViolation(room, playerData, now) {
 }
 
 function handlePlayerInput(room, socketId, inputData) {
+  if (room.status === "finished") return;
   const playerData = room.players.get(socketId);
   if (!playerData || !playerData.isAlive || playerData.connected === false) {
     return;
@@ -134,6 +170,7 @@ function handlePlayerInput(room, socketId, inputData) {
     if (Number.isFinite(lastSeq) && packetSeq <= lastSeq) {
       return;
     }
+    if (!Number.isSafeInteger(packetSeq) || packetSeq < 0) return;
     playerData._lastPositionSeq = packetSeq;
   }
   if (Number.isFinite(packetTimestamp)) {
@@ -148,38 +185,18 @@ function handlePlayerInput(room, socketId, inputData) {
     applyMovementVfxState(playerData, inputData);
     if (inputData.loaded === true) playerData.loaded = true;
     if (typeof inputData.animation === "string") {
-      playerData.animation = inputData.animation;
+      playerData.animation = inputData.animation.slice(0, 80);
     }
     if (Number.isFinite(Number(inputData.vx))) {
-      playerData.vx = Number(inputData.vx);
+      playerData.vx = Math.max(-MOVE_PLAUSIBLE_SPEED_H, Math.min(MOVE_PLAUSIBLE_SPEED_H, Number(inputData.vx)));
     }
     if (Number.isFinite(Number(inputData.vy))) {
-      playerData.vy = Number(inputData.vy);
+      playerData.vy = Math.max(-MOVE_PLAUSIBLE_SPEED_V, Math.min(MOVE_PLAUSIBLE_SPEED_V, Number(inputData.vy)));
     }
     if (typeof inputData.grounded === "boolean") {
       playerData.grounded = inputData.grounded;
     }
-    if (Number.isFinite(Number(inputData.width))) {
-      playerData._lastWidth = Number(inputData.width);
-    }
-    if (Number.isFinite(Number(inputData.height))) {
-      playerData._lastHeight = Number(inputData.height);
-    }
-    if (Number.isFinite(Number(inputData.bodyHalfWidth))) {
-      playerData._bodyHalfWidth = Math.max(4, Number(inputData.bodyHalfWidth));
-    }
-    if (Number.isFinite(Number(inputData.bodyHalfHeight))) {
-      playerData._bodyHalfHeight = Math.max(
-        8,
-        Number(inputData.bodyHalfHeight),
-      );
-    }
-    if (Number.isFinite(Number(inputData.bodyCenterOffsetX))) {
-      playerData._bodyCenterOffsetX = Number(inputData.bodyCenterOffsetX);
-    }
-    if (Number.isFinite(Number(inputData.bodyCenterOffsetY))) {
-      playerData._bodyCenterOffsetY = Number(inputData.bodyCenterOffsetY);
-    }
+    updateBodyGeometry(playerData, room);
     playerData._lastPositionPacketAt = now;
     playerData.lastInput = now;
     return;
@@ -199,7 +216,10 @@ function handlePlayerInput(room, socketId, inputData) {
     const rawY = bounded.y;
     const {x:minX, y:minY} = clampToRoomBounds(-Infinity, -Infinity, room);
     const {x:maxX, y:maxY} = clampToRoomBounds(Infinity, Infinity, room);
-    const dtMove = playerData.lastInput > 0 ? now - playerData.lastInput : 9999;
+    if (!playerData._movementBudget) resetMovementBudget(playerData, playerData.lastInput || now);
+    const budget = playerData._movementBudget;
+    const dtMove = Math.max(0, Math.min(MAX_MOVEMENT_CREDIT_MS, now - budget.at));
+    budget.at = now;
 
     const reportedVx = Number(inputData.vx);
     const activeIntentDir =
@@ -219,51 +239,35 @@ function handlePlayerInput(room, socketId, inputData) {
       }
     }
 
-    if (dtMove > 5 && dtMove < LAG_RECOVERY_INPUT_GAP_MS) {
-      const maxDX =
-        MOVE_PLAUSIBLE_SPEED_H * (dtMove / 1000) + MOVE_PLAUSIBLE_LAG_PAD_H;
-      const maxDY =
-        MOVE_PLAUSIBLE_SPEED_V * (dtMove / 1000) + MOVE_PLAUSIBLE_LAG_PAD_V;
-      const absDX = Math.abs(rawX - playerData.x);
-      const absDY = Math.abs(rawY - playerData.y);
-      if (absDX > maxDX || absDY > maxDY) {
-        noteMovementClampViolation(room, playerData, now);
-        netTestLogger.noteInputClamp(room, playerData, {
-          absDX,
-          maxDX,
-          absDY,
-          maxDY,
-          dtMove,
-        });
-        if (room.DEV_TIMING_DIAG && !room._netTestEnabled) {
-          console.warn(
-            `[GameRoom ${room.matchId}] position jump clamped: ${playerData.name} dx=${absDX.toFixed(0)}>${maxDX.toFixed(0)} dy=${absDY.toFixed(0)}>${maxDY.toFixed(0)} dt=${dtMove}ms`,
-          );
-        }
-        playerData.x = Math.max(
-          minX,
-          Math.min(maxX, playerData.x + Math.sign(rawX - playerData.x) * maxDX),
-        );
-        playerData.y = Math.max(
-          minY,
-          Math.min(maxY, playerData.y + Math.sign(rawY - playerData.y) * maxDY),
-        );
-      } else {
-        playerData.x = rawX;
-        playerData.y = rawY;
-      }
-    } else {
-      playerData.x = rawX;
-      playerData.y = rawY;
+    // Distance credit is replenished by elapsed server time, never by packet count.
+    // Server-issued impulses temporarily expand the allowance for knockback.
+    const impulse = playerData._movementImpulse;
+    const impulseSpeed = impulse?.until > now ? impulse.speed : 0;
+    const modifiers = effectManager.getModifiers(playerData, now);
+    const speedMult = Math.max(1, Math.min(movementPhysics.maxSpeedMult, Number(modifiers.speedMult) || 1));
+    const speedX = Math.max(MOVE_PLAUSIBLE_SPEED_H, movementPhysics.wallKickFull * speedMult) + impulseSpeed;
+    const speedY = MOVE_PLAUSIBLE_SPEED_V + impulseSpeed;
+    budget.x = Math.min(MOVE_PLAUSIBLE_LAG_PAD_H + speedX * MAX_MOVEMENT_CREDIT_MS / 1000, budget.x + speedX * dtMove / 1000);
+    budget.y = Math.min(MOVE_PLAUSIBLE_LAG_PAD_V + speedY * MAX_MOVEMENT_CREDIT_MS / 1000, budget.y + speedY * dtMove / 1000);
+    const dx = rawX - playerData.x, dy = rawY - playerData.y;
+    const moveX = Math.sign(dx) * Math.min(Math.abs(dx), budget.x);
+    const moveY = Math.sign(dy) * Math.min(Math.abs(dy), budget.y);
+    playerData.x = Math.max(minX, Math.min(maxX, playerData.x + moveX));
+    playerData.y = Math.max(minY, Math.min(maxY, playerData.y + moveY));
+    budget.x -= Math.abs(moveX);
+    budget.y -= Math.abs(moveY);
+    if (moveX !== dx || moveY !== dy) {
+      noteMovementClampViolation(room, playerData, now);
+      correctPosition(room, playerData, packetSeq);
     }
 
     if (typeof inputData.flip !== "undefined")
       playerData.flip = !!inputData.flip;
     if (typeof inputData.animation === "string") {
-      playerData.animation = inputData.animation;
+      playerData.animation = inputData.animation.slice(0, 80);
     }
     if (Number.isFinite(Number(inputData.vx))) {
-      const nextVx = Number(inputData.vx);
+      const nextVx = Math.max(-MOVE_PLAUSIBLE_SPEED_H, Math.min(MOVE_PLAUSIBLE_SPEED_H, Number(inputData.vx)));
       const currentVx = Number(playerData.vx) || 0;
       const keepCurrentVx =
         Math.sign(currentVx) !== 0 &&
@@ -275,7 +279,7 @@ function handlePlayerInput(room, socketId, inputData) {
       }
     }
     if (Number.isFinite(Number(inputData.vy))) {
-      playerData.vy = Number(inputData.vy);
+      playerData.vy = Math.max(-MOVE_PLAUSIBLE_SPEED_V, Math.min(MOVE_PLAUSIBLE_SPEED_V, Number(inputData.vy)));
     }
     if (typeof inputData.grounded === "boolean") {
       playerData.grounded = inputData.grounded;
@@ -285,27 +289,7 @@ function handlePlayerInput(room, socketId, inputData) {
       }
     }
     if (inputData.loaded === true) playerData.loaded = true;
-    if (Number.isFinite(Number(inputData.width))) {
-      playerData._lastWidth = Number(inputData.width);
-    }
-    if (Number.isFinite(Number(inputData.height))) {
-      playerData._lastHeight = Number(inputData.height);
-    }
-    if (Number.isFinite(Number(inputData.bodyHalfWidth))) {
-      playerData._bodyHalfWidth = Math.max(4, Number(inputData.bodyHalfWidth));
-    }
-    if (Number.isFinite(Number(inputData.bodyHalfHeight))) {
-      playerData._bodyHalfHeight = Math.max(
-        8,
-        Number(inputData.bodyHalfHeight),
-      );
-    }
-    if (Number.isFinite(Number(inputData.bodyCenterOffsetX))) {
-      playerData._bodyCenterOffsetX = Number(inputData.bodyCenterOffsetX);
-    }
-    if (Number.isFinite(Number(inputData.bodyCenterOffsetY))) {
-      playerData._bodyCenterOffsetY = Number(inputData.bodyCenterOffsetY);
-    }
+    updateBodyGeometry(playerData, room);
     playerData._lastPositionPacketAt = now;
 
     pushPositionHistory(playerData, now);
@@ -317,10 +301,7 @@ function handlePlayerInput(room, socketId, inputData) {
     return;
   }
 
-  inputData.timestamp = now;
-  playerData.inputBuffer.push(inputData);
-  if (playerData.inputBuffer.length > 10) playerData.inputBuffer.shift();
-  playerData.lastInput = now;
+  // Malformed position packets must not enter the legacy unvalidated movement path.
 }
 
 function processPlayerMovement(playerData, input) {
@@ -340,8 +321,9 @@ function processPlayerMovement(playerData, input) {
 }
 
 function handlePlayerInputIntent(room, socketId, intentData) {
+  if (room.status === "finished") return;
   const playerData = room.players.get(socketId);
-  if (!playerData) return;
+  if (!playerData || !playerData.isAlive || playerData.connected === false) return;
   if (!intentData || typeof intentData !== "object") return;
   if (Number(playerData._controlLockUntil || 0) > Date.now()) {
     return;
@@ -352,20 +334,17 @@ function handlePlayerInputIntent(room, socketId, intentData) {
   const normalizedIntent = {
     left: !!intentData.left,
     right: !!intentData.right,
-    direction: Number(intentData.direction) || 0,
+    direction: Math.sign(Number(intentData.direction) || 0),
     jumpHeld: !!intentData.jumpHeld,
     jumpPressed: !!intentData.jumpPressed,
-    grounded:
-      typeof intentData.grounded === "boolean"
-        ? intentData.grounded
-        : undefined,
-    ducking: intentData.ducking === true && intentData.grounded === true,
+    grounded: playerData.grounded === true,
+    ducking: intentData.ducking === true && playerData.grounded === true,
     facing: Number(intentData.facing) === -1 ? -1 : 1,
-    vx: Number(intentData.vx) || 0,
-    vy: Number(intentData.vy) || 0,
+    vx: playerData.vx || 0,
+    vy: playerData.vy || 0,
     movementLocked: !!intentData.movementLocked,
     animation:
-      typeof intentData.animation === "string" ? intentData.animation : null,
+      typeof intentData.animation === "string" ? intentData.animation.slice(0, 80) : null,
     timestamp: Number(intentData.timestamp) || Date.now(),
     sequence: Number.isFinite(sequence) ? sequence : -1,
   };
@@ -377,6 +356,7 @@ function handlePlayerInputIntent(room, socketId, intentData) {
 
   playerData._currentInputIntent = normalizedIntent;
   playerData.ducking = normalizedIntent.ducking;
+  updateBodyGeometry(playerData, room);
   playerData._lastInputIntent = normalizedIntent;
   playerData._lastInputSeq = normalizedIntent.sequence;
   netTestLogger.noteIntent(room, playerData, intentData);
@@ -429,6 +409,8 @@ function advancePlayerKinematics(room, playerData, dtMs) {
 }
 
 module.exports = {
+  updateBodyGeometry,
+  resetMovementBudget,
   handlePlayerInput,
   handlePlayerInputIntent,
   processPlayerMovement,

@@ -47,7 +47,7 @@ function getRuntimeOverrides(actionType) {
     const fireball =
       getResolvedCharacterAttackConfig("wizard", "fireball") || {};
     const runtime = {
-      collisionRadius: Number(fireball.collisionRadius) || 38,
+      collisionRadius: Number(fireball.collisionRadius) || 28,
       speed: Number(fireball.speed) || 450,
       range: Number(fireball.range) || 1050,
       forwardOffsetWidthFactor: Number(fireball.forwardOffset) || 0.23,

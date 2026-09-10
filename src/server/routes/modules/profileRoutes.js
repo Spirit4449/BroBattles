@@ -327,10 +327,8 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
 
       const rounds = Number(process.env.BCRYPT_ROUNDS) || 12;
       const nextHash = await bcrypt.hash(newPassword, rounds);
-      await db.runQuery("UPDATE users SET password = ? WHERE user_id = ?", [
-        nextHash,
-        user.user_id,
-      ]);
+      await app.locals.authSessions.changePassword(user.user_id, existingHash, nextHash);
+      await app.locals.authSessions.create({ ...user, password: nextHash }, res);
 
       return res.json({ success: true });
     } catch (error) {

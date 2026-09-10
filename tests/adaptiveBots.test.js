@@ -71,6 +71,8 @@ test("server bootstrap supplies transaction and party lifecycle helpers to socke
     db,
     io: {},
     COOKIE_SECRET: "test",
+    auth: { sessions: {} },
+    matchResults: {},
     runtimeConfig: {},
     chatService: {},
     abuseControl: {},
@@ -629,6 +631,13 @@ test("bot results retain combat stats, but only human accounts receive normal re
   human.user_id = 42;
   h.room._recordCombatStat(human, { hits: 3, damage: 4000, kills: 1 });
   h.room._recordCombatStat(bot, { hits: 2, damage: 2000 });
+  h.room.db.withTransaction = async fn => fn(null, async (sql, params = []) => {
+    h.queries.push({ sql, params });
+    if (sql.startsWith("SELECT status FROM matches")) return [{ status: "live" }];
+    if (sql.startsWith("SELECT user_id, COALESCE(trophies")) return [{ user_id: 42, trophies: 0 }];
+    if (sql.startsWith("UPDATE users")) return { affectedRows: 1 };
+    return [];
+  });
   const results = await distributeMatchRewards(h.room, human.team);
   const humanResult = results.find((r) => r.username === human.name);
   const botResult = results.find((r) => r.username === bot.name);

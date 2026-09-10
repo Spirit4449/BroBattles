@@ -12,7 +12,7 @@ test('game asset preload completes with the Phaser 3.70 loader API (no font meth
   });
   vm.runInNewContext(code, { exports, require: () => ({ preloadTerrainAudio() {} }) });
   const queued = [];
-  const load = Object.fromEntries(['image', 'audio', 'atlas', 'tilemapTiledJSON'].map(type =>
+  const load = Object.fromEntries(['image', 'audio', 'atlas', 'tilemapTiledJSON', 'spritesheet'].map(type =>
     [type, key => queued.push(key)]));
   let charactersLoaded = false;
   assert.doesNotThrow(() => exports.preloadGameAssets({ scene: { load }, staticPath: '/assets',

@@ -17,7 +17,7 @@ function setup({ anonymous = false } = {}) {
     },
   };
   const abuseControl = createAbuseControlService({ db });
-  const middleware = createAbuseHttpMiddleware({ abuseControl, db });
+  const middleware = createAbuseHttpMiddleware({ abuseControl, resolveUser: async () => anonymous ? null : user });
   async function request(statusCode = 200, path = "/upgrade", defer = false) {
     const req = {
       method: "POST", path, signedCookies: anonymous ? {} : { user_id: 1 },

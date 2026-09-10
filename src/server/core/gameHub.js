@@ -12,7 +12,7 @@
  * Create game hub controller
  * @param {GameHubDeps} deps
  */
-function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, playerActivity = null }) {
+function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, playerActivity = null, matchResults = null }) {
   // Map of matchId -> GameRoom instance
   const activeRooms = new Map();
 
@@ -22,6 +22,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, play
    * @param {object} matchData - { mode, map, players }
    */
   async function createGameRoom(matchId, matchData) {
+    if (matchResults?.isPending(matchId)) throw new Error("This match has ended; rewards are pending.");
     if (activeRooms.has(matchId)) {
       console.warn(`[GameHub] Room ${matchId} already exists`);
       return activeRooms.get(matchId);
@@ -34,6 +35,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, play
       runtimeConfig,
       abuseControl,
       playerActivity,
+      matchResults,
     });
     activeRooms.set(matchId, room);
     playerActivity?.registerMatch(matchId, matchData.players);
@@ -59,6 +61,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, play
    */
   function removeGameRoom(matchId) {
     const room = activeRooms.get(matchId);
+    if (room?._resultPending) return;
     if (room) {
       playerActivity?.finishMatch(matchId, { endScreen: false });
       room.cleanup();
@@ -144,6 +147,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, play
   // A lobby may ready again once the old room is finished or has no humans.
   async function endEmptyMatch(matchId) {
     const room = activeRooms.get(Number(matchId));
+    if (room?._resultPending) return false;
     if (room && room.status !== "finished") {
       if (room.hasConnectedHumanPlayers()) return false;
       await room._cancelMatchAsAbandoned("No human players remain in the match");

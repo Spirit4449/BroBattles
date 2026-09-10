@@ -334,7 +334,7 @@ export const characterStats = {
           speed: 450,
           range: 1050,
           visualRadius: 14,
-          collisionRadius: 38,
+          collisionRadius: 28,
           initialScale: 0.1,
           activeScale: 0.5,
           glowRadiusMultiplier: 1.35,

@@ -2,6 +2,7 @@ const {
   DEFAULT_CHARACTER,
   defaultCharacterList,
 } = require("../../lib/characterStats");
+const { createAuthSessionService } = require("../services/authSessionService");
 const { randomString } = require("./utils");
 const { setBanHoldCookies } = require("./banHold");
 
@@ -16,6 +17,7 @@ function isGuest(userRow) {
 
 function makeAuthHelpers(db, cookieOpts) {
   const { SIGNED_COOKIE_OPTS, DISPLAY_COOKIE_OPTS } = cookieOpts;
+  const sessions = createAuthSessionService({ db, cookieOptions: SIGNED_COOKIE_OPTS });
 
   async function createGuestAndSetCookies(res) {
     const guestName = `Guest${randomString(6, true)}`;
@@ -39,10 +41,7 @@ function makeAuthHelpers(db, cookieOpts) {
     );
     const user = rows[0];
 
-    res.cookie("user_id", String(userId), {
-      ...SIGNED_COOKIE_OPTS,
-      maxAge: 1000 * 60 * 60 * 24 * 30,
-    });
+    await sessions.create(user, res);
     res.cookie("display_name", user.name, {
       ...DISPLAY_COOKIE_OPTS,
       expires: new Date(expiresAtMs),
@@ -53,14 +52,8 @@ function makeAuthHelpers(db, cookieOpts) {
   }
 
   async function getOrCreateCurrentUser(req, res, { autoCreate = true } = {}) {
-    const id = req.signedCookies?.user_id;
-    if (id) {
-      const rows = await db.runQuery(
-        "SELECT * FROM users WHERE user_id = ? LIMIT 1",
-        [id],
-      );
-      if (rows.length > 0) return [rows[0], "existing"];
-    }
+    const user = await requireCurrentUser(req, res);
+    if (user || req.authBanned) return [user || req.authBanned, "existing"];
     if (!autoCreate) return null;
     return [await createGuestAndSetCookies(res), "new"];
   }
@@ -69,6 +62,7 @@ function makeAuthHelpers(db, cookieOpts) {
     if (Object.prototype.hasOwnProperty.call(req || {}, "abuseResolvedUser")) {
       const cachedUser = req.abuseResolvedUser || null;
       if (cachedUser && Number(cachedUser.is_banned || 0) === 1) {
+        req.authBanned = cachedUser;
         setBanHoldCookies({
           req,
           res,
@@ -85,36 +79,9 @@ function makeAuthHelpers(db, cookieOpts) {
       return cachedUser;
     }
 
-    const id = req.signedCookies?.user_id;
-    if (!id) {
-      console.warn("[auth] requireCurrentUser missing signed user_id cookie", {
-        method: req?.method,
-        path: req?.originalUrl || req?.url,
-        host: req?.headers?.host,
-        origin: req?.headers?.origin || null,
-        referer: req?.headers?.referer || null,
-        cookieHeaderPresent: !!req?.headers?.cookie,
-        forwardedProto: req?.headers?.["x-forwarded-proto"] || null,
-      });
-      return null;
-    }
-    const rows = await db.runQuery(
-      "SELECT * FROM users WHERE user_id = ? LIMIT 1",
-      [id],
-    );
-    if (!rows[0]) {
-      console.warn(
-        "[auth] requireCurrentUser cookie did not resolve to a user",
-        {
-          method: req?.method,
-          path: req?.originalUrl || req?.url,
-          host: req?.headers?.host,
-          userId: Number(id),
-        },
-      );
-    }
-    const user = rows[0] || null;
+    const user = await sessions.resolve(req.signedCookies?.user_id);
     if (user && Number(user.is_banned || 0) === 1) {
+      req.authBanned = user;
       setBanHoldCookies({
         req,
         res,
@@ -148,6 +115,7 @@ function makeAuthHelpers(db, cookieOpts) {
   }
 
   return {
+    sessions,
     createGuestAndSetCookies,
     getOrCreateCurrentUser,
     requireCurrentUser,

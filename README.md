@@ -214,6 +214,7 @@ The project structure follows:
 - Architecture map: `docs/ARCHITECTURE_MAP.md`
 - Contributor guide with exact "add character/map/powerup" instructions: `docs/CONTRIBUTING.md`
 - Repository coding constraints: `.github/copilot-instructions.md`
+- Production hardening and rollout: `docs/PRODUCTION_HARDENING.md`
 
 ## Contributing
 

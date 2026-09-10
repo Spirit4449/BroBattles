@@ -52,10 +52,8 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
         return res.status(result.statusCode || 401).json(result.payload || {});
       }
 
-      res.cookie("user_id", String(result.user.user_id), {
-        ...(app.locals?.SIGNED_COOKIE_OPTS || {}),
-        maxAge: 1000 * 60 * 60 * 24 * 20,
-      });
+      await app.locals.authSessions.revokeRequest(req, res);
+      await app.locals.authSessions.create(result.user, res);
       res.cookie(
         "display_name",
         result.user.name,
@@ -71,11 +69,13 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
     }
   });
 
-  app.post("/logout", (req, res) => {
+  app.post("/logout", async (req, res) => {
     try {
-      res.clearCookie("user_id", app.locals?.SIGNED_COOKIE_OPTS || {});
-      res.clearCookie("display_name", app.locals?.DISPLAY_COOKIE_OPTS || {});
-    } catch (_) {}
+      await app.locals.authSessions.revokeRequest(req, res);
+    } catch (error) {
+      console.error("[auth] logout failed", error?.message);
+      return res.status(503).json({ success: false, error: "Unable to sign out. Please retry." });
+    }
     return res.status(200).json({ success: true });
   });
 }

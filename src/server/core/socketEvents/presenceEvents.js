@@ -58,7 +58,7 @@ function registerPresenceEvents(
       pendingOffline.delete(uname);
     }
     const set = userSockets.get(uname);
-    if (set) set.delete(socket.id);
+    if (set) { set.delete(socket.id); if (!set.size) userSockets.delete(uname); }
     if (!set || set.size === 0) {
       const timer = setTimeout(async () => {
         const s = userSockets.get(uname);
@@ -118,7 +118,7 @@ function registerPresenceEvents(
     }
 
     const set = userSockets.get(username);
-    if (set) set.delete(socket.id);
+    if (set) { set.delete(socket.id); if (!set.size) userSockets.delete(username); }
     const hasAny = !!(set && set.size > 0);
     if (!hasAny) {
       const timer = setTimeout(async () => {

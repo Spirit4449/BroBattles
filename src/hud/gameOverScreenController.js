@@ -444,7 +444,9 @@ export function createGameOverScreenController({
         </div>`;
     };
 
-    const personalSummaryHtml = myReward
+    const personalSummaryHtml = payload?.meta?.rewardsPending
+      ? `<section class="bb-game-over-summary"><h2>Rewards pending</h2><p>Your rewards will appear once this match result is saved.</p></section>`
+      : myReward
       ? `
         <section class="bb-game-over-summary">
           <h2>Battle Rewards</h2>

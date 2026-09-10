@@ -102,7 +102,7 @@ async function recordMatchOutcome(db, room, winnerTeam, rewardSummary = []) {
       [winnerTeam, summaryJson, matchId],
     );
   } catch (error) {
-    if (error?.code !== "ER_BAD_FIELD_ERROR") throw error;
+    if (db.strictResults || error?.code !== "ER_BAD_FIELD_ERROR") throw error;
     console.warn("[battleLog] Missing result columns; apply migrations/2026-09-03_match_battle_log.sql");
     // Fallback if summary column does not exist yet
     try {
@@ -139,7 +139,7 @@ async function recordMatchOutcome(db, room, winnerTeam, rewardSummary = []) {
           ],
         );
       } catch (error) {
-        if (error?.code !== "ER_BAD_FIELD_ERROR") throw error;
+        if (db.strictResults || error?.code !== "ER_BAD_FIELD_ERROR") throw error;
         // Safe to ignore if individual combat stat columns have not been added yet
       }
     }

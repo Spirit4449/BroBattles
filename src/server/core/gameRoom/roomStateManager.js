@@ -53,6 +53,8 @@ function initializeSpawnPositions(room) {
       const teamSize = room.matchData.players.filter(mp => mp.team === p.team).length;
       Object.assign(p, spawnForParticipant(geometry, p, spawnIndex, teamSize), { vx: 0, vy: 0, grounded: true });
     }
+    require("./inputManager").resetMovementBudget(p);
+    require("./inputManager").updateBodyGeometry(p, room);
     p.loaded =
       p.loaded === true ||
       (p._sceneReady === true && Number.isFinite(p.x) && Number.isFinite(p.y));

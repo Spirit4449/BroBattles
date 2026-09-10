@@ -2,7 +2,7 @@
 const path = require("path");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
-module.exports = {
+module.exports = (_env = {}, argv = {}) => ({
   entry: {
     game: "./src/game.js",
     mapEditor: "./src/editor/mapEditor.js",
@@ -18,9 +18,10 @@ module.exports = {
     filename: "bundles/[name].bundle.js",
     path: path.resolve(__dirname, "dist"),
     publicPath: "/",
+    clean: argv.mode === "production",
   },
-  mode: "development",
-  devtool: "inline-source-map",
+  mode: argv.mode || "development",
+  devtool: argv.mode === "production" ? false : "inline-source-map",
   devServer: {
     port: 3001,
     static: {
@@ -80,4 +81,4 @@ module.exports = {
       ],
     }),
   ],
-};
+});

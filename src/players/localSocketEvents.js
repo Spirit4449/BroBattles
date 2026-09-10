@@ -309,6 +309,12 @@ export function bindLocalSocketEvents({
     updateHealthBar();
   };
 
+  const correctionHandler = (data) => {
+    const player = getPlayer();
+    if (!player?.body || !Number.isFinite(data?.x) || !Number.isFinite(data?.y)) return;
+    player.body.reset(data.x, data.y);
+  };
+  socket.on("game:correction", correctionHandler);
   socket.on("health-update", healthUpdateHandler);
   socket.on("super-update", superUpdateHandler);
   socket.on("player:special", specialHandler);
@@ -318,6 +324,7 @@ export function bindLocalSocketEvents({
 
   return () => {
     cancelCorpseRemoval();
+    socket.off("game:correction", correctionHandler);
     socket.off("health-update", healthUpdateHandler);
     socket.off("super-update", superUpdateHandler);
     socket.off("player:special", specialHandler);

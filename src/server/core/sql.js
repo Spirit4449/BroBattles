@@ -1,34 +1,54 @@
 // Database
 const mysql = require("mysql2/promise"); // Just mysql doesn't work
 const { normalizeSelection } = require("../helpers/gameSelectionCatalog");
-const pool = mysql.createPool({
+const databaseConfig = {
   host: process.env.DB_HOST || "localhost",
   port: Math.max(1, Number(process.env.DB_PORT) || 3306),
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
   database: process.env.DB_NAME || "game",
+};
+const pool = mysql.createPool({
+  ...databaseConfig,
+  waitForConnections: true,
   connectionLimit: Math.max(1, Number(process.env.DB_CONNECTION_LIMIT) || 10),
-  queueLimit: 0,
+  queueLimit: Math.max(1, Math.min(1000, Number(process.env.DB_QUEUE_LIMIT) || 100)),
 });
+
+const ACQUIRE_TIMEOUT_MS = Math.max(100, Number(process.env.DB_ACQUIRE_TIMEOUT_MS) || 5000);
+const QUERY_TIMEOUT_MS = Math.max(100, Number(process.env.DB_QUERY_TIMEOUT_MS) || 10000);
+function acquireConnection() {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      done = true;
+      reject(Object.assign(new Error("Database busy; retry later"), { code: "DB_BUSY", status: 503 }));
+    }, ACQUIRE_TIMEOUT_MS);
+    pool.getConnection().then(conn => {
+      clearTimeout(timer);
+      if (done) conn.release(); else { done = true; resolve(conn); }
+    }, error => {
+      clearTimeout(timer);
+      if (!done) { done = true; reject(error); }
+    });
+  });
+}
 
 // Reusable MySQL query function
 async function runQuery(sql, params = []) {
-  try {
-    const [rows] = await pool.query(sql, params);
-    return rows;
-  } catch (error) {
-    console.error("MySQL query error:", error);
-    throw error;
-  }
+  const conn = await acquireConnection();
+  try { return await runQueryConn(conn, sql, params); }
+  finally { conn.release(); }
 }
 
 // Run a query using an existing connection (for transactions)
 async function runQueryConn(conn, sql, params = []) {
   try {
-    const [rows] = await conn.query(sql, params);
+    const [rows] = await conn.query({ sql, timeout: QUERY_TIMEOUT_MS }, params);
     return rows;
   } catch (error) {
-    console.error("MySQL query (conn) error:", error);
+    if (error.code === "PROTOCOL_SEQUENCE_TIMEOUT") conn.destroy();
+    console.error("MySQL query failed:", error.code || error.message);
     throw error;
   }
 }
@@ -36,17 +56,17 @@ async function runQueryConn(conn, sql, params = []) {
 // Helper to run a function within a transaction on a single connection
 // Usage: await withTransaction(async (conn, q) => { await q("SQL", [..]); })
 async function withTransaction(fn) {
-  const conn = await pool.getConnection();
+  const conn = await acquireConnection();
   try {
-    await conn.beginTransaction();
+    await runQueryConn(conn, "START TRANSACTION");
     const result = await fn(conn, (sql, params = []) =>
       runQueryConn(conn, sql, params),
     );
-    await conn.commit();
+    await runQueryConn(conn, "COMMIT");
     return result;
   } catch (error) {
     try {
-      await conn.rollback();
+      await runQueryConn(conn, "ROLLBACK");
     } catch (_) {}
     throw error;
   } finally {
@@ -104,15 +124,7 @@ async function setUserSocketId(userId, socketId) {
 }
 
 async function clearUserSocketIfMatch(userId, socketId) {
-  const rows = await runQuery(
-    "SELECT socket_id FROM users WHERE user_id = ? LIMIT 1",
-    [userId],
-  );
-  if (rows[0]?.socket_id === socketId) {
-    await runQuery("UPDATE users SET socket_id = NULL WHERE user_id = ?", [
-      userId,
-    ]);
-  }
+  return runQuery("UPDATE users SET socket_id = NULL WHERE user_id = ? AND socket_id = ?", [userId, socketId]);
 }
 
 // Set a party's status to a given value
@@ -495,8 +507,18 @@ async function setOfflineIfLastSeenOlderThan(minutes = 3) {
   return staleRows;
 }
 
+async function refreshPartyPresence(names) {
+  for (let i = 0; i < names.length; i += 200) {
+    const chunk = names.slice(i, i + 200);
+    await runQuery(`UPDATE party_members SET last_seen = NOW() WHERE name IN (${chunk.map(() => "?").join(",")})`, chunk);
+  }
+}
+
 module.exports = {
+  openRuntimeConnection: () => mysql.createConnection({ ...databaseConfig, connectTimeout: 5000 }),
+  databaseName: databaseConfig.database,
   pool,
+  refreshPartyPresence,
   runQuery,
   runQueryConn,
   withTransaction,

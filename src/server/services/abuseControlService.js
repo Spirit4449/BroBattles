@@ -27,7 +27,7 @@ function getBanLevel(steps) {
 }
 
 function createAbuseControlService({ db, io }) {
-  const requestWindows = new Map();
+  const requestWindows = require("../helpers/requestWindow").createRequestWindow();
   let schemaChecked = false;
   let schemaAvailable = false;
   let missingSchemaLogged = false;
@@ -57,13 +57,7 @@ function createAbuseControlService({ db, io }) {
   }
 
   function markBucketAndGetCount(key, windowMs, now = Date.now(), mark = true) {
-    let bucket = requestWindows.get(key);
-    if (!Array.isArray(bucket)) bucket = [];
-    const floor = now - windowMs;
-    while (bucket.length && bucket[0] <= floor) bucket.shift();
-    if (mark) bucket.push(now);
-    requestWindows.set(key, bucket);
-    return bucket.length;
+    return requestWindows.count(key, windowMs, now, mark);
   }
 
   async function ensureSchema() {

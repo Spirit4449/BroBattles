@@ -14,17 +14,17 @@ function safeErrorMessage(error) {
   return String(error?.message || error || "Unknown error").slice(0, 255);
 }
 
-function createStripeShopService({ db, shopService }) {
+function createStripeShopService({ db, shopService, stripeClient = null }) {
   const publishableKey = String(process.env.STRIPE_PUBLISHABLE_KEY || "").trim();
   const secretKey = String(process.env.STRIPE_SECRET_KEY || "").trim();
   const webhookSecret = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
   const publicBaseUrl = String(process.env.PUBLIC_BASE_URL || "").trim().replace(/\/$/, "");
   const automaticTax =
     String(process.env.STRIPE_AUTOMATIC_TAX || "").toLowerCase() === "true";
-  let stripe = null;
+  let stripe = stripeClient;
   let loadError = null;
 
-  if (secretKey) {
+  if (secretKey && !stripe) {
     try {
       const Stripe = require("stripe");
       stripe = new Stripe(secretKey);
@@ -259,8 +259,8 @@ function createStripeShopService({ db, shopService }) {
         idempotencyKey: `bro-battles-shop:${order.order_id}`,
       });
       await db.runQuery(
-        "UPDATE shop_orders SET stripe_checkout_session_id = ?, last_error = NULL WHERE order_id = ?",
-        [session.id, order.order_id],
+        "UPDATE shop_orders SET stripe_checkout_session_id = ?, stripe_payment_intent_id = COALESCE(stripe_payment_intent_id, ?), last_error = NULL WHERE order_id = ?",
+        [session.id, session.payment_intent || null, order.order_id],
       );
       return {
         success: true,
@@ -378,7 +378,9 @@ function createStripeShopService({ db, shopService }) {
         [String(paymentIntentId)],
       );
       const order = rows[0];
-      if (!order || order.status === "pending") return null;
+      if (!order || !order.fulfilled_at) {
+        throw shopService.createShopError(503, "order_not_ready", "Payment order is not ready for reversal; retry required.");
+      }
       const userRows = await q(
         "SELECT coins, gems FROM users WHERE user_id = ? FOR UPDATE",
         [order.user_id],
@@ -479,7 +481,7 @@ function createStripeShopService({ db, shopService }) {
       [paymentIntentId],
     );
     const order = rows[0];
-    if (!order) return null;
+    if (!order || !order.fulfilled_at) throw shopService.createShopError(503, "order_not_ready", "Payment order is not ready for reversal; retry required.");
     if (created) {
       return setReversalTarget({
         paymentIntentId,
@@ -547,9 +549,7 @@ function createStripeShopService({ db, shopService }) {
     }
   }
 
-  async function handleWebhook(payload, signature) {
-    assertWebhookEnabled();
-    const event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+  async function processVerifiedEvent(event) {
     const inserted = await db.runQuery(
       "INSERT IGNORE INTO shop_webhook_events (event_id, event_type, status) VALUES (?, ?, 'processing')",
       [event.id, event.type],
@@ -559,7 +559,10 @@ function createStripeShopService({ db, shopService }) {
         "SELECT status, received_at FROM shop_webhook_events WHERE event_id = ? LIMIT 1",
         [event.id],
       );
-      if (rows[0]?.status === "processed") return { duplicate: true };
+      if (rows[0]?.status === "processed") {
+        await db.runQuery("DELETE FROM shop_webhook_inbox WHERE event_id = ?", [event.id]);
+        return { duplicate: true };
+      }
       const claimed = await db.runQuery(
         "UPDATE shop_webhook_events SET status = 'processing', attempt_count = attempt_count + 1, last_error = NULL, received_at = NOW() WHERE event_id = ? AND (status = 'failed' OR received_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE))",
         [event.id],
@@ -578,14 +581,38 @@ function createStripeShopService({ db, shopService }) {
         "UPDATE shop_webhook_events SET status = 'processed', processed_at = NOW(), last_error = NULL WHERE event_id = ?",
         [event.id],
       );
+      await db.runQuery("DELETE FROM shop_webhook_inbox WHERE event_id = ?", [event.id]);
       return { processed: true };
     } catch (error) {
       await db.runQuery(
         "UPDATE shop_webhook_events SET status = 'failed', last_error = ? WHERE event_id = ? AND status <> 'processed'",
         [safeErrorMessage(error), event.id],
       );
+      await db.runQuery("UPDATE shop_webhook_inbox SET next_attempt_at = DATE_ADD(NOW(), INTERVAL 1 MINUTE) WHERE event_id = ?", [event.id]);
       throw error;
     }
+  }
+
+  async function handleWebhook(payload, signature) {
+    assertWebhookEnabled();
+    const event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+    // Only signature-verified events enter the durable inbox.
+    await db.runQuery("INSERT IGNORE INTO shop_webhook_inbox (event_id, payload) VALUES (?, ?)", [event.id, JSON.stringify(event)]);
+    return processVerifiedEvent(event);
+  }
+
+  let reconciling = false;
+  async function reconcileWebhooks() {
+    if (reconciling || !stripe) return;
+    reconciling = true;
+    try {
+      const pending = await db.runQuery(
+        "SELECT event_id, payload FROM shop_webhook_inbox WHERE next_attempt_at <= NOW() ORDER BY next_attempt_at LIMIT 25");
+      for (const row of pending) {
+        try { await processVerifiedEvent(parseJson(row.payload, {})); }
+        catch (error) { console.warn("[shop:stripe] reconciliation pending", row.event_id, error?.message); }
+      }
+    } finally { reconciling = false; }
   }
 
   async function getCheckoutStatus({ userId, sessionId }) {
@@ -621,6 +648,7 @@ function createStripeShopService({ db, shopService }) {
     getCheckoutStatus,
     getConfigurationStatus,
     handleWebhook,
+    reconcileWebhooks,
   };
 }
 

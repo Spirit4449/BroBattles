@@ -10,7 +10,12 @@ function makeRoom({ characters = ['ninja', 'wizard'], map = 1, trophies = 1000, 
   const players = characters.map((char_class, i) => ({ participantId: `bot:test:${i}`, user_id: null, name: `Player${i}`, team: i % 2 ? 'team2' : 'team1', char_class,
     isBot: true, level: 1, trophies, seed: seed + i, difficulty: difficultyForTrophies(trophies) }));
   const teamSize = Math.max(1, Math.ceil(characters.length / 2));
-  const room = new GameRoom(1, { mode: teamSize, modeId: 'duels', modeVariantId: `duels-${teamSize}v${teamSize}`, map, players }, { io, db });
+  // Navigation assertions use the checked-in geometry, independent of local editor saves.
+  const document = require('../../src/shared/mapDefaults').find(entry => entry.id === Number(map));
+  const variant = `${teamSize}v${teamSize}`;
+  const editorMapSnapshot = { mapId: map, revision: 'test-default', variant,
+    metadata: document.metadata, map: structuredClone(document.variants[variant]) };
+  const room = new GameRoom(1, { mode: teamSize, modeId: 'duels', modeVariantId: `duels-${teamSize}v${teamSize}`, map, players, editorMapSnapshot }, { io, db });
   room.status = 'active'; room._loopStartWallTime = Date.now(); room._checkVictoryCondition = () => {};
   room.broadcastSnapshot = () => {}; room.DEV_TIMING_DIAG = false; room._netTestEnabled = true;
   room._requiredUserIds.clear();

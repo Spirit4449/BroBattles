@@ -38,6 +38,21 @@ function recordCombatStat(room, playerData, delta = {}) {
 }
 
 async function distributeMatchRewards(room, winnerTeam) {
+  return room.db.withTransaction(async (_conn, q) => {
+    // Serialize completion against every retry before calculating or crediting rewards.
+    const matches = await q("SELECT status FROM matches WHERE match_id = ? FOR UPDATE", [room.matchId]);
+    const committed = await q("SELECT summary FROM match_reward_commits WHERE match_id = ?", [room.matchId]);
+    if (committed[0]) return typeof committed[0].summary === "string" ? JSON.parse(committed[0].summary) : committed[0].summary;
+    if (!matches[0] || matches[0].status !== "live") throw new Error("Match is not eligible for rewards");
+    const summary = await applyMatchRewards(room, winnerTeam, q);
+    await require("../../helpers/battleLog").recordMatchOutcome({ runQuery: q, strictResults: true }, room, winnerTeam, summary);
+    await q("INSERT INTO match_reward_commits (match_id, summary) VALUES (?, ?)", [room.matchId, JSON.stringify(summary)]);
+    await q("UPDATE parties p JOIN match_participants mp ON mp.party_id = p.party_id SET p.status = 'idle' WHERE mp.match_id = ?", [room.matchId]);
+    return summary;
+  });
+}
+
+async function applyMatchRewards(room, winnerTeam, q) {
   if (!room.rewardStats) room.rewardStats = new Map();
   const modeId = resolveMatchModeId(room.matchData || {});
   const userIdToTrophies = new Map();
@@ -47,24 +62,13 @@ async function distributeMatchRewards(room, winnerTeam) {
     .filter((id) => Number.isFinite(id) && id > 0);
   if (participantUserIds.length) {
     const placeholders = participantUserIds.map(() => "?").join(",");
-    try {
-      const rows = await room.db.runQuery(
-        `SELECT user_id, COALESCE(trophies, 0) AS trophies FROM users WHERE user_id IN (${placeholders})`,
-        participantUserIds,
-      );
-      for (const row of rows || []) {
-        userIdToTrophies.set(
-          Number(row.user_id),
-          Math.max(0, Number(row.trophies) || 0),
-        );
-      }
-    } catch (error) {
-      console.warn(
-        `[GameRoom ${room.matchId}] Failed to preload trophy values`,
-        error?.message,
-      );
-    }
+    const rows = await q(
+      `SELECT user_id, COALESCE(trophies, 0) AS trophies FROM users WHERE user_id IN (${placeholders}) ORDER BY user_id FOR UPDATE`,
+      participantUserIds);
+    for (const row of rows || []) userIdToTrophies.set(Number(row.user_id), Math.max(0, Number(row.trophies) || 0));
+    if (userIdToTrophies.size !== new Set(participantUserIds).size) throw new Error("Reward participant missing");
   }
+
   const buckets = [];
   for (const playerData of room.players.values()) {
     const bucket = ensureRewardBucket(room, playerData);
@@ -73,7 +77,6 @@ async function distributeMatchRewards(room, winnerTeam) {
   }
   const maxima = buildPerformanceMaxima(buckets);
   const summary = [];
-  const updates = [];
 
   for (const playerData of room.players.values()) {
     const bucket = ensureRewardBucket(room, playerData) || {
@@ -112,28 +115,13 @@ async function distributeMatchRewards(room, winnerTeam) {
         (Number(trophyInfo.trophiesDelta) || 0) !== 0) &&
       playerData.user_id && !playerData.isBot
     ) {
-      updates.push(
-        room.db
-          .runQuery(
-            "UPDATE users SET coins = coins + ?, gems = gems + ?, trophies = GREATEST(0, COALESCE(trophies, 0) + ?) WHERE user_id = ?",
-            [
-              reward.coins,
-              reward.gems,
-              Number(trophyInfo.trophiesDelta) || 0,
-              playerData.user_id,
-            ],
-          )
-          .catch((e) => {
-            console.warn(
-              `[GameRoom ${room.matchId}] Failed to update rewards for ${playerData.name}`,
-              e?.message,
-            );
-          }),
-      );
+      const result = await q(
+        "UPDATE users SET coins = COALESCE(coins, 0) + ?, gems = COALESCE(gems, 0) + ?, trophies = GREATEST(0, COALESCE(trophies, 0) + ?) WHERE user_id = ?",
+        [reward.coins, reward.gems, Number(trophyInfo.trophiesDelta) || 0, playerData.user_id]);
+      if (result.affectedRows !== 1) throw new Error("Reward participant update failed");
     }
   }
 
-  if (updates.length) await Promise.all(updates);
   return summary;
 }
 

@@ -81,6 +81,8 @@ function readSignedCookieFromHandshake(socket, cookieName, secret) {
 function initSocket({
   io,
   COOKIE_SECRET,
+  sessions,
+  matchResults,
   db,
   runtimeConfig,
   chatService,
@@ -93,7 +95,7 @@ function initSocket({
     getGameRoom: matchId => gameHub?.getGameRoom(matchId),
   });
   // Game hub for managing active game rooms
-  gameHub = createGameHub({ io, db, runtimeConfig, abuseControl, playerActivity });
+  gameHub = createGameHub({ io, db, runtimeConfig, abuseControl, playerActivity, matchResults });
 
   // Matchmaking controller (power-saved loop inside)
   const mm = createMatchmaking({
@@ -116,7 +118,7 @@ function initSocket({
       const header = socket.handshake?.headers?.cookie || "";
       const userIdStr = readSignedCookieFromHandshake(
         socket,
-        "user_id", // this cookie stores the user ID
+        "user_id", // this cookie stores an opaque session token
         COOKIE_SECRET,
       );
       console.log("[socket-auth] handshake", {
@@ -129,18 +131,18 @@ function initSocket({
         userAgent: socket.handshake?.headers?.["user-agent"] || null,
         cookieHeaderPresent: !!header,
         cookieHeaderLength: header.length,
-        resolvedUserId: userIdStr ? Number(userIdStr) : null,
+        sessionCookiePresent: !!userIdStr,
       });
       if (!userIdStr) {
         socket.data.user = null;
         return next();
       }
-      const user = await db.getUserById(Number(userIdStr));
+      const user = await sessions.authenticateSocket(socket, userIdStr);
       socket.data.user = user || null;
       if (!user) {
         console.warn("[socket-auth] no user found for signed cookie", {
           socketId: socket.id,
-          userId: Number(userIdStr),
+          sessionCookiePresent: !!userIdStr,
         });
       } else if (Number(user.is_banned || 0) === 1) {
         socket.data.user = null;
@@ -217,6 +219,19 @@ function initSocket({
       PARTY_STATUS,
     });
 
+    registerPresenceEvents(socket, {
+      db,
+      io,
+      mm,
+      gameHub,
+      setPresence: partyPresence.setUserPresence,
+      playerActivity,
+      partyQueueTransition,
+      userSockets,
+      pendingOffline,
+      DISCONNECT_GRACE_MS,
+    });
+
     // store socket id and mark online
     try {
       if (userId) await db.setUserSocketId(userId, socket.id);
@@ -228,6 +243,8 @@ function initSocket({
     } catch (e) {
       console.warn("Could not persist socket_id:", e?.message);
     }
+
+    if (!socket.connected) return;
 
     // Track this socket for the user and mark online
     if (username) {
@@ -286,18 +303,7 @@ function initSocket({
       PARTY_STATUS,
       abuseControl,
     });
-    registerPresenceEvents(socket, {
-      db,
-      io,
-      mm,
-      gameHub,
-      setPresence: partyPresence.setUserPresence,
-      playerActivity,
-      partyQueueTransition,
-      userSockets,
-      pendingOffline,
-      DISCONNECT_GRACE_MS,
-    });
+
   });
 
   // fallback offline scanner
@@ -313,6 +319,7 @@ function initSocket({
   }, 15_000);
 
   return {
+    getGameRoom: matchId => gameHub.getGameRoom(Number(matchId)),
     // For routes to move sockets after DB changes:
     async moveUserSocketToParty(username, partyId) {
       try {

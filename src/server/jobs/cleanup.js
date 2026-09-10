@@ -1,13 +1,14 @@
 const { deleteMatchBots } = require('../services/matchRosterService');
 const { updateOrDeleteParty } = require("../helpers/party");
 
-function startCleanupJobs({ db, io }) {
+function startCleanupJobs({ db, io, matchResults = null, getGameRoom = () => null }) {
   // Inactive member cleanup (every 30 minutes)
   let _cleanupRunning = false;
   async function cleanupInactiveMembers() {
     if (_cleanupRunning) return;
     _cleanupRunning = true;
     try {
+      await db.runQuery("DELETE FROM auth_sessions WHERE expires_at <= NOW(3) LIMIT 10000");
       const removed = await db.findAndRemoveInactiveMembers(30);
       const byParty = new Map();
       for (const row of removed) {
@@ -96,7 +97,9 @@ function startCleanupJobs({ db, io }) {
       );
       if (!old || !old.length) return;
 
-      const ids = old.map((r) => r.match_id);
+      const ids = old.map((r) => r.match_id)
+        .filter(id => !matchResults?.isPending(id) && !getGameRoom(id));
+      if (!ids.length) return;
       const ph = ids.map(() => "?").join(",");
 
       // Mark matches completed

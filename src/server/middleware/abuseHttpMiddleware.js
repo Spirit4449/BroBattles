@@ -1,31 +1,31 @@
 const { HTTP_BUCKETS, HTTP_ROUTE_POLICIES } = require("../helpers/abusePolicy");
 const { setBanHoldCookies } = require("../helpers/banHold");
 
+const { createRequestWindow } = require("../helpers/requestWindow");
+
 function getClientIp(req) {
-  const forwarded = String(req.headers?.["x-forwarded-for"] || "")
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
-  if (forwarded[0]) return forwarded[0];
+  // Express resolves req.ip against the configured trusted proxy addresses.
   return req.ip || req.socket?.remoteAddress || "unknown";
 }
 
-function createAbuseHttpMiddleware({ abuseControl, db }) {
+function createAbuseHttpMiddleware({ abuseControl, resolveUser = async () => null }) {
+  const networkRequests = createRequestWindow();
   return async function abuseHttpMiddleware(req, res, next) {
     try {
-      const routeKey = `${String(req.method || "GET").toUpperCase()} ${String(req.path || "")}`;
+      const routeKey = `${String(req.method || "GET").toUpperCase()} ${String(req.path || "").toLowerCase().replace(/\/+$/, "")}`;
       const policy = HTTP_ROUTE_POLICIES[routeKey];
       if (!policy) return next();
 
       const bucket =
         HTTP_BUCKETS[String(policy.bucket || "lenient")] ||
         HTTP_BUCKETS.lenient;
-      const signedUserId = Number(req.signedCookies?.user_id) || 0;
-      let user = null;
-      if (signedUserId > 0) {
-        user = await db.getUserById(signedUserId);
-        req.abuseResolvedUser = user || null;
+      const ip = getClientIp(req);
+      if (networkRequests.count(ip, 10000) > 300) {
+        res.set?.("Retry-After", "10");
+        return res.status(429).json({ success: false, error: "Too many requests." });
       }
+      const user = await resolveUser(req, res);
+      req.abuseResolvedUser = user || null;
 
       if (Number(user?.is_banned || 0) === 1) {
         setBanHoldCookies({
@@ -107,7 +107,7 @@ function createAbuseHttpMiddleware({ abuseControl, db }) {
       });
     } catch (error) {
       console.error("[abuse] HTTP middleware error:", error);
-      return next();
+      return res.status(503).json({ success: false, error: "Service temporarily unavailable. Please retry." });
     }
   };
 }
