@@ -8,7 +8,7 @@ const { code } = babel.transformSync(fs.readFileSync(require.resolve('../src/gam
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 });
 vm.runInNewContext(code, { exports: exportsObject });
-const { createCombatMouseController } = exportsObject;
+const { COMBAT_MOUSE_CONFIG, createCombatMouseController } = exportsObject;
 function events() {
   const handlers = new Map();
   return {
@@ -29,7 +29,8 @@ function setup({ canCapture } = {}) {
   let allowed = true, releases = 0;
   const base = { baseX: 10, baseY: 20 };
   const scene = { game: { canvas }, add: { graphics: () => graphic }, events: { on() {}, off() {} }, cameras: { main: { zoom: 1.8 } } };
-  const controller = createCombatMouseController({ scene, canPlay: () => allowed, canCapture, getBase: () => base, onRelease: () => releases++, depth: 10 });
+  const controller = createCombatMouseController({ scene, canPlay: () => allowed, canCapture, getBase: () => base,
+    onRelease: () => releases++, depth: 10, config: { ...COMBAT_MOUSE_CONFIG, mouseSensitivity: 0.36 } });
   const capture = () => { assert.equal(controller.beginInput(), false); doc.pointerLockElement = canvas; doc.emit('pointerlockchange'); };
   return { controller, scene, doc, win, canvas, base, capture, block: () => { allowed = false; }, releases: () => releases };
 }
@@ -37,6 +38,9 @@ function move(h, x, y) {
   h.doc.emit('mousemove', { target: h.canvas, movementX: x, movementY: y });
   h.controller.update();
 }
+test('production aiming sensitivity is reduced', () => {
+  assert.equal(COMBAT_MOUSE_CONFIG.mouseSensitivity, 0.24);
+});
 test('gameplay hides cursor before clicking; movement captures and Escape keeps it visible', () => {
   const h = setup();
   let requests = 0;
@@ -156,10 +160,10 @@ test('click stays hidden; crossing the threshold reveals directional aim', () =>
   assert.equal(h.controller.getStrength(), 0);
   move(h, 1, 0);
   assert.equal(h.controller.isDefaultAim(), true);
-  move(h, 20, 0);
+  move(h, 30, 0);
   assert.equal(h.controller.isDefaultAim(), false);
   assert.equal(h.controller.shouldShowReticle(), true);
-  move(h, -21, 0);
+  move(h, -31, 0);
   assert.equal(h.controller.isAiming(), false);
   h.controller.endDrag(); h.controller.beginDrag(1);
   assert.equal(h.controller.getDirection().x, 1);
@@ -183,17 +187,17 @@ test('short throws hold their heading through center and switch only beyond the 
   const h = setup(); h.capture(); h.controller.beginDrag(1, true);
   assert.equal(h.controller.getCenterCue(), null);
   assert.equal(h.controller.shouldShowReticle(), false);
-  move(h, 70, 0);
+  move(h, 94, 0);
   assert.ok(h.controller.getDistanceRatio() > 0);
-  move(h, -45, 0);
+  move(h, -60, 0);
   assert.equal(h.controller.getCenterCue().held, true);
   assert.equal(h.controller.getDistanceRatio(), 0);
-  move(h, -55, 2);
+  move(h, -74, 2);
   assert.equal(h.controller.getDirection().x, 1);
   assert.equal(h.controller.getDistanceRatio(), 0);
   assert.equal(h.controller.shouldShowReticle(), true);
   assert.equal(h.scene._combatAimLook.x, 72);
-  move(h, -60, -2);
+  move(h, -80, -2);
   assert.equal(h.controller.getDirection().x, -1);
   assert.equal(h.controller.getCenterCue().held, false);
   assert.ok(h.controller.getDistanceRatio() > 0);

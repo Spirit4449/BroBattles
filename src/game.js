@@ -2,7 +2,7 @@ import './styles/mapPlaytest.css';
 const editorSession = window.location.pathname === '/map-editor/playtest' ? new URLSearchParams(window.location.search).get('session') : null;
 if (editorSession) document.body.classList.add('editor-playtest');
 import { preloadMapDocument } from './maps/documentRuntime';
-import { attachNinjaScene } from './characters/ninja/network';
+import { attachNinjaScene, discardNinjaPresentation } from './characters/ninja/network';
 // game.js
 
 import {
@@ -32,7 +32,7 @@ import {
   followRemotePosition,
 } from "./gameScene/remoteSmoothing.js";
 import { createMatchCoordinator } from "./match/matchCoordinator";
-import { attachHuntressScene } from './characters/huntress/network';
+import { attachHuntressScene, discardHuntressPresentation } from './characters/huntress/network';
 import { preloadGameAssets } from "./gameScene/preloadGameAssets";
 import { renderPoisonWater } from "./gameScene/poisonWaterRenderer";
 import { updateDynamicCamera } from "./gameScene/cameraDynamics";
@@ -410,6 +410,63 @@ matchCoordinator = createMatchCoordinator({
   onStopSuddenDeathMusic: stopSuddenDeathMusic,
   onPlayMatchEndSound: playMatchEndSound,
   onShowGameOverScreen: showGameOverScreen,
+  isPresentationSuppressed: () => document.hidden,
+});
+
+function clearTransientPresentation() {
+  PENDING_ACTIONS.length = 0;
+  POWERUP_COLLECT_QUEUE.length = 0;
+  DEATHDROP_COLLECT_QUEUE.length = 0;
+  SHIELD_IMPACT_QUEUE.length = 0;
+  discardNinjaPresentation();
+  discardHuntressPresentation();
+  for (const sprite of [
+    player,
+    ...Object.values(opponentPlayers).map((entry) => entry?.opponent),
+    ...Object.values(teamPlayers).map((entry) => entry?.opponent),
+  ]) {
+    try { sprite?._thorgAttackCleanup?.(); } catch (_) {}
+  }
+  try { gameScene?.events?.emit?.("presentation:reset"); } catch (_) {}
+  try { gameScene?.sound?.stopAll?.(); } catch (_) {}
+}
+
+function snapRemotePlayersToLatestState() {
+  for (const entry of gameData?.players || []) {
+    if (entry?.name === username) continue;
+    const sprite = (opponentPlayers[entry?.name] || teamPlayers[entry?.name])?.opponent;
+    const x = Number(entry?.x), y = Number(entry?.y);
+    if (!sprite || !Number.isFinite(x) || !Number.isFinite(y)) continue;
+    try { sprite.body?.reset?.(x, y); } catch (_) { sprite.setPosition?.(x, y); }
+    if (sprite._bbAnimationState) {
+      sprite._bbAnimationState.oneShot = null;
+      sprite._bbAnimationState.oneShotUntilMs = 0;
+      sprite._bbAnimationState.oneShotUntilPerf = 0;
+    }
+    sprite._remoteActionAnimUntil = 0;
+    const wrapper = opponentPlayers[entry.name] || teamPlayers[entry.name];
+    if (wrapper) wrapper._animLockUntil = 0;
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    clearTransientPresentation();
+    try { gameScene?._bgmEl?.pause?.(); } catch (_) {}
+    return;
+  }
+  // Throw away the old interpolation timeline and show current authoritative
+  // positions immediately. Fresh snapshots rebuild smoothing from "now".
+  clearTransientPresentation();
+  snapshotBuffer.reset();
+  snapRemotePlayersToLatestState();
+  try {
+    if (!gameEnded && gameScene?._suddenDeathMusicSfx) {
+      startSuddenDeathMusic();
+    } else if (!gameEnded && gameScene?._bgmStarted) {
+      gameScene._bgmEl?.play?.()?.catch?.(() => {});
+    }
+  } catch (_) {}
 });
 
 // Ensure listeners are not kept around when the tab navigates away.
@@ -427,7 +484,7 @@ window.addEventListener(
 );
 
 function startSuddenDeathMusic() {
-  if (!gameScene || !gameScene.sound) return;
+  if (document.hidden || !gameScene || !gameScene.sound) return;
   try {
     try {
       gameScene._bgmEl?.pause();
@@ -454,7 +511,7 @@ function stopSuddenDeathMusic() {
 }
 
 function playMatchEndSound(winnerTeam) {
-  if (!gameScene || !gameScene.sound) return;
+  if (document.hidden || !gameScene || !gameScene.sound) return;
   const key =
     winnerTeam == null
       ? null
@@ -2243,7 +2300,9 @@ const config = {
   roundPixels: false, // allow subpixel rendering for smoother interpolation (adaptive timeline)
   antialias: false,
   resolution: window.devicePixelRatio,
-  disableVisibilityChange: true, // keep running when tab is unfocused
+  // Let Phaser sleep with the page. Network state keeps arriving, and the
+  // visibility resync above restores only the latest authoritative state.
+  disableVisibilityChange: false,
   scale: {
     // Makes sure the game looks good on all screens
     mode: Phaser.Scale.FIT,
@@ -2326,8 +2385,12 @@ function showGameOverScreen(payload) {
 
 if (editorSession) {
   window.addEventListener('keydown', event => {
-    if (event.key !== 'Escape') return;
-    event.preventDefault();event.stopImmediatePropagation();
-    window.parent.postMessage({type:'bb-map-playtest-exit'},window.location.origin);
+    if (event.key === 'Escape') {
+      event.preventDefault();event.stopImmediatePropagation();
+      window.parent.postMessage({type:'bb-map-playtest-exit'},window.location.origin);
+    } else if (event.code === 'KeyQ' && !event.repeat && gameData?.editorSoloPlaytest && !isChatInputActive()) {
+      event.preventDefault();event.stopImmediatePropagation();
+      socket.emit('editor:self-kill');
+    }
   },true);
 }

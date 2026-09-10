@@ -4,6 +4,7 @@ import { characterStats } from "../../lib/characterStats.js";
 import { animations } from "./anim";
 import {
   performWizardFireball,
+  chargeWizardFireball,
   spawnWizardFireballAuthoritative,
   spawnWizardFireballVisual,
   changeDebugState,
@@ -54,11 +55,10 @@ class Wizard extends CharacterEntityBase {
       this.characterAssetPath(staticPath, "aura.webp"),
       this.characterAssetPath(staticPath, "aura.json"),
     );
-    // Load animated fireball atlas (frames defined in fireball.json)
     scene.load.atlas(
-      "wizard-fireball",
-      this.characterAssetPath(staticPath, "fireball_spritesheet_clean.webp"),
-      this.characterAssetPath(staticPath, "fireball_spritesheet_clean.json"),
+      "wizard-fireball-unified",
+      this.characterAssetPath(staticPath, "fireball-unified.png"),
+      this.characterAssetPath(staticPath, "fireball-unified.json"),
     );
     scene.load.audio(
       "wizard-fireball",
@@ -92,6 +92,7 @@ class Wizard extends CharacterEntityBase {
     if (!data) return false;
     const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
     if (data.type === `${NAME}-fireball`) {
+      chargeWizardFireball(scene, ownerSprite, data);
       playSpriteAnimation({
         scene,
         sprite: ownerSprite,

@@ -44,6 +44,10 @@ class Thorg extends CharacterEntityBase {
       this.characterAssetPath(staticPath, "weapon.webp"),
     );
 
+    scene.load.spritesheet("thorg-weapon-spin",
+      this.characterAssetPath(staticPath, "weapon-spin.webp"),
+      { frameWidth: 36, frameHeight: 101 });
+
     scene.load.audio(
       "thorg-throw",
       this.characterAssetPath(staticPath, "swoosh.mp3"),

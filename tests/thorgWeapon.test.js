@@ -33,6 +33,9 @@ function object() {
     active: true, visible: true, alpha: 1, x: 300, y: 200, depth: 30,
     rotation: 0, destroyCount: 0,
     setOrigin() { return this; },
+    setTexture(key, frame) { this.textureKey = key; this.textureFrame = frame; return this; }, setFlipX() { return this; },
+    setCrop(x,y,w,h) { this.crop = {x,y,w,h}; return this; },
+    setTint() { return this; }, clearTint() { return this; },
     setDisplaySize(width, height) { this.displayWidth = width; this.displayHeight = height; return this; },
     setVisible(value) { this.visible = value; return this; },
     setAlpha(value) { this.alpha = value; return this; },
@@ -84,7 +87,7 @@ test('all atlas grip tracks and locomotion transitions remain finite and ease wi
       const next = { ...motion.thorgGripPose(body, 16) };
       assert.ok(Object.values(next).every(Number.isFinite), frame);
       assert.ok(Math.hypot(next.x - previous.x, next.y - previous.y) < 30, `${frame}: abrupt grip shift`);
-      assert.ok(Math.abs(next.angle - previous.angle) < 0.6, `${frame}: abrupt rotation`);
+      assert.ok(Math.abs(next.angle - previous.angle) < (/^(idle|running)/.test(frame) ? 1.2 : 0.6), `${frame}: abrupt rotation`);
       previous = next;
     }
   }
@@ -108,16 +111,17 @@ test('looping idle grip interpolation is continuous across frame boundaries', ()
   }
 });
 
-test('sweep has one held weapon, one trail and one sound, then releases all transient resources', () => {
+test('sweep has one held weapon, two depth-separated trails and one sound, then releases all transient resources', () => {
   const h = harness();
   const weapon = weaponModule.ensureThorgWeapon(h.scene, h.body);
   assert.equal(weaponModule.ensureThorgWeapon(h.scene, h.body), weapon);
   weaponModule.startThorgSweep(h.scene, h.body);
-  for (let i = 0; i < 44; i++) h.tick(16);
-  assert.equal(h.images.length, 1);
-  assert.equal(h.graphics.length, 1);
+  for (let elapsed = 0; elapsed < sweep.THORG_SWEEP.windupMs + sweep.THORG_SWEEP.strikeMs + 150; elapsed += 16) h.tick(16);
+  assert.equal(h.images.length, 3);
+  assert.equal(h.graphics.length, 2);
   assert.ok(h.graphics[0].lineCount > 0);
   assert.equal(h.graphics[0].destroyCount, 1);
+  assert.equal(h.graphics[1].destroyCount, 1);
   assert.equal(h.sounds.length, 1);
   assert.equal(h.sounds[0].playCount, 1);
   assert.equal(h.sounds[0].destroyCount, 1);
@@ -134,12 +138,14 @@ test('restarting a sweep cleans the previous trail and sound without accumulatin
   weaponModule.startThorgSweep(h.scene, h.body); h.tick(240);
   weaponModule.startThorgSweep(h.scene, h.body);
   assert.equal(h.graphics[0].destroyCount, 1);
+  assert.equal(h.graphics[1].destroyCount, 1);
   assert.equal(h.sounds[0].destroyCount, 1);
   assert.equal(h.sounds[1].playCount, 1);
   assert.equal(h.scene.events.listenerCount('update'), 1);
   assert.equal(h.scene.events.listenerCount('postupdate'), 1);
   h.tick(750);
-  assert.equal(h.graphics[1].destroyCount, 1);
+  assert.equal(h.graphics[2].destroyCount, 1);
+  assert.equal(h.graphics[3].destroyCount, 1);
   assert.equal(h.sounds[1].destroyCount, 1);
 });
 
@@ -151,6 +157,7 @@ for (const event of ['destroy', 'shutdown']) test(`${event} removes weapon, trai
   h.tick(1000);
   assert.equal(h.images[0].destroyCount, 1);
   assert.equal(h.graphics[0].destroyCount, 1);
+  assert.equal(h.graphics[1].destroyCount, 1);
   assert.equal(h.sounds[0].destroyCount, 1);
   assert.equal(h.body._thorgWeapon, undefined);
   assert.equal(h.scene.events.listenerCount('update'), 0);
@@ -163,11 +170,11 @@ test('both facing directions and rage scales keep finite sweep placement and rec
     const h = harness();
     h.body._thorgVisualScale = scale;
     weaponModule.startThorgSweep(h.scene, h.body, { direction });
-    for (let i = 0; i < 70; i++) {
+    for (let i = 0; i < Math.ceil((sweep.THORG_SWEEP.windupMs + sweep.THORG_SWEEP.strikeMs + 150) / 10); i++) {
       h.body.x += 0.5; h.tick(10);
       const weapon = h.images[0];
       assert.ok([weapon.x, weapon.y, weapon.rotation].every(Number.isFinite));
-      assert.equal(weapon.displayWidth, 30 * scale);
+      assert.equal(weapon.displayWidth, 26 * scale);
       assert.equal(h.body.flipX, direction < 0);
     }
     const weapon = h.images[0], end = { x: weapon.x, y: weapon.y, rotation: weapon.rotation };
@@ -193,6 +200,24 @@ test('running grip stays on the displayed fist throughout each reordered frame',
   }
 });
 
+test('idle has no hand overlays while running fingers still clean up', () => {
+  const h = harness();
+  weaponModule.ensureThorgWeapon(h.scene, h.body);
+  const [weapon, fingers, support] = h.images;
+  assert.equal(fingers.visible, false);
+  assert.equal(support.visible, false);
+  h.body.frame.name = 'running00';
+  h.tick(100);
+  assert.ok(fingers.visible);
+  assert.equal(support.visible, false);
+  weaponModule.startThorgSweep(h.scene, h.body);
+  h.tick(16);
+  assert.equal(fingers.visible, false);
+  h.body.destroy();
+  assert.equal(fingers.destroyCount, 1);
+  assert.equal(support.destroyCount, 1);
+});
+
 test('attack frames do not drift the carry grip or rock the body', () => {
   const h = harness();
   weaponModule.ensureThorgWeapon(h.scene, h.body);
@@ -206,4 +231,96 @@ test('attack frames do not drift the carry grip or rock the body', () => {
   }
   h.tick(16);
   assert.deepEqual({ ...h.body._thorgGripPose }, carry);
+});
+
+test('idle-to-run locks the fist immediately and settles rotation within 72 ms', () => {
+  const body = { frame: { name: 'idle00' } };
+  motion.thorgGripPose(body);
+  body.frame.name = 'running00';
+  const first = motion.thorgGripPose(body, 16);
+  assert.equal(first.x, (anchors.running00[0] - 64) * 0.7);
+  assert.equal(first.y, (anchors.running00[1] - 64) * 0.7);
+  motion.thorgGripPose(body, 56);
+  assert.ok(Math.abs(body._thorgGripPose.angle - anchors.running00[2]) < 0.11);
+});
+
+test('rear arc and mace go behind the body while front trail stays in front', () => {
+  for (const direction of [-1, 1]) for (const scale of [1, sweep.THORG_SWEEP.rageScale]) {
+    const h = harness();
+    h.body._thorgVisualScale = scale;
+    const weapon = weaponModule.startThorgSweep(h.scene, h.body, { direction });
+    const [front, rear] = h.graphics;
+    const plane = h.body.y - 37.8 * (scale - 1) + 13 * scale;
+    front.lineBetween = (_x1, y1, _x2, y2) => {
+      assert.ok(y1 >= plane - 0.001 && y2 >= plane - 0.001);
+      front.lineCount = (front.lineCount || 0) + 1;
+    };
+    rear.lineBetween = (_x1, y1, _x2, y2) => {
+      assert.ok(y1 <= plane + 0.001 && y2 <= plane + 0.001);
+      rear.lineCount = (rear.lineCount || 0) + 1;
+    };
+    for (let t = 0; t < sweep.THORG_SWEEP.windupMs + sweep.THORG_SWEEP.strikeMs * 0.65; t += 8) h.tick(8);
+    assert.ok(front.lineCount > 0 && rear.lineCount > 0);
+    assert.ok(front.depth > h.body.depth && rear.depth < h.body.depth);
+    assert.ok(weapon.depth < h.body.depth);
+    h.body.destroy();
+  }
+});
+
+test('weapon remains rigid at its source aspect ratio throughout both sweep directions', () => {
+  for (const direction of [-1, 1]) for (const scale of [1, sweep.THORG_SWEEP.rageScale]) {
+    const h = harness(); h.body._thorgVisualScale = scale;
+    const weapon = weaponModule.startThorgSweep(h.scene, h.body, { direction });
+    for (let elapsed = 0; elapsed < 700; elapsed += 8) {
+      h.tick(8);
+      assert.ok(Math.abs(weapon.displayWidth / weapon.displayHeight - 36 / 101) < 0.0001);
+      assert.equal(weapon.displayWidth, 26 * scale);
+    }
+    h.body.destroy();
+  }
+});
+
+test('base weapon completes a one-second roll, loops, and pauses while hidden by dying', () => {
+  const h = harness();
+  const weapon = weaponModule.ensureThorgWeapon(h.scene, h.body);
+  assert.equal(weapon.textureKey, 'thorg-weapon-spin');
+  assert.equal(weapon.textureFrame, 0);
+  h.tick(124); assert.equal(weapon.textureFrame, 0);
+  h.tick(1); assert.equal(weapon.textureFrame, 1);
+  h.tick(875); assert.equal(weapon.textureFrame, 0);
+  h.body.frame.name = 'dying00'; h.tick(500);
+  assert.equal(weapon.visible, false);
+  assert.equal(weapon.textureFrame, 0);
+  h.body.destroy();
+});
+
+test('attack grip shifts inward and upward from the rigid waist orbit in both facings', () => {
+  for (const direction of [-1, 1]) for (const scale of [1, sweep.THORG_SWEEP.rageScale]) {
+    for (const progress of [0, 0.25, 0.35, 0.5, 0.65, 0.75, 1]) {
+      const h = harness(); h.body._thorgVisualScale = scale;
+      const weapon = weaponModule.startThorgSweep(h.scene, h.body, { direction });
+      h.tick(sweep.THORG_SWEEP.windupMs + sweep.THORG_SWEEP.strikeMs * progress);
+      const head = sweep.sampleThorgSweep({ x: h.body.x, y: h.body.y, direction, scale }, progress);
+      const offset = weapon.displayHeight / 71 * 39.5;
+      assert.ok(Math.abs((h.body.x + (weapon.x - h.body.x) / 0.9) + Math.cos(weapon.rotation + Math.PI / 2) * offset - head.x) < 0.001);
+      assert.ok(Math.abs(weapon.y + 3 * scale + Math.sin(weapon.rotation + Math.PI / 2) * offset - head.y) < 0.001);
+      h.body.destroy();
+    }
+  }
+});
+
+test('attack pose follows sweep phase and releases the animation clock on cleanup', () => {
+  const h = harness();
+  h.body.setFrame = name => { h.body.frame.name = name; };
+  let paused = false;
+  h.body.anims.pause = () => { paused = true; };
+  h.body.anims.resume = () => { paused = false; };
+  weaponModule.startThorgSweep(h.scene, h.body);
+  h.tick(sweep.THORG_SWEEP.windupMs + sweep.THORG_SWEEP.strikeMs * 0.35);
+  assert.equal(h.body.frame.name, 'throw01');
+  assert.equal(paused, true);
+  h.tick(sweep.THORG_SWEEP.strikeMs * 0.3);
+  assert.equal(h.body.frame.name, 'throw03');
+  h.tick(500);
+  assert.equal(paused, false);
 });

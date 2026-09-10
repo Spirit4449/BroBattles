@@ -1,5 +1,6 @@
 const { slimeLaunch, sampleSlimePath } = require("../../shared/gloopProjectile");
 const { aimAtTarget } = require("../../shared/huntressProjectile");
+const { resolveGloopHookSocket } = require("../../shared/gloopHookGeometry");
 const {
   getResolvedCharacterAimConfig,
   getResolvedCharacterSpecialAimConfig,
@@ -19,6 +20,7 @@ const DEFAULT_AIM_CONFIG = Object.freeze({
   minRange: null,
   maxRange: null,
   radius: null,
+  anchorKind: null,
   anchorForwardOffset: 24,
   anchorOffsetY: -6,
   reticleThickness: 18,
@@ -195,6 +197,10 @@ function resolveRangeSettings(character, config = {}, family = "basic") {
 
 function getPlayerAimBasePoint({ character, player, family = "basic" } = {}) {
   const config = getAimConfig(character, family);
+  if (config.anchorKind === "gloop-hook") {
+    const socket = resolveGloopHookSocket(player, getDefaultFacingAngle(player));
+    return { baseX: socket.x, baseY: socket.y, config };
+  }
   return {
     baseX: Number(player?.x) || 0,
     baseY: (Number(player?.y) || 0) + (Number(config.anchorOffsetY) || 0),
@@ -203,6 +209,15 @@ function getPlayerAimBasePoint({ character, player, family = "basic" } = {}) {
 }
 
 function getPlayerAimBase(player, config = {}, angle = 0) {
+  if (config.anchorKind === "gloop-hook") {
+    const socket = resolveGloopHookSocket(player, angle);
+    return {
+      baseX: socket.x,
+      baseY: socket.y,
+      anchorX: socket.x,
+      anchorY: socket.y,
+    };
+  }
   const point = {
     baseX: Number(player?.x) || 0,
     baseY: (Number(player?.y) || 0) + (Number(config.anchorOffsetY) || 0),

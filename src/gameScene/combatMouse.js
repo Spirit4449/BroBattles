@@ -3,7 +3,7 @@ export const COMBAT_MOUSE_CONFIG = Object.freeze({
   dragStartDistance: 10,
   dragReleaseDistance: 6,
   fullDragDistance: 120,
-  mouseSensitivity: 0.48,
+  mouseSensitivity: 0.24,
   throwCenterDistance: 28,
   throwCenterExitDistance: 38,
   lookAhead: 72,

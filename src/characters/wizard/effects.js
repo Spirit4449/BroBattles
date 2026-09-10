@@ -10,7 +10,10 @@ const POWERUP_TINTS = {
   poison: 0xfacc15,
   gravityBoots: 0xef4444,
 };
-const ARCANE_SURGE_DARK_MS = 2000;
+const ARCANE_SURGE_CAST_MS = 2000;
+const ARCANE_SURGE_BEAM_MS = 1000;
+const BEAM_HIT_MS = 300;
+const BEAM_CLEAR_MS = 780;
 const ALLY_GLOW_COLOR = 0x7dd3fc;
 
 function getPowerupTextureKey(scene, type) {
@@ -30,6 +33,13 @@ function getSpriteAnchor(sprite) {
   };
 }
 
+function getHitboxCenter(sprite) {
+  const center = sprite?.body?.center;
+  return Number.isFinite(center?.x) && Number.isFinite(center?.y)
+    ? { x: center.x, y: center.y }
+    : getSpriteAnchor(sprite);
+}
+
 function destroyMany(items = []) {
   for (const item of items) {
     try {
@@ -38,69 +48,149 @@ function destroyMany(items = []) {
   }
 }
 
-function pulseHtmlMatchBackgroundDarkness() {
-  const bgImage = document.querySelector("#game-bg .background-image");
-  if (!bgImage) return;
-
-  const prevTransition = bgImage.style.transition || "";
-  const prevFilter = bgImage.style.filter || "";
-  if (bgImage._wizardArcaneSurgeTimer) {
-    window.clearTimeout(bgImage._wizardArcaneSurgeTimer);
-    bgImage._wizardArcaneSurgeTimer = null;
-  }
-
-  bgImage.style.transition = prevTransition
-    ? `${prevTransition}, filter 180ms ease`
-    : "filter 180ms ease";
-  bgImage.style.filter = "brightness(0.33) saturate(0.78)";
-
-  bgImage._wizardArcaneSurgeTimer = window.setTimeout(() => {
-    bgImage.style.filter = prevFilter;
-    window.setTimeout(() => {
-      bgImage.style.transition = prevTransition;
-    }, 220);
-    bgImage._wizardArcaneSurgeTimer = null;
-  }, ARCANE_SURGE_DARK_MS);
+function isBeamTargetAlive(sprite) {
+  return !!sprite?.active && sprite.visible !== false && sprite.body?.enable !== false;
 }
 
-function createBlueTeamGlow(scene, sprite, isCaster) {
-  const anchor = getSpriteAnchor(sprite);
-  const outer = scene.add.circle(
-    anchor.x,
-    anchor.y,
-    isCaster ? 54 : 42,
-    ALLY_GLOW_COLOR,
-    isCaster ? 0.2 : 0.14,
-  );
-  const inner = scene.add.circle(
-    anchor.x,
-    anchor.y,
-    isCaster ? 28 : 22,
-    0xe0f2fe,
-    isCaster ? 0.18 : 0.12,
-  );
-  outer.setDepth((sprite.depth || 20) + 2);
-  inner.setDepth((sprite.depth || 20) + 3);
-
-  const state = { t: 0 };
-  scene.tweens.add({
+// Smooth layered light with a sparse pixel fringe matches the sprite art.
+function createPowerupBeam(scene, caster, sprite, entry) {
+  const graphics = scene.add.graphics();
+  graphics.setBlendMode("ADD");
+  graphics.setDepth((sprite.depth || 20) + 4);
+  const texture = getPowerupTextureKey(scene, entry.type);
+  const icon = texture
+    ? scene.add.image(0, 0, texture).setDisplaySize(26, 26)
+    : scene.add.text(0, 0, String(entry.type || "?").charAt(0).toUpperCase(), {
+        fontFamily: "monospace", fontSize: "20px", color: "#ffffff",
+      }).setOrigin(0.5);
+  icon.setDepth((sprite.depth || 20) + 5);
+  icon.setAlpha(0);
+  const state = { elapsed: 0 };
+  let delivered = false;
+  let tween;
+  let disposed = false;
+  const cleanup = () => {
+    if (disposed) return;
+    disposed = true;
+    tween?.stop();
+    scene.events?.off("shutdown", cleanup);
+    scene.events?.off("update", checkAlive);
+    sprite.off?.("destroy", cleanup);
+    caster?.off?.("destroy", cleanup);
+    destroyMany([graphics, icon]);
+  };
+  const checkAlive = () => {
+    if (!isBeamTargetAlive(sprite) || !isBeamTargetAlive(caster)) cleanup();
+  };
+  const pixel = (x, y, size, color, alpha) => {
+    graphics.fillStyle(color, alpha);
+    graphics.fillRect(Math.round(x / 3) * 3 - size / 2,
+      Math.round(y / 3) * 3 - size / 2, size, size);
+  };
+  scene.events?.once("shutdown", cleanup);
+  scene.events?.on("update", checkAlive);
+  sprite.once?.("destroy", cleanup);
+  caster?.once?.("destroy", cleanup);
+  tween = scene.tweens.add({
     targets: state,
-    t: 1,
-    duration: ARCANE_SURGE_DARK_MS,
-    ease: "Sine.easeInOut",
+    elapsed: ARCANE_SURGE_BEAM_MS,
+    duration: ARCANE_SURGE_BEAM_MS,
+    ease: "Linear",
     onUpdate: () => {
-      const next = getSpriteAnchor(sprite);
-      const pulse = 0.76 + Math.sin(state.t * Math.PI * 7) * 0.18;
-      outer.x = next.x;
-      outer.y = next.y;
-      inner.x = next.x;
-      inner.y = next.y;
-      outer.alpha = (isCaster ? 0.18 : 0.12) * (1 - state.t * 0.72) * pulse;
-      inner.alpha = (isCaster ? 0.22 : 0.14) * (1 - state.t * 0.65) * pulse;
-      outer.scale = 1 + state.t * (isCaster ? 0.42 : 0.26);
-      inner.scale = 1 + state.t * (isCaster ? 0.18 : 0.12);
+      checkAlive();
+      if (disposed) return;
+      const ms = state.elapsed;
+      const target = getHitboxCenter(sprite);
+      const source = getSpriteAnchor(caster);
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      const distance = Math.max(1, Math.hypot(dx, dy));
+      const nx = -dy / distance;
+      const ny = dx / distance;
+      const fade = Math.min(1, ms / 80);
+      const reach = Math.min(1, ms / BEAM_HIT_MS);
+      const tail = Math.max(0, Math.min(1, (ms - BEAM_HIT_MS) / (BEAM_CLEAR_MS - BEAM_HIT_MS)));
+      const impact = Math.max(0, Math.min(1, (ms - BEAM_HIT_MS) / (ARCANE_SURGE_BEAM_MS - BEAM_HIT_MS)));
+      const pulse = 0.85 + Math.sin(ms / 95) * 0.15;
+      graphics.clear();
+      const tip = { x: source.x + dx * reach, y: source.y + dy * reach };
+      const release = Math.max(0, 1 - ms / 300);
+      // Broad translucent bloom, blue body, and a bright white core.
+      for (const [width, color, alpha] of [
+        [58, 0x249cff, 0.055], [40, 0x38bdf8, 0.10],
+        [25, ALLY_GLOW_COLOR, 0.22], [14, 0xb8edff, 0.6],
+        [6, 0xffffff, 0.95],
+      ]) {
+        // Erase from the source forward, with a soft leading edge on the tail.
+        const segments = 40;
+        for (let i = 0; i < segments; i++) {
+          const start = Math.max(tail, i / segments);
+          const end = Math.min(reach, (i + 1) / segments);
+          if (end <= start) continue;
+          const edge = tail > 0 ? Math.min(1, ((start + end) / 2 - tail) / 0.16) : 1;
+          graphics.lineStyle(width * (1 + release * 0.4), color, alpha * fade * pulse * edge);
+          graphics.lineBetween(source.x + dx * start, source.y + dy * start,
+            source.x + dx * end, source.y + dy * end);
+        }
+      }
+      // A hot launch core and expanding shock ring announce the release.
+      for (const [radius, alpha] of [[42, 0.08], [26, 0.17], [12, 0.6]]) {
+        graphics.fillStyle(0xb8edff, alpha * fade * release);
+        graphics.fillCircle(source.x, source.y, radius * (1 + release * 0.5));
+        graphics.fillCircle(tip.x, tip.y, radius * 0.7);
+      }
+      if (release > 0) {
+        graphics.lineStyle(3, 0xe0f7ff, release * fade);
+        graphics.strokeCircle(source.x, source.y, 12 + (1 - release) * 68);
+        for (let i = 0; i < 10; i++) {
+          const angle = i * Math.PI / 5;
+          const radius = 18 + (1 - release) * 80;
+          graphics.lineStyle(2, ALLY_GLOW_COLOR, release * fade);
+          graphics.lineBetween(source.x + Math.cos(angle) * radius,
+            source.y + Math.sin(angle) * radius,
+            source.x + Math.cos(angle) * (radius + 14 * release),
+            source.y + Math.sin(angle) * (radius + 14 * release));
+        }
+      }
+      // Streams of detached pixels visibly flow from wizard to teammate.
+      for (let i = 0; i < 14; i++) {
+        const t = (ms / 760 + i / 14) % 1;
+        if (t > reach || t <= tail) continue;
+        const spread = Math.sin(i * 2.4 + ms / 180) * (14 + (i % 3) * 5);
+        pixel(source.x + dx * t + nx * spread,
+          source.y + dy * t + ny * spread, i % 3 === 0 ? 6 : 3,
+          i % 2 ? 0xffffff : ALLY_GLOW_COLOR, fade * 0.85 * Math.min(1, (t - tail) / 0.16));
+      }
+      const travel = reach;
+      icon.x = source.x + dx * travel;
+      icon.y = source.y + dy * travel;
+      icon.setAlpha(fade * Math.max(0, 1 - impact * 5));
+      if (ms >= BEAM_HIT_MS) {
+        const burstFade = Math.pow(1 - impact, 2);
+        const radius = 12 + (1 - Math.pow(1 - impact, 3)) * 66;
+        graphics.fillStyle(ALLY_GLOW_COLOR, burstFade * 0.22);
+        graphics.fillCircle(target.x, target.y, radius);
+        graphics.fillStyle(0xffffff, burstFade * 0.65);
+        graphics.fillCircle(target.x, target.y, 18 * (1 - impact));
+        graphics.lineStyle(5 * (1 - impact) + 1, 0xe0f7ff, burstFade);
+        graphics.strokeCircle(target.x, target.y, radius);
+        graphics.lineStyle(2, ALLY_GLOW_COLOR, burstFade * 0.75);
+        graphics.strokeCircle(target.x, target.y, radius * 0.72);
+        for (let i = 0; i < 12; i++) {
+          const angle = i * Math.PI / 6;
+          const sparkRadius = radius * (1 + impact * 0.4);
+          pixel(target.x + Math.cos(angle) * sparkRadius,
+            target.y + Math.sin(angle) * sparkRadius, i % 3 ? 3 : 6,
+            i % 3 ? 0xe0f2fe : POWERUP_TINTS[entry.type] || ALLY_GLOW_COLOR,
+            burstFade * 0.8);
+        }
+      }
+      if (travel === 1 && !delivered) {
+        delivered = true;
+        try { scene.sound?.play?.(`pu-touch-${entry.type}`, { volume: 0.28 }); } catch (_) {}
+      }
     },
-    onComplete: () => destroyMany([outer, inner]),
+    onComplete: cleanup,
   });
 }
 
@@ -126,7 +216,7 @@ function attachWizardAura(scene, sprite) {
   scene.tweens.add({
     targets: state,
     t: 1,
-    duration: ARCANE_SURGE_DARK_MS,
+    duration: ARCANE_SURGE_CAST_MS,
     ease: "Sine.easeInOut",
     onUpdate: () => {
       if (!sprite?.active) return;
@@ -167,8 +257,8 @@ function playCasterSpecialAnimation(scene, sprite) {
     fallback: "idle",
   });
   if (!specialKey) return;
-  sprite._specialAnimLockUntil = Date.now() + ARCANE_SURGE_DARK_MS + 120;
-  sprite._specialAnimLockUntilPerf = performance.now() + ARCANE_SURGE_DARK_MS + 120;
+  sprite._specialAnimLockUntil = Date.now() + ARCANE_SURGE_CAST_MS + 120;
+  sprite._specialAnimLockUntilPerf = performance.now() + ARCANE_SURGE_CAST_MS + 120;
 
   playSpriteAnimation({
     scene,
@@ -178,7 +268,7 @@ function playCasterSpecialAnimation(scene, sprite) {
     fallback: "throw",
   });
 
-  scene.time.delayedCall(Math.max(450, ARCANE_SURGE_DARK_MS - 120), () => {
+  scene.time.delayedCall(Math.max(450, ARCANE_SURGE_CAST_MS - 120), () => {
     if (!sprite?.active || !idleKey) return;
     try {
       const current = sprite.anims?.currentAnim?.key || "";
@@ -200,7 +290,6 @@ export function playWizardArcaneSurge(scene, payload, resolveSpriteByName) {
 
   const recipients = Array.isArray(payload?.recipients) ? payload.recipients : [];
   if (!recipients.length) return;
-  pulseHtmlMatchBackgroundDarkness();
 
   try {
     scene.sound?.play?.("wizard-special", {
@@ -217,125 +306,9 @@ export function playWizardArcaneSurge(scene, payload, resolveSpriteByName) {
 
   for (const entry of recipients) {
     const sprite = resolveSpriteByName(entry?.username);
-    if (!sprite?.active) continue;
+    if (entry?.isCaster || entry?.username === payload?.caster || sprite === casterSprite) continue;
+    if (!isBeamTargetAlive(sprite) || !isBeamTargetAlive(casterSprite)) continue;
 
-    const tint = POWERUP_TINTS[entry.type] || 0xffffff;
-    const textureKey = getPowerupTextureKey(scene, entry.type);
-    const anchor = getSpriteAnchor(sprite);
-    const auraScale = entry?.isCaster ? 2.35 : 1.7;
-    const auraAlpha = entry?.isCaster ? 0.34 : 0.22;
-    createBlueTeamGlow(scene, sprite, !!entry?.isCaster);
-
-    const glowOuter = scene.add.circle(anchor.x, anchor.y, 40, tint, auraAlpha);
-    const glowInner = scene.add.circle(
-      anchor.x,
-      anchor.y,
-      24,
-      0xffffff,
-      entry?.isCaster ? 0.24 : 0.14,
-    );
-    glowOuter.setDepth((sprite.depth || 20) + 3);
-    glowInner.setDepth((sprite.depth || 20) + 4);
-
-    scene.tweens.add({
-      targets: [glowOuter, glowInner],
-      scaleX: auraScale,
-      scaleY: auraScale,
-      alpha: 0,
-      duration: 1150,
-      ease: "Cubic.easeOut",
-      onUpdate: () => {
-        const next = getSpriteAnchor(sprite);
-        glowOuter.x = next.x;
-        glowOuter.y = next.y;
-        glowInner.x = next.x;
-        glowInner.y = next.y;
-      },
-      onComplete: () => destroyMany([glowOuter, glowInner]),
-    });
-
-    const orbit = scene.add.container(anchor.x, anchor.y);
-    orbit.setDepth((sprite.depth || 20) + 5);
-    const halo = scene.add.circle(0, 0, entry?.isCaster ? 26 : 20, tint, 0.28);
-    const ring = scene.add.circle(0, 0, entry?.isCaster ? 32 : 26);
-    ring.setStrokeStyle(2, 0xffffff, 0.88);
-    const icon = textureKey
-      ? scene.add.image(0, 0, textureKey)
-      : scene.add.text(0, 0, String(entry?.type || "?").charAt(0).toUpperCase(), {
-          fontFamily: "Arial",
-          fontSize: "18px",
-          color: "#ffffff",
-        }).setOrigin(0.5);
-    if (icon.setDisplaySize) {
-      const size = entry?.isCaster ? 30 : 24;
-      icon.setDisplaySize(size, size);
-    }
-    orbit.add([halo, ring, icon]);
-    orbit.alpha = 0;
-    orbit.setScale(0.2);
-
-    scene.tweens.add({
-      targets: orbit,
-      alpha: 1,
-      scaleX: 1,
-      scaleY: 1,
-      duration: 180,
-      ease: "Back.easeOut",
-    });
-
-    scene.tweens.addCounter({
-      from: 0,
-      to: Math.PI * 3.25,
-      duration: entry?.isCaster ? 980 : 860,
-      ease: "Sine.easeInOut",
-      onUpdate: (tween) => {
-        const angle = tween.getValue();
-        const next = getSpriteAnchor(sprite);
-        const radius = entry?.isCaster ? 42 : 34;
-        orbit.x = next.x;
-        orbit.y = next.y;
-        icon.x = Math.cos(angle) * radius;
-        icon.y = Math.sin(angle * 1.3) * (radius * 0.55);
-        halo.x = icon.x;
-        halo.y = icon.y;
-        ring.x = icon.x;
-        ring.y = icon.y;
-        orbit.rotation = angle * 0.08;
-      },
-      onComplete: () => {
-        const next = getSpriteAnchor(sprite);
-        scene.tweens.add({
-          targets: [icon, halo, ring],
-          x: 0,
-          y: 0,
-          alpha: { from: 1, to: 0 },
-          scaleX: entry?.isCaster ? 1.45 : 1.2,
-          scaleY: entry?.isCaster ? 1.45 : 1.2,
-          duration: 190,
-          ease: "Cubic.easeIn",
-          onStart: () => {
-            orbit.x = next.x;
-            orbit.y = next.y;
-          },
-          onComplete: () => {
-            const impact = scene.add.circle(next.x, next.y, entry?.isCaster ? 22 : 16, tint, 0.75);
-            impact.setDepth((sprite.depth || 20) + 6);
-            scene.tweens.add({
-              targets: impact,
-              alpha: 0,
-              scaleX: entry?.isCaster ? 3.4 : 2.5,
-              scaleY: entry?.isCaster ? 3.4 : 2.5,
-              duration: 260,
-              ease: "Quad.easeOut",
-              onComplete: () => impact.destroy(),
-            });
-            try {
-              scene.sound?.play?.(`pu-touch-${entry.type}`, { volume: 0.28 });
-            } catch (_) {}
-            orbit.destroy();
-          },
-        });
-      },
-    });
+    createPowerupBeam(scene, casterSprite, sprite, entry);
   }
 }

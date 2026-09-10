@@ -1,3 +1,4 @@
+import { createShurikenEffects } from './effects';
 // ReturningShuriken.js
 // Curved, returning, piercing shuriken with deterministic local simulation.
 
@@ -166,6 +167,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       ease: "Sine.easeInOut",
     });
 
+    this.fx = createShurikenEffects(scene, this, { x: startPos.x, y: startPos.y, angle, special: this.cfg.attackType !== "basic" });
     this.scene.events.on("update", this.updateShuriken, this);
   }
 
@@ -335,6 +337,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     this.trails.forEach((t) => t && t.destroy && t.destroy());
     this.trails.length = 0;
     if (this.glow && this.glow.destroy) this.glow.destroy();
+    this.fx?.destroy();
     this.destroy();
   }
 
@@ -342,6 +345,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     if (!this.active) return;
     this.elapsed += delta;
     this.totalElapsed += delta;
+    this.fx?.update(this.totalElapsed);
     this.trailAccum += delta;
     if (this.trailAccum >= this.trailInterval) {
       this.spawnTrail();

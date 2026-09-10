@@ -6,6 +6,7 @@ const {getAllCharacters,getHealth,getDamage,getSpecialDamage}=require('../../lib
 const {clone,variantKey,validateDocument}=require('../../shared/mapDocument');
 const {spawnForParticipant}=require('../../shared/duelGeometry');
 const {validateAssets}=require('./mapAssetValidation');
+const {getParticipant}=require('../core/gameRoom/participants');
 
 // Real game room, with only matchmaking, rewards, timer expiry and persistence disabled.
 // Character combat, bots, effects, collision, objectives and replication use GameRoom.
@@ -16,6 +17,21 @@ class EditorGameRoom extends GameRoom {
   async _finishGame() {}
   async _distributeMatchRewards() {return [];}
   async _cancelMatchAsAbandoned() {this.cleanup();}
+  _refillPlaytestSuper(player) {
+    if (!this.matchData.editorInfiniteSupers || !player || player.isBot) return;
+    player.superCharge=player.maxSuperCharge;
+    this.io.to(`game:${this.matchId}`).emit('super-update',{username:player.name,charge:player.superCharge,maxCharge:player.maxSuperCharge});
+  }
+  async addPlayer(socket,user) {
+    await super.addPlayer(socket,user);
+    const player=[...this.players.values()].find(p=>!p.isBot&&Number(p.user_id)===Number(user?.user_id));
+    this._refillPlaytestSuper(player);
+  }
+  requestSpecial(id,payload={}) {
+    const used=super.requestSpecial(id,payload);
+    if(used)this._refillPlaytestSuper(getParticipant(this,id));
+    return used;
+  }
   initializeSpawnPositions() {
     const size=Number(this.mapSnapshot.variant[0]);
     for(const p of this.players.values()){
@@ -45,11 +61,16 @@ class MapPlaytestService {
         room.sendGameStateToPlayer(socket);
         cb?.({ok:true,matchId:room.matchId});socket.emit('game:joined',{ok:true,matchId:room.matchId});
         room.onSocket(socket,'game:ready',()=>{if(!room._loopRunning){room.gameMode?.onStart?.();room.startGameLoop();}});
+        room.onSocket(socket,'editor:self-kill',()=>{
+          const player=room.players.get(socket.id);
+          if(!room.matchData.editorSoloPlaytest||!player?.isAlive||!player.loaded)return;
+          room._handlePlayerDeath(player,{cause:'editor-self-kill',at:Date.now()});
+        });
       }catch(e){cb?.({ok:false,error:e.message});socket.emit('game:error',{message:e.message});}});
       socket.on('disconnect',()=>{if(!room._disposed)room.removePlayer(socket,socket.data.user).catch(()=>{});});
     });
   }
-  create(user,{document,variant,bots=false,character='ninja',spawn=null}){
+  create(user,{document,variant,bots=false,infiniteSupers=false,character='ninja',spawn=null}){
     const errors=validateDocument(document);if(!errors.length)errors.push(...validateAssets(document));
     if(errors.length)throw Object.assign(Error('Map validation failed'),{status:422,errors});
     if(!this.namespace)throw Object.assign(Error('Playtest server is not initialized'),{status:503});
@@ -65,12 +86,12 @@ class MapPlaytestService {
     const snapshot={mapId:document.id,variant:key,revision:'editor-draft',metadata:{...document.metadata,id:document.id,label:document.label},map};
     // Deliberately has no database capability: a playtest cannot award or persist anything.
     const database={runQuery:async()=>[],setUserStatus:async()=>{},setPartiesStatus:async()=>{}};
-    const room=new EditorGameRoom(matchId,{mode:size,modeId,modeVariantId:`${modeId}-${key}`,map:document.id,players,editorMapSnapshot:snapshot},{io:{to:(...args)=>this.namespace.to(...args),sockets:{sockets:this.namespace.sockets}},db:database});
+    const room=new EditorGameRoom(matchId,{mode:size,modeId,modeVariantId:`${modeId}-${key}`,map:document.id,players,editorMapSnapshot:snapshot,editorSoloPlaytest:!bots,editorInfiniteSupers:infiniteSupers===true},{io:{to:(...args)=>this.namespace.to(...args),sockets:{sockets:this.namespace.sockets}},db:database});
     room.status='active';room.DEV_TIMING_DIAG=false;
     const normalPlan=room.gameMode.getRespawnPlan.bind(room.gameMode);
-    room.gameMode.getRespawnPlan=(p,meta)=>normalPlan(p,meta)||{enabled:true,delayMs:1200,shieldMs:1000,position:spawnForParticipant(room.geometry,p,p.spawnIndex||0,size)};
+    room.gameMode.getRespawnPlan=(p,meta)=>meta?.cause==='editor-self-kill'?{enabled:true,delayMs:1000,shieldMs:1000,position:spawnForParticipant(room.geometry,p,p.spawnIndex||0,size)}:normalPlan(p,meta)||{enabled:true,delayMs:1200,shieldMs:1000,position:spawnForParticipant(room.geometry,p,p.spawnIndex||0,size)};
     const token=randomUUID();const session={token,ownerId:Number(user.user_id),room,expiresAt:Date.now()+60*60*1000,
-      gameData:{matchId,mode:size,modeId,modeVariantId:`${modeId}-${key}`,map:document.id,mapSnapshot:snapshot,editorPlaytest:true,yourName:user.name,yourTeam:'team1',yourCharacter:character,isAdmin:true,isGuest:false,
+      gameData:{matchId,mode:size,modeId,modeVariantId:`${modeId}-${key}`,map:document.id,mapSnapshot:snapshot,editorPlaytest:true,editorSoloPlaytest:!bots,yourName:user.name,yourTeam:'team1',yourCharacter:character,isAdmin:true,isGuest:false,
         players:[]}};
     // Never expose the account row (password hashes, auth state) in a game roster.
     session.gameData.players=players.map(p=>({name:p.name,user_id:p.user_id,participantId:p.participantId,isBot:p.isBot,team:p.team,char_class:p.char_class,level:p.level,

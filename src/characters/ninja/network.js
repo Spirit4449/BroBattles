@@ -1,3 +1,4 @@
+import { createShurikenEffects } from './effects';
 import { playSpriteAnimation } from '../shared/animationState';
 import socket from '../../socket';
 import { CombatClock } from '../../shared/huntressReplication';
@@ -13,10 +14,18 @@ export function resetNinjaNetwork(){
   generation++;clearInterval(syncTimer);syncTimer=null;
   if(sceneRef&&listener)sceneRef.events.off('update',listener);
   if(sceneRef&&shutdown)sceneRef.events.off('shutdown',shutdown);
-  for(const e of active.values())e.sprite?.destroy();
+  for(const e of active.values()){e.fx?.destroy();e.sprite?.destroy();}
   for(const e of effects)e.destroy();effects.clear();
   active.clear();terminals.clear();requests.clear();clock.reset();
   enabled=false;sceneRef=null;listener=null;shutdown=null;ctx={};revision=0;
+}
+// Remove combat presentation that was on screen when the browser stopped
+// rendering. Keep the network runtime configured so fresh packets can resume
+// normally, but never replay projectiles that crossed the arena while hidden.
+export function discardNinjaPresentation(){
+  for(const e of active.values()){e.fx?.destroy();e.sprite?.destroy();}
+  for(const e of effects)e.destroy();
+  effects.clear();active.clear();requests.clear();
 }
 export function configureNinjaNetwork(state){
   resetNinjaNetwork();if(state?.ninjaCombatVersion!==VERSION)return;
@@ -37,7 +46,7 @@ function accept(projectile,simMono){
   active.set(projectile.id,{...prior,p:copy(projectile),at:simMono,authoritativeAt:simMono,predicted:false,
     correction:prior?.sprite?{visualX:prior.sprite.x,visualY:prior.sprite.y,at:performance.now()}:null});
 }
-function remove(id){active.get(id)?.sprite?.destroy();active.delete(id);}
+function remove(id){const e=active.get(id);e?.fx?.destroy();e?.sprite?.destroy();active.delete(id);}
 function tombstone(id){terminals.add(id);while(terminals.size>512)terminals.delete(terminals.values().next().value);remove(id);}
 function applyAmmo(action){
   if(action.revision<=revision)return;revision=action.revision;
@@ -79,13 +88,15 @@ export function attachNinjaScene(scene,next={}){
       }
       // Bound catch-up work after stalls; authoritative state is refreshed on return.
       let count=0;while(e.at+STEP_MS<=sim&&count++<360&&!e.p.done){step(e.p,o,colliders);e.at+=STEP_MS;}
-      if(!e.sprite){e.sprite=scene.add.image(e.p.x,e.p.y,'shuriken');e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special)e.sprite.setTint?.(0xc7efff);}
+      if(!e.sprite){e.sprite=scene.add.image(e.p.x,e.p.y,'shuriken');e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special)e.sprite.setTint?.(0xc7efff);
+        e.fx=createShurikenEffects(scene,e.sprite,{x:e.p.startX,y:e.p.startY,angle:e.p.angle,special:e.p.special,launch:e.p.elapsed<180});}
       const next=copy(e.p);if(!next.done)step(next,o,colliders);
       const f=Math.max(0,Math.min(1,(sim-e.at)/STEP_MS));
       if(e.correction&&e.correction.x===undefined){e.correction.x=e.correction.visualX-(e.p.x+(next.x-e.p.x)*f);e.correction.y=e.correction.visualY-(e.p.y+(next.y-e.p.y)*f);}
       const blend=e.correction?Math.max(0,1-(now-e.correction.at)/60):0;
       e.sprite.setPosition(e.p.x+(next.x-e.p.x)*f+(e.correction?.x||0)*blend,e.p.y+(next.y-e.p.y)*f+(e.correction?.y||0)*blend);
       e.sprite.setRotation(e.p.elapsed*e.p.cfg.rotationSpeed*Math.PI/180000*e.p.direction);
+      e.fx?.update(now,!e.p.done);
       if(e.p.done){e.sprite.setVisible?.(false);if(sim-e.at>2000)tombstone(id);continue;}e.sprite.setVisible?.(true);
       if(now-(e.trailAt||0)>45&&effects.size<180){e.trailAt=now;const trail=scene.add.image(e.sprite.x,e.sprite.y,'shuriken');trail.setScale(e.p.cfg.scale*.48);trail.setDepth(RENDER_LAYERS.ATTACKS-1);trail.alpha=.3;effects.add(trail);scene.tweens.add({targets:trail,alpha:0,duration:220,onComplete:()=>{effects.delete(trail);trail.destroy();}});}
     }

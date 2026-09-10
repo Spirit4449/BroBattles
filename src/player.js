@@ -583,7 +583,9 @@ export function createPlayer(
     } catch (_) {}
     attackAimReticleController = null;
   }
-  attackAimReticleController = createAttackAimReticleController(sceneParam);
+  attackAimReticleController = createAttackAimReticleController(sceneParam, {
+    getAmmoCharges: () => ammoCharges,
+  });
   if (!mobileControlsController) {
     mobileControlsController = createMobileControlsController({
       Phaser,

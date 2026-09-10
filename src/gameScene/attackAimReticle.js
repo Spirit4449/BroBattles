@@ -13,6 +13,16 @@ const RETICLE_PALETTES = {
     accentColor: 0xffffff,
     accentAlpha: 0.92,
   },
+  empty: {
+    shadowColor: 0x4d0000,
+    shadowAlpha: 0.2,
+    fillColor: 0xff3030,
+    fillAlpha: 0.2,
+    lineColor: 0xff6b6b,
+    lineAlpha: 0.3,
+    accentColor: 0xff3030,
+    accentAlpha: 0.96,
+  },
   special: {
     shadowColor: 0xffaa00,
     shadowAlpha: 0.16,
@@ -26,6 +36,9 @@ const RETICLE_PALETTES = {
 };
 
 function getPalette(state) {
+  if (state?.ammoAvailable === false && state?.paletteKey !== "special") {
+    return RETICLE_PALETTES.empty;
+  }
   return RETICLE_PALETTES[
     state?.paletteKey === "special" ? "special" : "basic"
   ];
@@ -297,7 +310,7 @@ function resolveRenderer(kind) {
   );
 }
 
-function createAttackAimReticleController(scene) {
+function createAttackAimReticleController(scene, { getAmmoCharges } = {}) {
   let renderer = null;
   let rendererKind = "";
 
@@ -318,7 +331,11 @@ function createAttackAimReticleController(scene) {
         return;
       }
       const activeRenderer = ensureRenderer(state.kind || state?.config?.kind);
-      activeRenderer.render(state);
+      const renderedState = state?.paletteKey === "special" || state?.family === "special" ||
+        typeof getAmmoCharges !== "function"
+        ? state
+        : { ...state, ammoAvailable: Number(getAmmoCharges()) >= 1 };
+      activeRenderer.render(renderedState);
       activeRenderer.setVisible(true);
     },
     hide() {

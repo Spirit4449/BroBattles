@@ -1,3 +1,5 @@
+import { THORG_SWEEP } from "../../shared/thorgSweep";
+
 export function animations(scene) {
   const NAME = "thorg";
   const tex = scene.textures.get(NAME);
@@ -50,21 +52,21 @@ export function animations(scene) {
     if (!ordered.length) return;
 
     // Phaser adds per-frame duration to its base interval. A single total
-    // duration keeps this body cycle on the 600ms weapon sweep clock.
+    // duration keeps the forearm poses on the shared weapon sweep clock.
     scene.anims.create({
       key: `${NAME}-throw`,
       frames: ordered.map((f) => ({
         key: NAME,
         frame: f,
       })),
-      duration: 600,
+      duration: THORG_SWEEP.windupMs + THORG_SWEEP.strikeMs + 100,
       repeat: 0,
     });
   };
 
   // Try reasonable prefix variants for robustness across atlases
   // Alternate lifted strides and planted contact poses, including the loop seam.
-  make(`${NAME}-running`, ["running", "run"], 12, -1,
+  make(`${NAME}-running`, ["running", "run"], 8, -1,
     ["running01", "running00", "running03", "running04", "running02", "running05"]);
   make(`${NAME}-idle`, ["idle", "stand", "idle_"], 6, -1);
   make(`${NAME}-jumping`, ["jumping", "jump"], 16, 0);

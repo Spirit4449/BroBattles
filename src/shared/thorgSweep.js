@@ -1,5 +1,5 @@
 // Canonical body-relative mace head trajectory, shared by rendering and hit truth.
-const THORG_SWEEP = Object.freeze({ windupMs: 140, strikeMs: 460, radiusX: 75, radiusY: 26, centerY: 13, headWidth: 54, headHeight: 40, rageScale: 1.25, footOffset: 37.8 });
+const THORG_SWEEP = Object.freeze({ windupMs: 70, strikeMs: 560, radiusX: 75, radiusY: 26, centerY: 13, headWidth: 54, headHeight: 40, rageScale: 1.25, footOffset: 37.8 });
 function sampleThorgSweep({ x = 0, y = 0, direction = 1, scale = 1 } = {}, progress = 0) {
   const t = Math.max(0, Math.min(1, Number(progress) || 0));
   // Smooth acceleration and recovery; one complete revolution touches both sides.

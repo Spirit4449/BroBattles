@@ -27,6 +27,16 @@ export function resetHuntressNetwork() {
   geometry = null;
 }
 
+// Visibility resync is presentation-only: preserve the configured protocol and
+// clock, while dropping arrows/casts that would otherwise appear after a stall.
+export function discardHuntressPresentation() {
+  for (const entry of sprites.values()) entry.sprite.destroy();
+  for (const particle of fireParticles) particle.destroy();
+  fireParticles.clear();
+  sprites.clear(); casts.clear(); predictedRequests.clear();
+  replica.active.clear();
+}
+
 export function configureHuntressNetwork(state) {
   resetHuntressNetwork();
   version = state?.huntressCombatVersion || 1;

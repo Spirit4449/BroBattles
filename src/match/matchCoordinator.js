@@ -151,6 +151,10 @@ export function createMatchCoordinator(config) {
     onPlayMatchEndSound,
     onShowGameOverScreen,
   } = config;
+  const presentationSuppressed = () =>
+    typeof config.isPresentationSuppressed === "function"
+      ? config.isPresentationSuppressed()
+      : typeof document !== "undefined" && document.hidden;
   const REMOTE_ATTACK_PRECISION_WINDOW_MS = 320;
   const START_WATCHDOG_TIMEOUT_MS = 15_000;
 
@@ -770,6 +774,7 @@ export function createMatchCoordinator(config) {
       const prev = lastHealthByPlayer[payload.username];
       lastHealthByPlayer[payload.username] = payload.health;
       if (
+        !presentationSuppressed() &&
         typeof prev === "number" &&
         payload.health < prev &&
         payload.username !== getUsername() &&
@@ -809,7 +814,9 @@ export function createMatchCoordinator(config) {
     const dyingPlayer = payload.username === getUsername()
       ? getPlayer()
       : (opponentPlayers[payload.username] || teamPlayers[payload.username])?.opponent;
-    spawnDeathTombstone(getGameScene(), payload, dyingPlayer);
+    if (!presentationSuppressed()) {
+      spawnDeathTombstone(getGameScene(), payload, dyingPlayer);
+    }
     hud.setTeamHudPlayerAlive(payload.username, false);
     if (Array.isArray(payload.drops) && payload.drops.length) {
       const known = Array.isArray(getLatestDeathDrops())
@@ -822,7 +829,7 @@ export function createMatchCoordinator(config) {
       }
       setLatestDeathDrops(Array.from(byId.values()));
     }
-    if (payload.username === getUsername()) return;
+    if (payload.username === getUsername() || presentationSuppressed()) return;
     const wrapper =
       opponentPlayers[payload.username] || teamPlayers[payload.username];
     wrapper?.startDeathPresentation?.(payload);
@@ -831,7 +838,7 @@ export function createMatchCoordinator(config) {
   function _onPlayerRespawn(payload) {
     if (!payload?.username) return;
     hud.setTeamHudPlayerAlive(payload.username, true);
-    if (payload.username === getUsername()) return;
+    if (payload.username === getUsername() || presentationSuppressed()) return;
     const wrapper =
       opponentPlayers[payload.username] || teamPlayers[payload.username];
     wrapper?.handleRespawn?.(payload);
@@ -916,6 +923,10 @@ export function createMatchCoordinator(config) {
   function _onGameAction(packet) {
     try {
       if (!packet) return;
+      // Socket.IO may deliver a burst after the browser has throttled a hidden
+      // tab. These packets describe past presentation; snapshots remain the
+      // source of truth for the current state.
+      if (presentationSuppressed()) return;
 
       const scene = getGameScene();
       if (!scene || !scene.sys || !scene.sys.isActive) {
@@ -1223,6 +1234,7 @@ export function createMatchCoordinator(config) {
 
   function _onPowerupCollected(payload) {
     if (!payload || typeof payload.id === "undefined") return;
+    if (presentationSuppressed()) return;
     powerupCollectQueue.push(payload);
   }
 
@@ -1253,6 +1265,7 @@ export function createMatchCoordinator(config) {
 
   function _onPowerupTick(payload) {
     if (!payload || !payload.type) return;
+    if (presentationSuppressed()) return;
     const scene = getGameScene();
     if (!scene?.sound) return;
     const entry = powerupTickSounds[payload.type];
@@ -1264,7 +1277,7 @@ export function createMatchCoordinator(config) {
 
   function _onWizardArcaneSurge(payload) {
     const scene = getGameScene();
-    if (!scene || !payload) return;
+    if (!scene || !payload || presentationSuppressed()) return;
     playWizardArcaneSurge(scene, payload, (name) => {
       if (!name) return null;
       if (name === getUsername()) return getPlayer();
@@ -1276,7 +1289,7 @@ export function createMatchCoordinator(config) {
 
   function _onDeathDropCollected(payload) {
     if (!payload || typeof payload.id === "undefined") return;
-    deathdropCollectQueue.push(payload);
+    if (!presentationSuppressed()) deathdropCollectQueue.push(payload);
     const known = Array.isArray(getLatestDeathDrops())
       ? getLatestDeathDrops()
       : [];

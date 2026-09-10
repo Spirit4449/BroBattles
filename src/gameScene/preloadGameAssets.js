@@ -140,6 +140,12 @@ export function preloadGameAssets({
     `${staticPath}/land.mp3`,
   ]);
 
+  scene.load.spritesheet(
+    "duck-guard-impact",
+    `${staticPath}/movement/duck-guard-impact.png`,
+    { frameWidth: 64, frameHeight: 64, startFrame: 0, endFrame: 77 },
+  );
+
   // Combat/health SFX
   scene.load.audio("sfx-damage", `${staticPath}/damage.mp3`);
   scene.load.audio("sfx-heal", `${staticPath}/heal.mp3`);

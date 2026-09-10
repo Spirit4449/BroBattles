@@ -926,97 +926,45 @@ export function spawnDamageImpact(scene, sprite, opts = {}) {
 
 export function spawnDuckGuardImpact(scene, sprite) {
   if (!scene?.add || !sprite?.active) return;
+  const textureKey = "duck-guard-impact";
+  if (!scene.textures.exists(textureKey)) return;
+
+  // The supplied sheet has 13 columns of 64px cells; row six is white.
+  const animationKey = "duck-guard-impact-white";
+  if (!scene.anims.exists(animationKey)) {
+    scene.anims.create({
+      key: animationKey,
+      frames: scene.anims.generateFrameNumbers(textureKey, { start: 65, end: 77 }),
+      frameRate: 24,
+      repeat: 0,
+    });
+  }
+
   const body = sprite.body;
   const cx = Number(body?.center?.x) || sprite.x;
   const cy = Number(body?.center?.y) || sprite.y;
-  const halfW = Math.max(18, (Number(body?.width) || 46) * 0.65);
-  const halfH = Math.max(16, (Number(body?.height) || 42) * 0.72);
-  const guard = scene.add.graphics();
-  guard.setPosition(cx, cy);
-  guard.setDepth(RENDER_LAYERS.PLAYER_HUD + 3);
-  guard.setBlendMode(Phaser.BlendModes.ADD);
-  guard.lineStyle(3, 0xf6a13a, 0.9);
-  for (const [x, y, dx, dy] of [
-    [-halfW, -halfH, 1, 1], [halfW, -halfH, -1, 1],
-    [-halfW, halfH, 1, -1], [halfW, halfH, -1, -1],
-  ]) {
-    guard.beginPath();
-    guard.moveTo(x + dx * 13, y);
-    guard.lineTo(x, y);
-    guard.lineTo(x, y + dy * 12);
-    guard.strokePath();
-  }
-  guard.fillStyle(0xffbd59, 0.75);
-  for (let i = 0; i < 7; i += 1) {
-    const angle = Phaser.Math.FloatBetween(-Math.PI, Math.PI);
-    const x = Math.cos(angle) * Phaser.Math.FloatBetween(halfW * 0.65, halfW);
-    const y = Math.sin(angle) * halfH;
-    guard.fillTriangle(
-      x, y,
-      x + Math.cos(angle - 0.5) * 8, y + Math.sin(angle - 0.5) * 8,
-      x + Math.cos(angle + 0.5) * 8, y + Math.sin(angle + 0.5) * 8,
-    );
-  }
-  // Loose dust motes bloom from the lower body while brighter diamond sparks
-  // snap outward. They move independently, so the result reads as an impact
-  // cloud instead of a circular aura.
-  for (let i = 0; i < 14; i += 1) {
-    const dust = scene.add.ellipse(
-      cx + Phaser.Math.Between(-halfW, halfW),
-      cy + Phaser.Math.Between(0, Math.round(halfH * 0.7)),
-      Phaser.Math.Between(5, 10),
-      Phaser.Math.Between(3, 7),
-      i % 3 === 0 ? 0xffcf75 : 0xe87924,
-      Phaser.Math.FloatBetween(0.48, 0.8),
-    );
-    dust.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
-    dust.setBlendMode(Phaser.BlendModes.ADD);
-    scene.tweens.add({
-      targets: dust,
-      x: dust.x + Phaser.Math.Between(-22, 22),
-      y: dust.y - Phaser.Math.Between(10, 34),
-      alpha: 0,
-      scaleX: Phaser.Math.FloatBetween(1.3, 2.4),
-      scaleY: Phaser.Math.FloatBetween(1.2, 2),
-      duration: Phaser.Math.Between(280, 460),
-      ease: "Quad.easeOut",
-      onComplete: () => dust.destroy(),
-    });
-  }
-  for (let i = 0; i < 9; i += 1) {
-    const spark = scene.add.graphics();
-    const size = Phaser.Math.FloatBetween(1.5, 3.2);
-    spark.fillStyle(i % 3 === 0 ? 0xfff0b0 : 0xffa12b, 0.95);
-    spark.fillTriangle(0, -size * 2, size, 0, 0, size * 2);
-    spark.fillTriangle(0, -size * 2, -size, 0, 0, size * 2);
-    spark.setPosition(
-      cx + Phaser.Math.Between(-Math.round(halfW * 0.5), Math.round(halfW * 0.5)),
-      cy + Phaser.Math.Between(-Math.round(halfH * 0.5), Math.round(halfH * 0.5)),
-    );
-    spark.setDepth(RENDER_LAYERS.PLAYER_HUD + 4);
-    spark.setBlendMode(Phaser.BlendModes.ADD);
-    const angle = Phaser.Math.FloatBetween(-Math.PI, Math.PI);
-    const travel = Phaser.Math.Between(22, 48);
-    scene.tweens.add({
-      targets: spark,
-      x: spark.x + Math.cos(angle) * travel,
-      y: spark.y + Math.sin(angle) * travel - 8,
-      rotation: Phaser.Math.FloatBetween(-1.2, 1.2),
-      alpha: 0,
-      scale: 0.35,
-      duration: Phaser.Math.Between(210, 340),
-      ease: "Cubic.easeOut",
-      onComplete: () => spark.destroy(),
-    });
-  }
+  const impact = scene.add.sprite(cx, cy, textureKey, 65);
+  impact.setOrigin(0.5);
+  impact.setScale(2);
+  impact.setDepth(RENDER_LAYERS.PLAYER_HUD + 3);
+  impact.once("animationcomplete", () => impact.destroy());
+  impact.play(animationKey);
+
+  const radius = Math.max(34, Math.hypot(body?.width || 46, body?.height || 42) / 2 + 10) * 0.8;
+  const bubble = scene.add.circle(cx, cy, radius, 0xffffff, 0.5);
+  bubble.setStrokeStyle(3, 0xffffff, 1);
+  bubble.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
   scene.tweens.add({
-    targets: guard,
+    targets: bubble,
     alpha: 0,
-    scaleX: 1.12,
-    scaleY: 1.08,
-    duration: 170,
-    ease: "Cubic.easeOut",
-    onComplete: () => guard.destroy(),
+    scale: 1.15,
+    duration: 540,
+    ease: "Quad.easeOut",
+    onUpdate: () => {
+      if (!sprite.active) { bubble.setVisible(false); return; }
+      bubble.setPosition(sprite.body?.center?.x ?? sprite.x, sprite.body?.center?.y ?? sprite.y);
+    },
+    onComplete: () => bubble.destroy(),
   });
 }
 

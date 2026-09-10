@@ -24,11 +24,11 @@ export function thorgGripPose(body, delta = 16) {
     angle: (a[2] ?? -4.48) + ((b[2] ?? -4.48) - (a[2] ?? -4.48))*mix + inertia +
       (idle ? Math.sin(phase)*0.008 : 0) };
   const pose = body._thorgGripPose || { ...target };
-  const blend = 1 - Math.exp(-Math.max(0,delta) / 45);
+  const blend = 1 - Math.exp(-Math.max(0,delta) / (idle || run ? 24 : 60));
   for (const key of ['x','y','angle']) pose[key] += (target[key]-pose[key])*blend;
   // Running artwork changes hands in discrete steps; the handle must stay on
   // the visible fist instead of interpolating through empty space between them.
-  if (run && body._thorgGripAnimation === name && delta > 0) {
+  if (run && delta > 0) {
     pose.x = target.x; pose.y = target.y;
   }
   if (delta > 0) body._thorgGripAnimation = name;

@@ -1,0 +1,9 @@
+# Unified fireball
+
+Generated using the built-in image generation tool. Asset: `public/assets/wizard/fireball-unified.png`; atlas: `public/assets/wizard/fireball-unified.json`. The transparent 1254 × 1254 sheet has 32 frames in an 8 × 4 grid.
+
+Frames 0–15 play once over the cast duration and hold at 15 while awaiting release. Frames 16–31 loop at 24 fps after release. One sprite and one texture are used throughout, with no crossfade, replacement sprite, or runtime growth tween.
+
+## Generation prompt
+
+Create ONE unified production game spritesheet with exactly 32 frames in an 8-column 4-row equal-cell grid, square 2048x2048 image, true transparent RGBA background (NO checkerboard). A blue-white pixel-art wizard fireball, upright with flame trailing upward, consistent center at each cell center. Reading order left to right then next row. Frames 0-15 are a ONE-TIME SPAWN: tiny cyan spark grows smoothly into irregular wispy blue-white flames and condenses into a bright fireball. No rotating spiral, no solid ring. Frames 16-31 are a SEAMLESS FLIGHT LOOP: identical overall size and core position, round white/cyan core at cell center with ragged electric blue flame tongues flickering upward; core diameter 120 pixels and total flame height 195 pixels. Frame15 and frame16 must look near-identical; frame31 and frame16 also must match for looping. Each adjacent frame changes only slightly, no leaps in shape, size, position or color. Spawn grows progressively, flight NEVER grows or shrinks. Crisp chunky pixel art, pale white hot center, light cyan body, azure edges, no dark navy. No staff or character, text, grid lines, borders. Every sprite fully isolated in its 256x256 cell with padding. Actual transparent alpha background is essential. This single sheet replaces both a charge and flight effect to eliminate any crossfade or texture swap.

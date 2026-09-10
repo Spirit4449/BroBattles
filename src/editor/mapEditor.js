@@ -14,7 +14,7 @@ const size = () => Number(variant[0]);
 const status = text => { $('status').textContent=text; };
 const uid = prefix => `${prefix}-${crypto.randomUUID().slice(0,8)}`;
 const dirty = () => documentData && JSON.stringify(documentData)!==savedJSON;
-const setBusy = value => {busy=value;for(const id of ['save','map-select','variant','import','new-map','preview','add','copy-variant']) $(id).disabled=value;};
+const setBusy = value => {busy=value;for(const id of ['save','map-select','variant','import','new-map','preview','infinite-supers','add','copy-variant']) $(id).disabled=value;};
 async function request(url, options={}) {
   const response=await fetch(url,{...options,headers:{'Content-Type':'application/json',...options.headers}});
   let result;try{result=await response.json();}catch{throw Error(`Request failed (${response.status})`);}
@@ -381,7 +381,7 @@ async function setPreview(value,row=null){
   }
   scene.pointerUp();setBusy(true);
   try{
-    const result=await request('/api/admin/map-playtests',{method:'POST',body:JSON.stringify({document:documentData,variant,bots:$('playtest-kind').value==='bots',character:$('playtest-character').value,spawn:row?.kind==='spawn'?{point:row.value}:null})});
+    const result=await request('/api/admin/map-playtests',{method:'POST',body:JSON.stringify({document:documentData,variant,bots:$('playtest-kind').value==='bots',infiniteSupers:$('infinite-supers').checked,character:$('playtest-character').value,spawn:row?.kind==='spawn'?{point:row.value}:null})});
     playtestSession=result.session;
     preview=true;keyboard.clear();game.scene.pause('studio');document.body.classList.add('preview');
     playtestFrame=node('iframe',undefined,{id:'playtest-frame',title:'Live game playtest',src:`/map-editor/playtest?session=${result.session}&match=${result.matchId}`,allow:'autoplay; fullscreen'});

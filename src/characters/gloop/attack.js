@@ -208,6 +208,7 @@ export function spawnGloopSlimeballVisual(
     disposed = true;
     scene.events.off("update", update);
     scene.events.off("gloop-slimeball-splat", splat);
+    scene.events.off("presentation:reset", cleanup);
     scene.events.off("shutdown", cleanup);
     visual.destroy();
     debug?.destroy?.();
@@ -238,6 +239,7 @@ export function spawnGloopSlimeballVisual(
   const pendingSplat = scene._gloopSplats?.get(payload.id);
   if (pendingSplat) splat(pendingSplat);
   scene.events.on("update", update);
+  scene.events.once("presentation:reset", cleanup);
   scene.events.once("shutdown", cleanup);
   visual.body.once("destroy", cleanup);
   visual.update(0);
