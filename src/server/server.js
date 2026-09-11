@@ -22,7 +22,7 @@ const {
   defaultCharacterList,
   upgradePrice,
   unlockPrice,
-} = require(path.join(ROOT_DIR, "src", "lib", "characterStats"));
+} = require("../shared/characterStats.js");
 
 // Core & modular routes/jobs
 const db = require("./core/sql.js");

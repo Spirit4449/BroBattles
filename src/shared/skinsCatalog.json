@@ -11,7 +11,6 @@
           "available": true,
           "assetUrl": "/assets/ninja/body.webp",
           "rarity": "common",
-          "price": { "gems": 0 },
           "unlockMethod": {
             "type": "character",
             "character": "ninja",
@@ -35,7 +34,6 @@
           "available": true,
           "assetUrl": "/assets/thorg/body.webp",
           "rarity": "common",
-          "price": { "gems": 0 },
           "unlockMethod": {
             "type": "character",
             "character": "thorg",
@@ -54,7 +52,6 @@
           "available": true,
           "assetUrl": "/assets/thorg/skins/thorg-storm/body.webp",
           "rarity": "rare",
-          "price": { "gems": 150 },
           "unlockMethod": {
             "type": "character",
             "character": "thorg",
@@ -74,7 +71,6 @@
           "available": true,
           "assetUrl": "/assets/thorg/skins/thorg-iron/body.webp",
           "rarity": "epic",
-          "price": { "gems": 250 },
           "unlockMethod": {
             "type": "shop",
             "limited": false
@@ -97,7 +93,6 @@
           "available": true,
           "assetUrl": "/assets/draven/body.webp",
           "rarity": "rare",
-          "price": { "gems": 0 },
           "unlockMethod": {
             "type": "character",
             "character": "draven",
@@ -121,7 +116,6 @@
           "available": true,
           "assetUrl": "/assets/wizard/body.webp",
           "rarity": "rare",
-          "price": { "gems": 0 },
           "unlockMethod": {
             "type": "character",
             "character": "wizard",
@@ -145,7 +139,6 @@
           "available": true,
           "assetUrl": "/assets/huntress/body.webp",
           "rarity": "rare",
-          "price": { "gems": 0 },
           "unlockMethod": {
             "type": "character",
             "character": "huntress",
@@ -169,7 +162,6 @@
           "available": true,
           "assetUrl": "/assets/gloop/body.webp",
           "rarity": "rare",
-          "price": { "gems": 0 },
           "unlockMethod": {
             "type": "character",
             "character": "gloop",

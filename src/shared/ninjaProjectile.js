@@ -1,4 +1,4 @@
-const { getResolvedCharacterAttackConfig, getResolvedCharacterAimConfig, getResolvedCharacterSpecialConfig } = require('../lib/characterTuning');
+const { getResolvedCharacterAttackConfig, getResolvedCharacterAimConfig, getResolvedCharacterSpecialConfig } = require("./characterTuning.js");
 const { sweep } = require('./huntressProjectile');
 const STEP_MS = 1000 / 60;
 const VERSION = 1;

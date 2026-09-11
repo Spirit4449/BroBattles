@@ -18,7 +18,7 @@ function observe(room, player, now, samples) {
   const ninja = [...(room._ninja?.active.values() || [])].map(e => {
     const p=e.projectile; p.attackerParticipantId=e.owner; p.collisionRadius=p.cfg.collisionRadius; return p;
   });
-  for (const attack of [...ninja, ...(room._activeAttacks || []), ...(room._botVisualProjectiles || []), ...(room._huntress?.active.values() || [])]) {
+  for (const attack of [...ninja, ...(room._activeAttacks || []), ...(room._huntress?.active.values() || [])]) {
     const owner = getParticipant(room, attack.attackerParticipantId) ||
       [...room.players.values()].find((p) => p.name === attack.attackerName);
     if (!owner || owner.team === player.team || !Number.isFinite(attack.x) || !Number.isFinite(attack.y)) continue;
@@ -87,22 +87,4 @@ function maneuverDanger(maneuver, observed, now, character) {
   return danger;
 }
 
-// Human Huntress arrows resolve hits in the browser. Track their visible flight
-// separately for perception, without ever calling damage or effect handlers.
-function tickVisualProjectiles(room) {
-  const dt = room.FIXED_DT_MS / 1000;
-  room._botVisualProjectiles = (room._botVisualProjectiles || []).filter((attack) => {
-    const beforeX = attack.x, beforeY = attack.y;
-    attack.vy += (attack.gravity || 0) * dt;
-    attack.x += attack.vx * dt;
-    attack.y += attack.vy * dt;
-    attack.elapsed = (attack.elapsed || 0) + room.FIXED_DT_MS;
-    const radius = attack.collisionRadius || 8;
-    if (room.geometry?.colliders.some((r) =>
-      Math.max(beforeX, attack.x) + radius >= r.left && Math.min(beforeX, attack.x) - radius <= r.right &&
-      Math.max(beforeY, attack.y) + radius >= r.top && Math.min(beforeY, attack.y) - radius <= r.bottom)) return false;
-    return attack.elapsed < Math.min(3000, attack.maxLifetimeMs || 2500);
-  });
-}
-
-module.exports = { observe, incomingThreat, maneuverDanger, tickVisualProjectiles };
+module.exports = { observe, incomingThreat, maneuverDanger };

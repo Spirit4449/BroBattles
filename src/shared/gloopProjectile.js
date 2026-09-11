@@ -1,6 +1,23 @@
+const { getResolvedCharacterAttackConfig } = require("./characterTuning");
+const SLIME = getResolvedCharacterAttackConfig("gloop", "slimeball");
 // Shared fixed-step slime physics. Collision normals drive both rebound and animation.
 const STEP_MS = 1000 / 120;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function getSlimeLaunchStepCount(distance, cfg = SLIME) {
+  const speedMultiplier = Math.max(
+    0.1,
+    Number(cfg?.launchSpeedMultiplier) || 1,
+  );
+  return Math.max(
+    1,
+    Math.round(
+      clamp(0.55 + Math.max(0, Number(distance) || 0) / 650, 0.55, 1.55) *
+        120 /
+        speedMultiplier,
+    ),
+  );
+}
 
 function sweep(x, y, dx, dy, r, rect) {
   const { left, right, top, bottom } = rect;
@@ -56,7 +73,7 @@ function slimeLaunch(pose, target, cfg) {
   const dx = target.x - start.x, dy = target.y - start.y;
   // Solve the same discrete gravity/drag integrator used in flight, for a lob
   // whose flight time grows with distance. No decorative Bezier approximation.
-  const steps = Math.round(clamp(0.55 + Math.hypot(dx, dy) / 650, 0.55, 1.55) * 120);
+  const steps = getSlimeLaunchStepCount(Math.hypot(dx, dy), cfg);
   const dt = STEP_MS / 1000, damping = Math.exp(-cfg.airDrag * dt);
   let horizontal = 0, velocity = 1;
   for (let i = 0; i < steps; i++) { velocity *= damping; horizontal += velocity * dt; }
@@ -94,7 +111,7 @@ function sampleSlimePath(launch, cfg, rects = [], { stopAtFirstImpact = false } 
 function advanceSlimeball(s, deltaMs, rects = [], onSegment = null) {
   const impacts = [];
   s._slimeAccumulator = (s._slimeAccumulator || 0) + Math.max(0, Number(deltaMs) || 0);
-  const r = s.collisionRadius || 18;
+  const r = s.collisionRadius ?? SLIME.collisionRadius;
   const surfaces = [...rects];
   if (Number.isFinite(s.floorY)) surfaces.push({ left: -1e7, right: 1e7, top: s.floorY, bottom: 1e7 });
   if (Number.isFinite(s.worldMinX)) surfaces.push({ left: -1e7, right: s.worldMinX, top: -1e7, bottom: 1e7 });
@@ -106,7 +123,7 @@ function advanceSlimeball(s, deltaMs, rects = [], onSegment = null) {
       s.contactHold.remaining -= STEP_MS;
       if (s.contactHold.remaining > 0) {
         if (onSegment?.({ x: s.x, y: s.y }, s) === true) s.done = true;
-        if (s.elapsed >= (s.maxLifetimeMs ?? 4200)) s.done = true;
+        if (s.elapsed >= (s.maxLifetimeMs ?? SLIME.maxLifetimeMs)) s.done = true;
         continue;
       }
       s.reboundImpulse = { vx: s.contactHold.vx, vy: s.contactHold.vy, elapsed: 0, duration: 50 };
@@ -125,8 +142,8 @@ function advanceSlimeball(s, deltaMs, rects = [], onSegment = null) {
       s.vx += impulse.vx * fraction; s.vy += impulse.vy * fraction;
       if (after >= 1) s.reboundImpulse = null;
     }
-    s.vy += (s.gravity ?? 340) * remaining;
-    s.vx *= Math.exp(-(s.airDrag ?? 0.2) * remaining);
+    s.vy += (s.gravity ?? SLIME.gravity) * remaining;
+    s.vx *= Math.exp(-(s.airDrag ?? SLIME.airDrag) * remaining);
     for (let contact = 0; contact < 4 && remaining > 1e-7 && !s.done; contact++) {
       const dx = s.vx * remaining, dy = s.vy * remaining;
       let hit = null;
@@ -144,9 +161,16 @@ function advanceSlimeball(s, deltaMs, rects = [], onSegment = null) {
       s.y += hit.ny * ((hit.push || 0) + 0.01);
       const normalSpeed = Math.max(0, -(s.vx * hit.nx + s.vy * hit.ny));
       const count = s.bounceCount || 0;
-      // The second rebound sheds substantially more energy, including on walls.
-      const restitution = clamp(s.bounceDampingY ?? 0.52, 0, 1) * (count === 0 ? 1 : 0.62);
-      const terminal = count >= Math.min(2, s.maxBounces ?? 2) || normalSpeed * restitution < (s.minBounceSpeed ?? 25);
+      // Later rebounds retain more lift so the second bounce remains useful and
+      // readable instead of collapsing almost immediately after the first.
+      const successiveBounceMultiplier = clamp(
+        s.successiveBounceMultiplier ?? SLIME.successiveBounceMultiplier ?? 0.85,
+        0,
+        1,
+      );
+      const restitution = clamp(s.bounceDampingY ?? SLIME.bounceDampingY, 0, 1) *
+        (count === 0 ? 1 : successiveBounceMultiplier);
+      const terminal = count >= Math.max(0, s.maxBounces ?? SLIME.maxBounces) || normalSpeed * restitution < (s.minBounceSpeed ?? SLIME.minBounceSpeed);
       impacts.push({ x: s.x - hit.nx * r, y: s.y - hit.ny * r,
         nx: hit.nx, ny: hit.ny, speed: normalSpeed, terminal });
       if (terminal) { s.done = true; break; }
@@ -154,7 +178,7 @@ function advanceSlimeball(s, deltaMs, rects = [], onSegment = null) {
       s.reboundImpulse = null;
       const tangentX = s.vx + normalSpeed * hit.nx;
       const tangentY = s.vy + normalSpeed * hit.ny;
-      const friction = clamp(s.bounceDampingX ?? 0.68, 0, 1);
+      const friction = clamp(s.bounceDampingX ?? SLIME.bounceDampingX, 0, 1);
       s.vx = tangentX * friction + hit.nx * normalSpeed * restitution;
       s.vy = tangentY * friction + hit.ny * normalSpeed * restitution;
       // Viscous dwell: impact energy is absorbed while the mass spreads,
@@ -165,8 +189,15 @@ function advanceSlimeball(s, deltaMs, rects = [], onSegment = null) {
       s.vx = 0; s.vy = 0;
       remaining = 0;
     }
-    if (s.elapsed >= (s.maxLifetimeMs ?? 4200) || s.traveled >= (s.range ?? 900)) s.done = true;
+    if (s.elapsed >= (s.maxLifetimeMs ?? SLIME.maxLifetimeMs) || s.traveled >= (s.range ?? SLIME.range)) s.done = true;
   }
   return impacts;
 }
-module.exports = { STEP_MS, sweep, advanceSlimeball, slimeLaunch, sampleSlimePath };
+module.exports = {
+  STEP_MS,
+  sweep,
+  advanceSlimeball,
+  slimeLaunch,
+  sampleSlimePath,
+  getSlimeLaunchStepCount,
+};

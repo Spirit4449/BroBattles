@@ -1,5 +1,15 @@
 import { appendLayoutObjectsFromConfig, configureMapPlatform, applyMapBounds, getSpawnPointForTeam, placeSpriteAtConfiguredSpawn } from './mapUtils';
 const runtimes = new Map();
+const boundScenes = new WeakSet();
+
+export function disposeMapDocument(scene) {
+  const runtime = scene?._mapRuntime;
+  if (!runtime) return;
+  if (runtimes.get(runtime.mapId) === runtime) runtimes.delete(runtime.mapId);
+  scene._mapRuntime = null;
+  scene._mapObjects = [];
+  scene._mapDocument = null;
+}
 export function preloadMapDocument(scene, data) {
   scene._mapAssetKeys = new Set(Object.keys(data?.assets || {}));
   for (const [key, asset] of Object.entries(data?.assets || {})) {
@@ -18,11 +28,24 @@ export function buildMapDocument(scene, mapId, data) {
   scene._mapDocument = data;
   applyMapBounds(scene, data.bounds);
   playMapAnimations(scene,objects,data);
-  const runtime = {data,objects,anchors,scene};
+  const previous = scene._mapRuntime;
+  if (previous && runtimes.get(previous.mapId) === previous) runtimes.delete(previous.mapId);
+  const runtime = {data,objects,anchors,scene,mapId:Number(mapId)};
+  scene._mapRuntime = runtime;
   runtimes.set(Number(mapId),runtime);
+  if (!boundScenes.has(scene) && scene.events?.once) {
+    boundScenes.add(scene);
+    scene.events.once('shutdown', () => {
+      disposeMapDocument(scene);
+      boundScenes.delete(scene);
+    });
+  }
   return runtime;
 }
-export function getDocumentRuntime(mapId) { return runtimes.get(Number(mapId)); }
+export function getDocumentRuntime(mapId, scene = null) {
+  if (scene) return scene._mapRuntime?.mapId === Number(mapId) ? scene._mapRuntime : undefined;
+  return runtimes.get(Number(mapId)); // Compatibility for non-scene presentation queries.
+}
 export function spawnOnMapDocument(scene,sprite,runtime,team,index,size) {
   const point = getSpawnPointForTeam(runtime.data.spawns,team,index,scene._mapVariantTeamSize || size);
   placeSpriteAtConfiguredSpawn(scene,sprite,point,runtime.anchors);
@@ -31,7 +54,7 @@ export function spawnOnMapDocument(scene,sprite,runtime,team,index,size) {
 // Reconcile by stable ID. History and inspector edits keep the Phaser scene,
 // canvas, camera and unchanged objects alive.
 export function syncMapDocument(scene,mapId,data) {
-  const runtime=getDocumentRuntime(mapId);
+  const runtime=getDocumentRuntime(mapId,scene);
   if(!runtime || runtime.scene !== scene) return buildMapDocument(scene,mapId,data);
   const rows=[...data.layout.platforms.map(row=>({row,kind:'platform'})),...data.layout.hitboxes.map(row=>({row,kind:'hitbox'}))];
   const previous=new Map(runtime.objects.map(object=>[object._mapObjectId,object]));

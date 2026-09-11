@@ -11,7 +11,7 @@ function makeRoom({ characters = ['ninja', 'wizard'], map = 1, trophies = 1000, 
     isBot: true, level: 1, trophies, seed: seed + i, difficulty: difficultyForTrophies(trophies) }));
   const teamSize = Math.max(1, Math.ceil(characters.length / 2));
   // Navigation assertions use the checked-in geometry, independent of local editor saves.
-  const document = require('../../src/shared/mapDefaults').find(entry => entry.id === Number(map));
+  const document = require('../../src/shared/maps').mapDefaults.find(entry => entry.id === Number(map));
   const variant = `${teamSize}v${teamSize}`;
   const editorMapSnapshot = { mapId: map, revision: 'test-default', variant,
     metadata: document.metadata, map: structuredClone(document.variants[variant]) };
@@ -19,7 +19,7 @@ function makeRoom({ characters = ['ninja', 'wizard'], map = 1, trophies = 1000, 
   room.status = 'active'; room._loopStartWallTime = Date.now(); room._checkVictoryCondition = () => {};
   room.broadcastSnapshot = () => {}; room.DEV_TIMING_DIAG = false; room._netTestEnabled = true;
   room._requiredUserIds.clear();
-  function tick(now) { room._tickId++; room._simulationMono = (room._simulationMono || 0) + room.FIXED_DT_MS; room.processTick(); tickActiveAttacks(room, now); require('../../src/server/core/gameRoom/ninjaCombat').tick(room); room._tickPowerupEffects(); room.processRegen(); }
+  function tick(now) { room._tickId++; room._simulationMono = (room._simulationMono || 0) + room.FIXED_DT_MS; room.processTick(); tickActiveAttacks(room, now); require('../../src/server/core/gameRoom/characterCombatRegistry').tick(room); room._tickPowerupEffects(); room.processRegen(); }
   function place(p, x, surface = room.geometry.colliders.find((p) => p.collision.up)) {
     Object.assign(p, standOn(surface, p.char_class, x));
   }

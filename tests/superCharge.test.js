@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
-const { getSuperChargeHits, getSuperChargePerHit } = require('../src/lib/characterStats');
+const { getSuperChargeHits, getSuperChargePerHit } = require("../src/shared/characterStats.js");
 const inferno = require('../src/server/core/gameRoom/abilities/dravenInfernoAbility');
 
 function fixture(t, character = 'draven') {
@@ -58,7 +58,7 @@ test('only configured supers grant charge and charge caps at ready', t => {
 
 test('each registered arrow in one volley grants one hit, including simultaneous contacts', t => {
   const { room, players: [p, target] } = fixture(t, 'huntress');
-  room.huntressCombatVersion = 2;
+
   for (let i = 0; i < 3; i++) {
     const id = `volley:${i}`;
     const arrow = { projectile: { id }, attackerName: p.name, attackType: 'huntress-arrow' };

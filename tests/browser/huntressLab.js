@@ -1,7 +1,6 @@
 import socket from '../../src/socket';
 import { configureHuntressNetwork, attachHuntressScene, handleHuntressPacket,
   observeHuntressSnapshot, predictHuntressShot } from '../../src/characters/huntress/network';
-import { spawnHuntressArrowVisual, stopHuntressArrowOnConfirmedHit } from '../../src/characters/huntress/attack';
 import { attackConfig } from '../../src/shared/huntressProjectile';
 const query=new URLSearchParams(location.search);
 socket.io.opts.query=Object.fromEntries(query);
@@ -11,7 +10,7 @@ function fire(){
   const cfg=attackConfig(),angle=init.username==='Lab0'?-0.32:Math.PI+0.32;
   const speed=cfg.speed*(1-Math.max(0,-Math.sin(angle))*.32);
   let payload={type:'huntress-arrow',id:`lab:${++sequence}`,angle,speed};
-  if(query.get('version')!=='1')payload=predictHuntressShot(scene,ctx.localPlayer,init.username,payload);
+  payload=predictHuntressShot(scene,ctx.localPlayer,init.username,payload);
   socket.emit('game:action',payload);
 }
 document.getElementById('fire').onclick=fire;
@@ -38,15 +37,7 @@ socket.on('lab:init',data=>{
 socket.on('game:snapshot',snapshot=>observeHuntressSnapshot(snapshot));
 socket.on('game:action',packet=>{
   actions.push(packet.action.type);if(actions.length>30)actions.shift();
-  if(handleHuntressPacket(scene,packet,ctx))return;
-  const a=packet.action,owner=packet.playerName===ctx.localUsername?ctx.localPlayer:ctx.opponentPlayersRef[packet.playerName]?.opponent;
-  if(a.type==='character-hit-confirm')stopHuntressArrowOnConfirmedHit(a.instanceId,a.target===ctx.localUsername?ctx.localPlayer:ctx.opponentPlayersRef[a.target]?.opponent,a.target);
-  if(!['huntress-arrow-release','huntress-burning-arrow'].includes(a.type))return;
-  const own=packet.playerName===ctx.localUsername;
-  spawnHuntressArrowVisual(scene,{...a,origin:packet.origin,...(!own?{start:{x:owner.x,y:owner.y}}:{})},owner,{
-    ...ctx,isOwner:own,username:init.username,attackerUsername:packet.playerName,
-    targetSprites:[{sprite:own?Object.values(ctx.opponentPlayersRef)[0].opponent:ctx.localPlayer,username:own?'Lab1':'Lab0'}],
-  });
+  handleHuntressPacket(scene,packet,ctx);
 });
 new Phaser.Game({type:Phaser.CANVAS,width:900,height:500,parent:'game',backgroundColor:'#152238',physics:{default:'arcade',arcade:{gravity:{y:0}}},audio:{noAudio:true},scene:{
   preload(){this.load.image('huntress-arrow','/assets/huntress/arrow.webp');},

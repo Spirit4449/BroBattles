@@ -129,3 +129,17 @@ export function handleNinjaPacket(scene,packet,next){
   }
   return true;
 }
+
+// Lifecycle contract consumed by the generic match and scene controllers.
+export const networkAdapter = {
+  key: 'ninja',
+  joinFields: { ninjaCombatVersion: 1 },
+  bootstrapKey: 'ninjaCombat',
+  configure: configureNinjaNetwork,
+  reset: resetNinjaNetwork,
+  discard: discardNinjaPresentation,
+  attach: attachNinjaScene,
+  observe: observeNinjaSnapshot,
+  handlePacket: handleNinjaPacket,
+  predictSpecial: (scene, player, username, request) => predictNinja(scene, player, username, request, true),
+};

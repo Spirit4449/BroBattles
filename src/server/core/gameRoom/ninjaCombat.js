@@ -95,4 +95,12 @@ function tick(room){
 function trusted(room,entry,payload){return !!entry&&room._ninja?.active.get(entry.projectile.id)===entry&&entry.contact?.instanceId===payload.instanceId&&entry.contact.target===payload.target;}
 function bootstrap(room){return {ninjaCombatVersion:room.ninjaCombatVersion,...timing(room),colliders:room.geometry?.colliders||[],
   active:[...room._ninja.active.values()].map(e=>({projectile:e.projectile,requestId:e.requestId})),terminals:room._ninja.terminals};}
-module.exports={initialize,request,tick,trusted,bootstrap};
+function dispose(room) {
+  const state = room._ninja;
+  if (!state) return;
+  state.active.clear();
+  state.pending.length = 0;
+  state.terminals.length = 0;
+  state.requests.clear();
+}
+module.exports={dispose,initialize,request,tick,trusted,bootstrap};

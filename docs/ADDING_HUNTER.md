@@ -68,7 +68,7 @@ These are the details required before a new character can be added cleanly.
 
 When the information above is available, add the character in this order.
 
-1. Add a stats/tuning entry in `src/lib/characterStats.js`.
+1. Add a definition in `src/shared/characters/<key>.json` and register it in `src/shared/characters/index.js`.
 2. Create `src/characters/<character-key>/constructor.js`.
 3. Create `src/characters/<character-key>/anim.js`.
 4. Create `src/characters/<character-key>/attack.js`.
@@ -78,7 +78,7 @@ When the information above is available, add the character in this order.
 8. Register the special module in `src/characters/special.js`.
 9. Add the default skin entry in `src/shared/skinsCatalog.json`.
 10. Add profile icon assets/catalog entries if the character should appear outside the skin picker.
-11. Add or update server attack descriptors in `src/shared/attackDescriptors.json`.
+11. Add or update server attack descriptors in the character definition's `attacks` object.
 12. Add descriptor resolver tuning in `src/server/core/gameRoom/attackDescriptorResolver.js` if the server needs values from character tuning.
 13. Build and manually verify selection, spawn, basic attack, special, remote rendering, damage, death, and missing asset warnings.
 
@@ -87,7 +87,7 @@ When the information above is available, add the character in this order.
 For a simple straight arrow, use the existing wizard fireball pattern as the closest match:
 
 1. Client sends a windup action and a release action.
-2. Server owns damage through an `attackDescriptors.json` entry with `runtime.kind: "projectile-linear"`.
+2. Server owns damage through an `attacks` entry in the shared character definition with `runtime.kind: "projectile-linear"`.
 3. Client renders local and remote arrow visuals in the character attack module.
 4. Runtime tuning should live in `characterStats.<key>.tuning.attack.<attackKey>`.
 5. Server resolver should merge speed, range, collision size, offsets, and startup from tuning.

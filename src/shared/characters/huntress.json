@@ -1,0 +1,157 @@
+{
+  "key": "huntress",
+  "stats": {
+    "baseHealth": 5500,
+    "attackDescription": "Fires three arrows in a slight spread, each dealing damage on impact.",
+    "baseDamage": 3000,
+    "ammoCooldownMs": 300,
+    "ammoReloadMs": 1667,
+    "ammoCapacity": 3,
+    "specialDescription": "Unleashes a wide volley of burning arrows that ignite enemies.",
+    "specialBaseDamage": 9000,
+    "specialChargeHits": 6,
+    "specialChargePerHit": 1,
+    "spriteScale": 1.5,
+    "body": {
+      "widthShrink": 80,
+      "heightShrink": 65,
+      "offsetXFromHalf": 5,
+      "offsetY": 63
+    },
+    "tuning": {
+      "attack": {
+        "aim": {
+          "kind": "throw",
+          "attackKey": "arrowSpread",
+          "minRange": 160,
+          "defaultRange": 500,
+          "maxRange": 500,
+          "anchorForwardOffset": 20,
+          "anchorOffsetY": 40,
+          "reticlePathOffsetY": 14,
+          "reticleThickness": 18,
+          "angleMode": "free",
+          "minSpeedScale": 0.5102222222222222,
+          "maxSpeedScale": 1,
+          "trajectorySamples": 32,
+          "previewStartBackOffset": 4,
+          "previewStartLiftY": -6,
+          "previewEndDropY": 84,
+          "previewArcHeight": 72,
+          "previewCurveMagnitude": -10,
+          "previewCurveMode": "facing",
+          "previewCurveUpwardScale": 1.05,
+          "previewCurveMidBoost": 1.1,
+          "previewCurveVerticalScale": 0,
+          "previewArcHeightMinScale": 0.5,
+          "previewArcHeightUpwardScale": 0.62,
+          "previewEndDropMinScale": 0.7,
+          "previewEndDropUpwardScale": 0.68,
+          "throwMinOffsetX": -900,
+          "throwMaxOffsetX": 900,
+          "throwMinOffsetY": -430,
+          "throwMaxOffsetY": 300,
+          "quickTargetOffsetX": 760,
+          "quickTargetOffsetY": -24
+        },
+        "arrowSpread": {
+          "count": 3,
+          "spreadDeg": 6,
+          "speed": 900,
+          "range": 1000,
+          "collisionRadius": 16,
+          "damagePerArrow": 1000,
+          "visualScale": 0.22,
+          "castDelayMs": 100,
+          "flipLockMs": 600,
+          "forwardOffset": 0.12,
+          "verticalOffset": -0.16,
+          "embedMs": 2000,
+          "gravity": 460,
+          "maxLifetimeMs": 5000
+        }
+      },
+      "special": {
+        "aim": {
+          "kind": "throw",
+          "specialKey": "burningVolley",
+          "minRange": 180,
+          "defaultRange": 820,
+          "maxRange": 1050,
+          "anchorForwardOffset": 34,
+          "anchorOffsetY": 14,
+          "reticlePathOffsetY": 14,
+          "reticleThickness": 42,
+          "angleMode": "free",
+          "minSpeedScale": 0.84,
+          "maxSpeedScale": 1.2,
+          "trajectorySamples": 36,
+          "previewStartBackOffset": 4,
+          "previewStartLiftY": -8,
+          "previewEndDropY": 96,
+          "previewArcHeight": 84,
+          "previewCurveMagnitude": -13,
+          "previewCurveMode": "facing",
+          "previewCurveUpwardScale": 1.1,
+          "previewCurveMidBoost": 1.2,
+          "previewCurveVerticalScale": 0,
+          "previewArcHeightMinScale": 0.52,
+          "previewArcHeightUpwardScale": 0.64,
+          "previewEndDropMinScale": 0.72,
+          "previewEndDropUpwardScale": 0.7,
+          "throwMinOffsetX": -980,
+          "throwMaxOffsetX": 980,
+          "throwMinOffsetY": -460,
+          "throwMaxOffsetY": 320,
+          "quickTargetOffsetX": 820,
+          "quickTargetOffsetY": -32,
+          "projectileAngleOffsetDeg": 0
+        },
+        "burningVolley": {
+          "count": 6,
+          "spreadDeg": 20,
+          "speed": 960,
+          "range": 960,
+          "collisionRadius": 18,
+          "damagePerArrow": 1000,
+          "visualScale": 0.24,
+          "castDelayMs": 230,
+          "releaseMs": 0,
+          "burnDurationMs": 5000,
+          "burnTotalDamage": 500,
+          "groundBurnMs": 2200,
+          "gravity": 360,
+          "maxLifetimeMs": 6000,
+          "embedMs": 2200
+        }
+      }
+    },
+    "description": "A precise ranged fighter who pins enemies down with arrows.",
+    "unlockPrice": 50
+  },
+  "frame": {
+    "w": 100,
+    "h": 100
+  },
+  "duckFrame": [
+    5,
+    2
+  ],
+  "basicAction": "huntress-arrow",
+  "basicHitTypes": [
+    "basic",
+    "huntress-arrow"
+  ],
+  "specialHitTypes": [
+    "special",
+    "huntress-burning-arrow"
+  ],
+  "attacks": {
+    "huntress-arrow": {
+      "character": "huntress",
+      "actionFlow": {
+        "kind": "server-runtime-only"
+      }
+    }
+  }
+}

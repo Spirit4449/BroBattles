@@ -1,7 +1,8 @@
-const { getResolvedCharacterAttackConfig, getResolvedCharacterAimConfig, getResolvedCharacterSpecialAimConfig, getResolvedCharacterSpecialConfig } = require("../../../lib/characterTuning.js");
+const { getResolvedCharacterAttackConfig, getResolvedCharacterAimConfig, getResolvedCharacterSpecialAimConfig, getResolvedCharacterSpecialConfig } = require("../../../shared/characterTuning.js");
 const { getResolvedAttackDescriptor } = require("../gameRoom/attackDescriptorResolver");
 const attackRuntime = require("../gameRoom/attackRuntimeManager");
-const attackTypes = { ninja: "ninja-shuriken", thorg: "thorg-fall", draven: "draven-splash", wizard: "wizard-fireball", huntress: "huntress-arrow", gloop: "gloop-slimeball" };
+const { characterDefinitions } = require('../../../shared/characters');
+const attackTypes = Object.fromEntries(Object.values(characterDefinitions).map(definition => [definition.key, definition.basicAction]));
 const BOT_ATTACK_TO_SUPER_COOLDOWN_MS = 400;
 
 function interceptTime(dx, dy, vx, vy, speed) {
@@ -32,8 +33,8 @@ function segmentCrossesRect(ax, ay, bx, by, rect, padding = 8) {
 // semi-implicit gravity step. Multiple roots give low and high firing arcs.
 function projectileSolutions(player, target, runtime, startup, prediction, dt, speedAtAngle) {
   const speed = runtime.speed || 800, gravity = runtime.gravity || 0;
-  const forward = (player._lastWidth || 80) * (runtime.forwardOffsetWidthFactor || 0);
-  const ox = player.x, oy = player.y - (player._lastHeight || 120) * (runtime.verticalOffsetHeightFactor || 0);
+  const forward = (player._lastWidth || 80) * (runtime.forwardOffsetWidthFactor ?? runtime.forwardOffset ?? 0);
+  const ox = player.x, oy = player.y - (player._lastHeight || 120) * (runtime.verticalOffsetHeightFactor ?? runtime.verticalOffset ?? 0);
   const vx = (target.vx || 0) * prediction, vy = (target.vy || 0) * prediction;
   const maxTime = gravity ? (runtime.maxLifetimeMs || 3000) / 1000 : (runtime.range || 1050) / speed;
   const vector = (t) => ({ x: target.x + vx * (startup + t) - ox,
@@ -182,7 +183,7 @@ function requestBasic(room, p, target, profile, random, now) {
     mapCollisionRects: room.geometry?.colliders || [] };
   const descriptor = getResolvedAttackDescriptor(aim.type);
   const lockMs = Math.max(150, Number(descriptor?.actionFlow?.startupMs) || Number(descriptor?.runtime?.windupMs) || 0);
-  if (p.char_class === 'huntress' && room.huntressCombatVersion === 2) {
+  if (p.char_class === 'huntress') {
     action.power = require('../../../shared/huntressProjectile').powerFromSpeed(action.angle, action.speed);
   } else if (p.char_class !== 'ninja' || !room.ninjaCombatVersion) {
     ammo.charges--; ammo.nextFireInMs = ammo.cooldownMs;

@@ -40,9 +40,7 @@ export default class CharacterEntityBase {
     return false;
   }
 
-  static getPowerupMobilityModifier() {
-    return { speedMult: 1, jumpMult: 1 };
-  }
+
 
   static getEffectTickSounds() {
     return {};

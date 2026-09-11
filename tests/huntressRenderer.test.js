@@ -4,7 +4,7 @@ const babel=require('@babel/core');
 const model=require('../src/shared/huntressProjectile');
 const replication=require('../src/shared/huntressReplication');
 const {resolveAttackAimContext}=require('../src/characters/shared/attackAim');
-const tuning=require('../src/lib/characterTuning');
+const tuning=require("../src/shared/characterTuning.js");
 const {makeRoom}=require('./helpers/botRoom');
 const combat=require('../src/server/core/gameRoom/huntressCombat');
 const attackCode=babel.transformSync(fs.readFileSync(require.resolve('../src/characters/huntress/attack.js'),'utf8'),{
@@ -117,7 +117,7 @@ test('real steep attack payload reaches the reticle on the server and retains fu
     t.after(()=>f.room.cleanup());
     const p=f.players[0];
     Object.assign(p,{x:owner.x,y:owner.y,isBot:false,connected:true});
-    f.room.huntressCombatVersion=2;
+
     f.room._tickId=0;f.room._simulationMono=0;
     f.room.geometry={...f.room.geometry,colliders:[]};f.players[1].loaded=false;
     assert.equal(f.room.handlePlayerAction(p.participantId,request),true);
@@ -169,4 +169,19 @@ test('normal power spans the original minimum to the previous average speed',()=
   assert.ok(Math.abs(model.resolveShot({angle:0,power:0}).speed-459.2)<1e-9);
   assert.equal(model.resolveShot({angle:0,power:1}).speed,900);
   assert.equal(model.resolveShot({angle:-Math.PI/2,power:1}).speed,900);
+});
+
+
+test('normal arrow trails fade and the network renderer detaches on cleanup', () => {
+  const {api,created,scene,owner,frame}=setup();
+  const tweens=[];
+  scene.tweens.add=options=>tweens.push(options);
+  api.predictHuntressShot(scene,owner,'owner',{id:'trail',angle:0,speed:model.resolveShot({angle:0}).speed});
+  frame(101);
+  const trails=tweens.filter(tween=>tween.duration===150);
+  assert.ok(trails.length>0);
+  for(const tween of trails){assert.equal(tween.alpha,0);tween.onComplete();assert.equal(tween.targets.active,false);}
+  api.resetHuntressNetwork();
+  assert.equal(scene.events.listenerCount('update'),0);
+  assert.ok(created.every(sprite=>!sprite.active));
 });

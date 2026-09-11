@@ -16,12 +16,7 @@
 
 const { effectDefs } = require("./effectDefs");
 
-const DEFAULT_MODIFIERS = Object.freeze({
-  damageMult: 1,
-  damageTakenMult: 1,
-  speedMult: 1,
-  jumpMult: 1,
-});
+const { combineModifiers } = require("../../../../shared/effectRules");
 
 function _state(player) {
   if (!player.activeEffects) player.activeEffects = {};
@@ -91,27 +86,15 @@ function getRemaining(player, effectKey, now) {
  */
 function getModifiers(player, now) {
   const state = _state(player);
-  let damageMult = 1;
-  let damageTakenMult = 1;
-  let speedMult = 1;
-  let jumpMult = 1;
-
+  const modifiers = [];
   for (const [key, entry] of Object.entries(state)) {
     if (entry.until <= now) continue;
     const def = effectDefs[key];
     if (!def) continue;
-    const m =
-      typeof def.getModifiers === "function"
-        ? def.getModifiers(entry.params || {})
-        : def.modifiers;
-    if (!m) continue;
-    if (m.damageMult != null) damageMult *= m.damageMult;
-    if (m.damageTakenMult != null) damageTakenMult *= m.damageTakenMult;
-    if (m.speedMult != null) speedMult *= m.speedMult;
-    if (m.jumpMult != null) jumpMult *= m.jumpMult;
+    modifiers.push(typeof def.getModifiers === 'function'
+      ? def.getModifiers(entry.params || {}) : def.modifiers);
   }
-
-  return { damageMult, damageTakenMult, speedMult, jumpMult };
+  return combineModifiers(modifiers);
 }
 
 /**

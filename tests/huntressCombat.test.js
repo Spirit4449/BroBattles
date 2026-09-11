@@ -8,7 +8,7 @@ const { HuntressReplica, CombatClock } = require('../src/shared/huntressReplicat
 
 function fixture(t, map = 1) {
   const f = makeRoom({ characters: ['huntress', 'ninja'], map });
-  f.room.huntressCombatVersion = 2;
+
   f.room._simulationMono = 10000;
   f.room._tickId = 0;
   f.room.geometry = { ...f.room.geometry, colliders: [] };
@@ -181,7 +181,7 @@ test('vault contacts use authoritative flight even when the shooter has moved aw
   assert.equal(actions('huntress-terminal')[0].target,'vault:team2');
 });
 
-test('the room feature flag is immutable and incompatible clients cannot join v2 rooms', async t => {
+test('authoritative combat is the default and incompatible clients must reload', async t => {
   const {room}=fixture(t);
   const {registerGameEvents}=require('../src/server/core/socketEvents/gameEvents');
   const handlers=new Map(),emitted=[];let joined=0;
@@ -192,9 +192,7 @@ test('the room feature flag is immutable and incompatible clients cannot join v2
   assert.equal(ack.error,'client_update_required');assert.equal(joined,0);
   await handlers.get('game:join')({matchId:1,huntressCombatVersion:2,ninjaCombatVersion:1},a=>{ack=a;});
   assert.equal(ack.ok,true);assert.equal(joined,1);
-  const prior=process.env.BB_HUNTRESS_COMBAT_V2;
-  process.env.BB_HUNTRESS_COMBAT_V2='0';assert.equal(combat.enabled(room),true);
-  if(prior===undefined)delete process.env.BB_HUNTRESS_COMBAT_V2;else process.env.BB_HUNTRESS_COMBAT_V2=prior;
+  assert.equal(room.huntressCombatVersion, model.VERSION);
 });
 
 test('prediction is reconciled by ID; terminal-before-launch, duplicates and epochs cannot resurrect arrows', () => {

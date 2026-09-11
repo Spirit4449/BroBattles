@@ -1,9 +1,9 @@
-const defaults = require('./mapDefaults');
+const defaults = require('./maps').mapDefaults;
 const { geometryFromMap, variantKey } = require('./mapDocument');
 const { resolveLanding } = require('./spawnPlacement');
-const frames = require('./characterFrames.json');
-const { getCharacterStats } = require('../lib/characterStats.js');
-const { getResolvedCharacterBodyConfig } = require('../lib/characterTuning.js');
+const frames = require("./characters/index.js").characterFrames;
+const { getCharacterStats } = require("./characterStats.js");
+const { getResolvedCharacterBodyConfig } = require("./characterTuning.js");
 function getDuelGeometry(mapId, variant = '1v1', snapshot = null) {
   const data = snapshot || defaults.find(d => d.id === Number(mapId))?.variants[variantKey(variant)];
   return data ? geometryFromMap(data, Number(mapId)) : null;

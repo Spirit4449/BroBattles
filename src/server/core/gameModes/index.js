@@ -1,7 +1,9 @@
 const gameModesCatalog = require("../../../shared/gameModes.catalog.json");
 const { DuelsGameMode } = require("./DuelsGameMode");
-const { BankBustGameMode } = require("./BankBustGameMode");
+const { BankBustGameMode } = require("./bankBust/BankBustGameMode.js");
 const { UnimplementedGameMode } = require("./UnimplementedGameMode");
+
+const MODE_RUNTIMES = { duels: DuelsGameMode, 'bank-bust': BankBustGameMode };
 
 const MODE_BY_ID = new Map(
   (Array.isArray(gameModesCatalog?.modes) ? gameModesCatalog.modes : []).map(
@@ -13,14 +15,8 @@ function createGameModeRuntime(room) {
   const modeId = String(room?.matchData?.modeId || "duels");
   const descriptor = MODE_BY_ID.get(modeId) || MODE_BY_ID.get("duels") || {};
 
-  if (String(descriptor?.runtimeClass || "") === "duels") {
-    return new DuelsGameMode(room, descriptor);
-  }
-  if (String(descriptor?.runtimeClass || "") === "bank-bust") {
-    return new BankBustGameMode(room, descriptor);
-  }
-
-  return new UnimplementedGameMode(room, descriptor);
+  const Runtime = MODE_RUNTIMES[descriptor.runtimeClass] || UnimplementedGameMode;
+  return new Runtime(room, descriptor);
 }
 
 module.exports = {

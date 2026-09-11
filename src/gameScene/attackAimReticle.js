@@ -94,12 +94,92 @@ class BaseAttackReticleRenderer {
 // Preserve attack identity while keeping the preview local enough to read in motion.
 export function getAttackGuideStyle(state) {
   const range = Number(state.config?.reticleRange) || Number(state.range) || 240;
+  const defaultLength = Math.min(
+    state.kind === "throw" ? 400 : 420,
+    range * (state.kind === "throw" ? 0.85 : 0.5),
+  );
   return {
     length: state.config?.showFullReticleRange === true
       ? range
-      : Math.min(state.kind === "throw" ? 400 : 420, range * (state.kind === "throw" ? 0.85 : 0.5)),
+      : Math.max(Number(state.config?.reticleMinLength) || 0, defaultLength),
     width: Math.max(4, Math.min(16, (Number(state.config?.reticleThickness) || 18) * 0.28)),
   };
+}
+
+function dedupePathPoints(points) {
+  const result = [];
+  for (const point of points || []) {
+    const next = { x: Number(point?.x), y: Number(point?.y) };
+    if (!Number.isFinite(next.x) || !Number.isFinite(next.y)) continue;
+    const previous = result[result.length - 1];
+    if (!previous || Math.hypot(next.x - previous.x, next.y - previous.y) > 0.35) {
+      result.push(next);
+    }
+  }
+  return result;
+}
+
+// The projectile dwells at a surface before peeling away. Round that zero-speed
+// turn with two eased quadratic halves so the guide communicates the rebound
+// instead of drawing a sharp, straight-cut corner through the impact point.
+function roundBounceCorners(points, impacts, radius = 30) {
+  const rounded = dedupePathPoints(points);
+  for (const impact of (impacts || []).filter((entry) => !entry?.terminal)) {
+    if (rounded.length < 5) break;
+    let contactIndex = 1;
+    let closest = Infinity;
+    for (let i = 1; i < rounded.length - 1; i += 1) {
+      const distance = Math.hypot(
+        rounded[i].x - Number(impact.x),
+        rounded[i].y - Number(impact.y),
+      );
+      if (distance < closest) {
+        closest = distance;
+        contactIndex = i;
+      }
+    }
+    let before = contactIndex;
+    let after = contactIndex;
+    let distance = 0;
+    while (before > 0 && distance < radius) {
+      distance += Math.hypot(
+        rounded[before].x - rounded[before - 1].x,
+        rounded[before].y - rounded[before - 1].y,
+      );
+      before -= 1;
+    }
+    distance = 0;
+    while (after < rounded.length - 1 && distance < radius) {
+      distance += Math.hypot(
+        rounded[after + 1].x - rounded[after].x,
+        rounded[after + 1].y - rounded[after].y,
+      );
+      after += 1;
+    }
+    if (before === contactIndex || after === contactIndex) continue;
+    const start = rounded[before];
+    const contact = rounded[contactIndex];
+    const end = rounded[after];
+    const curve = [];
+    for (let i = 0; i <= 4; i += 1) {
+      const t = i / 4;
+      const inverse = 1 - t;
+      curve.push({
+        x: inverse * inverse * start.x + 2 * inverse * t * contact.x + t * t * contact.x,
+        y: inverse * inverse * start.y + 2 * inverse * t * contact.y + t * t * contact.y,
+      });
+    }
+    for (let i = 1; i <= 4; i += 1) {
+      const t = i / 4;
+      const inverse = 1 - t;
+      curve.push({
+        x: inverse * inverse * contact.x + 2 * inverse * t * contact.x + t * t * end.x,
+        y: inverse * inverse * contact.y + 2 * inverse * t * contact.y + t * t * end.y,
+      });
+    }
+    rounded.splice(before, after - before + 1, ...curve);
+  }
+  return rounded;
 }
 
 function drawDirectionGuide(renderer, points, palette, limit = 240, width = 5) {
@@ -130,6 +210,17 @@ function drawDirectionGuide(renderer, points, palette, limit = 240, width = 5) {
   }
 }
 
+function getPolylineLength(points) {
+  let length = 0;
+  for (let i = 1; i < (points || []).length; i += 1) {
+    length += Math.hypot(
+      Number(points[i]?.x) - Number(points[i - 1]?.x),
+      Number(points[i]?.y) - Number(points[i - 1]?.y),
+    );
+  }
+  return length;
+}
+
 class LineAttackReticleRenderer extends BaseAttackReticleRenderer {
   render(state) {
     super.render(state);
@@ -150,14 +241,34 @@ class ThrowAttackReticleRenderer extends BaseAttackReticleRenderer {
     if (!state) return;
     const { length, width } = getAttackGuideStyle(state);
     // Use the actual sampled trajectory, preserving gravity and the launch curvature.
-    const points = state.throwPreview?.points || [];
+    const preview = state.throwPreview || {};
+    const points = roundBounceCorners(
+      preview.points || [],
+      preview.impacts || [],
+      Math.max(8, Number(state.config?.bounceCurveRadius) || 30),
+    );
     const offsetY = Number(state.config?.reticlePathOffsetY) || 0;
     // A uniform visual offset lowers the attachment point without bending the
     // sampled physical trajectory near the character.
     const displayed = offsetY
       ? points.map(point => ({ x: point.x, y: point.y + offsetY }))
       : points;
-    drawDirectionGuide(this, displayed, getPalette(state), length, width);
+    const sampledLength = getPolylineLength(displayed);
+    const maxLength = Math.max(
+      length,
+      Number(state.config?.reticleMaxLength) || length,
+    );
+    const visibleLength = state.config?.showPathToImpact === true &&
+      (preview.impacts || []).length
+      ? Math.min(sampledLength, maxLength)
+      : length;
+    drawDirectionGuide(
+      this,
+      displayed,
+      getPalette(state),
+      Math.max(length, visibleLength),
+      width,
+    );
     const cue = state.centerCue;
     if (cue?.proximity > 0) {
       const palette = getPalette(state);

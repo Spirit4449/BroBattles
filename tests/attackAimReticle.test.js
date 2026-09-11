@@ -37,6 +37,15 @@ test('wizard guide reads longer and wider than ninja; arrows and slime retain cu
     assert.ok(getAttackGuideStyle(state).length > 100);
   }
 });
+
+test('short Gloop aim still shows the falling side of its trajectory', () => {
+  const state = resolveAttackAimContext({ character: 'gloop',
+    player: { x: 200, y: 300, width: 80, height: 100 }, family: 'basic',
+    pointerWorldX: 210, pointerWorldY: 300, quick: false });
+  assert.equal(state.range, state.minRange);
+  assert.ok(getAttackGuideStyle(state).length >= 220);
+  assert.ok(state.throwPreview.points.some(point => point.y > state.anchorY + 20));
+});
 test('all basic attack shapes render finite geometry and directional guides visibly fade', () => {
   for (const character of ['wizard', 'ninja', 'huntress', 'gloop', 'draven', 'thorg']) {
     const styles = [], shapes = [];

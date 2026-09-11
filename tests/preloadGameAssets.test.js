@@ -10,7 +10,13 @@ test('game asset preload completes with the Phaser 3.70 loader API (no font meth
     babelrc: false, configFile: false,
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   });
-  vm.runInNewContext(code, { exports, require: () => ({ preloadTerrainAudio() {} }) });
+  const legacy = {};
+  const legacyCode = babel.transformSync(fs.readFileSync(require.resolve('../src/maps/legacy/preloadAssets.js'), 'utf8'), {
+    babelrc: false, configFile: false,
+    presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  }).code;
+  vm.runInNewContext(legacyCode, { exports: legacy });
+  vm.runInNewContext(code, { exports, require: name => name.includes('legacy') ? legacy : { preloadTerrainAudio() {} } });
   const queued = [];
   const load = Object.fromEntries(['image', 'audio', 'atlas', 'tilemapTiledJSON', 'spritesheet'].map(type =>
     [type, key => queued.push(key)]));

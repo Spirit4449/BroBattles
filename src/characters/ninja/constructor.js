@@ -1,8 +1,8 @@
 import { ninjaEnabled, predictNinja } from './network';
 // src/characters/ninja/ninja.js
 import socket from "../../socket";
-import { characterStats } from "../../lib/characterStats.js";
-import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
+import { characterStats } from "../../shared/characterStats.js";
+import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
 import ReturningShuriken from "./attack";
 import { animations } from "./anim";
 import {

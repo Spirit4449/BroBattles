@@ -1,6 +1,6 @@
 # Map terrain and footsteps
 
-Set each map's `terrain` in `src/shared/maps.catalog.json`:
+Set each map document's `metadata.terrain` through Map Studio/API (built-in defaults live in `src/shared/maps/<id>.json`):
 
 - `grass`: Lushy Peaks, Mangrove Meadow, Serenity. Four natural foot-on-grass steps and the soft “smush” landing.
 - `hard`: Iron Junction / Bank Bust. The original three industrial footstep samples and a concrete-impact landing.

@@ -5,7 +5,7 @@ import { HuntressReplica } from '../../shared/huntressReplication';
 import { VERSION, attackConfig, resolveShot, powerFromSpeed, createVolley, firstContact, insetBounds } from '../../shared/huntressProjectile';
 
 const replica = new HuntressReplica();
-let version = 1, sceneRef = null, context = {}, syncTimer = null, generation = 0;
+let version = null, sceneRef = null, context = {}, syncTimer = null, generation = 0;
 const sprites = new Map(), casts = new Map(), metrics = [];
 const predictedRequests = new Map();
 const fireParticles = new Set();
@@ -23,7 +23,7 @@ export function resetHuntressNetwork() {
   for (const particle of fireParticles) particle.destroy();
   fireParticles.clear();
   sprites.clear(); casts.clear(); predictedRequests.clear(); replica.reset(); lastAmmoRevision = 0;
-  sceneRef = null; updateListener = null; shutdownListener = null; context = {}; version = 1;
+  sceneRef = null; updateListener = null; shutdownListener = null; context = {}; version = null;
   geometry = null;
 }
 
@@ -39,7 +39,7 @@ export function discardHuntressPresentation() {
 
 export function configureHuntressNetwork(state) {
   resetHuntressNetwork();
-  version = state?.huntressCombatVersion || 1;
+  version = state?.huntressCombatVersion ?? null;
   if (version !== VERSION) return;
   geometry = state.collisionGeometry;
   replica.reset(state.epoch);
@@ -66,7 +66,6 @@ export function observeHuntressSnapshot(snapshot) {
   replica.clock.observe({ epoch: snapshot.snapshotEpoch, sentMono: snapshot.sentMono, simMono: snapshot.tMono }, performance.now());
 }
 
-export function huntressV2Enabled() { return version === VERSION; }
 
 function targetSprite(name) {
   return name === context.localUsername ? context.localPlayer :
@@ -268,3 +267,17 @@ export function predictHuntressShot(scene, owner, username, payload, special = f
   predictedRequests.set(id, { key: `${username}:${id}`, at: performance.now(), special });
   return special ? { ...payload, id, aim: normalized } : { type: 'huntress-arrow', id, ...normalized };
 }
+
+// Lifecycle contract consumed by the generic match and scene controllers.
+export const networkAdapter = {
+  key: 'huntress',
+  joinFields: { huntressCombatVersion: VERSION },
+  bootstrapKey: 'huntressCombat',
+  configure: configureHuntressNetwork,
+  reset: resetHuntressNetwork,
+  discard: discardHuntressPresentation,
+  attach: attachHuntressScene,
+  observe: observeHuntressSnapshot,
+  handlePacket: handleHuntressPacket,
+  predictSpecial: (scene, player, username, request) => predictHuntressShot(scene, player, username, request, true),
+};

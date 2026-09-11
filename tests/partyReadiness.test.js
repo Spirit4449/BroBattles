@@ -22,6 +22,10 @@ function fixture(names = ['Owner'], gameHub = undefined) {
       if (sql.includes('FROM matches')) return [];
       if (sql.startsWith('SELECT 1 FROM party_members')) return members.some(m => m.name === params[1]) ? [{}] : [];
       if (sql.startsWith('SELECT status FROM users')) return [{ status: members.find(m => m.name === params[0]).status }];
+      if (sql.startsWith('SELECT * FROM users')) {
+        const member = members.find(m => m.name === params[0] || Number(params[0]) === 1);
+        return member ? [{ user_id: 1, char_class: 'ninja', char_levels: { ninja: 1 }, ...member }] : [];
+      }
       if (sql.startsWith('UPDATE parties SET status')) { party.status = 'idle'; return {}; }
       throw new Error(sql);
     },
@@ -39,11 +43,12 @@ function fixture(names = ['Owner'], gameHub = undefined) {
   };
   function client(name) {
     const handlers = {};
-    const socket = { data: { user: { name } }, on: (event, handler) => { handlers[event] = handler; } };
+    const socket = { data: { user: { name, user_id: 1 } }, on: (event, handler) => { handlers[event] = handler; } };
     registerPartyEvents(socket, { db, io, mm, partyPresence, partyQueueTransition, gameHub, PARTY_STATUS });
     return {
       handlers,
       ready: async (ready, partyId = 7) => { let reply; await handlers['ready:status']({ ready, partyId }, result => { reply = result; }); return reply; },
+      changeCharacter: async (character = 'ninja') => { let reply; await handlers['char-change']({ partyId: 7, character }, result => { reply = result; }); return reply; },
     };
   }
   return { party, members, events, db, io, mm, partyQueueTransition, client, get joins() { return joins; }, fail() { failJoin = true; } };
@@ -113,6 +118,16 @@ test('closing character menu cannot overwrite a later ready request', async () =
   assert.equal(f.members[0].status, 'ready');
   await a.handlers['char-menu:status']({ partyId: 7, open: true });
   assert.equal(f.members[0].status, 'ready');
+});
+
+test('a ready party member cannot change character through the socket', async () => {
+  const f = fixture(['Owner', 'Member']);
+  const owner = f.client('Owner');
+  await owner.ready(true);
+  assert.deepEqual(await owner.changeCharacter(), {
+    ok: false,
+    error: 'unready_before_character_change',
+  });
 });
 
 test('idle disconnect preserves other members readiness', async () => {

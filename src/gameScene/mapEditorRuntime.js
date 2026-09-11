@@ -121,8 +121,8 @@ export function createMapEditorRuntime({
   const textureKeys = getMapEditorTextureKeys(mapId).filter((k) =>
     scene.textures.exists(k),
   );
-  const spawnAnchors = getMapSpawnAnchors(mapId) || {};
-  let spawnConfig = cloneJson(getMapSpawnConfig(mapId));
+  const spawnAnchors = getMapSpawnAnchors(mapId, scene) || {};
+  let spawnConfig = cloneJson(getMapSpawnConfig(mapId, scene));
 
   const state = {
     enabled: false,

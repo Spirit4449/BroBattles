@@ -383,7 +383,7 @@ export function createBankBustRuntime({
     if (Array.isArray(state.localLayout?.powerups))
       return state.localLayout.powerups;
     const mapId = Number(getGameData?.()?.map) || 1;
-    const mapSpawnConfig = getMapSpawnConfig(mapId);
+    const mapSpawnConfig = getMapSpawnConfig(mapId, scene);
     const powerups = Array.isArray(mapSpawnConfig?.powerups)
       ? cloneJson(mapSpawnConfig.powerups)
       : [];

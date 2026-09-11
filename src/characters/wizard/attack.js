@@ -1,4 +1,4 @@
-import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
+import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";

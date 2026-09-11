@@ -345,7 +345,11 @@ h3 {
   gap: 0; /* ensure no space between children */
   width: var(--platform-width);
   padding-top: 10px;
-  transition: all 0.3s ease;
+  transition:
+    left 0.3s ease,
+    right 0.3s ease,
+    top 0.3s ease,
+    width 0.3s ease;
   isolation: isolate;
   will-change: transform;
   animation: lobbyPlatformHoverFloat 7s ease-in-out infinite;
@@ -393,23 +397,8 @@ h3 {
     filter 200ms ease;
 }
 
-#lobby-area.map-switching .platform {
-  animation: platformMapShift 240ms ease;
-}
-
 .platform-image.map-switch {
   animation: platformImagePop 240ms ease;
-}
-
-@keyframes platformMapShift {
-  0% {
-    transform: translateY(6px);
-    opacity: 0.82;
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
 }
 
 @keyframes platformImagePop {

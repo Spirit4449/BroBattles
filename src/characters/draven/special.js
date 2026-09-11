@@ -1,6 +1,6 @@
 import { spawnExplosion } from "./attack";
-import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js";
-import { getResolvedCharacterSpecialAimConfig } from "../../lib/characterTuning.js";
+import { getResolvedCharacterSpecialConfig } from "../../shared/characterTuning.js";
+import { getResolvedCharacterSpecialAimConfig } from "../../shared/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 import {

@@ -13,8 +13,8 @@ function load(file) {
   vm.runInNewContext(code, { exports, require: () => ({}), performance: { now: () => 10000 } });
   return exports;
 }
-const { updateHealthBars } = load('../src/gameScene/healthBarUpdater.js');
-const OpPlayer = load('../src/opPlayer.js').default;
+const { updateHealthBars } = load('../src/gameScene/healthBarRenderer.js');
+const OpPlayer = load('../src/players/RemotePlayer.js').default;
 
 test('countdown refreshes teammate and opponent name/bar anchors throughout descent and landing', () => {
   function player() {

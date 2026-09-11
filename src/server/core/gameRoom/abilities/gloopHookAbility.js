@@ -2,7 +2,7 @@ const attackRuntimeManager = require("../attackRuntimeManager");
 const { broadcastAction } = require("../characterActionRegistry");
 const {
   getResolvedCharacterSpecialConfig,
-} = require("../../../../lib/characterTuning.js");
+} = require("../../../../shared/characterTuning.js");
 
 const KEY = "gloop";
 const HOOK = getResolvedCharacterSpecialConfig(KEY, "hook") || {};
@@ -29,31 +29,31 @@ function activate(caster, now, room, payload = null) {
     ownerEcho: true,
     direction,
     angle,
-    speed: Math.max(1, Number(HOOK.speed) || 900),
-    range: Math.max(1, Number(HOOK.range) || 780),
-    collisionRadius: Math.max(1, Number(HOOK.collisionRadius) || 34),
+    speed: Math.max(1, Number(HOOK.speed)),
+    range: Math.max(1, Number(HOOK.range)),
+    collisionRadius: Math.max(1, Number(HOOK.collisionRadius)),
     damage: Math.max(
       1,
-      Number(HOOK.damage) || Number(caster.specialDamage) || 500,
+      Number(HOOK.damage),
     ),
-    pullDurationMs: Math.max(120, Number(HOOK.pullDurationMs) || 640),
-    pullLockPaddingMs: Math.max(0, Number(HOOK.pullLockPaddingMs) || 120),
-    pulledStopDistance: Math.max(1, Number(HOOK.pulledStopDistance) || 54),
-    slowDurationMs: Math.max(1, Number(HOOK.slowDurationMs) || 2200),
-    slowSpeedMult: Math.max(0.1, Number(HOOK.slowSpeedMult) || 0.5),
-    slowJumpMult: Math.max(0.1, Number(HOOK.slowJumpMult) || 0.5),
+    pullDurationMs: Math.max(120, Number(HOOK.pullDurationMs)),
+    pullLockPaddingMs: Math.max(0, Number(HOOK.pullLockPaddingMs)),
+    pulledStopDistance: Math.max(1, Number(HOOK.pulledStopDistance)),
+    slowDurationMs: Math.max(1, Number(HOOK.slowDurationMs)),
+    slowSpeedMult: Math.max(0, Number(HOOK.slowSpeedMult)),
+    slowJumpMult: Math.max(0, Number(HOOK.slowJumpMult)),
     maxLifetimeMs: Math.max(
       200,
       Math.ceil(
-        (Math.max(1, Number(HOOK.range) || 780) /
-          Math.max(1, Number(HOOK.speed) || 900)) *
+        (Math.max(1, Number(HOOK.range)) /
+          Math.max(1, Number(HOOK.speed))) *
           1000 *
           1.5,
       ),
     ),
   };
 
-  const startup = Math.max(0, Number(HOOK.castDelayMs) || 0);
+  const startup = Math.max(0, Number(HOOK.castDelayMs ?? 0));
   const release = () => {
     if (
       room.status !== "active" ||

@@ -1,6 +1,6 @@
 import { ninjaEnabled } from './network';
 import ReturningShuriken from "./attack";
-import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js";
+import { getResolvedCharacterSpecialConfig } from "../../shared/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 import {

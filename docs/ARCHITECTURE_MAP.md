@@ -1,105 +1,62 @@
-# Bro Battles Architecture Map
+# Bro Battles architecture
 
-This document is the structural source of truth for the repository. Use it to decide where code belongs before writing it.
+## Ownership and contracts
 
-## 1. Design Rules
+The browser uses Phaser, the server uses Express and Socket.IO, and persistent account/party state lives in MySQL. Keep socket events, HTTP responses, DOM identifiers, saved map schemas and gameplay tuning stable during structural changes.
 
-1. Composition files wire modules together; they should not own feature rules.
-2. Feature behavior lives in feature domains (characters, maps, powerups, matchmaking, party).
-3. Shared constants and identifiers have one owner. Do not duplicate tables in random files.
-4. Keep public contracts stable unless you intentionally migrate both sides:
-   - Socket event names and payload shape
-   - HTTP routes and response shape
-   - DOM IDs/classes consumed by JS
+Entry points assemble features. A feature owns its state and behavior; shared modules contain data and pure rules that can run in the browser, server or tests without Phaser, DOM or database dependencies. Explicit registries are preferred to directory scanning or a plugin framework.
 
-## 2. Runtime Topology
+## Content sources
 
-- Client: Phaser scenes + UI orchestration in src/.
-- Server: Express + Socket.IO + server-authoritative simulation in src/server/.
-- Database: MySQL schema and migrations in migrations/.
+| Content | Definition | Runtime integration |
+| --- | --- | --- |
+| Characters | `src/shared/characters/<key>.json`, registered in `index.js` alongside those files | Browser classes in `src/characters/manifest.js`; authoritative attacks and abilities under `src/server/core/gameRoom/` |
+| Character progression/tuning access | `src/shared/characterStats.js`, `characterTuning.js` | Import the shared helpers directly; no forwarding modules |
+| Character frames, duck cells, attack descriptors | Derived from character definitions | Exports from `characters/index.js` and rules in `ducking.js`; do not add parallel tables |
+| Powerups | `src/shared/powerups.catalog.json` | `powerups.js` derives catalog exports and owns the shared pickup delay; `effectRules.js` shares modifiers with server callbacks and client prediction |
+| Maps | Built-ins in `src/shared/maps/<id>.json`; saved overrides in `data/maps/` or `BB_MAP_DIR` | `mapDocument.js` validates; `maps/index.js` registers built-ins and derives catalog metadata |
+| Modes | `src/shared/gameModes.catalog.json` | Server factories in `src/server/core/gameModes/index.js`; client factories/preloaders in `src/modes/index.js` |
+| Shop items and cosmetics | `src/shared/shopCatalog.json`, `skinsCatalog.json`, `playerCardsCatalog.json`, `profileIconsCatalog.json` | Shop offers own prices; cosmetic catalogs own identity/assets. Commerce services validate and fulfill purchases |
+| Terrain audio | `src/shared/terrainAudio.json` and each map's `metadata.terrain` | Shared movement-audio selection and preload helpers |
 
-Main runtime loop:
+Registration of behavior remains explicit. A JSON file can configure an existing attack mechanism; a new mechanism still needs code, assets and tests.
 
-1. Browser posts /status to identify/create user.
-2. Browser fetches /gamedata for match payload.
-3. Browser joins game room via game:join.
-4. Server game room ticks simulation and emits game:snapshot.
-5. Client interpolates snapshots and renders local/remote entities.
+## Browser domains
 
-## 3. Ownership Map
+- `src/index.js` and `src/party.js` wire lobby/party flows. `src/lobby/` owns profile, trophy progression, character selection and join-request state. Controller factories receive their live data dependencies rather than importing entry-point state.
+- `src/chat/` owns shared chat presentation and separate lobby/game controllers.
+- `src/match/snapshotBuffer.js` owns interpolation, its defaults and the frame update entry point. `gameScene/movementAudio.js` owns footsteps, landing and duck sounds; `healthBarRenderer.js` owns bar drawing and batch updates.
+- `src/game.js` wires scene lifecycle. `src/gameScene/`, `src/match/`, `src/hud/`, `src/powerups/` and `src/modes/` own their respective features.
+- `src/player.js` coordinates the local entity. `src/players/wallMovement.js` owns wall contact/sliding, `localStateSync.js` applies authoritative stats and local movement/invisibility rules, and `RemotePlayer.js` owns the remote entity.
+- `src/characters/<key>/` owns animation, attacks, specials and character presentation. `shared/animationBuilder.js` handles atlas selection and ordering; timing and deliberate pose ordering stay in character modules.
+- `src/characters/networkRegistry.js` delegates optional character-specific protocol lifecycle. Ninja and Huntress currently use it. Protocol fields and trusted-contact rules remain explicit in their adapters.
+- `src/maps/documentRuntime.js` builds map snapshots and stores runtime objects on their scene. Pass the scene to map queries. Scene shutdown clears that scene's references without deleting another scene's runtime for the same map ID.
+- `public/styles/game.css` owns the formerly inline game-page styles. `src/styles/` contains styles imported by browser bundles; the public stylesheet keeps its original cascade position.
 
-### Client domains
+Import owning domains directly. Pass-through compatibility files have been removed; registries remain where they assemble definitions or dispatch behavior.
 
-- src/game.js
-  - Scene lifecycle orchestration and dependency wiring.
-  - Should delegate to modules under src/gameScene/, src/match/, src/hud/, src/powerups/, src/players/.
-- src/match/
-  - Socket-driven match lifecycle and snapshot buffering.
-- src/gameScene/
-  - Frame-level scene helpers: camera, interpolation orchestration, local input sync, poison rendering, preload wiring.
-- src/players/
-  - Local player socket/state modules.
-- src/player.js
-  - Local player runtime integration point. Still large, but should continue shrinking by delegating behavior to src/players/ and character modules.
-- src/opPlayer.js
-  - Remote player entity runtime. Candidate for further split (socket events, ui bars, effect lifecycle).
-- src/characters/
-  - Character classes and behavior registration via src/characters/manifest.js and src/characters/index.js.
-- src/maps/
-  - Map definitions and map registry via src/maps/manifest.js.
-- src/powerups/
-  - Client powerup config and rendering.
+## Server domains
 
-### Server domains
+- `src/server/routes/` and `core/socketEvents/` adapt transport to `src/server/services/`. Keep database mutations and transaction rules in services.
+- `src/server/core/gameRoom.js` coordinates room lifecycle and simulation. Its public methods delegate payload validation to `gameRoom/actionValidation.js`, socket registration to `playerTransport.js`, and hit processing to `damageResolver.js`.
+- `gameRoom/characterAttackRegistry.js` maps attack runtime kinds to constructors and tick functions. `attackRuntimes/` groups linear/bouncing projectiles, melee, returning projectiles, hooks, shared geometry and target handling.
+- `gameRoom/characterCombatRegistry.js` delegates Ninja/Huntress initialization, requests, ticks, bootstrap and disposal. Their protocol-specific engines own projectile trust and reconciliation. Huntress authoritative combat is always enabled; the old browser collision engine and rollout toggle are removed. Protocol version checks require stale clients to reload.
+- `gameRoom/abilityRuntimeManager.js` selects character ability modules in `abilities/`. `effects/` owns timed effect application, stacking, expiry and snapshots.
+- `core/gameModes/` owns authoritative victory/objective rules. Mode capability data controls client sudden-death behavior, and client mode factories own objective rendering/assets.
+- `core/bots/` owns perception, navigation and tactics. Basic action identity comes from character definitions; aiming and special decisions can still be character-specific.
 
-- src/server/core/socket.js + src/server/core/socketEvents/
-  - Socket transport and event registration by domain.
-- src/server/core/matchmaking.js + src/server/core/matchmaking/
-  - Queue, balancing, ready-check, match assembly.
-- src/server/core/gameRoom.js + src/server/core/gameRoom/
-  - Authoritative simulation, combat, timed effects, snapshots.
-- src/server/services/
-  - Reusable mutation and response-building business logic used by routes and socket paths.
-- src/shared/shopCatalog.json + src/server/services/shopService.js
-  - Validated storefront offers, rotation-backed availability, and atomic virtual commerce.
-- src/server/services/stripeShopService.js
-  - Embedded Checkout sessions, signed webhook fulfillment, and refund/dispute reversals.
-- src/server/routes/
-  - HTTP adapters; should delegate business logic to services.
+## Deliberate boundaries
 
-## 4. Registries and Single Sources of Truth
+The legacy JavaScript maps and in-match editor remain compatibility fallbacks. New maps use Map Studio documents and the authenticated map API, not new legacy modules. Legacy texture preloading is isolated in `src/maps/legacy/preloadAssets.js` and skipped when document textures are queued. See [Map Studio](MAP_EDITOR.md).
 
-- Characters: src/characters/manifest.js + src/characters/index.js + src/lib/characterStats.js.
-- Maps: src/maps/manifest.js + each map definition file.
-- Client powerup identity/asset mapping: src/powerups/powerupConfig.js.
-- Server powerup identity/effect/timing: src/server/core/gameRoomConfig.js + src/server/core/gameRoom/effects/effectDefs.js.
+Effect modifiers stack multiplicatively through `src/shared/effectRules.js`. World snapshots retain numeric `playerEffects` durations and add `playerEffectMovement` with server-resolved movement, including per-application scaling and slows. Clients fall back to the shared base rules for older snapshots. Gravity Boots now use the server's 1.15 speed / 1.55 jump values; Rage and Thorg Rage retain their client speed boosts on the server too. This reconciles previously inconsistent gameplay, so movement and stacked effects need multiplayer checks.
 
-Important: powerup identity currently exists in both client and server config layers. Keep them synchronized until they are unified into a shared registry.
+Current map documents still model two teams and 1v1/2v2/3v3 variants, with Bank Bust-specific objective layout. Adding free-for-all, PvE waves or a new objective topology requires a deliberate schema/runtime change. Do not infer support from a catalog entry marked unimplemented.
 
-## 5. High-Value Data Flows
+Large orchestrators still contain lifecycle-sensitive code. Extract a further subsystem when it has clear ownership and a stable interface; do not create forwarding layers solely to reduce line counts.
 
-### Match join and startup
+## Validation and extension
 
-- Client entry: src/game.js
-- Server endpoints: src/server/routes/modules/gameRoutes.js -> src/server/services/gameDataService.js
-- Socket join path: src/server/core/socketEvents/gameEvents.js and/or game room join handlers
+Run `npm run validate:content`, relevant Node tests, then `npm test` and `npm run build` for cross-cutting changes. Content validation checks registered character data/assets, attack references/runtime kinds, powerup assets/effects, invalid body/reload values, duplicate cosmetic prices/movement tuning, shop offers and built-in map documents. It does not replace gameplay testing or the server's uploaded-map asset validation.
 
-### Live simulation and rendering
-
-- Server tick and snapshot assembly: src/server/core/gameRoom.js + src/server/core/gameRoom/roomStateManager.js
-- Client snapshot ingest/interpolation: src/match/matchCoordinator.js + src/match/snapshotBuffer.js
-
-### Party and presence
-
-- Route adapters: src/server/routes/modules/partyRoutes.js, statusRoutes.js
-- Service layer: src/server/services/partyStateService.js, partyPresenceService.js
-
-## 6. Extension Navigation (3 common additions)
-
-For exact implementation steps, use docs/CONTRIBUTING.md:
-
-- Add a character
-- Add a map
-- Add a powerup
-
-Those checklists are opinionated for this codebase and list all required files.
+[Contributing](CONTRIBUTING.md) lists concrete extension steps; [Adding characters](ADDING_CHARACTERS.md) lists the design/art inputs.

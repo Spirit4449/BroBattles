@@ -7,13 +7,14 @@ import {
   getSpecialDamage,
   LEVEL_CAP,
   upgradePrice,
-} from "./lib/characterStats.js";
-import { getSharedSelectionPopupShell } from "./lib/selectionPopupShell.js";
-import socket from "./socket.js";
-import { playSound } from "./lib/uiSounds.js";
-import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
-import { dismissPopup } from "./lib/popupMotion.js";
-import SKINS_CATALOG from "./shared/skinsCatalog.json";
+} from "../shared/characterStats.js";
+import { getSharedSelectionPopupShell } from "../lib/selectionPopupShell.js";
+import socket from "../socket.js";
+import { playSound } from "../lib/uiSounds.js";
+import { buildCharacterSkinBodyUrl } from "../lib/skinAssets.js";
+import { dismissPopup } from "../lib/popupMotion.js";
+import { sonner } from "../lib/sonner.js";
+import SKINS_CATALOG from "../shared/skinsCatalog.json";
 
 // Keep a reference to user data for confirmations and currency display
 let _userDataRef = null;
@@ -889,6 +890,28 @@ function getActivePartyIdFromPath() {
   return last || null;
 }
 
+function isCurrentUserReady() {
+  const selfSlot =
+    document.querySelector('.character-slot[data-is-current-user="true"]') ||
+    document.getElementById("your-slot-1");
+  const status = String(selfSlot?.querySelector(".status")?.textContent || "")
+    .trim()
+    .toLowerCase();
+  return status === "ready";
+}
+
+function blockCharacterChangeWhileReady() {
+  if (!isCurrentUserReady()) return false;
+  sonner(
+    "Character change unavailable",
+    "Unready before changing your character or skin.",
+    "OK",
+    undefined,
+    { tone: "error", duration: 3000 },
+  );
+  return true;
+}
+
 function emitCharacterMenuStatus(open) {
   try {
     const selfSlot =
@@ -1013,12 +1036,14 @@ export function initializeCharacterSelect(userData) {
   window.addEventListener("resize", resizeCanvas);
 
   function openCharacterSelect() {
+    if (blockCharacterChangeWhileReady()) return false;
     mountCharacterPopup();
     // Sync classes (selected/locked/maxed/pricing) whenever chooser opens.
     refreshUpgradeButtonAffordability();
     popupShell.show();
     emitCharacterMenuStatus(true);
     startParticles();
+    return true;
   }
   function closeCharacterSelect() {
     hideCharacterDetails();
@@ -1145,10 +1170,12 @@ function createCharacterCard(character, userData) {
 
 export function openCharacterSelect() {
   if (window.__openCharacterSelect) return window.__openCharacterSelect();
+  if (blockCharacterChangeWhileReady()) return false;
   const overlay = document.querySelector(".character-select-overlay");
   overlay?.classList.remove("is-hidden");
   overlay?.setAttribute("aria-hidden", "false");
   emitCharacterMenuStatus(true);
+  return true;
 }
 
 function openCharacterDetails(character) {
@@ -1199,6 +1226,7 @@ function closeCharacterSelectAfterSelection() {
 
 async function selectCharacter(character) {
   if (_characterSelectionPromise) return false;
+  if (blockCharacterChangeWhileReady()) return false;
   const charClass = normalizeCharacterId(character);
   const selectedSkin = getSelectedSkin(charClass);
   const selectedSkinId = String(selectedSkin?.id || "").trim();

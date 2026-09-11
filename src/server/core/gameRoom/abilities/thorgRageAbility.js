@@ -1,5 +1,5 @@
-const THORG_RAGE_KNOCKBACK_X = 400;
-const THORG_RAGE_KNOCKBACK_Y = 200;
+const { getResolvedCharacterSpecialConfig } = require("../../../../shared/characterTuning");
+const knockback = getResolvedCharacterSpecialConfig("thorg", "knockback");
 const effectManager = require("../effects/effectManager");
 
 function activate(player, now) {
@@ -17,8 +17,8 @@ function getKnockback(attacker, target, now) {
   if (!target) return null;
   const knockDirection = (target.x || 0) >= (attacker.x || 0) ? 1 : -1;
   return {
-    amountX: (rage ? THORG_RAGE_KNOCKBACK_X : 140) * knockDirection,
-    amountY: rage ? THORG_RAGE_KNOCKBACK_Y : 60,
+    amountX: (rage ? knockback.rageX : knockback.baseX) * knockDirection,
+    amountY: rage ? knockback.rageY : knockback.baseY,
   };
 }
 

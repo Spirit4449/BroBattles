@@ -4,10 +4,30 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const babel=require('@babel/core');
 const {clone,MapHistory}=require('../src/shared/mapDocument');
+const { EventEmitter } = require('node:events');
 function load(file,dependencies){
  const exports={};const {code}=babel.transformSync(fs.readFileSync(require.resolve(file),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]});
  vm.runInNewContext(code,{exports,require:id=>dependencies[id]});return exports;
 }
+test('two scenes can own the same map and shutting down one cannot clear the other', () => {
+ const api = load('../src/maps/documentRuntime.js', {'./mapUtils': {
+  appendLayoutObjectsFromConfig() {}, applyMapBounds() {},
+ }});
+ const document = { layout: { platforms: [], hitboxes: [] }, assets: {}, anchors: {}, bounds: {} };
+ const first = { events: new EventEmitter() }, second = { events: new EventEmitter() };
+ const a = api.buildMapDocument(first, 1, document);
+ const b = api.buildMapDocument(second, 1, document);
+ assert.equal(api.getDocumentRuntime(1, first), a);
+ assert.equal(api.getDocumentRuntime(1, second), b);
+ first.events.emit('shutdown');
+ assert.equal(api.getDocumentRuntime(1, first), undefined);
+ assert.equal(api.getDocumentRuntime(1), b);
+ second.events.emit('shutdown');
+ assert.equal(api.getDocumentRuntime(1), undefined);
+ api.buildMapDocument(first, 1, document);
+ first.events.emit('shutdown');
+ assert.equal(api.getDocumentRuntime(1), undefined, 'a restarted scene registers cleanup again');
+});
 test('history reconciliation retains scene, camera and surviving objects through resize, deletion and undo',()=>{
  let created=0;const camera={zoom:1.75,scrollX:120,scrollY:99};const canvas={};
  const configure=(object,row)=>{Object.assign(object,{x:row.x,y:row.y,scaleX:row.scaleX,scaleY:row.scaleY,texture:{key:row.textureKey}});};

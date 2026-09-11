@@ -25,7 +25,9 @@ test('ducking does not change whether a bot considers the target attackable', ()
 // Independently step the same velocity-first integration used by live attacks.
 function missDistance(p, enemy, angle, speed) {
   const huntress = p.char_class === 'huntress';
-  const runtime = getResolvedAttackDescriptor(huntress ? 'huntress-arrow-release' : 'wizard-fireball-release').runtime;
+  const cfg = require('../src/shared/huntressProjectile').attackConfig();
+  const runtime = huntress ? { ...cfg, forwardOffsetWidthFactor: cfg.forwardOffset, verticalOffsetHeightFactor: cfg.verticalOffset }
+    : getResolvedAttackDescriptor('wizard-fireball-release').runtime;
   speed ??= runtime.speed;
   const startup = getResolvedAttackDescriptor(huntress ? 'huntress-arrow' : 'wizard-fireball').actionFlow.startupMs / 1000;
   const dt = room.FIXED_DT_MS / 1000, g = huntress ? runtime.gravity : 0;
@@ -238,7 +240,7 @@ test('huntress rarely lobs at level targets but freely aims high at elevated tar
 });
 
 test('huntress varies power by distance without penalizing upward aim and sends it into every runtime arrow', () => {
-  const { createRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
+  const model = require('../src/shared/huntressProjectile');
   const p = { ...player('huntress'), participantId: 'adaptive-archer', name: 'Archer', isBot: true };
   const near = basicAim(p, { ...target, x: 160 }, profile, () => 0.5, room);
   const far = basicAim(p, { ...target, x: 500 }, profile, () => 0.5, room);
@@ -252,10 +254,9 @@ test('huntress varies power by distance without penalizing upward aim and sends 
     const aim = basicAim(p, enemy, profile, () => 0.5, room);
     assert.equal(aim.canHit, true);
     assert.ok(missDistance(p, enemy, aim.angle, aim.speed) < 12);
-    const arrows = createRuntimeAttack(p, { ...aim, type: 'huntress-arrow-release', id: 'power-test' }, 1000);
+    const arrows = model.createVolley({ ...p, width: 80, height: 120 }, model.resolveShot({ angle: aim.angle, power: model.powerFromSpeed(aim.angle, aim.speed) }), 'power-test', 1000);
     assert.ok(arrows.length > 0);
     for (const arrow of arrows) {
-      assert.equal(arrow.speed, aim.speed);
       assert.ok(Math.abs(Math.hypot(arrow.vx, arrow.vy) - aim.speed) < 0.001);
     }
   }

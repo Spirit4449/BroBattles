@@ -1,4 +1,5 @@
-import { configureNinjaNetwork, resetNinjaNetwork, handleNinjaPacket, observeNinjaSnapshot } from '../characters/ninja/network';
+import { supportsSuddenDeath } from '../shared/modeCapabilities';
+import { getCharacterNetworkVersions, configureCharacterNetworks, resetCharacterNetworks, observeCharacterSnapshot, handleCharacterNetworkPacket } from '../characters/networkRegistry';
 // match/matchCoordinator.js
 //
 // Owns all server socket event handlers for a live match session.
@@ -8,8 +9,6 @@ import { configureNinjaNetwork, resetNinjaNetwork, handleNinjaPacket, observeNin
 // Dependencies are injected via the config object so this module has zero
 // hidden global state and can be tested or instantiated in isolation.
 import { normalizeMapId } from "../maps/manifest";
-import { configureHuntressNetwork, resetHuntressNetwork, handleHuntressPacket,
-  observeHuntressSnapshot } from '../characters/huntress/network';
 import { startSpawnIntro, finishSpawnIntro } from '../gameScene/spawnIntro';
 import { spawnDamageImpact, spawnDuckGuardImpact } from "../effects";
 import { spawnDeathTombstone } from "../gameScene/deathTombstone";
@@ -127,6 +126,7 @@ export function createMatchCoordinator(config) {
     getLatestDeathDrops,
     setLatestDeathDrops,
     setLatestPlayerEffects,
+    setLatestEffectMovement,
     getLatestPlayerEffects,
     opponentPlayers,
     teamPlayers,
@@ -289,7 +289,7 @@ export function createMatchCoordinator(config) {
   /** Re-emit game:join when a socket connection is established or restored. */
   function _tryJoin() {
     const joinPayload = getJoinPayload();
-    if (joinPayload) { joinPayload.huntressCombatVersion = 2; joinPayload.ninjaCombatVersion = 1; }
+    if (joinPayload) { Object.assign(joinPayload, getCharacterNetworkVersions()); }
     const currentSocketId = socket.id || null;
     if (
       currentSocketId &&
@@ -363,8 +363,7 @@ export function createMatchCoordinator(config) {
   }
 
   function _onSocketDisconnect(reason) {
-    resetHuntressNetwork();
-    resetNinjaNetwork();
+    resetCharacterNetworks();
     if (!shouldMuteClientDefaultLogs()) {
       console.warn("[game] socket disconnected", {
         reason,
@@ -440,8 +439,7 @@ export function createMatchCoordinator(config) {
   }
 
   async function _recoverTimedOutStart(joinPayload) {
-    joinPayload.huntressCombatVersion = 2;
-    joinPayload.ninjaCombatVersion = 1;
+    Object.assign(joinPayload, getCharacterNetworkVersions());
     if (_startWatchdogRecoveryInFlight) return false;
     _startWatchdogRecoveryInFlight = true;
     try {
@@ -489,7 +487,7 @@ export function createMatchCoordinator(config) {
     if (getIsLiveGame() || getGameEnded()) return;
     if (_startWatchdogTimer) return;
 
-    const joinPayload = { ...getJoinPayload(), huntressCombatVersion: 2, ninjaCombatVersion: 1 };
+    const joinPayload = { ...getJoinPayload(), ...getCharacterNetworkVersions() };
     const joinMatchId = Number(joinPayload.matchId);
     if (!Number.isFinite(joinMatchId) || joinMatchId <= 0) return;
 
@@ -567,8 +565,7 @@ export function createMatchCoordinator(config) {
   }
 
   function _onGameInit(gameState) {
-    configureHuntressNetwork(gameState.huntressCombat);
-    configureNinjaNetwork(gameState.ninjaCombat);
+    configureCharacterNetworks(gameState);
     const gameData = getGameData();
     const username = getUsername();
     configureClientNetTest({
@@ -848,8 +845,7 @@ export function createMatchCoordinator(config) {
     if (!snapshot || !snapshot.players) return;
     const ingest = snapshotBuffer.ingestSnapshot(snapshot, performance.now());
     if (ingest.accepted === false) return;
-    observeHuntressSnapshot(snapshot);
-    observeNinjaSnapshot(snapshot);
+    observeCharacterSnapshot(snapshot);
 
     try {
       const gameData = getGameData();
@@ -936,8 +932,7 @@ export function createMatchCoordinator(config) {
 
       const { playerName, character, action } = packet;
       if (!playerName || !action) return;
-      if (handleNinjaPacket(scene, packet, {localPlayer:getPlayer(),localUsername:getUsername(),opponentPlayersRef:opponentPlayers,teamPlayersRef:teamPlayers,onAmmo:config.onHuntressAmmo})) return;
-      if (handleHuntressPacket(scene, packet, {
+      if (handleCharacterNetworkPacket(scene, packet, {
         localPlayer: getPlayer(), localUsername: getUsername(),
         opponentPlayersRef: opponentPlayers, teamPlayersRef: teamPlayers,
         onAmmo: config.onHuntressAmmo,
@@ -1164,8 +1159,7 @@ export function createMatchCoordinator(config) {
   }
 
   function _onGameOver(payload) {
-    resetHuntressNetwork();
-    resetNinjaNetwork();
+    resetCharacterNetworks();
     if (getGameEnded()) return; // idempotent guard
     _stopStartWatchdog();
     _clearForceLiveInputTimer();
@@ -1204,9 +1198,7 @@ export function createMatchCoordinator(config) {
       _clearForceLiveInputTimer();
       _forceLiveClientState();
     }
-    const isBankBust =
-      String(getLatestModeState?.()?.type || "") === "bank-bust";
-    if (isBankBust) return;
+    if (!supportsSuddenDeath(getLatestModeState?.()?.type || getGameData()?.modeId)) return;
     const scene = getGameScene();
     if (payload.suddenDeath && typeof payload.poisonY === "number") {
       if (scene) scene._poisonWaterY = payload.poisonY;
@@ -1221,9 +1213,7 @@ export function createMatchCoordinator(config) {
   }
 
   function _onGameSuddenDeath(payload) {
-    const isBankBust =
-      String(getLatestModeState?.()?.type || "") === "bank-bust";
-    if (isBankBust) return;
+    if (!supportsSuddenDeath(getLatestModeState?.()?.type || getGameData()?.modeId)) return;
     hud.showSuddenDeathBanner();
     onStartSuddenDeathMusic();
     const scene = getGameScene();
@@ -1250,6 +1240,7 @@ export function createMatchCoordinator(config) {
     }
     if (payload.playerEffects && typeof payload.playerEffects === "object") {
       setLatestPlayerEffects(payload.playerEffects);
+      setLatestEffectMovement?.(payload.playerEffectMovement || {});
       onTrackShieldEffects(payload.playerEffects);
     }
   }
@@ -1425,8 +1416,7 @@ export function createMatchCoordinator(config) {
   /** Remove all match socket listeners. Safe to call multiple times. */
   function dispose() {
     socket.off("game:presence-probe", onPresenceProbe);
-    resetHuntressNetwork();
-    resetNinjaNetwork();
+    resetCharacterNetworks();
     _stopStartWatchdog();
     _clearForceLiveInputTimer();
     socket.off("connect", _tryJoin);

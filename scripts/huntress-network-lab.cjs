@@ -17,8 +17,8 @@ const output = fs.mkdtempSync(path.join(os.tmpdir(), 'huntress-lab-'));
 const app = express(), server = http.createServer(app), io = new Server(server);
 const labs = new Map();
 const stats = { frames: {}, rooms: {} };
-function lab(version, rtt, jitter) {
-  const key = `${version}-${rtt}-${jitter}`;
+function lab(rtt, jitter) {
+  const key = `${rtt}-${jitter}`;
   if (labs.has(key)) return labs.get(key);
   const matchId = labs.size + 1000;
   let bytes = 0;
@@ -32,7 +32,7 @@ function lab(version, rtt, jitter) {
   const room = new GameRoom(matchId,{ mode:1, modeId:'duels', modeVariantId:'duels-1v1',map:1,players:roster },{
     io:delayedIo,db:{runQuery:async()=>[]},
   });
-  room.huntressCombatVersion=version;room.status='active';room._netTestEnabled=true;
+  room.status='active';room._netTestEnabled=true;
   room.botControllers.clear();room._checkVictoryCondition=()=>{};
   room.geometry={world:{x:0,y:0,width:900,height:500},colliders:[{id:'floor',left:0,right:900,top:420,bottom:500}]};
   const players=[...room.players.values()];
@@ -46,9 +46,9 @@ function lab(version, rtt, jitter) {
   const value={room,players,rtt,jitter,times:[],bytes:()=>bytes};labs.set(key,value);return value;
 }
 io.on('connection',socket=>{
-  const q=socket.handshake.query, version=q.version==='1'?1:2;
+  const q=socket.handshake.query;
   const rtt=[0,50,100,150].includes(Number(q.rtt))?Number(q.rtt):0;
-  const l=lab(version,rtt,q.jitter==='1'), {room,players}=l;
+  const l=lab(rtt,q.jitter==='1'), {room,players}=l;
   const p=players[q.client==='1'?1:0];p.socketId=socket.id;p.connected=true;
   socket.join(`game:${room.matchId}`);
   const later=fn=>setTimeout(fn,Math.max(0,rtt/2+(l.jitter?Math.sin(performance.now())*12:0)));
@@ -57,7 +57,7 @@ io.on('connection',socket=>{
   socket.on('game:special',data=>later(()=>room.requestSpecial(p.participantId,data)));
   socket.on('hit',data=>later(()=>room.handleHit(p.participantId,data)));
   socket.on('game:clock',(_data,ack)=>later(()=>{const response=combat.timing(room);later(()=>ack(response));}));
-  socket.on('lab:metrics',data=>{stats.frames[`${version}-${rtt}-${p.name}`]=data;});
+  socket.on('lab:metrics',data=>{stats.frames[`${rtt}-${p.name}`]=data;});
   socket.on('disconnect',()=>{p.connected=false;});
 });
 let previous=performance.now(),acc=0;
@@ -84,7 +84,7 @@ app.get('/lab.js',(_req,res)=>res.sendFile(path.join(output,'lab.js')));
 app.get('/stats',(_req,res)=>res.json(stats));
 app.get('/client',(_req,res)=>res.type('html').send('<!doctype html><meta charset="utf-8"><style>body{margin:0;background:#101725;color:white;font:14px sans-serif}button{margin:8px}pre{white-space:pre-wrap}</style><button id="fire">Fire</button><button id="auto">Auto fire</button><span id="status">Connecting</span><div id="game"></div><pre id="metrics"></pre><script src="/phaser.js"></script><script src="/lab.js"></script>'));
 app.get('/',(req,res)=>{
-  const params=new URLSearchParams({version:req.query.version==='1'?'1':'2',rtt:String(req.query.rtt||0),jitter:String(req.query.jitter||0)});
+  const params=new URLSearchParams({rtt:String(req.query.rtt||0),jitter:String(req.query.jitter||0)});
   res.type('html').send(`<!doctype html><meta charset="utf-8"><title>Huntress network lab</title><style>body{background:#101725;color:white;font:16px sans-serif}iframe{border:1px solid #667;width:920px;height:670px}</style><h1>Huntress network lab</h1><p>Two isolated clients · ${params.toString()} · <a href="/stats">Metrics</a></p><iframe src="/client?${params}&client=0"></iframe><iframe src="/client?${params}&client=1"></iframe>`);
 });
 webpack({mode:'development',devtool:false,entry:path.join(root,'tests/browser/huntressLab.js'),

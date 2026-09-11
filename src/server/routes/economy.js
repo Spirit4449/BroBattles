@@ -2,7 +2,7 @@ const {
   LEVEL_CAP,
   upgradePrice,
   unlockPrice,
-} = require("../../lib/characterStats");
+} = require("../../shared/characterStats.js");
 const { unlockProfileIconForUser } = require("../helpers/profileIconOwnership");
 const { selectPartyById, emitRoster } = require("../helpers/party");
 

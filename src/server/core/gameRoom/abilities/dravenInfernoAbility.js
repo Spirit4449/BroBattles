@@ -1,7 +1,7 @@
 const { chargeSuperForHit } = require("../superCharge");
 const effectManager = require("../effects/effectManager");
 const { reduceDuckDamage } = require("../../../../shared/ducking");
-const { getCharacterTuning } = require("../../../../lib/characterStats");
+const { getCharacterTuning } = require("../../../../shared/characterStats.js");
 
 const DRAVEN_INFERNO_DURATION_MS =
   getCharacterTuning("draven")?.special?.inferno?.durationMs ?? 5000;

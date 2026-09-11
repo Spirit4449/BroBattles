@@ -547,21 +547,20 @@ test('supers remain saved when their character-specific condition is poor', () =
   assert.equal(shouldUseSuper(brain, distant, [distant], now + 5000), false, 'retreat remains the priority');
 });
 
-test('human Huntress projectiles are visible to bots without applying duplicate server damage', (t) => {
+test('human Huntress flight is authoritative and visible to bots without duplicate releases', (t) => {
   const h = setup(t, ['huntress', 'ninja']), [human, bot] = h.players;
+  const combat = require('../src/server/core/gameRoom/huntressCombat');
   human.isBot = false;
-  let hits = 0;
-  t.mock.method(h.room, 'handleHit', () => { hits++; });
-  const action = { type: 'huntress-arrow-release', id: 'human-shot', x: human.x, y: human.y, direction: 1, angle: 0 };
-  assert.equal(registerAttackFromAction(h.room, human, action, h.now()), false);
-  assert.ok(h.room._botVisualProjectiles.length > 0);
-  const count = h.room._botVisualProjectiles.length;
-  registerAttackFromAction(h.room, human, action, h.now());
-  assert.equal(h.room._botVisualProjectiles.length, count);
+  assert.equal(h.room.handlePlayerAction(human.participantId, { type: 'huntress-arrow', id: 'human-shot', angle: 0 }), true);
+  h.room._tickId += 10;
+  h.room._simulationMono = h.now();
+  combat.tick(h.room);
+  const count = h.room._huntress.active.size;
+  assert.ok(count > 0);
   assert.ok(observe(h.room, bot, h.now(), new WeakMap()).projectiles.length > 0);
-  for (let i = 0; i < 200; i++) tickActiveAttacks(h.room, h.now() + i * 17);
-  assert.equal(hits, 0);
-  assert.equal(h.room._botVisualProjectiles.length, 0);
+  assert.equal(registerAttackFromAction(h.room, human, { type: 'huntress-arrow-release', id: 'human-shot' }, h.now()), false);
+  assert.equal(h.room._huntress.active.size, count);
+  assert.equal(h.room._activeAttacks?.length || 0, 0);
 });
 
 test('an unreachable target cannot leave a bot waiting forever with zero movement intent', (t) => {

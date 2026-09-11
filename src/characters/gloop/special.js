@@ -1,5 +1,5 @@
 import { prepareHandAnimation, handPose, HAND_TEXTURE } from "./handAnimation";
-import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js";
+import { getResolvedCharacterSpecialConfig } from "../../shared/characterTuning.js";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
 import { resolveGloopHookSocket } from "../../shared/gloopHookGeometry";

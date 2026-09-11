@@ -1,0 +1,103 @@
+{
+  "key": "thorg",
+  "stats": {
+    "baseHealth": 13000,
+    "attackDescription": "Revolves his heavy weapon around his body, striking both sides with light knockback.",
+    "baseDamage": 1500,
+    "ammoCooldownMs": 700,
+    "ammoReloadMs": 800,
+    "ammoCapacity": 3,
+    "specialDescription": "Enters a purple rage that buffs damage and strengthens knockback.",
+    "specialBaseDamage": 2800,
+    "specialChargeHits": 3,
+    "specialChargePerHit": 0,
+    "spriteScale": 0.7,
+    "body": {
+      "widthShrink": 40,
+      "heightShrink": 14,
+      "offsetXFromHalf": -18,
+      "offsetY": 8,
+      "flipOffset": 14
+    },
+    "tuning": {
+      "attack": {
+        "aim": {
+          "kind": "round",
+          "attackKey": "sweep",
+          "minRange": 102,
+          "defaultRange": 102,
+          "maxRange": 102,
+          "radius": 102,
+          "radiusY": 46,
+          "reticleOffsetY": 13,
+          "anchorForwardOffset": 0,
+          "anchorOffsetY": 13,
+          "minSpeedScale": 1,
+          "maxSpeedScale": 1
+        },
+        "sweep": {
+          "windupMs": 70,
+          "strikeMs": 560,
+          "radiusX": 95,
+          "radiusY": 26,
+          "centerY": 13,
+          "headWidth": 54,
+          "headHeight": 40,
+          "rageScale": 1.25,
+          "footOffset": 37.8,
+          "spriteForwardOffset": -1.5707963267948966
+        }
+      },
+      "special": {
+        "aim": {
+          "kind": "round",
+          "radius": 72,
+          "defaultRange": 72,
+          "anchorForwardOffset": 0,
+          "anchorOffsetY": -8
+        },
+        "rageDurationMs": 8000,
+        "rageModifiers": {
+          "damageMult": 1.3,
+          "speedMult": 1.12,
+          "jumpMult": 1.12
+        },
+        "knockback": {
+          "baseX": 140,
+          "baseY": 60,
+          "rageX": 400,
+          "rageY": 200
+        }
+      }
+    },
+    "description": "A sturdy frontline bruiser with crushing blows.",
+    "free": true
+  },
+  "frame": {
+    "w": 128,
+    "h": 128
+  },
+  "duckFrame": [
+    4,
+    4
+  ],
+  "basicAction": "thorg-fall",
+  "basicHitTypes": [
+    "basic"
+  ],
+  "specialHitTypes": [
+    "special"
+  ],
+  "attacks": {
+    "thorg-fall": {
+      "character": "thorg",
+      "actionFlow": {
+        "kind": "runtime-broadcast"
+      },
+      "attackType": "basic",
+      "runtime": {
+        "kind": "path-rect"
+      }
+    }
+  }
+}

@@ -1,5 +1,4 @@
 const { participantId } = require('./participants');
-const { tickVisualProjectiles } = require('../bots/perception');
 const {
   createRuntimeAttack,
   tickRuntimeAttack,
@@ -35,20 +34,8 @@ function registerAttackFromAction(
   actionData,
   now = Date.now(),
 ) {
-  const actionType = String(actionData?.type || "").toLowerCase();
-  // Huntress projectiles are client-collision authoritative for now.
-  if (
-    !playerData.isBot && (actionType === "huntress-arrow-release" ||
-    actionType === "huntress-burning-arrow")
-  ) {
-    if (room.botControllers?.size && claimAttackInstance(room, playerData, actionData, now)) {
-      const visual = createRuntimeAttack(playerData, actionData, now);
-      room._botVisualProjectiles ||= [];
-      for (const attack of [visual].flat().filter(Boolean)) room._botVisualProjectiles.push(attack);
-      if (room._botVisualProjectiles.length > 128) room._botVisualProjectiles.splice(0, room._botVisualProjectiles.length - 128);
-    }
-    return false;
-  }
+  // Dedicated combat protocols accept aim requests, never generic release packets.
+  if (playerData.char_class === 'huntress') return false;
   if (!claimAttackInstance(room, playerData, actionData, now)) return false;
   const runtimeAttack = createRuntimeAttack(playerData, actionData, now);
   if (!runtimeAttack) return false;
@@ -59,14 +46,12 @@ function registerAttackFromAction(
   for (const attack of attacks) {
     if (!attack) continue;
     attack.sourceType = sourceType;
-    if (playerData.isBot && playerData.char_class === 'huntress') attack.runtimeKind = 'projectile-spread';
     ensureAttackState(room).push(attack);
   }
   return true;
 }
 
 function tickActiveAttacks(room, now = Date.now()) {
-  if (room._botVisualProjectiles?.length) tickVisualProjectiles(room);
   const attacks = ensureAttackState(room);
   if (attacks.length) {
     room._activeAttacks = attacks.filter((attack) => {

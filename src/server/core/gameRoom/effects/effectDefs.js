@@ -1,9 +1,11 @@
+const { EFFECT_RULES, getEffectModifiers } = require('../../../../shared/effectRules');
+
 const { applyParticipantKnockback } = require('../participants');
 // src/server/core/gameRoom/effects/effectDefs.js
 //
 // Every status effect is defined here. To add a new effect:
 //   1. Add an entry to effectDefs below.
-//   2. (Optional) add a powerup type in gameRoomConfig.POWERUP_TYPES + POWERUP_DURATIONS_MS.
+//   2. Add shared tuning in effectRules or the powerup/character definition.
 //   3. Call effectManager.apply(player, "yourEffect", now) wherever it should be granted.
 //
 // Effect shape:
@@ -21,34 +23,12 @@ const { applyParticipantKnockback } = require('../participants');
 //   snapshotKey: string               — key sent to the client in playerEffects snapshot
 // }
 
-const {
-  POWERUP_RAGE_DAMAGE_MULT,
-  POWERUP_SHIELD_DAMAGE_MULT,
-  POWERUP_HEALTH_REGEN_PER_SEC,
-  POWERUP_POISON_DPS,
-  POWERUP_EFFECT_TICK_MS,
-  POWERUP_AMBIENT_TICK_MS,
-  POWERUP_DURATIONS_MS,
-  POWERUP_SHOCKWAVE_RADIUS,
-  POWERUP_SHOCKWAVE_FORCE_X,
-  POWERUP_SHOCKWAVE_FORCE_Y,
-  POWERUP_FREEZE_SPEED_MULT,
-  POWERUP_FREEZE_JUMP_MULT,
-  GAME_DURATION_MS,
-  SD_RISE_SPEED,
-  SD_RISE_FAST_PHASE_MS,
-  SD_RISE_FAST_MULT,
-  WORLD_BOUNDS,
-} = require("../../gameRoomConfig");
+const { POWERUP_HEALTH_REGEN_PER_SEC, POWERUP_POISON_DPS, POWERUP_EFFECT_TICK_MS, POWERUP_AMBIENT_TICK_MS, POWERUP_SHOCKWAVE_RADIUS, POWERUP_SHOCKWAVE_FORCE_X, POWERUP_SHOCKWAVE_FORCE_Y, GAME_DURATION_MS, SD_RISE_SPEED, SD_RISE_FAST_PHASE_MS, SD_RISE_FAST_MULT, WORLD_BOUNDS } = require("../../gameRoomConfig");
 const { reduceDuckDamage } = require("../../../../shared/ducking");
 
 function getPowerScale(params = {}) {
   const scale = Number(params?.powerScale);
   return Number.isFinite(scale) && scale > 0 ? scale : 1;
-}
-
-function scaleDeltaFromOne(baseValue, scale) {
-  return 1 + (Number(baseValue || 1) - 1) * scale;
 }
 
 function _isInSuddenDeathWater(room, player, now) {
@@ -68,14 +48,9 @@ const effectDefs = {
   // ── Powerup effects ─────────────────────────────────────────────────────────
 
   rage: {
-    durationMs: POWERUP_DURATIONS_MS.rage || 10000,
+    durationMs: EFFECT_RULES.rage.durationMs,
     tickIntervalMs: POWERUP_AMBIENT_TICK_MS,
-    getModifiers(params = {}) {
-      const powerScale = getPowerScale(params);
-      return {
-        damageMult: scaleDeltaFromOne(POWERUP_RAGE_DAMAGE_MULT, powerScale),
-      };
-    },
+    getModifiers(params = {}) { return getEffectModifiers('rage', params); },
     onApply: null,
     onTick(player, room) {
       room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
@@ -87,17 +62,9 @@ const effectDefs = {
   },
 
   shield: {
-    durationMs: POWERUP_DURATIONS_MS.shield || 10000,
+    durationMs: EFFECT_RULES.shield.durationMs,
     tickIntervalMs: 0,
-    getModifiers(params = {}) {
-      const powerScale = getPowerScale(params);
-      return {
-        damageTakenMult: Math.max(
-          0,
-          scaleDeltaFromOne(POWERUP_SHIELD_DAMAGE_MULT, powerScale),
-        ),
-      };
-    },
+    getModifiers(params = {}) { return getEffectModifiers('shield', params); },
     onApply: null,
     onTick: null,
     snapshotKey: "shield",
@@ -113,7 +80,7 @@ const effectDefs = {
   },
 
   health: {
-    durationMs: POWERUP_DURATIONS_MS.health || 10000,
+    durationMs: EFFECT_RULES.health.durationMs,
     tickIntervalMs: POWERUP_EFFECT_TICK_MS,
     modifiers: {},
     onApply(player, room) {
@@ -143,7 +110,7 @@ const effectDefs = {
   },
 
   poison: {
-    durationMs: POWERUP_DURATIONS_MS.poison || 8000,
+    durationMs: EFFECT_RULES.poison.durationMs,
     tickIntervalMs: POWERUP_EFFECT_TICK_MS,
     modifiers: {},
     onApply: null,
@@ -169,15 +136,9 @@ const effectDefs = {
   },
 
   gravityBoots: {
-    durationMs: POWERUP_DURATIONS_MS.gravityBoots || 7000,
+    durationMs: EFFECT_RULES.gravityBoots.durationMs,
     tickIntervalMs: POWERUP_AMBIENT_TICK_MS,
-    getModifiers(params = {}) {
-      const powerScale = getPowerScale(params);
-      return {
-        jumpMult: scaleDeltaFromOne(1.55, powerScale),
-        speedMult: scaleDeltaFromOne(1.15, powerScale),
-      };
-    },
+    getModifiers(params = {}) { return getEffectModifiers('gravityBoots', params); },
     onApply: null,
     onTick(player, room) {
       room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
@@ -189,7 +150,7 @@ const effectDefs = {
   },
 
   invisibility: {
-    durationMs: POWERUP_DURATIONS_MS.invisibility || 8000,
+    durationMs: EFFECT_RULES.invisibility.durationMs,
     tickIntervalMs: 0,
     modifiers: {},
     onApply: null,
@@ -198,7 +159,7 @@ const effectDefs = {
   },
 
   shockwave: {
-    durationMs: POWERUP_DURATIONS_MS.shockwave || 1,
+    durationMs: EFFECT_RULES.shockwave.durationMs,
     tickIntervalMs: 0,
     modifiers: {},
     onApply(player, room) {
@@ -245,12 +206,9 @@ const effectDefs = {
   },
 
   freeze: {
-    durationMs: POWERUP_DURATIONS_MS.freeze || 7000,
+    durationMs: EFFECT_RULES.freeze.durationMs,
     tickIntervalMs: POWERUP_AMBIENT_TICK_MS,
-    modifiers: {
-      speedMult: POWERUP_FREEZE_SPEED_MULT,
-      jumpMult: POWERUP_FREEZE_JUMP_MULT,
-    },
+    getModifiers(params = {}) { return getEffectModifiers('freeze', params); },
     onApply: null,
     onTick(player, room) {
       room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
@@ -264,9 +222,9 @@ const effectDefs = {
   // ── Character ability effects ────────────────────────────────────────────────
 
   thorgRage: {
-    durationMs: 8000,
+    durationMs: EFFECT_RULES.thorgRage.durationMs,
     tickIntervalMs: Math.max(700, POWERUP_AMBIENT_TICK_MS - 250),
-    modifiers: { damageMult: 1.3 },
+    getModifiers(params = {}) { return getEffectModifiers('thorgRage', params); },
     onApply: null,
     onTick(player, room) {
       room.io.to(`game:${room.matchId}`).emit("powerup:tick", {
@@ -278,13 +236,13 @@ const effectDefs = {
   },
 
   huntressBurn: {
-    durationMs: 5000,
+    durationMs: EFFECT_RULES.huntressBurn.durationMs,
     tickIntervalMs: 1000,
     modifiers: {},
     onApply: null,
     onTick(player, room, now, params = {}) {
-      const totalDamage = Math.max(0, Number(params.totalDamage) || 500);
-      const durationMs = Math.max(1, Number(params.durationMs) || 5000);
+      const totalDamage = Math.max(0, Number(params.totalDamage ?? EFFECT_RULES.huntressBurn.totalDamage));
+      const durationMs = Math.max(1, Number(params.durationMs ?? EFFECT_RULES.huntressBurn.durationMs));
       const prev = Number(player.health || 0);
       const rawDamage = Math.max(1, Math.round((totalDamage * 1000) / durationMs));
       const duckBlocked = player.ducking === true;
@@ -329,60 +287,45 @@ const effectDefs = {
   // Grant via: effectManager.apply(player, "slow", now)
 
   slow: {
-    durationMs: 3000,
+    durationMs: EFFECT_RULES.slow.durationMs,
     tickIntervalMs: 0,
-    getModifiers(params = {}) {
-      return {
-        speedMult: Math.max(0, Number(params?.speedMult) || 0.45),
-        jumpMult: Math.max(0, Number(params?.jumpMult) || 0.7),
-      };
-    },
+    getModifiers(params = {}) { return getEffectModifiers('slow', params); },
     onApply: null,
     onTick: null,
     snapshotKey: "slow",
   },
 
   gloopSlimeSlow: {
-    durationMs: 2000,
+    durationMs: EFFECT_RULES.gloopSlimeSlow.durationMs,
     tickIntervalMs: 0,
-    getModifiers(params = {}) {
-      return {
-        speedMult: Math.max(0, Number(params?.speedMult) || 0.7),
-        jumpMult: Math.max(0, Number(params?.jumpMult) || 0.7),
-      };
-    },
+    getModifiers(params = {}) { return getEffectModifiers('gloopSlimeSlow', params); },
     onApply: null,
     onTick: null,
     snapshotKey: "gloopSlimeSlow",
   },
 
   gloopHookSlow: {
-    durationMs: 2200,
+    durationMs: EFFECT_RULES.gloopHookSlow.durationMs,
     tickIntervalMs: 0,
-    getModifiers(params = {}) {
-      return {
-        speedMult: Math.max(0, Number(params?.speedMult) || 0.5),
-        jumpMult: Math.max(0, Number(params?.jumpMult) || 0.5),
-      };
-    },
+    getModifiers(params = {}) { return getEffectModifiers('gloopHookSlow', params); },
     onApply: null,
     onTick: null,
     snapshotKey: "gloopHookSlow",
   },
 
   stun: {
-    durationMs: 1200,
+    durationMs: EFFECT_RULES.stun.durationMs,
     tickIntervalMs: 0,
-    modifiers: { speedMult: 0, jumpMult: 0 },
+    getModifiers(params = {}) { return getEffectModifiers('stun', params); },
     onApply: null,
     onTick: null,
     snapshotKey: "stun",
   },
 
   damageBoost: {
-    durationMs: 5000,
+    durationMs: EFFECT_RULES.damageBoost.durationMs,
     tickIntervalMs: 0,
-    modifiers: { damageMult: 1.5 },
+    getModifiers(params = {}) { return getEffectModifiers('damageBoost', params); },
     onApply: null,
     onTick: null,
     snapshotKey: "damageBoost",

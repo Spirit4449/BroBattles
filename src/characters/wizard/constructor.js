@@ -1,6 +1,6 @@
 // src/characters/wizard/constructor.js
 import socket from "../../socket";
-import { characterStats } from "../../lib/characterStats.js";
+import { characterStats } from "../../shared/characterStats.js";
 import { animations } from "./anim";
 import {
   performWizardFireball,

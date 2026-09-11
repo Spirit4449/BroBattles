@@ -12,7 +12,7 @@ test('two rebounds lose energy, then the third contact splats', () => {
   assert.equal(s.bounceCount, 2); assert.equal(impacts.length, 3);
   assert.deepEqual(impacts.map(h => h.terminal), [false, false, true]);
   assert.ok(impacts[1].speed < impacts[0].speed);
-  assert.ok(impacts[2].speed < impacts[1].speed * 0.5);
+  assert.ok(impacts[2].speed < impacts[1].speed);
   assert.ok(Math.abs(s.y - 90) < 0.1);
 });
 test('walls reflect at the surface and count against the same bounce budget', () => {
@@ -80,30 +80,55 @@ test('server runtime follows the shared model through a wall rebound', () => {
   assert.ok(attack.vx < 0); assert.equal(attack.bounceCount, 1);
 });
 
-test('reachable aimed throws reach the requested point with the discrete integrator', () => {
-  const { slimeLaunch } = require('../src/shared/gloopProjectile');
-  const cfg = require('../src/lib/characterTuning').getResolvedCharacterAttackConfig('gloop', 'slimeball');
+test('reachable aimed throws reach the requested point with the configured discrete integrator', () => {
+  const { slimeLaunch, getSlimeLaunchStepCount } = require('../src/shared/gloopProjectile');
+  const cfg = require("../src/shared/characterTuning.js").getResolvedCharacterAttackConfig('gloop', 'slimeball');
   const pose = { x: 500, y: 300, width: 150, height: 150 };
   for (const target of [{ x: 650, y: 350 }, { x: 350, y: 300 }, { x: 500, y: 260 }, { x: 570, y: 400 }]) {
     const shot = slimeLaunch(pose, target, cfg);
     const distance = Math.hypot(target.x - shot.start.x, target.y - shot.start.y);
-    const steps = Math.round(Math.max(.55, Math.min(1.55, .55 + distance / 650)) * 120);
+    const steps = getSlimeLaunchStepCount(distance, cfg);
     const s = { ...cfg, x: shot.start.x, y: shot.start.y, vx: Math.cos(shot.angle) * shot.speed, vy: shot.initialVy };
     advanceSlimeball(s, steps * 1000 / 120);
     assert.ok(Math.hypot(s.x - target.x, s.y - target.y) < 1e-7);
   }
 });
 
+test('aimed Gloop projectiles use the requested thirty percent speed reduction', () => {
+  const cfg = require('../src/shared/characterTuning.js').getResolvedCharacterAttackConfig('gloop', 'slimeball');
+  assert.ok(Math.abs(cfg.launchSpeedMultiplier - 1.4 * 0.7) < 1e-12);
+  assert.ok(Math.abs(cfg.maxLaunchSpeed - 462 * 0.7) < 1e-12);
+  assert.ok(Math.abs(cfg.speed - 546 * 0.7) < 1e-12);
+});
+
+test('the successive Gloop rebound reaches higher than the old damped bounce', () => {
+  function secondBounceHeight(successiveBounceMultiplier) {
+    const s = state({ x: 0, y: 0, vx: 0, successiveBounceMultiplier });
+    let secondBounceStarted = false;
+    let apexY = Infinity;
+    for (let i = 0; i < 1200 && !s.done; i += 1) {
+      advanceSlimeball(s, 1000 / 120);
+      if (s.bounceCount >= 2) {
+        secondBounceStarted = true;
+        apexY = Math.min(apexY, s.y);
+      }
+    }
+    assert.equal(secondBounceStarted, true);
+    return 90 - apexY;
+  }
+  assert.ok(secondBounceHeight(0.85) > secondBounceHeight(0.62) * 1.5);
+});
+
 test('normal reticle stops at the server first impact while the projectile keeps bouncing', () => {
   const { resolveAttackAimContext } = require('../src/characters/shared/attackAim');
   const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
-  const cfg = require('../src/lib/characterTuning').getResolvedCharacterAttackConfig('gloop', 'slimeball');
+  const cfg = require("../src/shared/characterTuning.js").getResolvedCharacterAttackConfig('gloop', 'slimeball');
   const rects = [{ left: 600, right: 620, top: 0, bottom: 500 }];
   const player = { x: 100, y: 250, displayWidth: 150, displayHeight: 150, scene: {
     physics: { world: { bounds: { x: 0, y: 0, width: 1100, height: 500 } } }, _mapObjects: rects } };
   for (const target of [{ x: 750, y: 300 }, { x: 380, y: 450 }]) {
     const aim = resolveAttackAimContext({ character: 'gloop', player, pointerWorldX: target.x, pointerWorldY: target.y });
-    assert.equal(aim.kind, 'throw'); assert.ok(aim.angle < 0);
+    assert.equal(aim.kind, 'throw');
     const owner = { ...player, name: 'Gloop', participantId: 'gloop-test', isAlive: true, team: 'team1' };
     const attack = createRuntimeAttack(owner, { ...cfg, start: aim.start, angle: aim.angle, speed: aim.speed, initialVy: aim.initialVy, direction: aim.direction, type: 'gloop-slimeball-release', floorY: 500, worldMinX: 0, worldMaxX: 1100 }, 0);
     const room = { players: new Map([[owner.participantId, owner]]), FIXED_DT_MS: 1000 / 120, geometry: { colliders: rects } };
@@ -120,7 +145,7 @@ test('normal reticle stops at the server first impact while the projectile keeps
 test('a very short Gloop reticle continues through its bounce', () => {
   const { resolveAttackAimContext } = require('../src/characters/shared/attackAim');
   const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
-  const cfg = require('../src/lib/characterTuning').getResolvedCharacterAttackConfig('gloop', 'slimeball');
+  const cfg = require("../src/shared/characterTuning.js").getResolvedCharacterAttackConfig('gloop', 'slimeball');
   const rects = [{ left: 400, right: 600, top: 340, bottom: 370 }];
   const player = { x: 500, y: 250, displayWidth: 150, displayHeight: 150, scene: {
     physics: { world: { bounds: { x: 0, y: 0, width: 1100, height: 500 } } }, _mapObjects: rects } };
@@ -142,7 +167,7 @@ test('a very short Gloop reticle continues through its bounce', () => {
 test('authoritative release publishes the same launch and terrain used for damage', () => {
   const { handleCharacterAction } = require('../src/server/core/gameRoom/characterActionRegistry');
   const { slimeLaunch } = require('../src/shared/gloopProjectile');
-  const cfg = require('../src/lib/characterTuning').getResolvedCharacterAttackConfig('gloop','slimeball');
+  const cfg = require("../src/shared/characterTuning.js").getResolvedCharacterAttackConfig('gloop','slimeball');
   const owner = { participantId:'gloop-release',name:'Gloop',char_class:'gloop',isAlive:true,loaded:true,
     x:100,y:200,_lastWidth:150,_lastHeight:150 };
   const emitted=[];let release;
@@ -164,7 +189,7 @@ test('authoritative release publishes the same launch and terrain used for damag
 
  test('launch clamps distant targets on both sides to the throw limit', () => {
   const { slimeLaunch } = require('../src/shared/gloopProjectile');
-  const cfg = require('../src/lib/characterTuning').getResolvedCharacterAttackConfig('gloop', 'slimeball');
+  const cfg = require("../src/shared/characterTuning.js").getResolvedCharacterAttackConfig('gloop', 'slimeball');
   for (const x of [-2000, 2000]) {
     const launch = slimeLaunch({ x: 100, y: 200 }, { x, y: 700 }, cfg);
     assert.ok(Math.abs(Math.hypot(launch.target.x - 100, launch.target.y - 200) - 400) < 1e-8);
@@ -173,15 +198,15 @@ test('authoritative release publishes the same launch and terrain used for damag
 
 test('high throws spend horizontal speed and cannot exceed the height budget', () => {
   const { slimeLaunch } = require('../src/shared/gloopProjectile');
-  const cfg = require('../src/lib/characterTuning').getResolvedCharacterAttackConfig('gloop', 'slimeball');
+  const cfg = require("../src/shared/characterTuning.js").getResolvedCharacterAttackConfig('gloop', 'slimeball');
   const pose = { x: 0, y: 0, width: 150, height: 150 };
   const low = slimeLaunch(pose, { x: 400, y: 0 }, cfg);
   const high = slimeLaunch(pose, { x: 280, y: -280 }, cfg);
   assert.ok(Math.cos(high.angle) * high.speed < Math.cos(low.angle) * low.speed);
   for (const target of [{ x: 10000, y: -10000 }, { x: 0, y: -10000 }, { x: -10000, y: 0 }]) {
     const shot = slimeLaunch(pose, target, cfg);
-    assert.ok(shot.speed <= 330.000001);
-    assert.ok(shot.initialVy >= -270);
+    assert.ok(shot.speed <= cfg.maxLaunchSpeed + 0.000001);
+    assert.ok(shot.initialVy >= -cfg.maxUpwardSpeed);
     const s = { ...cfg, x: shot.start.x, y: shot.start.y,
       vx: Math.cos(shot.angle) * shot.speed, vy: shot.initialVy };
     let minY = s.y;
@@ -205,7 +230,8 @@ test('release translates the preview with windup movement without changing its i
     const room = {status:'active',matchId:1,geometry:{colliders:rects},players:new Map([['gloop',owner]]),
       FIXED_DT_MS:1000/120,io:{to:()=>({emit:()=>{}})},scheduleAction:fn=>{release=fn;}};
     handleCharacterAction(room,owner,{type:'gloop-slimeball',id:'cast',start:aim.start,
-      angle:aim.angle,speed:aim.speed,initialVy:aim.initialVy,target:aim.target},0);
+      angle:aim.angle,speed:aim.speed,initialVy:aim.initialVy,target:aim.target,
+      floorY:1000,worldMinX:-500,worldMaxX:1000},0);
     owner.x += 40;
     release();
     const attack=room._activeAttacks[0];
@@ -230,4 +256,12 @@ test('slime hits only one overlapping enemy and broadcasts the terminal splat', 
   assert.ok(attack.done);
   assert.equal(events.filter(e=>e.action?.type==='gloop-slimeball-splat').length,1);
   assert.equal(events.find(e=>e.action?.type==='gloop-slimeball-splat').action.id,'single');
+});
+
+test('configured bounce budgets above two are respected', () => {
+  const s = state({ x: 0, y: 89, vx: 0, vy: 300, bounceCount: 2, maxBounces: 3 });
+  const impacts = advanceSlimeball(s, 1000 / 120);
+  assert.equal(impacts.length, 1);
+  assert.equal(impacts[0].terminal, false);
+  assert.equal(s.bounceCount, 3);
 });

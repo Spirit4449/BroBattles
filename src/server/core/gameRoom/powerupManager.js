@@ -1,4 +1,4 @@
-const { PICKUP_DELAY_MS } = require("../../../shared/pickupTiming");
+const { PICKUP_DELAY_MS } = require("../../../shared/powerups");
 const {
   WORLD_BOUNDS,
   GAME_DURATION_MS,

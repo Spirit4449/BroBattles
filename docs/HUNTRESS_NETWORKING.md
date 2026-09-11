@@ -1,15 +1,12 @@
 # Huntress authoritative projectiles
 
-## Enable and rollback
+## Default release
 
-`npm run dev` enables protocol 2 for newly created rooms. Production remains opt-in:
-start the server with `BB_HUNTRESS_COMBAT_V2=1`, deploy the rebuilt client, reload
-both browsers, and create a new match. Existing rooms retain their original protocol.
-For rollback, restart with `BB_HUNTRESS_COMBAT_V2=0` and create new rooms.
-Protocol 2 rooms reject joins from clients that do not advertise support, with a reload message.
-The dev watcher includes `src/shared` and `src/lib` so projectile math and tuning
-changes restart the server as well as rebuilding the client. Restart `npm run dev`
-once to pick up the updated watcher configuration.
+Authoritative Huntress combat is always enabled in development and production.
+Deploy the rebuilt client and restart the server; clients with stale combat
+protocols receive a reload message. Protocol numbers remain wire compatibility
+checks, not feature switches. The former environment rollout flag and the
+browser-authoritative collision fallback have been removed.
 
 ## Behavior
 
@@ -35,8 +32,6 @@ Accepted launch state replaces predicted state by ID. Remote arrows are sampled
 at estimated server simulation age rather than launched from interpolated actors.
 Visual contacts may pause briefly awaiting confirmation; they never apply damage.
 Terminals carry exact impact coordinates plus a body-clamped attachment offset.
-The legacy confirmation path also clamps attachment to the current body to avoid
-arrows floating behind a victim. That legacy cosmetic fix does not fix legacy collision authority.
 
 `game:join` adds `huntressCombatVersion: 2`. `game:init` adds `huntressCombat`
 with version, epoch, clocks, collision geometry, active projectiles, and bounded
@@ -48,17 +43,17 @@ per-frame network stream is added. Actor snapshot cadence and movement authority
 ## Verification
 
 Run `npm run test:network`, `node --test tests/*.test.js tests/*.test.mjs`, and
-`npm run build`. `node scripts/benchmark-huntress.cjs` compares six firing
-Huntresses over identical headless workloads. `node scripts/huntress-network-lab.cjs`
+`npm run build`. `node scripts/benchmark-huntress.cjs` measures six firing
+Huntresses over repeatable headless workloads. `node scripts/huntress-network-lab.cjs`
 starts an isolated two-client Phaser/Socket.IO lab at http://127.0.0.1:3017.
-Use `?version=2&rtt=100&jitter=1`, or version 1 for comparison; supported RTTs
+Use `?rtt=100&jitter=1`; supported RTTs
 are 0, 50, 100 and 150 ms. This uses no production accounts or database.
 
 Browser diagnostics: `window.__BB_HUNTRESS_DIAGNOSTICS__()` includes prediction
 windup overrun, reconciliation distance, pre-confirmation visual error, confirmation
 age and target movement-report age. Server `_huntress.metrics` holds bounded tick costs.
 
-The isolated 100 ms RTT/jitter browser run measured approximately 8.41 ms p95
+Before removing the fallback, the isolated 100 ms RTT/jitter browser run measured approximately 8.41 ms p95
 frame time versus 8.42 ms for legacy. Stationary-target confirmed impact alignment
 was within 0.002 px in the sampled revised run. The six-shooter headless benchmark
 measured p95 tick cost around 0.09–0.11 ms for v2 versus 0.05–0.07 ms for legacy,

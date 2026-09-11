@@ -5,24 +5,24 @@ import {
   resolveAnimKey,
   getStats,
   getEffectsClass,
-} from "./characters";
-import { getResolvedCharacterBodyConfig } from "./lib/characterTuning.js";
-import { performSpecial } from "./characters/special";
-import { player } from "./player";
-import socket from "./socket";
+} from "../characters";
+import { getResolvedCharacterBodyConfig } from "../shared/characterTuning.js";
+import { performSpecial } from "../characters/special";
+import { player } from "../player";
+import socket from "../socket";
 import {
   drawSuperChargeBar,
   resetSuperBarAnimation,
-} from "./gameScene/superBarRenderer";
+} from "../gameScene/superBarRenderer";
 import {
   drawHealthBar,
   resetHealthBarAnimation,
-} from "./gameScene/healthBarRenderer";
+} from "../gameScene/healthBarRenderer";
 import {
   destroyStatusIconStack,
   setStatusIconStackVisible,
   syncStatusIconStack,
-} from "./gameScene/statusIconStack";
+} from "../gameScene/statusIconStack";
 import {
   MOVEMENT_VFX_CONFIG,
   spawnDeathBurst,
@@ -36,9 +36,9 @@ import {
   spawnWallKickCloud,
   spawnWallSlideBurst,
   spawnWallSlideTrail,
-} from "./effects";
-import { RENDER_LAYERS } from "./gameScene/renderLayers";
-import { playDuckTransitionSound } from "./gameScene/duckAudio.js";
+} from "../effects";
+import { RENDER_LAYERS } from "../gameScene/renderLayers";
+import { playDuckTransitionSound } from "../gameScene/movementAudio.js";
 
 const OP_PLAYER_NAME_OFFSET_Y = 42;
 const HUD_SMOOTH_ALPHA = 0.35;
@@ -54,7 +54,7 @@ function stabilizeHudAxis(current, target, snap = false) {
   return Math.round(currentValue + delta * HUD_SMOOTH_ALPHA);
 }
 
-export default class OpPlayer {
+export default class RemotePlayer {
   constructor(
     scene,
     character,

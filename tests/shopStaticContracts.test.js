@@ -181,7 +181,7 @@ test("shop sound effects are locally bundled with source provenance", () => {
 
 test("successful character upgrades play the dedicated upgrade sound", () => {
   const sounds = read("src/lib/uiSounds.js");
-  const characterLogic = read("src/characterLogic.js");
+  const characterLogic = read("src/lobby/characterSelectController.js");
 
   assert.match(sounds, /upgrade:\s*"\/assets\/upgrade\.mp3"/);
   assert.ok(fs.existsSync(path.join(root, "public/assets/upgrade.mp3")));
@@ -192,7 +192,7 @@ test("successful character upgrades play the dedicated upgrade sound", () => {
 });
 
 test("character upgrade success animation runs once and holds its final frame", () => {
-  const characterLogic = read("src/characterLogic.js");
+  const characterLogic = read("src/lobby/characterSelectController.js");
   const styles = read("src/styles/characterSelect.css");
   const rerender = characterLogic.slice(
     characterLogic.indexOf("function rerenderCharacterCard"),
@@ -205,7 +205,7 @@ test("character upgrade success animation runs once and holds its final frame", 
 });
 
 test("character card hover avoids full-card filter repaints", () => {
-  const characterLogic = read("src/characterLogic.js");
+  const characterLogic = read("src/lobby/characterSelectController.js");
   const styles = read("src/styles/characterSelect.css");
   const cardRules = styles.slice(
     styles.indexOf(".character-card {"),
@@ -227,7 +227,7 @@ test("character card hover avoids full-card filter repaints", () => {
 });
 
 test("max-level characters use the mastery visual treatment", () => {
-  const characterLogic = read("src/characterLogic.js");
+  const characterLogic = read("src/lobby/characterSelectController.js");
   const styles = read("src/styles/characterSelect.css");
 
   assert.match(characterLogic, /cardState\.isMaxed \? "is-maxed"/);

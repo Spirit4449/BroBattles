@@ -1,0 +1,156 @@
+{
+  "key": "gloop",
+  "stats": {
+    "baseHealth": 7000,
+    "attackDescription": "Lobs a heavy slimeball that bounces twice and splats on the first enemy, coating them in slowing slime.",
+    "baseDamage": 2000,
+    "ammoCooldownMs": 400,
+    "ammoReloadMs": 1500,
+    "ammoCapacity": 1,
+    "specialDescription": "Launches a slime hand that catches an enemy, pulls them close, and leaves them heavily slowed.",
+    "specialBaseDamage": 500,
+    "specialChargeHits": 6,
+    "specialChargePerHit": 0,
+    "spriteScale": 1.2,
+    "body": {
+      "widthShrink": 100,
+      "heightShrink": 90,
+      "offsetXFromHalf": 1,
+      "offsetY": 86
+    },
+    "tuning": {
+      "attack": {
+        "aim": {
+          "kind": "throw",
+          "attackKey": "slimeball",
+          "defaultRange": 320,
+          "minRange": 60,
+          "maxRange": 400,
+          "anchorForwardOffset": 0,
+          "anchorOffsetY": 0,
+          "reticlePathOffsetY": 22,
+          "previewBounceThreshold": 120,
+          "reticleMinLength": 220,
+          "reticleMaxLength": 420,
+          "showPathToImpact": true,
+          "bounceCurveRadius": 30,
+          "reticleThickness": 8,
+          "angleMode": "free"
+        },
+        "slimeball": {
+          "maxThrowRange": 400,
+          "launchSpeedMultiplier": 0.98,
+          "maxLaunchSpeed": 323.4,
+          "maxUpwardSpeed": 270,
+          "speed": 382.2,
+          "range": 900,
+          "collisionRadius": 18,
+          "visualScale": 1.5,
+          "castDelayMs": 300,
+          "flipLockMs": 520,
+          "forwardOffset": 0.22,
+          "verticalOffset": -0.16,
+          "initialVy": -45,
+          "gravity": 340,
+          "maxBounces": 2,
+          "bounceDampingY": 0.66,
+          "bounceDampingX": 0.68,
+          "successiveBounceMultiplier": 0.85,
+          "airDrag": 0.2,
+          "minBounceSpeed": 25,
+          "bounceFloorOffsetY": 80,
+          "maxLifetimeMs": 4200,
+          "slowDurationMs": 2000,
+          "slowSpeedMult": 0.7,
+          "slowJumpMult": 0.7,
+          "trailIntervalMs": 42,
+          "trailColor": 5621759
+        }
+      },
+      "special": {
+        "aim": {
+          "kind": "line",
+          "specialKey": "hook",
+          "anchorKind": "gloop-hook",
+          "defaultRange": 760,
+          "anchorForwardOffset": 10,
+          "anchorOffsetY": 16,
+          "reticleThickness": 56,
+          "showFullReticleRange": true,
+          "angleMode": "free"
+        },
+        "hook": {
+          "speed": 700,
+          "range": 780,
+          "collisionRadius": 44,
+          "damage": 500,
+          "pullDurationMs": 1000,
+          "pullLockPaddingMs": 120,
+          "pulledStopDistance": 10,
+          "slowDurationMs": 2200,
+          "slowSpeedMult": 0.5,
+          "slowJumpMult": 0.5,
+          "visualScale": 0.28,
+          "trailIntervalMs": 28
+        }
+      }
+    },
+    "description": "A sticky control fighter who slows enemies and reels them in.",
+    "unlockPrice": 100
+  },
+  "frame": {
+    "w": 128,
+    "h": 128
+  },
+  "duckFrame": [
+    8,
+    2
+  ],
+  "basicAction": "gloop-slimeball",
+  "basicHitTypes": [
+    "basic"
+  ],
+  "specialHitTypes": [
+    "special"
+  ],
+  "attacks": {
+    "gloop-slimeball": {
+      "character": "gloop",
+      "actionFlow": {
+        "kind": "windup-release",
+        "broadcastType": "gloop-slimeball",
+        "releaseActionType": "gloop-slimeball-release",
+        "releaseOwnerEcho": true
+      }
+    },
+    "gloop-slimeball-release": {
+      "character": "gloop",
+      "actionFlow": {
+        "kind": "server-runtime-only"
+      },
+      "attackType": "basic",
+      "runtime": {
+        "kind": "projectile-bounce"
+      },
+      "events": {
+        "onHitEffect": {
+          "type": "gloopSlimeSlow"
+        },
+        "onHitAction": {
+          "type": "gloop-slimeball-splat",
+          "ownerEcho": true
+        }
+      }
+    },
+    "gloop-hook-release": {
+      "character": "gloop",
+      "actionFlow": {
+        "kind": "server-runtime-only"
+      },
+      "attackType": "special",
+      "runtime": {
+        "kind": "hook-projectile"
+      }
+    }
+  }
+}

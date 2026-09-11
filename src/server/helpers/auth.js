@@ -1,7 +1,7 @@
 const {
   DEFAULT_CHARACTER,
   defaultCharacterList,
-} = require("../../lib/characterStats");
+} = require("../../shared/characterStats.js");
 const { createAuthSessionService } = require("../services/authSessionService");
 const { randomString } = require("./utils");
 const { setBanHoldCookies } = require("./banHold");

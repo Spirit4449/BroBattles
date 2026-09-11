@@ -142,6 +142,7 @@ function runLoop(t, coalesce, stall, finishAt = null) {
     _emitSnapshotWithTiming(time) { events.push({ type: "snapshot", tick: this._tickId, time }); },
     broadcastWorldState() { events.push({ type: "world" }); },
   });
+  room._huntress = { active: new Map(), pending: [], requests: new Map(), terminals: [], metrics: [] };
   room.startGameLoop(); clock = stall; callback();
   return { room, events };
 }

@@ -1,8 +1,9 @@
+import { syncLocalEffects } from './players/localStateSync';
 import './styles/mapPlaytest.css';
 const editorSession = window.location.pathname === '/map-editor/playtest' ? new URLSearchParams(window.location.search).get('session') : null;
 if (editorSession) document.body.classList.add('editor-playtest');
 import { preloadMapDocument } from './maps/documentRuntime';
-import { attachNinjaScene, discardNinjaPresentation } from './characters/ninja/network';
+import { attachCharacterNetworks, discardCharacterPresentation } from './characters/networkRegistry';
 // game.js
 
 import {
@@ -21,26 +22,24 @@ import { createGameHudController } from "./hud/gameHudController";
 import { createGameOverScreenController } from "./hud/gameOverScreenController";
 import { createBattleTutorialController } from "./hud/battleTutorialController";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
-import { createGameChatController } from "./lib/chatController.js";
+import { createGameChatController } from "./chat/gameChatController.js";
 import { isChatInputActive, setChatInputActive } from "./player";
 import "./styles/chat.css";
 import "./styles/tutorialTips.css";
-import { createSnapshotBuffer } from "./match/snapshotBuffer";
+import { createSnapshotBuffer, processSnapshotInterpolation } from "./match/snapshotBuffer";
 import {
   readNetworkExperiments,
   sampleRemoteFrame,
   followRemotePosition,
 } from "./gameScene/remoteSmoothing.js";
 import { createMatchCoordinator } from "./match/matchCoordinator";
-import { attachHuntressScene, discardHuntressPresentation } from './characters/huntress/network';
 import { preloadGameAssets } from "./gameScene/preloadGameAssets";
 import { renderPoisonWater } from "./gameScene/poisonWaterRenderer";
 import { updateDynamicCamera } from "./gameScene/cameraDynamics";
 import { createLocalInputSync } from "./gameScene/localInputSync";
-import { processSnapshotInterpolation } from "./gameScene/networkInterpolation";
-import { updateHealthBars } from "./gameScene/healthBarUpdater";
+import { updateHealthBars } from "./gameScene/healthBarRenderer";
 import { createMapEditorRuntime } from "./gameScene/mapEditorRuntime";
-import { createBankBustRuntime } from "./modes/bankBust/runtime";
+import { createModeRuntime, preloadModeAssets, supportsSuddenDeath } from "./modes";
 import {
   POWERUP_TYPES,
   POWERUP_ASSET_DIR,
@@ -78,7 +77,6 @@ import {
   setAttackDebugState,
   applyCharacterPowerupFx,
   drawCharacterPowerupAura,
-  getCharacterPowerupMobilityModifier,
   getCharacterEffectTickSounds,
 } from "./characters";
 import {
@@ -88,7 +86,7 @@ import {
   toLogicalAnimation,
 } from "./characters/shared/animationState.js";
 import socket, { waitForConnect } from "./socket";
-import OpPlayer from "./opPlayer";
+import OpPlayer from "./players/RemotePlayer";
 import { prepareSpawnIntro, finishSpawnIntro } from "./gameScene/spawnIntro";
 import { spawnDust, prewarmDust } from "./effects";
 import {
@@ -231,6 +229,7 @@ const SERVER_SPAWN_INDEX = Object.create(null); // name -> spawnIndex (if server
 let latestPowerups = []; // from server snapshots
 let latestModeState = null; // objective/timer state from server snapshots
 let latestDeathDrops = []; // from server snapshots / death events
+let latestEffectMovement = {};
 let latestPlayerEffects = {}; // name -> effect duration map (ms remaining)
 const POWERUP_COLLECT_QUEUE = [];
 const DEATHDROP_COLLECT_QUEUE = [];
@@ -289,7 +288,7 @@ let matchCoordinator = null;
 const hud = createGameHudController({
   getGameData: () => gameData,
   getUsername: () => username,
-  getMapBgAsset,
+  getMapBgAsset: mapId => getMapBgAsset(mapId, gameScene),
   getScene: () => gameScene,
   onCountdownFight: () => {
     finishSpawnIntro(gameScene);
@@ -388,6 +387,7 @@ matchCoordinator = createMatchCoordinator({
     latestPlayerEffects = v;
   },
   getLatestPlayerEffects: () => latestPlayerEffects,
+  setLatestEffectMovement: (value) => { latestEffectMovement = value; },
   opponentPlayers,
   teamPlayers,
   pendingActionsQueue: PENDING_ACTIONS,
@@ -418,8 +418,7 @@ function clearTransientPresentation() {
   POWERUP_COLLECT_QUEUE.length = 0;
   DEATHDROP_COLLECT_QUEUE.length = 0;
   SHIELD_IMPACT_QUEUE.length = 0;
-  discardNinjaPresentation();
-  discardHuntressPresentation();
+  discardCharacterPresentation();
   for (const sprite of [
     player,
     ...Object.values(opponentPlayers).map((entry) => entry?.opponent),
@@ -719,7 +718,7 @@ function initTeamStatusHud(players) {
 
 function applyMatchBackground(mapId) {
   try {
-    const bgUrl = gameData?.mapSnapshot?.map?.background || getMapBgAsset(mapId);
+    const bgUrl = gameData?.mapSnapshot?.map?.background || getMapBgAsset(mapId, gameScene);
     const bgImg = document.querySelector("#game-bg img");
     if (bgImg && bgUrl) {
       const markReady = () => {
@@ -893,6 +892,7 @@ class GameScene extends Phaser.Scene {
     });
 
     preloadMapDocument(this, gameData?.mapSnapshot?.map);
+    preloadModeAssets(this, gameData?.modeId, staticPath);
     preloadGameAssets({
       scene: this,
       staticPath,
@@ -942,7 +942,7 @@ class GameScene extends Phaser.Scene {
     this._modeObjectiveGraphics.setDepth(RENDER_LAYERS.GAME_OBJECTS);
     this._modeObjectiveUiGraphics = this.add.graphics();
     this._modeObjectiveUiGraphics.setDepth(RENDER_LAYERS.PLAYER_HUD);
-    this._bankBustRuntime = null;
+    this._modeRuntime = null;
     this._powerupRenderer = createPowerupRenderer({
       scene: this,
       Phaser,
@@ -961,11 +961,8 @@ class GameScene extends Phaser.Scene {
       socket,
       getMapObjects: () => mapObjects,
       getDead: () => dead,
-      setPowerupMobility,
-      setLocalPowerupInvisible: setPowerupInvisible,
       applyCharacterPowerupFx,
       drawCharacterPowerupAura,
-      getCharacterPowerupMobilityModifier,
     });
     // Wait for game data before creating map and player
     if (!gameData) {
@@ -1008,9 +1005,9 @@ class GameScene extends Phaser.Scene {
     // Creates the map objects based on game data
     this._mapVariantTeamSize = Number(gameData?.mapSnapshot?.variant?.[0]) || null;
     buildMap(this, gameData?.mapSnapshot?.mapId || activeMapId, gameData?.mapSnapshot?.map);
-    mapObjects = getMapObjects(activeMapId);
+    mapObjects = getMapObjects(activeMapId, this);
     this._mapObjects = mapObjects;
-    const mapBoundaryConfig = getMapBoundaryConfig(activeMapId);
+    const mapBoundaryConfig = getMapBoundaryConfig(activeMapId, this);
     applyMapBounds(this, mapBoundaryConfig, {
       extraTopSpace: this._topPlayfieldPadding,
     });
@@ -1166,9 +1163,9 @@ class GameScene extends Phaser.Scene {
         matchCoordinator?.dispose();
       } catch (_) {}
       try {
-        this._bankBustRuntime?.destroy?.();
+        this._modeRuntime?.destroy?.();
       } catch (_) {}
-      this._bankBustRuntime = null;
+      this._modeRuntime = null;
       try {
         this._mapEditorRuntime?.destroy?.();
       } catch (_) {}
@@ -1386,7 +1383,7 @@ class GameScene extends Phaser.Scene {
             this._editModeActive = !!editing;
             window.__BB_MAP_EDIT_ACTIVE = !!editing;
             try {
-              this._bankBustRuntime?.setEditMode?.(!!editing);
+              this._modeRuntime?.setEditMode?.(!!editing);
             } catch (_) {}
             if (this._editModeActive) {
               try {
@@ -1405,8 +1402,8 @@ class GameScene extends Phaser.Scene {
         },
       });
     }
-    if (!this._bankBustRuntime) {
-      this._bankBustRuntime = createBankBustRuntime({
+    if (!this._modeRuntime) {
+      this._modeRuntime = createModeRuntime({
         scene: this,
         Phaser,
         getGameData: () => gameData,
@@ -1417,7 +1414,7 @@ class GameScene extends Phaser.Scene {
         getTeamPlayers: () => teamPlayers,
         canEdit: false,
       });
-      this._bankBustRuntime.setEditMode?.(!!this._editModeActive);
+      this._modeRuntime.setEditMode?.(!!this._editModeActive);
     }
     // End camera setup
   }
@@ -1575,11 +1572,17 @@ class GameScene extends Phaser.Scene {
   }
 
   _renderPowerupsAndEffects() {
+    syncLocalEffects({
+      effects: latestPlayerEffects[username] || {},
+      authoritative: latestEffectMovement[username],
+      setMobility: setPowerupMobility,
+      setInvisible: setPowerupInvisible,
+    });
     this._powerupRenderer?.renderPowerupsAndEffects();
   }
 
   _renderModeObjectives() {
-    this._bankBustRuntime?.render?.();
+    this._modeRuntime?.render?.();
   }
 
   _enterSpectatorMode() {
@@ -1714,18 +1717,16 @@ class GameScene extends Phaser.Scene {
   }
 
   update() {
-    attachNinjaScene(this, { localPlayer: player, localUsername: username,
-      opponentPlayersRef: opponentPlayers, teamPlayersRef: teamPlayers });
-    attachHuntressScene(this, { localPlayer: player, localUsername: username,
+    attachCharacterNetworks(this, { localPlayer: player, localUsername: username,
       opponentPlayersRef: opponentPlayers, teamPlayersRef: teamPlayers });
     updateMatchBackgroundParallax(this);
-    const isBankBustMode = String(latestModeState?.type || "") === "bank-bust";
+    const suddenDeathEnabled = supportsSuddenDeath(latestModeState?.type || gameData?.modeId);
     const poisonAllowed =
       hasJoined &&
       gameInitialized &&
       !gameEnded &&
       !hud.isBattleIntroActive?.();
-    if (!poisonAllowed || this._editModeActive || isBankBustMode) {
+    if (!poisonAllowed || this._editModeActive || !suddenDeathEnabled) {
       try {
         this._poisonGraphics?.clear?.();
       } catch (_) {}

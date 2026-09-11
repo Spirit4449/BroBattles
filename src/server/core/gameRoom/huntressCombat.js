@@ -4,12 +4,11 @@ const { participantId, getParticipant } = require('./participants');
 const { characterBody } = require('../../../shared/duelGeometry');
 
 function initialize(room) {
-  // Room-scoped: never change authority in the middle of a match.
-  room.huntressCombatVersion = process.env.BB_HUNTRESS_COMBAT_V2 === '1' ? model.VERSION : 1;
+  // Protocol version protects joins from stale clients; combat is always authoritative.
+  room.huntressCombatVersion = model.VERSION;
   room._snapshotEpoch ??= randomUUID();
   room._huntress = { active: new Map(), pending: [], requests: new Map(), terminals: [], metrics: [] };
 }
-function enabled(room) { return room.huntressCombatVersion === model.VERSION; }
 function timing(room) {
   return { epoch: room._snapshotEpoch, sentMono: performance.now(), simMono: room._simulationMono ?? performance.now() };
 }
@@ -114,7 +113,6 @@ function finish(room, attack, contact) {
   if (owner) emit(room, owner, terminal);
 }
 function tick(room) {
-  if (!enabled(room)) return;
   const started = performance.now(), state = room._huntress;
   for (const p of room.players.values()) {
     // BotController already advances bot ammunition each fixed step.
@@ -159,11 +157,19 @@ function tick(room) {
 }
 function bootstrap(room) {
   return { huntressCombatVersion: room.huntressCombatVersion, ...timing(room),
-    collisionGeometry: enabled(room) ? { colliders: room.geometry.colliders, world: room.geometry.world } : undefined,
+    collisionGeometry: { colliders: room.geometry.colliders, world: room.geometry.world },
     projectiles: [...room._huntress.active.values()].map(packetFor), terminals: room._huntress.terminals.slice() };
 }
 function isTrustedContact(room, attack, payload) {
-  return enabled(room) && attack && room._huntress.active.get(attack.projectile.id) === attack &&
+  return attack && room._huntress.active.get(attack.projectile.id) === attack &&
     payload.instanceId === attack.projectile.id && payload.attacker === attack.attackerName && payload.attackType === attack.attackType;
 }
-module.exports = { initialize, enabled, request, tick, bootstrap, timing, isTrustedContact };
+function dispose(room) {
+  const state = room._huntress;
+  if (!state) return;
+  state.active.clear();
+  state.pending.length = 0;
+  state.terminals.length = 0;
+  state.requests.clear();
+}
+module.exports = { dispose, initialize, request, tick, bootstrap, timing, isTrustedContact };

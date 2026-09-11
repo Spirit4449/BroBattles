@@ -1,0 +1,137 @@
+{
+  "key": "draven",
+  "stats": {
+    "baseHealth": 6500,
+    "attackDescription": "Puffs out a magical smoke that deals splash damage to everyone in the path.",
+    "baseDamage": 2500,
+    "ammoCooldownMs": 450,
+    "ammoReloadMs": 1600,
+    "ammoCapacity": 3,
+    "specialDescription": "Unleashes a staff nova that expands outward.",
+    "specialBaseDamage": 2400,
+    "specialChargeHits": 4,
+    "specialChargePerHit": 0.25,
+    "spriteScale": 1.2,
+    "body": {
+      "widthShrink": 230,
+      "heightShrink": 194,
+      "offsetXFromHalf": 0,
+      "offsetY": 111,
+      "flipOffset": 5
+    },
+    "tuning": {
+      "attack": {
+        "aim": {
+          "kind": "splash",
+          "attackKey": "splash",
+          "defaultRange": 175,
+          "anchorForwardOffset": 8,
+          "anchorOffsetY": -8,
+          "coneRadius": 132,
+          "coneSpreadDeg": 60,
+          "coneInnerRadius": 6,
+          "angleMode": "horizontal-only"
+        },
+        "splash": {
+          "width": 150,
+          "height": 108,
+          "activeWindowMs": 450,
+          "flipUnlockMs": 530,
+          "damageTickMs": 90,
+          "damageStartMs": 100,
+          "tipOffset": 78,
+          "minHeight": 20,
+          "growDurationMs": 220,
+          "centerYFactor": 0.06,
+          "hitboxInflate": 2,
+          "remoteExplosionDelayMs": 500,
+          "remoteExplosionTipOffset": 78
+        }
+      },
+      "special": {
+        "aim": {
+          "kind": "round",
+          "radius": 245,
+          "defaultRange": 245,
+          "anchorForwardOffset": 0,
+          "anchorOffsetY": -6
+        },
+        "inferno": {
+          "durationMs": 5000,
+          "riseMs": 650,
+          "liftPx": 125,
+          "bobPx": 8,
+          "fireRingRadius": 215,
+          "firePulseMs": 120,
+          "explosionPulseMs": 260
+        }
+      },
+      "effects": {
+        "fireTrail": {
+          "intervalMs": 45,
+          "poolMax": 60,
+          "baseSizeMin": 5,
+          "baseSizeMax": 9,
+          "outerColor": 3221569,
+          "outerAlpha": 0.35,
+          "midColor": 12213538,
+          "midAlpha": 0.55,
+          "innerColorMin": 30,
+          "innerColorMax": 60,
+          "innerAlpha": 0.9,
+          "jitterMin": -3,
+          "jitterMax": 3,
+          "driftXMin": -12,
+          "driftXMax": 12,
+          "driftYMin": -18,
+          "driftYMax": -4,
+          "scaleTargetMin": 0.15,
+          "scaleTargetMax": 0.35,
+          "durationMinMs": 260,
+          "durationMaxMs": 420,
+          "spawnOffsetX": 14,
+          "spawnOffsetY": 8,
+          "spawnCountMin": 1,
+          "spawnCountMax": 2
+        }
+      }
+    },
+    "description": "A dark sorcerer who manipulates shadows.",
+    "unlockPrice": 280
+  },
+  "frame": {
+    "w": 250,
+    "h": 250
+  },
+  "duckFrame": [
+    1,
+    1
+  ],
+  "basicAction": "draven-splash",
+  "basicHitTypes": [
+    "basic"
+  ],
+  "specialHitTypes": [
+    "special"
+  ],
+  "attacks": {
+    "draven-splash": {
+      "character": "draven",
+      "actionFlow": {
+        "kind": "runtime-broadcast"
+      },
+      "attackType": "basic",
+      "runtime": {
+        "kind": "attached-rect"
+      },
+      "events": {
+        "onHitAction": {
+          "type": "draven-splash-explode",
+          "anchor": "target",
+          "offsetY": -12,
+          "ownerEcho": true
+        }
+      }
+    }
+  }
+}

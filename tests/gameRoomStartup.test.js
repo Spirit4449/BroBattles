@@ -63,7 +63,7 @@ async function setup(t, teamSize = 1) {
   }
   async function join(client) {
     let ack;
-    await client.receive('game:join', { matchId: 1341, ninjaCombatVersion: 1 }, (value) => { ack = value; });
+    await client.receive('game:join', { matchId: 1341, ninjaCombatVersion: 1, huntressCombatVersion: 2 }, (value) => { ack = value; });
     return ack;
   }
   async function ready(client) {

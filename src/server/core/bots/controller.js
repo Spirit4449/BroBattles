@@ -527,7 +527,7 @@ class BotController {
     const candidates = (context.graph.edges.get(current.id) || [])
       .filter((edge) => Math.sign(edge.direction) === direction &&
         !this.blockedEdges.has(edgeKey(edge, current.id)) &&
-        Math.abs(edge.takeoffX - p.x) <= 420 &&
+        Math.abs(edge.takeoffX - p.x) <= 120 &&
         (p.x - edge.takeoffX) * direction >= -8)
       .map((edge) => ({ edge, surface: context.graph.surfaces.find((surface) => surface.id === edge.to) }))
       .filter(({ surface }) => surface &&
@@ -558,7 +558,8 @@ class BotController {
     const radius = this.decision?.mode === 'loot' ? DEATH_DROP_PICKUP_RADIUS : POWERUP_PICKUP_RADIUS;
     const pickupTolerance = pickup ? Math.max(1, Math.sqrt(Math.max(0,
       radius ** 2 - (p.y - pickup.y) ** 2)) * 0.5) : 20;
-    const deadband = takeoff ? 3 : Math.min(20, pickupTolerance);
+    // A few pixels can change whether a jump clears a platform edge.
+    const deadband = takeoff ? 0.5 : Math.min(20, pickupTolerance);
     const stopping = speed * speed / (2 * movement.dragGround);
     const coasting = Math.sign(p.vx) === Math.sign(dx) && Math.abs(dx) <= stopping + deadband;
     const direction = coasting || Math.abs(dx) <= deadband ? 0 : Math.sign(dx);
@@ -569,7 +570,7 @@ class BotController {
     const p = this.player;
     if (this.approachEdge && p.grounded && !this.traversal && !this.maneuver) {
       const edge = this.approachEdge;
-      if (Math.abs(edge.takeoffX - p.x) <= 4 && Math.abs(p.vx || 0) < 12 && now >= (p._nextWallJump || 0)) {
+      if (Math.abs(edge.takeoffX - p.x) <= 1 && Math.abs(p.vx || 0) < 12 && now >= (p._nextWallJump || 0)) {
         const prepared = prepareTraversal(p, edge, this.room.geometry, mods, now, this.poisonY);
         this.approachEdge = null;
         if (!prepared) {

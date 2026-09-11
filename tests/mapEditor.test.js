@@ -4,13 +4,13 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const {clone,VARIANTS,MapHistory,validateDocument,validateMap,geometryFromMap,constrainPoint,resolvePowerupPoints}=require('../src/shared/mapDocument');
-const defaults=require('../src/shared/mapDefaults');
+const defaults=require('../src/shared/maps').mapDefaults;
 const {MapRepository}=require('../src/server/services/mapRepository');
 const {validateAssets}=require('../src/server/services/mapAssetValidation');
 const {allRows,snapMove,resizeRow,removeRows}=require('../src/editor/editorModel');
 const {spawnForParticipant,characterBody}=require('../src/shared/duelGeometry');
 const powerups=require('../src/server/core/gameRoom/powerupManager');
-const frameNames=Object.keys(require('../src/shared/characterFrames.json'));
+const frameNames=Object.keys(require("../src/shared/characters/index.js").characterFrames);
 function repository(t){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'bb-maps-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));return new MapRepository(dir);}
 
 test('all maps ship equal, independent variants with valid assets and safe spawns for every character',()=>{

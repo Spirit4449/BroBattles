@@ -1,8 +1,8 @@
 import { setThorgRageVisual } from "./rageVisual";
 // src/characters/thorg/thorg.js
 import socket from "../../socket";
-import { characterStats } from "../../lib/characterStats.js";
-import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
+import { characterStats } from "../../shared/characterStats.js";
+import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
 import { animations } from "./anim";
 import { executeDefaultAttack } from "../shared/attackFlow";
 import { performThorgFallAttack, THORG_FALL_DURATION_MS, changeDebugState } from "./attack";
@@ -15,11 +15,11 @@ import {
 
 // Single source of truth for this character's name/key
 const NAME = "thorg";
-const FALL = getResolvedCharacterAttackConfig(NAME, "fall");
+const SWEEP = getResolvedCharacterAttackConfig(NAME, "sweep");
 
 class Thorg extends CharacterEntityBase {
   static key = NAME;
-  static WEAPON_FORWARD_OFFSET = FALL.spriteForwardOffset;
+  static WEAPON_FORWARD_OFFSET = SWEEP.spriteForwardOffset;
   // Main texture key used for this character's sprite
   static textureKey = NAME;
 
@@ -296,12 +296,7 @@ class Thorg extends CharacterEntityBase {
     return true;
   }
 
-  static getPowerupMobilityModifier(effects = {}) {
-    if ((effects.thorgRage || 0) > 0) {
-      return { speedMult: 1.12, jumpMult: 1.12 };
-    }
-    return { speedMult: 1, jumpMult: 1 };
-  }
+
 
   static getEffectTickSounds() {
     return {

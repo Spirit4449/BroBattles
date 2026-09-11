@@ -1,38 +1,9 @@
+import { createAnimationBuilder } from '../shared/animationBuilder';
 export function animations(scene) {
   const NAME = "wizard";
   if (!scene?.textures?.exists(NAME)) return;
-  const tex = scene.textures.get(NAME);
-  const allNames = (tex && tex.getFrameNames && tex.getFrameNames()) || [];
-  if (!allNames.length) return;
+  const { make: ensureAnim, findFrames } = createAnimationBuilder(scene, NAME);
 
-  const findFrames = (candidates) => {
-    const matched = [];
-    for (const frame of allNames) {
-      const lower = frame.toLowerCase();
-      if (candidates.some((prefix) => lower.startsWith(prefix))) {
-        matched.push(frame);
-      }
-    }
-    matched.sort((a, b) => {
-      const ra = /([0-9]+)(?!.*[0-9])/.exec(a);
-      const rb = /([0-9]+)(?!.*[0-9])/.exec(b);
-      if (ra && rb) return Number(ra[1]) - Number(rb[1]);
-      return a.localeCompare(b);
-    });
-    return matched;
-  };
-
-  const ensureAnim = (key, prefixes, frameRate, repeat) => {
-    if (scene.anims.exists(key)) return;
-    const frames = findFrames(prefixes);
-    if (!frames.length) return;
-    scene.anims.create({
-      key,
-      frames: frames.map((f) => ({ key: NAME, frame: f })),
-      frameRate,
-      repeat,
-    });
-  };
   const ensureOrderedAttack = () => {
     if (scene.anims.exists(`${NAME}-throw`)) return;
     const frames = findFrames(["attack", "throw"]);

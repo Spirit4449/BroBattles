@@ -1,5 +1,5 @@
 import gameModesCatalog from "../shared/gameModes.catalog.json";
-import mapsCatalog from "../shared/maps.catalog.json";
+import { mapsCatalog as mapsCatalog } from "../shared/maps";
 
 const MODES = Array.isArray(gameModesCatalog?.modes)
   ? gameModesCatalog.modes

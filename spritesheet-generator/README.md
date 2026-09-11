@@ -82,7 +82,7 @@ The generated assets are compatible with the existing Bro Battles pattern that e
 
 This tool does not edit Bro Battles runtime files for you. You still need to manually register the new character in:
 
-- `src/lib/characterStats.js`
+- `src/shared/characters/<key>.json`
 - `src/characters/manifest.js`
 
 And add the runtime character modules under:

@@ -1,6 +1,6 @@
 import { setThorgRageVisual } from "./rageVisual";
 import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState";
-import { getResolvedCharacterSpecialConfig } from "../../lib/characterTuning.js";
+import { getResolvedCharacterSpecialConfig } from "../../shared/characterTuning.js";
 
 const THORG_SPECIAL = getResolvedCharacterSpecialConfig("thorg");
 const THORG_RAGE_DURATION_MS = THORG_SPECIAL.rageDurationMs;

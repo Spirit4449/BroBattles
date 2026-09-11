@@ -28,7 +28,8 @@
         "verticalScrolling": false,
         "aiBots": true,
         "economy": false,
-        "modeState": false
+        "modeState": false,
+        "suddenDeath": true
       },
       "variants": [
         {
@@ -182,7 +183,8 @@
         "verticalScrolling": false,
         "aiBots": true,
         "economy": false,
-        "modeState": true
+        "modeState": true,
+        "suddenDeath": false
       },
       "variants": [
         {

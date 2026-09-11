@@ -1,5 +1,5 @@
 const gameModesCatalog = require("../../shared/gameModes.catalog.json");
-const mapsCatalog = require("../../shared/maps.catalog.json");
+const mapsCatalog = require("../../shared/maps").mapsCatalog;
 
 const MODES = Array.isArray(gameModesCatalog?.modes) ? gameModesCatalog.modes : [];
 function allMaps() { return require("../services/mapRepository").mapRepository.list().map(({document}) => ({...document.metadata,id:document.id,label:document.label})); }

@@ -1,4 +1,4 @@
-import { PICKUP_DELAY_MS } from "../shared/pickupTiming";
+import { PICKUP_DELAY_MS } from "../shared/powerups";
 // powerups/powerupRenderer.js
 import { RENDER_LAYERS } from "../gameScene/renderLayers";
 import { createDeathLootEffects, handleDeathLootContact } from "./deathLootEffects";
@@ -21,11 +21,8 @@ export function createPowerupRenderer({
   socket,
   getMapObjects,
   getDead,
-  setPowerupMobility,
-  setLocalPowerupInvisible,
   applyCharacterPowerupFx,
   drawCharacterPowerupAura,
-  getCharacterPowerupMobilityModifier,
 }) {
   const auraBubbleStates = new Map();
   const deathLootFx = createDeathLootEffects(scene, Phaser);
@@ -1196,45 +1193,8 @@ export function createPowerupRenderer({
     const gameData = getGameData();
     const latestPlayerEffects = getLatestPlayerEffects() || {};
     const me = latestPlayerEffects[username] || {};
-    const liveBubbleKeys = new Set([username]);
-
-    const baseSpeedMult = (me.rage || 0) > 0 ? 1.25 : 1;
-    const baseJumpMult = (me.gravityBoots || 0) > 0 ? 1.5 : 1;
-    const effectSpeedMult =
-      (me.stun || 0) > 0
-        ? 0
-        : (me.freeze || 0) > 0
-          ? 0.45
-          : (me.gloopHookSlow || 0) > 0
-            ? 0.5
-            : (me.gloopSlimeSlow || 0) > 0
-              ? 0.7
-              : (me.slow || 0) > 0
-                ? 0.45
-                : 1;
-    const effectJumpMult =
-      (me.stun || 0) > 0
-        ? 0
-        : (me.freeze || 0) > 0
-          ? 0.6
-          : (me.gloopHookSlow || 0) > 0
-            ? 0.5
-            : (me.gloopSlimeSlow || 0) > 0
-              ? 0.7
-              : (me.slow || 0) > 0
-                ? 0.7
-                : 1;
-    const charMobility = getCharacterPowerupMobilityModifier(
-      gameData?.yourCharacter,
-      me,
-    );
-    const speedMult =
-      baseSpeedMult * effectSpeedMult * (charMobility?.speedMult || 1);
-    const jumpMult =
-      baseJumpMult * effectJumpMult * (charMobility?.jumpMult || 1);
-    setPowerupMobility(speedMult, jumpMult);
     const localInvisible = (me.invisibility || 0) > 0;
-    setLocalPowerupInvisible?.(localInvisible);
+    const liveBubbleKeys = new Set([username]);
 
     const drawAura = (spr, fx) => {
       if (!spr || !fx) return;

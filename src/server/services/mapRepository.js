@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
-const defaults = require('../../shared/mapDefaults');
+const defaults = require('../../shared/maps').mapDefaults;
 const { clone, variantKey, validateDocument } = require('../../shared/mapDocument');
 const revisionOf = doc => createHash('sha256').update(JSON.stringify(doc)).digest('hex');
 class MapRepository {

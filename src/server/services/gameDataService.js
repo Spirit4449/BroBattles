@@ -97,7 +97,7 @@ async function buildGameDataForMatch({
     getHealth,
     getDamage,
     getSpecialDamage,
-  } = require("../../lib/characterStats.js");
+  } = require("../../shared/characterStats.js");
 
   const gameData = {
     matchId: Number(matchId),

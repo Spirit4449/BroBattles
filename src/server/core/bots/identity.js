@@ -2,7 +2,7 @@ const { randomUUID, randomInt } = require("crypto");
 const {
   getAllCharacters,
   LEVEL_CAP,
-} = require("../../../lib/characterStats.js");
+} = require("../../../shared/characterStats.js");
 const { difficultyForTrophies } = require("./config");
 const { createRandom } = require("./random");
 

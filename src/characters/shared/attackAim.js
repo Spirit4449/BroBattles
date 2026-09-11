@@ -6,7 +6,7 @@ const {
   getResolvedCharacterSpecialAimConfig,
   getResolvedCharacterAttackConfig,
   getResolvedCharacterSpecialConfig,
-} = require("../../lib/characterTuning.js");
+} = require("../../shared/characterTuning.js");
 
 const ATTACK_AIM_HOLD_ACTIVATE_MS = 140;
 const ATTACK_AIM_DRAG_ACTIVATE_PX = 16;

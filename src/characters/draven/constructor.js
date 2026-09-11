@@ -1,7 +1,7 @@
 // src/characters/draven/draven.js
 import socket from "../../socket";
-import { characterStats } from "../../lib/characterStats.js";
-import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
+import { characterStats } from "../../shared/characterStats.js";
+import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
 import { animations } from "./anim";
 import DravenEffects from "./effects";
 import {

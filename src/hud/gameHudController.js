@@ -9,7 +9,7 @@ import {
   selectionToLegacyMode,
 } from "../lib/gameSelectionCatalog.js";
 import { buildCharacterSkinBodyUrl } from "../lib/skinAssets.js";
-import { LEVEL_CAP } from "../lib/characterStats.js";
+import { LEVEL_CAP } from "../shared/characterStats.js";
 
 function legacyModeToVariantId(mode) {
   const numeric = Number(mode);

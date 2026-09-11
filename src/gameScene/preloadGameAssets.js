@@ -1,3 +1,4 @@
+import { preloadLegacyMapAssets } from '../maps/legacy/preloadAssets';
 // gameScene/preloadGameAssets.js
 import { preloadTerrainAudio } from './movementAudio';
 
@@ -12,112 +13,13 @@ export function preloadGameAssets({
   // Character assets (preload all registered characters)
   preloadAllCharacters(scene, staticPath);
 
-  loadImage("tiles-image", `${staticPath}/map.webp`);
-  scene.load.tilemapTiledJSON("tiles", `${staticPath}/tilesheet.json`);
-  loadImage("lushy-base", `${staticPath}/lushy/base.webp`);
-  loadImage("lushy-platform", `${staticPath}/lushy/largePlatform.webp`);
-  loadImage(
-    "lushy-side-platform",
-    `${staticPath}/lushy/sidePlatform.webp`,
-  );
-  loadImage(
-    "mangrove-tiny-platform",
-    `${staticPath}/mangrove/lobbyPlatform.webp`,
-  );
-  loadImage(
-    "mangrove-lobby-platform",
-    `${staticPath}/mangrove/lobbyPlatform.webp`,
-  );
-  loadImage(
-    "mangrove-base-left",
-    `${staticPath}/mangrove/baseLeft.webp`,
-  );
-  loadImage(
-    "mangrove-base-middle",
-    `${staticPath}/mangrove/baseMiddle.webp`,
-  );
-  loadImage(
-    "mangrove-base-right",
-    `${staticPath}/mangrove/baseRight.webp`,
-  );
-  loadImage("mangrove-base-top", `${staticPath}/mangrove/baseTop.webp`);
-  loadImage(
-    "serenity-large-platform",
-    `${staticPath}/serenity/largePlatform.webp`,
-  );
-  loadImage(
-    "serenity-side-platform",
-    `${staticPath}/serenity/sidePlatform.webp`,
-  );
-  loadImage(
-    "serenity-log-platform",
-    `${staticPath}/serenity/logPlatform.webp`,
-  );
-  loadImage(
-    "serenity-small-rock",
-    `${staticPath}/serenity/smallRock.webp`,
-  );
+  if (!scene._mapAssetKeys?.size) preloadLegacyMapAssets(scene, staticPath);
   loadImage("deathdrop-coin", `${staticPath}/coin.webp`);
   loadImage("deathdrop-gem", `${staticPath}/gem.webp`);
   loadImage("spectate-icon", `${staticPath}/spectate.webp`);
   for (let i = 1; i <= 3; i++) {
     loadImage(`tombstone-${i}`, `${staticPath}/tombstone-${i}.webp`);
   }
-  loadImage("bank-bust-vault", `${staticPath}/bank-bust/vault.webp`);
-  loadImage("bank-bust-base", `${staticPath}/bank-bust/base.webp`);
-  loadImage("bank-bust-topcase", `${staticPath}/bank-bust/topcase.webp`);
-  loadImage(
-    "bank-bust-staircase",
-    `${staticPath}/bank-bust/staircase.webp`,
-  );
-  loadImage("bank-bust-middle", `${staticPath}/bank-bust/middle.webp`);
-  loadImage(
-    "bank-bust-middlebottom",
-    `${staticPath}/bank-bust/middlebottom.webp`,
-  );
-  loadImage(
-    "bank-bust-middledetail",
-    `${staticPath}/bank-bust/middledetail.webp`,
-  );
-  loadImage(
-    "bank-bust-longplatform",
-    `${staticPath}/bank-bust/longplatform.webp`,
-  );
-  loadImage(
-    "bank-bust-tallplatform",
-    `${staticPath}/bank-bust/tallplatform.webp`,
-  );
-  loadImage(
-    "bank-bust-bigblock",
-    `${staticPath}/bank-bust/bigblock.webp`,
-  );
-  loadImage("bank-bust-2x2", `${staticPath}/bank-bust/2x2square.webp`);
-  loadImage("bank-bust-3x3", `${staticPath}/bank-bust/3x3square.webp`);
-  loadImage("bank-bust-abyss", `${staticPath}/bank-bust/abyss.webp`);
-  loadImage("bank-bust-pipe", `${staticPath}/bank-bust/pipe.webp`);
-  loadImage(
-    "bank-bust-turret-base",
-    `${staticPath}/bank-bust/mount.webp`,
-  );
-  loadImage(
-    "bank-bust-turret-head",
-    `${staticPath}/bank-bust/barrel.webp`,
-  );
-  loadImage("bank-bust-bullet", `${staticPath}/bank-bust/bullet.webp`);
-  loadImage(
-    "bank-bust-wall-slot",
-    `${staticPath}/bank-bust/not-built.png`,
-  );
-  loadImage("bank-bust-wall-built", `${staticPath}/bank-bust/built.png`);
-  loadImage(
-    "bank-bust-mine-neutral",
-    `${staticPath}/bank-bust/mine.webp`,
-  );
-  loadImage(
-    "bank-bust-mine-claimed",
-    `${staticPath}/bank-bust/mine-claimed.webp`,
-  );
-
   // Level-balanced movement SFX and small randomized footstep set.
   preloadTerrainAudio(scene, staticPath);
   scene.load.audio("sfx-jump", `${staticPath}/movement/jump.mp3`);
@@ -156,29 +58,6 @@ export function preloadGameAssets({
     `${staticPath}/draven/explosion.webp`,
     `${staticPath}/draven/explosion.json`,
   );
-  // Allow a map-specific turret shoot sound to be used if present (preferred),
-  // otherwise fall back to the shared damage sound.
-  scene.load.audio("sfx-bankbust-turret-shoot", [
-    `${staticPath}/bank-bust/turret-shoot.mp3`,
-    `${staticPath}/damage.mp3`,
-  ]);
-  scene.load.audio(
-    "sfx-bankbust-turret-claim",
-    `${staticPath}/bank-bust/turret-claim.mp3`,
-  );
-  scene.load.audio(
-    "sfx-bankbust-mine-collect",
-    `${staticPath}/bank-bust/collect.mp3`,
-  );
-  scene.load.audio(
-    "sfx-bankbust-mine-claim",
-    `${staticPath}/ui-sound/ready.mp3`,
-  );
-  scene.load.audio(
-    "sfx-bankbust-wall-claim",
-    `${staticPath}/bank-bust/wall-claim.mp3`,
-  );
-
   // Music (non-blocking BGM: handled via HTMLAudio at runtime)
   scene.load.audio("win", `${staticPath}/win.mp3`);
   scene.load.audio("lose", `${staticPath}/lose.mp3`);

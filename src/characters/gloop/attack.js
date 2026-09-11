@@ -1,6 +1,6 @@
 import { advanceSlimeball, slimeLaunch } from "../../shared/gloopProjectile";
 import { createSlimeVisual } from "./slimeVisual";
-import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
+import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
@@ -174,6 +174,14 @@ export function spawnGloopSlimeballVisual(
         Number(SLIMEBALL.bounceDampingX) ||
         0.92,
     ),
+    successiveBounceMultiplier: Math.max(
+      0,
+      Number(
+        payload.successiveBounceMultiplier ??
+          SLIMEBALL.successiveBounceMultiplier ??
+          0.85,
+      ),
+    ),
     minBounceSpeed: Math.max(
       0,
       Number(payload.minBounceSpeed) || Number(SLIMEBALL.minBounceSpeed) || 0,
@@ -290,6 +298,8 @@ export function performGloopSlimeball(instance, attackContext = null) {
     maxBounces: Number(SLIMEBALL.maxBounces) || 2,
     bounceDampingY: Number(SLIMEBALL.bounceDampingY) || 0.74,
     bounceDampingX: Number(SLIMEBALL.bounceDampingX) || 0.92,
+    successiveBounceMultiplier:
+      Number(SLIMEBALL.successiveBounceMultiplier) || 0.85,
     minBounceSpeed: Number(SLIMEBALL.minBounceSpeed) || 0,
     maxLifetimeMs: Number(SLIMEBALL.maxLifetimeMs) || 4200,
     floorY:

@@ -1,9 +1,9 @@
-import { predictNinja } from './characters/ninja/network';
+import { resolveWallContact, applyWallSlide } from './players/wallMovement';
+import { predictCharacterSpecial } from './characters/networkRegistry';
 // player.js
 // NOTE: Refactored to remove circular dependency on game.js.
 // socket now comes from standalone socket.js and opponentPlayers are passed into createPlayer.
 import socket from "./socket";
-import { predictHuntressShot } from './characters/huntress/network';
 import { getTerrainSteps, footstepVolume, terrainLandingSound, shouldPlayLandingSound } from './gameScene/movementAudio';
 import { drawSuperChargeBar, resetSuperBarAnimation } from "./gameScene/superBarRenderer";
 import { drawHealthBar, resetHealthBarAnimation } from "./gameScene/healthBarRenderer";
@@ -54,7 +54,7 @@ import {
   toLogicalAnimation,
   playSpriteAnimation,
 } from "./characters/shared/animationState.js";
-import { getResolvedCharacterBodyConfig } from "./lib/characterTuning.js";
+import { getResolvedCharacterBodyConfig } from "./shared/characterTuning.js";
 import { createAttackAimReticleController } from "./gameScene/attackAimReticle";
 import { createCombatMouseController } from "./gameScene/combatMouse";
 import { createMobileControlsController } from "./gameScene/mobileControls";
@@ -71,7 +71,7 @@ import { noteClientActionSent } from "./lib/netTestLogger.js";
 import {
   playDuckTransitionSound,
   playDuckBlockSound,
-} from "./gameScene/duckAudio.js";
+} from "./gameScene/movementAudio.js";
 // Globals
 let player;
 let cursors;
@@ -1464,9 +1464,9 @@ function fireSpecialAttack(context = null) {
   } catch (_) {}
   noteClientActionSent("special", { type: "special" });
   const specialRequest = { aim: serializeAimContext(context) };
-  socket.emit("game:special", currentCharacter === 'huntress'
-    ? predictHuntressShot(player.scene, player, username, specialRequest, true)
-    : currentCharacter === 'ninja' ? predictNinja(player.scene, player, username, specialRequest, true) : specialRequest);
+  socket.emit("game:special", predictCharacterSpecial(
+    currentCharacter, player?.scene, player, username, specialRequest,
+  ));
 }
 
 function drawSuperBar(x, y) {
@@ -1624,13 +1624,8 @@ export function handlePlayerMovement(scene) {
   const wallKickFull = MOVEMENT_PHYSICS.wallKickFull;
   const wallKickVerticalMult =
     Number(MOVEMENT_PHYSICS.wallKickVerticalMult) || 1;
-  const wallJumpHorizontalGracePx =
-    MOVEMENT_PHYSICS.wallJumpHorizontalGracePx ?? 2;
   const wallSlideReentryDelayMs =
     MOVEMENT_PHYSICS.wallSlideReentryDelayMs || 220;
-  const wallSlideSnapDistance = MOVEMENT_PHYSICS.wallSlideSnapDistance;
-  const wallSlideVerticalPadding = 6;
-  const wallJumpPressBufferMs = 120;
   // - fallGravityFactor: gravity multiplier while falling (fast-fall). 1.0 = off.
   const fallGravityFactor = MOVEMENT_PHYSICS.fallGravityFactor;
   const shockwaveActive = (player._shockwaveUntil || 0) > Date.now();
@@ -1669,102 +1664,14 @@ export function handlePlayerMovement(scene) {
   let upKeyFreshPress = directionalUpFreshPress || jumpButtonFreshPress;
   let ducking = false;
 
-  const touchingLeftNow =
-    !!player.body.touching.left || !!player.body.blocked.left;
-  const touchingRightNow =
-    !!player.body.touching.right || !!player.body.blocked.right;
-  const playerBodyLeft = player.body.x;
-  const playerBodyRight = player.body.x + player.body.width;
-  const playerBodyTop = player.body.y;
-  const playerBodyBottom = player.body.y + player.body.height;
-  let nearLeftWall = false;
-  let nearRightWall = false;
-  let leftWallGap = Number.POSITIVE_INFINITY;
-  let rightWallGap = Number.POSITIVE_INFINITY;
-  const wallObjects = scene._mapObjects || [];
-  if (Array.isArray(wallObjects)) {
-    for (const obj of wallObjects) {
-      const body = obj?.body;
-      if (!body || body === player.body || body.enable === false) continue;
-      const bodyWidth = Number(body.width) || 0;
-      const bodyHeight = Number(body.height) || 0;
-      if (bodyWidth <= 0 || bodyHeight <= 0) continue;
-
-      const objLeft = Number(body.x) || 0;
-      const objRight = objLeft + bodyWidth;
-      const objTop = Number(body.y) || 0;
-      const objBottom = objTop + bodyHeight;
-      const verticallyAligned =
-        playerBodyBottom > objTop + wallSlideVerticalPadding &&
-        playerBodyTop < objBottom - wallSlideVerticalPadding;
-      if (!verticallyAligned) continue;
-
-      if (body.checkCollision?.right !== false && playerBodyLeft >= objRight) {
-        const gap = playerBodyLeft - objRight;
-        leftWallGap = Math.min(leftWallGap, gap);
-        if (gap <= wallSlideSnapDistance) {
-          nearLeftWall = true;
-        }
-      }
-      if (body.checkCollision?.left !== false && objLeft >= playerBodyRight) {
-        const gap = objLeft - playerBodyRight;
-        rightWallGap = Math.min(rightWallGap, gap);
-        if (gap <= wallSlideSnapDistance) {
-          nearRightWall = true;
-        }
-      }
-      if (nearLeftWall && nearRightWall) break;
-    }
-  }
-  const nowWallTs = Date.now();
-
-  // A fresh jump press detaches; an already-held Up input brakes the slide.
-  const wallBrakeHeld = (cursors.up.isDown || keyW.isDown) &&
-    !player.body.touching.down &&
-    (touchingLeftNow || touchingRightNow || nearLeftWall || nearRightWall);
-  upKeyFreshPress = jumpButtonFreshPress || directionalUpFreshPress;
-  if (upKeyFreshPress) player._lastJumpPressTime = nowWallTs;
-  const bufferedJumpPressActive =
-    nowWallTs - (player._lastJumpPressTime || 0) <= wallJumpPressBufferMs;
-  const horizontalKickReachPx =
-    wallSlideSnapDistance +
-    (bufferedJumpPressActive ? wallJumpHorizontalGracePx : 0);
-  const bufferedNearLeftWall =
-    Number.isFinite(leftWallGap) && leftWallGap <= horizontalKickReachPx;
-  const bufferedNearRightWall =
-    Number.isFinite(rightWallGap) && rightWallGap <= horizontalKickReachPx;
-  const bufferedKickSide =
-    bufferedNearLeftWall && !bufferedNearRightWall
-      ? "left"
-      : bufferedNearRightWall && !bufferedNearLeftWall
-        ? "right"
-        : bufferedNearLeftWall && bufferedNearRightWall
-          ? leftWallGap <= rightWallGap
-            ? "left"
-            : "right"
-          : null;
-  const wallSlideLeft = touchingLeftNow || nearLeftWall;
-  const wallSlideRight = touchingRightNow || nearRightWall;
-  const wallSlideContact = wallSlideLeft || wallSlideRight;
-  const wallSide = touchingLeftNow
-    ? "left"
-    : touchingRightNow
-      ? "right"
-      : nearLeftWall
-        ? "left"
-        : nearRightWall
-          ? "right"
-          : null;
-  // Buffered presses still work, but remembered contact cannot extend jump reach.
-  const effectiveWallSide = wallSide || bufferedKickSide;
-  const movingAwayFromWall =
-    (wallSide === "left" && rightKey && !leftKey) ||
-    (wallSide === "right" && leftKey && !rightKey);
-  if (movingAwayFromWall) {
-    player._wallSlideSuppressedUntil = nowWallTs + wallSlideReentryDelayMs;
-  }
-  const wallSlideSuppressed =
-    (player._wallSlideSuppressedUntil || 0) > nowWallTs;
+  const { wallSide, wallSlideContact, effectiveWallSide,
+    bufferedJumpPressActive, wallSlideSuppressed, wallBrakeHeld } = resolveWallContact(
+    player, scene._mapObjects || [], {
+      left: leftKey, right: rightKey,
+      upHeld: cursors.up.isDown || keyW.isDown,
+      jumpPressed: upKeyFreshPress,
+    },
+  );
   const nowTs = Date.now();
   const movementLockedByAbility = (player?._movementLockedUntil || 0) > nowTs;
   const movementLockedByExternal =
@@ -2142,33 +2049,9 @@ export function handlePlayerMovement(scene) {
       if (t >= 1) player._jumpLaunch = null;
     }
   }
-  const wallAttachNow = Date.now();
-  const wallAttachEligible =
-    !dead &&
-    !movementLocked &&
-    !player.body.touching.down &&
-    wallSlideContact &&
-    (player._wallSlideSuppressedUntil || 0) <= wallAttachNow;
-  if (!wallAttachEligible) {
-    player._wallAttachSide = null;
-    player._wallAttachStartedAt = null;
-  } else if (player._wallAttachSide !== wallSide) {
-    player._wallAttachSide = wallSide;
-    player._wallAttachStartedAt = wallAttachNow;
-  }
-  const isWallSliding = wallAttachEligible &&
-    wallAttachNow - player._wallAttachStartedAt >= MOVEMENT_PHYSICS.wallSlideAttachDelayMs;
-  if (isWallSliding) {
-    // Keep horizontal attachment while upward momentum runs its natural course.
-    player.setAccelerationX(0);
-    player.setVelocityX(wallSide === "left"
-      ? -MOVEMENT_PHYSICS.wallSlideAttachSpeed
-      : MOVEMENT_PHYSICS.wallSlideAttachSpeed);
-    if (player.body.velocity.y >= 0) {
-      player.setVelocityY(Math.min(player.body.velocity.y,
-        wallBrakeHeld ? MOVEMENT_PHYSICS.wallSlideBrakeFallSpeed : wallSlideMaxFallSpeed));
-    }
-  }
+  const isWallSliding = applyWallSlide(player, {
+    dead, movementLocked, wallSlideContact, wallSide, wallBrakeHeld,
+  });
   const wallSlideSpeedRatio = Phaser.Math.Clamp(
     (Number(player.body.velocity.y) || 0) / wallSlideMaxFallSpeed,
     0,

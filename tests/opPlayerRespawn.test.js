@@ -7,7 +7,7 @@ const babel = require('@babel/core');
 function loadOpPlayer() {
   const exports = {};
   const code = babel.transformSync(
-    fs.readFileSync(require.resolve('../src/opPlayer.js'), 'utf8'),
+    fs.readFileSync(require.resolve('../src/players/RemotePlayer.js'), 'utf8'),
     {
       babelrc: false,
       configFile: false,
@@ -16,18 +16,18 @@ function loadOpPlayer() {
   ).code;
   const noop = () => {};
   const modules = {
-    './characters': {
+    '../characters': {
       getTextureKey: noop,
       resolveAnimKey: () => 'idle',
       getStats: noop,
       getEffectsClass: () => null,
     },
-    './effects': new Proxy({}, { get: () => noop }),
-    './gameScene/healthBarRenderer': {
+    '../effects': new Proxy({}, { get: () => noop }),
+    '../gameScene/healthBarRenderer': {
       drawHealthBar: noop,
       resetHealthBarAnimation: noop,
     },
-    './gameScene/superBarRenderer': {
+    '../gameScene/superBarRenderer': {
       drawSuperChargeBar: noop,
       resetSuperBarAnimation: noop,
     },

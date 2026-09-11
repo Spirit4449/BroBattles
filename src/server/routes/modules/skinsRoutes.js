@@ -61,6 +61,7 @@ function registerSkinsRoutes({ app, db, requireCurrentUser, shopService }) {
         .trim()
         .toLowerCase();
       const skinId = String(req.body?.skinId || "").trim();
+      const activateCharacter = req.body?.activateCharacter === true;
       if (!character || !skinId) {
         return res
           .status(400)
@@ -86,14 +87,39 @@ function registerSkinsRoutes({ app, db, requireCurrentUser, shopService }) {
           .json({ success: false, error: "Skin is not unlocked" });
       }
 
-      const activateCharacter = req.body?.activateCharacter === true;
+      if (activateCharacter) {
+        const statusRows = await db.runQuery(
+          "SELECT status FROM users WHERE user_id = ? LIMIT 1",
+          [user.user_id],
+        );
+        if (
+          String(statusRows?.[0]?.status || "").trim().toLowerCase() ===
+          "ready"
+        ) {
+          return res.status(409).json({
+            success: false,
+            error: "Unready before changing your character or skin.",
+          });
+        }
+      }
+
       let savedMap;
       if (typeof db.withTransaction === "function") {
         savedMap = await db.withTransaction(async (_conn, q) => {
           const rows = await q(
-            "SELECT selected_skin_id_by_char FROM users WHERE user_id = ? FOR UPDATE",
+            "SELECT selected_skin_id_by_char, status FROM users WHERE user_id = ? FOR UPDATE",
             [user.user_id],
           );
+          if (
+            activateCharacter &&
+            String(rows?.[0]?.status || "").trim().toLowerCase() === "ready"
+          ) {
+            const readyError = new Error(
+              "Unready before changing your character or skin.",
+            );
+            readyError.statusCode = 409;
+            throw readyError;
+          }
           const nextMap = normalizeSelectedSkinMap(
             rows?.[0]?.selected_skin_id_by_char,
           );
@@ -134,6 +160,12 @@ function registerSkinsRoutes({ app, db, requireCurrentUser, shopService }) {
         activeCharacter: activateCharacter ? character : user.char_class,
       });
     } catch (error) {
+      if (Number(error?.statusCode) === 409) {
+        return res.status(409).json({
+          success: false,
+          error: error.message,
+        });
+      }
       console.error("[skins] /skins/select error", error);
       return res
         .status(500)

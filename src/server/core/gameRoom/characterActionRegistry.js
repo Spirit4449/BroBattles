@@ -1,5 +1,5 @@
 const { slimeLaunch } = require("../../../shared/gloopProjectile");
-const { getResolvedCharacterAttackConfig } = require("../../../lib/characterTuning");
+const { getResolvedCharacterAttackConfig } = require("../../../shared/characterTuning.js");
 const { participantId } = require('./participants');
 const attackRuntimeManager = require("./attackRuntimeManager");
 const { getResolvedAttackDescriptor } = require("./attackDescriptorResolver");

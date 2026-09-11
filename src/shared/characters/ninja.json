@@ -1,0 +1,122 @@
+{
+  "key": "ninja",
+  "stats": {
+    "baseHealth": 6000,
+    "attackDescription": "Unleashes a shuriken that boomerangs back.",
+    "baseDamage": 1200,
+    "ammoCooldownMs": 200,
+    "ammoReloadMs": 1000,
+    "ammoCapacity": 1,
+    "specialDescription": "Releases a staggered swarm of returning shurikens.",
+    "specialBaseDamage": 2000,
+    "specialChargeHits": 6,
+    "specialChargePerHit": 0.25,
+    "spriteScale": 0.9,
+    "body": {
+      "widthShrink": 42,
+      "heightShrink": 15,
+      "offsetXFromHalf": 0,
+      "offsetY": 10
+    },
+    "tuning": {
+      "attack": {
+        "aim": {
+          "kind": "line",
+          "attackKey": "returningShuriken",
+          "defaultRange": 500,
+          "anchorForwardOffset": 30,
+          "anchorOffsetY": -8,
+          "reticleThickness": 18,
+          "angleMode": "free"
+        },
+        "returningShuriken": {
+          "rotationSpeed": 2000,
+          "forwardDistance": 500,
+          "arcHeight": 160,
+          "outwardDuration": 380,
+          "returnSpeed": 900,
+          "scale": 0.1,
+          "collisionSizeScale": 0.52,
+          "collisionRadiusScale": 0.26,
+          "collisionRadius": 18,
+          "hoverDurationMs": 100,
+          "returnAcceleration": 800,
+          "returnStartSpeedFactor": 0.08,
+          "maxLifetimeMs": 7000,
+          "hitCooldownMs": 0,
+          "endYOffset": 0,
+          "ctrl1YOffset": 20,
+          "ctrl2YOffset": -40,
+          "hitArmMs": 60
+        }
+      },
+      "special": {
+        "aim": {
+          "kind": "line",
+          "specialKey": "swarm",
+          "defaultRange": 430,
+          "anchorForwardOffset": 34,
+          "anchorOffsetY": -10,
+          "reticleThickness": 124,
+          "angleMode": "horizontal-only"
+        },
+        "swarm": {
+          "count": 15,
+          "releaseMs": 36,
+          "lockPaddingMs": 180,
+          "damage": 300,
+          "yOffsetPerShard": 5.5,
+          "fanStrengthPerShard": 14,
+          "spawnForwardBase": 28,
+          "spawnForwardPerShard": 1.6,
+          "spawnYBase": -12,
+          "scale": 0.135,
+          "glowScale": 1.35,
+          "rotationSpeedBase": 2200,
+          "rotationSpeedPerShard": 35,
+          "forwardDistanceBase": 440,
+          "forwardDistancePerShard": 6,
+          "outwardDurationBase": 330,
+          "outwardDurationPerShard": 8,
+          "returnSpeed": 960,
+          "hitCooldownMs": 320,
+          "ctrl1YOffsetBase": 16,
+          "ctrl1YOffsetScale": 0.25,
+          "ctrl2YOffsetBase": 52,
+          "ctrl2YOffsetScale": 0.45,
+          "maxLifetimeMs": 5200
+        }
+      }
+    },
+    "description": "A swift and agile fighter.",
+    "free": true
+  },
+  "frame": {
+    "w": 72,
+    "h": 72
+  },
+  "duckFrame": [
+    1,
+    3
+  ],
+  "basicAction": "ninja-shuriken",
+  "basicHitTypes": [
+    "basic"
+  ],
+  "specialHitTypes": [
+    "special",
+    "ninja-special-swarm"
+  ],
+  "attacks": {
+    "ninja-shuriken": {
+      "character": "ninja",
+      "actionFlow": {
+        "kind": "runtime-broadcast"
+      },
+      "attackType": "basic",
+      "runtime": {
+        "kind": "returning-projectile"
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-const { getAllCharacters } = require("../../lib/characterStats");
+const { getAllCharacters } = require("../../shared/characterStats.js");
 
 const partySlots = new Map();
 const VALID_CHARACTERS = new Set(getAllCharacters());

@@ -1,5 +1,5 @@
 const bcrypt = require("bcrypt");
-const { getAllCharacters } = require("../../../lib/characterStats");
+const { getAllCharacters } = require("../../../shared/characterStats.js");
 const {
   syncProfileIconOwnershipForUser,
 } = require("../../helpers/profileIconOwnership");

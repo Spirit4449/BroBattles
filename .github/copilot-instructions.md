@@ -9,7 +9,7 @@ This project is a browser game built with Phaser (client) and Express + Socket.I
 - Production build: `npm run build`
 - Production start: `npm start`
 - Debug production bundle with maps: `npm run sourcemap`
-- Automated tests: none configured right now (do not assume a test runner exists)
+- Automated tests: `npm test` (Node test runner); content contracts: `npm run validate:content`. Focused suites are listed in `package.json`.
 - Do not run npm run build unless you have worked through many files and spent lots of time on a task.
 
 ## Environment and runtime
@@ -56,7 +56,7 @@ This project is a browser game built with Phaser (client) and Express + Socket.I
 ## Client patterns to follow
 
 - Always POST `/status` first to create/identify the user, then call `ensureSocketConnected()` from `src/socket.js` before relying on socket events.
-- Lobby/party UI lives in `src/index.js` + `src/party.js`; keep DOM IDs/classes stable (`.character-slot`, `#matchmaking-overlay`, etc.). Use `renderPartyMembers()` and `initializeModeDropdown()` to keep UI and DB in sync.
+- Lobby/party entry points are `src/index.js` + `src/party.js`, with feature controllers under `src/lobby/` and chat under `src/chat/`; keep DOM IDs/classes stable (`.character-slot`, `#matchmaking-overlay`, etc.). Use `renderPartyMembers()` and `initializeModeDropdown()` to keep UI and DB in sync.
 - Game flow: `src/game.js` fetches `/gamedata` then joins via `game:join`. Interpolate positions using the server’s `game:snapshot` and `tMono` timeline; do not snap remote sprites to network origins.
 
 ## Server patterns to follow
@@ -71,7 +71,7 @@ This project is a browser game built with Phaser (client) and Express + Socket.I
 - Mode/team sizes: team size S derives from “mode” (1→1v1, 2→2v2, 3→3v3). UI must prevent selecting a mode smaller than current members (`/party-members` check).
 - Character changes: emit `char-change` with `{ partyId, charClass }`; server validates, updates `users.char_class`, then re-emits roster.
 - Redirects: `/game/:matchid` serves `game.html`; client reads matchId from path. If `/status` reports `live_match_id`, redirect to the live game.
-- Keep powerup config identifiers aligned between client and server implementations to avoid desync.
+- Powerup identity, timing and asset mappings derive from `src/shared/powerups.catalog.json`; do not duplicate those tables. Character definitions live in `src/shared/characters/`. See `docs/CONTRIBUTING.md` for extension steps.
 
 Keep edits aligned with these contracts and file locations; when changing a public event or route, update both server emit/handlers and the corresponding client listeners.
 

@@ -15,7 +15,7 @@ client-controlled, while combat validation, match state, and bots run server-sid
 Primary authority boundaries:
 
 - Authoritative: server game room state in src/server/core/gameRoom.js and helpers.
-- Predictive/visual: client interpolation and VFX timing in src/match/snapshotBuffer.js, src/gameScene/networkInterpolation.js, src/match/matchCoordinator.js.
+- Predictive/visual: client interpolation and VFX timing in src/match/snapshotBuffer.js, src/match/matchCoordinator.js.
 
 ## 2) Main files and responsibilities
 

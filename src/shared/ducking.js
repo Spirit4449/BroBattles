@@ -1,11 +1,4 @@
-const DUCK_FRAME_CELLS = Object.freeze({
-  draven: [1, 1],
-  gloop: [8, 2],
-  ninja: [1, 3],
-  huntress: [5, 2],
-  wizard: [3, 7],
-  thorg: [4, 4],
-});
+const { duckFrameCells: DUCK_FRAME_CELLS } = require('./characters');
 
 const DUCK_HEIGHT_RATIO = 0.55;
 const DUCK_SPEED_RATIO = 0.25;

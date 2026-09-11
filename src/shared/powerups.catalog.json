@@ -1,0 +1,67 @@
+{
+  "rage": {
+    "assetDir": "rage",
+    "color": 11032055,
+    "durationMs": 10000,
+    "tickVolume": 0.18,
+    "modifiers": {
+      "damageMult": 1.35,
+      "speedMult": 1.25
+    }
+  },
+  "health": {
+    "assetDir": "health",
+    "color": 3462041,
+    "durationMs": 10000,
+    "tickVolume": 0.2,
+    "healingPerSecond": 600
+  },
+  "shield": {
+    "assetDir": "shield",
+    "color": 16347926,
+    "durationMs": 10000,
+    "modifiers": {
+      "damageTakenMult": 0.7
+    }
+  },
+  "poison": {
+    "assetDir": "poison",
+    "color": 16436245,
+    "durationMs": 8000,
+    "tickVolume": 0.28,
+    "damagePerSecond": 600
+  },
+  "gravityBoots": {
+    "assetDir": "gravity-boots",
+    "color": 15680580,
+    "durationMs": 7000,
+    "tickVolume": 0.2,
+    "modifiers": {
+      "jumpMult": 1.55,
+      "speedMult": 1.15
+    }
+  },
+  "invisibility": {
+    "assetDir": "invisibility",
+    "color": 12616956,
+    "durationMs": 8000
+  },
+  "shockwave": {
+    "assetDir": "shockwave",
+    "color": 16747008,
+    "durationMs": 1,
+    "radius": 420,
+    "forceX": 990,
+    "forceY": 750
+  },
+  "freeze": {
+    "assetDir": "freeze",
+    "color": 6809849,
+    "durationMs": 7000,
+    "tickVolume": 0.18,
+    "modifiers": {
+      "speedMult": 0.45,
+      "jumpMult": 0.6
+    }
+  }
+}

@@ -1,3 +1,5 @@
+import { resolveLocalEffectMovement } from '../shared/effectRules.js';
+
 // players/localStateSync.js
 
 export function createLocalStateSync({
@@ -120,4 +122,11 @@ export function createLocalStateSync({
     getAmmoSyncState,
     setPowerupMobility,
   };
+}
+
+// Apply gameplay state independently of whether any aura graphics exist.
+export function syncLocalEffects({ effects, authoritative, setMobility, setInvisible }) {
+  const movement = resolveLocalEffectMovement(effects, authoritative);
+  setMobility(movement.speedMult, movement.jumpMult);
+  setInvisible?.((effects.invisibility || 0) > 0);
 }

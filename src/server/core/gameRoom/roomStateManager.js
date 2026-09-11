@@ -1,3 +1,4 @@
+const effectManager = require('./effects/effectManager');
 const { randomUUID } = require("node:crypto");
 const { getDuelGeometry, spawnForParticipant } = require('../../../shared/duelGeometry');
 
@@ -27,6 +28,10 @@ function buildWorldStatePayload(room) {
     })),
     deathDrops: room._buildDeathDropsSnapshot(),
     playerEffects: room._buildPlayerEffectsSnapshot(),
+    playerEffectMovement: Object.fromEntries(Array.from(room.players.values(), player => {
+      const { speedMult, jumpMult } = effectManager.getModifiers(player, Date.now());
+      return [player.name, { speedMult, jumpMult }];
+    })),
   };
 }
 
@@ -72,8 +77,7 @@ function sendGameStateToPlayer(room, socket) {
   }
 
   const gameStateForPlayer = {
-    ninjaCombat: require('./ninjaCombat').bootstrap(room),
-    huntressCombat: require('./huntressCombat').bootstrap(room),
+    ...require('./characterCombatRegistry').bootstrap(room),
     matchId: room.matchId,
     mode: room.matchData.mode,
     modeId: room.matchData.modeId || "duels",

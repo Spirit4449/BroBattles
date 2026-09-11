@@ -1,0 +1,101 @@
+{
+  "key": "wizard",
+  "stats": {
+    "baseHealth": 5000,
+    "attackDescription": "Releases a fireball that deals splash damage to everyone in the path.",
+    "baseDamage": 3000,
+    "ammoCooldownMs": 800,
+    "ammoReloadMs": 3000,
+    "ammoCapacity": 3,
+    "specialDescription": "Empowers the whole team with random powerups.",
+    "specialBaseDamage": 0,
+    "specialChargeHits": 5,
+    "specialChargePerHit": 0,
+    "spriteScale": 0.92,
+    "body": {
+      "widthShrink": 200,
+      "heightShrink": 115,
+      "offsetXFromHalf": 0,
+      "offsetY": 62,
+      "flipOffset": 0
+    },
+    "tuning": {
+      "attack": {
+        "aim": {
+          "kind": "line",
+          "attackKey": "fireball",
+          "defaultRange": 1050,
+          "anchorForwardOffset": 38,
+          "anchorOffsetY": -6,
+          "reticleThickness": 55,
+          "angleMode": "free"
+        },
+        "fireball": {
+          "speed": 450,
+          "range": 1050,
+          "visualRadius": 14,
+          "collisionRadius": 28,
+          "initialScale": 0.1,
+          "activeScale": 0.5,
+          "glowRadiusMultiplier": 1.35,
+          "bobAmplitude": 5,
+          "verticalOffset": 0.12,
+          "castDelayMs": 520,
+          "flipLockMs": 650,
+          "bobTweenMs": 220,
+          "forwardOffset": 0.23,
+          "bobFreqMs": 120,
+          "depth": 100,
+          "baseAngleDeg": -90
+        }
+      },
+      "special": {
+        "aim": {
+          "kind": "round",
+          "radius": 67,
+          "defaultRange": 55,
+          "anchorForwardOffset": 0,
+          "anchorOffsetY": 4
+        }
+      }
+    },
+    "description": "Master of the fireball, wielder of the powerups.",
+    "unlockPrice": 200
+  },
+  "frame": {
+    "w": 231,
+    "h": 190
+  },
+  "duckFrame": [
+    3,
+    7
+  ],
+  "basicAction": "wizard-fireball",
+  "basicHitTypes": [
+    "basic"
+  ],
+  "specialHitTypes": [
+    "special"
+  ],
+  "attacks": {
+    "wizard-fireball": {
+      "character": "wizard",
+      "actionFlow": {
+        "kind": "windup-release",
+        "broadcastType": "wizard-fireball",
+        "releaseActionType": "wizard-fireball-release",
+        "releaseOwnerEcho": true
+      }
+    },
+    "wizard-fireball-release": {
+      "character": "wizard",
+      "actionFlow": {
+        "kind": "server-runtime-only"
+      },
+      "attackType": "basic",
+      "runtime": {
+        "kind": "projectile-linear"
+      }
+    }
+  }
+}

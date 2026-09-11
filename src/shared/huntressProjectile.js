@@ -1,6 +1,6 @@
 // No renderer or room dependencies: the server and predicted arrows use this model.
 const { getResolvedCharacterAttackConfig, getResolvedCharacterSpecialConfig,
-  getResolvedCharacterAimConfig, getResolvedCharacterSpecialAimConfig } = require('../lib/characterTuning');
+  getResolvedCharacterAimConfig, getResolvedCharacterSpecialAimConfig } = require("./characterTuning.js");
 
 const VERSION = 2;
 const STEP_MS = 1000 / 60;

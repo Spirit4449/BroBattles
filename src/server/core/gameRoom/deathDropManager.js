@@ -1,4 +1,4 @@
-const { PICKUP_DELAY_MS } = require("../../../shared/pickupTiming");
+const { PICKUP_DELAY_MS } = require("../../../shared/powerups");
 const {
   DEATH_DROP_DESPAWN_MS,
   DEATH_DROP_BLINK_MS,

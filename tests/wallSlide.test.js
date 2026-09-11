@@ -1,12 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
 const tuning = require('../src/shared/movementPhysics.json');
+const { resolveWallContact, applyWallSlide } = require('../src/players/wallMovement');
 
-// Exercise the actual local movement block with a minimal Phaser body.
-const source = fs.readFileSync(require.resolve('../src/player.js'), 'utf8');
-const slideBlock = source.slice(source.indexOf('  const wallAttachNow ='), source.indexOf('  const wallSlideSpeedRatio ='));
 function localSlide(overrides = {}) {
   const player = {
     _wallAttachSide: overrides.wallSide || "right", _wallAttachStartedAt: 0,
@@ -18,7 +14,7 @@ function localSlide(overrides = {}) {
   const context = { player, dead: false, movementLocked: false, wallSlideContact: true,
     wallSide: 'right', wallBrakeHeld: false, wallSlideMaxFallSpeed: tuning.wallSlideMaxFallSpeed,
     MOVEMENT_PHYSICS: tuning, ...overrides };
-  vm.runInNewContext(slideBlock + '\nresult = isWallSliding;', context);
+  context.result = applyWallSlide(context.player, context, overrides.Date?.now?.() ?? Date.now());
   return context;
 }
 test('neutral contact attaches and caps descent; holding up brakes further', () => {
@@ -46,7 +42,6 @@ test('no attachment away from walls or during ability locks; jumping suppression
   assert.equal(rising.player._jumpLaunch, undefined);
 });
 
-const contactBlock = source.slice(source.indexOf('  const touchingLeftNow ='), source.indexOf('  const nowTs = Date.now();', source.indexOf('  const touchingLeftNow =')));
 function contact({ side = 'right', upPress = false, spacePress = false, away = false, gap = 8, solid = true } = {}) {
   const player = { body: { x: 100, y: 100, width: 30, height: 50,
     touching: {}, blocked: {}, velocity: { x: side === 'right' ? 200 : -200, y: -180 } } };
@@ -59,7 +54,10 @@ function contact({ side = 'right', upPress = false, spacePress = false, away = f
     cursors: { up: { isDown: upPress } }, keyW: { isDown: false },
     leftKey: away && side === 'right', rightKey: away && side === 'left',
     directionalUpFreshPress: upPress, jumpButtonFreshPress: spacePress, upKeyFreshPress: false };
-  vm.runInNewContext(contactBlock + '\nresult = { wallSide, wallSlideContact, effectiveWallSide, bufferedJumpPressActive, wallSlideSuppressed, wallBrakeHeld };', context);
+  context.result = resolveWallContact(player, context.scene._mapObjects, {
+    left: context.leftKey, right: context.rightKey,
+    upHeld: upPress, jumpPressed: upPress || spacePress,
+  });
   return context;
 }
 test('momentum near either wall attaches while rising with no held direction or collision flags', () => {
@@ -135,7 +133,10 @@ test('wall jumps require current proximity within 12 pixels, even after recent c
       state.player._lastWallSide = side;
       state.player._lastWallContactTs = Date.now();
       const next = { ...state };
-      vm.runInNewContext(contactBlock + '\nresult = effectiveWallSide;', next);
+      next.result = resolveWallContact(next.player, next.scene._mapObjects, {
+        left: next.leftKey, right: next.rightKey,
+        jumpPressed: next.jumpButtonFreshPress,
+      }).effectiveWallSide;
       assert.equal(next.result, null);
     }
   }

@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development BB_HUNTRESS_COMBAT_V2=1 PORT=3002 nodemon --watch src/server --watch src/shared --watch src/lib --ext js,json --exec node src/server/server.js",
+    "dev": "cross-env NODE_ENV=development PORT=31337 nodemon --watch src/server --watch src/shared --watch src/lib --ext js,json --exec node src/server/server.js",
     "build": "webpack --mode production",
     "sourcemap": "cross-env NODE_ENV=production webpack --mode=production --devtool=source-map",
     "start": "cross-env NODE_ENV=production node src/server/server.js",
@@ -12,7 +12,9 @@
     "test:bots": "node --test tests/adaptiveBots.test.js tests/gameRoomStartup.test.js tests/botBehavior.test.js tests/botAiming.test.js tests/botTeamwork.test.js tests/botObjectives.test.js tests/botCoherence.test.js",
     "test:battle-log": "node --test tests/battleLog.test.js",
     "test:network": "node --test tests/networkTiming.test.mjs tests/ninjaCombat.test.js tests/ninjaRenderer.test.js tests/huntressCombat.test.js tests/huntressRenderer.test.js tests/huntressArrows.test.js",
-    "simulate:bots": "node scripts/simulate-bots.cjs"
+    "simulate:bots": "node scripts/simulate-bots.cjs",
+    "test": "node --test tests/*.test.js tests/*.test.mjs",
+    "validate:content": "node scripts/validate-content.cjs"
   },
   "author": "",
   "license": "ISC",

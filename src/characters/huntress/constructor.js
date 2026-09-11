@@ -1,13 +1,8 @@
 import socket from "../../socket";
 import { predictHuntressShot } from './network';
-import { characterStats } from "../../lib/characterStats.js";
+import { characterStats } from "../../shared/characterStats.js";
 import { animations } from "./anim";
-import {
-  changeDebugState,
-  performHuntressArrowSpread,
-  spawnHuntressArrowVisual,
-  stopHuntressArrowOnConfirmedHit,
-} from "./attack";
+import { performHuntressArrowSpread } from "./attack";
 import { executeDefaultAttack } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
@@ -65,10 +60,6 @@ class Huntress extends CharacterEntityBase {
     animations(scene);
   }
 
-  static setDebugState(enabled) {
-    changeDebugState(enabled);
-  }
-
   static getStats() {
     return characterStats.huntress;
   }
@@ -77,16 +68,6 @@ class Huntress extends CharacterEntityBase {
     if (!data) return false;
     const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
     const type = String(data.type || "").toLowerCase();
-    if (
-      type === "character-hit-confirm" &&
-      String(data?.attackType || "").toLowerCase().startsWith(`${NAME}-`)
-    ) {
-      return stopHuntressArrowOnConfirmedHit(
-        data?.instanceId,
-        remoteContext?.targetSprite || null,
-        remoteContext?.targetUsername || data?.target || "",
-      );
-    }
     if (type === `${NAME}-arrow`) {
       playSpriteAnimation({
         scene,
@@ -97,46 +78,7 @@ class Huntress extends CharacterEntityBase {
       });
       return true;
     }
-    if (type === `${NAME}-arrow-release` || type === `${NAME}-burning-arrow`) {
-      playSpriteAnimation({
-        scene,
-        sprite: ownerSprite,
-        character: NAME,
-        logical:
-          type === `${NAME}-burning-arrow` ? "special" : "throw",
-        fallback: "throw",
-      });
-      spawnHuntressArrowVisual(scene, data, ownerSprite, {
-        mapObjects: Array.isArray(scene?._mapObjects) ? scene._mapObjects : [],
-        opponentPlayersRef: remoteContext?.opponentPlayersRef || {},
-        teamPlayersRef: remoteContext?.teamPlayersRef || {},
-        localPlayer: remoteContext?.localPlayer || null,
-        localUsername: remoteContext?.localUsername || "",
-        attackerUsername: remoteContext?.attackerUsername || "",
-        attackerTeam: remoteContext?.attackerTeam || "",
-        players: remoteContext?.players || [],
-      });
-      return true;
-    }
     return false;
-  }
-
-  static handleLocalAuthoritativeAttack(scene, data, localContext = {}) {
-    const type = String(data?.type || "").toLowerCase();
-    if (type !== `${NAME}-arrow-release` && type !== `${NAME}-burning-arrow`) {
-      return false;
-    }
-    spawnHuntressArrowVisual(scene, data, localContext?.ownerSprite || null, {
-      mapObjects: Array.isArray(scene?._mapObjects) ? scene._mapObjects : [],
-      targetSprites: Object.entries(localContext?.opponentPlayersRef || {})
-        .map(([username, entry]) =>
-          entry?.opponent ? { sprite: entry.opponent, username } : null,
-        )
-        .filter(Boolean),
-      isOwner: true,
-      username: String(localContext?.username || "").trim(),
-    });
-    return true;
   }
 
   static getEffectTickSounds() {

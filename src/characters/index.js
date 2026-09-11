@@ -1,6 +1,6 @@
 // src/characters/index.js
 import CHARACTER_MANIFEST from "./manifest";
-import { characterStats } from "../lib/characterStats.js";
+import { characterStats } from "../shared/characterStats.js";
 import {
   normalizeSkinId,
   buildCharacterSkinTextureKey,
@@ -8,7 +8,7 @@ import {
   buildCharacterSkinWeaponUrl,
 } from "../lib/skinAssets.js";
 import { chooseRemoteAnimationState } from "./shared/animationState.js";
-import CHARACTER_FRAMES from "../shared/characterFrames.json";
+import { characterFrames as CHARACTER_FRAMES } from "../shared/characters/index.js";
 import { DUCK_FRAME_CELLS } from "../shared/ducking.js";
 
 function setupDuckFrame(scene, character, textureKey = character) {
@@ -366,14 +366,6 @@ export function drawCharacterPowerupAura(character, context = {}) {
     return !!Cls.drawPowerupAura(context);
   }
   return false;
-}
-
-export function getCharacterPowerupMobilityModifier(character, effects = {}) {
-  const Cls = getCharacterClass(character);
-  if (Cls && typeof Cls.getPowerupMobilityModifier === "function") {
-    return Cls.getPowerupMobilityModifier(effects);
-  }
-  return { speedMult: 1, jumpMult: 1 };
 }
 
 export function getCharacterEffectTickSounds() {

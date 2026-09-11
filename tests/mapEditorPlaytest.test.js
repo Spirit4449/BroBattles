@@ -1,7 +1,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const {MapPlaytestService}=require('../src/server/services/mapPlaytestService');
-const defaults=require('../src/shared/mapDefaults');
+const defaults=require('../src/shared/maps').mapDefaults;
 const {clone}=require('../src/shared/mapDocument');
 
 test('real playtest rooms isolate owners, fill 3v3 bots, respawn and clean up without matchmaking persistence',async t=>{

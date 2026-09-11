@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const babel = require('@babel/core');
 const terrainAudio = require('../src/shared/terrainAudio.json');
-const maps = require('../src/shared/maps.catalog.json');
+const maps = require('../src/shared/maps').mapsCatalog;
 const exported = {};
 const code = babel.transformSync(fs.readFileSync(require.resolve('../src/gameScene/movementAudio.js'), 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],

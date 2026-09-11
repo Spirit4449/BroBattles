@@ -15,7 +15,7 @@ const {
 const {
   syncSkinOwnershipForUser,
 } = require("../../helpers/skinOwnership");
-const { getAllCharacters } = require("../../../lib/characterStats");
+const { getAllCharacters } = require("../../../shared/characterStats.js");
 const {
   getPartyBotSlots,
   setPartyBotSlot,
@@ -473,6 +473,10 @@ function registerPartyEvents(
       const freshUser = userRows?.[0];
       if (!freshUser) {
         ack?.({ ok: false, error: "user_not_found" });
+        return;
+      }
+      if (String(freshUser.status || "").trim().toLowerCase() === "ready") {
+        ack?.({ ok: false, error: "unready_before_character_change" });
         return;
       }
       if (getCharacterLevel(freshUser, charClass) < 1) {

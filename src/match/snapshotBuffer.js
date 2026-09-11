@@ -1,5 +1,21 @@
 import { shouldMuteClientDefaultLogs } from "../lib/netTestLogger.js";
-import { DEFAULT_SNAPSHOT_BUFFER_CONFIG } from "./snapshotBufferConfig.js";
+export const DEFAULT_SNAPSHOT_BUFFER_CONFIG = Object.freeze({
+  maxStateBuffer: 90,
+  initialInterpDelayMs: 75,
+  minInterpDelayMs: 45,
+  maxInterpDelayMs: 115,
+  snapIntervalMs: 1000 / 30,
+  maxSpacingMs: 500,
+  lateSnapshotThresholdMs: 140,
+  largePositionDeltaPx: 90,
+  spacingEmaAlpha: 0.12,
+  enableAdaptiveDelay: true,
+  // Opt-in until gameplay traces validate the latency / underrun tradeoff.
+  enableArrivalAdaptiveDelay: false,
+  enableClockCorrection: false,
+  enableBacklogCatchup: true,
+  extrapolationLimitMs: 1000,
+});
 
 const SERVER_TICK_MS = 1000 / 60;
 
@@ -465,4 +481,23 @@ export function createSnapshotBuffer(options = {}) {
     hasData,
     getBufferLength,
   };
+}
+
+export function processSnapshotInterpolation({
+  snapshotBuffer,
+  now = performance.now(),
+  applyFrame,
+  onDebugLine,
+}) {
+  if (snapshotBuffer.hasData()) {
+    const frame = snapshotBuffer.getInterpolationFrame(now);
+    if (frame) {
+      applyFrame(frame);
+    }
+  }
+
+  try {
+    const line = snapshotBuffer.consumeAdaptiveDebugLine(now);
+    if (line && typeof onDebugLine === "function") onDebugLine(line);
+  } catch (_) {}
 }

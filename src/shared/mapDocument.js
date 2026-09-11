@@ -1,7 +1,7 @@
 // Versioned, data-only map contract. Shared by the editor, Phaser and the server.
 const { resolveLanding } = require('./spawnPlacement');
 const VARIANTS = ['1v1', '2v2', '3v3'];
-const POWERUP_TYPES = ['rage', 'health', 'shield', 'poison', 'gravityBoots', 'invisibility', 'shockwave', 'freeze'];
+const { POWERUP_TYPES } = require('./powerups');
 const clone = value => JSON.parse(JSON.stringify(value));
 function variantKey(value) {
   const match = String(value || '').match(/([123])v[123]$/);

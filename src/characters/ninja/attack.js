@@ -3,7 +3,7 @@ import { createShurikenEffects } from './effects';
 // Curved, returning, piercing shuriken with deterministic local simulation.
 
 import socket from "../../socket"; // owner-only hit events
-import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
+import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
 import { emitVaultHitForCircle } from "../shared/vaultTargeting";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 

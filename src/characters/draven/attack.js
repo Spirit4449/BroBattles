@@ -1,6 +1,6 @@
 // Draven splash attack extracted
 import socket from "../../socket";
-import { getResolvedCharacterAttackConfig } from "../../lib/characterTuning.js";
+import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
 import { rectsOverlap, getSpriteBounds } from "../shared/combatGeometry";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
