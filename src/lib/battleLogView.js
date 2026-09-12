@@ -1,5 +1,3 @@
-import { buildProfileIconUrl } from "./profileIconAssets.js";
-
 function escapeHtml(str) {
   if (str == null) return "";
   return String(str)
@@ -8,11 +6,6 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
-}
-
-function capitalize(str) {
-  if (!str) return "";
-  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 function formatTimeAgo(isoString) {
@@ -42,7 +35,7 @@ export function renderBattleLog(container, battles = [], options = {}) {
     container.innerHTML = `
       <div class="battle-log-empty">
         <div class="battle-log-empty-icon" aria-hidden="true">
-          <img src="/assets/sword.svg" alt="" width="48" height="48" />
+          <img src="/assets/logos/logo-large.webp" alt="" width="64" />
         </div>
         <h4>No Battles Yet</h4>
         <p>Complete matches to record your combat history and track trophy progress.</p>
@@ -80,18 +73,8 @@ export function renderBattleLog(container, battles = [], options = {}) {
       const deltaFormatted = battle.trophiesDelta == null ? "—" : delta > 0 ? `+${delta}` : `${delta}`;
       const timeAgo = formatTimeAgo(battle.createdAt);
 
-      const mapBanner =
-        battle.mapBanner || battle.mapPreview || "/assets/lushy/preview.webp";
-      const modeArt = battle.modeArt || "/assets/duels.webp";
       const mapLabel = battle.mapLabel || "Arena";
       const modeLabel = battle.modeLabel || "Duel";
-
-      const player = battle.player || {};
-      const charClass = capitalize(player.charClass || "ninja");
-      const avatarUrl = buildProfileIconUrl(
-        player.profileIconId,
-        player.charClass,
-      );
 
       const stats = battle.playerStats || {};
       const kills = statValue(stats.kills);
@@ -102,76 +85,39 @@ export function renderBattleLog(container, battles = [], options = {}) {
 
       return `
         <article class="battle-card ${outcome}" data-match-id="${escapeHtml(battle.matchId)}">
-          <!-- Banner Art Header (Mode and Map) -->
-          <div class="battle-card-banner" style="background-image: url('${escapeHtml(mapBanner)}');">
-            <div class="battle-card-banner-overlay"></div>
-            <div class="battle-card-banner-content">
-              <div class="battle-mode-art-wrap">
-                <img src="${escapeHtml(modeArt)}" alt="${escapeHtml(modeLabel)}" class="battle-mode-art" />
-              </div>
-              <div class="battle-banner-meta">
-                <h4 class="battle-banner-title">${escapeHtml(modeLabel)}</h4>
-                <div class="battle-banner-map">
-                  <span class="battle-map-dot" aria-hidden="true"></span>
-                  <span>${escapeHtml(mapLabel)}</span>
-                </div>
-              </div>
-              <time class="battle-time-badge" datetime="${escapeHtml(battle.createdAt)}">${timeAgo}</time>
-            </div>
-          </div>
-
-          <!-- Outcome & Combat Performance -->
           <div class="battle-card-main">
-            <div class="battle-result-strip">
+            <div class="battle-result-row">
               <span class="battle-outcome-badge ${outcome}">${outcomeLabel}</span>
+              <div class="battle-match-meta">
+                <h4>${escapeHtml(modeLabel)}</h4>
+                <span>${escapeHtml(mapLabel)}</span>
+              </div>
+              <time class="battle-time" datetime="${escapeHtml(battle.createdAt)}">${timeAgo}</time>
               <span class="battle-trophy-pill ${deltaClass}">
                 <img src="/assets/trophy.webp" alt="Trophies" class="trophy-mini-icon" />
                 <span>${deltaFormatted}</span>
               </span>
-              <span class="battle-match-code">Match #${escapeHtml(battle.matchId)}</span>
             </div>
 
-            <div class="battle-hero-stats-row">
-              <div class="battle-hero-tile">
-                <div class="battle-hero-avatar-frame">
-                  <img src="${avatarUrl}" alt="${escapeHtml(player.name || "Hero")}" class="battle-hero-avatar" />
-                </div>
-                <div class="battle-hero-label">
-                  <span class="battle-hero-name">${escapeHtml(player.name || "You")}</span>
-                  <span class="battle-hero-class">${escapeHtml(charClass)}</span>
-                </div>
+            <div class="battle-details-row">
+              <div class="battle-combat-stats" aria-label="Combat stats">
+                <span><strong class="chip-val kills">${kills}</strong> kills</span>
+                <span><strong class="chip-val damage">${damage}</strong> damage</span>
+                <span><strong class="chip-val hits">${hits}</strong> hits</span>
               </div>
-
-              <div class="battle-combat-chips">
-                <div class="battle-stat-chip">
-                  <span class="chip-label">KILLS</span>
-                  <strong class="chip-val kills">${kills}</strong>
-                </div>
-                <div class="battle-stat-chip">
-                  <span class="chip-label">DAMAGE</span>
-                  <strong class="chip-val damage">${damage}</strong>
-                </div>
-                <div class="battle-stat-chip">
-                  <span class="chip-label">HITS</span>
-                  <strong class="chip-val hits">${hits}</strong>
-                </div>
+              ${coins > 0 || gems > 0 ? '<span class="battle-detail-divider" aria-hidden="true"></span>' : ""}
+              <div class="battle-rewards" aria-label="Rewards">
                 ${
                   coins > 0
                     ? `
-                  <div class="battle-stat-chip reward">
-                    <span class="chip-label">COINS</span>
-                    <strong class="chip-val coins">+${coins}</strong>
-                  </div>
+                  <span><strong class="chip-val coins">+${coins}</strong> coins</span>
                 `
                     : ""
                 }
                 ${
                   gems > 0
                     ? `
-                  <div class="battle-stat-chip reward">
-                    <span class="chip-label">GEMS</span>
-                    <strong class="chip-val gems">+${gems}</strong>
-                  </div>
+                  <span><strong class="chip-val gems">+${gems}</strong> gems</span>
                 `
                     : ""
                 }
@@ -189,12 +135,13 @@ export function renderBattleLog(container, battles = [], options = {}) {
   container.innerHTML = `
     <div class="battle-log-summary-bar">
       <div class="battle-log-metric record">
-        <span>Last ${total}:</span> <strong>${wins}W · ${losses}L${draws > 0 ? ` · ${draws}D` : ""}</strong>
+        <strong>${wins}W</strong><span>${losses}L${draws > 0 ? ` · ${draws}D` : ""}</span>
       </div>
       <div class="battle-log-metric trophies ${netTrophies >= 0 ? "positive" : "negative"}">
         <img src="/assets/trophy.webp" alt="" class="trophy-mini-icon" width="14" height="14" />
-        <span>${recordedTrophies.length < total ? "Recorded trophies:" : "Net trophies:"}</span> <strong>${trophySign}</strong>
+        <strong>${trophySign}</strong>
       </div>
+      <span class="battle-summary-count">${total} recent battle${total === 1 ? "" : "s"}</span>
       ${unknown ? `<span class="battle-summary-note">${unknown} result${unknown === 1 ? "" : "s"} unavailable</span>` : ""}
     </div>
     <div class="battle-cards-stream">

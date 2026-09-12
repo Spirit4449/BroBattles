@@ -7,8 +7,7 @@ import {
   wireAccountSettings,
 } from "../lib/accountSettings.js";
 import { renderBattleLog } from "../lib/battleLogView.js";
-import { getAllCharacters, LEVEL_CAP } from "../shared/characterStats.js";
-import { buildCharacterSkinBodyUrl } from "../lib/skinAssets.js";
+import { renderCharacterLevelGrid } from "../lib/profileCharacterLevelsView.js";
 import { sonner } from "../lib/sonner.js";
 import { playSound } from "../lib/uiSounds.js";
 import { escapeHtml, profileFetchJson } from './ui';
@@ -131,10 +130,7 @@ export function createProfileController({ getUserData }) {
       "profile-character-levels-panel",
     );
     if (characterLevelsPanel) {
-      characterLevelsPanel.classList.toggle(
-        "is-hidden",
-        lobbyProfileState.viewingSelf,
-      );
+      characterLevelsPanel.classList.remove("is-hidden");
     }
     const cardsPanel = document.getElementById("profile-cards-panel");
     const iconsPanel = document.getElementById("profile-icons-panel");
@@ -180,68 +176,8 @@ export function createProfileController({ getUserData }) {
     const grid = document.getElementById("profile-character-levels-grid");
     const profile = lobbyProfileState.profile || {};
     if (!panel || !grid) return;
-    grid.innerHTML = "";
-
-    if (lobbyProfileState.viewingSelf) {
-      panel.classList.add("is-hidden");
-      return;
-    }
-
     panel.classList.remove("is-hidden");
-
-    const toDisplayName = (id) =>
-      String(id || "")
-        .split(/[_-]+/g)
-        .filter(Boolean)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(" ");
-
-    const validChars = new Set(
-      typeof getAllCharacters === "function" ? getAllCharacters() : [],
-    );
-
-    const mergedLevels = {};
-    Object.entries(profile.charLevels || {}).forEach(([charId, rawLevel]) => {
-      let id = String(charId || "")
-        .trim()
-        .toLowerCase();
-      if (id === "hunteress") {
-        id = "huntress";
-      }
-      if (validChars.size > 0 && !validChars.has(id)) {
-        return;
-      }
-      const level = Number(rawLevel) || 0;
-      if (level > 0) {
-        mergedLevels[id] = Math.max(mergedLevels[id] || 0, level);
-      }
-    });
-
-    const entries = Object.entries(mergedLevels)
-      .map(([charId, level]) => ({ charId, level }))
-      .sort((a, b) => b.level - a.level || a.charId.localeCompare(b.charId));
-
-    if (!entries.length) {
-      const empty = document.createElement("div");
-      empty.className = "profile-character-level-empty";
-      empty.textContent = "No unlocked characters available.";
-      grid.appendChild(empty);
-      return;
-    }
-
-    entries.forEach((entry) => {
-      const iconLevel = Math.max(1, Math.min(LEVEL_CAP, Number(entry.level) || 1));
-      const card = document.createElement("article");
-      card.className = "profile-character-level-card";
-      card.innerHTML = `
-      <div class="profile-character-level-badge" aria-hidden="true">
-        <img src="/assets/levels/${iconLevel}.webp" alt="" />
-      </div>
-      <img src="${buildCharacterSkinBodyUrl(entry.charId, "")}" alt="${toDisplayName(entry.charId)}" />
-      <div class="profile-character-level-name">${toDisplayName(entry.charId)}</div>
-    `;
-      grid.appendChild(card);
-    });
+    renderCharacterLevelGrid(grid, profile.charLevels);
   }
 
   function renderProfilePopupCards() {

@@ -108,8 +108,69 @@ body.mobile-game-ui #battle-start-overlay {
   display: flex;
   align-items: center;
 }
-h2 {
-  margin-left: 10px;
+.lobby-wordmark {
+  position: relative;
+  margin: 0 0 0 4px;
+  line-height: 0;
+  overflow: hidden;
+}
+
+.lobby-wordmark img {
+  display: block;
+  width: clamp(120px, 18vw, 180px);
+  height: auto;
+}
+
+.lobby-wordmark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse at 18% 35%,
+      rgba(255, 255, 255, 0.62),
+      rgba(139, 230, 255, 0.18) 24%,
+      transparent 52%
+    ),
+    radial-gradient(
+      ellipse at 78% 70%,
+      rgba(255, 224, 137, 0.26),
+      transparent 46%
+    );
+  background-size: 180% 180%, 160% 160%;
+  background-position: 0% 0%, 100% 100%;
+  -webkit-mask: url("/assets/logos/wordmark.webp") center / 100% 100% no-repeat;
+  mask: url("/assets/logos/wordmark.webp") center / 100% 100% no-repeat;
+  mix-blend-mode: screen;
+  opacity: 0;
+  animation: wordmark-highlight 12s ease-in-out infinite alternate;
+}
+
+@keyframes wordmark-highlight {
+  0% {
+    background-position: 0% 0%, 100% 100%;
+    opacity: 0;
+  }
+  18% {
+    background-position: 34% 20%, 64% 55%;
+    opacity: 0.78;
+  }
+  55% {
+    background-position: 74% 42%, 28% 12%;
+    opacity: 0.92;
+  }
+  100% {
+    background-position: 100% 100%, 0% 0%;
+    opacity: 0.92;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lobby-wordmark::after {
+    animation: none;
+    opacity: 0.42;
+  }
 }
 h3 {
   margin: 0;
@@ -179,13 +240,18 @@ h3 {
 }
 
 .pixel-menu-button:active {
-  transform: translateY(5px);
+  /* The face moves below; the actual button stays put so edge clicks land. */
+  transform: none;
   box-shadow:
     0px 5px black,
     0px -5px black,
     5px 0px black,
     -5px 0px black,
     inset 0px 5px #00000038;
+}
+
+.pixel-menu-button:active > * {
+  translate: 0 2px;
 }
 
 .resources {
@@ -1316,7 +1382,7 @@ h3 {
 }
 
 .bot-shuffle-icon {
-  content: url("/assets/shuffle1.webp");
+  content: url("/assets/shuffle/shuffle1.webp");
   transform-origin: 50% 58%;
   will-change: transform, opacity;
   animation:
@@ -1334,19 +1400,19 @@ h3 {
 @keyframes bot-shuffle-frames {
   0%,
   24.999% {
-    content: url("/assets/shuffle1.webp");
+    content: url("/assets/shuffle/shuffle1.webp");
   }
   25%,
   49.999% {
-    content: url("/assets/shuffle2.webp");
+    content: url("/assets/shuffle/shuffle2.webp");
   }
   50%,
   74.999% {
-    content: url("/assets/shuffle3.webp");
+    content: url("/assets/shuffle/shuffle3.webp");
   }
   75%,
   100% {
-    content: url("/assets/shuffle4.webp");
+    content: url("/assets/shuffle/shuffle4.webp");
   }
 }
 
@@ -4839,7 +4905,7 @@ h3 {
       calc(8px + env(safe-area-inset-left));
   }
 
-  #navbar h2 {
+  #navbar .lobby-wordmark {
     display: none;
   }
 
@@ -5027,9 +5093,8 @@ h3 {
     padding: 4px 10px;
   }
 
-  #navbar h2 {
+  #navbar .lobby-wordmark {
     margin-left: 6px;
-    font-size: 14px;
   }
 
   #navbar-right {
@@ -5187,7 +5252,7 @@ h3 {
     padding: 3px 8px;
   }
 
-  #navbar h2 {
+  #navbar .lobby-wordmark {
     display: none;
   }
 
@@ -5396,7 +5461,7 @@ h3 {
 .profile-popup-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 12px;
+  gap: 20px;
   padding: 16px;
 }
 
@@ -5725,67 +5790,6 @@ h3 {
 
 .profile-metric-card-generic strong {
   font-size: 26px;
-}
-
-.profile-character-levels-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 8px;
-}
-
-.profile-character-level-card {
-  position: relative;
-  overflow: visible;
-  border: 2px solid var(--bb-border-soft, #263b59);
-  border-radius: var(--bb-radius-card, 0);
-  padding: 10px 8px 8px;
-  display: grid;
-  gap: 8px;
-  justify-items: center;
-  background: linear-gradient(
-    180deg,
-    rgba(8, 17, 34, 0.84),
-    rgba(4, 12, 28, 0.92)
-  );
-}
-
-.profile-character-level-card img {
-  width: 100%;
-  height: 84px;
-  object-fit: contain;
-  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
-}
-
-.profile-character-level-badge {
-  position: absolute;
-  top: -39px;
-  left: -37px;
-  width: 96px;
-  height: 96px;
-  z-index: 2;
-  pointer-events: none;
-}
-
-.profile-character-level-badge img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.4));
-}
-
-.profile-character-level-name {
-  color: #eaf5ff;
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: capitalize;
-  text-align: center;
-  width: 100%;
-}
-
-.profile-character-level-empty {
-  color: #a9d5ff;
-  font-size: 12px;
-  padding: 6px 2px;
 }
 
 .profile-stat-row {
@@ -6597,6 +6601,15 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   text-shadow:
     0 4px 0 rgba(1, 6, 17, 0.8),
     0 0 28px rgba(90, 218, 255, 0.38);
+}
+
+.mm-brand-logo {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  width: clamp(100px, 12vw, 170px);
+  height: auto;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5));
 }
 
 .mm-heading::after {
@@ -7563,21 +7576,25 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
 
 @media (max-width: 900px) {
   .mm-header {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 12px 18px;
     width: calc(100% - 32px);
     padding-top: 20px;
   }
 
   .mm-heading {
-    grid-column: 1;
+    grid-column: 2;
     grid-row: 1;
-    justify-self: start;
+    justify-self: center;
   }
 
   .mm-progress {
-    grid-column: 2;
+    grid-column: 3;
     grid-row: 1;
+  }
+
+  .mm-brand-logo {
+    width: clamp(72px, 17vw, 110px);
   }
 
   .mm-players-grid[data-slots="4"],

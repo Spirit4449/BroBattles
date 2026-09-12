@@ -8,7 +8,7 @@
     />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="shortcut icon" href="/assets/sword.svg" type="image/x-icon" />
+    <link rel="shortcut icon" href="/assets/logos/logo-small.webp" type="image/webp" />
     <title>Bro Battles</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -62,8 +62,9 @@
     </script>
     <div id="navbar">
       <div class="flex">
-        <img src="/assets/sword.svg" width="20px" />
-        <h2>Bro Battles</h2>
+        <h1 class="lobby-wordmark">
+          <img src="/assets/logos/wordmark.webp" alt="Bro Battles" />
+        </h1>
       </div>
       <div class="flex" id="navbar-right">
         <button
@@ -402,7 +403,7 @@
             id="profile-character-levels-panel"
             class="profile-panel profile-character-levels-panel is-hidden"
           >
-            <h3>Character Levels</h3>
+            <h3 data-bros-heading>Bros</h3>
             <div
               id="profile-character-levels-grid"
               class="profile-character-levels-grid"
@@ -415,7 +416,7 @@
           >
             <div class="battle-log-header">
               <h3>
-                <img src="/assets/sword.svg" alt="" width="16" height="16" aria-hidden="true" />
+                <img src="/assets/logos/logo-small.webp" alt="" width="16" aria-hidden="true" />
                 Battle Log
               </h3>
             </div>
@@ -879,6 +880,11 @@
         aria-labelledby="mm-heading"
       >
         <header class="mm-header">
+          <img
+            class="mm-brand-logo"
+            src="/assets/logos/dark-bg.png"
+            alt="Bro Battles"
+          />
           <h1 id="mm-heading" class="mm-heading">Matchmaking</h1>
           <div class="mm-progress" aria-label="Players found">
             <div class="mm-count">

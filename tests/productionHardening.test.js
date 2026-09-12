@@ -237,6 +237,7 @@ test('durable match results survive failed writes and service restart', async t 
 test('production disables inline source maps while development keeps debugging maps', () => {
   const config = require('../webpack.config');
   assert.equal(config({}, { mode: 'production' }).devtool, false);
-  assert.equal(config({}, { mode: 'production' }).output.clean, true);
+  assert.equal(config({}, { mode: 'production' }).output.clean, false);
+  assert.equal(config({}, { mode: 'production' }).cache.type, 'filesystem');
   assert.equal(config({}, { mode: 'development' }).devtool, 'inline-source-map');
 });

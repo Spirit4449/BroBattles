@@ -3,8 +3,7 @@
 
 import { playSound } from "../lib/uiSounds.js";
 import {
-  getMapLabel,
-  getSelectionDisplayLabel,
+  getModeById,
   normalizeGameSelection,
   selectionToLegacyMode,
 } from "../lib/gameSelectionCatalog.js";
@@ -359,24 +358,7 @@ export function createGameHudController({
 
     const mapMode = document.getElementById("bs-map-mode");
     if (mapMode) {
-      const mapId = Number(gameData?.map) || 1;
-      const mapName =
-        mapId === 1
-          ? "Lushy Peaks"
-          : mapId === 2
-            ? "Mangrove Meadow"
-            : mapId === 3
-              ? "Serenity"
-              : `Map ${mapId}`;
-      const teamMode = `${Math.max(1, Number(gameData?.mode) || 1)}v${Math.max(
-        1,
-        Number(gameData?.mode) || 1,
-      )}`;
-      mapMode.textContent = `${mapName} - ${teamMode}`;
-    }
-
-    if (mapMode) {
-      mapMode.textContent = `${getMapLabel(selection.mapId || gameData?.map)} - ${getSelectionDisplayLabel(selection)}`;
+      mapMode.textContent = getModeById(selection.modeId)?.label || "Duels";
     }
 
     deferGameplayHudReveal = false;

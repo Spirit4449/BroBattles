@@ -442,6 +442,7 @@ test("renderer distinguishes unavailable stats from real zeros and escapes names
   assert.match(container.innerHTML, /1 result unavailable/);
   assert.doesNotMatch(container.innerHTML, /DRAW|1D|onerror=alert\(1\)>/);
   assert.match(container.innerHTML, /chip-val kills">—/);
+  assert.doesNotMatch(container.innerHTML, /battle-card-banner|battle-hero-avatar|Match #/);
   renderBattleLog(container, [{ matchId: 2, outcome: "draw", trophiesDelta: 0, playerStats: { kills: 0, damage: 0, hits: 0 } }]);
   assert.match(container.innerHTML, /DRAW/);
   assert.match(container.innerHTML, /chip-val kills">0/);

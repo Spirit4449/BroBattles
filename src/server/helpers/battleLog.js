@@ -303,7 +303,7 @@ async function getBattleLogForUser(db, userId, limit = 10) {
     const modeVariantId =
       summary?.modeVariantId || selection.modeVariantId || "duels-1v1";
     const modeDef = getModeById(modeId);
-    const modeArt = modeDef?.artAsset || "/assets/duels.webp";
+    const modeArt = modeDef?.artAsset || "/assets/map-banners/duels.webp";
     const modeLabel = formatModeLabel(modeId, modeVariantId);
 
     const mapId = Number(summary?.mapId || selection.mapId || row.map || 1);

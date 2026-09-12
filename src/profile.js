@@ -11,6 +11,7 @@ import {
   buildProfileIconUrl,
 } from "./lib/profileIconAssets.js";
 import { renderBattleLog } from "./lib/battleLogView.js";
+import { renderCharacterLevelGrid } from "./lib/profileCharacterLevelsView.js";
 
 wireFullscreenToggles();
 
@@ -77,6 +78,11 @@ function renderProfile(profile) {
       viewingSelf: true,
     });
   }
+
+  renderCharacterLevelGrid(
+    document.getElementById("profile-character-levels-grid"),
+    profile.charLevels,
+  );
 }
 
 function renderCardsGrid() {

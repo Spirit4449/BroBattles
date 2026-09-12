@@ -2,7 +2,21 @@
 const path = require("path");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
-module.exports = (_env = {}, argv = {}) => ({
+module.exports = (_env = {}, argv = {}) => {
+  const mode = argv.mode || "development";
+
+  return {
+  // Persist module and CopyWebpackPlugin snapshots between CLI invocations.
+  // CopyWebpackPlugin reuses a cached source when a file's snapshot is unchanged,
+  // and Webpack's compareBeforeEmit avoids rewriting an identical output file.
+  cache: {
+    type: "filesystem",
+    cacheDirectory: path.resolve(__dirname, "node_modules/.cache/webpack"),
+    name: `bro-battles-${mode}`,
+    buildDependencies: {
+      config: [__filename],
+    },
+  },
   entry: {
     game: "./src/game.js",
     mapEditor: "./src/editor/mapEditor.js",
@@ -18,10 +32,12 @@ module.exports = (_env = {}, argv = {}) => ({
     filename: "bundles/[name].bundle.js",
     path: path.resolve(__dirname, "dist"),
     publicPath: "/",
-    clean: argv.mode === "production",
+    // Do not delete dist before emitting: preserved assets let Webpack skip
+    // unchanged writes. Run `npm run cleanbuild` when a full clean is needed.
+    clean: false,
   },
-  mode: argv.mode || "development",
-  devtool: argv.mode === "production" ? false : "inline-source-map",
+  mode,
+  devtool: mode === "production" ? false : "inline-source-map",
   devServer: {
     port: 3001,
     static: {
@@ -81,4 +97,5 @@ module.exports = (_env = {}, argv = {}) => ({
       ],
     }),
   ],
-});
+  };
+};

@@ -43,12 +43,12 @@
   --bb-orange: #e6923b;
 
   /* Fixed-size mosaic cells stay square on wide and compact popup headers. */
-  --bb-chroma-mosaic: url("/assets/ui/chroma-mosaic.svg") top left / 576px 96px repeat;
+  --bb-chroma-mosaic: url("/assets/chromas/chroma-mosaic.svg") top left / 576px 96px repeat;
   --bb-chroma-header-veil: linear-gradient(90deg, transparent, #2856be 34%, #3045b9 66%, transparent);
   --bb-header-gradient: var(--bb-chroma-header-veil), var(--bb-chroma-mosaic), linear-gradient(100deg, #159dc9 0%, #2865c5 30%, #304bc4 62%, #3926a4 100%);
   --bb-chroma-button-corners:
-    url("/assets/ui/chroma-corner-light.svg") left top / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat,
-    url("/assets/ui/chroma-corner-shade.svg") right bottom / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat;
+    url("/assets/chromas/chroma-corner-light.svg") left top / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat,
+    url("/assets/chromas/chroma-corner-shade.svg") right bottom / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat;
   --bb-chroma-button-trail:
     linear-gradient(rgba(255,255,255,.20), rgba(255,255,255,.20)) left 12% top 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
     linear-gradient(rgba(255,255,255,.15), rgba(255,255,255,.15)) left 20% top var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
@@ -283,7 +283,8 @@ input:-webkit-autofill:focus {
   .status-action
 ):hover:not(:disabled) {
   filter: brightness(1.12) saturate(1.06);
-  transform: translateY(-2px);
+  /* Moving the control itself changes its hit-test bounds. */
+  transform: none;
 }
 
 :is(
@@ -301,8 +302,26 @@ input:-webkit-autofill:focus {
   .status-action
 ):active:not(:disabled) {
   filter: brightness(0.97);
-  transform: translateY(5px);
+  transform: none;
   box-shadow: var(--bb-control-shadow-pressed);
+}
+
+/* Depress the visible contents by 2px without moving the clickable element. */
+:is(
+  .pixel-menu-button:not(.map-select-card),
+  .bb-button,
+  .profile-btn,
+  .shop-close,
+  .shop-buy-button,
+  .shop-checkout-close,
+  .shop-reveal-panel > button,
+  .shop-load-error button,
+  .bb-chat-send,
+  .sonner__btn,
+  body.admin-page button,
+  .status-action
+):active:not(:disabled) > * {
+  translate: 0 2px;
 }
 
 :is(button, .bb-button):disabled,
@@ -784,12 +803,12 @@ button.bb-close.bb-close {
 
 button.bb-close.bb-close:hover:not(:disabled) {
   filter: brightness(1.12) saturate(1.06);
-  transform: translateY(-1px) !important;
+  transform: none !important;
 }
 
 button.bb-close.bb-close:active:not(:disabled) {
   filter: brightness(0.96);
-  transform: translateY(4px) !important;
+  transform: none !important;
   box-shadow: var(--bb-control-shadow-pressed) !important;
 }
 
@@ -1061,6 +1080,11 @@ body.profile-page-body .profile-form[hidden] {
   border-color: var(--bb-green);
   background: var(--bb-card-gradient);
   box-shadow: var(--bb-card-shadow), inset 0 -3px 0 var(--bb-green-deep);
+}
+
+/* The portrait supplies its own inner frame; the complete choice stays raised. */
+.profile-loadout-modal .profile-icon-art {
+  background: transparent;
 }
 
 .profile-loadout-modal .profile-icon-selected-badge {
@@ -2251,8 +2275,8 @@ body.profile-page-body .profile-form[hidden] {
   border-radius: inherit;
   pointer-events: none;
   background:
-    url("/assets/ui/chroma-corner-light.svg") left top / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat,
-    url("/assets/ui/chroma-corner-shade.svg") right bottom / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat;
+    url("/assets/chromas/chroma-corner-light.svg") left top / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat,
+    url("/assets/chromas/chroma-corner-shade.svg") right bottom / var(--bb-chroma-corner-size, 18px) var(--bb-chroma-corner-size, 18px) no-repeat;
   opacity: 1;
   transform: none;
   filter: none;
@@ -2321,7 +2345,7 @@ body.profile-page-body .profile-form[hidden] {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: url("/assets/ui/lobby-chroma-mosaic.svg") top left / 576px 96px repeat;
+  background: url("/assets/chromas/lobby-chroma-mosaic.svg") top left / 576px 96px repeat;
   mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, .65) 9%, transparent 25%, transparent 93%, rgba(0, 0, 0, .45) 100%);
   -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, .65) 9%, transparent 25%, transparent 93%, rgba(0, 0, 0, .45) 100%);
 }
@@ -2336,8 +2360,8 @@ body.profile-page-body .profile-form[hidden] {
   --bb-chroma-corner-size: 27px;
   --bb-chroma-trail-cell: 9px;
   --bb-chroma-button-corners:
-    url("/assets/ui/chroma-corner-light.svg") left top / 27px 27px no-repeat,
-    url("/assets/ui/chroma-corner-shade.svg") right bottom / 27px 27px no-repeat;
+    url("/assets/chromas/chroma-corner-light.svg") left top / 27px 27px no-repeat,
+    url("/assets/chromas/chroma-corner-shade.svg") right bottom / 27px 27px no-repeat;
 }
 .shop-buy-button, .shop-reveal-panel > button, .party-button.shop-button {
   --bb-chroma-button-trail:

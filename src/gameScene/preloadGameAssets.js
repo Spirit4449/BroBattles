@@ -5,6 +5,7 @@ import { preloadTerrainAudio } from './movementAudio';
 export function preloadGameAssets({
   scene,
   staticPath,
+  mapId,
   powerupTypes,
   powerupAssetDir,
   preloadAllCharacters,
@@ -13,12 +14,12 @@ export function preloadGameAssets({
   // Character assets (preload all registered characters)
   preloadAllCharacters(scene, staticPath);
 
-  if (!scene._mapAssetKeys?.size) preloadLegacyMapAssets(scene, staticPath);
+  if (!scene._mapAssetKeys?.size) preloadLegacyMapAssets(scene, staticPath, mapId);
   loadImage("deathdrop-coin", `${staticPath}/coin.webp`);
   loadImage("deathdrop-gem", `${staticPath}/gem.webp`);
   loadImage("spectate-icon", `${staticPath}/spectate.webp`);
   for (let i = 1; i <= 3; i++) {
-    loadImage(`tombstone-${i}`, `${staticPath}/tombstone-${i}.webp`);
+    loadImage(`tombstone-${i}`, `${staticPath}/tombstones/tombstone-${i}.webp`);
   }
   // Level-balanced movement SFX and small randomized footstep set.
   preloadTerrainAudio(scene, staticPath);
@@ -37,10 +38,7 @@ export function preloadGameAssets({
   scene.load.audio("sfx-you-death", `${staticPath}/you-death.mp3`);
   scene.load.audio("sfx-coin-pickup", `${staticPath}/coin.mp3`);
   scene.load.audio("sfx-gem-pickup", `${staticPath}/gem.mp3`);
-  scene.load.audio("sfx-noammo", [
-    `${staticPath}/noammo.mp3`,
-    `${staticPath}/land.mp3`,
-  ]);
+  scene.load.audio("sfx-noammo", `${staticPath}/noammo.mp3`);
 
   scene.load.spritesheet(
     "duck-guard-impact",

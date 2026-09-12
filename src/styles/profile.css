@@ -60,7 +60,8 @@ body.profile-page-body .profile-header h1 {
 body.profile-page-body .profile-grid {
   display: grid;
   grid-template-columns: minmax(300px, 0.85fr) minmax(340px, 1.15fr);
-  gap: 20px;
+  column-gap: 20px;
+  row-gap: 28px;
   margin-top: 28px;
 }
 
@@ -415,10 +416,91 @@ body.profile-page-body .card-actions {
   object-fit: contain;
 }
 
+/* Shared unlocked Bros display for self and public profile views. */
+.profile-character-levels-card {
+  grid-column: 1 / -1;
+}
+
+.profile-character-levels-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.profile-character-level-card {
+  position: relative;
+  width: 100px;
+  display: grid;
+  gap: 7px;
+  justify-items: center;
+}
+
+.profile-character-level-card > img {
+  width: 92px;
+  height: 92px;
+  display: block;
+  object-fit: cover;
+}
+
+.profile-character-level-badge {
+  position: absolute;
+  top: -7px;
+  left: -1px;
+  width: 38px;
+  height: 56px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.profile-character-level-badge img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.55));
+}
+
+.profile-character-level-name {
+  color: #eaf5ff;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: capitalize;
+  text-align: center;
+  width: 100%;
+}
+
+[data-bros-heading] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
+.profile-bros-unlocked-count {
+  color: #8ba3c7;
+  font-family: var(--bb-font-body, "Lato", sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.profile-bros-unlocked-count strong {
+  color: #fff;
+  font: inherit;
+}
+
+.profile-character-level-empty {
+  color: #a9d5ff;
+  font-size: 12px;
+  padding: 6px 2px;
+}
+
 /* Battle Log Section */
 .profile-card.battle-log-card {
   grid-column: 1 / -1;
-  margin-top: 10px;
 }
 
 .battle-log-header {
@@ -447,12 +529,9 @@ body.profile-page-body .card-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 20px;
-  margin-bottom: 16px;
-  padding: 10px 14px;
-  border-radius: var(--bb-radius-card, 0);
-  background: rgba(5, 12, 25, 0.88);
-  border: 2px solid var(--bb-border-soft, #263b59);
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  padding: 0 2px;
   font-size: 12px;
   color: #8ba3c7;
 }
@@ -460,9 +539,8 @@ body.profile-page-body .card-actions {
 .battle-log-metric {
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  line-height: 1.6;
+  gap: 5px;
+  line-height: 1.4;
 }
 
 .battle-log-summary-bar .trophy-mini-icon,
@@ -481,6 +559,11 @@ body.profile-page-body .card-actions {
   margin: 0;
 }
 
+.battle-summary-count {
+  margin-left: auto;
+  color: #7188a8;
+}
+
 .battle-log-metric strong {
   color: #fff;
   font-weight: 900;
@@ -494,6 +577,11 @@ body.profile-page-body .card-actions {
   gap: 6px;
 }
 
+.battle-log-metric.record {
+  padding-right: 12px;
+  border-right: 1px solid var(--bb-border-soft, #263b59);
+}
+
 .battle-log-metric.trophies.positive strong {
   color: #ffd32a;
 }
@@ -505,17 +593,17 @@ body.profile-page-body .card-actions {
 .battle-cards-stream {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .battle-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  border: 2px solid var(--bb-border, #385478);
+  border: 1px solid var(--bb-border-soft, #263b59);
   border-radius: var(--bb-radius-card, 0);
   background: var(--bb-card-gradient, linear-gradient(180deg, #14243c, #0b172a));
-  box-shadow: 0 3px 0 var(--bb-ink, #03060b);
+  box-shadow: 0 2px 0 var(--bb-ink, #03060b);
   overflow: hidden;
   transition: transform var(--bb-motion-fast, 130ms) ease;
 }
@@ -526,145 +614,78 @@ body.profile-page-body .card-actions {
 }
 
 .battle-card.victory {
-  border-top: 4px solid #19c890;
+  border-left: 3px solid #19c890;
 }
 
 .battle-card.defeat {
-  border-top: 4px solid #ff4757;
+  border-left: 3px solid #ff4757;
 }
 
 .battle-card.draw {
-  border-top: 4px solid #ffa502;
+  border-left: 3px solid #ffa502;
 }
 
 .battle-card.unknown {
-  border-top: 4px solid #8095af;
+  border-left: 3px solid #8095af;
 }
 
 .battle-outcome-badge.unknown {
   background: #34465f;
 }
 
-/* Banner Art Header */
-.battle-card-banner {
-  position: relative;
-  min-height: 72px;
-  background-size: cover;
-  background-position: center;
-  border-bottom: 2px solid var(--bb-ink, #03060b);
+/* Battle Card Main Body */
+.battle-card-main {
+  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.battle-card-banner-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, rgba(3, 6, 12, 0.94) 0%, rgba(11, 22, 41, 0.85) 55%, rgba(3, 6, 12, 0.68) 100%);
-}
-
-.battle-card-banner-content {
-  position: relative;
-  z-index: 1;
+.battle-result-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  min-height: 72px;
-  padding: 12px 14px;
   gap: 12px;
+  min-width: 0;
 }
 
-.battle-mode-art-wrap {
-  width: 42px;
-  height: 42px;
-  flex-shrink: 0;
-  border: 2px solid var(--bb-border-highlight, #7aa9e5);
-  background: rgba(5, 12, 25, 0.92);
-  box-shadow: 0 3px 0 var(--bb-ink, #03060b);
-  padding: 4px;
-  border-radius: var(--bb-radius-media, 4px);
-}
-
-.battle-mode-art {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.battle-banner-meta {
+.battle-match-meta {
   flex: 1;
   min-width: 0;
 }
 
-.battle-banner-title {
-  margin: 0 0 5px;
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+.battle-match-meta h4 {
+  margin: 0 0 2px;
+  color: #f7f9ff;
   font-size: 13px;
-  color: #fff;
-  text-transform: uppercase;
-  text-shadow: 2px 2px 0 var(--bb-ink, #03060b);
-  letter-spacing: 0.5px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
+  line-height: 1.2;
 }
 
-.battle-banner-map {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #c9d6e8;
-  text-shadow: 1px 1px 0 var(--bb-ink, #03060b);
-}
-
-.battle-map-dot {
-  width: 6px;
-  height: 6px;
-  background: #3d91eb;
-  border-radius: 50%;
-  box-shadow: 0 0 6px #3d91eb;
-}
-
-.battle-time-badge {
-  white-space: nowrap;
-  padding: 5px 9px;
-  font-size: 11px;
-  font-weight: 700;
+.battle-match-meta > span {
+  display: block;
+  overflow: hidden;
   color: #8ba3c7;
-  background: rgba(3, 6, 11, 0.85);
-  border: 2px solid var(--bb-border-soft, #263b59);
-  box-shadow: 0 3px 0 var(--bb-ink, #03060b);
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Battle Card Main Body */
-.battle-card-main {
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.battle-result-strip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.battle-result-strip .battle-match-code {
+.battle-time {
   margin-left: auto;
   font-size: 11px;
-  color: #a7b9d0;
+  color: #7188a8;
+  white-space: nowrap;
 }
 
 .battle-outcome-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 5px 12px;
-  border: 2px solid var(--bb-ink, #03060b);
-  box-shadow: 0 3px 0 var(--bb-ink, #03060b);
+  min-width: 78px;
+  padding: 5px 9px;
+  border: 1px solid var(--bb-ink, #03060b);
   font-family: var(--bb-font-display, "Press Start 2P", monospace);
-  font-size: 10px;
+  font-size: 8px;
   line-height: 1;
   text-transform: uppercase;
   color: #fff;
@@ -687,145 +708,76 @@ body.profile-page-body .card-actions {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px;
-  border: 2px solid var(--bb-ink, #03060b);
-  box-shadow: 0 3px 0 var(--bb-ink, #03060b);
+  min-width: 48px;
+  justify-content: flex-end;
+  padding: 0;
   font-family: var(--bb-font-display, "Press Start 2P", monospace);
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1;
 }
 
 .battle-trophy-pill.positive {
-  background: #182a1c;
   color: #ffd32a;
 }
 
 .battle-trophy-pill.negative {
-  background: #2a1414;
   color: #ff6b81;
 }
 
 .battle-trophy-pill.neutral {
-  background: #141f30;
   color: #c9d6e8;
 }
 
-/* Hero Stats Row */
-.battle-hero-stats-row {
+/* Compact secondary details */
+.battle-details-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0;
+  gap: 7px;
+  padding-left: 90px;
+  color: #7188a8;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
-.battle-hero-tile {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.battle-hero-label {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.battle-hero-avatar-frame {
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-  border: 2px solid var(--bb-border-highlight, #7aa9e5);
-  background: #050d1c;
-  box-shadow: 0 3px 0 var(--bb-ink, #03060b);
-}
-
-.battle-hero-avatar {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.battle-hero-name {
-  display: block;
-  font-size: 14px;
-  font-weight: 900;
-  color: #fff;
-  line-height: 1.2;
-}
-
-.battle-hero-class {
-  display: block;
-  font-size: 10px;
-  font-weight: 700;
-  color: #7aa9e5;
-  text-transform: uppercase;
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
-  margin-top: 3px;
-}
-
-.battle-combat-chips {
+.battle-combat-stats,
+.battle-rewards {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 5px 10px;
 }
 
-.battle-stat-chip {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 5px 10px;
-  min-width: 68px;
-  background: rgba(11, 22, 41, 0.9);
-  border-left: 1px solid var(--bb-border-soft, #263b59);
+.battle-detail-divider {
+  width: 1px;
+  height: 12px;
+  background: var(--bb-border-soft, #263b59);
 }
 
-.battle-stat-chip .chip-label {
-  font-size: 8px;
-  font-family: inherit;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-  color: #8ba3c7;
-  margin-bottom: 3px;
-}
-
-.battle-stat-chip .chip-val {
-  font-size: 14px;
+.battle-details-row .chip-val {
   font-variant-numeric: tabular-nums;
-  font-weight: 900;
-  color: #fff;
+  font-weight: 800;
+  color: #a7b9d0;
 }
 
-.battle-stat-chip .chip-val.kills {
+.battle-details-row .chip-val.kills {
   color: #ff7675;
 }
 
-.battle-stat-chip .chip-val.damage {
+.battle-details-row .chip-val.damage {
   color: #fdcb6e;
 }
 
-.battle-stat-chip .chip-val.hits {
+.battle-details-row .chip-val.hits {
   color: #74b9ff;
 }
 
-.battle-stat-chip .chip-val.coins {
+.battle-details-row .chip-val.coins {
   color: #ffd32a;
 }
 
-.battle-stat-chip .chip-val.gems {
+.battle-details-row .chip-val.gems {
   color: #2ed573;
-}
-
-.battle-card-subfooter {
-  display: flex;
-  justify-content: flex-end;
-  font-size: 10px;
-  color: #576574;
 }
 
 .battle-log-empty {
@@ -846,8 +798,8 @@ body.profile-page-body .card-actions {
 }
 
 .battle-log-empty-icon img {
-  width: 44px;
-  height: 44px;
+  width: 96px;
+  height: auto;
   filter: drop-shadow(0 3px 0 var(--bb-ink, #03060b));
 }
 
@@ -870,39 +822,31 @@ body.profile-page-body .card-actions {
   body.profile-page-body .profile-grid {
     grid-template-columns: 1fr;
   }
-
-  .battle-hero-stats-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .battle-combat-chips {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-
-  .battle-stat-chip {
-    grid-column: span 2;
-    min-width: 0;
-  }
-
-  .battle-stat-chip.reward {
-    grid-column: span 3;
-  }
 }
 
 @media (max-width: 560px) {
-  .battle-card-banner-content {
-    flex-wrap: wrap;
+  .battle-summary-count {
+    display: none;
+  }
+
+  .battle-result-row {
+    align-items: flex-start;
     gap: 8px;
   }
 
-  .battle-banner-title {
-    font-size: 10px;
+  .battle-outcome-badge {
+    min-width: 70px;
   }
 
-  .battle-mode-art-wrap {
+  .battle-trophy-pill {
+    margin-left: auto;
+  }
+
+  .battle-details-row {
+    padding-left: 78px;
+  }
+
+  .battle-detail-divider {
     display: none;
   }
   body.profile-page-body .profile-page {

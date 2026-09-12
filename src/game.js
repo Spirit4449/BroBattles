@@ -39,7 +39,7 @@ import { updateDynamicCamera } from "./gameScene/cameraDynamics";
 import { createLocalInputSync } from "./gameScene/localInputSync";
 import { updateHealthBars } from "./gameScene/healthBarRenderer";
 import { createMapEditorRuntime } from "./gameScene/mapEditorRuntime";
-import { createModeRuntime, preloadModeAssets, supportsSuddenDeath } from "./modes";
+import { createModeRuntime, loadMode, preloadModeAssets, supportsSuddenDeath } from "./modes";
 import {
   POWERUP_TYPES,
   POWERUP_ASSET_DIR,
@@ -862,6 +862,7 @@ window.__BOOT_GAME__ = () =>
     hud.initSpectateHud?.();
     initTimerHud();
     await initializeGame();
+    await loadMode(gameData?.modeId);
     if (!game) {
       game = new Phaser.Game(config);
     }
@@ -876,8 +877,8 @@ class GameScene extends Phaser.Scene {
 
   // Preloads assets
   preload() {
-    this.load.image("spawn-parachute-blue", "/assets/parachute-blue.webp");
-    this.load.image("spawn-parachute-red", "/assets/parachute-red.webp");
+    this.load.image("spawn-parachute-blue", "/assets/parachutes/parachute-blue.webp");
+    this.load.image("spawn-parachute-red", "/assets/parachutes/parachute-red.webp");
     this.load.on("progress", (p) => {
       // 50% - 90%
       const pct = Math.floor(50 + p * 40); // maps 0-1 -> 50-90
@@ -896,6 +897,7 @@ class GameScene extends Phaser.Scene {
     preloadGameAssets({
       scene: this,
       staticPath,
+      mapId: gameData?.mapSnapshot?.mapId || gameData?.map,
       powerupTypes: POWERUP_TYPES,
       powerupAssetDir: POWERUP_ASSET_DIR,
       preloadAllCharacters: (activeScene, activeStaticPath) =>

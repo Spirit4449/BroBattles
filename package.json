@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development PORT=31337 nodemon --watch src/server --watch src/shared --watch src/lib --ext js,json --exec node src/server/server.js",
     "build": "webpack --mode production",
+    "cleanbuild": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "sourcemap": "cross-env NODE_ENV=production webpack --mode=production --devtool=source-map",
     "start": "cross-env NODE_ENV=production node src/server/server.js",
     "test:shop": "node --test tests/shopCatalog.test.js tests/shopCommerce.test.js tests/shopRotation.test.js tests/shopStaticContracts.test.js",

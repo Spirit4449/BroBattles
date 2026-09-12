@@ -2102,7 +2102,7 @@ function applyBotToSlot(bot, slot, isYourTeam) {
     : `Bot · ${character[0].toUpperCase()}${character.slice(1)}`;
   usernameEl.className = `username${isYourTeam ? "" : " op-player"}`;
   spriteEl.src = isShuffle
-    ? "/assets/shuffle1.webp"
+    ? "/assets/shuffle/shuffle1.webp"
     : buildCharacterSkinBodyUrl(character, "");
   spriteEl.alt = isShuffle ? "Shuffle bot" : `${character} bot`;
   spriteEl.classList.remove("random");
@@ -2541,7 +2541,7 @@ function openBotPicker(slot) {
   const selectedCharacter = String(slot.dataset.botCharacter || "random");
   const choices = [
     { id: "random", label: "Random", image: "/assets/random.webp" },
-    { id: "shuffle", label: "Bot", image: "/assets/shuffle1.webp" },
+    { id: "shuffle", label: "Bot", image: "/assets/shuffle/shuffle1.webp" },
     ...getAllCharacters().map((id) => ({
       id,
       label: `Bot · ${id[0].toUpperCase()}${id.slice(1)}`,
@@ -2973,7 +2973,7 @@ function updateMMOverlay({ found, total, selection, players }) {
         const cls = p.char_class || "ninja";
         const isShuffleBot = p.isConfiguredBot && cls === "shuffle";
         img.src = isShuffleBot
-          ? "/assets/shuffle1.webp"
+          ? "/assets/shuffle/shuffle1.webp"
           : String(p.selected_skin_asset_url || "").trim() ||
             buildCharacterSkinBodyUrl(cls, "");
         img.alt = isShuffleBot ? "Shuffle bot" : cls;
@@ -3084,7 +3084,7 @@ function collectCurrentPartyMembers() {
         : `Bot · ${character[0].toUpperCase()}${character.slice(1)}`,
       char_class: character,
       selected_skin_asset_url: isShuffle
-        ? "/assets/shuffle1.webp"
+        ? "/assets/shuffle/shuffle1.webp"
         : buildCharacterSkinBodyUrl(character, ""),
       team: slot?.team || null,
       isConfiguredBot: true,
