@@ -1,3 +1,4 @@
+import { getSettings, bindCanvasName } from "./site/preferences";
 import { resolveWallContact, applyWallSlide } from './players/wallMovement';
 import { predictCharacterSpecial } from './characters/networkRegistry';
 // player.js
@@ -850,6 +851,7 @@ export function createPlayer(
   // Player name text anchored to physics body top (not frame height)
   const bodyTop = player.body ? player.body.y : player.y - player.height / 2;
   playerName = scene.add.text(player.x, bodyTop - 40, username);
+  bindCanvasName(playerName, username);
   playerName.setStyle({
     fontFamily: "LilitaOne-Regular",
     fontSize: "10px",
@@ -1013,7 +1015,7 @@ export function createPlayer(
   const pointerDownHandler = (pointer) => {
     if (window.__BB_MAP_EDIT_ACTIVE) return;
     if (dead) return;
-    if (chatInputActive) return;
+    if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) return;
     if (
       Math.max(
         Number(player?._movementLockedUntil || 0),
@@ -1045,7 +1047,7 @@ export function createPlayer(
   };
 
   const pointerMoveHandler = (pointer) => {
-    if (chatInputActive) return;
+    if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) return;
     const mobilePointerHandled =
       !!mobileControlsController?.handlePointerMove?.(pointer);
     if (mobilePointerHandled) return;
@@ -1066,7 +1068,7 @@ export function createPlayer(
   };
 
   const pointerUpHandler = (pointer) => {
-    if (chatInputActive) return;
+    if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) return;
     const mobilePointerHandled =
       !!mobileControlsController?.handlePointerUp?.(pointer);
     if (mobilePointerHandled) return;
@@ -1106,11 +1108,12 @@ export function createPlayer(
   scene.input.on("pointerupoutside", pointerUpHandler);
   scene.input.on("gameout", pointerGameOutHandler);
   combatMouseController = createCombatMouseController({
+    getPreferences: getSettings,
     scene: sceneParam,
-    canCapture: () => !!player && !sceneParam._battleEnded && !chatInputActive &&
+    canCapture: () => !!player && !sceneParam._battleEnded && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN &&
       !window.__BB_MAP_EDIT_ACTIVE && !mobileControlsController?.isEnabled?.() &&
       sceneParam.input.keyboard?.enabled !== false && sceneParam.sys.isActive(),
-    canPlay: () => !!player && !dead && !chatInputActive &&
+    canPlay: () => !!player && !dead && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN &&
       !window.__BB_MAP_EDIT_ACTIVE && !mobileControlsController?.isEnabled?.() &&
       sceneParam.input.keyboard?.enabled !== false && sceneParam.sys.isActive(),
     onRelease: () => {
@@ -1564,7 +1567,7 @@ export function handlePlayerMovement(scene) {
     };
     return;
   }
-  if (chatInputActive) {
+  if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) {
     stopMovementLoopSfx();
     try {
       if (player?.body) {
@@ -2611,7 +2614,7 @@ export function setLocalNetStateFlusher(fn) {
 
 export function setChatInputActive(active) {
   chatInputActive = !!active;
-  if (chatInputActive) {
+  if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) {
     combatMouseController?.release();
     resetPointerAttackAim();
     resetMovementInputState();

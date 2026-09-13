@@ -1,0 +1,75 @@
+{
+  "news": [
+    {
+      "slug": "welcome-to-beta",
+      "title": "Welcome to Bro Battles beta",
+      "date": "2026-09-12",
+      "summary": "Pick your fighter. Bring your friends. Help shape what comes next.",
+      "image": "/assets/lushy/lobbyBg.webp"
+    },
+    {
+      "slug": "make-your-next-duel-count",
+      "title": "Make your next duel count",
+      "date": "2026-09-11",
+      "summary": "One rival or a whole squad. Find your rhythm in Duels.",
+      "image": "/assets/map-banners/duels.webp"
+    },
+    {
+      "slug": "bring-the-crew-bust-the-vault",
+      "title": "Bring the crew. Bust the vault.",
+      "date": "2026-09-10",
+      "summary": "Push together, protect your vault, and turn the tide in Bank Bust.",
+      "image": "/assets/map-banners/bank-bust.webp"
+    }
+  ],
+  "help": [
+    {
+      "slug": "getting-started",
+      "title": "How do I start playing?",
+      "category": "Getting Started",
+      "summary": "Your first match, from lobby to arena."
+    },
+    {
+      "slug": "controls",
+      "title": "What are the controls?",
+      "category": "Gameplay",
+      "summary": "Movement, aiming, and getting your cursor back."
+    },
+    {
+      "slug": "parties",
+      "title": "How do I play with friends?",
+      "category": "Gameplay",
+      "summary": "Create a party and ready up together."
+    },
+    {
+      "slug": "accounts",
+      "title": "How do I save my progress?",
+      "category": "Accounts",
+      "summary": "Guest accounts, signup, and account access."
+    },
+    {
+      "slug": "purchases",
+      "title": "I need help with a purchase",
+      "category": "Purchases",
+      "summary": "Missing currency, payment problems, and refunds."
+    },
+    {
+      "slug": "connection",
+      "title": "The game will not connect",
+      "category": "Troubleshooting",
+      "summary": "Quick checks for loading and connection issues."
+    },
+    {
+      "slug": "safety",
+      "title": "Report a player or safety concern",
+      "category": "Safety & Privacy",
+      "summary": "Keep battles fair and your information private."
+    },
+    {
+      "slug": "privacy-requests",
+      "title": "Request access or deletion of my data",
+      "category": "Safety & Privacy",
+      "summary": "Contact the operator about your privacy rights."
+    }
+  ]
+}

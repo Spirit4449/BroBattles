@@ -259,3 +259,32 @@ test('Force Touch pressure does not activate or change aiming', () => {
   h.controller.destroy();
   assert.equal(h.canvas.count(), 0);
 });
+
+test('disabling automatic hiding keeps cursor visible until arena activation', () => {
+  const h = setup();
+  h.controller.destroy();
+  const preferences = { sensitivity: 1, autoHideCursor: false };
+  let requests = 0;
+  h.canvas.requestPointerLock = () => { requests++; };
+  const controller = createCombatMouseController({scene:h.scene,canPlay:()=>true,onRelease:()=>{},getPreferences:()=>preferences});
+  assert.equal(h.canvas.style.cursor, '');
+  h.doc.emit('keydown', {key:'w'});
+  assert.equal(requests, 0);
+  controller.beginInput();
+  assert.equal(requests, 1);
+  h.doc.pointerLockElement=h.canvas;h.doc.emit('pointerlockchange');
+  assert.equal(h.canvas.style.cursor,'none');
+  controller.release();controller.update();assert.equal(h.canvas.style.cursor,'');
+  controller.destroy();
+});
+test('sensitivity multiplier changes drag response without changing camera reach', () => {
+  const h = setup();h.controller.destroy();
+  const preferences={sensitivity:0.25,autoHideCursor:true};
+  const controller=createCombatMouseController({scene:h.scene,canPlay:()=>true,onRelease:()=>{},getPreferences:()=>preferences});
+  controller.beginInput();h.doc.pointerLockElement=h.canvas;h.doc.emit('pointerlockchange');controller.beginDrag();
+  h.doc.emit('mousemove',{target:h.canvas,movementX:100,movementY:0});assert.equal(controller.isAiming(),false);
+  preferences.sensitivity=3;
+  h.doc.emit('mousemove',{target:h.canvas,movementX:100,movementY:0});assert.equal(controller.isAiming(),true);
+  controller.update();assert.equal(h.scene._combatAimLook.x,COMBAT_MOUSE_CONFIG.lookAhead);
+  controller.destroy();
+});

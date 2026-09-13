@@ -1,3 +1,4 @@
+import { bindCanvasName } from "../site/preferences";
 // opplayer.js
 
 import {
@@ -166,6 +167,7 @@ export default class RemotePlayer {
       bodyTop - OP_PLAYER_NAME_OFFSET_Y,
       this.username,
     );
+    bindCanvasName(this.opPlayerName, this.username);
     this.opPlayerName.setStyle({
       fontFamily: "LilitaOne-Regular",
       fontSize: "10px",

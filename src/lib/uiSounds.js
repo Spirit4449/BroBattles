@@ -1,3 +1,4 @@
+import { getSettings, subscribeSettings } from "../site/preferences.js";
 import { shouldMuteClientDefaultLogs } from "./netTestLogger.js";
 
 /**
@@ -8,6 +9,10 @@ import { shouldMuteClientDefaultLogs } from "./netTestLogger.js";
  */
 
 const sounds = {};
+const activeSounds = new Map();
+subscribeSettings(settings => {
+  for (const [sound, base] of activeSounds) sound.volume = base * settings.sfx;
+});
 const soundPath = "/assets/ui-sound/";
 let preloaded = false;
 
@@ -100,9 +105,14 @@ export function playSound(soundName, volume = 0.5, options = {}) {
   if (!source) return;
   const sound = options.overlap ? source.cloneNode(true) : source;
   sound.currentTime = 0;
-  sound.volume = volume;
+  activeSounds.set(sound, volume);
+  sound.volume = volume * getSettings().sfx;
+  const release = () => activeSounds.delete(sound);
+  sound.addEventListener('ended', release, { once: true });
+  sound.addEventListener('error', release, { once: true });
   sound.playbackRate = Math.max(0.5, Math.min(2, Number(options.playbackRate) || 1));
   sound.play().catch((e) => {
+    release();
     if (!shouldMuteClientDefaultLogs()) {
       console.warn(`Sound ${soundName} failed:`, e);
     }

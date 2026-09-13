@@ -1,3 +1,4 @@
+import "./site/shell.js";
 // login.js
 import "./styles/accounts.css";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";

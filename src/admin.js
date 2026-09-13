@@ -308,3 +308,16 @@ function init() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+// Support and feedback share storage, with separate admin inboxes.
+import { renderInbox } from './site/supportUI';
+for (const kind of ['feedback', 'support']) {
+  const section = document.createElement('section');
+  section.className = 'site-panel site-admin-inbox';
+  const title = document.createElement('h2');
+  title.textContent = kind === 'feedback' ? 'Feedback' : 'Support requests';
+  const contents = document.createElement('div');
+  section.append(title, contents);
+  (document.querySelector('.admin-shell') || document.body).append(section);
+  renderInbox(contents, { admin: true, kind });
+}

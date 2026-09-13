@@ -333,6 +333,7 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
     const copy = document.createElement("div");
     copy.className = "party-request-card-copy";
     const name = document.createElement("strong");
+    name.dataset.privateName = "";
     name.textContent = String(request.requesterName || "Player");
     const meta = document.createElement("span");
     meta.textContent = "Wants to join your party.";

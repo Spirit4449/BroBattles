@@ -31,6 +31,8 @@ function registerRoutes({
 
   require("./modules/mapEditorRoutes").registerMapEditorRoutes({app, requireCurrentUser, isAdminUser, pageRoot});
 
+  require("./modules/siteRoutes").registerSiteRoutes({ app, db, auth });
+
   registerPageRoutes({
     app,
     db,

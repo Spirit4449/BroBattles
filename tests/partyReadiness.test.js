@@ -16,6 +16,7 @@ function fixture(names = ['Owner'], gameHub = undefined) {
     setPartyStatus: async (_, status) => { party.status = status; },
     setUserStatus: async (name, status) => { members.find(m => m.name === name).status = status; },
     async runQuery(sql, params) {
+      if (sql.includes("FROM legal_acceptances")) return [{}];
       if (sql.startsWith('SELECT * FROM parties')) return [{ ...party }];
       if (sql.startsWith('SELECT status FROM parties')) return [{ status: party.status }];
       if (sql.startsWith('SELECT 1 FROM match_tickets')) return ticket ? [{}] : [];
@@ -188,4 +189,13 @@ test('ready recovers from an empty old battle and joins a new queue', async () =
   assert.deepEqual(ended, [77]);
   assert.equal(f.party.status, 'queued');
   assert.equal(f.joins, 1);
+});
+
+test('first ready without accepted terms cannot enqueue, but unready still works', async () => {
+  const f = fixture(); const query = f.db.runQuery;
+  f.db.runQuery = (sql, params) => sql.includes('FROM legal_acceptances') ? Promise.resolve([]) : query(sql, params);
+  const response = await f.client('Owner').ready(true);
+  assert.equal(response.ok, false);
+  assert.equal(f.joins, 0);
+  assert.equal((await f.client('Owner').ready(false)).ok, true);
 });

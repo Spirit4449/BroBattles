@@ -1,3 +1,5 @@
+import siteConfig from "./shared/siteConfig.json";
+import "./site/shell.js";
 import { getDisplayName } from "./lib/cookies.js";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
 import "./styles/accounts.css";
@@ -34,6 +36,13 @@ if (requestedNext?.startsWith("/") && !requestedNext.includes("\\")) {
 
 // Display current guest name (server uses "display_name")
 document.getElementById("guestName").textContent = getDisplayName();
+const guestSession = fetch('/status', {method:'POST', credentials:'same-origin'}).then(async response => {
+  if (!response.ok) throw new Error('Unable to start a guest session. Please retry.');
+  const data = await response.json();
+  document.getElementById('guestName').textContent = data.userData?.name || getDisplayName();
+  return data;
+});
+guestSession.catch(error => showError(error.message));
 
 // Accessibility hint for errors
 errorMessage.setAttribute("role", "alert");
@@ -114,11 +123,12 @@ form.addEventListener("submit", async (e) => {
   setLoading(true);
 
   try {
+    await guestSession;
     const response = await fetch("/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // Server only expects username/password; guest session comes from cookies.
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, accepted: document.getElementById("legal-accept").checked, termsVersion: siteConfig.termsVersion, privacyVersion: siteConfig.privacyVersion }),
       credentials: "same-origin",
     });
 

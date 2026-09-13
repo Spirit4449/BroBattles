@@ -138,6 +138,7 @@ function initSocket({
         return next();
       }
       const user = await sessions.authenticateSocket(socket, userIdStr);
+
       socket.data.user = user || null;
       if (!user) {
         console.warn("[socket-auth] no user found for signed cookie", {

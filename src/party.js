@@ -1,3 +1,4 @@
+import { ensureLegalAcceptance } from "./site/shell";
 import { createJoinRequestController } from './lobby/joinRequestController';
 import { createMapEditorLink } from './lib/mapEditorLink';
 import { sonner } from "./lib/sonner.js";
@@ -2626,7 +2627,7 @@ export function initReadyToggle() {
   if (readyBtn.dataset.bound === "1") return;
   readyBtn.dataset.bound = "1";
 
-  readyBtn.addEventListener("click", () => {
+  readyBtn.addEventListener("click", async () => {
     if (getActivePartyId() && __activeBattleMatchId) {
       sessionStorage.setItem("matchId", String(__activeBattleMatchId));
       window.location.href = `/game/${__activeBattleMatchId}`;
@@ -2643,6 +2644,13 @@ export function initReadyToggle() {
     const cur = (statusEl.textContent || "").toLowerCase();
     const nextReady = cur.trim() !== "ready";
     const partyId = getActivePartyId();
+    if (nextReady) {
+      if (readyBtn.dataset.consentPending === '1') return;
+      readyBtn.dataset.consentPending = '1';
+      try { await ensureLegalAcceptance(); }
+      catch (_) { return; }
+      finally { delete readyBtn.dataset.consentPending; }
+    }
 
     if (nextReady && !partyId) {
       const blockReason = getSelectionBlockReason(getCurrentSelection());

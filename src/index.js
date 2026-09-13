@@ -1,3 +1,5 @@
+import { ensureLegalAcceptance, setNavigationGuard } from "./site/shell";
+import "./site/shell.js";
 import { escapeHtml, profileFetchJson, fetchLobbyJson, openOverlay, closeOverlay, isOverlayOpen } from './lobby/ui';
 import { createProfileController } from './lobby/profileController';
 import { createTrophyController } from './lobby/trophyController';
@@ -774,7 +776,7 @@ const statusPromise = fetch("/status", {
     );
     return res.json();
   })
-  .then((data) => {
+  .then(async (data) => {
     console.log(
       "[join-debug] /status payload",
       getJoinDebugMeta({
@@ -1030,6 +1032,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         profilePopup.open();
       }
     });
+  }
+  if (new URLSearchParams(location.search).get('profile') === 'self') {
+    profilePopup?.open?.();
+    const url = new URL(location.href);url.searchParams.delete('profile');
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
   }
   const initialCharClass = String(userData.char_class || "ninja").toLowerCase();
   const initialSkinId = String(
@@ -1295,10 +1302,18 @@ function signUpOut(guest) {
     signOut.addEventListener("click", () => (window.location.href = "/signup"));
     login.addEventListener("click", () => (window.location.href = "/login"));
   } else {
-    signOut.textContent = "Sign Out";
-    signOut.style.background = "linear-gradient(135deg, #d63939, #cf4545)";
-    signOut.addEventListener("click", () => {
-      window.location.href = "/signed-out";
+    signOut.style.display = "none";
+    const profileSignOut = document.getElementById('profile-sign-out');
+    profileSignOut?.addEventListener('click', async () => {
+      profileSignOut.disabled = true;
+      try {
+        const response = await fetch('/logout', {method:'POST',credentials:'same-origin'});
+        if (!response.ok) throw new Error('Unable to sign out.');
+        window.location.assign('/login');
+      } catch (_) {
+        profileSignOut.disabled = false;
+        profileSignOut.textContent = 'Retry sign out';
+      }
     });
     login.style.display = "none";
   }
@@ -1356,3 +1371,16 @@ export function setLobbyBackground(mapValue) {
   preload.src = nextUrl;
   if (preload.complete) queueMicrotask(applyLoadedBackground);
 }
+
+setNavigationGuard(async () => {
+  if (!document.body.classList.contains('matchmaking-active')) return true;
+  const confirmed = await showUiConfirm({title:'Leave matchmaking?', message:'Opening this page will cancel matchmaking.', confirmLabel:'Leave queue'});
+  if (!confirmed) return false;
+  try {
+    await new Promise((resolve, reject) => socket.timeout(5000).emit('queue:leave', (error, reply) => {
+      if (error || !reply?.ok) reject(new Error('Could not confirm cancellation. Please retry.'));
+      else resolve();
+    }));
+    return true;
+  } catch (error) { sonner('Unable to leave queue', error.message, 'error'); return false; }
+});

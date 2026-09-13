@@ -6,6 +6,7 @@ const { setBanHoldCookies } = require("../../helpers/banHold");
 
 function registerAuthRoutes({ app, db, requireCurrentUser }) {
   app.post("/signup", async (req, res) => {
+    if (!require("./siteRoutes").isSameOrigin(req)) return res.status(403).json({ error: "Same-origin request required." });
     try {
       const result = await completeSignupFromGuest({
         app,

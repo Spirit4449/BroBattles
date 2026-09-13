@@ -5,16 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Create Account</title>
     <link rel="shortcut icon" href="/assets/logos/logo-small.webp" type="image/webp" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="/bundles/signup.css" />
     <link rel="stylesheet" href="/styles/ui-system.css" />
   </head>
-  <body>
+  <body class="site-auth">
     <div class="container">
       <div class="auth-card">
         <h1>Create Account</h1>
@@ -55,6 +49,9 @@
             />
           </div>
 
+          <label class="site-consent"><input type="checkbox" id="legal-accept" required />
+            <span>I agree to the <a href="/terms" data-legal="terms">Terms of Service</a> and acknowledge the <a href="/privacy" data-legal="privacy">Privacy Policy</a>.</span>
+          </label>
           <button
             type="submit"
             class="auth-button pixel-menu-button"

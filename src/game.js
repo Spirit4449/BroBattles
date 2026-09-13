@@ -1,3 +1,6 @@
+import { bindAudio, bindGameAudio } from "./site/preferences";
+import { ensureLegalAcceptance } from "./site/shell";
+import "./site/shell.js";
 import { syncLocalEffects } from './players/localStateSync';
 import './styles/mapPlaytest.css';
 const editorSession = window.location.pathname === '/map-editor/playtest' ? new URLSearchParams(window.location.search).get('session') : null;
@@ -451,7 +454,7 @@ function snapRemotePlayersToLatestState() {
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     clearTransientPresentation();
-    try { gameScene?._bgmEl?.pause?.(); } catch (_) {}
+    try { gameScene?._bgmEl?.pause?.(); gameScene?._suddenDeathMusicSfx?.pause?.(); } catch (_) {}
     return;
   }
   // Throw away the old interpolation timeline and show current authoritative
@@ -489,10 +492,17 @@ function startSuddenDeathMusic() {
       gameScene._bgmEl?.pause();
     } catch (_) {}
     if (!gameScene._suddenDeathMusicSfx) {
-      gameScene._suddenDeathMusicSfx = gameScene.sound.add("sfx-sudden-death", {
-        loop: true,
-        volume: 0.32,
-      });
+      const track = new Audio('/assets/suddendeath.mp3');
+      track.loop = true;
+      const disposeVolume = bindAudio(track, 'music', 0.32);
+      gameScene._suddenDeathMusicSfx = {
+        get isPlaying() { return !track.paused; },
+        play() { track.play().catch(() => {}); },
+        stop() { track.pause(); track.currentTime = 0; },
+        pause() { track.pause(); },
+        destroy() { track.pause(); disposeVolume(); },
+      };
+      gameScene.events.once('shutdown', () => gameScene?._suddenDeathMusicSfx?.destroy());
     }
     if (!gameScene._suddenDeathMusicSfx.isPlaying) {
       gameScene._suddenDeathMusicSfx.play();
@@ -648,6 +658,7 @@ async function initializeGame() {
     } else {
       noteClientLifecycle("fetch-gamedata", `matchId=${matchId}`);
     }
+    if (!editorSession) await ensureLegalAcceptance();
     gameData = await fetchGameData();
     if (!editorSession) battleTutorial.initialize();
     // Start fetching the authoritative map background as soon as match data
@@ -685,6 +696,7 @@ async function initializeGame() {
     } catch {}
     // Do not emit here; connect/reconnect handlers (and immediate call below) will do it once.
   } catch (error) {
+    if(error.code === "CONSENT_CANCELLED") { location.assign("/"); return; }
     console.error("Failed to initialize game:", error);
   }
 }
@@ -910,6 +922,7 @@ class GameScene extends Phaser.Scene {
   }
 
   create() {
+    bindGameAudio(this);
     // Store scene reference
     gameScene = this;
     this._topPlayfieldPadding = getTopPlayfieldPadding();
@@ -1126,7 +1139,8 @@ class GameScene extends Phaser.Scene {
           const el = new Audio(bgmSrc);
           el.preload = "auto";
           el.loop = true;
-          el.volume = bgmVolume;
+          const disposeVolume = bindAudio(el, "music", bgmVolume);
+          this.events.once("shutdown", disposeVolume);
           this._bgmSrc = bgmSrc;
           this._bgmEl = el;
           // Hook into scene lifecycle for cleanup

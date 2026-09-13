@@ -61,6 +61,10 @@ async function completeSignupFromGuest({
     };
   }
 
+  const config = require('../../shared/siteConfig.json');
+  if (req.body?.accepted !== true || req.body.termsVersion !== config.termsVersion || req.body.privacyVersion !== config.privacyVersion) {
+    return { ok: false, statusCode: 400, payload: { success: false, error: 'Please accept the current Terms and acknowledge the Privacy Policy.' } };
+  }
   const validated = validateCredentials(req.body?.username, req.body?.password);
   if (!validated.ok) return validated;
 
@@ -84,12 +88,19 @@ async function completeSignupFromGuest({
   const hash = await bcrypt.hash(validated.password, rounds);
 
   try {
-    const result = await db.runQuery(
+    const result = await db.withTransaction(async (_conn, q) => {
+      const updated = await q(
       `UPDATE users
          SET name = ?, password = ?, expires_at = NULL
        WHERE user_id = ? AND expires_at IS NOT NULL`,
       [validated.username, hash, user.user_id],
     );
+      if (updated.affectedRows === 1) await q(
+        "INSERT INTO legal_acceptances (user_id, terms_version, privacy_version, context) VALUES (?, ?, ?, 'signup')",
+        [user.user_id, config.termsVersion, config.privacyVersion],
+      );
+      return updated;
+    });
     if (!result || result.affectedRows !== 1) {
       return {
         ok: false,

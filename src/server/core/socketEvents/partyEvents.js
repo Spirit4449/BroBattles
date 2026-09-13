@@ -149,6 +149,7 @@ function registerPartyEvents(
         throw new Error("Your party changed. Please refresh the lobby.");
       }
       await inPartyOrder(db, partyId, async () => {
+      if (isReady && !await require('../../services/legalAcceptance').hasLegalAcceptance(db,socket.data.user.user_id)) throw new Error('Please review the Terms before readying up.');
 
         if (Number(await db.getPartyIdByName(uname)) !== partyId) {
           throw new Error("Your party changed. Please refresh the lobby.");

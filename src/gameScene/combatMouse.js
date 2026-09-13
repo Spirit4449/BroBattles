@@ -9,7 +9,7 @@ export const COMBAT_MOUSE_CONFIG = Object.freeze({
   lookAhead: 72,
 });
 
-export function createCombatMouseController({ scene, canPlay, canCapture = canPlay, onRelease, config = COMBAT_MOUSE_CONFIG }) {
+export function createCombatMouseController({ scene, canPlay, canCapture = canPlay, onRelease, config = COMBAT_MOUSE_CONFIG, getPreferences = () => ({ sensitivity: 1, autoHideCursor: true }) }) {
   const canvas = scene.game.canvas;
   const doc = canvas.ownerDocument;
   const win = doc.defaultView;
@@ -88,8 +88,8 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
     if (!active || !dragging || !canPlay()) return;
     if (doc.pointerLockElement !== canvas && event.target !== canvas) return;
     const dx = Number(event.movementX) || 0, dy = Number(event.movementY) || 0;
-    dragX += dx * config.mouseSensitivity;
-    dragY += dy * config.mouseSensitivity;
+    dragX += dx * config.mouseSensitivity * getPreferences().sensitivity;
+    dragY += dy * config.mouseSensitivity * getPreferences().sensitivity;
     let distance = Math.hypot(dragX, dragY);
     // Discard outward overshoot for throws so the first inward movement
     // immediately shortens the attack, even after pushing against the limit.
@@ -118,7 +118,7 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
       !event.target?.isContentEditable &&
       !['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(event.target?.tagName) &&
       ['w', 'a', 's', 'd', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', ' '].includes(event.key?.length === 1 ? event.key.toLowerCase() : event.key)) {
-      controller.beginInput();
+      if (getPreferences().autoHideCursor) controller.beginInput();
     }
   });
   listen(doc, 'focusin', (event) => {
@@ -167,7 +167,7 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
       const playable = !destroyed && canCapture() && !doc.hidden && doc.hasFocus();
       if (playable && !wasPlayable) cursorReleased = false;
       wasPlayable = playable;
-      const hideCursor = playable && !cursorReleased;
+      const hideCursor = playable && !cursorReleased && (active || getPreferences().autoHideCursor);
       canvas.style.cursor = hideCursor ? 'none' : '';
       if (hint) hint.style.display = hideCursor ? '' : 'none';
       if (!playable) {

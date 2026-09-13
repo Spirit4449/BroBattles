@@ -195,6 +195,11 @@ registerRoutes({
       connect: db.openRuntimeConnection, database: db.databaseName,
       onLost: error => { console.error("[runtime] ownership lost", error.message); process.exit(1); },
     });
+    // Public site writes require the additive support migration before rollout.
+    for (const table of ['legal_acceptances', 'site_requests', 'site_request_messages']) {
+      try { await db.runQuery(`SELECT 1 FROM ${table} LIMIT 0`); }
+      catch (error) { throw new Error(`Apply migrations/2026-09-12_site_support.sql before starting: ${table} unavailable (${error.code || 'database error'})`); }
+    }
     // Fail at startup if the hardening migration has not been applied.
     await db.runQuery("SELECT token_hash FROM auth_sessions LIMIT 0");
     await db.runQuery("SELECT match_id FROM match_reward_commits LIMIT 0");

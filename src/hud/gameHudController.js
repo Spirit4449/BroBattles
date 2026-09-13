@@ -774,6 +774,7 @@ export function createGameHudController({
     if (!hud) return;
 
     const applyExpandedState = (expanded, persist = true) => {
+      if (expanded) document.querySelector(".site-settings-side")?.close();
       hud.classList.remove("hidden");
       hud.dataset.state = expanded ? "expanded" : "collapsed";
       if (toggleBtn) {

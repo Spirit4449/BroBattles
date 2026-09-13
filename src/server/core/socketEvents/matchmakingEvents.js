@@ -25,6 +25,10 @@ function registerMatchmakingEvents(
     try {
       const uname = socket.data.user?.name;
       const userId = socket.data.user?.user_id || null;
+      if (!userId || !await require('../../services/legalAcceptance').hasLegalAcceptance(db,userId)) {
+        socket.emit('match:cancelled', { reason:'Please review the Terms before readying up.' });
+        return;
+      }
       const { mode, modeId, modeVariantId, selection, map, side, partyId } =
         data || {};
       const pid = partyId || (uname ? await db.getPartyIdByName(uname) : null);
@@ -131,7 +135,7 @@ function registerMatchmakingEvents(
     }
   });
 
-  socket.on("queue:leave", async () => {
+  socket.on("queue:leave", async (ack) => {
     try {
       const uname = socket.data.user?.name;
       const userId = socket.data.user?.user_id || null;
@@ -169,7 +173,9 @@ function registerMatchmakingEvents(
           reason: "You cancelled matchmaking",
         });
       }
+      if (typeof ack === 'function') ack({ ok: true });
     } catch (e) {
+      if (typeof ack === 'function') ack({ ok: false });
       console.warn("queue:leave error:", e?.message);
     }
   });

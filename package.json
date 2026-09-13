@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development PORT=31337 nodemon --watch src/server --watch src/shared --watch src/lib --ext js,json --exec node src/server/server.js",
+    "dev": "cross-env NODE_ENV=development nodemon --watch src/server --watch src/shared --watch src/lib --ext js,json --exec node src/server/server.js",
     "build": "webpack --mode production",
     "cleanbuild": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "sourcemap": "cross-env NODE_ENV=production webpack --mode=production --devtool=source-map",
@@ -25,6 +25,7 @@
     "dotenv": "^17.2.3",
     "express": "^4.18.2",
     "lodash": "^4.17.21",
+    "markdown-it": "^14.3.2",
     "mysql2": "^3.14.3",
     "nodemon": "^3.0.2",
     "phaser": "^3.70.0",
