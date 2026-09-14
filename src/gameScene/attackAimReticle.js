@@ -70,6 +70,12 @@ class BaseAttackReticleRenderer {
     this.crosshair.setVisible(next);
   }
 
+  setAlpha(alpha) {
+    for (const graphic of [this.shadow, this.main, this.accent, this.crosshair]) {
+      graphic.setAlpha(alpha);
+    }
+  }
+
   clear() {
     this.shadow.clear();
     this.main.clear();
@@ -182,7 +188,7 @@ function roundBounceCorners(points, impacts, radius = 30) {
   return rounded;
 }
 
-function drawDirectionGuide(renderer, points, palette, limit = 240, width = 5) {
+function drawDirectionGuide(renderer, points, palette, limit = 240, width = 5, endAlpha = 0.18) {
   let travelled = 0;
   for (let i = 1; i < points.length && travelled < limit; i += 1) {
     const start = points[i - 1], end = points[i];
@@ -192,7 +198,7 @@ function drawDirectionGuide(renderer, points, palette, limit = 240, width = 5) {
     // Subdivide straight lines too, so their opacity fades with distance.
     for (let d = 0; d < visibleLength; d += 8) {
       const next = Math.min(d + 8, visibleLength);
-      const alpha = 0.18 + 0.82 * Math.pow(1 - (travelled + d) / limit, 0.65);
+      const alpha = endAlpha + (1 - endAlpha) * Math.pow(1 - (travelled + d) / limit, 0.65);
       const line = new Phaser.Geom.Line(
         start.x + (end.x - start.x) * d / length,
         start.y + (end.y - start.y) * d / length,
@@ -242,7 +248,9 @@ class ThrowAttackReticleRenderer extends BaseAttackReticleRenderer {
     const { length, width } = getAttackGuideStyle(state);
     // Use the actual sampled trajectory, preserving gravity and the launch curvature.
     const preview = state.throwPreview || {};
-    const points = roundBounceCorners(
+    const points = state.character === "gloop"
+      ? dedupePathPoints(preview.points || [])
+      : roundBounceCorners(
       preview.points || [],
       preview.impacts || [],
       Math.max(8, Number(state.config?.bounceCurveRadius) || 30),
@@ -268,6 +276,7 @@ class ThrowAttackReticleRenderer extends BaseAttackReticleRenderer {
       getPalette(state),
       Math.max(length, visibleLength),
       width,
+      state.character === "gloop" ? 0 : 0.18,
     );
     const cue = state.centerCue;
     if (cue?.proximity > 0) {
@@ -424,6 +433,10 @@ function resolveRenderer(kind) {
 function createAttackAimReticleController(scene, { getAmmoCharges } = {}) {
   let renderer = null;
   let rendererKind = "";
+  let shownState = null;
+  let opacity = 1;
+  let lastTime = null;
+  const resetTransition = () => { shownState = null; opacity = 1; lastTime = null; };
 
   const ensureRenderer = (kind) => {
     const nextKind = String(kind || "line").toLowerCase();
@@ -446,15 +459,38 @@ function createAttackAimReticleController(scene, { getAmmoCharges } = {}) {
         typeof getAmmoCharges !== "function"
         ? state
         : { ...state, ammoAvailable: Number(getAmmoCharges()) >= 1 };
-      activeRenderer.render(renderedState);
+      const now = Number(scene.time?.now) || 0;
+      const dt = lastTime === null ? 0 : Math.max(0, Math.min(50, now - lastTime));
+      lastTime = now;
+      const fadeSides = ["huntress", "gloop", "wizard"].includes(state.character);
+      if (!shownState || shownState.character !== state.character || shownState.family !== state.family) {
+        shownState = renderedState;
+        opacity = 1;
+      }
+      if (fadeSides && shownState.direction !== renderedState.direction) {
+        opacity = Math.max(0, opacity - dt / 80);
+        if (opacity === 0) shownState = renderedState;
+      } else {
+        shownState = renderedState;
+        opacity = Math.min(1, opacity + dt / 100);
+      }
+      const offsetX = renderedState.baseX - shownState.baseX;
+      const offsetY = renderedState.baseY - shownState.baseY;
+      activeRenderer.render(shownState);
+      for (const graphic of [activeRenderer.shadow, activeRenderer.main, activeRenderer.accent, activeRenderer.crosshair]) {
+        graphic.setPosition(offsetX, offsetY);
+      }
+      activeRenderer.setAlpha(opacity);
       activeRenderer.setVisible(true);
     },
     hide() {
+      resetTransition();
       if (!renderer) return;
       renderer.clear();
       renderer.setVisible(false);
     },
     destroy() {
+      resetTransition();
       if (!renderer) return;
       renderer.destroy();
       renderer = null;

@@ -75,6 +75,7 @@ function resolveCookieSecretLocal() {
   return newSecret;
 }
 const COOKIE_SECRET = resolveCookieSecretLocal();
+process.env.EMAIL_VERIFICATION_SECRET ||= COOKIE_SECRET;
 
 const SIGNED_COOKIE_OPTS = {
   httpOnly: true,
@@ -196,9 +197,13 @@ registerRoutes({
       onLost: error => { console.error("[runtime] ownership lost", error.message); process.exit(1); },
     });
     // Public site writes require the additive support migration before rollout.
-    for (const table of ['legal_acceptances', 'site_requests', 'site_request_messages']) {
+    for (const table of ['legal_acceptances', 'site_requests', 'site_request_messages', 'account_emails', 'email_outbox', 'pending_signups', 'email_marketing', 'marketing_jobs', 'marketing_contact_sync', 'email_webhook_events']) {
       try { await db.runQuery(`SELECT 1 FROM ${table} LIMIT 0`); }
-      catch (error) { throw new Error(`Apply migrations/2026-09-12_site_support.sql before starting: ${table} unavailable (${error.code || 'database error'})`); }
+      catch (error) { throw new Error(`Apply the email, signup, and marketing migrations before starting: ${table} unavailable (${error.code || 'database error'})`); }
+    }
+    for (const table of ['account_emails', 'pending_signups']) {
+      try { await db.runQuery(`SELECT correction_used FROM ${table} LIMIT 0`); }
+      catch (_) { throw new Error('Apply scripts/apply-email-polish-migration.cjs before starting.'); }
     }
     // Fail at startup if the hardening migration has not been applied.
     await db.runQuery("SELECT token_hash FROM auth_sessions LIMIT 0");

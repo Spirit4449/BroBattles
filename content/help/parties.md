@@ -1,14 +1,14 @@
-Create a party from the lobby and share its party link with your friends. You can also browse public parties.
+Create a party from the lobby, then share its link with your friends. You can also browse public parties when you want to meet a squad.
 
 Choose your character, then ready up. Party settings determine who can change selections. The party must fit the selected team size.
 
-If matchmaking stalls, cancel and check that everyone is connected and ready before trying again.
+If matchmaking seems stuck, cancel once and check that everyone is connected and ready before trying again.
 
 ## Pick the right team size
 
 Duels supports 1v1, 2v2, and 3v3. The chosen mode must have enough room for the people in your party. If a selection cannot fit everyone, choose a larger variant or reduce the party size.
 
-The party owner manages shared settings. Depending on the party's permissions, other members may be able to change selections. Check **Party Settings** if someone cannot make a change.
+The party owner manages shared settings. Other members can change selections only when the party permissions allow it. Check **Party Settings** if a button seems unavailable.
 
 ## A friend cannot join
 
@@ -22,4 +22,4 @@ Use the matchmaking cancel action if plans change. Opening a site page while que
 
 ## Playing as a squad
 
-In Duels, cover a teammate's approach instead of chasing the same opponent from the same angle. In Bank Bust, decide who will raid and who will guard before everyone rushes forward. Party chat is useful, but never share passwords or private contact details.
+In Duels, give your teammate another angle instead of following the same opponent in a straight line. In Bank Bust, decide who will raid and who will guard before everyone rushes forward. Use party chat for the plan, never for passwords or private details.

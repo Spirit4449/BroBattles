@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="/styles/ui-system.css" />
   </head>
   <body class="site-auth">
+<header class="site-header"><div class="site-brand"><span class="site-menu-placeholder" aria-hidden="true"></span><a href="/" class="lobby-wordmark"><img src="/assets/logos/wordmark.webp" width="176" height="36" alt="Bro Battles"/></a></div><nav class="site-desktop-nav" aria-label="Main navigation"><div class="site-nav-group "><a href="/about" >About</a><button type="button" aria-label="Expand About" aria-expanded="false">⌄</button><div class="site-nav-sub" hidden><a href="/about">Discover the game</a><a href="/about#modes">Game modes</a><a href="/about#fighters">Meet the fighters</a></div></div><div class="site-nav-group "><a href="/news" >News</a><button type="button" aria-label="Expand News" aria-expanded="false">⌄</button><div class="site-nav-sub" hidden><a href="/news">Latest stories</a><a href="/news/welcome-to-beta">Welcome to beta</a></div></div><div class="site-nav-group "><a href="/help" >Help Center</a><button type="button" aria-label="Expand Help Center" aria-expanded="false">⌄</button><div class="site-nav-sub" hidden><a href="/help">Browse answers</a><a href="/help/contact">Contact us</a><a href="/help/requests">My requests</a></div></div><div class="site-nav-group "><a href="/feedback" >Feedback</a><button type="button" aria-label="Expand Feedback" aria-expanded="false">⌄</button><div class="site-nav-sub" hidden><a href="/feedback">Send an idea</a><a href="/feedback">Report a bug</a></div></div></nav><a class="pixel-menu-button site-play" href="/">Play now</a><div class="site-account"><a class="pixel-menu-button" href="/login">Log in</a></div></header>
     <div class="container">
       <div class="auth-card">
         <h1>Create Account</h1>
@@ -25,17 +26,25 @@
         <form id="signupForm">
           <div class="form-group">
             <label for="username" class="form-label">Username</label>
-            <input
-              type="text"
-              id="username"
-              name="username"
-              class="form-input"
-              placeholder="Unique and seen by others"
-              autocomplete="username"
-              required
-            />
+            <div class="username-input-wrap">
+              <input
+                type="text"
+                id="username"
+                name="username"
+                class="form-input"
+                placeholder="Unique and seen by others"
+                autocomplete="username"
+                aria-describedby="username-status"
+                required
+              />
+              <span class="username-status" id="username-status" aria-live="polite"></span>
+            </div>
           </div>
 
+          <div class="form-group">
+            <label for="email" class="form-label">Email address</label>
+            <input type="email" id="email" name="email" class="form-input" placeholder="you@example.com" autocomplete="email" spellcheck="false" autocapitalize="none" required />
+          </div>
           <div class="form-group">
             <label for="password" class="form-label">Password</label>
             <input
@@ -49,8 +58,12 @@
             />
           </div>
 
+
           <label class="site-consent"><input type="checkbox" id="legal-accept" required />
             <span>I agree to the <a href="/terms" data-legal="terms">Terms of Service</a> and acknowledge the <a href="/privacy" data-legal="privacy">Privacy Policy</a>.</span>
+          </label>
+          <label class="site-consent marketing-consent"><input type="checkbox" id="marketing-consent" />
+            <span>Occasional game news &amp; offers. Unsubscribe anytime.</span>
           </label>
           <button
             type="submit"
@@ -65,6 +78,23 @@
 
           <div class="error-message" id="errorMessage"></div>
         </form>
+
+        <section id="verification-panel" class="verification-panel" hidden aria-live="polite">
+          <p class="eyebrow">CHECK YOUR INBOX</p>
+          <h2>Verify your email</h2>
+          <div class="verification-destination"><strong id="verification-email"></strong><button id="edit-signup" class="email-edit" type="button" aria-label="Edit signup email">✎ <span>Edit</span></button></div>
+          <div id="code-inputs" class="code-inputs" aria-label="Six digit verification code">
+            <input inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-label="Digit 1" />
+            <input inputmode="numeric" maxlength="1" aria-label="Digit 2" />
+            <input inputmode="numeric" maxlength="1" aria-label="Digit 3" />
+            <input inputmode="numeric" maxlength="1" aria-label="Digit 4" />
+            <input inputmode="numeric" maxlength="1" aria-label="Digit 5" />
+            <input inputmode="numeric" maxlength="1" aria-label="Digit 6" />
+          </div>
+          <p id="verification-message" class="error-message" role="alert"></p>
+          <button id="verify-button" type="button" class="auth-button pixel-menu-button">Verify &amp; create account</button>
+          <button id="resend-button" type="button" class="text-button">Resend code</button>
+        </section>
 
         <div class="link-section">
           <a href="/login" class="auth-link pixel-menu-button">Login instead</a>

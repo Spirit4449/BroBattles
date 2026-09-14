@@ -1258,16 +1258,6 @@ async function selectCharacter(character) {
     }
     _confirmedSkinSelections[charClass] = selectedSkinId;
 
-    // Update the main body sprite image immediately
-    const mainSprite = document.getElementById("sprite");
-    if (mainSprite) {
-      mainSprite.src = selectedSkinAsset;
-      mainSprite.alt = charClass;
-      try {
-        mainSprite.classList.remove("random");
-      } catch {}
-    }
-
     // Update current user's visible slot, if present
     const yourSlot =
       document.querySelector('.character-slot[data-is-current-user="true"]') ||

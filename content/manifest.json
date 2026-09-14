@@ -25,49 +25,109 @@
   "help": [
     {
       "slug": "getting-started",
-      "title": "How do I start playing?",
+      "title": "Start playing",
       "category": "Getting Started",
       "summary": "Your first match, from lobby to arena."
     },
     {
+      "slug": "matchmaking",
+      "title": "Matchmaking",
+      "category": "Getting Started",
+      "summary": "How the game looks for a close, fair matchup."
+    },
+    {
+      "slug": "modes-and-maps",
+      "title": "Modes and maps",
+      "category": "Getting Started",
+      "summary": "What changes between Duels, Bank Bust, and each arena."
+    },
+    {
       "slug": "controls",
-      "title": "What are the controls?",
+      "title": "Controls",
       "category": "Gameplay",
       "summary": "Movement, aiming, and getting your cursor back."
     },
     {
       "slug": "parties",
-      "title": "How do I play with friends?",
+      "title": "Play with friends",
       "category": "Gameplay",
       "summary": "Create a party and ready up together."
     },
     {
+      "slug": "chatting",
+      "title": "Party and battle chat",
+      "category": "Gameplay",
+      "summary": "Coordinate in party chat, team chat, or chat for everyone in a battle."
+    },
+    {
+      "slug": "player-guide",
+      "title": "Get better",
+      "category": "Gameplay",
+      "summary": "Simple habits for movement, aim, teamwork, and smarter fights."
+    },
+    {
+      "slug": "leaving-and-rejoining",
+      "title": "Leave or rejoin",
+      "category": "Gameplay",
+      "summary": "What happens when you leave and how to get back in."
+    },
+    {
+      "slug": "battle-rewards",
+      "title": "Rewards and trophies",
+      "category": "Progression & Rewards",
+      "summary": "Wins, losses, coins, gems, and the trophy reward track."
+    },
+    {
+      "slug": "leveling-up",
+      "title": "Fighter levels",
+      "category": "Progression & Rewards",
+      "summary": "Spend coins on stronger fighters, up to level 10."
+    },
+    {
+      "slug": "skins",
+      "title": "Skins and cosmetics",
+      "category": "Progression & Rewards",
+      "summary": "Unlock a new look without changing how a fighter plays."
+    },
+    {
       "slug": "accounts",
-      "title": "How do I save my progress?",
+      "title": "Save your progress",
       "category": "Accounts",
       "summary": "Guest accounts, signup, and account access."
     },
     {
       "slug": "purchases",
-      "title": "I need help with a purchase",
+      "title": "Purchase help",
       "category": "Purchases",
       "summary": "Missing currency, payment problems, and refunds."
     },
     {
       "slug": "connection",
-      "title": "The game will not connect",
+      "title": "Connection issues",
       "category": "Troubleshooting",
       "summary": "Quick checks for loading and connection issues."
     },
     {
+      "slug": "multiple-tabs",
+      "title": "Multiple tabs",
+      "category": "Troubleshooting",
+      "summary": "How two tabs on the same account affect parties and battles."
+    },
+    {
+      "slug": "chat-rate-limits",
+      "title": "Chat limits",
+      "category": "Troubleshooting",
+      "summary": "Why chat may pause, how restrictions work, and what to do next."
+    },
+    {
       "slug": "safety",
-      "title": "Report a player or safety concern",
+      "title": "Report a player",
       "category": "Safety & Privacy",
       "summary": "Keep battles fair and your information private."
     },
     {
       "slug": "privacy-requests",
-      "title": "Request access or deletion of my data",
+      "title": "Privacy requests",
       "category": "Safety & Privacy",
       "summary": "Contact the operator about your privacy rights."
     }

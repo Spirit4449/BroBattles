@@ -183,26 +183,25 @@ test('Escape, focus loss, menus and lifecycle cleanup release capture and cancel
   h.controller.destroy();
   assert.equal(h.doc.count() + h.win.count() + h.canvas.count(), 0);
 });
-test('short throws hold their heading through center and switch only beyond the exit zone', () => {
+test('minimum-range throws rotate in every direction and retain heading only at the tiny center', () => {
   const h = setup(); h.capture(); h.controller.beginDrag(1, true);
-  assert.equal(h.controller.getCenterCue(), null);
-  assert.equal(h.controller.shouldShowReticle(), false);
-  move(h, 94, 0);
-  assert.ok(h.controller.getDistanceRatio() > 0);
-  move(h, -60, 0);
+  move(h, 50, 0);
+  assert.equal(h.controller.getDistanceRatio(), 0);
+  let lastX = 50, lastY = 0;
+  for (const [x, y] of [[0, 50], [-50, 0], [0, -50], [50, 0]]) {
+    move(h, x - lastX, y - lastY);
+    assert.equal(h.controller.getDirection().x, x / 50);
+    assert.equal(h.controller.getDirection().y, y / 50);
+    assert.equal(h.controller.getDistanceRatio(), 0);
+    assert.equal(h.controller.shouldShowReticle(), true);
+    lastX = x; lastY = y;
+  }
+  move(h, -50, 0);
   assert.equal(h.controller.getCenterCue().held, true);
-  assert.equal(h.controller.getDistanceRatio(), 0);
-  move(h, -74, 2);
   assert.equal(h.controller.getDirection().x, 1);
-  assert.equal(h.controller.getDistanceRatio(), 0);
-  assert.equal(h.controller.shouldShowReticle(), true);
-  assert.equal(h.scene._combatAimLook.x, 72);
-  move(h, -80, -2);
+  move(h, -50, 0);
   assert.equal(h.controller.getDirection().x, -1);
-  assert.equal(h.controller.getCenterCue().held, false);
-  assert.ok(h.controller.getDistanceRatio() > 0);
-  h.controller.endDrag();
-  assert.equal(h.controller.getCenterCue(), null);
+  assert.equal(h.controller.getDistanceRatio(), 0);
   h.controller.destroy();
 });
 test('throw range discards overshoot in every direction and retracts on the first inward movement', () => {

@@ -1,4 +1,4 @@
-import { getSettings, bindCanvasName } from "./site/preferences";
+import { getSettings, bindCanvasName, subscribeSettings } from "./site/preferences";
 import { resolveWallContact, applyWallSlide } from './players/wallMovement';
 import { predictCharacterSpecial } from './characters/networkRegistry';
 // player.js
@@ -76,6 +76,7 @@ import {
 // Globals
 let player;
 let cursors;
+let movementKeys;
 let keySpace; // Spacebar for jump
 let keyJ; // J for basic attack
 let canWallJump = true;
@@ -634,28 +635,20 @@ export function createPlayer(
   currentCharacter = character;
   currentSkinId = String(selectedSkinIdParam || "").trim();
   pdbg();
-  cursors = scene.input.keyboard.createCursorKeys();
-  // Bind additional keys once
-  try {
-    keySpace = scene.input.keyboard.addKey(
-      Phaser.Input.Keyboard.KeyCodes.SPACE,
-    );
-    keyJ = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.J);
-  } catch (e) {
-    // Fallback to string names if KeyCodes not available (shouldn't happen in Phaser 3)
-    keySpace = scene.input.keyboard.addKey("SPACE");
-    keyJ = scene.input.keyboard.addKey("J");
-  }
-  try {
-    keyI = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.I);
-  } catch (e) {
-    keyI = scene.input.keyboard.addKey("I");
-  }
-  try {
-    keyE = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
-  } catch (e) {
-    keyE = scene.input.keyboard.addKey("E");
-  }
+  let bindingSignature='';
+  const bindKeys = settings => {
+    const signature=JSON.stringify(settings.keys);if(signature===bindingSignature)return;
+    bindingSignature=signature;
+    for(const key of Object.values(movementKeys || {})) key?.reset?.();
+    for(const key of [keySpace,keyJ,keyI,keyE,...Object.values(cursors || {})]) key?.reset?.();
+    const key = slot => scene.input.keyboard.addKey(settings.keys[slot]);
+    movementKeys={left:key('left'),right:key('right'),up:key('up'),down:key('down')};
+    cursors={left:key('leftAlt'),right:key('rightAlt'),up:key('upAlt'),down:key('downAlt')};
+    keySpace=key('jump');keyJ=key('attack');keyI=key('special');keyE=key('interact');
+  };
+  bindKeys(getSettings());
+  const stopKeyUpdates=subscribeSettings(bindKeys);
+  scene.events.once('shutdown',stopKeyUpdates);
 
   try {
     disposeMovementLoopSfx();
@@ -1396,7 +1389,6 @@ function updateHealthBar() {
   drawHealthBar(healthBar, {
     x: healthBarX, y, width: healthBarWidth,
     health: currentHealth, maxHealth, color: 0x99ab2c,
-    guarded: !!player._ducking,
   });
   healthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
 
@@ -1645,10 +1637,10 @@ export function handlePlayerMovement(scene) {
     : player._lastGroundTime || 0;
 
   // Keys. Player can use either arrow keys or WASD
-  const keyA = scene.input.keyboard.addKey("A");
-  const keyD = scene.input.keyboard.addKey("D");
-  const keyW = scene.input.keyboard.addKey("W");
-  const keyS = scene.input.keyboard.addKey("S");
+  const keyA = movementKeys.left;
+  const keyD = movementKeys.right;
+  const keyW = movementKeys.up;
+  const keyS = movementKeys.down;
   const mobileMoveLeft = !!mobileControlsController?.isMovingLeft?.();
   const mobileMoveRight = !!mobileControlsController?.isMovingRight?.();
   let leftKey = cursors.left.isDown || keyA.isDown || mobileMoveLeft;
@@ -2096,6 +2088,7 @@ export function handlePlayerMovement(scene) {
   );
   const shouldPlayFallAir =
     !dead &&
+    !scene._spawnIntroActive &&
     !player.body.touching.down &&
     !isWallSliding &&
     fallVelocity > 85;
@@ -2397,8 +2390,16 @@ export function handlePlayerMovement(scene) {
 
     if (!fallAirLoopPlaying) {
       try {
+        // A match can begin before the browser has unlocked audio. Do not
+        // start our fade clock until playback can actually begin; otherwise
+        // the queued first loop becomes audible at its already-ramped volume.
+        if (scene.sound?.locked) {
+          fallAirStartedAt = 0;
+          return;
+        }
         fallAirLoopSfx.setVolume?.(0);
-        fallAirLoopSfx.play();
+        const started = fallAirLoopSfx.play?.({ volume: 0 });
+        if (started === false) return;
         fallAirLoopPlaying = true;
         fallAirStartedAt = Date.now();
       } catch (_) {}

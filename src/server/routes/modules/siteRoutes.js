@@ -2,6 +2,7 @@ const { createSiteSupportService } = require('../../services/siteSupportService'
 const { createRequestWindow } = require('../../helpers/requestWindow');
 const config = require('../../../shared/siteConfig.json');
 const { registerSitePages } = require('../../services/siteContent');
+const { createHelpSearchService } = require('../../services/helpSearchService');
 function isSameOrigin(req) {
   try {
     const site = req.get('sec-fetch-site');
@@ -27,7 +28,10 @@ function registerSiteRoutes({ app, db, auth }) {
     } catch (_) { res.status(503).json({error:'Unable to verify terms acceptance.'}); }
   });
   const service = createSiteSupportService(db);
+  require("../../services/emailService").startEmailWorker(db);
+  require("../../services/marketingService").startMarketingWorker(db);
   const limits = createRequestWindow();
+  const searchHelp = createHelpSearchService();
   const wrap = (admin, permanent, action) => async (req, res) => {
     try {
       if (req.method !== 'GET' && !isSameOrigin(req)) return res.status(403).json({ error:'Same-origin request required.' });
@@ -54,6 +58,17 @@ function registerSiteRoutes({ app, db, auth }) {
       }
       res.set('Cache-Control','no-store').json({ member:!!user && !auth.isGuest(user), guest:!!user && auth.isGuest(user), username:user && !auth.isGuest(user) ? user.name : null, unread });
     } catch (_) { res.status(503).json({ error:'Support is temporarily unavailable.' }); }
+  });
+  app.post('/api/site/help-search', async (req,res) => {
+    if (!isSameOrigin(req)) return res.status(403).json({error:'Same-origin request required.'});
+    if (limits.count(`help-search:${req.ip}`,60000) > 20) return res.status(429).json({error:'Too many searches. Try again shortly.'});
+    try {
+      const result = await searchHelp(req.body?.query);
+      res.set('Cache-Control','private, max-age=60').json(result);
+    } catch (error) {
+      if (!error.status) console.warn('[site] AI help search unavailable:', error.message);
+      res.status(error.status || 503).json({error:error.status ? error.message : 'AI search is temporarily unavailable.'});
+    }
   });
   app.get('/api/legal/status', wrap(false,false,async (_req,user) => {
     const rows = await db.runQuery('SELECT 1 FROM legal_acceptances WHERE user_id=? AND terms_version=? AND privacy_version=? LIMIT 1',[user.user_id,config.termsVersion,config.privacyVersion]);

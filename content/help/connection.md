@@ -1,5 +1,5 @@
 1. Check that your internet connection is working.
-2. Refresh the page and let game assets finish loading.
+2. Refresh once and give the map and fighter art time to load.
 3. Try an up-to-date desktop browser and close unnecessary tabs.
 4. If the game is in maintenance, try again later.
 
@@ -9,13 +9,13 @@ Still stuck? [Contact support](/help/contact) and describe your browser, what ha
 
 ## Loading screen or frozen page
 
-Give the first load time to download the map and character assets. If it stays stuck, refresh once and check for a browser update. Make sure the browser has enough free memory; closing other demanding tabs can help.
+The first visit may need a moment to download map and fighter art. If it stays stuck, refresh once and check for a browser update. Closing video streams, games, or other demanding tabs can free memory.
 
 If an extension blocks a required game request, allow the game only in an extension you recognize and trust. Do not disable your browser's security protections or bypass certificate warnings.
 
 ## Lag during a match
 
-Lag can come from the network connection, distance to the server, or device performance. Try a stable connection, pause large downloads, and compare whether other websites are slow too. A fast download speed alone does not guarantee low multiplayer latency.
+Lag can come from your connection, distance to the server, or device performance. Pause large downloads and see whether other sites feel slow too. A high download speed does not always mean a quick response in a live match.
 
 Keep the game tab active. Background tabs can be throttled by the browser. Settings menus do not pause the server's match.
 

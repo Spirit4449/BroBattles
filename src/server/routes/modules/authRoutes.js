@@ -5,6 +5,48 @@ const {
 const { setBanHoldCookies } = require("../../helpers/banHold");
 
 function registerAuthRoutes({ app, db, requireCurrentUser }) {
+  app.get("/username-availability", async (req, res) => {
+    if (!require("./siteRoutes").isSameOrigin(req)) {
+      return res.status(403).json({ error: "Same-origin request required." });
+    }
+
+    const username =
+      typeof req.query?.username === "string" ? req.query.username.trim() : "";
+    const usernamePattern = /^[a-zA-Z0-9_.-]{3,14}$/;
+
+    if (!usernamePattern.test(username)) {
+      return res.json({ available: false, valid: false });
+    }
+
+    try {
+      // `name` has a unique index, so this remains a cheap lookup even as the
+      // player base grows. Signup still checks the unique constraint to handle
+      // another player claiming a name between this request and submission.
+      const rows = await db.runQuery(
+        "SELECT 1 FROM users WHERE name = ? LIMIT 1",
+        [username],
+      );
+      return res.json({ available: rows.length === 0, valid: true });
+    } catch (error) {
+      console.error("[auth] username availability error:", error);
+      return res.status(503).json({ error: "Unable to check username." });
+    }
+  });
+
+  const signupLimits = require('../../helpers/requestWindow').createRequestWindow();
+  const signupService = require('../../services/signupVerificationService');
+  app.use(['/signup', '/signup/pending', '/signup/verify', '/signup/resend', '/signup/cancel'], (req,res,next) => {
+    res.set('Cache-Control','no-store');
+    if (req.method !== 'GET' && !require('./siteRoutes').isSameOrigin(req)) return res.status(403).json({error:'Same-origin request required.'});
+    if (signupLimits.count(req.ip, 3600000) > 60) return res.status(429).json({error:'Too many attempts. Try again in an hour.'});
+    next();
+  });
+  for (const [method,path,action] of [['get','/signup/pending','pendingSignup'],['post','/signup/verify','verifySignup'],['post','/signup/resend','resendSignup'],['post','/signup/cancel','cancelSignup']]) {
+    app[method](path,async(req,res)=>{
+      try { const result=await signupService[action]({app,db,requireCurrentUser,req,res});res.status(result.statusCode).json(result.payload); }
+      catch(error){console.warn('[signup] verification unavailable:',error.code||error.message);res.status(503).json({error:'Unable to complete this step. Please try again.'});}
+    });
+  }
   app.post("/signup", async (req, res) => {
     if (!require("./siteRoutes").isSameOrigin(req)) return res.status(403).json({ error: "Same-origin request required." });
     try {

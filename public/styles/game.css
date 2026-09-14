@@ -94,6 +94,9 @@
         object-fit: cover;
         display: block;
       }
+      #matchmaking-screen .background-image {
+        object-position: 50% 0;
+      }
       /* Ensure Phaser canvas is above and transparent */
       canvas {
         position: fixed;
@@ -199,42 +202,50 @@
 
       #loading-text {
         text-align: center;
-        font-weight: 600;
-        font-size: clamp(14px, 2.2vw, 18px);
-        margin: 0 0 8px 0;
-        color: #fff;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+        font-family: "Press Start 2P", monospace;
+        font-size: clamp(10px, 1.6vw, 14px);
+        line-height: 1.5;
+        margin: 0 0 10px 0;
+        color: #fff6bf;
+        text-shadow: 2px 2px 0 #332414;
       }
 
       .loading-shell {
         position: relative;
         width: 100%;
-        height: 18px;
-        border-radius: 6px;
+        height: 24px;
         overflow: hidden;
-        background: rgba(0, 0, 0, 0.35);
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+        box-sizing: border-box;
+        border: 4px solid #24180f;
+        border-radius: 0;
+        background: #56351d;
+        box-shadow: 0 4px 0 #120b07, inset 0 0 0 2px #9c6b38;
       }
 
       .loading-fill {
         position: absolute;
-        top: 0;
-        left: 0;
-        height: 100%;
+        inset: 0 auto 0 0;
         width: 0%;
-        background: red;
-        transition: width 200ms ease;
+        background-color: #f5b432;
+        background-image: repeating-linear-gradient(
+          90deg,
+          #ffd55c 0 8px,
+          #f5b432 8px 16px
+        );
+        box-shadow: inset 0 3px 0 #fff09b, inset 0 -3px 0 #c66a1c;
+        transition: width 200ms steps(4, end);
       }
 
       #loading-percent {
         position: absolute;
-        right: 10px;
+        right: 8px;
         top: 50%;
         transform: translateY(-50%);
-        font-size: 12px;
+        font-family: "Press Start 2P", monospace;
+        font-size: 10px;
         font-weight: 700;
         color: #fff;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+        text-shadow: 2px 2px 0 #24180f;
         pointer-events: none;
       }
 
@@ -487,6 +498,7 @@
       }
 
       #battle-start-overlay .bs-map-mode {
+        font-family: "Press Start 2P", monospace;
         font-size: clamp(9px, 2vw, 20px);
         color: #c8e7ff;
         text-transform: uppercase;
@@ -816,6 +828,7 @@
       }
       #team-status-hud .team-hud-side-right {
         align-items: flex-end;
+        margin-right: 12px;
       }
       #team-status-hud .team-hud-player-stack {
         display: flex;
@@ -1595,14 +1608,7 @@
         content: "";
         position: absolute;
         inset: 0;
-        background:
-          radial-gradient(
-            circle at 50% 20%,
-            rgba(96, 165, 250, 0.18),
-            transparent 34%
-          ),
-          rgba(4, 7, 16, 0.58);
-        backdrop-filter: blur(2px);
+        background: var(--bb-popup-backdrop, rgba(5, 10, 22, 0.74));
       }
       .game-notice-card {
         position: relative;
@@ -1665,3 +1671,6 @@
       .game-notice-overlay.tone-error .game-notice-btn {
         background: linear-gradient(135deg, #d14b42, #ab2e2e);
       }
+
+#battle-keybind-hud .keyboard-pair{gap:8px}
+#battle-keybind-hud .controls-movement-or{flex:none;align-self:center;color:#9db4d2;font:8px/1 var(--bb-font-display);text-shadow:1px 1px #03060b}

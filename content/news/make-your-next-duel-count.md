@@ -1,6 +1,6 @@
 Every duel starts with the same question: what will you do differently this time?
 
-Maybe you rush too early. Maybe you land the shot you missed last match. Maybe your teammate buys you just enough room to turn a close fight around. That is where Bro Battles comes alive.
+Maybe you rushed too early last time. This round, you wait half a second and catch the landing. Maybe your teammate buys just enough room to turn a close fight around. Small choices make every rematch feel personal.
 
 ## Your fight, your team size
 
@@ -10,7 +10,7 @@ Duels brings elimination battles to **1v1, 2v2, and 3v3**. Go head-to-head to wo
 
 Try a fighter from the lobby and give yourself a small challenge: make better use of cover, leave room to dodge, or keep an eye on your teammate before committing. You do not need a perfect match to find a better move.
 
-A close loss can teach you plenty. A hard-earned win feels even better when you know what made the difference.
+A close loss can give you the next idea. A hard-earned win feels better when you know exactly what made the difference.
 
 ## Bring the rematch energy
 

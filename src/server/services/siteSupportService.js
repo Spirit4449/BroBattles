@@ -26,6 +26,7 @@ function createSiteSupportService(db) {
       if (!rows[0] || rows[0].kind !== kind) throw invalid('Submission reference already used.', 409);
       await q(`INSERT INTO site_request_messages (request_id, sender, author_id, body, submission_key)
         VALUES (?, 'player', ?, ?, ?) ON DUPLICATE KEY UPDATE id=id`, [result.insertId, user.user_id, input.body, input.key]);
+      await q("INSERT IGNORE INTO email_outbox (request_id) VALUES (?)", [result.insertId]);
       return { id: result.insertId };
     });
   }
@@ -77,6 +78,8 @@ function createSiteSupportService(db) {
   async function cleanup() {
     await db.runQuery(`DELETE FROM site_requests WHERE (kind='feedback' AND created_at<DATE_SUB(NOW(), INTERVAL ? MONTH))
       OR (kind='support' AND status='closed' AND closed_at<DATE_SUB(NOW(), INTERVAL ? MONTH)) LIMIT 1000`, [config.feedbackRetentionMonths, config.supportRetentionMonths]);
+    await db.runQuery('DELETE e FROM account_emails e LEFT JOIN users u ON u.user_id=e.user_id WHERE u.user_id IS NULL');
+    await db.runQuery("UPDATE account_emails SET pending_email=NULL,code_hash=NULL,expires_at=NULL WHERE expires_at<NOW(3)");
     await db.runQuery('DELETE a FROM legal_acceptances a LEFT JOIN users u ON u.user_id=a.user_id WHERE u.user_id IS NULL');
   }
   return { create, list, detail, reply, setStatus, cleanup };

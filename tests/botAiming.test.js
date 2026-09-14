@@ -120,7 +120,39 @@ test('ninja can shoot a ducking human without mistaking their floor for cover', 
   assert.equal(requestBasic(floorRoom, ninja, duckingHuman, profile, () => 0.5, 1000), true);
   assert.equal(ninja.ammoState.charges, 0);
   assert.equal(actions.length, 1);
-  assert.equal(actions[0].target.y, ninja.y);
+  const { characterBody } = require('../src/shared/duelGeometry');
+  assert.equal(actions[0].target.y, duckingHuman.y + characterBody('ninja').offsetY);
+});
+
+test('ninja aims into Gloop and Huntress bodies rather than their elevated sprite origins', () => {
+  const { characterBody } = require('../src/shared/duelGeometry');
+  const model = require('../src/shared/ninjaProjectile');
+  const { sweep } = require('../src/shared/huntressProjectile');
+  const floor = 600;
+  const ninjaBody = characterBody('ninja');
+  const ninja = { ...player('ninja'), y: floor - ninjaBody.offsetY - ninjaBody.halfHeight };
+  for (const char_class of ['gloop', 'huntress']) {
+    for (const direction of [-1, 1]) {
+      for (const distance of [160, 300, 400]) {
+        const body = characterBody(char_class, direction < 0);
+        const enemy = { char_class, flip: direction < 0, x: direction * distance,
+          y: floor - body.offsetY - body.halfHeight, vx: 0, vy: 0 };
+        const aim = basicAim(ninja, enemy, profile, () => 0.5, room);
+        const bounds = { left: enemy.x + body.offsetX - body.halfWidth,
+          right: enemy.x + body.offsetX + body.halfWidth,
+          top: floor - body.height, bottom: floor };
+        assert.ok(aim.target.y >= bounds.top && aim.target.y <= bounds.bottom);
+        const shot = model.launch(ninja, aim.angle, 'body-aim');
+        let hit = false;
+        while (!shot.done && shot.phase === 'outward') {
+          for (const segment of model.step(shot, ninja, [])) {
+            if (sweep(segment.a, segment.b, bounds, shot.cfg.collisionRadius) !== null) hit = true;
+          }
+        }
+        assert.ok(hit, `${char_class}, direction ${direction}, distance ${distance}`);
+      }
+    }
+  }
 });
 
 test('ninja can shoot a ducking Gloop despite its large sprite-to-body offset', () => {

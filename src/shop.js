@@ -252,7 +252,7 @@ function sectionMarkup(meta, items) {
     <section class="shop-section shop-section-${meta.id}" id="shop-section-${meta.id}">
       <header class="shop-section-head">
         <div class="shop-section-copy"><img src="${escapeHtml(meta.icon)}" alt="" /><h2>${escapeHtml(meta.title)}</h2></div>
-        ${timerKind ? `<div class="shop-reset-chip"><span>Refresh</span><strong data-shop-countdown="${timerKind}">--:--:--</strong></div>` : ""}
+        ${timerKind ? `<div class="shop-reset-chip"><img class="shop-clock-icon" src="/assets/ui/shop-clock.png" alt="" /><strong data-shop-countdown="${timerKind}">--:--:--</strong></div>` : ""}
       </header>
       <div class="shop-offer-grid${meta.id === "sales" ? " shop-sales-grid" : ""}">
         ${items.length ? items.map((item, index) => itemMarkup(item, meta.id, index)).join("") : '<div class="shop-empty"><strong>Nothing here yet.</strong></div>'}
@@ -621,6 +621,22 @@ export function initializeShop({
           ?.addEventListener("click", () => void refresh());
         reportError(error, "load");
       });
+  }
+
+  async function getFeaturedSale() {
+    if (!state.data) await refresh({ preserveScroll: false });
+    const sales = Array.isArray(state.data?.sections?.sales)
+      ? state.data.sections.sales
+      : [];
+    const offer =
+      sales.find((item) => item?.state?.available && !item?.state?.owned) ||
+      sales.find((item) => item?.state?.available) ||
+      null;
+    if (!offer) return null;
+    return {
+      offer,
+      nextRefreshAt: state.data?.rotations?.sales?.nextRefreshAt || null,
+    };
   }
 
   function close() {
@@ -1238,5 +1254,5 @@ export function initializeShop({
     }, 0);
   }
 
-  return { open, close, refresh, jumpTo };
+  return { open, close, refresh, jumpTo, getFeaturedSale };
 }

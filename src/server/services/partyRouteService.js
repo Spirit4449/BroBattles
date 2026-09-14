@@ -158,7 +158,12 @@ function createPartyRouteService({ db }) {
     }
   }
 
-  async function discoverPublicParties({ query, requesterName, limit = 30 }) {
+  async function discoverPublicParties({
+    query,
+    requesterName,
+    requesterTrophies,
+    limit = 30,
+  }) {
     const normalizedQuery = String(query || "").trim();
     const maxRows = Math.max(1, Math.min(100, Number(limit) || 30));
 
@@ -172,12 +177,24 @@ function createPartyRouteService({ db }) {
            p.mode_id,
            p.mode_variant_id,
            p.public_name,
+           p.status AS party_status,
+           p.created_at AS party_created_at,
            pm.name,
            pm.team,
+           pm.joined_at,
+           pm.last_seen,
            u.char_class,
            u.selected_skin_id_by_char,
            u.selected_profile_icon_id AS profile_icon_id,
-           u.status,
+           u.trophies,
+           CASE
+             WHEN pm.last_seen IS NULL
+               OR pm.last_seen < DATE_SUB(NOW(), INTERVAL 45 SECOND)
+             THEN 'offline'
+             ELSE COALESCE(u.status, 'online')
+           END AS status,
+           COALESCE(pa.battle_count, 0) AS party_battle_count,
+           pa.last_battle_at,
            CASE
              WHEN pm.joined_at = (
                SELECT MIN(pm2.joined_at)
@@ -189,6 +206,16 @@ function createPartyRouteService({ db }) {
          FROM parties p
          JOIN party_members pm ON pm.party_id = p.party_id
          LEFT JOIN users u ON u.name = pm.name
+         LEFT JOIN (
+           SELECT
+             mp.party_id,
+             COUNT(DISTINCT m.match_id) AS battle_count,
+             MAX(m.created_at) AS last_battle_at
+           FROM match_participants mp
+           JOIN matches m ON m.match_id = mp.match_id
+           WHERE mp.party_id IS NOT NULL AND m.status = 'completed'
+           GROUP BY mp.party_id
+         ) pa ON pa.party_id = p.party_id
          WHERE p.is_public = 1
          ORDER BY p.party_id DESC, pm.joined_at ASC, pm.name ASC
          LIMIT ?`,
@@ -219,6 +246,10 @@ function createPartyRouteService({ db }) {
           modeId: row.mode_id,
           modeVariantId: row.mode_variant_id,
           publicName: String(row.public_name || "").trim(),
+          status: String(row.party_status || "idle"),
+          createdAt: row.party_created_at || null,
+          battleCount: Math.max(0, Number(row.party_battle_count) || 0),
+          lastBattleAt: row.last_battle_at || null,
           ownerName: null,
           members: [],
         });
@@ -232,6 +263,8 @@ function createPartyRouteService({ db }) {
         selected_skin_asset_url: null,
         profile_icon_id: String(row.profile_icon_id || "") || null,
         status: String(row.status || "online"),
+        trophies: Math.max(0, Number(row.trophies) || 0),
+        joinedAt: row.joined_at || null,
       };
       const selectedSkinMap = normalizeSelectedSkinMap(
         row.selected_skin_id_by_char,
@@ -275,10 +308,56 @@ function createPartyRouteService({ db }) {
       );
     }
 
-    parties = parties.slice(0, maxRows).map((party) => ({
-      ...party,
-      membersCount: party.members.length,
-    }));
+    const targetSkill = Math.max(0, Number(requesterTrophies) || 0);
+    parties = parties
+      .map((party) => {
+        const ratings = party.members.map((member) => member.trophies);
+        const skillRating = ratings.length
+          ? Math.round(
+              ratings.reduce((sum, value) => sum + value, 0) / ratings.length,
+            )
+          : 0;
+        return {
+          ...party,
+          skillRating,
+          skillGap: Math.abs(skillRating - targetSkill),
+        };
+      })
+      .sort((left, right) =>
+        left.skillGap - right.skillGap || right.partyId - left.partyId,
+      );
+
+    parties = parties.map((party) => {
+      const capacity = capacityFromSelection(normalizeSelectionFromRow(party));
+      const capacityTotal = Math.max(1, Number(capacity?.total) || 2);
+      const activeMembers = party.members.filter(
+        (member) => member.status.toLowerCase() !== "offline",
+      ).length;
+      const suggestionEligible =
+        party.status === "idle" &&
+        party.battleCount >= 1 &&
+        party.members.length >= 1 &&
+        party.members.length < capacityTotal &&
+        activeMembers >= 1;
+      const skillFit = Math.max(0, 100 - Math.floor(party.skillGap / 20));
+      return {
+        ...party,
+        capacity: capacityTotal,
+        activeMembers,
+        membersCount: party.members.length,
+        suggestionEligible,
+        suggestionScore:
+          skillFit + activeMembers * 25 + Math.min(party.battleCount, 5) * 10,
+      };
+    });
+    parties.sort(
+      (left, right) =>
+        Number(right.suggestionEligible) - Number(left.suggestionEligible) ||
+        right.suggestionScore - left.suggestionScore ||
+        left.skillGap - right.skillGap ||
+        right.partyId - left.partyId,
+    );
+    parties = parties.slice(0, maxRows);
 
     return {
       ok: true,

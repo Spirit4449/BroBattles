@@ -125,7 +125,9 @@ function sendGameStateToPlayer(room, socket) {
             ? p.specialDamage
             : null,
         },
-        level: Number.isFinite(p?.level) ? p.level : 1,
+        // null means the participant has not joined this room yet. The client
+        // can then retain the authoritative level from its HTTP roster.
+        level: Number.isFinite(p?.level) ? p.level : null,
         isAlive: p ? p.isAlive !== false : true,
         isBot: p ? p.isBot === true : mp?.isBot === true,
         spawnIndex: computeSpawnIndex(room, mp.name, mp.team),

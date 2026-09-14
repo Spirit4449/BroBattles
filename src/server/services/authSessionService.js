@@ -37,6 +37,28 @@ function createAuthSessionService({ db, cookieOptions }) {
     res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge });
     return token;
   }
+  async function activateGuest(userId, res, complete) {
+    const token = crypto.randomBytes(32).toString('hex');
+    const result = await db.withTransaction(async (_conn, q) => {
+      const [user] = await q('SELECT * FROM users WHERE user_id=? FOR UPDATE', [userId]);
+      if (!user?.expires_at || new Date(user.expires_at).getTime() <= Date.now() || Number(user.is_banned || 0) === 1) {
+        return { ok:false, statusCode:409, payload:{error:'Your guest session has ended. Return to the lobby.'} };
+      }
+      const outcome = await complete(q, user);
+      if (!outcome.ok) return outcome;
+      // Revoke guest tokens in the activation transaction: an old guest cookie
+      // must never acquire permanent-account access, even for a brief window.
+      await q('DELETE FROM auth_sessions WHERE user_id=?', [userId]);
+      await q('INSERT INTO auth_sessions (token_hash,user_id,expires_at) VALUES (?,?,?)', [tokenHash(token),userId,new Date(Date.now()+SESSION_MS)]);
+      return outcome;
+    });
+    if (result.ok) {
+      disconnectWhere(entry => entry.userId === Number(userId));
+      res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge:SESSION_MS });
+      res.cookie('display_name', result.payload.username, { ...cookieOptions, signed:false, httpOnly:false, maxAge:SESSION_MS });
+    }
+    return result;
+  }
   function disconnectWhere(predicate) {
     for (const [socket, entry] of sockets) {
       if (predicate(entry)) {
@@ -96,6 +118,6 @@ function createAuthSessionService({ db, cookieOptions }) {
       throw error;
     }
   }
-  return { resolve, create, revokeRequest, changePassword, authenticateSocket, clear };
+  return { resolve, create, activateGuest, revokeRequest, changePassword, authenticateSocket, clear };
 }
 module.exports = { createAuthSessionService, tokenHash };

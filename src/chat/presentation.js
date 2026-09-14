@@ -315,7 +315,7 @@ function renderPartyChatMessage(
     const viewButton = document.createElement("button");
     viewButton.type = "button";
     viewButton.className = `bb-chat-view-count${Number(message?.viewCount) > 0 ? " is-read" : ""}`;
-    viewButton.textContent = `✓✓ ${Number(message?.viewCount) || 0}`;
+    viewButton.textContent = `${Number(message?.viewCount) || 0}`;
     viewButton.title = "Viewed by";
     viewButton.addEventListener("click", (event) =>
       onOpenViewers?.(message, event.currentTarget),

@@ -1,3 +1,4 @@
+import { wireEmailSettings } from "../lib/emailSettings.js";
 import {
   buildProfileIconAlt,
   buildProfileIconUrl,
@@ -478,6 +479,7 @@ export function createProfileController({ getUserData }) {
     const cardsPanel = document.getElementById("profile-cards-panel");
 
     if (!overlay) return;
+    wireEmailSettings(profileFetchJson);
 
     const accountSettings = wireAccountSettings(
       document.getElementById("profile-account-panel"),

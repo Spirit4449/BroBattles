@@ -36,12 +36,9 @@ function setPartyBotSlot(partyId, input) {
 }
 
 function prunePartyBotSlots(partyId, { teamSize = 3, members = [] } = {}) {
-  const counts = { team1: 0, team2: 0 };
-  for (const member of members || []) {
-    if (member?.team === "team1" || member?.team === "team2") counts[member.team]++;
-  }
+  const occupied = require('./partySlots').normalizePartySlots(members, teamSize);
   const valid = getPartyBotSlots(partyId).filter(
-    (slot) => slot.index < teamSize && slot.index >= counts[slot.team],
+    slot => slot.index < teamSize && !occupied.some(member => member.team === slot.team && member.slot_index === slot.index),
   );
   if (valid.length) partySlots.set(Number(partyId), valid);
   else partySlots.delete(Number(partyId));

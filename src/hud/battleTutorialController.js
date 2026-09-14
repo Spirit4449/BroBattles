@@ -263,7 +263,10 @@ export function createBattleTutorialController({
       });
       if (previous.id === "attack" || previous.id === "duck") {
         const label = actionEl.querySelector(".tutorial-action-text strong");
-        if (label) label.textContent = "Perfected ✓";
+        if (label) {
+          label.textContent = "Perfected";
+          label.classList.add("has-pixel-check");
+        }
       }
     }
 

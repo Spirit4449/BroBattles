@@ -2,6 +2,7 @@ const { getResolvedCharacterAttackConfig, getResolvedCharacterAimConfig, getReso
 const { getResolvedAttackDescriptor } = require("../gameRoom/attackDescriptorResolver");
 const attackRuntime = require("../gameRoom/attackRuntimeManager");
 const { characterDefinitions } = require('../../../shared/characters');
+const { characterBody } = require('../../../shared/duelGeometry');
 const attackTypes = Object.fromEntries(Object.values(characterDefinitions).map(definition => [definition.key, definition.basicAction]));
 const BOT_ATTACK_TO_SUPER_COOLDOWN_MS = 400;
 
@@ -102,6 +103,12 @@ function advanceAmmo(player, dt) {
 }
 
 function basicAim(player, target, profile, random, room) {
+  // Sprite origins can sit above the hitbox (especially Gloop and Huntress).
+  // Use standing body geometry so crouching remains a way to dodge bot shots.
+  if (player.char_class === 'ninja' && target.char_class) {
+    const body = characterBody(target.char_class, target.flip);
+    target = { ...target, x: target.x + body.offsetX, y: target.y + body.offsetY };
+  }
   const type = attackTypes[player.char_class];
   const descriptor = getResolvedAttackDescriptor(type);
   const aim = getResolvedCharacterAimConfig(player.char_class) || {};

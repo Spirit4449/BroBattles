@@ -1,0 +1,76 @@
+/* Loaded after the shared UI: decoration uses basic CSS gradient rectangles,
+   without SVG border slicing, color-mix(), or party-rendered child elements. */
+#lobby-area .character-slot {
+  border-radius: 0;
+}
+#lobby-area .character-slot.player-display,
+#lobby-area .character-slot.op-display {
+  background-image:
+    linear-gradient(#d5ffff, #d5ffff),
+    linear-gradient(#86d8ff, #86d8ff),
+    linear-gradient(#86d8ff, #86d8ff),
+    linear-gradient(#a8baff, #a8baff),
+    linear-gradient(#b8a0f4, #b8a0f4),
+    linear-gradient(#d2bdff, #d2bdff),
+    linear-gradient(#7196ce, #7196ce),
+    linear-gradient(#7196ce, #7196ce);
+  background-position: left top, 6px top, left 6px, right top,
+    right bottom, right 6px bottom, right bottom 6px, left bottom;
+  background-size: 6px 6px, 6px 3px, 3px 6px, 5px 5px,
+    6px 6px, 6px 3px, 3px 6px, 5px 5px;
+  background-repeat: no-repeat;
+  border-style: solid;
+  box-shadow: 0 2px 0 #14233d, inset 0 1px 0 #b6eaff66;
+}
+/* Opponent chroma follows the red frame rather than the ally palette. */
+#lobby-area .character-slot.op-display {
+  background-image:
+    linear-gradient(#ffe0d5, #ffe0d5),
+    linear-gradient(#ff9b86, #ff9b86),
+    linear-gradient(#ff9b86, #ff9b86),
+    linear-gradient(#ffb3a8, #ffb3a8),
+    linear-gradient(#eb706c, #eb706c),
+    linear-gradient(#ffc0b3, #ffc0b3),
+    linear-gradient(#bd555e, #bd555e),
+    linear-gradient(#bd555e, #bd555e);
+  box-shadow: 0 2px 0 #3d1820, inset 0 1px 0 #ffbcaa66;
+}
+#lobby-area .character-slot[data-is-current-user="true"] {
+  border-radius: 0;
+  outline: 2px solid #83f9ff;
+  outline-offset: 6px;
+  box-shadow: 0 0 16px #50dfff44, inset 0 1px 0 #d4ffff88;
+}
+/* Decoration lives on the card itself, including solo and drag silhouettes. */
+.party-pixel-frame { display: none; }
+#lobby-area .character-slot[data-is-current-user="true"]::after {
+  border-radius: 0;
+  background: linear-gradient(#f1ffff88, #f1ffff88) left top / 6px 6px no-repeat,
+    linear-gradient(#7c93dd66, #7c93dd66) right bottom / 6px 6px no-repeat,
+    linear-gradient(135deg, #d9ffff, #a4faff 55%, #99baff);
+}
+#lobby-area .status:not(.invite) {
+  border-radius: 0;
+  background: linear-gradient(110deg, #233956, #152037 65%, #203049);
+}
+#lobby-area .status.ready,
+#lobby-area .status.selecting-character { background: linear-gradient(110deg, #244c42, #172c32); }
+#lobby-area .status.not-ready { background: linear-gradient(110deg, #4b293c, #261d31); }
+#lobby-area .status.offline { background: linear-gradient(110deg, #363e4c, #202631); }
+#lobby-area .status.in-battle { background: linear-gradient(110deg, #443260, #211e36); }
+#lobby-area .status.end-screen { background: linear-gradient(110deg, #514333, #2d2730); }
+#lobby-area .status.bot-status { --lobby-status-color: #92e8ff; }
+#lobby-area .status:not(.invite)::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  pointer-events: none;
+  border: 0;
+  background-image: linear-gradient(#ffffff55, #ffffff55),
+    linear-gradient(#ffffff33, #ffffff33), linear-gradient(#ffffff26, #ffffff26),
+    linear-gradient(#b8a0ff44, #b8a0ff44), linear-gradient(#080f3055, #080f3055);
+  background-position: left top, 5px top, left 5px, right bottom, right 5px bottom;
+  background-size: 5px 5px, 5px 5px, 5px 5px, 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  opacity: 1;
+}

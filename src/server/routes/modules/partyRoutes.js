@@ -330,6 +330,7 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
       const result = await partyRoute.discoverPublicParties({
         query,
         requesterName: user.name,
+        requesterTrophies: user.trophies,
         limit: 30,
       });
       if (!result.ok) {

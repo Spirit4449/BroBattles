@@ -46,3 +46,5 @@ Streamer mode obscures known username labels using pixel mosaics, supplies neutr
 - `npm run build`
 
 Verify the waffle menu, keyboard focus, settings/reset, signup legal popups, article search, feedback submission, member replies, admin triage, and narrow-screen layouts in a browser. Before international launch, separately review server regions/capacity, localization, moderation/reporting, asset licenses, account recovery, payment obligations, and privacy operations.
+
+Settings includes expandable keyboard remapping. Letter, digit, arrow, and Space bindings are supported; duplicates and reserved shortcuts are rejected. Changes apply to the active player and reset restores all defaults. Battle Settings is a non-modal side panel; its Controls section replaces the separate controls button.

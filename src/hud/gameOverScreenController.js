@@ -423,7 +423,6 @@ export function createGameOverScreenController({
     const rewardSectionHtml = squadRewards.length
       ? `
         <section class="bb-game-over-results">
-          <h2>Your Squad</h2>
           <div class="bb-game-over-results-table" role="table" aria-label="Your squad results">
             ${headerRow}
             ${rewardRowsHtml}
@@ -449,7 +448,6 @@ export function createGameOverScreenController({
       : myReward
       ? `
         <section class="bb-game-over-summary">
-          <h2>Battle Rewards</h2>
           <div class="bb-game-over-rewards">
             ${Object.keys(REWARD_TYPES).map(rewardCardMarkup).join("")}
           </div>
@@ -487,7 +485,6 @@ export function createGameOverScreenController({
             ${Array.from({ length: 14 }, (_, index) => `<i style="--spark-index:${index}"></i>`).join("")}
           </div>
           <header class="bb-game-over-hero">
-            <span class="bb-game-over-kicker">Battle Complete</span>
             <h1 class="bb-game-over-title ${resultTone}">${heading}</h1>
             <p>${escapeHtml(resultMessage)}</p>
           </header>

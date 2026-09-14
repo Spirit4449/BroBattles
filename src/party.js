@@ -1,3 +1,6 @@
+import { revealLobby } from "./lobby/lobbyReveal.js";
+import { playPartyMoveEffect } from "./lobby/partyMoveEffect.js";
+import { createPartySlotDrag } from "./lobby/partySlotDrag.js";
 import { ensureLegalAcceptance } from "./site/shell";
 import { createJoinRequestController } from './lobby/joinRequestController';
 import { createMapEditorLink } from './lib/mapEditorLink';
@@ -965,7 +968,13 @@ export function createParty() {
     });
 }
 
+let partyDeparturePending = false;
 export async function leaveParty() {
+  if (partyDeparturePending) return;
+  partyDeparturePending = true;
+  const leaveButton = document.getElementById("create-party");
+  const previousLabel = leaveButton?.textContent;
+  if (leaveButton) { leaveButton.disabled = true; leaveButton.textContent = "Leaving…"; }
   const selfSlot = document.querySelector(
     '.character-slot[data-is-current-user="true"]',
   );
@@ -992,6 +1001,8 @@ export async function leaveParty() {
     window.location.href = `/`;
   } catch (error) {
     console.error("Error:", error);
+    partyDeparturePending = false;
+    if (leaveButton) { leaveButton.disabled = false; leaveButton.textContent = previousLabel; }
     clearLobbySpawnAnimation(selfSlot);
     sonner(
       "Could not leave party",
@@ -1789,12 +1800,30 @@ function getRenderedLobbyMemberSlots() {
   return rendered;
 }
 
+let partySlotDrag = null;
+function ensurePartySlotDrag() {
+  if (partySlotDrag) return partySlotDrag;
+  partySlotDrag = createPartySlotDrag({
+    canMove: () => !!getActivePartyId() && __partyContext.ownerName === getCurrentLobbyUserName() && !activeQueueContext && !__activeBattleMatchId && !__partyContext.members.some(m => String(m.status).toLowerCase() === 'ready'),
+    move: (name, slot) => new Promise((resolve, reject) => {
+      socket.timeout(5000).emit('party:slot:move', { partyId: getActivePartyId(), name, ...getBotSlotTarget(slot) }, (error, result) => {
+        if (error || !result?.ok) reject(new Error(result?.error || 'Connection interrupted. Please try again.'));
+        else resolve();
+      });
+    }),
+    render: renderPartyMembers,
+    onError: message => sonner('Could not move player', message, 'error'),
+  });
+  return partySlotDrag;
+}
+
 function commitPartyRosterLayout({
   members,
   currentUserName,
   layoutSlots,
   spawnMemberKeys,
 }) {
+  const previousPositions = new Map([...getRenderedLobbyMemberSlots()].map(([key, slot]) => [key, slot.getBoundingClientRect()]));
   updatePlatformsForMode(layoutSlots);
 
   const team1Members = members.filter((member) => member.team === "team1");
@@ -1803,22 +1832,20 @@ function commitPartyRosterLayout({
     (member) => getLobbyMemberKey(member) === getLobbyMemberKey(currentUserName),
   );
   const currentUserTeam = currentUser ? currentUser.team : "team1";
-  const yourTeamMembers =
-    currentUserTeam === "team1" ? team1Members : team2Members;
-  const opponentTeamMembers =
-    currentUserTeam === "team1" ? team2Members : team1Members;
+  const yourTeamMembers = team1Members;
+  const opponentTeamMembers = team2Members;
   const desiredSlots = new Map();
 
   yourTeamMembers.forEach((member, index) => {
-    desiredSlots.set(`your-slot-${index + 1}`, {
+    desiredSlots.set(`your-slot-${(member.slot_index ?? index) + 1}`, {
       member,
-      isYourTeam: true,
+      isYourTeam: currentUserTeam === "team1",
     });
   });
   opponentTeamMembers.forEach((member, index) => {
-    desiredSlots.set(`op-slot-${index + 1}`, {
+    desiredSlots.set(`op-slot-${(member.slot_index ?? index) + 1}`, {
       member,
-      isYourTeam: false,
+      isYourTeam: currentUserTeam === "team2",
     });
   });
 
@@ -1829,11 +1856,13 @@ function commitPartyRosterLayout({
   });
 
   document.querySelectorAll(".character-slot").forEach((slot) => {
+    const target = getBotSlotTarget(slot);
+    slot.dataset.slotLabel = `Team ${target?.team === 'team1' ? 1 : 2}, slot ${(target?.index || 0) + 1}`;
     const desired = desiredSlots.get(slot.id);
     const previousKey = getLobbyMemberKey(slot.dataset.playerName);
 
     if (!desired) {
-      if (previousKey || !slot.classList.contains("empty")) {
+      if (previousKey || !slot.classList.contains("empty") || !slot.querySelector(".character-sprite")?.getAttribute("src")) {
         resetSlotToRandom(slot);
       }
       return;
@@ -1841,7 +1870,7 @@ function commitPartyRosterLayout({
 
     const desiredKey = getLobbyMemberKey(desired.member);
     const shouldSpawn =
-      spawnMemberKeys.has(desiredKey) || (!previousKey && Boolean(desiredKey));
+      spawnMemberKeys.has(desiredKey);
 
     if (slot.classList.contains("lobby-spawn-exit")) {
       clearLobbySpawnAnimation(slot);
@@ -1851,18 +1880,28 @@ function commitPartyRosterLayout({
     }
 
     applyMemberToSlot(desired.member, slot.id, desired.isYourTeam);
+    const localOrigin = partySlotDrag?.takeOrigin(desiredKey);
     if (shouldSpawn) playLobbySpawnAnimation(slot, "enter");
+    else if (!prefersReducedLobbyMotion()) {
+      const before = localOrigin || previousPositions.get(desiredKey);
+      const after = slot.getBoundingClientRect();
+      if (before && (Math.abs(before.x - after.x) > 1 || Math.abs(before.y - after.y) > 1)) {
+        if (!localOrigin) playPartyMoveEffect(before, after);
+        slot.animate([{ translate: `${before.x - after.x}px ${before.y - after.y}px` }, { translate: '0px 0px' }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      }
+    }
   });
 
   for (const bot of __partyContext.botSlots || []) {
     const isYourTeam = bot.team === currentUserTeam;
-    const slotId = `${isYourTeam ? "your" : "op"}-slot-${Number(bot.index) + 1}`;
+    const slotId = `${bot.team === "team1" ? "your" : "op"}-slot-${Number(bot.index) + 1}`;
     const slot = document.getElementById(slotId);
     if (slot && !slot.dataset.playerName) applyBotToSlot(bot, slot, isYourTeam);
   }
 }
 
 export function renderPartyMembers(data) {
+  if (ensurePartySlotDrag().defer(data)) return;
   const members = Array.isArray(data.members) ? data.members : [];
   const capacity =
     data?.capacity && typeof data.capacity === "object" ? data.capacity : null;
@@ -1942,6 +1981,8 @@ export function renderPartyMembers(data) {
       layoutSlots,
       spawnMemberKeys,
     });
+    ensurePartySlotDrag().sync();
+    void revealLobby();
   };
 
   if (exitingSlots.length && !prefersReducedLobbyMotion()) {
@@ -1964,6 +2005,14 @@ export function renderPartyMembers(data) {
   }
 
   commit();
+}
+
+export function ensurePartyPixelFrame(slot) {
+  if (slot.querySelector(':scope > .party-pixel-frame')) return;
+  const frame = document.createElement('span');
+  frame.className = 'party-pixel-frame';
+  frame.setAttribute('aria-hidden', 'true');
+  slot.append(frame);
 }
 
 function applyMemberToSlot(member, slotId, isYourTeam = null) {
@@ -1993,12 +2042,14 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
     return;
   }
 
+  ensurePartyPixelFrame(slot);
+
   // Fill with member info
   const previousPlayerKey = getLobbyMemberKey(slot.dataset.playerName);
   const previousCharacter = String(slot.dataset.character || "").trim();
   const currentUserName = getCurrentLobbyUserName();
   const isCurrentUser = member.name === currentUserName;
-  const displayName = isCurrentUser ? `${member.name} (You)` : member.name;
+  const displayName = member.name;
   // Mark slot ownership for delegated handlers
   slot.dataset.isCurrentUser = isCurrentUser ? "true" : "false";
   slot.dataset.playerName = member.name || "";
@@ -2091,6 +2142,7 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
 }
 
 function applyBotToSlot(bot, slot, isYourTeam) {
+  ensurePartyPixelFrame(slot);
   const character = String(bot?.character || "shuffle").toLowerCase();
   const isShuffle = character === "shuffle";
   const usernameEl = slot.querySelector(".username");
@@ -2103,7 +2155,7 @@ function applyBotToSlot(bot, slot, isYourTeam) {
     : `Bot · ${character[0].toUpperCase()}${character.slice(1)}`;
   usernameEl.className = `username${isYourTeam ? "" : " op-player"}`;
   spriteEl.src = isShuffle
-    ? "/assets/shuffle/shuffle1.webp"
+    ? "/assets/shuffle/shuffle1.svg"
     : buildCharacterSkinBodyUrl(character, "");
   spriteEl.alt = isShuffle ? "Shuffle bot" : `${character} bot`;
   spriteEl.classList.remove("random");
@@ -2502,15 +2554,9 @@ function resetSlotToRandom(slot) {
 }
 
 function getBotSlotTarget(slot) {
-  const current = (__partyContext.members || []).find(
-    (member) => getLobbyMemberKey(member) === getLobbyMemberKey(getCurrentLobbyUserName()),
-  );
-  if (!current?.team) return null;
   const match = String(slot?.id || "").match(/^(your|op)-slot-(\d+)$/);
   if (!match) return null;
-  const team = match[1] === "your"
-    ? current.team
-    : current.team === "team1" ? "team2" : "team1";
+  const team = match[1] === "your" ? "team1" : "team2";
   return { team, index: Number(match[2]) - 1 };
 }
 
@@ -2542,7 +2588,7 @@ function openBotPicker(slot) {
   const selectedCharacter = String(slot.dataset.botCharacter || "random");
   const choices = [
     { id: "random", label: "Random", image: "/assets/random.webp" },
-    { id: "shuffle", label: "Bot", image: "/assets/shuffle/shuffle1.webp" },
+    { id: "shuffle", label: "Bot", image: "/assets/shuffle/shuffle1.svg" },
     ...getAllCharacters().map((id) => ({
       id,
       label: `Bot · ${id[0].toUpperCase()}${id.slice(1)}`,
@@ -2776,6 +2822,7 @@ export function showMatchmakingOverlay() {
   const overlay = ensureOverlay();
   if (!overlay) return;
   if (__postBattleLobbyReturn) return;
+  window.dispatchEvent(new CustomEvent("bb:matchmaking-start"));
   if (__matchmakingHideTimer) {
     window.clearTimeout(__matchmakingHideTimer);
     __matchmakingHideTimer = null;
@@ -2981,7 +3028,7 @@ function updateMMOverlay({ found, total, selection, players }) {
         const cls = p.char_class || "ninja";
         const isShuffleBot = p.isConfiguredBot && cls === "shuffle";
         img.src = isShuffleBot
-          ? "/assets/shuffle/shuffle1.webp"
+          ? "/assets/shuffle/shuffle1.svg"
           : String(p.selected_skin_asset_url || "").trim() ||
             buildCharacterSkinBodyUrl(cls, "");
         img.alt = isShuffleBot ? "Shuffle bot" : cls;
@@ -3092,7 +3139,7 @@ function collectCurrentPartyMembers() {
         : `Bot · ${character[0].toUpperCase()}${character.slice(1)}`,
       char_class: character,
       selected_skin_asset_url: isShuffle
-        ? "/assets/shuffle/shuffle1.webp"
+        ? "/assets/shuffle/shuffle1.svg"
         : buildCharacterSkinBodyUrl(character, ""),
       team: slot?.team || null,
       isConfiguredBot: true,

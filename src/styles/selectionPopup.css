@@ -6,9 +6,7 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: var(--bb-overlay, rgba(3, 8, 16, 0.72));
-  -webkit-backdrop-filter: blur(var(--bb-overlay-blur, 5px));
-  backdrop-filter: blur(var(--bb-overlay-blur, 5px));
+  background: var(--bb-popup-backdrop, rgba(5, 10, 22, 0.74));
 }
 
 .cs-confirm {

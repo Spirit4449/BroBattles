@@ -1,6 +1,6 @@
 To request access, correction, or deletion of personal information, use the **Privacy** category in [Contact support](/help/contact), or email **support@classchats.net**.
 
-Tell us what you are requesting and the username involved. Do not send passwords, card details, or identity documents unless a secure verification process is arranged.
+Tell us what you want us to check and which username is involved. Do not send passwords, card details, or identity documents unless support arranges a secure verification step.
 
 Requests are handled manually. We may need to verify ownership, and some records may need to be retained for legal, payment, or security reasons. See the [Privacy Policy](/privacy) for details.
 

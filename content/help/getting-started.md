@@ -1,25 +1,25 @@
-1. Open the [lobby](/) and choose a character.
-2. Select an available mode and map.
-3. Ready up and follow the matchmaking prompts.
+1. Open the [lobby](/) and pick a fighter.
+2. Choose a playable mode and map.
+3. Ready up and follow the matchmaking prompts into the arena.
 
 You can try the game as a guest. Create an account to keep your progress beyond the temporary guest session.
 
-Bro Battles is designed for desktop browser play. Availability of touch controls depends on the device and game mode.
+Bro Battles is built for desktop browsers. Touch controls depend on your device and the mode you choose.
 
 ## Choose your first battle
 
-**Duels** is a good place to learn movement and attacks. Start with 1v1 to focus on a single opponent, or team up for 2v2 or 3v3. **Bank Bust** adds a team objective: attack the opposing bank while protecting your own.
+**Duels** is a good place to learn movement and attacks. Try 1v1 to focus on one opponent, or bring teammates for 2v2 or 3v3. **Bank Bust** adds a team objective: break the enemy vault while protecting yours.
 
 Only playable modes can enter matchmaking. A mode shown as coming soon is a preview, not a queue you can join yet.
 
 ## Before you press Ready
 
-Check your character, map, and team size. On your first Ready action, review the Terms and Privacy Policy; accepting continues the same Ready action. No birthdate is requested.
+Check your fighter, map, and team size. The first time you ready up, you will be asked to review the Terms and Privacy Policy. Accepting continues the same Ready action.
 
 Once matchmaking finds a match, follow the ready-check prompts. Keep the tab open while the arena loads. If a friend is still choosing their character, wait until the party is ready before starting.
 
 ## Your first few matches
 
-Give yourself room to learn. Watch the attack indicator, avoid spending every ability at once, and use the map's platforms to change your angle. Losing a duel is a chance to spot what to try differently next time.
+Give yourself a few rounds to settle in. Watch the attack indicator, keep an attack in reserve, and use platforms to approach from a new angle. A loss usually gives you one useful thing to try differently next time.
 
 Want to keep playing later? Convert your guest account before it expires. Do not clear cookies or switch browsers before saving your progress.

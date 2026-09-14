@@ -107,6 +107,10 @@
   --bb-title-shadow: 3px 4px 0 rgba(2, 5, 12, 0.72);
   --bb-overlay: rgba(3, 8, 16, 0.72);
   --bb-overlay-blur: 5px;
+  --bb-popup-backdrop:
+    radial-gradient(circle at 14% 16%, rgba(255, 201, 85, 0.18), transparent 44%),
+    radial-gradient(circle at 85% 18%, rgba(81, 170, 255, 0.18), transparent 48%),
+    rgba(5, 10, 22, 0.74);
 
   --bb-text-xs: 9px;
   --bb-text-sm: 11px;
@@ -1129,6 +1133,94 @@ body.profile-page-body .profile-form[hidden] {
   box-shadow: var(--bb-frame-shadow);
 }
 
+/* Join-request dialogs follow the shared window-and-inset visual hierarchy. */
+:is(
+  .party-request-banner,
+  .party-request-card,
+  .party-request-empty,
+  .party-request-summary-card,
+  .party-request-pill
+) {
+  border-radius: var(--bb-radius-card);
+}
+
+:is(.party-join-request-panel, .party-join-request-owner-panel) {
+  font-family: var(--bb-font-body);
+  background: var(--bb-surface-gradient);
+}
+
+:is(.party-join-request-panel, .party-join-request-owner-panel)
+  .trophy-overlay-head h2 {
+  line-height: 1.5;
+}
+
+.party-request-banner,
+.party-request-summary-card,
+.party-request-empty {
+  border-color: var(--bb-border-soft);
+  background: rgba(26, 49, 84, 0.58);
+  box-shadow: var(--bb-inset-shadow);
+}
+
+.party-request-banner,
+.party-request-summary-card {
+  border-width: 2px;
+}
+
+.party-request-banner[data-status="pending"] {
+  border-color: var(--bb-blue);
+  background: rgba(26, 49, 84, 0.72);
+}
+
+.party-request-banner[data-status="accepted"] {
+  border-color: var(--bb-green);
+  background: rgba(7, 136, 95, 0.2);
+}
+
+.party-request-banner[data-status="rejected"] {
+  border-color: var(--bb-red);
+  background: rgba(169, 40, 51, 0.2);
+}
+
+.party-request-card {
+  border-color: var(--bb-border-soft);
+  background: var(--bb-card-gradient);
+}
+
+.party-request-pill {
+  border-color: var(--bb-border-soft);
+  color: var(--bb-text-soft);
+  background: var(--bb-surface-raised);
+}
+
+.party-request-submit {
+  background: var(--bb-primary-gradient);
+}
+
+.party-request-return,
+.party-request-button:not(.party-request-accept):not(.party-request-reject) {
+  background: linear-gradient(180deg, #29405f, #1d2e47);
+}
+
+.party-request-accept {
+  background: var(--bb-success-gradient);
+}
+
+.party-request-reject {
+  background: var(--bb-danger-gradient);
+}
+
+.party-request-summary-card span,
+.party-request-card-copy span,
+.party-request-empty {
+  color: var(--bb-text-soft);
+}
+
+.party-request-summary-card strong,
+.party-request-card-copy strong {
+  color: var(--bb-text);
+}
+
 :is(
   .character-select-popup .popup-header,
   .shop-header,
@@ -1385,10 +1477,7 @@ body.profile-page-body .profile-form[hidden] {
   overflow: hidden;
   padding: 20px;
   color: var(--bb-text);
-  background:
-    radial-gradient(circle at 50% 40%, rgba(61, 145, 235, 0.17), transparent 42%),
-    rgba(3, 8, 16, 0.82);
-  backdrop-filter: blur(8px);
+  background: var(--bb-popup-backdrop);
   font-family: var(--bb-font-body);
 }
 
@@ -2327,7 +2416,8 @@ body.profile-page-body .profile-form[hidden] {
 #ready.battle-in-progress:hover { --bb-ready-fill: linear-gradient(135deg, #398bf0, #2468ce); }
 
 /* Varied mineral-toned pixels over the lobby’s separate midnight palette. */
-#navbar {
+#navbar,
+.site-header {
   background:
     linear-gradient(90deg, rgba(16, 29, 47, .76), rgba(23, 26, 42, .94) 38%, rgba(34, 24, 40, .88) 72%, rgba(43, 27, 39, .76)),
     linear-gradient(100deg, #243d50, #262b40 48%, #493042);
@@ -2340,7 +2430,8 @@ body.profile-page-body .profile-form[hidden] {
 }
 
 /* Sparse color at the edges, with a quiet center and clear foreground text. */
-#navbar::before {
+#navbar::before,
+.site-header::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -2349,9 +2440,23 @@ body.profile-page-body .profile-form[hidden] {
   mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, .65) 9%, transparent 25%, transparent 93%, rgba(0, 0, 0, .45) 100%);
   -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, .65) 9%, transparent 25%, transparent 93%, rgba(0, 0, 0, .45) 100%);
 }
-#navbar > * {
+#navbar > *,
+.site-header > * {
   position: relative;
 }
+#navbar .lobby-wordmark,
+.site-header .lobby-wordmark {
+  width: 176px;
+  margin: 0 0 0 4px;
+}
+#navbar .lobby-wordmark img,
+.site-header .lobby-wordmark img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+@media(max-width:1099px){#navbar .lobby-wordmark,.site-header .lobby-wordmark{width:132px}}
+@media(max-width:650px){#navbar .lobby-wordmark,.site-header .lobby-wordmark{width:120px}}
 
 /* Shop actions use larger square cells and wider corner clusters. */
 .shop-buy-button,
@@ -2374,3 +2479,7 @@ body.profile-page-body .profile-form[hidden] {
     linear-gradient(rgba(8,16,32,.10), rgba(8,16,32,.10)) right 28% bottom 0 / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat,
     linear-gradient(rgba(8,16,32,.06), rgba(8,16,32,.06)) right 35% bottom var(--bb-chroma-trail-cell, 6px) / var(--bb-chroma-trail-cell, 6px) var(--bb-chroma-trail-cell, 6px) no-repeat;
 }
+/* Shared compact chrome. The lobby stays in document flow so overlays can cover it. */
+#navbar,.site-header{top:0;left:0;right:0;width:100%;height:60px;min-height:60px;box-sizing:border-box;padding:8px 24px;z-index:1000}
+#navbar{position:relative!important}.site-header{position:fixed!important}
+@media(max-width:650px){#navbar,.site-header{padding:8px 16px}}

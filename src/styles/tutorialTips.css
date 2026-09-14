@@ -73,6 +73,20 @@
   white-space: nowrap;
 }
 
+.tutorial-action-text strong.has-pixel-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tutorial-action-text strong.has-pixel-check::after {
+  content: "";
+  width: 13px;
+  height: 13px;
+  background: url("/assets/ui/pixel-check.png") center / contain no-repeat;
+  image-rendering: pixelated;
+}
+
 .tutorial-action-text > span {
   color: #c7d5e8;
   font-size: 9px;

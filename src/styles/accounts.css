@@ -128,6 +128,70 @@ body {
   opacity: 1;
 }
 
+.form-hint { margin: 7px 0 0; color: var(--bb-text-muted, #91a5c2); font-size: 12px; line-height: 1.4; }
+.marketing-consent { margin-top: 12px; }
+.auth-card .site-consent { font: 12px/1.5 system-ui, sans-serif; gap: 9px; margin: 12px 0; }
+.auth-card .site-consent input[type=checkbox] { width:20px; height:20px; margin-top:0; border-width:2px; }
+.auth-card .site-consent input[type=checkbox]:checked::after { width:13px; height:13px; font-size:15px; }
+.auth-card .form-input { font:16px/1.4 system-ui, sans-serif; letter-spacing:normal; user-select:text; -webkit-user-select:text; cursor:text; }
+.auth-card .form-group { margin-bottom:16px; }
+.auth-card .guest-info { margin-bottom:18px; font-size:12px; }
+.auth-card .subtitle { margin-bottom:18px; }
+.verification-destination { display:flex; align-items:center; justify-content:center; gap:10px; min-width:0; }
+.verification-destination > :first-child { min-width:0; overflow-wrap:anywhere; font:14px/1.5 system-ui,sans-serif; }
+.email-edit { display:inline-flex; align-items:center; gap:5px; flex:none; padding:7px 9px; border:1px solid #496b91; border-radius:6px; background:#1b304c; color:#cbe4ff; cursor:pointer; font:13px system-ui,sans-serif; }
+.verification-panel[hidden], .auth-card form[hidden], .auth-card .guest-info[hidden] { display:none!important; }
+@media(prefers-reduced-motion:reduce) { .verification-panel { animation:none!important; } }
+.verification-panel { position: relative; animation: verifyIn 220ms ease-out; }
+.verification-panel h2 { font-size: clamp(18px, 3.5vw, 24px); }
+.eyebrow { color:#91c9ff; font-size:12px; font-weight:900; letter-spacing:.12em; }
+.edit-email { position:absolute; top:0; right:0; border:0; color:#bfe2ff; background:transparent; font-size:22px; cursor:pointer; }
+.code-inputs { display:flex; justify-content:center; gap:8px; margin:24px 0; }
+.code-inputs input { width:min(12vw,46px); height:54px; border:2px solid var(--bb-border,#385478); background:#071123; color:#fff; text-align:center; font:24px var(--bb-font-display,"Press Start 2P",monospace); }
+.code-inputs input:focus { outline:0; border-color:#7aa9e5; box-shadow:0 0 0 3px rgba(122,169,229,.22); }
+.text-button { margin-top:18px; border:0; color:#a9d4ff; background:transparent; text-decoration:underline; cursor:pointer; }
+.text-button:disabled { opacity:.55; cursor:wait; }
+@keyframes verifyIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+.username-input-wrap {
+  position: relative;
+}
+
+.username-input-wrap .form-input {
+  padding-right: 48px;
+}
+
+.username-status {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  transform: translateY(-50%);
+  font-family: system-ui, sans-serif;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.username-status[data-state="checking"] {
+  color: #9eb7d6;
+  font-size: 16px;
+}
+
+.username-status[data-state="available"] {
+  color: #69e2a7;
+}
+
+.username-status[data-state="taken"],
+.username-status[data-state="invalid"],
+.username-status[data-state="error"] {
+  color: #ff9fa8;
+}
+
 .auth-button {
   width: 100%;
   min-height: 52px;

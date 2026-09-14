@@ -1159,7 +1159,7 @@ function createPartyStateService({ db, io }) {
         party,
         ownerName: await getPartyOwnerName(partyId),
         selection: normalizeSelectionFromRow(party || {}),
-        members: memberRows,
+        members: await db.fetchPartyMembersDetailed(partyId),
         capacity: { total: totalCap, perTeam: perTeamCap },
         joinedNow,
       };

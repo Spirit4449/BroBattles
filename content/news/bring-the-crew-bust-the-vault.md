@@ -4,7 +4,7 @@ The enemy vault is waiting. So is the team guarding it.
 
 ## Give every push a purpose
 
-A clear path to the enemy vault is tempting. Before you charge, check what is happening behind you. If everyone attacks at once, who is watching your own vault?
+A clear path to the enemy vault is hard to ignore. Before you charge, glance behind you. If all three players attack, your own vault is an invitation.
 
 Try taking turns creating pressure and covering home. Watch for openings together instead of giving the other team a string of separate fights.
 
@@ -12,7 +12,7 @@ Try taking turns creating pressure and covering home. Watch for openings togethe
 
 Bank Bust includes respawns, so getting knocked out does not end your match. Use the return to reassess: does your team need help defending, or is there a chance to join a push?
 
-You do not have to stick with the same approach all match. A well-timed change of plan can make the next team fight feel completely different.
+You do not owe the match one plan. Swap roles, take a different route, or turn a desperate defense into the start of your next push.
 
 ## Find your crew's rhythm
 

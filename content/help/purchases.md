@@ -1,6 +1,6 @@
 Real-money purchases require a permanent account. Available currency packs and prices appear in the shop; payment is handled through Stripe.
 
-If a payment completed but currency is missing, allow a short time for processing, then reopen the lobby. Do not repeat the purchase to troubleshoot it.
+If payment completed but the currency is missing, wait a moment and reopen the lobby. Do not buy the pack again just to test it.
 
 [Contact support](/help/contact) with the purchase date and receipt or order reference. Never include card numbers or passwords.
 
@@ -12,7 +12,7 @@ Check the currency pack, displayed price, and the account you are signed into. O
 
 ## Payment declined or checkout interrupted
 
-A declined payment does not mean currency has been delivered. Check the message shown by the payment provider and confirm the transaction's status before trying again. Your bank or payment provider can explain a payment-method decline; game support cannot override it.
+A declined payment does not deliver currency. Read the checkout message and confirm the transaction status before trying again. Your bank or payment provider can explain a card decline; game support cannot override one.
 
 If you closed checkout early, reopen the shop and check your balance before starting another payment. A temporary authorization on a statement is not always a completed charge.
 

@@ -1,5 +1,9 @@
+import { wireBackdropDismiss, wireOutsideDismiss } from './dialogDismiss.mjs';
+import { renderHeader } from '../shared/siteHeader.cjs';
+import { remapKeys } from './remapKeys';
 import { initializeDesktopNavigation, renderSiteAccount } from './navigation';
 import './site.css';
+import './pixelChecks.css';
 import config from '../shared/siteConfig.json';
 import { getSettings, saveSettings, resetSettings, subscribeSettings } from './preferences';
 import { playSound } from '../lib/uiSounds';
@@ -15,18 +19,18 @@ export function element(tag, text, className) { const node=document.createElemen
 let openDialogs=0;
 export function openDialog(title, { dismissible=true, side=false }={}) {
   const previous=document.activeElement;
-  const dialog=element('dialog',null,'site-dialog'+(side?' site-settings-side':''));
-  const header=element('header');const heading=element('h2',title);heading.id=`site-dialog-title-${Date.now()}`;header.append(heading);dialog.setAttribute('aria-labelledby',heading.id);
+  const dialog=element('dialog',null,'site-dialog bb-popup'+(side?' site-settings-side':''));
+  const header=element('header',null,'bb-popup-header');const heading=element('h2',title,'bb-popup-title');heading.tabIndex=-1;heading.id=`site-dialog-title-${Date.now()}`;header.append(heading);dialog.setAttribute('aria-labelledby',heading.id);
   const body=element('div',null,'site-dialog-body');
-  const close=element('button','×');close.type='button';close.className='site-close pixel-menu-button';close.setAttribute('aria-label','Close');
+  const close=element('button','×');close.type='button';close.className='site-close bb-close';close.setAttribute('aria-label','Close');
   if(dismissible)header.append(close);
   dialog.append(header,body);document.body.append(dialog);
   dialog.addEventListener('cancel',event=>{if(!dismissible)event.preventDefault();});
   close.onclick=()=>dialog.close();
-  dialog.addEventListener('click',event=>{if(dismissible && event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left || event.clientX>rect.right || event.clientY<rect.top || event.clientY>rect.bottom)dialog.close();}});
+  if(dismissible) side ? wireOutsideDismiss(dialog) : wireBackdropDismiss(dialog);
   openDialogs++;window.__BB_SITE_DIALOG_OPEN=true;document.exitPointerLock?.();
   dialog.addEventListener('close',()=>{openDialogs--;window.__BB_SITE_DIALOG_OPEN=openDialogs>0;dialog.remove();previous?.focus?.({preventScroll:true});},{once:true});
-  if(side){dialog.show();const escape=event=>{if(event.key==='Escape' && !document.querySelector('dialog:modal')){event.preventDefault();event.stopPropagation();dialog.close();}};document.addEventListener('keydown',escape,true);dialog.addEventListener('close',()=>document.removeEventListener('keydown',escape,true),{once:true});}else dialog.showModal();return {dialog,body};
+  if(side){dialog.show();const escape=event=>{if(event.key==='Escape' && !dialog.dataset.remapping && !document.querySelector('dialog:modal')){event.preventDefault();event.stopPropagation();dialog.close();}};document.addEventListener('keydown',escape,true);dialog.addEventListener('close',()=>document.removeEventListener('keydown',escape,true),{once:true});}else dialog.showModal();heading.focus();return {dialog,body};
 }
 export async function openLegal(kind) {
   const {body}=openDialog(kind==='terms'?'Terms of Service':'Privacy Policy');
@@ -39,21 +43,44 @@ export function openSettings() {
   const inGame=location.pathname.startsWith('/game/');
   if(inGame && document.querySelector('#battle-keybind-hud')?.dataset.state==='expanded') document.getElementById('battle-keybind-close')?.click();
   const {dialog,body}=openDialog('Settings',{side:inGame});dialog.classList.add('site-settings-window');
-  if(inGame){const controlsButton=element('button','Show controls','pixel-menu-button site-show-controls');controlsButton.type='button';controlsButton.onclick=()=>{dialog.close();const hud=document.getElementById('battle-keybind-hud');if(hud){hud.classList.remove('hidden');if(hud.dataset.state!=='expanded')document.getElementById('battle-keybind-toggle')?.click();}};body.append(controlsButton);}
 
-  const form=element('div');const controls={};
+
+  const form=element('div');const controls={};const volumes=element('div',null,'site-volume-row');
   for(const [key,label,min,max,step] of [['sensitivity','Mouse sensitivity',0.25,3,0.05],['sfx','SFX volume',0,1,0.01],['music','Background volume',0,1,0.01]]) {
     const row=element('label',null,'site-setting');row.append(element('span',label));const value=element('output');const input=element('input');input.type='range';input.id=`setting-${key}`;row.htmlFor=input.id;input.setAttribute('aria-label',label);input.min=min;input.max=max;input.step=step;
     input.addEventListener('input',()=>saveSettings({[key]:Number(input.value)}));input.addEventListener('change',()=>{if(key==='sfx')playSound('cursor4');});
-    row.append(value,input);form.append(row);controls[key]={input,value};
+    row.append(value,input);if(key==='sensitivity')form.append(row);else {row.firstChild.textContent=key==='sfx'?'SFX':'BG volume';volumes.append(row);}controls[key]={input,value};
   }
+  form.append(volumes);
   for(const [key,label,hint] of [['autoHideCursor','Auto-hide cursor','Hide on battle start. When off, click the arena to capture the cursor.'],['streamer','Streamer mode','Conceals username labels on this screen. Names typed into messages can still appear.']]) {
-    const row=element('label',null,'site-setting');const input=element('input');input.type='checkbox';input.onchange=()=>saveSettings({[key]:input.checked});row.append(element('span',label),input,element('small',hint));form.append(row);controls[key]={input};
+    const row=element('label',null,'site-setting');const input=element('input');input.type='checkbox';input.setAttribute('aria-label',label);input.onchange=()=>saveSettings({[key]:input.checked});const title=element('span',label,'site-setting-title');const infoWrap=element('span',null,'site-setting-info-wrap');const info=element('button','i','site-setting-info');info.type='button';info.setAttribute('aria-label',hint);const tip=element('span',hint,'site-setting-tooltip');infoWrap.append(info,tip);title.append(infoWrap);row.append(title,input);form.append(row);controls[key]={input};
   }
-  const update=settings=>{for(const [key,{input,value}] of Object.entries(controls)){if(input.type==='checkbox')input.checked=settings[key];else {input.value=settings[key];value.textContent=key==='sensitivity'?`${settings[key].toFixed(2)}×`:`${Math.round(settings[key]*100)}%`;}}};
+  let resetting=false;
+  const update=settings=>{if(resetting)return;for(const [key,{input,value}] of Object.entries(controls)){if(input.type==='checkbox')input.checked=settings[key];else {input.value=settings[key];value.textContent=key==='sensitivity'?`${settings[key].toFixed(2)}×`:`${Math.round(settings[key]*100)}%`;}}};
+  const formatValue=(key,value)=>key==='sensitivity'?`${value.toFixed(2)}×`:`${Math.round(value*100)}%`;
   update(getSettings());const off=subscribeSettings(update);dialog.addEventListener('close',off,{once:true});
-  const reset=element('button','Reset to defaults','pixel-menu-button');reset.id='settings-reset';reset.onclick=resetSettings;
-  body.append(form,element('p',location.pathname.startsWith('/game/')?'Saved in this browser. Your online match continues while Settings is open.':'Saved automatically in this browser.','site-settings-note'),reset);
+  const reset=element('button','RESET','pixel-menu-button');reset.id='settings-reset';
+  let resetTimer;
+  reset.onclick=()=>{
+    if(resetting)return;
+    const before=getSettings();const started=performance.now();const duration=720;
+    resetting=true;reset.disabled=true;dialog.classList.add('is-resetting');
+    resetSettings();dialog.dispatchEvent(new CustomEvent('settingsreset'));
+    const tick=now=>{
+      const progress=Math.min(1,(now-started)/duration);const eased=1-Math.pow(1-progress,3);
+      for(const [key,{input,value}] of Object.entries(controls)){
+        if(input.type==='checkbox'){if(progress>.52)input.checked=getSettings()[key];continue;}
+        const current=before[key]+(getSettings()[key]-before[key])*eased;
+        input.value=current;value.textContent=formatValue(key,current);
+      }
+      if(progress<1){requestAnimationFrame(tick);return;}
+      resetting=false;reset.disabled=false;update(getSettings());
+      clearTimeout(resetTimer);resetTimer=setTimeout(()=>dialog.classList.remove('is-resetting'),260);
+    };
+    requestAnimationFrame(tick);
+  };
+  dialog.addEventListener('close',()=>clearTimeout(resetTimer),{once:true});
+  body.append(form,remapKeys(dialog),reset);
 }
 let navigationGuard = async () => true;
 export function setNavigationGuard(guard) { navigationGuard = guard; }
@@ -61,12 +88,12 @@ function wireNavigation() {
   const host=document.querySelector('#navbar > .flex, .site-brand');
   if(host && !document.querySelector('.site-waffle')) {
     const wrap=element('div',null,'site-nav-wrap');const button=element('button',null,'site-waffle pixel-menu-button');button.type='button';button.setAttribute('aria-label','Open site menu');button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls','site-menu');
-    for(let i=0;i<9;i++){const dot=element('i');dot.setAttribute('aria-hidden','true');button.append(dot);}
+    for(let i=0;i<9;i++){const dot=element('i');dot.setAttribute('aria-hidden','true');button.append(dot);}const notification=element('span',null,'site-waffle-notification');notification.dataset.supportUnread='';notification.setAttribute('aria-hidden','true');button.append(notification);
     const menu=element('nav',null,'site-menu');menu.id='site-menu';menu.setAttribute('aria-label','Site navigation');menu.hidden=true;
-    for(const [label,url] of [['About','/about'],['News','/news'],['Help Center','/help'],['Feedback','/feedback']]) {const a=element('a',label);a.href=url;if(url==='/help'){const badge=element('span');badge.dataset.supportUnread='';a.append(' ',badge);}menu.append(a);}
+    for(const [label,url] of [['About','/about'],['News','/news'],['Help Center','/help'],['Feedback','/feedback']]) {const a=element('a',label);a.href=url;if(url==='/help'){const badge=element('span','NEW','site-support-badge');badge.dataset.supportUnread='';badge.setAttribute('aria-hidden','true');a.append(badge);}menu.append(a);}
     const settings=element('button','Settings');settings.type='button';settings.onclick=()=>{toggle(false);openSettings();};menu.append(settings,element('hr'));
     for(const [label,url] of [['Privacy Policy','/privacy'],['Terms of Service','/terms']]){const a=element('a',label,'site-menu-legal');a.href=url;menu.append(a);}
-    menu.append(element('small',config.version));wrap.append(button,menu);host.prepend(wrap);
+    menu.append(element('small',config.version));wrap.append(button,menu);host.querySelector('.site-menu-placeholder')?.remove();host.prepend(wrap);
     menu.addEventListener('click', async event => {
       const link = event.target.closest('a');
       if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -109,7 +136,7 @@ function applyStreamer() {
   }
 }
 export async function refreshUnread() {
-  try{const data=await api('/api/site/session');renderSiteAccount(data);document.querySelectorAll('[data-support-unread]').forEach(node=>{node.textContent=data.unread?`(${data.unread} new)`:'';});return data;}catch(_){return null;}
+  try{const data=await api('/api/site/session');renderSiteAccount(data);const hasUnread=data.unread>0;const unreadLabel=`${data.unread} unread ${data.unread===1?'message':'messages'}`;document.querySelectorAll('[data-support-unread]').forEach(node=>node.classList.toggle('is-visible',hasUnread));const waffle=document.querySelector('.site-waffle');if(waffle)waffle.setAttribute('aria-label',hasUnread?`Open site menu. ${unreadLabel}.`:'Open site menu');const helpLink=document.querySelector('.site-menu a[href="/help"]');if(helpLink)helpLink.setAttribute('aria-label',hasUnread?`Help Center. ${unreadLabel}.`:'Help Center');document.querySelectorAll('a[href="/help/requests"]').forEach(link=>link.setAttribute('aria-label',hasUnread?`My requests. ${unreadLabel}.`:'My requests'));return data;}catch(_){return null;}
 }
 let acceptancePromise;
 export function ensureLegalAcceptance() {
@@ -119,8 +146,9 @@ export function ensureLegalAcceptance() {
     await new Promise((resolve,reject)=>{
       let accepted=false;
       const {dialog,body}=openDialog('Before you battle');
+      dialog.classList.add('site-battle-consent-dialog');
       dialog.addEventListener('close',()=>{if(!accepted)reject(Object.assign(new Error('Ready cancelled.'),{code:'CONSENT_CANCELLED'}));},{once:true});
-      body.innerHTML='<p>Please review the Terms of Service and Privacy Policy.</p><label class="site-consent"><input type="checkbox"/><span>I agree to the <a href="/terms" data-legal="terms">Terms of Service</a> and acknowledge the <a href="/privacy" data-legal="privacy">Privacy Policy</a>.</span></label>';
+      body.innerHTML='<div class="battle-consent"><div class="battle-legal-cards"><a class="battle-legal-card" href="/terms" data-legal="terms"><img src="/assets/ui/terms-scroll-pixel.png" alt="Terms of Service" width="72" height="72"/><strong>Terms of Service</strong></a><a class="battle-legal-card" href="/privacy" data-legal="privacy"><img src="/assets/ui/privacy-shield-pixel.png" alt="Privacy Policy" width="72" height="72"/><strong>Privacy Policy</strong></a></div><label class="site-consent"><input type="checkbox"/><span>I agree to the <a href="/terms" data-legal="terms">Terms of Service</a> and <a href="/privacy" data-legal="privacy">Privacy Policy</a>.</span></label></div>';
       const error=element('p',null,'site-error');error.setAttribute('role','alert');const button=element('button','Continue','pixel-menu-button');button.disabled=true;body.querySelector('input').onchange=event=>button.disabled=!event.target.checked;
       button.onclick=async()=>{button.disabled=true;try{await api('/api/legal/accept',{accepted:true,termsVersion:config.termsVersion,privacyVersion:config.privacyVersion});accepted=true;dialog.close();resolve();}catch(e){error.textContent=e.message;button.disabled=false;}};
       body.append(error,button);
@@ -129,7 +157,7 @@ export function ensureLegalAcceptance() {
 }
 function initialize() {
   // Auth pages have no lobby header: supply a compact shared brand header.
-  if((['/signup','/login','/admin'].includes(location.pathname)) && !document.querySelector('.site-brand')){const header=element('header',null,'site-header');header.innerHTML='<div class="site-brand"><a href="/" class="lobby-wordmark"><img src="/assets/logos/wordmark.webp" alt="Bro Battles"/></a></div>';document.body.prepend(header);}
+  if((['/signup','/login','/admin'].includes(location.pathname)) && !document.querySelector('.site-brand')){document.body.insertAdjacentHTML('afterbegin',renderHeader(location.pathname));}
   wireNavigation();initializeDesktopNavigation();applyStreamer();subscribeSettings(applyStreamer);
   let pending=false;new MutationObserver(records=>{
     if(!getSettings().streamer || pending) return;

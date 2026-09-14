@@ -51,7 +51,7 @@ test('all basic attack shapes render finite geometry and directional guides visi
     const styles = [], shapes = [];
     const scene = { add: { graphics() {
       const g = {};
-      for (const key of ['setDepth', 'setVisible', 'clear', 'destroy']) g[key] = () => g;
+      for (const key of ['setPosition', 'setDepth', 'setAlpha', 'setVisible', 'clear', 'destroy']) g[key] = () => g;
       for (const key of ['fillStyle', 'lineStyle']) g[key] = (...args) => { styles.push(args); return g; };
       for (const key of ['strokeLineShape', 'fillPoints', 'strokePoints', 'fillEllipse', 'strokeEllipse']) {
         g[key] = (...args) => { shapes.push(args); return g; };
@@ -77,7 +77,7 @@ test('guide reach ignores drag strength and melee footprints remain fixed', () =
     const draws = [];
     const scene = { add: { graphics() {
       const g = {};
-      for (const key of ['setDepth', 'setVisible', 'clear', 'destroy', 'fillStyle', 'lineStyle']) g[key] = () => g;
+      for (const key of ['setPosition', 'setDepth', 'setAlpha', 'setVisible', 'clear', 'destroy', 'fillStyle', 'lineStyle']) g[key] = () => g;
       for (const key of ['strokeLineShape', 'fillPoints', 'strokePoints', 'fillEllipse', 'strokeEllipse'])
         g[key] = (...args) => { draws.push([key, ...args]); return g; };
       return g;
@@ -116,7 +116,7 @@ test('basic reticle turns red at zero ammo and returns to white when ammo reload
   const colors = [];
   const scene = { add: { graphics() {
     const g = {};
-    for (const key of ['setDepth', 'setVisible', 'clear', 'destroy']) g[key] = () => g;
+    for (const key of ['setPosition', 'setDepth', 'setAlpha', 'setVisible', 'clear', 'destroy']) g[key] = () => g;
     g.fillStyle = color => { colors.push(color); return g; };
     g.lineStyle = (_width, color) => { colors.push(color); return g; };
     for (const key of ['strokeLineShape', 'fillPoints', 'strokePoints', 'fillEllipse', 'strokeEllipse']) g[key] = () => g;
@@ -134,3 +134,36 @@ test('basic reticle turns red at zero ammo and returns to white when ammo reload
   assert.ok(!colors.includes(0xff3030));
   renderer.destroy();
 });
+
+for (const character of ['huntress', 'gloop', 'wizard']) {
+  test(`${character} fades completely before switching sides and resets on hide`, () => {
+    const graphics = [];
+    const scene = { time: { now: 0 }, add: { graphics() {
+      const g = { alpha: 1, lines: [] };
+      for (const key of ['setPosition', 'setDepth', 'setVisible', 'destroy', 'fillStyle', 'lineStyle', 'fillPoints', 'strokePoints', 'fillEllipse', 'strokeEllipse']) g[key] = () => g;
+      g.setAlpha = a => { g.alpha = a; return g; };
+      g.clear = () => { g.lines = []; return g; };
+      g.strokeLineShape = line => { g.lines.push(line); return g; };
+      graphics.push(g); return g;
+    } } };
+    const controller = createAttackAimReticleController(scene);
+    const right = context(character);
+    const left = resolveAttackAimContext({ character, player: { x: 200, y: 300, width: 80, height: 100 },
+      family: 'basic', pointerWorldX: -300, pointerWorldY: 300, quick: false });
+    controller.update(right);
+    const original = JSON.stringify(graphics[0].lines);
+    scene.time.now = 40; controller.update(left);
+    assert.equal(graphics[0].alpha, 0.5);
+    assert.equal(JSON.stringify(graphics[0].lines), original);
+    scene.time.now = 80; controller.update(left);
+    assert.equal(graphics[0].alpha, 0);
+    assert.notEqual(JSON.stringify(graphics[0].lines), original);
+    scene.time.now = 130; controller.update(left);
+    assert.equal(graphics[0].alpha, 0.5);
+    scene.time.now = 180; controller.update(left);
+    assert.equal(graphics[0].alpha, 1);
+    controller.hide(); controller.update(right);
+    assert.equal(graphics[0].alpha, 1);
+    controller.destroy();
+  });
+}

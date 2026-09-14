@@ -26,6 +26,7 @@ import {
   noteClientSnapshot,
   shouldMuteClientDefaultLogs,
 } from "../lib/netTestLogger.js";
+import { mergeInitialRosterPlayer } from "./playerRosterMerge.js";
 
 /**
  * @typedef {object} MatchCoordinatorConfig
@@ -641,42 +642,7 @@ export function createMatchCoordinator(config) {
       );
       const mergedRoster = gameData.players.map((p) => {
         const live = initByName.get(p.name) || null;
-        const mergedStats = {
-          ...(p?.stats && typeof p.stats === "object" ? p.stats : {}),
-          ...(live?.stats && typeof live.stats === "object" ? live.stats : {}),
-        };
-        if (!Number.isFinite(Number(mergedStats.damage))) {
-          const liveDamage = Number(live?.baseDamage);
-          if (Number.isFinite(liveDamage)) mergedStats.damage = liveDamage;
-        }
-        if (!Number.isFinite(Number(mergedStats.specialDamage))) {
-          const liveSpecialDamage = Number(live?.specialDamage);
-          if (Number.isFinite(liveSpecialDamage)) {
-            mergedStats.specialDamage = liveSpecialDamage;
-          }
-        }
-        return {
-          ...p,
-          ...(live || {}),
-          stats: mergedStats,
-          name: p.name,
-          team: p.team,
-          char_class: p.char_class,
-          // The HTTP roster is the asset manifest used during Phaser preload.
-          // Keep those identity fields stable if the room snapshot was created
-          // from an older selection, otherwise the client can request a texture
-          // key that was never loaded.
-          selected_skin_id:
-            p.selected_skin_id ?? live?.selected_skin_id ?? null,
-          selected_skin_asset_url:
-            p.selected_skin_asset_url ??
-            live?.selected_skin_asset_url ??
-            null,
-          selected_skin_game_assets:
-            p.selected_skin_game_assets ??
-            live?.selected_skin_game_assets ??
-            null,
-        };
+        return mergeInitialRosterPlayer(p, live);
       });
       gameData.players = mergedRoster;
       onInitializePlayers(mergedRoster);

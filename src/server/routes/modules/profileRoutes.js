@@ -13,6 +13,7 @@ const MIN_PW = 6;
 const MAX_PW = 32;
 
 function registerProfileRoutes({ app, db, requireCurrentUser }) {
+  require("./emailRoutes").registerEmailRoutes({ app, db, requireCurrentUser });
   async function buildProfileViewForUser(userRow) {
     const profileIconState = await syncProfileIconOwnershipForUser(db, userRow);
     const cardState = await syncPlayerCardOwnershipForUser(db, userRow);

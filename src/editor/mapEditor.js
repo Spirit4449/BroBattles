@@ -1,5 +1,6 @@
 import Phaser from 'phaser/dist/phaser-arcade-physics.min.js';
 import './mapEditor.css';
+import './pixelChecks.css';
 import { preloadMapDocument, buildMapDocument, syncMapDocument } from '../maps/documentRuntime';
 import { clone, VARIANTS, POWERUP_TYPES, MapHistory, validateDocument, validateMap, geometryFromMap, resolvePowerupPoints } from '../shared/mapDocument';
 import { resolveLanding } from '../shared/spawnPlacement';
@@ -24,7 +25,7 @@ async function request(url, options={}) {
 function error(e){status(e.message);showDialog('Unable to complete this edit',node('p',e.message),null,'Close');}
 function node(tag,text,attrs={}){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;for(const[k,v]of Object.entries(attrs))el.setAttribute(k,v);return el;}
 function persistDraft(){try{localStorage.setItem(`bb-map-draft-${documentData.id}`,JSON.stringify({revision,document:documentData}));}catch{status('Draft storage is full. Save or export to keep your edits.');}}
-function refreshSave(){ $('save-state').textContent=dirty()?'● Unsaved changes':'✓ Saved';$('undo').disabled=!history || history.index===0;$('redo').disabled=!history || history.index===history.stack.length-1; }
+function refreshSave(){ const state=$('save-state');const unsaved=dirty();if(unsaved)state.textContent='● Unsaved changes';else {const icon=node('img',undefined,{src:'/assets/ui/pixel-check.png',alt:''});icon.width=13;icon.height=13;icon.style.cssText='vertical-align:-2px;margin-right:4px;image-rendering:pixelated';state.replaceChildren(icon,'Saved');}$('undo').disabled=!history || history.index===0;$('redo').disabled=!history || history.index===history.stack.length-1; }
 function commit(message='Edit applied') {history.commit(documentData);persistDraft();refreshSave();renderBrowser();renderInspector();status(message);}
 function transaction(fn,message){if(busy)return;const before=clone(documentData);try{fn();const errors=validateMap(map());if(errors.length)throw Error(errors.slice(0,6).join('\n'));scene?.rebuild();commit(message);}catch(e){documentData=before;scene?.rebuild();renderBrowser();renderInspector();error(e);}}
 function showDialog(title,content,onApply,label='Apply'){

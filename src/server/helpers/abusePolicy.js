@@ -18,6 +18,7 @@ const HTTP_BUCKETS = {
 };
 
 const HTTP_ROUTE_POLICIES = {
+  "GET /username-availability": { bucket: "medium", enforceActiveSuspension: false },
   "POST /signup": { bucket: "strict" },
   "POST /login": { bucket: "strict" },
   "POST /upgrade": { bucket: "strict", countFailuresOnly: true },

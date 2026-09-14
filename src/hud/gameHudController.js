@@ -1,3 +1,5 @@
+import { getSettings, subscribeSettings } from '../site/preferences';
+import { updateControlsGuide } from '../site/controlsGuide.mjs';
 // HUD controller for battle overlays, timer, keybind help, and team status.
 // Keeps DOM/UI concerns out of game scene orchestration.
 
@@ -52,6 +54,7 @@ export function createGameHudController({
   let waitingBannerTimer = null;
   let keybindAutoDismissTimer = null;
   let collapseKeybindHud = null;
+  let stopGuideUpdates = null;
   let spectatedPlayerName = null;
 
   function _fallbackCatalog() {
@@ -808,21 +811,13 @@ export function createGameHudController({
 
     collapseKeybindHud = () => applyExpandedState(false, false);
 
-    const keyCodeByLabel = {
-      W: "KeyW",
-      A: "KeyA",
-      S: "KeyS",
-      D: "KeyD",
-      J: "KeyJ",
-      I: "KeyI",
-      ESC: "Escape",
-      "↑": "ArrowUp",
-      "←": "ArrowLeft",
-      "↓": "ArrowDown",
-      "→": "ArrowRight",
-    };
-    hud.querySelectorAll("kbd").forEach((key) => {
-      key.dataset.code = keyCodeByLabel[String(key.textContent || "").trim()] || "";
+    stopGuideUpdates?.();
+    const updateGuide = settings => updateControlsGuide(hud, settings);
+    updateGuide(getSettings());
+    stopGuideUpdates = subscribeSettings(updateGuide);
+    window.addEventListener('pagehide', () => stopGuideUpdates?.(), {once:true});
+    hud.querySelectorAll('kbd:not([data-binding])').forEach(key => {
+      if(key.textContent.trim()==='ESC')key.dataset.code='Escape';
     });
 
     const setPressed = (code, pressed) => {

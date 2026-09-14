@@ -119,7 +119,7 @@ test('the successive Gloop rebound reaches higher than the old damped bounce', (
   assert.ok(secondBounceHeight(0.85) > secondBounceHeight(0.62) * 1.5);
 });
 
-test('normal reticle stops at the server first impact while the projectile keeps bouncing', () => {
+test('normal reticle consistently follows the server through two bounces', () => {
   const { resolveAttackAimContext } = require('../src/characters/shared/attackAim');
   const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
   const cfg = require("../src/shared/characterTuning.js").getResolvedCharacterAttackConfig('gloop', 'slimeball');
@@ -132,8 +132,9 @@ test('normal reticle stops at the server first impact while the projectile keeps
     const owner = { ...player, name: 'Gloop', participantId: 'gloop-test', isAlive: true, team: 'team1' };
     const attack = createRuntimeAttack(owner, { ...cfg, start: aim.start, angle: aim.angle, speed: aim.speed, initialVy: aim.initialVy, direction: aim.direction, type: 'gloop-slimeball-release', floorY: 500, worldMinX: 0, worldMaxX: 1100 }, 0);
     const room = { players: new Map([[owner.participantId, owner]]), FIXED_DT_MS: 1000 / 120, geometry: { colliders: rects } };
-    for (let i = 0; i < 720 && !attack.done && !attack.bounceCount; i++) tickRuntimeAttack(room, attack, i * room.FIXED_DT_MS);
-    assert.equal(aim.throwPreview.impacts.length, 1);
+    for (let i = 0; i < 720 && !attack.done; i++) tickRuntimeAttack(room, attack, i * room.FIXED_DT_MS);
+    assert.equal(aim.throwPreview.impacts.filter(hit => !hit.terminal).length, 2);
+    assert.equal(aim.throwPreview.impacts.at(-1).terminal, true);
     assert.ok(Math.hypot(aim.target.x - player.x, aim.target.y - player.y) <= 400.00001);
     assert.equal(attack.x, aim.throwPreview.endX);
     assert.equal(attack.y, aim.throwPreview.endY);

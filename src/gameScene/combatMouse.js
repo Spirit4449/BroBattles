@@ -5,7 +5,6 @@ export const COMBAT_MOUSE_CONFIG = Object.freeze({
   fullDragDistance: 120,
   mouseSensitivity: 0.24,
   throwCenterDistance: 28,
-  throwCenterExitDistance: 38,
   lookAhead: 72,
 });
 
@@ -100,11 +99,12 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
       distance = config.fullDragDistance;
     }
     if (defaultAim && distance < config.dragStartDistance) return;
-    // Once a throw is visible, hold its heading through the center. A wider
-    // exit threshold prevents jitter from repeatedly reversing a short throw.
+    // Minimum range clamps power, not heading. Only the tiny directionless
+    // center retains the last angle; orbiting inside minimum range stays free.
     if (variableDistance && aiming) {
-      centerHeld = distance < (centerHeld ? config.throwCenterExitDistance : config.throwCenterDistance);
-      if (centerHeld) return;
+      centerHeld = distance < config.dragReleaseDistance;
+      if (!centerHeld) direction = { x: dragX / distance, y: dragY / distance };
+      return;
     }
     defaultAim = false;
     aiming = distance >= (aiming ? config.dragReleaseDistance : config.dragStartDistance);
@@ -117,7 +117,7 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
     else if (!event.repeat && !event.altKey && !event.ctrlKey && !event.metaKey &&
       !event.target?.isContentEditable &&
       !['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(event.target?.tagName) &&
-      ['w', 'a', 's', 'd', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', ' '].includes(event.key?.length === 1 ? event.key.toLowerCase() : event.key)) {
+      (getPreferences().keys ? ['left','right','up','down','leftAlt','rightAlt','upAlt','downAlt','jump'].some(slot => getPreferences().keys[slot] === event.keyCode) : ['w', 'a', 's', 'd', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', ' '].includes(event.key?.length === 1 ? event.key.toLowerCase() : event.key))) {
       if (getPreferences().autoHideCursor) controller.beginInput();
     }
   });

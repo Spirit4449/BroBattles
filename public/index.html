@@ -16,9 +16,24 @@
       href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap"
       rel="stylesheet"
     />
+    <style>
+      #lobby-area[data-loading] > * { visibility: hidden; }
+      #lobby-loading { display: none; }
+      #lobby-area[data-loading] > #lobby-loading {
+        visibility: visible; display: grid; place-content: center; gap: 12px;
+        position: absolute; inset: 0; text-align: center; color: white;
+        animation: lobby-loading-appear 180ms 500ms both;
+      }
+      @keyframes lobby-loading-appear { from { opacity: 0; } to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) {
+        #lobby-area[data-loading] > #lobby-loading { animation: none; }
+      }
+    </style>
     <script src="/socket.io/socket.io.js"></script>
     <link rel="stylesheet" href="/bundles/index.css" />
     <link rel="stylesheet" href="/styles/ui-system.css" />
+    <link rel="stylesheet" href="/styles/lobby-frames.css?v=3" />
+    <link rel="stylesheet" href="/styles/lobby-responsive.css" />
   </head>
   <body>
     <script>
@@ -62,8 +77,14 @@
     </script>
     <div id="navbar">
       <div class="flex">
+        <span class="site-menu-placeholder" aria-hidden="true"></span>
         <h1 class="lobby-wordmark">
-          <img src="/assets/logos/wordmark.webp" alt="Bro Battles" />
+          <img
+            src="/assets/logos/wordmark.webp"
+            width="2065"
+            height="408"
+            alt="Bro Battles"
+          />
         </h1>
       </div>
       <div class="flex" id="navbar-right">
@@ -142,6 +163,7 @@
     <div class="lobby-quick-actions" role="group" aria-label="Lobby actions">
       <button
         id="shop-button"
+        aria-label="Shop"
         class="party-button shop-button pixel-menu-button"
         type="button"
       >
@@ -156,6 +178,7 @@
       </button>
       <button
         id="leaderboard-button"
+        aria-label="Leaderboard"
         class="party-button leaderboard-button pixel-menu-button"
         type="button"
       >
@@ -170,7 +193,11 @@
       </button>
     </div>
 
-    <div id="lobby-area" class="mode-1">
+    <div id="lobby-area" class="mode-1" data-loading aria-busy="true">
+      <div id="lobby-loading" role="status">
+        <span>Preparing lobby…</span>
+        <button type="button" onclick="window.location.reload()" hidden>Retry</button>
+      </div>
       <div class="platform your-team-1" data-team="your-team" data-slot="1">
         <div class="character-slot empty" id="your-slot-1">
           <div class="slot-level-badge" aria-hidden="true"></div>
@@ -227,6 +254,8 @@
           <img
             id="mode-preview-img"
             src="/assets/fightImage.webp"
+            width="72"
+            height="40"
             alt="Mode preview"
           />
           <span class="mode-picker-copy">
@@ -254,6 +283,8 @@
           <img
             id="map-preview-img"
             src="/assets/lushy/lobbyBg.webp"
+            width="72"
+            height="40"
             alt="Map preview"
           />
           <span id="map-preview-name">Lushy Peaks</span>
@@ -446,7 +477,9 @@
             </section>
             <div data-account-member hidden>
             <h3>Account Settings</h3>
+            <p id="email-status" class="account-message" aria-live="polite"></p>
             <div class="profile-account-actions">
+              <button id="email-toggle" class="profile-action-btn pixel-menu-button" type="button">Add Email Address</button>
               <button class="profile-action-btn pixel-menu-button" type="button" data-account-toggle aria-controls="profile-username-form" aria-expanded="false">Change Name</button>
               <button class="profile-action-btn pixel-menu-button" type="button" data-account-toggle aria-controls="profile-password-form" aria-expanded="false">Change Password</button>
             </div>
@@ -699,18 +732,18 @@
         <div class="party-request-foot">
           <div class="party-request-actions-row">
             <button
-              id="party-join-request-submit"
-              class="pixel-menu-button party-request-submit"
-              type="button"
-            >
-              Request to Join
-            </button>
-            <button
               id="party-join-request-return"
               class="pixel-menu-button party-request-return"
               type="button"
             >
               Return Home
+            </button>
+            <button
+              id="party-join-request-submit"
+              class="pixel-menu-button party-request-submit"
+              type="button"
+            >
+              Request to Join
             </button>
           </div>
         </div>

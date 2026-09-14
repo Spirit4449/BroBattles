@@ -774,7 +774,6 @@ export default class RemotePlayer {
       health: this.opCurrentHealth,
       maxHealth: this.opMaxHealth,
       color: isTeammate ? 0x99ab2c : 0xc64d38,
-      guarded: !!this.opponent?._ducking,
     });
     this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
 

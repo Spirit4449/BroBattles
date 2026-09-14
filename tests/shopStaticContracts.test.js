@@ -254,6 +254,8 @@ test("shop navigation, icons, sales glimmer, and checkout chrome stay consistent
   }
   assert.match(source, /class="shop-tab-icon"/);
   assert.match(source, /class="shop-offer-name"/);
+  assert.match(source, /class="shop-clock-icon"/);
+  assert.doesNotMatch(source, /<span>Refresh<\/span>/);
   assert.match(source, /<h2 id="shop-checkout-title">Secure Checkout<\/h2>/);
   assert.doesNotMatch(source, /<span>ESC<\/span>/);
   assert.doesNotMatch(source, />SECURE CHECKOUT</);
@@ -299,4 +301,11 @@ test("profile loadout headers match 'Get More in Shop' and close button height",
     profileStyles,
     /\.cards-modal-head \.browse-shop-link[\s\S]+?height:\s*42px;/,
   );
+});
+
+test("profile popup stacks above lobby tooltips", () => {
+  const styles = read("src/styles/index.css");
+  const tooltipLayer = Number(styles.match(/\.lobby-hint\s*\{[\s\S]*?z-index:\s*(\d+)/)?.[1]);
+  const profileLayer = Number(styles.match(/#profile-overlay\s*\{[\s\S]*?z-index:\s*(\d+)/)?.[1]);
+  assert.ok(profileLayer > tooltipLayer);
 });

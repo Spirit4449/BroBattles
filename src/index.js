@@ -1,12 +1,17 @@
+import { revealLobby, watchLobbyLoading, showLobbyLoadError } from "./lobby/lobbyReveal.js";
 import { ensureLegalAcceptance, setNavigationGuard } from "./site/shell";
 import "./site/shell.js";
 import { escapeHtml, profileFetchJson, fetchLobbyJson, openOverlay, closeOverlay, isOverlayOpen } from './lobby/ui';
 import { createProfileController } from './lobby/profileController';
 import { createTrophyController } from './lobby/trophyController';
+import {
+  createLobbyHintController,
+  getRecentModeStreak,
+} from "./lobby/lobbyHintController.mjs";
 import { registerMapCatalog } from './lib/gameSelectionCatalog';
 import { registerMapMetadata } from './maps/manifest';
 import { sonner } from "./lib/sonner.js";
-import { checkIfInParty, createParty, leaveParty, socketInit, applyLobbySelection, renderPartyMembers, getPartyInteractionContext, initializeModeDropdown, initReadyToggle, setSlotLevelBadge, showPartyJoinRequestScreen, playLobbySpawnAnimation } from "./party.js";
+import { ensurePartyPixelFrame, checkIfInParty, createParty, leaveParty, socketInit, applyLobbySelection, renderPartyMembers, getPartyInteractionContext, initializeModeDropdown, initReadyToggle, setSlotLevelBadge, showPartyJoinRequestScreen, playLobbySpawnAnimation } from "./party.js";
 import socket, { ensureSocketConnected, waitForConnect } from "./socket.js";
 import {
   initializeCharacterSelect,
@@ -61,6 +66,7 @@ const { initProfilePopup } = profileController;
 const trophyController = createTrophyController({ getUserData: () => userData });
 const { openTrophyProgressionOverlay, refreshTrophyClaimAvailability, scrollTrophyTrack, updateTrophyTrackControls } = trophyController;
 let guest = false;
+let newGuestCreated = false;
 const POST_MATCH_REWARD_STORAGE_KEY = "bb_post_match_rewards_v1";
 
 let partySlotMenu = null;
@@ -93,13 +99,28 @@ function ensurePartySlotMenu() {
   if (partySlotMenu) return partySlotMenu;
   const menu = document.createElement("div");
   menu.className = "profile-slot-menu";
+  menu.setAttribute("role", "menu");
+  menu.setAttribute("aria-label", "Player actions");
   menu.hidden = true;
   menu.innerHTML = `
-    <div class="profile-slot-menu-head" id="party-slot-menu-name">Player</div>
+    <div class="profile-slot-menu-pointer" aria-hidden="true"></div>
+    <div class="profile-slot-menu-head">
+      <span class="profile-slot-menu-eyebrow">Player actions</span>
+      <strong id="party-slot-menu-name">Player</strong>
+    </div>
     <div class="profile-slot-menu-actions">
-      <button type="button" class="profile-slot-menu-btn kick pixel-menu-button" data-action="kick">Kick</button>
-      <button type="button" class="profile-slot-menu-btn owner pixel-menu-button" data-action="owner">Make Owner</button>
-      <button type="button" class="profile-slot-menu-btn view pixel-menu-button" data-action="view">View Profile</button>
+      <button type="button" role="menuitem" class="profile-slot-menu-btn view pixel-menu-button" data-action="view">
+        <span class="profile-slot-menu-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 2c-3.8 0-6.4 3.3-7 5 1 2.2 3.5 5 7 5s6-2.8 7-5c-.7-1.7-3.2-5-7-5Zm0 8.2A3.2 3.2 0 1 1 8 3.8a3.2 3.2 0 0 1 0 6.4Zm0-1.8A1.4 1.4 0 1 0 8 5.6a1.4 1.4 0 0 0 0 2.8Z"/></svg></span>
+        <span>View Profile</span>
+      </button>
+      <button type="button" role="menuitem" class="profile-slot-menu-btn owner pixel-menu-button" data-action="owner">
+        <span class="profile-slot-menu-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m2 5 3 2 3-5 3 5 3-2-1 7H3L2 5Zm1 8h10v2H3v-2Z"/></svg></span>
+        <span>Make Owner</span>
+      </button>
+      <button type="button" role="menuitem" class="profile-slot-menu-btn kick pixel-menu-button" data-action="kick">
+        <span class="profile-slot-menu-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3.1 1.7 8 6.6l4.9-4.9 1.4 1.4L9.4 8l4.9 4.9-1.4 1.4L8 9.4l-4.9 4.9-1.4-1.4L6.6 8 1.7 3.1l1.4-1.4Z"/></svg></span>
+        <span>Kick Player</span>
+      </button>
     </div>
   `;
   document.body.appendChild(menu);
@@ -107,6 +128,21 @@ function ensurePartySlotMenu() {
     if (menu.hidden) return;
     if (menu.contains(event.target)) return;
     menu.hidden = true;
+  });
+  menu.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      menu.hidden = true;
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const actions = Array.from(
+      menu.querySelectorAll('.profile-slot-menu-btn:not([hidden])'),
+    );
+    const currentIndex = actions.indexOf(document.activeElement);
+    const step = event.key === "ArrowDown" ? 1 : -1;
+    const nextIndex = (currentIndex + step + actions.length) % actions.length;
+    event.preventDefault();
+    actions[nextIndex]?.focus();
   });
   partySlotMenu = menu;
   return menu;
@@ -189,9 +225,21 @@ function openPartySlotMenu(slot, anchorEvent, profilePopup) {
       await handlePartyMemberAction("kick", playerName, profilePopup);
     };
   }
-  menu.style.left = `${Math.min(window.innerWidth - 220, anchorEvent.clientX + 12)}px`;
-  menu.style.top = `${Math.min(window.innerHeight - 180, anchorEvent.clientY + 12)}px`;
+  const anchorRect = slot.getBoundingClientRect();
+  const viewportGap = 12;
+  const anchorGap = 14;
+  menu.style.visibility = "hidden";
   menu.hidden = false;
+  const menuRect = menu.getBoundingClientRect();
+  const fitsRight = anchorRect.right + anchorGap + menuRect.width <= window.innerWidth - viewportGap;
+  const left = fitsRight
+    ? anchorRect.right + anchorGap
+    : anchorRect.left - menuRect.width - anchorGap;
+  const top = anchorRect.top + Math.min(anchorRect.height * 0.34, 54);
+  menu.dataset.side = fitsRight ? "right" : "left";
+  menu.style.left = `${Math.max(viewportGap, Math.min(left, window.innerWidth - menuRect.width - viewportGap))}px`;
+  menu.style.top = `${Math.max(viewportGap, Math.min(top, window.innerHeight - menuRect.height - viewportGap))}px`;
+  menu.style.visibility = "";
 }
 
 function animateNumber(el, from, to, durationMs) {
@@ -426,6 +474,186 @@ async function openPartyDiscoveryOverlay() {
   __partyDiscoveryState.query = query;
   openOverlay("party-discovery-overlay");
   await loadPartyDiscovery(query);
+}
+
+async function loadLobbyHintData() {
+  const profilePayload = await fetchLobbyJson("/profile/data").catch(() => ({
+    profile: { totalMatches: 0, battles: [] },
+  }));
+  const profile = profilePayload?.profile || {};
+  return {
+    battleCount: Math.max(0, Number(profile.totalMatches) || 0),
+    battles: Array.isArray(profile.battles) ? profile.battles : [],
+  };
+}
+
+function getSaleHintPrice(price) {
+  if (!price || price.type === "free") return { text: "FREE", icon: null };
+  if (price.type === "money") {
+    return {
+      text: new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+      }).format((Number(price.amountCents) || 0) / 100),
+      icon: null,
+    };
+  }
+  const currency = price.currency === "coins" ? "coins" : "gems";
+  return {
+    text: Math.max(0, Number(price.amount) || 0).toLocaleString(),
+    icon: `/assets/${currency === "coins" ? "coin" : "gem"}.webp`,
+  };
+}
+
+async function loadSuggestedParties() {
+  if (existingPartyId) return [];
+  const payload = await fetchLobbyJson("/party/discover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query: "" }),
+  });
+  return (Array.isArray(payload?.parties) ? payload.parties : []).filter(
+    (party) => party?.suggestionEligible,
+  );
+}
+
+function buildPartySuggestionHint(party) {
+  const members = Array.isArray(party?.members) ? party.members : [];
+  const partyName = String(
+    party?.publicName ||
+      (party?.ownerName ? `${party.ownerName}'s Party` : "Public Party"),
+  );
+  const partySize = Math.max(0, Number(party?.membersCount) || members.length);
+  const capacity = Math.max(partySize, Number(party?.capacity) || partySize);
+  const partyId = Number(party?.partyId);
+  return {
+    id: "party",
+    instanceKey: `${partyId}:${members
+      .map((member) => String(member?.name || ""))
+      .sort()
+      .join("|")}`,
+    anchor: "#search-parties",
+    variant: "party",
+    icon: "/assets/crown.webp",
+    title: "Suggested Party",
+    details: {
+      name: partyName,
+      mode: getDiscoveryModeLabel(party),
+      playerCount: `${partySize}/${capacity} players`,
+    },
+    players: members.map((member) => ({
+      name: String(member?.name || "Player"),
+      icon: buildProfileIconUrl(
+        String(member?.profile_icon_id || "") || null,
+        String(member?.char_class || "ninja"),
+      ),
+      trophies: Math.max(0, Number(member?.trophies) || 0),
+    })),
+    actionLabel: "JOIN",
+    actionVariant: "join",
+    priority: Number(party?.suggestionScore) || 0,
+    cooldownMs: 50_000,
+    repeatMs: 3 * 60_000,
+    onAction: () => {
+      if (Number.isFinite(partyId) && partyId > 0) {
+        window.location.assign(`/party/${partyId}`);
+      }
+    },
+  };
+}
+
+function startPartySuggestionMonitor(controller, context) {
+  if (existingPartyId) return;
+  controller.repeat(
+    async () => {
+      try {
+        const parties = await loadSuggestedParties();
+        controller.showTimedBest(
+          parties.map(buildPartySuggestionHint),
+          { ...context, minGapMs: 45_000 },
+        );
+      } catch (_) {}
+    },
+    {
+      initialDelayMs: 6000 + Math.round(Math.random() * 4000),
+      minIntervalMs: 18_000,
+      maxIntervalMs: 32_000,
+    },
+  );
+}
+
+async function initializeLobbyHints({ shop }) {
+  const controller = createLobbyHintController({
+    storageKey: `bb_lobby_hints_v1:${userData?.user_id || userData?.name || "guest"}`,
+  });
+
+  if (guest && newGuestCreated) {
+    controller.schedule(
+      [
+        {
+          id: "guest",
+          anchor: "#username-button",
+          icon: "/assets/profile-icons/blob.webp",
+          title: "Playing as Guest",
+          message: "Sign up to save your progress.",
+          priority: 100,
+          cooldownBattles: Number.MAX_SAFE_INTEGER,
+        },
+      ],
+      { battleCount: 0 },
+      2000,
+    );
+  }
+
+  const startedAt = performance.now();
+  const [hintData, featuredSale] = await Promise.all([
+    loadLobbyHintData(),
+    shop.getFeaturedSale().catch(() => null),
+  ]);
+  const modeStreak = getRecentModeStreak(hintData.battles);
+  const saleOffer = featuredSale?.offer || null;
+  const context = {
+    ...hintData,
+    modeStreak,
+    inParty: !!existingPartyId,
+    hintGapBattles: 3,
+  };
+  const hints = [
+    {
+      id: "mode-variety",
+      anchor: "#mode-picker-open",
+      icon: "/assets/ui/switch-mode.png",
+      title: "Try something new!",
+      message: "Switch modes to keep every battle fresh and exciting.",
+      priority: 30,
+      cooldownBattles: 10,
+      when: ({ inParty, modeStreak: streak }) =>
+        !inParty && Number(streak?.count) >= 5,
+    },
+    {
+      id: "sales",
+      anchor: "#shop-button",
+      align: "end",
+      variant: "sale",
+      icon: "/assets/ui/sale-tag.png",
+      title: String(saleOffer?.name || "Featured Sale"),
+      badge: "LIMITED SALE",
+      price: getSaleHintPrice(saleOffer?.price),
+      countdownTo: featuredSale?.nextRefreshAt || null,
+      priority: 10,
+      cooldownBattles: 4,
+      when: () => !!saleOffer,
+    },
+  ];
+
+  if (!(guest && newGuestCreated)) {
+    controller.schedule(
+      hints,
+      context,
+      Math.max(0, 3000 - (performance.now() - startedAt)),
+    );
+  }
+  startPartySuggestionMonitor(controller, context);
 }
 
 function setPartySettingsStatus(text, isError = false) {
@@ -759,6 +987,8 @@ function getJoinDebugMeta(extra = {}) {
   };
 }
 
+watchLobbyLoading();
+
 // Fetch user status upfront
 const statusPromise = fetch("/status", {
   method: "POST",
@@ -807,6 +1037,7 @@ const statusPromise = fetch("/status", {
       userData.isAdmin = !!data.isAdmin;
       window.__BRO_BATTLES_USERDATA__ = userData;
       guest = data.guest;
+      newGuestCreated = !!data.newlyCreated && !!data.guest;
 
       // Check for live match first
       if (checkForLiveMatch(data)) {
@@ -955,6 +1186,7 @@ async function bootstrapPartyData(partyId) {
       sound: "notification",
     });
   } catch (error) {
+    showLobbyLoadError();
     console.error(
       "[join-debug] bootstrapPartyData failed",
       getJoinDebugMeta({
@@ -975,7 +1207,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   signUpOut(guest);
 
-  const characterBodyElement = document.getElementById("sprite");
+  const characterBodyElement = checkIfInParty()
+    ? document.querySelector('.character-slot[data-is-current-user="true"] .character-sprite')
+    : document.getElementById("sprite");
   const characterSelect = document.getElementById("your-slot-1");
   const createPartyButton = document.getElementById("create-party");
   const searchPartiesButton = document.getElementById("search-parties");
@@ -1042,7 +1276,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const initialSkinId = String(
     userData?.selected_skin_id_by_char?.[initialCharClass] || "",
   ).trim();
-  characterBodyElement.src = buildCharacterSkinBodyUrl(
+  if (characterBodyElement) characterBodyElement.src = buildCharacterSkinBodyUrl(
     initialCharClass,
     initialSkinId,
   );
@@ -1249,6 +1483,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const spriteEl = yourSlot.querySelector(".character-sprite");
       if (spriteEl) spriteEl.classList.remove("random");
       yourSlot.className = "character-slot player-display";
+      ensurePartyPixelFrame(yourSlot);
       yourSlot.dataset.character = userData.char_class || "ninja";
       const levelBadge = yourSlot.querySelector(".slot-level-badge");
       const charLevels =
@@ -1258,6 +1493,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const level = Math.max(1, Number(charLevels?.[userData.char_class]) || 1);
       if (levelBadge) setSlotLevelBadge(yourSlot, level);
       playLobbySpawnAnimation(yourSlot, "enter");
+      void revealLobby();
     }
     // Bind Ready button in solo flow
     try {
@@ -1268,6 +1504,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   socket.off("party:members", syncPartySettingsButtonVisibility);
   socket.on("party:members", syncPartySettingsButtonVisibility);
+  void initializeLobbyHints({ shop });
 });
 
 document.addEventListener("DOMContentLoaded", async () => {

@@ -5,6 +5,7 @@ const { article,frame,registerSitePages }=require('../src/server/services/siteCo
 const { accepted,isSameOrigin }=require('../src/server/routes/modules/siteRoutes');
 const { completeSignupFromGuest }=require('../src/server/services/authAccountService');
 const config=require('../src/shared/siteConfig.json');
+const {createHelpSearchService,helpSearchDocuments,MODEL}=require('../src/server/services/helpSearchService');
 const valid={subject:'A useful idea',category:'idea',message:'Please add a new arena.',submissionKey:'12345678-1234-1234-1234-123456789012'};
 test('support input rejects malformed, oversized, or unknown values',()=>{
   assert.equal(validateSubmission(valid).body,valid.message);
@@ -44,6 +45,32 @@ test('Markdown lookup rejects traversal and unknown slugs; all manifest articles
   assert.equal(article('help','../../.env'),null);assert.equal(article('legal','anything'),null);assert.equal(article('help','missing'),null);
   const manifest=require('../content/manifest.json');for(const kind of ['news','help'])for(const item of manifest[kind])assert.ok(article(kind,item.slug).html.length>20);
   assert.match(article('legal','privacy').html,/support@classchats.net/);
+});
+test('help search index includes article contents and Gemini can only return known articles',async()=>{
+  const documents=helpSearchDocuments();
+  assert.ok(documents.find(item=>item.slug==='matchmaking').content.includes('trophy count'));
+  let request;
+  const search=createHelpSearchService({apiKey:'test-key',fetchImpl:async(url,options)=>{
+    request={url,options};
+    return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:JSON.stringify({matches:[
+      {slug:'matchmaking',reason:'Explains trophy-based matching.'},
+      {slug:'not-real',reason:'Ignore this.'},
+      {slug:'matchmaking',reason:'Duplicate.'},
+    ]})}]}}]})};
+  }});
+  const result=await search('fair opponents');
+  assert.match(request.url,new RegExp(MODEL));
+  assert.equal(request.options.headers['x-goog-api-key'],'test-key');
+  assert.deepEqual(result,{available:true,matches:[{slug:'matchmaking',reason:'Explains trophy-based matching.'}]});
+  const sent=JSON.parse(request.options.body);
+  assert.equal(sent.generationConfig.temperature,0);
+  assert.ok(sent.contents[0].parts[0].text.includes('fair opponents'));
+});
+test('help AI search is optional and validates the public query',async()=>{
+  const search=createHelpSearchService({apiKey:''});
+  assert.deepEqual(await search('matchmaking'),{available:false,matches:[]});
+  await assert.rejects(search('x'),{status:400});
+  await assert.rejects(search('x'.repeat(161)),{status:400});
 });
 test('public page routes register without authentication and return HTML without game engines',()=>{
   const routes=new Map();registerSitePages({get:(path,fn)=>routes.set(path,fn)});

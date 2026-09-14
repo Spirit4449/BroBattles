@@ -101,17 +101,6 @@ function lerp(a, b, t) {
   return start + (end - start) * clamp(t, 0, 1);
 }
 
-function getPolylineLength(points = []) {
-  let length = 0;
-  for (let i = 1; i < points.length; i += 1) {
-    length += Math.hypot(
-      Number(points[i]?.x) - Number(points[i - 1]?.x),
-      Number(points[i]?.y) - Number(points[i - 1]?.y),
-    );
-  }
-  return length;
-}
-
 function normalizeAngle(angle, fallback = 0) {
   const n = Number(angle);
   return Number.isFinite(n) ? n : fallback;
@@ -483,23 +472,12 @@ function resolveAttackAimContext({
       worldMinX: bounds?.x ?? -400,
       worldMaxX: bounds ? bounds.x + bounds.width : 4000,
     };
-    const firstImpactPreview = sampleSlimePath(
-      launch,
-      previewConfig,
-      rects,
-      { stopAtFirstImpact: true },
-    );
-    const bounceThreshold = Math.max(
-      0,
-      Number(config.previewBounceThreshold) || 0,
-    );
-    const throwPreview =
-      bounceThreshold > 0 &&
-      getPolylineLength(firstImpactPreview.points) < bounceThreshold
-        ? sampleSlimePath(launch, previewConfig, rects, {
-            stopAtFirstImpact: false,
-          })
-        : firstImpactPreview;
+    // Always follow the same trajectory. A distance threshold here made whole
+    // rebounds pop in and out with tiny mouse movements near terrain.
+    const throwPreview = sampleSlimePath(launch, {
+      ...previewConfig,
+      maxBounces: Math.min(2, Math.max(0, Number(cfg.maxBounces) || 0)),
+    }, rects);
     return { character, family: "basic", kind: "throw", config, quick, paletteKey: "basic",
       ...launch, targetX: target.x, targetY: target.y, pointerWorldX: target.x, pointerWorldY: target.y,
       baseX: x, baseY: y, anchorX: launch.start.x, anchorY: launch.start.y,

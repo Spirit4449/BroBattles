@@ -29,7 +29,6 @@
           "anchorForwardOffset": 0,
           "anchorOffsetY": 0,
           "reticlePathOffsetY": 22,
-          "previewBounceThreshold": 120,
           "reticleMinLength": 220,
           "reticleMaxLength": 420,
           "showPathToImpact": true,

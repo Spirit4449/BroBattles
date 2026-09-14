@@ -274,10 +274,38 @@ function registerPartyEvents(
     }
   });
 
+  socket.on("party:slot:move", async (data, ack) => {
+    const partyId = Number(data?.partyId);
+    try {
+      if (!Number.isSafeInteger(partyId) || partyId <= 0 || !socket.data.user?.name) throw new Error("Party ID required.");
+      await inPartyOrder(db, partyId, async () => {
+        await db.withTransaction(async (_conn, q) => {
+          const parties = await q("SELECT * FROM parties WHERE party_id = ? FOR UPDATE", [partyId]);
+          if (!parties.length) throw new Error("Party not found.");
+          if (String(parties[0].status).toLowerCase() !== PARTY_STATUS.IDLE) throw new Error("Finish matchmaking or battle before moving players.");
+          const members = await q("SELECT name, team, slot_index FROM party_members WHERE party_id = ? ORDER BY joined_at ASC, name ASC FOR UPDATE", [partyId]);
+          if (members[0]?.name !== socket.data.user.name) throw new Error("Only the party owner can move players.");
+          const ready = await q("SELECT u.name FROM users u JOIN party_members pm ON pm.name = u.name WHERE pm.party_id = ? AND LOWER(u.status) = 'ready'", [partyId]);
+          if (ready.length) throw new Error("Everyone must unready before moving players.");
+          const selection = normalizeSelectionFromRow(parties[0]);
+          const teamSize = getVariantDescriptor(selection.modeId, selection.modeVariantId).variant?.playersPerTeam || 1;
+          if (getPartyBotSlots(partyId).some(bot => bot.team === data.team && bot.index === data.index)) throw new Error("Remove the bot before moving a player into that slot.");
+          const next = require('../../helpers/partySlots').movePartyMember(members, data, teamSize);
+          for (const member of next) await q("UPDATE party_members SET team = ?, slot_index = ? WHERE party_id = ? AND name = ?", [member.team, member.slot_index, partyId, member.name]);
+        });
+        await partyPresence.emitPartyRosterById(partyId);
+        ack?.({ ok: true });
+      });
+    } catch (error) {
+      ack?.({ ok: false, error: error.message || "Could not move player." });
+    }
+  });
+
   socket.on("party:bot-slot:update", async (data, ack) => {
     const actorName = socket.data.user?.name;
     const partyId = Number(data?.partyId);
     try {
+      await inPartyOrder(db, partyId, async () => {
       if (!actorName || !partyId) throw new Error("Party ID required.");
       const ownerRows = await db.runQuery(
         `SELECT name FROM party_members WHERE party_id = ? ORDER BY joined_at ASC, name ASC LIMIT 1`,
@@ -298,8 +326,8 @@ function registerPartyEvents(
       ).variant?.playersPerTeam || Number(partyRows[0].mode) || 1;
       const team = data?.team;
       const index = Number(data?.index);
-      const occupied = (members || []).filter((member) => member.team === team).length;
-      if (!Number.isInteger(index) || index < occupied || index >= teamSize) {
+      const occupied = (members || []).some((member) => member.team === team && member.slot_index === index);
+      if (!Number.isInteger(index) || index < 0 || occupied || index >= teamSize) {
         throw new Error("That party slot is not available.");
       }
       setPartyBotSlot(partyId, {
@@ -310,6 +338,7 @@ function registerPartyEvents(
       const botSlots = prunePartyBotSlots(partyId, { teamSize, members });
       io.to(`party:${partyId}`).emit("party:bot-slots", { partyId, botSlots });
       ack?.({ ok: true, botSlots });
+      });
     } catch (error) {
       ack?.({ ok: false, error: error?.message || "Could not update bot slot." });
     }

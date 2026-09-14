@@ -8,10 +8,31 @@ export function sonner(
   onClick,
   options = {}
 ) {
+  // Older call sites passed the toast tone as the third argument. Treat those
+  // values as tone metadata rather than exposing them as a confusing action.
+  const legacyTone = ["success", "error"].includes(String(buttonText))
+    ? String(buttonText)
+    : null;
+  if (legacyTone) buttonText = "OK";
+
+  // A few legacy calls also supplied the options object in the fourth slot.
+  // Keep their notification settings while normalizing the action label.
+  if (
+    onClick &&
+    typeof onClick === "object" &&
+    !Array.isArray(onClick) &&
+    (!options || Object.keys(options).length === 0)
+  ) {
+    options = onClick;
+    onClick = undefined;
+  }
+
   const duration = Math.max(800, Number(options.duration || 5000));
   const containerId = options.containerId || "sonner-wrap";
-  const tone = ["info", "success", "error"].includes(String(options.tone || ""))
-    ? String(options.tone)
+  const tone = ["info", "success", "error"].includes(
+    String(options.tone || legacyTone || ""),
+  )
+    ? String(options.tone || legacyTone)
     : "info";
 
   // Ensure container exists (top center)

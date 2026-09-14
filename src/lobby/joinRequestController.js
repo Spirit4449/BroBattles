@@ -382,8 +382,8 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
     });
 
     actions.appendChild(viewBtn);
-    actions.appendChild(acceptBtn);
     actions.appendChild(rejectBtn);
+    actions.appendChild(acceptBtn);
     card.appendChild(actions);
 
     return card;

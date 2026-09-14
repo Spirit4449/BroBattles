@@ -8,7 +8,7 @@ Bro Battles is intended for players aged 13 and older. Younger players must not 
 
 ## Make a useful report
 
-Describe what happened, who was involved, and when. Distinguish a suspected exploit from a connection problem or an unfamiliar character ability. Accurate, focused reports are easier to investigate than repeated submissions.
+Tell us what happened, who was involved, and roughly when. If you are unsure whether you saw an exploit, a connection problem, or an unfamiliar ability, say that too. One focused report is easier to investigate than several copies.
 
 Keep reports private. Do not encourage other players to harass a person you report. Support may not be able to share another player's account details or the outcome of a moderation investigation.
 

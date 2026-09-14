@@ -1,9 +1,9 @@
 - **Move:** WASD or arrow keys.
-- **Attack:** left mouse button. Hold and move the mouse to aim supported attacks.
+- **Attack:** left mouse button. For attacks you can aim, hold the button and move the mouse.
 - **Special:** right mouse button when your ability is ready.
 - **Show cursor:** press Escape. Click the arena to capture it again.
 
-The battle Controls panel shows the available actions. Open Settings to adjust mouse sensitivity, sound, or automatic cursor hiding.
+The battle Controls panel keeps these actions close by. Open Settings to adjust mouse sensitivity, sound, or automatic cursor hiding.
 
 With auto-hide off, your cursor stays visible until you click the arena. Opening Settings releases the cursor, but the online match continues.
 
@@ -11,7 +11,7 @@ With auto-hide off, your cursor stays visible until you click the arena. Opening
 
 Open **Settings → Mouse sensitivity**. The default is 1×. A lower value makes relative mouse aiming more gradual; a higher value responds to smaller movements. It does not change your character's movement speed or the operating system's cursor speed.
 
-Try a small adjustment, then test it in a battle. If aiming feels unfamiliar after changing settings, use **Reset to defaults**.
+Change it a little at a time, then try it in a battle. If aiming starts to feel strange, use **Reset to defaults**.
 
 ## Why did the cursor disappear?
 

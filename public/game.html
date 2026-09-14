@@ -26,7 +26,7 @@
   <body>
     <div class="background" id="matchmaking-screen">
       <img
-        src="/assets/screens/matchmaking.webp"
+        src="/assets/loadingscreen.webp"
         class="background-image"
         alt="loading"
       />
@@ -150,14 +150,15 @@
             <div class="controls-move-layout">
               <span class="keyboard-pair">
                 <span class="keyboard-cluster" aria-hidden="true">
-                  <span class="spacer"></span><kbd>W</kbd
-                  ><span class="spacer"></span> <kbd>A</kbd><kbd>S</kbd
-                  ><kbd>D</kbd>
+                  <span class="spacer"></span><kbd data-binding="up">W</kbd
+                  ><span class="spacer"></span> <kbd data-binding="left">A</kbd><kbd data-binding="down">S</kbd
+                  ><kbd data-binding="right">D</kbd>
                 </span>
+                <span class="controls-movement-or">OR</span>
                 <span class="keyboard-cluster" aria-hidden="true">
-                  <span class="spacer"></span><kbd>&uarr;</kbd
-                  ><span class="spacer"></span> <kbd>&larr;</kbd
-                  ><kbd>&darr;</kbd><kbd>&rarr;</kbd>
+                  <span class="spacer"></span><kbd data-binding="upAlt">&uarr;</kbd
+                  ><span class="spacer"></span> <kbd data-binding="leftAlt">&larr;</kbd
+                  ><kbd data-binding="downAlt">&darr;</kbd><kbd data-binding="rightAlt">&rarr;</kbd>
                 </span>
               </span>
             </div>
@@ -168,7 +169,7 @@
             <div class="controls-actions">
               <div class="bs-help-action-row">
                 <div class="controls-action-inputs">
-                  <kbd>J</kbd>
+                  <kbd data-binding="attack">J</kbd>
                   <span class="controls-input-or">or</span>
                   <div class="bs-help-mouse">
                     <img
@@ -186,7 +187,7 @@
               </div>
               <div class="bs-help-action-row">
                 <div class="controls-action-inputs">
-                  <kbd>I</kbd>
+                  <kbd data-binding="special">I</kbd>
                   <span class="controls-input-or">or</span>
                   <div class="bs-help-mouse">
                     <img src="/assets/mouse_right.webp" alt="Right mouse button" />
@@ -288,7 +289,7 @@
       aria-live="polite"
       aria-label="Loading"
     >
-      <p id="loading-text">Loading...</p>
+      <p id="loading-text">Preparing your battle...</p>
       <div class="loading-shell" id="loading-shell">
         <div class="loading-fill" id="loading-bar-fill"></div>
         <span id="loading-percent">0%</span>
@@ -384,26 +385,26 @@
 
       (async () => {
         // Start creeping immediately during Phaser download
-        startCreep("Downloading engine...");
+        startCreep("Initializing world...");
         await loadScript(
           "/bundles/phaser-arcade-physics.min.js",
         );
 
         // Ensure we show some progress after engine arrives
         scriptPct = Math.max(scriptPct, 22);
-        updateLoading(scriptPct, "Engine ready");
+        updateLoading(scriptPct, "World ready...");
 
         // Keep creeping (still capped at 48%) during bundle download
-        updateLoading(scriptPct, "Downloading game...");
+        updateLoading(scriptPct, "Gathering the squad...");
         await loadScript("/bundles/game.bundle.js");
         window.__BOOT_GAME__ && window.__BOOT_GAME__();
         // Finish scripts slice cleanly
         stopCreep();
-        updateLoading(50, "Scripts loaded"); // handoff to Phaser preload (50–90)
+        updateLoading(50, "Loading arena..."); // handoff to Phaser preload (50–90)
       })().catch((err) => {
         console.error(err);
         stopCreep();
-        updateLoading(50, "Failed to load");
+        updateLoading(50, "Couldn't start game");
       });
     </script>
     <button

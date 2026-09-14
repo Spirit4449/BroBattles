@@ -90,9 +90,11 @@ async function getPartyIdByName(name) {
 }
 
 async function fetchPartyMembersDetailed(partyId) {
-  return runQuery(
+  const rows = await runQuery(
     `SELECT pm.name,
             pm.team,
+            pm.slot_index,
+            p.mode AS party_team_size,
             pm.last_seen,
             u.char_class,
             CASE
@@ -105,11 +107,13 @@ async function fetchPartyMembersDetailed(partyId) {
             u.selected_profile_icon_id AS profile_icon_id,
             u.selected_skin_id_by_char
        FROM party_members pm
+       JOIN parties p ON p.party_id = pm.party_id
        LEFT JOIN users u ON u.name = pm.name
       WHERE pm.party_id = ?
       ORDER BY pm.joined_at, pm.name`,
     [partyId],
   );
+  return require("../helpers/partySlots").normalizePartySlots(rows, Number(rows[0]?.party_team_size) || 3);
 }
 
 async function setUserStatus(name, status) {

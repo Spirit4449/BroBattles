@@ -4,7 +4,7 @@ Your privacy matters in and out of the arena. This policy explains what Bro Batt
 
 ## 1. Information we process
 
-- **Accounts and sessions:** username, a securely hashed password for permanent accounts, temporary guest identifiers, session tokens, account status, and timestamps. We do not store your password in readable form.
+- **Accounts and sessions:** username, a securely hashed password for permanent accounts, temporary guest identifiers, session tokens, account status, and timestamps. If you add an email address, we store the address and verification status, with temporary hashed verification codes and attempt counts. We do not store your password in readable form.
 - **Gameplay:** character choices, parties, progression, virtual currency, match activity, battle records, and information needed to run multiplayer sessions.
 - **Communications:** chat messages and interactions, feedback, support requests, and replies. Information you put into public or party features can be visible to other players in those spaces.
 - **Purchases:** order identifiers, currency grants, payment status, refunds, and disputes. Stripe processes payment details. Bro Battles does not ask you to enter card numbers into its feedback or support forms.
@@ -16,6 +16,8 @@ We do not ask for or store a birthdate in this version. Please do not send passw
 ## 2. Why we use information
 
 We use information to operate accounts and multiplayer gameplay, remember preferences, deliver purchases, answer support requests, improve the game using feedback, prevent abuse, and meet legal obligations.
+
+If you choose to receive game news and offers, we record that preference and may share the verified email address and preference with our email delivery provider to send those updates. You can turn marketing messages off in account settings or use an unsubscribe link in any marketing email.
 
 Where data protection laws require a legal basis, processing may be necessary to provide the service you request, meet legal duties, or pursue legitimate interests in operating and securing the game, subject to your rights. Where consent is required for optional processing, it must be obtained separately. Acknowledging this policy is not blanket consent to advertising or optional tracking.
 
@@ -29,7 +31,7 @@ This feature release does not add advertising or analytics trackers. Any optiona
 
 Other players can see usernames and information shared through multiplayer and chat features. Authorized administrators can access information needed for support, moderation, and operations.
 
-We use **Cloudflare** for website/network services and **Stripe** for payment processing. Providers process information needed to deliver their services. Information may also be disclosed when required by law, to protect rights or security, or as part of a lawful transfer of the service with appropriate protections and notice where required.
+We use **Cloudflare** for website/network services **Stripe** for payment processing, and **Resend** to deliver verification emails and support/feedback notifications. Providers process information needed to deliver their services. Information may also be disclosed when required by law, to protect rights or security, or as part of a lawful transfer of the service with appropriate protections and notice where required.
 
 We do not describe your information as anonymous merely because it uses a username.
 

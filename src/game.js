@@ -894,11 +894,11 @@ class GameScene extends Phaser.Scene {
     this.load.on("progress", (p) => {
       // 50% - 90%
       const pct = Math.floor(50 + p * 40); // maps 0-1 -> 50-90
-      updateLoading(pct, `Loading assets...`);
+      updateLoading(pct, "Loading arena...");
     });
 
     this.load.once("complete", () => {
-      updateLoading(95, "Assets loaded");
+      updateLoading(95, "Arena ready...");
       // Overlay will be controlled strictly by socket events (game:starting/game:start/init/live)
       // Do not show here to avoid race with late-arriving init/live status.
       // Input will be enabled on game:start or immediately if already live.
@@ -1008,7 +1008,7 @@ class GameScene extends Phaser.Scene {
 
     // Scene is now ready; if server is in starting phase, ack readiness
     trySendReadyAck();
-    updateLoading(100, "Starting...");
+    updateLoading(100, "Let's battle!");
   }
 
   initializeGameWorld() {
