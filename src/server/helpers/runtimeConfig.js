@@ -1,4 +1,5 @@
 const fs = require("fs");
+const { maintenanceRemaining } = require("../../shared/maintenance");
 const path = require("path");
 
 function deepMerge(target, source) {
@@ -25,6 +26,7 @@ function createRuntimeConfig({ rootDir }) {
   const filePath = path.join(rootDir, "runtime-overrides.json");
   const defaults = {
     maintenanceMode: false,
+    maintenanceUntil: null,
     bots: { enabled: false, rolloutPercent: 0 },
     announcements: "",
     rewardMultipliers: {
@@ -45,25 +47,18 @@ function createRuntimeConfig({ rootDir }) {
     console.warn("[runtimeConfig] Failed to load overrides:", err?.message);
   }
 
-  function persist() {
-    try {
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-    } catch (err) {
-      console.warn(
-        "[runtimeConfig] Failed to persist overrides:",
-        err?.message
-      );
-    }
-  }
 
   return {
     get() {
-      return { ...data };
+      return { ...data, maintenanceMode: maintenanceRemaining(data.maintenanceUntil) > 0 };
     },
     update(patch) {
-      data = deepMerge(data, patch || {});
-      persist();
-      return { ...data };
+      const next = deepMerge(data, patch || {});
+      const temporary = `${filePath}.tmp`;
+      fs.writeFileSync(temporary, JSON.stringify(next, null, 2), "utf8");
+      fs.renameSync(temporary, filePath);
+      data = next;
+      return { ...data, maintenanceMode: maintenanceRemaining(data.maintenanceUntil) > 0 };
     },
     filePath,
   };

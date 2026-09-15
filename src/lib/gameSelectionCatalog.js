@@ -1,3 +1,7 @@
+import { getModeUnlockReason } from "../shared/trophyProgression";
+let getProgressionUser = () => null;
+export function setSelectionProgressionUser(getUser) { getProgressionUser = getUser; }
+export function getModeProgressionBlockReason(modeId) { return getModeUnlockReason(modeId, getProgressionUser()); }
 import gameModesCatalog from "../shared/gameModes.catalog.json";
 import { mapsCatalog as mapsCatalog } from "../shared/maps";
 
@@ -199,7 +203,9 @@ export function isSelectionQueueable(selection) {
   return normalized.mapId != null;
 }
 
-export function getSelectionBlockReason(selection) {
+export function getSelectionBlockReason(selection, { usePartyHostAccess = false } = {}) {
+  const unlockReason = usePartyHostAccess ? "" : getModeProgressionBlockReason(selection?.modeId);
+  if (unlockReason) return unlockReason;
   const normalized = normalizeGameSelection(selection);
   const { mode } = getVariantDescriptor(
     normalized.modeId,

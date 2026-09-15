@@ -189,20 +189,6 @@ body.shop-is-open .sonner-wrap {
     #101b2c;
 }
 
-.shop-header::after {
-  content: "";
-  position: absolute;
-  right: 17%;
-  bottom: -1px;
-  left: 17%;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(239, 198, 111, 0.7),
-    transparent
-  );
-}
 
 .shop-brand {
   min-width: 0;
@@ -385,27 +371,12 @@ body.shop-is-open .sonner-wrap {
   border-left: 2px solid rgba(45, 67, 98, 0.48);
 }
 
-.shop-tabs button::after {
-  content: "";
-  position: absolute;
-  right: 26%;
-  bottom: 0;
-  left: 26%;
-  height: 3px;
-  background: #efc66e;
-  transform: scaleX(0);
-  transition: transform 180ms ease;
-}
 
 .shop-tabs button:hover {
   color: #f4f7fc;
   background: rgba(116, 144, 184, 0.055);
 }
 
-.shop-tabs button:hover::after,
-.shop-tabs button.is-active::after {
-  transform: scaleX(1);
-}
 
 .shop-tabs button.is-active {
   color: #fff3cc;
@@ -2267,4 +2238,131 @@ body.shop-is-open .sonner-wrap {
   .shop-reveal-panel h2 {
     font-size: 13px;
   }
+}
+
+/* Shared unlock showcase. Artwork carries the moment; no medallions or rings. */
+.reward-showcase { padding: 86px 24px 30px; box-sizing: border-box; }
+.reward-showcase .shop-reveal-panel {
+  width: min(900px, calc(100vw - 48px));
+  max-height: calc(100dvh - 120px);
+  overflow: auto;
+  padding: 28px 28px 24px;
+  border: 2px solid rgba(var(--rarity-rgb), .8);
+  border-radius: 4px;
+  background: linear-gradient(145deg, #18273b, #090f1d 65%);
+  box-shadow: 0 0 0 5px #03050a, 0 12px #03050a, 0 30px 90px #0009;
+}
+.reward-showcase .shop-reveal-panel::before {
+  content: ""; position: absolute; left: 12%; right: 12%; top: 0; height: 3px;
+  background: rgb(var(--rarity-rgb)); box-shadow: 0 0 28px rgba(var(--rarity-rgb), .9);
+}
+.reward-showcase .shop-reveal-panel::after { border: 0; }
+.reward-showcase .shop-reveal-heading {
+  margin: 0; padding: 0 0 14px; background: none; border: 0; box-shadow: none;
+}
+.reward-showcase .shop-reveal-panel h2 { margin-top: 0; font-size: clamp(18px, 3vw, 28px); line-height: 1.35; }
+.reward-showcase .shop-reveal-subheader {
+  margin: 8px 0 0;
+  color: rgb(var(--rarity-rgb));
+  font: 700 10px/1.3 'Lato', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: .16em;
+}
+.reward-showcase .shop-reveal-grants { display: block; padding: 0; min-height: 0; }
+.reward-showcase .shop-reveal-collectibles { display: grid; grid-template-columns: repeat(var(--reward-columns), minmax(0, 1fr)); gap: 12px; }
+.reward-showcase .shop-reveal-grant { display: flex; gap: 14px; min-width: 0; padding: 10px 0 16px; }
+.reward-showcase .shop-reveal-art {
+  width: 100%; height: clamp(190px, 32vh, 310px); max-width: none; position: relative;
+  background: linear-gradient(0deg, rgba(var(--rarity-rgb), .09), transparent 70%);
+  border-bottom: 2px solid rgba(var(--rarity-rgb), .35);
+  border-radius: 0; overflow: hidden;
+}
+.reward-showcase .shop-reveal-art::after {
+  content: ""; position: absolute; left: 15%; right: 15%; bottom: -1px; height: 2px;
+  background: rgba(var(--rarity-rgb), .8); box-shadow: 0 -8px 32px rgba(var(--rarity-rgb), .3);
+}
+.reward-showcase .shop-reveal-art img {
+  width: 100%; height: 100%; max-width: none; max-height: none;
+  object-fit: contain; filter: drop-shadow(0 16px 8px #0007);
+}
+.reward-showcase .shop-reveal-profileIcon .shop-reveal-art img { width: 64%; height: 64%; }
+.reward-showcase .shop-reveal-card .shop-reveal-art img { image-rendering: auto; padding: 5px 0 10px; box-sizing: border-box; }
+.reward-showcase .shop-reveal-mode .shop-reveal-art { width: min(100%, 560px); height: clamp(170px, 34vh, 300px); flex: none; }
+.reward-showcase .shop-reveal-mode .shop-reveal-art img { width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; }
+.reward-showcase .shop-reveal-currencies { display: flex; justify-content: center; gap: 32px; padding: 14px 20px; margin-top: 8px; background: #0209147a; border: 1px solid #6c829529; }
+.reward-showcase .shop-reveal-currencies .shop-reveal-grant { flex: 0 1 auto; flex-direction: row; padding: 0; gap: 14px; }
+.reward-showcase .shop-reveal-currencies .shop-reveal-art { width: 54px; height: 54px; border: 0; background: none; overflow: visible; }
+.reward-showcase .shop-reveal-currencies .shop-reveal-art::after { display: none; }
+.reward-showcase .shop-reveal-currencies [data-reveal-currency="gems"] strong { color: #aeedff; }
+.reward-showcase .shop-reveal-currencies { flex-wrap: wrap; }
+.reward-showcase .shop-reveal-currencies .shop-reveal-currency-amount {
+  max-width: none;
+  overflow: visible;
+  white-space: normal;
+  font-size: clamp(10px, 1.2vw, 14px);
+  color: #ffdc7a;
+}
+.reward-showcase .shop-reveal-panel > button { margin-top: 24px; min-width: 180px; min-height: 44px; }
+.reward-showcase [data-reveal-wallet-shell="coins"] { border-color: #bb882b; box-shadow: 0 4px #03050a, 0 0 22px #ffbe3538; }
+.reward-showcase [data-reveal-wallet-shell="gems"] { border-color: #3694ba; box-shadow: 0 4px #03050a, 0 0 22px #56d8ff38; }
+.reward-showcase.currency-only .shop-reveal-panel { width: min(620px, calc(100vw - 48px)); }
+.reward-showcase.currency-only .shop-reveal-currencies { background: none; border: 0; }
+.reward-showcase.currency-only .shop-reveal-currencies .shop-reveal-grant { flex-direction: column; }
+.reward-showcase.currency-only .shop-reveal-currencies .shop-reveal-art { width: 150px; height: 150px; }
+@media (max-width: 600px) {
+  .reward-showcase { padding: 76px 16px 22px; }
+  .reward-showcase .shop-reveal-panel { width: calc(100vw - 32px); padding: 22px 14px 18px; max-height: calc(100dvh - 104px); }
+  .reward-showcase .shop-reveal-subheader { font-size: 8px; letter-spacing: .1em; }
+  .reward-showcase .shop-reveal-collectibles { gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .reward-showcase .shop-reveal-collectibles > :only-child { grid-column: 1 / -1; }
+  .reward-showcase .shop-reveal-collectibles > :last-child:nth-child(3) { grid-column: 1 / -1; }
+  .reward-showcase .shop-reveal-collectibles:has(> :nth-child(3)) .shop-reveal-card { flex-direction: row; justify-content: center; gap: 20px; padding: 0 0 14px; }
+  .reward-showcase .shop-reveal-collectibles:has(> :nth-child(3)) .shop-reveal-card .shop-reveal-art { width: 90px; height: 162px; border: 0; background: none; }
+  .reward-showcase .shop-reveal-art { height: 175px; }
+  .reward-showcase .shop-reveal-currencies { gap: 16px; padding: 12px 4px; }
+  .reward-showcase .shop-reveal-currencies .shop-reveal-art { width: 35px; height: 35px; }
+  .reward-showcase .shop-reveal-currencies .shop-reveal-grant { gap: 7px; }
+  .reward-showcase.currency-only .shop-reveal-currencies .shop-reveal-art { width: 110px; height: 110px; }
+  .reward-showcase .shop-reveal-panel > button { margin-top: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reward-showcase, .reward-showcase * { animation: none !important; transition: none !important; }
+  .reward-showcase .shop-reveal-rays, .reward-showcase .shop-reveal-shard, .reward-showcase .shop-reveal-origin { display: none; }
+}
+.reward-showcase [data-character="gloop"] .shop-reveal-art img { transform: scale(1.25) translateY(-16%); }
+.reward-showcase, .reward-showcase * { box-sizing: border-box; }
+
+/* Reward polish: keep the full silhouette and light its actual alpha outline. */
+.reward-showcase .shop-reveal-art { display: flex; align-items: center; justify-content: center; overflow: visible; border: 0; background: none; padding: 12px; }
+.reward-showcase .shop-reveal-art::after { display: none; }
+.reward-showcase .shop-reveal-art img { object-fit: contain; filter: drop-shadow(0 0 14px rgba(var(--rarity-rgb), .48)) drop-shadow(0 0 30px rgba(var(--rarity-rgb), .2)); }
+.reward-showcase [data-character="gloop"] .shop-reveal-art img { transform: none; }
+.reward-showcase .shop-reveal-profileIcon .shop-reveal-art img { width: 85%; height: 85%; }
+.reward-showcase .shop-reveal-card .shop-reveal-art img { padding: 0; }
+.reward-showcase.currency-only .shop-reveal-currencies .shop-reveal-art { width: clamp(180px, 30vh, 260px); height: clamp(180px, 30vh, 260px); }
+.reward-showcase .shop-reveal-panel > .reward-continue {
+  opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .35s ease;
+  border: 0; border-radius: 0; background: #328ed4; color: white; padding: 16px 28px;
+  font: 12px 'Press Start 2P', monospace; text-transform: uppercase;
+  box-shadow: 0 5px #000, 0 -5px #000, 5px 0 #000, -5px 0 #000, 0 10px #0006, inset 0 5px #ffffff36;
+}
+.reward-showcase[data-ready="1"] .shop-reveal-panel > .reward-continue { opacity: 1; visibility: visible; pointer-events: auto; }
+.reward-showcase .shop-reveal-panel > .reward-continue:active { box-shadow: 0 5px #000, 0 -5px #000, 5px 0 #000, -5px 0 #000, inset 0 5px #0004; }
+.shop-flying-currency { will-change: transform, opacity; }
+@media (max-width:600px) { .reward-showcase .shop-reveal-art { padding: 8px; } }
+.reward-showcase .shop-reveal-art img { --currency-gleam-size: 12px; --currency-bloom-size: 24px; }
+.reward-showcase.currency-only .shop-reveal-currencies .shop-reveal-art { width: clamp(220px, 34vh, 300px); height: clamp(220px, 34vh, 300px); }
+.reward-showcase.has-collectibles .shop-reveal-currencies .shop-reveal-art { width: 64px; height: 64px; padding: 0; flex: none; }
+@media (max-width: 600px) { .reward-showcase.has-collectibles .shop-reveal-currencies .shop-reveal-art { width: 48px; height: 48px; } }
+
+/* Currency balances use a single icon-and-number row at every breakpoint. */
+.shop-header-wallet > span { grid-template-rows: auto; }
+.shop-header-wallet img, .shop-header-wallet strong { grid-row: 1; }
+.shop-reveal-wallet > span { grid-template-rows: auto; }
+.shop-reveal-wallet img, .shop-reveal-wallet strong { grid-row: 1; }
+
+.shop-section-copy > img[src$="skins-hanger.svg"] { width: 19px; height: 19px; }
+
+.reward-showcase .shop-reveal-mode .shop-reveal-art img {
+  width: auto; height: auto; border: 4px solid #000; border-radius: 0; box-sizing: border-box;
 }

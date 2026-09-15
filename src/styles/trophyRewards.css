@@ -1,0 +1,72 @@
+/* Road-specific layering; the reward stage itself is shared with Shop. */
+.shop-reward-reveal.trophy-reward-reveal { position: fixed; z-index: 17900; }
+.trophy-reward-reveal .shop-reveal-backdrop { backdrop-filter: blur(9px); }
+.trophy-reward-reveal .shop-reveal-wallet { position: fixed; z-index: 10; }
+#trophy-track-list .trophy-lane-item-wrap { display: flex; flex-wrap: wrap; align-content: center; justify-content: center; gap: 8px; }
+#trophy-track-list .trophy-reward-preview { display: grid; place-items: center; position: relative; width: 58px; height: 65px; }
+#trophy-track-list .trophy-reward-preview .trophy-lane-item { position: static; width: 48px; height: 48px; max-height: 56px; transform: none; object-fit: contain; }
+#trophy-track-list .trophy-reward-preview.reward-card .trophy-lane-item { height: 65px; max-height: 65px; image-rendering: auto; }
+#trophy-track-list .trophy-reward-preview small { color: #ffebba; font: 700 9px/1.2 'Press Start 2P', monospace; }
+#trophy-track-list .trophy-finale { border-color: #efbd4b; box-shadow: 0 5px #03050a, 0 0 28px #e5ac3d38; }
+#trophy-track-list .trophy-finale .trophy-lane-item-wrap { gap: 4px; }
+#trophy-track-list .trophy-finale .trophy-reward-preview { width: 46px; height: 54px; }
+#trophy-track-list .trophy-finale .trophy-lane-item { width: 38px; height: 38px; }
+.trophy-claim-error { color: #ffd3c7; font-size: 11px; margin: 6px 0 0; }
+.shop-reveal-panel button:focus-visible { outline: 3px solid #ffdc7a; outline-offset: 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .shop-reward-reveal, .shop-reward-reveal *, .trophy-claim-spark { animation: none !important; transition: none !important; }
+  .shop-reveal-origin, .shop-reveal-shard, .shop-reveal-rays { display: none; }
+}
+#trophy-track-list .trophy-lane-item-wrap.multi-reward { width: 176px; height: 120px; }
+#trophy-track-list .trophy-lane-meta strong { white-space: normal; }
+
+#trophy-track-list .trophy-lane-card:hover { transform: translateX(-50%); }
+#trophy-track-list .trophy-lane-card { transition: box-shadow 350ms ease; }
+#trophy-track-list .trophy-tier-claim { transition: filter 300ms ease, box-shadow 300ms ease; }
+#trophy-track-list .trophy-lane-item-wrap {
+  display: flex; align-items: center; justify-content: center; width: 100%; height: 138px;
+  border: 0; box-shadow: none; background: none; overflow: visible; padding: 5px; box-sizing: border-box;
+}
+#trophy-track-list .trophy-lane-item-wrap .trophy-lane-item {
+  position: static; transform: none; width: 100%; height: 100%; max-height: none; object-fit: contain;
+  filter: none;
+}
+#trophy-track-list .reward-card .trophy-lane-item { width: 100%; height: 152px; max-height: none; image-rendering: auto; }
+/* Give the smallest currency rewards more breathing room in the same frame. */
+#trophy-track-list .reward-currency .trophy-lane-item[src$="-small.webp"] {
+  width: 65%;
+  height: 65%;
+}
+#trophy-track-list .reward-card { height: 152px; margin-top: -7px; margin-bottom: -7px; }
+#trophy-track-list .trophy-lane-meta { min-height: 42px; justify-content: center; }
+#trophy-track-list .trophy-lane-meta span { font-size: 10px; white-space: normal; line-height: 1.4; }
+#trophy-track-list .trophy-lane-card.locked .trophy-lane-item { opacity: .85; }
+#trophy-track-list .trophy-lane-item { --currency-bloom-size: 14px; }
+
+#trophy-track-list .reward-mode .trophy-lane-item {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 100%;
+  border: 4px solid #000;
+  border-radius: 0;
+  box-sizing: border-box;
+  filter: none;
+}
+
+/* Keep the bloom independent of the image's rectangular filter surface. */
+#trophy-track-list .trophy-lane-item-wrap:not(.reward-mode)::before {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  pointer-events: none;
+  background: radial-gradient(ellipse closest-side, rgba(var(--reward-glow), .24), rgba(var(--reward-glow), .08) 55%, transparent 100%);
+}
+
+#trophy-track-list .trophy-lane-meta .trophy-pack-contents {
+  max-width: 100%;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

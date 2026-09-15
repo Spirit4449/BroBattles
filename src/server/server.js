@@ -92,6 +92,10 @@ app.locals.DISPLAY_COOKIE_OPTS = DISPLAY_COOKIE_OPTS;
 // Runtime overrides editable via admin dashboard
 const runtimeConfig = createRuntimeConfig({ rootDir: ROOT_DIR });
 app.locals.runtimeConfig = runtimeConfig;
+app.get("/api/site/runtime", (_req, res) => {
+  const current = runtimeConfig.get();
+  res.set("Cache-Control", "no-store").json({ maintenanceMode: !!current.maintenanceMode, maintenanceUntil: current.maintenanceUntil, serverTime: Date.now(), announcements: String(current.announcements || "").slice(0, 500) });
+});
 const chatService = createPartyChatService({ db, io });
 app.locals.chatService = chatService;
 const abuseControl = createAbuseControlService({ db, io });

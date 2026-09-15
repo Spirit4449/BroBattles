@@ -312,8 +312,8 @@ export function createProfileController({ getUserData }) {
       const isLocked = !isOwned;
       const unlock = icon?.unlock || {};
       const requirement =
-        unlock.type === "trophies"
-          ? `Reach ${Number(unlock.min) || 0} trophies`
+        ["trophies", "trophyRoad"].includes(unlock.type)
+          ? `Claim at ${(Number(unlock.min) || 0).toLocaleString()} trophies`
           : unlock.type === "character"
             ? `Unlock ${String(unlock.character || icon.name).replace(/\b\w/g, (char) => char.toUpperCase())}`
             : "Progression reward";

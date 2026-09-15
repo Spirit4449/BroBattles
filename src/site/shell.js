@@ -1,3 +1,5 @@
+import { sonner } from "../lib/sonner";
+import { MAINTENANCE_MESSAGE, maintenanceClock, maintenanceRemaining } from "../shared/maintenance";
 import { wireBackdropDismiss, wireOutsideDismiss } from './dialogDismiss.mjs';
 import { renderHeader } from '../shared/siteHeader.cjs';
 import { remapKeys } from './remapKeys';
@@ -155,7 +157,48 @@ export function ensureLegalAcceptance() {
     });
   })().catch(error=>{acceptancePromise=null;throw error;});return acceptancePromise;
 }
+function initializeRuntimeBanner() {
+  const banner = element('aside', null, 'site-runtime-banner');
+  banner.setAttribute('role', 'timer'); banner.hidden = true;
+  document.body.append(banner);
+  let runtime = {}, offset = 0;
+  let announcementShown = false;
+  const isGameEntry = location.pathname === '/' || location.pathname.startsWith('/game/');
+  function showAnnouncement() {
+    const message = String(runtime.announcements || '').trim();
+    if (!isGameEntry || announcementShown || !message) return;
+    if (document.querySelector('#lobby-area[data-loading]')) return;
+    announcementShown = true;
+    sonner('Global announcement', message, 'Dismiss', undefined, { persistent: true });
+  }
+  document.addEventListener('lobby:ready', showAnnouncement, { once: true });
+  function render() {
+    const now = Date.now() + offset;
+    const active = maintenanceRemaining(runtime.maintenanceUntil, now) > 0;
+    const message = active ? `Matchmaking Disabled — ${MAINTENANCE_MESSAGE} ◷ ${maintenanceClock(runtime.maintenanceUntil, now)} remaining` : '';
+    if (banner.textContent !== message) banner.textContent = message;
+    banner.hidden = !message;
+  }
+  async function refresh() {
+    try {
+      const response = await fetch('/api/site/runtime', { cache: 'no-store' });
+      if (!response.ok) return;
+      runtime = await response.json();
+      showAnnouncement();
+      offset = Number.isFinite(runtime.serverTime) ? runtime.serverTime - Date.now() : 0;
+      render();
+    } catch (_) { /* Keep the last known announcement during a network interruption. */ }
+  }
+  const clock = setInterval(render, 1000);
+  window.addEventListener('pagehide', () => clearInterval(clock), { once: true });
+
+  refresh();
+  const timer = setInterval(() => { if (!document.hidden) refresh(); }, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+  window.addEventListener('pagehide', () => clearInterval(timer), { once: true });
+}
 function initialize() {
+  initializeRuntimeBanner();
   // Auth pages have no lobby header: supply a compact shared brand header.
   if((['/signup','/login','/admin'].includes(location.pathname)) && !document.querySelector('.site-brand')){document.body.insertAdjacentHTML('afterbegin',renderHeader(location.pathname));}
   wireNavigation();initializeDesktopNavigation();applyStreamer();subscribeSettings(applyStreamer);

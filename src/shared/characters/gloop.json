@@ -95,7 +95,11 @@
       }
     },
     "description": "A sticky control fighter who slows enemies and reels them in.",
-    "unlockPrice": 100
+    "unlockPrice": 100,
+    "unlockMethod": {
+      "type": "trophyRoad",
+      "min": 2000
+    }
   },
   "frame": {
     "w": 128,

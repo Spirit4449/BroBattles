@@ -21,6 +21,24 @@
             "spritesheetUrl": "/assets/ninja/spritesheet.webp",
             "animationsUrl": "/assets/ninja/animations.json"
           }
+        },
+        {
+          "id": "ninja-arena-sovereign",
+          "name": "Arena Sovereign",
+          "character": "ninja",
+          "available": true,
+          "assetUrl": "/assets/ninja/skins/ninja-arena-sovereign/body.webp",
+          "rarity": "legendary",
+          "unlockMethod": {
+            "type": "trophyRoad",
+            "min": 10000
+          },
+          "showInPicker": true,
+          "gameAssets": {
+            "spritesheetUrl": "/assets/ninja/skins/ninja-arena-sovereign/spritesheet.webp",
+            "animationsUrl": "/assets/ninja/skins/ninja-arena-sovereign/animations.json",
+            "weaponUrl": "/assets/ninja/skins/ninja-arena-sovereign/crown.webp"
+          }
         }
       ]
     },
@@ -171,6 +189,23 @@
           "gameAssets": {
             "spritesheetUrl": "/assets/gloop/spritesheet.webp",
             "animationsUrl": "/assets/gloop/animations.json"
+          }
+        },
+        {
+          "id": "gloop-amethyst",
+          "name": "Crystal Gloop",
+          "character": "gloop",
+          "available": true,
+          "assetUrl": "/assets/gloop/skins/gloop-amethyst/body.webp",
+          "rarity": "epic",
+          "unlockMethod": {
+            "type": "trophyRoad",
+            "min": 3500
+          },
+          "showInPicker": true,
+          "gameAssets": {
+            "spritesheetUrl": "/assets/gloop/skins/gloop-amethyst/spritesheet.webp",
+            "animationsUrl": "/assets/gloop/skins/gloop-amethyst/animations.json"
           }
         }
       ]

@@ -59,7 +59,8 @@
           "maxPlayers": 6,
           "lobbyLayout": "mirrored-teams"
         }
-      ]
+      ],
+      "unlockTrophies": 0
     },
     {
       "id": "capture-flag",
@@ -89,7 +90,8 @@
         "economy": false,
         "modeState": true
       },
-      "variants": []
+      "variants": [],
+      "unlockTrophies": 100
     },
     {
       "id": "tower",
@@ -119,7 +121,8 @@
         "economy": false,
         "modeState": true
       },
-      "variants": []
+      "variants": [],
+      "unlockTrophies": 0
     },
     {
       "id": "airdrop",
@@ -149,7 +152,8 @@
         "economy": false,
         "modeState": true
       },
-      "variants": []
+      "variants": [],
+      "unlockTrophies": 750
     },
     {
       "id": "bank-bust",
@@ -196,13 +200,14 @@
           "maxPlayers": 6,
           "lobbyLayout": "mirrored-teams"
         }
-      ]
+      ],
+      "unlockTrophies": 250
     },
     {
       "id": "bot-survival",
       "label": "Bot Survival",
-      "description": "Last as long as you can against AI bots.",
-      "artAsset": "/assets/bot-survival.webp",
+      "description": "Last as long as you can against bots.",
+      "artAsset": "/assets/map-banners/bot-survival.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
       "queueable": false,
       "implemented": false,
@@ -226,13 +231,14 @@
         "economy": false,
         "modeState": true
       },
-      "variants": []
+      "variants": [],
+      "unlockTrophies": 0
     },
     {
       "id": "soccer",
       "label": "Soccer",
       "description": "Score more goals than the other side.",
-      "artAsset": "/assets/soccer.webp",
+      "artAsset": "/assets/map-banners/soccer.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
       "queueable": false,
       "implemented": false,
@@ -256,13 +262,14 @@
         "economy": false,
         "modeState": true
       },
-      "variants": []
+      "variants": [],
+      "unlockTrophies": 1500
     },
     {
       "id": "bedwars",
       "label": "Bedwars",
       "description": "Protect your bed, upgrade, and wipe the other team.",
-      "artAsset": "/assets/bedwars.webp",
+      "artAsset": "/assets/map-banners/bedwars.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
       "queueable": false,
       "implemented": false,
@@ -286,7 +293,8 @@
         "economy": true,
         "modeState": true
       },
-      "variants": []
+      "variants": [],
+      "unlockTrophies": 2500
     }
   ]
 }

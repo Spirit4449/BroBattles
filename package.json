@@ -15,7 +15,8 @@
     "test:network": "node --test tests/networkTiming.test.mjs tests/ninjaCombat.test.js tests/ninjaRenderer.test.js tests/huntressCombat.test.js tests/huntressRenderer.test.js tests/huntressArrows.test.js",
     "simulate:bots": "node scripts/simulate-bots.cjs",
     "test": "node --test tests/*.test.js tests/*.test.mjs",
-    "validate:content": "node scripts/validate-content.cjs"
+    "validate:content": "node scripts/validate-content.cjs",
+    "test:trophies": "node --test tests/trophyProgression.test.js tests/trophySkinAssets.test.js"
   },
   "author": "",
   "license": "ISC",

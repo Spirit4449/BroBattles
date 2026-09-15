@@ -2483,3 +2483,11 @@ body.profile-page-body .profile-form[hidden] {
 #navbar,.site-header{top:0;left:0;right:0;width:100%;height:60px;min-height:60px;box-sizing:border-box;padding:8px 24px;z-index:1000}
 #navbar{position:relative!important}.site-header{position:fixed!important}
 @media(max-width:650px){#navbar,.site-header{padding:8px 16px}}
+
+/* Keep currency glows static. Animating chained drop-shadows on every image
+   creates continuously changing filter surfaces, especially on Trophy Road. */
+img:is([src*="/coin.webp"], [src*="/gem.webp"], [src*="/currency/coins-"], [src*="/currency/gems-"]) {
+  --currency-light: 255, 211, 80;
+  filter: drop-shadow(0 0 var(--currency-bloom-size, 3px) rgba(var(--currency-light), .25));
+}
+img:is([src*="/gem.webp"], [src*="/currency/gems-"]) { --currency-light: 86, 219, 255; }

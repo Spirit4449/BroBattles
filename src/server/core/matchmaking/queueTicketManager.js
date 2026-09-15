@@ -47,6 +47,7 @@ function createQueueTicketManager({
       throw new Error(getSelectionBlockReason(selection));
     }
 
+    await require("../../helpers/trophyModeAccess").assertModeAccess(db, selection.modeId, { partyId, userId });
     const S = teamSizeForSelection(selection);
     let counts = { t1: 0, t2: 0 };
     let size = 0;

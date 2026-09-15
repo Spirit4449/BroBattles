@@ -908,3 +908,8 @@ body.profile-page-body .card-actions {
 .email-dialog button:disabled { opacity:.55; cursor:default; }
 .email-dialog-close { width:36px; height:36px; padding:0; }
 @media(max-width:480px) { .email-dialog-card { padding:24px 18px; }.email-code-inputs { gap:5px; } }
+
+.profile-slot-menu-crown {
+  width: 24px; height: 24px; object-fit: contain;
+  margin-left: 8px; vertical-align: middle; image-rendering: pixelated;
+}

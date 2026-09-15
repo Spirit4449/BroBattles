@@ -1,8 +1,17 @@
 {
   "modeTrophyRanges": {
-    "duels": { "min": 20, "max": 30 },
-    "bank-bust": { "min": 30, "max": 40 },
-    "default": { "min": 20, "max": 30 }
+    "duels": {
+      "min": 20,
+      "max": 30
+    },
+    "bank-bust": {
+      "min": 30,
+      "max": 40
+    },
+    "default": {
+      "min": 20,
+      "max": 30
+    }
   },
   "lossRangeScale": 0.5,
   "lossPerformanceMitigation": 0.35,
@@ -12,30 +21,45 @@
     "hits": 0.15
   },
   "rewardTrack": {
-    "maxTrophies": 2000,
-    "step": 100,
+    "maxTrophies": 10000,
+    "spacingBands": [
+      {
+        "through": 500,
+        "step": 50
+      },
+      {
+        "through": 1500,
+        "step": 100
+      },
+      {
+        "through": 5000,
+        "step": 250
+      },
+      {
+        "through": 10000,
+        "step": 500
+      }
+    ],
     "rewardPattern": [
       {
-        "id": "coins",
-        "title": "Coin Bundle",
+        "title": "Coin Cache",
         "rewards": [
           {
             "kind": "currency",
             "currency": "coins",
-            "amount": 300,
+            "amount": 100,
             "name": "Coins",
             "image": "/assets/coin.webp"
           }
         ]
       },
       {
-        "id": "gems",
-        "title": "Gem Bundle",
+        "title": "Gem Cache",
         "rewards": [
           {
             "kind": "currency",
             "currency": "gems",
-            "amount": 25,
+            "amount": 5,
             "name": "Gems",
             "image": "/assets/gem.webp"
           }
@@ -43,9 +67,80 @@
       }
     ],
     "majorMilestones": {
-      "500": {
-        "title": "Milestone Crate",
+      "100": {
+        "title": "Capture the Flag Unlocked",
         "rewards": [
+          {
+            "kind": "mode",
+            "itemId": "capture-flag",
+            "name": "Capture the Flag",
+            "image": "/assets/map-banners/capture-the-flag.webp",
+            "rarity": "rare"
+          }
+        ]
+      },
+      "250": {
+        "title": "Bank Bust Unlocked",
+        "rewards": [
+          {
+            "kind": "mode",
+            "itemId": "bank-bust",
+            "name": "Bank Bust",
+            "image": "/assets/map-banners/bank-bust.webp",
+            "rarity": "rare"
+          }
+        ]
+      },
+      "500": {
+        "title": "Arena Rookie",
+        "rewards": [
+          {
+            "kind": "profileIcon",
+            "itemId": "500trophies",
+            "name": "500 Trophies",
+            "image": "/assets/profile-icons/500trophies.webp",
+            "rarity": "epic",
+            "fallbackImage": "/assets/trophy.webp"
+          },
+          {
+            "kind": "currency",
+            "currency": "coins",
+            "amount": 800,
+            "name": "Coins",
+            "image": "/assets/coin.webp"
+          },
+          {
+            "kind": "currency",
+            "currency": "gems",
+            "amount": 30,
+            "name": "Gems",
+            "image": "/assets/gem.webp"
+          }
+        ]
+      },
+      "750": {
+        "title": "Airdrop Unlocked",
+        "rewards": [
+          {
+            "kind": "mode",
+            "itemId": "airdrop",
+            "name": "Airdrop",
+            "image": "/assets/map-banners/airdrop.webp",
+            "rarity": "rare"
+          }
+        ]
+      },
+      "1000": {
+        "title": "Arena Contender",
+        "rewards": [
+          {
+            "kind": "profileIcon",
+            "itemId": "1000trophies",
+            "name": "1,000 Trophies",
+            "image": "/assets/profile-icons/1000trophies.webp",
+            "rarity": "epic",
+            "fallbackImage": "/assets/trophy.webp"
+          },
           {
             "kind": "currency",
             "currency": "coins",
@@ -56,69 +151,244 @@
           {
             "kind": "currency",
             "currency": "gems",
-            "amount": 80,
+            "amount": 50,
             "name": "Gems",
             "image": "/assets/gem.webp"
           }
         ]
       },
-      "1000": {
-        "title": "Milestone Crate",
+      "1250": {
+        "title": "Arena Spark",
         "rewards": [
           {
-            "kind": "currency",
-            "currency": "coins",
-            "amount": 2200,
-            "name": "Coins",
-            "image": "/assets/coin.webp"
-          },
-          {
-            "kind": "currency",
-            "currency": "gems",
-            "amount": 160,
-            "name": "Gems",
-            "image": "/assets/gem.webp"
+            "kind": "profileIcon",
+            "itemId": "arena-spark",
+            "name": "Arena Spark",
+            "image": "/assets/profile-icons/arena-spark.webp",
+            "rarity": "epic"
           }
         ]
       },
       "1500": {
-        "title": "Milestone Crate",
+        "title": "Soccer Unlocked",
         "rewards": [
+          {
+            "kind": "mode",
+            "itemId": "soccer",
+            "name": "Soccer",
+            "image": "/assets/map-banners/soccer.webp",
+            "rarity": "rare"
+          }
+        ]
+      },
+      "1750": {
+        "title": "Slime Circuit",
+        "rewards": [
+          {
+            "kind": "card",
+            "itemId": "slime-circuit",
+            "name": "Slime Circuit",
+            "image": "/assets/player-cards/slime-circuit.webp",
+            "rarity": "epic"
+          }
+        ]
+      },
+      "2000": {
+        "title": "A New Bro: Gloop",
+        "rewards": [
+          {
+            "kind": "character",
+            "itemId": "gloop",
+            "character": "gloop",
+            "name": "Gloop",
+            "image": "/assets/gloop/body.webp",
+            "rarity": "epic"
+          }
+        ]
+      },
+      "2500": {
+        "title": "Bedwars Unlocked",
+        "rewards": [
+          {
+            "kind": "mode",
+            "itemId": "bedwars",
+            "name": "Bedwars",
+            "image": "/assets/map-banners/bedwars.webp",
+            "rarity": "rare"
+          }
+        ]
+      },
+      "3500": {
+        "title": "Crystal Gloop",
+        "rewards": [
+          {
+            "kind": "skin",
+            "itemId": "gloop-amethyst",
+            "character": "gloop",
+            "name": "Crystal Gloop",
+            "image": "/assets/gloop/skins/gloop-amethyst/body.webp",
+            "rarity": "epic"
+          }
+        ]
+      },
+      "5000": {
+        "title": "Arena Champion",
+        "rewards": [
+          {
+            "kind": "profileIcon",
+            "itemId": "5000trophies",
+            "name": "5,000 Trophies",
+            "image": "/assets/profile-icons/5000trophies.webp",
+            "rarity": "epic",
+            "fallbackImage": "/assets/trophy.webp"
+          },
           {
             "kind": "currency",
             "currency": "coins",
-            "amount": 3200,
+            "amount": 3000,
             "name": "Coins",
             "image": "/assets/coin.webp"
           },
           {
             "kind": "currency",
             "currency": "gems",
-            "amount": 240,
+            "amount": 100,
             "name": "Gems",
             "image": "/assets/gem.webp"
           }
         ]
       },
-      "2000": {
-        "title": "Milestone Crate",
+      "7500": {
+        "title": "Arena Elite",
         "rewards": [
+          {
+            "kind": "profileIcon",
+            "itemId": "7500trophies",
+            "name": "7,500 Trophies",
+            "image": "/assets/profile-icons/7500trophies.webp",
+            "rarity": "legendary",
+            "fallbackImage": "/assets/trophy.webp"
+          },
           {
             "kind": "currency",
             "currency": "coins",
-            "amount": 4500,
+            "amount": 4000,
             "name": "Coins",
             "image": "/assets/coin.webp"
           },
           {
             "kind": "currency",
             "currency": "gems",
-            "amount": 320,
+            "amount": 150,
             "name": "Gems",
             "image": "/assets/gem.webp"
           }
         ]
+      },
+      "10000": {
+        "title": "Arena Legend",
+        "rewards": [
+          {
+            "kind": "profileIcon",
+            "itemId": "10000trophies",
+            "name": "10,000 Trophies",
+            "image": "/assets/profile-icons/10000trophies.webp",
+            "rarity": "legendary",
+            "fallbackImage": "/assets/trophy.webp"
+          },
+          {
+            "kind": "currency",
+            "currency": "coins",
+            "amount": 6000,
+            "name": "Coins",
+            "image": "/assets/coin.webp"
+          },
+          {
+            "kind": "currency",
+            "currency": "gems",
+            "amount": 250,
+            "name": "Gems",
+            "image": "/assets/gem.webp"
+          },
+          {
+            "kind": "skin",
+            "itemId": "ninja-arena-sovereign",
+            "name": "Arena Sovereign",
+            "image": "/assets/ninja/skins/ninja-arena-sovereign/body.webp",
+            "rarity": "legendary",
+            "character": "ninja"
+          },
+          {
+            "kind": "card",
+            "itemId": "arena-crown",
+            "name": "Crown of the Arena",
+            "image": "/assets/player-cards/arena-crown.webp",
+            "rarity": "legendary"
+          }
+        ]
       }
-    }
+    },
+    "currencyGrowthBands": [
+      {
+        "fromTrophies": 0,
+        "coins": 100,
+        "gems": 5
+      },
+      {
+        "fromTrophies": 250,
+        "coins": 150,
+        "gems": 5
+      },
+      {
+        "fromTrophies": 500,
+        "coins": 200,
+        "gems": 10
+      },
+      {
+        "fromTrophies": 1000,
+        "coins": 250,
+        "gems": 10
+      },
+      {
+        "fromTrophies": 1500,
+        "coins": 300,
+        "gems": 15
+      },
+      {
+        "fromTrophies": 2000,
+        "coins": 400,
+        "gems": 20
+      },
+      {
+        "fromTrophies": 3000,
+        "coins": 500,
+        "gems": 25
+      },
+      {
+        "fromTrophies": 4000,
+        "coins": 600,
+        "gems": 30
+      },
+      {
+        "fromTrophies": 5000,
+        "coins": 700,
+        "gems": 35
+      },
+      {
+        "fromTrophies": 6000,
+        "coins": 800,
+        "gems": 40
+      },
+      {
+        "fromTrophies": 7500,
+        "coins": 1000,
+        "gems": 50
+      },
+      {
+        "fromTrophies": 9000,
+        "coins": 1200,
+        "gems": 60
+      }
+    ]
   }
 }

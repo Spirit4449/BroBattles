@@ -29,6 +29,7 @@ export async function revealLobby() {
   window.clearTimeout(failureTimer);
   lobby.removeAttribute("data-loading");
   lobby.setAttribute("aria-busy", "false");
+  document.dispatchEvent(new Event("lobby:ready"));
   if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
   [...lobby.querySelectorAll(":scope > .platform, :scope > #vs-container")].forEach((platform, index) => {
     platform.animate([

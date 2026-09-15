@@ -1,12 +1,16 @@
 {
-  "maintenanceMode": true,
-  "bots": { "enabled": true, "rolloutPercent": 100 },
-  "announcements": "Help me",
+  "maintenanceMode": false,
+  "maintenanceUntil": null,
+  "bots": {
+    "enabled": true,
+    "rolloutPercent": 100
+  },
+  "announcements": "",
   "rewardMultipliers": {
     "coins": 1,
     "gems": 1
   },
-  "rewardFloor": 5,
+  "rewardFloor": 0,
   "rewardCeiling": 500,
   "characterTuning": {
     "ninja": {

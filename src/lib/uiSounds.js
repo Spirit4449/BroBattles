@@ -10,6 +10,7 @@ import { shouldMuteClientDefaultLogs } from "./netTestLogger.js";
 
 const sounds = {};
 const activeSounds = new Map();
+const soundPools = new Map();
 subscribeSettings(settings => {
   for (const [sound, base] of activeSounds) sound.volume = base * settings.sfx;
 });
@@ -43,6 +44,13 @@ const soundFiles = {
   shopBigSuccess: "shop-big-success.ogg",
   shopError: "shop-error.ogg",
   shopReveal: "shop-reveal.ogg",
+  rewardCoins: "rewards/aura-soft.mp3",
+  rewardGems: "rewards/aura-bless.mp3",
+  rewardUnlock: "rewards/aura-radiant.mp3",
+  rewardEpic: "rewards/aura-divine.mp3",
+  rewardLegendary: "rewards/aura-celestial.mp3",
+  rewardCoinImpact: "rewards/coin-impact.wav",
+  rewardGemImpact: "rewards/gem-impact.wav",
   shopCurrencyImpact: "shop-currency-impact.wav",
 };
 
@@ -103,13 +111,27 @@ function getOrLoadSound(soundName) {
 export function playSound(soundName, volume = 0.5, options = {}) {
   const source = getOrLoadSound(soundName);
   if (!source) return;
-  const sound = options.overlap ? source.cloneNode(true) : source;
+  let sound = source;
+  if (options.overlap) {
+    const limit = Math.max(1, Math.min(16, Number(options.maxVoices) || 16));
+    const pool = soundPools.get(soundName) || [];
+    sound = pool.find(voice => !activeSounds.has(voice));
+    if (!sound && pool.length < limit) {
+      sound = source.cloneNode(true);
+      pool.push(sound);
+    }
+    if (!sound) {
+      sound = pool.shift();
+      pool.push(sound);
+    }
+    soundPools.set(soundName, pool);
+  }
   sound.currentTime = 0;
   activeSounds.set(sound, volume);
   sound.volume = volume * getSettings().sfx;
   const release = () => activeSounds.delete(sound);
-  sound.addEventListener('ended', release, { once: true });
-  sound.addEventListener('error', release, { once: true });
+  sound.onended = release;
+  sound.onerror = release;
   sound.playbackRate = Math.max(0.5, Math.min(2, Number(options.playbackRate) || 1));
   sound.play().catch((e) => {
     release();

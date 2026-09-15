@@ -268,7 +268,7 @@ function registerPartyEvents(
         ack?.({ ok: true, ready: isReady });
       });
     } catch (e) {
-      ack?.({ ok: false, error: e?.message || "Could not update readiness." });
+      ack?.({ ok: false, error: e?.message || "Could not update readiness.", code: e?.code, maintenanceUntil: e?.maintenanceUntil });
       if (partyId) await partyPresence.emitPartyRosterById(partyId).catch(() => {});
       console.warn("ready:status error:", e?.message);
     }

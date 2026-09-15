@@ -231,7 +231,7 @@ function getCharacterCardState(character, userData) {
   const coins = Number(userData?.coins || 0);
   const canUpgrade =
     !isLocked && !isMaxed && Number.isFinite(price) && coins >= price;
-  const canUnlock = isLocked && Number(userData?.gems || 0) >= Number(stats.unlockPrice || 0);
+  const canUnlock = stats.unlockMethod?.type !== "trophyRoad" && isLocked && Number(userData?.gems || 0) >= Number(stats.unlockPrice || 0);
 
   return {
     stats,
@@ -364,8 +364,8 @@ function ensureCharacterDetailsUi() {
   wallet.className = "character-details-wallet";
   wallet.setAttribute("aria-label", "Your wallet");
   wallet.innerHTML = `
-    <span><small>COINS</small><img src="/assets/coin.webp" alt="" /><strong data-character-wallet="coins">0</strong></span>
-    <span><small>GEMS</small><img src="/assets/gem.webp" alt="" /><strong data-character-wallet="gems">0</strong></span>
+    <span><img src="/assets/coin.webp" alt="Coins" /><strong data-character-wallet="coins">0</strong></span>
+    <span><img src="/assets/gem.webp" alt="Gems" /><strong data-character-wallet="gems">0</strong></span>
   `;
 
   titleWrap.appendChild(title);
@@ -687,10 +687,19 @@ function renderCharacterDetails(character) {
     buyButton.setAttribute("aria-label", `Unlock ${character} for ${stats.unlockPrice || 0} gems`);
     buyButton.className =
       `character-details-action buy-button pixel-menu-button${cardState.canUnlock ? " is-ready" : ""}`;
-    buyButton.innerHTML = `<span class="character-details-buy-label"><img class="upgrade-icon" src="/assets/lock.webp" alt="" /> <span>Buy</span></span><span class="button-price"><img class="cs-currency" src="/assets/gem.webp" alt="" /> ${stats.unlockPrice || 0}</span>`;
+    buyButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon" src="/assets/lock.webp" alt="" /><span>Buy</span></span><span class="button-price"><img class="cs-currency" src="/assets/gem.webp" alt="" /><span>${stats.unlockPrice || 0}</span></span>`;
+    if (stats.unlockMethod?.type === "trophyRoad") {
+      buyButton.innerHTML = `<span class="character-details-action-label character-details-trophy-label"><img class="character-details-action-icon" src="/assets/lock.webp" alt="" /><span>Trophy Reward</span></span><span class="button-price"><img class="cs-currency" src="/assets/trophy.webp" alt="" /><span>${stats.unlockMethod.min.toLocaleString()}</span></span>`;
+      buyButton.setAttribute("aria-label", `Claim ${character} on Trophy Road at ${stats.unlockMethod.min} trophies`);
+    }
     buyButton.addEventListener("click", (e) => {
       e.stopPropagation();
       playSound("cursor4", 0.2);
+      if (stats.unlockMethod?.type === "trophyRoad") {
+        getSharedSelectionPopupShell().hide();
+        document.getElementById("trophy-resource-button")?.click();
+        return;
+      }
       showConfirmDialog(
         {
           type: "unlock",
@@ -708,13 +717,17 @@ function renderCharacterDetails(character) {
       upgradeButton.type = "button";
       upgradeButton.setAttribute("aria-label", `Upgrade ${character} for ${cardState.price} coins`);
       upgradeButton.className = `character-details-action upgrade-button pixel-menu-button${cardState.canUpgrade ? " is-ready" : ""}`;
-      upgradeButton.innerHTML = `<img class="upgrade-icon" src="/assets/upgrade.webp" alt="" /> <span>Upgrade</span> <span class="button-price"><img class="cs-currency" src="/assets/coin.webp" alt="" /> ${cardState.price}</span>`;
+      upgradeButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon upgrade-icon" src="/assets/upgrade.webp" alt="" /><span>Upgrade</span></span><span class="button-price"><img class="cs-currency" src="/assets/coin.webp" alt="" /><span>${cardState.price}</span></span>`;
       if (!cardState.canUpgrade) {
         upgradeButton.title = "Not enough coins — select to view the balance needed";
       }
       upgradeButton.addEventListener("click", (e) => {
         e.stopPropagation();
         playSound("cursor4", 0.2);
+        if (!cardState.canUpgrade) {
+          showInsufficientDialog("coins");
+          return;
+        }
         if (!isUpgradePreview) {
           _upgradePreview = {
             character,
@@ -722,10 +735,6 @@ function renderCharacterDetails(character) {
             minimumButtonWidth: Math.ceil(upgradeButton.getBoundingClientRect().width),
           };
           renderCharacterDetails(character);
-          return;
-        }
-        if (!cardState.canUpgrade) {
-          showInsufficientDialog("coins");
           return;
         }
         upgradeButton.disabled = true;
@@ -1120,7 +1129,7 @@ function createCharacterCard(character, userData) {
   statusText.className = "character-card-status-text";
 
   if (cardState.isLocked) {
-    statusText.innerHTML = `<span class="character-card-status-label">Unlock</span> <img src="/assets/gem.webp" alt="" /> <span class="character-card-status-price">${stats.unlockPrice || 0}</span>`;
+    statusText.innerHTML = stats.unlockMethod?.type === "trophyRoad" ? `<img src="/assets/trophy.webp" alt="" /> <span class="character-card-status-price">${stats.unlockMethod.min.toLocaleString()}</span>` : `<span class="character-card-status-label">Unlock</span> <img src="/assets/gem.webp" alt="" /> <span class="character-card-status-price">${stats.unlockPrice || 0}</span>`;
   } else if (cardState.isMaxed) {
     statusText.classList.add("maxed");
     statusText.innerHTML =
@@ -1704,7 +1713,7 @@ function refreshUpgradeButtonAffordability() {
 
       if (state.isLocked) {
         statusText.className = "character-card-status-text";
-        statusText.innerHTML = `<span class="character-card-status-label">Unlock</span> <img src="/assets/gem.webp" alt="" /> <span class="character-card-status-price">${state.stats?.unlockPrice || 0}</span>`;
+        statusText.innerHTML = state.stats.unlockMethod?.type === "trophyRoad" ? `<img src="/assets/trophy.webp" alt="" /> <span class="character-card-status-price">${state.stats.unlockMethod.min.toLocaleString()}</span>` : `<span class="character-card-status-label">Unlock</span> <img src="/assets/gem.webp" alt="" /> <span class="character-card-status-price">${state.stats?.unlockPrice || 0}</span>`;
         return;
       }
 
@@ -1721,4 +1730,11 @@ function refreshUpgradeButtonAffordability() {
     } catch {}
   });
   sortCharacterCardsInGrid(_userDataRef);
+}
+
+export async function refreshCharacterRewards() {
+  await bootstrapSkinState();
+  for (const character of Object.keys(_userDataRef?.char_levels || {})) rerenderCharacterCard(character, _userDataRef);
+  refreshUpgradeButtonAffordability();
+  if (_characterDetailsUi?.currentCharacter) renderCharacterDetails(_characterDetailsUi.currentCharacter);
 }

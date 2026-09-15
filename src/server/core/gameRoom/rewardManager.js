@@ -116,7 +116,7 @@ async function applyMatchRewards(room, winnerTeam, q) {
       playerData.user_id && !playerData.isBot
     ) {
       const result = await q(
-        "UPDATE users SET coins = COALESCE(coins, 0) + ?, gems = COALESCE(gems, 0) + ?, trophies = GREATEST(0, COALESCE(trophies, 0) + ?) WHERE user_id = ?",
+        "UPDATE users SET coins = COALESCE(coins, 0) + ?, gems = COALESCE(gems, 0) + ?, trophies = GREATEST(0, COALESCE(trophies, 0) + ?), trophy_peak = GREATEST(COALESCE(trophy_peak, 0), trophies) WHERE user_id = ?",
         [reward.coins, reward.gems, Number(trophyInfo.trophiesDelta) || 0, playerData.user_id]);
       if (result.affectedRows !== 1) throw new Error("Reward participant update failed");
     }

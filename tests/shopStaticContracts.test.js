@@ -116,7 +116,10 @@ test("shop cards and purchase reveal use the pixel UI hierarchy", () => {
   assert.match(source, /THORG SKIN|FIGHTER SKIN/);
   assert.match(source, /PLAYER CARD/);
   assert.match(source, /COIN PACK/);
-  assert.match(source, /Wallet Updated/);
+  assert.match(source, /function getRevealHeading/);
+  assert.match(source, /shop-reveal-subheader/);
+  assert.doesNotMatch(source, /shop-reveal-caption/);
+  assert.doesNotMatch(source, /TROPHY ROAD • CLAIMED/);
   assert.doesNotMatch(source, /<h2>\$\{escapeHtml\(item\?\.name/);
   assert.match(styles, /\.shop-price-money[\s\S]+"Press Start 2P"/);
   assert.match(styles, /\.shop-buy-button[\s\S]+0 5px #03050a/);
@@ -128,7 +131,8 @@ test("currency rewards update a visible wallet on every physical impact", () => 
   assert.match(source, /data-reveal-wallet="coins"/);
   assert.match(source, /function flyWalletParticle/);
   assert.match(source, /writeWalletCount\(counter,[\s\S]+burstWalletTarget/);
-  assert.match(source, /playSound\("shopCurrencyImpact"[\s\S]+overlap: true/);
+  assert.match(source, /playSound\(currency === "gems" \? "rewardGemImpact" : "rewardCoinImpact"/);
+  assert.match(source, /overlap: true,[\s\S]*?maxVoices: 8/);
 });
 
 test("post-purchase updates do not bounce or replay card entrances", () => {

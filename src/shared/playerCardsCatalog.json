@@ -31,6 +31,34 @@
         "coins": 0,
         "gems": 20
       }
+    },
+    {
+      "id": "slime-circuit",
+      "name": "Slime Circuit",
+      "assetUrl": "/assets/player-cards/slime-circuit.webp",
+      "rarity": "epic",
+      "cost": {
+        "coins": 0,
+        "gems": 0
+      },
+      "unlock": {
+        "type": "trophyRoad",
+        "min": 1750
+      }
+    },
+    {
+      "id": "arena-crown",
+      "name": "Crown of the Arena",
+      "assetUrl": "/assets/player-cards/arena-crown.webp",
+      "rarity": "legendary",
+      "cost": {
+        "coins": 0,
+        "gems": 0
+      },
+      "unlock": {
+        "type": "trophyRoad",
+        "min": 10000
+      }
     }
   ]
 }

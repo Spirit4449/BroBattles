@@ -380,6 +380,7 @@ function createPartyStateService({ db, io }) {
       mode_variant_id: selection?.modeVariantId,
       map: selection?.mapId,
     });
+    await require("../helpers/trophyModeAccess").assertModeAccess(db, normalized.modeId, { actorName });
     await updatePartySelectionWithFallback(partyId, normalized);
     return normalized;
   }

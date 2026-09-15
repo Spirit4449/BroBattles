@@ -1,8 +1,24 @@
+import { currencyRewardImage } from "../lib/rewardPresentation.js";
 import { playSound } from "../lib/uiSounds.js";
-import { sonner } from "../lib/sonner.js";
+import { createRewardPresentation } from "../shop.js";
+import { buildProfileIconUrl } from "../lib/profileIconAssets.js";
+import "../styles/trophyRewards.css";
 import { escapeHtml, fetchLobbyJson, openOverlay, isOverlayOpen } from './ui';
 
-export function createTrophyController({ getUserData }) {
+export function createTrophyController({ getUserData, onRewardsClaimed }) {
+  let claimBusy = false;
+  const presentation = createRewardPresentation({
+    state: { overlay: document.body, reveal: null },
+    updateWallet: wallet => {
+      if (getUserData() && wallet) Object.assign(getUserData(), wallet);
+      updateLobbyResourceCounts();
+    },
+    onWalletTick: (currency, value) => {
+      if (getUserData()) getUserData()[currency] = value;
+      const count = document.getElementById(currency === "coins" ? "coin-count" : "gem-count");
+      if (count) count.textContent = value.toLocaleString();
+    },
+  });
   let trophyRoadLastScrollLeft = 0;
   let trophyProgressionState = null;
   let trophyProgressionRefreshPromise = null;
@@ -59,7 +75,7 @@ export function createTrophyController({ getUserData }) {
 
     if (!button) return;
     button.dataset.state = status;
-    button.disabled = status !== "claimable";
+    button.disabled = pending || status !== "claimable";
     button.textContent =
       status === "claimed"
         ? "Claimed"
@@ -70,19 +86,6 @@ export function createTrophyController({ getUserData }) {
     button.classList.toggle("is-pending", !!pending);
     if (pending) button.setAttribute("aria-busy", "true");
     else button.removeAttribute("aria-busy");
-  }
-
-  function summarizeTrophyCurrencyRewards(rewards) {
-    const totals = { coins: 0, gems: 0 };
-    for (const reward of Array.isArray(rewards) ? rewards : []) {
-      if (String(reward?.kind || "") !== "currency") continue;
-      const currency = String(reward?.currency || "");
-      const amount = Math.max(0, Number(reward?.amount) || 0);
-      if (currency === "coins" || currency === "gems") {
-        totals[currency] += amount;
-      }
-    }
-    return totals;
   }
 
   function updateLobbyResourceCounts() {
@@ -96,7 +99,6 @@ export function createTrophyController({ getUserData }) {
 
   function playTrophyClaimFeedback({ card, marker, canvas }) {
     playSound("shopBigSuccess", 0.65);
-    playSound("shopReveal", 0.55);
     spawnTrophyClaimParticles(card, { count: 12, tone: "gold" });
     spawnTrophyClaimParticles(marker, { count: 6, tone: "blue" });
     canvas?.classList.add("claim-flash");
@@ -126,6 +128,7 @@ export function createTrophyController({ getUserData }) {
   }
 
   function reconcileTrophyTrackState(state) {
+    const trophiesChanged = Number(state?.player?.trophies) !== Number(trophyProgressionState?.player?.trophies);
     const container = document.getElementById("trophy-track-list");
     const incomingTiers = Array.isArray(state?.tiers) ? state.tiers : [];
     const existingTiers = new Map(
@@ -136,7 +139,7 @@ export function createTrophyController({ getUserData }) {
     );
     const mergedTiers = incomingTiers.map((tier) => {
       const tierId = String(tier?.tierId || "");
-      if (!trophyClaimsInFlight.has(tierId)) return tier;
+      if (!trophyClaimsInFlight.has(tierId) || !existingTiers.get(tierId)?.claimed) return tier;
       return {
         ...tier,
         ...(existingTiers.get(tierId) || {}),
@@ -144,22 +147,15 @@ export function createTrophyController({ getUserData }) {
         canClaim: false,
       };
     });
-    const optimisticClaims = incomingTiers.filter(
-      (tier) =>
-        trophyClaimsInFlight.has(String(tier?.tierId || "")) && tier?.canClaim,
-    ).length;
     const mergedState = {
       ...state,
       tiers: mergedTiers,
-      availableClaimCount: Math.max(
-        0,
-        (Number(state?.availableClaimCount) || 0) - optimisticClaims,
-      ),
+      availableClaimCount: mergedTiers.filter(tier => tier.canClaim).length,
     };
     trophyProgressionState = mergedState;
     setTrophyClaimBadge(mergedState.availableClaimCount);
 
-    if (!container?.querySelector(".trophy-track-canvas")) return false;
+    if (trophiesChanged || !container?.querySelector(".trophy-track-canvas")) return false;
     const cards = new Map(
       [...container.querySelectorAll(".trophy-lane-card[data-tier-id]")].map(
         (card) => [String(card.dataset.tierId || ""), card],
@@ -205,6 +201,14 @@ export function createTrophyController({ getUserData }) {
     }
     trophyProgressionRefreshPromise = fetchLobbyJson("/trophies/progression")
       .then((progression) => {
+        const recoveredClaim = progression.tiers?.some(tier => tier.claimed && trophyProgressionState?.tiers?.find(previous => previous.tierId === tier.tierId)?.claimed === false);
+        if (!claimBusy && progression?.player && getUserData()) {
+          getUserData().coins = Number(progression.player.coins) || 0;
+          getUserData().gems = Number(progression.player.gems) || 0;
+          getUserData().char_levels = progression.player.char_levels || getUserData().char_levels;
+          getUserData().trophy_peak = progression.player.trophyPeak;
+          updateLobbyResourceCounts();
+        }
         const reconciled = reconcileTrophyTrackState(progression);
         if (!reconciled && isOverlayOpen("trophy-track-overlay")) {
           const list = document.getElementById("trophy-track-list");
@@ -213,6 +217,7 @@ export function createTrophyController({ getUserData }) {
           progression.__skipAnimation = true;
           renderTrophyTrack(progression);
         }
+        if (recoveredClaim && !claimBusy) onRewardsClaimed?.();
         return progression;
       })
       .finally(() => {
@@ -256,7 +261,14 @@ export function createTrophyController({ getUserData }) {
       1,
       ...tiers.map((tier) => Number(tier?.trophiesRequired) || 0),
     );
-    const overallRatio = Math.max(0, Math.min(1, trophies / maxTierRequirement));
+    const positionRatio = (value) => {
+      const next = tiers.findIndex(tier => tier.trophiesRequired > value);
+      if (next < 0) return 1;
+      if (next === 0) return 0;
+      const previous = tiers[next - 1].trophiesRequired;
+      return (next - 1 + (value - previous) / (tiers[next].trophiesRequired - previous)) / Math.max(1, tiers.length - 1);
+    };
+    const overallRatio = positionRatio(trophies);
     const compactTrack = window.matchMedia?.("(max-width: 700px)")?.matches;
     const laneInset = compactTrack ? 108 : 124;
     const tierSpacing = compactTrack ? 218 : 244;
@@ -300,7 +312,7 @@ export function createTrophyController({ getUserData }) {
     for (const tier of tiers) {
       const tierRatio = Math.max(
         0,
-        Math.min(1, (Number(tier.trophiesRequired) || 0) / maxTierRequirement),
+        Math.min(1, tierIndex / Math.max(1, tiers.length - 1)),
       );
       const statusClass = tier.claimed
         ? "claimed"
@@ -319,12 +331,20 @@ export function createTrophyController({ getUserData }) {
       };
       const primaryName = String(primaryReward?.name || "Reward");
       const primaryAmount = Math.max(0, Number(primaryReward?.amount) || 0);
-      const rewardPreviews = (rewards.length ? rewards : [primaryReward]).slice(
-        0,
-        2,
-      );
+      const bundle = rewards.length > 1;
+      const art = bundle ? `/assets/reward-bundles/milestone-${tier.trophiesRequired}.webp`
+        : primaryReward.kind === 'currency' ? currencyRewardImage(primaryReward.currency, primaryAmount)
+        : primaryReward.kind === 'profileIcon' ? buildProfileIconUrl(primaryReward.itemId) : primaryReward.image;
+      const contents = rewards.map(reward => reward.kind === 'currency' ? `${Number(reward.amount).toLocaleString()} ${reward.name}` : reward.name).join(', ');
+      const rewardDetails = rewards.map(reward => {
+        if (reward.kind === 'currency') return `${Number(reward.amount).toLocaleString()} ${reward.name}`;
+        const type = { profileIcon: 'Player icon', skin: 'Skin', card: 'Player card', character: 'Bro', mode: 'Gamemode' }[reward.kind];
+        return type || 'Reward';
+      }).join(' · ');
       const card = document.createElement("article");
-      card.className = `trophy-lane-card ${statusClass}${isMajorMilestone ? " major" : ""}`;
+      card.className = `trophy-lane-card ${statusClass}${isMajorMilestone ? " major" : ""}${tier.trophiesRequired === 10000 ? " trophy-finale" : ""}`;
+      card.dataset.tierId = tier.tierId;
+      card.setAttribute("aria-label", `${Number(tier.trophiesRequired).toLocaleString()} trophies: ${tier.title}`);
       card.style.left = `${Math.round(ratioToX(tierRatio))}px`;
       card.style.setProperty(
         "--trophy-tier-index",
@@ -332,17 +352,12 @@ export function createTrophyController({ getUserData }) {
       );
       card.innerHTML = `
       <div class="trophy-lane-card-sheen"></div>
-      <div class="trophy-lane-item-wrap${rewardPreviews.length > 1 ? " multi-reward" : ""}">
-        ${rewardPreviews
-            .map(
-              (reward) =>
-                `<img class="trophy-lane-item" src="${escapeHtml(reward?.image || "/assets/coin.webp")}" alt="${escapeHtml(reward?.name || "Reward")}" />`,
-            )
-            .join("")}
+      <div class="trophy-lane-item-wrap reward-${escapeHtml(bundle ? 'bundle' : primaryReward.kind)}" style="--reward-glow:${primaryReward.kind === 'card' && primaryReward.itemId === 'slime-circuit' ? '108,255,127' : primaryReward.currency === 'gems' ? '64,207,255' : isMajorMilestone ? '255,203,87' : '121,158,255'}">
+        <img class="trophy-lane-item" loading="lazy" src="${escapeHtml(art || '/assets/coin.webp')}" alt="${escapeHtml(contents)}" />
       </div>
       <div class="trophy-lane-meta">
-        <strong>${primaryAmount.toLocaleString()} ${escapeHtml(primaryName)}</strong>
-        <span>${escapeHtml(tier.title || "Trophy Milestone")}${rewards.length > 1 ? ` • ${rewards.length} Rewards` : ""}</span>
+        <strong>${bundle ? escapeHtml(tier.title) : `${primaryAmount ? `${primaryAmount.toLocaleString()} ` : ''}${escapeHtml(primaryName)}`}</strong>
+        ${bundle || primaryReward.kind !== 'currency' ? `<span class="trophy-pack-contents">${escapeHtml(rewardDetails)}</span>` : ''}
       </div>
       <button type="button" class="pixel-menu-button trophy-tier-claim" data-tier-id="${escapeHtml(tier.tierId)}" ${
           tier.canClaim ? "" : "disabled"
@@ -350,6 +365,7 @@ export function createTrophyController({ getUserData }) {
     `;
 
       const marker = document.createElement("div");
+      marker.dataset.tierId = tier.tierId;
       marker.className = `trophy-lane-marker ${statusClass}${isMajorMilestone ? " major" : ""}`;
       marker.style.left = `${Math.round(ratioToX(tierRatio))}px`;
       marker.innerHTML = `
@@ -360,113 +376,53 @@ export function createTrophyController({ getUserData }) {
     `;
 
       const claimBtn = card.querySelector(".trophy-tier-claim");
+      claimBtn?.setAttribute("aria-label", `Claim ${tier.title} at ${Number(tier.trophiesRequired).toLocaleString()} trophies`);
       claimBtn?.addEventListener("click", async (event) => {
         event?.stopPropagation?.();
         const tierId = String(claimBtn.dataset.tierId || "");
         if (!tierId || claimBtn.disabled || trophyClaimsInFlight.has(tierId))
           return;
 
+        if (claimBusy) return;
+        claimBusy = true;
         trophyClaimsInFlight.add(tierId);
-
-        // 1. Optimistically calculate and apply currency rewards
-        const rewards = Array.isArray(tier.rewards) ? tier.rewards : [];
-        const currencyRewards = summarizeTrophyCurrencyRewards(rewards);
-        const prevCoins = getUserData() ? Number(getUserData().coins) || 0 : 0;
-        const prevGems = getUserData() ? Number(getUserData().gems) || 0 : 0;
-
-        if (getUserData()) {
-          getUserData().coins = prevCoins + currencyRewards.coins;
-          getUserData().gems = prevGems + currencyRewards.gems;
-          updateLobbyResourceCounts();
-        }
-
-        // 2. Optimistically update local tier state and notification badge
-        tier.claimed = true;
-        tier.canClaim = false;
-        if (trophyProgressionState?.tiers) {
-          const localTier = trophyProgressionState.tiers.find(
-            (t) => String(t?.tierId) === tierId,
-          );
-          if (localTier) {
-            localTier.claimed = true;
-            localTier.canClaim = false;
-          }
-          trophyProgressionState.availableClaimCount = Math.max(
-            0,
-            (Number(trophyProgressionState.availableClaimCount) || 1) - 1,
-          );
-          setTrophyClaimBadge(trophyProgressionState.availableClaimCount);
-        }
-
-        // 3. Immediately apply claimed visual state (no "Claiming..." text)
-        applyTrophyTierVisualState({
-          card,
-          marker,
-          button: claimBtn,
-          tier,
-          pending: false,
-        });
-        playTrophyClaimFeedback({ card, marker, canvas });
-        sonner("Reward claimed", "Trophy reward collected!", "success");
-
-        // 4. Send background claim request to backend
+        applyTrophyTierVisualState({ card, marker, button: claimBtn, tier, pending: true });
+        card.querySelector(".trophy-claim-error")?.remove();
+        const startingWallet = { coins: Number(getUserData()?.coins) || 0, gems: Number(getUserData()?.gems) || 0 };
+        let committed = false;
         try {
           const result = await fetchLobbyJson("/trophies/claim", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tierId }),
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tierId }),
           });
-
-          trophyClaimsInFlight.delete(tierId);
-
-          if (result?.player && getUserData()) {
-            getUserData().coins = Number(result.player.coins ?? getUserData().coins) || 0;
-            getUserData().gems = Number(result.player.gems ?? getUserData().gems) || 0;
-            getUserData().trophies =
-              Number(result.player.trophies ?? getUserData().trophies) || 0;
-            updateLobbyResourceCounts();
+          committed = true;
+          tier.claimed = true;
+          tier.canClaim = false;
+          if (getUserData() && result.player) {
+            getUserData().char_levels = result.player.char_levels || getUserData().char_levels;
+            getUserData().trophy_peak = result.player.trophyPeak;
           }
-
-          if (result?.progression) {
-            reconcileTrophyTrackState(result.progression);
-          }
+          trophyProgressionState.availableClaimCount = Math.max(0, trophyProgressionState.availableClaimCount - 1);
+          setTrophyClaimBadge(trophyProgressionState.availableClaimCount);
+          applyTrophyTierVisualState({ card, marker, button: claimBtn, tier });
+          playTrophyClaimFeedback({ card, marker, canvas });
+          // HTTP success is the only point at which a reward can be celebrated.
+          await presentation.showRewardReveal({
+            result: { grants: result.grants || rewards, wallet: { coins: result.player.coins, gems: result.player.gems } },
+            item: { name: tier.title, grants: result.grants || rewards, rarity: tier.trophiesRequired === 10000 ? "legendary" : rewards.find(r => r.rarity)?.rarity || "rare" },
+            kind: "trophy", startingWallet, sourceRect: card.getBoundingClientRect(), holdUntilDismissed: true,
+          });
         } catch (error) {
+          const message = document.createElement("p");
+          message.className = "trophy-claim-error";
+          message.setAttribute("role", "alert");
+          message.textContent = committed ? "Reward saved. Reopen the road to refresh." : error?.message || "Could not claim. Please try again.";
+          card.appendChild(message);
+        } finally {
           trophyClaimsInFlight.delete(tierId);
-
-          // Rollback optimistic state on error
-          tier.claimed = false;
-          tier.canClaim = true;
-          if (trophyProgressionState?.tiers) {
-            const localTier = trophyProgressionState.tiers.find(
-              (t) => String(t?.tierId) === tierId,
-            );
-            if (localTier) {
-              localTier.claimed = false;
-              localTier.canClaim = true;
-            }
-            trophyProgressionState.availableClaimCount = Math.max(
-              0,
-              (Number(trophyProgressionState.availableClaimCount) || 0) + 1,
-            );
-            setTrophyClaimBadge(trophyProgressionState.availableClaimCount);
-          }
-          if (getUserData()) {
-            getUserData().coins = prevCoins;
-            getUserData().gems = prevGems;
-            updateLobbyResourceCounts();
-          }
-          applyTrophyTierVisualState({
-            card,
-            marker,
-            button: claimBtn,
-            tier,
-            pending: false,
-          });
-          sonner(
-            "Reward claim failed",
-            error?.message || "Please try again.",
-            "error",
-          );
+          claimBusy = false;
+          applyTrophyTierVisualState({ card, marker, button: claimBtn, tier });
+          if (committed) onRewardsClaimed?.();
+          void refreshTrophyProgressionInBackground().catch(() => {});
         }
       });
 

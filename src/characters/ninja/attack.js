@@ -1,3 +1,4 @@
+import { ninjaProjectileTexture } from './projectileTexture';
 import { createShurikenEffects } from './effects';
 // ReturningShuriken.js
 // Curved, returning, piercing shuriken with deterministic local simulation.
@@ -21,7 +22,8 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
    */
   constructor(scene, startPos, ownerSprite, config) {
     // Create image and guard against missing texture; make invisible until ready
-    super(scene, startPos.x, startPos.y, "shuriken");
+    super(scene, startPos.x, startPos.y, ninjaProjectileTexture(scene, ownerSprite));
+    this.projectileTexture = ninjaProjectileTexture(scene, ownerSprite);
     this.ownerSprite = ownerSprite;
     this.cfg = Object.assign(
       {
@@ -75,20 +77,20 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
 
     // If texture isn't ready yet (edge case), keep invisible and set once available
     try {
-      const hasTex = scene.textures?.exists("shuriken");
+      const hasTex = scene.textures?.exists(this.projectileTexture);
       if (!hasTex) {
         this.setVisible(false);
         const tryBind = () => {
           try {
-            if (scene.textures?.exists("shuriken")) {
-              this.setTexture("shuriken");
+            if (scene.textures?.exists(this.projectileTexture)) {
+              this.setTexture(this.projectileTexture);
               this.setVisible(true);
             }
           } catch (_) {}
         };
         scene.load?.once(Phaser.Loader.Events.COMPLETE, tryBind);
         scene.textures?.once(Phaser.Textures.Events.ADD, (key) => {
-          if (key === "shuriken") tryBind();
+          if (key === this.projectileTexture) tryBind();
         });
       }
     } catch (_) {}
@@ -305,8 +307,8 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
   }
 
   spawnTrail() {
-    if (!this.scene.textures.exists("shuriken")) return;
-    const s = this.scene.add.image(this.x, this.y, "shuriken");
+    if (!this.scene.textures.exists(this.projectileTexture)) return;
+    const s = this.scene.add.image(this.x, this.y, this.projectileTexture);
     s.setScale(this.cfg.scale * 0.48);
     s.setDepth(RENDER_LAYERS.ATTACKS - 1);
     s.alpha = 0.35;

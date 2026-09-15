@@ -1,3 +1,4 @@
+import { MAINTENANCE_MESSAGE } from "./shared/maintenance";
 import { revealLobby } from "./lobby/lobbyReveal.js";
 import { playPartyMoveEffect } from "./lobby/partyMoveEffect.js";
 import { createPartySlotDrag } from "./lobby/partySlotDrag.js";
@@ -26,6 +27,7 @@ import {
   getModeLabel,
   getModeSelectionStyle,
   getModeSubtitle,
+  getModeProgressionBlockReason,
   getPlayersPerTeamForSelection,
   getSelectionBlockReason,
   getSelectionDisplayLabel,
@@ -426,9 +428,9 @@ function syncModePickerUi(selection = getCurrentSelection()) {
   if (previewName) previewName.textContent = getModeLabel(normalized.modeId);
   if (previewSubtitle) {
     const label = getSelectionDisplayLabel(normalized);
-    previewSubtitle.textContent = label.includes("•")
+    previewSubtitle.textContent = getModeProgressionBlockReason(normalized.modeId) || (label.includes("•")
       ? label.split("•")[1].trim()
-      : getModeSubtitle(normalized.modeId);
+      : getModeSubtitle(normalized.modeId));
   }
   if (previewImg) {
     previewImg.src = getModeArtAsset(normalized.modeId);
@@ -664,7 +666,7 @@ function setupModePickerControls(onSelect = null) {
     grid.className = "mode-select-grid";
     const selection = getCurrentSelection();
 
-    getAllGameModes().forEach((mode) => {
+    [...getAllGameModes()].sort((a, b) => (a.unlockTrophies || 0) - (b.unlockTrophies || 0)).forEach((mode) => {
       const card = document.createElement("button");
       card.type = "button";
       card.className = `map-select-card mode-select-card pixel-menu-button${
@@ -672,13 +674,14 @@ function setupModePickerControls(onSelect = null) {
       }${mode.queueable ? "" : " is-disabled"}`;
       const artAsset =
         mode.artAsset || mode.fallbackArtAsset || "/assets/fightImage.webp";
-      const badge = mode.queueable ? "Playable" : "Coming Soon";
+      const unlockReason = getModeProgressionBlockReason(mode.id);
+      card.classList.toggle("is-trophy-locked", !!unlockReason);
+      card.disabled = !!unlockReason;
       card.innerHTML = `
-        <span class="mode-select-badge">${badge}</span>
-        <img src="${artAsset}" alt="${mode.label}" />
+        <div class="mode-select-art"><img src="${artAsset}" alt="${mode.label}" />${unlockReason ? '<span class="mode-select-lock" aria-hidden="true"><img src="/assets/lock.webp" alt="" /></span>' : ""}</div>
         <div class="map-select-name">${mode.label}</div>
         <div class="mode-select-subtitle">${mode.description || ""}</div>
-        <div class="mode-select-meta">${mode.topology || ""}</div>
+        <div class="mode-select-meta">${unlockReason && mode.unlockTrophies ? `<img src="/assets/trophy.webp" alt="Trophies" /><span>Unlock at ${mode.unlockTrophies.toLocaleString()}</span>` : ""}</div>
       `;
       card.querySelector("img")?.addEventListener("error", (event) => {
         event.currentTarget.src =
@@ -1569,7 +1572,7 @@ export function socketInit(options = {}) {
       mmOverlayPlayersSig = "";
       mmOverlayTotal = 0;
       if (err?.message) {
-        sonner("Queue error", err.message, "error", { sound: "notification" });
+        sonner(err.code === "MAINTENANCE" ? "Matchmaking Disabled" : "Queue error", err.code === "MAINTENANCE" ? MAINTENANCE_MESSAGE : err.message, "error", { sound: "notification", maintenanceUntil: err.code === "MAINTENANCE" ? err.maintenanceUntil : null });
       }
       // Reset local ready state so next click attempts to join again
       const selfSlot = Array.from(
@@ -2719,7 +2722,7 @@ export function initReadyToggle() {
         syncReadyAvailability();
         if (String(partyId) !== String(getActivePartyId())) return;
         if (error || !reply?.ok) {
-          sonner("Could not update readiness", reply?.error || "The server did not confirm. Please try again.", "error");
+          sonner(reply?.code === "MAINTENANCE" ? "Matchmaking Disabled" : "Could not update readiness", reply?.code === "MAINTENANCE" ? MAINTENANCE_MESSAGE : reply?.error || "The server did not confirm. Please try again.", "error", { maintenanceUntil: reply?.code === "MAINTENANCE" ? reply.maintenanceUntil : null });
         }
         if (!error && reply?.ok) return;
         // Refresh after a failed acknowledgement or timeout; never leave an unconfirmed
@@ -3087,7 +3090,7 @@ function syncReadyAvailability(selection = getCurrentSelection()) {
     btn.classList.remove("is-disabled", "cancel");
     return { blocked: false, reason: "", selection: normalized };
   }
-  const reason = getSelectionBlockReason(normalized);
+  const reason = getSelectionBlockReason(normalized, { usePartyHostAccess: Boolean(getActivePartyId()) });
   const blocked = Boolean(reason);
   const isCancelState = btn.classList.contains("cancel");
 

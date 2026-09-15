@@ -105,51 +105,25 @@ function calculateTrophyDelta({
 }
 
 function buildTrophyRewardTrack() {
-  const track = trophyCatalog?.rewardTrack || {};
-  const step = Math.max(25, Number(track.step) || 100);
-  const maxTrophies = Math.max(step, Number(track.maxTrophies) || 2000);
-  const rewardPattern = Array.isArray(track.rewardPattern)
-    ? track.rewardPattern
-    : [];
-  const majorMilestones = track?.majorMilestones || {};
-  const tiers = [];
-
-  for (
-    let trophiesRequired = step;
-    trophiesRequired <= maxTrophies;
-    trophiesRequired += step
-  ) {
-    const key = String(trophiesRequired);
-    const major = majorMilestones[key];
-    const pattern = rewardPattern.length
-      ? rewardPattern[
-          (Math.floor(trophiesRequired / step) - 1) % rewardPattern.length
-        ]
-      : null;
-
-    const source = major || pattern;
-    const rewards = Array.isArray(source?.rewards)
-      ? source.rewards.map((entry, idx) => ({
-          kind: String(entry?.kind || "currency"),
-          currency: entry?.currency ? String(entry.currency) : null,
-          amount: Math.max(0, Number(entry?.amount) || 0),
-          itemId: entry?.itemId ? String(entry.itemId) : null,
-          name: String(entry?.name || `Reward ${idx + 1}`),
-          image: String(entry?.image || "/assets/coin.webp"),
-        }))
-      : [];
-
-    tiers.push({
-      tierId: `trophy-tier-${trophiesRequired}`,
-      trophiesRequired,
-      title: String(
-        source?.title || `Tier ${Math.floor(trophiesRequired / step)}`,
-      ),
-      rewards,
-    });
+  const track = trophyCatalog.rewardTrack;
+  const thresholds = new Set(Object.keys(track.majorMilestones).map(Number));
+  let previous = 0;
+  for (const band of track.spacingBands) {
+    for (let value = previous + band.step; value <= band.through; value += band.step) thresholds.add(value);
+    previous = band.through;
   }
-
-  return tiers;
+  return [...thresholds].filter(n => n > 0 && n <= track.maxTrophies).sort((a, b) => a - b).map((trophiesRequired, index) => {
+    const major = track.majorMilestones[trophiesRequired];
+    const source = major || track.rewardPattern[index % track.rewardPattern.length];
+    const rewards = source.rewards.map(reward => {
+      const growthBand = track.currencyGrowthBands.findLast(band => trophiesRequired >= band.fromTrophies);
+      const amount = reward.kind === "currency"
+        ? (!major ? growthBand?.[reward.currency] ?? reward.amount : reward.amount)
+        : 0;
+      return { ...reward, amount };
+    });
+    return { tierId: `trophy-tier-${trophiesRequired}`, trophiesRequired, title: source.title, rewards };
+  });
 }
 
 function getTrophyTierById(tierId) {

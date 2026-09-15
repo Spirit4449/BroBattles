@@ -109,7 +109,7 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
       if (ids.has(items[i].ticket_id)) items.splice(i, 1);
   }
   async function tick() {
-    if (ticking) return;
+    if (ticking || runtimeConfig?.get?.().maintenanceMode) return;
     ticking = true;
     try {
       const queued = await db.runQuery(
@@ -220,6 +220,8 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
     }
   }
   async function queueJoin(args) {
+    const runtime = runtimeConfig?.get?.();
+    if (runtime?.maintenanceMode) throw Object.assign(new Error("New matches currently disabled for maintenance."), { code: "MAINTENANCE", maintenanceUntil: runtime.maintenanceUntil });
     return queueTicketManager.queueJoin(args);
   }
   async function queueLeave(args) {

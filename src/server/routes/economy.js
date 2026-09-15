@@ -2,6 +2,7 @@ const {
   LEVEL_CAP,
   upgradePrice,
   unlockPrice,
+  getCharacterStats,
 } = require("../../shared/characterStats.js");
 const { unlockProfileIconForUser } = require("../helpers/profileIconOwnership");
 const { selectPartyById, emitRoster } = require("../helpers/party");
@@ -54,6 +55,7 @@ function registerEconomyRoutes({ app, db, auth, io }) {
         const dbCoins = Number(rows[0].coins);
         const dbLevel = rows[0].lvl == null ? 0 : Number(rows[0].lvl);
 
+        if (dbLevel < 1) return { status: 403, body: { error: "Unlock this Bro before upgrading." } };
         if (dbLevel >= LEVEL_CAP) {
           return { status: 409, body: { error: "Level cap reached" } };
         }
@@ -116,6 +118,8 @@ function registerEconomyRoutes({ app, db, auth, io }) {
         return res.status(400).json({ error: "Invalid character key" });
       }
 
+      const trophyUnlock = getCharacterStats(character)?.unlockMethod;
+      if (trophyUnlock?.type === "trophyRoad") return res.status(403).json({ error: `Claim ${character} on Trophy Road at ${trophyUnlock.min.toLocaleString()} trophies.` });
       const price = unlockPrice(character);
       if (price === undefined) {
         return res.status(400).json({ error: "Character cannot be unlocked" });

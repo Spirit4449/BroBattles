@@ -229,10 +229,13 @@ h3 {
 .currency-resource:focus-visible {
   outline: none;
   background: rgba(55, 83, 124, 0.58);
-  box-shadow:
-    inset 0 -2px rgba(122, 169, 229, 0.72),
-    inset 0 2px rgba(255, 255, 255, 0.06);
+  box-shadow: none;
   filter: brightness(1.08);
+}
+
+.currency-resource:focus-visible {
+  outline: 2px solid #9bc7ff;
+  outline-offset: 2px;
 }
 
 .currency-resource:active {
@@ -298,17 +301,23 @@ h3 {
   box-shadow: 0 0 0 2px rgba(9, 15, 30, 0.96);
 }
 
-.trophy-resource.has-claimable {
+.trophy-resource.has-claimable::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 10px rgba(255, 213, 122, 0.74);
   animation: trophyPulseGlow 1.2s ease-in-out infinite;
 }
 
 @keyframes trophyPulseGlow {
   0%,
   100% {
-    filter: drop-shadow(0 0 0 rgba(255, 213, 122, 0));
+    opacity: 0;
   }
   50% {
-    filter: drop-shadow(0 0 10px rgba(255, 213, 122, 0.74));
+    opacity: 1;
   }
 }
 
@@ -1777,23 +1786,9 @@ h3 {
   opacity: 0.78;
 }
 
-.mode-select-badge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 1;
-  border-radius: 999px;
-  padding: 4px 8px;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  color: #fff7d1;
-  background: rgba(122, 92, 22, 0.86);
-  border: 1px solid rgba(255, 230, 149, 0.5);
-}
-
 .mode-select-subtitle {
+  width: 100%;
+  text-align: center;
   margin-top: 8px;
   font-family: "Lato", sans-serif;
   font-size: 13px;
@@ -1807,9 +1802,14 @@ h3 {
 .mode-select-meta {
   margin-top: auto;
   padding-top: 14px;
-  font-family: "Lato", sans-serif;
-  font-size: 12px;
-  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: "Press Start 2P", monospace;
+  font-size: 9px;
+  line-height: 1.6;
+  font-weight: 400;
   letter-spacing: 1.2px;
   text-transform: uppercase;
   color: rgba(157, 195, 249, 0.88);
@@ -3587,7 +3587,7 @@ h3 {
 
 .trophy-lane-card.claimable:hover {
   transform: translateX(-50%) translateY(-4px);
-  filter: brightness(1.08);
+  background: linear-gradient(180deg, #0d1c35, #081329);
 }
 
 .trophy-lane-marker {
@@ -4971,6 +4971,10 @@ h3 {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .trophy-resource.has-claimable::after {
+    animation: none;
+  }
+
   .lobby-hint {
     animation: none !important;
   }
@@ -7402,61 +7406,19 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   margin-bottom: 10px;
 }
 
-.mm-slot-beacon::before,
-.mm-slot-beacon::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-}
-
-.mm-slot-beacon::before {
-  left: 50%;
-  bottom: 7px;
-  width: 2px;
-  height: calc(100% - 12px);
-  background: linear-gradient(180deg, transparent, rgba(80, 218, 255, 0.48));
-  box-shadow: 0 0 14px rgba(64, 205, 255, 0.34);
-  transform: translateX(-50%);
-}
-
-.mm-slot-beacon::after {
-  left: 50%;
-  bottom: 2px;
-  width: 56px;
-  height: 10px;
-  border: 1px solid rgba(123, 228, 255, 0.35);
-  border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(72, 213, 255, 0.2), transparent 68%);
-  transform: translateX(-50%);
-}
-
+/* Three hard-edged pixels tick in sequence above each open slot. */
+.mm-slot-beacon { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .mm-slot-beacon i {
-  position: absolute;
-  z-index: 3;
-  left: 50%;
-  bottom: 11px;
   width: 8px;
   height: 8px;
-  background: linear-gradient(135deg, #e7fbff, #32d8ff 70%);
-  box-shadow:
-    0 0 8px #d9faff,
-    0 0 18px rgba(52, 210, 255, 0.72);
-  transform: translateX(-50%) rotate(45deg);
-  animation: mm-search-shard 1.55s cubic-bezier(0.22, 0.72, 0.24, 1) infinite;
+  background: #b9d7e8;
+  box-shadow: 0 3px 0 #020710;
+  opacity: 0.35;
+  animation: mm-search-pixel 1.2s steps(1, end) infinite;
 }
-
-.mm-slot-beacon i:nth-child(1) {
-  margin-left: -20px;
-  animation-delay: -1.03s;
-}
-
-.mm-slot-beacon i:nth-child(2) {
-  animation-delay: -0.52s;
-}
-
-.mm-slot-beacon i:nth-child(3) {
-  margin-left: 20px;
-}
+.mm-slot-beacon i:nth-child(2) { animation-delay: 0.2s; }
+.mm-slot-beacon i:nth-child(3) { animation-delay: 0.4s; }
+.mm-player.placeholder .mm-player-visual { animation: none; }
 
 .mm-arrival-fx {
   position: absolute;
@@ -7888,21 +7850,9 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   }
 }
 
-@keyframes mm-search-shard {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, 12px) rotate(45deg) scale(0.45);
-  }
-  24% {
-    opacity: 1;
-  }
-  68% {
-    opacity: 0.88;
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -46px) rotate(135deg) scale(0.9);
-  }
+@keyframes mm-search-pixel {
+  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+  20%, 40% { opacity: 1; transform: translateY(-4px); }
 }
 
 @keyframes mm-success-wave {
@@ -8454,3 +8404,46 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
 }
 
 .party-seat-silhouette, .party-seat-silhouette * { animation: none !important; transition: none !important; }
+
+.mode-select-art { position: relative; width: 100%; isolation: isolate; }
+.character-select-popup .mode-select-card.is-trophy-locked {
+  opacity: 1;
+  filter: none;
+  background: #050914;
+  border-color: #30394a;
+}
+.character-select-popup .mode-select-card.is-trophy-locked .mode-select-art > img {
+  filter: grayscale(.9) brightness(.28);
+}
+.character-select-popup .mode-select-card.is-trophy-locked .map-select-name,
+.character-select-popup .mode-select-card.is-trophy-locked .mode-select-subtitle {
+  color: #8792a6;
+}
+.mode-select-lock {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 2;
+  background: url("/assets/locked-chains.svg") center / 100% 100% no-repeat;
+  filter: drop-shadow(0 2px 2px #000);
+  pointer-events: none;
+}
+.character-select-popup .mode-select-grid .mode-select-lock img {
+  width: 44px; height: 44px; margin: 0; object-fit: contain;
+  filter: brightness(1.5) drop-shadow(0 2px 0 #03060b);
+}
+.character-select-popup .mode-select-grid .mode-select-meta img {
+  width: 22px; height: 22px; margin: 0; object-fit: contain; filter: none;
+}
+
+.profile-metric-card[data-profile-metric="coins"],
+.profile-metric-card[data-profile-metric="gems"] { grid-template-rows: 1fr; align-items: center; }
+.profile-metric-card[data-profile-metric="coins"] strong,
+.profile-metric-card[data-profile-metric="gems"] strong { grid-row: 1; align-self: center; }
+
+.character-select-popup .mode-select-art > img {
+  border: 4px solid #000;
+  border-radius: 0;
+  box-sizing: border-box;
+}

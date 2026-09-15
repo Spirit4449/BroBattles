@@ -130,9 +130,8 @@ async function syncProfileIconOwnershipForUser(db, userRow) {
       "SELECT icon_id FROM user_profile_icons WHERE user_id = ?",
       [userId],
     );
-    const ownedSet = new Set(
-      ownedRows.map((row) => String(row.icon_id || "")).filter(Boolean),
-    );
+    const validIds = new Set(catalog.icons.map(icon => icon.id));
+    const ownedSet = new Set(ownedRows.map(row => String(row.icon_id || "")).filter(id => validIds.has(id)));
     if (ownedSet.size === 0 && defaultIconId) {
       await db.runQuery(
         "INSERT IGNORE INTO user_profile_icons (user_id, icon_id, source) VALUES (?, ?, 'default')",

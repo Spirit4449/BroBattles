@@ -1,4 +1,5 @@
 import { sonner } from "./lib/sonner.js";
+import { currencyRewardImage, rewardSound, currencyParticleCount, currencyFlightPlan } from "./lib/rewardPresentation.js";
 import { playSound } from "./lib/uiSounds.js";
 import { showUiConfirm } from "./lib/uiConfirm.js";
 import "./styles/shop.css";
@@ -10,7 +11,7 @@ const SECTION_META = [
     title: "Dailies",
     icon: "/assets/shop/icons/dailies-v2.webp",
   },
-  { id: "skins", title: "Skins", icon: "/assets/shop/icons/skins-v2.webp" },
+  { id: "skins", title: "Skins", icon: "/assets/shop/icons/skins-hanger.svg" },
   {
     id: "profile",
     title: "Profile",
@@ -175,7 +176,7 @@ function getItemIcon(item, grants) {
       ? "/assets/gem.webp"
       : "/assets/coin.webp";
   }
-  if (primary.kind === "skin") return "/assets/shop/icons/skins-v2.webp";
+  if (primary.kind === "skin") return "/assets/shop/icons/skins-hanger.svg";
   if (primary.kind === "card" || primary.kind === "profileIcon")
     return "/assets/shop/icons/profile-v2.webp";
   return "/assets/shop/icons/shop-v2.webp";
@@ -195,8 +196,8 @@ function grantMarkup(grant, index, bundle) {
     <span class="shop-grant shop-grant-${kind}${bundle ? " shop-bundle-item" : ""}" style="--grant-index:${index}">
       <span class="shop-grant-art">
         <span class="shop-grant-halo" aria-hidden="true"></span>
-        ${!bundle && grant.kind === "currency" ? `<img class="shop-grant-echo shop-grant-echo-a" src="${escapeHtml(grant.image)}" alt="" /><img class="shop-grant-echo shop-grant-echo-b" src="${escapeHtml(grant.image)}" alt="" />` : ""}
-        <img class="shop-grant-image" src="${escapeHtml(grant.image)}" alt="${escapeHtml(grant.name)}" />
+
+        <img class="shop-grant-image" src="${escapeHtml(grant.kind === "currency" ? currencyRewardImage(grant.currency, grant.amount) : grant.image)}" alt="${escapeHtml(grant.name)}" />
       </span>
       <span class="shop-grant-copy">
         <strong>${quantity ? `${quantity.toLocaleString()} ` : ""}${escapeHtml(grant.name)}</strong>
@@ -353,8 +354,8 @@ export function initializeShop({
             <img class="shop-title-icon" src="/assets/shop/icons/shop-v2.webp" alt="" /><h1 id="shop-title">Bro Shop</h1>
           </div>
           <div class="shop-header-wallet" aria-label="Your wallet">
-            <span data-shop-wallet-shell="coins"><small>COINS</small><img src="/assets/coin.webp" alt="" /><strong data-shop-wallet="coins">0</strong></span>
-            <span data-shop-wallet-shell="gems"><small>GEMS</small><img src="/assets/gem.webp" alt="" /><strong data-shop-wallet="gems">0</strong></span>
+            <span data-shop-wallet-shell="coins"><img src="/assets/coin.webp" alt="Coins" /><strong data-shop-wallet="coins">0</strong></span>
+            <span data-shop-wallet-shell="gems"><img src="/assets/gem.webp" alt="Gems" /><strong data-shop-wallet="gems">0</strong></span>
           </div>
           <button class="shop-close bb-close pixel-menu-button" type="button" aria-label="Close shop">×</button>
         </header>
@@ -615,7 +616,7 @@ export function initializeShop({
       .then(() => requestAnimationFrame(() => jumpTo(section)))
       .catch((error) => {
         state.scroll.innerHTML =
-          '<div class="shop-load-error"><strong>Shop unavailable.</strong><button type="button" data-sound="cursor4">Try Again</button></div>';
+          '<div class="shop-load-error"><strong>Shop unavailable.</strong><button type="button" class="pixel-menu-button reward-continue" aria-hidden="true" tabindex="-1" data-sound="cursor4">Try Again</button></div>';
         state.scroll
           .querySelector("button")
           ?.addEventListener("click", () => void refresh());
@@ -672,372 +673,7 @@ export function initializeShop({
     }
   }
 
-  function closeReveal() {
-    if (!state.reveal) return;
-    const reveal = state.reveal;
-    state.reveal = null;
-    reveal.classList.add("is-leaving");
-    window.setTimeout(() => reveal.remove(), 260);
-  }
-
-  function readWalletCount(counter) {
-    return (
-      Number(String(counter?.textContent || "0").replace(/[^0-9-]/g, "")) || 0
-    );
-  }
-
-  function writeWalletCount(counter, value) {
-    if (counter) counter.textContent = Math.round(value).toLocaleString();
-  }
-
-  function animateWalletCount(counter, targetValue, duration = 620) {
-    if (!counter) return Promise.resolve();
-    const startValue = readWalletCount(counter);
-    const endValue = Number(targetValue) || 0;
-    if (startValue === endValue) return Promise.resolve();
-    return new Promise((resolve) => {
-      const startedAt = performance.now();
-      const frame = (now) => {
-        const progress = Math.min(1, (now - startedAt) / duration);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        writeWalletCount(counter, startValue + (endValue - startValue) * eased);
-        if (progress < 1) window.requestAnimationFrame(frame);
-        else resolve();
-      };
-      window.requestAnimationFrame(frame);
-    });
-  }
-
-  function burstWalletTarget(
-    target,
-    counter,
-    currency,
-    impactIndex,
-    totalImpacts,
-  ) {
-    const rect = target.getBoundingClientRect();
-    target.animate(
-      [
-        {
-          filter: "brightness(1)",
-          boxShadow: "0 5px 0 #03050a, inset 0 3px rgba(255,255,255,.08)",
-        },
-        {
-          filter: "brightness(1.55)",
-          boxShadow: `0 5px 0 #03050a, 0 0 18px rgba(${currency === "gems" ? "86,216,255" : "255,193,53"},.72), inset 0 3px rgba(255,255,255,.18)`,
-          offset: 0.42,
-        },
-        {
-          filter: "brightness(1)",
-          boxShadow: "0 5px 0 #03050a, inset 0 3px rgba(255,255,255,.08)",
-        },
-      ],
-      { duration: 240, easing: "ease-out" },
-    );
-    counter?.animate(
-      [
-        { opacity: 0.65, filter: "brightness(1)" },
-        { opacity: 1, filter: "brightness(1.75)", offset: 0.48 },
-        { opacity: 1, filter: "brightness(1)" },
-      ],
-      { duration: 190, easing: "ease-out" },
-    );
-    for (let sparkIndex = 0; sparkIndex < 5; sparkIndex += 1) {
-      const angle = (Math.PI * 2 * sparkIndex) / 5 + impactIndex * 0.37;
-      const distance = 22 + (sparkIndex % 2) * 10;
-      const spark = document.createElement("i");
-      spark.className = `shop-wallet-spark shop-wallet-spark-${currency}`;
-      spark.style.left = `${rect.left + rect.width / 2}px`;
-      spark.style.top = `${rect.top + rect.height / 2}px`;
-      document.body.appendChild(spark);
-      spark
-        .animate(
-          [
-            { opacity: 1, transform: "translate(-50%, -50%) scale(1)" },
-            {
-              opacity: 0,
-              transform: `translate(calc(-50% + ${Math.cos(angle) * distance}px), calc(-50% + ${Math.sin(angle) * distance}px)) scale(.2)`,
-            },
-          ],
-          { duration: 320, easing: "cubic-bezier(.12,.72,.25,1)" },
-        )
-        .finished.finally(() => spark.remove());
-    }
-    const pitchRange =
-      totalImpacts > 1 ? impactIndex / (totalImpacts - 1) : 0.5;
-    playSound("shopCurrencyImpact", 0.14, {
-      overlap: true,
-      playbackRate: 0.88 + pitchRange * 0.3 + (currency === "gems" ? 0.08 : 0),
-    });
-  }
-
-  function flyWalletParticle({
-    sourceRect,
-    target,
-    currency,
-    index,
-    count,
-    onImpact,
-  }) {
-    return new Promise((resolve) => {
-      window.setTimeout(() => {
-        const icon = document.createElement("img");
-        icon.className = `shop-flying-currency shop-flying-${currency}`;
-        icon.src =
-          currency === "gems" ? "/assets/gem.webp" : "/assets/coin.webp";
-        icon.alt = "";
-        document.body.appendChild(icon);
-
-        const spread = index - (count - 1) / 2;
-        let x = sourceRect.left + sourceRect.width / 2 + spread * 4;
-        let y = sourceRect.top + sourceRect.height / 2;
-        let vx = spread * 48 + (Math.random() - 0.5) * 85;
-        let vy = -360 - Math.random() * 120;
-        let rotation = spread * 9;
-        let startedAt = null;
-        let previousAt = null;
-
-        const finish = () => {
-          icon.remove();
-          onImpact();
-          resolve();
-        };
-
-        const frame = (now) => {
-          if (!startedAt) {
-            startedAt = now;
-            previousAt = now;
-          }
-          const elapsed = (now - startedAt) / 1000;
-          const dt = Math.min(
-            0.032,
-            Math.max(0.001, (now - previousAt) / 1000),
-          );
-          previousAt = now;
-          const targetRect = target.getBoundingClientRect();
-          const targetX = targetRect.left + targetRect.width / 2;
-          const targetY = targetRect.top + targetRect.height / 2;
-
-          if (elapsed < 0.24) {
-            vy += 1180 * dt;
-          } else {
-            const pull = Math.min(48, 18 + (elapsed - 0.24) * 34);
-            vx += (targetX - x) * pull * dt;
-            vy += (targetY - y) * pull * dt;
-            const drag = Math.exp(-5.2 * dt);
-            vx *= drag;
-            vy *= drag;
-          }
-
-          x += vx * dt;
-          y += vy * dt;
-          rotation += (160 + index * 12) * dt * (index % 2 ? -1 : 1);
-          const distance = Math.hypot(targetX - x, targetY - y);
-          const scale =
-            elapsed < 0.16
-              ? Math.min(1, elapsed / 0.16)
-              : Math.max(0.32, Math.min(1, distance / 85));
-          icon.style.opacity = String(Math.min(1, elapsed / 0.08));
-          icon.style.transform = `translate3d(${x - 16}px, ${y - 16}px, 0) rotate(${rotation}deg) scale(${scale})`;
-
-          if ((elapsed > 0.34 && distance < 17) || elapsed > 1.55) finish();
-          else window.requestAnimationFrame(frame);
-        };
-        window.requestAnimationFrame(frame);
-      }, index * 72);
-    });
-  }
-
-  async function animateWalletDebits(wallet, grantedCurrencies) {
-    if (!wallet) return;
-    const animations = [];
-    for (const currency of ["coins", "gems"]) {
-      if (grantedCurrencies.has(currency)) continue;
-      const counter =
-        state.reveal?.querySelector(`[data-reveal-wallet="${currency}"]`) ||
-        state.overlay?.querySelector(`[data-shop-wallet="${currency}"]`);
-      const targetValue = Number(wallet[currency]) || 0;
-      if (counter && targetValue < readWalletCount(counter)) {
-        animations.push(animateWalletCount(counter, targetValue, 720));
-      }
-    }
-    await Promise.all(animations);
-  }
-
-  async function flyRewardCurrency(grants, reveal, wallet) {
-    const grouped = new Map();
-    for (const grant of grants || []) {
-      if (grant.kind !== "currency") continue;
-      const currency = grant.currency === "gems" ? "gems" : "coins";
-      grouped.set(
-        currency,
-        (grouped.get(currency) || 0) + (Number(grant.amount) || 0),
-      );
-    }
-    const flights = [];
-    for (const [currency, amount] of grouped) {
-      const target =
-        reveal?.querySelector(`[data-reveal-wallet-shell="${currency}"]`) ||
-        state.overlay?.querySelector(`[data-shop-wallet-shell="${currency}"]`);
-      const counter = target?.querySelector(
-        `[data-reveal-wallet="${currency}"], [data-shop-wallet="${currency}"]`,
-      );
-      const source =
-        reveal?.querySelector(`[data-reveal-currency="${currency}"]`) ||
-        reveal?.querySelector(".shop-reveal-grants");
-      if (!target || !counter || !source) continue;
-      const sourceRect = source.getBoundingClientRect();
-      const startValue = readWalletCount(counter);
-      const endValue = Number(wallet?.[currency]) || startValue + amount;
-      const count = Math.min(
-        9,
-        Math.max(5, Math.ceil(Math.log10(amount + 1) * 2)),
-      );
-      let impacts = 0;
-      const onImpact = () => {
-        impacts += 1;
-        const progress = impacts / count;
-        const eased = 1 - Math.pow(1 - progress, 2);
-        writeWalletCount(counter, startValue + (endValue - startValue) * eased);
-        burstWalletTarget(target, counter, currency, impacts - 1, count);
-      };
-      for (let index = 0; index < count; index += 1) {
-        flights.push(
-          flyWalletParticle({
-            sourceRect,
-            target,
-            currency,
-            index,
-            count,
-            onImpact,
-          }),
-        );
-      }
-    }
-    await Promise.all(flights);
-    for (const currency of grouped.keys()) {
-      const finalValue =
-        wallet && Object.hasOwn(wallet, currency)
-          ? Number(wallet[currency]) || 0
-          : readWalletCount(
-              reveal?.querySelector(`[data-reveal-wallet="${currency}"]`),
-            );
-      writeWalletCount(
-        reveal?.querySelector(`[data-reveal-wallet="${currency}"]`) ||
-          state.overlay?.querySelector(`[data-shop-wallet="${currency}"]`),
-        finalValue,
-      );
-    }
-  }
-
-  function revealGrantMarkup(grant, index) {
-    const quantity = grant.kind === "currency" ? Number(grant.amount) || 0 : 0;
-    const currency =
-      grant.kind === "currency"
-        ? grant.currency === "gems"
-          ? "gems"
-          : "coins"
-        : null;
-    return `<div class="shop-reveal-grant shop-reveal-${safeCssToken(grant.kind)}" style="--reveal-index:${index}"${currency ? ` data-reveal-currency="${currency}"` : ""}><span><i></i><img src="${escapeHtml(grant.image)}" alt="${escapeHtml(grant.name)}" /></span><strong>${quantity ? `${quantity.toLocaleString()} ` : ""}${escapeHtml(grant.name)}</strong>${grant.character ? `<small>${escapeHtml(grant.character)}</small>` : ""}</div>`;
-  }
-
-  function getRevealTitle(item, grants, kind) {
-    if (kind === "daily") return "Daily Reward";
-    if (grants.length && grants.every((grant) => grant.kind === "currency"))
-      return "Wallet Updated";
-    if (item?.kind === "bundle") return "Bundle Unlocked";
-    const primaryKind = grants[0]?.kind;
-    if (primaryKind === "skin") return "New Skin";
-    if (primaryKind === "card") return "New Player Card";
-    if (primaryKind === "profileIcon") return "New Profile Icon";
-    return "Purchase Complete";
-  }
-
-  async function showRewardReveal({ result, item, kind, sourceRect }) {
-    closeReveal();
-    const grants = item?.grants || [];
-    const rarity = safeCssToken(item?.rarity || "rare");
-    const heading =
-      kind === "daily"
-        ? "CLAIMED"
-        : item?.price?.type === "money"
-          ? "PURCHASED"
-          : "UNLOCKED";
-    const title = getRevealTitle(item, grants, kind);
-    const startingWallet = {
-      coins: readWalletCount(
-        state.overlay?.querySelector('[data-shop-wallet="coins"]'),
-      ),
-      gems: readWalletCount(
-        state.overlay?.querySelector('[data-shop-wallet="gems"]'),
-      ),
-    };
-    const grantedCurrencies = new Set(
-      grants
-        .filter((grant) => grant.kind === "currency")
-        .map((grant) => (grant.currency === "gems" ? "gems" : "coins")),
-    );
-    const reveal = document.createElement("div");
-    reveal.className = `shop-reward-reveal shop-rarity-${rarity}`;
-    if (sourceRect) {
-      reveal.style.setProperty(
-        "--reveal-origin-x",
-        `${sourceRect.left + sourceRect.width / 2}px`,
-      );
-      reveal.style.setProperty(
-        "--reveal-origin-y",
-        `${sourceRect.top + sourceRect.height / 2}px`,
-      );
-    }
-    reveal.innerHTML = `
-      <div class="shop-reveal-backdrop"></div>
-      <div class="shop-reveal-rays" aria-hidden="true"></div>
-      <div class="shop-reveal-origin" aria-hidden="true"></div>
-      <div class="shop-reveal-wallet" aria-label="Updated wallet">
-        <span data-reveal-wallet-shell="coins"><img src="/assets/coin.webp" alt="" /><small>COINS</small><strong data-reveal-wallet="coins">${startingWallet.coins.toLocaleString()}</strong></span>
-        <span data-reveal-wallet-shell="gems"><img src="/assets/gem.webp" alt="" /><small>GEMS</small><strong data-reveal-wallet="gems">${startingWallet.gems.toLocaleString()}</strong></span>
-      </div>
-      <section class="shop-reveal-panel" role="dialog" aria-modal="true" aria-label="Purchase complete">
-        <header class="shop-reveal-heading"><span class="shop-reveal-kicker">${escapeHtml(heading)}</span><h2>${escapeHtml(title)}</h2></header>
-        <div class="shop-reveal-grants">${grants.map(revealGrantMarkup).join("")}</div>
-        <button type="button" data-sound="cursor4" data-volume="0.28">Done</button>
-      </section>
-      ${Array.from({ length: 8 }, (_, index) => `<i class="shop-reveal-shard" style="--shard:${index}"></i>`).join("")}`;
-    state.overlay.appendChild(reveal);
-    state.reveal = reveal;
-    const continueButton = reveal.querySelector("button");
-    continueButton.disabled = true;
-    let resolveDismissed;
-    const dismissed = new Promise((resolve) => {
-      resolveDismissed = resolve;
-    });
-    const dismiss = () => {
-      if (reveal.dataset.ready !== "1") return;
-      closeReveal();
-      resolveDismissed();
-    };
-    continueButton.addEventListener("click", dismiss);
-    reveal
-      .querySelector(".shop-reveal-backdrop")
-      ?.addEventListener("click", dismiss);
-    playSound("shopReveal", 0.46);
-    const debitAnimation = animateWalletDebits(
-      result?.wallet,
-      grantedCurrencies,
-    );
-    await delay(440);
-    await Promise.all([
-      debitAnimation,
-      flyRewardCurrency(result?.grants || [], reveal, result?.wallet),
-    ]);
-    updateWallet(result?.wallet, true, false);
-    onProfileInvalidate?.();
-    reveal.dataset.ready = "1";
-    continueButton.disabled = false;
-    await Promise.race([delay(1150), dismissed]);
-    closeReveal();
-    await delay(260);
-  }
+  const { closeReveal, showRewardReveal } = createRewardPresentation({ state, updateWallet, onProfileInvalidate });
 
   async function handleSuccess({ result, button, item, kind = "purchase" }) {
     const card = button?.closest?.(".shop-offer");
@@ -1255,4 +891,360 @@ export function initializeShop({
   }
 
   return { open, close, refresh, jumpTo, getFeaturedSale };
+}
+
+// Shared by Shop and Trophy Road so reward motion, audio and wallet impacts stay identical.
+export function createRewardPresentation({ state, updateWallet, onProfileInvalidate, onWalletTick }) {
+  function closeReveal() {
+    if (!state.reveal) return;
+    const reveal = state.reveal;
+    state.reveal = null;
+    reveal.__dismiss?.();
+    reveal.classList.add("is-leaving");
+    window.setTimeout(() => reveal.remove(), 260);
+  }
+
+  function readWalletCount(counter) {
+    return (
+      Number(String(counter?.textContent || "0").replace(/[^0-9-]/g, "")) || 0
+    );
+  }
+
+  function writeWalletCount(counter, value) {
+    if (counter) counter.textContent = Math.round(value).toLocaleString();
+  }
+
+  function animateWalletCount(counter, targetValue, duration = 620) {
+    if (!counter) return Promise.resolve();
+    const startValue = readWalletCount(counter);
+    const endValue = Number(targetValue) || 0;
+    if (startValue === endValue) return Promise.resolve();
+    return new Promise((resolve) => {
+      const startedAt = performance.now();
+      const frame = (now) => {
+        const progress = Math.min(1, (now - startedAt) / duration);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        writeWalletCount(counter, startValue + (endValue - startValue) * eased);
+        if (progress < 1) window.requestAnimationFrame(frame);
+        else resolve();
+      };
+      window.requestAnimationFrame(frame);
+    });
+  }
+
+  function burstWalletTarget(
+    target,
+    counter,
+    currency,
+    impactIndex,
+    totalImpacts,
+  ) {
+    const rect = target.getBoundingClientRect();
+    target.animate(
+      [
+        {
+          filter: "brightness(1)",
+          boxShadow: "0 5px 0 #03050a, inset 0 3px rgba(255,255,255,.08)",
+        },
+        {
+          filter: "brightness(1.55)",
+          boxShadow: `0 5px 0 #03050a, 0 0 18px rgba(${currency === "gems" ? "86,216,255" : "255,193,53"},.72), inset 0 3px rgba(255,255,255,.18)`,
+          offset: 0.42,
+        },
+        {
+          filter: "brightness(1)",
+          boxShadow: "0 5px 0 #03050a, inset 0 3px rgba(255,255,255,.08)",
+        },
+      ],
+      { duration: 240, easing: "ease-out" },
+    );
+    counter?.animate(
+      [
+        { opacity: 0.65, filter: "brightness(1)" },
+        { opacity: 1, filter: "brightness(1.75)", offset: 0.48 },
+        { opacity: 1, filter: "brightness(1)" },
+      ],
+      { duration: 190, easing: "ease-out" },
+    );
+    for (let sparkIndex = 0; sparkIndex < 2; sparkIndex += 1) {
+      const angle = (Math.PI * 2 * sparkIndex) / 2 + impactIndex * 0.37;
+      const distance = 22 + (sparkIndex % 2) * 10;
+      const spark = document.createElement("i");
+      spark.className = `shop-wallet-spark shop-wallet-spark-${currency}`;
+      spark.style.left = `${rect.left + rect.width / 2}px`;
+      spark.style.top = `${rect.top + rect.height / 2}px`;
+      document.body.appendChild(spark);
+      spark
+        .animate(
+          [
+            { opacity: 1, transform: "translate(-50%, -50%) scale(1)" },
+            {
+              opacity: 0,
+              transform: `translate(calc(-50% + ${Math.cos(angle) * distance}px), calc(-50% + ${Math.sin(angle) * distance}px)) scale(.2)`,
+            },
+          ],
+          { duration: 320, easing: "cubic-bezier(.12,.72,.25,1)" },
+        )
+        .finished.finally(() => spark.remove());
+    }
+    const pitchRange =
+      totalImpacts > 1 ? impactIndex / (totalImpacts - 1) : 0.5;
+    playSound(currency === "gems" ? "rewardGemImpact" : "rewardCoinImpact", 0.11, {
+      overlap: true,
+      maxVoices: 8,
+      playbackRate: 0.88 + pitchRange * 0.3 + (currency === "gems" ? 0.08 : 0),
+    });
+  }
+
+  function flyWalletParticle({ sourceRect, targetRect, currency, index, count, onImpact, reveal }) {
+    const icon = document.createElement("img");
+    icon.className = `shop-flying-currency shop-flying-${currency}`;
+    icon.src = currency === "gems" ? "/assets/gem.webp" : "/assets/coin.webp";
+    icon.alt = "";
+    document.body.appendChild(icon);
+    const { keyframes, duration, delay: flightDelay } = currencyFlightPlan({ sourceRect, targetRect, index, count });
+    const animation = icon.animate(keyframes, {
+      duration, delay: flightDelay, easing: "cubic-bezier(.2,.05,.55,1)", fill: "both",
+    });
+    // The compositor owns the flight; no per-frame DOM reads or physics loops.
+    return new Promise(resolve => {
+      const cancel = () => animation.cancel();
+      reveal.addEventListener("reward-dismiss", cancel, { once: true });
+      animation.finished.then(() => { if (reveal.dataset.dismissed !== "1") onImpact(); }, () => {}).finally(() => {
+        reveal.removeEventListener("reward-dismiss", cancel);
+        icon.remove();
+        resolve();
+      });
+    });
+  }
+
+  async function animateWalletDebits(wallet, grantedCurrencies) {
+    if (!wallet) return;
+    const animations = [];
+    for (const currency of ["coins", "gems"]) {
+      if (grantedCurrencies.has(currency)) continue;
+      const counter =
+        state.reveal?.querySelector(`[data-reveal-wallet="${currency}"]`) ||
+        state.overlay?.querySelector(`[data-shop-wallet="${currency}"]`);
+      const targetValue = Number(wallet[currency]) || 0;
+      if (counter && targetValue < readWalletCount(counter)) {
+        animations.push(animateWalletCount(counter, targetValue, 720));
+      }
+    }
+    await Promise.all(animations);
+  }
+
+  async function flyRewardCurrency(grants, reveal, wallet) {
+    const grouped = new Map();
+    for (const grant of grants || []) {
+      if (grant.kind !== "currency") continue;
+      const currency = grant.currency === "gems" ? "gems" : "coins";
+      grouped.set(
+        currency,
+        (grouped.get(currency) || 0) + (Number(grant.amount) || 0),
+      );
+    }
+    const flights = [];
+    for (const [currency, amount] of grouped) {
+      const target =
+        reveal?.querySelector(`[data-reveal-wallet-shell="${currency}"]`) ||
+        state.overlay?.querySelector(`[data-shop-wallet-shell="${currency}"]`);
+      const counter = target?.querySelector(
+        `[data-reveal-wallet="${currency}"], [data-shop-wallet="${currency}"]`,
+      );
+      const source =
+        reveal?.querySelector(`[data-reveal-currency="${currency}"]`) ||
+        reveal?.querySelector(".shop-reveal-grants");
+      if (!target || !counter || !source) continue;
+      const sourceRect = (source.querySelector(".shop-reveal-art") || source).getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const startValue = readWalletCount(counter);
+      const endValue = Number(wallet?.[currency]) || startValue + amount;
+      const count = currencyParticleCount(currency, amount);
+      let impacts = 0;
+      const onImpact = () => {
+        impacts += 1;
+        const progress = impacts / count;
+        const eased = 1 - Math.pow(1 - progress, 2);
+        writeWalletCount(counter, startValue + (endValue - startValue) * eased);
+        onWalletTick?.(currency, readWalletCount(counter));
+        burstWalletTarget(target, counter, currency, impacts - 1, count);
+      };
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+        writeWalletCount(counter, endValue);
+        onWalletTick?.(currency, endValue);
+        continue;
+      }
+      for (let index = 0; index < count; index += 1) {
+        flights.push(
+          flyWalletParticle({
+            sourceRect,
+            targetRect,
+            reveal,
+            currency,
+            index,
+            count,
+            onImpact,
+          }),
+        );
+      }
+    }
+    await Promise.all(flights);
+    for (const currency of grouped.keys()) {
+      const finalValue =
+        wallet && Object.hasOwn(wallet, currency)
+          ? Number(wallet[currency]) || 0
+          : readWalletCount(
+              reveal?.querySelector(`[data-reveal-wallet="${currency}"]`),
+            );
+      writeWalletCount(
+        reveal?.querySelector(`[data-reveal-wallet="${currency}"]`) ||
+          state.overlay?.querySelector(`[data-shop-wallet="${currency}"]`),
+        finalValue,
+      );
+    }
+  }
+
+  function revealGrantMarkup(grant, index) {
+    const currency = grant.kind === "currency" ? (grant.currency === "gems" ? "gems" : "coins") : null;
+    return `<div class="shop-reveal-grant shop-reveal-${safeCssToken(grant.kind)}" data-character="${escapeHtml(grant.character || "")}" style="--reveal-index:${index}"${currency ? ` data-reveal-currency="${currency}"` : ""}>
+      <span class="shop-reveal-art"><img src="${escapeHtml(grant.kind === "currency" ? currencyRewardImage(grant.currency, grant.amount) : grant.image)}" alt="${escapeHtml(grant.name)}" /></span>
+      ${currency ? `<strong class="shop-reveal-currency-amount">+${(Number(grant.amount) || 0).toLocaleString()} ${currency === "gems" ? "Gems" : "Coins"}</strong>` : ""}
+    </div>`;
+  }
+
+  function rewardTypeLabel(grant) {
+    if (grant?.kind === "currency") return "Currency";
+    if (grant?.kind === "skin") return `${grant.character || "Bro"} Skin`;
+    return ({ card: "Player Card", profileIcon: "Player Icon", character: "New Bro", mode: "Game Mode" }[grant?.kind] || "Reward");
+  }
+
+  function getRevealHeading(item, grants) {
+    if (grants.length !== 1) {
+      return { name: item?.name || "Reward Bundle", type: "Reward Bundle" };
+    }
+    const grant = grants[0];
+    const quantity = grant.kind === "currency" ? Number(grant.amount) || 0 : 0;
+    const fallbackName = grant.kind === "currency" ? (grant.currency === "gems" ? "Gems" : "Coins") : "Reward";
+    return {
+      name: `${quantity ? `+${quantity.toLocaleString()} ` : ""}${grant.name || item?.name || fallbackName}`,
+      type: rewardTypeLabel(grant),
+    };
+  }
+
+  async function showRewardReveal({ result, item, kind, sourceRect, startingWallet: walletBefore }) {
+    closeReveal();
+    const grants = item?.grants || [];
+    const rarity = safeCssToken(item?.rarity || "rare");
+    const collectibles = grants.filter(grant => grant.kind !== "currency");
+    const currencies = grants.filter(grant => grant.kind === "currency");
+    // Center the Bro or skin. The icon and full-height player card flank it.
+    const priority = { profileIcon: 0, character: 1, skin: 1, mode: 1, card: 2 };
+    collectibles.sort((a, b) => (priority[a.kind] ?? 1) - (priority[b.kind] ?? 1));
+    const heading = getRevealHeading(item, grants);
+    const startingWallet = walletBefore || {
+      coins: readWalletCount(
+        state.overlay?.querySelector('[data-shop-wallet="coins"]'),
+      ),
+      gems: readWalletCount(
+        state.overlay?.querySelector('[data-shop-wallet="gems"]'),
+      ),
+    };
+    const grantedCurrencies = new Set(
+      grants
+        .filter((grant) => grant.kind === "currency")
+        .map((grant) => (grant.currency === "gems" ? "gems" : "coins")),
+    );
+    const reveal = document.createElement("div");
+    reveal.className = `shop-reward-reveal reward-showcase shop-rarity-${rarity}${collectibles.length ? " has-collectibles" : " currency-only"}${kind === "trophy" ? " trophy-reward-reveal" : ""}`;
+    reveal.style.setProperty("--rarity-rgb", rarity === "legendary" ? "255, 197, 61" : rarity === "epic" ? "181, 110, 255" : "63, 158, 239");
+    const previousFocus = document.activeElement;
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (sourceRect) {
+      reveal.style.setProperty(
+        "--reveal-origin-x",
+        `${sourceRect.left + sourceRect.width / 2}px`,
+      );
+      reveal.style.setProperty(
+        "--reveal-origin-y",
+        `${sourceRect.top + sourceRect.height / 2}px`,
+      );
+    }
+    reveal.innerHTML = `
+      <div class="shop-reveal-backdrop"></div>
+      <div class="shop-reveal-rays" aria-hidden="true"></div>
+      <div class="shop-reveal-origin" aria-hidden="true"></div>
+      <div class="shop-reveal-wallet" aria-label="Updated wallet">
+        <span data-reveal-wallet-shell="coins"><img src="/assets/coin.webp" alt="Coins" /><strong data-reveal-wallet="coins">${startingWallet.coins.toLocaleString()}</strong></span>
+        <span data-reveal-wallet-shell="gems"><img src="/assets/gem.webp" alt="Gems" /><strong data-reveal-wallet="gems">${startingWallet.gems.toLocaleString()}</strong></span>
+      </div>
+      <section class="shop-reveal-panel" role="dialog" aria-modal="true" aria-label="${escapeHtml(heading.name)}" tabindex="-1">
+        <header class="shop-reveal-heading"><h2>${escapeHtml(heading.name)}</h2><p class="shop-reveal-subheader">${escapeHtml(heading.type)}</p></header>
+        <div class="shop-reveal-grants">
+          ${collectibles.length ? `<div class="shop-reveal-collectibles" style="--reward-columns:${Math.min(3, collectibles.length)}">${collectibles.map(revealGrantMarkup).join("")}</div>` : ""}
+          ${currencies.length ? `<div class="shop-reveal-currencies">${currencies.map((grant, index) => revealGrantMarkup(grant, collectibles.length + index)).join("")}</div>` : ""}
+        </div>
+        <button type="button" class="pixel-menu-button reward-continue" aria-hidden="true" tabindex="-1" data-sound="cursor4" data-volume="0.28">Done</button>
+      </section>
+      ${Array.from({ length: 8 }, (_, index) => `<i class="shop-reveal-shard" style="--shard:${index}"></i>`).join("")}`;
+    state.overlay.appendChild(reveal);
+    state.reveal = reveal;
+    const continueButton = reveal.querySelector("button");
+    continueButton.style.visibility = "hidden";
+    reveal.querySelector("[role=dialog]").focus();
+    let resolveDismissed;
+    const dismissed = new Promise((resolve) => {
+      resolveDismissed = resolve;
+    });
+    const dismiss = () => {
+      closeReveal();
+      resolveDismissed();
+    };
+    reveal.__dismiss = () => {
+      reveal.dataset.dismissed = "1";
+      reveal.dispatchEvent(new Event("reward-dismiss"));
+      reveal.querySelectorAll("[data-reveal-wallet]").forEach(node => writeWalletCount(node, result?.wallet?.[node.dataset.revealWallet]));
+      updateWallet(result?.wallet, true, false);
+      resolveDismissed();
+    };
+    continueButton.addEventListener("click", dismiss);
+    reveal
+      .querySelector(".shop-reveal-backdrop")
+      ?.addEventListener("click", dismiss);
+    const handleKey = (event) => {
+      if (event.key === "Escape" || event.key === "Tab") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.key === "Escape") dismiss();
+        else (reveal.dataset.ready !== "1" ? reveal.querySelector("[role=dialog]") : continueButton).focus();
+      }
+    };
+    window.addEventListener("keydown", handleKey, true);
+    try {
+      playSound(rewardSound(grants, rarity), 0.46);
+      const debitAnimation = reducedMotion ? Promise.resolve() : animateWalletDebits(result?.wallet, grantedCurrencies);
+      await Promise.race([delay(reducedMotion ? 0 : Math.max(420, 220 + grants.length * 75)), dismissed]);
+      if (reveal.dataset.dismissed !== "1") await Promise.all([debitAnimation, flyRewardCurrency(result?.grants || [], reveal, result?.wallet)]);
+      updateWallet(result?.wallet, true, false);
+      onProfileInvalidate?.();
+      reveal.dataset.ready = "1";
+      continueButton.style.visibility = "";
+      continueButton.removeAttribute("aria-hidden");
+      continueButton.removeAttribute("tabindex");
+      if (reveal.dataset.dismissed !== "1") continueButton.focus();
+      await dismissed;
+    } finally {
+      window.removeEventListener("keydown", handleKey, true);
+      // An interrupted reveal must never leave the confirmed wallet stale.
+      updateWallet(result?.wallet, true, false);
+      if (state.reveal === reveal) closeReveal();
+      if (previousFocus?.isConnected) {
+        const focusTarget = previousFocus.disabled ? previousFocus.closest('[tabindex="0"]') : previousFocus;
+        focusTarget?.focus();
+      }
+    }
+    await delay(reducedMotion ? 0 : 260);
+  }
+
+  return { closeReveal, showRewardReveal };
 }

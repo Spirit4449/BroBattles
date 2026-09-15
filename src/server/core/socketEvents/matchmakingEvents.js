@@ -131,6 +131,7 @@ function registerMatchmakingEvents(
       console.warn("queue:join error:", e?.message);
       socket.emit("queue:error", {
         message: e?.message || "queue join failed",
+        code: e?.code, maintenanceUntil: e?.maintenanceUntil,
       });
     }
   });

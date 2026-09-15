@@ -263,7 +263,12 @@ export function createGameOverScreenController({
     const starts = {};
     for (const type of Object.keys(REWARD_TYPES)) {
       const amount = readRewardAmount(myReward, type);
-      starts[type] = Math.max(0, wallet[type] - amount);
+      // A trophy loss should be shown as the final balance, not flown into the
+      // wallet like a reward.
+      starts[type] =
+        type === "trophies" && amount < 0
+          ? wallet[type]
+          : Math.max(0, wallet[type] - amount);
       writeWalletCount(
         walletPanel.querySelector(`[data-game-over-wallet="${type}"]`),
         starts[type],
@@ -293,7 +298,10 @@ export function createGameOverScreenController({
         const counter = target?.querySelector(
           `[data-game-over-wallet="${type}"]`,
         );
-        if (!source || !target || !counter || amount === 0) return;
+        const isTrophyLoss = type === "trophies" && amount < 0;
+        if (!source || !target || !counter || amount === 0 || isTrophyLoss) {
+          return;
+        }
 
         source.classList.add("is-collecting");
         const sourceRect = source.getBoundingClientRect();

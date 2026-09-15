@@ -112,7 +112,7 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
       }
 
       const userRows = await db.runQuery(
-        "SELECT user_id, name, coins, gems, COALESCE(trophies, 0) AS trophies FROM users WHERE user_id = ? LIMIT 1",
+        "SELECT user_id, name, char_levels, coins, gems, trophy_peak, COALESCE(trophies, 0) AS trophies FROM users WHERE user_id = ? LIMIT 1",
         [user.user_id],
       );
       const userRow = userRows[0];
@@ -127,7 +127,7 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
       let availableClaimCount = 0;
       const tiers = buildTrophyRewardTrack().map((tier) => {
         const claimed = claimedTierIds.has(tier.tierId);
-        const unlocked = trophies >= tier.trophiesRequired;
+        const unlocked = Math.max(trophies, Number(userRow.trophy_peak) || 0) >= tier.trophiesRequired;
         if (unlocked && !claimed) availableClaimCount += 1;
         return {
           ...tier,
@@ -147,6 +147,8 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
           userId: Number(userRow.user_id),
           username: String(userRow.name || ""),
           trophies,
+          trophyPeak: Math.max(trophies, Number(userRow.trophy_peak) || 0),
+          char_levels: typeof userRow.char_levels === "string" ? JSON.parse(userRow.char_levels) : userRow.char_levels,
           coins: Number(userRow.coins) || 0,
           gems: Number(userRow.gems) || 0,
         },
@@ -188,14 +190,14 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
       const { reward, userSnapshot } = await db.withTransaction(
         async (_conn, q) => {
           const rows = await q(
-            "SELECT user_id, COALESCE(trophies, 0) AS trophies FROM users WHERE user_id = ? LIMIT 1",
+            "SELECT user_id, char_levels, trophy_peak, COALESCE(trophies, 0) AS trophies FROM users WHERE user_id = ? FOR UPDATE",
             [user.user_id],
           );
           const row = rows[0];
           if (!row) throw new Error("User not found");
 
           const trophies = Number(row.trophies) || 0;
-          if (trophies < Number(tier.trophiesRequired || 0)) {
+          if (Math.max(trophies, Number(row.trophy_peak) || 0) < Number(tier.trophiesRequired || 0)) {
             const err = new Error("Tier not unlocked yet");
             err.httpStatus = 400;
             throw err;
@@ -211,6 +213,7 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
             throw err;
           }
 
+          await require("../../helpers/trophyRewardGrants").grantTrophyItems(q, user.user_id, tier.rewards);
           const reward = summarizeCurrencyRewards(tier.rewards);
           if (reward.coins > 0 || reward.gems > 0) {
             await q(
@@ -220,7 +223,7 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
           }
 
           const refreshedRows = await q(
-            "SELECT COALESCE(trophies, 0) AS trophies, coins, gems FROM users WHERE user_id = ? LIMIT 1",
+            "SELECT COALESCE(trophies, 0) AS trophies, trophy_peak, char_levels, coins, gems FROM users WHERE user_id = ? LIMIT 1",
             [user.user_id],
           );
 
@@ -239,8 +242,11 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
         success: true,
         tier,
         reward,
+        grants: tier.rewards,
         player: {
           trophies: Number(userSnapshot.trophies) || 0,
+          trophyPeak: Number(userSnapshot.trophy_peak) || 0,
+          char_levels: typeof userSnapshot.char_levels === "string" ? JSON.parse(userSnapshot.char_levels) : userSnapshot.char_levels,
           coins: Number(userSnapshot.coins) || 0,
           gems: Number(userSnapshot.gems) || 0,
         },

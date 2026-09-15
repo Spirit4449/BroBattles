@@ -367,3 +367,73 @@ button.secondary {
     flex-direction: column;
   }
 }
+
+/* Keep the admin workspace independent from global game-button sizing. */
+body.admin-page .admin-shell *, body.admin-page .admin-shell *::before, body.admin-page .admin-shell *::after { box-sizing: border-box; }
+body.admin-page .admin-shell [hidden] { display: none !important; }
+body.admin-page .admin-shell { max-width: 1320px; }
+body.admin-page .admin-shell .panels { display: contents; }
+body.admin-page .admin-shell > .panel, body.admin-page .admin-shell .panels > .panel { margin-bottom: 24px; }
+#adminNav { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
+body.admin-page .admin-shell button { font-family: var(--bb-font-body, "Lato", sans-serif); font-size: 14px; line-height: 1.4; min-height: 40px; margin: 0; text-transform: none; letter-spacing: normal; }
+#adminNav button { background: #14233b; border: 1px solid #385478; box-shadow: none; padding: 10px 18px; }
+#adminNav button[aria-pressed="true"] { background: #2867c4; border-color: #8bc9ff; }
+body.admin-page .admin-shell input:not([type="checkbox"]), body.admin-page .admin-shell select, body.admin-page .admin-shell textarea { box-sizing: border-box; min-height: 44px; width: 100%; font: inherit; margin: 6px 0 16px; padding: 10px 12px; }
+body.admin-page .admin-shell input[type="checkbox"] { width: 20px; height: 20px; margin: 0; flex: 0 0 20px; }
+body.admin-page .admin-shell .maintenance-field { display: flex; align-items: center; gap: 12px; margin: 16px 0 24px; }
+body.admin-page .admin-shell .flex-row > div { min-width: 0; }
+#userSearchForm { align-items: end; margin: 16px 0; }
+#userSearchForm > div:last-child { flex: 0 0 auto; align-self: auto !important; padding-bottom: 16px; }
+#playerResults { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+body.admin-page .admin-shell .player-result { display: grid; gap: 5px; text-align: left; padding: 14px; background: #101f35; border: 1px solid #385478; box-shadow: none; overflow-wrap: anywhere; }
+.player-result span, .player-result small, body.admin-page .admin-shell .muted { color: #a9b9cf; }
+#playerPager { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 0 24px; }
+#userEditForm { border-top: 1px solid #385478; padding-top: 16px; }
+#userName { overflow-wrap: anywhere; }
+.player-detail { border: 1px solid #385478; background: #0b1629; margin-top: 12px; padding: 14px; }
+.player-detail summary { cursor: pointer; font-weight: 700; padding: 3px; overflow-wrap: anywhere; }
+.player-detail dl { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr; gap: 12px; font-size: 14px; }
+.player-detail dt { color: #a9b9cf; text-transform: capitalize; }
+.player-detail dd { margin: 0; overflow-wrap: anywhere; }
+body.admin-page .admin-shell .player-link { padding: 0; background: transparent; color: #91caff; border: 0; box-shadow: none; text-align: left; }
+body.admin-page .admin-shell .recent-list li { gap: 20px; align-items: center; overflow-wrap: anywhere; }
+body.admin-page .admin-shell .recent-list li > span { text-align: right; color: #a9b9cf; }
+body.admin-page .admin-shell .site-filter { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; padding: 16px 0; border: 0; background: none; }
+body.admin-page .admin-shell .site-filter > label { flex: 1; min-width: 160px; display: grid; gap: 10px; }
+body.admin-page .admin-shell .site-request { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; width: 100%; text-align: left; padding: 18px; margin-bottom: 12px; min-height: auto; background: #14233b; border: 1px solid #385478; box-shadow: none; }
+body.admin-page .admin-shell .site-request strong { grid-column: 1; grid-row: 1; font-size: 16px; overflow-wrap: anywhere; }
+body.admin-page .admin-shell .site-request small { grid-column: 1 / -1; color: #a9b9cf; }
+body.admin-page .admin-shell .site-ticket-status { grid-column: 2; grid-row: 1; position: static; font-size: 12px; }
+body.admin-page .admin-shell .site-inbox { min-height: 0 !important; }
+body.admin-page .admin-shell button:disabled { opacity: .5; cursor: not-allowed; }
+body.admin-page .admin-shell :focus-visible { outline: 2px solid #8bc9ff; outline-offset: 4px; }
+#toast { z-index: 1000; max-width: calc(100vw - 48px); }
+@media(max-width: 680px) {
+  #statsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .stat-card { padding: 12px; } .stat-card span { font-size: 11px; }
+  body.admin-page .admin-shell .panel { padding: 18px 14px; }
+  #playerResults { grid-template-columns: 1fr; }
+  #userSearchForm > div:last-child { align-self: stretch !important; }
+  body.admin-page .admin-shell .recent-list li { align-items: start; flex-direction: column; gap: 5px; }
+  body.admin-page .admin-shell .recent-list li > span { text-align: left; }
+  .player-detail dl { grid-template-columns: 1fr; gap: 6px; }
+  .player-detail dd { margin-bottom: 8px; }
+}
+
+.level-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 16px; }
+#userEditor > button { margin-top: 16px; }
+body.admin-page .site-nav-group > button { padding: 5px; background: transparent; box-shadow: none; min-height: 30px; }
+
+#playerBrowser > summary { margin-bottom: 12px; }
+@media (min-width: 681px) and (max-width: 950px) { #statsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+#playerNav { display: flex; gap: 8px; border-bottom: 1px solid #385478; padding-bottom: 12px; margin-bottom: 24px; }
+body.admin-page #playerNav button { background: transparent; border: 1px solid #385478; box-shadow: none; }
+body.admin-page #playerNav button[aria-pressed="true"] { background: #2867c4; border-color: #8bc9ff; }
+.player-heading { padding: 24px 0 8px; }
+.player-heading h3 { font-size: 26px; margin: 8px 0; }
+#playerWorkspace { max-width: 850px; margin: 20px auto 0; }
+#playerWorkspace #userEditForm { border-top: 0; padding-top: 0; }
+#playerResults { grid-template-columns: 1fr; }
+body.admin-page .admin-shell .player-result { grid-template-columns: 1fr 1fr; align-items: center; padding: 14px 18px; }
+.player-result small { grid-column: 1 / -1; }
+@media(max-width:620px) { body.admin-page .admin-shell .player-result { grid-template-columns: 1fr; } #playerNav { flex-wrap: wrap; } }

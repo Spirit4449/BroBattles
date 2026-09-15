@@ -1,0 +1,11 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs'); const os=require('node:os');const path=require('node:path');
+const {createRuntimeConfig}=require('../src/server/helpers/runtimeConfig');
+const {createMatchmaking}=require('../src/server/core/matchmaking');
+test('maintenance rejects new queues before any database writes',async()=>{const mm=createMatchmaking({io:{},db:{runQuery(){throw Error('Database must not be touched')}},runtimeConfig:{get:()=>({maintenanceMode:true})}});await assert.rejects(mm.queueJoin({userId:1}),/New matches currently disabled for maintenance/);});
+test('runtime controls persist across restarts',()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'admin-runtime-'));try{const config=createRuntimeConfig({rootDir:dir});config.update({maintenanceUntil:new Date(Date.now()+60000).toISOString(),announcements:'Back soon'});assert.equal(config.get().maintenanceMode,true);assert.equal(createRuntimeConfig({rootDir:dir}).get().announcements,'Back soon');config.update({maintenanceUntil:null,announcements:''});assert.equal(createRuntimeConfig({rootDir:dir}).get().maintenanceMode,false);}finally{fs.rmSync(dir,{recursive:true,force:true});}});
+test('failed persistence leaves active config unchanged',()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'admin-runtime-'));const config=createRuntimeConfig({rootDir:dir});fs.rmSync(dir,{recursive:true});assert.throws(()=>config.update({maintenanceMode:true}));assert.equal(config.get().maintenanceMode,false);});
+
+test('maintenance expires by time without a config write or restart',()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'admin-runtime-'));try{const config=createRuntimeConfig({rootDir:dir});config.update({maintenanceUntil:new Date(Date.now()-1).toISOString(),maintenanceMode:true});assert.equal(config.get().maintenanceMode,false);}finally{fs.rmSync(dir,{recursive:true,force:true});}});
+test('countdown handles hours, expiry, and missing times',()=>{const {maintenanceClock}=require('../src/shared/maintenance');assert.equal(maintenanceClock(new Date(3661000).toISOString(),0),'01:01:01');assert.equal(maintenanceClock(null,0),'00:00:00');assert.equal(maintenanceClock(new Date(0).toISOString(),1000),'00:00:00');});

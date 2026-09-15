@@ -8,6 +8,7 @@ import {
   createLobbyHintController,
   getRecentModeStreak,
 } from "./lobby/lobbyHintController.mjs";
+import { setSelectionProgressionUser } from './lib/gameSelectionCatalog';
 import { registerMapCatalog } from './lib/gameSelectionCatalog';
 import { registerMapMetadata } from './maps/manifest';
 import { sonner } from "./lib/sonner.js";
@@ -15,6 +16,7 @@ import { ensurePartyPixelFrame, checkIfInParty, createParty, leaveParty, socketI
 import socket, { ensureSocketConnected, waitForConnect } from "./socket.js";
 import {
   initializeCharacterSelect,
+  refreshCharacterRewards,
   openCharacterSelect,
 } from "./lobby/characterSelectController.js";
 import { getLobbyBgAsset } from "./maps/manifest";
@@ -61,9 +63,13 @@ const lobbyChatController = createLobbyChatController({
 });
 
 let userData = null;
+setSelectionProgressionUser(() => userData);
 const profileController = createProfileController({ getUserData: () => userData });
 const { initProfilePopup } = profileController;
-const trophyController = createTrophyController({ getUserData: () => userData });
+const trophyController = createTrophyController({ getUserData: () => userData, onRewardsClaimed: () => {
+  profileController.invalidate();
+  void refreshCharacterRewards().catch(() => {});
+} });
 const { openTrophyProgressionOverlay, refreshTrophyClaimAvailability, scrollTrophyTrack, updateTrophyTrackControls } = trophyController;
 let guest = false;
 let newGuestCreated = false;
@@ -129,11 +135,14 @@ function ensurePartySlotMenu() {
     if (menu.contains(event.target)) return;
     menu.hidden = true;
   });
-  menu.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !menu.hidden) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
       menu.hidden = true;
-      return;
     }
+  }, true);
+  menu.addEventListener("keydown", (event) => {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     const actions = Array.from(
       menu.querySelectorAll('.profile-slot-menu-btn:not([hidden])'),
@@ -201,8 +210,14 @@ function openPartySlotMenu(slot, anchorEvent, profilePopup) {
   const viewBtn = menu.querySelector('[data-action="view"]');
   const title = menu.querySelector("#party-slot-menu-name");
   if (title) {
-    title.textContent =
-      playerName === party.ownerName ? `${playerName} 👑` : playerName;
+    title.textContent = playerName;
+    if (playerName === party.ownerName) {
+      const crown = document.createElement("img");
+      crown.src = "/assets/crown.webp";
+      crown.alt = "Party owner";
+      crown.className = "profile-slot-menu-crown";
+      title.appendChild(crown);
+    }
   }
   if (viewBtn) {
     viewBtn.hidden = false;
@@ -288,13 +303,18 @@ function animatePostMatchRewardsIfPresent(
   const trophiesFrom = Math.max(0, Number(trophiesNow) - trophiesDelta);
   coinEl.textContent = String(coinsFrom);
   gemEl.textContent = String(gemsFrom);
-  trophyEl.textContent = String(trophiesFrom);
+  // Trophy losses are already reflected in the lobby balance; do not replay
+  // them as a reward animation after a battle.
+  trophyEl.textContent = String(trophiesDelta < 0 ? trophiesNow : trophiesFrom);
   animateNumber(coinEl, coinsFrom, Number(coinsNow), 1600);
   animateNumber(gemEl, gemsFrom, Number(gemsNow), 1600);
-  animateNumber(trophyEl, trophiesFrom, Number(trophiesNow), 1600);
+  if (trophiesDelta >= 0) {
+    animateNumber(trophyEl, trophiesFrom, Number(trophiesNow), 1600);
+  }
 }
 
 function closeTransientLobbyUiOnEscape() {
+  if (document.querySelector(".shop-reward-reveal:not(.is-leaving)")) return false;
   const loadoutOverlay = document.getElementById("profile-loadout-overlay");
   if (loadoutOverlay && !loadoutOverlay.classList.contains("hidden")) {
     loadoutOverlay.classList.add("hidden");

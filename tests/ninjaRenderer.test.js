@@ -2,11 +2,13 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {EventEmitter}=require('node:events');
 const model=require('../src/shared/ninjaProjectile'),clock=require('../src/shared/huntressReplication');
 const code=babel.transformSync(fs.readFileSync(require.resolve('../src/characters/ninja/network'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code;
+const projectileTexture={};
+vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/characters/ninja/projectileTexture'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:projectileTexture});
 function setup(initial={}){
   let now=0;const api={},images=[],sounds=[],ammo=[];
-  vm.runInNewContext(code,{exports:api,require:name=>name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('huntressReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:{connected:false},
+  vm.runInNewContext(code,{exports:api,require:name=>name==='./projectileTexture'?projectileTexture:name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('huntressReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:{connected:false},
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){}});
-  const sprite=(x,y)=>{const s={x,y,active:true,setPosition(x,y){this.x=x;this.y=y;return this;},setScale(){return this;},setDepth(){return this;},setTint(){return this;},setVisible(v){this.visible=v;},setRotation(){},destroy(){this.active=false;}};images.push(s);return s;};
+  const sprite=(x,y,texture)=>{const s={x,y,texture,active:true,setPosition(x,y){this.x=x;this.y=y;return this;},setScale(){return this;},setDepth(){return this;},setTint(){return this;},setVisible(v){this.visible=v;},setRotation(){},destroy(){this.active=false;}};images.push(s);return s;};
   const scene={events:new EventEmitter(),add:{image:sprite},tweens:{add(){}},sound:{play:key=>sounds.push(key)}};
   const owner={active:true,x:100,y:200,flipX:false};
   api.configureNinjaNetwork({ninjaCombatVersion:1,epoch:'room',sentMono:0,simMono:0,colliders:[],active:[],terminals:[],...initial});
@@ -54,4 +56,29 @@ test('server return correction revives a provisionally caught visual until termi
   f.packet({type:'ninja-state',id:q.id,state:{x:400,y:200,phase:'return',elapsed:100,currentReturnSpeed:100}});f.frame(40);
   assert.equal(f.images[0].visible,true);
   f.packet({type:'ninja-terminal',id:q.id});assert.equal(f.images[0].active,false);f.api.resetNinjaNetwork();
+});
+
+test('king basic, swarm and trails use crown; default and missing skin assets fall back',()=>{
+  const key='ninja__ninja-arena-sovereign-weapon';
+  for(const special of [false,true]){
+    const f=setup();f.owner._bbSkinTextureKey='ninja__ninja-arena-sovereign';
+    f.scene.textures={exists:k=>k===key};
+    f.api.predictNinja(f.scene,f.owner,'owner',{id:'crown',angle:0,aim:{angle:0}},special);
+    f.frame(0);f.frame(100);
+    assert.ok(f.images.length>1);
+    assert.ok(f.images.every(image=>image.texture===key));
+    f.api.resetNinjaNetwork();
+  }
+  assert.equal(projectileTexture.ninjaProjectileTexture({textures:{exists:()=>false}},{_bbSkinTextureKey:'ninja__ninja-arena-sovereign'}),'shuriken');
+  assert.equal(projectileTexture.ninjaProjectileTexture({textures:{exists:k=>k===key}},{texture:{key:'ninja'}}),'shuriken');
+});
+test('authoritative crown launch resolves remote owner skin',()=>{
+  const f=setup(),key='ninja__ninja-arena-sovereign-weapon';
+  f.scene.textures={exists:k=>k===key};
+  const remote={x:200,y:200,_bbSkinTextureKey:'ninja__ninja-arena-sovereign'};
+  f.api.attachNinjaScene(f.scene,{opponentPlayersRef:{king:{opponent:remote}}});
+  const q=model.launch(remote,0,'king:shot:0');q.ownerName='king';
+  f.packet({type:'ninja-launch',projectile:q});f.frame(100);
+  assert.ok(f.images.length>0);assert.ok(f.images.every(image=>image.texture===key));
+  f.api.resetNinjaNetwork();
 });

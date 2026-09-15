@@ -1,3 +1,4 @@
+import ICONS from "../shared/profileIconsCatalog.json";
 import { buildCharacterSkinBodyUrl } from "./skinAssets.js";
 
 function normalizeProfileIconId(iconId) {
@@ -12,7 +13,7 @@ function normalizeProfileIconId(iconId) {
 export function buildProfileIconUrl(profileIconId, charClass = "ninja") {
   const iconId = normalizeProfileIconId(profileIconId);
   if (iconId) {
-    return `/assets/profile-icons/${iconId}.webp`;
+    return ICONS.icons.find(icon => icon.id === iconId)?.assetUrl || "/assets/profile-icons/ninja.webp";
   }
   const fallbackClass = String(charClass || "ninja")
     .trim()
@@ -25,3 +26,12 @@ export function buildProfileIconAlt(profileIconId, charClass = "ninja") {
   if (iconId) return iconId;
   return String(charClass || "ninja");
 }
+
+// Numeric milestone artwork is supplied separately. Use an honest trophy fallback
+// until those files arrive; the catalog URLs work immediately once supplied.
+if (typeof document !== "undefined") document.addEventListener("error", event => {
+  const img = event.target;
+  if (img?.tagName !== "IMG") return;
+  const icon = ICONS.icons.find(icon => icon.fallbackAssetUrl && img.getAttribute("src") === icon.assetUrl);
+  if (icon) img.src = icon.fallbackAssetUrl;
+}, true);

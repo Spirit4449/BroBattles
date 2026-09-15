@@ -31,13 +31,14 @@
 
       <div id="errorBanner" class="hidden"></div>
 
-      <section id="statsGrid">
+      <nav id="adminNav" aria-label="Admin sections"><button type="button" data-nav="overview" aria-pressed="false">Overview</button><button type="button" data-nav="players" aria-pressed="false">Players</button><button type="button" data-nav="store" aria-pressed="false">Store</button><button type="button" data-nav="runtime" aria-pressed="false">Runtime</button><button type="button" data-nav="feedback" aria-pressed="false">Feedback</button><button type="button" data-nav="support" aria-pressed="false">Support</button></nav>
+<section id="statsGrid" data-view="overview">
         <div class="stat-card">
           <span>Total Users</span>
           <strong data-stat="users">-</strong>
         </div>
         <div class="stat-card">
-          <span>Guests Active</span>
+          <span>Unexpired Guests</span>
           <strong data-stat="guests">-</strong>
         </div>
         <div class="stat-card">
@@ -50,7 +51,7 @@
         </div>
       </section>
 
-      <section class="panel shop-admin-panel">
+      <section class="panel shop-admin-panel" data-view="store" hidden>
         <div class="shop-admin-heading">
           <div>
             <p class="panel-kicker">Store Operations</p>
@@ -86,9 +87,9 @@
       </section>
 
       <section class="panels">
-        <article class="panel">
-          <h2>Player Editor</h2>
-          <form id="userSearchForm" class="flex-row" autocomplete="off">
+        <article class="panel" data-view="players">
+          <h2>Players</h2>
+          <div id="playerDirectory"><p class="muted">Find an account, then open it to view details or make changes.</p><form id="userSearchForm" class="flex-row" autocomplete="off">
             <div>
               <label for="userSearch">Username or ID</label>
               <input
@@ -99,15 +100,19 @@
               />
             </div>
             <div style="align-self: flex-end">
-              <button type="submit">Load</button>
+              <button type="submit">Search</button>
             </div>
           </form>
-          <div id="userPlaceholder">
-            Search for a player to unlock edit controls.
-          </div>
-          <form id="userEditForm" class="hidden" novalidate>
+          <div id="playerBrowser"><div id="playerResults" aria-live="polite"></div><div id="playerPager"></div></div></div>
+          <div id="playerWorkspace" hidden>
+            <button id="backToPlayers" type="button" class="secondary">← Back to players</button>
+            <header class="player-heading"><div><p class="panel-kicker">Player account</p><h3 id="userName"></h3><p id="playerSubtitle" class="muted"></p></div></header>
+            <nav id="playerNav" aria-label="Player account sections"><button type="button" data-player-tab="overview">Overview</button><button type="button" data-player-tab="edit">Edit account</button><button type="button" data-player-tab="history">History</button></nav>
+            <div id="playerOverview" data-player-panel="overview"></div>
+          <form id="userEditForm" class="hidden" data-player-panel="edit" hidden>
             <div id="userEditor" class="hidden">
-              <h3 id="userName" style="margin-top: 8px"></h3>
+<h4>Account & balances</h4>
+              <label for="fieldName">Username</label><input id="fieldName" required minlength="3" maxlength="50" />
               <div class="flex-row">
                 <div>
                   <label for="fieldCoins">Coins</label>
@@ -121,7 +126,7 @@
               <div class="flex-row">
                 <div>
                   <label for="fieldTrophies">Trophies</label>
-                  <input id="fieldTrophies" type="number" />
+                  <input id="fieldTrophies" type="number" min="0" />
                 </div>
                 <div>
                   <label for="fieldStatus">Presence</label>
@@ -134,25 +139,26 @@
                 </div>
               </div>
               <label for="fieldClass">Character Class</label>
-              <input id="fieldClass" placeholder="ninja" />
-              <button type="submit">Apply Changes</button>
+              <select id="fieldClass"><option value="ninja">Ninja</option><option value="thorg">Thorg</option><option value="draven">Draven</option><option value="wizard">Wizard</option><option value="huntress">Huntress</option><option value="gloop">Gloop</option></select>
+              <details class="player-detail"><summary>Edit character levels</summary><p>Level 0 locks a character. Levels 1–10 unlock and upgrade it.</p><div id="levelFields" class="level-fields"></div></details><button type="submit">Apply Changes</button>
             </div>
           </form>
+          <div id="playerDetails" data-player-panel="history" hidden></div></div>
         </article>
 
-        <article class="panel">
+        <article class="panel" data-view="runtime" hidden>
           <h2>Runtime Controls</h2>
           <form id="runtimeForm">
-            <label class="flex-row" style="align-items: center; gap: 8px">
-              <input type="checkbox" id="maintenanceToggle" />
-              <span>Maintenance Mode</span>
-            </label>
-            <label for="announcementField">Banner Message</label>
+            <label for="maintenanceUntil">Maintenance ends at (your local time)</label>
+            <input type="datetime-local" id="maintenanceUntil" />
+            <p id="maintenanceCountdown" role="timer"></p>
+            <button type="button" id="clearMaintenance" class="secondary">Clear maintenance time</button>
+            <p class="muted">Set a future end time to pause matchmaking. Leave empty to keep matchmaking enabled. Maintenance ends automatically at that time. Existing matches and ready checks can finish. Admin access stays available.</p><label for="announcementField">Site announcement</label>
             <textarea
               id="announcementField"
-              placeholder="Global announcement"
+              placeholder="Announcement shown when players load into the game" maxlength="500"
             ></textarea>
-            <div class="flex-row">
+            <p class="muted">Shown when players load into the game. Stays visible until they press Dismiss. Leave empty to disable.</p><div class="flex-row">
               <div>
                 <label for="rewardCoinMultiplier">Coin Multiplier</label>
                 <input
@@ -187,16 +193,16 @@
         </article>
       </section>
 
-      <section class="panel">
+      <section class="panel" data-view="overview">
         <h2>Recent Users</h2>
         <ul id="recentUsers" class="recent-list"></ul>
       </section>
-      <section class="panel">
+      <section class="panel" data-view="overview">
         <h2>Recent Matches</h2>
         <ul id="recentMatches" class="recent-list"></ul>
       </section>
     </div>
-    <div id="toast" class="hidden"></div>
+    <div id="toast" role="status" class="hidden"></div>
     <script src="/bundles/admin.bundle.js" defer></script>
   </body>
 </html>

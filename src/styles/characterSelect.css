@@ -1538,18 +1538,19 @@
   display: none;
 }
 
-.character-details-action {
+.character-details-action.pixel-menu-button {
   position: relative;
   isolation: isolate;
   overflow: hidden;
   flex: 0 0 auto;
   box-sizing: border-box;
-  height: 34px;
-  padding: 7px 11px;
+  height: 50px;
+  min-width: 110px;
+  padding: 7px 14px 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 4px;
   font-family: "Press Start 2P", "Lato", sans-serif;
   font-size: 10px;
   font-weight: 800;
@@ -1563,6 +1564,30 @@
   box-shadow: var(--bb-control-shadow);
   text-align: center;
   letter-spacing: 0.5px;
+}
+
+.character-details-action.pixel-menu-button:has(.character-details-action-label) {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 14px 22px;
+  padding: 5px 18px;
+  gap: 4px;
+  align-content: center;
+}
+
+.character-details-inline-actions .character-details-action.pixel-menu-button {
+  flex: 0 0 110px;
+  width: 110px;
+  min-width: 110px;
+  height: 50px;
+  min-height: 50px;
+  white-space: nowrap;
+}
+
+.character-details-inline-actions .character-details-action:is(.buy-button, .upgrade-button) {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 150px;
 }
 
 .character-details-action > * {
@@ -1673,21 +1698,35 @@
 }
 
 .button-price {
-  margin-left: 4px;
+  margin: 0;
   padding: 0;
   border-radius: 2px;
   font-weight: 800;
   color: #fef3c7;
-  font-size: 14px;
+  font-size: 12px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1;
 }
 
-.character-details-action.buy-button .upgrade-icon {
-  width: 24px;
-  height: 24px;
+.character-details-action-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
+  font-size: 8px;
+  line-height: 1;
+}
+
+.character-details-action-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
   object-fit: contain;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
 }
 
 .cs-currency {
@@ -1705,33 +1744,7 @@
 }
 
 .character-details-action.buy-button {
-  gap: 0;
-  padding: 0;
-  min-height: 48px;
-}
-
-.character-details-buy-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 12px;
-  white-space: nowrap;
-}
-
-.character-details-action.buy-button .character-details-buy-label .upgrade-icon {
-  width: 18px;
-  height: 18px;
-}
-
-.character-details-action.buy-button .button-price {
-  align-self: stretch;
-  margin: 0;
-  padding: 0 12px;
-  gap: 6px;
-  border-left: 1px solid rgba(4, 20, 55, 0.35);
-  border-radius: 0;
-  background: rgba(5, 24, 66, 0.18);
-  font-size: 13px;
+  min-height: 50px;
 }
 
 .character-card-status-text.maxed,
@@ -1913,7 +1926,7 @@
     flex: 1 1 auto;
     min-width: 0;
     font-size: 10px;
-    height: 44px;
+    height: 60px;
   }
 
   .character-details-maxed-label {
@@ -2247,3 +2260,7 @@
     transform: rotate(360deg);
   }
 }
+
+/* Currency balances use a single icon-and-number row at every breakpoint. */
+.character-details-wallet > span { grid-template-rows: auto; }
+.character-details-wallet img, .character-details-wallet strong { grid-row: 1; }

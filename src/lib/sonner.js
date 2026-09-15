@@ -1,6 +1,7 @@
+import { maintenanceClock } from "../shared/maintenance";
 import { playSound } from "./uiSounds.js";
 // Exported function: sonner(header, message, buttonText = "OK", onClick?, options?)
-// options: { duration?: number, containerId?: string, tone?: "info"|"success"|"error" }
+// options: { duration?: number, persistent?: boolean, containerId?: string, tone?: "info"|"success"|"error" }
 export function sonner(
   header,
   message,
@@ -27,6 +28,7 @@ export function sonner(
     onClick = undefined;
   }
 
+  const persistent = options.persistent === true;
   const duration = Math.max(800, Number(options.duration || 5000));
   const containerId = options.containerId || "sonner-wrap";
   const tone = ["info", "success", "error"].includes(
@@ -59,6 +61,13 @@ export function sonner(
   el.querySelector(".sonner__hdr").textContent = String(header ?? "");
   el.querySelector(".sonner__msg").textContent = String(message ?? "");
 
+  let countdownTimer;
+  if (options.maintenanceUntil) {
+    const messageNode = el.querySelector(".sonner__msg");
+    const updateCountdown = () => { messageNode.textContent = `${message} ◷ ${maintenanceClock(options.maintenanceUntil)} remaining`; };
+    updateCountdown(); countdownTimer = setInterval(updateCountdown, 1000);
+  }
+
   // Button
   const btn = document.createElement("button");
   btn.className = "sonner__btn";
@@ -77,6 +86,7 @@ export function sonner(
       if (!wrap.children.length) wrap.remove();
     }, 280);
     if (timer) clearTimeout(timer);
+    if (countdownTimer) clearInterval(countdownTimer);
   };
 
   btn.addEventListener("click", () => {
@@ -92,7 +102,8 @@ export function sonner(
 
   // Progress bar countdown
   const bar = el.querySelector(".sonner__progress");
-  bar.style.setProperty("--sonner-duration", duration + "ms");
+  if (persistent) bar.remove();
+  else bar.style.setProperty("--sonner-duration", duration + "ms");
 
   // Insert newest first
   wrap.insertBefore(el, wrap.firstChild || null);
@@ -103,11 +114,11 @@ export function sonner(
   // Animate in next frame for extra safety
   requestAnimationFrame(() => {
     el.classList.add("show");
-    bar.classList.add("anim");
+    if (!persistent) bar.classList.add("anim");
   });
 
   // Auto-close
-  timer = setTimeout(close, duration);
+  if (!persistent) timer = setTimeout(close, duration);
 
   // Optional notification sound
   if (options.sound) {

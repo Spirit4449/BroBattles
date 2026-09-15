@@ -78,18 +78,111 @@
       }
     },
     {
-      "id": "200trophies",
-      "name": "200 Trophies",
-      "assetUrl": "/assets/profile-icons/200trophies.webp",
+      "id": "500trophies",
+      "name": "500 Trophies",
+      "assetUrl": "/assets/profile-icons/500trophies.webp",
+      "fallbackAssetUrl": "/assets/trophy.webp",
       "rarity": "epic",
+      "showInPicker": true,
       "limited": true,
-      "showInPicker": false,
       "cost": {
         "gems": 0
       },
       "unlock": {
-        "type": "trophies",
-        "min": 200
+        "type": "trophyRoad",
+        "min": 500
+      }
+    },
+    {
+      "id": "1000trophies",
+      "name": "1,000 Trophies",
+      "assetUrl": "/assets/profile-icons/1000trophies.webp",
+      "fallbackAssetUrl": "/assets/trophy.webp",
+      "rarity": "epic",
+      "showInPicker": true,
+      "limited": true,
+      "cost": {
+        "gems": 0
+      },
+      "unlock": {
+        "type": "trophyRoad",
+        "min": 1000
+      }
+    },
+    {
+      "id": "5000trophies",
+      "name": "5,000 Trophies",
+      "assetUrl": "/assets/profile-icons/5000trophies.webp",
+      "fallbackAssetUrl": "/assets/trophy.webp",
+      "rarity": "epic",
+      "showInPicker": true,
+      "limited": true,
+      "cost": {
+        "gems": 0
+      },
+      "unlock": {
+        "type": "trophyRoad",
+        "min": 5000
+      }
+    },
+    {
+      "id": "7500trophies",
+      "name": "7,500 Trophies",
+      "assetUrl": "/assets/profile-icons/7500trophies.webp",
+      "fallbackAssetUrl": "/assets/trophy.webp",
+      "rarity": "legendary",
+      "showInPicker": true,
+      "limited": true,
+      "cost": {
+        "gems": 0
+      },
+      "unlock": {
+        "type": "trophyRoad",
+        "min": 7500
+      }
+    },
+    {
+      "id": "10000trophies",
+      "name": "10,000 Trophies",
+      "assetUrl": "/assets/profile-icons/10000trophies.webp",
+      "fallbackAssetUrl": "/assets/trophy.webp",
+      "rarity": "legendary",
+      "showInPicker": true,
+      "limited": true,
+      "cost": {
+        "gems": 0
+      },
+      "unlock": {
+        "type": "trophyRoad",
+        "min": 10000
+      }
+    },
+    {
+      "id": "arena-spark",
+      "name": "Arena Spark",
+      "assetUrl": "/assets/profile-icons/arena-spark.webp",
+      "rarity": "epic",
+      "showInPicker": true,
+      "cost": {
+        "gems": 0
+      },
+      "unlock": {
+        "type": "trophyRoad",
+        "min": 1250
+      }
+    },
+    {
+      "id": "gloop",
+      "name": "Gloop",
+      "assetUrl": "/assets/profile-icons/gloop.webp",
+      "rarity": "rare",
+      "showInPicker": true,
+      "cost": {
+        "gems": 0
+      },
+      "unlock": {
+        "type": "character",
+        "character": "gloop"
       }
     }
   ]
