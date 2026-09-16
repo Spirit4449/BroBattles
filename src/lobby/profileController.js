@@ -329,7 +329,7 @@ export function createProfileController({ getUserData }) {
       );
       tile.innerHTML = `
       <span class="profile-icon-art">
-        <img src="${escapeHtml(icon.assetUrl)}" alt="" />
+        <img src="${escapeHtml(buildProfileIconUrl(id))}" alt="" />
         ${isSelected ? '<span class="profile-icon-selected-badge">Selected</span>' : ""}
         ${isLocked ? '<span class="profile-icon-lock-overlay"><img src="/assets/lock.webp" alt="" /></span>' : ""}
       </span>

@@ -23,3 +23,11 @@ Validation: 18 ninja combat/renderer checks and both skin atlas contracts pass, 
 Supersedes the adult-proportioned portrait above. Built-in imagegen reference: `ai-source.png`, specifically its top-left idle king ninja. Prompt: preserve that exact short chibi silhouette, oversized head, compact beard, simple angular eyes, low wide jeweled crown, small fists, black ninja outfit, gold chains, short boots and crimson ermine cape. Keep the idle pose and orientation; no adult anatomy, ornate lion armor, realistic hair strands or added accessories. Authentic coarse pixel art, hard staircase contours, limited-tone shading, no smoothing, solid magenta background.
 
 Final `body.webp` is 1152×1152, sampled from this dedicated portrait on a 96×96 grid and enlarged exactly 12× using nearest-neighbor sampling. Every displayed pixel block has one solid RGBA value. Transparent background; gameplay atlas and crown remain as before.
+
+## Falling, crown spin and crouch
+
+Built-in imagegen prompt for `motion-source.png`: match the existing chibi king; four subtly changing upright falling poses with fixed head/body/feet positions and gently moving cape/wrists; isolated jeweled crowns rotating around the vertical Y axis with tips always upright; crouched king with crown low over his eyes, visible black torso, bent arms and legs, gold boots and bunched crimson cape. Strict spaced 4×3 grid, crisp pixels, complete silhouettes, no labels/shadows. The generated alpha is retained with binary pixel edges during packing.
+
+The king has four falling frames played at 8fps in a forward/back loop. `duck00` is explicitly packed, avoiding the base ninja's fixed crop coordinates on this padded skin atlas. The crouch is 35px tall in the 72px cell, with body and feet visible. `crown-spin.webp` contains eight 237px frames, used by predicted/remote and legacy projectile rendering; crown z rotation and angular velocity remain zero, including return/hover phases. Trails preserve the current view. Default ninja projectiles retain their existing rotation.
+
+Validation: renderer tests (including upright spin and reverse direction), ducking checks and atlas contracts pass. Production build passes with asset-size warnings. Packed art visually inspected; live match replay remains unverified. Portrait remains 1000×1000 with both soles at the bottom edge.

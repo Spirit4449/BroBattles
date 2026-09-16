@@ -35,3 +35,19 @@ button:disabled { opacity: .42; }
 .map-marker.selected .marker-label { border-color: var(--marker-color); }
 .map-marker.vault,.map-marker.respawn,.map-marker.objective,.map-marker.gold { --marker-color: #ffcc77; }
 .canvas-tools { z-index: 2; }
+
+#save-state { white-space: nowrap; border: 1px solid #627283; padding: 7px 10px; border-radius: 6px; background: #1c2a38; cursor: pointer; }
+.pending-changes { width: min(760px, 78vw); }
+.pending-actions { display: flex; gap: 8px; margin: 14px 0; }
+.pending-list { list-style: none; padding: 0 0 0 14px; margin: 0; max-height: 55vh; overflow: auto; }
+.pending-change { position: relative; border-left: 2px solid #516778; padding: 0 12px 20px 18px; }
+.pending-change::before { content: ''; position: absolute; top: 7px; left: -5px; width: 8px; height: 8px; border-radius: 50%; background: #baf36b; }
+.pending-change label { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.pending-change strong { flex: 1; overflow-wrap: anywhere; font-size: 12px; }
+.change-kind { color: #baf36b; font-size: 11px; }
+.pending-change details { margin: 9px 0 0 23px; }
+.pending-change summary { cursor: pointer; color: #bdcbd5; }
+.change-values { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+.change-values > div { min-width: 0; }
+.change-values pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; padding: 10px; background: #101b26; font-size: 11px; }
+.pending-actions .danger { color: #ffb2b2; border-color: #96565e; }

@@ -1,16 +1,24 @@
+const { exposeDamageHitbox } = require('../damageHitboxes');
 const effectManager = require("../effects/effectManager");
 const { getParticipant, participantId } = require('../participants');
 const { circleAabbOverlap, getPlayerBounds } = require('./geometry');
+const { sweep } = require('../../../../shared/huntressProjectile');
+const { isDetachedProjectile } = require('./projectileLifecycle');
 
 function emitServerHit(room, attack, targetName, payload = {}) {
-  room.handleHit(attack.attackerParticipantId, {
-    attacker: attack.attackerName,
-    target: targetName,
-    attackType: attack.attackType,
-    instanceId: attack.instanceId,
-    attackTime: Date.now(),
-    damage: payload.damage,
-  }, { server: true });
+  attack.contactTarget = targetName;
+  try {
+    return room.handleHit(attack.attackerParticipantId, {
+      attacker: attack.attackerName,
+      target: targetName,
+      attackType: attack.attackType,
+      instanceId: attack.instanceId,
+      attackTime: Date.now(),
+      damage: payload.damage,
+    }, { server: true, runtimeProjectile: attack });
+  } finally {
+    attack.contactTarget = null;
+  }
 }
 
 function applyDescriptorHitEffect(
@@ -129,8 +137,9 @@ function hitCircleTargets(
   now,
   repeatCooldownMs = 0,
 ) {
+  exposeDamageHitbox(room, attack, { kind: 'circle', x: cx, y: cy, radius }, now);
   const attacker = getParticipant(room, attack.attackerParticipantId);
-  if (!attacker || !attacker.isAlive) return 0;
+  if (!attacker || (!attacker.isAlive && !isDetachedProjectile(attack))) return 0;
   attack.hitTimes = attack.hitTimes || Object.create(null);
   let hitCount = 0;
 
@@ -168,6 +177,7 @@ function hitCircleTargets(
 }
 
 function hitRectTargets(room, attack, descriptor, rect, now) {
+  exposeDamageHitbox(room, attack, { kind: 'rect', ...rect }, now);
   const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return;
   const vaultTarget = getEnemyVaultTarget(room, attacker);
@@ -199,4 +209,30 @@ function hitRectTargets(room, attack, descriptor, rect, now) {
   }
 }
 
-module.exports = { emitServerHit, applyDescriptorHitEffect, getEnemyVaultTarget, buildTargetList, emitHitAction, hitCircleTargets, hitRectTargets };
+function hitCapsuleTargets(room, attack, descriptor, start, end, radius, now) {
+  exposeDamageHitbox(room, attack, { kind: 'sweep', a: start, b: end, radius }, now);
+  const attacker = getParticipant(room, attack.attackerParticipantId);
+  if (!attacker || !attacker.isAlive) return 0;
+  let hitCount = 0;
+  const vaultTarget = getEnemyVaultTarget(room, attacker);
+  if (
+    vaultTarget &&
+    !attack.hitSet?.has(vaultTarget.targetName) &&
+    sweep(start, end, vaultTarget.bounds, radius) !== null
+  ) {
+    attack.hitSet?.add(vaultTarget.targetName);
+    emitServerHit(room, attack, vaultTarget.targetName, { damage: attack.damage });
+    hitCount++;
+  }
+  for (const target of buildTargetList(room, attacker.name, attacker.team)) {
+    if (attack.hitSet?.has(target.name)) continue;
+    if (sweep(start, end, getPlayerBounds(target), radius) === null) continue;
+    attack.hitSet?.add(target.name);
+    emitServerHit(room, attack, target.name, { damage: attack.damage });
+    emitHitAction(room, attack, descriptor, attacker, target, now);
+    hitCount++;
+  }
+  return hitCount;
+}
+
+module.exports = { emitServerHit, applyDescriptorHitEffect, getEnemyVaultTarget, buildTargetList, emitHitAction, hitCircleTargets, hitRectTargets, hitCapsuleTargets };

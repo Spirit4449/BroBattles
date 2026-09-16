@@ -16,6 +16,29 @@ test('sweep is continuous, body-relative, mirrored and visits both sides', () =>
   }
 });
 
+test('damage capsule begins at body center and ends beyond the tucked-in mace tip', t => {
+  const { damageHitboxSnapshot } = require('../src/server/core/gameRoom/damageHitboxes');
+  const { room, players: [p, target] } = makeRoom({ characters: ['thorg', 'ninja'] });
+  t.after(() => room.cleanup());
+  room.matchData.editorDebugHitboxes = true;
+  target.loaded = false;
+  Object.assign(p, { x: 500, y: 300 });
+  const now = Date.now();
+  const attack = createRuntimeAttack(p, { type: 'thorg-fall', id: 'capsule', direction: 1 }, now);
+  tickRuntimeAttack(room, attack, now + THORG_SWEEP.windupMs);
+  const shape = damageHitboxSnapshot(room, now + THORG_SWEEP.windupMs)[0];
+  assert.equal(shape.kind, 'sweep');
+  assert.deepEqual(shape.a, { x: 500, y: 300 + THORG_SWEEP.centerY });
+  assert.equal(shape.b.x, 500 + THORG_SWEEP.radiusX + THORG_SWEEP.tipOffset);
+  assert.equal(shape.b.y, shape.a.y);
+  assert.equal(shape.radius, THORG_SWEEP.hitboxRadius);
+});
+
+test('tucked-in mace orbit keeps the shaft connected to Thorg', () => {
+  assert.equal(THORG_SWEEP.radiusX, 78);
+  assert.ok(THORG_SWEEP.radiusX - 50 <= 30);
+});
+
 test('authoritative sweep hits front and rear once, survives a delayed tick, and ignores spoofed reach/timing', t => {
   const { room, players: [p, front, rear, far] } = makeRoom({ characters: ['thorg', 'ninja', 'ninja', 'ninja'] });
   t.after(() => room.cleanup());

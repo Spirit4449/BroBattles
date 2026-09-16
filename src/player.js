@@ -1,5 +1,9 @@
 import { getSettings, bindCanvasName, subscribeSettings } from "./site/preferences";
-import { resolveWallContact, applyWallSlide } from './players/wallMovement';
+import {
+  resolveWallContact,
+  applyWallSlide,
+  resolveWallSlideFlipX,
+} from './players/wallMovement';
 import { predictCharacterSpecial } from './characters/networkRegistry';
 // player.js
 // NOTE: Refactored to remove circular dependency on game.js.
@@ -2047,6 +2051,17 @@ export function handlePlayerMovement(scene) {
   const isWallSliding = applyWallSlide(player, {
     dead, movementLocked, wallSlideContact, wallSide, wallBrakeHeld,
   });
+  if (isWallSliding && !player._lockFlip) {
+    const wasFlip = player.flipX;
+    player.flipX = resolveWallSlideFlipX(
+      wallSide,
+      player.body.velocity.x,
+      player.flipX,
+    );
+    if (player.flipX !== wasFlip && applyFlipOffsetLocal) {
+      applyFlipOffsetLocal();
+    }
+  }
   const wallSlideSpeedRatio = Phaser.Math.Clamp(
     (Number(player.body.velocity.y) || 0) / wallSlideMaxFallSpeed,
     0,

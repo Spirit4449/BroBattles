@@ -1,4 +1,5 @@
-import { ninjaProjectileTexture } from './projectileTexture';
+import { presentSwarmRelease } from './swarmPresentation';
+import { ninjaProjectileTexture, animateNinjaProjectile } from './projectileTexture';
 import { createShurikenEffects } from './effects';
 import { playSpriteAnimation } from '../shared/animationState';
 import socket from '../../socket';
@@ -89,17 +90,19 @@ export function attachNinjaScene(scene,next={}){
       }
       // Bound catch-up work after stalls; authoritative state is refreshed on return.
       let count=0;while(e.at+STEP_MS<=sim&&count++<360&&!e.p.done){step(e.p,o,colliders);e.at+=STEP_MS;}
-      if(!e.sprite){e.texture=ninjaProjectileTexture(scene,o);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special)e.sprite.setTint?.(0xc7efff);
+      if(!e.sprite){
+        if(e.p.special && !e.p.done && !e.releasePresented){presentSwarmRelease(scene,o,swarmConfig().releaseMs,e.p.ownerName!==ctx.localUsername);e.releasePresented=true;}
+        e.texture=ninjaProjectileTexture(scene,o);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special)e.sprite.setTint?.(0xc7efff);
         e.fx=createShurikenEffects(scene,e.sprite,{x:e.p.startX,y:e.p.startY,angle:e.p.angle,special:e.p.special,launch:e.p.elapsed<180});}
       const next=copy(e.p);if(!next.done)step(next,o,colliders);
       const f=Math.max(0,Math.min(1,(sim-e.at)/STEP_MS));
       if(e.correction&&e.correction.x===undefined){e.correction.x=e.correction.visualX-(e.p.x+(next.x-e.p.x)*f);e.correction.y=e.correction.visualY-(e.p.y+(next.y-e.p.y)*f);}
       const blend=e.correction?Math.max(0,1-(now-e.correction.at)/60):0;
       e.sprite.setPosition(e.p.x+(next.x-e.p.x)*f+(e.correction?.x||0)*blend,e.p.y+(next.y-e.p.y)*f+(e.correction?.y||0)*blend);
-      e.sprite.setRotation(e.p.elapsed*e.p.cfg.rotationSpeed*Math.PI/180000*e.p.direction);
+      animateNinjaProjectile(e.sprite,e.texture,e.p.elapsed,e.p.cfg.rotationSpeed,e.p.direction);
       e.fx?.update(now,!e.p.done);
       if(e.p.done){e.sprite.setVisible?.(false);if(sim-e.at>2000)tombstone(id);continue;}e.sprite.setVisible?.(true);
-      if(now-(e.trailAt||0)>45&&effects.size<180){e.trailAt=now;const trail=scene.add.image(e.sprite.x,e.sprite.y,e.texture);trail.setScale(e.p.cfg.scale*.48);trail.setDepth(RENDER_LAYERS.ATTACKS-1);trail.alpha=.3;effects.add(trail);scene.tweens.add({targets:trail,alpha:0,duration:220,onComplete:()=>{effects.delete(trail);trail.destroy();}});}
+      if(now-(e.trailAt||0)>45&&effects.size<180){e.trailAt=now;const trail=scene.add.image(e.sprite.x,e.sprite.y,e.texture,e.sprite.frame?.name);trail.setScale(e.p.cfg.scale*.48);trail.setDepth(RENDER_LAYERS.ATTACKS-1);trail.alpha=.3;effects.add(trail);scene.tweens.add({targets:trail,alpha:0,duration:220,onComplete:()=>{effects.delete(trail);trail.destroy();}});}
     }
   };
   scene.events.on('update',listener);shutdown=()=>resetNinjaNetwork();scene.events.once('shutdown',shutdown);

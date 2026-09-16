@@ -2,6 +2,7 @@ const huntressModel = require('../../../shared/huntressProjectile');
 const { EFFECT_RULES } = require('../../../shared/effectRules');
 const ninjaCombat = require('./ninjaCombat');
 const huntressCombat = require('./huntressCombat');
+const { isTrustedProjectileContact } = require('./attackRuntimes/projectileLifecycle');
 const { getParticipant, participantId } = require('./participants');
 const {
   NINJA_SWARM_HIT_DAMAGE
@@ -16,7 +17,7 @@ const combatValidation = require("./combatValidation");
 const { reduceDuckDamage } = require("../../../shared/ducking");
 const { chargeSuperForHit } = require("./superCharge");
 
-function handleHit(room, socketId, payload, { server = false, huntressProjectile = null, ninjaProjectile = null } = {}) {
+function handleHit(room, socketId, payload, { server = false, huntressProjectile = null, ninjaProjectile = null, runtimeProjectile = null } = {}) {
   try {
     if (!payload || typeof payload !== "object") return;
     const attackerName = String(payload.attacker || "").trim();
@@ -36,6 +37,8 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     const trustedNinja = server && ninjaCombat.trusted(room, ninjaProjectile, payload);
     if (attacker?.char_class === 'ninja' && attackerName !== targetName && !trustedNinja) return;
     const trustedHuntress = server && huntressCombat.isTrustedContact(room, huntressProjectile, payload);
+    const trustedProjectile = trustedNinja || trustedHuntress ||
+      (server && isTrustedProjectileContact(room, runtimeProjectile, payload));
     if (attacker?.char_class === 'huntress' &&
         attackerName !== targetName && !trustedHuntress) return;
     if (!server && (getParticipant(room, socketId) !== attacker || attacker?.isBot)) return;
@@ -69,7 +72,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
       }
       return;
     }
-    if (!attacker.isAlive || (!targetVault && !target.isAlive)) {
+    if ((!attacker.isAlive && !trustedProjectile) || (!targetVault && !target.isAlive)) {
       if (room.DEBUG_HIT_EVENTS) {
         console.log(
           `[HitDebug ${room.matchId}] reject reason=dead_player attackerAlive=${attacker.isAlive} targetAlive=${target?.isAlive}`,
@@ -148,7 +151,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     let dist = 0;
     let maxDist = room._getAttackMaxDist(attacker.char_class, attackType);
     let attackWasFuture = false;
-    if (trustedHuntress || trustedNinja) {
+    if (trustedProjectile) {
       aPos = { x: attacker.x, y: attacker.y };
       tPos = targetVault ? { x: targetVault.x, y: targetVault.y } : { x: target.x, y: target.y };
     } else if (targetVault) {

@@ -1,8 +1,9 @@
+const { exposeDamageHitbox } = require('../damageHitboxes');
 const { getParticipant, participantId } = require('../participants');
 const effectManager = require("../effects/effectManager");
 const { THORG_SWEEP, sampleThorgSweep } = require("../../../../shared/thorgSweep");
 const { resolvePlayerHeight, getBoundsCenter, normalizeAngleDelta, getPlayerBounds } = require('./geometry');
-const { hitRectTargets, getEnemyVaultTarget, emitServerHit, buildTargetList, emitHitAction } = require('./targets');
+const { hitRectTargets, hitCapsuleTargets, getEnemyVaultTarget, emitServerHit, buildTargetList, emitHitAction } = require('./targets');
 
 function buildAttachedRectAttack(playerData, actionData, descriptor, now) {
   return {
@@ -140,6 +141,7 @@ function tickAttachedCone(room, attack, descriptor, now) {
     Number(attack.innerRadius) || Number(runtime.innerRadius) || 0,
   );
 
+  exposeDamageHitbox(room, attack, { kind: 'sector', x: baseAnchorX, y: baseAnchorY, radius: radius + 24, innerRadius, angle, halfSpread }, now);
   const vaultTarget = getEnemyVaultTarget(room, attacker);
   if (vaultTarget && !attack.hitSet?.has(vaultTarget.targetName)) {
     const vaultCenter = getBoundsCenter(vaultTarget.bounds);
@@ -188,12 +190,27 @@ function tickPathRect(room, attack, descriptor, now) {
   for (let i = 0; i <= steps; i++) {
     const point = sampleThorgSweep({ x: Number(attacker.x), y: Number(attacker.y), direction: attack.direction, scale },
       previous + (progress - previous) * i / steps);
-    hitRectTargets(room, attack, descriptor, {
-      left: point.x - THORG_SWEEP.headWidth * scale / 2,
-      right: point.x + THORG_SWEEP.headWidth * scale / 2,
-      top: point.y - THORG_SWEEP.headHeight * scale / 2,
-      bottom: point.y + THORG_SWEEP.headHeight * scale / 2,
-    }, now);
+    const center = {
+      x: Number(attacker.x),
+      y: Number(attacker.y) - THORG_SWEEP.footOffset * (scale - 1) + THORG_SWEEP.centerY * scale,
+    };
+    const dx = point.x - center.x;
+    const dy = point.y - center.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const tipOffset = Math.max(0, Number(THORG_SWEEP.tipOffset) || 0) * scale;
+    const tip = {
+      x: point.x + dx / length * tipOffset,
+      y: point.y + dy / length * tipOffset,
+    };
+    hitCapsuleTargets(
+      room,
+      attack,
+      descriptor,
+      center,
+      tip,
+      Math.max(1, Number(THORG_SWEEP.hitboxRadius) || THORG_SWEEP.headHeight / 2) * scale,
+      now,
+    );
   }
   attack.previousProgress = progress;
   return progress >= 1;

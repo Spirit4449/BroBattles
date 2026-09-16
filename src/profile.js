@@ -201,7 +201,7 @@ function renderIconsGrid() {
     const tile = document.createElement("div");
     tile.className = `card-tile icon-tile ${rarity}`;
     tile.innerHTML = `
-      <img src="${icon.assetUrl}" alt="${icon.name}" />
+      <img src="${buildProfileIconUrl(icon.id)}" alt="${icon.name}" />
       <div class="card-meta">
         <strong>${icon.name}</strong>
         <span class="profile-card-rarity ${rarity}">${rarity}</span>

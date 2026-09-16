@@ -1,7 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const tuning = require('../src/shared/movementPhysics.json');
-const { resolveWallContact, applyWallSlide } = require('../src/players/wallMovement');
+const {
+  resolveWallContact,
+  applyWallSlide,
+  resolveWallSlideFlipX,
+} = require('../src/players/wallMovement');
 
 function localSlide(overrides = {}) {
   const player = {
@@ -25,6 +29,14 @@ test('neutral contact attaches and caps descent; holding up brakes further', () 
   const brake = localSlide({ wallSide: 'left', wallBrakeHeld: true });
   assert.equal(brake.player.body.velocity.x, -tuning.wallSlideAttachSpeed);
   assert.equal(brake.player.body.velocity.y, 75);
+});
+
+test('wall-slide pose follows the collision side instead of stale facing', () => {
+  assert.equal(resolveWallSlideFlipX('left', -180, false), true);
+  assert.equal(resolveWallSlideFlipX('right', 180, true), false);
+  assert.equal(resolveWallSlideFlipX(null, -180, false), true);
+  assert.equal(resolveWallSlideFlipX(null, 180, true), false);
+  assert.equal(resolveWallSlideFlipX(null, 0, true), true);
 });
 test('no attachment away from walls or during ability locks; jumping suppression is read immediately', () => {
   assert.equal(localSlide({ wallSlideContact: false }).result, false);

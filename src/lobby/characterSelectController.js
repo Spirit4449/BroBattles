@@ -14,6 +14,7 @@ import { playSound } from "../lib/uiSounds.js";
 import { buildCharacterSkinBodyUrl } from "../lib/skinAssets.js";
 import { dismissPopup } from "../lib/popupMotion.js";
 import { sonner } from "../lib/sonner.js";
+import { buildProfileIconUrl } from "../lib/profileIconAssets.js";
 import SKINS_CATALOG from "../shared/skinsCatalog.json";
 
 // Keep a reference to user data for confirmations and currency display
@@ -1090,7 +1091,7 @@ function createCharacterCard(character, userData) {
 
   // Compact card layout: portrait, name, and progression state. Detailed
   // combat stats live in the expanded character view.
-  const profileIconUrl = `/assets/profile-icons/${character}.webp`;
+  const profileIconUrl = buildProfileIconUrl(character, character);
 
   const imageWrap = document.createElement("div");
   imageWrap.className = "character-card-image-wrap";

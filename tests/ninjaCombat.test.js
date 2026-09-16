@@ -62,11 +62,35 @@ test('human and bot supers share staggered projectiles without browser damage cl
     assert.ok([...f.room._ninja.active.values()].every(e=>e.projectile.special));
   }
 });
-test('death cancels staggered casts and active flight; reconnect carries terminal records',t=>{
+test('death cancels unreleased swarm shots but preserves flying shots in reconnect state',t=>{
   const f=fixture(t),p=f.players[0];p.superCharge=p.maxSuperCharge;
-  combat.request(f.room,p,{id:'super',aim:{angle:0}},true);f.step();p.isAlive=false;f.step(40);
-  assert.equal(f.room._ninja.active.size,0);assert.equal(f.room._ninja.pending.length,0);
-  const state=combat.bootstrap(f.room);assert.equal(state.active.length,0);assert.ok(state.terminals.length>0);
+  combat.request(f.room,p,{id:'super',aim:{angle:0}},true);f.step();
+  const q=[...f.room._ninja.active.values()][0].projectile,startX=q.x;
+  f.room._handlePlayerDeath(p);f.step(5);
+  assert.ok(q.x>startX);assert.equal(f.room._ninja.active.size,1);assert.equal(f.room._ninja.pending.length,0);
+  const state=combat.bootstrap(f.room);assert.equal(state.active.length,1);
+  assert.equal(state.terminals.length,model.swarmConfig().count-1);
+  assert.equal(f.actions('ninja-launch').length,1);
+  f.step(500);assert.equal(f.room._ninja.active.size,0);
+  assert.notEqual(f.actions('ninja-terminal').at(-1).reason,'owner-unavailable');
+});
+test('basic and super shurikens still damage after owner death, without allowing new throws',t=>{
+  for(const special of [false,true])for(const bot of [false,true]){
+    const f=fixture(t,bot),[p,target]=f.players,hp=target.health;
+    p.superCharge=p.maxSuperCharge;
+    assert.equal(combat.request(f.room,p,{id:'released',angle:0,aim:{angle:0}},special),true);
+    f.step();
+    const sample=structuredClone([...f.room._ninja.active.values()][0].projectile);
+    for(let i=0;i<12;i++)model.step(sample,p,[]);
+    target.x=sample.x;target.y=sample.y;
+    f.room._handlePlayerDeath(p);f.step(24);
+    assert.ok(target.health<hp);
+    assert.ok(f.actions('ninja-impact').some(a=>a.appliedDamage>0));
+    assert.equal(combat.request(f.room,p,{id:'dead',angle:0,aim:{angle:0}},special),false);
+    const after=target.health;
+    f.room.handleHit(p.participantId,{attacker:p.name,target:target.name,instanceId:'forged',attackType:'basic'});
+    assert.equal(target.health,after);
+  }
 });
 test('shared flight is identical across render rates and swept segments do not tunnel',()=>{
   const terrain=[{left:270,right:271,top:-500,bottom:500}],owner={x:100,y:200};

@@ -133,6 +133,9 @@ export function preloadForRoster(scene, roster = [], staticPath = "/assets") {
       if (weaponUrl && !scene.textures.exists(`${textureKey}-weapon`)) {
         scene.load.image(`${textureKey}-weapon`, weaponUrl);
       }
+      if (entry.skinId === 'ninja-arena-sovereign' && !scene.textures.exists(`${textureKey}-weapon-spin`)) {
+        scene.load.spritesheet(`${textureKey}-weapon-spin`, '/assets/ninja/skins/ninja-arena-sovereign/crown-spin.webp', {frameWidth:237,frameHeight:237});
+      }
     }
   }
 }
@@ -175,6 +178,15 @@ function cloneBaseAnimationToVariant(scene, character, skinId) {
     const variantKey = `${textureKey}-${suffix}`;
     if (animManager.exists(variantKey)) continue;
     const variantTexture = scene.textures.get(textureKey);
+    if (skinId === 'ninja-arena-sovereign' && suffix === 'falling') {
+      animManager.create({
+        key: variantKey,
+        frames: [0, 1, 2, 3, 2, 1].map((i) => ({ key: textureKey, frame: `falling0${i}` })),
+        frameRate: 8,
+        repeat: -1,
+      });
+      continue;
+    }
     const frames = (Array.isArray(anim?.frames) ? anim.frames : [])
       .map((frameRef) => {
         const frameName = frameRef?.frame?.name;

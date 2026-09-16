@@ -1,3 +1,4 @@
+const { exposeDamageHitbox } = require('../damageHitboxes');
 const { chargeSuperForHit } = require("../superCharge");
 const effectManager = require("../effects/effectManager");
 const { reduceDuckDamage } = require("../../../../shared/ducking");
@@ -68,6 +69,8 @@ function tick(room, caster, now) {
   const infernoCenterY = Number(caster.y) || anchorY;
   caster.animation = "draven-special";
   caster.lastCombatAt = now;
+
+  exposeDamageHitbox(room, { attackerName: caster.name, instanceId: 'inferno' }, { kind: 'circle', x: infernoCenterX, y: infernoCenterY, radius: DRAVEN_INFERNO_RADIUS }, now);
 
   if ((Number(e.dravenInfernoNextDamageAt) || 0) > now) return;
   e.dravenInfernoNextDamageAt = now + DRAVEN_INFERNO_DAMAGE_TICK_MS;

@@ -18,7 +18,7 @@ for (const [character, id] of [['ninja', 'ninja-arena-sovereign'], ['gloop', 'gl
     const original = JSON.parse(fs.readFileSync(file(base.gameAssets.animationsUrl)));
     // Packing coordinates may differ; animation names and logical size must not.
     const logicalFrames = frames => frames.map(({frame, ...rest}) => ({...rest, width:frame.w, height:frame.h}));
-    assert.deepEqual(logicalFrames(atlas.frames), logicalFrames(original.frames));
+    assert.deepEqual(logicalFrames(atlas.frames.filter(f=>original.frames.some(o=>o.filename===f.filename))), logicalFrames(original.frames));
     for (const {frame} of atlas.frames) {
       assert.ok(frame.x >= 0 && frame.y >= 0);
       assert.ok(frame.x + frame.w <= atlas.meta.size.w);

@@ -45,10 +45,10 @@
           "range": 900,
           "collisionRadius": 18,
           "visualScale": 1.5,
-          "castDelayMs": 300,
+          "castDelayMs": 120,
           "flipLockMs": 520,
-          "forwardOffset": 0.22,
-          "verticalOffset": -0.16,
+          "forwardOffset": 0.10,
+          "verticalOffset": -0.24,
           "initialVy": -45,
           "gravity": 340,
           "maxBounces": 2,
@@ -82,6 +82,8 @@
           "speed": 700,
           "range": 780,
           "collisionRadius": 44,
+          "collisionForwardOffset": 28,
+          "collisionOffsetY": 50,
           "damage": 500,
           "pullDurationMs": 1000,
           "pullLockPaddingMs": 120,
@@ -106,8 +108,8 @@
     "h": 128
   },
   "duckFrame": [
-    8,
-    2
+    9,
+    3
   ],
   "basicAction": "gloop-slimeball",
   "basicHitTypes": [

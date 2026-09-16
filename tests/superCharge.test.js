@@ -84,6 +84,12 @@ test('Inferno charges per successful tick, skips shields, and publishes fraction
   assert.equal(events.filter(e => e.type === 'super-update').at(-1).payload.charge, .25);
 });
 
+test('Inferno damage radius matches the tucked-in special reticle', () => {
+  const aim = require('../src/shared/characterTuning').getResolvedCharacterSpecialAimConfig('draven');
+  assert.equal(aim.radius, 220);
+  assert.equal(aim.defaultRange, 220);
+});
+
 test('authoritative client sync preserves fractional super charge', async () => {
   const { createLocalStateSync } = await import('../src/players/localStateSync.js');
   let charge, max;

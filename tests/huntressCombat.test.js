@@ -143,15 +143,35 @@ test('burning arrows consume charge once, apply burn once, and publish precise t
   assert.ok(target.effects.huntressBurn || target.activeEffects.huntressBurn);
 });
 
-test('owner death cancels pending and active arrows and bootstrap restores only active flight', t => {
+test('released basic and burning arrows survive owner death, damage and remain in reconnect state', t => {
+  for (const special of [false,true]) {
+    const {room,players:[p,target],step,actions}=fixture(t);
+    p.superCharge=p.maxSuperCharge;
+    assert.equal(combat.request(room,p,{id:'death',angle:0,aim:{angle:0}},special),true);
+    step(special?14:6);
+    const arrow=[...room._huntress.active.values()][special?2:1];
+    for(const [id,a]of room._huntress.active)if(a!==arrow)room._huntress.active.delete(id);
+    target.x=arrow.x+150;target.y=arrow.y;
+    const hp=target.health,startX=arrow.x;
+    room._handlePlayerDeath(p);step();
+    assert.ok(arrow.x>startX);
+    assert.equal(combat.bootstrap(room).projectiles.length,1);
+    step(20);
+    assert.equal(target.health,hp-1000);
+    assert.equal(combat.bootstrap(room).projectiles.length,0);
+    assert.equal(actions('huntress-terminal')[0].accepted,true);
+    assert.equal(actions('huntress-terminal')[0].reason,'target');
+    if(special)assert.ok(target.effects.huntressBurn||target.activeEffects.huntressBurn);
+    assert.equal(combat.request(room,p,{id:'dead',angle:0,aim:{angle:0}},special),false);
+  }
+});
+test('death during huntress windup cancels unreleased arrows', t => {
   const {room,players:[p],step,actions}=fixture(t);
-  room.handlePlayerAction(p.participantId,{type:'huntress-arrow',id:'death',angle:0});
-  step(6);
-  assert.equal(combat.bootstrap(room).projectiles.length,3);
-  p.isAlive=false;step();
-  assert.equal(combat.bootstrap(room).projectiles.length,0);
-  assert.equal(combat.bootstrap(room).terminals.length,3);
-  assert.ok(actions('huntress-terminal').every(a=>a.reason==='cancelled'));
+  room.handlePlayerAction(p.participantId,{type:'huntress-arrow',id:'windup',angle:0});
+  room._handlePlayerDeath(p);step(10);
+  assert.equal(room._huntress.active.size,0);
+  assert.equal(actions('huntress-projectiles').length,0);
+  assert.equal(actions('huntress-result').at(-1).reason,'cancelled');
 });
 
 test('shielded contact consumes the arrow without damage or super charge', t => {

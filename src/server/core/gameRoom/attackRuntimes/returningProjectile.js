@@ -104,7 +104,7 @@ function buildReturningProjectileAttack(
 
 function tickReturningProjectile(room, attack, descriptor) {
   const attacker = getParticipant(room, attack.attackerParticipantId);
-  if (!attacker || !attacker.isAlive) return true;
+  if (!attacker || attacker.connected === false || attacker.loaded === false) return true;
   const runtime = descriptor?.runtime || {};
   const dtMs = room.FIXED_DT_MS;
   const dtSec = dtMs / 1000;

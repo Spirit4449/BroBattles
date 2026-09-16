@@ -1,3 +1,4 @@
+const { exposeDamageHitbox } = require('./damageHitboxes');
 const { randomUUID } = require('node:crypto');
 const model = require('../../../shared/huntressProjectile');
 const { participantId, getParticipant } = require('./participants');
@@ -138,11 +139,12 @@ function tick(room) {
   }
   for (const attack of state.active.values()) {
     const owner = getParticipant(room, attack.attackerParticipantId);
-    if (!owner?.isAlive || owner.connected === false || room.status !== 'active') {
+    if (!owner || owner.connected === false || room.status !== 'active') {
       finish(room, attack, { reason: 'cancelled', x: attack.x, y: attack.y }); continue;
     }
     const nextAge = Math.min(attack.projectile.maxLifetimeMs, Math.max(0, room._simulationMono - attack.projectile.launchMono));
     const next = model.sample(attack.projectile, nextAge);
+    exposeDamageHitbox(room, attack.projectile, { kind: 'sweep', a: { x: attack.x, y: attack.y }, b: { x: next.x, y: next.y }, radius: attack.collisionRadius });
     const contact = model.firstContact(attack, next, attack.collisionRadius, room.geometry.colliders, targetList(room, owner));
     Object.assign(attack, next, { age: nextAge });
     if (contact) finish(room, attack, contact);

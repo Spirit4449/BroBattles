@@ -1,3 +1,4 @@
+const { exposeDamageHitbox } = require('../../gameRoom/damageHitboxes');
 const { PICKUP_DELAY_MS } = require("../../../../shared/powerups");
 const { BaseGameMode } = require("../BaseGameMode");
 const {
@@ -468,6 +469,7 @@ class BankBustGameMode extends BaseGameMode {
         8,
         Number(shot?.radius) || TURRET_PROJECTILE_RADIUS,
       );
+      exposeDamageHitbox(this.room, shot, { kind: 'circle', x: shot.x, y: shot.y, radius: hitRadius + 26 }, now);
       const target = players.find((player) => {
         if (player.team === shot.ownerTeam) return false;
         return distance(player.x, player.y, shot.x, shot.y) <= hitRadius + 26;

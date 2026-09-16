@@ -66,6 +66,26 @@ function resolvePositiveNumber(value, fallback) {
   return fallback;
 }
 
+function getAttackCollisionCenter(attack, runtime = {}) {
+  const angle = Number(attack?.angle) || 0;
+  let forwardOffset = Number.isFinite(Number(attack?.collisionForwardOffset))
+    ? Number(attack.collisionForwardOffset)
+    : Number(runtime?.collisionForwardOffset) || 0;
+  // A rearward art-center correction must never put a new projectile's damage
+  // behind its launch point. Hold it at the muzzle until travel exceeds the
+  // configured correction, then preserve the requested offset in flight.
+  if (forwardOffset < 0 && Number.isFinite(Number(attack?.traveled))) {
+    forwardOffset = Math.max(forwardOffset, -Math.max(0, Number(attack.traveled)));
+  }
+  return {
+    x: (Number(attack?.x) || 0) + Math.cos(angle) * forwardOffset,
+    y:
+      (Number(attack?.y) || 0) +
+      Math.sin(angle) * forwardOffset +
+      (Number(attack?.collisionOffsetY) || Number(runtime?.collisionOffsetY) || 0),
+  };
+}
+
 function clampToWorld(value, axis = "x", room = null) {
   const world = room?.geometry?.world;
   const margin = Number(WORLD_BOUNDS?.margin) || 0;
@@ -92,4 +112,4 @@ function sweptCircleOverlapsRect(prevX, prevY, nextX, nextY, rect, radius = 0) {
   return !(maxX < left || minX > right || maxY < top || minY > bottom);
 }
 
-module.exports = { getPlayerBounds, getBoundsCenter, normalizeAngleDelta, circleAabbOverlap, cubic, resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, clampToWorld, sweptCircleOverlapsRect };
+module.exports = { getPlayerBounds, getBoundsCenter, normalizeAngleDelta, circleAabbOverlap, cubic, resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter, clampToWorld, sweptCircleOverlapsRect };

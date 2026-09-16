@@ -1,3 +1,4 @@
+import { diffUnsaved, discardChanges } from './unsavedChanges';
 import Phaser from 'phaser/dist/phaser-arcade-physics.min.js';
 import './mapEditor.css';
 import './pixelChecks.css';
@@ -15,7 +16,7 @@ const size = () => Number(variant[0]);
 const status = text => { $('status').textContent=text; };
 const uid = prefix => `${prefix}-${crypto.randomUUID().slice(0,8)}`;
 const dirty = () => documentData && JSON.stringify(documentData)!==savedJSON;
-const setBusy = value => {busy=value;for(const id of ['save','map-select','variant','import','new-map','preview','infinite-supers','add','copy-variant']) $(id).disabled=value;};
+const setBusy = value => {busy=value;for(const id of ['save','map-select','variant','import','new-map','preview','debug-hitboxes','infinite-supers','add','copy-variant']) $(id).disabled=value;};
 async function request(url, options={}) {
   const response=await fetch(url,{...options,headers:{'Content-Type':'application/json',...options.headers}});
   let result;try{result=await response.json();}catch{throw Error(`Request failed (${response.status})`);}
@@ -352,7 +353,7 @@ class StudioScene extends Phaser.Scene {
       for(let x=left;x<=right;x+=grid)g.lineBetween(x,top,x,bottom);for(let y=top;y<=bottom;y+=grid)g.lineBetween(left,y,right,y);}
     g.lineStyle(2/cam.zoom,0x91adc0,.65).strokeRect(w.x,w.y,w.width,w.height);g.lineStyle(1/cam.zoom,0xbaf36b,.25).lineBetween(w.x+w.width/2,w.y,w.x+w.width/2,w.y+w.height);
     this.positionMarkers();
-    for(const c of this.geometry.colliders){g.lineStyle(1/cam.zoom,c.id===selectedId?0xbaf36b:0x66bbff,c.id===selectedId?.9:.3).strokeRect(c.left,c.top,c.right-c.left,c.bottom-c.top);}
+    for(const c of this.geometry.colliders){g.lineStyle(1/cam.zoom,c.id===selectedId?0xbaf36b:0x66bbff,(c.id===selectedId||$('debug-hitboxes').checked) ? .9 : .3).strokeRect(c.left,c.top,c.right-c.left,c.bottom-c.top);}
     for(const guide of guidelines){g.lineStyle(1/cam.zoom,0xff87c8,.9);if(guide.axis==='x')g.lineBetween(guide.value,w.y,guide.value,w.y+w.height);else g.lineBetween(w.x,guide.value,w.x+w.width,guide.value);}
     const color=handleMode==='collision'?0xffb866:0xbaf36b;
     for(const row of visibleRows().filter(row=>selectedIds.has(row.id))){
@@ -382,7 +383,7 @@ async function setPreview(value,row=null){
   }
   scene.pointerUp();setBusy(true);
   try{
-    const result=await request('/api/admin/map-playtests',{method:'POST',body:JSON.stringify({document:documentData,variant,bots:$('playtest-kind').value==='bots',infiniteSupers:$('infinite-supers').checked,character:$('playtest-character').value,spawn:row?.kind==='spawn'?{point:row.value}:null})});
+    const result=await request('/api/admin/map-playtests',{method:'POST',body:JSON.stringify({document:documentData,variant,bots:$('playtest-kind').value==='bots',infiniteSupers:$('infinite-supers').checked,debugHitboxes:$('debug-hitboxes').checked,character:$('playtest-character').value,spawn:row?.kind==='spawn'?{point:row.value}:null})});
     playtestSession=result.session;
     preview=true;keyboard.clear();game.scene.pause('studio');document.body.classList.add('preview');
     playtestFrame=node('iframe',undefined,{id:'playtest-frame',title:'Live game playtest',src:`/map-editor/playtest?session=${result.session}&match=${result.matchId}`,allow:'autoplay; fullscreen'});
@@ -415,6 +416,60 @@ async function loadMap(id){setBusy(true);try{const response=await request(`/api/
 async function save(){if(busy||!documentData)return;scene?.pointerUp();const errors=validateDocument(documentData);if(errors.length){error(Error(errors.join('\n')));return;}setBusy(true);
   try{const result=await request(`/api/admin/maps/${documentData.id}`,{method:'PUT',body:JSON.stringify({document:documentData,revision})});revision=result.revision;documentData=result.document;history.stack[history.index]=clone(documentData);savedJSON=JSON.stringify(documentData);await syncHistoryScene();renderInspector();persistDraft();refreshSave();status('Saved. New matches will use this revision; existing matches keep their current map.');await refreshMaps();}
   catch(e){error(e);}finally{setBusy(false);}}
+async function showUnsavedChanges(){
+  if(busy||!documentData)return;
+  scene?.pointerUp();
+  const content=node('div',undefined,{class:'pending-changes'});
+  showDialog('Unsaved changes',content,null,'Close');
+  content.append(node('p','Comparing with the live map…'));
+  let live;
+  setBusy(true);
+  try {
+    if(revision===null){
+      content.replaceChildren(node('p','This new map has not been saved yet. Discarding it removes the local draft.'));
+      const discard=node('button','Discard new map',{type:'button',class:'danger'});
+      discard.onclick=async()=>{localStorage.removeItem(`bb-map-draft-${documentData.id}`);$('dialog').close();await refreshMaps();await loadMap(mapList[0].id);};content.append(discard);return;
+    }
+    live=await request(`/api/admin/maps/${documentData.id}`);
+  }catch(e){content.replaceChildren(node('p',e.message,{class:'errors'}));return;}finally{setBusy(false);}
+  const render=()=>{
+    const changes=diffUnsaved(live.document,documentData),chosen=new Set();
+    content.replaceChildren(node('p',changes.length?`${changes.length} pending changes compared with the live map. Only current differences are shown.`:'Your draft matches the live map.'));
+    if(!changes.length)return;
+    const actions=node('div',undefined,{class:'pending-actions'}),list=node('ol',undefined,{class:'pending-list'}),message=node('p','',{class:'errors',role:'status'});
+    const discardSelected=node('button','Discard selected',{type:'button'}),discardAll=node('button','Discard all',{type:'button',class:'danger'});
+    discardSelected.disabled=true;
+    const apply=async all=>{
+      if(busy)return;
+      const candidate=all?clone(live.document):discardChanges(documentData,changes.filter((_,i)=>chosen.has(i)));
+      const errors=validateDocument(candidate);
+      if(errors.length){message.textContent='These changes depend on other edits. Select the related changes too, or discard all. '+errors.slice(0,3).join(' ');return;}
+      setBusy(true);discardSelected.disabled=true;discardAll.disabled=true;
+      try{
+        documentData=candidate;
+        if(all||diffUnsaved(live.document,candidate).length===0){revision=live.revision;savedJSON=JSON.stringify(live.document);}
+        selectedId=null;selectedIds.clear();
+        commit(all?'All unsaved changes discarded.':'Selected changes discarded.');
+        await syncHistoryScene();render();
+      }catch(e){message.textContent=e.message;}finally{setBusy(false);}
+    };
+    discardSelected.onclick=()=>apply(false);discardAll.onclick=()=>apply(true);
+    actions.append(discardSelected,discardAll);content.append(actions,message,list);
+    const format=value=>value===undefined?'Not present':typeof value==='object'?JSON.stringify(value,null,2):String(value);
+    changes.forEach((change,i)=>{
+      const item=node('li',undefined,{class:'pending-change'}),label=node('label'),check=node('input',undefined,{type:'checkbox'});
+      const kind=change.before===undefined?'Added':change.after===undefined?'Removed':'Changed';
+      const title=change.path.map(part=>typeof part==='object'?part.id:friendlyName(part)).join(' › ');
+      check.onchange=()=>{if(check.checked)chosen.add(i);else chosen.delete(i);discardSelected.disabled=!chosen.size;discardSelected.textContent=chosen.size?`Discard selected (${chosen.size})`:'Discard selected';};
+      label.append(check,node('strong',title),node('span',kind,{class:'change-kind'}));item.append(label);
+      const details=node('details');details.append(node('summary','Live → draft'));
+      const values=node('div',undefined,{class:'change-values'});
+      for(const [name,value] of [['Live',change.before],['Draft',change.after]]){const col=node('div');col.append(node('b',name),node('pre',format(value)));values.append(col);}
+      details.append(values);item.append(details);list.append(item);
+    });
+  };
+  render();
+}
 function download(){const {document:exported,files:pending}=exportDocument(documentData);const blob=new Blob([JSON.stringify(exported,null,2)+'\n'],{type:'application/json'});const url=URL.createObjectURL(blob);const link=node('a',undefined,{href:url,download:`map-${documentData.id}.json`});link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);status('Exported full map document with all variants.');if(pending.size){const info=node('div');info.append(node('p','JSON does not include uploaded image files. Manually replace these game files when using this export:'));for(const file of pending)info.append(node('p','public'+file));showDialog('Images needed for this export',info,null,'Got it');}}
 function importDialog(){if(busy)return;const content=node('div');content.append(node('p','Paste a complete versioned map document, or select an exported JSON file. Import replaces every object and all three variants and can be undone.'));const input=node('input',undefined,{type:'file',accept:'.json,application/json'});const text=node('textarea',undefined,{'aria-label':'Map document JSON',spellcheck:'false'});input.onchange=async()=>{if(input.files[0])text.value=await input.files[0].text();};content.append(input,text);
   showDialog('Import map document',content,async()=>{let doc;try{doc=JSON.parse(text.value);}catch{throw Error('Invalid JSON.');}const errors=validateDocument(doc);if(errors.length)throw Error(errors.slice(0,12).join('\n'));if(doc.id!==documentData.id)throw Error('The imported map ID must match the open map. Use New map to create a separate map.');documentData=doc;selectedId=null;selectedIds.clear();commit('Document imported');await syncHistoryScene();});}
@@ -424,6 +479,7 @@ function newMapDialog(){if(busy)return;const content=node('div');const values={i
 function copyVariantDialog(){if(busy)return;const content=node('div');let target=VARIANTS.find(v=>v!==variant);content.append(node('p',`Copy the complete ${variant} layout, bounds, spawns and settings into another variant. This can be undone.`));field(content,'Destination',target,v=>target=v,{options:VARIANTS.filter(v=>v!==variant)});showDialog('Copy variant',content,()=>{documentData.variants[target]=clone(map());commit(`Copied ${variant} to ${target}`);});}
 async function undo(redo=false){if(!history||busy)return;documentData=redo?history.redo():history.undo();selectedIds=new Set([...selectedIds].filter(id=>allRows(map()).some(r=>r.id===id)));selectedId=[...selectedIds].at(-1)||null;persistDraft();refreshSave();renderBrowser();renderInspector();await syncHistoryScene();status(redo?'Edit restored':'Edit undone');}
 $('map-select').onchange=()=>loadMap(Number($('map-select').value));$('variant').onchange=async()=>{variant=$('variant').value;selectedId=null;selectedIds.clear();renderBrowser();renderInspector();await startScene();};$('search').oninput=renderBrowser;$('all-spawns').onchange=()=>{renderBrowser();scene?.rebuild();};
+$('save-state').onclick=showUnsavedChanges;
 $('add').onclick=()=>addObject();$('save').onclick=save;$('export').onclick=download;$('import').onclick=importDialog;$('new-map').onclick=newMapDialog;$('copy-variant').onclick=copyVariantDialog;
 $('undo').onclick=()=>undo();$('redo').onclick=()=>undo(true);$('preview').onclick=()=>setPreview(!preview);$('fit').onclick=()=>scene?.fit();$('zoom-in').onclick=()=>scene?.zoomBy(1.2);$('zoom-out').onclick=()=>scene?.zoomBy(1/1.2);
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{activeTab=b.dataset.tab;renderInspector();});
@@ -438,4 +494,4 @@ window.addEventListener('keydown',ev=>{if($('dialog').open)return;const typing=/
 const viewportObserver=new ResizeObserver(()=>{if(game&&scene&&!preview)game.scale.resize($('viewport').clientWidth,$('viewport').clientHeight);});viewportObserver.observe($('viewport'));
 window.addEventListener('keyup',ev=>keyboard.delete(ev.key.toLowerCase()));window.addEventListener('blur',()=>{keyboard.clear();scene?.pointerUp();});window.addEventListener('pointerup',()=>scene?.pointerUp());
 window.addEventListener('beforeunload',ev=>{if(dirty()){persistDraft();ev.preventDefault();ev.returnValue='';}});
-(async()=>{try{await refreshMaps();const query=new URLSearchParams(location.search);const requestedVariant=query.get('variant');if(VARIANTS.includes(requestedVariant)){variant=requestedVariant;$('variant').value=variant;}await loadMap(Number(query.get('map'))||mapList[0].id);}catch(e){error(e);}})();
+(async()=>{try{await refreshMaps();const query=new URLSearchParams(location.search);$('debug-hitboxes').checked=query.get('debug')==='1';const requestedVariant=query.get('variant');if(VARIANTS.includes(requestedVariant)){variant=requestedVariant;$('variant').value=variant;}await loadMap(Number(query.get('map'))||mapList[0].id);}catch(e){error(e);}})();

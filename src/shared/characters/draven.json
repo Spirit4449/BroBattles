@@ -51,8 +51,8 @@
       "special": {
         "aim": {
           "kind": "round",
-          "radius": 245,
-          "defaultRange": 245,
+          "radius": 220,
+          "defaultRange": 220,
           "anchorForwardOffset": 0,
           "anchorOffsetY": -6
         },

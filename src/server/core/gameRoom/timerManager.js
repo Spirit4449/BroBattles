@@ -1,3 +1,4 @@
+const { exposeDamageHitbox } = require('./damageHitboxes');
 const {
   WORLD_BOUNDS,
   GAME_DURATION_MS,
@@ -101,6 +102,8 @@ function tickTimerAndSuddenDeath(room) {
       return;
     }
 
+    const world = room.geometry?.world || { x: 0, width: WORLD_BOUNDS.width, y: 0, height: WORLD_BOUNDS.height };
+    exposeDamageHitbox(room, { id: 'sudden-death-poison' }, { kind: 'rect', left: world.x, right: world.x + world.width, top: poisonY, bottom: Math.max(poisonY, world.y + world.height) }, now);
     const dmgPerTick = (SD_DAMAGE_PER_SEC * room.FIXED_DT_MS) / 1000;
     for (const p of room.players.values()) {
       if (!p.isAlive || p.loaded !== true) continue;

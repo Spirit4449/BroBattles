@@ -160,7 +160,7 @@
   display: flex;
   flex-direction: column;
   gap: 9px;
-  border-radius: 10px;
+  border-radius: 12px;
   align-items: start;
   position: relative;
   min-height: 0;
@@ -306,7 +306,6 @@
 
 /* Image wrapper - profile icon */
 .character-card-image-wrap {
-  --character-portrait-radius: 12.5%;
   position: relative;
   width: 100%;
   height: auto;
@@ -315,16 +314,12 @@
   aspect-ratio: 1 / 1;
   flex: none;
   display: block;
-  /* Profile art has a baked-in radius of roughly 25px on its 200px canvas. */
-  border-radius: var(--character-portrait-radius);
+  /* Match the rounded silhouette of the composed portrait. */
+  border-radius: 9.375%;
   overflow: hidden;
-  background: linear-gradient(180deg, #091322, #040914);
-  box-shadow:
-    0 3px #000,
-    0 -3px #000,
-    3px 0 #000,
-    -3px 0 #000,
-    inset 0 3px rgba(255, 255, 255, 0.08);
+  background: transparent;
+  /* The SVG owns the complete rounded frame; avoid a second outer bezel. */
+  box-shadow: none;
 }
 
 .character-profile-icon {
@@ -334,7 +329,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: var(--character-portrait-radius);
+  border-radius: 9.375%;
   border: 0;
   outline: none;
   box-shadow: none;
@@ -440,7 +435,7 @@
 }
 
 .character-card-lock-overlay {
-  border-radius: var(--character-portrait-radius);
+  border-radius: 9.375%;
 }
 
 .character-details-lock-overlay {

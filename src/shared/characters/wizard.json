@@ -35,6 +35,8 @@
           "range": 1050,
           "visualRadius": 14,
           "collisionRadius": 28,
+          "collisionForwardOffset": -90,
+          "collisionOffsetY": 16,
           "initialScale": 0.1,
           "activeScale": 0.5,
           "glowRadiusMultiplier": 1.35,

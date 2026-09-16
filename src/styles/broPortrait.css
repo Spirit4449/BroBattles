@@ -1,0 +1,11 @@
+/* The portrait carries its own thin rim. Match its rounded silhouette in
+   avatar wrappers so their backgrounds cannot show through the corners. */
+img[src^="data:image/svg+xml,%3Csvg%20id%3D%22bro-portrait%22"] {
+  border-radius: 9.375% !important;
+  border: 0 !important;
+  object-fit: contain !important;
+}
+:is(.bb-chat-avatar, .leaderboard-avatar-frame, .profile-hero-avatar):has(img[src^="data:image/svg+xml,%3Csvg%20id%3D%22bro-portrait%22"]) {
+  border-radius: 9.375%;
+  border: 0;
+}

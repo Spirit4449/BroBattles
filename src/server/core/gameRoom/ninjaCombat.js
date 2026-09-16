@@ -1,3 +1,4 @@
+const { exposeDamageHitbox } = require('./damageHitboxes');
 const model=require('../../../shared/ninjaProjectile');
 const {sweep}=require('../../../shared/huntressProjectile');
 const {characterBody}=require('../../../shared/duelGeometry');
@@ -68,12 +69,13 @@ function tick(room){
   }
   for(const entry of state.active.values()){
     const p=getParticipant(room,entry.owner),q=entry.projectile;if(!p) {state.active.delete(q.id);continue;}
-    if(!p.isAlive||!p.loaded||p.connected===false){finish(room,entry,p,'owner-unavailable');continue;}
+    if(!p.loaded||p.connected===false){finish(room,entry,p,'owner-unavailable');continue;}
     if(q.launchMono===room._simulationMono)continue;
     q.returnTarget={x:p.x,y:p.y};
     const oldPhase=q.phase,segments=model.step(q,p,room.geometry?.colliders||[]);
-    for(const segment of segments){
+    for(const [index, segment] of segments.entries()){
       if(q.elapsed<60)continue;
+      exposeDamageHitbox(room,q,{kind:'sweep',a:segment.a,b:segment.b,radius:q.cfg.collisionRadius},Date.now(),String(index));
       const contacts=targets(room,p).map(t=>({...t,t:sweep(segment.a,segment.b,t.bounds,q.cfg.collisionRadius)}))
         .filter(t=>t.t!==null&&!(segment.terrain&&t.t>=1)).sort((a,b)=>a.t-b.t||a.name.localeCompare(b.name));
       for(const hit of contacts){

@@ -1,3 +1,4 @@
+const { damageHitboxSnapshot } = require('./damageHitboxes');
 const effectManager = require('./effects/effectManager');
 const { randomUUID } = require("node:crypto");
 const { getDuelGeometry, spawnForParticipant } = require('../../../shared/duelGeometry');
@@ -164,6 +165,8 @@ function broadcastSnapshot(room, extraTiming = null) {
     snapshotKind: extraTiming ? "periodic" : "event",
     players: {},
   };
+
+  if (room.matchData?.editorDebugHitboxes) snapshot.damageHitboxes = damageHitboxSnapshot(room, wall);
 
   for (const playerData of room.players.values()) {
     const playerSnapshot = {

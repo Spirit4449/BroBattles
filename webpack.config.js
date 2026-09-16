@@ -58,6 +58,7 @@ module.exports = (_env = {}, argv = {}) => {
   },
   module: {
     rules: [
+      { test: /\.webp$/, resourceQuery: /portrait/, type: "asset/inline" },
       {
         test: /\.js$/,
         exclude: /node_modules/,

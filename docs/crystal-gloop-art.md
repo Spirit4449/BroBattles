@@ -1,0 +1,39 @@
+# Crystal Gloop artwork
+
+## Latest falling and projectile revision
+
+Regular Gloop fall00–02 have been restored pixel-for-pixel from commit 676a62e. Duck and wall-slide revisions remain. Crystal falling poses were regenerated with built-in imagegen into public/assets/gloop/skins/gloop-amethyst/falling-source.png. Run node scripts/pack-crystal-falling.cjs to pack these into that skin's spritesheet.webp after a full atlas regeneration. One shared scale preserves the authored stretch: 38×44, 33×54, 37×46 visible pose rectangles inside the existing 128px frames. body.webp remains unchanged.
+
+The procedural projectile uses the body's sampled deep-purple palette (5010c0, 4000a0, 300090). Three elongated pointed crystals are spaced around the interior, with muted blue 3150b5 and violet 7450b8 faces and a restrained 4275bf tip facet to look submerged in the goo. Bright white caps and broad hexagonal shapes have been removed. The release remains lower (verticalOffset -0.24), close to the body, with 120ms windup.
+
+Regeneration prompt:
+
+Regenerate THREE falling animation poses of this Crystal Gloop character. Sprite strip: exactly 3 equally spaced columns in ONE row, real alpha transparent background. Pixel art sharp clear facets. Preserve faceless saturated deep indigo/violet jelly body, rigid cyan-blue and pale lavender chunky crystals from reference. All poses airborne falling DOWN: noticeably stretched vertically, body height approximately 1.4 times width. First pose medium stretch, second longer falling stretch, third settling to intermediate stretch. Broad heavy rounded lower belly, upper body pulled upward by descent, crystals clustered on upper body with slight upward lean. Compact cohesive jelly mass with strong vertical squash/stretch; NO thin liquid tail, NO water droplet silhouette, NO tendrils, NO eyes mouth smile. The entire chunky crystal cluster and purple body must remain recognizable. Large crystals retain straight edges and broad planar faces. No grounded flat base, no puddles, no floor, no shadows, no motion lines, no detached particles, no labels. All three complete silhouettes fully within equal width cells, with generous transparent gutters. Match reference colors exactly: vivid deep royal purple goo, dark indigo outline, electric cyan facets, blue midtones, lilac illuminated crystal faces.
+
+Generated with the built-in imagegen tool, then packed with `node scripts/pack-crystal-gloop.cjs` using Sharp nearest-neighbor resizing and lossless WebP encoding.
+
+Assets: `public/assets/gloop/skins/gloop-amethyst/{ai-source.png,spritesheet.webp,body.webp}`.
+
+The atlas is 1280×513, matching animations.json including its unused final 1px row. Playable frames remain 128×128, centered horizontally and grounded on the last row of each cell. Idle width matches base Gloop's 47px. The 1000×1000 transparent portrait uses a 64px source-art grid enlarged by an integer factor of 12, centered and bottom-aligned. The portrait is sampled from generated source art, not enlarged from the gameplay atlas.
+
+The procedural slime renderer selects the crystal variant from the owner's skin texture key, for both local and remote releases. It retains goo deformation and adds five two-tone crystals, purple trails and crystal fragments in impact residue. Physics remain shared.
+
+## Generation prompt
+
+Use case: style-transfer. Create a production game animation spritesheet redesign of the attached Crystal Gloop. Transparent background, real alpha. Wide 3200x1280 canvas, exact evenly spaced 10 columns by 4 rows, one whole isolated character per cell with ample transparent gutters. All 40 cells occupied. Side-scroller orthographic view. Redesign as FACELESS amethyst purple gelatinous slime with LARGE sharply angular crystalline clusters growing out of its body, cyan and lilac facets, dark purple crisp outline, hand-pixeled game art, limited flat palette, NO fuzzy glow, no blur, no soft gradients, no eyes, no mouth, NO SMILEY FACE anywhere. Gooey low dome base with pointed geometric crystals; consistent identical crystal arrangement across frames. Row1: 10 subtle idle breathing frames. Row2: 10 squashing and stretching running/sliding cycle frames. Row3: first 5 ascending stretched jump frames then 5 squash landing frames. Row4: 10 attack windup then sideways slime extension to right and recovery frames. Each sprite centered in own cell horizontally and grounded near cell bottom. No grid lines no text no labels no floor shadow. Maintain clear large readable facets even at 48 pixels wide. This is replacement art: do not preserve fuzzy texture or face from reference.
+
+## Transparency correction prompt
+
+Use case background-extraction. Keep this exact 10 column 4 row Crystal Gloop animation sheet and all 40 sprites unchanged, sharp details and faceless crystals. Remove the ENTIRE baked gray-and-white checkerboard background. Output real RGBA alpha transparency, NOT an illustration of a transparency checkerboard. Every background pixel between sprites must have alpha zero. Preserve original layout, character colors, shapes and crisp edges. NO checkerboard pixels in output, no backdrop, no shadow.
+
+## Shared movement revision
+
+The latest source is public/assets/gloop/movement-source.png, generated with built-in imagegen using the base and crystal body portraits as references. Both spritesheets use compact falling poses with small vertical changes, a moderately lowered duck dome, and a mildly compressed wall-contact pose. Portraits are unchanged.
+
+Run node scripts/pack-gloop-poses.cjs after any full atlas regeneration (including pack-crystal-gloop.cjs). This packer now only writes named duck00 and wall00 frames and preserves falling art. The duck pose occupies zero-based cell [8,2]; the game's duckFrame configuration is ONE-BASED [9,3]. setupDuckFrame uses the named frame first, then the corrected coordinates as a fallback. Tests execute the production setup function for both paths and both skins.
+
+All logical frames remain 128×128. Idle playback traverses 0–7 then 6–1 so the seam only advances one pose. Shared throw windup remains 120ms with a forward offset of 0.10 times sprite width.
+
+### Final movement prompt
+
+Create corrected game animation poses from these two reference characters using very restrained deformation. 5 columns x 2 rows, ten separate small crisp pixel-art sprites with real transparent alpha background, no checkerboard pixels, ample gutters. TOP ROW reference1 base Gloop, faceless compact domed teal blob with blue core, same firm jelly shape. BOTTOM ROW reference2 Crystal Gloop, faceless broad purple rock-like jelly dome with intact cyan/amethyst crystal cluster. Preserve their dense solid compact body masses, do not turn them into water, no tails, no tendrils, no drips, no flames, no teardrops, no melting, no flexible crystals. Column1 falling onset: compact airborne rounded body, slightly rounded underside instead of flat grounded base, width roughly 1.2 times height. Column2 falling: same compact body, 5 percent vertical stretch, rounded underside, crystals retain rigid shape. Column3 falling: same with small 5 percent wobble, consistent size. Column4 duck: crouched compact broad dome, 25 percent shorter than standing, 8 percent wider, still substantial solid body volume, crystals retain their geometry and tuck down slightly, NOT a pancake or puddle. Column5 wall-slide: same compact domed blob mildly pressed against invisible wall on RIGHT, body only 15 percent narrower than normal with gently flattened right contact face and round left contour, about equal width and height, no tall sliver, no elongation, no drips, no tail, NO wall drawn. All whole characters centered in their cells at consistent scale. Crisp limited-palette pixel art matching original references, NO faces eyes mouths, no labels, no motion streaks, no glow, no blur.

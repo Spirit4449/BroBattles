@@ -1,5 +1,25 @@
+import "../styles/broPortrait.css";
 import ICONS from "../shared/profileIconsCatalog.json";
-import { buildCharacterSkinBodyUrl } from "./skinAssets.js";
+import { BRO_PORTRAIT_PALETTES, buildBroPortraitSvg } from "./broPortrait.mjs";
+import ninjaBody from "../../public/assets/ninja/body.webp?portrait";
+import thorgBody from "../../public/assets/thorg/body.webp?portrait";
+import dravenBody from "../../public/assets/draven/body.webp?portrait";
+import wizardBody from "../../public/assets/wizard/body.webp?portrait";
+import huntressBody from "../../public/assets/huntress/body.webp?portrait";
+import gloopBody from "../../public/assets/gloop/body.webp?portrait";
+
+const bodies = { ninja: ninjaBody, thorg: thorgBody, draven: dravenBody,
+  wizard: wizardBody, huntress: huntressBody, gloop: gloopBody };
+const portraitUrls = new Map();
+
+function broPortraitUrl(character) {
+  const id = Object.hasOwn(bodies, character) ? character : "ninja";
+  if (!portraitUrls.has(id)) {
+    const svg = buildBroPortraitSvg(bodies[id], BRO_PORTRAIT_PALETTES[id]);
+    portraitUrls.set(id, `data:image/svg+xml,${encodeURIComponent(svg).replace(/'/g, "%27")}`);
+  }
+  return portraitUrls.get(id);
+}
 
 function normalizeProfileIconId(iconId) {
   const id = String(iconId || "")
@@ -12,13 +32,12 @@ function normalizeProfileIconId(iconId) {
 
 export function buildProfileIconUrl(profileIconId, charClass = "ninja") {
   const iconId = normalizeProfileIconId(profileIconId);
+  const character = normalizeProfileIconId(charClass) || "ninja";
+  if (Object.hasOwn(bodies, iconId)) return broPortraitUrl(iconId);
   if (iconId) {
-    return ICONS.icons.find(icon => icon.id === iconId)?.assetUrl || "/assets/profile-icons/ninja.webp";
+    return ICONS.icons.find(icon => icon.id === iconId)?.assetUrl || broPortraitUrl(character);
   }
-  const fallbackClass = String(charClass || "ninja")
-    .trim()
-    .toLowerCase();
-  return buildCharacterSkinBodyUrl(fallbackClass || "ninja", "");
+  return broPortraitUrl(character === "hunteress" ? "huntress" : character);
 }
 
 export function buildProfileIconAlt(profileIconId, charClass = "ninja") {

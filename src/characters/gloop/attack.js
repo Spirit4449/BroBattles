@@ -207,7 +207,7 @@ export function spawnGloopSlimeballVisual(
   const state = { ...cfg, x: start.x, y: start.y, vx: Math.cos(angle) * cfg.speed,
     vy: cfg.initialVy, collisionRadius: radius, elapsed: 0, traveled: 0, bounceCount: 0 };
   const visual = createSlimeVisual(scene, state,
-    Number(payload.scale) || Number(SLIMEBALL.visualScale) || 1.5);
+    Number(payload.scale) || Number(SLIMEBALL.visualScale) || 1.5, ownerSprite);
   const debug = createDebugCircle(scene, radius);
   let disposed = false;
   let ended = false;

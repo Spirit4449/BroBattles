@@ -1,4 +1,4 @@
-import { ninjaProjectileTexture } from './projectileTexture';
+import { ninjaProjectileTexture, animateNinjaProjectile } from './projectileTexture';
 import { createShurikenEffects } from './effects';
 // ReturningShuriken.js
 // Curved, returning, piercing shuriken with deterministic local simulation.
@@ -110,7 +110,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     );
     this.body.setSize(collisionSize, collisionSize, true);
     this.setDepth(RENDER_LAYERS.ATTACKS);
-    this.setAngularVelocity(this.cfg.rotationSpeed * this.cfg.direction);
+    this.setProjectileAngularVelocity(this.cfg.rotationSpeed * this.cfg.direction);
 
     // Path control points (slight dip then bulge)
     this.startX = startPos.x;
@@ -303,12 +303,16 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     }
     this.phase = "return";
     this.elapsed = 0;
-    this.setAngularVelocity(this.cfg.rotationSpeed * 1.15 * this.cfg.direction);
+    this.setProjectileAngularVelocity(this.cfg.rotationSpeed * 1.15 * this.cfg.direction);
+  }
+
+  setProjectileAngularVelocity(speed) {
+    this.setAngularVelocity(this.projectileTexture.endsWith('-weapon-spin') ? 0 : speed);
   }
 
   spawnTrail() {
     if (!this.scene.textures.exists(this.projectileTexture)) return;
-    const s = this.scene.add.image(this.x, this.y, this.projectileTexture);
+    const s = this.scene.add.image(this.x, this.y, this.projectileTexture, this.frame?.name);
     s.setScale(this.cfg.scale * 0.48);
     s.setDepth(RENDER_LAYERS.ATTACKS - 1);
     s.alpha = 0.35;
@@ -347,6 +351,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     if (!this.active) return;
     this.elapsed += delta;
     this.totalElapsed += delta;
+    if(this.projectileTexture.endsWith('-weapon-spin')) animateNinjaProjectile(this,this.projectileTexture,this.totalElapsed,this.cfg.rotationSpeed,this.cfg.direction);
     this.fx?.update(this.totalElapsed);
     this.trailAccum += delta;
     if (this.trailAccum >= this.trailInterval) {
@@ -383,7 +388,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       if (rawT >= 1) {
         this.phase = "hover";
         this.elapsed = 0;
-        this.setAngularVelocity(
+        this.setProjectileAngularVelocity(
           this.cfg.rotationSpeed * 0.55 * this.cfg.direction,
         );
       }
@@ -391,7 +396,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       if (this.elapsed >= this.hoverDuration) {
         this.phase = "return";
         this.elapsed = 0;
-        this.setAngularVelocity(
+        this.setProjectileAngularVelocity(
           this.cfg.rotationSpeed * 1.15 * this.cfg.direction,
         );
       }

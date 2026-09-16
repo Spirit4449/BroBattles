@@ -610,7 +610,18 @@ function setupMapPickerControls(onSelect = null) {
         if (editLink) {
           const choice = document.createElement('div');
           choice.className = 'map-choice';
-          choice.append(card, editLink);
+          const debugLabel = document.createElement('label');
+          debugLabel.className = 'map-choice-edit';
+          const debugCheck = document.createElement('input');
+          debugCheck.type = 'checkbox';
+          debugCheck.addEventListener('change', () => {
+            const url = new URL(editLink.href, location.origin);
+            if (debugCheck.checked) url.searchParams.set('debug', '1');
+            else url.searchParams.delete('debug');
+            editLink.href = url.pathname + url.search;
+          });
+          debugLabel.append(debugCheck, document.createTextNode('Debug hitboxes'));
+          choice.append(card, editLink, debugLabel);
           grid.appendChild(choice);
         } else grid.appendChild(card);
       });

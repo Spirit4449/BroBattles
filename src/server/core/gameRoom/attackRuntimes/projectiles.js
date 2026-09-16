@@ -3,7 +3,7 @@ const SLIME = getResolvedCharacterAttackConfig("gloop", "slimeball");
 const { getParticipant, participantId } = require('../participants');
 const { WORLD_BOUNDS } = require("../../gameRoomConfig");
 const { advanceSlimeball } = require("../../../../shared/gloopProjectile");
-const { resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, sweptCircleOverlapsRect } = require('./geometry');
+const { resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter, sweptCircleOverlapsRect } = require('./geometry');
 const { hitCircleTargets } = require('./targets');
 
 function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
@@ -91,6 +91,10 @@ function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
         Number(runtime.collisionRadius) ||
         1,
     ),
+    // Geometry offsets are server-owned tuning; clients cannot move damage
+    // independently of the rendered attack.
+    collisionForwardOffset: Number(runtime.collisionForwardOffset) || 0,
+    collisionOffsetY: Number(runtime.collisionOffsetY) || 0,
     burn: actionData?.burn || null,
     destroyOnHit:
       actionData?.destroyOnHit === true || runtime.destroyOnHit === true,
@@ -176,23 +180,24 @@ function buildProjectileBounceAttack(playerData, actionData, descriptor, now) {
   };
 }
 
-function tickLinearProjectile(room, attack, descriptor) {
+function tickLinearProjectile(room, attack, descriptor, now = Date.now()) {
   const attacker = getParticipant(room, attack.attackerParticipantId);
-  if (!attacker || !attacker.isAlive) return true;
+  if (!attacker || attacker.connected === false || attacker.loaded === false) return true;
   const runtime = descriptor?.runtime || {};
   const dtSec = room.FIXED_DT_MS / 1000;
   attack.elapsed += room.FIXED_DT_MS;
   attack.traveled += Number(attack.speed || runtime.speed) * dtSec;
   attack.x += Number(attack.vx) * dtSec;
   attack.y += Number(attack.vy) * dtSec;
+  const collisionCenter = getAttackCollisionCenter(attack, runtime);
   const hitCount = hitCircleTargets(
     room,
     attack,
     descriptor,
-    attack.x,
-    attack.y,
+    collisionCenter.x,
+    collisionCenter.y,
     Math.max(1, Number(attack.collisionRadius || runtime.collisionRadius) || 1),
-    Date.now(),
+    now,
   );
   if (attack.destroyOnHit && hitCount > 0) return true;
   return (
@@ -202,7 +207,7 @@ function tickLinearProjectile(room, attack, descriptor) {
 
 function tickBouncingProjectile(room, attack, descriptor, now) {
   const attacker = getParticipant(room, attack.attackerParticipantId);
-  if (!attacker || !attacker.isAlive) return true;
+  if (!attacker || attacker.connected === false || attacker.loaded === false) return true;
   advanceSlimeball(attack, room.FIXED_DT_MS,
     room.geometry?.colliders || attack.mapCollisionRects || [],
     () => {

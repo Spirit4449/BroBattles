@@ -48,6 +48,8 @@ function getRuntimeOverrides(actionType) {
       getResolvedCharacterAttackConfig("wizard", "fireball") || {};
     const runtime = {
       collisionRadius: Number(fireball.collisionRadius),
+      collisionForwardOffset: Number(fireball.collisionForwardOffset),
+      collisionOffsetY: Number(fireball.collisionOffsetY),
       speed: Number(fireball.speed),
       range: Number(fireball.range),
       forwardOffsetWidthFactor: Number(fireball.forwardOffset),
@@ -183,6 +185,8 @@ function getRuntimeOverrides(actionType) {
         speed: Math.max(1, Number(hook.speed)),
         range: Math.max(1, Number(hook.range)),
         collisionRadius: Math.max(1, Number(hook.collisionRadius)),
+        collisionForwardOffset: Number(hook.collisionForwardOffset),
+        collisionOffsetY: Number(hook.collisionOffsetY),
         maxLifetimeMs: Math.max(
           200,
           Math.ceil(

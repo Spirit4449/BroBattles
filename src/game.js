@@ -1,3 +1,4 @@
+import { installDamageHitboxDebug } from './gameScene/damageHitboxDebug';
 import { bindAudio, bindGameAudio } from "./site/preferences";
 import { ensureLegalAcceptance } from "./site/shell";
 import "./site/shell.js";
@@ -1322,14 +1323,13 @@ class GameScene extends Phaser.Scene {
     this.initializeOtherPlayers();
 
     // Toggle physics debug with Ctrl+M (ensures debug graphic exists)
-    this.input.keyboard.on("keydown-M", (e) => {
-      if (!e.ctrlKey) return;
+    if (gameData?.editorPlaytest) installDamageHitboxDebug(this, socket);
+    const setHitboxDebug = (enable) => {
       const world = this.physics?.world;
       if (!world) return;
-      const enable = !world.drawDebug;
       world.drawDebug = enable;
       try {
-        setAttackDebugState(enable);
+        setAttackDebugState(gameData?.editorDebugHitboxes ? false : enable);
       } catch (_) {}
       if (enable) {
         // Create debug graphic if Phaser hasn't created it yet
@@ -1354,6 +1354,10 @@ class GameScene extends Phaser.Scene {
       // Keep config in sync for any systems that read it
       const arcadeCfg = this.sys?.game?.config?.physics?.arcade;
       if (arcadeCfg) arcadeCfg.debug = enable;
+    };
+    setHitboxDebug(gameData?.editorDebugHitboxes === true);
+    this.input.keyboard.on("keydown-M", (e) => {
+      if (e.ctrlKey) setHitboxDebug(!this.physics?.world?.drawDebug);
     });
 
     // Camera: smooth follow

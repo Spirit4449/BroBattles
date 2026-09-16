@@ -3,12 +3,7 @@ import ReturningShuriken from "./attack";
 import { getResolvedCharacterSpecialConfig } from "../../shared/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
-import {
-  getAnimationDurationMs,
-  markOneShotAnimation,
-  playSpriteAnimation,
-  resolveSpriteAnimationKey,
-} from "../shared/animationState";
+import { presentSwarmRelease } from './swarmPresentation';
 
 const SWARM = getResolvedCharacterSpecialConfig("ninja", "swarm");
 const SWARM_COUNT = SWARM.count ?? 15;
@@ -142,34 +137,6 @@ export function perform(
   }
   lockFlipDuringRelease(scene, player);
 
-  try {
-    scene.sound?.play("shurikenThrow", {
-      volume: isOwner ? 0.9 : 0.42,
-      rate: 1.18,
-    });
-  } catch (_) {}
-
-  const throwAnimationKey = resolveSpriteAnimationKey({
-    scene,
-    sprite: player,
-    character: "ninja",
-    logical: "throw",
-    fallback: "idle",
-  });
-  markOneShotAnimation(
-    player,
-    "throw",
-    getAnimationDurationMs(scene, throwAnimationKey, 300),
-    { remote: !isOwner },
-  );
-  playSpriteAnimation({
-    scene,
-    sprite: player,
-    character: "ninja",
-    logical: "throw",
-    fallback: "idle",
-  });
-
   if (ninjaEnabled()) return;
   for (let index = 0; index < SWARM_COUNT; index++) {
     scene.time.delayedCall(index * SWARM_RELEASE_MS, () => {
@@ -183,11 +150,7 @@ export function perform(
         index,
         specialData,
       );
-      if (isOwner && index % 4 === 0) {
-        try {
-          scene.sound?.play("shurikenThrow", { volume: 0.34, rate: 1.28 });
-        } catch (_) {}
-      }
+      presentSwarmRelease(scene, player, SWARM_RELEASE_MS, !isOwner);
     });
   }
 }

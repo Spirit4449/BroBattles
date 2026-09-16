@@ -7,7 +7,17 @@ const COLORS = [0x0fb6b2, 0x169aaf, 0x1268b8, 0x25cbb4];
 
 // One graphics batch for droplets/residue, one for the deformable liquid body.
 // Effects are bounded and outlive the projectile briefly; shutdown owns all cleanup.
-export function createSlimeVisual(scene, state, visualScale = 1.5) {
+export function createSlimeVisual(scene, state, visualScale = 1.5, owner = null) {
+  const crystal = (owner?._bbSkinTextureKey || owner?.texture?.key) === 'gloop__gloop-amethyst';
+  const colors = crystal ? [0x4215b8, 0x5633cb, 0x261080, 0x3976bc] : COLORS;
+  const tint = color => crystal ? ({
+    0x07529b: 0x201060, 0x16afa9: 0x4215b8, 0x15aaa9: 0x4215b8,
+    0x16b6b0: 0x5633cb, 0xa2edcf: 0x8099d8, 0x9ee6ce: 0x8099d8,
+    0x99e9c9: 0x5366b6, 0x11bbaa: 0x5633cb, 0x139ca9: 0x4215b8,
+    0x0868b6: 0x301298, 0x0846ae: 0x261080, 0xf2f5aa: 0x8a9cdd,
+    0x93edce: 0x4f7bbf, 0x74dcbc: 0x6755bb, 0x12afaf: 0x4215b8,
+    0x13b5ad: 0x5633cb, 0x13abae: 0x4215b8,
+  }[color] ?? color) : color;
   const body = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 6);
   const fx = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 2);
   const r = state.collisionRadius * clamp(visualScale / 1.5, 0.75, 1.25);
@@ -21,7 +31,7 @@ export function createSlimeVisual(scene, state, visualScale = 1.5) {
   function ribbon(x, y, tailX, tailY, width, color, alpha) {
     const dx = x - tailX, dy = y - tailY, length = Math.hypot(dx, dy) || 1;
     const nx = -dy / length, ny = dx / length;
-    fx.fillStyle(color, alpha); fx.beginPath(); fx.moveTo(tailX, tailY);
+    fx.fillStyle(tint(color), alpha); fx.beginPath(); fx.moveTo(tailX, tailY);
     for (let i = 1; i <= 20; i++) {
       const t = i / 20, w = width * Math.pow(Math.sin(Math.PI * t), 0.7) * t;
       fx.lineTo(tailX + dx * t + nx * w, tailY + dy * t + ny * w);
@@ -35,7 +45,7 @@ export function createSlimeVisual(scene, state, visualScale = 1.5) {
 
   function droplet(x, y, vx, vy, size, life = 650) {
     if (drops.length >= 80) drops.shift();
-    drops.push({ x, y, vx, vy, size, life, maxLife: life, color: COLORS[Math.floor(random(0, COLORS.length))] });
+    drops.push({ x, y, vx, vy, size, life, maxLife: life, color: colors[Math.floor(random(0, colors.length))] });
   }
   function impact(hit) {
     lastImpact = hit; impactAge = 0;
@@ -54,7 +64,7 @@ export function createSlimeVisual(scene, state, visualScale = 1.5) {
     }
   }
   function contour(scale, color, alpha, ox = 0, oy = 0) {
-    body.fillStyle(color, alpha);
+    body.fillStyle(tint(color), alpha);
     body.beginPath();
     for (let i = 0; i <= 64; i++) {
       const a = i / 64 * Math.PI * 2;
@@ -87,6 +97,32 @@ export function createSlimeVisual(scene, state, visualScale = 1.5) {
     }
     body.closePath(); body.fillPath();
   }
+  // Long pointed crystals, darkened by the violet liquid around them.
+  function shard(graphics, x, y, size, angle, alpha = 1) {
+    const point = (px, py) => ({
+      x: x + (px * Math.cos(angle) - py * Math.sin(angle)) * size,
+      y: y + (px * Math.sin(angle) + py * Math.cos(angle)) * size,
+    });
+    const tip = point(-0.08, -1.3), left = point(-0.39, -0.25);
+    const lowerLeft = point(-0.32, 0.66), base = point(0.1, 0.85);
+    const lowerRight = point(0.37, 0.55), right = point(0.32, -0.35);
+    const ridge = point(0.02, -0.13);
+    const faces = [
+      [[tip, ridge, base, lowerLeft, left], 0x3150b5],
+      [[tip, right, lowerRight, base, ridge], 0x7450b8],
+      [[tip, left, ridge], 0x4275bf],
+    ];
+    for (const [vertices, color] of faces) {
+      graphics.fillStyle(color, alpha); graphics.beginPath();
+      graphics.moveTo(vertices[0].x, vertices[0].y);
+      for (const vertex of vertices.slice(1)) graphics.lineTo(vertex.x, vertex.y);
+      graphics.closePath(); graphics.fillPath();
+    }
+    graphics.lineStyle(1, 0x241064, alpha);
+    graphics.beginPath(); graphics.moveTo(tip.x, tip.y);
+    for (const vertex of [right, lowerRight, base, lowerLeft, left]) graphics.lineTo(vertex.x, vertex.y);
+    graphics.closePath(); graphics.strokePath();
+  }
   function update(delta) {
     if (destroyed) return;
     const dt = Math.min(Math.max(delta, 0), 100) / 1000;
@@ -100,25 +136,31 @@ export function createSlimeVisual(scene, state, visualScale = 1.5) {
       const tx = -stain.ny, ty = stain.nx;
       const wall = Math.abs(stain.nx) > 0.5;
       const film = Math.min(5, stain.size * 0.18);
-      fx.fillStyle(0x07529b, alpha * 0.5);
+      fx.fillStyle(tint(0x07529b), alpha * 0.5);
       fx.fillEllipse(stain.x + stain.nx * 1.5, stain.y + stain.ny * 1.5,
         wall ? film + 1 : stain.size * 2.5 * spread, wall ? stain.size * 2.5 * spread : film + 1);
-      fx.fillStyle(0x16afa9, alpha * 0.72);
+      fx.fillStyle(tint(0x16afa9), alpha * 0.72);
       fx.fillEllipse(stain.x + stain.nx * 3, stain.y + stain.ny * 3,
         wall ? film : stain.size * 2.2 * spread, wall ? stain.size * 2.2 * spread : film);
       for (const bead of stain.beads) {
         const x = stain.x + tx * bead.offset * stain.size * spread + stain.nx * 3;
         const y = stain.y + ty * bead.offset * stain.size * spread + stain.ny * 3;
         const drip = wall ? bead.drip * Math.min(1, stain.age / 1000) : 0;
-        fx.lineStyle(bead.size * stain.size * 0.6, 0x16afa9, alpha * 0.7);
+        fx.lineStyle(bead.size * stain.size * 0.6, tint(0x16afa9), alpha * 0.7);
         if (wall) ribbon(x + Math.sin(bead.offset * 7) * 2, y + drip + 5, x, y - 3,
           bead.size * stain.size * 0.65, 0x15aaa9, alpha * 0.85);
         else ribbon(x + bead.offset * 8, y + 1, x - bead.offset * 12, y - 1,
           bead.size * stain.size * 0.65, 0x16b6b0, alpha * 0.7);
       }
-      fx.lineStyle(1, 0xa2edcf, alpha * 0.55);
+      fx.lineStyle(1, tint(0xa2edcf), alpha * 0.55);
       fx.lineBetween(stain.x - tx * stain.size * 0.5 + stain.nx * 4, stain.y - ty * stain.size * 0.5 + stain.ny * 4,
         stain.x + tx * stain.size * 0.25 + stain.nx * 4, stain.y + ty * stain.size * 0.25 + stain.ny * 4);
+      if (crystal && stain.size > 8) {
+        for (let j = -1; j <= 1; j++) shard(fx,
+          stain.x + tx * j * stain.size * 0.48 + stain.nx * 3,
+          stain.y + ty * j * stain.size * 0.48 + stain.ny * 3,
+          stain.size * 0.23, j * 0.6 + Math.atan2(stain.nx, -stain.ny), alpha);
+      }
     }
     for (let i = drops.length - 1; i >= 0; i--) {
       const d = drops[i]; d.life -= delta;
@@ -149,7 +191,7 @@ export function createSlimeVisual(scene, state, visualScale = 1.5) {
       const angle = Math.atan2(d.vy + 70, d.vx);
       ribbon(d.x, d.y, d.x - Math.cos(angle) * length, d.y - Math.sin(angle) * length,
         d.size * 1.1, d.color, alpha);
-      fx.lineStyle(0.65, 0x9ee6ce, alpha * 0.5);
+      fx.lineStyle(0.65, tint(0x9ee6ce), alpha * 0.5);
       fx.lineBetween(d.x - 0.7, d.y - 2, d.x - Math.cos(angle) * length * 0.6, d.y - Math.sin(angle) * length * 0.6);
     }
     if (finished) return drops.length > 0 || stains.length > 0;
@@ -190,20 +232,28 @@ export function createSlimeVisual(scene, state, visualScale = 1.5) {
     // Layered translucent skin, dark lower mass and asymmetric wet reflections.
     contour(1.04, 0x99e9c9, 0.48);
     contour(1, 0x11bbaa, 0.98);
-    contour(0.89, 0x139ca9, 0.98);
-    contour(0.73, 0x0868b6, 0.97, r * 0.02, r * 0.09);
-    contour(0.56, 0x0846ae, 0.94, -r * 0.06, r * 0.13);
-    body.fillStyle(0xf2f5aa, 0.93);
+    contour(crystal ? 0.95 : 0.89, 0x139ca9, 0.98);
+    contour(crystal ? 0.81 : 0.73, 0x0868b6, 0.97, r * 0.02, r * 0.09);
+    contour(crystal ? 0.63 : 0.56, 0x0846ae, 0.94, -r * 0.06, r * 0.13);
+    body.fillStyle(tint(0xf2f5aa), 0.93);
     body.fillEllipse(-r * 0.44, -r * 0.47, r * 0.2, r * 0.36);
     body.fillEllipse(r * 0.42, -r * 0.51, r * 0.13, r * 0.28);
     if (compression < 0.08) {
-      body.lineStyle(1.1, 0x93edce, 0.65); body.beginPath();
+      body.lineStyle(1.1, tint(0x93edce), 0.65); body.beginPath();
       body.arc(0, 0, r * 0.92, 0.1, 1.05); body.strokePath();
     }
     for (let i = 0; i < 3; i++) {
       const a = time * 0.0009 + i * 2.3;
       const bx = Math.cos(a) * r * 0.43, by = Math.sin(a * 1.3) * r * 0.36;
-      body.lineStyle(0.8, 0x74dcbc, 0.4); body.strokeCircle(bx, by, r * (0.065 + i * 0.018));
+      body.lineStyle(0.8, tint(0x74dcbc), 0.4); body.strokeCircle(bx, by, r * (0.065 + i * 0.018));
+    }
+    if (crystal) {
+      for (let i = 0; i < 3; i++) {
+        const a = i * Math.PI * 2 / 3 + time * 0.00035;
+        shard(body, Math.cos(a) * r * 0.55,
+          Math.sin(a) * r * 0.48 + compression * r * 0.3,
+          r * (i === 0 ? 0.43 : 0.36), Math.sin(a) * 0.35, 0.96);
+      }
     }
     // Attached liquid necks droop in world gravity, then shed real falling droplets.
     for (let i = 0; i < (state.contactHold ? 0 : 2); i++) {
@@ -211,7 +261,7 @@ export function createSlimeVisual(scene, state, visualScale = 1.5) {
       const x = state.x - Math.sign(state.vx || 1) * r * (0.35 + i * 0.28);
       const y = state.y + r * 0.65;
       const length = r * (0.18 + phase * 0.55);
-      fx.lineStyle(r * (0.16 - phase * 0.07), 0x12afaf, 0.85);
+      fx.lineStyle(r * (0.16 - phase * 0.07), tint(0x12afaf), 0.85);
       fx.lineBetween(x, y, x - state.vx * 0.008 * phase, y + length);
       ribbon(x - state.vx * 0.008 * phase, y + length + 3, x, y - 4,
         r * (0.14 + phase * 0.025), 0x13b5ad, 0.9);

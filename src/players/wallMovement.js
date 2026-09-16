@@ -139,4 +139,15 @@ function applyWallSlide(player, { dead, movementLocked, wallSlideContact, wallSi
   return isWallSliding;
 }
 
-module.exports = { resolveWallContact, applyWallSlide };
+// A wall-slide pose faces the contacted surface. Horizontal input normally owns
+// flipX, so knockback/momentum can otherwise leave the slide using the stale
+// facing direction from before impact.
+function resolveWallSlideFlipX(wallSide, velocityX = 0, currentFlipX = false) {
+  if (wallSide === "left") return true;
+  if (wallSide === "right") return false;
+  const horizontalVelocity = Number(velocityX) || 0;
+  if (horizontalVelocity !== 0) return horizontalVelocity < 0;
+  return !!currentFlipX;
+}
+
+module.exports = { resolveWallContact, applyWallSlide, resolveWallSlideFlipX };

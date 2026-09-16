@@ -1,8 +1,9 @@
+const { exposeDamageHitbox } = require('../damageHitboxes');
 const { getResolvedCharacterSpecialConfig } = require("../../../../shared/characterTuning");
 const HOOK = getResolvedCharacterSpecialConfig("gloop", "hook");
 const { getParticipant, participantId } = require('../participants');
 const effectManager = require("../effects/effectManager");
-const { clampToWorld, circleAabbOverlap, getPlayerBounds } = require('./geometry');
+const { clampToWorld, circleAabbOverlap, getPlayerBounds, getAttackCollisionCenter } = require('./geometry');
 const { buildProjectileLinearAttack } = require('./projectiles');
 const { getEnemyVaultTarget, emitServerHit, buildTargetList } = require('./targets');
 
@@ -88,7 +89,10 @@ function applyGloopPull(room, attacker, target, attack, now) {
       id: attack.instanceId,
       target: target.name,
       ownerEcho: true,
-      start: { x: Number(attack.x ?? ax), y: Number(attack.y ?? ay) },
+      start: {
+        x: Number(attack.hitContactX ?? attack.x ?? ax),
+        y: Number(attack.hitContactY ?? attack.y ?? ay),
+      },
       end: { x: target._gloopPullState.toX, y: target._gloopPullState.toY },
       pullDurationMs,
       sourceName: attacker.name,
@@ -224,9 +228,11 @@ function tickHookProjectile(room, attack, descriptor, now) {
     1,
     Number(attack.collisionRadius || runtime.collisionRadius) || 1,
   );
+  const collisionCenter = getAttackCollisionCenter(attack, runtime);
+  exposeDamageHitbox(room, attack, { kind: 'circle', x: collisionCenter.x, y: collisionCenter.y, radius }, now);
   const vaultTarget = getEnemyVaultTarget(room, attacker);
   if (vaultTarget && !attack.hitSet?.has(vaultTarget.targetName)) {
-    if (circleAabbOverlap(attack.x, attack.y, radius, vaultTarget.bounds)) {
+    if (circleAabbOverlap(collisionCenter.x, collisionCenter.y, radius, vaultTarget.bounds)) {
       attack.hitSet?.add(vaultTarget.targetName);
       emitServerHit(room, attack, vaultTarget.targetName, {
         damage: attack.damage,
@@ -238,9 +244,11 @@ function tickHookProjectile(room, attack, descriptor, now) {
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
     const targetBounds = getPlayerBounds(target);
-    if (!circleAabbOverlap(attack.x, attack.y, radius, targetBounds)) continue;
+    if (!circleAabbOverlap(collisionCenter.x, collisionCenter.y, radius, targetBounds)) continue;
     attack.hitSet?.add(target.name);
     emitServerHit(room, attack, target.name, { damage: attack.damage });
+    attack.hitContactX = collisionCenter.x;
+    attack.hitContactY = collisionCenter.y;
     applyGloopPull(room, attacker, target, attack, now);
     return true;
   }

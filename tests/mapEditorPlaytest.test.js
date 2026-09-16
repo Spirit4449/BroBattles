@@ -10,8 +10,9 @@ test('real playtest rooms isolate owners, fill 3v3 bots, respawn and clean up wi
  service.namespace={sockets:new Map(),to(){return{emit(type,payload){emitted.push({type,payload});},compress(){return this;}};},in(){return{disconnectSockets(){}};}};
  t.after(()=>{for(const token of service.sessions.keys())service.remove(token);});
  const user={user_id:99,name:'MapTester',password_hash:'not-public',char_class:'ninja',char_levels:{ninja:1},trophies:100};
- const created=service.create(user,{document:clone(defaults[0]),variant:'3v3',bots:true});
+ const created=service.create(user,{document:clone(defaults[0]),variant:'3v3',bots:true,debugHitboxes:true});
  const session=service.get(created.session,user),room=session.room;
+ assert.equal(session.gameData.editorDebugHitboxes,true);assert.equal(room.matchData.editorDebugHitboxes,true);
  assert.equal(session.gameData.players.length,6);assert.equal(session.gameData.players.filter(p=>p.isBot).length,5);
  assert.ok(!JSON.stringify(session.gameData).includes('not-public'));
  assert.throws(()=>service.get(created.session,{user_id:100}),e=>e.status===404);

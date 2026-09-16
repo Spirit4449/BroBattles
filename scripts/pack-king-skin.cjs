@@ -47,6 +47,38 @@ atlas.frames.forEach((frame,n)=>{
   frame.frame={x:ox,y:oy,w:cell,h:cell};
 
 });
+const motion=read('motion-source.png');
+function motionBox(index){
+ const x0=Math.round(index%4*motion.sw/4),x1=Math.round((index%4+1)*motion.sw/4);
+ const y0=Math.round(Math.floor(index/4)*motion.sh/3),y1=Math.round((Math.floor(index/4)+1)*motion.sh/3);
+ let l=x1,r=x0,t=y1,b=y0;
+ for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)if(motion.raw[(y*motion.sw+x)*4+3]>127){l=Math.min(l,x);r=Math.max(r,x);t=Math.min(t,y);b=Math.max(b,y);}
+ if(l<=x0||r>=x1-1||t<=y0||b>=y1-1)throw Error('Motion cell touches boundary');
+ return {l,t,w:r-l+1,h:b-t+1};
+}
+function pasteMotion(index,dst,dw,x,y,w,h){
+ const box=motionBox(index);
+ for(let yy=0;yy<h;yy++)for(let xx=0;xx<w;xx++){
+  const si=((box.t+Math.floor((yy+.5)*box.h/h))*motion.sw+box.l+Math.floor((xx+.5)*box.w/w))*4;
+  const di=((y+yy)*dw+x+xx)*4;
+  if(motion.raw[si+3]>127){motion.raw.copy(dst,di,si,si+4);dst[di+3]=255;}
+ }
+}
+for(let i=0;i<5;i++){
+ const name=i<4?`falling0${i}`:'duck00';
+ let entry=atlas.frames.find(f=>f.filename===name);
+ if(!entry){const n=atlas.frames.length;entry=JSON.parse(JSON.stringify(atlas.frames[0]));entry.filename=name;entry.frame.x=n%8*stride+8;entry.frame.y=Math.floor(n/8)*stride+8;atlas.frames.push(entry);}
+ const {x,y}=entry.frame;
+ for(let yy=0;yy<72;yy++)pixels.fill(0,((y+yy)*width+x)*4,((y+yy)*width+x+72)*4);
+ const index=i<4?i:11,box=motionBox(index),h=i<4?55:35,w=Math.round(box.w*h/box.h);
+ pasteMotion(index,pixels,width,x+Math.floor((72-w)/2),y+68-h,w,h);
+}
+const spin=Buffer.alloc(237*8*237*4);
+for(let i=0;i<8;i++){
+ const index=i<7?i+4:5,box=motionBox(index),w=234,h=Math.round(box.h*w/box.w);
+ pasteMotion(index,spin,237*8,i*237+Math.floor((237-w)/2),Math.floor((237-h)/2),w,h);
+}
+save(spin,237*8,237,'crown-spin.webp');
 atlas.meta={...atlas.meta,app:'Bro Battles padded king atlas',size:{w:width,h:height}};
 save(pixels,width,height,'spritesheet.webp');
 fs.writeFileSync(path.join(dir,'animations.json'),JSON.stringify(atlas,null,2)+'\n');
@@ -79,11 +111,11 @@ let l=actions.sw,r=0,t=actions.sh,b=0;
 for(let y=Math.round(actions.sh/2);y<actions.sh;y++)for(let x=Math.round(actions.sw*3/4);x<actions.sw;x++){
   if(actions.raw[(y*actions.sw+x)*4+3]){l=Math.min(l,x);r=Math.max(r,x);t=Math.min(t,y);b=Math.max(b,y);}
 }
-const cw=217,ch=Math.round((b-t+1)*cw/(r-l+1));
+const cw=234,ch=Math.round((b-t+1)*cw/(r-l+1));
 for(let y=0;y<ch;y++)for(let x=0;x<cw;x++){
   const si=((t+Math.floor(y*(b-t+1)/ch))*actions.sw+l+Math.floor(x*(r-l+1)/cw))*4;
-  actions.raw.copy(crown,((Math.floor((237-ch)/2)+y)*237+10+x)*4,si,si+4);
+  actions.raw.copy(crown,((Math.floor((237-ch)/2)+y)*237+Math.floor((237-cw)/2)+x)*4,si,si+4);
 }
 save(crown,237,237,'crown.webp');
 fs.rmSync(tmp,{recursive:true});
-console.log('Packed 34 isolated 72px frames with 16px gutters; nearest-neighbor, lossless output.');
+console.log(`Packed ${atlas.frames.length} isolated 72px frames with 16px gutters; nearest-neighbor, lossless output.`);
