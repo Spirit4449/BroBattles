@@ -1,0 +1,1498 @@
+{
+  "removedFiles": 373,
+  "removedBytes": 121532654,
+  "files": [
+    {
+      "path": "output/body-art/draven-64.png",
+      "bytes": 787
+    },
+    {
+      "path": "output/body-art/gloop-64.png",
+      "bytes": 620
+    },
+    {
+      "path": "output/body-art/gloop-amethyst-64.png",
+      "bytes": 606
+    },
+    {
+      "path": "output/body-art/huntress-64.png",
+      "bytes": 914
+    },
+    {
+      "path": "output/body-art/lineup.png",
+      "bytes": 199376
+    },
+    {
+      "path": "output/body-art/manifest.json",
+      "bytes": 2011
+    },
+    {
+      "path": "output/body-art/ninja-64.png",
+      "bytes": 639
+    },
+    {
+      "path": "output/body-art/ninja-arena-sovereign-64.png",
+      "bytes": 937
+    },
+    {
+      "path": "output/body-art/originals/draven.webp",
+      "bytes": 101558
+    },
+    {
+      "path": "output/body-art/originals/gloop-skins-gloop-amethyst.webp",
+      "bytes": 6724
+    },
+    {
+      "path": "output/body-art/originals/gloop.webp",
+      "bytes": 23386
+    },
+    {
+      "path": "output/body-art/originals/huntress.webp",
+      "bytes": 11464
+    },
+    {
+      "path": "output/body-art/originals/ninja-skins-ninja-arena-sovereign.webp",
+      "bytes": 9462
+    },
+    {
+      "path": "output/body-art/originals/ninja.webp",
+      "bytes": 20340
+    },
+    {
+      "path": "output/body-art/originals/thorg.webp",
+      "bytes": 55316
+    },
+    {
+      "path": "output/body-art/originals/wizard.webp",
+      "bytes": 46318
+    },
+    {
+      "path": "output/body-art/prompts.json",
+      "bytes": 11529
+    },
+    {
+      "path": "output/body-art/sources/draven-installed.webp",
+      "bytes": 1126
+    },
+    {
+      "path": "output/body-art/sources/draven.png",
+      "bytes": 601285
+    },
+    {
+      "path": "output/body-art/sources/gloop-amethyst-installed.webp",
+      "bytes": 872
+    },
+    {
+      "path": "output/body-art/sources/gloop-amethyst.png",
+      "bytes": 445956
+    },
+    {
+      "path": "output/body-art/sources/gloop.png",
+      "bytes": 431236
+    },
+    {
+      "path": "output/body-art/sources/huntress-installed.webp",
+      "bytes": 1316
+    },
+    {
+      "path": "output/body-art/sources/huntress.png",
+      "bytes": 734706
+    },
+    {
+      "path": "output/body-art/sources/ninja-arena-sovereign-installed.webp",
+      "bytes": 1326
+    },
+    {
+      "path": "output/body-art/sources/ninja-arena-sovereign.png",
+      "bytes": 752715
+    },
+    {
+      "path": "output/body-art/sources/ninja-installed.webp",
+      "bytes": 249314
+    },
+    {
+      "path": "output/body-art/sources/ninja.png",
+      "bytes": 361938
+    },
+    {
+      "path": "output/body-art/sources/thorg.png",
+      "bytes": 702402
+    },
+    {
+      "path": "output/body-art/sources/wizard.png",
+      "bytes": 498017
+    },
+    {
+      "path": "output/body-art/thorg-64.png",
+      "bytes": 953
+    },
+    {
+      "path": "output/body-art/thorg-idle-reference.png",
+      "bytes": 28661
+    },
+    {
+      "path": "output/body-art/thorg-weapon-reference.png",
+      "bytes": 10492
+    },
+    {
+      "path": "output/body-art/versions/README.md",
+      "bytes": 1528
+    },
+    {
+      "path": "output/body-art/versions/v1/bodies/draven.webp",
+      "bytes": 1126
+    },
+    {
+      "path": "output/body-art/versions/v1/bodies/gloop-amethyst.webp",
+      "bytes": 872
+    },
+    {
+      "path": "output/body-art/versions/v1/bodies/gloop.webp",
+      "bytes": 970
+    },
+    {
+      "path": "output/body-art/versions/v1/bodies/huntress.webp",
+      "bytes": 1316
+    },
+    {
+      "path": "output/body-art/versions/v1/bodies/ninja-arena-sovereign.webp",
+      "bytes": 1326
+    },
+    {
+      "path": "output/body-art/versions/v1/bodies/ninja.webp",
+      "bytes": 1088
+    },
+    {
+      "path": "output/body-art/versions/v1/bodies/thorg.webp",
+      "bytes": 1318
+    },
+    {
+      "path": "output/body-art/versions/v1/bodies/wizard.webp",
+      "bytes": 1092
+    },
+    {
+      "path": "output/body-art/versions/v1/checksums.json",
+      "bytes": 664
+    },
+    {
+      "path": "output/body-art/versions/v1/draven-64.png",
+      "bytes": 787
+    },
+    {
+      "path": "output/body-art/versions/v1/export-body-art.cjs",
+      "bytes": 3120
+    },
+    {
+      "path": "output/body-art/versions/v1/gloop-64.png",
+      "bytes": 650
+    },
+    {
+      "path": "output/body-art/versions/v1/gloop-amethyst-64.png",
+      "bytes": 606
+    },
+    {
+      "path": "output/body-art/versions/v1/huntress-64.png",
+      "bytes": 914
+    },
+    {
+      "path": "output/body-art/versions/v1/lineup.png",
+      "bytes": 30575
+    },
+    {
+      "path": "output/body-art/versions/v1/manifest.json",
+      "bytes": 1708
+    },
+    {
+      "path": "output/body-art/versions/v1/ninja-64.png",
+      "bytes": 749
+    },
+    {
+      "path": "output/body-art/versions/v1/ninja-arena-sovereign-64.png",
+      "bytes": 937
+    },
+    {
+      "path": "output/body-art/versions/v1/originals/draven.webp",
+      "bytes": 101558
+    },
+    {
+      "path": "output/body-art/versions/v1/originals/gloop-skins-gloop-amethyst.webp",
+      "bytes": 6724
+    },
+    {
+      "path": "output/body-art/versions/v1/originals/gloop.webp",
+      "bytes": 23386
+    },
+    {
+      "path": "output/body-art/versions/v1/originals/huntress.webp",
+      "bytes": 11464
+    },
+    {
+      "path": "output/body-art/versions/v1/originals/ninja-skins-ninja-arena-sovereign.webp",
+      "bytes": 9462
+    },
+    {
+      "path": "output/body-art/versions/v1/originals/ninja.webp",
+      "bytes": 20340
+    },
+    {
+      "path": "output/body-art/versions/v1/originals/thorg.webp",
+      "bytes": 55316
+    },
+    {
+      "path": "output/body-art/versions/v1/originals/wizard.webp",
+      "bytes": 46318
+    },
+    {
+      "path": "output/body-art/versions/v1/prompts.json",
+      "bytes": 11529
+    },
+    {
+      "path": "output/body-art/versions/v1/sources/draven.png",
+      "bytes": 601285
+    },
+    {
+      "path": "output/body-art/versions/v1/sources/gloop-amethyst.png",
+      "bytes": 445956
+    },
+    {
+      "path": "output/body-art/versions/v1/sources/gloop.png",
+      "bytes": 478902
+    },
+    {
+      "path": "output/body-art/versions/v1/sources/huntress.png",
+      "bytes": 734706
+    },
+    {
+      "path": "output/body-art/versions/v1/sources/ninja-arena-sovereign.png",
+      "bytes": 752715
+    },
+    {
+      "path": "output/body-art/versions/v1/sources/ninja.png",
+      "bytes": 530811
+    },
+    {
+      "path": "output/body-art/versions/v1/sources/thorg.png",
+      "bytes": 761327
+    },
+    {
+      "path": "output/body-art/versions/v1/sources/wizard.png",
+      "bytes": 604310
+    },
+    {
+      "path": "output/body-art/versions/v1/thorg-64.png",
+      "bytes": 936
+    },
+    {
+      "path": "output/body-art/versions/v1/thorg-idle-reference.png",
+      "bytes": 28661
+    },
+    {
+      "path": "output/body-art/versions/v1/thorg-weapon-reference.png",
+      "bytes": 10492
+    },
+    {
+      "path": "output/body-art/versions/v1/wizard-64.png",
+      "bytes": 806
+    },
+    {
+      "path": "output/body-art/versions/v2/bodies/draven.webp",
+      "bytes": 1126
+    },
+    {
+      "path": "output/body-art/versions/v2/bodies/gloop-amethyst.webp",
+      "bytes": 872
+    },
+    {
+      "path": "output/body-art/versions/v2/bodies/gloop.webp",
+      "bytes": 914
+    },
+    {
+      "path": "output/body-art/versions/v2/bodies/huntress.webp",
+      "bytes": 1316
+    },
+    {
+      "path": "output/body-art/versions/v2/bodies/ninja-arena-sovereign.webp",
+      "bytes": 1326
+    },
+    {
+      "path": "output/body-art/versions/v2/bodies/ninja.webp",
+      "bytes": 964
+    },
+    {
+      "path": "output/body-art/versions/v2/bodies/thorg.webp",
+      "bytes": 1362
+    },
+    {
+      "path": "output/body-art/versions/v2/bodies/wizard.webp",
+      "bytes": 1092
+    },
+    {
+      "path": "output/body-art/versions/v2/comparison.png",
+      "bytes": 26259
+    },
+    {
+      "path": "output/body-art/versions/v2/draven-64.png",
+      "bytes": 787
+    },
+    {
+      "path": "output/body-art/versions/v2/gloop-64.png",
+      "bytes": 620
+    },
+    {
+      "path": "output/body-art/versions/v2/gloop-amethyst-64.png",
+      "bytes": 606
+    },
+    {
+      "path": "output/body-art/versions/v2/huntress-64.png",
+      "bytes": 914
+    },
+    {
+      "path": "output/body-art/versions/v2/lineup.png",
+      "bytes": 30064
+    },
+    {
+      "path": "output/body-art/versions/v2/manifest.json",
+      "bytes": 1888
+    },
+    {
+      "path": "output/body-art/versions/v2/ninja-64.png",
+      "bytes": 639
+    },
+    {
+      "path": "output/body-art/versions/v2/ninja-arena-sovereign-64.png",
+      "bytes": 937
+    },
+    {
+      "path": "output/body-art/versions/v2/prompts.json",
+      "bytes": 5113
+    },
+    {
+      "path": "output/body-art/versions/v2/sources/gloop.png",
+      "bytes": 401885
+    },
+    {
+      "path": "output/body-art/versions/v2/sources/ninja-before-face-touchup.png",
+      "bytes": 419244
+    },
+    {
+      "path": "output/body-art/versions/v2/sources/ninja.png",
+      "bytes": 437041
+    },
+    {
+      "path": "output/body-art/versions/v2/sources/thorg.png",
+      "bytes": 661535
+    },
+    {
+      "path": "output/body-art/versions/v2/thorg-64.png",
+      "bytes": 953
+    },
+    {
+      "path": "output/body-art/versions/v2/wizard-64.png",
+      "bytes": 806
+    },
+    {
+      "path": "output/body-art/versions/v3/README.md",
+      "bytes": 1414
+    },
+    {
+      "path": "output/body-art/versions/v3/bodies/draven.webp",
+      "bytes": 1126
+    },
+    {
+      "path": "output/body-art/versions/v3/bodies/gloop-amethyst.webp",
+      "bytes": 872
+    },
+    {
+      "path": "output/body-art/versions/v3/bodies/gloop.webp",
+      "bytes": 914
+    },
+    {
+      "path": "output/body-art/versions/v3/bodies/huntress.webp",
+      "bytes": 1316
+    },
+    {
+      "path": "output/body-art/versions/v3/bodies/ninja-arena-sovereign.webp",
+      "bytes": 1326
+    },
+    {
+      "path": "output/body-art/versions/v3/bodies/ninja.webp",
+      "bytes": 280478
+    },
+    {
+      "path": "output/body-art/versions/v3/bodies/thorg.webp",
+      "bytes": 495642
+    },
+    {
+      "path": "output/body-art/versions/v3/bodies/wizard.webp",
+      "bytes": 1092
+    },
+    {
+      "path": "output/body-art/versions/v3/draven-64.png",
+      "bytes": 787
+    },
+    {
+      "path": "output/body-art/versions/v3/gloop-64.png",
+      "bytes": 620
+    },
+    {
+      "path": "output/body-art/versions/v3/gloop-amethyst-64.png",
+      "bytes": 606
+    },
+    {
+      "path": "output/body-art/versions/v3/huntress-64.png",
+      "bytes": 914
+    },
+    {
+      "path": "output/body-art/versions/v3/lineup.png",
+      "bytes": 138517
+    },
+    {
+      "path": "output/body-art/versions/v3/manifest.json",
+      "bytes": 1927
+    },
+    {
+      "path": "output/body-art/versions/v3/ninja-arena-sovereign-64.png",
+      "bytes": 937
+    },
+    {
+      "path": "output/body-art/versions/v3/previous-manifest.json",
+      "bytes": 1754
+    },
+    {
+      "path": "output/body-art/versions/v3/prompts.json",
+      "bytes": 2743
+    },
+    {
+      "path": "output/body-art/versions/v3/sources/ninja.png",
+      "bytes": 419901
+    },
+    {
+      "path": "output/body-art/versions/v3/sources/thorg.png",
+      "bytes": 732990
+    },
+    {
+      "path": "output/body-art/versions/v3/wizard-64.png",
+      "bytes": 806
+    },
+    {
+      "path": "output/body-art/versions/v4/README.md",
+      "bytes": 1221
+    },
+    {
+      "path": "output/body-art/versions/v4/before/gloop.webp",
+      "bytes": 914
+    },
+    {
+      "path": "output/body-art/versions/v4/before/ninja.webp",
+      "bytes": 280478
+    },
+    {
+      "path": "output/body-art/versions/v4/before/thorg.webp",
+      "bytes": 495642
+    },
+    {
+      "path": "output/body-art/versions/v4/bodies/draven.webp",
+      "bytes": 1126
+    },
+    {
+      "path": "output/body-art/versions/v4/bodies/gloop-amethyst.webp",
+      "bytes": 872
+    },
+    {
+      "path": "output/body-art/versions/v4/bodies/gloop.webp",
+      "bytes": 262706
+    },
+    {
+      "path": "output/body-art/versions/v4/bodies/huntress.webp",
+      "bytes": 1316
+    },
+    {
+      "path": "output/body-art/versions/v4/bodies/ninja-arena-sovereign.webp",
+      "bytes": 1326
+    },
+    {
+      "path": "output/body-art/versions/v4/bodies/ninja.webp",
+      "bytes": 322182
+    },
+    {
+      "path": "output/body-art/versions/v4/bodies/thorg.webp",
+      "bytes": 505756
+    },
+    {
+      "path": "output/body-art/versions/v4/bodies/wizard.webp",
+      "bytes": 1092
+    },
+    {
+      "path": "output/body-art/versions/v4/draven-64.png",
+      "bytes": 787
+    },
+    {
+      "path": "output/body-art/versions/v4/gloop-amethyst-64.png",
+      "bytes": 606
+    },
+    {
+      "path": "output/body-art/versions/v4/huntress-64.png",
+      "bytes": 914
+    },
+    {
+      "path": "output/body-art/versions/v4/lineup.png",
+      "bytes": 181789
+    },
+    {
+      "path": "output/body-art/versions/v4/manifest.json",
+      "bytes": 1951
+    },
+    {
+      "path": "output/body-art/versions/v4/ninja-arena-sovereign-64.png",
+      "bytes": 937
+    },
+    {
+      "path": "output/body-art/versions/v4/prompts.json",
+      "bytes": 1257
+    },
+    {
+      "path": "output/body-art/versions/v4/sources/gloop.png",
+      "bytes": 401885
+    },
+    {
+      "path": "output/body-art/versions/v4/sources/ninja.png",
+      "bytes": 486970
+    },
+    {
+      "path": "output/body-art/versions/v4/sources/thorg.png",
+      "bytes": 742460
+    },
+    {
+      "path": "output/body-art/versions/v4/wizard-64.png",
+      "bytes": 806
+    },
+    {
+      "path": "output/body-art/versions/v5/README.md",
+      "bytes": 1600
+    },
+    {
+      "path": "output/body-art/versions/v5/before/draven.png",
+      "bytes": 16927
+    },
+    {
+      "path": "output/body-art/versions/v5/before/draven.webp",
+      "bytes": 1126
+    },
+    {
+      "path": "output/body-art/versions/v5/before/gloop-amethyst.webp",
+      "bytes": 872
+    },
+    {
+      "path": "output/body-art/versions/v5/before/gloop.png",
+      "bytes": 614547
+    },
+    {
+      "path": "output/body-art/versions/v5/before/gloop.webp",
+      "bytes": 262706
+    },
+    {
+      "path": "output/body-art/versions/v5/before/huntress.webp",
+      "bytes": 1316
+    },
+    {
+      "path": "output/body-art/versions/v5/before/ninja-arena-sovereign.webp",
+      "bytes": 1326
+    },
+    {
+      "path": "output/body-art/versions/v5/before/ninja.png",
+      "bytes": 680024
+    },
+    {
+      "path": "output/body-art/versions/v5/before/ninja.webp",
+      "bytes": 322182
+    },
+    {
+      "path": "output/body-art/versions/v5/before/thorg.png",
+      "bytes": 1151981
+    },
+    {
+      "path": "output/body-art/versions/v5/before/thorg.webp",
+      "bytes": 505756
+    },
+    {
+      "path": "output/body-art/versions/v5/before/wizard.png",
+      "bytes": 17408
+    },
+    {
+      "path": "output/body-art/versions/v5/before/wizard.webp",
+      "bytes": 1092
+    },
+    {
+      "path": "output/body-art/versions/v5/bodies/draven.webp",
+      "bytes": 1126
+    },
+    {
+      "path": "output/body-art/versions/v5/bodies/gloop-amethyst.webp",
+      "bytes": 872
+    },
+    {
+      "path": "output/body-art/versions/v5/bodies/gloop.webp",
+      "bytes": 261622
+    },
+    {
+      "path": "output/body-art/versions/v5/bodies/huntress.webp",
+      "bytes": 1316
+    },
+    {
+      "path": "output/body-art/versions/v5/bodies/ninja-arena-sovereign.webp",
+      "bytes": 1326
+    },
+    {
+      "path": "output/body-art/versions/v5/bodies/ninja.webp",
+      "bytes": 249314
+    },
+    {
+      "path": "output/body-art/versions/v5/bodies/thorg.webp",
+      "bytes": 455030
+    },
+    {
+      "path": "output/body-art/versions/v5/bodies/wizard.webp",
+      "bytes": 2022
+    },
+    {
+      "path": "output/body-art/versions/v5/final-prompts.json",
+      "bytes": 5361
+    },
+    {
+      "path": "output/body-art/versions/v5/lineup.png",
+      "bytes": 150135
+    },
+    {
+      "path": "output/body-art/versions/v5/manifest.json",
+      "bytes": 2071
+    },
+    {
+      "path": "output/body-art/versions/v5/previous-manifest.json",
+      "bytes": 1817
+    },
+    {
+      "path": "output/body-art/versions/v5/prompts.json",
+      "bytes": 5182
+    },
+    {
+      "path": "output/body-art/versions/v5/sources/gloop-first-pass.png",
+      "bytes": 431236
+    },
+    {
+      "path": "output/body-art/versions/v5/sources/gloop.png",
+      "bytes": 414864
+    },
+    {
+      "path": "output/body-art/versions/v5/sources/ninja-first-pass.png",
+      "bytes": 361938
+    },
+    {
+      "path": "output/body-art/versions/v5/sources/ninja.png",
+      "bytes": 382242
+    },
+    {
+      "path": "output/body-art/versions/v5/sources/thorg-first-pass.png",
+      "bytes": 617308
+    },
+    {
+      "path": "output/body-art/versions/v5/sources/thorg.png",
+      "bytes": 665001
+    },
+    {
+      "path": "output/body-art/versions/v5/sources/wizard-generated.png",
+      "bytes": 498017
+    },
+    {
+      "path": "output/body-art/versions/v5/sources/wizard.png",
+      "bytes": 18589
+    },
+    {
+      "path": "output/body-art/versions/v6/README.md",
+      "bytes": 689
+    },
+    {
+      "path": "output/body-art/versions/v6/before/draven.webp",
+      "bytes": 1126
+    },
+    {
+      "path": "output/body-art/versions/v6/before/gloop-amethyst.webp",
+      "bytes": 872
+    },
+    {
+      "path": "output/body-art/versions/v6/before/gloop.webp",
+      "bytes": 261622
+    },
+    {
+      "path": "output/body-art/versions/v6/before/huntress.webp",
+      "bytes": 1316
+    },
+    {
+      "path": "output/body-art/versions/v6/before/ninja-arena-sovereign.webp",
+      "bytes": 1326
+    },
+    {
+      "path": "output/body-art/versions/v6/before/ninja.webp",
+      "bytes": 249314
+    },
+    {
+      "path": "output/body-art/versions/v6/before/thorg.webp",
+      "bytes": 455030
+    },
+    {
+      "path": "output/body-art/versions/v6/before/wizard.webp",
+      "bytes": 2022
+    },
+    {
+      "path": "output/body-art/versions/v6/bodies/draven.webp",
+      "bytes": 1126
+    },
+    {
+      "path": "output/body-art/versions/v6/bodies/gloop-amethyst.webp",
+      "bytes": 872
+    },
+    {
+      "path": "output/body-art/versions/v6/bodies/gloop.webp",
+      "bytes": 262706
+    },
+    {
+      "path": "output/body-art/versions/v6/bodies/huntress.webp",
+      "bytes": 1316
+    },
+    {
+      "path": "output/body-art/versions/v6/bodies/ninja-arena-sovereign.webp",
+      "bytes": 1326
+    },
+    {
+      "path": "output/body-art/versions/v6/bodies/ninja.webp",
+      "bytes": 249314
+    },
+    {
+      "path": "output/body-art/versions/v6/bodies/thorg.webp",
+      "bytes": 420524
+    },
+    {
+      "path": "output/body-art/versions/v6/bodies/wizard.webp",
+      "bytes": 343786
+    },
+    {
+      "path": "output/body-art/versions/v6/lineup.png",
+      "bytes": 197901
+    },
+    {
+      "path": "output/body-art/versions/v6/manifest.json",
+      "bytes": 2071
+    },
+    {
+      "path": "output/body-art/versions/v6/previous-manifest.json",
+      "bytes": 1847
+    },
+    {
+      "path": "output/body-art/versions/v6/restored-sources.json",
+      "bytes": 157
+    },
+    {
+      "path": "output/body-art/versions/v6/sources/gloop.png",
+      "bytes": 401885
+    },
+    {
+      "path": "output/body-art/versions/v6/sources/thorg.png",
+      "bytes": 617308
+    },
+    {
+      "path": "output/body-art/versions/v6/sources/wizard.png",
+      "bytes": 498017
+    },
+    {
+      "path": "output/body-art/versions/v7/README.md",
+      "bytes": 609
+    },
+    {
+      "path": "output/body-art/versions/v7/before/draven.webp",
+      "bytes": 1126
+    },
+    {
+      "path": "output/body-art/versions/v7/before/gloop-amethyst.webp",
+      "bytes": 872
+    },
+    {
+      "path": "output/body-art/versions/v7/before/gloop.webp",
+      "bytes": 262706
+    },
+    {
+      "path": "output/body-art/versions/v7/before/huntress.webp",
+      "bytes": 1316
+    },
+    {
+      "path": "output/body-art/versions/v7/before/ninja-arena-sovereign.webp",
+      "bytes": 1326
+    },
+    {
+      "path": "output/body-art/versions/v7/before/ninja.webp",
+      "bytes": 249314
+    },
+    {
+      "path": "output/body-art/versions/v7/before/thorg.webp",
+      "bytes": 420524
+    },
+    {
+      "path": "output/body-art/versions/v7/before/wizard.webp",
+      "bytes": 343786
+    },
+    {
+      "path": "output/body-art/versions/v7/bodies/draven.webp",
+      "bytes": 1126
+    },
+    {
+      "path": "output/body-art/versions/v7/bodies/gloop-amethyst.webp",
+      "bytes": 872
+    },
+    {
+      "path": "output/body-art/versions/v7/bodies/gloop.webp",
+      "bytes": 281960
+    },
+    {
+      "path": "output/body-art/versions/v7/bodies/huntress.webp",
+      "bytes": 1316
+    },
+    {
+      "path": "output/body-art/versions/v7/bodies/ninja-arena-sovereign.webp",
+      "bytes": 1326
+    },
+    {
+      "path": "output/body-art/versions/v7/bodies/ninja.webp",
+      "bytes": 236612
+    },
+    {
+      "path": "output/body-art/versions/v7/bodies/thorg.webp",
+      "bytes": 508106
+    },
+    {
+      "path": "output/body-art/versions/v7/bodies/wizard.webp",
+      "bytes": 343786
+    },
+    {
+      "path": "output/body-art/versions/v7/lineup.png",
+      "bytes": 207508
+    },
+    {
+      "path": "output/body-art/versions/v7/manifest.json",
+      "bytes": 2071
+    },
+    {
+      "path": "output/body-art/versions/v7/previous-manifest.json",
+      "bytes": 2022
+    },
+    {
+      "path": "output/body-art/versions/v7/sources/gloop.png",
+      "bytes": 431236
+    },
+    {
+      "path": "output/body-art/versions/v7/sources/ninja.png",
+      "bytes": 361938
+    },
+    {
+      "path": "output/body-art/versions/v7/sources/thorg.png",
+      "bytes": 758373
+    },
+    {
+      "path": "output/body-art/versions/v7/thorg-prompt.txt",
+      "bytes": 1371
+    },
+    {
+      "path": "output/body-art/versions/v8/README.md",
+      "bytes": 353
+    },
+    {
+      "path": "output/body-art/versions/v8/before/draven.webp",
+      "bytes": 1126
+    },
+    {
+      "path": "output/body-art/versions/v8/before/gloop-amethyst.webp",
+      "bytes": 872
+    },
+    {
+      "path": "output/body-art/versions/v8/before/gloop.webp",
+      "bytes": 281960
+    },
+    {
+      "path": "output/body-art/versions/v8/before/huntress.webp",
+      "bytes": 1316
+    },
+    {
+      "path": "output/body-art/versions/v8/before/ninja-arena-sovereign.webp",
+      "bytes": 1326
+    },
+    {
+      "path": "output/body-art/versions/v8/before/ninja.webp",
+      "bytes": 236612
+    },
+    {
+      "path": "output/body-art/versions/v8/before/thorg.webp",
+      "bytes": 508106
+    },
+    {
+      "path": "output/body-art/versions/v8/before/wizard.webp",
+      "bytes": 343786
+    },
+    {
+      "path": "output/body-art/versions/v8/bodies/draven.webp",
+      "bytes": 1126
+    },
+    {
+      "path": "output/body-art/versions/v8/bodies/gloop-amethyst.webp",
+      "bytes": 872
+    },
+    {
+      "path": "output/body-art/versions/v8/bodies/gloop.webp",
+      "bytes": 281960
+    },
+    {
+      "path": "output/body-art/versions/v8/bodies/huntress.webp",
+      "bytes": 1316
+    },
+    {
+      "path": "output/body-art/versions/v8/bodies/ninja-arena-sovereign.webp",
+      "bytes": 1326
+    },
+    {
+      "path": "output/body-art/versions/v8/bodies/ninja.webp",
+      "bytes": 236612
+    },
+    {
+      "path": "output/body-art/versions/v8/bodies/thorg.webp",
+      "bytes": 470620
+    },
+    {
+      "path": "output/body-art/versions/v8/bodies/wizard.webp",
+      "bytes": 343786
+    },
+    {
+      "path": "output/body-art/versions/v8/lineup.png",
+      "bytes": 199376
+    },
+    {
+      "path": "output/body-art/versions/v8/manifest.json",
+      "bytes": 2071
+    },
+    {
+      "path": "output/body-art/versions/v8/previous-manifest.json",
+      "bytes": 2011
+    },
+    {
+      "path": "output/body-art/versions/v8/sources/thorg.png",
+      "bytes": 702402
+    },
+    {
+      "path": "output/body-art/versions/v8/thorg-prompt.txt",
+      "bytes": 1318
+    },
+    {
+      "path": "output/body-art/wizard-64.png",
+      "bytes": 806
+    },
+    {
+      "path": "output/mode-art/airdrop-160.png",
+      "bytes": 5460
+    },
+    {
+      "path": "output/mode-art/bank-bust-160.png",
+      "bytes": 4648
+    },
+    {
+      "path": "output/mode-art/bedwars-160.png",
+      "bytes": 5681
+    },
+    {
+      "path": "output/mode-art/bot-survival-160.png",
+      "bytes": 5766
+    },
+    {
+      "path": "output/mode-art/capture-the-flag-160.png",
+      "bytes": 5001
+    },
+    {
+      "path": "output/mode-art/check-first-six.png",
+      "bytes": 57305
+    },
+    {
+      "path": "output/mode-art/duels-160.png",
+      "bytes": 5684
+    },
+    {
+      "path": "output/mode-art/lineup.png",
+      "bytes": 88419
+    },
+    {
+      "path": "output/mode-art/manifest.json",
+      "bytes": 1465
+    },
+    {
+      "path": "output/mode-art/originals/airdrop.webp",
+      "bytes": 92786
+    },
+    {
+      "path": "output/mode-art/originals/bank-bust.webp",
+      "bytes": 51964
+    },
+    {
+      "path": "output/mode-art/originals/bedwars.webp",
+      "bytes": 155954
+    },
+    {
+      "path": "output/mode-art/originals/bot-survival.webp",
+      "bytes": 489876
+    },
+    {
+      "path": "output/mode-art/originals/capture-the-flag.webp",
+      "bytes": 68950
+    },
+    {
+      "path": "output/mode-art/originals/duels.webp",
+      "bytes": 95612
+    },
+    {
+      "path": "output/mode-art/originals/soccer.webp",
+      "bytes": 158072
+    },
+    {
+      "path": "output/mode-art/originals/tower.webp",
+      "bytes": 59042
+    },
+    {
+      "path": "output/mode-art/prompts.json",
+      "bytes": 11280
+    },
+    {
+      "path": "output/mode-art/soccer-160.png",
+      "bytes": 5102
+    },
+    {
+      "path": "output/mode-art/sources/airdrop.png",
+      "bytes": 1691685
+    },
+    {
+      "path": "output/mode-art/sources/bank-bust.png",
+      "bytes": 1405226
+    },
+    {
+      "path": "output/mode-art/sources/bedwars.png",
+      "bytes": 1789614
+    },
+    {
+      "path": "output/mode-art/sources/bot-survival.png",
+      "bytes": 1614476
+    },
+    {
+      "path": "output/mode-art/sources/capture-the-flag.png",
+      "bytes": 1652894
+    },
+    {
+      "path": "output/mode-art/sources/duels.png",
+      "bytes": 1698050
+    },
+    {
+      "path": "output/mode-art/sources/soccer.png",
+      "bytes": 1713696
+    },
+    {
+      "path": "output/mode-art/sources/tower.png",
+      "bytes": 1560674
+    },
+    {
+      "path": "output/mode-art/tower-160.png",
+      "bytes": 3828
+    },
+    {
+      "path": "output/mode-art/validation.json",
+      "bytes": 1541
+    },
+    {
+      "path": "public/assets/PressStart2P.ttf",
+      "bytes": 116008
+    },
+    {
+      "path": "public/assets/bank-bust/abyss.png",
+      "bytes": 7663
+    },
+    {
+      "path": "public/assets/bank-bust/base.png",
+      "bytes": 13619
+    },
+    {
+      "path": "public/assets/bank-bust/built.webp",
+      "bytes": 2884
+    },
+    {
+      "path": "public/assets/bank-bust/gameBg3.webp",
+      "bytes": 483600
+    },
+    {
+      "path": "public/assets/bank-bust/mine-unclaimed.webp",
+      "bytes": 19596
+    },
+    {
+      "path": "public/assets/bank-bust/not-built.webp",
+      "bytes": 2430
+    },
+    {
+      "path": "public/assets/bank-bust/topcase.png",
+      "bytes": 3719
+    },
+    {
+      "path": "public/assets/bank-bust/turret.webp",
+      "bytes": 8340
+    },
+    {
+      "path": "public/assets/bank-bust/vault-blue.webp",
+      "bytes": 26794
+    },
+    {
+      "path": "public/assets/bank-bust/vault-red.webp",
+      "bytes": 26810
+    },
+    {
+      "path": "public/assets/chromas/lobby-frame-pixels.svg",
+      "bytes": 602
+    },
+    {
+      "path": "public/assets/copy.webp",
+      "bytes": 3962
+    },
+    {
+      "path": "public/assets/draven/body.xmp",
+      "bytes": 5448
+    },
+    {
+      "path": "public/assets/draven/tinyPlatform.webp",
+      "bytes": 2896
+    },
+    {
+      "path": "public/assets/gloop/movement-source.png",
+      "bytes": 1023587
+    },
+    {
+      "path": "public/assets/gloop/skins/gloop-amethyst/ai-source.png",
+      "bytes": 1256293
+    },
+    {
+      "path": "public/assets/gloop/skins/gloop-amethyst/falling-source.png",
+      "bytes": 702866
+    },
+    {
+      "path": "public/assets/lava.mp3",
+      "bytes": 402866
+    },
+    {
+      "path": "public/assets/logos/light-bg.png",
+      "bytes": 584732
+    },
+    {
+      "path": "public/assets/logos/logo-large.png",
+      "bytes": 876042
+    },
+    {
+      "path": "public/assets/lushy/baseOld.webp",
+      "bytes": 15192
+    },
+    {
+      "path": "public/assets/lushy/gameBg.mp4",
+      "bytes": 38593362
+    },
+    {
+      "path": "public/assets/lushy/largePlatformOld.webp",
+      "bytes": 6528
+    },
+    {
+      "path": "public/assets/lushy/sidePlatformOld.webp",
+      "bytes": 6100
+    },
+    {
+      "path": "public/assets/mangrove/lobby.webp",
+      "bytes": 184858
+    },
+    {
+      "path": "public/assets/mangrove/lobbyBg2.webp",
+      "bytes": 246894
+    },
+    {
+      "path": "public/assets/mangrove/tinyPlatform.webp",
+      "bytes": 2896
+    },
+    {
+      "path": "public/assets/ninja/body.xmp",
+      "bytes": 5448
+    },
+    {
+      "path": "public/assets/ninja/shuriken-red.webp",
+      "bytes": 14442
+    },
+    {
+      "path": "public/assets/ninja/skins/ninja-arena-sovereign/action-source.png",
+      "bytes": 1478597
+    },
+    {
+      "path": "public/assets/ninja/skins/ninja-arena-sovereign/ai-source.png",
+      "bytes": 1855777
+    },
+    {
+      "path": "public/assets/ninja/skins/ninja-arena-sovereign/motion-source.png",
+      "bytes": 974985
+    },
+    {
+      "path": "public/assets/ninja/skins/ninja-arena-sovereign/portrait-source.png",
+      "bytes": 1128899
+    },
+    {
+      "path": "public/assets/ninja/spritesheet2.webp",
+      "bytes": 69090
+    },
+    {
+      "path": "public/assets/parachutes/parachute.webp",
+      "bytes": 20824
+    },
+    {
+      "path": "public/assets/player-cards/arena-crown-ai-source.png",
+      "bytes": 1383800
+    },
+    {
+      "path": "public/assets/player-cards/slime-circuit-ai-source.png",
+      "bytes": 1314741
+    },
+    {
+      "path": "public/assets/serenity/Veo_3_1_Pixel_sprite_loopable_animation_of_waterfall_moving_and_the_vines_swaying_ever_so_slightly_H.mp4",
+      "bytes": 7756181
+    },
+    {
+      "path": "public/assets/serenity/logPlatform.png",
+      "bytes": 321273
+    },
+    {
+      "path": "public/assets/shuffle/shuffle1.webp",
+      "bytes": 56814
+    },
+    {
+      "path": "public/assets/shuffle/shuffle2.webp",
+      "bytes": 56814
+    },
+    {
+      "path": "public/assets/shuffle/shuffle3.webp",
+      "bytes": 56814
+    },
+    {
+      "path": "public/assets/shuffle/shuffle4.webp",
+      "bytes": 56814
+    },
+    {
+      "path": "public/assets/sliding.mp3",
+      "bytes": 19586
+    },
+    {
+      "path": "public/assets/step.mp3",
+      "bytes": 3486
+    },
+    {
+      "path": "public/assets/sword.svg",
+      "bytes": 12150
+    },
+    {
+      "path": "public/assets/thorg/body.xmp",
+      "bytes": 5448
+    },
+    {
+      "path": "public/assets/thorg/spritesheet_without duck.webp",
+      "bytes": 127032
+    },
+    {
+      "path": "public/assets/ui/verified-shield-pixel.png",
+      "bytes": 68314
+    },
+    {
+      "path": "public/assets/water.webp",
+      "bytes": 10578
+    },
+    {
+      "path": "public/assets/wifi.webp",
+      "bytes": 4908
+    },
+    {
+      "path": "public/assets/wizard/body.xmp",
+      "bytes": 5448
+    },
+    {
+      "path": "public/assets/wizard/fireball-charge.json",
+      "bytes": 5839
+    },
+    {
+      "path": "public/assets/wizard/fireball-charge.png",
+      "bytes": 1028585
+    },
+    {
+      "path": "public/assets/wizard/fireball.json",
+      "bytes": 1388
+    },
+    {
+      "path": "public/assets/wizard/fireball.webp",
+      "bytes": 40382
+    },
+    {
+      "path": "public/assets/wizard/fireball_spritesheet_clean.json",
+      "bytes": 7298
+    },
+    {
+      "path": "public/assets/wizard/fireball_spritesheet_clean.webp",
+      "bytes": 302716
+    },
+    {
+      "path": "public/assets/xout.svg",
+      "bytes": 1189
+    },
+    {
+      "path": "scripts/export-body-art.cjs",
+      "bytes": 4351
+    },
+    {
+      "path": "scripts/export-mode-art.cjs",
+      "bytes": 1782
+    },
+    {
+      "path": "tmp/imagegen/attack-after.png",
+      "bytes": 98426
+    },
+    {
+      "path": "tmp/imagegen/attack-before.png",
+      "bytes": 42995
+    },
+    {
+      "path": "tmp/imagegen/attack-head-fixed.png",
+      "bytes": 115319
+    },
+    {
+      "path": "tmp/imagegen/attack-reference.png",
+      "bytes": 55922
+    },
+    {
+      "path": "tmp/imagegen/install-attack.cjs",
+      "bytes": 2787
+    },
+    {
+      "path": "tmp/imagegen/install-full-regen.cjs",
+      "bytes": 2377
+    },
+    {
+      "path": "tmp/imagegen/install-two-hands.cjs",
+      "bytes": 4329
+    },
+    {
+      "path": "tmp/imagegen/original-thorg-reference.png",
+      "bytes": 93384
+    },
+    {
+      "path": "tmp/imagegen/repair-head.cjs",
+      "bytes": 2513
+    },
+    {
+      "path": "tmp/imagegen/thorg-before-full-regen.webp",
+      "bytes": 455418
+    },
+    {
+      "path": "tmp/imagegen/thorg-before-head-fix.webp",
+      "bytes": 450650
+    },
+    {
+      "path": "tmp/imagegen/thorg-before-two-hands.webp",
+      "bytes": 461134
+    },
+    {
+      "path": "tmp/imagegen/thorg-before.webp",
+      "bytes": 440980
+    },
+    {
+      "path": "tmp/imagegen/thorg-full-regen-comparison.png",
+      "bytes": 159580
+    },
+    {
+      "path": "tmp/imagegen/thorg-identity.png",
+      "bytes": 35027
+    },
+    {
+      "path": "tmp/imagegen/thorg-two-hands-comparison.png",
+      "bytes": 128404
+    },
+    {
+      "path": "tmp/portrait-preview/chroma-texture-contact.png",
+      "bytes": 252103
+    },
+    {
+      "path": "tmp/portrait-preview/clean-chroma-contact.png",
+      "bytes": 214845
+    },
+    {
+      "path": "tmp/portrait-preview/contact.png",
+      "bytes": 380451
+    },
+    {
+      "path": "tmp/portrait-preview/corner-chroma-contact.png",
+      "bytes": 197988
+    },
+    {
+      "path": "tmp/portrait-preview/dispersed-chroma-contact.png",
+      "bytes": 246212
+    },
+    {
+      "path": "tmp/portrait-preview/draven.svg",
+      "bytes": 137721
+    },
+    {
+      "path": "tmp/portrait-preview/final-rounded-contact.png",
+      "bytes": 223179
+    },
+    {
+      "path": "tmp/portrait-preview/gloop.svg",
+      "bytes": 33493
+    },
+    {
+      "path": "tmp/portrait-preview/huntress.svg",
+      "bytes": 17597
+    },
+    {
+      "path": "tmp/portrait-preview/index.html",
+      "bytes": 802
+    },
+    {
+      "path": "tmp/portrait-preview/inset-chroma-contact.png",
+      "bytes": 218020
+    },
+    {
+      "path": "tmp/portrait-preview/ninja.svg",
+      "bytes": 29429
+    },
+    {
+      "path": "tmp/portrait-preview/pixel-edge-contact.png",
+      "bytes": 197014
+    },
+    {
+      "path": "tmp/portrait-preview/rounded-balanced-contact.png",
+      "bytes": 255170
+    },
+    {
+      "path": "tmp/portrait-preview/subtle-contact.png",
+      "bytes": 215283
+    },
+    {
+      "path": "tmp/portrait-preview/subtle-pixel-contact.png",
+      "bytes": 197189
+    },
+    {
+      "path": "tmp/portrait-preview/thin-border-contact.png",
+      "bytes": 195072
+    },
+    {
+      "path": "tmp/portrait-preview/thorg.svg",
+      "bytes": 76065
+    },
+    {
+      "path": "tmp/portrait-preview/wizard.svg",
+      "bytes": 64069
+    }
+  ]
+}

@@ -14,7 +14,7 @@ import { playSound } from "../lib/uiSounds.js";
 import { buildCharacterSkinBodyUrl } from "../lib/skinAssets.js";
 import { dismissPopup } from "../lib/popupMotion.js";
 import { sonner } from "../lib/sonner.js";
-import { buildProfileIconUrl } from "../lib/profileIconAssets.js";
+import { resolveBodyPortrait, buildFramedBodyPortrait } from "../lib/bodyPortraitAssets.js";
 import SKINS_CATALOG from "../shared/skinsCatalog.json";
 
 // Keep a reference to user data for confirmations and currency display
@@ -25,6 +25,7 @@ let _ownedSkinIds = new Set();
 let _skinBootstrapPromise = null;
 let _characterSelectionPromise = null;
 let _confirmedSkinSelections = Object.create(null);
+let _deferredSkinRender = null;
 let _upgradePreview = null;
 let _pendingUpgradeAnimation = null;
 
@@ -195,15 +196,64 @@ function getSelectedSkin(character) {
   return skins.find((skin) => skin.id === skinId) || skins[0];
 }
 
-function setSelectedSkin(character, skinId) {
+async function setSelectedSkin(character, skinId) {
   if (!_characterDetailsUi) return;
+  if (_characterSelectionPromise || blockCharacterChangeWhileReady()) return;
   const characterId = normalizeCharacterId(character);
   const skins = getCharacterSkinList(characterId);
   const nextSkin =
     skins.find((skin) => skin.id === String(skinId || "")) || skins[0];
+  const previousSkinId = getSelectedSkin(characterId)?.id;
   _characterDetailsUi.selectedSkinByCharacter[characterId] = nextSkin.id;
+  // Locked skins remain previewable, but only owned skins are equipped.
+  const saving = nextSkin.locked ? null : selectCharacter(characterId, { closeAfterSelection: false });
   if (_characterDetailsUi.currentCharacter === characterId) {
-    renderCharacterDetails(characterId);
+    updateSkinDetails(characterId);
+  }
+  if (saving) {
+    const saved = await saving;
+    if (!saved) _characterDetailsUi.selectedSkinByCharacter[characterId] = previousSkinId;
+    if (_characterDetailsUi.currentCharacter === characterId) updateSkinDetails(characterId);
+  }
+}
+
+function cycleSkin(character, direction) {
+  const skins = getCharacterSkinList(character);
+  const index = Math.max(0, skins.findIndex(skin => skin.id === getSelectedSkin(character)?.id));
+  return setSelectedSkin(character, skins[(index + direction + skins.length) % skins.length].id);
+}
+
+function updateSkinDetails(character) {
+  const ui = _characterDetailsUi;
+  if (!ui || ui.currentCharacter !== character) return;
+  const skin = getSelectedSkin(character);
+  const rarity = normalizeRarity(skin.rarity);
+  const image = ui.preview.querySelector('.character-details-preview-image');
+  image.src = resolveCharacterPreviewAsset(character, skin.id);
+  image.alt = `${character} ${skin.label}`;
+  const row = ui.stickyFooter.querySelector('.character-details-inline-skin');
+  for (const element of [row, ui.previewStage]) {
+    for (const value of SUPPORTED_RARITIES) element.classList.toggle(`skin-rarity-${value}`, value === rarity);
+  }
+  row.classList.toggle('is-locked', !!skin.locked);
+  row.querySelector('.character-details-skin-name-text').textContent = skin.label;
+  row.querySelector('.character-details-skin-rarity').textContent = rarity;
+  const name = row.querySelector('strong');
+  let lock = name.querySelector('.character-details-skin-lock');
+  if (skin.locked && !lock) {
+    lock = document.createElement('img');
+    lock.className = 'character-details-skin-lock';
+    lock.src = '/assets/lock.webp';
+    lock.alt = 'Locked';
+    name.prepend(lock);
+  } else if (!skin.locked) lock?.remove();
+  row.querySelectorAll('.character-details-skin-stepper').forEach(button => {
+    button.disabled = getCharacterSkinList(character).length <= 1 || !!_characterSelectionPromise;
+  });
+  const select = ui.stickyFooter.querySelector('.select-button');
+  if (select) {
+    select.disabled = !!skin.locked || !!_characterSelectionPromise;
+    select.textContent = skin.locked ? 'Locked' : 'Select';
   }
 }
 
@@ -211,7 +261,13 @@ function resolveCharacterPreviewAsset(character, skinId) {
   const skins = getCharacterSkinList(character);
   const skin =
     skins.find((entry) => entry.id === String(skinId || "")) || skins[0];
-  return skin?.previewSrc || buildCharacterSkinBodyUrl(character, skin?.id);
+  return resolveBodyPortrait(skin?.previewSrc || buildCharacterSkinBodyUrl(character, skin?.id));
+}
+
+function equippedCharacterPortrait(character, userData) {
+  return buildFramedBodyPortrait(character, buildCharacterSkinBodyUrl(
+    character, userData?.selected_skin_id_by_char?.[character],
+  ));
 }
 
 function getCharacterCardState(character, userData) {
@@ -339,6 +395,9 @@ function hideCharacterDetails() {
   _characterDetailsUi.overlay.classList.add("is-hidden");
   _characterDetailsUi.overlay.setAttribute("aria-hidden", "true");
   _characterDetailsUi.currentCharacter = null;
+  const render = _deferredSkinRender;
+  _deferredSkinRender = null;
+  render?.();
 }
 
 function ensureCharacterDetailsUi() {
@@ -624,23 +683,16 @@ function renderCharacterDetails(character) {
   skinControls.className = "character-details-skin-controls";
 
   const skins = getCharacterSkinList(character);
-  const activeSkinIndex = Math.max(
-    0,
-    skins.findIndex((skin) => skin.id === selectedSkin.id),
-  );
-  const prevSkin = skins[(activeSkinIndex - 1 + skins.length) % skins.length];
-  const nextSkin = skins[(activeSkinIndex + 1) % skins.length];
-
   const prevButton = document.createElement("button");
   prevButton.type = "button";
   prevButton.className = "character-details-skin-stepper";
-  prevButton.textContent = "‹";
+  prevButton.textContent = "";
   prevButton.setAttribute("aria-label", "Previous skin");
-  prevButton.disabled = skins.length <= 1;
+  prevButton.disabled = skins.length <= 1 || !!_characterSelectionPromise;
   prevButton.addEventListener("click", () => {
     if (skins.length <= 1) return;
     playSound("cursor4", 0.2);
-    setSelectedSkin(character, prevSkin.id);
+    cycleSkin(character, -1);
   });
 
   const skinChip = document.createElement("div");
@@ -654,7 +706,10 @@ function renderCharacterDetails(character) {
     lockIcon.alt = "Locked";
     skinName.appendChild(lockIcon);
   }
-  skinName.appendChild(document.createTextNode(selectedSkin.label));
+  const skinNameText = document.createElement("span");
+  skinNameText.className = "character-details-skin-name-text";
+  skinNameText.textContent = selectedSkin.label;
+  skinName.appendChild(skinNameText);
   const skinRarity = document.createElement("span");
   skinRarity.className = "character-details-skin-rarity";
   skinRarity.textContent = selectedSkinRarity;
@@ -664,13 +719,13 @@ function renderCharacterDetails(character) {
   const nextButton = document.createElement("button");
   nextButton.type = "button";
   nextButton.className = "character-details-skin-stepper";
-  nextButton.textContent = "›";
+  nextButton.textContent = "";
   nextButton.setAttribute("aria-label", "Next skin");
-  nextButton.disabled = skins.length <= 1;
+  nextButton.disabled = skins.length <= 1 || !!_characterSelectionPromise;
   nextButton.addEventListener("click", () => {
     if (skins.length <= 1) return;
     playSound("cursor4", 0.2);
-    setSelectedSkin(character, nextSkin.id);
+    cycleSkin(character, 1);
   });
 
   skinControls.appendChild(prevButton);
@@ -762,10 +817,10 @@ function renderCharacterDetails(character) {
     selectButton.className =
       "character-details-action select-button pixel-menu-button";
     selectButton.textContent = selectedSkin.locked ? "Locked" : "Select";
-    selectButton.disabled = !!selectedSkin.locked;
+    selectButton.disabled = !!selectedSkin.locked || !!_characterSelectionPromise;
     selectButton.addEventListener("click", async (e) => {
       e.stopPropagation();
-      if (selectedSkin.locked) return;
+      if (getSelectedSkin(character)?.locked) return;
       playSound("cursor4", 0.2);
       selectButton.disabled = true;
       selectButton.textContent = "Selecting...";
@@ -1091,7 +1146,7 @@ function createCharacterCard(character, userData) {
 
   // Compact card layout: portrait, name, and progression state. Detailed
   // combat stats live in the expanded character view.
-  const profileIconUrl = buildProfileIconUrl(character, character);
+  const profileIconUrl = equippedCharacterPortrait(character, userData);
 
   const imageWrap = document.createElement("div");
   imageWrap.className = "character-card-image-wrap";
@@ -1234,7 +1289,7 @@ function closeCharacterSelectAfterSelection() {
   emitCharacterMenuStatus(false);
 }
 
-async function selectCharacter(character) {
+async function selectCharacter(character, { closeAfterSelection = true } = {}) {
   if (_characterSelectionPromise) return false;
   if (blockCharacterChangeWhileReady()) return false;
   const charClass = normalizeCharacterId(character);
@@ -1268,6 +1323,7 @@ async function selectCharacter(character) {
     }
     _confirmedSkinSelections[charClass] = selectedSkinId;
 
+    const updateSelectionView = () => {
     // Update current user's visible slot, if present
     const yourSlot =
       document.querySelector('.character-slot[data-is-current-user="true"]') ||
@@ -1310,7 +1366,14 @@ async function selectCharacter(character) {
 
     // Keep chooser card highlight synced immediately after selection.
     refreshUpgradeButtonAffordability();
-    closeCharacterSelectAfterSelection();
+    };
+    if (!closeAfterSelection && _characterDetailsUi?.currentCharacter) {
+      _deferredSkinRender = updateSelectionView;
+    } else {
+      _deferredSkinRender = null;
+      updateSelectionView();
+    }
+    if (closeAfterSelection) closeCharacterSelectAfterSelection();
     playSound("cursor4", 0.4);
     return true;
   } catch (e) {
@@ -1695,6 +1758,8 @@ function refreshUpgradeButtonAffordability() {
       const character = card.dataset.char;
       if (!character) return;
       const state = getCharacterCardState(character, _userDataRef);
+      const portrait = card.querySelector(".character-profile-icon");
+      if (portrait) portrait.src = equippedCharacterPortrait(character, _userDataRef);
       const statusText = card.querySelector(".character-card-status-text");
       if (!statusText) return;
 

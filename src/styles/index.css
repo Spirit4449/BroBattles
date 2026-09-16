@@ -8446,4 +8446,5 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   border: 4px solid #000;
   border-radius: 0;
   box-sizing: border-box;
+  image-rendering: pixelated;
 }
