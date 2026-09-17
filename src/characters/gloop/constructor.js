@@ -75,7 +75,7 @@ class Gloop extends CharacterEntityBase {
     );
     scene.load.image(
       `${NAME}-hand-grip-source`,
-      this.characterAssetPath(staticPath, "hand-grip-source.png"),
+      this.characterAssetPath(staticPath, "hand-grip.webp"),
     );
     scene.load.image(
       `${NAME}-hand-open`,

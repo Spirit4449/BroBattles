@@ -16,7 +16,7 @@
           "name": "Coin Drop",
           "description": "Today's on us. Add 75 coins to your battle fund.",
           "rarity": "common",
-          "banner": "/assets/shop/banners/daily-coins.webp",
+          "banner": "/assets/shop/banners/daily-coins-scene.webp",
           "grants": [{ "kind": "currency", "currency": "coins", "amount": 75 }]
         },
         {
@@ -24,7 +24,7 @@
           "name": "Gem Spark",
           "description": "A little midnight luck: 5 gems, free for today.",
           "rarity": "rare",
-          "banner": "/assets/shop/banners/daily-gems.webp",
+          "banner": "/assets/shop/banners/daily-gems-scene.webp",
           "grants": [{ "kind": "currency", "currency": "gems", "amount": 5 }]
         }
       ]
@@ -49,7 +49,7 @@
       "description": "Forge a complete Thorg loadout with Ironbound, Shuriken Strike, and a 500 coin battle fund.",
       "rarity": "epic",
       "badge": "BUNDLE",
-      "banner": "/assets/shop/banners/ironbound-arsenal.webp",
+      "banner": "/assets/shop/banners/ironbound-arsenal-scene.webp",
       "price": { "type": "virtual", "currency": "gems", "amount": 250 },
       "purchaseLimit": "lifetime",
       "eligibility": { "requiresNotOwned": { "kind": "skin", "id": "thorg-iron" } },
@@ -66,7 +66,7 @@
       "name": "Ironbound",
       "description": "A battle-worn epic armor set forged for Thorg.",
       "rarity": "epic",
-      "banner": "/assets/shop/banners/ironbound.webp",
+      "banner": "/assets/shop/banners/ironbound-scene.webp",
       "price": { "type": "virtual", "currency": "gems", "amount": 250 },
       "purchaseLimit": "lifetime",
       "grants": [{ "kind": "skin", "id": "thorg-iron" }]
@@ -78,7 +78,7 @@
       "name": "Shuriken Strike",
       "description": "A rare player card framed by a storm of steel.",
       "rarity": "rare",
-      "banner": "/assets/shop/banners/shuriken-strike.webp",
+      "banner": "/assets/shop/banners/shuriken-strike-scene.webp",
       "price": { "type": "virtual", "currency": "gems", "amount": 20 },
       "purchaseLimit": "lifetime",
       "grants": [{ "kind": "card", "id": "shuriken-strike" }]
@@ -91,7 +91,7 @@
       "description": "A quick 1,000-coin boost for upgrades and your next winning streak.",
       "rarity": "common",
       "badge": "QUICK START",
-      "banner": "/assets/shop/banners/coin-satchel.webp",
+      "banner": "/assets/shop/banners/coin-satchel-scene.webp",
       "price": { "type": "money", "currency": "usd", "amountCents": 99 },
       "purchaseLimit": "unlimited",
       "grants": [{ "kind": "currency", "currency": "coins", "amount": 1000 }]
@@ -103,7 +103,7 @@
       "name": "250 Gems",
       "description": "250 gems for a fresh skin, card, or something shiny later.",
       "rarity": "rare",
-      "banner": "/assets/shop/banners/gem-pouch.webp",
+      "banner": "/assets/shop/banners/gem-pouch-scene.webp",
       "price": { "type": "money", "currency": "usd", "amountCents": 199 },
       "purchaseLimit": "unlimited",
       "grants": [{ "kind": "currency", "currency": "gems", "amount": 250 }]
@@ -116,7 +116,7 @@
       "description": "700 gems to open up the good stuff without holding back.",
       "rarity": "epic",
       "badge": "POPULAR",
-      "banner": "/assets/shop/banners/gem-cache.webp",
+      "banner": "/assets/shop/banners/gem-cache-scene.webp",
       "price": { "type": "money", "currency": "usd", "amountCents": 499 },
       "purchaseLimit": "unlimited",
       "grants": [{ "kind": "currency", "currency": "gems", "amount": 700 }]
@@ -129,7 +129,7 @@
       "description": "1,500 gems for collectors who always want the next great drop.",
       "rarity": "legendary",
       "badge": "BEST VALUE",
-      "banner": "/assets/shop/banners/gem-vault.webp",
+      "banner": "/assets/shop/banners/gem-vault-scene.webp",
       "price": { "type": "money", "currency": "usd", "amountCents": 999 },
       "purchaseLimit": "unlimited",
       "grants": [{ "kind": "currency", "currency": "gems", "amount": 1500 }]

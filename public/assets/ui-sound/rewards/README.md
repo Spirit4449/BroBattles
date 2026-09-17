@@ -16,7 +16,7 @@ Edits use a 25ms fade-in, 450ms fade-out, peak limiter, and stereo 128kbps MP3. 
 
 ## Wallet impacts
 
-Existing coin-impact.wav and gem-impact.wav remain from [WobbleBoxx Workshop, Level up, power up, Coin get (13 Sounds)](https://opengameart.org/content/level-up-power-up-coin-get-13-sounds), CC0: Coin01.aif and Rise02.aif respectively. Original short 220ms edits are unchanged. Old reveal WAVs are retained as unused alternatives.
+Existing coin-impact.wav and gem-impact.wav remain from [WobbleBoxx Workshop, Level up, power up, Coin get (13 Sounds)](https://opengameart.org/content/level-up-power-up-coin-get-13-sounds), CC0: Coin01.aif and Rise02.aif respectively. Original short 220ms edits are unchanged. Superseded reveal WAV alternatives have been removed.
 
 One tick accompanies each arriving particle. Count = ceil(2 × (amount / unit)^0.63), limited to the amount and 96; unit is 50 coins or 2.5 gems. Launch spread grows from 150ms by 22ms per particle; all flights finish within 3.4 seconds. Voices reuse a bounded pool of eight per currency and obey SFX settings. Reduced-motion retains the existing immediate wallet update.
 

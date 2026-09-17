@@ -11,6 +11,7 @@ import {
 } from "../lib/gameSelectionCatalog.js";
 import { buildCharacterSkinBodyUrl } from "../lib/skinAssets.js";
 import { LEVEL_CAP } from "../shared/characterStats.js";
+import { renderLevelBadge } from "../lib/levelBadgeView.js";
 
 function legacyModeToVariantId(mode) {
   const numeric = Number(mode);
@@ -152,16 +153,10 @@ export function createGameHudController({
 
     const levelBadge = document.createElement("div");
     levelBadge.className = "bs-card-level-badge";
-    const levelIcon = document.createElement("img");
     const level = Math.max(1, Math.min(LEVEL_CAP, Number(player?.level) || 1));
-    levelIcon.src = `/assets/levels/${level}.webp`;
-    levelIcon.alt = `Character level ${level}`;
-    levelIcon.onerror = () => {
-      levelIcon.onerror = null;
-      levelIcon.style.display = "none";
-      levelBadge.textContent = String(level);
-    };
-    levelBadge.appendChild(levelIcon);
+    renderLevelBadge(levelBadge, level, {
+      ariaLabel: `Character level ${level}`,
+    });
 
     const charNameEl = document.createElement("div");
     charNameEl.className = "bs-card-character-name";

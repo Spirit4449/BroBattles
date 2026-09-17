@@ -83,7 +83,7 @@
   content: "";
   width: 13px;
   height: 13px;
-  background: url("/assets/ui/pixel-check.png") center / contain no-repeat;
+  background: url("/assets/ui/pixel-check.webp") center / contain no-repeat;
   image-rendering: pixelated;
 }
 

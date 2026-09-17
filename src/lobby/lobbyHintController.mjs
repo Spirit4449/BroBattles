@@ -290,7 +290,7 @@ export function createLobbyHintController({
       </div>
       <div class="lobby-hint-meta" hidden>
         <span class="lobby-hint-price" hidden><img alt="" /><strong></strong></span>
-        <span class="lobby-hint-countdown" hidden><img class="pixel-clock-icon" src="/assets/ui/shop-clock.png" alt="" /><strong></strong></span>
+        <span class="lobby-hint-countdown" hidden><img class="pixel-clock-icon" src="/assets/ui/shop-clock.webp" alt="" /><strong></strong></span>
       </div>
       ${hint.actionLabel ? '<button class="lobby-hint-action pixel-menu-button" type="button"></button>' : ""}
     `;

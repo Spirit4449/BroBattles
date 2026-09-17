@@ -57,7 +57,7 @@ class Wizard extends CharacterEntityBase {
     );
     scene.load.atlas(
       "wizard-fireball-unified",
-      this.characterAssetPath(staticPath, "fireball-unified.png"),
+      this.characterAssetPath(staticPath, "fireball-unified.webp"),
       this.characterAssetPath(staticPath, "fireball-unified.json"),
     );
     scene.load.audio(

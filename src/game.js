@@ -4,6 +4,7 @@ import { ensureLegalAcceptance } from "./site/shell";
 import "./site/shell.js";
 import { syncLocalEffects } from './players/localStateSync';
 import './styles/mapPlaytest.css';
+import './styles/levelBadge.css';
 const editorSession = window.location.pathname === '/map-editor/playtest' ? new URLSearchParams(window.location.search).get('session') : null;
 if (editorSession) document.body.classList.add('editor-playtest');
 import { preloadMapDocument } from './maps/documentRuntime';

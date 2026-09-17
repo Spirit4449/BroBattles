@@ -588,22 +588,12 @@
         filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
       }
       #battle-start-overlay .bs-card-level-badge {
-        top: 40%;
-        width: 32%;
-        height: 22%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: clamp(12px, 1.1vw, 15px);
-        font-weight: 800;
-        color: #f7f8fb;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+        --level-badge-size: 17cqw;
+        top: 41.5%;
+        font-size: 2.2cqw;
       }
-      #battle-start-overlay .bs-card-level-badge img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.52));
+      #battle-start-overlay .bs-card-level-badge .level-badge__caption {
+        padding: 3cqw 1cqw 2cqw;
       }
       #battle-start-overlay .bs-card-character-name {
         left: 50%;

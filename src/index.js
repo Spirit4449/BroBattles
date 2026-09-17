@@ -38,6 +38,7 @@ import {
 import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
 
 import { initializeShop } from "./shop.js";
+import "./styles/levelBadge.css";
 import "./styles/characterSelect.css";
 import "./styles/index.css";
 
@@ -642,7 +643,7 @@ async function initializeLobbyHints({ shop }) {
     {
       id: "mode-variety",
       anchor: "#mode-picker-open",
-      icon: "/assets/ui/switch-mode.png",
+      icon: "/assets/ui/switch-mode.webp",
       title: "Try something new!",
       message: "Switch modes to keep every battle fresh and exciting.",
       priority: 30,
@@ -655,7 +656,7 @@ async function initializeLobbyHints({ shop }) {
       anchor: "#shop-button",
       align: "end",
       variant: "sale",
-      icon: "/assets/ui/sale-tag.png",
+      icon: "/assets/ui/sale-tag.webp",
       title: String(saleOffer?.name || "Featured Sale"),
       badge: "LIMITED SALE",
       price: getSaleHintPrice(saleOffer?.price),

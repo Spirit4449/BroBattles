@@ -1,6 +1,6 @@
 .site-consent input[type="checkbox"]:checked,
 .site-setting input[type="checkbox"]:checked {
-  background-image: url("/assets/ui/pixel-check.png") !important;
+  background-image: url("/assets/ui/pixel-check.webp") !important;
   background-position: center;
   background-repeat: no-repeat;
   background-size: 20px 20px;

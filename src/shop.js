@@ -189,23 +189,6 @@ function isBigPurchase(item) {
   return Number(item?.price?.amount) >= 250;
 }
 
-function grantMarkup(grant, index, bundle) {
-  const quantity = grant.kind === "currency" ? Number(grant.amount) || 0 : null;
-  const kind = safeCssToken(grant.kind || "item");
-  return `
-    <span class="shop-grant shop-grant-${kind}${bundle ? " shop-bundle-item" : ""}" style="--grant-index:${index}">
-      <span class="shop-grant-art">
-        <span class="shop-grant-halo" aria-hidden="true"></span>
-
-        <img class="shop-grant-image" src="${escapeHtml(grant.kind === "currency" ? currencyRewardImage(grant.currency, grant.amount) : grant.image)}" alt="${escapeHtml(grant.name)}" />
-      </span>
-      <span class="shop-grant-copy">
-        <strong>${quantity ? `${quantity.toLocaleString()} ` : ""}${escapeHtml(grant.name)}</strong>
-        ${grant.character ? `<small>${escapeHtml(grant.character)}</small>` : ""}
-      </span>
-    </span>`;
-}
-
 function itemMarkup(item, sectionId, itemIndex) {
   const grants = Array.isArray(item?.grants) ? item.grants : [];
   const action = getActionState(item);
@@ -230,9 +213,6 @@ function itemMarkup(item, sectionId, itemIndex) {
         ${item.badge ? `<span class="shop-offer-badge">${escapeHtml(item.badge)}</span>` : ""}
         ${showsRarity ? `<span class="shop-rarity-badge">${escapeHtml(rarity)}</span>` : ""}
         ${isFeatured ? '<span class="shop-sale-sheen" aria-hidden="true"></span>' : ""}
-        <div class="shop-product-stage${isBundle ? " is-bundle" : ""}" data-product-count="${grants.length}">
-          ${grants.map((grant, index) => grantMarkup(grant, index, isBundle)).join("")}
-        </div>
       </div>
       <div class="shop-offer-body">
         <div class="shop-offer-name"><img src="${escapeHtml(itemIcon)}" alt="" /><h3>${escapeHtml(item.name)}</h3></div>
@@ -253,7 +233,7 @@ function sectionMarkup(meta, items) {
     <section class="shop-section shop-section-${meta.id}" id="shop-section-${meta.id}">
       <header class="shop-section-head">
         <div class="shop-section-copy"><img src="${escapeHtml(meta.icon)}" alt="" /><h2>${escapeHtml(meta.title)}</h2></div>
-        ${timerKind ? `<div class="shop-reset-chip"><img class="shop-clock-icon" src="/assets/ui/shop-clock.png" alt="" /><strong data-shop-countdown="${timerKind}">--:--:--</strong></div>` : ""}
+        ${timerKind ? `<div class="shop-reset-chip"><img class="shop-clock-icon" src="/assets/ui/shop-clock.webp" alt="" /><strong data-shop-countdown="${timerKind}">--:--:--</strong></div>` : ""}
       </header>
       <div class="shop-offer-grid${meta.id === "sales" ? " shop-sales-grid" : ""}">
         ${items.length ? items.map((item, index) => itemMarkup(item, meta.id, index)).join("") : '<div class="shop-empty"><strong>Nothing here yet.</strong></div>'}
@@ -448,7 +428,6 @@ export function initializeShop({
     ).join("");
     state.scroll.scrollTop = previousTop;
     wireOfferActions();
-    wireOfferMotion();
     if (animateOffers) {
       stageOffers();
     } else {
@@ -459,31 +438,6 @@ export function initializeShop({
     }
     updateCountdowns();
     updateActiveSection();
-  }
-
-  function wireOfferMotion() {
-    if (!window.matchMedia?.("(pointer: fine)").matches) return;
-    state.scroll?.querySelectorAll(".shop-offer").forEach((offer) => {
-      offer.addEventListener("pointermove", (event) => {
-        const rect = offer.getBoundingClientRect();
-        const x = Math.max(
-          0,
-          Math.min(1, (event.clientX - rect.left) / rect.width),
-        );
-        const y = Math.max(
-          0,
-          Math.min(1, (event.clientY - rect.top) / rect.height),
-        );
-        offer.style.setProperty("--light-x", `${x * 100}%`);
-        offer.style.setProperty("--light-y", `${y * 100}%`);
-        offer.style.setProperty("--tilt-x", `${(0.5 - y) * 2.6}deg`);
-        offer.style.setProperty("--tilt-y", `${(x - 0.5) * 3.2}deg`);
-      });
-      offer.addEventListener("pointerleave", () => {
-        offer.style.setProperty("--tilt-x", "0deg");
-        offer.style.setProperty("--tilt-y", "0deg");
-      });
-    });
   }
 
   function stageOffers() {
@@ -512,22 +466,6 @@ export function initializeShop({
             entry.target.style.opacity = "1";
             offerEntrance.cancel();
           });
-          entry.target
-            .querySelectorAll(".shop-bundle-item")
-            .forEach((item, grantIndex) => {
-              item.animate(
-                [
-                  { opacity: 0, transform: "translateY(18px) scale(.82)" },
-                  { opacity: 1, transform: "translateY(0) scale(1)" },
-                ],
-                {
-                  duration: 460,
-                  delay: 210 + grantIndex * 110,
-                  easing: "cubic-bezier(.2,.9,.2,1)",
-                  fill: "both",
-                },
-              );
-            });
           observer.unobserve(entry.target);
         });
       },

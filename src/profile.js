@@ -1,5 +1,6 @@
 import { wireEmailSettings } from "./lib/emailSettings.js";
 import "./styles/profile.css";
+import "./styles/levelBadge.css";
 import "./styles/selectionPopup.css";
 import { sonner } from "./lib/sonner.js";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";

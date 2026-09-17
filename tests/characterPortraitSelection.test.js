@@ -88,6 +88,7 @@ test('leaving expanded details flushes deferred selection rendering once', () =>
     },
     _upgradePreview:null, _pendingUpgradeAnimation:null,
     _deferredSkinRender:()=>{renders++;},
+    disposeSkinCarousel:()=>{},
   };
   const hide = loadFunction('hideCharacterDetails', context);
   hide();

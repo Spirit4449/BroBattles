@@ -201,8 +201,7 @@
             "itemId": "gloop",
             "character": "gloop",
             "name": "Gloop",
-            "image": "/assets/gloop/body.webp",
-            "rarity": "epic"
+            "image": "/assets/gloop/body.webp"
           }
         ]
       },

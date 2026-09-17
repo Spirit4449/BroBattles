@@ -110,7 +110,7 @@
           "character": "draven",
           "available": true,
           "assetUrl": "/assets/draven/body.webp",
-          "rarity": "rare",
+          "rarity": "common",
           "unlockMethod": {
             "type": "character",
             "character": "draven",
@@ -133,7 +133,7 @@
           "character": "wizard",
           "available": true,
           "assetUrl": "/assets/wizard/body.webp",
-          "rarity": "rare",
+          "rarity": "common",
           "unlockMethod": {
             "type": "character",
             "character": "wizard",
@@ -156,7 +156,7 @@
           "character": "huntress",
           "available": true,
           "assetUrl": "/assets/huntress/body.webp",
-          "rarity": "rare",
+          "rarity": "common",
           "unlockMethod": {
             "type": "character",
             "character": "huntress",
@@ -179,7 +179,7 @@
           "character": "gloop",
           "available": true,
           "assetUrl": "/assets/gloop/body.webp",
-          "rarity": "rare",
+          "rarity": "common",
           "unlockMethod": {
             "type": "character",
             "character": "gloop",

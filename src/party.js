@@ -1,5 +1,7 @@
 import { MAINTENANCE_MESSAGE } from "./shared/maintenance";
+import "./styles/levelBadge.css";
 import { revealLobby } from "./lobby/lobbyReveal.js";
+import { refreshPlatformGrounding } from "./lobby/platformGrounding.mjs";
 import { playPartyMoveEffect } from "./lobby/partyMoveEffect.js";
 import { createPartySlotDrag } from "./lobby/partySlotDrag.js";
 import { ensureLegalAcceptance } from "./site/shell";
@@ -11,12 +13,12 @@ import { getSharedSelectionPopupShell } from "./lib/selectionPopupShell.js";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
 import {
   getLobbyBgAsset,
-  getLobbyCharacterOffsetY,
   getMapSelectPreviewAsset,
   getLobbyPlatformAsset,
 } from "./maps/manifest";
 import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
 import { getAllCharacters, LEVEL_CAP } from "./shared/characterStats.js";
+import { clearLevelBadge, renderLevelBadge } from "./lib/levelBadgeView.js";
 import {
   getAllGameModes,
   getCompatibleMapsForSelection,
@@ -130,12 +132,10 @@ function setSlotLevelBadge(slot, level) {
   }
   if (Number.isFinite(Number(level)) && Number(level) > 0) {
     const iconLevel = Math.max(1, Math.min(LEVEL_CAP, Number(level)));
-    badge.innerHTML = `<img src="/assets/levels/${iconLevel}.webp" alt="" />`;
-    badge.dataset.level = String(iconLevel);
+    renderLevelBadge(badge, iconLevel, { ariaHidden: true });
     slot.classList.add("has-level");
   } else {
-    badge.innerHTML = "";
-    delete badge.dataset.level;
+    clearLevelBadge(badge);
     slot.classList.remove("has-level");
   }
 }
@@ -796,15 +796,6 @@ function setupModePickerControls(onSelect = null) {
   syncModePickerUi();
 }
 
-function getViewportOffsetScale() {
-  // Gradually reduce vertical push on narrow layouts where elements stack tighter.
-  const w = Number(window.innerWidth) || 1280;
-  const minW = 420;
-  const maxW = 1440;
-  const t = Math.max(0, Math.min(1, (w - minW) / (maxW - minW)));
-  return 0.56 + t * 0.44; // 420px => 0.56, 1440px+ => 1.0
-}
-
 function applyPlatformImageForMap(mapValue) {
   const platformUrl = getLobbyPlatformAsset(mapValue || getCurrentMapValue());
   const imageEls = document.querySelectorAll(".platform-image");
@@ -812,18 +803,11 @@ function applyPlatformImageForMap(mapValue) {
     if (!imageEl) continue;
     imageEl.style.backgroundImage = `url("${platformUrl}")`;
   }
+  refreshPlatformGrounding();
 }
 
 function applyLobbyCharacterOffsetForMap(mapValue, modeValue) {
-  const baseOffsetPx = getLobbyCharacterOffsetY(
-    mapValue || getCurrentMapValue(),
-    modeValue || getCurrentModeValue(),
-  );
-  const offsetPx =
-    Math.round(baseOffsetPx * getViewportOffsetScale() * 100) / 100;
-  const lobbyArea = document.getElementById("lobby-area");
-  if (!lobbyArea) return;
-  lobbyArea.style.setProperty("--lobby-character-offset-y", `${offsetPx}px`);
+  refreshPlatformGrounding();
 }
 
 function bindLobbyOffsetResizeHandler() {
@@ -2489,6 +2473,7 @@ function createPlatform(team, slotNumber) {
   platform.appendChild(platformImage);
 
   lobbyArea.appendChild(platform);
+  refreshPlatformGrounding();
 }
 
 function copyInviteToClipboard() {
@@ -3084,6 +3069,7 @@ function updateMMOverlay({ found, total, selection, players }) {
       }
       grid.appendChild(item);
     }
+    refreshPlatformGrounding();
   }
 }
 

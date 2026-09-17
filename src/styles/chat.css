@@ -530,7 +530,7 @@
   width: 22px;
   height: 12px;
   flex: none;
-  background-image: url("/assets/ui/pixel-check.png"), url("/assets/ui/pixel-check.png");
+  background-image: url("/assets/ui/pixel-check.webp"), url("/assets/ui/pixel-check.webp");
   background-position: 0 0, 8px 0;
   background-repeat: no-repeat;
   background-size: 12px 12px;

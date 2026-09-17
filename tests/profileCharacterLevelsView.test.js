@@ -10,19 +10,25 @@ test("Bros renderer uses profile portraits, level crests, and reports unlocked c
   );
   const heading = { innerHTML: "" };
   const children = [];
+  const renderedBadges = [];
   const grid = {
     innerHTML: "",
     closest: () => ({ querySelector: () => heading }),
     appendChild: (child) => children.push(child),
   };
   const document = {
-    createElement: () => ({
-      className: "",
-      innerHTML: "",
-      setAttribute(name, value) {
-        this[name] = value;
-      },
-    }),
+    createElement: () => {
+      const badge = {};
+      return {
+        className: "",
+        innerHTML: "",
+        badge,
+        querySelector: () => badge,
+        setAttribute(name, value) {
+          this[name] = value;
+        },
+      };
+    },
   };
   const context = {
     exports: {},
@@ -30,7 +36,6 @@ test("Bros renderer uses profile portraits, level crests, and reports unlocked c
     require: (request) =>
       request.includes("characterStats")
         ? {
-            LEVEL_CAP: 10,
             getAllCharacters: () => [
               "ninja",
               "wizard",
@@ -40,6 +45,11 @@ test("Bros renderer uses profile portraits, level crests, and reports unlocked c
               "gloop",
             ],
           }
+        : request.includes("levelBadgeView")
+          ? {
+              normalizeCharacterLevel: (level) => Math.max(1, Math.min(10, Number(level) || 1)),
+              renderLevelBadge: (root, level) => renderedBadges.push({ root, level }),
+            }
         : {
             buildProfileIconUrl: (id) => `/assets/profile-icons/${id}.webp`,
           },
@@ -55,6 +65,7 @@ test("Bros renderer uses profile portraits, level crests, and reports unlocked c
   );
   assert.equal(children.length, 2);
   assert.match(children[0].innerHTML, /profile-icons\/wizard\.webp/);
-  assert.match(children[0].innerHTML, /assets\/levels\/8\.webp/);
+  assert.equal(renderedBadges[0].level, 8);
+  assert.equal(renderedBadges[0].root, children[0].badge);
   assert.doesNotMatch(children[0].innerHTML, /body\.webp/);
 });

@@ -12,7 +12,7 @@ input[type="checkbox"] {
 
 input[type="checkbox"]:checked {
   border-color: #8edfa6;
-  background: #287b43 url("/assets/ui/pixel-check.png") center / 13px 13px no-repeat;
+  background: #287b43 url("/assets/ui/pixel-check.webp") center / 13px 13px no-repeat;
 }
 
 input[type="checkbox"]:focus-visible {

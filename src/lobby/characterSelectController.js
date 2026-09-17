@@ -13,8 +13,15 @@ import socket from "../socket.js";
 import { playSound } from "../lib/uiSounds.js";
 import { buildCharacterSkinBodyUrl } from "../lib/skinAssets.js";
 import { dismissPopup } from "../lib/popupMotion.js";
+import { disposeSkinCarousel, switchSkinPreview } from "./skinCarousel.mjs";
 import { sonner } from "../lib/sonner.js";
 import { resolveBodyPortrait, buildFramedBodyPortrait } from "../lib/bodyPortraitAssets.js";
+import { BRO_PORTRAIT_PALETTES, buildPortraitChromaTile } from "../lib/broPortrait.mjs";
+import {
+  clearLevelBadge,
+  createLevelBadge,
+  renderLevelBadge,
+} from "../lib/levelBadgeView.js";
 import SKINS_CATALOG from "../shared/skinsCatalog.json";
 
 // Keep a reference to user data for confirmations and currency display
@@ -196,7 +203,7 @@ function getSelectedSkin(character) {
   return skins.find((skin) => skin.id === skinId) || skins[0];
 }
 
-async function setSelectedSkin(character, skinId) {
+async function setSelectedSkin(character, skinId, direction = 1) {
   if (!_characterDetailsUi) return;
   if (_characterSelectionPromise || blockCharacterChangeWhileReady()) return;
   const characterId = normalizeCharacterId(character);
@@ -208,29 +215,31 @@ async function setSelectedSkin(character, skinId) {
   // Locked skins remain previewable, but only owned skins are equipped.
   const saving = nextSkin.locked ? null : selectCharacter(characterId, { closeAfterSelection: false });
   if (_characterDetailsUi.currentCharacter === characterId) {
-    updateSkinDetails(characterId);
+    updateSkinDetails(characterId, direction);
   }
   if (saving) {
     const saved = await saving;
     if (!saved) _characterDetailsUi.selectedSkinByCharacter[characterId] = previousSkinId;
-    if (_characterDetailsUi.currentCharacter === characterId) updateSkinDetails(characterId);
+    if (_characterDetailsUi.currentCharacter === characterId) updateSkinDetails(characterId, saved ? direction : -direction);
   }
 }
 
 function cycleSkin(character, direction) {
   const skins = getCharacterSkinList(character);
   const index = Math.max(0, skins.findIndex(skin => skin.id === getSelectedSkin(character)?.id));
-  return setSelectedSkin(character, skins[(index + direction + skins.length) % skins.length].id);
+  return setSelectedSkin(character, skins[(index + direction + skins.length) % skins.length].id, direction);
 }
 
-function updateSkinDetails(character) {
+function updateSkinDetails(character, direction = 1) {
   const ui = _characterDetailsUi;
   if (!ui || ui.currentCharacter !== character) return;
   const skin = getSelectedSkin(character);
   const rarity = normalizeRarity(skin.rarity);
-  const image = ui.preview.querySelector('.character-details-preview-image');
-  image.src = resolveCharacterPreviewAsset(character, skin.id);
-  image.alt = `${character} ${skin.label}`;
+  switchSkinPreview(ui.previewStage, {
+    src: resolveCharacterPreviewAsset(character, skin.id),
+    alt: `${character} ${skin.label}`,
+    direction,
+  });
   const row = ui.stickyFooter.querySelector('.character-details-inline-skin');
   for (const element of [row, ui.previewStage]) {
     for (const value of SUPPORTED_RARITIES) element.classList.toggle(`skin-rarity-${value}`, value === rarity);
@@ -384,6 +393,7 @@ function getCharacterDetailsTarget(character) {
 
 function hideCharacterDetails() {
   if (!_characterDetailsUi) return;
+  disposeSkinCarousel(_characterDetailsUi.previewStage);
   _upgradePreview = null;
   _pendingUpgradeAnimation = null;
   _characterDetailsUi.popup.classList.remove("is-upgrade-confirming");
@@ -538,6 +548,7 @@ function renderCharacterDetails(character) {
   ui.wallet.querySelector('[data-character-wallet="gems"]').textContent =
     Math.max(0, Number(_userDataRef?.gems) || 0).toLocaleString();
 
+  disposeSkinCarousel(ui.previewStage);
   ui.preview.innerHTML = "";
   ui.info.innerHTML = "";
   ui.stickyFooter.innerHTML = "";
@@ -546,6 +557,11 @@ function renderCharacterDetails(character) {
   const previewFrame = document.createElement("div");
   previewFrame.className =
     `character-details-preview-frame skin-rarity-${selectedSkinRarity} ${cardState.isLocked ? "is-locked" : ""} ${cardState.isMaxed ? "is-maxed" : ""}`.trim();
+  previewFrame.dataset.character = character;
+  for (let corner = 0; corner < 4; corner++) {
+    const tile = buildPortraitChromaTile(BRO_PORTRAIT_PALETTES[character] || BRO_PORTRAIT_PALETTES.ninja, corner);
+    previewFrame.style.setProperty(`--portrait-chroma-${corner}`, `url("data:image/svg+xml,${encodeURIComponent(tile)}")`);
+  }
 
   const previewGlow = document.createElement("div");
   previewGlow.className = "character-details-preview-glow";
@@ -556,11 +572,10 @@ function renderCharacterDetails(character) {
   previewImg.alt = `${character} ${selectedSkin.label}`;
 
   if (!cardState.isLocked && cardState.level > 0 && cardState.level <= LEVEL_CAP) {
-    const levelBadge = document.createElement("img");
-    levelBadge.className = "character-details-preview-level-badge";
-    levelBadge.src = `/assets/levels/${cardState.level}.webp`;
-    levelBadge.alt = `Level ${cardState.level}`;
-    previewFrame.appendChild(levelBadge);
+    previewFrame.classList.add("has-character-level");
+    previewFrame.appendChild(createLevelBadge(cardState.level, {
+      className: "level-badge--framed character-level character-details-preview-level-badge",
+    }));
   }
 
   previewFrame.appendChild(previewGlow);
@@ -635,8 +650,22 @@ function renderCharacterDetails(character) {
     ${statTrackMarkup("damage", cardState.currentDamage, attackMax, nextDamage)}
     <div class="stat-box-content">
       ${stats.attackDescription ? `<div class="stat-box-desc">${stats.attackDescription}</div>` : ""}
-      <div class="stat-box-detail">Reload: ${(Number(stats.ammoReloadMs || 0) / 1000).toFixed(1)}s</div>
-      <div class="stat-box-detail">Ammo: ${stats.ammoCapacity || 0}</div>
+      <div class="stat-box-metrics attack-metrics" aria-label="Attack details">
+        <div class="stat-box-metric reload-metric">
+          <img src="/assets/ui/stat-reload.webp" alt="" aria-hidden="true" />
+          <span class="stat-box-metric-copy">
+            <span class="stat-box-metric-label">Reload</span>
+            <strong>${(Number(stats.ammoReloadMs || 0) / 1000).toFixed(1)}s</strong>
+          </span>
+        </div>
+        <div class="stat-box-metric ammo-metric">
+          <img src="/assets/ui/stat-ammo.webp" alt="" aria-hidden="true" />
+          <span class="stat-box-metric-copy">
+            <span class="stat-box-metric-label">Ammo</span>
+            <strong>${stats.ammoCapacity || 0}</strong>
+          </span>
+        </div>
+      </div>
     </div>
   `;
   attackSpecialRow.appendChild(attackBox);
@@ -654,7 +683,15 @@ function renderCharacterDetails(character) {
     ${statTrackMarkup("special", cardState.currentSpecial, specialMax, nextSpecial)}
     <div class="stat-box-content">
       ${stats.specialDescription ? `<div class="stat-box-desc">${stats.specialDescription}</div>` : ""}
-      <div class="stat-box-detail">Charge: ${cardState.currentSuperChargeHits} hits</div>
+      <div class="stat-box-metrics special-metrics" aria-label="Special charge details">
+        <div class="stat-box-metric hits-metric">
+          <img src="/assets/ui/stat-hits.webp" alt="" aria-hidden="true" />
+          <span class="stat-box-metric-copy">
+            <span class="stat-box-metric-label">Charge</span>
+            <strong>${cardState.currentSuperChargeHits} <small>hits</small></strong>
+          </span>
+        </div>
+      </div>
     </div>
   `;
   attackSpecialRow.appendChild(specialBox);
@@ -914,12 +951,10 @@ function setLobbySlotLevelIcon(slot, level) {
   }
   if (Number.isFinite(Number(level)) && Number(level) > 0) {
     const iconLevel = Math.max(1, Math.min(LEVEL_CAP, Number(level)));
-    badge.innerHTML = `<img src="/assets/levels/${iconLevel}.webp" alt="" />`;
-    badge.dataset.level = String(iconLevel);
+    renderLevelBadge(badge, iconLevel, { ariaHidden: true });
     slot.classList.add("has-level");
   } else {
-    badge.innerHTML = "";
-    delete badge.dataset.level;
+    clearLevelBadge(badge);
     slot.classList.remove("has-level");
   }
 }
@@ -1158,12 +1193,13 @@ function createCharacterCard(character, userData) {
   imageWrap.appendChild(profileIcon);
 
   if (!cardState.isLocked && cardState.level > 0 && cardState.level <= LEVEL_CAP) {
-    const levelIcon = document.createElement("img");
-    levelIcon.className = "character-card-level-icon";
-    levelIcon.src = `/assets/levels/${cardState.level}.webp`;
-    levelIcon.alt = `Level ${cardState.level}`;
-    card.appendChild(levelIcon);
+    // Attach the plaque to the card so it can overlap the portrait's clipped
+    // corner frame in the same way as the Selected tag.
+    card.appendChild(createLevelBadge(cardState.level, {
+      className: "level-badge--framed character-level character-card-level",
+    }));
   }
+
 
   const selectedBadge = document.createElement("span");
   selectedBadge.className = "character-card-selected-badge";
@@ -1458,10 +1494,9 @@ function showConfirmDialog(opts, onConfirm) {
   if (isUpgrade) {
     const levelLine = document.createElement("div");
     levelLine.className = "cs-level-line";
-    const currImg = document.createElement("img");
-    currImg.className = "cs-level-img";
-    currImg.src = `/assets/levels/${level}.webp`;
-    currImg.alt = `Level ${level}`;
+    const currImg = createLevelBadge(level, {
+      className: "level-badge--framed character-level cs-level-img",
+    });
     const arrow = document.createElement("img");
     arrow.className = "cs-arrow";
     arrow.src = "/assets/arrow.webp";
@@ -1470,10 +1505,9 @@ function showConfirmDialog(opts, onConfirm) {
     nextWrap.className = "cs-next-wrap";
     const beams = document.createElement("div");
     beams.className = "cs-beams coin"; // coin theme (golden rays)
-    const nextImg = document.createElement("img");
-    nextImg.className = "cs-next-badge";
-    nextImg.src = `/assets/levels/${Math.min(level + 1, LEVEL_CAP)}.webp`;
-    nextImg.alt = `Level ${Math.min(level + 1, LEVEL_CAP)}`;
+    const nextImg = createLevelBadge(Math.min(level + 1, LEVEL_CAP), {
+      className: "level-badge--framed character-level cs-next-badge",
+    });
     nextWrap.appendChild(beams);
     nextWrap.appendChild(nextImg);
     levelLine.appendChild(currImg);

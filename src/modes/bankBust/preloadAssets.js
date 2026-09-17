@@ -43,9 +43,9 @@ export function preloadBankBustAssets(scene, staticPath) {
   loadImage("bank-bust-bullet", `${staticPath}/bank-bust/bullet.webp`);
   loadImage(
     "bank-bust-wall-slot",
-    `${staticPath}/bank-bust/not-built.png`,
+    `${staticPath}/bank-bust/not-built.webp`,
   );
-  loadImage("bank-bust-wall-built", `${staticPath}/bank-bust/built.png`);
+  loadImage("bank-bust-wall-built", `${staticPath}/bank-bust/built.webp`);
   loadImage(
     "bank-bust-mine-neutral",
     `${staticPath}/bank-bust/mine.webp`,

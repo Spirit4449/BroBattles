@@ -353,7 +353,7 @@ h3 {
   width: 100%;
   height: calc(var(--bb-viewport-height, 100dvh) - 140px);
   margin-top: 20px;
-  --lobby-character-seam-overlap: clamp(6px, 1.2vh, 14px);
+  --lobby-character-seam-overlap: 0px;
 }
 
 /* Platform styling - responsive and mode-based sizing */
@@ -406,6 +406,7 @@ h3 {
 /* Visual platform image placed as a separate element to stack vertically */
 .platform-image {
   position: relative;
+  margin-top: calc(-1 * var(--platform-surface-offset, 0px));
   z-index: 1;
   width: 100%;
   aspect-ratio: 638 / 300;
@@ -556,7 +557,6 @@ h3 {
   padding: 8px 8px 0px 8px;
   /* Ensure sprite stays at top regardless of platform size */
   min-height: 80px;
-  transform: translateY(var(--lobby-character-offset-y, 0px));
   overflow: visible;
 }
 
@@ -618,6 +618,7 @@ h3 {
   margin-bottom: 0;
   filter: none;
   object-fit: contain;
+  object-position: center bottom;
   flex-shrink: 0; /* Prevent shrinking */
   transform-origin: 50% 100%;
 }
@@ -5191,47 +5192,27 @@ h3 {
 }
 
 .slot-level-badge {
+  --level-badge-size: 42px;
   position: absolute;
-  top: -30px;
-  left: -30px;
-  width: 88px;
-  height: 88px;
+  top: 8px;
+  left: 8px;
   z-index: 14;
   opacity: 0;
-  transform: translateY(-3px) scale(0.96);
+  transform: translateY(-3px);
   transition:
     opacity 160ms ease,
     transform 160ms ease;
-  animation: badgePop 5s ease-in-out infinite;
   pointer-events: none;
 }
 
-@keyframes badgePop {
-  0% {
-    rotate: -5deg;
-    transform: translateY(-2px) scale(0.98);
-  }
-  50% {
-    rotate: 2deg;
-    transform: translateY(2px) scale(1);
-  }
-  100% {
-    rotate: -5deg;
-    transform: translateY(-2px) scale(0.98);
-  }
+.slot-level-badge .level-badge__caption {
+  padding-block: 3px 2px;
+  font-size: 5px;
 }
 
 .character-slot.has-level .slot-level-badge {
   opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-.slot-level-badge img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.34));
+  transform: translateY(0);
 }
 
 /* Party invite popup styling with higher z-index */
@@ -7315,6 +7296,7 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
 
 .mm-platform {
   position: relative;
+  margin-top: calc(-1 * var(--platform-surface-offset, 0px));
   flex-shrink: 0;
   z-index: 2;
   width: 108%;

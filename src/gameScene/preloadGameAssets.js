@@ -42,7 +42,7 @@ export function preloadGameAssets({
 
   scene.load.spritesheet(
     "duck-guard-impact",
-    `${staticPath}/movement/duck-guard-impact.png`,
+    `${staticPath}/movement/duck-guard-impact.webp`,
     { frameWidth: 64, frameHeight: 64, startFrame: 0, endFrame: 77 },
   );
 

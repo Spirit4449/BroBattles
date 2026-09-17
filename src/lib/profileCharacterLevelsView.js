@@ -1,5 +1,9 @@
-import { getAllCharacters, LEVEL_CAP } from "../shared/characterStats.js";
+import { getAllCharacters } from "../shared/characterStats.js";
 import { buildProfileIconUrl } from "./profileIconAssets.js";
+import {
+  normalizeCharacterLevel,
+  renderLevelBadge,
+} from "./levelBadgeView.js";
 
 function toDisplayName(id) {
   return String(id || "")
@@ -55,18 +59,21 @@ export function renderCharacterLevelGrid(grid, charLevels = {}) {
   }
 
   entries.forEach(({ charId, level }) => {
-    const iconLevel = Math.max(1, Math.min(LEVEL_CAP, Number(level) || 1));
+    const iconLevel = normalizeCharacterLevel(level);
     const displayName = toDisplayName(charId);
     const card = document.createElement("article");
     card.className = "profile-character-level-card";
     card.setAttribute("aria-label", `${displayName}, level ${iconLevel}`);
     card.innerHTML = `
       <img src="${buildProfileIconUrl(charId, charId)}" alt="${displayName}" />
-      <span class="profile-character-level-badge" aria-hidden="true">
-        <img src="/assets/levels/${iconLevel}.webp" alt="" />
-      </span>
+      <span class="profile-character-level-badge"></span>
       <div class="profile-character-level-name">${displayName}</div>
     `;
+    renderLevelBadge(
+      card.querySelector(".profile-character-level-badge"),
+      iconLevel,
+      { ariaHidden: true },
+    );
     grid.appendChild(card);
   });
 }

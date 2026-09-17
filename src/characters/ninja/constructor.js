@@ -57,7 +57,7 @@ class Ninja extends CharacterEntityBase {
       );
     }
     scene.load.spritesheet("ninja-throw-effects",
-      this.characterAssetPath(staticPath, "throw-effects.png"),
+      this.characterAssetPath(staticPath, "throw-effects.webp"),
       { frameWidth: 64, frameHeight: 64 });
     scene.load.image(
       "shuriken",

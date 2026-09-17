@@ -248,7 +248,7 @@ test("shop navigation, icons, sales glimmer, and checkout chrome stay consistent
   for (const icon of [
     "sales-v2.webp",
     "dailies-v2.webp",
-    "skins-v2.webp",
+    "skins-hanger.svg",
     "profile-v2.webp",
     "currency-v2.webp",
     "bundle-v2.webp",

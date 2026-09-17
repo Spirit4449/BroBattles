@@ -17,3 +17,9 @@ Installed at `public/assets/ninja/skins/ninja-arena-sovereign/body.webp`. Source
 ## Draven left silhouette repair
 
 Built-in ImageGen repaired the clipped-looking viewer-left sleeve, purple hand, and flaring robe hem while retaining the hood, orange trim, staff and purple crystals. Installed as lossless native WebP at `public/assets/draven/body.webp`, with no palette reduction. Verified visible artwork has transparent margins on every side (209px left, 237px right, 76px top, 77px bottom on the 1254px square canvas). Source, before/after preview and exact prompt: `output/body-art/draven-repair/`.
+
+## Uniform canvases and floor alignment
+
+All ten catalog body files now share an exact 1254×1254 canvas. Existing relative silhouette sizes are preserved, including the smaller King and shorter Gloops. Nearest-neighbor scaling converts other canvas sizes, faint alpha flecks below 128 are cleared, and each image shifts downward until its lowest visible pixel reaches row 1253. No palette quantization or regeneration is used. The two omitted Thorg skins still contain their existing weapon placeholders; their canvases are standardized too.
+
+Reproducible operation: `scripts/align-body-canvases.cjs`. Original backups, measurements, and the floor-aligned lineup are in `output/body-alignment/`. All ten installed images were checked for exact dimensions and a visible pixel on the final row.
