@@ -7,4 +7,11 @@ function remoteLaunchCorrection(actor, origin, ageMs, now) {
   if (!Number.isFinite(x) || !Number.isFinite(y) || Math.hypot(x, y) > 200) return null;
   return { x, y, at: now, duration: 100 };
 }
-module.exports = { remoteLaunchCorrection };
+function reconcileFlight(from, to, now, speed) {
+  const x = from.x - to.x, y = from.y - to.y;
+  // Removing error at <= half normal flight speed avoids confirmation reversing
+  // an outbound shot. Authority still owns collisions, turns and lifetime.
+  const duration = Math.max(100, Math.min(1200, 2000 * Math.hypot(x, y) / Math.max(100, speed || 0)));
+  return { x, y, at: now, duration };
+}
+module.exports = { remoteLaunchCorrection, reconcileFlight };

@@ -200,3 +200,17 @@ test('PvP Huntress launches from the displayed moving opponent and converges to 
   assert.ok(Math.abs(f.created[0].x-model.sample(projectiles[0],100).x)<1e-6);
   f.api.resetHuntressNetwork();
 });
+
+test('a buffered opponent crossing an arrow does not pause unconfirmed flight',()=>{
+  const f=setup();
+  const enemy={active:true,x:160,y:124,body:{enable:true,left:150,right:180,top:80,bottom:170,width:30,height:90}};
+  f.api.attachHuntressScene(f.scene,{localUsername:'owner',localPlayer:f.owner,opponentPlayersRef:{enemy:{opponent:enemy}}});
+  const p=model.createVolley({x:100,y:100,width:150,height:150},model.resolveShot({angle:0,power:.5}),'owner:shot',0)[1];p.ownerName='owner';
+  f.api.handleHuntressPacket(f.scene,f.packet({type:'huntress-projectiles',requestId:'shot',projectiles:[p]}),{});
+  for(const t of [0,40,80,120,160,200]) {
+    f.frame(t);const expected=model.sample(p,t);
+    assert.ok(Math.abs(f.created[0].x-expected.x)<1e-6);
+    assert.ok(Math.abs(f.created[0].y-expected.y)<1e-6);
+  }
+  f.api.resetHuntressNetwork();
+});

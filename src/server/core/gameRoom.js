@@ -884,7 +884,13 @@ class GameRoom {
     for (const action of due) if (this.status === 'active') action.callback();
     tickActiveAbilities(this, now);
     const botStart = performance.now();
-    for (const controller of this.botControllers.values()) controller.tick(this.FIXED_DT_MS, now);
+    // A shared planning allowance leaves time for physics and human inputs.
+    // Rotate first access so crowded rooms cannot starve their last bot.
+    const controllers = [...this.botControllers.values()];
+    const first = (this._botPlanningCursor || 0) % (controllers.length || 1);
+    this._botPlanningCursor = first + 1;
+    this._botPlanningDeadline = botStart + 4;
+    for (let i = 0; i < controllers.length; i++) controllers[(first + i) % controllers.length].tick(this.FIXED_DT_MS, now);
     if (this.botControllers.size) {
       const elapsed = performance.now() - botStart;
       const stats = this._botTickStats ||= { ticks: 0, totalMs: 0, maxMs: 0 };

@@ -181,6 +181,7 @@ export function resetAirborneJumpAnimation(sprite) {
   if (!sprite) return;
   const state = sprite._bbAnimationState || {};
   state.jumpPlayedAirborne = false;
+  state.restartJump = true;
   sprite._bbAnimationState = state;
 }
 
@@ -217,7 +218,9 @@ export function playCharacterAnimation({
     ) {
       return key;
     }
-    sprite.anims.play(key, force);
+    const restartJump = wanted === "jumping" && sprite._bbAnimationState?.restartJump;
+    sprite.anims.play(key, restartJump ? false : force);
+    if (restartJump) sprite._bbAnimationState.restartJump = false;
     noteAnimationPlayed(sprite, wanted);
     if (lockMs > 0) {
       const fallbackMs =
@@ -303,6 +306,24 @@ export function chooseRemoteAnimationState({
   if ((logical === "throw" || logical === "special") && actionActive) {
     return logical;
   }
+  // Consume each physical jump event once, including a second wall kick while
+  // already airborne. Sequence regression is a respawn/reconnect baseline.
+  if (sprite) {
+    const state = sprite._bbAnimationState ||= {};
+    const seq = Number(currentPosition?.movementFxSeq);
+    if (grounded === true) { state.jumpPlayedAirborne = false; state.restartJump = false; }
+    if (Number.isFinite(seq)) {
+      if (Number.isFinite(state.movementSeq) && seq > state.movementSeq &&
+          ['jump', 'wall-jump'].includes(currentPosition?.movementFxType) && grounded === false && vy < -20) {
+        resetAirborneJumpAnimation(sprite);
+      }
+      state.movementSeq = seq;
+    }
+  }
+  if (grounded === false && typeof currentPosition?.wallSliding === 'boolean') {
+    if (currentPosition.wallSliding) return 'sliding';
+    if (Number.isFinite(vy)) return vy < -20 ? 'jumping' : 'falling';
+  }
   if (logical === "sliding") {
     return grounded === false ? "sliding" : "idle";
   }
@@ -310,7 +331,7 @@ export function chooseRemoteAnimationState({
     return grounded === false ? "falling" : "ducking";
   }
   if (logical === "jumping" || logical === "falling") {
-    return grounded === false ? logical : "idle";
+    return grounded === false ? (Number.isFinite(vy) ? (vy < -20 ? "jumping" : "falling") : logical) : "idle";
   }
   if (grounded === false || Math.abs(dy) > 2.2 || Math.abs(vy) > 85) {
     return dy < 0 || vy < -20 ? "jumping" : "falling";

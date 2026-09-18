@@ -165,3 +165,27 @@ test('PvP remote attack survives intervening movement snapshots, expires, and ca
   assert.equal(remote.anims.currentAnim.key,'ninja__skin-throw');
   f.api.resetNinjaNetwork();
 });
+
+test('remote return uses authoritative owner position despite buffered actor movement',()=>{
+  const f=setup(),remote={x:850,y:600,active:true};
+  f.api.attachNinjaScene(f.scene,{opponentPlayersRef:{remote:{opponent:remote}}});
+  const q=model.launch({x:100,y:200},0,'remote:return:0');q.ownerName='remote';
+  Object.assign(q,{x:500,y:200,phase:'return',elapsed:700,currentReturnSpeed:300});
+  f.packet({type:'ninja-launch',projectile:q},'remote');f.frame(0);f.frame(100);
+  const expected=structuredClone(q);for(let i=0;i<6;i++)model.step(expected,q.returnTarget,[]);
+  assert.ok(Math.abs(f.images[0].x-expected.x)<1e-6);assert.equal(f.images[0].y,200);
+  f.api.resetNinjaNetwork();
+});
+
+test('two remote clients converge despite asymmetric launch delay and duplicate delivery',()=>{
+  const clients=[setup(),setup()];
+  const q=model.launch({x:100,y:200},0,'remote:delayed:0');q.ownerName='remote';
+  for(let i=0;i<2;i++) {
+    const f=clients[i];f.api.attachNinjaScene(f.scene,{opponentPlayersRef:{remote:{opponent:{active:true,x:700+i*100,y:450}}}});
+    f.frame(i?310:40);f.packet({type:'ninja-launch',projectile:q,simMono:0,sentMono:0},'remote');f.frame(i?310:40);
+    f.packet({type:'ninja-launch',projectile:q,simMono:0,sentMono:0},'remote');f.frame(400);
+  }
+  assert.ok(Math.abs(clients[0].images[0].x-clients[1].images[0].x)<1e-6);
+  assert.ok(Math.abs(clients[0].images[0].y-clients[1].images[0].y)<1e-6);
+  clients.forEach(f=>f.api.resetNinjaNetwork());
+});

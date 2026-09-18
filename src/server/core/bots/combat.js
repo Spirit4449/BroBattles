@@ -63,9 +63,9 @@ function projectileSolutions(player, target, runtime, startup, prediction, dt, s
 function clearTrajectory(room, shot, radius) {
   let x = shot.ox + Math.cos(shot.angle) * shot.forward;
   let y = shot.oy + Math.sin(shot.angle) * shot.forward;
-  const steps = Math.ceil(shot.time / shot.dt);
+  const steps = shot.gravity ? Math.ceil(shot.time / shot.dt) : 1;
   for (let i = 1; i <= steps; i++) {
-    const t = Math.min(shot.time, i * shot.dt);
+    const t = shot.gravity ? Math.min(shot.time, i * shot.dt) : shot.time;
     const nx = shot.ox + Math.cos(shot.angle) * (shot.forward + shot.speed * t);
     const ny = shot.oy + Math.sin(shot.angle) * (shot.forward + shot.speed * t) + 0.5 * shot.gravity * t * (t + shot.dt);
     if ((room?.geometry?.colliders || []).some((r) => segmentCrossesRect(x, y, nx, ny, r, radius))) return false;
@@ -75,7 +75,7 @@ function clearTrajectory(room, shot, radius) {
 }
 
 function hasClearShot(room, player, target, aim = basicAim(player, target, player.difficulty || {}, () => 0.5)) {
-  if (player.char_class === 'huntress') return basicAim(player, target, player.difficulty || {}, () => 0.5, room).canHit;
+  if (player.char_class === 'huntress') return aim.coverChecked ? aim.canHit : basicAim(player, target, player.difficulty || {}, () => 0.5, room).canHit;
   if (!['ninja', 'gloop'].includes(player.char_class)) return true;
   const collisionRadius = player.char_class === 'ninja'
     ? getResolvedAttackDescriptor('ninja-shuriken')?.runtime?.collisionRadius || 18
@@ -102,6 +102,29 @@ function advanceAmmo(player, dt) {
   }
 }
 
+// Reuse immutable tuning only within a room tick; the next tick sees any live
+// tuning edits. Hypothetical stances no longer repeatedly clone descriptors.
+const aimTunings = new WeakMap();
+function aimTuning(character, room) {
+  let cache;
+  if (room && Number.isFinite(room._tickId)) {
+    cache = aimTunings.get(room);
+    if (!cache || cache.tick !== room._tickId) aimTunings.set(room, cache = { tick: room._tickId, values: new Map() });
+    if (cache.values.has(character)) return cache.values.get(character);
+  }
+  const type = attackTypes[character];
+  const descriptor = getResolvedAttackDescriptor(type);
+  const aim = getResolvedCharacterAimConfig(character) || {};
+  const release = getResolvedAttackDescriptor(descriptor?.actionFlow?.releaseActionType || type);
+  const cfg = getResolvedCharacterAttackConfig(character, aim.attackKey) || {};
+  const runtime = { ...cfg, ...(release?.runtime || {}) };
+  const range = (character === "wizard" ? runtime.range : aim.defaultRange) || runtime.range || runtime.defaultForwardDistance || 200;
+  const result = { type, descriptor, aim, runtime, range };
+  cache?.values.set(character, result);
+  return result;
+}
+function basicRange(player, room) { return aimTuning(player.char_class, room).range; }
+
 function basicAim(player, target, profile, random, room) {
   // Sprite origins can sit above the hitbox (especially Gloop and Huntress).
   // Use standing body geometry so crouching remains a way to dodge bot shots.
@@ -109,13 +132,7 @@ function basicAim(player, target, profile, random, room) {
     const body = characterBody(target.char_class, target.flip);
     target = { ...target, x: target.x + body.offsetX, y: target.y + body.offsetY };
   }
-  const type = attackTypes[player.char_class];
-  const descriptor = getResolvedAttackDescriptor(type);
-  const aim = getResolvedCharacterAimConfig(player.char_class) || {};
-  const release = getResolvedAttackDescriptor(descriptor?.actionFlow?.releaseActionType || type);
-  const cfg = getResolvedCharacterAttackConfig(player.char_class, aim.attackKey) || {};
-  const runtime = { ...cfg, ...(release?.runtime || {}) };
-  const range = (player.char_class === "wizard" ? runtime.range : aim.defaultRange) || runtime.range || runtime.defaultForwardDistance || 200;
+  const { type, descriptor, aim, runtime, range } = aimTuning(player.char_class, room);
   const distance = Math.hypot(target.x - player.x, target.y - player.y);
   const startup = (Number(descriptor?.actionFlow?.startupMs) || Number(runtime.windupMs) || 0) / 1000;
   const flight = Math.min(0.9, startup + interceptTime(target.x - player.x, target.y - player.y,
@@ -149,13 +166,15 @@ function basicAim(player, target, profile, random, room) {
   const direction = Math.cos(angle) < 0 ? -1 : 1;
   if (aim.angleMode === "horizontal-only") angle = direction < 0 ? Math.PI : 0;
   const canHit = (!['wizard', 'huntress'].includes(player.char_class) || !!solution) && distance <= range + 30 && (aim.angleMode !== 'horizontal-only' || Math.abs(target.y - player.y) < 90);
-  return { type, angle, direction, range, distance, canHit, ...(speedAtAngle ? { speed: speedAtAngle(angle), highArc: solution?.highArc || false } : {}), gravity: runtime.gravity || 0, maxLifetimeMs: runtime.maxLifetimeMs || 3000, target: { x: player.x + Math.cos(angle) * Math.min(range, Math.hypot(dx, dy)), y: player.y + Math.sin(angle) * Math.min(range, Math.hypot(dx, dy)) } };
+  return { type, angle, direction, range, distance, canHit, coverChecked: !!room, ...(speedAtAngle ? { speed: speedAtAngle(angle), highArc: solution?.highArc || false } : {}), gravity: runtime.gravity || 0, maxLifetimeMs: runtime.maxLifetimeMs || 3000, target: { x: player.x + Math.cos(angle) * Math.min(range, Math.hypot(dx, dy)), y: player.y + Math.sin(angle) * Math.min(range, Math.hypot(dx, dy)) } };
 }
 
 // A pressure shot must still pass near the opponent and respect cover.
 // Sample nearby intercept points instead of firing at arbitrary angles.
 function pressureAim(room, player, target, profile) {
   if (!['wizard', 'huntress', 'ninja', 'gloop'].includes(player.char_class)) return null;
+  const range = basicRange(player, room);
+  if (Math.hypot(target.x-player.x, target.y-player.y) > range + 125) return null;
   for (const radius of [55, 95]) {
     for (const [x, y] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) {
       const nearby = { ...target, x: target.x + x * radius, y: target.y + y * radius };
@@ -242,4 +261,4 @@ function startNinjaSwarm(room, p, now, aim = {}) {
     if (attack?.instanceId === action.id) attack.attackType = "ninja-special-swarm";
   }, i * releaseMs, now);
 }
-module.exports = { BOT_ATTACK_TO_SUPER_COOLDOWN_MS, advanceAmmo, basicAim, hasClearShot, pressureAim, requestBasic, requestSpecial, startNinjaSwarm };
+module.exports = { BOT_ATTACK_TO_SUPER_COOLDOWN_MS, advanceAmmo, basicAim, basicRange, hasClearShot, pressureAim, requestBasic, requestSpecial, startNinjaSwarm };
