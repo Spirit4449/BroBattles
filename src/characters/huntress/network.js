@@ -2,6 +2,7 @@ import socket from '../../socket';
 import { createRuntimeId } from '../shared/runtimeId';
 import { RENDER_LAYERS } from '../../gameScene/renderLayers';
 import { HuntressReplica } from '../../shared/huntressReplication';
+import { remoteLaunchCorrection } from '../../shared/projectilePresentation';
 import { VERSION, attackConfig, resolveShot, powerFromSpeed, createVolley, firstContact, insetBounds } from '../../shared/huntressProjectile';
 
 const replica = new HuntressReplica();
@@ -140,13 +141,16 @@ export function attachHuntressScene(scene, nextContext = {}) {
       if (!point || point.age < 0) continue;
       if (point.age >= p.maxLifetimeMs) { replica.active.delete(id); continue; }
       const entry = sprites.get(id) || addSprite(scene, p);
+      if (!entry.revision && p.ownerName !== context.localUsername) {
+        entry.correction = remoteLaunchCorrection(targetSprite(p.ownerName), p.origin, point.age, now);
+      }
       if (entry.revision && entry.revision !== state.revision) {
         entry.correction = { x: entry.sprite.x - point.x, y: entry.sprite.y - point.y, at: now };
         record({ type: 'reconcile', id, errorPx: Math.hypot(entry.correction.x, entry.correction.y) });
         entry.provisional = null; entry.lastPoint = null;
       }
       entry.revision = state.revision; entry.projectile = p;
-      const blend = entry.correction ? Math.max(0, 1 - (now - entry.correction.at) / 80) : 0;
+      const blend = entry.correction ? Math.max(0, 1 - (now - entry.correction.at) / (entry.correction.duration || 80)) : 0;
       entry.sprite.setPosition(point.x + (entry.correction?.x || 0) * blend, point.y + (entry.correction?.y || 0) * blend);
       entry.sprite.setRotation(Math.atan2(point.vy, point.vx));
       // Pause at a predicted contact while its authoritative terminal travels to us.

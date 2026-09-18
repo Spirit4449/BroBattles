@@ -45,6 +45,7 @@ function createProjectile(pose, shot, angle, cfg, identity = {}) {
   const forward = pose.width * cfg.forwardOffset;
   return {
       ...identity,
+      origin: { x: pose.x, y: pose.y },
       x: pose.x + Math.cos(angle) * forward,
       y: pose.y - pose.height * cfg.verticalOffset + Math.sin(angle) * forward,
       vx: Math.cos(angle) * shot.speed, vy: Math.sin(angle) * shot.speed,

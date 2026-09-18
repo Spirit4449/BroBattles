@@ -229,3 +229,16 @@ test("timeline recovery matches across refresh rates and cannot reverse frame pr
   assert.equal(getRenderClockCorrection(120, 16), 0);
   assert.equal(getRenderClockCorrection(-60, 16), 0);
 });
+
+
+test("snapshot ingest exposes transit and source gaps independently, with bounded default extrapolation", () => {
+  const b=createSnapshotBuffer();
+  b.ingestSnapshot(packet(1,0),0);
+  const received=b.ingestSnapshot(packet(2,33),200);
+  assert.equal(received.arrivalGapMs,200);
+  assert.equal(received.sourceGapMs,33);
+  const event=b.ingestSnapshot(packet(3,33,{snapshotKind:'event'}),205);
+  assert.equal(event.arrivalGapMs,0);
+  for(let t=210;t<2200;t+=17)b.getInterpolationFrame(t);
+  assert.ok(b.getDiagnostics().maxExtrapolationMs<=250);
+});

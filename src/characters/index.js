@@ -258,8 +258,7 @@ export function handleRemoteAttack(
 ) {
   const Cls = getCharacterClass(character);
   if (Cls && typeof Cls.handleRemoteAttack === "function") {
-    Cls.handleRemoteAttack(scene, data, ownerWrapper, remoteContext);
-    return true;
+    return Cls.handleRemoteAttack(scene, data, ownerWrapper, remoteContext) !== false;
   }
   return false;
 }

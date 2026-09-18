@@ -713,6 +713,7 @@ class GameRoom {
     const loop = () => {
       if (!this._loopRunning) return;
       const nowMono = monoNow();
+      const rawDelta = Math.max(0, nowMono - lastMono);
       let delta = nowMono - lastMono;
       if (delta < 0) delta = 0; // guard
       if (delta > 1000) delta = 1000; // clamp huge pause (avoid spiral)
@@ -744,7 +745,7 @@ class GameRoom {
       }
       this._timingDiagnostics?.noteLoopFrame({
         nowMono,
-        deltaMs: delta,
+        deltaMs: rawDelta,
         stepsThisFrame,
         sleepMs,
         accBefore,

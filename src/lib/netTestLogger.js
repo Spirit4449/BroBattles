@@ -51,6 +51,7 @@ function createEmptySummary() {
     snapshotGapTotal: 0,
     snapshotGapCount: 0,
     snapshotGapMax: 0,
+    sourceGapMax: 0,
     lateSnapshots: 0,
     outOfOrderSnapshots: 0,
     snapshotJumpCount: 0,
@@ -121,8 +122,9 @@ function flushClientNetTestSummary(force = false) {
       `sendDistMax=${formatNumber(s.inputDistMax, 1)}px`,
       `sendSpeedMax=${formatNumber(s.inputSpeedMax, 1)}pxps`,
       `snaps=${s.snapshots}`,
-      `snapAvg=${formatNumber(avgSnapGap, 1)}ms`,
-      `snapMax=${formatNumber(s.snapshotGapMax, 1)}ms`,
+      `arrivalAvg=${formatNumber(avgSnapGap, 1)}ms`,
+      `arrivalMax=${formatNumber(s.snapshotGapMax, 1)}ms`,
+      `sourceMax=${formatNumber(s.sourceGapMax, 1)}ms`,
       `late=${s.lateSnapshots}`,
       `ooo=${s.outOfOrderSnapshots}`,
       `jumpCount=${s.snapshotJumpCount}`,
@@ -232,12 +234,13 @@ export function noteClientSnapshot(snapshot, ingest = {}) {
   if (!clientNetTestState.enabled) return;
   const s = clientNetTestState.summary;
   s.snapshots += 1;
-  const gap = Math.max(0, Number(ingest?.spacingMs) || 0);
+  const gap = Math.max(0, Number(ingest?.arrivalGapMs) || 0);
   if (gap > 0) {
     s.snapshotGapTotal += gap;
     s.snapshotGapCount += 1;
     if (gap > s.snapshotGapMax) s.snapshotGapMax = gap;
   }
+  s.sourceGapMax = Math.max(s.sourceGapMax, Number(ingest?.sourceGapMs) || 0);
   if (ingest?.lateSnapshot) s.lateSnapshots += 1;
   if (ingest?.outOfOrderTick) s.outOfOrderSnapshots += 1;
   const jumps = Array.isArray(ingest?.positionJumps) ? ingest.positionJumps : [];
@@ -253,7 +256,7 @@ export function noteClientSnapshot(snapshot, ingest = {}) {
   if (ingest?.lateSnapshot) {
     emitLine(
       "snapshot-late",
-      `tick=${snapshot?.tickId ?? "?"} gap=${formatNumber(ingest?.spacingMs, 1)}ms interp=${formatNumber(ingest?.interpDelayMs, 1)}ms`,
+      `tick=${snapshot?.tickId ?? "?"} arrival=${formatNumber(ingest?.arrivalGapMs, 1)}ms source=${formatNumber(ingest?.sourceGapMs, 1)}ms interp=${formatNumber(ingest?.interpDelayMs, 1)}ms`,
     );
   }
   if (ingest?.outOfOrderTick) {

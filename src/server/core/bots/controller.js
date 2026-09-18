@@ -1,7 +1,8 @@
 const { createRandom } = require('./random');
 const { difficultyForTrophies, recoveryThreshold } = require('./config');
 const { bounds, stepBody } = require('./physics');
-const { buildGraph, findRoute, prepareTraversal, edgeKey, nearestSurface, safeWalkDirection, previewManeuver, walkLimits, poisonDamage } = require('./navigation');
+const { findRoute, prepareTraversal, edgeKey, nearestSurface, safeWalkDirection, previewManeuver, walkLimits, poisonDamage } = require('./navigation');
+const { getNavigationGraph } = require('./navigationService');
 const { advanceAmmo, basicAim, hasClearShot, pressureAim, requestBasic, requestSpecial } = require('./combat');
 const { observe, incomingThreat, maneuverDanger } = require('./perception');
 const { healthFraction, preferredRange, selectTarget, chooseDecision } = require('./tactics');
@@ -42,7 +43,7 @@ class BotController {
     this.ineffectivePositions = [];
     this.intent = { direction: 0 };
     this.objective = resolveBotObjective(room, player);
-    this.graph = buildGraph(room.geometry, player.char_class);
+    this.graph = getNavigationGraph(room.geometry, player.char_class);
     this.visited = new Map();
     this.blockedEdges = new Map();
     this.routePreferences = new Map();
@@ -128,7 +129,7 @@ class BotController {
 
   context(mods, now) {
     const p = this.player, room = this.room;
-    const graph = buildGraph(room.geometry, p.char_class, { speedMult: mods.speedMult, jumpMult: mods.jumpMult });
+    const graph = getNavigationGraph(room.geometry, p.char_class, { speedMult: mods.speedMult, jumpMult: mods.jumpMult });
     if (graph !== this.graph) { this.graph = graph; this.clearTravel(); this.nextDecisionAt = 0; }
     const current = graph.surfaces.find((s) => s.id === p.platformId) || nearestSurface(graph, { x: p.x, y: bounds(p).bottom });
     const actualPoisonY = room._suddenDeathActive ? room._computePoisonY(now - room._loopStartWallTime - room.gameMode.getMatchDurationMs()) : Infinity;

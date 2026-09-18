@@ -44,7 +44,8 @@ function mergeObjects(base, overrides) {
 
 function getResolvedCharacterBodyConfig(character) {
   const stats = getCharacterStats(character) || {};
-  return mergeObjects(CHARACTER_BODY_DEFAULTS, stats.body || {});
+  // Body fields are scalars. Avoid recursive cloning in every physics probe.
+  return { ...CHARACTER_BODY_DEFAULTS, ...(stats.body || {}) };
 }
 
 function getResolvedCharacterAttackConfig(character, attackKey = null) {

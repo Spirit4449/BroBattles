@@ -1,4 +1,4 @@
-import { playSpriteAnimation } from "../shared/animationState.js";
+import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState.js";
 
 export function perform(
   scene,
@@ -11,6 +11,7 @@ export function perform(
 ) {
   if (!scene || !player || !player.active) return;
   player._specialAnimLockUntil = Date.now() + 900;
+  markOneShotAnimation(player, 'special', 900, { remote: !isOwner });
 
   playSpriteAnimation({
     scene,

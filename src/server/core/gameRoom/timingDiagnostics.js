@@ -94,6 +94,11 @@ function createTimingDiagnostics(room, options = {}) {
     const snapshotGapValues = snapshotGaps.toArray();
     const snapshotBurstValues = snapshotBurstSizes.toArray();
 
+    // Severity reflects the bounded recent sample window, not a lifetime high.
+    const maxLoopDelta = Math.max(0, ...loopValues);
+    const maxLoopBurst = Math.max(0, ...loopBurstValues);
+    const maxSnapshotGap = Math.max(0, ...snapshotGapValues);
+    const maxSnapshotBurst = Math.max(0, ...snapshotBurstValues);
     const loopAvg = mean(loopValues);
     const loopSd = stddev(loopValues, loopAvg);
     const loopP95 = percentile(loopValues, 95);
@@ -163,7 +168,7 @@ function createTimingDiagnostics(room, options = {}) {
 
     const loopStepRatio = loopCount > 0 ? totalLoopSteps / loopCount : 0;
     const lines = [
-      `[diag] reason=${reason} verdict=${verdict} cause=${cause} conf=${format(confidence * 100, 0)}%`,
+      `[diag] reason=${reason} verdict=${verdict} cause=${cause} severityScore=${format(confidence, 2)}`,
       `loop n=${loopValues.length} avg=${format(loopAvg)}ms sd=${format(loopSd)}ms p95=${format(loopP95)}ms max=${format(maxLoopDelta)}ms burstAvg=${format(burstAvg, 2)} burstP95=${format(burstP95, 1)} burstMax=${format(maxLoopBurst, 0)} stepsPerFrame=${format(loopStepRatio, 2)}`,
       `snap n=${snapshotGapValues.length} avg=${format(snapshotAvg)}ms sd=${format(snapshotSd)}ms p95=${format(snapshotP95)}ms max=${format(maxSnapshotGap)}ms zeroGap=${format(zeroGapRatio * 100, 0)}% burstAvg=${format(snapshotBurstAvg, 2)} burstMax=${format(maxSnapshotBurst, 0)}`,
       `pressure loopLagExcess=${format(loopLagExcess)}ms backlogPressure=${format(backlogPressure)}ms snapshotGapPressure=${format(snapshotGapPressure)}ms sameMonoSnapshots=${sameMonoSnapshotCount}`,

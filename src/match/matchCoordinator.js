@@ -898,6 +898,7 @@ export function createMatchCoordinator(config) {
 
       const { playerName, character, action } = packet;
       if (!playerName || !action) return;
+      noteClientRemoteAction(packet);
       if (handleCharacterNetworkPacket(scene, packet, {
         localPlayer: getPlayer(), localUsername: getUsername(),
         opponentPlayersRef: opponentPlayers, teamPlayersRef: teamPlayers,
@@ -905,7 +906,6 @@ export function createMatchCoordinator(config) {
       })) return;
       const isSelfPacket = playerName === getUsername();
       if (isSelfPacket && !action?.ownerEcho) return;
-      noteClientRemoteAction(packet);
       const actionType = String(action?.type || "").toLowerCase();
       const gameData = getGameData();
       const pd = (gameData.players || []).find((p) => p.name === playerName);

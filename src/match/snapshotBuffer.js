@@ -14,7 +14,7 @@ export const DEFAULT_SNAPSHOT_BUFFER_CONFIG = Object.freeze({
   enableArrivalAdaptiveDelay: false,
   enableClockCorrection: false,
   enableBacklogCatchup: true,
-  extrapolationLimitMs: 1000,
+  extrapolationLimitMs: 250,
 });
 
 const SERVER_TICK_MS = 1000 / 60;
@@ -301,6 +301,8 @@ export function createSnapshotBuffer(options = {}) {
       calibrationLog,
       snapshotDiagLine,
       spacingMs,
+      arrivalGapMs: snapshot?.snapshotKind === "event" ? 0 : arrivalGapMs,
+      sourceGapMs: snapshot?.snapshotKind === "event" ? 0 : sourceGapMs,
       lateSnapshot,
       outOfOrderTick,
       previousTickId,

@@ -11,7 +11,7 @@ const attackCode=babel.transformSync(fs.readFileSync(require.resolve('../src/cha
   babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code;
 const attackApi={};
-vm.runInNewContext(attackCode,{exports:attackApi,require:name=>
+vm.runInNewContext(attackCode,{exports:attackApi,require:name=>name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):
   name.includes('characterTuning')?tuning:name.includes('huntressProjectile')?model:
   name.includes('runtimeId')?{createRuntimeId:()=> 'aim'}:
   name.includes('flipLock')?{lockPlayerFlip:()=>()=>{}}:
@@ -23,7 +23,7 @@ const code=babel.transformSync(fs.readFileSync(require.resolve('../src/character
 function setup(){
   const api={},created=[],sounds=[];let now=0;
   const socket={connected:false};
-  vm.runInNewContext(code,{exports:api,require:name=>name.includes('huntressProjectile')?model:name.includes('huntressReplication')?replication:
+  vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('huntressProjectile')?model:name.includes('huntressReplication')?replication:
     name.includes('runtimeId')?{createRuntimeId:()=> 'generated'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:10}}:socket,
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){},window:{}});
   function sprite(x,y){const s={active:true,x,y,setPosition(x,y){this.x=x;this.y=y;return this;},setRotation(r){this.rotation=r;return this;},
@@ -184,4 +184,19 @@ test('normal arrow trails fade and the network renderer detaches on cleanup', ()
   api.resetHuntressNetwork();
   assert.equal(scene.events.listenerCount('update'),0);
   assert.ok(created.every(sprite=>!sprite.active));
+});
+
+
+test('PvP Huntress launches from the displayed moving opponent and converges to server flight',()=>{
+  const f=setup();
+  const remote={active:true,x:240,y:100,displayWidth:150,displayHeight:150};
+  f.api.attachHuntressScene(f.scene,{localUsername:'viewer',opponentPlayersRef:{human:{opponent:remote}}});
+  const shot=model.resolveShot({angle:0,power:0.5});
+  const projectiles=model.createVolley({...remote,x:300,width:150,height:150},shot,'human:shot',0).map(p=>({...p,ownerName:'human'}));
+  f.api.handleHuntressPacket(f.scene,{...f.packet({type:'huntress-projectiles',requestId:'shot',projectiles}),playerName:'human'},{});
+  f.frame(0);
+  assert.equal(f.created[0].x,projectiles[0].x-60);
+  f.frame(100);
+  assert.ok(Math.abs(f.created[0].x-model.sample(projectiles[0],100).x)<1e-6);
+  f.api.resetHuntressNetwork();
 });

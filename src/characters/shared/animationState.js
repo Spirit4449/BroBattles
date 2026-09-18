@@ -67,9 +67,26 @@ export function markOneShotAnimation(
   }
 }
 
+// Both character adapters and legacy actions mark the sprite. Read the same
+// contract when movement snapshots render, including per-release swarm locks.
+export function remoteAnimationLockUntil(sprite, wrapper = {}) {
+  return Math.max(
+    Number(wrapper._animLockUntil || 0),
+    Number(sprite?._remoteActionAnimUntil || 0),
+    Number(sprite?._bbAnimationState?.oneShotUntilPerf || 0),
+    Number(sprite?._specialAnimLockUntilPerf || 0),
+  );
+}
+
 export function noteAnimationPlayed(sprite, logical = "idle") {
   if (!sprite) return;
   const state = sprite._bbAnimationState || {};
+  const next = toLogicalAnimation(logical);
+  if (state.remote && state.oneShot && state.oneShotUntilPerf > nowPerf() &&
+      next !== state.oneShot) {
+    state.lastInterruption = { from: state.oneShot, to: next, at: nowPerf() };
+    state.interruptionCount = (state.interruptionCount || 0) + 1;
+  }
   state.currentLogical = toLogicalAnimation(logical);
   state.updatedAt = nowMs();
   if (state.currentLogical === "jumping") {

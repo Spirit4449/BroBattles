@@ -5,8 +5,9 @@ const code=babel.transformSync(fs.readFileSync(require.resolve('../src/character
 const projectileTexture={};
 vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/characters/ninja/projectileTexture'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:projectileTexture});
 function setup(initial={}){
-  let now=0;const api={},images=[],sounds=[],ammo=[],releases=[];
-  vm.runInNewContext(code,{exports:api,require:name=>name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('huntressReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:{connected:false},
+  let now=0;const api={},images=[],sounds=[],ammo=[],releases=[],animation={};
+  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/characters/shared/animationState'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:animation,performance:{now:()=>now}});
+  vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('huntressReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:{connected:false},
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){}});
   const sprite=(x,y,texture)=>{const s={x,y,texture,active:true,setPosition(x,y){this.x=x;this.y=y;return this;},setScale(){return this;},setDepth(){return this;},setTint(){return this;},setVisible(v){this.visible=v;},setRotation(){},destroy(){this.active=false;}};images.push(s);return s;};
   const scene={events:new EventEmitter(),add:{image:sprite},tweens:{add(){}},sound:{play:key=>sounds.push(key)}};
@@ -14,8 +15,8 @@ function setup(initial={}){
   api.configureNinjaNetwork({ninjaCombatVersion:1,epoch:'room',sentMono:0,simMono:0,colliders:[],active:[],terminals:[],...initial});
   api.attachNinjaScene(scene,{localUsername:'owner',localPlayer:owner,onAmmo:a=>ammo.push(a)});
   const frame=t=>{now=t;api.observeNinjaSnapshot({snapshotEpoch:'room',sentMono:t,tMono:t});scene.events.emit('update');};
-  const packet=a=>api.handleNinjaPacket(scene,{playerName:'owner',action:{ninjaCombatVersion:1,epoch:'room',simMono:now,sentMono:now,...a}},{localUsername:'owner',localPlayer:owner});
-  return {api,scene,owner,frame,packet,images,sounds,ammo,releases};
+  const packet=(a,name='owner')=>api.handleNinjaPacket(scene,{playerName:name,action:{ninjaCombatVersion:1,epoch:'room',simMono:now,sentMono:now,...a}},{localUsername:'owner',localPlayer:owner});
+  return {api,scene,owner,frame,packet,images,sounds,ammo,releases,animation};
 }
 test('local launch is immediate and matches authoritative launch/reticle geometry',()=>{
   const f=setup();const aim=require('../src/characters/shared/attackAim').resolveAttackAimContext({character:'ninja',player:f.owner,pointerWorldX:500,pointerWorldY:50});
@@ -123,4 +124,44 @@ test('each swarm presentation restarts a skin-aware throw and plays its sound',(
   assert.equal(plays[0][0].duration,36);assert.equal(plays[0][1],false);
   player.active=false;api.presentSwarmRelease(scene,player,36);
   assert.equal(sounds.length,15);
+});
+
+for (const rtt of [10, 50, 150, 250, 350]) test(`PvP owner confirmation preserves outbound direction at steady ${rtt} ms RTT`, () => {
+  const f=setup();
+  f.api.predictNinja(f.scene,f.owner,'owner',{id:'shot',angle:0}); f.frame(0);
+  for(let t=10;t<=rtt;t+=10) f.frame(t);
+  const q=model.launch(f.owner,0,'owner:shot:0'); q.ownerName='owner';
+  f.packet({type:'ninja-launch',projectile:q,simMono:rtt/2,sentMono:rtt/2});
+  let previous=f.images[0].x;
+  for(let t=rtt;t<=rtt+150;t+=10){
+    f.frame(t);assert.ok(f.images[0].x>=previous-1e-8, `backward at ${t}`);previous=f.images[0].x;
+  }
+  // A genuine server turn must still be allowed to return toward the owner.
+  f.packet({type:'ninja-state',id:q.id,state:{x:500,y:200,phase:'return',elapsed:600,currentReturnSpeed:500}});
+  f.frame(rtt+200);const before=f.images[0].x;f.frame(rtt+300);
+  assert.ok(f.images[0].x<before);
+  f.api.resetNinjaNetwork();
+});
+
+test('PvP remote attack survives intervening movement snapshots, expires, and can repeat',()=>{
+  const f=setup();
+  const remote={x:300,y:200,active:true,texture:{key:'ninja__skin'},anims:{
+    currentAnim:{key:'ninja__skin-running'},play(key){this.currentAnim={key};this.isPlaying=true;}}};
+  f.scene.anims={exists:()=>true,get:()=>({frames:[{},{},{},{}],frameRate:15})};
+  const wrapper={opponent:remote};
+  f.api.attachNinjaScene(f.scene,{opponentPlayersRef:{human:wrapper}});
+  const q=model.launch(remote,0,'human:attack:0');q.ownerName='human';
+  f.packet({type:'ninja-launch',projectile:q},'human');
+  assert.equal(remote.anims.currentAnim.key,'ninja__skin-throw');
+  const renderMovement=t=>{
+    f.frame(t);
+    if(t>=f.animation.remoteAnimationLockUntil(remote,wrapper))
+      f.animation.playCharacterAnimation({scene:f.scene,sprite:remote,character:'ninja',logical:'running',resolveAnimKey:()=> 'ninja__skin-running'});
+  };
+  for(const t of [17,100,250]){renderMovement(t);assert.equal(remote.anims.currentAnim.key,'ninja__skin-throw');}
+  renderMovement(320);assert.equal(remote.anims.currentAnim.key,'ninja__skin-running');
+  const next=model.launch(remote,0,'human:second:0');next.ownerName='human';
+  f.packet({type:'ninja-launch',projectile:next},'human');renderMovement(340);
+  assert.equal(remote.anims.currentAnim.key,'ninja__skin-throw');
+  f.api.resetNinjaNetwork();
 });

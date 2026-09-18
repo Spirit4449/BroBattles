@@ -31,6 +31,7 @@ const { registerEconomyRoutes } = require("./routes/economy.js");
 const { makeAuthHelpers } = require("./helpers/auth.js");
 const { startCleanupJobs } = require("./jobs/cleanup.js");
 const { initSocket } = require("./core/socket.js");
+require('./core/bots/navigationService').enableAsyncNavigation();
 const { createRuntimeConfig } = require("./helpers/runtimeConfig.js");
 const { registerAdminRoutes } = require("./routes/admin.js");
 const { createPartyChatService } = require("./services/chatService.js");
