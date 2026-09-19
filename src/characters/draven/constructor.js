@@ -43,15 +43,17 @@ class Draven extends CharacterEntityBase {
     // Explosion atlas (separate) for splash attack visual
     scene.load.atlas(
       `${NAME}-explosion`,
-      this.characterAssetPath(staticPath, "explosion.webp"),
-      this.characterAssetPath(staticPath, "explosion.json"),
+      this.characterAssetPath(staticPath, "explosion-bb.webp"),
+      this.characterAssetPath(staticPath, "explosion-bb.json"),
     );
     // Inferno overlay atlas (separate) for special VFX layer
     scene.load.atlas(
       `${NAME}-special-fx`,
-      this.characterAssetPath(staticPath, "special.webp"),
-      this.characterAssetPath(staticPath, "special.json"),
+      this.characterAssetPath(staticPath, "special-bb.webp"),
+      this.characterAssetPath(staticPath, "special-bb.json"),
     );
+    scene.load.atlas("draven-explosion-red", this.characterAssetPath(staticPath, "explosion-bb-red.webp"), this.characterAssetPath(staticPath, "explosion-bb-red.json"));
+    scene.load.atlas("draven-special-fx-red", this.characterAssetPath(staticPath, "special-bb-red.webp"), this.characterAssetPath(staticPath, "special-bb-red.json"));
     // Fireball / splash SFX
     scene.load.audio(
       `${NAME}-fireball`,
@@ -87,6 +89,12 @@ class Draven extends CharacterEntityBase {
 
   static setupAnimations(scene) {
     animations(scene);
+    for (const [key, frameRate, repeat] of [["draven-explosion-red", 28, 0], ["draven-special-fx-red", 14, -1]]) {
+      if (!scene.anims.exists(key) && scene.textures.exists(key)) {
+        const names = scene.textures.get(key).getFrameNames().sort((a,b) => Number(a.match(/\d+/)?.[0]) - Number(b.match(/\d+/)?.[0]));
+        scene.anims.create({ key, frames: names.map(frame => ({ key, frame })), frameRate, repeat });
+      }
+    }
     // Create explosion animation once
     if (!scene.anims.exists(`${NAME}-explosion`)) {
       try {
@@ -144,11 +152,11 @@ class Draven extends CharacterEntityBase {
     changeDebugState(enabled);
   }
 
-  // Remote attack visualization: replicate moving splash & delayed explosion
+  // Cast animation starts immediately; confirmed hits own impact presentation.
   static handleRemoteAttack(scene, data, ownerWrapper) {
     if (!data) return false;
     if (data.type === "draven-splash-explode") {
-      spawnExplosion(scene, Number(data.x) || 0, Number(data.y) || 0);
+      spawnExplosion(scene, Number(data.x) || 0, Number(data.y) || 0, ownerWrapper?.opponent);
       return true;
     }
     if (data.type !== "draven-splash") return false;
@@ -165,24 +173,8 @@ class Draven extends CharacterEntityBase {
     try {
       scene.sound && scene.sound.play("draven-fireball", { volume: 0.4 });
     } catch (_) {}
-    const delay = data.delay || SPLASH.remoteExplosionDelayMs;
-    const tipOffset = data.tipOffset || SPLASH.remoteExplosionTipOffset;
-    const centerYFactor = data.centerYFactor || SPLASH.centerYFactor;
-    // Removed opponent-side debug splash rectangle; only show final explosion now
-    scene.time.delayedCall(delay, () => {
-      if (!ownerSprite || !ownerSprite.active) return;
-      const dir =
-        typeof data.direction === "number"
-          ? data.direction >= 0
-            ? 1
-            : -1
-          : ownerSprite.flipX
-            ? -1
-            : 1;
-      const ex = ownerSprite.x + (dir > 0 ? tipOffset : -tipOffset);
-      const ey = ownerSprite.y - ownerSprite.height * centerYFactor;
-      spawnExplosion(scene, ex, ey);
-    });
+    // Impact presentation is owned by the authoritative hit event. A delayed
+    // caster-position copy duplicates the target impact and can fire on misses.
     return true;
   }
 

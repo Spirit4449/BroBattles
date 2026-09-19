@@ -26,9 +26,9 @@ function setup(){
   vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('huntressProjectile')?model:name.includes('huntressReplication')?replication:
     name.includes('runtimeId')?{createRuntimeId:()=> 'generated'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:10}}:socket,
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){},window:{}});
-  function sprite(x,y){const s={active:true,x,y,setPosition(x,y){this.x=x;this.y=y;return this;},setRotation(r){this.rotation=r;return this;},
+  function sprite(x,y,texture){const s={active:true,x,y,texture,setPosition(x,y){this.x=x;this.y=y;return this;},setRotation(r){this.rotation=r;return this;},
     setScale(){return this;},setDepth(){return this;},setTint(){return this;},destroy(){this.active=false;}};created.push(s);return s;}
-  const scene={events:new EventEmitter(),add:{sprite,circle:sprite},tweens:{add(){}},sound:{play:key=>sounds.push(key)}};
+  const scene={events:new EventEmitter(),add:{sprite,circle:sprite,graphics(){const g=sprite(0,0);for(const key of ["setAlpha","fillStyle","fillRect"])g[key]=()=>g;return g;}},tweens:{add(){}},sound:{play:key=>sounds.push(key)}};
   api.configureHuntressNetwork({huntressCombatVersion:2,epoch:'room',sentMono:0,simMono:0,projectiles:[],terminals:[],collisionGeometry:{colliders:[]}});
   const owner={active:true,x:100,y:100,displayWidth:150,displayHeight:150,flipX:false};
   const frame=time=>{now=time;scene.events.emit('update',time,1000/120);};
@@ -40,8 +40,9 @@ test('predicted arrow appears on the first render frame after windup without a s
   const request=api.predictHuntressShot(scene,owner,'owner',{id:'shot',type:'huntress-arrow',angle:0,speed:model.resolveShot({angle:0,power:0.5}).speed});
   assert.ok(Math.abs(request.power-0.5)<1e-12);
   frame(99);assert.equal(created.length,0);
-  frame(100);assert.equal(created.filter(s=>s.active).length,6); // Three arrows and three trail particles.
-  assert.equal(created[2].x,118);assert.equal(created[2].y,124);
+  frame(100);assert.equal(created.filter(s=>s.active && s.texture === "huntress-arrow").length,3); // Flame particles do not count as arrows.
+  const arrows=created.filter(s=>s.texture === "huntress-arrow");
+  assert.ok(arrows.some(s => s.x === 118 && s.y === 124), "central arrow launches from the muzzle");
   api.resetHuntressNetwork();
 });
 test('rejection before windup suppresses launch, including a subsequent contradictory release',()=>{

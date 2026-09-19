@@ -1,3 +1,4 @@
+import { applyTeamVisual, TEAM_GREEN, TEAM_RED } from "../shared/projectilePresentation";
 import { bindCanvasName } from "../site/preferences";
 // opplayer.js
 
@@ -111,6 +112,8 @@ export default class RemotePlayer {
     this.opponent._bbCharacter = String(this.character || "").toLowerCase();
     this.opponent._bbSkinId = this.skinId;
     this.opponent._bbSkinTextureKey = textureKey;
+    this.opponent._bbTeamColor = ["teammate", "ally", true].includes(this.team) ? TEAM_GREEN : TEAM_RED;
+    applyTeamVisual(this.opponent, this.opponent);
     this.opponent.username = this.username; // Attach username for collision detection
     // Avoid first-frame pop: hide until frame/body configured and spawn applied
     this.opponent.setVisible(false);
@@ -773,7 +776,8 @@ export default class RemotePlayer {
       width: this.opHealthBarWidth,
       health: this.opCurrentHealth,
       maxHealth: this.opMaxHealth,
-      color: isTeammate ? 0x99ab2c : 0xc64d38,
+      color: isTeammate ? 0x99ab2c : 0xb24035,
+      teamGlowColor: isTeammate ? TEAM_GREEN : 0xe04a4e,
     });
     this.opHealthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
 

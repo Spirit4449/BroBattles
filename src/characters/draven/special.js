@@ -1,3 +1,4 @@
+import { teamColor, TEAM_RED } from "../../shared/projectilePresentation";
 import { spawnExplosion } from "./attack";
 import { getResolvedCharacterSpecialConfig } from "../../shared/characterTuning.js";
 import { getResolvedCharacterSpecialAimConfig } from "../../shared/characterTuning.js";
@@ -52,15 +53,18 @@ function ensureInfernoOverlay(scene, player) {
   }
 
   destroyInfernoOverlay(player);
+  const fxKey = teamColor(player) === TEAM_RED && scene.textures.exists("draven-special-fx-red") ? "draven-special-fx-red" : DRAVEN_SPECIAL_FX_TEXTURE_KEY;
 
-  const overlay = scene.add.sprite(player.x, player.y, DRAVEN_SPECIAL_FX_TEXTURE_KEY);
+  const overlay = scene.add.sprite(player.x, player.y, fxKey);
   overlay.setAlpha(0);
   overlay.setBlendMode(Phaser.BlendModes.ADD);
   const scaleBase = player.displayWidth || player.width || 72;
-  overlay.setScale(Math.max(0.45, (scaleBase / 92) * 1.7));
+  // Retain world size while using the higher-resolution source frames.
+  const frameWidth = overlay.frame?.realWidth || overlay.width || 72;
+  overlay.setScale(Math.max(0.45, (scaleBase / 92) * 1.7) * 72 / frameWidth);
   syncInfernoOverlay(player, overlay);
   try {
-    overlay.anims.play(DRAVEN_SPECIAL_FX_ANIM_KEY, true);
+    overlay.anims.play(fxKey, true);
   } catch (_) {}
   scene.tweens.add({
     targets: overlay,
@@ -72,8 +76,9 @@ function ensureInfernoOverlay(scene, player) {
   return overlay;
 }
 
-function spawnFireParticle(scene, x, y) {
-  const color = FIRE_COLORS[Phaser.Math.Between(0, FIRE_COLORS.length - 1)];
+function spawnFireParticle(scene, x, y, owner) {
+  const colors = teamColor(owner) === TEAM_RED ? [0xff5148, 0xff965b, 0xe63960, 0xffcd83] : FIRE_COLORS;
+  const color = colors[Phaser.Math.Between(0, colors.length - 1)];
   const p = scene.add.circle(x, y, Phaser.Math.Between(3, 7), color, 0.8);
   p.setDepth(18);
   p.setBlendMode(Phaser.BlendModes.ADD);
@@ -91,12 +96,12 @@ function spawnFireParticle(scene, x, y) {
   });
 }
 
-function spawnInfernoPulse(scene, cx, cy, strength = 1) {
+function spawnInfernoPulse(scene, cx, cy, strength = 1, owner = null) {
   const ring = scene.add.circle(
     cx,
     cy,
     DRAVEN_INFERNO_RADIUS * 0.75,
-    0xff4d2f,
+    teamColor(owner) === TEAM_RED ? 0xff5360 : 0xb13cff,
     0.22,
   );
   ring.setDepth(14);
@@ -117,7 +122,7 @@ function spawnInfernoPulse(scene, cx, cy, strength = 1) {
     const radius = Phaser.Math.FloatBetween(20, DRAVEN_INFERNO_RADIUS);
     const px = cx + Math.cos(angle) * radius;
     const py = cy + Math.sin(angle) * radius;
-    spawnFireParticle(scene, px, py);
+    spawnFireParticle(scene, px, py, owner);
   }
 }
 
@@ -153,7 +158,7 @@ function startInfernoVisualLoop(scene, player, token, isOwner) {
 
     if (now >= nextFireAt) {
       nextFireAt = now + DRAVEN_FIRE_PULSE_MS;
-      spawnInfernoPulse(scene, centerX, centerY, 1);
+      spawnInfernoPulse(scene, centerX, centerY, 1, player);
     }
 
     if (now >= nextExplosionAt) {
@@ -162,7 +167,7 @@ function startInfernoVisualLoop(scene, player, token, isOwner) {
       const distance = Phaser.Math.FloatBetween(0, DRAVEN_INFERNO_RADIUS);
       const ex = centerX + Math.cos(angle) * distance;
       const ey = centerY + Math.sin(angle) * distance;
-      spawnExplosion(scene, ex, ey);
+      spawnExplosion(scene, ex, ey, player);
     }
 
     const specialKey = resolveSpriteAnimationKey({

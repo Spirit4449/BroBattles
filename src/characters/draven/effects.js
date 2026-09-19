@@ -1,3 +1,4 @@
+import { teamColor, TEAM_RED } from "../../shared/projectilePresentation";
 // Draven-specific per-player effects (fire trail)
 import { getResolvedCharacterEffectConfig } from "../../shared/characterTuning.js";
 
@@ -49,14 +50,14 @@ export default class DravenEffects {
     );
     // Glow layers
     g.fillStyle(
-      FIRE_TRAIL.outerColor ?? 0x312841,
+      teamColor(this.sprite) === TEAM_RED ? 0x752442 : (FIRE_TRAIL.outerColor ?? 0x312841),
       FIRE_TRAIL.outerAlpha ?? 0.35,
     );
     g.fillCircle(0, 0, baseSize);
-    g.fillStyle(FIRE_TRAIL.midColor ?? 0xba5d22, FIRE_TRAIL.midAlpha ?? 0.55);
+    g.fillStyle(teamColor(this.sprite) === TEAM_RED ? 0xff6653 : (FIRE_TRAIL.midColor ?? 0xba5d22), FIRE_TRAIL.midAlpha ?? 0.55);
     g.fillCircle(0, 0, baseSize * 0.65);
     g.fillStyle(
-      Phaser.Display.Color.GetColor(
+      teamColor(this.sprite) === TEAM_RED ? 0xffbc86 : Phaser.Display.Color.GetColor(
         49,
         Phaser.Math.Between(
           FIRE_TRAIL.innerColorMin ?? 30,

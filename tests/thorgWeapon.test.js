@@ -22,6 +22,7 @@ function load(file, dependencies = {}) {
 const motion = load('../src/characters/thorg/weaponMotion.js', { './handAnchors.json': anchors });
 const flips = load('../src/characters/shared/flipLock.js');
 const weaponModule = load('../src/characters/thorg/weapon.js', {
+  '../../shared/projectilePresentation': require('../src/shared/projectilePresentation'),
   './weaponMotion': motion,
   '../../shared/thorgSweep': sweep,
   '../shared/flipLock': flips,

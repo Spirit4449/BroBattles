@@ -7,7 +7,7 @@ const api = {};
 const code = babel.transformSync(fs.readFileSync('src/characters/gloop/slimeVisual.js','utf8'), {
   babelrc:false, configFile:false, presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code;
-vm.runInNewContext(code,{exports:api,require:name=>name.includes('renderLayers')
+vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectilePresentation') ? require('../src/shared/projectilePresentation') : name.includes('renderLayers')
   ? {RENDER_LAYERS:{ATTACKS:20}} : require('../src/shared/gloopProjectile')});
 function setup(owner) {
   const objects=[];

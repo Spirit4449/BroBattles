@@ -1,3 +1,4 @@
+import { teamColor, TEAM_RED } from "../../shared/projectilePresentation";
 // Small stepped chips stay crisp at game scale, unlike miniature fireball sprites.
 function getPixelTexture(scene) {
   const key = "wizard-fire-pixels";
@@ -26,7 +27,7 @@ export function createFireballParticles(scene, sprite, angle) {
     speedY: { min: -fy * 80 - 28, max: -fy * 80 + 28 },
     scale: { start: layer === -2 ? 1.7 : 1.15, end: 0.4 },
     alpha: { start: layer === -2 ? 0.85 : 0.7, end: 0 },
-    tint: layer === -2 ? [0x43caff, 0x75dcff] : [0xd4f8ff, 0xffffff],
+    tint: teamColor(sprite) === TEAM_RED ? (layer === -2 ? [0xff5646, 0xff8e58] : [0xffd291, 0xfff4d6]) : (layer === -2 ? [0x43caff, 0x75dcff] : [0xd4f8ff, 0xffffff]),
     maxParticles: 180,
     blendMode: "NORMAL",
   }).setDepth(sprite.depth + layer));

@@ -1,3 +1,4 @@
+import { applyTeamVisual } from "../../shared/projectilePresentation";
 import { presentSwarmRelease } from './swarmPresentation';
 import { ninjaProjectileTexture, animateNinjaProjectile } from './projectileTexture';
 import { createShurikenEffects } from './effects';
@@ -99,7 +100,7 @@ export function attachNinjaScene(scene,next={}){
       let count=0;while(e.at+STEP_MS<=sim&&count++<360&&!e.p.done){step(e.p,o,colliders);e.at+=STEP_MS;}
       if(!e.sprite){
         if(e.p.special && !e.p.done && !e.releasePresented){presentSwarmRelease(scene,o,swarmConfig().releaseMs,e.p.ownerName!==ctx.localUsername);e.releasePresented=true;}
-        e.texture=ninjaProjectileTexture(scene,o);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special)e.sprite.setTint?.(0xc7efff);
+        e.texture=ninjaProjectileTexture(scene,o);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special && !e.texture.includes("-weapon"))e.sprite.setTint?.(0xc7efff);applyTeamVisual(e.sprite,o || {_bbTeamColor:ctx.opponentPlayersRef?.[e.p.ownerName]?0xff413f:0x50ce88},true,e.texture.includes("-weapon")?"crown":null);
         e.fx=createShurikenEffects(scene,e.sprite,{x:e.p.startX,y:e.p.startY,angle:e.p.angle,special:e.p.special,launch:e.p.elapsed<180});
         if(e.p.ownerName!==ctx.localUsername)e.correction=remoteLaunchCorrection(o,e.p.returnTarget,e.p.elapsed,now);
       }

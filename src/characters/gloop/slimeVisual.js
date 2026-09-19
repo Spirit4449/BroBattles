@@ -1,3 +1,4 @@
+import { teamColor, TEAM_RED } from "../../shared/projectilePresentation";
 import { sweep } from "../../shared/gloopProjectile";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 
@@ -9,8 +10,8 @@ const COLORS = [0x0fb6b2, 0x169aaf, 0x1268b8, 0x25cbb4];
 // Effects are bounded and outlive the projectile briefly; shutdown owns all cleanup.
 export function createSlimeVisual(scene, state, visualScale = 1.5, owner = null) {
   const crystal = (owner?._bbSkinTextureKey || owner?.texture?.key) === 'gloop__gloop-amethyst';
-  const colors = crystal ? [0x4215b8, 0x5633cb, 0x261080, 0x3976bc] : COLORS;
-  const tint = color => crystal ? ({
+  const sourceColors = crystal ? [0x4215b8, 0x5633cb, 0x261080, 0x3976bc] : COLORS;
+  const skinTint = color => crystal ? ({
     0x07529b: 0x201060, 0x16afa9: 0x4215b8, 0x15aaa9: 0x4215b8,
     0x16b6b0: 0x5633cb, 0xa2edcf: 0x8099d8, 0x9ee6ce: 0x8099d8,
     0x99e9c9: 0x5366b6, 0x11bbaa: 0x5633cb, 0x139ca9: 0x4215b8,
@@ -18,6 +19,20 @@ export function createSlimeVisual(scene, state, visualScale = 1.5, owner = null)
     0x93edce: 0x4f7bbf, 0x74dcbc: 0x6755bb, 0x12afaf: 0x4215b8,
     0x13b5ad: 0x5633cb, 0x13abae: 0x4215b8,
   }[color] ?? color) : color;
+  // Hand-selected cherry/coral ramp: keep glossy highlights and saturated depths.
+  // Amethyst retains violet facets with ruby edges rather than losing its identity.
+  const enemy = teamColor(owner) === TEAM_RED;
+  const redRamp = {
+    0x07529b: 0x9c2049, 0x16afa9: 0xeb4355, 0x15aaa9: 0xeb4355,
+    0x16b6b0: 0xf55265, 0xa2edcf: 0xffc5b5, 0x9ee6ce: 0xffb7aa,
+    0x99e9c9: crystal ? 0x67204d : 0x882333, 0x11bbaa: 0xe64a56, 0x139ca9: 0xdc3849,
+    0x0868b6: crystal ? 0xac3575 : 0xd73346,
+    0x0846ae: crystal ? 0x88305f : 0xc32e40,
+    0xf2f5aa: 0xffefc8, 0x93edce: 0xffc9b7, 0x74dcbc: 0xffaa9d,
+    0x12afaf: 0xef495f, 0x13b5ad: 0xf15a6a, 0x13abae: 0xdf385c,
+  };
+  const tint = color => enemy ? (redRamp[color] ?? 0xf05a69) : skinTint(color);
+  const colors = enemy ? (crystal ? [0xd54375,0xf56785,0x942d76,0xff9b99] : [0xff5360,0xf33f4d,0xea3043,0xff857e]) : sourceColors;
   const body = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 6);
   const fx = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 2);
   const r = state.collisionRadius * clamp(visualScale / 1.5, 0.75, 1.25);
@@ -230,7 +245,7 @@ export function createSlimeVisual(scene, state, visualScale = 1.5, owner = null)
         r * 0.45 * (1 - impactAge / 320), 0x13abae, 0.75);
     }
     // Layered translucent skin, dark lower mass and asymmetric wet reflections.
-    contour(1.04, 0x99e9c9, 0.48);
+    contour(enemy ? 1.08 : 1.04, 0x99e9c9, enemy ? 0.95 : 0.48);
     contour(1, 0x11bbaa, 0.98);
     contour(crystal ? 0.95 : 0.89, 0x139ca9, 0.98);
     contour(crystal ? 0.81 : 0.73, 0x0868b6, 0.97, r * 0.02, r * 0.09);

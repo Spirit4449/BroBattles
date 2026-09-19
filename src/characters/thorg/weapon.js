@@ -1,3 +1,4 @@
+import { applyTeamVisual } from "../../shared/projectilePresentation";
 import { thorgGripPose } from "./weaponMotion";
 import { THORG_SWEEP, sampleThorgSweep } from "../../shared/thorgSweep";
 import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState";
@@ -10,6 +11,7 @@ export function ensureThorgWeapon(scene, body) {
   const key = scene.textures.exists(`${skin}-weapon`) ? `${skin}-weapon` : "thorg-weapon";
   if (!scene.textures.exists(key)) return null;
   const weapon = scene.add.image(body.x, body.y, key).setOrigin(0.5, 0.12);
+  applyTeamVisual(weapon, body, true, "weapon");
   weapon.setDisplaySize(26, 26 * 101 / 36);
   body._thorgWeapon = weapon;
   const spin = key === "thorg-weapon" && scene.textures.exists("thorg-weapon-spin");

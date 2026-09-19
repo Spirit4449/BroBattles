@@ -1,3 +1,4 @@
+import { applyTeamVisual, attackColor } from "../../shared/projectilePresentation";
 import { ninjaProjectileTexture, animateNinjaProjectile } from './projectileTexture';
 import { createShurikenEffects } from './effects';
 // ReturningShuriken.js
@@ -154,7 +155,8 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       (this.cfg.endYOffset || 0) * 0.45;
 
     // Unified subtle glow (blue if owner, red otherwise)
-    const glowColor = this.cfg.isOwner ? 0x2e9bff : 0xff3a2e;
+    applyTeamVisual(this, ownerSprite, true, this.projectileTexture.includes("-weapon") ? "crown" : null);
+    const glowColor = attackColor(ownerSprite, 0x2e9bff);
     this.glow = scene.add.graphics();
     this.glow.setDepth(RENDER_LAYERS.ATTACKS - 1);
     this.glow.setBlendMode(Phaser.BlendModes.ADD);
@@ -313,6 +315,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
   spawnTrail() {
     if (!this.scene.textures.exists(this.projectileTexture)) return;
     const s = this.scene.add.image(this.x, this.y, this.projectileTexture, this.frame?.name);
+    applyTeamVisual(s, this.ownerSprite, true, this.projectileTexture.includes("-weapon") ? "crown" : null);
     s.setScale(this.cfg.scale * 0.48);
     s.setDepth(RENDER_LAYERS.ATTACKS - 1);
     s.alpha = 0.35;

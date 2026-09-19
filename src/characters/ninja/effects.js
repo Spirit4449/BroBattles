@@ -1,9 +1,10 @@
+import { teamColor, TEAM_RED } from "../../shared/projectilePresentation";
 import { RENDER_LAYERS } from '../../gameScene/renderLayers';
 
 // The supplied 320 × 576 sheet has five 64px frames per color; row 5 is white.
 export function createShurikenEffects(scene, sprite, { x, y, angle = 0, special = false, launch = true } = {}) {
   const particles = new Set();
-  const color = special ? 0xc7efff : 0xeaf6ff;
+  const color = teamColor(sprite) === TEAM_RED ? 0xff625b : 0x60eaa0;
   const fade = (object, duration, values = {}) => {
     particles.add(object);
     scene.tweens.add({ targets: object, alpha: 0, duration, ...values,
@@ -48,9 +49,12 @@ export function createShurikenEffects(scene, sprite, { x, y, angle = 0, special 
       if (particles.size < 36 && Math.hypot(dx, dy) > 1) {
         const length = Math.min(44, Math.hypot(dx, dy));
         const trail = graphics().setPosition(sprite.x, sprite.y).setRotation(Math.atan2(dy, dx));
-        trail.lineStyle(5, color, 0.16).lineBetween(-length, 0, 0, 0);
+        trail.lineStyle(5, 0xeaf6ff, 0.16).lineBetween(-length, 0, 0, 0);
         trail.lineStyle(1.5, 0xffffff, 0.75).lineBetween(-length, 0, 0, 0);
-        trail.fillStyle(color, 0.9).fillCircle(-length * 0.5, Math.sin(now * 0.07) * 8, 1.6);
+        const starX = -length * 0.5, starY = Math.sin(now * 0.07) * 9;
+        trail.lineStyle(2, color, 0.95);
+        trail.lineBetween(starX - 3, starY, starX + 3, starY);
+        trail.lineBetween(starX, starY - 3, starX, starY + 3);
         fade(trail, 210);
       }
       lastX = sprite.x; lastY = sprite.y;

@@ -48,7 +48,6 @@ export function preloadGameAssets({
 
   // Combat/health SFX
   scene.load.audio("sfx-damage", `${staticPath}/damage.mp3`);
-  scene.load.audio("sfx-heal", `${staticPath}/heal.mp3`);
   // Shockwave reuses Draven's animated explosion art under its own key so the
   // effect is available even when no Draven is present in the match roster.
   scene.load.atlas(

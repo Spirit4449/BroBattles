@@ -12,7 +12,7 @@ function load(file, imports = () => ({})) {
   vm.runInNewContext(code, { exports, require: imports, Phaser: { Math: { RadToDeg: r => r * 180 / Math.PI } } });
   return exports;
 }
-const particles = load('src/characters/wizard/fireballParticles.js');
+const particles = load('src/characters/wizard/fireballParticles.js', () => require('../src/shared/projectilePresentation'));
 test('pixel particles spread across the rear on both render layers and drain cleanly', () => {
   const emitters = [];
   const scene = { events: new EventEmitter(), textures: { exists: () => true }, add: {
@@ -44,6 +44,7 @@ test('pixel particles spread across the rear on both render layers and drain cle
 });
 test('charge holds its size and reuses its animated sprite on release', () => {
   const attack = load('src/characters/wizard/attack.js', name => {
+    if (name.includes('projectilePresentation')) return require('../src/shared/projectilePresentation');
     if (name.includes('fireballFrames')) return { getSteadyFireballTexture: () => 'wizard-fireball-steady' };
     if (name.includes('fireballParticles')) return { createFireballParticles: () => ({ stop() {}, destroy() {} }) };
     if (name.includes('renderLayers')) return { RENDER_LAYERS: { ATTACKS: 60 } };
@@ -89,4 +90,12 @@ test('charge holds its size and reuses its animated sprite on release', () => {
   assert.equal(owner.listenerCount('destroy'), 0);
   scene.events.emit('presentation:reset');
   assert.equal(sprite.active, false);
+  const enemy = object(300, 100);
+  enemy._bbTeamColor = 0xff413f;
+  const remote = attack.spawnWizardFireballVisual(scene, { id: 'remote', angle: Math.PI }, enemy);
+  assert.ok(remote.active, 'opponent fireballs spawn without a local charge');
+  assert.equal(remote._bbTeamColor, 0xff413f);
+  assert.equal(remote.anims.key, 'wizard-fireball-red:flight');
+  scene.events.emit('presentation:reset');
+  assert.equal(remote.active, false);
 });

@@ -1,3 +1,4 @@
+import { applyTeamVisual, teamPalette } from "../../shared/projectilePresentation";
 import socket from '../../socket';
 import { createRuntimeId } from '../shared/runtimeId';
 import { RENDER_LAYERS } from '../../gameScene/renderLayers';
@@ -83,14 +84,14 @@ function visualTargets(projectile, ignored) {
 function addSprite(scene, projectile) {
   const sprite = scene.add.sprite(projectile.x, projectile.y, 'huntress-arrow');
   sprite.setScale(projectile.scale); sprite.setDepth(RENDER_LAYERS.ATTACKS + 4);
-  if (projectile.special) sprite.setTint(0xff8a2f);
+  applyTeamVisual(sprite, targetSprite(projectile.ownerName) || { _bbTeamColor: context.opponentPlayersRef?.[projectile.ownerName] ? 0xff413f : 0x50ce88 }, true, "arrow");
   const entry = { sprite, projectile, revision: 0, lastTrail: 0 };
   sprites.set(projectile.id, entry);
   return entry;
 }
 function record(event) { metrics.push(event); if (metrics.length > 240) metrics.shift(); }
 
-function burningFx(scene, entry, now, embedded = false) {
+export function burningFx(scene, entry, now, embedded = false) {
   if (now - (entry.lastFire || -Infinity) < (embedded ? 90 : 45)) return;
   entry.lastFire = now;
   const angle = entry.sprite.rotation || 0;
@@ -98,7 +99,21 @@ function burningFx(scene, entry, now, embedded = false) {
   const emit = (radius, color, alpha, dx, dy, duration, scale) => {
     // Bound cosmetic work during volleys; particles never affect combat.
     if (fireParticles.size >= 320) return;
-    const particle = scene.add.circle(x, y, radius, color, alpha);
+    const particle = color === 0x62616a
+      ? scene.add.circle(x, y, radius, color, alpha)
+      : scene.add.graphics().setPosition(x, y).setAlpha(alpha);
+    if (color !== 0x62616a) {
+      // Stepped flame tongues, with an open fork and bright root: readable at
+      // arrow scale without blurring the shaft or tinting the whole projectile.
+      const size = radius / 4;
+      particle.fillStyle(color, 1);
+      particle.fillRect(-6*size, -2*size, 8*size, 4*size);
+      particle.fillRect(-10*size, -3*size, 5*size, 2*size);
+      particle.fillRect(-8*size, 2*size, 4*size, 2*size);
+      particle.fillStyle(teamPalette(entry.sprite).core, 0.8);
+      particle.fillRect(-2*size, -size, 3*size, 2*size);
+      particle.setRotation(angle);
+    }
     fireParticles.add(particle);
     particle.setDepth(RENDER_LAYERS.ATTACKS + 3);
     scene.tweens.add({ targets: particle, x: x + dx, y: y + dy,
@@ -107,9 +122,10 @@ function burningFx(scene, entry, now, embedded = false) {
   };
   const drift = embedded ? 0 : -Math.cos(angle) * 26;
   const lift = embedded ? -30 : -Math.sin(angle) * 26 - 12;
-  emit(7, 0xff4b0b, 0.7, drift - 4, lift, 240, 0.25);
-  emit(4, 0xffd24a, 0.95, drift + 3, lift - 7, 170, 0.2);
-  if (embedded || now - (entry.lastSmoke || -Infinity) > 120) {
+  const palette = teamPalette(entry.sprite);
+  emit(entry.projectile.special ? 7 : 4, palette.mid, 0.7, drift - 4, lift, 240, 0.25);
+  emit(entry.projectile.special ? 4 : 2, palette.light, 0.95, drift + 3, lift - 7, 170, 0.2);
+  if (entry.projectile.special && (embedded || now - (entry.lastSmoke || -Infinity) > 120)) {
     entry.lastSmoke = now;
     emit(5, 0x62616a, 0.38, drift * 0.4 + 10, -48, 650, 2.2);
   }
@@ -170,10 +186,10 @@ export function attachHuntressScene(scene, nextContext = {}) {
       }
       if (entry.provisional) entry.sprite.setPosition(entry.provisional.x, entry.provisional.y);
       entry.lastPoint = point;
-      if (p.special) burningFx(scene, entry, now);
+      burningFx(scene, entry, now);
       if (!p.special && now - entry.lastTrail > 45) {
         entry.lastTrail = now;
-        const trail = scene.add.circle(entry.sprite.x, entry.sprite.y, p.special ? 3 : 1.5, p.special ? 0xff8a2f : 0xffe6ad, 0.5);
+        const trail = scene.add.circle(entry.sprite.x, entry.sprite.y, p.special ? 3 : 1.5, teamPalette(entry.sprite).light, 0.5);
         trail.setDepth(RENDER_LAYERS.ATTACKS + 2);
         scene.tweens.add({ targets: trail, alpha: 0, duration: 150, onComplete: () => trail.destroy() });
       }
@@ -249,7 +265,7 @@ export function handleHuntressPacket(scene, packet, nextContext) {
         confirmAgeMs: replica.clock.now(performance.now()) - action.simMono, appliedDamage: action.appliedDamage });
       if (action.appliedDamage > 0) scene.sound?.play('huntress-hit', { volume: 0.55 });
       if (existing?.projectile.special && ['target', 'terrain'].includes(action.reason)) {
-        const flame = scene.add.circle(action.x, action.y, 26, 0xff6a1a, 0.3);
+        const flame = scene.add.circle(action.x, action.y, 26, teamPalette(existing.sprite).mid, 0.3);
         flame.setDepth(RENDER_LAYERS.ATTACKS + 1);
         scene.tweens.add({ targets: flame, alpha: 0, scaleX: 1.6, scaleY: 0.4, duration: 2200, onComplete: () => flame.destroy() });
       }

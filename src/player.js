@@ -1,3 +1,4 @@
+import { applyTeamVisual, TEAM_GREEN } from "./shared/projectilePresentation";
 import { getSettings, bindCanvasName, subscribeSettings } from "./site/preferences";
 import {
   resolveWallContact,
@@ -693,6 +694,7 @@ export function createPlayer(
   player._bbCharacter = String(currentCharacter || "").toLowerCase();
   player._bbSkinId = currentSkinId;
   player._bbSkinTextureKey = getTextureKey(character, currentSkinId);
+  applyTeamVisual(player, null);
   player.username = username; // Attach username for collision detection
   player._suppressSpawnLandingSound = true;
   player.setCollideWorldBounds(true);
@@ -1392,7 +1394,7 @@ function updateHealthBar() {
 
   drawHealthBar(healthBar, {
     x: healthBarX, y, width: healthBarWidth,
-    health: currentHealth, maxHealth, color: 0x99ab2c,
+    health: currentHealth, maxHealth, color: 0xaebb50, teamGlowColor: 0x83dca6, isLocal: true,
   });
   healthBar.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
 

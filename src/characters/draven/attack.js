@@ -1,3 +1,4 @@
+import { applyTeamVisual, teamColor, TEAM_RED } from "../../shared/projectilePresentation";
 // Draven splash attack extracted
 import socket from "../../socket";
 import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
@@ -148,16 +149,22 @@ function applySplashDamage({
   return null;
 }
 
-export function spawnExplosion(scene, x, y) {
+export function spawnExplosion(scene, x, y, owner = null) {
+  const texture = teamColor(owner) === TEAM_RED && scene?.textures?.exists("draven-explosion-red") ? "draven-explosion-red" : "draven-explosion";
   try {
-    if (!scene || !scene.add || !scene.textures?.exists("draven-explosion")) {
+    if (!scene || !scene.add || !scene.textures?.exists(texture)) {
       return null;
     }
-    const e = scene.add.sprite(x, y, "draven-explosion");
-    e.setDepth(RENDER_LAYERS.PLAYER - 1);
-    e.setScale(2.2);
-    if (scene.anims?.exists("draven-explosion")) {
-      e.anims.play("draven-explosion");
+    const e = scene.add.sprite(x, y, texture);
+    // The impact must sit above the struck actor, not behind their body.
+    e.setDepth(RENDER_LAYERS.ATTACKS);
+    e.setScale(2.05);
+    e.setAlpha(0.42);
+    scene.tweens?.add({ targets: e, alpha: 0.92, duration: 70, ease: "Sine.easeOut" });
+    applyTeamVisual(e, owner, true);
+    if (scene.anims?.exists(texture)) {
+      // Begin with visible contact rather than replaying the pre-impact buildup.
+      e.anims.play({ key: texture, startFrame: 3, frameRate: 22 });
       e.once("animationcomplete", () => e.destroy());
     } else {
       // No animation defined; fade out and destroy for a minimal visual cue

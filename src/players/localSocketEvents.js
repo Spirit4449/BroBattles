@@ -100,11 +100,6 @@ export function bindLocalSocketEvents({
           triggerDamageScreenPulse(scene);
           triggerDamageCameraShake(scene, -delta);
         }
-      } else if (delta > 0) {
-        const s = scene.sound.add("sfx-heal", { volume: 0.1 });
-        try {
-          s.play();
-        } catch (_) {}
       }
     }
 

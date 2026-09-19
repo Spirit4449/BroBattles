@@ -1,3 +1,4 @@
+import { applyTeamVisual, teamColor, TEAM_RED } from "../../shared/projectilePresentation";
 import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
@@ -75,30 +76,33 @@ function attachDebugFollower(scene, target) {
 const FIREBALL_TEXTURE = "wizard-fireball-unified";
 const FIREBALL_FLIGHT_ANIM = "wizard-fireball-unified:flight";
 
-function createFireballSprite(scene, x, y, direction) {
-  const hasSheet = scene.textures.exists(FIREBALL_TEXTURE);
+function createFireballSprite(scene, x, y, direction, owner = null) {
+  const texture = teamColor(owner) === TEAM_RED && scene.textures.exists("wizard-fireball-red") ? "wizard-fireball-red" : FIREBALL_TEXTURE;
+  const flightAnimation = `${texture}:flight`;
+  const hasSheet = scene.textures.exists(texture);
   const sprite = hasSheet
-    ? scene.add.sprite(x, y, FIREBALL_TEXTURE, "fire16")
+    ? scene.add.sprite(x, y, texture, "fire16")
     : scene.add.circle(x, y, FIREBALL_VISUAL_RADIUS, 0x8ae7ff, 0.9);
   sprite.setDepth(Math.max(FIREBALL_DEPTH, RENDER_LAYERS.ATTACKS));
   // The same lower hot-core anchor is used for every spawn and flight cell.
   if (hasSheet) {
     sprite.setOrigin(0.5, 0.79);
-    sprite.texture?.setFilter?.(1);
+    sprite.texture?.setFilter?.(0);
   }
   sprite.setScale(FIREBALL_ACTIVE_SCALE);
   sprite.setAngle(direction < 0 ? -FIREBALL_BASE_ANGLE_DEG : FIREBALL_BASE_ANGLE_DEG);
   if (hasSheet) {
-    if (!scene.anims.exists(FIREBALL_FLIGHT_ANIM)) {
+    if (!scene.anims.exists(flightAnimation)) {
       scene.anims.create({
-        key: FIREBALL_FLIGHT_ANIM,
-        frames: Array.from({ length: 16 }, (_, i) => ({ key: FIREBALL_TEXTURE, frame: `fire${i + 16}` })),
+        key: flightAnimation,
+        frames: Array.from({ length: 16 }, (_, i) => ({ key: texture, frame: `fire${i + 16}` })),
         frameRate: 24,
         repeat: -1,
       });
     }
-    sprite.anims.play(FIREBALL_FLIGHT_ANIM, true);
+    sprite.anims.play(flightAnimation, true);
   }
+  sprite._bbFlightAnimation = flightAnimation;
   return sprite;
 }
 
@@ -213,7 +217,8 @@ function spawnWizardFireballProjectile(
   const attackId = String(payload?.id || createRuntimeId("wizardFireball"));
 
   const charged = scene._wizardCharges?.get(payload?.id || ownerSprite);
-  const sprite = charged?.release() || createFireballSprite(scene, start.x, start.y, direction);
+  const sprite = charged?.release() || createFireballSprite(scene, start.x, start.y, direction, ownerSprite);
+  applyTeamVisual(sprite, ownerSprite, true);
   const offsetX = charged ? sprite.x - start.x : 0;
   const offsetY = charged ? sprite.y - start.y : 0;
   sprite.setScale(scale);
@@ -401,7 +406,8 @@ export function chargeWizardFireball(scene, owner, payload = {}) {
   const direction = payload.direction || (owner.flipX ? -1 : 1);
   const angle = Number.isFinite(Number(payload.angle)) ? Number(payload.angle) : direction < 0 ? Math.PI : 0;
   const start = getWizardStaffTip(owner);
-  const sprite = createFireballSprite(scene, start.x, start.y, direction);
+  const sprite = createFireballSprite(scene, start.x, start.y, direction, owner);
+  applyTeamVisual(sprite, owner, true);
   const hasSheet = scene.textures.exists(FIREBALL_TEXTURE);
   sprite.setAngle(Phaser.Math.RadToDeg(angle) + FIREBALL_BASE_ANGLE_DEG);
   if (hasSheet) {
@@ -431,7 +437,7 @@ export function chargeWizardFireball(scene, owner, payload = {}) {
   charges.set(key, { destroy, release() {
     detach();
     sprite.setScale(FIREBALL_ACTIVE_SCALE);
-    if (hasSheet) sprite.anims.play(FIREBALL_FLIGHT_ANIM, true);
+    if (hasSheet) sprite.anims.play(sprite._bbFlightAnimation || FIREBALL_FLIGHT_ANIM, true);
     return sprite;
   } });
   scene.events.on("postupdate", update);

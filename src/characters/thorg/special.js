@@ -9,8 +9,11 @@ function setLocalRageState(player, enabled) {
   if (!player) return;
   player._thorgRageActive = !!enabled;
   if (enabled) {
-    player._thorgRageUntil = Date.now() + THORG_RAGE_DURATION_MS;
+    const startedAt = Date.now();
+    player._thorgRageStartedAt = startedAt;
+    player._thorgRageUntil = startedAt + THORG_RAGE_DURATION_MS;
   } else {
+    delete player._thorgRageStartedAt;
     delete player._thorgRageUntil;
   }
 }

@@ -7,7 +7,7 @@ export function resetHealthBarAnimation(graphics) {
   if (graphics) barStates.delete(graphics);
 }
 
-export function drawHealthBar(graphics, { x, y, width, health, maxHealth, color }) {
+export function drawHealthBar(graphics, { x, y, width, health, maxHealth, color, teamGlowColor, isLocal = false }) {
   const fraction = maxHealth > 0
     ? Math.max(0, Math.min(1, health / maxHealth))
     : 0;
@@ -31,12 +31,31 @@ export function drawHealthBar(graphics, { x, y, width, health, maxHealth, color 
   }
 
   graphics.clear();
+  // Keep the affiliation halo on the health-bar graphics so it follows the
+  // existing HUD visibility, placement, and cleanup, including invisibility.
+  if (teamGlowColor !== undefined && health > 0) {
+    for (const [spread, alpha] of [[8, 0.12], [5, 0.22], [3, 0.42]]) {
+      graphics.fillStyle(teamGlowColor, alpha);
+      graphics.fillRoundedRect(x - spread, y - spread, width + spread * 2, 9 + spread * 2, 3 + spread);
+    }
+  }
   graphics.fillStyle(0x595959, 1);
   graphics.fillRect(x, y, width, 9);
   graphics.lineStyle(3, 0x000000, 1);
   graphics.strokeRoundedRect(x, y, width, 9, 3);
+  if (teamGlowColor !== undefined && health > 0) {
+    graphics.lineStyle(2, teamGlowColor, 0.95);
+    graphics.strokeRoundedRect(x - 2, y - 2, width + 4, 13, 4);
+  }
   graphics.fillStyle(color, 1);
   if (fraction > 0) graphics.fillRoundedRect(x, y, width * fraction, 9, 3);
+
+  if (isLocal && health > 0) {
+    graphics.lineStyle(1, 0xc8eed5, 0.55);
+    graphics.strokeRoundedRect(x - 2, y - 2, width + 4, 13, 4);
+    graphics.fillStyle(0xe6f4da, 0.25);
+    graphics.fillRect(x + 2, y + 1, Math.max(0, width * fraction - 4), 2);
+  }
 
   for (const chunk of state.chunks) {
     const progress = Math.max(0, (now - chunk.startedAt) / FADE_MS);

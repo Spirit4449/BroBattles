@@ -164,6 +164,7 @@ export function createMatchCoordinator(config) {
   let _forceLiveInputTimer = null;
   let _startWatchdogRecoveryInFlight = false;
   let _joinedSocketId = null;
+  const lastHealthSoundAt = new Map();
 
 
 
@@ -736,6 +737,12 @@ export function createMatchCoordinator(config) {
       );
       const prev = lastHealthByPlayer[payload.username];
       lastHealthByPlayer[payload.username] = payload.health;
+      // Use the same match-level audio path as health power-up ticks. This
+      // remains reliable when the local player has already synced its health.
+      if (payload.username === getUsername() && payload.health > 0 &&
+          (payload.cause === "heal" || (typeof prev === "number" && payload.health > prev))) {
+        _onPowerupTick({ type: "health", username: payload.username });
+      }
       if (
         !presentationSuppressed() &&
         typeof prev === "number" &&
@@ -1227,8 +1234,13 @@ export function createMatchCoordinator(config) {
     if (!scene?.sound) return;
     const entry = powerupTickSounds[payload.type];
     if (!entry) return;
+    const now = Date.now();
+    if (payload.type === "health" &&
+        now - (lastHealthSoundAt.get(payload.username) ?? -Infinity) < 120) return;
     try {
       scene.sound.play(entry.key, entry.options || {});
+      // A power-up heal also sends health-update; play that pair only once.
+      if (payload.type === "health") lastHealthSoundAt.set(payload.username, now);
     } catch (_) {}
   }
 

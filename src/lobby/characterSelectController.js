@@ -1053,8 +1053,11 @@ export function initializeCharacterSelect(userData) {
   });
   const popupShell = getSharedSelectionPopupShell();
 
-  const particlesCanvas = document.createElement("canvas");
-  particlesCanvas.className = "particles-canvas";
+  // Keep the starfield decorative: a full-viewport canvas used to redraw at
+  // display refresh rate, even behind details or after another picker mounted.
+  const starfield = document.createElement("div");
+  starfield.className = "character-select-starfield";
+  starfield.setAttribute("aria-hidden", "true");
 
   const charactersGrid = document.createElement("div");
   charactersGrid.className = "characters-grid";
@@ -1071,69 +1074,9 @@ export function initializeCharacterSelect(userData) {
       closeButtonAttrs: { "data-sound": "cancel" },
       closeButtonText: "×",
       contentNode: charactersGrid,
-      backgroundNode: particlesCanvas,
+      backgroundNode: starfield,
     });
   };
-
-  // --- Particles background behind popup ---
-  let rafId = null;
-  const ctx = particlesCanvas.getContext("2d");
-  let particles = [];
-  const P_COUNT = 100;
-  const P_COLOR = "rgba(255,255,255,0.35)";
-  const P_COLOR2 = "rgba(120,180,255,0.25)";
-  let canvasWidth = 0;
-  let canvasHeight = 0;
-  function resizeCanvas() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvasWidth = particlesCanvas.clientWidth;
-    canvasHeight = particlesCanvas.clientHeight;
-    particlesCanvas.width = canvasWidth * dpr;
-    particlesCanvas.height = canvasHeight * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-  function initParticles() {
-    particles = new Array(P_COUNT).fill(0).map(() => ({
-      x: Math.random() * canvasWidth,
-      y: Math.random() * canvasHeight,
-      vx: (Math.random() - 0.5) * 0.4,
-      vy: (Math.random() - 0.5) * 0.4,
-      r: Math.random() * 2 + 0.5,
-      c: Math.random() < 0.5 ? P_COLOR : P_COLOR2,
-    }));
-  }
-  function step() {
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-    ctx.fillStyle = "rgba(0,0,0,0.15)";
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    for (const p of particles) {
-      p.x += p.vx;
-      p.y += p.vy;
-      if (p.x < 0 || p.x > canvasWidth) p.vx *= -1;
-      if (p.y < 0 || p.y > canvasHeight) p.vy *= -1;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = p.c;
-      ctx.fill();
-    }
-    rafId = requestAnimationFrame(step);
-  }
-  function startParticles() {
-    resizeCanvas();
-    initParticles();
-    if (!rafId) rafId = requestAnimationFrame(step);
-  }
-  function stopParticles() {
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = null;
-    ctx.clearRect(
-      0,
-      0,
-      canvasWidth,
-      canvasHeight,
-    );
-  }
-  window.addEventListener("resize", resizeCanvas);
 
   function openCharacterSelect() {
     if (blockCharacterChangeWhileReady()) return false;
@@ -1142,14 +1085,12 @@ export function initializeCharacterSelect(userData) {
     refreshUpgradeButtonAffordability();
     popupShell.show();
     emitCharacterMenuStatus(true);
-    startParticles();
     return true;
   }
   function closeCharacterSelect() {
     hideCharacterDetails();
     popupShell.hide();
     emitCharacterMenuStatus(false);
-    stopParticles();
   }
   window.__openCharacterSelect = openCharacterSelect;
   window.__closeCharacterSelect = closeCharacterSelect;
@@ -1410,7 +1351,6 @@ async function selectCharacter(character, { closeAfterSelection = true } = {}) {
       updateSelectionView();
     }
     if (closeAfterSelection) closeCharacterSelectAfterSelection();
-    playSound("cursor4", 0.4);
     return true;
   } catch (e) {
     console.warn("selectCharacter failed:", e?.message);
