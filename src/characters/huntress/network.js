@@ -3,8 +3,8 @@ import socket from '../../socket';
 import { createRuntimeId } from '../shared/runtimeId';
 import { RENDER_LAYERS } from '../../gameScene/renderLayers';
 import { HuntressReplica } from '../../shared/huntressReplication';
-import { remoteLaunchCorrection } from '../../shared/projectilePresentation';
-import { VERSION, attackConfig, resolveShot, powerFromSpeed, createVolley, firstContact, insetBounds } from '../../shared/huntressProjectile';
+import { remoteLaunchCorrection, reconcileFlight } from '../../shared/projectilePresentation';
+import { VERSION, attackConfig, resolveShot, powerFromSpeed, createVolley } from '../../shared/huntressProjectile';
 
 const replica = new HuntressReplica();
 let version = null, sceneRef = null, context = {}, syncTimer = null, generation = 0;
@@ -14,7 +14,6 @@ const fireParticles = new Set();
 let lastAmmoRevision = 0;
 let updateListener = null;
 let shutdownListener = null;
-let geometry = null;
 
 export function resetHuntressNetwork() {
   generation++;
@@ -26,7 +25,6 @@ export function resetHuntressNetwork() {
   fireParticles.clear();
   sprites.clear(); casts.clear(); predictedRequests.clear(); replica.reset(); lastAmmoRevision = 0;
   sceneRef = null; updateListener = null; shutdownListener = null; context = {}; version = null;
-  geometry = null;
 }
 
 // Visibility resync is presentation-only: preserve the configured protocol and
@@ -43,7 +41,6 @@ export function configureHuntressNetwork(state) {
   resetHuntressNetwork();
   version = state?.huntressCombatVersion ?? null;
   if (version !== VERSION) return;
-  geometry = state.collisionGeometry;
   replica.reset(state.epoch);
   replica.clock.observe(state, performance.now());
   for (const terminal of state.terminals || []) replica.terminate(terminal, performance.now());
@@ -72,14 +69,6 @@ export function observeHuntressSnapshot(snapshot) {
 function targetSprite(name) {
   return name === context.localUsername ? context.localPlayer :
     context.opponentPlayersRef?.[name]?.opponent || context.teamPlayersRef?.[name]?.opponent;
-}
-function visualTargets(projectile, ignored) {
-  const enemyOwner = !!context.opponentPlayersRef?.[projectile.ownerName];
-  const targets = enemyOwner
-    ? [[context.localUsername, context.localPlayer], ...Object.entries(context.teamPlayersRef || {}).map(([name, w]) => [name, w.opponent])]
-    : Object.entries(context.opponentPlayersRef || {}).map(([name, w]) => [name, w.opponent]);
-  return targets.filter(([name, s]) => name !== projectile.ownerName && s?.active && s.body?.enable !== false && s.body && !ignored?.has(name))
-    .map(([name, sprite]) => ({ name, bounds: insetBounds(sprite.body) }));
 }
 function addSprite(scene, projectile) {
   const sprite = scene.add.sprite(projectile.x, projectile.y, 'huntress-arrow');
@@ -161,32 +150,16 @@ export function attachHuntressScene(scene, nextContext = {}) {
         entry.correction = remoteLaunchCorrection(targetSprite(p.ownerName), p.origin, point.age, now);
       }
       if (entry.revision && entry.revision !== state.revision) {
-        entry.correction = { x: entry.sprite.x - point.x, y: entry.sprite.y - point.y, at: now };
+        entry.correction = reconcileFlight(entry.sprite, point, now, Math.hypot(point.vx, point.vy));
         record({ type: 'reconcile', id, errorPx: Math.hypot(entry.correction.x, entry.correction.y) });
-        entry.provisional = null; entry.lastPoint = null;
       }
       entry.revision = state.revision; entry.projectile = p;
       const blend = entry.correction ? Math.max(0, 1 - (now - entry.correction.at) / (entry.correction.duration || 80)) : 0;
       entry.sprite.setPosition(point.x + (entry.correction?.x || 0) * blend, point.y + (entry.correction?.y || 0) * blend);
       entry.sprite.setRotation(Math.atan2(point.vy, point.vx));
-      // Pause at a predicted contact while its authoritative terminal travels to us.
-      // No damage, sound or permanent embedding is inferred from this contact.
-      if (entry.provisional && now > entry.provisional.until) {
-        entry.ignored ||= new Set();
-        entry.ignored.add(entry.provisional.target);
-        entry.provisional = null; entry.lastPoint = point;
-      }
-      if (!entry.provisional) {
-        const contact = firstContact(entry.lastPoint || point, point, p.radius, geometry?.colliders || [], visualTargets(p, entry.ignored));
-        if (contact) {
-          const samples = replica.clock.samples;
-          const rtt = samples.length ? Math.min(...samples.map(s => s.rtt)) : 100;
-          entry.provisional = { ...contact, until: now + Math.min(200, Math.max(50, rtt / 2 + 34)) };
-        }
-      }
-      if (entry.provisional) entry.sprite.setPosition(entry.provisional.x, entry.provisional.y);
-      entry.lastPoint = point;
-      burningFx(scene, entry, now);
+      // Only a server terminal ends flight. Buffered actors are unsuitable for
+      // predicting impact: a false contact used to freeze and then jump arrows.
+      if (p.special) burningFx(scene, entry, now);
       if (!p.special && now - entry.lastTrail > 45) {
         entry.lastTrail = now;
         const trail = scene.add.circle(entry.sprite.x, entry.sprite.y, p.special ? 3 : 1.5, teamPalette(entry.sprite).light, 0.5);

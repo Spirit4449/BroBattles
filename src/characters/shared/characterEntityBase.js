@@ -1,3 +1,5 @@
+import { chooseRemoteAnimationState } from "./animationState";
+
 export default class CharacterEntityBase {
   static key = "unknown";
   static textureKey = "sprite";
@@ -26,8 +28,8 @@ export default class CharacterEntityBase {
     return false;
   }
 
-  static chooseRemoteAnimation({ animation = "idle" } = {}) {
-    return animation || "idle";
+  static chooseRemoteAnimation(context = {}) {
+    return chooseRemoteAnimationState({ ...context, character: this.key });
   }
 
   static setDebugState() {}

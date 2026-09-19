@@ -84,6 +84,7 @@ module.exports = (_env = {}, argv = {}) => {
     ],
   },
   plugins: [
+    ...(mode === "production" ? [new (require("./scripts/build/versionHtmlAssets.cjs"))()] : []),
     new MiniCssExtractPlugin({
       filename: "bundles/[name].css",
       chunkFilename: "bundles/[id].css",

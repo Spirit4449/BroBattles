@@ -5,7 +5,7 @@ import { createShurikenEffects } from './effects';
 import { playSpriteAnimation, markOneShotAnimation, getAnimationDurationMs } from '../shared/animationState';
 import socket from '../../socket';
 import { CombatClock } from '../../shared/huntressReplication';
-import { remoteLaunchCorrection } from '../../shared/projectilePresentation';
+import { remoteLaunchCorrection, reconcileFlight } from '../../shared/projectilePresentation';
 import { VERSION, STEP_MS, launch, step, swarmConfig } from '../../shared/ninjaProjectile';
 import { createRuntimeId } from '../shared/runtimeId';
 import { RENDER_LAYERS } from '../../gameScene/renderLayers';
@@ -90,7 +90,10 @@ export function attachNinjaScene(scene,next={}){
     for(const [id,r] of requests)if(now-r.at>2500){requests.delete(id);if(!r.accepted)for(const [key,e]of active)if(key.startsWith(`${r.username}:${id}:`)&&e.predicted)tombstone(key);}
     for(const [id,e]of active){
       if(e.due>now)continue;
-      const o=owner(e.p.ownerName)||e.p.returnTarget;
+      const displayedOwner=owner(e.p.ownerName);
+      // Remote actors are buffered. Homing must use the authoritative target,
+      // not their older on-screen position; owners retain immediate prediction.
+      const o=e.p.ownerName===ctx.localUsername ? displayedOwner||e.p.returnTarget : e.p.returnTarget||displayedOwner;
       if(e.pending){
         // Rebuild staggered releases from the current shooter pose, retaining tuning.
         const i=Number(id.slice(id.lastIndexOf(':')+1));
@@ -99,14 +102,18 @@ export function attachNinjaScene(scene,next={}){
       // Bound catch-up work after stalls; authoritative state is refreshed on return.
       let count=0;while(e.at+STEP_MS<=sim&&count++<360&&!e.p.done){step(e.p,o,colliders);e.at+=STEP_MS;}
       if(!e.sprite){
-        if(e.p.special && !e.p.done && !e.releasePresented){presentSwarmRelease(scene,o,swarmConfig().releaseMs,e.p.ownerName!==ctx.localUsername);e.releasePresented=true;}
-        e.texture=ninjaProjectileTexture(scene,o);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special && !e.texture.includes("-weapon"))e.sprite.setTint?.(0xc7efff);applyTeamVisual(e.sprite,o || {_bbTeamColor:ctx.opponentPlayersRef?.[e.p.ownerName]?0xff413f:0x50ce88},true,e.texture.includes("-weapon")?"crown":null);
+        if(e.p.special && !e.p.done && !e.releasePresented){presentSwarmRelease(scene,displayedOwner,swarmConfig().releaseMs,e.p.ownerName!==ctx.localUsername);e.releasePresented=true;}
+        e.texture=ninjaProjectileTexture(scene,displayedOwner);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special && !e.texture.includes("-weapon"))e.sprite.setTint?.(0xc7efff);applyTeamVisual(e.sprite,o || {_bbTeamColor:ctx.opponentPlayersRef?.[e.p.ownerName]?0xff413f:0x50ce88},true,e.texture.includes("-weapon")?"crown":null);
         e.fx=createShurikenEffects(scene,e.sprite,{x:e.p.startX,y:e.p.startY,angle:e.p.angle,special:e.p.special,launch:e.p.elapsed<180});
-        if(e.p.ownerName!==ctx.localUsername)e.correction=remoteLaunchCorrection(o,e.p.returnTarget,e.p.elapsed,now);
+        if(e.p.ownerName!==ctx.localUsername)e.correction=remoteLaunchCorrection(displayedOwner,e.p.returnTarget,e.p.elapsed,now);
       }
       const next=copy(e.p);if(!next.done)step(next,o,colliders);
       const f=Math.max(0,Math.min(1,(sim-e.at)/STEP_MS));
-      if(e.correction&&e.correction.x===undefined){e.correction.x=e.correction.visualX-(e.p.x+(next.x-e.p.x)*f);e.correction.y=e.correction.visualY-(e.p.y+(next.y-e.p.y)*f);}
+      if(e.correction&&e.correction.x===undefined){
+        e.correction=reconcileFlight({x:e.correction.visualX,y:e.correction.visualY},
+          {x:e.p.x+(next.x-e.p.x)*f,y:e.p.y+(next.y-e.p.y)*f},now,
+          Math.hypot(next.x-e.p.x,next.y-e.p.y)*1000/STEP_MS);
+      }
       if(e.correction&&!e.correctionReported){e.correctionReported=true;record({type:'correction',id,at:now,phase:e.p.phase,predicted:e.wasPredicted,errorPx:Math.hypot(e.correction.x,e.correction.y)});}
       const blend=e.correction?Math.max(0,1-(now-e.correction.at)/(e.correction.duration||60)):0;
       let x=e.p.x+(next.x-e.p.x)*f+(e.correction?.x||0)*blend;

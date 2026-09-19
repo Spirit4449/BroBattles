@@ -86,33 +86,41 @@ function routePoisonDamage(player, point, route, poisonY, poisonAt, holdMs = 200
 
 function findRoute(graph, from, to, poisonY = Infinity, options = {}) {
   if (!from || !to) return null;
+  const surfaces = new Map(graph.surfaces.map(s => [s.id, s]));
+  const keyOf = (id, x) => `${id}:${Number.isFinite(x) ? Math.round(x) : ''}`;
   const atGoal = (id, x) => id === to && (!graph.geometry || !Number.isFinite(options.goalX) || !Number.isFinite(x) ||
-    canWalkBetween(graph.geometry, graph.surfaces.find((s) => s.id === id), graph.character, x, options.goalX));
+    canWalkBetween(graph.geometry, surfaces.get(id), graph.character, x, options.goalX));
   if (atGoal(from, options.startX)) return [];
   const queue = [{ id: from, route: [], cost: 0, elapsed: 0, x: options.startX }], visited = new Set();
+  const bestCost = new Map([[keyOf(from, options.startX), 0]]);
   while (queue.length) {
     queue.sort((a, b) => a.cost - b.cost);
     const item = queue.shift();
     if (atGoal(item.id, item.x)) return item.route;
     // Reaching the same platform on the other side of a wall is a different
     // navigation state. Collapsing both landings prevents routes around blocks.
-    const state = `${item.id}:${Number.isFinite(item.x) ? Math.round(item.x) : ''}`;
-    if (visited.has(state)) continue;
+    const state = keyOf(item.id, item.x);
+    if (visited.has(state) || item.cost > bestCost.get(state)) continue;
     visited.add(state);
     for (const edge of graph.edges.get(item.id) || []) {
-      const fromSurface = graph.surfaces.find((s) => s.id === item.id);
+      const nextState = keyOf(edge.to, edge.landingX);
+      if (visited.has(nextState)) continue;
+      const fromSurface = surfaces.get(item.id);
       if (graph.geometry && Number.isFinite(item.x) &&
           !canWalkBetween(graph.geometry, fromSurface, graph.character, item.x, edge.takeoffX)) continue;
       if (options.blocked?.has(edgeKey(edge, item.id)) || options.blocked?.has(`${item.id}:${edge.to}`)) continue;
-      const surface = graph.surfaces.find((s) => s.id === edge.to);
+      const surface = surfaces.get(edge.to);
       if (!surface) continue;
       const penalty = Math.max(0, Number(options.edgeCost?.(edge, item.id)) || 0);
       const approach = Number.isFinite(item.x) ? Math.abs(edge.takeoffX - item.x) / movement.maxSpeed * 1000 : 0;
-      const exposure = poisonDamage(edge.frames, edge.duration, poisonY, options.poisonAt, item.elapsed + approach) +
+      const exposure = !Number.isFinite(poisonY) ? 0 : poisonDamage(edge.frames, edge.duration, poisonY, options.poisonAt, item.elapsed + approach) +
         poisonDamage(Array.from({ length: 20 }, () => ({ y: fromSurface.top - graph.body.offsetY - graph.body.halfHeight })),
           approach, poisonY, options.poisonAt, item.elapsed);
+      const cost = item.cost + approach + edge.duration + penalty + exposure * 4;
+      if (cost >= (bestCost.get(nextState) ?? Infinity)) continue;
+      bestCost.set(nextState, cost);
       queue.push({ id: edge.to, route: [...item.route, edge], x: edge.landingX,
-        cost: item.cost + approach + edge.duration + penalty + exposure * 4,
+        cost,
         elapsed: item.elapsed + approach + edge.duration });
     }
   }

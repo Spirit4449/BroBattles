@@ -415,7 +415,7 @@ test('bots duck an imminent hit only when no safer dodge exists', (t) => {
   const h = setup(t, ['ninja', 'wizard'], 1250), enemy = h.players[1];
   h.brain.random = () => 0;
   h.brain.openingUntil = 0;
-  h.brain.findDodgeManeuver = () => ({ best: null, baseDanger: 100, bestScore: 100 });
+  h.brain.findDodgeSteps = function* () { return { best: null, baseDanger: 100, bestScore: 100 }; };
   h.room._activeAttacks = [{
     attackerParticipantId: enemy.participantId,
     x: h.p.x + 100,

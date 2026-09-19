@@ -1,4 +1,4 @@
-const { basicAim, hasClearShot, pressureAim } = require('./combat');
+const { basicAim, basicRange, hasClearShot, pressureAim } = require('./combat');
 const { nearestSurface, walkLimits, canStandAt, canWalkBetween, standOn, previewManeuver, routePoisonDamage } = require('./navigation');
 const { bounds } = require('./physics');
 const { teamPosition } = require('./teamwork');
@@ -99,7 +99,7 @@ function preferredRange(brain, target) {
     return Math.min(brain.superPlan.preferredRange, style.cap) * brain.spacing;
   }
   const style = STYLES[brain.player.char_class] || STYLES.ninja;
-  return Math.min(style.cap, basicAim(brain.player, target, brain.profile, () => 0.5).range * style.fraction) * brain.spacing;
+  return Math.min(style.cap, basicRange(brain.player, brain.room) * style.fraction) * brain.spacing;
 }
 
 function surfaceFor(graph, target) {
@@ -110,10 +110,11 @@ function surfaceFor(graph, target) {
   return nearestSurface(graph, { x: target.x, y: bounds(target).bottom });
 }
 
-function selectTarget(brain, enemies, routeTo, now = Date.now()) {
+function* selectTargetSteps(brain, enemies, routeTo, now = Date.now()) {
   let best = null, bestScore = Infinity;
   const ownHealth = healthFraction(brain.player);
   for (const target of enemies) {
+    yield;
     const hp = healthFraction(target), range = distance(brain.player, target);
     const route = routeTo(surfaceFor(brain.graph, target)?.id);
     const awareness = brain.profile.tacticalAwareness ?? brain.profile.prediction ?? 0.5;
@@ -159,7 +160,7 @@ function retreatExposure(player, point, route, enemies) {
   return exposure * (4 + (1 - healthFraction(player)) * 4);
 }
 
-function chooseDecision(brain, context, target, enemies, now) {
+function* chooseDecisionSteps(brain, context, target, enemies, now) {
   const p = brain.player, { graph, current, poisonY, routeTo } = context;
   const style = STYLES[p.char_class] || STYLES.ninja;
   const preferred = target ? preferredRange(brain, target) : style.cap;
@@ -176,14 +177,19 @@ function chooseDecision(brain, context, target, enemies, now) {
   const pressured = nearestRange < preferred * (brain.decision?.mode === 'kite' ? 0.95 : 0.7);
   const wantsSpace = brain.retreating || (near > friends + 1 && healthFraction(p) < 0.65) ||
     (!pressAdvantage && pressured && (style.clearance >= 145 || reloading));
-  const reachable = graph.surfaces.map((surface) => ({ surface, route: routeTo(surface.id) }))
-    .filter(({ route }) => route !== null);
+  const reachable = [];
+  for (const surface of graph.surfaces) {
+    yield;
+    const route = routeTo(surface.id);
+    if (route !== null) reachable.push({ surface, route });
+  }
 
   // Pickup value competes with fighting, distance, and pressure from every enemy.
   if (!suddenDeath) {
     // A shockwave detonates immediately. If an opponent has clearly won the race,
     // concede it and leave the blast radius instead of feeding the pickup.
     for (const pickup of brain.room._powerups?.values?.() || []) {
+        yield;
       if (pickup.type !== 'shockwave' || Number(pickup.expiresAt || Infinity) <= now || pickup.y >= poisonY - 40) continue;
       const surface = nearestSurface(graph, pickup), route = routeTo(surface?.id);
       if (route === null) continue;
@@ -199,6 +205,7 @@ function chooseDecision(brain, context, target, enemies, now) {
 
     let bestPickup = null, value = -Infinity;
     for (const pickup of brain.room._powerups?.values?.() || []) {
+        yield;
       if (Number(pickup.activeAt || 0) > now || Number(pickup.expiresAt || Infinity) <= now || pickup.y >= poisonY - 40) continue;
       const destination = collectionDestination(brain, context, pickup, now);
       if (!destination) continue;
@@ -236,6 +243,7 @@ function chooseDecision(brain, context, target, enemies, now) {
     // Loose rewards are a small, human-looking opportunity: nearby gems matter
     // more than coins, but danger and an active fight quickly outweigh either.
     for (const drop of brain.room._deathDrops?.values?.() || []) {
+        yield;
       if (brain.retreating && enemies.some((enemy) => distance(p, enemy) < 650)) continue;
       if (!drop || drop.claimedBy || Number(drop.expiresAt || 0) <= now || drop.y >= poisonY - 40) continue;
       const destination = collectionDestination(brain, context, drop, now, DEATH_DROP_PICKUP_RADIUS);
@@ -287,6 +295,7 @@ function chooseDecision(brain, context, target, enemies, now) {
       if (target) xs.push(clampX(target.x + side * combatRange), clampX(target.x - side * combatRange));
       if (target && wantsSpace) xs.push(clampX(target.x + side * Math.max(500, preferred * 1.4)), clampX(target.x - side * Math.max(500, preferred * 1.4)));
       for (const x of new Set(xs)) {
+        yield;
         if (!canStandAt(brain.room.geometry, surface, p.char_class, x)) continue;
         const landingX = route.length ? route.at(-1).landingX : p.x;
         const pointRoute = !Number.isFinite(landingX) || canWalkBetween(brain.room.geometry, surface, p.char_class, landingX, x)
@@ -392,4 +401,9 @@ function chooseDecision(brain, context, target, enemies, now) {
   return { mode: 'patrol', goal: { x, y: surface.top, surfaceId: surface.id } };
 }
 
-module.exports = { STYLES, healthFraction, preferredRange, surfaceFor, selectTarget, chooseDecision };
+// Synchronous adapters keep offline behavior tools usable; the live controller
+// consumes the same generators in small slices.
+function finishSteps(steps) { let result; do { result = steps.next(); } while (!result.done); return result.value; }
+function selectTarget(...args) { return finishSteps(selectTargetSteps(...args)); }
+function chooseDecision(...args) { return finishSteps(chooseDecisionSteps(...args)); }
+module.exports = { STYLES, healthFraction, preferredRange, surfaceFor, selectTarget, chooseDecision, selectTargetSteps, chooseDecisionSteps, finishSteps };

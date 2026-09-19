@@ -57,7 +57,6 @@ import {
   noteAnimationPlayed,
   playCharacterAnimation,
   resetAirborneJumpAnimation,
-  toLogicalAnimation,
   playSpriteAnimation,
 } from "./characters/shared/animationState.js";
 import { getResolvedCharacterBodyConfig } from "./shared/characterTuning.js";
@@ -2295,18 +2294,6 @@ export function handlePlayerMovement(scene) {
     String(currentCharacter || "").toLowerCase() === "draven"
   ) {
     desiredMovementAnimation = "special";
-  }
-  const currentLogicalAnimation = toLogicalAnimation(
-    player?.anims?.currentAnim?.key || "",
-    currentCharacter,
-  );
-  if (
-    !player?.body?.touching?.down &&
-    currentLogicalAnimation === "jumping" &&
-    player?.anims?.isPlaying &&
-    desiredMovementAnimation === "falling"
-  ) {
-    desiredMovementAnimation = "jumping";
   }
   const presentedAnimation = getPresentedAnimation(
     player,
