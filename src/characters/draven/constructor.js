@@ -159,6 +159,15 @@ class Draven extends CharacterEntityBase {
       spawnExplosion(scene, Number(data.x) || 0, Number(data.y) || 0, ownerWrapper?.opponent);
       return true;
     }
+    if (data.type === "draven-inferno-explode") {
+      spawnExplosion(
+        scene,
+        Number(data.x) || 0,
+        Number(data.y) || 0,
+        ownerWrapper?.opponent,
+      );
+      return true;
+    }
     if (data.type !== "draven-splash") return false;
     const ownerSprite = ownerWrapper && ownerWrapper.opponent;
     if (!ownerSprite) return true; // nothing to draw
@@ -179,6 +188,10 @@ class Draven extends CharacterEntityBase {
   }
 
   static handleLocalAuthoritativeAttack(scene, data) {
+    if (data?.type === "draven-inferno-explode") {
+      spawnExplosion(scene, Number(data.x) || 0, Number(data.y) || 0);
+      return true;
+    }
     if (!data || data.type !== "draven-splash-explode") return false;
     spawnExplosion(scene, Number(data.x) || 0, Number(data.y) || 0);
     return true;

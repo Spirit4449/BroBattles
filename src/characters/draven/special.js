@@ -161,14 +161,8 @@ function startInfernoVisualLoop(scene, player, token, isOwner) {
       spawnInfernoPulse(scene, centerX, centerY, 1, player);
     }
 
-    if (now >= nextExplosionAt) {
-      nextExplosionAt = now + DRAVEN_EXPLOSION_PULSE_MS;
-      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-      const distance = Phaser.Math.FloatBetween(0, DRAVEN_INFERNO_RADIUS);
-      const ex = centerX + Math.cos(angle) * distance;
-      const ey = centerY + Math.sin(angle) * distance;
-      spawnExplosion(scene, ex, ey, player);
-    }
+    // Explosion positions come from the authoritative damage events. Keeping
+    // this loop free of random effects prevents local/remote duplicates.
 
     const specialKey = resolveSpriteAnimationKey({
       scene,

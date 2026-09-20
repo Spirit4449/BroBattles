@@ -141,6 +141,22 @@ function tick(room, caster, now) {
     room._recordCombatStat(caster, { damage: applied, hits: 1 });
     chargeSuperForHit(room, caster, "special");
 
+    // The impact location is authoritative. Every client gets the same
+    // explosion at the target that actually took damage instead of inventing
+    // a random position around the caster.
+    room.io?.to?.(`game:${room.matchId}`)?.emit?.("game:action", {
+      playerName: caster.name,
+      character: caster.char_class,
+      action: {
+        type: "draven-inferno-explode",
+        id: `inferno:${caster.name}:${target.name}:${now}`,
+        x: Number(target.x) || 0,
+        y: Number(target.y) || 0,
+        attacker: caster.name,
+      },
+      t: now,
+    });
+
     if (target.health === 0 && old > 0) {
       room._recordCombatStat(caster, { kills: 1 });
     }

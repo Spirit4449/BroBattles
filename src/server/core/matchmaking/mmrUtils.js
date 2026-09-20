@@ -31,8 +31,8 @@ module.exports = {
 function ratingWindow(ticket, now = Date.now()) {
   const createdAt = new Date(ticket.created_at).getTime();
   const waitMs = Number.isFinite(createdAt) ? Math.max(0, now - createdAt) : 0;
-  // Start close to the player's rating, reaching a 6,400 trophy range at 20s.
+  // Start close to the player's rating, reaching a 6,000 trophy range at 10s.
   // No trophy cap: distant ratings eventually become eligible too.
-  return 100 * 2 ** (waitMs * 6 / 20000);
+  return 100 * 60 ** (waitMs / 10000);
 }
 module.exports.ratingWindow = ratingWindow;

@@ -1,11 +1,21 @@
 import { DEFAULT_BINDINGS, normalizeBindings } from './keyBindings.mjs';
 const KEY = 'bb_settings_v1';
-export const DEFAULT_SETTINGS = Object.freeze({ sensitivity:1, sfx:1, music:1, autoHideCursor:true, streamer:false, keys:DEFAULT_BINDINGS });
+export const GRAPHICS_OPTIONS = Object.freeze([
+  { value: 'low', label: 'Low', renderScale: 0.5 },
+  { value: 'medium', label: 'Medium', renderScale: 1 },
+  { value: 'high', label: 'High', renderScale: 2 },
+  { value: 'super-high', label: 'Super High', renderScale: 4 },
+]);
+export const DEFAULT_SETTINGS = Object.freeze({ sensitivity:1, sfx:1, music:1, graphics:'high', autoHideCursor:true, streamer:false, keys:DEFAULT_BINDINGS });
+export function graphicsRenderScale(level) {
+  return GRAPHICS_OPTIONS.find(option => option.value === level)?.renderScale
+    ?? GRAPHICS_OPTIONS.find(option => option.value === DEFAULT_SETTINGS.graphics).renderScale;
+}
 const subscribers = new Set();
 export function normalizeSettings(raw={}) {
   if (!raw || typeof raw !== 'object') raw={};
   const number=(key,min,max)=>typeof raw[key]==='number' && Number.isFinite(raw[key]) ? Math.min(max,Math.max(min,raw[key])) : DEFAULT_SETTINGS[key];
-  return { keys:normalizeBindings(raw.keys), sensitivity:number('sensitivity',0.25,3), sfx:number('sfx',0,1), music:number('music',0,1), autoHideCursor:typeof raw.autoHideCursor==='boolean'?raw.autoHideCursor:true, streamer:typeof raw.streamer==='boolean'?raw.streamer:false };
+  return { keys:normalizeBindings(raw.keys), sensitivity:number('sensitivity',0.25,3), sfx:number('sfx',0,1), music:number('music',0,1), graphics:GRAPHICS_OPTIONS.some(option => option.value === raw.graphics) ? raw.graphics : DEFAULT_SETTINGS.graphics, autoHideCursor:typeof raw.autoHideCursor==='boolean'?raw.autoHideCursor:true, streamer:typeof raw.streamer==='boolean'?raw.streamer:false };
 }
 function read() { try { return normalizeSettings(JSON.parse(localStorage.getItem(KEY))); } catch (_) { return {...DEFAULT_SETTINGS}; } }
 let settings=read();

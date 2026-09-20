@@ -123,19 +123,22 @@ test("fill starts from 5 seconds with randomized join times, disabled until conf
     computeUserMMRFromRow({ trophies: 750, char_levels: '{"ninja":5}' }),
     750,
   );
-  assert.equal(ratingWindow(t1, 10000), 800);
+  assert.equal(ratingWindow(t1, 10000), 6000);
 });
 
 test("trophy search accelerates over time without a fixed difference cap", () => {
   const queued = { created_at: new Date(0) };
   const ranges = [0, 10000, 20000, 30000].map((time) => ratingWindow(queued, time));
-  assert.deepEqual(ranges, [100, 800, 6400, 51200]);
+  assert.deepEqual(ranges, [100, 6000, 360000, 21600000]);
   assert.equal(ratingWindow(queued, -1000), 100);
   assert.equal(ratingWindow({ created_at: "invalid" }, 10000), 100);
 });
 
 test("distant players become eligible in full and partial matchmaking after waiting", () => {
-  const pool = [ticket(1, 600), ticket(2, 4000)];
+  const pool = [ticket(1, 600), ticket(2, 4000)].map((entry) => ({
+    ...entry,
+    created_at: new Date(now),
+  }));
   assert.equal(pickCompositeGroup(pool, 1, { now }), null);
   assert.equal(pickGroup(pool, 1, { partial: true, anchorId: 1, now }).length, 1);
   const later = now + 10000;
@@ -165,7 +168,7 @@ test("partial assembly maximizes humans, preserves party sides, excludes incompa
     ticket(2, 700),
     ticket(3, 690),
     ticket(4, 4000),
-  ];
+  ].map((entry) => ({ ...entry, created_at: new Date(now) }));
   const group = pickGroup(pool, 3, { partial: true, anchorId: 1, now });
   assert.equal(
     group.reduce((n, p) => n + p.ticket.size, 0),

@@ -1,5 +1,5 @@
 import { installDamageHitboxDebug } from './gameScene/damageHitboxDebug';
-import { bindAudio, bindGameAudio } from "./site/preferences";
+import { bindAudio, bindGameAudio, getSettings, graphicsRenderScale, subscribeSettings } from "./site/preferences";
 import { ensureLegalAcceptance } from "./site/shell";
 import "./site/shell.js";
 import { syncLocalEffects } from './players/localStateSync';
@@ -41,6 +41,7 @@ import { createMatchCoordinator } from "./match/matchCoordinator";
 import { preloadGameAssets } from "./gameScene/preloadGameAssets";
 import { renderPoisonWater } from "./gameScene/poisonWaterRenderer";
 import { updateDynamicCamera } from "./gameScene/cameraDynamics";
+import { installHighResolutionCanvas } from "./gameScene/highResolutionCanvas";
 import { createLocalInputSync } from "./gameScene/localInputSync";
 import { updateHealthBars } from "./gameScene/healthBarRenderer";
 import { createMapEditorRuntime } from "./gameScene/mapEditorRuntime";
@@ -2319,7 +2320,17 @@ const config = {
   pixelArt: true,
   roundPixels: false, // allow subpixel rendering for smoother interpolation (adaptive timeline)
   antialias: false,
-  resolution: window.devicePixelRatio,
+  // Phaser 3.70 Canvas does not honor the resolution config option. This
+  // backing-store control keeps the same FIT size and world coordinates.
+  callbacks: {
+    postBoot: (game) => {
+      const canvasResolution = installHighResolutionCanvas(game, Phaser, graphicsRenderScale(getSettings().graphics));
+      if (canvasResolution) {
+        const off = subscribeSettings(settings => canvasResolution.setScale(graphicsRenderScale(settings.graphics)));
+        game.events.once(Phaser.Core.Events.DESTROY, off);
+      }
+    },
+  },
   // Let Phaser sleep with the page. Network state keeps arriving, and the
   // visibility resync above restores only the latest authoritative state.
   disableVisibilityChange: false,
