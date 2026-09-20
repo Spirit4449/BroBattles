@@ -32,7 +32,7 @@ async function getPartyOwnerName(db, partyId) {
   return rows?.[0]?.name || null;
 }
 
-async function emitRoster(io, partyId, party, members, db = null) {
+async function emitRoster(io, partyId, party, members, db = null, snapshot = {}) {
   let selectedByName = {};
   try {
     if (db && typeof db.fetchSelectedCardsByNames === "function") {
@@ -67,7 +67,9 @@ async function emitRoster(io, partyId, party, members, db = null) {
     members: roster,
   });
   const capacity = capacityFromSelection(selection);
-  const ownerName = db ? await getPartyOwnerName(db, partyId) : null;
+  const ownerName = Object.prototype.hasOwnProperty.call(snapshot, "ownerName")
+    ? snapshot.ownerName
+    : db ? await getPartyOwnerName(db, partyId) : null;
   io.to(`party:${partyId}`).emit("party:members", {
     partyId,
     ownerName,

@@ -21,6 +21,15 @@ function parseMs(value) {
   return Number.isFinite(ms) ? ms : 0;
 }
 
+async function optionalStatusValue(load, fallback, onError) {
+  try {
+    return await load();
+  } catch (error) {
+    onError?.(error);
+    return fallback;
+  }
+}
+
 async function getUserLiveMatch(db, userId) {
   if (!userId) return null;
 
@@ -59,66 +68,33 @@ async function buildStatusPayload({
     };
   }
 
-  let selectedCardId = null;
-  let ownedCardIds = [];
-  let selectedProfileIconId = null;
-  let ownedProfileIconIds = [];
-  let selectedSkinIdByCharacter = {};
-  let ownedSkinIds = [];
-  let preferredSelection = null;
-  if (userNormalized?.user_id) {
-    try {
-      const iconState = await syncProfileIconOwnershipForUser(
-        db,
-        userNormalized,
-      );
-      selectedProfileIconId = iconState.selectedProfileIconId || null;
-      ownedProfileIconIds = Array.isArray(iconState.ownedIconIds)
-        ? iconState.ownedIconIds
-        : [];
-    } catch (_) {
-      selectedProfileIconId = null;
-      ownedProfileIconIds = [];
-    }
-    try {
-      const skinState = await syncSkinOwnershipForUser(db, userNormalized);
-      selectedSkinIdByCharacter = skinState.selectedSkinIdByCharacter || {};
-      ownedSkinIds = Array.isArray(skinState.ownedSkinIds)
-        ? skinState.ownedSkinIds
-        : [];
-    } catch (_) {
-      selectedSkinIdByCharacter = {};
-      ownedSkinIds = [];
-    }
-    try {
-      selectedCardId = await db.getUserSelectedCardId(userNormalized.user_id);
-    } catch (_) {
-      selectedCardId = null;
-    }
-    try {
-      ownedCardIds = await db.getUserOwnedCardIds(userNormalized.user_id);
-    } catch (_) {
-      ownedCardIds = [];
-    }
-    try {
-      preferredSelection = await db.getUserPreferredSelection(
-        userNormalized.user_id,
-      );
-    } catch (error) {
-      console.warn(
-        "[status] unable to load preferred selection:",
-        error?.message || error,
-      );
-      preferredSelection = null;
-    }
-  }
+  // These branches use independent fields. Keep each ownership helper's internal
+  // write/lock ordering, but don't serialize unrelated account and routing reads.
+  const userId = userNormalized?.user_id;
+  const optionalUserValue = (load, fallback, onError) => userId
+    ? optionalStatusValue(load, fallback, onError)
+    : Promise.resolve(fallback);
+  const [iconState, skinState, selectedCardId, ownedCardIds,
+    preferredSelection, partyRows, liveMatchId] = await Promise.all([
+    optionalUserValue(() => syncProfileIconOwnershipForUser(db, userNormalized), {}),
+    optionalUserValue(() => syncSkinOwnershipForUser(db, userNormalized), {}),
+    optionalUserValue(() => db.getUserSelectedCardId(userId), null),
+    optionalUserValue(() => db.getUserOwnedCardIds(userId), []),
+    optionalUserValue(() => db.getUserPreferredSelection(userId), null, error => {
+      console.warn("[status] unable to load preferred selection:", error?.message || error);
+    }),
+    // Membership is authoritative: unlike optional customization, a failed
+    // lookup must fail status rather than masquerade as "no party".
+    db.runQuery("SELECT party_id FROM party_members WHERE name = ? LIMIT 1", [userNormalized?.name]),
+    getUserLiveMatch(db, userId),
+  ]);
   if (userNormalized) {
     userNormalized.selected_card_id = selectedCardId;
     userNormalized.owned_card_ids = ownedCardIds;
-    userNormalized.selected_profile_icon_id = selectedProfileIconId;
-    userNormalized.owned_profile_icon_ids = ownedProfileIconIds;
-    userNormalized.selected_skin_id_by_char = selectedSkinIdByCharacter;
-    userNormalized.owned_skin_ids = ownedSkinIds;
+    userNormalized.selected_profile_icon_id = iconState?.selectedProfileIconId || null;
+    userNormalized.owned_profile_icon_ids = Array.isArray(iconState?.ownedIconIds) ? iconState.ownedIconIds : [];
+    userNormalized.selected_skin_id_by_char = skinState?.selectedSkinIdByCharacter || {};
+    userNormalized.owned_skin_ids = Array.isArray(skinState?.ownedSkinIds) ? skinState.ownedSkinIds : [];
     userNormalized.preferred_selection = preferredSelection;
   }
 
@@ -129,13 +105,6 @@ async function buildStatusPayload({
     matchmaking: mmSuspendedUntilMs > now ? mmSuspendedUntilMs : null,
     chat: chatSuspendedUntilMs > now ? chatSuspendedUntilMs : null,
   };
-
-  const partyRows = await db.runQuery(
-    "SELECT party_id FROM party_members WHERE name = ? LIMIT 1",
-    [userNormalized?.name],
-  );
-
-  const liveMatchId = await getUserLiveMatch(db, userNormalized?.user_id);
 
   return {
     success: true,

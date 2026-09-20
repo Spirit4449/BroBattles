@@ -505,6 +505,7 @@ export function createGameOverScreenController({
       </div>`;
 
     document.body.appendChild(div);
+    window.__BB_NAVIGATION__?.warmLobby?.();
     void animateRewardsIntoWallet(div, myReward);
 
     let leaving = false;
@@ -518,6 +519,13 @@ export function createGameOverScreenController({
         sessionStorage.removeItem("matchId");
         sessionStorage.setItem(POST_BATTLE_LOBBY_RETURN_KEY, "1");
       } catch (_) {}
+      const myPartyId = Number(
+        (gameData?.players || []).find((p) => p.name === username)?.party_id,
+      );
+      if (window.__BB_NAVIGATION__?.prepareLobbyReturn) {
+        await window.__BB_NAVIGATION__.prepareLobbyReturn(myPartyId);
+        return;
+      }
       try {
         const res = await fetch("/status", { method: "POST" });
         if (res.ok) {
@@ -527,6 +535,8 @@ export function createGameOverScreenController({
             window.location.replace(`/party/${pid}`);
             return;
           }
+          window.location.replace(data?.banned ? '/banned' : '/');
+          return;
         }
       } catch (_) {}
 

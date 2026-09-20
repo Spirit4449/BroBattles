@@ -133,7 +133,9 @@ if (!IS_PROD) {
   app.use(webpackHotMiddleware(compiler));
   app.use(express.static(PUBLIC_DIR));
 } else {
-  app.use(express.static(DIST_DIR));
+  app.use(express.static(DIST_DIR, {
+    setHeaders: require('./helpers/staticCache').setStaticCacheHeaders,
+  }));
 }
 
 const auth = makeAuthHelpers(db, { SIGNED_COOKIE_OPTS, DISPLAY_COOKIE_OPTS });

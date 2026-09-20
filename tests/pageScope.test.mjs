@@ -11,6 +11,7 @@ test('screen lifetimes support repeated navigation without stale work', async ()
   const originalFetch = globalThis.fetch;
   const document = new EventTarget();
   document.readyState = 'complete';
+  document.querySelector = () => null;
   let paused = 0;
   let disconnected = 0;
   const window = Object.assign(new EventTarget(), {
@@ -25,6 +26,8 @@ test('screen lifetimes support repeated navigation without stale work', async ()
   try {
     const routes = [];
     const first = createPageScope((...args) => routes.push(args));
+    assert.equal(first.document.querySelector, first.document.querySelector,
+      'hot native method reads reuse a bound function');
     let calls = 0;
     const listener = () => calls++;
     first.document.addEventListener('DOMContentLoaded', listener, { once: true });

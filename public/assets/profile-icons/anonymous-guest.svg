@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200" shape-rendering="crispEdges">
+  <!-- Anonymous guest portrait: neutral head-and-shoulders profile silhouette. -->
+  <rect width="200" height="200" fill="#10233b"/>
+  <rect x="24" y="24" width="152" height="152" fill="#0c1b30"/>
+
+  <!-- generic head-and-shoulders avatar: no identity, clothing, or facial detail -->
+  <rect x="80" y="48" width="40" height="8" fill="#96d8ec"/>
+  <rect x="64" y="56" width="72" height="8" fill="#96d8ec"/>
+  <rect x="56" y="64" width="88" height="40" fill="#83c8e1"/>
+  <rect x="64" y="104" width="72" height="8" fill="#75bad6"/>
+  <rect x="72" y="112" width="56" height="16" fill="#6aabc9"/>
+
+  <rect x="64" y="128" width="72" height="8" fill="#3e719f"/>
+  <rect x="48" y="136" width="104" height="8" fill="#3e719f"/>
+  <rect x="40" y="144" width="120" height="24" fill="#315d8c"/>
+  <rect x="56" y="136" width="88" height="8" fill="#4b7cab"/>
+  <rect x="72" y="144" width="56" height="24" fill="#426f9e"/>
+</svg>

@@ -1,3 +1,4 @@
+import { loadGameFonts } from './gameScene/loadGameFonts';
 import { installDamageHitboxDebug } from './gameScene/damageHitboxDebug';
 import { bindAudio, bindGameAudio, getSettings, graphicsRenderScale, subscribeSettings } from "./site/preferences";
 import { ensureLegalAcceptance } from "./site/shell";
@@ -28,7 +29,7 @@ import { createGameOverScreenController } from "./hud/gameOverScreenController";
 import { createBattleTutorialController } from "./hud/battleTutorialController";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
 import { createGameChatController } from "./chat/gameChatController.js";
-import { isChatInputActive, setChatInputActive } from "./player";
+import { focusBattleInput, isChatInputActive, setChatInputActive } from "./player";
 import "./styles/chat.css";
 import "./styles/tutorialTips.css";
 import { createSnapshotBuffer, processSnapshotInterpolation } from "./match/snapshotBuffer";
@@ -302,6 +303,9 @@ const hud = createGameHudController({
     try {
       gameScene?._startMainBgm?.();
     } catch (_) {}
+  },
+  onCountdownStart: () => {
+    focusBattleInput();
   },
   onEnableInput: () => {
     try {
@@ -894,7 +898,12 @@ window.__BOOT_GAME__ = () =>
       if (editorSession) { const controls=document.getElementById("battle-keybind-hud"); if(controls){controls.dataset.state="collapsed";controls.style.display="none";} }
       hud.initSpectateHud?.();
       initTimerHud();
-      await initializeGame();
+      // Canvas text captures its font at creation; CSS preloads alone do not
+      // guarantee it is decoded before the first Phaser text object is made.
+      await Promise.all([
+        initializeGame(),
+        loadGameFonts(document.fonts),
+      ]);
       if (!gameData) throw new Error('Unable to initialize this battle');
       await loadMode(gameData?.modeId);
       if (window.__BB_PAGE_SCOPE__ && !window.__BB_PAGE_SCOPE__.active) return;

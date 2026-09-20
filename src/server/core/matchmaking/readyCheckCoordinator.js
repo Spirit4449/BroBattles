@@ -11,7 +11,7 @@ function createReadyCheckCoordinator({
   function startReadyCheck(matchId, userIds) {
     const deadline = Date.now() + 10_000;
     const state = {
-      userIds: new Set(userIds),
+      userIds: new Set(userIds.map(Number)),
       ready: new Set(),
       deadline,
       timer: null,
@@ -40,7 +40,6 @@ function createReadyCheckCoordinator({
       if (state.ready.size !== state.userIds.size) return;
 
       clearInterval(state.timer);
-      readyStates.delete(matchId);
       await db.runQuery("UPDATE matches SET status='live' WHERE match_id= ?", [
         matchId,
       ]);
@@ -99,7 +98,10 @@ function createReadyCheckCoordinator({
       } catch (error) {
         clearInterval(state.timer); readyStates.delete(matchId);
         await cancelMatch(matchId, 'Unable to complete ready check');
-      } finally { state.checking = false; }
+      } finally {
+        if (state.ready.size === state.userIds.size || Date.now() >= state.deadline) readyStates.delete(matchId);
+        state.checking = false;
+      }
     };
 
     state.timer = setInterval(() => { void check().catch((error) => console.warn("[ready] cancellation failed:", error.message)); }, 250);
@@ -114,6 +116,7 @@ function createReadyCheckCoordinator({
   }
 
   return {
+    isActive: (matchId) => readyStates.has(Number(matchId)),
     startReadyCheck,
     handleReadyAck,
   };

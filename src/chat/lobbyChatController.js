@@ -986,7 +986,11 @@ export function createLobbyChatController({
   });
 
   return {
-    refresh: () => void loadHistory(),
+    refresh: () => {
+      syncHeader();
+      syncLobbyChatVisibility();
+      if (currentPartyId()) void loadHistory();
+    },
     open: () => setOpen(true),
     close: () => setOpen(false),
     destroy: () => {

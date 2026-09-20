@@ -39,6 +39,7 @@ export function preloadGameAssets({
   scene.load.audio("sfx-coin-pickup", `${staticPath}/coin.mp3`);
   scene.load.audio("sfx-gem-pickup", `${staticPath}/gem.mp3`);
   scene.load.audio("sfx-noammo", `${staticPath}/noammo.mp3`);
+  scene.load.audio("sfx-nosuper", `${staticPath}/nosuper.mp3`);
 
   scene.load.spritesheet(
     "duck-guard-impact",

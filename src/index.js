@@ -1,4 +1,5 @@
 import { revealLobby, watchLobbyLoading, showLobbyLoadError } from "./lobby/lobbyReveal.js";
+import { createLazyInitializer, deferLobbySetup } from "./lobby/deferredSetup.js";
 import { ensureLegalAcceptance, setNavigationGuard } from "./site/shell";
 import "./site/shell.js";
 import { escapeHtml, profileFetchJson, fetchLobbyJson, openOverlay, closeOverlay, isOverlayOpen } from './lobby/ui';
@@ -12,7 +13,7 @@ import { setSelectionProgressionUser } from './lib/gameSelectionCatalog';
 import { registerMapCatalog } from './lib/gameSelectionCatalog';
 import { registerMapMetadata } from './maps/manifest';
 import { sonner } from "./lib/sonner.js";
-import { ensurePartyPixelFrame, checkIfInParty, createParty, leaveParty, socketInit, applyLobbySelection, renderPartyMembers, getPartyInteractionContext, initializeModeDropdown, initReadyToggle, setSlotLevelBadge, showPartyJoinRequestScreen, playLobbySpawnAnimation } from "./party.js";
+import { ensurePartyPixelFrame, resetLobbyRoute, checkIfInParty, createParty, leaveParty, socketInit, applyLobbySelection, renderPartyMembers, getPartyInteractionContext, initializeModeDropdown, initReadyToggle, setSlotLevelBadge, showPartyJoinRequestScreen, playLobbySpawnAnimation } from "./party.js";
 import socket, { ensureSocketConnected, waitForConnect } from "./socket.js";
 import {
   initializeCharacterSelect,
@@ -614,7 +615,7 @@ async function initializeLobbyHints({ shop }) {
         {
           id: "guest",
           anchor: "#username-button",
-          icon: "/assets/profile-icons/blob.webp",
+          icon: "/assets/profile-icons/anonymous-guest.webp",
           title: "Playing as Guest",
           message: "Sign up to save your progress.",
           priority: 100,
@@ -993,7 +994,7 @@ function showSuspensionPopupFromStatus(statusData) {
   });
 }
 
-const existingPartyId = checkIfInParty();
+let existingPartyId = checkIfInParty();
 
 function getJoinDebugMeta(extra = {}) {
   return {
@@ -1010,8 +1011,10 @@ function getJoinDebugMeta(extra = {}) {
 
 watchLobbyLoading();
 
-// Fetch user status upfront
-const statusPromise = fetch("/status", {
+// Results navigation already obtained fresh status. Consume it only in the
+// destination scope; ordinary entry and failed returns use the usual request.
+const returnStatus = window.__BB_NAVIGATION__?.consumeLobbyReturnStatus?.();
+const statusPromise = (returnStatus ? Promise.resolve(returnStatus) : fetch("/status", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   credentials: "same-origin",
@@ -1026,7 +1029,7 @@ const statusPromise = fetch("/status", {
       }),
     );
     return res.json();
-  })
+  }))
   .then(async (data) => {
     console.log(
       "[join-debug] /status payload",
@@ -1090,7 +1093,7 @@ if (existingPartyId) {
   });
 }
 
-async function bootstrapPartyData(partyId) {
+async function bootstrapPartyData(partyId, signal) {
   console.log(
     "[join-debug] bootstrapPartyData starting",
     getJoinDebugMeta({
@@ -1106,7 +1109,9 @@ async function bootstrapPartyData(partyId) {
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
       body: JSON.stringify({ partyId }),
+      signal,
     });
+    if (signal?.aborted) return;
 
     console.log(
       "[join-debug] /partydata response",
@@ -1148,6 +1153,7 @@ async function bootstrapPartyData(partyId) {
     }
 
     const data = await resp.json();
+    if (signal?.aborted || String(partyId) !== String(checkIfInParty())) return;
     console.log(
       "[join-debug] /partydata payload",
       getJoinDebugMeta({
@@ -1207,7 +1213,9 @@ async function bootstrapPartyData(partyId) {
       sound: "notification",
     });
   } catch (error) {
+    if (signal?.aborted) return;
     showLobbyLoadError();
+    if (signal) throw error;
     console.error(
       "[join-debug] bootstrapPartyData failed",
       getJoinDebugMeta({
@@ -1250,9 +1258,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   const gemResourceButton = document.getElementById("gem-resource-button");
 
   document.getElementById("username-text").textContent = userData.name;
-  const profilePopup = initProfilePopup();
+  const ensureProfilePopup = createLazyInitializer(initProfilePopup);
+  const profilePopup = {
+    open: (...args) => ensureProfilePopup()?.open(...args),
+    close: () => ensureProfilePopup()?.close(),
+  };
   __lobbyProfilePopup = profilePopup;
-  const shop = initializeShop({
+  const ensureShop = createLazyInitializer(() => initializeShop({
     userData,
     guest,
     onWalletChange: (wallet) => {
@@ -1265,7 +1277,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     onProfileInvalidate: () => {
       profileController.invalidate();
     },
-  });
+  }));
+  const shop = {
+    open: (...args) => ensureShop().open(...args),
+    getFeaturedSale: () => ensureShop().getFeaturedSale(),
+  };
   shopButton?.addEventListener("click", () => void shop.open("sales"));
   coinResourceButton?.addEventListener(
     "click",
@@ -1288,11 +1304,20 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     });
   }
-  if (new URLSearchParams(location.search).get('profile') === 'self') {
-    profilePopup?.open?.();
-    const url = new URL(location.href);url.searchParams.delete('profile');
-    history.replaceState(null, '', url.pathname + url.search + url.hash);
-  }
+  deferLobbySetup([
+    () => {
+      ensureProfilePopup();
+      if (new URLSearchParams(location.search).get('profile') === 'self') {
+        profilePopup.open();
+        const url = new URL(location.href);
+        url.searchParams.delete('profile');
+        history.replaceState(null, '', url.pathname + url.search + url.hash);
+      }
+    },
+    ensureShop,
+    refreshTrophyClaimAvailability,
+    () => initializeLobbyHints({ shop }),
+  ]);
   const initialCharClass = String(userData.char_class || "ninja").toLowerCase();
   const initialSkinId = String(
     userData?.selected_skin_id_by_char?.[initialCharClass] || "",
@@ -1388,7 +1413,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     .querySelector("#leaderboard-overlay .trophy-overlay-backdrop")
     ?.addEventListener("click", () => closeOverlay("leaderboard-overlay"));
 
-  refreshTrophyClaimAvailability();
   wirePartyOverlayControls();
 
   searchPartiesButton?.addEventListener("click", () => {
@@ -1436,13 +1460,36 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   initializeModeDropdown(); // Initialize mode dropdown functionality for both party and lobby
 
+  createPartyButton.addEventListener('click', () => {
+    if (checkIfInParty()) void leaveParty();
+    else createParty();
+  });
+  // Delegated click handler so dynamically-updated Invite buttons work
+  if (lobby) {
+    lobby.addEventListener("click", (e) => {
+      const btn = e.target && e.target.closest && e.target.closest(".invite");
+      if (!btn) return;
+      // Only act when in a party
+      if (!existingPartyId) return;
+      const link = btn.dataset.inviteLink || window.location.href;
+      navigator.clipboard.writeText(link);
+      sonner(
+        "Invite link copied to clipboard",
+        "Share this with your friends to invite them to the party",
+        undefined,
+        undefined,
+        { duration: 2000 },
+      );
+    });
+  }
+
   // Initialize socket events for both party and solo flows once DOM is ready
 
   if (existingPartyId) {
     createPartyButton.textContent = "Leave Party";
     createPartyButton.style.background =
       "linear-gradient(135deg, #d63939, #cf4545)";
-    createPartyButton.addEventListener("click", leaveParty);
+
     createPartyButton.setAttribute("data-sound", "cancel2");
 
     // Ensure current Invite badges are visible and clickable in party
@@ -1455,37 +1502,15 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     });
 
-    // Delegated click handler so dynamically-updated Invite buttons work
-    const lobby = document.getElementById("lobby-area");
-    if (lobby) {
-      lobby.addEventListener("click", (e) => {
-        const btn = e.target && e.target.closest && e.target.closest(".invite");
-        if (!btn) return;
-        // Only act when in a party
-        if (!existingPartyId) return;
-        const link = btn.dataset.inviteLink || window.location.href;
-        navigator.clipboard.writeText(link);
-        sonner(
-          "Invite link copied to clipboard",
-          "Share this with your friends to invite them to the party",
-          undefined,
-          undefined,
-          { duration: 2000 },
-        );
-      });
-    }
     // Bind Ready button in party flow
     try {
       initReadyToggle();
     } catch {}
 
-    try {
-      await loadPartySettings();
-    } catch (_) {}
+    // Settings are fetched fresh when opened; the roster supplies permissions
+    // needed to show the button without a separate startup request.
     syncPartySettingsButtonVisibility();
   } else {
-    createPartyButton.addEventListener("click", createParty);
-
     // Not in a party: hide Invite badges entirely
     inviteStatus.forEach((status) => {
       status.style.display = "none";
@@ -1525,7 +1550,38 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   socket.off("party:members", syncPartySettingsButtonVisibility);
   socket.on("party:members", syncPartySettingsButtonVisibility);
-  void initializeLobbyHints({ shop });
+
+  window.__BB_NAVIGATION__?.setLobbyNavigator(async (url, signal) => {
+    existingPartyId = checkIfInParty();
+    resetLobbyRoute(existingPartyId);
+    lobbyChatController.close();
+    closeOverlay('party-discovery-overlay');
+    closeOverlay('party-settings-overlay');
+    createPartyButton.disabled = false;
+    createPartyButton.textContent = existingPartyId ? 'Leave Party' : 'Create Party';
+    createPartyButton.style.background = existingPartyId ? 'linear-gradient(135deg, #d63939, #cf4545)' : '';
+    if (existingPartyId) createPartyButton.setAttribute('data-sound', 'cancel2');
+    else createPartyButton.removeAttribute('data-sound');
+    if (existingPartyId) {
+      await bootstrapPartyData(existingPartyId, signal);
+    } else {
+      const response = await fetch('/status', { method: 'POST', credentials: 'same-origin', signal });
+      if (!response.ok) throw new Error('Unable to load your lobby');
+      const status = await response.json();
+      if (signal.aborted) return;
+      if (status.party_id) { window.location.href = `/party/${status.party_id}`; return; }
+      if (status.userData) Object.assign(userData, status.userData);
+      const character = userData.char_class || 'ninja';
+      renderPartyMembers({ partyId: null, immediate: true, members: [{
+        ...userData, team: 'team1', status: 'online',
+        selected_skin_asset_url: buildCharacterSkinBodyUrl(character, userData.selected_skin_id_by_char?.[character]),
+      }], botSlots: [] });
+    }
+    if (signal.aborted) return;
+    syncPartySettingsButtonVisibility();
+    lobbyChatController.refresh();
+    document.dispatchEvent(new Event('lobby:route-changed'));
+  });
 });
 
 document.addEventListener("DOMContentLoaded", async () => {

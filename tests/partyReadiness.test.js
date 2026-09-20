@@ -199,3 +199,17 @@ test('first ready without accepted terms cannot enqueue, but unready still works
   assert.equal(f.joins, 0);
   assert.equal((await f.client('Owner').ready(false)).ok, true);
 });
+
+test('unready after assembly preserves readiness and emits no cancellation', async () => {
+  const f = fixture();
+  await f.client('Owner').ready(true);
+  f.party.status = 'ready_check';
+  f.mm.queueLeave = async () => ({ cancelled: false, matchId: 77 });
+  const query = f.db.runQuery;
+  f.db.runQuery = (sql, params) => sql.includes('FROM matches') ? Promise.resolve([{ match_id: 77 }]) : query(sql, params);
+  const result = await f.client('Owner').ready(false);
+  assert.deepEqual(result, { ok: true, ready: true, cancelled: false, matchId: 77 });
+  assert.equal(f.party.status, 'ready_check');
+  assert.equal(f.members[0].status, 'ready');
+  assert.ok(!f.events.some(event => event.event === 'match:cancelled'));
+});

@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <link rel="preload" as="image" href="/assets/loadingscreen.webp" fetchpriority="high" />
     <script src="/bundles/navigation.bundle.js"></script>
     <meta charset="UTF-8" />
     <meta
@@ -17,24 +18,18 @@
       href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap"
       rel="stylesheet"
     />
+
+    <!-- Keep the authoritative roster hidden even before external CSS arrives. -->
     <style>
       #lobby-area[data-loading] > * { visibility: hidden; }
       #lobby-loading { display: none; }
-      #lobby-area[data-loading] > #lobby-loading {
-        visibility: visible; display: grid; place-content: center; gap: 12px;
-        position: absolute; inset: 0; text-align: center; color: white;
-        animation: lobby-loading-appear 180ms 500ms both;
-      }
-      @keyframes lobby-loading-appear { from { opacity: 0; } to { opacity: 1; } }
-      @media (prefers-reduced-motion: reduce) {
-        #lobby-area[data-loading] > #lobby-loading { animation: none; }
-      }
     </style>
     <script src="/socket.io/socket.io.js"></script>
     <link rel="stylesheet" href="/bundles/index.css" />
     <link rel="stylesheet" href="/styles/ui-system.css" />
     <link rel="stylesheet" href="/styles/lobby-frames.css?v=3" />
     <link rel="stylesheet" href="/styles/lobby-responsive.css" />
+    <link rel="stylesheet" href="/styles/loading.css" />
   </head>
   <body data-bb-screen="lobby">
     <script>
@@ -199,9 +194,10 @@
     </div>
 
     <div id="lobby-area" class="mode-1" data-loading aria-busy="true">
-      <div id="lobby-loading" role="status">
-        <span>Preparing lobby…</span>
-        <button type="button" onclick="window.location.reload()" hidden>Retry</button>
+      <div id="lobby-loading" role="status" aria-label="Loading lobby">
+        <span class="bb-loading-rune" aria-hidden="true"></span>
+        <span class="lobby-loading-label" hidden>Loading lobby…</span>
+        <button class="bb-loading-retry" type="button" onclick="window.location.reload()" hidden>Try again</button>
       </div>
       <div class="platform your-team-1" data-team="your-team" data-slot="1">
         <div class="character-slot empty" id="your-slot-1">

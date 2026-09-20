@@ -8,12 +8,12 @@ async function playersForPicks(q, picks, lock = false) {
     const suffix = lock ? " FOR UPDATE" : "";
     const rows = ticket.party_id
       ? await q(
-          `SELECT u.user_id, u.name, u.char_class, u.char_levels, u.trophies, u.selected_profile_icon_id AS profile_icon_id, u.selected_skin_id_by_char, pm.party_id, pm.team
+          `SELECT u.user_id, u.socket_id, u.name, u.char_class, u.char_levels, u.trophies, u.selected_profile_icon_id AS profile_icon_id, u.selected_skin_id_by_char, pm.party_id, pm.team
           FROM party_members pm JOIN users u ON u.name = pm.name WHERE pm.party_id = ? ORDER BY u.user_id${suffix}`,
           [ticket.party_id],
         )
       : await q(
-          `SELECT user_id, name, char_class, char_levels, trophies, selected_profile_icon_id AS profile_icon_id, selected_skin_id_by_char FROM users WHERE user_id = ?${suffix}`,
+          `SELECT user_id, socket_id, name, char_class, char_levels, trophies, selected_profile_icon_id AS profile_icon_id, selected_skin_id_by_char FROM users WHERE user_id = ?${suffix}`,
           [ticket.user_id],
         );
     const counts = { team1: 0, team2: 0 };
@@ -40,7 +40,7 @@ async function playersForPicks(q, picks, lock = false) {
       counts.team1 + botCounts.team1 !== Number(ticket.team1_count) ||
       counts.team2 + botCounts.team2 !== Number(ticket.team2_count)
     )
-      throw new Error("Queued party changed; queue again.");
+      throw Object.assign(new Error("Queued party changed; queue again."), { code: "STALE_TICKET" });
   }
   if (new Set(players.map((p) => p.user_id)).size !== players.length)
     throw new Error("Duplicate match participant.");
@@ -182,7 +182,7 @@ function createMatchAssemblyManager({
         ]);
       return {
         matchId,
-        players,
+        players: players.map(({ socket_id, ...player }) => player),
         selection: { modeId, modeVariantId, mapId: Number(map) },
       };
     });

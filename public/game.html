@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <link rel="preload" as="image" href="/assets/loadingscreen.webp" fetchpriority="high" />
     <script src="/bundles/navigation.bundle.js"></script>
     <meta charset="UTF-8" />
     <meta
@@ -22,6 +23,7 @@
     <link rel="preload" href="/assets/PressStart2P.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/styles/game.css" />
     <link rel="stylesheet" href="/styles/ui-system.css" />
+    <link rel="stylesheet" href="/styles/loading.css" />
   </head>
 
   <body data-bb-screen="game">
@@ -290,16 +292,19 @@
       aria-live="polite"
       aria-label="Loading"
     >
-      <p id="loading-text">Preparing your battle...</p>
+      <p id="loading-text">Preparing your battle…</p>
       <div class="loading-shell" id="loading-shell">
         <div class="loading-fill" id="loading-bar-fill"></div>
-        <span id="loading-percent">0%</span>
+        <span id="loading-percent" aria-hidden="true">0%</span>
       </div>
     </div>
 
     <!-- Helper: update progress -->
     <script>
       window.__BB_NAVIGATION__.runInline(function(window, document, location, setTimeout, clearTimeout, setInterval, clearInterval) {
+
+      const loadingPresentationReady = window.__BB_NAVIGATION__.beginBattleLoading();
+      let gameRevealPending = false;
 
       function updateLoading(progress, text) {
         // Keep last progress in a closure/static var
@@ -329,15 +334,19 @@
         if (pct >= 100) revealGameWhenReady();
       }
 
-      function revealGameWhenReady() {
+      async function revealGameWhenReady() {
         const gameBg = document.getElementById("game-bg");
         if (
+          gameRevealPending ||
           Number(updateLoading.lastPct || 0) < 100 ||
           gameBg?.dataset.ready !== "true"
         ) {
           return;
         }
 
+        gameRevealPending = true;
+        await loadingPresentationReady;
+        if (!window.__BB_PAGE_SCOPE__?.active) return;
         document.getElementById("loading-wrap")?.classList.add("hidden");
         document
           .getElementById("matchmaking-screen")

@@ -8,19 +8,14 @@ const bindings = 'window,document,location,setTimeout,clearTimeout,setInterval,c
 class PageRuntimePlugin {
   apply(compiler) {
     const exclude = /bundles\/navigation(?:\.|$)/;
-    new BannerPlugin({ raw: true, exclude, banner: `;(function(__scope){if(!__scope)return;(function({${bindings}}){` }).apply(compiler);
-    new BannerPlugin({ raw: true, footer: true, exclude, banner: '\n})(__scope);})(window.__BB_NAVIGATION__ ? window.__BB_NAVIGATION__.scriptScope() : window);' }).apply(compiler);
+    new BannerPlugin({ raw: true, test: /\.js$/, exclude, banner: `;(function(__scope){if(!__scope)return;(function({${bindings}}){` }).apply(compiler);
+    new BannerPlugin({ raw: true, footer: true, test: /\.js$/, exclude, banner: '\n})(__scope);})(window.__BB_NAVIGATION__ ? window.__BB_NAVIGATION__.scriptScope() : window);' }).apply(compiler);
     compiler.hooks.thisCompilation.tap('BattlePreload', compilation => {
       compilation.hooks.processAssets.tap({ name: 'BattlePreload', stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL }, () => {
         const root = path.resolve(compiler.context, 'public/assets');
         const urls = compilation.getAssets().filter(asset => /^bundles\/mode-.*\.(js|css)$/.test(asset.name)).map(asset => `/${asset.name}`);
-        // A bounded selection of shared battle art and sounds. Prioritize base
-        // character atlases; do not download every skin or menu illustration.
-        for (const character of ['ninja', 'thorg', 'draven', 'wizard', 'huntress', 'gloop']) {
-          for (const name of ['animations.json', 'spritesheet.webp']) {
-            if (fs.existsSync(path.join(root, character, name))) urls.push(`/assets/${character}/${name}`);
-          }
-        }
+        // Characters/skins come from the current lobby roster. This manifest
+        // contains only shared assets and optional mode chunks.
         for (const folder of ['movement', 'parachutes', 'tombstones']) {
           const dir = path.join(root, folder);
           if (fs.existsSync(dir)) for (const file of fs.readdirSync(dir)) {

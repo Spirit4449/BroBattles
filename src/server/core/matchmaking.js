@@ -67,6 +67,56 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
       botSlots: queueTicketManager.getBotSlotsForTicket(pick.ticket),
     }));
 
+  // Serialize queue mutations with assembly, including requests arriving during DB awaits.
+  let pendingOperation = Promise.resolve();
+  function inQueueOrder(operation) {
+    const next = pendingOperation.catch(() => {}).then(operation);
+    pendingOperation = next;
+    return next;
+  }
+
+  async function recoverAbandonedMatch(args) {
+    const match = await queueTicketManager.activeMatch(args);
+    if (match?.status === "queued" && !readyCheckCoordinator.isActive(match.match_id)) {
+      await cancelMatch(match.match_id, "Match interrupted. Please ready up again.");
+      return null;
+    }
+    return match;
+  }
+
+  async function queueStatus(args) {
+    const match = await recoverAbandonedMatch(args);
+    if (match) return {
+      state: match.status === "live" && !readyCheckCoordinator.isActive(match.match_id) ? "live" : "matched",
+      matchId: match.match_id,
+    };
+    const rows = await db.runQuery(
+      `SELECT ticket_id FROM match_tickets WHERE ${args.partyId ? "party_id" : "user_id"}=? AND status='queued'`,
+      [args.partyId || args.userId],
+    );
+    if (rows.length) {
+      lastProgress.clear();
+      await ensureLoop();
+    }
+    return { state: rows.length ? "queued" : "missing" };
+  }
+
+  async function discardStaleTicket(ticket) {
+    const result = await queueTicketManager.queueLeave({ partyId: ticket.party_id, userId: ticket.user_id });
+    if (result?.cancelled === false) {
+      await db.runQuery("DELETE FROM match_tickets WHERE ticket_id=? AND status='queued'", [ticket.ticket_id]);
+      return;
+    }
+    const payload = { reason: "Your matchmaking ticket expired or your party changed. Please ready up again." };
+    if (ticket.party_id) {
+      await db.runQuery("UPDATE users u JOIN party_members pm ON pm.name=u.name SET u.status='online' WHERE pm.party_id=? AND u.status='ready'", [ticket.party_id]);
+      io.to(`party:${ticket.party_id}`).emit("match:cancelled", payload);
+    } else {
+      const rows = await db.runQuery("SELECT socket_id FROM users WHERE user_id=?", [ticket.user_id]);
+      io.sockets.sockets.get(rows[0]?.socket_id)?.emit("match:cancelled", payload);
+    }
+  }
+
   let cachedRealUsernames = [];
   let lastRealUsernameFetch = 0;
   async function getRealUsernames() {
@@ -88,7 +138,11 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
   async function ensureLoop() {
     activity++;
     if (!loop) {
-      loop = setInterval(tick, 1000);
+      loop = setInterval(() => {
+        if (ticking) return;
+        ticking = true;
+        void inQueueOrder(tick).finally(() => { ticking = false; }).catch((error) => console.warn("[mm] loop failed:", error.message));
+      }, 1000);
       loop.unref?.();
     }
   }
@@ -109,12 +163,36 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
       if (ids.has(items[i].ticket_id)) items.splice(i, 1);
   }
   async function tick() {
-    if (ticking || runtimeConfig?.get?.().maintenanceMode) return;
-    ticking = true;
+    if (runtimeConfig?.get?.().maintenanceMode) return;
     try {
-      const queued = await db.runQuery(
-        "SELECT * FROM match_tickets WHERE status='queued' AND (claimed_by IS NULL OR claimed_by='') ORDER BY created_at",
+      const persisted = await db.runQuery(
+        "SELECT * FROM match_tickets WHERE status='queued' ORDER BY created_at",
       );
+      const queued = [];
+
+      for (const ticket of persisted) {
+        try {
+          if (await recoverAbandonedMatch({ partyId: ticket.party_id, userId: ticket.user_id })) {
+            await db.runQuery("DELETE FROM match_tickets WHERE ticket_id=? AND status='queued'", [ticket.ticket_id]);
+            continue;
+          }
+          // Claims are obsolete: current assembly consumes tickets in one transaction.
+          if (ticket.claimed_by) {
+            await db.runQuery("UPDATE match_tickets SET claimed_by=NULL WHERE ticket_id=? AND status='queued'", [ticket.ticket_id]);
+            ticket.claimed_by = null;
+          }
+          const players = await playersForPicks(db.runQuery.bind(db), withBotSlots([{ ticket, flip: false }]));
+          const oldEnough = Date.now() - new Date(ticket.created_at).getTime() > 15000;
+          if (!players.length || (oldEnough && players.some((p) => !io.sockets.sockets.has(p.socket_id)))) {
+            await discardStaleTicket(ticket);
+          } else {
+            queued.push(ticket);
+          }
+        } catch (error) {
+          if (error.code !== "STALE_TICKET") throw error;
+          await discardStaleTicket(ticket);
+        }
+      }
       const activeIds = new Set(queued.map((t) => t.ticket_id));
       for (const id of drafts.keys()) if (!activeIds.has(id)) drafts.delete(id);
       if (!queued.length) return await maybeStopLoop();
@@ -215,13 +293,12 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
       }
     } catch (error) {
       console.warn("[mm] tick failed:", error.message);
-    } finally {
-      ticking = false;
     }
   }
   async function queueJoin(args) {
     const runtime = runtimeConfig?.get?.();
     if (runtime?.maintenanceMode) throw Object.assign(new Error("New matches currently disabled for maintenance."), { code: "MAINTENANCE", maintenanceUntil: runtime.maintenanceUntil });
+    await recoverAbandonedMatch(args);
     return queueTicketManager.queueJoin(args);
   }
   async function queueLeave(args) {
@@ -289,6 +366,10 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
     } catch (error) {
       console.warn("[bots] cancellation cleanup deferred:", error.message);
     }
+    // Reset authoritative readiness as well as the overlay so the next ready starts cleanly.
+    await db.runQuery(
+      "UPDATE users u JOIN match_participants mp ON mp.user_id=u.user_id SET u.status='online' WHERE mp.match_id=? AND u.status='ready'", [matchId],
+    );
     // Reset any involved parties to idle
     try {
       const rows = await db.runQuery(
@@ -323,12 +404,20 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
   void ensureLoop(); // Resume persisted queues after a server restart.
 
   return {
-    queueJoin,
-    queueLeave,
+    queueJoin: (args) => inQueueOrder(() => queueJoin(args)),
+    queueLeave: (args) => inQueueOrder(() => queueLeave(args)),
+    queueStatus: (args) => inQueueOrder(() => queueStatus(args)),
     handleReadyAck,
-    createBotFilledMatch,
-    handleDisconnect,
-    invalidatePartyTicket,
+    createBotFilledMatch: (args) => inQueueOrder(() => createBotFilledMatch(args)),
+    handleDisconnect: (name) => inQueueOrder(async () => {
+      const user = await db.runQuery("SELECT user_id FROM users WHERE name=? LIMIT 1", [name]);
+      if (user[0] && await queueTicketManager.activeMatch({ userId: user[0].user_id })) return;
+      return handleDisconnect(name);
+    }),
+    invalidatePartyTicket: (id) => inQueueOrder(async () => {
+      if (await queueTicketManager.activeMatch({ partyId: id })) return;
+      return invalidatePartyTicket(id);
+    }),
   };
 }
 

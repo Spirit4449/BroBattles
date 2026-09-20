@@ -31,3 +31,22 @@ test("lobby reserves late-loaded header and selector geometry", () => {
     );
   }
 });
+
+test("lobby starts with a spinner and exposes text only when loading fails", () => {
+  const html = read("public/index.html");
+  const reveal = read("src/lobby/lobbyReveal.js");
+
+  assert.match(html, /class="bb-loading-rune" aria-hidden="true"/);
+  assert.doesNotMatch(html, /lobby-loading-panel|lobby-loading-title|lobby-loading-orbit/);
+  assert.match(html, /class="lobby-loading-label" hidden>Loading lobby…<\/span>/);
+  assert.doesNotMatch(html, /Preparing lobby/);
+  assert.match(reveal, /\.bb-loading-rune"\)\?\.setAttribute\("hidden", ""\)/);
+  assert.match(reveal, /Taking longer to load your lobby…/);
+});
+
+test("creating a party does not attach a duplicate UI sound", () => {
+  const source = read("src/index.js");
+
+  assert.match(source, /else createPartyButton\.removeAttribute\('data-sound'\)/);
+  assert.doesNotMatch(source, /existingPartyId \? 'cancel2' : 'party'/);
+});

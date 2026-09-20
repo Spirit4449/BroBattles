@@ -27,6 +27,16 @@ function createQueueTicketManager({
     selectionToLegacyMode,
   } = require("../../helpers/gameSelectionCatalog");
 
+  async function activeMatch({ partyId = null, userId = null }) {
+    const rows = await db.runQuery(
+      `SELECT m.match_id, m.status FROM matches m
+       JOIN match_participants mp ON mp.match_id=m.match_id
+       WHERE mp.${partyId ? "party_id" : "user_id"}=? AND m.status IN ('queued','live')
+       ORDER BY m.match_id DESC LIMIT 1`, [partyId || userId],
+    );
+    return rows[0] || null;
+  }
+
   async function queueJoin({
     partyId = null,
     userId = null,
@@ -37,6 +47,10 @@ function createQueueTicketManager({
     side = null,
     botSlots = [],
   }) {
+    if (!partyId && !userId) throw new Error("Authentication required.");
+    if (await activeMatch({ partyId, userId })) {
+      throw Object.assign(new Error("A match has already been found."), { code: "MATCH_FOUND" });
+    }
     const selection = normalizeSelection({
       modeId,
       modeVariantId,
@@ -121,10 +135,12 @@ function createQueueTicketManager({
   }
 
   async function queueLeave({ partyId = null, userId = null }) {
+    const match = await activeMatch({ partyId, userId });
+    if (match) return { cancelled: false, matchId: match.match_id };
     const field = partyId ? "party_id" : "user_id";
     const id = partyId || userId;
     const r = await db.runQuery(
-      `DELETE FROM match_tickets WHERE ${field} = ?`,
+      `DELETE FROM match_tickets WHERE ${field} = ? AND status='queued'`,
       [id],
     );
     reservedBotSlots.delete(partyId ? `p:${Number(partyId)}` : `u:${Number(userId)}`);
@@ -139,6 +155,7 @@ function createQueueTicketManager({
     );
     lastProgress.clear();
     await maybeStopLoop();
+    return { cancelled: true };
   }
 
   async function handleDisconnect(name) {
@@ -185,6 +202,7 @@ function createQueueTicketManager({
   }
 
   return {
+    activeMatch,
     queueJoin,
     queueLeave,
     handleDisconnect,

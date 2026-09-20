@@ -35,6 +35,7 @@ test('game asset preload completes with the Phaser 3.70 loader API (no font meth
     powerupTypes: ['test'], powerupAssetDir: {}, preloadAllCharacters() { charactersLoaded = true; } }));
   assert.ok(charactersLoaded);
   assert.ok(queued.includes('tiles'));
+  assert.ok(queued.includes('sfx-nosuper'), 'preloads the super-not-ready cue');
   assert.ok(queued.includes('pu-tick-test'), 'preload reaches the end of the asset queue');
 });
 

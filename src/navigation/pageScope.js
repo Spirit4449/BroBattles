@@ -129,8 +129,11 @@ export function createPageScope(navigate) {
       return observer;
     };
   }
+  const facades = new WeakMap();
   function facade(target) {
-    return new Proxy({}, {
+    if (facades.has(target)) return facades.get(target);
+    const methods = new Map();
+    const proxy = new Proxy({}, {
       get(_, key) {
         if (key === '__BB_PAGE_SCOPE__') return scope;
         if (key === 'addEventListener') return (...args) => listen(target, ...args);
@@ -146,7 +149,12 @@ export function createPageScope(navigate) {
         if (target === window && key === 'matchMedia') return query => facade(window.matchMedia(query));
         if (target === window && key in scope) return scope[key];
         const value = target[key];
-        return typeof value === 'function' && !/^[A-Z]/.test(String(key)) ? value.bind(target) : value;
+        if (typeof value !== 'function' || /^[A-Z]/.test(String(key))) return value;
+        const cached = methods.get(key);
+        if (cached?.original === value) return cached.bound;
+        const bound = value.bind(target);
+        methods.set(key, { original: value, bound });
+        return bound;
       },
       set(_, key, value) {
         if (!active) return true;
@@ -163,6 +171,8 @@ export function createPageScope(navigate) {
       },
       has: (_, key) => key in target,
     });
+    facades.set(target, proxy);
+    return proxy;
   }
   scope.window = facade(window);
   scope.document = facade(document);

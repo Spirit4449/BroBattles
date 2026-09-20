@@ -10,7 +10,13 @@ export function showLobbyLoadError() {
   const lobby = document.getElementById("lobby-area");
   if (!lobby?.hasAttribute("data-loading")) return;
   const loading = document.getElementById("lobby-loading");
-  loading.querySelector("span").textContent = "Taking longer to load your lobby…";
+  loading.classList.add("is-error");
+  loading.querySelector(".bb-loading-rune")?.setAttribute("hidden", "");
+  const label = loading.querySelector(".lobby-loading-label");
+  if (label) {
+    label.textContent = "Taking longer to load your lobby…";
+    label.hidden = false;
+  }
   loading.querySelector("button").hidden = false;
 }
 
@@ -18,6 +24,7 @@ export async function revealLobby() {
   const lobby = document.getElementById("lobby-area");
   if (!lobby?.hasAttribute("data-loading") || revealPending) return;
   revealPending = true;
+  window.__BB_NAVIGATION__?.progress(94);
   // Allow cached sprites to decode without holding the lobby on a slow asset.
   const images = [...lobby.querySelectorAll("img")].filter(img => img.getAttribute("src"));
   let assetTimer;

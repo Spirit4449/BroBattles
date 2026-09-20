@@ -8,7 +8,7 @@ export const COMBAT_MOUSE_CONFIG = Object.freeze({
   lookAhead: 72,
 });
 
-export function createCombatMouseController({ scene, canPlay, canCapture = canPlay, onRelease, config = COMBAT_MOUSE_CONFIG, getPreferences = () => ({ sensitivity: 1, autoHideCursor: true }) }) {
+export function createCombatMouseController({ scene, canPlay, canCapture = canPlay, canPrepare = canCapture, onRelease, config = COMBAT_MOUSE_CONFIG, getPreferences = () => ({ sensitivity: 1, autoHideCursor: true }) }) {
   const canvas = scene.game.canvas;
   const doc = canvas.ownerDocument;
   const win = doc.defaultView;
@@ -45,18 +45,25 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
   let destroyed = false;
   let fallback = false;
   let cursorReleased = false;
+  let preparedForBattle = false;
   let wasPlayable = false;
   const listeners = [];
   const listen = (target, name, fn) => {
     target.addEventListener(name, fn, true);
     listeners.push(() => target.removeEventListener(name, fn, true));
   };
+  const showCursor = (hidden) => {
+    canvas.style.cursor = hidden ? 'none' : '';
+    doc.body?.classList?.toggle('battle-cursor-hidden', hidden);
+    if (hint) hint.style.display = hidden ? '' : 'none';
+  };
   const release = () => {
     const hadInput = active || pending;
     active = false;
     pending = false;
+    preparedForBattle = false;
     cursorReleased = true;
-    canvas.style.cursor = '';
+    showCursor(false);
     endDrag();
     scene._resetAimCameraBounds?.();
     if (hadInput) onRelease();
@@ -70,7 +77,7 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
     pending = false;
     active = true;
     cursorReleased = false;
-    canvas.style.cursor = 'none';
+    showCursor(true);
   };
   listen(doc, 'pointerlockchange', () => {
     if (doc.pointerLockElement === canvas) { fallback = false; enable(); }
@@ -132,7 +139,9 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
   scene.events.on('sleep', release);
   const controller = {
     config,
-    isActive: () => active,
+    // The canvas has keyboard focus from the countdown even if the browser
+    // cannot grant pointer lock until the next user gesture.
+    isActive: () => active || (preparedForBattle && canCapture() && !doc.hidden && doc.hasFocus()),
     getDirection: () => direction,
     isAiming: () => active && dragging && aiming,
     getStrength,
@@ -149,6 +158,21 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
       direction = { x: facing < 0 ? -1 : 1, y: 0 };
     },
     endDrag,
+    // Countdown preparation focuses the canvas and applies the automatic
+    // cursor preference without enabling movement before the fight starts.
+    prepareForBattle() {
+      if (destroyed || !canPrepare() || doc.hidden || !doc.hasFocus() || !getPreferences().autoHideCursor) return false;
+      preparedForBattle = true;
+      cursorReleased = false;
+      showCursor(true);
+      try {
+        canvas.tabIndex = -1;
+        canvas.focus?.({ preventScroll: true });
+      } catch (_) {
+        try { canvas.focus?.(); } catch (_) {}
+      }
+      return true;
+    },
     // Consume the activation click so returning from a menu cannot shoot.
     beginInput() {
       if (destroyed || !canCapture() || doc.hidden || !doc.hasFocus()) return false;
@@ -166,10 +190,14 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
     update() {
       const playable = !destroyed && canCapture() && !doc.hidden && doc.hasFocus();
       if (playable && !wasPlayable) cursorReleased = false;
+      if (!playable && wasPlayable) preparedForBattle = false;
       wasPlayable = playable;
-      const hideCursor = playable && !cursorReleased && (active || getPreferences().autoHideCursor);
-      canvas.style.cursor = hideCursor ? 'none' : '';
-      if (hint) hint.style.display = hideCursor ? '' : 'none';
+      const autoHideCursor = getPreferences().autoHideCursor;
+      if (!autoHideCursor) preparedForBattle = false;
+      const hideCursor = !cursorReleased && (autoHideCursor
+        ? (preparedForBattle || playable)
+        : playable && active);
+      showCursor(hideCursor);
       if (!playable) {
         if (active || pending) release();
         return;

@@ -197,6 +197,13 @@ function registerPartyEvents(
             partyStatus = PARTY_STATUS.IDLE;
           }
         }
+        if (partyStatus === PARTY_STATUS.READY_CHECK && typeof mm.queueStatus === "function") {
+          const queue = await mm.queueStatus({ partyId });
+          if (queue.state === "missing") {
+            await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
+            partyStatus = PARTY_STATUS.IDLE;
+          }
+        }
         // Repeated ready requests must not requeue a claimed ticket.
         if (isReady && [PARTY_STATUS.QUEUED, PARTY_STATUS.READY_CHECK].includes(partyStatus)) {
           await partyPresence.emitPartyRosterById(partyId);
@@ -205,25 +212,18 @@ function registerPartyEvents(
         }
         socket.data.charMenuPrevStatus = null;
 
-        await partyPresence.setUserPresence(
-          uname,
-          isReady ? "ready" : "online",
-          partyId,
-          { strict: true },
-        );
-
-        if (!isReady) {
-          if (
-            partyStatus === PARTY_STATUS.QUEUED ||
-            partyStatus === PARTY_STATUS.READY_CHECK
-          ) {
-            await partyQueueTransition.cancelPartyQueue({
-              partyId,
-              userId: null,
-              reason: `${uname} cancelled matchmaking`,
-            });
+        if (!isReady && [PARTY_STATUS.QUEUED, PARTY_STATUS.READY_CHECK].includes(partyStatus)) {
+          const result = await partyQueueTransition.cancelPartyQueue({
+            partyId, userId: null, reason: `${uname} cancelled matchmaking`,
+          });
+          if (result?.cancelled === false) {
+            ack?.({ ok: true, ready: true, cancelled: false, matchId: result.matchId });
+            return;
           }
         }
+        await partyPresence.setUserPresence(
+          uname, isReady ? "ready" : "online", partyId, { strict: true },
+        );
 
         const members = await db.fetchPartyMembersDetailed(partyId);
         const allReady =

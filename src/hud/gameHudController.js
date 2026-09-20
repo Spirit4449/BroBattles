@@ -35,6 +35,7 @@ export function createGameHudController({
   getUsername,
   getMapBgAsset,
   onEnableInput,
+  onCountdownStart,
   onCountdownFight,
   onSpectatePrevious,
   onSpectateNext,
@@ -1086,6 +1087,10 @@ export function createGameHudController({
       countdownRunning = false;
       return;
     }
+
+    try {
+      if (typeof onCountdownStart === "function") onCountdownStart();
+    } catch (_) {}
 
     // Start intro sequence in parallel so countdown stays aligned to server start.
     // Intro runs for 1 second (darkness), then shows cards and countdown starts

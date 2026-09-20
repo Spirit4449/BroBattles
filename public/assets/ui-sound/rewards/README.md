@@ -14,6 +14,10 @@ Source: [Mixkit choir SFX](https://mixkit.co/free-sound-effects/choir/), downloa
 
 Edits use a 25ms fade-in, 450ms fade-out, peak limiter, and stereo 128kbps MP3. Currency value is summed across bundle grants (1 gem = 20 coins for audio tier selection only). Unlocks have a radiant floor, skins/Bros and epic rarity a divine floor, legendary rarity a celestial floor.
 
+## Super-not-ready feedback
+
+`../../nosuper.mp3` is a 420ms feedback cue derived from `../../noammo.mp3`, reinforced with a synthesized low, falling thump. It is limited and kept short so it reads as a denied action rather than a super-ready reward.
+
 ## Wallet impacts
 
 Existing coin-impact.wav and gem-impact.wav remain from [WobbleBoxx Workshop, Level up, power up, Coin get (13 Sounds)](https://opengameart.org/content/level-up-power-up-coin-get-13-sounds), CC0: Coin01.aif and Rise02.aif respectively. Original short 220ms edits are unchanged. Superseded reveal WAV alternatives have been removed.

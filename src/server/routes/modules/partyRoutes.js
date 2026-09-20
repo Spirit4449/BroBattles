@@ -74,14 +74,7 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
         return res.status(result.statusCode || 500).json(result.payload || {});
       }
 
-      try {
-        await db.setUserStatus(username, "online");
-      } catch (_) {}
-
-      let membersForEmit = result.members;
-      try {
-        membersForEmit = await db.fetchPartyMembersDetailed(partyId);
-      } catch (_) {}
+      const membersForEmit = result.members;
 
       await req.app.locals.socketApi.moveUserSocketToParty(username, partyId);
       console.log("[party] /partydata moved socket to party", {
@@ -96,7 +89,9 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
           );
         } catch (_) {}
       }
-      await emitRoster(io, partyId, result.party, membersForEmit, db);
+      await emitRoster(io, partyId, result.party, membersForEmit, db, {
+        ownerName: result.ownerName,
+      });
       const selection = normalizeSelectionFromRow(result.party || {});
 
       // Authoritative settings sync: ensure joiners adopt party mode/map.

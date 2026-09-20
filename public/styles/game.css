@@ -35,6 +35,10 @@
         -webkit-touch-callout: none;
         overscroll-behavior: none;
       }
+      body.battle-cursor-hidden,
+      body.battle-cursor-hidden * {
+        cursor: none !important;
+      }
       /* Full-bleed background image behind Phaser */
       .background {
         position: fixed;
@@ -187,66 +191,6 @@
       #game-bg.visible {
         opacity: 1;
         transition: opacity 0.2s ease-in;
-      }
-
-      /* ===== Loading UI ===== */
-      #loading-wrap {
-        position: fixed;
-        left: 50%;
-        transform: translateX(-50%);
-        bottom: 20px;
-        width: min(720px, 92vw);
-        z-index: 3;
-        pointer-events: none;
-      }
-
-      #loading-text {
-        text-align: center;
-        font-family: "Press Start 2P", monospace;
-        font-size: clamp(10px, 1.6vw, 14px);
-        line-height: 1.5;
-        margin: 0 0 10px 0;
-        color: #fff6bf;
-        text-shadow: 2px 2px 0 #332414;
-      }
-
-      .loading-shell {
-        position: relative;
-        width: 100%;
-        height: 24px;
-        overflow: hidden;
-        box-sizing: border-box;
-        border: 4px solid #24180f;
-        border-radius: 0;
-        background: #56351d;
-        box-shadow: 0 4px 0 #120b07, inset 0 0 0 2px #9c6b38;
-      }
-
-      .loading-fill {
-        position: absolute;
-        inset: 0 auto 0 0;
-        width: 0%;
-        background-color: #f5b432;
-        background-image: repeating-linear-gradient(
-          90deg,
-          #ffd55c 0 8px,
-          #f5b432 8px 16px
-        );
-        box-shadow: inset 0 3px 0 #fff09b, inset 0 -3px 0 #c66a1c;
-        transition: width 200ms steps(4, end);
-      }
-
-      #loading-percent {
-        position: absolute;
-        right: 8px;
-        top: 50%;
-        transform: translateY(-50%);
-        font-family: "Press Start 2P", monospace;
-        font-size: 10px;
-        font-weight: 700;
-        color: #fff;
-        text-shadow: 2px 2px 0 #24180f;
-        pointer-events: none;
       }
 
       .hidden {

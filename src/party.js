@@ -64,6 +64,40 @@ let mmOverlayTotal = 0;
 let __matchmakingHideTimer = null;
 let __matchmakingCountTimer = null;
 let __matchmakingReadyAckTimer = null;
+let __matchedQueueId = null;
+let __queueHealthTimer = null;
+let __queueHealthPending = false;
+let __queueHealthGeneration = 0;
+
+function lockMatchmakingCancel(matchId) {
+  __matchedQueueId = Number(matchId);
+  const button = document.getElementById("mm-cancel");
+  if (button) button.disabled = true;
+}
+
+function checkMatchmakingHealth() {
+  if (__queueHealthPending) return;
+  __queueHealthPending = true;
+  const generation = __queueHealthGeneration;
+  const requestedMatchId = __matchedQueueId;
+  socket.timeout(5000).emit("queue:status", (error, status) => {
+    if (generation !== __queueHealthGeneration) return;
+    __queueHealthPending = false;
+    if (__matchedQueueId !== requestedMatchId) return;
+    if (error || status?.state === "unavailable") return;
+    if (status?.state === "live") {
+      lockMatchmakingCancel(status.matchId);
+      window.location.href = `/game/${status.matchId}`;
+    } else if (status?.state === "matched") {
+      lockMatchmakingCancel(status.matchId);
+      socket.emit("ready:ack", { matchId: status.matchId });
+    } else if (status?.state === "missing") {
+      // Let the server reset party readiness and broadcast recovery to everyone.
+      socket.emit("queue:leave");
+      __matchedQueueId = null;
+    }
+  });
+}
 let __partyReadyPending = false;
 let __activeBattleMatchId = null;
 let __matchmakingReadyAt = 0;
@@ -932,6 +966,25 @@ export function checkIfInParty() {
   return false;
 }
 
+// Switching lobby routes changes state, not the screen or its connection.
+export function resetLobbyRoute(partyId) {
+  partyDeparturePending = false;
+  __partyReadyPending = false;
+  __activeBattleMatchId = null;
+  __partyRosterNames = null;
+  __partyRosterPartyId = partyId || null;
+  ++__partyRosterRenderSequence;
+  window.clearTimeout(__partyRosterCommitTimer);
+  __partyRosterCommitTimer = null;
+  __partyContext = { partyId: partyId || null, ownerName: null,
+    allowMemberSelection: true, isPublic: false, publicName: '',
+    capacity: null, members: [], botSlots: [] };
+  hidePartyJoinRequestScreen();
+  document.querySelectorAll('.character-slot').forEach(clearLobbySpawnAnimation);
+  setReadyButtonState(false);
+  syncReadyAvailability();
+}
+
 function getActivePartyId() {
   const contextPartyId = Number(__partyContext.partyId || 0);
   if (Number.isFinite(contextPartyId) && contextPartyId > 0) {
@@ -945,6 +998,9 @@ function getActivePartyId() {
 }
 
 export function createParty() {
+  const button = document.getElementById('create-party');
+  if (button?.disabled) return;
+  if (button) { button.disabled = true; button.textContent = 'Creating…'; }
   const selection = normalizeGameSelection(getCurrentSelection());
   fetch("/create-party", {
     method: "POST",
@@ -965,6 +1021,7 @@ export function createParty() {
     })
     .catch((error) => {
       console.error("Error:", error);
+      if (button) { button.disabled = false; button.textContent = 'Create Party'; }
     });
 }
 
@@ -975,15 +1032,6 @@ export async function leaveParty() {
   const leaveButton = document.getElementById("create-party");
   const previousLabel = leaveButton?.textContent;
   if (leaveButton) { leaveButton.disabled = true; leaveButton.textContent = "Leaving…"; }
-  const selfSlot = document.querySelector(
-    '.character-slot[data-is-current-user="true"]',
-  );
-  const departureDuration = selfSlot
-    ? playLobbySpawnAnimation(selfSlot, "exit")
-    : 0;
-  const departureAnimation = new Promise((resolve) => {
-    window.setTimeout(resolve, departureDuration);
-  });
 
   try {
     const response = await fetch("/leave-party", {
@@ -997,13 +1045,11 @@ export async function leaveParty() {
       throw new Error(data?.error || "Unable to leave the party");
     }
     console.log(data);
-    await departureAnimation;
     window.location.href = `/`;
   } catch (error) {
     console.error("Error:", error);
     partyDeparturePending = false;
     if (leaveButton) { leaveButton.disabled = false; leaveButton.textContent = previousLabel; }
-    clearLobbySpawnAnimation(selfSlot);
     sonner(
       "Could not leave party",
       error?.message || "Please try again.",
@@ -1149,7 +1195,7 @@ export function socketInit(options = {}) {
         membersCount: Array.isArray(data?.members) ? data.members.length : 0,
       });
       // If this update isn't for our current party page, ignore
-      if (currentPartyId && String(data.partyId) !== String(currentPartyId))
+      if (String(data.partyId || '') !== String(checkIfInParty() || ''))
         return;
 
       // Toasts: detect joins/leaves vs previous roster
@@ -1320,7 +1366,7 @@ export function socketInit(options = {}) {
   // Mode change updates
   socket.on("mode-change", (data) => {
     const currentPartyId = getActivePartyId();
-    if (currentPartyId && String(data.partyId) !== String(currentPartyId))
+    if (String(data.partyId || '') !== String(checkIfInParty() || ''))
       return;
 
     const selection = writeSelectionToDom(
@@ -1362,7 +1408,7 @@ export function socketInit(options = {}) {
   // Map change updates
   socket.on("map-change", (data) => {
     const currentPartyId = getActivePartyId();
-    if (currentPartyId && String(data.partyId) !== String(currentPartyId))
+    if (String(data.partyId || '') !== String(checkIfInParty() || ''))
       return;
 
     const selection = writeSelectionToDom(
@@ -1403,7 +1449,7 @@ export function socketInit(options = {}) {
 
   // Party-wide: everyone ready -> show matchmaking overlay
   socket.on("party:matchmaking:start", ({ partyId, selection, botSlots }) => {
-    if (__postBattleLobbyReturn) return;
+    if (__postBattleLobbyReturn || __matchedQueueId) return;
     const currentPartyId = getActivePartyId();
     if (currentPartyId && String(partyId) !== String(currentPartyId)) return;
     const normalized = normalizeGameSelection(
@@ -1439,7 +1485,7 @@ export function socketInit(options = {}) {
   });
 
   socket.on("queue:joined", (payload) => {
-    if (__postBattleLobbyReturn) return;
+    if (__postBattleLobbyReturn || __matchedQueueId) return;
     const currentPartyId = getActivePartyId();
     console.log("[join-debug] queue:joined", {
       currentPartyId: currentPartyId || null,
@@ -1450,21 +1496,24 @@ export function socketInit(options = {}) {
       payload?.selection || getCurrentSelection(),
     );
     activeQueueContext = { selection: normalized };
-    mmOverlayPlayers = [];
+    mmOverlayPlayers = collectCurrentPartyMembers();
     mmOverlayPlayersSig = "";
     mmOverlayTotal = getTotalPlayersForSelection(normalized);
     showMatchmakingOverlay();
     updateMMOverlay({
-      found: 0,
+      found: mmOverlayPlayers.length,
       total: mmOverlayTotal,
       selection: normalized,
-      players: [],
+      players: mmOverlayPlayers,
     });
   });
 
   // When a match is found, hold the success state before acknowledging ready.
   socket.on("match:found", (payload) => {
     if (__postBattleLobbyReturn) return;
+    if (!payload?.matchId) return;
+    lockMatchmakingCancel(payload.matchId);
+    showMatchmakingOverlay();
     const currentPartyId = getActivePartyId();
     console.log("[join-debug] match:found", {
       currentPartyId: currentPartyId || null,
@@ -1558,6 +1607,7 @@ export function socketInit(options = {}) {
 
   // Queue error -> notify and hide overlay (useful for solo flow)
   socket.on("queue:error", (err) => {
+    if (__matchedQueueId || err?.code === "MATCH_FOUND") return;
     try {
       const currentPartyId = getActivePartyId();
       console.error("[join-debug] queue:error", {
@@ -1608,6 +1658,7 @@ export function socketInit(options = {}) {
 
   // Match cancelled (e.g., ready timeout) -> hide overlay
   socket.on("match:cancelled", (data) => {
+    if (__matchedQueueId && Number(data?.matchId) !== __matchedQueueId) return;
     const currentPartyId = getActivePartyId();
     console.warn("[join-debug] match:cancelled", {
       currentPartyId: currentPartyId || null,
@@ -1641,7 +1692,7 @@ export function socketInit(options = {}) {
 
   // Progressive matching updates: incrementally update overlay found count
   socket.on("match:progress", (data) => {
-    if (__postBattleLobbyReturn) return;
+    if (__postBattleLobbyReturn || __matchedQueueId) return;
     const currentSelection = getCurrentSelection();
     const targetSelection = normalizeGameSelection(
       activeQueueContext?.selection || currentSelection,
@@ -1724,7 +1775,7 @@ export function socketInit(options = {}) {
 
   // // Member join/leave events
   // socket.on("user-joined", (data) => {
-  //   if (currentPartyId && String(data.partyId) !== String(currentPartyId)) {
+  //   if (String(data.partyId || '') !== String(checkIfInParty() || '')) {
   //     return;
   //   }
 
@@ -1756,7 +1807,7 @@ export function socketInit(options = {}) {
   // });
 
   // socket.on("user-disconnected", (data) => {
-  //   if (currentPartyId && String(data.partyId) !== String(currentPartyId))
+  //   if (String(data.partyId || '') !== String(checkIfInParty() || ''))
   //     return;
 
   //   console.log(`[party] ${data.name} left the party`);
@@ -1904,7 +1955,7 @@ function commitPartyRosterLayout({
 export function renderPartyMembers(data) {
   if (ensurePartySlotDrag().defer(data)) return;
   const members = Array.isArray(data.members) ? data.members : [];
-  warmBattleSelection(getCurrentSelection(), members);
+  warmBattleSelection(normalizeGameSelection(data?.selection || getCurrentSelection()), members);
   const capacity =
     data?.capacity && typeof data.capacity === "object" ? data.capacity : null;
   __partyContext = {
@@ -1984,10 +2035,13 @@ export function renderPartyMembers(data) {
       spawnMemberKeys,
     });
     ensurePartySlotDrag().sync();
+    if (!checkIfInParty()) {
+      document.querySelectorAll('#lobby-area .invite').forEach(badge => { badge.style.display = 'none'; });
+    }
     void revealLobby();
   };
 
-  if (exitingSlots.length && !prefersReducedLobbyMotion()) {
+  if (!data.immediate && exitingSlots.length && !prefersReducedLobbyMotion()) {
     let exitDuration = 0;
     exitingSlots.forEach((slot) => {
       if (slot.classList.contains("lobby-spawn-exit")) {
@@ -2214,7 +2268,7 @@ export function initializeModeDropdown() {
     selection,
     { animateMap = false, updateBackground = true } = {},
   ) => {
-    const normalized = writeSelectionToDom(selection, { persist: isSolo });
+    const normalized = writeSelectionToDom(selection, { persist: !checkIfInParty() });
     const teamSize = getPlayersPerTeamForSelection(normalized);
     const legacyMode = selectionToLegacyMode(normalized);
     updatePlatformsForMode(String(teamSize));
@@ -2257,8 +2311,10 @@ export function initializeModeDropdown() {
   // placeholder while the authoritative party selection is still loading.
   applySelectionVisuals(initialSelection, { updateBackground: isSolo });
 
+  // These controls survive lobby navigation, so resolve the party at click time.
   const handleModeSelection = async (selection) => {
     if (!canChangePartySelection()) return;
+    const partyId = checkIfInParty();
     const username = document.getElementById("username-text")?.textContent;
     const previousSelection = getCurrentSelection();
     const nextSelection = normalizeGameSelection(selection);
@@ -2274,6 +2330,7 @@ export function initializeModeDropdown() {
         });
         if (!response.ok) throw new Error("Failed to fetch party members");
         const data = await response.json();
+        if (checkIfInParty() !== partyId || !canChangePartySelection()) return;
         const requiredSlots = getPlayersPerTeamForSelection(nextSelection) * 2;
         if (
           nextSelection.modeId === "duels" &&
@@ -2288,7 +2345,6 @@ export function initializeModeDropdown() {
           return;
         }
 
-        if (!canChangePartySelection()) return;
         const applied = applySelectionVisuals(nextSelection);
         socket.emit("mode-change", {
           selection: applied,
@@ -2303,7 +2359,7 @@ export function initializeModeDropdown() {
           "Please try again. If the problem persists, try refreshing the page.",
           "error",
         );
-        applySelectionVisuals(previousSelection);
+        if (checkIfInParty() === partyId) applySelectionVisuals(previousSelection);
       }
       return;
     }
@@ -2319,6 +2375,7 @@ export function initializeModeDropdown() {
     mapDropdown.dataset.bound = "1";
     mapDropdown.addEventListener("change", (event) => {
       if (!canChangePartySelection()) return;
+      const partyId = checkIfInParty();
       const selectedValue = event.target.value;
       const username = document.getElementById("username-text")?.textContent;
       const applied = applySelectionVisuals(
@@ -2849,6 +2906,9 @@ export function showMatchmakingOverlay() {
     players: mmOverlayPlayers,
   });
   wireCancelButton();
+  const cancelButton = document.getElementById("mm-cancel");
+  if (cancelButton) cancelButton.disabled = !!__matchedQueueId;
+  if (!__queueHealthTimer) __queueHealthTimer = window.setInterval(checkMatchmakingHealth, 5000);
   wireAdminFillBotsButtons();
   const fillBtn = document.getElementById("mm-fill-bots");
   const fillUnlimitedBtn = document.getElementById("mm-fill-bots-unlimited");
@@ -2858,6 +2918,11 @@ export function showMatchmakingOverlay() {
 }
 
 export function hideMatchmakingOverlay({ immediate = false } = {}) {
+  __matchedQueueId = null;
+  __queueHealthGeneration++;
+  __queueHealthPending = false;
+  if (__queueHealthTimer) window.clearInterval(__queueHealthTimer);
+  __queueHealthTimer = null;
   const overlay = ensureOverlay();
   if (!overlay) return;
   if (__matchmakingReadyAckTimer) {
@@ -2938,7 +3003,7 @@ function updateMMOverlay({ found, total, selection, players }) {
   const foundCount = Math.max(0, Number(found) || 0);
   const totalCount =
     Number(total) || getTotalPlayersForSelection(normalized) || 0;
-  const isFull = totalCount > 0 && foundCount >= totalCount;
+  const isFull = !!__matchedQueueId && totalCount > 0 && foundCount >= totalCount;
 
   if (overlay) {
     const previousState = overlay.dataset.state;
@@ -3168,30 +3233,24 @@ function wireCancelButton() {
   if (!btn || btn.dataset.bound === "1") return;
   btn.dataset.bound = "1";
   btn.addEventListener("click", () => {
-    hideMatchmakingOverlay();
-    const partyId = getActivePartyId();
-    if (partyId) {
-      socket.emit("ready:status", { partyId, ready: false });
-    } else {
-      socket.emit("queue:leave");
-    }
-    activeQueueContext = null;
-    mmOverlayPlayers = [];
-    mmOverlayPlayersSig = "";
-    mmOverlayTotal = 0;
-    // Also reset local ready state immediately
-    try {
-      const selfSlot = Array.from(
-        document.querySelectorAll(".character-slot"),
-      ).find((s) => s.dataset.isCurrentUser === "true");
-      const statusEl = selfSlot?.querySelector(".status");
-      if (statusEl) {
-        statusEl.textContent = "online";
-        statusEl.className = "status online";
+    if (__matchedQueueId || btn.disabled) return;
+    btn.disabled = true;
+    const generation = __queueHealthGeneration;
+    socket.timeout(5000).emit("queue:leave", (error, result) => {
+      if (__matchedQueueId || generation !== __queueHealthGeneration) return;
+      if (result?.cancelled === false && result.matchId) {
+        lockMatchmakingCancel(result.matchId);
+        checkMatchmakingHealth();
+        return;
       }
-      setReadyButtonState(false);
-      syncReadyAvailability();
-    } catch {}
+      if (error || !result?.ok) {
+        btn.disabled = false;
+        checkMatchmakingHealth();
+        return;
+      }
+      hideMatchmakingOverlay();
+    });
+
   });
 }
 

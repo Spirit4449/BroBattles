@@ -10,6 +10,7 @@ import {
 } from "../shared/characterStats.js";
 import { getSharedSelectionPopupShell } from "../lib/selectionPopupShell.js";
 import socket from "../socket.js";
+import { warmBattleSelection } from './preloadBattle';
 import { playSound } from "../lib/uiSounds.js";
 import { buildCharacterSkinBodyUrl } from "../lib/skinAssets.js";
 import { dismissPopup } from "../lib/popupMotion.js";
@@ -789,7 +790,9 @@ function renderCharacterDetails(character) {
       e.stopPropagation();
       playSound("cursor4", 0.2);
       if (stats.unlockMethod?.type === "trophyRoad") {
-        getSharedSelectionPopupShell().hide();
+        // Closing through the picker lifecycle clears the party's
+        // "Selecting Character" presence before Trophy Road opens.
+        closeCharacterSelectAfterSelection();
         document.getElementById("trophy-resource-button")?.click();
         return;
       }
@@ -1299,6 +1302,7 @@ async function selectCharacter(character, { closeAfterSelection = true } = {}) {
       );
     }
     _confirmedSkinSelections[charClass] = selectedSkinId;
+    warmBattleSelection();
 
     const updateSelectionView = () => {
     // Update current user's visible slot, if present

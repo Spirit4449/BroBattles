@@ -1,3 +1,4 @@
+const { inPartyOrder } = require("../../helpers/partyOperations");
 const {
   normalizeSelection,
   isSelectionQueueable,
@@ -31,8 +32,10 @@ function registerMatchmakingEvents(
       }
       const { mode, modeId, modeVariantId, selection, map, side, partyId } =
         data || {};
-      const pid = partyId || (uname ? await db.getPartyIdByName(uname) : null);
+      const pid = uname ? await db.getPartyIdByName(uname) : null;
+      if (partyId && Number(partyId) !== Number(pid)) throw new Error("Your party changed. Please refresh the lobby.");
 
+      await inPartyOrder(db, pid || `user:${userId}`, async () => {
       if (abuseControl && userId) {
         const evaluateUserPenalty = async (targetUserId) => {
           const penalties =
@@ -127,6 +130,7 @@ function registerMatchmakingEvents(
         partyId: pid || null,
         selection: normalizedSelection,
       });
+      });
     } catch (e) {
       console.warn("queue:join error:", e?.message);
       socket.emit("queue:error", {
@@ -141,10 +145,15 @@ function registerMatchmakingEvents(
       const uname = socket.data.user?.name;
       const userId = socket.data.user?.user_id || null;
       const pid = uname ? await db.getPartyIdByName(uname) : null;
-      await mm.queueLeave({
+      await inPartyOrder(db, pid || `user:${userId}`, async () => {
+      const result = await mm.queueLeave({
         partyId: pid || null,
         userId: pid ? null : userId,
       });
+      if (result?.cancelled === false) {
+        if (typeof ack === "function") ack({ ok: true, cancelled: false, matchId: result.matchId });
+        return;
+      }
       if (pid) {
         try {
           await setPartyStatusSafe(pid, PARTY_STATUS.IDLE);
@@ -174,10 +183,23 @@ function registerMatchmakingEvents(
           reason: "You cancelled matchmaking",
         });
       }
-      if (typeof ack === 'function') ack({ ok: true });
+      if (typeof ack === 'function') ack({ ok: true, cancelled: true });
+      });
     } catch (e) {
       if (typeof ack === 'function') ack({ ok: false });
       console.warn("queue:leave error:", e?.message);
+    }
+  });
+
+  socket.on("queue:status", async (ack) => {
+    if (typeof ack !== "function") return;
+    try {
+      const user = socket.data.user;
+      if (!user?.user_id) return ack({ state: "missing" });
+      const partyId = await db.getPartyIdByName(user.name);
+      ack(await mm.queueStatus({ partyId, userId: user.user_id }));
+    } catch (_) {
+      ack({ state: "unavailable" });
     }
   });
 

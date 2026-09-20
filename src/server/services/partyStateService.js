@@ -1145,22 +1145,22 @@ function createPartyStateService({ db, io }) {
         [partyId, username],
       );
 
-      const [memberRows] = await conn.query(
-        `SELECT pm.name, pm.team, u.char_class, u.status
-           FROM party_members pm
-           LEFT JOIN users u ON u.name = pm.name
-          WHERE pm.party_id = ?
-          ORDER BY pm.joined_at, pm.name`,
-        [partyId],
-      );
-
       await conn.commit();
+      // Release the transaction's pool slot before issuing pooled reads/writes.
+      conn.release();
+      conn = null;
+      try {
+        await db.setUserStatus(username, "online");
+      } catch (_) {}
+      // Read once, after both presence updates. Detailed members retain the
+      // joined_at/name order used to determine ownership (not seat order).
+      const members = await db.fetchPartyMembersDetailed(partyId);
       return {
         ok: true,
         party,
-        ownerName: await getPartyOwnerName(partyId),
+        ownerName: members[0]?.name || null,
         selection: normalizeSelectionFromRow(party || {}),
-        members: await db.fetchPartyMembersDetailed(partyId),
+        members,
         capacity: { total: totalCap, perTeam: perTeamCap },
         joinedNow,
       };

@@ -25,7 +25,7 @@ function createPartyQueueTransitionService({ db, io, mm }) {
       `SELECT m.match_id FROM matches m
        JOIN match_participants mp ON m.match_id = mp.match_id
        JOIN users u ON u.user_id = mp.user_id
-       WHERE u.name = ? AND m.status = 'live'`,
+       WHERE u.name = ? AND m.status IN ('queued', 'live')`,
       [username],
     );
     return liveMatches.length > 0;
@@ -34,11 +34,10 @@ function createPartyQueueTransitionService({ db, io, mm }) {
   async function cancelPartyQueue({ partyId, userId = null, reason }) {
     try {
       if (partyId) {
-        try {
-          await mm.queueLeave({ partyId, userId: null });
-        } catch (_) {}
+        const result = await mm.queueLeave({ partyId, userId: null });
+        if (result?.cancelled === false) return result;
         await db.runQuery(
-          "UPDATE parties SET status = 'idle' WHERE party_id = ? AND status IN ('queued', 'ready_check')",
+          "UPDATE parties SET status = 'idle' WHERE party_id = ? AND status = 'queued'",
           [partyId],
         );
         await resetPartyMembersOnline(partyId);
@@ -47,13 +46,11 @@ function createPartyQueueTransitionService({ db, io, mm }) {
           `[cancel][party] cancelled party ${partyId}${reason ? ` reason=${reason}` : ""}`,
         );
       }
-      if (userId) {
-        try {
-          await mm.queueLeave({ partyId: null, userId });
-        } catch (_) {}
-      }
+      if (userId) return await mm.queueLeave({ partyId: null, userId });
+      return { cancelled: true };
     } catch (e) {
       console.warn("cancelPartyQueue failed:", e?.message);
+      throw e;
     }
   }
 
@@ -78,6 +75,7 @@ function createPartyQueueTransitionService({ db, io, mm }) {
         ) : [];
         const wasQueued = ["queued", "ready_check"].includes(partyRows[0]?.status);
         await mm.handleDisconnect(username);
+        if (await userHasLiveMatch(username)) return;
         if (pid && !wasQueued) {
           await db.setUserStatus(username, "offline");
           io.to(`party:${pid}`).emit("status:update", { partyId: pid, name: username, status: "offline" });
@@ -85,7 +83,7 @@ function createPartyQueueTransitionService({ db, io, mm }) {
         }
         if (pid) {
           await db.runQuery(
-            "UPDATE parties SET status = 'idle' WHERE party_id = ? AND status IN ('queued', 'ready_check')", [pid],
+            "UPDATE parties SET status = 'idle' WHERE party_id = ? AND status = 'queued'", [pid],
           );
           await db.setUserStatus(username, "offline");
           io.to(`party:${pid}`).emit("status:update", { partyId: pid, name: username, status: "offline" });

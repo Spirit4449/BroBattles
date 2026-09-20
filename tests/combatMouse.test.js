@@ -20,8 +20,16 @@ function events() {
 }
 function setup({ canCapture } = {}) {
   const win = events();
+  const bodyClasses = new Set();
+  const body = {
+    appendChild() {},
+    classList: {
+      toggle(name, enabled) { if (enabled) bodyClasses.add(name); else bodyClasses.delete(name); },
+      contains(name) { return bodyClasses.has(name); },
+    },
+  };
   const doc = Object.assign(events(), { defaultView: win, hidden: false, hasFocus: () => true,
-    body: { appendChild() {} }, createElement: () => ({ style: {}, remove() {} }) });
+    body, createElement: () => ({ style: {}, remove() {} }) });
   const canvas = Object.assign(events(), { ownerDocument: doc, style: {}, requestPointerLock() {} });
   doc.exitPointerLock = () => { doc.pointerLockElement = null; doc.emit('pointerlockchange'); };
   const graphic = {};
@@ -275,6 +283,52 @@ test('disabling automatic hiding keeps cursor visible until arena activation', (
   assert.equal(h.canvas.style.cursor,'none');
   controller.release();controller.update();assert.equal(h.canvas.style.cursor,'');
   controller.destroy();
+});
+test('countdown preparation hides the cursor and focuses the arena only when enabled', () => {
+  const h = setup();
+  h.controller.destroy();
+  let captureAllowed = false;
+  const controller = createCombatMouseController({
+    scene: h.scene,
+    canPlay: () => false,
+    canCapture: () => captureAllowed,
+    canPrepare: () => true,
+    onRelease: () => {},
+  });
+  let focused = 0;
+  h.canvas.focus = () => { focused++; h.doc.activeElement = h.canvas; };
+  assert.equal(controller.prepareForBattle(), true);
+  assert.equal(h.canvas.style.cursor, 'none');
+  assert.equal(h.doc.body.classList.contains('battle-cursor-hidden'), true);
+  assert.equal(h.doc.activeElement, h.canvas);
+  assert.equal(focused, 1);
+  assert.equal(h.canvas.tabIndex, -1);
+  assert.equal(controller.isActive(), false);
+  controller.update();
+  assert.equal(h.doc.body.classList.contains('battle-cursor-hidden'), true);
+  captureAllowed = true;
+  assert.equal(controller.isActive(), true);
+  controller.release();
+  assert.equal(controller.isActive(), false);
+  assert.equal(h.canvas.style.cursor, '');
+  assert.equal(h.doc.body.classList.contains('battle-cursor-hidden'), false);
+  controller.destroy();
+
+  const disabled = setup();
+  disabled.controller.destroy();
+  const disabledController = createCombatMouseController({
+    scene: disabled.scene,
+    canPlay: () => true,
+    onRelease: () => {},
+    getPreferences: () => ({ sensitivity: 1, autoHideCursor: false }),
+  });
+  let disabledFocused = 0;
+  disabled.canvas.focus = () => { disabledFocused++; };
+  assert.equal(disabledController.prepareForBattle(), false);
+  assert.equal(disabled.canvas.style.cursor, '');
+  assert.equal(disabled.doc.body.classList.contains('battle-cursor-hidden'), false);
+  assert.equal(disabledFocused, 0);
+  disabledController.destroy();
 });
 test('sensitivity multiplier changes drag response without changing camera reach', () => {
   const h = setup();h.controller.destroy();

@@ -140,6 +140,7 @@ let nextFireTime = 0; // timestamp (ms) when we can fire again
 let reloadTimerMs = 0; // accumulates while reloading toward ammoReloadMs
 let ammoBarShakeUntil = 0;
 let lastNoAmmoSfxAt = 0;
+let lastNoSuperSfxAt = 0;
 
 let superBar;
 let superBarBack;
@@ -1039,7 +1040,7 @@ export function createPlayer(
       if (superCharge >= maxSuperCharge) {
         startPointerAttackAim(pointer, "special", 2);
       } else {
-        _specialNotReadyFlash = Date.now() + 500;
+        triggerSpecialNotReadyFeedback();
       }
     }
   };
@@ -1108,6 +1109,8 @@ export function createPlayer(
   combatMouseController = createCombatMouseController({
     getPreferences: getSettings,
     scene: sceneParam,
+    canPrepare: () => !!player && !sceneParam._battleEnded && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN &&
+      !window.__BB_MAP_EDIT_ACTIVE && !mobileControlsController?.isEnabled?.() && sceneParam.sys.isActive(),
     canCapture: () => !!player && !sceneParam._battleEnded && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN &&
       !window.__BB_MAP_EDIT_ACTIVE && !mobileControlsController?.isEnabled?.() &&
       sceneParam.input.keyboard?.enabled !== false && sceneParam.sys.isActive(),
@@ -1441,7 +1444,7 @@ function fireBasicAttack(direction, context = null) {
 function fireSpecialAttack(context = null) {
   if (dead) return;
   if (superCharge < maxSuperCharge) {
-    _specialNotReadyFlash = Date.now() + 500;
+    triggerSpecialNotReadyFeedback();
     return;
   }
   try {
@@ -1467,6 +1470,16 @@ function fireSpecialAttack(context = null) {
   socket.emit("game:special", predictCharacterSpecial(
     currentCharacter, player?.scene, player, username, specialRequest,
   ));
+}
+
+function triggerSpecialNotReadyFeedback() {
+  const now = Date.now();
+  _specialNotReadyFlash = now + 500;
+  if (now - lastNoSuperSfxAt < 120) return;
+  lastNoSuperSfxAt = now;
+  try {
+    scene?.sound?.play("sfx-nosuper", { volume: 0.5 });
+  } catch (_) {}
 }
 
 function drawSuperBar(x, y) {
@@ -2638,6 +2651,12 @@ export function setChatInputActive(active) {
 
 export function isChatInputActive() {
   return chatInputActive;
+}
+
+// Keep browser focus on the arena during the pre-fight countdown without
+// enabling movement before the HUD declares the fight live.
+export function focusBattleInput() {
+  return combatMouseController?.prepareForBattle?.() || false;
 }
 
 export function reconcileLocalMovement(snapshot = {}) {
