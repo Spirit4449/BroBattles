@@ -211,14 +211,16 @@ export function spawnGloopSlimeballVisual(
   const debug = createDebugCircle(scene, radius);
   let disposed = false;
   let ended = false;
-  const cleanup = () => {
+  const cleanup = () => dispose(false);
+  const onBodyDestroy = () => dispose(true);
+  const dispose = (bodyAlreadyDestroying) => {
     if (disposed) return;
     disposed = true;
     scene.events.off("update", update);
     scene.events.off("gloop-slimeball-splat", splat);
     scene.events.off("presentation:reset", cleanup);
     scene.events.off("shutdown", cleanup);
-    visual.destroy();
+    visual.destroy({ skipBody: bodyAlreadyDestroying });
     debug?.destroy?.();
   };
   const splat = (hit) => {
@@ -249,7 +251,10 @@ export function spawnGloopSlimeballVisual(
   scene.events.on("update", update);
   scene.events.once("presentation:reset", cleanup);
   scene.events.once("shutdown", cleanup);
-  visual.body.once("destroy", cleanup);
+  // Phaser emits `destroy` before clearing the graphics object's scene. A
+  // second body.destroy() here would finish the inner destroy first, leaving
+  // the outer destroy to read scene.sys after scene has become undefined.
+  visual.body.once("destroy", onBodyDestroy);
   visual.update(0);
   return visual.body;
 }

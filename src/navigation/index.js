@@ -47,6 +47,7 @@ let transitionExitTimer;
 let transitionExitAnimation;
 let transitionPresentation = 0;
 const transitionMinimumMs = 1000;
+const lobbyReturnMinimumMs = 300;
 const transitionFadeMs = 120;
 function cancelTransitionExit() {
   ++transitionPresentation;
@@ -67,6 +68,8 @@ function dismissTransition() {
   cancelTransitionExit();
   const panel = transition;
   const presentation = transitionPresentation;
+  const minimumMs = panel.dataset.lobbyReturn === 'true'
+    ? lobbyReturnMinimumMs : transitionMinimumMs;
   transitionExitTimer = setTimeout(async () => {
     const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
     transitionExitAnimation = !reducedMotion && panel.animate?.(
@@ -76,7 +79,7 @@ function dismissTransition() {
     panel.remove();
     transition = null;
     transitionExitAnimation = null;
-  }, Math.max(240, transitionMinimumMs - (Date.now() - transitionShownAt)));
+  }, Math.max(240, minimumMs - (Date.now() - transitionShownAt)));
 }
 let readinessTimer;
 let audioContext;
@@ -265,6 +268,10 @@ function runInline(fn) {
 }
 async function executeScript(source, owner) {
   if (!owner.active) return;
+  // The edge may inject analytics into fetched HTML. The initial document has
+  // already handled those scripts; replaying them on a route change can make a
+  // browser extension's blocked beacon fail the entire navigation.
+  if (source.src && new URL(source.src, location.href).origin !== location.origin) return;
   if (source.src && (/\/socket\.io\/socket\.io\.js/.test(source.src) || /\/bundles\/navigation[.]/.test(source.src))) return;
   if (source.src && /phaser-arcade-physics/.test(source.src) && window.Phaser) return;
   const script = document.createElement('script');
@@ -315,12 +322,15 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
   if (returningToLobby) {
     showLobbyLoadingBar();
     transition.dataset.destination = url.href;
+    transition.dataset.lobbyReturn = 'true';
   } else if (url.pathname.startsWith('/game/')) {
     showBattleLoadingBar();
     transition.dataset.destination = url.href;
+    transition.dataset.lobbyReturn = 'false';
   } else if (!inLobby) {
     showTransition('Loading lobby…');
     transition.dataset.destination = url.href;
+    transition.dataset.lobbyReturn = 'false';
   }
   clearTimeout(readinessTimer);
   readinessTimer = setTimeout(() => { if (ticket === sequence) fail(new Error('Screen readiness timed out')); }, 45000);
@@ -472,6 +482,7 @@ window.__BB_NAVIGATION__ = {
     mounted = false;
     showLobbyLoadingBar();
     transition.dataset.destination = location.href;
+    transition.dataset.lobbyReturn = 'true';
     return lobbyReturn.prepare(fallbackPartyId);
   },
   async beginBattleLoading() {

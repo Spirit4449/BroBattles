@@ -48,7 +48,7 @@ Exact generation prompt:
 
 The model now renders cropped foreground fingers over the handle, plus the supporting idle hand, using the original atlas pixels. These layers track facing, transparency, tint and rage size and are removed on destruction/shutdown. They hide during the sweep. Running anchors follow the forward fist in all six frames, with the mace angled upward ahead of the character. Rotation transitions ease over 60 ms. Body atlas identity and combat geometry are preserved.
 
-Open `/thorg-preview.html` on the local server to inspect idle, running, jump, falling and sweep using the production renderer, mirrored at normal and enlarged sizes. The preview entry is built by webpack.
+Use the shared [Sprite Workshop](../spritesheet-generator/README.md): run `npm --prefix spritesheet-generator start`, create a project, and import Thorg from the character catalog. Inspect frames, both facings, onion skinning, and loop seams in one viewer. The workshop previews body sprites only; weapon sweeps and rage effects require in-game inspection.
 
 ## Heavier head, faster startup and rear sweep occlusion
 

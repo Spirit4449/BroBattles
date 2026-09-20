@@ -6,7 +6,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 
 // Small DOM transport double: requests, style completion, and cleanup resolve
 // independently, so the real router can be exercised in adverse order.
-function setup({ deferStyles = false, deferCleanup = false, initialStyles = [], imageClass, animate, destinationStyles = ['https://game.test/bundles/index.css'] } = {}) {
+function setup({ deferStyles = false, deferCleanup = false, initialStyles = [], imageClass, animate, destinationStyles = ['https://game.test/bundles/index.css'], injectedScripts = [] } = {}) {
   const location = new URL('https://game.test/game/1');
   const state = { fetches: [], executed: [], preloaded: [], styleRequests: [], disposed: 0, bodies: 0, status: null, warmed: 0, movedStyles: [], progressWrites: [] };
   let now = 0, timerId = 0;
@@ -57,6 +57,10 @@ function setup({ deferStyles = false, deferCleanup = false, initialStyles = [], 
         if (node.tagName === 'SCRIPT') {
           queueMicrotask(() => {
             state.executed.push(node.src);
+            if (node.src?.includes('static.cloudflareinsights.com')) {
+              node.onerror?.();
+              return;
+            }
             if (node.src?.includes('index.bundle')) {
               state.status = context.window.__BB_NAVIGATION__.consumeLobbyReturnStatus();
             }
@@ -118,7 +122,8 @@ function setup({ deferStyles = false, deferCleanup = false, initialStyles = [], 
           const style = new Element('link'); style.rel = 'stylesheet'; style.href = href; head.append(style);
         }
         const script = new Element('script'); script.src = 'https://game.test/bundles/index.bundle.js';
-        return { title: 'Lobby', body, head, querySelectorAll: () => [script] };
+        const injected = injectedScripts.map(src => { const node = new Element('script'); node.src = src; return node; });
+        return { title: 'Lobby', body, head, querySelectorAll: () => [script, ...injected] };
       }
     },
     createBattlePreloader: () => ({ start() { state.warmed++; }, stop() {}, enqueue() {} }),
@@ -160,8 +165,18 @@ test('return overlaps script downloads, CSS, and cleanup; status is delivered on
   assert.equal(env.state.status, env.status);
   assert.equal(env.nav.consumeLobbyReturnStatus(), null);
   env.document.dispatchEvent(new Event('lobby:ready'));
-  env.advanceTime(1000);
+  env.advanceTime(299);
+  assert.ok(env.document.getElementById('bb-route-transition'));
+  env.advanceTime(1);
   assert.equal(env.document.getElementById('bb-route-transition'), null);
+});
+
+test('a blocked Cloudflare analytics beacon cannot fail lobby navigation', async () => {
+  const env = setup({ injectedScripts: ['https://static.cloudflareinsights.com/beacon.min.js/v31'] });
+  await env.nav.navigate('/party/1');
+  assert.equal(env.state.bodies, 1);
+  assert.deepEqual(env.state.executed, ['https://game.test/bundles/index.bundle.js']);
+  assert.equal(env.document.getElementById('bb-route-transition').querySelector('button'), null);
 });
 
 test('a superseding route waits for and retains a stylesheet already requested by the cancelled route', async () => {
@@ -272,11 +287,11 @@ test('lobby return waits for artwork and a failed image still allows recovery', 
 });
 
 
-test('a fast ready screen stays covered for a full second', async () => {
+test('other ready screens keep the full transition', async () => {
   const { nav, document, advanceTime } = setup();
-  await nav.navigate('/party/1');
+  await nav.navigate('/game/2');
   const overlay = document.getElementById('bb-route-transition');
-  document.dispatchEvent(new Event('lobby:ready'));
+  document.dispatchEvent(new Event('game:ready'));
   advanceTime(999);
   assert.equal(document.getElementById('bb-route-transition'), overlay);
   advanceTime(1);
@@ -287,12 +302,14 @@ test('a newer route cancels the pending dismissal of its loading screen', async 
   const { nav, document, advanceTime } = setup();
   await nav.navigate('/party/1');
   document.dispatchEvent(new Event('lobby:ready'));
-  advanceTime(500);
+  advanceTime(200);
   await nav.navigate('/game/2');
   advanceTime(500);
   assert.ok(document.getElementById('bb-route-transition'));
   document.dispatchEvent(new Event('game:ready'));
-  advanceTime(240);
+  advanceTime(299);
+  assert.ok(document.getElementById('bb-route-transition'));
+  advanceTime(1);
   assert.equal(document.getElementById('bb-route-transition'), null);
 });
 
@@ -316,14 +333,14 @@ test('page replacement waits for fade-in and removal waits for fade-out', async 
       return { finished, cancel() { finish(); } };
     },
   });
-  const navigation = nav.navigate('/party/1');
+  const navigation = nav.navigate('/game/2');
   await flush();
   assert.equal(state.bodies, 0, 'outgoing page stays behind the fading cover');
   assert.equal(animations[0].options.duration, 120);
   animations[0].finish();
   await navigation;
   assert.equal(state.bodies, 1);
-  document.dispatchEvent(new Event('lobby:ready'));
+  document.dispatchEvent(new Event('game:ready'));
   advanceTime(999);
   assert.equal(animations.length, 1);
   advanceTime(1);

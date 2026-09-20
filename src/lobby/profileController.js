@@ -126,6 +126,9 @@ export function createProfileController({ getUserData }) {
     if (accountPanel) {
       accountPanel.classList.toggle("is-hidden", !lobbyProfileState.viewingSelf);
       renderAccountAccess(accountPanel, profile.guest === true);
+      if (lobbyProfileState.viewingSelf) {
+        wireEmailSettings(profileFetchJson, profile);
+      }
     }
     const characterLevelsPanel = document.getElementById(
       "profile-character-levels-panel",
@@ -479,8 +482,6 @@ export function createProfileController({ getUserData }) {
     const cardsPanel = document.getElementById("profile-cards-panel");
 
     if (!overlay) return;
-    wireEmailSettings(profileFetchJson);
-
     const accountSettings = wireAccountSettings(
       document.getElementById("profile-account-panel"),
     );

@@ -260,7 +260,6 @@ function renderIconsGrid() {
 }
 
 async function boot() {
-  wireEmailSettings(fetchJson);
   const accountSettings = wireAccountSettings(
     document.querySelector(".account"),
   );
@@ -294,6 +293,7 @@ async function boot() {
     };
 
     renderProfile(profileData);
+    wireEmailSettings(fetchJson, profileData);
     renderCardsGrid();
     renderIconsGrid();
 

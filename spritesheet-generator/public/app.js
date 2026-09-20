@@ -1,962 +1,592 @@
-const ANIMATIONS = [
-  { atlasPrefix: "idle", label: "Idle", singleFrame: false },
-  { atlasPrefix: "running", label: "Running", singleFrame: false },
-  { atlasPrefix: "jumping", label: "Jumping", singleFrame: false },
-  { atlasPrefix: "falling", label: "Falling", singleFrame: false },
-  { atlasPrefix: "attack", label: "Attack", singleFrame: false },
-  { atlasPrefix: "dying", label: "Dead", singleFrame: false },
-  { atlasPrefix: "wall", label: "Wall Jump", singleFrame: true },
-  { atlasPrefix: "special", label: "Special", singleFrame: false },
-];
-
+/* One UI over the same persisted operations used by cli.js. */
+const $ = id => document.getElementById(id);
 const state = {
-  sessionId: null,
-  characterKey: "",
-  keyColor: "#00ff00",
-  tolerance: 26,
-  bodySelection: null,
-  animations: Object.fromEntries(
-    ANIMATIONS.map((animation) => [
-      animation.atlasPrefix,
-      {
-        ...animation,
-        fps: 15,
-        frames: [],
-        currentPreviewIndex: 0,
-        currentEditorIndex: 0,
-        nextPreviewAt: 0,
-      },
-    ]),
-  ),
-  activeEditorPrefix: null,
-  activeTool: "brush",
-  isDrawing: false,
-  playbackTimer: null,
+  key: '',
+  project: null,
+  animation: 'idle',
+  index: 0,
+  selected: new Set(),
+  images: new Map(),
+  playing: false,
+  elapsed: 0,
+  busy: false,
+  reference: null,
+  transition: null,
+  stroke: null
 };
-
-const refs = {
-  characterName: document.getElementById("character-name"),
-  keyColor: document.getElementById("key-color"),
-  tolerance: document.getElementById("tolerance"),
-  toleranceOutput: document.getElementById("tolerance-output"),
-  newSessionButton: document.getElementById("new-session-button"),
-  exportButton: document.getElementById("export-button"),
-  statusText: document.getElementById("status-text"),
-  workspaceSummary: document.getElementById("workspace-summary"),
-  animationGrid: document.getElementById("animation-grid"),
-  resultCard: document.getElementById("result-card"),
-  resultBody: document.getElementById("result-body"),
-  editorModal: document.getElementById("editor-modal"),
-  modalEyebrow: document.getElementById("modal-eyebrow"),
-  modalTitle: document.getElementById("modal-title"),
-  closeEditorButton: document.getElementById("close-editor-button"),
-  editorFps: document.getElementById("editor-fps"),
-  toolBrush: document.getElementById("tool-brush"),
-  toolEraser: document.getElementById("tool-eraser"),
-  brushColor: document.getElementById("brush-color"),
-  brushSize: document.getElementById("brush-size"),
-  brushSizeOutput: document.getElementById("brush-size-output"),
-  prevFrameButton: document.getElementById("prev-frame-button"),
-  nextFrameButton: document.getElementById("next-frame-button"),
-  importFrameButton: document.getElementById("import-frame-button"),
-  importFrameInput: document.getElementById("import-frame-input"),
-  addFrameButton: document.getElementById("add-frame-button"),
-  duplicateFrameButton: document.getElementById("duplicate-frame-button"),
-  deleteFrameButton: document.getElementById("delete-frame-button"),
-  setBodyButton: document.getElementById("set-body-button"),
-  frameMeta: document.getElementById("frame-meta"),
-  frameEditorCanvas: document.getElementById("frame-editor-canvas"),
-  timelineStrip: document.getElementById("timeline-strip"),
-};
-
-const animationCardRefs = new Map();
-
-function setStatus(message, isError = false) {
-  refs.statusText.textContent = message;
-  refs.statusText.classList.toggle("is-error", isError);
+function status(text, error = false) {
+  $('status').textContent = text;
+  $('status').classList.toggle('error', error);
 }
-
-function clampBrushSize(value) {
-  if (!Number.isFinite(value)) return 1;
-  return Math.max(1, Math.min(32, Math.round(value)));
-}
-
-function getAnimationState(prefix) {
-  return state.animations[prefix];
-}
-
-function cloneCanvas(sourceCanvas) {
-  const canvas = document.createElement("canvas");
-  canvas.width = sourceCanvas.width;
-  canvas.height = sourceCanvas.height;
-  const ctx = canvas.getContext("2d");
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(sourceCanvas, 0, 0);
-  return canvas;
-}
-
-function createCanvasFromImage(image) {
-  const canvas = document.createElement("canvas");
-  canvas.width = image.naturalWidth || image.width;
-  canvas.height = image.naturalHeight || image.height;
-  const ctx = canvas.getContext("2d");
-  ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(image, 0, 0);
-  return canvas;
-}
-
-function frameToThumbnail(frame, size = 74) {
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, size, size);
-
-  const scale = Math.min(size / frame.canvas.width, size / frame.canvas.height);
-  const drawWidth = Math.max(1, Math.round(frame.canvas.width * scale));
-  const drawHeight = Math.max(1, Math.round(frame.canvas.height * scale));
-  const x = Math.floor((size - drawWidth) / 2);
-  const y = Math.floor((size - drawHeight) / 2);
-  ctx.drawImage(frame.canvas, x, y, drawWidth, drawHeight);
-  return canvas;
-}
-
-async function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error(`Failed to load ${url}`));
-    image.src = /^blob:|^data:/i.test(url) ? url : `${url}?t=${Date.now()}`;
-  });
-}
-
-async function ensureSession() {
-  if (state.sessionId) return state.sessionId;
-
-  const response = await fetch("/api/session/init", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+async function api(url, data) {
+  const response = await fetch(url, data === undefined ? {} : {
+    method: 'POST',
+    headers: data instanceof FormData ? {} : {
+      'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      characterName: refs.characterName.value,
-      keyColor: refs.keyColor.value,
-      tolerance: Number(refs.tolerance.value),
-    }),
+    body: data instanceof FormData ? data : JSON.stringify(data)
   });
-
-  const payload = await response.json();
+  const result = await response.json();
   if (!response.ok) {
-    throw new Error(payload.error || "Unable to create session.");
+    const e = new Error(result.error || 'Request failed');
+    e.code = result.code;
+    throw e;
   }
-
-  applySessionMetadata(payload.session);
-  return state.sessionId;
+  return result;
 }
-
-function applySessionMetadata(session) {
-  state.sessionId = session.sessionId;
-  state.characterKey = session.characterKey;
-  state.keyColor = session.keyColor;
-  state.tolerance = session.tolerance;
-
-  refs.characterName.value = session.characterKey;
-  refs.keyColor.value = session.keyColor;
-  refs.tolerance.value = String(session.tolerance);
-  refs.toleranceOutput.value = String(session.tolerance);
-
-  for (const animation of session.animations || []) {
-    const existing = getAnimationState(animation.atlasPrefix);
-    if (!existing) continue;
-    existing.fps = animation.fps || existing.fps;
+function endpoint(suffix = '') {
+  return `/api/projects/${state.key}${suffix}`;
+}
+function active() {
+  return state.project?.animations.find(a => a.key === state.animation);
+}
+function current() {
+  return state.project?.frames[active()?.frames[state.index]];
+}
+function controls() {
+  document.querySelectorAll('[data-project]').forEach(e => {
+    e.disabled = !state.project || state.busy;
+  });
+  $('undo').disabled ||= !state.project?.past.length;
+  $('redo').disabled ||= !state.project?.future.length;
+  $('export').disabled ||= !state.project?.normalized;
+  $('projects').disabled = state.busy;
+  $('create').disabled = state.busy;
+  $('replacement').disabled = state.busy || !current();
+  document.querySelectorAll('#grid button').forEach(e => {
+    e.disabled = state.busy;
+  });
+}
+async function work(fn, message = 'Saved.') {
+  if (state.busy) return;
+  state.busy = true;
+  state.playing = false;
+  controls();
+  try {
+    await fn();
+    status(message);
+  } catch (e) {
+    if (e.code === 'CONFLICT') await refresh();
+    status(e.message, true);
+  } finally {
+    state.busy = false;
+    controls();
   }
-
-  renderWorkspaceSummary();
-  renderAnimationGrid();
 }
-
-function renderWorkspaceSummary() {
-  const loadedCount = ANIMATIONS.filter(
-    (animation) => getAnimationState(animation.atlasPrefix).frames.length > 0,
-  ).length;
-  const bodyLabel = state.bodySelection
-    ? `${state.bodySelection.atlasPrefix} #${state.bodySelection.index + 1}`
-    : "Not selected";
-
-  refs.workspaceSummary.innerHTML = `
-    <div class="summary-metric">
-      <span class="metric-label">Session</span>
-      <strong>${state.sessionId ? "Active" : "Not created"}</strong>
-    </div>
-    <div class="summary-metric">
-      <span class="metric-label">Character</span>
-      <strong>${state.characterKey || "Not set"}</strong>
-    </div>
-    <div class="summary-metric">
-      <span class="metric-label">Animations Loaded</span>
-      <strong>${loadedCount} / ${ANIMATIONS.length}</strong>
-    </div>
-    <div class="summary-metric">
-      <span class="metric-label">Key Color</span>
-      <strong>${refs.keyColor.value}</strong>
-    </div>
-    <div class="summary-metric">
-      <span class="metric-label">Body Frame</span>
-      <strong>${bodyLabel}</strong>
-    </div>
-  `;
+async function apply(ops) {
+  await work(async () => {
+    await adopt(await api(endpoint('/edit'), {
+      revision: state.project.revision,
+      ops
+    }));
+  });
 }
-
-function renderAnimationGrid() {
-  refs.animationGrid.innerHTML = "";
-  animationCardRefs.clear();
-
-  for (const animation of ANIMATIONS) {
-    const animState = getAnimationState(animation.atlasPrefix);
-    const card = document.createElement("article");
-    card.className = "animation-card";
-    card.innerHTML = `
-      <div class="animation-card-header">
-        <div>
-          <h3>${animation.label}</h3>
-          <p>${animState.frames.length} frame${animState.frames.length === 1 ? "" : "s"} ready</p>
-        </div>
-        <div class="selection-badge">${animState.singleFrame ? "Single frame" : "Timeline edit"}</div>
-      </div>
-
-      <div class="animation-preview-stage">
-        <canvas data-role="preview-canvas"></canvas>
-      </div>
-
-      <div class="card-controls">
-        <label class="field compact-field">
-          <span>FPS</span>
-          <input data-role="fps-input" type="number" min="1" max="60" step="1" value="${animState.fps}" />
-        </label>
-
-        <label class="field compact-field grow">
-          <span>Upload Video</span>
-          <input data-role="file-input" type="file" accept="video/*" />
-        </label>
-      </div>
-
-      <div class="card-actions">
-        <button data-role="upload-button" type="button">Process ${animation.label}</button>
-        <button data-role="edit-button" type="button" class="secondary-button" ${animState.frames.length ? "" : "disabled"}>
-          Open Editor
-        </button>
-      </div>
-    `;
-
-    refs.animationGrid.appendChild(card);
-
-    const previewCanvas = card.querySelector('[data-role="preview-canvas"]');
-    const fpsInput = card.querySelector('[data-role="fps-input"]');
-    const fileInput = card.querySelector('[data-role="file-input"]');
-    const uploadButton = card.querySelector('[data-role="upload-button"]');
-    const editButton = card.querySelector('[data-role="edit-button"]');
-    const countText = card.querySelector(".animation-card-header p");
-
-    fpsInput.addEventListener("input", () => {
-      animState.fps = clampFps(Number(fpsInput.value));
-      fpsInput.value = String(animState.fps);
-      restartPlaybackLoop();
-      if (state.activeEditorPrefix === animation.atlasPrefix) {
-        refs.editorFps.value = String(animState.fps);
+function frameUrl(id, native = false) {
+  return `${endpoint(`/frames/${id}`)}?revision=${state.project.revision}${native ? '&native=1' : ''}`;
+}
+function imageFor(id, native = false) {
+  if (!id) return null;
+  const key = `${id}:${native}`;
+  if (!state.images.has(key)) {
+    const img = new Image();
+    img.src = frameUrl(id, native);
+    state.images.set(key, img);
+  }
+  return state.images.get(key);
+}
+function option(value, text = value) {
+  const e = document.createElement('option');
+  e.value = value;
+  e.textContent = text;
+  return e;
+}
+async function listProjects() {
+  const projects = await api('/api/projects');
+  $('projects').replaceChildren(option('', 'Open a project…'), ...projects.map(p => option(p.key, p.name)));
+  $('projects').value = state.key;
+}
+async function adopt(p) {
+  state.project = p;
+  state.images.clear();
+  if (!active()) state.animation = 'idle';
+  state.index = Math.min(state.index, Math.max(0, active().frames.length - 1));
+  state.selected = new Set([...state.selected].filter(id => !!p.frames[id]));
+  if (!state.selected.size && current()) state.selected.add(current().id);
+  for (const id of ['import-animation', 'assign-to', 'transition']) {
+    const value = $(id).value;
+    $(id).replaceChildren(...(id === 'transition' ? [option('', 'None')] : id === 'import-animation' ? [option('', 'Auto (atlas) / idle')] : []), ...p.animations.map(a => option(a.key)));
+    if ([...$(id).options].some(o => o.value === value)) $(id).value = value;
+  }
+  $('title').textContent = p.name;
+  $('subtitle').textContent = `Revision ${p.revision} · ${Object.keys(p.frames).length} frames · ${p.animations.length} animation rows`;
+  $('normalization').textContent = p.normalized ? '256 × 256 · normalized' : 'Original dimensions · normalize before export';
+  renderGrid();
+  inspector();
+  controls();
+  updateURL();
+}
+async function refresh() {
+  if (state.key) await adopt(await api(endpoint()));
+}
+function updateURL() {
+  if (state.key) history.replaceState(null, '', `?${new URLSearchParams({
+    project: state.key,
+    animation: state.animation,
+    ...(current() ? {
+      frame: current().id
+    } : {})
+  })}`);
+}
+function select(animation, index, event = {}) {
+  const oldIndex = state.index,
+    same = state.animation === animation;
+  state.animation = animation;
+  state.index = index;
+  state.playing = false;
+  state.elapsed = 0;
+  const id = current()?.id;
+  if (event.shiftKey && same) {
+    for (let i = Math.min(oldIndex, index); i <= Math.max(oldIndex, index); i++) state.selected.add(active().frames[i]);
+  } else if ((event.metaKey || event.ctrlKey) && id) {
+    if (state.selected.has(id)) state.selected.delete(id);else state.selected.add(id);
+  } else state.selected = new Set(id ? [id] : []);
+  renderGrid();
+  inspector();
+  updateURL();
+}
+function renderGrid() {
+  $('grid').replaceChildren();
+  if (!state.project) return;
+  const cols = Math.max(8, ...state.project.animations.map(a => a.frames.length));
+  for (const a of state.project.animations) {
+    const row = document.createElement('div');
+    row.className = 'animation-row';
+    const label = document.createElement('button');
+    label.className = `row-label ${a.key === state.animation ? 'active' : ''}`;
+    label.textContent = a.key;
+    const count = document.createElement('small');
+    count.textContent = `${a.frames.length} frames · ${a.fps} fps`;
+    label.append(count);
+    label.onclick = () => select(a.key, 0);
+    row.append(label);
+    for (let i = 0; i < cols; i++) {
+      const id = a.frames[i],
+        f = state.project.frames[id],
+        button = document.createElement('button');
+      button.className = `frame ${id ? '' : 'empty'} ${state.selected.has(id) ? 'selected' : ''} ${id && current()?.id === id ? 'current' : ''}`;
+      if (f) {
+        const img = document.createElement('img');
+        img.src = frameUrl(id);
+        img.alt = f.name;
+        img.loading = 'lazy';
+        const text = document.createElement('small');
+        text.textContent = `${i + 1} · ${f.name}`;
+        button.append(img, text);
+        button.title = `${f.name}\n${f.width}×${f.height}\n${id}`;
+        button.draggable = true;
+        button.onclick = event => select(a.key, i, event);
+        button.ondragstart = e => e.dataTransfer.setData('text/plain', JSON.stringify({
+          animation: a.key,
+          ids: state.selected.has(id) ? a.frames.filter(f => state.selected.has(f)) : [id]
+        }));
+        button.ondragover = e => e.preventDefault();
+        button.ondrop = e => {
+          e.preventDefault();
+          let payload;
+          try {
+            payload = JSON.parse(e.dataTransfer.getData('text/plain'));
+          } catch {
+            return;
+          }
+          if (payload.animation !== a.key) return;
+          const rest = a.frames.filter(f => !payload.ids.includes(f));
+          const at = rest.indexOf(id);
+          rest.splice(at < 0 ? rest.length : at, 0, ...payload.ids);
+          apply([{
+            op: 'reorder',
+            animation: a.key,
+            ids: rest
+          }]);
+        };
+      } else {
+        button.textContent = '+';
+        button.title = `Append blank frame to ${a.key}`;
+        button.onclick = () => apply([{
+          op: 'blank',
+          animation: a.key
+        }]);
       }
-    });
-
-    uploadButton.addEventListener("click", async () => {
-      try {
-        const file = fileInput.files?.[0];
-        if (!file) {
-          throw new Error(`Choose a video for ${animation.label} first.`);
-        }
-
-        uploadButton.disabled = true;
-        uploadButton.textContent = "Processing...";
-        setStatus(`Processing ${animation.label}...`);
-
-        const sessionId = await ensureSession();
-        const formData = new FormData();
-        formData.append("video", file);
-        formData.append("atlasPrefix", animation.atlasPrefix);
-        formData.append("fps", String(animState.fps));
-        formData.append("characterName", refs.characterName.value);
-        formData.append("keyColor", refs.keyColor.value);
-        formData.append("tolerance", refs.tolerance.value);
-
-        const response = await fetch(`/api/session/${sessionId}/animation`, {
-          method: "POST",
-          body: formData,
-        });
-
-        const payload = await response.json();
-        if (!response.ok) {
-          throw new Error(payload.error || `Failed to process ${animation.label}.`);
-        }
-
-        const sessionAnimation = payload.session.animations.find(
-          (candidate) => candidate.atlasPrefix === animation.atlasPrefix,
-        );
-        await hydrateAnimationFrames(animation.atlasPrefix, sessionAnimation);
-        refreshAnimationCardMeta(animation.atlasPrefix);
-        renderAnimationPreview(animation.atlasPrefix);
-        renderWorkspaceSummary();
-        restartPlaybackLoop();
-        setStatus(`${animation.label} is ready to edit.`);
-        openEditor(animation.atlasPrefix);
-      } catch (error) {
-        setStatus(error.message || `Failed to process ${animation.label}.`, true);
-      } finally {
-        uploadButton.disabled = false;
-        uploadButton.textContent = `Process ${animation.label}`;
-      }
-    });
-
-    editButton.addEventListener("click", () => openEditor(animation.atlasPrefix));
-    previewCanvas.addEventListener("click", () => {
-      if (animState.frames.length) {
-        openEditor(animation.atlasPrefix);
-      }
-    });
-
-    animationCardRefs.set(animation.atlasPrefix, {
-      previewCanvas,
-      fpsInput,
-      fileInput,
-      uploadButton,
-      editButton,
-      countText,
-    });
-
-    renderAnimationPreview(animation.atlasPrefix);
+      row.append(button);
+    }
+    $('grid').append(row);
   }
 }
-
-async function hydrateAnimationFrames(prefix, sessionAnimation) {
-  const animState = getAnimationState(prefix);
-  animState.fps = sessionAnimation.fps || animState.fps;
-  animState.frames = [];
-
-  for (let index = 0; index < sessionAnimation.frames.length; index += 1) {
-    const frame = sessionAnimation.frames[index];
-    const image = await loadImage(frame.url);
-    const canvas = createCanvasFromImage(image);
-    animState.frames.push({
-      id: frame.id || `${prefix}-${index}`,
-      fileName: frame.fileName,
-      canvas,
-      width: canvas.width,
-      height: canvas.height,
-    });
-  }
-
-  animState.currentPreviewIndex = 0;
-  animState.currentEditorIndex = 0;
-  animState.nextPreviewAt = performance.now();
-  if (!state.bodySelection) {
-    state.bodySelection = { atlasPrefix: prefix, index: 0 };
-  }
+function inspector() {
+  const a = active(),
+    f = current();
+  $('selection').textContent = f ? `${state.selected.size} selected · ${f.width}×${f.height} source\n${f.id}` : 'Nothing selected';
+  $('fps').value = a?.fps || 12;
+  $('loop').checked = a?.loop || false;
+  $('scrub').max = Math.max(0, (a?.frames.length || 1) - 1);
+  $('scrub').value = state.index;
+  if (!f) return;
+  $('frame-name').value = f.name;
+  for (const [id, key] of [['offset-x', 'x'], ['offset-y', 'y'], ['scale', 'scale'], ['anchor-x', 'anchorX'], ['anchor-y', 'anchorY']]) $(id).value = f.transform[key];
+  $('crop-width').value = f.width;
+  $('crop-height').value = f.height;
 }
-
-function renderAnimationPreview(prefix) {
-  const refsForCard = animationCardRefs.get(prefix);
-  const animState = getAnimationState(prefix);
-  if (!refsForCard) return;
-
-  const canvas = refsForCard.previewCanvas;
-  const ctx = canvas.getContext("2d");
-  const frame = animState.frames[animState.currentPreviewIndex] || animState.frames[0];
-
-  const size = 180;
-  canvas.width = size;
-  canvas.height = size;
-  ctx.clearRect(0, 0, size, size);
+function ids() {
+  return $('scope').value === 'animation' ? [...active().frames] : [...state.selected];
+}
+function num(id) {
+  return Number($(id).value);
+}
+function bind(id, fn) {
+  $(id).onclick = fn;
+}
+bind('create', () => work(async () => {
+  const result = await api('/api/projects', {
+    name: $('project-name').value || 'Untitled character'
+  });
+  state.key = result.key;
+  state.selected.clear();
+  await adopt(result.project);
+  await listProjects();
+}, 'Project created. Import frames to begin.'));
+$('projects').onchange = () => work(async () => {
+  state.key = $('projects').value;
+  state.selected.clear();
+  state.reference = null;
+  if (state.key) await refresh();else {
+    state.project = null;
+    location.href = location.pathname;
+  }
+}, 'Project opened.');
+bind('import-catalog', () => work(async () => {
+  await adopt(await api(endpoint('/catalog'), {
+    revision: state.project.revision,
+    catalogId: $('catalog').value
+  }));
+}, 'Character imported. Review mappings and normalize when ready.'));
+function upload(files, options) {
+  return work(async () => {
+    const form = new FormData();
+    [...files].forEach(f => form.append('files', f));
+    form.append('revision', state.project.revision);
+    form.append('options', JSON.stringify(options));
+    await adopt(await api(endpoint('/import'), form));
+  }, 'Imported. Original source files retained.');
+}
+bind('import-files', () => upload($('sources').files, {
+  kind: $('import-kind').value,
+  animation: $('import-animation').value,
+  width: num('grid-width'),
+  height: num('grid-height'),
+  rows: $('grid-rows').value ? $('grid-rows').value.split(',').map(s => s.trim()) : undefined,
+  extractFps: num('extract-fps')
+}));
+$('replacement').onchange = () => {
+  if (current() && $('replacement').files.length) upload($('replacement').files, {
+    replace: current().id
+  });
+};
+bind('normalize', () => apply([{
+  op: 'normalize'
+}]));
+bind('undo', () => apply([{
+  op: 'undo'
+}]));
+bind('redo', () => apply([{
+  op: 'redo'
+}]));
+bind('duplicate', () => apply([{
+  op: 'duplicate',
+  ids: ids()
+}]));
+bind('delete', () => apply([{
+  op: 'delete',
+  ids: ids()
+}]));
+bind('blank', () => apply([{
+  op: 'blank',
+  animation: state.animation,
+  index: current() ? state.index + 1 : 0
+}]));
+bind('portrait', () => current() && apply([{
+  op: 'portrait',
+  ids: [current().id]
+}]));
+bind('rename', () => current() && apply([{
+  op: 'rename',
+  ids: [current().id],
+  name: $('frame-name').value
+}]));
+bind('timing', () => apply([{
+  op: 'animation',
+  animation: state.animation,
+  fps: num('fps'),
+  loop: $('loop').checked
+}]));
+bind('add-animation', () => apply([{
+  op: 'animation',
+  animation: $('new-animation').value.trim()
+}]));
+bind('assign', () => apply([{
+  op: 'assign',
+  ids: ids(),
+  to: $('assign-to').value
+}]));
+bind('transform', () => apply([{
+  op: 'transform',
+  ids: ids(),
+  x: num('offset-x'),
+  y: num('offset-y'),
+  scale: num('scale'),
+  anchorX: num('anchor-x'),
+  anchorY: num('anchor-y')
+}]));
+bind('key', () => apply([{
+  op: 'key',
+  ids: ids(),
+  color: $('color').value,
+  tolerance: num('tolerance')
+}]));
+bind('crop', () => apply([{
+  op: 'crop',
+  ids: ids(),
+  x: num('crop-x'),
+  y: num('crop-y'),
+  width: num('crop-width'),
+  height: num('crop-height')
+}]));
+function step(delta) {
+  if (active()?.frames.length) select(state.animation, (state.index + delta + active().frames.length) % active().frames.length);
+}
+bind('previous', () => step(-1));
+bind('next', () => step(1));
+bind('play', () => {
+  if (!active()?.frames.length) return;
+  $('tool').value = 'inspect';
+  state.transition = null;
+  state.playing = !state.playing;
+  state.elapsed = 0;
+  if (!state.playing) select(state.animation, state.index);
+});
+$('scrub').oninput = () => select(state.animation, num('scrub'));
+bind('pin', () => {
+  state.reference = current()?.id;
+  $('compare').value = 'reference';
+});
+bind('play-transition', () => {
+  if (!active()?.frames.length || !$('transition').value) return;
+  state.index = 0;
+  state.elapsed = 0;
+  state.transition = $('transition').value;
+  state.playing = true;
+  $('tool').value = 'inspect';
+});
+$('tool').onchange = () => {
+  state.playing = false;
+};
+for (const command of ['validate', 'render', 'export']) bind(command, () => work(async () => {
+  status(command === 'render' ? 'Rendering contact sheets and animations…' : 'Analyzing project…');
+  const result = await api(endpoint(command === 'validate' ? '/validate' : `/${command}`), command === 'validate' ? undefined : {
+    frame: current()?.id
+  });
+  $('report').textContent = JSON.stringify(result.report || result, null, 2);
+  $('artifacts').replaceChildren();
+  for (const item of result.urls || []) {
+    const link = document.createElement('a');
+    link.href = item.url;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = item.file;
+    $('artifacts').append(link);
+  }
+}, `${command === 'validate' ? 'Analysis' : command === 'render' ? 'Review pack' : 'Export'} ready.`));
+function draw(ctx, id, native = false, alpha = 1) {
+  const img = imageFor(id, native);
+  if (!img?.complete || !img.naturalWidth) return;
+  const scale = Math.min(420 / img.naturalWidth, 420 / img.naturalHeight) * num('zoom');
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(256, 256);
+  if (!native && $('flip').checked) ctx.scale(-1, 1);
   ctx.imageSmoothingEnabled = false;
-
-  if (!frame) return;
-
-  const scale = Math.min(size / frame.canvas.width, size / frame.canvas.height);
-  const drawWidth = Math.max(1, Math.round(frame.canvas.width * scale));
-  const drawHeight = Math.max(1, Math.round(frame.canvas.height * scale));
-  const x = Math.floor((size - drawWidth) / 2);
-  const y = Math.floor((size - drawHeight) / 2);
-  ctx.drawImage(frame.canvas, x, y, drawWidth, drawHeight);
+  ctx.drawImage(img, -img.naturalWidth * scale / 2, -img.naturalHeight * scale / 2, img.naturalWidth * scale, img.naturalHeight * scale);
+  ctx.restore();
 }
-
-function refreshAnimationCardMeta(prefix) {
-  const cardRefs = animationCardRefs.get(prefix);
-  const animState = getAnimationState(prefix);
-  if (!cardRefs) return;
-
-  cardRefs.countText.textContent = `${animState.frames.length} frame${
-    animState.frames.length === 1 ? "" : "s"
-  } ready`;
-  cardRefs.editButton.disabled = animState.frames.length === 0;
-}
-
-function restartPlaybackLoop() {
-  if (state.playbackTimer) {
-    window.clearInterval(state.playbackTimer);
+function drawStage(canvas, id, native, onion = false) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 512, 512);
+  if (onion && active()?.frames.length > 1) {
+    draw(ctx, active().frames[(state.index + active().frames.length - 1) % active().frames.length], false, .2);
+    draw(ctx, active().frames[(state.index + 1) % active().frames.length], false, .2);
   }
-
-  state.playbackTimer = window.setInterval(() => {
-    const now = performance.now();
-    for (const animation of ANIMATIONS) {
-      const animState = getAnimationState(animation.atlasPrefix);
-      if (!animState.frames.length) continue;
-      if (now < animState.nextPreviewAt) continue;
-
-      animState.currentPreviewIndex =
-        (animState.currentPreviewIndex + 1) % animState.frames.length;
-      animState.nextPreviewAt = now + 1000 / Math.max(1, animState.fps || 15);
-      renderAnimationPreview(animation.atlasPrefix);
-    }
-  }, 50);
-}
-
-function openEditor(prefix) {
-  const animState = getAnimationState(prefix);
-  if (!animState.frames.length) {
-    setStatus("Upload and process an animation before opening the editor.", true);
-    return;
+  draw(ctx, id, native);
+  if ($('guides').checked && !native) {
+    ctx.strokeStyle = '#bdf16b80';
+    ctx.setLineDash([4, 5]);
+    ctx.beginPath();
+    ctx.moveTo(256, 0);
+    ctx.lineTo(256, 512);
+    const bottom = 256 + 210 * num('zoom');
+    ctx.moveTo(0, bottom);
+    ctx.lineTo(512, bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
-
-  state.activeEditorPrefix = prefix;
-  refs.modalEyebrow.textContent = `Animation Editor`;
-  refs.modalTitle.textContent = animState.label;
-  refs.editorFps.value = String(animState.fps);
-  refs.importFrameInput.value = "";
-  refs.editorModal.classList.remove("hidden");
-  refs.editorModal.setAttribute("aria-hidden", "false");
-  renderEditor();
-}
-
-function closeEditor() {
-  state.activeEditorPrefix = null;
-  state.isDrawing = false;
-  refs.editorModal.classList.add("hidden");
-  refs.editorModal.setAttribute("aria-hidden", "true");
-}
-
-function renderEditor() {
-  const prefix = state.activeEditorPrefix;
-  if (!prefix) return;
-
-  const animState = getAnimationState(prefix);
-  const frame = animState.frames[animState.currentEditorIndex];
-  if (!frame) return;
-
-  refs.frameMeta.textContent = `Frame ${animState.currentEditorIndex + 1} of ${animState.frames.length}`;
-  refs.editorFps.value = String(animState.fps);
-  refs.prevFrameButton.disabled = animState.frames.length <= 1;
-  refs.nextFrameButton.disabled = animState.frames.length <= 1;
-  drawFrameOnEditorCanvas(frame.canvas);
-  renderTimeline();
-}
-
-function drawFrameOnEditorCanvas(sourceCanvas) {
-  const scale = Math.max(
-    1,
-    Math.floor(
-      Math.min(
-        520 / Math.max(1, sourceCanvas.width),
-        520 / Math.max(1, sourceCanvas.height),
-      ),
-    ),
-  );
-  refs.frameEditorCanvas.width = sourceCanvas.width;
-  refs.frameEditorCanvas.height = sourceCanvas.height;
-  refs.frameEditorCanvas.style.width = `${sourceCanvas.width * scale}px`;
-  refs.frameEditorCanvas.style.height = `${sourceCanvas.height * scale}px`;
-
-  const ctx = refs.frameEditorCanvas.getContext("2d");
-  ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, refs.frameEditorCanvas.width, refs.frameEditorCanvas.height);
-  ctx.drawImage(sourceCanvas, 0, 0);
-}
-
-function renderTimeline() {
-  const prefix = state.activeEditorPrefix;
-  if (!prefix) return;
-
-  const animState = getAnimationState(prefix);
-  refs.timelineStrip.innerHTML = "";
-
-  animState.frames.forEach((frame, index) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "timeline-frame";
-    if (index === animState.currentEditorIndex) {
-      button.classList.add("is-current");
-    }
-    if (
-      state.bodySelection &&
-      state.bodySelection.atlasPrefix === prefix &&
-      state.bodySelection.index === index
-    ) {
-      button.classList.add("is-body");
-    }
-
-    const thumb = frameToThumbnail(frame);
-    thumb.className = "timeline-thumb";
-
-    const label = document.createElement("span");
-    label.textContent = String(index + 1);
-
-    button.appendChild(thumb);
-    button.appendChild(label);
-    button.addEventListener("click", () => selectEditorFrame(prefix, index));
-    refs.timelineStrip.appendChild(button);
-  });
-}
-
-function selectEditorFrame(prefix, index) {
-  const animState = getAnimationState(prefix);
-  if (!animState.frames.length) return;
-  animState.currentEditorIndex = Math.max(0, Math.min(index, animState.frames.length - 1));
-  renderEditor();
-}
-
-function getEditorFrame() {
-  const prefix = state.activeEditorPrefix;
-  if (!prefix) return null;
-  const animState = getAnimationState(prefix);
-  return animState.frames[animState.currentEditorIndex] || null;
-}
-
-function syncFrameFromEditorCanvas() {
-  const prefix = state.activeEditorPrefix;
-  const frame = getEditorFrame();
-  if (!prefix || !frame) return;
-
-  frame.canvas = cloneCanvas(refs.frameEditorCanvas);
-  frame.width = frame.canvas.width;
-  frame.height = frame.canvas.height;
-  renderAnimationPreview(prefix);
-  renderTimeline();
-}
-
-function getCanvasPoint(event) {
-  const rect = refs.frameEditorCanvas.getBoundingClientRect();
-  const scaleX = refs.frameEditorCanvas.width / rect.width;
-  const scaleY = refs.frameEditorCanvas.height / rect.height;
-  return {
-    x: Math.floor((event.clientX - rect.left) * scaleX),
-    y: Math.floor((event.clientY - rect.top) * scaleY),
-  };
-}
-
-function applyBrushStroke(point) {
-  const ctx = refs.frameEditorCanvas.getContext("2d");
-  const size = clampBrushSize(Number(refs.brushSize.value));
-  const half = Math.floor(size / 2);
-
-  if (state.activeTool === "eraser") {
-    ctx.clearRect(point.x - half, point.y - half, size, size);
-    return;
-  }
-
-  ctx.fillStyle = refs.brushColor.value;
-  ctx.fillRect(point.x - half, point.y - half, size, size);
-}
-
-async function importFrameImage() {
-  const prefix = state.activeEditorPrefix;
-  const file = refs.importFrameInput.files?.[0];
-  if (!prefix || !file) return;
-
-  const objectUrl = URL.createObjectURL(file);
-
-  try {
-    const image = await loadImage(objectUrl);
-    const animState = getAnimationState(prefix);
-    const insertionIndex = animState.currentEditorIndex + 1;
-    const canvas = createCanvasFromImage(image);
-
-    animState.frames.splice(insertionIndex, 0, {
-      id: `${prefix}-${cryptoRandom()}`,
-      fileName: `${prefix}-import-${cryptoRandom()}`,
-      canvas,
-      width: canvas.width,
-      height: canvas.height,
-    });
-
-    animState.currentEditorIndex = insertionIndex;
-    renderEditor();
-    refreshAnimationCardMeta(prefix);
-    renderAnimationPreview(prefix);
-    renderWorkspaceSummary();
-    setStatus(`Imported a frame into ${animState.label}.`);
-  } catch (error) {
-    setStatus(error.message || "Unable to import frame image.", true);
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-    refs.importFrameInput.value = "";
-  }
-}
-
-function addBlankFrame() {
-  const prefix = state.activeEditorPrefix;
-  if (!prefix) return;
-  const animState = getAnimationState(prefix);
-  const current = getEditorFrame();
-  const width = current?.canvas.width || 64;
-  const height = current?.canvas.height || 64;
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, width, height);
-
-  const insertionIndex = animState.currentEditorIndex + 1;
-  animState.frames.splice(insertionIndex, 0, {
-    id: `${prefix}-${cryptoRandom()}`,
-    fileName: `${prefix}-custom-${cryptoRandom()}`,
-    canvas,
-    width,
-    height,
-  });
-  animState.currentEditorIndex = insertionIndex;
-  renderEditor();
-  refreshAnimationCardMeta(prefix);
-  renderAnimationPreview(prefix);
-}
-
-function duplicateFrame() {
-  const prefix = state.activeEditorPrefix;
-  const frame = getEditorFrame();
-  if (!prefix || !frame) return;
-
-  const animState = getAnimationState(prefix);
-  const insertionIndex = animState.currentEditorIndex + 1;
-  animState.frames.splice(insertionIndex, 0, {
-    id: `${prefix}-${cryptoRandom()}`,
-    fileName: `${prefix}-copy-${cryptoRandom()}`,
-    canvas: cloneCanvas(frame.canvas),
-    width: frame.canvas.width,
-    height: frame.canvas.height,
-  });
-  animState.currentEditorIndex = insertionIndex;
-  renderEditor();
-  refreshAnimationCardMeta(prefix);
-  renderAnimationPreview(prefix);
-}
-
-function stepEditorFrame(direction) {
-  const prefix = state.activeEditorPrefix;
-  if (!prefix) return;
-  const animState = getAnimationState(prefix);
-  if (!animState.frames.length) return;
-
-  selectEditorFrame(
-    prefix,
-    (animState.currentEditorIndex + direction + animState.frames.length) % animState.frames.length,
-  );
-}
-
-function deleteCurrentFrame() {
-  const prefix = state.activeEditorPrefix;
-  if (!prefix) return;
-  const animState = getAnimationState(prefix);
-  if (animState.frames.length <= 1) {
-    setStatus("Each loaded animation needs at least one frame.", true);
-    return;
-  }
-
-  animState.frames.splice(animState.currentEditorIndex, 1);
-  if (state.bodySelection?.atlasPrefix === prefix) {
-    if (state.bodySelection.index === animState.currentEditorIndex) {
-      state.bodySelection.index = Math.max(0, animState.currentEditorIndex - 1);
-    } else if (state.bodySelection.index > animState.currentEditorIndex) {
-      state.bodySelection.index -= 1;
+  if (native && state.stroke) {
+    const f = current(),
+      scale = Math.min(420 / f.width, 420 / f.height) * num('zoom');
+    ctx.fillStyle = $('tool').value === 'eraser' ? '#ff777799' : $('color').value;
+    for (const [x, y] of state.stroke) {
+      ctx.beginPath();
+      ctx.arc(256 + (x - f.width / 2) * scale, 256 + (y - f.height / 2) * scale, num('radius') * scale, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
-  animState.currentEditorIndex = Math.max(
-    0,
-    Math.min(animState.currentEditorIndex, animState.frames.length - 1),
-  );
-  renderEditor();
-  refreshAnimationCardMeta(prefix);
-  renderAnimationPreview(prefix);
-  renderWorkspaceSummary();
 }
-
-function clampFps(value) {
-  if (!Number.isFinite(value)) return 15;
-  return Math.max(1, Math.min(60, Math.round(value)));
-}
-
-function cryptoRandom() {
-  return Math.random().toString(36).slice(2, 8);
-}
-
-async function canvasToBlob(canvas) {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob);
-      else reject(new Error("Failed to convert frame to blob."));
-    }, "image/png");
-  });
-}
-
-async function exportBundle() {
-  if (!state.sessionId) {
-    throw new Error("Create a session and upload at least one animation first.");
-  }
-
-  const loadedAnimations = ANIMATIONS
-    .map((animation) => getAnimationState(animation.atlasPrefix))
-    .filter((animation) => animation.frames.length > 0);
-
-  if (!loadedAnimations.length) {
-    throw new Error("Upload at least one animation before exporting.");
-  }
-
-  const formData = new FormData();
-  const manifest = {
-    characterName: refs.characterName.value,
-    keyColor: refs.keyColor.value,
-    tolerance: Number(refs.tolerance.value),
-    animations: [],
-    bodyFrameField: null,
-  };
-
-  let bodyAssigned = false;
-
-  for (const animation of loadedAnimations) {
-    const entry = {
-      atlasPrefix: animation.atlasPrefix,
-      label: animation.label,
-      fps: animation.fps,
-      frames: [],
-    };
-
-    for (let index = 0; index < animation.frames.length; index += 1) {
-      const frame = animation.frames[index];
-      const uploadField = `${animation.atlasPrefix}_${index}_${cryptoRandom()}`;
-      const blob = await canvasToBlob(frame.canvas);
-      formData.append(uploadField, blob, `${uploadField}.png`);
-      entry.frames.push({ uploadField });
-
-      if (
-        !bodyAssigned &&
-        state.bodySelection &&
-        state.bodySelection.atlasPrefix === animation.atlasPrefix &&
-        state.bodySelection.index === index
-      ) {
-        manifest.bodyFrameField = uploadField;
-        bodyAssigned = true;
+let last = performance.now();
+function tick(now) {
+  const wasPlaying = state.playing;
+  const delta = Math.min(100, now - last);
+  last = now;
+  if (state.playing && active()?.frames.length && !state.busy) {
+    state.elapsed += delta * num('speed');
+    const duration = 1000 / active().fps;
+    while (state.elapsed >= duration && state.playing) {
+      state.elapsed -= duration;
+      state.index++;
+      if (state.index >= active().frames.length) {
+        if (state.transition) {
+          state.animation = state.transition;
+          state.transition = null;
+          state.index = 0;
+          if (!active().frames.length) state.playing = false;
+        } else if (active().loop) state.index = 0;else {
+          state.index = active().frames.length - 1;
+          state.playing = false;
+        }
       }
     }
-
-    manifest.animations.push(entry);
   }
-
-  if (!manifest.bodyFrameField) {
-    const firstAnimation = manifest.animations[0];
-    manifest.bodyFrameField = firstAnimation.frames[0].uploadField;
+  if (wasPlaying && !state.playing) select(state.animation, state.index);
+  const a = active(),
+    f = current(),
+    seam = $('compare').value === 'seam',
+    native = $('tool').value !== 'inspect';
+  $('play').textContent = state.playing ? 'Pause' : 'Play';
+  $('position').textContent = `${f ? state.index + 1 : 0} / ${a?.frames.length || 0}`;
+  $('scrub').value = state.index;
+  $('frame-label').textContent = native ? `Original canvas · ${f?.name || 'No frame'}` : seam ? `${a?.key || ''} · last frame` : `${a?.key || ''} · ${f?.name || 'No frame'}`;
+  $('comparison-wrap').hidden = $('compare').value === 'none';
+  const bg = $('background').value;
+  for (const id of ['stage', 'comparison-stage']) {
+    $(id).classList.toggle('checker', bg === 'checker');
+    $(id).style.backgroundColor = bg === 'checker' ? '' : bg;
   }
-
-  formData.append("manifest", JSON.stringify(manifest));
-
-  const response = await fetch("/api/export", {
-    method: "POST",
-    body: formData,
-  });
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(payload.error || "Export failed.");
+  drawStage($('canvas'), seam && !native ? a?.frames.at(-1) : f?.id, native, $('onion').checked && !native && !seam);
+  if (!$('comparison-wrap').hidden) {
+    drawStage($('comparison'), seam ? a?.frames[0] : state.reference, false);
+    $('comparison-label').textContent = seam ? 'First frame · compare the loop seam' : `Reference · ${state.project?.frames[state.reference]?.name || 'Pin a frame'}`;
   }
-  return payload;
+  requestAnimationFrame(tick);
 }
-
-function renderExportResult(payload) {
-  refs.resultCard.classList.remove("is-empty");
-  const fpsLines = Object.entries(payload.fpsByAnimation || {})
-    .map(([name, fps]) => `<li><span>${name}</span><strong>${fps} fps</strong></li>`)
-    .join("");
-
-  refs.resultBody.innerHTML = `
-    <div class="result-summary">
-      <div class="summary-metric">
-        <span class="metric-label">Character</span>
-        <strong>${payload.character}</strong>
-      </div>
-      <div class="summary-metric">
-        <span class="metric-label">Frame Size</span>
-        <strong>${payload.cellSize.width} x ${payload.cellSize.height}</strong>
-      </div>
-      <div class="summary-metric">
-        <span class="metric-label">Animations</span>
-        <strong>${Object.keys(payload.frameCounts || {}).length}</strong>
-      </div>
-      <div class="summary-metric">
-        <span class="metric-label">Exported</span>
-        <strong>${new Date(payload.generatedAt).toLocaleTimeString()}</strong>
-      </div>
-    </div>
-
-    <div class="preview-grid">
-      <article class="preview-card">
-        <h3>Body</h3>
-        <img src="${payload.urls.body}?t=${Date.now()}" alt="body preview" />
-        <a href="${payload.urls.body}" target="_blank" rel="noreferrer">Open body.webp</a>
-      </article>
-
-      <article class="preview-card">
-        <h3>Spritesheet</h3>
-        <img src="${payload.urls.spritesheet}?t=${Date.now()}" alt="spritesheet preview" />
-        <a href="${payload.urls.spritesheet}" target="_blank" rel="noreferrer">Open spritesheet.webp</a>
-      </article>
-    </div>
-
-    <div class="link-grid">
-      <a href="${payload.urls.zip}">Download zip bundle</a>
-      <a href="${payload.urls.atlas}" target="_blank" rel="noreferrer">Open animations.json</a>
-      <a href="${payload.urls.notes}" target="_blank" rel="noreferrer">Open import notes</a>
-    </div>
-
-    <div class="count-card">
-      <h3>Animation FPS</h3>
-      <ul>${fpsLines}</ul>
-    </div>
-  `;
+function point(event) {
+  const f = current(),
+    rect = $('canvas').getBoundingClientRect();
+  if (!f) return null;
+  const scale = Math.min(420 / f.width, 420 / f.height) * num('zoom');
+  const x = ((event.clientX - rect.left) / rect.width * 512 - 256) / scale + f.width / 2;
+  const y = ((event.clientY - rect.top) / rect.height * 512 - 256) / scale + f.height / 2;
+  return x >= 0 && y >= 0 && x < f.width && y < f.height ? [x, y] : null;
 }
-
-refs.toleranceOutput.value = refs.tolerance.value;
-refs.brushSizeOutput.value = refs.brushSize.value;
-renderWorkspaceSummary();
-renderAnimationGrid();
-restartPlaybackLoop();
-
-refs.tolerance.addEventListener("input", () => {
-  refs.toleranceOutput.value = refs.tolerance.value;
+$('canvas').onpointerdown = e => {
+  if (state.busy || $('tool').value === 'inspect') return;
+  const p = point(e);
+  if (p) {
+    state.playing = false;
+    state.stroke = [p];
+    $('canvas').setPointerCapture(e.pointerId);
+  }
+};
+$('canvas').onpointermove = e => {
+  if (!state.stroke) return;
+  const p = point(e);
+  if (p) {
+    const prev = state.stroke.at(-1),
+      distance = Math.hypot(p[0] - prev[0], p[1] - prev[1]),
+      count = Math.ceil(distance / Math.max(.5, num('radius') / 2));
+    for (let i = 1; i <= count && state.stroke.length < 20000; i++) state.stroke.push([prev[0] + (p[0] - prev[0]) * i / count, prev[1] + (p[1] - prev[1]) * i / count]);
+  }
+};
+$('canvas').onpointerup = () => {
+  if (!state.stroke || state.busy) return;
+  const points = state.stroke;
+  state.stroke = null;
+  apply([{
+    op: 'paint',
+    ids: ids(),
+    points,
+    color: $('color').value,
+    radius: num('radius'),
+    erase: $('tool').value === 'eraser'
+  }]);
+};
+$('canvas').onpointercancel = () => {
+  state.stroke = null;
+};
+document.addEventListener('keydown', e => {
+  if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName) || !state.project || state.busy) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    apply([{
+      op: e.shiftKey ? 'redo' : 'undo'
+    }]);
+  } else if (e.code === 'Space') {
+    e.preventDefault();
+    $('play').click();
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    step(-1);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    step(1);
+  } else if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    $('delete').click();
+  }
 });
-
-refs.newSessionButton.addEventListener("click", async () => {
+setInterval(async () => {
+  if (!state.key || state.busy || state.stroke || /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName)) return;
   try {
-    refs.newSessionButton.disabled = true;
-    refs.newSessionButton.textContent = "Creating...";
-    const sessionId = await ensureSession();
-    setStatus(`Session ${sessionId} ready. Upload any animation to start editing.`);
-  } catch (error) {
-    setStatus(error.message || "Unable to create session.", true);
-  } finally {
-    refs.newSessionButton.disabled = false;
-    refs.newSessionButton.textContent = "Create Session";
+    const p = await api(endpoint());
+    if (p.revision !== state.project.revision) {
+      state.playing = false;
+      await adopt(p);
+      status(`Updated from disk · revision ${p.revision}`);
+    }
+  } catch (e) {
+    status(e.message, true);
   }
-});
-
-refs.exportButton.addEventListener("click", async () => {
+}, 2000);
+(async () => {
   try {
-    refs.exportButton.disabled = true;
-    refs.exportButton.textContent = "Exporting...";
-    setStatus("Exporting edited frames into a bundle...");
-    const payload = await exportBundle();
-    renderExportResult(payload);
-    setStatus(`Bundle exported for ${payload.character}.`);
-  } catch (error) {
-    setStatus(error.message || "Export failed.", true);
-  } finally {
-    refs.exportButton.disabled = false;
-    refs.exportButton.textContent = "Export Bundle";
+    const entries = await api('/api/catalog');
+    $('catalog').replaceChildren(...entries.map(i => option(i.id, i.label)));
+    const params = new URLSearchParams(location.search);
+    state.key = params.get('project') || '';
+    state.animation = params.get('animation') || 'idle';
+    await listProjects();
+    if (state.key) {
+      await refresh();
+      const index = active().frames.indexOf(params.get('frame'));
+      if (index >= 0) select(state.animation, index);
+    }
+  } catch (e) {
+    status(e.message, true);
   }
-});
-
-refs.closeEditorButton.addEventListener("click", closeEditor);
-refs.editorModal.addEventListener("click", (event) => {
-  if (event.target instanceof HTMLElement && event.target.dataset.closeEditor === "true") {
-    closeEditor();
-  }
-});
-
-refs.toolBrush.addEventListener("click", () => {
-  state.activeTool = "brush";
-  refs.toolBrush.classList.add("is-active");
-  refs.toolEraser.classList.remove("is-active");
-});
-
-refs.toolEraser.addEventListener("click", () => {
-  state.activeTool = "eraser";
-  refs.toolEraser.classList.add("is-active");
-  refs.toolBrush.classList.remove("is-active");
-});
-
-refs.brushSize.addEventListener("input", () => {
-  refs.brushSize.value = String(clampBrushSize(Number(refs.brushSize.value)));
-  refs.brushSizeOutput.value = refs.brushSize.value;
-});
-
-refs.editorFps.addEventListener("input", () => {
-  const prefix = state.activeEditorPrefix;
-  if (!prefix) return;
-  const animState = getAnimationState(prefix);
-  animState.fps = clampFps(Number(refs.editorFps.value));
-  refs.editorFps.value = String(animState.fps);
-  const cardRefs = animationCardRefs.get(prefix);
-  if (cardRefs) cardRefs.fpsInput.value = String(animState.fps);
-});
-
-refs.addFrameButton.addEventListener("click", addBlankFrame);
-refs.duplicateFrameButton.addEventListener("click", duplicateFrame);
-refs.deleteFrameButton.addEventListener("click", deleteCurrentFrame);
-refs.prevFrameButton.addEventListener("click", () => stepEditorFrame(-1));
-refs.nextFrameButton.addEventListener("click", () => stepEditorFrame(1));
-refs.importFrameButton.addEventListener("click", () => refs.importFrameInput.click());
-refs.importFrameInput.addEventListener("change", importFrameImage);
-refs.setBodyButton.addEventListener("click", () => {
-  const prefix = state.activeEditorPrefix;
-  if (!prefix) return;
-  const animState = getAnimationState(prefix);
-  state.bodySelection = {
-    atlasPrefix: prefix,
-    index: animState.currentEditorIndex,
-  };
-  renderTimeline();
-  renderWorkspaceSummary();
-  setStatus(
-    `Body export frame set to ${prefix} frame ${animState.currentEditorIndex + 1}.`,
-  );
-});
-
-refs.frameEditorCanvas.addEventListener("mousedown", (event) => {
-  if (!state.activeEditorPrefix) return;
-  state.isDrawing = true;
-  applyBrushStroke(getCanvasPoint(event));
-  syncFrameFromEditorCanvas();
-});
-
-refs.frameEditorCanvas.addEventListener("mousemove", (event) => {
-  if (!state.isDrawing || !state.activeEditorPrefix) return;
-  applyBrushStroke(getCanvasPoint(event));
-  syncFrameFromEditorCanvas();
-});
-
-window.addEventListener("mouseup", () => {
-  state.isDrawing = false;
-});
-
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !refs.editorModal.classList.contains("hidden")) {
-    closeEditor();
-    return;
-  }
-
-  if (refs.editorModal.classList.contains("hidden")) {
-    return;
-  }
-
-  if (event.key === "ArrowLeft") {
-    event.preventDefault();
-    stepEditorFrame(-1);
-  }
-
-  if (event.key === "ArrowRight") {
-    event.preventDefault();
-    stepEditorFrame(1);
-  }
-});
+  controls();
+  requestAnimationFrame(tick);
+})();

@@ -1,194 +1,40 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Bro Battles Spritesheet Generator</title>
-    <link rel="stylesheet" href="/styles.css" />
-  </head>
-  <body>
-    <main class="page-shell">
-      <section class="hero-card">
-        <p class="eyebrow">Bro Battles Asset Tool</p>
-        <h1>Upload one animation at a time, edit every frame, export when ready</h1>
-        <p class="hero-copy">
-          Each animation has its own upload flow, fps, and editor. Open an
-          animation editor to scrub frames, draw with a brush, erase pixels,
-          delete bad frames, duplicate good ones, add new blanks, and then
-          export the character atlas only when the frame timeline looks right.
-        </p>
-      </section>
-
-      <section class="tool-card">
-        <div class="card-header">
-          <div>
-            <p class="eyebrow">Session</p>
-            <h2>Character Setup</h2>
-          </div>
-          <button id="new-session-button" type="button">Create Session</button>
-        </div>
-
-        <div class="field-grid field-grid--top">
-          <label class="field">
-            <span>Character name</span>
-            <input
-              id="character-name"
-              type="text"
-              placeholder="shadow-brawler"
-              required
-            />
-          </label>
-
-          <label class="field">
-            <span>Background key color</span>
-            <input id="key-color" type="color" value="#00ff00" />
-          </label>
-
-          <label class="field">
-            <span>Tolerance</span>
-            <input
-              id="tolerance"
-              type="range"
-              min="0"
-              max="80"
-              step="1"
-              value="26"
-            />
-            <output id="tolerance-output">26</output>
-          </label>
-        </div>
-      </section>
-
-      <section class="status-card">
-        <div class="status-line">
-          <span class="status-label">Status</span>
-          <span id="status-text">Create a session, then upload any animation you want to work on.</span>
-        </div>
-      </section>
-
-      <section class="editor-card">
-        <div class="card-header">
-          <div>
-            <p class="eyebrow">Animations</p>
-            <h2>Per-Animation Workspace</h2>
-          </div>
-          <button id="export-button" type="button" class="secondary-button">
-            Export Bundle
-          </button>
-        </div>
-
-        <div class="workspace-summary" id="workspace-summary"></div>
-        <div class="animation-grid" id="animation-grid"></div>
-      </section>
-
-      <section class="result-card is-empty" id="result-card">
-        <div class="card-header">
-          <div>
-            <p class="eyebrow">Export</p>
-            <h2>Bundle Output</h2>
-          </div>
-        </div>
-
-        <div class="result-body" id="result-body">
-          <p class="empty-copy">
-            Exported files and download links will appear here after you export.
-          </p>
-        </div>
-      </section>
-    </main>
-
-    <div class="modal hidden" id="editor-modal" aria-hidden="true">
-      <div class="modal-backdrop" data-close-editor="true"></div>
-      <section class="modal-panel">
-        <div class="modal-header">
-          <div>
-            <p class="eyebrow" id="modal-eyebrow">Animation Editor</p>
-            <h2 id="modal-title">Idle</h2>
-          </div>
-          <button id="close-editor-button" type="button" class="ghost-button">
-            Close
-          </button>
-        </div>
-
-        <div class="editor-toolbar">
-          <label class="field compact-field">
-            <span>FPS</span>
-            <input id="editor-fps" type="number" min="1" max="60" step="1" />
-          </label>
-
-          <div class="tool-toggle-group">
-            <button id="tool-brush" type="button" class="tool-button is-active">
-              Brush
-            </button>
-            <button id="tool-eraser" type="button" class="tool-button">
-              Eraser
-            </button>
-          </div>
-
-          <label class="field compact-field">
-            <span>Brush Color</span>
-            <input id="brush-color" type="color" value="#ffffff" />
-          </label>
-
-          <label class="field compact-field">
-            <span>Brush Size</span>
-            <input id="brush-size" type="range" min="1" max="12" step="1" value="1" />
-            <output id="brush-size-output">1</output>
-          </label>
-
-          <div class="toolbar-actions">
-            <button id="prev-frame-button" type="button" class="small-button">
-              Prev Frame
-            </button>
-            <button id="next-frame-button" type="button" class="small-button">
-              Next Frame
-            </button>
-            <button id="set-body-button" type="button" class="small-button">
-              Use As Body
-            </button>
-            <button id="import-frame-button" type="button" class="small-button">
-              Import Image
-            </button>
-            <input
-              id="import-frame-input"
-              type="file"
-              accept="image/png,image/webp,image/jpeg"
-              hidden
-            />
-            <button id="add-frame-button" type="button" class="small-button">
-              Add Blank
-            </button>
-            <button id="duplicate-frame-button" type="button" class="small-button">
-              Duplicate
-            </button>
-            <button id="delete-frame-button" type="button" class="small-button danger-button">
-              Delete
-            </button>
-          </div>
-        </div>
-
-        <div class="modal-editor-layout">
-          <article class="editor-surface-card">
-            <div class="panel-header">
-              <h3>Frame Canvas</h3>
-              <p id="frame-meta">Frame 1</p>
-            </div>
-            <div class="editor-canvas-stage">
-              <canvas id="frame-editor-canvas"></canvas>
-            </div>
-          </article>
-
-          <article class="editor-surface-card">
-            <div class="panel-header">
-              <h3>Timeline</h3>
-              <p>Scrollable frame strip. Click a frame to edit it.</p>
-            </div>
-            <div class="timeline-strip" id="timeline-strip"></div>
-          </article>
-        </div>
-      </section>
-    </div>
-
-    <script src="/app.js" defer></script>
-  </body>
-</html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BB · Sprite Workshop</title><link rel="stylesheet" href="styles.css"></head>
+<body>
+<header><div class="brand">BB<span>SPRITE WORKSHOP</span><small>LOCAL ART TOOLS</small></div><div class="project-controls"><select id="projects" aria-label="Saved project"><option value="">Open a project…</option></select><input id="project-name" placeholder="New character project" aria-label="New project name"><button id="create" class="primary">New project</button></div></header>
+<div id="status" role="status">Create a project or open your saved work.</div>
+<main>
+<aside>
+  <section><h2>01 / Sources</h2><label>Repository character / skin<select id="catalog"></select></label><button id="import-catalog" data-project>Import character</button><hr>
+    <label>Source type<select id="import-kind"><option value="images">Images / numbered sequence</option><option value="grid">Uniform grid</option><option value="atlas">Phaser atlas + image</option><option value="video">Video</option></select></label>
+    <label>Destination animation<select id="import-animation"></select></label>
+    <div class="pair"><label>Grid cell width<input id="grid-width" type="number" min="1" value="256"></label><label>Height<input id="grid-height" type="number" min="1" value="256"></label></div>
+    <label>Grid row names (optional)<input id="grid-rows" placeholder="idle,running,jumping"></label>
+    <label>Video extraction FPS<input id="extract-fps" type="number" min="0.1" max="120" value="12"></label>
+    <label class="file-label">Choose source files<input id="sources" type="file" multiple accept="image/*,video/*,.json"></label><button id="import-files" data-project>Import selected files</button>
+  </section>
+  <section><h2>02 / Standardize</h2><p>256 × 256 cells. One scale across the project; bottom-center anchor. Original files stay intact.</p><button id="normalize" data-project>Normalize all frames</button><div id="normalization" class="badge">No project</div></section>
+  <section><h2>03 / Review & export</h2><button id="validate" data-project>Analyze frames</button><button id="render" data-project>Render review pack</button><button id="export" class="primary" data-project>Export atlas + ZIP</button><div id="artifacts"></div><details><summary>Review report</summary><pre id="report">No report yet.</pre></details></section>
+</aside>
+<div class="workspace">
+  <section class="viewer"><div class="section-heading"><div><h1 id="title">Make every frame count.</h1><p id="subtitle">Import → edit → compare → pack.</p></div><div class="history"><button id="undo" data-project title="Ctrl/Cmd Z">Undo</button><button id="redo" data-project title="Ctrl/Cmd Shift Z">Redo</button></div></div>
+    <div class="stages"><div><div class="stage checker" id="stage"><canvas id="canvas" width="512" height="512" aria-label="Animation preview and paint canvas"></canvas><span id="frame-label">No frames</span></div></div><div id="comparison-wrap" hidden><div class="stage checker" id="comparison-stage"><canvas id="comparison" width="512" height="512" aria-label="Comparison preview"></canvas><span id="comparison-label">Reference</span></div></div></div>
+    <div class="transport"><button id="previous" data-project title="Left arrow">←</button><button id="play" class="primary" data-project title="Space">Play</button><button id="next" data-project title="Right arrow">→</button><input id="scrub" type="range" min="0" max="0" value="0" aria-label="Frame scrubber"><span id="position">0 / 0</span></div>
+    <div class="view-options"><label>Speed<select id="speed"><option value="0.25">¼×</option><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label><label>Zoom<select id="zoom"><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label><label>Background<select id="background"><option value="checker">Checker</option><option value="#17232e">Dark</option><option value="#ffffff">White</option><option value="#69945d">Green</option></select></label><label><input type="checkbox" id="flip"> Flip</label><label><input type="checkbox" id="guides" checked> Guides</label><label><input type="checkbox" id="onion"> Onion skin</label></div>
+    <div class="view-options"><label>Compare<select id="compare"><option value="none">Off</option><option value="seam">Loop seam: last → first</option><option value="reference">Selected reference frame</option></select></label><button id="pin" data-project>Pin current frame</button><label>Transition to<select id="transition"><option value="">None</option></select></label><button id="play-transition" data-project>Play transition</button></div>
+  </section>
+  <section class="timeline"><div class="section-heading"><h2>Animation grid</h2><div><input id="new-animation" placeholder="extra_animation" aria-label="New animation key"><button id="add-animation" data-project>Add row</button></div></div><p class="hint">Click a frame to inspect. Shift-click for a range; ⌘/Ctrl-click to select. Drag to reorder. Empty slots do not play.</p><div id="grid"></div></section>
+</div>
+<aside class="inspector"><section><h2>Frame inspector</h2><p id="selection">Nothing selected</p>
+  <label>Edit scope<select id="scope"><option value="selection">Selected frames</option><option value="animation">Entire animation</option></select></label>
+  <label>Frame name<input id="frame-name" placeholder="idle00"></label><button id="rename" data-project>Rename current</button>
+  <div class="pair"><label>Playback FPS<input id="fps" type="number" value="12" min="0.1" max="120"></label><label class="check"><input id="loop" type="checkbox"> Loop</label></div><button id="timing" data-project>Save timing</button>
+  <hr><div class="pair"><label>Offset X<input id="offset-x" type="number" value="0"></label><label>Offset Y<input id="offset-y" type="number" value="0"></label></div><label>Scale<input id="scale" type="number" min="0.001" max="32" step="0.01" value="1"></label><div class="pair"><label>Anchor X<input id="anchor-x" type="number" value="128"></label><label>Anchor Y<input id="anchor-y" type="number" value="256"></label></div><button id="transform" data-project>Apply transform</button>
+  <div class="button-grid"><button id="duplicate" data-project>Duplicate</button><button id="delete" class="danger" data-project>Delete</button><button id="blank" data-project>Insert blank</button><button id="portrait" data-project>Set portrait</button></div>
+  <label>Move selection to<select id="assign-to"></select></label><button id="assign" data-project>Move frames</button><label class="file-label">Replace current image<input id="replacement" type="file" accept="image/*"></label>
+  </section><section><h2>Pixel cleanup</h2><p>Paint uses the original canvas. A stroke is one undo step.</p><label>Tool<select id="tool"><option value="inspect">Inspect / playback</option><option value="brush">Brush (original canvas)</option><option value="eraser">Eraser (original canvas)</option></select></label><div class="pair"><label>Color<input id="color" type="color" value="#00ff00"></label><label>Radius<input id="radius" type="number" value="3" min="0.5" max="128"></label></div><label>Key tolerance<input id="tolerance" type="number" min="0" max="441" value="26"></label><button id="key" data-project>Remove keyed background</button>
+  <hr><div class="pair"><label>Crop X<input id="crop-x" type="number" value="0"></label><label>Crop Y<input id="crop-y" type="number" value="0"></label></div><div class="pair"><label>Width<input id="crop-width" type="number" value="256" min="1"></label><label>Height<input id="crop-height" type="number" value="256" min="1"></label></div><button id="crop" data-project>Crop source canvas</button><p>Crop preserves registration by adjusting the anchor.</p></section>
+</aside>
+</main><script src="app.js"></script>
+</body></html>

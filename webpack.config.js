@@ -22,7 +22,6 @@ module.exports = (_env = {}, argv = {}) => {
     site: "./src/site/index.js",
     game: "./src/game.js",
     mapEditor: "./src/editor/mapEditor.js",
-    thorgPreview: "./src/characters/thorg/preview.js",
     party: "./src/party.js",
     index: "./src/index.js",
     signup: "./src/signup.js",

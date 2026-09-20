@@ -299,6 +299,11 @@ export function createSlimeVisual(scene, state, visualScale = 1.5, owner = null)
       }
       body.clear();
     },
-    destroy() { if (destroyed) return; destroyed = true; body.destroy(); fx.destroy(); },
+    destroy({ skipBody = false } = {}) {
+      if (destroyed) return;
+      destroyed = true;
+      if (!skipBody) body.destroy();
+      fx.destroy();
+    },
   };
 }

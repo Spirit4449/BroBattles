@@ -123,32 +123,6 @@
             "id": "h0"
           },
           {
-            "x": 754,
-            "y": 211,
-            "width": 16,
-            "height": 70,
-            "collision": {
-              "up": false,
-              "down": false,
-              "left": true,
-              "right": true
-            },
-            "id": "h1"
-          },
-          {
-            "x": 906,
-            "y": 318,
-            "width": 16,
-            "height": 70,
-            "collision": {
-              "up": false,
-              "down": false,
-              "left": true,
-              "right": true
-            },
-            "id": "h2"
-          },
-          {
             "x": 1094,
             "y": 361,
             "width": 14,

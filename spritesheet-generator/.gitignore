@@ -3,3 +3,5 @@ tmp/*
 !tmp/.gitkeep
 output/*
 !output/.gitkeep
+
+projects/

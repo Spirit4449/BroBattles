@@ -2,11 +2,13 @@
   "name": "spritesheet-generator",
   "version": "1.0.0",
   "private": true,
-  "description": "Simple local Express app for turning animation videos into Bro Battles spritesheets.",
+  "description": "Persistent sprite workshop with a shared browser and CLI engine.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node --test tests/*.test.js",
+    "cli": "node cli.js"
   },
   "dependencies": {
     "archiver": "^7.0.1",

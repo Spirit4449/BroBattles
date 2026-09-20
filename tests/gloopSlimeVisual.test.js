@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const { EventEmitter } = require('node:events');
 const babel = require('@babel/core');
 const api = {};
 const code = babel.transformSync(fs.readFileSync('src/characters/gloop/slimeVisual.js','utf8'), {
@@ -12,18 +13,25 @@ vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectilePres
 function setup(owner) {
   const objects=[];
   const scene={add:{graphics(){
-    const g={colors:[],lines:[],destroyed:false,
+    const g=Object.assign(new EventEmitter(),{colors:[],lines:[],destroyed:false,
       fillStyle(c){this.colors.push(c);return this;},
       lineTo(x,y){assert.ok(Number.isFinite(x)&&Number.isFinite(y));this.lines.push([x,y]);return this;},
       clear(){this.colors=[];this.lines=[];return this;},
-      destroy(){this.destroyed=true;},
-    };
-    for(const name of ['setDepth','beginPath','moveTo','closePath','fillPath','lineStyle','fillEllipse','lineBetween','strokeCircle','arc','strokePath','setPosition','setScale','setRotation']) g[name]=()=>g;
+      destroy(){
+        assert.equal(this.destroying,undefined,'graphics destruction must not reenter');
+        if(this.destroyed)return;
+        this.destroying=true;
+        this.emit('destroy');
+        this.destroyed=true;
+        this.destroying=undefined;
+      },
+    });
+    for(const name of ['setDepth','setVisible','beginPath','moveTo','closePath','fillPath','lineStyle','fillEllipse','lineBetween','strokeCircle','arc','strokePath','setPosition','setScale','setRotation','setStrokeStyle']) g[name]=()=>g;
     objects.push(g);return g;
   }}};
   const state={x:100,y:100,vx:200,vy:20,collisionRadius:28,floorY:500};
   const visual=api.createSlimeVisual(scene,state,1.5,owner);
-  return {visual,objects,state};
+  return {visual,objects,state,scene};
 }
 test('Crystal Gloop alone fires purple liquid with embedded faceted crystals',()=>{
   for(const owner of [{_bbSkinTextureKey:'gloop__gloop-amethyst'},{texture:{key:'gloop__gloop-amethyst'}}]) {
@@ -48,4 +56,29 @@ test('crystal goo survives rebound, deposits crystal residue and cleans up',()=>
   for(let i=0;i<50;i++)visual.update(100);
   assert.equal(visual.update(100),false);
   visual.destroy();assert.ok(objects.every(g=>g.destroyed));
+});
+
+test('slimeball graphics can be destroyed by Phaser without recursive destruction',()=>{
+  const attackApi={};
+  const attackCode=babel.transformSync(fs.readFileSync('src/characters/gloop/attack.js','utf8'),{
+    babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
+  }).code;
+  vm.runInNewContext(attackCode,{exports:attackApi,require:name=>{
+    if(name.includes('slimeVisual'))return {createSlimeVisual:api.createSlimeVisual};
+    if(name.includes('gloopProjectile'))return require('../src/shared/gloopProjectile');
+    if(name.includes('characterTuning'))return {getResolvedCharacterAttackConfig:()=>({collisionRadius:28,visualScale:1.5})};
+    if(name.includes('renderLayers'))return {RENDER_LAYERS:{ATTACKS:20}};
+    return {};
+  }});
+  for(const trigger of ['body','shutdown']){
+    const {scene,objects}=setup();
+    scene.events=new EventEmitter();
+    scene.add.circle=()=>scene.add.graphics();
+    const body=attackApi.spawnGloopSlimeballVisual(scene,{id:'test',start:{x:100,y:100}});
+    assert.ok(body);
+    if(trigger==='body')body.destroy();
+    else scene.events.emit('shutdown');
+    assert.ok(objects.slice(2).every(object=>object.destroyed));
+    assert.equal(scene.events.listenerCount('update'),0);
+  }
 });

@@ -1,7 +1,10 @@
 import { wireBackdropDismiss } from '../site/dialogDismiss.mjs';
 import { createCooldown, wireCodeInputs } from './emailVerificationUI';
 
-export function wireEmailSettings(fetchJson) {
+export function wireEmailSettings(fetchJson, profile) {
+  // Guest profiles can see the account panel while its member controls are
+  // hidden. The email API intentionally rejects guest sessions with 403.
+  if (profile?.guest !== false) return;
   const toggle = document.getElementById('email-toggle');
   if (!toggle || toggle.dataset.emailWired) return;
   toggle.dataset.emailWired = 'true';
