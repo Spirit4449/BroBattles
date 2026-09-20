@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script src="/bundles/navigation.bundle.js"></script>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
@@ -23,7 +24,7 @@
     <link rel="stylesheet" href="/styles/ui-system.css" />
   </head>
 
-  <body>
+  <body data-bb-screen="game">
     <div class="background" id="matchmaking-screen">
       <img
         src="/assets/loadingscreen.webp"
@@ -298,6 +299,8 @@
 
     <!-- Helper: update progress -->
     <script>
+      window.__BB_NAVIGATION__.runInline(function(window, document, location, setTimeout, clearTimeout, setInterval, clearInterval) {
+
       function updateLoading(progress, text) {
         // Keep last progress in a closure/static var
         if (typeof updateLoading.lastPct !== "number") {
@@ -311,6 +314,7 @@
           pct = updateLoading.lastPct;
         }
         updateLoading.lastPct = pct;
+        window.__BB_NAVIGATION__?.progress(pct, text);
 
         const bar = document.getElementById("loading-bar-fill");
         const label = document.getElementById("loading-percent");
@@ -339,6 +343,7 @@
           .getElementById("matchmaking-screen")
           ?.classList.add("hidden");
         gameBg.classList.add("visible");
+        document.dispatchEvent(new Event("game:ready"));
       }
 
       window.markMatchBackgroundReady = function () {
@@ -347,9 +352,15 @@
         gameBg.dataset.ready = "true";
         revealGameWhenReady();
       };
+
+      window.updateLoading = updateLoading;
+
+      });
     </script>
 
     <script>
+      window.__BB_NAVIGATION__.runInline(function(window, document, location, setTimeout, clearTimeout, setInterval, clearInterval) {
+
       // map scripts phase to 0–50
       const MAX_BEFORE_DONE = 48; // cap so it never reaches 50% until bundle finishes
       let scriptPct = 0;
@@ -386,9 +397,8 @@
       (async () => {
         // Start creeping immediately during Phaser download
         startCreep("Initializing world...");
-        await loadScript(
-          "/bundles/phaser-arcade-physics.min.js",
-        );
+        if (!window.Phaser) await loadScript("/bundles/phaser-arcade-physics.min.js");
+        if (!window.__BB_PAGE_SCOPE__.active) return;
 
         // Ensure we show some progress after engine arrives
         scriptPct = Math.max(scriptPct, 22);
@@ -397,14 +407,18 @@
         // Keep creeping (still capped at 48%) during bundle download
         updateLoading(scriptPct, "Gathering the squad...");
         await loadScript("/bundles/game.bundle.js");
+        if (!window.__BB_PAGE_SCOPE__.active) return;
         window.__BOOT_GAME__ && window.__BOOT_GAME__();
         // Finish scripts slice cleanly
         stopCreep();
         updateLoading(50, "Loading arena..."); // handoff to Phaser preload (50–90)
       })().catch((err) => {
         console.error(err);
+        if (window.__BB_PAGE_SCOPE__?.active) window.__BB_NAVIGATION__?.fail(err);
         stopCreep();
         updateLoading(50, "Couldn't start game");
+      });
+
       });
     </script>
     <button

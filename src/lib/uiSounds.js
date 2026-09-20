@@ -118,6 +118,8 @@ export function playSound(soundName, volume = 0.5, options = {}) {
     sound = pool.find(voice => !activeSounds.has(voice));
     if (!sound && pool.length < limit) {
       sound = source.cloneNode(true);
+      const voice = sound;
+      window.__BB_PAGE_SCOPE__?.onDispose(() => { voice.pause(); voice.removeAttribute('src'); voice.load(); });
       pool.push(sound);
     }
     if (!sound) {

@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script src="/bundles/navigation.bundle.js"></script>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
@@ -35,8 +36,10 @@
     <link rel="stylesheet" href="/styles/lobby-frames.css?v=3" />
     <link rel="stylesheet" href="/styles/lobby-responsive.css" />
   </head>
-  <body>
+  <body data-bb-screen="lobby">
     <script>
+      window.__BB_NAVIGATION__.runInline(function(window, document, location, setTimeout, clearTimeout, setInterval, clearInterval) {
+
       // Restore the most recently confirmed map before the first paint. Party
       // state replaces this once its authoritative selection arrives.
       (function () {
@@ -74,6 +77,8 @@
           document.body.dataset.lobbyBackgroundUrl = initialUrl;
         } catch (_) {}
       })();
+
+      });
     </script>
     <div id="navbar">
       <div class="flex">
@@ -1007,6 +1012,8 @@
     </div>
 
     <script>
+      window.__BB_NAVIGATION__.runInline(function(window, document, location, setTimeout, clearTimeout, setInterval, clearInterval) {
+
       (function () {
         var tips = [
           "Stay still to regenerate health. Pick your moment wisely.",
@@ -1041,6 +1048,8 @@
         showTip();
         setInterval(showTip, 4000);
       })();
+
+      });
     </script>
     <script src="/bundles/index.bundle.js"></script>
   </body>

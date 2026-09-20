@@ -33,6 +33,13 @@ const socket = io(editorSession ? '/map-playtest' : '/', {
   forceNew: false,
 });
 
+// A soft navigation mounts a fresh bundle; retire this screen's connection
+// before the next screen authenticates and joins its room.
+window.__BB_PAGE_SCOPE__?.onDispose(() => {
+  socket.removeAllListeners();
+  socket.disconnect();
+});
+
 // Utility: call this once after /status finishes
 export function ensureSocketConnected() {
   if (socket.connected || socket.connecting) {

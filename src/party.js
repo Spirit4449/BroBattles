@@ -1,4 +1,5 @@
 import { MAINTENANCE_MESSAGE } from "./shared/maintenance";
+import { warmBattleSelection } from './lobby/preloadBattle';
 import "./styles/levelBadge.css";
 import { revealLobby } from "./lobby/lobbyReveal.js";
 import { refreshPlatformGrounding } from "./lobby/platformGrounding.mjs";
@@ -496,6 +497,7 @@ function syncMapPickerUi(mapValue, selection = getCurrentSelection()) {
 }
 
 function writeSelectionToDom(selection, { persist = false } = {}) {
+  warmBattleSelection(normalizeGameSelection(selection));
   const normalized = normalizeGameSelection(selection);
   const modeIdInput = document.getElementById("mode-id");
   const modeVariantInput = document.getElementById("mode-variant-id");
@@ -1480,6 +1482,7 @@ export function socketInit(options = {}) {
     const matchedPlayers = Array.isArray(payload?.players)
       ? payload.players.slice()
       : [];
+    warmBattleSelection(normalized, matchedPlayers);
     mmOverlayPlayers = payload?.yourTeam
       ? matchedPlayers.sort((a, b) => {
           const aIsYours = a?.team === payload.yourTeam ? 0 : 1;
@@ -1901,6 +1904,7 @@ function commitPartyRosterLayout({
 export function renderPartyMembers(data) {
   if (ensurePartySlotDrag().defer(data)) return;
   const members = Array.isArray(data.members) ? data.members : [];
+  warmBattleSelection(getCurrentSelection(), members);
   const capacity =
     data?.capacity && typeof data.capacity === "object" ? data.capacity : null;
   __partyContext = {
