@@ -18,6 +18,7 @@ module.exports = (_env = {}, argv = {}) => {
     },
   },
   entry: {
+    navigation: "./src/navigation/index.js",
     site: "./src/site/index.js",
     game: "./src/game.js",
     mapEditor: "./src/editor/mapEditor.js",
@@ -30,6 +31,7 @@ module.exports = (_env = {}, argv = {}) => {
     profile: "./src/profile.js",
   },
   output: {
+    chunkLoadingGlobal: "webpackChunkBroBattles",
     filename: "bundles/[name].bundle.js",
     path: path.resolve(__dirname, "dist"),
     publicPath: "/",
@@ -84,6 +86,7 @@ module.exports = (_env = {}, argv = {}) => {
     ],
   },
   plugins: [
+    new (require("./scripts/build/pageRuntime.cjs"))(),
     ...(mode === "production" ? [new (require("./scripts/build/versionHtmlAssets.cjs"))()] : []),
     new MiniCssExtractPlugin({
       filename: "bundles/[name].css",

@@ -25,6 +25,7 @@ export async function revealLobby() {
     Promise.allSettled(images.map(img => img.decode?.())),
     new Promise(resolve => { assetTimer = window.setTimeout(resolve, 450); }),
   ]);
+  if (window.__BB_PAGE_SCOPE__ && !window.__BB_PAGE_SCOPE__.active) return;
   window.clearTimeout(assetTimer);
   window.clearTimeout(failureTimer);
   lobby.removeAttribute("data-loading");

@@ -548,6 +548,7 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
       ) || null;
     __joinRequestRequesterState.payload = payload || null;
     renderRequesterJoinRequestScreen(payload || {});
+    document.dispatchEvent(new Event('lobby:join-request'));
   }
 
   function hidePartyJoinRequestScreen() {

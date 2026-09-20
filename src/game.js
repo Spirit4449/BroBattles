@@ -871,16 +871,39 @@ function attachMapCollidersToSprite(scene, sprite, objects) {
 
 // Initialize game when page loads
 let game = null;
+window.__BB_PAGE_SCOPE__?.onDispose(async () => {
+  matchCoordinator?.dispose();
+  battleTutorial?.destroy();
+  destroyMobileControls?.();
+  if (game) {
+    const retiring = game;
+    game = null;
+    await new Promise(resolve => {
+      retiring.events.once(Phaser.Core.Events.DESTROY, resolve);
+      retiring.destroy(true, false);
+      // A hidden tab can have a sleeping loop. Wake it so destruction runs
+      // before the next screen is mounted, including browser Back transitions.
+      retiring.loop.wake();
+    });
+  }
+});
 window.__BOOT_GAME__ = () =>
   onReady(async () => {
-    initKeybindHud();
-    if (editorSession) { const controls=document.getElementById("battle-keybind-hud"); if(controls){controls.dataset.state="collapsed";controls.style.display="none";} }
-    hud.initSpectateHud?.();
-    initTimerHud();
-    await initializeGame();
-    await loadMode(gameData?.modeId);
-    if (!game) {
-      game = new Phaser.Game(config);
+    try {
+      initKeybindHud();
+      if (editorSession) { const controls=document.getElementById("battle-keybind-hud"); if(controls){controls.dataset.state="collapsed";controls.style.display="none";} }
+      hud.initSpectateHud?.();
+      initTimerHud();
+      await initializeGame();
+      if (!gameData) throw new Error('Unable to initialize this battle');
+      await loadMode(gameData?.modeId);
+      if (window.__BB_PAGE_SCOPE__ && !window.__BB_PAGE_SCOPE__.active) return;
+      if (!game) {
+        game = new Phaser.Game(config);
+      }
+    } catch (error) {
+      if (window.__BB_PAGE_SCOPE__?.active) window.__BB_NAVIGATION__?.fail(error);
+      else console.error(error);
     }
   });
 
@@ -2312,6 +2335,7 @@ function stabilizeSpawnedSpriteOnMap(scene, sprite, objects) {
 }
 
 const config = {
+  audio: { context: window.__BB_NAVIGATION__?.getAudioContext() },
   // Force Canvas renderer; enable transparency so the canvas can show the HTML/CSS background behind it
   type: Phaser.CANVAS,
   transparent: true,
