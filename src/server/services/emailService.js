@@ -11,7 +11,7 @@ const escape = (value) =>
 
 function publicAsset(pathname) {
   const base = String(
-    process.env.PUBLIC_BASE_URL || "https://classchats.net",
+    process.env.PUBLIC_BASE_URL || "https://brobattles.dev",
   ).replace(/\/$/, "");
   return `${base}${pathname}`;
 }
@@ -91,7 +91,7 @@ async function sendEmail(to, content, idempotencyKey) {
       ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
     },
     body: JSON.stringify({
-      from: process.env.EMAIL_FROM || "Bro Battles <noreply@classchats.net>",
+      from: process.env.EMAIL_FROM || "Bro Battles <noreply@brobattles.dev>",
       to: [to],
       reply_to: config.supportEmail,
       ...content,

@@ -59,7 +59,7 @@ export async function initializeSupportPage() {
   const view=root.dataset.view;
   if(view==='requests')root.replaceChildren(requestPlaceholders());
   const session=await refreshUnread();
-  if(!session){root.textContent='Support is unavailable. Please refresh to retry, or email support@classchats.net.';return;}
+  if(!session){root.textContent='Support is unavailable. Please refresh to retry, or email support@brobattles.dev.';return;}
   if(view==='feedback' && (session.guest || session.member)){renderSubmit(root,'feedback');return;}
   if(!session.member){root.replaceChildren(element('h2',view==='feedback'?'Join the arena first':'Log in to contact support'),element('p',view==='feedback'?'Open the lobby to start a guest session, then return here to send feedback.':'Use a permanent account so you can return to read replies.'));for(const [label,url] of view==='feedback'?[['Go to lobby','/']]:[['Log in','/login?next='+encodeURIComponent(location.pathname)],['Create account','/signup?next='+encodeURIComponent(location.pathname)]]){const a=element('a',label,'pixel-menu-button');a.href=url;root.append(a,' ');}return;}
   if(view==='contact')renderSubmit(root,'support');else renderInbox(root);

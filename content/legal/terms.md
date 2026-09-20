@@ -58,10 +58,10 @@ Nothing in these Terms excludes liability that cannot lawfully be excluded, incl
 
 ## 9. Disputes and changes to these Terms
 
-Contact **support@classchats.net** first so we can try to resolve a concern. These Terms are intended to be governed by the laws of Georgia, United States, subject to mandatory protections and jurisdiction rights in your place of residence. They do not impose mandatory arbitration or a class-action waiver.
+Contact **support@brobattles.dev** first so we can try to resolve a concern. These Terms are intended to be governed by the laws of Georgia, United States, subject to mandatory protections and jurisdiction rights in your place of residence. They do not impose mandatory arbitration or a class-action waiver.
 
 We may update these Terms. We will identify the updated version and seek renewed acceptance for material changes where required. If a provision is unenforceable, the remaining provisions continue to apply to the extent permitted by law.
 
 ## 10. Operator and contact
 
-Bro Battles is operated by **Nischay Patel, Georgia, United States**. Contact **support@classchats.net**.
+Bro Battles is operated by **Nischay Patel, Georgia, United States**. Contact **support@brobattles.dev**.

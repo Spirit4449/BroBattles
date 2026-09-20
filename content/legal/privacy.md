@@ -45,7 +45,7 @@ Permanent accounts and associated records are retained as needed to operate the 
 
 ## 6. Your choices and rights
 
-Depending on where you live, you may have rights to access, correct, delete, receive a copy of, restrict, or object to processing of your information, withdraw consent where applicable, or complain to a data protection authority. Contact **support@classchats.net**, or use the Privacy category in the Help Center.
+Depending on where you live, you may have rights to access, correct, delete, receive a copy of, restrict, or object to processing of your information, withdraw consent where applicable, or complain to a data protection authority. Contact **support@brobattles.dev**, or use the Privacy category in the Help Center.
 
 We may need proportionate information to verify a request. Do not send your password. Some requests may be limited by other people's rights or applicable legal obligations. You can change local settings in the game and clear browser storage through your browser.
 
@@ -66,4 +66,4 @@ We use measures such as password hashing, authenticated sessions, access control
 We may update this policy as the game develops. The effective date and version will identify changes; material changes will be brought to your attention where required.
 
 **Nischay Patel · Georgia, United States**  
-**support@classchats.net**
+**support@brobattles.dev**

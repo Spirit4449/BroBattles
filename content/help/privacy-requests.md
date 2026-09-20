@@ -1,4 +1,4 @@
-To request access, correction, or deletion of personal information, use the **Privacy** category in [Contact support](/help/contact), or email **support@classchats.net**.
+To request access, correction, or deletion of personal information, use the **Privacy** category in [Contact support](/help/contact), or email **support@brobattles.dev**.
 
 Tell us what you want us to check and which username is involved. Do not send passwords, card details, or identity documents unless support arranges a secure verification step.
 

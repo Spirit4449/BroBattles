@@ -44,7 +44,7 @@ test('signup rejects missing consent before touching credentials or account stat
 test('Markdown lookup rejects traversal and unknown slugs; all manifest articles render',()=>{
   assert.equal(article('help','../../.env'),null);assert.equal(article('legal','anything'),null);assert.equal(article('help','missing'),null);
   const manifest=require('../content/manifest.json');for(const kind of ['news','help'])for(const item of manifest[kind])assert.ok(article(kind,item.slug).html.length>20);
-  assert.match(article('legal','privacy').html,/support@classchats.net/);
+  assert.match(article('legal','privacy').html,/support@brobattles.dev/);
 });
 test('help search index includes article contents and Gemini can only return known articles',async()=>{
   const documents=helpSearchDocuments();

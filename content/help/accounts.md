@@ -4,7 +4,7 @@ Choose a unique username and a password you do not use elsewhere. Do not put you
 
 ## Trouble signing in?
 
-Check your username and password. There is currently no automated email-based password recovery. Contact **support@classchats.net** for assistance; recovery depends on whether ownership can be established.
+Check your username and password. There is currently no automated email-based password recovery. Contact **support@brobattles.dev** for assistance; recovery depends on whether ownership can be established.
 
 Never send your password. If you can sign in, use [My requests](/help/requests) to contact support.
 

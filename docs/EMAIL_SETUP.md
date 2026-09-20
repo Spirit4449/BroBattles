@@ -2,7 +2,7 @@
 
 The profile Account area supports Add Email Address / Change Email Address. A permanent, authenticated account can request a six-digit code. Codes expire after ten minutes, allow five guesses, are HMAC hashed, and are consumed on verification. Verified addresses are unique and are never included in public profile responses. Sending is limited to once per minute and five times per hour per account, plus an IP limit. Email does not yet provide password recovery.
 
-Server configuration: `RESEND_API_KEY` (or existing `EMAIL_API_KEY`), `EMAIL_FROM` (default `Bro Battles <noreply@classchats.net>`), `EMAIL_NOTIFICATIONS_TO` (owner inbox), and optional `EMAIL_VERIFICATION_SECRET` (defaults to `COOKIE_SECRET`). Keep these server-side. Production needs the same variables separately if it uses another environment.
+Server configuration: `RESEND_API_KEY` (or existing `EMAIL_API_KEY`), `EMAIL_FROM` (default `Bro Battles <noreply@brobattles.dev>`), `EMAIL_NOTIFICATIONS_TO` (owner inbox), and optional `EMAIL_VERIFICATION_SECRET` (defaults to `COOKIE_SECRET`). Keep these server-side. Production needs the same variables separately if it uses another environment. Production must also set `PUBLIC_BASE_URL=https://brobattles.dev` and `SECURE_COOKIES=true`.
 
 Apply `node scripts/apply-email-migration.cjs` after the site support migration, then build and restart the server. Startup checks the new tables. This additive migration has been applied to the configured development database.
 
@@ -12,7 +12,7 @@ New feedback and support requests enqueue one notification within the same trans
 
 Check failures with `SELECT id,request_id,attempts,next_attempt_at FROM email_outbox WHERE sent_at IS NULL;`. After resolving delivery configuration, reset attempts and next_attempt_at for the intended failed rows. Retrying more than 24 hours after an uncertain send may duplicate mail because provider idempotency expires.
 
-Domain configuration (September 13, 2026): Resend sends from classchats.net; Cloudflare handles receiving. support@classchats.net forwards to the verified owner Gmail inbox. Root SPF is consolidated to preserve the existing server IP and Cloudflare routing. The send subdomain MX points to Resend's feedback-smtp.us-east-1.amazonses.com. Resend receiving is disabled to avoid conflicting with root Cloudflare MX records. A setup test was confirmed Delivered in Resend.
+Domain configuration (September 20, 2026): Resend sends from `brobattles.dev`; set `EMAIL_FROM` to `Bro Battles <noreply@brobattles.dev>`. Cloudflare Email Routing handles receiving, with `support@brobattles.dev` forwarding to the verified owner inbox. The root SPF record must retain Cloudflare routing, while the `send` subdomain uses Resend's SPF and `feedback-smtp.us-east-1.amazonses.com` MX record. Keep Resend receiving disabled so it does not conflict with Cloudflare's root MX records. Verify the domain in Resend and send a production verification-email test after deployment.
 
 ## Marketing
 
