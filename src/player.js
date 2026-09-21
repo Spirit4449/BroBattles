@@ -1,3 +1,4 @@
+import { spritePresentation } from './characters/shared/spritePresentation';
 import { applyTeamVisual, TEAM_GREEN } from "./shared/projectilePresentation";
 import { getSettings, bindCanvasName, subscribeSettings } from "./site/preferences";
 import {
@@ -59,7 +60,6 @@ import {
   resetAirborneJumpAnimation,
   playSpriteAnimation,
 } from "./characters/shared/animationState.js";
-import { getResolvedCharacterBodyConfig } from "./shared/characterTuning.js";
 import { createAttackAimReticleController } from "./gameScene/attackAimReticle";
 import { createCombatMouseController } from "./gameScene/combatMouse";
 import { createMobileControlsController } from "./gameScene/mobileControls";
@@ -731,13 +731,14 @@ export function createPlayer(
   ammoCharges = ammoCapacity;
   nextFireTime = 0;
   reloadTimerMs = 0;
-  if (stats.spriteScale && stats.spriteScale !== 1) {
-    player.setScale(stats.spriteScale);
-  }
+  const presentation = spritePresentation(character, player.texture);
+  player.setScale(presentation.scale);
+  player.setOrigin(presentation.originX, presentation.originY);
+  player._bbHudTopOffset = presentation.hudTopOffset;
 
   // Establish frame/body sizing BEFORE computing spawn so height math is correct
   frame = player.frame;
-  const bs = getResolvedCharacterBodyConfig(character);
+  const bs = presentation.body;
   bodyConfig = bs; // persist for use in movement function
   const widthShrink = bs.widthShrink;
   const heightShrink = bs.heightShrink;
@@ -756,7 +757,7 @@ export function createPlayer(
     const flipOffset = cfg.flipOffset || 0; // falsy -> 0
     const extra = player.flipX ? flipOffset : 0;
     const frameW = frame ? frame.width : player.width;
-    const bodyW = player.body.width;
+    const bodyW = cfg.sourceUnits ? player.body.sourceWidth : player.body.width;
     const ox = frameW / 2 - bodyW / 2 + (cfg.offsetXFromHalf ?? 0) + extra;
     const standingHeight = Math.max(4, frame.height - cfg.heightShrink);
     const currentSourceHeight = player.body.sourceHeight || standingHeight;
@@ -1347,6 +1348,7 @@ export function syncLocalUiPosition() {
 }
 
 function getStableLocalUiTop() {
+  if (Number.isFinite(player?._bbHudTopOffset)) return player.y + player._bbHudTopOffset;
   if (!player?.body) return player.y - player.height / 2;
   if (!player._ducking || !bodyConfig || !frame) return player.body.y;
   const standingHeight = Math.max(4, frame.height - bodyConfig.heightShrink);

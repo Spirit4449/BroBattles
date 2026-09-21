@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "cellSize": 256,
+  "animations": [
+    {
+      "key": "idle",
+      "fps": 3,
+      "loop": true,
+      "frames": [
+        "idle00",
+        "idle01",
+        "idle02",
+        "idle03",
+        "idle04"
+      ],
+      "row": 0
+    },
+    {
+      "key": "running",
+      "fps": 14,
+      "loop": true,
+      "frames": [
+        "running00",
+        "running01",
+        "running02",
+        "running03",
+        "running04",
+        "running05"
+      ],
+      "row": 1
+    },
+    {
+      "key": "jumping",
+      "fps": 24,
+      "loop": false,
+      "frames": [
+        "jumping00",
+        "jumping01",
+        "jumping02",
+        "jumping03",
+        "jumping04",
+        "jumping05",
+        "jumping06",
+        "jumping07"
+      ],
+      "row": 2
+    },
+    {
+      "key": "falling",
+      "fps": 6,
+      "loop": false,
+      "frames": [
+        "falling00",
+        "falling01",
+        "falling02"
+      ],
+      "row": 3
+    },
+    {
+      "key": "attack",
+      "fps": 15,
+      "loop": false,
+      "frames": [
+        "attack00",
+        "attack01",
+        "attack02",
+        "attack03"
+      ],
+      "row": 4
+    },
+    {
+      "key": "dying",
+      "fps": 10,
+      "loop": false,
+      "frames": [
+        "dying00",
+        "dying01",
+        "dying02",
+        "dying03"
+      ],
+      "row": 5
+    },
+    {
+      "key": "wall",
+      "fps": 1,
+      "loop": true,
+      "frames": [
+        "wall00"
+      ],
+      "row": 6
+    },
+    {
+      "key": "special",
+      "fps": 30,
+      "loop": false,
+      "frames": [
+        "special00",
+        "special01",
+        "special02",
+        "special03",
+        "special04",
+        "special05",
+        "special06",
+        "special07"
+      ],
+      "row": 7
+    },
+    {
+      "key": "unused-original",
+      "fps": 12,
+      "loop": false,
+      "frames": [
+        "running06",
+        "jumping08",
+        "dying04"
+      ],
+      "row": 8
+    },
+    {
+      "key": "ducking",
+      "fps": 1,
+      "loop": true,
+      "frames": [
+        "duck00"
+      ],
+      "row": 9
+    }
+  ]
+}

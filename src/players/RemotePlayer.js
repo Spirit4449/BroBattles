@@ -1,3 +1,4 @@
+import { spritePresentation } from '../characters/shared/spritePresentation';
 import { applyTeamVisual, TEAM_GREEN, TEAM_RED } from "../shared/projectilePresentation";
 import { bindCanvasName } from "../site/preferences";
 // opplayer.js
@@ -8,7 +9,6 @@ import {
   getStats,
   getEffectsClass,
 } from "../characters";
-import { getResolvedCharacterBodyConfig } from "../shared/characterTuning.js";
 import { performSpecial } from "../characters/special";
 import { player } from "../player";
 import socket from "../socket";
@@ -118,15 +118,16 @@ export default class RemotePlayer {
     // Avoid first-frame pop: hide until frame/body configured and spawn applied
     this.opponent.setVisible(false);
     const stats = getStats(this.character);
-    this.bodyConfig = getResolvedCharacterBodyConfig(this.character);
+    const presentation = spritePresentation(this.character, this.opponent.texture);
+    this.bodyConfig = presentation.body;
     // Apply per-character max health for correct bar scaling
     if (stats && typeof stats.maxHealth === "number") {
       this.opMaxHealth = stats.maxHealth;
       this.opCurrentHealth = this.opMaxHealth;
     }
-    if (stats.spriteScale && stats.spriteScale !== 1) {
-      this.opponent.setScale(stats.spriteScale);
-    }
+    this.opponent.setScale(presentation.scale);
+    this.opponent.setOrigin(presentation.originX, presentation.originY);
+    this.opponent._bbHudTopOffset = presentation.hudTopOffset;
     this.opponent.body.allowGravity = false;
     this.opponent.setCollideWorldBounds(false); // no world-bounds collision for remote visuals
     this.opponent.anims.play(
@@ -160,8 +161,9 @@ export default class RemotePlayer {
     this.opponent.setVisible(false);
 
     // Sets the text of the name to username
-    const bodyTop =
-      (this.opponent.body
+    const bodyTop = Number.isFinite(this.opponent._bbHudTopOffset)
+      ? this.opponent.y + this.opponent._bbHudTopOffset
+      : (this.opponent.body
         ? this.opponent.body.y
         : this.opponent.y - this.opponent.height / 2) +
       (this.opponent._ducking ? 8 : 0);
@@ -584,7 +586,7 @@ export default class RemotePlayer {
     const flipOffset = bs.flipOffset || 0;
     const extra = this.opponent.flipX ? flipOffset : 0;
     const frameW = this.opFrame ? this.opFrame.width : this.opponent.width;
-    const bodyW = this.opponent.body.width;
+    const bodyW = bs.sourceUnits ? this.opponent.body.sourceWidth : this.opponent.body.width;
     const ox = frameW / 2 - bodyW / 2 + (bs.offsetXFromHalf ?? 0) + extra;
     const oy = bs.offsetY;
     this.opponent.body.setOffset(ox, oy);
@@ -594,8 +596,9 @@ export default class RemotePlayer {
   updateUIPosition() {
     if (!this.opponent) return;
     if (this._worldUiHidden) return;
-    const bodyTop =
-      (this.opponent.body
+    const bodyTop = Number.isFinite(this.opponent._bbHudTopOffset)
+      ? this.opponent.y + this.opponent._bbHudTopOffset
+      : (this.opponent.body
         ? this.opponent.body.y
         : this.opponent.y - this.opponent.height / 2) +
       (this.opponent._ducking ? 8 : 0);

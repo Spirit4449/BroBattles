@@ -189,3 +189,14 @@ test('two remote clients converge despite asymmetric launch delay and duplicate 
   assert.ok(Math.abs(clients[0].images[0].y-clients[1].images[0].y)<1e-6);
   clients.forEach(f=>f.api.resetNinjaNetwork());
 });
+
+test('dedicated Ninja special continues across releases without accelerating normal attacks',()=>{
+  const api={},plays=[],locks=[];
+  const source=babel.transformSync(fs.readFileSync(require.resolve('../src/characters/ninja/swarmPresentation'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code;
+  vm.runInNewContext(source,{exports:api,require:()=>({resolveSpriteAnimationKey:()=> 'ninja-special',markOneShotAnimation:(...args)=>locks.push(args)})});
+  const player={active:true,anims:{play:(...args)=>plays.push(args)}};
+  api.presentSwarmRelease({},player,36);api.presentSwarmRelease({},player,36);
+  assert.equal(plays[0][0].frameRate,30);assert.equal(plays[0][0].repeat,-1);
+  assert.equal(plays[1][1],true);assert.equal(plays[0][0].duration,undefined);
+  assert.equal(locks[0][1],'special');
+});

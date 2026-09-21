@@ -1,3 +1,4 @@
+import { legacyAnimations as legacyNinjaAnimations } from './ninja/legacyAnim';
 // src/characters/index.js
 import CHARACTER_MANIFEST from "./manifest";
 import { characterStats } from "../shared/characterStats.js";
@@ -17,13 +18,15 @@ function setupDuckFrame(scene, character, textureKey = character) {
   if (!cell || !dimensions || !scene.textures.exists(textureKey)) return;
   const texture = scene.textures.get(textureKey);
   if (!texture.has("duck00")) {
+    const originalDuck = character === 'ninja' && texture.get('idle00')?.width === 256
+      && texture.has('jumping00') ? texture.get('jumping00') : null;
     texture.add(
       "duck00",
       0,
-      (cell[0] - 1) * dimensions.w,
-      (cell[1] - 1) * dimensions.h,
-      dimensions.w,
-      dimensions.h,
+      originalDuck ? originalDuck.cutX : (cell[0] - 1) * dimensions.w,
+      originalDuck ? originalDuck.cutY : (cell[1] - 1) * dimensions.h,
+      originalDuck ? originalDuck.width : dimensions.w,
+      originalDuck ? originalDuck.height : dimensions.h,
     );
   }
   const animationKey = `${textureKey}-ducking`;
@@ -161,6 +164,18 @@ function cloneBaseAnimationToVariant(scene, character, skinId) {
   const textureKey = buildCharacterSkinTextureKey(character, skinId);
   if (!scene.textures.exists(textureKey)) return;
   setupDuckFrame(scene, character, textureKey);
+
+  // Unconverted Ninja skins retain their original frame counts and cadence.
+  if (character === 'ninja' && !scene.textures.get(textureKey).has('attack00')) {
+    legacyNinjaAnimations(scene, textureKey);
+    if (skinId === 'ninja-arena-sovereign') {
+      animManager.remove(textureKey + '-falling');
+      animManager.create({ key: textureKey + '-falling',
+        frames: [0, 1, 2, 3, 2, 1].map(i => ({ key: textureKey, frame: 'falling0' + i })),
+        frameRate: 8, repeat: -1 });
+    }
+    return;
+  }
 
   const entries = animManager?.anims?.entries;
   if (!entries) return;
