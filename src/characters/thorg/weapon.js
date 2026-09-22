@@ -1,11 +1,13 @@
 import { applyTeamVisual } from "../../shared/projectilePresentation";
 import { thorgGripPose } from "./weaponMotion";
-import { THORG_SWEEP, sampleThorgSweep } from "../../shared/thorgSweep";
+import { THORG_SWEEP, sampleThorgSweep, thorgAttackFrameAt } from "../../shared/thorgSweep";
 import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
 
 // A single held mace is used during locomotion, windup and the entire sweep.
 export function ensureThorgWeapon(scene, body) {
+  // Base Thorg's complete atlas includes the mace, including held poses.
+  if (body.texture?.customData?.meta?.bbVideoFrames === true) return null;
   if (body._thorgWeapon?.active) return body._thorgWeapon;
   const skin = body._bbSkinTextureKey || body.texture?.key;
   const key = scene.textures.exists(`${skin}-weapon`) ? `${skin}-weapon` : "thorg-weapon";
@@ -23,7 +25,8 @@ export function ensureThorgWeapon(scene, body) {
   const pose = (_time, delta) => {
     if (!body.active || !weapon.active) return;
     const legacySkin = /thorg-(storm|iron)/.test(String(body._bbSkinTextureKey || body.texture?.key));
-    weapon.setVisible(body.visible && (!legacySkin || body._thorgSweepActive) && !String(body.frame?.name).startsWith("dying"));
+    const embedded = body.frame?.customData?.bbEmbeddedWeapon === true;
+    weapon.setVisible(body.visible && !embedded && (!legacySkin || body._thorgSweepActive) && !String(body.frame?.name).startsWith("dying"));
     weapon.setAlpha(body.alpha);
     // Axial roll changes the head artwork without moving the held grip or
     // competing with the sweep's world-space rotation. Eight frames at 8 fps.
@@ -34,6 +37,7 @@ export function ensureThorgWeapon(scene, body) {
     const scale = body._thorgVisualScale || 1;
     fingers.setVisible(false);
     support.setVisible(false);
+    if (embedded) return;
     if (body._thorgSweepActive) return;
     weapon.setDisplaySize((legacySkin ? 30 : 26) * scale, (legacySkin ? 71 : 26 * 101 / 36) * scale);
     const grip = thorgGripPose(body, Number(delta) || 16);
@@ -75,6 +79,9 @@ export function ensureThorgWeapon(scene, body) {
 
 export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 } = {}) {
   body._thorgAttackCleanup?.();
+  if (body.texture?.get?.('throw00')?.customData?.bbEmbeddedWeapon === true) {
+    return startEmbeddedSweep(scene, body, direction);
+  }
   const weapon = ensureThorgWeapon(scene, body);
   if (!weapon) return null;
   body.flipX = direction < 0;
@@ -84,7 +91,7 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
   body._thorgSweepActive = true;
   playSpriteAnimation({ scene, sprite: body, character: "thorg", logical: "throw", fallback: "idle" });
   const strikeEnd = THORG_SWEEP.windupMs + THORG_SWEEP.strikeMs;
-  const duration = strikeEnd + 100;
+  const duration = strikeEnd + THORG_SWEEP.recoveryMs;
   markOneShotAnimation(body, "throw", duration);
   // Match the body animation clock to the same sweep clock, including skins.
   const animDuration = Number(body.anims?.currentAnim?.duration);
@@ -137,7 +144,7 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
       weapon.setDepth((body.depth ?? 30) + 0.1);
     } else {
       const t = Math.min(1, (elapsed - THORG_SWEEP.windupMs) / THORG_SWEEP.strikeMs);
-      const head = sampleThorgSweep({ x: body.x, y: body.y, direction, scale }, t);
+      const head = sampleThorgSweep({ x: body.x, y: body.y, direction, scale, legacy: true }, t);
       if (!legacySkin && body.setFrame) {
         const phase = t - Math.sin(2 * Math.PI * t) / (2 * Math.PI);
         const index = phase < 0.12 ? 0 : phase < 0.38 ? 1 : phase < 0.6 ? 2 : phase < 0.88 ? 3 : 4;
@@ -186,7 +193,7 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
         } else drawSegment(a, b, fade);
       }
       if (elapsed > strikeEnd) {
-        const recovery = Math.min(1, (elapsed - strikeEnd) / 100);
+        const recovery = Math.min(1, (elapsed - strikeEnd) / THORG_SWEEP.recoveryMs);
         const ease = recovery * recovery * (3 - 2 * recovery);
         weapon.setDisplaySize((legacySkin ? 30 : 26) * scale, (legacySkin ? 71 : 26 * 101 / 36) * scale);
         weapon.setPosition(body.x + direction * (handRadius + (grip.x - handRadius) * ease) * scale,
@@ -198,7 +205,7 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
     // Pull toward the torso on either side without changing weapon proportions.
     const gripBlend = elapsed < THORG_SWEEP.windupMs
       ? Math.min(1, elapsed / THORG_SWEEP.windupMs)
-      : Math.max(0, 1 - Math.max(0, elapsed - strikeEnd) / 100);
+      : Math.max(0, 1 - Math.max(0, elapsed - strikeEnd) / THORG_SWEEP.recoveryMs);
     weapon.setPosition(body.x + (weapon.x - body.x) * (1 - 0.1 * gripBlend),
       weapon.y - 3 * scale * gripBlend);
     if (elapsed >= duration) cleanup();
@@ -207,4 +214,55 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
   scene.events.on("update", update);
   scene.events.once("presentation:reset", cleanup);
   return weapon;
+}
+
+// The video frames already contain the complete attack and mace. Drive their
+// poses from the combat clock; the sweep effect is baked into the atlas.
+function startEmbeddedSweep(scene, body, direction) {
+  body.flipX = direction < 0;
+  const unlock = lockPlayerFlip(body);
+  const duration = THORG_SWEEP.windupMs + THORG_SWEEP.strikeMs + THORG_SWEEP.recoveryMs;
+  body._thorgSweepActive = true;
+  playSpriteAnimation({ scene, sprite: body, character: 'thorg', logical: 'throw', fallback: 'idle' });
+  markOneShotAnimation(body, 'throw', duration);
+  body.anims?.pause?.();
+  body.setFrame('throw00');
+  body._thorgWeapon?.setVisible(false);
+  let elapsed = 0;
+  let finished = false;
+  let sound;
+  try {
+    sound = scene.sound?.add(scene.cache?.audio?.exists('thorg-sweep') ? 'thorg-sweep' : 'thorg-throw');
+    sound?.play({ volume: 0.48 });
+  } catch (_) {}
+  const cleanup = () => {
+    if (finished) return;
+    finished = true;
+    scene.events.off('update', update);
+    scene.events.off('presentation:reset', cleanup);
+    scene.events.off('shutdown', cleanup);
+    body.off?.('destroy', cleanup);
+    sound?.stop();
+    sound?.destroy();
+    body._thorgSweepActive = false;
+    delete body._thorgAttackCleanup;
+    unlock();
+    if (body.anims) { body.anims.timeScale = 1; body.anims.resume?.(); }
+  };
+  const update = (_time, delta) => {
+    if (!body.active || !String(body.frame?.name).startsWith('throw')) { cleanup(); return; }
+    elapsed += Number(delta) || scene.game?.loop?.delta || 16;
+    enforceLockedFlip(body);
+    body.setFrame(thorgAttackFrameAt(elapsed).frame);
+    if (elapsed >= duration) {
+      cleanup();
+      playSpriteAnimation({ scene, sprite: body, character: 'thorg', logical: 'idle' });
+    }
+  };
+  body._thorgAttackCleanup = cleanup;
+  scene.events.on('update', update);
+  scene.events.once('presentation:reset', cleanup);
+  scene.events.once('shutdown', cleanup);
+  body.once?.('destroy', cleanup);
+  return body;
 }

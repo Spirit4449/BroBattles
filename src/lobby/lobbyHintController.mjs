@@ -265,7 +265,11 @@ export function createLobbyHintController({
     const elementId = `lobby-hint-${hint.id}`;
     element.id = elementId;
     element.className = `lobby-hint${hint.variant ? ` is-${hint.variant}` : ""}`;
-    element.setAttribute("role", "status");
+    element.setAttribute("role", hint.onClick ? "button" : "status");
+    if (hint.onClick) {
+      element.tabIndex = 0;
+      element.setAttribute("aria-label", `View ${hint.title || "offer"} in the shop`);
+    }
     element.innerHTML = `
       <span class="lobby-hint-pointer" aria-hidden="true"></span>
       <span class="lobby-hint-glint" aria-hidden="true"></span>
@@ -391,6 +395,18 @@ export function createLobbyHintController({
       dismiss();
       hint.onAction?.();
     });
+    if (hint.onClick) {
+      const openHint = () => {
+        dismiss(true);
+        hint.onClick();
+      };
+      element.addEventListener("click", openHint);
+      element.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        openHint();
+      });
+    }
     anchor.addEventListener("click", anchorClickHandler);
     resizeHandler = () => active && position(element, anchor, hint);
     window.addEventListener("resize", resizeHandler, { passive: true });

@@ -131,9 +131,9 @@
         "hitboxes": [
           {
             "id": "hitbox-43340d54",
-            "x": 1159,
+            "x": 1158,
             "y": 268,
-            "width": 472,
+            "width": 469,
             "height": 24,
             "collision": {
               "up": true,

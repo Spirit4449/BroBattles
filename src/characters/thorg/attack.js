@@ -3,7 +3,7 @@ import { THORG_SWEEP } from "../../shared/thorgSweep";
 import { startThorgSweep } from "./weapon";
 export const THORG_FALL_WINDUP_MS = THORG_SWEEP.windupMs;
 export const THORG_FALL_STRIKE_MS = THORG_SWEEP.strikeMs;
-export const THORG_FALL_DURATION_MS = THORG_FALL_WINDUP_MS + THORG_FALL_STRIKE_MS + 100;
+export const THORG_FALL_DURATION_MS = THORG_FALL_WINDUP_MS + THORG_FALL_STRIKE_MS + THORG_SWEEP.recoveryMs;
 export const THORG_FALL_RANGE = THORG_SWEEP.radiusX;
 export function performThorgFallAttack(instance, attackContext = null) {
   const context = attackContext || instance.consumeAttackContext?.() || {};

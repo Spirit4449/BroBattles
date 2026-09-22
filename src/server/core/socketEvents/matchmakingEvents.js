@@ -161,7 +161,7 @@ function registerMatchmakingEvents(
         try {
           const members = await db.fetchPartyMembersDetailed(pid);
           for (const m of members || []) {
-            if (!m?.name) continue;
+            if (!m?.name || !m.status || String(m.status).trim().toLowerCase() === "offline") continue;
             try {
               await db.setUserStatus(m.name, "online");
             } catch (_) {}

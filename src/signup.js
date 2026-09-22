@@ -3,6 +3,7 @@ import "./site/shell.js";
 import { getDisplayName } from "./lib/cookies.js";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
 import "./styles/accounts.css";
+import "./styles/emailControls.css";
 import { createCooldown, safeReturnPath, wireCodeInputs } from './lib/emailVerificationUI';
 
 wireFullscreenToggles();
@@ -25,9 +26,9 @@ function refresh() {
   const seconds = cooldown.remaining();
   const correction = sentEmail && sentEmail !== emailInput.value.trim().toLowerCase() && !correctionUsed;
   submit.disabled = busy || (seconds > 0 && !correction);
-  document.getElementById('buttonText').textContent = busy ? 'Please wait…' : seconds && !correction ? `Send code in ${seconds}s` : 'Create Account';
+  document.getElementById('buttonText').textContent = busy ? 'Please wait…' : seconds && !correction ? `Send code in ${seconds} sec` : 'Create Account';
   resend.disabled = busy || seconds > 0;
-  resend.textContent = seconds ? `Resend in ${seconds}s` : 'Resend code';
+  resend.textContent = seconds ? `Resend in ${seconds} sec` : 'Resend code';
   verify.disabled = edit.disabled = busy;
   panel.setAttribute('aria-busy', String(busy));
   [emailInput, usernameInput, passwordInput].forEach(input => { input.readOnly = busy; });

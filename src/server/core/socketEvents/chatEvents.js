@@ -165,7 +165,7 @@ function registerChatEvents(socket, { chatService, abuseControl }) {
       );
       const user = socket.data?.user || {};
       const key = normalizeTypingKey(user);
-      if (!partyId || !key) {
+      if (!partyId || !key || partyId !== normalizePartyId(socket.data?.partyId)) {
         cb?.({ ok: false, error: "Party not found" });
         return;
       }

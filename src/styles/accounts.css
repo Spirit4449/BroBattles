@@ -133,13 +133,12 @@ body {
 .auth-card .site-consent { font: 12px/1.5 system-ui, sans-serif; gap: 9px; margin: 12px 0; }
 .auth-card .site-consent input[type=checkbox] { width:20px; height:20px; margin-top:0; border-width:2px; }
 .auth-card .site-consent input[type=checkbox]:checked::after { width:13px; height:13px; font-size:15px; }
-.auth-card .form-input { font:16px/1.4 system-ui, sans-serif; letter-spacing:normal; user-select:text; -webkit-user-select:text; cursor:text; }
+.auth-card .form-input { font:10px/1.6 var(--bb-font-display,"Press Start 2P",monospace); letter-spacing:normal; user-select:text; -webkit-user-select:text; cursor:text; }
 .auth-card .form-group { margin-bottom:16px; }
 .auth-card .guest-info { margin-bottom:18px; font-size:12px; }
 .auth-card .subtitle { margin-bottom:18px; }
 .verification-destination { display:flex; align-items:center; justify-content:center; gap:10px; min-width:0; }
 .verification-destination > :first-child { min-width:0; overflow-wrap:anywhere; font:14px/1.5 system-ui,sans-serif; }
-.email-edit { display:inline-flex; align-items:center; gap:5px; flex:none; padding:7px 9px; border:1px solid #496b91; border-radius:6px; background:#1b304c; color:#cbe4ff; cursor:pointer; font:13px system-ui,sans-serif; }
 .verification-panel[hidden], .auth-card form[hidden], .auth-card .guest-info[hidden] { display:none!important; }
 @media(prefers-reduced-motion:reduce) { .verification-panel { animation:none!important; } }
 .verification-panel { position: relative; animation: verifyIn 220ms ease-out; }

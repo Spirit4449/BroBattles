@@ -1,3 +1,5 @@
+import { createChatScrollController } from './scrollController.mjs';
+import { composerHeight } from './composerSize.mjs';
 import { buildProfileIconUrl } from "../lib/profileIconAssets.js";
 import { sonner } from "../lib/sonner.js";
 const GAME_CHAT_RECENT_LIMIT = 40;
@@ -25,6 +27,26 @@ function formatChatTime(isoValue) {
 }
 function buildAvatarUrl(charClass, profileIconId = null) {
   return buildProfileIconUrl(profileIconId, charClass || "ninja");
+}
+function bindChatProfile(element, username, onOpenProfile) {
+  const name = String(username || "").trim();
+  if (!element || !name || typeof onOpenProfile !== "function") return;
+  element.classList.add("bb-chat-profile-link");
+  element.tabIndex = 0;
+  element.setAttribute("role", "button");
+  element.setAttribute("aria-label", `View ${name}'s profile`);
+  element.addEventListener("click", (event) => {
+    // Dragging across a name should still let the user select/copy it.
+    if (window.getSelection()?.toString()) return;
+    event.stopPropagation();
+    onOpenProfile(name);
+  });
+  element.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    onOpenProfile(name);
+  });
 }
 function createAvatarEl(name, charClass, profileIconId = null) {
   const avatar = document.createElement("div");
@@ -141,18 +163,20 @@ function makeChatShell({
     <div class="bb-chat-body">
       <div class="bb-chat-messages"></div>
       <div class="bb-chat-composer">
+        <button type="button" class="bb-chat-jump-latest" hidden aria-label="Jump to latest messages">↓</button>
         <div class="bb-chat-reply-banner hidden"></div>
+        <div class="bb-chat-typing is-idle" aria-live="polite">
+          <div class="bb-chat-typing-icons"></div>
+          <div class="bb-chat-typing-label">
+            <span class="bb-chat-typing-text"></span>
+            <span class="bb-chat-typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          </div>
+        </div>
         <div class="bb-chat-input-row">
           <textarea class="bb-chat-textarea" rows="1" maxlength="500" placeholder="Write a message..."></textarea>
           <button type="button" class="bb-chat-send">Send</button>
         </div>
-        <div class="bb-chat-typing hidden" aria-live="polite">
-          <div class="bb-chat-typing-icons"></div>
-          <div class="bb-chat-typing-label">
-            <span class="bb-chat-typing-text"></span>
-            <img class="bb-chat-typing-dots" src="/assets/typing.svg" alt="" width="18" height="12" />
-          </div>
-        </div>
+
       </div>
     </div>
   `;
@@ -162,7 +186,32 @@ function makeChatShell({
   document.body.appendChild(root);
   document.body.appendChild(launcher);
 
+  const textarea = panel.querySelector(".bb-chat-textarea");
+  function resizeComposer() {
+    if (!textarea.clientWidth) return;
+    textarea.style.height = "0px";
+    const style = window.getComputedStyle(textarea);
+    textarea.style.height = `${composerHeight(textarea.scrollHeight, style)}px`;
+  }
+  textarea.addEventListener("input", resizeComposer);
+  textarea.addEventListener("focus", resizeComposer);
+  let composerWidth = 0;
+  const composerObserver = new ResizeObserver(() => {
+    if (textarea.clientWidth === composerWidth) return;
+    composerWidth = textarea.clientWidth;
+    resizeComposer();
+  });
+  composerObserver.observe(textarea);
+
+  const scroll = createChatScrollController(
+    panel.querySelector(".bb-chat-messages"),
+    panel.querySelector(".bb-chat-composer"),
+    panel.querySelector(".bb-chat-jump-latest"),
+  );
   return {
+    scroll,
+    resizeComposer,
+    destroyComposer: () => { composerObserver.disconnect(); scroll.destroy(); },
     root,
     backdrop,
     launcher,
@@ -190,6 +239,7 @@ function renderPartyChatMessage(
     onReact,
     onOpenViewers,
     onJumpToMessage,
+    onOpenProfile,
     canReact = true,
     compact = false,
   } = {},
@@ -217,6 +267,8 @@ function renderPartyChatMessage(
     <div class="bb-chat-time">${escapeHtml(formatChatTime(message?.createdAt))}</div>
   `;
 
+  bindChatProfile(header.querySelector(".bb-chat-author"), message?.sender?.name, onOpenProfile);
+  bindChatProfile(avatar, message?.sender?.name, onOpenProfile);
   bubble.appendChild(header);
 
   if (!compact && message?.replyTo) {
@@ -348,6 +400,7 @@ function normalizeGameTeam(team) {
 }
 function renderGameChatLineMessage(message, currentUserName, localTeam) {
   const row = document.createElement("article");
+  row.dataset.messageId = String(message?.id || "");
   const senderName = String(message?.sender?.name || "Player");
   const bodyText = String(message?.body || "").trim();
   const scope =
@@ -372,6 +425,7 @@ function renderGameChatLineMessage(message, currentUserName, localTeam) {
   const name = document.createElement("span");
   name.className = "bb-chat-game-line-name";
   name.textContent = isSelf ? `${senderName} (You):` : `${senderName}:`;
+  name.title = isSelf ? `${senderName} (You)` : senderName;
 
   const body = document.createElement("span");
   body.className = "bb-chat-game-line-body";
@@ -381,4 +435,4 @@ function renderGameChatLineMessage(message, currentUserName, localTeam) {
   row.appendChild(body);
   return row;
 }
-export { escapeHtml, formatChatTime, buildAvatarUrl, createAvatarEl, messageIdOf, formatNameWithYou, postJson, formatSuspensionTime, showChatRequestError, buildInlineCooldownMessage, makeChatShell, renderPartyChatMessage, normalizeGameTeam, renderGameChatLineMessage, GAME_CHAT_RECENT_LIMIT, LOBBY_TYPING_IDLE_STOP_MS, LOBBY_TYPING_HEARTBEAT_MS, LOBBY_TYPING_STALE_MS, LOBBY_CHAT_BUBBLE_MS };
+export { bindChatProfile, escapeHtml, formatChatTime, buildAvatarUrl, createAvatarEl, messageIdOf, formatNameWithYou, postJson, formatSuspensionTime, showChatRequestError, buildInlineCooldownMessage, makeChatShell, renderPartyChatMessage, normalizeGameTeam, renderGameChatLineMessage, GAME_CHAT_RECENT_LIMIT, LOBBY_TYPING_IDLE_STOP_MS, LOBBY_TYPING_HEARTBEAT_MS, LOBBY_TYPING_STALE_MS, LOBBY_CHAT_BUBBLE_MS };

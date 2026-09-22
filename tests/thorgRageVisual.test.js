@@ -19,6 +19,8 @@ test('rage clone keeps physical transform untouched, restores alpha each render,
   const scene = {events,add:{sprite:()=>clone}};
   const setRage = exportsObject.setThorgRageVisual;
   setRage(scene,body,true); setRage(scene,body,true);
+  const standingHudTop = body._bbHudTopOffset;
+  assert.ok(standingHudTop < -52, 'HUD rises above the enlarged helmet');
   assert.equal(events.listenerCount('prerender'),1);
   events.emit('prerender');
   assert.equal(body.alpha,0);
@@ -27,7 +29,14 @@ test('rage clone keeps physical transform untouched, restores alpha each render,
   events.emit('render'); assert.equal(body.alpha,0.7);
   events.emit('prerender'); events.emit('render');
   assert.equal(clone.setScaleArgs[0],0.875);
+  body.frame = { name: 'powerup03', y: -30, realHeight: 128 };
+  events.emit('prerender'); events.emit('render');
+  assert.equal(body._bbHudTopOffset, standingHudTop, 'raised mace does not move the HUD above the head');
+  body.frame = { name: 'idle00' };
+  events.emit('prerender'); events.emit('render');
+  assert.equal(body._bbHudTopOffset, standingHudTop, 'returns to stable grown height');
   setRage(scene,body,false);
+  assert.equal(body._bbHudTopOffset, undefined, 'normal HUD anchor is restored');
   assert.equal(body._thorgVisualScale,1); assert.equal(body.alpha,0.7);
   assert.equal(events.listenerCount('prerender'),0); assert.equal(clone.destroyed,true);
 });

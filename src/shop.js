@@ -493,6 +493,21 @@ export function initializeShop({
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function spotlightOffer(offerId) {
+    const offer = Array.from(
+      state.scroll?.querySelectorAll("#shop-section-sales [data-shop-item-id]") || [],
+    ).find((item) => item.dataset.shopItemId === String(offerId));
+    if (!offer) {
+      jumpTo("sales");
+      return;
+    }
+    setActiveSection("sales");
+    offer.scrollIntoView({ behavior: "instant", block: "center" });
+    offer.focus({ preventScroll: true });
+    offer.classList.add("is-spotlight");
+    window.setTimeout(() => offer.classList.remove("is-spotlight"), 1800);
+  }
+
   function setActiveSection(section) {
     const nextSection = SECTION_META.some((meta) => meta.id === section)
       ? section
@@ -541,7 +556,7 @@ export function initializeShop({
     setActiveSection(active);
   }
 
-  function open(section = "sales") {
+  function open(section = "sales", offerId = null) {
     ensureShell();
     state.open = true;
     void state.overlay.offsetWidth;
@@ -551,7 +566,10 @@ export function initializeShop({
     playSound("shopOpen", 0.38);
     if (!state.timer) state.timer = window.setInterval(updateCountdowns, 1000);
     return refresh({ preserveScroll: false })
-      .then(() => requestAnimationFrame(() => jumpTo(section)))
+      .then(() => requestAnimationFrame(() => {
+        if (offerId) spotlightOffer(offerId);
+        else jumpTo(section);
+      }))
       .catch((error) => {
         state.scroll.innerHTML =
           '<div class="shop-load-error"><strong>Shop unavailable.</strong><button type="button" class="pixel-menu-button reward-continue" aria-hidden="true" tabindex="-1" data-sound="cursor4">Try Again</button></div>';
@@ -560,6 +578,10 @@ export function initializeShop({
           ?.addEventListener("click", () => void refresh());
         reportError(error, "load");
       });
+  }
+
+  function openOffer(offerId) {
+    return open("sales", offerId);
   }
 
   async function getFeaturedSale() {
@@ -828,7 +850,7 @@ export function initializeShop({
     }, 0);
   }
 
-  return { open, close, refresh, jumpTo, getFeaturedSale };
+  return { open, openOffer, close, refresh, jumpTo, getFeaturedSale };
 }
 
 // Shared by Shop and Trophy Road so reward motion, audio and wallet impacts stay identical.

@@ -72,7 +72,7 @@ body.site-auth{--bb-font-body:system-ui,-apple-system,"Segoe UI",sans-serif;font
 .site-settings-side .bb-popup-title{font-size:14px!important}.site-settings-side>.bb-popup-header{padding:14px 48px;min-height:54px}
 #battle-keybind-hud .controls-mini-toggle{display:none!important}
 .site-key-remap{margin:16px 0;border:2px solid var(--bb-border);background:#101d30;padding:12px}
-.site-key-remap summary{cursor:pointer;font:600 15px/1.5 system-ui,sans-serif;color:#e5efff}.site-key-remap p{font:400 13px/1.5 system-ui,sans-serif}.site-key-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0;font:400 14px/1.4 system-ui,sans-serif}.site-key-row button{min-width:64px;padding:8px!important;font-size:10px!important}
+.site-key-remap summary{cursor:pointer;font:11px/1.7 var(--bb-font-display);color:#e5efff}.site-key-remap p{font:9px/1.8 var(--bb-font-display)}.site-key-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0;font:10px/1.7 var(--bb-font-display)}.site-key-row button{min-width:64px;padding:8px!important;font-size:10px!important}
 .site-dialog #settings-reset.is-reset{background:linear-gradient(#40b65b,#258337)!important;box-shadow:0 5px #03060b,inset 0 3px #8edf79,inset 0 -4px #185424!important}
 
 /* Reset keeps the values legible while they return to their defaults. */

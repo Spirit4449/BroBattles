@@ -13,22 +13,23 @@
     "specialChargePerHit": 0,
     "spriteScale": 0.7,
     "body": {
-      "widthShrink": 40,
-      "heightShrink": 14,
-      "offsetXFromHalf": -18,
-      "offsetY": 8,
-      "flipOffset": 14
+      "widthShrink": 53,
+      "heightShrink": 22,
+      "offsetXFromHalf": 0,
+      "offsetY": 12,
+      "flipOffset": 0,
+      "sourceUnits": true
     },
     "tuning": {
       "attack": {
         "aim": {
           "kind": "round",
           "attackKey": "sweep",
-          "minRange": 90,
-          "defaultRange": 90,
-          "maxRange": 90,
-          "radius": 90,
-          "radiusY": 46,
+          "minRange": 117,
+          "defaultRange": 117,
+          "maxRange": 117,
+          "radius": 117,
+          "radiusY": 92,
           "reticleOffsetY": 13,
           "anchorForwardOffset": 0,
           "anchorOffsetY": 13,
@@ -37,7 +38,7 @@
         },
         "sweep": {
           "windupMs": 70,
-          "strikeMs": 560,
+          "strikeMs": 500,
           "radiusX": 78,
           "radiusY": 26,
           "centerY": 13,
@@ -47,7 +48,10 @@
           "tipOffset": 12,
           "rageScale": 1.25,
           "footOffset": 37.8,
-          "spriteForwardOffset": -1.5707963267948966
+          "spriteForwardOffset": -1.5707963267948966,
+          "recoveryMs": 300,
+          "hitboxReachScale": 1.3,
+          "hitboxHeightScale": 2
         }
       },
       "special": {

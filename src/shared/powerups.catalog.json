@@ -50,6 +50,7 @@
     "assetDir": "shockwave",
     "color": 16747008,
     "durationMs": 1,
+    "touchVolume": 0.75,
     "radius": 420,
     "forceX": 990,
     "forceY": 750

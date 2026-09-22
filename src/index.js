@@ -60,6 +60,7 @@ wireFullscreenToggles();
 const lobbyChatController = createLobbyChatController({
   socket,
   getPartyContext: getPartyInteractionContext,
+  onOpenProfile: (username) => __lobbyProfilePopup?.open({ username }),
   getCurrentUserName: () =>
     document.getElementById("username-text")?.textContent || "",
 });
@@ -316,6 +317,12 @@ function animatePostMatchRewardsIfPresent(
 }
 
 function closeTransientLobbyUiOnEscape() {
+  // The views dialog sits above chat; consume Escape before closing its parent.
+  const viewers = document.querySelector(".bb-chat-viewers-popup:not(.hidden)");
+  if (viewers) {
+    viewers.querySelector("button[data-chat-viewers-close]")?.click();
+    return true;
+  }
   if (document.querySelector(".shop-reward-reveal:not(.is-leaving)")) return false;
   const loadoutOverlay = document.getElementById("profile-loadout-overlay");
   if (loadoutOverlay && !loadoutOverlay.classList.contains("hidden")) {
@@ -362,11 +369,23 @@ document.addEventListener(
   true,
 );
 
-function setPartyDiscoveryStatus(text, isError = false) {
+function setPartyDiscoveryStatus(text, isError = false, count = null) {
   const status = document.getElementById("party-discovery-status");
   if (!status) return;
-  status.textContent = text || "";
+  status.replaceChildren();
+  if (Number.isFinite(count) && count > 0) {
+    const marker = document.createElement("span");
+    marker.className = "party-discovery-count-marker";
+    marker.setAttribute("aria-hidden", "true");
+    const label = document.createElement("span");
+    label.className = "party-discovery-count-label";
+    label.textContent = `${count} public ${count === 1 ? "party" : "parties"} available`;
+    status.append(marker, label);
+  } else {
+    status.textContent = text || "";
+  }
   status.classList.toggle("is-error", isError);
+  status.classList.toggle("has-count", Number.isFinite(count) && count > 0);
 }
 
 function renderPartyDiscoveryList(parties) {
@@ -376,12 +395,25 @@ function renderPartyDiscoveryList(parties) {
 
   if (!Array.isArray(parties) || parties.length === 0) {
     container.innerHTML =
-      '<p class="trophy-overlay-loading">No public parties found right now.</p>';
+      `<div class="party-discovery-empty">
+        <div class="party-discovery-empty-icon" aria-hidden="true">
+          <img src="/assets/ui/party-search-players.png" alt="" />
+        </div>
+        <div>
+          <h3>No parties found</h3>
+          <p>Try a different search or refresh to check for new parties.</p>
+        </div>
+      </div>`;
     return;
   }
 
   parties.forEach((party) => {
     const members = Array.isArray(party?.members) ? party.members : [];
+    const capacity = Math.max(
+      1,
+      members.length,
+      Number(party?.capacity) || members.length,
+    );
     const card = document.createElement("article");
     card.className = "party-discovery-card";
     const partyTitle = String(party?.publicName || "").trim();
@@ -397,16 +429,16 @@ function renderPartyDiscoveryList(parties) {
             <span>Hosted by ${escapeHtml(ownerName)}</span>
           </div>
         </div>
-        <button type="button" class="pixel-menu-button party-discovery-join" data-party-id="${Number(
-          party?.partyId,
-        )}">Join</button>
       </div>
+      <button type="button" class="pixel-menu-button party-discovery-join" data-party-id="${Number(
+        party?.partyId,
+      )}">Join</button>
       <div class="party-discovery-info-row">
         <span class="party-discovery-detail"><span class="party-discovery-meta-label">Mode</span> ${escapeHtml(getDiscoveryModeLabel(party))}</span>
         <span class="party-discovery-detail"><span class="party-discovery-meta-label">Map</span> ${escapeHtml(getMapLabel(party?.map))}</span>
       </div>
       <div class="party-discovery-roster">
-        <div class="party-discovery-meta-label">${members.length} ${members.length === 1 ? "player" : "players"}</div>
+        <div class="party-discovery-meta-label">${members.length}/${capacity} players</div>
         <div class="party-discovery-members"></div>
       </div>
     `;
@@ -471,11 +503,7 @@ async function loadPartyDiscovery(query = "") {
     }
     const parties = Array.isArray(payload?.parties) ? payload.parties : [];
     __partyDiscoveryState.lastResult = parties;
-    setPartyDiscoveryStatus(
-      parties.length
-        ? `Found ${parties.length} public ${parties.length === 1 ? "party" : "parties"}.`
-        : "",
-    );
+    setPartyDiscoveryStatus("", false, parties.length);
     renderPartyDiscoveryList(parties);
   } catch (error) {
     setPartyDiscoveryStatus(
@@ -662,6 +690,7 @@ async function initializeLobbyHints({ shop }) {
       badge: "LIMITED SALE",
       price: getSaleHintPrice(saleOffer?.price),
       countdownTo: featuredSale?.nextRefreshAt || null,
+      onClick: () => void shop.openOffer(saleOffer.id),
       priority: 10,
       cooldownBattles: 4,
       when: () => !!saleOffer,
@@ -1280,6 +1309,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }));
   const shop = {
     open: (...args) => ensureShop().open(...args),
+    openOffer: (...args) => ensureShop().openOffer(...args),
     getFeaturedSale: () => ensureShop().getFeaturedSale(),
   };
   shopButton?.addEventListener("click", () => void shop.open("sales"));

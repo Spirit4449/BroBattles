@@ -67,10 +67,14 @@ function validateContent({ characters = characterDefinitions, powerups = POWERUP
     if (!effectDefs[key]) errors.push(`${key}: missing server effect`);
     if (!(definition.durationMs > 0)) errors.push(`${key}: invalid duration`);
     if ('localMovement' in definition) errors.push(`${key}: separate localMovement tuning is obsolete; use shared modifiers`);
+    for (const field of ['touchVolume', 'tickVolume']) {
+      if (field in definition && (!Number.isFinite(definition[field]) || definition[field] < 0 || definition[field] > 1)) errors.push(`${key}: invalid ${field}`);
+    }
     for (const [field, value] of Object.entries(definition.modifiers || {})) {
       if (!['speedMult', 'jumpMult', 'damageMult', 'damageTakenMult'].includes(field) || !Number.isFinite(value) || value < 0) errors.push(`${key}: invalid modifier ${field}`);
     }
-    for (const file of ['icon.webp', 'touch.mp3', 'tick.mp3']) assetExists(`/assets/powerups/${definition.assetDir}/${file}`, key);
+    for (const file of ['icon.webp', 'touch.mp3']) assetExists(`/assets/powerups/${definition.assetDir}/${file}`, key);
+    if (definition.tickVolume != null) assetExists(`/assets/powerups/${definition.assetDir}/tick.mp3`, key);
   }
   for (const cosmetic of cosmetics) {
     if ('price' in cosmetic) errors.push(`${cosmetic.id}: cosmetic price duplicates shop offer pricing`);

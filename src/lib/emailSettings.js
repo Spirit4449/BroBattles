@@ -1,3 +1,6 @@
+import { sonner } from './sonner.js';
+import '../styles/emailControls.css';
+import '../styles/sonner.css';
 import { wireBackdropDismiss } from '../site/dialogDismiss.mjs';
 import { createCooldown, wireCodeInputs } from './emailVerificationUI';
 
@@ -31,10 +34,10 @@ export function wireEmailSettings(fetchJson, profile) {
         <label for="replacement-email">Email address</label>
         <input id="replacement-email" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com" spellcheck="false" autocapitalize="none" />
         <button class="profile-btn" type="submit" data-send>Send code</button>
-        <button type="button" class="email-text-button" data-resume hidden>Enter existing code</button>
+        <button type="button" class="email-text-button" data-resume hidden>Back</button>
       </form>
       <section data-code-step class="email-step" hidden>
-        <div class="verification-destination"><span data-destination></span><button type="button" class="email-edit" aria-label="Edit email address">✎ <span>Edit</span></button></div>
+        <div class="verification-destination"><span data-destination></span><button type="button" class="email-edit pixel-menu-button" aria-label="Edit email address">Edit</button></div>
         <div class="email-code-inputs" role="group" aria-label="Six-digit verification code">${Array.from({length:6}, (_,i) => `<input type="text" inputmode="numeric" autocomplete="${i ? 'off' : 'one-time-code'}" maxlength="${i ? 1 : 6}" aria-label="Digit ${i+1}" />`).join('')}</div>
         <button type="button" class="profile-btn" data-verify>Verify email</button>
         <button type="button" class="email-text-button" data-resend>Resend code</button>
@@ -56,9 +59,9 @@ export function wireEmailSettings(fetchJson, profile) {
     const refresh = () => {
       const seconds = cooldown.remaining();
       send.disabled = busy || (seconds > 0 && !canCorrect());
-      send.textContent = seconds && !canCorrect() ? `Send code in ${seconds}s` : 'Send code';
+      send.textContent = seconds && !canCorrect() ? `Send code in ${seconds} sec` : 'Send code';
       resend.disabled = busy || seconds > 0;
-      resend.textContent = seconds ? `Resend in ${seconds}s` : 'Resend code';
+      resend.textContent = seconds ? `Resend in ${seconds} sec` : 'Resend code';
       verify.disabled = edit.disabled = busy;
       resume.hidden = !sentEmail;
       resume.disabled = busy;
@@ -95,19 +98,36 @@ export function wireEmailSettings(fetchJson, profile) {
       try {
         const result = await post('/profile/email/verify', { code: digits.value() });
         show(result.email); dialog.close();
+        sonner('Email address updated.', undefined, 'success');
       } catch (error) { tell(error.message, true); digits.clear(); digits.focus(); }
       finally { busy = false; refresh(); }
     });
     marketing.addEventListener('change', async () => {
       const next = marketing.checked;
-      busy = true; refresh();
-      try { await post('/profile/email/marketing', { subscribed: next }); subscribed = next; tell('Email preference saved.'); }
-      catch (error) { marketing.checked = subscribed; tell(error.message, true); }
+      busy = true; tell(); refresh();
+      try { await post('/profile/email/marketing', { subscribed: next }); subscribed = next; notify('Email preference saved.', undefined, 'success'); }
+      catch (error) { marketing.checked = subscribed; notify('Could not save email preference', error.message, 'error'); }
       finally { busy = false; refresh(); }
     });
+    // Keep notifications in the modal top layer, above its backdrop.
+    const toastWrap = document.createElement('div');
+    toastWrap.id = 'email-settings-toasts';
+    toastWrap.className = 'sonner-wrap';
+    dialog.append(toastWrap);
+    const notify = (header, text, tone) => {
+      if (dialog.open) sonner(header, text, 'OK', undefined, { tone, containerId: toastWrap.id });
+      else sonner(header, text, 'OK', undefined, { tone });
+    };
+    const escape = event => {
+      if (event.key !== 'Escape' || !dialog.open) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      dialog.close();
+    };
+    window.addEventListener('keydown', escape, true);
     dialog.querySelector('.email-dialog-close').onclick = () => dialog.close();
     wireBackdropDismiss(dialog);
-    dialog.addEventListener('close', () => { cooldown.dispose(); dialog.remove(); activeDialog = null; toggle.focus({preventScroll:true}); }, { once: true });
+    dialog.addEventListener('close', () => { window.removeEventListener('keydown', escape, true); cooldown.dispose(); dialog.remove(); activeDialog = null; toggle.focus({preventScroll:true}); }, { once: true });
     document.body.append(dialog); dialog.showModal(); email.value = currentEmail; showAddress();
     Promise.allSettled([fetchJson('/profile/email'), fetchJson('/profile/email/marketing')]).then(([accountResult, preferenceResult]) => {
       if (!dialog.open) return;

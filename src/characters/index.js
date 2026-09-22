@@ -165,6 +165,12 @@ function cloneBaseAnimationToVariant(scene, character, skinId) {
   if (!scene.textures.exists(textureKey)) return;
   setupDuckFrame(scene, character, textureKey);
 
+  // Thorg's video atlas and older skins have different pose counts/timings.
+  if (character === 'thorg') {
+    registry.thorg.setupAnimations(scene, textureKey);
+    return;
+  }
+
   // Unconverted Ninja skins retain their original frame counts and cadence.
   if (character === 'ninja' && !scene.textures.get(textureKey).has('attack00')) {
     legacyNinjaAnimations(scene, textureKey);

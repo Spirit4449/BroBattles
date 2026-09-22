@@ -41,6 +41,7 @@ import {
 } from "../effects";
 import { RENDER_LAYERS } from "../gameScene/renderLayers";
 import { playDuckTransitionSound } from "../gameScene/movementAudio.js";
+import { DUCK_HEIGHT_RATIO } from "../shared/ducking.js";
 
 const OP_PLAYER_NAME_OFFSET_Y = 42;
 const HUD_SMOOTH_ALPHA = 0.35;
@@ -141,8 +142,8 @@ export default class RemotePlayer {
     const widthShrink = bs.widthShrink;
     const heightShrink = bs.heightShrink;
     this.opponent.body.setSize(
-      this.opFrame.width - widthShrink,
-      this.opFrame.height - heightShrink,
+      this.opFrame.realWidth - widthShrink,
+      this.opFrame.realHeight - heightShrink,
     );
     this.opponent.body.updateFromGameObject?.();
     this.applyFlipOffset();
@@ -571,6 +572,16 @@ export default class RemotePlayer {
     const nextDucking = ducking === true;
     const previousDucking = this.opponent._ducking;
     this.opponent._ducking = nextDucking;
+    if (this.character === "thorg" && this.opponent.body && this.opFrame && previousDucking !== nextDucking) {
+      const height = this.opFrame.realHeight - this.bodyConfig.heightShrink;
+      this.opponent.body.setSize(
+        this.opponent.body.sourceWidth,
+        nextDucking ? height * DUCK_HEIGHT_RATIO : height,
+        false,
+      );
+      this.applyFlipOffset();
+      this.opponent.body.updateFromGameObject?.();
+    }
     if (
       typeof previousDucking === "boolean" &&
       previousDucking !== nextDucking
@@ -585,10 +596,12 @@ export default class RemotePlayer {
     const bs = this.bodyConfig || {};
     const flipOffset = bs.flipOffset || 0;
     const extra = this.opponent.flipX ? flipOffset : 0;
-    const frameW = this.opFrame ? this.opFrame.width : this.opponent.width;
+    const frameW = this.opFrame ? this.opFrame.realWidth : this.opponent.width;
     const bodyW = bs.sourceUnits ? this.opponent.body.sourceWidth : this.opponent.body.width;
     const ox = frameW / 2 - bodyW / 2 + (bs.offsetXFromHalf ?? 0) + extra;
-    const oy = bs.offsetY;
+    const standingHeight = (this.opFrame?.realHeight ?? this.opponent.height) - bs.heightShrink;
+    const oy = bs.offsetY + (this.character === "thorg"
+      ? standingHeight - this.opponent.body.sourceHeight : 0);
     this.opponent.body.setOffset(ox, oy);
   }
 

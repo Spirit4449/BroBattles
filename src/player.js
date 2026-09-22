@@ -63,6 +63,7 @@ import {
 import { createAttackAimReticleController } from "./gameScene/attackAimReticle";
 import { createCombatMouseController } from "./gameScene/combatMouse";
 import { createMobileControlsController } from "./gameScene/mobileControls";
+import { releaseMovementForFocus } from "./players/focusMomentum.mjs";
 import { RENDER_LAYERS } from "./gameScene/renderLayers";
 import MOVEMENT_PHYSICS from "./shared/movementPhysics.json";
 import {
@@ -260,7 +261,7 @@ function resetMovementVfxTracking() {
   wasGroundWalking = false;
 }
 
-function resetMovementInputState() {
+function resetMovementInputState({ preserveVelocity = false } = {}) {
   const resetKeyState = (key) => {
     try {
       key?.reset?.();
@@ -285,11 +286,19 @@ function resetMovementInputState() {
   mobileControlsController?.resetInput?.();
 
   if (player?.body) {
-    player._jumpLaunch = null;
     player._lastJumpPressTime = 0;
     player._lastWallKickAwayInputTs = 0;
-    player.setVelocity?.(0, 0);
-    player.setAcceleration?.(0, 0);
+    if (preserveVelocity) {
+      releaseMovementForFocus(player, {
+        dragGround: MOVEMENT_PHYSICS.dragGround,
+        dragAir: MOVEMENT_PHYSICS.dragAir,
+        shockwaveActive: (player._shockwaveUntil || 0) > Date.now(),
+      });
+    } else {
+      player._jumpLaunch = null;
+      player.setVelocity?.(0, 0);
+      player.setAcceleration?.(0, 0);
+    }
   }
 
   networkInputState = {
@@ -299,10 +308,11 @@ function resetMovementInputState() {
     direction: 0,
     jumpHeld: false,
     jumpPressed: false,
-    vx: 0,
-    vy: 0,
+    vx: Number(player?.body?.velocity?.x) || 0,
+    vy: Number(player?.body?.velocity?.y) || 0,
     wallSliding: false,
     wallSide: null,
+    movementLocked: preserveVelocity,
   };
 }
 
@@ -742,8 +752,8 @@ export function createPlayer(
   bodyConfig = bs; // persist for use in movement function
   const widthShrink = bs.widthShrink;
   const heightShrink = bs.heightShrink;
-  const bw = Math.max(4, frame.width - widthShrink);
-  const bh = Math.max(4, frame.height - heightShrink);
+  const bw = Math.max(4, frame.realWidth - widthShrink);
+  const bh = Math.max(4, frame.realHeight - heightShrink);
   player.body.setSize(bw, bh);
   player.body.updateFromGameObject?.();
   player._ducking = false;
@@ -756,10 +766,10 @@ export function createPlayer(
     const cfg = bodyConfig || {};
     const flipOffset = cfg.flipOffset || 0; // falsy -> 0
     const extra = player.flipX ? flipOffset : 0;
-    const frameW = frame ? frame.width : player.width;
+    const frameW = frame ? frame.realWidth : player.width;
     const bodyW = cfg.sourceUnits ? player.body.sourceWidth : player.body.width;
     const ox = frameW / 2 - bodyW / 2 + (cfg.offsetXFromHalf ?? 0) + extra;
-    const standingHeight = Math.max(4, frame.height - cfg.heightShrink);
+    const standingHeight = Math.max(4, frame.realHeight - cfg.heightShrink);
     const currentSourceHeight = player.body.sourceHeight || standingHeight;
     const oy = cfg.offsetY + standingHeight - currentSourceHeight;
     player.body.setOffset(ox, oy);
@@ -769,7 +779,7 @@ export function createPlayer(
   resizeForDuckLocal = (ducking) => {
     if (!player?.body || player._ducking === !!ducking) return;
     const body = player.body;
-    const standingHeight = Math.max(4, frame.height - bodyConfig.heightShrink);
+    const standingHeight = Math.max(4, frame.realHeight - bodyConfig.heightShrink);
     const nextHeight = ducking
       ? Math.max(4, standingHeight * DUCK_HEIGHT_RATIO)
       : standingHeight;
@@ -1120,7 +1130,7 @@ export function createPlayer(
       sceneParam.input.keyboard?.enabled !== false && sceneParam.sys.isActive(),
     onRelease: () => {
       resetPointerAttackAim();
-      resetMovementInputState();
+      resetMovementInputState({ preserveVelocity: true });
     },
   });
 
@@ -1351,7 +1361,7 @@ function getStableLocalUiTop() {
   if (Number.isFinite(player?._bbHudTopOffset)) return player.y + player._bbHudTopOffset;
   if (!player?.body) return player.y - player.height / 2;
   if (!player._ducking || !bodyConfig || !frame) return player.body.y;
-  const standingHeight = Math.max(4, frame.height - bodyConfig.heightShrink);
+  const standingHeight = Math.max(4, frame.realHeight - bodyConfig.heightShrink);
   return player.body.bottom - standingHeight * Math.abs(player.scaleY || 1) + 8;
 }
 
@@ -1545,61 +1555,77 @@ function drawAmmoBar(forcedX, forcedY) {
 export function handlePlayerMovement(scene) {
   mobileControlsController?.ensure?.(scene);
   mobileControlsController?.layout?.(scene);
-  if (scene?.input?.keyboard?.enabled === false ||
-      (combatMouseController && !mobileControlsController?.isEnabled?.() && !combatMouseController.isActive())) {
+  const desktopInputInactive =
+    !!combatMouseController &&
+    !mobileControlsController?.isEnabled?.() &&
+    !combatMouseController.isActive();
+  if (
+    scene?.input?.keyboard?.enabled === false ||
+    desktopInputInactive ||
+    chatInputActive ||
+    window.__BB_SITE_DIALOG_OPEN
+  ) {
     stopMovementLoopSfx();
-    try {
-      if (player?.body) {
-        player._jumpLaunch = null;
-        player.setVelocityX(0);
-        player.setAccelerationX(0);
-        player.setDragX(0);
-      }
-    } catch (_) {}
-    networkInputState = {
-      left: false,
-      right: false,
-      direction: 0,
-      jumpHeld: false,
-      jumpPressed: false,
-      grounded: !!player?.body?.touching?.down,
-      vx: Number(player?.body?.velocity?.x) || 0,
-      vy: Number(player?.body?.velocity?.y) || 0,
-      facing: player?.flipX ? -1 : 1,
-      animation: getPresentedAnimation(player, "idle"),
+    releaseMovementForFocus(player, {
+      dragGround: MOVEMENT_PHYSICS.dragGround,
+      dragAir: MOVEMENT_PHYSICS.dragAir,
+      shockwaveActive: (player?._shockwaveUntil || 0) > Date.now(),
+    });
+    isMoving = false;
+    const grounded = !!(
+      player?.body?.touching?.down || player?.body?.blocked?.down
+    );
+    if (grounded) isJumping = false;
+    const now = Date.now();
+    const movementLocked =
+      Math.max(
+        Number(player?._movementLockedUntil || 0),
+        Number(player?._externalControlLockUntil || 0),
+      ) > now;
+    const desiredMovementAnimation = deriveMovementAnimation({
+      grounded,
+      ducking: !!player?._ducking,
+      moving: false,
       wallSliding: false,
-      wallSide: null,
-      ...getMovementFxNetworkState(),
-      movementLocked: true,
-      loaded:
-        !dead &&
-        Number.isFinite(player?.x) &&
-        Number.isFinite(player?.y) &&
-        player?.visible !== false,
-    };
-    return;
-  }
-  if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) {
-    stopMovementLoopSfx();
-    try {
-      if (player?.body) {
-        player._jumpLaunch = null;
-        player.setVelocityX(0);
-        player.setAccelerationX(0);
-        player.setDragX(0);
-      }
-    } catch (_) {}
+      vx: Number(player?.body?.velocity?.x) || 0,
+      vy: Number(player?.body?.velocity?.y) || 0,
+      dead,
+      movementLocked,
+      specialLocked: Number(player?._specialAnimLockUntil || 0) > now,
+      fallback: getPresentedAnimation(player, "idle"),
+    });
+    const presentedAnimation = getPresentedAnimation(
+      player,
+      desiredMovementAnimation,
+    );
+    const passiveAnimation =
+      presentedAnimation === "throw" || presentedAnimation === "special"
+        ? presentedAnimation
+        : desiredMovementAnimation;
+    playCharacterAnimation({
+      scene,
+      sprite: player,
+      character: currentCharacter,
+      skinId: currentSkinId,
+      resolveAnimKey,
+      logical: passiveAnimation,
+      fallback: "idle",
+      force: true,
+    });
+    // Input can be inactive while Arcade Physics still advances the body. Keep
+    // all world-space HUD elements attached even while controls are released.
+    syncLocalUiPosition();
     networkInputState = {
       left: false,
       right: false,
       direction: 0,
       jumpHeld: false,
       jumpPressed: false,
-      grounded: !!player?.body?.touching?.down,
+      grounded,
       vx: Number(player?.body?.velocity?.x) || 0,
       vy: Number(player?.body?.velocity?.y) || 0,
       facing: player?.flipX ? -1 : 1,
-      animation: getPresentedAnimation(player, "idle"),
+      animation: getPresentedAnimation(player, passiveAnimation),
       wallSliding: false,
       wallSide: null,
       ...getMovementFxNetworkState(),
@@ -1857,7 +1883,7 @@ export function handlePlayerMovement(scene) {
     ducking = false;
   }
   if (player._ducking && !ducking && groundedForDuck && !dead) {
-    const standingHeight = Math.max(4, frame.height - bodyConfig.heightShrink);
+    const standingHeight = Math.max(4, frame.realHeight - bodyConfig.heightShrink);
     const standingWorldHeight = standingHeight * Math.abs(player.scaleY || 1);
     const extraHeight = standingWorldHeight - player.body.height;
     if (!hasStandingClearance(player.body, scene._mapObjects || [], extraHeight)) {
@@ -2637,8 +2663,7 @@ export function setChatInputActive(active) {
   if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) {
     combatMouseController?.release();
     resetPointerAttackAim();
-    resetMovementInputState();
-    player?.setDragX?.(0);
+    resetMovementInputState({ preserveVelocity: true });
     networkInputState = {
       ...networkInputState,
       left: false,

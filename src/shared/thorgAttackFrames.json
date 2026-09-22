@@ -1,0 +1,170 @@
+[
+  {
+    "frame": "throw00",
+    "sourceFrame": 10,
+    "durationMs": 70,
+    "grip": [
+      -13.3,
+      3.5
+    ],
+    "tip": [
+      4.2,
+      -41.3
+    ],
+    "radius": 7
+  },
+  {
+    "frame": "throw01",
+    "sourceFrame": 11,
+    "durationMs": 62.5,
+    "grip": [
+      -18.9,
+      -1.4
+    ],
+    "tip": [
+      -27.3,
+      -49.0
+    ],
+    "radius": 7
+  },
+  {
+    "frame": "throw02",
+    "sourceFrame": 12,
+    "durationMs": 62.5,
+    "grip": [
+      -19.6,
+      -4.2
+    ],
+    "tip": [
+      -48.3,
+      -41.3
+    ],
+    "radius": 7
+  },
+  {
+    "frame": "throw03",
+    "sourceFrame": 14,
+    "durationMs": 62.5,
+    "grip": [
+      -23.8,
+      4.9
+    ],
+    "tip": [
+      -63.7,
+      -6.3
+    ],
+    "radius": 7
+  },
+  {
+    "frame": "throw04",
+    "sourceFrame": 16,
+    "durationMs": 62.5,
+    "grip": [
+      -6.3,
+      13.3
+    ],
+    "tip": [
+      -46.9,
+      14.7
+    ],
+    "radius": 7
+  },
+  {
+    "frame": "throw05",
+    "sourceFrame": 18,
+    "durationMs": 62.5,
+    "grip": [
+      37.1,
+      7.0
+    ],
+    "tip": [
+      79.1,
+      -14.7
+    ],
+    "radius": 7
+  },
+  {
+    "frame": "throw06",
+    "sourceFrame": 19,
+    "durationMs": 62.5,
+    "grip": [
+      36.4,
+      -11.9
+    ],
+    "tip": [
+      58.8,
+      -44.1
+    ],
+    "radius": 7
+  },
+  {
+    "frame": "throw07",
+    "sourceFrame": 20,
+    "durationMs": 62.5,
+    "grip": [
+      8.4,
+      -15.4
+    ],
+    "tip": [
+      1.4,
+      -62.3
+    ],
+    "radius": 7
+  },
+  {
+    "frame": "throw08",
+    "sourceFrame": 22,
+    "durationMs": 62.5,
+    "grip": [
+      -27.3,
+      -10.5
+    ],
+    "tip": [
+      -53.9,
+      -38.5
+    ],
+    "radius": 7
+  },
+  {
+    "frame": "throw09",
+    "sourceFrame": 40,
+    "durationMs": 100.0,
+    "grip": [
+      -7.0,
+      12.6
+    ],
+    "tip": [
+      -43.4,
+      31.5
+    ],
+    "radius": 7
+  },
+  {
+    "frame": "throw10",
+    "sourceFrame": 43,
+    "durationMs": 100.0,
+    "grip": [
+      1.4,
+      11.9
+    ],
+    "tip": [
+      35.0,
+      14.7
+    ],
+    "radius": 7
+  },
+  {
+    "frame": "throw11",
+    "sourceFrame": 46,
+    "durationMs": 100.0,
+    "grip": [
+      -4.9,
+      9.8
+    ],
+    "tip": [
+      40.6,
+      -21.7
+    ],
+    "radius": 7
+  }
+]

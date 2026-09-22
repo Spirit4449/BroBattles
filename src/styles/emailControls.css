@@ -1,0 +1,24 @@
+/* Shared by signup and account settings. */
+:is(.auth-card, .email-dialog) .email-edit.pixel-menu-button {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:none;
+  min-height:36px;
+  padding:9px 12px;
+  border:0;
+  border-radius:0;
+  background:linear-gradient(135deg,#18a462,#0e8255);
+  color:#fff;
+  font:10px/1.4 var(--bb-font-display,"Press Start 2P",monospace);
+  text-transform:uppercase;
+  box-shadow:var(--bb-control-shadow);
+  cursor:pointer;
+}
+:is(.auth-card, .email-dialog) .email-edit.pixel-menu-button:hover:not(:disabled) { filter:brightness(1.12); }
+:is(.auth-card, .email-dialog) .email-edit.pixel-menu-button:focus-visible { outline:3px solid var(--bb-gold,#ffd166); outline-offset:4px; }
+:is(.auth-card, .email-dialog) .email-edit.pixel-menu-button:active:not(:disabled) { transform:translateY(2px); box-shadow:var(--bb-control-shadow-pressed); }
+
+/* Keep the unit lowercase even inside uppercase arcade action buttons. */
+.email-dialog [data-send], .email-dialog [data-resend],
+.auth-card #signupBtn, .auth-card #resend-button { text-transform:none; }

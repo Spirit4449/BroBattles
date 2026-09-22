@@ -6,7 +6,7 @@ function createPartyQueueTransitionService({ db, io, mm }) {
     try {
       const members = await db.fetchPartyMembersDetailed(partyId);
       for (const m of members || []) {
-        if (!m?.name) continue;
+        if (!m?.name || !m.status || String(m.status).trim().toLowerCase() === "offline") continue;
         if (excludeName && m.name === excludeName) continue;
         try {
           await db.setUserStatus(m.name, "online");

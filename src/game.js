@@ -1,3 +1,4 @@
+import { processPlayerPlatformCollision } from './players/platformCollision';
 import { loadGameFonts } from './gameScene/loadGameFonts';
 import { installDamageHitboxDebug } from './gameScene/damageHitboxDebug';
 import { bindAudio, bindGameAudio, getSettings, graphicsRenderScale, subscribeSettings } from "./site/preferences";
@@ -868,7 +869,7 @@ function attachMapCollidersToSprite(scene, sprite, objects) {
   for (const mapObject of objects) {
     if (!mapObject) continue;
     try {
-      scene.physics.add.collider(sprite, mapObject);
+      scene.physics.add.collider(sprite, mapObject, null, processPlayerPlatformCollision);
     } catch (_) {}
   }
 }
@@ -1430,7 +1431,7 @@ class GameScene extends Phaser.Scene {
         onCreateMapObject: (mapObject) => {
           if (!mapObject) return;
           try {
-            if (player) this.physics.add.collider(player, mapObject);
+            if (player) this.physics.add.collider(player, mapObject, null, processPlayerPlatformCollision);
           } catch (_) {}
         },
         onEditModeChange: (editing) => {

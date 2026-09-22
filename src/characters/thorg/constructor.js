@@ -61,8 +61,8 @@ class Thorg extends CharacterEntityBase {
     }
   }
 
-  static setupAnimations(scene) {
-    animations(scene);
+  static setupAnimations(scene, textureKey = NAME) {
+    animations(scene, textureKey);
   }
 
   static setDebugState(enabled) {

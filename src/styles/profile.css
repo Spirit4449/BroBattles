@@ -881,29 +881,31 @@ body.profile-page-body .card-actions {
 #account-email-code { letter-spacing: .3em; font-size: 1.25rem; }
 #email-form button:disabled { opacity: .6; cursor: wait; }
 
-.email-dialog { width:min(92vw,470px); border:2px solid #4c7098; border-radius:14px; color:#eef5ff; background:#122139; box-shadow:0 24px 80px rgba(0,0,0,.65); }
+/* Account email uses the same framed panels and pixel controls as the lobby. */
+.email-dialog { width:min(92vw,500px); padding:0; max-height:calc(100dvh - 32px); overflow:auto; border:3px solid var(--bb-border,#385478); border-radius:var(--bb-radius-window,10px); color:var(--bb-text,#eef5ff); background:var(--bb-surface-gradient,linear-gradient(#111f37,#0b1629)); box-shadow:var(--bb-frame-shadow); }
 .email-dialog::backdrop { background:var(--bb-popup-backdrop,rgba(5,10,22,.74)); }
-.email-dialog-card { display:grid; gap:15px; padding:24px; }.email-dialog-card h2 { margin:0; font-size:22px; }.email-dialog-card label { display:grid; gap:7px; font-weight:700; }.email-dialog-card input { min-height:44px; padding:0 12px; border:1px solid #4c7098; background:#071123; color:#fff; }
-.email-dialog-eyebrow { margin:0; color:#91c9ff; font-size:12px; font-weight:800; letter-spacing:.12em; }.email-dialog-copy { margin:0; color:#b9cbe0; line-height:1.5; }.email-dialog-close { position:absolute; top:10px; right:12px; border:0; color:#d7e8ff; background:transparent; font-size:25px; cursor:pointer; }.email-dialog-code { display:grid; gap:12px; }.email-pref { border:0; justify-self:start; padding:0; color:#91c9ff; background:transparent; text-decoration:underline; cursor:pointer; }
-.email-dialog { padding:0; max-height:calc(100dvh - 32px); overflow:auto; }
-.email-dialog-card { padding:28px; gap:16px; font:15px/1.5 system-ui,sans-serif; }
-.email-dialog-card h2 { padding-right:24px; line-height:1.35; }
-.email-dialog-card .email-step { display:grid; gap:14px; margin:0; }
+.email-dialog-card { display:grid; padding:28px; gap:22px; font:15px/1.5 var(--bb-font-body,"Lato",sans-serif); border-top:8px solid #438feb; }
+.email-dialog-card h2 { margin:0; font:18px/1.6 var(--bb-font-display,"Press Start 2P",monospace); text-shadow:var(--bb-title-shadow); }
+.email-dialog-eyebrow { margin:0; padding-right:40px; color:#91c9ff; font:10px/1.6 var(--bb-font-display,"Press Start 2P",monospace); }
+.email-dialog-close { position:absolute; top:16px; right:16px; width:32px; height:32px; padding:0; border:2px solid #03060b; border-radius:0; color:#fff; background:#29405f; box-shadow:inset 0 2px #6686aa,0 3px #03060b; font:24px/1 monospace; cursor:pointer; }
+.email-dialog-card .email-step { display:grid; gap:18px; margin:0; }
+.email-dialog-card label { display:grid; gap:8px; font-weight:700; }
 .email-dialog [hidden] { display:none!important; }
-.email-dialog-card input { width:100%; box-sizing:border-box; border-radius:6px; font:16px system-ui,sans-serif; user-select:text; -webkit-user-select:text; cursor:text; }
+.email-dialog-card input { width:100%; box-sizing:border-box; min-height:48px; padding:0 12px; border:2px solid var(--bb-border,#385478); border-radius:0; background:#071123; color:#fff; box-shadow:var(--bb-inset-shadow); font:11px/1.6 var(--bb-font-display,"Press Start 2P",monospace); user-select:text; -webkit-user-select:text; cursor:text; }
 .email-dialog-card .profile-btn { width:100%; margin:4px 0; min-height:44px; background:linear-gradient(#438fea,#2562bc); color:#fff; }
-.email-dialog .verification-destination { display:flex; align-items:center; gap:10px; }
+.email-dialog .verification-destination { display:flex; align-items:center; gap:16px; }
 .email-dialog [data-destination] { min-width:0; overflow-wrap:anywhere; flex:1; }
-.email-dialog .email-edit { flex:none; border:1px solid #496b91; border-radius:6px; background:#1b304c; color:#cbe4ff; padding:7px 9px; font:13px system-ui; cursor:pointer; }
 .email-code-inputs { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:7px; margin:8px 0; }
-.email-code-inputs input { padding:0; height:52px; text-align:center; font-size:24px; }
-.email-text-button { border:0; padding:6px; background:transparent; color:#abd2ff; font:13px system-ui; cursor:pointer; }
-.email-dialog-message { margin:0; color:#9fdbbe; font-size:13px; }.email-dialog-message.is-error { color:#ffb5bf; }
-.email-dialog-card .email-marketing-setting { display:flex; align-items:center; gap:10px; border-top:1px solid #37516e; padding-top:16px; color:#b9cbe0; font:12px/1.5 system-ui; }
-.email-marketing-setting input { width:18px; min-height:18px; height:18px; accent-color:#438feb; cursor:pointer; }
-.email-dialog button:disabled { opacity:.55; cursor:default; }
-.email-dialog-close { width:36px; height:36px; padding:0; }
-@media(max-width:480px) { .email-dialog-card { padding:24px 18px; }.email-code-inputs { gap:5px; } }
+.email-code-inputs input { padding:0; height:52px; text-align:center; font-size:22px; }
+.email-text-button { border:0; padding:8px; background:transparent; color:#abd2ff; font:10px/1.6 var(--bb-font-display,"Press Start 2P",monospace); cursor:pointer; }
+.email-dialog-message { margin:0; color:#9fdbbe; font-size:13px; }
+.email-dialog-message.is-error { color:#ffb5bf; }
+.email-dialog-card .email-marketing-setting { display:flex; align-items:center; gap:12px; border-top:2px solid #263b59; padding-top:20px; color:#b9cbe0; font:14px/1.5 var(--bb-font-body,"Lato",sans-serif); }
+.email-marketing-setting input[type=checkbox] { appearance:none; -webkit-appearance:none; flex:none; width:26px; height:26px; min-height:26px; padding:0; margin:0; border:3px solid #03060b; background:#23374f; box-shadow:0 3px #03060b,inset 0 2px #6b85a2; cursor:pointer; }
+.email-marketing-setting input:checked { background:#309d51 url("/assets/ui/pixel-check.webp") center/20px 20px no-repeat; image-rendering:pixelated; }
+.email-dialog :is(button,input):focus-visible { outline:3px solid var(--bb-gold,#ffd166); outline-offset:4px; }
+.email-dialog :is(button,input):disabled { opacity:.55; cursor:default; }
+@media(max-width:480px) { .email-dialog-card { padding:24px 18px; }.email-code-inputs { gap:5px; }.email-dialog-card h2 { font-size:15px; } }
 
 .profile-slot-menu-crown {
   width: 24px; height: 24px; object-fit: contain;

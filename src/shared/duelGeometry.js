@@ -17,7 +17,7 @@ function characterBody(character, flip = false) {
   const width = Math.max(4, frame.w - cfg.widthShrink) * scale;
   const height = Math.max(4, frame.h - cfg.heightShrink) * scale;
   return { width, height, halfWidth: width / 2, halfHeight: height / 2,
-    offsetX: width * (1 - scale) / 2 + ((cfg.offsetXFromHalf || 0) + (flip ? cfg.flipOffset || 0 : 0)) * scale,
+    offsetX: (cfg.sourceUnits ? 0 : width * (1 - scale) / 2) + ((cfg.offsetXFromHalf || 0) + (flip ? cfg.flipOffset || 0 : 0)) * scale,
     offsetY: (cfg.offsetY || 0) * scale - frame.h * scale / 2 + height / 2,
     displayWidth: frame.w * scale, displayHeight: frame.h * scale };
 }

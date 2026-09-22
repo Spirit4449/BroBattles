@@ -231,7 +231,18 @@ function createPartyStateService({ db, io }) {
   }
 
   async function emitJoinRequestToOwner(partyId, requestRow) {
-    io.to(`party:${partyId}`).emit("party:join-request", requestRow);
+    const rows = await db.runQuery(
+      `SELECT socket_id FROM users
+        WHERE name = (
+          SELECT name FROM party_members
+           WHERE party_id = ?
+           ORDER BY joined_at ASC, name ASC
+           LIMIT 1
+        ) LIMIT 1`,
+      [partyId],
+    );
+    const socketId = rows?.[0]?.socket_id;
+    if (socketId) io.to(socketId).emit("party:join-request", requestRow);
   }
 
   async function updatePartySelectionWithFallback(

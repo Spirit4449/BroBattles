@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const webpack = require('webpack');
+const { Script } = require('node:vm');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const PageRuntimePlugin = require('../scripts/build/pageRuntime.cjs');
 const VersionHtmlAssetsPlugin = require('../scripts/build/versionHtmlAssets.cjs');
@@ -34,6 +35,8 @@ for (const mode of ['development', 'production']) {
         assert.doesNotMatch(css,/__scope|__BB_NAVIGATION__/);
         const js = await fs.readFile(path.join(directory,`dist/bundles/${name}.js`),'utf8');
         assert.match(js,/scriptScope/);
+        assert.doesNotThrow(() => new Script(js, { filename: `${name}.js` }),
+          'entry and lazy bundles must be valid JavaScript after lifetime wrapping');
       }
       const html = await fs.readFile(path.join(directory, 'dist/game.html'), 'utf8');
       const source = await fs.readFile(require.resolve('../src/navigation/preload.js'), 'utf8');

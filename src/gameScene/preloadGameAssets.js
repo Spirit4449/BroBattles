@@ -1,4 +1,5 @@
 import { preloadLegacyMapAssets } from '../maps/legacy/preloadAssets';
+import { POWERUP_CATALOG } from '../shared/powerups';
 // gameScene/preloadGameAssets.js
 import { preloadTerrainAudio } from './movementAudio';
 
@@ -71,10 +72,12 @@ export function preloadGameAssets({
       `${staticPath}/powerups/${dir}/touch.mp3`,
       `${staticPath}/powerups/${dir}/touch.wav`,
     ]);
-    scene.load.audio(`pu-tick-${type}`, [
-      `${staticPath}/powerups/${dir}/tick.mp3`,
-      `${staticPath}/powerups/${dir}/tick.wav`,
-    ]);
+    if (POWERUP_CATALOG[type]?.tickVolume != null) {
+      scene.load.audio(`pu-tick-${type}`, [
+        `${staticPath}/powerups/${dir}/tick.mp3`,
+        `${staticPath}/powerups/${dir}/tick.wav`,
+      ]);
+    }
   }
   // Fonts are declared and preloaded by game.html. Phaser 3.70 has no load.font API.
 }

@@ -213,3 +213,21 @@ test('unready after assembly preserves readiness and emits no cancellation', asy
   assert.equal(f.members[0].status, 'ready');
   assert.ok(!f.events.some(event => event.event === 'match:cancelled'));
 });
+
+test('queue cancellation does not bring offline members back online', async () => {
+  const f = fixture(['Owner', 'Offline', 'Ready']);
+  f.members[1].status = 'offline';
+  f.members[2].status = 'ready';
+  await f.partyQueueTransition.cancelPartyQueue({partyId:7, reason:'test'});
+  assert.deepEqual(f.members.map(m => m.status), ['online','offline','online']);
+  assert.equal(f.events.some(event => event.event === 'status:update' && event.data.name === 'Offline'), false);
+});
+
+test('queued disconnect preserves other offline members', async () => {
+  const f = fixture(['Owner', 'Offline', 'Ready']);
+  f.party.status = 'queued';
+  f.members[1].status = 'offline';
+  f.members[2].status = 'ready';
+  await f.partyQueueTransition.cancelForDisconnectedUser({username:'Owner'});
+  assert.deepEqual(f.members.map(m => m.status), ['offline','offline','online']);
+});

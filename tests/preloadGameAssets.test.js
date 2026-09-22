@@ -16,7 +16,11 @@ function loadPreloader() {
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code;
   vm.runInNewContext(legacyCode, { exports: legacy });
-  vm.runInNewContext(code, { exports, require: name => name.includes('legacy') ? legacy : { preloadTerrainAudio() {} } });
+  vm.runInNewContext(code, { exports, require: name => {
+    if (name.includes('legacy')) return legacy;
+    if (name.includes('shared/powerups')) return require('../src/shared/powerups');
+    return { preloadTerrainAudio() {} };
+  } });
   return exports.preloadGameAssets;
 }
 
@@ -32,11 +36,13 @@ test('game asset preload completes with the Phaser 3.70 loader API (no font meth
   const { load, queued } = makeLoaderQueue();
   let charactersLoaded = false;
   assert.doesNotThrow(() => preloadGameAssets({ scene: { load }, staticPath: '/assets',
-    powerupTypes: ['test'], powerupAssetDir: {}, preloadAllCharacters() { charactersLoaded = true; } }));
+    powerupTypes: ['health', 'shockwave'], powerupAssetDir: { health: 'health', shockwave: 'shockwave' },
+    preloadAllCharacters() { charactersLoaded = true; } }));
   assert.ok(charactersLoaded);
   assert.ok(queued.includes('tiles'));
   assert.ok(queued.includes('sfx-nosuper'), 'preloads the super-not-ready cue');
-  assert.ok(queued.includes('pu-tick-test'), 'preload reaches the end of the asset queue');
+  assert.ok(queued.includes('pu-tick-health'), 'powerups with periodic effects preload their tick sound');
+  assert.ok(!queued.includes('pu-tick-shockwave'), 'instant shockwave does not preload a nonexistent tick sound');
 });
 
 test('legacy fallback queues assets only for the selected map', () => {

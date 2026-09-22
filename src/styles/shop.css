@@ -588,6 +588,43 @@ body.shop-is-open .sonner-wrap {
   pointer-events: none;
 }
 
+.shop-offer.is-spotlight::before {
+  content: "";
+  position: absolute;
+  z-index: 9;
+  inset: 0;
+  border: 4px solid transparent;
+  border-radius: 7px;
+  pointer-events: none;
+  animation: shopOfferSpotlight 1.8s ease-out both;
+}
+
+@keyframes shopOfferSpotlight {
+  0%, 100% {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+  15%, 48%, 80% {
+    border-color: #ffe16e;
+    background: rgba(255, 215, 95, 0.13);
+    box-shadow: inset 0 0 35px rgba(255, 184, 46, 0.55);
+  }
+  32%, 65% {
+    border-color: rgba(255, 225, 110, 0.3);
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-offer.is-spotlight::before {
+    animation: none;
+    border-color: #ffe16e;
+    box-shadow: inset 0 0 20px rgba(255, 184, 46, 0.45);
+  }
+}
+
 .shop-offer:focus-visible {
   outline: 2px solid rgba(var(--rarity-rgb), 0.86);
   outline-offset: 2px;

@@ -14,6 +14,18 @@ export function setThorgRageVisual(scene, body, enabled) {
     return;
   }
   if (body._thorgRageVisualCleanup) return;
+  const previousHudTop = body._bbHudTopOffset;
+  const idleFrame = body.texture?.get?.('idle00');
+  const sourceScale = Math.abs(body.scaleY || 0.7);
+  const normalTop = Number.isFinite(previousHudTop) ? previousHudTop
+    : ((idleFrame?.y ?? 12) - (idleFrame?.realHeight ?? 128) * (body.originY ?? 0.5)) * sourceScale;
+  const updateHud = () => {
+    const pose = getThorgVisualPose(body);
+    // Keep the HUD above the enlarged helmet, independent of raised weapons.
+    const top = normalTop * pose.scale;
+    body._bbHudTopOffset = pose.y - body.y + top - 4;
+  };
+  updateHud();
   const visual = scene.add.sprite(body.x, body.y, body.texture.key, body.frame.name);
   visual.setVisible(false);
   visual.setDepth(body.depth);
@@ -29,6 +41,7 @@ export function setThorgRageVisual(scene, body, enabled) {
     if (!body.active || (body._thorgRageUntil && body._thorgRageUntil <= Date.now())) { cleanup(); return; }
     if (String(body.frame?.name).startsWith("dying")) { cleanup(); return; }
     const pose = getThorgVisualPose(body);
+    updateHud();
     visual.setTexture(body.texture.key, body.frame.name);
     visual.setPosition(pose.x, pose.y);
     visual.setOrigin(body.originX, body.originY);
@@ -50,6 +63,7 @@ export function setThorgRageVisual(scene, body, enabled) {
     body.off?.("destroy", cleanup);
     visual.destroy();
     body._thorgVisualScale = 1;
+    body._bbHudTopOffset = previousHudTop;
     delete body._thorgRageVisualCleanup;
   };
   body._thorgRageVisualCleanup = cleanup;

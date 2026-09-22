@@ -2285,6 +2285,15 @@ h3 {
     inset 0 3px rgba(255, 255, 255, 0.14);
 }
 
+.lobby-hint.is-sale[role="button"] {
+  cursor: pointer;
+}
+
+.lobby-hint.is-sale[role="button"]:focus-visible {
+  outline: 3px solid #ffe16e;
+  outline-offset: 5px;
+}
+
 .lobby-hint.is-sale[data-placement="below"] .lobby-hint-pointer,
 .lobby-hint.is-sale[data-placement="above"] .lobby-hint-pointer {
   background: transparent;
@@ -4060,17 +4069,17 @@ h3 {
 }
 
 .party-discovery-panel {
-  width: min(680px, 94vw);
+  width: min(760px, 94vw);
   max-height: min(760px, 92vh);
   display: grid;
   grid-template-rows: auto auto auto 1fr;
-  gap: var(--bb-space-3);
+  gap: var(--bb-space-2);
 }
 
 .party-discovery-search-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 20px;
+  gap: 12px;
 }
 
 .party-discovery-search-row input {
@@ -4095,32 +4104,62 @@ h3 {
   min-height: 18px;
 }
 
+.party-discovery-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 2px;
+}
+
+.party-discovery-status:empty {
+  min-height: 0;
+}
+
+.party-discovery-count-marker {
+  width: 8px;
+  height: 8px;
+  background: #5bd6ff;
+  box-shadow: 3px 3px 0 #1f5d91;
+}
+
+.party-discovery-count-label {
+  color: #bcd2ec;
+  font-family: var(--bb-font-display);
+  font-size: 9px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
 .party-discovery-list {
   display: grid;
   align-content: start;
   min-height: 0;
-  gap: var(--bb-space-3);
+  gap: var(--bb-space-2);
   overflow-y: auto;
-  padding: var(--bb-space-1) var(--bb-space-1) var(--bb-space-2);
+  padding: 2px 3px 8px;
 }
 
 .party-discovery-card {
-  padding: var(--bb-space-4);
+  padding: 12px 14px;
   display: grid;
-  gap: var(--bb-space-3);
+  grid-template-columns: minmax(180px, 1.25fr) minmax(170px, 1fr) auto;
+  grid-template-areas:
+    "head details join"
+    "roster roster roster";
+  gap: 10px 14px;
+  align-items: center;
 }
 
 .party-discovery-card-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--bb-space-3);
-  align-items: start;
+  display: block;
+  grid-area: head;
+  min-width: 0;
 }
 
 .party-discovery-card-head > div:first-child {
   display: grid;
   min-width: 0;
-  gap: 5px;
+  gap: 3px;
 }
 
 .party-discovery-title {
@@ -4130,24 +4169,28 @@ h3 {
 }
 
 .party-discovery-info-row {
+  grid-area: details;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--bb-space-2);
+  gap: 6px;
 }
 
 .party-discovery-detail {
   display: inline-flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 6px 9px;
+  gap: 5px;
+  padding: 5px 7px;
   line-height: 1.4;
 }
 
 .party-discovery-roster {
-  display: grid;
-  gap: var(--bb-space-2);
-  padding-top: 10px;
+  grid-area: roster;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding-top: 8px;
 }
 
 .party-discovery-meta span {
@@ -4170,7 +4213,7 @@ h3 {
 .party-discovery-members {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 14px;
+  gap: 6px 12px;
 }
 
 .party-discovery-member {
@@ -4186,8 +4229,8 @@ h3 {
 }
 
 .party-discovery-member img {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   object-fit: contain;
 }
 
@@ -4198,10 +4241,83 @@ h3 {
 }
 
 .party-discovery-join {
+  grid-area: join;
   justify-self: end;
   min-height: 34px;
   padding: 0 14px;
   align-self: start;
+}
+
+.party-discovery-empty {
+  min-height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  border: 2px solid #314e71;
+  background:
+    linear-gradient(90deg, #4a6b92 8px, transparent 8px) 0 0 / 100% 4px no-repeat,
+    linear-gradient(180deg, #4a6b92 8px, transparent 8px) 0 0 / 4px 100% no-repeat,
+    linear-gradient(270deg, #172d49 8px, transparent 8px) 100% 100% / 100% 4px no-repeat,
+    linear-gradient(0deg, #172d49 8px, transparent 8px) 100% 100% / 4px 100% no-repeat,
+    #10213a;
+  box-shadow: inset 0 0 0 4px #0c1a2e;
+  text-align: left;
+}
+
+.party-discovery-empty-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 58px;
+  width: 58px;
+  height: 58px;
+  border: 3px solid #365a82;
+  background: #0a182b;
+  box-shadow: 4px 4px 0 #07101e, inset 3px 3px #162f50;
+}
+
+.party-discovery-empty-icon img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.party-discovery-empty h3,
+.party-discovery-empty p {
+  margin: 0;
+}
+
+.party-discovery-empty h3 {
+  color: #eef7ff;
+  font-family: var(--bb-font-display);
+  font-size: 13px;
+  line-height: 1.5;
+  text-transform: uppercase;
+  text-shadow: 3px 3px 0 #07101e;
+}
+
+.party-discovery-empty p {
+  margin-top: 4px;
+  color: #9eb5d1;
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .party-discovery-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "head join"
+      "details details"
+      "roster roster";
+  }
+
+  .party-discovery-roster {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
 }
 
 .party-settings-panel {

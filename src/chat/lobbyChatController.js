@@ -1,13 +1,20 @@
+import { createPartyPresenceTracker, countOnlineMembers } from './partyPresence.mjs';
+import { positionChatPopover } from './popoverPosition.mjs';
 
-import { makeChatShell, formatSuspensionTime, escapeHtml, buildAvatarUrl, LOBBY_TYPING_HEARTBEAT_MS, LOBBY_TYPING_IDLE_STOP_MS, LOBBY_CHAT_BUBBLE_MS, messageIdOf, formatNameWithYou, formatChatTime, postJson, renderPartyChatMessage, showChatRequestError, buildInlineCooldownMessage, LOBBY_TYPING_STALE_MS } from './presentation';
+import { bindChatProfile, makeChatShell, formatSuspensionTime, escapeHtml, buildAvatarUrl, LOBBY_TYPING_HEARTBEAT_MS, LOBBY_TYPING_IDLE_STOP_MS, LOBBY_CHAT_BUBBLE_MS, messageIdOf, formatNameWithYou, formatChatTime, postJson, renderPartyChatMessage, showChatRequestError, buildInlineCooldownMessage, LOBBY_TYPING_STALE_MS } from './presentation';
 
 export function createLobbyChatController({
   socket,
   getPartyContext,
   getCurrentUserName,
+  onOpenProfile,
 } = {}) {
   const state = {
     partyId: null,
+    sending: false,
+    destroyed: false,
+    historyRequest: 0,
+    restoreUnreadOnOpen: false,
     isOpen: false,
     messages: [],
     messageMap: new Map(),
@@ -30,19 +37,25 @@ export function createLobbyChatController({
     cooldownDraftValue: "",
   };
 
+  const presence = createPartyPresenceTracker(getPartyContext?.());
+
   const ui = makeChatShell({
     rootClassName: "bb-chat-lobby-wrap",
     panelClassName: "bb-chat-lobby-panel",
     launcherLabel: "Chat",
     launcherClassName: "bb-chat-lobby-launcher",
   });
+  const socketListeners = [];
+  function listen(event, handler) {
+    socket?.on?.(event, handler);
+    socketListeners.push([event, handler]);
+  }
   ui.clearReplyBtn.style.display = "none";
 
   function currentPartyId() {
     const context =
       typeof getPartyContext === "function" ? getPartyContext() : null;
-    const fromContext = Number(context?.partyId) || 0;
-    if (fromContext > 0) return fromContext;
+    if (context) return Number(context.partyId) || 0;
     return Number(state.partyId) || 0;
   }
 
@@ -74,6 +87,7 @@ export function createLobbyChatController({
     }
     state.localCooldownUntilMs = now + duration;
     ui.textarea.value = String(message || "Slow down.");
+    ui.resizeComposer();
     ui.textarea.placeholder = ui.textarea.value;
     ui.textarea.disabled = true;
     ui.sendBtn.disabled = true;
@@ -91,8 +105,9 @@ export function createLobbyChatController({
         return;
       }
       ui.textarea.disabled = false;
-      ui.sendBtn.disabled = false;
+      ui.sendBtn.disabled = state.sending;
       ui.textarea.value = String(state.cooldownDraftValue || "");
+      ui.resizeComposer();
       ui.textarea.placeholder = "Write a message...";
       ui.textarea.focus();
       state.cooldownDraftValue = "";
@@ -106,9 +121,10 @@ export function createLobbyChatController({
         return;
       }
       ui.textarea.disabled = false;
-      ui.sendBtn.disabled = false;
+      ui.sendBtn.disabled = state.sending;
       if (ui.textarea.dataset.suspensionText === "1") {
         ui.textarea.value = "";
+        ui.resizeComposer();
         ui.textarea.dataset.suspensionText = "0";
       }
       ui.textarea.placeholder = "Write a message...";
@@ -123,6 +139,7 @@ export function createLobbyChatController({
     ui.textarea.disabled = true;
     ui.sendBtn.disabled = true;
     ui.textarea.value = text;
+    ui.resizeComposer();
     ui.textarea.dataset.suspensionText = "1";
     ui.textarea.placeholder = text;
     ui.root.classList.add("bb-chat-is-suspended");
@@ -130,13 +147,6 @@ export function createLobbyChatController({
 
   function getPartyContextSnapshot() {
     return typeof getPartyContext === "function" ? getPartyContext() : null;
-  }
-
-  function isOnlineStatus(status) {
-    const normalized = String(status || "online")
-      .trim()
-      .toLowerCase();
-    return normalized !== "offline";
   }
 
   function buildPartyTitle(context) {
@@ -149,7 +159,7 @@ export function createLobbyChatController({
   }
 
   function syncHeader() {
-    const context = getPartyContextSnapshot();
+    const context = presence.get();
     const partyId = Number(context?.partyId) || 0;
     if (!partyId) {
       ui.titleEl.textContent = "Chat";
@@ -157,10 +167,7 @@ export function createLobbyChatController({
       return;
     }
     const members = Array.isArray(context?.members) ? context.members : [];
-    const onlineCount = members.reduce(
-      (count, member) => count + (isOnlineStatus(member?.status) ? 1 : 0),
-      0,
-    );
+    const onlineCount = countOnlineMembers(members);
     const capacity = Math.max(
       Number(context?.capacity?.total) || 0,
       members.length,
@@ -172,7 +179,7 @@ export function createLobbyChatController({
 
   function hideTypingIndicator() {
     state.typingByUser.clear();
-    ui.typingEl.classList.add("hidden");
+    ui.typingEl.classList.add("is-idle");
     ui.typingIconsEl.innerHTML = "";
     ui.typingTextEl.textContent = "";
   }
@@ -186,12 +193,12 @@ export function createLobbyChatController({
     }
     const typers = Array.from(state.typingByUser.values());
     if (!typers.length) {
-      ui.typingEl.classList.add("hidden");
+      ui.typingEl.classList.add("is-idle");
       ui.typingIconsEl.innerHTML = "";
       ui.typingTextEl.textContent = "";
       return;
     }
-    ui.typingEl.classList.remove("hidden");
+    ui.typingEl.classList.remove("is-idle");
     ui.typingIconsEl.innerHTML = typers
       .map(
         (typer) =>
@@ -278,7 +285,18 @@ export function createLobbyChatController({
       bubble.className = "bb-lobby-chat-bubble";
       slot.appendChild(bubble);
     }
-    bubble.textContent = bodyText;
+    let text = bubble.querySelector(".bb-lobby-chat-bubble-text");
+    if (!text) {
+      text = document.createElement("span");
+      text.className = "bb-lobby-chat-bubble-text";
+      bubble.replaceChildren(text);
+    }
+    text.textContent = bodyText;
+    bubble.setAttribute("role", "status");
+    bubble.setAttribute("aria-label", `${senderName}: ${bodyText}`);
+    bubble.classList.remove("is-visible");
+    // Restart the entrance when a player sends another message mid-bubble.
+    void bubble.offsetWidth;
     bubble.classList.add("is-visible");
 
     const key = String(slot?.dataset?.playerName || senderName)
@@ -291,7 +309,7 @@ export function createLobbyChatController({
     const timer = window.setTimeout(() => {
       bubble.classList.remove("is-visible");
       state.bubbleTimers.delete(key);
-    }, LOBBY_CHAT_BUBBLE_MS);
+    }, Math.min(9000, Math.max(LOBBY_CHAT_BUBBLE_MS, bodyText.length * 55)));
     state.bubbleTimers.set(key, timer);
   }
 
@@ -314,7 +332,7 @@ export function createLobbyChatController({
     const next = Math.max(0, Number(count) || 0);
     state.unreadCount = next;
     if (next > 0) {
-      ui.badge.textContent = String(next);
+      ui.badge.textContent = next > 99 ? "99+" : String(next);
       ui.badge.classList.remove("hidden");
     } else {
       ui.badge.textContent = "";
@@ -339,6 +357,9 @@ export function createLobbyChatController({
     return {
       ...message,
       isMine: isMessageMineForCurrentUser(message),
+      myReaction: Object.entries(message.reactionUsers || {}).find(([, users]) =>
+        Array.isArray(users) && users.some((user) => sameName(user.name, getCurrentUserName?.())),
+      )?.[0] || null,
     };
   }
 
@@ -362,12 +383,13 @@ export function createLobbyChatController({
     state.isOpen = !!open;
     if (state.isOpen && !wasOpen) {
       state.openReadAnchorMessageId = Number(state.lastReadMessageId) || 0;
+      state.restoreUnreadOnOpen = ui.scroll.atBottom();
       setReactionBadge(false);
     }
     if (!state.isOpen && wasOpen) {
       state.openReadAnchorMessageId = 0;
       const latestId = messageIdOf(state.messages[state.messages.length - 1]);
-      if (latestId > 0) {
+      if (latestId > 0 && ui.scroll.atBottom()) {
         void markMessagesRead(latestId);
       }
       setLocalTyping(false);
@@ -375,9 +397,16 @@ export function createLobbyChatController({
     ui.panel.classList.toggle("is-open", state.isOpen);
     ui.backdrop.classList.toggle("is-visible", state.isOpen);
     ui.launcher.classList.toggle("is-active", state.isOpen);
+    if (!state.isOpen) closeViewersPopup();
     if (state.isOpen) {
       setUnreadBadge(0);
     }
+  }
+
+  function openMemberProfile(username) {
+    if (typeof onOpenProfile !== "function") return;
+    setOpen(false);
+    onOpenProfile(username);
   }
 
   function setReplyTo(message) {
@@ -401,7 +430,7 @@ export function createLobbyChatController({
     <div class="bb-chat-viewers-card" role="dialog" aria-modal="true" aria-label="Message views">
       <div class="bb-chat-viewers-head">
         <div class="bb-chat-viewers-title">Viewed by</div>
-        <button type="button" class="bb-chat-mini-btn bb-close pixel-menu-button" data-chat-viewers-close aria-label="Close viewers">×</button>
+        <button type="button" class="bb-chat-mini-btn bb-chat-close" data-chat-viewers-close aria-label="Close viewers">×</button>
       </div>
       <div class="bb-chat-viewers-list"></div>
     </div>
@@ -409,21 +438,40 @@ export function createLobbyChatController({
   document.body.appendChild(viewersPopup);
   const viewersListEl = viewersPopup.querySelector(".bb-chat-viewers-list");
   let viewersCloseTimer = null;
+  let viewersReturnFocus = null;
   const closeViewersPopup = () => {
+    if (viewersPopup.classList.contains("hidden") || viewersCloseTimer) return;
     const card = viewersPopup.querySelector(".bb-chat-viewers-card");
     card?.classList.remove("is-visible");
     if (viewersCloseTimer) window.clearTimeout(viewersCloseTimer);
     viewersCloseTimer = window.setTimeout(() => {
       viewersPopup.classList.add("hidden");
       viewersCloseTimer = null;
-    }, 150);
+      if (viewersReturnFocus?.isConnected) viewersReturnFocus.focus({ preventScroll: true });
+      else if (state.isOpen) ui.textarea.focus({ preventScroll: true });
+    }, 120);
   };
   viewersPopup
     .querySelectorAll("[data-chat-viewers-close]")
     .forEach((el) => el.addEventListener("click", closeViewersPopup));
 
+  const escapeHandler = (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    if (!viewersPopup.classList.contains("hidden")) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeViewersPopup();
+    } else if (state.isOpen) {
+      event.preventDefault();
+      setOpen(false);
+    }
+  };
+  document.addEventListener("keydown", escapeHandler);
+  window.addEventListener("resize", closeViewersPopup);
+
   function openViewersPopup(message, anchorEl) {
     if (!viewersListEl) return;
+    viewersReturnFocus = anchorEl || document.activeElement;
     if (viewersCloseTimer) {
       window.clearTimeout(viewersCloseTimer);
       viewersCloseTimer = null;
@@ -446,27 +494,25 @@ export function createLobbyChatController({
           <span class="bb-chat-viewer-name">${escapeHtml(formatNameWithYou(viewer?.name || "Player", currentName))}</span>
           <span class="bb-chat-viewer-time">${escapeHtml(formatChatTime(viewer?.readAt))}</span>
         `;
+        bindChatProfile(row.querySelector(".bb-chat-viewer-name"), viewer?.name, openMemberProfile);
+        bindChatProfile(row.querySelector(".bb-chat-viewer-avatar"), viewer?.name, openMemberProfile);
         fragment.appendChild(row);
       }
       viewersListEl.appendChild(fragment);
     }
     const card = viewersPopup.querySelector(".bb-chat-viewers-card");
-    if (card && anchorEl?.getBoundingClientRect) {
-      const rect = anchorEl.getBoundingClientRect();
-      const cardWidth = 280;
-      const cardHeight = 220;
-      let left = rect.left + rect.width - cardWidth;
-      let top = rect.bottom + 8;
-      left = Math.max(8, Math.min(left, window.innerWidth - cardWidth - 8));
-      if (top + cardHeight > window.innerHeight - 8) {
-        top = Math.max(8, rect.top - cardHeight - 8);
-      }
-      card.style.left = `${Math.round(left)}px`;
-      card.style.top = `${Math.round(top)}px`;
-      card.classList.remove("is-visible");
-      window.requestAnimationFrame(() => card.classList.add("is-visible"));
-    }
     viewersPopup.classList.remove("hidden");
+    card.classList.remove("is-visible");
+    if (anchorEl?.getBoundingClientRect) {
+      const rect = anchorEl.getBoundingClientRect();
+      const position = positionChatPopover(rect, card.offsetWidth, card.offsetHeight, window.innerWidth, window.innerHeight);
+      card.style.left = `${Math.round(position.left)}px`;
+      card.style.top = `${Math.round(position.top)}px`;
+      card.style.setProperty("--chat-popover-offset", position.above ? "3px" : "-3px");
+    }
+    void card.offsetWidth;
+    card.classList.add("is-visible");
+    viewersPopup.querySelector("button[data-chat-viewers-close]")?.focus({ preventScroll: true });
   }
 
   function jumpToMessage(messageId) {
@@ -525,6 +571,7 @@ export function createLobbyChatController({
         partyId,
         lastMessageId: targetId,
       });
+      if (state.destroyed || partyId !== currentPartyId()) return null;
       const serverLastRead = Number(result?.lastReadMessageId) || targetId;
       state.lastReadMessageId = Math.max(
         state.lastReadMessageId || 0,
@@ -533,6 +580,9 @@ export function createLobbyChatController({
       syncUnreadBadge();
       return result;
     } catch (_) {
+      if (partyId === currentPartyId() && state.lastReadSentMessageId === targetId) {
+        state.lastReadSentMessageId = state.lastReadMessageId;
+      }
       return null;
     }
   }
@@ -543,13 +593,7 @@ export function createLobbyChatController({
 
   function isScrolledNearBottom() {
     const { scrollTop, scrollHeight, clientHeight } = ui.messagesEl;
-    return scrollHeight - (scrollTop + clientHeight) < 64;
-  }
-
-  function scrollToBottom(force = false) {
-    if (force || isScrolledNearBottom()) {
-      ui.messagesEl.scrollTop = ui.messagesEl.scrollHeight;
-    }
+    return scrollHeight - (scrollTop + clientHeight) <= 24;
   }
 
   function replaceMessageMeta(row, message) {
@@ -560,6 +604,7 @@ export function createLobbyChatController({
       onReact: (target, reaction) => void reactToMessage(target?.id, reaction),
       onOpenViewers: openViewersPopup,
       onJumpToMessage: jumpToMessage,
+      onOpenProfile: openMemberProfile,
       canReact: !isChatSuspended(),
       compact: false,
     });
@@ -570,14 +615,19 @@ export function createLobbyChatController({
   function upsertMessage(message, { forceScroll = false } = {}) {
     const messageId = messageIdOf(message);
     if (!messageId) return;
-    const existing = state.messageMap.get(messageId);
+    const scrollSnapshot = ui.scroll.capture();
     state.messageMap.set(messageId, message);
     const index = state.messages.findIndex(
       (item) => messageIdOf(item) === messageId,
     );
     if (index >= 0) state.messages[index] = message;
     else state.messages.push(message);
-    state.messages = state.messages.slice(-100);
+    state.messages.sort((a, b) => messageIdOf(a) - messageIdOf(b));
+    const removed = state.messages.splice(0, Math.max(0, state.messages.length - 100));
+    for (const old of removed) {
+      state.messageMap.delete(messageIdOf(old));
+      getMessageRow(messageIdOf(old))?.remove();
+    }
 
     const existingRow = getMessageRow(messageId);
     if (existingRow) {
@@ -592,6 +642,7 @@ export function createLobbyChatController({
             void reactToMessage(target?.id, reaction),
           onOpenViewers: openViewersPopup,
           onJumpToMessage: jumpToMessage,
+      onOpenProfile: openMemberProfile,
           canReact: !isChatSuspended(),
           compact: false,
         }),
@@ -599,11 +650,11 @@ export function createLobbyChatController({
       ui.messagesEl.appendChild(fragment);
     }
 
-    if (state.isOpen) scrollToBottom(forceScroll);
+    if (state.isOpen) ui.scroll.restore(scrollSnapshot, { force: forceScroll, added: index < 0 && !message.isMine ? 1 : 0 });
   }
 
   function rebuildMessages(messages = []) {
-    const nearBottom = isScrolledNearBottom();
+    const scrollSnapshot = ui.scroll.capture();
     const fragment = document.createDocumentFragment();
     state.messages = Array.isArray(messages) ? messages.slice(-100) : [];
     state.messageMap = new Map();
@@ -632,14 +683,22 @@ export function createLobbyChatController({
             void reactToMessage(target?.id, reaction),
           onOpenViewers: openViewersPopup,
           onJumpToMessage: jumpToMessage,
+      onOpenProfile: openMemberProfile,
           canReact: !isChatSuspended(),
           compact: false,
         }),
       );
     }
     ui.messagesEl.appendChild(fragment);
-    if (nearBottom || state.isOpen) {
-      ui.messagesEl.scrollTop = ui.messagesEl.scrollHeight;
+    ui.scroll.restore(scrollSnapshot);
+    if (state.isOpen && state.restoreUnreadOnOpen && state.messages.length) {
+      state.restoreUnreadOnOpen = false;
+      const unread = state.messages.filter(message => !isMessageMineForCurrentUser(message) && messageIdOf(message) > state.lastReadMessageId);
+      const first = unread[0] && getMessageRow(messageIdOf(unread[0]));
+      if (first) {
+        ui.messagesEl.scrollTop += first.getBoundingClientRect().top - ui.messagesEl.getBoundingClientRect().top - 32;
+        ui.scroll.showPending(unread.length);
+      }
     }
   }
 
@@ -655,29 +714,36 @@ export function createLobbyChatController({
       renderMessages();
       return;
     }
+    const request = ++state.historyRequest;
+    const beforeRequest = new Map(state.messageMap);
     state.loading = true;
     try {
       const data = await postJson("/party-chat/history", {
         partyId,
         limit: 80,
       });
+      if (state.destroyed || partyId !== currentPartyId() || request !== state.historyRequest) return;
       const serverLastReadMessageId = Number(data?.lastReadMessageId) || 0;
       state.partyId = partyId;
-      state.messages = Array.isArray(data?.messages) ? data.messages : [];
+      const merged = new Map((data?.messages || []).map((message) => [messageIdOf(message), normalizeIncomingMessage(message)]));
+      for (const message of state.messages) {
+        if (beforeRequest.get(messageIdOf(message)) !== message) merged.set(messageIdOf(message), message);
+      }
+      state.messages = [...merged.values()].sort((a, b) => messageIdOf(a) - messageIdOf(b));
       state.messageMap = new Map(
         state.messages.map((message) => [messageIdOf(message), message]),
       );
-      state.lastReadMessageId = serverLastReadMessageId;
+      state.lastReadMessageId = Math.max(state.lastReadMessageId, serverLastReadMessageId);
       if (state.isOpen && !state.openReadAnchorMessageId) {
         state.openReadAnchorMessageId = serverLastReadMessageId;
       }
       renderMessages();
-      if (state.isOpen) {
+      if (state.isOpen && ui.scroll.atBottom()) {
         const latestId = messageIdOf(state.messages[state.messages.length - 1]);
         if (latestId > 0) void markMessagesRead(latestId);
       }
       if (!state.isOpen) {
-        state.lastReadMessageId = Number(data?.lastReadMessageId) || 0;
+        state.lastReadMessageId = Math.max(state.lastReadMessageId, Number(data?.lastReadMessageId) || 0);
         syncUnreadBadge();
       }
     } catch (error) {
@@ -694,8 +760,11 @@ export function createLobbyChatController({
       syncChatSuspensionUi();
       return;
     }
-    if (isLocalCooldownActive()) return;
+    if (state.sending || isLocalCooldownActive()) return;
     if (!partyId || !body) return;
+    state.sending = true;
+    const draft = ui.textarea.value;
+    const reply = state.replyTo;
     setLocalTyping(false);
     const payload = {
       partyId,
@@ -705,13 +774,16 @@ export function createLobbyChatController({
     ui.sendBtn.disabled = true;
     try {
       const result = await postJson("/party-chat/send", payload);
-      ui.textarea.value = "";
-      setReplyTo(null);
+      if (state.destroyed || partyId !== currentPartyId()) return;
+      if (ui.textarea.value === draft) ui.textarea.value = "";
+      ui.resizeComposer();
+      if (state.replyTo === reply) setReplyTo(null);
       const message = result?.message || null;
       if (message) {
         upsertMessage(message, { forceScroll: true });
       }
     } catch (error) {
+      if (state.destroyed || partyId !== currentPartyId()) return;
       console.warn("[chat] send failed", error?.message || error);
       const suspendedUntilMs = Number(error?.payload?.suspendedUntilMs) || 0;
       if (suspendedUntilMs > Date.now()) {
@@ -731,8 +803,9 @@ export function createLobbyChatController({
       }
       showChatRequestError(error, "Chat blocked");
     } finally {
-      if (!isChatSuspended() && !isLocalCooldownActive()) {
-        ui.sendBtn.disabled = false;
+      state.sending = false;
+      if (!state.destroyed && !isChatSuspended() && !isLocalCooldownActive()) {
+        ui.sendBtn.disabled = state.sending;
         ui.textarea.focus();
       }
     }
@@ -803,14 +876,28 @@ export function createLobbyChatController({
     setLocalTyping(false);
   });
   ui.textarea.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
       void sendMessage();
     }
   });
 
-  socket?.on?.("party:joined", ({ partyId }) => {
+  listen("party:joined", ({ partyId }) => {
+    presence.join(partyId);
+    setLocalTyping(false);
+    state.historyRequest++;
+    state.messages = [];
+    state.messageMap.clear();
+    ui.scroll.reset();
+    state.lastReadMessageId = 0;
+    state.lastReadSentMessageId = 0;
+    state.openReadAnchorMessageId = 0;
+    setReplyTo(null);
+    hideTypingIndicator();
+    closeViewersPopup();
     state.partyId = Number(partyId) || null;
+    renderMessages();
+    if (state.partyId) void loadHistory();
     syncHeader();
     syncLobbyChatVisibility();
     if (!state.partyId) {
@@ -825,7 +912,7 @@ export function createLobbyChatController({
     }
   });
 
-  socket?.on?.("party-chat:message", (payload = {}) => {
+  listen("party-chat:message", (payload = {}) => {
     const partyId = Number(payload?.partyId) || 0;
     if (partyId !== currentPartyId()) return;
     const rawMessage = payload?.message || null;
@@ -841,7 +928,7 @@ export function createLobbyChatController({
       ? { ...message, _reactionPulse: changedReaction }
       : message;
     if (!existing && !message?.type) {
-      const appendAtBottom = state.isOpen;
+      const appendAtBottom = state.isOpen && ui.scroll.atBottom();
       upsertMessage(nextMessage, { forceScroll: appendAtBottom });
       showLobbyMessageBubble(message);
     } else if (existing) {
@@ -862,14 +949,14 @@ export function createLobbyChatController({
       }, 260);
     }
 
-    if (state.isOpen) {
+    if (state.isOpen && ui.scroll.atBottom()) {
       void markMessagesRead(incomingId);
     } else if (!message?.isMine && !isExistingMessageUpdate) {
       syncUnreadBadge();
     }
   });
 
-  socket?.on?.("party-chat:read", (payload = {}) => {
+  listen("party-chat:read", (payload = {}) => {
     const partyId = Number(payload?.partyId) || 0;
     if (partyId !== currentPartyId()) return;
     const viewerName = String(payload?.viewerName || "");
@@ -913,7 +1000,7 @@ export function createLobbyChatController({
     }
   });
 
-  socket?.on?.("party-chat:typing", (payload = {}) => {
+  listen("party-chat:typing", (payload = {}) => {
     const partyId = Number(payload?.partyId) || 0;
     if (!partyId || partyId !== currentPartyId()) return;
     const now = Date.now();
@@ -938,7 +1025,8 @@ export function createLobbyChatController({
     renderTypingIndicator();
   });
 
-  socket?.on?.("party:members", () => {
+  listen("party:members", (payload = {}) => {
+    if (!presence.roster(payload)) return;
     syncHeader();
     syncLobbyChatVisibility();
     syncChatSuspensionUi();
@@ -954,10 +1042,8 @@ export function createLobbyChatController({
     }
   });
 
-  socket?.on?.("status:update", (payload = {}) => {
-    const partyId = Number(payload?.partyId) || 0;
-    if (partyId && partyId !== currentPartyId()) return;
-    syncHeader();
+  listen("status:update", (payload = {}) => {
+    if (presence.status(payload)) syncHeader();
   });
 
   const initialPartyId = currentPartyId();
@@ -987,13 +1073,22 @@ export function createLobbyChatController({
 
   return {
     refresh: () => {
+      const context = getPartyContextSnapshot();
+      presence.join(context?.partyId);
+      if (context) presence.roster(context);
       syncHeader();
       syncLobbyChatVisibility();
       if (currentPartyId()) void loadHistory();
     },
-    open: () => setOpen(true),
+    open: () => { setOpen(true); void loadHistory(); },
     close: () => setOpen(false),
     destroy: () => {
+      ui.destroyComposer();
+      state.destroyed = true;
+      document.removeEventListener("keydown", escapeHandler);
+      window.removeEventListener("resize", closeViewersPopup);
+      for (const [event, handler] of socketListeners) socket?.off?.(event, handler);
+      if (viewersCloseTimer) window.clearTimeout(viewersCloseTimer);
       setLocalTyping(false);
       if (state.typingSweepTimer) {
         window.clearInterval(state.typingSweepTimer);

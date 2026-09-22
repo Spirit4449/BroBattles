@@ -2,14 +2,16 @@ const { BannerPlugin } = require('webpack');
 const fs = require('node:fs');
 const path = require('node:path');
 const bindings = 'window,document,location,setTimeout,clearTimeout,setInterval,clearInterval,requestAnimationFrame,cancelAnimationFrame,fetch,Audio,ResizeObserver,MutationObserver,IntersectionObserver';
+const scopeArguments = bindings.split(',').map(name => `__scope.${name}`).join(',');
 
 // Lexical wrappers give every mounted bundle (including lazy chunks) a lifetime
 // without globally patching browser APIs or rewriting each feature module.
 class PageRuntimePlugin {
   apply(compiler) {
     const exclude = /bundles\/navigation(?:\.|$)/;
-    new BannerPlugin({ raw: true, test: /\.js$/, exclude, banner: `;(function(__scope){if(!__scope)return;(function({${bindings}}){` }).apply(compiler);
-    new BannerPlugin({ raw: true, footer: true, test: /\.js$/, exclude, banner: '\n})(__scope);})(window.__BB_NAVIGATION__ ? window.__BB_NAVIGATION__.scriptScope() : window);' }).apply(compiler);
+    // Lazy chunks can start with "use strict", which requires simple parameters.
+    new BannerPlugin({ raw: true, test: /\.js$/, exclude, banner: `;(function(__scope){if(!__scope)return;(function(${bindings}){` }).apply(compiler);
+    new BannerPlugin({ raw: true, footer: true, test: /\.js$/, exclude, banner: `\n})(${scopeArguments});})(window.__BB_NAVIGATION__ ? window.__BB_NAVIGATION__.scriptScope() : window);` }).apply(compiler);
     compiler.hooks.thisCompilation.tap('BattlePreload', compilation => {
       compilation.hooks.processAssets.tap({ name: 'BattlePreload', stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL }, () => {
         const root = path.resolve(compiler.context, 'public/assets');

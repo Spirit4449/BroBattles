@@ -1,7 +1,7 @@
 const { exposeDamageHitbox } = require('../damageHitboxes');
 const { getParticipant, participantId } = require('../participants');
 const effectManager = require("../effects/effectManager");
-const { THORG_SWEEP, sampleThorgSweep } = require("../../../../shared/thorgSweep");
+const { THORG_SWEEP, sampleThorgHitbox } = require("../../../../shared/thorgSweep");
 const { resolvePlayerHeight, getBoundsCenter, normalizeAngleDelta, getPlayerBounds } = require('./geometry');
 const { hitRectTargets, hitCapsuleTargets, getEnemyVaultTarget, emitServerHit, buildTargetList, emitHitAction } = require('./targets');
 
@@ -187,28 +187,17 @@ function tickPathRect(room, attack, descriptor, now) {
   const previous = attack.previousProgress || 0;
   // Subsample the curved sweep even after a delayed tick, so neither side can tunnel.
   const steps = Math.max(1, Math.ceil((progress - previous) * 96));
+  const legacy = ['thorg-storm', 'thorg-iron'].includes(attacker.selected_skin_id);
   for (let i = 0; i <= steps; i++) {
-    const point = sampleThorgSweep({ x: Number(attacker.x), y: Number(attacker.y), direction: attack.direction, scale },
+    const hitbox = sampleThorgHitbox({ x: Number(attacker.x), y: Number(attacker.y), direction: attack.direction, scale, legacy },
       previous + (progress - previous) * i / steps);
-    const center = {
-      x: Number(attacker.x),
-      y: Number(attacker.y) - THORG_SWEEP.footOffset * (scale - 1) + THORG_SWEEP.centerY * scale,
-    };
-    const dx = point.x - center.x;
-    const dy = point.y - center.y;
-    const length = Math.hypot(dx, dy) || 1;
-    const tipOffset = Math.max(0, Number(THORG_SWEEP.tipOffset) || 0) * scale;
-    const tip = {
-      x: point.x + dx / length * tipOffset,
-      y: point.y + dy / length * tipOffset,
-    };
     hitCapsuleTargets(
       room,
       attack,
       descriptor,
-      center,
-      tip,
-      Math.max(1, Number(THORG_SWEEP.hitboxRadius) || THORG_SWEEP.headHeight / 2) * scale,
+      hitbox.a,
+      hitbox.b,
+      hitbox.radius,
       now,
     );
   }
