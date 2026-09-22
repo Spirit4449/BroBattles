@@ -349,6 +349,7 @@ function registerPartyEvents(
     if (!uname || !data?.partyId) return;
 
     try {
+      await inPartyOrder(db, data.partyId, async () => {
       const rows = await db.runQuery(
         "SELECT * FROM parties WHERE party_id = ? LIMIT 1",
         [data.partyId],
@@ -396,16 +397,14 @@ function registerPartyEvents(
         botSlots,
       });
 
-      await broadcastSelectionNotice(
-        data.partyId,
-        uname,
-        savedSelection,
-        "mode",
-      );
+      if (savedSelection.modeId !== currentSelection.modeId || savedSelection.modeVariantId !== currentSelection.modeVariantId) {
+        await broadcastSelectionNotice(data.partyId, uname, savedSelection, "mode");
+      }
 
       console.log(
         `[party:${data.partyId}] Mode changed to ${savedSelection.modeId}:${savedSelection.modeVariantId} by ${uname}`,
       );
+      });
     } catch (e) {
       socket.emit("party:selection-denied", {
         partyId: data.partyId,
@@ -420,6 +419,7 @@ function registerPartyEvents(
     if (!uname || !data?.partyId) return;
 
     try {
+      await inPartyOrder(db, data.partyId, async () => {
       const rows = await db.runQuery(
         "SELECT * FROM parties WHERE party_id = ? LIMIT 1",
         [data.partyId],
@@ -450,16 +450,14 @@ function registerPartyEvents(
         username: uname,
       });
 
-      await broadcastSelectionNotice(
-        data.partyId,
-        uname,
-        savedSelection,
-        "map",
-      );
+      if (String(savedSelection.mapId) !== String(currentSelection.mapId)) {
+        await broadcastSelectionNotice(data.partyId, uname, savedSelection, "map");
+      }
 
       console.log(
         `[party:${data.partyId}] Map changed to ${savedSelection.mapId} by ${uname}`,
       );
+      });
     } catch (e) {
       socket.emit("party:selection-denied", {
         partyId: data.partyId,

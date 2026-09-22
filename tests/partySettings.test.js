@@ -136,3 +136,45 @@ for (const event of ["mode-change", "map-change"]) {
     assert.equal(replies[0].name, "party:selection-denied");
   });
 }
+
+for (const event of ['map-change', 'mode-change']) {
+  test(`${event} only emits a notice for a real change, including overlapping requests`, async () => {
+    const f = fixture();
+    const handlers = {};
+    const notices = [];
+    const socket = { data: {user: {name:'Owner'}}, on: (event, fn) => handlers[event] = fn, emit() {} };
+    const state = {async setPartySelection({selection}) {
+      f.party.mode_id = selection.modeId;
+      f.party.mode_variant_id = selection.modeVariantId;
+      f.party.map = selection.mapId;
+      return selection;
+    }};
+    registerPartyEvents(socket,{db:f.db,io:f.io,partyState:state,partyPresence:{emitPartyNotice:async (_, notice)=>notices.push(notice)}});
+    const current = {modeId:'duels',modeVariantId:'duels-1v1',mapId:1};
+    await handlers[event]({partyId:7,selection:current});
+    assert.equal(notices.length,0);
+    const next = event === 'map-change' ? {...current,mapId:2} : {...current,modeVariantId:'duels-2v2'};
+    await Promise.all([handlers[event]({partyId:7,selection:next}),handlers[event]({partyId:7,selection:next})]);
+    assert.equal(notices.length,1);
+    assert.equal(notices[0].actorName,'Owner');
+  });
+}
+
+test('selection toast is hidden for the actor but visible for other party members', () => {
+  const source = require('node:fs').readFileSync('src/party.js','utf8');
+  const start = source.indexOf('  socket.on("party:notice"');
+  const end = source.indexOf('\n  });',start)+6;
+  let handler;
+  const toasts=[];
+  require('node:vm').runInNewContext(source.slice(start,end),{
+    socket:{on:(_,fn)=>handler=fn},getActivePartyId:()=>7,getCurrentLobbyUserName:()=> 'Owner',
+    sonner:(...args)=>toasts.push(args),
+  });
+  handler({partyId:7,type:'map',actorName:' owner ',title:'Changed map'});
+  handler({partyId:7,type:'mode',actorName:'Owner',title:'Changed mode'});
+  assert.equal(toasts.length,0);
+  handler({partyId:7,type:'map',actorName:'Member',title:'Changed map'});
+  assert.equal(toasts.length,1);
+  handler({partyId:8,type:'map',actorName:'Member',title:'Changed map'});
+  assert.equal(toasts.length,1);
+});

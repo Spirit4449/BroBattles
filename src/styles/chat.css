@@ -681,30 +681,32 @@
   align-items: start;
 }
 
-.bb-chat-typing {
-  position: relative;
+.bb-chat-heading { flex: 1 1 0; min-width: 0; }
+.bb-chat-header-status {
   display: flex;
   align-items: center;
-  gap: 7px;
-  height: 26px;
-  min-height: 26px;
-  max-height: 26px;
+  gap: 10px;
+  height: 18px;
+  margin-top: 4px;
+  min-width: 0;
+}
+.bb-chat-header-status .bb-chat-subtitle { margin: 0; flex: 0 0 auto; }
+.bb-chat-typing {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  height: 18px;
   min-width: 0;
   overflow: hidden;
-  padding: 0 5px;
-  box-sizing: border-box;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
   pointer-events: none;
-  opacity: 1;
-  transition: opacity 140ms ease;
 }
-
-/* Do not use .hidden: the global utility removes the reserved row from layout. */
-.bb-chat-typing.is-idle {
-  visibility: hidden;
-  opacity: 0;
-}
-.bb-chat-game-panel .bb-chat-typing { display: none; }
-.bb-chat-typing-icons { display: flex; flex: 0 0 auto; }
+.bb-chat-typing.is-idle { display: none; }
+.bb-chat-game-panel .bb-chat-header-status { display: none; }
+.bb-chat-typing-icons { display: none; }
 .bb-chat-typing-icon {
   width: 18px;
   height: 18px;
@@ -1456,3 +1458,87 @@
 }
 .bb-chat-avatar.bb-chat-profile-link:hover,
 .bb-chat-viewer-avatar.bb-chat-profile-link:hover { filter: brightness(1.15); }
+
+/* A permanent clear strip above the composer keeps typing off the messages.
+   The indicator is positioned in that strip; idle/active never changes layout. */
+.bb-chat-lobby-panel .bb-chat-composer { margin-top: 28px; }
+.bb-chat-lobby-panel .bb-chat-typing {
+  position: absolute;
+  left: 12px;
+  right: 112px;
+  bottom: calc(100% + 5px);
+  height: 18px;
+  z-index: 3;
+}
+.bb-chat-game-panel .bb-chat-typing { display: none; }
+.bb-chat-lobby-panel .bb-chat-composer.has-messages-below::before {
+  bottom: calc(100% + 28px);
+}
+.bb-chat-lobby-panel .bb-chat-jump-latest { bottom: calc(100% + 1px); }
+
+.bb-chat-system-log {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  color: #93adc3;
+  font: 11px/1.5 "Lato", sans-serif;
+  text-align: center;
+  overflow-wrap: anywhere;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  outline: none;
+}
+.bb-chat-system-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 2px;
+  transition: color 120ms ease, background 120ms ease;
+}
+.bb-chat-system-icon {
+  display: inline-flex;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  color: #6e9fbd;
+}
+.bb-chat-system-icon svg { width: 100%; height: 100%; }
+.bb-chat-system-log[data-kind="join"] .bb-chat-system-icon { color: #79bda3; }
+.bb-chat-system-log[data-kind="leave"] .bb-chat-system-icon { color: #bc9494; }
+.bb-chat-system-log[data-kind="battle"] .bb-chat-system-icon { color: #d9b779; }
+.bb-chat-system-log:hover .bb-chat-system-content,
+.bb-chat-system-log:focus-visible .bb-chat-system-content {
+  color: #d0e2f0;
+  background: #91bfe90b;
+}
+.bb-chat-system-log:focus-visible .bb-chat-system-content { outline: 1px solid #81b2d0; }
+.bb-chat-system-time {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  max-width: 64px;
+  color: #91adc2;
+  font: 9px/1.4 "Lato", sans-serif;
+  text-align: right;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+.bb-chat-system-log:hover .bb-chat-system-time,
+.bb-chat-system-log:focus-visible .bb-chat-system-time { opacity: 1; }
+.bb-chat-system-log { padding-right: 72px; padding-left: 72px; min-height: 28px; }
+.bb-chat-system-log .bb-chat-system-icon {
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
+  image-rendering: pixelated;
+}

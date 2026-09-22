@@ -114,3 +114,21 @@ test('chat profile targets open the named player with mouse or keyboard without 
   assert.deepEqual(opened, ['Alice', 'Alice']);
   assert.equal(element.tabIndex, 0);
 });
+
+test('viewed messages advance locally before the read receipt resolves', async () => {
+  const source = fs.readFileSync('src/chat/lobbyChatController.js', 'utf8');
+  const start = source.indexOf('  async function markMessagesRead(');
+  const end = source.indexOf('  function getMessageRow', start);
+  const state = {lastViewedMessageId:0,lastReadSentMessageId:0,lastReadMessageId:0};
+  let resolve;
+  const markRead = vm.runInNewContext(`${source.slice(start,end)}\nmarkMessagesRead`, {
+    state, currentPartyId:()=>7, syncUnreadBadge() {},
+    postJson:()=>new Promise(done=>resolve=done),
+  });
+  const pending = markRead(20);
+  assert.equal(state.lastViewedMessageId,20);
+  assert.equal(state.lastReadMessageId,0);
+  resolve({lastReadMessageId:18});
+  await pending;
+  assert.equal(Math.max(state.lastViewedMessageId,state.lastReadMessageId),20);
+});

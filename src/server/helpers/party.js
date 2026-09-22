@@ -1,3 +1,4 @@
+const { recordPartyRoster } = require("../services/partyChatLog");
 const { capacityFromSelection } = require("./utils");
 const { normalizeSelectionFromRow } = require("./gameSelectionCatalog");
 const {
@@ -70,6 +71,7 @@ async function emitRoster(io, partyId, party, members, db = null, snapshot = {})
   const ownerName = Object.prototype.hasOwnProperty.call(snapshot, "ownerName")
     ? snapshot.ownerName
     : db ? await getPartyOwnerName(db, partyId) : null;
+  recordPartyRoster(io, partyId, roster);
   io.to(`party:${partyId}`).emit("party:members", {
     partyId,
     ownerName,

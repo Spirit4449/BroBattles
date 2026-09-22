@@ -1,3 +1,4 @@
+const { appendPartyChatLog } = require("../../services/partyChatLog");
 const { deleteMatchBots } = require("../../services/matchRosterService");
 const { ALL_DEAD_GAME_OVER_DELAY_MS } = require("../gameRoomConfig");
 const effectManager = require("./effects/effectManager");
@@ -242,6 +243,24 @@ async function finishGame(room, winnerTeam, meta = {}) {
     console.error(`[GameRoom ${room.matchId}] result settlement pending`, error?.message);
   }
   const finalMeta = { ...(meta || {}), rewards: rewardSummary, rewardsPending };
+
+  try {
+    const participants = await room.db.runQuery(
+      "SELECT mp.party_id, mp.team, u.name FROM match_participants mp JOIN users u ON u.user_id = mp.user_id WHERE mp.match_id = ? AND mp.party_id IS NOT NULL",
+      [room.matchId],
+    );
+    for (const partyId of new Set((participants || []).map(player => Number(player.party_id)))) {
+      appendPartyChatLog(room.io, partyId, {
+        kind: "battle", key: `battle:${room.matchId}`,
+        body: "Battle ended",
+        winnerTeam,
+        participants: (participants || []).filter(player => Number(player.party_id) === partyId).map(({ name, team }) => ({ name, team })),
+      });
+    }
+  } catch (error) {
+    console.warn("[chat] battle log failed", error?.message);
+  }
+
 
   room.io.to(`game:${room.matchId}`).emit("game:over", {
     matchId: room.matchId,

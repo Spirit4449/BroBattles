@@ -728,7 +728,7 @@ function setupModePickerControls(onSelect = null) {
         <div class="mode-select-art"><img src="${artAsset}" alt="${mode.label}" />${unlockReason ? '<span class="mode-select-lock" aria-hidden="true"><img src="/assets/lock.webp" alt="" /></span>' : ""}</div>
         <div class="map-select-name">${mode.label}</div>
         <div class="mode-select-subtitle">${mode.description || ""}</div>
-        <div class="mode-select-meta">${unlockReason && mode.unlockTrophies ? `<img src="/assets/trophy.webp" alt="Trophies" /><span>Unlock at ${mode.unlockTrophies.toLocaleString()}</span>` : ""}</div>
+        <div class="mode-select-meta">${unlockReason && mode.unlockTrophies ? `<span>Unlock at</span><span class="mode-select-trophy-cost"><img src="/assets/trophy.webp" alt="Trophies" /><span>${mode.unlockTrophies.toLocaleString()}</span></span>` : ""}</div>
       `;
       card.querySelector("img")?.addEventListener("error", (event) => {
         event.currentTarget.src =
@@ -1439,6 +1439,8 @@ export function socketInit(options = {}) {
     const currentPartyId = getActivePartyId();
     if (currentPartyId && String(data?.partyId) !== String(currentPartyId))
       return;
+    if (["map", "mode"].includes(data?.type) &&
+        String(data?.actorName || "").trim().toLowerCase() === getCurrentLobbyUserName().toLowerCase()) return;
     const title = String(data?.title || "Party update").trim();
     const message = String(data?.message || "").trim();
     sonner(title, message || undefined, "OK", undefined, {

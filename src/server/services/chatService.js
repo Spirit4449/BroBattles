@@ -1,3 +1,4 @@
+const { getPartyChatLogs } = require("./partyChatLog");
 const MAX_CHAT_BODY_LENGTH = 500;
 const MAX_CHAT_LIMIT = 100;
 
@@ -292,6 +293,7 @@ function createPartyChatService({ db, io }) {
     );
 
     return {
+      systemLogs: getPartyChatLogs(io, membership.partyId),
       messages: orderedRows.map((row) =>
         buildMessagePayload(row, aggregates, user),
       ),

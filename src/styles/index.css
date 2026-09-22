@@ -1806,7 +1806,7 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 12px;
   font-family: "Press Start 2P", monospace;
   font-size: 9px;
   line-height: 1.6;
@@ -1814,6 +1814,12 @@ h3 {
   letter-spacing: 1.2px;
   text-transform: uppercase;
   color: rgba(157, 195, 249, 0.88);
+}
+
+.mode-select-trophy-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .mode-select-empty {

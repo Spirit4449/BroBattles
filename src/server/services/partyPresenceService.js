@@ -1,3 +1,4 @@
+const { appendPartyChatLog } = require("./partyChatLog");
 const { emitRoster, selectPartyById } = require("../helpers/party");
 
 function createPartyPresenceService({ db, io }) {
@@ -50,7 +51,10 @@ function createPartyPresenceService({ db, io }) {
     emitPartyRosterById,
     emitPartyNotice: (partyId, notice) => {
       if (!partyId) return;
-      io.to(`party:${partyId}`).emit("party:notice", notice);
+      if (["map", "mode"].includes(notice?.type)) {
+        appendPartyChatLog(io, partyId, { kind: notice.type, body: notice.title });
+      }
+      io.to(`party:${partyId}`).emit("party:notice", { ...notice, partyId });
     },
   };
 }

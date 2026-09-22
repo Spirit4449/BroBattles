@@ -1,3 +1,4 @@
+import { renderSystemLog } from './systemLog.mjs';
 import { createPartyPresenceTracker, countOnlineMembers } from './partyPresence.mjs';
 import { positionChatPopover } from './popoverPosition.mjs';
 
@@ -17,6 +18,8 @@ export function createLobbyChatController({
     restoreUnreadOnOpen: false,
     isOpen: false,
     messages: [],
+    systemLogs: new Map(),
+    lastViewedMessageId: 0,
     messageMap: new Map(),
     lastReadMessageId: 0,
     lastReadSentMessageId: 0,
@@ -364,7 +367,7 @@ export function createLobbyChatController({
   }
 
   function getUnreadMessageCount() {
-    const lastReadId = Number(state.lastReadMessageId) || 0;
+    const lastReadId = Math.max(Number(state.lastReadMessageId) || 0, state.lastViewedMessageId);
     return state.messages.reduce((count, message) => {
       const messageId = messageIdOf(message);
       if (!messageId || messageId <= lastReadId) return count;
@@ -382,7 +385,7 @@ export function createLobbyChatController({
     const wasOpen = state.isOpen;
     state.isOpen = !!open;
     if (state.isOpen && !wasOpen) {
-      state.openReadAnchorMessageId = Number(state.lastReadMessageId) || 0;
+      state.openReadAnchorMessageId = Math.max(Number(state.lastReadMessageId) || 0, state.lastViewedMessageId);
       state.restoreUnreadOnOpen = ui.scroll.atBottom();
       setReactionBadge(false);
     }
@@ -392,6 +395,7 @@ export function createLobbyChatController({
       if (latestId > 0 && ui.scroll.atBottom()) {
         void markMessagesRead(latestId);
       }
+      ui.messagesEl.querySelector(".bb-chat-divider")?.remove();
       setLocalTyping(false);
     }
     ui.panel.classList.toggle("is-open", state.isOpen);
@@ -564,6 +568,8 @@ export function createLobbyChatController({
     const partyId = currentPartyId();
     const targetId = Number(lastMessageId) || 0;
     if (!partyId || targetId <= 0) return null;
+    state.lastViewedMessageId = Math.max(state.lastViewedMessageId, targetId);
+    syncUnreadBadge();
     if (targetId <= state.lastReadSentMessageId) return null;
     state.lastReadSentMessageId = targetId;
     try {
@@ -660,12 +666,18 @@ export function createLobbyChatController({
     state.messageMap = new Map();
     ui.messagesEl.innerHTML = "";
     let dividerInserted = false;
-    for (const message of state.messages) {
+    const timeline = [...state.messages, ...state.systemLogs.values()].sort((a, b) =>
+      (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0));
+    for (const message of timeline) {
+      if (message.system) {
+        fragment.appendChild(renderSystemLog(message, getCurrentUserName?.()));
+        continue;
+      }
       const messageId = messageIdOf(message);
       if (
         state.isOpen &&
         !dividerInserted &&
-        state.openReadAnchorMessageId &&
+        !isMessageMineForCurrentUser(message) &&
         messageId > state.openReadAnchorMessageId
       ) {
         dividerInserted = true;
@@ -693,7 +705,7 @@ export function createLobbyChatController({
     ui.scroll.restore(scrollSnapshot);
     if (state.isOpen && state.restoreUnreadOnOpen && state.messages.length) {
       state.restoreUnreadOnOpen = false;
-      const unread = state.messages.filter(message => !isMessageMineForCurrentUser(message) && messageIdOf(message) > state.lastReadMessageId);
+      const unread = state.messages.filter(message => !isMessageMineForCurrentUser(message) && messageIdOf(message) > Math.max(state.lastReadMessageId, state.lastViewedMessageId));
       const first = unread[0] && getMessageRow(messageIdOf(unread[0]));
       if (first) {
         ui.messagesEl.scrollTop += first.getBoundingClientRect().top - ui.messagesEl.getBoundingClientRect().top - 32;
@@ -723,6 +735,7 @@ export function createLobbyChatController({
         limit: 80,
       });
       if (state.destroyed || partyId !== currentPartyId() || request !== state.historyRequest) return;
+      for (const event of data?.systemLogs || []) rememberSystemLog(event);
       const serverLastReadMessageId = Number(data?.lastReadMessageId) || 0;
       state.partyId = partyId;
       const merged = new Map((data?.messages || []).map((message) => [messageIdOf(message), normalizeIncomingMessage(message)]));
@@ -888,6 +901,8 @@ export function createLobbyChatController({
     state.historyRequest++;
     state.messages = [];
     state.messageMap.clear();
+    state.systemLogs.clear();
+    state.lastViewedMessageId = 0;
     ui.scroll.reset();
     state.lastReadMessageId = 0;
     state.lastReadSentMessageId = 0;
@@ -910,6 +925,18 @@ export function createLobbyChatController({
       hideTypingIndicator();
       return;
     }
+  });
+
+  function rememberSystemLog(event) {
+    if (!event?.id || !event?.body) return;
+    state.systemLogs.set(event.id, { ...event, system: true });
+    while (state.systemLogs.size > 100) state.systemLogs.delete(state.systemLogs.keys().next().value);
+  }
+
+  listen("party-chat:system", (payload = {}) => {
+    if (Number(payload.partyId) !== currentPartyId()) return;
+    rememberSystemLog(payload.event);
+    if (state.isOpen) renderMessages();
   });
 
   listen("party-chat:message", (payload = {}) => {
