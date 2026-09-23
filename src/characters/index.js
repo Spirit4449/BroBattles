@@ -1,3 +1,4 @@
+import movementPhysics from '../shared/movementPhysics.json';
 import { legacyAnimations as legacyNinjaAnimations } from './ninja/legacyAnim';
 // src/characters/index.js
 import CHARACTER_MANIFEST from "./manifest";
@@ -334,6 +335,21 @@ export function resolveAnimKey(
   const anims = scene && scene.anims;
   if (!anims) return genericKey;
 
+  if (genericKey === 'dashing') {
+    const textureKey = skinTextureKey || char;
+    const key = `${textureKey}-dashing`;
+    if (!anims.exists(key)) {
+      const frames = (scene.textures?.get(textureKey)?.getFrameNames?.() || [])
+        .filter(name => /^dash(?:ing)?[0-9]+$/i.test(name))
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      if (frames.length) anims.create({ key,
+        frames: frames.map(frame => ({ key: textureKey, frame })),
+        frameRate: frames.length * 1000 / movementPhysics.dashDurationMs, repeat: 0 });
+    }
+    if (anims.exists(key)) return key;
+  }
+
+
   if (skinTextureKey) {
     const variantPreferred = `${skinTextureKey}-${genericKey}`;
     if (anims.exists(variantPreferred)) return variantPreferred;
@@ -417,10 +433,10 @@ export function getCharacterEffectTickSounds() {
  * @param {object} [overrides] - optional { volume, rate } to override defaults
  * @returns {boolean} whether a sound was played
  */
-export function playCharacterSound(scene, character, event, overrides = {}) {
+export function playCharacterSound(scene, character, event, overrides = {}, source = null) {
   const Cls = getCharacterClass(character);
   if (Cls && typeof Cls.playSound === "function") {
-    return Cls.playSound(scene, event, overrides);
+    return Cls.playSound(scene, event, overrides, source);
   }
   return false;
 }

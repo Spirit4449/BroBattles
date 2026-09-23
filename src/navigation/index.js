@@ -86,6 +86,12 @@ let audioContext;
 let pendingFetch;
 let cleanupPromise = Promise.resolve();
 let mounted = true;
+let routeFailed = false;
+let recoveryRequest;
+let retryAvailableAt = 0;
+let retryTimer;
+const unavailableMatchCodes = new Set(['MATCH_UNAVAILABLE', 'MATCH_ENDED']);
+let failureCode;
 let lobbyNavigator;
 let routeProgress = 0;
 const preloader = createBattlePreloader();
@@ -165,7 +171,7 @@ function showTransition(message) {
     retry.className = 'bb-loading-retry';
     retry.type = 'button';
     retry.hidden = true;
-    retry.onclick = () => navigate(transition.dataset.destination || location.href, { replace: true });
+    retry.onclick = retryFailedRoute;
     panel.append(label, retry);
     transition.append(panel);
     transition.dataset.presentation = 'message';
@@ -241,7 +247,7 @@ function showBattleLoadingBar() {
   showLoadingBar('Preparing your battle…');
 }
 function ready() {
-  if (!mounted) return;
+  if (!mounted || routeFailed) return;
   clearTimeout(readinessTimer);
   updateRouteLoadingBar(100);
   dismissTransition();
@@ -250,12 +256,72 @@ function ready() {
   if (document.body.dataset.bbScreen === 'lobby') preloader.start('battle');
 }
 function fail(error) {
+  if (routeFailed) return;
+  routeFailed = true;
+  mounted = false;
+  ++sequence;
+  clearTimeout(readinessTimer);
+  pendingFetch?.abort();
+  recoveryRequest?.abort();
+  recoveryRequest = null;
+  failureCode = error.code;
   lobbyReturn.clear();
   clearRouteHints();
   preloader.stop();
   console.error('[navigation]', error);
-  showTransition('Unable to finish loading. Please try again.');
+  showTransition('An error occured');
   transition.querySelector('button').hidden = false;
+  const retry = transition.querySelector('button');
+  if (retryAvailableAt) retryAvailableAt = Math.max(retryAvailableAt, Date.now() + 2000);
+  const delay = Math.max(0, retryAvailableAt - Date.now());
+  retry.disabled = delay > 0;
+  retry.textContent = delay > 0 ? 'Please wait…' : 'Try again';
+  clearTimeout(retryTimer);
+  if (delay) retryTimer = setTimeout(() => {
+    if (!routeFailed || transition?.querySelector('button') !== retry) return;
+    retry.disabled = false;
+    retry.textContent = 'Try again';
+  }, delay);
+}
+
+async function retryFailedRoute() {
+  if (!routeFailed || recoveryRequest || Date.now() < retryAvailableAt) return;
+  const destination = transition?.dataset.destination || location.href;
+  const match = new URL(destination, location.href).pathname.match(/^\/game\/([^/]+)\/?$/);
+  const code = failureCode;
+  const ticket = sequence;
+  const controller = new AbortController();
+  recoveryRequest = controller;
+  routeFailed = false;
+  retryAvailableAt = Date.now() + 2000;
+  const button = transition.querySelector('button');
+  button.disabled = true;
+  button.textContent = 'Trying again…';
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    let returnToLobby = match && unavailableMatchCodes.has(code);
+    if (match && !returnToLobby) {
+      const response = await fetch('/gamedata', {
+        method: 'POST', credentials: 'same-origin', signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matchId: match[1] }),
+      });
+      const result = await response.json();
+      returnToLobby = unavailableMatchCodes.has(result.code);
+      if (!returnToLobby && (!response.ok || !result.success)) {
+        throw new Error(result.error || 'Unable to check match');
+      }
+    }
+    if (ticket !== sequence || recoveryRequest !== controller) return;
+    clearTimeout(timeout);
+    if (returnToLobby) await window.__BB_NAVIGATION__.prepareLobbyReturn();
+    else await navigate(destination, { replace: true });
+  } catch (error) {
+    if (ticket === sequence && recoveryRequest === controller) fail(error);
+  } finally {
+    clearTimeout(timeout);
+    if (recoveryRequest === controller) recoveryRequest = null;
+  }
 }
 document.addEventListener('lobby:ready', ready);
 document.addEventListener('game:ready', ready);
@@ -300,6 +366,10 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
     return;
   }
   const ticket = ++sequence;
+  routeFailed = false;
+  recoveryRequest?.abort();
+  recoveryRequest = null;
+  clearTimeout(retryTimer);
   cancelTransitionExit();
   const newStyles = [];
   const discardNewStyles = () => newStyles.forEach(node => {
@@ -336,6 +406,7 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
   readinessTimer = setTimeout(() => { if (ticket === sequence) fail(new Error('Screen readiness timed out')); }, 45000);
   try {
     const response = await fetch(url.href, { credentials: 'same-origin', signal: controller.signal });
+    if (ticket !== sequence) return;
     const finalUrl = new URL(response.url);
     if (!supported(finalUrl)) { lobbyReturn.clear(); location.assign(finalUrl.href); return; }
     if (!response.ok) throw new Error(`Page request failed (${response.status})`);

@@ -126,11 +126,8 @@ function applyWallSlide(player, { dead, movementLocked, wallSlideContact, wallSi
   const isWallSliding = wallAttachEligible &&
     wallAttachNow - player._wallAttachStartedAt >= MOVEMENT_PHYSICS.wallSlideAttachDelayMs;
   if (isWallSliding) {
-    // Keep horizontal attachment while upward momentum runs its natural course.
-    player.setAccelerationX(0);
-    player.setVelocityX(wallSide === "left"
-      ? -MOVEMENT_PHYSICS.wallSlideAttachSpeed
-      : MOVEMENT_PHYSICS.wallSlideAttachSpeed);
+    // Contact can brake descent, but must never pull the player into a wall
+    // or replace the horizontal velocity/acceleration chosen by movement.
     if (player.body.velocity.y >= 0) {
       player.setVelocityY(Math.min(player.body.velocity.y,
         wallBrakeHeld ? MOVEMENT_PHYSICS.wallSlideBrakeFallSpeed : wallSlideMaxFallSpeed));

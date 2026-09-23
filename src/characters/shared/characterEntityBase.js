@@ -1,4 +1,5 @@
 import { chooseRemoteAnimationState } from "./animationState";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 export default class CharacterEntityBase {
   static key = "unknown";
@@ -62,7 +63,7 @@ export default class CharacterEntityBase {
    * Play a logical sound event using this class's sounds table.
    * Accepts optional overrides for volume/rate.
    */
-  static playSound(scene, event, overrides = {}) {
+  static playSound(scene, event, overrides = {}, source = null) {
     const entry = this.sounds?.[event];
     if (!entry || !scene?.sound) return false;
     const key = typeof entry === "string" ? entry : entry.key;
@@ -70,8 +71,8 @@ export default class CharacterEntityBase {
     const volume = overrides.volume ?? entry.volume ?? 1;
     const rate = overrides.rate ?? entry.rate ?? 1;
     try {
-      scene.sound.play(key, { volume, rate });
-      return true;
+      if (source) return playPlayerSound(scene, source, key, { volume, rate });
+      return scene.sound.play(key, { volume, rate });
     } catch (_) {
       return false;
     }

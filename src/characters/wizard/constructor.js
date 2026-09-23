@@ -8,6 +8,7 @@ import {
   spawnWizardFireballAuthoritative,
   spawnWizardFireballVisual,
   changeDebugState,
+  playWizardCastWindup,
 } from "./attack";
 import { executeDefaultAttack } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
@@ -98,14 +99,7 @@ class Wizard extends CharacterEntityBase {
     const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
     if (data.type === `${NAME}-fireball`) {
       chargeWizardFireball(scene, ownerSprite, data);
-      playSpriteAnimation({
-        scene,
-        sprite: ownerSprite,
-        character: NAME,
-        logical: "throw",
-        fallback: "idle",
-        force: false,
-      });
+      playWizardCastWindup(scene, ownerSprite, 0.55);
       return true;
     }
     if (data.type === `${NAME}-fireball-release`) {

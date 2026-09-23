@@ -1,5 +1,32 @@
 # Thorg sprite polish
 
+## Directional dash videos (September 23)
+
+Installed three poses per direction from `thorg_dash_right.mp4` (frames 2, 5, 8),
+`thorg_dash_45.mp4` (3, 6, 9), and `thorg_dash_up.mp4` (4, 8, 12).
+Animations `dashright`, `dashdiagonal`, and `dashup` play once over the shared
+160 ms dash duration. Leftward poses use the existing facing mirror. Downward
+diagonals use `dashright`; straight down uses normal falling without a dash pose.
+Local and remote playback share this selection. Legacy skins retain their own
+fallback artwork. The green background is removed with the existing hard key,
+using fixed scale 106/428 for all three directions, baseline 118,
+and the unchanged 128-pixel logical canvas.
+
+Straight horizontal dashes hold the final pose through 320 ms from launch,
+extending the visual into early coasting without changing dash physics. Running
+and falling yield to this short hold; attacks, jumps, ducking, wall slides,
+death, and stopping interrupt it immediately. Diagonal/upward timing is unchanged.
+
+Replaced the horizontal poses with the newer 21-frame `thorg_dash_right.mp4`.
+Frames 2, 5, and 8 capture the lean into its low, forward-pointing mace pose.
+Its standing reference matches the diagonal/up clips, so it now uses their
+106/428 scale and x=626 body center. The 320 ms horizontal hold is retained.
+
+Reimport with `python3 scripts/import-thorg-videos.py --dash-only` when the older
+source clips are archived. This preserves all 53 existing frames pixel-for-pixel
+and retains their alignment and metadata. Preview: `output/thorg-dash/installed.png`.
+Validation: 78 focused Thorg, dash, animation, and movement tests pass.
+
 ## Installed regenerated duck and wall slide (September 22)
 
 The approved green-background concepts are now installed as `duck00` and

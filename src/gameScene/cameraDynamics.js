@@ -20,7 +20,16 @@ export function updateDynamicCamera(scene, player, Phaser) {
   // Smoothly zoom out as player climbs to maintain vertical context.
   const t = Phaser.Math.Clamp((player.y - 80) / (520 - 80), 0, 1);
   const targetZoom = 1.3 + (1.8 - 1.3) * t;
-  cam.setZoom(cam.zoom + (targetZoom - cam.zoom) * 0.05);
+  const reducedMotion = typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const previousDashZoom = scene._dashCameraZoom || 0;
+  const dashTarget = player._dash && !reducedMotion ? targetZoom * 0.025 : 0;
+  const dashBlend = 1 - Math.exp(-Math.min(100, scene.game.loop.delta || 16.67) /
+    (dashTarget ? 55 : 180));
+  const dashZoom = previousDashZoom + (dashTarget - previousDashZoom) * dashBlend;
+  const baseZoom = cam.zoom - previousDashZoom;
+  cam.setZoom(baseZoom + (targetZoom - baseZoom) * 0.05 + dashZoom);
+  scene._dashCameraZoom = dashZoom;
 
   // Bias the camera down when higher up to reduce empty sky framing.
   const highFactor = 1 - t;

@@ -73,6 +73,7 @@ async function buildGameDataForMatch({
       payload: {
         success: false,
         error: "You are not a participant in this match",
+        code: "MATCH_UNAVAILABLE",
       },
     };
   }
@@ -83,7 +84,11 @@ async function buildGameDataForMatch({
     return {
       ok: false,
       statusCode: 400,
-      payload: { success: false, error: "Match is not live yet" },
+      payload: {
+        success: false,
+        error: ['completed', 'cancelled'].includes(participant.status) ? "Match has ended" : "Match is not live yet",
+        code: ['completed', 'cancelled'].includes(participant.status) ? "MATCH_ENDED" : "MATCH_NOT_READY",
+      },
     };
   }
 

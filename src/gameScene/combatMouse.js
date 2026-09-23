@@ -12,9 +12,6 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
   const canvas = scene.game.canvas;
   const doc = canvas.ownerDocument;
   const win = doc.defaultView;
-  // Living inside the controls panel shares its saved new-player visibility,
-  // mobile/editor exclusions, and the game's keycap styling.
-  const hint = doc.getElementById?.('battle-cursor-hint');
   let direction = { x: 1, y: 0 };
   let dragging = false;
   let aiming = false;
@@ -55,7 +52,6 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
   const showCursor = (hidden) => {
     canvas.style.cursor = hidden ? 'none' : '';
     doc.body?.classList?.toggle('battle-cursor-hidden', hidden);
-    if (hint) hint.style.display = hidden ? '' : 'none';
   };
   const release = () => {
     const hadInput = active || pending;
@@ -217,7 +213,6 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
       scene.events.off('pause', release);
       scene.events.off('sleep', release);
       scene.events.off('preupdate', controller.update);
-      if (hint) hint.style.display = 'none';
     },
   };
   // Runs even when the game update returns early for editor or spectator mode.

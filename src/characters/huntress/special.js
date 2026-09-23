@@ -1,4 +1,5 @@
 import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState.js";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 export function perform(
   scene,
@@ -22,9 +23,7 @@ export function perform(
   });
 
   try {
-    scene.sound?.play?.("huntress-special", {
-      volume: isOwner ? 0.65 : 0.38,
-    });
+    playPlayerSound(scene, player, "huntress-special", { volume: isOwner ? 0.56 : 0.33 });
   } catch (_) {}
 
   if (!scene.add) return;

@@ -9,6 +9,7 @@ import { remoteLaunchCorrection, reconcileFlight } from '../../shared/projectile
 import { VERSION, STEP_MS, launch, step, swarmConfig } from '../../shared/ninjaProjectile';
 import { createRuntimeId } from '../shared/runtimeId';
 import { RENDER_LAYERS } from '../../gameScene/renderLayers';
+import { playPlayerSound } from '../../gameScene/playerAudio';
 const clock=new CombatClock();
 const active=new Map(),terminals=new Set(),requests=new Map(),effects=new Set();
 const diagnostics=[];
@@ -150,7 +151,7 @@ export function handleNinjaPacket(scene,packet,next){
       const sprite=owner(packet.playerName);
       const key=playSpriteAnimation({scene,sprite,character:'ninja',logical:'throw',fallback:'idle',force:false});
       if(key)markOneShotAnimation(sprite,'throw',getAnimationDurationMs(scene,key),{remote:true});
-      scene.sound?.play('shurikenThrow',{volume:.5,rate:1.3});
+      playPlayerSound(scene, sprite, 'shurikenThrow', {volume:1,rate:1.3});
     }
     accept(a.projectile,a.simMono);
   }
@@ -159,7 +160,7 @@ export function handleNinjaPacket(scene,packet,next){
   else if(a.type==='ninja-impact'){
     const key=`hit:${a.id}:${a.phase}:${a.target}`;if(terminals.has(key))return true;
     terminals.add(key);while(terminals.size>512)terminals.delete(terminals.values().next().value);
-    if(a.appliedDamage>0)scene.sound?.play('shurikenHit',{volume:.5});
+    if(a.appliedDamage>0)playPlayerSound(scene, owner(packet.playerName) || {x:a.x,y:a.y}, 'shurikenHit', {volume:.5});
   }
   return true;
 }

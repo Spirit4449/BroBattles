@@ -51,3 +51,22 @@ test('older-message reading position survives appends, new counts accumulate, an
     scroll.destroy();
   } finally { globalThis.ResizeObserver = previous; }
 });
+
+test('resize deliveries coalesce into the next frame and pending work is cancelled on destroy', () => {
+  const previous = {ResizeObserver:globalThis.ResizeObserver,requestAnimationFrame:globalThis.requestAnimationFrame,cancelAnimationFrame:globalThis.cancelAnimationFrame};
+  let deliver, scheduled, calls=0, writes=0, cancelled;
+  globalThis.ResizeObserver = class { constructor(fn){deliver=fn;} observe(){} disconnect(){} };
+  globalThis.requestAnimationFrame = fn => {calls++;scheduled=fn;return calls;};
+  globalThis.cancelAnimationFrame = id => {cancelled=id;};
+  try {
+    const messages={scrollHeight:1000,clientHeight:300,get scrollTop(){return 700;},set scrollTop(value){writes++;},addEventListener(){},removeEventListener(){}};
+    const composer={classList:{toggle(){}}};
+    const button={addEventListener(){},removeEventListener(){},setAttribute(){}};
+    const scroll=createChatScrollController(messages,composer,button);
+    deliver();deliver();
+    assert.equal(writes,0);assert.equal(calls,1);
+    scheduled();assert.equal(writes,1);
+    deliver();assert.equal(calls,2);
+    scroll.destroy();assert.equal(cancelled,2);
+  } finally { Object.assign(globalThis,previous); }
+});

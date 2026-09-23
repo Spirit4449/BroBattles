@@ -5,6 +5,7 @@ import { RENDER_LAYERS } from '../../gameScene/renderLayers';
 import { HuntressReplica } from '../../shared/huntressReplication';
 import { remoteLaunchCorrection, reconcileFlight } from '../../shared/projectilePresentation';
 import { VERSION, attackConfig, resolveShot, powerFromSpeed, createVolley } from '../../shared/huntressProjectile';
+import { playPlayerSound } from '../../gameScene/playerAudio';
 
 const replica = new HuntressReplica();
 let version = null, sceneRef = null, context = {}, syncTimer = null, generation = 0;
@@ -236,7 +237,9 @@ export function handleHuntressPacket(scene, packet, nextContext) {
       record({ type: 'impact', id: action.id, movementReportAgeMs: action.movementReportAgeMs,
         errorPx: existing ? Math.hypot(existing.sprite.x - action.x, existing.sprite.y - action.y) : null,
         confirmAgeMs: replica.clock.now(performance.now()) - action.simMono, appliedDamage: action.appliedDamage });
-      if (action.appliedDamage > 0) scene.sound?.play('huntress-hit', { volume: 0.55 });
+      if (action.appliedDamage > 0) playPlayerSound(scene,
+        targetSprite(existing?.projectile?.ownerName || action.ownerName) || { x: action.x, y: action.y },
+        'huntress-hit', { volume: 0.48 });
       if (existing?.projectile.special && ['target', 'terrain'].includes(action.reason)) {
         const flame = scene.add.circle(action.x, action.y, 26, teamPalette(existing.sprite).mid, 0.3);
         flame.setDepth(RENDER_LAYERS.ATTACKS + 1);

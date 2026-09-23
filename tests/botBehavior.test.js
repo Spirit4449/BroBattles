@@ -126,6 +126,7 @@ test('a bot already reached by poison can still take an upward escape route', ()
 
 test('hurt bots retreat and counterfire, retaining retreat until sufficiently healed', (t) => {
   const h = setup(t, ['ninja', 'wizard']);
+  h.p._dashReadyAt = h.now() + 5000; // Exercise counterfire while dash is unavailable.
   h.brain.random = () => 0.5;
   h.place(h.players[1], h.p.x + 110);
   h.p.health = h.p.maxHealth * 0.2;
@@ -291,8 +292,12 @@ test('a healthier bot closes distance instead of kiting a wounded target', (t) =
   target.health = target.maxHealth * 0.25;
   const initialDistance = Math.abs(target.x - h.p.x);
   h.think();
-  assert.equal(h.brain.decision.mode, 'fight');
-  assert.ok(Math.abs(target.x - h.brain.decision.goal.x) < initialDistance);
+  if (h.brain.metrics.dashChases) {
+    assert.ok(Math.abs(target.x - h.brain.maneuver.end.x) < initialDistance);
+  } else {
+    assert.equal(h.brain.decision.mode, 'fight');
+    assert.ok(Math.abs(target.x - h.brain.decision.goal.x) < initialDistance);
+  }
   h.advance(60);
   assert.ok(Math.abs(target.x - h.p.x) < initialDistance);
 });
@@ -413,6 +418,7 @@ for (const trophies of [0, 2000]) {
 
 test('bots duck an imminent hit only when no safer dodge exists', (t) => {
   const h = setup(t, ['ninja', 'wizard'], 1250), enemy = h.players[1];
+  h.p._dashReadyAt = h.now() + 5000; // Neither a dash nor an ordinary dodge is available.
   h.brain.random = () => 0;
   h.brain.openingUntil = 0;
   h.brain.findDodgeSteps = function* () { return { best: null, baseDanger: 100, bestScore: 100 }; };

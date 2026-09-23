@@ -384,7 +384,7 @@ class GameRoom {
     if (special?.handled) return special.result;
     if (!p || !p.isAlive || !p.loaded || this.status !== 'active') return false;
     const now = Date.now();
-    if (p._controlLockUntil > now || p.superCharge < p.maxSuperCharge) return false;
+    if (Math.max(p._controlLockUntil || 0, p._attackInterruptedUntil || 0) > now || p.superCharge < p.maxSuperCharge) return false;
     p.superCharge = 0; p.lastCombatAt = now;
     const aimPayload = payload?.aim || null;
     if (p.isBot && p.char_class === 'ninja') startNinjaSwarm(this, p, now, aimPayload || {});
@@ -806,7 +806,7 @@ class GameRoom {
       playerData.loaded !== true
     )
       return;
-    if (Number(playerData._controlLockUntil || 0) > Date.now()) return;
+    if (Math.max(playerData._controlLockUntil || 0, playerData._attackInterruptedUntil || 0) > Date.now()) return;
 
     const sanitizedAction = this._sanitizeActionPayload(actionData);
     if (!sanitizedAction) return;
@@ -1227,6 +1227,9 @@ class GameRoom {
         ? spawnY
         : Number(playerData.y) || 0;
       playerData.isAlive = true;
+      playerData._dashReadyAt = 0;
+      playerData._dashUntil = 0;
+      playerData._stompPendingUntil = 0;
       playerData._deathHandled = false;
       playerData.health = Math.max(1, Number(playerData.maxHealth) || 1);
       playerData.x = nextX;

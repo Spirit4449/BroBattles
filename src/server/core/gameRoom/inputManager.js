@@ -1,3 +1,7 @@
+const { COLLISION_PACKET_TOLERANCE } = require('../../../shared/movementPrecision');
+const { sweepMovement } = require('../../../shared/sweptCollision');
+const { resolveStomp } = require('./stomp');
+const { acceptDash } = require('../../../shared/dash');
 const {
   WORLD_BOUNDS,
   POSITION_HISTORY_DEPTH,
@@ -13,7 +17,7 @@ const { isMovementSuppressed } = require("./abilityRuntimeManager");
 const netTestLogger = require("./netTestLogger");
 
 const { characterBody } = require("../../../shared/duelGeometry");
-const { DUCK_HEIGHT_RATIO } = require("../../../shared/ducking");
+const { DUCK_HEIGHT_RATIO, DUCK_REENTRY_DELAY_MS } = require("../../../shared/ducking");
 const MAX_MOVEMENT_CREDIT_MS = 500;
 const movementPhysics = require("../../../shared/movementPhysics.json");
 const effectManager = require("./effects/effectManager");
@@ -27,7 +31,11 @@ function updateBodyGeometry(player, room) {
     surface.collision?.up !== false && Math.abs(feet - surface.top) <= 8 &&
     player.x + body.offsetX + body.halfWidth > surface.left &&
     player.x + body.offsetX - body.halfWidth < surface.right);
-  player.ducking = player.ducking === true && player.grounded;
+  const wasDucking = player.ducking === true;
+  player.ducking = wasDucking && player.grounded;
+  if (wasDucking && !player.ducking) {
+    player._duckAvailableAt = Date.now() + DUCK_REENTRY_DELAY_MS;
+  }
   const height = body.height * (player.ducking ? DUCK_HEIGHT_RATIO : 1);
   player._bodyHalfWidth = body.halfWidth;
   player._bodyHalfHeight = height / 2;
@@ -42,10 +50,10 @@ function resetMovementBudget(player, now = Date.now()) {
   player.lastInput = now;
 }
 
-function correctPosition(room, player, sequence) {
+function correctPosition(room, player, sequence, detail = {}) {
   if (!player.socketId) return;
   room.io?.to(player.socketId).emit("game:correction", {
-    x: player.x, y: player.y, sequence,
+    x: player.x, y: player.y, sequence, ...detail,
   });
 }
 const MOVEMENT_FX_TYPES = new Set(["jump", "land", "turn", "wall-jump"]);
@@ -53,7 +61,14 @@ const MOVEMENT_FX_TYPES = new Set(["jump", "land", "turn", "wall-jump"]);
 function applyMovementVfxState(playerData, inputData) {
   if (!playerData || !inputData) return;
   if (typeof inputData.ducking === "boolean") {
-    playerData.ducking = inputData.ducking === true && inputData.grounded === true;
+    const now = Date.now();
+    const requested = inputData.ducking === true && inputData.grounded === true;
+    if (playerData.ducking === true && !requested) {
+      playerData._duckAvailableAt = now + DUCK_REENTRY_DELAY_MS;
+    }
+    playerData.ducking = requested && (
+      playerData.ducking === true || now >= Number(playerData._duckAvailableAt || 0)
+    );
   }
   if (typeof inputData.wallSliding === "boolean") {
     playerData.wallSliding = inputData.wallSliding;
@@ -209,11 +224,12 @@ function handlePlayerInput(room, socketId, inputData) {
     Number.isFinite(inputData.y)
   ) {
     applyMovementVfxState(playerData, inputData);
+    const acceptedDash = acceptDash(playerData, inputData, now);
     const prevInputX = Number(playerData.x);
     const prevInputY = Number(playerData.y);
     const bounded = clampToRoomBounds(inputData.x, inputData.y, room);
     let rawX = bounded.x;
-    const rawY = bounded.y;
+    let rawY = bounded.y;
     const {x:minX, y:minY} = clampToRoomBounds(-Infinity, -Infinity, room);
     const {x:maxX, y:maxY} = clampToRoomBounds(Infinity, Infinity, room);
     if (!playerData._movementBudget) resetMovementBudget(playerData, playerData.lastInput || now);
@@ -239,16 +255,43 @@ function handlePlayerInput(room, socketId, inputData) {
       }
     }
 
+    const dashAge = now - (playerData._dashUntil || 0);
+    const dashMotion = playerData._dashUntil && dashAge < movementPhysics.dashCoastMs;
+    let dashCollision = null;
+    let collisionClamped = false;
+    if (dashMotion && room.geometry?.colliders) {
+      const shape = characterBody(playerData.char_class, playerData.flip);
+      const halfWidth = playerData._bodyHalfWidth || shape.halfWidth;
+      const halfHeight = playerData._bodyHalfHeight || shape.halfHeight;
+      const offsetX = playerData._bodyCenterOffsetX ?? shape.offsetX;
+      const offsetY = playerData._bodyCenterOffsetY ?? shape.offsetY;
+      const resolved = sweepMovement({ x: playerData.x + offsetX - halfWidth,
+        y: playerData.y + offsetY - halfHeight, width: halfWidth * 2, height: halfHeight * 2 },
+        rawX - playerData.x, rawY - playerData.y, room.geometry.colliders);
+      const nextX = resolved.x - offsetX + halfWidth, nextY = resolved.y - offsetY + halfHeight;
+      collisionClamped = Math.abs(nextX - rawX) > COLLISION_PACKET_TOLERANCE || Math.abs(nextY - rawY) > COLLISION_PACKET_TOLERANCE;
+      rawX = nextX; rawY = nextY; dashCollision = resolved.hits;
+    }
+
     // Distance credit is replenished by elapsed server time, never by packet count.
     // Server-issued impulses temporarily expand the allowance for knockback.
     const impulse = playerData._movementImpulse;
     const impulseSpeed = impulse?.until > now ? impulse.speed : 0;
     const modifiers = effectManager.getModifiers(playerData, now);
     const speedMult = Math.max(1, Math.min(movementPhysics.maxSpeedMult, Number(modifiers.speedMult) || 1));
-    const speedX = Math.max(MOVE_PLAUSIBLE_SPEED_H, movementPhysics.wallKickFull * speedMult) + impulseSpeed;
+    const dashSpeedAllowance = dashMotion
+      ? Math.max(0, movementPhysics.dashMaxSpeed - Math.max(0, dashAge) * movementPhysics.dashCoastDrag) : 0;
+    const speedX = Math.max(MOVE_PLAUSIBLE_SPEED_H, movementPhysics.wallKickFull * speedMult, dashSpeedAllowance) + impulseSpeed;
+    const dashVerticalSpeed = playerData.dashX === 0 && playerData.dashY > 0
+      ? movementPhysics.dashDownSpeed : movementPhysics.dashMaxSpeed;
     const speedY = MOVE_PLAUSIBLE_SPEED_V + impulseSpeed;
-    budget.x = Math.min(MOVE_PLAUSIBLE_LAG_PAD_H + speedX * MAX_MOVEMENT_CREDIT_MS / 1000, budget.x + speedX * dtMove / 1000);
-    budget.y = Math.min(MOVE_PLAUSIBLE_LAG_PAD_V + speedY * MAX_MOVEMENT_CREDIT_MS / 1000, budget.y + speedY * dtMove / 1000);
+    budget.x = Math.min(MOVE_PLAUSIBLE_LAG_PAD_H + speedX * MAX_MOVEMENT_CREDIT_MS / 1000 + (playerData._dashUntil > now ? movementPhysics.dashMaxSpeed * movementPhysics.dashDurationMs / 1000 : 0), budget.x + speedX * dtMove / 1000);
+    budget.y = Math.min(MOVE_PLAUSIBLE_LAG_PAD_V + speedY * MAX_MOVEMENT_CREDIT_MS / 1000 + (playerData._dashUntil > now ? dashVerticalSpeed * movementPhysics.dashDurationMs / 1000 : 0), budget.y + speedY * dtMove / 1000);
+    if (acceptedDash) {
+      const distance = movementPhysics.dashMaxSpeed * movementPhysics.dashDurationMs / 1000;
+      budget.x += distance;
+      budget.y += dashVerticalSpeed * movementPhysics.dashDurationMs / 1000;
+    }
     const dx = rawX - playerData.x, dy = rawY - playerData.y;
     const moveX = Math.sign(dx) * Math.min(Math.abs(dx), budget.x);
     const moveY = Math.sign(dy) * Math.min(Math.abs(dy), budget.y);
@@ -267,7 +310,8 @@ function handlePlayerInput(room, socketId, inputData) {
       playerData.animation = inputData.animation.slice(0, 80);
     }
     if (Number.isFinite(Number(inputData.vx))) {
-      const nextVx = Math.max(-MOVE_PLAUSIBLE_SPEED_H, Math.min(MOVE_PLAUSIBLE_SPEED_H, Number(inputData.vx)));
+      const velocityLimit = Math.max(MOVE_PLAUSIBLE_SPEED_H, dashSpeedAllowance);
+      const nextVx = Math.max(-velocityLimit, Math.min(velocityLimit, Number(inputData.vx)));
       const currentVx = Number(playerData.vx) || 0;
       const keepCurrentVx =
         Math.sign(currentVx) !== 0 &&
@@ -292,6 +336,10 @@ function handlePlayerInput(room, socketId, inputData) {
     updateBodyGeometry(playerData, room);
     playerData._lastPositionPacketAt = now;
 
+    if (dashCollision?.left || dashCollision?.right) playerData.vx = 0;
+    if (dashCollision?.up || dashCollision?.down) playerData.vy = 0;
+    if (collisionClamped) correctPosition(room, playerData, packetSeq, { reason: 'collision', contacts: dashCollision });
+    resolveStomp(room, playerData, now);
     pushPositionHistory(playerData, now);
     netTestLogger.noteInput(room, playerData, now, {
       dx: rawX - prevInputX,
@@ -338,7 +386,9 @@ function handlePlayerInputIntent(room, socketId, intentData) {
     jumpHeld: !!intentData.jumpHeld,
     jumpPressed: !!intentData.jumpPressed,
     grounded: playerData.grounded === true,
-    ducking: intentData.ducking === true && playerData.grounded === true,
+    ducking: intentData.ducking === true &&
+      playerData.grounded === true &&
+      (playerData.ducking === true || Date.now() >= Number(playerData._duckAvailableAt || 0)),
     facing: Number(intentData.facing) === -1 ? -1 : 1,
     vx: playerData.vx || 0,
     vy: playerData.vy || 0,
@@ -355,6 +405,9 @@ function handlePlayerInputIntent(room, socketId, intentData) {
   }
 
   playerData._currentInputIntent = normalizedIntent;
+  if (playerData.ducking === true && !normalizedIntent.ducking) {
+    playerData._duckAvailableAt = Date.now() + DUCK_REENTRY_DELAY_MS;
+  }
   playerData.ducking = normalizedIntent.ducking;
   updateBodyGeometry(playerData, room);
   playerData._lastInputIntent = normalizedIntent;

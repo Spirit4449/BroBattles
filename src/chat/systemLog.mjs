@@ -2,10 +2,10 @@ const kinds = new Set(['join', 'leave', 'map', 'mode', 'battle']);
 const normalize = value => String(value || '').trim().toLowerCase();
 export function systemLogBody(message, currentUsername) {
   if (message.kind !== 'battle') return String(message.body || '');
-  if (message.winnerTeam === 'draw' || message.winnerTeam === null) return 'Battle ended — draw';
+  if (message.winnerTeam === 'draw' || message.winnerTeam === null) return 'Battle ended. Draw';
   const player = message.participants?.find(player => normalize(player.name) === normalize(currentUsername));
   if (!player?.team || !message.winnerTeam) return 'Battle ended';
-  return normalize(player.team) === normalize(message.winnerTeam) ? 'Battle ended — You won' : 'Battle ended — You lost';
+  return normalize(player.team) === normalize(message.winnerTeam) ? 'Battle ended. You won' : 'Battle ended. You lost';
 }
 export function formatSystemLogTime(createdAt, now = new Date()) {
   const date = new Date(createdAt);

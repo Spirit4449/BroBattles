@@ -225,7 +225,7 @@ export function spawnLandingImpact(scene, x, y, opts = {}) {
     ease: "Quad.easeOut",
   });
 
-  const puffCount = Math.round(7 + intensity * 5);
+  const puffCount = Math.round((7 + intensity * 5) * (opts.smokeMultiplier || 1));
   for (let i = 0; i < puffCount; i++) {
     const side = i % 2 === 0 ? -1 : 1;
     const lateralSpeed = Phaser.Math.Between(
@@ -734,7 +734,7 @@ export function spawnHealthMarker(scene, x, y, delta, opts = {}) {
   });
   marker.setOrigin(0.5);
   marker.setDepth(depth);
-  marker.setShadow(0, 2, glowColor, 5, false, true);
+  marker.setShadow(0, 2, glowColor, 2, false, true);
   marker.setScale(0.65);
   const float = opts.floatDistance || 28;
   const duration = opts.duration || 820;
@@ -1265,3 +1265,17 @@ export function triggerDamageScreenPulse(scene, opts = {}) {
 
 // Note: character-specific effects (like Draven's fire trail) live in
 // their own files under src/characters/<char>/effects.js.
+
+/** Heavy dash-down impact: wider dust/debris and two bright pressure rings. */
+export function spawnStompImpact(scene, x, y, opts = {}) {
+  spawnLandingImpact(scene, x, y, { impactVelocity: 1200, fallDistance: 400,
+    bodyWidth: 73.333, smokeMultiplier: 3, cameraShake: false });
+  for (const [radius, delay] of [[60.133, 0], [44, 65]]) {
+    const ring = scene.add.graphics().setPosition(x, y - 2).setDepth(31);
+    ring.lineStyle(5, 0xb9edff, 0.95);
+    ring.strokeEllipse(0, 0, radius * 2, 24);
+    scene.tweens.add({ targets: ring, scaleX: 110 / radius, scaleY: 1.8,
+      alpha: 0, duration: 360, delay, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+  }
+  if (opts.cameraShake) scene.cameras?.main?.shake?.(120, 0.006);
+}

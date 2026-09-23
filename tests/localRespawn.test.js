@@ -79,6 +79,7 @@ test('match healing uses the health power-up tick once even when health was alre
     triggerDamageScreenPulse: noop,
     triggerDamageCameraShake: noop,
     playSpriteAnimation: noop,
+    playPlayerSound: (scene, _source, key, options) => scene.sound.play(key, options),
   }), window: {}, Date: { now: () => now } });
 
   const handlers = {};
@@ -124,4 +125,34 @@ test('match healing uses the health power-up tick once even when health was alre
   handlers['powerup:tick']({ username: 'self', type: 'health' });
   handlers['health-update']({ username: 'self', health: 1000, cause: 'heal' });
   assert.equal(sounds.length, 3, 'reverse notification order must also play once');
+});
+
+test('match playback includes the freeze power-up tick', () => {
+  const exports = {};
+  const noop = () => {};
+  const code = babel.transformSync(fs.readFileSync(require.resolve('../src/match/matchCoordinator.js'), 'utf8'), {
+    babelrc: false, configFile: false,
+    presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  }).code;
+  vm.runInNewContext(code, { exports, require: () => ({
+    spawnDamageImpact: noop, spawnDuckGuardImpact: noop,
+    spawnDeathBurst: noop, spawnSpawnBurst: noop,
+    triggerDamageScreenPulse: noop, triggerDamageCameraShake: noop,
+    playSpriteAnimation: noop,
+    playPlayerSound: (scene, _source, key, options) => scene.sound.play(key, options),
+  }), window: {} });
+
+  const handlers = {};
+  const sounds = [];
+  const coordinator = exports.createMatchCoordinator({
+    socket: { on: (name, fn) => { handlers[name] = fn; }, off: noop },
+    getGameScene: () => ({ sound: { play: (key, config) => sounds.push({ key, config }) } }),
+    getUsername: () => 'self', getPlayer: () => ({ x: 0, y: 0 }),
+    powerupTickSounds: { freeze: { key: 'pu-tick-freeze', options: { volume: 0.7 } } },
+    getGameEnded: () => true, getIsLiveGame: () => true,
+  });
+  coordinator.register();
+
+  handlers['powerup:tick']({ username: 'self', type: 'freeze' });
+  assert.deepEqual(sounds, [{ key: 'pu-tick-freeze', config: { volume: 0.7 } }]);
 });

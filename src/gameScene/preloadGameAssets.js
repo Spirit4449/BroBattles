@@ -25,6 +25,8 @@ export function preloadGameAssets({
   // Level-balanced movement SFX and small randomized footstep set.
   preloadTerrainAudio(scene, staticPath);
   scene.load.audio("sfx-jump", `${staticPath}/movement/jump.mp3`);
+  scene.load.audio("sfx-stomp", `${staticPath}/movement/stomp.mp3`);
+  scene.load.audio("sfx-dash", `${staticPath}/movement/dash.mp3`);
   scene.load.audio("sfx-walljump", `${staticPath}/movement/wall-jump.mp3`);
   scene.load.audio("sfx-sliding", `${staticPath}/movement/wall-slide.mp3`);
   scene.load.audio("sfx-fall-air", `${staticPath}/movement/fall-wind.mp3`);

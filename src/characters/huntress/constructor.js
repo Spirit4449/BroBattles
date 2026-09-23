@@ -6,6 +6,7 @@ import { performHuntressArrowSpread } from "./attack";
 import { executeDefaultAttack } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 const NAME = "huntress";
 
@@ -18,9 +19,9 @@ class Huntress extends CharacterEntityBase {
   }
 
   static sounds = {
-    attack: { key: "huntress-attack", volume: 0.55 },
-    hit: { key: "huntress-hit", volume: 0.55 },
-    special: { key: "huntress-special", volume: 0.6 },
+    attack: { key: "huntress-attack", volume: 0.48 },
+    hit: { key: "huntress-hit", volume: 0.48 },
+    special: { key: "huntress-special", volume: 0.56 },
   };
 
   static preload(scene, staticPath = "/assets", options = {}) {
@@ -69,6 +70,7 @@ class Huntress extends CharacterEntityBase {
     const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
     const type = String(data.type || "").toLowerCase();
     if (type === `${NAME}-arrow`) {
+      playPlayerSound(scene, ownerSprite, "huntress-attack", { volume: 0.48 });
       playSpriteAnimation({
         scene,
         sprite: ownerSprite,

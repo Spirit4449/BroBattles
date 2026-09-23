@@ -21,12 +21,14 @@ function load(file, dependencies = {}) {
 }
 const motion = load('../src/characters/thorg/weaponMotion.js', { './handAnchors.json': anchors });
 const flips = load('../src/characters/shared/flipLock.js');
+const playerAudio = load('../src/gameScene/playerAudio.js');
 const weaponModule = load('../src/characters/thorg/weapon.js', {
   '../../shared/projectilePresentation': require('../src/shared/projectilePresentation'),
   './weaponMotion': motion,
   '../../shared/thorgSweep': sweep,
   '../shared/flipLock': flips,
   '../shared/animationState': { playSpriteAnimation() {}, markOneShotAnimation() {} },
+  '../../gameScene/playerAudio': playerAudio,
 });
 
 function object() {
@@ -71,6 +73,7 @@ function harness() {
     body: { velocity: { y: 0 } },
     anims: { currentAnim: { duration: 900 }, timeScale: 1 },
   });
+  scene._localPlayerAudioSprite = body;
   return { scene, body, images, graphics, sounds, tick(delta) {
     scene.events.emit('update', 0, delta); scene.events.emit('postupdate', 0, delta);
   }};

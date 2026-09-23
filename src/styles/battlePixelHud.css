@@ -1,0 +1,162 @@
+/* Battle-only shared frame: the chat launcher's stepped black pixel border. */
+body :is(#game-timer-hud, .fullscreen-toggle, .bb-dash-hud,
+  .bb-chat-button, #battle-keybind-hud .controls-mini-toggle) {
+  --battle-pixel-frame: 0 4px #03060b, 0 -4px #03060b,
+    4px 0 #03060b, -4px 0 #03060b, 0 8px #0005,
+    4px 4px #0005, -4px 4px #0005, inset 0 3px #ffffff30;
+  border: 0;
+  border-radius: 0;
+  background-color: #102744;
+  background-image: linear-gradient(90deg, #10274430, #102744dd 45%, #10274460),
+    url('/assets/chromas/lobby-chroma-mosaic.svg');
+  background-size: auto, 288px 48px;
+  box-shadow: var(--battle-pixel-frame);
+}
+/* Settings, Controls, and Battle Chat share one outer shell; their controls
+   and content panels keep their own colors and layout. */
+body :is(.site-settings-window.site-settings-side,
+  #battle-keybind-hud .controls-popover, .bb-chat-game-panel.bb-chat-shell) {
+  border: var(--bb-border-width) solid var(--bb-border);
+  border-radius: var(--bb-radius-window);
+  background: var(--bb-surface-gradient);
+  box-shadow: var(--bb-frame-shadow);
+}
+body .site-settings-window.site-settings-side:not(:focus-within) {
+  opacity: .88;
+  filter: brightness(.84);
+}
+body .site-settings-window.site-settings-side {
+  transition: opacity 180ms ease, filter 180ms ease;
+}
+body #battle-keybind-hud .controls-dash-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+  color: #e5efff;
+  font: 9px/1.3 "Press Start 2P", "Lato", sans-serif;
+}
+body #battle-keybind-hud .controls-dash-row kbd {
+  min-width: 66px;
+  padding: 5px 8px;
+  text-transform: uppercase;
+}
+/* Use the free space beside the timer until three players per team no longer
+   fit; the narrow layout retains the original edge columns. */
+@media (min-width: 760px) {
+  body:not(.mobile-game-ui) #team-status-hud {
+    top: 14px;
+    left: 50%;
+    right: auto;
+    width: min(500px, calc(100vw - 150px));
+    /* Keep centering separate from the entrance animation's transform. */
+    translate: -50% 0;
+    transform: none;
+    align-items: flex-start;
+  }
+  body:not(.mobile-game-ui) #team-status-hud .team-hud-side {
+    width: calc(50% - 85px);
+    flex-direction: row;
+    gap: 0;
+  }
+  body:not(.mobile-game-ui) #team-status-hud .team-hud-side-left {
+    justify-content: flex-end;
+  }
+  body:not(.mobile-game-ui) #team-status-hud .team-hud-side-right {
+    justify-content: flex-start;
+    align-items: flex-start;
+    margin-right: 0;
+  }
+  body:not(.mobile-game-ui) #team-status-hud .team-hud-player-stack {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  body:not(.mobile-game-ui) #team-status-hud .team-hud-player {
+    width: 38px;
+    gap: 3px;
+  }
+  body:not(.mobile-game-ui) #team-status-hud .team-hud-avatar-ring {
+    width: 32px;
+    height: 32px;
+    box-sizing: border-box;
+    padding: 2px;
+  }
+  body:not(.mobile-game-ui) #team-status-hud .team-hud-player-name {
+    max-width: 40px;
+    font-size: 5px;
+  }
+}
+body #team-status-hud .team-hud-avatar-ring {
+  border-radius: 0;
+  box-shadow: 0 3px #03060b, 0 -3px #03060b, 3px 0 #03060b,
+    -3px 0 #03060b, 0 6px #0005;
+}
+body #team-status-hud .team-hud-avatar-core {
+  border-radius: 0;
+  background-image: linear-gradient(135deg,
+    color-mix(in srgb, var(--team-core-start) 65%, transparent), var(--team-core-end)),
+    url('/assets/chromas/lobby-chroma-mosaic.svg');
+  background-size: auto, 288px 48px;
+}
+body #team-status-hud .team-hud-player.enemy .team-hud-avatar-core {
+  border-color: #ba6574;
+}
+body .bb-dash-hud[data-ready="true"] { color: #e3ffe9; }
+body .bb-dash-hud[data-ready="true"] [data-dash-status] { color: #7ef0a1; }
+body .bb-dash-hud[data-ready="true"] .bb-dash-hud__fill {
+  background: linear-gradient(90deg, #25b868, #95ffb8);
+  box-shadow: 0 0 7px #54f89899;
+}
+/* Separate halo stays outside the pixel frame and pulses visibly over scenery. */
+body .bb-dash-hud::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border: 2px solid #7effa9;
+  pointer-events: none;
+  opacity: 0;
+}
+body .bb-dash-hud[data-idle="true"]::after {
+  opacity: var(--dash-pulse-opacity);
+  box-shadow: 0 0 var(--dash-pulse-glow) 3px #54f89888;
+}
+body .bb-dash-hud[data-idle="true"] [data-dash-status],
+body .bb-dash-hud[data-idle="true"] .bb-dash-hud__fill {
+  opacity: var(--dash-pulse-content-opacity);
+  filter: brightness(var(--dash-pulse-brightness));
+}
+body .bb-dash-hud[data-dashing="true"] {
+  color: #fff9bf;
+  background-color: #795012;
+  background-image: linear-gradient(110deg, #ffc40066, #fff8bd99, #ff9b0066),
+    url('/assets/chromas/lobby-chroma-mosaic.svg');
+  background-size: 200% 100%, 288px 48px;
+  box-shadow: var(--battle-pixel-frame), 0 0 12px 5px #ffdd55bb, 0 0 30px #ffb300aa;
+  animation: dash-yellow-chroma 160ms linear infinite, dash-hud-bounce 160ms ease-out;
+}
+body .bb-dash-hud[data-dashing="true"] [data-dash-status] { color: #fffbd6; }
+body .bb-dash-hud[data-dashing="true"] .bb-dash-hud__fill {
+  background: #fff2a3;
+  box-shadow: 0 0 9px #ffe45b;
+}
+@keyframes dash-yellow-chroma {
+  from { background-position: 0% 0, 0 0; }
+  to { background-position: 100% 0, 48px 0; }
+}
+@keyframes dash-hud-bounce {
+  0% { transform: translateX(-50%) scale(1); }
+  35% { transform: translateX(-50%) translateY(-3px) scale(1.07); }
+  70% { transform: translateX(-50%) scale(.98); }
+  100% { transform: translateX(-50%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body .bb-dash-hud, body .bb-dash-hud::after,
+  body .bb-dash-hud [data-dash-status], body .bb-dash-hud__fill {
+    animation: none !important;
+  }
+  body .bb-dash-hud[data-idle="true"][data-halo="true"]::after { opacity: .4; box-shadow: 0 0 8px #54f89866; }
+  body .bb-dash-hud[data-idle="true"] [data-dash-status],
+  body .bb-dash-hud[data-idle="true"] .bb-dash-hud__fill { opacity: 1; filter: none; }
+}

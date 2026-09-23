@@ -10,6 +10,7 @@ import {
   resolveSpriteAnimationKey,
 } from "../shared/animationState.js";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
+import { playerSoundVolume } from "../../gameScene/playerAudio";
 
 const INFERNO = getResolvedCharacterSpecialConfig("draven", "inferno");
 const INFERNO_AIM = getResolvedCharacterSpecialAimConfig("draven");
@@ -247,26 +248,49 @@ export function perform(
   try {
     const sound = scene.sound?.add("draven-special", { volume: 0 });
     if (sound) {
+      const fadeState = { gain: 0 };
+      const updateVolume = () => {
+        sound.volume = playerSoundVolume(scene, player, 0.65) * fadeState.gain;
+      };
       const fade = scene.tweens.add({
-        targets: sound,
-        volume: isOwner ? 0.65 : 0.35,
+        targets: fadeState,
+        gain: 1,
         duration: DRAVEN_INFERNO_RISE_MS,
         ease: "Sine.easeInOut",
+        onUpdate: updateVolume,
       });
-      sound.once("complete", () => {
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        scene.events?.off("update", updateVolume);
+        scene.events?.off("shutdown", cleanup);
+        player.off?.("attack:interrupted", cleanup);
         fade.remove();
         sound.destroy();
-      });
-      if (!sound.play()) {
-        fade.remove();
-        sound.destroy();
-      }
+      };
+      scene.events?.on("update", updateVolume);
+      scene.events?.once("shutdown", cleanup);
+      sound.once("complete", cleanup);
+      player.once?.("attack:interrupted", cleanup);
+      if (!sound.play()) cleanup();
     }
   } catch (_) {}
 
+  const interrupt = () => {
+    if (player._dravenInfernoToken !== token) return;
+    player._movementLockedUntil = player._dravenInfernoUntil = 0;
+    delete player._dravenInfernoToken;
+    unlockFlip();
+    destroyInfernoOverlay(player);
+    if (player.body) player.body.allowGravity = player._dravenInfernoPrevGravity ?? true;
+    delete player._dravenInfernoPrevGravity;
+  };
+  player.once?.("attack:interrupted", interrupt);
   startInfernoVisualLoop(scene, player, token, isOwner);
 
   scene.time.delayedCall(DRAVEN_INFERNO_DURATION_MS, () => {
+    player.off?.("attack:interrupted", interrupt);
     if (!player || !player.active) return;
     if (player._dravenInfernoToken !== token) return;
 

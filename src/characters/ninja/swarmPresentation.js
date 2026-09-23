@@ -1,4 +1,5 @@
 import { markOneShotAnimation, resolveSpriteAnimationKey } from '../shared/animationState';
+import { playPlayerSound } from '../../gameScene/playerAudio';
 
 export function presentSwarmRelease(scene, player, releaseMs, remote = false) {
   if (!player?.active) return;
@@ -12,5 +13,5 @@ export function presentSwarmRelease(scene, player, releaseMs, remote = false) {
       : {key, duration:Math.max(1, releaseMs), repeat:0}, dedicated);
     markOneShotAnimation(player, dedicated ? 'special' : 'throw', releaseMs, {remote});
   }
-  scene.sound?.play('shurikenThrow', {volume:remote ? 0.22 : 0.34, rate:1.28});
+  playPlayerSound(scene, player, 'shurikenThrow', {volume:0.34, rate:1.28});
 }

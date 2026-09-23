@@ -19,6 +19,7 @@ function buildGraph(geometry, character, modifiers = {}) {
   if (cache.has(key)) return cache.get(key);
   const surfaces = geometry.colliders.filter((r) => r.collision.up && r.right - r.left >= 12);
   const edges = new Map(surfaces.map((r) => [r.id, []]));
+  const dashEdges = new Map(surfaces.map((r) => [r.id, []]));
   for (const from of surfaces) {
     const body = characterBody(character);
     const margin = Math.min((from.right - from.left) / 3, body.halfWidth + 4);
@@ -39,8 +40,29 @@ function buildGraph(geometry, character, modifiers = {}) {
       if (existing < 0) list.push(edge);
       else if (edge.duration < list[existing].duration) list[existing] = edge;
     }
+    // Separate resource-dependent edges keep ordinary routes available while
+    // dash recharges. Sample direct climbs and apex dashes for taller/wider gaps.
+    if ((modifiers.speedMult ?? 1) > 0) for (const x of starts) for (const direction of [-1, 0, 1]) {
+      const p = { ...standOn(from, character, x - body.offsetX), isAlive: true };
+      if (!canStandAt(geometry, from, character, p.x)) continue;
+      const choices = [
+        { dash: { x: direction * Math.SQRT1_2, y: direction ? -Math.SQRT1_2 : -1 }, dashFrame: 0 },
+        { dash: { x: 0, y: -1 }, dashFrame: 18 },
+        { dash: { x: direction * Math.SQRT1_2, y: direction ? -Math.SQRT1_2 : -1 }, dashFrame: 18 },
+        ...(direction ? [{ dash: { x: direction, y: 0 }, dashFrame: 18 }] : []),
+      ];
+      for (const choice of choices) {
+        const travel = prepareTraversal(p, { ...choice, direction, jump: choice.dashFrame > 0, wallClimb: false }, geometry, modifiers, 0);
+        if (!travel) continue;
+        const list = dashEdges.get(from.id), edge = { ...travel, takeoffX: p.x };
+        const existing = list.findIndex(e => e.to === edge.to && e.direction === direction &&
+          Math.abs(e.takeoffX - edge.takeoffX) < 75 && Math.abs(e.landingX - edge.landingX) < 100);
+        if (existing < 0) list.push(edge);
+        else if (edge.duration < list[existing].duration) list[existing] = edge;
+      }
+    }
   }
-  const graph = { surfaces, edges, body: characterBody(character), geometry, character };
+  const graph = { surfaces, edges, dashEdges, body: characterBody(character), geometry, character };
   // Bound modifier-specific cached graphs; default graphs are inexpensive to rebuild.
   if (cache.size >= 48) cache.delete(cache.keys().next().value);
   cache.set(key, graph);
@@ -87,7 +109,7 @@ function routePoisonDamage(player, point, route, poisonY, poisonAt, holdMs = 200
 function findRoute(graph, from, to, poisonY = Infinity, options = {}) {
   if (!from || !to) return null;
   const surfaces = new Map(graph.surfaces.map(s => [s.id, s]));
-  const keyOf = (id, x) => `${id}:${Number.isFinite(x) ? Math.round(x) : ''}`;
+  const keyOf = (id, x, dashUsed = false) => `${id}:${Number.isFinite(x) ? Math.round(x) : ''}:${dashUsed}`;
   const atGoal = (id, x) => id === to && (!graph.geometry || !Number.isFinite(options.goalX) || !Number.isFinite(x) ||
     canWalkBetween(graph.geometry, surfaces.get(id), graph.character, x, options.goalX));
   if (atGoal(from, options.startX)) return [];
@@ -99,11 +121,14 @@ function findRoute(graph, from, to, poisonY = Infinity, options = {}) {
     if (atGoal(item.id, item.x)) return item.route;
     // Reaching the same platform on the other side of a wall is a different
     // navigation state. Collapsing both landings prevents routes around blocks.
-    const state = keyOf(item.id, item.x);
+    const state = keyOf(item.id, item.x, item.dashUsed);
     if (visited.has(state) || item.cost > bestCost.get(state)) continue;
     visited.add(state);
-    for (const edge of graph.edges.get(item.id) || []) {
-      const nextState = keyOf(edge.to, edge.landingX);
+    const available = [...(graph.edges.get(item.id) || []),
+      ...(options.allowDash && !item.dashUsed ? graph.dashEdges?.get(item.id) || [] : [])];
+    for (const edge of available) {
+      const dashUsed = !!(item.dashUsed || edge.dash);
+      const nextState = keyOf(edge.to, edge.landingX, dashUsed);
       if (visited.has(nextState)) continue;
       const fromSurface = surfaces.get(item.id);
       if (graph.geometry && Number.isFinite(item.x) &&
@@ -119,7 +144,7 @@ function findRoute(graph, from, to, poisonY = Infinity, options = {}) {
       const cost = item.cost + approach + edge.duration + penalty + exposure * 4;
       if (cost >= (bestCost.get(nextState) ?? Infinity)) continue;
       bestCost.set(nextState, cost);
-      queue.push({ id: edge.to, route: [...item.route, edge], x: edge.landingX,
+      queue.push({ id: edge.to, route: [...item.route, edge], x: edge.landingX, dashUsed,
         cost,
         elapsed: item.elapsed + approach + edge.duration });
     }
@@ -146,25 +171,27 @@ function settleLanding(player, geometry, modifiers, now, poisonY = Infinity) {
 }
 
 function edgeKey(edge, from = edge.from) {
-  return `${from}:${edge.to}:${Math.round(edge.takeoffX)}:${edge.direction}:${Number(edge.jump)}:${Number(edge.wallClimb)}`;
+  return `${from}:${edge.to}:${Math.round(edge.takeoffX)}:${edge.direction}:${Number(edge.jump)}:${Number(edge.wallClimb)}:${edge.dash ? `${edge.dash.x},${edge.dash.y},${edge.dashFrame}` : ''}`;
 }
 
 // Graph samples establish connectivity. Validate the chosen motion again from
 // the actual takeoff state, including residual velocity and wall-jump timing.
 function prepareTraversal(player, edge, geometry, modifiers, now, poisonY = Infinity) {
-  const p = { ...player }, frames = [];
+  const p = { ...player, isAlive: player.isAlive ?? true }, frames = [];
   let airborne = false;
   for (let i = 0; i < 150; i++) {
     const at = now + i * DT;
     const wallJump = edge.wallClimb && p.wallSide && at >= (p._nextWallJump || 0);
     const direction = wallJump ? (p.wallSide === 'left' ? 1 : -1) : edge.direction;
-    const input = { direction, jumpPressed: (edge.jump && i === 0) || !!wallJump };
+    const input = { direction, jumpPressed: (edge.jump && i === 0) || !!wallJump,
+      ...(edge.dash && i === edge.dashFrame ? { dash: edge.dash } : {}) };
     frames.push({ ...input, x: p.x, y: p.y });
     p.flip = direction < 0;
     const result = stepBody(p, input, geometry, DT, at, modifiers);
-    if (result.fell) return null;
+    if (result.fell || (input.dash && !result.events.includes('dash'))) return null;
     airborne ||= !p.grounded;
     if (p.grounded && (airborne || p.platformId !== player.platformId)) {
+      if (edge.dash && i < edge.dashFrame) return null;
       if (p.platformId === player.platformId || (edge.to && p.platformId !== edge.to)) return null;
       const settlement = settleLanding(p, geometry, modifiers, now + (i + 1) * DT, poisonY);
       if (!settlement) return null;

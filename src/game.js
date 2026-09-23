@@ -6,6 +6,8 @@ import { ensureLegalAcceptance } from "./site/shell";
 import "./site/shell.js";
 import { syncLocalEffects } from './players/localStateSync';
 import './styles/mapPlaytest.css';
+import './styles/dashHud.css';
+import './styles/battlePixelHud.css';
 import './styles/levelBadge.css';
 const editorSession = window.location.pathname === '/map-editor/playtest' ? new URLSearchParams(window.location.search).get('session') : null;
 if (editorSession) document.body.classList.add('editor-playtest');
@@ -629,19 +631,17 @@ async function fetchGameData() {
       body: editorSession ? undefined : JSON.stringify({ matchId: Number(matchId) }),
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
     const result = await response.json();
-    if (!result.success) {
-      throw new Error(result.error || "Failed to fetch game data");
+    if (!response.ok || !result.success) {
+      const error = new Error(result.error || "Failed to fetch game data");
+      error.code = result.code;
+      throw error;
     }
 
     return result.gameData;
   } catch (error) {
     console.error("Failed to fetch game data:", error);
-    hud.showSystemNotice?.({
+    if (!window.__BB_NAVIGATION__) hud.showSystemNotice?.({
       title: "Failed To Load Match",
       message: "We couldn't load this match. Returning to the lobby.",
       buttonText: "Lobby",
@@ -707,6 +707,7 @@ async function initializeGame() {
   } catch (error) {
     if(error.code === "CONSENT_CANCELLED") { location.assign("/"); return; }
     console.error("Failed to initialize game:", error);
+    throw error;
   }
 }
 
@@ -1079,6 +1080,7 @@ class GameScene extends Phaser.Scene {
     };
     this._spectatorModeActive = false;
     this._spectatedPlayerName = null;
+    this._spectatedPlayerAudioSprite = null;
     this._spectatorCandidateCount = 0;
     this._spectatorFallbackActive = false;
     this._spectatorCameraTarget = { x: 0, y: 0 };
@@ -1690,6 +1692,7 @@ class GameScene extends Phaser.Scene {
     }
 
     this._spectatedPlayerName = nextName;
+    this._spectatedPlayerAudioSprite = selected?.wrapper?.opponent || null;
     this._spectatorCandidateCount = candidates.length;
     if (changed || candidateCountChanged) {
       hud.setSpectatingPlayer?.(nextName, { canSwitch: candidates.length > 1 });
@@ -1837,6 +1840,7 @@ class GameScene extends Phaser.Scene {
       }
       this._spectatorModeActive = false;
       this._spectatedPlayerName = null;
+      this._spectatedPlayerAudioSprite = null;
       this._spectatorCandidateCount = 0;
       this._spectatorFallbackActive = false;
       this._spectatorCameraFollowing = false;
@@ -2297,6 +2301,7 @@ class GameScene extends Phaser.Scene {
             skinId: wrapper.skinId || "",
             resolveAnimKey,
             logical: chosenAnim,
+            dashDirection: { x: animSrc.dashX, y: animSrc.dashY },
             fallback: "idle",
             force: true,
           });

@@ -8,6 +8,7 @@ import socket from "../../socket"; // owner-only hit events
 import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
 import { emitVaultHitForCircle } from "../shared/vaultTargeting";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 const RETURNING_SHURIKEN_DEFAULTS = getResolvedCharacterAttackConfig(
   "ninja",
@@ -229,7 +230,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     });
     // Play hit SFX locally for the owner
     try {
-      this.scene.sound.play("shurikenHit", { volume: 1, rate: 1.0 });
+      playPlayerSound(this.scene, this.ownerSprite, "shurikenHit", { volume: 1, rate: 1.0 });
     } catch (e) {}
     return true;
   }

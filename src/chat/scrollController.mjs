@@ -36,15 +36,20 @@ export function createChatScrollController(messages, composer, button) {
   const onScroll = () => { following = atBottom(); sync(); };
   messages.addEventListener('scroll', onScroll);
   button.addEventListener('click', jump);
+  let resizeFrame = 0;
   const observer = new ResizeObserver(() => {
-    if (following) messages.scrollTop = messages.scrollHeight;
-    sync();
+    if (resizeFrame) return;
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = 0;
+      if (following) messages.scrollTop = messages.scrollHeight;
+      sync();
+    });
   });
   observer.observe(messages);
   return {
     capture, restore, atBottom, jump,
     showPending(count) { pending = count; following = atBottom(); sync(); },
     reset() { pending = 0; following = true; sync(); },
-    destroy() { observer.disconnect(); messages.removeEventListener('scroll', onScroll); },
+    destroy() { observer.disconnect(); if (resizeFrame) cancelAnimationFrame(resizeFrame); messages.removeEventListener('scroll', onScroll); button.removeEventListener?.('click', jump); },
   };
 }

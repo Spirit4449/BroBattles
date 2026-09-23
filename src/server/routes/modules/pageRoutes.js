@@ -86,11 +86,11 @@ function registerPageRoutes({
     if (redirectIfBanHold(req, res)) return;
     try {
       const rows = await db.runQuery(
-        "SELECT 1 FROM matches WHERE match_id = ? LIMIT 1",
+        "SELECT status FROM matches WHERE match_id = ? LIMIT 1",
         [req.params.matchid],
       );
-      if (!rows.length)
-        return res.sendFile(path.join(distDir, "Errors", "gamenotfound.html"));
+      if (!rows.length || ['completed', 'cancelled'].includes(rows[0].status))
+        return res.redirect('/');
     } catch (e) {
       console.error(e);
     }

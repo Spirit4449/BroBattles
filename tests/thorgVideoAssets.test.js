@@ -7,6 +7,7 @@ const atlas = require('../public/assets/thorg/animations.json');
 const dependencies = {
   '../shared/animationBuilder': require('../src/characters/shared/animationBuilder'),
   '../../shared/thorgSweep': require('../src/shared/thorgSweep'),
+  '../../shared/movementPhysics.json': require('../src/shared/movementPhysics.json'),
 };
 const exportsObject = {};
 vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/characters/thorg/anim'), 'utf8'), {
@@ -14,7 +15,7 @@ vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/c
 }).code, { exports: exportsObject, require: key => dependencies[key] });
 
 test('video atlas respects pose budgets and keeps the original physics dimensions', () => {
-  const expected = { idle: 4, running: 8, throw: 12, jumping: 8, falling: 4, powerup: 7, dying: 8, duck: 1, sliding: 1 };
+  const expected = { idle: 4, running: 8, throw: 12, jumping: 8, falling: 4, powerup: 7, dying: 8, duck: 1, sliding: 1, dashright: 3, dashdiagonal: 3, dashup: 3 };
   for (const [prefix, count] of Object.entries(expected)) {
     const frames = atlas.frames.filter(f => f.filename.startsWith(prefix));
     assert.equal(frames.length, count, prefix);
@@ -129,8 +130,88 @@ test('legacy skins retain their original frame order and rates', () => {
   assert.equal(created.get('thorg-storm-running').frameRate, 8);
   assert.equal(created.get('thorg-storm-idle').frameRate, 6);
   assert.equal(created.has('thorg-storm-dying'), false); // No death art in this skin.
+  assert.equal(created.has('thorg-storm-dashright'), false);
   assert.ok(created.get('thorg-storm-throw').frames.length <= 5);
   for (const animation of created.values()) {
     assert.ok(animation.frames.every(f => f.key === 'thorg-storm'));
+  }
+});
+
+test('three directional dash poses cover one complete dash without looping', () => {
+  const created = setup(atlas);
+  for (const [name, source] of [['dashright', 'right'], ['dashdiagonal', '45'], ['dashup', 'up']]) {
+    const animation = created.get(`thorg-${name}`);
+    assert.equal(animation.frames.length, 3);
+    assert.equal(animation.repeat, 0);
+    assert.equal(1000 * animation.frames.length / animation.frameRate,
+      dependencies['../../shared/movementPhysics.json'].dashDurationMs);
+    assert.ok(atlas.frames.filter(f => f.filename.startsWith(name))
+      .every(f => f.sourceVideo === `thorg_dash_${source}.mp4`));
+  }
+});
+
+test('local and remote Thorg playback map all eight directions, including downward exceptions', () => {
+  const api = {};
+  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/characters/shared/animationState'), 'utf8'), {
+    babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  }).code, { exports: api });
+  for (const [x, y, expected] of [[1, 0, 'dashright'], [-1, 0, 'dashright'],
+    [1, -1, 'dashdiagonal'], [-1, -1, 'dashdiagonal'], [0, -1, 'dashup'],
+    [1, 1, 'dashright'], [-1, 1, 'dashright'], [0, 1, 'ducking']]) {
+    for (const remote of [false, true]) {
+      let played;
+      const direction = { x, y };
+      const sprite = { anims: { play: key => { played = key; } },
+        ...(remote ? {} : { _dash: direction }) };
+      api.playCharacterAnimation({ scene: {}, sprite, character: 'thorg', logical: 'dashing',
+        ...(remote ? { dashDirection: direction } : {}),
+        resolveAnimKey: (_scene, character, wanted) => `${character}-${wanted}` });
+      assert.equal(played, `thorg-${expected}`, `${remote ? 'remote' : 'local'} ${x},${y}`);
+    }
+  }
+  assert.equal(api.directionalDashAnimation('ninja', { x: 1, y: -1 }), 'dashing');
+  assert.equal(api.directionalDashAnimation('thorg', {}), 'dashing');
+  for (const character of ['ninja', 'wizard', 'huntress', 'gloop', 'draven']) {
+    assert.equal(api.directionalDashAnimation(character, { x: 0, y: 1 }), 'ducking');
+  }
+});
+
+test('horizontal dash holds its final pose through early coast and yields immediately to other actions', () => {
+  let now = 1000;
+  const api = {};
+  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/characters/shared/animationState'), 'utf8'), {
+    babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  }).code, { exports: api, Date: { now: () => now } });
+  for (const remote of [false, true]) {
+    const calls = [];
+    const sprite = { anims: { currentAnim: null, play(key) {
+      calls.push(key); this.currentAnim = { key };
+    } } };
+    const play = (logical, y = 0) => {
+      if (!remote) sprite._dash = logical === 'dashing' ? { x: 1, y } : null;
+      return api.playCharacterAnimation({ scene: {}, sprite, character: 'thorg', logical,
+        ...(remote ? { dashDirection: { x: 1, y } } : {}),
+        resolveAnimKey: (_scene, character, wanted) => `${character}-${wanted}` });
+    };
+    now = 1000;
+    play('dashing');
+    now = 1160;
+    sprite.anims.isPlaying = false;
+    assert.equal(play('running'), 'thorg-dashright');
+    now = 1319;
+    assert.equal(play('falling'), 'thorg-dashright');
+    assert.equal(calls.length, 1, 'held pose must not restart');
+    now = 1320;
+    assert.equal(play('running'), 'thorg-running');
+    for (const action of ['throw', 'special', 'jumping', 'ducking', 'sliding', 'dying', 'idle']) {
+      now += 1000;
+      play('dashing');
+      now += 170;
+      assert.equal(play(action), `thorg-${action}`);
+    }
+    now += 1000;
+    play('dashing', 1);
+    now += 160;
+    assert.equal(play('falling'), 'thorg-falling', 'downward diagonal keeps original timing');
   }
 });

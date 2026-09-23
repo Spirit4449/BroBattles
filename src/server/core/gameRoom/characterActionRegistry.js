@@ -94,7 +94,9 @@ function scheduleWindupRelease(
     actionNow,
   );
 
+  const interruptSeq = playerData._attackInterruptSeq || 0;
   const emitRelease = () => {
+    if ((playerData._attackInterruptSeq || 0) !== interruptSeq) return;
     if (
       room.status !== "active" ||
       !playerData?.isAlive ||

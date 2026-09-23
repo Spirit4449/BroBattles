@@ -12,6 +12,7 @@ import {
 import { executeDefaultAttack } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 // Single source of truth for this character's name/key
 const NAME = "draven";
@@ -180,7 +181,7 @@ class Draven extends CharacterEntityBase {
     });
     // Play remote attack start SFX (mirror owner's throw)
     try {
-      scene.sound && scene.sound.play("draven-fireball", { volume: 0.4 });
+      playPlayerSound(scene, ownerSprite, "draven-fireball", { volume: 0.4 });
     } catch (_) {}
     // Impact presentation is owned by the authoritative hit event. A delayed
     // caster-position copy duplicates the target impact and can fire on misses.

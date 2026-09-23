@@ -27,5 +27,16 @@
   "wallJumpHorizontalGracePx": 2,
   "wallSlideReentryDelayMs": 220,
   "minSpeedMult": 0.5,
-  "maxSpeedMult": 2
+  "maxSpeedMult": 2,
+  "dashSpeed": 560,
+  "dashDownSpeed": 840,
+  "dashDurationMs": 160,
+  "dashCooldownMs": 5000,
+  "dashMaxSpeed": 560,
+  "dashSurfaceDrag": 600,
+  "dashWallDragRate": 1.2,
+  "dashVerticalResistance": 0.0015,
+  "dashSteerAccel": 6500,
+  "dashCoastDrag": 900,
+  "dashCoastMs": 850
 }

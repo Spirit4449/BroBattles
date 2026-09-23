@@ -6,6 +6,7 @@ import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
 
 import { createFireballParticles } from "./fireballParticles";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 const FIREBALL = getResolvedCharacterAttackConfig("wizard", "fireball");
 
@@ -128,15 +129,15 @@ function spawnImpact(scene, x, y, playSound = true) {
     }
     // Play impact sound (audible to everyone if called from remote visual too)
     if (playSound) {
-      const played = scene.sound?.play("wizard-impact", { volume: 0.45 });
+      const played = playPlayerSound(scene, { x, y }, "wizard-impact", { volume: 0.45 });
       if (!played) {
-        scene.sound?.play("sfx-damage", { volume: 0.4 });
+        playPlayerSound(scene, { x, y }, "sfx-damage", { volume: 0.4 });
       }
     }
   } catch (_) {}
 }
 
-function playWizardCastWindup(scene, ownerSprite, volume = 0.3) {
+export function playWizardCastWindup(scene, ownerSprite, volume = 0.3) {
   playSpriteAnimation({
     scene,
     sprite: ownerSprite,
@@ -147,9 +148,9 @@ function playWizardCastWindup(scene, ownerSprite, volume = 0.3) {
   });
 
   try {
-    const played = scene.sound?.play("wizard-fireball", { volume });
+    const played = playPlayerSound(scene, ownerSprite, "wizard-fireball", { volume });
     if (!played) {
-      scene.sound?.play("draven-fireball", {
+      playPlayerSound(scene, ownerSprite, "draven-fireball", {
         volume: Math.max(0.2, volume * 0.8),
       });
     }
@@ -424,6 +425,7 @@ export function chargeWizardFireball(scene, owner, payload = {}) {
     scene.events.off("shutdown", destroy);
     scene.events.off("presentation:reset", destroy);
     owner.off?.("destroy", destroy);
+    owner.off?.("attack:interrupted", destroy);
   };
   const destroy = () => { detach(); sprite.destroy(); };
   const update = (_time, delta = 16.67) => {
@@ -444,5 +446,6 @@ export function chargeWizardFireball(scene, owner, payload = {}) {
   scene.events.once("shutdown", destroy);
   scene.events.once("presentation:reset", destroy);
   owner.once?.("destroy", destroy);
+  owner.once?.("attack:interrupted", destroy);
   return sprite;
 }

@@ -58,6 +58,8 @@ export function createGameHudController({
   let collapseKeybindHud = null;
   let stopGuideUpdates = null;
   let spectatedPlayerName = null;
+  let statusBannerHideTimer = null;
+  let spectateHudHideTimer = null;
 
   function _fallbackCatalog() {
     return {
@@ -582,25 +584,28 @@ export function createGameHudController({
     const banner = document.getElementById("game-status-banner");
     const textEl = document.getElementById("game-status-banner-text");
     if (!banner || !textEl) return;
+    clearTimeout(statusBannerHideTimer);
+    const wasHidden = banner.classList.contains("hidden");
     textEl.textContent = String(text || "");
     banner.classList.remove("hidden", "variant-info", "variant-danger");
     banner.classList.add(
       variant === "danger" ? "variant-danger" : "variant-info",
     );
-    requestAnimationFrame(() => {
-      banner.classList.add("show");
-    });
+    // Establish the hidden state before starting the transition on first reveal.
+    if (wasHidden) void banner.offsetWidth;
+    banner.classList.add("show");
   }
 
   function hideStatusBanner() {
     const banner = document.getElementById("game-status-banner");
-    if (!banner) return;
+    if (!banner?.classList.contains("show")) return;
     banner.classList.remove("show");
-    setTimeout(() => {
+    clearTimeout(statusBannerHideTimer);
+    statusBannerHideTimer = setTimeout(() => {
       if (!banner.classList.contains("show")) {
         banner.classList.add("hidden");
       }
-    }, 220);
+    }, 320);
   }
 
   function showWaitingForPlayersBanner() {
@@ -633,14 +638,30 @@ export function createGameHudController({
     const nameEl = document.getElementById("spectate-player-name");
     if (!root || !nameEl) return;
 
+    const wasVisible = !!spectatedPlayerName;
     spectatedPlayerName = name ? String(name) : null;
-    root.classList.toggle("hidden", !spectatedPlayerName);
     root.setAttribute("aria-hidden", spectatedPlayerName ? "false" : "true");
     nameEl.textContent = spectatedPlayerName || "No player available";
     root.querySelectorAll(".spectate-arrow").forEach((button) => {
       button.disabled = !canSwitch;
     });
     document.body.classList.toggle("spectating-active", !!spectatedPlayerName);
+
+    if (spectatedPlayerName) {
+      clearTimeout(spectateHudHideTimer);
+      const wasHidden = root.classList.contains("hidden");
+      root.classList.remove("hidden");
+      if (!wasVisible) {
+        if (wasHidden) void root.offsetWidth;
+        root.classList.add("show");
+      }
+    } else if (wasVisible) {
+      root.classList.remove("show");
+      clearTimeout(spectateHudHideTimer);
+      spectateHudHideTimer = setTimeout(() => {
+        if (!spectatedPlayerName) root.classList.add("hidden");
+      }, 320);
+    }
 
     for (const [playerName, entry] of teamRows) {
       entry.row?.classList?.toggle(

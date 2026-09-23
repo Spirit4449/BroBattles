@@ -54,7 +54,9 @@ function activate(caster, now, room, payload = null) {
   };
 
   const startup = Math.max(0, Number(HOOK.castDelayMs ?? 0));
+  const interruptSeq = caster._attackInterruptSeq || 0;
   const release = () => {
+    if ((caster._attackInterruptSeq || 0) !== interruptSeq) return;
     if (
       room.status !== "active" ||
       !caster.isAlive ||

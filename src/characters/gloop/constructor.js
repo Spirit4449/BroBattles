@@ -11,6 +11,7 @@ import { playHookAction, playHookCatchAction } from "./special";
 import { executeDefaultAttack } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 const NAME = "gloop";
 
@@ -44,7 +45,7 @@ class Gloop extends CharacterEntityBase {
   static textureKey = NAME;
 
   static sounds = {
-    attack: { key: `${NAME}-attack`, volume: 0.58 },
+    attack: { key: `${NAME}-attack`, volume: 0.5 },
     hit: { key: `${NAME}-hit`, volume: 0.5 },
     special: { key: `${NAME}-special`, volume: 0.62 },
     pull: { key: `${NAME}-pull`, volume: 0.54 },
@@ -121,6 +122,7 @@ class Gloop extends CharacterEntityBase {
     const type = String(data.type || "").toLowerCase();
     if (type === `${NAME}-slimeball`) {
       playOwnerThrow(scene, ownerSprite);
+      playPlayerSound(scene, ownerSprite, "gloop-attack", { volume: 0.5 });
       return true;
     }
     if (type === `${NAME}-slimeball-splat`) {

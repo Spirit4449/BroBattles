@@ -6,7 +6,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 
 // Small DOM transport double: requests, style completion, and cleanup resolve
 // independently, so the real router can be exercised in adverse order.
-function setup({ deferStyles = false, deferCleanup = false, initialStyles = [], imageClass, animate, destinationStyles = ['https://game.test/bundles/index.css'], injectedScripts = [] } = {}) {
+function setup({ gameDataResponse, deferStyles = false, deferCleanup = false, initialStyles = [], imageClass, animate, destinationStyles = ['https://game.test/bundles/index.css'], injectedScripts = [] } = {}) {
   const location = new URL('https://game.test/game/1');
   const state = { fetches: [], executed: [], preloaded: [], styleRequests: [], disposed: 0, bodies: 0, status: null, warmed: 0, movedStyles: [], progressWrites: [] };
   let now = 0, timerId = 0;
@@ -112,6 +112,7 @@ function setup({ deferStyles = false, deferCleanup = false, initialStyles = [], 
     fetch: async (url, options) => {
       state.fetches.push({ url: new URL(url, location).pathname, options });
       if (url === '/status') return { ok: true, json: async () => status };
+      if (url === '/gamedata') return gameDataResponse();
       return { ok: true, url, text: async () => '<script src="/bundles/index.bundle.js"></script>' };
     },
     DOMParser: class {
@@ -375,4 +376,63 @@ test('lobby return advances on completed work and never resets during the status
   }
   advanceTime(1000);
   assert.equal(document.getElementById('bb-route-transition'), null);
+});
+
+for (const code of ['MATCH_UNAVAILABLE', 'MATCH_ENDED']) {
+  test(`retry returns to the player's lobby when the server reports ${code}`, async () => {
+    const env = setup({ gameDataResponse: async () => ({ ok: false, json: async () => ({ code }) }) });
+    env.nav.fail(new Error('Timed out'));
+    await env.document.getElementById('bb-route-transition').querySelector('button').onclick();
+    assert.deepEqual(env.state.fetches.map(r => r.url), ['/gamedata', '/status', '/party/7']);
+    assert.equal(env.location.pathname, '/party/7');
+  });
+}
+
+test('retry is single flight and a failed retry has a cooldown', async () => {
+  let reject;
+  const env = setup({ gameDataResponse: () => new Promise((_, fail) => { reject = fail; }) });
+  env.nav.fail(new Error('Startup failed'));
+  const button = env.document.getElementById('bb-route-transition').querySelector('button');
+  const recovery = button.onclick();
+  await button.onclick();
+  assert.equal(button.disabled, true);
+  assert.equal(env.state.fetches.length, 1);
+  reject(new Error('Offline'));
+  await recovery;
+  await button.onclick();
+  assert.equal(env.state.fetches.length, 1);
+  assert.equal(button.disabled, true);
+  env.advanceTime(2000);
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, 'Try again');
+});
+
+test('a live match retries its destination and stale ready events cannot dismiss failure', async () => {
+  const env = setup({ gameDataResponse: async () => ({ ok: true, json: async () => ({ success: true }) }) });
+  env.nav.fail(new Error('Asset failure'));
+  env.document.dispatchEvent(new Event('game:ready'));
+  env.advanceTime(1000);
+  const overlay = env.document.getElementById('bb-route-transition');
+  assert.ok(overlay);
+  await overlay.querySelector('button').onclick();
+  assert.deepEqual(env.state.fetches.map(r => r.url), ['/gamedata', '/game/1']);
+});
+
+test('known terminal startup errors return to the lobby without rechecking the match', async () => {
+  const env = setup();
+  env.nav.fail(Object.assign(new Error('Match ended'), { code: 'MATCH_ENDED' }));
+  await env.document.getElementById('bb-route-transition').querySelector('button').onclick();
+  assert.deepEqual(env.state.fetches.map(r => r.url), ['/status', '/party/7']);
+});
+
+test('a match check that finishes after another navigation cannot redirect the player', async () => {
+  let resolve;
+  const env = setup({ gameDataResponse: () => new Promise(done => { resolve = done; }) });
+  env.nav.fail(new Error('Startup failed'));
+  const retry = env.document.getElementById('bb-route-transition').querySelector('button').onclick();
+  await env.nav.navigate('/party/3');
+  resolve({ ok: false, json: async () => ({ code: 'MATCH_ENDED' }) });
+  await retry;
+  assert.equal(env.location.pathname, '/party/3');
+  assert.deepEqual(env.state.fetches.map(r => r.url), ['/gamedata', '/party/3']);
 });

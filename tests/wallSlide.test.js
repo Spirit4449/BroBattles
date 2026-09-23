@@ -24,10 +24,10 @@ function localSlide(overrides = {}) {
 test('neutral contact attaches and caps descent; holding up brakes further', () => {
   const normal = localSlide();
   assert.equal(normal.result, true);
-  assert.equal(normal.player.body.velocity.x, tuning.wallSlideAttachSpeed);
+  assert.equal(normal.player.body.velocity.x, 0);
   assert.equal(normal.player.body.velocity.y, 120);
   const brake = localSlide({ wallSide: 'left', wallBrakeHeld: true });
-  assert.equal(brake.player.body.velocity.x, -tuning.wallSlideAttachSpeed);
+  assert.equal(brake.player.body.velocity.x, 0);
   assert.equal(brake.player.body.velocity.y, 75);
 });
 
@@ -152,4 +152,10 @@ test('wall jumps require current proximity within 12 pixels, even after recent c
       assert.equal(next.result, null);
     }
   }
+});
+
+test('wall slide never overrides sideways momentum or steering acceleration', () => {
+ const state=localSlide();state.player.body.velocity.x=-200;state.player.ax=-3000;
+ localSlide({player:state.player});
+ assert.equal(state.player.body.velocity.x,-200);assert.equal(state.player.ax,-3000);
 });

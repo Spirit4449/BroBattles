@@ -47,7 +47,7 @@ test("END_BATTLE_MESSAGES preserves legacy messages alongside new variety", () =
     "new victory message should be present",
   );
   assert.ok(
-    END_BATTLE_MESSAGES.defeat.includes("Close battle — bounce back stronger!"),
+    END_BATTLE_MESSAGES.defeat.includes("Close battle. Bounce back stronger!"),
     "new defeat message should be present",
   );
 });
@@ -108,4 +108,3 @@ test("gameOverScreenController re-exports message helpers and accepts getMessage
 
   assert.equal(typeof controller.showGameOverScreen, "function");
 });
-

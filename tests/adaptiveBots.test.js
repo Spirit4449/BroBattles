@@ -183,7 +183,7 @@ test("partial assembly maximizes humans, preserves party sides, excludes incompa
   );
 });
 
-test("ordinary bot identities have no accounts, support troll/guest/real names, and median character levels", () => {
+test("ordinary bot identities have no accounts, support troll/guest/real names, and varied nearby character levels", () => {
   assert.ok(BOT_NAMES.length >= 2000);
   assert.equal(new Set(BOT_NAMES).size, BOT_NAMES.length);
   assert.ok(TROLL_NAMES.length >= 50);
@@ -215,13 +215,18 @@ test("ordinary bot identities have no accounts, support troll/guest/real names, 
   assert.equal(new Set(bots.map((b) => b.name)).size, 4);
   for (const b of bots) {
     assert.equal(b.user_id, null);
-    assert.equal(b.level, 3);
+    const referenceLevel = b.team === 'team1' ? 1 : 5;
+    assert.ok(Math.abs(b.level - referenceLevel) <= 2);
     assert.notEqual(b.trophies, 1000);
-    assert.ok(Math.abs(b.trophies - 1000) <= 80);
+    assert.ok(Math.abs(b.trophies - 1000) <= 250);
     assert.equal(b.difficulty.trophies, 1000);
     assert.notEqual(b.name, humans[0].name);
     assert.notEqual(b.name, humans[1].name);
   }
+  assert.ok(
+    bots.every((b) => b.level !== (b.team === 'team1' ? 1 : 5)),
+    'bots are not generated as exact copies of their team reference level',
+  );
 
   // Verify multiple runs generate troll, guest, or real names without collision
   const sampleBots = [];

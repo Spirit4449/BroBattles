@@ -185,6 +185,15 @@ export function resetAirborneJumpAnimation(sprite) {
   sprite._bbAnimationState = state;
 }
 
+// Dash directions use screen coordinates (negative Y points upward).
+export function directionalDashAnimation(character, direction) {
+  if (direction?.x === 0 && direction?.y > 0) return "ducking";
+  if (String(character).toLowerCase() !== "thorg" ||
+      !Number.isFinite(direction?.x) || !Number.isFinite(direction?.y)) return "dashing";
+  if (direction.y < 0) return direction.x ? "dashdiagonal" : "dashup";
+  return direction.x ? "dashright" : "falling";
+}
+
 export function playCharacterAnimation({
   scene,
   sprite,
@@ -196,14 +205,41 @@ export function playCharacterAnimation({
   force = true,
   lockMs = 0,
   remote = false,
+  dashDirection,
 }) {
   if (!scene || !sprite?.anims || typeof resolveAnimKey !== "function") {
     return null;
   }
-  const wanted = toLogicalAnimation(logical, character);
+  let wanted = toLogicalAnimation(logical, character);
+  const direction = dashDirection || sprite._dash;
+  if (wanted === "dashing") {
+    wanted = directionalDashAnimation(character, direction);
+  }
   const key = resolveAnimKey(scene, character, wanted, fallback, skinId);
   try {
     const currentKey = sprite.anims?.currentAnim?.key || "";
+    const state = sprite._bbAnimationState ||= {};
+    // Let the horizontal lunge read through the first part of the coast.
+    // Only extend the real Thorg dash art, never a skin's fallback animation.
+    if (logical === "dashing" && wanted === "dashright" && direction?.y === 0 &&
+        key.endsWith("-dashright") && currentKey !== key) {
+      state.horizontalDashKey = key;
+      state.horizontalDashUntil = nowMs() + 320;
+    }
+    if (state.horizontalDashKey) {
+      const coasting = wanted === "running" || wanted === "falling";
+      const continuing = logical === "dashing" && wanted === "dashright" && direction?.y === 0;
+      if (currentKey === state.horizontalDashKey && nowMs() < state.horizontalDashUntil &&
+          (coasting || continuing)) {
+        // Keep the completed animation on its final frame instead of restarting.
+        noteAnimationPlayed(sprite, wanted);
+        return currentKey;
+      }
+      if (!continuing || nowMs() >= state.horizontalDashUntil) {
+        state.horizontalDashKey = null;
+        state.horizontalDashUntil = 0;
+      }
+    }
     if (
       (wanted === "throw" || wanted === "special") &&
       currentKey === key &&
@@ -306,6 +342,7 @@ export function chooseRemoteAnimationState({
   if ((logical === "throw" || logical === "special") && actionActive) {
     return logical;
   }
+  if (logical === "dashing") return "dashing";
   // Consume each physical jump event once, including a second wall kick while
   // already airborne. Sequence regression is a respawn/reconnect baseline.
   if (sprite) {

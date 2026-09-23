@@ -1,0 +1,60 @@
+.bb-dash-hud {
+  position: fixed;
+  z-index: 220;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: min(190px, calc(100vw - 32px));
+  padding: 5px 8px 6px;
+  border: 1px solid #6784a6;
+  border-radius: 4px;
+  background: #081221f0;
+  box-shadow: 0 0 0 2px #02060fc0, 0 3px 8px #0005;
+  color: #f8fbff;
+  font: 400 8px/1.6 "Press Start 2P", monospace;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  pointer-events: none;
+  user-select: none;
+  transition: border-color 140ms, box-shadow 140ms;
+}
+.bb-dash-hud[hidden] { display: none; }
+.bb-dash-hud__heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.bb-dash-hud kbd { margin-left: 4px; padding: 0 3px; border: 1px solid #ffffff30; border-radius: 2px; color: #9aabc1; font: 400 6px/1.4 "Press Start 2P", monospace; }
+.bb-dash-hud [data-dash-status] { font-variant-numeric: tabular-nums; color: #a8b9d0; }
+.bb-dash-hud__track { height: 4px; overflow: visible; border-radius: 1px; background: #ffffff16; }
+.bb-dash-hud__fill { width: 100%; height: 100%; background: linear-gradient(90deg, #60a5fa, #e8f9ff); transform-origin: left center; }
+.bb-dash-hud[data-ready="true"] { border-color: #7bcbed; }
+.bb-dash-hud[data-ready="true"] [data-dash-status] { color: #9ce9ff; }
+.bb-dash-hud[data-ready="true"] .bb-dash-hud__track { background: #54f89830; }
+.bb-dash-hud[data-dashing="true"] { animation: dash-burst-flash 180ms ease-out; border-color: white; }
+@keyframes dash-ready-flash { from { box-shadow: 0 0 0 2px #02060fc0, 0 0 15px #8bdcffb0; } to { box-shadow: 0 0 0 2px #02060fc0, 0 3px 8px #0005; } }
+@keyframes dash-burst-flash { from { background: #476b89; transform: translateX(-50%) scale(1.04); } to { background: #081221f0; transform: translateX(-50%) scale(1); } }
+@media (max-height: 480px) { .bb-dash-hud { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); } }
+@media (prefers-reduced-motion: reduce) { .bb-dash-hud { animation: none !important; transition: none; } }
+
+.bb-dash-speed-lines {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  pointer-events: none;
+  overflow: hidden;
+}
+.bb-dash-speed-lines i {
+  position: absolute;
+  display: block;
+  height: 2px;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, #d8f4ff 35%, #ffffff);
+  box-shadow: 0 1px 2px #071627b3, 0 0 4px #c1ecff80;
+  transform-origin: center;
+  animation: dash-edge-speed 380ms ease-in both;
+}
+@keyframes dash-edge-speed {
+  0% { opacity: 0; transform: translate(0, 0) rotate(var(--dash-angle)) scaleX(.5); }
+  20% { opacity: .65; }
+  65% { opacity: .45; }
+  100% { opacity: 0; transform: translate(var(--dash-travel-x), var(--dash-travel-y)) rotate(var(--dash-angle)) scaleX(1.65); }
+}
+@media (prefers-reduced-motion: reduce) { .bb-dash-speed-lines { display: none; } }

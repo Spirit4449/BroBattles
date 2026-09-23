@@ -3,6 +3,7 @@ const { duckFrameCells: DUCK_FRAME_CELLS } = require('./characters');
 const DUCK_HEIGHT_RATIO = 0.55;
 const DUCK_SPEED_RATIO = 0.25;
 const DUCK_DAMAGE_TAKEN_RATIO = 0.8;
+const DUCK_REENTRY_DELAY_MS = 200;
 
 function reduceDuckDamage(player, damage) {
   const raw = Math.max(0, Number(damage) || 0);
@@ -65,6 +66,7 @@ module.exports = {
   DUCK_HEIGHT_RATIO,
   DUCK_SPEED_RATIO,
   DUCK_DAMAGE_TAKEN_RATIO,
+  DUCK_REENTRY_DELAY_MS,
   reduceDuckDamage,
   findGroundSpan,
   hasStandingClearance,

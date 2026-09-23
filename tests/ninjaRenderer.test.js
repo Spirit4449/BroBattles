@@ -2,16 +2,19 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {EventEmitter}=require('node:events');
 const model=require('../src/shared/ninjaProjectile'),clock=require('../src/shared/huntressReplication');
 const code=babel.transformSync(fs.readFileSync(require.resolve('../src/characters/ninja/network'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code;
+const playerAudio={};
+vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/gameScene/playerAudio.js'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:playerAudio});
 const projectileTexture={};
 vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/characters/ninja/projectileTexture'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:projectileTexture});
 function setup(initial={}){
   let now=0;const api={},images=[],sounds=[],ammo=[],releases=[],animation={};
   vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/characters/shared/animationState'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:animation,performance:{now:()=>now}});
-  vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('huntressReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:{connected:false},
+  vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('playerAudio')?playerAudio:name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('huntressReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:{connected:false},
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){}});
   const sprite=(x,y,texture)=>{const s={x,y,texture,active:true,setPosition(x,y){this.x=x;this.y=y;return this;},setScale(){return this;},setDepth(){return this;},setTint(){return this;},setVisible(v){this.visible=v;},setRotation(){},destroy(){this.active=false;}};images.push(s);return s;};
   const scene={events:new EventEmitter(),add:{image:sprite},tweens:{add(){}},sound:{play:key=>sounds.push(key)}};
   const owner={active:true,x:100,y:200,flipX:false};
+  scene._localPlayerAudioSprite=owner;
   api.configureNinjaNetwork({ninjaCombatVersion:1,epoch:'room',sentMono:0,simMono:0,colliders:[],active:[],terminals:[],...initial});
   api.attachNinjaScene(scene,{localUsername:'owner',localPlayer:owner,onAmmo:a=>ammo.push(a)});
   const frame=t=>{now=t;api.observeNinjaSnapshot({snapshotEpoch:'room',sentMono:t,tMono:t});scene.events.emit('update');};
@@ -116,8 +119,9 @@ test('super presents each release once, without replaying on authoritative confi
 test('each swarm presentation restarts a skin-aware throw and plays its sound',()=>{
   const api={},plays=[],locks=[],sounds=[];
   const source=babel.transformSync(fs.readFileSync(require.resolve('../src/characters/ninja/swarmPresentation'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code;
-  vm.runInNewContext(source,{exports:api,require:()=>({resolveSpriteAnimationKey:()=> 'ninja__ninja-arena-sovereign-throw',markOneShotAnimation:(...args)=>locks.push(args)})});
-  const player={active:true,anims:{play:(...args)=>plays.push(args)}},scene={sound:{play:(...args)=>sounds.push(args)}};
+  vm.runInNewContext(source,{exports:api,require:name=>name.includes('playerAudio')?playerAudio:{resolveSpriteAnimationKey:()=> 'ninja__ninja-arena-sovereign-throw',markOneShotAnimation:(...args)=>locks.push(args)}});
+  const player={active:true,x:100,y:200,anims:{play:(...args)=>plays.push(args)}},scene={sound:{play:(...args)=>sounds.push(args)}};
+  scene._localPlayerAudioSprite=player;
   for(let i=0;i<15;i++)api.presentSwarmRelease(scene,player,36,true);
   assert.equal(plays.length,15);assert.equal(sounds.length,15);assert.equal(locks.length,15);
   assert.equal(plays[0][0].key,'ninja__ninja-arena-sovereign-throw');
@@ -193,7 +197,7 @@ test('two remote clients converge despite asymmetric launch delay and duplicate 
 test('dedicated Ninja special continues across releases without accelerating normal attacks',()=>{
   const api={},plays=[],locks=[];
   const source=babel.transformSync(fs.readFileSync(require.resolve('../src/characters/ninja/swarmPresentation'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code;
-  vm.runInNewContext(source,{exports:api,require:()=>({resolveSpriteAnimationKey:()=> 'ninja-special',markOneShotAnimation:(...args)=>locks.push(args)})});
+  vm.runInNewContext(source,{exports:api,require:name=>name.includes('playerAudio')?playerAudio:{resolveSpriteAnimationKey:()=> 'ninja-special',markOneShotAnimation:(...args)=>locks.push(args)}});
   const player={active:true,anims:{play:(...args)=>plays.push(args)}};
   api.presentSwarmRelease({},player,36);api.presentSwarmRelease({},player,36);
   assert.equal(plays[0][0].frameRate,30);assert.equal(plays[0][0].repeat,-1);

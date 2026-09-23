@@ -25,7 +25,7 @@ class Thorg extends CharacterEntityBase {
 
   static sounds = {
     attack: { key: "thorg-throw", volume: 0.6 },
-    hit: { key: "thorg-hit", volume: 0.8 },
+    hit: { key: "thorg-hit", volume: 0.72 },
     special: { key: "thorg-throw", volume: 0.5, rate: 0.85 },
   };
 

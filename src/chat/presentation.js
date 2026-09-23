@@ -198,10 +198,15 @@ function makeChatShell({
   textarea.addEventListener("input", resizeComposer);
   textarea.addEventListener("focus", resizeComposer);
   let composerWidth = 0;
+  let composerResizeFrame = 0;
   const composerObserver = new ResizeObserver(() => {
-    if (textarea.clientWidth === composerWidth) return;
-    composerWidth = textarea.clientWidth;
-    resizeComposer();
+    if (textarea.clientWidth === composerWidth || composerResizeFrame) return;
+    // Height writes during observer delivery can trigger an undelivered loop.
+    composerResizeFrame = requestAnimationFrame(() => {
+      composerResizeFrame = 0;
+      composerWidth = textarea.clientWidth;
+      resizeComposer();
+    });
   });
   composerObserver.observe(textarea);
 
@@ -213,7 +218,7 @@ function makeChatShell({
   return {
     scroll,
     resizeComposer,
-    destroyComposer: () => { composerObserver.disconnect(); scroll.destroy(); },
+    destroyComposer: () => { composerObserver.disconnect(); cancelAnimationFrame(composerResizeFrame); scroll.destroy(); },
     root,
     backdrop,
     launcher,

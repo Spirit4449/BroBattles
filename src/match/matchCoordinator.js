@@ -14,6 +14,7 @@ import { spawnDamageImpact, spawnDuckGuardImpact } from "../effects";
 import { spawnDeathTombstone } from "../gameScene/deathTombstone";
 import { playWizardArcaneSurge } from "../characters/wizard/effects.js";
 import { playCharacterSound } from "../characters";
+import { playPlayerSound } from "../gameScene/playerAudio";
 import {
   getAnimationDurationMs,
   markOneShotAnimation,
@@ -919,7 +920,6 @@ export function createMatchCoordinator(config) {
       const charKey = (character || (pd && pd.char_class) || "").toLowerCase();
 
       if (actionType === "character-hit-confirm") {
-        playCharacterSound(scene, charKey, "hit");
         const targetName = String(action?.target || "").trim();
         const targetSprite =
           targetName === getUsername()
@@ -927,6 +927,9 @@ export function createMatchCoordinator(config) {
             : opponentPlayers[targetName]?.opponent ||
               teamPlayers[targetName]?.opponent ||
               null;
+        const soundSource = targetSprite ||
+          (isSelfPacket ? getPlayer() : opponentPlayers[playerName]?.opponent || teamPlayers[playerName]?.opponent);
+        if (soundSource) playCharacterSound(scene, charKey, "hit", {}, soundSource);
         if (typeof handleRemoteAttack === "function") {
           handleRemoteAttack(scene, charKey, action, null, {
             targetSprite,
@@ -1238,7 +1241,11 @@ export function createMatchCoordinator(config) {
     if (payload.type === "health" &&
         now - (lastHealthSoundAt.get(payload.username) ?? -Infinity) < 120) return;
     try {
-      scene.sound.play(entry.key, entry.options || {});
+      const source = payload.username === getUsername()
+        ? getPlayer()
+        : opponentPlayers[payload.username]?.opponent || teamPlayers[payload.username]?.opponent;
+      if (!source) return;
+      playPlayerSound(scene, source, entry.key, entry.options || {});
       // A power-up heal also sends health-update; play that pair only once.
       if (payload.type === "health") lastHealthSoundAt.set(payload.username, now);
     } catch (_) {}

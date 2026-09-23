@@ -36,12 +36,13 @@ test('game asset preload completes with the Phaser 3.70 loader API (no font meth
   const { load, queued } = makeLoaderQueue();
   let charactersLoaded = false;
   assert.doesNotThrow(() => preloadGameAssets({ scene: { load }, staticPath: '/assets',
-    powerupTypes: ['health', 'shockwave'], powerupAssetDir: { health: 'health', shockwave: 'shockwave' },
+    powerupTypes: ['health', 'shockwave', 'freeze'], powerupAssetDir: { health: 'health', shockwave: 'shockwave', freeze: 'freeze' },
     preloadAllCharacters() { charactersLoaded = true; } }));
   assert.ok(charactersLoaded);
   assert.ok(queued.includes('tiles'));
   assert.ok(queued.includes('sfx-nosuper'), 'preloads the super-not-ready cue');
   assert.ok(queued.includes('pu-tick-health'), 'powerups with periodic effects preload their tick sound');
+  assert.ok(queued.includes('pu-tick-freeze'), 'freeze preloads its ambient tick sound');
   assert.ok(!queued.includes('pu-tick-shockwave'), 'instant shockwave does not preload a nonexistent tick sound');
 });
 

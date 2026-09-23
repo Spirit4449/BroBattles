@@ -3,6 +3,7 @@ import { thorgGripPose } from "./weaponMotion";
 import { THORG_SWEEP, sampleThorgSweep, thorgAttackFrameAt } from "../../shared/thorgSweep";
 import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
+import { playerSoundVolume } from "../../gameScene/playerAudio";
 
 // A single held mace is used during locomotion, windup and the entire sweep.
 export function ensureThorgWeapon(scene, body) {
@@ -103,7 +104,8 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
   let swingSound;
   try {
     swingSound = scene.sound?.add(scene.cache?.audio?.exists("thorg-sweep") ? "thorg-sweep" : "thorg-throw");
-    swingSound?.play({ volume: 0.48 });
+    const volume = playerSoundVolume(scene, body, 0.48);
+    if (volume > 0) swingSound?.play({ volume });
   } catch (_) {}
   let elapsed = 0;
   let finished = false;
@@ -233,7 +235,8 @@ function startEmbeddedSweep(scene, body, direction) {
   let sound;
   try {
     sound = scene.sound?.add(scene.cache?.audio?.exists('thorg-sweep') ? 'thorg-sweep' : 'thorg-throw');
-    sound?.play({ volume: 0.48 });
+    const volume = playerSoundVolume(scene, body, 0.48);
+    if (volume > 0) sound?.play({ volume });
   } catch (_) {}
   const cleanup = () => {
     if (finished) return;

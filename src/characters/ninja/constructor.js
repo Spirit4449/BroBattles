@@ -12,6 +12,7 @@ import {
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
 import { createRuntimeId } from "../shared/runtimeId";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 // Single source of truth for this character's name/key
 const NAME = "ninja";
@@ -104,13 +105,8 @@ class Ninja extends CharacterEntityBase {
       const mapObjects = Array.isArray(scene?._mapObjects)
         ? scene._mapObjects
         : [];
-      // Play remote throw SFX for other players
-      try {
-        const sfx = scene.sound.add("shurikenThrow");
-        sfx.setVolume(0.5); // Lower volume for remote players
-        sfx.setRate(1.3);
-        sfx.play();
-      } catch (_) {}
+      // Match the owner's throw level before spatial attenuation.
+      try { playPlayerSound(scene, ownerSprite, "shurikenThrow", { volume: 1, rate: 1.3 }); } catch (_) {}
       playSpriteAnimation({
         scene,
         sprite: ownerSprite,

@@ -186,8 +186,9 @@ function pressureAim(room, player, target, profile) {
 }
 
 function requestBasic(room, p, target, profile, random, now) {
+  if (now < Math.max(p._dashUntil || 0, p._attackInterruptedUntil || 0)) return false;
   const ammo = p.ammoState;
-  if (!p.isAlive || p._botActionUntil > now || p._controlLockUntil > now || !ammo || ammo.charges <= 0 || ammo.nextFireInMs > 0) return false;
+  if (!p.isAlive || p._botActionUntil > now || Math.max(p._controlLockUntil || 0, p._attackInterruptedUntil || 0) > now || !ammo || ammo.charges <= 0 || ammo.nextFireInMs > 0) return false;
   let aim = basicAim(p, target, profile, random, room);
   if (!aim.canHit || !hasClearShot(room, p, target, aim)) {
     if (ammo.charges < 2 || now < (p._botPressureUntil || 0) || random() > 0.45) return false;
@@ -221,6 +222,7 @@ function requestBasic(room, p, target, profile, random, now) {
 }
 
 function requestSpecial(room, p, target, now) {
+  if (now < Math.max(p._dashUntil || 0, p._attackInterruptedUntil || 0)) return false;
   const lastAttackAt = Number(p._botLastAttackAt);
   if (p._botActionUntil > now || p.superCharge < p.maxSuperCharge ||
     (Number.isFinite(lastAttackAt) && now - lastAttackAt < BOT_ATTACK_TO_SUPER_COOLDOWN_MS)) return false;
@@ -243,8 +245,9 @@ function startNinjaSwarm(room, p, now, aim = {}) {
   const count = cfg.count ?? 15, releaseMs = cfg.releaseMs ?? 36;
   const direction = aim.direction === -1 ? -1 : 1;
   const burst = ++p._botActionSeq;
+  const interruptSeq = p._attackInterruptSeq || 0;
   for (let i = 0; i < count; i++) room.scheduleAction(() => {
-    if (!p.isAlive) return;
+    if (!p.isAlive || (p._attackInterruptSeq || 0) !== interruptSeq) return;
     const spread = i - (count - 1) / 2;
     const yOffset = spread * (cfg.yOffsetPerShard ?? 5.5);
     const action = { type: "ninja-shuriken", id: `${p.participantId}:swarm:${burst}:${i}`, direction, angle: direction < 0 ? Math.PI : 0,

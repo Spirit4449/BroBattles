@@ -11,6 +11,10 @@ const animationApi = {};
 vm.runInNewContext(babel.transformSync(fs.readFileSync('src/characters/gloop/handAnimation.js', 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 }).code, { exports: animationApi });
+const playerAudio = {};
+vm.runInNewContext(babel.transformSync(fs.readFileSync('src/gameScene/playerAudio.js', 'utf8'), {
+  babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+}).code, { exports: playerAudio });
 function setup(animated = false) {
   const api = {}, objects = [], sounds = [];
   function object(x = 0, y = 0) {
@@ -34,9 +38,11 @@ function setup(animated = false) {
   const scene = { events: new EventEmitter(), textures: { exists: () => true },
     add: { sprite: object, graphics: object }, sound: { play: key => sounds.push(key) } };
   const owner = object(100, 200); owner.displayWidth = 80; owner.displayHeight = 100;
+  scene._localPlayerAudioSprite = owner;
   vm.runInNewContext(code, { exports: api, require: name => name.includes('handAnimation') ? { ...animationApi, prepareHandAnimation: () => animated } : name.includes('characterTuning')
     ? { getResolvedCharacterSpecialConfig: () => ({ visualScale: 0.28 }) }
     : name.includes('gloopHookGeometry') ? require('../src/shared/gloopHookGeometry.js')
+    : name.includes('playerAudio') ? playerAudio
     : name.includes('renderLayers') ? { RENDER_LAYERS: { ATTACKS: 20 } } : { playSpriteAnimation() {} } });
   const launch = () => api.playHookAction(scene, owner, { id: 'hook1', start: { x: 120, y: 180 }, angle: 0, range: 500, speed: 1000 }, true);
   const frame = (ms = 50) => scene.events.emit('update', 0, ms);

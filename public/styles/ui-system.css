@@ -379,9 +379,7 @@ input:-webkit-autofill:focus {
 }
 
 #lobby-area .character-slot.empty > .character-sprite.random {
-  filter:
-    drop-shadow(0 3px 0 rgba(3, 6, 11, 0.82))
-    drop-shadow(0 7px 7px rgba(0, 0, 0, 0.58));
+  filter: drop-shadow(0 3px 3px rgba(3, 6, 11, 0.32));
 }
 
 #lobby-area .status {

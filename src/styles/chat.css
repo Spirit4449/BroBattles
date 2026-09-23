@@ -1525,7 +1525,12 @@
   right: 6px;
   top: 50%;
   transform: translateY(-50%);
-  max-width: 64px;
+  max-width: calc(100% - 12px);
+  padding: 2px 5px;
+  border-radius: 2px;
+  background: #0a1524;
+  white-space: nowrap;
+  z-index: 5;
   color: #91adc2;
   font: 9px/1.4 "Lato", sans-serif;
   text-align: right;
@@ -1535,7 +1540,7 @@
 }
 .bb-chat-system-log:hover .bb-chat-system-time,
 .bb-chat-system-log:focus-visible .bb-chat-system-time { opacity: 1; }
-.bb-chat-system-log { padding-right: 72px; padding-left: 72px; min-height: 28px; }
+.bb-chat-system-log { padding: 3px 10px; min-height: 28px; }
 .bb-chat-system-log .bb-chat-system-icon {
   width: 16px;
   height: 16px;

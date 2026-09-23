@@ -61,6 +61,18 @@ test('grounded ducking uses canonical geometry and preserves the feet', t => {
   assert.equal(f.player._bodyHalfHeight, body.halfHeight * 0.55);
   assert.equal(f.player._bodyCenterOffsetY + f.player._bodyHalfHeight, body.offsetY + body.halfHeight);
 });
+test('ducking cannot be re-entered for 200ms after leaving it', t => {
+  const f = movement(t); const body = characterBody('ninja');
+  f.room.geometry = { colliders: [{ left: -100, right: 100, top: body.offsetY + body.halfHeight, collision: { up: true } }] };
+  f.send({ x: 0, y: 0, grounded: true, ducking: true });
+  assert.equal(f.player.ducking, true);
+  f.advance(1); f.send({ x: 0, y: 0, grounded: true, ducking: false });
+  assert.equal(f.player.ducking, false);
+  f.advance(199); f.send({ x: 0, y: 0, grounded: true, ducking: true });
+  assert.equal(f.player.ducking, false);
+  f.advance(1); f.send({ x: 0, y: 0, grounded: true, ducking: true });
+  assert.equal(f.player.ducking, true);
+});
 test('malformed packets do not reach the alternate movement buffer', t => {
   const f = movement(t); f.send({ x: NaN, right: true, up: true });
   assert.equal(f.player.inputBuffer.length, 0); assert.equal(f.player.x, 0);
@@ -240,4 +252,29 @@ test('production disables inline source maps while development keeps debugging m
   assert.equal(config({}, { mode: 'production' }).output.clean, false);
   assert.equal(config({}, { mode: 'production' }).cache.type, 'filesystem');
   assert.equal(config({}, { mode: 'development' }).devtool, 'inline-source-map');
+});
+
+test('approved dash covers a full burst without correction and replay cannot mint credit', t => {
+  const f = movement(t);
+  for (let i = 0; i < 8; i++) {
+    f.advance(20);
+    f.send({ x: (i + 1) * 14, y: 0, vx: 700, sequence: i,
+      dashSeq: 1, dashX: 1, dashY: 0 });
+  }
+  assert.equal(f.player.x, 112);
+  assert.equal(f.events.length, 0);
+  const credit = f.player._movementBudget.x;
+  f.send({ x: 112, y: 0, sequence: 8, dashSeq: 1, dashX: 1, dashY: 0 });
+  assert.equal(f.player._movementBudget.x, credit);
+  f.send({ x: 112, y: 0, sequence: 9, dashSeq: 2, dashX: 1, dashY: 0 });
+  assert.equal(f.player._movementBudget.x, credit);
+  assert.equal(f.player.dashSeq, 1);
+});
+
+test('server clamps a dash crossing a thin wall using canonical player bounds', t => {
+ const f=movement(t);const shape=characterBody('ninja');
+ f.room.geometry={colliders:[{left:50,right:52,top:-500,bottom:500}]};
+ f.advance(20);f.send({x:140,y:0,vx:1000,sequence:1,dashSeq:1,dashX:1,dashY:0});
+ assert.ok(f.player.x+shape.offsetX+shape.halfWidth<=50.00001);
+ assert.equal(f.player.vx,0);assert.ok(f.events.some(e=>e.name==='game:correction'));
 });

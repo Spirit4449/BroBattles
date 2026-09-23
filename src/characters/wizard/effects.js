@@ -2,6 +2,7 @@ import {
   playSpriteAnimation,
   resolveSpriteAnimationKey,
 } from "../shared/animationState.js";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 const POWERUP_TINTS = {
   rage: 0xa855f7,
@@ -187,7 +188,7 @@ function createPowerupBeam(scene, caster, sprite, entry) {
       }
       if (travel === 1 && !delivered) {
         delivered = true;
-        try { scene.sound?.play?.(`pu-touch-${entry.type}`, { volume: 0.28 }); } catch (_) {}
+        try { playPlayerSound(scene, target, `pu-touch-${entry.type}`, { volume: 0.28 }); } catch (_) {}
       }
     },
     onComplete: cleanup,
@@ -292,7 +293,7 @@ export function playWizardArcaneSurge(scene, payload, resolveSpriteByName) {
   if (!recipients.length) return;
 
   try {
-    scene.sound?.play?.("wizard-special", {
+    playPlayerSound(scene, resolveSpriteByName(payload?.caster), "wizard-special", {
       volume: 0.52,
       rate: 1,
     });

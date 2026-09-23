@@ -150,14 +150,14 @@ export function createBattleTutorialController({
       const awayLeft = wallSide === "right";
       return inputScheme === "arrows"
         ? [
-            { label: "↑", codes: ["ArrowUp", "Space"] },
+            { label: "↑", codes: ["ArrowUp"] },
             {
               label: awayLeft ? "←" : "→",
               codes: [awayLeft ? "ArrowLeft" : "ArrowRight"],
             },
           ]
         : [
-            { label: "W", codes: ["KeyW", "Space"] },
+            { label: "W", codes: ["KeyW"] },
             {
               label: awayLeft ? "A" : "D",
               codes: [awayLeft ? "KeyA" : "KeyD"],
@@ -227,8 +227,10 @@ export function createBattleTutorialController({
     actionEl.dataset.tone =
       id === "special" ? "super" : id === "powerup" ? "powerup" : "default";
     actionEl.classList.remove("is-perfect", "is-leaving");
+    const wasHidden = root.classList.contains("hidden");
     root.classList.remove("hidden");
-    requestAnimationFrame(() => actionEl.classList.add("is-visible"));
+    if (wasHidden) void actionEl.offsetWidth;
+    actionEl.classList.add("is-visible");
     return true;
   }
 
@@ -244,8 +246,10 @@ export function createBattleTutorialController({
       <span class="tutorial-top-icon">${escapeHtml(tip.icon)}</span>
       <span class="tutorial-top-content"><strong>${escapeHtml(tip.title)}</strong><span>${escapeHtml(tip.copy)}</span></span>`;
     topEl.classList.remove("is-leaving");
+    const wasHidden = root.classList.contains("hidden");
     root.classList.remove("hidden");
-    requestAnimationFrame(() => topEl.classList.add("is-visible"));
+    if (wasHidden) void topEl.offsetWidth;
+    topEl.classList.add("is-visible");
     return true;
   }
 
@@ -277,7 +281,7 @@ export function createBattleTutorialController({
       element.classList.remove("is-visible");
       setTimeout(() => {
         if (activeTip === previous) activeTip = null;
-      }, 180);
+      }, 220);
       lastTipHiddenAt = performance.now();
     };
     if (success) setTimeout(leave, previous.id === "attack" ? 520 : 260);

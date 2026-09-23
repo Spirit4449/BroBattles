@@ -19,8 +19,8 @@ test('join and leave logs track membership, not presence or repeated rosters', (
 });
 test('battle results deduplicate and recent logs survive history reads without generating messages', () => {
   const {io,events} = fixture();
-  appendPartyChatLog(io,7,{kind:'battle',body:'Battle ended — Team 1 won',key:'battle:12'});
-  appendPartyChatLog(io,7,{kind:'battle',body:'Battle ended — Team 1 won',key:'battle:12'});
+  appendPartyChatLog(io,7,{kind:'battle',body:'Battle ended. Team 1 won',key:'battle:12'});
+  appendPartyChatLog(io,7,{kind:'battle',body:'Battle ended. Team 1 won',key:'battle:12'});
   appendPartyChatLog(io,7,{kind:'map',body:'Alice changed map to Castle'});
   appendPartyChatLog(io,7,{kind:'mode',body:'Alice changed mode to Duels'});
   assert.equal(getPartyChatLogs(io,7).length,3);

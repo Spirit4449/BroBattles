@@ -59,7 +59,7 @@
     "assetDir": "freeze",
     "color": 6809849,
     "durationMs": 7000,
-    "tickVolume": 0.18,
+    "tickVolume": 0.7,
     "modifiers": {
       "speedMult": 0.45,
       "jumpMult": 0.6

@@ -11,6 +11,7 @@ const effects = require('../gameRoom/effects/effectManager');
 const { isMovementSuppressed } = require('../gameRoom/abilityRuntimeManager');
 const { updateTeamwork } = require('./teamwork');
 const { resolveBotObjective } = require('./objectives');
+const { tryDashSteps, recordDash } = require('./dash');
 const movement = require('../../../shared/movementPhysics.json');
 const { DEATH_DROP_PICKUP_RADIUS, POWERUP_PICKUP_RADIUS, WORLD_BOUNDS } = require('../gameRoomConfig');
 
@@ -49,7 +50,8 @@ class BotController {
     this.routePreferences = new Map();
     this.metrics = { thinks: 0, attacks: 0, specials: 0, recoveries: 0, falls: 0, unforcedFalls: 0,
       idleMs: 0, stuckMs: 0, dodges: 0, strategicDucks: 0, flavorDucks: 0, jumps: 0, optionalHops: 0, wallPauses: 0, targetSwitches: 0, retreats: 0, pickupGoals: 0,
-      lootGoals: 0, lootCollected: 0, obstacleRecoveries: 0, superSaves: 0, superThreatMs: 0 };
+      lootGoals: 0, lootCollected: 0, obstacleRecoveries: 0, superSaves: 0, superThreatMs: 0,
+      dashes: 0, dashStomps: 0, dashEscapes: 0, dashChases: 0, dashDodges: 0, dashTravel: 0 };
   }
 
   between(min, max) { return min + this.random() * (max - min); }
@@ -77,7 +79,13 @@ class BotController {
       while (this.observations.length > 12) this.observations.shift();
     }
     const mods = effects.getModifiers(p, now);
+    if ((this.maneuver?.dash || this.traversal?.dash) && p._knockbackUntil > now) {
+      this.clearTravel();
+      this.nextThink = 0;
+    }
     if (p._controlLockUntil > now || isMovementSuppressed(p, now)) {
+      p._dashUntil = 0;
+      p._botDashCoastUntil = 0;
       this.intent = { direction: 0 };
       this.duckUntil = 0;
       this.duckDirection = 0;
@@ -92,6 +100,14 @@ class BotController {
       this.planning = { steps: this.thinkSteps(observed, mods, now), at: now, damageAt: p.lastDamagedAt };
     }
     this.advancePlanning(now);
+    if (this.maneuver?.resumeWalk && p.grounded && now >= p._dashUntil && Math.abs(p.vx) <= movement.maxSpeed) {
+      // The full stop was previewed for safety. On a long walk, resume normal
+      // ledge-aware movement as soon as the extra dash speed has dissipated.
+      this.maneuver = null;
+      this.walkGoalX = this.decision?.goal?.x;
+      this.nextThink = 0;
+    }
+    require('../gameRoom/stomp').resolveStomp(room, p, now);
     p.ducking = p.grounded && now < this.duckUntil;
     if (p.ducking) {
       this.intent = { direction: this.getDuckDirection(), jumpPressed: false };
@@ -100,9 +116,10 @@ class BotController {
     if (p.ducking) {
       this.intent = { direction: this.getDuckDirection(), jumpPressed: false };
     }
-    if (this.traversal || this.maneuver || (p._botActionUntil <= now && this.intent.direction)) p.flip = this.intent.direction < 0;
+    if (!this.maneuver?.dash && (this.traversal || this.maneuver || (this.intent.direction && p._botActionUntil <= now))) p.flip = this.intent.direction < 0;
     const result = stepBody(p, this.intent, room.geometry, dt, now, mods);
     this.intent.jumpPressed = false;
+    this.intent.dash = null;
     p.lastInput = now;
     if (p.grounded && Math.abs(p.vx) < 12) this.metrics.idleMs += dt;
     this.checkProgress(now, dt, mods);
@@ -119,8 +136,10 @@ class BotController {
     }
     p.ducking = p.grounded && now < this.duckUntil;
     if (!p.ducking) this.duckDirection = 0;
-    if (p._botActionUntil <= now) p.animation = p.ducking ? 'ducking' : p.grounded ? (Math.abs(p.vx) > 12 ? 'running' : 'idle') : (p.vy < 0 ? 'jumping' : 'falling');
+    if (now < p._dashUntil) p.animation = 'dashing';
+    else if (p._botActionUntil <= now) p.animation = p.ducking ? 'ducking' : p.grounded ? (Math.abs(p.vx) > 12 ? 'running' : 'idle') : (p.vy < 0 ? 'jumping' : 'falling');
     for (const event of result.events) {
+      if (event === 'dash') { recordDash(this, 'dashTravel', now); continue; }
       if (event === 'jump' || event === 'wall-jump') { this.metrics.jumps++; this.lastJumpAt = now; }
       p.movementFxSeq = (p.movementFxSeq || 0) + 1;
       p.movementFxType = event;
@@ -143,6 +162,7 @@ class BotController {
     const routeTo = (id, goalX) => {
       const routeKey = `${id}:${goalX ?? ""}`;
       if (!routes.has(routeKey)) routes.set(routeKey, findRoute(graph, current?.id, id, poisonY, {
+        allowDash: now >= Math.max(p._dashReadyAt || 0, this.nextDashAt || 0),
         poisonAt,
         blocked: this.blockedEdges,
         startX: p.x,
@@ -150,7 +170,7 @@ class BotController {
         edgeCost: (edge, from) => {
           const key = `${from}:${edge.to}`;
           if (!this.routePreferences.has(key)) this.routePreferences.set(key, this.random() * 240);
-          return (edge.jump ? 70 : 0) + this.routePreferences.get(key);
+          return (edge.jump ? 70 : 0) + (edge.dash ? 140 : 0) + this.routePreferences.get(key);
         },
       }));
       return routes.get(routeKey);
@@ -262,6 +282,11 @@ class BotController {
       this.wantsProgress = false;
       return;
     }
+    if ((this.maneuver?.dash || this.traversal?.dash) && now >= (p._knockbackUntil || 0)) {
+      yield* this.tryCombatSteps(enemies, target, observed, now);
+      return;
+    }
+    if (yield* tryDashSteps(this, observed, target, threatened, mods, context, now)) return;
     if (threatened && p.grounded && !this.maneuver) {
       const dodge = yield* this.findDodgeSteps(observed, mods, now, context.poisonY);
       if (this.tryDodge(observed, mods, now, context.poisonY, dodge)) {
@@ -322,7 +347,11 @@ class BotController {
   tryCombat(...args) { return finishSteps(this.tryCombatSteps(...args)); }
 
   *tryCombatSteps(enemies, target, observed, now) {
-    if (!target || now < this.nextOpportunity) return;
+    if (!target || now < this.nextOpportunity || now < (this.player._dashUntil || 0)) return;
+    // Reserve the upcoming activation so an attack windup cannot invalidate a
+    // jump-then-dash halfway across a gap. Combat resumes once it has launched.
+    if ((this.traversal?.dash && this.traversal.cursor <= this.traversal.dashFrame) ||
+        (this.approachEdge?.dash && Math.abs(this.approachEdge.takeoffX - this.player.x) < 120)) return;
     const p = this.player;
     if (now < (this.ammoReadyAfter || 0) && p.superCharge < p.maxSuperCharge) return;
     const nearest = Math.min(...enemies.map((e) => Math.hypot(e.x - p.x, e.y - p.y)));
@@ -602,6 +631,10 @@ class BotController {
     if (this.approachEdge && p.grounded && !this.traversal && !this.maneuver) {
       const edge = this.approachEdge;
       if (Math.abs(edge.takeoffX - p.x) <= 1 && Math.abs(p.vx || 0) < 12 && now >= (p._nextWallJump || 0)) {
+        if (edge.dash && (now < Math.max(p._dashReadyAt || 0, this.nextDashAt || 0, p._botActionUntil || 0, p._knockbackUntil || 0))) {
+          this.intent = { direction: 0 };
+          return;
+        }
         const prepared = prepareTraversal(p, edge, this.room.geometry, mods, now, this.poisonY);
         this.approachEdge = null;
         if (!prepared) {
@@ -611,6 +644,7 @@ class BotController {
           return;
         }
         this.traversal = { ...prepared, cursor: 0, until: now + prepared.duration + 800 };
+        if (edge.dash) { this.duckUntil = 0; p.ducking = false; }
       } else this.intent = { direction: this.pursuitDirection(edge.takeoffX, now, true) };
     } else if (p.grounded && Number.isFinite(this.walkGoalX) && !this.traversal && !this.maneuver) {
       this.intent = { direction: this.pursuitDirection(this.walkGoalX, now) };
@@ -625,7 +659,7 @@ class BotController {
       this.nextThink = 0;
       return;
     }
-    this.intent = { direction: frame.direction, jumpPressed: frame.jumpPressed };
+    this.intent = { direction: frame.direction, jumpPressed: frame.jumpPressed, dash: frame.dash };
   }
 
   airRecovery(context, now) {

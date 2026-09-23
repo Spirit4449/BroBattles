@@ -8,7 +8,7 @@ export function remapKeys(dialog) {
   const buttons=new Map();let active=null;let feedbackTimer;
   const update=()=>{for(const [slot,button] of buttons){button.textContent=active===slot?'Press a key…':keyLabel(getSettings().keys[slot]);button.classList.remove('is-in-use');}};
   const cancel=()=>{error.textContent='';error.className='site-remap-status';active=null;delete dialog.dataset.remapping;update();};
-  for(const [slot,label] of KEY_SLOTS.filter(([slot])=>!slot.endsWith('Alt')&&slot!=='jump')){const row=document.createElement('div');row.className='site-key-row';const name=document.createElement('span');name.textContent=label;const button=document.createElement('button');button.type='button';button.className='pixel-menu-button';button.setAttribute('aria-label',`Remap ${label}`);button.onclick=()=>{active=slot;dialog.dataset.remapping='true';error.textContent='';update();};buttons.set(slot,button);row.append(name,button);details.append(row);}
+  for(const [slot,label] of KEY_SLOTS.filter(([slot])=>!slot.endsWith('Alt')&&slot!=='dash')){const row=document.createElement('div');row.className='site-key-row';const name=document.createElement('span');name.textContent=label;const button=document.createElement('button');button.type='button';button.className='pixel-menu-button';button.setAttribute('aria-label',`Remap ${label}`);button.onclick=()=>{active=slot;dialog.dataset.remapping='true';error.textContent='';update();};buttons.set(slot,button);row.append(name,button);details.append(row);}
   const capture=event=>{
     if(!active)return;
     event.preventDefault();event.stopImmediatePropagation();

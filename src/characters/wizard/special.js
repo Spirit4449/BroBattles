@@ -1,4 +1,5 @@
 import { playSpriteAnimation } from "../shared/animationState.js";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 function pulseAura(scene, sprite, tint = 0x7dd3fc, scale = 1.6, alpha = 0.34) {
   if (!scene?.add || !sprite?.active) return;
@@ -66,7 +67,7 @@ export function perform(scene, player) {
     fallback: "throw",
   });
   try {
-    scene.sound?.play?.("wizard-special", {
+    playPlayerSound(scene, player, "wizard-special", {
       volume: 0.5,
       rate: 1,
     });

@@ -23,6 +23,13 @@ test('physical keyboard codes map independently of keyboard character case',()=>
 test('alternate arrows and space remain fixed when loading saved preferences',()=>{
  const saved={...DEFAULT_BINDINGS,leftAlt:80,jump:79};
  assert.equal(normalizeBindings(saved).leftAlt,37);
- assert.equal(normalizeBindings(saved).jump,32);
+ assert.equal(normalizeBindings(saved).dash,32);
  assert.throws(()=>assignBinding(DEFAULT_BINDINGS,'leftAlt',80));
+});
+
+test('legacy jump preferences migrate to dash without losing remapped controls', () => {
+ const saved = {...DEFAULT_BINDINGS, attack:75, jump:32}; delete saved.dash;
+ const migrated = normalizeBindings(saved);
+ assert.equal(migrated.attack,75); assert.equal(migrated.dash,32);
+ assert.equal(migrated.jump,undefined);
 });

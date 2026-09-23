@@ -3,7 +3,7 @@
   inset: 0;
   z-index: 10001;
   pointer-events: none;
-  font-family: "Lato", sans-serif;
+  font-family: var(--bb-font-display);
 }
 
 .battle-tutorial.hidden {
@@ -11,112 +11,107 @@
 }
 
 .tutorial-action-card {
-  --tip-accent: #60a5fa;
+  --tip-accent: var(--bb-border-highlight);
   position: absolute;
   top: 0;
   left: 0;
   width: max-content;
-  max-width: min(210px, calc(100vw - 20px));
-  min-height: 38px;
+  max-width: min(255px, calc(100vw - 20px));
+  min-height: 30px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border: 1px solid var(--tip-accent);
-  border-radius: 6px;
-  color: #f8fbff;
-  background: rgba(8, 18, 33, 0.94);
-  box-shadow:
-    0 0 0 2px rgba(2, 6, 15, 0.75),
-    0 5px 12px rgba(0, 0, 0, 0.25);
+  gap: 6px;
+  padding: 5px 6px;
+  border: 2px solid var(--tip-accent);
+  border-radius: var(--bb-radius-control);
+  color: var(--bb-text);
+  background: var(--bb-surface-gradient);
+  box-shadow: var(--bb-card-shadow);
   opacity: 0;
+  translate: 0 8px;
   transition:
-    opacity 150ms ease,
-    filter 150ms ease;
+    opacity 220ms ease,
+    translate 220ms var(--bb-ease);
 }
 
 .tutorial-action-card[data-tone="super"] {
-  --tip-accent: #facc15;
+  --tip-accent: var(--bb-gold);
 }
 
 .tutorial-action-card[data-tone="powerup"] {
-  --tip-accent: #a78bfa;
+  --tip-accent: #ad8bef;
 }
 
 .tutorial-action-card.is-visible {
   opacity: 1;
-  animation: tutorial-pop 220ms cubic-bezier(0.2, 0.9, 0.24, 1.1);
+  translate: 0 0;
 }
 
 .tutorial-action-card.is-leaving {
   opacity: 0;
-  filter: blur(1px);
+  translate: 0 8px;
 }
 
 .tutorial-action-card.is-perfect {
-  --tip-accent: #4ade80;
+  --tip-accent: #7ef0a1;
 }
 
 .tutorial-action-text {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 3px;
 }
 
 .tutorial-action-text strong {
   color: var(--tip-accent);
-  font-size: 11px;
-  font-weight: 900;
-  line-height: 1.05;
-  white-space: nowrap;
+  font-size: 8px;
+  line-height: 1.35;
 }
 
 .tutorial-action-text strong.has-pixel-check {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .tutorial-action-text strong.has-pixel-check::after {
   content: "";
-  width: 13px;
-  height: 13px;
+  width: 11px;
+  height: 11px;
   background: url("/assets/ui/pixel-check.webp") center / contain no-repeat;
   image-rendering: pixelated;
 }
 
 .tutorial-action-text > span {
-  color: #c7d5e8;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1.1;
-  white-space: nowrap;
+  color: var(--bb-text-soft);
+  font-size: 7px;
+  line-height: 1.45;
 }
 
 .tutorial-key-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .tutorial-key-row kbd,
 .tutorial-mouse-key {
-  width: 25px;
-  min-width: 25px;
-  height: 24px;
+  width: 22px;
+  min-width: 22px;
+  height: 21px;
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 4px;
-  border: 1px solid #7890af;
+  padding: 0 2px;
+  border: 2px solid var(--bb-border-highlight);
   border-bottom-width: 3px;
-  border-radius: 4px;
-  color: white;
-  background: linear-gradient(#334b6b, #1b2c44);
-  font: 800 8px/1 "Press Start 2P", monospace;
+  border-radius: var(--bb-radius-control);
+  color: var(--bb-text);
+  background: var(--bb-primary-gradient);
+  font: 7px/1 var(--bb-font-display);
   transition:
     transform 70ms ease,
     background 100ms ease,
@@ -124,8 +119,8 @@
 }
 
 .tutorial-mouse-key img {
-  width: 16px;
-  height: 19px;
+  width: 14px;
+  height: 17px;
   object-fit: contain;
 }
 
@@ -146,51 +141,48 @@
 }
 
 .tutorial-key-or {
-  color: #7890af;
-  font-size: 7px;
-  font-weight: 900;
+  color: var(--bb-text-muted);
+  font-size: 6px;
 }
 
 .tutorial-top-card {
-  --top-accent: #60a5fa;
+  --top-accent: var(--bb-border-highlight);
   position: fixed;
   top: 84px;
   left: 50%;
-  width: min(370px, calc(100vw - 24px));
-  min-height: 42px;
+  width: min(295px, calc(100vw - 24px));
+  min-height: 36px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 9px;
-  border: 1px solid var(--top-accent);
-  border-radius: 6px;
-  color: white;
-  background: rgba(10, 23, 41, 0.95);
-  box-shadow:
-    0 0 0 2px rgba(2, 6, 15, 0.7),
-    0 5px 12px rgba(0, 0, 0, 0.22);
+  gap: 6px;
+  padding: 5px 7px;
+  border: 2px solid var(--top-accent);
+  border-radius: var(--bb-radius-control);
+  color: var(--bb-text);
+  background: var(--bb-surface-gradient);
+  box-shadow: var(--bb-card-shadow);
   opacity: 0;
   transform: translate(-50%, -8px);
   transition:
-    opacity 150ms ease,
-    transform 180ms ease;
+    opacity 220ms ease,
+    transform 220ms var(--bb-ease);
 }
 
 .tutorial-top-card[data-tone="danger"] {
-  --top-accent: #fb7185;
+  --top-accent: var(--bb-red);
 }
 
 .tutorial-top-card[data-tone="powerup"] {
-  --top-accent: #a78bfa;
+  --top-accent: #ad8bef;
 }
 
 .tutorial-top-card[data-tone="super"] {
-  --top-accent: #facc15;
+  --top-accent: var(--bb-gold);
 }
 
 .tutorial-top-card[data-tone="team"] {
-  --top-accent: #22d3ee;
+  --top-accent: var(--bb-border-highlight);
 }
 
 .tutorial-top-card.is-visible {
@@ -204,34 +196,33 @@
 }
 
 .tutorial-top-icon {
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--top-accent);
-  border-radius: 4px;
+  border: 2px solid var(--top-accent);
+  border-radius: var(--bb-radius-control);
   color: var(--top-accent);
-  font: 900 11px/1 "Press Start 2P", monospace;
+  font: 9px/1 var(--bb-font-display);
 }
 
 .tutorial-top-content {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 3px;
 }
 
 .tutorial-top-content strong {
-  font-size: 11px;
-  line-height: 1.05;
+  font-size: 8px;
+  line-height: 1.35;
 }
 
 .tutorial-top-content > span {
-  color: #bdcbe0;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1.15;
+  color: var(--bb-text-soft);
+  font-size: 7px;
+  line-height: 1.5;
 }
 
 .tutorial-target-marker {
@@ -285,11 +276,6 @@
   opacity: 0.62;
 }
 
-@keyframes tutorial-pop {
-  from { scale: 0.88; }
-  to { scale: 1; }
-}
-
 @keyframes tutorial-spin {
   to { transform: rotate(360deg); }
 }
@@ -301,14 +287,16 @@
 @media (max-width: 700px) {
   .tutorial-top-card {
     top: 76px;
-    width: min(330px, calc(100vw - 18px));
+    width: min(295px, calc(100vw - 18px));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .tutorial-action-card,
+  .tutorial-top-card,
   .tutorial-target-marker span,
   .tutorial-route line {
     animation: none !important;
+    transition-duration: 0.01ms;
   }
 }

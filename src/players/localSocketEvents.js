@@ -1,6 +1,10 @@
+import { endDash } from '../gameScene/dash';
+import { playPlayerSound } from '../gameScene/playerAudio';
+import { applyMovementCorrection } from './movementCorrection';
 import { resolveShockwaveImpulse, SHOCKWAVE_MOMENTUM_MS } from "../shared/shockwaveImpulse";
 import { performSpecial } from "../characters/special";
 import {
+  spawnStompImpact,
   spawnDamageImpact,
   spawnDuckGuardImpact,
   spawnDeathBurst,
@@ -39,6 +43,7 @@ export function bindLocalSocketEvents({
   removeLocalCorpse,
   onDebug,
   onDuckBlocked,
+  onAttackInterrupted,
 }) {
   let corpseRemovalTimer = null;
   let deathGeneration = 0;
@@ -226,7 +231,13 @@ export function bindLocalSocketEvents({
 
     const amountX = Number(data?.amountX) || 0;
     const amountY = Number(data?.amountY) || 0;
-    if (data?.cause === "shockwave") {
+    if (data?.cause === "stomp") {
+      endDash(player, false);
+      player._attackInterruptedUntil = Date.now() + 300;
+      interruptPresentation(player);
+      onAttackInterrupted?.();
+    }
+    if (data?.cause === "shockwave" || data?.cause === "stomp") {
       const body = player.body;
       const contacts = Object.fromEntries(["up", "down", "left", "right"].map(
         side => [side, !!(body.blocked?.[side] || body.touching?.[side])],
@@ -304,11 +315,36 @@ export function bindLocalSocketEvents({
     updateHealthBar();
   };
 
+  const stompHandler = (data) => {
+    const scene = getScene();
+    if (!scene || !Number.isFinite(data?.x) || !Number.isFinite(data?.y)) return;
+    const local = data.username === getUsername();
+    spawnStompImpact(scene, data.x, data.y, { cameraShake: local });
+    if (local) scene.sound?.play('sfx-stomp', { volume: 1 });
+    else playPlayerSound(scene, { x: data.x, y: data.y }, 'sfx-stomp', { volume: 1 });
+    for (const name of data.interrupted || []) {
+      const wrapper = Object.values(getOpponentPlayersRef() || {}).find(op =>
+        op.username === name || op.name === name || op.opponent?.name === name);
+      if (!wrapper?.opponent) continue;
+      wrapper._animLockUntil = 0;
+      interruptPresentation(wrapper.opponent);
+    }
+  };
+  const interruptPresentation = (sprite) => {
+    sprite.emit?.('attack:interrupted');
+    sprite._thorgAttackCleanup?.();
+    sprite._remoteActionAnimUntil = sprite._specialAnimLockUntilPerf = sprite._specialAnimLockUntil = 0;
+    sprite._bbAnimationState = {};
+    sprite._lockFlip = false;
+    playSpriteAnimation({ scene: getScene(), sprite, character: sprite._bbCharacter,
+      logical: 'falling', fallback: 'idle' });
+  };
   const correctionHandler = (data) => {
     const player = getPlayer();
     if (!player?.body || !Number.isFinite(data?.x) || !Number.isFinite(data?.y)) return;
-    player.body.reset(data.x, data.y);
+    applyMovementCorrection(player, data);
   };
+  socket.on("player:stomp", stompHandler);
   socket.on("game:correction", correctionHandler);
   socket.on("health-update", healthUpdateHandler);
   socket.on("super-update", superUpdateHandler);
@@ -319,6 +355,7 @@ export function bindLocalSocketEvents({
 
   return () => {
     cancelCorpseRemoval();
+    socket.off("player:stomp", stompHandler);
     socket.off("game:correction", correctionHandler);
     socket.off("health-update", healthUpdateHandler);
     socket.off("super-update", superUpdateHandler);

@@ -17,7 +17,7 @@ function request(room,p,data={},special=false){
   let reason=null;
   if(!id||!Number.isFinite(angle))reason='invalid-request';
   else if(room.status!=='active'||!p.isAlive||!p.loaded||p.connected===false)reason='inactive';
-  else if(p._controlLockUntil>now)reason='locked';
+  else if(Math.max(p._controlLockUntil || 0, p._attackInterruptedUntil || 0) > now)reason='locked';
   else if(special?p.superCharge<p.maxSuperCharge:!p.ammoState||p.ammoState.charges<=0||p.ammoState.nextFireInMs>0)reason='not-ready';
   if(!reason){
     if(special){p.superCharge=0;room.io.to(`game:${room.matchId}`).emit('super-update',{username:p.name,charge:0,maxCharge:p.maxSuperCharge});}

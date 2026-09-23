@@ -1,5 +1,6 @@
 import { createAnimationBuilder } from "../shared/animationBuilder";
 import { THORG_SWEEP, THORG_ATTACK_FRAMES } from "../../shared/thorgSweep";
+import movementPhysics from "../../shared/movementPhysics.json";
 
 export function animations(scene, NAME = "thorg") {
   const { make, getFrame, findFrames } = createAnimationBuilder(scene, NAME);
@@ -76,6 +77,9 @@ export function animations(scene, NAME = "thorg") {
   make(`${NAME}-powerup`, ["powerup"], videoFrames ? 18 : 10, 0);
   make(`${NAME}-special`, ["powerup"], videoFrames ? 18 : 10, 0);
   make(`${NAME}-ducking`, ["duck"], 1, -1);
+  for (const direction of ["dashright", "dashdiagonal", "dashup"]) {
+    make(`${NAME}-${direction}`, [direction], 3 * 1000 / movementPhysics.dashDurationMs, 0);
+  }
   makeSweep();
   make(`${NAME}-dying`, ["dying", "death", "dead"], videoFrames ? 28 / 3 : 10, 0);
 }

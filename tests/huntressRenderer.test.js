@@ -11,8 +11,13 @@ const attackCode=babel.transformSync(fs.readFileSync(require.resolve('../src/cha
   babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code;
 const attackApi={};
+const playerAudio={};
+vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/gameScene/playerAudio.js'),'utf8'),{
+  babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
+}).code,{exports:playerAudio});
 vm.runInNewContext(attackCode,{exports:attackApi,require:name=>name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):
   name.includes('characterTuning')?tuning:name.includes('huntressProjectile')?model:
+  name.includes('playerAudio')?playerAudio:
   name.includes('runtimeId')?{createRuntimeId:()=> 'aim'}:
   name.includes('flipLock')?{lockPlayerFlip:()=>()=>{}}:
   name.includes('animationState')?{playSpriteAnimation(){}}:{},
@@ -24,6 +29,7 @@ function setup(){
   const api={},created=[],sounds=[];let now=0;
   const socket={connected:false};
   vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('huntressProjectile')?model:name.includes('huntressReplication')?replication:
+    name.includes('playerAudio')?playerAudio:
     name.includes('runtimeId')?{createRuntimeId:()=> 'generated'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:10}}:socket,
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){},window:{}});
   function sprite(x,y,texture){const s={active:true,x,y,texture,setPosition(x,y){this.x=x;this.y=y;return this;},setRotation(r){this.rotation=r;return this;},
@@ -31,6 +37,7 @@ function setup(){
   const scene={events:new EventEmitter(),add:{sprite,circle:sprite,graphics(){const g=sprite(0,0);for(const key of ["setAlpha","fillStyle","fillRect"])g[key]=()=>g;return g;}},tweens:{add(){}},sound:{play:key=>sounds.push(key)}};
   api.configureHuntressNetwork({huntressCombatVersion:2,epoch:'room',sentMono:0,simMono:0,projectiles:[],terminals:[],collisionGeometry:{colliders:[]}});
   const owner={active:true,x:100,y:100,displayWidth:150,displayHeight:150,flipX:false};
+  scene._localPlayerAudioSprite=owner;
   const frame=time=>{now=time;scene.events.emit('update',time,1000/120);};
   const packet=action=>({playerName:'owner',action:{huntressCombatVersion:2,epoch:'room',sentMono:now,simMono:now,...action}});
   return {api,created,sounds,scene,owner,frame,packet};

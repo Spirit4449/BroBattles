@@ -3,6 +3,7 @@ import { getResolvedCharacterSpecialConfig } from "../../shared/characterTuning.
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
 import { resolveGloopHookSocket } from "../../shared/gloopHookGeometry";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 const NAME = "gloop";
 const HOOK = getResolvedCharacterSpecialConfig(NAME, "hook");
@@ -95,6 +96,7 @@ function createHookVisual(scene, owner, angle, start, id) {
     scene.events.off("update", update);
     scene.events.off("shutdown", visual.destroy);
     owner.off?.("destroy", visual.destroy);
+    owner.off?.("attack:interrupted", visual.destroy);
     hand.destroy(); tether.destroy(); fx.destroy();
     if (ACTIVE_HOOK_VISUALS.get(owner) === visual) ACTIVE_HOOK_VISUALS.delete(owner);
   };
@@ -216,6 +218,7 @@ function createHookVisual(scene, owner, angle, start, id) {
   scene.events.on("update", update);
   scene.events.once("shutdown", visual.destroy);
   owner.once?.("destroy", visual.destroy);
+  owner.once?.("attack:interrupted", visual.destroy);
   ACTIVE_HOOK_VISUALS.set(owner, visual);
   return visual;
 }
@@ -233,7 +236,7 @@ export function playHookAction(scene, player, specialData = null, isOwner = fals
   visual.outMs = Math.max(1, visual.range / speed * 1000);
   visual.returnMs = Math.max(160, visual.outMs * 0.45);
   visual.burst(start.x, start.y, 5, 90);
-  try { scene.sound?.play?.("gloop-special", { volume: isOwner ? 0.68 : 0.38 }); } catch (_) {}
+  try { playPlayerSound(scene, player, "gloop-special", { volume: 0.68 }); } catch (_) {}
 }
 
 export function playHookCatchAction(scene, ownerPlayer, actionData = null, isOwner = false) {
@@ -261,7 +264,7 @@ export function playHookCatchAction(scene, ownerPlayer, actionData = null, isOwn
   const closed = resolveHandTextureKey(scene, "closed");
   if (closed && !visual.hand._gripAnimated) visual.hand.setTexture?.(closed);
   visual.burst(start.x, start.y, 14, 170);
-  try { scene.sound?.play?.("gloop-pull", { volume: isOwner ? 0.62 : 0.36 }); } catch (_) {}
+  try { playPlayerSound(scene, ownerPlayer, "gloop-pull", { volume: 0.62 }); } catch (_) {}
 }
 
 export function perform(

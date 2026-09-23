@@ -1,3 +1,4 @@
+import { updateDash, endDash, drawDashCooldown, protectDashMotion, applyDashCoast } from './gameScene/dash';
 import { spritePresentation } from './characters/shared/spritePresentation';
 import { applyTeamVisual, TEAM_GREEN } from "./shared/projectilePresentation";
 import { getSettings, bindCanvasName, subscribeSettings } from "./site/preferences";
@@ -69,6 +70,7 @@ import MOVEMENT_PHYSICS from "./shared/movementPhysics.json";
 import {
   DUCK_HEIGHT_RATIO,
   DUCK_SPEED_RATIO,
+  DUCK_REENTRY_DELAY_MS,
   findGroundSpan,
   hasStandingClearance,
   clampBodyToGroundSpan,
@@ -82,7 +84,7 @@ import {
 let player;
 let cursors;
 let movementKeys;
-let keySpace; // Spacebar for jump
+let keySpace; // Spacebar for dash
 let keyJ; // J for basic attack
 let canWallJump = true;
 let isMoving = false;
@@ -351,6 +353,10 @@ const localStateSync = createLocalStateSync({
   getPlayer: () => player,
   getDead: () => dead,
   setDead: (value) => {
+    if (dead !== value) {
+      endDash(player, false);
+      if (player) { player._dashReadyAt = 0; player._dashHud?.hide(); }
+    }
     dead = value;
   },
   getMaxHealth: () => maxHealth,
@@ -659,7 +665,7 @@ export function createPlayer(
     const key = slot => scene.input.keyboard.addKey(settings.keys[slot]);
     movementKeys={left:key('left'),right:key('right'),up:key('up'),down:key('down')};
     cursors={left:key('leftAlt'),right:key('rightAlt'),up:key('upAlt'),down:key('downAlt')};
-    keySpace=key('jump');keyJ=key('attack');keyI=key('special');keyE=key('interact');
+    keySpace=key('dash');keyJ=key('attack');keyI=key('special');keyE=key('interact');
   };
   bindKeys(getSettings());
   const stopKeyUpdates=subscribeSettings(bindKeys);
@@ -701,6 +707,7 @@ export function createPlayer(
         -100,
         getTextureKey(character, currentSkinId),
       );
+  scene._localPlayerAudioSprite = player;
   player._bbCharacter = String(currentCharacter || "").toLowerCase();
   player._bbSkinId = currentSkinId;
   player._bbSkinTextureKey = getTextureKey(character, currentSkinId);
@@ -758,6 +765,7 @@ export function createPlayer(
   player.body.updateFromGameObject?.();
   player._ducking = false;
   player._duckRequested = false;
+  player._duckAvailableAt = 0;
   player._duckGroundSpan = null;
   player._duckGroundY = null;
   // Helper to adjust body offset when flipping
@@ -828,9 +836,12 @@ export function createPlayer(
     }
     clampBodyToGroundSpan(body, player._duckGroundSpan, player._duckGroundY);
   };
+  const protectDash = delta => { if (!dead) protectDashMotion(scene, player, Date.now(), delta); };
+  scene.physics.world.on("worldstep", protectDash);
   scene.physics.world.on("worldstep", protectDuckEdge);
   scene.events.once("shutdown", () => {
     scene.physics.world.off("worldstep", protectDuckEdge);
+    scene.physics.world.off("worldstep", protectDash);
   });
 
   // Listener to detect if player leaves the world bounds
@@ -952,6 +963,7 @@ export function createPlayer(
       } catch (_) {}
     },
     tryConsume: () => {
+      if (player?._dash) return false;
       const now = Date.now();
       if (!canAttack) {
         if (ammoCharges <= 0) ammoHooks.triggerNoAmmoFeedback(true);
@@ -1024,7 +1036,7 @@ export function createPlayer(
   // Right-click mirrors that for supers using the special reticle theme.
   const pointerDownHandler = (pointer) => {
     if (window.__BB_MAP_EDIT_ACTIVE) return;
-    if (dead) return;
+    if (dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
     if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) return;
     if (
       Math.max(
@@ -1093,7 +1105,7 @@ export function createPlayer(
         Number(player?._externalControlLockUntil || 0),
       ) > Date.now();
     const context = finishPointerAttackAim(pointer);
-    if (!context || dead || movementLockedNow) return;
+    if (!context || dead || movementLockedNow || Date.now() < (player?._attackInterruptedUntil || 0)) return;
     if (String(context.family || "basic").toLowerCase() === "special") {
       fireSpecialAttack(context);
       return;
@@ -1166,6 +1178,10 @@ export function createPlayer(
     },
     getDead: () => dead,
     setDead: (value) => {
+      if (dead !== value) {
+        endDash(player, false);
+        if (player) { player._dashReadyAt = 0; player._dashHud?.hide(); }
+      }
       dead = value;
     },
     getSuperCharge: () => superCharge,
@@ -1208,6 +1224,11 @@ export function createPlayer(
     },
     onDebug: pdbg,
     onDuckBlocked: () => playDuckBlockSound(scene),
+    onAttackInterrupted: () => {
+      isAttacking = false;
+      combatMouseController?.endDrag();
+      resetPointerAttackAim();
+    },
   });
 
   if (!scene._localSocketEventsCleanupBound) {
@@ -1438,7 +1459,7 @@ function updateHealthBar() {
 }
 
 function fireBasicAttack(direction, context = null) {
-  if (dead) return;
+  if (dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
   try {
     if (player?.scene) {
       player.scene._localAttackPrecisionUntil = performance.now() + 420;
@@ -1454,7 +1475,7 @@ function fireBasicAttack(direction, context = null) {
 }
 
 function fireSpecialAttack(context = null) {
-  if (dead) return;
+  if (dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
   if (superCharge < maxSuperCharge) {
     triggerSpecialNotReadyFeedback();
     return;
@@ -1553,6 +1574,7 @@ function drawAmmoBar(forcedX, forcedY) {
 }
 
 export function handlePlayerMovement(scene) {
+  drawDashCooldown(scene, player, dead);
   mobileControlsController?.ensure?.(scene);
   mobileControlsController?.layout?.(scene);
   const desktopInputInactive =
@@ -1565,6 +1587,7 @@ export function handlePlayerMovement(scene) {
     chatInputActive ||
     window.__BB_SITE_DIALOG_OPEN
   ) {
+    endDash(player);
     stopMovementLoopSfx();
     releaseMovementForFocus(player, {
       dragGround: MOVEMENT_PHYSICS.dragGround,
@@ -1638,6 +1661,53 @@ export function handlePlayerMovement(scene) {
     };
     return;
   }
+  const dashNow = Date.now();
+  const dashing = updateDash(scene, player, {
+    pressed: !!keySpace && Phaser.Input.Keyboard.JustDown(keySpace),
+    left: cursors.left.isDown || movementKeys.left.isDown || !!mobileControlsController?.isMovingLeft?.(),
+    right: cursors.right.isDown || movementKeys.right.isDown || !!mobileControlsController?.isMovingRight?.(),
+    up: cursors.up.isDown || movementKeys.up.isDown,
+    down: cursors.down.isDown || movementKeys.down.isDown,
+    blocked: dead || isAttacking || Number(movementSpeedMult) <= 0 ||
+      Math.max(player._movementLockedUntil || 0, player._externalControlLockUntil || 0,
+        player._specialAnimLockUntil || 0, player._shockwaveUntil || 0,
+        player._knockbackUntil || 0) > dashNow,
+    now: dashNow,
+    showEffect: !powerupInvisible,
+  });
+  // Ammo reload tick
+  if (ammoCharges < ammoCapacity) {
+    reloadTimerMs += scene.game.loop.delta;
+    if (reloadTimerMs >= ammoReloadMs) {
+      reloadTimerMs = 0;
+      ammoCharges = Math.min(ammoCapacity, ammoCharges + 1);
+    }
+  } else {
+    reloadTimerMs = 0; // full, no reload progress
+  }
+  // Redraw ammo bar periodically (cheap draw)
+  if (!dead) drawAmmoBar();
+
+  if (dashing) {
+    stopMovementLoopSfx();
+    isMoving = true;
+    wasWallSliding = false;
+    player._wallAttachSide = null;
+    player._wallAttachStartedAt = null;
+    applyFlipOffsetLocal?.();
+    playCharacterAnimation({ scene, sprite: player, character: currentCharacter,
+      skinId: currentSkinId, resolveAnimKey, logical: 'dashing', fallback: 'falling', force: true });
+    syncLocalUiPosition();
+    networkInputState = {
+      direction: player._dash.inputX || 0, jumpHeld: false, jumpPressed: false,
+      grounded: !!player.body.touching.down, ducking: !!player._ducking,
+      vx: player.body.velocity.x, vy: player.body.velocity.y,
+      facing: player.flipX ? -1 : 1, animation: 'dashing',
+      wallSliding: false, wallSide: null, ...getMovementFxNetworkState(),
+      movementLocked: false, loaded: !dead && player.visible !== false,
+    };
+    return;
+  }
   // Movement tuning knobs (edit to change the feel):
   // Enforce facing lock (e.g., Draven splash) BEFORE any movement logic mutates flip state
   if (player && player._lockFlip && player._lockedFlipX !== undefined) {
@@ -1674,7 +1744,7 @@ export function handlePlayerMovement(scene) {
   if (player.body) {
     const onGround = player.body.touching.down;
     player.setDragX(onGround ? dragGround : dragAir);
-    player.setMaxVelocity(shockwaveActive ? Math.max(maxSpeed, Math.abs(player.body.velocity.x)) : maxSpeed,
+    player.setMaxVelocity((shockwaveActive || (player._dashCoastUntil || 0) > Date.now()) ? Math.max(maxSpeed, Math.abs(player.body.velocity.x)) : maxSpeed,
       shockwaveActive ? Math.max(1000, Math.abs(player.body.velocity.y)) : 1000);
   }
   // Track last grounded time for coyote jumping
@@ -1694,13 +1764,11 @@ export function handlePlayerMovement(scene) {
   let upKey =
     cursors.up.isDown ||
     keyW.isDown ||
-    (keySpace && keySpace.isDown) ||
     !!mobileControlsController?.isJumpHeld?.();
   const directionalUpFreshPress =
     Phaser.Input.Keyboard.JustDown(cursors.up) ||
     Phaser.Input.Keyboard.JustDown(keyW);
   const jumpButtonFreshPress =
-    (!!keySpace && Phaser.Input.Keyboard.JustDown(keySpace)) ||
     !!mobileControlsController?.consumeJumpFreshPress?.();
   let upKeyFreshPress = directionalUpFreshPress || jumpButtonFreshPress;
   let ducking = false;
@@ -1801,7 +1869,8 @@ export function handlePlayerMovement(scene) {
       isAirborne &&
       isFalling &&
       (!wallSlideContact || wallSlideSuppressed) &&
-      fallGravityFactor > 1
+      fallGravityFactor > 1 &&
+      Date.now() >= (player._dashCoastUntil || 0)
     ) {
       // Additive per-body gravity so total ~= worldG * fallGravityFactor
       player.body.setGravityY(worldG * (fallGravityFactor - 1));
@@ -1864,7 +1933,13 @@ export function handlePlayerMovement(scene) {
     (cursors.down.isDown || keyS.isDown) && !upKey && !movementLocked && !dead;
   player._duckRequested = wantsToDuck;
   ducking = !!player._ducking;
-  if (!ducking && wantsToDuck && groundedForDuck && groundSpan) {
+  if (
+    !ducking &&
+    wantsToDuck &&
+    Date.now() >= (player._duckAvailableAt || 0) &&
+    groundedForDuck &&
+    groundSpan
+  ) {
     ducking = true;
     player._duckGroundSpan = groundSpan;
     player._duckGroundY = player.body.bottom;
@@ -1893,7 +1968,11 @@ export function handlePlayerMovement(scene) {
       player._lastJumpPressTime = 0;
     }
   }
+  const wasDucking = !!player._ducking;
   resizeForDuckLocal?.(ducking);
+  if (wasDucking && !ducking) {
+    player._duckAvailableAt = Date.now() + DUCK_REENTRY_DELAY_MS;
+  }
   if (!ducking) {
     player._duckGroundSpan = null;
     player._duckGroundY = null;
@@ -1968,6 +2047,7 @@ export function handlePlayerMovement(scene) {
 
   const inputDirection =
     leftKey && !rightKey ? -1 : rightKey && !leftKey ? 1 : 0;
+  applyDashCoast(player, inputDirection, maxSpeed);
   const groundSpeed = Math.abs(Number(player.body.velocity.x) || 0);
   const groundSpeedRatio = Phaser.Math.Clamp(groundSpeed / maxSpeed, 0, 1);
   if (
@@ -2266,19 +2346,6 @@ export function handlePlayerMovement(scene) {
   movementVfxInitialized = true;
   if (onGround) player._lastGroundTime = Date.now();
 
-  // Ammo reload tick
-  if (ammoCharges < ammoCapacity) {
-    reloadTimerMs += scene.game.loop.delta;
-    if (reloadTimerMs >= ammoReloadMs) {
-      reloadTimerMs = 0;
-      ammoCharges = Math.min(ammoCapacity, ammoCharges + 1);
-    }
-  } else {
-    reloadTimerMs = 0; // full, no reload progress
-  }
-  // Redraw ammo bar periodically (cheap draw)
-  if (!dead) drawAmmoBar();
-
   // Per-character effects update (e.g., Draven fire trail)
   if (charEffects && !powerupInvisible) {
     charEffects.update(scene.game.loop.delta, isMoving, dead);
@@ -2469,6 +2536,7 @@ export function handlePlayerMovement(scene) {
   }
 
   function jump() {
+    player._dashCoastUntil = 0;
     if (player.body?.touching?.down && !powerupInvisible) {
       const body = player.body;
       spawnJumpTakeoff(
@@ -2507,6 +2575,7 @@ export function handlePlayerMovement(scene) {
   }
 
   function wallJump(wallSideParam) {
+    player._dashCoastUntil = 0;
     player._wallSlideSuppressedUntil = Date.now() + wallSlideReentryDelayMs;
     player._jumpLaunch = null;
     updateWallSlideAudio(false);

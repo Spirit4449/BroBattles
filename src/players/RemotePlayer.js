@@ -1,3 +1,4 @@
+import { presentRemoteDash } from '../gameScene/dash';
 import { spritePresentation } from '../characters/shared/spritePresentation';
 import { applyTeamVisual, TEAM_GREEN, TEAM_RED } from "../shared/projectilePresentation";
 import { bindCanvasName } from "../site/preferences";
@@ -41,6 +42,8 @@ import {
 } from "../effects";
 import { RENDER_LAYERS } from "../gameScene/renderLayers";
 import { playDuckTransitionSound } from "../gameScene/movementAudio.js";
+import { playPlayerSound } from "../gameScene/playerAudio.js";
+import { createRemoteMovementAudio } from "../gameScene/remoteMovementAudio";
 import { DUCK_HEIGHT_RATIO } from "../shared/ducking.js";
 
 const OP_PLAYER_NAME_OFFSET_Y = 42;
@@ -313,6 +316,15 @@ export default class RemotePlayer {
   }
 
   updateMovementVfx(movementState, animationState = movementState) {
+    if (this.opponent?.active && this.opCurrentHealth > 0 &&
+        this.presenceLoaded && this.presenceConnected && this._spawnPresented) {
+      this._movementAudio ||= createRemoteMovementAudio(this.scene, this.opponent);
+      this._movementAudio.update(movementState, animationState);
+    } else {
+      this._movementAudio?.reset();
+    }
+    presentRemoteDash(this.scene, this.opponent, movementState, this,
+      this.opCurrentHealth <= 0);
     if (
       !this.scene?.add ||
       !this.opponent?.active ||
@@ -586,7 +598,7 @@ export default class RemotePlayer {
       typeof previousDucking === "boolean" &&
       previousDucking !== nextDucking
     ) {
-      playDuckTransitionSound(this.scene, nextDucking);
+      playDuckTransitionSound(this.scene, nextDucking, this.opponent);
     }
   }
 
@@ -658,6 +670,7 @@ export default class RemotePlayer {
   }
 
   setPresenceState(connected, loaded) {
+    if (connected === false || loaded === false) this._movementAudio?.reset();
     this.presenceConnected = connected !== false;
     this.presenceLoaded = loaded !== false;
     const shouldRender =
@@ -877,6 +890,7 @@ export default class RemotePlayer {
   }
 
   startDeathPresentation(meta = {}) {
+    this._movementAudio?.reset();
     if (
       !this.opponent ||
       !this.opponent.active ||
@@ -909,7 +923,7 @@ export default class RemotePlayer {
     }
 
     try {
-      this.scene.sound.play("sfx-death", { volume: 0.46 });
+      playPlayerSound(this.scene, this.opponent, "sfx-death", { volume: 0.55 });
     } catch (_) {}
     spawnDeathBurst(this.scene, this.opponent, {
       color: 0xff7394,
@@ -949,6 +963,7 @@ export default class RemotePlayer {
   }
 
   handleRespawn(meta = {}) {
+    this._movementAudio?.reset();
     if (!this.opponent) return;
     this._corpseRemovalTimer?.remove?.(false);
     this._corpseRemovalTimer = null;
@@ -1006,6 +1021,7 @@ export default class RemotePlayer {
 
   // Clean up method to stop any active tweens and remove sprites
   destroy() {
+    this._movementAudio?.destroy();
     this._corpseRemovalTimer?.remove?.(false);
     this._corpseRemovalTimer = null;
     if (this.healthUpdateListener) {

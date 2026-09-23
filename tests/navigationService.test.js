@@ -16,6 +16,7 @@ test('worker builds equivalent routes without blocking, reuses rooms and separat
     const graph = await service.prepare(geometry, 'ninja');
     assert.equal(heartbeat, true);
     assert.deepEqual(graph.edges, buildGraph(geometry, 'ninja').edges);
+    assert.deepEqual(graph.dashEdges, buildGraph(geometry, 'ninja').dashEdges);
     assert.equal(service.getGraph(structuredClone(geometry), 'ninja'), graph);
     const modifiers = { speedMult: 1.25, jumpMult: 1.55 };
     const waiting = service.getGraph(geometry, 'ninja', modifiers);

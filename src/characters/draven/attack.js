@@ -8,6 +8,7 @@ import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
 import { emitVaultHitForRect } from "../shared/vaultTargeting";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 const SPLASH = getResolvedCharacterAttackConfig("draven", "splash");
 const SPLASH_W = SPLASH.width;
@@ -55,7 +56,7 @@ export function performDravenSplashAttack(instance, attackContext = null) {
   // Play fireball SFX (local-only)
   try {
     if (scene.sound) {
-      scene.sound.play("draven-fireball", { volume: 0.4, rate: 1 });
+      playPlayerSound(scene, p, "draven-fireball", { volume: 0.4, rate: 1 });
     }
   } catch (_) {}
 

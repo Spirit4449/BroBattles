@@ -39,7 +39,7 @@ function request(room, p, data, special = false) {
   const shot = model.resolveShot(special ? data.aim : data, special);
   let reason;
   if (room.status !== 'active' || !p.isAlive || !p.loaded || p.connected === false) reason = 'inactive';
-  else if (p._controlLockUntil > now) reason = 'locked';
+  else if (Math.max(p._controlLockUntil || 0, p._attackInterruptedUntil || 0) > now) reason = 'locked';
   else if (!shot) reason = 'invalid-aim';
   else if (special ? p.superCharge < p.maxSuperCharge : !p.ammoState || p.ammoState.charges <= 0 || p.ammoState.nextFireInMs > 0) reason = 'not-ready';
   const accepted = !reason;

@@ -2129,8 +2129,8 @@ h3 {
 
 .lobby-hint {
   position: fixed;
-  /* Above lobby content, below navigation popovers and modal backdrops (1000+). */
-  z-index: 900;
+  /* Above the lobby bars, while staying below popup and modal overlays. */
+  z-index: 1001;
   width: min(238px, calc(100vw - 18px));
   box-sizing: border-box;
   display: grid;

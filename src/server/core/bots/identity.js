@@ -282,12 +282,9 @@ function createBotParticipants(
   } = {},
 ) {
   const random = createRandom(seed);
-  const levels = humans.map(characterLevel).sort((a, b) => a - b);
+  const levels = humans.map(characterLevel);
   const n = levels.length;
   if (!n) throw new Error("Bot matches require a human participant.");
-  const level = Math.round(
-    (levels[Math.floor((n - 1) / 2)] + levels[Math.floor(n / 2)]) / 2,
-  );
   const lobbyTrophies = Math.round(
     humans.reduce((sum, p) => sum + Math.max(0, Number(p.trophies) || 0), 0) /
       n,
@@ -309,7 +306,17 @@ function createBotParticipants(
   );
 
   for (const team of ["team1", "team2"]) {
-    const count = humans.filter((p) => p.team === team).length;
+    const teamHumans = humans.filter((p) => p.team === team);
+    const count = teamHumans.length;
+    // A bot resembles the strength of the side it joins, but should not look
+    // like a copy of the player or a precisely balanced team average.
+    const referenceLevels = teamHumans.length
+      ? teamHumans.map(characterLevel)
+      : levels;
+    const referenceLevel = Math.round(
+      referenceLevels.reduce((sum, value) => sum + value, 0) /
+        referenceLevels.length,
+    );
     for (let i = count; i < teamSize; i++) {
       let name = null;
 
@@ -360,9 +367,13 @@ function createBotParticipants(
       reserved.add(name.toLowerCase());
 
       const char_class = characters[Math.floor(random() * characters.length)];
+      const nearbyLevels = [-2, -1, 1, 2]
+        .map((offset) => Math.max(1, Math.min(LEVEL_CAP, referenceLevel + offset)))
+        .filter((value, index, values) => values.indexOf(value) === index);
+      const level = nearbyLevels[Math.floor(random() * nearbyLevels.length)];
       const trophySpread = Math.max(
-        15,
-        Math.min(120, Math.round(lobbyTrophies * 0.08)),
+        75,
+        Math.min(750, Math.round(lobbyTrophies * 0.25)),
       );
       let trophyOffset = Math.round((random() + random() - 1) * trophySpread);
       if (trophyOffset === 0) trophyOffset = lobbyTrophies === 0 || random() >= 0.5 ? 1 : -1;

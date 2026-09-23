@@ -1,12 +1,14 @@
 """Extract curated poses from the approved videos (requires Pillow, NumPy, ffmpeg).
 
 Run from the repository root. Review artifacts go in output/thorg-video-import.
+Use --dash-only to preserve shipped art when older source videos are archived.
 The 128px logical canvas preserves physics; trimmed art may extend outside it
 for raised weapons and the full-length corpse. No per-frame fit-to-box scaling.
 """
 import hashlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -24,6 +26,9 @@ SPECS = {
     'falling': ('fall3', [0, 12, 24, 37], 106 / 428, 8),
     'powerup': ('special', [0, 2, 4, 6, 8, 10, 12], 106 / 432, 18),
     'dying': ('dead', [2, 10, 21, 32, 42, 48, 54, 59], 106 / 496, 28 / 3),
+    'dashright': ('dash_right', [2, 5, 8], 106 / 428, 3 * 1000 / 160),
+    'dashdiagonal': ('dash_45', [3, 6, 9], 106 / 428, 3 * 1000 / 160),
+    'dashup': ('dash_up', [4, 8, 12], 106 / 428, 3 * 1000 / 160),
 }
 
 # Measured grip and distal mace-tip coordinates on 320x180 previews of attack3.
@@ -72,8 +77,23 @@ def cutout(rgb, preserve_sweep=False):
 
 
 entries = []
+dash_only = '--dash-only' in sys.argv
+if dash_only:
+    # Older source clips may be archived; preserve the shipped frames verbatim.
+    existing = json.loads((ASSETS / 'animations.json').read_text())
+    sheet = Image.open(ASSETS / 'spritesheet.webp').convert('RGBA')
+    for row in existing['frames']:
+        if row['filename'].startswith(('dashright', 'dashdiagonal', 'dashup')):
+            continue
+        f, s = row['frame'], row['spriteSourceSize']
+        entries.append({'name': row['filename'],
+                        'image': sheet.crop((f['x'], f['y'], f['x'] + f['w'], f['y'] + f['h'])),
+                        'x': s['x'], 'y': s['y'], 'embedded': row['bbEmbeddedWeapon'],
+                        'originalRow': row})
 manifest = {'animations': {}, 'logicalSize': 128, 'footBaseline': 118}
 for prefix, (video, indices, scale, fps) in SPECS.items():
+    if dash_only and not prefix.startswith('dash'):
+        continue
     assert len(indices) <= (12 if prefix == "throw" else 8), f"Too many frames: {prefix}"
     source = decode(video)
     poses = []
@@ -103,10 +123,11 @@ for prefix, (video, indices, scale, fps) in SPECS.items():
                                       'fps': fps, 'source': f'thorg_{video}.mp4'}
 
 # Reuse the final jump pose as falling00, so the handoff is pixel-exact.
-jump = next(e for e in entries if e['name'] == 'jumping07')
-fall = next(e for e in entries if e['name'] == 'falling00')
-fall.update({k: jump[k] for k in ('image', 'x', 'y', 'video', 'sourceFrame')})
-manifest['animations']['falling']['transition'] = 'falling00 reuses jumping07'
+if not dash_only:
+    jump = next(e for e in entries if e['name'] == 'jumping07')
+    fall = next(e for e in entries if e['name'] == 'falling00')
+    fall.update({k: jump[k] for k in ('image', 'x', 'y', 'video', 'sourceFrame')})
+    manifest['animations']['falling']['transition'] = 'falling00 reuses jumping07'
 
 # Match the idle helmet's 52px horn span, not the overall pose bounding box.
 # Raised hands/weapons must not shrink the body. Keep the original green masters
@@ -115,7 +136,7 @@ HELD_POSES = [
     ('duck00', 'duck', 52 / 540, 625),
     ('sliding00', 'wall-slide', 58 / 512, 625),
 ]
-for name, asset, scale, center in HELD_POSES:
+for name, asset, scale, center in ([] if dash_only else HELD_POSES):
     source_file = 'thorg_duck.png' if asset == 'duck' else 'thorg_slide.png'
     source_path = ASSETS / source_file
     source = Image.open(source_path).convert('RGBA')
@@ -159,6 +180,8 @@ for n, entry in enumerate(entries):
     if 'sourceFrame' in entry:
         row['sourceVideo'] = f"thorg_{entry['video']}.mp4"
         row['sourceFrame'] = entry['sourceFrame']
+    if 'originalRow' in entry:
+        row = {**entry['originalRow'], 'frame': row['frame']}
     frames.append(row)
     review.paste(im, (ax + 64 + entry['x'], ay + 64 + entry['y']), im)
     draw.text((ax + 8, ay + 234), entry['name'], fill='white')
@@ -179,6 +202,10 @@ for prefix, spec in manifest['animations'].items():
     durations = attack_durations if prefix == 'throw' else [round(1000/spec['fps'])] * len(previews)
     previews[0].save(OUT / f'{prefix}.gif', save_all=True, append_images=previews[1:],
                      duration=durations, loop=0, disposal=2)
+
+if dash_only:
+    print(json.dumps({k: len(v['frames']) for k, v in manifest['animations'].items()}))
+    sys.exit(0)
 
 attack_entries = [e for e in entries if e['name'].startswith('throw')]
 track = []

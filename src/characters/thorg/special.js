@@ -1,6 +1,7 @@
 import { setThorgRageVisual } from "./rageVisual";
 import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState";
 import { getResolvedCharacterSpecialConfig } from "../../shared/characterTuning.js";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 const THORG_SPECIAL = getResolvedCharacterSpecialConfig("thorg");
 const THORG_RAGE_DURATION_MS = THORG_SPECIAL.rageDurationMs;
@@ -86,20 +87,20 @@ export function perform(
   }
 
   try {
-    scene.sound?.play("thorg-throw", {
-      volume: isOwner ? 0.6 : 0.28,
+    playPlayerSound(scene, player, "thorg-throw", {
+      volume: 0.6,
       rate: 0.88,
     });
   } catch (_) {}
   try {
-    scene.sound?.play("pu-touch-rage", {
-      volume: isOwner ? 0.46 : 0.24,
+    playPlayerSound(scene, player, "pu-touch-rage", {
+      volume: 0.46,
       rate: 0.8,
     });
   } catch (_) {}
   try {
-    scene.sound?.play("pu-tick-rage", {
-      volume: isOwner ? 0.24 : 0.14,
+    playPlayerSound(scene, player, "pu-tick-rage", {
+      volume: 0.24,
       rate: 0.78,
     });
   } catch (_) {}

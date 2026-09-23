@@ -5,6 +5,7 @@ import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 const NAME = "gloop";
 const SLIMEBALL = getResolvedCharacterAttackConfig(NAME, "slimeball");
@@ -55,10 +56,11 @@ function playAttackAnimation(scene, sprite) {
   });
 }
 
-function playSound(scene, key, options = {}) {
+function playSound(scene, key, options = {}, source = null) {
   try {
     if (scene?.cache?.audio?.exists?.(key) || scene?.sound?.get?.(key)) {
-      scene.sound?.play?.(key, options);
+      if (source) playPlayerSound(scene, source, key, options);
+      else scene.sound?.play?.(key, options);
       return true;
     }
   } catch (_) {}
@@ -238,7 +240,7 @@ export function spawnGloopSlimeballVisual(
       for (const hit of impacts) {
         visual.impact(hit);
         playSound(scene, "gloop-hit", { volume: hit.terminal ? 0.48 : 0.3,
-          rate: state.bounceCount > 1 ? 0.85 : 1.05 });
+          rate: state.bounceCount > 1 ? 0.85 : 1.05 }, { x: state.x, y: state.y });
       }
       if (state.done) { ended = true; visual.finish(); debug?.setVisible(false); }
       if (debug?.active) { debug.x = state.x; debug.y = state.y; }
@@ -280,7 +282,7 @@ export function performGloopSlimeball(instance, attackContext = null) {
 
   p.flipX = direction < 0;
   playAttackAnimation(scene, p);
-  playSound(scene, "gloop-attack", { volume: 0.58 });
+  playSound(scene, "gloop-attack", { volume: 0.5 }, p);
   scene.time.delayedCall(Number(SLIMEBALL.flipLockMs) || 520, () => {
     try {
       unlockFlip();

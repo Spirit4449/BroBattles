@@ -284,8 +284,11 @@ test('a pursued bot fires repeated counterattacks while continuing to escape', (
   assert.ok(brain.metrics.attacks >= 4, `only fired ${brain.metrics.attacks} counterattacks`);
   assert.equal(brain.metrics.unforcedFalls, 0);
   h.place(enemy, p.x + 1100, floor);
+  // The last delayed observation can still describe a nearby pursuer. Allow
+  // perception and an in-progress planning slice to catch up after teleporting it.
+  for (let i = 0; i < 30; i++) time.step(h);
   const attacks = brain.metrics.attacks;
-  for (let i = 0; i < 90; i++) time.step(h);
+  for (let i = 0; i < 60; i++) time.step(h);
   assert.equal(brain.metrics.attacks, attacks, 'stops firing once pressure is gone');
 });
 

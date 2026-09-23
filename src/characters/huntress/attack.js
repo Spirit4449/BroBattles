@@ -2,6 +2,7 @@ import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.j
 import { createRuntimeId } from "../shared/runtimeId.js";
 import { lockPlayerFlip } from "../shared/flipLock.js";
 import { playSpriteAnimation } from "../shared/animationState.js";
+import { playPlayerSound } from "../../gameScene/playerAudio";
 
 const ARROWS = getResolvedCharacterAttackConfig("huntress", "arrowSpread");
 
@@ -19,7 +20,7 @@ export function performHuntressArrowSpread(instance, attackContext = null) {
   playSpriteAnimation({ scene, sprite: p, character: "huntress", logical: "throw", fallback: "throw" });
   try {
     if (scene?.cache?.audio?.exists?.("huntress-attack") || scene?.sound?.get?.("huntress-attack")) {
-      scene.sound?.play?.("huntress-attack", { volume: 0.55 });
+      playPlayerSound(scene, p, "huntress-attack", { volume: 0.48 });
     }
   } catch (_) {}
   scene.time.delayedCall(ARROWS.flipLockMs, unlockFlip);

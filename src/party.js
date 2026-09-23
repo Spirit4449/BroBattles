@@ -966,6 +966,16 @@ export function checkIfInParty() {
   return false;
 }
 
+function syncInviteBadges() {
+  const inParty = !!checkIfInParty();
+  document.querySelectorAll("#lobby-area .status.invite").forEach((badge) => {
+    badge.style.display = inParty ? "" : "none";
+    badge.style.cursor = inParty ? "pointer" : "default";
+    if (inParty) badge.dataset.inviteLink = window.location.href;
+    else delete badge.dataset.inviteLink;
+  });
+}
+
 // Switching lobby routes changes state, not the screen or its connection.
 export function resetLobbyRoute(partyId) {
   partyDeparturePending = false;
@@ -981,6 +991,7 @@ export function resetLobbyRoute(partyId) {
     capacity: null, members: [], botSlots: [] };
   hidePartyJoinRequestScreen();
   document.querySelectorAll('.character-slot').forEach(clearLobbySpawnAnimation);
+  syncInviteBadges();
   setReadyButtonState(false);
   syncReadyAvailability();
 }
@@ -1952,6 +1963,7 @@ function commitPartyRosterLayout({
     const slot = document.getElementById(slotId);
     if (slot && !slot.dataset.playerName) applyBotToSlot(bot, slot, isYourTeam);
   }
+  syncInviteBadges();
 }
 
 export function renderPartyMembers(data) {
@@ -2037,9 +2049,6 @@ export function renderPartyMembers(data) {
       spawnMemberKeys,
     });
     ensurePartySlotDrag().sync();
-    if (!checkIfInParty()) {
-      document.querySelectorAll('#lobby-area .invite').forEach(badge => { badge.style.display = 'none'; });
-    }
     void revealLobby();
   };
 

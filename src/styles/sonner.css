@@ -7,15 +7,15 @@
   display: flex;
   flex-direction: column; /* stack vertically */
   align-items: center; /* center horizontally */
-  gap: 10px; /* space between toasts */
+  gap: 12px; /* keep stacked notifications visually distinct */
   pointer-events: none;
-  z-index: 9999;
+  z-index: 2147483647;
 }
 
 /* Toast card */
 .sonner {
   pointer-events: auto;
-  max-width: 500px; /* a bit wider so inline layout breathes */
+  max-width: 420px;
   width: calc(100% - 24px);
   box-sizing: border-box;
   background: var(--bb-surface-gradient, linear-gradient(180deg, #111f37, #0b1629));
@@ -61,22 +61,22 @@
 
 /* Inline content area */
 .sonner__content {
-  padding: 12px 12px 10px 14px;
+  padding: 8px 10px 8px 12px;
   min-width: 0; /* allow text to wrap instead of overflowing */
 }
 
 .sonner__hdr {
   font-weight: 700;
   line-height: 1.1;
-  margin-top: 3px;
-  font-size: 15px;
+  margin-top: 0;
+  font-size: 14px;
   word-break: break-word;
 }
 
 .sonner__msg {
-  margin: 4px 0 0 0;
-  line-height: 1.35;
-  font-size: 13px;
+  margin: 3px 0 0 0;
+  line-height: 1.3;
+  font-size: 12px;
   word-break: break-word;
   white-space: pre-wrap;
 }
@@ -87,7 +87,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  padding: 8px 12px 8px 8px;
+  padding: 6px 8px 6px 6px;
 }
 
 .sonner__btn {
@@ -96,7 +96,7 @@
   border-radius: var(--bb-radius-control, 0);
   background: var(--bb-primary-gradient, linear-gradient(180deg, #438feb, #285fc0));
   color: #fff;
-  padding: 8px 12px;
+  padding: 6px 9px;
   font-weight: 700;
   font-size: 9px;
   cursor: pointer;

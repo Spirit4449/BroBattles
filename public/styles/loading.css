@@ -121,8 +121,9 @@
   cursor: pointer;
   touch-action: manipulation;
 }
-.bb-loading-retry:hover { filter: brightness(1.12); }
-.bb-loading-retry:active { transform: translateY(2px); }
+.bb-loading-retry:hover:not(:disabled) { filter: brightness(1.12); }
+.bb-loading-retry:active:not(:disabled) { transform: translateY(2px); }
+.bb-loading-retry:disabled { opacity: 0.55; cursor: wait; }
 .bb-loading-retry:focus-visible { outline: 3px solid #efc86e; outline-offset: 8px; }
 .bb-loading-retry[hidden], .bb-loading-rune[hidden] { display: none; }
 #lobby-area[data-loading] > * { visibility: hidden; }

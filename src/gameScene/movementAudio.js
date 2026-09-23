@@ -1,4 +1,5 @@
 import terrainAudio from '../shared/terrainAudio.json';
+import { playPlayerSound } from './playerAudio';
 
 export function getTerrainSteps(terrain) {
   const config = terrainAudio.terrains[terrain];
@@ -50,12 +51,14 @@ export function preloadTerrainAudio(scene, staticPath) {
   }
 }
 
-export function playDuckTransitionSound(scene, ducking) {
+export function playDuckTransitionSound(scene, ducking, source = null) {
   try {
-    scene?.sound?.play?.("sfx-duck-transition", {
-      volume: 0.9,
+    const options = {
+      volume: 1.75,
       rate: ducking ? 0.92 : 1.08,
-    });
+    };
+    if (source) playPlayerSound(scene, source, "sfx-duck-transition", options);
+    else scene?.sound?.play?.("sfx-duck-transition", options);
   } catch (_) {}
 }
 

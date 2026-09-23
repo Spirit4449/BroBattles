@@ -1,3 +1,4 @@
+import { quantizeMovementPosition } from '../shared/movementPrecision';
 // gameScene/localInputSync.js
 // Emits both game:input (position) and game:input-intent (direction/jump/action)
 // for dual-path server movement simulation (Phase 2).
@@ -107,8 +108,11 @@ export function createLocalInputSync({
         ? Math.round((body.center.y - player.y) * 2) / 2
         : 0;
     const currentState = {
-      x: quantizePosition(player.x),
-      y: quantizePosition(player.y),
+      dashSeq: player._dashSeq || 0,
+      dashX: player._dashDirection?.x || 0,
+      dashY: player._dashDirection?.y || 0,
+      x: quantizeMovementPosition(player.x),
+      y: quantizeMovementPosition(player.y),
       flip: player.flipX,
       vx: quantizeVelocity(player.body?.velocity?.x),
       vy: quantizeVelocity(player.body?.velocity?.y),
@@ -165,6 +169,7 @@ export function createLocalInputSync({
         ? currentState.y - lastReliablePlayerState.y
         : 0;
     const shouldSendReliable =
+      currentState.dashSeq !== (lastPlayerState.dashSeq || 0) ||
       reliable ||
       force ||
       now - lastReliableMovementSent >= RELIABLE_KEYFRAME_INTERVAL_MS ||
