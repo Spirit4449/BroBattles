@@ -35,11 +35,11 @@ test('graphics scale changes backing resolution without changing game size', () 
   context.setTransform(1, 0, 0, 1, 10, 20);
   assert.deepEqual(transforms.at(-1), [2, 0, 0, 2, 20, 40]);
 
-  resolution.setScale(4);
-  assert.deepEqual([canvas.width, canvas.height], [1600, 800]);
+  resolution.setScale(Math.SQRT2);
+  assert.deepEqual([canvas.width, canvas.height], [566, 283]);
   game.scale.baseSize = { width: 500, height: 300 };
   listeners.get('resize')();
-  assert.deepEqual([canvas.width, canvas.height], [2000, 1200]);
+  assert.deepEqual([canvas.width, canvas.height], [707, 424]);
 
   listeners.get('destroy')();
   assert.equal(context.setTransform, originalSetTransform);

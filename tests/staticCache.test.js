@@ -11,6 +11,9 @@ test('only content-addressed JS and CSS get immutable caching', () => {
     ['/dist/game.html', 'public, max-age=0'],
     ['/dist/battle-preload.json', 'public, max-age=0'],
     ['/dist/assets/ninja/spritesheet.webp', 'public, max-age=0'],
+    [`/dist/assets/map-revisions/${'a'.repeat(64)}.webp`, 'public, max-age=31536000, immutable'],
+    [`/dist/assets/map-revisions/${'b'.repeat(64)}.json`, 'public, max-age=31536000, immutable'],
+    ['/dist/assets/map-revisions/current.webp', 'public, max-age=0'],
   ]) {
     let header;
     setStaticCacheHeaders({ setHeader: (name, value) => { assert.equal(name, 'Cache-Control'); header = value; } }, file);

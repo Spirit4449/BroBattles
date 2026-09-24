@@ -64,3 +64,24 @@ test('legacy fallback queues assets only for the selected map', () => {
   assert.ok(!queued.includes('serenity-large-platform'));
   assert.ok(!queued.includes('tiles'));
 });
+
+test('shared assets resolve for every built-in map and powerup', () => {
+  const path = require('node:path');
+  const { POWERUP_CATALOG } = require('../src/shared/powerups');
+  const preloadGameAssets = loadPreloader();
+  for (const mapId of [1, 2, 3, 4]) {
+    const urls = [];
+    const load = Object.fromEntries(['image', 'audio', 'atlas', 'tilemapTiledJSON', 'spritesheet'].map(type =>
+      [type, (key, url, data) => {
+        urls.push(...[url].flat());
+        if (type === 'atlas') urls.push(data);
+      }]));
+    preloadGameAssets({ scene: { load }, staticPath: '/assets', mapId,
+      powerupTypes: Object.keys(POWERUP_CATALOG),
+      powerupAssetDir: Object.fromEntries(Object.entries(POWERUP_CATALOG).map(([key, value]) => [key, value.assetDir])),
+      preloadAllCharacters() {} });
+    for (const url of urls) {
+      assert.ok(fs.existsSync(path.join(__dirname, '../public', url)), `map ${mapId}: ${url}`);
+    }
+  }
+});

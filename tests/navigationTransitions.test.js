@@ -6,7 +6,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 
 // Small DOM transport double: requests, style completion, and cleanup resolve
 // independently, so the real router can be exercised in adverse order.
-function setup({ gameDataResponse, deferStyles = false, deferCleanup = false, initialStyles = [], imageClass, animate, destinationStyles = ['https://game.test/bundles/index.css'], injectedScripts = [] } = {}) {
+function setup({ routeResponse, statusResponse, gameDataResponse, deferStyles = false, deferCleanup = false, initialStyles = [], imageClass, animate, destinationStyles = ['https://game.test/bundles/index.css'], injectedScripts = [] } = {}) {
   const location = new URL('https://game.test/game/1');
   const state = { fetches: [], executed: [], preloaded: [], styleRequests: [], disposed: 0, bodies: 0, status: null, warmed: 0, movedStyles: [], progressWrites: [] };
   let now = 0, timerId = 0;
@@ -111,8 +111,9 @@ function setup({ gameDataResponse, deferStyles = false, deferCleanup = false, in
     history: { pushState: (_, __, url) => { location.href = url; }, replaceState: (_, __, url) => { location.href = url; } },
     fetch: async (url, options) => {
       state.fetches.push({ url: new URL(url, location).pathname, options });
-      if (url === '/status') return { ok: true, json: async () => status };
+      if (url === '/status') return statusResponse ? statusResponse() : { ok: true, json: async () => status };
       if (url === '/gamedata') return gameDataResponse();
+      if (routeResponse) return routeResponse(url, options);
       return { ok: true, url, text: async () => '<script src="/bundles/index.bundle.js"></script>' };
     },
     DOMParser: class {
@@ -435,4 +436,65 @@ test('a match check that finishes after another navigation cannot redirect the p
   await retry;
   assert.equal(env.location.pathname, '/party/3');
   assert.deepEqual(env.state.fetches.map(r => r.url), ['/gamedata', '/party/3']);
+});
+
+
+test('return retires game while status is pending and retry preserves lobby intent', async () => {
+  let release;
+  const env = setup({ statusResponse: () => new Promise(resolve => { release = resolve; }) });
+  const returning = env.nav.prepareLobbyReturn(7);
+  await flush();
+  assert.equal(env.state.disposed, 1, 'game reconnect listeners retire before status completes');
+  env.nav.fail(new Error('Return interrupted'));
+  release({ ok: true, json: async () => env.status });
+  await returning;
+  await env.document.getElementById('bb-route-transition').querySelector('button').onclick();
+  assert.deepEqual(env.state.fetches.map(r => r.url), ['/status', '/party/7']);
+  assert.equal(env.location.pathname, '/party/7');
+});
+
+test('lobby return retries a temporary connection failure after retiring the game', async () => {
+  let attempts = 0;
+  const env = setup({ routeResponse: async url => {
+    if (++attempts === 1) throw new TypeError('Load failed');
+    return { ok: true, url, text: async () => '' };
+  } });
+  const returning = env.nav.prepareLobbyReturn(7);
+  await flush();
+  assert.equal(env.state.disposed, 1);
+  assert.equal(attempts, 1);
+  env.advanceTime(500);
+  await returning;
+  assert.equal(attempts, 2);
+  assert.equal(env.location.pathname, '/party/7');
+  assert.equal(env.state.bodies, 1);
+});
+
+test('persistent connection failures are bounded and keep a lobby retry destination', async () => {
+  const env = setup({ routeResponse: async () => { throw new TypeError('Load failed'); } });
+  const returning = env.nav.prepareLobbyReturn(7);
+  await flush();
+  env.advanceTime(500);
+  await flush();
+  env.advanceTime(1000);
+  await returning;
+  assert.equal(env.state.fetches.filter(r => r.url === '/party/7').length, 3);
+  const panel = env.document.getElementById('bb-route-transition');
+  assert.equal(panel.dataset.destination, 'https://game.test/party/7');
+  assert.equal(panel.querySelector('button').hidden, false);
+  assert.equal(env.state.disposed, 1);
+});
+
+test('superseding a connection retry prevents another request to the old lobby', async () => {
+  const env = setup({ routeResponse: async url => {
+    if (url.endsWith('/party/7')) throw new TypeError('Load failed');
+    return { ok: true, url, text: async () => '' };
+  } });
+  const returning = env.nav.prepareLobbyReturn(7);
+  await flush();
+  await env.nav.navigate('/party/8');
+  env.advanceTime(500);
+  await returning;
+  assert.equal(env.state.fetches.filter(r => r.url === '/party/7').length, 1);
+  assert.equal(env.location.pathname, '/party/8');
 });

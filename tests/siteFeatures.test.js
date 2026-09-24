@@ -82,11 +82,11 @@ test('browser settings clamp values and preserve defaults with malformed storage
   const {normalizeSettings,DEFAULT_SETTINGS,GRAPHICS_OPTIONS,graphicsRenderScale}=await import('../src/site/preferences.js');
   assert.deepEqual(normalizeSettings(null),{...DEFAULT_SETTINGS});assert.deepEqual(normalizeSettings({sensitivity:100,sfx:-1,music:NaN,streamer:'yes'}),{...DEFAULT_SETTINGS,sensitivity:3,sfx:0});
   assert.deepEqual(GRAPHICS_OPTIONS.map(option=>[option.value,graphicsRenderScale(option.value)]),[
-    ['low',0.5],['medium',1],['high',2],['super-high',4],
+    ['low',0.5],['medium',1],['high',Math.SQRT2],['super-high',2],
   ]);
   assert.equal(normalizeSettings({graphics:'super-high'}).graphics,'super-high');
   assert.equal(normalizeSettings({graphics:'unknown'}).graphics,'high');
-  assert.equal(graphicsRenderScale(undefined),2);
+  assert.equal(graphicsRenderScale(undefined),Math.SQRT2);
 });
 
 test('same-origin metadata handles alias hosts and TLS proxies without allowing foreign requests', () => {

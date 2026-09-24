@@ -21,6 +21,7 @@ test('rapid reward impacts overlap in a bounded reusable pool and honor volume s
     getSettings: () => ({ sfx: .5 }),
     subscribeSettings: listener => { settingsListener = listener; },
     shouldMuteClientDefaultLogs: () => true,
+    window: {},
   });
   for (let i = 0; i < 56; i++) playSound('rewardCoinImpact', .12, { overlap: true, maxVoices: 8, playbackRate: 1.2 });
   assert.equal(clones.length, 8);
@@ -30,6 +31,32 @@ test('rapid reward impacts overlap in a bounded reusable pool and honor volume s
   clones.forEach(voice => voice.onended());
   playSound('rewardCoinImpact', .12, { overlap: true, maxVoices: 8 });
   assert.equal(clones.length, 8, 'finished voices are reused rather than allocated again');
+});
+
+test('UI initialization downloads no sounds; playing a sound loads and reuses only that sound', () => {
+  const audios = [];
+  class AudioStub {
+    constructor() { audios.push(this); }
+    addEventListener() {}
+    removeEventListener() {}
+    load() {}
+    play() { return Promise.resolve(); }
+  }
+  const source = fs.readFileSync(path.join(__dirname, '../src/lib/uiSounds.js'), 'utf8')
+    .replace(/^import .*;$/gm, '').replaceAll('export function', 'function');
+  const api = vm.runInNewContext(source + '; ({ playSound, initUISounds })', {
+    Audio: AudioStub, document: { addEventListener() {} }, window: {},
+    getSettings: () => ({ sfx: 1 }), subscribeSettings() {}, shouldMuteClientDefaultLogs: () => true,
+  });
+  api.initUISounds();
+  assert.equal(audios.length, 0);
+  api.playSound('click');
+  api.playSound('click');
+  assert.equal(audios.length, 1);
+  assert.equal(audios[0].src, '/assets/ui-sound/click.mp3');
+  api.playSound('shopOpen');
+  assert.equal(audios.length, 2);
+  assert.equal(audios[1].src, '/assets/ui-sound/shop-open.ogg');
 });
 
 test('reveal choir grows with currency value and preserves unlock rarity floors', () => {

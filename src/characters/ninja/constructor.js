@@ -202,10 +202,7 @@ class Ninja extends CharacterEntityBase {
     const fired = this.performDefaultAttack(() => {
       const attackId = createRuntimeId("ninjaShuriken");
       // Play throw anim and sfx
-      const sfx = this.scene.sound.add("shurikenThrow");
-      sfx.setVolume(1);
-      sfx.setRate(1.3);
-      sfx.play();
+      this.scene.sound.play("shurikenThrow", { volume: 1, rate: 1.3 });
       playSpriteAnimation({
         scene: this.scene,
         sprite: p,

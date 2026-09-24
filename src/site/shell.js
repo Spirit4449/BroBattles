@@ -62,7 +62,7 @@ export function openSettings() {
     const row=element('label',null,'site-setting');const input=element('input');input.type='checkbox';input.setAttribute('aria-label',label);input.onchange=()=>saveSettings({[key]:input.checked});const title=element('span',label,'site-setting-title');const infoWrap=element('span',null,'site-setting-info-wrap');const info=element('button','i','site-setting-info');info.type='button';info.setAttribute('aria-label',hint);const tip=element('span',hint,'site-setting-tooltip');infoWrap.append(info,tip);title.append(infoWrap);row.append(title,input);form.append(row);controls[key]={input};
   }
   let resetting=false;
-  const setGraphicsControl=level=>{const index=Math.max(0,GRAPHICS_OPTIONS.findIndex(option=>option.value===level));const option=GRAPHICS_OPTIONS[index];graphicsInput.value=index;graphicsValue.textContent=`${option.label} (${option.renderScale}×)`;};
+  const setGraphicsControl=level=>{const index=Math.max(0,GRAPHICS_OPTIONS.findIndex(option=>option.value===level));const option=GRAPHICS_OPTIONS[index];graphicsInput.value=index;graphicsValue.textContent=option.label;};
   const update=settings=>{if(resetting)return;for(const [key,{input,value}] of Object.entries(controls)){if(key==='graphics'){setGraphicsControl(settings.graphics);}else if(input.type==='checkbox')input.checked=settings[key];else {input.value=settings[key];value.textContent=key==='sensitivity'?`${settings[key].toFixed(2)}×`:`${Math.round(settings[key]*100)}%`;}}};
   const formatValue=(key,value)=>key==='sensitivity'?`${value.toFixed(2)}×`:`${Math.round(value*100)}%`;
   update(getSettings());const off=subscribeSettings(update);dialog.addEventListener('close',off,{once:true});
@@ -88,7 +88,19 @@ export function openSettings() {
     requestAnimationFrame(tick);
   };
   dialog.addEventListener('close',()=>clearTimeout(resetTimer),{once:true});
-  body.append(form,remapKeys(dialog),reset);
+  const footer=element('div',null,'site-settings-footer');
+  const renderer=element('small',null,'site-settings-renderer');
+  renderer.setAttribute('aria-label','Current renderer');
+  const updateRenderer=()=>{
+    const name=document.querySelector('canvas[data-game-renderer]')?.dataset.gameRenderer;
+    renderer.textContent=name || '';
+    renderer.hidden=!name;
+  };
+  updateRenderer();
+  document.addEventListener('bb:rendererchange',updateRenderer);
+  dialog.addEventListener('close',()=>document.removeEventListener('bb:rendererchange',updateRenderer),{once:true});
+  footer.append(reset,renderer);
+  body.append(form,remapKeys(dialog),footer);
 }
 let navigationGuard = async () => true;
 export function setNavigationGuard(guard) { navigationGuard = guard; }

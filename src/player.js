@@ -671,25 +671,25 @@ export function createPlayer(
   const stopKeyUpdates=subscribeSettings(bindKeys);
   scene.events.once('shutdown',stopKeyUpdates);
 
-  try {
-    disposeMovementLoopSfx();
-    wallSlideLoopSfx = scene.sound?.add("sfx-sliding", {
-      loop: true,
-      volume: 0,
-    });
-    fallAirLoopSfx = scene.sound?.add("sfx-fall-air", {
-      loop: true,
-      volume: 0,
-      rate: 0.72,
-    });
-    wallSlideLoopPlaying = false;
-    fallAirLoopPlaying = false;
-  } catch (_) {
-    wallSlideLoopSfx = null;
-    fallAirLoopSfx = null;
-    wallSlideLoopPlaying = false;
-    fallAirLoopPlaying = false;
-  }
+  disposeMovementLoopSfx();
+  const movementAudioScene = scene;
+  const ensureMovementLoops = () => {
+    if (!movementAudioScene.sound || movementAudioScene.game?.config?.audio?.noAudio) return;
+    if (!wallSlideLoopSfx && movementAudioScene.cache.audio.exists('sfx-sliding')) {
+      wallSlideLoopSfx = movementAudioScene.sound.add('sfx-sliding', { loop: true, volume: 0 });
+    }
+    if (!fallAirLoopSfx && movementAudioScene.cache.audio.exists('sfx-fall-air')) {
+      fallAirLoopSfx = movementAudioScene.sound.add('sfx-fall-air', { loop: true, volume: 0, rate: 0.72 });
+    }
+    if (wallSlideLoopSfx && fallAirLoopSfx) {
+      movementAudioScene.cache.audio.events.off('add', ensureMovementLoops);
+    }
+  };
+  movementAudioScene.cache.audio.events.on('add', ensureMovementLoops);
+  ensureMovementLoops();
+  movementAudioScene.events.once('shutdown', () => {
+    movementAudioScene.cache.audio.events.off('add', ensureMovementLoops);
+  });
 
   // Animations are registered globally in game.js via setupAll(scene)
 

@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const { createHash } = require('node:crypto');
 const babel = require('@babel/core');
 const atlas = require('../public/assets/thorg/animations.json');
 const dependencies = {
@@ -46,14 +47,18 @@ test('fall begins with the exact jump endpoint and alignment', () => {
 
 test('held poses use the approved green masters at helmet-matched scale', async () => {
   const sharp = require('../spritesheet-generator/node_modules/sharp');
-  for (const [name, asset, scale] of [
-    ['duck00', 'duck', 52 / 540], ['sliding00', 'wall-slide', 58 / 512],
+  // Hashes of the approved masters' decoded RGBA pixels, retained after source cleanup.
+  for (const [name, asset, scale, pixelHash] of [
+    ['duck00', 'duck', 52 / 540, '8b45123a0f4392c5dfd58bf0d70f1c770aacea538788e4d986356e0c6076ad6f'],
+    ['sliding00', 'wall-slide', 58 / 512, '0dbf871e595b59a139162fe1084eb7eb9fe08e3a72e67e1637ffaee897f8fe2c'],
   ]) {
     const f = atlas.frames.find(f => f.filename === name);
     assert.equal(f.sourceAsset, asset === 'duck' ? 'thorg_duck.png' : 'thorg_slide.png');
     assert.equal(f.importScale, scale);
     assert.equal(f.sourceMirrored, asset === 'wall-slide');
-    const { data, info } = await sharp(`public/assets/thorg/${asset}.webp`)
+    const r = f.frame;
+    const { data, info } = await sharp('public/assets/thorg/spritesheet.webp')
+      .extract({ left: r.x, top: r.y, width: r.w, height: r.h })
       .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     let bottom = 0;
     for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) {
@@ -63,10 +68,7 @@ test('held poses use the approved green masters at helmet-matched scale', async 
       assert.ok(!(data[i + 1] > data[i] + 25 && data[i + 1] > data[i + 2] + 25), 'green background remained');
     }
     assert.equal(bottom, 118);
-    const r = f.frame;
-    const packed = await sharp('public/assets/thorg/spritesheet.webp')
-      .extract({ left: r.x, top: r.y, width: r.w, height: r.h }).ensureAlpha().raw().toBuffer();
-    assert.deepEqual(packed, data, `${name} atlas still uses stale artwork`);
+    assert.equal(createHash('sha256').update(data).digest('hex'), pixelHash, `${name} atlas still uses stale artwork`);
   }
 });
 

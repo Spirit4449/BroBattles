@@ -171,3 +171,7 @@ body.site-auth{--bb-font-body:system-ui,-apple-system,"Segoe UI",sans-serif;font
 @media(prefers-reduced-motion:reduce){.site-ai-finding i,.site-ai-finding i:after{animation:none}}
 .site-runtime-banner { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 900; width: min(680px, calc(100% - 32px)); box-sizing: border-box; padding: 12px 18px; border: 1px solid #e6b85a; background: #172238; color: #fff2cb; font: 14px/1.5 Lato, sans-serif; box-shadow: 0 4px 20px #0008; overflow-wrap: anywhere; max-height: 25vh; overflow: auto; }
 .site-runtime-banner[hidden] { display: none; }
+
+.site-settings-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px}
+.site-settings-window .site-settings-footer #settings-reset{margin-top:0}
+.site-settings-renderer{font:11px/1.4 system-ui,sans-serif;color:#94a3b8;white-space:nowrap}

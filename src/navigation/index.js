@@ -85,6 +85,24 @@ let readinessTimer;
 let audioContext;
 let pendingFetch;
 let cleanupPromise = Promise.resolve();
+function retireCurrentPage() {
+  const outgoing = currentScope;
+  cleanupPromise = cleanupPromise.then(() => outgoing?.dispose());
+  return cleanupPromise;
+}
+
+async function fetchRoute(url, signal, retryConnectionFailure) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetch(url, { credentials: 'same-origin', signal });
+    } catch (error) {
+      if (!retryConnectionFailure || attempt >= 2 || signal.aborted || error.name !== 'TypeError') throw error;
+      // A brief server restart or connection drop should not strand a finished match.
+      await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+      if (signal.aborted) throw error;
+    }
+  }
+}
 let mounted = true;
 let routeFailed = false;
 let recoveryRequest;
@@ -393,6 +411,7 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
     showLobbyLoadingBar();
     transition.dataset.destination = url.href;
     transition.dataset.lobbyReturn = 'true';
+    retireCurrentPage();
   } else if (url.pathname.startsWith('/game/')) {
     showBattleLoadingBar();
     transition.dataset.destination = url.href;
@@ -405,7 +424,7 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
   clearTimeout(readinessTimer);
   readinessTimer = setTimeout(() => { if (ticket === sequence) fail(new Error('Screen readiness timed out')); }, 45000);
   try {
-    const response = await fetch(url.href, { credentials: 'same-origin', signal: controller.signal });
+    const response = await fetchRoute(url.href, controller.signal, returningToLobby);
     if (ticket !== sequence) return;
     const finalUrl = new URL(response.url);
     if (!supported(finalUrl)) { lobbyReturn.clear(); location.assign(finalUrl.href); return; }
@@ -426,8 +445,7 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
     }
     preloadRouteScripts(source);
     lobbyNavigator = null;
-    const outgoing = currentScope;
-    cleanupPromise = cleanupPromise.then(() => outgoing?.dispose());
+    retireCurrentPage();
     const cleanup = cleanupPromise.then(() => { if (ticket === sequence) markRoute('cleanup'); });
     const scripts = [...html.querySelectorAll('script')];
     scripts.forEach(script => script.remove());
@@ -552,8 +570,10 @@ window.__BB_NAVIGATION__ = {
     }
     mounted = false;
     showLobbyLoadingBar();
-    transition.dataset.destination = location.href;
+    const partyId = Number(fallbackPartyId);
+    transition.dataset.destination = new URL(Number.isFinite(partyId) && partyId > 0 ? `/party/${partyId}` : '/', location.href).href;
     transition.dataset.lobbyReturn = 'true';
+    if (document.body.dataset.bbScreen === 'game') retireCurrentPage();
     return lobbyReturn.prepare(fallbackPartyId);
   },
   async beginBattleLoading() {

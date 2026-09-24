@@ -11,9 +11,9 @@ function walk(dir) {
   });
 }
 
-test('browser raster assets use WebP, with only the email compatibility PNG retained', () => {
+test('browser raster assets use WebP, with explicit email and UI PNG exceptions', () => {
   const otherRasters = walk(assets).filter(file => /\.(png|jpe?g|gif|bmp|avif)$/i.test(file));
-  assert.deepEqual(otherRasters.map(file => path.relative(assets, file)), ['logos/wordmark.png']);
+  assert.deepEqual(otherRasters.map(file => path.relative(assets, file)), ['logos/wordmark.png', 'ui/party-search-players.png']);
 });
 
 test('all dynamically selected level badges exist in the final flat directory', () => {
@@ -35,6 +35,23 @@ test('literal runtime asset URLs resolve to published files', () => {
         // This is the map editor's example URL for a new, user-supplied asset.
         if (url === '/assets/maps/platform.png') continue;
         assert.ok(fs.existsSync(path.join(root, 'public', url)), `${path.relative(root, file)}: ${url}`);
+      }
+    }
+  }
+});
+
+test('published atlases have unique frame names in each texture', () => {
+  for (const file of walk(assets).filter(file => file.endsWith('.json'))) {
+    const atlas = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const textures = Array.isArray(atlas.textures) ? atlas.textures : [atlas];
+    const names = new Set(['__BASE']);
+    for (const texture of textures) {
+      const frames = Array.isArray(texture.frames)
+        ? texture.frames.map(frame => frame.filename)
+        : Object.keys(texture.frames || {});
+      for (const name of frames) {
+        assert.ok(!names.has(String(name)), `${path.relative(assets, file)}: duplicate frame ${name}`);
+        names.add(String(name));
       }
     }
   }

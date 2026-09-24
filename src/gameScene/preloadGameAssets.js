@@ -63,22 +63,16 @@ export function preloadGameAssets({
   scene.load.audio("win", `${staticPath}/win.mp3`);
   scene.load.audio("lose", `${staticPath}/lose.mp3`);
 
-  // Powerup assets (support common icon/audio extensions)
+  // Powerup assets use the published WebP icons and MP3 sounds.
   for (const type of powerupTypes) {
     const dir = powerupAssetDir[type] || type;
     loadImage(
       `pu-icon-${type}-webp`,
       `${staticPath}/powerups/${dir}/icon.webp`,
     );
-    scene.load.audio(`pu-touch-${type}`, [
-      `${staticPath}/powerups/${dir}/touch.mp3`,
-      `${staticPath}/powerups/${dir}/touch.wav`,
-    ]);
+    scene.load.audio(`pu-touch-${type}`, `${staticPath}/powerups/${dir}/touch.mp3`);
     if (POWERUP_CATALOG[type]?.tickVolume != null) {
-      scene.load.audio(`pu-tick-${type}`, [
-        `${staticPath}/powerups/${dir}/tick.mp3`,
-        `${staticPath}/powerups/${dir}/tick.wav`,
-      ]);
+      scene.load.audio(`pu-tick-${type}`, `${staticPath}/powerups/${dir}/tick.mp3`);
     }
   }
   // Fonts are declared and preloaded by game.html. Phaser 3.70 has no load.font API.

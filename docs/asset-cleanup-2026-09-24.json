@@ -1,0 +1,74 @@
+{
+  "removed": [
+    {
+      "path": "public/assets/gloop/attack.json",
+      "bytes": 1575
+    },
+    {
+      "path": "public/assets/wizard/fireball-unified.webp",
+      "bytes": 610182
+    },
+    {
+      "path": "public/assets/wizard/fireball-unified.json",
+      "bytes": 11469
+    },
+    {
+      "path": "public/assets/draven/special.webp",
+      "bytes": 21298
+    },
+    {
+      "path": "public/assets/draven/special.json",
+      "bytes": 2890
+    },
+    {
+      "path": "public/assets/movement/dash.webp",
+      "bytes": 17032
+    },
+    {
+      "path": "public/assets/loadingscreenedited.png",
+      "bytes": 6170599
+    },
+    {
+      "path": "public/assets/thorg/thorg_dash_45.mp4",
+      "bytes": 965631
+    },
+    {
+      "path": "public/assets/thorg/thorg_dash_right.mp4",
+      "bytes": 1033600
+    },
+    {
+      "path": "public/assets/thorg/thorg_dash_up.mp4",
+      "bytes": 1101416
+    },
+    {
+      "path": "public/assets/thorg/thorg_slide.png",
+      "bytes": 1142328
+    },
+    {
+      "path": "public/assets/thorg/thorg_duck.png",
+      "bytes": 986488
+    },
+    {
+      "path": "public/assets/thorg/Duck_new.png",
+      "bytes": 863838
+    },
+    {
+      "path": "public/assets/thorg/duck.webp",
+      "bytes": 10318
+    },
+    {
+      "path": "public/assets/thorg/wall-slide.webp",
+      "bytes": 13456
+    },
+    {
+      "path": "public/assets/typing.svg",
+      "bytes": 680
+    },
+    {
+      "path": "public/assets/profile-icons/anonymous-guest.svg",
+      "bytes": 1033
+    }
+  ],
+  "removedBytes": 12953833,
+  "reason": "Obsolete Gloop atlas, superseded Wizard/Draven effects, baked Thorg source poses and videos, unused dash/loading art and SVGs. Runtime atlases and dynamically selected UI assets retained."
+}

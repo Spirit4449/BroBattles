@@ -45,7 +45,8 @@ import { createMatchCoordinator } from "./match/matchCoordinator";
 import { preloadGameAssets } from "./gameScene/preloadGameAssets";
 import { renderPoisonWater } from "./gameScene/poisonWaterRenderer";
 import { updateDynamicCamera } from "./gameScene/cameraDynamics";
-import { installHighResolutionCanvas } from "./gameScene/highResolutionCanvas";
+import { installRenderResolution } from "./gameScene/renderResolution";
+import { deferSceneAudio } from "./gameScene/deferredAudio";
 import { createLocalInputSync } from "./gameScene/localInputSync";
 import { updateHealthBars } from "./gameScene/healthBarRenderer";
 import { createMapEditorRuntime } from "./gameScene/mapEditorRuntime";
@@ -578,48 +579,6 @@ function syncLiveMatchContext() {
   } catch (_) {}
 }
 
-// Prewarm frequently used textures to force GL upload before gameplay
-function prewarmTextures(scene) {
-  try {
-    const keys = [
-      // Character main atlases
-      "ninja",
-      "draven",
-      "thorg",
-      // Attack visuals
-      "draven-explosion",
-      "shuriken",
-      "thorg-weapon",
-    ];
-    const spawned = [];
-    for (const key of keys) {
-      if (!scene.textures.exists(key)) continue;
-      // Heuristic: atlases are fine as sprites; plain images as images
-      const isAtlas =
-        !!scene.textures.get(key)?.frameTotal &&
-        scene.textures.get(key).frameTotal > 1;
-      let obj = null;
-      if (isAtlas) {
-        obj = scene.add.sprite(-9999, -9999, key);
-      } else {
-        obj = scene.add.image(-9999, -9999, key);
-      }
-      if (obj) {
-        obj.setVisible(false);
-        spawned.push(obj);
-      }
-    }
-    // Destroy on next tick once GL textures are created
-    scene.time.delayedCall(0, () => {
-      for (const o of spawned) {
-        try {
-          o.destroy();
-        } catch (_) {}
-      }
-    });
-  } catch (_) {}
-}
-
 // Fetch game data from server
 async function fetchGameData() {
   try {
@@ -927,15 +886,18 @@ class GameScene extends Phaser.Scene {
 
   // Preloads assets
   preload() {
+    deferSceneAudio(this);
     this.load.image("spawn-parachute-blue", "/assets/parachutes/parachute-blue.webp");
     this.load.image("spawn-parachute-red", "/assets/parachutes/parachute-red.webp");
-    this.load.on("progress", (p) => {
+    const onVisualProgress = (p) => {
       // 50% - 90%
       const pct = Math.floor(50 + p * 40); // maps 0-1 -> 50-90
       updateLoading(pct, "Loading arena...");
-    });
+    };
+    this.load.on("progress", onVisualProgress);
 
     this.load.once("complete", () => {
+      this.load.off("progress", onVisualProgress);
       updateLoading(95, "Arena ready...");
       // Overlay will be controlled strictly by socket events (game:starting/game:start/init/live)
       // Do not show here to avoid race with late-arriving init/live status.
@@ -1145,17 +1107,6 @@ class GameScene extends Phaser.Scene {
         if (retryActions.length) {
           PENDING_ACTIONS.push(...retryActions);
         }
-      }
-    } catch (_) {}
-
-    // Prewarm textures is only meaningful for WebGL (uploads to GPU)
-    try {
-      if (
-        this.game &&
-        this.game.config &&
-        this.game.config.renderType === Phaser.WEBGL
-      ) {
-        prewarmTextures(this);
       }
     } catch (_) {}
 
@@ -2351,21 +2302,32 @@ function stabilizeSpawnedSpriteOnMap(scene, sprite, objects) {
 
 const config = {
   audio: { context: window.__BB_NAVIGATION__?.getAudioContext() },
-  // Force Canvas renderer; enable transparency so the canvas can show the HTML/CSS background behind it
-  type: Phaser.CANVAS,
+  // Prefer WebGL; Phaser falls back to Canvas when WebGL is unavailable.
+  type: Phaser.AUTO,
   transparent: true,
   backgroundColor: "rgba(0,0,0,0)",
   // Pixel-art friendly settings
   pixelArt: true,
   roundPixels: false, // allow subpixel rendering for smoother interpolation (adaptive timeline)
   antialias: false,
-  // Phaser 3.70 Canvas does not honor the resolution config option. This
-  // backing-store control keeps the same FIT size and world coordinates.
+  // Shared backing-resolution control preserves FIT size and world coordinates.
   callbacks: {
     postBoot: (game) => {
-      const canvasResolution = installHighResolutionCanvas(game, Phaser, graphicsRenderScale(getSettings().graphics));
-      if (canvasResolution) {
-        const off = subscribeSettings(settings => canvasResolution.setScale(graphicsRenderScale(settings.graphics)));
+      game.canvas.dataset.gameRenderer = game.renderer.type === Phaser.WEBGL ? 'WebGL' : 'Canvas';
+      document.dispatchEvent(new Event('bb:rendererchange'));
+      game.events.once(Phaser.Core.Events.DESTROY, () => {
+        delete game.canvas.dataset.gameRenderer;
+        document.dispatchEvent(new Event('bb:rendererchange'));
+      });
+      const renderResolution = installRenderResolution(game, Phaser, graphicsRenderScale(getSettings().graphics));
+      if (renderResolution) {
+        let currentScale = graphicsRenderScale(getSettings().graphics);
+        const off = subscribeSettings(settings => {
+          const nextScale = graphicsRenderScale(settings.graphics);
+          if (nextScale === currentScale) return;
+          currentScale = nextScale;
+          renderResolution.setScale(nextScale);
+        });
         game.events.once(Phaser.Core.Events.DESTROY, off);
       }
     },

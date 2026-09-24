@@ -125,10 +125,13 @@ if (!IS_PROD) {
   const config = require(path.join(ROOT_DIR, "webpack.config.js"))({}, { mode: "development" });
   const compiler = webpack(config);
   app.use(
-    webpackDevMiddleware(compiler, {
+    require("./helpers/devAssetMiddleware").isolateDevAssetResponse(webpackDevMiddleware(compiler, {
       publicPath: config.output.publicPath,
       serverSideRender: false,
-    }),
+      // Revalidate mutable development URLs without downloading unchanged
+      // bundles/assets again after background warming or route navigation.
+      ...config.devServer.devMiddleware,
+    })),
   );
   app.use(webpackHotMiddleware(compiler));
   app.use(express.static(PUBLIC_DIR));

@@ -54,7 +54,7 @@ export function installHighResolutionCanvas(game, Phaser, initialScale = 1) {
   };
 
   const setScale = (nextScale) => {
-    renderScale = [0.5, 1, 2, 4].includes(nextScale) ? nextScale : 1;
+    renderScale = Number.isFinite(nextScale) && nextScale >= 0.5 && nextScale <= 2 ? nextScale : 1;
     syncBackingStore();
   };
 

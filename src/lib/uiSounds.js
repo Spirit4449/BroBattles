@@ -15,7 +15,6 @@ subscribeSettings(settings => {
   for (const [sound, base] of activeSounds) sound.volume = base * settings.sfx;
 });
 const soundPath = "/assets/ui-sound/";
-let preloaded = false;
 
 // Default sound mappings (filename without extension)
 const soundFiles = {
@@ -88,17 +87,7 @@ function createAudioWithFallback(filename) {
   return audio;
 }
 
-// Preload sounds
-function preloadSounds() {
-  if (preloaded) return;
-  Object.entries(soundFiles).forEach(([key, filename]) => {
-    sounds[key] = createAudioWithFallback(filename);
-  });
-  preloaded = true;
-}
-
 function getOrLoadSound(soundName) {
-  preloadSounds();
   if (sounds[soundName]) return sounds[soundName];
   const filename = soundFiles[soundName];
   if (!filename) return null;
@@ -145,7 +134,6 @@ export function playSound(soundName, volume = 0.5, options = {}) {
 
 // Initialize auto-sound on elements with data-sound attribute
 export function initUISounds() {
-  preloadSounds();
 
   const safeClosest = (node, selector) => {
     if (!node || typeof node.closest !== "function") return null;

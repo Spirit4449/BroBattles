@@ -42,6 +42,10 @@ module.exports = (_env = {}, argv = {}) => {
   devtool: mode === "production" ? false : "inline-source-map",
   devServer: {
     port: 3001,
+    devMiddleware: {
+      etag: "strong",
+      cacheControl: "public, max-age=0, must-revalidate",
+    },
     static: {
       directory: path.resolve(__dirname, "dist"),
       watch: true,

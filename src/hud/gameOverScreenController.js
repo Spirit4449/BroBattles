@@ -500,7 +500,7 @@ export function createGameOverScreenController({
             ${personalSummaryHtml}
             ${rewardSectionHtml}
           </div>
-          <button id="go-lobby" class="bb-game-over-action pixel-menu-button" type="button" data-sound="cursor4" data-volume="0.28">Back to Lobby (10)</button>
+          <button id="go-lobby" class="bb-game-over-action pixel-menu-button" type="button" data-sound="cursor4" data-volume="0.28">Exit (10)</button>
         </section>
       </div>`;
 
@@ -556,7 +556,7 @@ export function createGameOverScreenController({
     const timer = setInterval(() => {
       countdown -= 1;
       if (button)
-        button.textContent = `Back to Lobby (${Math.max(0, countdown)})`;
+        button.textContent = `Exit (${Math.max(0, countdown)})`;
       if (countdown <= 0) {
         clearInterval(timer);
         goToLobby();

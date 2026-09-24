@@ -1,10 +1,10 @@
 import { DEFAULT_BINDINGS, normalizeBindings } from './keyBindings.mjs';
 const KEY = 'bb_settings_v1';
 export const GRAPHICS_OPTIONS = Object.freeze([
-  { value: 'low', label: 'Low', renderScale: 0.5 },
-  { value: 'medium', label: 'Medium', renderScale: 1 },
-  { value: 'high', label: 'High', renderScale: 2 },
-  { value: 'super-high', label: 'Super High', renderScale: 4 },
+  { value: 'low', label: 'Low', renderScale: 0.5, pixelMultiplier: 0.25 },
+  { value: 'medium', label: 'Medium', renderScale: 1, pixelMultiplier: 1 },
+  { value: 'high', label: 'High', renderScale: Math.SQRT2, pixelMultiplier: 2 },
+  { value: 'super-high', label: 'Super High', renderScale: 2, pixelMultiplier: 4 },
 ]);
 export const DEFAULT_SETTINGS = Object.freeze({ sensitivity:1, sfx:1, music:1, graphics:'high', autoHideCursor:true, streamer:false, keys:DEFAULT_BINDINGS });
 export function graphicsRenderScale(level) {
