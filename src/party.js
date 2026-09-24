@@ -1409,6 +1409,7 @@ export function socketInit(options = {}) {
       renderPartyMembers({
         partyId: currentPartyId,
         members: data.members,
+        botSlots: data.botSlots,
         selection,
         mode: getPlayersPerTeamForSelection(selection),
         map: selection.mapId,
@@ -2356,12 +2357,11 @@ export function initializeModeDropdown() {
           return;
         }
 
-        const applied = applySelectionVisuals(nextSelection);
+        // Resize only when the server supplies the roster for the new mode.
         socket.emit("mode-change", {
-          selection: applied,
+          selection: nextSelection,
           username,
           partyId,
-          members: data.members,
         });
       } catch (error) {
         console.error("Error changing mode:", error);

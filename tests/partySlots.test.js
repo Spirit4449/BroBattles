@@ -57,3 +57,19 @@ test('server rejects non-owner, ready players, and active matches', async () => 
     assert.deepEqual(f.rows, members);
   }
 });
+
+test('every two-player seating survives resizing between duel sizes', () => {
+  const { resizePartySlots } = require('../src/server/helpers/partySlots');
+  for (const from of [1, 2, 3]) for (const to of [1, 2, 3]) {
+    const seats = ['team1', 'team2'].flatMap(team => Array.from({ length: from }, (_, slot_index) => ({ team, slot_index })));
+    for (let a = 0; a < seats.length; a++) for (let b = a + 1; b < seats.length; b++) {
+      const original = [{ name: 'A', ...seats[a] }, { name: 'B', ...seats[b] }];
+      const next = resizePartySlots(original, to);
+      assert.equal(next.length, 2);
+      assert.equal(new Set(next.map(m => `${m.team}:${m.slot_index}`)).size, 2);
+      assert.ok(next.every(m => m.slot_index >= 0 && m.slot_index < to));
+      if (to >= from) assert.deepEqual(next, original);
+    }
+  }
+  assert.throws(() => resizePartySlots([...members, { name: 'Third', team: 'team1', slot_index: 1 }], 1), /Too many players/);
+});

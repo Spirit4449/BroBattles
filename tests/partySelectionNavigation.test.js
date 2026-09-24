@@ -68,3 +68,12 @@ test('a mode change waiting for the roster cannot overwrite a newly joined party
   assert.equal(state.emissions.length, 0);
   assert.equal(state.writes.length, 0);
 });
+
+test('party mode requests keep the existing layout until the authoritative roster arrives', async () => {
+  const state = setup('7');
+  await state.modeChange({ modeId: 'duels', modeVariantId: 'duels-2v2', mapId: 2 });
+  assert.equal(state.writes.length, 0);
+  assert.equal(state.selection.modeVariantId, 'duels-1v1');
+  assert.equal(state.emissions[0].data.selection.modeVariantId, 'duels-2v2');
+  assert.equal(state.emissions[0].data.members, undefined);
+});

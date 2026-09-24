@@ -32,4 +32,27 @@ function movePartyMember(members, { name, team, index }, teamSize) {
   source.slot_index = index;
   return next;
 }
-module.exports = { normalizePartySlots, movePartyMember };
+// Keep valid seats and teams; relocate only seats that no longer fit.
+function resizePartySlots(members, teamSize) {
+  if (members.length > teamSize * 2) throw new Error('Too many players for this mode.');
+  const result = members.map(member => ({ ...member }));
+  const used = { team1: new Set(), team2: new Set() };
+  const pending = [];
+  for (const member of result) {
+    const seats = used[member.team];
+    const index = member.slot_index;
+    if (seats && Number.isInteger(index) && index >= 0 && index < teamSize && !seats.has(index)) seats.add(index);
+    else pending.push(member);
+  }
+  for (const member of pending) {
+    const preferred = member.team === 'team2' ? 'team2' : 'team1';
+    const team = used[preferred].size < teamSize ? preferred : preferred === 'team1' ? 'team2' : 'team1';
+    let index = 0;
+    while (used[team].has(index)) index++;
+    member.team = team;
+    member.slot_index = index;
+    used[team].add(index);
+  }
+  return result;
+}
+module.exports = { normalizePartySlots, movePartyMember, resizePartySlots };

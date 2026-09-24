@@ -6,16 +6,23 @@ const { registerPartyEvents } = require("../src/server/core/socketEvents/partyEv
 
 function fixture(allow = 1) {
   const party = { party_id: 7, mode: 1, map: 1, is_public: 0, public_name: null, allow_member_selection: allow };
-  const members = [{ name: "Owner" }, { name: "Member" }];
+  const members = [{ name: "Owner", team: "team1", slot_index: 0 }, { name: "Member", team: "team1", slot_index: 1 }];
   const writes = [];
   const emissions = [];
   const db = {
     fetchPartyMembersDetailed: async () => members,
+    withTransaction: async fn => fn(null, db.runQuery.bind(db)),
     async runQuery(sql, params) {
       const query = sql.replace(/\s+/g, " ").trim();
       if (query.startsWith("SELECT 1 FROM party_members")) {
         const name = typeof params[0] === "string" ? params[0] : params[1];
         return members.some((member) => member.name === name) ? [{ 1: 1 }] : [];
+      }
+      if (query.startsWith("SELECT party_id FROM parties")) return [{ ...party }];
+      if (query.startsWith("SELECT name, team, slot_index")) return members.map(m => ({ ...m }));
+      if (query.startsWith("UPDATE party_members SET team")) {
+        Object.assign(members.find(m => m.name === params[3]), { team: params[0], slot_index: params[1] });
+        return { affectedRows: 1 };
       }
       if (query.startsWith("SELECT name FROM party_members")) return [members[0]];
       if (query.startsWith("SELECT * FROM parties")) return [{ ...party }];
@@ -177,4 +184,26 @@ test('selection toast is hidden for the actor but visible for other party member
   assert.equal(toasts.length,1);
   handler({partyId:8,type:'map',actorName:'Member',title:'Changed map'});
   assert.equal(toasts.length,1);
+});
+
+test('shrinking same-team party persists valid seats and broadcasts server roster', async () => {
+  const f = fixture();
+  const handlers = {};
+  registerPartyEvents({ data: { user: { name: 'Owner' } }, on: (event, fn) => handlers[event] = fn, emit() {} },
+    { db: f.db, io: f.io, partyState: f.state, partyPresence: {} });
+  await handlers['mode-change']({ partyId: 7, selection: { ...selection, modeVariantId: 'duels-1v1' }, members: [{ name: 'Stale' }] });
+  const roster = f.emissions.find(e => e.event === 'mode-change').data.members;
+  assert.deepEqual(roster.map(m => [m.name, m.team, m.slot_index]), [['Owner', 'team1', 0], ['Member', 'team2', 0]]);
+  assert.deepEqual(await f.db.fetchPartyMembersDetailed(), roster);
+});
+
+test('oversized party is rejected before changing the saved mode or seats', async () => {
+  const f = fixture();
+  const members = await f.db.fetchPartyMembersDetailed();
+  members.push({ name: 'Third', team: 'team2', slot_index: 0 });
+  const original = members.map(m => ({ ...m }));
+  await assert.rejects(() => f.state.setPartySelection({ partyId: 7, actorName: 'Owner',
+    selection: { ...selection, modeVariantId: 'duels-1v1' } }), /Too many players/);
+  assert.deepEqual(members, original);
+  assert.equal(f.writes.length, 0);
 });

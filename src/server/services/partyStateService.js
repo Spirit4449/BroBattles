@@ -248,6 +248,7 @@ function createPartyStateService({ db, io }) {
   async function updatePartySelectionWithFallback(
     partyId,
     normalizedSelection,
+    query = db.runQuery.bind(db),
   ) {
     const legacyMode = selectionToLegacyMode(
       normalizedSelection.modeId,
@@ -256,7 +257,7 @@ function createPartyStateService({ db, io }) {
     const mapId = normalizedSelection.mapId ?? DEFAULT_MAP_ID;
 
     try {
-      await db.runQuery(
+      await query(
         "UPDATE parties SET mode = ?, map = ?, mode_id = ?, mode_variant_id = ? WHERE party_id = ?",
         [
           legacyMode,
@@ -268,7 +269,7 @@ function createPartyStateService({ db, io }) {
       );
     } catch (error) {
       if (!isMissingModeSelectionColumn(error)) throw error;
-      await db.runQuery(
+      await query(
         "UPDATE parties SET mode = ?, map = ? WHERE party_id = ?",
         [legacyMode, mapId, partyId],
       );
@@ -392,7 +393,21 @@ function createPartyStateService({ db, io }) {
       map: selection?.mapId,
     });
     await require("../helpers/trophyModeAccess").assertModeAccess(db, normalized.modeId, { actorName });
-    await updatePartySelectionWithFallback(partyId, normalized);
+    await db.withTransaction(async (conn, q) => {
+      await q("SELECT party_id FROM parties WHERE party_id = ? FOR UPDATE", [partyId]);
+      const members = await q(
+        "SELECT name, team, slot_index FROM party_members WHERE party_id = ? ORDER BY joined_at, name FOR UPDATE",
+        [partyId],
+      );
+      const { perTeam: teamSize } = capacityFromSelection(normalized);
+      const next = require("../helpers/partySlots").resizePartySlots(members, teamSize);
+      for (let i = 0; i < next.length; i++) {
+        if (next[i].team === members[i].team && next[i].slot_index === members[i].slot_index) continue;
+        await q("UPDATE party_members SET team = ?, slot_index = ? WHERE party_id = ? AND name = ?",
+          [next[i].team, next[i].slot_index, partyId, next[i].name]);
+      }
+      await updatePartySelectionWithFallback(partyId, normalized, q);
+    });
     return normalized;
   }
 

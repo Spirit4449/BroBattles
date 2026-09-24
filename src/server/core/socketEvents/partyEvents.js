@@ -389,7 +389,7 @@ function registerPartyEvents(
         modeVariantId: savedSelection.modeVariantId,
         selection: savedSelection,
         username: uname,
-        members: data.members,
+        members,
         botSlots,
       });
       io.to(`party:${data.partyId}`).emit("party:bot-slots", {
