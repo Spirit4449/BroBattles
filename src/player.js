@@ -2328,7 +2328,7 @@ export function handlePlayerMovement(scene) {
         },
       );
     }
-    noteMovementFxEvent("land", {
+    if (playLandingSound) noteMovementFxEvent("land", {
       fallDistance,
       impactVelocity: lastAirborneVelocityY,
     });

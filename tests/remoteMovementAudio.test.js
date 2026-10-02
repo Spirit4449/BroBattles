@@ -132,3 +132,53 @@ test('spawn intro and locked audio stay silent; invisible fighters still produce
   assert.equal(f.calls.length, 1);
   f.controller.destroy();
 });
+
+test('opening remote touchdown is silent after the intro, with event IDs and legacy snapshots', () => {
+  for (const withSequence of [true, false]) {
+    const f = fixture();
+    f.sprite._suppressSpawnLandingSound = true;
+    f.sprite._spawnIntroPending = true;
+    const state = (grounded, vy, seq, type) => ({ grounded, vy,
+      ...(withSequence ? { movementFxSeq: seq, movementFxType: type } : {}) });
+    f.update(state(true, 0, 0, ''));
+    assert.equal(f.sprite._suppressSpawnLandingSound, true);
+    f.scene._spawnIntroActive = true;
+    f.update(state(false, 88, 0, ''));
+    f.scene._spawnIntroActive = false;
+    f.sprite._spawnIntroPending = false;
+    f.update(state(false, 88, 0, ''));
+    f.update(state(true, 0, 1, 'land'));
+    f.update(state(true, 0, 1, 'land'));
+    assert.equal(f.calls.length, 0);
+    f.update(state(false, -400, 2, 'jump'));
+    f.update(state(true, 0, 3, 'land'));
+    assert.deepEqual(f.calls.map(c => c.key), ['sfx-jump', 'sfx-grass-land']);
+    f.controller.destroy();
+  }
+});
+
+test('an immediate remote jump re-arms landing audio using network velocity', () => {
+  const f = fixture();
+  f.sprite._suppressSpawnLandingSound = true;
+  f.sprite.body = { velocity: { y: 0 } };
+  f.update({ grounded: false, vy: -400 });
+  f.update({ grounded: true, vy: 0 });
+  assert.deepEqual(f.calls.map(c => c.key), ['sfx-grass-land']);
+  f.controller.destroy();
+});
+
+test('late startup landing events and grounded contact flicker stay silent', () => {
+  const f = fixture();
+  f.sprite._suppressSpawnLandingSound = true;
+  f.update({ grounded: true, movementFxSeq: 0 });
+  f.update({ grounded: true, movementFxSeq: 1, movementFxType: 'land' });
+  f.sprite.y += 2;
+  f.update({ grounded: false, vy: 30, movementFxSeq: 1 });
+  f.update({ grounded: true, movementFxSeq: 2, movementFxType: 'land' });
+  assert.equal(f.calls.length, 0);
+  f.sprite.y += 20;
+  f.update({ grounded: false, vy: 180, movementFxSeq: 2 });
+  f.update({ grounded: true, movementFxSeq: 3, movementFxType: 'land' });
+  assert.deepEqual(f.calls.map(c => c.key), ['sfx-grass-land']);
+  f.controller.destroy();
+});

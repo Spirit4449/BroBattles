@@ -24,15 +24,20 @@ export function terrainLandingSound(terrain, baseVolume) {
   };
 }
 
-// Consume the initial spawn's landing silently, even if the first gameplay
-// frame is still slightly airborne. A deliberate jump re-arms normal audio.
-export function shouldPlayLandingSound(sprite, onGround) {
+// Keep startup settling and delayed landing events silent until the fighter
+// jumps or actually falls away from the first grounded position.
+export function shouldPlayLandingSound(sprite, onGround, velocityY = sprite.body?.velocity?.y) {
   if (!sprite._suppressSpawnLandingSound) return true;
-  if ((sprite.body?.velocity?.y || 0) < -1) {
+  if (sprite._spawnIntroPending) return false;
+  const bottom = Number(sprite.body?.bottom ?? sprite.y);
+  const spawnBottom = sprite._spawnLandingSoundBottom;
+  const fallingAway = !onGround && Number.isFinite(spawnBottom) &&
+    bottom - spawnBottom > 8 && velocityY > 40;
+  if ((velocityY || 0) < -40 || fallingAway) {
     sprite._suppressSpawnLandingSound = false;
     return true;
   }
-  if (onGround) sprite._suppressSpawnLandingSound = false;
+  if (onGround && Number.isFinite(bottom)) sprite._spawnLandingSoundBottom = bottom;
   return false;
 }
 

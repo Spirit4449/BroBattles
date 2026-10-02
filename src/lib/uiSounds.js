@@ -32,6 +32,7 @@ const soundFiles = {
   notification: "notification",
   beep: "/assets/beep.mp3",
   start: "/assets/start.mp3",
+  playerJoin: "/assets/player-join.wav",
   upgrade: "/assets/upgrade.mp3",
   unlock: "/assets/unlock.mp3",
   shopOpen: "shop-open.ogg",
@@ -95,6 +96,9 @@ function getOrLoadSound(soundName) {
   sounds[soundName] = audio;
   return audio;
 }
+
+// Warm time-critical cues without playing them.
+export function preloadSound(soundName) { getOrLoadSound(soundName); }
 
 // Play a sound
 export function playSound(soundName, volume = 0.5, options = {}) {

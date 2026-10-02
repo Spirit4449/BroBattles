@@ -1,6 +1,8 @@
 import { createPageScope } from './pageScope';
 import { createBattlePreloader, getTemplateResources } from './preload';
 import { createLobbyReturnController } from './lobbyReturn';
+import { createLobbyAudio } from './lobbyAudio.mjs';
+import { getSettings, subscribeSettings } from '../site/preferences';
 
 // Retain the decoded transition artwork for the lifetime of navigation, outside
 // page scopes and speculative asset warming. Start before either page boots.
@@ -163,7 +165,10 @@ function getAudioContext() {
   if (Context && (!audioContext || audioContext.state === 'closed')) audioContext = new Context();
   return audioContext;
 }
-function unlockAudio() { getAudioContext()?.resume().catch(() => {}); }
+const lobbyAudio = createLobbyAudio({ getAudioContext, readSettings: getSettings });
+subscribeSettings(() => lobbyAudio.refresh());
+document.addEventListener('visibilitychange', () => lobbyAudio.setHidden(document.hidden));
+function unlockAudio() { getAudioContext()?.resume().catch(() => {}); lobbyAudio.unlock(); }
 document.addEventListener('pointerdown', unlockAudio, { passive: true });
 document.addEventListener('keydown', unlockAudio);
 
@@ -271,11 +276,15 @@ function ready() {
   dismissTransition();
   clearRouteHints();
   markRoute('ready');
-  if (document.body.dataset.bbScreen === 'lobby') preloader.start('battle');
+  if (document.body.dataset.bbScreen === 'lobby') {
+    lobbyAudio.enterLobby();
+    preloader.start('battle');
+  }
 }
 function fail(error) {
   if (routeFailed) return;
   routeFailed = true;
+  lobbyAudio.handoff();
   mounted = false;
   ++sequence;
   clearTimeout(readinessTimer);
@@ -413,6 +422,7 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
     transition.dataset.lobbyReturn = 'true';
     retireCurrentPage();
   } else if (url.pathname.startsWith('/game/')) {
+    lobbyAudio.loading();
     showBattleLoadingBar();
     transition.dataset.destination = url.href;
     transition.dataset.lobbyReturn = 'false';
@@ -558,6 +568,7 @@ function progress(percent, message) {
   // Late asset callbacks must not overwrite a failure and its retry action.
 }
 window.__BB_NAVIGATION__ = {
+  lobbyAudio,
   setLobbyNavigator(fn) { lobbyNavigator = fn; }, scope, scriptScope, runInline, navigate, getAudioContext,
   preload: preloader.enqueue, selectPreloadMode: preloader.selectMode,
   warmLobby() { preloader.start('lobby'); },

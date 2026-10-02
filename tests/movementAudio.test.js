@@ -62,7 +62,7 @@ test('opening landing is silent even when the countdown ends before touchdown', 
   assert.equal(shouldPlayLandingSound(player, false), false);
   player.body.velocity.y = 0;
   assert.equal(shouldPlayLandingSound(player, true), false);
-  assert.equal(player._suppressSpawnLandingSound, false);
+  assert.equal(player._suppressSpawnLandingSound, true);
   player.body.velocity.y = -400;
   assert.equal(shouldPlayLandingSound(player, false), true);
   player.body.velocity.y = 0;
@@ -74,4 +74,36 @@ test('jumping immediately at fight start does not mute that jump landing', () =>
   assert.equal(shouldPlayLandingSound(player, false), true);
   player.body.velocity.y = 0;
   assert.equal(shouldPlayLandingSound(player, true), true);
+});
+
+test('grounded frames before the spawn intro finishes do not consume landing suppression', () => {
+  const player = { _suppressSpawnLandingSound: true, _spawnIntroPending: true };
+  assert.equal(shouldPlayLandingSound(player, true, 0), false);
+  assert.equal(player._suppressSpawnLandingSound, true);
+  player._spawnIntroPending = false;
+  assert.equal(shouldPlayLandingSound(player, false, 88), false);
+  assert.equal(shouldPlayLandingSound(player, true, 0), false);
+  assert.equal(shouldPlayLandingSound(player, false, -400), true);
+  assert.equal(shouldPlayLandingSound(player, true, 0), true);
+});
+
+test('startup contact flicker and small upward corrections remain silent', () => {
+  const player = { y: 200, _suppressSpawnLandingSound: true };
+  assert.equal(shouldPlayLandingSound(player, true, 0), false);
+  assert.equal(shouldPlayLandingSound(player, true, 0), false);
+  player.y = 199;
+  assert.equal(shouldPlayLandingSound(player, false, -2), false);
+  player.y = 202;
+  assert.equal(shouldPlayLandingSound(player, false, 50), false);
+  assert.equal(shouldPlayLandingSound(player, true, 0), false);
+});
+
+test('walking off the spawn platform re-arms the next landing', () => {
+  const player = { y: 200, _suppressSpawnLandingSound: true };
+  assert.equal(shouldPlayLandingSound(player, true, 0), false);
+  player.y = 201;
+  assert.equal(shouldPlayLandingSound(player, false, 20), false);
+  player.y = 220;
+  assert.equal(shouldPlayLandingSound(player, false, 180), true);
+  assert.equal(shouldPlayLandingSound(player, true, 0), true);
 });

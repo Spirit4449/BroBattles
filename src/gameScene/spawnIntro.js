@@ -81,6 +81,8 @@ export function prepareSpawnIntro(scene, sprite, character, skin, remote = false
   entries.push(entry);
   sprite.body.moves = false;
   sprite._spawnIntroPending = true;
+  sprite._suppressSpawnLandingSound = true;
+  sprite._spawnLandingSoundBottom = undefined;
 }
 
 export function startSpawnIntro(scene, positions = {}) {

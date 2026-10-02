@@ -41,6 +41,7 @@ import {
 } from "./lib/gameSelectionCatalog.js";
 
 wireFullscreenToggles();
+window.__BB_NAVIGATION__?.lobbyAudio?.enterLobby();
 
 // Track last known party roster to detect joins/leaves
 let __partyRosterNames = null; // Set<string> of member names
@@ -1211,8 +1212,7 @@ export function socketInit(options = {}) {
 
       // Toasts: detect joins/leaves vs previous roster
       try {
-        const currentUserName =
-          document.getElementById("username-text")?.textContent || "";
+        const currentUserName = getCurrentLobbyUserName();
         const newNames = new Set(
           (Array.isArray(data?.members) ? data.members : [])
             .map((m) => m?.name)
@@ -1229,10 +1229,10 @@ export function socketInit(options = {}) {
         } else {
           // Additions
           for (const name of newNames) {
-            if (!__partyRosterNames.has(name) && name !== currentUserName) {
+            if (!__partyRosterNames.has(name) && getLobbyMemberKey(name) !== getLobbyMemberKey(currentUserName)) {
               sonner(`${name} joined your party`, null, "OK", null, {
                 duration: 2000,
-                sound: "notification",
+                sound: "playerJoin",
               });
             }
           }
@@ -2894,6 +2894,7 @@ export function showMatchmakingOverlay() {
   if (!overlay) return;
   if (__postBattleLobbyReturn) return;
   window.dispatchEvent(new CustomEvent("bb:matchmaking-start"));
+  window.__BB_NAVIGATION__?.lobbyAudio?.searching();
   if (__matchmakingHideTimer) {
     window.clearTimeout(__matchmakingHideTimer);
     __matchmakingHideTimer = null;
@@ -2929,6 +2930,7 @@ export function showMatchmakingOverlay() {
 }
 
 export function hideMatchmakingOverlay({ immediate = false } = {}) {
+  window.__BB_NAVIGATION__?.lobbyAudio?.cancelSearch();
   __matchedQueueId = null;
   __queueHealthGeneration++;
   __queueHealthPending = false;
@@ -3015,6 +3017,12 @@ function updateMMOverlay({ found, total, selection, players }) {
   const totalCount =
     Number(total) || getTotalPlayersForSelection(normalized) || 0;
   const isFull = !!__matchedQueueId && totalCount > 0 && foundCount >= totalCount;
+  window.__BB_NAVIGATION__?.lobbyAudio?.updatePlayers(
+    (Array.isArray(players) ? players : []).slice(0, totalCount).map(
+      (player) => String(player?.botSlotKey || player?.name || "").trim().toLowerCase(),
+    ),
+    getLobbyMemberKey(getCurrentLobbyUserName()),
+  );
 
   if (overlay) {
     const previousState = overlay.dataset.state;
@@ -3025,6 +3033,7 @@ function updateMMOverlay({ found, total, selection, players }) {
     );
     if (isFull && previousState !== "ready") {
       __matchmakingReadyAt = Date.now();
+      window.__BB_NAVIGATION__?.lobbyAudio?.found();
     }
     if (!isFull) __matchmakingReadyAt = 0;
   }
@@ -3290,6 +3299,7 @@ function wireAdminFillBotsButtons() {
 // Ready button helpers
 // ---------------------------
 function setReadyButtonState(isCancel) {
+  window.__BB_NAVIGATION__?.lobbyAudio?.setReady(isCancel);
   const btn = document.getElementById("ready");
   if (!btn) return;
   // Input[type=submit] uses value for its label

@@ -20,6 +20,7 @@ test('intro enables gravity, plays falling, lands once, and never resets at figh
   const h = harness(), { scene, sprite } = h;
   h.prepareSpawnIntro(scene, sprite, 'ninja', '', true);
   assert.equal(sprite.body.moves, false);
+  assert.equal(sprite._suppressSpawnLandingSound, true);
   h.startSpawnIntro(scene, { player: { x: 110, y: 210 } });
   assert.equal(sprite.y, 30);
   assert.equal(sprite.body.allowGravity, true);
@@ -32,6 +33,7 @@ test('intro enables gravity, plays falling, lands once, and never resets at figh
   scene.events.emit('postupdate');
   assert.deepEqual(h.effects, ['land']);
   h.finishSpawnIntro(scene);
+  assert.equal(sprite._suppressSpawnLandingSound, true, 'suppression survives until gameplay observes touchdown');
   assert.equal(sprite.y, 212, 'fight does not teleport');
   assert.equal(sprite.body.allowGravity, false, 'remote interpolation regains ownership');
   assert.equal(sprite.body.maxVelocity.y, 900);

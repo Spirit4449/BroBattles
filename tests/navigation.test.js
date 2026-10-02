@@ -19,6 +19,8 @@ function setup(fetchPage) {
     }])),
     fetch: fetchPage || (async url => ({ ok: true, url, text: async () => '' })),
     DOMParser: class { parseFromString() { return { body: { dataset: { bbScreen: 'lobby' } } }; } },
+    getSettings: () => ({ music: 1, sfx: 1 }), subscribeSettings() {},
+    createLobbyAudio: () => Object.fromEntries(['enterLobby', 'refresh', 'setHidden', 'unlock', 'handoff', 'loading'].map(key => [key, () => {}])),
     createBattlePreloader: () => ({ start() { state.warmed++; }, stop() {}, enqueue() {} }),
     getTemplateResources: () => [],
     createPageScope: () => { state.scopes++; return { active: true, dispose() { state.disposed++; } }; },

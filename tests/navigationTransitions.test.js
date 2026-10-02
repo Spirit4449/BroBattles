@@ -128,6 +128,8 @@ function setup({ routeResponse, statusResponse, gameDataResponse, deferStyles = 
         return { title: 'Lobby', body, head, querySelectorAll: () => [script, ...injected] };
       }
     },
+    getSettings: () => ({ music: 1, sfx: 1 }), subscribeSettings() {},
+    createLobbyAudio: () => Object.fromEntries(['enterLobby', 'refresh', 'setHidden', 'unlock', 'handoff', 'loading'].map(key => [key, () => {}])),
     createBattlePreloader: () => ({ start() { state.warmed++; }, stop() {}, enqueue() {} }),
     createPageScope: () => ({
       id: String(++scopeId), active: true,

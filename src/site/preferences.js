@@ -22,7 +22,14 @@ let settings=read();
 export function getSettings() { return {...settings,keys:{...settings.keys}}; }
 export function subscribeSettings(fn) { subscribers.add(fn); return ()=>subscribers.delete(fn); }
 function announce() { subscribers.forEach(fn=>fn(getSettings())); }
-export function saveSettings(update) { settings=normalizeSettings({...settings,...update}); try { localStorage.setItem(KEY,JSON.stringify(settings)); } catch (_) {} announce(); }
+export function saveSettings(update) { settings=normalizeSettings({...settings,...update}); try { localStorage.setItem(KEY,JSON.stringify(settings)); } catch (_) {} announce();
+  // Navigation and each page bundle have separate module instances.
+  if (typeof CustomEvent !== 'undefined' && typeof window !== 'undefined') window.dispatchEvent?.(new CustomEvent('bb:settings-changed', { detail: settings }));
+}
+if (typeof window !== 'undefined') window.addEventListener('bb:settings-changed', event => {
+  if (event.detail === settings) return;
+  settings = normalizeSettings(event.detail); announce();
+});
 export function resetSettings() { saveSettings(DEFAULT_SETTINGS); }
 if (typeof window!=='undefined') window.addEventListener('storage',event=>{ if(event.key===KEY || event.key===null){settings=read();announce();} });
 export function bindAudio(audio, channel, baseVolume) {

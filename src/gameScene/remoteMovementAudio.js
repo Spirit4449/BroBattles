@@ -1,5 +1,5 @@
 import { playPlayerSound, playerSoundVolume } from './playerAudio';
-import { getTerrainSteps, footstepVolume, terrainLandingSound } from './movementAudio';
+import { getTerrainSteps, footstepVolume, terrainLandingSound, shouldPlayLandingSound } from './movementAudio';
 import { MOVEMENT_VFX_CONFIG } from '../effects';
 import movementPhysics from '../shared/movementPhysics.json';
 
@@ -80,6 +80,7 @@ export function createRemoteMovementAudio(scene, sprite) {
     lastUpdate = time;
     const grounded = !!state.grounded;
     const vx = Number(state.vx) || 0, vy = Number(state.vy) || 0;
+    const playLandingSound = shouldPlayLandingSound(sprite, grounded, vy);
     const animation = String(animationState?.animation || '').toLowerCase();
     const dash = /^(dash|dashing)$/.test(animation);
     const wall = !grounded && (typeof state.wallSliding === 'boolean' ? state.wallSliding : animation.includes('wallslid'));
@@ -101,7 +102,7 @@ export function createRemoteMovementAudio(scene, sprite) {
     }
     if (event === 'jump') play('sfx-jump', { volume: 0.36 + speed * 0.1, rate: 0.96 + speed * 0.08 });
     if (event === 'wall-jump') play('sfx-walljump', { volume: 0.5, rate: 0.96 + Math.min(0.08, Math.abs(vx) / 720) });
-    if (event === 'land' && previous) {
+    if (event === 'land' && previous && playLandingSound) {
       const impact = Number(state.movementFxImpactVelocity) || Math.max(previous.vy, vy);
       const distance = Number(state.movementFxFallDistance) || Math.max(0, y - previous.peak);
       const strength = (clamp(impact / MOVEMENT_VFX_CONFIG.landingMaxVelocity) * 0.65 +

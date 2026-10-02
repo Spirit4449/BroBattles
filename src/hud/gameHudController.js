@@ -3,7 +3,7 @@ import { updateControlsGuide } from '../site/controlsGuide.mjs';
 // HUD controller for battle overlays, timer, keybind help, and team status.
 // Keeps DOM/UI concerns out of game scene orchestration.
 
-import { playSound } from "../lib/uiSounds.js";
+import { playSound, preloadSound } from "../lib/uiSounds.js";
 import {
   getModeById,
   normalizeGameSelection,
@@ -1108,6 +1108,8 @@ export function createGameHudController({
       countdownRunning = false;
       return;
     }
+    preloadSound("beep");
+    preloadSound("start");
 
     try {
       if (typeof onCountdownStart === "function") onCountdownStart();
@@ -1138,7 +1140,7 @@ export function createGameHudController({
 
             setTimeout(() => {
               countdownEl.textContent = num;
-              playSound("beep", 0.6);
+              playSound("beep", 0.38, { playbackRate: 1 + (5 - num) * 0.035 });
               countdownEl.style.transform = "translate(-50%, -50%) scale(1.2)";
               countdownEl.style.opacity = "1";
               countdownEl.style.transition =

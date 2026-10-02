@@ -2,6 +2,7 @@ import { processPlayerPlatformCollision } from './players/platformCollision';
 import { loadGameFonts } from './gameScene/loadGameFonts';
 import { installDamageHitboxDebug } from './gameScene/damageHitboxDebug';
 import { bindAudio, bindGameAudio, getSettings, graphicsRenderScale, subscribeSettings } from "./site/preferences";
+import { bindMusicEnvelope } from './lib/musicEnvelope';
 import { ensureLegalAcceptance } from "./site/shell";
 import "./site/shell.js";
 import { syncLocalEffects } from './players/localStateSync';
@@ -304,11 +305,16 @@ const hud = createGameHudController({
   getScene: () => gameScene,
   onCountdownFight: () => {
     finishSpawnIntro(gameScene);
+    window.__BB_NAVIGATION__?.lobbyAudio?.handoff();
     try {
+      if (gameScene) gameScene._bgmIntensity = 1;
       gameScene?._startMainBgm?.();
+      gameScene?._bgmEnvelope?.fade(1, 900);
     } catch (_) {}
   },
   onCountdownStart: () => {
+    if (gameScene) gameScene._bgmIntensity = 0.3;
+    gameScene?._bgmEnvelope?.fade(0.3, 450);
     focusBattleInput();
   },
   onEnableInput: () => {
@@ -1129,8 +1135,11 @@ class GameScene extends Phaser.Scene {
           const el = new Audio(bgmSrc);
           el.preload = "auto";
           el.loop = true;
-          const disposeVolume = bindAudio(el, "music", bgmVolume);
-          this.events.once("shutdown", disposeVolume);
+          this._bgmEnvelope = bindMusicEnvelope(el, bgmVolume, 0);
+          el.addEventListener('playing', () => {
+            this._bgmEnvelope.fade(this._bgmIntensity ?? (isLiveGame ? 1 : 0.3), 1200);
+          }, { once: true });
+          this.events.once("shutdown", () => this._bgmEnvelope?.dispose());
           this._bgmSrc = bgmSrc;
           this._bgmEl = el;
           // Hook into scene lifecycle for cleanup
@@ -1144,12 +1153,15 @@ class GameScene extends Phaser.Scene {
           this.events.on("pause", () => this._bgmEl?.pause());
           this.events.on("resume", () => {
             try {
-              this._bgmEl?.play();
+              this._bgmEl?.play()?.catch(() => {});
             } catch (_) {}
           });
         }
-        const p = this._bgmEl.play();
-        if (p && typeof p.catch === "function") p.catch(() => {});
+        const playingElement = this._bgmEl;
+        const p = playingElement.play();
+        if (p && typeof p.then === "function") p.then(() => {
+          if (this._bgmEl === playingElement) window.__BB_NAVIGATION__?.lobbyAudio?.handoff();
+        }).catch(() => { this._bgmStarted = false; });
       } catch (e) {}
     };
     this._startMainBgm = () => {
