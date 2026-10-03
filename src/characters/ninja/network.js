@@ -3,27 +3,24 @@ import { presentSwarmRelease } from './swarmPresentation';
 import { ninjaProjectileTexture, animateNinjaProjectile } from './projectileTexture';
 import { createShurikenEffects } from './effects';
 import { playSpriteAnimation, markOneShotAnimation, getAnimationDurationMs } from '../shared/animationState';
-import socket from '../../socket';
-import { CombatClock } from '../../shared/huntressReplication';
+import { serverClock as clock, ensureServerClockEpoch } from '../../match/serverClock';
 import { remoteLaunchCorrection, reconcileFlight } from '../../shared/projectilePresentation';
 import { VERSION, STEP_MS, launch, step, swarmConfig } from '../../shared/ninjaProjectile';
 import { createRuntimeId } from '../shared/runtimeId';
 import { RENDER_LAYERS } from '../../gameScene/renderLayers';
 import { playPlayerSound } from '../../gameScene/playerAudio';
-const clock=new CombatClock();
 const active=new Map(),terminals=new Set(),requests=new Map(),effects=new Set();
 const diagnostics=[];
 function record(event){diagnostics.push(event);if(diagnostics.length>120)diagnostics.shift();}
-let enabled=false,sceneRef=null,listener=null,shutdown=null,syncTimer=null,ctx={},colliders=[],revision=0,generation=0;
+let enabled=false,sceneRef=null,listener=null,shutdown=null,ctx={},colliders=[],revision=0;
 const copy=value=>JSON.parse(JSON.stringify(value));
 export function ninjaEnabled(){return enabled;}
 export function resetNinjaNetwork(){
-  generation++;clearInterval(syncTimer);syncTimer=null;
   if(sceneRef&&listener)sceneRef.events.off('update',listener);
   if(sceneRef&&shutdown)sceneRef.events.off('shutdown',shutdown);
   for(const e of active.values()){e.fx?.destroy();e.sprite?.destroy();}
   for(const e of effects)e.destroy();effects.clear();
-  active.clear();terminals.clear();requests.clear();diagnostics.length=0;clock.reset();
+  active.clear();terminals.clear();requests.clear();diagnostics.length=0;
   enabled=false;sceneRef=null;listener=null;shutdown=null;ctx={};revision=0;
 }
 // Remove combat presentation that was on screen when the browser stopped
@@ -36,16 +33,12 @@ export function discardNinjaPresentation(){
 }
 export function configureNinjaNetwork(state){
   resetNinjaNetwork();if(state?.ninjaCombatVersion!==VERSION)return;
-  enabled=true;colliders=state.colliders||[];clock.reset(state.epoch);clock.observe(state,performance.now());
+  enabled=true;colliders=state.colliders||[];ensureServerClockEpoch(state.epoch);clock.observe(state,performance.now());
   if(typeof window!=='undefined')window.__BB_NINJA_DIAGNOSTICS__=()=>({
     epoch:clock.epoch,active:active.size,rttMs:clock.samples.map(p=>p.rtt),events:diagnostics.slice(),
   });
   for(const t of state.terminals||[])terminals.add(t.id);
   for(const e of state.active||[])accept(e.projectile,state.simMono);
-  const gen=generation;
-  const sync=()=>{if(!socket.connected)return;const sent=performance.now();socket.timeout(1500).emit('game:clock',{},(err,p)=>{
-    if(!err&&gen===generation)clock.synchronize(p,sent,performance.now());
-  });};sync();syncTimer=setInterval(sync,2000);
 }
 export function observeNinjaSnapshot(snapshot){if(enabled)clock.observe({epoch:snapshot.snapshotEpoch,sentMono:snapshot.sentMono,simMono:snapshot.tMono},performance.now());}
 function owner(name){return name===ctx.localUsername?ctx.localPlayer:ctx.opponentPlayersRef?.[name]?.opponent||ctx.teamPlayersRef?.[name]?.opponent;}

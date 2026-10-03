@@ -1,12 +1,10 @@
 import { quantizeMovementPosition } from '../shared/movementPrecision';
 // gameScene/localInputSync.js
-// Emits both game:input (position) and game:input-intent (direction/jump/action)
-// for dual-path server movement simulation (Phase 2).
+// Emits game:input: the locally simulated position plus control state. A change
+// in control intent (direction, jump, duck, ...) bypasses the send throttle.
 
-import {
-  noteClientInputSent,
-  noteClientIntentSent,
-} from "../lib/netTestLogger.js";
+import { localMovementCorrector } from "../players/localMovementCorrector.js";
+import { noteClientInputSent, noteClientIntentSent } from "../lib/netTestLogger.js";
 
 const RELIABLE_KEYFRAME_INTERVAL_MS = 250;
 const RELIABLE_KEYFRAME_DISTANCE_PX = 140;
@@ -149,6 +147,8 @@ export function createLocalInputSync({
       ),
       loaded: true,
       sequence: packetSequence,
+      // Lets the server discard packets sent before the latest correction.
+      correctionAck: localMovementCorrector.getAck(),
       timestamp: now,
       width: quantizePosition(player.displayWidth || player.width || 0),
       height: quantizePosition(player.displayHeight || player.height || 0),
@@ -184,6 +184,7 @@ export function createLocalInputSync({
     // Disable per-message compression for movement for lower latency.
     // Send every throttle interval, not only on visible state deltas.
     movementEmitter.emit("game:input", currentState);
+    localMovementCorrector.recordSent(packetSequence, currentState.x, currentState.y);
     noteClientInputSent({
       now,
       previousState: lastPlayerState,
@@ -191,8 +192,6 @@ export function createLocalInputSync({
       previousSentAt: lastMovementSent,
     });
 
-    // Real control intent: based on live controls, not inferred from sampled position deltas.
-    socket.compress(false).emit("game:input-intent", inputIntent);
     noteClientIntentSent(inputIntent);
 
     lastPlayerState = { ...currentState };

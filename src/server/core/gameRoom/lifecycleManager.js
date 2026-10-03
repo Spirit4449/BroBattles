@@ -202,6 +202,14 @@ async function finishGame(room, winnerTeam, meta = {}) {
 
   room._loopRunning = false;
   room._scheduledActions.length = 0;
+  // One line per match: which correction path fired for each human, if any.
+  const movement = [...room.players.values()]
+    .filter((p) => !p.isBot && p._movementStats)
+    .map((p) => ({ name: p.name, ...p._movementStats,
+      maxErrorPx: Math.round(p._movementStats.maxErrorPx * 10) / 10 }));
+  if (movement.length) {
+    console.log("[movement:corrections]", JSON.stringify({ matchId: room.matchId, players: movement }));
+  }
   console.log(
     "[bots:match-result]",
     JSON.stringify({

@@ -9,7 +9,6 @@ export const REMOTE_SMOOTHING_CONFIG = Object.freeze({
 export function readNetworkExperiments(search = "") {
   const params = new URLSearchParams(search);
   return {
-    continuousSmoothing: params.get("netSmoothing") !== "legacy",
     enableArrivalAdaptiveDelay: params.get("netArrivalDelay") === "1",
   };
 }

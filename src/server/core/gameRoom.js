@@ -195,7 +195,6 @@ class GameRoom {
         isAlive: true,
         lastInput: Date.now(),
         _lastPositionPacketAt: 0,
-        inputBuffer: [],
         level,
         baseDamage,
         specialDamage,
@@ -292,7 +291,6 @@ class GameRoom {
         isAlive: true,
         lastInput: now,
         _lastPositionPacketAt: 0,
-        inputBuffer: [],
         level,
         baseDamage,
         specialDamage,
@@ -341,11 +339,6 @@ class GameRoom {
       playerData.connected = true;
       playerData._lastPositionSeq = -1;
       playerData._lastPositionClientTs = 0;
-      playerData._lastInputSeq = -1;
-      playerData.inputBuffer.length = 0;
-      if (Array.isArray(playerData._inputIntentQueue)) playerData._inputIntentQueue.length = 0;
-      playerData._currentInputIntent = null;
-      playerData._lastInputIntent = null;
       if (!Number.isFinite(playerData.x) || !Number.isFinite(playerData.y)) {
         const team = this.matchData.players.filter(p => p.team === playerData.team);
         Object.assign(playerData, spawnForParticipant(this.geometry, playerData, playerData.spawnIndex, team.length));
@@ -898,26 +891,10 @@ class GameRoom {
       stats.ticks++; stats.totalMs += elapsed; stats.maxMs = Math.max(stats.maxMs, elapsed);
     }
 
-    // For Phase 1, just process basic movement inputs
+    // Humans record history when their position packets are accepted; bots
+    // move every simulation step, so their history is sampled here.
     for (const playerData of this.players.values()) {
-      if (
-        !playerData.isAlive ||
-        playerData.connected === false ||
-        playerData.loaded !== true
-      )
-        continue;
-
-      // Process latest input from buffer
-      if (playerData.inputBuffer.length > 0) {
-        const latestInput =
-          playerData.inputBuffer[playerData.inputBuffer.length - 1];
-        this.processPlayerMovement(playerData, latestInput);
-
-        // Clear old inputs
-        playerData.inputBuffer = [];
-      }
-
-      inputManager.advancePlayerKinematics(this, playerData, this.FIXED_DT_MS);
+      if (playerData.isBot) inputManager.recordBotHistory(playerData, now);
     }
   }
 
@@ -970,15 +947,6 @@ class GameRoom {
 
   _buildDeathDropsSnapshot() {
     return deathDropManager.buildDeathDropsSnapshot(this);
-  }
-
-  /**
-   * Process player movement
-   * @param {object} playerData
-   * @param {object} input
-   */
-  processPlayerMovement(playerData, input) {
-    inputManager.processPlayerMovement(playerData, input);
   }
 
   /**
@@ -1242,11 +1210,6 @@ class GameRoom {
       playerData.ducking = false;
       playerData.wallSliding = false;
       playerData.wallSide = null;
-      if (Array.isArray(playerData._inputIntentQueue)) {
-        playerData._inputIntentQueue.length = 0;
-      }
-      playerData._currentInputIntent = null;
-      playerData._lastInputIntent = null;
       playerData.lastDamagedAt = 0;
       playerData.lastCombatAt = now;
       if (Number(plan.shieldMs) > 0) {

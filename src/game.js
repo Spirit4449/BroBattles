@@ -49,6 +49,8 @@ import { updateDynamicCamera } from "./gameScene/cameraDynamics";
 import { installRenderResolution } from "./gameScene/renderResolution";
 import { deferSceneAudio } from "./gameScene/deferredAudio";
 import { createLocalInputSync } from "./gameScene/localInputSync";
+import { localMovementCorrector } from "./players/localMovementCorrector";
+import { getServerClockDiagnostics } from "./match/serverClock";
 import { updateHealthBars } from "./gameScene/healthBarRenderer";
 import { createMapEditorRuntime } from "./gameScene/mapEditorRuntime";
 import { createModeRuntime, loadMode, preloadModeAssets, supportsSuddenDeath } from "./modes";
@@ -289,6 +291,8 @@ const snapshotBuffer = createSnapshotBuffer(networkExperiments);
 window.__BB_NETWORK_DIAGNOSTICS__ = () => ({
   experiments: { ...networkExperiments },
   ...snapshotBuffer.getDiagnostics(),
+  corrections: localMovementCorrector.getDiagnostics(),
+  clock: getServerClockDiagnostics(),
 });
 
 // Game scene reference
@@ -1816,6 +1820,7 @@ class GameScene extends Phaser.Scene {
       hud.hideSpectatingBanner?.();
       hud.hideSpectatingPlayer?.();
       updateDynamicCamera(this, player, Phaser);
+      localMovementCorrector.update(player, this.game?.loop?.delta ?? 16.67);
       localInputSync.sync(this, player, {
         dead,
         gameEnded,
@@ -1915,87 +1920,23 @@ class GameScene extends Phaser.Scene {
       const velocityPerMs = (bNum - aNum) / safeDtMs;
       return bNum + velocityPerMs * extrapolationMs;
     };
-    const filterRemoteTarget = (
-      wrapper,
-      rawTargetX,
-      rawTargetY,
-      previousSnapshot,
-      currentSnapshot,
-    ) => {
-      const prevAcceptedX = Number(wrapper._filteredTargetX);
-      const prevAcceptedY = Number(wrapper._filteredTargetY);
-      if (!Number.isFinite(prevAcceptedX) || !Number.isFinite(prevAcceptedY)) {
-        wrapper._filteredTargetX = rawTargetX;
-        wrapper._filteredTargetY = rawTargetY;
-        return { x: rawTargetX, y: rawTargetY };
-      }
-
-      const incomingDx = rawTargetX - prevAcceptedX;
-      const stableDir = Number(wrapper._stableTargetDirX) || 0;
-      const snapshotDx =
-        Number(currentSnapshot?.x) - Number(previousSnapshot?.x);
-      const snapshotVx = Number(currentSnapshot?.vx);
-      const motionHint =
-        Number.isFinite(snapshotVx) && Math.abs(snapshotVx) > 35
-          ? Math.sign(snapshotVx)
-          : Number.isFinite(snapshotDx) && Math.abs(snapshotDx) > 1.25
-            ? Math.sign(snapshotDx)
-            : 0;
-      const incomingDir =
-        Math.abs(incomingDx) > 0.75 ? Math.sign(incomingDx) : 0;
-      const reverseAgainstTrend =
-        stableDir !== 0 &&
-        incomingDir !== 0 &&
-        incomingDir === -stableDir &&
-        Math.abs(incomingDx) >= 6;
-      const reverseConfirmed = motionHint !== 0 && motionHint === incomingDir;
-      const nowPerf = performance.now();
-
-      if (reverseAgainstTrend && !reverseConfirmed) {
-        const pending = wrapper._reverseTargetCandidate;
-        if (
-          !pending ||
-          pending.dir !== incomingDir ||
-          nowPerf - pending.at > 180
-        ) {
-          wrapper._reverseTargetCandidate = {
-            dir: incomingDir,
-            at: nowPerf,
-          };
-          return { x: prevAcceptedX, y: prevAcceptedY };
-        }
-      } else {
-        wrapper._reverseTargetCandidate = null;
-      }
-
-      if (incomingDir !== 0) {
-        wrapper._stableTargetDirX = incomingDir;
-      }
-      wrapper._filteredTargetX = rawTargetX;
-      wrapper._filteredTargetY = rawTargetY;
-      return { x: rawTargetX, y: rawTargetY };
-    };
-
     const applyInterp = (wrapper, name) => {
       if (!wrapper || !wrapper.opponent) return;
 
-      const continuous = networkExperiments.continuousSmoothing;
       const now = performance.now();
-      const sample = continuous
-        ? sampleRemoteFrame(
-            snapshotBuffer,
-            baseFrame,
-            (wrapper._continuousSmoothing ||= {}),
-            {
-              attack:
-                (Number(this._localAttackPrecisionUntil) || 0) > now ||
-                (Number(wrapper._attackPrecisionUntil) || 0) > now,
-              airborne: baseFrame.bState?.players?.[name]?.grounded === false,
-              deltaMs: this.game?.loop?.delta || 16.67,
-              snap: Number(wrapper._networkSnapUntil) > now,
-            },
-          )
-        : baseFrame;
+      const sample = sampleRemoteFrame(
+        snapshotBuffer,
+        baseFrame,
+        (wrapper._continuousSmoothing ||= {}),
+        {
+          attack:
+            (Number(this._localAttackPrecisionUntil) || 0) > now ||
+            (Number(wrapper._attackPrecisionUntil) || 0) > now,
+          airborne: baseFrame.bState?.players?.[name]?.grounded === false,
+          deltaMs: this.game?.loop?.delta || 16.67,
+          snap: Number(wrapper._networkSnapUntil) > now,
+        },
+      );
       const { aState, bState, alpha } = sample;
       const extrapolationMs = Math.max(0, Number(sample.extrapolationMs) || 0);
 
@@ -2026,26 +1967,12 @@ class GameScene extends Phaser.Scene {
             : true;
 
       // Render remote players directly from the buffered snapshot timeline.
-      // During a combat precision window (opened when we receive an attack from this
-      // opponent), blend toward their newest known snapshot position at a higher rate
-      // (effectiveAlpha ≥ 0.85) to shrink the visual-vs-authoritative gap on hits.
+      // Attack/airborne precision is handled by sampleRemoteFrame's small lead.
       let targetX = spr.x;
       let targetY = spr.y;
       if (isLoaded) {
-        const nowPerf = performance.now();
-        const localAttackPrecision =
-          (Number(this._localAttackPrecisionUntil) || 0) > nowPerf;
-        const inPrecision =
-          localAttackPrecision ||
-          (Number(wrapper._attackPrecisionUntil) || 0) > nowPerf;
         const airborne = !(bPosData?.grounded ?? aPosData?.grounded ?? false);
-        const effectiveAlpha = continuous
-          ? alpha
-          : inPrecision
-            ? Math.max(alpha, 0.85)
-            : airborne
-              ? Math.max(alpha, 0.72)
-              : alpha;
+        const effectiveAlpha = alpha;
         const aX = Number(aPosData?.x);
         const aY = Number(aPosData?.y);
         const bX = Number(bPosData?.x);
@@ -2111,28 +2038,12 @@ class GameScene extends Phaser.Scene {
       }
       const shouldSnapToTarget =
         Number(wrapper._networkSnapUntil) > performance.now();
-      if (shouldSnapToTarget) {
-        wrapper._filteredTargetX = targetX;
-        wrapper._filteredTargetY = targetY;
-        wrapper._stableTargetDirX = 0;
-        wrapper._reverseTargetCandidate = null;
-      } else if (!continuous) {
-        const filteredTarget = filterRemoteTarget(
-          wrapper,
-          targetX,
-          targetY,
-          aPosData,
-          bPosData,
-        );
-        targetX = filteredTarget.x;
-        targetY = filteredTarget.y;
-      }
 
       if (!wrapper._deathPresentationActive && !wrapper._corpseRemoved) {
         if (shouldSnapToTarget) {
           spr.x = targetX;
           spr.y = targetY;
-        } else if (continuous) {
+        } else {
           followRemotePosition(spr, targetX, targetY, {
             deltaMs: this.game?.loop?.delta ?? 16.67,
             attack:
@@ -2140,54 +2051,6 @@ class GameScene extends Phaser.Scene {
               (Number(wrapper._attackPrecisionUntil) || 0) > now,
             airborne: !(bPosData?.grounded ?? aPosData?.grounded ?? false),
           });
-        } else {
-          // Move toward interpolated target with a bounded step.
-          // This prevents visible twitch from sudden target jumps while still catching up fast.
-          const dx = targetX - spr.x;
-          const dy = targetY - spr.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist > 0.35) {
-            const nowPerf = performance.now();
-            const localAttackPrecision =
-              (Number(this._localAttackPrecisionUntil) || 0) > nowPerf;
-            const inPrecision =
-              localAttackPrecision ||
-              (Number(wrapper._attackPrecisionUntil) || 0) > nowPerf;
-            const airborne = !(
-              bPosData?.grounded ??
-              aPosData?.grounded ??
-              false
-            );
-            const dtMs = Math.max(1, Number(this.game?.loop?.delta) || 16.7);
-            const followSpeedPxPerSec =
-              dist > 520
-                ? 5200
-                : dist > 260
-                  ? 3600
-                  : inPrecision
-                    ? 3000
-                    : airborne
-                      ? 2300
-                      : 1500;
-            const maxStep = (followSpeedPxPerSec * dtMs) / 1000;
-            const snapDistance = inPrecision ? 1.5 : airborne ? 1.25 : 0.9;
-            const microJitterDeadband = inPrecision
-              ? 0
-              : airborne
-                ? 0.45
-                : 0.75;
-            const teleportSnapDistance = inPrecision ? 900 : 1600;
-            if (dist <= microJitterDeadband) {
-              // Ignore tiny buffered-target movement that reads as shimmer.
-            } else if (dist > teleportSnapDistance || dist <= snapDistance) {
-              spr.x = targetX;
-              spr.y = targetY;
-            } else {
-              const step = Math.min(maxStep, dist);
-              spr.x += (dx / dist) * step;
-              spr.y += (dy / dist) * step;
-            }
-          }
         }
       }
       if (typeof wrapper.setPresenceState === "function") {

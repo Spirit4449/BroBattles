@@ -1,14 +1,15 @@
 import { applyTeamVisual, teamPalette } from "../../shared/projectilePresentation";
-import socket from '../../socket';
 import { createRuntimeId } from '../shared/runtimeId';
 import { RENDER_LAYERS } from '../../gameScene/renderLayers';
 import { HuntressReplica } from '../../shared/huntressReplication';
+import { serverClock, ensureServerClockEpoch } from '../../match/serverClock';
 import { remoteLaunchCorrection, reconcileFlight } from '../../shared/projectilePresentation';
 import { VERSION, attackConfig, resolveShot, powerFromSpeed, createVolley } from '../../shared/huntressProjectile';
 import { playPlayerSound } from '../../gameScene/playerAudio';
 
-const replica = new HuntressReplica();
-let version = null, sceneRef = null, context = {}, syncTimer = null, generation = 0;
+// The replica reads the shared match clock; it never resets or pings it.
+const replica = new HuntressReplica(serverClock);
+let version = null, sceneRef = null, context = {};
 const sprites = new Map(), casts = new Map(), metrics = [];
 const predictedRequests = new Map();
 const fireParticles = new Set();
@@ -17,8 +18,6 @@ let updateListener = null;
 let shutdownListener = null;
 
 export function resetHuntressNetwork() {
-  generation++;
-  clearInterval(syncTimer); syncTimer = null;
   if (sceneRef && updateListener) sceneRef.events.off('update', updateListener);
   if (sceneRef && shutdownListener) sceneRef.events.off('shutdown', shutdownListener);
   for (const entry of sprites.values()) entry.sprite.destroy();
@@ -42,19 +41,11 @@ export function configureHuntressNetwork(state) {
   resetHuntressNetwork();
   version = state?.huntressCombatVersion ?? null;
   if (version !== VERSION) return;
+  ensureServerClockEpoch(state.epoch);
   replica.reset(state.epoch);
   replica.clock.observe(state, performance.now());
   for (const terminal of state.terminals || []) replica.terminate(terminal, performance.now());
   for (const projectile of state.projectiles || []) replica.launch(projectile);
-  const current = generation;
-  const sync = () => {
-    if (!socket.connected) return;
-    const sent = performance.now();
-    socket.timeout(1500).emit('game:clock', {}, (error, response) => {
-      if (!error && current === generation && response) replica.clock.synchronize(response, sent, performance.now());
-    });
-  };
-  sync(); syncTimer = setInterval(sync, 2000);
   if (typeof window !== 'undefined') window.__BB_HUNTRESS_DIAGNOSTICS__ = () => ({
     version, epoch: replica.clock.epoch, active: replica.active.size,
     rttMs: replica.clock.samples.map(p => p.rtt), events: metrics.slice(),

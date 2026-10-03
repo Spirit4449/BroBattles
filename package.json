@@ -12,7 +12,7 @@
     "test:shop": "node --test tests/shopCatalog.test.js tests/shopCommerce.test.js tests/shopRotation.test.js tests/shopStaticContracts.test.js",
     "test:bots": "node --test tests/adaptiveBots.test.js tests/gameRoomStartup.test.js tests/botBehavior.test.js tests/botDash.test.js tests/botDashNavigation.test.js tests/botAiming.test.js tests/botTeamwork.test.js tests/botObjectives.test.js tests/botCoherence.test.js tests/navigationService.test.js",
     "test:battle-log": "node --test tests/battleLog.test.js",
-    "test:network": "node --test tests/networkTiming.test.mjs tests/ninjaCombat.test.js tests/ninjaRenderer.test.js tests/huntressCombat.test.js tests/huntressRenderer.test.js tests/huntressArrows.test.js",
+    "test:network": "node --test tests/networkTiming.test.mjs tests/movementCorrection.test.js tests/serverClockAndHistory.test.js tests/dashNetworkContacts.test.js tests/ninjaCombat.test.js tests/ninjaRenderer.test.js tests/huntressCombat.test.js tests/huntressRenderer.test.js tests/huntressArrows.test.js",
     "simulate:bots": "node scripts/simulate-bots.cjs",
     "test": "node --test tests/*.test.js tests/*.test.mjs",
     "validate:content": "node scripts/validate-content.cjs",

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSnapshotBuffer, getRenderClockCorrection } from "../src/match/snapshotBuffer.js";
+import { createSnapshotBuffer, getRenderClockCorrection, getDeliveryClockCorrection } from "../src/match/snapshotBuffer.js";
 import { sampleRemoteFrame, readNetworkExperiments, followRemotePosition } from "../src/gameScene/remoteSmoothing.js";
 import roomState from "../src/server/core/gameRoom/roomStateManager.js";
 import roomModule from "../src/server/core/gameRoom.js";
@@ -117,8 +117,7 @@ test("continuous precision crosses snapshot boundaries and exits without reversi
   }
   b.reset(); b.ingestSnapshot(packet(1, 100), 110);
   assert.equal(sampleRemoteFrame(b, b.sampleAt(100), state).targetMono, 100);
-  assert.equal(readNetworkExperiments("").continuousSmoothing, true);
-  assert.equal(readNetworkExperiments("?netSmoothing=legacy").continuousSmoothing, false);
+  assert.equal(readNetworkExperiments("?netSmoothing=legacy").continuousSmoothing, undefined);
   assert.equal(readNetworkExperiments("?netSmoothing=continuous&netArrivalDelay=1").enableArrivalAdaptiveDelay, true);
 });
 
@@ -241,4 +240,36 @@ test("snapshot ingest exposes transit and source gaps independently, with bounde
   assert.equal(event.arrivalGapMs,0);
   for(let t=210;t<2200;t+=17)b.getInterpolationFrame(t);
   assert.ok(b.getDiagnostics().maxExtrapolationMs<=250);
+});
+
+test("rendered remote delay matches the configured interpolation delay", () => {
+  const lagAfter = (firstDelay) => {
+    const b = createSnapshotBuffer({ maxStateBuffer: 400, enableAdaptiveDelay: false });
+    let frame = null;
+    for (let i = 0; i < 300; i++) {
+      const sim = i * 1000 / 30;
+      b.ingestSnapshot(packet(i + 1, sim), sim + 50 + (i === 0 ? firstDelay : 0));
+      for (let t = sim + 50; t < sim + 50 + 1000 / 30; t += 1000 / 144) frame = b.getInterpolationFrame(t);
+    }
+    // Render delay behind the newest snapshot's steady 50 ms delivery.
+    return (300 - 1) * 1000 / 30 + 1000 / 30 - frame.targetMono;
+  };
+  // The configured 75 ms delay is what is rendered, plus at most one interval of
+  // arrival phase. (A startup clamp used to leave only ~15-48 ms of cushion.)
+  for (const firstDelay of [0, 100, -30]) {
+    const lag = lagAfter(firstDelay);
+    assert.ok(lag >= 75 - 2 && lag <= 75 + 1000 / 30 + 2, `first delay ${firstDelay}: lag ${lag}`);
+  }
+});
+
+test("delivery steering is a bounded slew that never reverses the timeline", () => {
+  for (const hz of [60, 144, 240]) {
+    const dt = 1000 / hz;
+    for (const error of [1000, -1000, 40, -40]) {
+      const c = getDeliveryClockCorrection(error, dt);
+      assert.ok(Math.abs(c) <= dt * 0.08 + 1e-12);
+      assert.ok(dt + c > 0);
+    }
+  }
+  assert.equal(getDeliveryClockCorrection(2, 16), 0);
 });

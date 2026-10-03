@@ -65,10 +65,6 @@ function applyGloopPull(room, attacker, target, attack, now) {
   target._controlLockUntil = now + pullDurationMs + lockPaddingMs;
   target.vx = 0;
   target.vy = 0;
-  target.inputBuffer = [];
-  if (Array.isArray(target._inputIntentQueue)) {
-    target._inputIntentQueue.length = 0;
-  }
   try {
     effectManager.apply(
       target,

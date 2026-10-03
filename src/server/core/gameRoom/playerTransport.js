@@ -21,15 +21,6 @@ function setupPlayerSocket(room, socket) {
     room.handlePlayerInput(socket.id, inputData);
   });
 
-    // NEW: Handle input intent (Phase 2 server-side movement simulation)
-    // Non-breaking; queued but not used unless USE_SERVER_MOVEMENT_SIMULATION_V1 enabled
-  room.onSocket(socket, "game:input-intent", (intentData) => {
-    if (room.status !== "finished" && room.players.has(socket.id) && Number.isFinite(intentData?.seq)) {
-      room.playerActivity?.gameActivity(socket, room.matchId);
-    }
-    inputManager.handlePlayerInputIntent(room, socket.id, intentData);
-  });
-
     // Handle player actions (attacks, abilities, etc.)
   room.onSocket(socket, "game:action", (actionData) => {
     const player = room.players.get(socket.id);

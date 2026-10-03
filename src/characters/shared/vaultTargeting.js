@@ -1,4 +1,5 @@
 import socket from "../../socket";
+import { serverNowMono } from "../../match/serverClock";
 import { circleRectOverlap, rectsOverlap } from "./combatGeometry";
 
 function getLiveMatchContext() {
@@ -69,7 +70,7 @@ export function emitVaultHitForRect({
     target: vault.target,
     attackType,
     instanceId,
-    attackTime: Date.now(),
+    attackServerMono: serverNowMono() ?? undefined,
     gameId,
   });
   return true;
@@ -107,7 +108,7 @@ export function emitVaultHitForCircle({
     target: vault.target,
     attackType,
     instanceId,
-    attackTime: Date.now(),
+    attackServerMono: serverNowMono() ?? undefined,
     gameId,
   });
   return true;

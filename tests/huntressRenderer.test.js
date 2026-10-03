@@ -1,5 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const {EventEmitter}=require('node:events');
+const loadServerClock=require('./helpers/serverClockModule');
 const babel=require('@babel/core');
 const model=require('../src/shared/huntressProjectile');
 const replication=require('../src/shared/huntressReplication');
@@ -28,7 +29,8 @@ const code=babel.transformSync(fs.readFileSync(require.resolve('../src/character
 function setup(){
   const api={},created=[],sounds=[];let now=0;
   const socket={connected:false};
-  vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('huntressProjectile')?model:name.includes('huntressReplication')?replication:
+  const serverClock=loadServerClock({performance:{now:()=>now}});
+  vm.runInNewContext(code,{exports:api,require:name=>name.includes('serverClock')?serverClock:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('huntressProjectile')?model:name.includes('huntressReplication')?replication:
     name.includes('playerAudio')?playerAudio:
     name.includes('runtimeId')?{createRuntimeId:()=> 'generated'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:10}}:socket,
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){},window:{}});

@@ -15,6 +15,13 @@ export const DEFAULT_SNAPSHOT_BUFFER_CONFIG = Object.freeze({
   enableClockCorrection: false,
   enableBacklogCatchup: true,
   extrapolationLimitMs: 250,
+  // The render timeline was anchored to whenever the first snapshot happened
+  // to arrive. One late first packet (common while the scene loads) then hid
+  // up to the backlog threshold of extra delay for the whole match. Steer it
+  // toward the median delivery offset of recent periodic snapshots instead.
+  enableDeliverySteering: true,
+  deliveryWindowMs: 4000,
+  deliveryMinSamples: 8,
 });
 
 const SERVER_TICK_MS = 1000 / 60;
@@ -30,6 +37,16 @@ export function getRenderClockCorrection(lagMs, deltaMs) {
     return -Math.min((-lagMs - 60) * (1 - Math.exp(-dt / 200)), dt * 0.48);
   }
   return 0;
+}
+
+// Gentle, bounded slew: at most 8% of frame time, so remote motion never
+// visibly speeds up/slows down or reverses, and a 2 ms deadband stops hunting.
+export function getDeliveryClockCorrection(errorMs, deltaMs) {
+  const dt = Math.max(0, Math.min(250, deltaMs));
+  if (Math.abs(errorMs) <= 2) return 0;
+  const step = errorMs * (1 - Math.exp(-dt / 500));
+  const limit = dt * 0.08;
+  return Math.max(-limit, Math.min(limit, step));
 }
 
 export function createSnapshotBuffer(options = {}) {
@@ -48,6 +65,9 @@ export function createSnapshotBuffer(options = {}) {
     enableClockCorrection,
     enableBacklogCatchup,
     extrapolationLimitMs,
+    enableDeliverySteering,
+    deliveryWindowMs,
+    deliveryMinSamples,
   } = {
     ...DEFAULT_SNAPSHOT_BUFFER_CONFIG,
     ...(options || {}),
@@ -76,6 +96,18 @@ export function createSnapshotBuffer(options = {}) {
   let rejectedSnapshots = 0;
   let maxExtrapolationMs = 0;
   let generation = 0;
+  const deliveryOffsets = [];
+  let deliveryOffsetMs = null;
+
+  function noteDelivery(clientMonoNow, snapMono) {
+    deliveryOffsets.push({ at: clientMonoNow, offset: clientMonoNow - snapMono });
+    while (deliveryOffsets.length && deliveryOffsets[0].at < clientMonoNow - deliveryWindowMs) {
+      deliveryOffsets.shift();
+    }
+    if (deliveryOffsets.length < deliveryMinSamples) return;
+    const sorted = deliveryOffsets.map((d) => d.offset).sort((a, b) => a - b);
+    deliveryOffsetMs = sorted[Math.floor(sorted.length / 2)];
+  }
 
   function reset() {
     generation++;
@@ -91,10 +123,12 @@ export function createSnapshotBuffer(options = {}) {
     arrivalJitterEma = arrivalGapMs = sourceGapMs = 0;
     underrunFrames = renderedFrames = rejectedSnapshots = maxExtrapolationMs = 0;
     lastAdaptivePrint = lastDiagLogMono = 0;
+    deliveryOffsets.length = 0;
+    deliveryOffsetMs = null;
   }
 
   function getDiagnostics() {
-    return { interpDelayMs, spacingEma, jitterEma, arrivalJitterEma,
+    return { interpDelayMs, deliveryOffsetMs, spacingEma, jitterEma, arrivalJitterEma,
       arrivalGapMs, sourceGapMs, underrunFrames, renderedFrames,
       rejectedSnapshots, maxExtrapolationMs, bufferLength: stateBuffer.length };
   }
@@ -128,6 +162,8 @@ export function createSnapshotBuffer(options = {}) {
       lastPeriodic = null;
       spacingEma = jitterEma = null;
       snapshotSpacings.length = 0;
+      deliveryOffsets.length = 0;
+      deliveryOffsetMs = null;
     }
     let activated = false;
     if (!active) {
@@ -241,14 +277,19 @@ export function createSnapshotBuffer(options = {}) {
           const dev = Math.abs(d - spacingEma);
           jitterEma = jitterEma == null ? dev : jitterEma + (dev - jitterEma) * spacingEmaAlpha;
           if (enableAdaptiveDelay) {
+            // Two snapshot intervals plus jitter keeps one spare snapshot. The
+            // old 3x target was masked by a startup clamp that left the
+            // timeline only ~15-48 ms behind; with delivery steering the
+            // configured delay is what players actually see.
             const target = enableArrivalAdaptiveDelay
-              ? snapIntervalMs * 3 + arrivalJitterEma * 2
-              : spacingEma * 3 + jitterEma * 2;
+              ? snapIntervalMs * 2 + arrivalJitterEma * 2
+              : spacingEma * 2 + jitterEma * 2;
             interpDelayMs += (Math.max(minInterpDelayMs, Math.min(maxInterpDelayMs, target)) - interpDelayMs) * 0.1;
           }
         }
       }
       lastPeriodic = { arrival: clientMonoNow, sendMono, simMono: snapMono };
+      if (Number.isFinite(snapshot?.tMono)) noteDelivery(clientMonoNow, snapMono);
     }
 
     if (
@@ -326,6 +367,12 @@ export function createSnapshotBuffer(options = {}) {
     if (dt > 250) dt = 250;
 
     renderClockMono += dt;
+    if (enableDeliverySteering && deliveryOffsetMs != null) {
+      renderClockMono += getDeliveryClockCorrection(
+        perfNow - deliveryOffsetMs - renderClockMono,
+        dt,
+      );
+    }
     let targetMono = renderClockMono - interpDelayMs;
 
     const newest = stateBuffer[stateBuffer.length - 1].tMono;

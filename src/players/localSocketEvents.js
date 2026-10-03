@@ -1,6 +1,6 @@
 import { endDash } from '../gameScene/dash';
 import { playPlayerSound } from '../gameScene/playerAudio';
-import { applyMovementCorrection } from './movementCorrection';
+import { localMovementCorrector } from './localMovementCorrector';
 import { resolveShockwaveImpulse, SHOCKWAVE_MOMENTUM_MS } from "../shared/shockwaveImpulse";
 import { performSpecial } from "../characters/special";
 import {
@@ -272,6 +272,7 @@ export function bindLocalSocketEvents({
           player.body.reset(Number(payload.x), Number(payload.y));
         }
       }
+      localMovementCorrector?.clear();
       player.setVelocity?.(0, 0);
       player.setAcceleration?.(0, 0);
       playSpriteAnimation({
@@ -328,9 +329,8 @@ export function bindLocalSocketEvents({
       logical: 'falling', fallback: 'idle' });
   };
   const correctionHandler = (data) => {
-    const player = getPlayer();
-    if (!player?.body || !Number.isFinite(data?.x) || !Number.isFinite(data?.y)) return;
-    applyMovementCorrection(player, data);
+    if (isEditModeActive()) return;
+    localMovementCorrector?.apply(getPlayer(), data);
   };
   socket.on("player:stomp", stompHandler);
   socket.on("game:correction", correctionHandler);

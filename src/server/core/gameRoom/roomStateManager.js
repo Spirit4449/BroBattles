@@ -141,12 +141,25 @@ function sendGameStateToPlayer(room, socket) {
     status: room.status,
   };
 
-  console.log("Emitting initial game state to player", gameStateForPlayer);
   socket.emit("game:init", gameStateForPlayer);
 }
 
+// Movement VFX events (jump/land/turn/wall-jump) change a few times a second at
+// most. movementFxSeq is always sent (clients use its presence to tell event-ID
+// senders from legacy ones); the five detail fields are published only for a
+// short window after each new event, which survives same-instant replacement
+// and buffer trimming, instead of repeating them in every 30 Hz snapshot.
+const MOVEMENT_FX_PUBLISH_MS = 500;
+function shouldPublishMovementFx(playerData, now) {
+  const seq = Number(playerData.movementFxSeq) || 0;
+  if (seq !== playerData._publishedMovementFxSeq) {
+    playerData._publishedMovementFxSeq = seq;
+    playerData._movementFxPublishUntil = seq ? now + MOVEMENT_FX_PUBLISH_MS : 0;
+  }
+  return now < (Number(playerData._movementFxPublishUntil) || 0);
+}
+
 function broadcastSnapshot(room, extraTiming = null) {
-  const { USE_SERVER_MOVEMENT_SIMULATION_V1 } = require("../gameRoomConfig");
   const sentMono = performance.now();
   const wall = Date.now();
   const tMono = extraTiming?.tMono ?? room._simulationMono ?? sentMono;
@@ -180,15 +193,8 @@ function broadcastSnapshot(room, extraTiming = null) {
       grounded: !!playerData.grounded,
       ducking: !!playerData.ducking && !!playerData.grounded,
       wallSliding: !!playerData.wallSliding,
-      wallSide: playerData.wallSide || null,
       dashSeq: playerData.dashSeq || 0, dashX: playerData.dashX || 0, dashY: playerData.dashY || 0,
       movementFxSeq: Number(playerData.movementFxSeq) || 0,
-      movementFxType: playerData.movementFxType || null,
-      movementFxDirection: Number(playerData.movementFxDirection) || 0,
-      movementFxWallSide: playerData.movementFxWallSide || null,
-      movementFxFallDistance: Number(playerData.movementFxFallDistance) || 0,
-      movementFxImpactVelocity:
-        Number(playerData.movementFxImpactVelocity) || 0,
       flip: !!playerData.flip,
       animation: playerData.animation || null,
       health: playerData.health,
@@ -197,15 +203,18 @@ function broadcastSnapshot(room, extraTiming = null) {
       loaded: playerData.loaded === true,
     };
 
-    // PHASE 2: Add optional diagnostic fields for server-side movement simulation
-    // (ignore if old client; only populated when flag enabled)
-    if (USE_SERVER_MOVEMENT_SIMULATION_V1) {
-      if (typeof playerData._simX === "number")
-        playerSnapshot.simX = playerData._simX;
-      if (typeof playerData._simY === "number")
-        playerSnapshot.simY = playerData._simY;
-      if (typeof playerData._lastInputSeq === "number")
-        playerSnapshot.inputSeq = playerData._lastInputSeq;
+    if (playerData.wallSliding && playerData.wallSide) {
+      playerSnapshot.wallSide = playerData.wallSide;
+    }
+    if (shouldPublishMovementFx(playerData, wall)) {
+      Object.assign(playerSnapshot, {
+        movementFxType: playerData.movementFxType || null,
+        movementFxDirection: Number(playerData.movementFxDirection) || 0,
+        movementFxWallSide: playerData.movementFxWallSide || null,
+        movementFxFallDistance: Number(playerData.movementFxFallDistance) || 0,
+        movementFxImpactVelocity:
+          Number(playerData.movementFxImpactVelocity) || 0,
+      });
     }
 
     snapshot.players[playerData.name] = playerSnapshot;

@@ -17,6 +17,20 @@ const combatValidation = require("./combatValidation");
 const { reduceDuckDamage } = require("../../../shared/ducking");
 const { chargeSuperForHit } = require("./superCharge");
 
+// Client wall clocks are unsynchronised, so a client-reported Date.now() cannot
+// place a hit on the server's history. Clients send the shared server-clock
+// estimate (server performance.now() domain) instead; it is translated into the
+// Date.now() domain used by position history. Server-originated hits already use
+// the server's own Date.now(). Anything else is evaluated at arrival time.
+function resolveAttackTime(payload, { server = false, now = Date.now(), nowMono = performance.now() } = {}) {
+  if (server) {
+    return Number.isFinite(payload?.attackTime) ? payload.attackTime : now;
+  }
+  const mono = Number(payload?.attackServerMono);
+  if (Number.isFinite(mono)) return now - (nowMono - mono);
+  return now;
+}
+
 function handleHit(room, socketId, payload, { server = false, huntressProjectile = null, ninjaProjectile = null, runtimeProjectile = null } = {}) {
   try {
     if (!payload || typeof payload !== "object") return;
@@ -138,11 +152,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     // The client reports attackTime (wall clock) so the server can look up
     // both players' historical positions at the moment the hit was detected,
     // rather than comparing against the latest (stale) known positions.
-    const attackTimeRaw =
-      typeof payload.attackTime === "number" &&
-      Number.isFinite(payload.attackTime)
-        ? payload.attackTime
-        : now;
+    const attackTimeRaw = resolveAttackTime(payload, { server, now });
     // Clamp to [now - HIT_STALENESS_MAX_MS, now] — reject absurdly old claims
     // but still handle normal network round-trip delay gracefully.
     let attackTimeClamped = attackTimeRaw;
@@ -363,4 +373,4 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
   }
 }
 
-module.exports = { handleHit };
+module.exports = { handleHit, resolveAttackTime };

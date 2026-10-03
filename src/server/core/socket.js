@@ -28,7 +28,7 @@ const { registerFriendEvents } = require("./socketEvents/friendEvents");
 const DEBUG_SOCKET_EVENTS =
   String(process.env.DEBUG_SOCKET_EVENTS || "").toLowerCase() === "1" ||
   String(process.env.DEBUG_SOCKET_EVENTS || "").toLowerCase() === "true";
-const NOISY_EVENTS = new Set(["game:input", "game:input-intent", "heartbeat"]);
+const NOISY_EVENTS = new Set(["game:input", "heartbeat"]);
 const NOISY_EVENT_SAMPLE_EVERY = 50;
 
 function summarizeArg(value) {

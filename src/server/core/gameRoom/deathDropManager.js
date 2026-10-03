@@ -120,11 +120,6 @@ function handlePlayerDeath(room, playerData, meta = {}) {
   playerData.ducking = false;
   playerData.wallSliding = false;
   playerData.wallSide = null;
-  if (Array.isArray(playerData._inputIntentQueue)) {
-    playerData._inputIntentQueue.length = 0;
-  }
-  playerData._currentInputIntent = null;
-  playerData._lastInputIntent = null;
 
   const drops = spawnDeathDropsForPlayer(room, playerData, at);
   const payload = {

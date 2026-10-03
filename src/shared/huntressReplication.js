@@ -34,9 +34,11 @@ class CombatClock {
 }
 
 class HuntressReplica {
-  constructor() { this.clock = new CombatClock(); this.reset(); }
+  // A supplied clock is shared (the client match clock) and is never reset here.
+  constructor(clock = null) { this.ownsClock = !clock; this.clock = clock || new CombatClock(); this.reset(); }
   reset(epoch = null) {
-    this.clock.reset(epoch); this.active = new Map(); this.terminals = new Map(); this.rejected = new Map();
+    if (this.ownsClock) this.clock.reset(epoch);
+    this.active = new Map(); this.terminals = new Map(); this.rejected = new Map();
   }
   launch(p, predicted = false) {
     if (this.terminals.has(p.id) || this.rejected.has(p.requestId)) return false;

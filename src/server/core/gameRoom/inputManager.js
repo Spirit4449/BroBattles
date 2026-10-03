@@ -5,13 +5,13 @@ const { acceptDash } = require('../../../shared/dash');
 const {
   WORLD_BOUNDS,
   POSITION_HISTORY_DEPTH,
+  POSITION_HISTORY_MS,
   MOVE_PLAUSIBLE_SPEED_H,
   MOVE_PLAUSIBLE_SPEED_V,
   MOVE_PLAUSIBLE_LAG_PAD_H,
   MOVE_PLAUSIBLE_LAG_PAD_V,
   MOVE_CLAMP_WINDOW_MS,
   MOVE_CLAMP_MAX_IN_WINDOW,
-  MOVE_CLAMP_SUPPRESS_MS,
 } = require("../gameRoomConfig");
 const { isMovementSuppressed } = require("./abilityRuntimeManager");
 const netTestLogger = require("./netTestLogger");
@@ -19,6 +19,13 @@ const netTestLogger = require("./netTestLogger");
 const { characterBody } = require("../../../shared/duelGeometry");
 const { DUCK_HEIGHT_RATIO, DUCK_REENTRY_DELAY_MS } = require("../../../shared/ducking");
 const MAX_MOVEMENT_CREDIT_MS = 500;
+// Packets sent before the client applied a correction still carry the rejected
+// path. Dropping them (instead of re-correcting) prevents correction cascades.
+// The timeout keeps a client that never acknowledges from being frozen.
+const CORRECTION_ACK_TIMEOUT_MS = 1000;
+// Sub-pixel/flip-offset disagreements against a face are clamped silently;
+// only genuine penetration is worth yanking the client's position.
+const DASH_COLLISION_CORRECTION_PX = 2;
 const movementPhysics = require("../../../shared/movementPhysics.json");
 const effectManager = require("./effects/effectManager");
 
@@ -48,13 +55,39 @@ function updateBodyGeometry(player, room) {
 function resetMovementBudget(player, now = Date.now()) {
   player._movementBudget = { at: now, x: MOVE_PLAUSIBLE_LAG_PAD_H, y: MOVE_PLAUSIBLE_LAG_PAD_V };
   player.lastInput = now;
+  // A server teleport (spawn/respawn) supersedes any unacknowledged correction.
+  player._correctionSentAt = 0;
+}
+
+function movementStats(player) {
+  return (player._movementStats ||= {
+    budget: 0, collision: 0, staleDropped: 0, maxErrorPx: 0,
+  });
 }
 
 function correctPosition(room, player, sequence, detail = {}) {
   if (!player.socketId) return;
+  const stats = movementStats(player);
+  const reason = detail.reason === "collision" ? "collision" : "budget";
+  stats[reason] += 1;
+  const errorPx = Number(detail.errorPx) || 0;
+  if (errorPx > stats.maxErrorPx) stats.maxErrorPx = errorPx;
+  player._correctionId = (Number(player._correctionId) || 0) + 1;
+  player._correctionSentAt = Date.now();
   room.io?.to(player.socketId).emit("game:correction", {
-    x: player.x, y: player.y, sequence, ...detail,
+    x: player.x, y: player.y, sequence,
+    correctionId: player._correctionId,
+    ...detail, reason,
   });
+}
+
+// A packet tagged with an older correction was sent before the client saw the
+// latest correction. Untagged packets (older clients) are always processed.
+function isPreCorrectionPacket(player, inputData, now) {
+  const ack = Number(inputData?.correctionAck);
+  const latest = Number(player._correctionId) || 0;
+  if (!Number.isFinite(ack) || ack >= latest) return false;
+  return now - (Number(player._correctionSentAt) || 0) < CORRECTION_ACK_TIMEOUT_MS;
 }
 const MOVEMENT_FX_TYPES = new Set(["jump", "land", "turn", "wall-jump"]);
 
@@ -127,16 +160,23 @@ function clampToRoomBounds(x, y, room = null) {
   };
 }
 
+// One sample per accepted position (humans) or simulation step (bots), kept
+// for POSITION_HISTORY_MS so hit validation can rewind across a full RTT plus
+// the remote interpolation delay. Duplicate per-tick samples are not recorded:
+// they turned linear rewinds between packets into steps.
 function pushPositionHistory(playerData, now = Date.now()) {
   if (!playerData) return;
-  if (!playerData._posHistory) playerData._posHistory = [];
-  playerData._posHistory.push({
+  const history = (playerData._posHistory ||= []);
+  history.push({
     x: Number(playerData.x) || 0,
     y: Number(playerData.y) || 0,
     t: now,
   });
-  if (playerData._posHistory.length > POSITION_HISTORY_DEPTH) {
-    playerData._posHistory.shift();
+  while (
+    history.length > POSITION_HISTORY_DEPTH ||
+    (history.length > 2 && history[1].t < now - POSITION_HISTORY_MS)
+  ) {
+    history.shift();
   }
 }
 
@@ -148,13 +188,15 @@ function noteMovementClampViolation(room, playerData, now) {
   }
   playerData._movementClampCount =
     Number(playerData._movementClampCount || 0) + 1;
+  // Clamping already bounds every packet to the movement budget. Freezing all
+  // input on top of that only desynchronised the server and caused a large
+  // snap-back once input resumed, so repeated clamps are reported, not punished.
   if (playerData._movementClampCount >= MOVE_CLAMP_MAX_IN_WINDOW) {
-    playerData._movementViolationUntil = now + MOVE_CLAMP_SUPPRESS_MS;
     playerData._movementClampWindowStart = now;
     playerData._movementClampCount = 0;
     if (room.DEV_TIMING_DIAG && !room._netTestEnabled) {
       console.warn(
-        `[GameRoom ${room.matchId}] movement temporarily suppressed for ${playerData.name} due to repeated clamp violations`,
+        `[GameRoom ${room.matchId}] repeated movement clamps for ${playerData.name}`,
       );
     }
   }
@@ -170,7 +212,6 @@ function handlePlayerInput(room, socketId, inputData) {
   if (!inputData || typeof inputData !== "object") return;
 
   const now = Date.now();
-  if (Number(playerData._movementViolationUntil || 0) > now) return;
   if (Number(playerData._controlLockUntil || 0) > now) {
     playerData.vx = 0;
     playerData.vy = 0;
@@ -194,6 +235,10 @@ function handlePlayerInput(room, socketId, inputData) {
       return;
     }
     playerData._lastPositionClientTs = packetTimestamp;
+  }
+  if (isPreCorrectionPacket(playerData, inputData, now)) {
+    movementStats(playerData).staleDropped += 1;
+    return;
   }
 
   if (infernoActive) {
@@ -237,28 +282,11 @@ function handlePlayerInput(room, socketId, inputData) {
     const dtMove = Math.max(0, Math.min(MAX_MOVEMENT_CREDIT_MS, now - budget.at));
     budget.at = now;
 
-    const reportedVx = Number(inputData.vx);
-    const activeIntentDir =
-      Number(playerData?._lastInputIntent?.direction) ||
-      Number(playerData?._currentInputIntent?.direction) ||
-      0;
-    const currentDir =
-      Math.sign(Number(playerData.vx) || 0) || Math.sign(activeIntentDir);
-    const reportedDir = Math.sign(reportedVx) || Math.sign(activeIntentDir);
-    const sameDirection = currentDir !== 0 && reportedDir === currentDir;
-    if (sameDirection) {
-      const trailsBehind =
-        (currentDir > 0 && rawX < playerData.x) ||
-        (currentDir < 0 && rawX > playerData.x);
-      if (trailsBehind && Math.abs(rawX - playerData.x) <= 42) {
-        rawX = playerData.x;
-      }
-    }
-
     const dashAge = now - (playerData._dashUntil || 0);
     const dashMotion = playerData._dashUntil && dashAge < movementPhysics.dashCoastMs;
     let dashCollision = null;
     let collisionClamped = false;
+    let collisionErrorPx = 0;
     if (dashMotion && room.geometry?.colliders) {
       const shape = characterBody(playerData.char_class, playerData.flip);
       const halfWidth = playerData._bodyHalfWidth || shape.halfWidth;
@@ -269,7 +297,9 @@ function handlePlayerInput(room, socketId, inputData) {
         y: playerData.y + offsetY - halfHeight, width: halfWidth * 2, height: halfHeight * 2 },
         rawX - playerData.x, rawY - playerData.y, room.geometry.colliders);
       const nextX = resolved.x - offsetX + halfWidth, nextY = resolved.y - offsetY + halfHeight;
-      collisionClamped = Math.abs(nextX - rawX) > COLLISION_PACKET_TOLERANCE || Math.abs(nextY - rawY) > COLLISION_PACKET_TOLERANCE;
+      const tolerance = Math.max(COLLISION_PACKET_TOLERANCE, DASH_COLLISION_CORRECTION_PX);
+      collisionClamped = Math.abs(nextX - rawX) > tolerance || Math.abs(nextY - rawY) > tolerance;
+      collisionErrorPx = Math.hypot(nextX - rawX, nextY - rawY);
       rawX = nextX; rawY = nextY; dashCollision = resolved.hits;
     }
 
@@ -301,7 +331,14 @@ function handlePlayerInput(room, socketId, inputData) {
     budget.y -= Math.abs(moveY);
     if (moveX !== dx || moveY !== dy) {
       noteMovementClampViolation(room, playerData, now);
-      correctPosition(room, playerData, packetSeq);
+      netTestLogger.noteInputClamp(room, playerData, {
+        absDX: Math.abs(dx), maxDX: Math.abs(moveX),
+        absDY: Math.abs(dy), maxDY: Math.abs(moveY), dtMove,
+      });
+      correctPosition(room, playerData, packetSeq, {
+        reason: "budget",
+        errorPx: Math.hypot(dx - moveX, dy - moveY),
+      });
     }
 
     if (typeof inputData.flip !== "undefined")
@@ -311,16 +348,7 @@ function handlePlayerInput(room, socketId, inputData) {
     }
     if (Number.isFinite(Number(inputData.vx))) {
       const velocityLimit = Math.max(MOVE_PLAUSIBLE_SPEED_H, dashSpeedAllowance);
-      const nextVx = Math.max(-velocityLimit, Math.min(velocityLimit, Number(inputData.vx)));
-      const currentVx = Number(playerData.vx) || 0;
-      const keepCurrentVx =
-        Math.sign(currentVx) !== 0 &&
-        Math.sign(currentVx) === Math.sign(nextVx) &&
-        Math.abs(nextVx) < Math.abs(currentVx) &&
-        Math.abs(currentVx - nextVx) <= 80;
-      if (!keepCurrentVx) {
-        playerData.vx = nextVx;
-      }
+      playerData.vx = Math.max(-velocityLimit, Math.min(velocityLimit, Number(inputData.vx)));
     }
     if (Number.isFinite(Number(inputData.vy))) {
       playerData.vy = Math.max(-MOVE_PLAUSIBLE_SPEED_V, Math.min(MOVE_PLAUSIBLE_SPEED_V, Number(inputData.vy)));
@@ -329,7 +357,6 @@ function handlePlayerInput(room, socketId, inputData) {
       playerData.grounded = inputData.grounded;
       if (inputData.grounded) {
         playerData._lastGroundTime = now;
-        playerData._simCanJump = true;
       }
     }
     if (inputData.loaded === true) playerData.loaded = true;
@@ -338,7 +365,11 @@ function handlePlayerInput(room, socketId, inputData) {
 
     if (dashCollision?.left || dashCollision?.right) playerData.vx = 0;
     if (dashCollision?.up || dashCollision?.down) playerData.vy = 0;
-    if (collisionClamped) correctPosition(room, playerData, packetSeq, { reason: 'collision', contacts: dashCollision });
+    if (collisionClamped) {
+      correctPosition(room, playerData, packetSeq, {
+        reason: 'collision', contacts: dashCollision, errorPx: collisionErrorPx,
+      });
+    }
     resolveStomp(room, playerData, now);
     pushPositionHistory(playerData, now);
     netTestLogger.noteInput(room, playerData, now, {
@@ -352,120 +383,19 @@ function handlePlayerInput(room, socketId, inputData) {
   // Malformed position packets must not enter the legacy unvalidated movement path.
 }
 
-function processPlayerMovement(playerData, input) {
-  const speed = 5;
-
-  if (input.left) playerData.x -= speed;
-  if (input.right) playerData.x += speed;
-  if (input.up) playerData.y -= speed;
-  if (input.down) playerData.y += speed;
-
-  const minX = -WORLD_BOUNDS.margin;
-  const maxX = WORLD_BOUNDS.width + WORLD_BOUNDS.margin;
-  const minY = -WORLD_BOUNDS.margin;
-  const maxY = WORLD_BOUNDS.height + WORLD_BOUNDS.margin;
-  playerData.x = Math.max(minX, Math.min(maxX, playerData.x));
-  playerData.y = Math.max(minY, Math.min(maxY, playerData.y));
-}
-
-function handlePlayerInputIntent(room, socketId, intentData) {
-  if (room.status === "finished") return;
-  const playerData = room.players.get(socketId);
-  if (!playerData || !playerData.isAlive || playerData.connected === false) return;
-  if (!intentData || typeof intentData !== "object") return;
-  if (Number(playerData._controlLockUntil || 0) > Date.now()) {
-    return;
-  }
-
-  if (!playerData._inputIntentQueue) playerData._inputIntentQueue = [];
-  const sequence = Number(intentData.sequence);
-  const normalizedIntent = {
-    left: !!intentData.left,
-    right: !!intentData.right,
-    direction: Math.sign(Number(intentData.direction) || 0),
-    jumpHeld: !!intentData.jumpHeld,
-    jumpPressed: !!intentData.jumpPressed,
-    grounded: playerData.grounded === true,
-    ducking: intentData.ducking === true &&
-      playerData.grounded === true &&
-      (playerData.ducking === true || Date.now() >= Number(playerData._duckAvailableAt || 0)),
-    facing: Number(intentData.facing) === -1 ? -1 : 1,
-    vx: playerData.vx || 0,
-    vy: playerData.vy || 0,
-    movementLocked: !!intentData.movementLocked,
-    animation:
-      typeof intentData.animation === "string" ? intentData.animation.slice(0, 80) : null,
-    timestamp: Number(intentData.timestamp) || Date.now(),
-    sequence: Number.isFinite(sequence) ? sequence : -1,
-  };
-
-  playerData._inputIntentQueue.push(normalizedIntent);
-  if (playerData._inputIntentQueue.length > 20) {
-    playerData._inputIntentQueue.shift();
-  }
-
-  playerData._currentInputIntent = normalizedIntent;
-  if (playerData.ducking === true && !normalizedIntent.ducking) {
-    playerData._duckAvailableAt = Date.now() + DUCK_REENTRY_DELAY_MS;
-  }
-  playerData.ducking = normalizedIntent.ducking;
-  updateBodyGeometry(playerData, room);
-  playerData._lastInputIntent = normalizedIntent;
-  playerData._lastInputSeq = normalizedIntent.sequence;
-  netTestLogger.noteIntent(room, playerData, intentData);
-}
-
-function drainLatestIntent(playerData) {
-  if (!playerData) return null;
-  let latest = playerData._currentInputIntent || null;
-  if (
-    Array.isArray(playerData._inputIntentQueue) &&
-    playerData._inputIntentQueue.length
-  ) {
-    latest =
-      playerData._inputIntentQueue[playerData._inputIntentQueue.length - 1];
-    playerData._inputIntentQueue.length = 0;
-    playerData._currentInputIntent = latest;
-  }
-  return latest;
-}
-
-function advancePlayerKinematics(room, playerData, dtMs) {
-  if (
-    !playerData ||
-    !playerData.isAlive ||
-    playerData.connected === false ||
-    playerData.loaded !== true
-  ) {
-    return;
-  }
-
-  const x = Number(playerData.x);
-  const y = Number(playerData.y);
-  if (!Number.isFinite(x) || !Number.isFinite(y)) {
-    return;
-  }
-
-  const now = Date.now();
-  const latestIntent = drainLatestIntent(playerData);
-  if (latestIntent && typeof latestIntent.grounded === "boolean") {
-    playerData.grounded = latestIntent.grounded;
-    if (latestIntent.grounded) {
-      playerData._lastGroundTime = now;
-    }
-  }
-
-  playerData._simX = playerData.x;
-  playerData._simY = playerData.y;
-
+// Bots move every simulation step on the server.
+function recordBotHistory(playerData, now = Date.now()) {
+  if (!playerData?.isAlive || !Number.isFinite(Number(playerData.x)) ||
+      !Number.isFinite(Number(playerData.y))) return;
   pushPositionHistory(playerData, now);
 }
 
 module.exports = {
+  CORRECTION_ACK_TIMEOUT_MS,
+  movementStats,
   updateBodyGeometry,
   resetMovementBudget,
   handlePlayerInput,
-  handlePlayerInputIntent,
-  processPlayerMovement,
-  advancePlayerKinematics,
+  pushPositionHistory,
+  recordBotHistory,
 };

@@ -344,7 +344,7 @@ Sends forged socket events to check whether server-side authorization and owners
       attacker: "SomeOtherPlayer",
       target: "AnotherPlayer",
       attackType: "special",
-      attackTime: Date.now() + 10000,
+      attackServerMono: performance.now() + 1e9,
     },
     safeAck("forged hit"),
   );

@@ -3,10 +3,6 @@
 
 const MOVEMENT_PHYSICS = require("../../shared/movementPhysics.json");
 
-// ========== FEATURE FLAGS ==========
-// Rollout flags for Phase 2 netcode improvements
-const USE_SERVER_MOVEMENT_SIMULATION_V1 = false;
-
 const WORLD_BOUNDS = {
   width: 3600,
   height: 1000,
@@ -64,8 +60,8 @@ const HIT_STALENESS_MAX_MS = 300;
 const HIT_FUTURE_TOLERANCE_MS = 120;
 // Allow modest client/server wall-clock drift (NTP skew, mobile devices, SBCs).
 // We still clamp future timestamps to `now`, so this only affects rejection.
-const HIT_CLOCK_SKEW_ALLOWANCE_MS = 2500;
-const POSITION_HISTORY_DEPTH = 50;
+const POSITION_HISTORY_DEPTH = 128;
+const POSITION_HISTORY_MS = 1000;
 
 const MOVE_PLAUSIBLE_SPEED_H = 320;
 const MOVE_PLAUSIBLE_SPEED_V = 1100;
@@ -77,7 +73,6 @@ const ACTION_SPAM_MAX_IN_WINDOW = 12;
 const ACTION_SPAM_SUPPRESS_MS = 800;
 const MOVE_CLAMP_WINDOW_MS = 6000;
 const MOVE_CLAMP_MAX_IN_WINDOW = 8;
-const MOVE_CLAMP_SUPPRESS_MS = 1200;
 const MELEE_FACING_TOLERANCE = 50;
 
 const ATTACK_MAX_DIST_MAP = {
@@ -152,7 +147,6 @@ const POWERUP_PLATFORM_POINTS = {
 
 module.exports = {
   MOVEMENT_PHYSICS,
-  USE_SERVER_MOVEMENT_SIMULATION_V1,
   WORLD_BOUNDS,
   GAME_DURATION_MS,
   SD_RISE_SPEED,
@@ -200,8 +194,8 @@ module.exports = {
   HIT_REWIND_MAX_MS,
   HIT_STALENESS_MAX_MS,
   HIT_FUTURE_TOLERANCE_MS,
-  HIT_CLOCK_SKEW_ALLOWANCE_MS,
   POSITION_HISTORY_DEPTH,
+  POSITION_HISTORY_MS,
   MOVE_PLAUSIBLE_SPEED_H,
   MOVE_PLAUSIBLE_SPEED_V,
   MOVE_PLAUSIBLE_LAG_PAD_H,
@@ -212,7 +206,6 @@ module.exports = {
   ACTION_SPAM_SUPPRESS_MS,
   MOVE_CLAMP_WINDOW_MS,
   MOVE_CLAMP_MAX_IN_WINDOW,
-  MOVE_CLAMP_SUPPRESS_MS,
   MELEE_FACING_TOLERANCE,
   ATTACK_MAX_DIST_MAP,
   POWERUP_PLATFORM_POINTS,

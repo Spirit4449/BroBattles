@@ -12,7 +12,6 @@ function createPlayerSummary() {
     inputDistMax: 0,
     inputSpeedMax: 0,
     inputClamps: 0,
-    intents: 0,
     actions: 0,
     attacks: 0,
     specials: 0,
@@ -112,20 +111,6 @@ function noteInputClamp(room, playerData, details) {
   );
 }
 
-function noteIntent(room, playerData, intentData) {
-  if (!room?._netTestEnabled || !playerData?.name) return;
-  const summary = ensurePlayerSummary(room, playerData.name);
-  summary.intents += 1;
-  if (intentData?.isJumping) {
-    emitPlayer(
-      room,
-      playerData.name,
-      "intent-jump",
-      `seq=${Number(intentData?.sequence) || -1} dir=${Number(intentData?.direction) || 0}`,
-    );
-  }
-}
-
 function noteAction(room, playerData, type) {
   if (!room?._netTestEnabled || !playerData?.name) return;
   const summary = ensurePlayerSummary(room, playerData.name);
@@ -155,7 +140,6 @@ function flushIfDue(room, now = Date.now()) {
         `inputDistMax=${fmt(summary.inputDistMax, 1)}px`,
         `inputSpeedMax=${fmt(summary.inputSpeedMax, 1)}pxps`,
         `clamps=${summary.inputClamps}`,
-        `intents=${summary.intents}`,
         `actions=${summary.actions}`,
         `specials=${summary.specials}`,
         `pos=(${fmt(summary.lastX, 1)},${fmt(summary.lastY, 1)})`,
@@ -173,7 +157,6 @@ module.exports = {
   noteSnapshot,
   noteInput,
   noteInputClamp,
-  noteIntent,
   noteAction,
   flushIfDue,
 };

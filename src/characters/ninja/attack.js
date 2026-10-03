@@ -5,6 +5,7 @@ import { createShurikenEffects } from './effects';
 // Curved, returning, piercing shuriken with deterministic local simulation.
 
 import socket from "../../socket"; // owner-only hit events
+import { serverNowMono } from "../../match/serverClock";
 import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
 import { emitVaultHitForCircle } from "../shared/vaultTargeting";
 import { RENDER_LAYERS } from "../../gameScene/renderLayers";
@@ -225,7 +226,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       damage: this.cfg.damage,
       attackType: this.cfg.attackType || "basic",
       instanceId: this.cfg.instanceId,
-      attackTime: Date.now(),
+      attackServerMono: serverNowMono() ?? undefined,
       gameId: this.cfg.gameId,
     });
     // Play hit SFX locally for the owner

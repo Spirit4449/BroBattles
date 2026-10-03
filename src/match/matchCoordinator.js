@@ -27,6 +27,17 @@ import {
   shouldMuteClientDefaultLogs,
 } from "../lib/netTestLogger.js";
 import { mergeInitialRosterPlayer } from "./playerRosterMerge.js";
+import {
+  observeServerClockSnapshot,
+  resyncServerClock,
+  startServerClockSync,
+  stopServerClockSync,
+} from "./serverClock.js";
+
+const ROSTER_OWNED_FIELDS = new Set([
+  "name", "team", "char_class", "selected_skin_id",
+  "selected_skin_asset_url", "selected_skin_game_assets",
+]);
 
 /**
  * @typedef {object} MatchCoordinatorConfig
@@ -816,30 +827,24 @@ export function createMatchCoordinator(config) {
 
   function _onGameSnapshot(snapshot) {
     if (!snapshot || !snapshot.players) return;
-    const ingest = snapshotBuffer.ingestSnapshot(snapshot, performance.now());
+    const receivedAt = performance.now();
+    const ingest = snapshotBuffer.ingestSnapshot(snapshot, receivedAt);
     if (ingest.accepted === false) return;
+    observeServerClockSnapshot(snapshot, receivedAt);
     observeCharacterSnapshot(snapshot);
 
     try {
+      // Update roster entries in place: rebuilding every player object at 30 Hz
+      // only produced garbage. Identity/cosmetic fields stay roster-owned.
       const gameData = getGameData();
       if (Array.isArray(gameData?.players)) {
-        gameData.players = gameData.players.map((p) => {
-          const live = snapshot.players?.[p.name];
-          return live
-            ? {
-                ...p,
-                ...live,
-                name: p.name,
-                team: p.team,
-                char_class: p.char_class,
-                selected_skin_id: p.selected_skin_id ?? null,
-                selected_skin_asset_url:
-                  p.selected_skin_asset_url ?? null,
-                selected_skin_game_assets:
-                  p.selected_skin_game_assets ?? null,
-              }
-            : p;
-        });
+        for (const p of gameData.players) {
+          const live = snapshot.players?.[p?.name];
+          if (!live) continue;
+          for (const key in live) {
+            if (!ROSTER_OWNED_FIELDS.has(key)) p[key] = live[key];
+          }
+        }
       }
     } catch (_) {}
 
@@ -1295,9 +1300,11 @@ export function createMatchCoordinator(config) {
 
   function register() {
     socket.on("game:presence-probe", onPresenceProbe);
+    // Socket.IO v4 emits "connect" for reconnects too ("reconnect" is a Manager event).
     socket.on("connect", _tryJoin);
-    socket.on("reconnect", _tryJoin);
+    socket.on("connect", resyncServerClock);
     socket.on("disconnect", _onSocketDisconnect);
+    startServerClockSync(socket);
     socket.on("game:joined", _onGameJoined);
     socket.on("game:init", _onGameInit);
     socket.on("game:start", _onGameStart);
@@ -1333,8 +1340,9 @@ export function createMatchCoordinator(config) {
     _stopStartWatchdog();
     _clearForceLiveInputTimer();
     socket.off("connect", _tryJoin);
-    socket.off("reconnect", _tryJoin);
+    socket.off("connect", resyncServerClock);
     socket.off("disconnect", _onSocketDisconnect);
+    stopServerClockSync();
     socket.off("game:joined", _onGameJoined);
     socket.off("game:init", _onGameInit);
     socket.off("game:start", _onGameStart);

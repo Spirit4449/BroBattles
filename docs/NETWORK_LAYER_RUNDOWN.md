@@ -36,7 +36,7 @@ Server core:
   - Routes add/remove player calls.
 - src/server/core/gameRoom.js
   - Main match runtime.
-  - Player socket handlers per room (game:input, game:input-intent, game:action, game:special, hit, heal, game:ready).
+  - Player socket handlers per room (game:input, game:clock, game:action, game:special, hit, heal, game:ready).
   - Fixed-step loop at 60 Hz and snapshot cadence.
   - Delegates to managers for timer, room state, health, powerups, lifecycle.
 - src/server/core/gameRoom/roomStateManager.js
@@ -59,8 +59,10 @@ Client core:
   - Maintains live replicated state slices and updates HUD pipelines.
 - src/gameScene/localInputSync.js
   - Sends game:input (volatile with reliable keyframes and pre-attack flushes, compress false).
-  - Sends game:input-intent (non-volatile, compress false).
-  - Throttled movement publish path.
+  - Control-intent changes (direction, jump, duck, ...) bypass the send throttle.
+- src/match/serverClock.js
+  - The single client estimate of server time (game:clock pings, lowest-RTT sample).
+  - Used by Ninja/Huntress projectile timelines and by hit reports (attackServerMono).
 - src/match/snapshotBuffer.js
   - Snapshot buffering, monotonic time calibration, interpolation frame selection.
 - src/players/localSocketEvents.js
@@ -90,7 +92,7 @@ Client core:
 
 5. Active simulation and broadcast
 - Server fixed-step loop runs at 60 Hz.
-- Human position reports are validated; bots, combat, timers, and powerups advance server-side.
+- Human positions are client-simulated; the server only bounds each packet to an elapsed-time movement budget and sweeps dash motion against colliders (see section 10). Bots, combat, timers, and powerups advance server-side.
 - Snapshot emission occurs on cadence (every N ticks; currently 30 Hz with SNAPSHOT_EVERY_TICKS=2 at 60 Hz loop).
 - Snapshots include timing metadata tickId and tMono.
 
@@ -117,9 +119,9 @@ Client to server:
 - game:input
   - Purpose: latest local positional state.
   - Sent volatile + compress(false) for low latency.
-- game:input-intent
-  - Purpose: movement intent diagnostic/server-sim path.
-  - Includes sequence and directional intent.
+- game:clock
+  - Purpose: clock-sync ping; ack returns { epoch, sentMono, simMono }.
+  - Driven only by src/match/serverClock.js.
 - game:action
   - Purpose: attack or gameplay action trigger.
 - game:special
@@ -288,7 +290,7 @@ jitter. Only periodic snapshots feed cadence/jitter estimates. `underrunFrames`,
 reset on reconnect. They do not measure end-to-end input latency or per-player
 visual hit alignment. Browser main-thread stalls can also delay arrival handlers.
 
-Continuous remote smoothing is now the default. It replaces the alpha floors
+Continuous remote smoothing is the only remote-follow path. It replaced the alpha floors
 and reverse-target filter with a continuous sampling timeline. Attack and airborne
 lead are 12 ms and 9 ms respectively, transitioned over 80 ms, approximating the
 old floors' average lead at 30 Hz. Remote sprites follow small interpolated
@@ -296,11 +298,8 @@ movements without a deadband. Position recovery speed limits, spawn snapping,
 and extrapolation caps remain. Buffer catch-up uses elapsed time and smoothly
 corrects excess lag, rather than applying a fixed correction per rendered frame.
 
-For a visual comparison, add `netSmoothing=legacy` to the game URL to restore the
-old alpha floors, reverse-target filter, and movement deadbands. This does not
-roll back the shared buffer timing fixes. `netSmoothing=continuous` remains valid;
-a plain URL also enables continuous smoothing. Parameters affect only that
-browser and are not persistent account preferences.
+The `netSmoothing=legacy` comparison path (alpha floors, reverse-target filter,
+movement deadbands) was removed on 2026-10-03; the parameter is now ignored.
 
 Arrival-based adaptive delay remains opt-in: add `netArrivalDelay=1` to base it
 on nominal cadence plus measured arrival jitter. The existing 45–115 ms bounds
@@ -316,3 +315,72 @@ death/respawn, and Bank Bust. Record underrun ratio, frame pacing, and visible h
 alignment; less extrapolation alone is not evidence of a better experience if
 the extra delay makes hits look worse. Local-player blur reported in Chrome/Edge
 has not been reproduced; this change does not alter local physics or rendering.
+
+## 10) Local movement corrections (2026-10-03)
+
+Human movement is client-controlled; the server only limits each `game:input`
+packet to an elapsed-time movement budget and sweeps dash motion against map
+colliders. When it rejects part of a packet it emits `game:correction`.
+
+- Corrections carry `correctionId` (per player, increasing), the corrected packet's
+  `sequence`, `reason` (`budget` or `collision`), `errorPx`, and contacts for collisions.
+- Clients echo the latest applied id as `correctionAck` on every `game:input`.
+  The server silently drops packets with an older ack for up to
+  `CORRECTION_ACK_TIMEOUT_MS` (1 s) — those were sent before the client saw the
+  correction, and re-correcting them used to cascade. Untagged (older) clients are
+  processed as before. Server teleports (`resetMovementBudget`) clear the wait.
+- The client (`src/players/movementCorrection.js`) shifts its *current* position by
+  the error at the corrected sequence instead of teleporting to a round-trip-old
+  point, keeps velocity, blends 1–240 px errors over ~70 ms, and snaps larger
+  ones. Collision corrections clamp only the blocked axis and never pull a player
+  back toward a face they already left.
+- Repeated clamps are logged, not punished: the old 1.2 s input freeze is gone.
+  The server no longer holds its position when a packet trails it, nor keeps a
+  stale higher `vx`; snapshots carry what the client reported, after clamping.
+- Dash-coast contact disagreements up to 2 px are clamped silently.
+
+Diagnostics: `window.__BB_NETWORK_DIAGNOSTICS__().corrections` (counts by reason,
+blend/snap modes, stale ids, max/last error, recent history). The server logs one
+`[movement:corrections]` line per match with per-human `budget`, `collision`,
+`staleDropped` and `maxErrorPx`. Regression tests: `tests/movementCorrection.test.js`.
+
+## 11) One clock, delivery steering and lag compensation (2026-10-03)
+
+- **Shared client clock.** `src/match/serverClock.js` owns the only `game:clock`
+  ping loop: a 5-ping burst whenever the room epoch changes or the socket
+  reconnects, then one ping every 2 s. It keeps the lowest-RTT offset (12-sample
+  window). Ninja and Huntress read it via `CombatClock.now()` and no longer run
+  their own pings; `HuntressReplica(clock)` never resets a shared clock.
+  `serverNowMono()` returns the estimated server `performance.now()`.
+- **Hit timing.** Client `hit` reports send `attackServerMono` (server-clock
+  domain). The server translates it into its `Date.now()` history domain
+  (`resolveAttackTime` in damageResolver). Client wall-clock `attackTime` is
+  ignored, so the old 2.5 s skew allowance is gone: future claims beyond
+  `HIT_FUTURE_TOLERANCE_MS` are rejected. Server-originated hits keep their own
+  `attackTime`.
+- **Position history.** Humans record one sample per accepted `game:input`; bots
+  record one per simulation step. History is pruned to `POSITION_HISTORY_MS`
+  (1 s, cap 128). The old per-tick duplicate samples turned linear rewinds into steps.
+- **Delivery steering.** The snapshot render timeline slews (≤8% of frame time,
+  2 ms deadband) toward the median arrival offset of the last 4 s of periodic
+  snapshots. Previously a startup clamp plus the backlog deadband left remotes
+  only ~15–48 ms behind the newest snapshot, regardless of the configured delay,
+  causing frequent extrapolation. The adaptive delay target is now
+  `2 × spacing + 2 × jitter` (45–115 ms), so remotes render ~70 ms behind at 30 Hz.
+  `deliveryOffsetMs` appears in `__BB_NETWORK_DIAGNOSTICS__()`, alongside
+  `clock` (offset, best RTT).
+
+## 12) Protocol cleanup (2026-10-03)
+
+- `game:input-intent` was removed. It duplicated `game:input` on the reliable
+  channel every packet and only fed ducking, which `game:input` already carries.
+  Older clients that still send it are ignored. The disabled server movement
+  simulation (`USE_SERVER_MOVEMENT_SIMULATION_V1`, `processPlayerMovement`,
+  `inputBuffer`, intent queues, `simX/simY/inputSeq`) is deleted.
+- Snapshots always carry `movementFxSeq`; the five `movementFx*` detail fields
+  are included only for 500 ms after a new event, and `wallSide` only while
+  wall-sliding. Clients already treated those fields as optional.
+- The client updates roster entries in place per snapshot instead of rebuilding
+  every player object; the server no longer logs the full `game:init` payload.
+- `socket.on("reconnect")` (a Manager event in Socket.IO v4, never fired on the
+  socket) was removed; `connect` covers reconnects and also resyncs the clock.
