@@ -163,7 +163,7 @@ export function getLobbyBgAsset(mapId) {
   const meta = MAP_META.get(normalizeMapId(mapId));
   return (
     meta?.lobbyBgAsset ||
-    (MAPS[normalizeMapId(mapId)]?.lobbyBgAsset ?? "/assets/lushy/lobbyBg.webp")
+    (MAPS[normalizeMapId(mapId)]?.lobbyBgAsset ?? "/assets/site/lushy-home-v2.webp")
   );
 }
 

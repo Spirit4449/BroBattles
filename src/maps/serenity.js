@@ -109,7 +109,7 @@ export const definition = {
   name: "serenity",
   bgAsset: "/assets/serenity/gameBg.webp",
   mapSelectPreviewAsset: "/assets/serenity/preview.webp",
-  lobbyBgAsset: "/assets/serenity/lobbyBg.webp",
+  lobbyBgAsset: "/assets/site/serenity-home.webp",
   lobbyPlatformAsset: "/assets/serenity/lobbyPlatform.webp",
   lobbyCharacterOffsetY: 25,
   // Optional per-mode override (1v1/2v2/3v3). Omit to use scaled base offset.

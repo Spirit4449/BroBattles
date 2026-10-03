@@ -313,3 +313,6 @@ body {
     gap: 12px;
   }
 }
+
+body.site-auth{background:linear-gradient(#080f1ed9,#050914ed),url('/assets/site/lushy-home-v2.webp') center/cover fixed}
+@media(max-width:650px){body.site-auth{background-image:linear-gradient(#080f1ed9,#050914ed),url('/assets/site/lushy-home-v2.webp')}}

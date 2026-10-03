@@ -6971,7 +6971,7 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
 }
 
 .mm-overlay {
-  --mm-map-background: url("/assets/lushy/lobbyBg.webp");
+  --mm-map-background: url("/assets/site/lushy-home-v2.webp");
   position: fixed;
   inset: 0;
   z-index: 9999;

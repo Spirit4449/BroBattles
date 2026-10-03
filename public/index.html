@@ -40,10 +40,10 @@
       (function () {
         try {
           var backgrounds = {
-            1: "/assets/lushy/lobbyBg.webp",
-            2: "/assets/mangrove/lobbyBg.webp",
-            3: "/assets/serenity/lobbyBg.webp",
-            4: "/assets/bank-bust/lobbyBg.webp",
+            1: "/assets/site/lushy-home-v2.webp",
+            2: "/assets/site/mangrove-home.webp",
+            3: "/assets/site/serenity-home.webp",
+            4: "/assets/site/bank-home.webp",
           };
           var partyMatch = window.location.pathname.match(
             /^\/party\/([^/?#]+)/,
@@ -63,6 +63,15 @@
           var cachedMap = partyMatch
             ? null
             : localStorage.getItem("bb_solo_map");
+          // Migrate remembered backgrounds to the current website artwork.
+          var legacyBackgrounds = {
+            "/assets/site/lushy-home.webp": backgrounds[1],
+            "/assets/lushy/lobbyBg.webp": backgrounds[1],
+            "/assets/mangrove/lobbyBg.webp": backgrounds[2],
+            "/assets/serenity/lobbyBg.webp": backgrounds[3],
+            "/assets/bank-bust/lobbyBg.webp": backgrounds[4],
+          };
+          cachedUrl = legacyBackgrounds[cachedUrl] || cachedUrl;
           var initialUrl = cachedUrl || backgrounds[cachedMap];
 
           if (!initialUrl && !partyMatch) initialUrl = backgrounds[1];
@@ -283,7 +292,7 @@
         >
           <img
             id="map-preview-img"
-            src="/assets/lushy/lobbyBg.webp"
+            src="/assets/site/lushy-home-v2.webp"
             width="72"
             height="40"
             alt="Map preview"

@@ -18,7 +18,7 @@
     "musicAsset": "/assets/mangrove/mangrove_main.mp3",
     "musicVolume": 0.11,
     "mapSelectPreviewAsset": "/assets/mangrove/gameBg.webp",
-    "lobbyBgAsset": "/assets/mangrove/lobbyBg.webp",
+    "lobbyBgAsset": "/assets/site/mangrove-home.webp",
     "lobbyPlatformAsset": "/assets/mangrove/lobbyPlatform.webp"
   },
   "variants": {
