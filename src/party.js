@@ -51,6 +51,7 @@ let __partyRosterCommitTimer = null;
 const __lobbySpawnCleanupTimers = new WeakMap();
 const __lobbySpawnEndTimes = new WeakMap();
 const __lobbyReadyEffectCleanupTimers = new WeakMap();
+const __partyMoveAnimations = new WeakMap();
 const LOBBY_SPAWN_ENTER_MS = 980;
 const LOBBY_SPAWN_EXIT_MS = 820;
 const SOLO_MODE_STORAGE_KEY = "bb_solo_mode";
@@ -168,7 +169,9 @@ function setSlotLevelBadge(slot, level) {
   }
   if (Number.isFinite(Number(level)) && Number(level) > 0) {
     const iconLevel = Math.max(1, Math.min(LEVEL_CAP, Number(level)));
-    renderLevelBadge(badge, iconLevel, { ariaHidden: true });
+    if (badge.dataset.level !== String(iconLevel)) {
+      renderLevelBadge(badge, iconLevel, { ariaHidden: true });
+    }
     slot.classList.add("has-level");
   } else {
     clearLevelBadge(badge);
@@ -1615,7 +1618,7 @@ export function socketInit(options = {}) {
       window.location.href = `/game/${matchId}`;
     } catch (error) {
       console.error("Error handling match:gameReady:", error);
-      sonner("Game Error", "Failed to join game", "error");
+      sonner("Could not join match", "Please refresh the page and try again.", "error");
     }
   });
 
@@ -1634,7 +1637,7 @@ export function socketInit(options = {}) {
       mmOverlayPlayersSig = "";
       mmOverlayTotal = 0;
       if (err?.message) {
-        sonner(err.code === "MAINTENANCE" ? "Matchmaking Disabled" : "Queue error", err.code === "MAINTENANCE" ? MAINTENANCE_MESSAGE : err.message, "error", { sound: "notification", maintenanceUntil: err.code === "MAINTENANCE" ? err.maintenanceUntil : null });
+        sonner(err.code === "MAINTENANCE" ? null : "Could not start matchmaking", err.code === "MAINTENANCE" ? MAINTENANCE_MESSAGE : err.message, "error", { sound: "notification", maintenanceUntil: err.code === "MAINTENANCE" ? err.maintenanceUntil : null });
       }
       // Reset local ready state so next click attempts to join again
       const selfSlot = Array.from(
@@ -1652,15 +1655,15 @@ export function socketInit(options = {}) {
 
   socket.on("queue:fill-bots:error", (err) => {
     sonner(
-      "Bot fill failed",
-      err?.message || "Unable to fill this queue with bots.",
+      "Could not add bots",
+      err?.message || "Please try adding bots again.",
       "error",
     );
   });
 
   socket.on("party:kicked", (data) => {
     sonner(
-      "Removed from party",
+      null,
       data?.actorName
         ? `${data.actorName} removed you from the party.`
         : "You were removed from the party.",
@@ -1680,7 +1683,7 @@ export function socketInit(options = {}) {
     });
     const overlay = document.getElementById("matchmaking-overlay");
     if (data?.reason && overlay && !overlay.classList.contains("hidden")) {
-      sonner("Cancelled matchmaking", data.reason, null, null, {
+      sonner("Matchmaking stopped", data.reason, null, null, {
         duration: 3000,
         sound: "notification",
       });
@@ -1889,7 +1892,9 @@ function commitPartyRosterLayout({
   layoutSlots,
   spawnMemberKeys,
 }) {
-  const previousPositions = new Map([...getRenderedLobbyMemberSlots()].map(([key, slot]) => [key, slot.getBoundingClientRect()]));
+  const previousSlots = getRenderedLobbyMemberSlots();
+  const previousPositions = new Map([...previousSlots].map(([key, slot]) => [key, slot.getBoundingClientRect()]));
+  const movedSlots = [];
   updatePlatformsForMode(layoutSlots);
 
   const team1Members = members.filter((member) => member.team === "team1");
@@ -1935,6 +1940,9 @@ function commitPartyRosterLayout({
     }
 
     const desiredKey = getLobbyMemberKey(desired.member);
+    // Screen coordinates include platform float, drag and active move animations.
+    // Only a change of seat should start a roster movement animation.
+    const changedSeat = previousSlots.has(desiredKey) && previousSlots.get(desiredKey) !== slot;
     const shouldSpawn =
       spawnMemberKeys.has(desiredKey);
 
@@ -1948,13 +1956,8 @@ function commitPartyRosterLayout({
     applyMemberToSlot(desired.member, slot.id, desired.isYourTeam);
     const localOrigin = partySlotDrag?.takeOrigin(desiredKey);
     if (shouldSpawn) playLobbySpawnAnimation(slot, "enter");
-    else if (!prefersReducedLobbyMotion()) {
-      const before = localOrigin || previousPositions.get(desiredKey);
-      const after = slot.getBoundingClientRect();
-      if (before && (Math.abs(before.x - after.x) > 1 || Math.abs(before.y - after.y) > 1)) {
-        if (!localOrigin) playPartyMoveEffect(before, after);
-        slot.animate([{ translate: `${before.x - after.x}px ${before.y - after.y}px` }, { translate: '0px 0px' }], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' });
-      }
+    else if ((changedSeat || localOrigin) && !prefersReducedLobbyMotion()) {
+      movedSlots.push({ slot, before: localOrigin || previousPositions.get(desiredKey), localOrigin });
     }
   });
 
@@ -1965,6 +1968,18 @@ function commitPartyRosterLayout({
     if (slot && !slot.dataset.playerName) applyBotToSlot(bot, slot, isYourTeam);
   }
   syncInviteBadges();
+  // Measure destinations after all occupants and badges have been updated.
+  for (const { slot, before, localOrigin } of movedSlots) {
+    __partyMoveAnimations.get(slot)?.cancel();
+    const after = slot.getBoundingClientRect();
+    if (before && (Math.abs(before.x - after.x) > 1 || Math.abs(before.y - after.y) > 1)) {
+      if (!localOrigin) playPartyMoveEffect(before, after);
+      __partyMoveAnimations.set(slot, slot.animate([
+        { translate: `${before.x - after.x}px ${before.y - after.y}px` },
+        { translate: '0px 0px' },
+      ], { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)' }));
+    }
+  }
 }
 
 export function renderPartyMembers(data) {
@@ -2140,7 +2155,7 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
     const skinAsset =
       String(member.selected_skin_asset_url || "").trim() ||
       buildCharacterSkinBodyUrl(cls, "");
-    spriteEl.src = skinAsset;
+    if (spriteEl.getAttribute("src") !== skinAsset) spriteEl.src = skinAsset;
     spriteEl.alt = cls;
     spriteEl.classList.remove("random", "bot-shuffle-icon");
     if (
@@ -2349,8 +2364,8 @@ export function initializeModeDropdown() {
           requiredSlots < Number(data.membersCount || 0)
         ) {
           sonner(
-            "Too many players for this duel size!",
-            "Please remove players before shrinking the duel format.",
+            "Too many players for this duel size",
+            "Remove players or choose a larger duel size.",
             "error",
           );
           applySelectionVisuals(previousSelection);
@@ -2366,7 +2381,7 @@ export function initializeModeDropdown() {
       } catch (error) {
         console.error("Error changing mode:", error);
         sonner(
-          "Failed to change mode",
+          "Could not change game mode",
           "Please try again. If the problem persists, try refreshing the page.",
           "error",
         );
@@ -2513,6 +2528,8 @@ function createPlatform(team, slotNumber) {
   // Create status element with invite functionality
   const status = document.createElement("div");
   status.className = "status invite";
+  status.dataset.sound = "cursor4";
+  status.dataset.volume = "0.3";
   status.textContent = "Invite";
   status.style.display = checkIfInParty() ? "" : "none";
   status.style.cursor = "pointer";
@@ -2563,6 +2580,8 @@ function copyInviteToClipboard() {
 
 function resetSlotToRandom(slot) {
   if (!slot) return;
+  __partyMoveAnimations.get(slot)?.cancel();
+  __partyMoveAnimations.delete(slot);
   // Don't destroy stable IDs; just reset content
   const originalId = slot.id;
   console.log("[party] resetSlotToRandom", { id: originalId });
@@ -2610,6 +2629,8 @@ function resetSlotToRandom(slot) {
 
   // Re-add invite functionality
   const newStatusEl = statusEl.cloneNode(true);
+  newStatusEl.dataset.sound = "cursor4";
+  newStatusEl.dataset.volume = "0.3";
   statusEl.parentNode.replaceChild(newStatusEl, statusEl);
 
   newStatusEl.addEventListener("click", (event) => {
@@ -2772,7 +2793,7 @@ export function initReadyToggle() {
     if (nextReady && !partyId) {
       const blockReason = getSelectionBlockReason(getCurrentSelection());
       if (blockReason) {
-        sonner("Mode not ready", blockReason, "error");
+        sonner(null, blockReason, "error");
         return;
       }
     }
@@ -2790,7 +2811,7 @@ export function initReadyToggle() {
         syncReadyAvailability();
         if (String(partyId) !== String(getActivePartyId())) return;
         if (error || !reply?.ok) {
-          sonner(reply?.code === "MAINTENANCE" ? "Matchmaking Disabled" : "Could not update readiness", reply?.code === "MAINTENANCE" ? MAINTENANCE_MESSAGE : reply?.error || "The server did not confirm. Please try again.", "error", { maintenanceUntil: reply?.code === "MAINTENANCE" ? reply.maintenanceUntil : null });
+          sonner(reply?.code === "MAINTENANCE" ? null : "Could not change ready status", reply?.code === "MAINTENANCE" ? MAINTENANCE_MESSAGE : reply?.error || "Your ready status could not be saved. Please try again.", "error", { maintenanceUntil: reply?.code === "MAINTENANCE" ? reply.maintenanceUntil : null });
         }
         if (!error && reply?.ok) return;
         // Refresh after a failed acknowledgement or timeout; never leave an unconfirmed

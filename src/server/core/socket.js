@@ -23,6 +23,7 @@ const {
   createPartyQueueTransitionService,
 } = require("../services/partyQueueTransitionService");
 const { registerChatEvents } = require("./socketEvents/chatEvents");
+const { registerFriendEvents } = require("./socketEvents/friendEvents");
 
 const DEBUG_SOCKET_EVENTS =
   String(process.env.DEBUG_SOCKET_EVENTS || "").toLowerCase() === "1" ||
@@ -87,13 +88,16 @@ function initSocket({
   runtimeConfig,
   chatService,
   abuseControl,
+  friendService,
 }) {
   const partyPresence = createPartyPresenceService({ db, io });
   let gameHub;
   const playerActivity = createPlayerActivityService({
     db, io, setPresence: partyPresence.setUserPresence,
     getGameRoom: matchId => gameHub?.getGameRoom(matchId),
+    onStatusChange: (name, status) => friendService?.handleStatusChange(name, status),
   });
+  friendService?.attachPresence({ getStatus: playerActivity.getStatus });
   // Game hub for managing active game rooms
   gameHub = createGameHub({ io, db, runtimeConfig, abuseControl, playerActivity, matchResults });
 
@@ -233,6 +237,9 @@ function initSocket({
       DISCONNECT_GRACE_MS,
     });
 
+    // Per-user room reaches every tab, independent of users.socket_id.
+    if (userId) socket.join(`user:${Number(userId)}`);
+
     // store socket id and mark online
     try {
       if (userId) await db.setUserSocketId(userId, socket.id);
@@ -296,6 +303,8 @@ function initSocket({
       chatService,
       abuseControl,
     });
+
+    if (friendService) registerFriendEvents(socket, { friendService });
 
     registerMatchmakingEvents(socket, {
       db,

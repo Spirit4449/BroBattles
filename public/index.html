@@ -149,7 +149,7 @@
       aria-label="Search Parties"
       title="Search Parties"
     >
-      <img src="/assets/search.webp" alt="" width="20" height="20" />
+      <img src="/assets/ui/party-search-bb-native.png" alt="" width="28" height="28" />
     </button>
     <button
       id="party-settings-button"
@@ -158,7 +158,7 @@
       aria-label="Party Settings"
       title="Party Settings"
     >
-      <img src="/assets/settings.webp" alt="" width="20" height="20" />
+      <img src="/assets/ui/party-settings-bb-generated-v2.png" alt="" width="28" height="28" />
     </button>
     <div class="lobby-quick-actions" role="group" aria-label="Lobby actions">
       <button
@@ -207,7 +207,7 @@
           </div>
           <div class="username">Random</div>
           <img class="character-sprite random" id="sprite" alt="Random" />
-          <div class="status invite">Invite</div>
+          <div class="status invite" data-sound="cursor4" data-volume="0.3">Invite</div>
         </div>
         <div class="platform-image"></div>
       </div>
@@ -225,7 +225,7 @@
             src="/assets/random.webp"
             alt="Random"
           />
-          <div class="status invite">Invite</div>
+          <div class="status invite" data-sound="cursor4" data-volume="0.3">Invite</div>
         </div>
         <div class="platform-image"></div>
       </div>
@@ -295,6 +295,7 @@
       <input
         type="submit"
         id="ready"
+        data-sound="none"
         class="pixel-menu-button"
         value="Ready"
       />
@@ -962,6 +963,7 @@
             </div>
             <button
               id="mm-cancel"
+              data-sound="none"
               class="mm-btn pixel-menu-button"
               type="button"
             >

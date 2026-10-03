@@ -489,7 +489,7 @@ function ensureCharacterDetailsUi() {
   };
 
   const closeDetails = () => {
-    playSound("cursor4", 0.3);
+    playSound("cancel", 0.3);
     hideCharacterDetails();
   };
 
@@ -1006,7 +1006,7 @@ function isCurrentUserReady() {
 function blockCharacterChangeWhileReady() {
   if (!isCurrentUserReady()) return false;
   sonner(
-    "Character change unavailable",
+    null,
     "Unready before changing your character or skin.",
     "OK",
     undefined,

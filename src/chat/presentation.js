@@ -69,6 +69,22 @@ function formatNameWithYou(name, currentUserName) {
   if (raw.toLowerCase() === current.toLowerCase()) return `${raw} (You)`;
   return raw;
 }
+// "You, Spirit, Bolt +2" — compact one-line list of who reacted.
+function formatReactorSummary(reactors, currentUserName, maxNames = 3) {
+  const current = String(currentUserName || "").trim().toLowerCase();
+  const names = [];
+  let includesYou = false;
+  for (const user of reactors) {
+    const name = String(user?.name || "").trim();
+    if (!name) continue;
+    if (name.toLowerCase() === current) includesYou = true;
+    else names.push(name);
+  }
+  if (includesYou) names.unshift("You");
+  const shown = names.slice(0, maxNames).join(", ");
+  const extra = names.length - maxNames;
+  return extra > 0 ? `${shown} +${extra}` : shown;
+}
 function postJson(url, body) {
   return fetch(url, {
     method: "POST",
@@ -99,15 +115,22 @@ function formatSuspensionTime(suspendedUntilMs) {
   const rem = seconds % 60;
   return rem ? `${mins}m ${rem}s` : `${mins}m`;
 }
-function showChatRequestError(error, fallbackTitle = "Chat") {
-  const message = String(error?.message || "Request failed");
+function showChatRequestError(error, fallbackTitle = "Could not send message") {
+  const status = Number(error?.statusCode) || 0;
+  const message = !status
+    ? "Couldn't reach the server. Check your connection and try again."
+    : status >= 500
+      ? "Something went wrong. Please try again in a moment."
+      : String(error?.message || "Please try again.");
   const suspendedUntilMs = Number(error?.payload?.suspendedUntilMs) || 0;
   const timeLeft = formatSuspensionTime(suspendedUntilMs);
   const finalMessage = timeLeft
     ? `${message} (${timeLeft} remaining)`
     : message;
-  sonner(fallbackTitle, finalMessage, "OK", undefined, {
+  // Expected restrictions already explain what happened in a complete sentence.
+  sonner(status >= 400 && status < 500 ? null : fallbackTitle, finalMessage, "OK", undefined, {
     duration: 4500,
+    tone: "error",
     sound: "notification",
   });
 }
@@ -115,6 +138,30 @@ function buildInlineCooldownMessage(error, fallback = "Slow down.") {
   const message = String(error?.message || fallback);
   const extra = String(error?.payload?.banWarning || "").trim();
   return extra ? `${message} ${extra}` : message;
+}
+// Grows the message box with its content (up to five lines).
+function bindComposerAutosize(textarea) {
+  function resize() {
+    if (!textarea.clientWidth) return;
+    textarea.style.height = "0px";
+    const style = window.getComputedStyle(textarea);
+    textarea.style.height = `${composerHeight(textarea.scrollHeight, style)}px`;
+  }
+  textarea.addEventListener("input", resize);
+  textarea.addEventListener("focus", resize);
+  let width = 0;
+  let frame = 0;
+  const observer = new ResizeObserver(() => {
+    if (textarea.clientWidth === width || frame) return;
+    // Height writes during observer delivery can trigger an undelivered loop.
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      width = textarea.clientWidth;
+      resize();
+    });
+  });
+  observer.observe(textarea);
+  return { resize, destroy: () => { observer.disconnect(); cancelAnimationFrame(frame); } };
 }
 function makeChatShell({
   rootClassName,
@@ -144,7 +191,7 @@ function makeChatShell({
   const reactionBadge = document.createElement("span");
   reactionBadge.className = "bb-chat-reaction-badge hidden";
   reactionBadge.title = "New reaction";
-  reactionBadge.innerHTML = `<img src="/assets/heart-filled.svg" alt="" width="14" height="14" />`;
+  reactionBadge.innerHTML = `<img src="/assets/heart-filled.svg" alt="" width="14" height="14" draggable="false" />`;
   launcher.appendChild(reactionBadge);
 
   const panel = document.createElement("section");
@@ -189,26 +236,8 @@ function makeChatShell({
   document.body.appendChild(launcher);
 
   const textarea = panel.querySelector(".bb-chat-textarea");
-  function resizeComposer() {
-    if (!textarea.clientWidth) return;
-    textarea.style.height = "0px";
-    const style = window.getComputedStyle(textarea);
-    textarea.style.height = `${composerHeight(textarea.scrollHeight, style)}px`;
-  }
-  textarea.addEventListener("input", resizeComposer);
-  textarea.addEventListener("focus", resizeComposer);
-  let composerWidth = 0;
-  let composerResizeFrame = 0;
-  const composerObserver = new ResizeObserver(() => {
-    if (textarea.clientWidth === composerWidth || composerResizeFrame) return;
-    // Height writes during observer delivery can trigger an undelivered loop.
-    composerResizeFrame = requestAnimationFrame(() => {
-      composerResizeFrame = 0;
-      composerWidth = textarea.clientWidth;
-      resizeComposer();
-    });
-  });
-  composerObserver.observe(textarea);
+  const composerSize = bindComposerAutosize(textarea);
+  const resizeComposer = composerSize.resize;
 
   const scroll = createChatScrollController(
     panel.querySelector(".bb-chat-messages"),
@@ -218,7 +247,7 @@ function makeChatShell({
   return {
     scroll,
     resizeComposer,
-    destroyComposer: () => { composerObserver.disconnect(); cancelAnimationFrame(composerResizeFrame); scroll.destroy(); },
+    destroyComposer: () => { composerSize.destroy(); scroll.destroy(); },
     root,
     backdrop,
     launcher,
@@ -249,6 +278,9 @@ function renderPartyChatMessage(
     onOpenProfile,
     canReact = true,
     compact = false,
+    // Direct messages have reactions but no replies or "viewed by" counts.
+    showReply = true,
+    showViewCount = true,
   } = {},
 ) {
   const row = document.createElement("article");
@@ -298,22 +330,8 @@ function renderPartyChatMessage(
   bubble.appendChild(body);
 
   if (!compact) {
-    const meta = document.createElement("div");
-    meta.className = "bb-chat-message-meta";
-
-    const actions = document.createElement("div");
-    actions.className = "bb-chat-hover-actions";
-
-    const replyButton = document.createElement("button");
-    replyButton.type = "button";
-    replyButton.className = "bb-chat-hover-btn";
-    replyButton.textContent = "Reply";
-    replyButton.disabled = !canReact;
-    replyButton.addEventListener("click", () => onReply?.(message));
-    actions.appendChild(replyButton);
-
-    const reactionRow = document.createElement("div");
-    reactionRow.className = "bb-chat-hover-reactions";
+    // Players can't react to their own messages; existing chips stay readable.
+    const canReactHere = canReact && !isSelf;
     const presetReactions = ["👍", "❤️", "😂", "🔥"];
     const reactionCounts = new Map(
       (Array.isArray(message?.reactions) ? message.reactions : []).map(
@@ -329,61 +347,75 @@ function renderPartyChatMessage(
     const usedReactions = Array.from(reactionCounts.entries())
       .filter(([, count]) => Number(count) > 0)
       .map(([reaction]) => reaction);
-    const hoverReactions = presetReactions.filter(
-      (reaction) => !usedReactions.includes(reaction),
-    );
-    const shownHoverReactions = hoverReactions.length
-      ? hoverReactions
-      : presetReactions;
 
-    for (const reaction of shownHoverReactions) {
-      const count = reactionCounts.get(reaction) || 0;
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `bb-chat-hover-btn${message?.myReaction === reaction ? " is-active" : ""}`;
-      button.textContent = reaction;
-      button.disabled = !canReact;
-      button.addEventListener("click", () => onReact?.(message, reaction));
-      reactionRow.appendChild(button);
+    // Hover toolbar sits on the bubble's top edge so it never covers the
+    // reaction chips (or their "who reacted" tooltips) along the bottom.
+    const actions = document.createElement("div");
+    actions.className = "bb-chat-hover-actions";
+    // Your own messages get no hover toolbar at all.
+    if (showReply && !isSelf) {
+      const replyButton = document.createElement("button");
+      replyButton.type = "button";
+      replyButton.className = "bb-chat-hover-btn";
+      replyButton.textContent = "Reply";
+      replyButton.disabled = !canReact;
+      replyButton.addEventListener("click", () => onReply?.(message));
+      actions.appendChild(replyButton);
     }
-    actions.appendChild(reactionRow);
+    if (canReactHere) {
+      const reactionRow = document.createElement("div");
+      reactionRow.className = "bb-chat-hover-reactions";
+      for (const reaction of presetReactions) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `bb-chat-hover-btn${message?.myReaction === reaction ? " is-active" : ""}`;
+        button.textContent = reaction;
+        button.title = message?.myReaction === reaction ? "Remove reaction" : "React";
+        button.addEventListener("click", () => onReact?.(message, reaction));
+        reactionRow.appendChild(button);
+      }
+      actions.appendChild(reactionRow);
+    }
+    if (actions.childElementCount) bubble.appendChild(actions);
 
+    const meta = document.createElement("div");
+    meta.className = "bb-chat-message-meta";
     const inlineReactions = document.createElement("div");
     inlineReactions.className = "bb-chat-inline-reactions";
     for (const reaction of usedReactions) {
       const count = Number(reactionCounts.get(reaction)) || 0;
-      const button = document.createElement("button");
-      button.type = "button";
+      // Read-only chips are plain elements: hover/focus tooltip, no click.
+      const button = document.createElement(canReactHere ? "button" : "span");
+      if (canReactHere) button.type = "button";
+      else button.tabIndex = 0;
       button.className = `bb-chat-inline-reaction${message?.myReaction === reaction ? " is-active" : ""}${
         message?._reactionPulse === reaction ? " is-pop" : ""
-      }`;
+      }${canReactHere ? "" : " is-readonly"}`;
       button.textContent = `${reaction} ${count}`;
-      button.disabled = !canReact;
       const reactors = Array.isArray(reactionUsers?.[reaction])
         ? reactionUsers[reaction]
         : [];
       if (reactors.length) {
-        button.dataset.tooltip = reactors
-          .map((user) => formatNameWithYou(user?.name, currentUserName))
-          .join("\n");
+        button.dataset.tooltip = formatReactorSummary(reactors, currentUserName);
+        button.setAttribute("aria-label", `${reaction} ${button.dataset.tooltip}`);
       }
-      button.addEventListener("click", () => onReact?.(message, reaction));
+      if (canReactHere) button.addEventListener("click", () => onReact?.(message, reaction));
       inlineReactions.appendChild(button);
     }
+    if (usedReactions.length) meta.appendChild(inlineReactions);
 
-    const viewButton = document.createElement("button");
-    viewButton.type = "button";
-    viewButton.className = `bb-chat-view-count${Number(message?.viewCount) > 0 ? " is-read" : ""}`;
-    viewButton.textContent = `${Number(message?.viewCount) || 0}`;
-    viewButton.title = "Viewed by";
-    viewButton.addEventListener("click", (event) =>
-      onOpenViewers?.(message, event.currentTarget),
-    );
-
-    meta.appendChild(actions);
-    meta.appendChild(inlineReactions);
-    meta.appendChild(viewButton);
-    bubble.appendChild(meta);
+    if (showViewCount) {
+      const viewButton = document.createElement("button");
+      viewButton.type = "button";
+      viewButton.className = `bb-chat-view-count${Number(message?.viewCount) > 0 ? " is-read" : ""}`;
+      viewButton.textContent = `${Number(message?.viewCount) || 0}`;
+      viewButton.title = "Viewed by";
+      viewButton.addEventListener("click", (event) =>
+        onOpenViewers?.(message, event.currentTarget),
+      );
+      meta.appendChild(viewButton);
+    }
+    if (meta.childElementCount) bubble.appendChild(meta);
   }
 
   if (isSelf) {
@@ -442,4 +474,4 @@ function renderGameChatLineMessage(message, currentUserName, localTeam) {
   row.appendChild(body);
   return row;
 }
-export { bindChatProfile, escapeHtml, formatChatTime, buildAvatarUrl, createAvatarEl, messageIdOf, formatNameWithYou, postJson, formatSuspensionTime, showChatRequestError, buildInlineCooldownMessage, makeChatShell, renderPartyChatMessage, normalizeGameTeam, renderGameChatLineMessage, GAME_CHAT_RECENT_LIMIT, LOBBY_TYPING_IDLE_STOP_MS, LOBBY_TYPING_HEARTBEAT_MS, LOBBY_TYPING_STALE_MS, LOBBY_CHAT_BUBBLE_MS };
+export { formatReactorSummary, bindComposerAutosize, bindChatProfile, escapeHtml, formatChatTime, buildAvatarUrl, createAvatarEl, messageIdOf, formatNameWithYou, postJson, formatSuspensionTime, showChatRequestError, buildInlineCooldownMessage, makeChatShell, renderPartyChatMessage, normalizeGameTeam, renderGameChatLineMessage, GAME_CHAT_RECENT_LIMIT, LOBBY_TYPING_IDLE_STOP_MS, LOBBY_TYPING_HEARTBEAT_MS, LOBBY_TYPING_STALE_MS, LOBBY_CHAT_BUBBLE_MS };

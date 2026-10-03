@@ -4,13 +4,17 @@ import { shouldMuteClientDefaultLogs } from "./netTestLogger.js";
 /**
  * Simple UI sound system
  * Usage:
- * 1. Auto: Add data-sound="click" to any button/element
+ * 1. Auto: Buttons and links get a default cue; data-sound overrides it.
  * 2. Manual: import { playSound } from './lib/uiSounds.js'; playSound('click');
  */
 
 const sounds = {};
 const activeSounds = new Map();
 const soundPools = new Map();
+let uiSoundsInitialized = false;
+const clickContexts = [];
+let automaticClickCue = false;
+const clickCues = new Set(["click", "cursor2", "cursor3", "cursor4", "cursor5", "cancel", "cancel2"]);
 subscribeSettings(settings => {
   for (const [sound, base] of activeSounds) sound.volume = base * settings.sfx;
 });
@@ -18,16 +22,16 @@ const soundPath = "/assets/ui-sound/";
 
 // Default sound mappings (filename without extension)
 const soundFiles = {
-  click: "click",
+  click: "Cursor4.wav",
   ready: "ready",
   cancel: "cancel",
-  cancel2: "cancel2",
-  success: "success",
-  error: "error",
-  cursor2: "Cursor2",
-  cursor3: "Cursor3",
-  cursor4: "Cursor4",
-  cursor5: "Cursor5",
+  cancel2: "cancel2.wav",
+  success: "shop-confirm.ogg",
+  error: "shop-error.ogg",
+  cursor2: "Cursor2.wav",
+  cursor3: "Cursor3.wav",
+  cursor4: "Cursor4.wav",
+  cursor5: "Cursor5.wav",
   party: "party",
   notification: "notification",
   beep: "/assets/beep.mp3",
@@ -104,6 +108,13 @@ export function preloadSound(soundName) { getOrLoadSound(soundName); }
 export function playSound(soundName, volume = 0.5, options = {}) {
   const source = getOrLoadSound(soundName);
   if (!source) return;
+  const clickContext = automaticClickCue ? null : [...clickContexts].reverse().find(context => context.event.eventPhase !== 0);
+  if (clickContext) {
+    // Profile/slot handlers can call the same cue twice as a click bubbles.
+    if (clickCues.has(soundName) && clickContext.cues.has(soundName)) return;
+    clickContext.cues.add(soundName);
+    clickContext.played = true;
+  }
   let sound = source;
   if (options.overlap) {
     const limit = Math.max(1, Math.min(16, Number(options.maxVoices) || 16));
@@ -136,38 +147,62 @@ export function playSound(soundName, volume = 0.5, options = {}) {
   });
 }
 
-// Initialize auto-sound on elements with data-sound attribute
+// Delegation covers dynamic controls (friends, chat, shop, and popups).
 export function initUISounds() {
-
-  const safeClosest = (node, selector) => {
-    if (!node || typeof node.closest !== "function") return null;
-    return node.closest(selector);
+  if (uiSoundsInitialized) return;
+  uiSoundsInitialized = true;
+  let disposed = false;
+  const controls = '[data-sound], button, a[href], input[type="button"], input[type="submit"], input[type="reset"], input[type="checkbox"], input[type="radio"], [role="button"], [role="tab"], [role="menuitem"], [role="option"], summary';
+  const safeClosest = (node, selector) => (node?.closest ? node : node?.parentElement)?.closest(selector);
+  const disabled = target => !!target.closest(':disabled, [aria-disabled="true"], [inert]');
+  const readVolume = (target, fallback) => {
+    const raw = target.getAttribute("data-volume");
+    const value = raw == null || raw.trim() === "" ? NaN : Number(raw);
+    return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : fallback;
   };
 
-  // Auto-attach to elements with data-sound
-  document.addEventListener(
-    "click",
-    (e) => {
-      const target = safeClosest(e.target, "[data-sound]");
-      if (target) {
-        const soundName = target.getAttribute("data-sound");
-        const volume = parseFloat(target.getAttribute("data-volume")) || 0.5;
-        playSound(soundName, volume);
+  const onClick = event => {
+    const target = safeClosest(event.target, controls);
+    // Snapshot before handlers disable, replace, or remove the control.
+    const eligible = target && !disabled(target);
+    const explicitSound = eligible ? target.getAttribute("data-sound") : null;
+    const isClose = eligible && (
+      /^[×✕✖xX]$/.test(target.textContent?.trim() || "") ||
+      /^close\b/i.test(target.getAttribute("aria-label") || "") ||
+      target.matches?.('.bb-close, .bb-chat-close, .close-popup')
+    );
+    const soundName = eligible
+      ? (explicitSound === "none" || explicitSound === "" ? explicitSound : isClose ? "cancel" : explicitSound ?? "cursor4")
+      : null;
+    const volume = eligible ? readVolume(target, target.getAttribute("data-sound") == null ? 0.3 : 0.5) : 0;
+    const context = { event, played: false, cues: new Set() };
+    clickContexts.push(context);
+    // Let existing synchronous handlers supply their custom cue first. Capture
+    // plus a deferred task still works when a popup stops propagation.
+    // A microtask can run between native event listeners, before the handler.
+    setTimeout(() => {
+      const index = clickContexts.indexOf(context);
+      if (index !== -1) clickContexts.splice(index, 1);
+      if (!disposed && !context.played && soundName && soundName !== "none") {
+        automaticClickCue = true;
+        try { playSound(soundName, volume); }
+        finally { automaticClickCue = false; }
       }
-    },
-    true,
-  );
-
-  // Optional: hover sounds
-  document.addEventListener(
-    "pointerover",
-    (e) => {
-      const target = safeClosest(e.target, "[data-sound-hover]");
-      if (!target || target.matches(":disabled") || target.contains(e.relatedTarget)) return;
-      const soundName = target.getAttribute("data-sound-hover");
-      const volume = parseFloat(target.getAttribute("data-volume")) || 0.3;
-      playSound(soundName, volume);
-    },
-    true,
-  );
+    }, 0);
+  };
+  const onHover = event => {
+    const target = safeClosest(event.target, "[data-sound-hover]");
+    if (!target || disabled(target) || target.contains(event.relatedTarget)) return;
+    const soundName = target.getAttribute("data-sound-hover");
+    if (soundName && soundName !== "none") playSound(soundName, readVolume(target, 0.3));
+  };
+  document.addEventListener("click", onClick, true);
+  document.addEventListener("pointerover", onHover, true);
+  window.__BB_PAGE_SCOPE__?.onDispose(() => {
+    disposed = true;
+    document.removeEventListener("click", onClick, true);
+    document.removeEventListener("pointerover", onHover, true);
+    clickContexts.length = 0;
+    uiSoundsInitialized = false;
+  });
 }

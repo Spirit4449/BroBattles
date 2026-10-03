@@ -31,6 +31,7 @@ import { showUiConfirm } from "./lib/uiConfirm.js";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
 
 import { createLobbyChatController } from "./chat/lobbyChatController.js";
+import { createFriendsPanelController } from "./friends/friendsPanelController.js";
 import {
   buildProfileIconAlt,
   buildProfileIconUrl,
@@ -51,6 +52,7 @@ document.addEventListener("dragstart", (event) => {
   }
 });
 import "./styles/chat.css";
+import "./styles/friends.css";
 import "./styles/profile.css";
 import "./styles/selectionPopup.css";
 import "./styles/sonner.css";
@@ -65,9 +67,52 @@ const lobbyChatController = createLobbyChatController({
     document.getElementById("username-text")?.textContent || "",
 });
 
+const friendsController = createFriendsPanelController({
+  socket,
+  getPartyContext: getPartyInteractionContext,
+  onOpenProfile: (username) => __lobbyProfilePopup?.open({ username }),
+  // Only one right-side drawer is open at a time.
+  onOpen: () => lobbyChatController?.close?.(),
+});
+document
+  .querySelector(".bb-chat-lobby-launcher")
+  ?.addEventListener("click", () => friendsController.close());
+
+// Add Friend / Pending / Friends button in another player's profile header.
+function syncProfileFriendButton(profile, viewingSelf) {
+  const head = document.querySelector("#profile-overlay .profile-head-copy");
+  if (!head) return;
+  let btn = document.getElementById("profile-friend-btn");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.id = "profile-friend-btn";
+    btn.type = "button";
+    btn.className = "bb-friends-btn is-primary profile-friend-btn";
+    head.appendChild(btn);
+  }
+  const name = String(profile?.username || "");
+  const relation = viewingSelf ? "self" : friendsController.relationshipFor(name);
+  btn.hidden = relation === "self" || relation === "unavailable" || !!profile?.guest;
+  btn.disabled = relation !== "none" && relation !== "incoming";
+  btn.textContent =
+    relation === "friends" ? "Friends ✓"
+      : relation === "outgoing" ? "Request Pending"
+        : relation === "incoming" ? "Accept Friend"
+          : "Add Friend";
+  btn.onclick = async () => {
+    btn.disabled = true;
+    const result = await friendsController.addFriend({ username: name });
+    syncProfileFriendButton(profile, viewingSelf);
+    if (!result) btn.disabled = false;
+  };
+}
+
 let userData = null;
 setSelectionProgressionUser(() => userData);
-const profileController = createProfileController({ getUserData: () => userData });
+const profileController = createProfileController({
+  getUserData: () => userData,
+  onProfileRendered: syncProfileFriendButton,
+});
 const { initProfilePopup } = profileController;
 const trophyController = createTrophyController({ getUserData: () => userData, onRewardsClaimed: () => {
   profileController.invalidate();
@@ -121,6 +166,10 @@ function ensurePartySlotMenu() {
       <button type="button" role="menuitem" class="profile-slot-menu-btn view pixel-menu-button" data-action="view">
         <span class="profile-slot-menu-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 2c-3.8 0-6.4 3.3-7 5 1 2.2 3.5 5 7 5s6-2.8 7-5c-.7-1.7-3.2-5-7-5Zm0 8.2A3.2 3.2 0 1 1 8 3.8a3.2 3.2 0 0 1 0 6.4Zm0-1.8A1.4 1.4 0 1 0 8 5.6a1.4 1.4 0 0 0 0 2.8Z"/></svg></span>
         <span>View Profile</span>
+      </button>
+      <button type="button" role="menuitem" class="profile-slot-menu-btn view pixel-menu-button" data-action="friend">
+        <span class="profile-slot-menu-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M6 7.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM0 14c0-2.5 2.7-4.5 6-4.5s6 2 6 4.5v1H0v-1Zm13-9h1.5v2h2v1.5h-2v2H13v-2h-2V7h2V5Z"/></svg></span>
+        <span class="profile-slot-menu-friend-label">Add Friend</span>
       </button>
       <button type="button" role="menuitem" class="profile-slot-menu-btn owner pixel-menu-button" data-action="owner">
         <span class="profile-slot-menu-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m2 5 3 2 3-5 3 5 3-2-1 7H3L2 5Zm1 8h10v2H3v-2Z"/></svg></span>
@@ -183,7 +232,7 @@ async function handlePartyMemberAction(action, playerName, profilePopup) {
       body: JSON.stringify({ partyId, targetName: playerName }),
     });
     sonner(
-      action === "owner" ? "Party owner updated" : "Player removed",
+      null,
       action === "owner"
         ? `${playerName} is now the party owner.`
         : `${playerName} was kicked from the party.`,
@@ -227,6 +276,24 @@ function openPartySlotMenu(slot, anchorEvent, profilePopup) {
     viewBtn.onclick = async () => {
       menu.hidden = true;
       await handlePartyMemberAction("view", playerName, profilePopup);
+    };
+  }
+  const friendBtn = menu.querySelector('[data-action="friend"]');
+  if (friendBtn) {
+    const relation = friendsController.relationshipFor(playerName);
+    const isGuestName = /^Guest[A-Za-z0-9]{6}$/.test(playerName);
+    friendBtn.hidden = isSelf || isGuestName || relation === "unavailable" || relation === "friends";
+    friendBtn.disabled = relation === "outgoing";
+    const label = friendBtn.querySelector(".profile-slot-menu-friend-label");
+    if (label) {
+      label.textContent =
+        relation === "outgoing" ? "Request Pending"
+          : relation === "incoming" ? "Accept Friend"
+            : "Add Friend";
+    }
+    friendBtn.onclick = async () => {
+      menu.hidden = true;
+      await friendsController.addFriend({ username: playerName });
     };
   }
   if (ownerBtn) {
@@ -347,6 +414,11 @@ function closeTransientLobbyUiOnEscape() {
   for (const overlayId of overlayIds) {
     if (!isOverlayOpen(overlayId)) continue;
     closeOverlay(overlayId);
+    return true;
+  }
+
+  if (document.querySelector(".bb-friends-panel.is-open")) {
+    friendsController?.close?.();
     return true;
   }
 
@@ -1017,7 +1089,7 @@ function showSuspensionPopupFromStatus(statusData) {
   const parts = [];
   if (mmText) parts.push(`Matchmaking suspended for ${mmText}.`);
   if (chatText) parts.push(`Lobby chat suspended for ${chatText}.`);
-  sonner("Account suspension active", parts.join(" "), "OK", undefined, {
+  sonner("Account temporarily restricted", parts.join(" "), "OK", undefined, {
     duration: 7000,
     sound: "notification",
   });
@@ -1504,8 +1576,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       const link = btn.dataset.inviteLink || window.location.href;
       navigator.clipboard.writeText(link);
       sonner(
-        "Invite link copied to clipboard",
-        "Share this with your friends to invite them to the party",
+        null,
+        "Party invite link copied. Share it with your friends.",
         undefined,
         undefined,
         { duration: 2000 },
@@ -1722,7 +1794,7 @@ setNavigationGuard(async () => {
   if (!confirmed) return false;
   try {
     await new Promise((resolve, reject) => socket.timeout(5000).emit('queue:leave', (error, reply) => {
-      if (error || !reply?.ok) reject(new Error('Could not confirm cancellation. Please retry.'));
+      if (error || !reply?.ok) reject(new Error("We couldn't stop matchmaking. Please try again."));
       else resolve();
     }));
     return true;

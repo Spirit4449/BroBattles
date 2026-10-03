@@ -8,7 +8,7 @@ import './site.css';
 import './pixelChecks.css';
 import config from '../shared/siteConfig.json';
 import { getSettings, saveSettings, resetSettings, subscribeSettings, GRAPHICS_OPTIONS } from './preferences';
-import { playSound } from '../lib/uiSounds';
+import { initUISounds, playSound } from '../lib/uiSounds';
 export async function api(url, body, attempt=0) {
   let response;
   try { response=await fetch(url,{credentials:'same-origin',...(body ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {})}); } catch (error) { if(attempt<2){await new Promise(resolve=>setTimeout(resolve,400*(attempt+1)));return api(url,body,attempt+1);} throw new Error('Connection interrupted. Your progress is safe—please try again.'); }
@@ -216,6 +216,7 @@ function initializeRuntimeBanner() {
   window.addEventListener('pagehide', () => clearInterval(timer), { once: true });
 }
 function initialize() {
+  initUISounds();
   initializeRuntimeBanner();
   // Auth pages have no lobby header: supply a compact shared brand header.
   if((['/signup','/login','/admin'].includes(location.pathname)) && !document.querySelector('.site-brand')){document.body.insertAdjacentHTML('afterbegin',renderHeader(location.pathname));}

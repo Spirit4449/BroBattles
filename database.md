@@ -451,3 +451,16 @@ CREATE TABLE IF NOT EXISTS site_request_messages (
   CONSTRAINT site_message_request FOREIGN KEY (request_id) REFERENCES site_requests(id) ON DELETE CASCADE
 );
 ```
+
+## Friends (2026-10-02)
+
+Apply with `node scripts/apply-friends-migration.cjs` (safe to re-run). Adds:
+
+- `users.friend_code VARCHAR(12) UNIQUE NULL`: lazily generated `XXXX-XXXX` code used to add friends.
+- `friend_requests`: pending/accepted/declined/cancelled requests. The generated `pending_pair` column keeps at most one pending request per pair of users.
+- `friendships`: one row per direction (`user_id`, `friend_id`).
+- `friend_messages`: persistent direct messages between friends; `user_a`/`user_b` are generated LEAST/GREATEST columns for conversation lookups, and `read_at` drives unread counts.
+- `friend_message_reactions`: one emoji reaction per user per direct message.
+- `matches.idx_matches_created_at`: speeds up the "played with recently" suggestions query.
+
+All friend data is keyed by `user_id` (usernames can change). Guests cannot use friends.

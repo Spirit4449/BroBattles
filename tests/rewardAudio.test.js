@@ -53,7 +53,7 @@ test('UI initialization downloads no sounds; playing a sound loads and reuses on
   api.playSound('click');
   api.playSound('click');
   assert.equal(audios.length, 1);
-  assert.equal(audios[0].src, '/assets/ui-sound/click.mp3');
+  assert.equal(audios[0].src, '/assets/ui-sound/Cursor4.wav');
   api.playSound('shopOpen');
   assert.equal(audios.length, 2);
   assert.equal(audios[1].src, '/assets/ui-sound/shop-open.ogg');

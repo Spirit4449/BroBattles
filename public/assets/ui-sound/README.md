@@ -6,7 +6,13 @@ Simple, efficient sound system for button clicks and UI interactions.
 
 ### Automatic (Recommended)
 
-Just add `data-sound` attribute to any button or element:
+Buttons, links, and accessible button/tab controls automatically play `cursor4`.
+Dynamic friends and chat controls are covered too. X/close buttons use `cancel`.
+Ready and matchmaking Cancel opt out because lobby audio owns their cues; shop
+actions also keep their existing purchase/claim/checkout sounds. Existing synchronous manual
+cues take priority so one click does not play both a custom and default sound.
+
+Use `data-sound` to customize any element (or `data-sound="none"` to opt out):
 
 ```html
 <button data-sound="click">Click Me</button>
@@ -27,7 +33,7 @@ playSound("success", 0.8); // Custom volume
 ### Optional Hover Sounds
 
 ```html
-<button data-sound="click" data-sound-hover="hover">Button</button>
+<button data-sound="click" data-sound-hover="shopHover">Button</button>
 ```
 
 ## Sound Files
@@ -36,12 +42,12 @@ Place `.mp3` files in `/public/assets/ui-sound/`
 
 Default sounds (edit `soundFiles` in `uiSounds.js` to add more):
 
-- `click.mp3` - General button clicks
-- `hover.mp3` - Button hover (optional)
+- `Cursor4.wav` - General button clicks (`click` and `cursor4`)
+- `shop-hover.ogg` - Optional hover cue (`shopHover`)
 - `ready.mp3` - Ready button
 - `cancel.mp3` - Cancel/back actions
-- `success.mp3` - Success actions
-- `error.mp3` - Error feedback
+- `shop-confirm.ogg` - Success actions (`success`)
+- `shop-error.ogg` - Error feedback (`error`)
 
 ## Adding New Sounds
 
@@ -57,13 +63,15 @@ Default sounds (edit `soundFiles` in `uiSounds.js` to add more):
 
 ## Volume Control
 
-- Default: 0.5 (click sounds), 0.3 (hover sounds)
+- Default: 0.3 (automatic click/hover sounds), 0.5 (manual sounds)
 - Custom: Add `data-volume="0.7"` to element
 - Or pass volume: `playSound('click', 0.7)`
 
 ## Notes
 
-- Sounds are preloaded on page load for instant playback
+- Sounds load lazily and are reused; `preloadSound` can warm time-critical cues
+- Disabled controls stay silent; `data-volume="0"` is honored
+- Initialization is idempotent and listeners are removed when a route is disposed
 - Failed sounds log to console but don't break the UI
 - Uses event delegation for optimal performance
 

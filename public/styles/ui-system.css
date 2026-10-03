@@ -777,14 +777,22 @@ body.profile-page-body .cards-modal.hidden .cards-modal-panel {
   text-transform: uppercase;
 }
 
-button.bb-close.bb-close {
+button.bb-chat-close.bb-chat-close {
+  --bb-close-size: 28px;
+  --bb-close-font-size: 10px;
+  --bb-chroma-corner-size: 12px;
+  flex: 0 0 var(--bb-close-size);
+}
+
+button.bb-close.bb-close,
+button.bb-chat-close.bb-chat-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px !important;
-  min-width: 42px !important;
-  height: 42px !important;
-  min-height: 42px !important;
+  width: var(--bb-close-size, 38px) !important;
+  min-width: var(--bb-close-size, 38px) !important;
+  height: var(--bb-close-size, 38px) !important;
+  min-height: var(--bb-close-size, 38px) !important;
   padding: 0 !important;
   margin: 0 !important;
   border: 0 !important;
@@ -793,7 +801,7 @@ button.bb-close.bb-close {
   background: var(--bb-danger-gradient) !important;
   box-shadow: var(--bb-control-shadow) !important;
   font-family: var(--bb-font-display) !important;
-  font-size: 15px !important;
+  font-size: var(--bb-close-font-size, 15px) !important;
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
@@ -803,12 +811,14 @@ button.bb-close.bb-close {
     filter var(--bb-motion-fast) ease;
 }
 
-button.bb-close.bb-close:hover:not(:disabled) {
+button.bb-close.bb-close:hover:not(:disabled),
+button.bb-chat-close.bb-chat-close:hover:not(:disabled) {
   filter: brightness(1.12) saturate(1.06);
   transform: none !important;
 }
 
-button.bb-close.bb-close:active:not(:disabled) {
+button.bb-close.bb-close:active:not(:disabled),
+button.bb-chat-close.bb-chat-close:active:not(:disabled) {
   filter: brightness(0.96);
   transform: none !important;
   box-shadow: var(--bb-control-shadow-pressed) !important;
@@ -2343,7 +2353,7 @@ body.profile-page-body .profile-form[hidden] {
    blend with the actual control fill, including hover and disabled variants.
    Use a low-specificity positioning default to retain absolute close controls. */
 :where(.pixel-menu-button:not(.map-select-card), .bb-button, .profile-btn,
-  .bb-close, .shop-close, .shop-buy-button, .shop-checkout-close,
+  .bb-close, .bb-chat-close, .shop-close, .shop-buy-button, .shop-checkout-close,
   .shop-reveal-panel > button, .shop-load-error button, .bb-chat-send,
   .sonner__btn, .status-action, .cs-btn, .switch-character, .status.invite,
   .character-card-status-text, .character-details-action,
@@ -2352,7 +2362,7 @@ body.profile-page-body .profile-form[hidden] {
 }
 
 :is(.pixel-menu-button:not(.map-select-card), .bb-button, .profile-btn,
-  .bb-close, .shop-close, .shop-checkout-close,
+  .bb-close, .bb-chat-close, .shop-close, .shop-checkout-close,
   .shop-reveal-panel > button, .shop-load-error button, .bb-chat-send,
   .sonner__btn, .status-action, .cs-btn, .switch-character, .status.invite,
   .character-card-status-text, .character-details-action,
@@ -2531,6 +2541,9 @@ img:is([src*="/gem.webp"], [src*="/currency/gems-"]) { --currency-light: 86, 219
 .bb-chat-viewers-popup .bb-chat-viewer-time { font-size: 9px; white-space: nowrap; }
 .bb-chat-viewers-popup .bb-chat-viewers-empty { padding: 5px 0; }
 .bb-chat-viewers-popup .bb-chat-viewers-head button[data-chat-viewers-close] {
+  --bb-close-size: 20px;
+  --bb-close-font-size: 8px;
+  --bb-chroma-corner-size: 9px;
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
@@ -2546,10 +2559,5 @@ img:is([src*="/gem.webp"], [src*="/currency/gems-"]) { --currency-light: 86, 219
   margin: 0 !important;
   border: 0 !important;
   border-radius: 2px !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  font: 18px/1 system-ui, sans-serif !important;
-  color: #b5c9db !important;
 }
-.bb-chat-viewers-popup .bb-chat-viewers-head button[data-chat-viewers-close]::before,
 .bb-chat-viewers-popup .bb-chat-viewers-head button[data-chat-viewers-close]::after { content: none; }

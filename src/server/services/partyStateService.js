@@ -7,6 +7,7 @@ const {
   normalizeSelectionFromRow,
   selectionToLegacyMode,
 } = require("../helpers/gameSelectionCatalog");
+const { hasPartyInvite, consumePartyInvite } = require("./partyInviteStore");
 
 function createPartyStateService({ db, io }) {
   const MAX_JOIN_REQUESTS = 4;
@@ -1020,7 +1021,10 @@ function createPartyStateService({ db, io }) {
           joinRequestStorageAvailable = false;
         }
 
-        if (!partyIsPublic && !joinRequestStorageAvailable) {
+        // A friend's in-app invite admits the invitee without a join request.
+        const invitedByFriend = hasPartyInvite(userId, partyId);
+
+        if (!partyIsPublic && !joinRequestStorageAvailable && !invitedByFriend) {
           const members = await db.fetchPartyMembersDetailed(partyId);
           await conn.rollback();
           return {
@@ -1064,7 +1068,7 @@ function createPartyStateService({ db, io }) {
           };
         }
 
-        if (!partyIsPublic && String(requestRow?.status || "") !== "accepted") {
+        if (!partyIsPublic && !invitedByFriend && String(requestRow?.status || "") !== "accepted") {
           const members = await db.fetchPartyMembersDetailed(partyId);
           await conn.rollback();
           return {
@@ -1152,6 +1156,7 @@ function createPartyStateService({ db, io }) {
           );
           console.log("[party] join", { username, partyId, team: chosen });
           joinedNow = true;
+          if (invitedByFriend) consumePartyInvite(userId, partyId);
         } catch (e) {
           if (!(e && e.code === "ER_DUP_ENTRY")) {
             await conn.rollback();

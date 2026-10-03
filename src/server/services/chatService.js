@@ -415,12 +415,17 @@ function createPartyChatService({ db, io }) {
     }
 
     const targetRows = await db.runQuery(
-      `SELECT message_id FROM party_chat_messages WHERE party_id = ? AND message_id = ? LIMIT 1`,
+      `SELECT message_id, user_id FROM party_chat_messages WHERE party_id = ? AND message_id = ? LIMIT 1`,
       [membership.partyId, targetId],
     );
     if (!targetRows.length) {
       const error = new Error("Message not found");
       error.statusCode = 404;
+      throw error;
+    }
+    if (Number(targetRows[0].user_id) === Number(user.user_id)) {
+      const error = new Error("You can't react to your own message.");
+      error.statusCode = 400;
       throw error;
     }
 

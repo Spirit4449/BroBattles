@@ -35,6 +35,7 @@ require('./core/bots/navigationService').enableAsyncNavigation();
 const { createRuntimeConfig } = require("./helpers/runtimeConfig.js");
 const { registerAdminRoutes } = require("./routes/admin.js");
 const { createPartyChatService } = require("./services/chatService.js");
+const { createFriendService } = require("./services/friendService.js");
 const { createAbuseControlService } = require("./services/abuseControlService");
 const { createShopService } = require("./services/shopService");
 const { createStripeShopService } = require("./services/stripeShopService");
@@ -99,6 +100,8 @@ app.get("/api/site/runtime", (_req, res) => {
 });
 const chatService = createPartyChatService({ db, io });
 app.locals.chatService = chatService;
+const friendService = createFriendService({ db, io });
+app.locals.friendService = friendService;
 const abuseControl = createAbuseControlService({ db, io });
 app.locals.abuseControl = abuseControl;
 const shopService = createShopService({ db });
@@ -155,6 +158,7 @@ const socketApi = initSocket({
   runtimeConfig,
   chatService,
   abuseControl,
+  friendService,
 });
 app.locals.socketApi = socketApi;
 
@@ -197,6 +201,7 @@ registerRoutes({
   abuseControl,
   shopService,
   stripeShopService,
+  friendService,
 });
 
 // Server start

@@ -107,7 +107,7 @@ function createMatchmaking({ io, db, gameHub = null, runtimeConfig = null }) {
       await db.runQuery("DELETE FROM match_tickets WHERE ticket_id=? AND status='queued'", [ticket.ticket_id]);
       return;
     }
-    const payload = { reason: "Your matchmaking ticket expired or your party changed. Please ready up again." };
+    const payload = { reason: "Matchmaking stopped because the wait expired or your party changed. Please ready up again." };
     if (ticket.party_id) {
       await db.runQuery("UPDATE users u JOIN party_members pm ON pm.name=u.name SET u.status='online' WHERE pm.party_id=? AND u.status='ready'", [ticket.party_id]);
       io.to(`party:${ticket.party_id}`).emit("match:cancelled", payload);

@@ -13,7 +13,7 @@ import { sonner } from "../lib/sonner.js";
 import { playSound } from "../lib/uiSounds.js";
 import { escapeHtml, profileFetchJson } from './ui';
 
-export function createProfileController({ getUserData }) {
+export function createProfileController({ getUserData, onProfileRendered }) {
   const lobbyProfileState = {
     profile: null,
     catalog: null,
@@ -122,6 +122,7 @@ export function createProfileController({ getUserData }) {
     if (title) {
       title.textContent = `${profile.username || "Player"} Profile`;
     }
+    onProfileRendered?.(profile, lobbyProfileState.viewingSelf);
     const accountPanel = document.getElementById("profile-account-panel");
     if (accountPanel) {
       accountPanel.classList.toggle("is-hidden", !lobbyProfileState.viewingSelf);
@@ -242,8 +243,8 @@ export function createProfileController({ getUserData }) {
 
             await loadProfilePopupData(true);
           } catch (err) {
-            const msg = String(err?.message || "Card action failed.");
-            sonner("Card action failed", msg, "error");
+            const msg = String(err?.message || "Please try again.");
+            sonner("Could not equip player card", msg, "error");
             actionBtn.disabled = false;
           }
         });
@@ -359,8 +360,8 @@ export function createProfileController({ getUserData }) {
 
           await loadProfilePopupData(true);
         } catch (err) {
-          const msg = String(err?.message || "Profile icon action failed.");
-          sonner("Profile icon action failed", msg, "error");
+          const msg = String(err?.message || "Please try again.");
+          sonner("Could not equip profile icon", msg, "error");
           tile.disabled = false;
         }
       });

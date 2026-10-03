@@ -1,7 +1,46 @@
 import { maintenanceClock } from "../shared/maintenance";
 import { playSound } from "./uiSounds.js";
 // Exported function: sonner(header, message, buttonText = "OK", onClick?, options?)
-// options: { duration?: number, persistent?: boolean, containerId?: string, tone?: "info"|"success"|"error" }
+// Pass null for the header, or layout: "description", for a description-only toast.
+// options: { duration?: number, persistent?: boolean, containerId?: string, tone?: "info"|"success"|"error", layout?: "description" }
+export function friendlyToastMessage(value) {
+  const message = String(value ?? "").trim();
+  if (/^(?:TypeError: )?(?:failed to fetch|fetch failed|network ?error|network request failed|load failed)/i.test(message)) {
+    return "Couldn't reach the server. Check your connection and try again.";
+  }
+  if (/^(?:unauthorized|not authenticated|authentication required)\.?$/i.test(message)) {
+    return "Please sign in again to continue.";
+  }
+  if (message === "New matches currently disabled for maintenance.") {
+    return "Matchmaking is paused for maintenance. Please try again later.";
+  }
+  if (/^(?:iconId is required|Unknown iconId)\.?$/i.test(message)) {
+    return "This profile icon is unavailable. Refresh the page and choose another icon.";
+  }
+  if (/^(?:cardId is required|Unknown cardId)\.?$/i.test(message)) {
+    return "This player card is unavailable. Refresh the page and choose another card.";
+  }
+  if (message === "Card is not owned by this user") {
+    return "Unlock this player card before equipping it.";
+  }
+  if (message === "Queue ticket not found.") {
+    return "You're no longer in matchmaking. Please ready up again.";
+  }
+  if (/^(?:party not found|join request not found|join request expired)\.?$/i.test(message)) {
+    return /party not found/i.test(message)
+      ? "This party is no longer available. Join or create another party."
+      : "This join request is no longer available.";
+  }
+  // Catch implementation details without replacing useful gameplay restrictions,
+  // names, wait times, or instructions supplied by the server.
+  if (/^(?:ER_[A-Z_]+(?::|$)|SQL(?:STATE|:|\s+(?:error|syntax|query|failed))|(?:ECONN\w+|ETIMEDOUT)(?::|$)|(?:TypeError|ReferenceError|SyntaxError):)|\bsqlMessage\b|\b(?:apply|run)\b.*\bmigration\b|Unexpected token|not valid JSON|Cannot (?:read|set) propert|Unknown column|columns? (?:are |is )?missing/i.test(message)) {
+    return "Something went wrong. Please try again in a moment.";
+  }
+  if (/^(?:request failed|internal server error|server error|HTTP \d{3}|queue join failed|invalid ready state|unsupported join request response|missing party action data|party ID.*required|card action failed|profile icon action failed)\.?$/i.test(message)) {
+    return "Please try again. If this keeps happening, refresh the page.";
+  }
+  return message;
+}
 export function sonner(
   header,
   message,
@@ -36,6 +75,16 @@ export function sonner(
   )
     ? String(options.tone || legacyTone)
     : "info";
+  let title = String(header ?? "").trim();
+  let description = tone === "error"
+    ? friendlyToastMessage(message)
+    : String(message ?? "").trim();
+  // One-sentence notices use the same readable body style, even at older
+  // call sites that only passed the first argument.
+  if (options.layout === "description" || !description) {
+    description = description || (tone === "error" ? friendlyToastMessage(title) : title);
+    title = "";
+  }
 
   // Ensure container exists (top center)
   let wrap = document.getElementById(containerId);
@@ -47,7 +96,8 @@ export function sonner(
   }
 
   const el = document.createElement("div");
-  el.className = `sonner sonner--${tone}`;
+  const shortMessage = !title && description.length <= 90 && !description.includes("\n") && !options.maintenanceUntil;
+  el.className = `sonner sonner--${tone}${title ? "" : " sonner--description"}${shortMessage ? " sonner--short" : ""}`;
   el.setAttribute("role", "alert");
   el.setAttribute("aria-live", "polite");
   el.innerHTML = `
@@ -58,13 +108,16 @@ export function sonner(
     <div class="sonner__actions"></div>
     <div class="sonner__progress"></div>
   `;
-  el.querySelector(".sonner__hdr").textContent = String(header ?? "");
-  el.querySelector(".sonner__msg").textContent = String(message ?? "");
+  const headerNode = el.querySelector(".sonner__hdr");
+  const messageNode = el.querySelector(".sonner__msg");
+  if (title) headerNode.textContent = title;
+  else headerNode.remove();
+  if (description || options.maintenanceUntil) messageNode.textContent = description;
+  else messageNode.remove();
 
   let countdownTimer;
   if (options.maintenanceUntil) {
-    const messageNode = el.querySelector(".sonner__msg");
-    const updateCountdown = () => { messageNode.textContent = `${message} ◷ ${maintenanceClock(options.maintenanceUntil)} remaining`; };
+    const updateCountdown = () => { messageNode.textContent = `${description} ◷ ${maintenanceClock(options.maintenanceUntil)} remaining`; };
     updateCountdown(); countdownTimer = setInterval(updateCountdown, 1000);
   }
 

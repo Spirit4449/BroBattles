@@ -152,8 +152,8 @@ function renderCardsGrid() {
           renderProfile(profileData);
           renderCardsGrid();
         } catch (err) {
-          const msg = String(err?.message || "Card action failed.");
-          sonner("Card action failed", msg, "error");
+          const msg = String(err?.message || "Please try again.");
+          sonner("Could not equip player card", msg, "error");
         }
       });
     }
@@ -249,8 +249,8 @@ function renderIconsGrid() {
           renderProfile(profileData);
           renderIconsGrid();
         } catch (error) {
-          const msg = String(error?.message || "Profile icon action failed.");
-          sonner("Profile icon action failed", msg, "error");
+          const msg = String(error?.message || "Please try again.");
+          sonner("Could not equip profile icon", msg, "error");
         }
       });
     }

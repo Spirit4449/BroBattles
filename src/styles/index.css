@@ -2633,6 +2633,14 @@ h3 {
     rgba(12, 43, 38, 0.4);
 }
 
+.party-search-button img,
+.party-settings-button img {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  image-rendering: pixelated;
+}
+
 .party-search-button:hover {
   background:
     linear-gradient(135deg, rgba(34, 120, 93, 0.94), rgba(31, 124, 107, 0.86)),

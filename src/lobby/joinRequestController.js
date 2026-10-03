@@ -254,8 +254,8 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
     } catch (error) {
       console.error("[party] submitJoinRequestForCurrentParty failed", error);
       sonner(
-        "Join request",
-        error?.message || "Unable to send request.",
+        "Could not send join request",
+        error?.message || "Please try again.",
         "error",
       );
     } finally {
@@ -501,8 +501,8 @@ export function createJoinRequestController({ socket, checkIfInParty, getActiveP
       renderOwnerJoinRequestOverlay();
     } catch (error) {
       sonner(
-        "Join request",
-        error?.message || "Unable to update join request.",
+        "Could not update join request",
+        error?.message || "Please try again.",
         "error",
       );
     }

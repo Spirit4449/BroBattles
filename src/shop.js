@@ -26,28 +26,28 @@ const SECTION_META = [
 
 const FRIENDLY_ERRORS = {
   insufficient_funds: {
-    title: "Not enough gems",
-    message: "Choose another item or get more gems.",
+    title: "Not enough currency",
+    message: "Check your balance and choose another item or get more currency.",
   },
   payments_unavailable: {
     title: "Checkout unavailable",
     message: "Try again in a moment.",
   },
   account_required: {
-    title: "Account required",
-    message: "Sign up to buy currency.",
+    title: null,
+    message: "Create an account to buy currency.",
   },
   offer_ineligible: {
-    title: "Already owned",
-    message: "This bundle is no longer available.",
+    title: "Offer unavailable",
+    message: "You already own the featured cosmetic in this offer.",
   },
   unknown_offer: {
     title: "Shop refreshed",
     message: "Pick from the latest offers.",
   },
   order_not_found: {
-    title: "Order still processing",
-    message: "Your wallet will update when it is ready.",
+    title: "Could not find this order",
+    message: "Refresh the shop and check your balance before trying another purchase.",
   },
 };
 
@@ -296,6 +296,10 @@ export function initializeShop({
   }
 
   function friendlyError(error, context = "action") {
+    if (error?.code === "insufficient_funds") {
+      const currency = /Not enough (coins|gems)\./i.exec(error.message)?.[1]?.toLowerCase();
+      if (currency) return { title: `Not enough ${currency}`, message: `Check your balance and choose another item or get more ${currency}.` };
+    }
     if (FRIENDLY_ERRORS[error?.code]) return FRIENDLY_ERRORS[error.code];
     if (context === "load") {
       return {
@@ -306,12 +310,12 @@ export function initializeShop({
     if (context === "checkout") {
       return {
         title: "Checkout unavailable",
-        message: "Nothing was charged. Try again.",
+        message: "Please try again in a moment. If you already paid, check your balance first.",
       };
     }
     return {
-      title: "Try again",
-      message: "Nothing was lost.",
+      title: context === "daily" ? "Could not claim daily reward" : "Could not complete purchase",
+      message: "Please try again in a moment.",
     };
   }
 
@@ -653,6 +657,8 @@ export function initializeShop({
     state.scroll?.querySelectorAll("[data-shop-action]").forEach((button) => {
       const action = button.dataset.shopAction;
       if (!action) return;
+      // Purchase/claim/checkout flows own their feedback, including async cues.
+      button.dataset.sound = "none";
       button.addEventListener("click", async () => {
         if (button.disabled) return;
         const offerId = String(button.dataset.offerId || "");
@@ -723,7 +729,7 @@ export function initializeShop({
           }
         } catch (error) {
           if (error.wallet) updateWallet(error.wallet);
-          reportError(error, action === "checkout" ? "checkout" : "action");
+          reportError(error, action);
         } finally {
           if (button.isConnected) {
             button.disabled = false;
@@ -805,8 +811,8 @@ export function initializeShop({
         await refresh();
         shopToast(
           "info",
-          "Almost there",
-          "Your balance will update automatically.",
+          "Payment processing",
+          "Your balance will update automatically once your payment is confirmed.",
           5000,
         );
       }

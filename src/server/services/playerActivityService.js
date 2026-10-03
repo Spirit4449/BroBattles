@@ -4,7 +4,7 @@ const ACTIVITY_TTL_MS = 10_000;
 const END_SCREEN_MS = 10_000;
 const IDLE_RETENTION_MS = 60_000;
 const REFRESH_MS = 10_000;
-function createPlayerActivityService({ db, io, setPresence, getGameRoom = () => null, now = Date.now, schedule = true }) {
+function createPlayerActivityService({ db, io, setPresence, getGameRoom = () => null, onStatusChange = null, now = Date.now, schedule = true }) {
   const users = new Map();
   const matches = new Map();
   function setMatch(s, id) {
@@ -61,6 +61,7 @@ function createPlayerActivityService({ db, io, setPresence, getGameRoom = () => 
           if (partyId && status !== 'offline') await db.updateLastSeen(partyId, s.name);
           await setPresence(s.name, status, partyId, { strict: true });
           s.status = status;
+          if (onStatusChange) void Promise.resolve(onStatusChange(s.name, status)).catch(() => {});
         }
         emitSelf(s);
       }
@@ -188,6 +189,6 @@ function createPlayerActivityService({ db, io, setPresence, getGameRoom = () => 
   }
   const timer = schedule ? setInterval(() => { void tick().catch(error => console.warn('[presence] tick failed:', error?.message)); }, 2000) : null;
   timer?.unref?.();
-  return { hasMatchPresence: name => { const s = users.get(name); return !!s && (s.matchId !== null || s.endedAt !== null); }, registerMatch, joinGame, gameActivity, lobbyPing, disconnect, finishMatch, tick, getStats: () => ({ users: users.size, matches: matches.size }), dispose: () => { clearInterval(timer); for (const s of users.values()) clearTimeout(s.expiryTimer); users.clear(); matches.clear(); } };
+  return { getStatus: name => { const s = users.get(name); return s ? derive(s) : 'offline'; }, hasMatchPresence: name => { const s = users.get(name); return !!s && (s.matchId !== null || s.endedAt !== null); }, registerMatch, joinGame, gameActivity, lobbyPing, disconnect, finishMatch, tick, getStats: () => ({ users: users.size, matches: matches.size }), dispose: () => { clearInterval(timer); for (const s of users.values()) clearTimeout(s.expiryTimer); users.clear(); matches.clear(); } };
 }
 module.exports = { createPlayerActivityService, ACTIVITY_TTL_MS, END_SCREEN_MS };

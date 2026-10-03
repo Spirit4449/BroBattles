@@ -76,6 +76,7 @@ test("server bootstrap supplies transaction and party lifecycle helpers to socke
     runtimeConfig: {},
     chatService: {},
     abuseControl: {},
+    friendService: {},
     initSocket(deps) {
       socketDb = deps.db;
       return {};

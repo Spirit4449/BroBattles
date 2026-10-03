@@ -1,6 +1,6 @@
 import { renderSystemLog } from './systemLog.mjs';
 import { createPartyPresenceTracker, countOnlineMembers } from './partyPresence.mjs';
-import { positionChatPopover } from './popoverPosition.mjs';
+import { createViewersPopup } from './viewersPopup.js';
 
 import { bindChatProfile, makeChatShell, formatSuspensionTime, escapeHtml, buildAvatarUrl, LOBBY_TYPING_HEARTBEAT_MS, LOBBY_TYPING_IDLE_STOP_MS, LOBBY_CHAT_BUBBLE_MS, messageIdOf, formatNameWithYou, formatChatTime, postJson, renderPartyChatMessage, showChatRequestError, buildInlineCooldownMessage, LOBBY_TYPING_STALE_MS } from './presentation';
 
@@ -152,20 +152,11 @@ export function createLobbyChatController({
     return typeof getPartyContext === "function" ? getPartyContext() : null;
   }
 
-  function buildPartyTitle(context) {
-    const publicName = String(context?.publicName || "").trim();
-    const ownerName = String(context?.ownerName || "").trim();
-    const isPublic = !!context?.isPublic;
-    if (isPublic && publicName) return publicName;
-    if (ownerName) return `${ownerName}'s Party`;
-    return "Party";
-  }
-
   function syncHeader() {
     const context = presence.get();
     const partyId = Number(context?.partyId) || 0;
+    ui.titleEl.textContent = "Party Chat";
     if (!partyId) {
-      ui.titleEl.textContent = "Chat";
       ui.subtitleEl.textContent = "Party only";
       return;
     }
@@ -176,7 +167,6 @@ export function createLobbyChatController({
       members.length,
       1,
     );
-    ui.titleEl.textContent = buildPartyTitle(context);
     ui.subtitleEl.textContent = `${onlineCount}/${capacity} online`;
   }
 
@@ -427,41 +417,17 @@ export function createLobbyChatController({
     ui.textarea.focus();
   }
 
-  const viewersPopup = document.createElement("div");
-  viewersPopup.className = "bb-chat-viewers-popup hidden";
-  viewersPopup.innerHTML = `
-    <div class="bb-chat-viewers-backdrop" data-chat-viewers-close></div>
-    <div class="bb-chat-viewers-card" role="dialog" aria-modal="true" aria-label="Message views">
-      <div class="bb-chat-viewers-head">
-        <div class="bb-chat-viewers-title">Viewed by</div>
-        <button type="button" class="bb-chat-mini-btn bb-chat-close" data-chat-viewers-close aria-label="Close viewers">×</button>
-      </div>
-      <div class="bb-chat-viewers-list"></div>
-    </div>
-  `;
-  document.body.appendChild(viewersPopup);
-  const viewersListEl = viewersPopup.querySelector(".bb-chat-viewers-list");
-  let viewersCloseTimer = null;
-  let viewersReturnFocus = null;
-  const closeViewersPopup = () => {
-    if (viewersPopup.classList.contains("hidden") || viewersCloseTimer) return;
-    const card = viewersPopup.querySelector(".bb-chat-viewers-card");
-    card?.classList.remove("is-visible");
-    if (viewersCloseTimer) window.clearTimeout(viewersCloseTimer);
-    viewersCloseTimer = window.setTimeout(() => {
-      viewersPopup.classList.add("hidden");
-      viewersCloseTimer = null;
-      if (viewersReturnFocus?.isConnected) viewersReturnFocus.focus({ preventScroll: true });
-      else if (state.isOpen) ui.textarea.focus({ preventScroll: true });
-    }, 120);
-  };
-  viewersPopup
-    .querySelectorAll("[data-chat-viewers-close]")
-    .forEach((el) => el.addEventListener("click", closeViewersPopup));
+  const viewersPopup = createViewersPopup({
+    getCurrentUserName,
+    onOpenProfile: openMemberProfile,
+    getFallbackFocus: () => (state.isOpen ? ui.textarea : null),
+  });
+  const closeViewersPopup = viewersPopup.close;
+  const openViewersPopup = viewersPopup.open;
 
   const escapeHandler = (event) => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
-    if (!viewersPopup.classList.contains("hidden")) {
+    if (viewersPopup.isOpen()) {
       event.preventDefault();
       event.stopPropagation();
       closeViewersPopup();
@@ -471,53 +437,6 @@ export function createLobbyChatController({
     }
   };
   document.addEventListener("keydown", escapeHandler);
-  window.addEventListener("resize", closeViewersPopup);
-
-  function openViewersPopup(message, anchorEl) {
-    if (!viewersListEl) return;
-    viewersReturnFocus = anchorEl || document.activeElement;
-    if (viewersCloseTimer) {
-      window.clearTimeout(viewersCloseTimer);
-      viewersCloseTimer = null;
-    }
-    const currentName = getCurrentUserName?.() || "";
-    const viewers = Array.isArray(message?.viewers) ? message.viewers : [];
-    viewersListEl.innerHTML = "";
-    if (!viewers.length) {
-      const empty = document.createElement("div");
-      empty.className = "bb-chat-viewers-empty";
-      empty.textContent = "No views yet";
-      viewersListEl.appendChild(empty);
-    } else {
-      const fragment = document.createDocumentFragment();
-      for (const viewer of viewers) {
-        const row = document.createElement("div");
-        row.className = "bb-chat-viewer-row";
-        row.innerHTML = `
-          <span class="bb-chat-viewer-avatar"><img src="${escapeHtml(buildAvatarUrl(viewer?.charClass, viewer?.profileIconId))}" alt="${escapeHtml(viewer?.name || "Player")}" loading="lazy" decoding="async" /></span>
-          <span class="bb-chat-viewer-name">${escapeHtml(formatNameWithYou(viewer?.name || "Player", currentName))}</span>
-          <span class="bb-chat-viewer-time">${escapeHtml(formatChatTime(viewer?.readAt))}</span>
-        `;
-        bindChatProfile(row.querySelector(".bb-chat-viewer-name"), viewer?.name, openMemberProfile);
-        bindChatProfile(row.querySelector(".bb-chat-viewer-avatar"), viewer?.name, openMemberProfile);
-        fragment.appendChild(row);
-      }
-      viewersListEl.appendChild(fragment);
-    }
-    const card = viewersPopup.querySelector(".bb-chat-viewers-card");
-    viewersPopup.classList.remove("hidden");
-    card.classList.remove("is-visible");
-    if (anchorEl?.getBoundingClientRect) {
-      const rect = anchorEl.getBoundingClientRect();
-      const position = positionChatPopover(rect, card.offsetWidth, card.offsetHeight, window.innerWidth, window.innerHeight);
-      card.style.left = `${Math.round(position.left)}px`;
-      card.style.top = `${Math.round(position.top)}px`;
-      card.style.setProperty("--chat-popover-offset", position.above ? "3px" : "-3px");
-    }
-    void card.offsetWidth;
-    card.classList.add("is-visible");
-    viewersPopup.querySelector("button[data-chat-viewers-close]")?.focus({ preventScroll: true });
-  }
 
   function jumpToMessage(messageId) {
     const targetId = Number(messageId) || 0;
@@ -806,7 +725,7 @@ export function createLobbyChatController({
         );
         syncChatSuspensionUi();
         renderMessages();
-        showChatRequestError(error, "Chat blocked");
+        showChatRequestError(error, "Message not sent");
         return;
       }
       const type = String(error?.payload?.type || "").toLowerCase();
@@ -814,7 +733,7 @@ export function createLobbyChatController({
         applyLocalCooldown(buildInlineCooldownMessage(error), 2000);
         return;
       }
-      showChatRequestError(error, "Chat blocked");
+      showChatRequestError(error, "Message not sent");
     } finally {
       state.sending = false;
       if (!state.destroyed && !isChatSuspended() && !isLocalCooldownActive()) {
@@ -849,7 +768,7 @@ export function createLobbyChatController({
         );
         syncChatSuspensionUi();
         renderMessages();
-        showChatRequestError(error, "Reaction blocked");
+        showChatRequestError(error, "Could not update reaction");
         return;
       }
       const type = String(error?.payload?.type || "").toLowerCase();
@@ -857,7 +776,7 @@ export function createLobbyChatController({
         applyLocalCooldown(buildInlineCooldownMessage(error), 2000);
         return;
       }
-      showChatRequestError(error, "Reaction blocked");
+      showChatRequestError(error, "Could not update reaction");
     }
   }
 
@@ -1113,9 +1032,7 @@ export function createLobbyChatController({
       ui.destroyComposer();
       state.destroyed = true;
       document.removeEventListener("keydown", escapeHandler);
-      window.removeEventListener("resize", closeViewersPopup);
       for (const [event, handler] of socketListeners) socket?.off?.(event, handler);
-      if (viewersCloseTimer) window.clearTimeout(viewersCloseTimer);
       setLocalTyping(false);
       if (state.typingSweepTimer) {
         window.clearInterval(state.typingSweepTimer);
@@ -1131,7 +1048,7 @@ export function createLobbyChatController({
       state.bubbleTimers.clear();
       ui.root.remove();
       ui.launcher.remove();
-      viewersPopup.remove();
+      viewersPopup.destroy();
     },
   };
 }

@@ -13,6 +13,7 @@ const { registerProfileRoutes } = require("./modules/profileRoutes");
 const { registerTrophyRoutes } = require("./modules/trophyRoutes");
 const { registerChatRoutes } = require("./modules/chatRoutes");
 const { registerShopRoutes } = require("./modules/shopRoutes");
+const { registerFriendRoutes } = require("./modules/friendRoutes");
 
 function registerRoutes({
   app,
@@ -25,6 +26,7 @@ function registerRoutes({
   abuseControl,
   shopService,
   stripeShopService,
+  friendService,
 }) {
   const { getOrCreateCurrentUser, requireCurrentUser, isGuest, isAdminUser } =
     auth;
@@ -115,6 +117,13 @@ function registerRoutes({
     app,
     requireCurrentUser,
     chatService,
+    abuseControl,
+  });
+
+  registerFriendRoutes({
+    app,
+    requireCurrentUser,
+    friendService,
     abuseControl,
   });
 
