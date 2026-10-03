@@ -40,10 +40,10 @@
       (function () {
         try {
           var backgrounds = {
-            1: "/assets/site/lushy-home-v2.webp",
-            2: "/assets/site/mangrove-home.webp",
-            3: "/assets/site/serenity-home.webp",
-            4: "/assets/site/bank-home.webp",
+            1: "/assets/lushy/lobbyBg.webp",
+            2: "/assets/mangrove/lobbyBg.webp",
+            3: "/assets/serenity/lobbyBg.webp",
+            4: "/assets/bank-bust/lobbyBg.webp",
           };
           var partyMatch = window.location.pathname.match(
             /^\/party\/([^/?#]+)/,
@@ -63,15 +63,19 @@
           var cachedMap = partyMatch
             ? null
             : localStorage.getItem("bb_solo_map");
-          // Migrate remembered backgrounds to the current website artwork.
-          var legacyBackgrounds = {
+          // Discard website art cached by the former lobby background override.
+          // Map metadata and first paint now use the original lobby backgrounds.
+          var websiteBackgrounds = {
             "/assets/site/lushy-home.webp": backgrounds[1],
-            "/assets/lushy/lobbyBg.webp": backgrounds[1],
-            "/assets/mangrove/lobbyBg.webp": backgrounds[2],
-            "/assets/serenity/lobbyBg.webp": backgrounds[3],
-            "/assets/bank-bust/lobbyBg.webp": backgrounds[4],
+            "/assets/site/lushy-home-v2.webp": backgrounds[1],
+            "/assets/site/mangrove-home.webp": backgrounds[2],
+            "/assets/site/serenity-home.webp": backgrounds[3],
+            "/assets/site/bank-home.webp": backgrounds[4],
           };
-          cachedUrl = legacyBackgrounds[cachedUrl] || cachedUrl;
+          if (websiteBackgrounds[cachedUrl]) {
+            cachedUrl = websiteBackgrounds[cachedUrl];
+            localStorage.setItem("bb_lobby_background_url:" + backgroundScope, cachedUrl);
+          }
           var initialUrl = cachedUrl || backgrounds[cachedMap];
 
           if (!initialUrl && !partyMatch) initialUrl = backgrounds[1];
@@ -148,27 +152,29 @@
       </div>
     </div>
 
-    <button id="create-party" class="party-button pixel-menu-button">
-      <p>Create Party</p>
-    </button>
-    <button
-      id="search-parties"
-      class="party-button party-search-button pixel-menu-button"
-      type="button"
-      aria-label="Search Parties"
-      title="Search Parties"
-    >
-      <img src="/assets/ui/party-search-bb-native.png" alt="" width="28" height="28" />
-    </button>
-    <button
-      id="party-settings-button"
-      class="party-button party-settings-button pixel-menu-button hidden"
-      type="button"
-      aria-label="Party Settings"
-      title="Party Settings"
-    >
-      <img src="/assets/ui/party-settings-bb-generated-v2.png" alt="" width="28" height="28" />
-    </button>
+    <div class="lobby-party-actions" role="group" aria-label="Party actions">
+      <button id="create-party" class="party-button pixel-menu-button">
+        <p>Create Party</p>
+      </button>
+      <button
+        id="search-parties"
+        class="party-button party-search-button pixel-menu-button"
+        type="button"
+        aria-label="Search Parties"
+        title="Search Parties"
+      >
+        <img src="/assets/ui/party-search-bb-native.png" alt="" width="28" height="28" />
+      </button>
+      <button
+        id="party-settings-button"
+        class="party-button party-settings-button pixel-menu-button hidden"
+        type="button"
+        aria-label="Party Settings"
+        title="Party Settings"
+      >
+        <img src="/assets/ui/party-settings-bb-generated-v2.png" alt="" width="28" height="28" />
+      </button>
+    </div>
     <div class="lobby-quick-actions" role="group" aria-label="Lobby actions">
       <button
         id="shop-button"
@@ -292,7 +298,7 @@
         >
           <img
             id="map-preview-img"
-            src="/assets/site/lushy-home-v2.webp"
+            src="/assets/lushy/lobbyBg.webp"
             width="72"
             height="40"
             alt="Map preview"

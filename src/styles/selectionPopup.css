@@ -6,23 +6,19 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: var(--bb-popup-backdrop, rgba(5, 10, 22, 0.74));
+  background: var(--bb-popup-backdrop);
 }
 
 .cs-confirm {
   width: min(100%, 440px);
   padding: 22px;
-  border: 3px solid var(--bb-border, #385478);
-  border-radius: var(--bb-radius-window, 10px);
-  color: var(--bb-text, #f7f9ff);
-  background: var(--bb-surface-gradient, linear-gradient(180deg, #111f37, #0b1629));
-  box-shadow: var(--bb-frame-shadow);
+  color: var(--bb-text);
 }
 
 .cs-confirm-title {
   margin: 0 0 12px;
   color: #fff;
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-family: var(--bb-font-display);
   font-size: 14px;
   font-weight: 700;
   line-height: 1.45;
@@ -35,7 +31,7 @@
   align-items: center;
   gap: 8px;
   margin: 6px 0;
-  color: var(--bb-text-soft, #c9d6e8);
+  color: var(--bb-text-soft);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -52,14 +48,14 @@
   min-width: 112px;
   min-height: 42px;
   padding: 8px 14px;
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-family: var(--bb-font-display);
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 .cs-btn.cancel {
-  color: var(--bb-text, #f7f9ff);
+  color: var(--bb-text);
   background: linear-gradient(180deg, #43536b, #2d3b50);
 }
 
@@ -69,7 +65,7 @@
   justify-content: center;
   gap: 8px;
   color: #fff;
-  background: var(--bb-primary-gradient, linear-gradient(180deg, #438feb, #285fc0));
+  background: var(--bb-primary-gradient);
 }
 
 .cs-currency {

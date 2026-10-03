@@ -18,7 +18,7 @@
     "musicAsset": "/assets/serenity/serenity_main.mp3",
     "musicVolume": 0.11,
     "mapSelectPreviewAsset": "/assets/serenity/preview.webp",
-    "lobbyBgAsset": "/assets/site/serenity-home.webp",
+    "lobbyBgAsset": "/assets/serenity/lobbyBg.webp",
     "lobbyPlatformAsset": "/assets/serenity/lobbyPlatform.webp"
   },
   "variants": {

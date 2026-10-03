@@ -18,10 +18,10 @@
   max-width: 420px;
   width: calc(100% - 24px);
   box-sizing: border-box;
-  background: var(--bb-surface-gradient, linear-gradient(180deg, #111f37, #0b1629));
+  background: var(--bb-popup-bg);
   color: #fff;
-  border: 2px solid var(--bb-border, #385478);
-  border-radius: var(--bb-radius-card, 0);
+  border: 2px solid var(--bb-border);
+  border-radius: var(--bb-radius-card);
   box-shadow: var(--bb-card-shadow);
   overflow: hidden;
   opacity: 0;
@@ -103,8 +103,8 @@
 
 .sonner .sonner__btn {
   --bb-chroma-corner-size: 10px;
-  --bb-control-shadow: 0 0 0 2px var(--bb-ink, #03060b), 0 3px var(--bb-ink, #03060b), inset 0 2px rgba(255, 255, 255, 0.16);
-  --bb-control-shadow-pressed: 0 0 0 2px var(--bb-ink, #03060b), inset 0 2px rgba(0, 0, 0, 0.24);
+  --bb-control-shadow: 0 0 0 2px var(--bb-ink), 0 3px var(--bb-ink), inset 0 2px rgba(255, 255, 255, 0.16);
+  --bb-control-shadow-pressed: 0 0 0 2px var(--bb-ink), inset 0 2px rgba(0, 0, 0, 0.24);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -114,8 +114,8 @@
   flex-shrink: 0;
   appearance: none;
   border: 0;
-  border-radius: var(--bb-radius-control, 0);
-  background: var(--bb-primary-gradient, linear-gradient(180deg, #438feb, #285fc0));
+  border-radius: var(--bb-radius-control);
+  background: var(--bb-primary-gradient);
   color: #fff;
   padding: 6px 8px;
   font-weight: 700;

@@ -24,8 +24,9 @@ in `output/site-art/home-revision.json`. News and mode covers retain their 4:3 f
 covers, fighter portraits and support category icons remain the canonical art.
 Legal pages retain their reading layout.
 
-Home uses updated map metadata and fallback definitions. Its first-paint script
-migrates remembered legacy background URLs to the new art.
+The lobby uses its original map backgrounds and fallback definitions. Its
+first-paint script migrates previously cached website-art URLs back to the
+original backgrounds. Generated website art is not used in the lobby.
 
 Exact prompts, generation source paths, export settings and layout screenshots
 are saved in `output/site-art/`. Run `export.py` there with Pillow to reproduce

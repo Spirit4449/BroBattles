@@ -10,10 +10,12 @@ export function createPlayerCardTile(card, { selected = false, lobby = false } =
       <strong>${escapeHtml(card?.name)}</strong>
       <span class="profile-card-rarity ${rarity}">${rarity}</span>
     </div>
-    <div class="${lobby ? "profile-card-actions" : "card-actions"}">
-      <span class="${lobby ? "profile-card-state" : ""}">${selected ? "Equipped" : "Owned"}</span>
+    <div class="${lobby ? "profile-card-actions" : "card-actions"}">${
+      // The lobby button already states equipped/owned, so it stands alone.
+      lobby ? "" : `
+      <span>${selected ? "Equipped" : "Owned"}</span>`}
       <button class="${lobby ? "profile-card-btn pixel-menu-button" : "profile-btn"}" type="button">
-        ${selected ? "Selected" : "Equip"}
+        ${lobby ? (selected ? "Equipped" : "Equip") : selected ? "Selected" : "Equip"}
       </button>
     </div>`;
   const button = tile.querySelector("button");

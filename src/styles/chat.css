@@ -75,7 +75,7 @@
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: 0;
   background: linear-gradient(180deg, #fb7185, #e11d48);
   color: #fff;
   font-size: 9px;
@@ -112,8 +112,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 3px solid var(--bb-ink, #03060b);
-  background: var(--bb-surface-gradient, linear-gradient(180deg, #111f37, #0b1629));
+  border: 3px solid var(--bb-ink);
+  background: var(--bb-popup-bg);
   box-shadow: none;
 }
 
@@ -132,8 +132,8 @@
   justify-content: space-between;
   gap: 10px;
   padding: 10px 12px;
-  border-bottom: 2px solid var(--bb-ink, #03060b);
-  background: var(--bb-surface-raised, #20314a);
+  border-bottom: 2px solid var(--bb-ink);
+  background: var(--bb-surface-raised);
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.07);
 }
 
@@ -166,16 +166,16 @@
   min-width: 25px;
   min-height: 25px;
   padding: 0 8px;
-  border-radius: var(--bb-radius-control, 0);
-  border: 2px solid var(--bb-ink, #03060b);
+  border-radius: var(--bb-radius-control);
+  border: 2px solid var(--bb-ink);
   background: rgba(14, 24, 44, 0.88);
   color: #eff8ff;
   cursor: pointer;
   line-height: 1;
-  box-shadow: 0 3px 0 var(--bb-ink, #03060b);
+  box-shadow: 0 3px 0 var(--bb-ink);
   transition:
-    transform var(--bb-motion-fast, 130ms) var(--bb-ease, ease),
-    filter var(--bb-motion-fast, 130ms) ease;
+    transform var(--bb-motion-fast) var(--bb-ease),
+    filter var(--bb-motion-fast) ease;
 }
 
 .bb-chat-mini-btn:hover:not(:disabled) {
@@ -195,15 +195,15 @@
   min-height: 28px;
   flex: 0 0 28px;
   padding: 0;
-  border: 2px solid var(--bb-ink, #03060b);
+  border: 2px solid var(--bb-ink);
   border-radius: 0;
-  background: linear-gradient(180deg, #d95a52, #a92833);
+  background: linear-gradient(180deg, #d95a52, var(--bb-red-deep));
   color: #fff;
   font-size: 10px;
   text-transform: none;
   font-family: "Press Start 2P", system-ui;
   box-shadow:
-    0 3px 0 var(--bb-ink, #03060b),
+    0 3px 0 var(--bb-ink),
     inset 0 2px rgba(255, 255, 255, 0.18);
   cursor: pointer;
 }
@@ -234,7 +234,7 @@
 }
 
 .bb-chat-messages::-webkit-scrollbar-thumb {
-  border-radius: 999px;
+  border-radius: 0;
   border: 2px solid transparent;
   background-clip: content-box;
   background-color: rgba(126, 211, 255, 0.7);
@@ -288,11 +288,11 @@
 .bb-chat-avatar {
   width: 32px;
   height: 32px;
-  border-radius: var(--bb-radius-media, 4px);
+  border-radius: var(--bb-radius-media);
   overflow: hidden;
   border: 2px solid rgba(87, 132, 184, 0.62);
   background: rgba(14, 24, 44, 0.8);
-  box-shadow: 0 2px 0 var(--bb-ink, #03060b);
+  box-shadow: 0 2px 0 var(--bb-ink);
 }
 
 .bb-chat-avatar img {
@@ -309,11 +309,11 @@
   max-width: 100%;
   gap: 4px;
   padding: 7px 9px 6px;
-  border-radius: var(--bb-radius-media, 4px);
+  border-radius: var(--bb-radius-media);
   border: 2px solid rgba(56, 84, 120, 0.9);
-  background: var(--bb-card-gradient, linear-gradient(180deg, #14243c, #0b172a));
+  background: var(--bb-card-gradient);
   box-shadow:
-    0 3px 0 var(--bb-ink, #03060b),
+    0 3px 0 var(--bb-ink),
     inset 0 2px rgba(255, 255, 255, 0.05);
 }
 
@@ -351,7 +351,7 @@
 
 .bb-chat-reply-preview {
   padding: 7px 8px;
-  border-radius: 4px;
+  border-radius: 0;
   border: 1px solid rgba(73, 119, 171, 0.52);
   border-left-width: 3px;
   background: rgba(12, 20, 34, 0.72);
@@ -396,9 +396,9 @@
   gap: 3px;
   align-items: center;
   padding: 2px;
-  border: 2px solid var(--bb-ink, #03060b);
+  border: 2px solid var(--bb-ink);
   background: rgba(10, 20, 34, 0.98);
-  box-shadow: 0 3px 0 var(--bb-ink, #03060b);
+  box-shadow: 0 3px 0 var(--bb-ink);
   z-index: 3;
   opacity: 0;
   pointer-events: none;
@@ -439,13 +439,13 @@
   position: relative;
   min-height: 18px;
   padding: 0 6px;
-  border-radius: 3px;
+  border-radius: 0;
   border: 1px solid rgba(90, 137, 190, 0.62);
   background: rgba(18, 38, 60, 0.9);
   color: #eff8ff;
   font-size: 9px;
   cursor: pointer;
-  box-shadow: 0 1px 0 var(--bb-ink, #03060b);
+  box-shadow: 0 1px 0 var(--bb-ink);
 }
 
 .bb-chat-inline-reaction.is-readonly {
@@ -472,11 +472,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   padding: 4px 6px;
-  border: 2px solid var(--bb-ink, #03060b);
+  border: 2px solid var(--bb-ink);
   background: #0d1a2b;
   color: #eaf6ff;
   font: 700 11px/1.2 "Lato", sans-serif;
-  box-shadow: 0 3px 0 var(--bb-ink, #03060b);
+  box-shadow: 0 3px 0 var(--bb-ink);
   z-index: 4;
   pointer-events: none;
 }
@@ -489,7 +489,7 @@
   bottom: calc(100% + 1px);
   border: 5px solid transparent;
   border-bottom: 0;
-  border-top-color: var(--bb-ink, #03060b);
+  border-top-color: var(--bb-ink);
   z-index: 5;
   pointer-events: none;
 }
@@ -522,13 +522,13 @@
   min-height: 22px;
   min-width: 24px;
   padding: 0 5px;
-  border-radius: var(--bb-radius-tag, 0);
+  border-radius: var(--bb-radius-tag);
   border: 1px solid rgba(90, 137, 190, 0.58);
   background: rgba(9, 18, 30, 0.88);
   color: #eff8ff;
   font-size: 9px;
   cursor: pointer;
-  box-shadow: 0 1px 0 var(--bb-ink, #03060b);
+  box-shadow: 0 1px 0 var(--bb-ink);
 }
 
 .bb-chat-hover-btn:hover,
@@ -604,10 +604,6 @@
   width: min(280px, calc(100vw - 20px));
   max-height: min(240px, 46vh);
   overflow: auto;
-  border-radius: var(--bb-radius-window, 10px);
-  border: 2px solid var(--bb-border, #385478);
-  background: rgba(9, 22, 36, 0.98);
-  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.42);
   opacity: 0;
   transform: translateY(-4px) scale(0.96);
   transition:
@@ -654,7 +650,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: var(--bb-radius-card, 0);
+  border-radius: var(--bb-radius-card);
   background: rgba(12, 20, 34, 0.74);
   border: 1px solid rgba(126, 211, 255, 0.12);
 }
@@ -662,7 +658,7 @@
 .bb-chat-viewer-avatar {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
   border: 1px solid rgba(126, 211, 255, 0.35);
 }
@@ -686,10 +682,10 @@
 .bb-chat-composer {
   position: relative;
   padding: 8px 10px 10px;
-  border-top: 2px solid var(--bb-ink, #03060b);
+  border-top: var(--bb-popup-divider);
   display: grid;
   gap: 6px;
-  background: var(--bb-surface-2, #111f37);
+  background: var(--bb-surface-2);
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.06);
 }
 
@@ -743,7 +739,7 @@
   width: 18px;
   height: 18px;
   box-sizing: border-box;
-  border-radius: 2px;
+  border-radius: 0;
   overflow: hidden;
   border: 1px solid #53718c;
   background: #102036;
@@ -801,46 +797,40 @@
   resize: none;
   box-sizing: border-box;
   border-radius: 0;
-  border: 2px solid var(--bb-ink, #03060b);
-  background: var(--bb-surface-3, #182942);
-  color: var(--bb-text, #f7f9ff);
+  border: 2px solid var(--bb-border);
+  background: var(--bb-bg-deep);
+  color: var(--bb-text);
   padding: 7px 10px;
   font-family: "Lato", sans-serif;
   font-size: 14px;
   line-height: 1.35;
   overflow-y: auto;
-  box-shadow:
-    0 3px 0 var(--bb-ink, #03060b),
-    inset 0 2px rgba(0, 0, 0, 0.24),
-    inset 0 -1px rgba(255, 255, 255, 0.08);
+  box-shadow: var(--bb-inset-shadow);
 }
 
 .bb-chat-composer .bb-chat-textarea::placeholder {
-  color: var(--bb-text-muted, #91a5c2);
+  color: var(--bb-text-muted);
   opacity: 1;
 }
 
 .bb-chat-composer .bb-chat-textarea:focus,
 .bb-chat-composer .bb-chat-textarea:focus-visible {
   outline: none;
-  border-color: var(--bb-ink, #03060b);
-  background: var(--bb-surface-raised, #20314a);
-  box-shadow:
-    0 3px 0 var(--bb-ink, #03060b),
-    inset 0 2px rgba(0, 0, 0, 0.24),
-    inset 0 -1px rgba(255, 255, 255, 0.08);
+  border-color: var(--bb-field-focus);
+  background: var(--bb-bg-deep);
+  box-shadow: var(--bb-field-focus-shadow);
 }
 
 /* Match the field's visible height; global button shadows add 5px above
    and below the box, so these compact controls use their own shadows. */
 .bb-chat-shell .bb-chat-composer .bb-chat-send {
-  --bb-control-shadow: 0 3px 0 var(--bb-ink, #03060b), inset 0 3px rgba(255, 255, 255, 0.16);
-  --bb-control-shadow-pressed: 0 3px 0 var(--bb-ink, #03060b), inset 0 3px rgba(0, 0, 0, 0.24);
+  --bb-control-shadow: 0 3px 0 var(--bb-ink), inset 0 3px rgba(255, 255, 255, 0.16);
+  --bb-control-shadow-pressed: 0 3px 0 var(--bb-ink), inset 0 3px rgba(0, 0, 0, 0.24);
   min-width: 82px;
   min-height: 38px;
   border-radius: 0;
-  border: 2px solid var(--bb-ink, #03060b);
-  background: var(--bb-primary-gradient, linear-gradient(180deg, #438feb, #285fc0));
+  border: 2px solid var(--bb-ink);
+  background: var(--bb-primary-gradient);
   color: #fff;
   cursor: pointer;
   font-family: "Press Start 2P", system-ui;
@@ -850,7 +840,7 @@
 }
 
 .bb-chat-composer .bb-chat-send:hover {
-  background: #2f73bb;
+  filter: brightness(1.12) saturate(1.06);
 }
 
 .bb-chat-composer .bb-chat-send:active {
@@ -1003,7 +993,7 @@
   width: 100%;
   height: min(268px, 31vh);
   max-height: min(268px, 31vh);
-  border-radius: var(--bb-radius-card, 0);
+  border-radius: var(--bb-radius-card);
   opacity: 1;
   transition:
     opacity 220ms ease,
@@ -1042,29 +1032,24 @@
 }
 
 .bb-chat-game-panel .bb-chat-composer {
-  padding: 7px 8px 8px;
-  border-top-color: var(--bb-ink, #03060b);
+  padding: 8px;
 }
 
 .bb-chat-game-panel .bb-chat-header {
-  padding: 7px 8px 8px 10px;
-  min-height: 34px;
+  padding: 8px 8px 8px 12px;
+  min-height: 40px;
   gap: 8px;
-  background: linear-gradient(
-    180deg,
-    rgba(32, 81, 135, 0.98),
-    rgba(18, 48, 84, 0.98)
-  );
-  border-bottom-color: rgba(115, 192, 255, 0.42);
+  border-bottom: var(--bb-popup-divider);
 }
 
 .bb-chat-game-panel .bb-chat-textarea {
   height: 32px;
   min-height: 32px;
   max-height: 52px;
-  padding: 7px 9px;
-  font-size: 11px;
-  border-color: var(--bb-ink, #03060b);
+  padding: 9px 9px 7px;
+  font-family: var(--bb-font-display);
+  font-size: 8px;
+  line-height: 1.6;
 }
 
 .bb-chat-game-panel .bb-chat-composer .bb-chat-send {
@@ -1075,7 +1060,7 @@
 }
 
 .bb-chat-game-panel .bb-chat-title {
-  font-size: 7px;
+  font-size: 9px;
   line-height: 1.35;
   white-space: nowrap;
 }
@@ -1100,11 +1085,11 @@
 .bb-chat-audience-tabs {
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(54px, 1fr));
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid rgba(135, 202, 255, 0.46);
-  background: rgba(5, 18, 34, 0.62);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.06);
+  gap: 0;
+  padding: 0;
+  border: 2px solid var(--bb-ink);
+  background: var(--bb-surface-1);
+  box-shadow: 0 2px 0 var(--bb-ink);
 }
 
 .bb-chat-audience-tab {
@@ -1117,10 +1102,10 @@
   padding: 0 8px;
   border: 0;
   background: transparent;
-  color: #93b8d8;
+  color: var(--bb-text-muted);
   cursor: pointer;
-  font-family: "Press Start 2P", system-ui;
-  font-size: 6px;
+  font-family: var(--bb-font-display);
+  font-size: 7px;
   line-height: 1;
   transition:
     color 120ms ease,
@@ -1129,8 +1114,8 @@
 }
 
 .bb-chat-audience-tab:hover {
-  color: #fff;
-  background: rgba(72, 139, 204, 0.28);
+  color: var(--bb-text);
+  background: var(--bb-surface-3);
 }
 
 .bb-chat-audience-tab:disabled {
@@ -1144,11 +1129,10 @@
 }
 
 .bb-chat-audience-tab.is-active {
-  color: #fff;
-  background: linear-gradient(180deg, #438feb, #285fc0);
-  box-shadow:
-    inset 0 2px rgba(255, 255, 255, 0.18),
-    0 2px 0 rgba(2, 8, 18, 0.9);
+  --bb-chroma-corner-size: 9px;
+  color: var(--bb-text);
+  background: var(--bb-chroma-button-corners), var(--bb-primary-gradient);
+  box-shadow: inset 0 2px rgba(255, 255, 255, 0.18);
 }
 
 .bb-chat-tab-count {
@@ -1158,14 +1142,13 @@
   min-width: 14px;
   height: 14px;
   padding: 0 3px;
-  border-radius: 999px;
-  background: #ec5267;
+  border-radius: 0;
+  background: var(--bb-red);
   color: #fff;
-  font-family: "Lato", sans-serif;
-  font-size: 8px;
-  font-weight: 800;
+  font-family: var(--bb-font-display);
+  font-size: 6px;
   line-height: 1;
-  box-shadow: 0 1px 0 rgba(46, 5, 14, 0.9);
+  box-shadow: 0 0 0 1px var(--bb-ink);
 }
 
 .bb-chat-tab-count.hidden {
@@ -1184,11 +1167,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  background: linear-gradient(
-    180deg,
-    rgba(5, 15, 27, 0.62),
-    rgba(8, 18, 31, 0.9)
-  );
+  background: var(--bb-panel-bg);
 }
 
 .bb-chat-game-empty {
@@ -1200,16 +1179,16 @@
   justify-content: center;
   gap: 8px;
   padding: 16px;
-  color: #7898b5;
-  font-size: 10px;
+  color: var(--bb-text-muted);
+  font-size: 12px;
   line-height: 1.35;
   text-align: center;
 }
 
 .bb-chat-game-empty-title {
-  color: #b9d6ed;
-  font-family: "Press Start 2P", system-ui;
-  font-size: 7px;
+  color: var(--bb-text-soft);
+  font-family: var(--bb-font-display);
+  font-size: 8px;
 }
 
 .bb-chat-game-line {
@@ -1220,37 +1199,22 @@
   width: 100%;
   min-height: 30px;
   padding: 7px 9px 6px;
-  border: 2px solid rgba(56, 91, 130, 0.9);
-  border-left: 4px solid #62aef4;
+  border: 2px solid var(--bb-border-soft);
+  border-left: 4px solid var(--bb-blue);
   border-radius: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(25, 52, 84, 0.96),
-    rgba(13, 31, 52, 0.96)
-  );
-  box-shadow:
-    0 2px 0 rgba(2, 8, 18, 0.9),
-    inset 0 1px rgba(255, 255, 255, 0.07);
+  background: var(--bb-card-bg);
+  box-shadow: 0 2px 0 var(--bb-ink);
   font-size: 8px;
   line-height: 1.45;
-  color: #e5f2ff;
+  color: var(--bb-text);
 }
 
 .bb-chat-game-line.is-team-blue {
-  color: #d8ecff;
-  border-color: rgba(55, 100, 145, 0.92);
-  border-left-color: #62aef4;
+  border-left-color: var(--bb-blue);
 }
 
 .bb-chat-game-line.is-team-red {
-  color: #ffd9dc;
-  border-color: rgba(121, 55, 70, 0.92);
-  border-left-color: #e06672;
-  background: linear-gradient(
-    180deg,
-    rgba(76, 31, 47, 0.96),
-    rgba(45, 20, 33, 0.96)
-  );
+  border-left-color: var(--bb-red);
 }
 
 .bb-chat-game-line-name {
@@ -1297,7 +1261,7 @@
 .bb-chat-game-panel .bb-chat-avatar {
   width: 26px;
   height: 26px;
-  border-radius: 9px;
+  border-radius: 0;
 }
 
 .bb-chat-game-panel .bb-chat-bubble {
@@ -1440,7 +1404,7 @@
   height: 18px;
   padding: 0 2px;
   border: 1px solid #ffc1bd;
-  border-radius: 2px;
+  border-radius: 0;
   background: #b93446;
   box-shadow: 0 2px 0 #450f1c;
 }
@@ -1490,7 +1454,7 @@
   height: 28px;
   padding: 0 9px;
   border: 1px solid #81c7e6;
-  border-radius: 3px;
+  border-radius: 0;
   background: #15334e;
   color: #ecfaff;
   box-shadow: 0 3px 0 #030a13;
@@ -1559,7 +1523,7 @@
   gap: 7px;
   max-width: 100%;
   padding: 4px 8px;
-  border-radius: 2px;
+  border-radius: 0;
   transition: color 120ms ease, background 120ms ease;
 }
 .bb-chat-system-icon {
@@ -1586,7 +1550,7 @@
   transform: translateY(-50%);
   max-width: calc(100% - 12px);
   padding: 2px 5px;
-  border-radius: 2px;
+  border-radius: 0;
   background: #0a1524;
   white-space: nowrap;
   z-index: 5;

@@ -16,7 +16,7 @@
     "musicAsset": "/assets/bank-bust/bankbust-main.mp3",
     "musicVolume": 0.22,
     "mapSelectPreviewAsset": "/assets/bank-bust/preview.webp",
-    "lobbyBgAsset": "/assets/site/bank-home.webp",
+    "lobbyBgAsset": "/assets/bank-bust/lobbyBg.webp",
     "lobbyPlatformAsset": "/assets/bank-bust/lobbyPlatform.webp",
     "objectiveLayout": {
       "bankBust": {

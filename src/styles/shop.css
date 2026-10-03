@@ -101,7 +101,7 @@ body.shop-is-open .sonner-wrap {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: var(--bb-popup-backdrop, rgba(5, 10, 22, 0.74));
+  background: var(--bb-popup-backdrop);
 }
 
 .shop-backdrop::before {
@@ -153,14 +153,6 @@ body.shop-is-open .sonner-wrap {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
-  border: 3px solid #334f76;
-  border-radius: 14px;
-  background: #070d18;
-  box-shadow:
-    0 0 0 5px #03050a,
-    0 8px 0 #03050a,
-    0 28px 84px rgba(0, 0, 0, 0.76),
-    inset 0 3px rgba(255, 255, 255, 0.1);
   transform-origin: center;
 }
 
@@ -170,7 +162,7 @@ body.shop-is-open .sonner-wrap {
   z-index: 40;
   inset: 7px;
   border: 2px solid rgba(255, 255, 255, 0.055);
-  border-radius: 8px;
+  border-radius: 0;
   pointer-events: none;
 }
 
@@ -183,10 +175,7 @@ body.shop-is-open .sonner-wrap {
   align-items: center;
   gap: 16px;
   padding: 10px 16px 10px 22px;
-  border-bottom: 3px solid #263a5b;
-  background:
-    linear-gradient(100deg, rgba(54, 143, 233, 0.98), rgba(101, 61, 183, 0.98)),
-    #101b2c;
+  /* Chroma header and divider come from the popup contract. */
 }
 
 
@@ -212,7 +201,7 @@ body.shop-is-open .sonner-wrap {
     700 clamp(16px, 1.7vw, 23px)/1 "Press Start 2P",
     monospace;
   letter-spacing: -0.03em;
-  text-shadow: var(--bb-title-shadow, 3px 4px 0 rgba(2, 5, 12, 0.72));
+  text-shadow: var(--bb-title-shadow);
 }
 
 .shop-header-wallet {
@@ -232,7 +221,7 @@ body.shop-is-open .sonner-wrap {
   column-gap: 7px;
   padding: 5px 10px 5px 8px;
   border: 2px solid #203452;
-  border-radius: 6px;
+  border-radius: 0;
   background:
     linear-gradient(135deg, rgba(5, 14, 27, 0.78), rgba(18, 24, 43, 0.88)),
     #0a1120;
@@ -284,13 +273,13 @@ body.shop-is-open .sonner-wrap {
   place-items: center;
   margin: 0 4px 4px;
   border: 0;
-  border-radius: 2px;
+  border-radius: 0;
   background: linear-gradient(180deg, #e04a4a, #ad252f);
   box-shadow:
-    0 5px #03050a,
-    0 -5px #03050a,
-    5px 0 #03050a,
-    -5px 0 #03050a,
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink),
     0 10px rgba(0, 0, 0, 0.3),
     inset 0 4px rgba(255, 255, 255, 0.18);
   line-height: 1;
@@ -308,10 +297,10 @@ body.shop-is-open .sonner-wrap {
 .shop-close:active {
   transform: translateY(4px);
   box-shadow:
-    0 5px #03050a,
-    0 -5px #03050a,
-    5px 0 #03050a,
-    -5px 0 #03050a,
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink),
     inset 0 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -323,12 +312,8 @@ body.shop-is-open .sonner-wrap {
   align-items: stretch;
   overflow-x: auto;
   padding: 0 14px;
-  border-bottom: 2px solid #1b2b43;
-  background: linear-gradient(
-    180deg,
-    rgba(9, 17, 31, 0.99),
-    rgba(7, 13, 24, 0.99)
-  );
+  border-bottom: 2px solid var(--bb-border-soft);
+  background: var(--bb-surface-1);
   scrollbar-width: none;
 }
 
@@ -398,15 +383,9 @@ body.shop-is-open .sonner-wrap {
   scroll-behavior: smooth;
   scroll-padding-top: 12px;
   padding: 0 20px 56px;
-  background:
-    radial-gradient(circle at 8% 0, rgba(46, 91, 140, 0.12), transparent 32%),
-    radial-gradient(
-      circle at 92% 42%,
-      rgba(105, 56, 151, 0.09),
-      transparent 28%
-    ),
-    linear-gradient(180deg, #09111e, #060b14);
-  scrollbar-color: #405a7d #080f1b;
+  /* The window supplies the shared popup surface. */
+  background: transparent;
+  scrollbar-color: var(--bb-border) transparent;
   scrollbar-width: thin;
 }
 
@@ -474,12 +453,10 @@ body.shop-is-open .sonner-wrap {
 .shop-reset-chip {
   min-width: 102px;
   padding: 6px 9px;
-  border: 2px solid #233754;
-  border-radius: var(--bb-radius-tag, 0);
-  background: rgba(7, 15, 28, 0.7);
-  box-shadow:
-    0 4px 0 rgba(2, 5, 11, 0.7),
-    inset 0 2px rgba(255, 255, 255, 0.045);
+  border: var(--bb-currency-chip-border);
+  border-radius: 0;
+  background: var(--bb-currency-chip-bg);
+  box-shadow: var(--bb-currency-chip-shadow);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -533,10 +510,14 @@ body.shop-is-open .sonner-wrap {
   display: grid;
   grid-template-rows: 188px auto auto;
   overflow: hidden;
-  border: 3px solid rgba(var(--rarity-rgb), 0.58);
-  border-radius: 10px;
   outline: none;
   opacity: 1;
+  /* Standard card fill; only real rarities paint their light into it. */
+  background: var(--bb-card-bg);
+  transition: filter 170ms ease;
+}
+
+.shop-offer.has-rarity:not(.shop-rarity-common) {
   background:
     radial-gradient(
       circle at var(--light-x) var(--light-y),
@@ -556,8 +537,6 @@ body.shop-is-open .sonner-wrap {
     100% 100%;
   animation: shopCardGradientDrift 16s ease-in-out infinite alternate;
   animation-delay: calc(var(--offer-index, 0) * -2.4s);
-  box-shadow: var(--bb-control-shadow);
-  transition: filter 170ms ease;
 }
 
 @keyframes shopCardGradientDrift {
@@ -578,23 +557,13 @@ body.shop-is-open .sonner-wrap {
   }
 }
 
-.shop-offer::after {
-  content: "";
-  position: absolute;
-  z-index: 8;
-  inset: 4px;
-  border: 1.5px solid rgba(255, 255, 255, 0.035);
-  border-radius: 4px;
-  pointer-events: none;
-}
-
 .shop-offer.is-spotlight::before {
   content: "";
   position: absolute;
   z-index: 9;
   inset: 0;
   border: 4px solid transparent;
-  border-radius: 7px;
+  border-radius: 0;
   pointer-events: none;
   animation: shopOfferSpotlight 1.8s ease-out both;
 }
@@ -678,7 +647,7 @@ body.shop-is-open .sonner-wrap {
   position: relative;
   min-width: 0;
   overflow: hidden;
-  border-bottom: 1px solid rgba(var(--rarity-rgb), 0.25);
+  border-bottom: 2px solid var(--bb-ink);
   background: #08101c;
 }
 
@@ -727,12 +696,6 @@ body.shop-is-open .sonner-wrap {
   display: none;
 }
 
-.shop-offer.has-rarity {
-  box-shadow:
-    var(--bb-control-shadow),
-    0 0 24px rgba(var(--rarity-rgb), 0.14),
-    inset 0 2px rgba(255, 255, 255, 0.07);
-}
 
 .shop-offer.has-rarity .shop-banner-light {
   display: block;
@@ -746,7 +709,7 @@ body.shop-is-open .sonner-wrap {
   right: 10px;
   padding: 6px 8px 5px;
   border: 1px solid rgba(var(--rarity-rgb), 0.75);
-  border-radius: 999px;
+  border-radius: 0;
   color: rgb(var(--rarity-rgb));
   background: rgba(5, 10, 19, 0.82);
   box-shadow:
@@ -758,14 +721,6 @@ body.shop-is-open .sonner-wrap {
   text-shadow: 0 0 8px rgba(var(--rarity-rgb), 0.72);
 }
 
-.shop-offer.has-rarity.shop-rarity-epic,
-.shop-offer.has-rarity.shop-rarity-legendary {
-  box-shadow:
-    var(--bb-control-shadow),
-    0 0 34px rgba(var(--rarity-rgb), 0.22),
-    inset 0 0 22px rgba(var(--rarity-rgb), 0.06),
-    inset 0 2px rgba(255, 255, 255, 0.07);
-}
 
 .shop-offer-badge {
   position: absolute;
@@ -774,7 +729,7 @@ body.shop-is-open .sonner-wrap {
   left: 10px;
   padding: 5px 8px 5px;
   border: 2px solid rgba(255, 224, 151, 0.58);
-  border-radius: var(--bb-radius-tag, 0);
+  border-radius: var(--bb-radius-tag);
   color: #ffe6a5;
   background: linear-gradient(
     135deg,
@@ -915,10 +870,10 @@ body.shop-is-open .sonner-wrap {
   background: linear-gradient(180deg, #23d994 0%, #09a96f 54%, #07895f 100%);
   text-shadow: 0 2px 0 rgba(1, 61, 42, 0.56);
   box-shadow:
-    0 5px #03050a,
-    0 -5px #03050a,
-    5px 0 #03050a,
-    -5px 0 #03050a,
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink),
     0 0 12px rgba(47, 255, 174, 0.74),
     0 0 28px rgba(32, 218, 145, 0.42),
     0 8px rgba(0, 0, 0, 0.28),
@@ -944,14 +899,14 @@ body.shop-is-open .sonner-wrap {
   margin: 0 5px 5px;
   padding: 8px 12px;
   border: 0;
-  border-radius: var(--bb-radius-control, 0);
+  border-radius: var(--bb-radius-control);
   color: #fff;
   background: linear-gradient(180deg, #16bd83, #078e66);
   box-shadow:
-    0 5px #03050a,
-    0 -5px #03050a,
-    5px 0 #03050a,
-    -5px 0 #03050a,
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink),
     0 8px rgba(0, 0, 0, 0.28),
     5px 5px rgba(0, 0, 0, 0.28),
     -5px 5px rgba(0, 0, 0, 0.28),
@@ -1066,10 +1021,10 @@ body.shop-is-open .sonner-wrap {
 .shop-buy-button:active:not(:disabled) {
   transform: translateY(4px);
   box-shadow:
-    0 5px #03050a,
-    0 -5px #03050a,
-    5px 0 #03050a,
-    -5px 0 #03050a,
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink),
     inset 0 4px rgba(0, 0, 0, 0.22);
 }
 
@@ -1077,10 +1032,10 @@ body.shop-is-open .sonner-wrap {
   color: #8d9bb0;
   background: rgba(30, 42, 60, 0.72);
   box-shadow:
-    0 5px #03050a,
-    0 -5px #03050a,
-    5px 0 #03050a,
-    -5px 0 #03050a,
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink),
     inset 0 4px rgba(255, 255, 255, 0.06);
   cursor: default;
 }
@@ -1157,14 +1112,14 @@ body.shop-is-open .sonner-wrap {
   margin: 8px 4px 4px;
   padding: 6px 14px;
   border: 0;
-  border-radius: var(--bb-radius-control, 0);
+  border-radius: var(--bb-radius-control);
   color: #fff;
   background: linear-gradient(180deg, #4ba4ed, #296fc0);
   box-shadow:
-    0 5px #03050a,
-    0 -5px #03050a,
-    5px 0 #03050a,
-    -5px 0 #03050a,
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink),
     0 10px rgba(0, 0, 0, 0.28),
     inset 0 4px rgba(255, 255, 255, 0.18);
   font:
@@ -1177,10 +1132,10 @@ body.shop-is-open .sonner-wrap {
 .shop-empty button:active {
   transform: translateY(4px);
   box-shadow:
-    0 5px #03050a,
-    0 -5px #03050a,
-    5px 0 #03050a,
-    -5px 0 #03050a,
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink),
     inset 0 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -1188,7 +1143,7 @@ body.shop-is-open .sonner-wrap {
   grid-column: 1 / -1;
   min-height: 160px;
   border: 1px dashed rgba(131, 160, 197, 0.18);
-  border-radius: var(--bb-radius-card, 0);
+  border-radius: var(--bb-radius-card);
   background: rgba(11, 20, 34, 0.42);
 }
 
@@ -1208,7 +1163,7 @@ body.shop-is-open .sonner-wrap {
 .shop-checkout-backdrop {
   position: absolute;
   inset: 0;
-  background: var(--bb-popup-backdrop, rgba(5, 10, 22, 0.74));
+  background: var(--bb-popup-backdrop);
 }
 
 .shop-checkout-panel {
@@ -1216,13 +1171,7 @@ body.shop-is-open .sonner-wrap {
   width: min(530px, 96vw);
   max-height: 94vh;
   overflow: auto;
-  border: 3px solid #38577e;
-  border-radius: var(--bb-radius-window, 10px);
   background: #f6f8fc;
-  box-shadow:
-    0 0 0 5px #03050a,
-    0 9px 0 #03050a,
-    0 24px 80px rgba(0, 0, 0, 0.74);
 }
 
 .shop-checkout-panel > header {
@@ -1249,16 +1198,16 @@ body.shop-is-open .sonner-wrap {
   height: 33px;
   margin: 0 4px 4px;
   border: 0;
-  border-radius: 2px;
+  border-radius: 0;
   font:
     700 12px/1 "Press Start 2P",
     monospace;
   background: linear-gradient(180deg, #e04a4a, #ad252f);
   box-shadow:
-    0 5px #03050a,
-    0 -5px #03050a,
-    5px 0 #03050a,
-    -5px 0 #03050a,
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink),
     0 10px rgba(0, 0, 0, 0.28),
     inset 0 4px rgba(255, 255, 255, 0.18);
 }
@@ -1266,10 +1215,10 @@ body.shop-is-open .sonner-wrap {
 .shop-checkout-close:active {
   transform: translateY(4px);
   box-shadow:
-    0 5px #03050a,
-    0 -5px #03050a,
-    5px 0 #03050a,
-    -5px 0 #03050a,
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink),
     inset 0 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -1320,7 +1269,7 @@ body.shop-is-open .sonner-wrap {
 .shop-reveal-backdrop {
   position: absolute;
   inset: 0;
-  background: var(--bb-popup-backdrop, rgba(5, 10, 22, 0.74));
+  background: var(--bb-popup-backdrop);
 }
 
 .shop-reveal-rays {
@@ -1350,7 +1299,7 @@ body.shop-is-open .sonner-wrap {
   padding: 0 18px 20px;
   overflow: hidden;
   border: 3px solid rgba(var(--rarity-rgb), 0.86);
-  border-radius: 10px;
+  border-radius: 0;
   background:
     radial-gradient(
       circle at 50% 18%,
@@ -1359,8 +1308,8 @@ body.shop-is-open .sonner-wrap {
     ),
     linear-gradient(155deg, rgba(22, 31, 51, 0.99), rgba(7, 12, 22, 0.99));
   box-shadow:
-    0 0 0 5px #03050a,
-    0 9px 0 #03050a,
+    0 0 0 5px var(--bb-ink),
+    0 9px 0 var(--bb-ink),
     0 24px 80px rgba(0, 0, 0, 0.74),
     0 0 45px rgba(var(--rarity-rgb), 0.15),
     inset 0 1px rgba(255, 255, 255, 0.12);
@@ -1373,7 +1322,7 @@ body.shop-is-open .sonner-wrap {
   position: absolute;
   inset: 6px;
   border: 2px solid rgba(255, 255, 255, 0.055);
-  border-radius: 5px;
+  border-radius: 0;
   pointer-events: none;
 }
 
@@ -1441,10 +1390,10 @@ body.shop-is-open .sonner-wrap {
   column-gap: 6px;
   padding: 5px 9px;
   border: 2px solid #294362;
-  border-radius: var(--bb-radius-tag, 0);
+  border-radius: var(--bb-radius-tag);
   background: rgba(7, 15, 28, 0.94);
   box-shadow:
-    0 4px 0 #03050a,
+    0 4px 0 var(--bb-ink),
     inset 0 2px rgba(255, 255, 255, 0.08);
   transform-origin: center;
 }
@@ -1500,7 +1449,7 @@ body.shop-is-open .sonner-wrap {
     700 clamp(13px, 2vw, 18px)/1.4 "Press Start 2P",
     monospace;
   letter-spacing: -0.04em;
-  text-shadow: var(--bb-title-shadow, 3px 4px 0 rgba(2, 5, 12, 0.72));
+  text-shadow: var(--bb-title-shadow);
 }
 
 .shop-reveal-grants {
@@ -1594,14 +1543,14 @@ body.shop-is-open .sonner-wrap {
   margin: 12px 4px 4px;
   padding: 0 20px;
   border: 0;
-  border-radius: var(--bb-radius-control, 0);
+  border-radius: var(--bb-radius-control);
   color: #fff;
   background: linear-gradient(180deg, #4ba4ed, #296fc0);
   box-shadow:
-    0 5px #03050a,
-    0 -5px #03050a,
-    5px 0 #03050a,
-    -5px 0 #03050a,
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink),
     0 10px rgba(0, 0, 0, 0.28),
     inset 0 4px rgba(255, 255, 255, 0.18);
   font:
@@ -1620,10 +1569,10 @@ body.shop-is-open .sonner-wrap {
 .shop-reveal-panel > button:active {
   transform: translateY(4px);
   box-shadow:
-    0 5px #03050a,
-    0 -5px #03050a,
-    5px 0 #03050a,
-    -5px 0 #03050a;
+    0 5px var(--bb-ink),
+    0 -5px var(--bb-ink),
+    5px 0 var(--bb-ink),
+    -5px 0 var(--bb-ink);
 }
 
 .shop-reveal-panel > button:disabled {
@@ -1642,7 +1591,7 @@ body.shop-is-open .sonner-wrap {
   top: 50%;
   width: 7px;
   height: 16px;
-  border-radius: 2px;
+  border-radius: 0;
   background: rgb(var(--rarity-rgb));
   box-shadow: 0 0 12px rgba(var(--rarity-rgb), 0.7);
   opacity: 0;
@@ -1781,7 +1730,6 @@ body.shop-is-open .sonner-wrap {
   .shop-window {
     width: 100%;
     height: calc(var(--bb-viewport-height, 100dvh) - 10px);
-    border-radius: 15px;
   }
 
   .shop-header {
@@ -1999,9 +1947,9 @@ body.shop-is-open .sonner-wrap {
   overflow: auto;
   padding: 28px 28px 24px;
   border: 2px solid rgba(var(--rarity-rgb), .8);
-  border-radius: 4px;
+  border-radius: 0;
   background: linear-gradient(145deg, #18273b, #090f1d 65%);
-  box-shadow: 0 0 0 5px #03050a, 0 12px #03050a, 0 30px 90px #0009;
+  box-shadow: 0 0 0 5px var(--bb-ink), 0 12px var(--bb-ink), 0 30px 90px #0009;
 }
 .reward-showcase .shop-reveal-panel::before {
   content: ""; position: absolute; left: 12%; right: 12%; top: 0; height: 3px;
@@ -2054,8 +2002,8 @@ body.shop-is-open .sonner-wrap {
   color: #ffdc7a;
 }
 .reward-showcase .shop-reveal-panel > button { margin-top: 24px; min-width: 180px; min-height: 44px; }
-.reward-showcase [data-reveal-wallet-shell="coins"] { border-color: #bb882b; box-shadow: 0 4px #03050a, 0 0 22px #ffbe3538; }
-.reward-showcase [data-reveal-wallet-shell="gems"] { border-color: #3694ba; box-shadow: 0 4px #03050a, 0 0 22px #56d8ff38; }
+.reward-showcase [data-reveal-wallet-shell="coins"] { border-color: #bb882b; box-shadow: 0 4px var(--bb-ink), 0 0 22px #ffbe3538; }
+.reward-showcase [data-reveal-wallet-shell="gems"] { border-color: #3694ba; box-shadow: 0 4px var(--bb-ink), 0 0 22px #56d8ff38; }
 .reward-showcase.currency-only .shop-reveal-panel { width: min(620px, calc(100vw - 48px)); }
 .reward-showcase.currency-only .shop-reveal-currencies { background: none; border: 0; }
 .reward-showcase.currency-only .shop-reveal-currencies .shop-reveal-grant { flex-direction: column; }

@@ -17,7 +17,7 @@ function ensureHostHtml() {
   host.innerHTML = `
     <style>
       #bank-bust-edit-host{position:fixed;left:14px;bottom:14px;z-index:100001;font-family:system-ui,sans-serif}
-      #bank-bust-interact-prompt{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:none;z-index:100000;background:rgba(15,23,42,.92);border:1px solid rgba(248,250,252,.2);border-radius:999px;padding:10px 16px;color:#f8fafc;font:600 13px/1.2 Lato,sans-serif;box-shadow:0 12px 28px rgba(0,0,0,.32)}
+      #bank-bust-interact-prompt{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:none;z-index:100000;background:var(--bb-hud-bg);border:0;border-radius:0;padding:10px 16px;color:var(--bb-text);font:10px/1.5 var(--bb-font-display);text-transform:uppercase;text-shadow:2px 2px 0 var(--bb-ink);box-shadow:var(--bb-hud-frame)}
       #bank-bust-interact-prompt.open{display:block}
       #bank-bust-edit-panel{display:none;width:min(360px,92vw);background:rgba(9,16,28,.94);border:1px solid rgba(99,102,241,.45);border-radius:12px;padding:10px;color:#dbeafe;box-shadow:0 12px 28px rgba(0,0,0,.34)}
       #bank-bust-edit-panel.open{display:block}

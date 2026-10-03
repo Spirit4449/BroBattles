@@ -47,7 +47,7 @@ export const definition = {
   name: "Lushy Peaks",
   bgAsset: "/assets/lushy/gameBg.webp",
   mapSelectPreviewAsset: "/assets/lushy/preview.webp",
-  lobbyBgAsset: "/assets/site/lushy-home-v2.webp",
+  lobbyBgAsset: "/assets/lushy/lobbyBg.webp",
   lobbyPlatformAsset: "/assets/lushy/lobbyPlatform.webp",
   lobbyCharacterOffsetY: 15,
 

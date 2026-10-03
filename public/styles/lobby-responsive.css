@@ -7,7 +7,7 @@
 @media (max-width: 1100px) {
   #navbar { gap: 12px; padding-inline: 16px; }
   #navbar > .flex:first-child { flex-shrink: 0; }
-  #navbar-right { min-width: 0; gap: 10px; }
+  #navbar-right { min-width: 0; gap: 14px; }
   #navbar .account { white-space: nowrap; font-size: 9px; padding-inline: 8px; }
   #navbar .resources { gap: 5px; }
   #navbar .resources p { font-size: 11px; }
@@ -40,11 +40,12 @@
   #navbar .resources img { width: 16px; height: 16px; }
   #username-button #username-text { max-width: 64px; }
   #navbar .fullscreen-toggle { min-width: 32px; }
-  body > .party-button { top: var(--lobby-toolbar-top); height: 34px; font-size: 8px; }
-  #create-party { left: 12px; width: 126px; padding-inline: 6px; white-space: nowrap; }
+  .lobby-party-actions { top: var(--lobby-toolbar-top); left: 12px; gap: 12px; }
+  .lobby-party-actions .party-button { height: 34px; font-size: 8px; }
+  #create-party { width: 126px; padding-inline: 6px; white-space: nowrap; }
   #create-party p { margin: 0; font-size: inherit; }
-  #search-parties { left: 150px; width: 34px; }
-  #party-settings-button { left: 196px; width: 34px; }
+  #search-parties,
+  #party-settings-button { width: 34px; }
   .lobby-quick-actions { top: var(--lobby-toolbar-top); right: 12px; gap: 12px; }
   .lobby-quick-actions .party-button { height: 34px; font-size: 8px; }
   #lobby-area { margin-top: 60px; height: calc(var(--bb-viewport-height, 100dvh) - 194px); }
@@ -150,8 +151,7 @@
   #navbar .resources { gap: 3px; padding-inline: 0; }
   #username-button #username-text { max-width: 36px; }
   #create-party { width: 112px; }
-  #search-parties { left: 136px; }
-  #party-settings-button { left: 182px; }
   #shop-button p { display: none; }
+  .lobby-party-actions,
   .lobby-quick-actions { gap: 10px; }
 }

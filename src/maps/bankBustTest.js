@@ -52,7 +52,7 @@ export const definition = {
   name: "Iron Junction",
   bgAsset: "/assets/bank-bust/gameBg.webp",
   mapSelectPreviewAsset: "/assets/bank-bust/preview.webp",
-  lobbyBgAsset: "/assets/site/bank-home.webp",
+  lobbyBgAsset: "/assets/bank-bust/lobbyBg.webp",
   lobbyPlatformAsset: "/assets/bank-bust/lobbyPlatform.webp",
   lobbyCharacterOffsetY: 12,
 

@@ -4,14 +4,16 @@ import { getLobbyBgAsset, getLobbyPlatformAsset } from "../maps/manifest";
 import { buildCharacterSkinBodyUrl } from "../lib/skinAssets.js";
 import { DEFAULT_CHARACTER } from "../shared/characterStats.js";
 import { refreshPlatformGrounding } from "./platformGrounding.mjs";
+import { createPlatformFlight } from "./matchmakingPlatformFlight.js";
 
 const MATCHMAKING_EXIT_MS = 190;
 const LOBBY_CHROME_SELECTOR =
-  "#navbar, body > .party-button, .lobby-quick-actions, #lobby-area, #bottom-bar, .bb-chat-lobby-wrap";
+  "#navbar, .lobby-party-actions, .lobby-quick-actions, #lobby-area, #bottom-bar, .bb-chat-lobby-wrap";
 
 export function createMatchmakingOverlay() {
   let hideTimer = null;
   let countTimer = null;
+  const platformFlight = createPlatformFlight();
   const overlay = () => document.getElementById("matchmaking-overlay");
   const cancelButton = () => document.getElementById("mm-cancel");
 
@@ -54,6 +56,8 @@ export function createMatchmakingOverlay() {
       hideTimer = null;
     }
     ensureParticles();
+    // Measure the lobby platforms before the lobby begins its exit transition.
+    if (element.classList.contains("hidden")) platformFlight.capture();
     document.body.classList.remove("matchmaking-exiting");
     document.body.classList.add("matchmaking-active");
     setLobbyChromeInert(true);
@@ -67,6 +71,7 @@ export function createMatchmakingOverlay() {
   function hide({ immediate = false } = {}) {
     const element = overlay();
     if (!element) return;
+    platformFlight.clear();
     if (immediate) {
       if (hideTimer) {
         window.clearTimeout(hideTimer);
@@ -229,6 +234,7 @@ export function createMatchmakingOverlay() {
     }
     if (totalEl) totalEl.textContent = String(total);
     if (grid) renderGrid(grid, { total, selection, players, yourTeam });
+    platformFlight.launch();
     return result;
   }
 

@@ -3,7 +3,7 @@
 body.profile-page-body {
   min-height: 100dvh;
   margin: 0;
-  color: var(--bb-text, #f7f9ff);
+  color: var(--bb-text);
   background:
     radial-gradient(
       circle at 20% 15%,
@@ -15,8 +15,8 @@ body.profile-page-body {
       rgba(106, 67, 189, 0.18),
       transparent 42%
     ),
-    var(--bb-bg-deep, #050914);
-  font-family: var(--bb-font-body, "Lato", sans-serif);
+    var(--bb-bg-deep);
+  font-family: var(--bb-font-body);
 }
 
 body.profile-page-body .profile-page {
@@ -40,12 +40,12 @@ body.profile-page-body .profile-header {
   align-items: center;
   gap: 16px;
   padding: 12px 18px;
-  border: 3px solid var(--bb-border, #385478);
-  border-radius: var(--bb-radius-window, 10px);
+  border: 3px solid var(--bb-border);
+  border-radius: var(--bb-radius-window);
   color: #fff;
   background: var(
     --bb-header-gradient,
-    linear-gradient(90deg, #3d91eb, #6a43bd)
+    linear-gradient(90deg, var(--bb-blue), var(--bb-purple))
   );
   box-shadow: var(--bb-frame-shadow);
 }
@@ -56,12 +56,12 @@ body.profile-page-body .profile-header::after {
 
 body.profile-page-body .profile-header h1 {
   margin: 0;
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-family: var(--bb-font-display);
   font-size: clamp(16px, 2.4vw, 25px);
   line-height: 1.3;
   text-align: center;
   text-transform: uppercase;
-  text-shadow: var(--bb-title-shadow, 3px 4px 0 rgba(2, 5, 12, 0.72));
+  text-shadow: var(--bb-title-shadow);
 }
 
 body.profile-page-body .profile-grid {
@@ -74,9 +74,9 @@ body.profile-page-body .profile-grid {
 
 body.profile-page-body .profile-card {
   padding: 18px;
-  border: 2px solid var(--bb-border, #385478);
-  border-radius: var(--bb-radius-card, 0);
-  color: var(--bb-text, #f7f9ff);
+  border: 2px solid var(--bb-border);
+  border-radius: var(--bb-radius-card);
+  color: var(--bb-text);
   background: var(
     --bb-card-gradient,
     linear-gradient(180deg, #14243c, #0b172a)
@@ -88,7 +88,7 @@ body.profile-page-body .profile-card h2,
 body.profile-page-body .profile-card h3 {
   margin: 0 0 16px;
   color: #fff;
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-family: var(--bb-font-display);
   font-size: 14px;
   line-height: 1.4;
   text-transform: uppercase;
@@ -105,15 +105,15 @@ body.profile-page-body .profile-icon-trigger {
   width: 112px;
   height: 112px;
   padding: 6px;
-  border: 2px solid var(--bb-border-highlight, #7aa9e5);
-  border-radius: var(--bb-radius-card, 0);
+  border: 2px solid var(--bb-border-highlight);
+  border-radius: var(--bb-radius-card);
   color: #fff;
   background: rgba(5, 13, 28, 0.9);
   box-shadow: var(--bb-card-shadow);
   cursor: pointer;
   transition:
-    transform var(--bb-motion-fast, 130ms) var(--bb-ease, ease),
-    filter var(--bb-motion-fast, 130ms) ease;
+    transform var(--bb-motion-fast) var(--bb-ease),
+    filter var(--bb-motion-fast) ease;
 }
 
 body.profile-page-body .profile-icon-trigger:hover {
@@ -130,7 +130,7 @@ body.profile-page-body .profile-icon-trigger > img {
   width: 100%;
   height: 100%;
   display: block;
-  border-radius: var(--bb-radius-media, 4px);
+  border-radius: var(--bb-radius-media);
   object-fit: cover;
 }
 
@@ -143,13 +143,13 @@ body.profile-page-body .profile-icon-edit-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid var(--bb-ink, #03060b);
-  border-radius: var(--bb-radius-tag, 0);
+  border: 2px solid var(--bb-ink);
+  border-radius: var(--bb-radius-tag);
   background: var(
     --bb-primary-gradient,
     linear-gradient(180deg, #438feb, #285fc0)
   );
-  box-shadow: 0 3px 0 var(--bb-ink, #03060b);
+  box-shadow: 0 3px 0 var(--bb-ink);
 }
 
 body.profile-page-body .profile-icon-edit-badge img {
@@ -166,16 +166,16 @@ body.profile-page-body .stat-row {
   gap: 12px;
   margin-bottom: 9px;
   padding: 9px 11px;
-  border: 2px solid var(--bb-border-soft, #263b59);
-  border-radius: var(--bb-radius-card, 0);
-  color: var(--bb-text-soft, #c9d6e8);
+  border: 2px solid var(--bb-border-soft);
+  border-radius: var(--bb-radius-card);
+  color: var(--bb-text-soft);
   background: rgba(5, 13, 28, 0.68);
   box-shadow: var(--bb-inset-shadow);
 }
 
 body.profile-page-body .stat-row strong {
   color: #fff;
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-family: var(--bb-font-display);
   font-size: 11px;
 }
 
@@ -211,7 +211,7 @@ body.profile-page-body .profile-form {
 
 body.profile-page-body .profile-form label {
   margin-top: 2px;
-  color: var(--bb-text-soft, #c9d6e8);
+  color: var(--bb-text-soft);
   font-size: 13px;
   font-weight: 900;
 }
@@ -220,9 +220,9 @@ body.profile-page-body .profile-form input {
   width: 100%;
   min-height: 44px;
   padding: 9px 11px;
-  border: 2px solid var(--bb-border, #385478);
-  border-radius: var(--bb-radius-control, 0);
-  color: var(--bb-text, #f7f9ff);
+  border: 2px solid var(--bb-border);
+  border-radius: var(--bb-radius-control);
+  color: var(--bb-text);
   background: rgba(5, 12, 25, 0.88);
   box-shadow: var(--bb-inset-shadow);
 }
@@ -247,7 +247,7 @@ body.profile-page-body .cards-modal.hidden {
 body.profile-page-body .cards-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: var(--bb-popup-backdrop, rgba(5, 10, 22, 0.74));
+  background: var(--bb-popup-backdrop);
 }
 
 body.profile-page-body .cards-modal-panel {
@@ -258,13 +258,10 @@ body.profile-page-body .cards-modal-panel {
   max-height: 88vh;
   overflow: auto;
   padding: 16px;
-  border: 3px solid var(--bb-border, #385478);
-  border-radius: var(--bb-radius-window, 10px);
-  color: var(--bb-text, #f7f9ff);
-  background: var(
-    --bb-surface-gradient,
-    linear-gradient(180deg, #111f37, #0b1629)
-  );
+  border: 3px solid var(--bb-border);
+  border-radius: var(--bb-radius-window);
+  color: var(--bb-text);
+  background: var(--bb-popup-bg);
   box-shadow: var(--bb-frame-shadow);
   transform: translate(-50%, -50%);
 }
@@ -279,16 +276,16 @@ body.profile-page-body .cards-modal-head {
   border-bottom: 2px solid rgba(255, 255, 255, 0.14);
   background: var(
     --bb-header-gradient,
-    linear-gradient(90deg, #3d91eb, #6a43bd)
+    linear-gradient(90deg, var(--bb-blue), var(--bb-purple))
   );
 }
 
 body.profile-page-body .cards-modal-head h2 {
   margin: 0 auto 0 0;
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-family: var(--bb-font-display);
   font-size: 16px;
   text-transform: uppercase;
-  text-shadow: var(--bb-title-shadow, 3px 4px 0 rgba(2, 5, 12, 0.72));
+  text-shadow: var(--bb-title-shadow);
 }
 
 body.profile-page-body .cards-modal-head .browse-shop-link {
@@ -313,8 +310,8 @@ body.profile-page-body .card-tile {
   position: relative;
   overflow: hidden;
   padding: 10px;
-  border: 2px solid var(--bb-border-soft, #263b59);
-  border-radius: var(--bb-radius-card, 0);
+  border: 2px solid var(--bb-border-soft);
+  border-radius: var(--bb-radius-card);
   background: var(
     --bb-card-gradient,
     linear-gradient(180deg, #14243c, #0b172a)
@@ -331,7 +328,7 @@ body.profile-page-body .card-tile > img {
 
 body.profile-page-body .icon-tile > img {
   aspect-ratio: 1;
-  border-radius: var(--bb-radius-media, 4px);
+  border-radius: var(--bb-radius-media);
   object-fit: cover;
 }
 
@@ -355,11 +352,11 @@ body.profile-page-body .card-actions {
   align-items: center;
   justify-content: center;
   padding: 4px 8px;
-  border: 2px solid var(--bb-ink, #03060b);
-  border-radius: var(--bb-radius-tag, 0);
+  border: 2px solid var(--bb-ink);
+  border-radius: var(--bb-radius-tag);
   color: #fff;
-  box-shadow: 0 3px 0 var(--bb-ink, #03060b);
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  box-shadow: 0 3px 0 var(--bb-ink);
+  font-family: var(--bb-font-display);
   font-size: 8px;
   text-transform: uppercase;
 }
@@ -371,7 +368,7 @@ body.profile-page-body .card-actions {
   background: #2867c4;
 }
 .profile-card-rarity.epic {
-  background: #6a43bd;
+  background: var(--bb-purple);
 }
 .profile-card-rarity.legendary {
   background: #c47b16;
@@ -480,7 +477,7 @@ body.profile-page-body .card-actions {
 
 .profile-bros-unlocked-count {
   color: #8ba3c7;
-  font-family: var(--bb-font-body, "Lato", sans-serif);
+  font-family: var(--bb-font-body);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0;
@@ -510,7 +507,7 @@ body.profile-page-body .card-actions {
   gap: 10px;
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 2px solid var(--bb-border-soft, #263b59);
+  border-bottom: 2px solid var(--bb-border-soft);
 }
 
 .battle-log-header h2,
@@ -520,10 +517,10 @@ body.profile-page-body .card-actions {
   align-items: center;
   gap: 10px;
   color: #fff;
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-family: var(--bb-font-display);
   font-size: 14px;
   text-transform: uppercase;
-  text-shadow: var(--bb-title-shadow, 3px 4px 0 rgba(2, 5, 12, 0.72));
+  text-shadow: var(--bb-title-shadow);
 }
 
 .battle-log-summary-bar {
@@ -568,7 +565,7 @@ body.profile-page-body .card-actions {
 .battle-log-metric strong {
   color: #fff;
   font-weight: 900;
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-family: var(--bb-font-display);
   font-size: 11px;
 }
 
@@ -580,7 +577,7 @@ body.profile-page-body .card-actions {
 
 .battle-log-metric.record {
   padding-right: 12px;
-  border-right: 1px solid var(--bb-border-soft, #263b59);
+  border-right: 1px solid var(--bb-border-soft);
 }
 
 .battle-log-metric.trophies.positive strong {
@@ -601,18 +598,10 @@ body.profile-page-body .card-actions {
   position: relative;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--bb-border-soft, #263b59);
-  border-radius: var(--bb-radius-card, 0);
-  background: var(--bb-card-gradient, linear-gradient(180deg, #14243c, #0b172a));
-  box-shadow: 0 2px 0 var(--bb-ink, #03060b);
   overflow: hidden;
-  transition: transform var(--bb-motion-fast, 130ms) ease;
+  transition: transform var(--bb-motion-fast) ease;
 }
 
-.battle-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--bb-border-highlight, #7aa9e5);
-}
 
 .battle-card.victory {
   border-left: 3px solid #19c890;
@@ -656,7 +645,7 @@ body.profile-page-body .card-actions {
 
 .battle-match-meta h4 {
   margin: 0 0 2px;
-  color: #f7f9ff;
+  color: var(--bb-text);
   font-size: 13px;
   line-height: 1.2;
 }
@@ -684,8 +673,8 @@ body.profile-page-body .card-actions {
   justify-content: center;
   min-width: 78px;
   padding: 5px 9px;
-  border: 1px solid var(--bb-ink, #03060b);
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  border: 1px solid var(--bb-ink);
+  font-family: var(--bb-font-display);
   font-size: 8px;
   line-height: 1;
   text-transform: uppercase;
@@ -694,11 +683,11 @@ body.profile-page-body .card-actions {
 }
 
 .battle-outcome-badge.victory {
-  background: var(--bb-success-gradient, linear-gradient(180deg, #19c890, #079063));
+  background: var(--bb-success-gradient);
 }
 
 .battle-outcome-badge.defeat {
-  background: var(--bb-danger-gradient, linear-gradient(180deg, #d64a4a, #a92833));
+  background: var(--bb-danger-gradient);
 }
 
 .battle-outcome-badge.draw {
@@ -712,7 +701,7 @@ body.profile-page-body .card-actions {
   min-width: 48px;
   justify-content: flex-end;
   padding: 0;
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-family: var(--bb-font-display);
   font-size: 9px;
   line-height: 1;
 }
@@ -726,7 +715,7 @@ body.profile-page-body .card-actions {
 }
 
 .battle-trophy-pill.neutral {
-  color: #c9d6e8;
+  color: var(--bb-text-soft);
 }
 
 /* Compact secondary details */
@@ -752,7 +741,7 @@ body.profile-page-body .card-actions {
 .battle-detail-divider {
   width: 1px;
   height: 12px;
-  background: var(--bb-border-soft, #263b59);
+  background: var(--bb-border-soft);
 }
 
 .battle-details-row .chip-val {
@@ -787,10 +776,10 @@ body.profile-page-body .card-actions {
   align-items: center;
   text-align: center;
   padding: 36px 16px;
-  border-radius: var(--bb-radius-card, 0);
+  border-radius: var(--bb-radius-card);
   background: rgba(5, 12, 25, 0.7);
-  border: 2px dashed var(--bb-border-soft, #263b59);
-  box-shadow: 0 4px 0 var(--bb-ink, #03060b);
+  border: 2px dashed var(--bb-border-soft);
+  box-shadow: 0 4px 0 var(--bb-ink);
 }
 
 .battle-log-empty-icon {
@@ -801,12 +790,12 @@ body.profile-page-body .card-actions {
 .battle-log-empty-icon img {
   width: 96px;
   height: auto;
-  filter: drop-shadow(0 3px 0 var(--bb-ink, #03060b));
+  filter: drop-shadow(0 3px 0 var(--bb-ink));
 }
 
 .battle-log-empty h4 {
   margin: 0 0 8px;
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-family: var(--bb-font-display);
   font-size: 12px;
   color: #fff;
   text-transform: uppercase;
@@ -882,28 +871,28 @@ body.profile-page-body .card-actions {
 #email-form button:disabled { opacity: .6; cursor: wait; }
 
 /* Account email uses the same framed panels and pixel controls as the lobby. */
-.email-dialog { width:min(92vw,500px); padding:0; max-height:calc(100dvh - 32px); overflow:auto; border:3px solid var(--bb-border,#385478); border-radius:var(--bb-radius-window,10px); color:var(--bb-text,#eef5ff); background:var(--bb-surface-gradient,linear-gradient(#111f37,#0b1629)); box-shadow:var(--bb-frame-shadow); }
-.email-dialog::backdrop { background:var(--bb-popup-backdrop,rgba(5,10,22,.74)); }
-.email-dialog-card { display:grid; padding:28px; gap:22px; font:15px/1.5 var(--bb-font-body,"Lato",sans-serif); border-top:8px solid #438feb; }
-.email-dialog-card h2 { margin:0; font:18px/1.6 var(--bb-font-display,"Press Start 2P",monospace); text-shadow:var(--bb-title-shadow); }
-.email-dialog-eyebrow { margin:0; padding-right:40px; color:#91c9ff; font:10px/1.6 var(--bb-font-display,"Press Start 2P",monospace); }
-.email-dialog-close { position:absolute; top:16px; right:16px; width:32px; height:32px; padding:0; border:2px solid #03060b; border-radius:0; color:#fff; background:#29405f; box-shadow:inset 0 2px #6686aa,0 3px #03060b; font:24px/1 monospace; cursor:pointer; }
+.email-dialog { width:min(92vw,500px); padding:0; max-height:calc(100dvh - 32px); overflow:auto; color:var(--bb-text); }
+.email-dialog::backdrop { background:var(--bb-popup-backdrop); }
+.email-dialog-card { display:grid; padding:28px; gap:22px; font:15px/1.5 var(--bb-font-body); border-top:8px solid #438feb; }
+.email-dialog-card h2 { margin:0; font:18px/1.6 var(--bb-font-display); text-shadow:var(--bb-title-shadow); }
+.email-dialog-eyebrow { margin:0; padding-right:40px; color:#91c9ff; font:10px/1.6 var(--bb-font-display); }
+.email-dialog-close { position:absolute; top:16px; right:16px; width:32px; height:32px; padding:0; border:2px solid var(--bb-ink); border-radius:0; color:#fff; background:#29405f; box-shadow:inset 0 2px #6686aa,0 3px var(--bb-ink); font:24px/1 monospace; cursor:pointer; }
 .email-dialog-card .email-step { display:grid; gap:18px; margin:0; }
 .email-dialog-card label { display:grid; gap:8px; font-weight:700; }
 .email-dialog [hidden] { display:none!important; }
-.email-dialog-card input { width:100%; box-sizing:border-box; min-height:48px; padding:0 12px; border:2px solid var(--bb-border,#385478); border-radius:0; background:#071123; color:#fff; box-shadow:var(--bb-inset-shadow); font:11px/1.6 var(--bb-font-display,"Press Start 2P",monospace); user-select:text; -webkit-user-select:text; cursor:text; }
+.email-dialog-card input { width:100%; box-sizing:border-box; min-height:48px; padding:0 12px; border:2px solid var(--bb-border); border-radius:0; background:#071123; color:#fff; box-shadow:var(--bb-inset-shadow); font:11px/1.6 var(--bb-font-display); user-select:text; -webkit-user-select:text; cursor:text; }
 .email-dialog-card .profile-btn { width:100%; margin:4px 0; min-height:44px; background:linear-gradient(#438fea,#2562bc); color:#fff; }
 .email-dialog .verification-destination { display:flex; align-items:center; gap:16px; }
 .email-dialog [data-destination] { min-width:0; overflow-wrap:anywhere; flex:1; }
 .email-code-inputs { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:7px; margin:8px 0; }
 .email-code-inputs input { padding:0; height:52px; text-align:center; font-size:22px; }
-.email-text-button { border:0; padding:8px; background:transparent; color:#abd2ff; font:10px/1.6 var(--bb-font-display,"Press Start 2P",monospace); cursor:pointer; }
+.email-text-button { border:0; padding:8px; background:transparent; color:#abd2ff; font:10px/1.6 var(--bb-font-display); cursor:pointer; }
 .email-dialog-message { margin:0; color:#9fdbbe; font-size:13px; }
 .email-dialog-message.is-error { color:#ffb5bf; }
-.email-dialog-card .email-marketing-setting { display:flex; align-items:center; gap:12px; border-top:2px solid #263b59; padding-top:20px; color:#b9cbe0; font:14px/1.5 var(--bb-font-body,"Lato",sans-serif); }
-.email-marketing-setting input[type=checkbox] { appearance:none; -webkit-appearance:none; flex:none; width:26px; height:26px; min-height:26px; padding:0; margin:0; border:3px solid #03060b; background:#23374f; box-shadow:0 3px #03060b,inset 0 2px #6b85a2; cursor:pointer; }
+.email-dialog-card .email-marketing-setting { display:flex; align-items:center; gap:12px; border-top:2px solid var(--bb-border-soft); padding-top:20px; color:#b9cbe0; font:14px/1.5 var(--bb-font-body); }
+.email-marketing-setting input[type=checkbox] { appearance:none; -webkit-appearance:none; flex:none; width:26px; height:26px; min-height:26px; padding:0; margin:0; border:3px solid var(--bb-ink); background:#23374f; box-shadow:0 3px var(--bb-ink),inset 0 2px #6b85a2; cursor:pointer; }
 .email-marketing-setting input:checked { background:#309d51 url("/assets/ui/pixel-check.webp") center/20px 20px no-repeat; image-rendering:pixelated; }
-.email-dialog :is(button,input):focus-visible { outline:3px solid var(--bb-gold,#ffd166); outline-offset:4px; }
+.email-dialog :is(button,input):focus-visible { outline:3px solid var(--bb-gold); outline-offset:4px; }
 .email-dialog :is(button,input):disabled { opacity:.55; cursor:default; }
 @media(max-width:480px) { .email-dialog-card { padding:24px 18px; }.email-code-inputs { gap:5px; }.email-dialog-card h2 { font-size:15px; } }
 

@@ -122,7 +122,7 @@ test("shop cards and purchase reveal use the pixel UI hierarchy", () => {
   assert.doesNotMatch(source, /TROPHY ROAD • CLAIMED/);
   assert.doesNotMatch(source, /<h2>\$\{escapeHtml\(item\?\.name/);
   assert.match(styles, /\.shop-price-money[\s\S]+"Press Start 2P"/);
-  assert.match(styles, /\.shop-buy-button[\s\S]+0 5px #03050a/);
+  assert.match(styles, /\.shop-buy-button[\s\S]+0 5px var\(--bb-ink\)/);
   assert.match(styles, /\.shop-offer-type/);
 });
 
@@ -220,11 +220,16 @@ test("character card hover avoids full-card filter repaints", () => {
     characterLogic.indexOf("function startParticles()"),
   );
 
+  // Frame, fill, and hover lift come from the shared card contract.
+  const contract = read("public/styles/ui-system.css");
+  const cardContract = contract.slice(contract.indexOf("/* ---- Cards:"), contract.indexOf("/* Selected / current choice. */"));
+
   assert.doesNotMatch(cardRules, /transition:[^;}]*\bfilter\b/);
   assert.doesNotMatch(cardRules, /\.character-card:hover\s*\{[^}]*filter:/);
-  assert.match(cardRules, /will-change:\s*transform/);
-  assert.match(cardRules, /transition:[^;]*\btransform\b/);
-  assert.match(cardRules, /\.character-card:hover\s*\{[^}]*transform:/);
+  assert.match(cardRules, /will-change:\s*translate/);
+  assert.doesNotMatch(cardContract, /transition:[^;}]*\bfilter\b/);
+  assert.match(cardContract, /transition:[^;]*\btranslate\b/);
+  assert.match(cardContract, /\.character-card,[\s\S]+?\):is\(:hover, :focus-visible\)[^{]*\{[^}]*translate:/);
   assert.doesNotMatch(styles, /\.character-card:hover \.character-profile-icon/);
   assert.doesNotMatch(styles, /\.character-card:hover \.character-card-info/);
   assert.doesNotMatch(particleStep, /clientWidth|clientHeight/);
@@ -237,7 +242,7 @@ test("max-level characters use the mastery visual treatment", () => {
   assert.match(characterLogic, /cardState\.isMaxed \? "is-maxed"/);
   assert.match(characterLogic, /crown\.webp[^;]+Max Level/);
   assert.doesNotMatch(characterLogic, /Mastered/);
-  assert.match(styles, /\.character-card\.is-maxed\s*\{/);
+  assert.match(read("public/styles/ui-system.css"), /\.character-card\.is-maxed\s*\{/);
   assert.match(styles, /@keyframes maxLevelSheen/);
   assert.match(styles, /\.character-details-preview-frame\.is-maxed/);
 });

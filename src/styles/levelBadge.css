@@ -43,9 +43,9 @@
   background-position: center, center;
   background-size: 108% 108%, 100% 100%;
   background-repeat: no-repeat;
-  border: 2px solid #03060b;
+  border: 2px solid var(--bb-ink);
   box-shadow:
-    0 3px 0 #03060b,
+    0 3px 0 var(--bb-ink),
     0 0 7px rgba(var(--level-accent-rgb), 0.18),
     inset 0 0 0 2px rgba(var(--level-accent-rgb), 0.62);
   animation: level-badge-gradient-gleam 3.8s ease-in-out infinite;
@@ -61,10 +61,10 @@
   background:
     linear-gradient(180deg, rgba(var(--level-accent-rgb), 0.34), transparent),
     linear-gradient(180deg, #2b415d, #132238);
-  border-bottom: 2px solid #03060b;
+  border-bottom: 2px solid var(--bb-ink);
   text-align: center;
   letter-spacing: 0.5px;
-  text-shadow: 0 2px #03060b;
+  text-shadow: 0 2px var(--bb-ink);
 }
 
 .level-badge--framed .level-badge__caption {
@@ -85,7 +85,7 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow: none;
-  filter: drop-shadow(0 2px 0 #03060b)
+  filter: drop-shadow(0 2px 0 var(--bb-ink))
     drop-shadow(0 0 3px rgba(var(--level-accent-rgb), 0.38));
   animation: level-caption-gleam 4s linear infinite;
 }
@@ -108,14 +108,14 @@
   100% {
     background-size: 108% 108%, 100% 100%;
     box-shadow:
-      0 3px 0 #03060b,
+      0 3px 0 var(--bb-ink),
       0 0 7px rgba(var(--level-accent-rgb), 0.18),
       inset 0 0 0 2px rgba(var(--level-accent-rgb), 0.62);
   }
   50% {
     background-size: 148% 148%, 100% 100%;
     box-shadow:
-      0 3px 0 #03060b,
+      0 3px 0 var(--bb-ink),
       0 0 11px rgba(var(--level-accent-rgb), 0.3),
       inset 0 0 0 2px rgba(var(--level-accent-rgb), 0.78);
   }

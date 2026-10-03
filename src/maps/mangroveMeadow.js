@@ -40,7 +40,7 @@ export const definition = {
   name: "Mangrove Meadow",
   bgAsset: "/assets/mangrove/gameBg.webp",
   mapSelectPreviewAsset: "/assets/mangrove/gameBg.webp",
-  lobbyBgAsset: "/assets/site/mangrove-home.webp",
+  lobbyBgAsset: "/assets/mangrove/lobbyBg.webp",
   lobbyPlatformAsset: "/assets/mangrove/lobbyPlatform.webp",
   lobbyCharacterOffsetY: 55,
 

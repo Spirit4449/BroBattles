@@ -1,25 +1,26 @@
-/* Battle-only shared frame: the chat launcher's stepped black pixel border. */
+/* Battle HUD chrome. The match clock is the benchmark: one stepped ink frame
+   over the mosaic fill, with no extra border or drop-shadow stacked on top. */
 body :is(#game-timer-hud, .fullscreen-toggle, .bb-dash-hud,
-  .bb-chat-button, #battle-keybind-hud .controls-mini-toggle) {
-  --battle-pixel-frame: 0 4px #03060b, 0 -4px #03060b,
-    4px 0 #03060b, -4px 0 #03060b, 0 8px #0005,
-    4px 4px #0005, -4px 4px #0005, inset 0 3px #ffffff30;
+  .bb-chat-button, #battle-keybind-hud .controls-mini-toggle,
+  .game-status-banner, #spectate-hud) {
+  --battle-pixel-frame: var(--bb-hud-frame);
   border: 0;
   border-radius: 0;
-  background-color: #102744;
-  background-image: linear-gradient(90deg, #10274430, #102744dd 45%, #10274460),
-    url('/assets/chromas/lobby-chroma-mosaic.svg');
-  background-size: auto, 288px 48px;
+  background: var(--bb-hud-bg);
   box-shadow: var(--battle-pixel-frame);
+}
+body #game-timer-hud.sudden-death,
+body .game-status-banner.variant-danger {
+  background: var(--bb-hud-bg-danger);
 }
 /* Settings, Controls, and Battle Chat share one outer shell; their controls
    and content panels keep their own colors and layout. */
 body :is(.site-settings-window.site-settings-side,
   #battle-keybind-hud .controls-popover, .bb-chat-game-panel.bb-chat-shell) {
-  border: var(--bb-border-width) solid var(--bb-border);
-  border-radius: var(--bb-radius-window);
-  background: var(--bb-surface-gradient);
-  box-shadow: var(--bb-frame-shadow);
+  border: var(--bb-popup-border-width) solid var(--bb-popup-border-color);
+  border-radius: 0;
+  background: var(--bb-popup-bg);
+  box-shadow: var(--bb-popup-shadow);
 }
 body .site-settings-window.site-settings-side:not(:focus-within) {
   opacity: .88;
@@ -90,8 +91,8 @@ body #battle-keybind-hud .controls-dash-row kbd {
 }
 body #team-status-hud .team-hud-avatar-ring {
   border-radius: 0;
-  box-shadow: 0 3px #03060b, 0 -3px #03060b, 3px 0 #03060b,
-    -3px 0 #03060b, 0 6px #0005;
+  box-shadow: 0 3px var(--bb-ink), 0 -3px var(--bb-ink), 3px 0 var(--bb-ink),
+    -3px 0 var(--bb-ink), 0 6px #0005;
 }
 body #team-status-hud .team-hud-avatar-core {
   border-radius: 0;

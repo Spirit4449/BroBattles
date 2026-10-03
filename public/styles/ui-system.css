@@ -64,13 +64,13 @@
   --bb-danger-gradient: linear-gradient(180deg, var(--bb-red), var(--bb-red-deep));
   --bb-primary-gradient: linear-gradient(180deg, #438feb, #285fc0);
 
-  /* Large windows may be subtly rounded; interactive and inset pieces stay square. */
-  --bb-radius-window: 10px;
-  --bb-radius-media: 4px;
+  /* Every frame is square: windows, cards, media, controls, and tags. */
+  --bb-radius-window: 0px;
+  --bb-radius-media: 0px;
   --bb-radius-card: 0px;
   --bb-radius-control: 0px;
   --bb-radius-tag: 0px;
-  --bb-radius-pill: 999px;
+  --bb-radius-pill: 0px;
 
   --bb-border-width: 3px;
   --bb-frame-shadow:
@@ -132,6 +132,72 @@
   --bb-ease: cubic-bezier(0.2, 0.75, 0.25, 1);
   --bb-popup-motion: 150ms;
   --bb-popup-shift: 12px;
+
+  /* ---- Semantic component tokens. Components consume these, never raw hex. ---- */
+
+  /* Popups and modals: one window surface for every dialog in lobby and battle. */
+  /* Flat on purpose: a gradient reads as a different color on every window height. */
+  --bb-popup-surface: #0c182c;
+  --bb-popup-bg: var(--bb-popup-surface);
+  --bb-popup-border-color: var(--bb-border);
+  --bb-popup-border-width: var(--bb-border-width);
+  --bb-popup-shadow: var(--bb-frame-shadow);
+  --bb-popup-pad: var(--bb-space-5);
+  --bb-popup-divider: 2px solid rgba(255, 255, 255, 0.14);
+
+  /* Inset panels inside a popup (settings rows, profile sections). */
+  --bb-panel-bg: rgba(8, 18, 36, 0.76);
+  --bb-panel-border: 2px solid var(--bb-border-soft);
+  --bb-panel-shadow: var(--bb-inset-shadow);
+
+  /* Cards: benchmarked on the profile icon picker tile. */
+  --bb-card-bg: var(--bb-card-gradient);
+  --bb-card-bg-hover: linear-gradient(180deg, #1a2e4b, #0f1d33);
+  --bb-card-border-width: 2px;
+  --bb-card-border-color: var(--bb-border);
+  --bb-card-border-hover: var(--bb-border-highlight);
+  --bb-card-border-selected: var(--bb-green);
+  --bb-card-border-current: var(--bb-gold);
+  --bb-card-shadow-pressed:
+    0 0 0 4px var(--bb-ink),
+    0 2px 0 var(--bb-ink),
+    inset 0 2px rgba(0, 0, 0, 0.24);
+  --bb-card-locked-bg: linear-gradient(180deg, #161d2a, #0c111b);
+  --bb-card-locked-border: #2c374a;
+  --bb-card-pad: var(--bb-space-3);
+  --bb-card-gap: var(--bb-space-2);
+  --bb-card-grid-gap: var(--bb-space-5);
+  --bb-card-title-size: 10px;
+
+  /* In-battle HUD chrome, benchmarked on the match clock. */
+  --bb-hud-frame:
+    0 4px var(--bb-ink),
+    0 -4px var(--bb-ink),
+    4px 0 var(--bb-ink),
+    -4px 0 var(--bb-ink),
+    0 8px rgba(0, 0, 0, 0.33),
+    4px 4px rgba(0, 0, 0, 0.33),
+    -4px 4px rgba(0, 0, 0, 0.33),
+    inset 0 3px rgba(255, 255, 255, 0.19);
+  --bb-hud-fill: #102744;
+  --bb-hud-fill-danger: #4a1a26;
+  --bb-hud-mosaic: url("/assets/chromas/lobby-chroma-mosaic.svg") 0 0 / 288px 48px;
+  --bb-hud-bg: linear-gradient(90deg, #10274430, #102744dd 45%, #10274460), var(--bb-hud-mosaic), var(--bb-hud-fill);
+  --bb-hud-bg-danger: linear-gradient(90deg, #4a1a2630, #4a1a26e6 45%, #4a1a2660), var(--bb-hud-mosaic), var(--bb-hud-fill-danger);
+  --bb-hud-label: var(--bb-border-highlight);
+
+  /* Currency: one chip and one palette everywhere coins, gems, or trophies show. */
+  --bb-coin: #ffd36a;
+  --bb-gem: #8fe6ff;
+  --bb-trophy: #ffd36a;
+  --bb-currency-chip-bg: linear-gradient(180deg, #0d1a2e, #081221);
+  --bb-currency-chip-border: 2px solid var(--bb-border-soft);
+  --bb-currency-chip-shadow: 0 3px 0 var(--bb-ink), inset 0 2px rgba(255, 255, 255, 0.07);
+  --bb-currency-icon: 20px;
+
+  /* Rhythm for button rows and stacked actions. */
+  --bb-stack-gap: var(--bb-space-3);
+  --bb-action-gap: var(--bb-space-4);
 }
 
 *,
@@ -250,6 +316,8 @@ input:-webkit-autofill:focus {
   .shop-load-error button,
   .bb-chat-send,
   .sonner__btn,
+  .cs-btn,
+  .game-notice-btn,
   body.admin-page button,
   .status-action
 ) {
@@ -283,6 +351,8 @@ input:-webkit-autofill:focus {
   .shop-load-error button,
   .bb-chat-send,
   .sonner__btn,
+  .cs-btn,
+  .game-notice-btn,
   body.admin-page button,
   .status-action
 ):hover:not(:disabled) {
@@ -302,6 +372,8 @@ input:-webkit-autofill:focus {
   .shop-load-error button,
   .bb-chat-send,
   .sonner__btn,
+  .cs-btn,
+  .game-notice-btn,
   body.admin-page button,
   .status-action
 ):active:not(:disabled) {
@@ -322,6 +394,8 @@ input:-webkit-autofill:focus {
   .shop-load-error button,
   .bb-chat-send,
   .sonner__btn,
+  .cs-btn,
+  .game-notice-btn,
   body.admin-page button,
   .status-action
 ):active:not(:disabled) > * {
@@ -469,11 +543,7 @@ input:-webkit-autofill:focus {
 /* Reusable presets for new UI. Existing components below are mapped to the same contract. */
 .bb-popup {
   overflow: hidden;
-  border: var(--bb-border-width) solid var(--bb-border);
-  border-radius: var(--bb-radius-window);
   color: var(--bb-text);
-  background: var(--bb-surface-gradient);
-  box-shadow: var(--bb-frame-shadow);
 }
 
 .bb-popup-header {
@@ -796,7 +866,7 @@ button.bb-chat-close.bb-chat-close {
   padding: 0 !important;
   margin: 0 !important;
   border: 0 !important;
-  border-radius: 2px !important;
+  border-radius: 0 !important;
   color: #fff !important;
   background: var(--bb-danger-gradient) !important;
   box-shadow: var(--bb-control-shadow) !important;
@@ -1053,11 +1123,7 @@ body.profile-page-body .profile-form[hidden] {
 
 .profile-loadout-modal .profile-icon-choice-tile,
 .profile-loadout-modal .profile-card-tile {
-  border: 2px solid var(--bb-border);
-  border-radius: var(--bb-radius-card);
   color: var(--bb-text);
-  background: var(--bb-card-gradient);
-  box-shadow: var(--bb-card-shadow);
   font-family: var(--bb-font-body);
   transition:
     transform var(--bb-motion-fast) var(--bb-ease),
@@ -1070,29 +1136,13 @@ body.profile-page-body .profile-form[hidden] {
   background: var(--bb-bg-deep);
 }
 
-.profile-loadout-modal .profile-icon-choice-tile:hover:not(:disabled):not(.is-selected),
-.profile-loadout-modal .profile-card-tile:hover:not(.is-selected) {
-  border-color: var(--bb-border-highlight);
-  box-shadow: var(--bb-card-shadow);
-  transform: translateY(-2px);
-}
 
-.profile-loadout-modal .profile-icon-choice-tile:active:not(:disabled):not(.is-selected) {
-  transform: translateY(2px);
-  box-shadow: var(--bb-inset-shadow);
-}
 
 .profile-loadout-modal .profile-icon-choice-tile:focus-visible {
   outline: 2px solid var(--bb-border-highlight);
   outline-offset: 5px;
 }
 
-.profile-loadout-modal .profile-icon-choice-tile.is-selected,
-.profile-loadout-modal .profile-card-tile.is-selected {
-  border-color: var(--bb-green);
-  background: var(--bb-card-gradient);
-  box-shadow: var(--bb-card-shadow), inset 0 -3px 0 var(--bb-green-deep);
-}
 
 /* The portrait supplies its own inner frame; the complete choice stays raised. */
 .profile-loadout-modal .profile-icon-art {
@@ -1120,26 +1170,6 @@ body.profile-page-body .profile-form[hidden] {
   color: var(--bb-gold);
 }
 
-/* Map established UI to the presets without changing layout or behavior. */
-:is(
-  .profile-popup,
-  .profile-loadout-modal,
-  .party-popup,
-  .party-join-request-panel,
-  .party-join-request-owner-panel,
-  .party-discovery-panel,
-  .party-settings-panel,
-  .mm-card,
-  .shop-window,
-  .cards-modal-panel,
-  .bb-chat-viewers-card,
-  .game-notice-card
-) {
-  border-color: var(--bb-border);
-  border-radius: var(--bb-radius-window);
-  background-color: var(--bb-surface-1);
-  box-shadow: var(--bb-frame-shadow);
-}
 
 /* Join-request dialogs follow the shared window-and-inset visual hierarchy. */
 :is(
@@ -1154,7 +1184,6 @@ body.profile-page-body .profile-form[hidden] {
 
 :is(.party-join-request-panel, .party-join-request-owner-panel) {
   font-family: var(--bb-font-body);
-  background: var(--bb-surface-gradient);
 }
 
 :is(.party-join-request-panel, .party-join-request-owner-panel)
@@ -1190,10 +1219,6 @@ body.profile-page-body .profile-form[hidden] {
   background: rgba(169, 40, 51, 0.2);
 }
 
-.party-request-card {
-  border-color: var(--bb-border-soft);
-  background: var(--bb-card-gradient);
-}
 
 .party-request-pill {
   border-color: var(--bb-border-soft);
@@ -1342,12 +1367,6 @@ body.profile-page-body .profile-form[hidden] {
   color: #d8e9ff;
 }
 
-.party-discovery-card {
-  border-radius: var(--bb-radius-card);
-  border: 1px solid var(--bb-border-soft);
-  background: var(--bb-card-gradient);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.04);
-}
 
 .party-discovery-title {
   font-size: var(--bb-text-lg);
@@ -1355,16 +1374,6 @@ body.profile-page-body .profile-form[hidden] {
   font-weight: 700;
 }
 
-.party-discovery-detail {
-  background: var(--bb-surface-2);
-  border: 1px solid var(--bb-border-soft);
-  color: var(--bb-text);
-  font-size: var(--bb-text-md);
-}
-
-.party-discovery-roster {
-  border-top: 1px solid var(--bb-border-soft);
-}
 
 .party-discovery-meta {
   color: var(--bb-text-soft);
@@ -1467,7 +1476,6 @@ body.profile-page-body .profile-form[hidden] {
 
 :is(.party-discovery-panel, .party-settings-panel) {
   font-family: var(--bb-font-body);
-  background: var(--bb-surface-gradient);
 }
 
 :is(.party-discovery-panel, .party-settings-panel) .trophy-overlay-head p {
@@ -1502,10 +1510,6 @@ body.profile-page-body .profile-form[hidden] {
   flex-direction: column;
   overflow: hidden;
   padding: 0 26px 24px;
-  border: 3px solid var(--bb-border);
-  border-radius: var(--bb-radius-window);
-  background: var(--bb-surface-gradient);
-  box-shadow: var(--bb-frame-shadow);
   text-align: center;
   isolation: isolate;
 }
@@ -1522,19 +1526,7 @@ body.profile-page-body .profile-form[hidden] {
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 5px);
 }
 
-.bb-game-over-card.is-victory {
-  border-color: #438c70;
-  box-shadow:
-    0 0 0 5px var(--bb-ink),
-    0 8px 0 var(--bb-ink),
-    0 0 62px rgba(45, 222, 148, 0.2),
-    0 24px 56px rgba(0, 0, 0, 0.58),
-    inset 0 3px rgba(255, 255, 255, 0.09);
-}
 
-.bb-game-over-card.is-defeat {
-  border-color: #724558;
-}
 
 .bb-game-over-hero {
   position: relative;
@@ -1666,7 +1658,7 @@ body.profile-page-body .profile-form[hidden] {
   border: 2px solid #4e5562;
   background: linear-gradient(180deg, #1d2a3c, #101a29);
   box-shadow:
-    0 4px 0 #03050a,
+    0 4px 0 var(--bb-ink),
     inset 0 2px rgba(255, 255, 255, 0.08);
 }
 
@@ -1797,7 +1789,9 @@ body.profile-page-body .profile-form[hidden] {
   padding: 9px 14px;
   border-bottom: 1px solid rgba(176, 219, 255, 0.13);
   color: var(--bb-text-soft);
-  font-size: 13px;
+  font-family: var(--bb-font-display);
+  font-size: 9px;
+  line-height: 1.5;
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
@@ -1809,7 +1803,6 @@ body.profile-page-body .profile-form[hidden] {
 .bb-game-over-result-row > :first-child {
   overflow: hidden;
   color: var(--bb-text);
-  font-weight: 800;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1817,17 +1810,15 @@ body.profile-page-body .profile-form[hidden] {
 
 .bb-game-over-result-row.is-header {
   min-height: 30px;
-  color: #9db2cc;
+  color: var(--bb-text-muted);
   background: rgba(32, 55, 86, 0.55);
-  font-family: var(--bb-font-display);
-  font-size: 6px;
-  letter-spacing: 0.45px;
+  font-size: 7px;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .bb-game-over-result-row.is-header > :first-child {
-  color: #b9cbe0;
-  font-weight: 400;
+  color: var(--bb-text-muted);
 }
 
 .bb-game-over-result-row.is-you {
@@ -1842,7 +1833,7 @@ body.profile-page-body .profile-form[hidden] {
   color: #b9dcff;
   background: rgba(66, 145, 226, 0.26);
   font-family: var(--bb-font-display);
-  font-size: 5px;
+  font-size: 6px;
   line-height: 1;
   text-transform: uppercase;
   vertical-align: 2px;
@@ -1895,7 +1886,7 @@ body.profile-page-body .profile-form[hidden] {
   border: 2px solid #324c6d;
   background: rgba(7, 15, 28, 0.96);
   box-shadow:
-    0 5px 0 #03050a,
+    0 5px 0 var(--bb-ink),
     0 9px 20px rgba(0, 0, 0, 0.38),
     inset 0 2px rgba(255, 255, 255, 0.08);
   transform-origin: center;
@@ -2237,13 +2228,6 @@ body.profile-page-body .profile-form[hidden] {
   }
 }
 
-/* Compact in-game help follows the same framed-panel language. */
-#battle-keybind-hud .controls-popover {
-  border: 3px solid var(--bb-border);
-  border-radius: var(--bb-radius-window);
-  background: var(--bb-surface-gradient);
-  box-shadow: var(--bb-frame-shadow);
-}
 
 #battle-keybind-hud .bs-help-title {
   color: var(--bb-text);
@@ -2330,7 +2314,7 @@ body.profile-page-body .profile-form[hidden] {
 
 /* Compact dialogs have a title instead of a separate header element. */
 .cs-confirm {
-  --bb-confirm-padding: 22px;
+  --bb-confirm-padding: var(--bb-popup-pad);
   padding: var(--bb-confirm-padding);
   overflow: hidden;
 }
@@ -2343,9 +2327,6 @@ body.profile-page-body .profile-form[hidden] {
 }
 
 .game-notice-card .game-notice-title {
-  margin: -18px -20px 16px;
-  padding: 18px 20px;
-  border-radius: 7px 7px 0 0;
   background: var(--bb-header-gradient);
 }
 
@@ -2510,10 +2491,6 @@ img:is([src*="/gem.webp"], [src*="/currency/gems-"]) { --currency-light: 86, 219
   box-sizing: border-box;
   width: min(228px, calc(100vw - 16px));
   max-height: min(200px, calc(100vh - 16px));
-  border: 1px solid #54718e;
-  border-radius: 3px;
-  background: #101e30;
-  box-shadow: 0 3px 0 #030a13, 0 6px 14px #0005;
   transform: translateY(var(--chat-popover-offset, -3px));
   transition: opacity 120ms ease, transform 120ms ease;
 }
@@ -2536,7 +2513,7 @@ img:is([src*="/gem.webp"], [src*="/currency/gems-"]) { --currency-light: 86, 219
   border: 0;
   background: none;
 }
-.bb-chat-viewers-popup .bb-chat-viewer-avatar { width: 20px; height: 20px; border-radius: 2px; }
+.bb-chat-viewers-popup .bb-chat-viewer-avatar { width: 20px; height: 20px; border-radius: 0; }
 .bb-chat-viewers-popup .bb-chat-viewer-name { font-size: 10px; overflow-wrap: anywhere; }
 .bb-chat-viewers-popup .bb-chat-viewer-time { font-size: 9px; white-space: nowrap; }
 .bb-chat-viewers-popup .bb-chat-viewers-empty { padding: 5px 0; }
@@ -2558,6 +2535,469 @@ img:is([src*="/gem.webp"], [src*="/currency/gems-"]) { --currency-light: 86, 219
   padding: 0 !important;
   margin: 0 !important;
   border: 0 !important;
-  border-radius: 2px !important;
+  border-radius: 0 !important;
 }
 .bb-chat-viewers-popup .bb-chat-viewers-head button[data-chat-viewers-close]::after { content: none; }
+
+/* ==========================================================================
+   Design system contract
+   --------------------------------------------------------------------------
+   The single source for popup shells, cards, and currency chips in the lobby
+   and battle UI. Component stylesheets own layout and content only; they do
+   not restate these frames. `body` lifts these rules above component rules
+   that load later (lazy chunks such as the shop) without needing !important.
+   ========================================================================== */
+
+/* ---- Popups & modals: identical surface, border, corners, and shadow. ---- */
+body :is(
+  .character-select-popup,
+  .character-details-popup,
+  .trophy-overlay-panel,
+  .profile-popup,
+  .profile-loadout-modal,
+  .party-popup,
+  .party-join-request-panel,
+  .party-join-request-owner-panel,
+  .party-discovery-panel,
+  .party-settings-panel,
+  .shop-window,
+  .cs-confirm,
+  .bb-game-over-card,
+  .game-notice-card,
+  .profile-slot-menu,
+  .bb-chat-viewers-card,
+  .email-dialog,
+  .site-dialog
+),
+body #battle-keybind-hud .controls-popover,
+body .site-dialog.site-settings-side[open] {
+  border: var(--bb-popup-border-width) solid var(--bb-popup-border-color);
+  border-radius: 0;
+  color: var(--bb-text);
+  background: var(--bb-popup-bg);
+  box-shadow: var(--bb-popup-shadow);
+}
+
+/* Checkout hosts the payment provider's light form, so it keeps its fill. */
+body .shop-checkout-panel {
+  border: var(--bb-popup-border-width) solid var(--bb-popup-border-color);
+  border-radius: 0;
+  box-shadow: var(--bb-popup-shadow);
+}
+
+/* Inner decorative frames were drawn for rounded windows. */
+body .shop-window::after {
+  display: none;
+}
+
+/* The chroma header strip under the window title. */
+body .character-select-popup::before {
+  border-bottom: var(--bb-popup-divider);
+}
+
+body :is(.shop-header, .trophy-overlay-head, .profile-popup-head, .profile-loadout-head,
+  .character-details-header, .bb-chat-header, .site-dialog > header) {
+  border-bottom: var(--bb-popup-divider);
+}
+
+body .shop-header {
+  background: var(--bb-header-gradient);
+}
+
+/* ---- Cards: the profile icon tile is the benchmark. ---------------------
+   Variants never restate the frame. They set:
+     --bb-card-accent / --bb-card-accent-hover   border color
+     --bb-card-fill   / --bb-card-fill-hover     background
+     --bb-card-halo                              extra glow or inset lip    */
+body :is(
+  .character-card,
+  .map-select-card,
+  .trophy-lane-card,
+  .profile-icon-choice-tile,
+  .profile-card-tile,
+  .profile-metric-card,
+  .profile-character-level-card,
+  .party-discovery-card,
+  .party-request-card,
+  .party-request-summary-card,
+  .battle-card,
+  .shop-offer
+) {
+  border: var(--bb-card-border-width) solid var(--bb-card-accent, var(--bb-card-border-color));
+  border-radius: 0;
+  box-shadow: var(--bb-card-shadow), var(--bb-card-halo, 0 0 transparent);
+  transition:
+    translate var(--bb-motion-fast) var(--bb-ease),
+    border-color var(--bb-motion-fast) ease,
+    background-color var(--bb-motion-fast) ease,
+    box-shadow var(--bb-motion-fast) ease;
+}
+
+/* Shop offers paint rarity light into their own fill; every other card uses the token. */
+body :is(
+  .character-card,
+  .map-select-card,
+  .trophy-lane-card,
+  .profile-icon-choice-tile,
+  .profile-card-tile,
+  .profile-metric-card,
+  .profile-character-level-card,
+  .party-discovery-card,
+  .party-request-card,
+  .party-request-summary-card,
+  .battle-card
+) {
+  background: var(--bb-card-fill, var(--bb-card-bg));
+}
+
+/* Interactive cards lift 2px. `translate` composes with layout transforms
+   (Trophy Road positions its cards with translateX(-50%)). */
+body :is(
+  .character-card,
+  .map-select-card,
+  .profile-icon-choice-tile,
+  .profile-card-tile,
+  .battle-card
+):is(:hover, :focus-visible):not(:disabled):not([aria-disabled="true"]) {
+  border-color: var(--bb-card-accent-hover, var(--bb-card-border-hover));
+  background: var(--bb-card-fill-hover, var(--bb-card-bg-hover));
+  translate: 0 -2px;
+}
+
+body :is(
+  .character-card,
+  .map-select-card,
+  .profile-icon-choice-tile,
+  .profile-card-tile
+):active:not(:disabled):not([aria-disabled="true"]) {
+  translate: 0 1px;
+  box-shadow: var(--bb-card-shadow-pressed);
+}
+
+body :is(.character-card, .map-select-card, .profile-icon-choice-tile, .profile-card-tile):focus-visible {
+  outline: 2px solid var(--bb-border-highlight);
+  outline-offset: 5px;
+}
+
+/* Selected / current choice. */
+body :is(
+  .character-card.selected,
+  .map-select-card.active,
+  .profile-icon-choice-tile.is-selected,
+  .profile-card-tile.is-selected
+) {
+  --bb-card-accent: var(--bb-card-border-selected);
+  --bb-card-accent-hover: var(--bb-card-border-selected);
+  --bb-card-halo: inset 0 -3px 0 var(--bb-green-deep);
+}
+
+/* Locked or unavailable. */
+body :is(.character-card.locked, .mode-select-card.is-trophy-locked) {
+  --bb-card-fill: var(--bb-card-locked-bg);
+  --bb-card-fill-hover: linear-gradient(180deg, #1b2333, #0f1520);
+  --bb-card-accent: var(--bb-card-locked-border);
+  --bb-card-accent-hover: #44526a;
+}
+
+/* Vibrant progression accents: same frame, accent color only. */
+body .character-card.is-maxed {
+  --bb-card-fill: radial-gradient(circle at 18% 34%, rgba(255, 207, 82, 0.1), transparent 44%), var(--bb-card-bg);
+  --bb-card-fill-hover: radial-gradient(circle at 18% 34%, rgba(255, 207, 82, 0.14), transparent 44%), var(--bb-card-bg-hover);
+  --bb-card-halo: inset 0 3px rgba(255, 230, 143, 0.24);
+}
+
+body .character-card.is-upgrade-ready {
+  --bb-card-halo: inset 0 3px rgba(255, 215, 125, 0.24);
+}
+
+body .trophy-lane-card.claimable {
+  --bb-card-accent: #38d66c;
+  --bb-card-halo: 0 0 22px rgba(56, 214, 108, 0.3);
+}
+
+body .trophy-lane-card.major {
+  --bb-card-accent: #e5a93b;
+  --bb-card-halo: 0 0 22px rgba(229, 169, 59, 0.3);
+}
+
+/* Shop offers share the standard card border; only real rarities tint it. */
+body .shop-offer.has-rarity:not(.shop-rarity-common) {
+  --bb-card-accent: rgba(var(--rarity-rgb), 0.7);
+}
+
+body .shop-offer.has-rarity {
+  --bb-card-halo: 0 0 24px rgba(var(--rarity-rgb), 0.14);
+}
+
+body .shop-offer.has-rarity:is(.shop-rarity-epic, .shop-rarity-legendary) {
+  --bb-card-halo: 0 0 34px rgba(var(--rarity-rgb), 0.22), inset 0 0 22px rgba(var(--rarity-rgb), 0.06);
+}
+
+/* Battle log keeps its result stripe on the left edge. */
+body .battle-card:is(.victory, .defeat, .draw, .unknown) {
+  border-left-width: 4px;
+}
+
+/* Profile metrics: accent stripe only, on the shared card fill. */
+body .profile-metric-card::after {
+  height: 3px;
+  background: var(--profile-metric-accent);
+  opacity: 1;
+}
+
+body .profile-metric-card[data-profile-metric="coins"] {
+  --profile-metric-accent: var(--bb-coin);
+}
+
+body .profile-metric-card[data-profile-metric="gems"] {
+  --profile-metric-accent: var(--bb-gem);
+  --profile-metric-glow: rgba(86, 219, 255, 0.2);
+}
+
+/* Card inner media frames are square too. */
+body :is(.map-select-card img, .trophy-lane-item-wrap, .profile-icon-art) {
+  border-radius: 0;
+}
+
+/* ---- Card typography: titles and labels use the pixel face. ---- */
+body :is(
+  .profile-icon-details strong,
+  .map-select-name,
+  .character-card-name,
+  .profile-character-level-name,
+  .party-discovery-title
+) {
+  font-family: var(--bb-font-display);
+  font-size: var(--bb-card-title-size);
+  font-weight: 400;
+  line-height: 1.5;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 var(--bb-ink);
+}
+
+body .profile-metric-card > span:not(.profile-metric-icon) {
+  color: var(--bb-text-muted);
+  font-family: var(--bb-font-display);
+  font-size: 8px;
+  letter-spacing: 0;
+}
+
+body .profile-metric-card strong {
+  font-family: var(--bb-font-display);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.3;
+  text-shadow: 2px 2px 0 var(--bb-ink);
+}
+
+body .profile-icon-status,
+body .profile-icon-requirement {
+  font-size: 12px;
+}
+
+/* ---- Card grid rhythm: room for the 4px ink ring plus a clear gutter. ---- */
+body :is(
+  .characters-grid,
+  .map-select-grid,
+  .mode-select-grid,
+  .shop-offer-grid,
+  .profile-icon-group-grid,
+  .profile-cards-grid,
+  .profile-character-levels-grid,
+  .party-bot-picker-grid,
+  .party-request-summary-grid
+) {
+  gap: var(--bb-card-grid-gap);
+}
+
+/* ---- Currency: one chip for the lobby header, shop wallet, and reveals. ---- */
+body :is(.currency-resource, .shop-header-wallet > span, .shop-reveal-wallet > span) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--bb-space-2);
+  min-width: 0;
+  min-height: 34px;
+  height: auto;
+  padding: 4px 12px 4px 8px;
+  border: var(--bb-currency-chip-border);
+  border-radius: 0;
+  background: var(--bb-currency-chip-bg);
+  box-shadow: var(--bb-currency-chip-shadow);
+}
+
+body :is(.currency-resource, .shop-header-wallet > span, .shop-reveal-wallet > span) img {
+  width: var(--bb-currency-icon);
+  height: var(--bb-currency-icon);
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+body :is(.currency-resource p, .shop-header-wallet strong, .shop-reveal-wallet strong) {
+  margin: 0;
+  color: var(--bb-text);
+  font: 400 10px/1 var(--bb-font-display);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 1px 2px 0 var(--bb-ink);
+}
+
+/* Labels repeat what the icon already says; the chip stays compact. */
+body :is(.shop-header-wallet small, .shop-reveal-wallet small) {
+  display: none;
+}
+
+body .currency-resource:is(:hover, :focus-visible) {
+  border-color: var(--bb-border-highlight);
+  background: var(--bb-currency-chip-bg);
+  filter: brightness(1.12);
+}
+
+body .shop-header-wallet,
+body .shop-reveal-wallet,
+#navbar-right .resources {
+  gap: var(--bb-space-3);
+}
+
+/* ---- Tags and small badges stay square. ---- */
+body :is(.trophy-claim-badge, .bb-chat-tab-count, .shop-rarity-badge, .profile-card-rarity) {
+  border-radius: 0;
+}
+
+/* ---- Spacing rhythm: pixel controls draw a 5px ink ring on every side, so
+   rows and stacks of them need the action gap to read as separate buttons. ---- */
+body :is(
+  .cs-confirm-actions,
+  .game-notice-actions,
+  .party-settings-actions,
+  .party-request-actions-row,
+  .profile-account-actions,
+  .profile-guest-actions,
+  .profile-loadout-head-actions,
+  .mm-actions,
+  .mm-fill-actions,
+  .lobby-quick-actions,
+  .bb-friends-actions
+) {
+  gap: var(--bb-action-gap);
+}
+
+body .game-notice-card {
+  padding: var(--bb-popup-pad);
+}
+
+body .game-notice-card .game-notice-title {
+  margin: calc(-1 * var(--bb-popup-pad)) calc(-1 * var(--bb-popup-pad)) var(--bb-space-4);
+  padding: 18px var(--bb-popup-pad);
+  border-bottom: var(--bb-popup-divider);
+}
+
+/* ---- Typography rule: headings, labels, names, values, and table text use the
+   pixel face. Sentences and paragraphs stay in the readable body face. ---- */
+body :is(
+  .profile-panel h3,
+  .profile-form label,
+  .party-public-name-label,
+  .party-request-summary-card span,
+  .party-request-summary-card strong,
+  .party-request-card-copy strong,
+  .party-request-pill,
+  .bb-mobile-jump-label
+) {
+  font-family: var(--bb-font-display);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+/* Section headings inside popups. */
+body .profile-panel h3 {
+  color: var(--bb-text);
+  font-size: 11px;
+  text-shadow: 2px 2px 0 var(--bb-ink);
+}
+
+/* Small caps-style labels above a value or field. */
+body :is(.profile-form label, .party-public-name-label, .party-request-summary-card span) {
+  color: var(--bb-text-muted);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+body .party-request-summary-card {
+  display: grid;
+  gap: var(--bb-space-2);
+}
+
+body .party-request-summary-card strong {
+  color: var(--bb-text);
+  font-size: 12px;
+  text-shadow: 2px 2px 0 var(--bb-ink);
+  overflow-wrap: anywhere;
+}
+
+body .party-request-card-copy strong {
+  font-size: 10px;
+}
+
+body .party-request-pill {
+  font-size: 7px;
+  text-transform: uppercase;
+}
+
+body :is(
+  .trophy-pack-contents,
+  .leaderboard-name,
+  .leaderboard-row small,
+  .party-discovery-meta > span,
+  .party-discovery-detail,
+  .party-discovery-meta-label,
+  .party-discovery-member-name,
+  .profile-hero-class,
+  .profile-bros-unlocked-count,
+  .profile-bros-unlocked-count strong
+) {
+  font-family: var(--bb-font-display);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+body :is(.trophy-pack-contents, .leaderboard-row small, .party-discovery-meta-label,
+  .party-discovery-meta > span, .profile-bros-unlocked-count) {
+  color: var(--bb-text-muted);
+  font-size: 7px;
+  text-transform: uppercase;
+}
+
+body :is(.leaderboard-name, .party-discovery-member-name) {
+  font-size: 10px;
+  text-shadow: 2px 2px 0 var(--bb-ink);
+}
+
+body .party-discovery-member-name {
+  font-size: 8px;
+}
+
+body .party-discovery-detail {
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+body .party-discovery-detail .party-discovery-meta-label {
+  color: var(--bb-text-muted);
+}
+
+body .party-discovery-title {
+  font-size: 12px;
+}
+
+body .profile-hero-class {
+  color: var(--bb-gold);
+  font-size: 10px;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 var(--bb-ink);
+}
+
+body .profile-bros-unlocked-count strong {
+  color: var(--bb-text);
+  font-size: 8px;
+}

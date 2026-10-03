@@ -73,7 +73,7 @@
   inset: 0;
   z-index: 2147483647;
   background: #111b2b url(/assets/loadingscreen.webp) center / cover;
-  color: var(--bb-text, #f7f9ff);
+  color: var(--bb-text);
   isolation: isolate;
   margin: 0;
   padding: 0;
@@ -92,14 +92,14 @@
   box-sizing: border-box;
   padding: 28px 24px;
   text-align: center;
-  background: var(--bb-surface-1, #0b1629);
-  border: 3px solid var(--bb-border, #385478);
-  border-radius: var(--bb-radius-card, 0px);
-  box-shadow: 0 0 0 4px #03060b, 0 8px 0 #03060b, inset 0 2px #20314a;
+  background: var(--bb-surface-1);
+  border: 3px solid var(--bb-border);
+  border-radius: var(--bb-radius-card);
+  box-shadow: 0 0 0 4px var(--bb-ink), 0 8px 0 var(--bb-ink), inset 0 2px var(--bb-surface-raised);
 }
 #bb-route-message, .lobby-loading-label {
-  color: var(--bb-text-soft, #c9d6e8);
-  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  color: var(--bb-text-soft);
+  font-family: var(--bb-font-display);
   font-size: clamp(10px, 1.6vw, 12px);
   line-height: 1.8;
   overflow-wrap: anywhere;
@@ -113,18 +113,18 @@
   padding: 12px 20px;
   border: 0;
   border-radius: 0;
-  background: var(--bb-primary-gradient, linear-gradient(#438feb, #285fc0));
-  color: #f7f9ff;
+  background: var(--bb-primary-gradient);
+  color: var(--bb-text);
   font: 700 11px/1.5 "Press Start 2P", monospace;
   text-transform: uppercase;
-  box-shadow: var(--bb-control-shadow, 0 5px #03060b, 0 -5px #03060b, 5px 0 #03060b, -5px 0 #03060b, inset 0 4px #7aa9e5);
+  box-shadow: var(--bb-control-shadow);
   cursor: pointer;
   touch-action: manipulation;
 }
 .bb-loading-retry:hover:not(:disabled) { filter: brightness(1.12); }
 .bb-loading-retry:active:not(:disabled) { transform: translateY(2px); }
 .bb-loading-retry:disabled { opacity: 0.55; cursor: wait; }
-.bb-loading-retry:focus-visible { outline: 3px solid #efc86e; outline-offset: 8px; }
+.bb-loading-retry:focus-visible { outline: 3px solid var(--bb-gold); outline-offset: 8px; }
 .bb-loading-retry[hidden], .bb-loading-rune[hidden] { display: none; }
 #lobby-area[data-loading] > * { visibility: hidden; }
 #lobby-loading { display: none; }
@@ -144,7 +144,7 @@
   box-sizing: border-box;
   width: 32px;
   height: 32px;
-  border: 2px solid #385478;
+  border: 2px solid var(--bb-border);
   border-top-color: #c39bf4;
   border-right-color: #78b9f6;
   transform: rotate(45deg);
@@ -154,7 +154,7 @@
   content: "";
   position: absolute;
   inset: 7px;
-  border: 1px solid #efc86e;
+  border: 1px solid var(--bb-gold);
 }
 .lobby-loading-label { max-width: 30ch; margin-top: 14px; }
 @keyframes lobby-loading-appear { from { opacity: 0; } to { opacity: 1; } }
