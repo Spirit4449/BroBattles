@@ -7,6 +7,7 @@ const {
   buildSkinAssetUrl,
 } = require("./skinsCatalog");
 const { getPlayersPerTeamForSelection } = require("./gameSelectionCatalog");
+const { resolveCharacterKey } = require("../../shared/characterStats.js");
 const {
   getPartyBotSlots,
   prunePartyBotSlots,
@@ -47,7 +48,7 @@ async function emitRoster(io, partyId, party, members, db = null, snapshot = {})
 
   const roster = (Array.isArray(members) ? members : []).map((m) => {
     const fallback = m?.selected_card_id ?? null;
-    const character = String(m?.char_class || "ninja").toLowerCase();
+    const character = resolveCharacterKey(m?.char_class);
     const selectedSkinMap = normalizeSelectedSkinMap(
       m?.selected_skin_id_by_char,
     );

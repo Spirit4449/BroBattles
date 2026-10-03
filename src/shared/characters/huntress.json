@@ -52,7 +52,9 @@
           "throwMinOffsetY": -430,
           "throwMaxOffsetY": 300,
           "quickTargetOffsetX": 760,
-          "quickTargetOffsetY": -24
+          "quickTargetOffsetY": -24,
+          "trajectory": "arrowFlight",
+          "reticleFadeOnTurn": true
         },
         "arrowSpread": {
           "count": 3,
@@ -105,7 +107,9 @@
           "throwMaxOffsetY": 320,
           "quickTargetOffsetX": 820,
           "quickTargetOffsetY": -32,
-          "projectileAngleOffsetDeg": 0
+          "projectileAngleOffsetDeg": 0,
+          "trajectory": "arrowFlight",
+          "reticleFadeOnTurn": true
         },
         "burningVolley": {
           "count": 6,

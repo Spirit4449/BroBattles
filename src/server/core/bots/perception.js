@@ -1,6 +1,7 @@
 const effects = require('../gameRoom/effects/effectManager');
 const { participantId, getParticipant } = require('../gameRoom/participants');
 const { bounds } = require('./physics');
+const { botProfile } = require('./characterProfiles');
 
 function observe(room, player, now, samples) {
   const enemies = [...room.players.values()].filter((p) =>
@@ -61,7 +62,7 @@ function incomingThreat(observed, player, now) {
     const dx = player.x - enemy.x, dy = player.y - enemy.y;
     const facing = Math.cos(attack.angle);
     if (Math.sign(dx) !== Math.sign(facing) || Math.abs(dy) > 90) continue;
-    const range = ['thorg', 'draven'].includes(enemy.char_class) ? 210 : 550;
+    const range = botProfile(enemy.char_class).melee ? 210 : 550;
     if (Math.hypot(dx, dy) < range) closest = { x: enemy.x, y: enemy.y, impactIn: 0.5, telegraph: true };
   }
   return closest;

@@ -172,7 +172,7 @@ for (const event of ['destroy', 'shutdown']) test(`${event} removes weapon, trai
 test('both facing directions and rage scales keep finite sweep placement and recover into live grip', () => {
   for (const direction of [-1, 1]) for (const scale of [1, sweep.THORG_SWEEP.rageScale]) {
     const h = harness();
-    h.body._thorgVisualScale = scale;
+    h.body._bbVisualScale = scale;
     weaponModule.startThorgSweep(h.scene, h.body, { direction });
     for (let i = 0; i < Math.ceil((sweep.THORG_SWEEP.windupMs + sweep.THORG_SWEEP.strikeMs + sweep.THORG_SWEEP.recoveryMs + 50) / 10); i++) {
       h.body.x += 0.5; h.tick(10);
@@ -251,7 +251,7 @@ test('idle-to-run locks the fist immediately and settles rotation within 72 ms',
 test('rear arc and mace go behind the body while front trail stays in front', () => {
   for (const direction of [-1, 1]) for (const scale of [1, sweep.THORG_SWEEP.rageScale]) {
     const h = harness();
-    h.body._thorgVisualScale = scale;
+    h.body._bbVisualScale = scale;
     const weapon = weaponModule.startThorgSweep(h.scene, h.body, { direction });
     const [front, rear] = h.graphics;
     const plane = h.body.y - 37.8 * (scale - 1) + 13 * scale;
@@ -273,7 +273,7 @@ test('rear arc and mace go behind the body while front trail stays in front', ()
 
 test('weapon remains rigid at its source aspect ratio throughout both sweep directions', () => {
   for (const direction of [-1, 1]) for (const scale of [1, sweep.THORG_SWEEP.rageScale]) {
-    const h = harness(); h.body._thorgVisualScale = scale;
+    const h = harness(); h.body._bbVisualScale = scale;
     const weapon = weaponModule.startThorgSweep(h.scene, h.body, { direction });
     for (let elapsed = 0; elapsed < 700; elapsed += 8) {
       h.tick(8);
@@ -301,7 +301,7 @@ test('base weapon completes a one-second roll, loops, and pauses while hidden by
 test('attack grip shifts inward and upward from the rigid waist orbit in both facings', () => {
   for (const direction of [-1, 1]) for (const scale of [1, sweep.THORG_SWEEP.rageScale]) {
     for (const progress of [0, 0.25, 0.35, 0.5, 0.65, 0.75, 1]) {
-      const h = harness(); h.body._thorgVisualScale = scale;
+      const h = harness(); h.body._bbVisualScale = scale;
       const weapon = weaponModule.startThorgSweep(h.scene, h.body, { direction });
       h.tick(sweep.THORG_SWEEP.windupMs + sweep.THORG_SWEEP.strikeMs * progress);
       const head = sweep.sampleThorgSweep({ x: h.body.x, y: h.body.y, direction, scale, legacy: true }, progress);

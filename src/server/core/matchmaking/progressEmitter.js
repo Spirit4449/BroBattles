@@ -1,3 +1,4 @@
+const { DEFAULT_CHARACTER } = require("../../../shared/characterStats.js");
 function createProgressEmitter({ db, io, lastProgress }) {
   const {
     normalizeSelectedSkinMap,
@@ -60,7 +61,7 @@ function createProgressEmitter({ db, io, lastProgress }) {
           const normalized = (members || [])
             .filter((m) => !!m?.name)
             .map((m) => {
-              const character = m.char_class || "ninja";
+              const character = m.char_class || DEFAULT_CHARACTER;
               const selectedSkinId = resolveSelectedSkinId({
                 character,
                 selectedSkinMap: normalizeSelectedSkinMap(
@@ -100,17 +101,17 @@ function createProgressEmitter({ db, io, lastProgress }) {
             ? [
                 {
                   name: u.name,
-                  char_class: u.char_class || "ninja",
+                  char_class: u.char_class || DEFAULT_CHARACTER,
                   selected_skin_id: resolveSelectedSkinId({
-                    character: u.char_class || "ninja",
+                    character: u.char_class || DEFAULT_CHARACTER,
                     selectedSkinMap: normalizeSelectedSkinMap(
                       u.selected_skin_id_by_char,
                     ),
                   }),
                   selected_skin_asset_url: buildSkinAssetUrl(
-                    u.char_class || "ninja",
+                    u.char_class || DEFAULT_CHARACTER,
                     resolveSelectedSkinId({
-                      character: u.char_class || "ninja",
+                      character: u.char_class || DEFAULT_CHARACTER,
                       selectedSkinMap: normalizeSelectedSkinMap(
                         u.selected_skin_id_by_char,
                       ),

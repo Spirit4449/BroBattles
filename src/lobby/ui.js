@@ -1,12 +1,4 @@
-export function escapeHtml(value) {
-  const raw = String(value ?? "");
-  return raw
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
+import { escapeHtml } from "../shared/html.cjs";
 
 export async function fetchLobbyJson(url, options = {}) {
   const response = await fetch(url, {
@@ -40,3 +32,5 @@ export function isOverlayOpen(id) {
   const overlay = document.getElementById(id);
   return !!overlay && !overlay.classList.contains("hidden");
 }
+
+export { escapeHtml };

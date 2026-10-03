@@ -1,7 +1,5 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
 const { createQueueTicketManager } = require('../src/server/core/matchmaking/queueTicketManager');
 const { registerMatchmakingEvents } = require('../src/server/core/socketEvents/matchmakingEvents');
 const { createPartyQueueTransitionService } = require('../src/server/services/partyQueueTransitionService');
@@ -74,47 +72,6 @@ test('stale roster and disconnected tickets are removed while a healthy queue st
   assert.ok(events.some(e => e.id === 3 && e.event === 'match:progress' && e.data.found === 1));
 });
 
-function browserFixture() {
-  const source = fs.readFileSync(require.resolve('../src/party.js'), 'utf8');
-  const button = { dataset: {}, disabled: false, addEventListener: (_, fn) => { button.click = fn; } };
-  const requests = [];
-  let hidden = 0;
-  const context = vm.createContext({
-    document: { getElementById: () => button },
-    socket: { timeout: () => ({ emit: (...args) => requests.push(args) }), emit: (...args) => requests.push(args) },
-    checkMatchmakingHealth: () => {}, hideMatchmakingOverlay: () => { hidden++; },
-  });
-  const lockStart = source.indexOf('function lockMatchmakingCancel(');
-  const lockEnd = source.indexOf('\nfunction checkMatchmakingHealth', lockStart);
-  const cancelStart = source.indexOf('function wireCancelButton()');
-  const cancelEnd = source.indexOf('\nfunction wireAdminFillBotsButtons', cancelStart);
-  vm.runInContext(`let __matchedQueueId = null; let __queueHealthGeneration = 0; ${source.slice(lockStart, lockEnd)} ${source.slice(cancelStart, cancelEnd)} wireCancelButton();`, context);
-  return { button, requests, context, get hidden() { return hidden; } };
-}
-
-test('cancel stays visible until acknowledged and cannot hide an intervening found match', () => {
-  const f = browserFixture();
-  f.button.click();
-  assert.equal(f.button.disabled, true);
-  assert.equal(f.hidden, 0);
-  vm.runInContext('lockMatchmakingCancel(77)', f.context);
-  f.requests[0][1](null, { ok: true, cancelled: true });
-  assert.equal(f.hidden, 0);
-  f.button.click();
-  assert.equal(f.requests.length, 1);
-});
-
-test('cancel rejection locks the button while a failed request permits retry', () => {
-  const f = browserFixture();
-  f.button.click();
-  f.requests[0][1](Error('timeout'));
-  assert.equal(f.button.disabled, false);
-  f.button.click();
-  f.requests[1][1](null, { ok: true, cancelled: false, matchId: 77 });
-  assert.equal(f.button.disabled, true);
-  assert.equal(f.hidden, 0);
-});
-
 test('queue health distinguishes missing tickets and refreshes persisted queue progress', async t => {
   t.mock.timers.enable({ apis: ['setInterval'] });
   let hasTicket = false;
@@ -148,24 +105,6 @@ test('a ready check abandoned by restart is cancelled and no longer traps the qu
   assert.ok(writes.some(sql => sql.includes("u.status='online'")));
   assert.equal(emitted[0][0], 'match:cancelled');
   assert.equal(emitted[0][1].matchId, 77);
-});
-
-test('browser health check recovers a missing ticket and ignores a response overtaken by match found', () => {
-  const source = fs.readFileSync(require.resolve('../src/party.js'), 'utf8');
-  const start = source.indexOf('function checkMatchmakingHealth()');
-  const end = source.indexOf('let __partyReadyPending', start);
-  const requests = [], emits = [];
-  const context = vm.createContext({
-    socket: { timeout: () => ({ emit: (...args) => requests.push(args) }), emit: (...args) => emits.push(args) },
-    window: { location: {} }, lockMatchmakingCancel: () => {},
-  });
-  vm.runInContext(`let __matchedQueueId = null, __queueHealthPending = false, __queueHealthGeneration = 0; ${source.slice(start, end)} checkMatchmakingHealth();`, context);
-  requests[0][1](null, { state: 'missing' });
-  assert.equal(emits[0][0], 'queue:leave');
-  vm.runInContext('checkMatchmakingHealth(); __matchedQueueId = 77;', context);
-  requests[1][1](null, { state: 'missing' });
-  assert.equal(emits.length, 1);
-  assert.equal(vm.runInContext('__matchedQueueId', context), 77);
 });
 
 test('ready state survives asynchronous room startup and accepts numeric-string user IDs', async t => {

@@ -1,21 +1,30 @@
 const fs = require("fs");
 const path = require("path");
-const {
-  getPlayerCardById,
-  getPlayerCardsCatalog,
-} = require("./playerCardsCatalog");
-const {
-  getProfileIconById,
-  getProfileIconsCatalog,
-} = require("./profileIconsCatalog");
-const { getSkinById, getSkinsCatalog } = require("./skinsCatalog");
+const { createCatalogLoader, deepFreeze } = require("./catalogLoader");
+const cards = require("./playerCardsCatalog");
+const profileIcons = require("./profileIconsCatalog");
+const skins = require("./skinsCatalog");
+
+const { getPlayerCardById, getPlayerCardsCatalog } = cards;
+const { getProfileIconById, getProfileIconsCatalog } = profileIcons;
+const { getSkinById, getSkinsCatalog } = skins;
 
 const CATALOG_PATH = path.resolve(__dirname, "../../shared/shopCatalog.json");
 const PUBLIC_PATH = path.resolve(__dirname, "../../../public");
 const CURRENCIES = new Set(["coins", "gems"]);
 const PRICE_TYPES = new Set(["virtual", "money"]);
 const PURCHASE_LIMITS = new Set(["lifetime", "unlimited"]);
-let lastValidationErrors = [];
+const FALLBACK_TIMEZONE = "America/New_York";
+
+const rawLoader = createCatalogLoader({
+  name: "shop",
+  filePath: CATALOG_PATH,
+  fallback: () => ({ version: 1, timezone: FALLBACK_TIMEZONE, sections: [], offers: [] }),
+});
+
+// Validation (including banner existence checks) is cached per combination of
+// shop + cosmetic catalog versions, so a cosmetic reload revalidates grants.
+let validated = null;
 
 function validateBanner(value, location, errors) {
   const banner = String(value || "");
@@ -26,12 +35,6 @@ function validateBanner(value, location, errors) {
   if (!fs.existsSync(path.join(PUBLIC_PATH, banner))) {
     errors.push(`${location}: shop banner asset is missing`);
   }
-}
-
-function loadRawCatalog() {
-  delete require.cache[CATALOG_PATH];
-  const raw = require(CATALOG_PATH);
-  return raw && typeof raw === "object" ? raw : {};
 }
 
 function validateGrant(grant, location, errors) {
@@ -177,37 +180,23 @@ function validateCatalog(raw) {
   return errors;
 }
 
-function getShopCatalog() {
-  let raw;
-  try {
-    raw = loadRawCatalog();
-  } catch (error) {
-    lastValidationErrors = [error?.message || "Unable to load shop catalog"];
-    console.error("[shop] failed to load catalog", error);
-    return { version: 1, timezone: "America/New_York", sections: [], offers: [] };
-  }
-  lastValidationErrors = validateCatalog(raw);
-  if (lastValidationErrors.length) {
-    console.error("[shop] catalog validation failed", lastValidationErrors);
-  }
+function buildValidatedCatalog(raw, errors) {
   const invalidOfferIndexes = new Set(
-    lastValidationErrors
+    errors
       .map((message) => message.match(/offers\[(\d+)\]/)?.[1])
       .filter((value) => value != null)
       .map(Number),
   );
   const invalidDailyIndexes = new Set(
-    lastValidationErrors
+    errors
       .map((message) => message.match(/daily reward (\d+)/)?.[1])
       .filter((value) => value != null)
       .map(Number),
   );
   return {
     ...raw,
-    timezone: lastValidationErrors.some((error) =>
-      error.startsWith("timezone "),
-    )
-      ? "America/New_York"
+    timezone: errors.some((error) => error.startsWith("timezone "))
+      ? FALLBACK_TIMEZONE
       : raw.timezone,
     rotation: {
       ...(raw?.rotation || {}),
@@ -226,32 +215,79 @@ function getShopCatalog() {
   };
 }
 
+function buildOfferIndexes(catalog) {
+  const offerById = new Map();
+  const offerByGrant = new Map();
+  for (const offer of catalog.offers) {
+    const id = String(offer?.id || "");
+    if (!offerById.has(id)) offerById.set(id, offer);
+    if (offer?.kind === "bundle") continue;
+    for (const grant of offer?.grants || []) {
+      const key = `${String(grant?.kind || "")}:${String(grant?.id || "")}`;
+      if (!offerByGrant.has(key)) offerByGrant.set(key, offer);
+    }
+  }
+  return { offerById, offerByGrant };
+}
+
+function loadValidatedCatalog() {
+  const shop = rawLoader.snapshot();
+  const versions = [
+    shop.generation || 0,
+    skins.getCatalogVersion(),
+    cards.getCatalogVersion(),
+    profileIcons.getCatalogVersion(),
+  ];
+  const key = versions.join(":");
+  if (validated?.key === key) return validated;
+
+  let result;
+  if (shop.error) {
+    // The loader already logged the failure; keep the unvalidated fallback.
+    result = {
+      catalog: shop.catalog,
+      errors: [shop.error?.message || "Unable to load shop catalog"],
+      ...buildOfferIndexes(shop.catalog),
+    };
+  } else {
+    const errors = validateCatalog(shop.catalog);
+    if (errors.length) {
+      console.error("[shop] catalog validation failed", errors);
+    }
+    const catalog = deepFreeze(buildValidatedCatalog(shop.catalog, errors));
+    result = { catalog, errors, ...buildOfferIndexes(catalog) };
+  }
+  // Never cache a result built while any catalog was failing to load.
+  validated = versions.includes(0) ? null : { key, ...result };
+  return result;
+}
+
+function getShopCatalog() {
+  return loadValidatedCatalog().catalog;
+}
+
 function getShopCatalogErrors() {
-  getShopCatalog();
-  return [...lastValidationErrors];
+  return [...loadValidatedCatalog().errors];
 }
 
 function getShopOfferById(offerId) {
   const id = String(offerId || "").trim();
-  return (
-    getShopCatalog().offers.find((offer) => String(offer?.id || "") === id) ||
-    null
-  );
+  return loadValidatedCatalog().offerById.get(id) || null;
 }
 
 function findOfferForGrant(kind, id) {
-  const normalizedKind = String(kind || "");
-  const normalizedId = String(id || "");
-  return (
-    getShopCatalog().offers.find((offer) => {
-      if (offer?.kind === "bundle") return false;
-      return (offer?.grants || []).some(
-        (grant) =>
-          String(grant?.kind || "") === normalizedKind &&
-          String(grant?.id || "") === normalizedId,
-      );
-    }) || null
-  );
+  const key = `${String(kind || "")}:${String(id || "")}`;
+  return loadValidatedCatalog().offerByGrant.get(key) || null;
+}
+
+// Drops every cached catalog (shop and cosmetics) so the next access rereads
+// the JSON files and revalidates the shop, e.g. after editing them in dev.
+function invalidateCatalog() {
+  rawLoader.invalidate();
+  skins.invalidateSkinsCatalog();
+  cards.invalidatePlayerCardsCatalog();
+  profileIcons.invalidateProfileIconsCatalog();
+  validated = null;
 }
 
 function getCosmeticCatalogs() {
@@ -268,5 +304,6 @@ module.exports = {
   getShopCatalog,
   getShopCatalogErrors,
   getShopOfferById,
+  invalidateCatalog,
   validateCatalog,
 };

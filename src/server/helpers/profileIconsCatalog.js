@@ -1,37 +1,49 @@
 const path = require("path");
+const { DEFAULT_CHARACTER } = require("../../shared/characterStats.js");
+const { createCatalogLoader } = require("./catalogLoader");
 
 const CATALOG_PATH = path.resolve(
   __dirname,
   "../../shared/profileIconsCatalog.json",
 );
 
-let _cache = null;
-
-function _loadCatalog() {
-  delete require.cache[CATALOG_PATH];
-  const raw = require(CATALOG_PATH);
-  return raw && typeof raw === "object" ? raw : {};
+function buildIconIndexes(catalog) {
+  const iconById = new Map();
+  for (const icon of Array.isArray(catalog?.icons) ? catalog.icons : []) {
+    const id = String(icon?.id || "");
+    if (!iconById.has(id)) iconById.set(id, icon);
+  }
+  return { iconById };
 }
 
+const loader = createCatalogLoader({
+  name: "profile-icons",
+  filePath: CATALOG_PATH,
+  fallback: () => ({ version: 1, defaultIconId: DEFAULT_CHARACTER, icons: [] }),
+  build: buildIconIndexes,
+});
+
 function getProfileIconsCatalog() {
-  try {
-    _cache = _loadCatalog();
-  } catch (error) {
-    console.error("[profile-icons] failed to load catalog", error);
-    _cache = { version: 1, defaultIconId: "ninja", icons: [] };
-  }
-  return _cache;
+  return loader.get();
+}
+
+function invalidateProfileIconsCatalog() {
+  loader.invalidate();
+}
+
+function getCatalogVersion() {
+  return loader.version();
 }
 
 function getProfileIconById(iconId) {
   const id = String(iconId || "").trim();
   if (!id) return null;
-  const catalog = getProfileIconsCatalog();
-  const icons = Array.isArray(catalog?.icons) ? catalog.icons : [];
-  return icons.find((icon) => String(icon?.id || "") === id) || null;
+  return loader.indexes().iconById.get(id) || null;
 }
 
 module.exports = {
+  getCatalogVersion,
   getProfileIconsCatalog,
   getProfileIconById,
+  invalidateProfileIconsCatalog,
 };

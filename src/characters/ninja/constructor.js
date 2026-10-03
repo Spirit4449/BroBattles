@@ -1,17 +1,13 @@
 import { ninjaEnabled, predictNinja } from './network';
-// src/characters/ninja/ninja.js
-import socket from "../../socket";
-import { characterStats } from "../../shared/characterStats.js";
 import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
 import ReturningShuriken from "./attack";
 import { animations } from "./anim";
-import {
-  executeDefaultAttack,
-  resolveSessionDamage,
-} from "../shared/attackFlow";
+import { legacyAnimations } from "./legacyAnim";
+import { resolveSessionDamage } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
 import { createRuntimeId } from "../shared/runtimeId";
+import { consumeOnce } from "../shared/packetDedupe";
 import { playPlayerSound } from "../../gameScene/playerAudio";
 
 // Single source of truth for this character's name/key
@@ -21,20 +17,7 @@ const RETURNING_SHURIKEN = getResolvedCharacterAttackConfig(
   "returningShuriken",
 );
 
-function consumeRemoteNinjaAction(scene, id) {
-  const key = String(id || "").trim();
-  if (!key) return true;
-  if (!scene._ninjaRemoteActionSeen) {
-    scene._ninjaRemoteActionSeen = new Map();
-  }
-  const now = Date.now();
-  for (const [seenKey, seenAt] of scene._ninjaRemoteActionSeen.entries()) {
-    if (now - seenAt > 5000) scene._ninjaRemoteActionSeen.delete(seenKey);
-  }
-  if (scene._ninjaRemoteActionSeen.has(key)) return false;
-  scene._ninjaRemoteActionSeen.set(key, now);
-  return true;
-}
+const consumeRemoteNinjaAction = (scene, id) => consumeOnce(scene, "ninja-remote-action", id, 5000);
 
 class Ninja extends CharacterEntityBase {
   static key = NAME;
@@ -47,44 +30,32 @@ class Ninja extends CharacterEntityBase {
     hitWood: { key: "shurikenHitWood", volume: 0.7 },
   };
 
+  static attackFlow = { attackResetMs: 300 };
+
   static preload(scene, staticPath = "/assets", options = {}) {
-    const includeBaseAtlas = options?.includeBaseAtlas !== false;
-    // Load atlas and projectile/sounds
-    if (includeBaseAtlas) {
-      scene.load.atlas(
-        NAME,
-        this.characterAssetPath(staticPath, "spritesheet.webp"),
-        this.characterAssetPath(staticPath, "animations.json"),
-      );
-    }
+    this.loadBaseAtlas(scene, staticPath, options);
     scene.load.spritesheet("ninja-throw-effects",
       this.characterAssetPath(staticPath, "throw-effects.webp"),
       { frameWidth: 64, frameHeight: 64 });
-    scene.load.image(
-      "shuriken",
-      this.characterAssetPath(staticPath, "shuriken.webp"),
-    );
-    scene.load.audio(
-      "shurikenThrow",
-      this.characterAssetPath(staticPath, "shurikenThrow.mp3"),
-    );
-    scene.load.audio(
-      "shurikenHit",
-      this.characterAssetPath(staticPath, "hit.mp3"),
-    );
-    scene.load.audio(
-      "shurikenHitWood",
-      this.characterAssetPath(staticPath, "woodhit.wav"),
-    );
+    this.loadFiles(scene, staticPath, {
+      image: { shuriken: "shuriken.webp" },
+      audio: {
+        shurikenThrow: "shurikenThrow.mp3",
+        shurikenHit: "hit.mp3",
+        shurikenHitWood: "woodhit.wav",
+      },
+    });
   }
 
   static setupAnimations(scene) {
     animations(scene);
   }
 
-  // Per-character gameplay and presentation stats
-  static getStats() {
-    return characterStats.ninja;
+  // Unconverted skins retain their original frame counts and cadence.
+  static setupSkinAnimations(scene, textureKey, texture) {
+    if (texture.has("attack00")) return false;
+    legacyAnimations(scene, textureKey);
+    return true;
   }
 
   // Handle remote attack events for opponents using this character
@@ -152,23 +123,6 @@ class Ninja extends CharacterEntityBase {
       // Optionally, could queue a retry later if needed.
     }
     return true;
-  }
-
-  constructor(deps) {
-    super(deps);
-  }
-
-  // Generic/default attack flow: ammo checks, flags, UI, socket emit
-  performDefaultAttack(payloadBuilder, onAfterFire) {
-    const result = executeDefaultAttack({
-      scene: this.scene,
-      ammo: this.ammo,
-      emitAction: (payload) => socket.emit("game:action", payload),
-      payloadBuilder,
-      onAfterFire,
-      attackResetMs: 300,
-    });
-    return !!result.fired;
   }
 
   // Ninja-specific attack: spawn a returning shuriken with owner-side collisions

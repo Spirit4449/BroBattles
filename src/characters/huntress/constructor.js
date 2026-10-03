@@ -1,11 +1,10 @@
 import socket from "../../socket";
 import { predictHuntressShot } from './network';
-import { characterStats } from "../../shared/characterStats.js";
 import { animations } from "./anim";
 import { performHuntressArrowSpread } from "./attack";
-import { executeDefaultAttack } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
+import { applyScaleLockedRageFx } from "../shared/powerupFx";
 import { playPlayerSound } from "../../gameScene/playerAudio";
 
 const NAME = "huntress";
@@ -14,55 +13,30 @@ class Huntress extends CharacterEntityBase {
   static key = NAME;
   static textureKey = NAME;
 
-  static characterAssetPath(staticPath = "/assets", fileName = "") {
-    return `${staticPath}/huntress/${fileName}`;
-  }
-
   static sounds = {
     attack: { key: "huntress-attack", volume: 0.48 },
     hit: { key: "huntress-hit", volume: 0.48 },
     special: { key: "huntress-special", volume: 0.56 },
   };
 
-  static preload(scene, staticPath = "/assets", options = {}) {
-    const includeBaseAtlas = options?.includeBaseAtlas !== false;
-    if (!scene?.load) return;
+  static attackFlow = { attackResetMs: 520, cooldownFallbackMs: 1000 };
 
-    if (includeBaseAtlas) {
-      scene.load.atlas(
-        NAME,
-        this.characterAssetPath(staticPath, "spritesheet.webp"),
-        this.characterAssetPath(staticPath, "animations.json"),
-      );
-    }
-    scene.load.image(
-      `${NAME}-arrow`,
-      this.characterAssetPath(staticPath, "arrow.webp"),
-    );
-    scene.load.audio(
-      `${NAME}-attack`,
-      this.characterAssetPath(staticPath, "attack.mp3"),
-    );
-    scene.load.audio(
-      `${NAME}-hit`,
-      this.characterAssetPath(staticPath, "hit.mp3"),
-    );
-    scene.load.audio(
-      `${NAME}-special`,
-      this.characterAssetPath(staticPath, "special.mp3"),
-    );
-    scene.load.audio(
-      `${NAME}-burn-tick`,
-      this.characterAssetPath(staticPath, "tick.mp3"),
-    );
+  static preload(scene, staticPath = "/assets", options = {}) {
+    if (!scene?.load) return;
+    this.loadBaseAtlas(scene, staticPath, options);
+    this.loadFiles(scene, staticPath, {
+      image: { [`${NAME}-arrow`]: "arrow.webp" },
+      audio: {
+        [`${NAME}-attack`]: "attack.mp3",
+        [`${NAME}-hit`]: "hit.mp3",
+        [`${NAME}-special`]: "special.mp3",
+        [`${NAME}-burn-tick`]: "tick.mp3",
+      },
+    });
   }
 
   static setupAnimations(scene) {
     animations(scene);
-  }
-
-  static getStats() {
-    return characterStats.huntress;
   }
 
   static handleRemoteAttack(scene, data, ownerWrapper, remoteContext = {}) {
@@ -105,55 +79,13 @@ class Huntress extends CharacterEntityBase {
     return true;
   }
 
-  static applyPowerupFx({
-    sprite,
-    effects,
-    nowSec,
-    colors,
-    spawnTrailParticle,
-  } = {}) {
-    if (!sprite || !effects) return { handled: false, rageLike: false };
-    if ((effects.rage || 0) <= 0) return { handled: false, rageLike: false };
-
-    const pulse = 0.5 + 0.5 * Math.sin(nowSec * 8 + (sprite.x || 0) * 0.01);
-    sprite.setTint(pulse > 0.52 ? 0xc084fc : 0x9333ea);
-
-    // Keep base scale under rage so the physics body does not desync and tunnel.
-    const baseX = sprite._puBaseScaleX || 1;
-    const baseY = sprite._puBaseScaleY || 1;
-    const baseOriginX = sprite._puBaseOriginX ?? 0.5;
-    const baseOriginY = sprite._puBaseOriginY ?? 0.5;
-    sprite.setScale(baseX, baseY);
-    sprite.setOrigin(baseOriginX, baseOriginY);
-
-    if (typeof spawnTrailParticle === "function" && Math.random() < 0.34) {
-      spawnTrailParticle(
-        (sprite.x || 0) + (Math.random() * 28 - 14),
-        (sprite.y || 0) + (Math.random() * 44 - 26),
-        colors?.rage || 0xa855f7,
-        3.5,
-        300,
-      );
-    }
-    return { handled: true, rageLike: true };
+  static applyPowerupFx(context) {
+    return applyScaleLockedRageFx(context, { particleSize: 3.5 });
   }
 
-  constructor(deps) {
-    super(deps);
-  }
-
-  performDefaultAttack(payloadBuilder, onAfterFire) {
-    const result = executeDefaultAttack({
-      scene: this.scene,
-      ammo: this.ammo,
-      emitAction: (payload) => socket.emit("game:action",
-        predictHuntressShot(this.scene, this.player, this.username, payload)),
-      payloadBuilder,
-      onAfterFire,
-      attackResetMs: 520,
-      cooldownFallbackMs: 1000,
-    });
-    return !!result.fired;
+  // Shots are predicted locally before the server confirms them.
+  emitAttackAction(payload) {
+    socket.emit("game:action", predictHuntressShot(this.scene, this.player, this.username, payload));
   }
 
   handlePointerDown(attackContext = null) {

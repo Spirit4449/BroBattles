@@ -6,6 +6,7 @@ const { effectDefs } = require('../src/server/core/gameRoom/effects/effectDefs')
 const { validateDocument } = require('../src/shared/mapDocument');
 const mapDefaults = require('../src/shared/maps').mapDefaults;
 const { ATTACK_RUNTIMES } = require('../src/server/core/gameRoom/characterAttackRegistry');
+const { BOT_PROFILES } = require('../src/server/core/bots/characterProfiles');
 const skinsCatalog = require('../src/shared/skinsCatalog.json');
 const cardsCatalog = require('../src/shared/playerCardsCatalog.json');
 const iconsCatalog = require('../src/shared/profileIconsCatalog.json');
@@ -16,7 +17,7 @@ function validateContent({ characters = characterDefinitions, powerups = POWERUP
   cosmetics = [
     ...Object.values(skinsCatalog.characters).flatMap(entry => entry.skins),
     ...cardsCatalog.cards, ...iconsCatalog.icons,
-  ], shop = shopCatalog } = {}) {
+  ], shop = shopCatalog, botProfiles = BOT_PROFILES } = {}) {
   const errors = [];
   const publicDir = path.resolve(__dirname, '../public');
   const assetExists = (url, owner) => {
@@ -44,6 +45,7 @@ function validateContent({ characters = characterDefinitions, powerups = POWERUP
     if (!(definition.frame?.w > 0) || !(definition.frame?.h > 0)) errors.push(`${key}: missing frame dimensions`);
     if (!Array.isArray(definition.duckFrame) || definition.duckFrame.length !== 2 || definition.duckFrame.some(n => !Number.isInteger(n) || n < 1)) errors.push(`${key}: invalid duck frame`);
     if (!actions[definition.basicAction] || actions[definition.basicAction].character !== key) errors.push(`${key}: unknown basic action ${definition.basicAction}`);
+    if (!Object.hasOwn(botProfiles, key)) errors.push(`${key}: missing bot profile in src/server/core/bots/characterProfiles.js`);
     for (const file of ['body.webp', 'spritesheet.webp', 'animations.json']) assetExists(`/assets/${key}/${file}`, key);
     const atlasPath = path.join(publicDir, 'assets', key, 'animations.json');
     if (fs.existsSync(atlasPath)) {

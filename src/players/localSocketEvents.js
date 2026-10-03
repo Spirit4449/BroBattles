@@ -34,9 +34,7 @@ export function bindLocalSocketEvents({
   getSuperCharge,
   setSuperCharge,
   setMaxSuperCharge,
-  getWallSlideLoopSfx,
-  getWallSlideLoopPlaying,
-  setWallSlideLoopPlaying,
+  stopWallSlideAudio,
   getIsEditMode,
   onLocalDeath,
   onLocalRespawn,
@@ -116,12 +114,7 @@ export function bindLocalSocketEvents({
             onLocalDeath();
           } catch (_) {}
         }
-        if (getWallSlideLoopPlaying() && getWallSlideLoopSfx()) {
-          try {
-            getWallSlideLoopSfx().stop();
-          } catch (_) {}
-          setWallSlideLoopPlaying(false);
-        }
+        stopWallSlideAudio?.();
         onDebug?.();
       }
       setCurrentHealthValue(0);
@@ -144,12 +137,7 @@ export function bindLocalSocketEvents({
       onLocalDeath?.();
     } catch (_) {}
 
-    if (getWallSlideLoopPlaying() && getWallSlideLoopSfx()) {
-      try {
-        getWallSlideLoopSfx().stop();
-      } catch (_) {}
-      setWallSlideLoopPlaying(false);
-    }
+    stopWallSlideAudio?.();
 
     try {
       scene.sound.play("sfx-you-death", { volume: 0.55 });

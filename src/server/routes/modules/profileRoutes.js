@@ -1,5 +1,5 @@
 const bcrypt = require("bcrypt");
-const { getAllCharacters } = require("../../../shared/characterStats.js");
+const { getAllCharacters, resolveCharacterKey, canonicalCharacterKey, parseCharacterLevels } = require("../../../shared/characterStats.js");
 const {
   syncProfileIconOwnershipForUser,
 } = require("../../helpers/profileIconOwnership");
@@ -38,26 +38,13 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       wins = 0;
     }
 
-    let charLevels = {};
-    try {
-      charLevels =
-        typeof userRow.char_levels === "string"
-          ? JSON.parse(userRow.char_levels || "{}")
-          : userRow.char_levels || {};
-    } catch (_) {
-      charLevels = {};
-    }
+    let charLevels = parseCharacterLevels(userRow.char_levels);
 
     if (charLevels && typeof charLevels === "object") {
       const normalizedCharLevels = {};
       const validChars = new Set(getAllCharacters());
       for (const [key, val] of Object.entries(charLevels)) {
-        let normalizedKey = String(key || "")
-          .trim()
-          .toLowerCase();
-        if (normalizedKey === "hunteress") {
-          normalizedKey = "huntress";
-        }
+        const normalizedKey = canonicalCharacterKey(key);
         if (!validChars.has(normalizedKey)) continue;
         const levelNum = Number(val) || 0;
         normalizedCharLevels[normalizedKey] = Math.max(
@@ -68,12 +55,7 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       charLevels = normalizedCharLevels;
     }
 
-    let charClass = String(userRow.char_class || "ninja")
-      .trim()
-      .toLowerCase();
-    if (charClass === "hunteress") {
-      charClass = "huntress";
-    }
+    const charClass = resolveCharacterKey(userRow.char_class);
 
     const levelValues = Object.values(charLevels)
       .map((n) => Number(n) || 0)

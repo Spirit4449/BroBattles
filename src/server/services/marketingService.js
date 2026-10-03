@@ -4,7 +4,7 @@ const { sendEmail } = require('./emailService');
 function baseUrl() { return String(process.env.PUBLIC_BASE_URL || '').replace(/\/$/, ''); }
 function postalAddress() { return String(process.env.MARKETING_POSTAL_ADDRESS || '').trim(); }
 function marketingApiKey() { return process.env.RESEND_MARKETING_API_KEY || ''; }
-const escape = value => String(value).replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]);
+const { escapeHtml: escape } = require("../../shared/html.cjs");
 
 function welcomeEmail(email, unsubscribeId) {
   const unsubscribe = `${baseUrl()}/email/unsubscribe/${encodeURIComponent(unsubscribeId)}`;

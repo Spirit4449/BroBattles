@@ -433,7 +433,10 @@ test("renderer distinguishes unavailable stats from real zeros and escapes names
   const compiled = transformFileSync(require.resolve("../src/lib/battleLogView.js"), {
     presets: [["@babel/preset-env", { targets: { node: "current" } }]],
   });
-  const context = { exports: {}, require: () => ({ buildProfileIconUrl: () => "/assets/profile-icons/ninja.webp" }) };
+  const context = { exports: {}, require: (request) => {
+    if (request === "../shared/html.cjs") return require("../src/shared/html.cjs");
+    throw new Error(`Unexpected renderer dependency: ${request}`);
+  } };
   vm.runInNewContext(compiled.code, context);
   const { renderBattleLog } = context.exports;
   const container = {};

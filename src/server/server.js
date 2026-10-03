@@ -235,11 +235,20 @@ registerRoutes({
       await q(`UPDATE parties p JOIN match_participants mp ON mp.party_id = p.party_id JOIN matches m ON m.match_id = mp.match_id SET p.status = 'idle' WHERE m.status = 'live'${exclusion}`, pendingIds);
       await q(`UPDATE matches m SET m.status = 'cancelled' WHERE m.status = 'live'${exclusion}`, pendingIds);
     });
+    // A rejected promise outside a request/socket handler should not take
+    // down every live match. Log it with its stack; programming errors
+    // (uncaughtException) still crash so a supervisor restarts clean state.
+    process.on("unhandledRejection", (reason) => {
+      console.error("[process] unhandled promise rejection", reason?.stack || reason);
+    });
     process.once("SIGTERM", () => { server.close(() => { void ownership.release().finally(() => process.exit(0)); }); setTimeout(() => process.exit(0), 5000).unref(); });
     startCleanupJobs({ db, io, matchResults, getGameRoom: socketApi.getGameRoom });
     setInterval(() => { void matchResults.reconcile().catch(error => console.error("[rewards] reconciliation failed", error.message)); }, 30000).unref();
     setInterval(() => { void stripeShopService.reconcileWebhooks().catch(error => console.error("[shop:stripe] reconciliation failed", error.message)); }, 60000).unref();
     console.log("✅ Database connected");
+    // Parse map metadata once up front so the first /status requests don't.
+    try { require("./services/mapRepository").mapRepository.listMetadata(); }
+    catch (error) { console.warn("[maps] unable to warm metadata cache", error.message); }
     server.listen(port, "0.0.0.0", () => {
       console.log(
         `Server listening on 0.0.0.0:${port} (cookies secure=${SECURE_COOKIES}, env=${

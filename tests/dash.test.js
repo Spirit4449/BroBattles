@@ -58,13 +58,15 @@ test('server grants a burst only once and rejects cooldown spam, dead/locked pla
  assert.equal(acceptDash({isAlive:true},{...input,dashSeq:Infinity},1000),false);
 });
 
-test('the actual movement handler completes its dash branch without touching later const state', () => {
+test('the actual movement handler completes its dash branch without touching later movement state', () => {
   const source = fs.readFileSync(require.resolve('../src/player.js'), 'utf8');
-  const ast = babel.parseSync(source, { babelrc:false, configFile:false, sourceType:'module' });
-  const fn = ast.program.body.find(n => n.type === 'ExportNamedDeclaration' && n.declaration?.id?.name === 'handlePlayerMovement').declaration;
+  // The per-frame pipeline and all of its step functions.
+  const movement = source.slice(source.indexOf('export function handlePlayerMovement(scene)'),
+    source.indexOf('export function setSuperStats(')).replace('export function', 'function');
   const p = player(); p._dash = {x:-Math.SQRT1_2,y:-Math.SQRT1_2};
   p.body.touching = {down:false}; p.body.velocity = {x:-495,y:-495};
   const key = {isDown:false};
+  let wallSlideCleared = false;
   const context = { player:p, scene:{game:{loop:{delta:16}}},
     mobileControlsController:null, combatMouseController:null, chatInputActive:false, window:{},
     drawDashCooldown(){}, updateDash:()=>true, keySpace:key,
@@ -72,14 +74,15 @@ test('the actual movement handler completes its dash branch without touching lat
     cursors:{left:key,right:key,up:key,down:key}, movementKeys:{left:key,right:key,up:key,down:key},
     dead:false, isAttacking:false, movementSpeedMult:1, powerupInvisible:false,
     ammoCharges:1, ammoCapacity:1, reloadTimerMs:0, drawAmmoBar(){},
-    stopMovementLoopSfx(){}, isMoving:false, wasWallSliding:true, applyFlipOffsetLocal(){},
+    movementAudio:{stopLoops(){}}, movementFx:{clearWallSlide(){ wallSlideCleared = true; }},
+    isMoving:false, applyFlipOffsetLocal(){},
     playCharacterAnimation(){}, currentCharacter:'ninja',currentSkinId:'',resolveAnimKey(){},
     syncLocalUiPosition(){},getMovementFxNetworkState:()=>({}), networkInputState:null,
   };
-  vm.runInNewContext(`${source.slice(fn.start,fn.end)}; handlePlayerMovement(scene);`,context);
+  vm.runInNewContext(`${movement}; handlePlayerMovement(scene);`,context);
   assert.equal(context.networkInputState.animation,'dashing');
   assert.equal(context.networkInputState.wallSliding,false);
-  assert.equal(context.wasWallSliding,false);
+  assert.equal(wallSlideCleared,true);
   assert.equal(p._wallAttachSide,null);
 });
 

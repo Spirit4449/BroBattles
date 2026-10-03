@@ -1,4 +1,4 @@
-import { getAllCharacters } from "../shared/characterStats.js";
+import { getAllCharacters, canonicalCharacterKey } from "../shared/characterStats.js";
 import { buildProfileIconUrl } from "./profileIconAssets.js";
 import {
   normalizeCharacterLevel,
@@ -23,10 +23,7 @@ export function renderCharacterLevelGrid(grid, charLevels = {}) {
   const mergedLevels = {};
 
   Object.entries(charLevels || {}).forEach(([charId, rawLevel]) => {
-    let id = String(charId || "")
-      .trim()
-      .toLowerCase();
-    if (id === "hunteress") id = "huntress";
+    const id = canonicalCharacterKey(charId);
     if (validChars.size > 0 && !validChars.has(id)) return;
 
     const level = Number(rawLevel) || 0;

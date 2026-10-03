@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { addPartyInvite, getInviteCooldownMs } = require("./partyInviteStore");
+const { DEFAULT_CHARACTER, resolveCharacterKey } = require("../../shared/characterStats.js");
 
 const MAX_FRIENDS = 200;
 const MAX_MESSAGE_LENGTH = 500;
@@ -48,7 +49,7 @@ function toPublicUser(row, status = "offline") {
   return {
     userId: Number(row.user_id),
     name: String(row.name || ""),
-    charClass: String(row.char_class || "ninja"),
+    charClass: resolveCharacterKey(row.char_class),
     profileIconId: row.selected_profile_icon_id ? String(row.selected_profile_icon_id) : null,
     trophies: Number(row.trophies) || 0,
     status,
@@ -182,7 +183,7 @@ function createFriendService({ db, io }) {
       listRequests(userId),
       getUnreadCounts(userId),
     ]);
-    return { me: { userId, name: String(user.name || ""), charClass: user.char_class || "ninja", profileIconId: user.selected_profile_icon_id || null }, friendCode, friends, ...requests, unread };
+    return { me: { userId, name: String(user.name || ""), charClass: user.char_class || DEFAULT_CHARACTER, profileIconId: user.selected_profile_icon_id || null }, friendCode, friends, ...requests, unread };
   }
 
   async function getSuggestions(user) {

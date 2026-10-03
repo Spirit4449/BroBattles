@@ -37,7 +37,26 @@
           "gameAssets": {
             "spritesheetUrl": "/assets/ninja/skins/ninja-arena-sovereign/spritesheet.webp",
             "animationsUrl": "/assets/ninja/skins/ninja-arena-sovereign/animations.json",
-            "weaponUrl": "/assets/ninja/skins/ninja-arena-sovereign/crown.webp"
+            "weaponUrl": "/assets/ninja/skins/ninja-arena-sovereign/crown.webp",
+            "weaponSpin": {
+              "url": "/assets/ninja/skins/ninja-arena-sovereign/crown-spin.webp",
+              "frameWidth": 237,
+              "frameHeight": 237
+            },
+            "animationOverrides": {
+              "falling": {
+                "frames": [
+                  "falling00",
+                  "falling01",
+                  "falling02",
+                  "falling03",
+                  "falling02",
+                  "falling01"
+                ],
+                "frameRate": 8,
+                "repeat": -1
+              }
+            }
           }
         }
       ]

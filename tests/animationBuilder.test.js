@@ -40,3 +40,8 @@ test('repeated setup preserves existing animation definitions and skips missing 
   assert.equal(animations.size, 1);
   assert.equal(animations.get('idle').frameRate, 8);
 });
+
+test('prefix alternatives are case insensitive and overlapping prefixes do not duplicate frames', () => {
+  const { builder } = setup(['Run10', 'running02', 'run01', 'idle00']);
+  assert.deepEqual(builder.findFrames(['RUN', 'RUNNING']), ['run01', 'running02', 'Run10']);
+});

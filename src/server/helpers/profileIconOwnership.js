@@ -1,54 +1,18 @@
+const { DEFAULT_CHARACTER } = require("../../shared/characterStats.js");
+const { isAutoUnlocked, unlockedCharacterSet } = require("./cosmeticUnlocks");
 const {
   getProfileIconById,
   getProfileIconsCatalog,
 } = require("./profileIconsCatalog");
 
-function parseCharLevels(charLevelsRaw) {
-  if (!charLevelsRaw) return {};
-  if (typeof charLevelsRaw === "object") return charLevelsRaw;
-  try {
-    return JSON.parse(String(charLevelsRaw || "{}"));
-  } catch (_) {
-    return {};
-  }
-}
-
-function extractUnlockedCharacters(userRow) {
-  const levels = parseCharLevels(userRow?.char_levels);
-  const unlocked = new Set();
-  for (const [key, value] of Object.entries(levels || {})) {
-    if (Number(value) >= 1) unlocked.add(String(key));
-  }
-  return unlocked;
-}
-
 function isIconAutoUnlockedForUser(icon, userRow, unlockedCharacters = null) {
-  const unlock =
-    icon?.unlock && typeof icon.unlock === "object" ? icon.unlock : null;
-  if (!unlock) return false;
-  const type = String(unlock.type || "").toLowerCase();
-  if (type === "starter") return true;
-
-  if (type === "character") {
-    const character = String(unlock.character || "").trim();
-    if (!character) return false;
-    const chars = unlockedCharacters || extractUnlockedCharacters(userRow);
-    return chars.has(character);
-  }
-
-  if (type === "trophies") {
-    const min = Math.max(0, Number(unlock.min) || 0);
-    const trophies = Math.max(0, Number(userRow?.trophies) || 0);
-    return trophies >= min;
-  }
-
-  return false;
+  return isAutoUnlocked(icon?.unlock, userRow, { unlockedCharacters });
 }
 
 function getAutoUnlockIconIds(userRow) {
   const catalog = getProfileIconsCatalog();
   const icons = Array.isArray(catalog?.icons) ? catalog.icons : [];
-  const unlockedCharacters = extractUnlockedCharacters(userRow);
+  const unlockedCharacters = unlockedCharacterSet(userRow);
   const out = [];
   for (const icon of icons) {
     if (isIconAutoUnlockedForUser(icon, userRow, unlockedCharacters)) {
@@ -108,12 +72,12 @@ async function syncProfileIconOwnershipForUser(db, userRow) {
     return {
       ownedIconIds: [],
       selectedProfileIconId: null,
-      defaultIconId: String(getProfileIconsCatalog()?.defaultIconId || "ninja"),
+      defaultIconId: String(getProfileIconsCatalog()?.defaultIconId || DEFAULT_CHARACTER),
     };
   }
 
   const catalog = getProfileIconsCatalog();
-  const defaultIconId = String(catalog?.defaultIconId || "ninja");
+  const defaultIconId = String(catalog?.defaultIconId || DEFAULT_CHARACTER);
   const autoUnlockIds = getAutoUnlockIconIds(userRow);
 
   try {

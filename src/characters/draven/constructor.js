@@ -1,22 +1,17 @@
 // src/characters/draven/draven.js
-import socket from "../../socket";
-import { characterStats } from "../../shared/characterStats.js";
-import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
 import { animations } from "./anim";
 import DravenEffects from "./effects";
+import { updateInfernoHover } from "./infernoHover";
 import {
   performDravenSplashAttack,
   spawnExplosion,
   changeDebugState,
 } from "./attack";
-import { executeDefaultAttack } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
 import { playPlayerSound } from "../../gameScene/playerAudio";
 
-// Single source of truth for this character's name/key
 const NAME = "draven";
-const SPLASH = getResolvedCharacterAttackConfig(NAME, "splash");
 
 class Draven extends CharacterEntityBase {
   static key = NAME;
@@ -31,16 +26,14 @@ class Draven extends CharacterEntityBase {
     special: { key: "draven-special", volume: 0.6, rate: 0.8 },
   };
 
+  // The attack flag clears when the throw animation completes.
+  static attackFlow = {
+    attackResetMs: null,
+    clearOnAnimation: { safetyMs: 900, fallbackFrameRate: 15, bufferMs: 30, noAnimationMs: 350 },
+  };
+
   static preload(scene, staticPath = "/assets", options = {}) {
-    const includeBaseAtlas = options?.includeBaseAtlas !== false;
-    // Load atlas and projectile/sounds
-    if (includeBaseAtlas) {
-      scene.load.atlas(
-        NAME,
-        this.characterAssetPath(staticPath, "spritesheet.webp"),
-        this.characterAssetPath(staticPath, "animations.json"),
-      );
-    }
+    this.loadBaseAtlas(scene, staticPath, options);
     // Explosion atlas (separate) for splash attack visual
     scene.load.atlas(
       `${NAME}-explosion`,
@@ -149,6 +142,11 @@ class Draven extends CharacterEntityBase {
     }
   }
 
+  // Called every local movement frame; Inferno is Draven's ability lock.
+  static updateMovementLock(scene, player, state) {
+    updateInfernoHover(scene, player, state);
+  }
+
   static setDebugState(enabled) {
     changeDebugState(enabled);
   }
@@ -195,61 +193,6 @@ class Draven extends CharacterEntityBase {
     }
     if (!data || data.type !== "draven-splash-explode") return false;
     spawnExplosion(scene, Number(data.x) || 0, Number(data.y) || 0);
-    return true;
-  }
-
-  // Per-character gameplay and presentation stats
-  static getStats() {
-    return characterStats.draven;
-  }
-
-  constructor(deps) {
-    super(deps);
-  }
-
-  // Common default behavior for firing attacks
-  performDefaultAttack(payloadBuilder, onAfterFire) {
-    const result = executeDefaultAttack({
-      scene: this.scene,
-      ammo: this.ammo,
-      emitAction: (payload) => socket.emit("game:action", payload),
-      payloadBuilder,
-      onAfterFire,
-      attackResetMs: null,
-    });
-
-    if (!result.fired) return false;
-
-    // We'll clear isAttacking when the attack animation actually completes (see below)
-    // Provide a safety fallback in case the animation is interrupted.
-    const safeClear = result.clearAttack;
-    // Safety fallback: if nothing else clears it within 900ms, clear automatically
-    this.scene.time.delayedCall(900, safeClear);
-
-    // Attempt to detect and listen for the throw animation to finish before clearing isAttacking
-    try {
-      const p = this.player;
-      const currentAnim =
-        p.anims && p.anims.currentAnim ? p.anims.currentAnim : null;
-      if (currentAnim && /throw|attack/i.test(currentAnim.key)) {
-        const key = currentAnim.key;
-        // Estimate duration if we have frame data
-        const frameRate = currentAnim.frameRate || 15;
-        const frameCount =
-          (currentAnim.frames && currentAnim.frames.length) || frameRate;
-        const estMs = (frameCount / Math.max(1, frameRate)) * 1000 + 30; // small buffer
-        // Hard cap (not longer than 1.2s so we don't get stuck)
-        const capped = Math.min(estMs, 1200);
-        this.scene.time.delayedCall(capped, safeClear);
-        // Also clear on actual animation complete (whichever happens first)
-        p.once("animationcomplete", (anim) => {
-          if (anim && anim.key === key) safeClear();
-        });
-      } else {
-        // If no attack animation detected, rely on the shorter fallback
-        this.scene.time.delayedCall(350, safeClear);
-      }
-    } catch (_) {}
     return true;
   }
 

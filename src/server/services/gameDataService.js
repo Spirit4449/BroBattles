@@ -1,15 +1,8 @@
 const { loadMatchRoster } = require('./matchRosterService');
+const { parseCharacterLevels } = require("../../shared/characterStats.js");
 const {
   normalizeSelectionFromRow,
 } = require("../helpers/gameSelectionCatalog");
-const {
-  normalizeSelectedSkinMap,
-  resolveSelectedSkinId,
-  buildSkinAssetUrl,
-  getSkinGameAssets,
-} = require("../helpers/skinsCatalog");
-
-
 
 async function buildGameDataForMatch({
   db,
@@ -120,11 +113,7 @@ async function buildGameDataForMatch({
     players: allParticipants.map((p) => {
       let level = p.level || 1;
       try {
-        const levels =
-          typeof p.char_levels === "string"
-            ? JSON.parse(p.char_levels || "{}")
-            : p.char_levels || {};
-        const lv = levels && levels[p.char_class];
+        const lv = parseCharacterLevels(p.char_levels)[p.char_class];
         level = p.isBot ? p.level : Number(lv) > 0 ? Number(lv) : 1;
       } catch (_) {
         level = 1;
@@ -137,10 +126,8 @@ async function buildGameDataForMatch({
         name: p.name,
         team: p.team,
         char_class: p.char_class,
-        selected_skin_id: resolveSelectedSkinId({
-          character: p.char_class,
-          selectedSkinMap: normalizeSelectedSkinMap(p.selected_skin_id_by_char),
-        }),
+        // Skin fields are resolved once by loadMatchRoster's decoration.
+        selected_skin_id: p.selected_skin_id,
         profile_icon_id: String(p.profile_icon_id || "") || null,
         selected_card_id: selectedByName[p.name] ?? null,
         trophies: Number(p.trophies) || 0,
@@ -150,24 +137,8 @@ async function buildGameDataForMatch({
           damage: getDamage(p.char_class, level),
           specialDamage: getSpecialDamage(p.char_class, level),
         },
-        selected_skin_asset_url: buildSkinAssetUrl(
-          p.char_class,
-          resolveSelectedSkinId({
-            character: p.char_class,
-            selectedSkinMap: normalizeSelectedSkinMap(
-              p.selected_skin_id_by_char,
-            ),
-          }),
-        ),
-        selected_skin_game_assets: getSkinGameAssets(
-          p.char_class,
-          resolveSelectedSkinId({
-            character: p.char_class,
-            selectedSkinMap: normalizeSelectedSkinMap(
-              p.selected_skin_id_by_char,
-            ),
-          }),
-        ),
+        selected_skin_asset_url: p.selected_skin_asset_url,
+        selected_skin_game_assets: p.selected_skin_game_assets,
       };
     }),
   };

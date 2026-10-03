@@ -118,5 +118,15 @@
         "kind": "returning-projectile"
       }
     }
+  },
+  "presentation": {
+    "hiResArt": {
+      "sourceSize": 256,
+      "scale": 0.32,
+      "groundY": 240,
+      "hudTopOffset": -35,
+      "requiresFrame": "attack00",
+      "duckFrame": "jumping00"
+    }
   }
 }

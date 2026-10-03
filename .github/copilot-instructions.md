@@ -10,6 +10,7 @@ This project is a browser game built with Phaser (client) and Express + Socket.I
 - Production start: `npm start`
 - Debug production bundle with maps: `npm run sourcemap`
 - Automated tests: `npm test` (Node test runner); content contracts: `npm run validate:content`. Focused suites are listed in `package.json`.
+- Unapplied migrations: `npm run migrate:status` (read-only).
 - Do not run npm run build unless you have worked through many files and spent lots of time on a task.
 
 ## Environment and runtime
@@ -71,7 +72,7 @@ This project is a browser game built with Phaser (client) and Express + Socket.I
 - Mode/team sizes: team size S derives from “mode” (1→1v1, 2→2v2, 3→3v3). UI must prevent selecting a mode smaller than current members (`/party-members` check).
 - Character changes: emit `char-change` with `{ partyId, charClass }`; server validates, updates `users.char_class`, then re-emits roster.
 - Redirects: `/game/:matchid` serves `game.html`; client reads matchId from path. If `/status` reports `live_match_id`, redirect to the live game.
-- Powerup identity, timing and asset mappings derive from `src/shared/powerups.catalog.json`; do not duplicate those tables. Character definitions live in `src/shared/characters/`. See `docs/CONTRIBUTING.md` for extension steps.
+- Powerup identity, timing and asset mappings derive from `src/shared/powerups.catalog.json`; do not duplicate those tables. Character definitions live in `src/shared/characters/`; bot play style per character lives in `src/server/core/bots/characterProfiles.js`. Use `DEFAULT_CHARACTER`/`resolveCharacterKey()` from `shared/characterStats.js` instead of `|| "ninja"`. See `docs/CONTRIBUTING.md` for extension steps.
 
 Keep edits aligned with these contracts and file locations; when changing a public event or route, update both server emit/handlers and the corresponding client listeners.
 

@@ -10,7 +10,7 @@ const { helpSearchDocuments } = require('./helpSearchService');
 const modes = require('../../shared/gameModes.catalog.json').modes.filter(mode=>mode.implemented && mode.queueable);
 const helpArt={'Getting Started':'/assets/profile-icons/ninja.webp','Gameplay':'/assets/profile-icons/thorg.webp','Accounts':'/assets/profile-icons/blob.webp','Purchases':'/assets/gem.webp','Troubleshooting':'/assets/settings.webp','Safety & Privacy':'/assets/powerups/shield/icon.webp'};
 const md = new MarkdownIt({ html:false, linkify:false, breaks:false });
-const escape = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const { escapeHtml: escape } = require("../../shared/html.cjs");
 function article(kind, slug) {
   if (!['news','help','legal'].includes(kind) || !/^[a-z0-9-]+$/.test(slug)) return null;
   const item = kind === 'legal' ? ({terms:{title:'Terms of Service'},privacy:{title:'Privacy Policy'}}[slug]) : manifest[kind].find(item=>item.slug===slug);

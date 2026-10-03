@@ -1,3 +1,4 @@
+import { createModalFocus } from "../lib/modalFocus.js";
 import { positionChatPopover } from "./popoverPosition.mjs";
 import {
   bindChatProfile,
@@ -25,23 +26,31 @@ export function createViewersPopup({ getCurrentUserName, onOpenProfile, getFallb
   const listEl = popup.querySelector(".bb-chat-viewers-list");
   const card = popup.querySelector(".bb-chat-viewers-card");
   let closeTimer = null;
-  let returnFocus = null;
+  const focus = createModalFocus(card, {
+    initialFocus: () => popup.querySelector("button[data-chat-viewers-close]"),
+    onEscape: close,
+    fallbackFocus: getFallbackFocus,
+  });
 
   const isOpen = () => !popup.classList.contains("hidden") && !closeTimer;
 
-  function close() {
+  function close({ restoreFocus = true } = {}) {
     if (popup.classList.contains("hidden") || closeTimer) return;
     card.classList.remove("is-visible");
+    focus.deactivate({ restoreFocus });
     closeTimer = window.setTimeout(() => {
       popup.classList.add("hidden");
       closeTimer = null;
-      if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
-      else getFallbackFocus?.()?.focus({ preventScroll: true });
     }, 120);
   }
 
+  const openProfile = typeof onOpenProfile === "function" ? name => {
+    close({ restoreFocus: false });
+    onOpenProfile(name);
+  } : undefined;
+
   function open(message, anchorEl) {
-    returnFocus = anchorEl || document.activeElement;
+    const trigger = anchorEl || document.activeElement;
     if (closeTimer) {
       window.clearTimeout(closeTimer);
       closeTimer = null;
@@ -64,8 +73,8 @@ export function createViewersPopup({ getCurrentUserName, onOpenProfile, getFallb
           <span class="bb-chat-viewer-name">${escapeHtml(formatNameWithYou(viewer?.name || "Player", currentName))}</span>
           <span class="bb-chat-viewer-time">${escapeHtml(formatChatTime(viewer?.readAt))}</span>
         `;
-        bindChatProfile(row.querySelector(".bb-chat-viewer-name"), viewer?.name, onOpenProfile);
-        bindChatProfile(row.querySelector(".bb-chat-viewer-avatar"), viewer?.name, onOpenProfile);
+        bindChatProfile(row.querySelector(".bb-chat-viewer-name"), viewer?.name, openProfile);
+        bindChatProfile(row.querySelector(".bb-chat-viewer-avatar"), viewer?.name, openProfile);
         fragment.appendChild(row);
       }
       listEl.appendChild(fragment);
@@ -81,7 +90,7 @@ export function createViewersPopup({ getCurrentUserName, onOpenProfile, getFallb
     }
     void card.offsetWidth;
     card.classList.add("is-visible");
-    popup.querySelector("button[data-chat-viewers-close]")?.focus({ preventScroll: true });
+    focus.activate(trigger);
   }
 
   popup.querySelectorAll("[data-chat-viewers-close]").forEach((el) => el.addEventListener("click", close));
@@ -92,6 +101,7 @@ export function createViewersPopup({ getCurrentUserName, onOpenProfile, getFallb
     close,
     isOpen,
     destroy() {
+      focus.deactivate();
       window.removeEventListener("resize", close);
       if (closeTimer) window.clearTimeout(closeTimer);
       popup.remove();

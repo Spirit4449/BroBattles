@@ -248,7 +248,7 @@ class ThrowAttackReticleRenderer extends BaseAttackReticleRenderer {
     const { length, width } = getAttackGuideStyle(state);
     // Use the actual sampled trajectory, preserving gravity and the launch curvature.
     const preview = state.throwPreview || {};
-    const points = state.character === "gloop"
+    const points = state.config?.reticleRoundCorners === false
       ? dedupePathPoints(preview.points || [])
       : roundBounceCorners(
       preview.points || [],
@@ -276,7 +276,7 @@ class ThrowAttackReticleRenderer extends BaseAttackReticleRenderer {
       getPalette(state),
       Math.max(length, visibleLength),
       width,
-      state.character === "gloop" ? 0 : 0.18,
+      state.config?.reticleEndAlpha ?? 0.18,
     );
     const cue = state.centerCue;
     if (cue?.proximity > 0) {
@@ -370,7 +370,7 @@ class RoundAttackReticleRenderer extends BaseAttackReticleRenderer {
     const cx = Number(state.baseX ?? state.anchorX) || 0;
     const cy = (Number(state.baseY ?? state.anchorY) || 0) +
       (Number(state.config?.reticleOffsetY) || 0) * visualScale -
-      (state.character === "thorg" ? 37.8 * (visualScale - 1) : 0);
+      (Number(state.config?.reticleScaleLiftY) || 0) * (visualScale - 1);
 
     // Concentric fills fade radially; the outer ellipse marks the true attack footprint.
     this.shadow.lineStyle(palette.shadowColor === 0xffaa00 ? 12 : 5, palette.shadowColor === 0xffaa00 ? 0xffaa00 : 0x101725, 0.45);
@@ -462,7 +462,7 @@ function createAttackAimReticleController(scene, { getAmmoCharges } = {}) {
       const now = Number(scene.time?.now) || 0;
       const dt = lastTime === null ? 0 : Math.max(0, Math.min(50, now - lastTime));
       lastTime = now;
-      const fadeSides = ["huntress", "gloop", "wizard"].includes(state.character);
+      const fadeSides = state.config?.reticleFadeOnTurn === true;
       if (!shownState || shownState.character !== state.character || shownState.family !== state.family) {
         shownState = renderedState;
         opacity = 1;

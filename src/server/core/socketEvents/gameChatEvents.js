@@ -1,3 +1,4 @@
+const { resolveCharacterKey } = require("../../../shared/characterStats.js");
 function registerGameChatEvents(gameRoom, socket) {
   gameRoom.onSocket(socket, "game:chat:send", async (payload = {}, cb) => {
     try {
@@ -46,7 +47,7 @@ function registerGameChatEvents(gameRoom, socket) {
         createdAt: new Date().toISOString(),
         sender: {
           name: player.name,
-          charClass: String(player.char_class || "ninja"),
+          charClass: resolveCharacterKey(player.char_class),
           profileIconId: String(player.profile_icon_id || "") || null,
           team: String(player.team || "team1"),
         },

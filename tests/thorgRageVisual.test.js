@@ -37,6 +37,6 @@ test('rage clone keeps physical transform untouched, restores alpha each render,
   assert.equal(body._bbHudTopOffset, standingHudTop, 'returns to stable grown height');
   setRage(scene,body,false);
   assert.equal(body._bbHudTopOffset, undefined, 'normal HUD anchor is restored');
-  assert.equal(body._thorgVisualScale,1); assert.equal(body.alpha,0.7);
+  assert.equal(body._bbVisualScale,1); assert.equal(body.alpha,0.7);
   assert.equal(events.listenerCount('prerender'),0); assert.equal(clone.destroyed,true);
 });

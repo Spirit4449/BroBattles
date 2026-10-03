@@ -1,3 +1,4 @@
+const { getCharacterLevel } = require("../../../shared/characterStats.js");
 const {
   getSkinsCatalog,
   getCharacterSkins,
@@ -8,17 +9,6 @@ const {
   syncSkinOwnershipForUser,
 } = require("../../helpers/skinOwnership");
 
-function getUserCharacterLevel(user, character) {
-  let levels = user?.char_levels || {};
-  if (typeof levels === "string") {
-    try {
-      levels = JSON.parse(levels || "{}");
-    } catch (_) {
-      levels = {};
-    }
-  }
-  return Math.max(0, Number(levels?.[character]) || 0);
-}
 
 function registerSkinsRoutes({ app, db, requireCurrentUser, shopService }) {
   app.get("/skins/catalog", (_req, res) => {
@@ -72,7 +62,7 @@ function registerSkinsRoutes({ app, db, requireCurrentUser, shopService }) {
       if (!skin || String(skin.character || "") !== character) {
         return res.status(404).json({ success: false, error: "Unknown skin" });
       }
-      if (getUserCharacterLevel(user, character) < 1) {
+      if (getCharacterLevel(user, character) < 1) {
         return res.status(403).json({
           success: false,
           error: "Unlock this character before selecting one of its skins.",

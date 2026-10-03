@@ -43,7 +43,7 @@ Create a MySQL database and run the migration scripts:
 CREATE DATABASE game;
 ```
 
-Then execute the migration files in order from `migrations/`. The unified Shop
+Then execute the migration files in order from `migrations/`. `npm run migrate:status` reports (read-only) any migration whose tables, columns or indexes are missing. The unified Shop
 requires:
 
 - `migrations/2026-08-31_shop_commerce.sql`

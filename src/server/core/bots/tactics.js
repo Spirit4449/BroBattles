@@ -3,16 +3,10 @@ const { nearestSurface, walkLimits, canStandAt, canWalkBetween, standOn, preview
 const { bounds } = require('./physics');
 const { teamPosition } = require('./teamwork');
 const effects = require('../gameRoom/effects/effectManager');
+const { botProfile } = require('./characterProfiles');
 const { POWERUP_SHOCKWAVE_RADIUS, POWERUP_PICKUP_RADIUS, DEATH_DROP_PICKUP_RADIUS } = require('../gameRoomConfig');
 
-const STYLES = {
-  thorg: { fraction: 0.65, cap: 125, clearance: 60, height: 20 },
-  draven: { fraction: 0.65, cap: 220, clearance: 95, height: 45 },
-  ninja: { fraction: 0.68, cap: 330, clearance: 145, height: 35 },
-  wizard: { fraction: 0.7, cap: 480, clearance: 225, height: 100 },
-  huntress: { fraction: 0.65, cap: 370, clearance: 200, height: 85 },
-  gloop: { fraction: 0.65, cap: 330, clearance: 170, height: 70 },
-};
+const style = (player) => botProfile(player.char_class).spacing;
 const healthFraction = (p) => Math.max(0, Math.min(1, p.health / Math.max(1, p.maxHealth)));
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -95,11 +89,10 @@ function shockwaveEvadeGoal(brain, pickup, reachable, enemies, routeTo) {
 function preferredRange(brain, target) {
   if (brain.superPlan?.charged && Number.isFinite(brain.superPlan.preferredRange)) {
     // A reserved super influences spacing without disabling basic attacks.
-    const style = STYLES[brain.player.char_class] || STYLES.ninja;
-    return Math.min(brain.superPlan.preferredRange, style.cap) * brain.spacing;
+    return Math.min(brain.superPlan.preferredRange, style(brain.player).cap) * brain.spacing;
   }
-  const style = STYLES[brain.player.char_class] || STYLES.ninja;
-  return Math.min(style.cap, basicRange(brain.player, brain.room) * style.fraction) * brain.spacing;
+  const { cap, fraction } = style(brain.player);
+  return Math.min(cap, basicRange(brain.player, brain.room) * fraction) * brain.spacing;
 }
 
 function surfaceFor(graph, target) {
@@ -162,8 +155,8 @@ function retreatExposure(player, point, route, enemies) {
 
 function* chooseDecisionSteps(brain, context, target, enemies, now) {
   const p = brain.player, { graph, current, poisonY, routeTo } = context;
-  const style = STYLES[p.char_class] || STYLES.ninja;
-  const preferred = target ? preferredRange(brain, target) : style.cap;
+  const spacing = style(p);
+  const preferred = target ? preferredRange(brain, target) : spacing.cap;
   const formation = teamPosition(brain, target, preferred);
   const suddenDeath = Number.isFinite(poisonY);
   const hazard = bounds(p).bottom >= poisonY - 100;
@@ -176,7 +169,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
   const reloading = p.ammoState?.charges === 0;
   const pressured = nearestRange < preferred * (brain.decision?.mode === 'kite' ? 0.95 : 0.7);
   const wantsSpace = brain.retreating || (near > friends + 1 && healthFraction(p) < 0.65) ||
-    (!pressAdvantage && pressured && (style.clearance >= 145 || reloading));
+    (!pressAdvantage && pressured && (spacing.clearance >= 145 || reloading));
   const reachable = [];
   for (const surface of graph.surfaces) {
     yield;
@@ -304,7 +297,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
         const point = { x, y: surface.top - graph.body.offsetY - graph.body.halfHeight };
         const travel = pointRoute.reduce((sum, e) => sum + e.duration, 0) * 0.045 + Math.abs(p.x - x) * 0.13;
         const nearestEnemy = enemies.length ? Math.min(...enemies.map((e) => distance(point, e))) : Infinity;
-        const crowding = enemies.reduce((sum, e) => sum + Math.max(0, (wantsSpace ? 500 : style.clearance) - distance(point, e)), 0);
+        const crowding = enemies.reduce((sum, e) => sum + Math.max(0, (wantsSpace ? 500 : spacing.clearance) - distance(point, e)), 0);
         let score = travel + crowding * (wantsSpace ? 1.5 : 0.85);
         if (formation && !hazard && !brain.retreating) score += distance(point, formation) * formation.weight;
         if (brain.teamPlan && !hazard) {
@@ -346,7 +339,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
           const pressure = !direct && pressureAim(brain.room, { ...p, ...point }, target, brain.profile);
           score += Math.abs(distance(point, target) - combatRange) * (pressure ? 0.5 : 0.75);
           if (pressAdvantage) score += Math.max(0, distance(point, target) - combatRange) * 0.45;
-          score += Math.max(0, Math.abs(point.y - target.y) - style.height) * (direct ? 0.25 : pressure ? 0.65 : 1.3);
+          score += Math.max(0, Math.abs(point.y - target.y) - spacing.height) * (direct ? 0.25 : pressure ? 0.65 : 1.3);
           if (!direct) score += pressure ? 120 : 300;
           // After holding one platform for a while, try another usable angle.
           // Travel and danger still compete with this preference.
@@ -360,7 +353,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
               score += Math.max(0, 1 - Math.abs(x - failed.x) / 180) * 340;
             }
           }
-          score -= Math.min(style.height, Math.max(0, target.y - point.y)) * 0.15;
+          score -= Math.min(spacing.height, Math.max(0, target.y - point.y)) * 0.15;
         }
         if (surface.id === current?.id && !brain.retreating) score -= 25; // Briefly hold useful ground before considering another angle.
         if (previous && Math.abs(x - previous.x) < 1) incumbent = { goal: previous, score };
@@ -406,4 +399,4 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
 function finishSteps(steps) { let result; do { result = steps.next(); } while (!result.done); return result.value; }
 function selectTarget(...args) { return finishSteps(selectTargetSteps(...args)); }
 function chooseDecision(...args) { return finishSteps(chooseDecisionSteps(...args)); }
-module.exports = { STYLES, healthFraction, preferredRange, surfaceFor, selectTarget, chooseDecision, selectTargetSteps, chooseDecisionSteps, finishSteps };
+module.exports = { healthFraction, preferredRange, surfaceFor, selectTarget, chooseDecision, selectTargetSteps, chooseDecisionSteps, finishSteps };

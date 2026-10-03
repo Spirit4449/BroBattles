@@ -15,7 +15,9 @@ vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/p
   babelrc: false, configFile: false,
   presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 }).code, { exports: api, require: id => id === '../shared/ducking.js'
-  ? { DUCK_HEIGHT_RATIO } : { playDuckTransitionSound() {} } });
+  ? { DUCK_HEIGHT_RATIO }
+  : id === '../shared/characters/index.js' ? require('../src/shared/characters')
+  : { playDuckTransitionSound() {} } });
 
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, `${a} != ${b}`);
 

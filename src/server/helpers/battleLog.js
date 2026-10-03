@@ -1,3 +1,4 @@
+const { DEFAULT_CHARACTER, resolveCharacterKey } = require("../../shared/characterStats.js");
 const {
   getModeById,
   getVariantDescriptor,
@@ -32,7 +33,7 @@ function resolvePlayerIconId(player) {
   if (icon && typeof icon === "string" && icon.trim()) {
     return icon.trim().toLowerCase();
   }
-  return String(player.char_class || player.charClass || "ninja")
+  return String(player.char_class || player.charClass || DEFAULT_CHARACTER)
     .trim()
     .toLowerCase();
 }
@@ -59,7 +60,7 @@ async function recordMatchOutcome(db, room, winnerTeam, rewardSummary = []) {
   for (const p of roomPlayers) {
     const r = rewardsMap.get(String(p.name)) || {};
     const combat = room.rewardStats?.get(String(p.name)) || {};
-    const charClass = String(p.char_class || "ninja").toLowerCase();
+    const charClass = resolveCharacterKey(p.char_class);
     const profileIconId = resolvePlayerIconId(p);
     const trophiesDelta = nullableNumber(r.trophiesDelta);
     const kills = nullableNumber(r.kills ?? combat.kills);
@@ -243,7 +244,7 @@ async function getBattleLogForUser(db, userId, limit = 10) {
           userId: pr.user_id ? Number(pr.user_id) : null,
           name: pr.name || "Player",
           team: pr.team || "team1",
-          charClass: String(pr.char_class || "ninja").toLowerCase(),
+          charClass: resolveCharacterKey(pr.char_class),
           profileIconId: resolvePlayerIconId(pr),
           isBot: false,
           kills: nullableNumber(pr.kills),
@@ -271,7 +272,7 @@ async function getBattleLogForUser(db, userId, limit = 10) {
           userId: null,
           name: br.name || "Bot",
           team: br.team || "team2",
-          charClass: String(br.char_class || "ninja").toLowerCase(),
+          charClass: resolveCharacterKey(br.char_class),
           profileIconId: resolvePlayerIconId(br),
           isBot: true,
           kills: null,
@@ -332,7 +333,7 @@ async function getBattleLogForUser(db, userId, limit = 10) {
         userId: p.userId ? Number(p.userId) : null,
         name: String(p.name || (p.isBot ? "Bot" : "Player")),
         team: String(p.team || "team1"),
-        charClass: String(p.charClass || "ninja").toLowerCase(),
+        charClass: resolveCharacterKey(p.charClass),
         profileIconId: resolvePlayerIconId(p),
         isBot: Boolean(p.isBot),
         isCurrentPlayer: Number(p.userId) === uid,
@@ -357,9 +358,9 @@ async function getBattleLogForUser(db, userId, limit = 10) {
             userId: uid,
             name: "You",
             team: playerTeam,
-            charClass: String(row.player_char_class || "ninja").toLowerCase(),
+            charClass: resolveCharacterKey(row.player_char_class),
             profileIconId: String(
-              row.player_char_class || "ninja",
+              row.player_char_class || DEFAULT_CHARACTER,
             ).toLowerCase(),
             isBot: false,
             isCurrentPlayer: true,
@@ -401,10 +402,10 @@ async function getBattleLogForUser(db, userId, limit = 10) {
         name: currentPlayerObj?.name || "You",
         charClass:
           currentPlayerObj?.charClass ||
-          String(row.player_char_class || "ninja").toLowerCase(),
+          resolveCharacterKey(row.player_char_class),
         profileIconId:
           currentPlayerObj?.profileIconId ||
-          String(row.player_char_class || "ninja").toLowerCase(),
+          resolveCharacterKey(row.player_char_class),
       },
       playerStats: {
         kills: currentPlayerObj?.kills ?? nullableNumber(row.player_kills),

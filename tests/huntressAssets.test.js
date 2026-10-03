@@ -13,7 +13,7 @@ test("huntress burn tick preload points at the shipped audio asset", () => {
 
   assert.match(
     constructorSource,
-    /`\$\{NAME\}-burn-tick`[\s\S]*?characterAssetPath\(staticPath, "tick\.mp3"\)/,
+    /\[`\$\{NAME\}-burn-tick`\]: "tick\.mp3"/,
   );
   assert.ok(fs.existsSync(path.join(root, "public/assets/huntress/tick.mp3")));
 });

@@ -28,7 +28,8 @@
           "anchorForwardOffset": 38,
           "anchorOffsetY": -6,
           "reticleThickness": 55,
-          "angleMode": "free"
+          "angleMode": "free",
+          "reticleFadeOnTurn": true
         },
         "fireball": {
           "speed": 450,
@@ -57,7 +58,8 @@
           "radius": 67,
           "defaultRange": 55,
           "anchorForwardOffset": 0,
-          "anchorOffsetY": 4
+          "anchorOffsetY": 4,
+          "reticleFadeOnTurn": true
         }
       }
     },
@@ -99,5 +101,8 @@
         "kind": "projectile-linear"
       }
     }
+  },
+  "presentation": {
+    "specialAnimationLockMs": 2100
   }
 }

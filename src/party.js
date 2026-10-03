@@ -1,9 +1,13 @@
+import { escapeHtml } from "./shared/html.cjs";
 import { MAINTENANCE_MESSAGE } from "./shared/maintenance";
 import { warmBattleSelection } from './lobby/preloadBattle';
 import "./styles/levelBadge.css";
 import { revealLobby } from "./lobby/lobbyReveal.js";
 import { refreshPlatformGrounding } from "./lobby/platformGrounding.mjs";
 import { playPartyMoveEffect } from "./lobby/partyMoveEffect.js";
+import { setLobbyBackground } from "./lobby/lobbyBackground.js";
+import { createMatchmakingClient } from "./lobby/matchmakingClient.mjs";
+import { createMatchmakingOverlay } from "./lobby/matchmakingOverlay.js";
 import { createPartySlotDrag } from "./lobby/partySlotDrag.js";
 import { ensureLegalAcceptance } from "./site/shell";
 import { createJoinRequestController } from './lobby/joinRequestController';
@@ -13,12 +17,11 @@ import socket, { ensureSocketConnected, waitForConnect } from "./socket";
 import { getSharedSelectionPopupShell } from "./lib/selectionPopupShell.js";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
 import {
-  getLobbyBgAsset,
   getMapSelectPreviewAsset,
   getLobbyPlatformAsset,
 } from "./maps/manifest";
 import { buildCharacterSkinBodyUrl } from "./lib/skinAssets.js";
-import { getAllCharacters, LEVEL_CAP } from "./shared/characterStats.js";
+import { getAllCharacters, LEVEL_CAP, DEFAULT_CHARACTER, resolveCharacterKey, parseCharacterLevels } from "./shared/characterStats.js";
 import { clearLevelBadge, renderLevelBadge } from "./lib/levelBadgeView.js";
 import {
   getAllGameModes,
@@ -59,52 +62,8 @@ const SOLO_MODE_ID_STORAGE_KEY = "bb_solo_mode_id";
 const SOLO_MODE_VARIANT_STORAGE_KEY = "bb_solo_mode_variant_id";
 const SOLO_MAP_STORAGE_KEY = "bb_solo_map";
 const POST_BATTLE_LOBBY_RETURN_KEY = "bb_post_battle_lobby_return";
-let activeQueueContext = null; // { selection }
-let mmOverlayPlayers = [];
-let mmOverlayPlayersSig = "";
-let mmOverlayTotal = 0;
-let __matchmakingHideTimer = null;
-let __matchmakingCountTimer = null;
-let __matchmakingReadyAckTimer = null;
-let __matchedQueueId = null;
-let __queueHealthTimer = null;
-let __queueHealthPending = false;
-let __queueHealthGeneration = 0;
-
-function lockMatchmakingCancel(matchId) {
-  __matchedQueueId = Number(matchId);
-  const button = document.getElementById("mm-cancel");
-  if (button) button.disabled = true;
-}
-
-function checkMatchmakingHealth() {
-  if (__queueHealthPending) return;
-  __queueHealthPending = true;
-  const generation = __queueHealthGeneration;
-  const requestedMatchId = __matchedQueueId;
-  socket.timeout(5000).emit("queue:status", (error, status) => {
-    if (generation !== __queueHealthGeneration) return;
-    __queueHealthPending = false;
-    if (__matchedQueueId !== requestedMatchId) return;
-    if (error || status?.state === "unavailable") return;
-    if (status?.state === "live") {
-      lockMatchmakingCancel(status.matchId);
-      window.location.href = `/game/${status.matchId}`;
-    } else if (status?.state === "matched") {
-      lockMatchmakingCancel(status.matchId);
-      socket.emit("ready:ack", { matchId: status.matchId });
-    } else if (status?.state === "missing") {
-      // Let the server reset party readiness and broadcast recovery to everyone.
-      socket.emit("queue:leave");
-      __matchedQueueId = null;
-    }
-  });
-}
 let __partyReadyPending = false;
 let __activeBattleMatchId = null;
-let __matchmakingReadyAt = 0;
-const MATCHMAKING_EXIT_MS = 190;
-const MATCHMAKING_SUCCESS_HOLD_MS = 2400;
 let __battleReturnPageshowBound = false;
 
 function consumeBattleLobbyReturnFlag() {
@@ -119,7 +78,6 @@ function consumeBattleLobbyReturnFlag() {
   }
 }
 
-let __postBattleLobbyReturn = consumeBattleLobbyReturnFlag();
 let __lobbyOffsetResizeBound = false;
 let __mapPopupUi = null;
 let __modePopupUi = null;
@@ -137,23 +95,41 @@ let __partyContext = {
 const joinRequests = createJoinRequestController({ socket, checkIfInParty, getActivePartyId });
 const { showPartyJoinRequestScreen, hidePartyJoinRequestScreen, loadPendingJoinRequests } = joinRequests;
 export { showPartyJoinRequestScreen, hidePartyJoinRequestScreen };
+const matchmaking = createMatchmakingClient({
+  socket,
+  view: createMatchmakingOverlay(),
+  selection: {
+    normalize: normalizeGameSelection,
+    totalPlayers: getTotalPlayersForSelection,
+    current: getCurrentSelection,
+  },
+  party: {
+    activeId: getActivePartyId,
+    players: collectCurrentPartyMembers,
+    currentTeam: () => getCurrentPartyMember()?.team || null,
+    setBotSlots: (botSlots) => { __partyContext.botSlots = botSlots; },
+  },
+  memberKey: getLobbyMemberKey,
+  selfKey: () => getLobbyMemberKey(getCurrentLobbyUserName()),
+  onReadyReset: resetSelfReadyState,
+  warmBattle: warmBattleSelection,
+  notify: sonner,
+  maintenanceMessage: MAINTENANCE_MESSAGE,
+  audio: () => window.__BB_NAVIGATION__?.lobbyAudio,
+  isAdmin: () => !!window.__BRO_BATTLES_USERDATA__?.isAdmin,
+  navigate: (url) => { window.location.href = url; },
+  rememberMatch: (matchId) => sessionStorage.setItem("matchId", matchId),
+  dispatchStart: () => window.dispatchEvent(new CustomEvent("bb:matchmaking-start")),
+  suppressed: consumeBattleLobbyReturnFlag(),
+});
 
-function parseCharacterLevels(levels) {
-  if (!levels) return {};
-  if (typeof levels === "object") return levels;
-  try {
-    return JSON.parse(String(levels || "{}"));
-  } catch (_) {
-    return {};
-  }
-}
 
 function getMemberLevel(member) {
   if (!member) return null;
   if (Number.isFinite(Number(member.level))) {
     return Math.max(1, Number(member.level));
   }
-  const charClass = String(member.char_class || "ninja");
+  const charClass = resolveCharacterKey(member.char_class);
   const levels = parseCharacterLevels(member.char_levels);
   return Math.max(1, Number(levels?.[charClass]) || 1);
 }
@@ -729,9 +705,9 @@ function setupModePickerControls(onSelect = null) {
       card.classList.toggle("is-trophy-locked", !!unlockReason);
       card.disabled = !!unlockReason;
       card.innerHTML = `
-        <div class="mode-select-art"><img src="${artAsset}" alt="${mode.label}" />${unlockReason ? '<span class="mode-select-lock" aria-hidden="true"><img src="/assets/lock.webp" alt="" /></span>' : ""}</div>
-        <div class="map-select-name">${mode.label}</div>
-        <div class="mode-select-subtitle">${mode.description || ""}</div>
+        <div class="mode-select-art"><img src="${escapeHtml(artAsset)}" alt="${escapeHtml(mode.label)}" />${unlockReason ? '<span class="mode-select-lock" aria-hidden="true"><img src="/assets/lock.webp" alt="" /></span>' : ""}</div>
+        <div class="map-select-name">${escapeHtml(mode.label)}</div>
+        <div class="mode-select-subtitle">${escapeHtml(mode.description || "")}</div>
         <div class="mode-select-meta">${unlockReason && mode.unlockTrophies ? `<span>Unlock at</span><span class="mode-select-trophy-cost"><img src="/assets/trophy.webp" alt="Trophies" /><span>${mode.unlockTrophies.toLocaleString()}</span></span>` : ""}</div>
       `;
       card.querySelector("img")?.addEventListener("error", (event) => {
@@ -794,9 +770,9 @@ function setupModePickerControls(onSelect = null) {
         selection.modeVariantId === variant.id ? " active" : ""
       }`;
       card.innerHTML = `
-        <img src="${getModeArtAsset(modeId)}" alt="${variant.label}" />
-        <div class="map-select-name">${variant.label}</div>
-        <div class="mode-select-subtitle">${variant.subtitle || getModeSubtitle(modeId)}</div>
+        <img src="${escapeHtml(getModeArtAsset(modeId))}" alt="${escapeHtml(variant.label)}" />
+        <div class="map-select-name">${escapeHtml(variant.label)}</div>
+        <div class="mode-select-subtitle">${escapeHtml(variant.subtitle || getModeSubtitle(modeId))}</div>
       `;
       card.querySelector("img")?.addEventListener("error", (event) => {
         event.currentTarget.src = getModeFallbackArtAsset(modeId);
@@ -1108,11 +1084,11 @@ export function socketInit(options = {}) {
       if (socket.connected) startHeartbeat(getActivePartyId());
       else ensureSocketConnected();
       if (!consumeBattleLobbyReturnFlag()) return;
-      restoreLobbyAfterBattleReturn();
+      matchmaking.restoreAfterBattleReturn();
     });
   }
 
-  if (__postBattleLobbyReturn) restoreLobbyAfterBattleReturn();
+  if (matchmaking.isSuppressed()) matchmaking.restoreAfterBattleReturn();
 
   socket.on("presence:self", ({ matchId }) => {
     __activeBattleMatchId = Number(matchId) > 0 ? Number(matchId) : null;
@@ -1465,201 +1441,7 @@ export function socketInit(options = {}) {
   });
 
   // Party-wide: everyone ready -> show matchmaking overlay
-  socket.on("party:matchmaking:start", ({ partyId, selection, botSlots }) => {
-    if (__postBattleLobbyReturn || __matchedQueueId) return;
-    const currentPartyId = getActivePartyId();
-    if (currentPartyId && String(partyId) !== String(currentPartyId)) return;
-    const normalized = normalizeGameSelection(
-      selection || getCurrentSelection(),
-    );
-    if (Array.isArray(botSlots)) {
-      __partyContext.botSlots = botSlots;
-    }
-    const currentMember = (__partyContext.members || []).find(
-      (member) =>
-        getLobbyMemberKey(member) ===
-        getLobbyMemberKey(getCurrentLobbyUserName()),
-    );
-    activeQueueContext = {
-      selection: normalized,
-      yourTeam: currentMember?.team || null,
-    };
-    mmOverlayTotal = getTotalPlayersForSelection(normalized);
-    mmOverlayPlayers = collectCurrentPartyMembers().slice(0, mmOverlayTotal);
-    mmOverlayPlayersSig = JSON.stringify(
-      mmOverlayPlayers.map(
-        (player) =>
-          `${player?.botSlotKey || player?.name || ""}:${player?.char_class || ""}`,
-      ),
-    );
-    showMatchmakingOverlay();
-    updateMMOverlay({
-      found: mmOverlayPlayers.length,
-      total: mmOverlayTotal,
-      selection: normalized,
-      players: mmOverlayPlayers,
-    });
-  });
-
-  socket.on("queue:joined", (payload) => {
-    if (__postBattleLobbyReturn || __matchedQueueId) return;
-    const currentPartyId = getActivePartyId();
-    console.log("[join-debug] queue:joined", {
-      currentPartyId: currentPartyId || null,
-      payloadPartyId: payload?.partyId ?? null,
-      selection: payload?.selection || null,
-    });
-    const normalized = normalizeGameSelection(
-      payload?.selection || getCurrentSelection(),
-    );
-    activeQueueContext = { selection: normalized };
-    mmOverlayPlayers = collectCurrentPartyMembers();
-    mmOverlayPlayersSig = "";
-    mmOverlayTotal = getTotalPlayersForSelection(normalized);
-    showMatchmakingOverlay();
-    updateMMOverlay({
-      found: mmOverlayPlayers.length,
-      total: mmOverlayTotal,
-      selection: normalized,
-      players: mmOverlayPlayers,
-    });
-  });
-
-  // When a match is found, hold the success state before acknowledging ready.
-  socket.on("match:found", (payload) => {
-    if (__postBattleLobbyReturn) return;
-    if (!payload?.matchId) return;
-    lockMatchmakingCancel(payload.matchId);
-    showMatchmakingOverlay();
-    const currentPartyId = getActivePartyId();
-    console.log("[join-debug] match:found", {
-      currentPartyId: currentPartyId || null,
-      matchId: payload?.matchId ?? null,
-      playerCount: Array.isArray(payload?.players) ? payload.players.length : 0,
-      selection: payload?.selection || null,
-    });
-    const normalized = normalizeGameSelection(
-      payload?.selection || getCurrentSelection(),
-    );
-    activeQueueContext = {
-      selection: normalized,
-      yourTeam: payload?.yourTeam || null,
-    };
-    const matchedPlayers = Array.isArray(payload?.players)
-      ? payload.players.slice()
-      : [];
-    warmBattleSelection(normalized, matchedPlayers);
-    mmOverlayPlayers = payload?.yourTeam
-      ? matchedPlayers.sort((a, b) => {
-          const aIsYours = a?.team === payload.yourTeam ? 0 : 1;
-          const bIsYours = b?.team === payload.yourTeam ? 0 : 1;
-          return aIsYours - bIsYours;
-        })
-      : matchedPlayers;
-    mmOverlayPlayersSig = JSON.stringify(
-      mmOverlayPlayers.map((p) => `${p?.name || ""}:${p?.char_class || ""}`),
-    );
-    mmOverlayTotal = getTotalPlayersForSelection(normalized);
-    updateMMOverlay({
-      found: mmOverlayPlayers.length,
-      total: mmOverlayTotal,
-      selection: normalized,
-      players: mmOverlayPlayers,
-    });
-    if (payload?.matchId) {
-      if (__matchmakingReadyAckTimer) {
-        window.clearTimeout(__matchmakingReadyAckTimer);
-      }
-      const successTimeRemaining = Math.max(
-        0,
-        MATCHMAKING_SUCCESS_HOLD_MS -
-          (Date.now() - (__matchmakingReadyAt || Date.now())),
-      );
-      __matchmakingReadyAckTimer = window.setTimeout(() => {
-        socket.emit("ready:ack", { matchId: payload.matchId });
-        __matchmakingReadyAckTimer = null;
-      }, successTimeRemaining);
-    }
-  });
-
-  // When match is ready to start, redirect to game
-  socket.on("match:gameReady", async (payload) => {
-    if (__postBattleLobbyReturn) return;
-    try {
-      const { matchId } = payload;
-      if (!matchId) {
-        console.error("No matchId in gameReady payload");
-        return;
-      }
-
-      const currentPartyId = getActivePartyId();
-      console.log("[join-debug] match:gameReady redirecting", {
-        matchId,
-        currentPartyId: currentPartyId || null,
-        href: window.location.href,
-      });
-
-      const successTimeRemaining = Math.max(
-        0,
-        MATCHMAKING_SUCCESS_HOLD_MS -
-          (Date.now() - (__matchmakingReadyAt || Date.now())),
-      );
-      if (successTimeRemaining > 0) {
-        await new Promise((resolve) => {
-          window.setTimeout(resolve, successTimeRemaining);
-        });
-      }
-
-      // Store match info for game page
-      sessionStorage.setItem("matchId", matchId);
-      activeQueueContext = null;
-
-      // Redirect to game page using new URL format
-      window.location.href = `/game/${matchId}`;
-    } catch (error) {
-      console.error("Error handling match:gameReady:", error);
-      sonner("Could not join match", "Please refresh the page and try again.", "error");
-    }
-  });
-
-  // Queue error -> notify and hide overlay (useful for solo flow)
-  socket.on("queue:error", (err) => {
-    if (__matchedQueueId || err?.code === "MATCH_FOUND") return;
-    try {
-      const currentPartyId = getActivePartyId();
-      console.error("[join-debug] queue:error", {
-        currentPartyId: currentPartyId || null,
-        message: err?.message || null,
-        raw: err || null,
-      });
-      hideMatchmakingOverlay();
-      mmOverlayPlayers = [];
-      mmOverlayPlayersSig = "";
-      mmOverlayTotal = 0;
-      if (err?.message) {
-        sonner(err.code === "MAINTENANCE" ? null : "Could not start matchmaking", err.code === "MAINTENANCE" ? MAINTENANCE_MESSAGE : err.message, "error", { sound: "notification", maintenanceUntil: err.code === "MAINTENANCE" ? err.maintenanceUntil : null });
-      }
-      // Reset local ready state so next click attempts to join again
-      const selfSlot = Array.from(
-        document.querySelectorAll(".character-slot"),
-      ).find((s) => s.dataset.isCurrentUser === "true");
-      const statusEl = selfSlot?.querySelector(".status");
-      if (statusEl) {
-        statusEl.textContent = "online";
-        statusEl.className = "status online";
-      }
-      // Reset bottom Ready button
-      setReadyButtonState(false);
-    } catch (_) {}
-  });
-
-  socket.on("queue:fill-bots:error", (err) => {
-    sonner(
-      "Could not add bots",
-      err?.message || "Please try adding bots again.",
-      "error",
-    );
-  });
+  matchmaking.bindSocketEvents();
 
   socket.on("party:kicked", (data) => {
     sonner(
@@ -1672,177 +1454,6 @@ export function socketInit(options = {}) {
     hidePartyJoinRequestScreen();
     window.location.href = "/";
   });
-
-  // Match cancelled (e.g., ready timeout) -> hide overlay
-  socket.on("match:cancelled", (data) => {
-    if (__matchedQueueId && Number(data?.matchId) !== __matchedQueueId) return;
-    const currentPartyId = getActivePartyId();
-    console.warn("[join-debug] match:cancelled", {
-      currentPartyId: currentPartyId || null,
-      reason: data?.reason || null,
-    });
-    const overlay = document.getElementById("matchmaking-overlay");
-    if (data?.reason && overlay && !overlay.classList.contains("hidden")) {
-      sonner("Matchmaking stopped", data.reason, null, null, {
-        duration: 3000,
-        sound: "notification",
-      });
-    }
-    hideMatchmakingOverlay();
-    activeQueueContext = null;
-    mmOverlayPlayers = [];
-    mmOverlayPlayersSig = "";
-    mmOverlayTotal = 0;
-    // Reset your local ready state so next click sets Ready (prevents double-click issue)
-    try {
-      const selfSlot = Array.from(
-        document.querySelectorAll(".character-slot"),
-      ).find((s) => s.dataset.isCurrentUser === "true");
-      const statusEl = selfSlot?.querySelector(".status");
-      if (statusEl) {
-        statusEl.textContent = "online";
-        statusEl.className = "status online";
-      }
-      setReadyButtonState(false);
-    } catch {}
-  });
-
-  // Progressive matching updates: incrementally update overlay found count
-  socket.on("match:progress", (data) => {
-    if (__postBattleLobbyReturn || __matchedQueueId) return;
-    const currentSelection = getCurrentSelection();
-    const targetSelection = normalizeGameSelection(
-      activeQueueContext?.selection || currentSelection,
-    );
-    const incomingSelection = normalizeGameSelection(
-      data?.selection || {
-        modeId: data?.modeId,
-        modeVariantId: data?.modeVariantId,
-        mapId: data?.map,
-      },
-    );
-    // Only update if it matches the current selection
-    if (
-      incomingSelection.modeId !== targetSelection.modeId ||
-      incomingSelection.modeVariantId !== targetSelection.modeVariantId ||
-      Number(incomingSelection.mapId) !== Number(targetSelection.mapId)
-    )
-      return;
-
-    // Keep overlay context aligned to server payload while queued.
-    activeQueueContext = { selection: incomingSelection };
-
-    const overlay = document.getElementById("matchmaking-overlay");
-    if (overlay && overlay.classList.contains("hidden")) {
-      showMatchmakingOverlay();
-    }
-    const foundCount = Number(data?.found) || 0;
-    const totalCount =
-      Number(data?.total) || getTotalPlayersForSelection(incomingSelection);
-
-    const incomingPlayers = Array.isArray(data?.players) ? data.players : [];
-    const localPlayers = collectCurrentPartyMembers();
-    const localHumansByName = new Map(
-      localPlayers
-        .filter((player) => !player?.isConfiguredBot)
-        .map((player) => [getLobbyMemberKey(player?.name), player]),
-    );
-    const hydratedIncomingPlayers = incomingPlayers.map((player) => ({
-      ...(localHumansByName.get(getLobbyMemberKey(player?.name)) || {}),
-      ...player,
-    }));
-    const configuredBotPreviews = localPlayers.filter(
-      (player) => player?.isConfiguredBot,
-    );
-    const visiblePlayerTarget = Math.min(foundCount, totalCount);
-    const missingPreviewCount = Math.max(
-      0,
-      visiblePlayerTarget - hydratedIncomingPlayers.length,
-    );
-    const fallbackLocalPlayers = localPlayers.slice(
-      0,
-      Math.min(foundCount, totalCount),
-    );
-    const nextPlayers = incomingPlayers.length
-      ? [
-          ...hydratedIncomingPlayers,
-          ...configuredBotPreviews.slice(0, missingPreviewCount),
-        ]
-      : fallbackLocalPlayers;
-    if (Array.isArray(nextPlayers)) {
-      const nextSig = JSON.stringify(
-        nextPlayers.map(
-          (p) =>
-            `${p?.botSlotKey || p?.name || ""}:${p?.char_class || ""}`,
-        ),
-      );
-      if (nextSig !== mmOverlayPlayersSig) {
-        mmOverlayPlayersSig = nextSig;
-        mmOverlayPlayers = nextPlayers;
-      }
-    }
-    mmOverlayTotal = totalCount;
-    updateMMOverlay({
-      found: foundCount,
-      total: mmOverlayTotal,
-      selection: incomingSelection,
-      players: mmOverlayPlayers,
-    });
-  });
-
-  // // Member join/leave events
-  // socket.on("user-joined", (data) => {
-  //   if (String(data.partyId || '') !== String(checkIfInParty() || '')) {
-  //     return;
-  //   }
-
-  //   console.log(`[party] ${data.name} joined the party`);
-
-  //   // Fetch updated party data to refresh the view
-  //   if (currentPartyId) {
-  //     fetch("/partydata", {
-  //       method: "POST",
-  //       headers: { "Content-Type": "application/json" },
-  //       credentials: "same-origin",
-  //       body: JSON.stringify({ partyId: currentPartyId }),
-  //     })
-  //       .then((resp) => resp.json())
-  //       .then((partyData) => {
-  //         if (partyData?.members) {
-  //           renderPartyMembers({
-  //             partyId: currentPartyId,
-  //             members: partyData.members,
-  //             mode: partyData?.party?.mode,
-  //             map: partyData?.party?.map,
-  //           });
-  //         }
-  //       })
-  //       .catch((err) =>
-  //         console.warn("Failed to fetch party data after user join:", err)
-  //       );
-  //   }
-  // });
-
-  // socket.on("user-disconnected", (data) => {
-  //   if (String(data.partyId || '') !== String(checkIfInParty() || ''))
-  //     return;
-
-  //   console.log(`[party] ${data.name} left the party`);
-
-  //   // Find and reset the slot for the disconnected user
-  //   const userSlots = document.querySelectorAll(".character-slot");
-  //   for (const slot of userSlots) {
-  //     const usernameElement = slot.querySelector(".username");
-  //     if (
-  //       usernameElement &&
-  //       (usernameElement.textContent === data.name ||
-  //         usernameElement.textContent === `${data.name} (You)`)
-  //     ) {
-  //       resetSlotToRandom(slot);
-  //       break;
-  //     }
-  //   }
-  // });
 }
 
 function getLobbyMemberKey(value) {
@@ -1873,7 +1484,7 @@ let partySlotDrag = null;
 function ensurePartySlotDrag() {
   if (partySlotDrag) return partySlotDrag;
   partySlotDrag = createPartySlotDrag({
-    canMove: () => !!getActivePartyId() && __partyContext.ownerName === getCurrentLobbyUserName() && !activeQueueContext && !__activeBattleMatchId && !__partyContext.members.some(m => String(m.status).toLowerCase() === 'ready'),
+    canMove: () => !!getActivePartyId() && __partyContext.ownerName === getCurrentLobbyUserName() && !matchmaking.isQueued() && !__activeBattleMatchId && !__partyContext.members.some(m => String(m.status).toLowerCase() === 'ready'),
     move: (name, slot) => new Promise((resolve, reject) => {
       socket.timeout(5000).emit('party:slot:move', { partyId: getActivePartyId(), name, ...getBotSlotTarget(slot) }, (error, result) => {
         if (error || !result?.ok) reject(new Error(result?.error || 'Connection interrupted. Please try again.'));
@@ -2151,7 +1762,7 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
   }
 
   if (spriteEl) {
-    const cls = member.char_class || "ninja";
+    const cls = member.char_class || DEFAULT_CHARACTER;
     const skinAsset =
       String(member.selected_skin_asset_url || "").trim() ||
       buildCharacterSkinBodyUrl(cls, "");
@@ -2215,7 +1826,7 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
 
   slot.classList.remove("empty", "player-display", "op-display");
   slot.classList.add(isYourTeam ? "player-display" : "op-display");
-  slot.dataset.character = member.char_class || "ninja";
+  slot.dataset.character = member.char_class || DEFAULT_CHARACTER;
   setSlotLevelBadge(slot, getMemberLevel(member));
 
   // Set interaction properties
@@ -2751,7 +2362,6 @@ function wirePartyBotSlotControls() {
 }
 
 // Import setLobbyBackground function
-import { setLobbyBackground } from "./index.js";
 
 // ---------------------------
 // Ready toggle + overlay UI
@@ -2771,11 +2381,9 @@ export function initReadyToggle() {
       window.location.href = `/game/${__activeBattleMatchId}`;
       return;
     }
-    __postBattleLobbyReturn = false;
+    matchmaking.resumeQueueing();
     // Find current user's status element to update optimistically
-    const selfSlot = Array.from(
-      document.querySelectorAll(".character-slot"),
-    ).find((s) => s.dataset.isCurrentUser === "true");
+    const selfSlot = getSelfSlot();
     const statusEl = selfSlot?.querySelector(".status");
     if (!statusEl) return;
 
@@ -2847,340 +2455,10 @@ export function initReadyToggle() {
       socket.emit("ready:status", { partyId, ready: nextReady });
     } else {
       // Solo flow: directly join/leave the queue and control overlay locally
-      if (nextReady) {
-        const selection = getCurrentSelection();
-        const map = Number(selection.mapId) || 1;
-        const side = "team1"; // default; server may flip if needed
-        activeQueueContext = { selection };
-        mmOverlayTotal = getTotalPlayersForSelection(selection);
-        socket.emit("queue:join", {
-          selection,
-          modeId: selection.modeId,
-          modeVariantId: selection.modeVariantId,
-          map,
-          side,
-        });
-        showMatchmakingOverlay();
-      } else {
-        socket.emit("queue:leave");
-        hideMatchmakingOverlay();
-        activeQueueContext = null;
-      }
+      if (nextReady) matchmaking.startSolo(getCurrentSelection());
+      else matchmaking.leaveSolo();
     }
   });
-}
-
-// Static overlay present in HTML; helpers to show/hide and update it
-function ensureOverlay() {
-  return document.getElementById("matchmaking-overlay");
-}
-
-function setLobbyChromeInert(shouldBeInert) {
-  document
-    .querySelectorAll(
-      "#navbar, body > .party-button, .lobby-quick-actions, #lobby-area, #bottom-bar, .bb-chat-lobby-wrap",
-    )
-    .forEach((element) => {
-      element.inert = shouldBeInert;
-    });
-}
-
-function ensureMatchmakingParticles() {
-  const field = document.getElementById("mm-particles");
-  if (!field || field.childElementCount) return;
-
-  // A deterministic field keeps the scene varied without changing between
-  // overlay opens or consuming animation-frame JavaScript.
-  for (let index = 0; index < 38; index += 1) {
-    const particle = document.createElement("i");
-    const lane = (index * 37 + 11) % 101;
-    const size = 2 + ((index * 13) % 6);
-    const duration = 4.2 + ((index * 17) % 42) / 10;
-    const delay = -((index * 29) % 86) / 10;
-    const drift = -42 + ((index * 31) % 85);
-    const opacity = 0.2 + ((index * 19) % 55) / 100;
-
-    particle.style.setProperty("--mm-particle-x", `${lane}%`);
-    particle.style.setProperty("--mm-particle-size", `${size}px`);
-    particle.style.setProperty("--mm-particle-duration", `${duration}s`);
-    particle.style.setProperty("--mm-particle-delay", `${delay}s`);
-    particle.style.setProperty("--mm-particle-drift", `${drift}px`);
-    particle.style.setProperty("--mm-particle-opacity", String(opacity));
-    field.appendChild(particle);
-  }
-}
-
-export function showMatchmakingOverlay() {
-  const overlay = ensureOverlay();
-  if (!overlay) return;
-  if (__postBattleLobbyReturn) return;
-  window.dispatchEvent(new CustomEvent("bb:matchmaking-start"));
-  window.__BB_NAVIGATION__?.lobbyAudio?.searching();
-  if (__matchmakingHideTimer) {
-    window.clearTimeout(__matchmakingHideTimer);
-    __matchmakingHideTimer = null;
-  }
-  ensureMatchmakingParticles();
-  const selection = normalizeGameSelection(
-    activeQueueContext?.selection || getCurrentSelection(),
-  );
-  document.body.classList.remove("matchmaking-exiting");
-  document.body.classList.add("matchmaking-active");
-  setLobbyChromeInert(true);
-  overlay.classList.remove("hidden");
-  overlay.classList.remove("is-exiting");
-  void overlay.offsetWidth;
-  overlay.classList.add("is-visible");
-  overlay.setAttribute("aria-hidden", "false");
-  updateMMOverlay({
-    found: mmOverlayPlayers.length,
-    total: mmOverlayTotal || getTotalPlayersForSelection(selection),
-    selection,
-    players: mmOverlayPlayers,
-  });
-  wireCancelButton();
-  const cancelButton = document.getElementById("mm-cancel");
-  if (cancelButton) cancelButton.disabled = !!__matchedQueueId;
-  if (!__queueHealthTimer) __queueHealthTimer = window.setInterval(checkMatchmakingHealth, 5000);
-  wireAdminFillBotsButtons();
-  const fillBtn = document.getElementById("mm-fill-bots");
-  const fillUnlimitedBtn = document.getElementById("mm-fill-bots-unlimited");
-  const isAdmin = !!window.__BRO_BATTLES_USERDATA__?.isAdmin;
-  if (fillBtn) fillBtn.classList.toggle("hidden", !isAdmin);
-  if (fillUnlimitedBtn) fillUnlimitedBtn.classList.toggle("hidden", !isAdmin);
-}
-
-export function hideMatchmakingOverlay({ immediate = false } = {}) {
-  window.__BB_NAVIGATION__?.lobbyAudio?.cancelSearch();
-  __matchedQueueId = null;
-  __queueHealthGeneration++;
-  __queueHealthPending = false;
-  if (__queueHealthTimer) window.clearInterval(__queueHealthTimer);
-  __queueHealthTimer = null;
-  const overlay = ensureOverlay();
-  if (!overlay) return;
-  if (__matchmakingReadyAckTimer) {
-    window.clearTimeout(__matchmakingReadyAckTimer);
-    __matchmakingReadyAckTimer = null;
-  }
-  __matchmakingReadyAt = 0;
-  if (immediate) {
-    if (__matchmakingHideTimer) {
-      window.clearTimeout(__matchmakingHideTimer);
-      __matchmakingHideTimer = null;
-    }
-    overlay.setAttribute("aria-hidden", "true");
-    overlay.classList.add("hidden");
-    overlay.classList.remove("is-visible", "is-exiting");
-    document.body.classList.remove(
-      "matchmaking-active",
-      "matchmaking-exiting",
-    );
-    setLobbyChromeInert(false);
-    return;
-  }
-  if (overlay.classList.contains("hidden")) {
-    document.body.classList.remove(
-      "matchmaking-active",
-      "matchmaking-exiting",
-    );
-    setLobbyChromeInert(false);
-    return;
-  }
-  overlay.setAttribute("aria-hidden", "true");
-  overlay.classList.remove("is-visible");
-  overlay.classList.add("is-exiting");
-  document.body.classList.remove("matchmaking-active");
-  document.body.classList.add("matchmaking-exiting");
-  setLobbyChromeInert(false);
-
-  if (__matchmakingHideTimer) window.clearTimeout(__matchmakingHideTimer);
-  __matchmakingHideTimer = window.setTimeout(() => {
-    overlay.classList.add("hidden");
-    overlay.classList.remove("is-exiting");
-    document.body.classList.remove("matchmaking-exiting");
-    __matchmakingHideTimer = null;
-  }, MATCHMAKING_EXIT_MS);
-}
-
-function restoreLobbyAfterBattleReturn() {
-  __postBattleLobbyReturn = true;
-  activeQueueContext = null;
-  mmOverlayPlayers = [];
-  mmOverlayPlayersSig = "";
-  mmOverlayTotal = 0;
-  hideMatchmakingOverlay({ immediate: true });
-
-  socket.emit("lobby:heartbeat");
-
-  const selfSlot = Array.from(
-    document.querySelectorAll(".character-slot"),
-  ).find((slot) => slot.dataset.isCurrentUser === "true");
-  const statusEl = selfSlot?.querySelector(".status");
-  if (statusEl) {
-    statusEl.textContent = "online";
-    statusEl.className = "status online";
-  }
-  setReadyButtonState(false);
-}
-
-function updateMMOverlay({ found, total, selection, players }) {
-  const overlay = ensureOverlay();
-  const headingEl = document.getElementById("mm-heading");
-  const labelEl = document.querySelector(".mm-progress .mm-label");
-  const foundEl = document.getElementById("mm-found");
-  const totalEl = document.getElementById("mm-total");
-  const grid = document.getElementById("mm-players");
-  const normalized = normalizeGameSelection(
-    selection || activeQueueContext?.selection || getCurrentSelection(),
-  );
-  const foundCount = Math.max(0, Number(found) || 0);
-  const totalCount =
-    Number(total) || getTotalPlayersForSelection(normalized) || 0;
-  const isFull = !!__matchedQueueId && totalCount > 0 && foundCount >= totalCount;
-  window.__BB_NAVIGATION__?.lobbyAudio?.updatePlayers(
-    (Array.isArray(players) ? players : []).slice(0, totalCount).map(
-      (player) => String(player?.botSlotKey || player?.name || "").trim().toLowerCase(),
-    ),
-    getLobbyMemberKey(getCurrentLobbyUserName()),
-  );
-
-  if (overlay) {
-    const previousState = overlay.dataset.state;
-    overlay.dataset.state = isFull ? "ready" : "searching";
-    overlay.style.setProperty(
-      "--mm-map-background",
-      `url("${getLobbyBgAsset(normalized.mapId)}")`,
-    );
-    if (isFull && previousState !== "ready") {
-      __matchmakingReadyAt = Date.now();
-      window.__BB_NAVIGATION__?.lobbyAudio?.found();
-    }
-    if (!isFull) __matchmakingReadyAt = 0;
-  }
-  if (headingEl) headingEl.textContent = isFull ? "Match Found" : "Matchmaking";
-  if (labelEl) labelEl.textContent = isFull ? "Starting" : "Players";
-  if (foundEl && foundEl.textContent !== String(foundCount)) {
-    foundEl.textContent = String(foundCount);
-    foundEl.classList.remove("is-updating");
-    void foundEl.offsetWidth;
-    foundEl.classList.add("is-updating");
-    if (__matchmakingCountTimer) {
-      window.clearTimeout(__matchmakingCountTimer);
-    }
-    __matchmakingCountTimer = window.setTimeout(() => {
-      foundEl.classList.remove("is-updating");
-      __matchmakingCountTimer = null;
-    }, 520);
-  }
-  if (totalEl) {
-    totalEl.textContent = String(totalCount);
-  }
-  if (grid) {
-    const playersArr = Array.isArray(players) ? players : [];
-    const nextSig = JSON.stringify({
-      total: totalCount,
-      mapId: normalized.mapId,
-      players: playersArr.map(
-        (p) =>
-          `${p?.name || ""}:${p?.char_class || ""}:${p?.selected_skin_id || ""}:${p?.selected_skin_asset_url || ""}`,
-      ),
-    });
-    if (nextSig === grid.dataset.renderSig) return;
-    grid.dataset.renderSig = nextSig;
-
-    const previousPlayerKeys = new Set(
-      Array.from(grid.querySelectorAll(".mm-player[data-player-key]")).map(
-        (item) => item.dataset.playerKey,
-      ),
-    );
-    grid.innerHTML = "";
-    grid.style.setProperty("--mm-slot-count", String(totalCount));
-    grid.dataset.slots = String(totalCount);
-    grid.style.setProperty(
-      "--mm-platform-image",
-      `url("${getLobbyPlatformAsset(normalized.mapId)}")`,
-    );
-
-    for (let i = 0; i < totalCount; i++) {
-      const p = playersArr[i];
-      const item = document.createElement("div");
-      item.className = "mm-player" + (p ? "" : " placeholder");
-      item.style.setProperty("--mm-slot-index", String(i));
-      item.dataset.team = p?.team
-        ? p.team === activeQueueContext?.yourTeam
-          ? "blue"
-          : "red"
-        : i < Math.ceil(totalCount / 2)
-          ? "blue"
-          : "red";
-
-      const visual = document.createElement("div");
-      visual.className = "mm-player-visual";
-
-      if (p) {
-        const playerKey = `${String(
-          p.botSlotKey || p.name || "player",
-        ).trim().toLowerCase()}:${i}`;
-        item.dataset.playerKey = playerKey;
-        if (!previousPlayerKeys.has(playerKey)) {
-          item.classList.add("mm-player-arriving");
-        }
-
-        const arrival = document.createElement("div");
-        arrival.className = "mm-arrival-fx";
-        arrival.setAttribute("aria-hidden", "true");
-        arrival.innerHTML =
-          '<i></i><i></i><i></i><i></i><i></i><i></i><span></span>';
-
-        const img = document.createElement("img");
-        const cls = p.char_class || "ninja";
-        const isShuffleBot = p.isConfiguredBot && cls === "shuffle";
-        img.src = isShuffleBot
-          ? "/assets/shuffle/shuffle1.svg"
-          : String(p.selected_skin_asset_url || "").trim() ||
-            buildCharacterSkinBodyUrl(cls, "");
-        img.alt = isShuffleBot ? "Shuffle bot" : cls;
-        img.className = `mm-character${
-          isShuffleBot ? " bot-shuffle-icon mm-bot-shuffle-icon" : ""
-        }`;
-        const name = document.createElement("div");
-        name.className = "mm-name";
-        name.textContent = p.name || "Player";
-        const platform = document.createElement("div");
-        platform.className = "mm-platform";
-        platform.setAttribute("aria-hidden", "true");
-
-        visual.appendChild(arrival);
-        visual.appendChild(img);
-        visual.appendChild(platform);
-        item.appendChild(visual);
-        item.appendChild(name);
-        if (item.classList.contains("mm-player-arriving")) {
-          window.setTimeout(() => {
-            item.classList.remove("mm-player-arriving");
-          }, 1100);
-        }
-      } else {
-        const beacon = document.createElement("div");
-        beacon.className = "mm-slot-beacon";
-        beacon.setAttribute("aria-hidden", "true");
-        beacon.innerHTML = "<i></i><i></i><i></i>";
-        const name = document.createElement("div");
-        name.className = "mm-name";
-        name.textContent = "Searching";
-        const platform = document.createElement("div");
-        platform.className = "mm-platform";
-        platform.setAttribute("aria-hidden", "true");
-        visual.appendChild(beacon);
-        visual.appendChild(platform);
-        item.appendChild(visual);
-        item.appendChild(name);
-      }
-      grid.appendChild(item);
-    }
-    refreshPlatformGrounding();
-  }
 }
 
 function syncReadyAvailability(selection = getCurrentSelection()) {
@@ -3212,13 +2490,36 @@ function syncReadyAvailability(selection = getCurrentSelection()) {
   return { blocked, reason, selection: normalized };
 }
 
+function getCurrentPartyMember() {
+  const selfKey = getLobbyMemberKey(getCurrentLobbyUserName());
+  return (__partyContext.members || []).find((member) => getLobbyMemberKey(member) === selfKey);
+}
+
+function getSelfSlot() {
+  return Array.from(document.querySelectorAll(".character-slot")).find(
+    (slot) => slot.dataset.isCurrentUser === "true",
+  );
+}
+
+// Return the local slot and Ready button to "online" after a queue ends.
+function resetSelfReadyState() {
+  try {
+    const statusEl = getSelfSlot()?.querySelector(".status");
+    if (statusEl) {
+      statusEl.textContent = "online";
+      statusEl.className = "status online";
+    }
+    setReadyButtonState(false);
+  } catch (_) {}
+}
+
 function collectCurrentPartyMembers() {
   const contextMembers = Array.isArray(__partyContext.members)
     ? __partyContext.members
     : [];
   const players = contextMembers.map((member) => ({
     name: member?.name || "Player",
-    char_class: member?.char_class || "ninja",
+    char_class: member?.char_class || DEFAULT_CHARACTER,
     selected_skin_id: member?.selected_skin_id || null,
     selected_skin_asset_url: member?.selected_skin_asset_url || "",
     team: member?.team || null,
@@ -3235,7 +2536,7 @@ function collectCurrentPartyMembers() {
       const cls =
         slot.dataset.character && slot.dataset.character !== "Random"
           ? slot.dataset.character
-          : "ninja";
+          : DEFAULT_CHARACTER;
       players.push({ name, char_class: cls });
     }
   }
@@ -3257,63 +2558,11 @@ function collectCurrentPartyMembers() {
     };
   });
 
-  const currentMember = contextMembers.find(
-    (member) =>
-      getLobbyMemberKey(member) ===
-      getLobbyMemberKey(getCurrentLobbyUserName()),
-  );
-  const yourTeam = currentMember?.team || null;
+  const yourTeam = getCurrentPartyMember()?.team || null;
   return [...players, ...botPreviews].sort((a, b) => {
     if (!yourTeam) return 0;
     return Number(b?.team === yourTeam) - Number(a?.team === yourTeam);
   });
-}
-
-function wireCancelButton() {
-  const btn = document.getElementById("mm-cancel");
-  if (!btn || btn.dataset.bound === "1") return;
-  btn.dataset.bound = "1";
-  btn.addEventListener("click", () => {
-    if (__matchedQueueId || btn.disabled) return;
-    btn.disabled = true;
-    const generation = __queueHealthGeneration;
-    socket.timeout(5000).emit("queue:leave", (error, result) => {
-      if (__matchedQueueId || generation !== __queueHealthGeneration) return;
-      if (result?.cancelled === false && result.matchId) {
-        lockMatchmakingCancel(result.matchId);
-        checkMatchmakingHealth();
-        return;
-      }
-      if (error || !result?.ok) {
-        btn.disabled = false;
-        checkMatchmakingHealth();
-        return;
-      }
-      hideMatchmakingOverlay();
-    });
-
-  });
-}
-
-function wireAdminFillBotsButtons() {
-  const btn = document.getElementById("mm-fill-bots");
-  if (btn && btn.dataset.bound !== "1") {
-    btn.dataset.bound = "1";
-    btn.addEventListener("click", () => {
-      socket.emit("queue:fill-bots");
-    });
-  }
-
-  const unlimitedBtn = document.getElementById("mm-fill-bots-unlimited");
-  if (unlimitedBtn && unlimitedBtn.dataset.bound !== "1") {
-    unlimitedBtn.dataset.bound = "1";
-    unlimitedBtn.addEventListener("click", () => {
-      socket.emit("queue:fill-bots", {
-        mode: "unlimited-health",
-        botHealthOverride: 9999999,
-      });
-    });
-  }
 }
 
 // ---------------------------
@@ -3331,9 +2580,7 @@ function setReadyButtonState(isCancel) {
 }
 
 function syncReadyButtonFromSelfSlot() {
-  const selfSlot = Array.from(
-    document.querySelectorAll(".character-slot"),
-  ).find((s) => s.dataset.isCurrentUser === "true");
+  const selfSlot = getSelfSlot();
   const statusEl = selfSlot?.querySelector(".status");
   if (!statusEl) return;
   const isReady = (statusEl.textContent || "").trim().toLowerCase() === "ready";

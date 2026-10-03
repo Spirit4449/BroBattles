@@ -2,7 +2,7 @@ const defaults = require('./maps').mapDefaults;
 const { geometryFromMap, variantKey } = require('./mapDocument');
 const { resolveLanding } = require('./spawnPlacement');
 const frames = require("./characters/index.js").characterFrames;
-const { getCharacterStats } = require("./characterStats.js");
+const { getCharacterStats, DEFAULT_CHARACTER } = require("./characterStats.js");
 const { getResolvedCharacterBodyConfig } = require("./characterTuning.js");
 function getDuelGeometry(mapId, variant = '1v1', snapshot = null) {
   const data = snapshot || defaults.find(d => d.id === Number(mapId))?.variants[variantKey(variant)];
@@ -11,7 +11,7 @@ function getDuelGeometry(mapId, variant = '1v1', snapshot = null) {
 
 function characterBody(character, flip = false) {
   const frame = frames[character] || frames.ninja;
-  const stats = getCharacterStats(character) || getCharacterStats("ninja");
+  const stats = getCharacterStats(character) || getCharacterStats(DEFAULT_CHARACTER);
   const cfg = getResolvedCharacterBodyConfig(character);
   const scale = stats.spriteScale || 1;
   const width = Math.max(4, frame.w - cfg.widthShrink) * scale;

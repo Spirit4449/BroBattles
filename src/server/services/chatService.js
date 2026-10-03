@@ -1,4 +1,5 @@
 const { getPartyChatLogs } = require("./partyChatLog");
+const { resolveCharacterKey } = require("../../shared/characterStats.js");
 const MAX_CHAT_BODY_LENGTH = 500;
 const MAX_CHAT_LIMIT = 100;
 
@@ -174,7 +175,7 @@ function createPartyChatService({ db, io }) {
       readersByMessageId.get(messageId).push({
         userId: Number(row.user_id),
         name: String(row.reader_name || ""),
-        charClass: String(row.reader_char_class || "ninja"),
+        charClass: resolveCharacterKey(row.reader_char_class),
         profileIconId: String(row.reader_profile_icon_id || "") || null,
         readAt: row.read_at ? new Date(row.read_at).toISOString() : null,
       });
@@ -202,7 +203,7 @@ function createPartyChatService({ db, io }) {
       sender: {
         userId: Number(row.user_id),
         name: senderName,
-        charClass: String(row.char_class || "ninja"),
+        charClass: resolveCharacterKey(row.char_class),
         profileIconId: String(row.profile_icon_id || "") || null,
         selectedCardId: row.selected_card_id || null,
       },
@@ -516,7 +517,7 @@ function createPartyChatService({ db, io }) {
       messageId: maxMessageId,
       viewerName: user.name,
       viewerUserId: Number(user.user_id) || null,
-      viewerCharClass: String(user.char_class || "ninja"),
+      viewerCharClass: resolveCharacterKey(user.char_class),
       viewerProfileIconId: String(user.selected_profile_icon_id || "") || null,
       type: "read",
     });

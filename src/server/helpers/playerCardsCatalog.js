@@ -1,41 +1,50 @@
 const path = require("path");
+const { createCatalogLoader } = require("./catalogLoader");
 
 const CATALOG_PATH = path.resolve(
   __dirname,
   "../../shared/playerCardsCatalog.json",
 );
 
-let _cache = null;
-
-function _loadCatalog() {
-  // Keep this dynamic in dev so edits to the catalog are picked up without restarts.
-  delete require.cache[CATALOG_PATH];
-  const raw = require(CATALOG_PATH);
-  return raw && typeof raw === "object" ? raw : {};
+function buildCardIndexes(catalog) {
+  const cardById = new Map();
+  for (const card of Array.isArray(catalog?.cards) ? catalog.cards : []) {
+    const id = String(card?.id);
+    if (!cardById.has(id)) cardById.set(id, card);
+  }
+  return { cardById };
 }
 
+// Cached after the first read; dev edits are picked up by nodemon restarting
+// the server (it watches src/shared JSON) or by invalidatePlayerCardsCatalog().
+const loader = createCatalogLoader({
+  name: "cards",
+  filePath: CATALOG_PATH,
+  fallback: () => ({ version: 1, defaultCardId: null, cards: [] }),
+  build: buildCardIndexes,
+});
+
 function getPlayerCardsCatalog() {
-  try {
-    _cache = _loadCatalog();
-  } catch (error) {
-    console.error("[cards] failed to load catalog", error);
-    _cache = { version: 1, defaultCardId: null, cards: [] };
-  }
-  return _cache;
+  return loader.get();
+}
+
+function invalidatePlayerCardsCatalog() {
+  loader.invalidate();
+}
+
+function getCatalogVersion() {
+  return loader.version();
 }
 
 function getPlayerCardById(cardId) {
   const id = String(cardId || "").trim();
   if (!id) return null;
-  const catalog = getPlayerCardsCatalog();
-  return (
-    (Array.isArray(catalog.cards) ? catalog.cards : []).find(
-      (card) => String(card?.id) === id,
-    ) || null
-  );
+  return loader.indexes().cardById.get(id) || null;
 }
 
 module.exports = {
+  getCatalogVersion,
   getPlayerCardsCatalog,
   getPlayerCardById,
+  invalidatePlayerCardsCatalog,
 };

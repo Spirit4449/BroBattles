@@ -12,8 +12,7 @@ import { normalizeMapId } from "../maps/manifest";
 import { startSpawnIntro, finishSpawnIntro } from '../gameScene/spawnIntro';
 import { spawnDamageImpact, spawnDuckGuardImpact } from "../effects";
 import { spawnDeathTombstone } from "../gameScene/deathTombstone";
-import { playWizardArcaneSurge } from "../characters/wizard/effects.js";
-import { playCharacterSound } from "../characters";
+import { applyActionToLocalPlayer, getCharacterSocketEvents, playCharacterSound } from "../characters";
 import { playPlayerSound } from "../gameScene/playerAudio";
 import {
   getAnimationDurationMs,
@@ -946,7 +945,13 @@ export function createMatchCoordinator(config) {
         origin: packet?.origin || action?.origin || null,
         flip: typeof packet?.flip === "boolean" ? packet.flip : action?.flip,
       };
-      _applyLocalGloopHookCatch(actionWithPacketMeta);
+      applyActionToLocalPlayer(actionWithPacketMeta, {
+        scene: getGameScene(),
+        localPlayer: getPlayer(),
+        username: String(getUsername() || ""),
+        findSprite: _findPlayerSprite,
+        setExternalControlLockUntil,
+      });
       if (isSelfPacket) {
         const consumedLocal =
           typeof handleLocalAuthoritativeAttack === "function"
@@ -1251,18 +1256,6 @@ export function createMatchCoordinator(config) {
     } catch (_) {}
   }
 
-  function _onWizardArcaneSurge(payload) {
-    const scene = getGameScene();
-    if (!scene || !payload || presentationSuppressed()) return;
-    playWizardArcaneSurge(scene, payload, (name) => {
-      if (!name) return null;
-      if (name === getUsername()) return getPlayer();
-      return (
-        opponentPlayers[name]?.opponent || teamPlayers[name]?.opponent || null
-      );
-    });
-  }
-
   function _onDeathDropCollected(payload) {
     if (!payload || typeof payload.id === "undefined") return;
     if (!presentationSuppressed()) deathdropCollectQueue.push(payload);
@@ -1274,86 +1267,21 @@ export function createMatchCoordinator(config) {
     );
   }
 
-  function _applyLocalGloopHookCatch(action) {
-    const username = String(getUsername() || "");
-    if (!username) return;
-    if (String(action?.type || "").toLowerCase() !== "gloop-hook-catch") {
-      return;
-    }
-    if (String(action?.target || "") !== username) return;
-
-    const scene = getGameScene();
-    const localPlayer = getPlayer();
-    if (!scene?.tweens || !localPlayer?.body || !localPlayer?.active) return;
-
-    const endX = Number(action?.end?.x);
-    const endY = Number(action?.end?.y);
-    if (!Number.isFinite(endX) || !Number.isFinite(endY)) return;
-
-    const pullDurationMs = Math.max(100, Number(action?.pullDurationMs) || 640);
-    const lockUntil = Date.now() + pullDurationMs + 120;
-    try {
-      setExternalControlLockUntil?.(lockUntil);
-    } catch (_) {}
-
-    const startX = Number.isFinite(Number(localPlayer.x))
-      ? Number(localPlayer.x)
-      : endX;
-    const startY = Number.isFinite(Number(localPlayer.y))
-      ? Number(localPlayer.y)
-      : endY;
-    const sourceName =
-      String(action?.sourceName || action?.playerName || "").trim() || null;
-    const stopDistance = Math.max(1, Number(action?.pulledStopDistance) || 54);
-
-    try {
-      if (localPlayer._gloopHookPullTween?.isPlaying?.()) {
-        localPlayer._gloopHookPullTween.stop();
-      }
-    } catch (_) {}
-
-    const motion = { x: startX, y: startY };
-    const tween = scene.tweens.addCounter({
-      from: 0,
-      to: 1,
-      duration: pullDurationMs,
-      ease: "Linear",
-      onUpdate: () => {
-        if (!localPlayer?.active || !localPlayer?.body) return;
-        let targetX = endX;
-        let targetY = endY;
-        if (sourceName) {
-          const sourceSprite =
-            sourceName === username
-              ? localPlayer
-              : opponentPlayers[sourceName]?.opponent ||
-                teamPlayers[sourceName]?.opponent ||
-                null;
-          if (sourceSprite?.active) {
-            const ax = Number(sourceSprite.x);
-            const ay = Number(sourceSprite.y);
-            if (Number.isFinite(ax) && Number.isFinite(ay)) {
-              const dx = Number(localPlayer.x) - ax;
-              const dy = Number(localPlayer.y) - ay;
-              const dist = Math.hypot(dx, dy) || 1;
-              targetX = ax + (dx / dist) * stopDistance;
-              targetY = ay + (dy / dist) * stopDistance;
-            }
-          }
-        }
-        motion.x += (targetX - motion.x) * 0.3;
-        motion.y += (targetY - motion.y) * 0.3;
-        localPlayer.body.reset(motion.x, motion.y);
-        localPlayer.setVelocity?.(0, 0);
-      },
-      onComplete: () => {
-        if (!localPlayer?.active || !localPlayer?.body) return;
-        localPlayer.body.reset(motion.x, motion.y);
-        localPlayer.setVelocity?.(0, 0);
-      },
-    });
-    localPlayer._gloopHookPullTween = tween;
+  function _findPlayerSprite(name) {
+    if (!name) return null;
+    if (name === getUsername()) return getPlayer();
+    return opponentPlayers[name]?.opponent || teamPlayers[name]?.opponent || null;
   }
+
+  // Character-owned socket events (see CharacterEntityBase.socketEvents).
+  const characterSocketHandlers = getCharacterSocketEvents().map(([event, handler]) => [
+    event,
+    (payload) => {
+      const scene = getGameScene();
+      if (!scene || !payload || presentationSuppressed()) return;
+      handler({ scene, findSprite: _findPlayerSprite }, payload);
+    },
+  ]);
 
   // ---------------------------------------------------------------------------
   // Public API
@@ -1388,7 +1316,7 @@ export function createMatchCoordinator(config) {
     socket.on("game:sudden-death:start", _onGameSuddenDeath);
     socket.on("powerup:collected", _onPowerupCollected);
     socket.on("powerup:tick", _onPowerupTick);
-    socket.on("wizard:arcane-surge", _onWizardArcaneSurge);
+    for (const [event, handler] of characterSocketHandlers) socket.on(event, handler);
     socket.on("deathdrop:collected", _onDeathDropCollected);
 
     // If already connected when register() is called, attempt join right away
@@ -1425,7 +1353,7 @@ export function createMatchCoordinator(config) {
     socket.off("game:sudden-death:start", _onGameSuddenDeath);
     socket.off("powerup:collected", _onPowerupCollected);
     socket.off("powerup:tick", _onPowerupTick);
-    socket.off("wizard:arcane-surge", _onWizardArcaneSurge);
+    for (const [event, handler] of characterSocketHandlers) socket.off(event, handler);
     socket.off("deathdrop:collected", _onDeathDropCollected);
   }
 

@@ -45,6 +45,8 @@ import { playDuckTransitionSound } from "../gameScene/movementAudio.js";
 import { playPlayerSound } from "../gameScene/playerAudio.js";
 import { createRemoteMovementAudio } from "../gameScene/remoteMovementAudio";
 import { DUCK_HEIGHT_RATIO } from "../shared/ducking.js";
+import { resolveCharacterKey } from "../shared/characterStats.js";
+import { characterPresentation } from "../shared/characters/index.js";
 
 const OP_PLAYER_NAME_OFFSET_Y = 42;
 const HUD_SMOOTH_ALPHA = 0.35;
@@ -165,12 +167,7 @@ export default class RemotePlayer {
     this.opponent.setVisible(false);
 
     // Sets the text of the name to username
-    const bodyTop = Number.isFinite(this.opponent._bbHudTopOffset)
-      ? this.opponent.y + this.opponent._bbHudTopOffset
-      : (this.opponent.body
-        ? this.opponent.body.y
-        : this.opponent.y - this.opponent.height / 2) +
-      (this.opponent._ducking ? 8 : 0);
+    const bodyTop = this.hudTopY();
     this.opPlayerName = this.scene.add.text(
       this.opponent.x,
       bodyTop - OP_PLAYER_NAME_OFFSET_Y,
@@ -285,9 +282,8 @@ export default class RemotePlayer {
 
     this.specialListener = (data) => {
       if (data.username === this.username) {
-        if (String(data.character || "").toLowerCase() === "wizard") {
-          this._animLockUntil = performance.now() + 2200;
-        }
+        const specialLockMs = characterPresentation(resolveCharacterKey(data.character)).specialAnimationLockMs;
+        if (specialLockMs) this._animLockUntil = performance.now() + specialLockMs;
         performSpecial(
           data.character,
           this.scene,
@@ -584,22 +580,39 @@ export default class RemotePlayer {
     const nextDucking = ducking === true;
     const previousDucking = this.opponent._ducking;
     this.opponent._ducking = nextDucking;
-    if (this.character === "thorg" && this.opponent.body && this.opFrame && previousDucking !== nextDucking) {
-      const height = this.opFrame.realHeight - this.bodyConfig.heightShrink;
-      this.opponent.body.setSize(
-        this.opponent.body.sourceWidth,
-        nextDucking ? height * DUCK_HEIGHT_RATIO : height,
-        false,
-      );
-      this.applyFlipOffset();
-      this.opponent.body.updateFromGameObject?.();
-    }
+    if (previousDucking !== nextDucking) this.resizeBodyForDuck(nextDucking);
     if (
       typeof previousDucking === "boolean" &&
       previousDucking !== nextDucking
     ) {
       playDuckTransitionSound(this.scene, nextDucking, this.opponent);
     }
+  }
+
+  // Collider height while standing, in body source units.
+  standingBodyHeight() {
+    return (this.opFrame?.realHeight ?? this.opponent.height) - (this.bodyConfig?.heightShrink || 0);
+  }
+
+  // Crouching shrinks the collider to DUCK_HEIGHT_RATIO with the feet kept in
+  // place, matching the local player and the server's duck hitbox.
+  resizeBodyForDuck(ducking) {
+    const body = this.opponent?.body;
+    if (!body || !this.opFrame) return;
+    const standing = this.standingBodyHeight();
+    body.setSize(body.sourceWidth, ducking ? standing * DUCK_HEIGHT_RATIO : standing, false);
+    this.applyFlipOffset();
+    body.updateFromGameObject?.();
+  }
+
+  // Top of the world HUD (name, bars). Ducking only nudges it down slightly
+  // instead of following the shrunken collider, like the local player's HUD.
+  hudTopY() {
+    const sprite = this.opponent;
+    if (Number.isFinite(sprite._bbHudTopOffset)) return sprite.y + sprite._bbHudTopOffset;
+    if (!sprite.body) return sprite.y - sprite.height / 2;
+    if (!sprite._ducking || !this.opFrame) return sprite.body.y;
+    return sprite.body.bottom - this.standingBodyHeight() * Math.abs(sprite.scaleY || 1) + 8;
   }
 
   // Adjust body offset depending on facing; uses optional flipOffset from body config
@@ -611,22 +624,17 @@ export default class RemotePlayer {
     const frameW = this.opFrame ? this.opFrame.realWidth : this.opponent.width;
     const bodyW = bs.sourceUnits ? this.opponent.body.sourceWidth : this.opponent.body.width;
     const ox = frameW / 2 - bodyW / 2 + (bs.offsetXFromHalf ?? 0) + extra;
-    const standingHeight = (this.opFrame?.realHeight ?? this.opponent.height) - bs.heightShrink;
-    const oy = bs.offsetY + (this.character === "thorg"
-      ? standingHeight - this.opponent.body.sourceHeight : 0);
+    // A shrunken (ducking) collider keeps its bottom at the standing feet.
+    const oy = bs.offsetY + this.standingBodyHeight() - this.opponent.body.sourceHeight;
     this.opponent.body.setOffset(ox, oy);
   }
 
-  // Public helper to sync UI positions immediately (used after teleports/initial position set)
-  updateUIPosition() {
+  // Public helper to sync UI positions immediately (used after teleports/initial position set).
+  // Pass { drawBars: false } when a later pass (updateHealthBars) redraws the bars this frame.
+  updateUIPosition({ drawBars = true } = {}) {
     if (!this.opponent) return;
     if (this._worldUiHidden) return;
-    const bodyTop = Number.isFinite(this.opponent._bbHudTopOffset)
-      ? this.opponent.y + this.opponent._bbHudTopOffset
-      : (this.opponent.body
-        ? this.opponent.body.y
-        : this.opponent.y - this.opponent.height / 2) +
-      (this.opponent._ducking ? 8 : 0);
+    const bodyTop = this.hudTopY();
     const snapHud =
       this.opponent._spawnIntroPending === true ||
       Number(this._networkSnapUntil) > performance.now();
@@ -651,7 +659,7 @@ export default class RemotePlayer {
         this._hudAnchorY - OP_PLAYER_NAME_OFFSET_Y + 7,
       );
     }
-    this.updateHealthBar(false);
+    if (drawBars) this.updateHealthBar(false);
   }
 
   setSpectated(active = false) {
@@ -1000,8 +1008,7 @@ export default class RemotePlayer {
         true,
       );
       this.opponent._ducking = false;
-      this.applyFlipOffset();
-      this.opponent.body?.updateFromGameObject?.();
+      this.resizeBodyForDuck(false);
       spawnSpawnBurst(this.scene, this.opponent, {
         tint: 0xffffff,
         accent: 0xb8ecff,

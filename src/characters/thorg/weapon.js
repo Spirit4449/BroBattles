@@ -35,7 +35,7 @@ export function ensureThorgWeapon(scene, body) {
       spinElapsed = (spinElapsed + Math.max(0, Number(delta) || 0)) % 1000;
       weapon.setTexture("thorg-weapon-spin", Math.floor(spinElapsed / 125));
     }
-    const scale = body._thorgVisualScale || 1;
+    const scale = body._bbVisualScale || 1;
     fingers.setVisible(false);
     support.setVisible(false);
     if (embedded) return;
@@ -128,7 +128,7 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
     if (!body.active || !weapon.active) { cleanup(); return; }
     elapsed += Number(delta) || scene.game?.loop?.delta || 16;
     enforceLockedFlip(body);
-    const scale = body._thorgVisualScale || 1;
+    const scale = body._bbVisualScale || 1;
     const centerY = body.y - 37.8 * (scale - 1);
     const legacySkin = /thorg-(storm|iron)/.test(String(body._bbSkinTextureKey || body.texture?.key));
     weapon.setDisplaySize((legacySkin ? 30 : 26) * scale, (legacySkin ? 71 : 26 * 101 / 36) * scale);

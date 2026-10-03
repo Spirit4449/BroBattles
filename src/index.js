@@ -20,7 +20,7 @@ import {
   refreshCharacterRewards,
   openCharacterSelect,
 } from "./lobby/characterSelectController.js";
-import { getLobbyBgAsset } from "./maps/manifest";
+import { setLobbyBackground } from "./lobby/lobbyBackground.js";
 import {
   getMapLabel,
   getSelectionDisplayLabel,
@@ -56,6 +56,7 @@ import "./styles/friends.css";
 import "./styles/profile.css";
 import "./styles/selectionPopup.css";
 import "./styles/sonner.css";
+import { DEFAULT_CHARACTER, resolveCharacterKey } from "./shared/characterStats.js";
 
 wireFullscreenToggles();
 
@@ -138,7 +139,6 @@ let __partySettingsState = {
   memberSelectionSupported: true,
 };
 let __lobbyProfilePopup = null;
-let lobbyBackgroundRequestSequence = 0;
 
 function getDiscoveryModeLabel(party) {
   const selection = normalizeGameSelection({
@@ -518,7 +518,7 @@ function renderPartyDiscoveryList(parties) {
     const memberWrap = card.querySelector(".party-discovery-members");
     members.forEach((member) => {
       const name = String(member?.name || "Player");
-      const charClass = String(member?.char_class || "ninja");
+      const charClass = resolveCharacterKey(member?.char_class);
       const profileIconId = String(member?.profile_icon_id || "") || null;
       const entry = document.createElement("div");
       entry.className = "party-discovery-member";
@@ -667,7 +667,7 @@ function buildPartySuggestionHint(party) {
       name: String(member?.name || "Player"),
       icon: buildProfileIconUrl(
         String(member?.profile_icon_id || "") || null,
-        String(member?.char_class || "ninja"),
+        resolveCharacterKey(member?.char_class),
       ),
       trophies: Math.max(0, Number(member?.trophies) || 0),
     })),
@@ -1002,7 +1002,7 @@ function renderLeaderboardRows(rows, profilePopup) {
     if (rank <= 3) {
       item.classList.add(`top-${rank}`);
     }
-    const charClass = String(row.charClass || "ninja");
+    const charClass = resolveCharacterKey(row.charClass);
     const profileIconId = String(row.profileIconId || "") || null;
     item.innerHTML = `
       <span class="leaderboard-rank">#${rank}</span>
@@ -1420,7 +1420,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     refreshTrophyClaimAvailability,
     () => initializeLobbyHints({ shop }),
   ]);
-  const initialCharClass = String(userData.char_class || "ninja").toLowerCase();
+  const initialCharClass = resolveCharacterKey(userData.char_class);
   const initialSkinId = String(
     userData?.selected_skin_id_by_char?.[initialCharClass] || "",
   ).trim();
@@ -1632,7 +1632,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (spriteEl) spriteEl.classList.remove("random");
       yourSlot.className = "character-slot player-display";
       ensurePartyPixelFrame(yourSlot);
-      yourSlot.dataset.character = userData.char_class || "ninja";
+      yourSlot.dataset.character = userData.char_class || DEFAULT_CHARACTER;
       const levelBadge = yourSlot.querySelector(".slot-level-badge");
       const charLevels =
         typeof userData.char_levels === "object" && userData.char_levels
@@ -1673,7 +1673,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (signal.aborted) return;
       if (status.party_id) { window.location.href = `/party/${status.party_id}`; return; }
       if (status.userData) Object.assign(userData, status.userData);
-      const character = userData.char_class || 'ninja';
+      const character = userData.char_class || DEFAULT_CHARACTER;
       renderPartyMembers({ partyId: null, immediate: true, members: [{
         ...userData, team: 'team1', status: 'online',
         selected_skin_asset_url: buildCharacterSkinBodyUrl(character, userData.selected_skin_id_by_char?.[character]),
@@ -1733,59 +1733,6 @@ function signUpOut(guest) {
     });
     login.style.display = "none";
   }
-}
-
-export function setLobbyBackground(mapValue) {
-  const nextUrl = getLobbyBgAsset(mapValue);
-  const current = document.body.dataset.lobbyBackgroundUrl || "";
-  const target = `url("${nextUrl}")`;
-  const requestId = String(++lobbyBackgroundRequestSequence);
-  const existingOverlay = document.getElementById("lobby-bg-fade");
-  if (current === nextUrl) {
-    if (existingOverlay) {
-      existingOverlay.dataset.backgroundRequestId = requestId;
-      existingOverlay.classList.remove("active");
-    }
-    return;
-  }
-
-  let overlay = existingOverlay;
-  if (!overlay) {
-    overlay = document.createElement("div");
-    overlay.id = "lobby-bg-fade";
-    document.body.appendChild(overlay);
-  }
-
-  const preload = new Image();
-  let applied = false;
-  overlay.dataset.backgroundRequestId = requestId;
-
-  const applyLoadedBackground = () => {
-    if (applied || overlay.dataset.backgroundRequestId !== requestId) return;
-    applied = true;
-    overlay.style.backgroundImage = target;
-    overlay.classList.add("active");
-
-    setTimeout(() => {
-      if (overlay.dataset.backgroundRequestId !== requestId) return;
-      document.body.style.backgroundImage = target;
-      document.body.dataset.lobbyBackgroundUrl = nextUrl;
-      try {
-        const partyMatch =
-          window.location.pathname.match(/^\/party\/([^/?#]+)/);
-        const backgroundScope = partyMatch ? `party:${partyMatch[1]}` : "solo";
-        localStorage.setItem(
-          `bb_lobby_background_url:${backgroundScope}`,
-          nextUrl,
-        );
-      } catch (_) {}
-      overlay.classList.remove("active");
-    }, 240);
-  };
-
-  preload.onload = applyLoadedBackground;
-  preload.src = nextUrl;
-  if (preload.complete) queueMicrotask(applyLoadedBackground);
 }
 
 setNavigationGuard(async () => {

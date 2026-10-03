@@ -1,3 +1,6 @@
+import { escapeHtml } from "../shared/html.cjs";
+import { renderCharacterStatus } from "./characterStatusView.js";
+import { createModalFocus } from "../lib/modalFocus.js";
 import {
   getCharacterStats,
   getAllCharacters,
@@ -377,11 +380,11 @@ function createStatBar({ label, value, percent, detail, className }) {
   section.className = `character-detail-stat ${className || ""}`.trim();
   section.innerHTML = `
     <div class="character-detail-stat-header">
-      <span class="character-detail-stat-label">${label}</span>
-      <span class="character-detail-stat-value">${value}</span>
+      <span class="character-detail-stat-label">${escapeHtml(label)}</span>
+      <span class="character-detail-stat-value">${escapeHtml(value)}</span>
     </div>
     <div class="character-detail-stat-bar"><span style="width: ${Math.max(0, Math.min(100, percent))}%"></span></div>
-    <div class="character-detail-stat-detail">${detail}</div>
+    <div class="character-detail-stat-detail">${escapeHtml(detail)}</div>
   `;
   return section;
 }
@@ -405,6 +408,7 @@ function hideCharacterDetails() {
   }
   _characterDetailsUi.overlay.classList.add("is-hidden");
   _characterDetailsUi.overlay.setAttribute("aria-hidden", "true");
+  _characterDetailsUi.focus.deactivate();
   _characterDetailsUi.currentCharacter = null;
   const render = _deferredSkinRender;
   _deferredSkinRender = null;
@@ -419,6 +423,9 @@ function ensureCharacterDetailsUi() {
   overlay.setAttribute("aria-hidden", "true");
   const popup = document.createElement("div");
   popup.className = "character-details-popup";
+  popup.setAttribute("role", "dialog");
+  popup.setAttribute("aria-modal", "true");
+  popup.setAttribute("aria-labelledby", "character-details-title");
 
   const header = document.createElement("div");
   header.className = "character-details-header";
@@ -427,6 +434,7 @@ function ensureCharacterDetailsUi() {
   titleWrap.className = "character-details-title-wrap";
   const title = document.createElement("h3");
   title.className = "character-details-title";
+  title.id = "character-details-title";
 
   const subtitle = document.createElement("p");
   subtitle.className = "character-details-header-description";
@@ -446,7 +454,8 @@ function ensureCharacterDetailsUi() {
   closeButton.className =
     "close character-details-close bb-close pixel-menu-button";
   closeButton.type = "button";
-  closeButton.innerHTML = "×";
+  closeButton.textContent = "×";
+  closeButton.setAttribute("aria-label", "Close character details");
 
   const content = document.createElement("div");
   content.className = "character-details-content";
@@ -485,7 +494,7 @@ function ensureCharacterDetailsUi() {
     previewStage: null,
     selectedSkinByCharacter: {},
     currentCharacter: null,
-    keydownHandler: null,
+    focus: null,
   };
 
   const closeDetails = () => {
@@ -504,20 +513,10 @@ function ensureCharacterDetailsUi() {
 
   popup.addEventListener("click", (e) => e.stopPropagation());
 
-  // Remove any old keyboard handler to avoid duplicates
-  if (state.keydownHandler) {
-    document.removeEventListener("keydown", state.keydownHandler);
-  }
-
-  state.keydownHandler = (e) => {
-    if (e.key !== "Escape") return;
-    if (overlay.classList.contains("is-hidden") || !overlay.isConnected) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    closeDetails();
-  };
-
-  document.addEventListener("keydown", state.keydownHandler, true);
+  state.focus = createModalFocus(popup, {
+    initialFocus: () => closeButton,
+    onEscape: closeDetails,
+  });
 
   _characterDetailsUi = state;
   return state;
@@ -609,7 +608,7 @@ function renderCharacterDetails(character) {
   const statValueMarkup = (stat, value, nextValue) => {
     const displayValue = Number(animatedStart[stat] ?? value);
     const gain = Math.max(0, Number(nextValue) - Number(value));
-    return `<span class="stat-box-value-stack"><span class="stat-box-value" data-stat-value="${stat}" data-stat-target="${value}">${displayValue}</span>${isUpgradePreview ? `<span class="stat-box-gain">+${gain}</span>` : ""}</span>`;
+    return `<span class="stat-box-value-stack"><span class="stat-box-value" data-stat-value="${stat}" data-stat-target="${escapeHtml(value)}">${displayValue}</span>${isUpgradePreview ? `<span class="stat-box-gain">+${gain}</span>` : ""}</span>`;
   };
   const statTrackMarkup = (stat, value, maxValue, nextValue) => {
     const displayedValue = Number(animatedStart[stat] ?? value);
@@ -617,7 +616,7 @@ function renderCharacterDetails(character) {
     const targetWidth = Math.max(0, Math.min(100, (value / maxValue) * 100));
     const nextWidth = Math.max(0, Math.min(100, (nextValue / maxValue) * 100));
     const previewWidth = Math.max(0, nextWidth - targetWidth);
-    return `<div class="stat-box-track" role="progressbar" aria-label="${stat}" aria-valuemin="0" aria-valuemax="${maxValue}" aria-valuenow="${value}"><div class="stat-box-fill" data-stat-fill="${stat}" data-stat-target-width="${targetWidth}" style="width:${shownWidth}%"></div>${isUpgradePreview ? `<div class="stat-box-preview-fill" style="left:${targetWidth}%;width:${previewWidth}%"></div>` : ""}</div>`;
+    return `<div class="stat-box-track" role="progressbar" aria-label="${stat}" aria-valuemin="0" aria-valuemax="${maxValue}" aria-valuenow="${escapeHtml(value)}"><div class="stat-box-fill" data-stat-fill="${stat}" data-stat-target-width="${targetWidth}" style="width:${shownWidth}%"></div>${isUpgradePreview ? `<div class="stat-box-preview-fill" style="left:${targetWidth}%;width:${previewWidth}%"></div>` : ""}</div>`;
   };
 
   // Health box (full width)
@@ -650,7 +649,7 @@ function renderCharacterDetails(character) {
     </div>
     ${statTrackMarkup("damage", cardState.currentDamage, attackMax, nextDamage)}
     <div class="stat-box-content">
-      ${stats.attackDescription ? `<div class="stat-box-desc">${stats.attackDescription}</div>` : ""}
+      ${stats.attackDescription ? `<div class="stat-box-desc">${escapeHtml(stats.attackDescription)}</div>` : ""}
       <div class="stat-box-metrics attack-metrics" aria-label="Attack details">
         <div class="stat-box-metric reload-metric">
           <img src="/assets/ui/stat-reload.webp" alt="" aria-hidden="true" />
@@ -663,7 +662,7 @@ function renderCharacterDetails(character) {
           <img src="/assets/ui/stat-ammo.webp" alt="" aria-hidden="true" />
           <span class="stat-box-metric-copy">
             <span class="stat-box-metric-label">Ammo</span>
-            <strong>${stats.ammoCapacity || 0}</strong>
+            <strong>${escapeHtml(stats.ammoCapacity || 0)}</strong>
           </span>
         </div>
       </div>
@@ -683,7 +682,7 @@ function renderCharacterDetails(character) {
     </div>
     ${statTrackMarkup("special", cardState.currentSpecial, specialMax, nextSpecial)}
     <div class="stat-box-content">
-      ${stats.specialDescription ? `<div class="stat-box-desc">${stats.specialDescription}</div>` : ""}
+      ${stats.specialDescription ? `<div class="stat-box-desc">${escapeHtml(stats.specialDescription)}</div>` : ""}
       <div class="stat-box-metrics special-metrics" aria-label="Special charge details">
         <div class="stat-box-metric hits-metric">
           <img src="/assets/ui/stat-hits.webp" alt="" aria-hidden="true" />
@@ -781,7 +780,7 @@ function renderCharacterDetails(character) {
     buyButton.setAttribute("aria-label", `Unlock ${character} for ${stats.unlockPrice || 0} gems`);
     buyButton.className =
       `character-details-action buy-button pixel-menu-button${cardState.canUnlock ? " is-ready" : ""}`;
-    buyButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon" src="/assets/lock.webp" alt="" /><span>Buy</span></span><span class="button-price"><img class="cs-currency" src="/assets/gem.webp" alt="" /><span>${stats.unlockPrice || 0}</span></span>`;
+    buyButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon" src="/assets/lock.webp" alt="" /><span>Buy</span></span><span class="button-price"><img class="cs-currency" src="/assets/gem.webp" alt="" /><span>${escapeHtml(stats.unlockPrice || 0)}</span></span>`;
     if (stats.unlockMethod?.type === "trophyRoad") {
       buyButton.innerHTML = `<span class="character-details-action-label character-details-trophy-label"><img class="character-details-action-icon" src="/assets/lock.webp" alt="" /><span>Trophy Reward</span></span><span class="button-price"><img class="cs-currency" src="/assets/trophy.webp" alt="" /><span>${stats.unlockMethod.min.toLocaleString()}</span></span>`;
       buyButton.setAttribute("aria-label", `Claim ${character} on Trophy Road at ${stats.unlockMethod.min} trophies`);
@@ -813,7 +812,7 @@ function renderCharacterDetails(character) {
       upgradeButton.type = "button";
       upgradeButton.setAttribute("aria-label", `Upgrade ${character} for ${cardState.price} coins`);
       upgradeButton.className = `character-details-action upgrade-button pixel-menu-button${cardState.canUpgrade ? " is-ready" : ""}`;
-      upgradeButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon upgrade-icon" src="/assets/upgrade.webp" alt="" /><span>Upgrade</span></span><span class="button-price"><img class="cs-currency" src="/assets/coin.webp" alt="" /><span>${cardState.price}</span></span>`;
+      upgradeButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon upgrade-icon" src="/assets/upgrade.webp" alt="" /><span>Upgrade</span></span><span class="button-price"><img class="cs-currency" src="/assets/coin.webp" alt="" /><span>${escapeHtml(cardState.price)}</span></span>`;
       if (!cardState.canUpgrade) {
         upgradeButton.title = "Not enough coins — select to view the balance needed";
       }
@@ -1164,16 +1163,7 @@ function createCharacterCard(character, userData) {
   const statusText = document.createElement("div");
   statusText.className = "character-card-status-text";
 
-  if (cardState.isLocked) {
-    statusText.innerHTML = stats.unlockMethod?.type === "trophyRoad" ? `<img src="/assets/trophy.webp" alt="" /> <span class="character-card-status-price">${stats.unlockMethod.min.toLocaleString()}</span>` : `<span class="character-card-status-label">Unlock</span> <img src="/assets/gem.webp" alt="" /> <span class="character-card-status-price">${stats.unlockPrice || 0}</span>`;
-  } else if (cardState.isMaxed) {
-    statusText.classList.add("maxed");
-    statusText.innerHTML =
-      '<img src="/assets/crown.webp" alt="" /> <span>Max Level</span>';
-  } else {
-    statusText.classList.add("upgradable");
-    statusText.innerHTML = `<img class="character-card-upgrade-icon" src="/assets/upgrade.webp" alt="" /> <span class="character-card-status-label">Upgrade</span> <img src="/assets/coin.webp" alt="" /> <span class="character-card-status-price">${cardState.price}</span>`;
-  }
+  renderCharacterStatus(statusText, cardState);
 
   statusSection.appendChild(statusText);
 
@@ -1204,11 +1194,7 @@ function createCharacterCard(character, userData) {
     openCharacterDetails(character);
   });
 
-  card.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    e.preventDefault();
-    openCharacterDetails(character);
-  });
+
 
   return card;
 }
@@ -1216,9 +1202,7 @@ function createCharacterCard(character, userData) {
 export function openCharacterSelect() {
   if (window.__openCharacterSelect) return window.__openCharacterSelect();
   if (blockCharacterChangeWhileReady()) return false;
-  const overlay = document.querySelector(".character-select-overlay");
-  overlay?.classList.remove("is-hidden");
-  overlay?.setAttribute("aria-hidden", "false");
+  getSharedSelectionPopupShell().show();
   emitCharacterMenuStatus(true);
   return true;
 }
@@ -1233,6 +1217,7 @@ function openCharacterDetails(character) {
   if (wasDetached) void ui.overlay.offsetWidth;
   ui.overlay.classList.remove("is-hidden");
   ui.overlay.setAttribute("aria-hidden", "false");
+  ui.focus.activate();
 }
 
 async function persistActiveCharacterSelection(character, skinId) {
@@ -1261,11 +1246,7 @@ function closeCharacterSelectAfterSelection() {
     return;
   }
   hideCharacterDetails();
-  const overlay = document.querySelector(".character-select-overlay");
-  if (overlay) {
-    overlay.classList.add("is-hidden");
-    overlay.setAttribute("aria-hidden", "true");
-  }
+  getSharedSelectionPopupShell().hide();
   emitCharacterMenuStatus(false);
 }
 
@@ -1375,18 +1356,18 @@ function closeConfirmationBackdrop(backdrop) {
   dismissPopup(backdrop, () => backdrop.remove());
 }
 
-// Confirmation dialogs receive Escape at window capture phase so they close
-// before the expanded character view or the shared selection overlay.
+// The topmost confirmation owns keyboard focus above details and selection.
 function installPriorityEscape(backdrop) {
-  const handleEscape = (event) => {
-    if (event.key !== "Escape" || !backdrop.isConnected) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    closeConfirmationBackdrop(backdrop);
-  };
-  window.addEventListener("keydown", handleEscape, true);
+  const dialog = backdrop.querySelector(".cs-confirm");
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", dialog.querySelector(".cs-confirm-title").textContent);
+  const focus = createModalFocus(dialog, {
+    onEscape: () => closeConfirmationBackdrop(backdrop),
+  });
+  focus.activate();
   backdrop.__removePriorityEscape = () => {
-    window.removeEventListener("keydown", handleEscape, true);
+    focus.deactivate();
     backdrop.__removePriorityEscape = null;
   };
 }
@@ -1484,7 +1465,7 @@ function showConfirmDialog(opts, onConfirm) {
   okBtn.className = "cs-btn confirm pixel-menu-button";
   okBtn.innerHTML = `<img class="cs-currency" src="${
     isUpgrade ? "/assets/coin.webp" : "/assets/gem.webp"
-  }" alt=""/> <span>${price}</span>`;
+  }" alt=""/> <span>${escapeHtml(price)}</span>`;
 
   cancelBtn.onclick = () => {
     playSound("cursor4", 0.2);
@@ -1755,22 +1736,7 @@ function refreshUpgradeButtonAffordability() {
       card.classList.toggle("is-upgrade-ready", state.canUpgrade);
       card.classList.toggle("is-unlock-ready", state.canUnlock);
 
-      if (state.isLocked) {
-        statusText.className = "character-card-status-text";
-        statusText.innerHTML = state.stats.unlockMethod?.type === "trophyRoad" ? `<img src="/assets/trophy.webp" alt="" /> <span class="character-card-status-price">${state.stats.unlockMethod.min.toLocaleString()}</span>` : `<span class="character-card-status-label">Unlock</span> <img src="/assets/gem.webp" alt="" /> <span class="character-card-status-price">${state.stats?.unlockPrice || 0}</span>`;
-        return;
-      }
-
-      if (state.isMaxed) {
-        statusText.className = "character-card-status-text maxed";
-        statusText.innerHTML =
-          '<img src="/assets/crown.webp" alt="" /> <span>Max Level</span>';
-        return;
-      }
-
-      statusText.className =
-        "character-card-status-text upgradable";
-      statusText.innerHTML = `<img class="character-card-upgrade-icon" src="/assets/upgrade.webp" alt="" /> <span class="character-card-status-label">Upgrade</span> <img src="/assets/coin.webp" alt="" /> <span class="character-card-status-price">${state.price || 0}</span>`;
+      renderCharacterStatus(statusText, state);
     } catch {}
   });
   sortCharacterCardsInGrid(_userDataRef);

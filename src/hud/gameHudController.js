@@ -10,7 +10,7 @@ import {
   selectionToLegacyMode,
 } from "../lib/gameSelectionCatalog.js";
 import { buildCharacterSkinBodyUrl } from "../lib/skinAssets.js";
-import { LEVEL_CAP } from "../shared/characterStats.js";
+import { LEVEL_CAP, DEFAULT_CHARACTER } from "../shared/characterStats.js";
 import { renderLevelBadge } from "../lib/levelBadgeView.js";
 
 function legacyModeToVariantId(mode) {
@@ -206,15 +206,15 @@ export function createGameHudController({
 
     statsRow.innerHTML = `
       <div class="bs-card-stat-pill" title="Health">
-        <img src="/assets/heart.webp" alt="Health" class="bs-card-stat-icon" onerror="this.style.display='none'">
+        <img src="/assets/heart.webp" alt="Health" class="bs-card-stat-icon">
         <span class="bs-card-stat-number">${healthValue}</span>
       </div>
       <div class="bs-card-stat-pill" title="Attack">
-        <img src="/assets/attack.webp" alt="Attack" class="bs-card-stat-icon" onerror="this.style.display='none'">
+        <img src="/assets/attack.webp" alt="Attack" class="bs-card-stat-icon">
         <span class="bs-card-stat-number">${damageValue}</span>
       </div>
       <div class="bs-card-stat-pill" title="Special">
-        <img src="/assets/special.webp" alt="Special" class="bs-card-stat-icon" onerror="this.style.display='none'">
+        <img src="/assets/special.webp" alt="Special" class="bs-card-stat-icon">
         <span class="bs-card-stat-number">${specialValue}</span>
       </div>`;
 
@@ -225,6 +225,9 @@ export function createGameHudController({
     root.appendChild(charNameEl);
     root.appendChild(spriteWrap);
     root.appendChild(statsRow);
+    statsRow.querySelectorAll("img").forEach(image => {
+      image.addEventListener("error", () => { image.style.display = "none"; }, { once: true });
+    });
     root.draggable = false;
     root.addEventListener("dragstart", (event) => event.preventDefault());
     root.querySelectorAll("img").forEach((image) => { image.draggable = false; });
@@ -930,7 +933,7 @@ export function createGameHudController({
       const avatarCore = document.createElement("div");
       avatarCore.className = "team-hud-avatar-core";
       const img = document.createElement("img");
-      const cls = (p?.char_class || "ninja").toLowerCase();
+      const cls = (p?.char_class || DEFAULT_CHARACTER).toLowerCase();
       img.src =
         String(p?.selected_skin_asset_url || "").trim() ||
         buildCharacterSkinBodyUrl(cls, "");

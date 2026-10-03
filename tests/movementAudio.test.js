@@ -51,9 +51,9 @@ test('grass footsteps share predictable playback gain and landings follow terrai
 });
 
 test('the first grounded movement frame plays a step for short key taps', () => {
-  const playerSource = fs.readFileSync(require.resolve('../src/player.js'), 'utf8');
-  assert.match(playerSource, /if \(!wasGroundWalking\) \{\s*playMovementStep\(groundSpeedRatio, false\);/);
-  assert.match(playerSource, /wasGroundWalking = isGroundWalking;/);
+  const source = fs.readFileSync(require.resolve('../src/players/localMovementFx.js'), 'utf8');
+  assert.match(source, /if \(!wasGroundWalking\) \{\s*audio\.playStep\(scene, speedRatio, false\);/);
+  assert.match(source, /wasGroundWalking = isGroundWalking;/);
 });
 
 test('opening landing is silent even when the countdown ends before touchdown', () => {

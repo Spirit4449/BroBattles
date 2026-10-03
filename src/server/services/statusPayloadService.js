@@ -2,15 +2,12 @@ const {
   syncProfileIconOwnershipForUser,
 } = require("../helpers/profileIconOwnership");
 const { syncSkinOwnershipForUser } = require("../helpers/skinOwnership");
+const { parseCharacterLevels } = require("../../shared/characterStats.js");
 
 function normalizeUserForStatus(user) {
   const out = user ? { ...user } : null;
   if (out && typeof out.char_levels === "string") {
-    try {
-      out.char_levels = JSON.parse(out.char_levels || "{}");
-    } catch (_) {
-      out.char_levels = {};
-    }
+    out.char_levels = parseCharacterLevels(out.char_levels);
   }
   return out;
 }
@@ -109,7 +106,7 @@ async function buildStatusPayload({
   return {
     success: true,
     userData: userNormalized,
-    mapCatalog: require("./mapRepository").mapRepository.list().map(({document})=>({...document.metadata,id:document.id,label:document.label})),
+    mapCatalog: require("./mapRepository").mapRepository.listMetadata(),
     suspension,
     isAdmin:
       typeof isAdminUser === "function" ? !!isAdminUser(userNormalized) : false,

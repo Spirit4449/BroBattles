@@ -34,7 +34,9 @@
           "anchorForwardOffset": 0,
           "anchorOffsetY": 13,
           "minSpeedScale": 1,
-          "maxSpeedScale": 1
+          "maxSpeedScale": 1,
+          "scalesWithSprite": true,
+          "reticleScaleLiftY": 37.8
         },
         "sweep": {
           "windupMs": 70,

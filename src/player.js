@@ -1,6 +1,6 @@
 import { updateDash, endDash, drawDashCooldown, protectDashMotion, applyDashCoast } from './gameScene/dash';
 import { spritePresentation } from './characters/shared/spritePresentation';
-import { applyTeamVisual, TEAM_GREEN } from "./shared/projectilePresentation";
+import { applyTeamVisual } from "./shared/projectilePresentation";
 import { getSettings, bindCanvasName, subscribeSettings } from "./site/preferences";
 import {
   resolveWallContact,
@@ -12,7 +12,6 @@ import { predictCharacterSpecial } from './characters/networkRegistry';
 // NOTE: Refactored to remove circular dependency on game.js.
 // socket now comes from standalone socket.js and opponentPlayers are passed into createPlayer.
 import socket from "./socket";
-import { getTerrainSteps, footstepVolume, terrainLandingSound, shouldPlayLandingSound } from './gameScene/movementAudio';
 import { drawSuperChargeBar, resetSuperBarAnimation } from "./gameScene/superBarRenderer";
 import { drawHealthBar, resetHealthBarAnimation } from "./gameScene/healthBarRenderer";
 import {
@@ -32,19 +31,14 @@ import {
   getEffectsClass,
 } from "./characters";
 import {
-  MOVEMENT_VFX_CONFIG,
-  spawnDirectionChangeBurst,
-  spawnFastFallTrail,
   spawnHealthMarker,
   spawnJumpTakeoff,
-  spawnLandingImpact,
-  spawnRunDust,
   spawnSpawnBurst,
-  spawnWallSlideBurst,
-  spawnWallSlideTrail,
   spawnWallKickCloud,
 } from "./effects";
 import { bindLocalSocketEvents } from "./players/localSocketEvents";
+import { createLocalMovementAudio } from "./players/localMovementAudio";
+import { createLocalMovementFx } from "./players/localMovementFx";
 import { createLocalStateSync } from "./players/localStateSync";
 import {
   getPlayerAimBasePoint,
@@ -59,7 +53,6 @@ import {
   noteAnimationPlayed,
   playCharacterAnimation,
   resetAirborneJumpAnimation,
-  playSpriteAnimation,
 } from "./characters/shared/animationState.js";
 import { createAttackAimReticleController } from "./gameScene/attackAimReticle";
 import { createCombatMouseController } from "./gameScene/combatMouse";
@@ -80,6 +73,8 @@ import {
   playDuckTransitionSound,
   playDuckBlockSound,
 } from "./gameScene/movementAudio.js";
+import { resolveCharacterKey } from "./shared/characterStats.js";
+import { characterPresentation } from "./shared/characters/index.js";
 // Globals
 let player;
 let cursors;
@@ -92,23 +87,6 @@ let isJumping = false;
 let isAttacking = false;
 let canAttack = true;
 // SFX state
-let sfxWalkCooldown = 0;
-let wasOnGround = false;
-let movementVfxInitialized = false;
-let lastAirborneVelocityY = 0;
-let airbornePeakBottomY = null;
-let wasWallSliding = false;
-let wallSlideVfxElapsed = 0;
-let fastFallVfxElapsed = 0;
-let lastGroundInputDirection = 0;
-let lastDirectionChangeAt = 0;
-let wasGroundWalking = false;
-let wallSlideLoopSfx = null;
-let wallSlideLoopPlaying = false;
-let fallAirLoopSfx = null;
-let fallAirLoopPlaying = false;
-let fallAirStartedAt = 0;
-let footstepVariantCursor = 0;
 let movementFxSequence = 0;
 let latestMovementFxEvent = {
   seq: 0,
@@ -168,13 +146,9 @@ let scene;
 let currentCharacter;
 let currentSkinId = "";
 
-let spawn;
 let playersInTeam;
-let spawnPlatform;
 let mapObjects;
-let map;
 let opponentPlayersRef; // injected from game.js to avoid circular import
-let dustTimer = 0;
 
 // Body config and flip-offset applier hoisted for use across functions
 let bodyConfig = null;
@@ -210,6 +184,9 @@ function noteMovementFxEvent(type, details = {}) {
   };
 }
 
+const movementAudio = createLocalMovementAudio();
+const movementFx = createLocalMovementFx({ audio: movementAudio, noteEvent: noteMovementFxEvent });
+
 function getMovementFxNetworkState() {
   return {
     movementFxSeq: latestMovementFxEvent.seq,
@@ -221,46 +198,9 @@ function getMovementFxNetworkState() {
   };
 }
 
-function stopMovementLoopSfx() {
-  if (wallSlideLoopPlaying) {
-    try {
-      wallSlideLoopSfx?.stop?.();
-    } catch (_) {}
-    wallSlideLoopPlaying = false;
-  }
-  if (fallAirLoopPlaying) {
-    try {
-      fallAirLoopSfx?.stop?.();
-    } catch (_) {}
-    fallAirLoopPlaying = false;
-  }
-  fallAirStartedAt = 0;
-}
-
-function disposeMovementLoopSfx() {
-  stopMovementLoopSfx();
-  try {
-    wallSlideLoopSfx?.destroy?.();
-  } catch (_) {}
-  try {
-    fallAirLoopSfx?.destroy?.();
-  } catch (_) {}
-  wallSlideLoopSfx = null;
-  fallAirLoopSfx = null;
-}
-
 function resetMovementVfxTracking() {
-  stopMovementLoopSfx();
-  wasOnGround = false;
-  movementVfxInitialized = false;
-  lastAirborneVelocityY = 0;
-  airbornePeakBottomY = null;
-  wasWallSliding = false;
-  wallSlideVfxElapsed = 0;
-  fastFallVfxElapsed = 0;
-  lastGroundInputDirection = 0;
-  lastDirectionChangeAt = 0;
-  wasGroundWalking = false;
+  movementAudio.stopLoops();
+  movementFx.reset();
 }
 
 function resetMovementInputState({ preserveVelocity = false } = {}) {
@@ -647,10 +587,7 @@ export function createPlayer(
 
   username = name;
   scene = sceneParam;
-  spawn = spawnParam;
   playersInTeam = playersInTeamParam;
-  spawnPlatform = spawnPlatformParam;
-  map = mapParam;
   opponentPlayersRef = opponentPlayersParam;
   // Remember the chosen character for animation resolution in update loop
   currentCharacter = character;
@@ -671,25 +608,7 @@ export function createPlayer(
   const stopKeyUpdates=subscribeSettings(bindKeys);
   scene.events.once('shutdown',stopKeyUpdates);
 
-  disposeMovementLoopSfx();
-  const movementAudioScene = scene;
-  const ensureMovementLoops = () => {
-    if (!movementAudioScene.sound || movementAudioScene.game?.config?.audio?.noAudio) return;
-    if (!wallSlideLoopSfx && movementAudioScene.cache.audio.exists('sfx-sliding')) {
-      wallSlideLoopSfx = movementAudioScene.sound.add('sfx-sliding', { loop: true, volume: 0 });
-    }
-    if (!fallAirLoopSfx && movementAudioScene.cache.audio.exists('sfx-fall-air')) {
-      fallAirLoopSfx = movementAudioScene.sound.add('sfx-fall-air', { loop: true, volume: 0, rate: 0.72 });
-    }
-    if (wallSlideLoopSfx && fallAirLoopSfx) {
-      movementAudioScene.cache.audio.events.off('add', ensureMovementLoops);
-    }
-  };
-  movementAudioScene.cache.audio.events.on('add', ensureMovementLoops);
-  ensureMovementLoops();
-  movementAudioScene.events.once('shutdown', () => {
-    movementAudioScene.cache.audio.events.off('add', ensureMovementLoops);
-  });
+  movementAudio.attach(scene);
 
   // Animations are registered globally in game.js via setupAll(scene)
 
@@ -803,14 +722,8 @@ export function createPlayer(
     player._ducking = !!ducking;
     body.touching.down = true;
     body.wasTouching.down = true;
-    wasOnGround = true;
-    lastAirborneVelocityY = 0;
-    airbornePeakBottomY = null;
-    if (fallAirLoopPlaying) {
-      try { fallAirLoopSfx?.stop?.(); } catch (_) {}
-      fallAirLoopPlaying = false;
-      fallAirStartedAt = 0;
-    }
+    movementFx.markGrounded();
+    movementAudio.stopFallAir();
     playDuckTransitionSound(scene, !!ducking);
   };
 
@@ -1191,11 +1104,7 @@ export function createPlayer(
     setMaxSuperCharge: (value) => {
       maxSuperCharge = value;
     },
-    getWallSlideLoopSfx: () => wallSlideLoopSfx,
-    getWallSlideLoopPlaying: () => wallSlideLoopPlaying,
-    setWallSlideLoopPlaying: (value) => {
-      wallSlideLoopPlaying = value;
-    },
+    stopWallSlideAudio: () => movementAudio.stopWallSlide(),
     onLocalDeath: () => {
       combatMouseController?.endDrag();
       resetMovementInputState();
@@ -1241,7 +1150,7 @@ export function createPlayer(
         disposeLocalSocketEvents = null;
       }
       resetPointerAttackAim();
-      disposeMovementLoopSfx();
+      movementAudio.dispose();
       mobileControlsController?.destroy?.();
       detachPointerAttackBindings(sceneParam);
       clearGameCursor(sceneParam);
@@ -1259,7 +1168,7 @@ export function createPlayer(
         disposeLocalSocketEvents = null;
       }
       resetPointerAttackAim();
-      disposeMovementLoopSfx();
+      movementAudio.dispose();
       mobileControlsController?.destroy?.();
       detachPointerAttackBindings(sceneParam);
       clearGameCursor(sceneParam);
@@ -1487,8 +1396,9 @@ function fireSpecialAttack(context = null) {
       handlePlayerMovement,
     });
   } catch (_) {}
-  if (String(currentCharacter || "").toLowerCase() === "wizard" && player) {
-    player._specialAnimLockUntil = Date.now() + 2100;
+  const specialLockMs = characterPresentation(resolveCharacterKey(currentCharacter)).specialAnimationLockMs;
+  if (specialLockMs && player) {
+    player._specialAnimLockUntil = Date.now() + specialLockMs;
   }
   if (player) {
     markOneShotAnimation(player, "special", 1100);
@@ -1573,95 +1483,209 @@ function drawAmmoBar(forcedX, forcedY) {
   ammoBarBack.setDepth(40);
 }
 
+// ---------------------------------------------------------------------------
+// Per-frame local movement
+// ---------------------------------------------------------------------------
+// handlePlayerMovement runs every frame as an ordered pipeline. Each step
+// reads the state produced by the previous ones, so the order matters:
+// input gating -> dash -> physics limits -> input -> control locks -> actions
+// -> ducking -> horizontal motion -> jumps -> wall slide -> airborne state ->
+// presentation (effects, animation) -> replicated input state.
+
 export function handlePlayerMovement(scene) {
   drawDashCooldown(scene, player, dead);
   mobileControlsController?.ensure?.(scene);
   mobileControlsController?.layout?.(scene);
+  if (isLocalInputInactive(scene)) {
+    applyInactiveInputFrame(scene);
+    return;
+  }
+  const dashing = updateDashAndAmmo(scene);
+  if (dashing) {
+    applyDashFrame(scene);
+    return;
+  }
+
+  enforceLockedFacing();
+  const tuning = resolveMovementTuning();
+  const shockwaveActive = (player._shockwaveUntil || 0) > Date.now();
+  applyBodyLimits(tuning, shockwaveActive);
+
+  const input = readMovementInput();
+  const wall = resolveWallContact(player, scene._mapObjects || [], {
+    left: input.left,
+    right: input.right,
+    upHeld: input.directionalUpHeld,
+    jumpPressed: input.upFresh,
+  });
+  const locks = applyMovementLocks(scene, input);
+  applyFastFallGravity(scene, wall, tuning);
+  handleActionKeys();
+  updateAimReticleVisibility();
+  const ducking = updateDucking(scene, input, locks.movementLocked);
+  applyHorizontalMovement(input, tuning, { ducking, shockwaveActive });
+
+  const inputDirection = input.left && !input.right ? -1 : input.right && !input.left ? 1 : 0;
+  applyDashCoast(player, inputDirection, tuning.maxSpeed);
+  const groundSpeedRatio = movementFx.updateGroundMotion(scene, player, {
+    inputDirection,
+    maxSpeed: tuning.maxSpeed,
+    dead,
+    hidden: powerupInvisible,
+    attacking: isAttacking,
+  });
+  updateJumping(scene, wall, tuning, {
+    movementLocked: locks.movementLocked,
+    shockwaveActive,
+    groundSpeedRatio,
+  });
+  const isWallSliding = updateWallSlide(scene, wall, tuning, locks.movementLocked);
+  movementFx.updateFalling(scene, player, { dead, sliding: isWallSliding, hidden: powerupInvisible });
+  updateAirborneState(isWallSliding);
+
+  updatePointerAttackAimState();
+  syncLocalUiPosition();
+  movementFx.updateLanding(scene, player, { dead, hidden: powerupInvisible });
+  if (player.body.touching.down) player._lastGroundTime = Date.now();
+  // Per-character effects update (e.g., Draven fire trail)
+  if (charEffects && !powerupInvisible) {
+    charEffects.update(scene.game.loop.delta, isMoving, dead);
+  }
+  movementFx.updateRunDust(scene, player, {
+    dead,
+    hidden: powerupInvisible,
+    moving: isMoving,
+    maxSpeed: tuning.maxSpeed,
+  });
+
+  presentMovementAnimation(scene, {
+    wallSliding: isWallSliding,
+    movementLocked: locks.movementLocked,
+    lockedByAbility: locks.byAbility,
+  });
+  networkInputState = buildNetworkInputState({
+    left: !!input.left,
+    right: !!input.right,
+    direction: inputDirection,
+    jumpHeld: !!input.up,
+    jumpPressed: !!input.upFresh,
+    animation: getPresentedAnimation(player, "idle"),
+    wallSliding: !!isWallSliding,
+    wallSide: isWallSliding ? wall.wallSide || (player.flipX ? "left" : "right") : null,
+    movementLocked: locks.movementLocked,
+  });
+}
+
+function isLocalInputInactive(scene) {
   const desktopInputInactive =
     !!combatMouseController &&
     !mobileControlsController?.isEnabled?.() &&
     !combatMouseController.isActive();
-  if (
+  return (
     scene?.input?.keyboard?.enabled === false ||
     desktopInputInactive ||
     chatInputActive ||
-    window.__BB_SITE_DIALOG_OPEN
-  ) {
-    endDash(player);
-    stopMovementLoopSfx();
-    releaseMovementForFocus(player, {
-      dragGround: MOVEMENT_PHYSICS.dragGround,
-      dragAir: MOVEMENT_PHYSICS.dragAir,
-      shockwaveActive: (player?._shockwaveUntil || 0) > Date.now(),
-    });
-    isMoving = false;
-    const grounded = !!(
-      player?.body?.touching?.down || player?.body?.blocked?.down
-    );
-    if (grounded) isJumping = false;
-    const now = Date.now();
-    const movementLocked =
-      Math.max(
-        Number(player?._movementLockedUntil || 0),
-        Number(player?._externalControlLockUntil || 0),
-      ) > now;
-    const desiredMovementAnimation = deriveMovementAnimation({
-      grounded,
-      ducking: !!player?._ducking,
-      moving: false,
-      wallSliding: false,
-      vx: Number(player?.body?.velocity?.x) || 0,
-      vy: Number(player?.body?.velocity?.y) || 0,
-      dead,
-      movementLocked,
-      specialLocked: Number(player?._specialAnimLockUntil || 0) > now,
-      fallback: getPresentedAnimation(player, "idle"),
-    });
-    const presentedAnimation = getPresentedAnimation(
-      player,
-      desiredMovementAnimation,
-    );
-    const passiveAnimation =
-      presentedAnimation === "throw" || presentedAnimation === "special"
-        ? presentedAnimation
-        : desiredMovementAnimation;
-    playCharacterAnimation({
-      scene,
-      sprite: player,
-      character: currentCharacter,
-      skinId: currentSkinId,
-      resolveAnimKey,
-      logical: passiveAnimation,
-      fallback: "idle",
-      force: true,
-    });
-    // Input can be inactive while Arcade Physics still advances the body. Keep
-    // all world-space HUD elements attached even while controls are released.
-    syncLocalUiPosition();
-    networkInputState = {
-      left: false,
-      right: false,
-      direction: 0,
-      jumpHeld: false,
-      jumpPressed: false,
-      grounded,
-      vx: Number(player?.body?.velocity?.x) || 0,
-      vy: Number(player?.body?.velocity?.y) || 0,
-      facing: player?.flipX ? -1 : 1,
-      animation: getPresentedAnimation(player, passiveAnimation),
-      wallSliding: false,
-      wallSide: null,
-      ...getMovementFxNetworkState(),
-      movementLocked: true,
-      loaded:
-        !dead &&
-        Number.isFinite(player?.x) &&
-        Number.isFinite(player?.y) &&
-        player?.visible !== false,
-    };
-    return;
-  }
-  const dashNow = Date.now();
+    !!window.__BB_SITE_DIALOG_OPEN
+  );
+}
+
+function isControlLocked(now = Date.now()) {
+  return Math.max(
+    Number(player?._movementLockedUntil || 0),
+    Number(player?._externalControlLockUntil || 0),
+  ) > now;
+}
+
+function isSpecialAnimationLocked() {
+  return (player?._specialAnimLockUntil || 0) > Date.now();
+}
+
+function isLoadedForNetwork() {
+  return !dead && Number.isFinite(player?.x) && Number.isFinite(player?.y) && player?.visible !== false;
+}
+
+// Replicated input snapshot; physics/facing fields always come from the body.
+function buildNetworkInputState(fields) {
+  return {
+    grounded: !!player?.body?.touching?.down,
+    ducking: !!player?._ducking,
+    vx: Number(player?.body?.velocity?.x) || 0,
+    vy: Number(player?.body?.velocity?.y) || 0,
+    facing: player?.flipX ? -1 : 1,
+    ...fields,
+    ...getMovementFxNetworkState(),
+    loaded: isLoadedForNetwork(),
+  };
+}
+
+// Throw/special poses outrank the movement pose while they are playing.
+function withActionPose(movementAnimation) {
+  const presented = getPresentedAnimation(player, movementAnimation);
+  return presented === "throw" || presented === "special" ? presented : movementAnimation;
+}
+
+// Controls are released (chat, dialogs, unfocused desktop window): drop
+// input but keep animating and keep the HUD attached while physics continues.
+function applyInactiveInputFrame(scene) {
+  endDash(player);
+  movementAudio.stopLoops();
+  releaseMovementForFocus(player, {
+    dragGround: MOVEMENT_PHYSICS.dragGround,
+    dragAir: MOVEMENT_PHYSICS.dragAir,
+    shockwaveActive: (player?._shockwaveUntil || 0) > Date.now(),
+  });
+  isMoving = false;
+  const grounded = !!(player?.body?.touching?.down || player?.body?.blocked?.down);
+  if (grounded) isJumping = false;
+  const now = Date.now();
+  const desiredMovementAnimation = deriveMovementAnimation({
+    grounded,
+    ducking: !!player?._ducking,
+    moving: false,
+    wallSliding: false,
+    vx: Number(player?.body?.velocity?.x) || 0,
+    vy: Number(player?.body?.velocity?.y) || 0,
+    dead,
+    movementLocked: isControlLocked(now),
+    specialLocked: Number(player?._specialAnimLockUntil || 0) > now,
+    fallback: getPresentedAnimation(player, "idle"),
+  });
+  const passiveAnimation = withActionPose(desiredMovementAnimation);
+  playCharacterAnimation({
+    scene,
+    sprite: player,
+    character: currentCharacter,
+    skinId: currentSkinId,
+    resolveAnimKey,
+    logical: passiveAnimation,
+    fallback: "idle",
+    force: true,
+  });
+  // Input can be inactive while Arcade Physics still advances the body. Keep
+  // all world-space HUD elements attached even while controls are released.
+  syncLocalUiPosition();
+  networkInputState = {
+    left: false,
+    right: false,
+    direction: 0,
+    jumpHeld: false,
+    jumpPressed: false,
+    grounded,
+    vx: Number(player?.body?.velocity?.x) || 0,
+    vy: Number(player?.body?.velocity?.y) || 0,
+    facing: player?.flipX ? -1 : 1,
+    animation: getPresentedAnimation(player, passiveAnimation),
+    wallSliding: false,
+    wallSide: null,
+    ...getMovementFxNetworkState(),
+    movementLocked: true,
+    loaded: isLoadedForNetwork(),
+  };
+}
+
+// Advances the dash and ammo reload. Returns true while a dash owns movement.
+function updateDashAndAmmo(scene) {
+  const now = Date.now();
   const dashing = updateDash(scene, player, {
     pressed: !!keySpace && Phaser.Input.Keyboard.JustDown(keySpace),
     left: cursors.left.isDown || movementKeys.left.isDown || !!mobileControlsController?.isMovingLeft?.(),
@@ -1671,11 +1695,10 @@ export function handlePlayerMovement(scene) {
     blocked: dead || isAttacking || Number(movementSpeedMult) <= 0 ||
       Math.max(player._movementLockedUntil || 0, player._externalControlLockUntil || 0,
         player._specialAnimLockUntil || 0, player._shockwaveUntil || 0,
-        player._knockbackUntil || 0) > dashNow,
-    now: dashNow,
+        player._knockbackUntil || 0) > now,
+    now,
     showEffect: !powerupInvisible,
   });
-  // Ammo reload tick
   if (ammoCharges < ammoCapacity) {
     reloadTimerMs += scene.game.loop.delta;
     if (reloadTimerMs >= ammoReloadMs) {
@@ -1685,286 +1708,200 @@ export function handlePlayerMovement(scene) {
   } else {
     reloadTimerMs = 0; // full, no reload progress
   }
-  // Redraw ammo bar periodically (cheap draw)
   if (!dead) drawAmmoBar();
+  return dashing;
+}
 
-  if (dashing) {
-    stopMovementLoopSfx();
-    isMoving = true;
-    wasWallSliding = false;
-    player._wallAttachSide = null;
-    player._wallAttachStartedAt = null;
+function applyDashFrame(scene) {
+  movementAudio.stopLoops();
+  movementFx.clearWallSlide();
+  isMoving = true;
+  player._wallAttachSide = null;
+  player._wallAttachStartedAt = null;
+  applyFlipOffsetLocal?.();
+  playCharacterAnimation({ scene, sprite: player, character: currentCharacter,
+    skinId: currentSkinId, resolveAnimKey, logical: "dashing", fallback: "falling", force: true });
+  syncLocalUiPosition();
+  networkInputState = {
+    direction: player._dash.inputX || 0, jumpHeld: false, jumpPressed: false,
+    grounded: !!player.body.touching.down, ducking: !!player._ducking,
+    vx: player.body.velocity.x, vy: player.body.velocity.y,
+    facing: player.flipX ? -1 : 1, animation: "dashing",
+    wallSliding: false, wallSide: null, ...getMovementFxNetworkState(),
+    movementLocked: false, loaded: !dead && player.visible !== false,
+  };
+}
+
+// Attacks such as Draven's splash lock facing; enforce it before movement
+// logic can flip the sprite.
+function enforceLockedFacing() {
+  if (player._lockFlip && player._lockedFlipX !== undefined && player.flipX !== player._lockedFlipX) {
+    player.flipX = player._lockedFlipX;
     applyFlipOffsetLocal?.();
-    playCharacterAnimation({ scene, sprite: player, character: currentCharacter,
-      skinId: currentSkinId, resolveAnimKey, logical: 'dashing', fallback: 'falling', force: true });
-    syncLocalUiPosition();
-    networkInputState = {
-      direction: player._dash.inputX || 0, jumpHeld: false, jumpPressed: false,
-      grounded: !!player.body.touching.down, ducking: !!player._ducking,
-      vx: player.body.velocity.x, vy: player.body.velocity.y,
-      facing: player.flipX ? -1 : 1, animation: 'dashing',
-      wallSliding: false, wallSide: null, ...getMovementFxNetworkState(),
-      movementLocked: false, loaded: !dead && player.visible !== false,
-    };
-    return;
   }
-  // Movement tuning knobs (edit to change the feel):
-  // Enforce facing lock (e.g., Draven splash) BEFORE any movement logic mutates flip state
-  if (player && player._lockFlip && player._lockedFlipX !== undefined) {
-    if (player.flipX !== player._lockedFlipX) {
-      player.flipX = player._lockedFlipX;
-      if (applyFlipOffsetLocal) applyFlipOffsetLocal();
-    }
+}
+
+function setFacingLeft(left) {
+  const wasFlip = player.flipX;
+  if (!player._lockFlip) {
+    player.flipX = left;
+  } else if (player._lockedFlipX !== undefined) {
+    player.flipX = player._lockedFlipX;
   }
-  // Shared movement constants are mirrored on the server for prediction.
-  const maxSpeed =
-    MOVEMENT_PHYSICS.maxSpeed *
-    (Number(movementSpeedMult) <= 0
-      ? 0
-      : Math.max(MOVEMENT_PHYSICS.minSpeedMult, movementSpeedMult || 1));
-  const accel = MOVEMENT_PHYSICS.accel;
-  const airAccel = MOVEMENT_PHYSICS.airAccel;
-  const dragGround = MOVEMENT_PHYSICS.dragGround;
-  const dragAir = MOVEMENT_PHYSICS.dragAir;
-  let jumpSpeed = MOVEMENT_PHYSICS.jumpSpeed;
-  const jumpBoost = MOVEMENT_PHYSICS.jumpBoost;
-  const coyoteTimeMs = MOVEMENT_PHYSICS.coyoteTimeMs;
-  const wallJumpCooldownMs = MOVEMENT_PHYSICS.wallJumpCooldownMs;
-  const wallSlideMaxFallSpeed = MOVEMENT_PHYSICS.wallSlideMaxFallSpeed;
-  const wallKickLockMs = MOVEMENT_PHYSICS.wallKickLockMs;
-  const wallKickFull = MOVEMENT_PHYSICS.wallKickFull;
-  const wallKickVerticalMult =
-    Number(MOVEMENT_PHYSICS.wallKickVerticalMult) || 1;
-  const wallSlideReentryDelayMs =
-    MOVEMENT_PHYSICS.wallSlideReentryDelayMs || 220;
-  // - fallGravityFactor: gravity multiplier while falling (fast-fall). 1.0 = off.
-  const fallGravityFactor = MOVEMENT_PHYSICS.fallGravityFactor;
-  const shockwaveActive = (player._shockwaveUntil || 0) > Date.now();
-  // Ensure body uses our drag settings once
+  if (player.flipX !== wasFlip) applyFlipOffsetLocal?.();
+}
+
+// Shared movement constants (mirrored on the server for prediction) scaled
+// by the current speed/jump effects.
+function resolveMovementTuning() {
+  const effectScale = (mult) =>
+    Number(mult) <= 0 ? 0 : Math.max(MOVEMENT_PHYSICS.minSpeedMult, mult || 1);
+  return {
+    ...MOVEMENT_PHYSICS,
+    maxSpeed: MOVEMENT_PHYSICS.maxSpeed * effectScale(movementSpeedMult),
+    jumpScale: effectScale(movementJumpMult),
+    wallKickVerticalMult: Number(MOVEMENT_PHYSICS.wallKickVerticalMult) || 1,
+    wallSlideReentryDelayMs: MOVEMENT_PHYSICS.wallSlideReentryDelayMs || 220,
+  };
+}
+
+function applyBodyLimits(tuning, shockwaveActive) {
   if (player.body) {
-    const onGround = player.body.touching.down;
-    player.setDragX(onGround ? dragGround : dragAir);
-    player.setMaxVelocity((shockwaveActive || (player._dashCoastUntil || 0) > Date.now()) ? Math.max(maxSpeed, Math.abs(player.body.velocity.x)) : maxSpeed,
-      shockwaveActive ? Math.max(1000, Math.abs(player.body.velocity.y)) : 1000);
+    player.setDragX(player.body.touching.down ? tuning.dragGround : tuning.dragAir);
+    const coasting = shockwaveActive || (player._dashCoastUntil || 0) > Date.now();
+    player.setMaxVelocity(
+      coasting ? Math.max(tuning.maxSpeed, Math.abs(player.body.velocity.x)) : tuning.maxSpeed,
+      shockwaveActive ? Math.max(1000, Math.abs(player.body.velocity.y)) : 1000,
+    );
   }
-  // Track last grounded time for coyote jumping
-  player._lastGroundTime = player.body.touching.down
-    ? Date.now()
-    : player._lastGroundTime || 0;
+  // Track last grounded time for coyote jumping.
+  player._lastGroundTime = player.body.touching.down ? Date.now() : player._lastGroundTime || 0;
+}
 
-  // Keys. Player can use either arrow keys or WASD
-  const keyA = movementKeys.left;
-  const keyD = movementKeys.right;
-  const keyW = movementKeys.up;
-  const keyS = movementKeys.down;
-  const mobileMoveLeft = !!mobileControlsController?.isMovingLeft?.();
-  const mobileMoveRight = !!mobileControlsController?.isMovingRight?.();
-  let leftKey = cursors.left.isDown || keyA.isDown || mobileMoveLeft;
-  let rightKey = cursors.right.isDown || keyD.isDown || mobileMoveRight;
-  let upKey =
-    cursors.up.isDown ||
-    keyW.isDown ||
-    !!mobileControlsController?.isJumpHeld?.();
-  const directionalUpFreshPress =
-    Phaser.Input.Keyboard.JustDown(cursors.up) ||
-    Phaser.Input.Keyboard.JustDown(keyW);
-  const jumpButtonFreshPress =
-    !!mobileControlsController?.consumeJumpFreshPress?.();
-  let upKeyFreshPress = directionalUpFreshPress || jumpButtonFreshPress;
-  let ducking = false;
+// Arrow keys, WASD (or rebound keys) and mobile controls.
+function readMovementInput() {
+  const directionalUpHeld = cursors.up.isDown || movementKeys.up.isDown;
+  const directionalUpFresh =
+    Phaser.Input.Keyboard.JustDown(cursors.up) || Phaser.Input.Keyboard.JustDown(movementKeys.up);
+  const jumpButtonFresh = !!mobileControlsController?.consumeJumpFreshPress?.();
+  return {
+    left: cursors.left.isDown || movementKeys.left.isDown || !!mobileControlsController?.isMovingLeft?.(),
+    right: cursors.right.isDown || movementKeys.right.isDown || !!mobileControlsController?.isMovingRight?.(),
+    up: directionalUpHeld || !!mobileControlsController?.isJumpHeld?.(),
+    upFresh: directionalUpFresh || jumpButtonFresh,
+    down: cursors.down.isDown || movementKeys.down.isDown,
+    directionalUpHeld,
+  };
+}
 
-  const { wallSide, wallSlideContact, effectiveWallSide,
-    bufferedJumpPressActive, wallSlideSuppressed, wallBrakeHeld } = resolveWallContact(
-    player, scene._mapObjects || [], {
-      left: leftKey, right: rightKey,
-      upHeld: cursors.up.isDown || keyW.isDown,
-      jumpPressed: upKeyFreshPress,
-    },
-  );
-  const nowTs = Date.now();
-  const movementLockedByAbility = (player?._movementLockedUntil || 0) > nowTs;
-  const movementLockedByExternal =
-    (player?._externalControlLockUntil || 0) > nowTs;
-  const movementLocked = movementLockedByAbility || movementLockedByExternal;
-  const specialAnimLocked = () =>
-    (player?._specialAnimLockUntil || 0) > Date.now();
-  if (movementLockedByExternal) {
-    leftKey = false;
-    rightKey = false;
-    upKey = false;
+// External locks (e.g. being pulled by a Gloop hook) and ability locks (e.g.
+// Draven's Inferno) suppress movement input and gravity for their duration.
+function applyMovementLocks(scene, input) {
+  const now = Date.now();
+  const byAbility = (player?._movementLockedUntil || 0) > now;
+  const byExternal = (player?._externalControlLockUntil || 0) > now;
+  const freeze = () => {
+    input.left = false;
+    input.right = false;
+    input.up = false;
     if (player.body) {
       player.setAccelerationX(0);
       player.setVelocityX(0);
+    }
+  };
+  if (byExternal) {
+    freeze();
+    if (player.body) {
       if (player._externalControlPrevGravity === undefined) {
         player._externalControlPrevGravity = !!player.body.allowGravity;
       }
       player.body.allowGravity = false;
     }
-  } else if (
-    player &&
-    player.body &&
-    player._externalControlPrevGravity !== undefined
-  ) {
-    const prevGravity =
-      typeof player._externalControlPrevGravity === "boolean"
-        ? player._externalControlPrevGravity
-        : true;
-    player.body.allowGravity = prevGravity;
+  } else if (player.body && player._externalControlPrevGravity !== undefined) {
+    player.body.allowGravity =
+      typeof player._externalControlPrevGravity === "boolean" ? player._externalControlPrevGravity : true;
     delete player._externalControlPrevGravity;
   }
-
-  if (movementLockedByAbility) {
-    leftKey = false;
-    rightKey = false;
-    upKey = false;
-    if (player.body) {
-      player.setAccelerationX(0);
-      player.setVelocityX(0);
-      player.body.allowGravity = false;
-    }
-
-    const startedAt = Number(player._dravenInfernoStartedAt || nowTs);
-    const baseX = Number.isFinite(player._dravenInfernoBaseX)
-      ? player._dravenInfernoBaseX
-      : player.x;
-    const baseY = Number.isFinite(player._dravenInfernoBaseY)
-      ? player._dravenInfernoBaseY
-      : player.y;
-    const riseMs = Number(player._dravenInfernoRiseMs || 650);
-    const riseT = Phaser.Math.Clamp((nowTs - startedAt) / riseMs, 0, 1);
-    const lift = Number(player._dravenInfernoLift || 125);
-    const hoverY =
-      baseY -
-      lift * Phaser.Math.Easing.Cubic.Out(riseT) +
-      Math.sin((nowTs - startedAt) / 120) * 8;
-    player.x = baseX;
-    player.y = hoverY;
-
-    playSpriteAnimation({
-      scene,
-      sprite: player,
-      character: currentCharacter,
-      logical: "special",
-      fallback: "throw",
-    });
-  } else if (
-    player &&
-    player.body &&
-    player._dravenInfernoPrevGravity !== undefined
-  ) {
-    const prevGravity =
-      typeof player._dravenInfernoPrevGravity === "boolean"
-        ? player._dravenInfernoPrevGravity
-        : true;
-    player.body.allowGravity = prevGravity;
-    delete player._dravenInfernoPrevGravity;
+  if (byAbility) {
+    freeze();
+    if (player.body) player.body.allowGravity = false;
   }
+  getCharacterClassByKey(currentCharacter)?.updateMovementLock?.(scene, player, { locked: byAbility, now });
+  return { byAbility, byExternal, movementLocked: byAbility || byExternal };
+}
 
-  // Fast-fall gravity: apply extra gravity only when falling (vy > 0) and airborne.
+// Fast-fall: additive per-body gravity so total ~= world gravity * factor,
+// only while falling freely (not wall sliding or dash coasting).
+function applyFastFallGravity(scene, wall, tuning) {
   try {
     const worldG = scene.physics?.world?.gravity?.y || 0;
-    const isAirborne = !player.body.touching.down;
-    const isFalling = (player.body.velocity.y || 0) > 5;
+    const falling = !player.body.touching.down && (player.body.velocity.y || 0) > 5;
     if (
-      isAirborne &&
-      isFalling &&
-      (!wallSlideContact || wallSlideSuppressed) &&
-      fallGravityFactor > 1 &&
+      falling &&
+      (!wall.wallSlideContact || wall.wallSlideSuppressed) &&
+      tuning.fallGravityFactor > 1 &&
       Date.now() >= (player._dashCoastUntil || 0)
     ) {
-      // Additive per-body gravity so total ~= worldG * fallGravityFactor
-      player.body.setGravityY(worldG * (fallGravityFactor - 1));
+      player.body.setGravityY(worldG * (tuning.fallGravityFactor - 1));
     } else {
-      // Reset any extra gravity when not falling
       player.body.setGravityY(0);
     }
   } catch (_) {}
+}
 
-  // Handle basic attack on J
+// Keyboard attack (J), special (I) and mode interaction (E).
+function handleActionKeys() {
   try {
-    if (keyJ && Phaser.Input.Keyboard.JustDown(keyJ) && !dead) {
-      if (
-        Math.max(
-          Number(player?._movementLockedUntil || 0),
-          Number(player?._externalControlLockUntil || 0),
-        ) <= Date.now()
-      ) {
-        const context = resolveQuickAttackContext("basic");
-        fireBasicAttack(context.direction, context);
-      }
+    const pressed = (key) => key && Phaser.Input.Keyboard.JustDown(key) && !dead;
+    if (pressed(keyJ) && !isControlLocked()) {
+      const context = resolveQuickAttackContext("basic");
+      fireBasicAttack(context.direction, context);
     }
-    // Handle special on I
-    if (keyI && Phaser.Input.Keyboard.JustDown(keyI) && !dead) {
-      if (
-        Math.max(
-          Number(player?._movementLockedUntil || 0),
-          Number(player?._externalControlLockUntil || 0),
-        ) <= Date.now()
-      ) {
-        fireSpecialAttack(resolveQuickAttackContext("special"));
-      }
+    if (pressed(keyI) && !isControlLocked()) {
+      fireSpecialAttack(resolveQuickAttackContext("special"));
     }
-    if (keyE && Phaser.Input.Keyboard.JustDown(keyE) && !dead) {
-      if (
-        Math.max(
-          Number(player?._movementLockedUntil || 0),
-          Number(player?._externalControlLockUntil || 0),
-        ) <= Date.now()
-      ) {
-        noteClientActionSent("mode-interact", { type: "mode-interact" });
-        socket.emit("game:action", { type: "mode-interact" });
-      }
+    if (pressed(keyE) && !isControlLocked()) {
+      noteClientActionSent("mode-interact", { type: "mode-interact" });
+      socket.emit("game:action", { type: "mode-interact" });
     }
   } catch (_) {}
+}
 
+function updateAimReticleVisibility() {
   if (mobileControlsController?.isEnabled?.()) {
     mobileControlsController.updateReticle(attackAimReticleController);
   } else if (!attackAimState.active) {
     clearAttackAimReticle();
   }
+}
 
-  const groundedForDuck = !!(
-    player.body.touching.down || player.body.blocked.down
-  );
-  const groundSpan = groundedForDuck
-    ? findGroundSpan(player.body, scene._mapObjects || [])
-    : null;
-  const wantsToDuck =
-    (cursors.down.isDown || keyS.isDown) && !upKey && !movementLocked && !dead;
+// Ducking holds only on a supported ground span and cannot stand up into a
+// ceiling. May cancel this frame's jump input. Returns whether ducking.
+function updateDucking(scene, input, movementLocked) {
+  const grounded = !!(player.body.touching.down || player.body.blocked.down);
+  const groundSpan = grounded ? findGroundSpan(player.body, scene._mapObjects || []) : null;
+  const wantsToDuck = input.down && !input.up && !movementLocked && !dead;
   player._duckRequested = wantsToDuck;
-  ducking = !!player._ducking;
-  if (
-    !ducking &&
-    wantsToDuck &&
-    Date.now() >= (player._duckAvailableAt || 0) &&
-    groundedForDuck &&
-    groundSpan
-  ) {
+  let ducking = !!player._ducking;
+  if (!ducking && wantsToDuck && Date.now() >= (player._duckAvailableAt || 0) && grounded && groundSpan) {
     ducking = true;
     player._duckGroundSpan = groundSpan;
     player._duckGroundY = player.body.bottom;
-  } else if (
-    ducking &&
-    !player._duckGroundSpan &&
-    wantsToDuck &&
-    groundedForDuck &&
-    groundSpan
-  ) {
+  } else if (ducking && !player._duckGroundSpan && wantsToDuck && grounded && groundSpan) {
     player._duckGroundSpan = groundSpan;
     player._duckGroundY = player.body.bottom;
   } else if (ducking && (!wantsToDuck || player.body.velocity.y < -5)) {
     ducking = false;
-  } else if (ducking && !player._duckGroundSpan && !groundedForDuck) {
+  } else if (ducking && !player._duckGroundSpan && !grounded) {
     ducking = false;
   }
-  if (player._ducking && !ducking && groundedForDuck && !dead) {
+  if (player._ducking && !ducking && grounded && !dead) {
     const standingHeight = Math.max(4, frame.realHeight - bodyConfig.heightShrink);
-    const standingWorldHeight = standingHeight * Math.abs(player.scaleY || 1);
-    const extraHeight = standingWorldHeight - player.body.height;
+    const extraHeight = standingHeight * Math.abs(player.scaleY || 1) - player.body.height;
     if (!hasStandingClearance(player.body, scene._mapObjects || [], extraHeight)) {
       ducking = true;
-      upKey = false;
-      upKeyFreshPress = false;
+      input.up = false;
+      input.upFresh = false;
       player._lastJumpPressTime = 0;
     }
   }
@@ -1977,717 +1914,240 @@ export function handlePlayerMovement(scene) {
     player._duckGroundSpan = null;
     player._duckGroundY = null;
   }
+  return ducking;
+}
 
-  // Left movement
+function hideSpawnIndicator() {
+  if (!indicatorTriangle) return;
+  indicatorTriangle.clear();
+  indicatorTriangle.setVisible(false);
+}
+
+function applyHorizontalMovement(input, tuning, { ducking, shockwaveActive }) {
   if (ducking && !shockwaveActive) {
-    const duckMaxSpeed = maxSpeed * DUCK_SPEED_RATIO;
+    const duckMaxSpeed = tuning.maxSpeed * DUCK_SPEED_RATIO;
     player.setMaxVelocity(duckMaxSpeed, 1000);
     if (Math.abs(player.body.velocity.x) > duckMaxSpeed) {
       player.setVelocityX(Math.sign(player.body.velocity.x) * duckMaxSpeed);
     }
   }
-  if (leftKey) {
-    if (indicatorTriangle) {
-      indicatorTriangle.clear(); // Removes indicator triangle if the player has moved
-      indicatorTriangle.setVisible(false);
-    }
-    // Apply acceleration left (respect wall-kick lock)
-    const lockActive = (player._wallKickLockUntil || 0) > Date.now();
-    const onGround = player.body.touching.down;
-    const a = onGround ? accel : airAccel;
-    if (lockActive && (player.body.velocity.x || 0) > 0) {
-      // Currently being kicked to the right; ignore opposite input briefly
+  const onGround = player.body.touching.down;
+  const accelerate = (direction) => {
+    // A wall kick briefly ignores input opposing its direction.
+    const kickLocked = (player._wallKickLockUntil || 0) > Date.now();
+    if (kickLocked && Math.sign(player.body.velocity.x || 0) === -direction) {
       player.setAccelerationX(0);
     } else {
-      player.setAccelerationX(-a);
+      player.setAccelerationX(direction * (onGround ? tuning.accel : tuning.airAccel));
     }
-    player.setDragX(onGround ? dragGround : dragAir);
-    const wasFlip = player.flipX;
-    if (!player._lockFlip) {
-      player.flipX = true; // Mirrors the body of the player
-    } else if (player._lockedFlipX !== undefined) {
-      player.flipX = player._lockedFlipX; // enforce locked facing
-    }
-    if (player.flipX !== wasFlip && applyFlipOffsetLocal)
-      applyFlipOffsetLocal();
-    isMoving = true; // Sets the isMoving to true
-    // Right movement
-  } else if (rightKey) {
-    if (indicatorTriangle) {
-      indicatorTriangle.clear(); // Removes indicator triangle if the player has moved
-      indicatorTriangle.setVisible(false);
-    }
-    const wasFlip = player.flipX;
-    if (!player._lockFlip) {
-      player.flipX = false; // Undo mirror
-    } else if (player._lockedFlipX !== undefined) {
-      player.flipX = player._lockedFlipX; // keep locked
-    }
-    if (player.flipX !== wasFlip && applyFlipOffsetLocal)
-      applyFlipOffsetLocal();
-    const onGroundRight = player.body.touching.down;
-    const aRight = onGroundRight ? accel : airAccel;
-    const lockActiveRight = (player._wallKickLockUntil || 0) > Date.now();
-    if (lockActiveRight && (player.body.velocity.x || 0) < 0) {
-      // Currently being kicked to the left; ignore opposite input briefly
-      player.setAccelerationX(0);
-    } else {
-      player.setAccelerationX(aRight);
-    }
-    player.setDragX(onGroundRight ? dragGround : dragAir);
-    isMoving = true; // Sets moving variable
+    player.setDragX(onGround ? tuning.dragGround : tuning.dragAir);
+  };
+  if (input.left) {
+    hideSpawnIndicator();
+    accelerate(-1);
+    setFacingLeft(true);
+    isMoving = true;
+  } else if (input.right) {
+    hideSpawnIndicator();
+    setFacingLeft(false);
+    accelerate(1);
+    isMoving = true;
   } else {
-    stopMoving(); // If no key is being pressed, it calls the stop moving function
+    // Stop applying acceleration and let drag slow the player naturally.
+    player.setAccelerationX(0);
+    player.setDragX(onGround ? tuning.dragGround : tuning.dragAir);
+    if (player._lockFlip && player._lockedFlipX !== undefined) {
+      player.flipX = player._lockedFlipX;
+    }
+    isMoving = false;
   }
-
   if (shockwaveActive) {
     player.setAccelerationX(0);
     player.setDragX(0);
   }
+}
 
-  const inputDirection =
-    leftKey && !rightKey ? -1 : rightKey && !leftKey ? 1 : 0;
-  applyDashCoast(player, inputDirection, maxSpeed);
-  const groundSpeed = Math.abs(Number(player.body.velocity.x) || 0);
-  const groundSpeedRatio = Phaser.Math.Clamp(groundSpeed / maxSpeed, 0, 1);
-  if (
-    !dead &&
-    !powerupInvisible &&
-    player.body.touching.down &&
-    inputDirection !== 0 &&
-    lastGroundInputDirection !== 0 &&
-    inputDirection !== lastGroundInputDirection &&
-    groundSpeed >= MOVEMENT_VFX_CONFIG.directionChangeMinSpeed &&
-    Date.now() - lastDirectionChangeAt >= 130
-  ) {
-    const body = player.body;
-    spawnDirectionChangeBurst(
-      scene,
-      Number(body.center?.x) || player.x,
-      (Number(body.bottom) || player.y + player.height * 0.5) - 2,
-      {
-        previousDirection: lastGroundInputDirection,
-        speedRatio: groundSpeedRatio,
-      },
-    );
-    noteMovementFxEvent("turn", {
-      direction: lastGroundInputDirection,
-    });
-    playMovementStep(Math.max(0.62, groundSpeedRatio), true);
-    lastDirectionChangeAt = Date.now();
-  }
-  if (inputDirection !== 0) lastGroundInputDirection = inputDirection;
-
-  const isGroundWalking =
-    !dead &&
-    player.body.touching.down &&
-    inputDirection !== 0 &&
-    !isAttacking;
-  if (isGroundWalking) {
-    // Play on the first grounded movement frame so a quick key tap is audible.
-    // The cooldown continues to space footsteps during sustained movement.
-    if (!wasGroundWalking) {
-      playMovementStep(groundSpeedRatio, false);
-      sfxWalkCooldown = 0;
-    }
-    sfxWalkCooldown += scene.game.loop.delta;
-    const stepInterval = Phaser.Math.Linear(285, 150, groundSpeedRatio);
-    if (sfxWalkCooldown >= stepInterval) {
-      sfxWalkCooldown = 0;
-      playMovementStep(groundSpeedRatio, false);
-    }
-  } else {
-    sfxWalkCooldown = 0;
-  }
-  wasGroundWalking = isGroundWalking;
-
-  // Jumping
-  const now = Date.now();
-  if (
-    !dead &&
-    !movementLocked &&
-    effectiveWallSide &&
-    !player.body.touching.down &&
-    !shockwaveActive &&
-    canWallJump &&
-    bufferedJumpPressActive
-  ) {
-    wallJump(effectiveWallSide); // Calls walljump
-    scene.sound.play("sfx-walljump", {
-      volume: 0.5,
-      rate:
-        0.96 +
-        Phaser.Math.Clamp(
-          Math.abs(player.body.velocity.x) / 720,
-          0,
-          0.08,
-        ),
-    });
-    player._lastJumpPressTime = 0;
-  } else if (
-    bufferedJumpPressActive &&
-    !shockwaveActive &&
-    !movementLocked &&
-    (player.body.touching.down ||
-      now - (player._lastGroundTime || 0) <= coyoteTimeMs) &&
-    !dead
-  ) {
-    // If player is touching ground and jumping
-    if (indicatorTriangle) {
-      indicatorTriangle.clear(); // Removes indicator triangle if the player has jumped
-      indicatorTriangle.setVisible(false);
-    }
-    // Slight jump boost when moving fast to feel snappier transitions
-    const vx = Math.abs(player.body.velocity.x || 0);
-    const boost = Phaser.Math.Clamp((vx / maxSpeed) * jumpBoost, 0, jumpBoost);
-    jumpSpeed =
-      (MOVEMENT_PHYSICS.jumpSpeed + boost) *
-      (Number(movementJumpMult) <= 0
-        ? 0
-        : Math.max(MOVEMENT_PHYSICS.minSpeedMult, movementJumpMult || 1));
-    jump(); // Calls jump
-    scene.sound.play("sfx-jump", {
-      volume: 0.36 + groundSpeedRatio * 0.1,
-      rate: 0.96 + groundSpeedRatio * 0.08,
-    });
-    player._lastJumpPressTime = 0;
-    if (wallSlideContact || effectiveWallSide) {
-      player._wallSlideSuppressedUntil = Date.now() + wallSlideReentryDelayMs;
-    }
-  }
-  const launch = player._jumpLaunch;
-  if (launch) {
-    const elapsed = Date.now() - launch.startedAt;
-    // Floor contact can still be set on the first frame after takeoff.
-    if (dead || movementLocked || player.body.blocked.up || player.body.touching.up ||
-        player.body.velocity.y >= 0) {
-      player._jumpLaunch = null;
-    } else {
-      const t = Math.min(1, elapsed / MOVEMENT_PHYSICS.jumpRampMs);
-      const ratio = MOVEMENT_PHYSICS.jumpStartSpeedRatio +
-        (1 - MOVEMENT_PHYSICS.jumpStartSpeedRatio) * t;
-      player.setVelocityY(launch.vy * ratio);
-      if (t >= 1) player._jumpLaunch = null;
-    }
-  }
-  const isWallSliding = applyWallSlide(player, {
-    dead, movementLocked, wallSlideContact, wallSide, wallBrakeHeld,
-  });
-  if (isWallSliding && !player._lockFlip) {
-    const wasFlip = player.flipX;
-    player.flipX = resolveWallSlideFlipX(
-      wallSide,
-      player.body.velocity.x,
-      player.flipX,
-    );
-    if (player.flipX !== wasFlip && applyFlipOffsetLocal) {
-      applyFlipOffsetLocal();
-    }
-  }
-  const wallSlideSpeedRatio = Phaser.Math.Clamp(
-    (Number(player.body.velocity.y) || 0) / wallSlideMaxFallSpeed,
-    0,
-    1,
-  );
-  updateWallSlideAudio(isWallSliding, wallSlideSpeedRatio);
-
-  // Wall sliding gets a strong entry accent and a lighter continuous scrape.
-  if (isWallSliding) {
-    const slideSide = wallSide || (player.flipX ? "left" : "right");
-    const body = player.body;
-    const contactX = body
-      ? body.x + (slideSide === "left" ? 0 : body.width)
-      : player.x + (slideSide === "left" ? -24 : 24);
-    const contactY = body ? body.y + body.height * 0.68 : player.y + 12;
-    if (!wasWallSliding && !powerupInvisible) {
-      spawnWallSlideBurst(scene, contactX, contactY, slideSide);
-      wallSlideVfxElapsed = MOVEMENT_VFX_CONFIG.wallTrailIntervalMs;
-    }
-    wallSlideVfxElapsed += scene.game.loop.delta;
-    if (wallSlideVfxElapsed >= MOVEMENT_VFX_CONFIG.wallTrailIntervalMs) {
-      wallSlideVfxElapsed = 0;
-      if (!powerupInvisible) {
-        spawnWallSlideTrail(scene, contactX, contactY, slideSide);
-      }
-    }
-  } else {
-    wallSlideVfxElapsed = 0;
-  }
-  wasWallSliding = isWallSliding;
-
-  const fallVelocity = Number(player.body.velocity.y) || 0;
-  const fastFallRatio = Phaser.Math.Clamp(
-    (fallVelocity - MOVEMENT_VFX_CONFIG.fastFallStartVelocity) /
-      (MOVEMENT_VFX_CONFIG.fastFallMaxVelocity -
-        MOVEMENT_VFX_CONFIG.fastFallStartVelocity),
-    0,
-    1,
-  );
-  const shouldPlayFallAir =
-    !dead &&
-    !scene._spawnIntroActive &&
-    !player.body.touching.down &&
-    !isWallSliding &&
-    fallVelocity > 85;
-  updateFallingAirAudio(shouldPlayFallAir, fallVelocity);
-  if (
-    shouldPlayFallAir &&
-    !powerupInvisible &&
-    fallVelocity >= MOVEMENT_VFX_CONFIG.fastFallStartVelocity
-  ) {
-    fastFallVfxElapsed += scene.game.loop.delta;
-    const fastFallInterval = Phaser.Math.Linear(
-      MOVEMENT_VFX_CONFIG.fastFallTrailMaxIntervalMs,
-      MOVEMENT_VFX_CONFIG.fastFallTrailMinIntervalMs,
-      fastFallRatio,
-    );
-    if (fastFallVfxElapsed >= fastFallInterval) {
-      fastFallVfxElapsed = 0;
-      spawnFastFallTrail(scene, player, { velocityY: fallVelocity });
-    }
-  } else {
-    fastFallVfxElapsed = 0;
-  }
-
-  // Check if the jump animation has completed
-  if (
-    !player.anims.isPlaying &&
-    !player.body.touching.down &&
-    !isWallSliding &&
-    !isAttacking
-  ) {
-    fall(); // Updates jump state once the jump animation has completed.
-  }
-
-  // If no movement animations are playing, play the 'idle' animation
-  if (
-    !isMoving &&
-    player.body.touching.down &&
-    !isJumping &&
-    !isAttacking &&
-    !dead
-  ) {
-    idle();
-  }
-
-  updatePointerAttackAimState();
-  syncLocalUiPosition();
-
-  // Landing detection (transition airborne -> grounded)
-  const onGround = player.body.touching.down;
-  const playLandingSound = shouldPlayLandingSound(player, onGround);
-  const currentBodyBottom =
-    Number(player.body?.bottom) || player.y + player.height * 0.5;
-  if (!onGround && !dead) {
-    if (!Number.isFinite(airbornePeakBottomY) || wasOnGround) {
-      airbornePeakBottomY = currentBodyBottom;
-    } else {
-      airbornePeakBottomY = Math.min(airbornePeakBottomY, currentBodyBottom);
-    }
-  }
-  if (movementVfxInitialized && !wasOnGround && onGround && !dead) {
-    const fallDistance = Math.max(
-      0,
-      currentBodyBottom -
-        (Number.isFinite(airbornePeakBottomY)
-          ? airbornePeakBottomY
-          : currentBodyBottom),
-    );
-    const landingVelocityRatio = Phaser.Math.Clamp(
-      lastAirborneVelocityY / MOVEMENT_VFX_CONFIG.landingMaxVelocity,
-      0,
-      1,
-    );
-    const landingHeightRatio = Phaser.Math.Clamp(
-      fallDistance / (MOVEMENT_VFX_CONFIG.landingShockwaveMinFallPx * 2),
-      0,
-      1,
-    );
-    const landingStrength =
-      landingVelocityRatio * 0.65 + landingHeightRatio * 0.35;
-    const shapedLandingStrength = landingStrength * landingStrength;
-    const landingAudio = terrainLandingSound(
-      scene._terrainType,
-      0.28 + shapedLandingStrength * 0.5,
-    );
-    if (playLandingSound) scene.sound.play(landingAudio.key, {
-      volume: landingAudio.volume,
-      rate: 0.93 - shapedLandingStrength * 0.02,
-    });
-    const body = player.body;
-    if (!powerupInvisible) {
-      spawnLandingImpact(
-        scene,
-        Number(body?.center?.x) || player.x,
-        (Number(body?.bottom) || player.y + player.height * 0.5) - 2,
-        {
-          impactVelocity: lastAirborneVelocityY,
-          fallDistance,
-          bodyWidth: Number(body?.width) || player.displayWidth,
-          cameraShake: true,
-        },
-      );
-    }
-    if (playLandingSound) noteMovementFxEvent("land", {
-      fallDistance,
-      impactVelocity: lastAirborneVelocityY,
-    });
-  }
-  if (!onGround && !dead) {
-    lastAirborneVelocityY = Math.max(
-      lastAirborneVelocityY,
-      Number(player.body.velocity.y) || 0,
-    );
-  } else if (onGround) {
-    lastAirborneVelocityY = 0;
-    airbornePeakBottomY = null;
-  }
-  wasOnGround = onGround;
-  movementVfxInitialized = true;
-  if (onGround) player._lastGroundTime = Date.now();
-
-  // Per-character effects update (e.g., Draven fire trail)
-  if (charEffects && !powerupInvisible) {
-    charEffects.update(scene.game.loop.delta, isMoving, dead);
-  }
-
-  dustTimer += scene.game.loop.delta;
-
-  // Ground running dust becomes denser and more frequent with actual speed.
-  const runSpeed = Math.abs(Number(player.body.velocity.x) || 0);
-  const runSpeedRatio = Phaser.Math.Clamp(runSpeed / maxSpeed, 0, 1);
-  const runDustInterval = Phaser.Math.Linear(
-    MOVEMENT_VFX_CONFIG.runDustMaxIntervalMs,
-    MOVEMENT_VFX_CONFIG.runDustMinIntervalMs,
-    runSpeedRatio,
-  );
-  if (
-    !dead &&
-    !powerupInvisible &&
-    isMoving &&
-    player.body.touching.down &&
-    runSpeed > 35 &&
-    dustTimer >= runDustInterval
-  ) {
-    dustTimer = 0;
-    // Spawn at the physics body's bottom to account for per-character frame sizing
-    const bodyBottom = player.body
-      ? player.body.y + player.body.height
-      : player.y + player.height / 2;
-    const dustY = bodyBottom - 2; // slight lift to avoid z-fighting
-    const runDirection =
-      Math.sign(Number(player.body.velocity.x) || 0) ||
-      (player.flipX ? -1 : 1);
-    const dustX = player.x - runDirection * 10;
-    spawnRunDust(scene, dustX, dustY, {
-      direction: runDirection,
-      intensity: runSpeedRatio,
-    });
-  }
-
-  let desiredMovementAnimation = deriveMovementAnimation({
-    grounded: !!player?.body?.touching?.down,
-    ducking: !!player?._ducking,
-    moving: !!isMoving,
-    wallSliding: !!isWallSliding,
-    vx: Number(player?.body?.velocity?.x) || 0,
-    vy: Number(player?.body?.velocity?.y) || 0,
-    dead,
-    movementLocked,
-    specialLocked: specialAnimLocked(),
-    fallback: getPresentedAnimation(player, "idle"),
-  });
-  if (
-    movementLockedByAbility &&
-    String(currentCharacter || "").toLowerCase() === "draven"
-  ) {
-    desiredMovementAnimation = "special";
-  }
-  const presentedAnimation = getPresentedAnimation(
-    player,
-    desiredMovementAnimation,
-  );
-  const desiredAnimation =
-    presentedAnimation === "throw" || presentedAnimation === "special"
-      ? presentedAnimation
-      : desiredMovementAnimation;
+function playJumpAnimation(scene) {
+  if (isAttacking || isSpecialAnimationLocked()) return;
+  resetAirborneJumpAnimation(player);
   playCharacterAnimation({
     scene,
     sprite: player,
     character: currentCharacter,
     skinId: currentSkinId,
     resolveAnimKey,
-    logical: desiredAnimation,
+    logical: "jumping",
+    fallback: "idle",
+    force: true,
+  });
+}
+
+// Wall jumps take priority over ground/coyote jumps; a started jump ramps
+// its launch speed over jumpRampMs.
+function updateJumping(scene, wall, tuning, { movementLocked, shockwaveActive, groundSpeedRatio }) {
+  const now = Date.now();
+  const body = player.body;
+  if (
+    !dead && !movementLocked && wall.effectiveWallSide && !body.touching.down &&
+    !shockwaveActive && canWallJump && wall.bufferedJumpPressActive
+  ) {
+    performWallJump(scene, wall.effectiveWallSide, tuning);
+    scene.sound.play("sfx-walljump", {
+      volume: 0.5,
+      rate: 0.96 + Phaser.Math.Clamp(Math.abs(body.velocity.x) / 720, 0, 0.08),
+    });
+    player._lastJumpPressTime = 0;
+  } else if (
+    wall.bufferedJumpPressActive && !shockwaveActive && !movementLocked &&
+    (body.touching.down || now - (player._lastGroundTime || 0) <= tuning.coyoteTimeMs) &&
+    !dead
+  ) {
+    hideSpawnIndicator();
+    // Slight jump boost when moving fast to feel snappier transitions.
+    const boost = Phaser.Math.Clamp(
+      (Math.abs(body.velocity.x || 0) / tuning.maxSpeed) * tuning.jumpBoost, 0, tuning.jumpBoost);
+    performJump(scene, (tuning.jumpSpeed + boost) * tuning.jumpScale);
+    scene.sound.play("sfx-jump", {
+      volume: 0.36 + groundSpeedRatio * 0.1,
+      rate: 0.96 + groundSpeedRatio * 0.08,
+    });
+    player._lastJumpPressTime = 0;
+    if (wall.wallSlideContact || wall.effectiveWallSide) {
+      player._wallSlideSuppressedUntil = Date.now() + tuning.wallSlideReentryDelayMs;
+    }
+  }
+  const launch = player._jumpLaunch;
+  if (launch) {
+    // Floor contact can still be set on the first frame after takeoff.
+    if (dead || movementLocked || body.blocked.up || body.touching.up || body.velocity.y >= 0) {
+      player._jumpLaunch = null;
+    } else {
+      const t = Math.min(1, (Date.now() - launch.startedAt) / tuning.jumpRampMs);
+      player.setVelocityY(launch.vy * (tuning.jumpStartSpeedRatio + (1 - tuning.jumpStartSpeedRatio) * t));
+      if (t >= 1) player._jumpLaunch = null;
+    }
+  }
+}
+
+function performJump(scene, jumpSpeed) {
+  player._dashCoastUntil = 0;
+  if (player.body?.touching?.down && !powerupInvisible) {
+    const body = player.body;
+    spawnJumpTakeoff(
+      scene,
+      Number(body.center?.x) || player.x,
+      (Number(body.bottom) || player.y + player.height * 0.5) - 2,
+      { bodyWidth: Number(body.width) || player.displayWidth, velocityX: Number(body.velocity?.x) || 0 },
+    );
+    noteMovementFxEvent("jump", { direction: Math.sign(Number(body.velocity?.x) || 0) });
+  }
+  playJumpAnimation(scene);
+  pdbg();
+  player._jumpLaunch = { startedAt: Date.now(), vy: -jumpSpeed * MOVEMENT_PHYSICS.jumpLaunchSpeedMult };
+  player.setVelocityY(player._jumpLaunch.vy * MOVEMENT_PHYSICS.jumpStartSpeedRatio);
+  isMoving = true;
+  isJumping = true;
+}
+
+// Physics-impulse wall jump away from `wallSide`, with a short re-jump
+// cooldown and an input lock so the kick carries.
+function performWallJump(scene, wallSide, tuning) {
+  player._dashCoastUntil = 0;
+  player._wallSlideSuppressedUntil = Date.now() + tuning.wallSlideReentryDelayMs;
+  player._jumpLaunch = null;
+  movementAudio.updateWallSlide(false);
+  canWallJump = false;
+  const fromLeft = wallSide === "left";
+  const vertKick = Math.max(tuning.jumpSpeed + 30, 220) * Math.max(0.1, tuning.wallKickVerticalMult);
+
+  // Face away from the wall (or reinforce a locked facing).
+  if (!player._lockFlip) setFacingLeft(!fromLeft);
+  else enforceLockedFacing();
+  playJumpAnimation(scene);
+  pdbg();
+
+  // Visual-only kickback cloud at the wall contact point.
+  try {
+    const body = player.body;
+    const contactX = body
+      ? body.x + (fromLeft ? 0 : body.width)
+      : player.x + (fromLeft ? -player.width * 0.5 : player.width * 0.5);
+    const contactY = body ? body.y + body.height * 0.62 : player.y + player.height * 0.18;
+    if (!powerupInvisible) spawnWallKickCloud(scene, contactX, contactY, fromLeft ? 1 : -1);
+  } catch (_) {}
+  noteMovementFxEvent("wall-jump", { direction: fromLeft ? 1 : -1, wallSide: fromLeft ? "left" : "right" });
+
+  // Nudge away from the wall first so the body does not stay embedded.
+  player.x += fromLeft ? 8 : -8;
+  player.setVelocityX(fromLeft ? tuning.wallKickFull : -tuning.wallKickFull);
+  player.setVelocityY(-vertKick);
+  player.setDragX(tuning.dragAir);
+  scene.time.delayedCall(tuning.wallJumpCooldownMs, () => {
+    canWallJump = true;
+  });
+  player._wallKickLockUntil = Date.now() + tuning.wallKickLockMs;
+}
+
+function updateWallSlide(scene, wall, tuning, movementLocked) {
+  const sliding = applyWallSlide(player, {
+    dead, movementLocked, wallSlideContact: wall.wallSlideContact, wallSide: wall.wallSide,
+    wallBrakeHeld: wall.wallBrakeHeld,
+  });
+  if (sliding && !player._lockFlip) {
+    const wasFlip = player.flipX;
+    player.flipX = resolveWallSlideFlipX(wall.wallSide, player.body.velocity.x, player.flipX);
+    if (player.flipX !== wasFlip) applyFlipOffsetLocal?.();
+  }
+  movementFx.updateWallSlide(scene, player, {
+    sliding,
+    wallSide: wall.wallSide,
+    maxFallSpeed: tuning.wallSlideMaxFallSpeed,
+    hidden: powerupInvisible,
+  });
+  return sliding;
+}
+
+// Clears the jump state once the jump animation ends in the air, and stops
+// the slide scrape when idle on the ground.
+function updateAirborneState(isWallSliding) {
+  if (!player.anims.isPlaying && !player.body.touching.down && !isWallSliding && !isAttacking) {
+    movementAudio.updateWallSlide(false);
+    pdbg();
+    isJumping = false;
+  }
+  if (!isMoving && player.body.touching.down && !isJumping && !isAttacking && !dead) {
+    movementAudio.updateWallSlide(false);
+    pdbg();
+  }
+}
+
+function presentMovementAnimation(scene, { wallSliding, movementLocked, lockedByAbility }) {
+  let desired = deriveMovementAnimation({
+    grounded: !!player?.body?.touching?.down,
+    ducking: !!player?._ducking,
+    moving: !!isMoving,
+    wallSliding: !!wallSliding,
+    vx: Number(player?.body?.velocity?.x) || 0,
+    vy: Number(player?.body?.velocity?.y) || 0,
+    dead,
+    movementLocked,
+    specialLocked: isSpecialAnimationLocked(),
+    fallback: getPresentedAnimation(player, "idle"),
+  });
+  const abilityLockAnimation = characterPresentation(resolveCharacterKey(currentCharacter)).abilityLockAnimation;
+  if (lockedByAbility && abilityLockAnimation) desired = abilityLockAnimation;
+  playCharacterAnimation({
+    scene,
+    sprite: player,
+    character: currentCharacter,
+    skinId: currentSkinId,
+    resolveAnimKey,
+    logical: withActionPose(desired),
     fallback: "idle",
     // Phaser's second play argument means "ignore if already playing".
     // Keep it enabled so the one-frame duck pose is not restarted every tick.
     force: true,
   });
-
-  networkInputState = {
-    left: !!leftKey,
-    right: !!rightKey,
-    direction: rightKey && !leftKey ? 1 : leftKey && !rightKey ? -1 : 0,
-    jumpHeld: !!upKey,
-    jumpPressed: !!upKeyFreshPress,
-    grounded: !!player?.body?.touching?.down,
-    ducking: !!player?._ducking,
-    vx: Number(player?.body?.velocity?.x) || 0,
-    vy: Number(player?.body?.velocity?.y) || 0,
-    facing: player?.flipX ? -1 : 1,
-    animation: getPresentedAnimation(player, "idle"),
-    wallSliding: !!isWallSliding,
-    wallSide: isWallSliding
-      ? wallSide || (player.flipX ? "left" : "right")
-      : null,
-    ...getMovementFxNetworkState(),
-    movementLocked,
-    loaded:
-      !dead &&
-      Number.isFinite(player?.x) &&
-      Number.isFinite(player?.y) &&
-      player?.visible !== false,
-  };
-
-  function stopMoving() {
-    // Stop applying acceleration and let drag slow the player naturally
-    player.setAccelerationX(0);
-    const onGround = player.body.touching.down;
-    player.setDragX(onGround ? dragGround : dragAir);
-    // Maintain locked facing if an attack is forcing orientation
-    if (player._lockFlip && player._lockedFlipX !== undefined) {
-      player.flipX = player._lockedFlipX;
-    }
-    isMoving = false;
-  }
-
-  function playMovementStep(speedRatio, isDirectionChange) {
-    const normalizedSpeed = Phaser.Math.Clamp(
-      Number(speedRatio) || 0,
-      0,
-      1,
-    );
-    const steps = getTerrainSteps(scene._terrainType);
-    footstepVariantCursor =
-      (footstepVariantCursor + (steps.length > 1 ? Phaser.Math.Between(1, steps.length - 1) : 1)) % steps.length;
-    const key = steps[footstepVariantCursor].key;
-    try {
-      scene.sound.play(key, {
-        volume: footstepVolume(normalizedSpeed, isDirectionChange, scene._terrainType),
-        rate:
-          (isDirectionChange ? 0.88 : 0.94) + normalizedSpeed * 0.14,
-      });
-    } catch (_) {}
-  }
-
-  function updateFallingAirAudio(shouldPlay, velocityY) {
-    if (!fallAirLoopSfx) return;
-    if (!shouldPlay) {
-      if (fallAirLoopPlaying) {
-        const currentVolume = Number(fallAirLoopSfx.volume) || 0;
-        const fadedVolume = Phaser.Math.Linear(currentVolume, 0, 0.12);
-        fallAirLoopSfx.setVolume?.(fadedVolume);
-        if (fadedVolume <= 0.006) {
-          try {
-            fallAirLoopSfx.stop();
-          } catch (_) {}
-          fallAirLoopPlaying = false;
-          fallAirStartedAt = 0;
-        }
-      } else {
-        fallAirStartedAt = 0;
-      }
-      return;
-    }
-
-    if (!fallAirLoopPlaying) {
-      try {
-        // A match can begin before the browser has unlocked audio. Do not
-        // start our fade clock until playback can actually begin; otherwise
-        // the queued first loop becomes audible at its already-ramped volume.
-        if (scene.sound?.locked) {
-          fallAirStartedAt = 0;
-          return;
-        }
-        fallAirLoopSfx.setVolume?.(0);
-        const started = fallAirLoopSfx.play?.({ volume: 0 });
-        if (started === false) return;
-        fallAirLoopPlaying = true;
-        fallAirStartedAt = Date.now();
-      } catch (_) {}
-    }
-    const speedRatio = Phaser.Math.Clamp(
-      (Number(velocityY) - 85) /
-        (MOVEMENT_VFX_CONFIG.fastFallMaxVelocity - 85),
-      0,
-      1,
-    );
-    const timeRatio = Phaser.Math.Clamp(
-      (Date.now() - (fallAirStartedAt || Date.now())) / 950,
-      0,
-      1,
-    );
-    const targetVolume = 0.06 + speedRatio * (0.16 + timeRatio * 0.14);
-    const currentVolume = Number(fallAirLoopSfx.volume) || 0;
-    fallAirLoopSfx.setVolume?.(
-      Phaser.Math.Linear(currentVolume, targetVolume, 0.075),
-    );
-    fallAirLoopSfx.setRate?.(0.72 + speedRatio * 0.24 + timeRatio * 0.04);
-  }
-
-  function jump() {
-    player._dashCoastUntil = 0;
-    if (player.body?.touching?.down && !powerupInvisible) {
-      const body = player.body;
-      spawnJumpTakeoff(
-        scene,
-        Number(body.center?.x) || player.x,
-        (Number(body.bottom) || player.y + player.height * 0.5) - 2,
-        {
-          bodyWidth: Number(body.width) || player.displayWidth,
-          velocityX: Number(body.velocity?.x) || 0,
-        },
-      );
-      noteMovementFxEvent("jump", {
-        direction: Math.sign(Number(body.velocity?.x) || 0),
-      });
-    }
-    if (!isAttacking && !specialAnimLocked()) {
-      resetAirborneJumpAnimation(player);
-      playCharacterAnimation({
-        scene,
-        sprite: player,
-        character: currentCharacter,
-        skinId: currentSkinId,
-        resolveAnimKey,
-        logical: "jumping",
-        fallback: "idle",
-        force: true,
-      });
-    }
-    pdbg();
-    player._jumpLaunch = {
-      startedAt: Date.now(), vy: -jumpSpeed * MOVEMENT_PHYSICS.jumpLaunchSpeedMult,
-    };
-    player.setVelocityY(player._jumpLaunch.vy * MOVEMENT_PHYSICS.jumpStartSpeedRatio);
-    isMoving = true;
-    isJumping = true;
-  }
-
-  function wallJump(wallSideParam) {
-    player._dashCoastUntil = 0;
-    player._wallSlideSuppressedUntil = Date.now() + wallSlideReentryDelayMs;
-    player._jumpLaunch = null;
-    updateWallSlideAudio(false);
-    // More powerful wall jump using physics impulses (no tween)
-    canWallJump = false;
-    const fromLeft = wallSideParam === "left";
-    const horizKick = fromLeft ? wallKickFull : -wallKickFull;
-    const vertKick =
-      Math.max(jumpSpeed + 30, 220) * Math.max(0.1, wallKickVerticalMult); // slightly less vertical pop
-
-    // Face away from the wall and fix body offset
-    if (!player._lockFlip) {
-      const wasFlip = player.flipX;
-      player.flipX = !fromLeft;
-      if (player.flipX !== wasFlip && applyFlipOffsetLocal)
-        applyFlipOffsetLocal();
-    } else if (player._lockedFlipX !== undefined) {
-      // Reinforce locked facing
-      if (player.flipX !== player._lockedFlipX) {
-        player.flipX = player._lockedFlipX;
-        if (applyFlipOffsetLocal) applyFlipOffsetLocal();
-      }
-    }
-
-    // Play a jump-like animation
-    if (!isAttacking && !specialAnimLocked()) {
-      resetAirborneJumpAnimation(player);
-      playCharacterAnimation({
-        scene,
-        sprite: player,
-        character: currentCharacter,
-        skinId: currentSkinId,
-        resolveAnimKey,
-        logical: "jumping",
-        fallback: "idle",
-        force: true,
-      });
-    }
-    pdbg();
-
-    // Apply velocity impulses
-    // Nudge away from the wall first so we don't remain embedded and lose the kick
-    const sep = 8;
-
-    // Visual-only kickback cloud at wall contact point.
-    try {
-      const body = player.body;
-      const contactX = body
-        ? body.x + (fromLeft ? 0 : body.width)
-        : player.x + (fromLeft ? -player.width * 0.5 : player.width * 0.5);
-      const contactY = body
-        ? body.y + body.height * 0.62
-        : player.y + player.height * 0.18;
-      // direction indicates kick direction away from wall.
-      if (!powerupInvisible) {
-        spawnWallKickCloud(scene, contactX, contactY, fromLeft ? 1 : -1);
-      }
-    } catch (_) {}
-    noteMovementFxEvent("wall-jump", {
-      direction: fromLeft ? 1 : -1,
-      wallSide: fromLeft ? "left" : "right",
-    });
-
-    player.x += fromLeft ? sep : -sep;
-    player.setVelocityX(horizKick);
-    player.setVelocityY(-vertKick);
-    player.setDragX(dragAir);
-
-    // Small lockout to prevent immediate re-wall-jumping
-    scene.time.delayedCall(wallJumpCooldownMs, () => {
-      canWallJump = true;
-    });
-    // During a short lock window, ignore opposite input so the kick carries
-    player._wallKickLockUntil = Date.now() + wallKickLockMs;
-  }
-
-  function fall() {
-    updateWallSlideAudio(false);
-    pdbg();
-    isJumping = false;
-  }
-
-  function idle() {
-    updateWallSlideAudio(false);
-    pdbg();
-  }
-
-  function updateWallSlideAudio(shouldPlay, speedRatio = 0) {
-    if (!wallSlideLoopSfx) return;
-    if (shouldPlay) {
-      const normalizedSpeed = Phaser.Math.Clamp(
-        Number(speedRatio) || 0,
-        0,
-        1,
-      );
-      wallSlideLoopSfx.setVolume?.(0.28 + normalizedSpeed * 0.17);
-      wallSlideLoopSfx.setRate?.(0.84 + normalizedSpeed * 0.22);
-      if (!wallSlideLoopPlaying) {
-        try {
-          wallSlideLoopSfx.play();
-          wallSlideLoopPlaying = true;
-        } catch (_) {}
-      }
-      return;
-    }
-    if (wallSlideLoopPlaying) {
-      try {
-        wallSlideLoopSfx.stop();
-      } catch (_) {}
-      wallSlideLoopPlaying = false;
-    }
-  }
 }
 
 export function setSuperStats(charge, maxCharge) {

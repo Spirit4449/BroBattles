@@ -217,3 +217,16 @@ test('horizontal dash holds its final pose through early coast and yields immedi
     assert.equal(play('falling'), 'thorg-falling', 'downward diagonal keeps original timing');
   }
 });
+
+test('repeated Thorg setup preserves the attack animation used by active sprites', () => {
+  const created = setup(atlas);
+  const attack = created.get('thorg-throw');
+  exportsObject.animations({
+    textures: { get: () => ({ customData: { meta: { bbVideoFrames: true } },
+      getFrameNames: () => atlas.frames.map(f => f.filename) }) },
+    anims: { exists: key => created.has(key),
+      create() { assert.fail('existing animations must not be recreated'); },
+      remove() { assert.fail('active animations must not be removed'); } },
+  });
+  assert.equal(created.get('thorg-throw'), attack);
+});

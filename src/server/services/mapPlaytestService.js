@@ -2,7 +2,7 @@ const {randomUUID}=require('node:crypto');
 const {GameRoom}=require('../core/gameRoom');
 const {createBotParticipants}=require('../core/bots/identity');
 const {decorateParticipant}=require('./matchRosterService');
-const {getAllCharacters,getHealth,getDamage,getSpecialDamage}=require("../../shared/characterStats.js");
+const { getAllCharacters, getHealth, getDamage, getSpecialDamage, DEFAULT_CHARACTER }=require("../../shared/characterStats.js");
 const {clone,variantKey,validateDocument}=require('../../shared/mapDocument');
 const {spawnForParticipant}=require('../../shared/duelGeometry');
 const {validateAssets}=require('./mapAssetValidation');
@@ -70,7 +70,7 @@ class MapPlaytestService {
       socket.on('disconnect',()=>{if(!room._disposed)room.removePlayer(socket,socket.data.user).catch(()=>{});});
     });
   }
-  create(user,{document,variant,bots=false,infiniteSupers=false,debugHitboxes=false,character='ninja',spawn=null}){
+  create(user,{document,variant,bots=false,infiniteSupers=false,debugHitboxes=false,character=DEFAULT_CHARACTER,spawn=null}){
     const errors=validateDocument(document);if(!errors.length)errors.push(...validateAssets(document));
     if(errors.length)throw Object.assign(Error('Map validation failed'),{status:422,errors});
     if(!this.namespace)throw Object.assign(Error('Playtest server is not initialized'),{status:503});

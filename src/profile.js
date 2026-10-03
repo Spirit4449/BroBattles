@@ -1,3 +1,5 @@
+import { escapeHtml } from "./shared/html.cjs";
+import { createPlayerCardTile } from "./lib/playerCardTile.js";
 import { wireEmailSettings } from "./lib/emailSettings.js";
 import "./styles/profile.css";
 import "./styles/levelBadge.css";
@@ -109,23 +111,7 @@ function renderCardsGrid() {
     const id = String(card.id);
     const isOwned = owned.has(id);
     const isSelected = isOwned && selected === id;
-    const rarity = String(card?.rarity || "common").toLowerCase();
-
-    const tile = document.createElement("div");
-    tile.className = `card-tile ${rarity}`;
-    tile.innerHTML = `
-      <img src="${card.assetUrl}" alt="${card.name}" />
-      <div class="card-meta">
-        <strong>${card.name}</strong>
-        <span class="profile-card-rarity ${rarity}">${rarity}</span>
-      </div>
-      <div class="card-actions">
-        <span>${isSelected ? "Equipped" : "Owned"}</span>
-        <button class="profile-btn" data-card-id="${id}">
-          ${isSelected ? "Selected" : "Equip"}
-        </button>
-      </div>
-    `;
+    const tile = createPlayerCardTile(card, { selected: isSelected, lobby: false });
 
     const btn = tile.querySelector("button[data-card-id]");
     if (btn) {
@@ -184,7 +170,7 @@ function renderIconsGrid() {
     const isOwned = owned.has(id);
     const isSelected = isOwned && selected === id;
     const isLimited = icon?.limited === true;
-    const rarity = String(icon?.rarity || "common").toLowerCase();
+    const rarity = String(icon?.rarity || "common").toLowerCase().replace(/[^a-z0-9_-]/g, "-");
     const unlock = icon?.unlock || {};
     const requirement =
       ["trophies", "trophyRoad"].includes(unlock.type)
@@ -202,16 +188,16 @@ function renderIconsGrid() {
     const tile = document.createElement("div");
     tile.className = `card-tile icon-tile ${rarity}`;
     tile.innerHTML = `
-      <img src="${buildProfileIconUrl(icon.id)}" alt="${icon.name}" />
+      <img src="${escapeHtml(buildProfileIconUrl(icon.id))}" alt="${escapeHtml(icon.name)}" />
       <div class="card-meta">
-        <strong>${icon.name}</strong>
+        <strong>${escapeHtml(icon.name)}</strong>
         <span class="profile-card-rarity ${rarity}">${rarity}</span>
-        ${!isOwned ? `<span class="profile-cost">${requirement}</span>` : ""}
+        ${!isOwned ? `<span class="profile-cost">${escapeHtml(requirement)}</span>` : ""}
       </div>
       <div class="card-actions">
         <span>${isSelected ? "Equipped" : isOwned ? "Owned" : isLimited ? "Limited" : "Locked"}</span>
-        <button class="profile-btn" data-icon-id="${id}" data-action="${action}">
-          ${actionLabel}
+        <button class="profile-btn" type="button" data-icon-id="${escapeHtml(id)}" data-action="${action}">
+          ${escapeHtml(actionLabel)}
         </button>
       </div>
     `;

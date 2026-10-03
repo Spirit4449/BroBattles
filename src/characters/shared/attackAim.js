@@ -450,7 +450,7 @@ function resolveAttackAimContext({
   const config = getAimConfig(character, family);
   const defaultAngle = quick && (quickFacingDirection === -1 || quickFacingDirection === 1)
     ? (quickFacingDirection < 0 ? Math.PI : 0) : getDefaultFacingAngle(player);
-  if (character === "gloop" && !isSpecialFamily(family)) {
+  if (config.trajectory === "slimeLob") {
     const cfg = getAimTuning(character, config, family);
     const x = Number(player?.x) || 0, y = Number(player?.y) || 0;
     const pointer = pointerWorldX != null && pointerWorldY != null &&
@@ -607,7 +607,7 @@ function resolveAttackAimContext({
     Number(config.maxSpeedScale) || 1,
     rangeRatio,
   );
-  if (character === "huntress") {
+  if (config.trajectory === "arrowFlight") {
     const flight = aimAtTarget({ x: Number(player?.x) || 0, y: Number(player?.y) || 0,
       width: player?.displayWidth || player?.width || 150,
       height: player?.displayHeight || player?.height || 150 },
@@ -662,7 +662,7 @@ function resolveAttackAimContext({
     coneSpreadDeg: Math.max(1, Number(config.coneSpreadDeg) || 56),
     coneInnerRadius: Math.max(0, Number(config.coneInnerRadius) || 0),
     roundRadius,
-    visualScale: character === "thorg" && !isSpecialFamily(family) ? (Number(player?._thorgVisualScale) || 1) : 1,
+    visualScale: config.scalesWithSprite ? (Number(player?._bbVisualScale) || 1) : 1,
     throwPreview,
   };
 }

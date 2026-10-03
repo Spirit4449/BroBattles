@@ -8,6 +8,7 @@ const {
   selectionToLegacyMode,
 } = require("../helpers/gameSelectionCatalog");
 const { hasPartyInvite, consumePartyInvite } = require("./partyInviteStore");
+const { DEFAULT_CHARACTER, resolveCharacterKey } = require("../../shared/characterStats.js");
 
 function createPartyStateService({ db, io }) {
   const MAX_JOIN_REQUESTS = 4;
@@ -88,7 +89,7 @@ function createPartyStateService({ db, io }) {
         status !== "pending" &&
         !(requestCount >= MAX_JOIN_REQUESTS && cooldownRemainingMs > 0),
       requesterName: String(requestRow.requester_name || ""),
-      charClass: String(requestRow.char_class || "ninja"),
+      charClass: resolveCharacterKey(requestRow.char_class),
       userStatus: String(requestRow.user_status || "online"),
       trophies: Number(requestRow.trophies) || 0,
       requestedAt: requestRow.requested_at || null,
@@ -1057,7 +1058,7 @@ function createPartyStateService({ db, io }) {
                 attemptsRemaining: 0,
                 canRequest: false,
                 requesterName: username,
-                charClass: "ninja",
+                charClass: DEFAULT_CHARACTER,
                 userStatus: "online",
                 trophies: 0,
                 requestedAt: null,

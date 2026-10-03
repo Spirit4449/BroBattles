@@ -44,6 +44,7 @@ test("Bros renderer uses profile portraits, level crests, and reports unlocked c
               "huntress",
               "gloop",
             ],
+            canonicalCharacterKey: require("../src/shared/characterStats").canonicalCharacterKey,
           }
         : request.includes("levelBadgeView")
           ? {

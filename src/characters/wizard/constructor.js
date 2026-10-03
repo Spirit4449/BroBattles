@@ -1,6 +1,4 @@
 // src/characters/wizard/constructor.js
-import socket from "../../socket";
-import { characterStats } from "../../shared/characterStats.js";
 import { animations } from "./anim";
 import {
   performWizardFireball,
@@ -10,26 +8,12 @@ import {
   changeDebugState,
   playWizardCastWindup,
 } from "./attack";
-import { executeDefaultAttack } from "../shared/attackFlow";
+import { playWizardArcaneSurge } from "./effects.js";
 import CharacterEntityBase from "../shared/characterEntityBase";
-import { playSpriteAnimation } from "../shared/animationState";
+import { consumeOnce } from "../shared/packetDedupe";
 
 const NAME = "wizard";
-
-function consumeWizardRelease(scene, packetId) {
-  const id = String(packetId || "").trim();
-  if (!id) return true;
-  if (!scene._wizardReleaseSeen) {
-    scene._wizardReleaseSeen = new Map();
-  }
-  const now = Date.now();
-  for (const [key, seenAt] of scene._wizardReleaseSeen.entries()) {
-    if (now - seenAt > 4000) scene._wizardReleaseSeen.delete(key);
-  }
-  if (scene._wizardReleaseSeen.has(id)) return false;
-  scene._wizardReleaseSeen.set(id, now);
-  return true;
-}
+const consumeWizardRelease = (scene, id) => consumeOnce(scene, "wizard-release", id, 4000);
 
 class Wizard extends CharacterEntityBase {
   static key = NAME;
@@ -41,16 +25,20 @@ class Wizard extends CharacterEntityBase {
     special: { key: "wizard-special", volume: 0.5, rate: 1 },
   };
 
+  static attackFlow = {
+    attackResetMs: null,
+    cooldownFallbackMs: 450,
+    clearOnAnimation: { safetyMs: 950, fallbackFrameRate: 18, bufferMs: 120, noAnimationMs: 520 },
+  };
+
+  static socketEvents = {
+    "wizard:arcane-surge": ({ scene, findSprite }, payload) =>
+      playWizardArcaneSurge(scene, payload, findSprite),
+  };
+
   static preload(scene, staticPath = "/assets", options = {}) {
-    const includeBaseAtlas = options?.includeBaseAtlas !== false;
     if (!scene?.load) return;
-    if (includeBaseAtlas) {
-      scene.load.atlas(
-        NAME,
-        this.characterAssetPath(staticPath, "spritesheet.webp"),
-        this.characterAssetPath(staticPath, "animations.json"),
-      );
-    }
+    this.loadBaseAtlas(scene, staticPath, options);
     scene.load.atlas(
       "wizard-aura",
       this.characterAssetPath(staticPath, "aura.webp"),
@@ -66,14 +54,9 @@ class Wizard extends CharacterEntityBase {
       this.characterAssetPath(staticPath, "fireball-bb-red.webp"),
       this.characterAssetPath(staticPath, "fireball-bb-red.json"),
     );
-    scene.load.audio(
-      "wizard-fireball",
-      this.characterAssetPath(staticPath, "fireball.mp3"),
-    );
-    scene.load.audio(
-      "wizard-special",
-      this.characterAssetPath(staticPath, "special.mp3"),
-    );
+    this.loadFiles(scene, staticPath, {
+      audio: { "wizard-fireball": "fireball.mp3", "wizard-special": "special.mp3" },
+    });
     if (!scene.cache?.audio?.exists("wizard-impact")) {
       scene.load.audio(
         "wizard-impact",
@@ -88,10 +71,6 @@ class Wizard extends CharacterEntityBase {
 
   static setDebugState(enabled) {
     changeDebugState(enabled);
-  }
-
-  static getStats() {
-    return characterStats.wizard;
   }
 
   static handleRemoteAttack(scene, data, ownerWrapper) {
@@ -117,54 +96,12 @@ class Wizard extends CharacterEntityBase {
     return true;
   }
 
-  constructor(deps) {
-    super(deps);
-  }
-
-  performDefaultAttack(payloadBuilder, onAfterFire) {
-    const result = executeDefaultAttack({
-      scene: this.scene,
-      ammo: this.ammo,
-      emitAction: (payload) => socket.emit("game:action", payload),
-      payloadBuilder,
-      onAfterFire,
-      attackResetMs: null,
-      cooldownFallbackMs: 450,
-    });
-
-    if (!result.fired) return false;
-
-    const safeClear = result.clearAttack;
-    this.scene.time.delayedCall(950, safeClear);
-
-    try {
-      const p = this.player;
-      const currentAnim =
-        p?.anims && p.anims.currentAnim ? p.anims.currentAnim : null;
-      if (currentAnim && /throw|attack/i.test(currentAnim.key)) {
-        const key = currentAnim.key;
-        const frameRate = currentAnim.frameRate || 18;
-        const frameCount =
-          (currentAnim.frames && currentAnim.frames.length) || frameRate;
-        const estMs = (frameCount / Math.max(1, frameRate)) * 1000 + 120;
-        this.scene.time.delayedCall(Math.min(estMs, 1200), safeClear);
-        p.once("animationcomplete", (anim) => {
-          if (anim && anim.key === key) safeClear();
-        });
-      } else {
-        this.scene.time.delayedCall(520, safeClear);
-      }
-    } catch (_) {}
-
-    return true;
-  }
-
-  handlePointerDown = (attackContext = null) => {
+  handlePointerDown(attackContext = null) {
     const context = attackContext || this.consumeAttackContext();
     return this.performDefaultAttack(() =>
       performWizardFireball(this, context),
     );
-  };
+  }
 }
 
 export default Wizard;

@@ -133,5 +133,8 @@
         }
       }
     }
+  },
+  "presentation": {
+    "abilityLockAnimation": "special"
   }
 }

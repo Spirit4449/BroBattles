@@ -53,7 +53,7 @@ for(const folder of ['public/assets/gloop','public/assets/gloop/skins/gloop-amet
       const textureKey=folder.includes('skins')?'gloop__gloop-amethyst':'gloop';
       const scene={textures:{exists:key=>key===textureKey,get:()=>texture},
         anims:{exists:key=>animations.has(key),create:a=>animations.set(a.key,a)}};
-      const context={DUCK_FRAME_CELLS:{gloop:definition.duckFrame},CHARACTER_FRAMES:{gloop:definition.frame},scene,textureKey};
+      const context={DUCK_FRAME_CELLS:{gloop:definition.duckFrame},CHARACTER_FRAMES:{gloop:definition.frame},characterPresentation:()=>({}),scene,textureKey};
       vm.runInNewContext(duckSetupSource+'; setupDuckFrame(scene,"gloop",textureKey);',context);
       const frame=frames.get('duck00');
       assert.equal(frame.x,authored.frame.x);

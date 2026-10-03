@@ -1,3 +1,4 @@
+import { escapeHtml } from "../shared/html.cjs";
 // hud/gameOverScreenController.js
 
 import { playSound } from "../lib/uiSounds.js";
@@ -397,14 +398,6 @@ export function createGameOverScreenController({
         );
       }
     } catch (_) {}
-
-    const escapeHtml = (val) =>
-      String(val ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
-        .replace(/'/g, "&#39;");
 
     const headerRow = `
       <div class="bb-game-over-result-row is-header" role="row">

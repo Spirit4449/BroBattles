@@ -1,5 +1,4 @@
 import movementPhysics from '../shared/movementPhysics.json';
-import { legacyAnimations as legacyNinjaAnimations } from './ninja/legacyAnim';
 // src/characters/index.js
 import CHARACTER_MANIFEST from "./manifest";
 import { characterStats } from "../shared/characterStats.js";
@@ -8,9 +7,10 @@ import {
   buildCharacterSkinTextureKey,
   buildCharacterSkinAtlasUrls,
   buildCharacterSkinWeaponUrl,
+  getSkinGameAssets,
 } from "../lib/skinAssets.js";
 import { chooseRemoteAnimationState } from "./shared/animationState.js";
-import { characterFrames as CHARACTER_FRAMES } from "../shared/characters/index.js";
+import { characterFrames as CHARACTER_FRAMES, characterPresentation } from "../shared/characters/index.js";
 import { DUCK_FRAME_CELLS } from "../shared/ducking.js";
 
 function setupDuckFrame(scene, character, textureKey = character) {
@@ -19,8 +19,10 @@ function setupDuckFrame(scene, character, textureKey = character) {
   if (!cell || !dimensions || !scene.textures.exists(textureKey)) return;
   const texture = scene.textures.get(textureKey);
   if (!texture.has("duck00")) {
-    const originalDuck = character === 'ninja' && texture.get('idle00')?.width === 256
-      && texture.has('jumping00') ? texture.get('jumping00') : null;
+    // High-resolution art draws its own crouch pose (see `presentation.hiResArt`).
+    const art = characterPresentation(character).hiResArt;
+    const originalDuck = art?.duckFrame && texture.get('idle00')?.width === art.sourceSize
+      && texture.has(art.duckFrame) ? texture.get(art.duckFrame) : null;
     texture.add(
       "duck00",
       0,
@@ -39,6 +41,19 @@ function setupDuckFrame(scene, character, textureKey = character) {
       repeat: -1,
     });
   }
+}
+
+// Register dash frames with the rest of the atlas, never in the render-time resolver.
+function setupDashAnimation(scene, textureKey) {
+  const key = `${textureKey}-dashing`;
+  if (scene.anims.exists(key) || !scene.textures.exists(textureKey)) return;
+  const frames = scene.textures.get(textureKey).getFrameNames()
+    .filter(name => /^dash(?:ing)?[0-9]+$/i.test(name))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  if (!frames.length) return;
+  scene.anims.create({ key,
+    frames: frames.map(frame => ({ key: textureKey, frame })),
+    frameRate: frames.length * 1000 / movementPhysics.dashDurationMs, repeat: 0 });
 }
 
 // Build the registry automatically from the manifest.
@@ -137,8 +152,12 @@ export function preloadForRoster(scene, roster = [], staticPath = "/assets") {
       if (weaponUrl && !scene.textures.exists(`${textureKey}-weapon`)) {
         scene.load.image(`${textureKey}-weapon`, weaponUrl);
       }
-      if (entry.skinId === 'ninja-arena-sovereign' && !scene.textures.exists(`${textureKey}-weapon-spin`)) {
-        scene.load.spritesheet(`${textureKey}-weapon-spin`, '/assets/ninja/skins/ninja-arena-sovereign/crown-spin.webp', {frameWidth:237,frameHeight:237});
+      const weaponSpin = getSkinGameAssets(character, entry.skinId).weaponSpin;
+      if (weaponSpin?.url && !scene.textures.exists(`${textureKey}-weapon-spin`)) {
+        scene.load.spritesheet(`${textureKey}-weapon-spin`, weaponSpin.url, {
+          frameWidth: weaponSpin.frameWidth,
+          frameHeight: weaponSpin.frameHeight,
+        });
       }
     }
   }
@@ -148,13 +167,12 @@ export function setupFor(scene, character) {
   const Cls = getCharacterClass(character);
   if (Cls && Cls.setupAnimations) Cls.setupAnimations(scene);
   setupDuckFrame(scene, character);
+  setupDashAnimation(scene, character);
 }
 
 export function setupAll(scene) {
   for (const key of Object.keys(registry)) {
-    const Cls = registry[key];
-    if (Cls && Cls.setupAnimations) Cls.setupAnimations(scene);
-    setupDuckFrame(scene, key);
+    setupFor(scene, key);
   }
 }
 
@@ -166,23 +184,35 @@ function cloneBaseAnimationToVariant(scene, character, skinId) {
   if (!scene.textures.exists(textureKey)) return;
   setupDuckFrame(scene, character, textureKey);
 
-  // Thorg's video atlas and older skins have different pose counts/timings.
-  if (character === 'thorg') {
-    registry.thorg.setupAnimations(scene, textureKey);
-    return;
-  }
+  // Characters whose skins use different pose counts/timings build their own.
+  const handled = registry[character]?.setupSkinAnimations?.(
+    scene, textureKey, scene.textures.get(textureKey)) === true;
+  if (!handled) cloneBaseAnimations(scene, character, textureKey);
+  setupDashAnimation(scene, textureKey);
+  applySkinAnimationOverrides(scene, textureKey, getSkinGameAssets(character, skinId).animationOverrides);
+}
 
-  // Unconverted Ninja skins retain their original frame counts and cadence.
-  if (character === 'ninja' && !scene.textures.get(textureKey).has('attack00')) {
-    legacyNinjaAnimations(scene, textureKey);
-    if (skinId === 'ninja-arena-sovereign') {
-      animManager.remove(textureKey + '-falling');
-      animManager.create({ key: textureKey + '-falling',
-        frames: [0, 1, 2, 3, 2, 1].map(i => ({ key: textureKey, frame: 'falling0' + i })),
-        frameRate: 8, repeat: -1 });
-    }
-    return;
+// Skin catalog `gameAssets.animationOverrides`: { suffix: { frames, frameRate, repeat } }.
+function applySkinAnimationOverrides(scene, textureKey, overrides) {
+  scene._bbSkinAnimationOverrides ||= new Set();
+  for (const [suffix, anim] of Object.entries(overrides || {})) {
+    const key = `${textureKey}-${suffix}`;
+    if (scene._bbSkinAnimationOverrides.has(key)) continue;
+    scene._bbSkinAnimationOverrides.add(key);
+    scene.anims.remove(key);
+    scene.anims.create({
+      key,
+      frames: anim.frames.map((frame) => ({ key: textureKey, frame })),
+      frameRate: anim.frameRate,
+      repeat: anim.repeat ?? -1,
+    });
   }
+}
+
+// Copies the character's base animations onto a skin texture, keeping only
+// frames that the skin atlas actually contains.
+function cloneBaseAnimations(scene, character, textureKey) {
+  const animManager = scene.anims;
 
   const entries = animManager?.anims?.entries;
   if (!entries) return;
@@ -200,15 +230,6 @@ function cloneBaseAnimationToVariant(scene, character, skinId) {
     const variantKey = `${textureKey}-${suffix}`;
     if (animManager.exists(variantKey)) continue;
     const variantTexture = scene.textures.get(textureKey);
-    if (skinId === 'ninja-arena-sovereign' && suffix === 'falling') {
-      animManager.create({
-        key: variantKey,
-        frames: [0, 1, 2, 3, 2, 1].map((i) => ({ key: textureKey, frame: `falling0${i}` })),
-        frameRate: 8,
-        repeat: -1,
-      });
-      continue;
-    }
     const frames = (Array.isArray(anim?.frames) ? anim.frames : [])
       .map((frameRef) => {
         const frameName = frameRef?.frame?.name;
@@ -335,22 +356,11 @@ export function resolveAnimKey(
   const anims = scene && scene.anims;
   if (!anims) return genericKey;
 
-  if (genericKey === 'dashing') {
-    const textureKey = skinTextureKey || char;
-    const key = `${textureKey}-dashing`;
-    if (!anims.exists(key)) {
-      const frames = (scene.textures?.get(textureKey)?.getFrameNames?.() || [])
-        .filter(name => /^dash(?:ing)?[0-9]+$/i.test(name))
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-      if (frames.length) anims.create({ key,
-        frames: frames.map(frame => ({ key: textureKey, frame })),
-        frameRate: frames.length * 1000 / movementPhysics.dashDurationMs, repeat: 0 });
-    }
-    if (anims.exists(key)) return key;
-  }
-
-
   if (skinTextureKey) {
+    for (const prefix of [skinTextureKey, char]) {
+      if (genericKey?.startsWith(`${prefix}-`)) genericKey = genericKey.slice(prefix.length + 1);
+      if (fallback?.startsWith(`${prefix}-`)) fallback = fallback.slice(prefix.length + 1);
+    }
     const variantPreferred = `${skinTextureKey}-${genericKey}`;
     if (anims.exists(variantPreferred)) return variantPreferred;
     const variantFallback = `${skinTextureKey}-${fallback}`;
@@ -414,6 +424,18 @@ export function drawCharacterPowerupAura(character, context = {}) {
     return !!Cls.drawPowerupAura(context);
   }
   return false;
+}
+
+// [event, handler] pairs for socket events owned by character classes.
+export function getCharacterSocketEvents() {
+  return Object.values(registry).flatMap((Cls) => Object.entries(Cls.socketEvents || {}));
+}
+
+// Lets the kit that produced `action` apply its effect when it targets the
+// local player. Returns true when a character handled it.
+export function applyActionToLocalPlayer(action, context = {}) {
+  return Object.values(registry).some((Cls) =>
+    Cls.handleActionTargetingLocalPlayer?.(action, context) === true);
 }
 
 export function getCharacterEffectTickSounds() {

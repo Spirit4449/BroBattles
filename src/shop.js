@@ -1,3 +1,4 @@
+import { escapeHtml } from "./shared/html.cjs";
 import { sonner } from "./lib/sonner.js";
 import { currencyRewardImage, rewardSound, currencyParticleCount, currencyFlightPlan } from "./lib/rewardPresentation.js";
 import { playSound } from "./lib/uiSounds.js";
@@ -50,15 +51,6 @@ const FRIENDLY_ERRORS = {
     message: "Refresh the shop and check your balance before trying another purchase.",
   },
 };
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
 
 function safeCssToken(value) {
   return String(value || "item").replace(/[^a-z0-9_-]/gi, "-");

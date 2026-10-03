@@ -1,3 +1,4 @@
+import { escapeHtml } from "../shared/html.cjs";
 const TUTORIAL_MATCH_KEY = "bb_tutorial_first_match_v1";
 const TIP_REST_MS = 5000;
 const ACTION_LIFETIME_MS = 4800;
@@ -6,15 +7,6 @@ const MAX_STANDARD_SHOWS = 2;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
 
 export function createBattleTutorialController({

@@ -2,7 +2,7 @@ const gameModesCatalog = require("../../shared/gameModes.catalog.json");
 const mapsCatalog = require("../../shared/maps").mapsCatalog;
 
 const MODES = Array.isArray(gameModesCatalog?.modes) ? gameModesCatalog.modes : [];
-function allMaps() { return require("../services/mapRepository").mapRepository.list().map(({document}) => ({...document.metadata,id:document.id,label:document.label})); }
+function allMaps() { return require("../services/mapRepository").mapRepository.listMetadata(); }
 
 const DEFAULT_MODE_ID = String(gameModesCatalog?.defaultModeId || "duels");
 const DEFAULT_VARIANT_ID = String(

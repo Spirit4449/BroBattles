@@ -1,10 +1,7 @@
 import { setThorgRageVisual } from "./rageVisual";
 // src/characters/thorg/thorg.js
-import socket from "../../socket";
-import { characterStats } from "../../shared/characterStats.js";
 import { getResolvedCharacterAttackConfig } from "../../shared/characterTuning.js";
 import { animations } from "./anim";
-import { executeDefaultAttack } from "../shared/attackFlow";
 import { performThorgFallAttack, THORG_FALL_DURATION_MS, changeDebugState } from "./attack";
 import { ensureThorgWeapon, startThorgSweep } from "./weapon";
 import CharacterEntityBase from "../shared/characterEntityBase";
@@ -29,16 +26,10 @@ class Thorg extends CharacterEntityBase {
     special: { key: "thorg-throw", volume: 0.5, rate: 0.85 },
   };
 
+  static attackFlow = { attackResetMs: THORG_FALL_DURATION_MS };
+
   static preload(scene, staticPath = "/assets", options = {}) {
-    const includeBaseAtlas = options?.includeBaseAtlas !== false;
-    // Load atlas and projectile/sounds
-    if (includeBaseAtlas) {
-      scene.load.atlas(
-        NAME,
-        this.characterAssetPath(staticPath, "spritesheet.webp"),
-        this.characterAssetPath(staticPath, "animations.json"),
-      );
-    }
+    this.loadBaseAtlas(scene, staticPath, options);
     scene.load.image(
       `${NAME}-weapon`,
       this.characterAssetPath(staticPath, "weapon.webp"),
@@ -63,6 +54,12 @@ class Thorg extends CharacterEntityBase {
 
   static setupAnimations(scene, textureKey = NAME) {
     animations(scene, textureKey);
+  }
+
+  // Thorg's video atlas and older skins have different pose counts/timings.
+  static setupSkinAnimations(scene, textureKey) {
+    this.setupAnimations(scene, textureKey);
+    return true;
   }
 
   static setDebugState(enabled) {
@@ -215,11 +212,6 @@ class Thorg extends CharacterEntityBase {
     });
   }
 
-  // Per-character gameplay and presentation stats
-  static getStats() {
-    return characterStats.thorg;
-  }
-
   static chooseRemoteAnimation({
     animation = "idle",
     previousPosition,
@@ -296,8 +288,6 @@ class Thorg extends CharacterEntityBase {
     return true;
   }
 
-
-
   static getEffectTickSounds() {
     return {
       thorgRage: {
@@ -310,19 +300,6 @@ class Thorg extends CharacterEntityBase {
   constructor(deps) {
     super(deps);
     ensureThorgWeapon(this.scene, this.player);
-  }
-
-  // Common default behavior for firing attacks
-  performDefaultAttack(payloadBuilder, onAfterFire) {
-    const result = executeDefaultAttack({
-      scene: this.scene,
-      ammo: this.ammo,
-      emitAction: (payload) => socket.emit("game:action", payload),
-      payloadBuilder,
-      onAfterFire,
-      attackResetMs: THORG_FALL_DURATION_MS,
-    });
-    return !!result.fired;
   }
 
   handlePointerDown(attackContext = null) {

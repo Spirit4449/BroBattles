@@ -36,7 +36,7 @@ test('local respawn survives old death callbacks and refreshes the body before t
     getUsername: () => 'self', getScene: () => scene, getPlayer: () => player,
     getCurrentCharacter: () => 'ninja', getDead: () => dead,
     setDead: v => { dead = v; }, setMaxHealth: noop, setCurrentHealthValue: noop,
-    getWallSlideLoopPlaying: () => false,
+    stopWallSlideAudio: () => {},
     updateHealthBar: () => order.push('hud'),
     removeLocalCorpse: () => player.setVisible(false),
   });
@@ -73,6 +73,8 @@ test('match healing uses the health power-up tick once even when health was alre
   }).code;
   vm.runInNewContext(code, { exports, require: () => ({
     spawnDamageImpact: noop,
+    getCharacterSocketEvents: () => [],
+    applyActionToLocalPlayer: () => false,
     spawnDuckGuardImpact: noop,
     spawnDeathBurst: noop,
     spawnSpawnBurst: noop,
@@ -99,8 +101,7 @@ test('match healing uses the health power-up tick once even when health was alre
     setMaxHealth: noop,
     getDead: () => false,
     setDead: noop,
-    getWallSlideLoopPlaying: () => false,
-    getWallSlideLoopSfx: () => null,
+    stopWallSlideAudio: () => {},
     spawnHealthMarker: noop,
     updateHealthBar: noop,
   });
@@ -136,6 +137,7 @@ test('match playback includes the freeze power-up tick', () => {
   }).code;
   vm.runInNewContext(code, { exports, require: () => ({
     spawnDamageImpact: noop, spawnDuckGuardImpact: noop,
+    getCharacterSocketEvents: () => [], applyActionToLocalPlayer: () => false,
     spawnDeathBurst: noop, spawnSpawnBurst: noop,
     triggerDamageScreenPulse: noop, triggerDamageCameraShake: noop,
     playSpriteAnimation: noop,

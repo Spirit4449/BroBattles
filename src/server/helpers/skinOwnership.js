@@ -1,3 +1,5 @@
+const { isDeepStrictEqual } = require("util");
+const { isAutoUnlocked, unlockedCharacterSet } = require("./cosmeticUnlocks");
 const {
   getSkinsCatalog,
   getCharacterSkins,
@@ -7,49 +9,9 @@ const {
   resolveSelectedSkinId,
 } = require("./skinsCatalog");
 
-function parseCharLevels(charLevelsRaw) {
-  if (!charLevelsRaw) return {};
-  if (typeof charLevelsRaw === "object") return charLevelsRaw;
-  try {
-    return JSON.parse(String(charLevelsRaw || "{}"));
-  } catch (_) {
-    return {};
-  }
-}
-
-function extractUnlockedCharacters(userRow) {
-  const levels = parseCharLevels(userRow?.char_levels);
-  const unlocked = new Set();
-  for (const [key, value] of Object.entries(levels || {})) {
-    if (Number(value) >= 1) unlocked.add(String(key));
-  }
-  return unlocked;
-}
 
 function isSkinAutoUnlockedForUser(skin, userRow, unlockedCharacters = null) {
-  const unlock =
-    skin?.unlockMethod && typeof skin.unlockMethod === "object"
-      ? skin.unlockMethod
-      : null;
-  if (!unlock) return false;
-
-  const type = String(unlock.type || "").toLowerCase();
-  if (type === "starter") return true;
-
-  if (type === "character") {
-    const character = String(unlock.character || skin.character || "").trim();
-    if (!character) return false;
-    const chars = unlockedCharacters || extractUnlockedCharacters(userRow);
-    return chars.has(character);
-  }
-
-  if (type === "trophies") {
-    const min = Math.max(0, Number(unlock.min) || 0);
-    const trophies = Math.max(0, Number(userRow?.trophies) || 0);
-    return trophies >= min;
-  }
-
-  return false;
+  return isAutoUnlocked(skin?.unlockMethod, userRow, { fallbackCharacter: skin?.character, unlockedCharacters });
 }
 
 function getAutoUnlockSkinIds(userRow) {
@@ -58,7 +20,7 @@ function getAutoUnlockSkinIds(userRow) {
     catalog?.characters && typeof catalog.characters === "object"
       ? Object.keys(catalog.characters)
       : [];
-  const unlockedCharacters = extractUnlockedCharacters(userRow);
+  const unlockedCharacters = unlockedCharacterSet(userRow);
   const out = new Set();
 
   for (const character of chars) {
@@ -111,27 +73,44 @@ async function unlockSkinForUser(db, userId, skinId, source = "grant") {
   }
 }
 
+function parseStoredSkinMap(raw) {
+  if (raw == null) return null;
+  if (typeof raw === "object") return raw;
+  try {
+    return JSON.parse(String(raw));
+  } catch (_) {
+    return null;
+  }
+}
+
 async function syncSkinOwnershipWithRunner(db, userRow) {
   const userId = Number(userRow?.user_id) || 0;
   const autoUnlockIds = getAutoUnlockSkinIds(userRow);
 
-  if (autoUnlockIds.length) {
-    const placeholders = autoUnlockIds.map(() => "(?, ?, 'auto')").join(",");
-    const params = autoUnlockIds.flatMap((skinId) => [userId, skinId]);
+  const loadOwnedSet = async () => {
+    const ownedRows = await db.runQuery(
+      "SELECT skin_id FROM user_skins WHERE user_id = ?",
+      [userId],
+    );
+    return new Set(
+      ownedRows.map((row) => String(row.skin_id || "")).filter(Boolean),
+    );
+  };
+
+  let ownedSet = await loadOwnedSet();
+
+  // Most syncs find every automatic unlock already granted; skip the insert
+  // (and its locks) unless something is actually missing.
+  const missingIds = autoUnlockIds.filter((skinId) => !ownedSet.has(skinId));
+  if (missingIds.length) {
+    const placeholders = missingIds.map(() => "(?, ?, 'auto')").join(",");
+    const params = missingIds.flatMap((skinId) => [userId, skinId]);
     await db.runQuery(
       `INSERT IGNORE INTO user_skins (user_id, skin_id, source) VALUES ${placeholders}`,
       params,
     );
+    ownedSet = await loadOwnedSet();
   }
-
-  const ownedRows = await db.runQuery(
-    "SELECT skin_id FROM user_skins WHERE user_id = ?",
-    [userId],
-  );
-
-  const ownedSet = new Set(
-    ownedRows.map((row) => String(row.skin_id || "")).filter(Boolean),
-  );
 
   const selectedMapRaw = normalizeSelectedSkinMap(
     userRow?.selected_skin_id_by_char,
@@ -143,23 +122,33 @@ async function syncSkinOwnershipWithRunner(db, userRow) {
       ? Object.keys(catalog.characters)
       : [];
 
+  const ownedSkinIds = Array.from(ownedSet);
   const nextSelectedMap = {};
   for (const character of characters) {
     const selected = resolveSelectedSkinId({
       character,
       selectedSkinMap: selectedMapRaw,
-      ownedSkinIds: Array.from(ownedSet),
+      ownedSkinIds,
     });
     if (selected) nextSelectedMap[character] = selected;
   }
 
-  await db.runQuery(
-    "UPDATE users SET selected_skin_id_by_char = ? WHERE user_id = ?",
-    [JSON.stringify(nextSelectedMap), userId],
-  );
+  // Compare against the stored value (not the normalized one) so stale or
+  // malformed entries are still rewritten.
+  if (
+    !isDeepStrictEqual(
+      parseStoredSkinMap(userRow?.selected_skin_id_by_char),
+      nextSelectedMap,
+    )
+  ) {
+    await db.runQuery(
+      "UPDATE users SET selected_skin_id_by_char = ? WHERE user_id = ?",
+      [JSON.stringify(nextSelectedMap), userId],
+    );
+  }
 
   return {
-    ownedSkinIds: Array.from(ownedSet),
+    ownedSkinIds,
     selectedSkinIdByCharacter: nextSelectedMap,
   };
 }

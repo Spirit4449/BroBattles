@@ -8,6 +8,7 @@ export function animations(scene, NAME = "thorg") {
     scene.textures.get(NAME)?.customData?.meta?.bbVideoFrames === true;
 
   const makeSweep = () => {
+    if (scene.anims.exists(`${NAME}-throw`)) return;
     const ordered = (
       videoFrames
         ? findFrames("throw")
@@ -15,9 +16,6 @@ export function animations(scene, NAME = "thorg") {
     )
       .map((n) => getFrame(n))
       .filter(Boolean);
-    if (scene.anims.exists(`${NAME}-throw`)) {
-      scene.anims.remove(`${NAME}-throw`);
-    }
     if (!ordered.length) return;
 
     // Phaser adds per-frame duration to its base interval. A single total

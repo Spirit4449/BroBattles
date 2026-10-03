@@ -37,6 +37,39 @@ const UPGRADE_PRICES = [
 
 const characterStats = definitions.characterStats;
 
+// Misspellings that older clients/rows may still send.
+const CHARACTER_KEY_ALIASES = { hunteress: "huntress" };
+
+// Lowercased, trimmed key with legacy aliases applied ("" when empty).
+function canonicalCharacterKey(value) {
+  const key = String(value || "").trim().toLowerCase();
+  return CHARACTER_KEY_ALIASES[key] || key;
+}
+
+// Normalizes a stored/received character key, falling back to the default.
+// Use this instead of repeating `|| "ninja"` at call sites.
+function resolveCharacterKey(value) {
+  return canonicalCharacterKey(value) || DEFAULT_CHARACTER;
+}
+
+// users.char_levels arrives as a JSON string (MySQL) or an object. Always
+// returns an object; malformed data reads as no levels instead of throwing.
+function parseCharacterLevels(raw) {
+  if (!raw) return {};
+  if (typeof raw === "object") return raw;
+  try {
+    const parsed = JSON.parse(String(raw));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+// Owned level for one character (0 when locked or unknown).
+function getCharacterLevel(user, character) {
+  return Math.max(0, Number(parseCharacterLevels(user?.char_levels)[character]) || 0);
+}
+
 function getCharacterStats(character) {
   return characterStats[character] || undefined;
 }
@@ -130,6 +163,10 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     DEFAULT_CHARACTER,
     LEVEL_CAP,
+    canonicalCharacterKey,
+    resolveCharacterKey,
+    parseCharacterLevels,
+    getCharacterLevel,
     characterStats,
     getCharacterStats,
     getCharacterTuning,

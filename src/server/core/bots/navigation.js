@@ -106,6 +106,50 @@ function routePoisonDamage(player, point, route, poisonY, poisonAt, holdMs = 200
   return damage;
 }
 
+// Binary min-heap ordered by (cost, insertion order). The insertion tiebreak
+// keeps equal-cost expansion order deterministic (first queued, first popped).
+class MinHeap {
+  constructor() { this.items = []; }
+  get size() { return this.items.length; }
+  static less(a, b) { return a.cost < b.cost || (a.cost === b.cost && a.seq < b.seq); }
+  push(item) {
+    const items = this.items;
+    let i = items.push(item) - 1;
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (!MinHeap.less(items[i], items[parent])) break;
+      [items[i], items[parent]] = [items[parent], items[i]];
+      i = parent;
+    }
+  }
+  pop() {
+    const items = this.items;
+    const top = items[0];
+    const last = items.pop();
+    if (items.length) {
+      items[0] = last;
+      for (let i = 0; ;) {
+        const left = i * 2 + 1, right = left + 1;
+        let smallest = i;
+        if (left < items.length && MinHeap.less(items[left], items[smallest])) smallest = left;
+        if (right < items.length && MinHeap.less(items[right], items[smallest])) smallest = right;
+        if (smallest === i) break;
+        [items[i], items[smallest]] = [items[smallest], items[i]];
+        i = smallest;
+      }
+    }
+    return top;
+  }
+}
+
+// Search nodes link to their parent instead of copying the route; the edge
+// list is rebuilt only for the goal node.
+function routeOf(node) {
+  const route = [];
+  for (let n = node; n.parent; n = n.parent) route.push(n.edge);
+  return route.reverse();
+}
+
 function findRoute(graph, from, to, poisonY = Infinity, options = {}) {
   if (!from || !to) return null;
   const surfaces = new Map(graph.surfaces.map(s => [s.id, s]));
@@ -113,12 +157,14 @@ function findRoute(graph, from, to, poisonY = Infinity, options = {}) {
   const atGoal = (id, x) => id === to && (!graph.geometry || !Number.isFinite(options.goalX) || !Number.isFinite(x) ||
     canWalkBetween(graph.geometry, surfaces.get(id), graph.character, x, options.goalX));
   if (atGoal(from, options.startX)) return [];
-  const queue = [{ id: from, route: [], cost: 0, elapsed: 0, x: options.startX }], visited = new Set();
+  let seq = 0;
+  const queue = new MinHeap(), visited = new Set();
+  queue.push({ id: from, parent: null, edge: null, cost: 0, elapsed: 0, x: options.startX, seq: seq++ });
   const bestCost = new Map([[keyOf(from, options.startX), 0]]);
-  while (queue.length) {
-    queue.sort((a, b) => a.cost - b.cost);
-    const item = queue.shift();
-    if (atGoal(item.id, item.x)) return item.route;
+  const poisoned = Number.isFinite(poisonY);
+  while (queue.size) {
+    const item = queue.pop();
+    if (atGoal(item.id, item.x)) return routeOf(item);
     // Reaching the same platform on the other side of a wall is a different
     // navigation state. Collapsing both landings prevents routes around blocks.
     const state = keyOf(item.id, item.x, item.dashUsed);
@@ -126,27 +172,34 @@ function findRoute(graph, from, to, poisonY = Infinity, options = {}) {
     visited.add(state);
     const available = [...(graph.edges.get(item.id) || []),
       ...(options.allowDash && !item.dashUsed ? graph.dashEdges?.get(item.id) || [] : [])];
+    const fromSurface = surfaces.get(item.id);
+    const hasX = Number.isFinite(item.x);
+    // Standing still on the takeoff surface is the same for every edge.
+    let standingFrames = null;
     for (const edge of available) {
       const dashUsed = !!(item.dashUsed || edge.dash);
       const nextState = keyOf(edge.to, edge.landingX, dashUsed);
       if (visited.has(nextState)) continue;
-      const fromSurface = surfaces.get(item.id);
-      if (graph.geometry && Number.isFinite(item.x) &&
+      if (graph.geometry && hasX &&
           !canWalkBetween(graph.geometry, fromSurface, graph.character, item.x, edge.takeoffX)) continue;
       if (options.blocked?.has(edgeKey(edge, item.id)) || options.blocked?.has(`${item.id}:${edge.to}`)) continue;
       const surface = surfaces.get(edge.to);
       if (!surface) continue;
       const penalty = Math.max(0, Number(options.edgeCost?.(edge, item.id)) || 0);
-      const approach = Number.isFinite(item.x) ? Math.abs(edge.takeoffX - item.x) / movement.maxSpeed * 1000 : 0;
-      const exposure = !Number.isFinite(poisonY) ? 0 : poisonDamage(edge.frames, edge.duration, poisonY, options.poisonAt, item.elapsed + approach) +
-        poisonDamage(Array.from({ length: 20 }, () => ({ y: fromSurface.top - graph.body.offsetY - graph.body.halfHeight })),
-          approach, poisonY, options.poisonAt, item.elapsed);
+      const approach = hasX ? Math.abs(edge.takeoffX - item.x) / movement.maxSpeed * 1000 : 0;
+      let exposure = 0;
+      if (poisoned) {
+        standingFrames ||= Array.from({ length: 20 }, () => ({ y: fromSurface.top - graph.body.offsetY - graph.body.halfHeight }));
+        exposure = poisonDamage(edge.frames, edge.duration, poisonY, options.poisonAt, item.elapsed + approach) +
+          poisonDamage(standingFrames, approach, poisonY, options.poisonAt, item.elapsed);
+      }
       const cost = item.cost + approach + edge.duration + penalty + exposure * 4;
       if (cost >= (bestCost.get(nextState) ?? Infinity)) continue;
       bestCost.set(nextState, cost);
-      queue.push({ id: edge.to, route: [...item.route, edge], x: edge.landingX, dashUsed,
+      queue.push({ id: edge.to, parent: item, edge, x: edge.landingX, dashUsed,
         cost,
-        elapsed: item.elapsed + approach + edge.duration });
+        elapsed: item.elapsed + approach + edge.duration,
+        seq: seq++ });
     }
   }
   return null;

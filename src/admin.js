@@ -1,6 +1,6 @@
 import "./styles/admin.css";
 import { maintenanceClock, maintenanceRemaining } from "./shared/maintenance";
-import { LEVEL_CAP } from "./shared/characterStats";
+import { LEVEL_CAP, DEFAULT_CHARACTER, parseCharacterLevels } from "./shared/characterStats";
 import { characterDefinitions } from "./shared/characters";
 import { wireFullscreenToggles } from "./lib/fullscreen.js";
 
@@ -177,7 +177,7 @@ function populateUserEditor(user) {
   $("#fieldGems").value = user.gems ?? 0;
   $("#fieldTrophies").value = user.trophies ?? 0;
   $("#fieldStatus").value = user.status || "offline";
-  $("#fieldClass").value = user.char_class || "ninja";
+  $("#fieldClass").value = user.char_class || DEFAULT_CHARACTER;
   const levels = parseLevels(user.char_levels);
   const host = $("#levelFields"); host.replaceChildren();
   for (const character of Object.keys(characterDefinitions)) {
@@ -277,8 +277,7 @@ function renderPlayerDetails(user, history) {
   const host = $("#playerOverview"); host.replaceChildren();
   $("#playerSubtitle").textContent = `${user.expires_at ? "Guest" : "Permanent account"} · ${user.status || "offline"} · ${user.trophies ?? 0} trophies`;
   host.append(detailSection("Account & profile", [["Account type", user.expires_at ? "Guest" : "Permanent"], ["Created", formatAdminDate(user.created_at)], ["Updated", formatAdminDate(user.updated_at)], ["Guest expiry", formatAdminDate(user.expires_at)], ["Peak trophies", user.trophy_peak], ["Profile icon", user.selected_profile_icon_id], ["Player card", user.selected_card_id]]));
-  let levels = user.char_levels;
-  try { if (typeof levels === "string") levels = JSON.parse(levels); } catch { levels = null; }
+  const levels = parseCharacterLevels(user.char_levels);
   host.append(detailSection("Character levels", Object.entries(levels || {}).length ? Object.entries(levels) : [["Levels", "No levels recorded"]]));
   host.append(detailSection("Moderation status", [["Banned", user.is_banned ? "Yes" : "No"], ["Ban reason", user.ban_reason], ["Banned at", formatAdminDate(user.banned_at)], ["Chat suspended until", formatAdminDate(user.chat_suspended_until)], ["Matchmaking suspended until", formatAdminDate(user.mm_suspended_until)]]));
   for (const [key, title] of [["matches", "Recent matches"], ["orders", "Recent orders"], ["currency", "Currency activity"], ["moderation", "Moderation events"]]) {

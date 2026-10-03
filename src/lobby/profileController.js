@@ -1,3 +1,4 @@
+import { createPlayerCardTile } from "../lib/playerCardTile.js";
 import { wireEmailSettings } from "../lib/emailSettings.js";
 import {
   buildProfileIconAlt,
@@ -12,6 +13,7 @@ import { renderCharacterLevelGrid } from "../lib/profileCharacterLevelsView.js";
 import { sonner } from "../lib/sonner.js";
 import { playSound } from "../lib/uiSounds.js";
 import { escapeHtml, profileFetchJson } from './ui';
+import { resolveCharacterKey } from "../shared/characterStats.js";
 
 export function createProfileController({ getUserData, onProfileRendered }) {
   const lobbyProfileState = {
@@ -71,7 +73,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
     setText("profile-avg-level", Number(profile.avgCharLevel) || 1);
     setText("profile-wins", Number(profile.wins) || 0);
     setText("profile-hero-name", profile.username || "-");
-    setText("profile-hero-class", String(profile.charClass || "ninja"));
+    setText("profile-hero-class", resolveCharacterKey(profile.charClass));
     const heroAvatar = document.getElementById("profile-hero-avatar");
     if (heroAvatar) {
       heroAvatar.src = buildProfileIconUrl(
@@ -209,23 +211,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
     ownedCards.forEach((card) => {
       const id = String(card?.id || "");
       const isSelected = selected === id;
-      const rarity = String(card?.rarity || "common").toLowerCase();
-
-      const tile = document.createElement("article");
-      tile.className = `profile-card-tile ${rarity}${isSelected ? " is-selected" : ""}`;
-      tile.innerHTML = `
-      <img src="${card.assetUrl}" alt="${card.name}" />
-      <div class="profile-card-meta">
-        <strong>${card.name}</strong>
-        <span class="profile-card-rarity ${rarity}">${rarity}</span>
-      </div>
-      <div class="profile-card-actions">
-        <span class="profile-card-state">${isSelected ? "Equipped" : "Owned"}</span>
-        <button class="profile-card-btn pixel-menu-button" type="button" data-card-id="${id}">
-          ${isSelected ? "Selected" : "Equip"}
-        </button>
-      </div>
-    `;
+      const tile = createPlayerCardTile(card, { selected: isSelected, lobby: true });
 
       const actionBtn = tile.querySelector("button[data-card-id]");
       if (actionBtn) {

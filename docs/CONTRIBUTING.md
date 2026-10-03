@@ -18,11 +18,11 @@ Use a focused test file during development, for example `node --test tests/conte
 
 1. Create `src/shared/characters/<key>.json` using an existing character as a shape reference. Include `key`, `stats` (including `tuning`), `frame`, one-based `duckFrame` cell, `basicAction`, `basicHitTypes`, `specialHitTypes`, and `attacks`. These hit-type lists control super charging; distinguish the emitted action ID from its damage hit type.
 2. Register the definition in `src/shared/characters/index.js`. Stats, frame dimensions, duck cells, attack descriptors and bot basic-action IDs are derived. Import shared helpers directly; do not create another stats/frame table.
-3. Add browser behavior in `src/characters/<key>/` and register its constructor in `src/characters/manifest.js`. Use the existing character entity base and animation builder where their behavior fits. Keep unique attack choreography in that character's modules.
+3. Add browser behavior in `src/characters/<key>/` and register its constructor in `src/characters/manifest.js`. Extend `CharacterEntityBase`: declare `key`, `sounds`, `attackFlow` and a `preload` built from `loadBaseAtlas`/`loadFiles`, then override only the hooks the kit needs (listed at the top of `characterEntityBase.js`). Put presentation settings in the definition's `presentation` and `aim` blocks rather than adding `character === "<key>"` checks to player, reticle or match code. Keep unique attack choreography in that character's modules.
 4. Put runtime assets in `public/assets/<key>/`. The validator expects `body.webp`, `spritesheet.webp` and `animations.json`. Register weapon/audio/effect files in the character preloader; confirm their names and paths. The roster preloader loads participating characters and selected skins.
 5. Configure an existing authoritative attack runtime through the definition's `attacks`. If it needs tuning-to-runtime translation, add that mapping in `attackDescriptorResolver.js`. A genuinely new attack mechanism gets a module under `gameRoom/attackRuntimes/` and a registry entry in `characterAttackRegistry.js`.
 6. For an ordinary server special, add an ability module and register it in `abilityRuntimeManager.js`. A specialized network protocol may instead require adapters in the client `characters/networkRegistry.js` and server `gameRoom/characterCombatRegistry.js`. Preserve validation and server ownership; adapters alone do not establish trusted damage.
-7. Check bot aiming, ranges and special conditions in `src/server/core/bots/`. Shared action registration does not automatically teach bots a novel mechanic.
+7. Add a bot profile in `src/server/core/bots/characterProfiles.js` (spacing, melee/buff flags, aim model, super range and `shouldUseSuper`). Content validation fails until it exists. Shared action registration does not teach bots a novel mechanic; add a profile field rather than a `char_class` comparison in bot modules.
 
 Run content validation and attack/ability/network tests. Manually check selection, local and remote attacks, special charging, hit/death animations, skins and missing asset warnings. [Adding characters](ADDING_CHARACTERS.md) is the design/art checklist.
 
@@ -61,6 +61,10 @@ An ability-only effect needs an effect definition and its snapshot/presentation 
 - Animation frame selection/sorting uses `src/characters/shared/animationBuilder.js`. Keep timing, repeats and deliberate pose order in each character's `anim.js`. Check any new animation against the actual atlas, including skin variants.
 - Map artwork is declared in the map document's asset library. Terrain audio is declared in `src/shared/terrainAudio.json`, selected by `metadata.terrain`.
 - Runtime assets belong under `public/assets/` in the owning content folder. Keep source artwork, intermediate exports and licensing information clearly named; avoid moving an asset until its runtime/catalog references are checked.
+
+## Add a database migration
+
+Add `migrations/<date>_<feature>.sql` with additive, idempotent DDL (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`) and document the schema in `database.md`. When the change needs checks or backfills, write `scripts/apply-<feature>-migration.cjs` on top of `scripts/lib/db.cjs` (`runScript`, `readMigration`, `hasColumn`, `hasIndex`, `hasTable`) instead of copying connection code. `npm run migrate:status` reads the database (no writes) and lists migrations whose tables, columns or indexes are missing; it is derived from the SQL files, so changes made only in an apply script are not checked.
 
 ## Module boundaries
 

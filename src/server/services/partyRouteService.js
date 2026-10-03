@@ -1,5 +1,6 @@
 const { capacityFromSelection } = require("../helpers/utils");
 const { selectPartyById, getPartyOwnerName } = require("../helpers/party");
+const { resolveCharacterKey } = require("../../shared/characterStats.js");
 const {
   normalizeSelectionFromRow,
 } = require("../helpers/gameSelectionCatalog");
@@ -51,7 +52,7 @@ function createPartyRouteService({ db }) {
 
     const membersRaw = await db.fetchPartyMembersDetailed(partyId);
     const members = (Array.isArray(membersRaw) ? membersRaw : []).map((m) => {
-      const character = String(m?.char_class || "ninja").toLowerCase();
+      const character = resolveCharacterKey(m?.char_class);
       const selectedSkinId = resolveSelectedSkinId({
         character,
         selectedSkinMap: normalizeSelectedSkinMap(m?.selected_skin_id_by_char),
@@ -258,7 +259,7 @@ function createPartyRouteService({ db }) {
       const member = {
         name: String(row.name || ""),
         team: String(row.team || "team1"),
-        char_class: String(row.char_class || "ninja"),
+        char_class: resolveCharacterKey(row.char_class),
         selected_skin_id: null,
         selected_skin_asset_url: null,
         profile_icon_id: String(row.profile_icon_id || "") || null,

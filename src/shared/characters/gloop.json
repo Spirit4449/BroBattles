@@ -34,7 +34,11 @@
           "showPathToImpact": true,
           "bounceCurveRadius": 30,
           "reticleThickness": 8,
-          "angleMode": "free"
+          "angleMode": "free",
+          "trajectory": "slimeLob",
+          "reticleRoundCorners": false,
+          "reticleEndAlpha": 0,
+          "reticleFadeOnTurn": true
         },
         "slimeball": {
           "maxThrowRange": 400,
@@ -47,7 +51,7 @@
           "visualScale": 1.5,
           "castDelayMs": 120,
           "flipLockMs": 520,
-          "forwardOffset": 0.10,
+          "forwardOffset": 0.1,
           "verticalOffset": -0.24,
           "initialVy": -45,
           "gravity": 340,
@@ -76,7 +80,8 @@
           "anchorOffsetY": 16,
           "reticleThickness": 56,
           "showFullReticleRange": true,
-          "angleMode": "free"
+          "angleMode": "free",
+          "reticleFadeOnTurn": true
         },
         "hook": {
           "speed": 700,

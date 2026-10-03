@@ -81,10 +81,12 @@ test('skin arrows save owned skins without closing, preview locked skins, and ro
 
 test('leaving expanded details flushes deferred selection rendering once', () => {
   let renders = 0;
+  let focusReleases = 0;
   const context = {
     _characterDetailsUi: {
       popup:{classList:{remove(){}}}, overlay:{classList:{add(){}},setAttribute(){}},
       currentCharacter:'gloop', selectedSkinByCharacter:{gloop:'amethyst'},
+      focus:{deactivate(){focusReleases++;}},
     },
     _upgradePreview:null, _pendingUpgradeAnimation:null,
     _deferredSkinRender:()=>{renders++;},
@@ -93,6 +95,7 @@ test('leaving expanded details flushes deferred selection rendering once', () =>
   const hide = loadFunction('hideCharacterDetails', context);
   hide();
   assert.equal(renders,1);
+  assert.equal(focusReleases,1);
   assert.equal(context._characterDetailsUi.currentCharacter,null);
   hide();
   assert.equal(renders,1);

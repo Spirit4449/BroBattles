@@ -6,8 +6,8 @@ const playerSource = fs.readFileSync("src/player.js", "utf8");
 
 test("inactive controls keep the local HUD attached to the physics body", () => {
   const inactiveBranch = playerSource.slice(
-    playerSource.indexOf("const desktopInputInactive"),
-    playerSource.indexOf("// Movement tuning knobs"),
+    playerSource.indexOf("function applyInactiveInputFrame(scene)"),
+    playerSource.indexOf("// Advances the dash and ammo reload"),
   );
   assert.match(inactiveBranch, /syncLocalUiPosition\(\)/);
   assert.match(inactiveBranch, /releaseMovementForFocus\(player/);
@@ -17,8 +17,8 @@ test("inactive controls keep the local HUD attached to the physics body", () => 
 
 test("inactive controls reconcile movement animation before returning", () => {
   const inactiveBranch = playerSource.slice(
-    playerSource.indexOf("const desktopInputInactive"),
-    playerSource.indexOf("// Movement tuning knobs"),
+    playerSource.indexOf("function applyInactiveInputFrame(scene)"),
+    playerSource.indexOf("// Advances the dash and ammo reload"),
   );
   assert.match(inactiveBranch, /deriveMovementAnimation\(\{/);
   assert.match(inactiveBranch, /playCharacterAnimation\(\{/);

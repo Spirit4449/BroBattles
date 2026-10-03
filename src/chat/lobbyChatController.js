@@ -3,6 +3,7 @@ import { createPartyPresenceTracker, countOnlineMembers } from './partyPresence.
 import { createViewersPopup } from './viewersPopup.js';
 
 import { bindChatProfile, makeChatShell, formatSuspensionTime, escapeHtml, buildAvatarUrl, LOBBY_TYPING_HEARTBEAT_MS, LOBBY_TYPING_IDLE_STOP_MS, LOBBY_CHAT_BUBBLE_MS, messageIdOf, formatNameWithYou, formatChatTime, postJson, renderPartyChatMessage, showChatRequestError, buildInlineCooldownMessage, LOBBY_TYPING_STALE_MS } from './presentation';
+import { resolveCharacterKey } from "../shared/characterStats.js";
 
 export function createLobbyChatController({
   socket,
@@ -933,7 +934,7 @@ export function createLobbyChatController({
         viewers.push({
           name: viewerName,
           userId: Number(payload?.viewerUserId) || null,
-          charClass: String(payload?.viewerCharClass || "ninja"),
+          charClass: resolveCharacterKey(payload?.viewerCharClass),
           profileIconId: String(payload?.viewerProfileIconId || "") || null,
           readAt: new Date().toISOString(),
         });
@@ -962,7 +963,7 @@ export function createLobbyChatController({
       next.set(key, {
         userId: userId || null,
         name,
-        charClass: String(typer?.charClass || "ninja"),
+        charClass: resolveCharacterKey(typer?.charClass),
         profileIconId: String(typer?.profileIconId || "") || null,
         expiresAt: now + LOBBY_TYPING_STALE_MS,
       });

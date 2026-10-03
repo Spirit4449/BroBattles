@@ -1,21 +1,15 @@
+import { escapeHtml } from "../shared/html.cjs";
 import { createChatScrollController } from './scrollController.mjs';
 import { composerHeight } from './composerSize.mjs';
 import { buildProfileIconUrl } from "../lib/profileIconAssets.js";
 import { sonner } from "../lib/sonner.js";
+import { DEFAULT_CHARACTER } from "../shared/characterStats.js";
 const GAME_CHAT_RECENT_LIMIT = 40;
 const LOBBY_TYPING_IDLE_STOP_MS = 1000;
 const LOBBY_TYPING_HEARTBEAT_MS = 850;
 const LOBBY_TYPING_STALE_MS = 4000;
 const LOBBY_CHAT_BUBBLE_MS = 3800;
-function escapeHtml(value) {
-  const raw = String(value ?? "");
-  return raw
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
+
 function formatChatTime(isoValue) {
   if (!isoValue) return "";
   const date = new Date(isoValue);
@@ -26,7 +20,7 @@ function formatChatTime(isoValue) {
   });
 }
 function buildAvatarUrl(charClass, profileIconId = null) {
-  return buildProfileIconUrl(profileIconId, charClass || "ninja");
+  return buildProfileIconUrl(profileIconId, charClass || DEFAULT_CHARACTER);
 }
 function bindChatProfile(element, username, onOpenProfile) {
   const name = String(username || "").trim();

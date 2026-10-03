@@ -7,13 +7,14 @@ import dravenBody from "../../public/assets/draven/body.webp?portrait";
 import wizardBody from "../../public/assets/wizard/body.webp?portrait";
 import huntressBody from "../../public/assets/huntress/body.webp?portrait";
 import gloopBody from "../../public/assets/gloop/body.webp?portrait";
+import { DEFAULT_CHARACTER, canonicalCharacterKey } from "../shared/characterStats.js";
 
 const bodies = { ninja: ninjaBody, thorg: thorgBody, draven: dravenBody,
   wizard: wizardBody, huntress: huntressBody, gloop: gloopBody };
 const portraitUrls = new Map();
 
 function broPortraitUrl(character) {
-  const id = Object.hasOwn(bodies, character) ? character : "ninja";
+  const id = Object.hasOwn(bodies, character) ? character : DEFAULT_CHARACTER;
   if (!portraitUrls.has(id)) {
     const svg = buildBroPortraitSvg(bodies[id], BRO_PORTRAIT_PALETTES[id]);
     portraitUrls.set(id, `data:image/svg+xml,${encodeURIComponent(svg).replace(/'/g, "%27")}`);
@@ -30,20 +31,20 @@ function normalizeProfileIconId(iconId) {
   return id;
 }
 
-export function buildProfileIconUrl(profileIconId, charClass = "ninja") {
+export function buildProfileIconUrl(profileIconId, charClass = DEFAULT_CHARACTER) {
   const iconId = normalizeProfileIconId(profileIconId);
-  const character = normalizeProfileIconId(charClass) || "ninja";
+  const character = normalizeProfileIconId(charClass) || DEFAULT_CHARACTER;
   if (Object.hasOwn(bodies, iconId)) return broPortraitUrl(iconId);
   if (iconId) {
     return ICONS.icons.find(icon => icon.id === iconId)?.assetUrl || broPortraitUrl(character);
   }
-  return broPortraitUrl(character === "hunteress" ? "huntress" : character);
+  return broPortraitUrl(canonicalCharacterKey(character));
 }
 
-export function buildProfileIconAlt(profileIconId, charClass = "ninja") {
+export function buildProfileIconAlt(profileIconId, charClass = DEFAULT_CHARACTER) {
   const iconId = normalizeProfileIconId(profileIconId);
   if (iconId) return iconId;
-  return String(charClass || "ninja");
+  return String(charClass || DEFAULT_CHARACTER);
 }
 
 // Numeric milestone artwork is supplied separately. Use an honest trophy fallback

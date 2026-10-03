@@ -1,14 +1,14 @@
 import { THORG_SWEEP } from "../../shared/thorgSweep";
 
 export function getThorgVisualPose(body) {
-  const scale = body?._thorgVisualScale || 1;
+  const scale = body?._bbVisualScale || 1;
   return { x: body.x, y: body.y - THORG_SWEEP.footOffset * (scale - 1), scale };
 }
 
 // Grow a render-only copy. Never change the physics sprite's origin or scale:
 // Arcade derives its collider from those values on the following physics step.
 export function setThorgRageVisual(scene, body, enabled) {
-  body._thorgVisualScale = enabled ? THORG_SWEEP.rageScale : 1;
+  body._bbVisualScale = enabled ? THORG_SWEEP.rageScale : 1;
   if (!enabled) {
     body._thorgRageVisualCleanup?.();
     return;
@@ -62,7 +62,7 @@ export function setThorgRageVisual(scene, body, enabled) {
     scene.events.off("shutdown", cleanup);
     body.off?.("destroy", cleanup);
     visual.destroy();
-    body._thorgVisualScale = 1;
+    body._bbVisualScale = 1;
     body._bbHudTopOffset = previousHudTop;
     delete body._thorgRageVisualCleanup;
   };

@@ -1,6 +1,22 @@
+import socket from "../../socket";
+import { characterStats } from "../../shared/characterStats.js";
 import { chooseRemoteAnimationState } from "./animationState";
+import { executeDefaultAttack } from "./attackFlow";
 import { playPlayerSound } from "../../gameScene/playerAudio";
 
+/**
+ * Base for browser character classes registered in ../manifest.js.
+ *
+ * Data (stats, tuning, aim, presentation knobs) lives in
+ * src/shared/characters/<key>.json. A subclass declares `key`, its assets in
+ * `preload`, its animations, and overrides only the hooks its kit needs:
+ *   - attackFlow / emitAttackAction / handlePointerDown: local basic attack
+ *   - handleRemoteAttack / handleLocalAuthoritativeAttack: action playback
+ *   - handleActionTargetingLocalPlayer: effects applied to the local player
+ *   - socketEvents: character-owned match socket events
+ *   - setupSkinAnimations: skins whose atlases need their own animations
+ *   - applyPowerupFx / drawPowerupAura / getEffectTickSounds: effect visuals
+ */
 export default class CharacterEntityBase {
   static key = "unknown";
   static textureKey = "sprite";
@@ -15,11 +31,60 @@ export default class CharacterEntityBase {
 
   static preload() {}
 
+  /** Loads the character's base atlas unless a skin atlas replaces it. */
+  static loadBaseAtlas(scene, staticPath = "/assets", options = {}) {
+    if (options?.includeBaseAtlas === false) return;
+    scene.load.atlas(
+      this.key,
+      this.characterAssetPath(staticPath, "spritesheet.webp"),
+      this.characterAssetPath(staticPath, "animations.json"),
+    );
+  }
+
+  /** Queues `{ image: { key: file }, audio: { key: file } }` from this character's folder. */
+  static loadFiles(scene, staticPath = "/assets", { image = {}, audio = {} } = {}) {
+    for (const [key, file] of Object.entries(image)) {
+      scene.load.image(key, this.characterAssetPath(staticPath, file));
+    }
+    for (const [key, file] of Object.entries(audio)) {
+      scene.load.audio(key, this.characterAssetPath(staticPath, file));
+    }
+  }
+
   static setupAnimations() {}
 
-  static getStats() {
-    return null;
+  /**
+   * Builds animations for a skin texture. Return true when handled; otherwise
+   * the base animations are cloned onto the skin's frames.
+   */
+  static setupSkinAnimations() {
+    return false;
   }
+
+  static getStats() {
+    return characterStats[this.key] || null;
+  }
+
+  /**
+   * Character-owned match socket events: { event: (context, payload) => void }.
+   * The match coordinator binds them for the match lifetime; `context` exposes
+   * { scene, findSprite(name) }.
+   */
+  static socketEvents = {};
+
+  /**
+   * Called for every action packet so a kit can affect the local player when
+   * it is the target (e.g. Gloop's hook pull). Return true when handled.
+   */
+  static handleActionTargetingLocalPlayer() {
+    return false;
+  }
+
+  /**
+   * Called every local movement frame with { locked, now }, where `locked`
+   * means an ability (player._movementLockedUntil) holds the fighter in place.
+   */
+  static updateMovementLock() {}
 
   static handleRemoteAttack() {
     return false;
@@ -42,8 +107,6 @@ export default class CharacterEntityBase {
   static drawPowerupAura() {
     return false;
   }
-
-
 
   static getEffectTickSounds() {
     return {};
@@ -125,6 +188,55 @@ export default class CharacterEntityBase {
       return this.handlePointerDown(context);
     }
     return false;
+  }
+
+  /**
+   * Basic-attack timing: { attackResetMs, cooldownFallbackMs, clearOnAnimation }.
+   * `clearOnAnimation` ({ safetyMs, fallbackFrameRate, bufferMs, noAnimationMs })
+   * keeps the attack flag until the throw/attack animation finishes.
+   */
+  static attackFlow = {};
+
+  emitAttackAction(payload) {
+    socket.emit("game:action", payload);
+  }
+
+  performDefaultAttack(payloadBuilder, onAfterFire) {
+    const flow = this.constructor.attackFlow || {};
+    const result = executeDefaultAttack({
+      scene: this.scene,
+      ammo: this.ammo,
+      emitAction: (payload) => this.emitAttackAction(payload),
+      payloadBuilder,
+      onAfterFire,
+      attackResetMs: flow.attackResetMs,
+      cooldownFallbackMs: flow.cooldownFallbackMs,
+    });
+    if (!result.fired) return false;
+    if (flow.clearOnAnimation) this.clearAttackAfterAnimation(result.clearAttack, flow.clearOnAnimation);
+    return true;
+  }
+
+  // Clears the attack flag when the current attack animation completes, with
+  // an estimate and a safety timeout in case the animation is interrupted.
+  clearAttackAfterAnimation(clear, { safetyMs, fallbackFrameRate, bufferMs, noAnimationMs }) {
+    this.scene.time.delayedCall(safetyMs, clear);
+    try {
+      const sprite = this.player;
+      const currentAnim = sprite?.anims?.currentAnim || null;
+      if (currentAnim && /throw|attack/i.test(currentAnim.key)) {
+        const key = currentAnim.key;
+        const frameRate = currentAnim.frameRate || fallbackFrameRate;
+        const frameCount = currentAnim.frames?.length || frameRate;
+        const estimateMs = (frameCount / Math.max(1, frameRate)) * 1000 + bufferMs;
+        this.scene.time.delayedCall(Math.min(estimateMs, 1200), clear);
+        sprite.once("animationcomplete", (anim) => {
+          if (anim && anim.key === key) clear();
+        });
+      } else {
+        this.scene.time.delayedCall(noAnimationMs, clear);
+      }
+    } catch (_) {}
   }
 
   attachInput() {

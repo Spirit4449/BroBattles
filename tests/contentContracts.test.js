@@ -55,3 +55,30 @@ test('server Gravity Boots tuning and scaling remain unchanged', () => {
   assert.equal(effectDefs.gravityBoots.getModifiers({ powerScale: 2 }).jumpMult, 2.1);
   for (const key of POWERUP_TYPES) assert.equal(effectDefs[key].durationMs, POWERUP_CATALOG[key].durationMs);
 });
+
+test('character keys normalize to the shared default instead of per-call literals', () => {
+  const { DEFAULT_CHARACTER, resolveCharacterKey, getCharacterStats } = require('../src/shared/characterStats');
+  assert.ok(getCharacterStats(DEFAULT_CHARACTER), 'default character must be registered');
+  assert.equal(resolveCharacterKey(null), DEFAULT_CHARACTER);
+  assert.equal(resolveCharacterKey(''), DEFAULT_CHARACTER);
+  assert.equal(resolveCharacterKey('Wizard'), 'wizard');
+});
+
+test('every registered character declares how bots play it', () => {
+  const { BOT_PROFILES } = require('../src/server/core/bots/characterProfiles');
+  const botProfiles = { ...BOT_PROFILES };
+  delete botProfiles.gloop;
+  assert.ok(validateContent({ botProfiles }).some(error => error.includes('gloop: missing bot profile')));
+  for (const key of Object.keys(BOT_PROFILES)) assert.ok(characterDefinitions[key], `${key} bot profile has no character`);
+});
+
+test('character levels parse from rows without throwing on malformed data', () => {
+  const { parseCharacterLevels, getCharacterLevel, canonicalCharacterKey } = require('../src/shared/characterStats');
+  assert.deepEqual(parseCharacterLevels('{"wizard":3}'), { wizard: 3 });
+  assert.deepEqual(parseCharacterLevels({ ninja: 1 }), { ninja: 1 });
+  assert.deepEqual(parseCharacterLevels('not json'), {});
+  assert.deepEqual(parseCharacterLevels('7'), {});
+  assert.equal(getCharacterLevel({ char_levels: '{"gloop":4}' }, 'gloop'), 4);
+  assert.equal(getCharacterLevel(null, 'gloop'), 0);
+  assert.equal(canonicalCharacterKey(' Hunteress '), 'huntress');
+});

@@ -4,6 +4,7 @@ const attackRuntime = require("../gameRoom/attackRuntimeManager");
 const { characterDefinitions } = require('../../../shared/characters');
 const { characterBody } = require('../../../shared/duelGeometry');
 const attackTypes = Object.fromEntries(Object.values(characterDefinitions).map(definition => [definition.key, definition.basicAction]));
+const { botProfile, DEFAULT_SPECIAL_LOCK_MS, DEFAULT_SPECIAL_RANGE } = require('./characterProfiles');
 const BOT_ATTACK_TO_SUPER_COOLDOWN_MS = 400;
 
 function interceptTime(dx, dy, vx, vy, speed) {
@@ -75,11 +76,11 @@ function clearTrajectory(room, shot, radius) {
 }
 
 function hasClearShot(room, player, target, aim = basicAim(player, target, player.difficulty || {}, () => 0.5)) {
-  if (player.char_class === 'huntress') return aim.coverChecked ? aim.canHit : basicAim(player, target, player.difficulty || {}, () => 0.5, room).canHit;
-  if (!['ninja', 'gloop'].includes(player.char_class)) return true;
-  const collisionRadius = player.char_class === 'ninja'
-    ? getResolvedAttackDescriptor('ninja-shuriken')?.runtime?.collisionRadius || 18
-    : 8;
+  const { clearShot } = botProfile(player.char_class);
+  if (clearShot === 'trajectory') return aim.coverChecked ? aim.canHit : basicAim(player, target, player.difficulty || {}, () => 0.5, room).canHit;
+  if (!clearShot) return true;
+  const collisionRadius = (clearShot.radiusFromAttack &&
+    getResolvedAttackDescriptor(clearShot.radiusFromAttack)?.runtime?.collisionRadius) || clearShot.radius;
   return !(room.geometry?.colliders || []).some((rect) =>
     segmentCrossesRect(
       player.x,
@@ -118,7 +119,7 @@ function aimTuning(character, room) {
   const release = getResolvedAttackDescriptor(descriptor?.actionFlow?.releaseActionType || type);
   const cfg = getResolvedCharacterAttackConfig(character, aim.attackKey) || {};
   const runtime = { ...cfg, ...(release?.runtime || {}) };
-  const range = (character === "wizard" ? runtime.range : aim.defaultRange) || runtime.range || runtime.defaultForwardDistance || 200;
+  const range = (botProfile(character).aim?.rangeFromRuntime ? runtime.range : aim.defaultRange) || runtime.range || runtime.defaultForwardDistance || 200;
   const result = { type, descriptor, aim, runtime, range };
   cache?.values.set(character, result);
   return result;
@@ -128,7 +129,9 @@ function basicRange(player, room) { return aimTuning(player.char_class, room).ra
 function basicAim(player, target, profile, random, room) {
   // Sprite origins can sit above the hitbox (especially Gloop and Huntress).
   // Use standing body geometry so crouching remains a way to dodge bot shots.
-  if (player.char_class === 'ninja' && target.char_class) {
+  const profileAim = botProfile(player.char_class).aim || {};
+  const ballistic = profileAim.ballistic;
+  if (profileAim.bodyCenter && target.char_class) {
     const body = characterBody(target.char_class, target.flip);
     target = { ...target, x: target.x + body.offsetX, y: target.y + body.offsetY };
   }
@@ -144,11 +147,11 @@ function basicAim(player, target, profile, random, room) {
     Math.max(1, (aim.maxRange || range) - (aim.minRange || 160))));
   const huntressSpeed = (ratio) => (angle) => (runtime.speed || 560) *
     ((aim.minSpeedScale || 0.82) + ((aim.maxSpeedScale || 1.18) - (aim.minSpeedScale || 0.82)) * ratio);
-  let speedAtAngle = player.char_class === 'huntress' ? huntressSpeed(distanceRatio) : null;
+  let speedAtAngle = ballistic?.powerScaled ? huntressSpeed(distanceRatio) : null;
   let solution;
-  if (['wizard', 'huntress'].includes(player.char_class)) {
+  if (ballistic) {
     solution = projectileSolutions(player, target, runtime, startup, profile.prediction ?? 0.5, (room?.FIXED_DT_MS || 1000 / 60) / 1000, speedAtAngle)
-      .find((shot) => player.char_class === 'wizard' || clearTrajectory(room, shot, runtime.playerCollisionRadius || runtime.collisionRadius || 16));
+      .find((shot) => !ballistic.coverCheck || clearTrajectory(room, shot, runtime.playerCollisionRadius || runtime.collisionRadius || 16));
     // A retreating target can outrun the initial distance-based choice.
     // Increase power within the same player tuning limits when necessary.
     if (!solution && speedAtAngle) {
@@ -159,20 +162,21 @@ function basicAim(player, target, profile, random, room) {
     }
   }
   const baseAimError = profile.aimError || 0;
-  const aimError = player.char_class === 'huntress'
-    ? Math.min(0.22, Math.max(baseAimError * 1.45, baseAimError + 0.025))
+  const scale = profileAim.errorScale;
+  const aimError = scale
+    ? Math.min(scale.max, Math.max(baseAimError * scale.factor, baseAimError + scale.add))
     : baseAimError;
   let angle = (solution?.angle ?? Math.atan2(dy, dx)) + (random() * 2 - 1) * aimError;
   const direction = Math.cos(angle) < 0 ? -1 : 1;
   if (aim.angleMode === "horizontal-only") angle = direction < 0 ? Math.PI : 0;
-  const canHit = (!['wizard', 'huntress'].includes(player.char_class) || !!solution) && distance <= range + 30 && (aim.angleMode !== 'horizontal-only' || Math.abs(target.y - player.y) < 90);
+  const canHit = (!ballistic || !!solution) && distance <= range + 30 && (aim.angleMode !== 'horizontal-only' || Math.abs(target.y - player.y) < 90);
   return { type, angle, direction, range, distance, canHit, coverChecked: !!room, ...(speedAtAngle ? { speed: speedAtAngle(angle), highArc: solution?.highArc || false } : {}), gravity: runtime.gravity || 0, maxLifetimeMs: runtime.maxLifetimeMs || 3000, target: { x: player.x + Math.cos(angle) * Math.min(range, Math.hypot(dx, dy)), y: player.y + Math.sin(angle) * Math.min(range, Math.hypot(dx, dy)) } };
 }
 
 // A pressure shot must still pass near the opponent and respect cover.
 // Sample nearby intercept points instead of firing at arbitrary angles.
 function pressureAim(room, player, target, profile) {
-  if (!['wizard', 'huntress', 'ninja', 'gloop'].includes(player.char_class)) return null;
+  if (!botProfile(player.char_class).pressureShots) return null;
   const range = basicRange(player, room);
   if (Math.hypot(target.x-player.x, target.y-player.y) > range + 125) return null;
   for (const radius of [55, 95]) {
@@ -197,7 +201,8 @@ function requestBasic(room, p, target, profile, random, now) {
   }
   // Lob shots are occasional pressure, unless the opponent is actually above
   // us. Rate-limit the decision too, so retries cannot turn 20% into spam.
-  const highArc = p.char_class === 'huntress' && (aim.highArc || Math.sin(aim.angle) < -Math.sin(55 * Math.PI / 180));
+  const kit = botProfile(p.char_class);
+  const highArc = kit.lobLimited && (aim.highArc || Math.sin(aim.angle) < -Math.sin(55 * Math.PI / 180));
   if (highArc && target.y >= p.y - 40) {
     if (now < (p._botHighArcCheckAfter || 0)) return false;
     p._botHighArcCheckAfter = now + 1800;
@@ -210,9 +215,8 @@ function requestBasic(room, p, target, profile, random, now) {
     mapCollisionRects: room.geometry?.colliders || [] };
   const descriptor = getResolvedAttackDescriptor(aim.type);
   const lockMs = Math.max(150, Number(descriptor?.actionFlow?.startupMs) || Number(descriptor?.runtime?.windupMs) || 0);
-  if (p.char_class === 'huntress') {
-    action.power = require('../../../shared/huntressProjectile').powerFromSpeed(action.angle, action.speed);
-  } else if (p.char_class !== 'ninja' || !room.ninjaCombatVersion) {
+  kit.decorateBasicAction?.(action);
+  if (!kit.serverOwnsAmmo?.(room)) {
     ammo.charges--; ammo.nextFireInMs = ammo.cooldownMs;
   }
   p._botActionUntil = now + lockMs; p.animation = "throw";
@@ -228,15 +232,19 @@ function requestSpecial(room, p, target, now) {
     (Number.isFinite(lastAttackAt) && now - lastAttackAt < BOT_ATTACK_TO_SUPER_COOLDOWN_MS)) return false;
   const aim = getResolvedCharacterSpecialAimConfig(p.char_class) || {};
   const distance = Math.hypot(target.x - p.x, target.y - p.y);
-  const range = p.char_class === "wizard" ? (getResolvedCharacterAimConfig("wizard")?.defaultRange || 1000) : aim.defaultRange || aim.radius || (p.char_class === "thorg" ? 250 : 700);
+  const kit = botProfile(p.char_class);
+  const specialRange = kit.specialRange || {};
+  const range = specialRange.fromBasicAim
+    ? getResolvedCharacterAimConfig(p.char_class)?.defaultRange || specialRange.fallback
+    : aim.defaultRange || aim.radius || specialRange.fallback || DEFAULT_SPECIAL_RANGE;
   // These supers buff the caster/allies; their visual radius is not an enemy
   // targeting limit. The tactical evaluator decides when the buff is useful.
-  if (!['thorg', 'wizard'].includes(p.char_class) && distance > range + 40) return false;
+  if (!kit.buffSuper && distance > range + 40) return false;
   const direction = target.x < p.x ? -1 : 1;
   const angle = aim.angleMode === "horizontal-only" ? (direction < 0 ? Math.PI : 0) : Math.atan2(target.y - p.y, target.x - p.x);
   p.flip = direction < 0;
   const used = room.requestSpecial(p.participantId, { aim: { direction, angle, range } });
-  if (used) { p._botActionUntil = now + (p.char_class === "ninja" ? 720 : 450); p.animation = "special"; }
+  if (used) { p._botActionUntil = now + (kit.specialLockMs ?? DEFAULT_SPECIAL_LOCK_MS); p.animation = "special"; }
   return used;
 }
 

@@ -1,13 +1,6 @@
 const crypto = require("node:crypto");
 const config = require("../../shared/siteConfig.json");
-const escape = (value) =>
-  String(value).replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        c
-      ],
-  );
+const { escapeHtml: escape } = require("../../shared/html.cjs");
 
 function publicAsset(pathname) {
   const base = String(

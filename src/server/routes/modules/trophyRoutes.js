@@ -1,3 +1,4 @@
+const { resolveCharacterKey, parseCharacterLevels } = require("../../../shared/characterStats.js");
 const {
   buildTrophyRewardTrack,
   getTrophyTierById,
@@ -86,7 +87,7 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
         rank: index + 1,
         userId: Number(row.userId),
         username: String(row.username || "Unknown"),
-        charClass: String(row.charClass || "ninja"),
+        charClass: resolveCharacterKey(row.charClass),
         profileIconId: String(row.profileIconId || "") || null,
         trophies: Number(row.trophies) || 0,
         wins: Number(row.wins) || 0,
@@ -148,7 +149,7 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
           username: String(userRow.name || ""),
           trophies,
           trophyPeak: Math.max(trophies, Number(userRow.trophy_peak) || 0),
-          char_levels: typeof userRow.char_levels === "string" ? JSON.parse(userRow.char_levels) : userRow.char_levels,
+          char_levels: parseCharacterLevels(userRow.char_levels),
           coins: Number(userRow.coins) || 0,
           gems: Number(userRow.gems) || 0,
         },
@@ -246,7 +247,7 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
         player: {
           trophies: Number(userSnapshot.trophies) || 0,
           trophyPeak: Number(userSnapshot.trophy_peak) || 0,
-          char_levels: typeof userSnapshot.char_levels === "string" ? JSON.parse(userSnapshot.char_levels) : userSnapshot.char_levels,
+          char_levels: parseCharacterLevels(userSnapshot.char_levels),
           coins: Number(userSnapshot.coins) || 0,
           gems: Number(userSnapshot.gems) || 0,
         },

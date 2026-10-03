@@ -2281,8 +2281,9 @@ class GameScene extends Phaser.Scene {
       }
 
       // Keep remote UI positioning centralized in OpPlayer so one offset controls all updates.
+      // Bars are drawn once afterwards by the frame's updateHealthBars pass.
       if (typeof wrapper.updateUIPosition === "function") {
-        wrapper.updateUIPosition();
+        wrapper.updateUIPosition({ drawBars: false });
       }
     };
 

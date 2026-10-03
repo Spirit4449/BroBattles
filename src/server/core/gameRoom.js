@@ -36,6 +36,7 @@ const { startNinjaSwarm } = require('./bots/combat');
 
 const { getParticipant, participantId } = require('./gameRoom/participants');
 const { deleteMatchBots } = require('../services/matchRosterService');
+const { DEFAULT_CHARACTER, resolveCharacterKey } = require("../../shared/characterStats.js");
 
 class GameRoom {
   constructor(
@@ -155,7 +156,7 @@ class GameRoom {
         ammoCapacity,
         ammoCooldownMs,
         ammoReloadMs,
-      } = this._computeStats(matchPlayer.char_class || "ninja", level);
+      } = this._computeStats(matchPlayer.char_class || DEFAULT_CHARACTER, level);
       const botMaxHealth = this._resolveBotMaxHealth(matchPlayer, maxHealth);
       const key = matchPlayer.participantId;
       this.players.set(key, {
@@ -169,7 +170,7 @@ class GameRoom {
         user_id: matchPlayer.user_id,
         name: matchPlayer.name,
         team: matchPlayer.team,
-        char_class: matchPlayer.char_class || "ninja",
+        char_class: matchPlayer.char_class || DEFAULT_CHARACTER,
         selected_skin_id: String(matchPlayer.selected_skin_id || "") || null,
         selected_skin_asset_url:
           String(matchPlayer.selected_skin_asset_url || "") || null,
@@ -177,7 +178,7 @@ class GameRoom {
           matchPlayer.selected_skin_game_assets || null,
         profile_icon_id:
           String(matchPlayer.profile_icon_id || "") ||
-          String(matchPlayer.char_class || "ninja"),
+          resolveCharacterKey(matchPlayer.char_class),
         isBot: true,
         connected: true,
         loaded: true,
@@ -273,7 +274,7 @@ class GameRoom {
         selected_skin_id: String(matchPlayer.selected_skin_id || "") || null,
         selected_skin_asset_url: String(matchPlayer.selected_skin_asset_url || "") || null,
         selected_skin_game_assets: matchPlayer.selected_skin_game_assets || null,
-        profile_icon_id: String(matchPlayer.profile_icon_id || matchPlayer.char_class || "ninja"),
+        profile_icon_id: String(matchPlayer.profile_icon_id || matchPlayer.char_class || DEFAULT_CHARACTER),
         isBot: false,
         trophies: Number(matchPlayer.trophies) || 0,
         connected: true,

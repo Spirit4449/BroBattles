@@ -15,7 +15,7 @@ const {
 const {
   syncSkinOwnershipForUser,
 } = require("../../helpers/skinOwnership");
-const { getAllCharacters } = require("../../../shared/characterStats.js");
+const { getAllCharacters, getCharacterLevel } = require("../../../shared/characterStats.js");
 const {
   getPartyBotSlots,
   setPartyBotSlot,
@@ -43,17 +43,6 @@ const VALID_CHARACTER_IDS = new Set(
     .filter(Boolean),
 );
 
-function getCharacterLevel(user, character) {
-  let levels = user?.char_levels || {};
-  if (typeof levels === "string") {
-    try {
-      levels = JSON.parse(levels || "{}");
-    } catch (_) {
-      levels = {};
-    }
-  }
-  return Math.max(0, Number(levels?.[character]) || 0);
-}
 
 function registerPartyEvents(
   socket,

@@ -5,7 +5,8 @@ const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const active = (p) => p.isAlive && p.loaded && p.connected !== false;
 const { difficultyForTrophies, recoveryThreshold } = require('./config');
 const skill = (p) => p.difficulty?.tacticalAwareness ?? (p.trophies == null ? 0.8 : difficultyForTrophies(p.trophies).tacticalAwareness);
-const melee = (p) => ['thorg', 'draven'].includes(p.char_class);
+const { botProfile } = require('./characterProfiles');
+const melee = (p) => !!botProfile(p.char_class).melee;
 
 function temperament(id) {
   let hash = 0;

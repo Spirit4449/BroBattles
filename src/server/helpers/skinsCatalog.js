@@ -1,72 +1,87 @@
 const path = require("path");
+const { DEFAULT_CHARACTER } = require("../../shared/characterStats.js");
+const { createCatalogLoader } = require("./catalogLoader");
 
 const CATALOG_PATH = path.resolve(__dirname, "../../shared/skinsCatalog.json");
 
-let _cache = null;
-
-function loadCatalog() {
-  delete require.cache[CATALOG_PATH];
-  const raw = require(CATALOG_PATH);
-  return raw && typeof raw === "object" ? raw : {};
+function normalizeCharacterKey(character) {
+  return String(character || "")
+    .trim()
+    .toLowerCase();
 }
+
+// One pass per catalog load: per-character skin lists (tagged with their
+// character) plus an id index, so lookups never rescan the catalog.
+function buildSkinIndexes(catalog) {
+  const skinsByCharacter = new Map();
+  const skinById = new Map();
+  const defaultSkinIdByCharacter = new Map();
+  const characters =
+    catalog?.characters && typeof catalog.characters === "object"
+      ? catalog.characters
+      : {};
+  for (const [key, entry] of Object.entries(characters)) {
+    const skins = (Array.isArray(entry?.skins) ? entry.skins : []).map((skin) =>
+      Object.freeze({ ...skin, character: key }),
+    );
+    skinsByCharacter.set(key, Object.freeze(skins));
+    for (const skin of skins) {
+      const id = String(skin?.id || "");
+      if (!skinById.has(id)) skinById.set(id, skin);
+    }
+    const defaultSkinId =
+      String(entry?.defaultSkinId || "").trim() ||
+      String(skins[0]?.id || "").trim() ||
+      null;
+    defaultSkinIdByCharacter.set(key, defaultSkinId);
+  }
+  return { skinsByCharacter, skinById, defaultSkinIdByCharacter };
+}
+
+const loader = createCatalogLoader({
+  name: "skins",
+  filePath: CATALOG_PATH,
+  fallback: () => ({ version: 1, characters: {} }),
+  build: buildSkinIndexes,
+});
 
 function resolveCharacterAssetFolder(character) {
   const key = String(character || "")
     .trim()
     .toLowerCase();
-  if (!key) return "ninja";
+  if (!key) return DEFAULT_CHARACTER;
   if (key === "huntress") return "huntress";
   return key;
 }
 
 function getSkinsCatalog() {
-  try {
-    _cache = loadCatalog();
-  } catch (error) {
-    console.error("[skins] failed to load catalog", error);
-    _cache = { version: 1, characters: {} };
-  }
-  return _cache;
+  return loader.get();
+}
+
+function invalidateSkinsCatalog() {
+  loader.invalidate();
+}
+
+function getCatalogVersion() {
+  return loader.version();
 }
 
 function getCharacterSkins(character) {
-  const key = String(character || "")
-    .trim()
-    .toLowerCase();
+  const key = normalizeCharacterKey(character);
   if (!key) return [];
-  const catalog = getSkinsCatalog();
-  const entry = catalog?.characters?.[key];
-  const skins = Array.isArray(entry?.skins) ? entry.skins : [];
-  return skins.map((skin) => ({ ...skin, character: key }));
+  return [...(loader.indexes().skinsByCharacter.get(key) || [])];
 }
 
 function getDefaultSkinId(character) {
-  const key = String(character || "")
-    .trim()
-    .toLowerCase();
+  const key = normalizeCharacterKey(character);
   if (!key) return null;
-  const catalog = getSkinsCatalog();
-  const entry = catalog?.characters?.[key] || {};
-  const defaultSkinId = String(entry.defaultSkinId || "").trim();
-  if (defaultSkinId) return defaultSkinId;
-  const skins = Array.isArray(entry.skins) ? entry.skins : [];
-  return String(skins[0]?.id || "").trim() || null;
+  return loader.indexes().defaultSkinIdByCharacter.get(key) || null;
 }
 
 function getSkinById(skinId) {
   const id = String(skinId || "").trim();
   if (!id) return null;
-  const catalog = getSkinsCatalog();
-  const chars =
-    catalog?.characters && typeof catalog.characters === "object"
-      ? Object.keys(catalog.characters)
-      : [];
-  for (const character of chars) {
-    const skins = getCharacterSkins(character);
-    const found = skins.find((skin) => String(skin?.id || "") === id);
-    if (found) return found;
-  }
-  return null;
+  return loader.indexes().skinById.get(id) || null;
 }
 
 function buildSkinAssetUrl(character, skinId) {
@@ -185,7 +200,9 @@ function resolveSelectedSkinId({ character, selectedSkinMap, ownedSkinIds }) {
 }
 
 module.exports = {
+  getCatalogVersion,
   getSkinsCatalog,
+  invalidateSkinsCatalog,
   getCharacterSkins,
   getDefaultSkinId,
   getSkinById,

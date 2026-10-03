@@ -14,6 +14,7 @@ const { resolveBotObjective } = require('./objectives');
 const { tryDashSteps, recordDash } = require('./dash');
 const movement = require('../../../shared/movementPhysics.json');
 const { DEATH_DROP_PICKUP_RADIUS, POWERUP_PICKUP_RADIUS, WORLD_BOUNDS } = require('../gameRoomConfig');
+const { botProfile } = require('./characterProfiles');
 
 class BotController {
   constructor(room, player) {
@@ -406,11 +407,8 @@ class BotController {
     const awareness = this.profile.tacticalAwareness ?? 0.5;
     const aggression = Math.max(0.8, this.aggression || 1);
     const urgency = this.retreating ? 0.55 : 1;
-    if (this.player.char_class === 'huntress') {
-      // Her three-arrow spread is already forgiving, so give opponents a
-      // readable punish window instead of chaining every available charge.
-      return (this.between(360, 620) + (1 - awareness) * 120) * urgency;
-    }
+    const fixed = botProfile(this.player.char_class).hesitation;
+    if (fixed) return (this.between(fixed.min, fixed.max) + (1 - awareness) * fixed.awarenessPenalty) * urgency;
     const min = 65 + (1 - awareness) * 55;
     const max = 190 + (1 - awareness) * 170;
     // A rare quick follow-up creates bursts without returning to frame-perfect spam.

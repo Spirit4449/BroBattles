@@ -1,3 +1,6 @@
+import { createModalFocus } from "./modalFocus.js";
+
+const TITLE_SEQUENCE = Symbol.for("bro-battles.selection-title-sequence");
 let __sharedShell = null;
 
 export function getSharedSelectionPopupShell() {
@@ -6,20 +9,27 @@ export function getSharedSelectionPopupShell() {
   const overlay = document.createElement("div");
   overlay.className = "character-select-overlay is-hidden";
 
+  const titleNumber = document[TITLE_SEQUENCE] = (document[TITLE_SEQUENCE] || 0) + 1;
+  const titleId = `selection-popup-title-${titleNumber}`;
   const popup = document.createElement("div");
   popup.className = "character-select-popup";
+  popup.setAttribute("role", "dialog");
+  popup.setAttribute("aria-modal", "true");
+  popup.setAttribute("aria-labelledby", titleId);
 
   const headerBar = document.createElement("div");
   headerBar.className = "popup-header";
 
   const title = document.createElement("h2");
   title.className = "popup-title";
+  title.id = titleId;
   title.textContent = "Choose";
 
   const closeButton = document.createElement("button");
   closeButton.className = "close-popup bb-close pixel-menu-button";
   closeButton.type = "button";
-  closeButton.innerHTML = "×";
+  closeButton.textContent = "×";
+  closeButton.setAttribute("aria-label", "Close picker");
 
   const state = {
     onClose: null,
@@ -33,7 +43,7 @@ export function getSharedSelectionPopupShell() {
       state.onClose();
       return;
     }
-    overlay.classList.add("is-hidden");
+    hide();
   };
 
   closeButton.onclick = doClose;
@@ -41,16 +51,9 @@ export function getSharedSelectionPopupShell() {
     if (!popup.contains(e.target)) doClose();
   });
   popup.addEventListener("click", (e) => e.stopPropagation());
-  document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
-    if (overlay.classList.contains("is-hidden") || !overlay.isConnected) return;
-    // A character details dialog is layered above this shared picker. Its
-    // capture-phase Escape handler owns the first key press.
-    const characterDetails = document.querySelector(
-      ".character-details-overlay:not(.is-hidden)",
-    );
-    if (characterDetails) return;
-    doClose();
+  const focus = createModalFocus(popup, {
+    initialFocus: () => closeButton,
+    onEscape: doClose,
   });
 
   headerBar.appendChild(title);
@@ -78,6 +81,7 @@ export function getSharedSelectionPopupShell() {
       closeButton.removeAttribute(key);
     }
     state.closeAttrKeys = [];
+    closeButton.setAttribute("aria-label", "Close picker");
     if (closeButtonAttrs && typeof closeButtonAttrs === "object") {
       Object.entries(closeButtonAttrs).forEach(([key, val]) => {
         if (val == null) return;
@@ -127,12 +131,14 @@ export function getSharedSelectionPopupShell() {
     if (wasDetached) void overlay.offsetWidth;
     overlay.classList.remove("is-hidden");
     overlay.setAttribute("aria-hidden", "false");
+    focus.activate();
     return api;
   };
 
   const hide = () => {
     overlay.classList.add("is-hidden");
     overlay.setAttribute("aria-hidden", "true");
+    focus.deactivate();
     return api;
   };
 

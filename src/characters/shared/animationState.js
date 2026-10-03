@@ -41,10 +41,11 @@ export function getAnimationDurationMs(scene, key, fallbackMs = DEFAULT_ONE_SHOT
     (sum, frame) => sum + Math.max(0, Number(frame?.duration) || 0),
     0,
   );
-  if (explicitDuration > 0) return explicitDuration + 30;
   const frameRate = Math.max(1, Number(anim.frameRate) || 12);
   const frameCount = Math.max(1, frames.length || 1);
-  return Math.round((frameCount / frameRate) * 1000) + 30;
+  // Phaser adds each frame duration to the base interval (it is not a replacement).
+  const interval = Number(anim.msPerFrame) > 0 ? anim.msPerFrame : 1000 / frameRate;
+  return Math.round(frameCount * interval + explicitDuration) + 30;
 }
 
 export function markOneShotAnimation(
@@ -216,6 +217,7 @@ export function playCharacterAnimation({
     wanted = directionalDashAnimation(character, direction);
   }
   const key = resolveAnimKey(scene, character, wanted, fallback, skinId);
+  if (!key) return null;
   try {
     const currentKey = sprite.anims?.currentAnim?.key || "";
     const state = sprite._bbAnimationState ||= {};
@@ -249,7 +251,9 @@ export function playCharacterAnimation({
     }
     if (
       wanted === "jumping" &&
+      currentKey === key &&
       sprite._bbAnimationState?.jumpPlayedAirborne &&
+      !sprite._bbAnimationState?.restartJump &&
       !sprite.body?.touching?.down
     ) {
       return key;
@@ -342,7 +346,7 @@ export function chooseRemoteAnimationState({
   if ((logical === "throw" || logical === "special") && actionActive) {
     return logical;
   }
-  if (logical === "dashing") return "dashing";
+  if (logical === "dying") return "dying";
   // Consume each physical jump event once, including a second wall kick while
   // already airborne. Sequence regression is a respawn/reconnect baseline.
   if (sprite) {
@@ -357,6 +361,7 @@ export function chooseRemoteAnimationState({
       state.movementSeq = seq;
     }
   }
+  if (logical === "dashing") return "dashing";
   if (grounded === false && typeof currentPosition?.wallSliding === 'boolean') {
     if (currentPosition.wallSliding) return 'sliding';
     if (Number.isFinite(vy)) return vy < -20 ? 'jumping' : 'falling';

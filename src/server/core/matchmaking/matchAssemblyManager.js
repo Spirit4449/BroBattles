@@ -1,6 +1,7 @@
 const { selectionToLegacyMode } = require("../../helpers/gameSelectionCatalog");
 const { decorateParticipant } = require("../../services/matchRosterService");
 const { createBotParticipants } = require("../bots/identity");
+const { DEFAULT_CHARACTER } = require("../../../shared/characterStats.js");
 
 async function playersForPicks(q, picks, lock = false) {
   const players = [];
@@ -27,7 +28,7 @@ async function playersForPicks(q, picks, lock = false) {
           ...row,
           party_id: ticket.party_id || null,
           team,
-          char_class: row.char_class || "ninja",
+          char_class: row.char_class || DEFAULT_CHARACTER,
         }),
       );
     }

@@ -1,4 +1,5 @@
 import SKINS_CATALOG from "../shared/skinsCatalog.json";
+import { DEFAULT_CHARACTER, canonicalCharacterKey } from "../shared/characterStats.js";
 
 export function normalizeSkinId(skinId) {
   const value = String(skinId || "").trim();
@@ -7,10 +8,7 @@ export function normalizeSkinId(skinId) {
 }
 
 function resolveCatalogSkin(character, skinId) {
-  let char = String(character || "")
-    .trim()
-    .toLowerCase();
-  if (char === "hunteress") char = "huntress";
+  const char = canonicalCharacterKey(character);
   const entry = SKINS_CATALOG?.characters?.[char] || null;
   const skins = Array.isArray(entry?.skins) ? entry.skins : [];
   const defaultSkinId =
@@ -35,12 +33,7 @@ function resolveCatalogSkin(character, skinId) {
 }
 
 export function resolveCharacterAssetFolder(character) {
-  const key = String(character || "")
-    .trim()
-    .toLowerCase();
-  if (!key) return "ninja";
-  if (key === "huntress" || key === "hunteress") return "huntress";
-  return key;
+  return canonicalCharacterKey(character) || DEFAULT_CHARACTER;
 }
 
 export function buildCharacterSkinTextureKey(character, skinId) {
@@ -90,6 +83,13 @@ export function buildCharacterSkinAtlasUrls(character, skinId) {
       : String(assets.animationsUrl || "").trim() ||
         `/assets/${char}/animations.json`,
   };
+}
+
+// Runtime asset metadata for a non-default skin (empty for base art).
+export function getSkinGameAssets(character, skinId) {
+  if (!normalizeSkinId(skinId)) return {};
+  const assets = resolveCatalogSkin(character, skinId).skin?.gameAssets;
+  return assets && typeof assets === "object" ? assets : {};
 }
 
 export function buildCharacterSkinWeaponUrl(character, skinId) {

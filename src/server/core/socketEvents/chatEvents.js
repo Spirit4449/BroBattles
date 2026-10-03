@@ -1,3 +1,4 @@
+const { resolveCharacterKey } = require("../../../shared/characterStats.js");
 const TYPING_STALE_MS = 4500;
 const typingByParty = new Map(); // partyId -> Map<userIdOrName, typer>
 
@@ -56,7 +57,7 @@ function broadcastTyping(io, partyId) {
     .map((entry) => ({
       userId: Number(entry?.userId) || null,
       name: String(entry?.name || ""),
-      charClass: String(entry?.charClass || "ninja"),
+      charClass: resolveCharacterKey(entry?.charClass),
       profileIconId: String(entry?.profileIconId || "") || null,
     }))
     .filter((entry) => !!entry.name);
@@ -187,7 +188,7 @@ function registerChatEvents(socket, { chatService, abuseControl }) {
         map.set(key, {
           userId: Number(user?.user_id) || null,
           name: String(user?.name || "").trim() || "Player",
-          charClass: String(user?.char_class || "ninja"),
+          charClass: resolveCharacterKey(user?.char_class),
           profileIconId: String(user?.selected_profile_icon_id || "") || null,
           updatedAt: Date.now(),
         });

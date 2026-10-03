@@ -25,17 +25,7 @@ export function animations(scene) {
     if (scene.anims.exists(auraKey) || !scene.textures?.exists("wizard-aura")) {
       return;
     }
-    const auraTex = scene.textures.get("wizard-aura");
-    const auraNames =
-      (auraTex && auraTex.getFrameNames && auraTex.getFrameNames()) || [];
-    const frames = auraNames
-      .filter((frame) => /^aura/i.test(String(frame)))
-      .sort((a, b) => {
-        const ra = /([0-9]+)(?!.*[0-9])/.exec(a);
-        const rb = /([0-9]+)(?!.*[0-9])/.exec(b);
-        if (ra && rb) return Number(ra[1]) - Number(rb[1]);
-        return String(a).localeCompare(String(b));
-      });
+    const frames = createAnimationBuilder(scene, "wizard-aura").findFrames("aura");
     if (!frames.length) return;
     scene.anims.create({
       key: auraKey,

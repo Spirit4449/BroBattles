@@ -1,3 +1,4 @@
+import { createModalFocus } from "./modalFocus.js";
 import { playSound } from "./uiSounds.js";
 import { dismissPopup } from "./popupMotion.js";
 
@@ -16,6 +17,9 @@ export function showUiConfirm({
 
     const dialog = document.createElement("div");
     dialog.className = "cs-confirm";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", String(title || "Confirm"));
     dialog.addEventListener("click", (e) => e.stopPropagation());
 
     const titleEl = document.createElement("div");
@@ -51,11 +55,15 @@ export function showUiConfirm({
     okText.textContent = String(confirmLabel || "Confirm");
     okBtn.appendChild(okText);
 
+    let closing = false;
     const cleanup = (answer) => {
+      if (closing) return;
+      closing = true;
       dismissPopup(backdrop, () => {
         try {
           backdrop.remove();
         } catch (_) {}
+        focus.deactivate();
         resolve(!!answer);
       });
     };
@@ -80,5 +88,7 @@ export function showUiConfirm({
     dialog.appendChild(actions);
     backdrop.appendChild(dialog);
     document.body.appendChild(backdrop);
+    const focus = createModalFocus(dialog, { onEscape: () => cleanup(false) });
+    focus.activate();
   });
 }

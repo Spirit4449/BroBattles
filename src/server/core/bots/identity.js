@@ -5,6 +5,7 @@ const {
 } = require("../../../shared/characterStats.js");
 const { difficultyForTrophies } = require("./config");
 const { createRandom } = require("./random");
+const { parseCharacterLevels } = require("../../../shared/characterStats.js");
 
 // Combinatorial player-style names, without legacy numbered/Ultra bot labels.
 const first =
@@ -256,12 +257,7 @@ const BOT_NAMES = Object.freeze([
 ]);
 
 function characterLevel(player) {
-  let levels = player.char_levels || {};
-  try {
-    if (typeof levels === "string") levels = JSON.parse(levels);
-  } catch {
-    levels = {};
-  }
+  const levels = parseCharacterLevels(player.char_levels);
   return Math.max(
     1,
     Math.min(

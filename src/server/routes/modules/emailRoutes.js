@@ -4,7 +4,7 @@ const {createRequestWindow}=require('../../helpers/requestWindow');
 const {sendEmail,template,hashCode}=require('../../services/emailService');
 const failure=(error,status=400)=>({error,status});
 const {emailCooldown}=require('../../helpers/emailCooldown');
-const escapeHtml=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const { escapeHtml } = require("../../../shared/html.cjs");
 const preferencesPage=(title,content)=>`<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · Bro Battles</title><body style="margin:0;background:#091324;color:#eef5ff;font-family:system-ui"><main style="max-width:440px;margin:10vh auto;padding:28px;background:#14233b;border:2px solid #45648b;border-radius:12px"><p style="color:#9bc7ff;font-size:12px;letter-spacing:.12em">BRO BATTLES</p><h1 style="font-size:24px">${title}</h1>${content}</main></body></html>`;
 function registerEmailRoutes({app,db,requireCurrentUser}) {
  const limits=createRequestWindow();

@@ -23,7 +23,8 @@ function fixture({ fail = [], blocked = false, user = { user_id: 1, name: 'Playe
     require: name => {
       if (name.endsWith('/profileIconOwnership')) return { syncProfileIconOwnershipForUser: () => load('icons') };
       if (name.endsWith('/skinOwnership')) return { syncSkinOwnershipForUser: () => load('skins') };
-      if (name === './mapRepository') return { mapRepository: { list: () => [{ document: { id: 1, label: 'Map', metadata: { unlocked: true } } }] } };
+      if (name.endsWith('/characterStats.js')) return require('../src/shared/characterStats.js');
+      if (name === './mapRepository') return { mapRepository: { listMetadata: () => [{ unlocked: true, id: 1, label: 'Map' }] } };
       throw new Error(name);
     },
   });
