@@ -4,16 +4,42 @@ import { getLobbyBgAsset, getLobbyPlatformAsset } from "../maps/manifest";
 import { buildCharacterSkinBodyUrl } from "../lib/skinAssets.js";
 import { DEFAULT_CHARACTER } from "../shared/characterStats.js";
 import { refreshPlatformGrounding } from "./platformGrounding.mjs";
-import { createPlatformFlight } from "./matchmakingPlatformFlight.js";
 
 const MATCHMAKING_EXIT_MS = 190;
+const ARRIVAL_MS = 1100;
 const LOBBY_CHROME_SELECTOR =
   "#navbar, .lobby-party-actions, .lobby-quick-actions, #lobby-area, #bottom-bar, .bb-chat-lobby-wrap";
+
+const isBotPlayer = (p) => !!(p?.isConfiguredBot || p?.isBot || p?.botSlotKey);
+const humanKey = (p) => String(p?.name || "").trim().toLowerCase();
+const SEAT_MOVE_MS = 420;
+
+// "ally" / "enemy" relative to the viewer, or null while the team is unknown.
+// Comparing against yourTeam keeps this right when the server flips a party.
+const sideOf = (p, yourTeam) => (p?.team && yourTeam ? (p.team === yourTeam ? "ally" : "enemy") : null);
+const halfOf = (index, total) => (index < Math.ceil(total / 2) ? "ally" : "enemy");
+
+/** Stable identities for a roster. Bots are keyed per side, since lobby bot
+    previews are renamed by the server once the match is assembled. */
+function describeRoster(players, yourTeam) {
+  const counts = new Map();
+  return players.filter(Boolean).map((player) => {
+    const side = sideOf(player, yourTeam);
+    const bot = isBotPlayer(player);
+    const base = bot ? `bot:${side || "any"}` : `player:${humanKey(player)}`;
+    const n = counts.get(base) || 0;
+    counts.set(base, n + 1);
+    return { key: `${base}#${n}`, player, side, bot };
+  });
+}
 
 export function createMatchmakingOverlay() {
   let hideTimer = null;
   let countTimer = null;
-  const platformFlight = createPlatformFlight();
+  // Per queue session: who has been seen (only later joiners play the
+  // arrival), who queued from this lobby, and which seat each player holds.
+  // Bots are counted rather than named for arrivals, as the server renames them.
+  const session = { humans: new Set(), bots: 0, lobby: new Set(), seats: [] };
   const overlay = () => document.getElementById("matchmaking-overlay");
   const cancelButton = () => document.getElementById("mm-cancel");
 
@@ -48,7 +74,88 @@ export function createMatchmakingOverlay() {
     }
   }
 
-  function show() {
+  function resetSession(seatedPlayers) {
+    const humans = seatedPlayers.filter((p) => p && !isBotPlayer(p)).map(humanKey);
+    session.humans = new Set(humans);
+    session.bots = seatedPlayers.filter(isBotPlayer).length;
+    session.lobby = new Set(humans);
+    session.seats = [];
+    const grid = document.getElementById("mm-players");
+    if (grid) {
+      grid.replaceChildren();
+      delete grid.dataset.renderSig;
+    }
+  }
+
+  /** Returns the keys of roster entries that are new this session. */
+  function claimArrivals(entries) {
+    const arriving = new Set();
+    let bots = 0;
+    for (const entry of entries) {
+      if (entry.bot) {
+        bots += 1;
+        if (bots > session.bots) arriving.add(entry.key);
+        continue;
+      }
+      const name = humanKey(entry.player);
+      if (!session.humans.has(name)) {
+        session.humans.add(name);
+        arriving.add(entry.key);
+      }
+    }
+    session.bots = Math.max(session.bots, bots);
+    return arriving;
+  }
+
+  /**
+   * Keeps every player in the seat they first took. Players only move when
+   * their team becomes known and they sit on the wrong half; newcomers take
+   * the first free seat on their side (lobby players default to the viewer's
+   * side, unknown players to the emptier half).
+   */
+  function assignSeats(entries, total) {
+    const byKey = new Map(entries.map((entry) => [entry.key, entry]));
+    if (session.seats.length !== total) session.seats = Array(total).fill(null);
+    const seats = session.seats.map((key, index) => {
+      const entry = key && byKey.get(key);
+      return entry && (!entry.side || entry.side === halfOf(index, total)) ? key : null;
+    });
+    const seated = new Set(seats.filter(Boolean));
+    const freeSeat = (side) => seats.findIndex((key, index) => !key && (!side || halfOf(index, total) === side));
+    const freeCount = (side) => seats.filter((key, index) => !key && halfOf(index, total) === side).length;
+
+    const guesses = [];
+    // Confirmed sides first, so a guess never holds a seat a known player needs.
+    for (const entry of entries) {
+      if (seated.has(entry.key)) continue;
+      if (!entry.side) {
+        guesses.push(entry);
+        continue;
+      }
+      let index = freeSeat(entry.side);
+      if (index < 0) {
+        index = seats.findIndex((key, i) => key && halfOf(i, total) === entry.side && !byKey.get(key).side);
+        if (index < 0) continue;
+        guesses.push(byKey.get(seats[index]));
+      }
+      seats[index] = entry.key;
+    }
+    for (const entry of guesses) {
+      const preferred = session.lobby.has(humanKey(entry.player)) && !entry.bot
+        ? "ally"
+        : freeCount("enemy") >= freeCount("ally") ? "enemy" : "ally";
+      const index = freeSeat(preferred) >= 0 ? freeSeat(preferred) : freeSeat();
+      if (index >= 0) seats[index] = entry.key;
+    }
+    session.seats = seats;
+    return seats.map((key) => (key ? byKey.get(key) : null));
+  }
+
+  /**
+   * Opens the overlay. Players in `seatedPlayers` (the lobby roster that just
+   * queued together) are already on screen, so they never play the arrival.
+   */
+  function show({ seatedPlayers = [] } = {}) {
     const element = overlay();
     if (!element) return;
     if (hideTimer) {
@@ -56,8 +163,7 @@ export function createMatchmakingOverlay() {
       hideTimer = null;
     }
     ensureParticles();
-    // Measure the lobby platforms before the lobby begins its exit transition.
-    if (element.classList.contains("hidden")) platformFlight.capture();
+    if (element.classList.contains("hidden")) resetSession(seatedPlayers);
     document.body.classList.remove("matchmaking-exiting");
     document.body.classList.add("matchmaking-active");
     setLobbyChromeInert(true);
@@ -71,7 +177,6 @@ export function createMatchmakingOverlay() {
   function hide({ immediate = false } = {}) {
     const element = overlay();
     if (!element) return;
-    platformFlight.clear();
     if (immediate) {
       if (hideTimer) {
         window.clearTimeout(hideTimer);
@@ -105,14 +210,11 @@ export function createMatchmakingOverlay() {
     }, MATCHMAKING_EXIT_MS);
   }
 
-  function renderPlayer(p, index, previousPlayerKeys) {
+  function renderPlayer(p, arriving) {
     const item = document.createElement("div");
     item.className = "mm-player";
     const visual = document.createElement("div");
     visual.className = "mm-player-visual";
-    const playerKey = `${String(p.botSlotKey || p.name || "player").trim().toLowerCase()}:${index}`;
-    item.dataset.playerKey = playerKey;
-    if (!previousPlayerKeys.has(playerKey)) item.classList.add("mm-player-arriving");
 
     const arrival = document.createElement("div");
     arrival.className = "mm-arrival-fx";
@@ -139,10 +241,9 @@ export function createMatchmakingOverlay() {
     visual.appendChild(platform);
     item.appendChild(visual);
     item.appendChild(name);
-    if (item.classList.contains("mm-player-arriving")) {
-      window.setTimeout(() => {
-        item.classList.remove("mm-player-arriving");
-      }, 1100);
+    if (arriving) {
+      item.classList.add("mm-player-arriving");
+      window.setTimeout(() => item.classList.remove("mm-player-arriving"), ARRIVAL_MS);
     }
     return item;
   }
@@ -169,36 +270,74 @@ export function createMatchmakingOverlay() {
     return item;
   }
 
+  const contentSig = (p) =>
+    p
+      ? [p.name, p.char_class, p.selected_skin_id, p.selected_skin_asset_url, p.isConfiguredBot].join(":")
+      : "placeholder";
+
+  // Seats are reconciled by identity rather than rebuilt, so re-renders never
+  // restart a seat's arrival, float or success animation.
   function renderGrid(grid, { total, selection, players, yourTeam }) {
+    const entries = describeRoster(players.slice(0, total), yourTeam);
     const nextSig = JSON.stringify({
       total,
       mapId: selection.mapId,
-      players: players.map(
-        (p) =>
-          `${p?.name || ""}:${p?.char_class || ""}:${p?.selected_skin_id || ""}:${p?.selected_skin_asset_url || ""}`,
-      ),
+      roster: entries.map((entry) => `${entry.key}:${entry.side}:${contentSig(entry.player)}`),
     });
     if (nextSig === grid.dataset.renderSig) return;
     grid.dataset.renderSig = nextSig;
 
-    const previousPlayerKeys = new Set(
-      Array.from(grid.querySelectorAll(".mm-player[data-player-key]")).map((item) => item.dataset.playerKey),
-    );
-    grid.innerHTML = "";
     grid.style.setProperty("--mm-slot-count", String(total));
     grid.dataset.slots = String(total);
     grid.style.setProperty("--mm-platform-image", `url("${getLobbyPlatformAsset(selection.mapId)}")`);
 
-    for (let i = 0; i < total; i++) {
-      const p = players[i];
-      const item = p ? renderPlayer(p, i, previousPlayerKeys) : renderPlaceholder();
-      item.style.setProperty("--mm-slot-index", String(i));
-      item.dataset.team = p?.team
-        ? p.team === yourTeam ? "blue" : "red"
-        : i < Math.ceil(total / 2) ? "blue" : "red";
-      grid.appendChild(item);
+    const arriving = claimArrivals(entries);
+    const seats = assignSeats(entries, total);
+    const existing = new Map();
+    const before = new Map();
+    for (const item of grid.children) {
+      existing.set(item.dataset.seatKey, item);
+      before.set(item, item.getBoundingClientRect?.());
     }
+
+    const items = seats.map((entry, i) => {
+      const seatKey = entry ? entry.key : `placeholder@${i}`;
+      const sig = contentSig(entry?.player);
+      let item = existing.get(seatKey);
+      if (!item || item.dataset.contentSig !== sig) {
+        item = entry ? renderPlayer(entry.player, arriving.has(entry.key)) : renderPlaceholder();
+        item.dataset.seatKey = seatKey;
+        item.dataset.contentSig = sig;
+        item.style.setProperty("--mm-slot-index", String(i));
+      }
+      item.dataset.team = halfOf(i, total) === "ally" ? "blue" : "red";
+      return item;
+    });
+
+    // Only touch nodes that are out of place; moving a node restarts its animations.
+    items.forEach((item, i) => {
+      if (grid.children[i] !== item) grid.insertBefore(item, grid.children[i] || null);
+    });
+    while (grid.children.length > items.length) grid.lastElementChild.remove();
+    glideMovedSeats(items, before);
     refreshPlatformGrounding();
+  }
+
+  // A player who switches sides once teams are final slides to the new seat.
+  function glideMovedSeats(items, before) {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    for (const item of items) {
+      const from = before.get(item);
+      const to = item.getBoundingClientRect?.();
+      if (!from || !to) continue;
+      const dx = from.left - to.left;
+      const dy = from.top - to.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+      item.animate?.(
+        [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
+        { duration: SEAT_MOVE_MS, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
+      );
+    }
   }
 
   /**
@@ -234,7 +373,6 @@ export function createMatchmakingOverlay() {
     }
     if (totalEl) totalEl.textContent = String(total);
     if (grid) renderGrid(grid, { total, selection, players, yourTeam });
-    platformFlight.launch();
     return result;
   }
 

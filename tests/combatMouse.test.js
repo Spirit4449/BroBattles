@@ -83,6 +83,17 @@ test('typing, shortcuts and blocked gameplay do not capture the mouse', () => {
   assert.equal(h.canvas.style.cursor, '');
   h.controller.destroy();
 });
+test('focused arena consumes game keys while capture is disabled for countdown', () => {
+  const h = setup({ canCapture: () => false });
+  let prevented = 0;
+  h.doc.emit('keydown', { key: 'ArrowDown', target: h.canvas, preventDefault() { prevented++; } });
+  h.doc.emit('keydown', { key: ' ', target: h.canvas, preventDefault() { prevented++; } });
+  h.doc.emit('keydown', { key: 'ArrowDown', target: { tagName: 'INPUT' }, preventDefault() { prevented++; } });
+  h.doc.emit('keydown', { key: 'ArrowDown', target: h.canvas, metaKey: true, preventDefault() { prevented++; } });
+  assert.equal(prevented, 2);
+  assert.equal(h.controller.isActive(), false);
+  h.controller.destroy();
+});
 test('death keeps capture for spectating; battle end shows cursor and blocks recapture', () => {
   let battleActive = true;
   const h = setup({ canCapture: () => battleActive });

@@ -1,8 +1,47 @@
 /* Lobby-specific layout comes after the shared pixel chrome. */
+#create-party {
+  width: auto;
+  white-space: nowrap;
+  transition-property: background, color, box-shadow, filter, opacity, transform;
+}
+
 .mm-card { min-width: 0; }
 .mm-header, .mm-footer, .mm-lobby { box-sizing: border-box; min-width: 0; }
 .mm-lobby { grid-template-columns: minmax(0, 1fr); overflow-y: auto; overflow-x: hidden; }
 .mm-players-grid { min-width: 0; max-width: 100%; }
+
+/* Reserve the longer Cancel label's width before readying. */
+#ready { box-sizing: border-box; width: 200px; min-width: 200px; flex-shrink: 0; }
+#ready.battle-in-progress, #ready.is-disabled { width: auto; }
+
+.lobby-ready :is(#navbar button, #navbar .account, #navbar a,
+  .lobby-party-actions .party-button, .lobby-quick-actions .party-button,
+  #bottom-bar .dropdown-group, #lobby-area .switch-character) {
+  filter: grayscale(1);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Keep invite badges on one paint path as readiness and hover change.
+   Animated filters over the floating platforms flicker in Safari. */
+#lobby-area .status.invite {
+  filter: none;
+  transition: none;
+}
+#lobby-area .status.invite::before {
+  background:
+    linear-gradient(#ffffff55, #ffffff55) left top / 6px 6px no-repeat,
+    linear-gradient(#080f3055, #080f3055) right bottom / 6px 6px no-repeat;
+}
+#lobby-area .status.invite:hover,
+#lobby-area .status.invite:active { filter: none; }
+.lobby-ready #lobby-area .status.invite {
+  background: linear-gradient(180deg, #70757c, #51565e);
+  color: #d2d5da;
+  opacity: 1;
+  transform: translateX(-50%);
+  cursor: not-allowed;
+}
 
 @media (max-width: 1100px) {
   #navbar { gap: 12px; padding-inline: 16px; }
@@ -34,7 +73,8 @@
   :root { --lobby-toolbar-top: 78px; }
   #navbar { height: 64px; min-height: 64px; padding: 8px 12px; gap: 10px; }
   #navbar .lobby-wordmark { width: 104px; }
-  #navbar-right { gap: 8px; }
+  /* Pixel buttons draw a 5px ink ring; keep visible air between them while still fitting one row. */
+  #navbar-right { gap: clamp(10px, calc((100vw - 640px) / 8), 14px); }
   #navbar .account { font-size: 8px; padding-inline: 7px; height: 32px; }
   #navbar .resources p { font-size: 9px; }
   #navbar .resources img { width: 16px; height: 16px; }
@@ -42,10 +82,10 @@
   #navbar .fullscreen-toggle { min-width: 32px; }
   .lobby-party-actions { top: var(--lobby-toolbar-top); left: 12px; gap: 12px; }
   .lobby-party-actions .party-button { height: 34px; font-size: 8px; }
-  #create-party { width: 126px; padding-inline: 6px; white-space: nowrap; }
+  #create-party { box-sizing: border-box; min-width: 0; padding-inline: 6px; }
   #create-party p { margin: 0; font-size: inherit; }
   #search-parties,
-  #party-settings-button { width: 34px; }
+  #party-settings-button { box-sizing: border-box; width: 34px; min-width: 34px; padding-inline: 0; }
   .lobby-quick-actions { top: var(--lobby-toolbar-top); right: 12px; gap: 12px; }
   .lobby-quick-actions .party-button { height: 34px; font-size: 8px; }
   #lobby-area { margin-top: 60px; height: calc(var(--bb-viewport-height, 100dvh) - 194px); }
@@ -55,7 +95,7 @@
   #mode-preview-img, #map-preview-img { width: 44px; height: 28px; }
   #mode-preview-name, #map-preview-name { font-size: 8px; line-height: 1.5; }
   #mode-preview-subtitle { font-size: 7px; }
-  #ready { flex-shrink: 0; min-width: 98px; height: 42px; }
+  #ready { width: 110px; min-width: 110px; height: 42px; padding: 8px 12px; }
   .character-details-popup { width: calc(100% - 24px); max-width: 920px; max-height: calc(100dvh - 24px); }
   .character-details-inline-skin { max-width: none; width: 100%; }
   .character-details-inline-actions { justify-content: stretch; gap: 12px; }
@@ -89,7 +129,7 @@
   #bottom-bar .mode-picker, #bottom-bar .map-picker { padding: 5px; justify-content: center; }
   #mode-preview-img, #map-preview-img { display: none; }
   .mode-picker-copy { display: flex; }
-  #ready { min-width: 82px; font-size: calc(9px * var(--ready-text-scale, 1)); }
+  #ready { width: 98px; min-width: 98px; font-size: calc(9px * var(--ready-text-scale, 1)); }
   #lobby-area .platform { --platform-width: min(40vw, 240px); --platform-float-distance: 4px; }
   #lobby-area .platform[data-team="your-team"] { left: 4%; }
   #lobby-area .platform[data-team="op-team"] { right: 4%; }
@@ -98,7 +138,35 @@
   #lobby-area.mode-3 .platform[data-slot="2"] { top: 37%; }
   #lobby-area.mode-3 .platform[data-slot="3"] { top: 66%; }
   #vs { width: 48px; }
-  .bb-chat-lobby-launcher { top: auto; bottom: calc(88px + env(safe-area-inset-bottom)); right: 12px; transform: none; width: 44px; min-height: 44px; }
+  /* Friends and chat become a compact icon pair stacked above the bottom bar.
+     The paired selectors are listed so their mid-screen offsets cannot
+     reapply `top` and stretch a launcher down to the bottom offset. */
+  .bb-chat-lobby-launcher,
+  .bb-chat-lobby-launcher.has-friends-pair,
+  .bb-friends-launcher,
+  .bb-friends-launcher.is-paired {
+    top: auto;
+    bottom: calc(88px + env(safe-area-inset-bottom));
+    right: 12px;
+    transform: none;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
+  .bb-friends-launcher.is-paired { bottom: calc(88px + 44px + 16px + env(safe-area-inset-bottom)); }
+  :is(.bb-chat-lobby-launcher, .bb-friends-launcher) .bb-chat-launcher-label { display: none; }
+
+  /* Stacked 2v2 and 3v3 rows are closer together than a platform is tall, so a name
+     above the frame would land on the platform above. Label each seat on its
+     own platform instead, under the status pill, with YOU just above the frame. */
+  #lobby-area:is(.mode-2, .mode-3) .character-slot .username { top: calc(100% + 14px); max-width: calc(var(--platform-width) - 16px); }
+  #lobby-area:is(.mode-2, .mode-3) .character-slot:has(> .status:not([style*="none"])) .username { top: calc(100% + 42px); }
+  #lobby-area:is(.mode-2, .mode-3) .character-slot[data-is-current-user="true"]::after { top: -24px; }
+
+  /* Keep the claim badge clear of the compact trophy count. */
+  .trophy-claim-badge { top: -11px; right: -11px; min-width: 16px; height: 16px; font-size: 7px; }
   .character-details-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 14px; }
   .character-details-title-wrap { grid-column: 1; }
   .character-details-close { grid-column: 2; grid-row: 1 / span 2; align-self: start; width: 36px; height: 36px; }
@@ -145,12 +213,18 @@
   .mm-actions { grid-column: 2; }
 }
 
+/* Leave room for both party icons, including the host's settings button. */
+@media (max-width: 480px) {
+  .lobby-party-actions, .lobby-quick-actions { gap: 10px; }
+  #shop-button p { display: none; }
+  #shop-button { box-sizing: border-box; width: 34px; padding-inline: 0; justify-content: center; }
+}
+
 @media (max-width: 360px) {
   #navbar-right { gap: 5px; }
   #navbar .account { font-size: 6px; padding-inline: 4px; }
   #navbar .resources { gap: 3px; padding-inline: 0; }
   #username-button #username-text { max-width: 36px; }
-  #create-party { width: 112px; }
   #shop-button p { display: none; }
   .lobby-party-actions,
   .lobby-quick-actions { gap: 10px; }

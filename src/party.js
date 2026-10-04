@@ -9,6 +9,7 @@ import { setLobbyBackground } from "./lobby/lobbyBackground.js";
 import { createMatchmakingClient } from "./lobby/matchmakingClient.mjs";
 import { createMatchmakingOverlay } from "./lobby/matchmakingOverlay.js";
 import { createPartySlotDrag } from "./lobby/partySlotDrag.js";
+import { setPartyButtonLabel } from "./lobby/partyButtonLabel.js";
 import { ensureLegalAcceptance } from "./site/shell";
 import { createJoinRequestController } from './lobby/joinRequestController';
 import { createMapEditorLink } from './lib/mapEditorLink';
@@ -63,6 +64,9 @@ const SOLO_MODE_VARIANT_STORAGE_KEY = "bb_solo_mode_variant_id";
 const SOLO_MAP_STORAGE_KEY = "bb_solo_map";
 const POST_BATTLE_LOBBY_RETURN_KEY = "bb_post_battle_lobby_return";
 let __partyReadyPending = false;
+let __partyReadyTarget = null;
+let __partyReadyRequestId = 0;
+const __readyLockedRoots = new Map();
 let __activeBattleMatchId = null;
 let __battleReturnPageshowBound = false;
 
@@ -960,6 +964,8 @@ function syncInviteBadges() {
 export function resetLobbyRoute(partyId) {
   partyDeparturePending = false;
   __partyReadyPending = false;
+  __partyReadyTarget = null;
+  ++__partyReadyRequestId;
   __activeBattleMatchId = null;
   __partyRosterNames = null;
   __partyRosterPartyId = partyId || null;
@@ -991,7 +997,7 @@ function getActivePartyId() {
 export function createParty() {
   const button = document.getElementById('create-party');
   if (button?.disabled) return;
-  if (button) { button.disabled = true; button.textContent = 'Creating…'; }
+  if (button) { button.disabled = true; setPartyButtonLabel(button, 'Creating…'); }
   const selection = normalizeGameSelection(getCurrentSelection());
   fetch("/create-party", {
     method: "POST",
@@ -1012,7 +1018,7 @@ export function createParty() {
     })
     .catch((error) => {
       console.error("Error:", error);
-      if (button) { button.disabled = false; button.textContent = 'Create Party'; }
+      if (button) { button.disabled = false; setPartyButtonLabel(button, 'Create Party'); }
     });
 }
 
@@ -1022,7 +1028,7 @@ export async function leaveParty() {
   partyDeparturePending = true;
   const leaveButton = document.getElementById("create-party");
   const previousLabel = leaveButton?.textContent;
-  if (leaveButton) { leaveButton.disabled = true; leaveButton.textContent = "Leaving…"; }
+  if (leaveButton) { leaveButton.disabled = true; setPartyButtonLabel(leaveButton, "Leaving…"); }
 
   try {
     const response = await fetch("/leave-party", {
@@ -1040,7 +1046,7 @@ export async function leaveParty() {
   } catch (error) {
     console.error("Error:", error);
     partyDeparturePending = false;
-    if (leaveButton) { leaveButton.disabled = false; leaveButton.textContent = previousLabel; }
+    if (leaveButton) { leaveButton.disabled = false; setPartyButtonLabel(leaveButton, previousLabel); }
     sonner(
       "Could not leave party",
       error?.message || "Please try again.",
@@ -2413,12 +2419,16 @@ export function initReadyToggle() {
         return;
       }
       __partyReadyPending = true;
-      syncReadyAvailability();
+      __partyReadyTarget = nextReady;
+      const requestId = ++__partyReadyRequestId;
+      setSelfReadyState(nextReady);
       socket.timeout(8000).emit("ready:status", { partyId, ready: nextReady }, async (error, reply) => {
+        if (requestId !== __partyReadyRequestId || String(partyId) !== String(getActivePartyId())) return;
         __partyReadyPending = false;
+        __partyReadyTarget = null;
         syncReadyAvailability();
-        if (String(partyId) !== String(getActivePartyId())) return;
         if (error || !reply?.ok) {
+          setSelfReadyState(!nextReady);
           sonner(reply?.code === "MAINTENANCE" ? null : "Could not change ready status", reply?.code === "MAINTENANCE" ? MAINTENANCE_MESSAGE : reply?.error || "Your ready status could not be saved. Please try again.", "error", { maintenanceUntil: reply?.code === "MAINTENANCE" ? reply.maintenanceUntil : null });
         }
         if (!error && reply?.ok) return;
@@ -2430,7 +2440,7 @@ export function initReadyToggle() {
             body: JSON.stringify({ partyId }),
           });
           const roster = await response.json();
-          if (response.ok && String(partyId) === String(getActivePartyId())) {
+          if (response.ok && requestId === __partyReadyRequestId && String(partyId) === String(getActivePartyId())) {
             renderPartyMembers(roster);
             syncReadyButtonFromSelfSlot();
           }
@@ -2440,24 +2450,10 @@ export function initReadyToggle() {
     }
 
     // Solo queue feedback is local until the matchmaking response arrives.
-    statusEl.textContent = nextReady ? "ready" : "online";
-    statusEl.className = `status ${nextReady ? "ready" : "online"}`;
-    applyLobbyStatusVisualState(
-      selfSlot,
-      cur,
-      nextReady ? "ready" : "online",
-    );
-    // Update Ready button appearance/label
-    setReadyButtonState(nextReady);
-
-    if (partyId) {
-      // Party flow: server will show overlay when all ready
-      socket.emit("ready:status", { partyId, ready: nextReady });
-    } else {
-      // Solo flow: directly join/leave the queue and control overlay locally
-      if (nextReady) matchmaking.startSolo(getCurrentSelection());
-      else matchmaking.leaveSolo();
-    }
+    setSelfReadyState(nextReady);
+    // Solo flow: directly join/leave the queue and control overlay locally.
+    if (nextReady) matchmaking.startSolo(getCurrentSelection());
+    else matchmaking.leaveSolo();
   });
 }
 
@@ -2504,13 +2500,21 @@ function getSelfSlot() {
 // Return the local slot and Ready button to "online" after a queue ends.
 function resetSelfReadyState() {
   try {
-    const statusEl = getSelfSlot()?.querySelector(".status");
-    if (statusEl) {
-      statusEl.textContent = "online";
-      statusEl.className = "status online";
-    }
-    setReadyButtonState(false);
+    setSelfReadyState(false);
   } catch (_) {}
+}
+
+function setSelfReadyState(ready) {
+  const slot = getSelfSlot();
+  const statusEl = slot?.querySelector(".status");
+  const status = ready ? "ready" : "online";
+  if (statusEl) {
+    const previous = statusEl.textContent;
+    statusEl.textContent = status;
+    statusEl.className = `status ${status}`;
+    applyLobbyStatusVisualState(slot, previous, status);
+  }
+  setReadyButtonState(ready);
 }
 
 function collectCurrentPartyMembers() {
@@ -2569,6 +2573,18 @@ function collectCurrentPartyMembers() {
 // Ready button helpers
 // ---------------------------
 function setReadyButtonState(isCancel) {
+  // Inert also blocks keyboard activation and dynamically rendered controls.
+  // Chat and friends live outside these lobby groups.
+  document.body.classList.toggle("lobby-ready", isCancel);
+  if (isCancel) {
+    document.querySelectorAll("#navbar, .lobby-party-actions, .lobby-quick-actions, #bottom-bar .dropdown-group, #lobby-area").forEach((root) => {
+      if (!__readyLockedRoots.has(root)) __readyLockedRoots.set(root, root.inert);
+      root.inert = true;
+    });
+  } else {
+    for (const [root, wasInert] of __readyLockedRoots) root.inert = wasInert;
+    __readyLockedRoots.clear();
+  }
   window.__BB_NAVIGATION__?.lobbyAudio?.setReady(isCancel);
   const btn = document.getElementById("ready");
   if (!btn) return;
@@ -2580,6 +2596,10 @@ function setReadyButtonState(isCancel) {
 }
 
 function syncReadyButtonFromSelfSlot() {
+  if (__partyReadyPending && __partyReadyTarget !== null) {
+    setSelfReadyState(__partyReadyTarget);
+    return;
+  }
   const selfSlot = getSelfSlot();
   const statusEl = selfSlot?.querySelector(".status");
   if (!statusEl) return;

@@ -1171,13 +1171,11 @@ export function createMatchCoordinator(config) {
         p.body.enable = false;
       }
     } catch (_) {}
-    try {
-      document.getElementById("game-timer-hud")?.classList.add("hidden");
-    } catch (_) {}
     setTimeout(() => onShowGameOverScreen(payload), 2000);
   }
 
   function _onGameTimer(payload) {
+    if (getGameEnded()) return;
     _stopStartWatchdog();
     hud.updateTimerHud(payload.remaining, payload.suddenDeath);
     if (!getIsLiveGame()) {

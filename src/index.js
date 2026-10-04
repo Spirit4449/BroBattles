@@ -1,4 +1,5 @@
 import { revealLobby, watchLobbyLoading, showLobbyLoadError } from "./lobby/lobbyReveal.js";
+import { setPartyButtonLabel } from "./lobby/partyButtonLabel.js";
 import { createLazyInitializer, deferLobbySetup } from "./lobby/deferredSetup.js";
 import { ensureLegalAcceptance, setNavigationGuard } from "./site/shell";
 import "./site/shell.js";
@@ -1588,7 +1589,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Initialize socket events for both party and solo flows once DOM is ready
 
   if (existingPartyId) {
-    createPartyButton.textContent = "Leave Party";
+    setPartyButtonLabel(createPartyButton, "Leave Party");
     createPartyButton.style.background =
       "linear-gradient(135deg, #d63939, #cf4545)";
 
@@ -1660,7 +1661,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     closeOverlay('party-discovery-overlay');
     closeOverlay('party-settings-overlay');
     createPartyButton.disabled = false;
-    createPartyButton.textContent = existingPartyId ? 'Leave Party' : 'Create Party';
+    setPartyButtonLabel(createPartyButton, existingPartyId ? 'Leave Party' : 'Create Party');
     createPartyButton.style.background = existingPartyId ? 'linear-gradient(135deg, #d63939, #cf4545)' : '';
     if (existingPartyId) createPartyButton.setAttribute('data-sound', 'cancel2');
     else createPartyButton.removeAttribute('data-sound');

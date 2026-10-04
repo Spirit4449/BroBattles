@@ -153,7 +153,15 @@ export function createMatchmakingClient({
     if (!view.exists() || state.suppressed) return;
     dispatchStart();
     audio()?.searching();
-    view.show();
+    // Everyone already standing in the lobby queued together: they keep their
+    // seats from the start and only players matched in afterwards arrive.
+    if (view.isHidden()) {
+      const seatedPlayers = party.players();
+      if (!state.players.length) state.players = state.total ? seatedPlayers.slice(0, state.total) : seatedPlayers;
+      view.show({ seatedPlayers });
+    } else {
+      view.show();
+    }
     renderCurrent();
     view.bindControls({
       onCancel: requestCancel,
@@ -179,12 +187,16 @@ export function createMatchmakingClient({
       state.readyAckTimer = null;
     }
     state.readyAt = 0;
+    // A closed queue's roster must not flash in the next session's overlay.
+    resetRoster();
     view.hide({ immediate });
   }
 
   function startSolo(requested) {
-    state.queue = { selection: requested };
+    state.queue = { selection: requested, yourTeam: party.currentTeam() || null };
     state.total = selection.totalPlayers(requested);
+    state.players = party.players().slice(0, state.total);
+    state.playersSig = rosterSignature(state.players);
     socket.emit("queue:join", {
       selection: requested,
       modeId: requested.modeId,
@@ -235,7 +247,7 @@ export function createMatchmakingClient({
         selection: payload?.selection || null,
       }));
       const normalized = selection.normalize(payload?.selection || selection.current());
-      state.queue = { selection: normalized };
+      state.queue = { selection: normalized, yourTeam: party.currentTeam() || null };
       state.players = party.players();
       state.playersSig = "";
       state.total = selection.totalPlayers(normalized);
@@ -332,8 +344,9 @@ export function createMatchmakingClient({
       if (incoming.modeId !== target.modeId || incoming.modeVariantId !== target.modeVariantId ||
         Number(incoming.mapId) !== Number(target.mapId)) return;
 
-      // Keep overlay context aligned to the server payload while queued.
-      state.queue = { selection: incoming };
+      // Keep overlay context aligned to the server payload while queued. The
+      // lobby team stays: hydrated party members still carry lobby teams.
+      state.queue = { selection: incoming, yourTeam: state.queue?.yourTeam ?? (party.currentTeam() || null) };
       if (view.isHidden()) show();
       const foundCount = Number(data?.found) || 0;
       const totalCount = Number(data?.total) || selection.totalPlayers(incoming);

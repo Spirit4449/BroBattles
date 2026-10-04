@@ -65,8 +65,31 @@
 
 #trophy-track-list .trophy-lane-meta .trophy-pack-contents {
   max-width: 100%;
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
   white-space: normal;
   overflow-wrap: anywhere;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+@media (max-width: 768px) {
+  #trophy-track-list { scroll-snap-type: x mandatory; scroll-padding-inline-start: var(--trophy-snap-inset, 0px); }
+  #trophy-track-list .trophy-lane-card { scroll-snap-align: start; }
+  #trophy-track-list .trophy-lane-meta { height: 54px; min-height: 54px; }
+  #trophy-track-list .trophy-lane-meta .trophy-pack-contents { font-size: 7px; line-height: 1.3; -webkit-line-clamp: 3; line-clamp: 3; }
+}
+
+@media (max-width: 600px) and (min-height: 521px) {
+  #trophy-track-overlay .trophy-track-stage,
+  #trophy-track-list,
+  #trophy-track-list .trophy-track-canvas { min-height: 390px; }
+}
+
+@media (max-height: 520px) {
+  #trophy-track-overlay .trophy-track-stage,
+  #trophy-track-list,
+  #trophy-track-list .trophy-track-canvas { min-height: 230px; }
+  #trophy-track-list .trophy-lane-item-wrap { height: 72px; }
+  #trophy-track-list .reward-card { height: 78px; }
+  #trophy-track-list .reward-card .trophy-lane-item { height: 78px; }
 }

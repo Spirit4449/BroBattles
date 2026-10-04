@@ -23,6 +23,23 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
   let trophyProgressionState = null;
   let trophyProgressionRefreshPromise = null;
   const trophyClaimsInFlight = new Set();
+  let resizeFrame = null;
+
+  window.addEventListener("resize", () => {
+    if (!isOverlayOpen("trophy-track-overlay") || !trophyProgressionState) return;
+    if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
+    resizeFrame = window.requestAnimationFrame(() => {
+      resizeFrame = null;
+      const list = document.getElementById("trophy-track-list");
+      const oldSpacing = Number(list?.querySelector(".trophy-track-canvas")?.dataset.tierSpacing) || 0;
+      renderTrophyTrack({
+        ...trophyProgressionState,
+        __preserveScroll: true,
+        __scrollLeft: Number(list?.scrollLeft) || 0,
+        __oldSpacing: oldSpacing,
+      });
+    });
+  });
 
   function setTrophyClaimBadge(count) {
     const badge = document.getElementById("trophy-claim-badge");
@@ -120,9 +137,12 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
   function scrollTrophyTrack(direction) {
     const container = document.getElementById("trophy-track-list");
     if (!container) return;
-    const distance = Math.max(260, Math.round(container.clientWidth * 0.72));
-    container.scrollBy({
-      left: (Number(direction) < 0 ? -1 : 1) * distance,
+    const spacing = Number(container.querySelector(".trophy-track-canvas")?.dataset.tierSpacing) ||
+      Math.max(260, Math.round(container.clientWidth * 0.72));
+    const maxScroll = Math.max(0, container.scrollWidth - container.clientWidth);
+    const next = (Math.round(container.scrollLeft / spacing) + (Number(direction) < 0 ? -1 : 1)) * spacing;
+    container.scrollTo({
+      left: Math.max(0, Math.min(maxScroll, next)),
       behavior: "smooth",
     });
   }
@@ -269,9 +289,11 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
       return (next - 1 + (value - previous) / (tiers[next].trophiesRequired - previous)) / Math.max(1, tiers.length - 1);
     };
     const overallRatio = positionRatio(trophies);
-    const compactTrack = window.matchMedia?.("(max-width: 700px)")?.matches;
-    const laneInset = compactTrack ? 108 : 124;
-    const tierSpacing = compactTrack ? 218 : 244;
+    const narrowTrack = window.matchMedia?.("(max-width: 480px)")?.matches;
+    const compactTrack = window.matchMedia?.("(max-width: 768px)")?.matches;
+    const viewportWidth = container.clientWidth || 900;
+    const laneInset = narrowTrack ? viewportWidth / 2 : compactTrack ? 108 : 124;
+    const tierSpacing = narrowTrack ? viewportWidth : compactTrack ? viewportWidth - laneInset * 2 : 244;
     const trackWidth = Math.max(
       container.clientWidth || 900,
       laneInset * 2 + Math.max(0, tiers.length - 1) * tierSpacing,
@@ -285,6 +307,8 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
 
     const canvas = document.createElement("div");
     canvas.className = "trophy-track-canvas";
+    canvas.dataset.tierSpacing = String(tierSpacing);
+    canvas.dataset.viewportWidth = String(container.clientWidth);
     canvas.classList.toggle("has-progress", overallRatio > 0);
     canvas.style.width = `${trackWidth}px`;
     canvas.style.setProperty("--trophy-lane-inset", `${laneInset}px`);
@@ -431,6 +455,13 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
       tierIndex += 1;
     }
 
+    if (compactTrack) {
+      const firstCardWidth = cardRow?.querySelector(".trophy-lane-card")?.getBoundingClientRect().width || 0;
+      container.style.setProperty("--trophy-snap-inset", `${Math.max(0, laneInset - firstCardWidth / 2)}px`);
+    } else {
+      container.style.removeProperty("--trophy-snap-inset");
+    }
+
     const ratioCenterTarget = Math.max(
       0,
       Math.min(
@@ -438,27 +469,32 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
         ratioToX(overallRatio) - container.clientWidth / 2,
       ),
     );
+    const preservedScrollLeft = state?.__oldSpacing
+      ? previousScrollLeft * tierSpacing / state.__oldSpacing
+      : previousScrollLeft;
     const nextScrollLeft = shouldPreserveScroll
       ? Math.max(
           0,
           Math.min(
             Math.max(0, canvas.scrollWidth - container.clientWidth),
-            Number(previousScrollLeft) || 0,
+            Number(preservedScrollLeft) || 0,
           ),
         )
       : ratioCenterTarget;
-    container.scrollLeft = nextScrollLeft;
-    trophyRoadLastScrollLeft = nextScrollLeft;
+    const alignedScrollLeft = compactTrack
+      ? Math.max(0, Math.min(canvas.scrollWidth - container.clientWidth, Math.round(nextScrollLeft / tierSpacing) * tierSpacing))
+      : nextScrollLeft;
+    container.scrollLeft = alignedScrollLeft;
+    trophyRoadLastScrollLeft = alignedScrollLeft;
     window.requestAnimationFrame(() => updateTrophyTrackControls(container));
   }
 
   async function openTrophyProgressionOverlay(options = {}) {
     openOverlay("trophy-track-overlay");
     const list = document.getElementById("trophy-track-list");
+    const existingCanvas = list?.querySelector(".trophy-track-canvas");
     const preserveScroll = !!options?.preserveScroll;
-    const hasExistingCanvas = Boolean(
-      list?.querySelector(".trophy-track-canvas"),
-    );
+    const hasExistingCanvas = Boolean(existingCanvas);
 
     if (list && !hasExistingCanvas) {
       list.innerHTML = `<div class="trophy-rewards-state trophy-rewards-loading">
@@ -471,12 +507,15 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
 
     try {
       const progression = await fetchLobbyJson("/trophies/progression");
-      if (hasExistingCanvas && reconcileTrophyTrackState(progression)) {
+      const layoutChanged = hasExistingCanvas &&
+        Number(existingCanvas.dataset.viewportWidth) !== list.clientWidth;
+      if (hasExistingCanvas && !layoutChanged && reconcileTrophyTrackState(progression)) {
         return;
       }
       progression.__preserveScroll = preserveScroll || hasExistingCanvas;
       progression.__scrollLeft =
         Number(list?.scrollLeft) || trophyRoadLastScrollLeft;
+      if (layoutChanged) progression.__oldSpacing = Number(existingCanvas.dataset.tierSpacing) || 0;
       renderTrophyTrack(progression);
     } catch (err) {
       if (!hasExistingCanvas && list) {

@@ -43,49 +43,138 @@ body #battle-keybind-hud .controls-dash-row kbd {
   padding: 5px 8px;
   text-transform: uppercase;
 }
-/* Use the free space beside the timer until three players per team no longer
-   fit; the narrow layout retains the original edge columns. */
-@media (min-width: 760px) {
-  body:not(.mobile-game-ui) #team-status-hud {
-    top: 14px;
-    left: 50%;
-    right: auto;
-    width: min(500px, calc(100vw - 150px));
-    /* Keep centering separate from the entrance animation's transform. */
-    translate: -50% 0;
-    transform: none;
-    align-items: flex-start;
+/* Share sizing and safe-area gutters across the independently mounted HUD
+   elements. Keep translate separate from the entrance animation's transform. */
+body[data-bb-screen="game"] {
+  --battle-hud-edge: max(12px, env(safe-area-inset-left), env(safe-area-inset-right));
+  --battle-hud-top: calc(14px + env(safe-area-inset-top));
+  --battle-timer-width: 142px;
+  --battle-player-width: clamp(38px, 4vw, 54px);
+}
+body[data-bb-screen="game"] #game-timer-hud {
+  top: var(--battle-hud-top);
+  width: var(--battle-timer-width);
+  min-width: 0;
+  padding: 7px 8px 8px;
+  translate: -50% 0;
+  transform: none;
+}
+body[data-bb-screen="game"] #game-timer-hud.hud-intro-enter {
+  transform: translateY(-28px);
+}
+body[data-bb-screen="game"] #game-timer-hud.hud-intro-enter.in {
+  transform: translateY(0);
+}
+body[data-bb-screen="game"] .fullscreen-toggle {
+  top: var(--battle-hud-top);
+  right: var(--battle-hud-edge);
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+}
+body[data-bb-screen="game"] .site-battle-settings {
+  right: calc(var(--battle-hud-edge) + 42px);
+}
+body[data-bb-screen="game"] .bb-chat-game-launcher {
+  position: fixed;
+  top: var(--battle-hud-top);
+  left: var(--battle-hud-edge);
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 6px;
+}
+body[data-bb-screen="game"] .bb-chat-game-wrap {
+  top: calc(var(--battle-hud-top) + 58px);
+  left: var(--battle-hud-edge);
+  width: min(360px, calc(100vw - 2 * var(--battle-hud-edge)));
+}
+body[data-bb-screen="game"] #team-status-hud {
+  top: var(--battle-hud-top);
+  left: 50%;
+  right: auto;
+  width: min(720px, calc(100vw - 2 * var(--battle-hud-edge) - 180px));
+  translate: -50% 0;
+  transform: none;
+  align-items: flex-start;
+}
+body[data-bb-screen="game"] #team-status-hud.hud-intro-enter {
+  transform: translateY(-28px);
+}
+body[data-bb-screen="game"] #team-status-hud.hud-intro-enter.in {
+  transform: translateY(0);
+}
+body[data-bb-screen="game"] #team-status-hud .team-hud-side {
+  width: calc((100% - var(--battle-timer-width) - 32px) / 2);
+  flex-direction: row;
+  gap: 0;
+}
+body[data-bb-screen="game"] #team-status-hud .team-hud-side-left {
+  justify-content: flex-end;
+}
+body[data-bb-screen="game"] #team-status-hud .team-hud-side-right {
+  justify-content: flex-start;
+  align-items: flex-start;
+  margin-right: 0;
+}
+body[data-bb-screen="game"] #team-status-hud .team-hud-player-stack {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: inherit;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+}
+body[data-bb-screen="game"] #team-status-hud .team-hud-player {
+  width: var(--battle-player-width);
+  min-width: 0;
+  gap: 4px;
+}
+body[data-bb-screen="game"] #team-status-hud .team-hud-avatar-ring {
+  width: calc(var(--battle-player-width) - 6px);
+  height: calc(var(--battle-player-width) - 6px);
+  box-sizing: border-box;
+  padding: 2px;
+}
+body[data-bb-screen="game"] #team-status-hud .team-hud-player-name-wrap {
+  max-width: 100%;
+  min-width: 0;
+}
+body[data-bb-screen="game"] #team-status-hud .team-hud-player-name {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 5px;
+}
+/* Put both teams below the clock on phones and small windows. This also
+   avoids the mobile transform overrides shifting the clock off center. */
+@media (max-width: 799px) {
+  body[data-bb-screen="game"] {
+    --battle-player-width: clamp(32px, 6vw, 42px);
   }
-  body:not(.mobile-game-ui) #team-status-hud .team-hud-side {
-    width: calc(50% - 85px);
-    flex-direction: row;
-    gap: 0;
+  body[data-bb-screen="game"] #team-status-hud {
+    top: calc(var(--battle-hud-top) + 62px);
+    width: calc(100vw - 2 * var(--battle-hud-edge));
   }
-  body:not(.mobile-game-ui) #team-status-hud .team-hud-side-left {
+  body[data-bb-screen="game"] #team-status-hud .team-hud-side {
+    width: calc((100% - 24px) / 2);
+  }
+  body[data-bb-screen="game"] #team-status-hud .team-hud-side-left {
+    justify-content: flex-start;
+  }
+  body[data-bb-screen="game"] #team-status-hud .team-hud-side-right {
     justify-content: flex-end;
   }
-  body:not(.mobile-game-ui) #team-status-hud .team-hud-side-right {
-    justify-content: flex-start;
-    align-items: flex-start;
-    margin-right: 0;
+  body[data-bb-screen="game"] #team-status-hud .team-hud-player-stack {
+    gap: 6px;
   }
-  body:not(.mobile-game-ui) #team-status-hud .team-hud-player-stack {
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 8px;
+}
+@media (max-width: 479px) {
+  body[data-bb-screen="game"] { --battle-timer-width: 118px; }
+  body[data-bb-screen="game"] #game-timer-hud .timer-display {
+    font-size: 18px;
   }
-  body:not(.mobile-game-ui) #team-status-hud .team-hud-player {
-    width: 38px;
-    gap: 3px;
-  }
-  body:not(.mobile-game-ui) #team-status-hud .team-hud-avatar-ring {
-    width: 32px;
-    height: 32px;
-    box-sizing: border-box;
-    padding: 2px;
-  }
-  body:not(.mobile-game-ui) #team-status-hud .team-hud-player-name {
-    max-width: 40px;
+  body[data-bb-screen="game"] #game-timer-hud .timer-label {
     font-size: 5px;
   }
 }

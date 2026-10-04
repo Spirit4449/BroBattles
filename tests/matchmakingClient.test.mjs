@@ -8,7 +8,7 @@ import {
 
 const duel = { modeId: "duels", modeVariantId: "duels-1v1", mapId: 1 };
 
-function fixture({ suppressed = false, players = [{ name: "Ann", char_class: "ninja" }] } = {}) {
+function fixture({ suppressed = false, players = [{ name: "Ann", char_class: "ninja" }], team = null } = {}) {
   const handlers = {};
   const requests = []; // socket.timeout(...).emit(event, cb)
   const emits = [];
@@ -27,7 +27,8 @@ function fixture({ suppressed = false, players = [{ name: "Ann", char_class: "ni
     renders: [],
     nextFull: false,
     isHidden() { return this.hidden; },
-    show() { this.hidden = false; this.shown++; },
+    showOptions: [],
+    show(options) { this.hidden = false; this.shown++; this.showOptions.push(options); },
     hide(options) { this.hidden = true; this.hides.push(options); },
     render(snapshot) {
       this.renders.push(snapshot);
@@ -53,7 +54,7 @@ function fixture({ suppressed = false, players = [{ name: "Ann", char_class: "ni
       totalPlayers: () => 2,
       current: () => duel,
     },
-    party: { activeId: () => null, players: () => players, currentTeam: () => null },
+    party: { activeId: () => null, players: () => players, currentTeam: () => team },
     memberKey: (name) => String(name || "").toLowerCase(),
     selfKey: () => "ann",
     onReadyReset: () => { readyResets++; },
@@ -183,4 +184,31 @@ test("progress for another selection is ignored and local humans hydrate server 
   assert.equal(last.players[0].selected_skin_id, "x");
   assert.equal(last.players[1].name, "Bo");
   assert.equal(last.full, false, "a full lobby is not found until the server locks the match");
+});
+
+test("opening the overlay seats the queued lobby roster so it never plays the arrival", () => {
+  const party = [{ name: "Ann" }, { name: "Bo" }];
+  const f = fixture({ players: party });
+  f.handlers["party:matchmaking:start"]({ selection: duel });
+  assert.deepEqual(f.view.showOptions[0], { seatedPlayers: party });
+  f.handlers["match:progress"]({ selection: duel, found: 2, total: 2, players: [{ name: "Ann" }, { name: "Bo" }] });
+  // Re-showing an open overlay must not reseat (and silence) newly joined players.
+  assert.equal(f.view.showOptions.length, 1);
+});
+
+test("a closed queue does not leak its roster into the next session", () => {
+  const f = fixture({ players: [{ name: "Ann" }] });
+  f.handlers["match:progress"]({ selection: duel, found: 2, total: 2, players: [{ name: "Ann" }, { name: "Zed" }] });
+  f.client.hide();
+  f.client.startSolo(duel);
+  assert.deepEqual(f.view.renders.at(-1).players, [{ name: "Ann" }]);
+});
+
+test("queue progress keeps the lobby team so party seats never flip sides", () => {
+  const f = fixture({ players: [{ name: "Ann", team: "team1" }], team: "team1" });
+  f.handlers["party:matchmaking:start"]({ selection: duel });
+  f.handlers["match:progress"]({ selection: duel, found: 2, total: 2, players: [{ name: "Ann" }, { name: "Bo" }] });
+  const last = f.view.renders.at(-1);
+  assert.equal(last.yourTeam, "team1");
+  assert.equal(last.players[0].team, "team1");
 });
