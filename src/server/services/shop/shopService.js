@@ -31,7 +31,7 @@ function normalizeIdempotencyKey(raw) {
 }
 
 function currencyAsset(currency) {
-  return currency === "gems" ? "/assets/gem.webp" : "/assets/coin.webp";
+  return currency === "gems" ? "/assets/icons/gem.webp" : "/assets/icons/coin.webp";
 }
 
 function titleCase(value) {
@@ -182,7 +182,7 @@ function createShopService({ db }) {
       kind: String(grant?.kind || "item"),
       id: String(grant?.id || ""),
       name: titleCase(grant?.id || grant?.kind || "Item"),
-      image: "/assets/lock.webp",
+      image: "/assets/icons/lock.webp",
     };
   }
 

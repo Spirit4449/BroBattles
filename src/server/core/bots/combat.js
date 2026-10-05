@@ -213,8 +213,8 @@ function requestBasic(room, p, target, profile, random, now) {
   if (aim.pressure) p._botPressureUntil = now + 1800;
   p.flip = aim.direction < 0;
   const id = `${p.participantId}:${++p._botActionSeq}`;
-  const action = { ...aim, id, x: p.x, y: p.y, forwardDistance: Math.min(aim.range, aim.distance + 40),
-    mapCollisionRects: room.geometry?.colliders || [] };
+  // Bots only run with map geometry, which projectile runtimes read directly.
+  const action = { ...aim, id, x: p.x, y: p.y, forwardDistance: Math.min(aim.range, aim.distance + 40) };
   const descriptor = getResolvedAttackDescriptor(aim.type);
   const lockMs = Math.max(150, Number(descriptor?.actionFlow?.startupMs) || Number(descriptor?.runtime?.windupMs) || 0);
   kit.decorateBasicAction?.(action);

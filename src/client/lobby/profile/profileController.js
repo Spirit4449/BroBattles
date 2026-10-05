@@ -321,7 +321,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       <span class="profile-icon-art">
         <img src="${escapeHtml(buildProfileIconUrl(id))}" alt="" />
         ${isSelected ? '<span class="profile-icon-selected-badge">Selected</span>' : ""}
-        ${isLocked ? '<span class="profile-icon-lock-overlay"><img src="/assets/lock.webp" alt="" /></span>' : ""}
+        ${isLocked ? '<span class="profile-icon-lock-overlay"><img src="/assets/icons/lock.webp" alt="" /></span>' : ""}
       </span>
       <span class="profile-icon-details">
         <strong>${escapeHtml(icon.name)}</strong>

@@ -83,3 +83,28 @@ test('zero slows survive projectile creation, contact and hook expiry', () => {
   assert.equal(effects.getModifiers(target, pullEnd).jumpMult, 0);
   assert.equal(effects.getModifiers(target, pullEnd + 100).speedMult, 1);
 });
+
+test('sparse world state: only active timers, movement only for affected players', t => {
+  let now = 10000;
+  t.mock.method(Date, 'now', () => now);
+  const idle = { name: 'Idle' }, slowed = { name: 'Slowed' };
+  effects.apply(slowed, 'gloopSlimeSlow', now, { speedMult: 0.2, jumpMult: 0.3, durationMs: 500 });
+  const payload = () => buildWorldStatePayload({
+    players: new Map([[idle.name, idle], [slowed.name, slowed]]), _powerups: new Map(),
+    _buildDeathDropsSnapshot: () => [],
+    _buildPlayerEffectsSnapshot: () => ({ Idle: effects.snapshotActive(idle, now), Slowed: effects.snapshotActive(slowed, now) }),
+  });
+  let p = payload();
+  // Every player keeps an entry so clients can clear per-player visuals.
+  assert.deepEqual(p.playerEffects, { Idle: {}, Slowed: { gloopSlimeSlow: 500 } });
+  assert.deepEqual(Object.keys(p.playerEffectMovement), ['Slowed']);
+  for (const player of [idle, slowed]) {
+    const { speedMult, jumpMult } = effects.getModifiers(player, now);
+    assert.deepEqual(resolveLocalEffectMovement(p.playerEffects[player.name], p.playerEffectMovement[player.name]), { speedMult, jumpMult });
+  }
+  now += 500;
+  p = payload();
+  assert.deepEqual(p.playerEffects, { Idle: {}, Slowed: {} });
+  assert.deepEqual(p.playerEffectMovement, {});
+  assert.deepEqual(resolveLocalEffectMovement(p.playerEffects.Slowed, p.playerEffectMovement.Slowed), { speedMult: 1, jumpMult: 1 });
+});

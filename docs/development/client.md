@@ -170,7 +170,7 @@ Export measurements in earlier work logs were local observations. The shipped tr
 
 Relevant checks: `node --test tests/lobbyAudio.test.mjs tests/musicEnvelope.test.js tests/matchStartAudio.test.js tests/navigation.test.js tests/navigationTransitions.test.js tests/rewardAudio.test.js`.
 
-The battle countdown plays its beeps and the final `/assets/start.mp3` FIGHT cue. Both cues are preloaded when the countdown starts.
+The battle countdown plays its beeps and the final `/assets/game-sounds/start.mp3` FIGHT cue. Both cues are preloaded when the countdown starts.
 
 ## Map terrain and footsteps
 

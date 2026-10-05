@@ -121,7 +121,7 @@ export function openPartySlotMenu(slot, anchorEvent, { profilePopup, currentUser
     title.textContent = playerName;
     if (playerName === party.ownerName) {
       const crown = document.createElement("img");
-      crown.src = "/assets/crown.webp";
+      crown.src = "/assets/icons/crown.webp";
       crown.alt = "Party owner";
       crown.className = "profile-slot-menu-crown";
       title.appendChild(crown);

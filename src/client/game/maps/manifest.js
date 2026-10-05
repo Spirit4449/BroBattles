@@ -159,7 +159,7 @@ export function getLobbyPlatformAsset(mapId) {
  */
 export function getMapMusicAsset(mapId) {
   const meta = MAP_META.get(normalizeMapId(mapId));
-  return meta?.musicAsset || "/assets/main.mp3";
+  return meta?.musicAsset || "/assets/game-sounds/main.mp3";
 }
 
 /**

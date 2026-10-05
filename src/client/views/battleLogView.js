@@ -86,7 +86,7 @@ export function renderBattleLog(container, battles = [], options = {}) {
               </div>
               <time class="battle-time" datetime="${escapeHtml(battle.createdAt)}">${timeAgo}</time>
               <span class="battle-trophy-pill ${deltaClass}">
-                <img src="/assets/trophy.webp" alt="Trophies" class="trophy-mini-icon" />
+                <img src="/assets/icons/trophy.webp" alt="Trophies" class="trophy-mini-icon" />
                 <span>${deltaFormatted}</span>
               </span>
             </div>
@@ -130,7 +130,7 @@ export function renderBattleLog(container, battles = [], options = {}) {
         <strong>${wins}W</strong><span>${losses}L${draws > 0 ? ` · ${draws}D` : ""}</span>
       </div>
       <div class="battle-log-metric trophies ${netTrophies >= 0 ? "positive" : "negative"}">
-        <img src="/assets/trophy.webp" alt="" class="trophy-mini-icon" width="14" height="14" />
+        <img src="/assets/icons/trophy.webp" alt="" class="trophy-mini-icon" width="14" height="14" />
         <strong>${trophySign}</strong>
       </div>
       <span class="battle-summary-count">${total} recent battle${total === 1 ? "" : "s"}</span>

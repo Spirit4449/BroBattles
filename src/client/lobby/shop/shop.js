@@ -165,8 +165,8 @@ function getItemIcon(item, grants) {
   if (item.kind === "bundle") return "/assets/shop/icons/bundle-v2.webp";
   if (primary.kind === "currency") {
     return primary.currency === "gems"
-      ? "/assets/gem.webp"
-      : "/assets/coin.webp";
+      ? "/assets/icons/gem.webp"
+      : "/assets/icons/coin.webp";
   }
   if (primary.kind === "skin") return "/assets/shop/icons/skins-hanger.svg";
   if (primary.kind === "card" || primary.kind === "profileIcon")
@@ -330,8 +330,8 @@ export function initializeShop({
             <img class="shop-title-icon" src="/assets/shop/icons/shop-v2.webp" alt="" /><h1 id="shop-title">Bro Shop</h1>
           </div>
           <div class="shop-header-wallet" aria-label="Your wallet">
-            <span data-shop-wallet-shell="coins"><img src="/assets/coin.webp" alt="Coins" /><strong data-shop-wallet="coins">0</strong></span>
-            <span data-shop-wallet-shell="gems"><img src="/assets/gem.webp" alt="Gems" /><strong data-shop-wallet="gems">0</strong></span>
+            <span data-shop-wallet-shell="coins"><img src="/assets/icons/coin.webp" alt="Coins" /><strong data-shop-wallet="coins">0</strong></span>
+            <span data-shop-wallet-shell="gems"><img src="/assets/icons/gem.webp" alt="Gems" /><strong data-shop-wallet="gems">0</strong></span>
           </div>
           <button class="shop-close bb-close pixel-menu-button" type="button" aria-label="Close shop">×</button>
         </header>
@@ -688,7 +688,7 @@ export function initializeShop({
               confirmLabel: amount.toLocaleString(),
               cancelLabel: "Back",
               confirmIcon:
-                currency === "coins" ? "/assets/coin.webp" : "/assets/gem.webp",
+                currency === "coins" ? "/assets/icons/coin.webp" : "/assets/icons/gem.webp",
               confirmSound: "shopBuy",
               cancelSound: "cancel",
             });
@@ -957,7 +957,7 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
   function flyWalletParticle({ sourceRect, targetRect, currency, index, count, onImpact, reveal }) {
     const icon = document.createElement("img");
     icon.className = `shop-flying-currency shop-flying-${currency}`;
-    icon.src = currency === "gems" ? "/assets/gem.webp" : "/assets/coin.webp";
+    icon.src = currency === "gems" ? "/assets/icons/gem.webp" : "/assets/icons/coin.webp";
     icon.alt = "";
     document.body.appendChild(icon);
     const { keyframes, duration, delay: flightDelay } = currencyFlightPlan({ sourceRect, targetRect, index, count });
@@ -1133,8 +1133,8 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
       <div class="shop-reveal-rays" aria-hidden="true"></div>
       <div class="shop-reveal-origin" aria-hidden="true"></div>
       <div class="shop-reveal-wallet" aria-label="Updated wallet">
-        <span data-reveal-wallet-shell="coins"><img src="/assets/coin.webp" alt="Coins" /><strong data-reveal-wallet="coins">${startingWallet.coins.toLocaleString()}</strong></span>
-        <span data-reveal-wallet-shell="gems"><img src="/assets/gem.webp" alt="Gems" /><strong data-reveal-wallet="gems">${startingWallet.gems.toLocaleString()}</strong></span>
+        <span data-reveal-wallet-shell="coins"><img src="/assets/icons/coin.webp" alt="Coins" /><strong data-reveal-wallet="coins">${startingWallet.coins.toLocaleString()}</strong></span>
+        <span data-reveal-wallet-shell="gems"><img src="/assets/icons/gem.webp" alt="Gems" /><strong data-reveal-wallet="gems">${startingWallet.gems.toLocaleString()}</strong></span>
       </div>
       <section class="shop-reveal-panel" role="dialog" aria-modal="true" aria-label="${escapeHtml(heading.name)}" tabindex="-1">
         <header class="shop-reveal-heading"><h2>${escapeHtml(heading.name)}</h2><p class="shop-reveal-subheader">${escapeHtml(heading.type)}</p></header>

@@ -84,6 +84,7 @@ test('match healing uses the health power-up tick once even when health was alre
     playPlayerSound: (scene, _source, key, options) => scene.sound.play(key, options),
     startServerClockSync: noop, stopServerClockSync: noop,
     resyncServerClock: noop, observeServerClockSnapshot: noop,
+    createSnapshotDecoder: require('../src/shared/snapshotDelta').createSnapshotDecoder,
   }), window: {}, Date: { now: () => now } });
 
   const handlers = {};
@@ -146,6 +147,7 @@ test('match playback includes the freeze power-up tick', () => {
     playPlayerSound: (scene, _source, key, options) => scene.sound.play(key, options),
     startServerClockSync: noop, stopServerClockSync: noop,
     resyncServerClock: noop, observeServerClockSnapshot: noop,
+    createSnapshotDecoder: require('../src/shared/snapshotDelta').createSnapshotDecoder,
   }), window: {} });
 
   const handlers = {};

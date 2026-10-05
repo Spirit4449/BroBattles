@@ -53,7 +53,7 @@ function renderLeaderboardRows(rows, profilePopup) {
         <small>Wins</small>
       </span>
       <span class="leaderboard-trophies">
-        <img src="/assets/trophy.webp" alt="" />
+        <img src="/assets/icons/trophy.webp" alt="" />
         <span><strong>${trophies.toLocaleString()}</strong><small>Trophies</small></span>
       </span>
     `;

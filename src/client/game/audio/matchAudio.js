@@ -8,7 +8,7 @@ export function startSuddenDeathMusic(gameScene) {
       gameScene._bgmEl?.pause();
     } catch (_) {}
     if (!gameScene._suddenDeathMusicSfx) {
-      const track = new Audio('/assets/suddendeath.mp3');
+      const track = new Audio('/assets/game-sounds/suddendeath.mp3');
       track.loop = true;
       const disposeVolume = bindAudio(track, 'music', 0.32);
       gameScene._suddenDeathMusicSfx = {

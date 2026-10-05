@@ -174,7 +174,7 @@ function makeChatShell({
   launcher.className = "bb-chat-button bb-chat-launcher";
   if (launcherClassName) launcher.classList.add(launcherClassName);
   launcher.innerHTML = `
-    <img class="bb-chat-launcher-icon" src="/assets/chat.webp" alt="" width="20" height="20" />
+    <img class="bb-chat-launcher-icon" src="/assets/icons/chat.webp" alt="" width="20" height="20" />
     <span class="bb-chat-launcher-label">${escapeHtml(launcherLabel || "Chat")}</span>
   `;
 

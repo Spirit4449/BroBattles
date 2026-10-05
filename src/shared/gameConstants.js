@@ -1,6 +1,6 @@
 // Cross-cutting game constants shared by the server, the browser client, bots,
 // and tools. Anything both sides must agree on lives here; values owned by one
-// feature live with that feature (see docs/GAME_CONSTANTS.md for the full map).
+// feature live with that feature (see docs/development/constants.md for the full map).
 
 // ---------------------------------------------------------------------------
 // Simulation clock

@@ -41,7 +41,7 @@ function openBotPicker(slot, partyId) {
   const { popupShell, closePopup, content, grid } = ensureBotPicker();
   const selectedCharacter = String(slot.dataset.botCharacter || "random");
   const choices = [
-    { id: "random", label: "Random", image: "/assets/random.webp" },
+    { id: "random", label: "Random", image: "/assets/icons/random.webp" },
     { id: "shuffle", label: "Bot", image: "/assets/shuffle/shuffle1.svg" },
     ...getAllCharacters().map((id) => ({
       id,

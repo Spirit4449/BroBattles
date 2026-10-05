@@ -9,7 +9,22 @@ function getDuelGeometry(mapId, variant = '1v1', snapshot = null) {
   return data ? geometryFromMap(data, Number(mapId)) : null;
 }
 
+// Bodies depend only on static character data, but physics probes, bot
+// navigation and every movement packet ask for them. Frozen results are cached
+// by character, then [unflipped, flipped], so lookups allocate nothing.
+const bodyCache = new Map();
 function characterBody(character, flip = false) {
+  const side = flip ? 1 : 0;
+  let pair = bodyCache.get(character);
+  if (!pair) {
+    pair = [null, null];
+    // Only known characters are cached so arbitrary keys cannot grow the map.
+    if (frames[character]) bodyCache.set(character, pair);
+  }
+  return pair[side] ||= Object.freeze(computeCharacterBody(character, side === 1));
+}
+
+function computeCharacterBody(character, flip) {
   const frame = frames[character] || frames.ninja;
   const stats = getCharacterStats(character) || getCharacterStats(DEFAULT_CHARACTER);
   const cfg = getResolvedCharacterBodyConfig(character);

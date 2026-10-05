@@ -17,7 +17,7 @@ export function warmBattleSelection(selection = lastSelection, roster = null) {
   ) : self ? [self] : []);
   window.__BB_NAVIGATION__?.selectPreloadMode?.(selection.modeId);
   // Plays the moment the battle loading screen lifts.
-  const urls = ['/assets/pregame.mp3'];
+  const urls = ['/assets/game-sounds/pregame.mp3'];
   if (selection?.mapId) {
     const map = mapDefaults.find(entry => Number(entry.id) === Number(selection.mapId));
     const variantId = String(selection.modeVariantId || '').match(/(\d+v\d+)$/)?.[1];

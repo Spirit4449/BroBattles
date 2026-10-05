@@ -267,7 +267,7 @@ function syncMapPickerUi(mapValue, selection = getCurrentSelection()) {
     previewImg.src =
       compatibleMaps.length > 0
         ? getMapSelectPreviewAsset(normalized)
-        : "/assets/map.webp";
+        : "/assets/icons/map.webp";
   }
   if (openBtn) {
     openBtn.disabled = !canChangePartySelection() || compatibleMaps.length === 0;
@@ -475,10 +475,10 @@ function setupModePickerControls(onSelect = null) {
       card.classList.toggle("is-trophy-locked", !!unlockReason);
       card.disabled = !!unlockReason;
       card.innerHTML = `
-        <div class="mode-select-art"><img src="${escapeHtml(artAsset)}" alt="${escapeHtml(mode.label)}" />${unlockReason ? '<span class="mode-select-lock" aria-hidden="true"><img src="/assets/lock.webp" alt="" /></span>' : ""}</div>
+        <div class="mode-select-art"><img src="${escapeHtml(artAsset)}" alt="${escapeHtml(mode.label)}" />${unlockReason ? '<span class="mode-select-lock" aria-hidden="true"><img src="/assets/icons/lock.webp" alt="" /></span>' : ""}</div>
         <div class="map-select-name">${escapeHtml(mode.label)}</div>
         <div class="mode-select-subtitle">${escapeHtml(mode.description || "")}</div>
-        <div class="mode-select-meta">${unlockReason && mode.unlockTrophies ? `<span>Unlock at</span><span class="mode-select-trophy-cost"><img src="/assets/trophy.webp" alt="Trophies" /><span>${mode.unlockTrophies.toLocaleString()}</span></span>` : ""}</div>
+        <div class="mode-select-meta">${unlockReason && mode.unlockTrophies ? `<span>Unlock at</span><span class="mode-select-trophy-cost"><img src="/assets/icons/trophy.webp" alt="Trophies" /><span>${mode.unlockTrophies.toLocaleString()}</span></span>` : ""}</div>
       `;
       card.querySelector("img")?.addEventListener("error", (event) => {
         event.currentTarget.src =
@@ -1810,7 +1810,7 @@ function createPlatform(team, slotNumber) {
   // Create character sprite
   const sprite = document.createElement("img");
   sprite.className = "character-sprite random";
-  sprite.src = "/assets/random.webp";
+  sprite.src = "/assets/icons/random.webp";
   sprite.alt = "Random";
 
   // Create status element with invite functionality
@@ -1882,7 +1882,7 @@ function resetSlotToRandom(slot) {
   clearLobbySpawnAnimation(slot);
 
   username.textContent = "Random";
-  sprite.src = "/assets/random.webp";
+  sprite.src = "/assets/icons/random.webp";
   sprite.alt = "Random";
   sprite.classList.add("random");
   sprite.classList.remove("bot-shuffle-icon");

@@ -1,5 +1,7 @@
 # Progression and cosmetics
 
+Character levels, per-level HP/damage/special gains, the level cap and upgrade prices live in `src/shared/characters/characterStats.js`. Base stats and unlock methods live in each character JSON. See [Game constants](constants.md) for current defaults. Runtime reward multipliers/floors/ceilings affect battle rewards; they do not redefine Trophy Road grants.
+
 ## Track and economy
 
 46 milestones through 10,000 trophies. Normal intervals:
@@ -37,7 +39,7 @@ Ordinary rewards alternate 300 coins and 15 gems, increasing by 50% of that base
 
 The finale contains the 10,000 player icon, Arena Sovereign Ninja skin, Crown of the Arena player card, 6,000 coins and 250 gems.
 
-Modes unlock automatically at the player's highest achieved trophies. Queue admission checks every human party member on the server. Skins, icons, cards and Bros require their Trophy Road claim. Ownership is permanent and uses the same tables and equip endpoints as Shop and Profile. Gloop cannot be bought through `/buy` or unlocked through `/upgrade`; existing owners keep their levels. To add another trophy Bro, set its stats' `unlockMethod` to `{ "type": "trophyRoad", "min": ... }` and add a `character` reward with its character key.
+Modes unlock automatically at the player's highest achieved trophies. Party queue admission checks the host’s peak trophies on the server; personal mode-selection changes check the acting player’s unlock. Solo admission checks the individual account. Skins, icons, cards and Bros require their Trophy Road claim. Ownership is permanent and uses the same tables and equip endpoints as Shop and Profile. Gloop cannot be bought through `/buy` or unlocked through `/upgrade`; existing owners keep their levels. To add another trophy Bro, set its stats' `unlockMethod` to `{ "type": "trophyRoad", "min": ... }` and add a `character` reward with its character key.
 
 Only Duels and Bank Bust currently have playable game implementations in this repository. The other modes retain their existing Coming Soon status independently of trophy access. Adding their gameplay is a separate task.
 

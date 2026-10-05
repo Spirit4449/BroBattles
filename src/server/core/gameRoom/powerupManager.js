@@ -1,7 +1,6 @@
 const { PICKUP_DELAY_MS } = require("../../../shared/powerups");
 const {
   WORLD_BOUNDS,
-  GAME_DURATION_MS,
   SD_RISE_SPEED,
   SD_RISE_FAST_PHASE_MS,
   SD_RISE_FAST_MULT,
@@ -16,6 +15,7 @@ const {
 const { getDuelGeometry } = require("../../../shared/physics/duelGeometry");
 const { resolvePowerupPoints } = require("../../../shared/maps/mapDocument");
 const effectManager = require("./effects/effectManager");
+const { matchDurationMs } = require("./timerManager");
 const { effectDefs } = require("./effects/effectDefs");
 
 // Spawn points come from the map document (`spawns.powerups`, edited in the
@@ -189,7 +189,8 @@ function computePoisonY(room, sdElapsedMs) {
 function isInSuddenDeathWater(room, playerData, nowTs) {
   if (!room._suddenDeathActive) return false;
   const elapsed = nowTs - room._loopStartWallTime;
-  const sdElapsed = Math.max(0, elapsed - GAME_DURATION_MS);
+  // Same regulation length the timer uses, so heal-blocking matches the poison.
+  const sdElapsed = Math.max(0, elapsed - matchDurationMs(room));
   const poisonY = computePoisonY(room, sdElapsed);
   return typeof playerData?.y === "number" && playerData.y >= poisonY;
 }
@@ -256,7 +257,7 @@ function buildPlayerEffectsSnapshot(room) {
   const now = Date.now();
   const out = {};
   for (const p of room.players.values()) {
-    out[p.name] = effectManager.snapshotAll(p, now);
+    out[p.name] = effectManager.snapshotActive(p, now);
   }
   return out;
 }

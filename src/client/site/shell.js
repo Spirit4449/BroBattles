@@ -126,7 +126,7 @@ function wireNavigation() {
     document.addEventListener('click',event=>{if(!wrap.contains(event.target))toggle(false);});
     wrap.addEventListener('focusout',event=>{if(event.relatedTarget && !wrap.contains(event.relatedTarget))toggle(false);});
   }
-  if(location.pathname.startsWith('/game/')){const button=element('button',null,'site-battle-settings fullscreen-toggle');button.setAttribute('aria-label','Settings');const img=element('img');img.src='/assets/settings.webp';img.alt='';button.append(img);button.onclick=openSettings;document.body.append(button);}
+  if(location.pathname.startsWith('/game/')){const button=element('button',null,'site-battle-settings fullscreen-toggle');button.setAttribute('aria-label','Settings');const img=element('img');img.src='/assets/icons/settings.webp';img.alt='';button.append(img);button.onclick=openSettings;document.body.append(button);}
 }
 // Existing lobby code reads textContent as identity. Keep that data intact and
 // obscure its presentation; the accessibility tree receives only a neutral label.

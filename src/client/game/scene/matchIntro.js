@@ -15,7 +15,7 @@ import {
   sampleFlythrough,
 } from "./pregameFlythrough";
 
-const PREGAME_AUDIO_SRC = "/assets/pregame.mp3";
+const PREGAME_AUDIO_SRC = "/assets/game-sounds/pregame.mp3";
 const PREGAME_AUDIO_VOLUME = 0.55;
 const AUDIO_FADE_OUT_MS = 450;
 const CUT_SHORT_BLEND_MS = 650;

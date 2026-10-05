@@ -18,6 +18,13 @@ function clearStartTimers(room) {
   room._countdownTimeout = null;
 }
 
+// A delayed victory finish (see checkVictoryCondition) that has not fired yet.
+function clearPendingVictory(room) {
+  clearTimeout(room._pendingVictoryFinishTimeout);
+  room._pendingVictoryFinishTimeout = null;
+  room._pendingVictoryOutcomeKey = null;
+}
+
 function armStartDeadline(room) {
   room._startDeadlineTimer = setTimeout(() => {
     room._startDeadlineTimer = null;
@@ -160,11 +167,7 @@ function checkVictoryCondition(room) {
   const winner = terminal ? (victoryState?.winnerTeam ?? null) : null;
 
   if (!terminal) {
-    if (room._pendingVictoryFinishTimeout) {
-      clearTimeout(room._pendingVictoryFinishTimeout);
-      room._pendingVictoryFinishTimeout = null;
-      room._pendingVictoryOutcomeKey = null;
-    }
+    clearPendingVictory(room);
     return;
   }
 
@@ -250,17 +253,7 @@ async function finishGame(room, winnerTeam, meta = {}) {
       timing: room._botTickStats || null,
     }),
   );
-  if (room._pendingVictoryFinishTimeout) {
-    clearTimeout(room._pendingVictoryFinishTimeout);
-    room._pendingVictoryFinishTimeout = null;
-    room._pendingVictoryOutcomeKey = null;
-  }
-  if (room.gameLoop) {
-    try {
-      clearInterval(room.gameLoop);
-    } catch (_) {}
-    room.gameLoop = null;
-  }
+  clearPendingVictory(room);
 
   let rewardSummary = [];
   let rewardsPending = false;
@@ -339,6 +332,7 @@ async function finishGame(room, winnerTeam, meta = {}) {
 
 module.exports = {
   clearStartTimers,
+  clearPendingVictory,
   armStartDeadline,
   noteReady,
   potentialStartGame,

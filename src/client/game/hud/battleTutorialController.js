@@ -161,7 +161,7 @@ export function createBattleTutorialController({
         {
           label: "Left mouse button",
           codes: ["Mouse0"],
-          icon: "/assets/mouse_left.webp",
+          icon: "/assets/icons/mouse_left.webp",
         },
         { label: "J", codes: ["KeyJ"] },
       ];
@@ -171,7 +171,7 @@ export function createBattleTutorialController({
         {
           label: "Right mouse button",
           codes: ["Mouse2"],
-          icon: "/assets/mouse_right.webp",
+          icon: "/assets/icons/mouse_right.webp",
         },
         { label: "I", codes: ["KeyI"] },
       ];
@@ -181,7 +181,7 @@ export function createBattleTutorialController({
         {
           label: "Hold mouse button",
           codes: ["Mouse0", "Mouse2"],
-          icon: "/assets/mouse_left.webp",
+          icon: "/assets/icons/mouse_left.webp",
         },
       ];
     }

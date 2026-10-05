@@ -64,7 +64,7 @@ function buildPartySuggestionHint(party) {
       .join("|")}`,
     anchor: "#search-parties",
     variant: "party",
-    icon: "/assets/crown.webp",
+    icon: "/assets/icons/crown.webp",
     title: "Suggested Party",
     details: {
       name: partyName,

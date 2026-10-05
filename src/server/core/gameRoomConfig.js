@@ -1,6 +1,6 @@
 // Server-side match tuning: timers, sudden death, powerup spawning, death
 // drops, regen, and anti-cheat tolerances. Everything here is read by
-// src/server/core/gameRoom/*. See docs/GAME_CONSTANTS.md for where every other
+// src/server/core/gameRoom/*. See docs/development/constants.md for where every other
 // kind of constant lives.
 //
 // Values owned by content files are re-exported, never copied:

@@ -1,5 +1,5 @@
 const { exposeDamageHitbox } = require('./damageHitboxes');
-const { randomUUID } = require('node:crypto');
+const { snapshotEpoch } = require('./roomStateManager');
 const model = require('../../../shared/characters/huntressProjectile');
 const { participantId, getParticipant } = require('./participants');
 const { characterBody } = require('../../../shared/physics/duelGeometry');
@@ -7,7 +7,7 @@ const { characterBody } = require('../../../shared/physics/duelGeometry');
 function initialize(room) {
   // Protocol version protects joins from stale clients; combat is always authoritative.
   room.huntressCombatVersion = model.VERSION;
-  room._snapshotEpoch ??= randomUUID();
+  snapshotEpoch(room);
   room._huntress = { active: new Map(), pending: [], requests: new Map(), terminals: [], metrics: [] };
 }
 function timing(room) {

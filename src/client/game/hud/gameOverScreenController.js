@@ -10,17 +10,17 @@ import { POST_BATTLE_LOBBY_RETURN_KEY } from "../../lib/storageKeys.js";
 
 const REWARD_TYPES = {
   coins: {
-    image: "/assets/coin.webp",
+    image: "/assets/icons/coin.webp",
     label: "Coins",
     rewardKey: "coinsAwarded",
   },
   gems: {
-    image: "/assets/gem.webp",
+    image: "/assets/icons/gem.webp",
     label: "Gems",
     rewardKey: "gemsAwarded",
   },
   trophies: {
-    image: "/assets/trophy.webp",
+    image: "/assets/icons/trophy.webp",
     label: "Trophies",
     rewardKey: "trophiesDelta",
   },

@@ -323,7 +323,7 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
     <div class="trophy-track-marker-row" id="trophy-track-marker-row"></div>
     <div class="trophy-track-player-pin" style="left:${playerX}px" aria-label="Current position: ${trophies.toLocaleString()} trophies">
       <small>You</small>
-      <img src="/assets/trophy.webp" alt="" />
+      <img src="/assets/icons/trophy.webp" alt="" />
       <span>${trophies.toLocaleString()}</span>
     </div>
   `;
@@ -349,7 +349,7 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
 
       const rewards = Array.isArray(tier.rewards) ? tier.rewards : [];
       const primaryReward = rewards[0] || {
-        image: "/assets/coin.webp",
+        image: "/assets/icons/coin.webp",
         name: "Reward",
         amount: 0,
       };
@@ -377,7 +377,7 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
       card.innerHTML = `
       <div class="trophy-lane-card-sheen"></div>
       <div class="trophy-lane-item-wrap reward-${escapeHtml(bundle ? 'bundle' : primaryReward.kind)}" style="--reward-glow:${primaryReward.kind === 'card' && primaryReward.itemId === 'slime-circuit' ? '108,255,127' : primaryReward.currency === 'gems' ? '64,207,255' : isMajorMilestone ? '255,203,87' : '121,158,255'}">
-        <img class="trophy-lane-item" loading="lazy" src="${escapeHtml(art || '/assets/coin.webp')}" alt="${escapeHtml(contents)}" />
+        <img class="trophy-lane-item" loading="lazy" src="${escapeHtml(art || '/assets/icons/coin.webp')}" alt="${escapeHtml(contents)}" />
       </div>
       <div class="trophy-lane-meta">
         <strong>${bundle ? escapeHtml(tier.title) : `${primaryAmount ? `${primaryAmount.toLocaleString()} ` : ''}${escapeHtml(primaryName)}`}</strong>
@@ -394,7 +394,7 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
       marker.style.left = `${Math.round(ratioToX(tierRatio))}px`;
       marker.innerHTML = `
       <span class="trophy-lane-marker-chip">
-        <img src="/assets/trophy.webp" alt="" />
+        <img src="/assets/icons/trophy.webp" alt="" />
         <span>${Math.max(0, Number(tier.trophiesRequired) || 0).toLocaleString()}</span>
       </span>
     `;

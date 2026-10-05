@@ -1,8 +1,13 @@
 const { damageHitboxSnapshot } = require('./damageHitboxes');
 const effectManager = require('./effects/effectManager');
-const { randomUUID } = require("node:crypto");
+const { randomBytes } = require("node:crypto");
 const { getDuelGeometry, spawnForParticipant } = require('../../../shared/physics/duelGeometry');
 const { participantId } = require('./participants');
+const { createSnapshotEncoder } = require('../../../shared/snapshotDelta');
+
+function snapshotEncoder(room) {
+  return (room._snapshotEncoder ||= createSnapshotEncoder());
+}
 
 function roundPosition(value) {
   const num = Number(value);
@@ -15,9 +20,31 @@ function roundVelocity(value) {
   return Number.isFinite(num) ? Math.round(num) : 0;
 }
 
+// Clients only compare epochs for equality (a new room resets clock samples),
+// so 48 random bits are plenty and cost 8 bytes instead of a 36-byte UUID.
+function snapshotEpoch(room) {
+  return (room._snapshotEpoch ??= randomBytes(6).toString("base64url"));
+}
+
+// Server-computed movement multipliers, only for players with active effects.
+// Without an entry the client derives them from playerEffects, which is
+// exactly 1x/1x when that map is empty.
+function buildEffectMovement(room, playerEffects, now) {
+  const out = {};
+  for (const player of room.players.values()) {
+    const active = playerEffects[player.name];
+    if (!active || !Object.keys(active).length) continue;
+    const { speedMult, jumpMult } = effectManager.getModifiers(player, now);
+    out[player.name] = { speedMult, jumpMult };
+  }
+  return out;
+}
+
 function buildWorldStatePayload(room) {
+  const now = Date.now();
+  const playerEffects = room._buildPlayerEffectsSnapshot();
   return {
-    timestamp: Date.now(),
+    timestamp: now,
     modeState: room.gameMode?.buildModeState?.() ?? null,
     powerups: Array.from(room._powerups.values()).map((pu) => ({
       id: pu.id,
@@ -29,11 +56,8 @@ function buildWorldStatePayload(room) {
       expiresAt: pu.expiresAt,
     })),
     deathDrops: room._buildDeathDropsSnapshot(),
-    playerEffects: room._buildPlayerEffectsSnapshot(),
-    playerEffectMovement: Object.fromEntries(Array.from(room.players.values(), player => {
-      const { speedMult, jumpMult } = effectManager.getModifiers(player, Date.now());
-      return [player.name, { speedMult, jumpMult }];
-    })),
+    playerEffects,
+    playerEffectMovement: buildEffectMovement(room, playerEffects, now),
   };
 }
 
@@ -165,6 +189,8 @@ function sendGameStateToPlayer(room, socket) {
   };
 
   socket.emit("game:init", gameStateForPlayer);
+  // The joiner has no delta base yet; make the next broadcast self-contained.
+  snapshotEncoder(room).requestKeyframe();
 }
 
 // Movement VFX events (jump/land/turn/wall-jump) change a few times a second at
@@ -189,26 +215,24 @@ function broadcastSnapshot(room, extraTiming = null) {
   // Several state changes can occur in one simulation tick. Order emissions
   // independently, without inventing elapsed simulation time for those changes.
   room._snapshotSeq = (room._snapshotSeq || 0) + 1;
-  room._snapshotEpoch ??= randomUUID();
 
   const snapshot = {
     timestamp: wall,
-    sentAtWallMs: wall,
     sentMono,
     tMono,
     tickId: room._tickId || 0,
     snapshotSeq: room._snapshotSeq,
-    snapshotEpoch: room._snapshotEpoch,
+    snapshotEpoch: snapshotEpoch(room),
     snapshotKind: extraTiming ? "periodic" : "event",
-    players: {},
   };
+  const players = {};
 
   if (room.matchData?.editorDebugHitboxes) snapshot.damageHitboxes = damageHitboxSnapshot(room, wall);
 
+  // Identity fields (participantId, isBot, team, ...) never change mid-match;
+  // clients take them from game:init, so periodic snapshots carry state only.
   for (const playerData of room.players.values()) {
     const playerSnapshot = {
-      participantId: playerData.participantId,
-      isBot: playerData.isBot === true,
       x: roundPosition(playerData.x),
       y: roundPosition(playerData.y),
       vx: roundVelocity(playerData.vx),
@@ -240,8 +264,11 @@ function broadcastSnapshot(room, extraTiming = null) {
       });
     }
 
-    snapshot.players[playerData.name] = playerSnapshot;
+    players[playerData.name] = playerSnapshot;
   }
+  // Only fields that changed since the previous snapshot go on the wire
+  // (see shared/snapshotDelta); clients rebuild full states before use.
+  Object.assign(snapshot, snapshotEncoder(room).encode(room._snapshotSeq, players));
 
   room.io
     .to(`game:${room.matchId}`)
@@ -257,6 +284,7 @@ function broadcastWorldState(room) {
 }
 
 module.exports = {
+  snapshotEpoch,
   buildWorldStatePayload,
   computeSpawnIndex,
   spawnStateFor,

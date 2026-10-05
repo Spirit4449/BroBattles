@@ -20,7 +20,7 @@ function setup(handler) {
       if (handler) { const result = await handler(new URL(url).pathname, options); if (result) return result; }
       if (url.endsWith('/game.html')) return new Response('<script src="/bundles/navigation.bundle.abc.js"></script><script>loadScript("/bundles/game.bundle.0123456789abcdef.js")</script><link href="/bundles/game.0123456789abcdef.css">');
       if (url.endsWith('/index.html')) return new Response('<script src="/bundles/index.bundle.0123456789abcdef.js"></script><link href="/styles/lobby.css?v=3">');
-      if (url.endsWith('/battle-preload.json')) return new Response(JSON.stringify(['/bundles/mode-bank-bust.js', '/bundles/mode-other.js', '/assets/death.mp3']));
+      if (url.endsWith('/battle-preload.json')) return new Response(JSON.stringify(['/bundles/mode-bank-bust.js', '/bundles/mode-other.js', '/assets/game-sounds/death.mp3']));
       return new Response('asset');
     },
   });

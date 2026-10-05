@@ -337,7 +337,7 @@ export function createLobbyHintController({
         const name = document.createElement("strong");
         name.textContent = player.name || "Player";
         const trophies = document.createElement("span");
-        trophies.innerHTML = '<img src="/assets/trophy.webp" alt="" />';
+        trophies.innerHTML = '<img src="/assets/icons/trophy.webp" alt="" />';
         trophies.append(String(Math.max(0, Number(player.trophies) || 0)));
         row.append(avatar, name, trophies);
         playerPopover.appendChild(row);

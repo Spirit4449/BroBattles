@@ -13,9 +13,9 @@ export function preloadGameAssets({
   // Character assets (preload all registered characters)
   preloadAllCharacters(scene, staticPath);
 
-  loadImage("deathdrop-coin", `${staticPath}/coin.webp`);
-  loadImage("deathdrop-gem", `${staticPath}/gem.webp`);
-  loadImage("spectate-icon", `${staticPath}/spectate.webp`);
+  loadImage("deathdrop-coin", `${staticPath}/icons/coin.webp`);
+  loadImage("deathdrop-gem", `${staticPath}/icons/gem.webp`);
+  loadImage("spectate-icon", `${staticPath}/icons/spectate.webp`);
   for (let i = 1; i <= 3; i++) {
     loadImage(`tombstone-${i}`, `${staticPath}/tombstones/tombstone-${i}.webp`);
   }
@@ -32,13 +32,13 @@ export function preloadGameAssets({
     `${staticPath}/movement/duck-transition.mp3`,
   );
   scene.load.audio("sfx-duck-block", `${staticPath}/movement/duck-block.wav`);
-  scene.load.audio("sfx-sudden-death", `${staticPath}/suddendeath.mp3`);
-  scene.load.audio("sfx-death", `${staticPath}/death.mp3`);
-  scene.load.audio("sfx-you-death", `${staticPath}/you-death.mp3`);
-  scene.load.audio("sfx-coin-pickup", `${staticPath}/coin.mp3`);
-  scene.load.audio("sfx-gem-pickup", `${staticPath}/gem.mp3`);
-  scene.load.audio("sfx-noammo", `${staticPath}/noammo.mp3`);
-  scene.load.audio("sfx-nosuper", `${staticPath}/nosuper.mp3`);
+  scene.load.audio("sfx-sudden-death", `${staticPath}/game-sounds/suddendeath.mp3`);
+  scene.load.audio("sfx-death", `${staticPath}/game-sounds/death.mp3`);
+  scene.load.audio("sfx-you-death", `${staticPath}/game-sounds/you-death.mp3`);
+  scene.load.audio("sfx-coin-pickup", `${staticPath}/game-sounds/coin.mp3`);
+  scene.load.audio("sfx-gem-pickup", `${staticPath}/game-sounds/gem.mp3`);
+  scene.load.audio("sfx-noammo", `${staticPath}/game-sounds/noammo.mp3`);
+  scene.load.audio("sfx-nosuper", `${staticPath}/game-sounds/nosuper.mp3`);
 
   scene.load.spritesheet(
     "duck-guard-impact",
@@ -47,7 +47,7 @@ export function preloadGameAssets({
   );
 
   // Combat/health SFX
-  scene.load.audio("sfx-damage", `${staticPath}/damage.mp3`);
+  scene.load.audio("sfx-damage", `${staticPath}/game-sounds/damage.mp3`);
   // Shockwave reuses Draven's animated explosion art under its own key so the
   // effect is available even when no Draven is present in the match roster.
   scene.load.atlas(
@@ -56,8 +56,8 @@ export function preloadGameAssets({
     `${staticPath}/draven/explosion.json`,
   );
   // Music (non-blocking BGM: handled via HTMLAudio at runtime)
-  scene.load.audio("win", `${staticPath}/win.mp3`);
-  scene.load.audio("lose", `${staticPath}/lose.mp3`);
+  scene.load.audio("win", `${staticPath}/game-sounds/win.mp3`);
+  scene.load.audio("lose", `${staticPath}/game-sounds/lose.mp3`);
 
   // Powerup assets use the published WebP icons and MP3 sounds.
   for (const type of powerupTypes) {

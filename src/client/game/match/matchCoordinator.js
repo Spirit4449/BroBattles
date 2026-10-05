@@ -27,6 +27,7 @@ import {
   shouldMuteClientDefaultLogs,
 } from "../../lib/netTestLogger.js";
 import { mergeInitialRosterPlayer } from "./playerRosterMerge.js";
+import { createSnapshotDecoder } from "../../../shared/snapshotDelta";
 import {
   observeServerClockSnapshot,
   resyncServerClock,
@@ -172,6 +173,8 @@ export function createMatchCoordinator(config) {
   const REMOTE_ATTACK_PRECISION_WINDOW_MS = 320;
   const START_WATCHDOG_TIMEOUT_MS = 15_000;
 
+  // Snapshots arrive as deltas; everything below sees rebuilt full states.
+  const snapshotDecoder = createSnapshotDecoder();
   let _startWatchdogTimer = null;
   let _startWatchdogDeadline = 0;
   let _forceLiveInputTimer = null;
@@ -290,6 +293,7 @@ export function createMatchCoordinator(config) {
     }
     _joinedSocketId = null;
     snapshotBuffer.reset();
+    snapshotDecoder.reset();
     setHasJoined(false);
     setJoinInFlight(false);
   }
@@ -804,7 +808,9 @@ export function createMatchCoordinator(config) {
     wrapper?.handleRespawn?.(payload);
   }
 
-  function _onGameSnapshot(snapshot) {
+  function _onGameSnapshot(packet) {
+    // Null until a keyframe arrives after joining or a missed packet.
+    const snapshot = snapshotDecoder.decode(packet);
     if (!snapshot || !snapshot.players) return;
     const receivedAt = performance.now();
     const ingest = snapshotBuffer.ingestSnapshot(snapshot, receivedAt);
@@ -1324,6 +1330,7 @@ export function createMatchCoordinator(config) {
     socket.off("player:dead", _onPlayerDead);
     socket.off("player:respawn", _onPlayerRespawn);
     socket.off("game:snapshot", _onGameSnapshot);
+    snapshotDecoder.reset();
     socket.off("game:state", _onGameState);
     socket.off("game:action", _onGameAction);
     socket.off("game:error", _onGameError);

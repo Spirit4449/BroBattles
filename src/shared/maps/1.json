@@ -15,7 +15,7 @@
       "duels-2v2",
       "duels-3v3"
     ],
-    "musicAsset": "/assets/main.mp3",
+    "musicAsset": "/assets/game-sounds/main.mp3",
     "musicVolume": 0.11,
     "mapSelectPreviewAsset": "/assets/lushy/preview.webp",
     "lobbyBgAsset": "/assets/lushy/lobbyBg.webp",

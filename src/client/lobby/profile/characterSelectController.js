@@ -252,7 +252,7 @@ function updateSkinDetails(character, direction = 1) {
   if (skin.locked && !lock) {
     lock = document.createElement('img');
     lock.className = 'character-details-skin-lock';
-    lock.src = '/assets/lock.webp';
+    lock.src = '/assets/icons/lock.webp';
     lock.alt = 'Locked';
     name.prepend(lock);
   } else if (!skin.locked) lock?.remove();
@@ -439,8 +439,8 @@ function ensureCharacterDetailsUi() {
   wallet.className = "character-details-wallet";
   wallet.setAttribute("aria-label", "Your wallet");
   wallet.innerHTML = `
-    <span><img src="/assets/coin.webp" alt="Coins" /><strong data-character-wallet="coins">0</strong></span>
-    <span><img src="/assets/gem.webp" alt="Gems" /><strong data-character-wallet="gems">0</strong></span>
+    <span><img src="/assets/icons/coin.webp" alt="Coins" /><strong data-character-wallet="coins">0</strong></span>
+    <span><img src="/assets/icons/gem.webp" alt="Gems" /><strong data-character-wallet="gems">0</strong></span>
   `;
 
   titleWrap.appendChild(title);
@@ -579,7 +579,7 @@ function renderCharacterDetails(character) {
   if (cardState.isLocked) {
     const lockOverlay = document.createElement("div");
     lockOverlay.className = "character-details-lock-overlay";
-    lockOverlay.innerHTML = '<img src="/assets/lock.webp" alt="Locked" />';
+    lockOverlay.innerHTML = '<img src="/assets/icons/lock.webp" alt="Locked" />';
     previewFrame.appendChild(lockOverlay);
   }
 
@@ -621,7 +621,7 @@ function renderCharacterDetails(character) {
   const healthMax = Math.max(1, Number(cardState.maxHealth || 1));
   healthBox.innerHTML = `
     <div class="stat-box-header">
-      <img class="stat-box-icon" src="/assets/heart.webp" alt="Health" />
+      <img class="stat-box-icon" src="/assets/icons/heart.webp" alt="Health" />
       <span class="stat-box-label">Health</span>
       ${statValueMarkup("health", cardState.currentHealth, nextHealth)}
     </div>
@@ -639,7 +639,7 @@ function renderCharacterDetails(character) {
   const attackMax = Math.max(1, Number(cardState.maxDamage || 1));
   attackBox.innerHTML = `
     <div class="stat-box-header">
-      <img class="stat-box-icon" src="/assets/attack.webp" alt="Attack" />
+      <img class="stat-box-icon" src="/assets/icons/attack.webp" alt="Attack" />
       <span class="stat-box-label">Attack</span>
       ${statValueMarkup("damage", cardState.currentDamage, nextDamage)}
     </div>
@@ -672,7 +672,7 @@ function renderCharacterDetails(character) {
   const specialMax = Math.max(1, Number(cardState.maxSpecial || 1));
   specialBox.innerHTML = `
     <div class="stat-box-header">
-      <img class="stat-box-icon" src="/assets/special.webp" alt="Special" />
+      <img class="stat-box-icon" src="/assets/icons/special.webp" alt="Special" />
       <span class="stat-box-label">Special</span>
       ${statValueMarkup("special", cardState.currentSpecial, nextSpecial)}
     </div>
@@ -735,7 +735,7 @@ function renderCharacterDetails(character) {
   if (selectedSkin.locked) {
     const lockIcon = document.createElement("img");
     lockIcon.className = "character-details-skin-lock";
-    lockIcon.src = "/assets/lock.webp";
+    lockIcon.src = "/assets/icons/lock.webp";
     lockIcon.alt = "Locked";
     skinName.appendChild(lockIcon);
   }
@@ -776,9 +776,9 @@ function renderCharacterDetails(character) {
     buyButton.setAttribute("aria-label", `Unlock ${character} for ${stats.unlockPrice || 0} gems`);
     buyButton.className =
       `character-details-action buy-button pixel-menu-button${cardState.canUnlock ? " is-ready" : ""}`;
-    buyButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon" src="/assets/lock.webp" alt="" /><span>Buy</span></span><span class="button-price"><img class="cs-currency" src="/assets/gem.webp" alt="" /><span>${escapeHtml(stats.unlockPrice || 0)}</span></span>`;
+    buyButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon" src="/assets/icons/lock.webp" alt="" /><span>Buy</span></span><span class="button-price"><img class="cs-currency" src="/assets/icons/gem.webp" alt="" /><span>${escapeHtml(stats.unlockPrice || 0)}</span></span>`;
     if (stats.unlockMethod?.type === "trophyRoad") {
-      buyButton.innerHTML = `<span class="character-details-action-label character-details-trophy-label"><img class="character-details-action-icon" src="/assets/lock.webp" alt="" /><span>Trophy Reward</span></span><span class="button-price"><img class="cs-currency" src="/assets/trophy.webp" alt="" /><span>${stats.unlockMethod.min.toLocaleString()}</span></span>`;
+      buyButton.innerHTML = `<span class="character-details-action-label character-details-trophy-label"><img class="character-details-action-icon" src="/assets/icons/lock.webp" alt="" /><span>Trophy Reward</span></span><span class="button-price"><img class="cs-currency" src="/assets/icons/trophy.webp" alt="" /><span>${stats.unlockMethod.min.toLocaleString()}</span></span>`;
       buyButton.setAttribute("aria-label", `Claim ${character} on Trophy Road at ${stats.unlockMethod.min} trophies`);
     }
     buyButton.addEventListener("click", (e) => {
@@ -808,7 +808,7 @@ function renderCharacterDetails(character) {
       upgradeButton.type = "button";
       upgradeButton.setAttribute("aria-label", `Upgrade ${character} for ${cardState.price} coins`);
       upgradeButton.className = `character-details-action upgrade-button pixel-menu-button${cardState.canUpgrade ? " is-ready" : ""}`;
-      upgradeButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon upgrade-icon" src="/assets/upgrade.webp" alt="" /><span>Upgrade</span></span><span class="button-price"><img class="cs-currency" src="/assets/coin.webp" alt="" /><span>${escapeHtml(cardState.price)}</span></span>`;
+      upgradeButton.innerHTML = `<span class="character-details-action-label"><img class="character-details-action-icon upgrade-icon" src="/assets/icons/upgrade.webp" alt="" /><span>Upgrade</span></span><span class="button-price"><img class="cs-currency" src="/assets/icons/coin.webp" alt="" /><span>${escapeHtml(cardState.price)}</span></span>`;
       if (!cardState.canUpgrade) {
         upgradeButton.title = "Not enough coins — select to view the balance needed";
       }
@@ -843,7 +843,7 @@ function renderCharacterDetails(character) {
       const maxedLabel = document.createElement("div");
       maxedLabel.className = "character-details-maxed-label";
       maxedLabel.innerHTML =
-        '<img src="/assets/crown.webp" alt="" /> <span>Max Level</span>';
+        '<img src="/assets/icons/crown.webp" alt="" /> <span>Max Level</span>';
       footer.appendChild(maxedLabel);
     }
 
@@ -1130,7 +1130,7 @@ function createCharacterCard(character, userData) {
   if (cardState.isLocked) {
     const lockOverlay = document.createElement("div");
     lockOverlay.className = "character-card-lock-overlay";
-    lockOverlay.innerHTML = '<img src="/assets/lock.webp" alt="Locked" />';
+    lockOverlay.innerHTML = '<img src="/assets/icons/lock.webp" alt="Locked" />';
     imageWrap.appendChild(lockOverlay);
   }
 
@@ -1401,7 +1401,7 @@ function showConfirmDialog(opts, onConfirm) {
     });
     const arrow = document.createElement("img");
     arrow.className = "cs-arrow";
-    arrow.src = "/assets/arrow.webp";
+    arrow.src = "/assets/icons/arrow.webp";
     arrow.alt = ">";
     const nextWrap = document.createElement("div");
     nextWrap.className = "cs-next-wrap";
@@ -1422,7 +1422,7 @@ function showConfirmDialog(opts, onConfirm) {
   priceRow.className = "cs-price-row";
   const remainingIcon = document.createElement("img");
   remainingIcon.className = "cs-currency";
-  remainingIcon.src = isUpgrade ? "/assets/coin.webp" : "/assets/gem.webp";
+  remainingIcon.src = isUpgrade ? "/assets/icons/coin.webp" : "/assets/icons/gem.webp";
   remainingIcon.alt = isUpgrade ? "Coins" : "Gems";
   const remainingText = document.createElement("span");
   remainingText.textContent = `Remaining after purchase: ${Math.max(
@@ -1441,7 +1441,7 @@ function showConfirmDialog(opts, onConfirm) {
   const okBtn = document.createElement("button");
   okBtn.className = "cs-btn confirm pixel-menu-button";
   okBtn.innerHTML = `<img class="cs-currency" src="${
-    isUpgrade ? "/assets/coin.webp" : "/assets/gem.webp"
+    isUpgrade ? "/assets/icons/coin.webp" : "/assets/icons/gem.webp"
   }" alt=""/> <span>${escapeHtml(price)}</span>`;
 
   cancelBtn.onclick = () => {
@@ -1516,7 +1516,7 @@ function showInsufficientDialog(currency) {
   if (!document.querySelector(".character-select-overlay")) return;
   const icon = document.createElement("img");
   icon.className = "cs-currency";
-  icon.src = currency === "coins" ? "/assets/coin.webp" : "/assets/gem.webp";
+  icon.src = currency === "coins" ? "/assets/icons/coin.webp" : "/assets/icons/gem.webp";
   icon.alt = currency;
   const txt = document.createElement("span");
   txt.textContent = ` Not enough ${currency} to complete this purchase.`;

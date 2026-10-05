@@ -75,13 +75,9 @@ class GameRoom {
     this.gameMode = createGameModeRuntime(this);
     this.modeState = this.gameMode?.createRoomState?.() ?? null;
 
-    // Game loop (will migrate to fixed-step accumulator + snapshot cadence)
-    this.gameLoop = null; // legacy interval reference (used only until refactor start)
+    // Fixed-step loop state (see startGameLoop)
     this._loopRunning = false;
     this._tickId = 0; // monotonically increasing per 60Hz tick
-    this._lastSnapshotMono = 0;
-    this._snapshotIntervals = []; // diagnostics (ms spacing between snapshots)
-    this._diagLastLogMono = 0;
     this._chatSeq = 1;
     // Tick/snapshot cadence: src/shared/gameConstants.js
     this.FIXED_DT_MS = FIXED_DT_MS;
@@ -89,9 +85,14 @@ class GameRoom {
     this.WORLD_STATE_EVERY_TICKS = WORLD_STATE_EVERY_TICKS;
     // Rollback switch for comparing publication pacing; simulation is unchanged.
     this.COALESCE_SNAPSHOTS = process.env.BB_COALESCE_SNAPSHOTS !== "0";
-    this.DEV_TIMING_DIAG = true; // temporary diagnostics flag
+    // Gates timing/anti-cheat warnings. Routine periodic timing summaries are
+    // further limited to development (or BB_TIMING_DIAG=1); stalls always log.
+    this.DEV_TIMING_DIAG = true;
     this._timingDiagnostics = createTimingDiagnostics(this, {
       fixedDtMs: this.FIXED_DT_MS,
+      periodicSummaries: process.env.BB_TIMING_DIAG
+        ? process.env.BB_TIMING_DIAG === "1"
+        : process.env.NODE_ENV !== "production",
     });
     this.DEBUG_HIT_EVENTS =
       String(process.env.DEBUG_HIT_EVENTS || "").toLowerCase() === "1" ||
@@ -502,14 +503,7 @@ class GameRoom {
     this.status = "finished";
     this.playerActivity?.finishMatch(this.matchId, { endScreen: false });
     this._loopRunning = false;
-
-    if (this._pendingVictoryFinishTimeout) {
-      try {
-        clearTimeout(this._pendingVictoryFinishTimeout);
-      } catch (_) {}
-      this._pendingVictoryFinishTimeout = null;
-      this._pendingVictoryOutcomeKey = null;
-    }
+    lifecycleManager.clearPendingVictory(this);
     lifecycleManager.clearStartTimers(this);
 
     try {
@@ -661,9 +655,7 @@ class GameRoom {
     for (let i = 0; i < POWERUP_STARTING_COUNT; i++) {
       this._spawnPowerup();
     }
-    const perf = (typeof performance !== "undefined" && performance) || null;
-    const monoNow = () =>
-      perf && typeof perf.now === "function" ? perf.now() : Date.now();
+    const monoNow = () => performance.now();
     let lastMono = monoNow();
     let simulatedMono = lastMono;
     let acc = 0;
@@ -755,14 +747,8 @@ class GameRoom {
   }
 
   _emitSnapshotWithTiming(snapMono) {
-    const nowMono =
-      typeof performance !== "undefined" &&
-      performance &&
-      typeof performance.now === "function"
-        ? performance.now()
-        : Date.now();
     this._timingDiagnostics?.noteSnapshot({
-      nowMono,
+      nowMono: performance.now(),
       snapMono,
       tickId: this._tickId,
       burstSize: 1,
@@ -814,7 +800,7 @@ class GameRoom {
             origin: { x: playerData.x, y: playerData.y },
             flip: !!playerData.flip,
             character: playerData.char_class,
-            action: sanitizedAction,
+            action: characterActionRegistry.withoutUnusedTerrain(sanitizedAction),
             t: Date.now(),
           });
         }
@@ -869,9 +855,14 @@ class GameRoom {
   processTick() {
     const now = Date.now();
     this._botNow = now;
-    const due = this._scheduledActions.filter((a) => a.at <= now);
-    this._scheduledActions = this._scheduledActions.filter((a) => a.at > now);
-    for (const action of due) if (this.status === 'active') action.callback();
+    // Most ticks have nothing scheduled; only rebuild the queue when needed.
+    if (this._scheduledActions.length) {
+      const due = this._scheduledActions.filter((a) => a.at <= now);
+      if (due.length) {
+        this._scheduledActions = this._scheduledActions.filter((a) => a.at > now);
+        for (const action of due) if (this.status === 'active') action.callback();
+      }
+    }
     tickActiveAbilities(this, now);
     const botStart = performance.now();
     // A shared planning allowance leaves time for physics and human inputs.
@@ -881,7 +872,7 @@ class GameRoom {
     this._botPlanningCursor = first + 1;
     this._botPlanningDeadline = botStart + 4;
     for (let i = 0; i < controllers.length; i++) controllers[(first + i) % controllers.length].tick(this.FIXED_DT_MS, now);
-    if (this.botControllers.size) {
+    if (controllers.length) {
       const elapsed = performance.now() - botStart;
       const stats = this._botTickStats ||= { ticks: 0, totalMs: 0, maxMs: 0 };
       stats.ticks++; stats.totalMs += elapsed; stats.maxMs = Math.max(stats.maxMs, elapsed);
@@ -963,11 +954,10 @@ class GameRoom {
     if (this._disposed) return;
     clearTimeout(this._resultRetry);
     clearTimeout(this._finishCleanupTimer);
-    clearTimeout(this._pendingVictoryFinishTimeout);
     this._resultRetry = null;
     this._finishCleanupTimer = null;
-    this._pendingVictoryFinishTimeout = null;
     this._disposed = true;
+    lifecycleManager.clearPendingVictory(this);
     lifecycleManager.clearStartTimers(this);
     for (const { socket, event, listener } of this._socketBindings) socket.off(event, listener);
     this._socketBindings.length = 0;
@@ -979,16 +969,11 @@ class GameRoom {
     this._recentHits?.clear();
     this._recentCharacterActions?.clear();
     this._recentAttackInstances?.clear();
+    this._damageHitboxes?.clear();
+    this._snapshotEncoder = null;
     this._cancelAbandonTimer("cleanup");
     // Stop fixed-step loop
     this._loopRunning = false;
-    if (this.gameLoop) {
-      // legacy interval if still allocated
-      try {
-        clearInterval(this.gameLoop);
-      } catch (_) {}
-      this.gameLoop = null;
-    }
 
     // Disconnect all remaining players
     for (const playerData of this.players.values()) {

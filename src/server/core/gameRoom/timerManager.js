@@ -8,6 +8,14 @@ const {
 } = require("../gameRoomConfig");
 const netTestLogger = require("./netTestLogger");
 
+// Regulation length; sudden death (when the mode supports it) starts after it.
+function matchDurationMs(room) {
+  return Math.max(
+    1000,
+    Number(room.gameMode?.getMatchDurationMs?.()) || GAME_DURATION_MS,
+  );
+}
+
 function decideSuddenDeathWinner(room) {
   const teams = {
     team1: { alive: 0, health: 0, damage: 0 },
@@ -54,10 +62,7 @@ function tickTimerAndSuddenDeath(room) {
   if (room.status !== "active") return;
   const now = Date.now();
   const elapsed = now - room._loopStartWallTime;
-  const totalDurationMs = Math.max(
-    1000,
-    Number(room.gameMode?.getMatchDurationMs?.()) || GAME_DURATION_MS,
-  );
+  const totalDurationMs = matchDurationMs(room);
   const shouldUseSuddenDeath = room.gameMode?.supportsSuddenDeath?.() !== false;
   const remaining = Math.max(0, totalDurationMs - elapsed);
   const suddenDeath = shouldUseSuddenDeath && elapsed >= totalDurationMs;
@@ -135,39 +140,17 @@ function tickTimerAndSuddenDeath(room) {
   }
 }
 
+// Snapshot spacing statistics live in timingDiagnostics (noted by the caller).
 function emitSnapshotWithTiming(room, snapMono) {
-  const wall = Date.now();
-  if (room._lastSnapshotMono > 0) {
-    const spacing = snapMono - room._lastSnapshotMono;
-    if (spacing >= 0) room._snapshotIntervals.push(spacing);
-    if (room._snapshotIntervals.length > 240) room._snapshotIntervals.shift();
-  }
-  room._lastSnapshotMono = snapMono;
   room.broadcastSnapshot({
     tickId: room._tickId,
     tMono: snapMono,
-    sentAtWallMs: wall,
   });
   netTestLogger.noteSnapshot(room, snapMono);
-  if (room.DEV_TIMING_DIAG && !room._netTestEnabled) {
-    if (
-      snapMono - room._diagLastLogMono >= 1000 &&
-      room._snapshotIntervals.length
-    ) {
-      const arr = room._snapshotIntervals.slice(-60);
-      const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
-      const variance =
-        arr.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / arr.length;
-      const stdev = Math.sqrt(variance);
-      console.log(
-        `[GameRoom ${room.matchId}] timing tickId=${room._tickId} avgSpacing=${avg.toFixed(2)}ms stdev=${stdev.toFixed(2)}ms samples=${arr.length}`,
-      );
-      room._diagLastLogMono = snapMono;
-    }
-  }
 }
 
 module.exports = {
+  matchDurationMs,
   tickTimerAndSuddenDeath,
   emitSnapshotWithTiming,
 };

@@ -134,6 +134,23 @@ function snapshotAll(player, now) {
   return snap;
 }
 
+/**
+ * Network form of snapshotAll: only effects with time remaining. Clients read
+ * a missing key as 0 and replace their whole map on each world state, so
+ * expired effects still clear.
+ */
+function snapshotActive(player, now) {
+  const state = _state(player);
+  const snap = {};
+  for (const key in state) {
+    const entry = state[key];
+    const def = effectDefs[key];
+    if (!def || !(entry?.until > now)) continue;
+    snap[def.snapshotKey || key] = entry.until - now;
+  }
+  return snap;
+}
+
 module.exports = {
   apply,
   isActive,
@@ -141,4 +158,5 @@ module.exports = {
   getModifiers,
   tickAll,
   snapshotAll,
+  snapshotActive,
 };

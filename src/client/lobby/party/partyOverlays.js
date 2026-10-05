@@ -91,7 +91,7 @@ function renderPartyDiscoveryList(parties) {
             partyTitle || `${ownerName}'s Party`,
           )}</h3>
           <div class="party-discovery-meta" title="${escapeHtml(ownerName)}">
-            <img src="/assets/crown.webp" alt="Owner" width="12" height="12" />
+            <img src="/assets/icons/crown.webp" alt="Owner" width="12" height="12" />
             <span>Hosted by ${escapeHtml(ownerName)}</span>
           </div>
         </div>

@@ -134,7 +134,7 @@ export function createGameHudController({
     trophyRow.className = "bs-card-trophies";
     const trophyIcon = document.createElement("img");
     trophyIcon.className = "bs-card-trophy-icon";
-    trophyIcon.src = "/assets/trophy.webp";
+    trophyIcon.src = "/assets/icons/trophy.webp";
     trophyIcon.alt = "Trophies";
     trophyIcon.onerror = () => {
       trophyIcon.onerror = null;
@@ -198,15 +198,15 @@ export function createGameHudController({
 
     statsRow.innerHTML = `
       <div class="bs-card-stat-pill" title="Health">
-        <img src="/assets/heart.webp" alt="Health" class="bs-card-stat-icon">
+        <img src="/assets/icons/heart.webp" alt="Health" class="bs-card-stat-icon">
         <span class="bs-card-stat-number">${healthValue}</span>
       </div>
       <div class="bs-card-stat-pill" title="Attack">
-        <img src="/assets/attack.webp" alt="Attack" class="bs-card-stat-icon">
+        <img src="/assets/icons/attack.webp" alt="Attack" class="bs-card-stat-icon">
         <span class="bs-card-stat-number">${damageValue}</span>
       </div>
       <div class="bs-card-stat-pill" title="Special">
-        <img src="/assets/special.webp" alt="Special" class="bs-card-stat-icon">
+        <img src="/assets/icons/special.webp" alt="Special" class="bs-card-stat-icon">
         <span class="bs-card-stat-number">${specialValue}</span>
       </div>`;
 
@@ -907,7 +907,7 @@ export function createGameHudController({
       nameWrap.className = "team-hud-player-name-wrap";
       const spectateMarker = document.createElement("img");
       spectateMarker.className = "team-hud-spectate-icon";
-      spectateMarker.src = "/assets/spectate.webp";
+      spectateMarker.src = "/assets/icons/spectate.webp";
       spectateMarker.alt = "Currently spectating";
       nameWrap.appendChild(spectateMarker);
       nameWrap.appendChild(nameEl);

@@ -55,6 +55,9 @@ function createRingBuffer(limit) {
 function createTimingDiagnostics(room, options = {}) {
   const fixedDtMs = Number(options.fixedDtMs) || 33.333333333333336;
   const sampleLimit = Math.max(30, Number(options.sampleLimit) || 240);
+  // Routine summaries are per room every few seconds; production keeps only
+  // the rate-limited summaries triggered by stalls and pacing gaps.
+  const periodicSummaries = options.periodicSummaries !== false;
   const summaryIntervalMs = Math.max(
     1000,
     Number(options.summaryIntervalMs) || 4000,
@@ -114,9 +117,9 @@ function createTimingDiagnostics(room, options = {}) {
     const backlogPressure = Math.max(0, maxLoopBacklog - fixedDtMs);
     const snapshotGapPressure = Math.max(0, maxSnapshotGap - fixedDtMs);
     const zeroGapRatio =
-      snapshotGaps.length() > 0
-        ? snapshotGaps.toArray().filter((gap) => Math.abs(gap) < 0.5).length /
-          snapshotGaps.length()
+      snapshotGapValues.length > 0
+        ? snapshotGapValues.filter((gap) => Math.abs(gap) < 0.5).length /
+          snapshotGapValues.length
         : 0;
 
     let verdict = "stable";
@@ -190,7 +193,8 @@ function createTimingDiagnostics(room, options = {}) {
       recentSnapshotGap >= severeSnapshotGapMs ||
       recentBurst >= 4 ||
       sameMonoSnapshotCount >= 3;
-    if (!force && !severe && now - lastSummaryAt < summaryIntervalMs) return;
+    if (!force && !severe &&
+        (!periodicSummaries || now - lastSummaryAt < summaryIntervalMs)) return;
     if (!force && severe && now - lastSummaryAt < 1000) return;
     console.log(`[GameRoom ${room.matchId}] ${buildSummary(reason)}`);
     lastSummaryAt = now;

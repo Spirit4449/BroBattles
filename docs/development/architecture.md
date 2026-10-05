@@ -48,6 +48,10 @@ src/
     site/            site config and server-rendered HTML helpers
 ```
 
+## Constants ownership
+
+[Game constants](constants.md) maps the shared clock/world/party constants in `src/shared/gameConstants.js`, server match defaults in `src/server/core/gameRoomConfig.js`, content tuning, and feature-local constants. Import values from their owner and derive dependent timing. Map and runtime overrides can supersede defaults; inspect those before diagnosing a tuning mismatch.
+
 ## Content sources
 
 | Content | Definition | Runtime integration |

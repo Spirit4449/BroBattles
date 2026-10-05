@@ -59,7 +59,7 @@ export function preloadBankBustAssets(scene, staticPath) {
   // otherwise fall back to the shared damage sound.
   scene.load.audio("sfx-bankbust-turret-shoot", [
     `${staticPath}/bank-bust/turret-shoot.mp3`,
-    `${staticPath}/damage.mp3`,
+    `${staticPath}/game-sounds/damage.mp3`,
   ]);
   scene.load.audio(
     "sfx-bankbust-turret-claim",

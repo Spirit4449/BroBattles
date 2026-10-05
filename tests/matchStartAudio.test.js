@@ -17,8 +17,8 @@ test("countdown keeps its beeps and final fight cue", () => {
     ["beep", "beep.mp3"],
     ["start", "start.mp3"],
   ]) {
-    assert.ok(sounds.includes(`${name}: \"/assets/${asset}\"`));
-    assert.ok(fs.existsSync(path.join(root, "public/assets", asset)));
+    assert.ok(sounds.includes(`${name}: \"/assets/game-sounds/${asset}\"`));
+    assert.ok(fs.existsSync(path.join(root, "public/assets/game-sounds", asset)));
     assert.ok(hud.includes(`playSound(\"${name}\"`));
   }
   assert.ok(hud.includes('preloadSound("start"'));

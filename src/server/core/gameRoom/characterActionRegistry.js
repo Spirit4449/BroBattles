@@ -18,6 +18,16 @@ function maybeHandleNinjaReturnSignal(room, playerData, actionData) {
   return { handled: true };
 }
 
+// Terrain rectangles only matter to the Gloop slimeball visual, whose release
+// packet carries the room's own colliders. Every other action would otherwise
+// echo a whole map's worth of rectangles to every client.
+const TERRAIN_ACTION_TYPES = new Set(["gloop-slimeball-release"]);
+function withoutUnusedTerrain(action) {
+  if (!action?.mapCollisionRects || TERRAIN_ACTION_TYPES.has(action.type)) return action;
+  const { mapCollisionRects: _unused, ...rest } = action;
+  return rest;
+}
+
 function broadcastAction(room, playerData, action, timestamp = Date.now()) {
   if (getDescriptor(action?.type)?.character === playerData.char_class && action?.type !== 'ninja-shuriken-return') {
     playerData._visibleAttack = { at: timestamp, startupMs: Number(action.startup) || 0,
@@ -29,7 +39,7 @@ function broadcastAction(room, playerData, action, timestamp = Date.now()) {
     origin: { x: playerData.x, y: playerData.y },
     flip: !!playerData.flip,
     character: playerData.char_class,
-    action,
+    action: withoutUnusedTerrain(action),
     t: timestamp,
   });
 }
@@ -198,6 +208,7 @@ function handleCharacterAction(
 }
 
 module.exports = {
+  withoutUnusedTerrain,
   broadcastAction,
   handleCharacterAction,
 };

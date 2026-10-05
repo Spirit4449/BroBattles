@@ -127,10 +127,15 @@ for (const teamSize of [1, 2, 3]) {
     assert.ok(h.events.some(e => e.type === 'game:state'), 'shield state is sent at fight');
     h.room.processTick();
     h.room.broadcastSnapshot();
-    const snapshot = h.events.findLast((e) => e.type === 'game:snapshot').payload;
+    // Snapshots are deltas; rebuild them in order the way a client does.
+    const decoder = require('../src/shared/snapshotDelta').createSnapshotDecoder();
+    let snapshot = null;
+    for (const e of h.events) if (e.type === 'game:snapshot') snapshot = decoder.decode(e.payload) || snapshot;
     assert.equal(Object.keys(snapshot.players).length, teamSize * 2);
+    // Identity is delivered once by game:init; periodic snapshots carry state.
+    for (const p of initial.players) assert.ok(p.participantId && typeof p.isBot === 'boolean');
     for (const player of Object.values(snapshot.players)) {
-      assert.ok(player.participantId);
+      assert.equal(player.participantId, undefined);
       assert.ok(Number.isFinite(player.x) && Number.isFinite(player.y));
     }
     assert.equal(h.hub.getStats().rooms[0].botCount, teamSize * 2 - 1);
