@@ -1,7 +1,7 @@
 const { damageHitboxSnapshot } = require('./damageHitboxes');
 const effectManager = require('./effects/effectManager');
 const { randomUUID } = require("node:crypto");
-const { getDuelGeometry, spawnForParticipant } = require('../../../shared/duelGeometry');
+const { getDuelGeometry, spawnForParticipant } = require('../../../shared/physics/duelGeometry');
 const { participantId } = require('./participants');
 
 function roundPosition(value) {

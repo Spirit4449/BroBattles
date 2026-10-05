@@ -8,7 +8,7 @@ const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
 test("both profile clients are equip-only", () => {
-  for (const file of ["src/index.js", "src/profile.js"]) {
+  for (const file of ["src/client/pages/lobby.js", "src/client/pages/profile.js"]) {
     const source = read(file);
     assert.doesNotMatch(source, /\/player-cards\/buy/);
     assert.doesNotMatch(source, /\/profile-icons\/buy/);
@@ -18,7 +18,7 @@ test("both profile clients are equip-only", () => {
 });
 
 test("shop grant delivery never updates equipped cosmetics", () => {
-  const source = read("src/server/services/shopService.js");
+  const source = read("src/server/services/shop/shopService.js");
   const grantBody = source.slice(
     source.indexOf("async function applyGrants"),
     source.indexOf("async function redeem"),
@@ -46,7 +46,7 @@ test("all public shop interfaces and the raw webhook are registered", () => {
       server.indexOf("app.use(express.json())"),
   );
   assert.match(
-    read("src/server/routes/stripeWebhook.js"),
+    read("src/server/routes/modules/stripeWebhook.js"),
     /express\.raw\(\{ type: "application\/json" \}\)/,
   );
 });
@@ -59,18 +59,18 @@ test("local environment files are ignored while the example remains trackable", 
 });
 
 test("checkout explicitly opts out of Stripe Managed Payments", () => {
-  const service = read("src/server/services/stripeShopService.js");
+  const service = read("src/server/services/shop/stripeShopService.js");
   assert.match(service, /managed_payments:\s*\{\s*enabled:\s*false\s*\}/);
 });
 
 test("checkout uses the current Stripe embedded page UI mode", () => {
-  const service = read("src/server/services/stripeShopService.js");
+  const service = read("src/server/services/shop/stripeShopService.js");
   assert.match(service, /ui_mode:\s*["']embedded_page["']/);
   assert.doesNotMatch(service, /ui_mode:\s*["']embedded["']/);
 });
 
 test("shop shelves exclude default and non-offer cosmetics", () => {
-  const service = read("src/server/services/shopService.js");
+  const service = read("src/server/services/shop/shopService.js");
   assert.match(
     service,
     /if \(!offer \|\| id === String\(entry\?\.defaultSkinId \|\| ""\)\) continue;/,
@@ -86,7 +86,7 @@ test("shop shelves exclude default and non-offer cosmetics", () => {
 });
 
 test("shop notifications use friendly labels instead of severity button text", () => {
-  const source = read("src/shop.js");
+  const source = read("src/client/lobby/shop/shop.js");
   assert.doesNotMatch(
     source,
     /sonner\([^\n]+,\s*[^\n]+,\s*["'](?:success|error)["']/,
@@ -96,7 +96,7 @@ test("shop notifications use friendly labels instead of severity button text", (
 });
 
 test("shop cards use price actions and scroll-aware matching tabs", () => {
-  const source = read("src/shop.js");
+  const source = read("src/client/lobby/shop/shop.js");
   assert.match(source, /id="shop-title">Bro Shop</);
   assert.doesNotMatch(source, /Bro Bazaar|shop-brand-mark|THE BATTLE MARKET/);
   assert.doesNotMatch(
@@ -110,8 +110,8 @@ test("shop cards use price actions and scroll-aware matching tabs", () => {
 });
 
 test("shop cards and purchase reveal use the pixel UI hierarchy", () => {
-  const source = read("src/shop.js");
-  const styles = read("src/styles/shop.css");
+  const source = read("src/client/lobby/shop/shop.js");
+  const styles = read("src/client/styles/shop.css");
   assert.match(source, /function getItemTypeLabel/);
   assert.match(source, /THORG SKIN|FIGHTER SKIN/);
   assert.match(source, /PLAYER CARD/);
@@ -127,7 +127,7 @@ test("shop cards and purchase reveal use the pixel UI hierarchy", () => {
 });
 
 test("currency rewards update a visible wallet on every physical impact", () => {
-  const source = read("src/shop.js");
+  const source = read("src/client/lobby/shop/shop.js");
   assert.match(source, /data-reveal-wallet="coins"/);
   assert.match(source, /function flyWalletParticle/);
   assert.match(source, /writeWalletCount\(counter,[\s\S]+burstWalletTarget/);
@@ -136,8 +136,8 @@ test("currency rewards update a visible wallet on every physical impact", () => 
 });
 
 test("post-purchase updates do not bounce or replay card entrances", () => {
-  const source = read("src/shop.js");
-  const styles = read("src/styles/shop.css");
+  const source = read("src/client/lobby/shop/shop.js");
+  const styles = read("src/client/styles/shop.css");
   const walletImpact = source.slice(
     source.indexOf("function burstWalletTarget"),
     source.indexOf("function flyWalletParticle"),
@@ -161,7 +161,7 @@ test("post-purchase updates do not bounce or replay card entrances", () => {
 });
 
 test("shop sound effects are locally bundled with source provenance", () => {
-  const sounds = read("src/lib/uiSounds.js");
+  const sounds = read("src/client/ui/uiSounds.js");
   for (const sound of [
     "shop-open.ogg",
     "shop-close.ogg",
@@ -184,8 +184,8 @@ test("shop sound effects are locally bundled with source provenance", () => {
 });
 
 test("successful character upgrades play the dedicated upgrade sound", () => {
-  const sounds = read("src/lib/uiSounds.js");
-  const characterLogic = read("src/lobby/characterSelectController.js");
+  const sounds = read("src/client/ui/uiSounds.js");
+  const characterLogic = read("src/client/lobby/profile/characterSelectController.js");
 
   assert.match(sounds, /upgrade:\s*"\/assets\/upgrade\.mp3"/);
   assert.ok(fs.existsSync(path.join(root, "public/assets/upgrade.mp3")));
@@ -196,8 +196,8 @@ test("successful character upgrades play the dedicated upgrade sound", () => {
 });
 
 test("character upgrade success animation runs once and holds its final frame", () => {
-  const characterLogic = read("src/lobby/characterSelectController.js");
-  const styles = read("src/styles/characterSelect.css");
+  const characterLogic = read("src/client/lobby/profile/characterSelectController.js");
+  const styles = read("src/client/styles/characterSelect.css");
   const rerender = characterLogic.slice(
     characterLogic.indexOf("function rerenderCharacterCard"),
     characterLogic.indexOf("// Upgrade / unlock stubs"),
@@ -209,8 +209,8 @@ test("character upgrade success animation runs once and holds its final frame", 
 });
 
 test("character card hover avoids full-card filter repaints", () => {
-  const characterLogic = read("src/lobby/characterSelectController.js");
-  const styles = read("src/styles/characterSelect.css");
+  const characterLogic = read("src/client/lobby/profile/characterSelectController.js");
+  const styles = read("src/client/styles/characterSelect.css");
   const cardRules = styles.slice(
     styles.indexOf(".character-card {"),
     styles.indexOf("/* Image wrapper - profile icon */"),
@@ -236,8 +236,8 @@ test("character card hover avoids full-card filter repaints", () => {
 });
 
 test("max-level characters use the mastery visual treatment", () => {
-  const characterLogic = read("src/lobby/characterSelectController.js");
-  const styles = read("src/styles/characterSelect.css");
+  const characterLogic = read("src/client/lobby/profile/characterSelectController.js");
+  const styles = read("src/client/styles/characterSelect.css");
 
   assert.match(characterLogic, /cardState\.isMaxed \? "is-maxed"/);
   assert.match(characterLogic, /crown\.webp[^;]+Max Level/);
@@ -248,8 +248,8 @@ test("max-level characters use the mastery visual treatment", () => {
 });
 
 test("shop navigation, icons, sales glimmer, and checkout chrome stay consistent", () => {
-  const source = read("src/shop.js");
-  const styles = read("src/styles/shop.css");
+  const source = read("src/client/lobby/shop/shop.js");
+  const styles = read("src/client/styles/shop.css");
   for (const icon of [
     "sales-v2.webp",
     "dailies-v2.webp",
@@ -284,7 +284,7 @@ test("shop navigation, icons, sales glimmer, and checkout chrome stay consistent
 });
 
 test("huntress profile icon uses the portrait icon asset instead of spritesheet", () => {
-  const catalog = JSON.parse(read("src/shared/profileIconsCatalog.json"));
+  const catalog = JSON.parse(read("src/shared/catalogs/profileIconsCatalog.json"));
   const huntressIcon = catalog.icons.find((i) => i.id === "huntress");
   assert.ok(huntressIcon, "huntress icon must exist in catalog");
   assert.equal(huntressIcon.assetUrl, "/assets/profile-icons/huntress.webp");
@@ -294,9 +294,9 @@ test("huntress profile icon uses the portrait icon asset instead of spritesheet"
 });
 
 test("profile loadout headers match 'Get More in Shop' and close button height", () => {
-  const indexStyles = read("src/styles/index.css");
+  const indexStyles = read("src/client/styles/index.css");
   const uiStyles = read("public/styles/ui-system.css");
-  const profileStyles = read("src/styles/profile.css");
+  const profileStyles = read("src/client/styles/profile.css");
 
   assert.match(
     indexStyles,
@@ -313,7 +313,7 @@ test("profile loadout headers match 'Get More in Shop' and close button height",
 });
 
 test("profile popup stacks above lobby tooltips", () => {
-  const styles = read("src/styles/index.css");
+  const styles = read("src/client/styles/index.css");
   const tooltipLayer = Number(styles.match(/\.lobby-hint\s*\{[\s\S]*?z-index:\s*(\d+)/)?.[1]);
   const profileLayer = Number(styles.match(/#profile-overlay\s*\{[\s\S]*?z-index:\s*(\d+)/)?.[1]);
   assert.ok(profileLayer > tooltipLayer);

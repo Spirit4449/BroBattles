@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createAnimationBuilder } = require('../src/characters/shared/animationBuilder');
+const { createAnimationBuilder } = require('../src/client/game/characters/shared/animationBuilder');
 
 function setup(names) {
   const animations = new Map();

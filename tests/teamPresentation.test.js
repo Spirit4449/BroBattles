@@ -36,12 +36,12 @@ test('enemy rendering restores the original frame and never applies a drop shado
 
 test('wizard fireball factory creates an animated sprite before team presentation', () => {
   const fs = require('node:fs'), vm = require('node:vm'), babel = require('@babel/core');
-  const source = fs.readFileSync('src/characters/wizard/attack.js', 'utf8') + '\nexport { createFireballSprite };';
+  const source = fs.readFileSync('src/client/game/characters/wizard/attack.js', 'utf8') + '\nexport { createFireballSprite };';
   const code = babel.transformSync(source, { babelrc: false, configFile: false,
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]] }).code;
   const api = {};
   vm.runInNewContext(code, { exports: api, require: name => {
-    if (name.includes('characterTuning')) return require('../src/shared/characterTuning');
+    if (name.includes('characterTuning')) return require('../src/shared/characters/characterTuning');
     if (name.includes('projectilePresentation')) return require('../src/shared/projectilePresentation');
     if (name.includes('renderLayers')) return { RENDER_LAYERS: { ATTACKS: 10 } };
     return {};

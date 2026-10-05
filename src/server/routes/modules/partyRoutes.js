@@ -1,10 +1,10 @@
-const { emitRoster } = require("../../helpers/party");
-const { createPartyStateService } = require("../../services/partyStateService");
-const { createPartyRouteService } = require("../../services/partyRouteService");
+const { emitRoster } = require("../../services/party/party");
+const { createPartyStateService } = require("../../services/party/partyStateService");
+const { createPartyRouteService } = require("../../services/party/partyRouteService");
 const {
   normalizeSelectionFromRow,
-} = require("../../helpers/gameSelectionCatalog");
-const { getPartyBotSlots } = require("../../helpers/partyBotSlots");
+} = require("../../services/match/gameSelectionCatalog");
+const { getPartyBotSlots } = require("../../services/party/partyBotSlots");
 
 function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
   const partyState = createPartyStateService({ db, io });

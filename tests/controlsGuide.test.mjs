@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DEFAULT_BINDINGS} from '../src/site/keyBindings.mjs';
-import {updateControlsGuide,bindingEventCode} from '../src/site/controlsGuide.mjs';
+import {DEFAULT_BINDINGS} from '../src/client/site/keyBindings.mjs';
+import {updateControlsGuide,bindingEventCode} from '../src/client/site/controlsGuide.mjs';
 test('guide updates labels and pressed-key tracking after remapping and reset',()=>{
  const keys=['up','attack','special','leftAlt'].map(binding=>({dataset:{binding},classList:{remove(value){assert.equal(value,'is-pressed');}}}));
  const root={querySelectorAll:()=>keys};

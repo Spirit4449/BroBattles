@@ -1,237 +1,53 @@
 # Bro Battles
 
-A real-time multiplayer browser-based battle arena game built with Phaser 3, Express, and Socket.IO. Challenge your friends in fast-paced PvP combat with multiple character classes and game modes!
+A multiplayer browser arena built with Phaser 3, Express, Socket.IO, and MySQL.
+Human movement is simulated by the browser with server validation; the server owns combat outcomes, bots, match state, and rewards.
 
-## What is Bro Battles?
+Playable modes are Duels (1v1, 2v2, 3v3) and Bank Bust (3v3). The six fighters are Ninja, Thorg, Draven, Wizard, Huntress, and Gloop. Other catalog modes are marked Coming Soon. Map Studio edits the four built-in maps and saved custom maps.
 
-Bro Battles is a server-authoritative multiplayer action game where players can:
+## Run locally
 
-- Choose from multiple unique character classes (Draven, Ninja, Thorg, Wizard)
-- Battle in different game modes (1v1, 2v2, 3v3)
-- Fight on various maps (Lushy Peaks, Mangrove Meadow)
-- Create or join parties with friends
-- Experience smooth real-time combat with client-side interpolation
+Use Node.js 18 or newer and a MySQL installation compatible with the repository's SQL. The repository has incremental migrations, **not a complete empty-database bootstrap**. Obtain a sanitized base schema from the maintainer and follow [database setup](docs/operations/database.md) before starting the server.
 
-The game features a matchmaking system, party management, character progression, and an in-game economy for upgrades.
-
-## Prerequisites
-
-- **Node.js** (v18 or higher; required by the Stripe SDK)
-- **MySQL** (v5.7 or higher)
-- A modern web browser (Chrome, Firefox, Edge, Safari)
-
-## Setup Instructions
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/Spirit4449/APCSP-Create-Project---Final.git
-cd "Bro Battles"
+```sh
+npm ci
+cp .env.example .env
 ```
 
-### 2. Install Dependencies
+Set the `DB_*` connection values in `.env`. Keep local credentials out of Git. `COOKIE_SECRET` can be omitted for development; the server persists a generated value in `.cookie-secret`. Configure `ADMIN_USERS` for admin and Map Studio access. Stripe, email, and optional assisted help search have separate server-side credentials described in [services](docs/operations/services.md) and [payments](docs/operations/payments.md).
 
-```bash
-npm install
-```
-
-### 3. Database Setup
-
-Create a MySQL database and run the migration scripts:
-
-```sql
-CREATE DATABASE game;
-```
-
-Then execute the migration files in order from `migrations/`. `npm run migrate:status` reports (read-only) any migration whose tables, columns or indexes are missing. The unified Shop
-requires:
-
-- `migrations/2026-08-31_shop_commerce.sql`
-
-Refer to `database.md` for detailed schema information.
-
-### 4. Environment Configuration
-
-Copy `.env.example` to `.env`. The server auto-generates a `.cookie-secret`
-file when `COOKIE_SECRET` is empty. Database configuration is environment-only.
-
-- `PORT` - Server port (default: 3002)
-- `NODE_ENV` - Environment mode (development/production)
-- `SECURE_COOKIES` - Set to `true` for HTTPS (default: false)
-- `COOKIE_SECRET` - Custom cookie secret (auto-generated if not set)
-- `ADMIN_USERS` - All the users who can access admin panel on /admin
-- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` - MySQL connection
-- `STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` - Stripe Checkout and webhook credentials
-- `PUBLIC_BASE_URL` - Canonical application origin used by Stripe return URLs
-- `STRIPE_AUTOMATIC_TAX` - Keep `false` until tax registrations are confirmed
-
-See [`docs/PAYMENTS.md`](docs/PAYMENTS.md) for sandbox setup, webhook events,
-secret protection, refunds, disputes, and the production checklist.
-
-### 5. Build and Run
-
-**Development Mode:**
-
-```bash
+```sh
+npm run migrate:status
 npm run dev
 ```
 
-The server will start on `http://localhost:3002` with hot reloading.
+Open http://localhost:3002 (or `PORT`). Development uses webpack middleware for browser assets and nodemon for server/shared changes. For production:
 
-**Production Mode:**
-
-```bash
+```sh
 npm run build
 npm start
 ```
 
-## How to Play
+Read [deployment and recovery](docs/operations/deployment.md) before operating a persistent server.
 
-### Getting Started
+## Documentation
 
-1. **Open Your Browser**
-   - Navigate to `http://localhost:3002` (or your configured port)
+Start at the [documentation index](docs/README.md).
 
-2. **Create an Account** (Optional)
-   - Click "Sign Up" to create a persistent account
-   - Or continue as a guest (automatically created)
+- [Development](docs/development/architecture.md): ownership, contribution workflow, gameplay, networking, browser lifecycle, maps, and progression.
+- [Operations](docs/operations/deployment.md): deployment, databases, payments, public content, email, and support.
+- [Art](docs/art/README.md): installed assets, production tools, and retained generation prompts.
+- [Player help](content/help/getting-started.md): articles served by the game at `/help`.
+- [Sprite Workshop](spritesheet-generator/README.md): separate local editor and CLI.
 
-3. **Select Your Character**
-   - Choose from available character classes:
-     - **Draven**: Balanced melee fighter
-     - **Ninja**: Fast, agile assassin
-     - **Thorg**: Tank with high health
-     - **Wizard**: Ranged magic caster
+## Checks
 
-### Playing Solo
-
-1. Click "Play" from the main menu
-2. Select your game mode (1v1, 2v2, or 3v3)
-3. Choose your map
-4. Click "Ready" to join the matchmaking queue
-5. Wait for other players to be matched
-6. Accept the ready check when a match is found
-7. Battle begins!
-
-### Playing with Friends (Party Mode)
-
-1. From the main menu, click "Create Party" or join an existing party
-2. Share your party ID with friends
-3. Wait for friends to join your party
-4. As party leader, select:
-   - Game mode
-   - Map
-   - Character class for yourself
-5. All party members must click "Ready"
-6. Party leader initiates matchmaking
-7. Once a match is found, all players accept the ready check
-8. Fight together as a team!
-
-### In-Game Controls
-
-- **Movement**: WASD or Arrow Keys
-- **Attack**: Left Click or Spacebar
-- **Special Abilities**: Character-specific (check in-game HUD)
-- **Heal**: H key (if available)
-
-### Combat Tips
-
-- Each character has unique stats and abilities
-- Pay attention to your health bar
-- Use the environment and map features to your advantage
-- Coordinate with teammates in team modes
-- Time your attacks and abilities strategically
-
-### Progression
-
-- Win matches to earn currency
-- Purchase character upgrades in the shop
-- Level up your characters to unlock new abilities
-- Track your stats and match history
-
-## Game Features
-
-- **Real-time Combat**: Server-authoritative gameplay with client-side prediction and interpolation
-- **Matchmaking System**: Fair matching with ready-check confirmation
-- **Party System**: Play with friends in private or public matches
-- **Multiple Maps**: Each with unique layouts and strategic elements
-- **Character Classes**: Diverse playstyles with unique abilities
-- **Economy**: Earn and spend currency on character upgrades
-- **Responsive Design**: Playable on desktop browsers
-
-## Troubleshooting
-
-**Connection Issues:**
-
-- Ensure the server is running
-- Check your firewall settings
-- Verify MySQL is running and accessible
-
-**Game Won't Start:**
-
-- Clear browser cache and cookies
-- Check browser console for errors (F12)
-- Ensure all dependencies are installed
-
-**Matchmaking Stuck:**
-
-- Wait for other players to queue
-- Try a different game mode
-- Refresh and try again
-
-## Technical Stack
-
-- **Frontend**: Phaser 3 (game engine), vanilla JavaScript
-- **Backend**: Node.js, Express
-- **Real-time**: Socket.IO
-- **Database**: MySQL with mysql2/promise
-- **Build Tool**: Webpack 5
-- **Authentication**: Signed cookies with guest support
-
-## Development
-
-Run the development server with hot reloading:
-
-```bash
-npm run dev
-```
-
-Build production bundles:
-
-```bash
+```sh
+npm run validate:content
+npm test
 npm run build
 ```
 
-The project structure follows:
+Focused suites include `test:network`, `test:bots`, `test:shop`, `test:trophies`, and `test:battle-log`. Database checks (`npm run test:db`) require configured MySQL; see their prerequisites in the database guide. Browser rendering harnesses have separate Playwright requirements described in the client guide.
 
-- `src/` - Client-side game code and server code
-- `public/` - Static assets and HTML pages
-- `src/server/` - Server-side logic (matchmaking, game rooms, routes)
-- `migrations/` - Database migrations
-
-## Architecture and Contribution Docs
-
-- Architecture map: `docs/ARCHITECTURE_MAP.md`
-- Contributor guide with exact "add character/map/powerup" instructions: `docs/CONTRIBUTING.md`
-- Repository coding constraints: `.github/copilot-instructions.md`
-- Production hardening and rollout: `docs/PRODUCTION_HARDENING.md`
-
-## Contributing
-
-Contributions are welcome. Before opening a PR:
-
-1. Read `docs/ARCHITECTURE_MAP.md`.
-2. Follow `docs/CONTRIBUTING.md` checklists.
-3. Run `npm run build` and verify gameplay paths affected by your change.
-
-## License
-
-This project is an educational project for AP Computer Science Principles.
-
-## Support
-
-For issues or questions, please open an issue on the GitHub repository.
-
----
-
-**Ready to battle? Launch the game and show your skills!** 🎮⚔️
+Run commands from the repository root unless a guide says otherwise. `package.json` is the command reference; `src/shared/` owns gameplay definitions and catalogs.

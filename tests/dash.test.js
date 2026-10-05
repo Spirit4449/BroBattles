@@ -3,16 +3,16 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const babel = require('@babel/core');
-const physics = require('../src/shared/movementPhysics.json');
-const { dashDirection, acceptDash } = require('../src/shared/dash');
+const physics = require('../src/shared/physics/movementPhysics.json');
+const { dashDirection, acceptDash } = require('../src/shared/physics/dash');
 const playerAudio = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/gameScene/playerAudio.js'), 'utf8'), {
+vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/audio/playerAudio.js'), 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', {targets:{node:'current'}}]],
 }).code, {exports: playerAudio});
 const exported = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/gameScene/dash.js'), 'utf8'), {
+vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/dash.js'), 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', {targets:{node:'current'}}]],
-}).code, { exports: exported, require: path => path.endsWith('.json') ? physics : path.includes('sweptCollision') ? require('../src/shared/sweptCollision') : path.includes('playerAudio') ? playerAudio : {dashDirection}, Date });
+}).code, { exports: exported, require: path => path.endsWith('.json') ? physics : path.includes('sweptCollision') ? require('../src/shared/physics/sweptCollision') : path.includes('playerAudio') ? playerAudio : {dashDirection}, Date });
 const scene = { textures:{exists:()=>false} };
 function player() {
   return { visible:true, flipX:false, body:{allowGravity:true, velocity:{x:0,y:-100}, blocked:{}},
@@ -59,7 +59,7 @@ test('server grants a burst only once and rejects cooldown spam, dead/locked pla
 });
 
 test('the actual movement handler completes its dash branch without touching later movement state', () => {
-  const source = fs.readFileSync(require.resolve('../src/player.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../src/client/game/players/localPlayer.js'), 'utf8');
   // The per-frame pipeline and all of its step functions.
   const movement = source.slice(source.indexOf('export function handlePlayerMovement(scene)'),
     source.indexOf('export function setSuperStats(')).replace('export function', 'function');
@@ -111,7 +111,7 @@ test('bottom HUD counts down to ready, stays independent of player coordinates, 
   const handlers={}; const body={appendChild(el){this.child=el;}};
   const document={body,createElement:()=>root,addEventListener(){},removeEventListener(){}};
   const hudExports={};
-  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/gameScene/dash.js'),'utf8'),{
+  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/dash.js'),'utf8'),{
     babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
   }).code,{exports:hudExports,require:path=>path.endsWith('.json')?physics:path.includes('playerAudio')?playerAudio:{dashDirection},Date,document});
   const p=player();p._dashReadyAt=6000;p.once=(name,fn)=>handlers[name]=fn;
@@ -170,7 +170,7 @@ test('dash starts at fixed speed regardless of incoming momentum and preserves e
  assert.ok(Math.hypot(p.body.velocity.x,p.body.velocity.y)<=700.000001);
 });
 
-const {sweepMovement}=require('../src/shared/sweptCollision');
+const {sweepMovement}=require('../src/shared/physics/sweptCollision');
 test('sweeps stop at thin walls, ceilings, floors and slide without penetrating at low frame rates', () => {
  const box={x:0,y:0,width:20,height:20};
  const wall={left:50,right:52,top:-100,bottom:200};
@@ -282,7 +282,7 @@ test('normal speed movement is not suppressed by post-dash coasting', () => {
 
 test('dash sweep repairs a fractional landing side-stall and normal movement continues after coast', () => {
  const Body=require('phaser/src/physics/arcade/Body');const World=require('phaser/src/physics/arcade/World');
- const {processPlayerPlatformCollision}=require('../src/players/platformCollision');
+ const {processPlayerPlatformCollision}=require('../src/client/game/players/platformCollision');
  const world={defaults:{},gravity:{x:0,y:825},OVERLAP_BIAS:4,intersects:World.prototype.intersects};
  const body=new Body(world),surface=new Body(world);
  body.setSize(31,37.15384615384615);surface.setSize(500,20);

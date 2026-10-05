@@ -1,8 +1,8 @@
-const { createSiteSupportService } = require('../../services/siteSupportService');
-const { createRequestWindow } = require('../../helpers/requestWindow');
-const config = require('../../../shared/siteConfig.json');
-const { registerSitePages } = require('../../services/siteContent');
-const { createHelpSearchService } = require('../../services/helpSearchService');
+const { createSiteSupportService } = require('../../services/site/siteSupportService');
+const { createRequestWindow } = require('../../lib/requestWindow');
+const config = require('../../../shared/site/siteConfig.json');
+const { registerSitePages } = require('../../services/site/siteContent');
+const { createHelpSearchService } = require('../../services/site/helpSearchService');
 function isSameOrigin(req) {
   try {
     const site = req.get('sec-fetch-site');
@@ -23,13 +23,13 @@ function registerSiteRoutes({ app, db, auth }) {
   app.use(['/gamedata'], async (req,res,next) => {
     try {
       const user = await auth.requireCurrentUser(req,res);
-      if (user && !await require('../../services/legalAcceptance').hasLegalAcceptance(db,user.user_id)) return res.status(403).json({error:'Please accept the current Terms in the lobby.',code:'TERMS_REQUIRED'});
+      if (user && !await require('../../services/auth/legalAcceptance').hasLegalAcceptance(db,user.user_id)) return res.status(403).json({error:'Please accept the current Terms in the lobby.',code:'TERMS_REQUIRED'});
       next();
     } catch (_) { res.status(503).json({error:'Unable to verify terms acceptance.'}); }
   });
   const service = createSiteSupportService(db);
-  require("../../services/emailService").startEmailWorker(db);
-  require("../../services/marketingService").startMarketingWorker(db);
+  require("../../services/email/emailService").startEmailWorker(db);
+  require("../../services/email/marketingService").startMarketingWorker(db);
   const limits = createRequestWindow();
   const searchHelp = createHelpSearchService();
   const wrap = (admin, permanent, action) => async (req, res) => {

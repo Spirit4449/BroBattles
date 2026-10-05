@@ -5,11 +5,11 @@ const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const babel = require('@babel/core');
 const api = {};
-const code = babel.transformSync(fs.readFileSync('src/characters/gloop/slimeVisual.js','utf8'), {
+const code = babel.transformSync(fs.readFileSync('src/client/game/characters/gloop/slimeVisual.js','utf8'), {
   babelrc:false, configFile:false, presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code;
 vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectilePresentation') ? require('../src/shared/projectilePresentation') : name.includes('renderLayers')
-  ? {RENDER_LAYERS:{ATTACKS:20}} : require('../src/shared/gloopProjectile')});
+  ? {RENDER_LAYERS:{ATTACKS:20}} : require('../src/shared/characters/gloopProjectile')});
 function setup(owner) {
   const objects=[];
   const scene={add:{graphics(){
@@ -60,14 +60,15 @@ test('crystal goo survives rebound, deposits crystal residue and cleans up',()=>
 
 test('slimeball graphics can be destroyed by Phaser without recursive destruction',()=>{
   const attackApi={};
-  const attackCode=babel.transformSync(fs.readFileSync('src/characters/gloop/attack.js','utf8'),{
+  const attackCode=babel.transformSync(fs.readFileSync('src/client/game/characters/gloop/attack.js','utf8'),{
     babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
   }).code;
   vm.runInNewContext(attackCode,{exports:attackApi,require:name=>{
     if(name.includes('slimeVisual'))return {createSlimeVisual:api.createSlimeVisual};
-    if(name.includes('gloopProjectile'))return require('../src/shared/gloopProjectile');
+    if(name.includes('gloopProjectile'))return require('../src/shared/characters/gloopProjectile');
     if(name.includes('characterTuning'))return {getResolvedCharacterAttackConfig:()=>({collisionRadius:28,visualScale:1.5})};
     if(name.includes('renderLayers'))return {RENDER_LAYERS:{ATTACKS:20}};
+    if(name.includes('gameConstants'))return require('../src/shared/gameConstants');
     return {};
   }});
   for(const trigger of ['body','shutdown']){

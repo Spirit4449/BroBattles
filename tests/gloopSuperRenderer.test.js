@@ -4,15 +4,15 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const babel = require('@babel/core');
-const code = babel.transformSync(fs.readFileSync('src/characters/gloop/special.js', 'utf8'), {
+const code = babel.transformSync(fs.readFileSync('src/client/game/characters/gloop/special.js', 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 }).code;
 const animationApi = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync('src/characters/gloop/handAnimation.js', 'utf8'), {
+vm.runInNewContext(babel.transformSync(fs.readFileSync('src/client/game/characters/gloop/handAnimation.js', 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 }).code, { exports: animationApi });
 const playerAudio = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync('src/gameScene/playerAudio.js', 'utf8'), {
+vm.runInNewContext(babel.transformSync(fs.readFileSync('src/client/game/audio/playerAudio.js', 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 }).code, { exports: playerAudio });
 function setup(animated = false) {
@@ -41,7 +41,7 @@ function setup(animated = false) {
   scene._localPlayerAudioSprite = owner;
   vm.runInNewContext(code, { exports: api, require: name => name.includes('handAnimation') ? { ...animationApi, prepareHandAnimation: () => animated } : name.includes('characterTuning')
     ? { getResolvedCharacterSpecialConfig: () => ({ visualScale: 0.28 }) }
-    : name.includes('gloopHookGeometry') ? require('../src/shared/gloopHookGeometry.js')
+    : name.includes('gloopHookGeometry') ? require('../src/shared/characters/gloopHookGeometry.js')
     : name.includes('playerAudio') ? playerAudio
     : name.includes('renderLayers') ? { RENDER_LAYERS: { ATTACKS: 20 } } : { playSpriteAnimation() {} } });
   const launch = () => api.playHookAction(scene, owner, { id: 'hook1', start: { x: 120, y: 180 }, angle: 0, range: 500, speed: 1000 }, true);

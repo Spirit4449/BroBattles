@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../src/party.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../src/client/lobby/party/party.js'), 'utf8');
 const commitSource = source.slice(source.indexOf('function commitPartyRosterLayout('), source.indexOf('export function renderPartyMembers('));
 
 function fixture() {
@@ -112,7 +112,8 @@ test('an unchanged level badge keeps its existing artwork', () => {
     LEVEL_CAP: 11,
     renderLevelBadge: (element, level) => { renders++; element.dataset.level = String(level); },
   });
-  vm.runInContext(source.slice(source.indexOf('function setSlotLevelBadge('), source.indexOf('function prefersReducedLobbyMotion(')), context);
+  const badgeSource = fs.readFileSync(require.resolve('../src/client/views/levelBadgeView.js'), 'utf8');
+  vm.runInContext(badgeSource.slice(badgeSource.indexOf('function setSlotLevelBadge(')), context);
   context.setSlotLevelBadge(slot, 5);
   context.setSlotLevelBadge(slot, 5);
   assert.equal(renders, 1);

@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const babel = require('@babel/core');
 
 const exported = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/gameScene/pregameFlythrough.js'), 'utf8'), {
+vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/pregameFlythrough.js'), 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 }).code, { exports: exported, Math });
 const { planFlythrough, sampleFlythrough, clampCenter, fitZoom, blendFraming, OPENING_HOLD } = exported;

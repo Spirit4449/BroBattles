@@ -1,9 +1,9 @@
-const { characterBody } = require("../../../shared/duelGeometry");
+const { characterBody } = require("../../../shared/physics/duelGeometry");
 const { bounds, stepBody } = require("./physics");
-const movement = require("../../../shared/movementPhysics.json");
+const movement = require("../../../shared/physics/movementPhysics.json");
 const { SD_DAMAGE_PER_SEC } = require('../gameRoomConfig');
 const graphs = new WeakMap();
-const DT = 1000 / 60;
+const { FIXED_DT_MS: DT } = require('../../../shared/gameConstants');
 const EDGE_STANCE_INSET = 14;
 
 function standOn(surface, character, x) {

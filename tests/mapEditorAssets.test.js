@@ -4,12 +4,12 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const {randomUUID}=require('node:crypto');
-const {clone,validateDocument}=require('../src/shared/mapDocument');
+const {clone,validateDocument}=require('../src/shared/maps/mapDocument');
 const defaults=require('../src/shared/maps').mapDefaults;
-const {replaceAssetReferences,exportDocument,resizeCollision,snapMove,allRows}=require('../src/editor/editorModel');
-const {geometryFromMap}=require('../src/shared/mapDocument');
-const {MapRepository}=require('../src/server/services/mapRepository');
-const files=require('../src/server/services/mapAssetFiles');
+const {replaceAssetReferences,exportDocument,resizeCollision,snapMove,allRows}=require('../src/client/editor/editorModel');
+const {geometryFromMap}=require('../src/shared/maps/mapDocument');
+const {MapRepository}=require('../src/server/services/maps/mapRepository');
+const files=require('../src/server/services/maps/mapAssetFiles');
 
 test('asset replacement follows matching URLs across variants, preserves dimensions and leaves independent artwork alone',()=>{
  const doc=clone(defaults[0]),map=doc.variants['1v1'],key=map.layout.platforms[1].textureKey,original=map.assets[key];

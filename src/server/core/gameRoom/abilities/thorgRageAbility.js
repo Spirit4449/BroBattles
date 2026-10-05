@@ -1,4 +1,4 @@
-const { getResolvedCharacterSpecialConfig } = require("../../../../shared/characterTuning");
+const { getResolvedCharacterSpecialConfig } = require("../../../../shared/characters/characterTuning");
 const knockback = getResolvedCharacterSpecialConfig("thorg", "knockback");
 const effectManager = require("../effects/effectManager");
 

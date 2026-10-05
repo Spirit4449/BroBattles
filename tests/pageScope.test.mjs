@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('../src/navigation/pageScope.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../src/client/navigation/pageScope.js', import.meta.url), 'utf8');
 const { createPageScope } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 
 test('screen lifetimes support repeated navigation without stale work', async () => {

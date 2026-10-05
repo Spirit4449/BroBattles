@@ -1,4 +1,4 @@
-const { buildGameDataForMatch } = require("../../services/gameDataService");
+const { buildGameDataForMatch } = require("../../services/match/gameDataService");
 
 function registerGameRoutes({
   app,

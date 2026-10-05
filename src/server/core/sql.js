@@ -1,6 +1,6 @@
 // Database
 const mysql = require("mysql2/promise"); // Just mysql doesn't work
-const { normalizeSelection } = require("../helpers/gameSelectionCatalog");
+const { normalizeSelection } = require("../services/match/gameSelectionCatalog");
 const databaseConfig = {
   host: process.env.DB_HOST || "localhost",
   port: Math.max(1, Number(process.env.DB_PORT) || 3306),
@@ -113,7 +113,7 @@ async function fetchPartyMembersDetailed(partyId) {
       ORDER BY pm.joined_at, pm.name`,
     [partyId],
   );
-  return require("../helpers/partySlots").normalizePartySlots(rows, Number(rows[0]?.party_team_size) || 3);
+  return require("../services/party/partySlots").normalizePartySlots(rows, Number(rows[0]?.party_team_size) || 3);
 }
 
 async function setUserStatus(name, status) {

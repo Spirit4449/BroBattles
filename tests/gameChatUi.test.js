@@ -3,10 +3,10 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 
 const controllerSource = fs.readFileSync(
-  "src/chat/gameChatController.js",
+  "src/client/chat/gameChatController.js",
   "utf8",
 );
-const chatStyles = fs.readFileSync("src/styles/chat.css", "utf8");
+const chatStyles = fs.readFileSync("src/client/styles/chat.css", "utf8");
 
 test("battle chat exposes direct Team and All tabs instead of a select", () => {
   assert.match(controllerSource, /class="bb-chat-audience-tab"/);

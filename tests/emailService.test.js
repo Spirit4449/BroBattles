@@ -1,6 +1,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {template,hashCode,sendEmail}=require('../src/server/services/emailService');
+const {template,hashCode,sendEmail}=require('../src/server/services/email/emailService');
 test('email template escapes user content and includes plain text',()=>{
  const result=template('New feedback','<img src=x onerror=alert(1)>');
  assert.ok(!result.html.includes('<img src=x onerror=alert(1)>'));

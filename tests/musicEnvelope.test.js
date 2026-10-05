@@ -6,7 +6,7 @@ const vm = require('node:vm');
 test('map music fades from its current intensity, honors mute during fades, and disposes', () => {
   let time = 0, id = 0, listener, unsubscribed = false;
   const frames = new Map(), settings = { music: 1 }, audio = {};
-  const source = fs.readFileSync(require.resolve('../src/lib/musicEnvelope.js'), 'utf8')
+  const source = fs.readFileSync(require.resolve('../src/client/lib/musicEnvelope.js'), 'utf8')
     .replace(/^import .*;$/gm, '').replace(/^export /gm, '');
   const bind = vm.runInNewContext(source + '; bindMusicEnvelope', {
     getSettings: () => settings,
@@ -40,7 +40,7 @@ test('settings synchronize navigation and independently bundled pages without fe
     dispatchEvent(event) { for (const fn of listeners.get(event.type) || []) fn(event); },
   };
   let saved;
-  const source = fs.readFileSync(require.resolve('../src/site/preferences.js'), 'utf8')
+  const source = fs.readFileSync(require.resolve('../src/client/site/preferences.js'), 'utf8')
     .replace(/^import .*;$/gm, '').replace(/^export /gm, '');
   function bundle() {
     return vm.runInNewContext(source + '; ({ getSettings, saveSettings, subscribeSettings })', {

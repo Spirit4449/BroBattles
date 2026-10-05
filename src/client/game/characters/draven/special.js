@@ -1,0 +1,320 @@
+import { teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
+import { getResolvedCharacterSpecialConfig } from "../../../../shared/characters/characterTuning.js";
+import { getResolvedCharacterSpecialAimConfig } from "../../../../shared/characters/characterTuning.js";
+import { createRuntimeId } from "../shared/runtimeId";
+import { lockPlayerFlip } from "../shared/flipLock";
+import {
+  markOneShotAnimation,
+  playSpriteAnimation,
+  resolveSpriteAnimationKey,
+} from "../shared/animationState.js";
+import { RENDER_LAYERS } from "../../scene/renderLayers";
+import { playerSoundVolume } from "../../audio/playerAudio";
+
+const INFERNO = getResolvedCharacterSpecialConfig("draven", "inferno");
+const INFERNO_AIM = getResolvedCharacterSpecialAimConfig("draven");
+
+// Tuning lives in src/shared/characters/draven.json (special.inferno / special.aim).
+const DRAVEN_INFERNO_DURATION_MS = INFERNO.durationMs;
+const DRAVEN_INFERNO_RISE_MS = INFERNO.riseMs;
+const DRAVEN_INFERNO_LIFT_PX = INFERNO.liftPx;
+const DRAVEN_INFERNO_BOB_PX = INFERNO.bobPx;
+const DRAVEN_INFERNO_RADIUS = INFERNO_AIM.radius; // same radius the server damages
+const DRAVEN_FIRE_PULSE_MS = INFERNO.firePulseMs;
+const DRAVEN_EXPLOSION_PULSE_MS = INFERNO.explosionPulseMs;
+const DRAVEN_SPECIAL_FX_TEXTURE_KEY = "draven-special-fx";
+const DRAVEN_SPECIAL_FX_ANIM_KEY = "draven-special-fx";
+
+const FIRE_COLORS = [0xff5a2f, 0xff8a00, 0xb13cff, 0xff2f5d];
+
+function syncInfernoOverlay(player, overlay) {
+  if (!player || !overlay || !overlay.active) return;
+  overlay.x = player.x;
+  overlay.y = player.y;
+  overlay.flipX = !!player.flipX;
+  overlay.setDepth(RENDER_LAYERS.PLAYER - 1);
+}
+
+function destroyInfernoOverlay(player) {
+  if (!player || !player._dravenInfernoOverlay) return;
+  try {
+    player._dravenInfernoOverlay.destroy();
+  } catch (_) {}
+  delete player._dravenInfernoOverlay;
+}
+
+function ensureInfernoOverlay(scene, player) {
+  if (!scene?.add || !player?.active) return null;
+  if (
+    !scene.textures?.exists(DRAVEN_SPECIAL_FX_TEXTURE_KEY) ||
+    !scene.anims?.exists(DRAVEN_SPECIAL_FX_ANIM_KEY)
+  ) {
+    return null;
+  }
+
+  destroyInfernoOverlay(player);
+  const fxKey = teamColor(player) === TEAM_RED && scene.textures.exists("draven-special-fx-red") ? "draven-special-fx-red" : DRAVEN_SPECIAL_FX_TEXTURE_KEY;
+
+  const overlay = scene.add.sprite(player.x, player.y, fxKey);
+  overlay.setAlpha(0);
+  overlay.setBlendMode(Phaser.BlendModes.ADD);
+  const scaleBase = player.displayWidth || player.width || 72;
+  // Retain world size while using the higher-resolution source frames.
+  const frameWidth = overlay.frame?.realWidth || overlay.width || 72;
+  overlay.setScale(Math.max(0.45, (scaleBase / 92) * 1.7) * 72 / frameWidth);
+  syncInfernoOverlay(player, overlay);
+  try {
+    overlay.anims.play(fxKey, true);
+  } catch (_) {}
+  scene.tweens.add({
+    targets: overlay,
+    alpha: 1,
+    duration: DRAVEN_INFERNO_RISE_MS,
+    ease: "Sine.easeInOut",
+  });
+  player._dravenInfernoOverlay = overlay;
+  return overlay;
+}
+
+function spawnFireParticle(scene, x, y, owner) {
+  const colors = teamColor(owner) === TEAM_RED ? [0xff5148, 0xff965b, 0xe63960, 0xffcd83] : FIRE_COLORS;
+  const color = colors[Phaser.Math.Between(0, colors.length - 1)];
+  const p = scene.add.circle(x, y, Phaser.Math.Between(3, 7), color, 0.8);
+  p.setDepth(18);
+  p.setBlendMode(Phaser.BlendModes.ADD);
+
+  scene.tweens.add({
+    targets: p,
+    y: y - Phaser.Math.Between(22, 56),
+    x: x + Phaser.Math.Between(-14, 14),
+    alpha: 0,
+    scaleX: Phaser.Math.FloatBetween(1.1, 1.8),
+    scaleY: Phaser.Math.FloatBetween(1.2, 2),
+    duration: Phaser.Math.Between(260, 460),
+    ease: "Cubic.easeOut",
+    onComplete: () => p.destroy(),
+  });
+}
+
+function spawnInfernoPulse(scene, cx, cy, strength = 1, owner = null) {
+  const ring = scene.add.circle(
+    cx,
+    cy,
+    DRAVEN_INFERNO_RADIUS * 0.75,
+    teamColor(owner) === TEAM_RED ? 0xff5360 : 0xb13cff,
+    0.22,
+  );
+  ring.setDepth(14);
+  ring.setBlendMode(Phaser.BlendModes.ADD);
+  scene.tweens.add({
+    targets: ring,
+    scaleX: 1.35,
+    scaleY: 1.35,
+    alpha: 0,
+    duration: 260,
+    ease: "Quad.easeOut",
+    onComplete: () => ring.destroy(),
+  });
+
+  const sparks = Math.floor(10 * strength);
+  for (let i = 0; i < sparks; i++) {
+    const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    const radius = Phaser.Math.FloatBetween(20, DRAVEN_INFERNO_RADIUS);
+    const px = cx + Math.cos(angle) * radius;
+    const py = cy + Math.sin(angle) * radius;
+    spawnFireParticle(scene, px, py, owner);
+  }
+}
+
+function startInfernoVisualLoop(scene, player, token, isOwner) {
+  let nextFireAt = scene.time.now;
+  let nextExplosionAt = scene.time.now + 80;
+
+  const tick = () => {
+    if (!player || !player.active) return;
+    if (player._dravenInfernoToken !== token) return;
+
+    const now = scene.time.now;
+    const until = Number(player._dravenInfernoUntil || 0);
+    if (Date.now() >= until) return;
+
+    const elapsed = Math.max(
+      0,
+      Date.now() - Number(player._dravenInfernoStartedAt || Date.now()),
+    );
+    const riseT = Phaser.Math.Clamp(elapsed / DRAVEN_INFERNO_RISE_MS, 0, 1);
+    const liftNow =
+      DRAVEN_INFERNO_LIFT_PX * Phaser.Math.Easing.Cubic.Out(riseT);
+    const bob = Math.sin(elapsed / INFERNO.bobWaveMs) * DRAVEN_INFERNO_BOB_PX;
+
+    const baseX = Number.isFinite(player._dravenInfernoBaseX)
+      ? player._dravenInfernoBaseX
+      : player.x;
+    const baseY = Number.isFinite(player._dravenInfernoBaseY)
+      ? player._dravenInfernoBaseY
+      : player.y;
+    const centerX = player.x;
+    const centerY = player.y;
+
+    if (now >= nextFireAt) {
+      nextFireAt = now + DRAVEN_FIRE_PULSE_MS;
+      spawnInfernoPulse(scene, centerX, centerY, 1, player);
+    }
+
+    // Explosion positions come from the authoritative damage events. Keeping
+    // this loop free of random effects prevents local/remote duplicates.
+
+    const specialKey = resolveSpriteAnimationKey({
+      scene,
+      sprite: player,
+      character: "draven",
+      logical: "special",
+      fallback: "throw",
+    });
+    if (specialKey && player.anims?.currentAnim?.key !== specialKey) {
+      playSpriteAnimation({
+        scene,
+        sprite: player,
+        character: "draven",
+        logical: "special",
+        fallback: "throw",
+      });
+    }
+
+    // Keep the owner fully anchored while channeling.
+    if (isOwner) {
+      player.x = baseX;
+      player.y = baseY - liftNow + bob;
+      if (player.body) {
+        player.body.allowGravity = false;
+        player.setVelocity(0, 0);
+      }
+    }
+
+    syncInfernoOverlay(player, player._dravenInfernoOverlay);
+
+    scene.time.delayedCall(16, tick);
+  };
+
+  tick();
+}
+
+export function perform(
+  scene,
+  player,
+  playersInTeam,
+  opponentPlayers,
+  username,
+  gameId,
+  isOwner = false,
+  specialData = null,
+) {
+  if (!scene || !player || !player.active) return;
+
+  const now = Date.now();
+  const token = createRuntimeId("draven_inferno");
+  const baseX = player.x;
+  const baseY = player.y;
+
+  player._dravenInfernoToken = token;
+  player._dravenInfernoStartedAt = now;
+  player._dravenInfernoUntil = now + DRAVEN_INFERNO_DURATION_MS;
+  player._dravenInfernoBaseX = baseX;
+  player._dravenInfernoBaseY = baseY;
+  player._dravenInfernoLift = DRAVEN_INFERNO_LIFT_PX;
+  player._dravenInfernoRiseMs = DRAVEN_INFERNO_RISE_MS;
+  player._movementLockedUntil = now + DRAVEN_INFERNO_DURATION_MS;
+  markOneShotAnimation(player, "special", DRAVEN_INFERNO_DURATION_MS);
+
+  const unlockFlip = lockPlayerFlip(player);
+
+  if (player.body) {
+    player._dravenInfernoPrevGravity = player.body.allowGravity;
+    player.body.allowGravity = false;
+    player.setVelocity(0, 0);
+  }
+
+  playSpriteAnimation({
+    scene,
+    sprite: player,
+    character: "draven",
+    logical: "special",
+    fallback: "throw",
+  });
+
+  ensureInfernoOverlay(scene, player);
+
+  try {
+    const sound = scene.sound?.add("draven-special", { volume: 0 });
+    if (sound) {
+      const fadeState = { gain: 0 };
+      const updateVolume = () => {
+        sound.volume = playerSoundVolume(scene, player, 0.65) * fadeState.gain;
+      };
+      const fade = scene.tweens.add({
+        targets: fadeState,
+        gain: 1,
+        duration: DRAVEN_INFERNO_RISE_MS,
+        ease: "Sine.easeInOut",
+        onUpdate: updateVolume,
+      });
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        scene.events?.off("update", updateVolume);
+        scene.events?.off("shutdown", cleanup);
+        player.off?.("attack:interrupted", cleanup);
+        fade.remove();
+        sound.destroy();
+      };
+      scene.events?.on("update", updateVolume);
+      scene.events?.once("shutdown", cleanup);
+      sound.once("complete", cleanup);
+      player.once?.("attack:interrupted", cleanup);
+      if (!sound.play()) cleanup();
+    }
+  } catch (_) {}
+
+  const interrupt = () => {
+    if (player._dravenInfernoToken !== token) return;
+    player._movementLockedUntil = player._dravenInfernoUntil = 0;
+    delete player._dravenInfernoToken;
+    unlockFlip();
+    destroyInfernoOverlay(player);
+    if (player.body) player.body.allowGravity = player._dravenInfernoPrevGravity ?? true;
+    delete player._dravenInfernoPrevGravity;
+  };
+  player.once?.("attack:interrupted", interrupt);
+  startInfernoVisualLoop(scene, player, token, isOwner);
+
+  scene.time.delayedCall(DRAVEN_INFERNO_DURATION_MS, () => {
+    player.off?.("attack:interrupted", interrupt);
+    if (!player || !player.active) return;
+    if (player._dravenInfernoToken !== token) return;
+
+    player._movementLockedUntil = 0;
+    player._dravenInfernoUntil = 0;
+    unlockFlip();
+    destroyInfernoOverlay(player);
+
+    if (player._matchEnded) {
+      if (player.body) {
+        player.setVelocity(0, 0);
+      }
+      return;
+    }
+
+    if (player.body) {
+      const prevGravity =
+        typeof player._dravenInfernoPrevGravity === "boolean"
+          ? player._dravenInfernoPrevGravity
+          : true;
+      player.body.allowGravity = prevGravity;
+      player.setVelocityY(Math.max(player.body.velocity.y, 150));
+    }
+
+    delete player._dravenInfernoPrevGravity;
+    delete player._dravenInfernoToken;
+  });
+}

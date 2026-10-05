@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { expectedSchema } = require('../scripts/migration-status.cjs');
+const { expectedSchema } = require('../scripts/db/migration-status.cjs');
 
 test('migration status derives additive DDL, including conditional PREPARE strings', () => {
   const sql = `

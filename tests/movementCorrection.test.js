@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const input = require('../src/server/core/gameRoom/inputManager');
-const { characterBody } = require('../src/shared/duelGeometry');
-const { createMovementCorrector } = require('../src/players/movementCorrection');
+const { characterBody } = require('../src/shared/physics/duelGeometry');
+const { createMovementCorrector } = require('../src/client/game/players/movementCorrection');
 
 function server(t) {
   let now = 100000;

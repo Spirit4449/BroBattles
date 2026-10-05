@@ -1,11 +1,12 @@
-const huntressModel = require('../../../shared/huntressProjectile');
+const huntressModel = require('../../../shared/characters/huntressProjectile');
 const { EFFECT_RULES } = require('../../../shared/effectRules');
 const ninjaCombat = require('./ninjaCombat');
 const huntressCombat = require('./huntressCombat');
 const { isTrustedProjectileContact } = require('./attackRuntimes/projectileLifecycle');
 const { getParticipant, participantId } = require('./participants');
 const {
-  NINJA_SWARM_HIT_DAMAGE
+  NINJA_SWARM_HIT_DAMAGE,
+  DUPLICATE_HIT_WINDOW_MS,
 } = require("../gameRoomConfig");
 const effectManager = require("./effects/effectManager");
 const {
@@ -14,7 +15,7 @@ const {
   getKnockback
 } = require("./abilityRuntimeManager");
 const combatValidation = require("./combatValidation");
-const { reduceDuckDamage } = require("../../../shared/ducking");
+const { reduceDuckDamage } = require("../../../shared/physics/ducking");
 const { chargeSuperForHit } = require("./superCharge");
 
 // Client wall clocks are unsynchronised, so a client-reported Date.now() cannot
@@ -248,8 +249,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
       "|" +
       instanceId;
     const last = room._recentHits.get(keySafe) || 0;
-    const DUP_WINDOW_MS = 80; // hits within 80ms considered duplicate
-    if (!isSelf && now - last < DUP_WINDOW_MS) {
+    if (!isSelf && now - last < DUPLICATE_HIT_WINDOW_MS) {
       if (room.DEBUG_HIT_EVENTS) {
         console.log(
           `[HitDebug ${room.matchId}] reject reason=duplicate attacker=${attacker.name} target=${targetVault ? targetName : target.name} type=${attackType} dt=${now - last}`,

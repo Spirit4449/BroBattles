@@ -3,10 +3,9 @@ const { maneuverDanger } = require('./perception');
 const { healthFraction, preferredRange } = require('./tactics');
 const { hasClearShot } = require('./combat');
 const { isMovementSuppressed } = require('../gameRoom/abilityRuntimeManager');
-const movement = require('../../../shared/movementPhysics.json');
-const { STOMP_RADIUS } = require('../gameRoom/stomp');
-
-const DT = 1000 / 60;
+const movement = require('../../../shared/physics/movementPhysics.json');
+const { STOMP_RADIUS } = require('../gameRoomConfig');
+const { FIXED_DT_MS: DT } = require('../../../shared/gameConstants');
 
 function recordDash(brain, kind, now) {
   brain.nextDashAt = brain.player._dashReadyAt + brain.between(250, 1100);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { releaseMovementForFocus } from "../src/players/focusMomentum.mjs";
+import { releaseMovementForFocus } from "../src/client/game/players/focusMomentum.mjs";
 
 function movingPlayer(grounded = false) {
   const player = {

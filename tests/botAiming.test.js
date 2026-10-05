@@ -25,7 +25,7 @@ test('ducking does not change whether a bot considers the target attackable', ()
 // Independently step the same velocity-first integration used by live attacks.
 function missDistance(p, enemy, angle, speed) {
   const huntress = p.char_class === 'huntress';
-  const cfg = require('../src/shared/huntressProjectile').attackConfig();
+  const cfg = require('../src/shared/characters/huntressProjectile').attackConfig();
   const runtime = huntress ? { ...cfg, forwardOffsetWidthFactor: cfg.forwardOffset, verticalOffsetHeightFactor: cfg.verticalOffset }
     : getResolvedAttackDescriptor('wizard-fireball-release').runtime;
   speed ??= runtime.speed;
@@ -120,14 +120,14 @@ test('ninja can shoot a ducking human without mistaking their floor for cover', 
   assert.equal(requestBasic(floorRoom, ninja, duckingHuman, profile, () => 0.5, 1000), true);
   assert.equal(ninja.ammoState.charges, 0);
   assert.equal(actions.length, 1);
-  const { characterBody } = require('../src/shared/duelGeometry');
+  const { characterBody } = require('../src/shared/physics/duelGeometry');
   assert.equal(actions[0].target.y, duckingHuman.y + characterBody('ninja').offsetY);
 });
 
 test('ninja aims into Gloop and Huntress bodies rather than their elevated sprite origins', () => {
-  const { characterBody } = require('../src/shared/duelGeometry');
-  const model = require('../src/shared/ninjaProjectile');
-  const { sweep } = require('../src/shared/huntressProjectile');
+  const { characterBody } = require('../src/shared/physics/duelGeometry');
+  const model = require('../src/shared/characters/ninjaProjectile');
+  const { sweep } = require('../src/shared/characters/huntressProjectile');
   const floor = 600;
   const ninjaBody = characterBody('ninja');
   const ninja = { ...player('ninja'), y: floor - ninjaBody.offsetY - ninjaBody.halfHeight };
@@ -272,7 +272,7 @@ test('huntress rarely lobs at level targets but freely aims high at elevated tar
 });
 
 test('huntress varies power by distance without penalizing upward aim and sends it into every runtime arrow', () => {
-  const model = require('../src/shared/huntressProjectile');
+  const model = require('../src/shared/characters/huntressProjectile');
   const p = { ...player('huntress'), participantId: 'adaptive-archer', name: 'Archer', isBot: true };
   const near = basicAim(p, { ...target, x: 160 }, profile, () => 0.5, room);
   const far = basicAim(p, { ...target, x: 500 }, profile, () => 0.5, room);

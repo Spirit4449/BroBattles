@@ -5,15 +5,15 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const input = require('../src/server/core/gameRoom/inputManager');
-const { characterBody } = require('../src/shared/duelGeometry');
+const { characterBody } = require('../src/shared/physics/duelGeometry');
 const { GameRoom } = require('../src/server/core/gameRoom');
-const { createAuthSessionService, tokenHash } = require('../src/server/services/authSessionService');
+const { createAuthSessionService, tokenHash } = require('../src/server/services/auth/authSessionService');
 const { createAbuseHttpMiddleware } = require('../src/server/middleware/abuseHttpMiddleware');
-const { createRequestWindow } = require('../src/server/helpers/requestWindow');
+const { createRequestWindow } = require('../src/server/lib/requestWindow');
 const { acquireRuntimeOwnership } = require('../src/server/services/runtimeOwnershipService');
-const { createPlayerActivityService } = require('../src/server/services/playerActivityService');
+const { createPlayerActivityService } = require('../src/server/services/match/playerActivityService');
 const { distributeMatchRewards } = require('../src/server/core/gameRoom/rewardManager');
-const { createMatchResultService } = require('../src/server/services/matchResultService');
+const { createMatchResultService } = require('../src/server/services/match/matchResultService');
 
 function movement(t) {
   let now = 100000;

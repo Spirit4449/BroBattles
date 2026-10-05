@@ -5,7 +5,7 @@ const vm = require("node:vm");
 const babel = require("@babel/core");
 
 const compiled = babel.transformSync(
-  fs.readFileSync(require.resolve("../src/match/playerRosterMerge.js"), "utf8"),
+  fs.readFileSync(require.resolve("../src/client/game/match/playerRosterMerge.js"), "utf8"),
   {
     babelrc: false,
     configFile: false,

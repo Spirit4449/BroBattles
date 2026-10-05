@@ -6,7 +6,7 @@ const babel = require('@babel/core');
 const { BotController } = require('../src/server/core/bots/controller');
 const { reconcileFlight } = require('../src/shared/projectilePresentation');
 const animation = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/characters/shared/animationState'), 'utf8'), {
+vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/animationState'), 'utf8'), {
   babelrc:false, configFile:false, presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code, { exports:animation, performance:{now:()=>1000} });
 

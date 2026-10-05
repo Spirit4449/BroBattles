@@ -4,13 +4,13 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const skinsCatalog = require("../src/server/helpers/skinsCatalog");
-const { getPlayerCardById } = require("../src/server/helpers/playerCardsCatalog");
-const { getProfileIconById } = require("../src/server/helpers/profileIconsCatalog");
-const shopCatalog = require("../src/server/helpers/shopCatalog");
-const { syncSkinOwnershipForUser } = require("../src/server/helpers/skinOwnership");
-const { MapRepository } = require("../src/server/services/mapRepository");
-const { clone } = require("../src/shared/mapDocument");
+const skinsCatalog = require("../src/server/services/cosmetics/skinsCatalog");
+const { getPlayerCardById } = require("../src/server/services/cosmetics/playerCardsCatalog");
+const { getProfileIconById } = require("../src/server/services/cosmetics/profileIconsCatalog");
+const shopCatalog = require("../src/server/services/shop/shopCatalog");
+const { syncSkinOwnershipForUser } = require("../src/server/services/cosmetics/skinOwnership");
+const { MapRepository } = require("../src/server/services/maps/mapRepository");
+const { clone } = require("../src/shared/maps/mapDocument");
 const defaults = require("../src/shared/maps").mapDefaults;
 
 function countReads(t) {
@@ -27,7 +27,7 @@ function countReads(t) {
 test("cosmetic and shop catalogs load once, index by id, and reload after invalidation", (t) => {
   shopCatalog.invalidateCatalog();
   const reads = countReads(t);
-  const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "../src/shared/skinsCatalog.json"), "utf8"));
+  const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "../src/shared/catalogs/skinsCatalog.json"), "utf8"));
   reads.length = 0;
 
   for (const [character, entry] of Object.entries(raw.characters)) {

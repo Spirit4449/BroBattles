@@ -1,5 +1,5 @@
 const path = require("path");
-const { getBanHoldFromRequest } = require("../../helpers/banHold");
+const { getBanHoldFromRequest } = require("../../services/auth/banHold");
 
 function registerPageRoutes({
   app,

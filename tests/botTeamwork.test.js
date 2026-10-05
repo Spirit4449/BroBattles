@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { updateTeamwork, teamPosition } = require('../src/server/core/bots/teamwork');
 const { chooseDecision } = require('../src/server/core/bots/tactics');
 const { standOn } = require('../src/server/core/bots/navigation');
-const { characterBody } = require('../src/shared/duelGeometry');
+const { characterBody } = require('../src/shared/physics/duelGeometry');
 
 function setup(count = 3) {
   const allies = ['thorg', 'wizard', 'huntress'].slice(0, count).map((char_class, i) => ({

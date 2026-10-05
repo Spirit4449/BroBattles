@@ -12,8 +12,9 @@ const { isMovementSuppressed } = require('../gameRoom/abilityRuntimeManager');
 const { updateTeamwork } = require('./teamwork');
 const { resolveBotObjective } = require('./objectives');
 const { tryDashSteps, recordDash } = require('./dash');
-const movement = require('../../../shared/movementPhysics.json');
+const movement = require('../../../shared/physics/movementPhysics.json');
 const { DEATH_DROP_PICKUP_RADIUS, POWERUP_PICKUP_RADIUS, WORLD_BOUNDS } = require('../gameRoomConfig');
+const { FIXED_DT_MS } = require('../../../shared/gameConstants');
 const { botProfile } = require('./characterProfiles');
 
 class BotController {
@@ -687,7 +688,7 @@ class BotController {
     const baseline = previewManeuver(p, { direction: this.intent.direction }, this.room.geometry, mods, now, poisonY);
     if (!baseline) return { best: null, baseDanger: Infinity, bestScore: Infinity };
     const poisonAt = this.context(mods, now).poisonAt;
-    const hazardCost = (maneuver) => poisonDamage(maneuver.frames, maneuver.frames.length * 1000 / 60, poisonY, poisonAt) * 1200 / Math.max(1, p.health);
+    const hazardCost = (maneuver) => poisonDamage(maneuver.frames, maneuver.frames.length * FIXED_DT_MS, poisonY, poisonAt) * 1200 / Math.max(1, p.health);
     const baseDanger = maneuverDanger(baseline, observed, now, p.char_class) + hazardCost(baseline);
     let best = null, bestScore = baseDanger - 20;
     for (const direction of [-1, 0, 1]) for (const jumpPressed of [false, true]) {

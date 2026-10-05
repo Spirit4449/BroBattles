@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { acceptDash } = require('../src/shared/dash');
+const { acceptDash } = require('../src/shared/physics/dash');
 const { resolveStomp } = require('../src/server/core/gameRoom/stomp');
-const { characterBody } = require('../src/shared/duelGeometry');
+const { characterBody } = require('../src/shared/physics/duelGeometry');
 const input = require('../src/server/core/gameRoom/inputManager');
 function fixture() {
   const fighter = (name, x, extra = {}) => ({ name, socketId:name, char_class:'ninja',
@@ -101,11 +101,11 @@ test('local stomp interruption restores dash gravity and preserves the outward i
     _dash:{allowGravity:true}, _thorgAttackCleanup:()=>cleaned++,
     setVelocityX(x){this.body.velocity.x=x;},setVelocityY(y){this.body.velocity.y=y;},
     setMaxVelocity(){},setAccelerationX(){},setDragX(){},emit(){}};
-  const source=fs.readFileSync(require.resolve('../src/players/localSocketEvents'),'utf8');
+  const source=fs.readFileSync(require.resolve('../src/client/game/players/localSocketEvents'),'utf8');
   vm.runInNewContext(babel.transformSync(source,{babelrc:false,configFile:false,
     presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports,Date,window:{},require:path=>
-      path.includes('shockwaveImpulse')?require('../src/shared/shockwaveImpulse'):
-      path.includes('gameScene/dash')?{endDash:p=>{p.body.allowGravity=p._dash.allowGravity;p._dash=null;}}:
+      path.includes('shockwaveImpulse')?require('../src/shared/physics/shockwaveImpulse'):
+      path.includes('scene/dash')?{endDash:p=>{p.body.allowGravity=p._dash.allowGravity;p._dash=null;}}:
       {playSpriteAnimation(){}}});
   const dispose=exports.bindLocalSocketEvents({socket:{on:(e,fn)=>handlers[e]=fn,off(){}},
     getPlayer:()=>player,getDead:()=>false,getScene:()=>({}),onAttackInterrupted:()=>interrupted++});

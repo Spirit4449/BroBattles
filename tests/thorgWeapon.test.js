@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const babel = require('@babel/core');
-const anchors = require('../src/characters/thorg/handAnchors.json');
-const sweep = require('../src/shared/thorgSweep');
+const anchors = require('../src/client/game/characters/thorg/handAnchors.json');
+const sweep = require('../src/shared/characters/thorgSweep');
 
 function load(file, dependencies = {}) {
   const exports = {};
@@ -19,16 +19,16 @@ function load(file, dependencies = {}) {
   }});
   return exports;
 }
-const motion = load('../src/characters/thorg/weaponMotion.js', { './handAnchors.json': anchors });
-const flips = load('../src/characters/shared/flipLock.js');
-const playerAudio = load('../src/gameScene/playerAudio.js');
-const weaponModule = load('../src/characters/thorg/weapon.js', {
-  '../../shared/projectilePresentation': require('../src/shared/projectilePresentation'),
+const motion = load('../src/client/game/characters/thorg/weaponMotion.js', { './handAnchors.json': anchors });
+const flips = load('../src/client/game/characters/shared/flipLock.js');
+const playerAudio = load('../src/client/game/audio/playerAudio.js');
+const weaponModule = load('../src/client/game/characters/thorg/weapon.js', {
+  '../../../../shared/projectilePresentation': require('../src/shared/projectilePresentation'),
   './weaponMotion': motion,
-  '../../shared/thorgSweep': sweep,
+  '../../../../shared/characters/thorgSweep': sweep,
   '../shared/flipLock': flips,
   '../shared/animationState': { playSpriteAnimation() {}, markOneShotAnimation() {} },
-  '../../gameScene/playerAudio': playerAudio,
+  '../../audio/playerAudio': playerAudio,
 });
 
 function object() {

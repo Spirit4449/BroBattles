@@ -2,18 +2,18 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {EventEmitter}=require('node:events');
 const loadServerClock=require('./helpers/serverClockModule');
 const babel=require('@babel/core');
-const model=require('../src/shared/huntressProjectile');
-const replication=require('../src/shared/huntressReplication');
-const {resolveAttackAimContext}=require('../src/characters/shared/attackAim');
-const tuning=require("../src/shared/characterTuning.js");
+const model=require('../src/shared/characters/huntressProjectile');
+const replication=require('../src/shared/characters/huntressReplication');
+const {resolveAttackAimContext}=require('../src/client/game/characters/shared/attackAim');
+const tuning=require("../src/shared/characters/characterTuning.js");
 const {makeRoom}=require('./helpers/botRoom');
 const combat=require('../src/server/core/gameRoom/huntressCombat');
-const attackCode=babel.transformSync(fs.readFileSync(require.resolve('../src/characters/huntress/attack.js'),'utf8'),{
+const attackCode=babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/huntress/attack.js'),'utf8'),{
   babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code;
 const attackApi={};
 const playerAudio={};
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/gameScene/playerAudio.js'),'utf8'),{
+vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/audio/playerAudio.js'),'utf8'),{
   babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code,{exports:playerAudio});
 vm.runInNewContext(attackCode,{exports:attackApi,require:name=>name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):
@@ -23,7 +23,7 @@ vm.runInNewContext(attackCode,{exports:attackApi,require:name=>name.includes('pr
   name.includes('flipLock')?{lockPlayerFlip:()=>()=>{}}:
   name.includes('animationState')?{playSpriteAnimation(){}}:{},
   Phaser:{Physics:{Arcade:{Image:class{}}}}});
-const code=babel.transformSync(fs.readFileSync(require.resolve('../src/characters/huntress/network.js'),'utf8'),{
+const code=babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/huntress/network.js'),'utf8'),{
   babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code;
 function setup(){

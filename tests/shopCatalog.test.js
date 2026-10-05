@@ -7,7 +7,7 @@ const {
   getShopCatalog,
   getShopCatalogErrors,
   validateCatalog,
-} = require("../src/server/helpers/shopCatalog");
+} = require("../src/server/services/shop/shopCatalog");
 
 test("the production shop catalog has the expected offers and no validation errors", () => {
   const catalog = getShopCatalog();

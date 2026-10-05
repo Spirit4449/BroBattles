@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { createLobbyAudio } from '../src/navigation/lobbyAudio.mjs';
-import { LOBBY_MUSIC_TIMING as timing } from '../src/navigation/lobbyMusicTiming.mjs';
+import { createLobbyAudio } from '../src/client/navigation/lobbyAudio.mjs';
+import { LOBBY_MUSIC_TIMING as timing } from '../src/client/navigation/lobbyMusicTiming.mjs';
 
 const settle = async () => { await Promise.resolve(); await Promise.resolve(); };
 function setup({ webAudio = true, delayMatchmaking = false, delayResumeMatchmaking = false, seekDelay = 0 } = {}) {

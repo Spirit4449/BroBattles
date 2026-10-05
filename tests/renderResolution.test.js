@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const babel = require('@babel/core');
 const exportsObject = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync('src/gameScene/renderResolution.js','utf8'), {
+vm.runInNewContext(babel.transformSync(fs.readFileSync('src/client/game/scene/renderResolution.js','utf8'), {
   babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code, {exports:exportsObject,require:()=>({installHighResolutionCanvas:()=> 'canvas-adapter'})});
 const { installRenderResolution } = exportsObject;

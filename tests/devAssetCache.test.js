@@ -6,7 +6,7 @@ const path = require('node:path');
 const express = require('express');
 const webpack = require('webpack');
 const devMiddleware = require('webpack-dev-middleware');
-const { isolateDevAssetResponse } = require('../src/server/helpers/devAssetMiddleware');
+const { isolateDevAssetResponse } = require('../src/server/middleware/devAssetMiddleware');
 
 test('warmed development bundles revalidate without a body and rebuilds invalidate the ETag', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-cache-'));

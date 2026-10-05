@@ -1,9 +1,10 @@
-- **Move:** WASD or arrow keys.
-- **Attack:** left mouse button. For attacks you can aim, hold the button and move the mouse.
-- **Special:** right mouse button when your ability is ready.
+- **Move:** A/D or Left/Right. Jump with W or Up; duck/drop with S or Down.
+- **Dash:** Space plus a direction. Without directional input, dash the way you face. Dash has a cooldown and does not grant invulnerability.
+- **Attack:** left mouse button or J. For attacks you can aim, hold the button and move the mouse.
+- **Special:** right mouse button or I when your ability is ready.
 - **Show cursor:** press Escape. Click the arena to capture it again.
 
-The battle Controls panel keeps these actions close by. Open Settings to adjust mouse sensitivity, sound, or automatic cursor hiding.
+Open **Settings → Controls** for keyboard bindings. Arrow alternatives and Space dash stay fixed. Use Settings to adjust mouse sensitivity, sound, or automatic cursor hiding.
 
 With auto-hide off, your cursor stays visible until you click the arena. Opening Settings releases the cursor, but the online match continues.
 

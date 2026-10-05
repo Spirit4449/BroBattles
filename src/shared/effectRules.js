@@ -1,5 +1,5 @@
 const { POWERUP_CATALOG } = require('./powerups');
-const { getResolvedCharacterAttackConfig, getResolvedCharacterSpecialConfig } = require('./characterTuning');
+const { getResolvedCharacterAttackConfig, getResolvedCharacterSpecialConfig } = require('./characters/characterTuning');
 
 const slime = getResolvedCharacterAttackConfig('gloop', 'slimeball');
 const hook = getResolvedCharacterSpecialConfig('gloop', 'hook');

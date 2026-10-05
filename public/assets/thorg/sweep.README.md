@@ -1,7 +1,9 @@
 # Thorg full sweep audio
 
-`sweep.wav` is a 700 ms, 48 kHz stereo PCM mix for the entire attack:
-140 ms windup, 460 ms active swing, and 100 ms recovery. Play it once when
+`sweep.wav` is a 700 ms, 48 kHz stereo PCM attack cue:
+its original audio mix has 140 ms buildup, 460 ms sweep, and 100 ms tail. These
+are sound-design segments, not current gameplay phases. The shared attack tuning
+now uses 70/500/300 ms (870 ms total); the 700 ms recording remains unchanged. Play it once when
 the attack begins, at normal rate. Its quiet opening builds into the active
 sweep and fades through recovery; do not delay it until the hit window.
 

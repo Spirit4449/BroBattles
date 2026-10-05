@@ -1,6 +1,6 @@
 Guests can jump in right away, but a guest account usually expires after about two hours. Sign up from that same session to keep its progress.
 
-Choose a unique username and a password you do not use elsewhere. Do not put your real name or contact information in your username.
+Choose a unique username and a password you do not use elsewhere. Signup also requires an email verification code; your guest session stays active until verification completes. Do not put your real name or contact information in your username.
 
 ## Trouble signing in?
 

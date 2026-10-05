@@ -1,4 +1,4 @@
-const { createPlayerActivityService } = require("../services/playerActivityService");
+const { createPlayerActivityService } = require("../services/match/playerActivityService");
 // socket.js
 const cookie = require("cookie");
 const cookieSignature = require("cookie-signature");
@@ -6,7 +6,7 @@ const {
   PARTY_STATUS,
   DISCONNECT_GRACE_MS,
   TEAM_SIZE_BY_MODE,
-} = require("../../server/helpers/partyRules");
+} = require("../services/party/partyRules");
 const { createMatchmaking } = require("./matchmaking");
 const { createGameHub } = require("./gameHub");
 const { registerGameEvents } = require("./socketEvents/gameEvents");
@@ -17,11 +17,11 @@ const {
 const { registerPresenceEvents } = require("./socketEvents/presenceEvents");
 const {
   createPartyPresenceService,
-} = require("../services/partyPresenceService");
-const { createPartyStateService } = require("../services/partyStateService");
+} = require("../services/party/partyPresenceService");
+const { createPartyStateService } = require("../services/party/partyStateService");
 const {
   createPartyQueueTransitionService,
-} = require("../services/partyQueueTransitionService");
+} = require("../services/party/partyQueueTransitionService");
 const { registerChatEvents } = require("./socketEvents/chatEvents");
 const { registerFriendEvents } = require("./socketEvents/friendEvents");
 
@@ -315,18 +315,6 @@ function initSocket({
     });
 
   });
-
-  // fallback offline scanner
-  setInterval(async () => {
-    try {
-      // (We can’t do this purely here without raw SQL; routes keep last_seen fresh)
-      // This module relies on db.updateLastSeen being called by heartbeat/routes,
-      // and your server eviction loop handling removal + roster broadcasts.
-      // If you want this module to own fallback offline too, inject a db.findStaleSince(sec).
-    } catch (e) {
-      console.warn("offline fallback scan failed:", e?.message);
-    }
-  }, 15_000);
 
   return {
     getGameRoom: matchId => gameHub.getGameRoom(Number(matchId)),

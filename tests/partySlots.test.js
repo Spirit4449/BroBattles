@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizePartySlots, movePartyMember } = require('../src/server/helpers/partySlots');
+const { normalizePartySlots, movePartyMember } = require('../src/server/services/party/partySlots');
 const { registerPartyEvents } = require('../src/server/core/socketEvents/partyEvents');
-const { PARTY_STATUS } = require('../src/server/helpers/partyRules');
-const { setPartyBotSlot, prunePartyBotSlots, clearPartyBotSlots } = require('../src/server/helpers/partyBotSlots');
+const { PARTY_STATUS } = require('../src/server/services/party/partyRules');
+const { setPartyBotSlot, prunePartyBotSlots, clearPartyBotSlots } = require('../src/server/services/party/partyBotSlots');
 const members = [
   { name: 'Owner', team: 'team1', slot_index: 0 },
   { name: 'Friend', team: 'team2', slot_index: 0 },
@@ -59,7 +59,7 @@ test('server rejects non-owner, ready players, and active matches', async () => 
 });
 
 test('every two-player seating survives resizing between duel sizes', () => {
-  const { resizePartySlots } = require('../src/server/helpers/partySlots');
+  const { resizePartySlots } = require('../src/server/services/party/partySlots');
   for (const from of [1, 2, 3]) for (const to of [1, 2, 3]) {
     const seats = ['team1', 'team2'].flatMap(team => Array.from({ length: from }, (_, slot_index) => ({ team, slot_index })));
     for (let a = 0; a < seats.length; a++) for (let b = a + 1; b < seats.length; b++) {

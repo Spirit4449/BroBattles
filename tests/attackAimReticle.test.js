@@ -18,9 +18,9 @@ function load(file) {
     require: id => id.includes('renderLayers') ? { RENDER_LAYERS: { RETICLES: 100 } } : createRequire(path)(id) });
   return exports;
 }
-const { resolveAttackAimContext } = require('../src/characters/shared/attackAim.js');
-const { resolveGloopHookSocket } = require('../src/shared/gloopHookGeometry.js');
-const { createAttackAimReticleController, getAttackGuideStyle } = load('../src/gameScene/attackAimReticle.js');
+const { resolveAttackAimContext } = require('../src/client/game/characters/shared/attackAim.js');
+const { resolveGloopHookSocket } = require('../src/shared/characters/gloopHookGeometry.js');
+const { createAttackAimReticleController, getAttackGuideStyle } = load('../src/client/game/scene/attackAimReticle.js');
 function context(character) {
   return resolveAttackAimContext({ character, player: { x: 200, y: 300, width: 80, height: 100 },
     family: 'basic', pointerWorldX: 700, pointerWorldY: 300, quick: false });

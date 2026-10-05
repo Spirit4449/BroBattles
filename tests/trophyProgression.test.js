@@ -2,13 +2,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { buildTrophyRewardTrack, summarizeCurrencyRewards } = require('../src/server/helpers/trophySystem');
+const { buildTrophyRewardTrack, summarizeCurrencyRewards } = require('../src/server/services/trophies/trophySystem');
 const { getModeUnlockReason } = require('../src/shared/trophyProgression');
-const { grantTrophyItems } = require('../src/server/helpers/trophyRewardGrants');
+const { grantTrophyItems } = require('../src/server/services/trophies/trophyRewardGrants');
 const { registerTrophyRoutes } = require('../src/server/routes/modules/trophyRoutes');
-const { getAutoUnlockIconIds } = require('../src/server/helpers/profileIconOwnership');
-const { getAutoUnlockSkinIds } = require('../src/server/helpers/skinOwnership');
-const { assertModeAccess } = require('../src/server/helpers/trophyModeAccess');
+const { getAutoUnlockIconIds } = require('../src/server/services/cosmetics/profileIconOwnership');
+const { getAutoUnlockSkinIds } = require('../src/server/services/cosmetics/skinOwnership');
+const { assertModeAccess } = require('../src/server/services/trophies/trophyModeAccess');
 
 test('road starts at 50, grows in spacing, places unlocks on exact tiers and ends at 10,000', () => {
   const road = buildTrophyRewardTrack();
@@ -20,7 +20,7 @@ test('road starts at 50, grows in spacing, places unlocks on exact tiers and end
   assert.equal(road.at(-1).trophiesRequired - road.at(-2).trophiesRequired, 500);
   for (const tier of road.filter(t => t.rewards.some(r => r.kind === 'mode'))) {
     assert.equal(tier.rewards.length, 1);
-    const mode = require('../src/shared/gameModes.catalog.json').modes.find(m => m.id === tier.rewards[0].itemId);
+    const mode = require('../src/shared/catalogs/gameModes.catalog.json').modes.find(m => m.id === tier.rewards[0].itemId);
     assert.equal(mode.unlockTrophies, tier.trophiesRequired);
     assert.notEqual(getModeUnlockReason(mode.id, { trophies: tier.trophiesRequired - 1 }), '');
     assert.equal(getModeUnlockReason(mode.id, { trophies: tier.trophiesRequired }), '');

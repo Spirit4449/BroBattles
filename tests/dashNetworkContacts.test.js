@@ -1,10 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {mapDefaults} = require('../src/shared/maps');
-const {getDuelGeometry,characterBody} = require('../src/shared/duelGeometry');
+const {getDuelGeometry,characterBody} = require('../src/shared/physics/duelGeometry');
 const input = require('../src/server/core/gameRoom/inputManager');
-const {quantizeMovementPosition} = require('../src/shared/movementPrecision');
-const {applyMovementCorrection} = require('../src/players/movementCorrection');
+const {quantizeMovementPosition} = require('../src/shared/physics/movementPrecision');
+const {applyMovementCorrection} = require('../src/client/game/players/movementCorrection');
 const Body = require('phaser/src/physics/arcade/Body');
 
 function fixture(rect, face) {

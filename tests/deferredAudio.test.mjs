@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { deferSceneAudio } from '../src/gameScene/deferredAudio.js';
+import { deferSceneAudio } from '../src/client/game/audio/deferredAudio.js';
 
 function fixture() {
   const queued = [], played = [], cached = new Set();

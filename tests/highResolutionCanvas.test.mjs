@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { installHighResolutionCanvas } from '../src/gameScene/highResolutionCanvas.js';
+import { installHighResolutionCanvas } from '../src/client/game/scene/highResolutionCanvas.js';
 
 test('graphics scale changes backing resolution without changing game size', () => {
   const transforms = [];

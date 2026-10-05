@@ -592,7 +592,7 @@ test('an unreachable target cannot leave a bot waiting forever with zero movemen
 });
 
 test('bots back up and climb when a route takeoff is hidden behind a solid obstruction', (t) => {
-  const { getDuelGeometry } = require('../src/shared/duelGeometry');
+  const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
   const h = setup(t, ['ninja', 'wizard']);
   h.room.geometry = getDuelGeometry(2);
   const floor = h.room.geometry.colliders.find((surface) => surface.id === 'p0');
@@ -627,7 +627,7 @@ test('bots back up and climb when a route takeoff is hidden behind a solid obstr
 });
 
 test('bots hop over Bank Bust steps instead of pushing against their sides', (t) => {
-  const { getDuelGeometry } = require('../src/shared/duelGeometry');
+  const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
   const h = setup(t, ['ninja', 'wizard']);
   h.room.geometry = getDuelGeometry(4);
   const floor = h.room.geometry.colliders.find((surface) => surface.id === 'p19');
@@ -699,7 +699,7 @@ test('holding a platform eventually encourages a reachable alternative firing an
 
 test('sampled navigation routes land on their advertised platforms under real physics', () => {
   const { buildGraph, standOn } = require('../src/server/core/bots/navigation');
-  const { getDuelGeometry } = require('../src/shared/duelGeometry');
+  const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
   const { stepBody } = require('../src/server/core/bots/physics');
   let replayed = 0;
   for (const map of [1, 2, 3]) {

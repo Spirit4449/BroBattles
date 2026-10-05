@@ -1,4 +1,4 @@
-const catalog = require('./gameModes.catalog.json');
+const catalog = require('./catalogs/gameModes.catalog.json');
 const byId = Object.fromEntries(catalog.modes.map(mode => [mode.id, mode]));
 function supportsSuddenDeath(modeId) {
   return byId[modeId]?.capabilities?.suddenDeath !== false;

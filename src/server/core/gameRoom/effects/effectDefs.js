@@ -23,25 +23,12 @@ const { applyParticipantKnockback } = require('../participants');
 //   snapshotKey: string               — key sent to the client in playerEffects snapshot
 // }
 
-const { POWERUP_HEALTH_REGEN_PER_SEC, POWERUP_POISON_DPS, POWERUP_EFFECT_TICK_MS, POWERUP_AMBIENT_TICK_MS, POWERUP_SHOCKWAVE_RADIUS, POWERUP_SHOCKWAVE_FORCE_X, POWERUP_SHOCKWAVE_FORCE_Y, GAME_DURATION_MS, SD_RISE_SPEED, SD_RISE_FAST_PHASE_MS, SD_RISE_FAST_MULT, WORLD_BOUNDS } = require("../../gameRoomConfig");
-const { reduceDuckDamage } = require("../../../../shared/ducking");
+const { POWERUP_HEALTH_REGEN_PER_SEC, POWERUP_POISON_DPS, POWERUP_EFFECT_TICK_MS, POWERUP_AMBIENT_TICK_MS, POWERUP_SHOCKWAVE_RADIUS, POWERUP_SHOCKWAVE_FORCE_X, POWERUP_SHOCKWAVE_FORCE_Y } = require("../../gameRoomConfig");
+const { reduceDuckDamage } = require("../../../../shared/physics/ducking");
 
 function getPowerScale(params = {}) {
   const scale = Number(params?.powerScale);
   return Number.isFinite(scale) && scale > 0 ? scale : 1;
-}
-
-function _isInSuddenDeathWater(room, player, now) {
-  if (!room._suddenDeathActive) return false;
-  const elapsed = now - room._loopStartWallTime;
-  const sdElapsed = Math.max(0, elapsed - GAME_DURATION_MS);
-  const worldBottomY = Number(WORLD_BOUNDS.height) || 1000;
-  const earlySec = Math.min(sdElapsed, SD_RISE_FAST_PHASE_MS) / 1000;
-  const lateSec = Math.max(0, sdElapsed - SD_RISE_FAST_PHASE_MS) / 1000;
-  const rise =
-    earlySec * SD_RISE_SPEED * SD_RISE_FAST_MULT + lateSec * SD_RISE_SPEED;
-  const poisonY = Math.max(0, worldBottomY - rise);
-  return typeof player?.y === "number" && player.y >= poisonY;
 }
 
 const effectDefs = {
@@ -91,7 +78,8 @@ const effectDefs = {
       }
     },
     onTick(player, room, now, params = {}) {
-      if (_isInSuddenDeathWater(room, player, now)) return;
+      // Healing pauses while standing in the sudden-death poison.
+      if (room._isInSuddenDeathWater?.(player, now)) return;
       const prev = player.health;
       const powerScale = getPowerScale(params);
       const inc =

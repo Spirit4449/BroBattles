@@ -2,9 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createQueueTicketManager } = require('../src/server/core/matchmaking/queueTicketManager');
 const { registerMatchmakingEvents } = require('../src/server/core/socketEvents/matchmakingEvents');
-const { createPartyQueueTransitionService } = require('../src/server/services/partyQueueTransitionService');
+const { createPartyQueueTransitionService } = require('../src/server/services/party/partyQueueTransitionService');
 const { createMatchmaking } = require('../src/server/core/matchmaking');
-const { PARTY_STATUS } = require('../src/server/helpers/partyRules');
+const { PARTY_STATUS } = require('../src/server/services/party/partyRules');
 
 for (const status of ['queued', 'live']) {
   test(`queue leave and duplicate join cannot change a ${status} match`, async () => {

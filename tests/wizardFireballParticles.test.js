@@ -12,7 +12,7 @@ function load(file, imports = () => ({})) {
   vm.runInNewContext(code, { exports, require: imports, Phaser: { Math: { RadToDeg: r => r * 180 / Math.PI } } });
   return exports;
 }
-const particles = load('src/characters/wizard/fireballParticles.js', () => require('../src/shared/projectilePresentation'));
+const particles = load('src/client/game/characters/wizard/fireballParticles.js', () => require('../src/shared/projectilePresentation'));
 test('pixel particles spread across the rear on both render layers and drain cleanly', () => {
   const emitters = [];
   const scene = { events: new EventEmitter(), textures: { exists: () => true }, add: {
@@ -43,9 +43,8 @@ test('pixel particles spread across the rear on both render layers and drain cle
   assert.equal(scene.events.listenerCount('shutdown'), 0);
 });
 test('charge holds its size and reuses its animated sprite on release', () => {
-  const attack = load('src/characters/wizard/attack.js', name => {
+  const attack = load('src/client/game/characters/wizard/attack.js', name => {
     if (name.includes('projectilePresentation')) return require('../src/shared/projectilePresentation');
-    if (name.includes('fireballFrames')) return { getSteadyFireballTexture: () => 'wizard-fireball-steady' };
     if (name.includes('fireballParticles')) return { createFireballParticles: () => ({ stop() {}, destroy() {} }) };
     if (name.includes('renderLayers')) return { RENDER_LAYERS: { ATTACKS: 60 } };
     if (name.includes('characterTuning')) return { getResolvedCharacterAttackConfig: () => ({ activeScale: 0.5, castDelayMs: 520, speed: 450, range: 1050, forwardOffset: 0.23, verticalOffset: 0.12, baseAngleDeg: -90, bobAmplitude: 0, bobFreqMs: 120 }) };

@@ -4,8 +4,8 @@ const assert = require("node:assert/strict");
 const {
   characterDefinitions,
 } = require("../src/shared/characters");
-const skinsCatalog = require("../src/shared/skinsCatalog.json");
-const trophySystemCatalog = require("../src/shared/trophySystem.catalog.json");
+const skinsCatalog = require("../src/shared/catalogs/skinsCatalog.json");
+const trophySystemCatalog = require("../src/shared/catalogs/trophySystem.catalog.json");
 
 test("characters do not have rarities", () => {
   for (const [character, definition] of Object.entries(characterDefinitions)) {

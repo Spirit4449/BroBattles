@@ -29,7 +29,7 @@ function fixture() {
       },
     };
   }
-  vm.runInNewContext(compile('src/lib/sonner.js'), {
+  vm.runInNewContext(compile('src/client/ui/sonner.js'), {
     exports: api,
     require: name => name.includes('maintenance')
       ? { maintenanceClock: () => '02:30' }
@@ -110,7 +110,7 @@ test('maintenance description keeps countdown and legacy options and sound', () 
 
 test('friend and chat errors omit redundant headings and retain suspension time', () => {
   const api = {}, calls = [];
-  vm.runInNewContext(compile('src/chat/presentation.js'), {
+  vm.runInNewContext(compile('src/client/chat/presentation.js'), {
     exports: api,
     require: name => name.includes('sonner') ? { sonner: (...args) => calls.push(args) } : {},
   });

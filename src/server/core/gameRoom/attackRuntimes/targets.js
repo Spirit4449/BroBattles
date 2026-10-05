@@ -1,8 +1,8 @@
 const { exposeDamageHitbox } = require('../damageHitboxes');
 const effectManager = require("../effects/effectManager");
-const { getParticipant, participantId } = require('../participants');
+const { getParticipant } = require('../participants');
 const { circleAabbOverlap, getPlayerBounds } = require('./geometry');
-const { sweep } = require('../../../../shared/huntressProjectile');
+const { sweep } = require('../../../../shared/characters/huntressProjectile');
 const { isDetachedProjectile } = require('./projectileLifecycle');
 
 function emitServerHit(room, attack, targetName, payload = {}) {

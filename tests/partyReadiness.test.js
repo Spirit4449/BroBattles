@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { registerPartyEvents } = require('../src/server/core/socketEvents/partyEvents');
 const { registerPresenceEvents } = require('../src/server/core/socketEvents/presenceEvents');
-const { createPartyQueueTransitionService } = require('../src/server/services/partyQueueTransitionService');
-const { PARTY_STATUS } = require('../src/server/helpers/partyRules');
+const { createPartyQueueTransitionService } = require('../src/server/services/party/partyQueueTransitionService');
+const { PARTY_STATUS } = require('../src/server/services/party/partyRules');
 
 function fixture(names = ['Owner'], gameHub = undefined) {
   const party = { party_id: 7, status: 'idle', mode: 1, map: 1 };
@@ -165,7 +165,7 @@ test('disconnect racing with enqueue removes the ticket after the ready transiti
 });
 
 test('failed presence writes reject readiness instead of acknowledging success', async () => {
-  const { createPartyPresenceService } = require('../src/server/services/partyPresenceService');
+  const { createPartyPresenceService } = require('../src/server/services/party/partyPresenceService');
   const presence = createPartyPresenceService({ db: { setUserStatus: async () => { throw new Error('DB unavailable'); } }, io: {} });
   await assert.rejects(presence.setUserPresence('Owner', 'ready', 7, { strict: true }), /DB unavailable/);
 });

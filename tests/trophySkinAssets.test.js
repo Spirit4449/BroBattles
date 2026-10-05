@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const skins = require('../src/shared/skinsCatalog.json');
+const skins = require('../src/shared/catalogs/skinsCatalog.json');
 const root = path.resolve(__dirname, '..');
 const file = url => path.join(root, 'public', url);
 
@@ -37,7 +37,7 @@ for (const [character, id] of [['ninja', 'ninja-arena-sovereign'], ['gloop', 'gl
 }
 
 test('currency artwork scales through all six levels and ships every selected asset', () => {
-  const source = fs.readFileSync(path.join(root,'src/lib/rewardPresentation.js'),'utf8').replaceAll('export function','function');
+  const source = fs.readFileSync(path.join(root,'src/client/views/rewardPresentation.js'),'utf8').replaceAll('export function','function');
   const api = vm.runInNewContext(source+'; ({currencyRewardImage, rewardSound})');
   for (const [currency, amounts] of [['coins',[100,400,1000,2500,5000,10000]],['gems',[10,20,60,150,400,1000]]]) {
     const assets=amounts.map(amount=>api.currencyRewardImage(currency,amount));
@@ -50,6 +50,6 @@ test('currency artwork scales through all six levels and ships every selected as
 });
 
 test('every multi-reward milestone has a unified bundle illustration', () => {
-  const track=require('../src/server/helpers/trophySystem').buildTrophyRewardTrack();
+  const track=require('../src/server/services/trophies/trophySystem').buildTrophyRewardTrack();
   for(const tier of track.filter(tier=>tier.rewards.length>1))assert.ok(fs.existsSync(file(`/assets/reward-bundles/milestone-${tier.trophiesRequired}.webp`)),tier.tierId);
 });

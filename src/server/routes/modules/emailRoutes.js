@@ -1,10 +1,10 @@
 const crypto=require('node:crypto');
 const {isSameOrigin}=require('./siteRoutes');
-const {createRequestWindow}=require('../../helpers/requestWindow');
-const {sendEmail,template,hashCode}=require('../../services/emailService');
+const {createRequestWindow}=require('../../lib/requestWindow');
+const {sendEmail,template,hashCode}=require('../../services/email/emailService');
 const failure=(error,status=400)=>({error,status});
-const {emailCooldown}=require('../../helpers/emailCooldown');
-const { escapeHtml } = require("../../../shared/html.cjs");
+const {emailCooldown}=require('../../services/email/emailCooldown');
+const { escapeHtml } = require("../../../shared/site/html.cjs");
 const preferencesPage=(title,content)=>`<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · Bro Battles</title><body style="margin:0;background:#091324;color:#eef5ff;font-family:system-ui"><main style="max-width:440px;margin:10vh auto;padding:28px;background:#14233b;border:2px solid #45648b;border-radius:12px"><p style="color:#9bc7ff;font-size:12px;letter-spacing:.12em">BRO BATTLES</p><h1 style="font-size:24px">${title}</h1>${content}</main></body></html>`;
 function registerEmailRoutes({app,db,requireCurrentUser}) {
  const limits=createRequestWindow();
@@ -56,7 +56,7 @@ function registerEmailRoutes({app,db,requireCurrentUser}) {
      if (preference?.email && preference.email !== row.pending_email) {
        await q(`INSERT INTO marketing_contact_sync (email,subscribed,next_attempt_at) VALUES (?,FALSE,NOW(3))
          ON DUPLICATE KEY UPDATE subscribed=FALSE,synced_at=NULL,next_attempt_at=NOW(3),attempts=0`,[preference.email]);
-       await require('../../services/marketingService').setSubscription(q,user.user_id,row.pending_email,!!preference.subscribed);
+       await require('../../services/email/marketingService').setSubscription(q,user.user_id,row.pending_email,!!preference.subscribed);
      }
    }
    catch(error){throw error;}
@@ -64,14 +64,14 @@ function registerEmailRoutes({app,db,requireCurrentUser}) {
   });
  }));
  app.get('/profile/email/marketing',wrap(async(_req,user)=>{
-   const subscribed=await db.withTransaction((_conn,q)=>require('../../services/marketingService').readSubscription(q,user.user_id));
+   const subscribed=await db.withTransaction((_conn,q)=>require('../../services/email/marketingService').readSubscription(q,user.user_id));
    return {subscribed};
  }));
  app.post('/profile/email/marketing',wrap(async(req,user)=>{
    return db.withTransaction(async(_conn,q)=>{
      const [email]=await q('SELECT email FROM account_emails WHERE user_id=? AND verified_at IS NOT NULL FOR UPDATE',[user.user_id]);
      if(!email?.email) return failure('Verify an email address before changing email preferences.',409);
-     await require('../../services/marketingService').setSubscription(q,user.user_id,email.email,req.body?.subscribed===true);
+     await require('../../services/email/marketingService').setSubscription(q,user.user_id,email.email,req.body?.subscribed===true);
      return {success:true,subscribed:req.body?.subscribed===true};
    });
  }));
@@ -91,7 +91,7 @@ function registerEmailRoutes({app,db,requireCurrentUser}) {
    const found=await db.withTransaction(async(_conn,q)=>{
      const [row]=await q('SELECT user_id,email FROM email_marketing WHERE unsubscribe_id=? FOR UPDATE',[id]);
      if(!row) return false;
-     await require('../../services/marketingService').setSubscription(q,row.user_id,row.email,false);
+     await require('../../services/email/marketingService').setSubscription(q,row.user_id,row.email,false);
      await q("UPDATE marketing_jobs SET cancelled_at=NOW(3) WHERE user_id=? AND sent_at IS NULL",[row.user_id]);
      return true;
    });

@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const {
   createShopRotationService,
   getNaturalCycle,
-} = require("../src/server/services/shopRotationService");
+} = require("../src/server/services/shop/shopRotationService");
 
 test("daily reset follows Eastern midnight across spring DST", () => {
   const before = getNaturalCycle(

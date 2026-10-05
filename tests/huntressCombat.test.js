@@ -2,9 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
 const combat = require('../src/server/core/gameRoom/huntressCombat');
-const model = require('../src/shared/huntressProjectile');
-const { characterBody, getDuelGeometry } = require('../src/shared/duelGeometry');
-const { HuntressReplica, CombatClock } = require('../src/shared/huntressReplication');
+const model = require('../src/shared/characters/huntressProjectile');
+const { characterBody, getDuelGeometry } = require('../src/shared/physics/duelGeometry');
+const { HuntressReplica, CombatClock } = require('../src/shared/characters/huntressReplication');
 
 function fixture(t, map = 1) {
   const f = makeRoom({ characters: ['huntress', 'ninja'], map });

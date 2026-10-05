@@ -1,4 +1,4 @@
-const { resolveCharacterKey } = require("../../../shared/characterStats.js");
+const { resolveCharacterKey } = require("../../../shared/characters/characterStats.js");
 const TYPING_STALE_MS = 4500;
 const typingByParty = new Map(); // partyId -> Map<userIdOrName, typer>
 
@@ -82,25 +82,29 @@ function clearUserTypingFromAllParties(io, user, keepPartyId = 0) {
   }
 }
 
+// Rate limits socket chat writes; replies through the ack and returns false
+// when the user is throttled or banned.
+async function guardChat(socket, abuseControl, actionType, source, cb) {
+  if (!abuseControl) return true;
+  const guard = await abuseControl.guardChatAction({
+    userId: Number(socket.data?.user?.user_id) || 0,
+    actionType,
+    source,
+  });
+  if (guard?.allowed) return true;
+  cb?.({
+    ok: false,
+    error: guard?.message || "You are sending messages too fast.",
+    type: guard?.type || "chat_limited",
+    suspendedUntilMs: Number(guard?.suspendedUntilMs || 0) || null,
+  });
+  return false;
+}
+
 function registerChatEvents(socket, { chatService, abuseControl }) {
   socket.on("party-chat:send", async (payload = {}, cb) => {
     try {
-      if (abuseControl) {
-        const guard = await abuseControl.guardChatAction({
-          userId: Number(socket.data?.user?.user_id) || 0,
-          actionType: "message",
-          source: "socket:party-chat:send",
-        });
-        if (!guard?.allowed) {
-          cb?.({
-            ok: false,
-            error: guard?.message || "You are sending messages too fast.",
-            type: guard?.type || "chat_limited",
-            suspendedUntilMs: Number(guard?.suspendedUntilMs || 0) || null,
-          });
-          return;
-        }
-      }
+      if (!(await guardChat(socket, abuseControl, "message", "socket:party-chat:send", cb))) return;
       const partyId = Number(payload?.partyId || socket.data?.partyId || 0);
       const message = await chatService.sendPartyChatMessage({
         partyId,
@@ -116,22 +120,7 @@ function registerChatEvents(socket, { chatService, abuseControl }) {
 
   socket.on("party-chat:react", async (payload = {}, cb) => {
     try {
-      if (abuseControl) {
-        const guard = await abuseControl.guardChatAction({
-          userId: Number(socket.data?.user?.user_id) || 0,
-          actionType: "reaction",
-          source: "socket:party-chat:react",
-        });
-        if (!guard?.allowed) {
-          cb?.({
-            ok: false,
-            error: guard?.message || "You are sending messages too fast.",
-            type: guard?.type || "chat_limited",
-            suspendedUntilMs: Number(guard?.suspendedUntilMs || 0) || null,
-          });
-          return;
-        }
-      }
+      if (!(await guardChat(socket, abuseControl, "reaction", "socket:party-chat:react", cb))) return;
       const partyId = Number(payload?.partyId || socket.data?.partyId || 0);
       const message = await chatService.reactToPartyChatMessage({
         partyId,

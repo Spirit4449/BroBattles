@@ -1,7 +1,7 @@
-import socket from '../../src/socket';
+import socket from '../../src/client/lib/socket';
 import { configureHuntressNetwork, attachHuntressScene, handleHuntressPacket,
-  observeHuntressSnapshot, predictHuntressShot } from '../../src/characters/huntress/network';
-import { attackConfig } from '../../src/shared/huntressProjectile';
+  observeHuntressSnapshot, predictHuntressShot } from '../../src/client/game/characters/huntress/network';
+import { attackConfig } from '../../src/shared/characters/huntressProjectile';
 const query=new URLSearchParams(location.search);
 socket.io.opts.query=Object.fromEntries(query);
 let scene,init,ctx,sequence=0,automatic=false,nextShot=0,frameTimes=[],actions=[];

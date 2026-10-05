@@ -1,9 +1,9 @@
-const { resolveCharacterKey, parseCharacterLevels } = require("../../../shared/characterStats.js");
+const { resolveCharacterKey, parseCharacterLevels } = require("../../../shared/characters/characterStats.js");
 const {
   buildTrophyRewardTrack,
   getTrophyTierById,
   summarizeCurrencyRewards,
-} = require("../../helpers/trophySystem");
+} = require("../../services/trophies/trophySystem");
 
 function parseLimit(value, fallback = 50, max = 200) {
   const n = Number(value);
@@ -214,7 +214,7 @@ function registerTrophyRoutes({ app, db, requireCurrentUser }) {
             throw err;
           }
 
-          await require("../../helpers/trophyRewardGrants").grantTrophyItems(q, user.user_id, tier.rewards);
+          await require("../../services/trophies/trophyRewardGrants").grantTrophyItems(q, user.user_id, tier.rewards);
           const reward = summarizeCurrencyRewards(tier.rewards);
           if (reward.coins > 0 || reward.gems > 0) {
             await q(

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const babel = require('@babel/core');
 const exportsObject = {};
-const { code } = babel.transformSync(fs.readFileSync(require.resolve('../src/gameScene/combatMouse.js'), 'utf8'), {
+const { code } = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/combatMouse.js'), 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 });
 vm.runInNewContext(code, { exports: exportsObject });

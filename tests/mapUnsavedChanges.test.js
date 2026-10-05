@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {diffUnsaved,discardChanges}=require('../src/editor/unsavedChanges');
+const {diffUnsaved,discardChanges}=require('../src/client/editor/unsavedChanges');
 const clone=v=>JSON.parse(JSON.stringify(v));
 const live={label:'Arena',variants:{'1v1':{platforms:[{id:'a',x:10},{id:'b',x:20}],spawns:[{x:1,y:2}]},'2v2':{width:100}}};
 test('shows net differences across variants, no reverted edits',()=>{

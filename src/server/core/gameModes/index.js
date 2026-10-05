@@ -1,4 +1,4 @@
-const gameModesCatalog = require("../../../shared/gameModes.catalog.json");
+const gameModesCatalog = require("../../../shared/catalogs/gameModes.catalog.json");
 const { DuelsGameMode } = require("./DuelsGameMode");
 const { BankBustGameMode } = require("./bankBust/BankBustGameMode.js");
 const { UnimplementedGameMode } = require("./UnimplementedGameMode");

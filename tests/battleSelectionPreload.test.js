@@ -14,7 +14,7 @@ function setup() {
     buildCharacterSkinAtlasUrls: (character, skin) => ({ animationsUrl: `/assets/${character}/${skin || 'base'}.json`, spritesheetUrl: `/assets/${character}/${skin || 'base'}.webp` }),
     buildCharacterSkinWeaponUrl: (character, skin) => skin ? `/assets/${character}/${skin}-weapon.webp` : null,
   });
-  const source = fs.readFileSync(require.resolve('../src/lobby/preloadBattle.js'), 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, '');
+  const source = fs.readFileSync(require.resolve('../src/client/lobby/preloadBattle.js'), 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, '');
   vm.runInContext(source, context);
   return { state, window, warm: context.warmBattleSelection };
 }

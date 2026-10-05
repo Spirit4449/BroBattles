@@ -4,7 +4,7 @@ import {
   GAME_CHAT_FOCUS_MS,
   GAME_CHAT_UNFOCUSED_MS,
   gameChatVisibilityPhase,
-} from "../src/chat/gameChatVisibility.mjs";
+} from "../src/client/chat/gameChatVisibility.mjs";
 
 test("battle chat darkens after two seconds, then disappears three seconds later", () => {
   const state = { open: true, suppressed: false, lastActivityAt: 1000 };

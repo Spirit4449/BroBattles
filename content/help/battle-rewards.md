@@ -14,6 +14,6 @@ You may also collect reward drops during a battle. Those are added to the result
 
 ## Trophy rewards
 
-Your trophy track has rewards at regular milestones. Open it from your profile and claim any milestone you have reached. Most steps alternate between coins and gems, with larger bundles at major milestones.
+Your trophy track has rewards at regular milestones. Open it from your profile and claim any milestone your highest trophy count has reached. Most steps alternate between coins and gems, with larger bundles and cosmetic unlocks at major milestones. Gloop unlocks by claiming the 2,000-trophy reward. Mode access does not make Coming Soon modes playable.
 
 Trophies measure matchmaking progress; they are not a currency and cannot be spent. Coins are used for fighter upgrades, while gems can unlock fighters and selected shop items.

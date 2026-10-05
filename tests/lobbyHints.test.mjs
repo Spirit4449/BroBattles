@@ -5,7 +5,7 @@ import {
   chooseTimedLobbyHint,
   formatHintCountdown,
   getRecentModeStreak,
-} from "../src/lobby/lobbyHintController.mjs";
+} from "../src/client/lobby/lobbyHintController.mjs";
 
 const hint = (id, options = {}) => ({
   id,
@@ -36,7 +36,7 @@ test("sale countdowns stay compact and readable", () => {
 
 test("sale hint markup uses a clock instead of technical countdown copy", async () => {
   const source = await import("node:fs/promises").then(({ readFile }) =>
-    readFile(new URL("../src/lobby/lobbyHintController.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../src/client/lobby/lobbyHintController.mjs", import.meta.url), "utf8"),
   );
   assert.match(source, /class="pixel-clock-icon"/);
   assert.doesNotMatch(source, /ENDS IN/);
@@ -44,7 +44,7 @@ test("sale hint markup uses a clock instead of technical countdown copy", async 
 
 test("tooltip dismissal keeps an exit phase while cancellation stays immediate", async () => {
   const source = await import("node:fs/promises").then(({ readFile }) =>
-    readFile(new URL("../src/lobby/lobbyHintController.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../src/client/lobby/lobbyHintController.mjs", import.meta.url), "utf8"),
   );
   assert.match(source, /classList\.add\("is-leaving"\)/);
   assert.match(source, /window\.setTimeout\(remove, 240\)/);
@@ -53,7 +53,7 @@ test("tooltip dismissal keeps an exit phase while cancellation stays immediate",
 
 test("finished tooltip animations release clipping so pixel borders remain visible", async () => {
   const styles = await import("node:fs/promises").then(({ readFile }) =>
-    readFile(new URL("../src/styles/index.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/client/styles/index.css", import.meta.url), "utf8"),
   );
   assert.match(styles, /\.lobby-hint\.is-visible\s*\{[\s\S]*?clip-path:\s*none/);
   assert.match(styles, /100%\s*\{\s*opacity:\s*1;\s*clip-path:\s*none/);

@@ -1,8 +1,8 @@
 const {
   completeSignupFromGuest,
   loginPermanentUser,
-} = require("../../services/authAccountService");
-const { setBanHoldCookies } = require("../../helpers/banHold");
+} = require("../../services/auth/authAccountService");
+const { setBanHoldCookies } = require("../../services/auth/banHold");
 
 function registerAuthRoutes({ app, db, requireCurrentUser }) {
   app.get("/username-availability", async (req, res) => {
@@ -33,8 +33,8 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
     }
   });
 
-  const signupLimits = require('../../helpers/requestWindow').createRequestWindow();
-  const signupService = require('../../services/signupVerificationService');
+  const signupLimits = require('../../lib/requestWindow').createRequestWindow();
+  const signupService = require('../../services/auth/signupVerificationService');
   app.use(['/signup', '/signup/pending', '/signup/verify', '/signup/resend', '/signup/cancel'], (req,res,next) => {
     res.set('Cache-Control','no-store');
     if (req.method !== 'GET' && !require('./siteRoutes').isSameOrigin(req)) return res.status(403).json({error:'Same-origin request required.'});

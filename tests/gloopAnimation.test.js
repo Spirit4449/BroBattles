@@ -3,10 +3,10 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const babel=require('@babel/core');
-const {createAnimationBuilder}=require('../src/characters/shared/animationBuilder');
-const {slimeLaunch}=require('../src/shared/gloopProjectile');
+const {createAnimationBuilder}=require('../src/client/game/characters/shared/animationBuilder');
+const {slimeLaunch}=require('../src/shared/characters/gloopProjectile');
 const definition=require('../src/shared/characters/gloop.json');
-const code=babel.transformSync(fs.readFileSync('src/characters/gloop/anim.js','utf8'),{
+const code=babel.transformSync(fs.readFileSync('src/client/game/characters/gloop/anim.js','utf8'),{
   babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code;
 for(const folder of ['public/assets/gloop','public/assets/gloop/skins/gloop-amethyst']) {
@@ -39,7 +39,7 @@ test('Gloop throw releases sooner and overlaps the body on both sides',()=>{
 });
 
 // Execute the production setup function, including its one-based cell fallback.
-const registrySource=fs.readFileSync('src/characters/index.js','utf8');
+const registrySource=fs.readFileSync('src/client/game/characters/index.js','utf8');
 const duckSetupSource=registrySource.slice(registrySource.indexOf('function setupDuckFrame('),registrySource.indexOf('// Build the registry'));
 for(const folder of ['public/assets/gloop','public/assets/gloop/skins/gloop-amethyst']) {
   for(const named of [true,false]) {

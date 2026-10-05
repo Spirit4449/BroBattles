@@ -1,7 +1,7 @@
-const { HTTP_BUCKETS, HTTP_ROUTE_POLICIES } = require("../helpers/abusePolicy");
-const { setBanHoldCookies } = require("../helpers/banHold");
+const { HTTP_BUCKETS, HTTP_ROUTE_POLICIES } = require("../services/moderation/abusePolicy");
+const { setBanHoldCookies } = require("../services/auth/banHold");
 
-const { createRequestWindow } = require("../helpers/requestWindow");
+const { createRequestWindow } = require("../lib/requestWindow");
 
 function getClientIp(req) {
   // Express resolves req.ip against the configured trusted proxy addresses.

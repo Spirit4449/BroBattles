@@ -4,7 +4,7 @@ const {
 } = require('./store');
 const REPO = path.resolve(__dirname, '../../..');
 async function catalog(repo = REPO) {
-  const registry = JSON.parse(await fs.readFile(path.join(repo, 'src/shared/skinsCatalog.json'), 'utf8'));
+  const registry = JSON.parse(await fs.readFile(path.join(repo, 'src/shared/catalogs/skinsCatalog.json'), 'utf8'));
   const files = await fs.readdir(path.join(repo, 'src/shared/characters'));
   const items = [];
   for (const file of files.filter(f => f.endsWith('.json'))) {
@@ -44,12 +44,12 @@ async function compatibility(p, repo = REPO) {
   const runtime = [];
   for (const character of characters) {
     if (!/^[a-z0-9-]+$/.test(character)) continue;
-    const file = path.join(repo, 'src/characters', character, 'anim.js');
+    const file = path.join(repo, 'src/client/game/characters', character, 'anim.js');
     try {
       const definitions = await fs.readFile(file, 'utf8');
       const entry = {
         character,
-        source: `src/characters/${character}/anim.js`,
+        source: `src/client/game/characters/${character}/anim.js`,
         definitions
       };
       try {
@@ -80,7 +80,7 @@ async function compatibility(p, repo = REPO) {
         const tuning = JSON.parse(await fs.readFile(path.join(repo, 'src/shared/characters/thorg.json'), 'utf8')).stats.tuning.attack.sweep;
         require('node:vm').runInNewContext(`${source}\nanimations(scene);`, {
           scene,
-          createAnimationBuilder: require(path.join(repo, 'src/characters/shared/animationBuilder')).createAnimationBuilder,
+          createAnimationBuilder: require(path.join(repo, 'src/client/game/characters/shared/animationBuilder')).createAnimationBuilder,
           THORG_SWEEP: tuning
         }, {
           timeout: 1000

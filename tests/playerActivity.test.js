@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createPlayerActivityService } = require('../src/server/services/playerActivityService');
+const { createPlayerActivityService } = require('../src/server/services/match/playerActivityService');
 function fixture() {
   let time = 1000, liveMatch = 7;
   const writes = [], events = [], probes = [];

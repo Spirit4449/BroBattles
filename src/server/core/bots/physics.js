@@ -1,9 +1,9 @@
-const { resolveShockwaveImpulse, SHOCKWAVE_MOMENTUM_MS } = require("../../../shared/shockwaveImpulse");
-const tuning = require("../../../shared/movementPhysics.json");
-const { characterBody } = require("../../../shared/duelGeometry");
-const { DUCK_SPEED_RATIO } = require("../../../shared/ducking");
-const { acceptDash } = require('../../../shared/dash');
-const { sweepMovement } = require('../../../shared/sweptCollision');
+const { resolveShockwaveImpulse, SHOCKWAVE_MOMENTUM_MS } = require("../../../shared/physics/shockwaveImpulse");
+const tuning = require("../../../shared/physics/movementPhysics.json");
+const { characterBody } = require("../../../shared/physics/duelGeometry");
+const { DUCK_SPEED_RATIO } = require("../../../shared/physics/ducking");
+const { acceptDash } = require('../../../shared/physics/dash');
+const { sweepMovement } = require('../../../shared/physics/sweptCollision');
 
 function bounds(player) {
   const body = characterBody(player.char_class, player.flip);

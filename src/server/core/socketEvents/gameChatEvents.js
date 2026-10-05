@@ -1,4 +1,4 @@
-const { resolveCharacterKey } = require("../../../shared/characterStats.js");
+const { resolveCharacterKey } = require("../../../shared/characters/characterStats.js");
 function registerGameChatEvents(gameRoom, socket) {
   gameRoom.onSocket(socket, "game:chat:send", async (payload = {}, cb) => {
     try {

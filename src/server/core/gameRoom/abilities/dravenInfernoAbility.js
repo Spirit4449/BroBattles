@@ -1,25 +1,20 @@
 const { exposeDamageHitbox } = require('../damageHitboxes');
 const { chargeSuperForHit } = require("../superCharge");
 const effectManager = require("../effects/effectManager");
-const { reduceDuckDamage } = require("../../../../shared/ducking");
-const { getCharacterTuning } = require("../../../../shared/characterStats.js");
+const { reduceDuckDamage } = require("../../../../shared/physics/ducking");
+const {
+  getResolvedCharacterSpecialConfig,
+  getResolvedCharacterSpecialAimConfig,
+} = require("../../../../shared/characters/characterTuning.js");
 
-const DRAVEN_INFERNO_DURATION_MS =
-  getCharacterTuning("draven")?.special?.inferno?.durationMs ?? 5000;
-const DRAVEN_INFERNO_RISE_MS =
-  getCharacterTuning("draven")?.special?.inferno?.riseMs ?? 650;
-const DRAVEN_INFERNO_LIFT_PX = 125;
-const DRAVEN_INFERNO_BOB_PX = 8;
-const DRAVEN_INFERNO_DAMAGE_TICK_MS = 220;
-const DRAVEN_INFERNO_RADIUS = Math.max(
-  80,
-  Number(getCharacterTuning("draven")?.special?.aim?.radius) || 215,
-);
-const DRAVEN_INFERNO_DAMAGE_SCALE = 0.22;
+// All inferno tuning lives in src/shared/characters/draven.json
+// (stats.tuning.special.inferno); the hit radius is the aim reticle radius.
+const INFERNO = getResolvedCharacterSpecialConfig("draven", "inferno");
+const DRAVEN_INFERNO_RADIUS = getResolvedCharacterSpecialAimConfig("draven").radius;
 
 function activate(player, now) {
   player.effects = player.effects || {};
-  player.effects.dravenInfernoUntil = now + DRAVEN_INFERNO_DURATION_MS;
+  player.effects.dravenInfernoUntil = now + INFERNO.durationMs;
   player.effects.dravenInfernoStartedAt = now;
   player.effects.dravenInfernoAnchorX = Number.isFinite(player.x)
     ? player.x
@@ -27,7 +22,7 @@ function activate(player, now) {
   player.effects.dravenInfernoAnchorY = Number.isFinite(player.y)
     ? player.y
     : 0;
-  player.effects.dravenInfernoNextDamageAt = now + 80;
+  player.effects.dravenInfernoNextDamageAt = now + INFERNO.firstDamageDelayMs;
 }
 
 function isMovementSuppressed(player, now) {
@@ -58,10 +53,10 @@ function tick(room, caster, now) {
 
   const riseT = Math.max(
     0,
-    Math.min(1, (now - startedAt) / DRAVEN_INFERNO_RISE_MS),
+    Math.min(1, (now - startedAt) / INFERNO.riseMs),
   );
-  const liftNow = DRAVEN_INFERNO_LIFT_PX * (1 - Math.pow(1 - riseT, 3));
-  const bob = Math.sin((now - startedAt) / 120) * DRAVEN_INFERNO_BOB_PX;
+  const liftNow = INFERNO.liftPx * (1 - Math.pow(1 - riseT, 3));
+  const bob = Math.sin((now - startedAt) / INFERNO.bobWaveMs) * INFERNO.bobPx;
 
   caster.x = anchorX;
   caster.y = anchorY - liftNow + bob;
@@ -73,12 +68,12 @@ function tick(room, caster, now) {
   exposeDamageHitbox(room, { attackerName: caster.name, instanceId: 'inferno' }, { kind: 'circle', x: infernoCenterX, y: infernoCenterY, radius: DRAVEN_INFERNO_RADIUS }, now);
 
   if ((Number(e.dravenInfernoNextDamageAt) || 0) > now) return;
-  e.dravenInfernoNextDamageAt = now + DRAVEN_INFERNO_DAMAGE_TICK_MS;
+  e.dravenInfernoNextDamageAt = now + INFERNO.damageTickMs;
 
   let perTickDmg = Math.round(
     Math.max(
-      120,
-      Number(caster.specialDamage || 0) * DRAVEN_INFERNO_DAMAGE_SCALE,
+      INFERNO.minDamagePerTick,
+      Number(caster.specialDamage || 0) * INFERNO.damageScale,
     ),
   );
   perTickDmg = Math.round(

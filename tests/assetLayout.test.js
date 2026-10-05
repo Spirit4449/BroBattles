@@ -13,7 +13,7 @@ function walk(dir) {
 
 test('browser raster assets use WebP, with explicit email and UI PNG exceptions', () => {
   const otherRasters = walk(assets).filter(file => /\.(png|jpe?g|gif|bmp|avif)$/i.test(file));
-  assert.deepEqual(otherRasters.map(file => path.relative(assets, file)), ['logos/wordmark.png', 'ui/party-search-players.png']);
+  assert.deepEqual(otherRasters.map(file => path.relative(assets, file)), ['logos/wordmark.png', 'ui/party-search-bb-native.png', 'ui/party-search-players.png', 'ui/party-settings-bb-generated-v2.png']);
 });
 
 test('all dynamically selected level badges exist in the final flat directory', () => {
@@ -23,7 +23,7 @@ test('all dynamically selected level badges exist in the final flat directory', 
     assert.equal(bytes.toString('ascii', 8, 12), 'WEBP');
   }
   assert.equal(fs.existsSync(path.join(assets, 'levels/reforged')), false);
-  assert.match(fs.readFileSync(path.join(root, 'src/lib/levelBadgeView.js'), 'utf8'), /\/assets\/levels\/\$\{normalizedLevel\}\.webp/);
+  assert.match(fs.readFileSync(path.join(root, 'src/client/views/levelBadgeView.js'), 'utf8'), /\/assets\/levels\/\$\{normalizedLevel\}\.webp/);
 });
 
 test('literal runtime asset URLs resolve to published files', () => {

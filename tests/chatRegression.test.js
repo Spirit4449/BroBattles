@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const { registerChatEvents } = require('../src/server/core/socketEvents/chatEvents');
 
 function lobbyFunction(name, context) {
-  const source = fs.readFileSync('src/chat/lobbyChatController.js', 'utf8');
+  const source = fs.readFileSync('src/client/chat/lobbyChatController.js', 'utf8');
   const start = source.indexOf(`  function ${name}(`);
   const end = source.indexOf('\n  function ', start + 1);
   return vm.runInNewContext(`${source.slice(start, end)}\n${name}`, context);
@@ -43,7 +43,7 @@ test('broadcast reaction highlights belong to the current viewer', () => {
 });
 
 test('battle send prevents duplicate submissions and preserves the other channel draft', async () => {
-  const source = fs.readFileSync('src/chat/gameChatController.js', 'utf8');
+  const source = fs.readFileSync('src/client/chat/gameChatController.js', 'utf8');
   const start = source.indexOf('  async function sendMessage()');
   const end = source.indexOf('\n  function openComposer', start);
   let acknowledge;
@@ -70,7 +70,7 @@ test('battle send prevents duplicate submissions and preserves the other channel
 });
 
 test('lobby Escape dismisses views before the underlying chat', () => {
-  const source = fs.readFileSync('src/index.js', 'utf8');
+  const source = fs.readFileSync('src/client/pages/lobby.js', 'utf8');
   const start = source.indexOf('function closeTransientLobbyUiOnEscape()');
   const end = source.indexOf('\ndocument.addEventListener(', start);
   let viewsOpen = true;
@@ -96,7 +96,7 @@ test('lobby Escape dismisses views before the underlying chat', () => {
 });
 
 test('chat profile targets open the named player with mouse or keyboard without disrupting text selection', () => {
-  const source = fs.readFileSync('src/chat/presentation.js', 'utf8');
+  const source = fs.readFileSync('src/client/chat/presentation.js', 'utf8');
   const start = source.indexOf('function bindChatProfile(');
   const end = source.indexOf('function createAvatarEl', start);
   let selection = '';
@@ -116,7 +116,7 @@ test('chat profile targets open the named player with mouse or keyboard without 
 });
 
 test('viewed messages advance locally before the read receipt resolves', async () => {
-  const source = fs.readFileSync('src/chat/lobbyChatController.js', 'utf8');
+  const source = fs.readFileSync('src/client/chat/lobbyChatController.js', 'utf8');
   const start = source.indexOf('  async function markMessagesRead(');
   const end = source.indexOf('  function getMessageRow', start);
   const state = {lastViewedMessageId:0,lastReadSentMessageId:0,lastReadMessageId:0};

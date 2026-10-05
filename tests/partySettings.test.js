@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createPartyStateService } = require("../src/server/services/partyStateService");
-const { createPartyRouteService } = require("../src/server/services/partyRouteService");
+const { createPartyStateService } = require("../src/server/services/party/partyStateService");
+const { createPartyRouteService } = require("../src/server/services/party/partyRouteService");
 const { registerPartyEvents } = require("../src/server/core/socketEvents/partyEvents");
 
 function fixture(allow = 1) {
@@ -168,7 +168,7 @@ for (const event of ['map-change', 'mode-change']) {
 }
 
 test('selection toast is hidden for the actor but visible for other party members', () => {
-  const source = require('node:fs').readFileSync('src/party.js','utf8');
+  const source = require('node:fs').readFileSync('src/client/lobby/party/party.js','utf8');
   const start = source.indexOf('  socket.on("party:notice"');
   const end = source.indexOf('\n  });',start)+6;
   let handler;

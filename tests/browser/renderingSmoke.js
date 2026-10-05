@@ -1,5 +1,5 @@
-import { installRenderResolution } from '/src/gameScene/renderResolution.js';
-import { deferSceneAudio } from '/src/gameScene/deferredAudio.js';
+import { installRenderResolution } from '/src/client/game/scene/renderResolution.js';
+import { deferSceneAudio } from '/src/client/game/audio/deferredAudio.js';
 
 const requested = new URLSearchParams(location.search).get('renderer');
 let resolution;

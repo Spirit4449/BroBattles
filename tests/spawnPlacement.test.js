@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { getDuelGeometry, spawnForParticipant, characterBody } = require('../src/shared/duelGeometry');
-const { resolveLanding } = require('../src/shared/spawnPlacement');
+const { getDuelGeometry, spawnForParticipant, characterBody } = require('../src/shared/physics/duelGeometry');
+const { resolveLanding } = require('../src/shared/physics/spawnPlacement');
 const frames = require("../src/shared/characters/index.js").characterFrames;
 
 test('every map, character, facing, team and slot has solid support and clearance', () => {

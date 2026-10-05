@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { getNearestOpponentDirection, resolveAttackAimContext } = require('../src/characters/shared/attackAim');
+const { getNearestOpponentDirection, resolveAttackAimContext } = require('../src/client/game/characters/shared/attackAim');
 
 test('quick direction selects the nearest living visible opponent and falls back to facing', () => {
   const player = { x: 300, y: 300, flipX: false };

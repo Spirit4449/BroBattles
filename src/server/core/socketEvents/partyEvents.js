@@ -6,23 +6,23 @@ const {
   selectionToLegacyMode,
   getMapById,
   getVariantDescriptor,
-} = require("../../helpers/gameSelectionCatalog");
+} = require("../../services/match/gameSelectionCatalog");
 const {
   getSkinById,
   normalizeSelectedSkinMap,
   resolveSelectedSkinId,
-} = require("../../helpers/skinsCatalog");
+} = require("../../services/cosmetics/skinsCatalog");
 const {
   syncSkinOwnershipForUser,
-} = require("../../helpers/skinOwnership");
-const { getAllCharacters, getCharacterLevel } = require("../../../shared/characterStats.js");
+} = require("../../services/cosmetics/skinOwnership");
+const { getAllCharacters, getCharacterLevel } = require("../../../shared/characters/characterStats.js");
 const {
   getPartyBotSlots,
   setPartyBotSlot,
   prunePartyBotSlots,
-} = require("../../helpers/partyBotSlots");
+} = require("../../services/party/partyBotSlots");
 
-const { inPartyOrder } = require("../../helpers/partyOperations");
+const { inPartyOrder } = require("../../services/party/partyOperations");
 
 function formatSelectionLabel(selection) {
   const { mode, variant } = getVariantDescriptor(
@@ -138,7 +138,7 @@ function registerPartyEvents(
         throw new Error("Your party changed. Please refresh the lobby.");
       }
       await inPartyOrder(db, partyId, async () => {
-      if (isReady && !await require('../../services/legalAcceptance').hasLegalAcceptance(db,socket.data.user.user_id)) throw new Error('Please review the Terms before readying up.');
+      if (isReady && !await require('../../services/auth/legalAcceptance').hasLegalAcceptance(db,socket.data.user.user_id)) throw new Error('Please review the Terms before readying up.');
 
         if (Number(await db.getPartyIdByName(uname)) !== partyId) {
           throw new Error("Your party changed. Please refresh the lobby.");
@@ -279,7 +279,7 @@ function registerPartyEvents(
           const selection = normalizeSelectionFromRow(parties[0]);
           const teamSize = getVariantDescriptor(selection.modeId, selection.modeVariantId).variant?.playersPerTeam || 1;
           if (getPartyBotSlots(partyId).some(bot => bot.team === data.team && bot.index === data.index)) throw new Error("Remove the bot before moving a player into that slot.");
-          const next = require('../../helpers/partySlots').movePartyMember(members, data, teamSize);
+          const next = require('../../services/party/partySlots').movePartyMember(members, data, teamSize);
           for (const member of next) await q("UPDATE party_members SET team = ?, slot_index = ? WHERE party_id = ? AND name = ?", [member.team, member.slot_index, partyId, member.name]);
         });
         await partyPresence.emitPartyRosterById(partyId);

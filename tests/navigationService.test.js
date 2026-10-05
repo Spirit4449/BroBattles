@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createNavigationService } = require('../src/server/core/bots/navigationService');
-const { getDuelGeometry } = require('../src/shared/duelGeometry');
+const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
 const { buildGraph } = require('../src/server/core/bots/navigation');
 
 test('worker builds equivalent routes without blocking, reuses rooms and separates buffs', async () => {

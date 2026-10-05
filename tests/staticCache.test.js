@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { setStaticCacheHeaders } = require('../src/server/helpers/staticCache');
+const { setStaticCacheHeaders } = require('../src/server/middleware/staticCache');
 
 test('only content-addressed JS and CSS get immutable caching', () => {
   for (const [file, expected] of [

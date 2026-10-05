@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { registerPartyRoutes } = require('../src/server/routes/modules/partyRoutes');
-const { emitRoster } = require('../src/server/helpers/party');
+const { emitRoster } = require('../src/server/services/party/party');
 
 function fixture({ existing = true, missing = false, full = false, privateParty = false, statusFails = false, rosterFails = false } = {}) {
   const calls = [], emissions = [], routes = new Map();

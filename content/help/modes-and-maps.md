@@ -8,7 +8,7 @@ If a Duel stays tied, sudden death pushes the action toward a finish.
 
 ## Bank Bust
 
-Bank Bust is a **3v3 objective battle**. Break the enemy vault before they break yours. Players respawn, so a knockout costs time and space rather than ending your match.
+Bank Bust unlocks at 250 peak trophies and is a **3v3 objective battle**. Break the enemy vault before they break yours. Players respawn, so a knockout costs time and space rather than ending your match.
 
 A strong team changes gears: defend when your vault is under pressure, then push when the other side is recovering. Fighting well helps, but the vault decides the winner.
 

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../src/navigation/lobbyReturn.js'), 'utf8').replace(/^export /gm, '');
+const source = fs.readFileSync(require.resolve('../src/client/navigation/lobbyReturn.js'), 'utf8').replace(/^export /gm, '');
 
 function setup(fetch) {
   const state = { version: 0, scope: 'game', routes: [] };
@@ -81,7 +81,7 @@ test('superseded requests cannot navigate, and handoffs cannot escape their scop
 });
 
 test('actual lobby bootstrap skips its fetch only when given a fresh handoff', async () => {
-  const index = fs.readFileSync(require.resolve('../src/index.js'), 'utf8');
+  const index = fs.readFileSync(require.resolve('../src/client/pages/lobby.js'), 'utf8');
   const bootstrap = index.slice(index.indexOf('const returnStatus ='), index.indexOf('  .then(async (data) => {', index.indexOf('const returnStatus =')));
   for (const hasHandoff of [true, false]) {
     let calls = 0;

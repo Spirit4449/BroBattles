@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const Body = require('phaser/src/physics/arcade/Body');
 const World = require('phaser/src/physics/arcade/World');
-const { characterBody, getDuelGeometry } = require('../src/shared/duelGeometry');
-const { processPlayerPlatformCollision } = require('../src/players/platformCollision');
+const { characterBody, getDuelGeometry } = require('../src/shared/physics/duelGeometry');
+const { processPlayerPlatformCollision } = require('../src/client/game/players/platformCollision');
 
 function fixture(character = 'thorg', side = 'left') {
   const world = { defaults: {}, gravity: { x: 0, y: 825 }, OVERLAP_BIAS: 4,

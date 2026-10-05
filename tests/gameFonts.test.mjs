@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-const source = await readFile(new URL('../src/gameScene/loadGameFonts.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../src/client/game/scene/loadGameFonts.js', import.meta.url), 'utf8');
 const { loadGameFonts } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 
 test('canvas startup waits for both HUD fonts, including a delayed font', async () => {

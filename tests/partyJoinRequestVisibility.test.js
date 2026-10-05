@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createPartyStateService } = require("../src/server/services/partyStateService");
+const { createPartyStateService } = require("../src/server/services/party/partyStateService");
 
 function fixture(socketId = "owner-socket") {
   const emissions = [];

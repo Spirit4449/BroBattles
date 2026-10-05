@@ -17,15 +17,15 @@ function loadModule(file) {
     exports,
     Phaser: { Loader: { Events: { COMPLETE: 'complete' } } },
     require(name) {
-      if (name.includes('characterEntityBase')) return loadModule('src/characters/shared/characterEntityBase.js');
-      if (name.includes('characterTuning')) return require('../src/shared/characterTuning.js');
+      if (name.includes('characterEntityBase')) return loadModule('src/client/game/characters/shared/characterEntityBase.js');
+      if (name.includes('characterTuning')) return require('../src/shared/characters/characterTuning.js');
       return {};
     },
   });
   return { __esModule: true, ...exports };
 }
 
-const manifest = fs.readFileSync(path.join(root, 'src/characters/manifest.js'), 'utf8');
+const manifest = fs.readFileSync(path.join(root, 'src/client/game/characters/manifest.js'), 'utf8');
 const characters = [...manifest.matchAll(/from "\.\/([^/]+)\/constructor"/g)].map(match => match[1]);
 for (const character of characters) {
   for (const includeBaseAtlas of [true, false]) {
@@ -34,7 +34,7 @@ for (const character of characters) {
       const load = Object.fromEntries(['image', 'audio', 'spritesheet', 'atlas'].map(type =>
         [type, (key, url, atlas) => queued.push({ type, key, urls: type === 'atlas' ? [url, atlas] : [url].flat() })]));
       load.on = () => {};
-      const Character = loadModule(`src/characters/${character}/constructor.js`).default;
+      const Character = loadModule(`src/client/game/characters/${character}/constructor.js`).default;
       Character.preload({ load, sound: { get: () => null } }, '/assets', { includeBaseAtlas });
       assert.ok(queued.length > 0);
       for (const { type, key, urls } of queued) {

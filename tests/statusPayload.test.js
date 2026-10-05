@@ -18,13 +18,13 @@ function fixture({ fail = [], blocked = false, user = { user_id: 1, name: 'Playe
     return values[key];
   };
   const module = { exports: {} };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/server/services/statusPayloadService'), 'utf8'), {
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/server/services/match/statusPayloadService'), 'utf8'), {
     module, console: { warn: (...args) => warnings.push(args), error() {} },
     require: name => {
       if (name.endsWith('/profileIconOwnership')) return { syncProfileIconOwnershipForUser: () => load('icons') };
       if (name.endsWith('/skinOwnership')) return { syncSkinOwnershipForUser: () => load('skins') };
-      if (name.endsWith('/characterStats.js')) return require('../src/shared/characterStats.js');
-      if (name === './mapRepository') return { mapRepository: { listMetadata: () => [{ unlocked: true, id: 1, label: 'Map' }] } };
+      if (name.endsWith('/characterStats.js')) return require('../src/shared/characters/characterStats.js');
+      if (name === '../maps/mapRepository') return { mapRepository: { listMetadata: () => [{ unlocked: true, id: 1, label: 'Map' }] } };
       throw new Error(name);
     },
   });

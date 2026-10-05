@@ -88,14 +88,14 @@ function getAttackCollisionCenter(attack, runtime = {}) {
 
 function clampToWorld(value, axis = "x", room = null) {
   const world = room?.geometry?.world;
-  const margin = Number(WORLD_BOUNDS?.margin) || 0;
+  const margin = WORLD_BOUNDS.margin;
   if (axis === "y") {
     const minY = (world?.y || 0) - margin;
-    const maxY = (world ? world.y + world.height : Number(WORLD_BOUNDS?.height) || 1000) + margin;
+    const maxY = (world ? world.y + world.height : WORLD_BOUNDS.height) + margin;
     return Math.max(minY, Math.min(maxY, Number(value) || 0));
   }
   const minX = (world?.x || 0) - margin;
-  const maxX = (world ? world.x + world.width : Number(WORLD_BOUNDS?.width) || 3600) + margin;
+  const maxX = (world ? world.x + world.width : WORLD_BOUNDS.width) + margin;
   return Math.max(minX, Math.min(maxX, Number(value) || 0));
 }
 

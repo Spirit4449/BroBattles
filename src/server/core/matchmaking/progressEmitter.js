@@ -1,10 +1,10 @@
-const { DEFAULT_CHARACTER } = require("../../../shared/characterStats.js");
+const { DEFAULT_CHARACTER } = require("../../../shared/characters/characterStats.js");
 function createProgressEmitter({ db, io, lastProgress }) {
   const {
     normalizeSelectedSkinMap,
     resolveSelectedSkinId,
     buildSkinAssetUrl,
-  } = require("../../helpers/skinsCatalog");
+  } = require("../../services/cosmetics/skinsCatalog");
 
   function ageSeconds(row) {
     return Math.floor((Date.now() - new Date(row.created_at).getTime()) / 1000);

@@ -7,39 +7,28 @@ const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
 const path = require("path");
-const fs = require("fs");
-const crypto = require("crypto");
 const cookieParser = require("cookie-parser");
-const bcrypt = require("bcrypt");
 
 // Resolve repository root (two levels up from src/server)
 const ROOT_DIR = path.resolve(__dirname, "..", "..");
 
-// Shared libs
-const {
-  DEFAULT_CHARACTER,
-  LEVEL_CAP,
-  defaultCharacterList,
-  upgradePrice,
-  unlockPrice,
-} = require("../shared/characterStats.js");
-
 // Core & modular routes/jobs
 const db = require("./core/sql.js");
 const { registerRoutes } = require("./routes/routes.js");
-const { registerEconomyRoutes } = require("./routes/economy.js");
-const { makeAuthHelpers } = require("./helpers/auth.js");
+const { resolveCookieSecret } = require("./lib/utils");
+const { registerEconomyRoutes } = require("./routes/modules/economy.js");
+const { makeAuthHelpers } = require("./services/auth/auth.js");
 const { startCleanupJobs } = require("./jobs/cleanup.js");
 const { initSocket } = require("./core/socket.js");
 require('./core/bots/navigationService').enableAsyncNavigation();
-const { createRuntimeConfig } = require("./helpers/runtimeConfig.js");
-const { registerAdminRoutes } = require("./routes/admin.js");
-const { createPartyChatService } = require("./services/chatService.js");
-const { createFriendService } = require("./services/friendService.js");
-const { createAbuseControlService } = require("./services/abuseControlService");
-const { createShopService } = require("./services/shopService");
-const { createStripeShopService } = require("./services/stripeShopService");
-const { registerStripeWebhookRoute } = require("./routes/stripeWebhook");
+const { createRuntimeConfig } = require("./lib/runtimeConfig.js");
+const { registerAdminRoutes } = require("./routes/modules/admin.js");
+const { createPartyChatService } = require("./services/social/chatService.js");
+const { createFriendService } = require("./services/social/friendService.js");
+const { createAbuseControlService } = require("./services/moderation/abuseControlService");
+const { createShopService } = require("./services/shop/shopService");
+const { createStripeShopService } = require("./services/shop/stripeShopService");
+const { registerStripeWebhookRoute } = require("./routes/modules/stripeWebhook");
 const {
   createAbuseHttpMiddleware,
 } = require("./middleware/abuseHttpMiddleware");
@@ -60,23 +49,7 @@ const DIST_DIR = path.join(ROOT_DIR, "dist");
 const PAGE_ROOT = IS_PROD ? DIST_DIR : PUBLIC_DIR;
 
 // Resolve a persistent cookie secret (env, then file, then random persisted)
-function resolveCookieSecretLocal() {
-  const fromEnv = process.env.COOKIE_SECRET;
-  if (fromEnv && String(fromEnv).trim()) return String(fromEnv);
-  const secretPath = path.join(ROOT_DIR, ".cookie-secret");
-  try {
-    if (fs.existsSync(secretPath)) {
-      const s = fs.readFileSync(secretPath, "utf8").trim();
-      if (s) return s;
-    }
-  } catch (_) {}
-  const newSecret = crypto.randomBytes(32).toString("hex");
-  try {
-    fs.writeFileSync(secretPath, newSecret, { encoding: "utf8" });
-  } catch (_) {}
-  return newSecret;
-}
-const COOKIE_SECRET = resolveCookieSecretLocal();
+const COOKIE_SECRET = resolveCookieSecret(ROOT_DIR, process.env.COOKIE_SECRET);
 process.env.EMAIL_VERIFICATION_SECRET ||= COOKIE_SECRET;
 
 const SIGNED_COOKIE_OPTS = {
@@ -128,7 +101,7 @@ if (!IS_PROD) {
   const config = require(path.join(ROOT_DIR, "webpack.config.js"))({}, { mode: "development" });
   const compiler = webpack(config);
   app.use(
-    require("./helpers/devAssetMiddleware").isolateDevAssetResponse(webpackDevMiddleware(compiler, {
+    require("./middleware/devAssetMiddleware").isolateDevAssetResponse(webpackDevMiddleware(compiler, {
       publicPath: config.output.publicPath,
       serverSideRender: false,
       // Revalidate mutable development URLs without downloading unchanged
@@ -140,7 +113,7 @@ if (!IS_PROD) {
   app.use(express.static(PUBLIC_DIR));
 } else {
   app.use(express.static(DIST_DIR, {
-    setHeaders: require('./helpers/staticCache').setStaticCacheHeaders,
+    setHeaders: require('./middleware/staticCache').setStaticCacheHeaders,
   }));
 }
 
@@ -148,7 +121,7 @@ const auth = makeAuthHelpers(db, { SIGNED_COOKIE_OPTS, DISPLAY_COOKIE_OPTS });
 app.locals.authSessions = auth.sessions;
 
 // Bootstrap sockets early and attach to app.locals
-const matchResults = require("./services/matchResultService").createMatchResultService({ db, journalDir: process.env.MATCH_RESULT_DIR || path.join(ROOT_DIR, "data", "match-results") });
+const matchResults = require("./services/match/matchResultService").createMatchResultService({ db, journalDir: process.env.MATCH_RESULT_DIR || path.join(ROOT_DIR, "data", "match-results") });
 const socketApi = initSocket({
   io,
   COOKIE_SECRET,
@@ -163,7 +136,7 @@ const socketApi = initSocket({
 app.locals.socketApi = socketApi;
 
 // Prepare auth helpers
-require('./services/mapPlaytestService').mapPlaytests.attach(io, async socket => {
+require('./services/maps/mapPlaytestService').mapPlaytests.attach(io, async socket => {
   const cookies = require('cookie').parse(socket.handshake.headers.cookie || '');
   const signed = cookieParser.signedCookies(cookies, COOKIE_SECRET);
   return auth.sessions.authenticateSocket(socket, signed.user_id);
@@ -218,7 +191,7 @@ registerRoutes({
     }
     for (const table of ['account_emails', 'pending_signups']) {
       try { await db.runQuery(`SELECT correction_used FROM ${table} LIMIT 0`); }
-      catch (_) { throw new Error('Apply scripts/apply-email-polish-migration.cjs before starting.'); }
+      catch (_) { throw new Error('Apply scripts/db/apply-migration.cjs email-polish before starting.'); }
     }
     // Fail at startup if the hardening migration has not been applied.
     await db.runQuery("SELECT token_hash FROM auth_sessions LIMIT 0");
@@ -241,13 +214,19 @@ registerRoutes({
     process.on("unhandledRejection", (reason) => {
       console.error("[process] unhandled promise rejection", reason?.stack || reason);
     });
-    process.once("SIGTERM", () => { server.close(() => { void ownership.release().finally(() => process.exit(0)); }); setTimeout(() => process.exit(0), 5000).unref(); });
+    // io.close() drops live websockets so server.close() can finish instead of
+    // waiting out the hard-exit timer; the nav worker is a separate thread.
+    process.once("SIGTERM", () => {
+      setTimeout(() => process.exit(0), 5000).unref();
+      void require("./core/bots/navigationService").closeAsyncNavigation().catch(() => {});
+      io.close(() => { void ownership.release().finally(() => process.exit(0)); });
+    });
     startCleanupJobs({ db, io, matchResults, getGameRoom: socketApi.getGameRoom });
     setInterval(() => { void matchResults.reconcile().catch(error => console.error("[rewards] reconciliation failed", error.message)); }, 30000).unref();
     setInterval(() => { void stripeShopService.reconcileWebhooks().catch(error => console.error("[shop:stripe] reconciliation failed", error.message)); }, 60000).unref();
     console.log("✅ Database connected");
     // Parse map metadata once up front so the first /status requests don't.
-    try { require("./services/mapRepository").mapRepository.listMetadata(); }
+    try { require("./services/maps/mapRepository").mapRepository.listMetadata(); }
     catch (error) { console.warn("[maps] unable to warm metadata cache", error.message); }
     server.listen(port, "0.0.0.0", () => {
       console.log(

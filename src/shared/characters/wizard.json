@@ -60,6 +60,16 @@
           "anchorForwardOffset": 0,
           "anchorOffsetY": 4,
           "reticleFadeOnTurn": true
+        },
+        "arcaneSurge": {
+          "powerScale": 1.5,
+          "durationScale": 1.5,
+          "castMs": 2000,
+          "beamMs": 1000,
+          "teammateBlockedPowerups": [
+            "poison"
+          ],
+          "fallbackPowerup": "shield"
         }
       }
     },

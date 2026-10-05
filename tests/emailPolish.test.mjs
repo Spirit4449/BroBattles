@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createCooldown,safeReturnPath,wireCodeInputs} from '../src/lib/emailVerificationUI.js';
-import cooldownModule from '../src/server/helpers/emailCooldown.js';
+import {createCooldown,safeReturnPath,wireCodeInputs} from '../src/client/account/emailVerificationUI.js';
+import cooldownModule from '../src/server/services/email/emailCooldown.js';
 const {emailCooldown}=cooldownModule;
 
 test('only the first email correction waives the minute, never the hourly cap',()=>{

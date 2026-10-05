@@ -1,9 +1,9 @@
-import { createPlayerCardTile } from "../../src/lib/playerCardTile.js";
-import { renderCharacterStatus } from "../../src/lobby/characterStatusView.js";
-import { createModalFocus } from "../../src/lib/modalFocus.js";
-import { getSharedSelectionPopupShell } from "../../src/lib/selectionPopupShell.js";
-import { createViewersPopup } from "../../src/chat/viewersPopup.js";
-import { showUiConfirm } from "../../src/lib/uiConfirm.js";
+import { createPlayerCardTile } from "../../src/client/views/playerCardTile.js";
+import { renderCharacterStatus } from "../../src/client/lobby/profile/characterStatusView.js";
+import { createModalFocus } from "../../src/client/ui/modalFocus.js";
+import { getSharedSelectionPopupShell } from "../../src/client/ui/selectionPopupShell.js";
+import { createViewersPopup } from "../../src/client/chat/viewersPopup.js";
+import { showUiConfirm } from "../../src/client/ui/uiConfirm.js";
 
 function check(condition, message) {
   if (!condition) throw new Error(message);

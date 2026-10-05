@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createChatScrollController } from '../src/chat/scrollController.mjs';
+import { createChatScrollController } from '../src/client/chat/scrollController.mjs';
 
 test('older-message reading position survives appends, new counts accumulate, and jump clears them', () => {
   const previous = globalThis.ResizeObserver;

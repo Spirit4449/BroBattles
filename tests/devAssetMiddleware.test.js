@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { isolateDevAssetResponse } = require('../src/server/helpers/devAssetMiddleware');
+const { isolateDevAssetResponse } = require('../src/server/middleware/devAssetMiddleware');
 
 for (const state of ['headersSent', 'writableEnded', 'streaming', 'unhandled', 'error']) {
   test(`development asset handoff: ${state}`, () => {

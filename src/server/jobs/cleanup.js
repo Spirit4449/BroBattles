@@ -1,5 +1,5 @@
-const { deleteMatchBots } = require('../services/matchRosterService');
-const { updateOrDeleteParty } = require("../helpers/party");
+const { deleteMatchBots } = require('../services/match/matchRosterService');
+const { updateOrDeleteParty } = require("../services/party/party");
 
 function startCleanupJobs({ db, io, matchResults = null, getGameRoom = () => null }) {
   // Inactive member cleanup (every 30 minutes)

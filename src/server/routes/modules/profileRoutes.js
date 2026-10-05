@@ -1,16 +1,14 @@
 const bcrypt = require("bcrypt");
-const { getAllCharacters, resolveCharacterKey, canonicalCharacterKey, parseCharacterLevels } = require("../../../shared/characterStats.js");
+const { getAllCharacters, resolveCharacterKey, canonicalCharacterKey, parseCharacterLevels } = require("../../../shared/characters/characterStats.js");
 const {
   syncProfileIconOwnershipForUser,
-} = require("../../helpers/profileIconOwnership");
+} = require("../../services/cosmetics/profileIconOwnership");
 const {
   syncPlayerCardOwnershipForUser,
-} = require("../../helpers/playerCardOwnership");
-const { getBattleLogForUser } = require("../../helpers/battleLog");
+} = require("../../services/cosmetics/playerCardOwnership");
+const { getBattleLogForUser } = require("../../services/match/battleLog");
 
-const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,14}$/;
-const MIN_PW = 6;
-const MAX_PW = 32;
+const { USERNAME_RE, MIN_PW, MAX_PW } = require("../../services/auth/authAccountService");
 
 function registerProfileRoutes({ app, db, requireCurrentUser }) {
   require("./emailRoutes").registerEmailRoutes({ app, db, requireCurrentUser });

@@ -1,9 +1,10 @@
-const { getResolvedCharacterAttackConfig } = require("../../../../shared/characterTuning");
+const { getResolvedCharacterAttackConfig } = require("../../../../shared/characters/characterTuning");
 const SLIME = getResolvedCharacterAttackConfig("gloop", "slimeball");
-const { getParticipant, participantId } = require('../participants');
+const { getParticipant } = require('../participants');
+const { attackIdentity } = require('./attackIdentity');
 const { WORLD_BOUNDS } = require("../../gameRoomConfig");
-const { advanceSlimeball } = require("../../../../shared/gloopProjectile");
-const { resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter, sweptCircleOverlapsRect } = require('./geometry');
+const { advanceSlimeball } = require("../../../../shared/characters/gloopProjectile");
+const { resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter } = require('./geometry');
 const { hitCircleTargets } = require('./targets');
 
 function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
@@ -38,13 +39,7 @@ function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
           width *
           (Number(runtime.forwardOffsetWidthFactor) || 0);
   return {
-    descriptorKey: String(actionData?.type || "").toLowerCase(),
-    runtimeKind: String(runtime.kind || "").toLowerCase(),
-    createdAt: now,
-    attackerParticipantId: participantId(playerData),
-    attackerName: playerData.name,
-    attackType: String(descriptor?.attackType || "basic").toLowerCase(),
-    instanceId: String(actionData?.id || `${playerData.name}:${now}`),
+    ...attackIdentity(playerData, actionData, descriptor, now),
     direction,
     angle,
     speed: resolvePositiveNumber(
@@ -111,7 +106,7 @@ function buildProjectileBounceAttack(playerData, actionData, descriptor, now) {
     now,
   );
   const floorFromAction = Number(actionData?.floorY);
-  const floorFromRuntime = Number(WORLD_BOUNDS?.height) || 1000;
+  const floorFromRuntime = WORLD_BOUNDS.height;
   return {
     ...base,
     runtimeKind: "projectile-bounce",
@@ -165,11 +160,11 @@ function buildProjectileBounceAttack(playerData, actionData, descriptor, now) {
     bounceCount: 0,
     worldMinX: Number.isFinite(Number(actionData?.worldMinX))
       ? Number(actionData.worldMinX)
-      : -((Number(WORLD_BOUNDS?.margin) || 0) + 20),
+      : -(WORLD_BOUNDS.margin + 20),
     worldMaxX: Number.isFinite(Number(actionData?.worldMaxX))
       ? Number(actionData.worldMaxX)
-      : (Number(WORLD_BOUNDS?.width) || 3600) +
-        (Number(WORLD_BOUNDS?.margin) || 0) +
+      : WORLD_BOUNDS.width +
+        WORLD_BOUNDS.margin +
         20,
     effectDurationMs:
       Number(actionData?.slowDurationMs ?? runtime.slowDurationMs ?? SLIME.slowDurationMs),

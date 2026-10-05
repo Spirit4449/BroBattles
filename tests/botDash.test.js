@@ -6,7 +6,7 @@ const { standOn } = require('../src/server/core/bots/navigation');
 const { incomingThreat, maneuverDanger } = require('../src/server/core/bots/perception');
 const { finishSteps, preferredRange } = require('../src/server/core/bots/tactics');
 const { requestBasic, requestSpecial } = require('../src/server/core/bots/combat');
-const movement = require('../src/shared/movementPhysics.json');
+const movement = require('../src/shared/physics/movementPhysics.json');
 const { makeRoom } = require('./helpers/botRoom');
 
 const now = 1000000;

@@ -119,7 +119,7 @@ test('overlay follows the debug toggle and cleans up stale frames and scene list
   const fs = require('node:fs'), vm = require('node:vm'), babel = require('@babel/core');
   const moduleExports = {};
   let now = 100, circles = 0, destroyed = false;
-  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/gameScene/damageHitboxDebug.js'), 'utf8'), {
+  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/damageHitboxDebug.js'), 'utf8'), {
     babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code, { exports: moduleExports, Date: { now: () => now } });
   const graphics = { setDepth() { return this; }, clear() {}, lineStyle() {}, strokeCircle() { circles++; }, destroy() { destroyed = true; } };

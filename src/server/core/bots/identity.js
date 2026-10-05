@@ -2,10 +2,10 @@ const { randomUUID, randomInt } = require("crypto");
 const {
   getAllCharacters,
   LEVEL_CAP,
-} = require("../../../shared/characterStats.js");
+} = require("../../../shared/characters/characterStats.js");
 const { difficultyForTrophies } = require("./config");
 const { createRandom } = require("./random");
-const { parseCharacterLevels } = require("../../../shared/characterStats.js");
+const { parseCharacterLevels } = require("../../../shared/characters/characterStats.js");
 
 // Combinatorial player-style names, without legacy numbered/Ultra bot labels.
 const first =

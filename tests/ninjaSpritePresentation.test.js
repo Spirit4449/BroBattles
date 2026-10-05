@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { spritePresentation } = require('../src/characters/shared/spritePresentation');
-const { characterBody } = require('../src/shared/duelGeometry');
+const { spritePresentation } = require('../src/client/game/characters/shared/spritePresentation');
+const { characterBody } = require('../src/shared/physics/duelGeometry');
 const settings = require('../public/assets/ninja/animation-settings.json');
 const exportedAtlas = require('../public/assets/ninja/animations.json');
 const atlas = {frames: Object.fromEntries(exportedAtlas.frames.map(frame => [frame.filename, frame]))};
@@ -48,7 +48,7 @@ function loadAnimations(path) {
 }
 test('runtime preserves selected row timing and logical attack/wall aliases',()=>{
   const entries=new Map();
-  loadAnimations('../src/characters/ninja/anim').animations({anims:{exists:key=>entries.has(key),create:row=>entries.set(row.key,row)}});
+  loadAnimations('../src/client/game/characters/ninja/anim').animations({anims:{exists:key=>entries.has(key),create:row=>entries.set(row.key,row)}});
   for(const row of settings.animations){
     if (!row.frames.length || row.key === 'unused-original') continue;
     const key='ninja-'+({attack:'throw',wall:'sliding'}[row.key]||row.key);
@@ -73,7 +73,7 @@ test('real Phaser playback keeps run and fall inside their rows across multiple 
     return {name,texture:{key}};
   }};
   const scene={anims:manager,sys:{anims:manager}};
-  loadAnimations('../src/characters/ninja/anim').animations(scene);
+  loadAnimations('../src/client/game/characters/ninja/anim').animations(scene);
   const sprite={scene,emit(){},setSizeToFrame(){}};
   const state=new State(sprite);sprite.anims=state;
   for(const logical of ['running','falling']){
@@ -90,7 +90,7 @@ test('legacy Ninja skins keep throw names and original attack duration',()=>{
   const entries=new Map();
   const anims={exists:()=>false,create:row=>entries.set(row.key,row),
     generateFrameNames:(key,opts)=>Array.from({length:opts.end+1},(_,i)=>({key,frame:opts.prefix+String(i).padStart(2,'0')}))};
-  loadAnimations('../src/characters/ninja/legacyAnim').legacyAnimations({anims},'sovereign');
+  loadAnimations('../src/client/game/characters/ninja/legacyAnim').legacyAnimations({anims},'sovereign');
   const attack=entries.get('sovereign-throw');
   assert.equal(attack.frames.length,4);assert.equal(attack.frameRate,15);
   assert.equal(attack.frames[0].frame,'throw00');
@@ -99,7 +99,7 @@ test('legacy Ninja skins keep throw names and original attack duration',()=>{
 
 test('idle holds its open eyes while blink frames use short total durations',()=>{
   const entries=new Map();
-  loadAnimations('../src/characters/ninja/anim').animations({anims:{exists:()=>false,create:row=>entries.set(row.key,row)}});
+  loadAnimations('../src/client/game/characters/ninja/anim').animations({anims:{exists:()=>false,create:row=>entries.set(row.key,row)}});
   const idle=entries.get('ninja-idle');
   const holds=idle.frames.map(frame=>1000/idle.frameRate+(frame.duration||0));
   assert.deepEqual(Array.from(holds),[1000,400,70,90,160]);

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
-const { getSuperChargeHits, getSuperChargePerHit } = require("../src/shared/characterStats.js");
+const { getSuperChargeHits, getSuperChargePerHit } = require("../src/shared/characters/characterStats.js");
 const inferno = require('../src/server/core/gameRoom/abilities/dravenInfernoAbility');
 
 function fixture(t, character = 'draven') {
@@ -85,13 +85,13 @@ test('Inferno charges per successful tick, skips shields, and publishes fraction
 });
 
 test('Inferno damage radius matches the tucked-in special reticle', () => {
-  const aim = require('../src/shared/characterTuning').getResolvedCharacterSpecialAimConfig('draven');
+  const aim = require('../src/shared/characters/characterTuning').getResolvedCharacterSpecialAimConfig('draven');
   assert.equal(aim.radius, 220);
   assert.equal(aim.defaultRange, 220);
 });
 
 test('authoritative client sync preserves fractional super charge', async () => {
-  const { createLocalStateSync } = await import('../src/players/localStateSync.js');
+  const { createLocalStateSync } = await import('../src/client/game/players/localStateSync.js');
   let charge, max;
   const sync = createLocalStateSync({
     setSuperCharge: value => { charge = value; },

@@ -5,7 +5,7 @@ const { transformFileSync } = require("@babel/core");
 
 test("Bros renderer uses profile portraits, level crests, and reports unlocked count", () => {
   const compiled = transformFileSync(
-    require.resolve("../src/lib/profileCharacterLevelsView.js"),
+    require.resolve("../src/client/views/profileCharacterLevelsView.js"),
     { presets: [["@babel/preset-env", { targets: { node: "current" } }]] },
   );
   const heading = { innerHTML: "" };
@@ -44,7 +44,7 @@ test("Bros renderer uses profile portraits, level crests, and reports unlocked c
               "huntress",
               "gloop",
             ],
-            canonicalCharacterKey: require("../src/shared/characterStats").canonicalCharacterKey,
+            canonicalCharacterKey: require("../src/shared/characters/characterStats").canonicalCharacterKey,
           }
         : request.includes("levelBadgeView")
           ? {

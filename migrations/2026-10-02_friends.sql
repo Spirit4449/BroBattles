@@ -1,4 +1,4 @@
--- Apply with scripts/apply-friends-migration.cjs (safe to re-run).
+-- Apply with scripts/db/apply-migration.cjs friends (safe to re-run).
 -- users.friend_code is added by the apply script because MySQL has no
 -- ADD COLUMN IF NOT EXISTS.
 CREATE TABLE IF NOT EXISTS friend_requests (

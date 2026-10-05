@@ -1,100 +1,78 @@
-const { getCharacterLevel } = require("../../../shared/characterStats.js");
+const { getCharacterLevel } = require("../../../shared/characters/characterStats.js");
 const {
   getSkinsCatalog,
-  getCharacterSkins,
   getSkinById,
   normalizeSelectedSkinMap,
-} = require("../../helpers/skinsCatalog");
+} = require("../../services/cosmetics/skinsCatalog");
 const {
   syncSkinOwnershipForUser,
-} = require("../../helpers/skinOwnership");
-
+} = require("../../services/cosmetics/skinOwnership");
+const { authedRoute, sendShopError, purchaseGrantFromShop } = require("../routeHelpers");
 
 function registerSkinsRoutes({ app, db, requireCurrentUser, shopService }) {
   app.get("/skins/catalog", (_req, res) => {
     return res.json({ success: true, catalog: getSkinsCatalog() });
   });
 
-  app.get("/skins/owned", async (req, res) => {
-    try {
-      const user = await requireCurrentUser(req, res);
-      if (!user) {
-        return res
-          .status(401)
-          .json({ success: false, error: "Not authenticated" });
-      }
+  app.get("/skins/owned", authedRoute(requireCurrentUser, "[skins] /skins/owned", async (_req, res, user) => {
+    const sync = await syncSkinOwnershipForUser(db, user);
+    return res.json({
+      success: true,
+      ownedSkinIds: sync.ownedSkinIds || [],
+      selectedSkinIdByCharacter: sync.selectedSkinIdByCharacter || {},
+    });
+  }));
 
-      const sync = await syncSkinOwnershipForUser(db, user);
-      return res.json({
-        success: true,
-        ownedSkinIds: sync.ownedSkinIds || [],
-        selectedSkinIdByCharacter: sync.selectedSkinIdByCharacter || {},
-      });
-    } catch (error) {
-      console.error("[skins] /skins/owned error", error);
+  app.post("/skins/select", authedRoute(requireCurrentUser, "[skins] /skins/select", async (req, res, user) => {
+    const character = String(req.body?.character || "")
+      .trim()
+      .toLowerCase();
+    const skinId = String(req.body?.skinId || "").trim();
+    const activateCharacter = req.body?.activateCharacter === true;
+    if (!character || !skinId) {
       return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
+        .status(400)
+        .json({ success: false, error: "character and skinId are required" });
     }
-  });
 
-  app.post("/skins/select", async (req, res) => {
-    try {
-      const user = await requireCurrentUser(req, res);
-      if (!user) {
-        return res
-          .status(401)
-          .json({ success: false, error: "Not authenticated" });
-      }
+    const skin = getSkinById(skinId);
+    if (!skin || String(skin.character || "") !== character) {
+      return res.status(404).json({ success: false, error: "Unknown skin" });
+    }
+    if (getCharacterLevel(user, character) < 1) {
+      return res.status(403).json({
+        success: false,
+        error: "Unlock this character before selecting one of its skins.",
+      });
+    }
 
-      const character = String(req.body?.character || "")
-        .trim()
-        .toLowerCase();
-      const skinId = String(req.body?.skinId || "").trim();
-      const activateCharacter = req.body?.activateCharacter === true;
-      if (!character || !skinId) {
-        return res
-          .status(400)
-          .json({ success: false, error: "character and skinId are required" });
-      }
+    const sync = await syncSkinOwnershipForUser(db, user);
+    const owns = new Set((sync.ownedSkinIds || []).map(String));
+    if (!owns.has(skinId)) {
+      return res
+        .status(403)
+        .json({ success: false, error: "Skin is not unlocked" });
+    }
 
-      const skin = getSkinById(skinId);
-      if (!skin || String(skin.character || "") !== character) {
-        return res.status(404).json({ success: false, error: "Unknown skin" });
-      }
-      if (getCharacterLevel(user, character) < 1) {
-        return res.status(403).json({
+    if (activateCharacter) {
+      const statusRows = await db.runQuery(
+        "SELECT status FROM users WHERE user_id = ? LIMIT 1",
+        [user.user_id],
+      );
+      if (
+        String(statusRows?.[0]?.status || "").trim().toLowerCase() ===
+        "ready"
+      ) {
+        return res.status(409).json({
           success: false,
-          error: "Unlock this character before selecting one of its skins.",
+          error: "Unready before changing your character or skin.",
         });
       }
+    }
 
-      const sync = await syncSkinOwnershipForUser(db, user);
-      const owns = new Set((sync.ownedSkinIds || []).map(String));
-      if (!owns.has(skinId)) {
-        return res
-          .status(403)
-          .json({ success: false, error: "Skin is not unlocked" });
-      }
-
-      if (activateCharacter) {
-        const statusRows = await db.runQuery(
-          "SELECT status FROM users WHERE user_id = ? LIMIT 1",
-          [user.user_id],
-        );
-        if (
-          String(statusRows?.[0]?.status || "").trim().toLowerCase() ===
-          "ready"
-        ) {
-          return res.status(409).json({
-            success: false,
-            error: "Unready before changing your character or skin.",
-          });
-        }
-      }
-
-      let savedMap;
-      if (typeof db.withTransaction === "function") {
+    let savedMap;
+    if (typeof db.withTransaction === "function") {
+      try {
         savedMap = await db.withTransaction(async (_conn, q) => {
           const rows = await q(
             "SELECT selected_skin_id_by_char, status FROM users WHERE user_id = ? FOR UPDATE",
@@ -129,119 +107,76 @@ function registerSkinsRoutes({ app, db, requireCurrentUser, shopService }) {
           }
           return nextMap;
         });
-      } else {
-        savedMap = normalizeSelectedSkinMap(
-          sync.selectedSkinIdByCharacter || user.selected_skin_id_by_char,
-        );
-        savedMap[character] = skinId;
-        if (activateCharacter) {
-          await db.runQuery(
-            "UPDATE users SET char_class = ?, selected_skin_id_by_char = ? WHERE user_id = ?",
-            [character, JSON.stringify(savedMap), user.user_id],
-          );
-        } else {
-          await db.setUserSelectedSkinMap(user.user_id, savedMap);
-        }
+      } catch (error) {
+        // Raced into Ready while the transaction held the row.
+        if (Number(error?.statusCode) !== 409) throw error;
+        return res.status(409).json({ success: false, error: error.message });
       }
+    } else {
+      savedMap = normalizeSelectedSkinMap(
+        sync.selectedSkinIdByCharacter || user.selected_skin_id_by_char,
+      );
+      savedMap[character] = skinId;
+      if (activateCharacter) {
+        await db.runQuery(
+          "UPDATE users SET char_class = ?, selected_skin_id_by_char = ? WHERE user_id = ?",
+          [character, JSON.stringify(savedMap), user.user_id],
+        );
+      } else {
+        await db.setUserSelectedSkinMap(user.user_id, savedMap);
+      }
+    }
 
+    return res.json({
+      success: true,
+      selectedSkinIdByCharacter: savedMap,
+      activeCharacter: activateCharacter ? character : user.char_class,
+    });
+  }));
+
+  app.post("/skins/buy", authedRoute(requireCurrentUser, "[skins] /skins/buy", async (req, res, user) => {
+    const character = String(req.body?.character || "")
+      .trim()
+      .toLowerCase();
+    const skinId = String(req.body?.skinId || "").trim();
+    if (!character || !skinId) {
+      return res
+        .status(400)
+        .json({ success: false, error: "character and skinId are required" });
+    }
+
+    const skin = getSkinById(skinId);
+    if (!skin || String(skin.character || "") !== character) {
+      return res.status(404).json({ success: false, error: "Unknown skin" });
+    }
+    if (skin.available === false) {
+      return res.status(400).json({
+        success: false,
+        error: "This skin is not currently available.",
+      });
+    }
+
+    const sync = await syncSkinOwnershipForUser(db, user);
+    const owns = new Set((sync.ownedSkinIds || []).map(String));
+    if (owns.has(skinId)) {
       return res.json({
         success: true,
-        selectedSkinIdByCharacter: savedMap,
-        activeCharacter: activateCharacter ? character : user.char_class,
+        owned: true,
+        skinId,
+        gems: Number(user.gems) || 0,
       });
-    } catch (error) {
-      if (Number(error?.statusCode) === 409) {
-        return res.status(409).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      console.error("[skins] /skins/select error", error);
-      return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
     }
-  });
 
-  app.post("/skins/buy", async (req, res) => {
-    try {
-      const user = await requireCurrentUser(req, res);
-      if (!user) {
-        return res
-          .status(401)
-          .json({ success: false, error: "Not authenticated" });
-      }
+    const purchase = await purchaseGrantFromShop({
+      shopService, req, user, grantType: "skin", grantId: skinId, idempotencyPrefix: "legacy-skin",
+    });
+    if (purchase) return res.json({ ...purchase, skinId });
 
-      const character = String(req.body?.character || "")
-        .trim()
-        .toLowerCase();
-      const skinId = String(req.body?.skinId || "").trim();
-      if (!character || !skinId) {
-        return res
-          .status(400)
-          .json({ success: false, error: "character and skinId are required" });
-      }
-
-      const skin = getSkinById(skinId);
-      if (!skin || String(skin.character || "") !== character) {
-        return res.status(404).json({ success: false, error: "Unknown skin" });
-      }
-      if (skin.available === false) {
-        return res.status(400).json({
-          success: false,
-          error: "This skin is not currently available.",
-        });
-      }
-
-      const sync = await syncSkinOwnershipForUser(db, user);
-      const owns = new Set((sync.ownedSkinIds || []).map(String));
-      if (owns.has(skinId)) {
-        return res.json({
-          success: true,
-          owned: true,
-          skinId,
-          gems: Number(user.gems) || 0,
-        });
-      }
-
-      const shopOffer = shopService?.findOfferForGrant?.("skin", skinId);
-      if (shopOffer) {
-        const idempotencyKey =
-          String(req.body?.idempotencyKey || "").trim() ||
-          `legacy-skin:${user.user_id}:${skinId}:${Date.now()}`;
-        const result = await shopService.purchaseVirtual({
-          userId: user.user_id,
-          offerId: shopOffer.id,
-          idempotencyKey,
-        });
-        return res.json({
-          ...result,
-          skinId,
-          owned: true,
-          coins: result?.wallet?.coins,
-          gems: result?.wallet?.gems,
-        });
-      }
-
-      return res.status(409).json({
-        success: false,
-        error: "This skin is not currently for sale in the Shop.",
-      });
-    } catch (error) {
-      console.error("[skins] /skins/buy error", error);
-      if (Number(error?.status) >= 400 && Number(error?.status) < 600) {
-        return res.status(Number(error.status)).json({
-          success: false,
-          code: error.code || "shop_error",
-          error: error.message || "Unable to purchase skin",
-          wallet: error.wallet || undefined,
-        });
-      }
-      return res
-        .status(500)
-        .json({ success: false, error: "Internal server error" });
-    }
-  });
+    return res.status(409).json({
+      success: false,
+      error: "This skin is not currently for sale in the Shop.",
+    });
+  }, { onError: (error, res) => sendShopError(res, error, "Unable to purchase skin") }));
 }
 
 module.exports = { registerSkinsRoutes };

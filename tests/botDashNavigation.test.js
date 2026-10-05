@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { buildGraph, findRoute, standOn, prepareTraversal } = require('../src/server/core/bots/navigation');
 const { stepBody } = require('../src/server/core/bots/physics');
-const { getDuelGeometry } = require('../src/shared/duelGeometry');
+const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
 const { makeRoom } = require('./helpers/botRoom');
 
 const DT = 1000 / 60;

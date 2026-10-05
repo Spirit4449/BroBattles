@@ -1,4 +1,4 @@
-const { getSuperChargePerHit } = require("../../../shared/characterStats.js");
+const { getSuperChargePerHit } = require("../../../shared/characters/characterStats.js");
 
 // Called once per accepted enemy hit that dealt positive damage, never for
 // passive damage, self-hits, or vault damage.

@@ -1,11 +1,12 @@
 const { exposeDamageHitbox } = require('../../gameRoom/damageHitboxes');
 const { PICKUP_DELAY_MS } = require("../../../../shared/powerups");
 const { BaseGameMode } = require("../BaseGameMode");
+const { getModeById } = require("../../../../shared/gameSelection");
 const {
   getMapObjectiveLayout,
-} = require("../../../helpers/gameSelectionCatalog");
+} = require("../../../services/match/gameSelectionCatalog");
 const effectManager = require("../../gameRoom/effects/effectManager");
-const { reduceDuckDamage } = require("../../../../shared/ducking");
+const { reduceDuckDamage } = require("../../../../shared/physics/ducking");
 const {
   RANDOM_GOLD_PICKUP_CAP,
   RANDOM_GOLD_PICKUP_VALUE,
@@ -18,11 +19,17 @@ const {
   expireCollectionEvents,
 } = require("./state");
 
-const DEFAULT_VAULT_MAX_HEALTH = 50000;
-const DEFAULT_MATCH_DURATION_MS = 210000;
-const DEFAULT_RESPAWN_DELAY_MS = 500;
-const DEFAULT_RESPAWN_SHIELD_MS = 3000;
+// Match rules (vault HP, clock, respawn) live in gameModes.catalog.json under
+// the "bank-bust" mode's `settings`; these defaults read from that same entry
+// so a room built without a descriptor still matches the catalog.
+const CATALOG_SETTINGS = getModeById("bank-bust")?.settings || {};
+const DEFAULT_VAULT_MAX_HEALTH = CATALOG_SETTINGS.vaultMaxHp;
+const DEFAULT_MATCH_DURATION_MS = CATALOG_SETTINGS.matchDurationMs;
+const DEFAULT_RESPAWN_DELAY_MS = CATALOG_SETTINGS.respawnDelayMs;
+const DEFAULT_RESPAWN_SHIELD_MS = CATALOG_SETTINGS.respawnShieldMs;
+// Vault-under-attack alerts stay in the snapshot this long.
 const ALERT_RETENTION_MS = 2200;
+// Vault turret bullets: hit radius (px) and max flight time.
 const TURRET_PROJECTILE_RADIUS = 10;
 const TURRET_PROJECTILE_MAX_LIFETIME_MS = 2200;
 
@@ -199,7 +206,7 @@ class BankBustGameMode extends BaseGameMode {
   }
 
   getRespawnPlan(playerData) {
-    const { getDuelGeometry, spawnForParticipant } = require('../../../../shared/duelGeometry');
+    const { getDuelGeometry, spawnForParticipant } = require('../../../../shared/physics/duelGeometry');
     const geometry = this.room?.geometry || getDuelGeometry(this.room?.matchData?.map);
     const state = this.getModeState();
     const layout = this.getLayout();

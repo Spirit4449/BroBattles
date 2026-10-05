@@ -8,7 +8,7 @@ test('local respawn survives old death callbacks and refreshes the body before t
   const exports = {};
   const noop = () => {};
   const order = [];
-  const code = babel.transformSync(fs.readFileSync(require.resolve('../src/players/localSocketEvents.js'), 'utf8'), {
+  const code = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/players/localSocketEvents.js'), 'utf8'), {
     babelrc: false, configFile: false,
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code;
@@ -67,7 +67,7 @@ test('match healing uses the health power-up tick once even when health was alre
   const exports = {};
   const noop = () => {};
   let now = 1000;
-  const code = babel.transformSync(fs.readFileSync(require.resolve('../src/match/matchCoordinator.js'), 'utf8'), {
+  const code = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/match/matchCoordinator.js'), 'utf8'), {
     babelrc: false, configFile: false,
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code;
@@ -133,7 +133,7 @@ test('match healing uses the health power-up tick once even when health was alre
 test('match playback includes the freeze power-up tick', () => {
   const exports = {};
   const noop = () => {};
-  const code = babel.transformSync(fs.readFileSync(require.resolve('../src/match/matchCoordinator.js'), 'utf8'), {
+  const code = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/match/matchCoordinator.js'), 'utf8'), {
     babelrc: false, configFile: false,
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code;

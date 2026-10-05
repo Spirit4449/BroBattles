@@ -4,12 +4,12 @@ import {
   END_BATTLE_MESSAGES,
   getEndBattleMessage,
   normalizeResultTone,
-} from "../src/hud/gameOverMessages.js";
+} from "../src/client/game/hud/gameOverMessages.js";
 import {
   END_BATTLE_MESSAGES as EXPORTED_MESSAGES,
   getEndBattleMessage as exportedGetEndBattleMessage,
   createGameOverScreenController,
-} from "../src/hud/gameOverScreenController.js";
+} from "../src/client/game/hud/gameOverScreenController.js";
 
 test("END_BATTLE_MESSAGES defines pools for victory, defeat, and draw", () => {
   assert.ok(Array.isArray(END_BATTLE_MESSAGES.victory), "victory messages should be an array");

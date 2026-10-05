@@ -25,9 +25,9 @@ function setup(fetchPage) {
     getTemplateResources: () => [],
     createPageScope: () => { state.scopes++; return { active: true, dispose() { state.disposed++; } }; },
   };
-  const source = fs.readFileSync(require.resolve('../src/navigation/index.js'), 'utf8').replace(/^import .*;\n/gm, '');
+  const source = fs.readFileSync(require.resolve('../src/client/navigation/index.js'), 'utf8').replace(/^import .*;\n/gm, '');
   vm.createContext(context);
-  vm.runInContext(fs.readFileSync(require.resolve('../src/navigation/lobbyReturn.js'), 'utf8').replace(/^export /gm, ''), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../src/client/navigation/lobbyReturn.js'), 'utf8').replace(/^export /gm, ''), context);
   vm.runInContext(source, context);
   return { nav: window.__BB_NAVIGATION__, state, location };
 }
@@ -81,7 +81,7 @@ test('superseded lobby data receives an abort signal', async () => {
 });
 
 test('a game return uses the loading bar instead of the lobby message overlay', () => {
-  const source = fs.readFileSync(require.resolve('../src/navigation/index.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../src/client/navigation/index.js'), 'utf8');
   assert.match(source, /function showLobbyLoadingBar\(\)/);
   assert.match(source, /returningToLobby[\s\S]*?showLobbyLoadingBar\(\)/);
   assert.match(source, /showLoadingBar\('Loading lobby…'\)/);
@@ -89,7 +89,7 @@ test('a game return uses the loading bar instead of the lobby message overlay', 
 });
 
 test('a battle launch keeps one bottom-anchored loading bar through game startup', () => {
-  const source = fs.readFileSync(require.resolve('../src/navigation/index.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../src/client/navigation/index.js'), 'utf8');
   assert.match(source, /function showBattleLoadingBar\(\)/);
   assert.match(source, /showLoadingBar\('Preparing your battle…'\)/);
   assert.match(source, /url\.pathname\.startsWith\('\/game\/'\)[\s\S]*?showBattleLoadingBar\(\)/);
@@ -100,7 +100,7 @@ test('a battle launch keeps one bottom-anchored loading bar through game startup
 });
 
 test('the route loader keeps its pixel font while pages exchange stylesheets', () => {
-  const source = fs.readFileSync(require.resolve('../src/navigation/index.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../src/client/navigation/index.js'), 'utf8');
   assert.match(source, /function ensureRouteLoaderFont\(\)/);
   assert.match(source, /style\.dataset\.navigation = 'route-loader-font'/);
   assert.match(source, /font-display:block/);

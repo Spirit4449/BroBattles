@@ -4,7 +4,7 @@ const {
   formatModeLabel,
   recordMatchOutcome,
   getBattleLogForUser,
-} = require("../src/server/helpers/battleLog");
+} = require("../src/server/services/match/battleLog");
 
 test("formatModeLabel returns friendly readable mode labels", () => {
   assert.equal(formatModeLabel("duels", "duels-1v1"), "1v1 Duel");
@@ -430,11 +430,11 @@ test("finishing a game persists results before game-over and bot cleanup, once o
 test("renderer distinguishes unavailable stats from real zeros and escapes names", async () => {
   const { transformFileSync } = require("@babel/core");
   const vm = require("node:vm");
-  const compiled = transformFileSync(require.resolve("../src/lib/battleLogView.js"), {
+  const compiled = transformFileSync(require.resolve("../src/client/views/battleLogView.js"), {
     presets: [["@babel/preset-env", { targets: { node: "current" } }]],
   });
   const context = { exports: {}, require: (request) => {
-    if (request === "../shared/html.cjs") return require("../src/shared/html.cjs");
+    if (request === "../../shared/site/html.cjs") return require("../src/shared/site/html.cjs");
     throw new Error(`Unexpected renderer dependency: ${request}`);
   } };
   vm.runInNewContext(compiled.code, context);

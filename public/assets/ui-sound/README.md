@@ -23,7 +23,8 @@ Use `data-sound` to customize any element (or `data-sound="none"` to opt out):
 ### Manual (Programmatic)
 
 ```javascript
-import { playSound } from "./lib/uiSounds.js";
+// From a module in src/client/pages/:
+import { playSound } from "../ui/uiSounds.js";
 
 // Play a sound
 playSound("click"); // Default volume (0.5)
@@ -52,7 +53,7 @@ Default sounds (edit `soundFiles` in `uiSounds.js` to add more):
 ## Adding New Sounds
 
 1. Add `.mp3` file to `/public/assets/ui-sound/`
-2. Edit `src/lib/uiSounds.js` and add to `soundFiles` object:
+2. Edit `src/client/ui/uiSounds.js` and add to `soundFiles` object:
    ```javascript
    const soundFiles = {
      click: "click",

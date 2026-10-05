@@ -15,7 +15,7 @@ function setup() {
     load() {}
     play() { played.push({ src: this.src, volume: this.volume }); return Promise.resolve(); }
   }
-  const source = fs.readFileSync(path.join(__dirname, '../src/lib/uiSounds.js'), 'utf8')
+  const source = fs.readFileSync(path.join(__dirname, '../src/client/ui/uiSounds.js'), 'utf8')
     .replace(/^import .*;$/gm, '').replaceAll('export function', 'function');
   const api = vm.runInNewContext(source + '; ({ initUISounds, playSound, soundFiles })', {
     Audio: AudioStub,

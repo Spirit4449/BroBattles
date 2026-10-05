@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { platformSurfaceOffset, refreshPlatformGrounding } from '../src/lobby/platformGrounding.mjs';
-import { buildBroPortraitSvg, BRO_PORTRAIT_PALETTES } from '../src/lib/broPortrait.mjs';
+import { platformSurfaceOffset, refreshPlatformGrounding } from '../src/client/lobby/party/platformGrounding.mjs';
+import { buildBroPortraitSvg, BRO_PORTRAIT_PALETTES } from '../src/client/views/broPortrait.mjs';
 
 test('square body bottom meets the shared frame interior edge', () => {
   const svg = buildBroPortraitSvg('body.webp', BRO_PORTRAIT_PALETTES.ninja);

@@ -1,9 +1,9 @@
-const { buildStatusPayload } = require("../../services/statusPayloadService");
+const { buildStatusPayload } = require("../../services/match/statusPayloadService");
 const {
   setBanHoldCookies,
   getBanHoldFromRequest,
-} = require("../../helpers/banHold");
-const { normalizeSelection } = require("../../helpers/gameSelectionCatalog");
+} = require("../../services/auth/banHold");
+const { normalizeSelection } = require("../../services/match/gameSelectionCatalog");
 
 function registerStatusRoutes({
   app,

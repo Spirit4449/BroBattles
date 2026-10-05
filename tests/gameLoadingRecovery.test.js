@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildGameDataForMatch } = require('../src/server/services/gameDataService');
+const { buildGameDataForMatch } = require('../src/server/services/match/gameDataService');
 const { registerPageRoutes } = require('../src/server/routes/modules/pageRoutes');
 
 for (const [rows, code] of [

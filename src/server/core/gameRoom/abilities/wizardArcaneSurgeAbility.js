@@ -1,9 +1,12 @@
 const { POWERUP_TYPES } = require("../../gameRoomConfig");
+const { getResolvedCharacterSpecialConfig } = require("../../../../shared/characters/characterTuning.js");
 
-const TEAMMATE_BLOCKED_POWERUPS = ["poison"];
-const FALLBACK_POWERUP = "shield";
-const ARCANE_SURGE_POWER_SCALE = 1.5;
-const ARCANE_SURGE_DURATION_SCALE = 1.5;
+// Tuning lives in src/shared/characters/wizard.json (special.arcaneSurge).
+const SURGE = getResolvedCharacterSpecialConfig("wizard", "arcaneSurge");
+const TEAMMATE_BLOCKED_POWERUPS = SURGE.teammateBlockedPowerups;
+const FALLBACK_POWERUP = SURGE.fallbackPowerup;
+const ARCANE_SURGE_POWER_SCALE = SURGE.powerScale;
+const ARCANE_SURGE_DURATION_SCALE = SURGE.durationScale;
 
 function randomFrom(list) {
   const pool = Array.isArray(list) ? list.filter(Boolean) : [];

@@ -2,7 +2,7 @@ const attackRuntimeManager = require("../attackRuntimeManager");
 const { broadcastAction } = require("../characterActionRegistry");
 const {
   getResolvedCharacterSpecialConfig,
-} = require("../../../../shared/characterTuning.js");
+} = require("../../../../shared/characters/characterTuning.js");
 
 const KEY = "gloop";
 const HOOK = getResolvedCharacterSpecialConfig(KEY, "hook") || {};

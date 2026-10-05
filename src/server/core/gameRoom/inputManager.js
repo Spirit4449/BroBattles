@@ -1,7 +1,7 @@
-const { COLLISION_PACKET_TOLERANCE } = require('../../../shared/movementPrecision');
-const { sweepMovement } = require('../../../shared/sweptCollision');
+const { COLLISION_PACKET_TOLERANCE } = require('../../../shared/physics/movementPrecision');
+const { sweepMovement } = require('../../../shared/physics/sweptCollision');
 const { resolveStomp } = require('./stomp');
-const { acceptDash } = require('../../../shared/dash');
+const { acceptDash } = require('../../../shared/physics/dash');
 const {
   WORLD_BOUNDS,
   POSITION_HISTORY_DEPTH,
@@ -12,13 +12,13 @@ const {
   MOVE_PLAUSIBLE_LAG_PAD_V,
   MOVE_CLAMP_WINDOW_MS,
   MOVE_CLAMP_MAX_IN_WINDOW,
+  MAX_MOVEMENT_CREDIT_MS,
 } = require("../gameRoomConfig");
 const { isMovementSuppressed } = require("./abilityRuntimeManager");
 const netTestLogger = require("./netTestLogger");
 
-const { characterBody } = require("../../../shared/duelGeometry");
-const { DUCK_HEIGHT_RATIO, DUCK_REENTRY_DELAY_MS } = require("../../../shared/ducking");
-const MAX_MOVEMENT_CREDIT_MS = 500;
+const { characterBody } = require("../../../shared/physics/duelGeometry");
+const { DUCK_HEIGHT_RATIO, DUCK_REENTRY_DELAY_MS } = require("../../../shared/physics/ducking");
 // Packets sent before the client applied a correction still carry the rejected
 // path. Dropping them (instead of re-correcting) prevents correction cascades.
 // The timeout keeps a client that never acknowledges from being frozen.
@@ -26,7 +26,7 @@ const CORRECTION_ACK_TIMEOUT_MS = 1000;
 // Sub-pixel/flip-offset disagreements against a face are clamped silently;
 // only genuine penetration is worth yanking the client's position.
 const DASH_COLLISION_CORRECTION_PX = 2;
-const movementPhysics = require("../../../shared/movementPhysics.json");
+const movementPhysics = require("../../../shared/physics/movementPhysics.json");
 const effectManager = require("./effects/effectManager");
 
 function updateBodyGeometry(player, room) {
@@ -149,11 +149,11 @@ function applyMovementVfxState(playerData, inputData) {
 
 function clampToRoomBounds(x, y, room = null) {
   const world = room?.geometry?.world;
-  const margin = Number(WORLD_BOUNDS?.margin) || 0;
+  const margin = WORLD_BOUNDS.margin;
   const minX = (world?.x || 0) - margin;
-  const maxX = world ? world.x + world.width + margin : Number(WORLD_BOUNDS?.width) + margin;
+  const maxX = world ? world.x + world.width + margin : WORLD_BOUNDS.width + margin;
   const minY = (world?.y || 0) - margin;
-  const maxY = world ? world.y + world.height + margin : Number(WORLD_BOUNDS?.height) + margin;
+  const maxY = world ? world.y + world.height + margin : WORLD_BOUNDS.height + margin;
   return {
     x: Math.max(minX, Math.min(maxX, Number(x) || 0)),
     y: Math.max(minY, Math.min(maxY, Number(y) || 0)),

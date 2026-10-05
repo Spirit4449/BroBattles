@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { createShopService } = require("../src/server/services/shopService");
+const { createShopService } = require("../src/server/services/shop/shopService");
 
 class CommerceFakeDb {
   constructor(user) {

@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const babel = require('@babel/core');
 
 const audio = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync('src/gameScene/playerAudio.js', 'utf8'), {
+vm.runInNewContext(babel.transformSync(fs.readFileSync('src/client/game/audio/playerAudio.js', 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 }).code, { exports: audio });
 

@@ -1,32 +1,21 @@
 const { exposeDamageHitbox } = require('../damageHitboxes');
-const { getParticipant, participantId } = require('../participants');
+const { getParticipant } = require('../participants');
+const { attackIdentity } = require('./attackIdentity');
 const effectManager = require("../effects/effectManager");
-const { THORG_SWEEP, sampleThorgHitbox } = require("../../../../shared/thorgSweep");
+const { THORG_SWEEP, sampleThorgHitbox } = require("../../../../shared/characters/thorgSweep");
 const { resolvePlayerHeight, getBoundsCenter, normalizeAngleDelta, getPlayerBounds } = require('./geometry');
 const { hitRectTargets, hitCapsuleTargets, getEnemyVaultTarget, emitServerHit, buildTargetList, emitHitAction } = require('./targets');
 
 function buildAttachedRectAttack(playerData, actionData, descriptor, now) {
   return {
-    descriptorKey: String(actionData?.type || "").toLowerCase(),
-    runtimeKind: String(descriptor?.runtime?.kind || "").toLowerCase(),
-    createdAt: now,
-    attackerParticipantId: participantId(playerData),
-    attackerName: playerData.name,
-    attackType: String(descriptor?.attackType || "basic").toLowerCase(),
-    instanceId: String(actionData?.id || `${playerData.name}:${now}`),
+    ...attackIdentity(playerData, actionData, descriptor, now),
     hitSet: new Set(),
   };
 }
 
 function buildPathRectAttack(playerData, actionData, descriptor, now) {
   return {
-    descriptorKey: String(actionData?.type || "").toLowerCase(),
-    runtimeKind: "path-rect",
-    createdAt: now,
-    attackerParticipantId: participantId(playerData),
-    attackerName: playerData.name,
-    attackType: String(descriptor?.attackType || "basic").toLowerCase(),
-    instanceId: String(actionData?.id || `${playerData.name}:${now}`),
+    ...attackIdentity(playerData, actionData, descriptor, now, "path-rect"),
     direction: Number(actionData?.direction) === -1 ? -1 : 1,
     hitSet: new Set(),
     previousProgress: 0,
@@ -44,13 +33,7 @@ function buildAttachedConeAttack(playerData, actionData, descriptor, now) {
   const anchorX = Number(actionData?.anchor?.x);
   const anchorY = Number(actionData?.anchor?.y);
   return {
-    descriptorKey: String(actionData?.type || "").toLowerCase(),
-    runtimeKind: String(descriptor?.runtime?.kind || "").toLowerCase(),
-    createdAt: now,
-    attackerParticipantId: participantId(playerData),
-    attackerName: playerData.name,
-    attackType: String(descriptor?.attackType || "basic").toLowerCase(),
-    instanceId: String(actionData?.id || `${playerData.name}:${now}`),
+    ...attackIdentity(playerData, actionData, descriptor, now),
     angle,
     direction,
     radius: Math.max(

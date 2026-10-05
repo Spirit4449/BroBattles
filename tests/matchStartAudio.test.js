@@ -10,8 +10,8 @@ const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
 test("countdown keeps its beeps and final fight cue", () => {
-  const sounds = read("src/lib/uiSounds.js");
-  const hud = read("src/hud/gameHudController.js");
+  const sounds = read("src/client/ui/uiSounds.js");
+  const hud = read("src/client/game/hud/gameHudController.js");
 
   for (const [name, asset] of [
     ["beep", "beep.mp3"],
@@ -28,7 +28,7 @@ test("final countdown cue plays once alongside FIGHT and enabling input", () => 
   const exported = {}, calls = [], preloaded = [], timers = [];
   const countdown = { style: {}, textContent: '' };
   let now = 0, fights = 0, enabled = 0;
-  const code = babel.transformSync(read("src/hud/gameHudController.js"), {
+  const code = babel.transformSync(read("src/client/game/hud/gameHudController.js"), {
     babelrc: false, configFile: false,
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code;

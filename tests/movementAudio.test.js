@@ -4,10 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const babel = require('@babel/core');
-const terrainAudio = require('../src/shared/terrainAudio.json');
+const terrainAudio = require('../src/shared/physics/terrainAudio.json');
 const maps = require('../src/shared/maps').mapsCatalog;
 const exported = {};
-const code = babel.transformSync(fs.readFileSync(require.resolve('../src/gameScene/movementAudio.js'), 'utf8'), {
+const code = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/audio/movementAudio.js'), 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 }).code;
 vm.runInNewContext(code, { exports: exported, require: () => terrainAudio });
@@ -51,7 +51,7 @@ test('grass footsteps share predictable playback gain and landings follow terrai
 });
 
 test('the first grounded movement frame plays a step for short key taps', () => {
-  const source = fs.readFileSync(require.resolve('../src/players/localMovementFx.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../src/client/game/players/localMovementFx.js'), 'utf8');
   assert.match(source, /if \(!wasGroundWalking\) \{\s*audio\.playStep\(scene, speedRatio, false\);/);
   assert.match(source, /wasGroundWalking = isGroundWalking;/);
 });

@@ -1,5 +1,5 @@
 const { exposeDamageHitbox } = require('../damageHitboxes');
-const { getResolvedCharacterSpecialConfig } = require("../../../../shared/characterTuning");
+const { getResolvedCharacterSpecialConfig } = require("../../../../shared/characters/characterTuning");
 const HOOK = getResolvedCharacterSpecialConfig("gloop", "hook");
 const { getParticipant, participantId } = require('../participants');
 const effectManager = require("../effects/effectManager");

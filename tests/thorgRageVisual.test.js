@@ -3,9 +3,9 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const sweep = require('../src/shared/thorgSweep');
-const source = fs.readFileSync(require.resolve('../src/characters/thorg/rageVisual.js'), 'utf8')
-  .replace('import { THORG_SWEEP } from "../../shared/thorgSweep";', 'const { THORG_SWEEP } = sweep;')
+const sweep = require('../src/shared/characters/thorgSweep');
+const source = fs.readFileSync(require.resolve('../src/client/game/characters/thorg/rageVisual.js'), 'utf8')
+  .replace('import { THORG_SWEEP } from "../../../../shared/characters/thorgSweep";', 'const { THORG_SWEEP } = sweep;')
   .replaceAll('export function ', 'function ') + '\nexports.setThorgRageVisual = setThorgRageVisual;';
 const exportsObject = {};
 vm.runInNewContext(source, { exports: exportsObject, sweep });

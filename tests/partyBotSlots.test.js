@@ -5,7 +5,7 @@ const {
   setPartyBotSlot,
   prunePartyBotSlots,
   clearPartyBotSlots,
-} = require("../src/server/helpers/partyBotSlots");
+} = require("../src/server/services/party/partyBotSlots");
 
 test("party bot slots support shuffle, a fighter, and returning to random", () => {
   clearPartyBotSlots(7001);

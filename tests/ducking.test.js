@@ -6,7 +6,7 @@ const {
   hasStandingClearance,
   clampBodyToGroundSpan,
   reduceDuckDamage,
-} = require("../src/shared/ducking");
+} = require("../src/shared/physics/ducking");
 
 const platform = (x, y, width = 100, overrides = {}) => ({
   body: { x, y, width, height: 20, ...overrides },

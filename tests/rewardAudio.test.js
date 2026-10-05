@@ -14,7 +14,7 @@ test('rapid reward impacts overlap in a bounded reusable pool and honor volume s
     cloneNode() { const audio = new AudioStub(); clones.push(audio); return audio; }
     play() { return Promise.resolve(); }
   }
-  const source = fs.readFileSync(path.join(__dirname, '../src/lib/uiSounds.js'), 'utf8')
+  const source = fs.readFileSync(path.join(__dirname, '../src/client/ui/uiSounds.js'), 'utf8')
     .replace(/^import .*;$/gm, '').replaceAll('export function', 'function');
   const playSound = vm.runInNewContext(source + '; playSound', {
     Audio: AudioStub,
@@ -42,7 +42,7 @@ test('UI initialization downloads no sounds; playing a sound loads and reuses on
     load() {}
     play() { return Promise.resolve(); }
   }
-  const source = fs.readFileSync(path.join(__dirname, '../src/lib/uiSounds.js'), 'utf8')
+  const source = fs.readFileSync(path.join(__dirname, '../src/client/ui/uiSounds.js'), 'utf8')
     .replace(/^import .*;$/gm, '').replaceAll('export function', 'function');
   const api = vm.runInNewContext(source + '; ({ playSound, initUISounds })', {
     Audio: AudioStub, document: { addEventListener() {} }, window: {},
@@ -60,7 +60,7 @@ test('UI initialization downloads no sounds; playing a sound loads and reuses on
 });
 
 test('reveal choir grows with currency value and preserves unlock rarity floors', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../src/lib/rewardPresentation.js'), 'utf8').replaceAll('export function', 'function');
+  const source = fs.readFileSync(path.join(__dirname, '../src/client/views/rewardPresentation.js'), 'utf8').replaceAll('export function', 'function');
   const { rewardSound, currencyParticleCount } = vm.runInNewContext(source + '; ({ rewardSound, currencyParticleCount })');
   const currency = (amount, type = 'coins') => ({ kind: 'currency', currency: type, amount });
   const tiers = ['rewardCoins', 'rewardGems', 'rewardUnlock', 'rewardEpic', 'rewardLegendary'];

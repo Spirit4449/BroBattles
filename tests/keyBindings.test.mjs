@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {DEFAULT_BINDINGS,normalizeBindings,assignBinding,eventKeyCode} from '../src/site/keyBindings.mjs';
+import {DEFAULT_BINDINGS,normalizeBindings,assignBinding,eventKeyCode} from '../src/client/site/keyBindings.mjs';
 test('missing or corrupt bindings preserve all default controls',()=>{
  for(const value of [null,{}, {left:27},{...DEFAULT_BINDINGS,left:68}])assert.deepEqual(normalizeBindings(value),DEFAULT_BINDINGS);
 });

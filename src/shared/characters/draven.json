@@ -61,9 +61,13 @@
           "riseMs": 650,
           "liftPx": 125,
           "bobPx": 8,
-          "fireRingRadius": 215,
           "firePulseMs": 120,
-          "explosionPulseMs": 260
+          "explosionPulseMs": 260,
+          "bobWaveMs": 120,
+          "firstDamageDelayMs": 80,
+          "damageTickMs": 220,
+          "damageScale": 0.22,
+          "minDamagePerTick": 120
         }
       },
       "effects": {

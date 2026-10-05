@@ -14,3 +14,7 @@ todo.md
 /data/maps/matches/
 
 /data/match-results/
+
+# Local database dumps (contain user data; never commit)
+/backup*.sql
+*.sql.bak

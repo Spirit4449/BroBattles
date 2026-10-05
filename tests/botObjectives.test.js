@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const catalog = require("../src/shared/gameModes.catalog.json");
+const catalog = require("../src/shared/catalogs/gameModes.catalog.json");
 const { createGameModeRuntime } = require("../src/server/core/gameModes");
 const {
   BOT_OBJECTIVE_SCHEMA_VERSION,

@@ -1,6 +1,6 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');
 const {registerEmailRoutes}=require('../src/server/routes/modules/emailRoutes');
-const {hashCode}=require('../src/server/services/emailService');
+const {hashCode}=require('../src/server/services/email/emailService');
 process.env.EMAIL_VERIFICATION_SECRET='route-test-secret';
 function harness(row){const routes={};const queries=[];const db={withTransaction:async fn=>fn(null,async(sql,args)=>{queries.push({sql,args});if(sql.startsWith('SELECT'))return row?[row]:[];return {affectedRows:1};}),runQuery:async()=>row?[row]:[]};registerEmailRoutes({app:{get:(p,f)=>routes[p]=f,post:(p,f)=>routes[p]=f},db,requireCurrentUser:async()=>({user_id:1})});return {queries,call:async(path,body={},site='same-origin')=>{const res={statusCode:200,set(){return this},status(n){this.statusCode=n;return this},json(data){this.data=data;return this}};await routes[path]({method:'POST',ip:'test',get:k=>k==='sec-fetch-site'?site:null,body},res);return res;}};}
 test('invalid codes increment attempts without verifying email',async()=>{const row={code_hash:hashCode(1,'a@example.com','123456'),pending_email:'a@example.com',expires_at:new Date(Date.now()+60000),attempts:0};const h=harness(row);const r=await h.call('/profile/email/verify',{code:'111111'});assert.equal(r.statusCode,400);assert.ok(h.queries.some(q=>q.sql.includes('attempts=attempts+1')));assert.ok(!h.queries.some(q=>q.sql.includes('email=pending_email')));});

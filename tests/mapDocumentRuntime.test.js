@@ -3,14 +3,14 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const babel=require('@babel/core');
-const {clone,MapHistory}=require('../src/shared/mapDocument');
+const {clone,MapHistory}=require('../src/shared/maps/mapDocument');
 const { EventEmitter } = require('node:events');
 function load(file,dependencies){
  const exports={};const {code}=babel.transformSync(fs.readFileSync(require.resolve(file),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]});
  vm.runInNewContext(code,{exports,require:id=>dependencies[id]});return exports;
 }
 test('two scenes can own the same map and shutting down one cannot clear the other', () => {
- const api = load('../src/maps/documentRuntime.js', {'./mapUtils': {
+ const api = load('../src/client/game/maps/documentRuntime.js', {'./mapUtils': {
   appendLayoutObjectsFromConfig() {}, applyMapBounds() {},
  }});
  const document = { layout: { platforms: [], hitboxes: [] }, assets: {}, anchors: {}, bounds: {} };
@@ -31,7 +31,7 @@ test('two scenes can own the same map and shutting down one cannot clear the oth
 test('history reconciliation retains scene, camera and surviving objects through resize, deletion and undo',()=>{
  let created=0;const camera={zoom:1.75,scrollX:120,scrollY:99};const canvas={};
  const configure=(object,row)=>{Object.assign(object,{x:row.x,y:row.y,scaleX:row.scaleX,scaleY:row.scaleY,texture:{key:row.textureKey}});};
- const runtime=load('../src/maps/documentRuntime.js',{'./mapUtils':{
+ const runtime=load('../src/client/game/maps/documentRuntime.js',{'./mapUtils':{
   appendLayoutObjectsFromConfig(scene,objects,layout){for(const row of layout.platforms){const object={_mapObjectId:row.id,type:'Sprite',anims:{stop(){}},destroy(){this.destroyed=true;}};configure(object,row);objects.push(object);created++;}},
   configureMapPlatform:configure,applyMapBounds(){},
  }});
@@ -47,7 +47,7 @@ test('history reconciliation retains scene, camera and surviving objects through
  assert.equal(scene.cameras.main,camera);assert.deepEqual(camera,{zoom:1.75,scrollX:120,scrollY:99});assert.equal(scene.game.canvas,canvas);
 });
 test('client collision configuration uses top-left offsets, including undoing custom offsets',()=>{
- const {configureMapPlatform}=load('../src/maps/mapUtils.js',{'../shared/spawnPlacement':require('../src/shared/spawnPlacement')});
+ const {configureMapPlatform}=load('../src/client/game/maps/mapUtils.js',{'../../../shared/physics/spawnPlacement':require('../src/shared/physics/spawnPlacement')});
  const sprite={displayWidth:200,displayHeight:100,scaleX:2,scaleY:2,
   body:{checkCollision:{},setSize(w,h){this.width=w;this.height=h;this.offset=[17,19];},setOffset(x,y){this.offset=[x,y];},updateFromGameObject(){}},
  };

@@ -8,8 +8,8 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 test("lobby reserves late-loaded header and selector geometry", () => {
   const html = read("public/index.html");
-  const siteCss = read("src/site/site.css");
-  const lobbyCss = read("src/styles/index.css");
+  const siteCss = read("src/client/site/site.css");
+  const lobbyCss = read("src/client/styles/index.css");
 
   assert.match(
     html,
@@ -34,7 +34,7 @@ test("lobby reserves late-loaded header and selector geometry", () => {
 
 test("lobby starts with a spinner and exposes text only when loading fails", () => {
   const html = read("public/index.html");
-  const reveal = read("src/lobby/lobbyReveal.js");
+  const reveal = read("src/client/lobby/lobbyReveal.js");
 
   assert.match(html, /class="bb-loading-rune" aria-hidden="true"/);
   assert.doesNotMatch(html, /lobby-loading-panel|lobby-loading-title|lobby-loading-orbit/);
@@ -45,7 +45,7 @@ test("lobby starts with a spinner and exposes text only when loading fails", () 
 });
 
 test("creating a party does not attach a duplicate UI sound", () => {
-  const source = read("src/index.js");
+  const source = read("src/client/pages/lobby.js");
 
   assert.match(source, /else createPartyButton\.removeAttribute\('data-sound'\)/);
   assert.doesNotMatch(source, /existingPartyId \? 'cancel2' : 'party'/);

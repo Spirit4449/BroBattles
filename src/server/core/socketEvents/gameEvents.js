@@ -1,4 +1,4 @@
-const { loadMatchData } = require('../../services/matchRosterService');
+const { loadMatchData } = require('../../services/match/matchRosterService');
 function registerGameEvents(socket, { db, gameHub, abuseControl }) {
   socket.on("game:join", async (data, cb) => {
     try {

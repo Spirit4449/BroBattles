@@ -142,7 +142,7 @@ function setup({ routeResponse, statusResponse, gameDataResponse, deferStyles = 
     }),
   });
   for (const file of ['preload', 'lobbyReturn', 'index']) {
-    const source = fs.readFileSync(require.resolve(`../src/navigation/${file}.js`), 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, '');
+    const source = fs.readFileSync(require.resolve(`../src/client/navigation/${file}.js`), 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, '');
     // Keep the queue stub; resource discovery runs its actual implementation.
     vm.runInContext(file === 'preload' ? source.slice(0, source.indexOf('function createBattlePreloader')) : source, context);
   }

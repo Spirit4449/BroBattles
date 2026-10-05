@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { EventEmitter } = require("node:events");
-const { createAbuseControlService } = require("../src/server/services/abuseControlService");
+const { createAbuseControlService } = require("../src/server/services/moderation/abuseControlService");
 const { createAbuseHttpMiddleware } = require("../src/server/middleware/abuseHttpMiddleware");
 
 function setup({ anonymous = false } = {}) {

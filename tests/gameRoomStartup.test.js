@@ -4,8 +4,8 @@ const { EventEmitter } = require('node:events');
 const { createGameHub } = require('../src/server/core/gameHub');
 const { registerGameEvents } = require('../src/server/core/socketEvents/gameEvents');
 const { createBotParticipants } = require('../src/server/core/bots/identity');
-const { decorateParticipant } = require('../src/server/services/matchRosterService');
-const { spawnForParticipant } = require('../src/shared/duelGeometry');
+const { decorateParticipant } = require('../src/server/services/match/matchRosterService');
+const { spawnForParticipant } = require('../src/shared/physics/duelGeometry');
 const { PREGAME_MS, PREGAME_GRACE_MS, COUNTDOWN_MS, START_DEADLINE_MS, plannedCountdownStart } = require('../src/shared/matchIntroTiming');
 
 class TestSocket extends EventEmitter {

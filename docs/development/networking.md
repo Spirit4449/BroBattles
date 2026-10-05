@@ -1,0 +1,102 @@
+# Networking
+
+Human movement is client-simulated with server bounds and dash collision checks. The server owns combat validation, health, bots, room membership, match state and rewards. Clients predict presentation and interpolate remote actors. See [gameplay](gameplay.md) for dash/bots and [client lifecycle](client.md) for screen teardown.
+
+## Ownership
+
+| Component | Source |
+| --- | --- |
+| Socket authentication and early handler registration | `src/server/core/socket.js` |
+| Join validation and room lookup | `src/server/core/socketEvents/gameEvents.js`, `src/server/core/gameHub.js` |
+| Fixed-step simulation and publication | `src/server/core/gameRoom/index.js` |
+| Player transport and action validation | `src/server/core/gameRoom/playerTransport.js`, `src/server/core/gameRoom/actionValidation.js` |
+| Initial state, spawns and snapshots | `src/server/core/gameRoom/roomStateManager.js` |
+| Damage, hit timing and health | `src/server/core/gameRoom/damageResolver.js`, `src/server/core/gameRoom/healthManager.js` |
+| Client socket lifecycle | `src/client/lib/socket.js` |
+| Match listeners, state and join/readiness recovery | `src/client/game/match/matchCoordinator.js` |
+| Input publication | `src/client/game/scene/localInputSync.js` |
+| Shared client clock | `src/client/game/match/serverClock.js` |
+| Snapshot buffering and render timeline | `src/client/game/match/snapshotBuffer.js` |
+| Movement correction | `src/client/game/players/movementCorrection.js`, `src/client/game/players/localMovementCorrector.js` |
+| Local lifecycle reactions | `src/client/game/players/localSocketEvents.js` |
+
+The signed `user_id` cookie carries a session token. Socket authentication resolves the account through stored session hashes; client-supplied participant identity cannot authorize an action.
+
+## Match lifecycle
+
+1. The coordinator emits `game:join` with `matchId` and combat protocol versions. The gateway authenticates membership before joining `game:{matchId}`.
+2. `game:init` provides roster, mode/map, server spawns, loaded/connected flags, effects, items and protocol bootstrap state. Clients merge roster data without inventing ownership.
+3. Once the scene is built and the loading screen lifts, the client emits `game:ready` and begins the pregame. Readiness is keyed by account, not socket ID. The coordinator retries join/readiness only after local readiness.
+4. `src/shared/matchIntroTiming.js` defines a five-second pregame, up to two seconds of grace for loading peers, a five-second countdown and a 45-second room-start deadline. `game:start` sends countdown duration and spawns. Rejoins receive remaining countdown state; live rejoins skip pregame. Controls and movement sync begin at FIGHT.
+5. The room simulates at 60 Hz, publishes player snapshots every two ticks (30 Hz) and world state every eight ticks (7.5 Hz). Human reports are bounded; bots advance in simulation steps.
+6. Health, effects, objective state, timers and terminal events remain server-owned. `game:over` disables input and drives results. [Deployment](../operations/deployment.md) explains durable reward settlement and restart behavior.
+
+## Transport contracts
+
+| Direction | Event | Role |
+| --- | --- | --- |
+| Client → server | `game:join`, `game:ready` | Membership and scene readiness |
+| Client → server | `game:input` | Sequenced positional state and controls; normally volatile with reliable keyframes and pre-attack flushes |
+| Client → server | `game:clock` | Acknowledged clock exchange returning epoch/simulation/publication timing |
+| Client → server | `game:action`, `game:special` | Validated action and charged-special requests |
+| Client → server | `hit`, `heal`, `deathdrop:pickup` | Proposals checked by the server, never permission to assign outcomes |
+| Server → client | `game:joined`, `game:init`, `game:start` | Join/bootstrap/countdown |
+| Server → client | `game:snapshot`, `game:correction` | Replicated state and rejected-movement correction |
+| Server → client | `game:action`, `player:special` | Accepted combat presentation and protocol packets |
+| Server → client | `health-update`, `super-update` | Authoritative health/charge |
+| Server → client | `player:dead`, `player:respawn`, `player:disconnected`, `player:reconnected` | Actor lifecycle |
+| Server → client | `game:timer`, `game:sudden-death:start`, `game:over` | Match lifecycle |
+| Server → client | `powerup:collected`, `powerup:tick`, `deathdrop:collected` | Item/effect events |
+
+This table is an overview, not an exhaustive schema. Read emitters and listeners together when changing payloads. Keep compatible fields additive; update both endpoints and protocol gates when making incompatible changes. `game:input-intent` and the disabled server human-movement simulator have been removed. Socket.IO `connect` handles reconnects; the socket itself does not emit the Manager's `reconnect` event.
+
+## Snapshots and clocks
+
+Each snapshot carries room-instance `snapshotEpoch`, increasing `snapshotSeq`, simulation `tMono`, publication `sentMono`, `snapshotKind` (`periodic` or `event`), plus tick/wall-time fields. Clients reject stale/duplicate sequences before roster or HUD updates. New emissions at the same simulation instant replace that instant in the buffer; reconnects and epoch changes reset history. Compatibility handling accepts older payloads without sequence fields.
+
+Catch-up callbacks coalesce periodic snapshots and world state while preserving every simulation step and discrete event. Snapshots remain non-volatile. `BB_COALESCE_SNAPSHOTS=0` disables coalescing for newly created rooms for controlled comparisons.
+
+`serverClock.js` owns the clock ping loop: a five-ping burst after epoch changes/reconnects, then one ping every two seconds. It uses the lowest RTT in a 12-sample window. Ninja, Huntress and hit reports share this clock; character adapters must not reset it independently.
+
+Hit proposals use `attackServerMono`, which the damage resolver converts into the server's wall-clock position-history domain. Client wall-clock `attackTime` does not establish hit timing. Future claims beyond the server tolerance are rejected. Human history records accepted inputs; bot history records simulation steps. History is bounded to one second and 128 samples.
+
+The render timeline interpolates buffered remote states with bounded extrapolation. Delivery steering follows median arrival offset over a four-second window, with bounded slewing. Adaptive delay uses spacing and jitter, bounded to 45–115 ms. Only periodic snapshots feed cadence/jitter estimates. Arrival-based delay is an opt-in comparison (`netArrivalDelay=1`); the removed `netSmoothing=legacy` switch no longer selects another renderer. Remote smoothing preserves spawn snaps and recovery/extrapolation limits.
+
+`movementFxSeq` identifies movement cues; detailed movement-effect fields are short-lived, and wall-side data is conditional. Treat optional snapshot fields as optional and reset visual/audio state on lifecycle transitions.
+
+## Movement corrections
+
+The server limits each input packet to an elapsed-time movement budget and sweeps dash/coast against canonical colliders. Corrections include an increasing per-player `correctionId`, corrected input `sequence`, reason (`budget` or `collision`), error and collision contacts. The client echoes its latest applied ID as `correctionAck`; the server briefly drops reports sent before that acknowledgment to prevent repeated stale corrections. Server teleports reset the wait.
+
+The client applies the error relative to the corrected input's recorded position, preserving subsequent movement. Small errors blend; large errors snap. Collision corrections constrain the blocked axis while retaining motion along the surface, and do not pull an actor back to a face already left. Fractional movement precision and subpixel tolerances prevent repeated corrections on platform edges. This is bounded client movement, not a complete authoritative human physics replay.
+
+## Ninja and Huntress protocols
+
+`src/client/game/characters/networkRegistry.js` and `src/server/core/gameRoom/characterCombatRegistry.js` register the dedicated adapters. Both use server runtimes for human and bot outcomes, predicted local visuals, reconciliation by projectile ID and reconnect bootstrap records. Stale protocol clients must reload; deploy matching browser and server versions.
+
+**Ninja** advertises `ninjaCombatVersion: 1`. The shared projectile model defines outgoing, hover and fixed-step homing-return phases. Requests validate socket identity, aim, ammo, cooldown, charge and eligibility. Swept contacts hit each target at most once per flight leg. Outgoing wall contact turns a projectile back; returning flight passes through terrain. Only an authoritative basic return refunds ammo; supers never do. Return corrections are sent at 10 Hz because the owner moves. Death/disconnect cancels active flight and pending super shards. Late launches cannot resurrect completed/rejected predictions.
+
+**Huntress** advertises `huntressCombatVersion: 2`. Authoritative combat is always enabled; there is no browser-damage fallback or rollout toggle. The shared fixed-step model drives arrows and aim preview. Client aim/power are inputs; the server resolves launch position, spread, gravity, ammo and damage. Read `src/shared/characters/huntress.json` for current speeds/reload/lifetimes. Local arrows predict after windup, accepted launches reconcile by ID, and remote arrows sample server age rather than launching from delayed actor sprites. Visual contact pauses never apply damage. Terminals contain exact impact coordinates and attachment offsets. `game:init.huntressCombat` carries version, epoch, clocks, geometry, active projectiles and bounded terminals; existing `game:action` carries result/projectile/terminal messages.
+
+Human collision locations still depend on received movement reports. Last-moment dodges can disagree under latency; projectile authority does not eliminate that limitation.
+
+## Diagnostics and verification
+
+Browser console diagnostics:
+
+```js
+window.__BB_NETWORK_DIAGNOSTICS__()
+window.__BB_HUNTRESS_DIAGNOSTICS__()
+```
+
+Network diagnostics report cadence/arrival gaps, jitter, underruns, extrapolation, delivery offset, clock estimates and correction counts/history. Server `[movement:corrections]` logs summarize budget/collision/stale-packet counts per human. Huntress diagnostics expose prediction and confirmation age/alignment metrics. These measurements do not establish end-to-end input latency or perceptual smoothness.
+
+```sh
+npm run test:network
+node scripts/dev/benchmark-huntress.cjs
+node scripts/dev/huntress-network-lab.cjs
+```
+
+The lab runs two isolated clients at http://127.0.0.1:3017 without production accounts or MySQL. `?rtt=100&jitter=1` enables a latency scenario; supported RTT values are 0, 50, 100 and 150 ms.
+
+After transport changes, run relevant tests and the production build, then use two real clients to exercise fresh start, late join, disconnect/reconnect during pregame/countdown/combat, every character's basic/special, wall jumps, reversals, knockback, death/respawn, Bank Bust and results cleanup. Compare steady/variable latency and stalls. Deterministic tests and isolated benchmarks do not establish production capacity or browser frame pacing.

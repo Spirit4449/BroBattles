@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../src/navigation/preload.js'), 'utf8').replace(/^export /gm, '');
+const source = fs.readFileSync(require.resolve('../src/client/navigation/preload.js'), 'utf8').replace(/^export /gm, '');
 const flush = async () => { for (let n = 0; n < 4; n++) await new Promise(resolve => setImmediate(resolve)); };
 
 function setup(handler) {

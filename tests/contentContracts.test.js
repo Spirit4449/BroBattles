@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateContent } = require('../scripts/validate-content.cjs');
+const { validateContent } = require('../scripts/dev/validate-content.cjs');
 const { characterDefinitions } = require('../src/shared/characters');
 const { POWERUP_TYPES, POWERUP_CATALOG } = require('../src/shared/powerups');
 const { resolveLocalEffectMovement } = require('../src/shared/effectRules');
@@ -8,7 +8,7 @@ const { effectDefs } = require('../src/server/core/gameRoom/effects/effectDefs')
 
 test('registered content has valid assets, effects, map documents and attack references', () => {
   assert.deepEqual(validateContent(), []);
-  assert.deepEqual(require('../src/shared/mapDocument').POWERUP_TYPES, POWERUP_TYPES);
+  assert.deepEqual(require('../src/shared/maps/mapDocument').POWERUP_TYPES, POWERUP_TYPES);
   assert.deepEqual(require('../src/server/core/gameRoomConfig').POWERUP_TYPES, POWERUP_TYPES);
 });
 
@@ -57,7 +57,7 @@ test('server Gravity Boots tuning and scaling remain unchanged', () => {
 });
 
 test('character keys normalize to the shared default instead of per-call literals', () => {
-  const { DEFAULT_CHARACTER, resolveCharacterKey, getCharacterStats } = require('../src/shared/characterStats');
+  const { DEFAULT_CHARACTER, resolveCharacterKey, getCharacterStats } = require('../src/shared/characters/characterStats');
   assert.ok(getCharacterStats(DEFAULT_CHARACTER), 'default character must be registered');
   assert.equal(resolveCharacterKey(null), DEFAULT_CHARACTER);
   assert.equal(resolveCharacterKey(''), DEFAULT_CHARACTER);
@@ -73,7 +73,7 @@ test('every registered character declares how bots play it', () => {
 });
 
 test('character levels parse from rows without throwing on malformed data', () => {
-  const { parseCharacterLevels, getCharacterLevel, canonicalCharacterKey } = require('../src/shared/characterStats');
+  const { parseCharacterLevels, getCharacterLevel, canonicalCharacterKey } = require('../src/shared/characters/characterStats');
   assert.deepEqual(parseCharacterLevels('{"wizard":3}'), { wizard: 3 });
   assert.deepEqual(parseCharacterLevels({ ninja: 1 }), { ninja: 1 });
   assert.deepEqual(parseCharacterLevels('not json'), {});

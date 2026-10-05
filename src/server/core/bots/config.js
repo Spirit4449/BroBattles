@@ -1,13 +1,14 @@
 const { createRandom } = require("./random");
 
+// Matchmaking bot-fill defaults. Any of these can be overridden live from
+// runtime-overrides.json -> "bots" (the admin panel writes that file).
 const defaults = Object.freeze({
-  enabled: false,
-  rolloutPercent: 0,
-  startAfterMs: 5000,
-  randomWindowMs: 3500,
-  minIntervalMs: 1000,
-  intervalVarianceMs: 2000,
-  fillByMs: 18000,
+  enabled: false, // bots join queues at all
+  rolloutPercent: 0, // % of tickets eligible for bot fill (0-100)
+  startAfterMs: 5000, // queue time before the first bot may join
+  randomWindowMs: 3500, // random extra delay before the first bot
+  minIntervalMs: 1000, // minimum gap between later bots
+  intervalVarianceMs: 2000, // random extra gap between later bots
 });
 
 function getBotConfig(runtimeConfig) {
@@ -24,7 +25,6 @@ function getBotConfig(runtimeConfig) {
     minIntervalMs: Number(value.minIntervalMs) || defaults.minIntervalMs,
     intervalVarianceMs:
       Number(value.intervalVarianceMs) || defaults.intervalVarianceMs,
-    fillByMs: Number(value.fillByMs) || defaults.fillByMs,
   };
 }
 

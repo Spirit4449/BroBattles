@@ -1,6 +1,6 @@
 const { Worker } = require('node:worker_threads');
 const { createHash } = require('node:crypto');
-const { characterBody } = require('../../../shared/duelGeometry');
+const { characterBody } = require('../../../shared/physics/duelGeometry');
 const { buildGraph } = require('./navigation');
 
 // The live server opts in; deterministic offline simulations retain buildGraph.
@@ -82,7 +82,12 @@ function createNavigationService({ limit = 32, log = console.info } = {}) {
 }
 let liveService;
 function enableAsyncNavigation() { liveService ||= createNavigationService(); }
+async function closeAsyncNavigation() {
+  const service = liveService;
+  liveService = null;
+  if (service) await service.close();
+}
 function getNavigationGraph(...args) {
   return liveService ? liveService.getGraph(...args) : buildGraph(...args);
 }
-module.exports = { createNavigationService, enableAsyncNavigation, getNavigationGraph };
+module.exports = { createNavigationService, enableAsyncNavigation, closeAsyncNavigation, getNavigationGraph };

@@ -1,10 +1,10 @@
-const { inPartyOrder } = require("../../helpers/partyOperations");
+const { inPartyOrder } = require("../../services/party/partyOperations");
 const {
   normalizeSelection,
   isSelectionQueueable,
   getSelectionBlockReason,
   selectionToLegacyMode,
-} = require("../../helpers/gameSelectionCatalog");
+} = require("../../services/match/gameSelectionCatalog");
 
 function registerMatchmakingEvents(
   socket,
@@ -26,7 +26,7 @@ function registerMatchmakingEvents(
     try {
       const uname = socket.data.user?.name;
       const userId = socket.data.user?.user_id || null;
-      if (!userId || !await require('../../services/legalAcceptance').hasLegalAcceptance(db,userId)) {
+      if (!userId || !await require('../../services/auth/legalAcceptance').hasLegalAcceptance(db,userId)) {
         socket.emit('match:cancelled', { reason:'Please review the Terms before readying up.' });
         return;
       }

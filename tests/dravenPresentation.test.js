@@ -11,8 +11,8 @@ function load(file, deps) {
 }
 test('remote cast never schedules a phantom explosion; confirmed impact renders once at target',()=>{
   const impacts=[];
-  const Draven=load('src/characters/draven/constructor.js',{
-    '../../shared/characterTuning.js':{getResolvedCharacterAttackConfig:()=>({})},
+  const Draven=load('src/client/game/characters/draven/constructor.js',{
+    '../../../../shared/characters/characterTuning.js':{getResolvedCharacterAttackConfig:()=>({})},
     '../shared/characterEntityBase':{default:class {},__esModule:true},
     '../shared/animationState':{playSpriteAnimation(){}},
     './attack':{spawnExplosion:(...args)=>impacts.push(args)},
@@ -26,10 +26,10 @@ test('remote cast never schedules a phantom explosion; confirmed impact renders 
   assert.equal(impacts[0][1],240);assert.equal(impacts[0][2],160);
 });
 test('explosion starts at contact frame with brief translucent fade-in',()=>{
-  const api=load('src/characters/draven/attack.js',{
-    '../../shared/characterTuning.js':{getResolvedCharacterAttackConfig:()=>({})},
-    '../../shared/projectilePresentation':require('../src/shared/projectilePresentation'),
-    '../../gameScene/renderLayers':{RENDER_LAYERS:{PLAYER:30,ATTACKS:60}},
+  const api=load('src/client/game/characters/draven/attack.js',{
+    '../../../../shared/characters/characterTuning.js':{getResolvedCharacterAttackConfig:()=>({})},
+    '../../../../shared/projectilePresentation':require('../src/shared/projectilePresentation'),
+    '../../scene/renderLayers':{RENDER_LAYERS:{PLAYER:30,ATTACKS:60}},
   });
   let animation,tween;
   const sprite={setDepth(v){this.depth=v;},setScale(v){this.scale=v;},setAlpha(v){this.alpha=v;},anims:{play(v){animation=v;}},once(){}};

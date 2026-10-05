@@ -1,9 +1,9 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {verifySignup,pendingSignup,cancelSignup}=require('../src/server/services/signupVerificationService');
-const {createAuthSessionService}=require('../src/server/services/authSessionService');
-const {hashCode}=require('../src/server/services/emailService');
-const config=require('../src/shared/siteConfig.json');
+const {verifySignup,pendingSignup,cancelSignup}=require('../src/server/services/auth/signupVerificationService');
+const {createAuthSessionService}=require('../src/server/services/auth/authSessionService');
+const {hashCode}=require('../src/server/services/email/emailService');
+const config=require('../src/shared/site/siteConfig.json');
 process.env.EMAIL_VERIFICATION_SECRET='signup-regression-test';
 function harness({invalid=false,collision=false,commitFailure=false}={}) {
   const cookies=[],queries=[],events=[];

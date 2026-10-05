@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const model = require('../src/shared/huntressProjectile');
+const model = require('../src/shared/characters/huntressProjectile');
 
 // Exercise the shared model used by both prediction and authoritative collision.
 test('normal and burning arrows launch from the same body socket', () => {

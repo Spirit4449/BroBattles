@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { registerAdminRoutes } = require('../src/server/routes/admin');
+const { registerAdminRoutes } = require('../src/server/routes/modules/admin');
 function harness(admin = { user_id: 1, name: 'Admin' }) {
   const routes = {}, queries = [];
   registerAdminRoutes({ app: { get: (p, f) => routes[p] = f, post: (p, f) => routes[p] = f }, auth: { requireAdminUser: async () => admin }, db: { runQuery: async (sql, args) => { queries.push({sql,args}); if(sql.includes('COUNT')) return [{total: 23}]; if(sql.startsWith('UPDATE')) return {affectedRows: 1}; return [{user_id: 2,name:'Player',coins:4}]; } } });

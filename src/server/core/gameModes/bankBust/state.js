@@ -1,8 +1,10 @@
-const RANDOM_GOLD_PICKUP_CAP = 6;
-const RANDOM_GOLD_PICKUP_VALUE = 10;
-const RANDOM_GOLD_PICKUP_RADIUS = 42;
-const RANDOM_GOLD_SPAWN_INTERVAL_MS = 3200;
-const COLLECTION_EVENT_RETENTION_MS = 1800;
+// Bank Bust loose-gold tuning (spawn points come from the map's
+// objectiveLayout.bankBust.randomGoldSpawnPoints).
+const RANDOM_GOLD_PICKUP_CAP = 6; // max loose gold pickups on the map at once
+const RANDOM_GOLD_PICKUP_VALUE = 10; // gold added per pickup
+const RANDOM_GOLD_PICKUP_RADIUS = 42; // pickup distance (px)
+const RANDOM_GOLD_SPAWN_INTERVAL_MS = 3200; // one new pickup this often
+const COLLECTION_EVENT_RETENTION_MS = 1800; // "+gold" events kept in snapshots this long
 
 function cloneLayoutObject(def = {}) {
   return JSON.parse(JSON.stringify(def || {}));

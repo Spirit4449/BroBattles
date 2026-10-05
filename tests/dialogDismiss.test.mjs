@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { wireBackdropDismiss, wireOutsideDismiss } from '../src/site/dialogDismiss.mjs';
+import { wireBackdropDismiss, wireOutsideDismiss } from '../src/client/site/dialogDismiss.mjs';
 function setup() {
   const handlers={};let closed=0;
   const dialog={addEventListener:(name,fn)=>handlers[name]=fn,getBoundingClientRect:()=>({left:100,right:500,top:100,bottom:500}),close:()=>closed++};

@@ -6,7 +6,7 @@ const babel = require("@babel/core");
 
 const exportsObject = {};
 const { code } = babel.transformSync(
-  fs.readFileSync(require.resolve("../src/powerups/deathLootEffects.js"), "utf8"),
+  fs.readFileSync(require.resolve("../src/client/game/powerups/deathLootEffects.js"), "utf8"),
   { babelrc: false, configFile: false,
     presets: [["@babel/preset-env", { targets: { node: "current" } }]] },
 );

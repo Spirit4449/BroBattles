@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { appendPartyChatLog, recordPartyRoster, getPartyChatLogs } = require('../src/server/services/partyChatLog');
+const { appendPartyChatLog, recordPartyRoster, getPartyChatLogs } = require('../src/server/services/party/partyChatLog');
 function fixture() {
   const events = [];
   const io = { to: room => ({emit: (name, data) => events.push({room,name,data})}) };

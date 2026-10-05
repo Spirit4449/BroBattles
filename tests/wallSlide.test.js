@@ -1,11 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const tuning = require('../src/shared/movementPhysics.json');
+const tuning = require('../src/shared/physics/movementPhysics.json');
 const {
   resolveWallContact,
   applyWallSlide,
   resolveWallSlideFlipX,
-} = require('../src/players/wallMovement');
+} = require('../src/client/game/players/wallMovement');
 
 function localSlide(overrides = {}) {
   const player = {
@@ -62,7 +62,7 @@ function contact({ side = 'right', upPress = false, spacePress = false, away = f
     checkCollision: { left: solid, right: solid },
   } }] }, wallSlideVerticalPadding: 6, wallSlideSnapDistance: tuning.wallSlideSnapDistance,
     wallJumpHorizontalGracePx: tuning.wallJumpHorizontalGracePx, wallJumpPressBufferMs: 120,
-    wallContactGraceMs: tuning.wallContactGraceMs, wallSlideReentryDelayMs: tuning.wallSlideReentryDelayMs,
+    wallSlideReentryDelayMs: tuning.wallSlideReentryDelayMs,
     cursors: { up: { isDown: upPress } }, keyW: { isDown: false },
     leftKey: away && side === 'right', rightKey: away && side === 'left',
     directionalUpFreshPress: upPress, jumpButtonFreshPress: spacePress, upKeyFreshPress: false };

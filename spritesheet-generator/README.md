@@ -2,6 +2,8 @@
 
 A local sprite editor and CLI sharing the same persistent project engine. Use it to inspect existing characters, prepare AI-generated frames, clean up motion, and export standard atlases. It does not regenerate art or modify live game assets.
 
+See the [repository art workflow](../docs/art/README.md) for installing and validating game assets.
+
 ## Run
 
 Requires Node.js 18+; install dependencies with `npm install` in this directory. FFmpeg on PATH is needed only for video import. Image import, animated WebP reviews, and export work without it.

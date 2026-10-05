@@ -2,7 +2,7 @@ const {
   resolveMatchModeId,
   buildPerformanceMaxima,
   calculateTrophyDelta,
-} = require("../../helpers/trophySystem");
+} = require("../../services/trophies/trophySystem");
 
 function ensureRewardBucket(room, playerData) {
   if (!playerData || !playerData.name) return null;
@@ -45,7 +45,7 @@ async function distributeMatchRewards(room, winnerTeam) {
     if (committed[0]) return typeof committed[0].summary === "string" ? JSON.parse(committed[0].summary) : committed[0].summary;
     if (!matches[0] || matches[0].status !== "live") throw new Error("Match is not eligible for rewards");
     const summary = await applyMatchRewards(room, winnerTeam, q);
-    await require("../../helpers/battleLog").recordMatchOutcome({ runQuery: q, strictResults: true }, room, winnerTeam, summary);
+    await require("../../services/match/battleLog").recordMatchOutcome({ runQuery: q, strictResults: true }, room, winnerTeam, summary);
     await q("INSERT INTO match_reward_commits (match_id, summary) VALUES (?, ?)", [room.matchId, JSON.stringify(summary)]);
     await q("UPDATE parties p JOIN match_participants mp ON mp.party_id = p.party_id SET p.status = 'idle' WHERE mp.match_id = ?", [room.matchId]);
     return summary;

@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {makeRoom}=require('./helpers/botRoom');
 const combat=require('../src/server/core/gameRoom/ninjaCombat');
-const model=require('../src/shared/ninjaProjectile');
+const model=require('../src/shared/characters/ninjaProjectile');
 function fixture(t,isBot=false){
   const f=makeRoom({characters:['ninja','wizard']});t.after(()=>f.room.cleanup());
   const [p,target]=f.players;Object.assign(p,{x:100,y:200,isBot,connected:true});

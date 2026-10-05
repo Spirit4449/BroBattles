@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { escapeHtml, assetUrl } = require("../src/shared/html.cjs");
+const { escapeHtml, assetUrl } = require("../src/shared/site/html.cjs");
 
 test("HTML text and quoted attributes preserve text without creating markup", () => {
   assert.equal(escapeHtml(`<img src=x onerror="alert('x')">&`), "&lt;img src=x onerror=&quot;alert(&#39;x&#39;)&quot;&gt;&amp;");

@@ -1,4 +1,5 @@
-const { getParticipant, participantId } = require('../participants');
+const { getParticipant } = require('../participants');
+const { attackIdentity } = require('./attackIdentity');
 const { resolvePositiveNumber, cubic, sweptCircleOverlapsRect } = require('./geometry');
 const { hitCircleTargets } = require('./targets');
 
@@ -51,13 +52,7 @@ function buildReturningProjectileAttack(
   const bulgeUp = Math.abs(ctrl2YOffset);
 
   return {
-    descriptorKey: String(actionData?.type || "").toLowerCase(),
-    runtimeKind: String(runtime.kind || "").toLowerCase(),
-    createdAt: now,
-    attackerParticipantId: participantId(playerData),
-    attackerName: playerData.name,
-    attackType: String(descriptor?.attackType || "basic").toLowerCase(),
-    instanceId: String(actionData?.id || `${playerData.name}:${now}`),
+    ...attackIdentity(playerData, actionData, descriptor, now),
     direction,
     angle,
     x: resolvedStartX,

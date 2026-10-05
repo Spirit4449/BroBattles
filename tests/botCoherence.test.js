@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
-const { getDuelGeometry } = require('../src/shared/duelGeometry');
+const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
 const { buildGraph, findRoute, standOn, safeWalkDirection, walkLimits, canStandAt } = require('../src/server/core/bots/navigation');
 const { stepBody } = require('../src/server/core/bots/physics');
 const { difficultyForTrophies } = require('../src/server/core/bots/config');

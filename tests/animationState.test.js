@@ -13,7 +13,7 @@ function load(file, dependencies = {}) {
   vm.runInNewContext(code, { exports, require: key => dependencies[key] || {} });
   return exports;
 }
-const animation = load('../src/characters/shared/animationState');
+const animation = load('../src/client/game/characters/shared/animationState');
 
 test('animation locks include the base interval and per-frame additions', () => {
   const duration = anim => animation.getAnimationDurationMs({ anims: { get: () => anim } }, 'cast');
@@ -51,15 +51,15 @@ test('remote death wins over residual velocity and dash snapshots reset landed j
   assert.equal(sprite._bbAnimationState.restartJump, false);
 });
 
-const registry = load('../src/characters/index', {
+const registry = load('../src/client/game/characters/index', {
   './manifest': { __esModule: true, default: [{ key: 'ninja', setupAnimations() {} }] },
-  '../lib/skinAssets.js': {
+  '../../views/skinAssets.js': {
     normalizeSkinId: value => value === 'default' ? '' : value || '',
     buildCharacterSkinTextureKey: (char, skin) => `${char}__${skin}`,
   },
-  '../shared/characters/index.js': { characterFrames: {}, characterPresentation: () => ({}) },
-  '../shared/ducking.js': { DUCK_FRAME_CELLS: {} },
-  '../shared/movementPhysics.json': require('../src/shared/movementPhysics.json'),
+  '../../../shared/characters/index.js': { characterFrames: {}, characterPresentation: () => ({}) },
+  '../../../shared/physics/ducking.js': { DUCK_FRAME_CELLS: {} },
+  '../../../shared/physics/movementPhysics.json': require('../src/shared/physics/movementPhysics.json'),
 });
 
 test('qualified animation requests resolve on the selected skin before its idle fallback', () => {

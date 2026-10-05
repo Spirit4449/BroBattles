@@ -5,18 +5,18 @@ const vm = require('node:vm');
 const babel = require('@babel/core');
 const Frame = require('phaser/src/textures/Frame');
 const Body = require('phaser/src/physics/arcade/Body');
-const { characterBody } = require('../src/shared/duelGeometry');
-const { spritePresentation } = require('../src/characters/shared/spritePresentation');
-const { DUCK_HEIGHT_RATIO } = require('../src/shared/ducking');
+const { characterBody } = require('../src/shared/physics/duelGeometry');
+const { spritePresentation } = require('../src/client/game/characters/shared/spritePresentation');
+const { DUCK_HEIGHT_RATIO } = require('../src/shared/physics/ducking');
 const { characterDefinitions } = require('../src/shared/characters');
 
 const api = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/players/RemotePlayer'), 'utf8'), {
+vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/players/RemotePlayer'), 'utf8'), {
   babelrc: false, configFile: false,
   presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-}).code, { exports: api, require: id => id === '../shared/ducking.js'
+}).code, { exports: api, require: id => id === '../../../shared/physics/ducking.js'
   ? { DUCK_HEIGHT_RATIO }
-  : id === '../shared/characters/index.js' ? require('../src/shared/characters')
+  : id === '../../../shared/characters/index.js' ? require('../src/shared/characters')
   : { playDuckTransitionSound() {} } });
 
 const close = (a, b, label) => assert.ok(Math.abs(a - b) < 1e-6, `${label}: ${a} != ${b}`);

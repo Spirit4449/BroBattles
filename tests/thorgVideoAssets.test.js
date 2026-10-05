@@ -6,12 +6,12 @@ const { createHash } = require('node:crypto');
 const babel = require('@babel/core');
 const atlas = require('../public/assets/thorg/animations.json');
 const dependencies = {
-  '../shared/animationBuilder': require('../src/characters/shared/animationBuilder'),
-  '../../shared/thorgSweep': require('../src/shared/thorgSweep'),
-  '../../shared/movementPhysics.json': require('../src/shared/movementPhysics.json'),
+  '../shared/animationBuilder': require('../src/client/game/characters/shared/animationBuilder'),
+  '../../../../shared/characters/thorgSweep': require('../src/shared/characters/thorgSweep'),
+  '../../../../shared/physics/movementPhysics.json': require('../src/shared/physics/movementPhysics.json'),
 };
 const exportsObject = {};
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/characters/thorg/anim'), 'utf8'), {
+vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/thorg/anim'), 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 }).code, { exports: exportsObject, require: key => dependencies[key] });
 
@@ -78,7 +78,7 @@ test('replacement attack uses the new clip and omits long idle and extended-pose
   assert.deepEqual(frames.map(f => f.sourceFrame), [
     10, 11, 12, 14, 16, 18, 19, 20, 22, 40, 43, 46,
   ]);
-  const track = require('../src/shared/thorgAttackFrames.json');
+  const track = require('../src/shared/characters/thorgAttackFrames.json');
   assert.deepEqual(track.map(f => f.sourceFrame), frames.map(f => f.sourceFrame));
 });
 
@@ -146,7 +146,7 @@ test('three directional dash poses cover one complete dash without looping', () 
     assert.equal(animation.frames.length, 3);
     assert.equal(animation.repeat, 0);
     assert.equal(1000 * animation.frames.length / animation.frameRate,
-      dependencies['../../shared/movementPhysics.json'].dashDurationMs);
+      dependencies['../../../../shared/physics/movementPhysics.json'].dashDurationMs);
     assert.ok(atlas.frames.filter(f => f.filename.startsWith(name))
       .every(f => f.sourceVideo === `thorg_dash_${source}.mp4`));
   }
@@ -154,7 +154,7 @@ test('three directional dash poses cover one complete dash without looping', () 
 
 test('local and remote Thorg playback map all eight directions, including downward exceptions', () => {
   const api = {};
-  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/characters/shared/animationState'), 'utf8'), {
+  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/animationState'), 'utf8'), {
     babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code, { exports: api });
   for (const [x, y, expected] of [[1, 0, 'dashright'], [-1, 0, 'dashright'],
@@ -181,7 +181,7 @@ test('local and remote Thorg playback map all eight directions, including downwa
 test('horizontal dash holds its final pose through early coast and yields immediately to other actions', () => {
   let now = 1000;
   const api = {};
-  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/characters/shared/animationState'), 'utf8'), {
+  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/animationState'), 'utf8'), {
     babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code, { exports: api, Date: { now: () => now } });
   for (const remote of [false, true]) {

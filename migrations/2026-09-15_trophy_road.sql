@@ -1,4 +1,4 @@
--- Apply with scripts/apply-trophy-road-migration.cjs (safe to re-run).
+-- Apply with scripts/db/apply-migration.cjs trophy-road (safe to re-run).
 -- Keep historical claim receipts and balances. Only new non-currency rewards
 -- are backfilled for milestones claimed on the old road.
 UPDATE users u LEFT JOIN (

@@ -24,7 +24,7 @@ const {
   getDuelGeometry,
   characterBody,
   spawnForParticipant,
-} = require("../src/shared/duelGeometry");
+} = require("../src/shared/physics/duelGeometry");
 const {
   buildGraph,
   findRoute,

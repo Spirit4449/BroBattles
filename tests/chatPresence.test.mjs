@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPartyPresenceTracker, countOnlineMembers } from '../src/chat/partyPresence.mjs';
+import { createPartyPresenceTracker, countOnlineMembers } from '../src/client/chat/partyPresence.mjs';
 
 test('offline update immediately reduces the count without waiting for shared lobby state', () => {
   const initial = {partyId:7, members:[{name:'Alice',status:'online'},{name:'Bob',status:'ready'}]};

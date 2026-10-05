@@ -1,5 +1,5 @@
-const { appendPartyChatLog } = require("../../services/partyChatLog");
-const { deleteMatchBots } = require("../../services/matchRosterService");
+const { appendPartyChatLog } = require("../../services/party/partyChatLog");
+const { deleteMatchBots } = require("../../services/match/matchRosterService");
 const { ALL_DEAD_GAME_OVER_DELAY_MS } = require("../gameRoomConfig");
 const effectManager = require("./effects/effectManager");
 const {
@@ -310,6 +310,8 @@ async function finishGame(room, winnerTeam, meta = {}) {
 
   if (rewardsPending && room.matchResults) {
     const retry = async () => {
+      room._resultRetry = null;
+      if (room._disposed) return;
       try {
         await room.matchResults.complete(room, winnerTeam);
         room._resultPending = false;
@@ -325,12 +327,14 @@ async function finishGame(room, winnerTeam, meta = {}) {
     return;
   }
 
-  setTimeout(() => {
+  room._finishCleanupTimer = setTimeout(() => {
+    room._finishCleanupTimer = null;
     try {
       if (room.onFinished) room.onFinished();
       else room.cleanup();
     } catch (_) {}
   }, 15000);
+  room._finishCleanupTimer.unref?.();
 }
 
 module.exports = {

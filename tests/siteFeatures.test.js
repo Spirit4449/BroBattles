@@ -1,11 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateSubmission,createSiteSupportService }=require('../src/server/services/siteSupportService');
-const { article,frame,registerSitePages }=require('../src/server/services/siteContent');
+const { validateSubmission,createSiteSupportService }=require('../src/server/services/site/siteSupportService');
+const { article,frame,registerSitePages }=require('../src/server/services/site/siteContent');
 const { accepted,isSameOrigin }=require('../src/server/routes/modules/siteRoutes');
-const { completeSignupFromGuest }=require('../src/server/services/authAccountService');
-const config=require('../src/shared/siteConfig.json');
-const {createHelpSearchService,helpSearchDocuments,MODEL}=require('../src/server/services/helpSearchService');
+const { completeSignupFromGuest }=require('../src/server/services/auth/authAccountService');
+const config=require('../src/shared/site/siteConfig.json');
+const {createHelpSearchService,helpSearchDocuments,MODEL}=require('../src/server/services/site/helpSearchService');
 const valid={subject:'A useful idea',category:'idea',message:'Please add a new arena.',submissionKey:'12345678-1234-1234-1234-123456789012'};
 test('support input rejects malformed, oversized, or unknown values',()=>{
   assert.equal(validateSubmission(valid).body,valid.message);
@@ -79,7 +79,7 @@ test('public page routes register without authentication and return HTML without
   let status;routes.get('/news/:slug')({params:{slug:'missing'},path:'/news/missing'},{status:code=>{status=code;return {send(){}};}});assert.equal(status,404);
 });
 test('browser settings clamp values and preserve defaults with malformed storage',async()=>{
-  const {normalizeSettings,DEFAULT_SETTINGS,GRAPHICS_OPTIONS,graphicsRenderScale}=await import('../src/site/preferences.js');
+  const {normalizeSettings,DEFAULT_SETTINGS,GRAPHICS_OPTIONS,graphicsRenderScale}=await import('../src/client/site/preferences.js');
   assert.deepEqual(normalizeSettings(null),{...DEFAULT_SETTINGS});assert.deepEqual(normalizeSettings({sensitivity:100,sfx:-1,music:NaN,streamer:'yes'}),{...DEFAULT_SETTINGS,sensitivity:3,sfx:0});
   assert.deepEqual(GRAPHICS_OPTIONS.map(option=>[option.value,graphicsRenderScale(option.value)]),[
     ['low',0.5],['medium',1],['high',Math.SQRT2],['super-high',2],

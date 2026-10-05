@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { welcomeEmail } = require('../src/server/services/marketingService');
+const { welcomeEmail } = require('../src/server/services/email/marketingService');
 
 test('welcome marketing email uses the branded email frame and compliance links', () => {
   const previousBaseUrl = process.env.PUBLIC_BASE_URL;
@@ -27,7 +27,7 @@ test('welcome marketing email uses the branded email frame and compliance links'
 });
 
 test('Broadcast opt-outs cancel pending welcome mail and update local preferences',async()=>{
-  const {readSubscription}=require('../src/server/services/marketingService');
+  const {readSubscription}=require('../src/server/services/email/marketingService');
   const originalFetch=global.fetch,previousKey=process.env.RESEND_MARKETING_API_KEY;
   process.env.RESEND_MARKETING_API_KEY='test-key';
   const queries=[];
@@ -42,7 +42,7 @@ test('Broadcast opt-outs cancel pending welcome mail and update local preference
 });
 
 test('an explicit local subscription change waits to sync before checking provider state',async()=>{
-  const {readSubscription}=require('../src/server/services/marketingService');
+  const {readSubscription}=require('../src/server/services/email/marketingService');
   const previousKey=process.env.RESEND_MARKETING_API_KEY,originalFetch=global.fetch;
   process.env.RESEND_MARKETING_API_KEY='test-key';
   try{

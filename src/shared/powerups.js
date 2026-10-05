@@ -1,4 +1,4 @@
-const POWERUP_CATALOG = require('./powerups.catalog.json');
+const POWERUP_CATALOG = require('./catalogs/powerups.catalog.json');
 // Applies to powerups, death drops, and Bank Bust gold after they become active.
 const PICKUP_DELAY_MS = 500;
 const POWERUP_TYPES = Object.keys(POWERUP_CATALOG);

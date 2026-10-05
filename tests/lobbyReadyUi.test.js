@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../src/party.js'), 'utf8');
+const source = fs.readFileSync(require.resolve('../src/client/lobby/party/party.js'), 'utf8');
 const toggleSource = source.slice(source.indexOf('export function initReadyToggle()'), source.indexOf('function getCurrentPartyMember()')).replace('export ', '');
 const selfSource = source.slice(source.indexOf('function setSelfReadyState('), source.indexOf('function collectCurrentPartyMembers('));
 const buttonSource = source.slice(source.indexOf('function setReadyButtonState('), source.indexOf('export function getPartyInteractionContext('));

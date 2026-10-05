@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 
-const playerSource = fs.readFileSync("src/player.js", "utf8");
+const playerSource = fs.readFileSync("src/client/game/players/localPlayer.js", "utf8");
 
 test("inactive controls keep the local HUD attached to the physics body", () => {
   const inactiveBranch = playerSource.slice(

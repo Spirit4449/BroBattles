@@ -39,7 +39,7 @@ for (const mode of ['development', 'production']) {
           'entry and lazy bundles must be valid JavaScript after lifetime wrapping');
       }
       const html = await fs.readFile(path.join(directory, 'dist/game.html'), 'utf8');
-      const source = await fs.readFile(require.resolve('../src/navigation/preload.js'), 'utf8');
+      const source = await fs.readFile(require.resolve('../src/client/navigation/preload.js'), 'utf8');
       const { getTemplateResources } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
       const urls = getTemplateResources(html);
       assert.equal(urls.length, 3);

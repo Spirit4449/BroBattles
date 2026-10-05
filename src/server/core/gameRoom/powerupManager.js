@@ -12,22 +12,20 @@ const {
   POWERUP_OMEN_MS,
   POWERUP_SPAWN_Y_LIFT,
   POWERUP_TYPE_ROTATION,
-  POWERUP_PLATFORM_POINTS,
 } = require("../gameRoomConfig");
+const { getDuelGeometry } = require("../../../shared/physics/duelGeometry");
+const { resolvePowerupPoints } = require("../../../shared/maps/mapDocument");
 const effectManager = require("./effects/effectManager");
 const { effectDefs } = require("./effects/effectDefs");
 
+// Spawn points come from the map document (`spawns.powerups`, edited in the
+// map editor). Rooms without map geometry fall back to the shipped map file.
 function getPlatformSpawnPoints(room) {
-  if (room.geometry?.spawns?.powerups) return require("../../../shared/mapDocument").resolvePowerupPoints(room.geometry);
-  const mapId = Number(room.matchData?.map) || 1;
-  const raw = room.geometry?.spawns?.powerups || POWERUP_PLATFORM_POINTS[mapId] || POWERUP_PLATFORM_POINTS[1];
-  const points =
-    Array.isArray(raw) && raw.length ? raw : POWERUP_PLATFORM_POINTS[1];
-  return points
-    .map((p) => ({
-      x: Number(p?.x),
-      y: Number(p?.y),
-    }))
+  const geometry = room.geometry?.spawns?.powerups
+    ? room.geometry
+    : getDuelGeometry(Number(room.matchData?.map) || 1) || getDuelGeometry(1);
+  return resolvePowerupPoints(geometry)
+    .map((p) => ({ ...p, x: Number(p?.x), y: Number(p?.y) }))
     .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
 }
 
@@ -180,7 +178,7 @@ function spawnPowerup(room) {
 }
 
 function computePoisonY(room, sdElapsedMs) {
-  const worldBottomY = room.geometry?.world ? room.geometry.world.y + room.geometry.world.height : Number(WORLD_BOUNDS.height) || 1000;
+  const worldBottomY = room.geometry?.world ? room.geometry.world.y + room.geometry.world.height : WORLD_BOUNDS.height;
   const earlySec = Math.min(sdElapsedMs, SD_RISE_FAST_PHASE_MS) / 1000;
   const lateSec = Math.max(0, sdElapsedMs - SD_RISE_FAST_PHASE_MS) / 1000;
   const rise =

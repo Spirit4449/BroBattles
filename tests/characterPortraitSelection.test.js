@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const controller = fs.readFileSync('src/lobby/characterSelectController.js', 'utf8');
-const portraitSource = fs.readFileSync('src/lib/bodyPortraitAssets.js', 'utf8');
+const controller = fs.readFileSync('src/client/lobby/profile/characterSelectController.js', 'utf8');
+const portraitSource = fs.readFileSync('src/client/views/bodyPortraitAssets.js', 'utf8');
 function loadFunction(name, context) {
   const start = controller.indexOf(`function ${name}(`);
   const end = controller.indexOf('\n}', start) + 2;
@@ -26,7 +26,7 @@ test('detail previews resolve current bundled Gloop body for base and skin', () 
   assert.equal(preview('gloop','gloop-amethyst'),'bundled:amethyst');
 });
 test('bundled portrait imports exist and cover all catalog bodies', () => {
-  const catalog = require('../src/shared/skinsCatalog.json');
+  const catalog = require('../src/shared/catalogs/skinsCatalog.json');
   for (const entry of Object.values(catalog.characters)) for (const skin of entry.skins) {
     assert.ok(portraitSource.includes(`public${skin.assetUrl}?portrait`),skin.id);
     assert.ok(fs.existsSync(`public${skin.assetUrl}`),skin.id);
@@ -34,7 +34,7 @@ test('bundled portrait imports exist and cover all catalog bodies', () => {
 });
 
 test('framed skin portrait keeps the original rim, backdrop and embedded body', async () => {
-  const { BRO_PORTRAIT_PALETTES, buildBroPortraitSvg } = await import('../src/lib/broPortrait.mjs');
+  const { BRO_PORTRAIT_PALETTES, buildBroPortraitSvg } = await import('../src/client/views/broPortrait.mjs');
   const source = portraitSource.replace(/^import .*;\n/gm, '').replaceAll('export function', 'function');
   const context = { BRO_PORTRAIT_PALETTES, buildBroPortraitSvg };
   for (let i = 0; i < 10; i++) context[`body${i}`] = `data:image/webp;base64,body${i}`;

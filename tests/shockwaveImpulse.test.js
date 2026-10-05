@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { resolveShockwaveImpulse } = require('../src/shared/shockwaveImpulse');
+const { resolveShockwaveImpulse } = require('../src/shared/physics/shockwaveImpulse');
 const { applyImpulse, stepBody } = require('../src/server/core/bots/physics');
 
 test('floor, wall, ceiling and corner contacts redirect blocked blast force', () => {
@@ -33,12 +33,12 @@ test('local shockwave handler lifts grounded players and removes speed caps imme
   const vm = require('node:vm');
   const babel = require('@babel/core');
   const exports = {};
-  const code = babel.transformSync(fs.readFileSync(require.resolve('../src/players/localSocketEvents'), 'utf8'), {
+  const code = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/players/localSocketEvents'), 'utf8'), {
     babelrc: false, configFile: false,
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code;
   vm.runInNewContext(code, { exports, require: name => name.includes('shockwaveImpulse')
-    ? require('../src/shared/shockwaveImpulse') : {}, window: {} });
+    ? require('../src/shared/physics/shockwaveImpulse') : {}, window: {} });
   const handlers = {};
   const player = {
     body: { blocked: { down: true }, touching: {} }, _jumpLaunch: {},

@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const babel = require('@babel/core');
 
 test('email settings request is made only for a confirmed member profile', async () => {
-  const source = babel.transformSync(fs.readFileSync('src/lib/emailSettings.js', 'utf8'), {
+  const source = babel.transformSync(fs.readFileSync('src/client/account/emailSettings.js', 'utf8'), {
     babelrc: false, configFile: false,
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code;
@@ -34,7 +34,7 @@ test('email settings request is made only for a confirmed member profile', async
 });
 
 test('preference feedback uses modal Sonner and Escape leaves the underlying profile alone', async () => {
-  const source = babel.transformSync(fs.readFileSync('src/lib/emailSettings.js', 'utf8'), {
+  const source = babel.transformSync(fs.readFileSync('src/client/account/emailSettings.js', 'utf8'), {
     babelrc: false, configFile: false,
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code;

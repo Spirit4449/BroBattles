@@ -22,7 +22,7 @@ function fixture({ ready = false, idle = true } = {}) {
     },
     console: { warn: (...args) => errors.push(args) },
   });
-  vm.runInContext(fs.readFileSync(require.resolve('../src/lobby/deferredSetup.js'), 'utf8').replace(/^export /gm, ''), context);
+  vm.runInContext(fs.readFileSync(require.resolve('../src/client/lobby/deferredSetup.js'), 'utf8').replace(/^export /gm, ''), context);
   function step(queue) {
     const entry = queue.entries().next().value;
     if (!entry) return;
@@ -108,7 +108,7 @@ test('failed initialization can retry; failed optional tasks do not block later 
 });
 
 test('lobby bootstrap defers optional requests and retains fresh on-open settings', () => {
-  const source = fs.readFileSync(require.resolve('../src/index.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../src/client/pages/lobby.js'), 'utf8');
   const deferred = source.slice(source.indexOf('  deferLobbySetup(['), source.indexOf('  const initialCharClass'));
   assert.match(deferred, /ensureProfilePopup\(\)/);
   assert.match(deferred, /ensureShop/);
@@ -117,13 +117,14 @@ test('lobby bootstrap defers optional requests and retains fresh on-open setting
   assert.match(deferred, /get\('profile'\) === 'self'/);
   const bootstrap = source.slice(source.indexOf('document.addEventListener("DOMContentLoaded", async () => {'));
   assert.doesNotMatch(bootstrap, /await loadPartySettings\(\)/);
-  assert.match(source, /async function openPartySettingsOverlay\(\)[\s\S]*?await loadPartySettings\(\)/);
+  const overlays = fs.readFileSync(require.resolve('../src/client/lobby/party/partyOverlays.js'), 'utf8');
+  assert.match(overlays, /async function openPartySettingsOverlay\(\)[\s\S]*?await loadPartySettings\(\)/);
   assert.match(source, /open: \(\.\.\.args\) => ensureShop\(\)\.open\(\.\.\.args\)/);
   assert.match(source, /open: \(\.\.\.args\) => ensureProfilePopup\(\)\?\.open\(\.\.\.args\)/);
 });
 
 test('actual menu wiring supports early clicks, deferred profile deep links, and wallet updates', () => {
-  const source = fs.readFileSync(require.resolve('../src/index.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../src/client/pages/lobby.js'), 'utf8');
   const wiring = source.slice(source.indexOf('  const ensureProfilePopup ='), source.indexOf('  const initialCharClass'));
   const f = fixture();
   const button = () => ({ addEventListener(_, callback) { this.click = callback; } });
@@ -141,7 +142,7 @@ test('actual menu wiring supports early clicks, deferred profile deep links, and
     set __lobbyProfilePopup(value) { wiredProfile = value; },
     profileController: { updateWallet: () => calls.push('wallet'), invalidate() {} },
     shopButton, usernameButton, coinResourceButton: button(), gemResourceButton: button(),
-    document: { getElementById: () => button() }, userData, guest: true, coinCount, gemCount,
+    document: { getElementById: () => button() }, userData, guest: true, newGuestCreated: false, existingPartyId: null, coinCount, gemCount,
     URL, URLSearchParams, location,
     history: { replaceState: (_, __, url) => { location.href = new URL(url, location).href; } },
     refreshTrophyClaimAvailability: () => calls.push('trophies'),

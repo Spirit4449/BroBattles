@@ -4,12 +4,19 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const code = require('@babel/core').transformSync(
-  fs.readFileSync('src/characters/wizard/effects.js', 'utf8'),
+  fs.readFileSync('src/client/game/characters/wizard/effects.js', 'utf8'),
   { babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]] },
 ).code;
+const { POWERUP_CATALOG } = require('../src/shared/powerups');
+const stubs = {
+  '../../../../shared/characters/characterTuning.js': require('../src/shared/characters/characterTuning.js'),
+  '../../powerups/powerupConfig': {
+    POWERUP_COLORS: Object.fromEntries(Object.entries(POWERUP_CATALOG).map(([key, entry]) => [key, entry.color])),
+  },
+};
 function setup() {
   const api = {}, objects = [], tweens = [];
-  vm.runInNewContext(code, { exports: api, require: () => ({}) });
+  vm.runInNewContext(code, { exports: api, require: id => stubs[id] || {} });
   function object() {
     const item = { calls: [], active: true, destroy() { this.active = false; } };
     for (const key of ['setDepth', 'setBlendMode', 'setDisplaySize', 'setOrigin', 'setAlpha', 'fillStyle', 'fillRect', 'clear', 'lineStyle', 'lineBetween', 'fillCircle', 'strokeCircle']) item[key] = (...args) => { item.calls.push({ key, args }); return item; };

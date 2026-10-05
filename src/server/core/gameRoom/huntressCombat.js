@@ -1,8 +1,8 @@
 const { exposeDamageHitbox } = require('./damageHitboxes');
 const { randomUUID } = require('node:crypto');
-const model = require('../../../shared/huntressProjectile');
+const model = require('../../../shared/characters/huntressProjectile');
 const { participantId, getParticipant } = require('./participants');
-const { characterBody } = require('../../../shared/duelGeometry');
+const { characterBody } = require('../../../shared/physics/duelGeometry');
 
 function initialize(room) {
   // Protocol version protects joins from stale clients; combat is always authoritative.

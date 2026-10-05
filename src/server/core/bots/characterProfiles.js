@@ -2,7 +2,7 @@
 // shared character definitions; this table holds only how a bot *plays* each
 // kit. Adding a character means adding one entry here (content validation
 // fails until it exists).
-const { DEFAULT_CHARACTER } = require('../../../shared/characterStats.js');
+const { DEFAULT_CHARACTER } = require('../../../shared/characters/characterStats.js');
 const effects = require('../gameRoom/effects/effectManager');
 
 const healthFraction = (player) =>
@@ -96,7 +96,7 @@ const PROFILES = {
     lobLimited: true,
     serverOwnsAmmo: () => true,
     decorateBasicAction(action) {
-      action.power = require('../../../shared/huntressProjectile').powerFromSpeed(action.angle, action.speed);
+      action.power = require('../../../shared/characters/huntressProjectile').powerFromSpeed(action.angle, action.speed);
     },
     // Her three-arrow spread is already forgiving, so give opponents a
     // readable punish window instead of chaining every available charge.

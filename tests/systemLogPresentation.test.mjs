@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { systemLogBody, formatSystemLogTime } from '../src/chat/systemLog.mjs';
+import { systemLogBody, formatSystemLogTime } from '../src/client/chat/systemLog.mjs';
 test('battle result follows the viewer rather than a party-wide team label', () => {
  const event={kind:'battle',winnerTeam:'team1',participants:[{name:'Alice',team:'team1'},{name:'Bob',team:'team2'}]};
  assert.equal(systemLogBody(event,'alice'),'Battle ended. You won');

@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSnapshotBuffer, getRenderClockCorrection, getDeliveryClockCorrection } from "../src/match/snapshotBuffer.js";
-import { sampleRemoteFrame, readNetworkExperiments, followRemotePosition } from "../src/gameScene/remoteSmoothing.js";
+import { createSnapshotBuffer, getRenderClockCorrection, getDeliveryClockCorrection } from "../src/client/game/match/snapshotBuffer.js";
+import { sampleRemoteFrame, readNetworkExperiments, followRemotePosition } from "../src/client/game/scene/remoteSmoothing.js";
 import roomState from "../src/server/core/gameRoom/roomStateManager.js";
-import roomModule from "../src/server/core/gameRoom.js";
+import roomModule from "../src/server/core/gameRoom/index.js";
 
 const packet = (seq, time, extra = {}) => ({
   snapshotEpoch: "room-a", snapshotSeq: seq, tickId: Math.floor(time / (1000 / 60)),

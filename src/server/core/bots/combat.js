@@ -1,10 +1,12 @@
-const { getResolvedCharacterAttackConfig, getResolvedCharacterAimConfig, getResolvedCharacterSpecialAimConfig, getResolvedCharacterSpecialConfig } = require("../../../shared/characterTuning.js");
+const { getResolvedCharacterAttackConfig, getResolvedCharacterAimConfig, getResolvedCharacterSpecialAimConfig } = require("../../../shared/characters/characterTuning.js");
 const { getResolvedAttackDescriptor } = require("../gameRoom/attackDescriptorResolver");
 const attackRuntime = require("../gameRoom/attackRuntimeManager");
 const { characterDefinitions } = require('../../../shared/characters');
-const { characterBody } = require('../../../shared/duelGeometry');
+const { characterBody } = require('../../../shared/physics/duelGeometry');
 const attackTypes = Object.fromEntries(Object.values(characterDefinitions).map(definition => [definition.key, definition.basicAction]));
 const { botProfile, DEFAULT_SPECIAL_LOCK_MS, DEFAULT_SPECIAL_RANGE } = require('./characterProfiles');
+const { FIXED_DT_MS } = require('../../../shared/gameConstants');
+const ninjaModel = require('../../../shared/characters/ninjaProjectile');
 const BOT_ATTACK_TO_SUPER_COOLDOWN_MS = 400;
 
 function interceptTime(dx, dy, vx, vy, speed) {
@@ -150,14 +152,14 @@ function basicAim(player, target, profile, random, room) {
   let speedAtAngle = ballistic?.powerScaled ? huntressSpeed(distanceRatio) : null;
   let solution;
   if (ballistic) {
-    solution = projectileSolutions(player, target, runtime, startup, profile.prediction ?? 0.5, (room?.FIXED_DT_MS || 1000 / 60) / 1000, speedAtAngle)
+    solution = projectileSolutions(player, target, runtime, startup, profile.prediction ?? 0.5, (room?.FIXED_DT_MS || FIXED_DT_MS) / 1000, speedAtAngle)
       .find((shot) => !ballistic.coverCheck || clearTrajectory(room, shot, runtime.playerCollisionRadius || runtime.collisionRadius || 16));
     // A retreating target can outrun the initial distance-based choice.
     // Increase power within the same player tuning limits when necessary.
     if (!solution && speedAtAngle) {
       speedAtAngle = () => (runtime.speed || 560) * (aim.maxSpeedScale || 1.18);
       solution = projectileSolutions(player, target, runtime, startup, profile.prediction ?? 0.5,
-        (room?.FIXED_DT_MS || 1000 / 60) / 1000, speedAtAngle)
+        (room?.FIXED_DT_MS || FIXED_DT_MS) / 1000, speedAtAngle)
         .find((shot) => clearTrajectory(room, shot, runtime.playerCollisionRadius || runtime.collisionRadius || 16));
     }
   }
@@ -249,24 +251,17 @@ function requestSpecial(room, p, target, now) {
 }
 
 function startNinjaSwarm(room, p, now, aim = {}) {
-  const cfg = getResolvedCharacterSpecialConfig("ninja", "swarm") || {};
-  const count = cfg.count ?? 15, releaseMs = cfg.releaseMs ?? 36;
+  const { count, releaseMs } = ninjaModel.swarmConfig();
   const direction = aim.direction === -1 ? -1 : 1;
   const burst = ++p._botActionSeq;
   const interruptSeq = p._attackInterruptSeq || 0;
   for (let i = 0; i < count; i++) room.scheduleAction(() => {
     if (!p.isAlive || (p._attackInterruptSeq || 0) !== interruptSeq) return;
-    const spread = i - (count - 1) / 2;
-    const yOffset = spread * (cfg.yOffsetPerShard ?? 5.5);
+    const shard = ninjaModel.swarmShard(i, direction);
     const action = { type: "ninja-shuriken", id: `${p.participantId}:swarm:${burst}:${i}`, direction, angle: direction < 0 ? Math.PI : 0,
-      x: p.x + direction * ((cfg.spawnForwardBase ?? 28) + Math.abs(spread) * (cfg.spawnForwardPerShard ?? 1.6)),
-      y: p.y + (cfg.spawnYBase ?? -12) + yOffset,
-      forwardDistance: (cfg.forwardDistanceBase ?? 440) + Math.abs(spread) * (cfg.forwardDistancePerShard ?? 6),
-      outwardDuration: (cfg.outwardDurationBase ?? 330) + Math.abs(spread) * (cfg.outwardDurationPerShard ?? 8),
-      returnSpeed: cfg.returnSpeed ?? 960,
-      endYOffset: spread * (cfg.fanStrengthPerShard ?? 14),
-      ctrl1YOffset: (cfg.ctrl1YOffsetBase ?? 16) + yOffset * (cfg.ctrl1YOffsetScale ?? 0.25),
-      ctrl2YOffset: -((cfg.ctrl2YOffsetBase ?? 52) + Math.abs(spread * (cfg.fanStrengthPerShard ?? 14)) * (cfg.ctrl2YOffsetScale ?? 0.45)) };
+      x: p.x + shard.spawnOffsetX, y: p.y + shard.spawnOffsetY,
+      forwardDistance: shard.forwardDistance, outwardDuration: shard.outwardDuration, returnSpeed: shard.returnSpeed,
+      endYOffset: shard.endYOffset, ctrl1YOffset: shard.ctrl1YOffset, ctrl2YOffset: shard.ctrl2YOffset };
     attackRuntime.registerAttackFromAction(room, p, action, room._botNow || Date.now());
     const attack = room._activeAttacks.at(-1);
     if (attack?.instanceId === action.id) attack.attackType = "ninja-special-swarm";

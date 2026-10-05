@@ -1,7 +1,7 @@
 const { exposeDamageHitbox } = require('./damageHitboxes');
-const model=require('../../../shared/ninjaProjectile');
-const {sweep}=require('../../../shared/huntressProjectile');
-const {characterBody}=require('../../../shared/duelGeometry');
+const model=require('../../../shared/characters/ninjaProjectile');
+const {sweep}=require('../../../shared/characters/huntressProjectile');
+const {characterBody}=require('../../../shared/physics/duelGeometry');
 const {participantId,getParticipant}=require('./participants');
 const {timing}=require('./huntressCombat');
 function initialize(room){room.ninjaCombatVersion=model.VERSION;room._ninja={active:new Map(),pending:[],requests:new Map(),terminals:[]};}

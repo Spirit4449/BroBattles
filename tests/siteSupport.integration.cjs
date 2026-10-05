@@ -3,7 +3,7 @@ require('dotenv').config({quiet:true});
 const mysql=require('mysql2/promise');
 const fs=require('node:fs');
 const assert=require('node:assert/strict');
-const {createSiteSupportService}=require('../src/server/services/siteSupportService');
+const {createSiteSupportService}=require('../src/server/services/site/siteSupportService');
 (async()=>{
   const conn=await mysql.createConnection({host:process.env.DB_HOST||'localhost',port:Number(process.env.DB_PORT)||3306,user:process.env.DB_USER||'root',password:process.env.DB_PASSWORD||'',database:process.env.DB_NAME||'game',multipleStatements:true});
   try {

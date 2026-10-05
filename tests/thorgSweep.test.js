@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { THORG_SWEEP, THORG_ATTACK_FRAMES, thorgAttackFrameAt, sampleThorgSweep, sampleThorgHitbox } = require('../src/shared/thorgSweep');
+const { THORG_SWEEP, THORG_ATTACK_FRAMES, thorgAttackFrameAt, sampleThorgSweep, sampleThorgHitbox } = require('../src/shared/characters/thorgSweep');
 const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
 const { makeRoom } = require('./helpers/botRoom');
 const rage = require('../src/server/core/gameRoom/abilities/thorgRageAbility');

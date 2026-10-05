@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, "..");
 
 test("huntress burn tick preload points at the shipped audio asset", () => {
   const constructorSource = fs.readFileSync(
-    path.join(root, "src/characters/huntress/constructor.js"),
+    path.join(root, "src/client/game/characters/huntress/constructor.js"),
     "utf8",
   );
 

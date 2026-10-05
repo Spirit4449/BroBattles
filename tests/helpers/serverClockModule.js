@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const babel = require('@babel/core');
 
-const code = babel.transformSync(fs.readFileSync(require.resolve('../../src/match/serverClock.js'), 'utf8'), {
+const code = babel.transformSync(fs.readFileSync(require.resolve('../../src/client/game/match/serverClock.js'), 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 }).code;
 
@@ -13,7 +13,7 @@ module.exports = function loadServerClock({ performance, setTimeout = () => 0, c
   const exports = {};
   vm.runInNewContext(code, {
     exports,
-    require: name => (name.includes('huntressReplication') ? require('../../src/shared/huntressReplication') : null),
+    require: name => (name.includes('huntressReplication') ? require('../../src/shared/characters/huntressReplication') : null),
     performance, setTimeout, clearTimeout, setInterval, clearInterval,
   });
   return exports;

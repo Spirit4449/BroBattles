@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   createPartyRouteService,
-} = require("../src/server/services/partyRouteService");
+} = require("../src/server/services/party/partyRouteService");
 
 test("public parties are ranked by average trophy distance", async () => {
   const rows = [

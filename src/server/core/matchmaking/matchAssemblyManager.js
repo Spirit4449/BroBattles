@@ -1,7 +1,7 @@
-const { selectionToLegacyMode } = require("../../helpers/gameSelectionCatalog");
-const { decorateParticipant } = require("../../services/matchRosterService");
+const { selectionToLegacyMode } = require("../../services/match/gameSelectionCatalog");
+const { decorateParticipant } = require("../../services/match/matchRosterService");
 const { createBotParticipants } = require("../bots/identity");
-const { DEFAULT_CHARACTER } = require("../../../shared/characterStats.js");
+const { DEFAULT_CHARACTER } = require("../../../shared/characters/characterStats.js");
 
 async function playersForPicks(q, picks, lock = false) {
   const players = [];

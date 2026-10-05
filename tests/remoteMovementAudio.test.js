@@ -14,9 +14,9 @@ function load(path, dependencies = {}, extra = {}) {
   }, ...extra });
   return exports;
 }
-const audio = load('src/gameScene/playerAudio.js');
-const movement = load('src/gameScene/movementAudio.js', {
-  './playerAudio': audio, '../shared/terrainAudio.json': require('../src/shared/terrainAudio.json'),
+const audio = load('src/client/game/audio/playerAudio.js');
+const movement = load('src/client/game/audio/movementAudio.js', {
+  './playerAudio': audio, '../../../shared/physics/terrainAudio.json': require('../src/shared/physics/terrainAudio.json'),
 });
 function fixture() {
   let time = 0;
@@ -34,10 +34,10 @@ function fixture() {
         }; sounds.push(sound); return sound;
       } },
   };
-  const module = load('src/gameScene/remoteMovementAudio.js', {
+  const module = load('src/client/game/audio/remoteMovementAudio.js', {
     './playerAudio': audio, './movementAudio': movement,
-    '../shared/movementPhysics.json': require('../src/shared/movementPhysics.json'),
-    '../effects': { MOVEMENT_VFX_CONFIG: { fastFallMaxVelocity: 760, runSpeedReference: 260,
+    '../../../shared/physics/movementPhysics.json': require('../src/shared/physics/movementPhysics.json'),
+    '../scene/effects': { MOVEMENT_VFX_CONFIG: { fastFallMaxVelocity: 760, runSpeedReference: 260,
       landingMaxVelocity: 760, landingShockwaveMinFallPx: 150 } },
   }, { performance: { now: () => time } });
   const controller = module.createRemoteMovementAudio(scene, sprite);

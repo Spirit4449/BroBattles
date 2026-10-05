@@ -4,7 +4,7 @@ import {
   createMatchmakingClient,
   MATCHMAKING_SUCCESS_HOLD_MS,
   QUEUE_HEALTH_INTERVAL_MS,
-} from "../src/lobby/matchmakingClient.mjs";
+} from "../src/client/lobby/matchmaking/matchmakingClient.mjs";
 
 const duel = { modeId: "duels", modeVariantId: "duels-1v1", mapId: 1 };
 

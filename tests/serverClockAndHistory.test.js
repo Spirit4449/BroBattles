@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const input = require('../src/server/core/gameRoom/inputManager');
 const { resolveAttackTime } = require('../src/server/core/gameRoom/damageResolver');
 const { evaluateHitRange, getHistoricalPosition } = require('../src/server/core/gameRoom/combatValidation');
-const { HuntressReplica, CombatClock } = require('../src/shared/huntressReplication');
+const { HuntressReplica, CombatClock } = require('../src/shared/characters/huntressReplication');
 const { POSITION_HISTORY_MS } = require('../src/server/core/gameRoomConfig');
 const loadServerClock = require('./helpers/serverClockModule');
 
