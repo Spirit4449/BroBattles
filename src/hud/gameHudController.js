@@ -45,15 +45,13 @@ export function createGameHudController({
   const teamRows = new Map(); // name -> { row }
   let cardCatalog = null;
   let cardCatalogFetchPromise = null;
-  let introSequencePromise = null;
   let countdownRunning = false;
-  let deferGameplayHudReveal = false;
+  let pregameActive = false;
   let currentCardNodes = [];
   let timerPaused = false;
   let lastModeAlertAt = 0;
   let lastModeAlertEventAt = 0;
   let noticeAutoCloseTimer = null;
-  let waitingBannerTimer = null;
   let keybindAutoDismissTimer = null;
   let collapseKeybindHud = null;
   let stopGuideUpdates = null;
@@ -286,26 +284,17 @@ export function createGameHudController({
     return !!overlay && !overlay.classList.contains("hidden");
   }
 
-  async function _runIntroSequence() {
-    if (introSequencePromise) return introSequencePromise;
+  function _cardsRevealed(root) {
+    return !!root?.classList.contains("phase-cards");
+  }
 
+  // Darken the arena and bring in the player cards alongside the countdown.
+  function _revealCards() {
     const root = document.getElementById("battle-start-overlay");
     if (!root) return;
-
-    introSequencePromise = (async () => {
-      root.classList.add("phase-cinematic");
-      root.classList.remove("phase-darkened", "phase-cards");
-
-      // 1 second of darkness before cards appear
-      await _sleep(1000);
-
-      root.classList.add("phase-darkened", "phase-cards");
-      showTopHudFade();
-      await _sleep(40);
-      _animateCardsIn(currentCardNodes);
-    })();
-
-    return introSequencePromise;
+    root.classList.add("phase-cinematic", "phase-darkened", "phase-cards");
+    showTopHudFade();
+    _animateCardsIn(currentCardNodes);
   }
 
   function _gameData() {
@@ -318,23 +307,6 @@ export function createGameHudController({
 
   function _enableInput() {
     if (typeof onEnableInput === "function") onEnableInput();
-  }
-
-  function _clearWaitingBannerTimer() {
-    if (waitingBannerTimer) {
-      clearTimeout(waitingBannerTimer);
-      waitingBannerTimer = null;
-    }
-  }
-
-  function _scheduleWaitingBanner() {
-    _clearWaitingBannerTimer();
-    waitingBannerTimer = setTimeout(() => {
-      waitingBannerTimer = null;
-      if (countdownRunning) return;
-      if (!_isOverlayVisible()) return;
-      showWaitingForPlayersBanner();
-    }, 1000);
   }
 
   function showBattleStartOverlay(players) {
@@ -364,9 +336,6 @@ export function createGameHudController({
     if (mapMode) {
       mapMode.textContent = getModeById(selection.modeId)?.label || "Duels";
     }
-
-    deferGameplayHudReveal = false;
-    _scheduleWaitingBanner();
 
     try {
       const timerHud = document.getElementById("game-timer-hud");
@@ -421,6 +390,8 @@ export function createGameHudController({
       });
 
       currentCardNodes = [...yourNodes, ...oppNodes];
+      // The catalog can resolve after the cards are already on screen.
+      if (_cardsRevealed(root)) _animateCardsIn(currentCardNodes);
       requestAnimationFrame(() => _syncCardWrapState(root));
       requestAnimationFrame(() => _syncCardWrapState(root));
     };
@@ -455,9 +426,7 @@ export function createGameHudController({
     const display = document.getElementById("game-timer-display");
     const label = document.getElementById("game-timer-label");
     if (!hud) return;
-    if (!deferGameplayHudReveal) {
-      hud.classList.remove("hidden");
-    }
+    hud.classList.remove("hidden");
     if (timerPaused) {
       if (label) label.textContent = "Paused (Editor)";
       return;
@@ -609,19 +578,6 @@ export function createGameHudController({
         banner.classList.add("hidden");
       }
     }, 320);
-  }
-
-  function showWaitingForPlayersBanner() {
-    showStatusBanner("Waiting for other players...", { variant: "info" });
-  }
-
-  function hideWaitingForPlayersBanner() {
-    const banner = document.getElementById("game-status-banner");
-    const textEl = document.getElementById("game-status-banner-text");
-    if (!banner || !textEl) return;
-    if (textEl.textContent === "Waiting for other players...") {
-      hideStatusBanner();
-    }
   }
 
   function showSpectatingBanner() {
@@ -1073,7 +1029,6 @@ export function createGameHudController({
   function hideBattleStartOverlay() {
     const overlay = document.getElementById("battle-start-overlay");
     if (!overlay) return;
-    _clearWaitingBannerTimer();
     const wrap = overlay.querySelector(".bs-wrap");
     if (wrap) wrap.style.opacity = "0";
     setTimeout(() => {
@@ -1084,11 +1039,9 @@ export function createGameHudController({
         "phase-darkened",
         "phase-cards",
       );
-      deferGameplayHudReveal = false;
       try {
         const timerHud = document.getElementById("game-timer-hud");
         const teamHud = document.getElementById("team-status-hud");
-        hideWaitingForPlayersBanner();
         timerHud?.classList.remove("hidden");
         teamHud?.classList.remove("hidden");
         requestAnimationFrame(() => {
@@ -1100,11 +1053,24 @@ export function createGameHudController({
     }, 300);
   }
 
-  function startCountdown(seconds = 7) {
+  // The pregame flythrough owns the screen: hide gameplay chrome and keep
+  // intro-gated systems (tutorial tips, poison, input) paused.
+  function setPregameActive(active) {
+    pregameActive = !!active;
+    document.body?.classList.toggle("match-pregame", pregameActive);
+    // Cards appear the moment the countdown starts; fetch their art now.
+    if (pregameActive) void _ensureCardCatalog();
+  }
+
+  /**
+   * Player cards and the countdown appear together. FIGHT lands `seconds`
+   * after the server's game:start; `elapsedMs` skips time already spent (a
+   * rejoin mid-countdown). Each beat is scheduled from the start time so
+   * timer drift cannot accumulate.
+   */
+  function startCountdown(seconds = 5, { elapsedMs = 0 } = {}) {
     if (countdownRunning) return;
     countdownRunning = true;
-    _clearWaitingBannerTimer();
-    hideWaitingForPlayersBanner();
 
     const countdownEl = document.getElementById("countdown-display");
     if (!countdownEl) {
@@ -1118,70 +1084,52 @@ export function createGameHudController({
       if (typeof onCountdownStart === "function") onCountdownStart();
     } catch (_) {}
 
-    // Start intro sequence in parallel so countdown stays aligned to server start.
-    // Intro runs for 1 second (darkness), then shows cards and countdown starts
-    _runIntroSequence().catch(() => {});
+    if (!_isOverlayVisible()) showBattleStartOverlay(_gameData()?.players || []);
+    _revealCards();
 
-    const totalSeconds = Math.max(1, Number(seconds) || 7);
-    const introDuration = 1000; // 1 second of darkness before countdown
-    const countdownDuration = totalSeconds - introDuration / 1000; // 6 seconds for countdown (5, 4, 3, 2, 1, FIGHT)
+    const totalMs = Math.max(1, Number(seconds) || 5) * 1000;
+    const skippedMs = Math.min(totalMs, Math.max(0, Number(elapsedMs) || 0));
+    const at = (ms, fn) => setTimeout(fn, Math.max(0, ms - skippedMs));
 
-    const runCountdown = () => {
-      // Wait for intro darkness to complete, then start countdown
+    const showNumber = (num) => {
+      countdownEl.style.transform = "translate(-50%, -50%) scale(0.5)";
+      countdownEl.style.opacity = "0.5";
       setTimeout(() => {
-        // Countdown: 5, 4, 3, 2, 1, FIGHT
-        const numbers = [5, 4, 3, 2, 1];
-        let displayIndex = 0;
-
-        const displayNext = () => {
-          if (displayIndex < numbers.length) {
-            const num = numbers[displayIndex];
-
-            // Animate in
-            countdownEl.style.transform = "translate(-50%, -50%) scale(0.5)";
-            countdownEl.style.opacity = "0.5";
-
-            setTimeout(() => {
-              countdownEl.textContent = num;
-              playSound("beep", 0.38, { playbackRate: 1 + (5 - num) * 0.035 });
-              countdownEl.style.transform = "translate(-50%, -50%) scale(1.2)";
-              countdownEl.style.opacity = "1";
-              countdownEl.style.transition =
-                "transform 0.3s ease, opacity 0.3s ease";
-
-              setTimeout(() => {
-                countdownEl.style.transform = "translate(-50%, -50%) scale(1)";
-              }, 150);
-            }, 50);
-
-            displayIndex++;
-            setTimeout(displayNext, 1000);
-          } else {
-            // Show FIGHT
-            countdownEl.textContent = "FIGHT!";
-            countdownEl.style.color = "#ef4444";
-            countdownEl.style.transform = "translate(-50%, -50%) scale(1.5)";
-            playSound("start", 0.8);
-
-            try {
-              if (typeof onCountdownFight === "function") {
-                onCountdownFight();
-              }
-            } catch (_) {}
-
-            // Immediately hide overlay, enable input
-            hideBattleStartOverlay();
-            _enableInput();
-            introSequencePromise = null;
-            countdownRunning = false;
-          }
-        };
-
-        displayNext();
-      }, introDuration);
+        countdownEl.textContent = num;
+        playSound("beep", 0.38, { playbackRate: 1 + (5 - num) * 0.035 });
+        countdownEl.style.transform = "translate(-50%, -50%) scale(1.2)";
+        countdownEl.style.opacity = "1";
+        countdownEl.style.transition = "transform 0.3s ease, opacity 0.3s ease";
+        setTimeout(() => {
+          countdownEl.style.transform = "translate(-50%, -50%) scale(1)";
+        }, 150);
+      }, 50);
     };
 
-    runCountdown();
+    // 5, 4, 3, 2, 1 on whole seconds, then FIGHT.
+    for (let num = Math.ceil(totalMs / 1000); num >= 1; num--) {
+      const shownAt = totalMs - num * 1000;
+      // A rejoin starts on the current number instead of replaying past ones.
+      if (shownAt + 1000 <= skippedMs) continue;
+      at(shownAt, () => showNumber(num));
+    }
+    at(totalMs, () => {
+      countdownEl.textContent = "FIGHT!";
+      countdownEl.style.color = "#ef4444";
+      countdownEl.style.transform = "translate(-50%, -50%) scale(1.5)";
+      playSound("start", 0.8);
+
+      try {
+        if (typeof onCountdownFight === "function") {
+          onCountdownFight();
+        }
+      } catch (_) {}
+
+      // Immediately hide overlay, enable input
+      hideBattleStartOverlay();
+      _enableInput();
+      countdownRunning = false;
+    });
   }
 
   function setTimerPaused(paused) {
@@ -1201,8 +1149,6 @@ export function createGameHudController({
     showSuddenDeathBanner,
     showStatusBanner,
     hideStatusBanner,
-    showWaitingForPlayersBanner,
-    hideWaitingForPlayersBanner,
     showSpectatingBanner,
     hideSpectatingBanner,
     initSpectateHud,
@@ -1220,7 +1166,8 @@ export function createGameHudController({
     setTeamHudPlayerLoaded,
     syncTeamHudFromSnapshot,
     syncModeState,
-    isBattleIntroActive: () => countdownRunning || _isOverlayVisible(),
+    isBattleIntroActive: () => pregameActive || countdownRunning || _isOverlayVisible(),
+    setPregameActive,
     startCountdown,
     hideBattleStartOverlay,
     setTimerPaused,

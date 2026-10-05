@@ -129,8 +129,6 @@ export function placeSpriteAtConfiguredSpawn(
   const bottomOffset = sprite.body ? sprite.body.bottom - sprite.y : sprite.displayHeight / 2;
   const centerOffset = sprite.body ? sprite.body.center.x - sprite.x : 0;
   sprite.body.reset(landing.x - centerOffset, landing.y - bottomOffset);
-  const requestedHeight = Number(point.dropHeight ?? 180);
-  sprite._spawnLanding = { x: sprite.x, y: sprite.y, dropHeight: Number.isFinite(requestedHeight) ? Math.max(0, Math.min(320, requestedHeight)) : 180 };
 }
 
 export function getSpawnPreviewPoint(scene, point, anchors = {}, epsilon = 2, snapToSurface = false) {

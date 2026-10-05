@@ -12,14 +12,21 @@ function smoothstep(value) {
   return t * t * (3 - 2 * t);
 }
 
-export function updateDynamicCamera(scene, player, Phaser) {
+// Where the follow camera settles for a player standing at playerY: zoomed out
+// as the player climbs (more vertical context) and biased down when high up
+// (less empty sky).
+export function restingCameraFrame(playerY) {
+  const t = clamp((playerY - 80) / (520 - 80), 0, 1);
+  return { zoom: 1.3 + (1.8 - 1.3) * t, followOffsetY: 120 + 80 * (1 - t) };
+}
+
+export function updateDynamicCamera(scene, player) {
   if (!scene || !player) return;
 
   const cam = scene.cameras.main;
 
-  // Smoothly zoom out as player climbs to maintain vertical context.
-  const t = Phaser.Math.Clamp((player.y - 80) / (520 - 80), 0, 1);
-  const targetZoom = 1.3 + (1.8 - 1.3) * t;
+  // Smoothly approach the resting framing for the player's height.
+  const { zoom: targetZoom, followOffsetY: targetFollowOffsetY } = restingCameraFrame(player.y);
   const reducedMotion = typeof window !== 'undefined' &&
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const previousDashZoom = scene._dashCameraZoom || 0;
@@ -31,9 +38,6 @@ export function updateDynamicCamera(scene, player, Phaser) {
   cam.setZoom(baseZoom + (targetZoom - baseZoom) * 0.05 + dashZoom);
   scene._dashCameraZoom = dashZoom;
 
-  // Bias the camera down when higher up to reduce empty sky framing.
-  const highFactor = 1 - t;
-  const targetFollowOffsetY = 120 + 80 * highFactor;
   const aim = scene._combatAimLook || { x: 0, y: 0 };
   const blend = 1 - Math.exp(-Math.min(100, scene.game.loop.delta || 16.67) / 140);
   // Camera follow already eases movement; keep this extra aim filter brief.

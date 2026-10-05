@@ -16,10 +16,11 @@ function load(file) {
 const { updateHealthBars } = load('../src/gameScene/healthBarRenderer.js');
 const OpPlayer = load('../src/players/RemotePlayer.js').default;
 
-test('countdown refreshes teammate and opponent name/bar anchors throughout descent and landing', () => {
+test('teammate and opponent name/bar anchors follow moving fighters every frame', () => {
   function player() {
     const wrapper = Object.create(OpPlayer.prototype);
-    wrapper.opponent = { x: 100, body: { y: 20 }, _spawnIntroPending: true };
+    wrapper.opponent = { x: 100, body: { y: 20 } };
+    wrapper._networkSnapUntil = Infinity;
     wrapper._hudAnchorX = 500;
     wrapper._hudAnchorY = -300;
     wrapper.opPlayerName = { setPosition(x, y) { this.x = x; this.y = y; } };

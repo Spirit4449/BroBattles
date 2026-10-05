@@ -30,7 +30,7 @@ const {
   tickActiveAbilities
 } = require("./gameRoom/abilityRuntimeManager");
 
-const { getDuelGeometry, spawnForParticipant } = require('../../shared/duelGeometry');
+const { getDuelGeometry } = require('../../shared/duelGeometry');
 const { BotController } = require('./bots/controller');
 const { startNinjaSwarm } = require('./bots/combat');
 
@@ -105,8 +105,11 @@ class GameRoom {
         )
         .filter((id) => id !== null),
     );
-    this._readyAcks = new Set(); // user_id set
-    this._startTimeout = null; // NodeJS timer for starting phase
+    this._readyAt = new Map(); // user_id -> server time their pregame began
+    this._startTimer = null;
+    this._startDeadlineTimer = null;
+    this._countdownTimeout = null;
+    this._countdownEndsAt = 0;
     this._abandonTimer = null;
     this.ABANDON_MATCH_GRACE_MS = 15000;
 
@@ -139,6 +142,7 @@ class GameRoom {
     if (this.geometry) for (const player of this.players.values()) {
       if (player.isBot) this.botControllers.set(player.participantId, new BotController(this, player));
     }
+    lifecycleManager.armStartDeadline(this);
   }
 
   _seedBotPlayers() {
@@ -182,7 +186,7 @@ class GameRoom {
         isBot: true,
         connected: true,
         loaded: true,
-        spawnIndex: this._computeSpawnIndex(matchPlayer.name, matchPlayer.team),
+        spawnIndex: spawn.spawnIndex,
         x: spawn.x,
         y: spawn.y,
         vx: 0,
@@ -227,8 +231,7 @@ class GameRoom {
 
   _getBotSpawnState(matchPlayer) {
     if (!this.geometry) throw new Error('Bot navigation is unavailable for this map.');
-    const team = this.matchData.players.filter((p) => p.team === matchPlayer.team);
-    return spawnForParticipant(this.geometry, matchPlayer, team.findIndex((p) => p.participantId === matchPlayer.participantId), team.length);
+    return this.spawnStateFor(matchPlayer);
   }
 
   async addPlayer(socket, user) {
@@ -278,7 +281,7 @@ class GameRoom {
         trophies: Number(matchPlayer.trophies) || 0,
         connected: true,
         loaded: false,
-        spawnIndex: this._computeSpawnIndex(matchPlayer.name || user.name, matchPlayer.team),
+        spawnIndex: roomStateManager.computeSpawnIndex(this, matchPlayer),
         x: null,
         y: null,
         vx: 0,
@@ -311,8 +314,7 @@ class GameRoom {
         },
       };
       if (!Number.isFinite(playerData.x) || !Number.isFinite(playerData.y)) {
-        const team = this.matchData.players.filter(p => p.team === playerData.team);
-        Object.assign(playerData, spawnForParticipant(this.geometry, playerData, playerData.spawnIndex, team.length));
+        Object.assign(playerData, this.spawnStateFor(playerData), { flip: false });
       }
       inputManager.resetMovementBudget(playerData);
       inputManager.updateBodyGeometry(playerData, this);
@@ -340,8 +342,7 @@ class GameRoom {
       playerData._lastPositionSeq = -1;
       playerData._lastPositionClientTs = 0;
       if (!Number.isFinite(playerData.x) || !Number.isFinite(playerData.y)) {
-        const team = this.matchData.players.filter(p => p.team === playerData.team);
-        Object.assign(playerData, spawnForParticipant(this.geometry, playerData, playerData.spawnIndex, team.length));
+        Object.assign(playerData, this.spawnStateFor(playerData), { flip: false });
       }
       inputManager.resetMovementBudget(playerData);
       inputManager.updateBodyGeometry(playerData, this);
@@ -359,9 +360,6 @@ class GameRoom {
     this.setupPlayerSocket(socket);
     this.sendGameStateToPlayer(socket);
     this._cancelAbandonTimer("player_joined");
-    if (this.getPlayerCount() === this.matchData.players.length && this.status === "waiting") {
-      this.potentialStartGame();
-    }
   }
 
   scheduleAction(callback, delayMs, now = Date.now()) {
@@ -500,12 +498,7 @@ class GameRoom {
       this._pendingVictoryFinishTimeout = null;
       this._pendingVictoryOutcomeKey = null;
     }
-    if (this._startTimeout) {
-      try {
-        clearTimeout(this._startTimeout);
-      } catch (_) {}
-      this._startTimeout = null;
-    }
+    lifecycleManager.clearStartTimers(this);
 
     try {
       await this.db.runQuery(
@@ -603,26 +596,16 @@ class GameRoom {
   }
 
   /**
-   * Enter a 10s starting phase where clients load and ack readiness.
-   * If all acks received sooner, start immediately; otherwise start on timeout.
+   * Schedule the countdown from the ready signals received so far (see
+   * shared/matchIntroTiming). `force` starts now; used by the start deadline.
+   * Editor playtest rooms override this to never start a countdown.
    */
-  potentialStartGame() {
-    lifecycleManager.potentialStartGame(this);
+  potentialStartGame(options) {
+    lifecycleManager.potentialStartGame(this, options);
   }
 
-  /**
-   * Finalize start after all acks or timeout.
-   * @param {"all_acks"|"timeout"} reason
-   */
-  _finalizeStart(reason = "timeout") {
-    lifecycleManager.finalizeStart(this, reason);
-  }
-
-  /**
-   * Start the game
-   */
-  startGame() {
-    lifecycleManager.startGame(this);
+  _noteReady(player) {
+    return lifecycleManager.noteReady(this, player);
   }
 
   async _broadcastParticipantStatus(statusLabel) {
@@ -636,8 +619,9 @@ class GameRoom {
     roomStateManager.initializeSpawnPositions(this);
   }
 
-  _computeSpawnIndex(name, team) {
-    return roomStateManager.computeSpawnIndex(this, name, team);
+  /** Authoritative start position for a participant (see roomStateManager). */
+  spawnStateFor(player) {
+    return roomStateManager.spawnStateFor(this, player);
   }
 
   /**
@@ -966,8 +950,7 @@ class GameRoom {
   cleanup() {
     clearTimeout(this._resultRetry);
     this._disposed = true;
-    if (this._countdownTimeout) clearTimeout(this._countdownTimeout);
-    this._countdownTimeout = null;
+    lifecycleManager.clearStartTimers(this);
     for (const { socket, event, listener } of this._socketBindings) socket.off(event, listener);
     this._socketBindings.length = 0;
     for (const controller of this.botControllers.values()) controller.dispose();
@@ -1006,7 +989,7 @@ class GameRoom {
     this.players.clear();
     this.matchData.players = [];
     this.rewardStats.clear();
-    this._readyAcks.clear();
+    this._readyAt.clear();
     this._requiredUserIds.clear();
     this._powerups.clear();
     this._deathDrops.clear();

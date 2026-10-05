@@ -28,7 +28,6 @@ export function terrainLandingSound(terrain, baseVolume) {
 // jumps or actually falls away from the first grounded position.
 export function shouldPlayLandingSound(sprite, onGround, velocityY = sprite.body?.velocity?.y) {
   if (!sprite._suppressSpawnLandingSound) return true;
-  if (sprite._spawnIntroPending) return false;
   const bottom = Number(sprite.body?.bottom ?? sprite.y);
   const spawnBottom = sprite._spawnLandingSoundBottom;
   const fallingAway = !onGround && Number.isFinite(spawnBottom) &&

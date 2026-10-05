@@ -55,7 +55,7 @@ Client core:
 - src/match/matchCoordinator.js
   - Central listener registry for live match events.
   - Emits game:join and game:ready.
-  - Consumes game:init, game:start, game:starting, game:snapshot, health/death/timer/over, etc.
+  - Consumes game:init, game:start, game:snapshot, health/death/timer/over, etc.
   - Maintains live replicated state slices and updates HUD pipelines.
 - src/gameScene/localInputSync.js
   - Sends game:input (volatile with reliable keyframes and pre-attack flushes, compress false).
@@ -68,7 +68,7 @@ Client core:
 - src/players/localSocketEvents.js
   - Local-player-specific health/death/special/knockback/respawn reactions.
 - src/game.js
-  - Sends one-time game:ready once scene exists and local state can be acknowledged.
+  - Sends game:ready (once per socket) when the loading screen lifts over a built scene; this also starts the local pregame (src/gameScene/matchIntro.js).
 
 ## 3) End-to-end live match flow
 
@@ -85,10 +85,11 @@ Client core:
 - Server emits game:init from roomStateManager with roster, team, map/mode, spawnVersion, loaded/connected flags, initial powerups, modeState, deathDrops, playerEffects.
 - Client merges init data into its roster in matchCoordinator and initializes remote players.
 
-4. Starting phase and readiness
-- Room enters starting phase.
-- Server expects game:ready ack from required participants (tracked by user_id, robust to reconnect).
-- Start is finalized either by all acks or timeout.
+4. Pregame and readiness (timings in src/shared/matchIntroTiming.js)
+- Each client sends game:ready when its loading screen lifts, then plays a 5 s pregame (map flythrough + pregame.mp3).
+- Room stays `waiting`; ready signals are tracked by user_id with server receipt time (robust to reconnect).
+- The countdown starts when the first client's pregame ends if every human is ready, otherwise as soon as the last one is, capped at 2 s of silent grace. A 45 s deadline from room creation starts (or abandons) a match nobody reports loaded.
+- game:start opens a 5 s countdown (cards, 5..1, FIGHT); the room is `active` with controls locked until it ends. game:init carries countdownRemainingMs so a rejoin resumes the countdown.
 
 5. Active simulation and broadcast
 - Server fixed-step loop runs at 60 Hz.
@@ -114,7 +115,7 @@ Client to server:
   - Typical payload: { matchId }.
   - Ack path supported in gameEvents.
 - game:ready
-  - Purpose: client scene loaded and local state ready.
+  - Purpose: loading screen lifted; client scene built and pregame started. Ignored once the match is active.
   - Typical payload: { matchId, x, y, flip, animation }.
 - game:input
   - Purpose: latest local positional state.
@@ -139,10 +140,8 @@ Server to client:
   - Join confirmation.
 - game:init
   - Initial authoritative room state.
-- game:starting
-  - Starting handshake phase active.
 - game:start
-  - Countdown/start signal.
+  - Countdown start: { countdownMs, spawns }.
 - game:snapshot
   - Repeated world snapshot with player states and timing fields.
 - game:action
@@ -194,7 +193,7 @@ Design intent:
 - Socket handlers for game events are registered early during connection to avoid missed early events.
 - Reconnection path updates player socket association in room while preserving user identity.
 - Readiness tracking is keyed by user_id, not socket id, so reconnects do not break start handshake.
-- Client matchCoordinator has a watchdog that retries join/ready during start if events are missed.
+- Client matchCoordinator has a watchdog that retries join/ready during start if events are missed. Its timeout counts from the local loading screen lifting, and it only resends ready once the client really is ready.
 
 ## 7) How to safely modify this network layer
 
@@ -211,7 +210,7 @@ Recommended verification checklist after changes:
 
 - Fresh match start with all players present.
 - Late join to live match.
-- Disconnect/reconnect during waiting, starting, and active states.
+- Disconnect/reconnect during the pregame, the countdown, and the active match.
 - Ability/action replication for all classes.
 - Snapshot smoothness under packet jitter.
 - Sudden death transition and timer correctness.

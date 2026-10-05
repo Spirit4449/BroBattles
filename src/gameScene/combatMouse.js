@@ -123,7 +123,9 @@ export function createCombatMouseController({ scene, canPlay, canCapture = canPl
       (getPreferences().keys ? ['left','right','up','down','leftAlt','rightAlt','upAlt','downAlt','jump'].some(slot => getPreferences().keys[slot] === event.keyCode) : ['w', 'a', 's', 'd', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight', ' '].includes(event.key?.length === 1 ? event.key.toLowerCase() : event.key))) {
       // Phaser does not consume keys while its keyboard plugin is disabled
       // for the countdown. Keep the focused arena from scrolling/selecting.
-      if (event.target === canvas) event.preventDefault?.();
+      // Once capture is allowed, Phaser handles these keys itself and ignores
+      // any keydown that already has defaultPrevented set.
+      if (event.target === canvas && !canCapture()) event.preventDefault?.();
       if (getPreferences().autoHideCursor) controller.beginInput();
     }
   });

@@ -100,7 +100,6 @@ function renderInspector(){if(!map())return;document.querySelectorAll('[data-tab
     const geom=geometryFromMap(map());const surfaces=geom.colliders.filter(c=>c.collision.up);
     field(panel,'Platform',p.anchorId,v=>transaction(()=>{p.anchorId=v;p.dx=0;delete p.x;delete p.y;}),{options:surfaces.map(c=>[c.id,c.id])});
     field(panel,'Horizontal offset',p.dx??0,v=>transaction(()=>{p.dx=v;delete p.x;delete p.y;}));
-    if(row.kind==='spawn')field(advanced(panel),'Drop height',p.dropHeight??180,v=>editValue(p,'dropHeight',v),{min:0,max:320});
     button(panel,'Playtest from here',()=>setPreview(true,row));
   }else{
     const grid=node('div',undefined,{class:'fields'});panel.append(grid);for(const k of ['x','y'])field(grid,k.toUpperCase(),mapPoint(row)[k],v=>transaction(()=>{if(row.kind==='powerup'){Object.assign(p,mapPoint(row));delete p.anchorId;delete p.dx;}p[k]=v;}));

@@ -154,6 +154,8 @@ export function createLobbyAudio({ getAudioContext, readSettings, createAudio = 
     }
     planSwitch(); scheduleSync();
   }
+  // Battle loading silences the lobby so the match opens on its own pregame cue.
+  const LOADING_FADE_SECONDS = 1.2;
   function change(next, seconds = timing.beatSeconds) {
     if (phase === next) return;
     const previousVersion = desired();
@@ -175,31 +177,31 @@ export function createLobbyAudio({ getAudioContext, readSettings, createAudio = 
   }
   return {
     enterLobby() {
-      if (phase === 'game' || phase === 'loading') { ready = false; playerKeys = undefined; change('lobby', 1.8); }
+      if (phase === 'game') { ready = false; playerKeys = undefined; change('lobby', 1.8); }
     },
     setReady(value) {
-      if (['found', 'loading', 'game'].includes(phase) || ready === value) return;
+      if (['found', 'game'].includes(phase) || ready === value) return;
       ready = value; cue(value ? 'ready' : 'cancel2', value ? 0.38 : 0.22);
       if (value && phase === 'searching') return;
       change(value ? 'ready' : 'lobby');
     },
-    searching() { if (!['found', 'loading', 'game'].includes(phase)) change('searching'); },
+    searching() { if (!['found', 'game'].includes(phase)) change('searching'); },
     updatePlayers(keys, selfKey) {
       const next = new Set(keys.filter(Boolean));
       if (playerKeys && [...next].some(key => key !== selfKey && !playerKeys.has(key))) cue('playerJoin', 0.35);
       playerKeys = next;
     },
     found() {
-      if (['found', 'loading', 'game'].includes(phase)) return;
+      if (['found', 'game'].includes(phase)) return;
       change('found');
     },
     cancelSearch() {
       playerKeys = undefined;
-      if (['loading', 'game'].includes(phase)) return;
+      if (phase === 'game') return;
       if (ready || ['searching', 'found'].includes(phase)) cue('cancel2', 0.22);
       ready = false; change('lobby');
     },
-    loading() { if (phase !== 'game') change('loading'); },
+    loading() { change('game', LOADING_FADE_SECONDS); },
     handoff() { change('game', 1.1); },
     unlock() { unlocked = true; start(); },
     refresh() {

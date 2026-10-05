@@ -247,7 +247,6 @@ export function createMapEditorRuntime({
         <div class="row">
           <div><label>Body Offset X</label><input id="map-edit-ox" type="number" step="1"></div>
           <div><label>Body Offset Y</label><input id="map-edit-oy" type="number" step="1"></div>
-          <div><label>Spawn drop height (0–320 px)</label><input id="map-edit-drop" type="number" min="0" max="320" step="10"></div>
         </div>
 
         <div class="btns">
@@ -298,7 +297,6 @@ export function createMapEditorRuntime({
     h: host.querySelector("#map-edit-h"),
     ox: host.querySelector("#map-edit-ox"),
     oy: host.querySelector("#map-edit-oy"),
-    drop: host.querySelector('#map-edit-drop'),
     json: host.querySelector("#map-edit-json"),
     sideUp: host.querySelector("#map-edit-side-up"),
     sideDown: host.querySelector("#map-edit-side-down"),
@@ -600,8 +598,6 @@ export function createMapEditorRuntime({
 
   function syncInputsFromSelection() {
     const spawn = findSelected()?.ref;
-    el.drop.disabled = spawn?.type !== 'spawn';
-    el.drop.value = spawn?.point?.dropHeight ?? 180;
     const selEntities = selectedEntities();
     if (selEntities.length > 1) {
       const go = selEntities[selEntities.length - 1].go;
@@ -901,7 +897,6 @@ export function createMapEditorRuntime({
     }
 
     const point = selected.ref.point;
-    if (selected.ref.type === 'spawn') point.dropHeight = clampNum(el.drop.value, 0, 320);
     if (Number.isFinite(x)) point.x = x;
     if (!point.anchorId && Number.isFinite(y)) point.y = y;
     delete point.dx;
@@ -1608,7 +1603,7 @@ export function createMapEditorRuntime({
   el.sideLeft?.addEventListener("click", () => toggleBoundarySide("left"));
   el.sideRight?.addEventListener("click", () => toggleBoundarySide("right"));
 
-  const editCommitFields = [el.x, el.y, el.sx, el.sy, el.w, el.h, el.ox, el.oy, el.drop];
+  const editCommitFields = [el.x, el.y, el.sx, el.sy, el.w, el.h, el.ox, el.oy];
   for (const input of editCommitFields) {
     if (!input) continue;
     input.addEventListener("focus", () => {

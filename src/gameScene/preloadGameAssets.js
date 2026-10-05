@@ -35,7 +35,6 @@ export function preloadGameAssets({
     `${staticPath}/movement/duck-transition.mp3`,
   );
   scene.load.audio("sfx-duck-block", `${staticPath}/movement/duck-block.wav`);
-  scene.load.audio("sfx-parachute-open", `${staticPath}/movement/parachute-open.mp3`);
   scene.load.audio("sfx-sudden-death", `${staticPath}/suddendeath.mp3`);
   scene.load.audio("sfx-death", `${staticPath}/death.mp3`);
   scene.load.audio("sfx-you-death", `${staticPath}/you-death.mp3`);

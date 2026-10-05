@@ -1300,7 +1300,7 @@ export function finalizeLocalSpawnPresentation() {
   try {
     player.setVisible(true);
   } catch (_) {}
-  if (!player._spawnIntroPresented && !player._spawnIntroPending) {
+  if (!player._spawnIntroPresented) {
     try {
       spawnSpawnBurst(scene, player, {
         tint: 0xffffff,

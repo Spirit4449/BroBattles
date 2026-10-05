@@ -89,28 +89,22 @@ function setupPlayerSocket(room, socket) {
     // which calls gameHub.handlePlayerLeave
   });
 
-    // Client signals they're ready to start (assets + scene loaded)
-  room.onSocket(socket, "game:ready", (payload = {}) => {
+  // The client's loading screen lifted: its scene exists and its pregame began.
+  // Repeats (watchdog, reconnects) are harmless. Once the match is underway a
+  // late loader becomes loaded through its input packets instead.
+  room.onSocket(socket, "game:ready", () => {
     try {
       const p = room.players.get(socket.id);
-      if (!p || !p.user_id) return;
-      if (room.status !== "starting" || p._sceneReady) return;
-      p._sceneReady = true;
-      p.loaded = Number.isFinite(p.x) && Number.isFinite(p.y);
-      inputManager.updateBodyGeometry(p, room);
-      // Track by user_id (robust to reconnection)
-      if (!room._readyAcks.has(p.user_id)) {
-        room._readyAcks.add(p.user_id);
-        const need = room._requiredUserIds.size;
-        const have = room._readyAcks.size;
-        if (!room._netTestEnabled) {
-          console.log(
-            `[GameRoom ${room.matchId}] Ready ack from ${p.name} (${have}/${need})`,
-          );
-        }
-        if (have >= need) {
-          room._finalizeStart("all_acks");
-        }
+      if (!p || !p.user_id || room.status !== "waiting") return;
+      if (!p._sceneReady) {
+        p._sceneReady = true;
+        p.loaded = Number.isFinite(p.x) && Number.isFinite(p.y);
+        inputManager.updateBodyGeometry(p, room);
+      }
+      if (room._noteReady(p) && !room._netTestEnabled) {
+        console.log(
+          `[GameRoom ${room.matchId}] Ready from ${p.name} (${room._readyAt.size}/${room._requiredUserIds.size})`,
+        );
       }
     } catch (e) {
       console.warn(

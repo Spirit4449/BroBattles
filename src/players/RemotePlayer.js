@@ -635,9 +635,7 @@ export default class RemotePlayer {
     if (!this.opponent) return;
     if (this._worldUiHidden) return;
     const bodyTop = this.hudTopY();
-    const snapHud =
-      this.opponent._spawnIntroPending === true ||
-      Number(this._networkSnapUntil) > performance.now();
+    const snapHud = Number(this._networkSnapUntil) > performance.now();
     this._hudAnchorX = stabilizeHudAxis(
       this._hudAnchorX,
       this.opponent.x,
@@ -757,7 +755,7 @@ export default class RemotePlayer {
     if (!this.opponent || this._corpseRemoved) return;
     this._spawnPresented = true;
     this._networkSnapUntil = performance.now() + 220;
-    if (!this._initialSpawnFxPlayed && !this.opponent._spawnIntroPending) {
+    if (!this._initialSpawnFxPlayed) {
       try {
         spawnSpawnBurst(this.scene, this.opponent, {
           tint: 0xffffff,

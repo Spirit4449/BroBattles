@@ -137,7 +137,7 @@ export function createLocalMovementFx({ audio, noteEvent }) {
       (fallVelocity - MOVEMENT_VFX_CONFIG.fastFallStartVelocity) /
         (MOVEMENT_VFX_CONFIG.fastFallMaxVelocity - MOVEMENT_VFX_CONFIG.fastFallStartVelocity),
     );
-    const falling = !dead && !scene._spawnIntroActive && !player.body.touching.down && !sliding && fallVelocity > 85;
+    const falling = !dead && !player.body.touching.down && !sliding && fallVelocity > 85;
     audio.updateFallingAir(scene, falling, fallVelocity);
     if (falling && !hidden && fallVelocity >= MOVEMENT_VFX_CONFIG.fastFallStartVelocity) {
       fastFallElapsed += scene.game.loop.delta;

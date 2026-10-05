@@ -118,11 +118,8 @@ test('stale movement, presentation resets, shutdown and sprite destruction relea
   }
 });
 
-test('spawn intro and locked audio stay silent; invisible fighters still produce movement cues', () => {
+test('locked audio stays silent; invisible fighters still produce movement cues', () => {
   const f = fixture(), walking = { grounded: true, vx: 260 };
-  f.scene._spawnIntroActive = true;
-  f.update(walking); assert.equal(f.calls.length, 0);
-  f.scene._spawnIntroActive = false;
   f.scene.sound.locked = true;
   f.update(walking); f.update({ grounded: false, wallSliding: true, vy: 100 });
   assert.equal(f.calls.length, 0); assert.equal(f.sounds.length, 0);
@@ -133,19 +130,14 @@ test('spawn intro and locked audio stay silent; invisible fighters still produce
   f.controller.destroy();
 });
 
-test('opening remote touchdown is silent after the intro, with event IDs and legacy snapshots', () => {
+test('opening remote touchdown is silent, with event IDs and legacy snapshots', () => {
   for (const withSequence of [true, false]) {
     const f = fixture();
     f.sprite._suppressSpawnLandingSound = true;
-    f.sprite._spawnIntroPending = true;
     const state = (grounded, vy, seq, type) => ({ grounded, vy,
       ...(withSequence ? { movementFxSeq: seq, movementFxType: type } : {}) });
     f.update(state(true, 0, 0, ''));
     assert.equal(f.sprite._suppressSpawnLandingSound, true);
-    f.scene._spawnIntroActive = true;
-    f.update(state(false, 88, 0, ''));
-    f.scene._spawnIntroActive = false;
-    f.sprite._spawnIntroPending = false;
     f.update(state(false, 88, 0, ''));
     f.update(state(true, 0, 1, 'land'));
     f.update(state(true, 0, 1, 'land'));

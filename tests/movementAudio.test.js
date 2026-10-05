@@ -56,7 +56,7 @@ test('the first grounded movement frame plays a step for short key taps', () => 
   assert.match(source, /wasGroundWalking = isGroundWalking;/);
 });
 
-test('opening landing is silent even when the countdown ends before touchdown', () => {
+test('the opening spawn settle is silent and a real jump re-arms landing audio', () => {
   const player = { _suppressSpawnLandingSound: true, body: { velocity: { y: 88 } } };
   assert.equal(shouldPlayLandingSound(player, false), false);
   assert.equal(shouldPlayLandingSound(player, false), false);
@@ -74,17 +74,6 @@ test('jumping immediately at fight start does not mute that jump landing', () =>
   assert.equal(shouldPlayLandingSound(player, false), true);
   player.body.velocity.y = 0;
   assert.equal(shouldPlayLandingSound(player, true), true);
-});
-
-test('grounded frames before the spawn intro finishes do not consume landing suppression', () => {
-  const player = { _suppressSpawnLandingSound: true, _spawnIntroPending: true };
-  assert.equal(shouldPlayLandingSound(player, true, 0), false);
-  assert.equal(player._suppressSpawnLandingSound, true);
-  player._spawnIntroPending = false;
-  assert.equal(shouldPlayLandingSound(player, false, 88), false);
-  assert.equal(shouldPlayLandingSound(player, true, 0), false);
-  assert.equal(shouldPlayLandingSound(player, false, -400), true);
-  assert.equal(shouldPlayLandingSound(player, true, 0), true);
 });
 
 test('startup contact flicker and small upward corrections remain silent', () => {

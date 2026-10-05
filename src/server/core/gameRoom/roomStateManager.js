@@ -2,6 +2,7 @@ const { damageHitboxSnapshot } = require('./damageHitboxes');
 const effectManager = require('./effects/effectManager');
 const { randomUUID } = require("node:crypto");
 const { getDuelGeometry, spawnForParticipant } = require('../../../shared/duelGeometry');
+const { participantId } = require('./participants');
 
 function roundPosition(value) {
   const num = Number(value);
@@ -36,31 +37,49 @@ function buildWorldStatePayload(room) {
   };
 }
 
-function computeSpawnIndex(room, name, team) {
-  try {
-    const teamList = (room.matchData.players || [])
-      .filter((p) => p.team === team)
-      .map((p) => ({ name: p.name }));
-    return Math.max(
-      0,
-      teamList.findIndex((p) => p.name === name),
-    );
-  } catch (_) {
-    return 0;
-  }
+// Spawn slots are ordered by roster position within a team. Match by
+// participant ID first (bots and humans alike), then by name.
+function computeSpawnIndex(room, player) {
+  const id = participantId(player);
+  const team = (room.matchData.players || []).filter((p) => p.team === player?.team);
+  let index = id ? team.findIndex((p) => participantId(p) === id) : -1;
+  if (index < 0) index = team.findIndex((p) => p.name === player?.name);
+  return Math.max(0, index);
 }
 
+// The map variant (1v1/2v2/3v3) picks the slot layout, matching the client's
+// fallback placement; the live roster size is only used without a variant.
+function spawnTeamSize(room, team) {
+  const variantSize = Number(String(room.mapSnapshot?.variant || "")[0]);
+  if (Number.isFinite(variantSize) && variantSize > 0) return variantSize;
+  return (room.matchData.players || []).filter((p) => p.team === team).length;
+}
+
+/**
+ * The single authority for where a participant stands at match start. Spawns
+ * are computed facing right so the coordinates match a freshly created sprite.
+ * Returns { spawnIndex, x, y } in sprite coordinates, or null without geometry.
+ */
+function spawnStateFor(room, player) {
+  const geometry = room.geometry || getDuelGeometry(room.matchData.map);
+  if (!geometry || !player) return null;
+  const spawnIndex = computeSpawnIndex(room, player);
+  const { x, y } = spawnForParticipant(geometry, { ...player, flip: false },
+    spawnIndex, spawnTeamSize(room, player.team));
+  return { spawnIndex, x, y };
+}
+
+// Place every participant at their spawn, standing still and facing right.
+// Called once when the countdown starts; game:start carries the result.
 function initializeSpawnPositions(room) {
+  const inputManager = require("./inputManager");
   for (const p of room.players.values()) {
-    const spawnIndex = computeSpawnIndex(room, p.name, p.team);
-    p.spawnIndex = spawnIndex;
-    const geometry = room.geometry || getDuelGeometry(room.matchData.map);
-    if (geometry) {
-      const teamSize = room.matchData.players.filter(mp => mp.team === p.team).length;
-      Object.assign(p, spawnForParticipant(geometry, p, spawnIndex, teamSize), { vx: 0, vy: 0, grounded: true });
+    const spawn = spawnStateFor(room, p);
+    if (spawn) {
+      Object.assign(p, spawn, { vx: 0, vy: 0, grounded: true, flip: false });
     }
-    require("./inputManager").resetMovementBudget(p);
-    require("./inputManager").updateBodyGeometry(p, room);
+    inputManager.resetMovementBudget(p);
+    inputManager.updateBodyGeometry(p, room);
     p.loaded =
       p.loaded === true ||
       (p._sceneReady === true && Number.isFinite(p.x) && Number.isFinite(p.y));
@@ -132,13 +151,17 @@ function sendGameStateToPlayer(room, socket) {
         level: Number.isFinite(p?.level) ? p.level : null,
         isAlive: p ? p.isAlive !== false : true,
         isBot: p ? p.isBot === true : mp?.isBot === true,
-        spawnIndex: computeSpawnIndex(room, mp.name, mp.team),
+        spawnIndex: computeSpawnIndex(room, mp),
         connected: p ? p.connected !== false : false,
         loaded: p ? p.loaded === true : false,
         ammoState: p?.ammoState || null,
       };
     }),
     status: room.status,
+    // A (re)join during the pre-fight countdown resumes it instead of going live.
+    countdownRemainingMs: room.status === "active"
+      ? Math.max(0, (room._countdownEndsAt || 0) - Date.now())
+      : 0,
   };
 
   socket.emit("game:init", gameStateForPlayer);
@@ -236,6 +259,7 @@ function broadcastWorldState(room) {
 module.exports = {
   buildWorldStatePayload,
   computeSpawnIndex,
+  spawnStateFor,
   initializeSpawnPositions,
   sendGameStateToPlayer,
   broadcastSnapshot,

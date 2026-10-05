@@ -46,6 +46,7 @@ import { createMatchCoordinator } from "./match/matchCoordinator";
 import { preloadGameAssets } from "./gameScene/preloadGameAssets";
 import { renderPoisonWater } from "./gameScene/poisonWaterRenderer";
 import { updateDynamicCamera } from "./gameScene/cameraDynamics";
+import { createMatchIntro, FOLLOW_LERP } from "./gameScene/matchIntro";
 import { installRenderResolution } from "./gameScene/renderResolution";
 import { deferSceneAudio } from "./gameScene/deferredAudio";
 import { createLocalInputSync } from "./gameScene/localInputSync";
@@ -102,7 +103,6 @@ import {
 } from "./characters/shared/animationState.js";
 import socket, { waitForConnect } from "./socket";
 import OpPlayer from "./players/RemotePlayer";
-import { prepareSpawnIntro, finishSpawnIntro } from "./gameScene/spawnIntro";
 import { spawnDust, prewarmDust } from "./effects";
 import {
   configureClientNetTest,
@@ -232,8 +232,8 @@ let gameEnded = false; // stops update loop network emissions after game over
 let gameInitialized = false; // track if game has been initialized
 let hasJoined = false;
 let joinInFlight = false; // prevent duplicate in-flight join emits
-let startingPhase = false; // server announced starting phase
-let readyAckSent = false; // ensure single ready ack
+let clientRevealed = false; // loading screen lifted over a built scene
+let readyAckSocketId = null; // socket that last carried our ready signal
 let isLiveGame = false; // server reported active game (late join)
 let pendingAuthoritativeLocalState = null; // apply once local sprite exists
 // Buffer for remote actions that arrive before scene is ready
@@ -308,7 +308,6 @@ const hud = createGameHudController({
   getMapBgAsset: mapId => getMapBgAsset(mapId, gameScene),
   getScene: () => gameScene,
   onCountdownFight: () => {
-    finishSpawnIntro(gameScene);
     window.__BB_NAVIGATION__?.lobbyAudio?.handoff();
     try {
       if (gameScene) gameScene._bgmIntensity = 1;
@@ -317,7 +316,9 @@ const hud = createGameHudController({
     } catch (_) {}
   },
   onCountdownStart: () => {
+    matchIntro.conclude();
     if (gameScene) gameScene._bgmIntensity = 0.3;
+    gameScene?._startMainBgm?.();
     gameScene?._bgmEnvelope?.fade(0.3, 450);
     focusBattleInput();
   },
@@ -331,6 +332,27 @@ const hud = createGameHudController({
   onSpectatePrevious: () => gameScene?._cycleSpectatedPlayer?.(-1),
   onSpectateNext: () => gameScene?._cycleSpectatedPlayer?.(1),
 });
+
+// Pregame flythrough + pregame.mp3 between the loading screen and countdown.
+const matchIntro = createMatchIntro({
+  getScene: () => gameScene,
+  getPlayer: () => player,
+  getEnemySprites: () =>
+    Object.values(opponentPlayers).map((wrapper) => wrapper?.opponent).filter(Boolean),
+  onActiveChange: (active) => hud.setPregameActive(active),
+});
+
+// The loading screen lifted: this client's pregame starts and the server
+// counts us as loaded. A match already counting down or live skips it.
+function onGameRevealed() {
+  clientRevealed = true;
+  trySendReadyAck();
+  const skipPregame =
+    isLiveGame || gameEnded || editorSession || gameData?.editorPlaytest ||
+    hud.isBattleIntroActive?.();
+  if (!skipPregame) matchIntro.beginPregame();
+}
+document.addEventListener("game:ready", onGameRevealed, { once: true });
 
 const battleTutorial = createBattleTutorialController({
   socket,
@@ -379,15 +401,16 @@ matchCoordinator = createMatchCoordinator({
   getIsLiveGame: () => isLiveGame,
   setIsLiveGame: (v) => {
     isLiveGame = v;
+    if (!v) return;
+    matchIntro.conclude();
+    gameScene?._startMainBgm?.();
   },
   getGameEnded: () => gameEnded,
   setGameEnded: (v) => {
     gameEnded = v;
     if (gameScene) gameScene._battleEnded = !!v;
   },
-  setStartingPhase: (v) => {
-    startingPhase = v;
-  },
+  isClientReady: () => clientRevealed && !!gameScene && !!player,
   setPendingAuthoritativeLocalState: (v) => {
     pendingAuthoritativeLocalState = v;
   },
@@ -396,6 +419,7 @@ matchCoordinator = createMatchCoordinator({
     SPAWN_VERSION = v;
   },
   serverSpawnIndex: SERVER_SPAWN_INDEX,
+  onServerSpawns: applyServerSpawns,
   setLatestPowerups: (v) => {
     latestPowerups = v;
   },
@@ -680,13 +704,6 @@ async function initializeGame() {
   }
 }
 
-// -----------------------------
-// Battle Start Overlay (static DOM in game.html)
-// -----------------------------
-function showBattleStartOverlay(players) {
-  return hud.showBattleStartOverlay(players);
-}
-
 function initTimerHud() {
   return hud.initTimerHud();
 }
@@ -834,6 +851,43 @@ function initializePlayers(players) {
   });
 }
 
+// Before FIGHT the server's spawn is authoritative for every fighter. In a live
+// game only a loaded player's position is; others still fall back to the map.
+function hasServerPosition(playerData) {
+  return (
+    (!isLiveGame || playerData?.loaded === true) &&
+    Number.isFinite(Number(playerData?.x)) &&
+    Number.isFinite(Number(playerData?.y))
+  );
+}
+
+/**
+ * Stand fighters on the server's spawns ({ [name]: { x, y } }). Used on
+ * game:init and game:start; live games move players through snapshots and
+ * corrections instead, so this does nothing once the fight is on.
+ */
+function applyServerSpawns(spawns) {
+  if (!spawns || isLiveGame) return;
+  const place = (sprite, spawn) => {
+    const x = Number(spawn?.x);
+    const y = Number(spawn?.y);
+    if (!sprite?.body || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+    sprite.body.reset(x, y);
+    sprite.setVelocity?.(0, 0);
+    sprite.setAcceleration?.(0, 0);
+    return true;
+  };
+  if (username && place(player, spawns[username])) {
+    localMovementCorrector.clear();
+    syncLocalUiPosition();
+  }
+  for (const [name, spawn] of Object.entries(spawns)) {
+    if (name === username) continue;
+    const wrapper = opponentPlayers[name] || teamPlayers[name];
+    if (place(wrapper?.opponent, spawn)) wrapper.updateUIPosition?.();
+  }
+}
+
 function attachMapCollidersToSprite(scene, sprite, objects) {
   if (!scene?.physics || !sprite || !Array.isArray(objects)) return;
   for (const mapObject of objects) {
@@ -847,6 +901,8 @@ function attachMapCollidersToSprite(scene, sprite, objects) {
 // Initialize game when page loads
 let game = null;
 window.__BB_PAGE_SCOPE__?.onDispose(async () => {
+  document.removeEventListener("game:ready", onGameRevealed);
+  matchIntro.dispose();
   matchCoordinator?.dispose();
   battleTutorial?.destroy();
   destroyMobileControls?.();
@@ -897,8 +953,6 @@ class GameScene extends Phaser.Scene {
   // Preloads assets
   preload() {
     deferSceneAudio(this);
-    this.load.image("spawn-parachute-blue", "/assets/parachutes/parachute-blue.webp");
-    this.load.image("spawn-parachute-red", "/assets/parachutes/parachute-red.webp");
     const onVisualProgress = (p) => {
       // 50% - 90%
       const pct = Math.floor(50 + p * 40); // maps 0-1 -> 50-90
@@ -909,9 +963,8 @@ class GameScene extends Phaser.Scene {
     this.load.once("complete", () => {
       this.load.off("progress", onVisualProgress);
       updateLoading(95, "Arena ready...");
-      // Overlay will be controlled strictly by socket events (game:starting/game:start/init/live)
-      // Do not show here to avoid race with late-arriving init/live status.
-      // Input will be enabled on game:start or immediately if already live.
+      // The pregame begins when the loading screen lifts (onGameRevealed);
+      // input is enabled at FIGHT, or immediately when joining a live match.
     });
 
     preloadMapDocument(this, gameData?.mapSnapshot?.map);
@@ -1178,7 +1231,9 @@ class GameScene extends Phaser.Scene {
       }
       startBgm();
     };
-    this._startMainBgm();
+    // Normal starts stay silent through the pregame hold; the countdown (or
+    // going live) starts the map music.
+    if (isLiveGame) this._startMainBgm();
 
     this.events.once("shutdown", () => {
       try {
@@ -1250,15 +1305,17 @@ class GameScene extends Phaser.Scene {
         }
       }
     } catch (_) {}
+    // Before FIGHT the server's spawn is authoritative; in a live game only a
+    // loaded (previously synced) position is.
     const hasAuthoritativeSpawn =
       pendingAuthoritativeLocalState &&
-      pendingAuthoritativeLocalState.loaded === true &&
+      (!isLiveGame || pendingAuthoritativeLocalState.loaded === true) &&
       Number.isFinite(pendingAuthoritativeLocalState.x) &&
       Number.isFinite(pendingAuthoritativeLocalState.y) &&
       player?.body;
 
-    // After sprite exists and body sized, move to a map-appropriate spawn slot
-    // only when we do not already have an authoritative live position.
+    // After sprite exists and body sized, fall back to the map's spawn slot
+    // only when the server has not sent a position yet.
     try {
       if (hasAuthoritativeSpawn) {
         player.body.reset(
@@ -1310,15 +1367,6 @@ class GameScene extends Phaser.Scene {
     } catch (_) {}
 
     try {
-      if (!isLiveGame) {
-        player._spawnIntroPending = true;
-        prepareSpawnIntro(
-          this,
-          player,
-          gameData.yourCharacter,
-          me?.selected_skin_id,
-        );
-      }
       finalizeLocalSpawnPresentation();
     } catch (_) {}
 
@@ -1378,7 +1426,7 @@ class GameScene extends Phaser.Scene {
     // lerpX=0.08 for crisp horizontal tracking; lerpY=0.05 is deliberately
     // lazier so the vertical frame shifts more gently - vertical centering is
     // less critical than horizontal awareness.
-    cam.startFollow(player, false, 0.08, 0.05);
+    followLocalPlayer(cam);
     this._editModeActive = false;
     this._editorCamKeys = this.input.keyboard.addKeys({
       left: Phaser.Input.Keyboard.KeyCodes.LEFT,
@@ -1419,7 +1467,7 @@ class GameScene extends Phaser.Scene {
               } catch (_) {}
             } else {
               try {
-                this.cameras.main.startFollow(player, false, 0.08, 0.05);
+                followLocalPlayer(this.cameras.main);
               } catch (_) {}
             }
             hud.setTimerPaused?.(!!editing);
@@ -1480,12 +1528,7 @@ class GameScene extends Phaser.Scene {
             (gameData.players || []).filter((p) => p.team === playerData.team)
               .length,
           );
-          if (
-            isLiveGame &&
-            playerData.loaded === true &&
-            Number.isFinite(playerData.x) &&
-            Number.isFinite(playerData.y)
-          ) {
+          if (hasServerPosition(playerData)) {
             const serverX = Number(playerData.x);
             const serverY = Number(playerData.y);
 
@@ -1539,27 +1582,11 @@ class GameScene extends Phaser.Scene {
           (gameData.players || []).filter((p) => p.team === playerData.team)
             .length,
         );
-        if (
-          isLiveGame &&
-          playerData.loaded === true &&
-          Number.isFinite(playerData.x) &&
-          Number.isFinite(playerData.y)
-        ) {
+        if (hasServerPosition(playerData)) {
           const serverX = Number(playerData.x);
           const serverY = Number(playerData.y);
 
           opPlayer.opponent.body?.reset?.(serverX, serverY);
-        }
-        if (!isLiveGame) {
-          opPlayer.opponent._spawnIntroPending = true;
-          prepareSpawnIntro(
-            this,
-            opPlayer.opponent,
-            playerData.char_class,
-            playerData.selected_skin_id,
-            true,
-            isTeammate,
-          );
         }
         opPlayer.finalizeSpawnPresentation?.();
         if (opPlayer.updateUIPosition) opPlayer.updateUIPosition();
@@ -1784,12 +1811,12 @@ class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (
-      !isLiveGame &&
-      (this._spawnIntroEntries?.length || this._spawnIntroActive)
-    ) {
+    // The pregame flythrough (and its hand-back blend) owns the camera.
+    // Before FIGHT, fighters stand at their spawns: no input or movement sync.
+    const introCamera = matchIntro.updateCamera();
+    if (!isLiveGame) {
       syncLocalUiPosition();
-      updateDynamicCamera(this, player, Phaser);
+      if (!introCamera) updateDynamicCamera(this, player);
       updateHealthBars({ opponentPlayers, teamPlayers, syncPositions: true });
       return;
     }
@@ -1802,7 +1829,7 @@ class GameScene extends Phaser.Scene {
       this._spectatorVignette = false;
       if (this._spectatorModeActive) {
         try {
-          this.cameras.main.startFollow(player, false, 0.08, 0.05);
+          followLocalPlayer(this.cameras.main);
         } catch (_) {}
       }
       this._spectatorModeActive = false;
@@ -1819,7 +1846,7 @@ class GameScene extends Phaser.Scene {
       }
       hud.hideSpectatingBanner?.();
       hud.hideSpectatingPlayer?.();
-      updateDynamicCamera(this, player, Phaser);
+      if (!introCamera) updateDynamicCamera(this, player);
       localMovementCorrector.update(player, this.game?.loop?.delta ?? 16.67);
       localInputSync.sync(this, player, {
         dead,
@@ -2231,52 +2258,28 @@ const config = {
 
 export { opponentPlayers, teamPlayers };
 
-function buildReadyPayload() {
-  const payload = { matchId: Number(matchId) };
-  const authoritativeSpawn =
-    pendingAuthoritativeLocalState &&
-    pendingAuthoritativeLocalState.loaded === true &&
-    Number.isFinite(pendingAuthoritativeLocalState.x) &&
-    Number.isFinite(pendingAuthoritativeLocalState.y)
-      ? pendingAuthoritativeLocalState
-      : null;
-  if (authoritativeSpawn) {
-    payload.x = authoritativeSpawn.x;
-    payload.y = authoritativeSpawn.y;
-  } else if (player) {
-    if (Number.isFinite(player.x)) payload.x = player.x;
-    if (Number.isFinite(player.y)) payload.y = player.y;
-  } else {
-    return payload;
-  }
-  payload.flip = player ? !!player.flipX : false;
-  payload.animation = player?.anims?.currentAnim?.key || null;
-  return payload;
+// Phaser's startFollow resets the follow offset to (0, 0) unless given one,
+// which visibly snaps the framing; keep the offset the camera already has.
+function followLocalPlayer(cam) {
+  if (!cam || !player) return;
+  cam.startFollow(player, false, FOLLOW_LERP.x, FOLLOW_LERP.y, cam.followOffset.x, cam.followOffset.y);
 }
 
-// Emit a one-time game:ready handshake once the scene exists and the server can
-// use the local player's real spawn position instead of waiting for movement.
-function trySendReadyAck() {
-  if (readyAckSent) return;
-  const sceneReady = !!gameScene && !!player; // player created implies scene ready
-  if (!sceneReady || (!startingPhase && !isLiveGame)) return;
+// Tell the server our loading screen lifted (our pregame began). Sent once per
+// socket; the start watchdog may `force` a resend, which the server ignores if
+// it already counted us.
+function trySendReadyAck(force = false) {
+  if (!clientRevealed || !gameScene || !player || !hasJoined || !socket.connected) return;
+  if (!force && readyAckSocketId === socket.id) return;
   try {
-    readyAckSent = true;
-    socket.emit("game:ready", buildReadyPayload());
+    readyAckSocketId = socket.id;
+    socket.emit("game:ready", { matchId: Number(matchId) });
     if (!shouldMuteClientDefaultLogs()) {
       console.log("Sent game:ready ack");
     } else {
       noteClientLifecycle("ready-ack", "");
     }
   } catch (_) {}
-}
-
-function startCountdown() {
-  return hud.startCountdown();
-}
-
-function hideBattleStartOverlay() {
-  return hud.hideBattleStartOverlay();
 }
 
 // -----------------------------

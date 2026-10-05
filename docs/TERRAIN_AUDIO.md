@@ -11,6 +11,6 @@ To add another material, add a named entry to `src/shared/terrainAudio.json` wit
 
 `footstepVolumeScale` is the master multiplier. Grass uses four individual foot contacts extracted from a real walking recording and normalized to −22 LUFS with a −4 dB true-peak ceiling. Its landing volume is independently reduced through `landing.volumeScale`. The untouched CC0 preview remains alongside the game-ready files. Speed-dependent pitch/volume and nonrepeating variants are retained.
 
-The initial player spawn is marked for a silent landing. The marker survives an unfinished countdown drop and is consumed on the first grounded frame (or cleared on a deliberate jump). Later gameplay landings retain their normal audio. This only suppresses the landing sound, not spawn visuals or the parachute opening sound.
+The initial player spawn is marked for a silent landing. The marker is consumed on the first grounded frame (or cleared on a deliberate jump or a real fall). Later gameplay landings retain their normal audio. This only suppresses the landing sound, not spawn visuals.
 
 Tests: `node --test tests/movementAudio.test.js`.

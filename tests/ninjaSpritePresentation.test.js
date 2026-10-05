@@ -97,6 +97,16 @@ test('legacy Ninja skins keep throw names and original attack duration',()=>{
   assert.equal(entries.get('sovereign-jumping').frames.length,8);
 });
 
+test('idle holds its open eyes while blink frames use short total durations',()=>{
+  const entries=new Map();
+  loadAnimations('../src/characters/ninja/anim').animations({anims:{exists:()=>false,create:row=>entries.set(row.key,row)}});
+  const idle=entries.get('ninja-idle');
+  const holds=idle.frames.map(frame=>1000/idle.frameRate+(frame.duration||0));
+  assert.deepEqual(Array.from(holds),[1000,400,70,90,160]);
+  assert.equal(idle.repeat,-1);
+  assert.ok(entries.get('ninja-running').frames.every(frame=>frame.duration===undefined));
+});
+
 test('Ninja standing artwork retains original world height and clears the HUD',async()=>{
   const sharp=require('../spritesheet-generator/node_modules/sharp');
   async function bounds(file,frame){const {data,info}=await sharp(file).extract({left:frame.x,top:frame.y,width:frame.w,height:frame.h}).ensureAlpha().raw().toBuffer({resolveWithObject:true});let top=info.height,bottom=0;for(let y=0;y<info.height;y++)for(let x=0;x<info.width;x++)if(data[(y*info.width+x)*4+3]>127){top=Math.min(top,y);bottom=Math.max(bottom,y);}return{top,height:bottom-top+1};}

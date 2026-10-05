@@ -94,8 +94,10 @@ test('gesture starts two persistent streams; readiness switches on a beat withou
   env.advance(2);
   assert.equal(params[0].target, 0); assert.equal(params[1].target, .264);
   assert.equal(voices.filter(v => v.src.endsWith('/ready.mp3')).length, 1);
-  api.found(); api.found(); api.searching(); api.setReady(false); api.loading();
-  assert.equal(params[1].target, .264, 'found/loading do not lower music level');
+  api.found(); api.found(); api.searching(); api.setReady(false);
+  assert.equal(params[1].target, .264, 'match found does not lower music level');
+  api.loading();
+  assert.ok(params.every(p => p.target === 0), 'the battle loading screen fades the lobby out');
   env.advance(100);
   assert.equal(voices.some(v => v.src.endsWith('/match-ready.wav')), false);
   for (const voice of voices.slice(0,2)) {
@@ -213,9 +215,9 @@ test('lobby keeps playing while the matchmaking stream is not ready; errors fall
 
 test('handoff fades and pauses both; lobby return resumes a Phaser-suspended context', async () => {
   const env = setup(); env.api.enterLobby(); env.api.unlock(); await settle();
-  env.api.searching(); env.advance(600); env.api.loading();
+  env.api.searching(); env.advance(600);
   assert.equal(env.params[1].target, .264);
-  env.api.handoff(); assert.ok(env.params.every(p => p.target === 0)); env.advance(1400);
+  env.api.loading(); env.api.handoff(); assert.ok(env.params.every(p => p.target === 0)); env.advance(1400);
   assert.ok(env.voices.slice(0,2).every(v => v.paused));
   env.api.unlock(); assert.ok(env.voices.slice(0,2).every(v => v.paused));
   const positions = env.voices.slice(0,2).map(v => v.currentTime);

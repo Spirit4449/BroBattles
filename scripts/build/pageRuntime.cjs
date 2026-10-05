@@ -18,7 +18,7 @@ class PageRuntimePlugin {
         const urls = compilation.getAssets().filter(asset => /^bundles\/mode-.*\.(js|css)$/.test(asset.name)).map(asset => `/${asset.name}`);
         // Characters/skins come from the current lobby roster. This manifest
         // contains only shared assets and optional mode chunks.
-        for (const folder of ['movement', 'parachutes', 'tombstones']) {
+        for (const folder of ['movement', 'tombstones']) {
           const dir = path.join(root, folder);
           if (fs.existsSync(dir)) for (const file of fs.readdirSync(dir)) {
             if (/\.(webp|mp3|wav)$/.test(file) && fs.statSync(path.join(dir, file)).size < 1024 * 1024) urls.push(`/assets/${folder}/${file}`);

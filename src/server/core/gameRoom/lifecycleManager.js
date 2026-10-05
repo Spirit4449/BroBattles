@@ -2,55 +2,77 @@ const { appendPartyChatLog } = require("../../services/partyChatLog");
 const { deleteMatchBots } = require("../../services/matchRosterService");
 const { ALL_DEAD_GAME_OVER_DELAY_MS } = require("../gameRoomConfig");
 const effectManager = require("./effects/effectManager");
+const {
+  COUNTDOWN_MS,
+  START_DEADLINE_MS,
+  plannedCountdownStart,
+} = require("../../../shared/matchIntroTiming");
 
-function potentialStartGame(room) {
-  if (room.status !== "waiting") return;
-  room.status = "starting";
-  room._readyAcks = new Set();
-  console.log(
-    `[GameRoom ${room.matchId}] Entering starting phase (10s timeout)`,
-  );
-
-  room.io.to(`game:${room.matchId}`).emit("game:starting", {
-    timeoutMs: 10000,
-    at: Date.now(),
-  });
-
-  if (room._startTimeout) {
-    try {
-      clearTimeout(room._startTimeout);
-    } catch (_) {}
-  }
-  room._startTimeout = setTimeout(() => {
-    room._finalizeStart("timeout");
-  }, 10000);
+// Every pre-fight timer lives here so cleanup and cancellation release them all.
+function clearStartTimers(room) {
+  clearTimeout(room._startTimer);
+  clearTimeout(room._startDeadlineTimer);
+  clearTimeout(room._countdownTimeout);
+  room._startTimer = null;
+  room._startDeadlineTimer = null;
+  room._countdownTimeout = null;
 }
 
-function finalizeStart(room, reason = "timeout") {
-  if (room.status !== "starting") return;
-  if (room._startTimeout) {
-    try {
-      clearTimeout(room._startTimeout);
-    } catch (_) {}
-    room._startTimeout = null;
-  }
-  const have = room._readyAcks?.size || 0;
-  const need = room._requiredUserIds?.size || 0;
-  console.log(
-    `[GameRoom ${room.matchId}] Finalizing start (reason=${reason}) acks=${have}/${need}`,
-  );
-  room.startGame();
+function armStartDeadline(room) {
+  room._startDeadlineTimer = setTimeout(() => {
+    room._startDeadlineTimer = null;
+    room.potentialStartGame({ force: true });
+  }, START_DEADLINE_MS);
+  room._startDeadlineTimer.unref?.();
 }
 
-function startGame(room) {
+/**
+ * A human's loading screen lifted and their pregame began. Returns true the
+ * first time each user reports ready before the countdown.
+ */
+function noteReady(room, player, now = Date.now()) {
+  if (room.status !== "waiting" || room._readyAt.has(player.user_id)) return false;
+  room._readyAt.set(player.user_id, now);
+  room.potentialStartGame();
+  return true;
+}
+
+// Reschedule the countdown from the ready signals received so far. Every
+// reschedule moves it earlier (everyone loaded) or keeps it, never later.
+function potentialStartGame(room, { force = false } = {}) {
+  if (room.status !== "waiting" || room._disposed) return;
+  if (force) {
+    if (!room.hasConnectedHumanPlayers()) {
+      void room._cancelMatchAsAbandoned("No players loaded into the match");
+      return;
+    }
+    startGame(room, "deadline");
+    return;
+  }
+  const startAt = plannedCountdownStart(
+    [...room._readyAt.values()],
+    room._requiredUserIds.size,
+  );
+  if (startAt == null) return;
+  clearTimeout(room._startTimer);
+  room._startTimer = setTimeout(() => {
+    room._startTimer = null;
+    const allIn = room._readyAt.size >= room._requiredUserIds.size;
+    startGame(room, allIn ? "all_ready" : "grace_expired");
+  }, Math.max(0, startAt - Date.now()));
+}
+
+function startGame(room, reason = "all_ready") {
+  if (room.status !== "waiting" || room._disposed) return;
+  clearStartTimers(room);
   console.log(
-    `[GameRoom ${room.matchId}] Starting game with ${room.getPlayerCount()} connected players`,
+    `[GameRoom ${room.matchId}] Starting countdown (reason=${reason}) ready=${room._readyAt.size}/${room._requiredUserIds.size} connected=${room.getPlayerCount()}`,
   );
 
   room.status = "active";
-
   room.initializeSpawnPositions();
-  for (const p of room.players.values()) p._controlLockUntil = Date.now() + 6000;
+  room._countdownEndsAt = Date.now() + COUNTDOWN_MS;
+  for (const p of room.players.values()) p._controlLockUntil = room._countdownEndsAt;
   try {
     room.gameMode?.onStart?.();
   } catch (e) {
@@ -58,13 +80,14 @@ function startGame(room) {
   }
 
   room.io.to(`game:${room.matchId}`).emit("game:start", {
-    countdown: 6,
+    countdownMs: COUNTDOWN_MS,
     spawns: Object.fromEntries(Array.from(room.players.values(), p => [p.name, { x: p.x, y: p.y }])),
   });
 
   room._countdownTimeout = setTimeout(() => {
     if (room._disposed || room.status !== "active") return;
     room._countdownTimeout = null;
+    room._countdownEndsAt = 0;
     try {
       const now = Date.now();
       console.log(
@@ -72,8 +95,8 @@ function startGame(room) {
         {
           players: room.players.size,
           connectedPlayers: room.getPlayerCount(),
-          readyAcks: room._readyAcks?.size || 0,
-          requiredReadyAcks: room._requiredUserIds?.size || 0,
+          ready: room._readyAt.size,
+          required: room._requiredUserIds.size,
         },
       );
       for (const playerData of room.players.values()) {
@@ -97,7 +120,7 @@ function startGame(room) {
         error,
       );
     }
-  }, 6000);
+  }, COUNTDOWN_MS);
 }
 
 async function broadcastParticipantStatus(room, statusLabel) {
@@ -311,8 +334,10 @@ async function finishGame(room, winnerTeam, meta = {}) {
 }
 
 module.exports = {
+  clearStartTimers,
+  armStartDeadline,
+  noteReady,
   potentialStartGame,
-  finalizeStart,
   startGame,
   broadcastParticipantStatus,
   checkVictoryCondition,

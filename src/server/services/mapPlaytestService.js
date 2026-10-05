@@ -4,7 +4,6 @@ const {createBotParticipants}=require('../core/bots/identity');
 const {decorateParticipant}=require('./matchRosterService');
 const { getAllCharacters, getHealth, getDamage, getSpecialDamage, DEFAULT_CHARACTER }=require("../../shared/characterStats.js");
 const {clone,variantKey,validateDocument}=require('../../shared/mapDocument');
-const {spawnForParticipant}=require('../../shared/duelGeometry');
 const {validateAssets}=require('./mapAssetValidation');
 const {getParticipant}=require('../core/gameRoom/participants');
 
@@ -31,14 +30,6 @@ class EditorGameRoom extends GameRoom {
     const used=super.requestSpecial(id,payload);
     if(used)this._refillPlaytestSuper(getParticipant(this,id));
     return used;
-  }
-  initializeSpawnPositions() {
-    const size=Number(this.mapSnapshot.variant[0]);
-    for(const p of this.players.values()){
-      const team=this.matchData.players.filter(m=>m.team===p.team);
-      const index=Math.max(0,team.findIndex(m=>m.name===p.name));
-      Object.assign(p,spawnForParticipant(this.geometry,p,index,size),{vx:0,vy:0,grounded:true,spawnIndex:index});
-    }
   }
 }
 class MapPlaytestService {
@@ -89,7 +80,7 @@ class MapPlaytestService {
     const room=new EditorGameRoom(matchId,{mode:size,modeId,modeVariantId:`${modeId}-${key}`,map:document.id,players,editorMapSnapshot:snapshot,editorSoloPlaytest:!bots,editorInfiniteSupers:infiniteSupers===true,editorDebugHitboxes:debugHitboxes===true},{io:{to:(...args)=>this.namespace.to(...args),sockets:{sockets:this.namespace.sockets}},db:database});
     room.status='active';room.DEV_TIMING_DIAG=false;
     const normalPlan=room.gameMode.getRespawnPlan.bind(room.gameMode);
-    room.gameMode.getRespawnPlan=(p,meta)=>meta?.cause==='editor-self-kill'?{enabled:true,delayMs:1000,shieldMs:1000,position:spawnForParticipant(room.geometry,p,p.spawnIndex||0,size)}:normalPlan(p,meta)||{enabled:true,delayMs:1200,shieldMs:1000,position:spawnForParticipant(room.geometry,p,p.spawnIndex||0,size)};
+    room.gameMode.getRespawnPlan=(p,meta)=>meta?.cause==='editor-self-kill'?{enabled:true,delayMs:1000,shieldMs:1000,position:room.spawnStateFor(p)}:normalPlan(p,meta)||{enabled:true,delayMs:1200,shieldMs:1000,position:room.spawnStateFor(p)};
     const token=randomUUID();const session={token,ownerId:Number(user.user_id),room,expiresAt:Date.now()+60*60*1000,
       gameData:{matchId,mode:size,modeId,modeVariantId:`${modeId}-${key}`,map:document.id,mapSnapshot:snapshot,editorPlaytest:true,editorDebugHitboxes:debugHitboxes===true,editorSoloPlaytest:!bots,yourName:user.name,yourTeam:'team1',yourCharacter:character,isAdmin:true,isGuest:false,
         players:[]}};

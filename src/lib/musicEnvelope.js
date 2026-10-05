@@ -1,7 +1,7 @@
 import { getSettings, subscribeSettings } from '../site/preferences';
 
 // Keep the settings multiplier separate from the scene's musical intensity.
-export function bindMusicEnvelope(audio, baseVolume, initial = 1) {
+export function bindMusicEnvelope(audio, baseVolume, initial = 1, initialFadeMs = 1200) {
   let intensity = 0, frame, disposed = false;
   const apply = () => { audio.volume = Math.max(0, Math.min(1, baseVolume * intensity * getSettings().music)); };
   const unsubscribe = subscribeSettings(apply);
@@ -18,6 +18,6 @@ export function bindMusicEnvelope(audio, baseVolume, initial = 1) {
     frame = requestAnimationFrame(tick);
   }
   apply();
-  fade(initial, 1200);
+  fade(initial, initialFadeMs);
   return { fade, dispose() { disposed = true; cancelAnimationFrame(frame); unsubscribe(); } };
 }

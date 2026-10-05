@@ -1,4 +1,5 @@
 import { supportsSuddenDeath } from '../shared/modeCapabilities';
+import { COUNTDOWN_MS } from '../shared/matchIntroTiming';
 import { getCharacterNetworkVersions, configureCharacterNetworks, resetCharacterNetworks, observeCharacterSnapshot, handleCharacterNetworkPacket } from '../characters/networkRegistry';
 // match/matchCoordinator.js
 //
@@ -9,7 +10,6 @@ import { getCharacterNetworkVersions, configureCharacterNetworks, resetCharacter
 // Dependencies are injected via the config object so this module has zero
 // hidden global state and can be tested or instantiated in isolation.
 import { normalizeMapId } from "../maps/manifest";
-import { startSpawnIntro, finishSpawnIntro } from '../gameScene/spawnIntro';
 import { spawnDamageImpact, spawnDuckGuardImpact } from "../effects";
 import { spawnDeathTombstone } from "../gameScene/deathTombstone";
 import { applyActionToLocalPlayer, getCharacterSocketEvents, playCharacterSound } from "../characters";
@@ -60,12 +60,13 @@ const ROSTER_OWNED_FIELDS = new Set([
  * @property {(v: boolean) => void} setIsLiveGame
  * @property {() => boolean}       getGameEnded
  * @property {(v: boolean) => void} setGameEnded
- * @property {(v: boolean) => void} setStartingPhase
+ * @property {() => boolean}       isClientReady  loading screen lifted and scene built
  * @property {(v: any) => void}    setPendingAuthoritativeLocalState
  * // ---- spawn state ----
  * @property {() => number}        getSpawnVersion
  * @property {(v: number) => void} setSpawnVersion
  * @property {object}              serverSpawnIndex
+ * @property {(spawns: Record<string, {x: number, y: number}>) => void} onServerSpawns
  * // ---- live state (set via setter, read externally via closure var) ----
  * @property {(v: Array) => void}  setLatestPowerups
  * @property {(v: object|null) => void} setLatestModeState
@@ -127,11 +128,12 @@ export function createMatchCoordinator(config) {
     setIsLiveGame,
     getGameEnded,
     setGameEnded,
-    setStartingPhase,
+    isClientReady,
     setPendingAuthoritativeLocalState,
     getSpawnVersion,
     setSpawnVersion,
     serverSpawnIndex,
+    onServerSpawns,
     setLatestPowerups,
     setLatestModeState,
     getLatestModeState,
@@ -222,12 +224,9 @@ export function createMatchCoordinator(config) {
         idx,
         teamRoster.length,
       );
-      if (
-        getIsLiveGame() &&
-        pd.loaded === true &&
-        Number.isFinite(pd.x) &&
-        Number.isFinite(pd.y)
-      ) {
+      // Before FIGHT the server spawn is authoritative; once live, only a
+      // loaded player's position is.
+      if (!getIsLiveGame() || pd.loaded === true) {
         _applyAuthoritativeRemotePosition(op, pd);
       }
       op.finalizeSpawnPresentation?.();
@@ -410,11 +409,8 @@ export function createMatchCoordinator(config) {
   }
 
   function _forceLiveClientState() {
-    finishSpawnIntro(getGameScene());
     try {
       setIsLiveGame(true);
-      setStartingPhase(false);
-      hud.hideWaitingForPlayersBanner?.();
       hud.hideTopHudFade?.();
       hud.hideBattleStartOverlay();
       const scene = getGameScene();
@@ -512,6 +508,15 @@ export function createMatchCoordinator(config) {
         return;
       }
 
+      // Slow loads are not missed starts: the timeout counts from our own
+      // loading screen lifting, and the server waits for us until then.
+      if (!isClientReady()) {
+        _startWatchdogDeadline = Math.max(
+          _startWatchdogDeadline,
+          Date.now() + START_WATCHDOG_TIMEOUT_MS,
+        );
+      }
+
       if (Date.now() >= _startWatchdogDeadline) {
         _stopStartWatchdog();
         _clearForceLiveInputTimer();
@@ -521,7 +526,6 @@ export function createMatchCoordinator(config) {
             _startStartWatchdog();
             return;
           }
-          hud.hideWaitingForPlayersBanner?.();
           hud.showSystemNotice?.({
             title: "Match Connection Failed",
             message:
@@ -551,29 +555,8 @@ export function createMatchCoordinator(config) {
           socket.emit("game:join", joinPayload);
         }
       } catch (_) {}
-      try {
-        const readyPayload = { matchId: joinMatchId };
-        const localPlayer = getPlayer();
-        if (localPlayer) {
-          if (Number.isFinite(localPlayer.x)) readyPayload.x = localPlayer.x;
-          if (Number.isFinite(localPlayer.y)) readyPayload.y = localPlayer.y;
-          readyPayload.flip = !!localPlayer.flipX;
-          readyPayload.animation = localPlayer.anims?.currentAnim?.key || null;
-        }
-        if (!shouldMuteClientDefaultLogs()) {
-          console.log("[game] watchdog re-emitting ready", {
-            matchId: joinMatchId,
-            hasJoined: getHasJoined(),
-            hasLocalPlayer: !!localPlayer,
-          });
-        } else {
-          noteClientLifecycle(
-            "watchdog-ready",
-            `matchId=${joinMatchId} joined=${getHasJoined() ? 1 : 0}`,
-          );
-        }
-        socket.emit("game:ready", readyPayload);
-      } catch (_) {}
+      // Re-send readiness in case it was lost; only once we really are ready.
+      onTrySendReadyAck(true);
     }, 1000);
   }
 
@@ -603,11 +586,15 @@ export function createMatchCoordinator(config) {
     _joinedSocketId = socket.id || _joinedSocketId;
     setHasJoined(true);
 
-    // Detect late-join into an already-running game
+    // Detect late-join into an already-running game. A join during the
+    // pre-fight countdown resumes the countdown instead.
+    let resumeCountdownMs = 0;
     try {
       const status = String(gameState?.status || "").toLowerCase();
-      const live =
+      const active =
         status === "active" || status === "started" || status === "running";
+      resumeCountdownMs = active ? Math.max(0, Number(gameState?.countdownRemainingMs) || 0) : 0;
+      const live = active && resumeCountdownMs <= 0;
       setIsLiveGame(live);
       if (!shouldMuteClientDefaultLogs()) {
         console.log(live, "is live");
@@ -617,11 +604,6 @@ export function createMatchCoordinator(config) {
       if (live) {
         _clearForceLiveInputTimer();
         _forceLiveClientState();
-      } else if (status === "waiting" || status === "starting") {
-        try {
-          const gameData = getGameData();
-          hud.showBattleStartOverlay(gameData.players);
-        } catch (_) {}
       }
     } catch (_) {}
 
@@ -663,6 +645,13 @@ export function createMatchCoordinator(config) {
 
     _applyWorldState(gameState, gameData?.yourTeam);
 
+    // Sprites that already exist stand on the server's spawns (pre-fight only).
+    if (Array.isArray(gameState?.players)) {
+      onServerSpawns?.(Object.fromEntries(gameState.players
+        .filter((p) => p?.name && Number.isFinite(p.x) && Number.isFinite(p.y))
+        .map((p) => [p.name, { x: p.x, y: p.y }])));
+    }
+
     // Stash local player's live stats so character modules and spawn logic can use them
     try {
       const me = (gameState.players || []).find((p) => p.name === username);
@@ -685,57 +674,47 @@ export function createMatchCoordinator(config) {
     } catch (_) {}
 
     onTrySendReadyAck();
+    if (resumeCountdownMs > 0) {
+      _onGameStart({ countdownMs: resumeCountdownMs, elapsedMs: COUNTDOWN_MS - resumeCountdownMs });
+    }
   }
 
-  /** Server says the game has started — begin the pre-game countdown for normal joiners. */
+  /** Server started the pre-fight countdown: cards, 5..1, FIGHT. */
   function _onGameStart(data) {
+    const countdownMs = Math.max(0, Number(data?.countdownMs) || COUNTDOWN_MS);
     if (!shouldMuteClientDefaultLogs()) {
       console.log("Game starting:", data);
     } else {
-      noteClientLifecycle("start", `countdown=${Number(data?.countdown) || 0}`);
+      noteClientLifecycle("start", `countdownMs=${countdownMs}`);
     }
-    hud.hideWaitingForPlayersBanner?.();
-    const seconds = Math.max(1, Number(data?.countdown) || 3);
     _clearForceLiveInputTimer();
     // Keep the watchdog alive through the countdown until we receive
     // actual live evidence (snapshot/timer/world-state). This avoids a
     // permanent client-side stall if `game:start` arrives but the first
     // live packets are missed.
     _startWatchdogDeadline =
-      Date.now() + Math.max(START_WATCHDOG_TIMEOUT_MS, seconds * 1000 + 6000);
+      Date.now() + Math.max(START_WATCHDOG_TIMEOUT_MS, countdownMs + 6000);
     _startStartWatchdog();
+    // Spawns are re-established when the countdown starts; stand everyone on
+    // them so the first live packet matches the server.
+    onServerSpawns?.(data?.spawns);
     // Late joiners skip the countdown because the game is already running
     if (!getIsLiveGame()) {
       for (const name of Object.keys(data?.spawns || {})) {
         const wrapper = opponentPlayers[name] || teamPlayers[name];
         wrapper?.setPresenceState?.(true, true);
       }
-      startSpawnIntro(getGameScene(), data?.spawns);
-      hud.startCountdown(seconds);
+      // A resumed countdown counts down the full scale from where it is.
+      const elapsedMs = Math.max(0, Number(data?.elapsedMs) || 0);
+      hud.startCountdown((countdownMs + elapsedMs) / 1000, { elapsedMs });
     }
     _forceLiveInputTimer = setTimeout(
       () => {
         _forceLiveInputTimer = null;
         _forceLiveClientState();
       },
-      seconds * 1000 + 250,
+      countdownMs + 250,
     );
-  }
-
-  /** Server entered the starting window — show battle overlay and ack readiness. */
-  function _onGameStarting(payload) {
-    if (!shouldMuteClientDefaultLogs()) {
-      console.log("Game starting phase:", payload);
-    } else {
-      noteClientLifecycle("starting", `matchId=${payload?.matchId ?? "?"}`);
-    }
-    setStartingPhase(true);
-    if (!getIsLiveGame()) {
-      const gameData = getGameData();
-      hud.showBattleStartOverlay(gameData.players);
-    }
-    onTrySendReadyAck();
-    _startStartWatchdog();
   }
 
   function _onHealthUpdate(payload) {
@@ -1108,7 +1087,6 @@ export function createMatchCoordinator(config) {
   function _onGameError(error) {
     console.error("Game error:", error);
     _stopStartWatchdog();
-    hud.hideWaitingForPlayersBanner?.();
     hud.showSystemNotice?.({
       title: "Game Error",
       message: String(error?.message || "Something went wrong in this match."),
@@ -1149,7 +1127,6 @@ export function createMatchCoordinator(config) {
     if (getGameEnded()) return; // idempotent guard
     _stopStartWatchdog();
     _clearForceLiveInputTimer();
-    hud.hideWaitingForPlayersBanner?.();
     setGameEnded(true);
     onStopSuddenDeathMusic();
     onPlayMatchEndSound(payload?.winnerTeam);
@@ -1306,7 +1283,6 @@ export function createMatchCoordinator(config) {
     socket.on("game:joined", _onGameJoined);
     socket.on("game:init", _onGameInit);
     socket.on("game:start", _onGameStart);
-    socket.on("game:starting", _onGameStarting);
     socket.on("health-update", _onHealthUpdate);
     socket.on("player:dead", _onPlayerDead);
     socket.on("player:respawn", _onPlayerRespawn);
@@ -1344,7 +1320,6 @@ export function createMatchCoordinator(config) {
     socket.off("game:joined", _onGameJoined);
     socket.off("game:init", _onGameInit);
     socket.off("game:start", _onGameStart);
-    socket.off("game:starting", _onGameStarting);
     socket.off("health-update", _onHealthUpdate);
     socket.off("player:dead", _onPlayerDead);
     socket.off("player:respawn", _onPlayerRespawn);

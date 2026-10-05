@@ -257,6 +257,17 @@
         transition: none !important;
       }
 
+      /* The pregame map flythrough plays without gameplay chrome. */
+      #battle-keybind-hud,
+      #bb-mobile-controls-overlay {
+        transition: opacity 320ms ease;
+      }
+      body.match-pregame #battle-keybind-hud,
+      body.match-pregame #bb-mobile-controls-overlay {
+        opacity: 0;
+        pointer-events: none;
+      }
+
       /* ===== Battle Start Overlay (playful, blue-toned game card style) ===== */
       #battle-start-overlay {
         position: fixed;

@@ -94,6 +94,14 @@ test('focused arena consumes game keys while capture is disabled for countdown',
   assert.equal(h.controller.isActive(), false);
   h.controller.destroy();
 });
+test('focused arena leaves game keys to Phaser once the fight is live', () => {
+  const h = setup({ canCapture: () => true });
+  let prevented = 0;
+  h.doc.emit('keydown', { key: 'ArrowRight', target: h.canvas, preventDefault() { prevented++; } });
+  h.doc.emit('keydown', { key: 'a', target: h.canvas, preventDefault() { prevented++; } });
+  assert.equal(prevented, 0);
+  h.controller.destroy();
+});
 test('death keeps capture for spectating; battle end shows cursor and blocks recapture', () => {
   let battleActive = true;
   const h = setup({ canCapture: () => battleActive });

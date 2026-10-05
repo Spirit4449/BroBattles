@@ -4,7 +4,7 @@
   "animations": [
     {
       "key": "idle",
-      "fps": 3,
+      "fps": 20,
       "loop": true,
       "frames": [
         "idle00",
@@ -13,7 +13,14 @@
         "idle03",
         "idle04"
       ],
-      "row": 0
+      "row": 0,
+      "frameDurationsMs": [
+        1000,
+        400,
+        70,
+        90,
+        160
+      ]
     },
     {
       "key": "running",
@@ -124,6 +131,18 @@
         "duck00"
       ],
       "row": 9
+    },
+    {
+      "key": "dashing",
+      "fps": 25,
+      "loop": false,
+      "frames": [
+        "dash00",
+        "dash01",
+        "dash02",
+        "dash03"
+      ],
+      "row": 10
     }
   ]
 }

@@ -210,8 +210,9 @@ class BankBustGameMode extends BaseGameMode {
       shieldMs: Number(state?.respawnShieldMs) || DEFAULT_RESPAWN_SHIELD_MS,
       spawn: "team-base",
       team: playerData?.team || null,
-      position: geometry ? spawnForParticipant(geometry, playerData, Number(playerData.spawnIndex) || 0,
-        this.room.matchData.players.filter(p => p.team === playerData.team).length) : respawn
+      position: geometry ? (this.room?.spawnStateFor?.(playerData) ||
+        spawnForParticipant(geometry, playerData, Number(playerData.spawnIndex) || 0,
+          this.room.matchData.players.filter(p => p.team === playerData.team).length)) : respawn
         ? { x: Number(respawn.x) || 0, y: Number(respawn.y) || 0 }
         : null,
     };

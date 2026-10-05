@@ -212,7 +212,9 @@ function handlePlayerInput(room, socketId, inputData) {
   if (!inputData || typeof inputData !== "object") return;
 
   const now = Date.now();
-  if (Number(playerData._controlLockUntil || 0) > now) {
+  // Fighters stand at their spawns until FIGHT: before the countdown starts
+  // and while it runs, movement packets cannot move them.
+  if (room.status === "waiting" || Number(playerData._controlLockUntil || 0) > now) {
     playerData.vx = 0;
     playerData.vy = 0;
     playerData.lastInput = now;

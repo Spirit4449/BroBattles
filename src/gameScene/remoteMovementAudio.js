@@ -55,7 +55,7 @@ export function createRemoteMovementAudio(scene, sprite) {
   function tick() {
     if (!motion || destroyed) return;
     const time = now();
-    if (!sprite.active || scene._spawnIntroActive ||
+    if (!sprite.active ||
         (typeof document !== 'undefined' && document.hidden) || time - lastUpdate > 300) {
       reset();
       return;
@@ -74,7 +74,7 @@ export function createRemoteMovementAudio(scene, sprite) {
   }
   function update(state, animationState = state) {
     if (destroyed) return;
-    if (!state || !sprite.active || scene._spawnIntroActive ||
+    if (!state || !sprite.active ||
         (typeof document !== 'undefined' && document.hidden)) { reset(); return; }
     const time = now();
     lastUpdate = time;

@@ -902,6 +902,90 @@
         "w": 256,
         "h": 256
       }
+    },
+    {
+      "filename": "dash00",
+      "frame": {
+        "x": 0,
+        "y": 2560,
+        "w": 256,
+        "h": 256
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 256,
+        "h": 256
+      },
+      "sourceSize": {
+        "w": 256,
+        "h": 256
+      }
+    },
+    {
+      "filename": "dash01",
+      "frame": {
+        "x": 256,
+        "y": 2560,
+        "w": 256,
+        "h": 256
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 256,
+        "h": 256
+      },
+      "sourceSize": {
+        "w": 256,
+        "h": 256
+      }
+    },
+    {
+      "filename": "dash02",
+      "frame": {
+        "x": 512,
+        "y": 2560,
+        "w": 256,
+        "h": 256
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 256,
+        "h": 256
+      },
+      "sourceSize": {
+        "w": 256,
+        "h": 256
+      }
+    },
+    {
+      "filename": "dash03",
+      "frame": {
+        "x": 768,
+        "y": 2560,
+        "w": 256,
+        "h": 256
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 256,
+        "h": 256
+      },
+      "sourceSize": {
+        "w": 256,
+        "h": 256
+      }
     }
   ],
   "meta": {
@@ -910,7 +994,7 @@
     "image": "spritesheet.webp",
     "size": {
       "w": 2048,
-      "h": 2560
+      "h": 2816
     },
     "scale": 1
   }
