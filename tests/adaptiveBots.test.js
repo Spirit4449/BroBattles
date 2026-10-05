@@ -23,11 +23,8 @@ const {
 const {
   getDuelGeometry,
   characterBody,
-  spawnForParticipant,
 } = require("../src/shared/physics/duelGeometry");
 const {
-  buildGraph,
-  findRoute,
   standOn,
   safeWalkDirection,
 } = require("../src/server/core/bots/navigation");
@@ -251,34 +248,6 @@ test("ordinary bot identities have no accounts, support troll/guest/real names, 
     difficultyForTrophies(2000).reactionMaxMs <
       difficultyForTrophies(0).reactionMinMs,
   );
-});
-
-test("every character spawns on a real collider and has physically verified routes on every Duel map", () => {
-  for (const map of [1, 2, 3])
-    for (const character of [
-      "ninja",
-      "thorg",
-      "draven",
-      "wizard",
-      "huntress",
-      "gloop",
-    ]) {
-      const g = getDuelGeometry(map),
-        graph = buildGraph(g, character);
-      assert.ok([...graph.edges.values()].some((list) => list.length));
-      for (const team of ["team1", "team2"]) {
-        const p = {
-          char_class: character,
-          team,
-          ...spawnForParticipant(g, { char_class: character, team }, 0, 1),
-        };
-        for (let i = 0; i < 30; i++)
-          stepBody(p, {}, g, 1000 / 60, (i * 1000) / 60);
-        assert.ok(p.grounded, `${map}/${character}/${team} grounded`);
-        assert.ok(graph.surfaces.some((s) => s.id === p.platformId));
-        assert.equal(findRoute(graph, p.platformId, p.platformId).length, 0);
-      }
-    }
 });
 
 test("safe patrol brakes at edges; jump, one-way collision, wall jump and knockback are physical", () => {

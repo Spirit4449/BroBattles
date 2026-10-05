@@ -7,6 +7,7 @@ Documentation is organized by the job being done. Paths in prose and shell comma
 | Install and run | [Root README](../README.md) |
 | Find code owners and shared contracts | [Architecture](development/architecture.md) |
 | Add characters, modes, powerups, or migrations | [Contributing](development/contributing.md) |
+| Run or write tests | [Testing](development/contributing.md#testing) |
 | Change movement, bots, or debug combat | [Gameplay](development/gameplay.md) |
 | Find or tune a game constant | [Game constants](development/constants.md) |
 | Change replication, clocks, or projectile protocols | [Networking](development/networking.md) |

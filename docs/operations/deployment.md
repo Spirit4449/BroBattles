@@ -90,7 +90,7 @@ separate performance improvement.
 ## Verification
 
 ```sh
-node --test tests/*.test.js tests/*.test.mjs
+npm run test:all
 node scripts/db/verify-hardening-db.cjs
 npm run build
 node scripts/db/verify-hardening-server.cjs

@@ -175,13 +175,6 @@ test('burning arrows emit flames in flight and smoke at attached impacts, then c
   assert.ok(created.filter(s=>s.active).length<=1);
 });
 
-test('normal power spans the original minimum to the previous average speed',()=>{
-  assert.ok(Math.abs(model.resolveShot({angle:0,power:0}).speed-459.2)<1e-9);
-  assert.equal(model.resolveShot({angle:0,power:1}).speed,900);
-  assert.equal(model.resolveShot({angle:-Math.PI/2,power:1}).speed,900);
-});
-
-
 test('normal arrow trails fade and the network renderer detaches on cleanup', () => {
   const {api,created,scene,owner,frame}=setup();
   const tweens=[];
@@ -195,7 +188,6 @@ test('normal arrow trails fade and the network renderer detaches on cleanup', ()
   assert.equal(scene.events.listenerCount('update'),0);
   assert.ok(created.every(sprite=>!sprite.active));
 });
-
 
 test('PvP Huntress launches from the displayed moving opponent and converges to server flight',()=>{
   const f=setup();

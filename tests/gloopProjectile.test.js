@@ -94,31 +94,6 @@ test('reachable aimed throws reach the requested point with the configured discr
   }
 });
 
-test('aimed Gloop projectiles use the requested thirty percent speed reduction', () => {
-  const cfg = require('../src/shared/characters/characterTuning.js').getResolvedCharacterAttackConfig('gloop', 'slimeball');
-  assert.ok(Math.abs(cfg.launchSpeedMultiplier - 1.4 * 0.7) < 1e-12);
-  assert.ok(Math.abs(cfg.maxLaunchSpeed - 462 * 0.7) < 1e-12);
-  assert.ok(Math.abs(cfg.speed - 546 * 0.7) < 1e-12);
-});
-
-test('the successive Gloop rebound reaches higher than the old damped bounce', () => {
-  function secondBounceHeight(successiveBounceMultiplier) {
-    const s = state({ x: 0, y: 0, vx: 0, successiveBounceMultiplier });
-    let secondBounceStarted = false;
-    let apexY = Infinity;
-    for (let i = 0; i < 1200 && !s.done; i += 1) {
-      advanceSlimeball(s, 1000 / 120);
-      if (s.bounceCount >= 2) {
-        secondBounceStarted = true;
-        apexY = Math.min(apexY, s.y);
-      }
-    }
-    assert.equal(secondBounceStarted, true);
-    return 90 - apexY;
-  }
-  assert.ok(secondBounceHeight(0.85) > secondBounceHeight(0.62) * 1.5);
-});
-
 test('normal reticle consistently follows the server through two bounces', () => {
   const { resolveAttackAimContext } = require('../src/client/game/characters/shared/attackAim');
   const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');

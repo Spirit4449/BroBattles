@@ -12,7 +12,30 @@ npm test
 npm run build
 ```
 
-Use a focused test file during development, for example `node --test tests/contentContracts.test.js`. The full suite includes bot simulations and may take longer. Database and environment setup are in the [root README](../../README.md) and [database guide](../operations/database.md).
+Database and environment setup are in the [root README](../../README.md) and [database guide](../operations/database.md).
+
+## Testing
+
+Tests use the built-in `node --test` runner. There is no test framework to install.
+
+| Command | Runs | When |
+| --- | --- | --- |
+| `node --test tests/<file>.test.js` | One file | While iterating on a change |
+| `npm run test:<area>` | Focused group: `network`, `bots`, `shop`, `trophies`, `battle-log` | Changes inside that area |
+| `npm test` | `tests/*.test.js` and `tests/*.test.mjs` (about 4 seconds) | Once before finishing a change |
+| `npm run test:slow` | `tests/slow/`: exhaustive bot movement sweeps over every character and Duel map (about 7 seconds) | Changes to bot navigation, bot movement, bot physics, map geometry or spawns |
+| `npm run test:all` | Default suite plus `tests/slow/` | Before a deploy or a broad refactor |
+| `npm run test:db` | MySQL integration scripts | Schema or persistence changes, with a configured database |
+
+Find the relevant file by name (`tests/<feature>*.test.js`) or with `grep -rl "<module name>" tests/`. Feature guides list their focused checks.
+
+Writing tests:
+
+- Test behavior by calling real modules. Many client tests load browser modules through `vm` or Babel with stubbed imports; copy an existing test for the same folder.
+- Do not assert on source or CSS text (regular expressions over a file's contents), and do not pin tuning constants to literal numbers. Both break on harmless edits and were removed in the October 2026 test trim.
+- Extend the existing file for a feature instead of adding a new file for one regression. Each file is a separate process.
+- Put anything that takes more than about a second in `tests/slow/`. It is excluded from `npm test`.
+- `tests/helpers/` holds shared fixtures (`botRoom.js` builds a headless room with bots). `tests/browser/` holds Playwright harnesses described in the [client guide](client.md); they are not part of any npm test script.
 
 ## Add a character
 

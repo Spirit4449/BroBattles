@@ -107,22 +107,6 @@ test('failed initialization can retry; failed optional tasks do not block later 
   assert.equal(attempts, 2);
 });
 
-test('lobby bootstrap defers optional requests and retains fresh on-open settings', () => {
-  const source = fs.readFileSync(require.resolve('../src/client/pages/lobby.js'), 'utf8');
-  const deferred = source.slice(source.indexOf('  deferLobbySetup(['), source.indexOf('  const initialCharClass'));
-  assert.match(deferred, /ensureProfilePopup\(\)/);
-  assert.match(deferred, /ensureShop/);
-  assert.match(deferred, /refreshTrophyClaimAvailability/);
-  assert.match(deferred, /initializeLobbyHints/);
-  assert.match(deferred, /get\('profile'\) === 'self'/);
-  const bootstrap = source.slice(source.indexOf('document.addEventListener("DOMContentLoaded", async () => {'));
-  assert.doesNotMatch(bootstrap, /await loadPartySettings\(\)/);
-  const overlays = fs.readFileSync(require.resolve('../src/client/lobby/party/partyOverlays.js'), 'utf8');
-  assert.match(overlays, /async function openPartySettingsOverlay\(\)[\s\S]*?await loadPartySettings\(\)/);
-  assert.match(source, /open: \(\.\.\.args\) => ensureShop\(\)\.open\(\.\.\.args\)/);
-  assert.match(source, /open: \(\.\.\.args\) => ensureProfilePopup\(\)\?\.open\(\.\.\.args\)/);
-});
-
 test('actual menu wiring supports early clicks, deferred profile deep links, and wallet updates', () => {
   const source = fs.readFileSync(require.resolve('../src/client/pages/lobby.js'), 'utf8');
   const wiring = source.slice(source.indexOf('  const ensureProfilePopup ='), source.indexOf('  const initialCharClass'));

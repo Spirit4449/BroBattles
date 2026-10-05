@@ -48,6 +48,6 @@ npm test
 npm run build
 ```
 
-Focused suites include `test:network`, `test:bots`, `test:shop`, `test:trophies`, and `test:battle-log`. Database checks (`npm run test:db`) require configured MySQL; see their prerequisites in the database guide. Browser rendering harnesses have separate Playwright requirements described in the client guide.
+Focused suites include `test:network`, `test:bots`, `test:shop`, `test:trophies`, and `test:battle-log`. Exhaustive bot movement sweeps run separately with `npm run test:slow`; `npm run test:all` runs everything. See [Testing](docs/development/contributing.md#testing). Database checks (`npm run test:db`) require configured MySQL; see their prerequisites in the database guide. Browser rendering harnesses have separate Playwright requirements described in the client guide.
 
 Run commands from the repository root unless a guide says otherwise. `package.json` is the command reference; `src/shared/` owns gameplay definitions and catalogs.

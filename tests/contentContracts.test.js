@@ -50,9 +50,7 @@ test('shared movement uses authoritative boost values and multiplicative slow st
   assert.deepEqual(resolveLocalEffectMovement({}, null), { speedMult: 1, jumpMult: 1 });
 });
 
-test('server Gravity Boots tuning and scaling remain unchanged', () => {
-  assert.deepEqual(effectDefs.gravityBoots.getModifiers(), { jumpMult: 1.55, speedMult: 1.15 });
-  assert.equal(effectDefs.gravityBoots.getModifiers({ powerScale: 2 }).jumpMult, 2.1);
+test('server powerup effect durations match the powerup catalog', () => {
   for (const key of POWERUP_TYPES) assert.equal(effectDefs[key].durationMs, POWERUP_CATALOG[key].durationMs);
 });
 

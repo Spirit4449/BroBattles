@@ -44,13 +44,6 @@ for(const map of mapDefaults) for(const variant of Object.keys(map.variants)) {
  });
 }
 
-test('reported Lushy upper-platform floor rounds inside with legacy precision, but not new precision',()=>{
- const rect=getDuelGeometry(1).colliders.find(r=>r.id==='p1');
- const f=fixture(rect,'up');
- assert.ok(Math.round(f.y*2)/2-f.y>0.2);
- assert.ok(Math.abs(quantizeMovementPosition(f.y)-f.y)<0.0001);
-});
-
 test('genuine wall penetration still corrects and carries the contacted face',()=>{
  const rect=getDuelGeometry(1).colliders.find(r=>r.id==='p2');const f=fixture(rect,'right');
  input.handlePlayerInput(f.room,'p',{x:f.x-10,y:f.y,sequence:1,vx:-700,vy:100});

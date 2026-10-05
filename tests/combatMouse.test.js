@@ -46,9 +46,6 @@ function move(h, x, y) {
   h.doc.emit('mousemove', { target: h.canvas, movementX: x, movementY: y });
   h.controller.update();
 }
-test('production aiming sensitivity is reduced', () => {
-  assert.equal(COMBAT_MOUSE_CONFIG.mouseSensitivity, 0.24);
-});
 test('gameplay hides cursor before clicking; movement captures and Escape keeps it visible', () => {
   const h = setup();
   let requests = 0;

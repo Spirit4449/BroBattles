@@ -50,12 +50,6 @@ test('grass footsteps share predictable playback gain and landings follow terrai
   assert.equal(terrainLandingSound('hard', 0.5).volume, 0.45);
 });
 
-test('the first grounded movement frame plays a step for short key taps', () => {
-  const source = fs.readFileSync(require.resolve('../src/client/game/players/localMovementFx.js'), 'utf8');
-  assert.match(source, /if \(!wasGroundWalking\) \{\s*audio\.playStep\(scene, speedRatio, false\);/);
-  assert.match(source, /wasGroundWalking = isGroundWalking;/);
-});
-
 test('the opening spawn settle is silent and a real jump re-arms landing audio', () => {
   const player = { _suppressSpawnLandingSound: true, body: { velocity: { y: 88 } } };
   assert.equal(shouldPlayLandingSound(player, false), false);

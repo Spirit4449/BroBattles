@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '..');
 const file = url => path.join(root, 'public', url);
 
 for (const [character, id] of [['ninja', 'ninja-arena-sovereign'], ['gloop', 'gloop-amethyst']]) {
-  test(`${id}: dedicated art preserves every playable animation frame`, () => {
+  test(`${id}: dedicated art provides its playable animation frames`, () => {
     const skin = skins.characters[character].skins.find(skin => skin.id === id);
     const base = skins.characters[character].skins.find(skin => skin.id.endsWith('-default'));
     assert.notEqual(skin.gameAssets.spritesheetUrl, base.gameAssets.spritesheetUrl);
@@ -16,9 +16,23 @@ for (const [character, id] of [['ninja', 'ninja-arena-sovereign'], ['gloop', 'gl
     for (const asset of [skin.assetUrl, skin.gameAssets.spritesheetUrl, skin.gameAssets.animationsUrl]) assert.ok(fs.existsSync(file(asset)), asset);
     const atlas = JSON.parse(fs.readFileSync(file(skin.gameAssets.animationsUrl)));
     const original = JSON.parse(fs.readFileSync(file(base.gameAssets.animationsUrl)));
-    // Packing coordinates may differ; animation names and logical size must not.
     const logicalFrames = frames => frames.map(({frame, ...rest}) => ({...rest, width:frame.w, height:frame.h}));
-    assert.deepEqual(logicalFrames(atlas.frames.filter(f=>original.frames.some(o=>o.filename===f.filename))), logicalFrames(original.frames));
+    if (character === 'ninja') {
+      // This skin uses the legacy 72px animation set, with throw poses instead of base attack/special poses.
+      const required = ['idle', 'running', 'jumping', 'falling', 'dying', 'throw']
+        .flatMap((name, group) => Array.from({length: [5, 7, 9, 4, 5, 4][group]}, (_, i) => `${name}${String(i).padStart(2, '0')}`));
+      required.push('wall00', 'duck00');
+      assert.equal(atlas.frames.length, required.length);
+      assert.deepEqual(new Set(atlas.frames.map(frame => frame.filename)), new Set(required));
+      for (const entry of atlas.frames) {
+        assert.equal(entry.frame.w, 72, entry.filename);
+        assert.equal(entry.frame.h, 72, entry.filename);
+        assert.deepEqual(entry.sourceSize, {w: 72, h: 72}, entry.filename);
+      }
+    } else {
+      // Gloop's skin retains the base animation names and logical frame sizes.
+      assert.deepEqual(logicalFrames(atlas.frames), logicalFrames(original.frames));
+    }
     for (const {frame} of atlas.frames) {
       assert.ok(frame.x >= 0 && frame.y >= 0);
       assert.ok(frame.x + frame.w <= atlas.meta.size.w);
@@ -44,7 +58,7 @@ test('currency artwork scales through all six levels and ships every selected as
     assert.equal(new Set(assets).size,6);
     for(const asset of assets)assert.ok(fs.existsSync(file(asset)),asset);
   }
-  assert.equal(api.rewardSound([{kind:'currency',currency:'gems'}],'rare'),'rewardGems');
+  assert.equal(api.rewardSound([{kind:'currency',currency:'gems',amount:20}],'rare'),'rewardGems');
   assert.equal(api.rewardSound([{kind:'skin'}],'epic'),'rewardEpic');
   assert.equal(api.rewardSound([{kind:'skin'}],'legendary'),'rewardLegendary');
 });

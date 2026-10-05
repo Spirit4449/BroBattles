@@ -9,21 +9,6 @@ const root = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
-test("countdown keeps its beeps and final fight cue", () => {
-  const sounds = read("src/client/ui/uiSounds.js");
-  const hud = read("src/client/game/hud/gameHudController.js");
-
-  for (const [name, asset] of [
-    ["beep", "beep.mp3"],
-    ["start", "start.mp3"],
-  ]) {
-    assert.ok(sounds.includes(`${name}: \"/assets/game-sounds/${asset}\"`));
-    assert.ok(fs.existsSync(path.join(root, "public/assets/game-sounds", asset)));
-    assert.ok(hud.includes(`playSound(\"${name}\"`));
-  }
-  assert.ok(hud.includes('preloadSound("start"'));
-});
-
 test("final countdown cue plays once alongside FIGHT and enabling input", () => {
   const exported = {}, calls = [], preloaded = [], timers = [];
   const countdown = { style: {}, textContent: '' };

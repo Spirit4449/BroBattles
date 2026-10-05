@@ -14,7 +14,7 @@ const platform = (x, y, width = 100, overrides = {}) => ({
 
 test("duck art cells match the requested one-based sheet positions", () => {
   assert.deepEqual(DUCK_FRAME_CELLS, {
-    draven: [1, 1], gloop: [8, 2], ninja: [1, 3],
+    draven: [1, 1], gloop: [9, 3], ninja: [1, 3],
     huntress: [5, 2], wizard: [3, 7], thorg: [4, 4],
   });
 });

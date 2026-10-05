@@ -30,16 +30,6 @@ function collide(f, callback) {
   World.prototype.separate.call(f.world, f.player, f.platform, callback, null, false);
 }
 
-test('unmodified Arcade reproduces the recorded Thorg corner stall', () => {
-  const f = fixture();
-  collide(f);
-  assert.equal(f.player.blocked.down, true);
-  assert.equal(f.player.blocked.right, true);
-  assert.equal(f.player.velocity.x, 0);
-  assert.ok(f.player.bottom > f.platform.top);
-  assert.ok(f.player.bottom - f.platform.top < 1e-10);
-});
-
 for (const character of ['thorg', 'ninja', 'wizard', 'draven', 'gloop', 'huntress']) {
   for (const side of ['left', 'right']) {
     test(`${character} keeps moving after landing on the ${side} corner`, () => {

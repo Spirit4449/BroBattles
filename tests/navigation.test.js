@@ -79,30 +79,3 @@ test('superseded lobby data receives an abort signal', async () => {
   assert.equal(firstSignal.aborted, true);
   release(); await first;
 });
-
-test('a game return uses the loading bar instead of the lobby message overlay', () => {
-  const source = fs.readFileSync(require.resolve('../src/client/navigation/index.js'), 'utf8');
-  assert.match(source, /function showLobbyLoadingBar\(\)/);
-  assert.match(source, /returningToLobby[\s\S]*?showLobbyLoadingBar\(\)/);
-  assert.match(source, /showLoadingBar\('Loading lobby…'\)/);
-  assert.doesNotMatch(source, /'Preparing your lobby…'/);
-});
-
-test('a battle launch keeps one bottom-anchored loading bar through game startup', () => {
-  const source = fs.readFileSync(require.resolve('../src/client/navigation/index.js'), 'utf8');
-  assert.match(source, /function showBattleLoadingBar\(\)/);
-  assert.match(source, /showLoadingBar\('Preparing your battle…'\)/);
-  assert.match(source, /url\.pathname\.startsWith\('\/game\/'\)[\s\S]*?showBattleLoadingBar\(\)/);
-  const css = fs.readFileSync(require.resolve('../public/styles/loading.css'), 'utf8');
-  assert.match(css, /#loading-wrap, #bb-route-loading-wrap/);
-  assert.match(css, /bottom: max\(20px, env\(safe-area-inset-bottom\)\)/);
-  assert.doesNotMatch(source, /showTransition\(url\.pathname\.startsWith\('\/game\/'\) \? 'Preparing your battle…'/);
-});
-
-test('the route loader keeps its pixel font while pages exchange stylesheets', () => {
-  const source = fs.readFileSync(require.resolve('../src/client/navigation/index.js'), 'utf8');
-  assert.match(source, /function ensureRouteLoaderFont\(\)/);
-  assert.match(source, /style\.dataset\.navigation = 'route-loader-font'/);
-  assert.match(source, /font-display:block/);
-  assert.match(source, /document\.fonts\?\.load\?\.\('16px "Press Start 2P"'\)/);
-});
