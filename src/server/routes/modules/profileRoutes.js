@@ -9,6 +9,7 @@ const {
 const { getBattleLogForUser } = require("../../services/match/battleLog");
 
 const { USERNAME_RE, MIN_PW, MAX_PW } = require("../../services/auth/authAccountService");
+const { isReservedAdminName } = require("../../services/auth/auth");
 
 function registerProfileRoutes({ app, db, requireCurrentUser }) {
   require("./emailRoutes").registerEmailRoutes({ app, db, requireCurrentUser });
@@ -232,6 +233,11 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       }
       if (next === String(user.name || "")) {
         return res.json({ success: true, username: next });
+      }
+      if (isReservedAdminName(next)) {
+        return res
+          .status(409)
+          .json({ success: false, error: "Username is already taken." });
       }
 
       await db.withTransaction(async (_conn, q) => {

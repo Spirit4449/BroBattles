@@ -25,7 +25,7 @@ function resolveCookieSecret(rootDir, envSecret) {
   } catch (_) {}
   const newSecret = crypto.randomBytes(32).toString("hex");
   try {
-    fs.writeFileSync(secretPath, newSecret, { encoding: "utf8" });
+    fs.writeFileSync(secretPath, newSecret, { encoding: "utf8", mode: 0o600 });
   } catch (_) {}
   return newSecret;
 }

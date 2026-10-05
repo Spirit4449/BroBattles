@@ -11,6 +11,23 @@ const ADMIN_TOKENS = (process.env.ADMIN_USERS || "nishay")
   .map((token) => token.trim())
   .filter(Boolean);
 
+function isAdminUser(user) {
+  if (!user || !ADMIN_TOKENS.length) return false;
+  const id = String(user.user_id || "");
+  const name = String(user.name || "").toLowerCase();
+  return ADMIN_TOKENS.some((token) => {
+    if (/^[0-9]+$/.test(token)) return token === id;
+    return token.toLowerCase() === name;
+  });
+}
+
+// Name-based admin tokens grant access by username, so players must never be
+// able to claim one through signup or a rename.
+function isReservedAdminName(name) {
+  const lower = String(name || "").trim().toLowerCase();
+  return !!lower && ADMIN_TOKENS.some((token) => !/^[0-9]+$/.test(token) && token.toLowerCase() === lower);
+}
+
 function isGuest(userRow) {
   return userRow?.expires_at !== null && userRow?.expires_at !== undefined;
 }
@@ -96,18 +113,6 @@ function makeAuthHelpers(db, cookieOpts) {
     return user;
   }
 
-  function isAdminUser(user) {
-    if (!user || !ADMIN_TOKENS.length) return false;
-    const id = String(user.user_id || "");
-    const name = String(user.name || "").toLowerCase();
-    return ADMIN_TOKENS.some((token) => {
-      const trimmed = token.trim();
-      if (!trimmed) return false;
-      if (/^[0-9]+$/.test(trimmed)) return trimmed === id;
-      return trimmed.toLowerCase() === name;
-    });
-  }
-
   async function requireAdminUser(req, res) {
     const user = await requireCurrentUser(req, res);
     if (!user || !isAdminUser(user)) return null;
@@ -125,4 +130,4 @@ function makeAuthHelpers(db, cookieOpts) {
   };
 }
 
-module.exports = { makeAuthHelpers, isGuest };
+module.exports = { makeAuthHelpers, isGuest, isAdminUser, isReservedAdminName };

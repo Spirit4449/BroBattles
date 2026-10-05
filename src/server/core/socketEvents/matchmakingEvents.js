@@ -1,4 +1,5 @@
 const { inPartyOrder } = require("../../services/party/partyOperations");
+const { isAdminUser } = require("../../services/auth/auth");
 const {
   normalizeSelection,
   isSelectionQueueable,
@@ -219,11 +220,7 @@ function registerMatchmakingEvents(
       if (!requester?.name || !requester?.user_id) {
         throw new Error("Authentication required.");
       }
-      const adminNames = String(process.env.ADMIN_USERS || "nishay")
-        .split(",")
-        .map((token) => token.trim().toLowerCase())
-        .filter(Boolean);
-      if (!adminNames.includes(String(requester.name).toLowerCase())) {
+      if (!isAdminUser(requester)) {
         throw new Error("Admins only.");
       }
       const partyId = await db.getPartyIdByName(requester.name);

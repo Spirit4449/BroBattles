@@ -3,6 +3,7 @@ const {
   loginPermanentUser,
 } = require("../../services/auth/authAccountService");
 const { setBanHoldCookies } = require("../../services/auth/banHold");
+const { isReservedAdminName } = require("../../services/auth/auth");
 
 function registerAuthRoutes({ app, db, requireCurrentUser }) {
   app.get("/username-availability", async (req, res) => {
@@ -16,6 +17,9 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
 
     if (!usernamePattern.test(username)) {
       return res.json({ available: false, valid: false });
+    }
+    if (isReservedAdminName(username)) {
+      return res.json({ available: false, valid: true });
     }
 
     try {
@@ -78,6 +82,7 @@ function registerAuthRoutes({ app, db, requireCurrentUser }) {
   });
 
   app.post("/login", async (req, res) => {
+    if (!require("./siteRoutes").isSameOrigin(req)) return res.status(403).json({ error: "Same-origin request required." });
     try {
       const result = await loginPermanentUser({ app, db, req });
       if (!result.ok) {

@@ -1,6 +1,7 @@
 const bcrypt = require("bcrypt");
 const { getBanHoldFromRequest } = require("./banHold");
 const { failure } = require("../serviceResult");
+const { isReservedAdminName } = require("./auth");
 
 // Account credential rules (signup, login, and profile edits all use these).
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,14}$/; // 3-14 chars: letters, digits, _ . -
@@ -23,6 +24,9 @@ function validateCredentials(usernameRaw, passwordRaw) {
         error: "Username must be 3-14 chars: letters, numbers, _ . - only.",
       },
     };
+  }
+  if (isReservedAdminName(username)) {
+    return failure(409, { success: false, error: "Username is already taken." });
   }
   if (password.length < MIN_PW || password.length > MAX_PW) {
     return {

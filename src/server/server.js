@@ -38,6 +38,13 @@ const server = http.createServer(app);
 const io = socketIo(server);
 const port = Number(process.env.PORT) || 3002;
 
+app.disable("x-powered-by");
+app.use((_req, res, next) => {
+  // Only same-origin framing (Map Studio playtest) is allowed.
+  res.set({ "X-Frame-Options": "SAMEORIGIN", "X-Content-Type-Options": "nosniff" });
+  next();
+});
+
 // Config
 const IS_PROD = process.env.NODE_ENV === "production";
 // Allow overriding cookie security for HTTP deployments (e.g., Raspberry Pi dev)
