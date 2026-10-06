@@ -13,6 +13,7 @@ function imageSize(buffer) {
   throw Error('Use PNG, WebP or JPEG images');
 }
 function validateAssets(document, publicRoot=PUBLIC){
+  // Cloud art is the game-wide library (clouds.json), checked by validate:content.
   const errors=[];const cache=new Map();
   function read(url){
     if(!url?.startsWith('/assets/')||url.includes('..'))throw Error('Asset URL must be under /assets/');
@@ -20,7 +21,8 @@ function validateAssets(document, publicRoot=PUBLIC){
     if(!url.startsWith('/assets/map-editor-staged/')&&!url.startsWith('/assets/map-revisions/')&&!fs.realpathSync(file).startsWith(fs.realpathSync(path.join(publicRoot,'assets'))+path.sep))throw Error('Asset must stay inside public/assets');
     return fs.readFileSync(file);
   }
-  for(const[variant,map]of Object.entries(document.variants))for(const[key,asset]of Object.entries(map.assets)){
+  const map=document;
+  for(const[key,asset]of Object.entries(map.assets)){
     try{
       const cacheKey=JSON.stringify([asset,map.textureSizes[key]]);if(cache.has(cacheKey))continue;
       const dimensions=imageSize(read(asset.url));const expected=map.textureSizes[key];
@@ -38,10 +40,9 @@ function validateAssets(document, publicRoot=PUBLIC){
         for(const f of asset.animation?.frames||[])if(!frames[f])throw Error(`Unknown atlas frame ${f}`);
       }
       cache.set(cacheKey,true);
-    }catch(e){errors.push(`${variant}.assets.${key}: ${e.code==='ENOENT'?'Asset file does not exist in public/assets':e.message}`);}
+    }catch(e){errors.push(`assets.${key}: ${e.code==='ENOENT'?'Asset file does not exist in public/assets':e.message}`);}
   }
-  for(const [variant,map]of Object.entries(document.variants))try{imageSize(read(map.background));}catch(e){errors.push(`${variant}.background: ${e.code==='ENOENT'?'Image file does not exist':e.message}`);}
-  for(const [variant,map]of Object.entries(document.variants))for(const layer of [...(map.scenery?.layers||[]),...(map.scenery?.clouds||[])])try{imageSize(read(layer.url));}catch(e){errors.push(`${variant}.scenery.${layer.id}: ${e.code==='ENOENT'?'Image file does not exist':e.message}`);}
+  for(const layer of map.scenery?.layers||[])try{imageSize(read(layer.url));}catch(e){errors.push(`scenery.${layer.id}: ${e.code==='ENOENT'?'Image file does not exist':e.message}`);}
   return errors;
 }
 module.exports={validateAssets,imageSize};

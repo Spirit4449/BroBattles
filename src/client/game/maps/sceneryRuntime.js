@@ -2,16 +2,18 @@
 // backdrop renders here. Art layers, drifting clouds and parallax render at
 // every quality level. Atmosphere (fog, mist, glows, light rays, dust, platform
 // lighting, vignette) is WebGL-only and appears on High and Super High.
+// Depth-of-field blur is baked into layer art by the importer, not done here.
 import { getSettings, subscribeSettings } from '../../site/preferences';
 import { RENDER_LAYERS } from '../scene/renderLayers';
-import { ARENA_DEPTH, coverScale, sceneryTransform } from '../../../shared/maps/scenery';
-import { blurredTexture, ensureSceneryTextures, SCENERY_TEXTURES as T } from './sceneryTextures';
+import { ARENA_DEPTH, activeClouds, cloudUrl, coverScale, sceneryTransform, sceneryUrls } from '../../../shared/maps/scenery';
+import { mapArena } from '../../../shared/maps/arenas';
+import { ensureSceneryTextures, SCENERY_TEXTURES as T } from './sceneryTextures';
 import { GAME_VIEW } from '../scene/gameViewport';
 
 const ATMOSPHERE_LEVELS = new Set(['high', 'super-high']);
 // Extra camera travel covered beyond the bounds: aim look-ahead and shake.
 const COVER_MARGIN = 160;
-const MAX_MATCH_ZOOM = 2.2;
+// Dash adds a few percent of zoom on top of the arena's follow range.
 const DASH_ZOOM = 1.03;
 // Sub-steps above each back layer (10 apart), so its haze sits on it, its light
 // over that and its clouds in front.
@@ -19,22 +21,16 @@ const STACK = { fog: 1, mist: 2, glow: 3, rays: 4, dust: 4.5, clouds: 5 };
 // Clouds wrap this far beyond the camera bounds' half-width (world px).
 const CLOUD_WRAP_MARGIN = 500;
 
-// Maps without scenery layers show their `background` as one gently drifting layer.
-const BACKGROUND_SCROLL = 0.1;
-
-const layerKey = (url) => `scenery:${url}`;
+/** Texture key a scenery image loads under. */
+export const sceneryTextureKey = (url) => `scenery:${url}`;
+const layerKey = sceneryTextureKey;
 const color = (hex, fallback = 0xffffff) => (typeof hex === 'string' ? parseInt(hex.slice(1), 16) : fallback);
 const between = ([min, max], t = Math.random()) => min + (max - min) * t;
 
-function sceneryLayers(data) {
-  if (data?.scenery?.layers?.length) return data.scenery.layers;
-  return data?.background ? [{ id: 'background', url: data.background, scroll: BACKGROUND_SCROLL }] : [];
-}
-
 export function preloadScenery(scene, data) {
-  for (const layer of [...sceneryLayers(data), ...(data?.scenery?.clouds || [])]) {
-    const key = layerKey(layer.url);
-    if (!scene.textures.exists(key)) scene.load.image(key, layer.url);
+  for (const url of sceneryUrls(data?.scenery)) {
+    const key = layerKey(url);
+    if (!scene.textures.exists(key)) scene.load.image(key, url);
   }
 }
 
@@ -72,20 +68,25 @@ function atmosphereEnabled(scene) {
   return scene.game.renderer.type === Phaser.WEBGL && ATMOSPHERE_LEVELS.has(getSettings().graphics);
 }
 
-export function buildScenery(scene, data) {
+/**
+ * Build a map's scenery into a scene. The match runs it live: parallax against
+ * the camera, drifting clouds and atmosphere. `still: true` (Map Studio's edit
+ * view) composes it once as the match camera sees it at its reference zoom,
+ * centred in its bounds, with clouds at their placed positions.
+ */
+export function buildScenery(scene, data, { still = false } = {}) {
   destroyScenery(scene);
-  const layers = sceneryLayers(data);
-  if (!layers.length) return null;
-  const scenery = { ...data.scenery, layers };
-  const bounds = scene.cameras.main.getBounds();
+  const scenery = data?.scenery;
+  const camera = mapArena(data)?.camera;
+  if (!scenery || !camera) return null;
   const runtime = {
     scene,
     scenery,
-    center: { x: bounds.centerX, y: bounds.centerY },
-    bounds: { width: bounds.width, height: bounds.height },
-    referenceZoom: Number(data.bounds?.camera?.zoom) || scene.cameras.main.zoom || 1,
-    // The follow camera's zoom limits when the map sets them (cameraDynamics.js).
-    zoomLimits: Number.isFinite(data.bounds?.camera?.minZoom) ? [data.bounds.camera.minZoom, data.bounds.camera.maxZoom] : null,
+    center: { x: camera.x + camera.width / 2, y: camera.y + camera.height / 2 },
+    bounds: { width: camera.width, height: camera.height },
+    referenceZoom: camera.zoom,
+    // The follow camera's zoom range (cameraDynamics.js).
+    zoomLimits: [camera.minZoom, camera.maxZoom],
     depths: layerDepths(scenery.layers),
     layers: [],
     clouds: [],
@@ -94,8 +95,7 @@ export function buildScenery(scene, data) {
   for (const layer of scenery.layers) {
     const texture = loadTexture(scene, layer.url, layer.filter);
     if (!texture) continue;
-    // Depth of field: far layers draw from a blurred copy of their art.
-    const image = scene.add.image(0, 0, layer.blur > 0 ? blurredTexture(scene, texture.key, layer.blur) : texture.key)
+    const image = scene.add.image(0, 0, texture.key)
       .setScrollFactor(layer.scroll)
       .setDepth(runtime.depths[layer.id])
       .setAlpha(layer.alpha ?? 1);
@@ -111,16 +111,30 @@ export function buildScenery(scene, data) {
 
   fitLayers(runtime);
 
-  (scenery.clouds || []).forEach((cloud, i) => {
-    const texture = loadTexture(scene, cloud.url);
+  // Clouds sit in the world like platforms and drift sideways; by default
+  // over the platforms and under the fighters.
+  activeClouds(scenery).forEach((cloud, i) => {
+    const texture = loadTexture(scene, cloudUrl(cloud));
     if (!texture) return;
     const scale = cloud.scale || 1;
-    const obj = scene.add.image(0, 0, texture.key).setScrollFactor(cloud.scroll).setFlipX(Boolean(cloud.flipX))
-      .setDepth(stackDepth(runtime.depths, cloud, STACK.clouds) + 0.001 * i).setAlpha(cloud.alpha ?? 1);
+    const placement = cloud.front || cloud.after ? cloud : { after: ARENA_DEPTH };
+    const obj = scene.add.image(0, 0, texture.key).setScrollFactor(1).setFlipX(Boolean(cloud.flipX))
+      .setDepth(stackDepth(runtime.depths, placement, STACK.clouds) + 0.001 * i).setAlpha(cloud.alpha ?? 1);
     const halfSpan = runtime.bounds.width / 2 + CLOUD_WRAP_MARGIN + texture.getSourceImage().width * scale / 2;
-    runtime.clouds.push({ obj, scroll: cloud.scroll, home: cloud.x, speed: cloud.speed || 0, halfSpan,
-      offset: { x: cloud.x, y: cloud.y }, sx: scale, sy: scale });
+    const home = cloud.x - runtime.center.x;
+    runtime.clouds.push({ obj, scroll: 1, home, speed: cloud.direction === 'left' ? -cloud.speed : cloud.speed, halfSpan,
+      offset: { x: home, y: cloud.y - runtime.center.y }, sx: scale, sy: scale });
   });
+
+  if (still) {
+    for (const item of [...runtime.layers, ...runtime.clouds]) {
+      item.obj.setScrollFactor(1).setPosition(runtime.center.x + item.offset.x, runtime.center.y + item.offset.y)
+        .setScale(item.sx, item.sy);
+    }
+    runtime.destroy = () => { for (const item of [...runtime.layers, ...runtime.clouds]) item.obj.destroy(); };
+    scene._sceneryRuntime = runtime;
+    return runtime;
+  }
 
   const sync = () => {
     const enabled = Boolean(scenery.atmosphere) && atmosphereEnabled(scene);
@@ -170,11 +184,10 @@ function fitLayers(runtime) {
       scale = item.layer.scale || 0;
       for (const view of FIT_VIEWS) {
         const fitZoom = Math.max(view.width / runtime.bounds.width, view.height / runtime.bounds.height);
-        const [low, high] = runtime.zoomLimits || [runtime.referenceZoom, MAX_MATCH_ZOOM];
+        const [low, high] = runtime.zoomLimits;
         scale = Math.max(scale, coverScale({
           image: item.image, scroll: item.scroll, offset: extra, view, bounds: runtime.bounds,
-          // Dash adds a few percent of zoom on top of the follow limits.
-          referenceZoom: runtime.referenceZoom, zoomRange: [Math.min(fitZoom, low), runtime.zoomLimits ? high * DASH_ZOOM : high],
+          referenceZoom: runtime.referenceZoom, zoomRange: [Math.min(fitZoom, low, runtime.referenceZoom), high * DASH_ZOOM],
           margin: COVER_MARGIN, horizontalOnly: item.layer.fit === 'cover-x',
         }));
       }

@@ -13,7 +13,6 @@ function allMaps() { return require("../maps/mapRepository").mapRepository.listM
 
 const {
   getMapById,
-  getMapObjectiveLayout,
   getCompatibleMapsForSelection,
   normalizeSelection,
   isSelectionQueueable,
@@ -56,7 +55,6 @@ module.exports = {
   selectionToLegacyMode,
   getModeById,
   getMapById,
-  getMapObjectiveLayout,
   getVariantDescriptor,
   getCompatibleMapsForSelection,
   normalizeSelection,

@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { advanceSlimeball, sweep } = require('../src/shared/characters/gloopProjectile');
+const WORLD = require('../src/shared/maps/arenas').arenaFor('duels-1v1').world;
 const state = (extra = {}) => ({ x: 0, y: 0, vx: 220, vy: 0, collisionRadius: 10,
   gravity: 340, airDrag: 0.2, floorY: 100, maxBounces: 2,
   bounceDampingY: 0.68, bounceDampingX: 0.84, minBounceSpeed: 0,
@@ -71,7 +72,7 @@ test('server runtime follows the shared model through a wall rebound', () => {
     start: { x: 0, y: 0 }, direction: 1, mapCollisionRects: rects, floorY: 500 }, 0);
   const predicted = { ...attack };
   const room = { players: new Map([[player.participantId, player]]), FIXED_DT_MS: 1000 / 60,
-    geometry: { colliders: rects } };
+    geometry: { colliders: rects, world: WORLD } };
   for (let frame = 0; frame < 30; frame++) {
     tickRuntimeAttack(room, attack, frame * room.FIXED_DT_MS);
     advanceSlimeball(predicted, room.FIXED_DT_MS, rects);
@@ -106,7 +107,7 @@ test('normal reticle consistently follows the server through two bounces', () =>
     assert.equal(aim.kind, 'throw');
     const owner = { ...player, name: 'Gloop', participantId: 'gloop-test', isAlive: true, team: 'team1' };
     const attack = createRuntimeAttack(owner, { ...cfg, start: aim.start, angle: aim.angle, speed: aim.speed, initialVy: aim.initialVy, direction: aim.direction, type: 'gloop-slimeball-release', floorY: 500, worldMinX: 0, worldMaxX: 1100 }, 0);
-    const room = { players: new Map([[owner.participantId, owner]]), FIXED_DT_MS: 1000 / 120, geometry: { colliders: rects } };
+    const room = { players: new Map([[owner.participantId, owner]]), FIXED_DT_MS: 1000 / 120, geometry: { colliders: rects, world: WORLD } };
     for (let i = 0; i < 720 && !attack.done; i++) tickRuntimeAttack(room, attack, i * room.FIXED_DT_MS);
     assert.equal(aim.throwPreview.impacts.filter(hit => !hit.terminal).length, 2);
     assert.equal(aim.throwPreview.impacts.at(-1).terminal, true);
@@ -134,7 +135,7 @@ test('a very short Gloop reticle continues through its bounce', () => {
     speed: aim.speed, initialVy: aim.initialVy, direction: aim.direction,
     type: 'gloop-slimeball-release', floorY: 500, worldMinX: 0, worldMaxX: 1100 }, 0);
   const room = { players: new Map([[owner.participantId, owner]]), FIXED_DT_MS: 1000 / 120,
-    geometry: { colliders: rects } };
+    geometry: { colliders: rects, world: WORLD } };
   for (let i = 0; i < 720 && !attack.done; i++) tickRuntimeAttack(room, attack, i * room.FIXED_DT_MS);
   assert.equal(attack.x, aim.throwPreview.endX);
   assert.equal(attack.y, aim.throwPreview.endY);
@@ -147,7 +148,7 @@ test('authoritative release publishes the same launch and terrain used for damag
   const owner = { participantId:'gloop-release',name:'Gloop',char_class:'gloop',isAlive:true,loaded:true,
     x:100,y:200,_lastWidth:150,_lastHeight:150 };
   const emitted=[];let release;
-  const room={status:'active',matchId:1,geometry:{colliders:[{left:600,right:610,top:100,bottom:500}]},
+  const room={status:'active',matchId:1,geometry:{colliders:[{left:600,right:610,top:100,bottom:500}], world: WORLD },
     io:{to:()=>({emit:(_event,data)=>emitted.push(data)})},scheduleAction:fn=>{release=fn;}};
   const target={x:450,y:300};
   handleCharacterAction(room,owner,{type:'gloop-slimeball',id:'release-test',target},0);
@@ -203,7 +204,7 @@ test('release translates the preview with windup movement without changing its i
     const owner = { ...player, participantId:'gloop',name:'Gloop',char_class:'gloop',isAlive:true,loaded:true,
       _lastWidth:80,_lastHeight:100 };
     let release;
-    const room = {status:'active',matchId:1,geometry:{colliders:rects},players:new Map([['gloop',owner]]),
+    const room = {status:'active',matchId:1,geometry:{colliders:rects, world: WORLD },players:new Map([['gloop',owner]]),
       FIXED_DT_MS:1000/120,io:{to:()=>({emit:()=>{}})},scheduleAction:fn=>{release=fn;}};
     handleCharacterAction(room,owner,{type:'gloop-slimeball',id:'cast',start:aim.start,
       angle:aim.angle,speed:aim.speed,initialVy:aim.initialVy,target:aim.target,
@@ -225,7 +226,7 @@ test('slime hits only one overlapping enemy and broadcasts the terminal splat', 
   const enemies=['one','two'].map(name=>({participantId:name,name,char_class:'gloop',team:'b',isAlive:true,loaded:true,x:80,y:100,_lastWidth:150,_lastHeight:150}));
   const hits=[],events=[];
   const room={players:new Map([owner,...enemies].map(p=>[p.participantId,p])),FIXED_DT_MS:1000/120,
-    geometry:{colliders:[]},handleHit:(_,hit)=>hits.push(hit),io:{to:()=>({emit:(event,data)=>events.push(data)})}};
+    geometry:{colliders:[], world: WORLD },handleHit:(_,hit)=>hits.push(hit),io:{to:()=>({emit:(event,data)=>events.push(data)})}};
   const attack=createRuntimeAttack(owner,{type:'gloop-slimeball-release',id:'single',start:{x:20,y:100},angle:0,speed:250,initialVy:0,floorY:1000},0);
   for(let i=0;i<120&&!attack.done;i++) tickRuntimeAttack(room,attack,i*room.FIXED_DT_MS);
   assert.equal(hits.length,1);

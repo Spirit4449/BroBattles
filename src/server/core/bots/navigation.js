@@ -5,6 +5,9 @@ const { SD_DAMAGE_PER_SEC } = require('../gameRoomConfig');
 const graphs = new WeakMap();
 const { FIXED_DT_MS: DT } = require('../../../shared/gameConstants');
 const EDGE_STANCE_INSET = 14;
+// Longest single move the planner simulates (about 4 s). Multi-kick wall
+// climbs up tall pillars take close to 3 s.
+const MAX_TRAVERSAL_FRAMES = 240;
 
 function standOn(surface, character, x) {
   const b = characterBody(character);
@@ -17,7 +20,13 @@ function buildGraph(geometry, character, modifiers = {}) {
   if (!cache) { cache = new Map(); graphs.set(geometry, cache); }
   const key = `${character}:${modifiers.speedMult ?? 1}:${modifiers.jumpMult ?? 1}`;
   if (cache.has(key)) return cache.get(key);
-  const surfaces = geometry.colliders.filter((r) => r.collision.up && r.right - r.left >= 12);
+  // Tops buried under other solid ground (a pillar inside an arch) are not
+  // places to stand, so they are left out of the graph.
+  const standable = (r) => {
+    const { left, right } = walkLimits(r, character);
+    return Array.from({ length: 9 }, (_, i) => left + (right - left) * i / 8).some((x) => canStandAt(geometry, r, character, x));
+  };
+  const surfaces = geometry.colliders.filter((r) => r.collision.up && r.right - r.left >= 12 && standable(r));
   const edges = new Map(surfaces.map((r) => [r.id, []]));
   const dashEdges = new Map(surfaces.map((r) => [r.id, []]));
   for (const from of surfaces) {
@@ -236,7 +245,7 @@ function prepareTraversal(player, edge, sourceGeometry, modifiers, now, poisonY 
   const p = { ...player, isAlive: player.isAlive ?? true }, frames = [];
   const forecast = forecastGeometry(sourceGeometry), geometry = forecast.geometry;
   let airborne = false;
-  for (let i = 0; i < 150; i++) {
+  for (let i = 0; i < MAX_TRAVERSAL_FRAMES; i++) {
     const at = now + i * DT;
     forecast.step(p, i * DT);
     const wallJump = edge.wallClimb && p.wallSide && at >= (p._nextWallJump || 0);

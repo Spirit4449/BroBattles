@@ -1,8 +1,10 @@
 const { clone, geometryFromMap, constrainPoint } = require('../../shared/maps/mapDocument');
+const { arenaFor } = require('../../shared/maps/arenas');
 function allRows(map) {
   const rows = [...map.layout.platforms.map(value=>({kind:'platform',value})), ...map.layout.hitboxes.map(value=>({kind:'hitbox',value}))];
-  for (const team of ['team1','team2']) for (const [size,points] of Object.entries(map.spawns.players[team])) points.forEach((value,index)=>rows.push({kind:'spawn',id:`spawn-${team}-${size}-${index}`,team,size,index,value}));
+  for (const team of ['team1','team2']) map.spawns.players[team].forEach((value,index)=>rows.push({kind:'spawn',id:`spawn-${team}-${index}`,team,index,value}));
   rows.push(...map.spawns.powerups.map(value=>({kind:'powerup',value})));
+  rows.push(...(map.scenery.clouds?.items||[]).map(value=>({kind:'cloud',value})));
   const bank = map.objectiveLayout?.bankBust;
   if(bank) {
     for(const [team,value] of Object.entries(bank.vaults)) rows.push({kind:'vault',id:`vault-${team}`,value});
@@ -59,6 +61,7 @@ function removeRows(map, ids) {
   for(const id of ids) if(protectedIds.has(id)) throw Error(`${id} supports a spawn. Move or remove its spawn markers before deleting it.`);
   for(const kind of ['platforms','hitboxes']) map.layout[kind] = map.layout[kind].filter(p=>!ids.includes(p.id));
   map.spawns.powerups=map.spawns.powerups.filter(p=>!ids.includes(p.id));
+  if(map.scenery.clouds)map.scenery.clouds.items=map.scenery.clouds.items.filter(c=>!ids.includes(c.id));
   const b=map.objectiveLayout?.bankBust;
   if(b) for(const kind of ['objects','randomGoldSpawnPoints']) b[kind]=b[kind].filter(p=>!ids.includes(p.id));
   for(const [key,ref] of Object.entries(map.anchors)) if(ids.includes(ref.objectId)) delete map.anchors[key];
@@ -79,7 +82,8 @@ module.exports={allRows,snapMove,resizeRow,resizeCollision,removeRows};
 function replaceAssetReferences(document, original, upload) {
   const originalUrl=original.url;
   const source=original.sourceUrl||original.replaceTarget||originalUrl;
-  for(const data of Object.values(document.variants))for(const [key,asset]of Object.entries(data.assets)){
+  const data=document;
+  for(const [key,asset]of Object.entries(data.assets)){
     if(asset.url!==originalUrl&&(asset.sourceUrl||asset.replaceTarget||asset.url)!==source)continue;
     const old=data.textureSizes[key];
     if(asset.type==='image'){
@@ -94,7 +98,7 @@ function replaceAssetReferences(document, original, upload) {
 }
 function exportDocument(document) {
   const exported=clone(document),files=new Set();
-  for(const data of Object.values(exported.variants))for(const asset of Object.values(data.assets)){
+  for(const asset of Object.values(exported.assets)){
     const target=asset.replaceTarget||asset.sourceUrl;
     if(target){files.add(target);asset.url=target;delete asset.replaceTarget;delete asset.sourceUrl;}
   }
@@ -102,3 +106,19 @@ function exportDocument(document) {
 }
 module.exports.replaceAssetReferences=replaceAssetReferences;
 module.exports.exportDocument=exportDocument;
+
+// A copy of a map made for another mode: same layout and art, with one spawn
+// slot per player that mode allows (extra slots reuse the last one until moved)
+// and objectives only where the mode has them.
+function retargetMap(document, modeVariantId) {
+  const arena=arenaFor(modeVariantId);if(!arena)throw Error(`${modeVariantId} has no arena in arenas.json yet.`);
+  const copy=clone(document);copy.modeVariantId=modeVariantId;
+  for(const team of ['team1','team2']){
+    const slots=copy.spawns.players[team];
+    copy.spawns.players[team]=Array.from({length:arena.playersPerTeam},(_,i)=>clone(slots[Math.min(i,slots.length-1)]));
+  }
+  if(arena.modeId==='bank-bust'&&!copy.objectiveLayout?.bankBust)throw Error(`${arena.label} needs vaults and objectives. Start from a ${arena.label} map.`);
+  if(arena.modeId!=='bank-bust')delete copy.objectiveLayout;
+  return copy;
+}
+module.exports.retargetMap=retargetMap;

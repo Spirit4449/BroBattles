@@ -6,25 +6,13 @@ import { lockPlayerFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
 import { playPlayerSound } from "../../audio/playerAudio";
-import { WORLD_BOUNDS } from "../../../../shared/gameConstants";
 
 const NAME = "gloop";
 const SLIMEBALL = getResolvedCharacterAttackConfig(NAME, "slimeball");
-// Fallback travel limits when the scene has no physics bounds (shared world + margin).
-const WORLD_MIN_X = -WORLD_BOUNDS.margin;
-const WORLD_MAX_X = WORLD_BOUNDS.width + WORLD_BOUNDS.margin;
-
+// The map's world (its mode's arena), set as the physics bounds.
 function resolveWorldBounds(scene) {
-  const bounds = scene?.physics?.world?.bounds;
-  const rawX = Number(bounds?.x);
-  const rawY = Number(bounds?.y);
-  const rawW = Number(bounds?.width);
-  const rawH = Number(bounds?.height);
-  const minX = Number.isFinite(rawX) ? rawX : WORLD_MIN_X;
-  const minY = Number.isFinite(rawY) ? rawY : 0;
-  const maxX = Number.isFinite(rawW) ? minX + rawW : WORLD_MAX_X;
-  const maxY = Number.isFinite(rawH) ? minY + rawH : WORLD_BOUNDS.height;
-  return { minX, maxX, minY, maxY };
+  const { x, y, width, height } = scene.physics.world.bounds;
+  return { minX: x, maxX: x + width, minY: y, maxY: y + height };
 }
 
 let DEBUG_DRAW = false;
@@ -198,10 +186,7 @@ export function spawnGloopSlimeballVisual(
       0,
       Number(payload.minBounceSpeed) || Number(SLIMEBALL.minBounceSpeed) || 0,
     ),
-    floorY: Math.min(
-      Number(payload.floorY) || Number(worldBounds.maxY) || 1000,
-      Number(worldBounds.maxY) || 1000,
-    ),
+    floorY: Math.min(Number(payload.floorY) || worldBounds.maxY, worldBounds.maxY),
     maxLifetimeMs: Math.max(
       250,
       Number(payload.maxLifetimeMs) || Number(SLIMEBALL.maxLifetimeMs) || 4200,
@@ -209,10 +194,10 @@ export function spawnGloopSlimeballVisual(
     trailIntervalMs: Math.max(18, Number(SLIMEBALL.trailIntervalMs) || 42),
     worldMinX: Number.isFinite(Number(payload.worldMinX))
       ? Number(payload.worldMinX)
-      : Number(worldBounds.minX) || WORLD_MIN_X,
+      : worldBounds.minX,
     worldMaxX: Number.isFinite(Number(payload.worldMaxX))
       ? Number(payload.worldMaxX)
-      : Number(worldBounds.maxX) || WORLD_MAX_X,
+      : worldBounds.maxX,
     mapCollisionRects,
   };
 
@@ -320,10 +305,9 @@ export function performGloopSlimeball(instance, attackContext = null) {
       Number(SLIMEBALL.successiveBounceMultiplier) || 0.85,
     minBounceSpeed: Number(SLIMEBALL.minBounceSpeed) || 0,
     maxLifetimeMs: Number(SLIMEBALL.maxLifetimeMs) || 4200,
-    floorY:
-      Number(worldBounds.maxY) || Number(SLIMEBALL.bounceFloorOffsetY) || 1000,
-    worldMinX: Number(worldBounds.minX) || WORLD_MIN_X,
-    worldMaxX: Number(worldBounds.maxX) || WORLD_MAX_X,
+    floorY: worldBounds.maxY,
+    worldMinX: worldBounds.minX,
+    worldMaxX: worldBounds.maxX,
     mapCollisionRects: getMapCollisionRects(scene),
     slowDurationMs,
     slowSpeedMult,

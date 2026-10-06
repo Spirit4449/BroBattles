@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const input = require('../src/server/core/gameRoom/inputManager');
 const { characterBody } = require('../src/shared/physics/duelGeometry');
 const { createMovementCorrector } = require('../src/client/game/players/movementCorrection');
+const WORLD = require('../src/shared/maps/arenas').arenaFor('duels-1v1').world;
 
 function server(t) {
   let now = 100000;
@@ -10,7 +11,7 @@ function server(t) {
   const player = { socketId: 'p', name: 'Player', char_class: 'ninja', x: 0, y: 0,
     isAlive: true, connected: true, lastInput: now };
   const events = [];
-  const room = { players: new Map([['p', player]]),
+  const room = { players: new Map([['p', player]]), geometry: { colliders: [], world: WORLD },
     io: { to: () => ({ emit: (name, data) => events.push({ name, data }) }) } };
   input.resetMovementBudget(player, now);
   const corrections = () => events.filter(e => e.name === 'game:correction').map(e => e.data);
@@ -100,7 +101,7 @@ test('dash contact disagreements within 2px are clamped silently; deeper penetra
     const f = server(t);
     const shape = characterBody('ninja');
     const wallLeft = 50;
-    f.room.geometry = { colliders: [{ left: wallLeft, right: 52, top: -500, bottom: 500 }] };
+    f.room.geometry = { colliders: [{ left: wallLeft, right: 52, top: -500, bottom: 500 }], world: WORLD };
     // Player standing flush against the wall's left face during dash coast.
     f.player.x = wallLeft - shape.offsetX - shape.halfWidth;
     f.player._dashUntil = Date.now();

@@ -2,9 +2,6 @@ const { exposeDamageHitbox } = require('../../gameRoom/damageHitboxes');
 const { PICKUP_DELAY_MS } = require("../../../../shared/powerups");
 const { BaseGameMode } = require("../BaseGameMode");
 const { getModeById } = require("../../../../shared/gameSelection");
-const {
-  getMapObjectiveLayout,
-} = require("../../../services/match/gameSelectionCatalog");
 const effectManager = require("../../gameRoom/effects/effectManager");
 const { reduceDuckDamage } = require("../../../../shared/physics/ducking");
 const {
@@ -150,7 +147,7 @@ class BankBustGameMode extends BaseGameMode {
   }
 
   getLayout() {
-    return this.room?.mapSnapshot?.map?.objectiveLayout?.bankBust || getMapObjectiveLayout(this.room?.matchData?.map, "bankBust") || null;
+    return this.room?.mapSnapshot?.map?.objectiveLayout?.bankBust || null;
   }
 
   getMatchDurationMs() {
@@ -218,8 +215,7 @@ class BankBustGameMode extends BaseGameMode {
       spawn: "team-base",
       team: playerData?.team || null,
       position: geometry ? (this.room?.spawnStateFor?.(playerData) ||
-        spawnForParticipant(geometry, playerData, Number(playerData.spawnIndex) || 0,
-          this.room.matchData.players.filter(p => p.team === playerData.team).length)) : respawn
+        spawnForParticipant(geometry, playerData, Number(playerData.spawnIndex) || 0)) : respawn
         ? { x: Number(respawn.x) || 0, y: Number(respawn.y) || 0 }
         : null,
     };

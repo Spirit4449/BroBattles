@@ -4,16 +4,19 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const {clone,validateMap}=require('../src/shared/maps/mapDocument');
-const {coverScale,sceneryTransform,layerZoom}=require('../src/shared/maps/scenery');
+const {coverScale,sceneryTransform,layerZoom,cloudUrl,sceneryUrls,CLOUD_TYPES}=require('../src/shared/maps/scenery');
+const {mapArena}=require('../src/shared/maps/arenas');
 const defaults=require('../src/shared/maps').mapDefaults;
 const {MapRepository}=require('../src/server/services/maps/mapRepository');
 
-const withScenery=()=>defaults.find(d=>d.variants['1v1'].scenery);
+// The demonstration map: layered scenery with clouds and atmosphere.
+const withScenery=()=>defaults.find(d=>d.scenery.atmosphere&&d.scenery.clouds?.items.length);
 
-test('scenery is optional and validated with the map',()=>{
+test('every map has scenery, validated with the map',()=>{
  const doc=withScenery();assert.ok(doc,'a built-in map demonstrates scenery');
- assert.deepEqual(validateMap(doc.variants['1v1']),[]);
- const plain=clone(doc.variants['1v1']);delete plain.scenery;assert.deepEqual(validateMap(plain),[]);
+ assert.deepEqual(validateMap(doc),[]);
+ for(const map of defaults)assert.ok(map.scenery.layers.length,`${map.id} has at least one layer`);
+ const plain=clone(doc);delete plain.scenery;assert.ok(validateMap(plain).some(e=>e.includes('scenery')),'scenery is required');
  const mutations=[
   s=>s.layers[0].url='/assets/../.env',
   s=>s.layers[0].url='https://example.com/a.webp',
@@ -25,25 +28,36 @@ test('scenery is optional and validated with the map',()=>{
   s=>s.atmosphere.rays[0].alpha=[0.5,0.1],
   s=>s.atmosphere.dust[0].count=100000,
   s=>s.atmosphere.platforms.strength=2,
-  s=>s.clouds[0].url='/assets/../cloud.webp',
-  s=>s.clouds[1].id=s.layers[0].id,
-  s=>s.clouds[0].after='nowhere',
-  s=>s.clouds[0].speed=9999,
+  s=>s.layers=[],
+  s=>s.clouds.items[0].type='no-such-cloud',
+  s=>s.clouds.items[1].id=s.layers[0].id,
+  s=>s.clouds.items[0].after='nowhere',
+  s=>s.clouds.items[0].speed=9999,
+  s=>s.clouds.items[0].direction='up',
+  s=>delete s.clouds.enabled,
   s=>s.layers[1].frame={width:0,height:10,x:0,y:0},
  ];
- for(const mutate of mutations){const map=clone(doc.variants['1v1']);mutate(map.scenery);assert.ok(validateMap(map).some(e=>e.includes('scenery')),mutate.toString());}
+ for(const mutate of mutations){const map=clone(doc);mutate(map.scenery);assert.ok(validateMap(map).some(e=>e.includes('scenery')),mutate.toString());}
 });
 
 test('scenery can stack items over the arena and drift clouds',()=>{
- const map=clone(withScenery().variants['1v1']);
- assert.ok(map.scenery.clouds.length,'the demonstration map drifts clouds');
- map.scenery.atmosphere.mist[0].after='arena';map.scenery.clouds[0].after='arena';map.scenery.clouds[1].front=true;delete map.scenery.clouds[1].after;
+ const map=clone(withScenery());
+ map.scenery.atmosphere.mist[0].after='arena';map.scenery.clouds.items[0].after='arena';map.scenery.clouds.items[1].front=true;delete map.scenery.clouds.items[1].after;
  assert.deepEqual(validateMap(map),[]);
+});
+
+test('clouds come from the shared library; random picks the same cloud everywhere and turning clouds off loads none',()=>{
+ const map=clone(withScenery());const cloud={...map.scenery.clouds.items[0],type:'random'};
+ assert.ok(Object.values(CLOUD_TYPES).includes(cloudUrl(cloud)));assert.equal(cloudUrl(cloud),cloudUrl({...cloud}));
+ const types=new Set(Array.from({length:40},(_,i)=>cloudUrl({id:`cloud-${i}`,type:'random'})));assert.ok(types.size>1,'random spreads across the library');
+ assert.ok(sceneryUrls(map.scenery).some(url=>Object.values(CLOUD_TYPES).includes(url)));
+ map.scenery.clouds.enabled=false;assert.deepEqual(validateMap(map),[]);
+ assert.ok(!sceneryUrls(map.scenery).some(url=>Object.values(CLOUD_TYPES).includes(url)));
 });
 
 test('matches pin scenery layer art like platform art',t=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'bb-maps-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
- const doc=withScenery();const snapshot=new MapRepository(dir).forMatch(7001,doc.id,'1v1');
+ const doc=withScenery();const snapshot=new MapRepository(dir).forMatch(7001,doc.id);
  assert.ok(snapshot.map.scenery.layers.length);
  for(const layer of snapshot.map.scenery.layers)assert.match(layer.url,/^\/assets\/map-revisions\/[0-9a-f]{64}\.webp$/);
 });
@@ -59,7 +73,7 @@ function screenEdges({image,scale,scroll,offset,center,view,zoom,referenceZoom,c
 }
 
 test('cover layers never expose an edge anywhere the match camera can go',()=>{
- const doc=withScenery(),map=doc.variants['1v1'];const b=map.bounds.camera;
+ const doc=withScenery();const b=mapArena(doc).camera;
  const bounds={width:b.width,height:b.height},center={x:b.x+b.width/2,y:b.y+b.height/2};
  const view={width:2300,height:1100},referenceZoom=b.zoom,image={width:1672,height:941};
  const minZoom=Math.max(view.width/bounds.width,view.height/bounds.height),maxZoom=2.2;
@@ -78,7 +92,7 @@ test('cover layers never expose an edge anywhere the match camera can go',()=>{
 });
 
 test('horizontal cover spans the screen width without forcing full height',()=>{
- const doc=withScenery(),b=doc.variants['1v1'].bounds.camera;
+ const doc=withScenery(),b=mapArena(doc).camera;
  const args={image:{width:1672,height:400},scroll:0.3,view:{width:2300,height:1100},bounds:{width:b.width,height:b.height},referenceZoom:b.zoom,zoomRange:[1.2,2.2]};
  const full=coverScale(args),strip=coverScale({...args,horizontalOnly:true});
  assert.ok(strip<full,'a short strip needs less scale to span the width than to fill the screen');

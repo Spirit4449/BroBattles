@@ -94,15 +94,8 @@ export function getSpawnPreviewPoint(scene, point, anchors = {}, epsilon = 2, sn
   return { x, y };
 }
 
-export function getSpawnPointForTeam(spawnConfig, team, index, teamSize) {
-  const modeKey = String(Math.max(1, Math.min(3, Number(teamSize) || 1)));
-  const teamConfig = spawnConfig?.players?.[team];
-  const slots =
-    teamConfig?.[modeKey] ||
-    teamConfig?.["3"] ||
-    teamConfig?.["2"] ||
-    teamConfig?.["1"] ||
-    [];
+export function getSpawnPointForTeam(spawnConfig, team, index) {
+  const slots = spawnConfig?.players?.[team];
   if (!Array.isArray(slots) || !slots.length) return null;
 
   const i = Math.max(0, Math.min(slots.length - 1, Number(index) || 0));

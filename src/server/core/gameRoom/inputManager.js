@@ -3,7 +3,7 @@ const { sweepMovement } = require('../../../shared/physics/sweptCollision');
 const { resolveStomp } = require('./stomp');
 const { acceptDash } = require('../../../shared/physics/dash');
 const {
-  WORLD_BOUNDS,
+  WORLD_MARGIN,
   POSITION_HISTORY_DEPTH,
   POSITION_HISTORY_MS,
   MOVE_PLAUSIBLE_SPEED_H,
@@ -153,13 +153,12 @@ function applyMovementVfxState(playerData, inputData) {
   );
 }
 
-function clampToRoomBounds(x, y, room = null) {
-  const world = room?.geometry?.world;
-  const margin = WORLD_BOUNDS.margin;
-  const minX = (world?.x || 0) - margin;
-  const maxX = world ? world.x + world.width + margin : WORLD_BOUNDS.width + margin;
-  const minY = (world?.y || 0) - margin;
-  const maxY = world ? world.y + world.height + margin : WORLD_BOUNDS.height + margin;
+function clampToRoomBounds(x, y, room) {
+  const world = room.geometry.world;
+  const minX = world.x - WORLD_MARGIN;
+  const maxX = world.x + world.width + WORLD_MARGIN;
+  const minY = world.y - WORLD_MARGIN;
+  const maxY = world.y + world.height + WORLD_MARGIN;
   return {
     x: Math.max(minX, Math.min(maxX, Number(x) || 0)),
     y: Math.max(minY, Math.min(maxY, Number(y) || 0)),

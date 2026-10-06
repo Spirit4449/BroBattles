@@ -5,6 +5,7 @@ const { POWERUP_CATALOG } = require('../../src/shared/powerups');
 const { effectDefs } = require('../../src/server/core/gameRoom/effects/effectDefs');
 const { validateDocument } = require('../../src/shared/maps/mapDocument');
 const mapDefaults = require('../../src/shared/maps').mapDefaults;
+const { CLOUD_TYPES } = require('../../src/shared/maps/scenery');
 const { ATTACK_RUNTIMES } = require('../../src/server/core/gameRoom/characterAttackRegistry');
 const { BOT_PROFILES } = require('../../src/server/core/bots/characterProfiles');
 const skinsCatalog = require('../../src/shared/catalogs/skinsCatalog.json');
@@ -85,6 +86,7 @@ function validateContent({ characters = characterDefinitions, powerups = POWERUP
   for (const document of mapDefaults) {
     errors.push(...validateDocument(document).map(error => `map ${document.id}: ${error}`));
   }
+  for (const [type, url] of Object.entries(CLOUD_TYPES)) assetExists(url, `cloud ${type}`);
   return errors;
 }
 

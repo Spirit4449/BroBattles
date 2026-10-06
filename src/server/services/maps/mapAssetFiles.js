@@ -28,7 +28,7 @@ function immutableAsset(url){
 }
 function publishUploads(document,commit=doc=>doc){
   const doc=JSON.parse(JSON.stringify(document));const replacements=new Map();
-  for(const map of Object.values(doc.variants))for(const asset of Object.values(map.assets))if(asset.url.startsWith('/assets/map-editor-staged/')){
+  for(const asset of Object.values(doc.assets))if(asset.url.startsWith('/assets/map-editor-staged/')){
     const stage=resolveAssetFile(asset.url),meta=JSON.parse(fs.readFileSync(stage+'.json','utf8'));
     if(!assetUrl(meta.targetUrl))throw Error('Invalid staged asset destination');
     replacements.set(meta.targetUrl,{stage,url:asset.url});
@@ -73,8 +73,8 @@ function pinMapAssets(map){
     asset.url=immutableAsset(asset.url);
     if(asset.atlasURL)asset.atlasURL=immutableAsset(asset.atlasURL);
   }
-  copy.background=immutableAsset(copy.background);
-  for(const item of [...(copy.scenery?.layers||[]),...(copy.scenery?.clouds||[])])item.url=immutableAsset(item.url);
+  // Scenery layers are map art; clouds come from the game-wide cloud library.
+  for(const layer of copy.scenery.layers)layer.url=immutableAsset(layer.url);
   return copy;
 }
 module.exports={resolveAssetFile,stageUpload,publishUploads,pinMapAssets,immutableAsset};

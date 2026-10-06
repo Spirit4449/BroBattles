@@ -13,7 +13,7 @@ const defaults=require('../src/shared/maps').mapDefaults;
 
 // A map whose first platform that no spawn uses moves with `motion`.
 function movingMap(motion){
- const map=clone(defaults[0].variants['1v1']);
+ const map=clone(defaults[0]);
  const anchored=new Set(JSON.stringify(map.spawns).match(/"anchorId":"[^"]+"/g).map(s=>s.slice(12,-1)));
  const platform=map.layout.platforms.find(p=>!anchored.has(p.id));
  platform.motion={...MOTION_DEFAULTS,...motion};
@@ -42,9 +42,9 @@ test('moving platforms validate their motion and never support spawns',()=>{
   const bad=clone(map);bad.layout.platforms.find(p=>p.id===platform.id).motion[field]=value;
   assert.ok(validateMap(bad).some(e=>e.includes('.motion.')),`${field}=${value} is rejected`);
  }
- const anchored=clone(map);anchored.spawns.players.team1[1][0].anchorId=platform.id;
+ const anchored=clone(map);anchored.spawns.players.team1[0].anchorId=platform.id;
  assert.ok(validateMap(anchored).some(e=>e.includes('cannot anchor to a moving platform')));
- const point=constrainPoint(map,map.spawns.players.team1[1][0],platform.x,platform.y-40);
+ const point=constrainPoint(map,map.spawns.players.team1[0],platform.x,platform.y-40);
  assert.notEqual(point.anchorId,platform.id,'spawn snapping skips moving platforms');
 });
 
@@ -61,7 +61,7 @@ test('geometry advances moving colliders in place and plans bots over static one
  assert.equal(collider.right-collider.left,collider.base.right-collider.base.left);
  const fixed=staticGeometry(geometry);
  assert.ok(!fixed.colliders.includes(collider));assert.equal(staticGeometry(geometry),fixed);
- assert.equal(staticGeometry(geometryFromMap(defaults[0].variants['1v1'])).colliders.length,geometryFromMap(defaults[0].variants['1v1']).colliders.length);
+ assert.equal(staticGeometry(geometryFromMap(defaults[0])).colliders.length,geometryFromMap(defaults[0]).colliders.length);
 });
 
 test('the server carries a bot riding a moving platform and it stays grounded',()=>{

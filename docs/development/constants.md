@@ -37,7 +37,7 @@ These constants are used by the server, the client, bots, and the replicated pro
 | `FIXED_DT_MS` | Derived as `1000 / SERVER_TICK_HZ`. Used by the room loop, bots, Ninja/Huntress projectile replays, and client snapshot interpolation. |
 | `SNAPSHOT_EVERY_TICKS` | Ticks between player snapshots (2 → 30 Hz). The client's expected snapshot spacing is derived from it. |
 | `WORLD_STATE_EVERY_TICKS` | Ticks between world-state packets (8 → 7.5 Hz). |
-| `WORLD_BOUNDS` | Fallback playfield (`width`, `height`, `margin`) for rooms whose map defines no world rect. Gloop's client-side travel limits are derived from it. |
+| `WORLD_MARGIN` | How far past the world edges players, hooks and projectiles may travel. Each mode's world rectangle lives in `src/shared/maps/arenas.json`. |
 | `PARTY_JOIN_REQUEST_TIMEOUT_MS` | Lifetime of a party join request. The server enforces it and the client shows it as a countdown. |
 
 ## Server match tuning: `src/server/core/gameRoomConfig.js`

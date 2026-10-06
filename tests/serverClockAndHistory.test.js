@@ -6,6 +6,7 @@ const { evaluateHitRange, getHistoricalPosition } = require('../src/server/core/
 const { HuntressReplica, CombatClock } = require('../src/shared/characters/huntressReplication');
 const { POSITION_HISTORY_MS } = require('../src/server/core/gameRoomConfig');
 const loadServerClock = require('./helpers/serverClockModule');
+const WORLD = require('../src/shared/maps/arenas').arenaFor('duels-1v1').world;
 
 test('client hit times come from the shared server clock, never the client wall clock', () => {
   const now = 50000, nowMono = 9000;
@@ -29,7 +30,7 @@ test('humans record one history sample per accepted packet and rewind linearly b
   let now = 100000;
   t.mock.method(Date, 'now', () => now);
   const player = { socketId: 'p', name: 'P', char_class: 'ninja', x: 0, y: 0, isAlive: true, connected: true };
-  const room = { players: new Map([['p', player]]), io: { to: () => ({ emit() {} }) } };
+  const room = { players: new Map([['p', player]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
   input.resetMovementBudget(player, now);
   now += 30; input.handlePlayerInput(room, 'p', { x: 0, y: 0, sequence: 1 });
   now += 30; input.handlePlayerInput(room, 'p', { x: 9, y: 0, sequence: 2 });

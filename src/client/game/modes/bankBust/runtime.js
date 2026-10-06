@@ -1,6 +1,3 @@
-import { getMapObjectiveLayout } from "../../../lib/gameSelectionCatalog";
-import { getMapSpawnConfig } from "../../maps/manifest";
-import { getSpawnPreviewPoint } from "../../maps/mapUtils";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
 
 function cloneJson(v) {
@@ -11,41 +8,18 @@ function cloneJson(v) {
   }
 }
 
-function ensureHostHtml() {
+function createPromptHost() {
   const host = document.createElement("div");
-  host.id = "bank-bust-edit-host";
+  host.id = "bank-bust-prompt-host";
   host.innerHTML = `
     <style>
-      #bank-bust-edit-host{position:fixed;left:14px;bottom:14px;z-index:100001;font-family:system-ui,sans-serif}
       #bank-bust-interact-prompt{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:none;z-index:100000;background:var(--bb-hud-bg);border:0;border-radius:0;padding:10px 16px;color:var(--bb-text);font:10px/1.5 var(--bb-font-display);text-transform:uppercase;text-shadow:2px 2px 0 var(--bb-ink);box-shadow:var(--bb-hud-frame)}
       #bank-bust-interact-prompt.open{display:block}
-      #bank-bust-edit-panel{display:none;width:min(360px,92vw);background:rgba(9,16,28,.94);border:1px solid rgba(99,102,241,.45);border-radius:12px;padding:10px;color:#dbeafe;box-shadow:0 12px 28px rgba(0,0,0,.34)}
-      #bank-bust-edit-panel.open{display:block}
-      #bank-bust-edit-panel.min{display:none}
-      #bank-bust-edit-panel h4{margin:0 0 8px 0;font-size:13px}
-      #bank-bust-edit-panel .tiny{font-size:11px;opacity:.8;line-height:1.35;margin:6px 0}
-      #bank-bust-edit-panel textarea{width:100%;min-height:130px;box-sizing:border-box;background:#0f172a;border:1px solid rgba(148,163,184,.28);border-radius:8px;color:#e2e8f0;padding:8px;font:11px Consolas,monospace}
-      #bank-bust-edit-panel .btns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-      #bank-bust-edit-panel button{background:#1e293b;border:1px solid rgba(96,165,250,.35);color:#e0f2fe;border-radius:8px;padding:6px 10px;cursor:pointer}
     </style>
     <div id="bank-bust-interact-prompt"></div>
-    <div id="bank-bust-edit-panel">
-      <h4>Bank Bust Objects</h4>
-      <div class="btns">
-        <button id="bank-bust-export-layout" type="button">Export Layout</button>
-      </div>
-      <textarea id="bank-bust-export-json" placeholder="Exported Bank Bust layout appears here"></textarea>
-      <p class="tiny">While map edit mode is on, drag Bank Bust vaults, mines, slots, gold spawn markers, and powerup spawn markers. Export this JSON and reuse it in the shared map layout.</p>
-    </div>
   `;
   document.body.appendChild(host);
-  return {
-    host,
-    prompt: host.querySelector("#bank-bust-interact-prompt"),
-    panel: host.querySelector("#bank-bust-edit-panel"),
-    exportBtn: host.querySelector("#bank-bust-export-layout"),
-    textarea: host.querySelector("#bank-bust-export-json"),
-  };
+  return { host, prompt: host.querySelector("#bank-bust-interact-prompt") };
 }
 
 export function createBankBustRuntime({
@@ -57,15 +31,11 @@ export function createBankBustRuntime({
   getLocalPlayer,
   getOpponentPlayers,
   getTeamPlayers,
-  canEdit = false,
 } = {}) {
   const TURRET_RENDER_Y_OFFSET = 0;
   const state = {
     damageEventAt: 0,
-    editMode: false,
-    localLayout: null,
-    draggable: new Map(),
-    mapEditorMinimized: false,
+    layout: null,
     lastCollectionEventAt: 0,
     previousObjectStates: new Map(),
     mineOwnerById: new Map(),
@@ -77,15 +47,11 @@ export function createBankBustRuntime({
   uiGraphics.setDepth(RENDER_LAYERS.GAME_OBJECTS + 1);
   const objectGraphics = scene.add.graphics();
   objectGraphics.setDepth(RENDER_LAYERS.GAME_OBJECTS - 1);
-  const markerGraphics = scene.add.graphics();
-  markerGraphics.setDepth(RENDER_LAYERS.PLAYER_HUD);
 
   const vaultSprites = new Map();
   const floatingCoins = [];
   const objectContainers = new Map();
   const pickupSprites = new Map();
-  const spawnPointMarkers = new Map();
-  const powerupSpawnMarkers = new Map();
   const wallBodies = new Map();
   const turretBaseSprites = new Map();
   const turretHeadSprites = new Map();
@@ -95,25 +61,25 @@ export function createBankBustRuntime({
   const turretProjectileVisualState = new Map();
   const turretProjectileLocallyDestroyed = new Set();
 
-  const editorUi = ensureHostHtml();
+  const promptUi = createPromptHost();
 
   function getBaseLayout() {
-    return getGameData?.()?.mapSnapshot?.map?.objectiveLayout?.bankBust || getMapObjectiveLayout(getGameData?.()?.map, "bankBust") || null;
+    return getGameData?.()?.mapSnapshot?.map?.objectiveLayout?.bankBust || null;
   }
 
-  function getWorkingLayout() {
-    if (!state.localLayout) {
-      state.localLayout = cloneJson(getBaseLayout()) || {
+  function getLayout() {
+    if (!state.layout) {
+      state.layout = cloneJson(getBaseLayout()) || {
         vaults: {},
         objects: [],
         randomGoldSpawnPoints: [],
       };
     }
-    return state.localLayout;
+    return state.layout;
   }
 
   function syncLayoutFromModeState(modeState) {
-    const working = getWorkingLayout();
+    const working = getLayout();
     if (modeState?.vaults) {
       working.vaults = working.vaults || {};
       for (const [team, vault] of Object.entries(modeState.vaults || {})) {
@@ -178,32 +144,10 @@ export function createBankBustRuntime({
     }
   }
 
-  function setEditorVisible(visible) {
-    if (!editorUi) return;
-    editorUi.panel.classList.toggle(
-      "open",
-      !!visible && !state.mapEditorMinimized,
-    );
-    editorUi.panel.classList.toggle("min", !!state.mapEditorMinimized);
-  }
-
-  function onMapEditorUiState(ev) {
-    const enabled = ev?.detail?.enabled !== false;
-    state.mapEditorMinimized = !!ev?.detail?.minimized;
-    if (!enabled) state.mapEditorMinimized = false;
-    setEditorVisible(canEdit && state.editMode);
-  }
-
-  function setEditMode(enabled) {
-    state.editMode = !!enabled;
-    setEditorVisible(canEdit && state.editMode);
-  }
-
   function setPrompt(text = "") {
-    if (!editorUi?.prompt) return;
     const value = String(text || "").trim();
-    editorUi.prompt.textContent = value;
-    editorUi.prompt.classList.toggle("open", !!value);
+    promptUi.prompt.textContent = value;
+    promptUi.prompt.classList.toggle("open", !!value);
   }
 
   function currentLocalPlayer() {
@@ -234,15 +178,14 @@ export function createBankBustRuntime({
   }
 
   function computeInteractPrompt(modeState) {
-    if (state.editMode) return "";
     const localPlayer = currentLocalPlayer();
     if (!localPlayer || localPlayer.dead || !localPlayer.body) return "";
     const team = getLocalTeam();
     if (!team) return "";
     const teamGold = Math.max(0, Number(modeState?.teamGold?.[team]) || 0);
     let best = null;
-    for (const entry of Array.isArray(getWorkingLayout()?.objects)
-      ? getWorkingLayout().objects
+    for (const entry of Array.isArray(getLayout()?.objects)
+      ? getLayout().objects
       : []) {
       if (entry?.type !== "claimableTurret" && entry?.type !== "wallSlot")
         continue;
@@ -276,7 +219,7 @@ export function createBankBustRuntime({
   }
 
   function getLayoutVault(team, vault) {
-    const layoutVault = getWorkingLayout()?.vaults?.[team] || {};
+    const layoutVault = getLayout()?.vaults?.[team] || {};
     return {
       ...layoutVault,
       ...cloneJson(vault || {}),
@@ -287,16 +230,6 @@ export function createBankBustRuntime({
     };
   }
 
-  function ensureDraggable(go, meta) {
-    if (!go || !canEdit) return;
-    if (!go.input) {
-      go.setInteractive({ cursor: "grab" });
-    }
-    scene.input.setDraggable(go);
-    go.__bankBustMeta = meta;
-    state.draggable.set(go, meta);
-  }
-
   function ensureVaultSprite(team) {
     let sprite = vaultSprites.get(team) || null;
     if (sprite?.scene) return sprite;
@@ -304,7 +237,6 @@ export function createBankBustRuntime({
     sprite = scene.add.image(-9999, -9999, "bank-bust-vault");
     sprite.setDepth(RENDER_LAYERS.GAME_OBJECTS + 1);
     sprite.setVisible(false);
-    ensureDraggable(sprite, { kind: "vault", id: team });
     vaultSprites.set(team, sprite);
     return sprite;
   }
@@ -334,7 +266,6 @@ export function createBankBustRuntime({
     container.setVisible(false);
     container._bg = bg;
     container._label = label;
-    ensureDraggable(container, { kind: "object", id });
     objectContainers.set(id, container);
     return container;
   }
@@ -353,49 +284,6 @@ export function createBankBustRuntime({
     sprite.setVisible(false);
     map.set(id, sprite);
     return sprite;
-  }
-
-  function ensureSpawnPointMarker(id) {
-    let marker = spawnPointMarkers.get(id) || null;
-    if (marker?.scene) return marker;
-    marker = scene.add.circle(-9999, -9999, 12, 0xf8e16c, 0.65);
-    marker.setStrokeStyle(3, 0x1e293b, 0.95);
-    marker.setDepth(RENDER_LAYERS.PLAYER_HUD);
-    marker.setVisible(false);
-    ensureDraggable(marker, { kind: "randomGoldSpawnPoint", id });
-    spawnPointMarkers.set(id, marker);
-    return marker;
-  }
-
-  function ensurePowerupSpawnMarker(index) {
-    let marker = powerupSpawnMarkers.get(index) || null;
-    if (marker?.scene) return marker;
-    marker = scene.add.circle(-9999, -9999, 10, 0x99ff77, 0.75);
-    marker.setStrokeStyle(3, 0x1e293b, 0.95);
-    marker.setDepth(RENDER_LAYERS.PLAYER_HUD);
-    marker.setVisible(false);
-    ensureDraggable(marker, { kind: "powerupSpawnPoint", index });
-    powerupSpawnMarkers.set(index, marker);
-    return marker;
-  }
-
-  function getWorkingPowerupSpawns() {
-    if (Array.isArray(state.localLayout?.powerups))
-      return state.localLayout.powerups;
-    const mapId = Number(getGameData?.()?.map) || 1;
-    const mapSpawnConfig = getMapSpawnConfig(mapId, scene);
-    const powerups = Array.isArray(mapSpawnConfig?.powerups)
-      ? cloneJson(mapSpawnConfig.powerups)
-      : [];
-    if (!state.localLayout) {
-      state.localLayout = cloneJson(getBaseLayout()) || {
-        vaults: {},
-        objects: [],
-        randomGoldSpawnPoints: [],
-      };
-    }
-    state.localLayout.powerups = powerups;
-    return state.localLayout.powerups;
   }
 
   function ensureTurretSprite(
@@ -563,7 +451,7 @@ export function createBankBustRuntime({
   }
 
   function getObjectPositionById(id) {
-    const layout = getWorkingLayout();
+    const layout = getLayout();
     const entry = (Array.isArray(layout?.objects) ? layout.objects : []).find(
       (obj) => obj?.id === id,
     );
@@ -696,7 +584,7 @@ export function createBankBustRuntime({
   }
 
   function renderObjects(modeState) {
-    const layout = getWorkingLayout();
+    const layout = getLayout();
     const objectStateById = new Map(
       (Array.isArray(modeState?.objects) ? modeState.objects : []).map(
         (entry) => [entry.id, entry],
@@ -847,29 +735,6 @@ export function createBankBustRuntime({
     cleanupUnused(turretBaseSprites, usedObjectIds);
     cleanupUnused(turretHeadSprites, usedObjectIds);
 
-    const usedSpawnPoints = new Set();
-    for (const entry of Array.isArray(layout?.randomGoldSpawnPoints)
-      ? layout.randomGoldSpawnPoints
-      : []) {
-      usedSpawnPoints.add(entry.id);
-      const marker = ensureSpawnPointMarker(entry.id);
-      marker.setPosition(Number(entry.x) || 0, Number(entry.y) || 0);
-      marker.setVisible(!!state.editMode);
-    }
-    cleanupUnused(spawnPointMarkers, usedSpawnPoints);
-
-    const usedPowerupIndices = new Set();
-    const powerups = getWorkingPowerupSpawns();
-    for (let i = 0; i < powerups.length; i++) {
-      const entry = powerups[i];
-      const preview = getSpawnPreviewPoint(scene, entry, {}, 0);
-      if (!preview) continue;
-      usedPowerupIndices.add(i);
-      const marker = ensurePowerupSpawnMarker(i);
-      marker.setPosition(preview.x, preview.y);
-      marker.setVisible(!!state.editMode);
-    }
-    cleanupUnused(powerupSpawnMarkers, usedPowerupIndices);
     hideUnusedWallBodies(modeState);
   }
 
@@ -1147,74 +1012,13 @@ export function createBankBustRuntime({
     state.recentProjectileIds = nextProjectileIds;
   }
 
-  function buildExportPayload() {
-    const layout = getWorkingLayout();
-    return {
-      schema: "bank-bust-layout.v1",
-      vaults: cloneJson(layout?.vaults || {}),
-      objects: cloneJson(layout?.objects || []),
-      randomGoldSpawnPoints: cloneJson(layout?.randomGoldSpawnPoints || []),
-      powerups: cloneJson(getWorkingPowerupSpawns() || []),
-    };
-  }
-
-  function exportLayout() {
-    if (!editorUi) return;
-    const payload = JSON.stringify(buildExportPayload(), null, 2);
-    editorUi.textarea.value = payload;
-    navigator?.clipboard?.writeText?.(payload).catch(() => {});
-  }
-
-  if (canEdit && editorUi?.exportBtn) {
-    editorUi.exportBtn.addEventListener("click", exportLayout);
-  }
-
-  const dragHandler = (_pointer, go, dragX, dragY) => {
-    if (!state.editMode || !canEdit) return;
-    const meta = go?.__bankBustMeta;
-    if (!meta) return;
-    const layout = getWorkingLayout();
-    if (meta.kind === "vault") {
-      const vault = layout?.vaults?.[meta.id];
-      if (!vault) return;
-      vault.x = dragX;
-      vault.y = dragY;
-    } else if (meta.kind === "object") {
-      const target = (layout?.objects || []).find(
-        (entry) => entry.id === meta.id,
-      );
-      if (!target) return;
-      target.x = dragX;
-      target.y = dragY;
-    } else if (meta.kind === "randomGoldSpawnPoint") {
-      const target = (layout?.randomGoldSpawnPoints || []).find(
-        (entry) => entry.id === meta.id,
-      );
-      if (!target) return;
-      target.x = dragX;
-      target.y = dragY;
-    } else if (meta.kind === "powerupSpawnPoint") {
-      const powerups = getWorkingPowerupSpawns();
-      const target = powerups?.[meta.index] || null;
-      if (!target) return;
-      target.x = dragX;
-      target.y = dragY;
-      delete target.dx;
-      delete target.anchorId;
-    }
-  };
-  scene.input.on("drag", dragHandler);
-  window.addEventListener("bb:map-editor-ui-state", onMapEditorUiState);
-
   function render() {
     objectiveGraphics.clear();
     uiGraphics.clear();
     objectGraphics.clear();
-    markerGraphics.clear();
 
     const modeState = getModeState?.() || null;
     if (modeState?.type !== "bank-bust") {
-      setEditorVisible(false);
       setPrompt("");
       cleanupUnused(vaultSprites, new Set());
       cleanupUnused(objectContainers, new Set());
@@ -1222,8 +1026,6 @@ export function createBankBustRuntime({
       cleanupUnused(wallSprites, new Set());
       cleanupUnused(turretBaseSprites, new Set());
       cleanupUnused(turretHeadSprites, new Set());
-      cleanupUnused(spawnPointMarkers, new Set());
-      cleanupUnused(powerupSpawnMarkers, new Set());
       for (const sprite of pickupSprites.values()) sprite.setVisible(false);
       for (const sprite of turretProjectileSprites.values())
         sprite.setVisible(false);
@@ -1249,21 +1051,13 @@ export function createBankBustRuntime({
     renderTurretProjectiles(modeState);
     renderVaults(modeState);
     setPrompt(computeInteractPrompt(modeState));
-    setEditorVisible(canEdit && state.editMode);
   }
 
   function destroy() {
     try {
-      scene.input.off("drag", dragHandler);
-    } catch (_) {}
-    try {
-      window.removeEventListener("bb:map-editor-ui-state", onMapEditorUiState);
-    } catch (_) {}
-    try {
       objectiveGraphics.destroy();
       uiGraphics.destroy();
       objectGraphics.destroy();
-      markerGraphics.destroy();
     } catch (_) {}
     for (const sprite of vaultSprites.values()) destroyContainer(sprite);
     for (const visual of pickupSprites.values()) {
@@ -1274,8 +1068,6 @@ export function createBankBustRuntime({
         visual?.glowCore?.destroy?.();
       } catch (_) {}
     }
-    for (const sprite of spawnPointMarkers.values()) destroyContainer(sprite);
-    for (const sprite of powerupSpawnMarkers.values()) destroyContainer(sprite);
     for (const entry of objectContainers.values()) destroyContainer(entry);
     for (const sprite of turretBaseSprites.values()) destroyContainer(sprite);
     for (const sprite of turretHeadSprites.values()) destroyContainer(sprite);
@@ -1290,14 +1082,12 @@ export function createBankBustRuntime({
       updateWallBody(id, null, false);
     }
     try {
-      editorUi?.host?.remove?.();
+      promptUi.host.remove();
     } catch (_) {}
   }
 
   return {
     render,
     destroy,
-    setEditMode,
-    exportLayout,
   };
 }

@@ -510,7 +510,6 @@ export function createGameHudController({
   }
 
   function showSuddenDeathBanner() {
-    if (window.__BB_MAP_EDIT_ACTIVE) return;
     const existing = document.getElementById("sd-flash-banner");
     if (existing) return;
     const banner = document.createElement("div");
@@ -546,7 +545,6 @@ export function createGameHudController({
   }
 
   function showStatusBanner(text, { variant = "info" } = {}) {
-    if (window.__BB_MAP_EDIT_ACTIVE) return;
     const banner = document.getElementById("game-status-banner");
     const textEl = document.getElementById("game-status-banner-text");
     if (!banner || !textEl) return;
@@ -694,7 +692,6 @@ export function createGameHudController({
     onConfirm = null,
     confirmOnAutoClose = false,
   } = {}) {
-    if (window.__BB_MAP_EDIT_ACTIVE) return null;
     const overlay = document.getElementById("game-notice-overlay");
     const titleEl = document.getElementById("game-notice-title");
     const messageEl = document.getElementById("game-notice-message");

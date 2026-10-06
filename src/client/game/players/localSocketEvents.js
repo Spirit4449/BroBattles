@@ -36,7 +36,6 @@ export function bindLocalSocketEvents({
   setSuperCharge,
   setMaxSuperCharge,
   stopWallSlideAudio,
-  getIsEditMode,
   onLocalDeath,
   onLocalRespawn,
   removeLocalCorpse,
@@ -51,13 +50,6 @@ export function bindLocalSocketEvents({
     corpseRemovalTimer?.remove?.(false);
     corpseRemovalTimer = null;
   };
-  const isEditModeActive = () => {
-    try {
-      if (typeof getIsEditMode === "function") return !!getIsEditMode();
-    } catch (_) {}
-    return !!window.__BB_MAP_EDIT_ACTIVE;
-  };
-
   const healthUpdateHandler = (data) => {
     if (data.username !== getUsername()) return;
 
@@ -74,12 +66,6 @@ export function bindLocalSocketEvents({
     setCurrentHealthValue(data.health);
 
     const delta = getCurrentHealth() - prev;
-
-    if (isEditModeActive() && delta < 0) {
-      setCurrentHealthValue(prev);
-      updateHealthBar();
-      return;
-    }
 
     onDebug?.();
 
@@ -214,7 +200,6 @@ export function bindLocalSocketEvents({
   };
 
   const knockbackHandler = (data) => {
-    if (isEditModeActive()) return;
     const player = getPlayer();
     if (!player || !player.body || getDead()) return;
 
@@ -330,7 +315,6 @@ export function bindLocalSocketEvents({
       logical: 'falling', fallback: 'idle' });
   };
   const correctionHandler = (data) => {
-    if (isEditModeActive()) return;
     localMovementCorrector?.apply(getPlayer(), data);
   };
   socket.on("player:stomp", stompHandler);

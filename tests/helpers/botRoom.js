@@ -10,13 +10,13 @@ function makeRoom({ characters = ['ninja', 'wizard'], map = 1, trophies = 1000, 
   const db = { runQuery: async (sql, params) => { queries.push({ sql, params }); return []; } };
   const players = characters.map((char_class, i) => ({ participantId: `bot:test:${i}`, user_id: null, name: `Player${i}`, team: i % 2 ? 'team2' : 'team1', char_class,
     isBot: true, level: 1, trophies, seed: seed + i, difficulty: difficultyForTrophies(trophies) }));
-  const teamSize = Math.max(1, Math.ceil(characters.length / 2));
   // Navigation assertions use the checked-in geometry, independent of local editor saves.
-  const document = require('../../src/shared/maps').mapDefaults.find(entry => entry.id === Number(map));
-  const variant = `${teamSize}v${teamSize}`;
-  const editorMapSnapshot = { mapId: map, revision: 'test-default', variant,
-    metadata: document.metadata, map: structuredClone(mapData || document.variants[variant]) };
-  const room = new GameRoom(1, { mode: teamSize, modeId: 'duels', modeVariantId: `duels-${teamSize}v${teamSize}`, map, players, editorMapSnapshot }, { io, db });
+  const { mapDefaults } = require('../../src/shared/maps');
+  const { mapSummary } = require('../../src/shared/maps/mapDocument');
+  const { schemaVersion, ...document } = structuredClone(mapDefaults.find(entry => entry.id === Number(map)));
+  const arena = require('../../src/shared/maps/arenas').mapArena(document);
+  const editorMapSnapshot = { mapId: map, revision: 'test-default', metadata: mapSummary(document), map: structuredClone(mapData || document) };
+  const room = new GameRoom(1, { mode: arena.playersPerTeam, modeId: arena.modeId, modeVariantId: arena.modeVariantId, map, players, editorMapSnapshot }, { io, db });
   room.status = 'active'; room._loopStartWallTime = Date.now(); room._checkVictoryCondition = () => {};
   room.broadcastSnapshot = () => {}; room.DEV_TIMING_DIAG = false; room._netTestEnabled = true;
   room._requiredUserIds.clear();

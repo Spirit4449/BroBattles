@@ -19,7 +19,7 @@ function registerMapEditorRoutes({app, requireCurrentUser, isAdminUser, pageRoot
   app.get('/api/admin/map-playtests/:session', admin((req,res,user)=>res.json({success:true,gameData:mapPlaytests.get(req.params.session,user).gameData})));
   app.delete('/api/admin/map-playtests/:session', admin((req,res,user)=>{mapPlaytests.get(req.params.session,user);mapPlaytests.remove(req.params.session);return res.json({success:true});}));
   app.get('/map-editor', admin((req,res) => res.sendFile(path.join(pageRoot,'map-editor.html'))));
-  app.get('/api/admin/maps', admin((req,res) => res.json({maps:mapRepository.list().map(({document,revision})=>({id:document.id,label:document.label,revision}))})));
+  app.get('/api/admin/maps', admin((req,res) => res.json({maps:mapRepository.list().map(({document,revision})=>({id:document.id,label:document.label,modeVariantId:document.modeVariantId,revision}))})));
   app.get('/api/admin/maps/:id', admin((req,res) => res.json(mapRepository.get(req.params.id))));
   app.put('/api/admin/maps/:id', admin((req,res) => {
     if (Number(req.params.id) !== req.body?.document?.id) return res.status(400).json({error:'URL and document map IDs must match'});

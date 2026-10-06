@@ -1,12 +1,15 @@
-// Optional per-variant `scenery`: parallax art layers plus atmosphere
-// (fog, mist, glows, light rays, dust, platform lighting, vignette).
-// Presentation only. The server validates and pins it but never simulates it.
+// A map's `scenery`: parallax art layers (at least one), drifting clouds and
+// optional atmosphere (fog, mist, glows, light rays, dust, platform lighting,
+// vignette). Presentation only. The server validates and pins it but never
+// simulates it.
 //
 // Layer and atmosphere positions are offsets in world units from the camera
 // bounds centre. `scroll` is the parallax factor: 0 is fixed to the screen,
 // 1 moves with the arena, above 1 is foreground that moves faster.
+// Clouds are placed in world coordinates, like platforms.
 // Atmosphere and clouds stack with `after`: a layer ID, or ARENA_DEPTH for
 // over the platforms but under the fighters. `front: true` is over the fighters.
+const CLOUD_TYPES = require('./clouds.json');
 
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 const URL = /^\/assets\/[a-zA-Z0-9_./-]+$/;
@@ -15,9 +18,12 @@ const ARENA_DEPTH = 'arena';
 const FITS = ['cover', 'cover-x', 'none'];
 const LAYER_STACKS = ['back', 'arena', 'front'];
 
-function validateScenery(scenery, fail, num) {
-  if (scenery === undefined) return;
-  if (!scenery || typeof scenery !== 'object') return fail('scenery', 'must be an object');
+const CLOUD_DIRECTIONS = ['left', 'right'];
+const RANDOM_CLOUD = 'random';
+
+// `id` registers map-wide unique object IDs (clouds share them with platforms).
+function validateScenery(scenery, fail, num, id) {
+  if (!scenery || typeof scenery !== 'object') return fail('scenery', 'requires at least one layer');
   const color = (v, path) => { if (v !== undefined && (typeof v !== 'string' || !COLOR.test(v))) fail(path, 'must be a #rrggbb colour'); };
   const range = (v, path, min, max) => {
     if (!Array.isArray(v) || v.length !== 2) return fail(path, 'requires [min, max]');
@@ -34,6 +40,7 @@ function validateScenery(scenery, fail, num) {
 
   const layerIds = new Set();
   const layers = list(scenery.layers, 'scenery.layers', 16);
+  if (!layers.length) fail('scenery.layers', 'requires at least one layer');
   layers.forEach((layer, i) => {
     const path = `scenery.layers[${i}]`;
     if (typeof layer?.id !== 'string' || !ID.test(layer.id) || layerIds.has(layer.id)) fail(`${path}.id`, 'requires a unique stable ID');
@@ -46,6 +53,7 @@ function validateScenery(scenery, fail, num) {
     opt(layer?.x, `${path}.x`); opt(layer?.y, `${path}.y`);
     opt(layer?.alpha, `${path}.alpha`, 0, 1);
     opt(layer?.fog, `${path}.fog`, 0, 1);
+    // Blur is baked into the image by the art importer, not applied in game.
     opt(layer?.blur, `${path}.blur`, 0, 16);
     color(layer?.tint, `${path}.tint`);
     // stack: back (behind the platforms; the default up to scroll 1), arena
@@ -68,16 +76,21 @@ function validateScenery(scenery, fail, num) {
   };
 
   // Clouds drift sideways at `speed` (world px/s) and wrap around the arena.
-  const cloudIds = new Set();
-  list(scenery.clouds, 'scenery.clouds', 40).forEach((c, i) => {
-    const path = `scenery.clouds[${i}]`;
-    if (typeof c?.id !== 'string' || !ID.test(c.id) || cloudIds.has(c.id) || layerIds.has(c.id)) fail(`${path}.id`, 'requires a unique stable ID');
-    cloudIds.add(c?.id);
-    url(c?.url, `${path}.url`); placement(c, path);
-    num(c?.x, `${path}.x`); num(c?.y, `${path}.y`); num(c?.scroll, `${path}.scroll`, 0, 3);
-    opt(c?.scale, `${path}.scale`, 0.01, 50); opt(c?.speed, `${path}.speed`, -500, 500); opt(c?.alpha, `${path}.alpha`, 0, 1);
-    if (c?.flipX !== undefined && typeof c.flipX !== 'boolean') fail(`${path}.flipX`, 'must be boolean');
-  });
+  const clouds = scenery.clouds;
+  if (clouds !== undefined) {
+    if (!clouds || typeof clouds !== 'object' || typeof clouds.enabled !== 'boolean') fail('scenery.clouds', 'requires enabled (boolean) and items');
+    list(clouds?.items, 'scenery.clouds.items', 40).forEach((c, i) => {
+      const path = `scenery.clouds.items[${i}]`;
+      if (layerIds.has(c?.id)) fail(`${path}.id`, 'must differ from layer IDs');
+      id(c?.id, `${path}.id`);
+      if (c?.type !== RANDOM_CLOUD && !CLOUD_TYPES[c?.type]) fail(`${path}.type`, `use "${RANDOM_CLOUD}" or a cloud from clouds.json`);
+      if (!CLOUD_DIRECTIONS.includes(c?.direction)) fail(`${path}.direction`, `use ${CLOUD_DIRECTIONS.join(' or ')}`);
+      num(c?.x, `${path}.x`); num(c?.y, `${path}.y`); num(c?.speed, `${path}.speed`, 0, 500);
+      if (c?.after !== undefined || c?.front !== undefined) placement(c, path);
+      opt(c?.scale, `${path}.scale`, 0.01, 50); opt(c?.alpha, `${path}.alpha`, 0, 1);
+      if (c?.flipX !== undefined && typeof c.flipX !== 'boolean') fail(`${path}.flipX`, 'must be boolean');
+    });
+  }
 
   const a = scenery.atmosphere;
   if (a === undefined) return;
@@ -122,9 +135,23 @@ function validateScenery(scenery, fail, num) {
   if (a.vignette !== undefined) { color(a.vignette?.color, 'scenery.atmosphere.vignette.color'); num(a.vignette?.alpha, 'scenery.atmosphere.vignette.alpha', 0, 1); }
 }
 
-/** Image files a scenery block loads; pinned per match like platform art. */
+/** Cloud art for a cloud object; "random" picks by ID, so every client agrees. */
+function cloudUrl(cloud) {
+  if (cloud.type !== RANDOM_CLOUD) return CLOUD_TYPES[cloud.type];
+  const types = Object.keys(CLOUD_TYPES);
+  let hash = 0;
+  for (const char of String(cloud.id)) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return CLOUD_TYPES[types[hash % types.length]];
+}
+
+/** Clouds that render: none when the map turns them off. */
+function activeClouds(scenery) {
+  return scenery?.clouds?.enabled ? scenery.clouds.items || [] : [];
+}
+
+/** Image files a scenery block loads. */
 function sceneryUrls(scenery) {
-  return [...(scenery?.layers || []), ...(scenery?.clouds || [])].map(item => item.url);
+  return [...(scenery?.layers || []).map(layer => layer.url), ...activeClouds(scenery).map(cloudUrl)];
 }
 
 /** Apparent zoom of a layer. Far layers react less to camera zoom. */
@@ -168,4 +195,4 @@ function coverScale({ image, scroll, offset = { x: 0, y: 0 }, view, bounds, refe
   return scale;
 }
 
-module.exports = { ARENA_DEPTH, validateScenery, sceneryUrls, layerZoom, sceneryTransform, coverScale };
+module.exports = { ARENA_DEPTH, CLOUD_TYPES, CLOUD_DIRECTIONS, RANDOM_CLOUD, validateScenery, cloudUrl, activeClouds, sceneryUrls, layerZoom, sceneryTransform, coverScale };

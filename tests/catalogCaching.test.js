@@ -10,7 +10,7 @@ const { getProfileIconById } = require("../src/server/services/cosmetics/profile
 const shopCatalog = require("../src/server/services/shop/shopCatalog");
 const { syncSkinOwnershipForUser } = require("../src/server/services/cosmetics/skinOwnership");
 const { MapRepository } = require("../src/server/services/maps/mapRepository");
-const { clone } = require("../src/shared/maps/mapDocument");
+const { clone, mapSummary } = require("../src/shared/maps/mapDocument");
 const defaults = require("../src/shared/maps").mapDefaults;
 
 function countReads(t) {
@@ -110,7 +110,7 @@ test("map metadata is cached, cloned on read, and invalidated by save", (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bb-maps-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const repo = new MapRepository(dir);
-  const expected = repo.list().map(({ document }) => ({ ...document.metadata, id: document.id, label: document.label }));
+  const expected = repo.list().map(({ document }) => mapSummary(document));
   assert.deepEqual(repo.listMetadata(), expected);
 
   const read = repo.listMetadata();
@@ -120,14 +120,12 @@ test("map metadata is cached, cloned on read, and invalidated by save", (t) => {
   const original = repo.get(1);
   const doc = clone(original.document);
   doc.label = "Renamed Peaks";
-  doc.metadata = { ...doc.metadata, label: doc.label };
   repo.save(doc, original.revision);
   assert.equal(repo.listMetadata().find((map) => map.id === 1).label, "Renamed Peaks");
 
   // Another process writing a new map file is picked up once the recheck window passes.
   const extra = clone(defaults[0]);
   extra.id = 9;
-  extra.metadata = { ...extra.metadata, id: 9 };
   fs.writeFileSync(path.join(dir, "9.json"), JSON.stringify(extra));
   repo._metadataCheckedAt = 0;
   assert.ok(repo.listMetadata().some((map) => map.id === 9));

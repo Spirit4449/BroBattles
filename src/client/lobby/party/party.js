@@ -534,15 +534,18 @@ function setupModePickerControls(onSelect = null) {
     grid.className = "mode-select-grid subcards";
     const variants = Array.isArray(mode?.variants) ? mode.variants : [];
     variants.forEach((variant) => {
+      // Maps are made for one team size; a size without maps is coming soon.
+      const comingSoon = !getCompatibleMapsForSelection({ modeId, modeVariantId: variant.id }).length;
       const card = document.createElement("button");
       card.type = "button";
       card.className = `map-select-card mode-select-card pixel-menu-button${
         selection.modeVariantId === variant.id ? " active" : ""
-      }`;
+      }${comingSoon ? " is-disabled" : ""}`;
+      card.disabled = comingSoon;
       card.innerHTML = `
         <img src="${escapeHtml(getModeArtAsset(modeId))}" alt="${escapeHtml(variant.label)}" />
         <div class="map-select-name">${escapeHtml(variant.label)}</div>
-        <div class="mode-select-subtitle">${escapeHtml(variant.subtitle || getModeSubtitle(modeId))}</div>
+        <div class="mode-select-subtitle">${escapeHtml(comingSoon ? "Coming soon" : variant.subtitle || getModeSubtitle(modeId))}</div>
       `;
       card.querySelector("img")?.addEventListener("error", (event) => {
         event.currentTarget.src = getModeFallbackArtAsset(modeId);

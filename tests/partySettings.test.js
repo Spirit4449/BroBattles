@@ -45,7 +45,9 @@ function fixture(allow = 1) {
   return { party, writes, emissions, db, io, state, view: createPartyRouteService({ db }) };
 }
 
-const selection = { modeId: "duels", modeVariantId: "duels-2v2", mapId: 1 };
+// A real 2v2 map: every map is made for one mode.
+const selection = { modeId: "duels", modeVariantId: "duels-2v2",
+  mapId: require("../src/shared/maps").mapDefaults.find((map) => map.modeVariantId === "duels-2v2").id };
 
 test("owner can save permissions, read them back, and broadcast them to members", async () => {
   const f = fixture();

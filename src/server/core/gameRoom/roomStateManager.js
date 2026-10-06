@@ -71,14 +71,6 @@ function computeSpawnIndex(room, player) {
   return Math.max(0, index);
 }
 
-// The map variant (1v1/2v2/3v3) picks the slot layout, matching the client's
-// fallback placement; the live roster size is only used without a variant.
-function spawnTeamSize(room, team) {
-  const variantSize = Number(String(room.mapSnapshot?.variant || "")[0]);
-  if (Number.isFinite(variantSize) && variantSize > 0) return variantSize;
-  return (room.matchData.players || []).filter((p) => p.team === team).length;
-}
-
 /**
  * The single authority for where a participant stands at match start. Spawns
  * are computed facing right so the coordinates match a freshly created sprite.
@@ -88,8 +80,7 @@ function spawnStateFor(room, player) {
   const geometry = room.geometry || getDuelGeometry(room.matchData.map);
   if (!geometry || !player) return null;
   const spawnIndex = computeSpawnIndex(room, player);
-  const { x, y } = spawnForParticipant(geometry, { ...player, flip: false },
-    spawnIndex, spawnTeamSize(room, player.team));
+  const { x, y } = spawnForParticipant(geometry, { ...player, flip: false }, spawnIndex);
   return { spawnIndex, x, y };
 }
 

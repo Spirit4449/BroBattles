@@ -12,8 +12,8 @@ function load(file,dependencies){
 test('two scenes can own the same map and shutting down one cannot clear the other', () => {
  const api = load('../src/client/game/maps/documentRuntime.js', {'./mapUtils': {
   appendLayoutObjectsFromConfig() {}, applyMapBounds() {},
- }});
- const document = { layout: { platforms: [], hitboxes: [] }, assets: {}, anchors: {}, bounds: {} };
+ }, '../../../shared/maps/arenas': require('../src/shared/maps/arenas')});
+ const document = { modeVariantId: 'duels-1v1', layout: { platforms: [], hitboxes: [] }, assets: {}, anchors: {} };
  const first = { events: new EventEmitter() }, second = { events: new EventEmitter() };
  const a = api.buildMapDocument(first, 1, document);
  const b = api.buildMapDocument(second, 1, document);
@@ -34,9 +34,9 @@ test('history reconciliation retains scene, camera and surviving objects through
  const runtime=load('../src/client/game/maps/documentRuntime.js',{'./mapUtils':{
   appendLayoutObjectsFromConfig(scene,objects,layout){for(const row of layout.platforms){const object={_mapObjectId:row.id,type:'Sprite',anims:{stop(){}},destroy(){this.destroyed=true;}};configure(object,row);objects.push(object);created++;}},
   configureMapPlatform:configure,applyMapBounds(){},
- }});
+ },'../../../shared/maps/arenas':require('../src/shared/maps/arenas')});
  const scene={cameras:{main:camera},game:{canvas},physics:{world:{setBounds(){}}}};
- const original={layout:{platforms:[{id:'one',textureKey:'platform',x:100,y:100,scaleX:1,scaleY:1},{id:'two',textureKey:'platform',x:200,y:100,scaleX:1,scaleY:1}],hitboxes:[]},assets:{platform:{type:'image'}},bounds:{world:{x:0,y:0,width:1000,height:1000}},anchors:{}};
+ const original={layout:{platforms:[{id:'one',textureKey:'platform',x:100,y:100,scaleX:1,scaleY:1},{id:'two',textureKey:'platform',x:200,y:100,scaleX:1,scaleY:1}],hitboxes:[]},assets:{platform:{type:'image'}},modeVariantId:'duels-1v1',anchors:{}};
  const history=new MapHistory(original),first=runtime.syncMapDocument(scene,1,original),one=first.objects[0],two=first.objects[1];
  const resized=clone(original);resized.layout.platforms[0].scaleX=2;history.commit(resized);runtime.syncMapDocument(scene,1,resized);
  assert.equal(runtime.getDocumentRuntime(1).objects[0],one);assert.equal(one.scaleX,2);assert.equal(created,2);

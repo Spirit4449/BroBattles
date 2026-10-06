@@ -1,14 +1,13 @@
 // Versioned, data-only map contract. Shared by the editor, Phaser and the server.
+// A map is one layout for one game mode; its world and camera come from that
+// mode's arena (arenas.js), never from the map.
 const { resolveLanding } = require('../physics/spawnPlacement');
-const VARIANTS = ['1v1', '2v2', '3v3'];
+const SCHEMA_VERSION = 2;
 const { POWERUP_TYPES } = require('../powerups');
 const { validateScenery } = require('./scenery');
+const { mapArena } = require('./arenas');
 const { validateMotion, motionPeakSpeed } = require('./platformMotion');
 const clone = value => JSON.parse(JSON.stringify(value));
-function variantKey(value) {
-  const match = String(value || '').match(/([123])v[123]$/);
-  return match ? `${match[1]}v${match[1]}` : `${Math.max(1, Math.min(3, Number(value) || 1))}v${Math.max(1, Math.min(3, Number(value) || 1))}`;
-}
 function geometryFromMap(data, mapId = null) {
   const platforms = data.layout.platforms.map((p, i) => {
     const size = data.textureSizes[p.textureKey];
@@ -36,7 +35,7 @@ function geometryFromMap(data, mapId = null) {
   // Fastest a rider can be carried on each axis, for server movement budgets.
   const platformSpeed = { x: 0, y: 0 };
   for (const p of movingColliders) platformSpeed[p.motion.axis] = Math.max(platformSpeed[p.motion.axis], p.peakSpeed);
-  return { mapId, world: data.bounds.world, spawns: data.spawns, anchors, colliders, movingColliders, platformSpeed, settings: data.powerups };
+  return { mapId, world: mapArena(data).world, spawns: data.spawns, anchors, colliders, movingColliders, platformSpeed, settings: data.powerups };
 }
 function constrainPoint(data, point, x, y, body = { width: 64, height: 96 }) {
   const geometry = geometryFromMap(data);
@@ -61,15 +60,9 @@ function validateMapUnsafe(data) {
   const ids = new Set();
   function id(v, path) { if (typeof v !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(v) || ids.has(v)) fail(path, 'requires a unique stable ID'); ids.add(v); }
   if (!data || typeof data !== 'object') return ['map: must be an object'];
-  for (const k of ['world', 'camera']) {
-    const b = data.bounds?.[k];
-    for (const field of ['x', 'y', 'width', 'height']) num(b?.[field], `bounds.${k}.${field}`, /width|height/.test(field) ? 1 : -100000);
-  }
-  for (const k of ['zoom', 'deadzoneWidth', 'deadzoneHeight', 'followOffsetY']) if (data.bounds?.camera?.[k] !== undefined) num(data.bounds.camera[k], `bounds.camera.${k}`, k === 'zoom' ? 0.05 : k === 'followOffsetY' ? -100000 : 0, k === 'zoom' ? 8 : 100000);
-  // Optional follow-camera zoom range; both or neither.
-  const cam = data.bounds?.camera;
-  if ((cam?.minZoom === undefined) !== (cam?.maxZoom === undefined)) fail('bounds.camera', 'set minZoom and maxZoom together');
-  else if (cam?.minZoom !== undefined) { num(cam.minZoom, 'bounds.camera.minZoom', 0.05, 8); num(cam.maxZoom, 'bounds.camera.maxZoom', 0.05, 8); if (cam.minZoom > cam.maxZoom) fail('bounds.camera.minZoom', 'must not exceed maxZoom'); }
+  const arena = mapArena(data);
+  if (!arena) return ['modeVariantId: must name a game mode with an arena in arenas.json'];
+  for (const key of ['bounds', 'background', 'variants']) if (data[key] !== undefined) fail(key, 'is not part of a map; the world and camera come from the mode\'s arena and backdrops are scenery layers');
   for (const kind of ['platforms', 'hitboxes']) {
     const rows = data.layout?.[kind];
     if (!Array.isArray(rows) || rows.length > 1000) { fail(`layout.${kind}`, 'requires an array of at most 1000 objects'); continue; }
@@ -103,8 +96,7 @@ function validateMapUnsafe(data) {
     if (!Array.isArray(data.powerups.types) || !data.powerups.types.length || data.powerups.types.some(t => !POWERUP_TYPES.includes(t))) fail('powerups.types', 'select known powerup types');
   }
   if (errors.length) return errors;
-  if (typeof data.background !== 'string' || !/^\/assets\/[a-zA-Z0-9_./-]+$/.test(data.background) || data.background.includes('..')) fail('background', 'requires a local /assets/ URL');
-  validateScenery(data.scenery, fail, num);
+  validateScenery(data.scenery, fail, num, id);
   for (const p of [...data.layout.platforms,...data.layout.hitboxes]) {
     if(p.collisionEnabled !== undefined && typeof p.collisionEnabled !== 'boolean') fail(p.id, 'collisionEnabled must be boolean');
     if(p.alpha !== undefined) num(p.alpha, `${p.id}.alpha`,0,1);
@@ -123,14 +115,15 @@ function validateMapUnsafe(data) {
       if (landing.surface !== geometry.anchors[p.anchorId]) fail(path, 'anchor has no clear walkable landing space');
     } catch (e) { fail(path, e.message); }
   };
-  for (const team of ['team1', 'team2']) for (const size of [1, 2, 3]) {
-    const points = data.spawns?.players?.[team]?.[size];
-    if (!Array.isArray(points) || points.length !== size) fail(`spawns.players.${team}.${size}`, `requires ${size} slots`);
-    else points.forEach((p,i) => validatePoint(p, `spawns.players.${team}.${size}[${i}]`, { width: 64, height: 96 }));
+  for (const team of ['team1', 'team2']) {
+    const points = data.spawns?.players?.[team], size = arena.playersPerTeam;
+    if (!Array.isArray(points) || points.length !== size) fail(`spawns.players.${team}`, `requires ${size} slot${size > 1 ? 's' : ''} for ${arena.label}`);
+    else points.forEach((p,i) => validatePoint(p, `spawns.players.${team}[${i}]`, { width: 64, height: 96 }));
   }
   if (!Array.isArray(data.spawns?.powerups) || data.spawns.powerups.length > 200) fail('spawns.powerups', 'requires an array of at most 200 points');
   else data.spawns.powerups.forEach((p,i) => { id(p.id, `spawns.powerups[${i}].id`); if(p.anchorId) validatePoint(p, `spawns.powerups[${i}]`, { width: 32, height: 40 }); else {num(p.x, `spawns.powerups[${i}].x`);num(p.y, `spawns.powerups[${i}].y`);} if (p.type && !POWERUP_TYPES.includes(p.type)) fail(`spawns.powerups[${i}].type`, 'unknown powerup'); });
   const bank = data.objectiveLayout?.bankBust;
+  if (arena.modeId === 'bank-bust' && !bank) fail('objectiveLayout.bankBust', `is required for ${arena.label}`);
   if (bank) {
     for (const team of ['team1','team2']) for (const key of ['vaults','respawnPoints']) {
       const p = bank[key]?.[team]; num(p?.x, `objectiveLayout.bankBust.${key}.${team}.x`); num(p?.y, `objectiveLayout.bankBust.${key}.${team}.y`);
@@ -150,11 +143,16 @@ function validateMap(data) {
   try { return validateMapUnsafe(data); } catch (_) { return ['map: malformed layout, spawn, objective or asset structure']; }
 }
 function validateDocument(doc) {
-  if (!doc || doc.schemaVersion !== 1 || !Number.isInteger(doc.id) || doc.id < 1 || typeof doc.label !== 'string' || !doc.label.trim()) return ['document: requires schemaVersion 1, positive integer id, and label'];
+  if (!doc || doc.schemaVersion !== SCHEMA_VERSION || !Number.isInteger(doc.id) || doc.id < 1 || typeof doc.label !== 'string' || !doc.label.trim()) return [`document: requires schemaVersion ${SCHEMA_VERSION}, positive integer id, and label`];
   const meta = doc.metadata;
-  if (!meta || meta.id !== doc.id || !Array.isArray(meta.compatibleModeIds) || !meta.compatibleModeIds.length || !Array.isArray(meta.compatibleVariantIds)) return ['metadata: requires matching id and game mode compatibility arrays'];
+  if (!meta || typeof meta !== 'object') return ['metadata: requires lobby and music settings'];
   if (typeof meta.musicVolume !== 'number' || !Number.isFinite(meta.musicVolume) || meta.musicVolume < 0 || meta.musicVolume > 1) return ['metadata.musicVolume: must be between 0 and 1'];
-  return VARIANTS.flatMap(key => validateMap(doc.variants?.[key]).map(e => `${key}.${e}`));
+  return validateMap(doc);
+}
+/** Catalog entry for a map: lobby/music metadata plus its mode. */
+function mapSummary(doc) {
+  const arena = mapArena(doc);
+  return { ...doc.metadata, id: doc.id, label: doc.label, modeVariantId: doc.modeVariantId, modeId: arena?.modeId || null };
 }
 class MapHistory {
   constructor(value, limit = 250) { this.limit = limit; this.stack = [clone(value)]; this.index = 0; }
@@ -162,4 +160,4 @@ class MapHistory {
   undo() { if (this.index > 0) this.index--; return clone(this.stack[this.index]); }
   redo() { if (this.index < this.stack.length - 1) this.index++; return clone(this.stack[this.index]); }
 }
-module.exports = { VARIANTS, POWERUP_TYPES, clone, variantKey, geometryFromMap, constrainPoint, resolvePowerupPoints, validateMap, validateDocument, MapHistory };
+module.exports = { SCHEMA_VERSION, POWERUP_TYPES, clone, mapSummary, geometryFromMap, constrainPoint, resolvePowerupPoints, validateMap, validateDocument, MapHistory };

@@ -26,7 +26,7 @@ import {
   getMapMusicAsset,
   getMapMusicVolume,
   getMapObjects,
-  getMapBoundaryConfig,
+  getMapArena,
   getDefaultMapDocument,
   normalizeMapId,
 } from "../game/maps/manifest";
@@ -61,7 +61,6 @@ import { createLocalInputSync } from "../game/scene/localInputSync";
 import { localMovementCorrector } from "../game/players/localMovementCorrector";
 import { getServerClockDiagnostics } from "../game/match/serverClock";
 import { updateHealthBars } from "../game/scene/healthBarRenderer";
-import { createMapEditorRuntime } from "../game/scene/mapEditorRuntime";
 import { createModeRuntime, loadMode, preloadModeAssets, supportsSuddenDeath } from "../game/modes";
 import {
   POWERUP_TYPES,
@@ -237,28 +236,6 @@ const DEATHDROP_COLLECT_QUEUE = [];
 const LAST_HEALTH_BY_PLAYER = Object.create(null);
 const SHIELD_IMPACT_QUEUE = [];
 const LAST_SHIELD_ACTIVE_AT = Object.create(null);
-const EDIT_CAMERA_SCROLL_SPEED = 14;
-
-function updateEditorCamera(scene) {
-  if (!scene || !scene._editModeActive) return;
-  const cam = scene.cameras?.main;
-  const keys = scene._editorCamKeys;
-  if (!cam || !keys) return;
-
-  let dx = 0;
-  let dy = 0;
-
-  if (keys.left?.isDown || keys.leftAlt?.isDown) dx -= 1;
-  if (keys.right?.isDown || keys.rightAlt?.isDown) dx += 1;
-  if (keys.up?.isDown || keys.upAlt?.isDown) dy -= 1;
-  if (keys.down?.isDown || keys.downAlt?.isDown) dy += 1;
-
-  if (dx === 0 && dy === 0) return;
-
-  const step = EDIT_CAMERA_SCROLL_SPEED / Math.max(0.3, cam.zoom || 1);
-  cam.scrollX += dx * step;
-  cam.scrollY += dy * step;
-}
 
 const localInputSync = createLocalInputSync({
   socket,
@@ -960,12 +937,10 @@ class GameScene extends Phaser.Scene {
     const activeMapId = normalizeMapId(gameData?.map);
     // No per-scene spawn plan needed now; map modules provide positioning helpers
     // Creates the map objects based on game data
-    this._mapVariantTeamSize = Number(gameData?.mapSnapshot?.variant?.[0]) || null;
     buildMap(this, gameData?.mapSnapshot?.mapId || activeMapId, gameData?.mapSnapshot?.map);
     mapObjects = getMapObjects(activeMapId, this);
     this._mapObjects = mapObjects;
-    const mapBoundaryConfig = getMapBoundaryConfig(activeMapId, this);
-    applyMapBounds(this, mapBoundaryConfig, {
+    applyMapBounds(this, getMapArena(activeMapId, this), {
       extraTopSpace: this._topPlayfieldPadding,
     });
     // Parallax layers fit themselves to the camera bounds set above.
@@ -1124,10 +1099,6 @@ class GameScene extends Phaser.Scene {
         this._modeRuntime?.destroy?.();
       } catch (_) {}
       this._modeRuntime = null;
-      try {
-        this._mapEditorRuntime?.destroy?.();
-      } catch (_) {}
-      this._mapEditorRuntime = null;
       stopSuddenDeathMusic(gameScene);
       try {
         this._suddenDeathMusicSfx?.destroy();
@@ -1166,7 +1137,6 @@ class GameScene extends Phaser.Scene {
     attachMapCollidersToSprite(this, player, mapObjects);
     installMovingPlatforms(this, {
       riders: () => (player && !dead ? [player] : []),
-      paused: () => this._editModeActive,
     });
 
     // Set initial super stats
@@ -1211,16 +1181,12 @@ class GameScene extends Phaser.Scene {
         const serverIdx = SERVER_SPAWN_INDEX[username];
         const myIndex =
           typeof serverIdx === "number" ? Math.max(0, serverIdx) : 0;
-        const teamSize = (gameData.players || []).filter(
-          (p) => p.team === gameData.yourTeam,
-        ).length;
         positionSpawn(
           this,
           player,
           activeMapId,
           gameData.yourTeam,
           myIndex,
-          teamSize,
         );
       }
       stabilizeSpawnedSpriteOnMap(this, player, mapObjects);
@@ -1300,66 +1266,11 @@ class GameScene extends Phaser.Scene {
 
     // Camera: smooth follow
     const cam = this.cameras.main;
-    if (!mapBoundaryConfig?.camera) {
-      cam.setZoom(1.7);
-      const contentCenterX = BASE_GAME_WIDTH / 2;
-      cam.setBounds(contentCenterX - 850, -40, 2000, BASE_GAME_HEIGHT);
-      cam.setDeadzone(50, 50);
-      cam.setFollowOffset(0, 120);
-    }
 
     // lerpX=0.08 for crisp horizontal tracking; lerpY=0.05 is deliberately
     // lazier so the vertical frame shifts more gently - vertical centering is
     // less critical than horizontal awareness.
     followLocalPlayer(cam);
-    this._editModeActive = false;
-    this._editorCamKeys = this.input.keyboard.addKeys({
-      left: Phaser.Input.Keyboard.KeyCodes.LEFT,
-      right: Phaser.Input.Keyboard.KeyCodes.RIGHT,
-      up: Phaser.Input.Keyboard.KeyCodes.UP,
-      down: Phaser.Input.Keyboard.KeyCodes.DOWN,
-      leftAlt: Phaser.Input.Keyboard.KeyCodes.A,
-      rightAlt: Phaser.Input.Keyboard.KeyCodes.D,
-      upAlt: Phaser.Input.Keyboard.KeyCodes.W,
-      downAlt: Phaser.Input.Keyboard.KeyCodes.S,
-    });
-
-    if (!this._mapEditorRuntime) {
-      this._mapEditorRuntime = createMapEditorRuntime({
-        scene: this,
-        mapId: activeMapId,
-        mapObjects,
-        canEdit: false,
-        onCreateMapObject: (mapObject) => {
-          if (!mapObject) return;
-          try {
-            if (player) this.physics.add.collider(player, mapObject, null, collidePlayerWithPlatform);
-          } catch (_) {}
-        },
-        onEditModeChange: (editing) => {
-          try {
-            this._editModeActive = !!editing;
-            window.__BB_MAP_EDIT_ACTIVE = !!editing;
-            try {
-              this._modeRuntime?.setEditMode?.(!!editing);
-            } catch (_) {}
-            if (this._editModeActive) {
-              try {
-                player?.setVelocity?.(0, 0);
-              } catch (_) {}
-              try {
-                this.cameras.main.stopFollow();
-              } catch (_) {}
-            } else {
-              try {
-                followLocalPlayer(this.cameras.main);
-              } catch (_) {}
-            }
-            hud.setTimerPaused?.(!!editing);
-          } catch (_) {}
-        },
-      });
-    }
     if (!this._modeRuntime) {
       this._modeRuntime = createModeRuntime({
         scene: this,
@@ -1370,9 +1281,7 @@ class GameScene extends Phaser.Scene {
         getLocalPlayer: () => player,
         getOpponentPlayers: () => opponentPlayers,
         getTeamPlayers: () => teamPlayers,
-        canEdit: false,
       });
-      this._modeRuntime.setEditMode?.(!!this._editModeActive);
     }
     // End camera setup
   }
@@ -1410,8 +1319,6 @@ class GameScene extends Phaser.Scene {
             activeMapId,
             playerData.team,
             Math.max(0, idx),
-            (gameData.players || []).filter((p) => p.team === playerData.team)
-              .length,
           );
           if (hasServerPosition(playerData)) {
             const serverX = Number(playerData.x);
@@ -1464,8 +1371,6 @@ class GameScene extends Phaser.Scene {
           activeMapId,
           playerData.team,
           index,
-          (gameData.players || []).filter((p) => p.team === playerData.team)
-            .length,
         );
         if (hasServerPosition(playerData)) {
           const serverX = Number(playerData.x);
@@ -1663,7 +1568,7 @@ class GameScene extends Phaser.Scene {
       gameInitialized &&
       !gameEnded &&
       !hud.isBattleIntroActive?.();
-    if (!poisonAllowed || this._editModeActive || !suddenDeathEnabled) {
+    if (!poisonAllowed || !suddenDeathEnabled) {
       try {
         this._poisonGraphics?.clear?.();
       } catch (_) {}
@@ -1686,14 +1591,6 @@ class GameScene extends Phaser.Scene {
     this._renderPowerupsAndEffects();
     this._renderModeObjectives();
     battleTutorial.update();
-
-    if (this._editModeActive) {
-      try {
-        player?.setVelocity?.(0, 0);
-      } catch (_) {}
-      updateEditorCamera(this);
-      return;
-    }
 
     // The pregame flythrough (and its hand-back blend) owns the camera.
     // Before FIGHT, fighters stand at their spawns: no input or movement sync.
@@ -2177,7 +2074,6 @@ function trySendReadyAck(force = false) {
 // Simple Game Over Overlay
 // -----------------------------
 function showGameOverScreen(payload) {
-  if (window.__BB_MAP_EDIT_ACTIVE) return;
   if (gameScene) gameScene._battleEnded = true;
   try {
     destroyMobileControls?.();

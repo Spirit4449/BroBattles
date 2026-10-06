@@ -14,7 +14,7 @@ const { updateTeamwork } = require('./teamwork');
 const { resolveBotObjective } = require('./objectives');
 const { tryDashSteps, recordDash } = require('./dash');
 const movement = require('../../../shared/physics/movementPhysics.json');
-const { DEATH_DROP_PICKUP_RADIUS, POWERUP_PICKUP_RADIUS, WORLD_BOUNDS } = require('../gameRoomConfig');
+const { DEATH_DROP_PICKUP_RADIUS, POWERUP_PICKUP_RADIUS } = require('../gameRoomConfig');
 const { FIXED_DT_MS } = require('../../../shared/gameConstants');
 const { botProfile } = require('./characterProfiles');
 // How often a bot riding a moving platform looks for a safe hop off.
@@ -161,7 +161,7 @@ class BotController {
     if (graph !== this.graph) { this.graph = graph; this.clearTravel(); this.nextDecisionAt = 0; }
     const current = graph.surfaces.find((s) => s.id === p.platformId) || nearestSurface(graph, { x: p.x, y: bounds(p).bottom });
     const actualPoisonY = room._suddenDeathActive ? room._computePoisonY(now - room._loopStartWallTime - room.gameMode.getMatchDurationMs()) : Infinity;
-    const gasSaturated = Number.isFinite(actualPoisonY) && actualPoisonY <= WORLD_BOUNDS.height * 0.1;
+    const gasSaturated = Number.isFinite(actualPoisonY) && actualPoisonY <= room.geometry.world.y + room.geometry.world.height * 0.1;
     const poisonY = gasSaturated ? Infinity : actualPoisonY;
     const poisonAt = (offset) => room._suddenDeathActive && !gasSaturated ? room._computePoisonY(now + offset - room._loopStartWallTime - room.gameMode.getMatchDurationMs()) : Infinity;
     for (const [key, until] of this.blockedEdges) if (until <= now) this.blockedEdges.delete(key);

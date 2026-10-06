@@ -1,60 +1,82 @@
-# Map Studio
+# Maps and Map Studio
 
-Admins can open Map Studio using the Edit map action inside the lobby map selection menu, or visit `/map-editor`. Editing runs separately from matchmaking. Choose a map and its **1v1**, **2v2**, or **3v3** variant in the toolbar. All built-in variants start with the same layout; edits affect only the selected variant. **Copy variant** explicitly copies the full layout and settings to another size.
+Every map is built for exactly one game mode: `duels-1v1`, `duels-2v2` or `bank-bust-3v3`. A map's `modeVariantId` decides which lobby selection lists it. A mode with no maps (Duels 3v3 today) shows as "Coming soon" in the party menu.
 
-## Editing controls
+## Modes and arenas
+
+Each mode's world size and match camera live in `src/shared/maps/arenas.json` (read through `src/shared/maps/arenas.js`). All maps of a mode share them, and a map cannot override them, so every map of a mode plays and frames the same way.
+
+- `world`: the physics bounds.
+- `camera`: the follow camera's bounds (`x`, `y`, `width`, `height`), its dead zone and `followOffsetY`.
+  - `zoom` is the reference zoom that scenery is composed at.
+  - The live zoom eases from `maxZoom`, with the player at or below `climbY[1]`, to `minZoom` at or above `climbY[0]`. See `restingCameraFrame` in `cameraDynamics.js`.
+  - Duels 2v2 insets the camera 250 px from each side of its world, so edge art never shows.
+
+To give a new mode maps, add its variant id (from `gameModes.catalog.json`) to `arenas.json`. Retuning a mode's camera or size there changes all of its maps.
+
+## Map Studio
+
+Admins can open Map Studio using the Edit map action inside the lobby map selection menu, or visit `/map-editor`. Editing runs separately from matchmaking. The toolbar shows the map's mode. **New map** asks for the mode, and its spawns are sized to the mode's team size. Player slots stay fixed to that formation.
+
+### Editing controls
 
 - Click to select without moving. Shift-click toggles objects in the selection; drag empty space to box-select. Drag a selected object to move the group.
 - Drag corner or edge handles to resize. Proportions are preserved by default; hold Shift for free resizing. Size fields also preserve proportions unless Shift is held when the change is applied.
 - Tab switches a platform between green artwork handles and orange collision handles. Collision handles change the solid boundary without stretching the artwork.
 - Grid and alignment guides help with placement. Hold Command (macOS) or Control to bypass snapping. Player spawns still require a safe, walkable platform.
 - Space + drag, middle drag, or right drag pans. Scroll zooms; F fits the world. Arrow keys nudge the selected object; Shift increases the nudge to 16 pixels.
-- Command/Control Z undoes; Command/Control Shift Z or Control Y redoes. History keeps 250 document states, including settings and all variants, while retaining the Phaser scene and camera.
-- D duplicates; Delete removes. A platform supporting a player spawn cannot be deleted until its markers are moved to another platform. Player slots remain fixed to the required team formation.
+- C toggles **Game camera**: live scenery (parallax, drifting clouds, atmosphere) framed by the mode's camera bounds and zoom range, as in a match. The overlay outlines the camera bounds.
+- Command/Control Z undoes; Command/Control Shift Z or Control Y redoes. History keeps 250 document states, including settings and scenery, while retaining the Phaser scene and camera.
+- D duplicates; Delete removes. A platform supporting a player spawn cannot be deleted until its markers are moved to another platform.
 - Escape opens a real game playtest. Choose Solo or With bots and a character first. Escape in the playtest returns to the editor. Controls/tutorial overlays stay hidden; the actual GameRoom, movement, combat, bots, objectives, effects, and powerups run in an isolated admin session. Playtests expire after an hour and do not award rewards or create matchmaking records.
 
-Powerup markers can be placed anywhere. Editing or dragging an older anchored powerup turns it into a free point; its coordinates are used directly by the server. Player markers always stay anchored. The **All spawn formations** checkbox exposes the alternate team formations stored in that variant.
+Powerup markers can be placed anywhere. Editing or dragging an older anchored powerup turns it into a free point; its coordinates are used directly by the server. Player markers always stay anchored.
 
-The World tab edits world/camera bounds, powerup rules, background and catalog presentation. Less common controls are inside expandable Advanced sections. Pixel fields display whole numbers; percentage fields expose values such as opacity and camera zoom without requiring decimal entry. Scale factors and coordinate conversions retain the precision needed to keep artwork and physics aligned.
+The World tab shows the mode's arena (read-only) and edits powerup rules and catalog presentation. Less common controls are inside expandable Advanced sections. Pixel fields display whole numbers; percentage fields expose values such as opacity without requiring decimal entry. Scale factors and coordinate conversions retain the precision needed to keep artwork and physics aligned.
 
-## Artwork and animations
+The Scenery tab edits the backdrop (see [Scenery](#scenery-parallax-and-atmosphere)): layers in back-to-front order, the cloud switch and the atmosphere settings. Clouds are canvas objects: add one from the add menu, then drag it, duplicate it or set its type, direction and speed in the inspector.
+
+### Artwork and animations
 
 The Assets tab is a library of reusable platform artwork. **New platform artwork** registers an image and places a platform. Still images require only an image URL; dimensions are read automatically. Animated platforms use either an image with equal-sized frames or an image plus a JSON frame file. Animated artwork additionally exposes frame dimensions, frame numbers/names, and playback speed. Atlas frames must currently be untrimmed, unrotated, and equal-sized.
 
-URLs must point under `/assets/`, corresponding to `public/assets/` in the repository. Dropping a PNG, WebP, or JPEG onto an artwork card (or choosing **Replace image**) stages a replacement, updates matching references across the document's variants, and preserves platform size and collision placement. Variants using a different artwork URL remain independent. Animated image replacements retain their animation/frame configuration and are validated when saving or starting a playtest.
+URLs must point under `/assets/`, corresponding to `public/assets/` in the repository. Dropping a PNG, WebP, or JPEG onto an artwork card (or choosing **Replace image**) stages a replacement, updates matching references across the document, and preserves platform size and collision placement. Animated image replacements retain their animation/frame configuration and are validated when saving or starting a playtest.
 
 **Save map** publishes uploaded artwork to its game asset path and updates the production `dist` copy if present. Uploaded images are also stored at immutable revision URLs so existing matches retain their artwork. A failed document save restores any overwritten artwork. Files must be at most 8 MB and 16384 pixels per dimension.
 
-**Export** produces a portable JSON document containing all variants. Image files are not embedded. If artwork was uploaded, an export dialog lists every game file that must be copied manually, including uploads that have already been saved. Keep the replacement image files alongside your export.
+**Export** produces a portable JSON document. Image files are not embedded. If artwork was uploaded, an export dialog lists every game file that must be copied manually, including uploads that have already been saved. Keep the replacement image files alongside your export.
 
 ## Persistence and deployment
 
 Built-in documents live in `src/shared/maps/{id}.json`. The backend reads saved overrides from `data/maps/{id}.json`, or from `BB_MAP_DIR` if configured. Back up that directory and `public/assets` together and keep them writable/persistent on the server. Generated asset revisions, map history and match snapshots are runtime data excluded from Git. Saved overrides take precedence over built-in documents.
 
-Each save validates every variant and its image/frame files, checks the revision to reject stale writes, and atomically replaces the document. Previous document revisions are retained in `history/{id}/`. Browser drafts recover unsaved edits; a stale draft must be exported and merged with the latest document before saving.
+Each save validates the document and its image/frame files, checks the revision to reject stale writes, and atomically replaces the document. Previous document revisions are retained in `history/{id}/`. Browser drafts recover unsaved edits; a stale draft must be exported and merged with the latest document before saving.
 
 New maps are discovered by the lobby catalog without adding JavaScript modules. Matches receive a fixed document/artwork snapshot when first loaded, so later saves apply to new matches. Production additionally persists match snapshots across server restarts.
 
-## Editing with AI or other tools
+## Document format
 
-The format is data-only JSON, validated by `src/shared/maps/mapDocument.js`. Start from an exported document or clone a built-in document, retain `schemaVersion: 1`, and preserve stable object IDs. A document contains:
+The format is data-only JSON, validated by `src/shared/maps/mapDocument.js`. Start from an exported document or clone a built-in document, keep `schemaVersion: 2`, and preserve stable object IDs. A document contains:
 
-- `id`, `label`, and `metadata` for catalog compatibility and presentation.
-- `variants['1v1'|'2v2'|'3v3']`, each holding `layout.platforms`, `layout.hitboxes`, `assets`, `textureSizes`, `bounds`, `spawns`, `powerups`, `anchors`, and optional `objectiveLayout.bankBust`.
+- `id`, `label`, `modeVariantId` and `metadata` (presentation: previews, lobby background, music).
+- `layout.platforms`, `layout.hitboxes`, `assets`, `textureSizes`, `anchors`, `spawns`, `powerups` and `scenery`. Bank Bust maps also need `objectiveLayout.bankBust`.
 - Platforms use center `x/y`, a `textureKey`, positive `scaleX/scaleY`, optional collision settings and a `body`. Body width/height are world pixels; offsets are unscaled texture pixels measured from the artwork's top left.
 - A platform may add `motion` to move (see [Moving platforms](#moving-platforms)).
-- Player spawn slots contain `anchorId`, optional horizontal `dx`, and optional `dropHeight`. Each team has arrays of exactly 1, 2, and 3 slots under `spawns.players`. Free powerups contain an `id`, `x/y`, optional `type`, and optional `enabled`.
+- `spawns.players.team1` and `team2` each list exactly the mode's players per team. A slot contains `anchorId`, optional horizontal `dx`, and optional `dropHeight`. Free powerups contain an `id`, `x/y`, optional `type`, and optional `enabled`.
+- Documents never contain world or camera bounds; those come from the mode's arena.
 
-Use `validateDocument(document)` before importing. The server additionally validates local asset dimensions and animation frames. `geometryFromMap` is the shared collision contract. `src/client/editor/editorModel.js` exposes the same snapping, resizing, replacement, and export operations used by the GUI.
+`retargetMap(document, modeVariantId)` in `src/client/editor/editorModel.js` moves a document to another mode. It resizes the spawn lists and adds or drops objectives. That module also exposes the snapping, resizing, replacement, and export operations used by the GUI.
+
+Use `validateDocument(document)` before importing. The server additionally validates local asset dimensions and animation frames. `geometryFromMap` is the shared collision contract.
 
 Authenticated admin endpoints:
 
-- `GET /api/admin/maps`: list maps and revisions.
+- `GET /api/admin/maps`: list maps, their modes and revisions.
 - `GET /api/admin/maps/:id`: retrieve `{document, revision}`.
 - `PUT /api/admin/maps/:id`: send `{document, revision}`. Use `revision: null` for a new ID. A stale revision returns 409; validation errors return 422 with field paths.
 - `POST /api/admin/maps/upload`: stage `{targetUrl, fileName, base64}`; use its returned `url`, `targetUrl`, `width` and `height` for the replacement.
 
-For manual JSON changes, import in Map Studio and Save, or use the authenticated API so validation and revision checks run. Do not rewrite legacy map JavaScript constants or modify a live match snapshot.
+For manual JSON changes, import in Map Studio and Save, or use the authenticated API so validation and revision checks run. Do not modify a live match snapshot.
 
 Verification: `node --test tests/mapEditor*.test.js tests/mapDocumentRuntime.test.js` and `npm run build`.
 
@@ -81,24 +103,46 @@ Checks: `node --test tests/movingPlatforms.test.js tests/ducking.test.js tests/m
 
 ## Scenery (parallax and atmosphere)
 
-Every map's backdrop renders inside Phaser. A variant without `scenery` layers shows its `background` as a single layer with a gentle parallax. A variant may add an optional `scenery` block instead. Candy Land (`src/shared/maps/5.json`) is the working example. Map Studio does not edit it yet; change the JSON directly. `background` is still required and is used for previews.
+Every map's backdrop renders inside Phaser from its required `scenery` block, which has at least one layer. A map with a single flat background has a single `background` layer. Candy Land (`src/shared/maps/5.json`) is the full example. Edit scenery in Map Studio's Scenery tab or in the JSON.
 
 - `layers`: art images, listed back to front. `scroll` is the parallax factor: 0 is fixed to the screen, 1 moves with the arena, and above 1 is foreground drawn over fighters (under their HUD). `x`/`y` are offsets in world units from the camera bounds centre. `fit` controls size:
-  - `"cover"` (the default) scales the layer so no edge shows at any zoom or camera position, so nearer layers display larger.
+  - `"cover"` (the default) scales the layer so no edge shows at any zoom or camera position in the mode's range, so nearer layers display larger.
   - `"cover-x"` only guarantees the width, for horizon strips that leave sky above or ground below.
   - `"none"` uses `scale` as given.
 
-  `fog` (0 to 1) hazes everything behind and including that layer toward `atmosphere.fogColor`; the haze is heavier toward the ground. `blur` (0 to 16, texture pixels) gives depth of field: the game blurs a copy of the art once when the map loads. It uses canvas blurring, not Phaser `preFX`.
+  `fog` (0 to 1) hazes everything behind and including that layer toward `atmosphere.fogColor`; the haze is heavier toward the ground. `blur` records how many pixels of blur are baked into the image. The game never blurs at runtime; the importer applies it.
 - `stack` on a layer sets its depth: `"back"` (behind the platforms; the default up to `scroll` 1), `"arena"` (over the platforms and everything placed `after: "arena"`, under the fighters) or `"front"` (over the fighters; the default above `scroll` 1). A layer with `scroll: 1` stays fixed in the world like the platforms.
 - `frame` on a layer (`{ width, height, x, y }` in image pixels) records where a cropped image sat in the full canvas it was exported from. The frame is fitted instead of the image, so layers exported from one canvas keep their composition.
-- `clouds`: individual images that drift sideways at `speed` (world px per second) and wrap around the arena. With `scroll: 1` they sit in the world and only move by drifting. They take `x`/`y`, `scroll`, `scale`, `alpha` and `flipX`, and render on every graphics setting.
+- `clouds`: `{ enabled, items }`. Setting `enabled: false` hides every cloud without deleting them. Each item is an object:
+  - `id`.
+  - `type`: a key of the shared library `src/shared/maps/clouds.json`, or `"random"`. A random cloud picks the same image every time, from a hash of its id.
+  - `x`/`y`: the world position.
+  - `direction`: `"left"` or `"right"`.
+  - `speed`: world px per second, 0 to 500. Clouds wrap around the camera bounds.
+  - Optional: `scale`, `alpha`, `flipX`, and `after` or `front` (see below).
+
+  Any map can use any library cloud. Add new cloud art under `public/assets/clouds/` and list it in `clouds.json`.
 - `atmosphere`: `glows`, `mist`, `rays`, `dust`, `platforms` (top-lit gradient on platform art, with an optional drop shadow) and `vignette`. `dust` may be a list of fields at different depths; large, faint motes placed `after` far layers read as out-of-focus particles. Rays and glows pulse with `alpha: [min, max]`.
 
-A map whose `bounds.camera` sets `minZoom`/`maxZoom` sizes its layers for that zoom range (see the follow camera in `cameraDynamics.js`). Clouds, glows, mist and rays stack with `after`: a layer ID places them just above that layer, and `"arena"` places them over the platforms but under the fighters. `front: true` draws them over the fighters.
+Clouds, glows, mist and rays stack with `after`: a layer ID places them just above that layer, and `"arena"` places them over the platforms but under the fighters. `front: true` draws them over the fighters. Layers are sized for the mode's camera zoom range, so a map looks right at every zoom the match uses.
 
-Layers, clouds and parallax render on every graphics setting. The atmosphere renders only with WebGL on High and Super High, and Super High uses `dust.superHighCount`. The runtime is `src/client/game/maps/sceneryRuntime.js`; validation and the parallax math live in `src/shared/maps/scenery.js`. Matches pin layer and cloud images like platform art. Avoid Phaser `preFX` on map objects: under the game's framebuffer scaling it renders offset and clipped.
+Layers, clouds and parallax render on every graphics setting. The atmosphere renders only with WebGL on High and Super High, and Super High uses `dust.superHighCount`. The runtime is `src/client/game/maps/sceneryRuntime.js`; validation and the parallax math live in `src/shared/maps/scenery.js`. Matches pin layer images like platform art. Avoid Phaser `preFX` on map objects: under the game's framebuffer scaling it renders offset and clipped.
 
-Candy Land art is exported as full-canvas PNG layers. Keep those sources outside `public/` (by default in the ignored `output/candyland-source/`) and run `node scripts/art/import-candyland.cjs [source dir]`. It trims, halves and converts each image to WebP in `public/assets/candyland/`, prints each crop (the `frame` values) and flattens the backdrop into `lobby-background.webp`.
+### Importing layered art
+
+Layered art can be added by hand: put WebP files under `public/assets/<map>/` and add layers in the Scenery tab or JSON. Pre-blur any image that should look out of focus.
+
+To speed this up, export full-canvas PNGs from the art file and run:
+
+```bash
+node scripts/art/import-map-art.cjs <map id> <export dir> [--clouds] [--scale 0.5]
+```
+
+Name the exports `[Layer0]_Background.png`, `[Layer1]_Peaks.png` and so on, back to front. Put platform art in a `[LayerN]_Platforms/` folder and clouds in a `[LayerN]_Clouds/` folder.
+
+The importer trims and scales each image, bakes each layer's `blur`, saves WebP files and records each crop as `frame`. It also registers platform artwork and writes `lobby-background.webp`. With `--clouds` it adds the clouds to the shared library.
+
+New layers start with depth defaults that you then tune: the back layer is the sky, farther layers get more fog and blur, and layers above the platform folder are foreground. Re-running updates art in place and keeps the settings of layers and platforms already in the map. It needs `cwebp`/`dwebp` (`brew install webp`). Keep the source PNGs outside `public/`.
 
 Checks: `node --test tests/mapScenery.test.js` and `npm run validate:content`.
 
@@ -106,6 +150,6 @@ Checks: `node --test tests/mapScenery.test.js` and `npm run validate:content`.
 
 Spawn slots describe safe landing surfaces, not sprite centers. `src/shared/physics/spawnPlacement.js` resolves character bodies, collision-enabled surfaces and platform-edge clearance. Player markers stay anchored to supporting platforms; legacy `dropHeight` values are validated but do not cause the pregame fighters to fall.
 
-`spawnStateFor` in `src/server/core/gameRoom/roomStateManager.js` supplies human, bot, playtest and Bank Bust respawn positions. `game:init` and `game:start` carry the server positions; the client falls back to document placement only when positions are absent. Movement input stays locked until FIGHT. New maps and edits use the document/API workflow above; do not replace legacy `duelMaps.json` or `bankSpawnGeometry.json` snippets as an editing workflow.
+`spawnStateFor` in `src/server/core/gameRoom/roomStateManager.js` supplies human, bot, playtest and Bank Bust respawn positions from the match's map snapshot. `game:init` and `game:start` carry the server positions; the client falls back to document placement only when positions are absent. Movement input stays locked until FIGHT.
 
 Checks: `node --test tests/spawnPlacement.test.js tests/gameRoomStartup.test.js tests/pregameFlythrough.test.js`.

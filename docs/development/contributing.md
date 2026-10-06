@@ -57,7 +57,7 @@ For a built-in map shipped with the repository, add `src/shared/maps/<id>.json` 
 
 Do not add a legacy JavaScript map module, dropdown option, map-specific preload branch or powerup coordinate table. Documents own those values. Pass the owning scene into runtime map queries; do not retain map objects after scene shutdown.
 
-Test the document and asset validation, all supported spawn formations, powerup placement, boundaries, collisions, objective layout and an isolated editor playtest. `node --test tests/mapEditor*.test.js tests/mapDocumentRuntime.test.js` covers the document workflow.
+Test the document and asset validation, the spawn formation for the map's mode, powerup placement, boundaries, collisions, objective layout and an isolated editor playtest. `node --test tests/mapEditor*.test.js tests/mapDocumentRuntime.test.js` covers the document workflow.
 
 ## Add a mode
 

@@ -4,6 +4,7 @@ const effects = require('../src/server/core/gameRoom/effects/effectManager');
 const { buildWorldStatePayload } = require('../src/server/core/gameRoom/roomStateManager');
 const { resolveLocalEffectMovement, EFFECT_RULES } = require('../src/shared/effectRules');
 const { characterDefinitions } = require('../src/shared/characters');
+const WORLD = require('../src/shared/maps/arenas').arenaFor('duels-1v1').world;
 
 function snapshot(player, now) {
   return buildWorldStatePayload({
@@ -63,7 +64,7 @@ test('zero slows survive projectile creation, contact and hook expiry', () => {
   const { buildHookProjectileAttack, applyGloopPull, tickRuntimeControlEffects } = require('../src/server/core/gameRoom/attackRuntimes/hook');
   const attacker = { participantId: 'a', name: 'Gloop', char_class: 'gloop', x: 100, y: 100 };
   const target = { participantId: 'b', name: 'Target', x: 200, y: 100, isAlive: true, loaded: true };
-  const room = { players: new Map([['a', attacker], ['b', target]]), io: { to: () => ({ emit() {} }) } };
+  const room = { players: new Map([['a', attacker], ['b', target]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
   const action = { slowSpeedMult: 0, slowJumpMult: 0, slowDurationMs: 100, maxBounces: 0, bounceDampingX: 0, bounceDampingY: 0, airDrag: 0, initialVy: 0, pullLockPaddingMs: 0 };
   const descriptor = { runtime: { slowSpeedMult: 0.8, slowJumpMult: 0.8, maxBounces: 2 }, events: { onHitEffect: { type: 'gloopSlimeSlow' } } };
   const slime = buildProjectileBounceAttack(attacker, action, descriptor, 10000);

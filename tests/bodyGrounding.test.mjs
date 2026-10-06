@@ -21,6 +21,11 @@ test('platform surface offset follows rendered width for every built-in map', ()
     }
   }
   assert.equal(platformSurfaceOffset('url("/custom-platform.webp")', 300), 0);
+  for (const width of [130, 258, 420]) {
+    const offset = platformSurfaceOffset('url("/assets/candyland/lobby-platform.webp")', width);
+    const renderedSurface = width * (300 / 638 - (256 - 44) / 768);
+    assert.ok(Math.abs(offset - renderedSurface) < 1e-9);
+  }
 });
 
 test('resizing and switching map recomputes grounding and releases removed slots', async () => {

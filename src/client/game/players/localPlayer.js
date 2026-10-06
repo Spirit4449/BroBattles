@@ -497,7 +497,7 @@ function startPointerAttackAim(pointer, family = "basic", button = 0) {
 
 function updatePointerAttackAimState() {
   if (mobileControlsController?.isEnabled?.()) return;
-  if (!player || dead || window.__BB_MAP_EDIT_ACTIVE || !combatMouseController?.shouldShowReticle()) {
+  if (!player || dead || !combatMouseController?.shouldShowReticle()) {
     clearAttackAimReticle();
     return;
   }
@@ -935,7 +935,6 @@ export function createPlayer(
   // Mouse movement selects direction; left-click releases the basic attack.
   // Right-click mirrors that for supers using the special reticle theme.
   const pointerDownHandler = (pointer) => {
-    if (window.__BB_MAP_EDIT_ACTIVE) return;
     if (dead || player?._dash || Date.now() < (player?._attackInterruptedUntil || 0)) return;
     if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) return;
     if (
@@ -1033,12 +1032,12 @@ export function createPlayer(
     getPreferences: getSettings,
     scene: sceneParam,
     canPrepare: () => !!player && !sceneParam._battleEnded && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN &&
-      !window.__BB_MAP_EDIT_ACTIVE && !mobileControlsController?.isEnabled?.() && sceneParam.sys.isActive(),
+      !mobileControlsController?.isEnabled?.() && sceneParam.sys.isActive(),
     canCapture: () => !!player && !sceneParam._battleEnded && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN &&
-      !window.__BB_MAP_EDIT_ACTIVE && !mobileControlsController?.isEnabled?.() &&
+      !mobileControlsController?.isEnabled?.() &&
       sceneParam.input.keyboard?.enabled !== false && sceneParam.sys.isActive(),
     canPlay: () => !!player && !dead && !chatInputActive && !window.__BB_SITE_DIALOG_OPEN &&
-      !window.__BB_MAP_EDIT_ACTIVE && !mobileControlsController?.isEnabled?.() &&
+      !mobileControlsController?.isEnabled?.() &&
       sceneParam.input.keyboard?.enabled !== false && sceneParam.sys.isActive(),
     onRelease: () => {
       resetPointerAttackAim();

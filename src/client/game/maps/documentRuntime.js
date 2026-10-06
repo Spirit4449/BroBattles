@@ -1,3 +1,4 @@
+import { mapArena } from '../../../shared/maps/arenas';
 import { appendLayoutObjectsFromConfig, configureMapPlatform, applyMapBounds, getSpawnPointForTeam, placeSpriteAtConfiguredSpawn } from './mapUtils';
 const runtimes = new Map();
 const boundScenes = new WeakSet();
@@ -9,6 +10,7 @@ export function disposeMapDocument(scene) {
   scene._mapRuntime = null;
   scene._mapObjects = [];
   scene._mapDocument = null;
+  scene._mapArena = null;
 }
 export function preloadMapDocument(scene, data) {
   scene._mapAssetKeys = new Set(Object.keys(data?.assets || {}));
@@ -26,7 +28,9 @@ export function buildMapDocument(scene, mapId, data) {
   for (const [key, ref] of Object.entries(data.anchors || {})) anchors[key] = anchors[ref.objectId];
   scene._mapObjects = objects;
   scene._mapDocument = data;
-  applyMapBounds(scene, data.bounds);
+  // The map's mode rules: world, camera bounds and follow zoom (arenas.json).
+  scene._mapArena = mapArena(data);
+  applyMapBounds(scene, scene._mapArena);
   playMapAnimations(scene,objects,data);
   const previous = scene._mapRuntime;
   if (previous && runtimes.get(previous.mapId) === previous) runtimes.delete(previous.mapId);
@@ -46,8 +50,8 @@ export function getDocumentRuntime(mapId, scene = null) {
   if (scene) return scene._mapRuntime?.mapId === Number(mapId) ? scene._mapRuntime : undefined;
   return runtimes.get(Number(mapId)); // Compatibility for non-scene presentation queries.
 }
-export function spawnOnMapDocument(scene,sprite,runtime,team,index,size) {
-  const point = getSpawnPointForTeam(runtime.data.spawns,team,index,scene._mapVariantTeamSize || size);
+export function spawnOnMapDocument(scene,sprite,runtime,team,index) {
+  const point = getSpawnPointForTeam(runtime.data.spawns,team,index);
   placeSpriteAtConfiguredSpawn(scene,sprite,point,runtime.anchors);
 }
 
@@ -82,7 +86,8 @@ export function syncMapDocument(scene,mapId,data) {
   for(const[key,ref]of Object.entries(data.anchors||{}))anchors[key]=anchors[ref.objectId];
   playMapAnimations(scene,objects,data);
   Object.assign(runtime,{data,objects,anchors});scene._mapObjects=objects;scene._mapDocument=data;
-  scene.physics.world.setBounds(data.bounds.world.x,data.bounds.world.y,data.bounds.world.width,data.bounds.world.height);
+  scene._mapArena=mapArena(data);const {world}=scene._mapArena;
+  scene.physics.world.setBounds(world.x,world.y,world.width,world.height);
   return runtime;
 }
 

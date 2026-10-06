@@ -3,7 +3,8 @@ const {GameRoom}=require('../../core/gameRoom');
 const {createBotParticipants}=require('../../core/bots/identity');
 const {decorateParticipant}=require('../match/matchRosterService');
 const { getAllCharacters, getHealth, getDamage, getSpecialDamage, DEFAULT_CHARACTER }=require("../../../shared/characters/characterStats.js");
-const {clone,variantKey,validateDocument}=require('../../../shared/maps/mapDocument');
+const {clone,mapSummary,validateDocument}=require('../../../shared/maps/mapDocument');
+const {mapArena}=require('../../../shared/maps/arenas');
 const {validateAssets}=require('./mapAssetValidation');
 const {getParticipant}=require('../../core/gameRoom/participants');
 
@@ -61,28 +62,28 @@ class MapPlaytestService {
       socket.on('disconnect',()=>{if(!room._disposed)room.removePlayer(socket,socket.data.user).catch(()=>{});});
     });
   }
-  create(user,{document,variant,bots=false,infiniteSupers=false,debugHitboxes=false,character=DEFAULT_CHARACTER,spawn=null}){
+  create(user,{document,bots=false,infiniteSupers=false,debugHitboxes=false,character=DEFAULT_CHARACTER,spawn=null}){
     const errors=validateDocument(document);if(!errors.length)errors.push(...validateAssets(document));
     if(errors.length)throw Object.assign(Error('Map validation failed'),{status:422,errors});
     if(!this.namespace)throw Object.assign(Error('Playtest server is not initialized'),{status:503});
     if(!getAllCharacters().includes(character))throw Object.assign(Error('Unknown character'),{status:400});
     for(const[token,session]of this.sessions)if(session.ownerId===Number(user.user_id)||Date.now()>session.expiresAt)this.remove(token);
-    const key=variantKey(variant),size=Number(key[0]),map=clone(document.variants[key]);
+    const arena=mapArena(document),size=arena.playersPerTeam,{schemaVersion,...map}=clone(document);
     // Play from a selected marker uses the same constrained spawn config as a normal match.
-    if(spawn?.point){const choices=Object.values(map.spawns.players).flatMap(team=>Object.values(team).flat());if(!choices.some(p=>JSON.stringify(p)===JSON.stringify(spawn.point)))throw Object.assign(Error('Unknown spawn marker'),{status:400});const point=clone(spawn.point);for(const n of [1,2,3])map.spawns.players.team1[n][0]=point;}
+    if(spawn?.point){const choices=Object.values(map.spawns.players).flat();if(!choices.some(p=>JSON.stringify(p)===JSON.stringify(spawn.point)))throw Object.assign(Error('Unknown spawn marker'),{status:400});map.spawns.players.team1[0]=clone(spawn.point);}
     const human=decorateParticipant({...user,team:'team1',char_class:character,level:1,participantId:`user:${user.user_id}`});
     const players=[human,...(bots?createBotParticipants([human],size,{seed:42}).map(decorateParticipant):[])];
-    const modeId=map.objectiveLayout?.bankBust?'bank-bust':'duels';
+    const {modeId,modeVariantId}=arena;
     const matchId=Date.now();
-    const snapshot={mapId:document.id,variant:key,revision:'editor-draft',metadata:{...document.metadata,id:document.id,label:document.label},map};
+    const snapshot={mapId:document.id,revision:'editor-draft',metadata:mapSummary(document),map};
     // Deliberately has no database capability: a playtest cannot award or persist anything.
     const database={runQuery:async()=>[],setUserStatus:async()=>{},setPartiesStatus:async()=>{}};
-    const room=new EditorGameRoom(matchId,{mode:size,modeId,modeVariantId:`${modeId}-${key}`,map:document.id,players,editorMapSnapshot:snapshot,editorSoloPlaytest:!bots,editorInfiniteSupers:infiniteSupers===true,editorDebugHitboxes:debugHitboxes===true},{io:{to:(...args)=>this.namespace.to(...args),sockets:{sockets:this.namespace.sockets}},db:database});
+    const room=new EditorGameRoom(matchId,{mode:size,modeId,modeVariantId,map:document.id,players,editorMapSnapshot:snapshot,editorSoloPlaytest:!bots,editorInfiniteSupers:infiniteSupers===true,editorDebugHitboxes:debugHitboxes===true},{io:{to:(...args)=>this.namespace.to(...args),sockets:{sockets:this.namespace.sockets}},db:database});
     room.status='active';room.DEV_TIMING_DIAG=false;
     const normalPlan=room.gameMode.getRespawnPlan.bind(room.gameMode);
     room.gameMode.getRespawnPlan=(p,meta)=>meta?.cause==='editor-self-kill'?{enabled:true,delayMs:1000,shieldMs:1000,position:room.spawnStateFor(p)}:normalPlan(p,meta)||{enabled:true,delayMs:1200,shieldMs:1000,position:room.spawnStateFor(p)};
     const token=randomUUID();const session={token,ownerId:Number(user.user_id),room,expiresAt:Date.now()+60*60*1000,
-      gameData:{matchId,mode:size,modeId,modeVariantId:`${modeId}-${key}`,map:document.id,mapSnapshot:snapshot,editorPlaytest:true,editorDebugHitboxes:debugHitboxes===true,editorSoloPlaytest:!bots,yourName:user.name,yourTeam:'team1',yourCharacter:character,isAdmin:true,isGuest:false,
+      gameData:{matchId,mode:size,modeId,modeVariantId,map:document.id,mapSnapshot:snapshot,editorPlaytest:true,editorDebugHitboxes:debugHitboxes===true,editorSoloPlaytest:!bots,yourName:user.name,yourTeam:'team1',yourCharacter:character,isAdmin:true,isGuest:false,
         players:[]}};
     // Never expose the account row (password hashes, auth state) in a game roster.
     session.gameData.players=players.map(p=>({name:p.name,user_id:p.user_id,participantId:p.participantId,isBot:p.isBot,team:p.team,char_class:p.char_class,level:p.level,

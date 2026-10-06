@@ -212,9 +212,6 @@ export function createMatchCoordinator(config) {
     try {
       op.isBot = _isBotPlayer(pd);
 
-      const teamRoster = (gameData.players || []).filter(
-        (p) => p.team === pd.team,
-      );
       const idx =
         typeof serverSpawnIndex[pd.name] === "number"
           ? serverSpawnIndex[pd.name]
@@ -225,7 +222,6 @@ export function createMatchCoordinator(config) {
         gameData.map,
         pd.team,
         idx,
-        teamRoster.length,
       );
       // Before FIGHT the server spawn is authoritative; once live, only a
       // loaded player's position is.

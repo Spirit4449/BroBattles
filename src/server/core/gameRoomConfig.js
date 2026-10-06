@@ -8,7 +8,7 @@
 //   - character stats -> src/shared/characters/<name>.json
 //   - world fallback  -> src/shared/gameConstants.js
 
-const { WORLD_BOUNDS } = require("../../shared/gameConstants");
+const { WORLD_MARGIN } = require("../../shared/gameConstants");
 const movementPhysics = require("../../shared/physics/movementPhysics.json");
 const { POWERUP_CATALOG, POWERUP_TYPES, POWERUP_DURATIONS_MS } = require("../../shared/powerups");
 const { getResolvedCharacterSpecialConfig } = require("../../shared/characters/characterTuning");
@@ -183,7 +183,7 @@ const ATTACK_MAX_DIST_MAP = {
 };
 
 module.exports = {
-  WORLD_BOUNDS,
+  WORLD_MARGIN,
   GAME_DURATION_MS,
   SD_RISE_SPEED,
   SD_RISE_FAST_PHASE_MS,

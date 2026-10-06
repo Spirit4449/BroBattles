@@ -15,6 +15,7 @@ const { acquireRuntimeOwnership } = require('../src/server/services/runtimeOwner
 const { createPlayerActivityService } = require('../src/server/services/match/playerActivityService');
 const { distributeMatchRewards } = require('../src/server/core/gameRoom/rewardManager');
 const { createMatchResultService } = require('../src/server/services/match/matchResultService');
+const WORLD = require('../src/shared/maps/arenas').arenaFor('duels-1v1').world;
 
 function movement(t) {
   let now = 100000;
@@ -22,7 +23,7 @@ function movement(t) {
   const player = { socketId: 'p', name: 'Player', char_class: 'ninja', x: 0, y: 0,
     isAlive: true, connected: true, lastInput: now, inputBuffer: [] };
   const events = [];
-  const room = { players: new Map([['p', player]]), io: { to: () => ({ emit: (name, data) => events.push({ name, data }) }) } };
+  const room = { players: new Map([['p', player]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit: (name, data) => events.push({ name, data }) }) } };
   input.resetMovementBudget(player, now);
   return { player, room, events, advance: ms => { now += ms; }, send: data => input.handlePlayerInput(room, 'p', data) };
 }
@@ -57,7 +58,7 @@ test('client geometry and grounded claims cannot move or shrink collision bounds
 });
 test('grounded ducking uses canonical geometry and preserves the feet', t => {
   const f = movement(t); const body = characterBody('ninja');
-  f.room.geometry = { colliders: [{ left: -100, right: 100, top: body.offsetY + body.halfHeight, collision: { up: true } }] };
+  f.room.geometry = { colliders: [{ left: -100, right: 100, top: body.offsetY + body.halfHeight, collision: { up: true } }], world: WORLD };
   f.send({ x: 0, y: 0, grounded: true, ducking: true });
   assert.equal(f.player.ducking, true);
   assert.equal(f.player._bodyHalfHeight, body.halfHeight * 0.55);
@@ -65,7 +66,7 @@ test('grounded ducking uses canonical geometry and preserves the feet', t => {
 });
 test('ducking cannot be re-entered for 200ms after leaving it', t => {
   const f = movement(t); const body = characterBody('ninja');
-  f.room.geometry = { colliders: [{ left: -100, right: 100, top: body.offsetY + body.halfHeight, collision: { up: true } }] };
+  f.room.geometry = { colliders: [{ left: -100, right: 100, top: body.offsetY + body.halfHeight, collision: { up: true } }], world: WORLD };
   f.send({ x: 0, y: 0, grounded: true, ducking: true });
   assert.equal(f.player.ducking, true);
   f.advance(1); f.send({ x: 0, y: 0, grounded: true, ducking: false });
@@ -275,7 +276,7 @@ test('approved dash covers a full burst without correction and replay cannot min
 
 test('server clamps a dash crossing a thin wall using canonical player bounds', t => {
  const f=movement(t);const shape=characterBody('ninja');
- f.room.geometry={colliders:[{left:50,right:52,top:-500,bottom:500}]};
+ f.room.geometry={colliders:[{left:50,right:52,top:-500,bottom:500}],world:WORLD};
  f.advance(20);f.send({x:140,y:0,vx:1000,sequence:1,dashSeq:1,dashX:1,dashY:0});
  assert.ok(f.player.x+shape.offsetX+shape.halfWidth<=50.00001);
  assert.equal(f.player.vx,0);assert.ok(f.events.some(e=>e.name==='game:correction'));

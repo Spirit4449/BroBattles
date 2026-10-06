@@ -19,9 +19,9 @@ function fixture(rect, face) {
  return {player,events,room,x,y};
 }
 
-for(const map of mapDefaults) for(const variant of Object.keys(map.variants)) {
- test(`${map.id}/${variant}: every enabled platform face tolerates packet rounding without stopping the player`,()=>{
-  for(const rect of getDuelGeometry(map.id,variant).colliders) {
+for(const map of mapDefaults) {
+ test(`map ${map.id}: every enabled platform face tolerates packet rounding without stopping the player`,()=>{
+  for(const rect of getDuelGeometry(map.id).colliders) {
    // Moving platforms are excluded from input correction (inputManager.js).
    if(rect.enabled===false||rect.motion)continue;
    for(const face of ['up','down','left','right']) {

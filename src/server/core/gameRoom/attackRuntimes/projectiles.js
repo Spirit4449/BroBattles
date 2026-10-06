@@ -2,7 +2,7 @@ const { getResolvedCharacterAttackConfig } = require("../../../../shared/charact
 const SLIME = getResolvedCharacterAttackConfig("gloop", "slimeball");
 const { getParticipant } = require('../participants');
 const { attackIdentity } = require('./attackIdentity');
-const { WORLD_BOUNDS } = require("../../gameRoomConfig");
+const { WORLD_MARGIN } = require("../../gameRoomConfig");
 const { advanceSlimeball } = require("../../../../shared/characters/gloopProjectile");
 const { resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter } = require('./geometry');
 const { hitCircleTargets } = require('./targets');
@@ -105,8 +105,6 @@ function buildProjectileBounceAttack(playerData, actionData, descriptor, now) {
     descriptor,
     now,
   );
-  const floorFromAction = Number(actionData?.floorY);
-  const floorFromRuntime = WORLD_BOUNDS.height;
   return {
     ...base,
     runtimeKind: "projectile-bounce",
@@ -141,9 +139,8 @@ function buildProjectileBounceAttack(playerData, actionData, descriptor, now) {
       0,
       Number(actionData?.minBounceSpeed ?? runtime.minBounceSpeed ?? SLIME.minBounceSpeed),
     ),
-    floorY: Number.isFinite(floorFromAction)
-      ? floorFromAction
-      : floorFromRuntime,
+    // The client's limits, narrowed to the room's world on the first tick.
+    floorY: Number.isFinite(Number(actionData?.floorY)) ? Number(actionData.floorY) : Infinity,
     mapCollisionRects: Array.isArray(actionData?.mapCollisionRects)
       ? actionData.mapCollisionRects
           .map((rect) => {
@@ -158,14 +155,8 @@ function buildProjectileBounceAttack(playerData, actionData, descriptor, now) {
           .filter(Boolean)
       : [],
     bounceCount: 0,
-    worldMinX: Number.isFinite(Number(actionData?.worldMinX))
-      ? Number(actionData.worldMinX)
-      : -(WORLD_BOUNDS.margin + 20),
-    worldMaxX: Number.isFinite(Number(actionData?.worldMaxX))
-      ? Number(actionData.worldMaxX)
-      : WORLD_BOUNDS.width +
-        WORLD_BOUNDS.margin +
-        20,
+    worldMinX: Number.isFinite(Number(actionData?.worldMinX)) ? Number(actionData.worldMinX) : -Infinity,
+    worldMaxX: Number.isFinite(Number(actionData?.worldMaxX)) ? Number(actionData.worldMaxX) : Infinity,
     effectDurationMs:
       Number(actionData?.slowDurationMs ?? runtime.slowDurationMs ?? SLIME.slowDurationMs),
     effectSpeedMult:
@@ -203,6 +194,10 @@ function tickLinearProjectile(room, attack, descriptor, now = Date.now()) {
 function tickBouncingProjectile(room, attack, descriptor, now) {
   const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || attacker.connected === false || attacker.loaded === false) return true;
+  const world = room.geometry.world;
+  attack.floorY = Math.min(attack.floorY, world.y + world.height);
+  attack.worldMinX = Math.max(attack.worldMinX, world.x - WORLD_MARGIN);
+  attack.worldMaxX = Math.min(attack.worldMaxX, world.x + world.width + WORLD_MARGIN);
   advanceSlimeball(attack, room.FIXED_DT_MS,
     room.geometry?.colliders || attack.mapCollisionRects || [],
     () => {

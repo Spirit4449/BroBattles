@@ -66,34 +66,15 @@ function createSelectionCatalog(getMaps) {
     );
   }
 
-  function getMapObjectiveLayout(mapId, objectiveKey = null) {
-    const map = getMapById(mapId);
-    const layouts =
-      map?.objectiveLayout && typeof map.objectiveLayout === "object"
-        ? map.objectiveLayout
-        : null;
-    if (!layouts) return null;
-    if (!objectiveKey) return layouts;
-    return layouts?.[objectiveKey] || null;
-  }
-
+  // Every map is built for one mode variant (its arena), so a selection's
+  // maps are exactly the maps made for that variant.
   function getCompatibleMapsForSelection(selection) {
     const { mode, variant } = describeSelection(selection);
     if (!mode) return [];
-
-    const modeId = String(mode.id);
     const variantId = String(variant?.id || "");
-    return getMaps().filter((map) => {
-      const compatibleModeIds = Array.isArray(map?.compatibleModeIds)
-        ? map.compatibleModeIds.map(String)
-        : [];
-      if (!compatibleModeIds.includes(modeId)) return false;
-      const compatibleVariantIds = Array.isArray(map?.compatibleVariantIds)
-        ? map.compatibleVariantIds.map(String)
-        : [];
-      if (!compatibleVariantIds.length || !variantId) return true;
-      return compatibleVariantIds.includes(variantId);
-    });
+    return getMaps().filter((map) => variantId
+      ? map?.modeVariantId === variantId
+      : map?.modeId === String(mode.id));
   }
 
   function normalizeSelection(selection = {}) {
@@ -137,7 +118,6 @@ function createSelectionCatalog(getMaps) {
 
   return {
     getMapById,
-    getMapObjectiveLayout,
     getCompatibleMapsForSelection,
     normalizeSelection,
     isSelectionQueueable,

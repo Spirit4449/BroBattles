@@ -11,9 +11,16 @@ function walk(dir) {
   });
 }
 
-test('browser raster assets use WebP, with explicit email and UI PNG exceptions', () => {
+test('browser raster assets use WebP, with explicit cloud and UI PNG exceptions', () => {
   const otherRasters = walk(assets).filter(file => /\.(png|jpe?g|gif|bmp|avif)$/i.test(file));
-  assert.deepEqual(otherRasters.map(file => path.relative(assets, file)), ['logos/wordmark.png', 'ui/party-search-bb-native.png', 'ui/party-search-players.png', 'ui/party-settings-bb-generated-v2.png']);
+  const cloudPngs = Array.from({ length: 12 }, (_, i) => `clouds/cloud-${i + 1}.png`).sort();
+  assert.deepEqual(otherRasters.map(file => path.relative(assets, file)), [
+    ...cloudPngs,
+    'logos/wordmark.png',
+    'ui/party-search-bb-native.png',
+    'ui/party-search-players.png',
+    'ui/party-settings-bb-generated-v2.png',
+  ]);
 });
 
 test('all dynamically selected level badges exist in the final flat directory', () => {

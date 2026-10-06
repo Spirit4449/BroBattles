@@ -43,5 +43,5 @@ export function preloadModeAssets(scene, modeId, staticPath) {
 }
 export function createModeRuntime(options) {
   const modeId = options.getGameData()?.modeId || 'duels';
-  return loadedModes.get(String(modeId))?.create(options) || { render() {}, destroy() {}, setEditMode() {} };
+  return loadedModes.get(String(modeId))?.create(options) || { render() {}, destroy() {} };
 }

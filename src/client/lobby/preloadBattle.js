@@ -1,6 +1,6 @@
 import { mapDefaults } from '../../shared/maps';
 import { buildCharacterSkinAtlasUrls, buildCharacterSkinWeaponUrl } from '../views/skinAssets';
-import { getMapBgAsset } from '../game/maps/manifest';
+import { sceneryUrls } from '../../shared/maps/scenery';
 
 let lastSelection;
 let lastRoster = [];
@@ -20,10 +20,8 @@ export function warmBattleSelection(selection = lastSelection, roster = null) {
   const urls = ['/assets/game-sounds/pregame.mp3'];
   if (selection?.mapId) {
     const map = mapDefaults.find(entry => Number(entry.id) === Number(selection.mapId));
-    const variantId = String(selection.modeVariantId || '').match(/(\d+v\d+)$/)?.[1];
-    const variant = map?.variants?.[variantId] || Object.values(map?.variants || {})[0];
-    urls.push(variant?.background || getMapBgAsset(selection.mapId));
-    for (const asset of Object.values(variant?.assets || {})) urls.push(asset.url, asset.textureURL, asset.atlasURL);
+    urls.push(...sceneryUrls(map?.scenery));
+    for (const asset of Object.values(map?.assets || {})) urls.push(asset.url, asset.textureURL, asset.atlasURL);
   }
   for (const member of members) {
     const character = String(member?.char_class || member?.character || '').toLowerCase();

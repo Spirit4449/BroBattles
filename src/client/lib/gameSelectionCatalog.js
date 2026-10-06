@@ -34,7 +34,6 @@ const MAPS = Array.isArray(mapsCatalog?.maps) ? mapsCatalog.maps : [];
 const catalog = createSelectionCatalog(() => MAPS);
 export const {
   getMapById,
-  getMapObjectiveLayout,
   getCompatibleMapsForSelection,
   isSelectionQueueable,
 } = catalog;

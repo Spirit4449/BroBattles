@@ -159,7 +159,12 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
   const preferred = target ? preferredRange(brain, target) : spacing.cap;
   const formation = teamPosition(brain, target, preferred);
   const suddenDeath = Number.isFinite(poisonY);
-  const hazard = bounds(p).bottom >= poisonY - 100;
+  // Ground within this margin of the gas counts as poisoned.
+  const clearOfPoison = (top) => top < poisonY - 100;
+  const hazard = !clearOfPoison(bounds(p).bottom);
+  // Optional trips (patrol, search) must keep the whole route out of the gas.
+  const safeTrip = (surface, route) => !suddenDeath || (clearOfPoison(surface.top) &&
+    routePoisonDamage(p, { x: surface.x, y: surface.top - graph.body.offsetY - graph.body.halfHeight }, route, poisonY, context.poisonAt) === 0);
   const near = enemies.filter((e) => distance(e, p) < 320).length;
   const friends = [...brain.room.players.values()].filter((ally) => ally !== p && ally.team === p.team && ally.isAlive && distance(ally, p) < 500).length;
   const healthLead = target ? healthFraction(p) - healthFraction(target) : 0;
@@ -371,11 +376,12 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
     if (surface) {
       const limits = walkLimits(surface, p.char_class);
       const x = Math.max(limits.left, Math.min(limits.right, brain.lastSeen.x));
-      if (canStandAt(brain.room.geometry, surface, p.char_class, x) && routeTo(surface.id, x) !== null)
+      const route = canStandAt(brain.room.geometry, surface, p.char_class, x) ? routeTo(surface.id, x) : null;
+      if (route !== null && safeTrip(surface, route))
         return { mode: 'search', goal: { x, y: surface.top, surfaceId: surface.id } };
     }
   }
-  const exploration = reachable.flatMap(({ surface }) => {
+  const exploration = reachable.filter(({ surface, route }) => safeTrip(surface, route)).flatMap(({ surface }) => {
     const limits = walkLimits(surface, p.char_class, 22);
     const center = Math.max(limits.left, Math.min(limits.right, surface.x));
     const xs = [center, limits.left, limits.right].filter((x) =>

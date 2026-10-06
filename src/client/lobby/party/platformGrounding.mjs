@@ -4,6 +4,9 @@ const SURFACES = {
   '/assets/mangrove/lobbyPlatform.webp': 100,
   '/assets/serenity/lobbyPlatform.webp': 54,
   '/assets/bank-bust/lobbyPlatform.webp': 4,
+  // The 768x256 artwork is bottom-aligned inside the 638:300 platform frame;
+  // its frosting begins 44 image pixels below the transparent top edge.
+  '/assets/candyland/lobby-platform.webp': (300 / 638 - (256 - 44) / 768) * 638,
 };
 
 export function platformSurfaceOffset(backgroundImage, width) {

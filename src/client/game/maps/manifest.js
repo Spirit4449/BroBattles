@@ -7,6 +7,7 @@
 import { mapDefaults as defaults, mapsCatalog } from '../../../shared/maps';
 import { buildMapDocument, getDocumentRuntime, spawnOnMapDocument } from './documentRuntime';
 import { DEFAULT_MAP_ID } from '../../../shared/gameSelection';
+import { mapArena } from '../../../shared/maps/arenas';
 
 const MAP_META = new Map(
   (Array.isArray(mapsCatalog?.maps) ? mapsCatalog.maps : []).map((entry) => [
@@ -25,9 +26,9 @@ export function normalizeMapId(mapId) {
   return DEFAULT_MAP_ID;
 }
 
-/** Built-in 1v1 document for a map, used when the server sent no snapshot. */
+/** Built-in document for a map, used when the server sent no snapshot. */
 export function getDefaultMapDocument(mapId) {
-  return defaults.find((d) => d.id === Number(mapId))?.variants['1v1'] || null;
+  return defaults.find((d) => d.id === Number(mapId)) || null;
 }
 
 /**
@@ -49,11 +50,10 @@ export function buildMap(scene, mapId, snapshot = null) {
  * @param {number|string} mapId
  * @param {string}       team      — "team1" | "team2"
  * @param {number}       index     — 0-based index within the team
- * @param {number}       teamSize  — total players on that team
  */
-export function positionSpawn(scene, sprite, mapId, team, index, teamSize) {
+export function positionSpawn(scene, sprite, mapId, team, index) {
   const runtime = getDocumentRuntime(mapId, scene);
-  if (runtime) spawnOnMapDocument(scene, sprite, runtime, team, index, teamSize);
+  if (runtime) spawnOnMapDocument(scene, sprite, runtime, team, index);
 }
 
 /**
@@ -80,12 +80,12 @@ export function getMapSpawnConfig(mapId, scene = null) {
 }
 
 /**
- * Runtime boundary/camera config for a map.
+ * World and camera bounds for a map: its mode's arena (arenas.json).
  * @param {number|string} mapId
- * @returns {object}
+ * @returns {{world: object, camera: object}|null}
  */
-export function getMapBoundaryConfig(mapId, scene = null) {
-  return getMapDocument(mapId, scene)?.bounds ?? {};
+export function getMapArena(mapId, scene = null) {
+  return mapArena(getMapDocument(mapId, scene));
 }
 
 /**
@@ -107,12 +107,13 @@ export function getMapSpawnAnchors(mapId, scene = null) {
 }
 
 /**
- * Background image URL for the given map (used in battle-start overlay).
+ * Backdrop image URL for the given map (used in battle-start overlay): its
+ * farthest scenery layer.
  * @param {number|string} mapId
  * @returns {string}
  */
 export function getMapBgAsset(mapId, scene = null) {
-  return getDocumentRuntime(mapId, scene)?.data?.background || MAP_META.get(Number(mapId))?.mapSelectPreviewAsset || "/assets/lushy/gameBg.webp";
+  return getMapDocument(mapId, scene)?.scenery?.layers?.[0]?.url || getMapSelectPreviewAsset(mapId);
 }
 
 /**

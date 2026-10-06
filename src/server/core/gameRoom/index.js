@@ -71,8 +71,8 @@ class GameRoom {
     this.players = new Map(); // socketId -> playerData
     this.rewardStats = new Map(); // name -> { userId, team, hits, damage, kills }
     this.gameState = null;
-    this.mapSnapshot = matchData.editorMapSnapshot || require('../../services/maps/mapRepository').mapRepository.forMatch(matchId, matchData.map, matchData.modeVariantId || matchData.mode);
-    this.geometry = getDuelGeometry(matchData.map, this.mapSnapshot.variant, this.mapSnapshot.map);
+    this.mapSnapshot = matchData.editorMapSnapshot || require('../../services/maps/mapRepository').mapRepository.forMatch(matchId, matchData.map);
+    this.geometry = getDuelGeometry(matchData.map, this.mapSnapshot.map);
     this.gameMode = createGameModeRuntime(this);
     this.modeState = this.gameMode?.createRoomState?.() ?? null;
 

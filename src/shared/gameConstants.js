@@ -20,13 +20,9 @@ const WORLD_STATE_EVERY_TICKS = 8;
 // World
 // ---------------------------------------------------------------------------
 
-// Fallback playfield used when a map document does not define its own world
-// rectangle. Real maps set `bounds`/`world` in src/shared/maps/<id>.json.
-const WORLD_BOUNDS = Object.freeze({
-  width: 3600, // playfield width (px)
-  height: 1000, // playfield height (px); poison/sudden-death floor
-  margin: 400, // how far past the edges players/projectiles may travel (px)
-});
+// Each mode's world rectangle lives in src/shared/maps/arenas.json. This is
+// how far past its edges players and projectiles may travel (px).
+const WORLD_MARGIN = 400;
 
 // ---------------------------------------------------------------------------
 // Lobby & party
@@ -41,6 +37,6 @@ module.exports = {
   FIXED_DT_MS,
   SNAPSHOT_EVERY_TICKS,
   WORLD_STATE_EVERY_TICKS,
-  WORLD_BOUNDS,
+  WORLD_MARGIN,
   PARTY_JOIN_REQUEST_TIMEOUT_MS,
 };

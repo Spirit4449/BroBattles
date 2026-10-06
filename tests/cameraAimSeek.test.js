@@ -10,13 +10,14 @@ const { code } = babel.transformSync(fs.readFileSync(require.resolve('../src/cli
 vm.runInNewContext(code, { exports: exportsObject });
 const { updateDynamicCamera, restingCameraFrame } = exportsObject;
 const Phaser = { Math: { Clamp: (v, lo, hi) => Math.max(lo, Math.min(hi, v)) } };
+const { arenaFor, arenaIds } = require('../src/shared/maps/arenas');
 test('aim seek shifts camera limits at either map edge without accumulating bounds drift', () => {
   const cam = { zoom: 1.8, useBounds: true, _bounds: { x: -40, y: -20, width: 2000, height: 1200 },
     followOffset: { x: 0, y: 120 },
     setZoom(z) { this.zoom = z; },
     setBounds(x,y,width,height) { this._bounds = { x,y,width,height }; },
     setFollowOffset(x,y) { this.followOffset = { x,y }; } };
-  const scene = { cameras: { main: cam }, game: { loop: { delta: 16.67 } } };
+  const scene = { cameras: { main: cam }, game: { loop: { delta: 16.67 } }, _mapArena: arenaFor('duels-1v1') };
   for (const x of [-100, 100]) {
     scene._combatAimLook = { x, y: 30 };
     for (let i = 0; i < 360; i++) updateDynamicCamera(scene, { x: x < 0 ? 0 : 2000, y: 520 }, Phaser);
@@ -29,13 +30,12 @@ test('aim seek shifts camera limits at either map edge without accumulating boun
   }
 });
 
-test('maps can set their own follow zoom range, measured within their camera bounds', () => {
-  const camera = { y: -40, height: 1300, minZoom: 1.28, maxZoom: 1.5 };
-  const low = restingCameraFrame(camera.y + camera.height, camera), high = restingCameraFrame(camera.y, camera);
-  assert.equal(low.zoom, camera.maxZoom);
-  assert.equal(high.zoom, camera.minZoom);
-  const mid = restingCameraFrame(camera.y + camera.height * 0.34, camera).zoom;
-  assert.ok(mid > camera.minZoom && mid < camera.maxZoom, 'zoom eases between the limits as players climb');
-  // Maps without a range keep the classic framing.
-  assert.deepEqual(restingCameraFrame(520, { y: -40, height: 1000, zoom: 1.7 }), restingCameraFrame(520));
+test('every mode eases its follow zoom between its own limits as players climb', () => {
+  for (const id of arenaIds()) {
+    const camera = arenaFor(id).camera, [high, low] = camera.climbY;
+    assert.equal(restingCameraFrame(low + 200, camera).zoom, camera.maxZoom, id);
+    assert.equal(restingCameraFrame(high - 200, camera).zoom, camera.minZoom, id);
+    const mid = restingCameraFrame((high + low) / 2, camera).zoom;
+    assert.ok(mid > Math.min(camera.minZoom, camera.maxZoom) && mid < Math.max(camera.minZoom, camera.maxZoom), id);
+  }
 });

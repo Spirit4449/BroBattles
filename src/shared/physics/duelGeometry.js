@@ -1,11 +1,11 @@
 const defaults = require('../maps').mapDefaults;
-const { geometryFromMap, variantKey } = require('../maps/mapDocument');
+const { geometryFromMap } = require('../maps/mapDocument');
 const { resolveLanding } = require('./spawnPlacement');
 const frames = require("../characters/index.js").characterFrames;
 const { getCharacterStats, DEFAULT_CHARACTER } = require("../characters/characterStats.js");
 const { getResolvedCharacterBodyConfig } = require("../characters/characterTuning.js");
-function getDuelGeometry(mapId, variant = '1v1', snapshot = null) {
-  const data = snapshot || defaults.find(d => d.id === Number(mapId))?.variants[variantKey(variant)];
+function getDuelGeometry(mapId, snapshot = null) {
+  const data = snapshot || defaults.find(d => d.id === Number(mapId));
   return data ? geometryFromMap(data, Number(mapId)) : null;
 }
 
@@ -37,9 +37,9 @@ function computeCharacterBody(character, flip) {
     displayWidth: frame.w * scale, displayHeight: frame.h * scale };
 }
 
-function spawnForParticipant(geometry, player, index, teamSize) {
-  const team = geometry.spawns.players[player.team];
-  const choices = team?.[Math.max(1, Math.min(3, teamSize))] || team?.[3];
+// A map has one spawn slot per player its mode allows on each team.
+function spawnForParticipant(geometry, player, index) {
+  const choices = geometry.spawns.players[player.team];
   const point = choices?.[Math.min(index, choices.length - 1)];
   const anchor = geometry.anchors[point?.anchorId];
   const body = characterBody(player.char_class, player.flip);

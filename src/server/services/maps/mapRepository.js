@@ -2,12 +2,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
 const defaults = require('../../../shared/maps').mapDefaults;
-const { clone, variantKey, validateDocument } = require('../../../shared/maps/mapDocument');
+const { clone, mapSummary, validateDocument } = require('../../../shared/maps/mapDocument');
 const revisionOf = doc => createHash('sha256').update(JSON.stringify(doc)).digest('hex');
 // Bounded staleness for edits made outside this process (other workers, manual
 // file edits). Saves through this repository invalidate immediately.
 const METADATA_RECHECK_MS = 5000;
-const mapSummary = document => ({...document.metadata, id:document.id, label:document.label});
 class MapRepository {
   constructor(directory = process.env.BB_MAP_DIR || path.resolve(__dirname, "../../../../data/maps")) { this.directory = directory; this.matches = new Map(); this._metadata = null; this._metadataSig = null; this._metadataCheckedAt = 0; }
   readDocument(id) {
@@ -71,20 +70,20 @@ class MapRepository {
     return this.get(document.id);
     });
   }
-  forMatch(matchId, mapId, variant) {
-    const key = `${matchId}:${mapId}:${variantKey(variant)}`;
+  forMatch(matchId, mapId) {
+    const key = `${matchId}:${mapId}`;
     if (!this.matches.has(key)) {
       const persist = process.env.NODE_ENV === 'production';
-      const matchFile = path.join(this.directory,'matches',`${Number(matchId)}-${Number(mapId)}-${variantKey(variant)}.json`);
+      const matchFile = path.join(this.directory,'matches',`${Number(matchId)}-${Number(mapId)}.json`);
       if (persist && fs.existsSync(matchFile)) {
         const stored = JSON.parse(fs.readFileSync(matchFile,'utf8'));
         this.matches.set(key,stored);
         return clone(stored);
       }
       const {document, revision} = this.get(Number(mapId) || 1);
-      const selectedVariant = variantKey(variant);
       if (this.matches.size > 10000) this.matches.delete(this.matches.keys().next().value);
-      this.matches.set(key, {mapId:document.id, revision, variant:selectedVariant, metadata:mapSummary(document), map:require('./mapAssetFiles').pinMapAssets(document.variants[selectedVariant])});
+      const { schemaVersion, ...map } = document;
+      this.matches.set(key, {mapId:document.id, revision, metadata:mapSummary(document), map:require('./mapAssetFiles').pinMapAssets(map)});
       if (persist) {
         fs.mkdirSync(path.dirname(matchFile),{recursive:true});
         // An exclusive write pins the first revision across workers too.

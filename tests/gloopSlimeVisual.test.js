@@ -68,13 +68,13 @@ test('slimeball graphics can be destroyed by Phaser without recursive destructio
     if(name.includes('gloopProjectile'))return require('../src/shared/characters/gloopProjectile');
     if(name.includes('characterTuning'))return {getResolvedCharacterAttackConfig:()=>({collisionRadius:28,visualScale:1.5})};
     if(name.includes('renderLayers'))return {RENDER_LAYERS:{ATTACKS:20}};
-    if(name.includes('gameConstants'))return require('../src/shared/gameConstants');
     return {};
   }});
   for(const trigger of ['body','shutdown']){
     const {scene,objects}=setup();
     scene.events=new EventEmitter();
     scene.add.circle=()=>scene.add.graphics();
+    scene.physics={world:{bounds:{x:0,y:0,width:2300,height:1000}}};
     const body=attackApi.spawnGloopSlimeballVisual(scene,{id:'test',start:{x:100,y:100}});
     assert.ok(body);
     if(trigger==='body')body.destroy();

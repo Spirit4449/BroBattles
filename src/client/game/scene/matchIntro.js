@@ -61,7 +61,7 @@ export function createMatchIntro({ getScene, getPlayer, getEnemySprites, onActiv
   let shot = null; // { plan, bounds, view, startedAt, blend? }
 
   function restFraming(player, bounds, view) {
-    const rest = restingCameraFrame(player.y, getScene()?._mapDocument?.bounds?.camera);
+    const rest = restingCameraFrame(player.y, getScene()._mapArena.camera);
     return {
       ...clampCenter(bounds, view, rest.zoom, player.x, player.y - rest.followOffsetY),
       zoom: rest.zoom,

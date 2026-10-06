@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { mapDefaults } = require('../src/shared/maps');
+const { sceneryUrls } = require('../src/shared/maps/scenery');
 
 function setup() {
   const state = { urls: [], mode: null };
@@ -10,7 +11,7 @@ function setup() {
     preload: urls => { state.urls = Array.from(urls); }, selectPreloadMode: mode => { state.mode = mode; },
   } };
   const context = vm.createContext({
-    window, mapDefaults, getMapBgAsset: id => `/assets/map-${id}.webp`,
+    window, mapDefaults, sceneryUrls,
     buildCharacterSkinAtlasUrls: (character, skin) => ({ animationsUrl: `/assets/${character}/${skin || 'base'}.json`, spritesheetUrl: `/assets/${character}/${skin || 'base'}.webp` }),
     buildCharacterSkinWeaponUrl: (character, skin) => skin ? `/assets/${character}/${skin}-weapon.webp` : null,
   });
@@ -19,14 +20,15 @@ function setup() {
   return { state, window, warm: context.warmBattleSelection };
 }
 
-test('selection warming includes only the selected map variant and roster characters', () => {
+test('selection warming includes only the selected map and roster characters', () => {
   const { state, warm } = setup();
   warm({ modeId: 'bank-bust', modeVariantId: 'bank-bust-3v3', mapId: 4 }, [
     { char_class: 'ninja', selected_skin_id: 'ninja-blue' }, { char_class: 'Random' }, { char_class: 'shuffle' },
   ]);
   assert.equal(state.mode, 'bank-bust');
-  for (const asset of Object.values(mapDefaults.find(map => map.id === 4).variants['3v3'].assets)) {
-    assert.ok(state.urls.includes(asset.url));
+  const map = mapDefaults.find(entry => entry.id === 4);
+  for (const url of [...Object.values(map.assets).map(asset => asset.url), ...sceneryUrls(map.scenery)]) {
+    assert.ok(state.urls.includes(url), url);
   }
   assert.ok(state.urls.includes('/assets/ninja/base.webp'));
   assert.ok(state.urls.includes('/assets/ninja/ninja-blue.webp'));

@@ -1,6 +1,5 @@
 const { PICKUP_DELAY_MS } = require("../../../shared/powerups");
 const {
-  WORLD_BOUNDS,
   SD_RISE_SPEED,
   SD_RISE_FAST_PHASE_MS,
   SD_RISE_FAST_MULT,
@@ -178,12 +177,13 @@ function spawnPowerup(room) {
 }
 
 function computePoisonY(room, sdElapsedMs) {
-  const worldBottomY = room.geometry?.world ? room.geometry.world.y + room.geometry.world.height : WORLD_BOUNDS.height;
+  const world = room.geometry.world;
+  const worldBottomY = world.y + world.height;
   const earlySec = Math.min(sdElapsedMs, SD_RISE_FAST_PHASE_MS) / 1000;
   const lateSec = Math.max(0, sdElapsedMs - SD_RISE_FAST_PHASE_MS) / 1000;
   const rise =
     earlySec * SD_RISE_SPEED * SD_RISE_FAST_MULT + lateSec * SD_RISE_SPEED;
-  return Math.max(room.geometry?.world?.y || 0, worldBottomY - rise);
+  return Math.max(world.y, worldBottomY - rise);
 }
 
 function isInSuddenDeathWater(room, playerData, nowTs) {

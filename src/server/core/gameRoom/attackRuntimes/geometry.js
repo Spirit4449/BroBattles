@@ -1,6 +1,6 @@
 const DEFAULT_TARGET_HALF_HEIGHT = 60;
 const DEFAULT_TARGET_HALF_WIDTH = 28;
-const { WORLD_BOUNDS } = require("../../gameRoomConfig");
+const { WORLD_MARGIN } = require("../../gameRoomConfig");
 
 function getPlayerBounds(target) {
   const halfH = Math.max(
@@ -86,17 +86,10 @@ function getAttackCollisionCenter(attack, runtime = {}) {
   };
 }
 
-function clampToWorld(value, axis = "x", room = null) {
-  const world = room?.geometry?.world;
-  const margin = WORLD_BOUNDS.margin;
-  if (axis === "y") {
-    const minY = (world?.y || 0) - margin;
-    const maxY = (world ? world.y + world.height : WORLD_BOUNDS.height) + margin;
-    return Math.max(minY, Math.min(maxY, Number(value) || 0));
-  }
-  const minX = (world?.x || 0) - margin;
-  const maxX = (world ? world.x + world.width : WORLD_BOUNDS.width) + margin;
-  return Math.max(minX, Math.min(maxX, Number(value) || 0));
+function clampToWorld(value, axis, room) {
+  const world = room.geometry.world;
+  const [min, size] = axis === "y" ? [world.y, world.height] : [world.x, world.width];
+  return Math.max(min - WORLD_MARGIN, Math.min(min + size + WORLD_MARGIN, Number(value) || 0));
 }
 
 function sweptCircleOverlapsRect(prevX, prevY, nextX, nextY, rect, radius = 0) {
