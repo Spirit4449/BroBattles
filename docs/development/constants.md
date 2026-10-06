@@ -62,7 +62,9 @@ The local player, the server's movement validation, and the bot physics all read
 | `accel` / `airAccel` | Run acceleration on the ground / in the air (px/s²). |
 | `dragGround` / `dragAir` | Deceleration with no input (px/s²). |
 | `gravity` | Downward acceleration (px/s²). |
+| `maxVerticalSpeed` | Normal vertical speed cap (px/s); the server's vertical movement allowance adds 10% headroom. Scale with jump speed and gravity to preserve capped jump airtime. |
 | `fallGravityFactor` | Gravity multiplier while falling. Higher values give a snappier arc. |
+| `fallGravityMinSpeed` | Downward speed (px/s) that enables the falling gravity multiplier; scales with jump speed and gravity. |
 | `jumpSpeed` | Jump launch speed (px/s). |
 | `jumpLaunchSpeedMult` | Scale on `jumpSpeed` when the jump starts. |
 | `jumpStartSpeedRatio` / `jumpRampMs` | The jump begins at this fraction of launch speed and ramps to full over `jumpRampMs`. |
@@ -76,6 +78,7 @@ The local player, the server's movement validation, and the bot physics all read
 | `wallSlideReentryDelayMs` | Delay before re-attaching to a wall after leaving it. |
 | `wallJumpHorizontalGracePx` | Extra horizontal reach (px) for detecting a wall jump. |
 | `wallKickFull` | Horizontal speed of a wall kick (px/s). |
+| `wallKickVerticalBonus` / `wallKickMinVerticalSpeed` | Extra speed added to `jumpSpeed` / minimum speed before applying the vertical wall-kick multiplier (px/s). Scale with jump speed and gravity. |
 | `wallKickVerticalMult` | Vertical scale on a wall kick. |
 | `wallKickLockMs` | Steering lockout after a wall kick. |
 | `minSpeedMult` / `maxSpeedMult` | Clamp on combined slow/haste effects. |
@@ -138,7 +141,7 @@ The admin panel calls the runtime configuration service, which updates in-memory
 | `gameRoomConfig.js`: powerups | Spawn interval 25s; starting count 2; max active 3; pickup radius 70px; despawn 10s after the 2s omen; anchored spawn lift 22px |
 | `gameRoomConfig.js`: drops | Lifetime 12s; final 3s blinking; pickup radius 110px; 4–8 coin drops and 1–3 gem drops |
 | `gameRoomConfig.js`: validation | Hit rewind cap 300ms; future tolerance 120ms; history 1s / 128 samples; duplicate-hit window 80ms; stomp radius 110px and interruption 300ms |
-| `movementPhysics.json` | Run speed 260px/s; ground/air acceleration 3000/3300px/s²; gravity 825px/s²; jump speed parameter 390px/s; dash 560px/s (straight down 840), burst 160ms, cooldown 5000ms, coast up to 850ms |
+| `movementPhysics.json` | Run speed 260px/s; ground/air acceleration 3000/3300px/s²; gravity 990px/s²; jump speed parameter 468px/s; dash 560px/s (straight down 840), burst 160ms, cooldown 5000ms, coast up to 850ms |
 | `ducking.js` | Body height ×0.55; movement ×0.25; damage taken ×0.8; reentry delay 200ms |
 | `characterStats.js` | Level cap 10; levels 2–5 add 500 HP / 100 damage / 200 special damage per level; levels 6–10 add 400 / 80 / 100; next-level coin costs 200, 400, 800, 1600, 2400, 3300, 4500, 6100, 8200 |
 | `gameModes.catalog.json`: Bank Bust | Vault HP 50,000; match 210s; respawn 3500ms; respawn shield 3000ms; unlock 250 peak trophies |

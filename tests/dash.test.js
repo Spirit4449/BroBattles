@@ -86,6 +86,30 @@ test('the actual movement handler completes its dash branch without touching lat
   assert.equal(p._wallAttachSide,null);
 });
 
+test('normal movement and dash coasting preserve boosted vertical speeds within the shared cap', () => {
+  const Body = require('phaser/src/physics/arcade/Body');
+  const World = require('phaser/src/physics/arcade/World');
+  const source = fs.readFileSync(require.resolve('../src/client/game/players/localPlayer.js'), 'utf8');
+  const movement = source.slice(source.indexOf('export function handlePlayerMovement(scene)'),
+    source.indexOf('export function setSuperStats(')).replace('export function', 'function');
+  const world = { defaults: {}, gravity: { x: 0, y: 0 }, updateMotion: World.prototype.updateMotion,
+    computeVelocity: World.prototype.computeVelocity, computeAngularVelocity: World.prototype.computeAngularVelocity };
+  const body = new Body(world); body.setSize(20, 20); body.enable = true;
+  const p = { body, setMaxVelocity:(x,y)=>body.setMaxVelocity(x,y), setDragX:x=>body.setDragX(x), setAccelerationX:x=>body.setAccelerationX(x) };
+  const context = vm.createContext({ player:p, Date, physics });
+  vm.runInContext(movement, context);
+  for (const sign of [-1, 1]) for (const coast of [false, true]) {
+    const velocity = sign * physics.maxVerticalSpeed * 0.95;
+    body.setVelocity(physics.maxSpeed * 1.5, velocity);
+    p._dashCoastUntil = coast ? Date.now() + physics.dashCoastMs : 0;
+    vm.runInContext('applyBodyLimits(physics, false)', context);
+    if (coast) exported.applyDashCoast(p, 1, physics.maxSpeed);
+    body.update(1 / 60);
+    assert.equal(body.velocity.y, velocity, `vertical speed survives ${coast ? 'coast' : 'normal movement'}`);
+  }
+  assert.ok(require('../src/server/core/gameRoomConfig').MOVE_PLAUSIBLE_SPEED_V > physics.maxVerticalSpeed);
+});
+
 test('dash sound plays once per accepted launch, including when the visual effect is hidden', () => {
   const calls=[];const audioScene={...scene,cache:{audio:{exists:()=>true}},sound:{play:(...args)=>calls.push(args)}};
   const p=player();
@@ -191,7 +215,7 @@ test('one-way surfaces, disabled colliders and travel away from contact remain f
 });
 test('Arcade body displacement is swept even when the body completely skips over a wall', () => {
  const Body=require('phaser/src/physics/arcade/Body');
- const world={defaults:{},gravity:{x:0,y:825}};
+ const world={defaults:{},gravity:{x:0,y:physics.gravity}};
  const body=new Body(world);body.setSize(20,20);body.prev.set(0,0);body.x=140;body.y=0;
  body.newVelocity.set(140,0);body.velocity.set(1000,0);body.enable=true;
  const p={body,_dash:{}};
@@ -201,7 +225,7 @@ test('Arcade body displacement is swept even when the body completely skips over
 
 test('real Arcade steps coast smoothly and never reapply blocked dash velocity', () => {
  const Body=require('phaser/src/physics/arcade/Body');const World=require('phaser/src/physics/arcade/World');
- const world={defaults:{},gravity:{x:0,y:825},updateMotion:World.prototype.updateMotion,
+ const world={defaults:{},gravity:{x:0,y:physics.gravity},updateMotion:World.prototype.updateMotion,
    computeVelocity:World.prototype.computeVelocity,computeAngularVelocity:World.prototype.computeAngularVelocity};
  const body=new Body(world);body.setSize(20,20);body.x=0;body.y=0;body.enable=true;
  const p={visible:true,body,flipX:false,setFlipX(v){this.flipX=v;},setVelocity:(x,y)=>body.setVelocity(x,y),
@@ -225,7 +249,7 @@ test('real Arcade steps coast smoothly and never reapply blocked dash velocity',
 
 test('wall sliding loses tangential speed to surface friction during dash and coast without rebuilding normal speed', () => {
  const Body=require('phaser/src/physics/arcade/Body');
- const body=new Body({defaults:{},gravity:{x:0,y:825}});body.setSize(20,20);body.enable=true;
+ const body=new Body({defaults:{},gravity:{x:0,y:physics.gravity}});body.setSize(20,20);body.enable=true;
  const wall={left:50,right:52,top:-200,bottom:200};const wallScene={_mapObjects:[{body:wall}]};
  const p={body,_dash:{}};
  body.prev.set(0,0);body.newVelocity.set(60,-500/60);body.x=60;body.y=-500/60;body.velocity.set(500,-500);
@@ -244,7 +268,7 @@ test('wall sliding loses tangential speed to surface friction during dash and co
 test('ground and ceiling dash friction is independent of physics step frequency', () => {
  const Body=require('phaser/src/physics/arcade/Body');
  for(const fps of [30,60,120]) for(const ceiling of [false,true]) {
-   const body=new Body({defaults:{},gravity:{x:0,y:825}});body.setSize(20,20);body.enable=true;
+   const body=new Body({defaults:{},gravity:{x:0,y:physics.gravity}});body.setSize(20,20);body.enable=true;
    const surface={left:-1000,right:1000,top:ceiling?-22:20,bottom:ceiling?0:22};
    body.velocity.set(700,0);body.x=0;body.y=0;const p={body,_dash:{}};
    for(let i=0;i<fps/10;i++) {
@@ -283,7 +307,7 @@ test('normal speed movement is not suppressed by post-dash coasting', () => {
 test('dash sweep repairs a fractional landing side-stall and normal movement continues after coast', () => {
  const Body=require('phaser/src/physics/arcade/Body');const World=require('phaser/src/physics/arcade/World');
  const {processPlayerPlatformCollision}=require('../src/client/game/players/platformCollision');
- const world={defaults:{},gravity:{x:0,y:825},OVERLAP_BIAS:4,intersects:World.prototype.intersects};
+ const world={defaults:{},gravity:{x:0,y:physics.gravity},OVERLAP_BIAS:4,intersects:World.prototype.intersects};
  const body=new Body(world),surface=new Body(world);
  body.setSize(31,37.15384615384615);surface.setSize(500,20);
  surface.x=0;surface.y=100;surface.prev.set(0,100);surface.immovable=true;surface.moves=false;surface.updateCenter();
@@ -299,8 +323,8 @@ test('dash sweep repairs a fractional landing side-stall and normal movement con
  assert.equal(body.velocity.x,60);assert.equal(body.blocked.right,false);assert.ok(body.bottom<=surface.top);
  const startingX=body.x;
  for(let i=0;i<60;i++) {
-   body.resetFlags();body.prev.set(body.x,body.y);body.newVelocity.set(1,825/3600);
-   body.x+=1;body.y+=825/3600;body._dx=1;body._dy=825/3600;body.velocity.set(60,825/60);body.updateCenter();
+   body.resetFlags();body.prev.set(body.x,body.y);body.newVelocity.set(1,physics.gravity/3600);
+   body.x+=1;body.y+=physics.gravity/3600;body._dx=1;body._dy=physics.gravity/3600;body.velocity.set(60,physics.gravity/60);body.updateCenter();
    World.prototype.separate.call(world,body,surface,processPlayerPlatformCollision,null,false);
    exported.protectDashMotion({_mapObjects:[{body:surface}]},p,1016+i*17,1/60);
    assert.equal(body.blocked.right,false);assert.equal(body.velocity.x,60);
@@ -326,7 +350,7 @@ test('vertical drag is frame-rate independent and ascent becomes descent through
  }
  assert.ok(Math.max(...outcomes)-Math.min(...outcomes)<1e-8);
  let v=-100;
- for(let i=0;i<30;i++) v=exported.dampDashVertical(v+825/60,1/60);
+ for(let i=0;i<30;i++) v=exported.dampDashVertical(v+physics.gravity/60,1/60);
  assert.ok(v>250); // Gravity carries the player through the apex; no hover threshold.
 });
 
@@ -339,7 +363,7 @@ test('air dash ignores direction changes until the burst ends', () => {
 });
 test('wall contact restores gravity during the burst and vertical speed grows after it', () => {
  const Body=require('phaser/src/physics/arcade/Body');const World=require('phaser/src/physics/arcade/World');
- const world={defaults:{},gravity:{x:0,y:825},updateMotion:World.prototype.updateMotion,
+ const world={defaults:{},gravity:{x:0,y:physics.gravity},updateMotion:World.prototype.updateMotion,
  computeVelocity:World.prototype.computeVelocity,computeAngularVelocity:World.prototype.computeAngularVelocity};
  const body=new Body(world);body.setSize(20,20);body.enable=true;body.x=30;body.y=0;body.allowGravity=false;
  const p={body,_dash:{allowGravity:true},_dashCoastUntil:2000};

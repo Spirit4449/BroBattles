@@ -193,6 +193,24 @@
       }
       #game-bg {
         opacity: 0;
+        background: #0b0710;
+      }
+      /* Mirrored, blurred continuation of the arena in letterbox space
+         (ambientBezels.js). Overrides the shared canvas positioning. */
+      #game-bg .ambient-canvas {
+        position: fixed;
+        inset: 0;
+        left: 0;
+        bottom: auto;
+        width: 100%;
+        height: 100%;
+        transform: none;
+        z-index: 0;
+        display: none;
+        filter: blur(22px);
+      }
+      #game-bg.ambient-active .ambient-canvas {
+        display: block;
       }
       #game-bg.visible {
         opacity: 1;

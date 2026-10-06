@@ -5,6 +5,7 @@ import '../editor/pixelChecks.css';
 import { preloadMapDocument, syncMapDocument } from '../game/maps/documentRuntime';
 import { clone, VARIANTS, POWERUP_TYPES, MapHistory, validateDocument, validateMap, geometryFromMap } from '../../shared/maps/mapDocument';
 import { resolveLanding } from '../../shared/physics/spawnPlacement';
+import { MOTION_DEFAULTS, MOTION_EASES, motionOffset } from '../../shared/maps/platformMotion';
 import { allRows, snapMove, resizeRow, resizeCollision, removeRows, exportDocument, replaceAssetReferences } from '../editor/editorModel';
 const $ = id => document.getElementById(id);
 let documentData, revision, savedJSON, history, game, scene, mapList = [], selectedId = null, activeTab = 'selection', variant = '1v1', preview = false, busy = false;
@@ -97,7 +98,7 @@ function renderInspector(){if(!map())return;document.querySelectorAll('[data-tab
   if(!['spawn','vault','respawn'].includes(row.kind))field(panel,'Label',p.label||'',v=>editValue(p,'label',v));
   if(row.kind==='spawn'){
     panel.append(node('p','Anchored to a walkable collision surface. Move the platform and this marker follows.'));
-    const geom=geometryFromMap(map());const surfaces=geom.colliders.filter(c=>c.collision.up);
+    const geom=geometryFromMap(map());const surfaces=geom.colliders.filter(c=>c.collision.up&&!c.motion);
     field(panel,'Platform',p.anchorId,v=>transaction(()=>{p.anchorId=v;p.dx=0;delete p.x;delete p.y;}),{options:surfaces.map(c=>[c.id,c.id])});
     field(panel,'Horizontal offset',p.dx??0,v=>transaction(()=>{p.dx=v;delete p.x;delete p.y;}));
     button(panel,'Playtest from here',()=>setPreview(true,row));
@@ -116,6 +117,24 @@ function renderInspector(){if(!map())return;document.querySelectorAll('[data-tab
       const body=advanced(panel,'Collision details');const b=p.body||{};
       for(const k of ['width','height','offsetX','offsetY'])field(body,k,b[k]??(/width|height/.test(k)?dims[k]*p[k==='width'?'scaleX':'scaleY']:0),v=>transaction(()=>{if(!p.body)p.body={};p.body[k]=v;}));
       body.append(node('div','Width/height are world pixels. Offsets are unscaled texture pixels.',{class:'muted'}));
+      const motion=section('Movement');panel.append(motion);
+      check(motion,'Moving platform',!!p.motion,v=>transaction(()=>{
+        if(!v){delete p.motion;return;}
+        if(allRows(map()).some(r=>['spawn','powerup'].includes(r.kind)&&r.value.anchorId===p.id))throw Error(`${p.id} supports a spawn. Move its spawn markers to another platform before making it move.`);
+        p.motion={...MOTION_DEFAULTS};
+      },v?'Platform now moves':'Platform is now static'));
+      if(p.motion){
+        const m=p.motion;
+        field(motion,'Direction',m.axis,v=>editValue(m,'axis',v),{options:[['y','Up and down'],['x','Left and right']]});
+        field(motion,m.axis==='x'?'Travel (px, negative goes left)':'Travel (px, negative goes up)',m.distance,v=>editValue(m,'distance',v));
+        field(motion,'Speed (px/sec)',m.speed,v=>editValue(m,'speed',v),{min:5,max:2000});
+        field(motion,'Ease',m.ease,v=>editValue(m,'ease',v),{options:MOTION_EASES.map(e=>[e,EASE_LABELS[e]||e])});
+        const timing=advanced(motion,'Timing');
+        field(timing,'Pause at each end (ms)',m.pauseMs??0,v=>editValue(m,'pauseMs',v),{min:0});
+        field(timing,'Start offset (%)',Math.round((m.phase??0)*100),v=>editValue(m,'phase',v/100),{min:0,max:100});
+        const roundTrip=2*(Math.abs(m.distance)/m.speed+(m.pauseMs||0)/1000);
+        motion.append(node('div',`Round trip ${roundTrip.toFixed(1)} s. Drag the round handle on the canvas to set how far it travels. Speed is the average; eases go faster mid-way.`,{class:'muted'}));
+      }
     }else for(const[key,value]of Object.entries(p))if(row.kind!=='powerup'&&!['x','y','id','type','label','collision','collisionEnabled'].includes(key)&&typeof value!=='object')field(panel,key==='turnSpeed'?'Turn speed (%)':key,key==='turnSpeed'?value*100:value,v=>editValue(p,key,key==='turnSpeed'?v/100:v));
     if(['platform','hitbox'].includes(row.kind)){
       const collision=advanced(panel,'Collision behavior');check(collision,'Enabled',p.collisionEnabled!==false,v=>editValue(p,'collisionEnabled',v));
@@ -215,6 +234,9 @@ function remove(){
 function mapPoint(row,data=map()){if(row.kind!=='spawn'&&!(row.kind==='powerup'&&row.value.anchorId))return{x:row.value.x,y:row.value.y};const geometry=geometryFromMap(data);const p=resolveLanding(row.value,geometry.anchors[row.value.anchorId],geometry.colliders,row.kind==='powerup'?{width:32,height:40}:{width:64,height:96});return{x:p.x,y:p.y};}
 function visibleRows(){return allRows(map()).filter(r=>r.kind!=='spawn'||$('all-spawns').checked||r.size===String(size()));}
 function rowBounds(row,collision=false){if(collision&&row.kind==='platform'){const c=geometryFromMap(map()).anchors[row.id];return{x:c.left,y:c.top,width:c.right-c.left,height:c.bottom-c.top};}const p=row.value;const tex=map().textureSizes[p.textureKey];const width=row.kind==='platform'?tex.width*p.scaleX:row.kind==='hitbox'?p.width:24;const height=row.kind==='platform'?tex.height*p.scaleY:row.kind==='hitbox'?p.height:24;const pt=mapPoint(row);return{x:pt.x-width/2,y:pt.y-height/2,width,height};}
+const EASE_LABELS={linear:'Linear (constant speed)',sine:'Smooth (sine)',quad:'Gentle (quad)',cubic:'Strong (cubic)',quart:'Sharp (quart)',expo:'Snappy (expo)'};
+// A moving platform's far end: its rest bounds shifted by the travel distance.
+function travelEnd(row){const b=rowBounds(row),m=row.value.motion;const dx=m.axis==='x'?m.distance:0,dy=m.axis==='y'?m.distance:0;return{...b,x:b.x+dx,y:b.y+dy,cx:b.x+dx+b.width/2,cy:b.y+dy+b.height/2};}
 const handlesFor=b=>({nw:[b.x,b.y],n:[b.x+b.width/2,b.y],ne:[b.x+b.width,b.y],e:[b.x+b.width,b.y+b.height/2],se:[b.x+b.width,b.y+b.height],s:[b.x+b.width/2,b.y+b.height],sw:[b.x,b.y+b.height],w:[b.x,b.y+b.height/2]});
 class StudioScene extends Phaser.Scene {
   constructor(){super('studio');this.markerElements=new Map();this.visuals=[];this.objectiveVisuals=[];this.mapObjects=[];this.pickups=new Map();this.accumulator=0;}
@@ -284,6 +306,10 @@ class StudioScene extends Phaser.Scene {
       drag={kind:'pan',x:pointer.x,y:pointer.y,scrollX:cam.scrollX,scrollY:cam.scrollY};return;
     }
     const current=selected();
+    if(selectedIds.size===1&&current?.kind==='platform'&&current.value.motion){
+      const end=travelEnd(current);
+      if(Math.hypot(pt.x-end.cx,pt.y-end.cy)<9/cam.zoom){drag={kind:'travel',rowId:current.id,before:clone(documentData),screenX:pointer.x,screenY:pointer.y,moved:false};return;}
+    }
     if(selectedIds.size===1&&current&&['platform','hitbox'].includes(current.kind)){
       for(const[handle,[x,y]]of Object.entries(handlesFor(rowBounds(current,handleMode==='collision')))){
         if(Math.hypot(pt.x-x,pt.y-y)<8/cam.zoom){
@@ -323,7 +349,11 @@ class StudioScene extends Phaser.Scene {
     if(!row)return;
     try{
       const bypass=pointer.event?.metaKey||pointer.event?.ctrlKey,grid=Number($('grid').value);
-      if(drag.kind==='resize'){
+      if(drag.kind==='travel'){
+        const m=row.value.motion,start=m.axis==='x'?row.value.x:row.value.y;let travel=(m.axis==='x'?pt.x:pt.y)-start;
+        if(!bypass&&grid)travel=Math.round(travel/grid)*grid;
+        m.distance=Math.round(Math.abs(travel)<8?(travel<0?-8:8):travel);
+      }else if(drag.kind==='resize'){
         const x=Math.round(!bypass&&grid?Math.round(pt.x/grid)*grid:pt.x),y=Math.round(!bypass&&grid?Math.round(pt.y/grid)*grid:pt.y);
         const value=handleMode==='collision'&&row.kind==='platform'?resizeCollision(base,row,drag.handle,x,y,!pointer.event?.shiftKey):resizeRow(drag.start,drag.handle,x,y,row.kind==='platform'?map().textureSizes[row.value.textureKey]:null,!pointer.event?.shiftKey);
         Object.assign(row.value,value);
@@ -345,7 +375,7 @@ class StudioScene extends Phaser.Scene {
     if(current.kind==='pan'||current.kind==='marquee'||!current.moved)return;
     const errors=validateMap(map());
     if(errors.length){documentData=current.before;this.rebuild();renderInspector();status(`Edit reverted: ${errors[0]}`);return;}
-    commit(current.kind==='resize'?'Object resized':'Selection moved');
+    commit(({resize:'Object resized',travel:'Travel distance updated'})[current.kind]||'Selection moved');
   }
   drawOverlay(){this.overlay.clear();if(preview)return;const g=this.overlay,cam=this.cameras.main,w=map().bounds.world,grid=Number($('grid').value);
     if(grid&&grid*cam.zoom>=7){g.lineStyle(1/cam.zoom,0x7594a7,.12);const view=cam.worldView;const left=Math.max(w.x,Math.floor(view.x/grid)*grid),top=Math.max(w.y,Math.floor(view.y/grid)*grid),right=Math.min(w.x+w.width,view.right),bottom=Math.min(w.y+w.height,view.bottom);
@@ -353,6 +383,15 @@ class StudioScene extends Phaser.Scene {
     g.lineStyle(2/cam.zoom,0x91adc0,.65).strokeRect(w.x,w.y,w.width,w.height);g.lineStyle(1/cam.zoom,0xbaf36b,.25).lineBetween(w.x+w.width/2,w.y,w.x+w.width/2,w.y+w.height);
     this.positionMarkers();
     for(const c of this.geometry.colliders){g.lineStyle(1/cam.zoom,c.id===selectedId?0xbaf36b:0x66bbff,(c.id===selectedId||$('debug-hitboxes').checked) ? .9 : .3).strokeRect(c.left,c.top,c.right-c.left,c.bottom-c.top);}
+    // Moving platforms: travel path, far-end ghost and a live preview of the motion.
+    const now=performance.now();
+    for(const row of visibleRows().filter(r=>r.kind==='platform'&&r.value.motion)){
+      const rest=rowBounds(row),end=travelEnd(row),offset=motionOffset(row.value.motion,now),active=selectedIds.has(row.id);
+      g.lineStyle(2/cam.zoom,0xffd166,active?.9:.45).lineBetween(rest.x+rest.width/2,rest.y+rest.height/2,end.cx,end.cy);
+      g.lineStyle(1/cam.zoom,0xffd166,active?.7:.3).strokeRect(end.x,end.y,end.width,end.height);
+      g.fillStyle(0xffd166,active?.18:.08).fillRect(rest.x+offset.x,rest.y+offset.y,rest.width,rest.height);
+      if(active&&selectedIds.size===1){g.fillStyle(0x17212c).fillCircle(end.cx,end.cy,6/cam.zoom);g.lineStyle(2/cam.zoom,0xffd166).strokeCircle(end.cx,end.cy,6/cam.zoom);}
+    }
     for(const guide of guidelines){g.lineStyle(1/cam.zoom,0xff87c8,.9);if(guide.axis==='x')g.lineBetween(guide.value,w.y,guide.value,w.y+w.height);else g.lineBetween(w.x,guide.value,w.x+w.width,guide.value);}
     const color=handleMode==='collision'?0xffb866:0xbaf36b;
     for(const row of visibleRows().filter(row=>selectedIds.has(row.id))){

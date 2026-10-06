@@ -90,6 +90,13 @@ function getMapCollisionRects(scene, fallbackRects = null) {
   return rects;
 }
 
+// Server terrain rects are static; moving platforms are added where they are now.
+function currentTerrain(scene, launchRects, fromServer) {
+  if (!fromServer) return getMapCollisionRects(scene);
+  const moving = (scene?._mapObjects || []).filter((object) => object?._mapMotion);
+  return moving.length ? [...launchRects, ...getMapCollisionRects(null, moving)] : launchRects;
+}
+
 function resolveStart(payload = {}, ownerSprite = null, angle = 0) {
   const startX = Number(payload?.start?.x);
   const startY = Number(payload?.start?.y);
@@ -147,6 +154,7 @@ export function spawnGloopSlimeballVisual(
     scene,
     payload.mapCollisionRects,
   );
+  const serverTerrain = Array.isArray(payload.mapCollisionRects) && payload.mapCollisionRects.length > 0;
   const worldBounds = resolveWorldBounds(scene);
   const cfg = {
     speed: Math.max(1, Number(payload.speed) || Number(SLIMEBALL.speed) || 390),
@@ -238,7 +246,8 @@ export function spawnGloopSlimeballVisual(
   const update = (_, delta = 16) => {
     if (disposed) return;
     if (!ended) {
-      const impacts = advanceSlimeball(state, delta, cfg.mapCollisionRects);
+      state.mapCollisionRects = currentTerrain(scene, cfg.mapCollisionRects, serverTerrain);
+      const impacts = advanceSlimeball(state, delta, state.mapCollisionRects);
       for (const hit of impacts) {
         visual.impact(hit);
         playSound(scene, "gloop-hit", { volume: hit.terminal ? 0.48 : 0.3,

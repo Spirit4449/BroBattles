@@ -2,6 +2,8 @@
 const { resolveLanding } = require('../physics/spawnPlacement');
 const VARIANTS = ['1v1', '2v2', '3v3'];
 const { POWERUP_TYPES } = require('../powerups');
+const { validateScenery } = require('./scenery');
+const { validateMotion, motionPeakSpeed } = require('./platformMotion');
 const clone = value => JSON.parse(JSON.stringify(value));
 function variantKey(value) {
   const match = String(value || '').match(/([123])v[123]$/);
@@ -13,10 +15,13 @@ function geometryFromMap(data, mapId = null) {
     const sx = Math.abs(p.scaleX || 1), sy = Math.abs(p.scaleY || 1);
     const left = p.x - size.width * sx / 2 + (p.body?.offsetX || 0) * sx;
     const top = p.y - size.height * sy / 2 + (p.body?.offsetY || 0) * sy;
-    return { id: p.id || `p${i}`, x: p.x, y: p.y, left, top,
+    const collider = { id: p.id || `p${i}`, x: p.x, y: p.y, left, top,
       right: left + (p.body?.width || size.width * sx), bottom: top + (p.body?.height || size.height * sy),
       enabled: p.collisionEnabled !== false,
       collision: { up: true, down: true, left: true, right: true, ...p.collision } };
+    if (p.motion) Object.assign(collider, { motion: { ...p.motion }, peakSpeed: motionPeakSpeed(p.motion),
+      base: { x: collider.x, y: collider.y, left: collider.left, top: collider.top, right: collider.right, bottom: collider.bottom } });
+    return collider;
   });
   const hitboxes = data.layout.hitboxes.map((p, i) => ({ id: p.id || `h${i}`, x: p.x, y: p.y,
     left: p.x - p.width / 2, right: p.x + p.width / 2, top: p.y - p.height / 2,
@@ -27,7 +32,11 @@ function geometryFromMap(data, mapId = null) {
   for (const [name, ref] of Object.entries(data.anchors || {})) {
     anchors[name] = ref.objectId ? anchors[ref.objectId] : (ref.kind === 'platform' ? platforms : hitboxes)[ref.index];
   }
-  return { mapId, world: data.bounds.world, spawns: data.spawns, anchors, colliders: all.filter(p => p.enabled), settings: data.powerups };
+  const colliders = all.filter(p => p.enabled), movingColliders = colliders.filter(p => p.motion);
+  // Fastest a rider can be carried on each axis, for server movement budgets.
+  const platformSpeed = { x: 0, y: 0 };
+  for (const p of movingColliders) platformSpeed[p.motion.axis] = Math.max(platformSpeed[p.motion.axis], p.peakSpeed);
+  return { mapId, world: data.bounds.world, spawns: data.spawns, anchors, colliders, movingColliders, platformSpeed, settings: data.powerups };
 }
 function constrainPoint(data, point, x, y, body = { width: 64, height: 96 }) {
   const geometry = geometryFromMap(data);
@@ -57,6 +66,10 @@ function validateMapUnsafe(data) {
     for (const field of ['x', 'y', 'width', 'height']) num(b?.[field], `bounds.${k}.${field}`, /width|height/.test(field) ? 1 : -100000);
   }
   for (const k of ['zoom', 'deadzoneWidth', 'deadzoneHeight', 'followOffsetY']) if (data.bounds?.camera?.[k] !== undefined) num(data.bounds.camera[k], `bounds.camera.${k}`, k === 'zoom' ? 0.05 : k === 'followOffsetY' ? -100000 : 0, k === 'zoom' ? 8 : 100000);
+  // Optional follow-camera zoom range; both or neither.
+  const cam = data.bounds?.camera;
+  if ((cam?.minZoom === undefined) !== (cam?.maxZoom === undefined)) fail('bounds.camera', 'set minZoom and maxZoom together');
+  else if (cam?.minZoom !== undefined) { num(cam.minZoom, 'bounds.camera.minZoom', 0.05, 8); num(cam.maxZoom, 'bounds.camera.maxZoom', 0.05, 8); if (cam.minZoom > cam.maxZoom) fail('bounds.camera.minZoom', 'must not exceed maxZoom'); }
   for (const kind of ['platforms', 'hitboxes']) {
     const rows = data.layout?.[kind];
     if (!Array.isArray(rows) || rows.length > 1000) { fail(`layout.${kind}`, 'requires an array of at most 1000 objects'); continue; }
@@ -69,6 +82,7 @@ function validateMapUnsafe(data) {
         else { num(size.width, `textureSizes.${p.textureKey}.width`, 1, 16384); num(size.height, `textureSizes.${p.textureKey}.height`, 1, 16384); }
         num(p.scaleX, `${path}.scaleX`, 0.01, 100); num(p.scaleY, `${path}.scaleY`, 0.01, 100);
         for (const k of ['width', 'height', 'offsetX', 'offsetY']) if (p.body?.[k] !== undefined) num(p.body[k], `${path}.body.${k}`, /width|height/.test(k) ? 1 : -100000);
+        validateMotion(p.motion, `${path}.motion`, fail, num);
       } else { num(p.width, `${path}.width`, 1); num(p.height, `${path}.height`, 1); }
       for (const v of Object.values(p.collision || {})) if (typeof v !== 'boolean') fail(`${path}.collision`, 'sides must be booleans');
     });
@@ -90,6 +104,7 @@ function validateMapUnsafe(data) {
   }
   if (errors.length) return errors;
   if (typeof data.background !== 'string' || !/^\/assets\/[a-zA-Z0-9_./-]+$/.test(data.background) || data.background.includes('..')) fail('background', 'requires a local /assets/ URL');
+  validateScenery(data.scenery, fail, num);
   for (const p of [...data.layout.platforms,...data.layout.hitboxes]) {
     if(p.collisionEnabled !== undefined && typeof p.collisionEnabled !== 'boolean') fail(p.id, 'collisionEnabled must be boolean');
     if(p.alpha !== undefined) num(p.alpha, `${p.id}.alpha`,0,1);
@@ -99,6 +114,7 @@ function validateMapUnsafe(data) {
   const geometry = geometryFromMap(data);
   const validatePoint = (p, path, body) => {
     if (!p || !geometry.anchors[p.anchorId]) { fail(path, 'must reference an existing platform or hitbox'); return; }
+    if (geometry.anchors[p.anchorId].motion) { fail(path, 'cannot anchor to a moving platform'); return; }
     if (p.dx !== undefined) num(p.dx, `${path}.dx`);
     if (p.x !== undefined) num(p.x, `${path}.x`);
     if (p.dropHeight !== undefined) num(p.dropHeight, `${path}.dropHeight`, 0, 320);

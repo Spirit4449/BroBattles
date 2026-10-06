@@ -1,8 +1,9 @@
 const { createRandom } = require('./random');
 const { difficultyForTrophies, recoveryThreshold } = require('./config');
-const { bounds, stepBody } = require('./physics');
+const { bounds, stepBody, forecastGeometry } = require('./physics');
 const { findRoute, prepareTraversal, edgeKey, nearestSurface, safeWalkDirection, previewManeuver, walkLimits, poisonDamage } = require('./navigation');
 const { getNavigationGraph } = require('./navigationService');
+const { staticGeometry } = require('../../../shared/maps/platformMotion');
 const { advanceAmmo, basicAim, hasClearShot, pressureAim, requestBasic, requestSpecial } = require('./combat');
 const { observe, incomingThreat, maneuverDanger } = require('./perception');
 const { healthFraction, preferredRange, chooseDecision, selectTargetSteps, chooseDecisionSteps, finishSteps } = require('./tactics');
@@ -16,6 +17,10 @@ const movement = require('../../../shared/physics/movementPhysics.json');
 const { DEATH_DROP_PICKUP_RADIUS, POWERUP_PICKUP_RADIUS, WORLD_BOUNDS } = require('../gameRoomConfig');
 const { FIXED_DT_MS } = require('../../../shared/gameConstants');
 const { botProfile } = require('./characterProfiles');
+// How often a bot riding a moving platform looks for a safe hop off.
+const RIDE_EXIT_CHECK_MS = 250;
+// How often an airborne bot on a moving-platform map re-forecasts its landing.
+const AIR_LANDING_CHECK_MS = 100;
 
 class BotController {
   constructor(room, player) {
@@ -46,7 +51,7 @@ class BotController {
     this.ineffectivePositions = [];
     this.intent = { direction: 0 };
     this.objective = resolveBotObjective(room, player);
-    this.graph = getNavigationGraph(room.geometry, player.char_class);
+    this.graph = getNavigationGraph(staticGeometry(room.geometry), player.char_class);
     this.visited = new Map();
     this.blockedEdges = new Map();
     this.routePreferences = new Map();
@@ -152,7 +157,7 @@ class BotController {
 
   context(mods, now) {
     const p = this.player, room = this.room;
-    const graph = getNavigationGraph(room.geometry, p.char_class, { speedMult: mods.speedMult, jumpMult: mods.jumpMult });
+    const graph = getNavigationGraph(staticGeometry(room.geometry), p.char_class, { speedMult: mods.speedMult, jumpMult: mods.jumpMult });
     if (graph !== this.graph) { this.graph = graph; this.clearTravel(); this.nextDecisionAt = 0; }
     const current = graph.surfaces.find((s) => s.id === p.platformId) || nearestSurface(graph, { x: p.x, y: bounds(p).bottom });
     const actualPoisonY = room._suddenDeathActive ? room._computePoisonY(now - room._loopStartWallTime - room.gameMode.getMatchDurationMs()) : Infinity;
@@ -625,8 +630,56 @@ class BotController {
     return takeoff ? direction : safeWalkDirection(p, direction, this.room.geometry);
   }
 
+  // Routes cover static ground only. On a moving platform, edge toward the
+  // goal side (combat continues; ledge braking keeps the footing) and hop off
+  // once a previewed jump lands on static ground, preferring the goal side.
+  ridePlatform(now, mods) {
+    const p = this.player;
+    if (!p.grounded || this.maneuver || this.traversal) return false;
+    const support = this.room.geometry.movingColliders?.find((c) => c.id === p.platformId);
+    if (!support) return false;
+    this.approachEdge = null;
+    const goalX = this.decision?.goal?.x ?? this.target?.x ?? p.x;
+    if (now >= (this.nextRideExitAt || 0)) {
+      this.nextRideExitAt = now + RIDE_EXIT_CHECK_MS;
+      const exit = this.findRideExit(goalX, mods, now);
+      if (exit) {
+        this.traversal = { ...exit, cursor: 0, until: now + exit.duration + 800 };
+        if (exit.dash) { this.duckUntil = 0; p.ducking = false; }
+        this.metrics.rideExits = (this.metrics.rideExits || 0) + 1;
+        return false;
+      }
+    }
+    const limits = walkLimits(support, p.char_class);
+    this.intent = { direction: this.walkDirection(goalX < p.x ? limits.left : limits.right) };
+    return true;
+  }
+
+  // The same motions route edges use (hops, wall climbs, dashes), validated
+  // from the bot's real state against forecast platform motion. Only landings
+  // on static ground count.
+  findRideExit(goalX, mods, now) {
+    const p = this.player, toward = Math.sign(goalX - p.x) || 1;
+    const staticIds = new Set(this.graph.surfaces.map((s) => s.id));
+    for (const direction of [toward, 0, -toward]) {
+      const diagonal = { x: direction * Math.SQRT1_2, y: direction ? -Math.SQRT1_2 : -1 };
+      const edges = [
+        { direction, jump: true, wallClimb: false },
+        { direction, jump: true, wallClimb: true },
+        { direction, jump: false, wallClimb: false, dash: diagonal, dashFrame: 0 },
+        ...(direction ? [{ direction, jump: true, wallClimb: false, dash: { x: direction, y: 0 }, dashFrame: 18 }] : []),
+      ];
+      for (const edge of edges) {
+        const prepared = prepareTraversal(p, edge, this.room.geometry, mods, now, this.poisonY);
+        if (prepared && staticIds.has(prepared.to)) return { ...prepared, from: p.platformId, takeoffX: p.x };
+      }
+    }
+    return null;
+  }
+
   executeTravel(now, mods) {
     const p = this.player;
+    if (this.ridePlatform(now, mods)) return;
     if (this.approachEdge && p.grounded && !this.traversal && !this.maneuver) {
       const edge = this.approachEdge;
       if (Math.abs(edge.takeoffX - p.x) <= 1 && Math.abs(p.vx || 0) < 12 && now >= (p._nextWallJump || 0)) {
@@ -676,9 +729,31 @@ class BotController {
       this.intent = { direction: (p.wallSide === 'left' ? -1 : 1) * (jump ? -1 : 1), jumpPressed: jump };
     } else {
       this.lastWallSide = null;
+      const steer = this.room.geometry.movingColliders?.length ? this.forecastLanding(now) : null;
+      if (steer !== null) { this.intent = { direction: steer }; return; }
       const x = landing ? Math.max(landing.left + foot.halfWidth + 8, Math.min(landing.right - foot.halfWidth - 8, p.x)) : p.x;
       this.intent = { direction: Math.abs(x - p.x) > 8 ? Math.sign(x - p.x) : 0 };
     }
+  }
+
+  // Static landing targets can be out of reach when a jump toward a moving
+  // platform is interrupted. Steer in a direction the forecast proves lands,
+  // on static or moving ground: momentum first, then straight, then back.
+  forecastLanding(now) {
+    if (now < (this.landingCheckAt || 0)) return this.landingDirection;
+    this.landingCheckAt = now + AIR_LANDING_CHECK_MS;
+    const p = this.player, mods = effects.getModifiers(p, now), forward = Math.sign(p.vx) || 1;
+    this.landingDirection = null;
+    for (const direction of [forward, 0, -forward]) {
+      const sim = { ...p }, forecast = forecastGeometry(this.room.geometry);
+      for (let i = 0; i < 120; i++) {
+        forecast.step(sim, i * FIXED_DT_MS);
+        const result = stepBody(sim, { direction }, forecast.geometry, FIXED_DT_MS, now + i * FIXED_DT_MS, mods);
+        if (result.fell || bounds(sim).bottom >= (this.poisonY ?? Infinity)) break;
+        if (sim.grounded) { this.landingDirection = direction; return direction; }
+      }
+    }
+    return null;
   }
 
   findDodgeManeuver(...args) { return finishSteps(this.findDodgeSteps(...args)); }

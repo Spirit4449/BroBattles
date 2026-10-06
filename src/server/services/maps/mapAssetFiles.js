@@ -74,6 +74,7 @@ function pinMapAssets(map){
     if(asset.atlasURL)asset.atlasURL=immutableAsset(asset.atlasURL);
   }
   copy.background=immutableAsset(copy.background);
+  for(const item of [...(copy.scenery?.layers||[]),...(copy.scenery?.clouds||[])])item.url=immutableAsset(item.url);
   return copy;
 }
 module.exports={resolveAssetFile,stageUpload,publishUploads,pinMapAssets,immutableAsset};

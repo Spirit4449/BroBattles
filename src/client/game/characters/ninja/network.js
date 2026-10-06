@@ -6,6 +6,7 @@ import { playSpriteAnimation, markOneShotAnimation, getAnimationDurationMs } fro
 import { serverClock as clock, ensureServerClockEpoch } from '../../match/serverClock';
 import { remoteLaunchCorrection, reconcileFlight } from '../../../../shared/projectilePresentation';
 import { VERSION, STEP_MS, launch, step, swarmConfig } from '../../../../shared/characters/ninjaProjectile';
+import { advanceGeometry } from '../../../../shared/maps/platformMotion';
 import { createRuntimeId } from '../shared/runtimeId';
 import { RENDER_LAYERS } from '../../scene/renderLayers';
 import { playPlayerSound } from '../../audio/playerAudio';
@@ -13,6 +14,10 @@ const active=new Map(),terminals=new Set(),requests=new Map(),effects=new Set();
 const diagnostics=[];
 function record(event){diagnostics.push(event);if(diagnostics.length>120)diagnostics.shift();}
 let enabled=false,sceneRef=null,listener=null,shutdown=null,ctx={},colliders=[],revision=0;
+// Bootstrap colliders carry their motion; move them to each step's server time,
+// as the server does, so predictions hit moving platforms where they are.
+let platformMotion={movingColliders:[]};
+const stepAt=(p,o,at)=>{advanceGeometry(platformMotion,at);step(p,o,colliders);};
 const copy=value=>JSON.parse(JSON.stringify(value));
 export function ninjaEnabled(){return enabled;}
 export function resetNinjaNetwork(){
@@ -33,7 +38,7 @@ export function discardNinjaPresentation(){
 }
 export function configureNinjaNetwork(state){
   resetNinjaNetwork();if(state?.ninjaCombatVersion!==VERSION)return;
-  enabled=true;colliders=state.colliders||[];ensureServerClockEpoch(state.epoch);clock.observe(state,performance.now());
+  enabled=true;colliders=state.colliders||[];platformMotion={movingColliders:colliders.filter(c=>c.motion&&c.base)};ensureServerClockEpoch(state.epoch);clock.observe(state,performance.now());
   if(typeof window!=='undefined')window.__BB_NINJA_DIAGNOSTICS__=()=>({
     epoch:clock.epoch,active:active.size,rttMs:clock.samples.map(p=>p.rtt),events:diagnostics.slice(),
   });
@@ -94,14 +99,14 @@ export function attachNinjaScene(scene,next={}){
         e.p={...launch(o,e.p.angle,id,e.p.special?i:null),ownerName:e.p.ownerName};e.pending=false;
       }
       // Bound catch-up work after stalls; authoritative state is refreshed on return.
-      let count=0;while(e.at+STEP_MS<=sim&&count++<360&&!e.p.done){step(e.p,o,colliders);e.at+=STEP_MS;}
+      let count=0;while(e.at+STEP_MS<=sim&&count++<360&&!e.p.done){stepAt(e.p,o,e.at);e.at+=STEP_MS;}
       if(!e.sprite){
         if(e.p.special && !e.p.done && !e.releasePresented){presentSwarmRelease(scene,displayedOwner,swarmConfig().releaseMs,e.p.ownerName!==ctx.localUsername);e.releasePresented=true;}
         e.texture=ninjaProjectileTexture(scene,displayedOwner);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special && !e.texture.includes("-weapon"))e.sprite.setTint?.(0xc7efff);applyTeamVisual(e.sprite,o || {_bbTeamColor:ctx.opponentPlayersRef?.[e.p.ownerName]?0xff413f:0x50ce88},true,e.texture.includes("-weapon")?"crown":null);
         e.fx=createShurikenEffects(scene,e.sprite,{x:e.p.startX,y:e.p.startY,angle:e.p.angle,special:e.p.special,launch:e.p.elapsed<180});
         if(e.p.ownerName!==ctx.localUsername)e.correction=remoteLaunchCorrection(displayedOwner,e.p.returnTarget,e.p.elapsed,now);
       }
-      const next=copy(e.p);if(!next.done)step(next,o,colliders);
+      const next=copy(e.p);if(!next.done)stepAt(next,o,e.at);
       const f=Math.max(0,Math.min(1,(sim-e.at)/STEP_MS));
       if(e.correction&&e.correction.x===undefined){
         e.correction=reconcileFlight({x:e.correction.visualX,y:e.correction.visualY},

@@ -26,6 +26,8 @@ const CORRECTION_ACK_TIMEOUT_MS = 1000;
 // Sub-pixel/flip-offset disagreements against a face are clamped silently;
 // only genuine penetration is worth yanking the client's position.
 const DASH_COLLISION_CORRECTION_PX = 2;
+// Latency allowance for judging contact with a moving platform.
+const MOVING_SURFACE_LAG_S = 0.2;
 const movementPhysics = require("../../../shared/physics/movementPhysics.json");
 const effectManager = require("./effects/effectManager");
 
@@ -33,11 +35,15 @@ function updateBodyGeometry(player, room) {
   const body = characterBody(player.char_class, player.flip);
   // Ground contact is derived from the map, not the client's grounded flag.
   const feet = player.y + body.offsetY + body.halfHeight;
-  player.grounded = (room.geometry?.colliders || []).some(surface =>
-    surface.enabled !== false && surface.collision?.none !== true &&
-    surface.collision?.up !== false && Math.abs(feet - surface.top) <= 8 &&
-    player.x + body.offsetX + body.halfWidth > surface.left &&
-    player.x + body.offsetX - body.halfWidth < surface.right);
+  // Packets describe the client's past, so allow for a moving surface's travel.
+  player.grounded = (room.geometry?.colliders || []).some(surface => {
+    const lag = surface.motion ? surface.peakSpeed * MOVING_SURFACE_LAG_S : 0;
+    const lagX = surface.motion?.axis === 'x' ? lag : 0, lagY = surface.motion?.axis === 'y' ? lag : 0;
+    return surface.enabled !== false && surface.collision?.none !== true &&
+      surface.collision?.up !== false && Math.abs(feet - surface.top) <= 8 + lagY &&
+      player.x + body.offsetX + body.halfWidth > surface.left - lagX &&
+      player.x + body.offsetX - body.halfWidth < surface.right + lagX;
+  });
   const wasDucking = player.ducking === true;
   player.ducking = wasDucking && player.grounded;
   if (wasDucking && !player.ducking) {
@@ -297,7 +303,8 @@ function handlePlayerInput(room, socketId, inputData) {
       const offsetY = playerData._bodyCenterOffsetY ?? shape.offsetY;
       const resolved = sweepMovement({ x: playerData.x + offsetX - halfWidth,
         y: playerData.y + offsetY - halfHeight, width: halfWidth * 2, height: halfHeight * 2 },
-        rawX - playerData.x, rawY - playerData.y, room.geometry.colliders);
+        // Moving platforms are where the client saw them, not where they are now.
+        rawX - playerData.x, rawY - playerData.y, room.geometry.colliders.filter(c => !c.motion));
       const nextX = resolved.x - offsetX + halfWidth, nextY = resolved.y - offsetY + halfHeight;
       const tolerance = Math.max(COLLISION_PACKET_TOLERANCE, DASH_COLLISION_CORRECTION_PX);
       collisionClamped = Math.abs(nextX - rawX) > tolerance || Math.abs(nextY - rawY) > tolerance;
@@ -313,10 +320,12 @@ function handlePlayerInput(room, socketId, inputData) {
     const speedMult = Math.max(1, Math.min(movementPhysics.maxSpeedMult, Number(modifiers.speedMult) || 1));
     const dashSpeedAllowance = dashMotion
       ? Math.max(0, movementPhysics.dashMaxSpeed - Math.max(0, dashAge) * movementPhysics.dashCoastDrag) : 0;
-    const speedX = Math.max(MOVE_PLAUSIBLE_SPEED_H, movementPhysics.wallKickFull * speedMult, dashSpeedAllowance) + impulseSpeed;
+    // Riding a moving platform adds its speed to the rider's own.
+    const carried = room.geometry?.platformSpeed || { x: 0, y: 0 };
+    const speedX = Math.max(MOVE_PLAUSIBLE_SPEED_H, movementPhysics.wallKickFull * speedMult, dashSpeedAllowance) + impulseSpeed + carried.x;
     const dashVerticalSpeed = playerData.dashX === 0 && playerData.dashY > 0
       ? movementPhysics.dashDownSpeed : movementPhysics.dashMaxSpeed;
-    const speedY = MOVE_PLAUSIBLE_SPEED_V + impulseSpeed;
+    const speedY = MOVE_PLAUSIBLE_SPEED_V + impulseSpeed + carried.y;
     budget.x = Math.min(MOVE_PLAUSIBLE_LAG_PAD_H + speedX * MAX_MOVEMENT_CREDIT_MS / 1000 + (playerData._dashUntil > now ? movementPhysics.dashMaxSpeed * movementPhysics.dashDurationMs / 1000 : 0), budget.x + speedX * dtMove / 1000);
     budget.y = Math.min(MOVE_PLAUSIBLE_LAG_PAD_V + speedY * MAX_MOVEMENT_CREDIT_MS / 1000 + (playerData._dashUntil > now ? dashVerticalSpeed * movementPhysics.dashDurationMs / 1000 : 0), budget.y + speedY * dtMove / 1000);
     if (acceptedDash) {

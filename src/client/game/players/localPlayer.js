@@ -66,7 +66,7 @@ import {
   DUCK_REENTRY_DELAY_MS,
   findGroundSpan,
   hasStandingClearance,
-  clampBodyToGroundSpan,
+  holdDuckGround,
 } from "../../../shared/physics/ducking.js";
 import { noteClientActionSent } from "../../lib/netTestLogger.js";
 import {
@@ -677,7 +677,6 @@ export function createPlayer(
   player._duckRequested = false;
   player._duckAvailableAt = 0;
   player._duckGroundSpan = null;
-  player._duckGroundY = null;
   // Helper to adjust body offset when flipping
   applyFlipOffsetLocal = () => {
     if (!player || !player.body) return;
@@ -725,20 +724,9 @@ export function createPlayer(
       !player._duckGroundSpan ||
       dead
     ) return;
-    const body = player.body;
-    if (body.velocity.y < 0) return;
-    // Confirm the remembered platform still exists before anchoring to it.
-    const probe = {
-      x: (player._duckGroundSpan[0] + player._duckGroundSpan[1]) / 2 - body.width / 2,
-      y: player._duckGroundY - body.height,
-      width: body.width,
-      height: body.height,
-    };
-    if (!findGroundSpan(probe, scene._mapObjects || [])) {
-      player._duckGroundSpan = null;
-      return;
-    }
-    clampBodyToGroundSpan(body, player._duckGroundSpan, player._duckGroundY);
+    if (player.body.velocity.y < 0) return;
+    // Re-read live ground so moving platforms carry the edge guard with them.
+    player._duckGroundSpan = holdDuckGround(player.body, player._duckGroundSpan, scene._mapObjects || [])?.span || null;
   };
   const protectDash = delta => { if (!dead) protectDashMotion(scene, player, Date.now(), delta); };
   scene.physics.world.on("worldstep", protectDash);
@@ -1758,7 +1746,7 @@ function applyBodyLimits(tuning, shockwaveActive) {
     const coasting = shockwaveActive || (player._dashCoastUntil || 0) > Date.now();
     player.setMaxVelocity(
       coasting ? Math.max(tuning.maxSpeed, Math.abs(player.body.velocity.x)) : tuning.maxSpeed,
-      shockwaveActive ? Math.max(1000, Math.abs(player.body.velocity.y)) : 1000,
+      shockwaveActive ? Math.max(tuning.maxVerticalSpeed, Math.abs(player.body.velocity.y)) : tuning.maxVerticalSpeed,
     );
   }
   // Track last grounded time for coyote jumping.
@@ -1822,7 +1810,7 @@ function applyMovementLocks(scene, input) {
 function applyFastFallGravity(scene, wall, tuning) {
   try {
     const worldG = scene.physics?.world?.gravity?.y || 0;
-    const falling = !player.body.touching.down && (player.body.velocity.y || 0) > 5;
+    const falling = !player.body.touching.down && (player.body.velocity.y || 0) > tuning.fallGravityMinSpeed;
     if (
       falling &&
       (!wall.wallSlideContact || wall.wallSlideSuppressed) &&
@@ -1873,10 +1861,8 @@ function updateDucking(scene, input, movementLocked) {
   if (!ducking && wantsToDuck && Date.now() >= (player._duckAvailableAt || 0) && grounded && groundSpan) {
     ducking = true;
     player._duckGroundSpan = groundSpan;
-    player._duckGroundY = player.body.bottom;
   } else if (ducking && !player._duckGroundSpan && wantsToDuck && grounded && groundSpan) {
     player._duckGroundSpan = groundSpan;
-    player._duckGroundY = player.body.bottom;
   } else if (ducking && (!wantsToDuck || player.body.velocity.y < -5)) {
     ducking = false;
   } else if (ducking && !player._duckGroundSpan && !grounded) {
@@ -1899,7 +1885,6 @@ function updateDucking(scene, input, movementLocked) {
   }
   if (!ducking) {
     player._duckGroundSpan = null;
-    player._duckGroundY = null;
   }
   return ducking;
 }
@@ -1913,7 +1898,7 @@ function hideSpawnIndicator() {
 function applyHorizontalMovement(input, tuning, { ducking, shockwaveActive }) {
   if (ducking && !shockwaveActive) {
     const duckMaxSpeed = tuning.maxSpeed * DUCK_SPEED_RATIO;
-    player.setMaxVelocity(duckMaxSpeed, 1000);
+    player.setMaxVelocity(duckMaxSpeed, MOVEMENT_PHYSICS.maxVerticalSpeed);
     if (Math.abs(player.body.velocity.x) > duckMaxSpeed) {
       player.setVelocityX(Math.sign(player.body.velocity.x) * duckMaxSpeed);
     }
@@ -2045,7 +2030,7 @@ function performWallJump(scene, wallSide, tuning) {
   movementAudio.updateWallSlide(false);
   canWallJump = false;
   const fromLeft = wallSide === "left";
-  const vertKick = Math.max(tuning.jumpSpeed + 30, 220) * Math.max(0.1, tuning.wallKickVerticalMult);
+  const vertKick = Math.max(tuning.jumpSpeed + tuning.wallKickVerticalBonus, tuning.wallKickMinVerticalSpeed) * Math.max(0.1, tuning.wallKickVerticalMult);
 
   // Face away from the wall (or reinforce a locked facing).
   if (!player._lockFlip) setFacingLeft(!fromLeft);

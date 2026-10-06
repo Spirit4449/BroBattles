@@ -341,7 +341,11 @@ export function createMobileControlsController({
     label.setPosition(button.x, button.y);
   }
 
+  // The game size follows the window (gameViewport.js); keep controls in its corners.
+  const relayoutOnResize = () => layout();
+
   function destroy() {
+    state?.scene?.scale?.off?.("resize", relayoutOnResize);
     const ui = state?.ui;
     if (ui) {
       for (const obj of Object.values(ui)) {
@@ -367,6 +371,7 @@ export function createMobileControlsController({
     destroy();
     state.enabled = true;
     state.scene = nextScene;
+    nextScene.scale?.on?.("resize", relayoutOnResize);
     setHudMobileClass(true);
     ensureDomRoot();
     try {

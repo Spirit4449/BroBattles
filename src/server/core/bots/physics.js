@@ -3,7 +3,8 @@ const tuning = require("../../../shared/physics/movementPhysics.json");
 const { characterBody } = require("../../../shared/physics/duelGeometry");
 const { DUCK_SPEED_RATIO } = require("../../../shared/physics/ducking");
 const { acceptDash } = require('../../../shared/physics/dash');
-const { sweepMovement } = require('../../../shared/physics/sweptCollision');
+const { sweepMovement, resolveOverlap } = require('../../../shared/physics/sweptCollision');
+const { advanceGeometry, PLATFORM_STEP_UP_PX } = require('../../../shared/maps/platformMotion');
 
 function bounds(player) {
   const body = characterBody(player.char_class, player.flip);
@@ -101,7 +102,7 @@ function stepBody(p, intent, geometry, dtMs, now, modifiers = {}) {
       p._jumpLaunch = null;
       const kick = wallSide === "left" ? 1 : -1;
       p.vx = kick * tuning.wallKickFull * Math.max(tuning.minSpeedMult, speedMult);
-      p.vy = -Math.max(tuning.jumpSpeed + 30, 220) * tuning.wallKickVerticalMult * Math.max(tuning.minSpeedMult, jumpMult);
+      p.vy = -Math.max(tuning.jumpSpeed + tuning.wallKickVerticalBonus, tuning.wallKickMinVerticalSpeed) * tuning.wallKickVerticalMult * Math.max(tuning.minSpeedMult, jumpMult);
       p._wallKickUntil = now + tuning.wallKickLockMs;
       p._nextWallJump = now + tuning.wallJumpCooldownMs;
       p._slideSuppressedUntil = now + tuning.wallSlideReentryDelayMs;
@@ -123,7 +124,7 @@ function stepBody(p, intent, geometry, dtMs, now, modifiers = {}) {
     else p.vx = approach(p.vx, 0, (p.grounded ? tuning.dragGround : tuning.dragAir) * dt);
   }
   const sliding = wallSide && !p.grounded && direction === (wallSide === "left" ? -1 : 1) && now >= (p._slideSuppressedUntil || 0);
-  p.vy += tuning.gravity * (p.vy > 5 && !sliding ? tuning.fallGravityFactor : 1) * dt;
+  p.vy += tuning.gravity * (p.vy > tuning.fallGravityMinSpeed && !sliding ? tuning.fallGravityFactor : 1) * dt;
   if (p._jumpLaunch) {
     const t = Math.min(1, (now - p._jumpLaunch.startedAt) / tuning.jumpRampMs);
     p.vy = p._jumpLaunch.vy * (tuning.jumpStartSpeedRatio + (1 - tuning.jumpStartSpeedRatio) * t);
@@ -163,6 +164,74 @@ function stepBody(p, intent, geometry, dtMs, now, modifiers = {}) {
   return { events, fell: p.y > world.y + world.height + 50 };
 }
 
+// Applies one tick of platform motion (advanceGeometry's result) to a body,
+// matching the client (client/game/maps/movingPlatforms.js): a rider moves
+// with its platform and a platform whose colliding leading face runs into a
+// body pushes it, both swept against other ground. A body that ground would
+// trap stays where the sweep stops and the platform passes through it;
+// stepBody ignores colliders a body already overlaps. A body inside a platform
+// for any other reason is stopped at the colliding face it crossed during its
+// last step, as at a wall (onto the top only from within PLATFORM_STEP_UP_PX);
+// faces with collision off are passed through. Leaving a platform gives no
+// extra speed. Call every tick on maps with moving platforms, before stepBody.
+function carryOnPlatforms(p, moved, colliders) {
+  const sweep = (mx, my, others) => {
+    const b = bounds(p);
+    const result = sweepMovement({ x: b.left, y: b.top, width: b.right - b.left, height: b.bottom - b.top }, mx, my, others);
+    p.x += result.x - b.left; p.y += result.y - b.top;
+    return Math.abs(result.x - b.left - mx) < 0.01 && Math.abs(result.y - b.top - my) < 0.01;
+  };
+  // Where the body began its last step, relative to each platform's position then.
+  const stepStart = p._platformStepStart;
+  for (const { collider, dx, dy } of moved) {
+    const others = colliders.filter((c) => c !== collider);
+    if (p.grounded && p.platformId === collider.id) {
+      if (!sweep(dx, dy, others) && dy < 0) { p.grounded = false; p.platformId = null; }
+      continue;
+    }
+    const b = bounds(p);
+    const inside = (r) => b.left < r.right - 0.01 && b.right > r.left + 0.01 && b.top < r.bottom - 0.01 && b.bottom > r.top + 0.01;
+    if (!inside(collider)) continue;
+    const previous = { left: collider.left - dx, right: collider.right - dx, top: collider.top - dy, bottom: collider.bottom - dy };
+    if (inside(previous)) {
+      if (!stepStart) continue;
+      const before = { left: stepStart.left + dx, right: stepStart.right + dx, top: stepStart.top + dy, bottom: stepStart.bottom + dy };
+      const exit = resolveOverlap(b, collider, PLATFORM_STEP_UP_PX, before);
+      if (!exit) continue;
+      p.x += exit.dx; p.y += exit.dy;
+      if (exit.dx) p.vx = 0;
+      if (exit.face === 'up') p.vy = Math.max(0, p.vy || 0);
+      if (exit.face === 'down') { p.vy = Math.min(0, p.vy || 0); p.grounded = true; p.platformId = collider.id; }
+      continue;
+    }
+    const c = collider.collision || {};
+    if (dx > 0 ? c.right === false : dx < 0 ? c.left === false : false) continue;
+    if (dy > 0 ? c.down === false : dy < 0 ? c.up === false : false) continue;
+    const pushed = sweep(dx > 0 ? collider.right - b.left : dx < 0 ? collider.left - b.right : 0,
+      dy > 0 ? collider.bottom - b.top : dy < 0 ? collider.top - b.bottom : 0, others);
+    if (pushed && dy < 0) { p.vy = Math.min(p.vy || 0, 0); p.grounded = true; p.platformId = collider.id; }
+  }
+  const b = bounds(p);
+  p._platformStepStart = { left: b.left, right: b.right, top: b.top, bottom: b.bottom };
+}
+
+// Predictions must see platforms where they will be, not frozen where they
+// are. Returns a private geometry; step(p, elapsedMs) moves its platforms to
+// `elapsedMs` after the source geometry's time and carries the body.
+function forecastGeometry(geometry) {
+  if (!geometry?.movingColliders?.length) return { geometry, step() {} };
+  const copies = new Map(geometry.movingColliders.map((c) => [c, { ...c }]));
+  const forecast = { ...geometry, colliders: geometry.colliders.map((c) => copies.get(c) || c),
+    movingColliders: [...copies.values()] };
+  const start = geometry.motionTime ?? 0;
+  return { geometry: forecast,
+    step(p, elapsedMs) {
+      const previous = forecast.motionTime;
+      const moved = advanceGeometry(forecast, start + elapsedMs);
+      if (forecast.motionTime > previous) carryOnPlatforms(p, moved, forecast.colliders);
+    } };
+}
+
 function applyImpulse(player, impulse, now = Date.now()) {
   player._botDashCoastUntil = 0;
   player._dashUntil = 0;
@@ -179,4 +248,4 @@ function applyImpulse(player, impulse, now = Date.now()) {
   player._knockbackUntil = now + (["shockwave", "stomp"].includes(impulse.cause) ? SHOCKWAVE_MOMENTUM_MS : 180);
   player.grounded = false;
 }
-module.exports = { bounds, stepBody, applyImpulse, startDash };
+module.exports = { bounds, stepBody, applyImpulse, startDash, carryOnPlatforms, forecastGeometry };

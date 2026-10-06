@@ -42,4 +42,27 @@ function sweepMovement(rect, dx, dy, surfaces) {
   }
   return { x, y, hits };
 }
-module.exports = { sweepMovement };
+// The way out of a surface a body has ended up inside that a wall would have
+// produced. Only faces the body crossed since `before` (its rect at the start
+// of the step, relative to the surface's current position) can stop it, and
+// only if that face collides, so passing up through an open underside is not
+// turned into a shove out of a side. A body that crossed a side with its feet
+// within `stepUp` of the top may step onto the top instead. Rects are edge
+// rects. Returns { dx, dy, face }, where face is the side of the body that was
+// blocked, or null when the body did not cross a colliding face.
+function resolveOverlap(body, surface, stepUp, before) {
+  const c = surface.checkCollision || surface.collision || {};
+  const edge = 0.5;
+  const fromLeft = before.right <= surface.left + edge, fromRight = before.left >= surface.right - edge;
+  const exits = [
+    c.left !== false && fromLeft && { dx: surface.left - body.right, dy: 0, face: 'right' },
+    c.right !== false && fromRight && { dx: surface.right - body.left, dy: 0, face: 'left' },
+    c.down !== false && before.top >= surface.bottom - edge && { dx: 0, dy: surface.bottom - body.top, face: 'up' },
+    c.up !== false && (before.bottom <= surface.top + edge ||
+      ((fromLeft || fromRight) && body.bottom - surface.top <= stepUp)) &&
+      { dx: 0, dy: surface.top - body.bottom, face: 'down' },
+  ].filter(Boolean);
+  exits.sort((a, b) => Math.abs(a.dx) + Math.abs(a.dy) - Math.abs(b.dx) - Math.abs(b.dy));
+  return exits[0] || null;
+}
+module.exports = { sweepMovement, resolveOverlap };

@@ -1,5 +1,8 @@
 // Coordinates describe a landing surface, never an arbitrary sprite center.
-function resolveLanding(point, anchor, colliders, body) {
+// Moving platforms are never spawn surfaces or spawn blockers: their position
+// at spawn time is transient.
+function resolveLanding(point, anchor, allColliders, body) {
+  const colliders = allColliders.filter(p => !p.motion);
   const surfaces = colliders.filter(p => p.enabled !== false && p.collision?.none !== true && p.collision?.up !== false && p.right - p.left >= body.width + 4);
   if (!surfaces.length) throw new Error('Map has no walkable spawn surface');
   const x = Number.isFinite(point?.x) ? point.x : (anchor ? (anchor.left + anchor.right) / 2 : (surfaces[0].left + surfaces[0].right) / 2) + (point?.dx || 0);

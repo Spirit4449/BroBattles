@@ -4,6 +4,7 @@ const mapDefaults = [
   require('./2.json'),
   require('./3.json'),
   require('./4.json'),
+  require('./5.json'),
 ];
 const mapsCatalog = {
   defaultMapId: 1,

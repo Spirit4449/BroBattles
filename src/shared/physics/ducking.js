@@ -5,6 +5,7 @@ const DUCK_HEIGHT_RATIO = 0.55; // hitbox height while ducking, as a fraction of
 const DUCK_SPEED_RATIO = 0.25; // move speed while ducking, as a fraction of normal
 const DUCK_DAMAGE_TAKEN_RATIO = 0.8; // damage taken while ducking (0.8 = 20% less)
 const DUCK_REENTRY_DELAY_MS = 200; // wait after standing up before ducking again
+const DUCK_GROUND_SLACK_PX = 8; // per-step platform travel the duck edge guard follows (480 px/s)
 
 function reduceDuckDamage(player, damage) {
   const raw = Math.max(0, Number(damage) || 0);
@@ -17,24 +18,50 @@ function collidablePlatformBodies(objects = []) {
     body.checkCollision?.none !== true && body.checkCollision?.up !== false);
 }
 
-function findGroundSpan(body, objects = [], tolerance = 4) {
+// The ground under a body's centre: merged collinear platform tops within
+// `tolerance` of its feet, as { span: [left, right], top }. With `slack`, ground
+// whose edge is that close to the centre also counts.
+function findGround(body, objects = [], tolerance = 4, slack = 0) {
   if (!body) return null;
   const feet = body.y + body.height;
   const centerX = body.x + body.width / 2;
-  const spans = collidablePlatformBodies(objects)
+  const platforms = collidablePlatformBodies(objects)
     .filter((platform) => Math.abs(platform.y - feet) <= tolerance)
-    .map((platform) => [platform.x, platform.x + platform.width])
-    .sort((a, b) => a[0] - b[0]);
+    .sort((a, b) => a.x - b.x);
   const merged = [];
-  for (const span of spans) {
+  for (const platform of platforms) {
     const previous = merged[merged.length - 1];
-    if (previous && span[0] <= previous[1] + 1) {
-      previous[1] = Math.max(previous[1], span[1]);
+    if (previous && platform.x <= previous.span[1] + 1) {
+      previous.span[1] = Math.max(previous.span[1], platform.x + platform.width);
+      previous.platforms.push(platform);
     } else {
-      merged.push([...span]);
+      merged.push({ span: [platform.x, platform.x + platform.width], platforms: [platform] });
     }
   }
-  return merged.find(([left, right]) => centerX >= left && centerX <= right) || null;
+  const distance = ({ span }) => Math.max(span[0] - centerX, centerX - span[1], 0);
+  const ground = merged.filter((g) => distance(g) <= slack).sort((a, b) => distance(a) - distance(b))[0];
+  if (!ground) return null;
+  const under = ground.platforms.find((p) => centerX >= p.x && centerX <= p.x + p.width) || ground.platforms[0];
+  return { span: ground.span, top: under.y };
+}
+
+function findGroundSpan(body, objects = [], tolerance = 4) {
+  return findGround(body, objects, tolerance)?.span || null;
+}
+
+// Keeps a ducking body from walking off the ground it ducked on. The ground is
+// re-read from the live platforms every step at the body's current feet, so a
+// moving platform carries the guard with it and ground that has moved away
+// releases the body instead of holding it in the air. The remembered span is
+// one physics step old, so a platform may have moved DUCK_GROUND_SLACK_PX.
+// Returns the ground now held, or null when there is none.
+function holdDuckGround(body, span, objects = []) {
+  if (!body || !span) return null;
+  const centerX = Math.max(span[0], Math.min(span[1], body.x + body.width / 2));
+  const ground = findGround({ x: centerX - body.width / 2, y: body.y, width: body.width, height: body.height },
+    objects, 4, DUCK_GROUND_SLACK_PX);
+  if (ground) clampBodyToGroundSpan(body, ground.span, ground.top);
+  return ground;
 }
 
 function hasStandingClearance(body, objects = [], extraHeight = 0) {
@@ -69,7 +96,9 @@ module.exports = {
   DUCK_DAMAGE_TAKEN_RATIO,
   DUCK_REENTRY_DELAY_MS,
   reduceDuckDamage,
+  findGround,
   findGroundSpan,
+  holdDuckGround,
   hasStandingClearance,
   clampBodyToGroundSpan,
 };

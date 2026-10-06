@@ -1,5 +1,5 @@
 const { characterBody } = require("../../../shared/physics/duelGeometry");
-const { bounds, stepBody } = require("./physics");
+const { bounds, stepBody, forecastGeometry } = require("./physics");
 const movement = require("../../../shared/physics/movementPhysics.json");
 const { SD_DAMAGE_PER_SEC } = require('../gameRoomConfig');
 const graphs = new WeakMap();
@@ -207,9 +207,12 @@ function findRoute(graph, from, to, poisonY = Infinity, options = {}) {
 
 // A first-frame overlap with a ledge is not a usable landing. Include the
 // braking/turning motion so a route ends on ground the bot can actually hold.
-function settleLanding(player, geometry, modifiers, now, poisonY = Infinity) {
+// `geometry` is at the time of the step that produced `player`.
+function settleLanding(player, sourceGeometry, modifiers, now, poisonY = Infinity) {
   const p = { ...player }, platformId = p.platformId, frames = [];
+  const forecast = forecastGeometry(sourceGeometry), geometry = forecast.geometry;
   for (let i = 0; i < 36; i++) {
+    forecast.step(p, (i + 1) * DT);
     const direction = safeWalkDirection(p, 0, geometry);
     frames.push({ direction, jumpPressed: false, x: p.x, y: p.y });
     p.flip = direction < 0;
@@ -229,11 +232,13 @@ function edgeKey(edge, from = edge.from) {
 
 // Graph samples establish connectivity. Validate the chosen motion again from
 // the actual takeoff state, including residual velocity and wall-jump timing.
-function prepareTraversal(player, edge, geometry, modifiers, now, poisonY = Infinity) {
+function prepareTraversal(player, edge, sourceGeometry, modifiers, now, poisonY = Infinity) {
   const p = { ...player, isAlive: player.isAlive ?? true }, frames = [];
+  const forecast = forecastGeometry(sourceGeometry), geometry = forecast.geometry;
   let airborne = false;
   for (let i = 0; i < 150; i++) {
     const at = now + i * DT;
+    forecast.step(p, i * DT);
     const wallJump = edge.wallClimb && p.wallSide && at >= (p._nextWallJump || 0);
     const direction = wallJump ? (p.wallSide === 'left' ? 1 : -1) : edge.direction;
     const input = { direction, jumpPressed: (edge.jump && i === 0) || !!wallJump,
@@ -257,11 +262,13 @@ function prepareTraversal(player, edge, geometry, modifiers, now, poisonY = Infi
 
 // Check optional hops/dodges with the real solver before committing to them.
 // Walks brake at ledges; jumps must actually land within the preview window.
-function previewManeuver(player, intent, geometry, modifiers, now, poisonY = Infinity) {
+function previewManeuver(player, intent, sourceGeometry, modifiers, now, poisonY = Infinity) {
   const p = { ...player };
   const frames = [];
+  const forecast = forecastGeometry(sourceGeometry), geometry = forecast.geometry;
   let airborne = !p.grounded;
   for (let i = 0; i < 78; i++) {
+    forecast.step(p, i * DT);
     const direction = safeWalkDirection(p, intent.direction, geometry);
     const input = { direction, jumpPressed: i === 0 && !!intent.jumpPressed };
     frames.push({ ...input, x: p.x, y: p.y });

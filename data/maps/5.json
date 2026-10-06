@@ -1,0 +1,2141 @@
+{
+  "schemaVersion": 1,
+  "id": 5,
+  "label": "Candy Land",
+  "metadata": {
+    "id": 5,
+    "key": "candy-land",
+    "terrain": "grass",
+    "label": "Candy Land",
+    "compatibleModeIds": [
+      "duels"
+    ],
+    "compatibleVariantIds": [
+      "duels-1v1",
+      "duels-2v2",
+      "duels-3v3"
+    ],
+    "musicAsset": "/assets/game-sounds/main.mp3",
+    "musicVolume": 0.11,
+    "mapSelectPreviewAsset": "/assets/candyland/lobby-background.webp",
+    "lobbyBgAsset": "/assets/candyland/lobby-background.webp",
+    "lobbyPlatformAsset": "/assets/lushy/lobbyPlatform.webp"
+  },
+  "variants": {
+    "1v1": {
+      "layout": {
+        "platforms": [
+          {
+            "id": "base",
+            "x": 1148,
+            "y": 1157,
+            "textureKey": "candy-base",
+            "scaleX": 0.3456,
+            "scaleY": 0.3456,
+            "body": {
+              "width": 583,
+              "height": 248,
+              "offsetX": 22,
+              "offsetY": 140
+            }
+          },
+          {
+            "id": "tall-left",
+            "x": 528,
+            "y": 1074,
+            "textureKey": "candy-tall",
+            "scaleX": 0.3345,
+            "scaleY": 0.3345,
+            "body": {
+              "width": 329,
+              "height": 399,
+              "offsetX": 29,
+              "offsetY": 190
+            }
+          },
+          {
+            "id": "tall-right",
+            "x": 1776,
+            "y": 1074,
+            "textureKey": "candy-tall",
+            "scaleX": 0.3345,
+            "scaleY": 0.3345,
+            "body": {
+              "width": 327,
+              "height": 389,
+              "offsetX": 32,
+              "offsetY": 187
+            },
+            "flipX": true
+          },
+          {
+            "id": "moving-left",
+            "x": 1024,
+            "y": 959,
+            "textureKey": "candy-moving",
+            "scaleX": 0.4321,
+            "scaleY": 0.4321,
+            "body": {
+              "width": 156,
+              "height": 31,
+              "offsetX": 0,
+              "offsetY": 14
+            },
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "motion": {
+              "axis": "y",
+              "distance": -180,
+              "speed": 60,
+              "ease": "sine",
+              "pauseMs": 800,
+              "phase": 0
+            }
+          },
+          {
+            "id": "moving-right",
+            "x": 1296,
+            "y": 959,
+            "textureKey": "candy-moving",
+            "scaleX": 0.4321,
+            "scaleY": 0.4321,
+            "body": {
+              "width": 156,
+              "height": 33,
+              "offsetX": 0,
+              "offsetY": 9
+            },
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "motion": {
+              "axis": "y",
+              "distance": -180,
+              "speed": 60,
+              "ease": "sine",
+              "pauseMs": 800,
+              "phase": 0.5
+            }
+          },
+          {
+            "id": "arch",
+            "x": 1151,
+            "y": 560,
+            "textureKey": "candy-arch",
+            "scaleX": 0.518,
+            "scaleY": 0.518,
+            "body": {
+              "width": 821,
+              "height": 92,
+              "offsetX": 24,
+              "offsetY": 5
+            },
+            "collision": {
+              "up": true,
+              "down": true,
+              "left": true,
+              "right": true
+            }
+          }
+        ],
+        "hitboxes": [
+          {
+            "id": "hitbox-c6e2c60a",
+            "x": 814,
+            "y": 576,
+            "width": 148,
+            "height": 350,
+            "collision": {
+              "up": true,
+              "down": true,
+              "left": true,
+              "right": true
+            }
+          },
+          {
+            "id": "hitbox-cb6b3b18",
+            "x": 1492,
+            "y": 599,
+            "width": 139,
+            "height": 308,
+            "collision": {
+              "up": true,
+              "down": true,
+              "left": true,
+              "right": true
+            }
+          }
+        ]
+      },
+      "spawns": {
+        "players": {
+          "team1": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "tall-left"
+              }
+            ],
+            "2": [
+              {
+                "dx": -55,
+                "anchorId": "tall-left"
+              },
+              {
+                "dx": 55,
+                "anchorId": "tall-left"
+              }
+            ],
+            "3": [
+              {
+                "dx": -85,
+                "anchorId": "tall-left"
+              },
+              {
+                "dx": 0,
+                "anchorId": "tall-left"
+              },
+              {
+                "dx": 85,
+                "anchorId": "tall-left"
+              }
+            ]
+          },
+          "team2": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "tall-right"
+              }
+            ],
+            "2": [
+              {
+                "dx": -55,
+                "anchorId": "tall-right"
+              },
+              {
+                "dx": 55,
+                "anchorId": "tall-right"
+              }
+            ],
+            "3": [
+              {
+                "dx": -85,
+                "anchorId": "tall-right"
+              },
+              {
+                "dx": 0,
+                "anchorId": "tall-right"
+              },
+              {
+                "dx": 85,
+                "anchorId": "tall-right"
+              }
+            ]
+          }
+        },
+        "powerups": [
+          {
+            "id": "powerup-0",
+            "x": 864,
+            "y": 928
+          },
+          {
+            "id": "powerup-1",
+            "x": 1152,
+            "y": 976
+          },
+          {
+            "id": "powerup-2",
+            "x": 1152,
+            "y": 688
+          },
+          {
+            "id": "powerup-3",
+            "x": 936,
+            "y": 272
+          },
+          {
+            "id": "powerup-4",
+            "x": 1496,
+            "y": 920
+          },
+          {
+            "id": "powerup-5",
+            "x": 1392,
+            "y": 264
+          }
+        ]
+      },
+      "bounds": {
+        "world": {
+          "x": 0,
+          "y": 0,
+          "width": 2300,
+          "height": 1300
+        },
+        "camera": {
+          "x": 250,
+          "y": -40,
+          "width": 1800,
+          "height": 1300,
+          "zoom": 1.4,
+          "deadzoneWidth": 50,
+          "deadzoneHeight": 50,
+          "followOffsetY": 120,
+          "minZoom": 1.28,
+          "maxZoom": 1.5
+        }
+      },
+      "textureSizes": {
+        "candy-base": {
+          "width": 1736,
+          "height": 824
+        },
+        "candy-tall": {
+          "width": 1036,
+          "height": 1327
+        },
+        "candy-arch": {
+          "width": 1636,
+          "height": 774
+        },
+        "candy-moving": {
+          "width": 361,
+          "height": 85
+        }
+      },
+      "anchors": {
+        "base": {
+          "objectId": "base"
+        },
+        "top": {
+          "objectId": "arch"
+        }
+      },
+      "assets": {
+        "candy-base": {
+          "type": "image",
+          "url": "/assets/candyland/platform-base.webp"
+        },
+        "candy-tall": {
+          "type": "image",
+          "url": "/assets/candyland/platform-tall.webp"
+        },
+        "candy-arch": {
+          "type": "image",
+          "url": "/assets/candyland/platform-arch.webp"
+        },
+        "candy-moving": {
+          "type": "image",
+          "url": "/assets/candyland/platform-moving.webp"
+        }
+      },
+      "powerups": {
+        "spawnIntervalMs": 25000,
+        "maxActive": 3,
+        "despawnMs": 10000,
+        "pickupRadius": 70,
+        "omenMs": 2000,
+        "spawnLift": 22,
+        "types": [
+          "rage",
+          "health",
+          "shield",
+          "poison",
+          "gravityBoots",
+          "invisibility",
+          "shockwave",
+          "freeze"
+        ]
+      },
+      "objectiveLayout": {},
+      "background": "/assets/candyland/background.webp",
+      "scenery": {
+        "layers": [
+          {
+            "id": "sky",
+            "url": "/assets/candyland/background.webp",
+            "scroll": 0.03,
+            "fit": "cover",
+            "frame": {
+              "width": 1672,
+              "height": 941,
+              "x": 0,
+              "y": 0
+            },
+            "y": 140,
+            "blur": 1
+          },
+          {
+            "id": "peaks",
+            "url": "/assets/candyland/peaks.webp",
+            "scroll": 0.1,
+            "fit": "cover-x",
+            "frame": {
+              "width": 1672,
+              "height": 941,
+              "x": 0,
+              "y": 137
+            },
+            "y": 140,
+            "fog": 0.5,
+            "blur": 2
+          },
+          {
+            "id": "midground",
+            "url": "/assets/candyland/midground-peaks.webp",
+            "scroll": 0.2,
+            "fit": "cover-x",
+            "frame": {
+              "width": 1672,
+              "height": 941,
+              "x": 63,
+              "y": 244
+            },
+            "y": 140,
+            "fog": 0.38,
+            "blur": 1.5
+          },
+          {
+            "id": "side-left",
+            "url": "/assets/candyland/side-candy-left.webp",
+            "scroll": 0.3,
+            "fit": "none",
+            "y": 316,
+            "fog": 0.22,
+            "scale": 0.7,
+            "x": -637
+          },
+          {
+            "id": "side-right",
+            "url": "/assets/candyland/side-candy-right.webp",
+            "scroll": 0.3,
+            "fit": "cover-x",
+            "frame": {
+              "width": 1672,
+              "height": 941,
+              "x": 1362.5,
+              "y": 264
+            },
+            "y": 140,
+            "fog": 0.22
+          },
+          {
+            "id": "canopy",
+            "url": "/assets/candyland/frame-top.webp",
+            "scroll": 1,
+            "fit": "none",
+            "stack": "arena",
+            "y": -582,
+            "scale": 1.1,
+            "x": 0
+          },
+          {
+            "id": "candy-floor",
+            "url": "/assets/candyland/frame-bottom.webp",
+            "scroll": 1,
+            "fit": "none",
+            "y": 554,
+            "stack": "front",
+            "scale": 1.1,
+            "x": 0
+          }
+        ],
+        "clouds": [
+          {
+            "id": "cloud-1",
+            "url": "/assets/candyland/cloud-1.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -650,
+            "y": -530,
+            "scale": 0.9,
+            "speed": 5
+          },
+          {
+            "id": "cloud-2",
+            "url": "/assets/candyland/cloud-2.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 325,
+            "y": -470,
+            "scale": 0.85,
+            "speed": 6
+          },
+          {
+            "id": "cloud-12",
+            "url": "/assets/candyland/cloud-12.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 950,
+            "y": -570,
+            "scale": 0.8,
+            "speed": 5
+          },
+          {
+            "id": "cloud-6",
+            "url": "/assets/candyland/cloud-6.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -112,
+            "y": -390,
+            "scale": 0.7,
+            "speed": 7
+          },
+          {
+            "id": "cloud-10",
+            "url": "/assets/candyland/cloud-10.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -800,
+            "y": -310,
+            "scale": 0.75,
+            "speed": 9
+          },
+          {
+            "id": "cloud-7",
+            "url": "/assets/candyland/cloud-7.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 600,
+            "y": -250,
+            "scale": 0.7,
+            "speed": 10
+          },
+          {
+            "id": "cloud-3",
+            "url": "/assets/candyland/cloud-3.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -325,
+            "y": -160,
+            "scale": 0.6,
+            "speed": 8
+          },
+          {
+            "id": "cloud-9",
+            "url": "/assets/candyland/cloud-9.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 1100,
+            "y": -430,
+            "scale": 0.6,
+            "speed": 9
+          },
+          {
+            "id": "cloud-4",
+            "url": "/assets/candyland/cloud-4.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -375,
+            "y": -90,
+            "scale": 0.85,
+            "speed": 14,
+            "alpha": 0.9
+          },
+          {
+            "id": "cloud-5",
+            "url": "/assets/candyland/cloud-5.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 288,
+            "y": -190,
+            "scale": 0.85,
+            "speed": 16,
+            "alpha": 0.9
+          },
+          {
+            "id": "cloud-8",
+            "url": "/assets/candyland/cloud-8.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -37,
+            "y": -350,
+            "scale": 0.75,
+            "speed": 12,
+            "alpha": 0.85
+          },
+          {
+            "id": "cloud-11",
+            "url": "/assets/candyland/cloud-11.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 525,
+            "y": -500,
+            "scale": 0.7,
+            "speed": 15,
+            "alpha": 0.85
+          }
+        ],
+        "atmosphere": {
+          "fogColor": "#ffd9ea",
+          "glows": [
+            {
+              "after": "sky",
+              "x": 720,
+              "y": -480,
+              "scroll": 0.05,
+              "radius": 1150,
+              "color": "#fbffd6",
+              "alpha": [
+                0.35,
+                0.55
+              ],
+              "periodMs": 8000
+            }
+          ],
+          "mist": [
+            {
+              "after": "peaks",
+              "color": "#ffe8f2",
+              "alpha": 0.6,
+              "scroll": 0.1,
+              "y": 200,
+              "height": 420,
+              "speed": 5
+            },
+            {
+              "after": "midground",
+              "color": "#ffe3f0",
+              "alpha": 0.55,
+              "scroll": 0.2,
+              "y": 390,
+              "height": 520,
+              "speed": 9
+            },
+            {
+              "after": "side-right",
+              "color": "#ffdcec",
+              "alpha": 0.45,
+              "scroll": 0.3,
+              "y": 520,
+              "height": 440,
+              "speed": 13
+            },
+            {
+              "after": "arena",
+              "color": "#ffd6ea",
+              "alpha": 0.32,
+              "scroll": 1,
+              "y": 560,
+              "height": 380,
+              "speed": 18
+            }
+          ],
+          "rays": [
+            {
+              "after": "midground",
+              "x": 720,
+              "y": -620,
+              "scroll": 0.2,
+              "count": 7,
+              "angle": 28,
+              "spread": 24,
+              "length": 2300,
+              "width": [
+                120,
+                300
+              ],
+              "color": "#f4ffd0",
+              "alpha": [
+                0.12,
+                0.32
+              ],
+              "periodMs": [
+                3500,
+                7500
+              ]
+            },
+            {
+              "after": "arena",
+              "x": 640,
+              "y": -620,
+              "scroll": 0.9,
+              "count": 3,
+              "angle": 30,
+              "spread": 16,
+              "length": 1900,
+              "width": [
+                90,
+                200
+              ],
+              "color": "#fbffe6",
+              "alpha": [
+                0.03,
+                0.08
+              ],
+              "periodMs": [
+                5000,
+                9000
+              ]
+            }
+          ],
+          "dust": [
+            {
+              "after": "peaks",
+              "color": "#ffeaf4",
+              "count": 16,
+              "superHighCount": 26,
+              "scroll": 0.12,
+              "size": [
+                30,
+                64
+              ],
+              "alpha": 0.2
+            },
+            {
+              "after": "midground",
+              "color": "#fff0f6",
+              "count": 20,
+              "superHighCount": 32,
+              "scroll": 0.22,
+              "size": [
+                16,
+                34
+              ],
+              "alpha": 0.26
+            },
+            {
+              "color": "#fff6e4",
+              "count": 80,
+              "superHighCount": 150,
+              "scroll": 1,
+              "size": [
+                4,
+                10
+              ],
+              "alpha": 0.8
+            }
+          ],
+          "platforms": {
+            "top": "#fff4dc",
+            "bottom": "#8e3a5e",
+            "strength": 0.22
+          },
+          "vignette": {
+            "color": "#4a1033",
+            "alpha": 0.26
+          }
+        }
+      }
+    },
+    "2v2": {
+      "layout": {
+        "platforms": [
+          {
+            "id": "base",
+            "x": 1148,
+            "y": 1157,
+            "textureKey": "candy-base",
+            "scaleX": 0.3456,
+            "scaleY": 0.3456,
+            "body": {
+              "width": 583,
+              "height": 248,
+              "offsetX": 22,
+              "offsetY": 140
+            }
+          },
+          {
+            "id": "tall-left",
+            "x": 528,
+            "y": 1074,
+            "textureKey": "candy-tall",
+            "scaleX": 0.3345,
+            "scaleY": 0.3345,
+            "body": {
+              "width": 329,
+              "height": 399,
+              "offsetX": 29,
+              "offsetY": 190
+            }
+          },
+          {
+            "id": "tall-right",
+            "x": 1776,
+            "y": 1074,
+            "textureKey": "candy-tall",
+            "scaleX": 0.3345,
+            "scaleY": 0.3345,
+            "body": {
+              "width": 327,
+              "height": 389,
+              "offsetX": 32,
+              "offsetY": 187
+            },
+            "flipX": true
+          },
+          {
+            "id": "moving-left",
+            "x": 1024,
+            "y": 959,
+            "textureKey": "candy-moving",
+            "scaleX": 0.4321,
+            "scaleY": 0.4321,
+            "body": {
+              "width": 156,
+              "height": 31,
+              "offsetX": 0,
+              "offsetY": 14
+            },
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "motion": {
+              "axis": "y",
+              "distance": -180,
+              "speed": 60,
+              "ease": "sine",
+              "pauseMs": 800,
+              "phase": 0
+            }
+          },
+          {
+            "id": "moving-right",
+            "x": 1296,
+            "y": 959,
+            "textureKey": "candy-moving",
+            "scaleX": 0.4321,
+            "scaleY": 0.4321,
+            "body": {
+              "width": 156,
+              "height": 33,
+              "offsetX": 0,
+              "offsetY": 9
+            },
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "motion": {
+              "axis": "y",
+              "distance": -180,
+              "speed": 60,
+              "ease": "sine",
+              "pauseMs": 800,
+              "phase": 0.5
+            }
+          },
+          {
+            "id": "arch",
+            "x": 1151,
+            "y": 560,
+            "textureKey": "candy-arch",
+            "scaleX": 0.518,
+            "scaleY": 0.518,
+            "body": {
+              "width": 821,
+              "height": 92,
+              "offsetX": 24,
+              "offsetY": 5
+            },
+            "collision": {
+              "up": true,
+              "down": true,
+              "left": true,
+              "right": true
+            }
+          }
+        ],
+        "hitboxes": [
+          {
+            "id": "hitbox-c6e2c60a",
+            "x": 814,
+            "y": 576,
+            "width": 148,
+            "height": 350,
+            "collision": {
+              "up": true,
+              "down": true,
+              "left": true,
+              "right": true
+            }
+          },
+          {
+            "id": "hitbox-cb6b3b18",
+            "x": 1492,
+            "y": 599,
+            "width": 139,
+            "height": 308,
+            "collision": {
+              "up": true,
+              "down": true,
+              "left": true,
+              "right": true
+            }
+          }
+        ]
+      },
+      "spawns": {
+        "players": {
+          "team1": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "tall-left"
+              }
+            ],
+            "2": [
+              {
+                "dx": -55,
+                "anchorId": "tall-left"
+              },
+              {
+                "dx": 55,
+                "anchorId": "tall-left"
+              }
+            ],
+            "3": [
+              {
+                "dx": -85,
+                "anchorId": "tall-left"
+              },
+              {
+                "dx": 0,
+                "anchorId": "tall-left"
+              },
+              {
+                "dx": 85,
+                "anchorId": "tall-left"
+              }
+            ]
+          },
+          "team2": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "tall-right"
+              }
+            ],
+            "2": [
+              {
+                "dx": -55,
+                "anchorId": "tall-right"
+              },
+              {
+                "dx": 55,
+                "anchorId": "tall-right"
+              }
+            ],
+            "3": [
+              {
+                "dx": -85,
+                "anchorId": "tall-right"
+              },
+              {
+                "dx": 0,
+                "anchorId": "tall-right"
+              },
+              {
+                "dx": 85,
+                "anchorId": "tall-right"
+              }
+            ]
+          }
+        },
+        "powerups": [
+          {
+            "id": "powerup-0",
+            "x": 864,
+            "y": 928
+          },
+          {
+            "id": "powerup-1",
+            "x": 1152,
+            "y": 976
+          },
+          {
+            "id": "powerup-2",
+            "x": 1152,
+            "y": 688
+          },
+          {
+            "id": "powerup-3",
+            "x": 936,
+            "y": 272
+          },
+          {
+            "id": "powerup-4",
+            "x": 1496,
+            "y": 920
+          },
+          {
+            "id": "powerup-5",
+            "x": 1392,
+            "y": 264
+          }
+        ]
+      },
+      "bounds": {
+        "world": {
+          "x": 0,
+          "y": 0,
+          "width": 2300,
+          "height": 1300
+        },
+        "camera": {
+          "x": 250,
+          "y": -40,
+          "width": 1800,
+          "height": 1300,
+          "zoom": 1.4,
+          "deadzoneWidth": 50,
+          "deadzoneHeight": 50,
+          "followOffsetY": 120,
+          "minZoom": 1.28,
+          "maxZoom": 1.5
+        }
+      },
+      "textureSizes": {
+        "candy-base": {
+          "width": 1736,
+          "height": 824
+        },
+        "candy-tall": {
+          "width": 1036,
+          "height": 1327
+        },
+        "candy-arch": {
+          "width": 1636,
+          "height": 774
+        },
+        "candy-moving": {
+          "width": 361,
+          "height": 85
+        }
+      },
+      "anchors": {
+        "base": {
+          "objectId": "base"
+        },
+        "top": {
+          "objectId": "arch"
+        }
+      },
+      "assets": {
+        "candy-base": {
+          "type": "image",
+          "url": "/assets/candyland/platform-base.webp"
+        },
+        "candy-tall": {
+          "type": "image",
+          "url": "/assets/candyland/platform-tall.webp"
+        },
+        "candy-arch": {
+          "type": "image",
+          "url": "/assets/candyland/platform-arch.webp"
+        },
+        "candy-moving": {
+          "type": "image",
+          "url": "/assets/candyland/platform-moving.webp"
+        }
+      },
+      "powerups": {
+        "spawnIntervalMs": 25000,
+        "maxActive": 3,
+        "despawnMs": 10000,
+        "pickupRadius": 70,
+        "omenMs": 2000,
+        "spawnLift": 22,
+        "types": [
+          "rage",
+          "health",
+          "shield",
+          "poison",
+          "gravityBoots",
+          "invisibility",
+          "shockwave",
+          "freeze"
+        ]
+      },
+      "objectiveLayout": {},
+      "background": "/assets/candyland/background.webp",
+      "scenery": {
+        "layers": [
+          {
+            "id": "sky",
+            "url": "/assets/candyland/background.webp",
+            "scroll": 0.03,
+            "fit": "cover",
+            "frame": {
+              "width": 1672,
+              "height": 941,
+              "x": 0,
+              "y": 0
+            },
+            "y": 140,
+            "blur": 1
+          },
+          {
+            "id": "peaks",
+            "url": "/assets/candyland/peaks.webp",
+            "scroll": 0.1,
+            "fit": "cover-x",
+            "frame": {
+              "width": 1672,
+              "height": 941,
+              "x": 0,
+              "y": 137
+            },
+            "y": 140,
+            "fog": 0.5,
+            "blur": 2
+          },
+          {
+            "id": "midground",
+            "url": "/assets/candyland/midground-peaks.webp",
+            "scroll": 0.2,
+            "fit": "cover-x",
+            "frame": {
+              "width": 1672,
+              "height": 941,
+              "x": 63,
+              "y": 244
+            },
+            "y": 140,
+            "fog": 0.38,
+            "blur": 1.5
+          },
+          {
+            "id": "side-left",
+            "url": "/assets/candyland/side-candy-left.webp",
+            "scroll": 0.3,
+            "fit": "none",
+            "y": 316,
+            "fog": 0.22,
+            "scale": 0.7,
+            "x": -637
+          },
+          {
+            "id": "side-right",
+            "url": "/assets/candyland/side-candy-right.webp",
+            "scroll": 0.3,
+            "fit": "cover-x",
+            "frame": {
+              "width": 1672,
+              "height": 941,
+              "x": 1362.5,
+              "y": 264
+            },
+            "y": 140,
+            "fog": 0.22
+          },
+          {
+            "id": "canopy",
+            "url": "/assets/candyland/frame-top.webp",
+            "scroll": 1,
+            "fit": "none",
+            "stack": "arena",
+            "y": -582,
+            "scale": 1.1,
+            "x": 0
+          },
+          {
+            "id": "candy-floor",
+            "url": "/assets/candyland/frame-bottom.webp",
+            "scroll": 1,
+            "fit": "none",
+            "y": 554,
+            "stack": "front",
+            "scale": 1.1,
+            "x": 0
+          }
+        ],
+        "clouds": [
+          {
+            "id": "cloud-1",
+            "url": "/assets/candyland/cloud-1.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -650,
+            "y": -530,
+            "scale": 0.9,
+            "speed": 5
+          },
+          {
+            "id": "cloud-2",
+            "url": "/assets/candyland/cloud-2.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 325,
+            "y": -470,
+            "scale": 0.85,
+            "speed": 6
+          },
+          {
+            "id": "cloud-12",
+            "url": "/assets/candyland/cloud-12.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 950,
+            "y": -570,
+            "scale": 0.8,
+            "speed": 5
+          },
+          {
+            "id": "cloud-6",
+            "url": "/assets/candyland/cloud-6.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -112,
+            "y": -390,
+            "scale": 0.7,
+            "speed": 7
+          },
+          {
+            "id": "cloud-10",
+            "url": "/assets/candyland/cloud-10.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -800,
+            "y": -310,
+            "scale": 0.75,
+            "speed": 9
+          },
+          {
+            "id": "cloud-7",
+            "url": "/assets/candyland/cloud-7.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 600,
+            "y": -250,
+            "scale": 0.7,
+            "speed": 10
+          },
+          {
+            "id": "cloud-3",
+            "url": "/assets/candyland/cloud-3.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -325,
+            "y": -160,
+            "scale": 0.6,
+            "speed": 8
+          },
+          {
+            "id": "cloud-9",
+            "url": "/assets/candyland/cloud-9.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 1100,
+            "y": -430,
+            "scale": 0.6,
+            "speed": 9
+          },
+          {
+            "id": "cloud-4",
+            "url": "/assets/candyland/cloud-4.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -375,
+            "y": -90,
+            "scale": 0.85,
+            "speed": 14,
+            "alpha": 0.9
+          },
+          {
+            "id": "cloud-5",
+            "url": "/assets/candyland/cloud-5.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 288,
+            "y": -190,
+            "scale": 0.85,
+            "speed": 16,
+            "alpha": 0.9
+          },
+          {
+            "id": "cloud-8",
+            "url": "/assets/candyland/cloud-8.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -37,
+            "y": -350,
+            "scale": 0.75,
+            "speed": 12,
+            "alpha": 0.85
+          },
+          {
+            "id": "cloud-11",
+            "url": "/assets/candyland/cloud-11.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 525,
+            "y": -500,
+            "scale": 0.7,
+            "speed": 15,
+            "alpha": 0.85
+          }
+        ],
+        "atmosphere": {
+          "fogColor": "#ffd9ea",
+          "glows": [
+            {
+              "after": "sky",
+              "x": 720,
+              "y": -480,
+              "scroll": 0.05,
+              "radius": 1150,
+              "color": "#fbffd6",
+              "alpha": [
+                0.35,
+                0.55
+              ],
+              "periodMs": 8000
+            }
+          ],
+          "mist": [
+            {
+              "after": "peaks",
+              "color": "#ffe8f2",
+              "alpha": 0.6,
+              "scroll": 0.1,
+              "y": 200,
+              "height": 420,
+              "speed": 5
+            },
+            {
+              "after": "midground",
+              "color": "#ffe3f0",
+              "alpha": 0.55,
+              "scroll": 0.2,
+              "y": 390,
+              "height": 520,
+              "speed": 9
+            },
+            {
+              "after": "side-right",
+              "color": "#ffdcec",
+              "alpha": 0.45,
+              "scroll": 0.3,
+              "y": 520,
+              "height": 440,
+              "speed": 13
+            },
+            {
+              "after": "arena",
+              "color": "#ffd6ea",
+              "alpha": 0.32,
+              "scroll": 1,
+              "y": 560,
+              "height": 380,
+              "speed": 18
+            }
+          ],
+          "rays": [
+            {
+              "after": "midground",
+              "x": 720,
+              "y": -620,
+              "scroll": 0.2,
+              "count": 7,
+              "angle": 28,
+              "spread": 24,
+              "length": 2300,
+              "width": [
+                120,
+                300
+              ],
+              "color": "#f4ffd0",
+              "alpha": [
+                0.12,
+                0.32
+              ],
+              "periodMs": [
+                3500,
+                7500
+              ]
+            },
+            {
+              "after": "arena",
+              "x": 640,
+              "y": -620,
+              "scroll": 0.9,
+              "count": 3,
+              "angle": 30,
+              "spread": 16,
+              "length": 1900,
+              "width": [
+                90,
+                200
+              ],
+              "color": "#fbffe6",
+              "alpha": [
+                0.03,
+                0.08
+              ],
+              "periodMs": [
+                5000,
+                9000
+              ]
+            }
+          ],
+          "dust": [
+            {
+              "after": "peaks",
+              "color": "#ffeaf4",
+              "count": 16,
+              "superHighCount": 26,
+              "scroll": 0.12,
+              "size": [
+                30,
+                64
+              ],
+              "alpha": 0.2
+            },
+            {
+              "after": "midground",
+              "color": "#fff0f6",
+              "count": 20,
+              "superHighCount": 32,
+              "scroll": 0.22,
+              "size": [
+                16,
+                34
+              ],
+              "alpha": 0.26
+            },
+            {
+              "color": "#fff6e4",
+              "count": 80,
+              "superHighCount": 150,
+              "scroll": 1,
+              "size": [
+                4,
+                10
+              ],
+              "alpha": 0.8
+            }
+          ],
+          "platforms": {
+            "top": "#fff4dc",
+            "bottom": "#8e3a5e",
+            "strength": 0.22
+          },
+          "vignette": {
+            "color": "#4a1033",
+            "alpha": 0.26
+          }
+        }
+      }
+    },
+    "3v3": {
+      "layout": {
+        "platforms": [
+          {
+            "id": "base",
+            "x": 1148,
+            "y": 1157,
+            "textureKey": "candy-base",
+            "scaleX": 0.3456,
+            "scaleY": 0.3456,
+            "body": {
+              "width": 583,
+              "height": 248,
+              "offsetX": 22,
+              "offsetY": 140
+            }
+          },
+          {
+            "id": "tall-left",
+            "x": 528,
+            "y": 1074,
+            "textureKey": "candy-tall",
+            "scaleX": 0.3345,
+            "scaleY": 0.3345,
+            "body": {
+              "width": 329,
+              "height": 399,
+              "offsetX": 29,
+              "offsetY": 190
+            }
+          },
+          {
+            "id": "tall-right",
+            "x": 1776,
+            "y": 1074,
+            "textureKey": "candy-tall",
+            "scaleX": 0.3345,
+            "scaleY": 0.3345,
+            "body": {
+              "width": 327,
+              "height": 389,
+              "offsetX": 32,
+              "offsetY": 187
+            },
+            "flipX": true
+          },
+          {
+            "id": "moving-left",
+            "x": 1024,
+            "y": 959,
+            "textureKey": "candy-moving",
+            "scaleX": 0.4321,
+            "scaleY": 0.4321,
+            "body": {
+              "width": 156,
+              "height": 31,
+              "offsetX": 0,
+              "offsetY": 14
+            },
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "motion": {
+              "axis": "y",
+              "distance": -180,
+              "speed": 60,
+              "ease": "sine",
+              "pauseMs": 800,
+              "phase": 0
+            }
+          },
+          {
+            "id": "moving-right",
+            "x": 1296,
+            "y": 959,
+            "textureKey": "candy-moving",
+            "scaleX": 0.4321,
+            "scaleY": 0.4321,
+            "body": {
+              "width": 156,
+              "height": 33,
+              "offsetX": 0,
+              "offsetY": 9
+            },
+            "collision": {
+              "up": true,
+              "down": false,
+              "left": true,
+              "right": true
+            },
+            "motion": {
+              "axis": "y",
+              "distance": -180,
+              "speed": 60,
+              "ease": "sine",
+              "pauseMs": 800,
+              "phase": 0.5
+            }
+          },
+          {
+            "id": "arch",
+            "x": 1151,
+            "y": 560,
+            "textureKey": "candy-arch",
+            "scaleX": 0.518,
+            "scaleY": 0.518,
+            "body": {
+              "width": 821,
+              "height": 92,
+              "offsetX": 24,
+              "offsetY": 5
+            },
+            "collision": {
+              "up": true,
+              "down": true,
+              "left": true,
+              "right": true
+            }
+          }
+        ],
+        "hitboxes": [
+          {
+            "id": "hitbox-c6e2c60a",
+            "x": 814,
+            "y": 576,
+            "width": 148,
+            "height": 350,
+            "collision": {
+              "up": true,
+              "down": true,
+              "left": true,
+              "right": true
+            }
+          },
+          {
+            "id": "hitbox-cb6b3b18",
+            "x": 1492,
+            "y": 599,
+            "width": 139,
+            "height": 308,
+            "collision": {
+              "up": true,
+              "down": true,
+              "left": true,
+              "right": true
+            }
+          }
+        ]
+      },
+      "spawns": {
+        "players": {
+          "team1": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "tall-left"
+              }
+            ],
+            "2": [
+              {
+                "dx": -55,
+                "anchorId": "tall-left"
+              },
+              {
+                "dx": 55,
+                "anchorId": "tall-left"
+              }
+            ],
+            "3": [
+              {
+                "dx": -85,
+                "anchorId": "tall-left"
+              },
+              {
+                "dx": 0,
+                "anchorId": "tall-left"
+              },
+              {
+                "dx": 85,
+                "anchorId": "tall-left"
+              }
+            ]
+          },
+          "team2": {
+            "1": [
+              {
+                "dx": 0,
+                "anchorId": "tall-right"
+              }
+            ],
+            "2": [
+              {
+                "dx": -55,
+                "anchorId": "tall-right"
+              },
+              {
+                "dx": 55,
+                "anchorId": "tall-right"
+              }
+            ],
+            "3": [
+              {
+                "dx": -85,
+                "anchorId": "tall-right"
+              },
+              {
+                "dx": 0,
+                "anchorId": "tall-right"
+              },
+              {
+                "dx": 85,
+                "anchorId": "tall-right"
+              }
+            ]
+          }
+        },
+        "powerups": [
+          {
+            "id": "powerup-0",
+            "x": 864,
+            "y": 928
+          },
+          {
+            "id": "powerup-1",
+            "x": 1152,
+            "y": 976
+          },
+          {
+            "id": "powerup-2",
+            "x": 1152,
+            "y": 688
+          },
+          {
+            "id": "powerup-3",
+            "x": 936,
+            "y": 272
+          },
+          {
+            "id": "powerup-4",
+            "x": 1496,
+            "y": 920
+          },
+          {
+            "id": "powerup-5",
+            "x": 1392,
+            "y": 264
+          }
+        ]
+      },
+      "bounds": {
+        "world": {
+          "x": 0,
+          "y": 0,
+          "width": 2300,
+          "height": 1300
+        },
+        "camera": {
+          "x": 250,
+          "y": -40,
+          "width": 1800,
+          "height": 1300,
+          "zoom": 1.4,
+          "deadzoneWidth": 50,
+          "deadzoneHeight": 50,
+          "followOffsetY": 120,
+          "minZoom": 1.28,
+          "maxZoom": 1.5
+        }
+      },
+      "textureSizes": {
+        "candy-base": {
+          "width": 1736,
+          "height": 824
+        },
+        "candy-tall": {
+          "width": 1036,
+          "height": 1327
+        },
+        "candy-arch": {
+          "width": 1636,
+          "height": 774
+        },
+        "candy-moving": {
+          "width": 361,
+          "height": 85
+        }
+      },
+      "anchors": {
+        "base": {
+          "objectId": "base"
+        },
+        "top": {
+          "objectId": "arch"
+        }
+      },
+      "assets": {
+        "candy-base": {
+          "type": "image",
+          "url": "/assets/candyland/platform-base.webp"
+        },
+        "candy-tall": {
+          "type": "image",
+          "url": "/assets/candyland/platform-tall.webp"
+        },
+        "candy-arch": {
+          "type": "image",
+          "url": "/assets/candyland/platform-arch.webp"
+        },
+        "candy-moving": {
+          "type": "image",
+          "url": "/assets/candyland/platform-moving.webp"
+        }
+      },
+      "powerups": {
+        "spawnIntervalMs": 25000,
+        "maxActive": 3,
+        "despawnMs": 10000,
+        "pickupRadius": 70,
+        "omenMs": 2000,
+        "spawnLift": 22,
+        "types": [
+          "rage",
+          "health",
+          "shield",
+          "poison",
+          "gravityBoots",
+          "invisibility",
+          "shockwave",
+          "freeze"
+        ]
+      },
+      "objectiveLayout": {},
+      "background": "/assets/candyland/background.webp",
+      "scenery": {
+        "layers": [
+          {
+            "id": "sky",
+            "url": "/assets/candyland/background.webp",
+            "scroll": 0.03,
+            "fit": "cover",
+            "frame": {
+              "width": 1672,
+              "height": 941,
+              "x": 0,
+              "y": 0
+            },
+            "y": 140,
+            "blur": 1
+          },
+          {
+            "id": "peaks",
+            "url": "/assets/candyland/peaks.webp",
+            "scroll": 0.1,
+            "fit": "cover-x",
+            "frame": {
+              "width": 1672,
+              "height": 941,
+              "x": 0,
+              "y": 137
+            },
+            "y": 140,
+            "fog": 0.5,
+            "blur": 2
+          },
+          {
+            "id": "midground",
+            "url": "/assets/candyland/midground-peaks.webp",
+            "scroll": 0.2,
+            "fit": "cover-x",
+            "frame": {
+              "width": 1672,
+              "height": 941,
+              "x": 63,
+              "y": 244
+            },
+            "y": 140,
+            "fog": 0.38,
+            "blur": 1.5
+          },
+          {
+            "id": "side-left",
+            "url": "/assets/candyland/side-candy-left.webp",
+            "scroll": 0.3,
+            "fit": "none",
+            "y": 316,
+            "fog": 0.22,
+            "scale": 0.7,
+            "x": -637
+          },
+          {
+            "id": "side-right",
+            "url": "/assets/candyland/side-candy-right.webp",
+            "scroll": 0.3,
+            "fit": "cover-x",
+            "frame": {
+              "width": 1672,
+              "height": 941,
+              "x": 1362.5,
+              "y": 264
+            },
+            "y": 140,
+            "fog": 0.22
+          },
+          {
+            "id": "canopy",
+            "url": "/assets/candyland/frame-top.webp",
+            "scroll": 1,
+            "fit": "none",
+            "stack": "arena",
+            "y": -582,
+            "scale": 1.1,
+            "x": 0
+          },
+          {
+            "id": "candy-floor",
+            "url": "/assets/candyland/frame-bottom.webp",
+            "scroll": 1,
+            "fit": "none",
+            "y": 554,
+            "stack": "front",
+            "scale": 1.1,
+            "x": 0
+          }
+        ],
+        "clouds": [
+          {
+            "id": "cloud-1",
+            "url": "/assets/candyland/cloud-1.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -650,
+            "y": -530,
+            "scale": 0.9,
+            "speed": 5
+          },
+          {
+            "id": "cloud-2",
+            "url": "/assets/candyland/cloud-2.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 325,
+            "y": -470,
+            "scale": 0.85,
+            "speed": 6
+          },
+          {
+            "id": "cloud-12",
+            "url": "/assets/candyland/cloud-12.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 950,
+            "y": -570,
+            "scale": 0.8,
+            "speed": 5
+          },
+          {
+            "id": "cloud-6",
+            "url": "/assets/candyland/cloud-6.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -112,
+            "y": -390,
+            "scale": 0.7,
+            "speed": 7
+          },
+          {
+            "id": "cloud-10",
+            "url": "/assets/candyland/cloud-10.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -800,
+            "y": -310,
+            "scale": 0.75,
+            "speed": 9
+          },
+          {
+            "id": "cloud-7",
+            "url": "/assets/candyland/cloud-7.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 600,
+            "y": -250,
+            "scale": 0.7,
+            "speed": 10
+          },
+          {
+            "id": "cloud-3",
+            "url": "/assets/candyland/cloud-3.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -325,
+            "y": -160,
+            "scale": 0.6,
+            "speed": 8
+          },
+          {
+            "id": "cloud-9",
+            "url": "/assets/candyland/cloud-9.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 1100,
+            "y": -430,
+            "scale": 0.6,
+            "speed": 9
+          },
+          {
+            "id": "cloud-4",
+            "url": "/assets/candyland/cloud-4.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -375,
+            "y": -90,
+            "scale": 0.85,
+            "speed": 14,
+            "alpha": 0.9
+          },
+          {
+            "id": "cloud-5",
+            "url": "/assets/candyland/cloud-5.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 288,
+            "y": -190,
+            "scale": 0.85,
+            "speed": 16,
+            "alpha": 0.9
+          },
+          {
+            "id": "cloud-8",
+            "url": "/assets/candyland/cloud-8.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": -37,
+            "y": -350,
+            "scale": 0.75,
+            "speed": 12,
+            "alpha": 0.85
+          },
+          {
+            "id": "cloud-11",
+            "url": "/assets/candyland/cloud-11.webp",
+            "after": "arena",
+            "scroll": 1,
+            "x": 525,
+            "y": -500,
+            "scale": 0.7,
+            "speed": 15,
+            "alpha": 0.85
+          }
+        ],
+        "atmosphere": {
+          "fogColor": "#ffd9ea",
+          "glows": [
+            {
+              "after": "sky",
+              "x": 720,
+              "y": -480,
+              "scroll": 0.05,
+              "radius": 1150,
+              "color": "#fbffd6",
+              "alpha": [
+                0.35,
+                0.55
+              ],
+              "periodMs": 8000
+            }
+          ],
+          "mist": [
+            {
+              "after": "peaks",
+              "color": "#ffe8f2",
+              "alpha": 0.6,
+              "scroll": 0.1,
+              "y": 200,
+              "height": 420,
+              "speed": 5
+            },
+            {
+              "after": "midground",
+              "color": "#ffe3f0",
+              "alpha": 0.55,
+              "scroll": 0.2,
+              "y": 390,
+              "height": 520,
+              "speed": 9
+            },
+            {
+              "after": "side-right",
+              "color": "#ffdcec",
+              "alpha": 0.45,
+              "scroll": 0.3,
+              "y": 520,
+              "height": 440,
+              "speed": 13
+            },
+            {
+              "after": "arena",
+              "color": "#ffd6ea",
+              "alpha": 0.32,
+              "scroll": 1,
+              "y": 560,
+              "height": 380,
+              "speed": 18
+            }
+          ],
+          "rays": [
+            {
+              "after": "midground",
+              "x": 720,
+              "y": -620,
+              "scroll": 0.2,
+              "count": 7,
+              "angle": 28,
+              "spread": 24,
+              "length": 2300,
+              "width": [
+                120,
+                300
+              ],
+              "color": "#f4ffd0",
+              "alpha": [
+                0.12,
+                0.32
+              ],
+              "periodMs": [
+                3500,
+                7500
+              ]
+            },
+            {
+              "after": "arena",
+              "x": 640,
+              "y": -620,
+              "scroll": 0.9,
+              "count": 3,
+              "angle": 30,
+              "spread": 16,
+              "length": 1900,
+              "width": [
+                90,
+                200
+              ],
+              "color": "#fbffe6",
+              "alpha": [
+                0.03,
+                0.08
+              ],
+              "periodMs": [
+                5000,
+                9000
+              ]
+            }
+          ],
+          "dust": [
+            {
+              "after": "peaks",
+              "color": "#ffeaf4",
+              "count": 16,
+              "superHighCount": 26,
+              "scroll": 0.12,
+              "size": [
+                30,
+                64
+              ],
+              "alpha": 0.2
+            },
+            {
+              "after": "midground",
+              "color": "#fff0f6",
+              "count": 20,
+              "superHighCount": 32,
+              "scroll": 0.22,
+              "size": [
+                16,
+                34
+              ],
+              "alpha": 0.26
+            },
+            {
+              "color": "#fff6e4",
+              "count": 80,
+              "superHighCount": 150,
+              "scroll": 1,
+              "size": [
+                4,
+                10
+              ],
+              "alpha": 0.8
+            }
+          ],
+          "platforms": {
+            "top": "#fff4dc",
+            "bottom": "#8e3a5e",
+            "strength": 0.22
+          },
+          "vignette": {
+            "color": "#4a1033",
+            "alpha": 0.26
+          }
+        }
+      }
+    }
+  }
+}

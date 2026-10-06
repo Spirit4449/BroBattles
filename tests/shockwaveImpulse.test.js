@@ -37,7 +37,8 @@ test('local shockwave handler lifts grounded players and removes speed caps imme
     babelrc: false, configFile: false,
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code;
-  vm.runInNewContext(code, { exports, require: name => name.includes('shockwaveImpulse')
+  vm.runInNewContext(code, { exports, require: name => name.includes('movementPhysics')
+    ? require('../src/shared/physics/movementPhysics.json') : name.includes('shockwaveImpulse')
     ? require('../src/shared/physics/shockwaveImpulse') : {}, window: {} });
   const handlers = {};
   const player = {

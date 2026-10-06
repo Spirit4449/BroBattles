@@ -1,4 +1,5 @@
 const test = require('node:test');
+const physics = require('../src/shared/physics/movementPhysics.json');
 const assert = require('node:assert/strict');
 const Body = require('phaser/src/physics/arcade/Body');
 const World = require('phaser/src/physics/arcade/World');
@@ -6,7 +7,7 @@ const { characterBody, getDuelGeometry } = require('../src/shared/physics/duelGe
 const { processPlayerPlatformCollision } = require('../src/client/game/players/platformCollision');
 
 function fixture(character = 'thorg', side = 'left') {
-  const world = { defaults: {}, gravity: { x: 0, y: 825 }, OVERLAP_BIAS: 4,
+  const world = { defaults: {}, gravity: { x: 0, y: physics.gravity }, OVERLAP_BIAS: 4,
     intersects: World.prototype.intersects };
   const player = new Body(world), platform = new Body(world);
   player.gameObject = { body: player }; platform.gameObject = { body: platform };
@@ -40,9 +41,9 @@ for (const character of ['thorg', 'ninja', 'wizard', 'draven', 'gloop', 'huntres
           f.player.resetFlags();
           f.player.prev.set(f.player.x, f.player.y);
           f.player.x += f.direction * 0.5;
-          f.player.y += 825 / 3600;
-          f.player._dx = f.direction * 0.5; f.player._dy = 825 / 3600;
-          f.player.velocity.y = 825 / 60;
+          f.player.y += physics.gravity / 3600;
+          f.player._dx = f.direction * 0.5; f.player._dy = physics.gravity / 3600;
+          f.player.velocity.y = physics.gravity / 60;
           f.player.updateCenter();
         }
         collide(f, processPlayerPlatformCollision);

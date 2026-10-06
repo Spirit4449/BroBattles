@@ -32,8 +32,8 @@ test('save/reopen is lossless, rejects stale revisions, and snapshots preserve l
  assert.ok(fs.existsSync(path.join(repo.directory,'history','1',original.revision+'.json')));
 });
 test('new maps can be created and listed without changing source modules',t=>{
- const repo=repository(t),doc=clone(defaults[0]);doc.id=5;doc.label='Bigger Peaks';doc.metadata={...doc.metadata,id:5,label:doc.label,key:'bigger-peaks'};
- repo.save(doc,null);assert.equal(repo.list().length,5);assert.equal(repo.forMatch(91,5,'3v3').mapId,5);assert.throws(()=>repo.save(doc,null),e=>e.status===409);
+ const repo=repository(t),doc=clone(defaults[0]),id=Math.max(...defaults.map(d=>d.id))+1;doc.id=id;doc.label='Bigger Peaks';doc.metadata={...doc.metadata,id,label:doc.label,key:'bigger-peaks'};
+ repo.save(doc,null);assert.equal(repo.list().length,defaults.length+1);assert.equal(repo.forMatch(91,id,'3v3').mapId,id);assert.throws(()=>repo.save(doc,null),e=>e.status===409);
 });
 test('invalid maps never replace the last good saved map',t=>{
  const repo=repository(t),{document,revision}=repo.get(1);const mutations=[d=>d.variants['1v1'].bounds.world.width=-1,d=>d.variants['1v1'].layout.platforms[1].id='p0',d=>d.variants['1v1'].textureSizes['lushy-base'].width=999,d=>d.variants['1v1'].spawns.players.team1[1][0].anchorId='deleted',d=>d.variants['1v1'].powerups.types=['bogus'],d=>d.variants['1v1'].assets['lushy-base'].url='/assets/../.env'];

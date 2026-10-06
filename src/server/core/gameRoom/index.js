@@ -42,6 +42,7 @@ const {
 } = require("./abilityRuntimeManager");
 
 const { getDuelGeometry } = require('../../../shared/physics/duelGeometry');
+const { tickMovingPlatforms } = require('./movingPlatforms');
 const { BotController } = require('../bots/controller');
 const { startNinjaSwarm } = require('../bots/combat');
 
@@ -665,6 +666,7 @@ class GameRoom {
     const step = (currentMono) => {
       this._simulationMono = currentMono;
       this._tickId++;
+      tickMovingPlatforms(this, currentMono);
       this.processTick();
       attackRuntimeManager.tickActiveAttacks(this, Date.now());
       characterCombat.tick(this);

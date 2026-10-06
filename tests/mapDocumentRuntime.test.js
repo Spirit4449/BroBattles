@@ -49,7 +49,7 @@ test('history reconciliation retains scene, camera and surviving objects through
 test('client collision configuration uses top-left offsets, including undoing custom offsets',()=>{
  const {configureMapPlatform}=load('../src/client/game/maps/mapUtils.js',{'../../../shared/physics/spawnPlacement':require('../src/shared/physics/spawnPlacement')});
  const sprite={displayWidth:200,displayHeight:100,scaleX:2,scaleY:2,
-  body:{checkCollision:{},setSize(w,h){this.width=w;this.height=h;this.offset=[17,19];},setOffset(x,y){this.offset=[x,y];},updateFromGameObject(){}},
+  body:{checkCollision:{},friction:{set(){}},setSize(w,h){this.width=w;this.height=h;this.offset=[17,19];},setOffset(x,y){this.offset=[x,y];},updateFromGameObject(){}},
  };
  for(const method of ['setTexture','setPosition','setImmovable','setScale','setFlipX','setDepth','setAlpha','setFlipY'])sprite[method]=()=>sprite;
  const row={id:'one',textureKey:'art',x:50,y:100,scaleX:2,scaleY:2,body:{width:80,height:40,offsetX:12,offsetY:15}};

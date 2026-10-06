@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const input = require('../src/server/core/gameRoom/inputManager');
+const { MOVE_PLAUSIBLE_SPEED_V, MOVE_PLAUSIBLE_LAG_PAD_V, MAX_MOVEMENT_CREDIT_MS } = require('../src/server/core/gameRoomConfig');
 const { characterBody } = require('../src/shared/physics/duelGeometry');
 const { GameRoom } = require('../src/server/core/gameRoom');
 const { createAuthSessionService, tokenHash } = require('../src/server/services/auth/authSessionService');
@@ -28,7 +29,8 @@ function movement(t) {
 for (const gap of [0, 1, 5, 250, 300, 10000]) {
   test(`movement is bounded after a ${gap}ms packet gap`, t => {
     const f = movement(t); f.advance(gap); f.send({ x: 3000, y: 900 });
-    assert.ok(f.player.x <= 260); assert.ok(f.player.y <= 650);
+    assert.ok(f.player.x <= 260);
+    assert.ok(f.player.y <= MOVE_PLAUSIBLE_LAG_PAD_V + MOVE_PLAUSIBLE_SPEED_V * MAX_MOVEMENT_CREDIT_MS / 1000);
     assert.equal(f.events[0].name, 'game:correction');
   });
 }

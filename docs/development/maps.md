@@ -42,6 +42,7 @@ The format is data-only JSON, validated by `src/shared/maps/mapDocument.js`. Sta
 - `id`, `label`, and `metadata` for catalog compatibility and presentation.
 - `variants['1v1'|'2v2'|'3v3']`, each holding `layout.platforms`, `layout.hitboxes`, `assets`, `textureSizes`, `bounds`, `spawns`, `powerups`, `anchors`, and optional `objectiveLayout.bankBust`.
 - Platforms use center `x/y`, a `textureKey`, positive `scaleX/scaleY`, optional collision settings and a `body`. Body width/height are world pixels; offsets are unscaled texture pixels measured from the artwork's top left.
+- A platform may add `motion` to move (see [Moving platforms](#moving-platforms)).
 - Player spawn slots contain `anchorId`, optional horizontal `dx`, and optional `dropHeight`. Each team has arrays of exactly 1, 2, and 3 slots under `spawns.players`. Free powerups contain an `id`, `x/y`, optional `type`, and optional `enabled`.
 
 Use `validateDocument(document)` before importing. The server additionally validates local asset dimensions and animation frames. `geometryFromMap` is the shared collision contract. `src/client/editor/editorModel.js` exposes the same snapping, resizing, replacement, and export operations used by the GUI.
@@ -56,6 +57,50 @@ Authenticated admin endpoints:
 For manual JSON changes, import in Map Studio and Save, or use the authenticated API so validation and revision checks run. Do not rewrite legacy map JavaScript constants or modify a live match snapshot.
 
 Verification: `node --test tests/mapEditor*.test.js tests/mapDocumentRuntime.test.js` and `npm run build`.
+
+## Moving platforms
+
+Select a platform and tick **Moving platform** in its Movement section. Choose **Up and down** or **Left and right**, how far it travels, its speed and its ease. Under Timing, set the pause at each end and a start offset that staggers platforms sharing a rhythm. The canvas draws each moving platform's path, its far end and a live preview. Drag the round handle at the far end to set the travel distance; the grid applies unless you hold Command or Control.
+
+In the document this is `motion: { axis: 'x' | 'y', distance, speed, ease, pauseMs, phase }`. `x`/`y` stay the rest position. `distance` is signed world pixels (negative goes left or up). `speed` is the average pixels per second of one leg, so eased platforms move faster mid-way. Eases are `linear`, `sine`, `quad`, `cubic`, `quart` and `expo`; each eases in and out of both ends. `phase` is 0 to 1.
+
+A platform's position is a pure function of server time (`src/shared/maps/platformMotion.js`). The client reads the synchronized server clock, so every player sees the same platform and nothing extra is replicated. Rules that follow:
+
+- Moving platforms cannot hold player spawns or anchored powerups; validation rejects them and spawn snapping skips them.
+- A moving platform's colliding faces behave like any wall. Walking into a side stops you; dashing up into a blocking underside bonks you back down. A player is stopped only at a face they actually crossed during the physics step, and only if that face collides, so jumping up through an open underside (Block from below off) passes through even with the sides on, and you land on top coming back down. Crossing a side with your feet within `PLATFORM_STEP_UP_PX` (10) of the top steps you onto it (`resolveOverlap` in `src/shared/physics/sweptCollision.js`).
+- A platform carries players standing on it and pushes players its own travel runs into (only with a colliding leading face), swept against other solid ground. When that ground would trap a player (a ceiling above a lift, a wall beside a sliding block, the floor under a descending one), the platform passes through them instead of crushing them. The client (`src/client/game/maps/movingPlatforms.js`) and the server's bot physics (`carryOnPlatforms` in `src/server/core/bots/physics.js`) apply the same rule.
+- Leaving a moving platform gives no extra speed: a jump or step off moves only at the player's own speed.
+- Ducking still stops you at a moving platform's edges, like static ground. The edge guard re-reads the live ground every physics step, so it follows the platform and lets go when the ground leaves.
+- Remote players standing on one are shifted by the platform's travel over the interpolation delay so they do not slide.
+- The server advances platform colliders every tick (`src/server/core/gameRoom/movingPlatforms.js`), so projectiles and ground checks use current positions. Ninja projectile prediction and Gloop slimeballs move platforms to the same times on the client.
+- Bots plan routes over static platforms only. Every jump, dash and landing preview forecasts platform motion, so bots also jump onto moving platforms deliberately. A bot riding one edges toward its goal and leaves by the first hop, wall climb or dash that the forecast proves lands on static ground. In the air on these maps, bots steer toward a landing the forecast proves.
+- Server movement budgets add the fastest platform speed on each axis. Dash collision checks on the server skip moving platforms, because the client saw them at an earlier time.
+- Keep moving platforms clear of paths that would squeeze players between them and other ground unless that is intended; squeezed players drop through the platform. Avoid placing them where flight abilities usually end (Draven's Inferno, Ninja's super), because a bot or player may come down after the platform has moved away.
+
+Checks: `node --test tests/movingPlatforms.test.js tests/ducking.test.js tests/mapEditor.test.js`, and `npm run test:slow` after changing bot behaviour. `tests/helpers/arcadePlatforms.js` runs the real Arcade bodies and client runtime headlessly for new movement cases.
+
+## Scenery (parallax and atmosphere)
+
+Every map's backdrop renders inside Phaser. A variant without `scenery` layers shows its `background` as a single layer with a gentle parallax. A variant may add an optional `scenery` block instead. Candy Land (`src/shared/maps/5.json`) is the working example. Map Studio does not edit it yet; change the JSON directly. `background` is still required and is used for previews.
+
+- `layers`: art images, listed back to front. `scroll` is the parallax factor: 0 is fixed to the screen, 1 moves with the arena, and above 1 is foreground drawn over fighters (under their HUD). `x`/`y` are offsets in world units from the camera bounds centre. `fit` controls size:
+  - `"cover"` (the default) scales the layer so no edge shows at any zoom or camera position, so nearer layers display larger.
+  - `"cover-x"` only guarantees the width, for horizon strips that leave sky above or ground below.
+  - `"none"` uses `scale` as given.
+
+  `fog` (0 to 1) hazes everything behind and including that layer toward `atmosphere.fogColor`; the haze is heavier toward the ground. `blur` (0 to 16, texture pixels) gives depth of field: the game blurs a copy of the art once when the map loads. It uses canvas blurring, not Phaser `preFX`.
+- `stack` on a layer sets its depth: `"back"` (behind the platforms; the default up to `scroll` 1), `"arena"` (over the platforms and everything placed `after: "arena"`, under the fighters) or `"front"` (over the fighters; the default above `scroll` 1). A layer with `scroll: 1` stays fixed in the world like the platforms.
+- `frame` on a layer (`{ width, height, x, y }` in image pixels) records where a cropped image sat in the full canvas it was exported from. The frame is fitted instead of the image, so layers exported from one canvas keep their composition.
+- `clouds`: individual images that drift sideways at `speed` (world px per second) and wrap around the arena. With `scroll: 1` they sit in the world and only move by drifting. They take `x`/`y`, `scroll`, `scale`, `alpha` and `flipX`, and render on every graphics setting.
+- `atmosphere`: `glows`, `mist`, `rays`, `dust`, `platforms` (top-lit gradient on platform art, with an optional drop shadow) and `vignette`. `dust` may be a list of fields at different depths; large, faint motes placed `after` far layers read as out-of-focus particles. Rays and glows pulse with `alpha: [min, max]`.
+
+A map whose `bounds.camera` sets `minZoom`/`maxZoom` sizes its layers for that zoom range (see the follow camera in `cameraDynamics.js`). Clouds, glows, mist and rays stack with `after`: a layer ID places them just above that layer, and `"arena"` places them over the platforms but under the fighters. `front: true` draws them over the fighters.
+
+Layers, clouds and parallax render on every graphics setting. The atmosphere renders only with WebGL on High and Super High, and Super High uses `dust.superHighCount`. The runtime is `src/client/game/maps/sceneryRuntime.js`; validation and the parallax math live in `src/shared/maps/scenery.js`. Matches pin layer and cloud images like platform art. Avoid Phaser `preFX` on map objects: under the game's framebuffer scaling it renders offset and clipped.
+
+Candy Land art is exported as full-canvas PNG layers. Keep those sources outside `public/` (by default in the ignored `output/candyland-source/`) and run `node scripts/art/import-candyland.cjs [source dir]`. It trims, halves and converts each image to WebP in `public/assets/candyland/`, prints each crop (the `frame` values) and flattens the backdrop into `lobby-background.webp`.
+
+Checks: `node --test tests/mapScenery.test.js` and `npm run validate:content`.
 
 ## Spawn placement
 

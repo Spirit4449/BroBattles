@@ -1,4 +1,4 @@
-const { bounds, stepBody, startDash } = require('./physics');
+const { bounds, stepBody, startDash, forecastGeometry } = require('./physics');
 const { maneuverDanger } = require('./perception');
 const { healthFraction, preferredRange } = require('./tactics');
 const { hasClearShot } = require('./combat');
@@ -22,12 +22,14 @@ function canDash(brain, mods, now) {
     now >= (p._knockbackUntil || 0) && (mods.speedMult ?? 1) > 0 && !isMovementSuppressed(p, now);
 }
 
-function previewDash(player, direction, geometry, mods, now, poisonAt = () => Infinity) {
+function previewDash(player, direction, sourceGeometry, mods, now, poisonAt = () => Infinity) {
   const p = { ...player }, frames = [];
+  const forecast = forecastGeometry(sourceGeometry), geometry = forecast.geometry;
   let stompImpact = null;
   if (direction && !startDash(p, direction, now)) return null;
   // Release input after launch and include braking/landing, not just the burst.
   for (let i = 0; i < 120; i++) {
+    forecast.step(p, i * DT);
     frames.push({ x: p.x, y: p.y, flip: p.flip, direction: 0, jumpPressed: false });
     const result = stepBody(p, { direction: 0 }, geometry, DT, now + i * DT, mods);
     if (!stompImpact && p.grounded && p._stompPendingUntil >= now + (i + 1) * DT) {

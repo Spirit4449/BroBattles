@@ -1,4 +1,5 @@
 const test = require('node:test');
+const physics = require('../src/shared/physics/movementPhysics.json');
 const assert = require('node:assert/strict');
 const {mapDefaults} = require('../src/shared/maps');
 const {getDuelGeometry,characterBody} = require('../src/shared/physics/duelGeometry');
@@ -21,7 +22,8 @@ function fixture(rect, face) {
 for(const map of mapDefaults) for(const variant of Object.keys(map.variants)) {
  test(`${map.id}/${variant}: every enabled platform face tolerates packet rounding without stopping the player`,()=>{
   for(const rect of getDuelGeometry(map.id,variant).colliders) {
-   if(rect.enabled===false)continue;
+   // Moving platforms are excluded from input correction (inputManager.js).
+   if(rect.enabled===false||rect.motion)continue;
    for(const face of ['up','down','left','right']) {
     if(rect.collision?.[face]===false)continue;
     for(const round of [quantizeMovementPosition,v=>Math.round(v*2)/2]) {
@@ -51,7 +53,7 @@ test('genuine wall penetration still corrects and carries the contacted face',()
 });
 
 test('real Phaser reset stops both axes; collision correction preserves tangential motion and steering',()=>{
- const body=new Body({defaults:{},gravity:{x:0,y:825}});
+ const body=new Body({defaults:{},gravity:{x:0,y:physics.gravity}});
  body.setVelocity(600,150);body.setAcceleration(3000,10);body.reset(10,20);
  assert.equal(body.velocity.x,0);assert.equal(body.velocity.y,0);
  body.setVelocity(600,150);body.setAcceleration(3000,10);

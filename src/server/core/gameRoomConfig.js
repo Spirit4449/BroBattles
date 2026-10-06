@@ -9,6 +9,7 @@
 //   - world fallback  -> src/shared/gameConstants.js
 
 const { WORLD_BOUNDS } = require("../../shared/gameConstants");
+const movementPhysics = require("../../shared/physics/movementPhysics.json");
 const { POWERUP_CATALOG, POWERUP_TYPES, POWERUP_DURATIONS_MS } = require("../../shared/powerups");
 const { getResolvedCharacterSpecialConfig } = require("../../shared/characters/characterTuning");
 
@@ -143,7 +144,7 @@ const POSITION_HISTORY_MS = 1000; // max age
 // Movement plausibility: fastest horizontal/vertical speed (px/s) a normal
 // client may report before dashes, wall kicks, and knockback are added on top.
 const MOVE_PLAUSIBLE_SPEED_H = 320;
-const MOVE_PLAUSIBLE_SPEED_V = 1100;
+const MOVE_PLAUSIBLE_SPEED_V = movementPhysics.maxVerticalSpeed * 1.1;
 // Extra distance (px) allowed on top of the speed budget to absorb lag.
 const MOVE_PLAUSIBLE_LAG_PAD_H = 80;
 const MOVE_PLAUSIBLE_LAG_PAD_V = 100;

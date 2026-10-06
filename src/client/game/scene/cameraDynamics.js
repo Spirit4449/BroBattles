@@ -14,10 +14,15 @@ function smoothstep(value) {
 
 // Where the follow camera settles for a player standing at playerY: zoomed out
 // as the player climbs (more vertical context) and biased down when high up
-// (less empty sky).
-export function restingCameraFrame(playerY) {
-  const t = clamp((playerY - 80) / (520 - 80), 0, 1);
-  return { zoom: 1.3 + (1.8 - 1.3) * t, followOffsetY: 120 + 80 * (1 - t) };
+// (less empty sky). A map's camera may set minZoom/maxZoom; the climb is then
+// measured within its camera bounds instead of the classic 1000-tall arena.
+export function restingCameraFrame(playerY, camera = null) {
+  const custom = Number.isFinite(camera?.minZoom) && Number.isFinite(camera?.maxZoom);
+  const high = custom ? camera.y + camera.height * 0.12 : 80;
+  const low = custom ? camera.y + camera.height * 0.56 : 520;
+  const minZoom = custom ? camera.minZoom : 1.3, maxZoom = custom ? camera.maxZoom : 1.8;
+  const t = clamp((playerY - high) / (low - high), 0, 1);
+  return { zoom: minZoom + (maxZoom - minZoom) * t, followOffsetY: 120 + 80 * (1 - t) };
 }
 
 export function updateDynamicCamera(scene, player) {
@@ -26,7 +31,7 @@ export function updateDynamicCamera(scene, player) {
   const cam = scene.cameras.main;
 
   // Smoothly approach the resting framing for the player's height.
-  const { zoom: targetZoom, followOffsetY: targetFollowOffsetY } = restingCameraFrame(player.y);
+  const { zoom: targetZoom, followOffsetY: targetFollowOffsetY } = restingCameraFrame(player.y, scene._mapDocument?.bounds?.camera);
   const reducedMotion = typeof window !== 'undefined' &&
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const previousDashZoom = scene._dashCameraZoom || 0;

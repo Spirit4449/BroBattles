@@ -120,6 +120,17 @@ leaves offscreen render targets at their own sizes. The Canvas adapter scales
 context transforms. Neither adds per-sprite renderer selection. Changes to other
 settings do not resize the renderer. Revalidate this adapter when upgrading Phaser.
 
+The logical game size follows the window (`src/client/game/scene/gameViewport.js`).
+The arena fills the screen by trimming the view: tall windows first gain sky
+above the arena, then lose up to 30% of the sides; very wide windows lose some
+top and bottom. Beyond those limits the canvas letterboxes. `ambientBezels.js`
+then fills the spare space by mirroring the frame's edge strip outward, darkening
+it with distance and blurring it. It samples about 20 times a second, after
+Phaser renders. The arena edge is feathered into the bezel with a CSS mask. The
+logical size changes only once a resize settles; the canvas stretches until
+then, and cameras keep their centre. Map backdrops render inside Phaser (see
+Scenery in [Maps](maps.md)), not behind the canvas.
+
 `deferSceneAudio` captures existing `load.audio` declarations during preload,
 including character and mode sounds, and starts them after scene creation with
 two parallel downloads. Visual assets and their atlas/map data remain blocking;

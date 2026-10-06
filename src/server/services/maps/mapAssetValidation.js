@@ -41,6 +41,7 @@ function validateAssets(document, publicRoot=PUBLIC){
     }catch(e){errors.push(`${variant}.assets.${key}: ${e.code==='ENOENT'?'Asset file does not exist in public/assets':e.message}`);}
   }
   for(const [variant,map]of Object.entries(document.variants))try{imageSize(read(map.background));}catch(e){errors.push(`${variant}.background: ${e.code==='ENOENT'?'Image file does not exist':e.message}`);}
+  for(const [variant,map]of Object.entries(document.variants))for(const layer of [...(map.scenery?.layers||[]),...(map.scenery?.clouds||[])])try{imageSize(read(layer.url));}catch(e){errors.push(`${variant}.scenery.${layer.id}: ${e.code==='ENOENT'?'Image file does not exist':e.message}`);}
   return errors;
 }
 module.exports={validateAssets,imageSize};

@@ -299,7 +299,7 @@ export function applyDashCoast(player, inputDirection, maxSpeed, now = Date.now(
   if (now >= (player._dashCoastUntil || 0)) return;
   const vx = player.body.velocity.x;
   if (Math.abs(vx) <= maxSpeed) return;
-  player.setMaxVelocity(Math.max(maxSpeed, Math.abs(vx)), Math.max(1000, Math.abs(player.body.velocity.y)));
+  player.setMaxVelocity(Math.max(maxSpeed, Math.abs(vx)), Math.max(physics.maxVerticalSpeed, Math.abs(player.body.velocity.y)));
   if (!inputDirection || Math.sign(vx) === inputDirection) {
     player.setAccelerationX(0);
     player.setDragX((player.body.touching.down || player.body.blocked?.down) ? physics.dashSurfaceDrag : physics.dashCoastDrag);

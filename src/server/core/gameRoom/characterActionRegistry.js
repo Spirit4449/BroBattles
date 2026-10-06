@@ -128,7 +128,8 @@ function scheduleWindupRelease(
         x: slimeCast.start.x + playerData.x - castOrigin.x,
         y: slimeCast.start.y + playerData.y - castOrigin.y,
       } });
-      if (room.geometry?.colliders) releaseAction.mapCollisionRects = room.geometry.colliders.map(
+      // Static terrain only: clients add moving platforms where they are each frame.
+      if (room.geometry?.colliders) releaseAction.mapCollisionRects = room.geometry.colliders.filter((c) => !c.motion).map(
         ({ left, right, top, bottom }) => ({ left, right, top, bottom }));
     }
     attackRuntimeManager.registerAttackFromAction(

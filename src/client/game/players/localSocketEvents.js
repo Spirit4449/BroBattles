@@ -1,4 +1,5 @@
 import { endDash } from '../scene/dash';
+import movementPhysics from '../../../shared/physics/movementPhysics.json';
 import { playPlayerSound } from '../audio/playerAudio';
 import { localMovementCorrector } from './localMovementCorrector';
 import { resolveShockwaveImpulse, SHOCKWAVE_MOMENTUM_MS } from "../../../shared/physics/shockwaveImpulse";
@@ -234,7 +235,7 @@ export function bindLocalSocketEvents({
       player._jumpLaunch = null;
       player._shockwaveUntil = Date.now() + SHOCKWAVE_MOMENTUM_MS;
       player._wallSlideSuppressedUntil = player._shockwaveUntil;
-      player.setMaxVelocity(Math.max(1, Math.abs(impulse.x)), Math.max(1000, Math.abs(impulse.y)));
+      player.setMaxVelocity(Math.max(1, Math.abs(impulse.x)), Math.max(movementPhysics.maxVerticalSpeed, Math.abs(impulse.y)));
       player.setAccelerationX(0);
       player.setDragX(0);
       player.setVelocityX(impulse.x);

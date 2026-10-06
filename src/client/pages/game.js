@@ -13,6 +13,8 @@ import '../styles/levelBadge.css';
 const editorSession = window.location.pathname === '/map-editor/playtest' ? new URLSearchParams(window.location.search).get('session') : null;
 if (editorSession) document.body.classList.add('editor-playtest');
 import { preloadMapDocument } from '../game/maps/documentRuntime';
+import { buildScenery, preloadScenery } from '../game/maps/sceneryRuntime';
+import { installMovingPlatforms, passesThrough, platformClock, remoteRideOffset } from '../game/maps/movingPlatforms';
 import { attachCharacterNetworks, discardCharacterPresentation } from '../game/characters/networkRegistry';
 // game.js
 
@@ -30,7 +32,9 @@ import {
 } from "../game/maps/manifest";
 import { applyMapBounds } from "../game/maps/mapUtils";
 import { POST_MATCH_REWARD_STORAGE_KEY } from "../lobby/profile/postMatchRewards.js";
-import { applyMatchBackground, updateMatchBackgroundParallax } from "../game/scene/matchBackground.js";
+import { applyMatchBackground } from "../game/scene/matchBackground.js";
+import { installAmbientBezels } from "../game/scene/ambientBezels.js";
+import { fitGameSize, installViewportFit, viewportSize } from "../game/scene/gameViewport.js";
 import { playMatchEndSound, startSuddenDeathMusic, stopSuddenDeathMusic } from "../game/audio/matchAudio.js";
 import { createGameHudController } from "../game/hud/gameHudController";
 import { createGameOverScreenController } from "../game/hud/gameOverScreenController";
@@ -135,35 +139,14 @@ window.Phaser = Phaser;
 const staticPath = "/assets";
 const BASE_GAME_WIDTH = 2300;
 const BASE_GAME_HEIGHT = 1000;
-const MAX_TOP_PLAYFIELD_PADDING = 320;
 
-function getViewportAdaptiveGameHeight() {
-  const visualViewport = window.visualViewport;
-  const viewportWidth = Math.max(
-    1,
-    Number(visualViewport?.width) ||
-      Number(window.innerWidth) ||
-      Number(document.documentElement?.clientWidth) ||
-      BASE_GAME_WIDTH,
-  );
-  const viewportHeight = Math.max(
-    1,
-    Number(visualViewport?.height) ||
-      Number(window.innerHeight) ||
-      Number(document.documentElement?.clientHeight) ||
-      BASE_GAME_HEIGHT,
-  );
-  const fittedHeight = Math.round(
-    (BASE_GAME_WIDTH * viewportHeight) / viewportWidth,
-  );
-  return Math.max(
-    BASE_GAME_HEIGHT,
-    Math.min(BASE_GAME_HEIGHT + MAX_TOP_PLAYFIELD_PADDING, fittedHeight),
-  );
+function initialGameSize() {
+  const { width, height } = viewportSize();
+  return fitGameSize(width, height);
 }
 
 function getTopPlayfieldPadding() {
-  return Math.max(0, getViewportAdaptiveGameHeight() - BASE_GAME_HEIGHT);
+  return Math.max(0, initialGameSize().height - BASE_GAME_HEIGHT);
 }
 
 const POWERUP_TICK_SOUNDS = createPowerupTickSounds(
@@ -767,12 +750,17 @@ function applyServerSpawns(spawns) {
   }
 }
 
+// A moving platform passing through a trapped player skips separation.
+function collidePlayerWithPlatform(player, platform) {
+  return !passesThrough(player, platform) && processPlayerPlatformCollision(player, platform);
+}
+
 function attachMapCollidersToSprite(scene, sprite, objects) {
   if (!scene?.physics || !sprite || !Array.isArray(objects)) return;
   for (const mapObject of objects) {
     if (!mapObject) continue;
     try {
-      scene.physics.add.collider(sprite, mapObject, null, processPlayerPlatformCollision);
+      scene.physics.add.collider(sprite, mapObject, null, collidePlayerWithPlatform);
     } catch (_) {}
   }
 }
@@ -859,6 +847,7 @@ class GameScene extends Phaser.Scene {
       this,
       gameData?.mapSnapshot?.map || getDefaultMapDocument(gameData?.map),
     );
+    preloadScenery(this, gameData?.mapSnapshot?.map || getDefaultMapDocument(gameData?.map));
     preloadModeAssets(this, gameData?.modeId, staticPath);
     preloadGameAssets({
       scene: this,
@@ -979,6 +968,8 @@ class GameScene extends Phaser.Scene {
     applyMapBounds(this, mapBoundaryConfig, {
       extraTopSpace: this._topPlayfieldPadding,
     });
+    // Parallax layers fit themselves to the camera bounds set above.
+    buildScenery(this, this._mapDocument);
     this._spectatorBounds = {
       centerX:
         Number(this.physics?.world?.bounds?.centerX) ||
@@ -1173,6 +1164,10 @@ class GameScene extends Phaser.Scene {
     );
 
     attachMapCollidersToSprite(this, player, mapObjects);
+    installMovingPlatforms(this, {
+      riders: () => (player && !dead ? [player] : []),
+      paused: () => this._editModeActive,
+    });
 
     // Set initial super stats
     const me = (gameData.players || []).find((p) => p.name === username);
@@ -1338,7 +1333,7 @@ class GameScene extends Phaser.Scene {
         onCreateMapObject: (mapObject) => {
           if (!mapObject) return;
           try {
-            if (player) this.physics.add.collider(player, mapObject, null, processPlayerPlatformCollision);
+            if (player) this.physics.add.collider(player, mapObject, null, collidePlayerWithPlatform);
           } catch (_) {}
         },
         onEditModeChange: (editing) => {
@@ -1662,7 +1657,6 @@ class GameScene extends Phaser.Scene {
   update() {
     attachCharacterNetworks(this, { localPlayer: player, localUsername: username,
       opponentPlayersRef: opponentPlayers, teamPlayersRef: teamPlayers });
-    updateMatchBackgroundParallax(this, gameData?.map);
     const suddenDeathEnabled = supportsSuddenDeath(latestModeState?.type || gameData?.modeId);
     const poisonAllowed =
       hasJoined &&
@@ -1952,6 +1946,11 @@ class GameScene extends Phaser.Scene {
           targetX = aX;
           targetY = aY;
         }
+        if (!airborne) {
+          const ride = remoteRideOffset(this, spr, targetX, targetY, sample.targetMono, platformClock());
+          targetX += ride.x;
+          targetY += ride.y;
+        }
       }
       const shouldSnapToTarget =
         Number(wrapper._networkSnapUntil) > performance.now();
@@ -2112,6 +2111,8 @@ const config = {
         delete game.canvas.dataset.gameRenderer;
         document.dispatchEvent(new Event('bb:rendererchange'));
       });
+      installViewportFit(game);
+      installAmbientBezels(game);
       const renderResolution = installRenderResolution(game, Phaser, graphicsRenderScale(getSettings().graphics));
       if (renderResolution) {
         let currentScale = graphicsRenderScale(getSettings().graphics);
@@ -2133,8 +2134,8 @@ const config = {
     mode: Phaser.Scale.FIT,
     // We'll position the canvas via CSS, so disable Phaser auto centering
     autoCenter: Phaser.Scale.NO_CENTER,
-    width: BASE_GAME_WIDTH,
-    height: getViewportAdaptiveGameHeight(),
+    // Fills the window, trimming the view within limits (gameViewport.js).
+    ...initialGameSize(),
   },
   scene: GameScene,
   physics: {

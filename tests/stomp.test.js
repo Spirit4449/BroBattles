@@ -104,6 +104,7 @@ test('local stomp interruption restores dash gravity and preserves the outward i
   const source=fs.readFileSync(require.resolve('../src/client/game/players/localSocketEvents'),'utf8');
   vm.runInNewContext(babel.transformSync(source,{babelrc:false,configFile:false,
     presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports,Date,window:{},require:path=>
+      path.includes('movementPhysics')?require('../src/shared/physics/movementPhysics.json'):
       path.includes('shockwaveImpulse')?require('../src/shared/physics/shockwaveImpulse'):
       path.includes('scene/dash')?{endDash:p=>{p.body.allowGravity=p._dash.allowGravity;p._dash=null;}}:
       {playSpriteAnimation(){}}});

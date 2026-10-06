@@ -9,7 +9,7 @@ function spawnGeometry(scene, anchors) {
     o.body.updateFromGameObject?.();
     const b = o.body;
     return { object: o, left: b.left, right: b.right, top: b.top, bottom: b.bottom,
-      enabled: b.enable, collision: b.checkCollision };
+      enabled: b.enable, collision: b.checkCollision, motion: o._mapMotion };
   });
   return entries;
 }
@@ -229,6 +229,11 @@ export function configureMapPlatform(sprite,row) {
   // The shared geometry contract measures offsets from the artwork's top left.
   sprite.body.setOffset(Number.isFinite(ox) ? ox : 0, Number.isFinite(oy) ? oy : 0);
   sprite._mapObjectId = row.id;
+  // movingPlatforms.js offsets moving platforms from this rest position and
+  // carries riders itself, so Arcade must not also drag them by friction.
+  sprite._mapMotion = row.motion || null;
+  sprite._mapBase = { x: row.x, y: row.y };
+  sprite.body.friction.set(row.motion ? 0 : 1, 0);
   sprite.setDepth(Number(row.depth) || 0);
   sprite.setAlpha(row.alpha ?? 1);
   sprite.setFlipY(!!row.flipY);
