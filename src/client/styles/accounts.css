@@ -274,20 +274,9 @@ body {
   background: linear-gradient(180deg, #1a2a40, #142136);
 }
 
-.loading {
+.loading.bb-battle-loader {
+  --bb-loader-size: 26px;
   display: none;
-  width: 18px;
-  height: 18px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
-  border-radius: var(--bb-radius-pill, 999px);
-  animation: authSpin 0.8s linear infinite;
-}
-
-@keyframes authSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @media (max-width: 480px) {

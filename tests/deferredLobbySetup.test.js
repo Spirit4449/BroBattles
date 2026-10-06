@@ -122,7 +122,7 @@ test('actual menu wiring supports early clicks, deferred profile deep links, and
     createLazyInitializer: f.createLazyInitializer,
     deferLobbySetup: pending => { tasks = pending; },
     initProfilePopup: () => { calls.push('profile-init'); return { open: () => calls.push('profile-open'), close() {} }; },
-    initializeShop: options => { calls.push('shop-init'); shopOptions = options; return { open: section => calls.push(`shop-open:${section}`), getFeaturedSale() {} }; },
+    initializeShop: options => { calls.push('shop-init'); shopOptions = options; return { open: section => calls.push(`shop-open:${section}`), getFeaturedSale() {}, refreshNotifications: () => calls.push('shop-notifications') }; },
     set __lobbyProfilePopup(value) { wiredProfile = value; },
     profileController: { updateWallet: () => calls.push('wallet'), invalidate() {} },
     shopButton, usernameButton, coinResourceButton: button(), gemResourceButton: button(),
@@ -139,6 +139,7 @@ test('actual menu wiring supports early clicks, deferred profile deep links, and
   assert.deepEqual(calls, ['shop-init', 'shop-open:sales', 'profile-init', 'profile-open']);
   tasks.forEach(task => task());
   assert.equal(calls.filter(call => call === 'shop-init').length, 1);
+  assert.equal(calls.filter(call => call === 'shop-notifications').length, 1, 'Shop tags refresh during deferred setup');
   assert.equal(calls.filter(call => call === 'profile-init').length, 1);
   assert.equal(calls.filter(call => call === 'profile-open').length, 2, 'profile=self is still honored');
   assert.equal(location.search, '?shop=currency', 'profile cleanup preserves shop deep links');

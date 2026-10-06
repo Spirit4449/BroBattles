@@ -188,7 +188,7 @@
             "kind": "card",
             "itemId": "slime-circuit",
             "name": "Slime Circuit",
-            "image": "/assets/player-cards/slime-circuit.webp",
+            "image": "/assets/player-cards/slime-circuit/slime-circuit.webp",
             "rarity": "epic"
           }
         ]
@@ -321,7 +321,7 @@
             "kind": "card",
             "itemId": "arena-crown",
             "name": "Crown of the Arena",
-            "image": "/assets/player-cards/arena-crown.webp",
+            "image": "/assets/player-cards/arena-crown/arena-crown.webp",
             "rarity": "legendary"
           }
         ]

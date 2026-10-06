@@ -3001,3 +3001,98 @@ body .profile-bros-unlocked-count strong {
   color: var(--bb-text);
   font-size: 8px;
 }
+
+/* Card preview uses the same popup frame, chroma header and close control. */
+.player-card-preview.bb-popup {
+  border: var(--bb-popup-border-width) solid var(--bb-popup-border-color);
+  border-radius: var(--bb-radius-window);
+  background: var(--bb-popup-bg);
+  box-shadow: var(--bb-popup-shadow);
+  font-family: var(--bb-font-body);
+}
+.player-card-preview[open] {
+  animation: bb-popup-panel-in var(--bb-popup-motion) var(--bb-ease) both;
+}
+.player-card-preview::backdrop {
+  background: var(--bb-popup-backdrop);
+  backdrop-filter: blur(var(--bb-overlay-blur));
+}
+.player-card-preview figcaption {
+  color: var(--bb-text-soft);
+  font-family: var(--bb-font-display);
+  font-size: var(--bb-text-sm);
+  line-height: 1.6;
+  text-transform: uppercase;
+}
+.shop-card-info.bb-button { background: var(--bb-primary-gradient); }
+
+/* Shared loading emblem: opposing pixel blades clash on a gold impact spark.
+ * The legacy status selector also supports server-rendered status pages. */
+.bb-battle-loader,
+.status-spinner {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: var(--bb-loader-size, 64px);
+  height: var(--bb-loader-size, 64px);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  vertical-align: middle;
+  background:
+    linear-gradient(var(--bb-gold), var(--bb-gold)) 50% 41% / 6% 32% no-repeat,
+    linear-gradient(var(--bb-gold), var(--bb-gold)) 50% 41% / 32% 6% no-repeat,
+    linear-gradient(#fff2c7, #fff2c7) 30% 30% / 6% 6% no-repeat,
+    linear-gradient(#fff2c7, #fff2c7) 70% 30% / 6% 6% no-repeat;
+  animation: bb-blade-impact 1.2s steps(1, end) infinite;
+}
+.bb-battle-loader::before,
+.bb-battle-loader::after,
+.status-spinner::before,
+.status-spinner::after {
+  content: "";
+  position: absolute;
+  top: 3%;
+  left: 7%;
+  width: 40%;
+  height: 88%;
+  /* Two transparent sprite cells share the same dimensions and grip pivot. */
+  background: url("/assets/ui/loading-swords.webp") left top / 200% 100% no-repeat;
+  image-rendering: pixelated;
+  transform-origin: 50% 84%;
+  transform: rotate(33deg);
+  animation: bb-blue-blade-clash 1.2s steps(6, end) infinite;
+}
+.bb-battle-loader::after,
+.status-spinner::after {
+  left: 53%;
+  background-position: right top;
+  transform: rotate(-33deg);
+  animation-name: bb-red-blade-clash;
+}
+.bb-battle-loader[hidden], .status-spinner[hidden] { display: none; }
+/* Each hilt stays planted. Separated blades swing inward, strike, then recoil. */
+@keyframes bb-blue-blade-clash {
+  0%, 18%, 88%, 100% { transform: rotate(-16deg); }
+  38%, 44% { transform: rotate(33deg); }
+  55% { transform: rotate(27deg); }
+  66% { transform: rotate(30deg); }
+}
+@keyframes bb-red-blade-clash {
+  0%, 18%, 88%, 100% { transform: rotate(16deg); }
+  38%, 44% { transform: rotate(-33deg); }
+  55% { transform: rotate(-27deg); }
+  66% { transform: rotate(-30deg); }
+}
+@keyframes bb-blade-impact {
+  0%, 52%, 100% { background-size: 0 0; }
+  38% { background-size: 6% 32%, 32% 6%, 6% 6%, 6% 6%; }
+  46% { background-size: 4% 12%, 12% 4%, 4% 4%, 4% 4%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bb-battle-loader, .bb-battle-loader::before, .bb-battle-loader::after,
+  .status-spinner, .status-spinner::before, .status-spinner::after {
+    animation: none;
+  }
+}

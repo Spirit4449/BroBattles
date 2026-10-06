@@ -805,7 +805,7 @@ class GameScene extends Phaser.Scene {
 
   // Preloads assets
   preload() {
-    deferSceneAudio(this);
+    deferSceneAudio(this, { holdDownloads: () => window.__BB_NAVIGATION__?.holdGameplayDownloads?.() });
     const onVisualProgress = (p) => {
       // 50% - 90%
       const pct = Math.floor(50 + p * 40); // maps 0-1 -> 50-90

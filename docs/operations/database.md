@@ -32,6 +32,7 @@ Apply older SQL in chronological order after checking existing schema. Do not bl
 | `email-polish` | Both `email` and `signup-marketing`; adds `correction_used` to verification records (helper-only DDL) |
 | `party-slots` | Party members; adds explicit slot index |
 | `trophy-road` | Trophy claims and cosmetic ownership tables; adds trophy peak, migrates claims and backfills non-currency grants |
+| `shop-views` | Users; creates account-saved viewed Shop offers and rotation acknowledgments |
 | `friends` | Users and matches; adds friend codes, social tables and the matches-created index |
 
 The helper's list order is not a dependency order: run `signup-marketing` before `email-polish`. Trophy Road's non-currency backfill calls application services; running its SQL alone is insufficient. Friends also adds columns/indexes outside its SQL file. Verify each environment independently; this documentation makes no claim about its applied state.

@@ -53,12 +53,15 @@ import {
   noteAnimationPlayed,
   playCharacterAnimation,
   resetAirborneJumpAnimation,
+  markWallJumpAnimation,
+  holdWallSlidePose,
 } from "../characters/shared/animationState.js";
 import { createAttackAimReticleController } from "../scene/attackAimReticle";
 import { createCombatMouseController } from "../scene/combatMouse";
 import { createMobileControlsController } from "../scene/mobileControls";
 import { releaseMovementForFocus } from "./focusMomentum.mjs";
 import { RENDER_LAYERS } from "../scene/renderLayers";
+import { triggerWallJumpCameraKick } from "../scene/cameraDynamics";
 import MOVEMENT_PHYSICS from "../../../shared/physics/movementPhysics.json";
 import {
   DUCK_HEIGHT_RATIO,
@@ -1938,9 +1941,10 @@ function applyHorizontalMovement(input, tuning, { ducking, shockwaveActive }) {
   }
 }
 
-function playJumpAnimation(scene) {
+function playJumpAnimation(scene, wallJump = false) {
   if (isAttacking || isSpecialAnimationLocked()) return;
-  resetAirborneJumpAnimation(player);
+  if (wallJump) markWallJumpAnimation(player);
+  else resetAirborneJumpAnimation(player);
   playCharacterAnimation({
     scene,
     sprite: player,
@@ -2034,7 +2038,7 @@ function performWallJump(scene, wallSide, tuning) {
   // Face away from the wall (or reinforce a locked facing).
   if (!player._lockFlip) setFacingLeft(!fromLeft);
   else enforceLockedFacing();
-  playJumpAnimation(scene);
+  playJumpAnimation(scene, true);
   pdbg();
 
   // Visual-only kickback cloud at the wall contact point.
@@ -2047,6 +2051,7 @@ function performWallJump(scene, wallSide, tuning) {
     if (!powerupInvisible) spawnWallKickCloud(scene, contactX, contactY, fromLeft ? 1 : -1);
   } catch (_) {}
   noteMovementFxEvent("wall-jump", { direction: fromLeft ? 1 : -1, wallSide: fromLeft ? "left" : "right" });
+  triggerWallJumpCameraKick(scene, fromLeft ? 1 : -1);
 
   // Nudge away from the wall first so the body does not stay embedded.
   player.x += fromLeft ? 8 : -8;
@@ -2093,11 +2098,15 @@ function updateAirborneState(isWallSliding) {
 }
 
 function presentMovementAnimation(scene, { wallSliding, movementLocked, lockedByAbility }) {
+  const visualWallSliding = holdWallSlidePose(player, {
+    sliding: wallSliding,
+    grounded: !!player?.body?.touching?.down,
+  });
   let desired = deriveMovementAnimation({
     grounded: !!player?.body?.touching?.down,
     ducking: !!player?._ducking,
     moving: !!isMoving,
-    wallSliding: !!wallSliding,
+    wallSliding: visualWallSliding,
     vx: Number(player?.body?.velocity?.x) || 0,
     vy: Number(player?.body?.velocity?.y) || 0,
     dead,

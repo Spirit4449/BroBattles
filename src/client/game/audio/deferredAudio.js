@@ -1,6 +1,7 @@
 // Capture every preload's audio declaration (characters, maps, modes and shared
 // effects). The visual loader alone controls scene creation and loading progress.
-export function deferSceneAudio(scene) {
+export function deferSceneAudio(scene, { holdDownloads = () => () => {} } = {}) {
+  const releaseDownloads = holdDownloads() || (() => {});
   const loader = scene.load;
   const originalAudio = loader.audio;
   const originalParallelDownloads = loader.maxParallelDownloads;
@@ -25,11 +26,15 @@ export function deferSceneAudio(scene) {
       loader.maxParallelDownloads = 2;
       for (const args of queued) originalAudio.apply(loader, args);
       queued.length = 0;
+      loader.once?.('complete', releaseDownloads);
       loader.start();
+      if (!loader.once) releaseDownloads();
     }, 0);
   };
   const cleanup = () => {
     clearTimeout(timer);
+    loader.off?.('complete', releaseDownloads);
+    releaseDownloads();
     queued.length = 0;
     loader.audio = originalAudio;
     loader.maxParallelDownloads = originalParallelDownloads;

@@ -43,3 +43,20 @@ test('leaving before background loading starts cancels work and restores methods
   assert.equal(f.scene.sound.play, play);
   assert.equal(f.scene.events.listenerCount('create'), 0);
 });
+
+test('optional media waits for deferred audio completion and releases on shutdown', async () => {
+  const f = fixture();
+  const events = new EventEmitter();
+  f.scene.load.once = events.once.bind(events);
+  f.scene.load.off = events.off.bind(events);
+  let busy = false;
+  deferSceneAudio(f.scene, { holdDownloads() { busy = true; return () => { busy = false; }; } });
+  f.scene.load.audio('attack', '/attack.mp3');
+  f.scene.events.emit('create');
+  await tick();
+  assert.equal(busy, true);
+  events.emit('complete');
+  assert.equal(busy, false);
+  f.scene.events.emit('shutdown');
+  assert.equal(events.listenerCount('complete'), 0);
+});

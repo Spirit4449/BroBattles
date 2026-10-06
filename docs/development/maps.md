@@ -10,7 +10,7 @@ Each mode's world size and match camera live in `src/shared/maps/arenas.json` (r
 - `camera`: the follow camera's bounds (`x`, `y`, `width`, `height`), its dead zone and `followOffsetY`.
   - `zoom` is the reference zoom that scenery is composed at.
   - The live zoom eases from `maxZoom`, with the player at or below `climbY[1]`, to `minZoom` at or above `climbY[0]`. See `restingCameraFrame` in `cameraDynamics.js`.
-  - Duels 2v2 insets the camera 250 px from each side of its world, so edge art never shows.
+  - The follow bounds extend 80 px past each side of the Duels 1v1 and Bank Bust worlds, giving players more camera tracking near the edges. Duels 2v2 retains a 90 px side inset to keep edge art out of view. Every mode's bounds also allow the camera to track above and below the physics world.
 
 To give a new mode maps, add its variant id (from `gameModes.catalog.json`) to `arenas.json`. Retuning a mode's camera or size there changes all of its maps.
 

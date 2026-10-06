@@ -1,0 +1,51 @@
+{
+  "tool": "Built-in image_gen",
+  "covers": [
+    {
+      "id": "shuriken-strike",
+      "generatedFile": "exec-a2acaf9f-f618-43a7-931b-3fbbaf1ab9b9.png",
+      "prompt": "Regenerate the attached BACKGROUND ONLY in the same restrained coarse Bro Battles pixel-art style for shuriken-strike. Wide 1536x640 (2.4:1). Theme: ninja dojo; desaturated red and charcoal palette; one throwing star and folded red cloth at left, wooden floor ledge, distant roof silhouette at far right. DO NOT draw any collectible card, rectangular frame, UI, text, or central object. The app overlays the exact original card. Keep central 45% quiet, empty and dark. Match reference's moderate amount of scenery, but no leafy vines unless appropriate to theme. 2-3 large props at edges, shallow depth and big flat background silhouettes. Large square pixel clusters on a logical 192x80 grid, bold staircase edges, 2-3 flat shades per material, limited palette. No tiny textures, clutter, particles, glows, detailed architectural landscape, reflections, cinematic light, gradients, blur or painterly rendering. Full opaque background."
+    },
+    {
+      "id": "wizard-spell",
+      "generatedFile": "exec-a8e9c930-4a47-44d8-a878-f605bd311b0e.png",
+      "prompt": "Regenerate the attached BACKGROUND ONLY in the same restrained coarse Bro Battles pixel-art style for wizard-spell. Wide 1536x640 (2.4:1). Theme: wizard study; indigo and muted tan palette; two rolled scrolls at left, wooden floor ledge, small bookshelf silhouette at far right. DO NOT draw any collectible card, rectangular frame, UI, text, or central object. The app overlays the exact original card. Keep central 45% quiet, empty and dark. Match reference's moderate amount of scenery, but no leafy vines unless appropriate to theme. 2-3 large props at edges, shallow depth and big flat background silhouettes. Large square pixel clusters on a logical 192x80 grid, bold staircase edges, 2-3 flat shades per material, limited palette. No tiny textures, clutter, particles, glows, detailed architectural landscape, reflections, cinematic light, gradients, blur or painterly rendering. Full opaque background."
+    },
+    {
+      "id": "radiant-ruby",
+      "generatedFile": "exec-d0d27b94-e10c-486c-b784-49bd07158b5b.png",
+      "prompt": "Regenerate the attached BACKGROUND ONLY in the same restrained coarse Bro Battles pixel-art style for radiant-ruby. Wide 1536x640 (2.4:1). Theme: ruby mine; burgundy and charcoal palette; one ruby cluster at left, basalt floor ledge, distant rock silhouettes. DO NOT draw any collectible card, rectangular frame, UI, text, or central object. The app overlays the exact original card. Keep central 45% quiet, empty and dark. Match reference's moderate amount of scenery, but no leafy vines unless appropriate to theme. 2-3 large props at edges, shallow depth and big flat background silhouettes. Large square pixel clusters on a logical 192x80 grid, bold staircase edges, 2-3 flat shades per material, limited palette. No tiny textures, clutter, particles, glows, detailed architectural landscape, reflections, cinematic light, gradients, blur or painterly rendering. Full opaque background."
+    },
+    {
+      "id": "radiant-gold",
+      "generatedFile": "exec-3d029501-2b44-4e4b-bba6-66446adfa015.png",
+      "prompt": "Regenerate the attached BACKGROUND ONLY in the same restrained coarse Bro Battles pixel-art style for radiant-gold. Wide 1536x640 (2.4:1). Theme: treasury alcove; dark brown and warm gold palette; a modest stack of three gold ingots at left, stone floor, simple vault-door silhouette at far right. DO NOT draw any collectible card, rectangular frame, UI, text, or central object. The app overlays the exact original card. Keep central 45% quiet, empty and dark. Match reference's moderate amount of scenery, but no leafy vines unless appropriate to theme. 2-3 large props at edges, shallow depth and big flat background silhouettes. Large square pixel clusters on a logical 192x80 grid, bold staircase edges, 2-3 flat shades per material, limited palette. No tiny textures, clutter, particles, glows, detailed architectural landscape, reflections, cinematic light, gradients, blur or painterly rendering. Full opaque background."
+    },
+    {
+      "id": "mjolnirs-anvil",
+      "generatedFile": "exec-429fa276-7b7c-4b6f-ab4c-6249864f3560.png",
+      "prompt": "Regenerate the attached BACKGROUND ONLY in the same restrained coarse Bro Battles pixel-art style for mjolnirs-anvil. Wide 1536x640 (2.4:1). Theme: storm forge; blue grey palette; one anvil at left, stone platform, a simple mountain silhouette far right with ONE angular blue lightning bolt. DO NOT draw any collectible card, rectangular frame, UI, text, or central object. The app overlays the exact original card. Keep central 45% quiet, empty and dark. Match reference's moderate amount of scenery, but no leafy vines unless appropriate to theme. 2-3 large props at edges, shallow depth and big flat background silhouettes. Large square pixel clusters on a logical 192x80 grid, bold staircase edges, 2-3 flat shades per material, limited palette. No tiny textures, clutter, particles, glows, detailed architectural landscape, reflections, cinematic light, gradients, blur or painterly rendering. Full opaque background."
+    },
+    {
+      "id": "radiant-silver",
+      "generatedFile": "exec-cfff9d03-c392-4cda-86db-4975b0ee1514.png",
+      "prompt": "Regenerate the attached BACKGROUND ONLY in the same restrained coarse Bro Battles pixel-art style for radiant-silver. Wide 1536x640 (2.4:1). Theme: quiet armory; slate blue and silver palette; two stacked silver ingots at left, stone floor ledge, a simple sword rack silhouette at far right. DO NOT draw any collectible card, rectangular frame, UI, text, or central object. The app overlays the exact original card. Keep central 45% quiet, empty and dark. Match reference's moderate amount of scenery, but no leafy vines unless appropriate to theme. 2-3 large props at edges, shallow depth and big flat background silhouettes. Large square pixel clusters on a logical 192x80 grid, bold staircase edges, 2-3 flat shades per material, limited palette. No tiny textures, clutter, particles, glows, detailed architectural landscape, reflections, cinematic light, gradients, blur or painterly rendering. Full opaque background."
+    },
+    {
+      "id": "astral-amethyst",
+      "generatedFile": "exec-0badb265-3910-403e-90c1-81f47c220137.png",
+      "prompt": "Regenerate the attached BACKGROUND ONLY in the same restrained coarse Bro Battles pixel-art style for astral-amethyst. Wide 1536x640 (2.4:1). Theme: purple crystal shrine; dark plum, lavender and slate palette; small amethyst cluster at left, two stepped stone slabs, distant cave silhouettes at edges. DO NOT draw any collectible card, rectangular frame, UI, text, or central object. The app overlays the exact original card. Keep central 45% quiet, empty and dark. Match reference's moderate amount of scenery, but no leafy vines unless appropriate to theme. 2-3 large props at edges, shallow depth and big flat background silhouettes. Large square pixel clusters on a logical 192x80 grid, bold staircase edges, 2-3 flat shades per material, limited palette. No tiny textures, clutter, particles, glows, detailed architectural landscape, reflections, cinematic light, gradients, blur or painterly rendering. Full opaque background."
+    },
+    {
+      "id": "radiant-diamond",
+      "generatedFile": "exec-35eaacad-fcb9-47ee-8aef-74c942f3a0ba.png",
+      "prompt": "Regenerate the attached BACKGROUND ONLY in the same restrained coarse Bro Battles pixel-art style for radiant-diamond. Wide 1536x640 (2.4:1). Theme: ice grotto; navy and pale cyan palette; three chunky ice facets on left edge, icy floor ledge, simple cave silhouettes far right. DO NOT draw any collectible card, rectangular frame, UI, text, or central object. The app overlays the exact original card. Keep central 45% quiet, empty and dark. Match reference's moderate amount of scenery, but no leafy vines unless appropriate to theme. 2-3 large props at edges, shallow depth and big flat background silhouettes. Large square pixel clusters on a logical 192x80 grid, bold staircase edges, 2-3 flat shades per material, limited palette. No tiny textures, clutter, particles, glows, detailed architectural landscape, reflections, cinematic light, gradients, blur or painterly rendering. Full opaque background."
+    },
+    {
+      "id": "radiant-emerald",
+      "generatedFile": "exec-579edcd7-75f9-435a-bb17-f8bd4a7d547b.png",
+      "prompt": "Create ONLY a background scene for the Bro Battles Radiant Emerald shop banner, landscape 1536x640 (2.4:1). The existing collectible card will be overlaid by the app, so DO NOT draw any card, rectangular frame, border, UI, text or central object. Middle ground between detailed illustration and plain solid background: a simple abandoned emerald shrine with three large stepped stone slabs, a small emerald cluster in the far left foreground, two hanging vines at the far upper edges, a flat silhouette of a ruined arch in the far right background. Keep central 45% quiet and empty, dark teal backdrop behind the card. Deliberate COARSE pixel art: visibly large square clusters on a logical 192x80 grid; 2-3 hard-edged flat shades per material; bold dark outlines, limited forest green/teal/slate palette. Flat side-view game background with shallow depth. Moderate scenery, readable at thumbnail size, no clutter, no tiny texture, no particles, no cinematic light, no smooth gradients, no blur or painterly shading. Full opaque scene."
+    }
+  ],
+  "composition": "Generated backgrounds only. Original card art is layered by the shop renderer at its intrinsic aspect ratio."
+}

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../src/client/views/rewardPresentation.js'), 'utf8').replaceAll('export function', 'function');
-const { currencyParticleCount, currencyFlightPlan, currencyRewardImage } = vm.runInNewContext(source + '; ({ currencyParticleCount, currencyFlightPlan, currencyRewardImage })');
+const { currencyParticleCount, currencyFlightPlan, currencyRewardImage, resolveRewardGrants } = vm.runInNewContext(source + '; ({ currencyParticleCount, currencyFlightPlan, currencyRewardImage, resolveRewardGrants })');
 
 test('reward bursts grow with value, remain bounded, and never invent pieces for zero rewards', () => {
   for (const currency of ['coins', 'gems']) {
@@ -34,4 +34,17 @@ test('varied flight curves all arrive at the wallet and finish in a bounded time
     assert.ok(plan.duration + plan.delay < 3400);
     assert.ok(plan.keyframes.every(frame => !/NaN|Infinity/.test(frame.transform)));
   }
+});
+
+test('reward reveals use receipt grants after rotation or catalog changes', () => {
+  const display = [{ kind: 'currency', currency: 'coins', amount: 75, name: 'Coins' }, { kind: 'card', id: 'old-card' }];
+  const grants = resolveRewardGrants([{ kind: 'currency', currency: 'gems', amount: 5 }], display);
+  assert.equal(grants.length, 1);
+  assert.equal(grants[0].currency, 'gems');
+  assert.equal(grants[0].amount, 5);
+  assert.equal(resolveRewardGrants([], display).length, 0);
+  assert.equal(resolveRewardGrants(undefined, display), display);
+  const changed = resolveRewardGrants([{ kind: 'currency', currency: 'coins', amount: 100 }], display);
+  assert.equal(changed[0].name, 'Coins');
+  assert.equal(changed[0].amount, 100);
 });

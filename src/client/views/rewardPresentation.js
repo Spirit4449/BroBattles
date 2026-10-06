@@ -57,3 +57,13 @@ export function rewardSound(grants, rarity) {
   if (rarity === 'legendary') tier = 4;
   return ['rewardCoins', 'rewardGems', 'rewardUnlock', 'rewardEpic', 'rewardLegendary'][tier];
 }
+
+// Receipt grants define what was delivered; tiles provide optional display metadata.
+export function resolveRewardGrants(receiptGrants, displayedGrants = []) {
+  if (!Array.isArray(receiptGrants)) return displayedGrants || [];
+  return receiptGrants.map(grant => {
+    const display = (displayedGrants || []).find(item => item.kind === grant.kind &&
+      (grant.kind === 'currency' ? item.currency === grant.currency : item.id === grant.id));
+    return { name: grant.id || grant.currency || 'Reward', image: '/assets/icons/lock.webp', ...display, ...grant };
+  });
+}

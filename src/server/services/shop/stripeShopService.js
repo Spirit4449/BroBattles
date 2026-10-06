@@ -638,7 +638,7 @@ function createStripeShopService({ db, shopService, stripeClient = null }) {
         coins: Number(walletRows[0]?.coins) || 0,
         gems: Number(walletRows[0]?.gems) || 0,
       },
-      grants: parseJson(rows[0].reward_snapshot, []),
+      grants: shopService.describeGrants(parseJson(rows[0].reward_snapshot, [])),
     };
   }
 

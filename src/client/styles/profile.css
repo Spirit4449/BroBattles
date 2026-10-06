@@ -319,7 +319,7 @@ body.profile-page-body .card-tile {
   box-shadow: var(--bb-card-shadow);
 }
 
-body.profile-page-body .card-tile > img {
+body.profile-page-body .card-tile > :is(img, video, .player-card-canvas) {
   width: 100%;
   aspect-ratio: 650 / 1250;
   display: block;

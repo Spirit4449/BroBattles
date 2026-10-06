@@ -138,3 +138,124 @@ test('results warming requests only the static lobby and its resources', async (
   await env.advance(4000);
   assert.deepEqual(env.calls.map(call => call.url), ['/index.html', '/bundles/index.bundle.0123456789abcdef.js', '/styles/lobby.css']);
 });
+
+const card = (id, bytes = 100000) => ({ animationUrl: `/assets/player-cards/${id}/${id}-animated.webm`, animationBytes: bytes });
+
+test('cards use the gameplay queue, own card first, and share cached blobs across navigation', async () => {
+  const env = setup();
+  const self = card('self'), other = card('other');
+  const ready = [];
+  env.preloader.requestCardAnimation(other, url => ready.push(['other', url]));
+  env.preloader.requestCardAnimation(self, url => ready.push(['self', url]));
+  env.preloader.warmPlayerCard(self);
+  env.preloader.enqueue(['/assets/ninja/spritesheet.webp']);
+  env.preloader.selectMode('bank-bust');
+  env.preloader.start();
+  await env.advance(8000);
+  const paths = env.calls.map(call => call.url);
+  assert.ok(paths.indexOf('/assets/game-sounds/death.mp3') < paths.indexOf(self.animationUrl));
+  assert.ok(paths.indexOf(self.animationUrl) < paths.indexOf(other.animationUrl));
+  assert.deepEqual(ready.map(([id]) => id), ['self', 'other']);
+  assert.ok(ready.every(([, url]) => url.startsWith('blob:')));
+  env.preloader.stop();
+  let cached;
+  env.preloader.requestCardAnimation(self, url => { cached = url; });
+  assert.equal(cached, ready[0][1]);
+  env.preloader.start('cards');
+  await env.advance(3000);
+  assert.equal(env.calls.filter(call => call.url === self.animationUrl).length, 1);
+});
+
+test('gameplay holds prevent video downloads until both visual and audio work finish', async () => {
+  const env = setup();
+  const visual = env.preloader.holdGameplay(), audio = env.preloader.holdGameplay();
+  env.preloader.warmPlayerCard(card('self'));
+  env.preloader.start('cards');
+  await env.advance(3000);
+  assert.equal(env.calls.length, 0);
+  visual();
+  await env.advance(1000);
+  assert.equal(env.calls.length, 0);
+  audio();
+  await env.advance(1000);
+  assert.equal(env.calls.length, 1);
+});
+
+test('slow networks reserve optional downloads for self and data saver stays static', async () => {
+  const env = setup();
+  env.connection.effectiveType = '3g';
+  env.connection.downlink = 1;
+  env.connection.saveData = true;
+  env.preloader.warmPlayerCard(card('self', 100000));
+  env.preloader.requestCardAnimation(card('other', 100000));
+  env.preloader.start('cards');
+  await env.advance(4000);
+  assert.equal(env.calls.length, 0);
+  env.connection.saveData = false;
+  env.listeners.connection();
+  await env.advance(3000);
+  assert.deepEqual(env.calls.map(call => call.url), [card('self').animationUrl]);
+  env.connection.effectiveType = '4g';
+  env.listeners.connection();
+  await env.advance(1000);
+  assert.equal(env.calls.length, 2);
+});
+
+test('new gameplay work aborts an optional download and resumes it after critical assets', async () => {
+  let blocked = true;
+  const env = setup((path, { signal }) => {
+    if (path !== card('self').animationUrl || !blocked) return;
+    return new Promise((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('stopped', 'AbortError'))));
+  });
+  env.preloader.warmPlayerCard(card('self'));
+  env.preloader.start();
+  await env.advance(3500);
+  const first = env.calls.find(call => call.url === card('self').animationUrl);
+  assert.ok(first);
+  env.preloader.enqueue(['/assets/new-map.webp']);
+  assert.equal(first.options.signal.aborted, true);
+  blocked = false;
+  await env.advance(2000);
+  const paths = env.calls.map(call => call.url);
+  assert.ok(paths.indexOf('/assets/new-map.webp') < paths.lastIndexOf(card('self').animationUrl));
+});
+
+test('leaving previews cancels pending work and changing equipped cards discards old warming', async () => {
+  const env = setup();
+  env.preloader.warmPlayerCard(card('old'));
+  env.preloader.warmPlayerCard(card('new'));
+  const cancel = env.preloader.requestCardAnimation(card('hover'));
+  cancel();
+  env.preloader.start('cards');
+  await env.advance(4000);
+  assert.deepEqual(env.calls.map(call => call.url), [card('new').animationUrl]);
+});
+
+test('optional download deadline stays static without retry storms', async () => {
+  const env = setup((path, { signal }) => path.endsWith('.webm') ?
+    new Promise((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('slow', 'AbortError')))) : null);
+  let ready = false;
+  env.preloader.requestCardAnimation(card('slow'), () => { ready = true; });
+  env.preloader.start('cards');
+  await env.advance(15000);
+  assert.equal(ready, false);
+  assert.equal(env.calls.length, 1);
+  assert.equal(env.calls[0].options.signal.aborted, true);
+});
+
+test('deliberate previews load despite low downlink estimates but still wait for gameplay', async () => {
+  const env = setup();
+  env.connection.effectiveType = '3g';
+  env.connection.downlink = 0.3;
+  const release = env.preloader.holdGameplay();
+  const apple = { animationUrl: '/assets/player-cards/royal/royal-animated.mov', animationBytes: 1400000 };
+  let ready;
+  env.preloader.requestCardAnimation(apple, url => { ready = url; }, { interactive: true });
+  env.preloader.start('cards');
+  await env.advance(3000);
+  assert.equal(env.calls.length, 0);
+  release();
+  await env.advance(1000);
+  assert.equal(env.calls.length, 1);
+  assert.match(ready, /^blob:/);
+});

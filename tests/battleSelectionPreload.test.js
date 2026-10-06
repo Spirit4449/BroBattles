@@ -6,12 +6,13 @@ const { mapDefaults } = require('../src/shared/maps');
 const { sceneryUrls } = require('../src/shared/maps/scenery');
 
 function setup() {
-  const state = { urls: [], mode: null };
+  const state = { urls: [], mode: null, card: null };
   const window = { __BB_NAVIGATION__: {
     preload: urls => { state.urls = Array.from(urls); }, selectPreloadMode: mode => { state.mode = mode; },
   } };
   const context = vm.createContext({
     window, mapDefaults, sceneryUrls,
+    warmEquippedPlayerCard: card => { state.card = card; },
     buildCharacterSkinAtlasUrls: (character, skin) => ({ animationsUrl: `/assets/${character}/${skin || 'base'}.json`, spritesheetUrl: `/assets/${character}/${skin || 'base'}.webp` }),
     buildCharacterSkinWeaponUrl: (character, skin) => skin ? `/assets/${character}/${skin}-weapon.webp` : null,
   });
@@ -45,4 +46,15 @@ test('confirmed solo character changes replace stale roster skin assets', () => 
   warm();
   assert.ok(state.urls.includes('/assets/wizard/gold.webp'));
   assert.ok(!state.urls.some(url => /old-custom|ninja/.test(url)));
+});
+
+test('the equipped card warms even before a lobby mode selection is available', () => {
+  const { state, window, warm } = setup();
+  window.__BRO_BATTLES_USERDATA__ = { name: 'self', selected_card_id: 'arena-crown' };
+  warm();
+  assert.equal(state.card, 'arena-crown');
+  assert.deepEqual(state.urls, []);
+  window.__BRO_BATTLES_USERDATA__.selected_card_id = 'default';
+  warm();
+  assert.equal(state.card, 'default');
 });

@@ -161,6 +161,16 @@ function createShopRotationService({ db, timeZone = "America/New_York" }) {
           toMysqlDateTime(natural.nextRefreshAt),
         ],
       );
+      const currentRows = await q(
+        "SELECT * FROM shop_rotation_state WHERE section = ? FOR UPDATE",
+        [normalizedSection],
+      );
+      if (currentRows[0]?.period_key !== natural.periodKey) {
+        await q(
+          "UPDATE shop_rotation_state SET period_key = ?, generation = 0, refreshed_at = NOW(), next_refresh_at = ?, refreshed_by_user_id = NULL WHERE section = ?",
+          [natural.periodKey, toMysqlDateTime(natural.nextRefreshAt), normalizedSection],
+        );
+      }
       await q(
         "UPDATE shop_rotation_state SET period_key = ?, generation = generation + 1, refreshed_at = NOW(), next_refresh_at = ?, refreshed_by_user_id = ? WHERE section = ?",
         [

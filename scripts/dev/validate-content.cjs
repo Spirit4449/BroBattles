@@ -81,6 +81,13 @@ function validateContent({ characters = characterDefinitions, powerups = POWERUP
   }
   for (const cosmetic of cosmetics) {
     if ('price' in cosmetic) errors.push(`${cosmetic.id}: cosmetic price duplicates shop offer pricing`);
+    if (cosmetic.animationUrl) {
+      if (!/^\/assets\/player-cards\/([a-z0-9-]+)\/\1-animated\.webm$/.test(cosmetic.animationUrl)) {
+        errors.push(`${cosmetic.id}: invalid card animation URL`);
+      } else assetExists(cosmetic.animationUrl, cosmetic.id);
+      assetExists(cosmetic.assetUrl, cosmetic.id);
+      if (cosmetic.animationAppleUrl) assetExists(cosmetic.animationAppleUrl, cosmetic.id);
+    }
   }
   errors.push(...validateCatalog(shop).map(error => `shop: ${error}`));
   for (const document of mapDefaults) {

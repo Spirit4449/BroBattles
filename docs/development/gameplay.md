@@ -1,6 +1,18 @@
 # Gameplay
 
+## Wall movement
+
+Wall jumps use the shared movement tuning in `src/shared/physics/movementPhysics.json`. The horizontal kick is 360 px/s, and a 450 ms cooldown spaces successive kicks; the upward kick is unchanged so existing climbs remain reachable. Wall jumps play the character's existing jump frames over roughly 450 ms without slowing ordinary jumps. The wall-slide pose stays visible for 120 ms after natural separation from the wall, while a wall jump or landing replaces it immediately. This pose hold changes presentation only; wall contact, slide friction, and jump input still use the physical state.
+
+When tuning this movement, check repeated wall jumps, narrow wall climbs, dash interruption, and both players' animation timing in a live match. The bot movement simulation reads the same kick and cooldown values.
+
+Wall kicks emit a short burst of segmented white and warm-white horizontal speed lines, matching the fast-fall trail style. Lines spread around the wall contact point and stretch away from it, with a few small dust flecks marking the impact. Local and remote players use the same effect.
+
+The local player's wall jump adds a 3 screen-pixel horizontal camera recoil toward the wall and a subtle 1% zoom in, easing in together over 80 ms and returning over 220 ms. Recoil applies to the final camera render transform, after follow smoothing, dead zones, and bounds, so its strength stays consistent across maps and heights. The zoom pulse uses the current resting view at takeoff; height-based zoom pauses during the pulse and resumes gradually over 220 ms afterward. These combine with aim framing, dash zoom, and damage shake without accumulating drift, and respect reduced-motion preferences. Camera feedback clears on input release, spectating, scene shutdown, or camera destruction.
+
 ## Dash
+
+The local dash camera eases toward a 2.5% zoom-in pulse based on the resting view when the dash begins. Height-based zoom pauses during the burst, then resumes gradually as the pulse fades, keeping upward and downward dashes as readable as horizontal ones across maps. Dash and wall-jump zoom add together; input release, spectating, and scene cleanup clear both effects. Reduced-motion preferences suppress the pulses.
 
 Press Space with WASD or arrow keys to dash in any of eight directions. With no net directional input, dash horizontally in the direction the character faces. Opposing keys cancel on each axis. Diagonals are normalized. W / Up still jump outside a dash; Space no longer jumps.
 
@@ -55,6 +67,8 @@ The party slot UI supports explicit bot slots. Automatic queue filling is separa
 `src/server/core/bots/config.js` owns fill timing and trophy-based difficulty. Ordinary staged seats begin after 5–8.5 seconds; ratings above 3,000 wait at least 20 seconds before staging. Additional seats use randomized intervals. Cohorts are stable by user/party ID. Human grouping preserves ticket/team assignments and assembly revalidates tickets transactionally. Check the matchmaking implementation for the current rating windows and ready-check behavior.
 
 Participants use `participantId` / `isBot`; bots have no account `user_id`. Input identity comes from authenticated sockets. Bots use shared character stats, damage/effects and authoritative projectile runtimes. Results include bot combat statistics, but account rewards go only to humans. Cleanup removes temporary bot participants, never accounts based on names.
+
+Bot battle cards are cosmetic. `src/server/core/bots/playerCards.js` weights the catalog's card rarities by each bot's trophy count, which is generated near the human lobby average. Trophy Road cards appear only once that bot meets their unlock threshold. The bot's saved seed makes its card choice stable from the ready check through match loading; no account ownership or extra database field is involved.
 
 The `src/server/core/bots/` directory owns perception, navigation workers, movement execution, tactics, objectives, profiles and seeded simulation. `characterProfiles.js` defines spacing, aim model and super decisions. Shared map documents supply geometry. Navigation simulates movement and verifies stable landings, including jump/dash routes; actual takeoff state is revalidated. Difficulty scales through trophy anchors up to 4,000, retaining reaction delay, aim error and missed opportunities. Invisible opponents are not tracked by reading their live positions.
 

@@ -1,15 +1,17 @@
 import { mapDefaults } from '../../shared/maps';
 import { buildCharacterSkinAtlasUrls, buildCharacterSkinWeaponUrl } from '../views/skinAssets';
 import { sceneryUrls } from '../../shared/maps/scenery';
+import { warmEquippedPlayerCard } from '../views/playerCardAnimation.cjs';
 
 let lastSelection;
 let lastRoster = [];
 
 export function warmBattleSelection(selection = lastSelection, roster = null) {
+  const self = window.__BRO_BATTLES_USERDATA__;
+  if (self) warmEquippedPlayerCard(self.selected_card_id || self.selectedCardId);
   if (!selection) return;
   lastSelection = selection;
   if (roster) lastRoster = roster;
-  const self = window.__BRO_BATTLES_USERDATA__;
   const members = roster || (lastRoster.length ? lastRoster.map(member =>
     self && member.name === self.name ? { ...member, ...self,
       selected_skin_id: self.selected_skin_id_by_char?.[self.char_class], selected_skin_game_assets: null,

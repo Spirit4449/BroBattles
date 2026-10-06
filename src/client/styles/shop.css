@@ -662,6 +662,19 @@ body.shop-is-open .sonner-wrap {
   transition: filter 220ms ease;
 }
 
+.shop-card-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+}
+
 .shop-banner-scrim {
   position: absolute;
   z-index: 1;
@@ -825,8 +838,78 @@ body.shop-is-open .sonner-wrap {
 }
 
 .shop-offer-footer {
+  position: relative;
   display: block;
   padding: 8px 14px 14px;
+}
+
+.shop-offer-footer.has-discount {
+  padding-top: 14px;
+}
+
+.shop-sale-prices {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.shop-bundle-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shop-bundle-items li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  border: 1px solid rgba(var(--rarity-rgb), 0.55);
+  color: #f5e7be;
+  background: rgba(5, 12, 24, 0.65);
+  font: 700 8px/1.3 "Press Start 2P", monospace;
+}
+
+.shop-bundle-items img {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.shop-original-price {
+  color: rgba(255, 255, 255, 0.48);
+  font: 700 9px/1 "Press Start 2P", monospace;
+  text-decoration-color: rgba(89, 20, 27, 0.95);
+  text-decoration-thickness: 2px;
+}
+
+.shop-sale-discount {
+  position: absolute;
+  z-index: 3;
+  top: -5px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  min-width: 48px;
+  padding: 5px 4px 4px;
+  color: #fff;
+  background: linear-gradient(145deg, #d13bfa, #8419cf);
+  border: 2px solid #ed83ff;
+  box-shadow: 2px 3px 0 #421369, 0 0 9px rgba(202, 72, 255, 0.5);
+  font: 700 10px/1 "Press Start 2P", monospace;
+  transform: rotate(5deg);
+  pointer-events: none;
+}
+
+.shop-sale-discount small {
+  margin-top: 3px;
+  font: 700 7px/1 "Press Start 2P", monospace;
 }
 
 .shop-price-virtual {
@@ -1071,30 +1154,7 @@ body.shop-is-open .sonner-wrap {
   font-size: 10px;
 }
 
-.shop-loading-rune {
-  position: relative;
-  width: 32px;
-  height: 32px;
-  margin-bottom: 6px;
-  border: 2px solid rgba(128, 165, 217, 0.28);
-  border-top-color: #c39bf4;
-  border-right-color: #78b9f6;
-  transform: rotate(45deg);
-  animation: shopRuneSpin 1.2s cubic-bezier(0.6, 0.1, 0.4, 0.9) infinite;
-}
-
-.shop-loading-rune::after {
-  content: "";
-  position: absolute;
-  inset: 7px;
-  border: 1px solid rgba(241, 205, 126, 0.68);
-}
-
-@keyframes shopRuneSpin {
-  to {
-    transform: rotate(405deg);
-  }
-}
+.shop-loading-rune { margin-bottom: 6px; }
 
 .shop-load-error {
   min-height: 360px;
@@ -1980,14 +2040,14 @@ body.shop-is-open .sonner-wrap {
   content: ""; position: absolute; left: 15%; right: 15%; bottom: -1px; height: 2px;
   background: rgba(var(--rarity-rgb), .8); box-shadow: 0 -8px 32px rgba(var(--rarity-rgb), .3);
 }
-.reward-showcase .shop-reveal-art img {
+.reward-showcase .shop-reveal-art :is(img, video, .player-card-canvas) {
   width: 100%; height: 100%; max-width: none; max-height: none;
   object-fit: contain; filter: drop-shadow(0 16px 8px #0007);
 }
-.reward-showcase .shop-reveal-profileIcon .shop-reveal-art img { width: 64%; height: 64%; }
-.reward-showcase .shop-reveal-card .shop-reveal-art img { image-rendering: auto; padding: 5px 0 10px; box-sizing: border-box; }
+.reward-showcase .shop-reveal-profileIcon .shop-reveal-art :is(img, video, .player-card-canvas) { width: 64%; height: 64%; }
+.reward-showcase .shop-reveal-card .shop-reveal-art :is(img, video, .player-card-canvas) { image-rendering: auto; padding: 5px 0 10px; box-sizing: border-box; }
 .reward-showcase .shop-reveal-mode .shop-reveal-art { width: min(100%, 560px); height: clamp(170px, 34vh, 300px); flex: none; }
-.reward-showcase .shop-reveal-mode .shop-reveal-art img { width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; }
+.reward-showcase .shop-reveal-mode .shop-reveal-art :is(img, video, .player-card-canvas) { width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; }
 .reward-showcase .shop-reveal-currencies { display: flex; justify-content: center; gap: 32px; padding: 14px 20px; margin-top: 8px; background: #0209147a; border: 1px solid #6c829529; }
 .reward-showcase .shop-reveal-currencies .shop-reveal-grant { flex: 0 1 auto; flex-direction: row; padding: 0; gap: 14px; }
 .reward-showcase .shop-reveal-currencies .shop-reveal-art { width: 54px; height: 54px; border: 0; background: none; overflow: visible; }
@@ -2028,16 +2088,32 @@ body.shop-is-open .sonner-wrap {
   .reward-showcase, .reward-showcase * { animation: none !important; transition: none !important; }
   .reward-showcase .shop-reveal-rays, .reward-showcase .shop-reveal-shard, .reward-showcase .shop-reveal-origin { display: none; }
 }
-.reward-showcase [data-character="gloop"] .shop-reveal-art img { transform: scale(1.25) translateY(-16%); }
+.reward-showcase [data-character="gloop"] .shop-reveal-art :is(img, video, .player-card-canvas) { transform: scale(1.25) translateY(-16%); }
 .reward-showcase, .reward-showcase * { box-sizing: border-box; }
 
 /* Reward polish: keep the full silhouette and light its actual alpha outline. */
 .reward-showcase .shop-reveal-art { display: flex; align-items: center; justify-content: center; overflow: visible; border: 0; background: none; padding: 12px; }
 .reward-showcase .shop-reveal-art::after { display: none; }
-.reward-showcase .shop-reveal-art img { object-fit: contain; filter: drop-shadow(0 0 14px rgba(var(--rarity-rgb), .48)) drop-shadow(0 0 30px rgba(var(--rarity-rgb), .2)); }
-.reward-showcase [data-character="gloop"] .shop-reveal-art img { transform: none; }
-.reward-showcase .shop-reveal-profileIcon .shop-reveal-art img { width: 85%; height: 85%; }
-.reward-showcase .shop-reveal-card .shop-reveal-art img { padding: 0; }
+.reward-showcase .shop-reveal-art :is(img, video, .player-card-canvas) { object-fit: contain; filter: drop-shadow(0 0 14px rgba(var(--rarity-rgb), .48)) drop-shadow(0 0 30px rgba(var(--rarity-rgb), .2)); }
+.reward-showcase [data-character="gloop"] .shop-reveal-art :is(img, video, .player-card-canvas) { transform: none; }
+.reward-showcase .shop-reveal-profileIcon .shop-reveal-art :is(img, video, .player-card-canvas) { width: 85%; height: 85%; }
+.reward-showcase .shop-reveal-card .shop-reveal-art :is(img, video, .player-card-canvas) { padding: 0; }
+/* Keep card rewards in a centered portrait box, with room for canvas effects. */
+.reward-showcase .shop-reveal-card { justify-content: center; }
+.reward-showcase .shop-reveal-card .shop-reveal-art {
+  width: auto;
+  height: clamp(240px, 52vh, 380px);
+  aspect-ratio: 650 / 1250;
+  flex: none;
+  padding: 0;
+}
+.reward-showcase .shop-reveal-card .shop-reveal-art :is(img, video, .player-card-canvas) {
+  width: 100%;
+  height: 100%;
+}
+.reward-showcase.single-card-reveal .shop-reveal-card .shop-reveal-art {
+  height: clamp(160px, calc(100dvh - 350px), 380px);
+}
 .reward-showcase.currency-only .shop-reveal-currencies .shop-reveal-art { width: clamp(180px, 30vh, 260px); height: clamp(180px, 30vh, 260px); }
 .reward-showcase .shop-reveal-panel > .reward-continue {
   opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .35s ease;
@@ -2049,7 +2125,17 @@ body.shop-is-open .sonner-wrap {
 .reward-showcase .shop-reveal-panel > .reward-continue:active { box-shadow: 0 5px #000, 0 -5px #000, 5px 0 #000, -5px 0 #000, inset 0 5px #0004; }
 .shop-flying-currency { will-change: transform, opacity; }
 @media (max-width:600px) { .reward-showcase .shop-reveal-art { padding: 8px; } }
-.reward-showcase .shop-reveal-art img { --currency-gleam-size: 12px; --currency-bloom-size: 24px; }
+@media (max-width:600px) {
+  .reward-showcase .shop-reveal-card .shop-reveal-art { height: min(42dvh, 300px); padding: 0; }
+  .reward-showcase.single-card-reveal .shop-reveal-card .shop-reveal-art {
+    height: clamp(140px, calc(100dvh - 310px), 300px);
+  }
+  .reward-showcase .shop-reveal-collectibles:has(> :nth-child(3)) .shop-reveal-card .shop-reveal-art {
+    width: 90px;
+    height: 162px;
+  }
+}
+.reward-showcase .shop-reveal-art :is(img, video, .player-card-canvas) { --currency-gleam-size: 12px; --currency-bloom-size: 24px; }
 .reward-showcase.currency-only .shop-reveal-currencies .shop-reveal-art { width: clamp(220px, 34vh, 300px); height: clamp(220px, 34vh, 300px); }
 .reward-showcase.has-collectibles .shop-reveal-currencies .shop-reveal-art { width: 64px; height: 64px; padding: 0; flex: none; }
 @media (max-width: 600px) { .reward-showcase.has-collectibles .shop-reveal-currencies .shop-reveal-art { width: 48px; height: 48px; } }
@@ -2062,6 +2148,83 @@ body.shop-is-open .sonner-wrap {
 
 .shop-section-copy > img[src$="skins-hanger.svg"] { width: 19px; height: 19px; }
 
-.reward-showcase .shop-reveal-mode .shop-reveal-art img {
+.reward-showcase .shop-reveal-mode .shop-reveal-art :is(img, video, .player-card-canvas) {
   width: auto; height: auto; border: 4px solid #000; border-radius: 0; box-sizing: border-box;
 }
+
+.shop-info-icon { width: 20px; height: 20px; display: block; pointer-events: none; }
+
+/* Profile/skin catalogs open at two rows at every responsive column count. */
+.shop-expand { display: none; margin: 18px auto 0; padding: 12px 24px; }
+.shop-section-collapsible:not(.is-expanded) .shop-offer:nth-child(n + 7) { display: none; }
+.shop-section-collapsible:has(.shop-offer:nth-child(7)) > .shop-expand { display: block; }
+@media (max-width: 1080px) {
+  .shop-section-collapsible:not(.is-expanded) .shop-offer:nth-child(n + 5) { display: none; }
+  .shop-section-collapsible:has(.shop-offer:nth-child(5)) > .shop-expand { display: block; }
+}
+@media (max-width: 760px) {
+  .shop-section-collapsible:not(.is-expanded) .shop-offer:nth-child(n + 3) { display: none; }
+  .shop-section-collapsible:has(.shop-offer:nth-child(3)) > .shop-expand { display: block; }
+}
+/* Scene covers contain the complete collectible, including its top ornament. */
+.shop-product-card .shop-banner-art { object-fit: cover; background: #090e1b; }
+
+/* Keep original card pixels separate from the themed background. Never stretch
+   either dimension independently: intrinsic proportions survive every tile size. */
+.shop-original-card {
+  position: absolute;
+  left: 50%;
+  top: 8%;
+  height: 82%;
+  width: auto;
+  max-width: 42%;
+  object-fit: contain;
+  transform: translateX(-50%);
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.shop-collection-complete {
+  padding: 28px 18px;
+  border: 2px solid #71603d;
+  background: #101c2e;
+  box-shadow: inset 0 0 0 4px #18263a;
+}
+.shop-collection-star { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
+.shop-collection-complete :is(strong, p, button) { font-family: var(--bb-font-display, "Press Start 2P", monospace); }
+.shop-collection-complete strong { color: #f4cb67; }
+.shop-collection-complete p { line-height: 1.8; color: #afbed3; }
+
+/* Account-saved unread Shop content. */
+.shop-new-tag {
+  display: inline-block;
+  padding: 5px 7px;
+  background: #d52b3f;
+  color: #fff;
+  border: 2px solid #17111a;
+  box-shadow: 2px 2px 0 #0008;
+  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-size: 8px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+#shop-button > .shop-new-tag {
+  position: absolute;
+  top: -18px;
+  right: -4px;
+  z-index: 3;
+  padding: 4px 6px;
+  line-height: 1.25;
+  text-shadow: none;
+}
+/* Absolute badges leave the centered tab labels and widths unchanged. */
+.shop-tabs .shop-new-tag {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  margin: 0;
+  transform: translateY(-50%);
+}
+.shop-item-new { position: absolute; left: 10px; top: 10px; z-index: 8; }
+.shop-item-new + .shop-offer-badge { top: 38px; }

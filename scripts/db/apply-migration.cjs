@@ -15,6 +15,13 @@ async function requireTables(conn, tables) {
 }
 
 const MIGRATIONS = {
+  'shop-views': {
+    describe: 'Account-saved viewed Shop offers and rotations.',
+    async run(conn) {
+      await conn.query(readMigration('2026-10-06_shop_views.sql'));
+      await requireTables(conn, ['shop_views']);
+    },
+  },
   hardening: {
     describe: 'Battle log, auth sessions, reward commits and webhook inbox.',
     async run(conn) {

@@ -30,6 +30,7 @@
           "maxRange": 117,
           "radius": 117,
           "radiusY": 92,
+          "reticleScale": 0.8,
           "reticleOffsetY": 13,
           "anchorForwardOffset": 0,
           "anchorOffsetY": 13,

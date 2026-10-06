@@ -6,6 +6,9 @@ const {
   GAMER_NAMES,
   createBotParticipants,
 } = require("../src/server/core/bots/identity");
+const { selectBotPlayerCard } = require("../src/server/core/bots/playerCards");
+const { decorateParticipant, loadMatchRoster } = require("../src/server/services/match/matchRosterService");
+const { getPlayerCardsCatalog } = require("../src/server/services/cosmetics/playerCardsCatalog");
 const {
   stagedSeatCount,
   difficultyForTrophies,
@@ -248,6 +251,31 @@ test("ordinary bot identities have no accounts, support troll/guest/real names, 
     difficultyForTrophies(2000).reactionMaxMs <
       difficultyForTrophies(0).reactionMinMs,
   );
+});
+
+test("bot cards follow catalog rarity and trophy road access, then survive roster reload", async () => {
+  const catalog = getPlayerCardsCatalog();
+  const rarityById = new Map(catalog.cards.map((card) => [card.id, card.rarity]));
+  const samples = (trophies) => Array.from({ length: 1000 }, (_, seed) =>
+    selectBotPlayerCard(seed, trophies));
+  const novice = samples(0);
+  const skilled = samples(4000);
+  const elite = samples(10000);
+  assert.ok(novice.some((id) => id !== catalog.defaultCardId));
+  assert.ok(novice.every((id) => ["common", "rare"].includes(rarityById.get(id))));
+  assert.ok(skilled.filter((id) => rarityById.get(id) === "epic").length >
+    novice.filter((id) => rarityById.get(id) === "epic").length);
+  assert.ok(skilled.every((id) => rarityById.get(id) !== "legendary"));
+  assert.ok(elite.some((id) => rarityById.get(id) === "legendary"));
+  assert.ok(elite.filter((id) => rarityById.get(id) === "legendary").length < elite.length / 2);
+
+  const bot = { participant_id: "bot:test", isBot: true, name: "Bot", team: "team2",
+    char_class: "ninja", level: 2, trophies: 10000, seed: 67 };
+  const readyCard = decorateParticipant(bot).selected_card_id;
+  const [reloaded] = await loadMatchRoster({ runQuery: async (sql) =>
+    sql.includes("match_bot_participants") ? [bot] : [] }, 1);
+  assert.equal(reloaded.selected_card_id, readyCard);
+  assert.equal(selectBotPlayerCard(bot.seed, bot.trophies), readyCard);
 });
 
 test("safe patrol brakes at edges; jump, one-way collision, wall jump and knockback are physical", () => {

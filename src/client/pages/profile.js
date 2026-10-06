@@ -1,5 +1,6 @@
 import { escapeHtml } from "../../shared/site/html.cjs";
-import { createPlayerCardTile } from "../views/playerCardTile.js";
+import { createPlayerCardTile, comparePlayerCardsByRarity } from "../views/playerCardTile.js";
+import { warmEquippedPlayerCard } from "../views/playerCardAnimation.cjs";
 import { wireEmailSettings } from "../account/emailSettings.js";
 import "../styles/profile.css";
 import "../styles/levelBadge.css";
@@ -101,7 +102,7 @@ function renderCardsGrid() {
 
   const ownedCards = (cardsCatalog?.cards || []).filter((card) =>
     owned.has(String(card?.id || "")),
-  );
+  ).sort(comparePlayerCardsByRarity);
   if (!ownedCards.length) {
     grid.innerHTML = "<p>No player cards owned yet. Find them in the Shop.</p>";
     return;
@@ -135,6 +136,7 @@ function renderCardsGrid() {
             selectedCardId:
               ownedRes.selectedCardId || profileRes.profile.selectedCardId,
           };
+          warmEquippedPlayerCard(profileData.selectedCardId);
           renderProfile(profileData);
           renderCardsGrid();
         } catch (err) {
@@ -278,6 +280,7 @@ async function boot() {
         [],
     };
 
+    warmEquippedPlayerCard(profileData.selectedCardId);
     renderProfile(profileData);
     wireEmailSettings(fetchJson, profileData);
     renderCardsGrid();

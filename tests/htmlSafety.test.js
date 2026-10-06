@@ -11,9 +11,9 @@ test("HTML text and quoted attributes preserve text without creating markup", ()
 });
 
 test("catalog artwork stays inside the local assets directory", () => {
-  const fallback = "/assets/player-cards/default.webp";
+  const fallback = "/assets/player-cards/default/default.webp";
   for (const value of ["javascript:alert(1)", "https://example.com/a.webp", "//example.com/a.webp", "/assets/../../account", "/assets/%2e%2e/account", "/assets/\\evil", "/assets/a\nb.webp", null]) {
     assert.equal(assetUrl(value), fallback, String(value));
   }
-  assert.equal(assetUrl("/assets/player-cards/default.webp?v=2"), "/assets/player-cards/default.webp?v=2");
+  assert.equal(assetUrl("/assets/player-cards/default/default.webp?v=2"), "/assets/player-cards/default/default.webp?v=2");
 });

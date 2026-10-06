@@ -139,28 +139,10 @@
   text-align: center;
   animation: lobby-loading-appear 180ms 500ms both;
 }
-.bb-loading-rune {
-  position: relative;
-  box-sizing: border-box;
-  width: 32px;
-  height: 32px;
-  border: 2px solid var(--bb-border);
-  border-top-color: #c39bf4;
-  border-right-color: #78b9f6;
-  transform: rotate(45deg);
-  animation: bbLoadingRuneSpin 1.2s cubic-bezier(.6,.1,.4,.9) infinite;
-}
-.bb-loading-rune::after {
-  content: "";
-  position: absolute;
-  inset: 7px;
-  border: 1px solid var(--bb-gold);
-}
 .lobby-loading-label { max-width: 30ch; margin-top: 14px; }
 @keyframes lobby-loading-appear { from { opacity: 0; } to { opacity: 1; } }
-@keyframes bbLoadingRuneSpin { to { transform: rotate(405deg); } }
 @media (prefers-reduced-motion: reduce) {
-  #lobby-area[data-loading] > #lobby-loading, .bb-loading-rune { animation: none; }
+  #lobby-area[data-loading] > #lobby-loading { animation: none; }
   .loading-fill { transition: none; }
   .bb-loading-retry:active { transform: none; }
 }

@@ -13,6 +13,7 @@ import {
 import { buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
 import { LEVEL_CAP, DEFAULT_CHARACTER } from "../../../shared/characters/characterStats.js";
 import { renderLevelBadge } from "../../views/levelBadgeView.js";
+import { disposePlayerCardMedia, layerPlayerCardMedia, createPlayerCardMedia, positionPlayerCardCanvas, warmEquippedPlayerCard } from "../../views/playerCardAnimation.cjs";
 
 function getSelectionFromGameData(gameData) {
   return normalizeGameSelection({
@@ -38,6 +39,16 @@ export function createGameHudController({
 } = {}) {
   const teamRows = new Map(); // name -> { row }
   let cardCatalog = null;
+  const preparedCards = new Map();
+  let cardsDisposed = false;
+  function clearPreparedCards() {
+    for (const { media } of preparedCards.values()) disposePlayerCardMedia(media);
+    preparedCards.clear();
+  }
+  window.__BB_PAGE_SCOPE__?.onDispose(() => {
+    cardsDisposed = true;
+    clearPreparedCards();
+  });
   let cardCatalogFetchPromise = null;
   let countdownRunning = false;
   let pregameActive = false;
@@ -60,7 +71,7 @@ export function createGameHudController({
         {
           id: "default",
           name: "Default Card",
-          assetUrl: "/assets/player-cards/default.webp",
+          assetUrl: "/assets/player-cards/default/default.webp",
         },
       ],
     };
@@ -109,26 +120,28 @@ export function createGameHudController({
     return list[0] || _fallbackCatalog().cards[0];
   }
 
-  function _createPlayerCardElement({ player, username, side, catalog }) {
+  function _createPlayerCardElement({ player, side, catalog, index = 0 }) {
     const root = document.createElement("div");
     root.className = `bs-player-card ${side === "your" ? "your" : "opp"}`;
 
     const card = _resolveCard(catalog, player?.selected_card_id);
 
-    const floatDuration = 3.8 + Math.random() * 2.2;
-    const floatDelay = -Math.random() * floatDuration;
-    root.style.setProperty("--float-duration", `${floatDuration.toFixed(2)}s`);
-    root.style.setProperty("--float-delay", `${floatDelay.toFixed(2)}s`);
+    root.style.setProperty("--card-delay", `${index * 70}ms`);
 
-    const frame = document.createElement("img");
+    const prepared = preparedCards.get(player?.name);
+    preparedCards.delete(player?.name);
+    if (prepared && prepared.cardId !== card.id) disposePlayerCardMedia(prepared.media);
+    const media = prepared?.cardId === card.id ? prepared.media : createPlayerCardMedia(card);
+    const frame = layerPlayerCardMedia(media);
     frame.className = "bs-card-frame";
-    frame.src = card?.assetUrl || "/assets/player-cards/default.webp";
     frame.alt = card?.name || "Player Card";
+    positionPlayerCardCanvas(frame, card, { battle: true });
 
     const nameEl = document.createElement("div");
     nameEl.className = "bs-card-player-name";
     const nm = String(player?.name || "Player");
-    nameEl.textContent = nm + (nm === username ? " (You)" : "");
+    nameEl.textContent = nm;
+    nameEl.title = nm;
 
     const trophyRow = document.createElement("div");
     trophyRow.className = "bs-card-trophies";
@@ -172,12 +185,12 @@ export function createGameHudController({
       sprite.src = buildCharacterSkinBodyUrl(cls, "");
       sprite.alt = cls;
     } else {
-      sprite.src = card?.assetUrl || "/assets/player-cards/default.webp";
+      sprite.src = card?.assetUrl || "/assets/player-cards/default/default.webp";
       sprite.alt = "default";
     }
     sprite.onerror = () => {
       sprite.onerror = null;
-      sprite.src = card?.assetUrl || "/assets/player-cards/default.webp";
+      sprite.src = card?.assetUrl || "/assets/player-cards/default/default.webp";
     };
     spriteWrap.appendChild(sprite);
 
@@ -200,14 +213,17 @@ export function createGameHudController({
       <div class="bs-card-stat-pill" title="Health">
         <img src="/assets/icons/heart.webp" alt="Health" class="bs-card-stat-icon">
         <span class="bs-card-stat-number">${healthValue}</span>
+        <span class="bs-card-stat-label" aria-hidden="true">HP</span>
       </div>
       <div class="bs-card-stat-pill" title="Attack">
         <img src="/assets/icons/attack.webp" alt="Attack" class="bs-card-stat-icon">
         <span class="bs-card-stat-number">${damageValue}</span>
+        <span class="bs-card-stat-label" aria-hidden="true">ATK</span>
       </div>
       <div class="bs-card-stat-pill" title="Special">
         <img src="/assets/icons/special.webp" alt="Special" class="bs-card-stat-icon">
         <span class="bs-card-stat-number">${specialValue}</span>
+        <span class="bs-card-stat-label" aria-hidden="true">SP</span>
       </div>`;
 
     root.appendChild(frame);
@@ -259,7 +275,7 @@ export function createGameHudController({
       return;
     }
 
-    const px = Math.max(1, Math.min(245, Math.floor(resolvedSize)));
+    const px = Math.max(1, Math.min(270, Math.floor(resolvedSize)));
     root.style.setProperty("--bs-card-size", `${px}px`);
   }
 
@@ -308,7 +324,6 @@ export function createGameHudController({
     if (!root) return null;
 
     const gameData = _gameData();
-    const username = _username();
     const selection = getSelectionFromGameData(gameData);
 
     const mapBgAsset =
@@ -354,30 +369,32 @@ export function createGameHudController({
     );
 
     const renderPlayers = (catalog) => {
+      const self = (players || []).find(player => player.name === _username());
+      if (self) warmEquippedPlayerCard(_resolveCard(catalog, self.selected_card_id));
       if (yourCol) yourCol.innerHTML = "";
       if (oppCol) oppCol.innerHTML = "";
 
       const yourNodes = [];
       const oppNodes = [];
 
-      yourTeam.forEach((p) => {
+      yourTeam.forEach((p, index) => {
         if (!yourCol) return;
         const node = _createPlayerCardElement({
           player: p,
-          username,
           side: "your",
           catalog,
+          index,
         });
         yourCol.appendChild(node);
         yourNodes.push(node);
       });
-      oppTeam.forEach((p) => {
+      oppTeam.forEach((p, index) => {
         if (!oppCol) return;
         const node = _createPlayerCardElement({
           player: p,
-          username,
           side: "opp",
           catalog,
+          index,
         });
         oppCol.appendChild(node);
         oppNodes.push(node);
@@ -390,10 +407,11 @@ export function createGameHudController({
       requestAnimationFrame(() => _syncCardWrapState(root));
     };
 
-    renderPlayers(cardCatalog || _fallbackCatalog());
+    const renderedCatalog = cardCatalog || _fallbackCatalog();
+    renderPlayers(renderedCatalog);
     _ensureCardCatalog().then((catalog) => {
       const stillVisible = !root.classList.contains("hidden");
-      if (!stillVisible) return;
+      if (!stillVisible || catalog === renderedCatalog) return;
       renderPlayers(catalog || _fallbackCatalog());
     });
 
@@ -1018,6 +1036,7 @@ export function createGameHudController({
   }
 
   function hideBattleStartOverlay() {
+    clearPreparedCards();
     const overlay = document.getElementById("battle-start-overlay");
     if (!overlay) return;
     const wrap = overlay.querySelector(".bs-wrap");
@@ -1050,7 +1069,20 @@ export function createGameHudController({
     pregameActive = !!active;
     document.body?.classList.toggle("match-pregame", pregameActive);
     // Cards appear the moment the countdown starts; fetch their art now.
-    if (pregameActive) void _ensureCardCatalog();
+    if (pregameActive) void _ensureCardCatalog().then(catalog => {
+      if (cardsDisposed || !pregameActive || countdownRunning) return;
+      clearPreparedCards();
+      const players = _gameData()?.players || [];
+      const self = players.find(player => player.name === _username());
+      if (self) warmEquippedPlayerCard(_resolveCard(catalog, self.selected_card_id));
+      for (const player of players) {
+        const card = _resolveCard(catalog, player.selected_card_id);
+        preparedCards.set(player.name, {
+          cardId: card.id,
+          media: createPlayerCardMedia(card, { prepare: true }),
+        });
+      }
+    });
   }
 
   /**

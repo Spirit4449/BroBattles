@@ -5,6 +5,42 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('../src/client/navigation/pageScope.js', import.meta.url), 'utf8');
 const { createPageScope } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 
+test('disconnected observers leave screen cleanup and rejoin when reused', async () => {
+  const originalWindow = globalThis.window, originalDocument = globalThis.document;
+  const records = [];
+  class Observer {
+    constructor() { this.disconnects = 0; this.targets = []; records.push(this); }
+    observe(target) { this.targets.push(target); }
+    disconnect() { this.disconnects++; }
+  }
+  globalThis.document = new EventTarget();
+  globalThis.window = Object.assign(new EventTarget(), {
+    location: {}, setTimeout, clearTimeout, setInterval, clearInterval,
+    requestAnimationFrame: fn => setTimeout(fn, 1), cancelAnimationFrame: clearTimeout,
+    ResizeObserver: Observer, MutationObserver: Observer, IntersectionObserver: Observer,
+  });
+  try {
+    const scope = createPageScope(() => {});
+    for (const name of ['ResizeObserver', 'MutationObserver', 'IntersectionObserver']) {
+      const retired = new scope[name]();
+      retired.observe('closed-preview');
+      retired.disconnect();
+      const reused = new scope[name]();
+      reused.observe('first-preview');
+      reused.disconnect();
+      reused.observe('second-preview');
+    }
+    await scope.dispose();
+    assert.deepEqual(records.map(observer => observer.disconnects), [1, 2, 1, 2, 1, 2],
+      'only live/reused observers should receive another disposal call');
+    records[1].observe('retired-screen');
+    assert.deepEqual(records[1].targets, ['first-preview', 'second-preview']);
+  } finally {
+    globalThis.window = originalWindow;
+    globalThis.document = originalDocument;
+  }
+});
+
 test('screen lifetimes support repeated navigation without stale work', async () => {
   const originalWindow = globalThis.window;
   const originalDocument = globalThis.document;

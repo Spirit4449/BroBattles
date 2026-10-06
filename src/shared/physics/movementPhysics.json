@@ -14,7 +14,7 @@
   "jumpLaunchSpeedMult": 0.96,
   "jumpBoost": 12,
   "coyoteTimeMs": 130,
-  "wallJumpCooldownMs": 320,
+  "wallJumpCooldownMs": 450,
   "wallSlideMaxFallSpeed": 120,
   "wallSlideBrakeFallSpeed": 75,
   "wallSlideSnapDistance": 10,

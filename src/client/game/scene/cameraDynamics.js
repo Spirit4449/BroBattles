@@ -6,6 +6,57 @@ function clamp(value, min, max) {
 
 const LIGHT_HIT_DAMAGE_LIMIT = 2000;
 const MAX_SHAKE_DAMAGE = 6000;
+const WALL_JUMP_RECOIL_IN_MS = 80;
+const WALL_JUMP_RECOIL_OUT_MS = 220;
+const WALL_JUMP_RECOIL_PX = 3;
+const WALL_JUMP_ZOOM_RATIO = 0.01;
+
+function resetMovementCameraFeedback(scene, cam) {
+  scene._wallJumpCameraKick = null;
+  scene._wallJumpCameraOffsetX = 0;
+  cam.setZoom(cam.zoom - (scene._wallJumpCameraZoom || 0) - (scene._dashCameraZoom || 0));
+  scene._dashCameraZoom = 0;
+  scene._dashCameraBaseZoom = null;
+  scene._wallJumpCameraZoom = 0;
+  scene._movementZoomRecoveryMs = WALL_JUMP_RECOIL_OUT_MS;
+}
+
+function bindMovementCameraFeedback(scene, cam) {
+  if (scene._movementCameraCleanup || !cam.on) return;
+  // The renderer emits this after follow, dead-zone, bounds and shake updates.
+  // Matrix translation is in screen pixels, independent of camera zoom.
+  const render = () => {
+    if (scene._spectatorModeActive) {
+      resetMovementCameraFeedback(scene, cam);
+      return;
+    }
+    cam.matrix.e -= scene._wallJumpCameraOffsetX || 0;
+  };
+  const cleanup = () => {
+    cam.off('prerender', render);
+    cam.off('cameradestroy', cleanup);
+    scene.events?.off('shutdown', cleanup);
+    resetMovementCameraFeedback(scene, cam);
+    scene._movementCameraCleanup = null;
+  };
+  cam.on('prerender', render);
+  cam.once('cameradestroy', cleanup);
+  scene.events?.once('shutdown', cleanup);
+  scene._movementCameraCleanup = cleanup;
+}
+
+export function triggerWallJumpCameraKick(scene, direction) {
+  if (!scene?.cameras?.main || !Number.isFinite(direction) || direction === 0) return;
+  const cam = scene.cameras.main;
+  bindMovementCameraFeedback(scene, cam);
+  scene._wallJumpCameraKick = {
+    direction: Math.sign(direction), elapsedMs: 0,
+    startOffsetX: scene._wallJumpCameraOffsetX || 0,
+    startZoom: scene._wallJumpCameraZoom || 0,
+    baseZoom: cam.zoom - (scene._dashCameraZoom || 0) - (scene._wallJumpCameraZoom || 0),
+  };
+  scene._movementZoomRecoveryMs = 0;
+}
 
 function smoothstep(value) {
   const t = clamp(value, 0, 1);
@@ -33,19 +84,67 @@ export function updateDynamicCamera(scene, player) {
   const reducedMotion = typeof window !== 'undefined' &&
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const previousDashZoom = scene._dashCameraZoom || 0;
-  const dashTarget = player._dash && !reducedMotion ? targetZoom * 0.025 : 0;
+  const baseZoom = cam.zoom - previousDashZoom - (scene._wallJumpCameraZoom || 0);
+  const dashing = !!player._dash && !reducedMotion;
+  if (dashing) {
+    if (scene._dashCameraBaseZoom == null) {
+      scene._dashCameraBaseZoom = baseZoom;
+      bindMovementCameraFeedback(scene, cam);
+    }
+    scene._movementZoomRecoveryMs = 0;
+  } else {
+    scene._dashCameraBaseZoom = null;
+  }
+  // Match the visible view at dash start, rather than the changing height target.
+  const dashTarget = dashing ? scene._dashCameraBaseZoom * 0.025 : 0;
   const dashBlend = 1 - Math.exp(-Math.min(100, scene.game.loop.delta || 16.67) /
     (dashTarget ? 55 : 180));
   const dashZoom = previousDashZoom + (dashTarget - previousDashZoom) * dashBlend;
-  const baseZoom = cam.zoom - previousDashZoom;
-  cam.setZoom(baseZoom + (targetZoom - baseZoom) * 0.05 + dashZoom);
-  scene._dashCameraZoom = dashZoom;
 
   const aim = scene._combatAimLook || { x: 0, y: 0 };
   const blend = 1 - Math.exp(-Math.min(100, scene.game.loop.delta || 16.67) / 140);
   // Camera follow already eases movement; keep this extra aim filter brief.
   const aimBlend = 1 - Math.exp(-Math.min(100, scene.game.loop.delta || 16.67) / 160);
   const previous = scene._aimCameraShift || { x: 0, y: 0 };
+  const kick = scene._wallJumpCameraKick;
+  let recoil = 0;
+  let wallJumpZoom = 0;
+  if (kick) {
+    kick.elapsedMs += Math.max(0, scene.game.loop.delta || 16.67);
+    if (!reducedMotion) {
+      const peak = -kick.direction * WALL_JUMP_RECOIL_PX;
+      const zoomPeak = kick.baseZoom * WALL_JUMP_ZOOM_RATIO;
+      if (kick.elapsedMs < WALL_JUMP_RECOIL_IN_MS) {
+        const progress = smoothstep(kick.elapsedMs / WALL_JUMP_RECOIL_IN_MS);
+        recoil = kick.startOffsetX + (peak - kick.startOffsetX) * progress;
+        wallJumpZoom = kick.startZoom + (zoomPeak - kick.startZoom) * progress;
+      } else {
+        const remaining = 1 - smoothstep((kick.elapsedMs - WALL_JUMP_RECOIL_IN_MS) / WALL_JUMP_RECOIL_OUT_MS);
+        recoil = peak * remaining;
+        wallJumpZoom = zoomPeak * remaining;
+      }
+    }
+    if (reducedMotion || kick.elapsedMs >= WALL_JUMP_RECOIL_IN_MS + WALL_JUMP_RECOIL_OUT_MS) {
+      scene._wallJumpCameraKick = null;
+    }
+  }
+  // Freeze the resting zoom during the pulse so ascent cannot cancel it.
+  // Resume height tracking gradually afterward, without a catch-up snap.
+  let restingZoom = baseZoom;
+  if (kick && !reducedMotion) restingZoom = kick.baseZoom;
+  else if (dashing) restingZoom = scene._dashCameraBaseZoom;
+  if ((!kick || reducedMotion) && !dashing) {
+    const delta = Math.max(0, scene.game.loop.delta || 16.67);
+    const recovery = reducedMotion ? WALL_JUMP_RECOIL_OUT_MS : Math.min(WALL_JUMP_RECOIL_OUT_MS,
+      (scene._movementZoomRecoveryMs ?? WALL_JUMP_RECOIL_OUT_MS) + delta);
+    scene._movementZoomRecoveryMs = recovery;
+    const zoomBlend = (1 - Math.pow(0.95, delta / (1000 / 60))) * smoothstep(recovery / WALL_JUMP_RECOIL_OUT_MS);
+    restingZoom += (targetZoom - restingZoom) * zoomBlend;
+  }
+  cam.setZoom(restingZoom + dashZoom + wallJumpZoom);
+  scene._dashCameraZoom = dashZoom;
+  scene._wallJumpCameraZoom = wallJumpZoom;
+  // Only aim affects follow and bounds; recoil is applied by the renderer.
   const shift = {
     x: previous.x + (aim.x - previous.x) * aimBlend,
     y: previous.y + (aim.y - previous.y) * aimBlend,
@@ -58,6 +157,7 @@ export function updateDynamicCamera(scene, player) {
       bounds.width, bounds.height);
   }
   scene._aimCameraShift = shift;
+  scene._wallJumpCameraOffsetX = recoil;
   scene._resetAimCameraBounds = () => {
     const offset = scene._aimCameraShift;
     if (!offset) return;
@@ -67,6 +167,7 @@ export function updateDynamicCamera(scene, player) {
     }
     cam.setFollowOffset(0, cam.followOffset.y + offset.y);
     scene._aimCameraShift = null;
+    resetMovementCameraFeedback(scene, cam);
   };
   cam.setFollowOffset(
     -shift.x,

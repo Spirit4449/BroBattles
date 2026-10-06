@@ -1,3 +1,4 @@
+import { warmEquippedPlayerCard } from "../views/playerCardAnimation.cjs";
 import { revealLobby, watchLobbyLoading, showLobbyLoadError } from "../lobby/lobbyReveal.js";
 import { setPartyButtonLabel } from "../lobby/party/partyButtonLabel.js";
 import { createLazyInitializer, deferLobbySetup } from "../lobby/deferredSetup.js";
@@ -269,6 +270,7 @@ const statusPromise = (returnStatus ? Promise.resolve(returnStatus) : fetch("/st
       userData = data.userData;
       userData.isAdmin = !!data.isAdmin;
       window.__BRO_BATTLES_USERDATA__ = userData;
+      warmEquippedPlayerCard(userData.selected_card_id || userData.selectedCardId);
       guest = data.guest;
       newGuestCreated = !!data.newlyCreated && !!data.guest;
 
@@ -475,6 +477,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const ensureShop = createLazyInitializer(() => initializeShop({
     userData,
     guest,
+    onOpenProfile: () => profilePopup.open(),
     onWalletChange: (wallet) => {
       userData.coins = wallet.coins;
       userData.gems = wallet.gems;
@@ -523,7 +526,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         history.replaceState(null, '', url.pathname + url.search + url.hash);
       }
     },
-    ensureShop,
+    () => ensureShop().refreshNotifications(),
     refreshTrophyClaimAvailability,
     () =>
       initializeLobbyHints({

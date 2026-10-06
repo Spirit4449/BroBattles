@@ -45,6 +45,79 @@ share one concurrent download and a 24 MiB session budget. Hidden tabs, data
 saver, and 2G connections pause warming; navigation cancels it. Failed downloads
 retry up to three times, and pauses do not consume retries.
 
+Card animation downloads share this queue and its 24 MiB session budget. They
+run after queued gameplay assets, one at a time, with the equipped local card
+ahead of other cards. Lobby status and successful equip changes warm that card;
+battle confirms the local selection before requesting roster media. Completed
+videos live in an 8 MiB navigation-owned blob cache and survive lobby/game
+transitions. Media elements receive only completed blob URLs, never remote video
+URLs that could independently compete with Phaser downloads.
+
+Apple browsers use HEVC-with-alpha MOV variants with no B frames. Most cards
+use full-quality alpha and a one-second keyframe interval; Crown of the Arena
+uses the approved smaller export with alpha quality 0.6, a 192-frame keyframe
+interval, and a 360 kbit/s target. The importer despills green
+and zeros fully transparent RGB before encoding to prevent edge contamination.
+Profile and reward presentation boxes fit the catalog card viewport; their
+effect canvases can overflow. Scrollable shop previews contain the full effect
+canvas in a taller artwork box so sparks cannot clip against the header or rarity
+caption. Posters and playing videos use identical geometry. Other browsers use VP9 WebM.
+Before visible playback, the renderer decodes a transparent corner into a canvas
+and checks its alpha; a decoder that drops transparency leaves the poster in place.
+During the pregame flythrough, the HUD prepares the roster's actual video elements,
+including the alpha check and `preload="auto"`, then mounts those same elements
+when the countdown starts. Preparation follows selected gameplay assets and
+respects gameplay download holds and speculative network limits; it never delays
+the server countdown. The local selection is warmed before preparing the roster.
+Only deliberate previews and reward reveals bypass transfer-time estimates.
+Profile hero cards loop when visible and restart from time zero each time a
+profile is opened, including when the same card/video element is reused.
+Selection cards start on their first hover/focus and keep looping after the
+pointer/focus leaves (while visible).
+Shop offers containing cards have an info button opening a native preview dialog.
+The preview uses the canonical `bb-popup` header, square frame tokens,
+`bb-close` control, and shared popup dismissal motion from `ui-system.css`.
+Each preview card shows its rarity beneath the art. Closing a preview immediately
+disposes its media and unregisters its page-disposal callback, including a close
+before visibility observers have seen the dialog. Disconnected observers also
+unregister from the page scope, and register again when reused.
+The same renderer is used by purchase/Trophy Road unlock reveals.
+
+Cards display an independent static image underneath the video. A decoded-frame
+callback starts a short video fade-in; the still remains until the fade finishes.
+Stopping, waiting, or decoding failure restores the still before hiding the
+video. Both layers share the same geometry. Visible selection tiles prepare
+optional animation before hover or keyboard focus, without playing it. Loaded
+previews pause and retain their source/decoder between plays; removal, page
+disposal, or decoding failure releases the source. Offscreen tiles and hidden
+tabs stop playback and unsubscribe pending requests. Reduced motion keeps posters. Data saver and 2G block optional
+downloads; 3G permits only the local player's card when its estimated transfer
+fits five seconds. Other cards need an estimated transfer within 2.5 seconds.
+Estimates use declared animation bytes, connection downlink when available, and
+observed queue throughput. Browsers without network estimates try a bounded
+low-priority request with the same time limits. Failures keep posters without
+holding up gameplay or repeatedly retrying the same request.
+
+`node scripts/dev/test-generated-html.cjs` checks actual card playback, poster
+alignment, decoded green-spill pixels on Shuriken/Amethyst/Anvil/Wizard (including
+later orb and particle effects), hover/visibility behavior,
+preview effect bounds and cleanup, and reward reveals. Use `--preview-layout`
+or `--reward-layout` for focused desktop/mobile layout checks. Playwright is
+required; `NODE_PATH` and `CHROME_EXECUTABLE` can select existing installations.
+
+Explicit hover/focus, profile viewing, info previews, and unlock reveals allow
+up to 20 seconds and bypass estimated-speed rejection, while still respecting
+gameplay priority, byte budgets, data saver and 2G restrictions. This prevents
+conservative browser downlink estimates from silently blocking requested previews.
+Deliberate previews follow selected gameplay assets but precede the speculative
+shared-asset manifest; the actual Phaser loading hold still blocks them.
+
+Route loading suspends warming. Phaser holds optional card downloads through
+visual loading and the deferred audio queue, releasing on audio completion or
+scene teardown. A cached animation can still play during those holds. New
+gameplay warming preempts an in-flight card download. The game-ready event starts
+the optional queue without awaiting it or adding cards to game-loader progress.
+
 The results screen calls `warmLobby()` to download the static lobby template and
 its bundles/styles. It never pre-joins a party. On actual return,
 `prepareLobbyReturn(fallbackPartyId)` obtains fresh `/status`, resolves the current
@@ -98,6 +171,33 @@ an estimate. Compare cold and warm runs and inspect `/status` and `/partydata`
 in the network panel when checking a deployment.
 
 ## Rendering and loading
+
+Indeterminate loading uses the shared `.bb-battle-loader` in
+`public/styles/ui-system.css`: steel pixel blades clash around a gold spark. Only their
+inset guard gems use the logo’s ice/cobalt-blue and gold/orange palettes. The transparent two-cell sprite sheet lives at
+`public/assets/ui/loading-swords.webp`; its source prompt is recorded beside it.
+Shop/checkout, lobby recovery, Trophy Road, leaderboard, account forms, and help
+search share the same emblem. Set `--bb-loader-size` for compact inline contexts;
+keep it decorative with `aria-hidden="true"` beside the loading label. Reduced
+motion displays still crossed blades. Battle/route progress bars retain their
+determinate percentage display.
+
+The pre-battle player cards use the equipped cosmetic frame with a shared inset
+for the player name, trophies, larger fighter portrait, level badge, and labeled
+combat stats. Blue/coral accents distinguish teams. Cards and fighter portraits
+remain still after their entrance unless the equipped frame has an
+`animationUrl`; those transparent videos loop, with still posters for
+reduced-motion users. Fighter portraits remain still.
+`gameHudController.js` fits both teams to the available space and staggers each
+team's reveal; `public/styles/game.css` owns the pixel grid
+and entrance styling. Reduced-motion preferences disable overlay animations and
+transitions. Battle frames use a single uniform scale to fit their measured visible
+bounds inside the shared card box, preserving the original artwork's aspect
+ratio. All cards receive a 10% uniform reduction, except Shuriken Strike at 5%.
+Frames remain centered, and posters and videos share the same geometry.
+Art importers refresh these measurements when replacing an asset. When adjusting
+the layout, preview every cosmetic frame in solo and full-team matches at desktop
+and phone sizes (`node scripts/dev/test-generated-html.cjs --battle-layout`).
 
 The game uses `Phaser.AUTO`: WebGL when supported, Canvas otherwise. Characters,
 map objects, particles, animations, and effects use ordinary Phaser APIs in both
@@ -162,6 +262,8 @@ Opponent movement uses `src/client/game/audio/remoteMovementAudio.js`: terrain-s
 ## Lobby and match audio
 
 `public/assets/music/lobby-aligned.mp3` is the supplied 決戦の鐘 lobby render. `matchmaking-aligned.mp3` is the supplied lower-pitched 決戦の鐘 (0.76x) render. They stream through two persistent HTML audio elements owned by navigation; party changes preserve playback. Both play continuously, with the inactive version silent, keeping memory use bounded without decoding both full songs into Web Audio buffers.
+
+The lobby pair and sudden death music remain encoded as MP3 at 128 kbit/s stereo or 64 kbit/s mono. Bank Bust, Candyland, and the default map music use 96 kbit/s stereo; Mangrove and Serenity use 56 kbit/s mono. The lobby pair's alignment timing is unchanged.
 
 `src/client/navigation/lobbyAudio.mjs` uses the original version in the lobby and the relaxed version during ready, searching, found, and loading. It waits for the next quarter-note boundary and crossfades over approximately one beat. Cancellation switches back using the same rule. Both versions use the same base level, multiplied by the user's music setting. New matchmaking participants play `/assets/player-join.wav`; your own arrival, the initial roster, reordering, and repeated updates are silent. Match found and loading do not play a sound effect. Party join notifications also use the player-join cue. There is no runtime speed change, pitch shift, or low-pass filtering. If the relaxed stream is unavailable, the original continues until it can switch; media errors fall back to the available stream.
 

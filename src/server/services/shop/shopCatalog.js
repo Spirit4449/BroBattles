@@ -1,3 +1,4 @@
+const { buildOfferIndexes } = require("./shopOfferRules");
 const fs = require("fs");
 const path = require("path");
 const { createCatalogLoader, deepFreeze } = require("../../lib/catalogLoader");
@@ -43,7 +44,7 @@ function validateGrant(grant, location, errors) {
     if (!CURRENCIES.has(String(grant?.currency || ""))) {
       errors.push(`${location}: unknown currency`);
     }
-    if (!Number.isInteger(Number(grant?.amount)) || Number(grant?.amount) <= 0) {
+    if (!Number.isSafeInteger(grant?.amount) || Number(grant?.amount) <= 0) {
       errors.push(`${location}: currency amount must be a positive integer`);
     }
     return;
@@ -79,6 +80,17 @@ function validateCatalog(raw) {
       String(entry?.id || ""),
     ),
   );
+  if (!Array.isArray(raw?.sections) || !raw.sections.length) errors.push("sections must not be empty");
+  const sectionIds = new Set();
+  for (const section of Array.isArray(raw?.sections) ? raw.sections : []) {
+    if (!/^[a-z][a-z0-9-]*$/.test(section?.id || "") || sectionIds.has(section.id)) errors.push("sections must have unique valid ids");
+    sectionIds.add(section?.id);
+    if (!section?.name || typeof section.name !== "string") errors.push("sections require a name");
+    if (!/^\/assets\/shop\/icons\/[a-z0-9-]+\.(webp|svg)$/.test(section?.icon || "") || !fs.existsSync(path.join(PUBLIC_PATH, String(section?.icon || "")))) errors.push("sections require a local shop icon");
+    if (section?.rotation != null && !["sales", "dailies"].includes(section.rotation)) errors.push("sections have an unsupported rotation");
+  }
+  if (!sections.has("sales") || !sections.has("dailies")) errors.push("sections require sales and dailies");
+  if (!Array.isArray(raw?.offers)) errors.push("offers must be an array");
   const seen = new Set();
   const offers = Array.isArray(raw?.offers) ? raw.offers : [];
 
@@ -91,6 +103,11 @@ function validateCatalog(raw) {
     }
     if (seen.has(id)) errors.push(`${at}: duplicate id`);
     seen.add(id);
+    if (id !== offer?.id) errors.push(`${at}: id must not contain whitespace`);
+    if (!["item", "bundle", "currency-pack"].includes(offer?.kind)) errors.push(`${at}: unsupported offer kind`);
+    if (!offer?.name || typeof offer.name !== "string") errors.push(`${at}: name is required`);
+    if (offer?.section === "dailies") errors.push(`${at}: use rotation.dailies.rewards for daily offers`);
+    if (offer?.saleDiscountPercent != null && (!Number.isInteger(offer.saleDiscountPercent) || offer.saleDiscountPercent < 0 || offer.saleDiscountPercent > 90)) errors.push(`${at}: saleDiscountPercent must be an integer from 0 to 90`);
     if (!sections.has(String(offer?.section || ""))) {
       errors.push(`${at}: unknown section`);
     }
@@ -101,18 +118,23 @@ function validateCatalog(raw) {
       if (!CURRENCIES.has(String(price.currency || ""))) {
         errors.push(`${at}: invalid virtual currency`);
       }
-      if (!Number.isInteger(Number(price.amount)) || Number(price.amount) <= 0) {
+      if (!Number.isSafeInteger(price.amount) || Number(price.amount) <= 0) {
         errors.push(`${at}: invalid virtual price`);
       }
     } else if (
       String(price.currency || "").toLowerCase() !== "usd" ||
-      !Number.isInteger(Number(price.amountCents)) ||
+      !Number.isSafeInteger(price.amountCents) ||
       Number(price.amountCents) < 50
     ) {
       errors.push(`${at}: invalid USD price`);
     }
     const grants = Array.isArray(offer?.grants) ? offer.grants : [];
     if (!grants.length) errors.push(`${at}: at least one grant is required`);
+    if (offer?.kind === "item" && (grants.length !== 1 || grants[0]?.kind === "currency")) errors.push(`${at}: item offers require one cosmetic; use bundle for multiple grants`);
+    if (offer?.kind === "currency-pack" && grants.some(grant => grant?.kind !== "currency")) errors.push(`${at}: currency-pack must grant currency only`);
+    const grantKeys = grants.map(grant => `${grant?.kind}:${grant?.id || grant?.currency}`);
+    if (new Set(grantKeys).size !== grantKeys.length) errors.push(`${at}: duplicate grants must be combined`);
+    if (price.type === "money" && (offer?.purchaseLimit !== "unlimited" || offer?.eligibility != null)) errors.push(`${at}: real-money offers require unlimited purchases and no eligibility rules`);
     grants.forEach((grant, grantIndex) =>
       validateGrant(grant, `${at}.grants[${grantIndex}]`, errors),
     );
@@ -127,6 +149,8 @@ function validateCatalog(raw) {
     }
     validateBanner(offer?.banner, `${at}.banner`, errors);
     if (offer?.eligibility?.requiresNotOwned) {
+      const required = offer.eligibility.requiresNotOwned;
+      if (required.kind === "currency" || !grants.some(grant => grant?.kind === required.kind && grant?.id === required.id)) errors.push(`${at}: requiresNotOwned must reference an included cosmetic`);
       validateGrant(
         offer.eligibility.requiresNotOwned,
         `${at}.eligibility.requiresNotOwned`,
@@ -143,7 +167,7 @@ function validateCatalog(raw) {
     dailyRewards.forEach((reward, rewardIndex) => {
       const grants = Array.isArray(reward?.grants) ? reward.grants : [];
       const rewardId = String(reward?.id || "").trim();
-      if (!rewardId) {
+      if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(rewardId) || rewardId !== reward?.id || seen.has(rewardId)) {
         errors.push(`daily reward ${rewardIndex}: id is required`);
       }
       if (seenDailyIds.has(rewardId)) {
@@ -168,66 +192,46 @@ function validateCatalog(raw) {
     });
   }
 
-  const referencedSales = [
-    ...(raw?.rotation?.sales?.pinnedOfferIds || []),
-    ...(raw?.rotation?.sales?.promotedOfferIds || []),
-  ];
+  const sales = raw?.rotation?.sales || {};
+  const referencedSales = [];
+  for (const key of ["pinnedOfferIds", "promotedOfferIds"]) {
+    if (!Array.isArray(sales[key])) errors.push(`rotation.sales.${key} must be an array`);
+    else referencedSales.push(...sales[key]);
+  }
+  if (new Set(referencedSales).size !== referencedSales.length) errors.push("rotation.sales references duplicate offers");
+  if (!Number.isSafeInteger(sales.promotedCount) || sales.promotedCount < 0) errors.push("rotation.sales.promotedCount must be a nonnegative integer");
+  const discountPercent = raw?.rotation?.sales?.discountPercent;
+  if (!Number.isInteger(discountPercent) || discountPercent < 0 || discountPercent > 90) {
+    errors.push("rotation.sales.discountPercent must be an integer from 0 to 90");
+  }
   for (const offerId of referencedSales) {
     if (!seen.has(String(offerId))) {
       errors.push(`rotation.sales references unknown offer ${String(offerId)}`);
+    } else if (offers.find((offer) => offer?.id === offerId)?.price?.type !== "virtual") {
+      errors.push(`rotation.sales offer ${String(offerId)} must have a virtual price`);
     }
+  }
+  const standaloneKeys = new Set();
+  for (const [index, offer] of offers.entries()) {
+    if (offer?.section === "sales" && !referencedSales.includes(offer.id)) errors.push(`offers[${index}]: sales offer must be pinned or promoted`);
+    if (offer?.kind !== "item" || offer.grants?.length !== 1) continue;
+    const grant = offer.grants[0];
+    const key = `${grant?.kind}:${grant?.id}`;
+    if (standaloneKeys.has(key)) errors.push(`offers[${index}]: duplicate standalone cosmetic offer`);
+    standaloneKeys.add(key);
   }
   return errors;
 }
 
 function buildValidatedCatalog(raw, errors) {
-  const invalidOfferIndexes = new Set(
-    errors
-      .map((message) => message.match(/offers\[(\d+)\]/)?.[1])
-      .filter((value) => value != null)
-      .map(Number),
-  );
-  const invalidDailyIndexes = new Set(
-    errors
-      .map((message) => message.match(/daily reward (\d+)/)?.[1])
-      .filter((value) => value != null)
-      .map(Number),
-  );
+  if (!errors.length) return { ...raw };
   return {
-    ...raw,
-    timezone: errors.some((error) => error.startsWith("timezone "))
-      ? FALLBACK_TIMEZONE
-      : raw.timezone,
-    rotation: {
-      ...(raw?.rotation || {}),
-      dailies: {
-        ...(raw?.rotation?.dailies || {}),
-        rewards: (
-          Array.isArray(raw?.rotation?.dailies?.rewards)
-            ? raw.rotation.dailies.rewards
-            : []
-        ).filter((_reward, index) => !invalidDailyIndexes.has(index)),
-      },
-    },
-    offers: (Array.isArray(raw?.offers) ? raw.offers : []).filter(
-      (_offer, index) => !invalidOfferIndexes.has(index),
-    ),
+    version: raw?.version,
+    timezone: FALLBACK_TIMEZONE,
+    sections: [],
+    offers: [],
+    rotation: { dailies: { rewards: [] }, sales: { pinnedOfferIds: [], promotedOfferIds: [], promotedCount: 0, discountPercent: 0 } },
   };
-}
-
-function buildOfferIndexes(catalog) {
-  const offerById = new Map();
-  const offerByGrant = new Map();
-  for (const offer of catalog.offers) {
-    const id = String(offer?.id || "");
-    if (!offerById.has(id)) offerById.set(id, offer);
-    if (offer?.kind === "bundle") continue;
-    for (const grant of offer?.grants || []) {
-      const key = `${String(grant?.kind || "")}:${String(grant?.id || "")}`;
-      if (!offerByGrant.has(key)) offerByGrant.set(key, offer);
-    }
-  }
-  return { offerById, offerByGrant };
 }
 
 function loadValidatedCatalog() {

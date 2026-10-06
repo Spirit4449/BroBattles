@@ -1,12 +1,14 @@
 const { normalizeSelectionFromRow } = require("./gameSelectionCatalog");
 const { normalizeSelectedSkinMap, resolveSelectedSkinId, buildSkinAssetUrl, getSkinGameAssets } = require("../cosmetics/skinsCatalog");
 const { characterLevel } = require("../../core/bots/identity");
+const { selectBotPlayerCard } = require("../../core/bots/playerCards");
 
 function decorateParticipant(p) {
   const selected = resolveSelectedSkinId({ character: p.char_class,
     selectedSkinMap: p.isBot ? {} : normalizeSelectedSkinMap(p.selected_skin_id_by_char) });
   return { ...p, participantId: p.participantId || `user:${p.user_id}`, isBot: p.isBot === true,
     level: characterLevel(p), selected_skin_id: selected,
+    selected_card_id: p.isBot ? selectBotPlayerCard(p.seed, p.trophies) : p.selected_card_id,
     selected_skin_asset_url: buildSkinAssetUrl(p.char_class, selected),
     selected_skin_game_assets: getSkinGameAssets(p.char_class, selected) };
 }

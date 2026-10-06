@@ -21,10 +21,11 @@ class PageRuntimePlugin {
         for (const folder of ['movement', 'tombstones']) {
           const dir = path.join(root, folder);
           if (fs.existsSync(dir)) for (const file of fs.readdirSync(dir)) {
-            if (/\.(webp|mp3|wav)$/.test(file) && fs.statSync(path.join(dir, file)).size < 1024 * 1024) urls.push(`/assets/${folder}/${file}`);
+            if (/\.(webp|mp3|wav|ogg)$/.test(file) && fs.statSync(path.join(dir, file)).size < 1024 * 1024) urls.push(`/assets/${folder}/${file}`);
           }
         }
-        urls.push(...['coin.webp', 'gem.webp', 'spectate.webp', 'death.mp3', 'you-death.mp3', 'damage.mp3', 'win.mp3', 'lose.mp3', 'noammo.mp3', 'coin.mp3', 'gem.mp3'].map(name => `/assets/${name}`));
+        urls.push(...['coin.webp', 'gem.webp', 'spectate.webp'].map(name => `/assets/icons/${name}`));
+        urls.push(...['beep.mp3', 'start.mp3', 'death.mp3', 'you-death.mp3', 'damage.mp3', 'win.mp3', 'lose.mp3', 'noammo.mp3', 'nosuper.mp3', 'coin.mp3', 'gem.mp3'].map(name => `/assets/game-sounds/${name}`));
         compilation.emitAsset('battle-preload.json', new compiler.webpack.sources.RawSource(JSON.stringify(urls)));
       });
     });

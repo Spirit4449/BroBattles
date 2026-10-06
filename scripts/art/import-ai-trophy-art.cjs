@@ -42,11 +42,11 @@ function paste(src, box, dst, x, y, w, h) {
 for(const [name,target] of jobs) {
   const dir=path.join(root,'public/assets',target);
   const card=target.startsWith('player-cards');
-  fs.mkdirSync(card?path.dirname(dir):dir,{recursive:true});
-  const sourceFile=card?`${dir}-ai-source.png`:path.join(dir,'ai-source.png');
+  fs.mkdirSync(dir,{recursive:true});
+  const sourceFile=path.join(dir,'ai-source.png');
   fs.copyFileSync(path.join(sources,name),sourceFile);
   const src=read(sourceFile);
-  if(card) { save(src,`${dir}.webp`); continue; }
+  if(card) { save(src,path.join(dir,`${path.basename(dir)}.webp`)); continue; }
   const ninja=target.startsWith('ninja'), cell=ninja?72:128, cols=ninja?8:10;
   const sheet=blank(ninja?576:1280,ninja?648:512);
   const rows=ninja?[0,182,351,518,686,855]:[0,220,410,605,793];

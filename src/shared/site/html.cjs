@@ -6,7 +6,7 @@ function escapeHtml(value) {
 }
 
 // Catalog artwork is served from our assets directory, never arbitrary URLs.
-function assetUrl(value, fallback = "/assets/player-cards/default.webp") {
+function assetUrl(value, fallback = "/assets/player-cards/default/default.webp") {
   const raw = String(value ?? "");
   if (!raw.startsWith("/assets/") || /[\\\x00-\x20]/.test(raw)) return fallback;
   try {

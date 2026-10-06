@@ -101,6 +101,7 @@ export function initializeHelpSearch() {
   const findingLabel = document.createTextNode('');
   finding.className = 'site-ai-finding';
   finding.setAttribute('aria-label', 'Finding results');
+  findingIcon.className = 'bb-battle-loader';
   findingIcon.setAttribute('aria-hidden', 'true');
   finding.append(findingIcon, findingLabel);
   finding.hidden = true;

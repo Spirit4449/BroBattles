@@ -1,0 +1,116 @@
+[
+  {
+    "id": "astral-amethyst",
+    "crf": 36,
+    "outputWidth": 720,
+    "posterQuality": 92,
+    "appleBitrate": "900k",
+    "appleAlphaQuality": 0.8,
+    "appleKeyframeInterval": 144,
+    "despillMix": 0,
+    "name": "Astral Amethyst",
+    "rarity": "legendary",
+    "gems": 200,
+    "viewport": {
+      "width": 1080,
+      "height": 1920,
+      "x": 222,
+      "y": 326,
+      "w": 636,
+      "h": 1234
+    },
+    "preserveGreen": false
+  },
+  {
+    "id": "mjolnirs-anvil",
+    "despillMix": 0,
+    "name": "Mjolnir’s Anvil",
+    "rarity": "rare",
+    "gems": 50,
+    "viewport": {
+      "width": 1080,
+      "height": 1920,
+      "x": 226,
+      "y": 328,
+      "w": 628,
+      "h": 1214
+    },
+    "preserveGreen": false
+  },
+  {
+    "id": "radiant-diamond",
+    "name": "Radiant Diamond",
+    "rarity": "common",
+    "gems": 25,
+    "viewport": {
+      "width": 1080,
+      "height": 1920,
+      "x": 208,
+      "y": 327,
+      "w": 665,
+      "h": 1269
+    },
+    "preserveGreen": true
+  },
+  {
+    "id": "radiant-emerald",
+    "name": "Radiant Emerald",
+    "rarity": "common",
+    "gems": 25,
+    "preserveGreen": true,
+    "viewport": {
+      "width": 1080,
+      "height": 1920,
+      "x": 210,
+      "y": 325,
+      "w": 660,
+      "h": 1271
+    }
+  },
+  {
+    "id": "radiant-gold",
+    "name": "Radiant Gold",
+    "rarity": "common",
+    "gems": 25,
+    "viewport": {
+      "width": 1080,
+      "height": 1920,
+      "x": 214,
+      "y": 327,
+      "w": 652,
+      "h": 1264
+    },
+    "preserveGreen": true
+  },
+  {
+    "id": "radiant-ruby",
+    "name": "Radiant Ruby",
+    "rarity": "common",
+    "gems": 25,
+    "viewport": {
+      "width": 1080,
+      "height": 1920,
+      "x": 212,
+      "y": 329,
+      "w": 656,
+      "h": 1264
+    },
+    "preserveGreen": true
+  },
+  {
+    "id": "wizard-spell",
+    "despillMix": 0,
+    "name": "Wizard Spell",
+    "rarity": "rare",
+    "gems": 50,
+    "viewport": {
+      "width": 1080,
+      "height": 1920,
+      "x": 234,
+      "y": 384,
+      "w": 614,
+      "h": 1116
+    },
+    "preserveGreen": false
+  }
+]

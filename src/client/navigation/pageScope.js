@@ -125,7 +125,24 @@ export function createPageScope(navigate) {
   for (const name of ['ResizeObserver', 'MutationObserver', 'IntersectionObserver']) {
     scope[name] = window[name] && function (...args) {
       const observer = new window[name](...args);
-      onDispose(() => observer.disconnect());
+      const disconnect = observer.disconnect.bind(observer);
+      const register = () => onDispose(() => observer.disconnect());
+      let unregister = register();
+      // Closed previews disconnect their observers before the screen ends.
+      // Release the scope's references too, and register again if reused.
+      observer.disconnect = () => {
+        unregister?.();
+        unregister = null;
+        disconnect();
+      };
+      if (observer.observe) {
+        const observe = observer.observe.bind(observer);
+        observer.observe = (...args) => {
+          if (!active) return;
+          unregister ||= register();
+          return observe(...args);
+        };
+      }
       return observer;
     };
   }

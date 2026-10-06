@@ -9,6 +9,42 @@ const root = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
+test("pregame cards preserve speculative network limits and prioritize the local selection", async () => {
+  const exported = {}, requests = [], warmed = [];
+  const cards = [{ id: 'default' }, { id: 'self-card' }, { id: 'opponent-card' }];
+  const code = babel.transformSync(read("src/client/game/hud/gameHudController.js"), {
+    babelrc: false, configFile: false,
+    presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  }).code;
+  vm.runInNewContext(code, {
+    exports: exported,
+    require: name => name.includes('playerCardAnimation') ? {
+      warmEquippedPlayerCard(card) { warmed.push(card.id); },
+      createPlayerCardMedia(card, options) {
+        requests.push({ id: card.id, ...options });
+        assert.deepEqual(warmed, ['self-card'], 'warm self before preparing any roster media');
+        return {};
+      },
+    } : {},
+    fetch: async () => ({ ok: true, json: async () => ({ catalog: { cards, defaultCardId: 'default' } }) }),
+    window: { addEventListener() {} },
+    document: { body: { classList: { toggle() {} } } },
+  });
+  const hud = exported.createGameHudController({
+    getUsername: () => 'self',
+    getGameData: () => ({ players: [
+      { name: 'opponent', selected_card_id: 'opponent-card' },
+      { name: 'self', selected_card_id: 'self-card' },
+    ] }),
+  });
+  hud.setPregameActive(true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(requests, [
+    { id: 'opponent-card', prepare: true }, { id: 'self-card', prepare: true },
+  ]);
+  assert.ok(requests.every(request => !request.interactive));
+});
+
 test("final countdown cue plays once alongside FIGHT and enabling input", () => {
   const exported = {}, calls = [], preloaded = [], timers = [];
   const countdown = { style: {}, textContent: '' };

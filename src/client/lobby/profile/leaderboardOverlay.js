@@ -69,7 +69,7 @@ export async function openLeaderboardOverlay(profilePopup) {
   const container = document.getElementById("leaderboard-list");
   if (container)
     container.innerHTML = `<div class="leaderboard-state leaderboard-loading-state">
-        <span class="leaderboard-loading-mark" aria-hidden="true"></span>
+        <span class="leaderboard-loading-mark bb-battle-loader" aria-hidden="true"></span>
         <strong>Loading standings</strong>
         <span>Checking the latest rankings...</span>
       </div>`;

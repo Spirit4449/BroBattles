@@ -31,7 +31,7 @@ function getSaleHintPrice(price) {
   const currency = price.currency === "coins" ? "coins" : "gems";
   return {
     text: Math.max(0, Number(price.amount) || 0).toLocaleString(),
-    icon: `/assets/${currency === "coins" ? "coin" : "gem"}.webp`,
+    icon: `/assets/icons/${currency === "coins" ? "coin" : "gem"}.webp`,
   };
 }
 

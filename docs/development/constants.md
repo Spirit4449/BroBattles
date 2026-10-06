@@ -101,7 +101,7 @@ The local player, the server's movement validation, and the bot physics all read
 | `stats.specialChargeHits` | Basic hits needed to fill the super. |
 | `stats.specialChargePerHit` | Charge a super hit gives back, as a fraction of one basic hit. |
 | `stats.spriteScale`, `stats.body` | Render scale and hitbox shrink and offset. Defaults are in `characterTuning.js` (`CHARACTER_BODY_DEFAULTS`). |
-| `stats.tuning.attack.aim`, `stats.tuning.special.aim` | Aim reticle shape and range. Draven's inferno also uses its `aim.radius` as its damage radius. |
+| `stats.tuning.attack.aim`, `stats.tuning.special.aim` | Aim reticle shape and range. `reticleScale` shrinks a round reticle visually without changing range or damage. Draven's inferno also uses its `aim.radius` as its damage radius. |
 | `stats.tuning.attack.<name>` | Basic-attack projectile or melee numbers (speed, range, radius, timings). |
 | `stats.tuning.special.<name>` | Super numbers, for example `ninja.swarm`, `draven.inferno` (now includes `damageTickMs`, `damageScale`, `minDamagePerTick`, `firstDamageDelayMs`, `bobWaveMs`), `wizard.arcaneSurge` (`powerScale`, `durationScale`, `castMs`, `beamMs`, `teammateBlockedPowerups`, `fallbackPowerup`), `gloop.hook`, and Thorg's `rageDurationMs` / `rageModifiers` / `knockback`. |
 | `presentation` | Client-only visual settings (art scale, animation locks, dash poses). |

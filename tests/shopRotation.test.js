@@ -95,4 +95,7 @@ test("manual refresh advances the global generation without changing the natural
   assert.equal(initial.cycleKey, "week:2026-08-31:g0");
   assert.equal(refreshed.cycleKey, "week:2026-08-31:g1");
   assert.equal(refreshed.nextRefreshAt, initial.nextRefreshAt);
+  await service.forceRefresh("sales", 42, now);
+  const nextWeek = await service.forceRefresh("sales", 42, new Date("2026-09-07T12:00:00.000Z"));
+  assert.equal(nextWeek.cycleKey, "week:2026-09-07:g1", "manual refresh resets the previous period generation first");
 });

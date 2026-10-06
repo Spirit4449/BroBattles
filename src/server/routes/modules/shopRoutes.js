@@ -26,6 +26,20 @@ function registerShopRoutes({ app, requireCurrentUser, shopService, stripeShopSe
     }
   });
 
+  app.post("/api/shop/viewed", async (req, res) => {
+    try {
+      const user = await requireCurrentUser(req, res);
+      if (!user) return res.status(401).json({ success: false, error: "Not authenticated" });
+      return res.json(await shopService.markViewed({
+        userId: user.user_id,
+        rotations: req.body?.rotations,
+        offerIds: req.body?.offerIds,
+      }));
+    } catch (error) {
+      return sendShopError(res, error, "Unable to save viewed shop content.");
+    }
+  });
+
   app.post("/api/shop/claim-daily", async (req, res) => {
     try {
       const user = await requireCurrentUser(req, res);
@@ -49,6 +63,8 @@ function registerShopRoutes({ app, requireCurrentUser, shopService, stripeShopSe
         await shopService.purchaseVirtual({
           userId: user.user_id,
           offerId: req.body?.offerId,
+          expectedPrice: req.body?.expectedPrice,
+          expectedCurrency: req.body?.expectedCurrency,
           idempotencyKey: req.body?.idempotencyKey,
         }),
       );

@@ -1,4 +1,5 @@
-import { createPlayerCardTile } from "../../views/playerCardTile.js";
+import { createPlayerCardTile, comparePlayerCardsByRarity } from "../../views/playerCardTile.js";
+import { restartPlayerCardMedia, warmEquippedPlayerCard, presentPlayerCardMedia, createPlayerCardMedia } from "../../views/playerCardAnimation.cjs";
 import { wireEmailSettings } from "../../account/emailSettings.js";
 import {
   buildProfileIconAlt,
@@ -57,7 +58,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       if (defaultCard?.assetUrl) return defaultCard;
       return {
         name: "Player Card",
-        assetUrl: "/assets/player-cards/default.webp",
+        assetUrl: "/assets/player-cards/default/default.webp",
       };
     };
 
@@ -88,9 +89,13 @@ export function createProfileController({ getUserData, onProfileRendered }) {
     const heroCardFrame = document.getElementById("profile-hero-card-frame");
     if (heroCardFrame) {
       const selectedCard = resolveSelectedCard();
-      heroCardFrame.src =
-        selectedCard?.assetUrl || "/assets/player-cards/default.webp";
-      heroCardFrame.alt = selectedCard?.name || "Selected player card";
+      if (heroCardFrame.dataset.cardId !== selectedCard.id) {
+        const media = presentPlayerCardMedia(createPlayerCardMedia(selectedCard, { interactive: true }), selectedCard);
+        media.id = heroCardFrame.id;
+        media.className = heroCardFrame.className;
+        media.dataset.cardId = selectedCard.id;
+        heroCardFrame.replaceWith(media);
+      }
     }
     const avatarTrigger = document.getElementById("profile-hero-avatar-trigger");
     const cardTrigger = document.getElementById("profile-hero-card-trigger");
@@ -200,7 +205,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
 
     const ownedCards = catalogCards.filter((card) =>
       owned.has(String(card?.id || "")),
-    );
+    ).sort(comparePlayerCardsByRarity);
 
     if (!ownedCards.length) {
       grid.innerHTML =
@@ -226,6 +231,9 @@ export function createProfileController({ getUserData, onProfileRendered }) {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ cardId }),
             });
+
+            if (getUserData()) getUserData().selected_card_id = cardId;
+            warmEquippedPlayerCard(cardId);
 
             await loadProfilePopupData(true);
           } catch (err) {
@@ -410,6 +418,8 @@ export function createProfileController({ getUserData, onProfileRendered }) {
             : [];
           lobbyProfileState.selectedCardId =
             ownedRes?.selectedCardId || profile?.selectedCardId || null;
+          if (getUserData()) getUserData().selected_card_id = lobbyProfileState.selectedCardId;
+          warmEquippedPlayerCard(lobbyProfileState.selectedCardId);
           lobbyProfileState.ownedProfileIconIds = Array.isArray(
             iconOwnedRes?.ownedIconIds,
           )
@@ -518,6 +528,9 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       setProfilePopupMessage("Loading profile...");
       try {
         await loadProfilePopupData(true);
+        // Each profile opening starts its animation anew, even when the hero
+        // reuses the same equipped card and already-loaded video element.
+        restartPlayerCardMedia(document.getElementById("profile-hero-card-frame")?.querySelector("video"));
         overlay.classList.remove("hidden");
         overlay.setAttribute("aria-hidden", "false");
         setProfilePopupMessage("");

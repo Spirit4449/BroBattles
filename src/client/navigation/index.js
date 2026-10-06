@@ -279,7 +279,7 @@ function ready() {
   if (document.body.dataset.bbScreen === 'lobby') {
     lobbyAudio.enterLobby();
     preloader.start('battle');
-  }
+  } else preloader.start('cards');
 }
 function fail(error) {
   if (routeFailed) return;
@@ -571,6 +571,9 @@ window.__BB_NAVIGATION__ = {
   lobbyAudio,
   setLobbyNavigator(fn) { lobbyNavigator = fn; }, scope, scriptScope, runInline, navigate, getAudioContext,
   preload: preloader.enqueue, selectPreloadMode: preloader.selectMode,
+  requestCardAnimation: preloader.requestCardAnimation,
+  warmPlayerCard: preloader.warmPlayerCard,
+  holdGameplayDownloads: preloader.holdGameplay,
   warmLobby() { preloader.start('lobby'); },
   async prepareLobbyReturn(fallbackPartyId) {
     const routeVersion = sequence;
@@ -588,6 +591,7 @@ window.__BB_NAVIGATION__ = {
     return lobbyReturn.prepare(fallbackPartyId);
   },
   async beginBattleLoading() {
+    preloader.stop();
     const ticket = sequence;
     if (!transitionArtworkReady) await prepareTransitionArtwork();
     if (ticket !== sequence) return;

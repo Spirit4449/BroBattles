@@ -30,6 +30,54 @@ test('wall kick restarts jump exactly once and a landing resets the airborne gua
   animation.resetAirborneJumpAnimation(sprite);play();assert.equal(calls.at(-1)[1],false);
 });
 
+test('wall jump plays the jump frames more slowly and restores normal playback afterward', () => {
+  const jump = { frameRate: 24, frames: Array.from({ length: 6 }, () => ({})) };
+  const scene = { anims: { get: () => jump } };
+  const sprite = { body: { touching: { down: false } }, anims: {
+    timeScale: 1, currentAnim: null, isPlaying: true,
+    play(key) { this.currentAnim = { key }; },
+  } };
+  const play = logical => animation.playCharacterAnimation({
+    scene, sprite, character: 'thorg', logical,
+    resolveAnimKey: (_scene, _character, wanted) => `thorg-${wanted}`,
+  });
+  animation.markWallJumpAnimation(sprite);
+  play('jumping');
+  assert.ok(sprite.anims.timeScale < 1);
+  play('falling');
+  assert.equal(sprite.anims.timeScale, 1);
+  animation.resetAirborneJumpAnimation(sprite);
+  play('jumping');
+  assert.equal(sprite.anims.timeScale, 1);
+});
+
+test('wall-slide pose lingers after separation but yields immediately to a wall jump or landing', () => {
+  const sprite = {};
+  assert.equal(animation.holdWallSlidePose(sprite, { sliding: true, now: 1000 }), true);
+  assert.equal(animation.holdWallSlidePose(sprite, { now: 1001 }), true);
+  assert.equal(animation.holdWallSlidePose(sprite, { now: 1100 }), true);
+  assert.equal(animation.holdWallSlidePose(sprite, { now: 2000 }), false);
+  animation.holdWallSlidePose(sprite, { sliding: true, now: 3000 });
+  animation.markWallJumpAnimation(sprite, 3001);
+  assert.equal(animation.holdWallSlidePose(sprite, { now: 3002 }), false);
+  animation.holdWallSlidePose(sprite, { sliding: true, now: 4000 });
+  assert.equal(animation.holdWallSlidePose(sprite, { grounded: true, now: 4001 }), false);
+});
+
+test('remote presentation holds a departed wall-slide pose without reporting physical contact', () => {
+  const sprite = {};
+  const choose = (wallSliding, vy) => animation.chooseRemoteAnimationState({
+    animation: 'sliding', sprite,
+    currentPosition: { grounded: false, wallSliding, vy },
+  });
+  assert.equal(choose(true, 120), 'sliding');
+  assert.equal(choose(false, 120), 'sliding');
+  assert.equal(animation.chooseRemoteAnimationState({
+    animation: 'sliding', sprite,
+    currentPosition: { grounded: true, wallSliding: false, vy: 0 },
+  }), 'idle');
+});
+
 test('flight error converges without a constant-speed shot stopping or reversing', () => {
   for(const error of [10,45,100,200]) {
     const speed=700,c=reconcileFlight({x:error,y:0},{x:0,y:0},0,speed);

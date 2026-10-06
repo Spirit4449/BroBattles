@@ -498,7 +498,7 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
 
     if (list && !hasExistingCanvas) {
       list.innerHTML = `<div class="trophy-rewards-state trophy-rewards-loading">
-      <span class="trophy-rewards-loading-mark" aria-hidden="true"></span>
+      <span class="trophy-rewards-loading-mark bb-battle-loader" aria-hidden="true"></span>
       <strong>Loading reward road</strong>
       <span>Checking your latest milestones...</span>
     </div>`;

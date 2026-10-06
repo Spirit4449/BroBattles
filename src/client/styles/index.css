@@ -1824,8 +1824,6 @@ h3 {
   padding: 10px 10px 12px;
 }
 
-
-
 .character-select-popup .map-select-grid .map-select-card img {
   height: auto;
   aspect-ratio: 16 / 7;
@@ -2680,6 +2678,7 @@ h3 {
   gap: 7px;
   padding: 0 12px 0 7px;
   isolation: isolate;
+  overflow: visible;
   white-space: nowrap;
   color: #fffbe7;
   background: linear-gradient(
@@ -2729,20 +2728,16 @@ h3 {
   content: "";
   position: absolute;
   z-index: 1;
-  top: -65%;
-  bottom: -65%;
-  left: -58%;
-  width: 34%;
+  inset: 0;
   pointer-events: none;
   background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.22) 28%,
-    rgba(255, 249, 190, 0.92) 50%,
-    rgba(255, 255, 255, 0.2) 72%,
-    transparent
+    108deg,
+    transparent 44%,
+    rgba(255, 249, 190, 0.75) 50%,
+    transparent 56%
   );
-  transform: translateX(0) skewX(-18deg);
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
   animation: shopButtonGlint 3.6s ease-in-out infinite;
 }
 
@@ -2759,7 +2754,7 @@ h3 {
 @keyframes shopButtonGlint {
   0%,
   52% {
-    transform: translateX(0) skewX(-18deg);
+    background-position: 100% 0;
     opacity: 0;
   }
   58% {
@@ -2767,7 +2762,7 @@ h3 {
   }
   78%,
   100% {
-    transform: translateX(560%) skewX(-18deg);
+    background-position: 0% 0;
     opacity: 0;
   }
 }
@@ -3503,8 +3498,6 @@ h3 {
   opacity: 0.65;
 }
 
-
-
 .trophy-lane-marker {
   --marker-accent: #374b68;
   position: absolute;
@@ -3618,8 +3611,7 @@ h3 {
   font-size: 12px;
 }
 
-.trophy-rewards-state-icon,
-.trophy-rewards-loading-mark {
+.trophy-rewards-state-icon {
   width: 38px;
   height: 38px;
   display: grid;
@@ -3638,12 +3630,6 @@ h3 {
     -3px 0px black;
 }
 
-.trophy-rewards-loading-mark {
-  border-color: #1f304c;
-  border-top-color: #6ed0ff;
-  animation: trophyRewardsLoadingSpin 700ms steps(8) infinite;
-}
-
 @keyframes trophyRewardCardIn {
   from {
     opacity: 0;
@@ -3652,12 +3638,6 @@ h3 {
   to {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
-  }
-}
-
-@keyframes trophyRewardsLoadingSpin {
-  to {
-    transform: rotate(360deg);
   }
 }
 
@@ -4607,8 +4587,7 @@ h3 {
   font-size: 13px;
 }
 
-.leaderboard-state-icon,
-.leaderboard-loading-mark {
+.leaderboard-state-icon {
   width: 42px;
   height: 42px;
   display: grid;
@@ -4621,13 +4600,6 @@ h3 {
   color: #b8d8ff;
   font-family: "Press Start 2P", system-ui;
   font-size: 15px;
-}
-
-.leaderboard-loading-mark {
-  border-color: #233756;
-  border-top-color: #7bd4ff;
-  box-shadow: 4px 4px 0 #05070d;
-  animation: leaderboardLoadingSpin 700ms steps(8) infinite;
 }
 
 .leaderboard-list::-webkit-scrollbar {
@@ -4654,12 +4626,6 @@ h3 {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes leaderboardLoadingSpin {
-  to {
-    transform: rotate(360deg);
   }
 }
 
@@ -5007,9 +4973,7 @@ h3 {
   }
 
   .leaderboard-row,
-  .leaderboard-loading-mark,
-  .trophy-lane-card,
-  .trophy-rewards-loading-mark {
+  .trophy-lane-card {
     animation: none;
   }
 }
@@ -6328,7 +6292,7 @@ h3 {
     box-shadow 140ms ease;
 }
 
-.profile-card-tile img {
+.profile-card-tile :is(img, video, .player-card-canvas) {
   width: 100%;
   aspect-ratio: 650 / 1250;
   object-fit: contain;

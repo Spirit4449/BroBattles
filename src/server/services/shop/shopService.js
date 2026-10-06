@@ -50,8 +50,10 @@ function createShopError(status, code, message, detail = {}) {
   return error;
 }
 
-function createShopService({ db }) {
-  const initialCatalog = getShopCatalog();
+const { getSaleOfferIds, getSalePrice, getBundleValue, buildOfferIndexes, ownsGrant } = require("./shopOfferRules");
+
+function createShopService({ db, catalogProvider = getShopCatalog }) {
+  const initialCatalog = catalogProvider();
   const rotationService = createShopRotationService({
     db,
     timeZone: initialCatalog.timezone || "America/New_York",
@@ -91,31 +93,24 @@ function createShopService({ db }) {
     };
   }
 
-  function ownsGrant(ownership, grant) {
-    if (grant?.kind === "skin") return ownership.skins.has(String(grant.id));
-    if (grant?.kind === "card") return ownership.cards.has(String(grant.id));
-    if (grant?.kind === "profileIcon") {
-      return ownership.profileIcons.has(String(grant.id));
-    }
-    return false;
-  }
-
   function getOfferState(offer, ownership, redemptionSet, paymentsEnabled) {
     const grants = Array.isArray(offer?.grants) ? offer.grants : [];
-    const ownable = grants.filter((grant) => grant.kind !== "currency");
-    const owned = ownable.length > 0 && ownable.every((grant) => ownsGrant(ownership, grant));
+    const purchased = offer.purchaseLimit === "lifetime" && redemptionSet.has(`lifetime:${offer.id}`);
+    const owned = grants.length > 0 && grants.every((grant) => ownsGrant(ownership, grant));
     const requiredNotOwned = offer?.eligibility?.requiresNotOwned;
     const blockedByOwnership = requiredNotOwned
       ? ownsGrant(ownership, requiredNotOwned)
       : false;
     let reason = null;
-    if (blockedByOwnership) reason = "The featured skin is already in your collection";
-    if (redemptionSet.has(`lifetime:${offer.id}`)) reason = "Already in your collection";
+    if (owned) reason = "Already in your collection";
+    if (blockedByOwnership) reason = "The featured cosmetic is already in your collection";
+    if (purchased) reason = "Already purchased";
     if (offer?.price?.type === "money" && !paymentsEnabled) {
       reason = "Card checkout is coming soon";
     }
     return {
       owned,
+      purchased,
       available: !reason,
       reason,
     };
@@ -160,6 +155,7 @@ function createShopService({ db }) {
           id: card.id,
           name: card.name,
           image: card.assetUrl,
+          shopImage: card.shopAssetUrl || null,
           rarity: card.rarity,
         };
       }
@@ -186,6 +182,11 @@ function createShopService({ db }) {
     };
   }
 
+  function describeGrants(grants) {
+    const cosmetics = getCosmeticCatalogs();
+    return grants.map(grant => resolveGrantDisplay(grant, cosmetics));
+  }
+
   function serializeOffer(offer, cosmetics, ownership, redemptionSet, paymentsEnabled, extra = {}) {
     return {
       id: offer.id,
@@ -209,124 +210,25 @@ function createShopService({ db }) {
     };
   }
 
-  function buildCatalogOnlyTiles(cosmetics, ownership, offerByGrant) {
-    const skins = [];
-    for (const [character, entry] of Object.entries(
-      cosmetics?.skins?.characters || {},
-    )) {
-      for (const skin of entry?.skins || []) {
-        if (skin?.showInPicker === false) continue;
-        const id = String(skin?.id || "");
-        const offer = offerByGrant.get(`skin:${id}`);
-        if (!offer || id === String(entry?.defaultSkinId || "")) continue;
-        skins.push({
-          id: `browse-skin-${id}`,
-          kind: "browse-item",
-          itemKind: "skin",
-          itemId: id,
-          name: skin.name === "Default" ? `${titleCase(character)} Default` : skin.name,
-          description: offer?.description || `A ${skin.rarity || "common"} ${titleCase(character)} skin.`,
-          rarity: skin.rarity || "common",
-          banner: offer.banner || null,
-          grants: [resolveGrantDisplay({ kind: "skin", id }, cosmetics)],
-          offerId: offer?.id || null,
-          price: offer?.price || null,
-          state: {
-            owned: ownership.skins.has(id),
-            available: !!offer && !ownership.skins.has(id),
-            reason: ownership.skins.has(id)
-              ? "Owned"
-              : skin?.unlockMethod?.type === "shop"
-                ? "Available in Shop"
-                : `Unlock through ${titleCase(skin?.unlockMethod?.type || "progression")}`,
-          },
-        });
-      }
-    }
-
-    const profile = [];
-    for (const card of cosmetics?.cards?.cards || []) {
-      const id = String(card?.id || "");
-      const offer = offerByGrant.get(`card:${id}`);
-      if (!offer) continue;
-      profile.push({
-        id: `browse-card-${id}`,
-        kind: "browse-item",
-        itemKind: "card",
-        itemId: id,
-        name: card.name,
-        description: offer?.description || "A player card for your profile loadout.",
-        rarity: card.rarity || "common",
-        banner: offer.banner || null,
-        grants: [resolveGrantDisplay({ kind: "card", id }, cosmetics)],
-        offerId: offer?.id || null,
-        price: offer?.price || null,
-        state: {
-          owned: ownership.cards.has(id),
-          available: !!offer && !ownership.cards.has(id),
-          reason: ownership.cards.has(id) ? "Owned" : offer ? "Available in Shop" : "Progression reward",
-        },
-      });
-    }
-    for (const icon of cosmetics?.profileIcons?.icons || []) {
-      const id = String(icon?.id || "");
-      const offer = offerByGrant.get(`profileIcon:${id}`);
-      if (!offer) continue;
-      const unlock = icon?.unlock || {};
-      let unlockText = "Progression reward";
-      if (unlock.type === "character") unlockText = `Unlock ${titleCase(unlock.character)}`;
-      if (unlock.type === "trophies") unlockText = `Reach ${Number(unlock.min) || 0} trophies`;
-      profile.push({
-        id: `browse-icon-${id}`,
-        kind: "browse-item",
-        itemKind: "profileIcon",
-        itemId: id,
-        name: icon.name,
-        description: "A profile icon earned through progression.",
-        rarity: icon.rarity || "common",
-        banner: offer.banner || null,
-        grants: [resolveGrantDisplay({ kind: "profileIcon", id }, cosmetics)],
-        offerId: offer.id,
-        price: offer.price,
-        state: {
-          owned: ownership.profileIcons.has(id),
-          available: !ownership.profileIcons.has(id),
-          reason: ownership.profileIcons.has(id) ? "Owned" : unlockText,
-        },
-      });
-    }
-    return { skins, profile };
-  }
-
   async function buildBootstrap(user, { paymentsEnabled = false, publishableKey = null } = {}) {
     const freshUser = (await getFreshUser(user.user_id)) || user;
-    const catalog = getShopCatalog();
+    const catalog = catalogProvider();
     const cosmetics = getCosmeticCatalogs();
-    const [rotations, ownership, redemptionRows] = await Promise.all([
+    const [rotations, ownership, redemptionRows, viewedRows] = await Promise.all([
       rotationService.getBoth(),
       getOwnership(freshUser),
       db.runQuery(
         "SELECT offer_id, limit_key, status FROM shop_redemptions WHERE user_id = ? AND status = 'fulfilled'",
         [freshUser.user_id],
       ),
+      db.runQuery("SELECT view_kind, view_key FROM shop_views WHERE user_id = ?", [freshUser.user_id]),
     ]);
     const redemptionSet = new Set(
       (redemptionRows || []).map(
         (row) => `${String(row.limit_key || "")}:${String(row.offer_id || "")}`,
       ),
     );
-    const offerById = new Map(
-      (catalog.offers || []).map((offer) => [String(offer.id), offer]),
-    );
-    const offerByGrant = new Map();
-    for (const offer of catalog.offers || []) {
-      if (offer.kind === "bundle") continue;
-      for (const grant of offer.grants || []) {
-        if (grant.kind !== "currency") {
-          offerByGrant.set(`${grant.kind}:${grant.id}`, offer);
-        }
-      }
-    }
+    const { offerById, offerByGrant } = buildOfferIndexes(catalog);
 
     const dailyRewards = catalog?.rotation?.dailies?.rewards || [];
     const daily = dailyRewards.length
@@ -358,53 +260,58 @@ function createShopService({ db }) {
         }
       : null;
 
-    const salesConfig = catalog?.rotation?.sales || {};
-    const promotedIds = Array.isArray(salesConfig.promotedOfferIds)
-      ? salesConfig.promotedOfferIds
-      : [];
-    const promotedCount = Math.max(0, Number(salesConfig.promotedCount) || 0);
-    const salesOffset = promotedIds.length
-      ? Math.abs(Number(rotations.sales.ordinal) || 0) % promotedIds.length
-      : 0;
-    const rotatedPromotions = [];
-    for (let index = 0; index < Math.min(promotedCount, promotedIds.length); index += 1) {
-      rotatedPromotions.push(promotedIds[(salesOffset + index) % promotedIds.length]);
-    }
-    const saleIds = [
-      ...new Set([
-        ...(salesConfig.pinnedOfferIds || []),
-        ...rotatedPromotions,
-      ]),
-    ];
+    const saleIds = getSaleOfferIds(catalog, rotations.sales);
     const sales = saleIds
       .map((id) => offerById.get(String(id)))
       .filter(Boolean)
-      .map((offer) =>
-        serializeOffer(
+      .map((offer) => {
+        const salePrice = getSalePrice(offer, catalog);
+        const bundleValue = getBundleValue(offer, offerByGrant, ownership);
+        return serializeOffer(
           offer,
           cosmetics,
           ownership,
           redemptionSet,
           paymentsEnabled,
-          { featured: true },
-        ),
-      );
+          {
+            featured: true,
+            price: salePrice,
+            originalPrice: salePrice.amount < offer.price.amount ? offer.price : bundleValue?.cosmeticPrice || offer.price,
+            bundleValue,
+            discountPercent: salePrice.amount >= offer.price.amount ? null : Math.round((offer.price.amount - salePrice.amount) * 100 / offer.price.amount),
+          },
+        );
+      });
 
-    const browse = buildCatalogOnlyTiles(cosmetics, ownership, offerByGrant);
-    const currency = (catalog.offers || [])
-      .filter((offer) => offer.section === "currency")
-      .map((offer) =>
-        serializeOffer(
-          offer,
-          cosmetics,
-          ownership,
-          redemptionSet,
-          paymentsEnabled,
-        ),
-      );
+    const sections = Object.fromEntries((catalog.sections || []).map(section => [section.id, []]));
+    for (const offer of catalog.offers || []) {
+      if (saleIds.includes(offer.id) || offer.section === "sales") continue;
+      const bundleValue = getBundleValue(offer, offerByGrant, ownership);
+      sections[offer.section]?.push(serializeOffer(
+        offer, cosmetics, ownership, redemptionSet, paymentsEnabled,
+        { offerId: offer.id, bundleValue, originalPrice: bundleValue?.cosmeticPrice || null },
+      ));
+    }
+    sections.sales = sales;
+    sections.dailies = dailyOffer ? [dailyOffer] : [];
 
+    const viewed = new Set(viewedRows.map(row => `${row.view_kind}:${row.view_key}`));
+    const notifications = { sections: {}, hasNew: false };
+    for (const meta of catalog.sections || []) {
+      const items = sections[meta.id] || [];
+      for (const item of items) {
+        item.isNew = item.kind !== "daily" && !item.state.owned && !item.state.purchased
+          && !viewed.has(`offer:${item.id}`);
+      }
+      const cycleKey = rotations[meta.id]?.cycleKey || null;
+      const refreshed = !!cycleKey && !viewed.has(`rotation:${meta.id}:${cycleKey}`);
+      const offerIds = items.filter(item => item.isNew).map(item => item.id);
+      notifications.sections[meta.id] = { cycleKey, refreshed, offerIds, hasNew: refreshed || offerIds.length > 0 };
+      notifications.hasNew ||= notifications.sections[meta.id].hasNew;
+    }
     return {
       success: true,
+      notifications,
       serverNow: new Date().toISOString(),
       timezone: rotations.timezone,
       wallet: {
@@ -417,13 +324,8 @@ function createShopService({ db }) {
         publishableKey: paymentsEnabled ? publishableKey : null,
       },
       rotations,
-      sections: {
-        sales,
-        dailies: dailyOffer ? [dailyOffer] : [],
-        skins: browse.skins,
-        profile: browse.profile,
-        currency,
-      },
+      sectionMeta: catalog.sections,
+      sections,
     };
   }
 
@@ -469,7 +371,7 @@ function createShopService({ db }) {
     return totals;
   }
 
-  async function redeem({ userId, offer, grants, price, limitKey, kind, idempotencyKey }) {
+  async function redeem({ userId, offer, grants, price, limitKey, kind, idempotencyKey, expectedPrice, expectedCurrency }) {
     const normalizedKey = normalizeIdempotencyKey(idempotencyKey);
     if (!normalizedKey) {
       throw createShopError(400, "invalid_idempotency_key", "A valid idempotency key is required.");
@@ -509,8 +411,13 @@ function createShopService({ db }) {
             coins: Number(walletRows[0]?.coins) || 0,
             gems: Number(walletRows[0]?.gems) || 0,
           },
-          grants: parseJson(duplicateRows[0].reward_snapshot, grants),
+          grants: describeGrants(parseJson(duplicateRows[0].reward_snapshot, grants)),
         };
+      }
+
+      if ((expectedPrice != null && Number(expectedPrice) !== Number(price?.amount)) ||
+          (expectedCurrency != null && expectedCurrency !== price?.currency)) {
+        throw createShopError(409, "price_changed", "The offer price changed. Refresh the shop and try again.");
       }
 
       const ownership = await getOwnershipWithRunner(q, userId);
@@ -525,8 +432,7 @@ function createShopService({ db }) {
       const ownable = (grants || []).filter((grant) => grant.kind !== "currency");
       if (
         kind !== "daily" &&
-        offer.kind !== "bundle" &&
-        ownable.length > 0 &&
+        ownable.length === grants.length && ownable.length > 0 &&
         ownable.every((grant) => ownsGrant(ownership, grant))
       ) {
         return {
@@ -536,7 +442,7 @@ function createShopService({ db }) {
             coins: Number(currentUser.coins) || 0,
             gems: Number(currentUser.gems) || 0,
           },
-          grants,
+          grants: describeGrants(grants),
         };
       }
 
@@ -546,7 +452,7 @@ function createShopService({ db }) {
         ? Math.max(0, Math.round(Number(virtualPrice.amount) || 0))
         : 0;
       const currentBalance = Number(currentUser[priceCurrency]) || 0;
-      if (priceAmount > currentBalance) {
+      if (priceAmount > 0 && priceAmount > currentBalance) {
         throw createShopError(
           400,
           "insufficient_funds",
@@ -598,17 +504,24 @@ function createShopService({ db }) {
           coins: Number(walletRows[0]?.coins) || 0,
           gems: Number(walletRows[0]?.gems) || 0,
         },
-        grants,
+        grants: describeGrants(grants),
       };
     });
   }
 
-  async function purchaseVirtual({ userId, offerId, idempotencyKey }) {
-    const offer = getShopOfferById(offerId);
+  async function purchaseVirtual({ userId, offerId, idempotencyKey, expectedPrice, expectedCurrency }) {
+    const catalog = catalogProvider();
+    const offer = catalog.offers.find(entry => entry.id === String(offerId || "").trim());
     if (!offer) throw createShopError(404, "unknown_offer", "Offer not found.");
     if (offer?.price?.type !== "virtual") {
       throw createShopError(400, "wrong_purchase_type", "This offer requires checkout.");
     }
+    const saleRotation = await rotationService.ensure("sales");
+    const onSale = getSaleOfferIds(catalog, saleRotation).includes(offer.id);
+    if (offer.section === "sales" && !onSale) {
+      throw createShopError(409, "offer_unavailable", "This offer is not in the current sale rotation.");
+    }
+    const price = onSale ? getSalePrice(offer, catalog) : offer.price;
     const limitKey = offer.purchaseLimit === "unlimited"
       ? `request:${normalizeIdempotencyKey(idempotencyKey) || "invalid"}`
       : "lifetime";
@@ -616,15 +529,17 @@ function createShopService({ db }) {
       userId,
       offer,
       grants: offer.grants || [],
-      price: offer.price,
+      price,
       limitKey,
       kind: "virtual",
       idempotencyKey,
+      expectedPrice,
+      expectedCurrency,
     });
   }
 
   async function claimDaily({ userId, idempotencyKey }) {
-    const catalog = getShopCatalog();
+    const catalog = catalogProvider();
     const rotation = await rotationService.ensure("dailies");
     const rewards = catalog?.rotation?.dailies?.rewards || [];
     const reward = rewards[Math.abs(Number(rotation.ordinal) || 0) % rewards.length];
@@ -638,6 +553,34 @@ function createShopService({ db }) {
       kind: "daily",
       idempotencyKey,
     });
+  }
+
+  async function markViewed({ userId, rotations = {}, offerIds = [] }) {
+    if (!Array.isArray(offerIds) || offerIds.length > 200 || !rotations || typeof rotations !== "object" || Array.isArray(rotations)) {
+      throw createShopError(400, "invalid_views", "Invalid viewed shop content.");
+    }
+    const catalog = catalogProvider();
+    const knownOffers = new Set((catalog.offers || []).map(offer => offer.id));
+    const views = [];
+    for (const id of new Set(offerIds)) {
+      if (typeof id !== "string" || !knownOffers.has(id)) throw createShopError(400, "invalid_views", "Unknown shop item.");
+      views.push(["offer", id]);
+    }
+    const current = await rotationService.getBoth();
+    for (const [section, cycleKey] of Object.entries(rotations)) {
+      if (!["sales", "dailies"].includes(section) || typeof cycleKey !== "string") {
+        throw createShopError(400, "invalid_views", "Unknown shop rotation.");
+      }
+      // An older screen must never acknowledge a refresh the player has not seen.
+      if (current[section].cycleKey === cycleKey) views.push(["rotation", `${section}:${cycleKey}`]);
+    }
+    if (views.length) {
+      await db.runQuery(
+        `INSERT IGNORE INTO shop_views (user_id, view_kind, view_key) VALUES ${views.map(() => "(?, ?, ?)").join(", ")}`,
+        views.flatMap(([kind, key]) => [Number(userId), kind, key]),
+      );
+    }
+    return { success: true };
   }
 
   async function getAdminStatus() {
@@ -654,7 +597,9 @@ function createShopService({ db }) {
 
   return {
     applyGrants,
+    describeGrants,
     buildBootstrap,
+    markViewed,
     claimDaily,
     createShopError,
     findOfferForGrant,

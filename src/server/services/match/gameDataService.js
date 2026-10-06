@@ -126,7 +126,7 @@ async function buildGameDataForMatch({
         // Skin fields are resolved once by loadMatchRoster's decoration.
         selected_skin_id: p.selected_skin_id,
         profile_icon_id: String(p.profile_icon_id || "") || null,
-        selected_card_id: selectedByName[p.name] ?? null,
+        selected_card_id: p.isBot ? p.selected_card_id : selectedByName[p.name] ?? null,
         trophies: Number(p.trophies) || 0,
         level,
         stats: {

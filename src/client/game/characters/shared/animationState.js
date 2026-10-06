@@ -1,6 +1,8 @@
 const DEFAULT_ONE_SHOT_MS = 520;
 const DEFAULT_SPECIAL_MS = 900;
 const ACTION_PATTERN = /throw|attack|slash|special/i;
+const WALL_JUMP_ANIMATION_MS = 450;
+const WALL_SLIDE_POSE_HOLD_MS = 120;
 
 function nowPerf() {
   return typeof performance !== "undefined" && performance.now
@@ -57,6 +59,10 @@ export function markOneShotAnimation(
   if (!sprite) return;
   const ms = Math.max(80, Number(durationMs) || DEFAULT_ONE_SHOT_MS);
   const state = sprite._bbAnimationState || {};
+  if (state.wallJumpAnimationKey && sprite.anims) sprite.anims.timeScale = 1;
+  state.wallJumpAnimationKey = null;
+  state.wallJumpAnimationUntil = 0;
+  state.wallSlidePoseUntil = 0;
   state.oneShot = toLogicalAnimation(logical);
   state.currentLogical = state.oneShot;
   state.oneShotUntilMs = nowMs() + ms;
@@ -183,7 +189,39 @@ export function resetAirborneJumpAnimation(sprite) {
   const state = sprite._bbAnimationState || {};
   state.jumpPlayedAirborne = false;
   state.restartJump = true;
+  state.wallJumpAnimationUntil = 0;
+  state.wallSlidePoseUntil = 0;
   sprite._bbAnimationState = state;
+}
+
+export function markWallJumpAnimation(sprite, now = nowMs()) {
+  if (!sprite) return;
+  resetAirborneJumpAnimation(sprite);
+  const state = sprite._bbAnimationState;
+  state.wallJumpAnimationUntil = now + WALL_JUMP_ANIMATION_MS;
+  state.wallSlidePoseUntil = 0;
+}
+
+// Keep the last wall-slide pose visible briefly after natural separation.
+// Jumping and landing always replace it immediately.
+export function holdWallSlidePose(sprite, { sliding = false, grounded = false, now = nowMs() } = {}) {
+  if (!sprite) return sliding && !grounded;
+  const state = sprite._bbAnimationState ||= {};
+  if (grounded) {
+    state.wallSlidePoseUntil = 0;
+    state.wallJumpAnimationUntil = 0;
+    return false;
+  }
+  if (sliding) {
+    state.wallSlidePoseUntil = now + WALL_SLIDE_POSE_HOLD_MS;
+    state.wallJumpAnimationUntil = 0;
+    return true;
+  }
+  if (state.wallJumpAnimationUntil > now) {
+    state.wallSlidePoseUntil = 0;
+    return false;
+  }
+  return sliding || (state.wallSlidePoseUntil || 0) > now;
 }
 
 // Dash directions use screen coordinates (negative Y points upward).
@@ -221,6 +259,15 @@ export function playCharacterAnimation({
   try {
     const currentKey = sprite.anims?.currentAnim?.key || "";
     const state = sprite._bbAnimationState ||= {};
+    const wallJumpPlayback = wanted === "jumping" && state.wallJumpAnimationUntil > nowMs();
+    if (wallJumpPlayback) {
+      const duration = getAnimationDurationMs(scene, key) - 30;
+      sprite.anims.timeScale = Math.min(1, duration / WALL_JUMP_ANIMATION_MS);
+      state.wallJumpAnimationKey = key;
+    } else if (state.wallJumpAnimationKey) {
+      sprite.anims.timeScale = 1;
+      state.wallJumpAnimationKey = null;
+    }
     // Let the horizontal lunge read through the first part of the coast.
     // Only extend the real Thorg dash art, never a skin's fallback animation.
     if (logical === "dashing" && wanted === "dashright" && direction?.y === 0 &&
@@ -356,14 +403,20 @@ export function chooseRemoteAnimationState({
     if (Number.isFinite(seq)) {
       if (Number.isFinite(state.movementSeq) && seq > state.movementSeq &&
           ['jump', 'wall-jump'].includes(currentPosition?.movementFxType) && grounded === false && vy < -20) {
-        resetAirborneJumpAnimation(sprite);
+        if (currentPosition.movementFxType === 'wall-jump') markWallJumpAnimation(sprite);
+        else resetAirborneJumpAnimation(sprite);
       }
       state.movementSeq = seq;
     }
   }
+  const visualWallSliding = holdWallSlidePose(sprite, {
+    sliding: currentPosition?.wallSliding === true ||
+      (typeof currentPosition?.wallSliding !== 'boolean' && logical === 'sliding' && grounded === false),
+    grounded: grounded === true,
+  });
   if (logical === "dashing") return "dashing";
   if (grounded === false && typeof currentPosition?.wallSliding === 'boolean') {
-    if (currentPosition.wallSliding) return 'sliding';
+    if (visualWallSliding) return 'sliding';
     if (Number.isFinite(vy)) return vy < -20 ? 'jumping' : 'falling';
   }
   if (logical === "sliding") {

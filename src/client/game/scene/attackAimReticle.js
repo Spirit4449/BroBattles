@@ -361,18 +361,19 @@ class RoundAttackReticleRenderer extends BaseAttackReticleRenderer {
     if (!state) return;
     const palette = getPalette(state);
     const visualScale = Number(state.visualScale) || 1;
+    const reticleScale = Number(state.config?.reticleScale) || 1;
     const reveal = 1;
-    const radius = reveal * visualScale * Math.max(
+    const radius = reveal * visualScale * reticleScale * Math.max(
       16,
       Number(state.roundRadius) || Number(state.range) || 60,
     );
-    const radiusY = Math.max(16, Number(state.config?.radiusY) * visualScale * reveal || radius);
+    const radiusY = Math.max(16, Number(state.config?.radiusY) * visualScale * reticleScale * reveal || radius);
     const cx = Number(state.baseX ?? state.anchorX) || 0;
     const cy = (Number(state.baseY ?? state.anchorY) || 0) +
       (Number(state.config?.reticleOffsetY) || 0) * visualScale -
       (Number(state.config?.reticleScaleLiftY) || 0) * (visualScale - 1);
 
-    // Concentric fills fade radially; the outer ellipse marks the true attack footprint.
+    // Concentric fills fade radially; the outer ellipse is a visual aim cue.
     this.shadow.lineStyle(palette.shadowColor === 0xffaa00 ? 12 : 5, palette.shadowColor === 0xffaa00 ? 0xffaa00 : 0x101725, 0.45);
     this.shadow.strokeEllipse(cx, cy, radius * 2, radiusY * 2);
     for (let band = 10; band >= 1; band -= 1) {

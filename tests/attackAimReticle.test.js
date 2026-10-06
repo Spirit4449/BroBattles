@@ -91,6 +91,26 @@ test('guide reach ignores drag strength and melee footprints remain fixed', () =
   }
 });
 
+test('Thorg draws a smaller reticle without shortening his attack range', () => {
+  const state = context('thorg');
+  const ellipses = [];
+  const scene = { add: { graphics() {
+    const g = {};
+    for (const key of ['setPosition', 'setDepth', 'setAlpha', 'setVisible', 'clear', 'destroy', 'fillStyle', 'lineStyle']) g[key] = () => g;
+    g.strokeEllipse = (_x, _y, width, height) => { ellipses.push({ width, height }); return g; };
+    g.fillEllipse = () => g;
+    return g;
+  } } };
+  const renderer = createAttackAimReticleController(scene);
+  renderer.update(state);
+  assert.equal(state.range, state.maxRange);
+  assert.equal(state.roundRadius, state.range);
+  assert.ok(ellipses.length > 0);
+  assert.ok(ellipses[0].width < state.range * 2);
+  assert.ok(ellipses[0].height < state.config.radiusY * 2);
+  renderer.destroy();
+});
+
 test('Gloop super guide displays the hook full attack reach', () => {
   const state = resolveAttackAimContext({ character: 'gloop',
     player: { x: 200, y: 300, width: 80, height: 100 }, family: 'special',

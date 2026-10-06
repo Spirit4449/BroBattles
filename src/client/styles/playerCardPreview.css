@@ -1,0 +1,27 @@
+.player-card-preview {
+  box-sizing: border-box;
+  width: min(760px, 94vw);
+  max-height: 92dvh;
+  padding: 0;
+  text-align: center;
+}
+.player-card-preview[open] { display: flex; flex-direction: column; }
+.player-card-preview .bb-popup-header { flex: 0 0 auto; text-align: left; }
+.player-card-preview .bb-popup-title { min-width: 0; overflow-wrap: anywhere; }
+.player-card-preview-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+  padding: 24px;
+  overflow: auto;
+  min-height: 0;
+}
+.player-card-preview figure { margin: 0; flex: 0 1 280px; min-width: 0; }
+.player-card-preview figure > :is(img, .player-card-canvas) {
+  width: 100%;
+  height: min(66dvh, 560px);
+  object-fit: contain;
+  display: block;
+}
+.player-card-preview figcaption { margin: 16px 0 8px; }

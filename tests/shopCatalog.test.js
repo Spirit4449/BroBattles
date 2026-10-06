@@ -37,7 +37,7 @@ test("the production shop catalog has the expected offers and no validation erro
   assert.deepEqual(byId.get("card-shuriken-strike").price, {
     type: "virtual",
     currency: "gems",
-    amount: 20,
+    amount: require('../src/shared/catalogs/playerCardsCatalog.json').cards.find(card => card.id === 'shuriken-strike').cost.gems,
   });
   assert.deepEqual(
     [
@@ -78,6 +78,29 @@ test("invalid prices and cosmetic references fail validation", () => {
   );
 });
 
+test('wood is the free still default and the new animated cards have rotating gem offers', () => {
+  const cards = require('../src/shared/catalogs/playerCardsCatalog.json');
+  const shop = getShopCatalog();
+  const defaultCard = cards.cards.find(card => card.id === cards.defaultCardId);
+  assert.equal(defaultCard.id, 'default');
+  assert.equal(defaultCard.animationUrl, undefined);
+  assert.equal(defaultCard.cost.gems, 0);
+  assert.ok(!cards.cards.some(card => card.id === 'sorcerers-decree'));
+  assert.ok(!shop.offers.some(offer => offer.id === 'card-sorcerers-decree'));
+  assert.ok(!shop.rotation.sales.promotedOfferIds.includes('card-sorcerers-decree'));
+  const ids = ['radiant-silver', 'radiant-diamond', 'radiant-emerald', 'radiant-gold', 'radiant-ruby', 'mjolnirs-anvil', 'wizard-spell', 'astral-amethyst'];
+  for (const id of ids) {
+    const card = cards.cards.find(card => card.id === id);
+    const offer = shop.offers.find(offer => offer.grants.length === 1 && offer.grants[0].kind === 'card' && offer.grants[0].id === id);
+    assert.ok(card.animationUrl && card.animationAppleUrl, `${id} supports both video formats`);
+    assert.equal(offer.price.currency, 'gems');
+    assert.equal(offer.price.amount, card.cost.gems);
+    assert.equal(offer.rarity, card.rarity);
+    assert.ok(shop.rotation.sales.promotedOfferIds.includes(offer.id), `${id} participates in rotation`);
+  }
+  assert.ok(!shop.offers.some(offer => offer.grants.some(grant => grant.kind === 'card' && grant.id === defaultCard.id)));
+});
+
 test("money offers cannot grant cosmetics", () => {
   const fixture = JSON.parse(JSON.stringify(getShopCatalog()));
   const offer = fixture.offers.find((entry) => entry.price.type === "money");
@@ -99,4 +122,41 @@ test("missing or external banner art fails closed", () => {
   const errors = validateCatalog(fixture);
   assert.ok(errors.some((error) => error.includes("invalid shop banner path")));
   assert.ok(errors.some((error) => error.includes("shop banner asset is missing")));
+});
+
+
+test('malformed sale settings report errors instead of crashing validation', () => {
+  for (const value of [null, {}, 2, 'bad']) {
+    const catalog = structuredClone(getShopCatalog());
+    catalog.rotation.sales.promotedOfferIds = value;
+    assert.ok(validateCatalog(catalog).some(error => error.includes('promotedOfferIds must be an array')));
+  }
+});
+
+test('catalog validation rejects ambiguous grants, unsupported limits and unsafe amounts', () => {
+  const catalog = structuredClone(getShopCatalog());
+  const item = catalog.offers.find(offer => offer.kind === 'item');
+  item.grants.push(item.grants[0]);
+  item.price.amount = Number.MAX_SAFE_INTEGER + 1;
+  const money = catalog.offers.find(offer => offer.price.type === 'money');
+  money.purchaseLimit = 'lifetime';
+  catalog.rotation.sales.promotedCount = -1;
+  catalog.rotation.sales.pinnedOfferIds.push(catalog.rotation.sales.pinnedOfferIds[0]);
+  const errors = validateCatalog(catalog);
+  for (const expected of ['duplicate grants', 'invalid virtual price', 'real-money offers require unlimited', 'promotedCount', 'duplicate offers']) {
+    assert.ok(errors.some(error => error.includes(expected)), expected);
+  }
+});
+
+test('sale prices and selection are reusable catalog rules with optional discounts', () => {
+  const { getSaleOfferIds, getSalePrice } = require('../src/server/services/shop/shopOfferRules');
+  const catalog = { rotation: { sales: { pinnedOfferIds: ['a'], promotedOfferIds: ['a', 'b', 'b', 'c'], promotedCount: 2, discountPercent: 20 } } };
+  assert.deepEqual(getSaleOfferIds(catalog, { ordinal: 0 }), ['a', 'b', 'c']);
+  const offer = { kind: 'item', price: { type: 'virtual', currency: 'gems', amount: 1 } };
+  assert.equal(getSalePrice(offer, catalog).amount, 1);
+  offer.price.amount = 100;
+  offer.saleDiscountPercent = 0;
+  assert.deepEqual(getSalePrice(offer, catalog), offer.price);
+  offer.saleDiscountPercent = 40;
+  assert.equal(getSalePrice(offer, catalog).amount, 60);
 });

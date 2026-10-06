@@ -14,28 +14,58 @@
   "cards": [
     {
       "id": "default",
-      "name": "Default Card",
-      "assetUrl": "/assets/player-cards/default.webp",
+      "name": "Default",
+      "assetUrl": "/assets/player-cards/default/default.webp",
       "rarity": "common",
       "cost": {
         "coins": 0,
         "gems": 0
+      },
+      "renderScale": 0.95,
+      "battleViewport": {
+        "width": 904,
+        "height": 1739,
+        "x": 21,
+        "y": 113,
+        "w": 863,
+        "h": 1495
       }
     },
     {
       "id": "shuriken-strike",
       "name": "Shuriken Strike",
-      "assetUrl": "/assets/player-cards/shuriken-strike.webp",
+      "assetUrl": "/assets/player-cards/shuriken-strike/shuriken-strike-poster.webp",
       "rarity": "rare",
       "cost": {
         "coins": 0,
-        "gems": 20
+        "gems": 50
+      },
+      "animationUrl": "/assets/player-cards/shuriken-strike/shuriken-strike-animated.webm",
+      "animationViewport": {
+        "width": 1080,
+        "height": 1920,
+        "x": 196,
+        "y": 310,
+        "w": 688,
+        "h": 1290
+      },
+      "animationBytes": 314789,
+      "animationAppleUrl": "/assets/player-cards/shuriken-strike/shuriken-strike-animated.mov",
+      "animationAppleBytes": 480679,
+      "shopAssetUrl": "/assets/player-cards/shuriken-strike/shuriken-strike.webp",
+      "battleViewport": {
+        "width": 540,
+        "height": 960,
+        "x": 98,
+        "y": 155,
+        "w": 343,
+        "h": 646
       }
     },
     {
       "id": "slime-circuit",
       "name": "Slime Circuit",
-      "assetUrl": "/assets/player-cards/slime-circuit.webp",
+      "assetUrl": "/assets/player-cards/slime-circuit/slime-circuit-poster.webp",
       "rarity": "epic",
       "cost": {
         "coins": 0,
@@ -44,12 +74,42 @@
       "unlock": {
         "type": "trophyRoad",
         "min": 1750
+      },
+      "animationUrl": "/assets/player-cards/slime-circuit/slime-circuit-animated.webm",
+      "animationViewport": {
+        "width": 1080,
+        "height": 1920,
+        "x": 220,
+        "y": 310,
+        "w": 640,
+        "h": 1280
+      },
+      "animationBytes": 652431,
+      "animationAppleUrl": "/assets/player-cards/slime-circuit/slime-circuit-animated.mov",
+      "animationAppleBytes": 546333,
+      "battleViewport": {
+        "width": 540,
+        "height": 960,
+        "x": 110,
+        "y": 153,
+        "w": 320,
+        "h": 646
       }
     },
     {
       "id": "arena-crown",
       "name": "Crown of the Arena",
-      "assetUrl": "/assets/player-cards/arena-crown.webp",
+      "assetUrl": "/assets/player-cards/arena-crown/arena-crown-poster.webp",
+      "animationUrl": "/assets/player-cards/arena-crown/arena-crown-animated.webm",
+      "animationBytes": 720865,
+      "animationViewport": {
+        "width": 800,
+        "height": 1600,
+        "x": 70,
+        "y": 170,
+        "w": 660,
+        "h": 1268
+      },
       "rarity": "legendary",
       "cost": {
         "coins": 0,
@@ -58,6 +118,269 @@
       "unlock": {
         "type": "trophyRoad",
         "min": 10000
+      },
+      "animationAppleUrl": "/assets/player-cards/arena-crown/arena-crown-animated.mov",
+      "animationAppleBytes": 706805,
+      "battleViewport": {
+        "width": 400,
+        "height": 800,
+        "x": 45,
+        "y": 91,
+        "w": 310,
+        "h": 601
+      }
+    },
+    {
+      "id": "radiant-silver",
+      "name": "Radiant Silver",
+      "assetUrl": "/assets/player-cards/radiant-silver/radiant-silver-poster.webp",
+      "animationUrl": "/assets/player-cards/radiant-silver/radiant-silver-animated.webm",
+      "animationBytes": 88162,
+      "animationViewport": {
+        "width": 1080,
+        "height": 1920,
+        "x": 215,
+        "y": 333,
+        "w": 650,
+        "h": 1250
+      },
+      "rarity": "common",
+      "cost": {
+        "coins": 0,
+        "gems": 25
+      },
+      "animationAppleUrl": "/assets/player-cards/radiant-silver/radiant-silver-animated.mov",
+      "animationAppleBytes": 188627,
+      "shopAssetUrl": "/assets/player-cards/radiant-silver/radiant-silver.webp",
+      "renderScale": 0.95,
+      "battleViewport": {
+        "width": 540,
+        "height": 960,
+        "x": 115,
+        "y": 211,
+        "w": 311,
+        "h": 535
+      }
+    },
+    {
+      "id": "astral-amethyst",
+      "name": "Astral Amethyst",
+      "rarity": "legendary",
+      "cost": {
+        "coins": 0,
+        "gems": 200
+      },
+      "assetUrl": "/assets/player-cards/astral-amethyst/astral-amethyst-poster.webp",
+      "animationUrl": "/assets/player-cards/astral-amethyst/astral-amethyst-animated.webm",
+      "animationViewport": {
+        "width": 1080,
+        "height": 1920,
+        "x": 222,
+        "y": 326,
+        "w": 636,
+        "h": 1234
+      },
+      "animationBytes": 1740873,
+      "animationAppleUrl": "/assets/player-cards/astral-amethyst/astral-amethyst-animated.mov",
+      "animationAppleBytes": 1141138,
+      "shopAssetUrl": "/assets/player-cards/astral-amethyst/astral-amethyst.webp",
+      "battleViewport": {
+        "width": 720,
+        "height": 1280,
+        "x": 149,
+        "y": 217,
+        "w": 422,
+        "h": 823
+      }
+    },
+    {
+      "id": "mjolnirs-anvil",
+      "name": "Mjolnir’s Anvil",
+      "rarity": "rare",
+      "cost": {
+        "coins": 0,
+        "gems": 50
+      },
+      "assetUrl": "/assets/player-cards/mjolnirs-anvil/mjolnirs-anvil-poster.webp",
+      "animationUrl": "/assets/player-cards/mjolnirs-anvil/mjolnirs-anvil-animated.webm",
+      "animationViewport": {
+        "width": 1080,
+        "height": 1920,
+        "x": 226,
+        "y": 328,
+        "w": 628,
+        "h": 1214
+      },
+      "animationBytes": 554924,
+      "animationAppleUrl": "/assets/player-cards/mjolnirs-anvil/mjolnirs-anvil-animated.mov",
+      "animationAppleBytes": 388304,
+      "shopAssetUrl": "/assets/player-cards/mjolnirs-anvil/mjolnirs-anvil.webp",
+      "battleViewport": {
+        "width": 540,
+        "height": 960,
+        "x": 113,
+        "y": 164,
+        "w": 314,
+        "h": 606
+      }
+    },
+    {
+      "id": "radiant-diamond",
+      "name": "Radiant Diamond",
+      "rarity": "common",
+      "cost": {
+        "coins": 0,
+        "gems": 25
+      },
+      "assetUrl": "/assets/player-cards/radiant-diamond/radiant-diamond-poster.webp",
+      "animationUrl": "/assets/player-cards/radiant-diamond/radiant-diamond-animated.webm",
+      "animationViewport": {
+        "width": 1080,
+        "height": 1920,
+        "x": 208,
+        "y": 327,
+        "w": 665,
+        "h": 1269
+      },
+      "animationBytes": 132029,
+      "animationAppleUrl": "/assets/player-cards/radiant-diamond/radiant-diamond-animated.mov",
+      "animationAppleBytes": 223674,
+      "shopAssetUrl": "/assets/player-cards/radiant-diamond/radiant-diamond.webp",
+      "renderScale": 0.95,
+      "battleViewport": {
+        "width": 540,
+        "height": 960,
+        "x": 111,
+        "y": 206,
+        "w": 318,
+        "h": 544
+      }
+    },
+    {
+      "id": "radiant-emerald",
+      "name": "Radiant Emerald",
+      "rarity": "common",
+      "cost": {
+        "coins": 0,
+        "gems": 25
+      },
+      "assetUrl": "/assets/player-cards/radiant-emerald/radiant-emerald-poster.webp",
+      "animationUrl": "/assets/player-cards/radiant-emerald/radiant-emerald-animated.webm",
+      "animationViewport": {
+        "width": 1080,
+        "height": 1920,
+        "x": 210,
+        "y": 325,
+        "w": 660,
+        "h": 1271
+      },
+      "animationBytes": 94841,
+      "animationAppleUrl": "/assets/player-cards/radiant-emerald/radiant-emerald-animated.mov",
+      "animationAppleBytes": 199680,
+      "shopAssetUrl": "/assets/player-cards/radiant-emerald/radiant-emerald.webp",
+      "renderScale": 0.95,
+      "battleViewport": {
+        "width": 540,
+        "height": 960,
+        "x": 111,
+        "y": 204,
+        "w": 318,
+        "h": 547
+      }
+    },
+    {
+      "id": "radiant-gold",
+      "name": "Radiant Gold",
+      "rarity": "common",
+      "cost": {
+        "coins": 0,
+        "gems": 25
+      },
+      "assetUrl": "/assets/player-cards/radiant-gold/radiant-gold-poster.webp",
+      "animationUrl": "/assets/player-cards/radiant-gold/radiant-gold-animated.webm",
+      "animationViewport": {
+        "width": 1080,
+        "height": 1920,
+        "x": 214,
+        "y": 327,
+        "w": 652,
+        "h": 1264
+      },
+      "animationBytes": 137745,
+      "animationAppleUrl": "/assets/player-cards/radiant-gold/radiant-gold-animated.mov",
+      "animationAppleBytes": 233266,
+      "shopAssetUrl": "/assets/player-cards/radiant-gold/radiant-gold.webp",
+      "renderScale": 0.95,
+      "battleViewport": {
+        "width": 540,
+        "height": 960,
+        "x": 113,
+        "y": 205,
+        "w": 314,
+        "h": 544
+      }
+    },
+    {
+      "id": "radiant-ruby",
+      "name": "Radiant Ruby",
+      "rarity": "common",
+      "cost": {
+        "coins": 0,
+        "gems": 25
+      },
+      "assetUrl": "/assets/player-cards/radiant-ruby/radiant-ruby-poster.webp",
+      "animationUrl": "/assets/player-cards/radiant-ruby/radiant-ruby-animated.webm",
+      "animationViewport": {
+        "width": 1080,
+        "height": 1920,
+        "x": 212,
+        "y": 329,
+        "w": 656,
+        "h": 1264
+      },
+      "animationBytes": 156727,
+      "animationAppleUrl": "/assets/player-cards/radiant-ruby/radiant-ruby-animated.mov",
+      "animationAppleBytes": 331705,
+      "shopAssetUrl": "/assets/player-cards/radiant-ruby/radiant-ruby.webp",
+      "renderScale": 0.95,
+      "battleViewport": {
+        "width": 540,
+        "height": 960,
+        "x": 113,
+        "y": 207,
+        "w": 315,
+        "h": 543
+      }
+    },
+    {
+      "id": "wizard-spell",
+      "name": "Wizard Spell",
+      "rarity": "rare",
+      "cost": {
+        "coins": 0,
+        "gems": 50
+      },
+      "assetUrl": "/assets/player-cards/wizard-spell/wizard-spell-poster.webp",
+      "animationUrl": "/assets/player-cards/wizard-spell/wizard-spell-animated.webm",
+      "animationViewport": {
+        "width": 1080,
+        "height": 1920,
+        "x": 234,
+        "y": 384,
+        "w": 614,
+        "h": 1116
+      },
+      "animationBytes": 350308,
+      "animationAppleUrl": "/assets/player-cards/wizard-spell/wizard-spell-animated.mov",
+      "animationAppleBytes": 344306,
+      "shopAssetUrl": "/assets/player-cards/wizard-spell/wizard-spell.webp",
+      "battleViewport": {
+        "width": 540,
+        "height": 960,
+        "x": 117,
+        "y": 192,
+        "w": 306,
+        "h": 557
       }
     }
   ]

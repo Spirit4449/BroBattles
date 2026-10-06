@@ -631,14 +631,14 @@ export function spawnWallKickCloud(
   tint = 0xd9d9d9,
 ) {
   if (!scene || !scene.add) return;
-  const puffs = Phaser.Math.Between(7, 10);
+  const puffs = Phaser.Math.Between(3, 4);
   const push = direction >= 0 ? 1 : -1;
 
   for (let i = 0; i < puffs; i++) {
     const g = scene.add.graphics();
     g.setDepth(MOVEMENT_VFX_CONFIG.frontParticleDepth);
-    g.fillStyle(tint, Phaser.Math.FloatBetween(0.62, 0.84));
-    const size = Phaser.Math.Between(4, 9);
+    g.fillStyle(tint, Phaser.Math.FloatBetween(0.38, 0.58));
+    const size = Phaser.Math.Between(3, 5);
     g.fillRect(-size / 2, -size / 2, size, size);
     if (i % 2 === 0) {
       g.fillStyle(MOVEMENT_VFX_CONFIG.dustHighlight, 0.7);
@@ -654,36 +654,40 @@ export function spawnWallKickCloud(
       alpha: 0,
       scaleX: Phaser.Math.FloatBetween(1.25, 1.9),
       scaleY: Phaser.Math.FloatBetween(1.25, 1.9),
-      duration: Phaser.Math.Between(250, 380),
+      duration: Phaser.Math.Between(180, 260),
       ease: "Cubic.easeOut",
       onComplete: () => g.destroy(),
     });
   }
 
-  // Layered horizontal pixel bars form the wall-jump shock front.
-  for (let i = 0; i < 3; i++) {
+  // Horizontal counterparts to the segmented fast-fall lines. Spread them
+  // around the contact point and stretch away from the wall as the kick fires.
+  for (let i = 0; i < 7; i++) {
     const streak = scene.add.graphics();
-    streak.setDepth(MOVEMENT_VFX_CONFIG.frontParticleDepth);
+    streak.setDepth(MOVEMENT_VFX_CONFIG.behindPlayerDepth);
     streak.fillStyle(
-      i === 0 ? MOVEMENT_VFX_CONFIG.dustHighlight : 0xffffff,
-      0.82 - i * 0.12,
+      i % 3 === 0
+        ? MOVEMENT_VFX_CONFIG.dustHighlight
+        : MOVEMENT_VFX_CONFIG.impactAccent,
+      Phaser.Math.FloatBetween(0.48, 0.78),
     );
-    const width = 16 + i * 6;
-    const height = i === 0 ? 5 : 3;
-    streak.fillRect(push > 0 ? 0 : -width, -height / 2, width, height);
-    streak.fillRect(
-      push > 0 ? width * 0.45 : -width * 0.67,
-      push > 0 ? -8 - i * 3 : 6 + i * 2,
-      width * 0.22,
-      3,
+    const pixel = Phaser.Math.Between(2, 3);
+    const length = Phaser.Math.Between(30, 58);
+    const first = Math.round(length * 0.45);
+    const gapEnd = Math.round(length * 0.62);
+    const last = Math.round(length * 0.22);
+    streak.fillRect(push > 0 ? 0 : -first, -pixel / 2, first, pixel);
+    streak.fillRect(push > 0 ? gapEnd : -gapEnd - last, -pixel / 2, last, pixel);
+    streak.setPosition(
+      Math.round(x + push * Phaser.Math.Between(2, 14)),
+      Math.round(y + (i - 3) * 8 + Phaser.Math.Between(-2, 2)),
     );
-    streak.setPosition(Math.round(x), Math.round(y + (i - 1) * 7));
     streak.setBlendMode(Phaser.BlendModes.ADD);
     destroyWhenDone(scene, streak, {
-      x: streak.x + push * (14 + i * 7),
+      x: streak.x + push * Phaser.Math.Between(28, 52),
       alpha: 0,
-      scaleX: 1.35 + i * 0.12,
-      duration: 120 + i * 25,
+      scaleX: Phaser.Math.FloatBetween(1.3, 1.65),
+      duration: Phaser.Math.Between(200, 280),
       ease: "Cubic.easeOut",
     });
   }

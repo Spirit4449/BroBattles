@@ -125,18 +125,9 @@ body.banned-page .status-detail {
   background: rgba(91, 22, 32, 0.34);
 }
 
-.status-spinner {
-  width: 42px;
-  height: 42px;
+.status-page .status-spinner {
+  display: block;
   margin: 24px auto 0;
-  border: 5px solid rgba(255, 255, 255, 0.18);
-  border-top-color: var(--bb-blue, #3d91eb);
-  border-radius: var(--bb-radius-pill, 999px);
-  animation: statusSpin 0.9s linear infinite;
-}
-
-@keyframes statusSpin {
-  to { transform: rotate(360deg); }
 }
 
 @media (max-width: 480px) {

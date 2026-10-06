@@ -26,7 +26,10 @@ function encodeWebp(image, file, name) {
   const pam = tmp(`${name}.pam`);
   writePam(image, pam);
   fs.mkdirSync(path.dirname(abs(file)), { recursive: true });
-  execFileSync("cwebp", ["-quiet", "-lossless", "-exact", pam, "-o", abs(file)]);
+  const compression = name === "slime-circuit" || name === "arena-crown"
+    ? ["-q", "80", "-m", "6", "-alpha_q", "100"]
+    : ["-lossless", "-exact"];
+  execFileSync("cwebp", ["-quiet", ...compression, pam, "-o", abs(file)]);
 }
 
 function clearTransparentRgb(image) {
@@ -360,14 +363,14 @@ function writeBodyFromFrame(sheet, atlasFile, frameName, outputFile, name) {
   encodeWebp(out, outputFile, name);
 }
 
-quietCardInterior("public/assets/player-cards/arena-crown.webp", "public/assets/player-cards/arena-crown.webp", {
+quietCardInterior("public/assets/player-cards/arena-crown/arena-crown.webp", "public/assets/player-cards/arena-crown/arena-crown.webp", {
   name: "arena-crown",
   rect: { x: 84, y: 184, w: 344, h: 612 },
   top: [11, 17, 27],
   bottom: [6, 10, 18],
   border: [34, 28, 18, 255],
 });
-quietCardInterior("public/assets/player-cards/slime-circuit.webp", "public/assets/player-cards/slime-circuit.webp", {
+quietCardInterior("public/assets/player-cards/slime-circuit/slime-circuit.webp", "public/assets/player-cards/slime-circuit/slime-circuit.webp", {
   name: "slime-circuit",
   rect: { x: 84, y: 154, w: 344, h: 682 },
   top: [6, 18, 20],
