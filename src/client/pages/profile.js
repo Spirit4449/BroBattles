@@ -1,6 +1,6 @@
 import { escapeHtml } from "../../shared/site/html.cjs";
 import { createPlayerCardTile, comparePlayerCardsByRarity } from "../views/playerCardTile.js";
-import { warmEquippedPlayerCard } from "../views/playerCardAnimation.cjs";
+import { warmEquippedPlayerCard, disposePlayerCardMediaWithin } from "../views/playerCardAnimation.cjs";
 import { wireEmailSettings } from "../account/emailSettings.js";
 import "../styles/profile.css";
 import "../styles/levelBadge.css";
@@ -93,6 +93,7 @@ function renderProfile(profile) {
 function renderCardsGrid() {
   const grid = document.getElementById("cards-grid");
   if (!grid) return;
+  disposePlayerCardMediaWithin(grid);
   grid.innerHTML = "";
 
   const owned = new Set(

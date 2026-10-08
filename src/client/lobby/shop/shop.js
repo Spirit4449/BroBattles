@@ -1,5 +1,5 @@
 import { escapeHtml } from "../../../shared/site/html.cjs";
-import { playerCardImage, hydratePlayerCardMedia } from "../../views/playerCardAnimation.cjs";
+import { playerCardImage, hydratePlayerCardMedia, disposePlayerCardMediaWithin } from "../../views/playerCardAnimation.cjs";
 import { showPlayerCardPreview } from "../../views/playerCardPreview.js";
 import { sonner } from "../../ui/sonner.js";
 import { currencyRewardImage, rewardSound, currencyParticleCount, currencyFlightPlan, resolveRewardGrants } from "../../views/rewardPresentation.js";
@@ -1027,6 +1027,7 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
     const reveal = state.reveal;
     state.reveal = null;
     reveal.__dismiss?.();
+    disposePlayerCardMediaWithin(reveal);
     reveal.classList.add("is-leaving");
     window.setTimeout(() => reveal.remove(), 260);
   }

@@ -45,13 +45,17 @@ share one concurrent download and a 24 MiB session budget. Hidden tabs, data
 saver, and 2G connections pause warming; navigation cancels it. Failed downloads
 retry up to three times, and pauses do not consume retries.
 
-Card animation downloads share this queue and its 24 MiB session budget. They
+Speculative card animation downloads share this queue and its 24 MiB session budget. They
 run after queued gameplay assets, one at a time, with the equipped local card
 ahead of other cards. Lobby status and successful equip changes warm that card;
-battle confirms the local selection before requesting roster media. Completed
-videos live in an 8 MiB navigation-owned blob cache and survive lobby/game
-transitions. Media elements receive only completed blob URLs, never remote video
-URLs that could independently compete with Phaser downloads.
+match-found rosters include equipped card IDs and warm all participants' cards.
+Battle confirms the local selection before requesting roster media. Completed
+videos live in an 8 MiB navigation-owned LRU blob cache and survive lobby/game
+transitions. Equipped/roster cards and active media subscriptions prevent eviction;
+paused decoders retain their subscription until disposed. Media elements receive
+only completed blob URLs, never remote video URLs that could independently
+compete with Phaser downloads. Catalog content hashes version the fetch URLs;
+the server grants immutable caching only when the version matches the file.
 
 Apple browsers use HEVC-with-alpha MOV variants with no B frames. Most cards
 use full-quality alpha and a one-second keyframe interval; Crown of the Arena
@@ -62,14 +66,22 @@ Profile and reward presentation boxes fit the catalog card viewport; their
 effect canvases can overflow. Scrollable shop previews contain the full effect
 canvas in a taller artwork box so sparks cannot clip against the header or rarity
 caption. Posters and playing videos use identical geometry. Other browsers use VP9 WebM.
-Before visible playback, the renderer decodes a transparent corner into a canvas
-and checks its alpha; a decoder that drops transparency leaves the poster in place.
-During the pregame flythrough, the HUD prepares the roster's actual video elements,
-including the alpha check and `preload="auto"`, then mounts those same elements
-when the countdown starts. Preparation follows selected gameplay assets and
-respects gameplay download holds and speculative network limits; it never delays
-the server countdown. The local selection is warmed before preparing the roster.
-Only deliberate previews and reward reveals bypass transfer-time estimates.
+Before visible playback, the renderer probes a transparent corner of the first
+downloaded card once per codec. The result is cached for the browser user agent
+in localStorage; inconclusive probes are not persisted and can retry twice.
+A decoder that drops
+transparency leaves the poster in place. The HUD uses the bundled catalog and
+starts preparing actual roster video elements during visual loading, one card
+per idle turn. During the flythrough it pauses unfinished preparation and holds
+optional downloads, including downloads released by deferred audio. At countdown
+the same prepared elements are mounted and pending work resumes through idle
+callbacks. Preparation respects gameplay holds and speculative network limits;
+it never delays the server countdown. Duplicate cards share a video decoder and
+copy presented frames to canvases sized for display; browsers without video frame
+callbacks use independent videos. The shadow is a separate static poster layer.
+Visible automatic cards, deliberate previews, and reward reveals bypass
+transfer-time estimates and the speculative session budget. Offscreen preparation
+continues to use speculation limits.
 Profile hero cards loop when visible and restart from time zero each time a
 profile is opened, including when the same card/video element is reused.
 Selection cards start on their first hover/focus and keep looping after the
@@ -89,9 +101,12 @@ Stopping, waiting, or decoding failure restores the still before hiding the
 video. Both layers share the same geometry. Visible selection tiles prepare
 optional animation before hover or keyboard focus, without playing it. Loaded
 previews pause and retain their source/decoder between plays; removal, page
-disposal, or decoding failure releases the source. Offscreen tiles and hidden
+disposal, or decoding failure releases the source. Owners call
+`disposePlayerCardMediaWithin` before replacing profile grids/hero cards, dismissing
+rewards, or retiring battle overlays; there is no page-wide removal observer.
+Offscreen tiles and hidden
 tabs stop playback and unsubscribe pending requests. Reduced motion keeps posters. Data saver and 2G block optional
-downloads; 3G permits only the local player's card when its estimated transfer
+downloads; 3G permits equipped and roster cards when their estimated transfer
 fits five seconds. Other cards need an estimated transfer within 2.5 seconds.
 Estimates use declared animation bytes, connection downlink when available, and
 observed queue throughput. Browsers without network estimates try a bounded
@@ -104,13 +119,16 @@ later orb and particle effects), hover/visibility behavior,
 preview effect bounds and cleanup, and reward reveals. Use `--preview-layout`
 or `--reward-layout` for focused desktop/mobile layout checks. Playwright is
 required; `NODE_PATH` and `CHROME_EXECUTABLE` can select existing installations.
+Use `--battle-media` to check six animated cards sharing one decoder and teardown.
 
-Explicit hover/focus, profile viewing, info previews, and unlock reveals allow
-up to 20 seconds and bypass estimated-speed rejection, while still respecting
-gameplay priority, byte budgets, data saver and 2G restrictions. This prevents
-conservative browser downlink estimates from silently blocking requested previews.
-Deliberate previews follow selected gameplay assets but precede the speculative
-shared-asset manifest; the actual Phaser loading hold still blocks them.
+Visible playback allows up to 20 seconds per request, with at most three attempts
+for transient network/server failures, while still respecting gameplay priority,
+the bounded blob cache, data saver and 2G restrictions. Missing or oversized
+files do not retry. This also works after background warming has exhausted its
+session budget, including on localhost. Visible cards follow selected gameplay
+assets but precede the speculative shared-asset manifest; actual Phaser and
+flythrough loading holds still block them. Cancelled media requests cannot install
+a stale source; hide/show during preparation resumes the current request.
 
 Route loading suspends warming. Phaser holds optional card downloads through
 visual loading and the deferred audio queue, releasing on audio completion or
@@ -148,7 +166,8 @@ are fetched fresh when opened, not as an extra request during lobby bootstrap.
 During a foreground screen change, script preload hints start as soon as HTML
 arrives, alongside stylesheet loading and outgoing cleanup. Execution remains
 ordered and starts only after cleanup and styles complete. Hashed production
-JS/CSS receive one-year immutable caching; HTML, manifests, unversioned assets,
+JS/CSS and content-versioned card videos receive one-year immutable caching;
+HTML, manifests, unversioned assets,
 and development files continue revalidating. No service worker or hidden running
 lobby is used.
 
@@ -195,6 +214,9 @@ transitions. Battle frames use a single uniform scale to fit their measured visi
 bounds inside the shared card box, preserving the original artwork's aspect
 ratio. All cards receive a 10% uniform reduction, except Shuriken Strike at 5%.
 Frames remain centered, and posters and videos share the same geometry.
+Arena canvas positioning targets `canvas[data-game-renderer]` only; mirrored card
+canvases keep their own poster's bounds and stacking order. The battle media
+browser check loads the actual game stylesheet to verify duplicate animated cards.
 Art importers refresh these measurements when replacing an asset. When adjusting
 the layout, preview every cosmetic frame in solo and full-team matches at desktop
 and phone sizes (`node scripts/dev/test-generated-html.cjs --battle-layout`).

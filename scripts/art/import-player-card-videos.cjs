@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { measurePlayerCardBounds } = require('./player-card-bounds.cjs');
+const { stampPlayerCardVersions } = require('./player-card-versions.cjs');
 const specs = [
   { id: 'radiant-silver', crf: 30, appleBitrate: '350k' },
   {
@@ -140,6 +141,7 @@ for (const [index, { id, crf, appleBitrate, appleAlphaQuality = 1, appleKeyframe
     entry.animationBytes = fs.statSync(path.join(cardOut, `${id}-animated.webm`)).size;
     entry.animationAppleUrl = `/assets/player-cards/${id}/${id}-animated.mov`;
     entry.animationAppleBytes = fs.statSync(path.join(cardOut, `${id}-animated.mov`)).size;
+    stampPlayerCardVersions(entry);
     fs.writeFileSync(catalogPath, JSON.stringify(catalog, null, 2) + '\n');
     console.log(`${id}: ${frames.length} frames, ${fs.statSync(path.join(cardOut, `${id}-animated.webm`)).size} bytes`);
   } finally {

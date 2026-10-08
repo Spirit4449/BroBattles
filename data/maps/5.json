@@ -357,8 +357,8 @@
         "scroll": 1,
         "fit": "none",
         "stack": "arena",
-        "y": -530,
-        "scale": 1.1,
+        "y": -590,
+        "scale": 1.28,
         "x": 0
       },
       {
@@ -366,9 +366,9 @@
         "url": "/assets/candyland/bottom.webp",
         "scroll": 1,
         "fit": "none",
-        "y": 500,
+        "y": 570,
         "stack": "front",
-        "scale": 1.1,
+        "scale": 0.557333,
         "x": 0
       }
     ],

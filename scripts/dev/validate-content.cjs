@@ -10,6 +10,7 @@ const { ATTACK_RUNTIMES } = require('../../src/server/core/gameRoom/characterAtt
 const { BOT_PROFILES } = require('../../src/server/core/bots/characterProfiles');
 const skinsCatalog = require('../../src/shared/catalogs/skinsCatalog.json');
 const cardsCatalog = require('../../src/shared/catalogs/playerCardsCatalog.json');
+const { FIELDS: CARD_VERSION_FIELDS, playerCardAssetVersion } = require('../art/player-card-versions.cjs');
 const iconsCatalog = require('../../src/shared/catalogs/profileIconsCatalog.json');
 const { validateCatalog } = require('../../src/server/services/shop/shopCatalog');
 const shopCatalog = require('../../src/shared/catalogs/shopCatalog.json');
@@ -87,6 +88,13 @@ function validateContent({ characters = characterDefinitions, powerups = POWERUP
       } else assetExists(cosmetic.animationUrl, cosmetic.id);
       assetExists(cosmetic.assetUrl, cosmetic.id);
       if (cosmetic.animationAppleUrl) assetExists(cosmetic.animationAppleUrl, cosmetic.id);
+      // A stale version would pin old bytes under an immutable cache header.
+      for (const [urlField, versionField] of CARD_VERSION_FIELDS) {
+        if (!cosmetic[urlField]) continue;
+        let actual = null;
+        try { actual = playerCardAssetVersion(cosmetic[urlField]); } catch (_) { /* Reported by assetExists. */ }
+        if (actual && cosmetic[versionField] !== actual) errors.push(`${cosmetic.id}: ${versionField} is stale; run node scripts/art/player-card-versions.cjs`);
+      }
     }
   }
   errors.push(...validateCatalog(shop).map(error => `shop: ${error}`));

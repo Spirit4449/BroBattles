@@ -18,15 +18,34 @@ function prefersStillCards() {
 
 let standaloneLoader;
 const mediaControls = new WeakMap();
-const mountedMedia = new Set();
-let removalObserver;
 const alphaChecks = new Map();
+const ALPHA_CACHE_KEY = 'bb_card_alpha_v1';
 
-// Codec support does not guarantee alpha support. Probe decoded pixels before
-// attaching a source to visible media, so an opaque green frame never flashes.
-function verifyPlayerCardAlpha(url) {
-  if (alphaChecks.has(url)) return alphaChecks.get(url);
-  const promise = new Promise(resolve => {
+function animationFormat(url) {
+  return /\.mov(?:[?#]|$)/.test(String(url || '')) ? 'hevc' : 'webm';
+}
+
+// Alpha decoding is a property of the browser's codec, not of each file, so
+// one verdict per format is kept and remembered for this browser build.
+function readAlphaCache() {
+  try {
+    const agent = navigator.userAgent;
+    const saved = JSON.parse(window.localStorage.getItem(ALPHA_CACHE_KEY) || 'null');
+    return saved?.agent === agent ? saved : { agent };
+  } catch (_) { return null; }
+}
+
+function rememberAlpha(format, transparent) {
+  const saved = readAlphaCache();
+  if (!saved) return;
+  saved[format] = transparent;
+  try { window.localStorage.setItem(ALPHA_CACHE_KEY, JSON.stringify(saved)); } catch (_) { /* Storage is optional. */ }
+}
+
+// Resolves true/false once a frame decodes, or null when the probe could not
+// decide (timeout or load error); undecided probes are never remembered.
+function probeAlpha(url) {
+  return new Promise(resolve => {
     const probe = document.createElement('video');
     probe.muted = true;
     probe.playsInline = true;
@@ -37,8 +56,8 @@ function verifyPlayerCardAlpha(url) {
       probe.pause(); probe.removeAttribute('src'); probe.load();
       resolve(value);
     };
-    const timer = setTimeout(() => finish(false), 5000);
-    probe.onerror = () => finish(false);
+    const timer = setTimeout(() => finish(null), 5000);
+    probe.onerror = () => finish(null);
     probe.onloadeddata = () => {
       try {
         const canvas = document.createElement('canvas');
@@ -46,22 +65,50 @@ function verifyPlayerCardAlpha(url) {
         const context = canvas.getContext('2d', { willReadFrequently: true });
         context.drawImage(probe, 0, 0, 1, 1, 0, 0, 1, 1);
         finish(context.getImageData(0, 0, 1, 1).data[3] < 16);
-      } catch (_) { finish(false); }
+      } catch (_) { finish(null); }
     };
     probe.src = url;
     probe.load();
   });
-  alphaChecks.set(url, promise);
+}
+
+// Codec support does not guarantee alpha support. Probe decoded pixels before
+// attaching a source to visible media, so an opaque green frame never flashes.
+function verifyPlayerCardAlpha(url, format = animationFormat(url)) {
+  if (alphaChecks.has(format)) return alphaChecks.get(format);
+  const saved = readAlphaCache()?.[format];
+  const promise = typeof saved === 'boolean' ? Promise.resolve(saved) : probeAlpha(url).then(transparent => {
+    if (transparent == null) {
+      alphaChecks.delete(format);
+      return null;
+    }
+    rememberAlpha(format, transparent);
+    return transparent;
+  });
+  alphaChecks.set(format, promise);
   return promise;
+}
+
+// Media prepared ahead of display sets up its decoder one card per idle
+// period, so a roster whose downloads finish together cannot pile that work
+// into a single animation frame.
+let idleTurn = Promise.resolve();
+function whenIdle() {
+  idleTurn = idleTurn.then(() => new Promise(resolve => {
+    if (window.requestIdleCallback) window.requestIdleCallback(() => resolve(), { timeout: 500 });
+    else setTimeout(resolve, 0);
+  }));
+  return idleTurn;
 }
 
 function selectPlayerCardVideo(card) {
   const entry = resolveCard(card);
   // Apple platforms have HEVC alpha decoding; WebM alpha is not implied by
-  // canPlayType('video/webm'). Every selected source is also pixel-probed.
+  // canPlayType('video/webm'). Every selected format is also pixel-probed.
   const apple = typeof navigator !== 'undefined' && /Apple/.test(navigator.vendor || '');
   if (apple && entry?.animationAppleUrl && document.createElement('video').canPlayType('video/mp4; codecs="hvc1"')) {
-    return { ...entry, animationUrl: entry.animationAppleUrl, animationBytes: entry.animationAppleBytes };
+    return { ...entry, animationUrl: entry.animationAppleUrl, animationBytes: entry.animationAppleBytes,
+      animationVersion: entry.animationAppleVersion };
   }
   return entry;
 }
@@ -81,11 +128,18 @@ function warmEquippedPlayerCard(card) {
   getCardLoader().warmPlayerCard(selectPlayerCardVideo(card || catalog.defaultCardId));
 }
 
+// Download the rest of a matched roster's cards while the lobby is still up,
+// so the battle overlay never starts a download during the walkthrough.
+function warmRosterPlayerCards(cards) {
+  const entries = (cards || []).map(card => selectPlayerCardVideo(card || catalog.defaultCardId)).filter(Boolean);
+  getCardLoader().warmRosterCards?.(entries);
+}
+
 function createPlayerCardMedia(card, { hover = false, interactive = false, prepare = false, verifyAlpha = verifyPlayerCardAlpha } = {}) {
   const entry = selectPlayerCardVideo(card);
   const poster = playerCardImage(entry, { animate: false });
   const animated = playerCardImage(entry);
-  const video = /\.(webm|mov)$/.test(animated);
+  const video = /\.(webm|mov)(?:\?|$)/.test(animated);
   const media = document.createElement(video ? 'video' : 'img');
   media.setAttribute('aria-label', entry?.name || 'Player card');
   if (!video) {
@@ -107,6 +161,13 @@ function createPlayerCardMedia(card, { hover = false, interactive = false, prepa
   let release;
   let requestInteractive = false;
   let readyUrl;
+  let receivedUrl;
+  let preparationPaused = false;
+  let preparing = false;
+  let requestGeneration = 0;
+  let preparationRevision = 0;
+  let alphaRetries = 0;
+  let retryTimer;
   let observer;
   let unregisterScope;
   const motion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
@@ -117,6 +178,7 @@ function createPlayerCardMedia(card, { hover = false, interactive = false, prepa
     if (frameCallback != null) media.cancelVideoFrameCallback?.(frameCallback);
     frameCallback = null;
     state.showVideo?.(false);
+    for (const mirror of state.mirrors) mirror.showVideo?.(false);
   };
   const awaitFrame = () => {
     if (frameCallback != null) return;
@@ -130,55 +192,100 @@ function createPlayerCardMedia(card, { hover = false, interactive = false, prepa
     else if (media.readyState >= 2 && media.currentTime > 0) reveal();
   };
   const stop = () => {
-    release?.();
-    release = null;
+    clearTimeout(retryTimer);
+    retryTimer = null;
+    // A paused decoder still owns its blob URL; only release that cache lease
+    // when the source is discarded. Pending requests can be cancelled freely.
+    if (!readyUrl || disposed || failed) {
+      requestGeneration++;
+      preparationRevision++;
+      release?.();
+      release = null;
+      receivedUrl = null;
+    }
     resetFrame();
     media.pause();
     // Keep the decoder loaded between preview plays; teardown only on disposal/error.
     if ((disposed || failed) && media.getAttribute('src')) { media.removeAttribute('src'); media.load(); }
   };
   const play = () => {
-    if (disposed || failed || !active || !visible || !media.isConnected || document.hidden || motion?.matches) return;
+    if (preparationPaused || disposed || failed || !active || !visible || !media.isConnected || document.hidden || motion?.matches) return;
     prepare = false;
     if (media.getAttribute('src') !== readyUrl) media.src = readyUrl;
     awaitFrame();
-    media.play()?.catch(() => resetFrame()); // Keep the independent poster on autoplay rejection.
+    const generation = frameGeneration;
+    media.play()?.catch(() => {
+      // A rejected play from before a hide/restart must not hide a newer frame.
+      if (generation === frameGeneration) resetFrame();
+    });
   };
-  const update = () => {
-    if (disposed) return;
-    if (document.hidden || motion?.matches || failed) { stop(); return; }
-    if (!prepare && ((!active && !hover) || !visible || !media.isConnected)) { stop(); return; }
-    if (readyUrl) {
-      if (!active) stop(); else play();
-      return;
-    }
-    const wantsInteractive = active && (interactive || hover);
-    if (release && (!wantsInteractive || requestInteractive)) return;
-    // Upgrade an already queued tile when the user hovers it. Subscribe first
-    // so removing the speculative listener cannot abort the shared download.
-    const previousRelease = release;
-    requestInteractive = wantsInteractive;
-    release = getCardLoader().requestCardAnimation(entry, async url => {
-      const transparent = await verifyAlpha(url);
-      if (disposed || readyUrl === url) return;
+  const prepareReceived = async () => {
+    if (preparing || retryTimer || preparationPaused || disposed || failed || !receivedUrl || readyUrl) return;
+    preparing = true;
+    const revision = preparationRevision;
+    const url = receivedUrl;
+    try {
+      await whenIdle();
+      if (preparationPaused || disposed || revision !== preparationRevision || document.hidden || motion?.matches) return;
+      const transparent = await verifyAlpha(url, animationFormat(entry?.animationUrl));
+      if (preparationPaused || disposed || revision !== preparationRevision) return;
+      if (transparent == null && alphaRetries++ < 2) {
+        media.dataset.animationState = 'retrying';
+        retryTimer = setTimeout(() => { retryTimer = null; update(); }, 250);
+        return;
+      }
       if (!transparent) {
         failed = true;
-        media.dataset.animationState = 'unsupported';
+        media.dataset.animationState = transparent === false ? 'unsupported' : 'unavailable';
         stop();
         return;
       }
+      // Multiple cards may have awaited the same codec probe. Spread their
+      // actual decoder starts across idle turns too.
+      await whenIdle();
+      if (preparationPaused || disposed || revision !== preparationRevision || document.hidden || motion?.matches) return;
       readyUrl = url;
-      // Prepare the actual playback element before mounting the battle overlay.
       media.preload = 'auto';
       media.src = url;
       media.load();
       media.dataset.animationState = 'ready';
       play();
+    } finally {
+      preparing = false;
+      // A hide/show or request upgrade can deliver a new blob while an older
+      // alpha check is pending. Continue the latest work, even for the same URL.
+      if (revision !== preparationRevision && receivedUrl && !disposed) void prepareReceived();
+    }
+  };
+  const update = () => {
+    if (disposed) return;
+    if (document.hidden || motion?.matches || failed) { stop(); return; }
+    if (preparationPaused) return;
+    if (!prepare && ((!active && !hover) || !visible || !media.isConnected)) { stop(); return; }
+    if (readyUrl) {
+      if (!active) stop(); else play();
+      return;
+    }
+    if (receivedUrl && release) { void prepareReceived(); return; }
+    const wantsInteractive = active && (interactive || hover || (visible && media.isConnected));
+    if (release && (!wantsInteractive || requestInteractive)) return;
+    // Upgrade an already queued tile when the user hovers it. Subscribe first
+    // so removing the speculative listener cannot abort the shared download.
+    const previousRelease = release;
+    requestInteractive = wantsInteractive;
+    const generation = ++requestGeneration;
+    release = getCardLoader().requestCardAnimation(entry, async url => {
+      if (disposed || generation !== requestGeneration) return;
+      receivedUrl = url;
+      preparationRevision++;
+      await prepareReceived();
     }, { interactive: wantsInteractive });
     previousRelease?.();
   };
   const state = {
-    media, seen: false,
+    media, mirrors: new Set(),
+    canMirror: () => !disposed && !failed && !preparationPaused && active && visible && !document.hidden && !motion?.matches && !media.paused,
+    setPreparationPaused(value) { preparationPaused = value; if (!value) update(); },
     restart() {
       if (disposed || failed) return;
       resetFrame();
@@ -190,6 +297,7 @@ function createPlayerCardMedia(card, { hover = false, interactive = false, prepa
     dispose() {
       if (disposed) return;
       disposed = true;
+      for (const mirror of [...state.mirrors]) mirror.dispose();
       stop();
       observer?.disconnect();
       state.disposePresentation?.();
@@ -197,28 +305,15 @@ function createPlayerCardMedia(card, { hover = false, interactive = false, prepa
       document.removeEventListener('visibilitychange', update);
       motion?.removeEventListener?.('change', update);
       unregisterScope?.();
-      mountedMedia.delete(state);
-      if (!mountedMedia.size) { removalObserver?.disconnect(); removalObserver = null; }
     },
     update,
   };
+  // Owners dispose media they remove (disposePlayerCardMediaWithin); page
+  // disposal releases anything still mounted.
   mediaControls.set(media, state);
-  mountedMedia.add(state);
-  if (!removalObserver && window.MutationObserver) {
-    removalObserver = new window.MutationObserver(() => {
-      for (const item of mountedMedia) {
-        if (item.media.isConnected) {
-          item.seen = true;
-          if (!window.IntersectionObserver) item.update();
-        } else if (item.seen) item.dispose();
-      }
-    });
-    removalObserver.observe(document.documentElement, { childList: true, subtree: true });
-  }
   if (window.IntersectionObserver) {
     observer = new window.IntersectionObserver(entries => {
       visible = entries.some(item => item.isIntersecting);
-      if (media.isConnected) state.seen = true;
       update();
     });
     observer.observe(media);
@@ -232,7 +327,12 @@ function createPlayerCardMedia(card, { hover = false, interactive = false, prepa
   media.addEventListener('error', () => { failed = true; stop(); }, { once: true });
   unregisterScope = window.__BB_PAGE_SCOPE__?.onDispose(state.dispose);
   if (prepare) update();
+  else if (!window.IntersectionObserver) window.requestAnimationFrame?.(update);
   return media;
+}
+
+function pausePlayerCardPreparation(media, paused) {
+  mediaControls.get(media)?.setPreparationPaused(paused);
 }
 
 function restartPlayerCardMedia(media) {
@@ -241,6 +341,66 @@ function restartPlayerCardMedia(media) {
 
 function disposePlayerCardMedia(media) {
   mediaControls.get(media)?.dispose();
+}
+
+// Release every card video (and mirror) inside a subtree before replacing it.
+function disposePlayerCardMediaWithin(root) {
+  if (!root) return;
+  if (mediaControls.has(root)) disposePlayerCardMedia(root);
+  root.querySelectorAll?.('video, canvas').forEach(disposePlayerCardMedia);
+}
+
+// Show the same card a second time without a second decoder: copy each frame
+// the source presents onto a canvas. Returns null where frame callbacks are
+// unavailable, so callers fall back to independent media.
+function mirrorPlayerCardMedia(source) {
+  const controls = mediaControls.get(source);
+  if (!controls?.mirrors || !source.requestVideoFrameCallback) return null;
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext?.('2d');
+  if (!context) return null;
+  canvas.setAttribute('aria-label', source.getAttribute('aria-label') || 'Player card');
+  let frame = null;
+  let disposed = false;
+  let sized = false;
+  const mirror = {
+    media: canvas,
+    poster: source.poster,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      if (frame != null) source.cancelVideoFrameCallback?.(frame);
+      frame = null;
+      controls.mirrors.delete(mirror);
+      mirror.showVideo?.(false);
+      mirror.disposeLayers?.();
+    },
+  };
+  const draw = () => {
+    frame = null;
+    if (disposed) return;
+    const { videoWidth: width, videoHeight: height } = source;
+    if (width && height && controls.canMirror()) {
+      if (!sized) {
+        // Battle cards are small on screen; copying the full export for each
+        // teammate needlessly multiplies the canvas upload cost.
+        const bounds = source.getBoundingClientRect();
+        const scale = Math.min(1, bounds.width * (window.devicePixelRatio || 1) / width);
+        canvas.width = Math.max(1, Math.ceil(width * scale));
+        canvas.height = Math.max(1, Math.ceil(height * scale));
+        sized = true;
+      } else context.clearRect(0, 0, canvas.width, canvas.height);
+      try {
+        context.drawImage(source, 0, 0, canvas.width, canvas.height);
+        mirror.showVideo?.(true);
+      } catch (_) { mirror.showVideo?.(false); }
+    }
+    frame = source.requestVideoFrameCallback(draw);
+  };
+  frame = source.requestVideoFrameCallback(draw);
+  controls.mirrors.add(mirror);
+  mediaControls.set(canvas, mirror);
+  return canvas;
 }
 
 // A native video poster may disappear before Safari paints its decoded frame.
@@ -252,7 +412,7 @@ function layerPlayerCardMedia(media) {
   layers.className = 'player-card-layers';
   Object.assign(layers.style, { position: 'relative', display: 'block', width: '100%', height: '100%' });
   const still = document.createElement('img');
-  still.src = media.poster;
+  still.src = controls.poster || media.poster;
   still.alt = '';
   still.setAttribute('aria-hidden', 'true');
   still.className = 'player-card-still';
@@ -386,4 +546,4 @@ function bindPlayerCardHover(tile, image, card) {
   });
 }
 
-module.exports = { restartPlayerCardMedia, disposePlayerCardMedia, layerPlayerCardMedia, presentPlayerCardMedia, playerCardImage, prefersStillCards, bindPlayerCardHover, positionPlayerCardCanvas, createPlayerCardMedia, hydratePlayerCardMedia, warmEquippedPlayerCard, verifyPlayerCardAlpha, selectPlayerCardVideo };
+module.exports = { pausePlayerCardPreparation, restartPlayerCardMedia, disposePlayerCardMedia, disposePlayerCardMediaWithin, mirrorPlayerCardMedia, warmRosterPlayerCards, layerPlayerCardMedia, presentPlayerCardMedia, playerCardImage, prefersStillCards, bindPlayerCardHover, positionPlayerCardCanvas, createPlayerCardMedia, hydratePlayerCardMedia, warmEquippedPlayerCard, verifyPlayerCardAlpha, selectPlayerCardVideo };

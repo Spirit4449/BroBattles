@@ -101,7 +101,7 @@ The local player, the server's movement validation, and the bot physics all read
 | `stats.specialChargeHits` | Basic hits needed to fill the super. |
 | `stats.specialChargePerHit` | Charge a super hit gives back, as a fraction of one basic hit. |
 | `stats.spriteScale`, `stats.body` | Render scale and hitbox shrink and offset. Defaults are in `characterTuning.js` (`CHARACTER_BODY_DEFAULTS`). |
-| `stats.tuning.attack.aim`, `stats.tuning.special.aim` | Aim reticle shape and range. `reticleScale` shrinks a round reticle visually without changing range or damage. Draven's inferno also uses its `aim.radius` as its damage radius. |
+| `stats.tuning.attack.aim`, `stats.tuning.special.aim` | Aim reticle shape and range. `reticleScale`, `radiusY`, and `reticleOffsetY` control a round reticle's drawn size and placement without changing range or damage. Draven's inferno also uses its `aim.radius` as its damage radius. |
 | `stats.tuning.attack.<name>` | Basic-attack projectile or melee numbers (speed, range, radius, timings). |
 | `stats.tuning.special.<name>` | Super numbers, for example `ninja.swarm`, `draven.inferno` (now includes `damageTickMs`, `damageScale`, `minDamagePerTick`, `firstDamageDelayMs`, `bobWaveMs`), `wizard.arcaneSurge` (`powerScale`, `durationScale`, `castMs`, `beamMs`, `teammateBlockedPowerups`, `fallbackPowerup`), `gloop.hook`, and Thorg's `rageDurationMs` / `rageModifiers` / `knockback`. |
 | `presentation` | Client-only visual settings (art scale, animation locks, dash poses). |
@@ -142,7 +142,7 @@ The admin panel calls the runtime configuration service, which updates in-memory
 | `gameRoomConfig.js`: drops | Lifetime 12s; final 3s blinking; pickup radius 110px; 4–8 coin drops and 1–3 gem drops |
 | `gameRoomConfig.js`: validation | Hit rewind cap 300ms; future tolerance 120ms; history 1s / 128 samples; duplicate-hit window 80ms; stomp radius 110px and interruption 300ms |
 | `movementPhysics.json` | Run speed 260px/s; ground/air acceleration 3000/3300px/s²; gravity 990px/s²; jump speed parameter 468px/s; dash 560px/s (straight down 840), burst 160ms, cooldown 5000ms, coast up to 850ms |
-| `ducking.js` | Body height ×0.55; movement ×0.25; damage taken ×0.8; reentry delay 200ms |
+| `ducking.js` | Body height ×0.55; movement ×0.25; damage taken ×0.8; minimum hold 50ms; reentry delay 100ms |
 | `characterStats.js` | Level cap 10; levels 2–5 add 500 HP / 100 damage / 200 special damage per level; levels 6–10 add 400 / 80 / 100; next-level coin costs 200, 400, 800, 1600, 2400, 3300, 4500, 6100, 8200 |
 | `gameModes.catalog.json`: Bank Bust | Vault HP 50,000; match 210s; respawn 3500ms; respawn shield 3000ms; unlock 250 peak trophies |
 | `bankBust/state.js`: loose gold | Cap 6; value 10 each; pickup radius 42px; spawn interval 3200ms; collection event retention 1800ms |

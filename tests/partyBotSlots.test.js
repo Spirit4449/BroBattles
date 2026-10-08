@@ -68,6 +68,7 @@ test("configured party bot fighter is used by match assembly", async () => {
         char_class: "ninja",
         char_levels: '{"ninja":2}',
         trophies: 500,
+        selected_card_id: "radiant-silver",
         party_id: 44,
         team: "team1",
       }];
@@ -102,6 +103,7 @@ test("configured party bot fighter is used by match assembly", async () => {
     { teamSize: 1, seed: 3 },
   );
   assert.equal(result.players.length, 2);
+  assert.equal(result.players.find(player => !player.isBot).selected_card_id, "radiant-silver");
   assert.equal(botInserts.length, 1);
   assert.equal(botInserts[0][4], "wizard");
 });

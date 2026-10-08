@@ -4,8 +4,24 @@ const { duckFrameCells: DUCK_FRAME_CELLS } = require('../characters');
 const DUCK_HEIGHT_RATIO = 0.55; // hitbox height while ducking, as a fraction of standing
 const DUCK_SPEED_RATIO = 0.25; // move speed while ducking, as a fraction of normal
 const DUCK_DAMAGE_TAKEN_RATIO = 0.8; // damage taken while ducking (0.8 = 20% less)
-const DUCK_REENTRY_DELAY_MS = 200; // wait after standing up before ducking again
+const DUCK_MIN_HOLD_MS = 50; // minimum duration for an accepted duck press
+const DUCK_REENTRY_DELAY_MS = 100; // wait after standing up before ducking again
 const DUCK_GROUND_SLACK_PX = 8; // per-step platform travel the duck edge guard follows (480 px/s)
+
+// Called before applying the local duck pose. Only accepted entries start a hold;
+// continuing to hold the key must not extend the minimum duration.
+function updateDuckRequest(player, pressed, eligible, now) {
+  if (!eligible) {
+    player._duckHoldUntil = 0;
+    return false;
+  }
+  if (!player._ducking) {
+    player._duckHoldUntil = 0;
+    if (!pressed || now < (player._duckAvailableAt || 0)) return false;
+    player._duckHoldUntil = now + DUCK_MIN_HOLD_MS;
+  }
+  return pressed || now < (player._duckHoldUntil || 0);
+}
 
 function reduceDuckDamage(player, damage) {
   const raw = Math.max(0, Number(damage) || 0);
@@ -95,6 +111,8 @@ module.exports = {
   DUCK_SPEED_RATIO,
   DUCK_DAMAGE_TAKEN_RATIO,
   DUCK_REENTRY_DELAY_MS,
+  DUCK_MIN_HOLD_MS,
+  updateDuckRequest,
   reduceDuckDamage,
   findGround,
   findGroundSpan,

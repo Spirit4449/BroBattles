@@ -92,12 +92,14 @@ test('guide reach ignores drag strength and melee footprints remain fixed', () =
 });
 
 test('Thorg draws a smaller reticle without shortening his attack range', () => {
-  const state = context('thorg');
+  const player = { x: 200, y: 300, width: 80, height: 100 };
+  const state = resolveAttackAimContext({ character: 'thorg', player,
+    family: 'basic', pointerWorldX: 700, pointerWorldY: 300, quick: false });
   const ellipses = [];
   const scene = { add: { graphics() {
     const g = {};
     for (const key of ['setPosition', 'setDepth', 'setAlpha', 'setVisible', 'clear', 'destroy', 'fillStyle', 'lineStyle']) g[key] = () => g;
-    g.strokeEllipse = (_x, _y, width, height) => { ellipses.push({ width, height }); return g; };
+    g.strokeEllipse = (x, y, width, height) => { ellipses.push({ x, y, width, height }); return g; };
     g.fillEllipse = () => g;
     return g;
   } } };
@@ -108,6 +110,9 @@ test('Thorg draws a smaller reticle without shortening his attack range', () => 
   assert.ok(ellipses.length > 0);
   assert.ok(ellipses[0].width < state.range * 2);
   assert.ok(ellipses[0].height < state.config.radiusY * 2);
+  assert.ok(ellipses[0].height < ellipses[0].width * 0.6);
+  assert.ok(ellipses[0].y <= state.baseY);
+  assert.ok(ellipses[0].y + ellipses[0].height / 2 < state.baseY + player.height / 2);
   renderer.destroy();
 });
 

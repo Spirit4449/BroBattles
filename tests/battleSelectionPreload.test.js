@@ -6,13 +6,14 @@ const { mapDefaults } = require('../src/shared/maps');
 const { sceneryUrls } = require('../src/shared/maps/scenery');
 
 function setup() {
-  const state = { urls: [], mode: null, card: null };
+  const state = { urls: [], mode: null, card: null, roster: null };
   const window = { __BB_NAVIGATION__: {
     preload: urls => { state.urls = Array.from(urls); }, selectPreloadMode: mode => { state.mode = mode; },
   } };
   const context = vm.createContext({
     window, mapDefaults, sceneryUrls,
     warmEquippedPlayerCard: card => { state.card = card; },
+    warmRosterPlayerCards: cards => { state.roster = cards; },
     buildCharacterSkinAtlasUrls: (character, skin) => ({ animationsUrl: `/assets/${character}/${skin || 'base'}.json`, spritesheetUrl: `/assets/${character}/${skin || 'base'}.webp` }),
     buildCharacterSkinWeaponUrl: (character, skin) => skin ? `/assets/${character}/${skin}-weapon.webp` : null,
   });
@@ -34,6 +35,16 @@ test('selection warming includes only the selected map and roster characters', (
   assert.ok(state.urls.includes('/assets/ninja/base.webp'));
   assert.ok(state.urls.includes('/assets/ninja/ninja-blue.webp'));
   assert.ok(!state.urls.some(url => /wizard|shuffle|random/i.test(url)));
+});
+
+test('a matched roster warms every player card before the battle loads', () => {
+  const { state, warm } = setup();
+  warm({ modeId: 'duels', modeVariantId: 'duels-2v2', mapId: 1 }, [
+    { name: 'a', char_class: 'ninja', selected_card_id: 'arena-crown' },
+    { name: 'bot', char_class: 'wizard', selected_card_id: 'radiant-gold' },
+    { name: 'c', char_class: 'thorg' },
+  ]);
+  assert.deepEqual(state.roster, ['arena-crown', 'radiant-gold', null]);
 });
 
 test('confirmed solo character changes replace stale roster skin assets', () => {

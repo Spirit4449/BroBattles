@@ -33,6 +33,7 @@ async function main() {
       });
     }));
     server = http.createServer((req, res) => {
+      req.url = new URL(req.url, 'http://localhost').pathname;
       if (req.url === '/assets/PressStart2P.woff2' || /^\/assets\/chromas\/[a-z-]+\.svg$/.test(req.url)) {
         res.setHeader('Content-Type', req.url.endsWith('.svg') ? 'image/svg+xml' : 'font/woff2');
         return res.end(fs.readFileSync(path.join(root, 'public', req.url)));
@@ -78,7 +79,13 @@ async function main() {
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     await page.waitForFunction(() => window.htmlSmoke);
     let result;
-    if (process.argv.includes('--card-cleanup')) {
+    if (process.argv.includes('--battle-media')) {
+      result = [];
+      for (const viewport of [{ width: 1512, height: 820 }, { width: 844, height: 390 }, { width: 390, height: 844 }]) {
+        await page.setViewportSize(viewport);
+        result.push(...await page.evaluate(() => window.htmlSmoke.runBattleMedia()));
+      }
+    } else if (process.argv.includes('--card-cleanup')) {
       result = await page.evaluate(() => window.htmlSmoke.runCardCleanup());
     } else if (process.argv.includes('--battle-layout')) {
       result = [];

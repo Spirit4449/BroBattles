@@ -806,6 +806,9 @@ class GameScene extends Phaser.Scene {
   // Preloads assets
   preload() {
     deferSceneAudio(this, { holdDownloads: () => window.__BB_NAVIGATION__?.holdGameplayDownloads?.() });
+    // Prepare cached roster media throughout visual loading. The HUD pauses
+    // unfinished decoder work and optional downloads during the flythrough.
+    if (!isLiveGame && !gameEnded && !editorSession && !gameData?.editorPlaytest) hud.prepareBattleCards();
     const onVisualProgress = (p) => {
       // 50% - 90%
       const pct = Math.floor(50 + p * 40); // maps 0-1 -> 50-90

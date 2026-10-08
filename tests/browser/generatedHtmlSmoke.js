@@ -1,5 +1,5 @@
 import { createPlayerCardTile } from "../../src/client/views/playerCardTile.js";
-import { createPlayerCardMedia } from "../../src/client/views/playerCardAnimation.cjs";
+import { createPlayerCardMedia, disposePlayerCardMediaWithin } from "../../src/client/views/playerCardAnimation.cjs";
 import { showPlayerCardPreview } from "../../src/client/views/playerCardPreview.js";
 import { initializeShop, createRewardPresentation } from "../../src/client/lobby/shop/shop.js";
 import playerCards from "../../src/shared/catalogs/playerCardsCatalog.json";
@@ -104,7 +104,7 @@ window.htmlSmoke = {
             check(Math.abs(art.left + (view.x + view.w / 2) * scale - (rect.left + rect.width / 2)) < 1, 'frame centered horizontally');
             check(Math.abs(art.top + (view.y + view.h / 2) * scale - (rect.top + rect.height / 2)) < 1, 'frame centered vertically');
             check(scale < fit && scale > fit * .8, 'frame uses a modest uniform reduction');
-            const video = frame.querySelector('video');
+            const video = frame.querySelector('video, canvas');
             if (video) {
               const playing = video.getBoundingClientRect();
               check(['x', 'y', 'width', 'height'].every(key => Math.abs(playing[key] - art[key]) < 0.1), 'video and poster geometry must match');
@@ -114,8 +114,53 @@ window.htmlSmoke = {
       }
       return ['all 13 cards preserve proportions with uniformly reduced frames in solo, duo, and full teams'];
     } finally {
+      disposePlayerCardMediaWithin(overlay);
       overlay.remove(); css.remove(); window.fetch = originalFetch;
     }
+  },
+  async runBattleMedia() {
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = '/styles/game.css';
+    const loaded = new Promise(resolve => { css.onload = resolve; });
+    document.head.append(css);
+    await loaded;
+    const overlay = document.createElement('div');
+    overlay.id = 'battle-start-overlay';
+    overlay.innerHTML = '<div class="bs-panel"><div class="bs-grid"><div id="bs-your" class="bs-col"></div><div id="bs-opp" class="bs-col"></div></div></div>';
+    document.body.append(overlay);
+    const card = playerCards.cards.find(card => card.id === 'astral-amethyst');
+    const roster = Array.from({ length: 6 }, (_, i) => ({
+      name: `Player ${i}`, team: i < 3 ? 1 : 2, selected_card_id: card.id, char_class: 'ninja',
+    }));
+    const hud = createGameHudController({ getGameData: () => ({ yourTeam: 1, players: roster }) });
+    try {
+      hud.showBattleStartOverlay(roster);
+      overlay.classList.add('phase-cards');
+      for (const node of overlay.querySelectorAll('.bs-player-card')) node.classList.add('is-in');
+      check(overlay.querySelectorAll('video').length === 1, 'duplicate cards created extra decoders');
+      check(overlay.querySelectorAll('canvas').length === 5, 'every other player should mirror the shared decoder');
+      const video = overlay.querySelector('video');
+      for (let n = 0; n < 160 && ![...overlay.querySelectorAll('canvas')].every(canvas => canvas.style.opacity === '1'); n++) await tick(50);
+      check(video.currentTime > 0, 'shared source failed to animate');
+      for (const canvas of overlay.querySelectorAll('canvas')) {
+        check(canvas.style.opacity === '1', 'a duplicate player card stayed still');
+        const poster = canvas.parentElement.querySelector('img').getBoundingClientRect();
+        const rendered = canvas.getBoundingClientRect();
+        check(['x', 'y', 'width', 'height'].every(key => Math.abs(rendered[key] - poster[key]) < 0.1),
+          `mirrored frame shifted from its own poster: canvas x=${rendered.x}, poster x=${poster.x}`);
+        const label = canvas.closest('.bs-player-card').querySelector('.bs-card-player-name');
+        const labelBounds = label.getBoundingClientRect();
+        check(document.elementsFromPoint(labelBounds.x + labelBounds.width / 2, labelBounds.y + labelBounds.height / 2).indexOf(label) >= 0,
+          'a mirrored frame obscured the player name');
+        check(canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some(value => value > 0), 'mirrored card has no pixels');
+      }
+      hud.hideBattleStartOverlay();
+      await tick(400);
+      check(!video.getAttribute('src'), 'finished countdown retained the shared decoder');
+      check([...overlay.querySelectorAll('canvas')].every(canvas => canvas.style.opacity === '0'), 'finished countdown retained mirror playback');
+      return ['six animated player cards share one decoder and release it after the countdown'];
+    } finally { disposePlayerCardMediaWithin(overlay); overlay.remove(); css.remove(); }
   },
   async runPreviewLayout() {
     const previousScope = window.__BB_PAGE_SCOPE__;
@@ -287,6 +332,7 @@ window.htmlSmoke = {
       tile.style.display = '';
       for (let attempt = 0; attempt < 100 && video.style.opacity !== '1'; attempt++) await tick(30);
       check(video.style.opacity === '1', 'cached hover replay did not reveal its first frame');
+      disposePlayerCardMediaWithin(tile);
       tile.remove();
       await tick(50);
       check(!video.getAttribute('src'), 'removed profile retained its decoder');
@@ -298,6 +344,7 @@ window.htmlSmoke = {
       automatic.style.display = 'none';
       for (let attempt = 0; attempt < 20 && !automatic.paused; attempt++) await tick(50);
       check(automatic.paused && automatic.getAttribute('src') === downloadedUrl, 'hidden card did not pause/retain its decoder');
+      disposePlayerCardMediaWithin(automatic);
       automatic.remove();
       await tick(50);
       check(!automatic.getAttribute('src'), 'removed automatic card retained its decoder');

@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const input = require('../src/server/core/gameRoom/inputManager');
 const { MOVE_PLAUSIBLE_SPEED_V, MOVE_PLAUSIBLE_LAG_PAD_V, MAX_MOVEMENT_CREDIT_MS } = require('../src/server/core/gameRoomConfig');
+const { DUCK_REENTRY_DELAY_MS } = require('../src/shared/physics/ducking');
 const { characterBody } = require('../src/shared/physics/duelGeometry');
 const { GameRoom } = require('../src/server/core/gameRoom');
 const { createAuthSessionService, tokenHash } = require('../src/server/services/auth/authSessionService');
@@ -64,16 +65,20 @@ test('grounded ducking uses canonical geometry and preserves the feet', t => {
   assert.equal(f.player._bodyHalfHeight, body.halfHeight * 0.55);
   assert.equal(f.player._bodyCenterOffsetY + f.player._bodyHalfHeight, body.offsetY + body.halfHeight);
 });
-test('ducking cannot be re-entered for 200ms after leaving it', t => {
+test('ducking re-entry waits for the shared delay after leaving it', t => {
   const f = movement(t); const body = characterBody('ninja');
   f.room.geometry = { colliders: [{ left: -100, right: 100, top: body.offsetY + body.halfHeight, collision: { up: true } }], world: WORLD };
   f.send({ x: 0, y: 0, grounded: true, ducking: true });
   assert.equal(f.player.ducking, true);
-  f.advance(1); f.send({ x: 0, y: 0, grounded: true, ducking: false });
+  f.send({ x: 0, y: 0, grounded: true, ducking: false });
   assert.equal(f.player.ducking, false);
-  f.advance(199); f.send({ x: 0, y: 0, grounded: true, ducking: true });
+  f.send({ x: 0, y: 0, grounded: true, ducking: true });
   assert.equal(f.player.ducking, false);
-  f.advance(1); f.send({ x: 0, y: 0, grounded: true, ducking: true });
+  f.advance(DUCK_REENTRY_DELAY_MS - 1);
+  f.send({ x: 0, y: 0, grounded: true, ducking: true });
+  assert.equal(f.player.ducking, false);
+  f.advance(1);
+  f.send({ x: 0, y: 0, grounded: true, ducking: true });
   assert.equal(f.player.ducking, true);
 });
 test('malformed packets do not reach the alternate movement buffer', t => {

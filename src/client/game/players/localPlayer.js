@@ -67,6 +67,7 @@ import {
   DUCK_HEIGHT_RATIO,
   DUCK_SPEED_RATIO,
   DUCK_REENTRY_DELAY_MS,
+  updateDuckRequest,
   findGroundSpan,
   hasStandingClearance,
   holdDuckGround,
@@ -679,6 +680,7 @@ export function createPlayer(
   player._ducking = false;
   player._duckRequested = false;
   player._duckAvailableAt = 0;
+  player._duckHoldUntil = 0;
   player._duckGroundSpan = null;
   // Helper to adjust body offset when flipping
   applyFlipOffsetLocal = () => {
@@ -1857,7 +1859,8 @@ function updateAimReticleVisibility() {
 function updateDucking(scene, input, movementLocked) {
   const grounded = !!(player.body.touching.down || player.body.blocked.down);
   const groundSpan = grounded ? findGroundSpan(player.body, scene._mapObjects || []) : null;
-  const wantsToDuck = input.down && !input.up && !movementLocked && !dead;
+  const wantsToDuck = updateDuckRequest(player, input.down,
+    !input.up && !movementLocked && !dead && grounded && !!groundSpan, Date.now());
   player._duckRequested = wantsToDuck;
   let ducking = !!player._ducking;
   if (!ducking && wantsToDuck && Date.now() >= (player._duckAvailableAt || 0) && grounded && groundSpan) {

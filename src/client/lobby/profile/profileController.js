@@ -1,5 +1,5 @@
 import { createPlayerCardTile, comparePlayerCardsByRarity } from "../../views/playerCardTile.js";
-import { restartPlayerCardMedia, warmEquippedPlayerCard, presentPlayerCardMedia, createPlayerCardMedia } from "../../views/playerCardAnimation.cjs";
+import { restartPlayerCardMedia, warmEquippedPlayerCard, presentPlayerCardMedia, createPlayerCardMedia, disposePlayerCardMediaWithin } from "../../views/playerCardAnimation.cjs";
 import { wireEmailSettings } from "../../account/emailSettings.js";
 import {
   buildProfileIconAlt,
@@ -94,6 +94,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
         media.id = heroCardFrame.id;
         media.className = heroCardFrame.className;
         media.dataset.cardId = selectedCard.id;
+        disposePlayerCardMediaWithin(heroCardFrame);
         heroCardFrame.replaceWith(media);
       }
     }
@@ -195,6 +196,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
   function renderProfilePopupCards() {
     const grid = document.getElementById("profile-cards-grid");
     if (!grid) return;
+    disposePlayerCardMediaWithin(grid);
     grid.innerHTML = "";
 
     const catalogCards = Array.isArray(lobbyProfileState.catalog?.cards)
@@ -381,6 +383,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
         lobbyProfileState.profile?.selectedCardId || null;
       renderProfilePopupStats();
       const grid = document.getElementById("profile-cards-grid");
+      disposePlayerCardMediaWithin(grid);
       if (grid) grid.innerHTML = "";
       const iconGrid = document.getElementById("profile-icons-grid");
       if (iconGrid) iconGrid.innerHTML = "";

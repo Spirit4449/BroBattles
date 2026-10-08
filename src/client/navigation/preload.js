@@ -6,16 +6,20 @@ export function getTemplateResources(html) {
 }
 
 // Only download bytes into the HTTP cache. Discovery and assets share a queue,
-// cancellation controller, and session byte budget.
+// cancellation controller. The session byte budget limits speculation, not
+// playback the user is currently viewing.
 export function createBattlePreloader() {
   const jobs = new Map();
   const templates = new Map();
   const completed = new Set();
   // Navigation owns these blobs, so a warmed lobby video survives page disposal.
+  // Map order is least recently used first.
   const videos = new Map();
   const gameplayHolds = new Set();
   let videoBytes = 0;
   let ownVideo;
+  // The matched roster's cards are retained speculative downloads, like ownVideo.
+  let rosterVideos = new Set();
   let activeJob;
   let measuredMbps;
   let manifest;
@@ -30,19 +34,58 @@ export function createBattlePreloader() {
   const allowed = () => !document.hidden && navigator.onLine !== false && !navigator.connection?.saveData && !/^(slow-)?2g$/.test(navigator.connection?.effectiveType || '');
   const relevant = job => job.kind === 'video' || job.target === screen;
   const videoLimit = 8 * 1024 * 1024;
+  const retained = url => url === ownVideo || rosterVideos.has(url);
+  const foreground = job => job.kind === 'video' && job.interactive;
+  function videoPriority(url, interactive) {
+    const rank = url === ownVideo ? 0 : rosterVideos.has(url) ? 1 : 2;
+    return (interactive ? [2.4, 2.45, 2.5] : [4, 4.5, 5])[rank];
+  }
+  // Re-rank queued cards after the equipped card or roster changes, dropping
+  // speculative downloads nothing wants any more.
+  function retarget() {
+    for (const [key, job] of jobs) if (job.kind === 'video') {
+      job.priority = videoPriority(job.url, job.interactive);
+      if (!job.listeners.size && !retained(job.url)) jobs.delete(key);
+    }
+    interruptVideo();
+  }
+  // Card paths are fixed; the catalog's content hash makes the URL immutable.
+  function cardVideoUrl(card) {
+    const path = card?.animationUrl;
+    if (!/^\/assets\/player-cards\/([a-z0-9-]+)\/\1-animated\.(webm|mov)$/.test(path || '')) return null;
+    const url = new URL(path, location.origin);
+    if (/^[a-f0-9]{12,64}$/.test(card.animationVersion || '')) url.searchParams.set('v', card.animationVersion);
+    return url.href;
+  }
+  // Pending/paused decoders retain a lease until their source is discarded.
+  function makeRoom(bytes, evict = false) {
+    let available = videoLimit - videoBytes;
+    for (const [url, entry] of videos) {
+      if (available >= bytes) break;
+      if (retained(url) || entry.listeners.size) continue;
+      available += entry.size;
+      if (evict) {
+        videos.delete(url);
+        videoBytes -= entry.size;
+        URL.revokeObjectURL?.(entry.objectUrl);
+      }
+    }
+    return available >= bytes;
+  }
   function videoAllowed(job) {
     if (gameplayHolds.size || window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return false;
-    if (videoBytes + job.bytes > videoLimit || job.bytes > budget) return false;
-    // Deliberate previews/rewards still yield to gameplay and data-saver, but
-    // must not be silently rejected by an unreliable downlink estimate.
+    if ((!foreground(job) && job.bytes > budget) || job.bytes > videoLimit) return false;
+    const wanted = job.interactive || retained(job.url);
+    if (videoBytes + job.bytes > videoLimit && !(wanted && makeRoom(job.bytes))) return false;
+    // Visible playback still yields to gameplay and data saver, but must not
+    // be silently rejected by an unreliable downlink estimate.
     if (job.interactive) return true;
     const connection = navigator.connection;
-    const own = job.url === ownVideo;
-    if (!own && /3g/.test(connection?.effectiveType || '')) return false;
+    if (!wanted && /3g/.test(connection?.effectiveType || '')) return false;
     const reported = Number(connection?.downlink);
     const speed = Math.min(reported > 0 ? reported : Infinity, measuredMbps || Infinity);
     // No Network Information API: try one bounded, low-priority download.
-    return job.bytes * 8 / (speed * 1000000) <= (own ? 5 : 2.5);
+    return job.bytes * 8 / (speed * 1000000) <= (wanted ? 5 : 2.5);
   }
   function interruptVideo() {
     if (activeJob?.kind === 'video') {
@@ -83,7 +126,7 @@ export function createBattlePreloader() {
     delayTimer = idleTimer = null;
   }
   function schedule(delay = 250) {
-    if (!enabled || busy || !allowed() || budget <= 0 || delayTimer || idleTimer) return;
+    if (!enabled || busy || !allowed() || delayTimer || idleTimer) return;
     delayTimer = setTimeout(() => {
       delayTimer = null;
       const run = () => { idleTimer = null; void pump(); };
@@ -91,11 +134,12 @@ export function createBattlePreloader() {
     }, delay);
   }
   async function pump() {
-    if (!enabled || busy || !allowed() || budget <= 0) return;
-    const job = [...jobs.values()].filter(entry => relevant(entry) && entry.attempts < 3 &&
+    if (!enabled || busy || !allowed()) return;
+    const job = [...jobs.values()].filter(entry => relevant(entry) && entry.attempts < 3 && (budget > 0 || foreground(entry)) &&
       (entry.kind !== 'video' || videoAllowed(entry)))
       .sort((a, b) => a.priority - b.priority)[0];
     if (!job) return;
+    if (job.kind === 'video') makeRoom(job.bytes, true);
     if (job.kind !== 'video' && completed.has(job.url)) { jobs.delete(job.key); schedule(); return; }
     busy = true;
     activeJob = job;
@@ -104,11 +148,13 @@ export function createBattlePreloader() {
     controller = request;
     const started = Date.now();
     let transferred = 0;
-    const timeout = setTimeout(() => request.abort(), job.kind === 'video' ? (job.interactive ? 20000 : job.url === ownVideo ? 5000 : 2500) : 15000);
+    let retryable = true;
+    const timeout = setTimeout(() => request.abort(), job.kind === 'video' ? (job.interactive ? 20000 : retained(job.url) ? 5000 : 2500) : 15000);
     job.attempts++;
     try {
       const response = await fetch(job.url, { credentials: 'same-origin', priority: 'low', signal: request.signal });
       if (!response.ok || !response.body) {
+        retryable = response.status >= 500 || response.status === 408 || response.status === 429;
         await response.body?.cancel();
         throw new Error('Preload unavailable');
       }
@@ -118,19 +164,22 @@ export function createBattlePreloader() {
         const { done, value } = await reader.read();
         if (request.signal.aborted) throw new DOMException('Preload stopped', 'AbortError');
         if (done) break;
-        budget -= value.byteLength;
         transferred += value.byteLength;
-        if (budget < 0) { await reader.cancel(); throw new Error('Preload budget exhausted'); }
+        if (!foreground(job)) {
+          budget -= value.byteLength;
+          if (budget < 0) { await reader.cancel(); throw new Error('Preload budget exhausted'); }
+        }
         if (job.kind === 'video' && (transferred > job.bytes * 1.1 || videoBytes + transferred > videoLimit)) {
+          retryable = false;
           await reader.cancel();
           throw new Error('Card animation exceeds declared size');
         }
         if (job.kind !== 'asset') chunks.push(value);
       }
       if (job.kind === 'video') {
-        const blob = new Blob(chunks, { type: job.url.endsWith('.mov') ? 'video/quicktime' : 'video/webm' });
+        const blob = new Blob(chunks, { type: new URL(job.url).pathname.endsWith('.mov') ? 'video/quicktime' : 'video/webm' });
         const url = URL.createObjectURL(blob);
-        videos.set(job.url, url);
+        videos.set(job.url, { objectUrl: url, size: blob.size, listeners: job.listeners });
         videoBytes += blob.size;
         for (const notify of job.listeners) {
           try { notify(url); } catch (_) { /* A retired view cannot fail warming. */ }
@@ -157,8 +206,10 @@ export function createBattlePreloader() {
       // priority group, at most three times.
       if (!enabled || !allowed() || !relevant(job) || job.preempted) job.attempts--;
       else if (job.kind === 'video') {
-        job.attempts = 3; // Cosmetic failures stay static for this request.
-        if (request.signal.aborted) measuredMbps = Math.max(0.05, transferred * 8 / Math.max(1, Date.now() - started) / 1000);
+        // Visible playback can recover from a transient server/connection
+        // failure. Speculation and terminal media failures do not retry.
+        if (!foreground(job) || !retryable) job.attempts = 3;
+        if (request.signal.aborted && !foreground(job)) measuredMbps = Math.max(0.05, transferred * 8 / Math.max(1, Date.now() - started) / 1000);
       }
       if (jobs.has(job.key)) {
         jobs.delete(job.key);
@@ -193,51 +244,64 @@ export function createBattlePreloader() {
   window.addEventListener?.('online', resume);
   const api = {
     requestCardAnimation(card, notify = () => {}, { interactive = false } = {}) {
-      const path = card?.animationUrl;
-      if (!/^\/assets\/player-cards\/([a-z0-9-]+)\/\1-animated\.(webm|mov)$/.test(path || '')) return () => {};
-      const url = new URL(path, location.origin).href;
-      if (videos.has(url)) { notify(videos.get(url)); return () => {}; }
+      const url = cardVideoUrl(card);
+      if (!url) return () => {};
+      const cached = videos.get(url);
+      if (cached) {
+        videos.delete(url);
+        videos.set(url, cached);
+        cached.listeners.add(notify);
+        notify(cached.objectUrl);
+        return () => { cached.listeners.delete(notify); schedule(); };
+      }
       const key = 'video:' + url;
       let job = jobs.get(key);
       if (!job) {
         if (jobs.size >= 160) return () => {};
         const bytes = Number(card.animationBytes);
-        job = { key, url, kind: 'video', target: 'cards', priority: url === ownVideo ? 4 : 5,
+        job = { key, url, kind: 'video', target: 'cards', priority: videoPriority(url, false),
           bytes: Number.isFinite(bytes) && bytes > 0 ? bytes : 1024 * 1024, attempts: 0, listeners: new Set() };
         jobs.set(key, job);
       }
-      if (interactive && !job.interactive) {
+      if (interactive && (!job.interactive || !job.listeners.size)) {
         job.interactive = true;
         job.attempts = 0;
       }
-      // Explicit previews follow selected gameplay assets, but needn't wait
+      // Visible cards follow selected gameplay assets, but needn't wait
       // behind the entire speculative shared-asset warming manifest.
-      job.priority = job.interactive ? (url === ownVideo ? 2.4 : 2.5) : url === ownVideo ? 4 : 5;
+      job.priority = videoPriority(url, job.interactive);
       job.listeners.add(notify);
       schedule();
       return () => {
         job.listeners.delete(notify);
-        if (!job.listeners.size && url !== ownVideo && jobs.get(key) === job) {
+        if (!job.listeners.size && !retained(url) && jobs.get(key) === job) {
           jobs.delete(key);
           if (activeJob === job) interruptVideo();
         }
+        schedule();
       };
     },
     warmPlayerCard(card) {
-      const next = /^\/assets\/player-cards\/([a-z0-9-]+)\/\1-animated\.(webm|mov)$/.test(card?.animationUrl || '')
-        ? new URL(card.animationUrl, location.origin).href : null;
+      const next = cardVideoUrl(card);
       if (next === ownVideo) return;
       ownVideo = next;
-      for (const [key, job] of jobs) if (job.kind === 'video') {
-        job.priority = job.interactive ? (job.url === ownVideo ? 2.4 : 2.5) : job.url === ownVideo ? 4 : 5;
-        if (!job.listeners.size && job.url !== ownVideo) jobs.delete(key);
-      }
-      interruptVideo();
+      retarget();
       if (next) {
-        // Retain only the equipped card's speculative request.
+        // Retain only the equipped and roster cards' speculative requests.
         const release = api.requestCardAnimation(card);
         release();
       }
+      schedule();
+    },
+    // The players about to share a battle; their cards are downloaded at a
+    // retained speculative priority right behind the local player's card.
+    warmRosterCards(cards) {
+      const entries = (cards || []).map(card => [cardVideoUrl(card), card]).filter(([url]) => url);
+      const next = new Set(entries.map(([url]) => url));
+      if (next.size === rosterVideos.size && [...next].every(url => rosterVideos.has(url))) return;
+      rosterVideos = next;
+      retarget();
+      for (const [, card] of entries) api.requestCardAnimation(card)();
       schedule();
     },
     holdGameplay() {

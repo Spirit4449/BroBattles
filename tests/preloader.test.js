@@ -16,7 +16,7 @@ function setup(handler) {
     setTimeout: setTimer, clearTimeout: id => timers.delete(id),
     window: { requestIdleCallback: fn => setTimer(fn, 1), cancelIdleCallback: id => timers.delete(id) },
     fetch: async (url, options) => {
-      calls.push({ url: new URL(url).pathname, options });
+      calls.push({ url: new URL(url).pathname, href: url, options });
       if (handler) { const result = await handler(new URL(url).pathname, options); if (result) return result; }
       if (url.endsWith('/game.html')) return new Response('<script src="/bundles/navigation.bundle.abc.js"></script><script>loadScript("/bundles/game.bundle.0123456789abcdef.js")</script><link href="/bundles/game.0123456789abcdef.css">');
       if (url.endsWith('/index.html')) return new Response('<script src="/bundles/index.bundle.0123456789abcdef.js"></script><link href="/styles/lobby.css?v=3">');
@@ -258,4 +258,75 @@ test('deliberate previews load despite low downlink estimates but still wait for
   await env.advance(1000);
   assert.equal(env.calls.length, 1);
   assert.match(ready, /^blob:/);
+});
+
+test('roster warming deduplicates cards, replaces obsolete rosters, and uses content versions', async () => {
+  const env = setup();
+  const self = card('self'), ally = { ...card('ally'), animationVersion: '0123456789abcdef' };
+  env.preloader.warmPlayerCard(self);
+  env.preloader.warmRosterCards([card('old')]);
+  env.preloader.warmRosterCards([ally, self, ally]);
+  env.preloader.start('cards');
+  await env.advance(4000);
+  assert.deepEqual(env.calls.map(call => call.url), [self.animationUrl, ally.animationUrl]);
+  assert.equal(new URL(env.calls[1].href).searchParams.get('v'), ally.animationVersion);
+  let cached;
+  const release = env.preloader.requestCardAnimation(ally, url => { cached = url; });
+  assert.match(cached, /^blob:/);
+  release();
+});
+
+test('cache pressure never revokes a blob still owned by a decoder', async () => {
+  const size = 3 * 1024 * 1024;
+  const env = setup(path => path.endsWith('.webm') ? new Response(new Uint8Array(size)) : null);
+  const urls = [];
+  const releaseA = env.preloader.requestCardAnimation(card('a', size), url => urls.push(url), { interactive: true });
+  const releaseB = env.preloader.requestCardAnimation(card('b', size), url => urls.push(url), { interactive: true });
+  env.preloader.start('cards');
+  await env.advance(4000);
+  let next;
+  const releaseC = env.preloader.requestCardAnimation(card('c', size), url => { next = url; }, { interactive: true });
+  await env.advance(1000);
+  assert.equal(next, undefined, 'live decoders fill the cache');
+  assert.equal((await fetch(urls[0])).status, 200);
+  releaseB();
+  await env.advance(1000);
+  assert.match(next, /^blob:/);
+  assert.equal((await fetch(urls[0])).status, 200, 'remaining decoder keeps its source');
+  await assert.rejects(fetch(urls[1]), 'unused least-recent blob is revoked');
+  releaseA(); releaseC();
+});
+
+test('visible playback survives exhausted speculative warming and still yields to gameplay', async () => {
+  const env = setup(path => path === '/assets/large.webp' ? new Response(new Uint8Array(32 * 1024 * 1024)) : null);
+  env.preloader.enqueue(['/assets/large.webp', '/assets/unused.webp']);
+  env.preloader.start();
+  await env.advance(5000);
+  assert.ok(!env.calls.some(call => call.url === '/assets/unused.webp'), 'speculative warming exhausted its budget');
+  const releaseHold = env.preloader.holdGameplay();
+  let ready;
+  env.preloader.requestCardAnimation(card('visible'), url => { ready = url; }, { interactive: true });
+  await env.advance(1000);
+  assert.equal(ready, undefined);
+  releaseHold();
+  await env.advance(1000);
+  assert.match(ready, /^blob:/, 'visible cards are foreground work, not lifetime speculation');
+  assert.ok(!env.calls.some(call => call.url === '/assets/unused.webp'));
+});
+
+test('visible card requests retry transient local server failures without retrying forever', async () => {
+  let requests = 0;
+  const env = setup(path => path.endsWith('.webm') && ++requests < 3 ? new Response('', { status: 503 }) : null);
+  let ready;
+  env.preloader.requestCardAnimation(card('visible'), url => { ready = url; }, { interactive: true });
+  env.preloader.start('cards');
+  await env.advance(4000);
+  assert.match(ready, /^blob:/);
+  const failed = setup(() => new Response('', { status: 503 }));
+  failed.preloader.requestCardAnimation(card('broken'), () => {}, { interactive: true });
+  failed.preloader.start('cards');
+  await failed.advance(20000);
+  const attempts = failed.calls.length;
+  await failed.advance(20000);
+  assert.equal(failed.calls.length, attempts, 'persistent failures have a finite retry limit');
 });

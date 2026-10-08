@@ -60,7 +60,9 @@
         "y": 155,
         "w": 343,
         "h": 646
-      }
+      },
+      "animationVersion": "2bf7125a9cd98430",
+      "animationAppleVersion": "e32f8dab129ecb6b"
     },
     {
       "id": "slime-circuit",
@@ -94,7 +96,9 @@
         "y": 153,
         "w": 320,
         "h": 646
-      }
+      },
+      "animationVersion": "701bea711eb3edf2",
+      "animationAppleVersion": "9ee86f0997743e24"
     },
     {
       "id": "arena-crown",
@@ -128,7 +132,9 @@
         "y": 91,
         "w": 310,
         "h": 601
-      }
+      },
+      "animationVersion": "59956cb793f3e236",
+      "animationAppleVersion": "70b5b3dfb981d026"
     },
     {
       "id": "radiant-silver",
@@ -160,7 +166,9 @@
         "y": 211,
         "w": 311,
         "h": 535
-      }
+      },
+      "animationVersion": "d633cbcc18a5a502",
+      "animationAppleVersion": "a62d1fc46044a1e3"
     },
     {
       "id": "astral-amethyst",
@@ -191,7 +199,9 @@
         "y": 217,
         "w": 422,
         "h": 823
-      }
+      },
+      "animationVersion": "b505b5b5d641f2b2",
+      "animationAppleVersion": "76c75fa0ef0b53cb"
     },
     {
       "id": "mjolnirs-anvil",
@@ -222,7 +232,9 @@
         "y": 164,
         "w": 314,
         "h": 606
-      }
+      },
+      "animationVersion": "fc06565d8d3c7822",
+      "animationAppleVersion": "2f436f00dfe4c908"
     },
     {
       "id": "radiant-diamond",
@@ -254,7 +266,9 @@
         "y": 206,
         "w": 318,
         "h": 544
-      }
+      },
+      "animationVersion": "c552a7a54d15582f",
+      "animationAppleVersion": "2519dc226d0b54bb"
     },
     {
       "id": "radiant-emerald",
@@ -286,7 +300,9 @@
         "y": 204,
         "w": 318,
         "h": 547
-      }
+      },
+      "animationVersion": "d88767e8d3bbaa27",
+      "animationAppleVersion": "e8afb2d651b089e3"
     },
     {
       "id": "radiant-gold",
@@ -318,7 +334,9 @@
         "y": 205,
         "w": 314,
         "h": 544
-      }
+      },
+      "animationVersion": "299ce1a65ddd18fd",
+      "animationAppleVersion": "0ec2d8c9afb942ed"
     },
     {
       "id": "radiant-ruby",
@@ -350,7 +368,9 @@
         "y": 207,
         "w": 315,
         "h": 543
-      }
+      },
+      "animationVersion": "f1afea35dd174e40",
+      "animationAppleVersion": "4de4568cc77a3426"
     },
     {
       "id": "wizard-spell",
@@ -381,7 +401,9 @@
         "y": 192,
         "w": 306,
         "h": 557
-      }
+      },
+      "animationVersion": "18dcba25b076b3ff",
+      "animationAppleVersion": "0234844f9d5726d7"
     }
   ]
 }

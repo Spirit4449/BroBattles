@@ -1,7 +1,7 @@
 import { mapDefaults } from '../../shared/maps';
 import { buildCharacterSkinAtlasUrls, buildCharacterSkinWeaponUrl } from '../views/skinAssets';
 import { sceneryUrls } from '../../shared/maps/scenery';
-import { warmEquippedPlayerCard } from '../views/playerCardAnimation.cjs';
+import { warmEquippedPlayerCard, warmRosterPlayerCards } from '../views/playerCardAnimation.cjs';
 
 let lastSelection;
 let lastRoster = [];
@@ -17,6 +17,7 @@ export function warmBattleSelection(selection = lastSelection, roster = null) {
       selected_skin_id: self.selected_skin_id_by_char?.[self.char_class], selected_skin_game_assets: null,
     } : member,
   ) : self ? [self] : []);
+  warmRosterPlayerCards(members.map(member => member?.selected_card_id || member?.selectedCardId || null));
   window.__BB_NAVIGATION__?.selectPreloadMode?.(selection.modeId);
   // Plays the moment the battle loading screen lifts.
   const urls = ['/assets/game-sounds/pregame.mp3'];

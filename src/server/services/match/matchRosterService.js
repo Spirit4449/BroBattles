@@ -16,7 +16,7 @@ function decorateParticipant(p) {
 async function loadMatchRoster(db, matchId) {
   const humans = await db.runQuery(
     `SELECT mp.user_id, mp.party_id, mp.team, mp.char_class, u.name, u.char_levels,
-            u.trophies, u.selected_profile_icon_id AS profile_icon_id, u.selected_skin_id_by_char
+            u.trophies, u.selected_profile_icon_id AS profile_icon_id, u.selected_skin_id_by_char, u.selected_card_id
        FROM match_participants mp JOIN users u ON u.user_id = mp.user_id
       WHERE mp.match_id = ? ORDER BY mp.user_id`, [matchId]);
   let bots = [];

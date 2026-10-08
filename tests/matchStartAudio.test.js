@@ -9,8 +9,9 @@ const root = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
-test("pregame cards preserve speculative network limits and prioritize the local selection", async () => {
-  const exported = {}, requests = [], warmed = [];
+test("cards prepare once per cosmetic before pregame and pause during the flythrough", () => {
+  const exported = {}, requests = [], warmed = [], idle = [], paused = [];
+  let holds = 0;
   const cards = [{ id: 'default' }, { id: 'self-card' }, { id: 'opponent-card' }];
   const code = babel.transformSync(read("src/client/game/hud/gameHudController.js"), {
     babelrc: false, configFile: false,
@@ -23,11 +24,13 @@ test("pregame cards preserve speculative network limits and prioritize the local
       createPlayerCardMedia(card, options) {
         requests.push({ id: card.id, ...options });
         assert.deepEqual(warmed, ['self-card'], 'warm self before preparing any roster media');
-        return {};
+        return { id: card.id };
       },
-    } : {},
-    fetch: async () => ({ ok: true, json: async () => ({ catalog: { cards, defaultCardId: 'default' } }) }),
-    window: { addEventListener() {} },
+      pausePlayerCardPreparation(media, value) { paused.push([media.id, value]); },
+    } : name.includes('playerCardsCatalog') ? { cards, defaultCardId: 'default' } : {},
+    fetch() { throw new Error('Catalog resolution must not fetch'); },
+    window: { addEventListener() {}, requestIdleCallback: fn => idle.push(fn),
+      __BB_NAVIGATION__: { holdGameplayDownloads() { holds++; return () => holds--; } } },
     document: { body: { classList: { toggle() {} } } },
   });
   const hud = exported.createGameHudController({
@@ -35,14 +38,23 @@ test("pregame cards preserve speculative network limits and prioritize the local
     getGameData: () => ({ players: [
       { name: 'opponent', selected_card_id: 'opponent-card' },
       { name: 'self', selected_card_id: 'self-card' },
+      { name: 'teammate', selected_card_id: 'self-card' },
     ] }),
   });
-  hud.setPregameActive(true);
-  await new Promise(resolve => setImmediate(resolve));
+  hud.prepareBattleCards();
+  while (idle.length) idle.shift()();
   assert.deepEqual(requests, [
     { id: 'opponent-card', prepare: true }, { id: 'self-card', prepare: true },
   ]);
   assert.ok(requests.every(request => !request.interactive));
+  hud.setPregameActive(true);
+  hud.setPregameActive(true);
+  assert.equal(holds, 1);
+  assert.equal(requests.length, 2, 'the flythrough must not initiate card preparation');
+  assert.deepEqual(paused.slice(0, 2), [['opponent-card', true], ['self-card', true]]);
+  hud.setPregameActive(false);
+  assert.equal(holds, 0);
+  assert.deepEqual(paused.slice(-2), [['opponent-card', false], ['self-card', false]]);
 });
 
 test("final countdown cue plays once alongside FIGHT and enabling input", () => {

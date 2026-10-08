@@ -2,6 +2,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   DUCK_FRAME_CELLS,
+  DUCK_MIN_HOLD_MS,
+  DUCK_REENTRY_DELAY_MS,
+  updateDuckRequest,
   findGroundSpan,
   hasStandingClearance,
   clampBodyToGroundSpan,
@@ -84,4 +87,25 @@ test("ducking reduces incoming combat damage by twenty percent", () => {
   assert.equal(reduceDuckDamage({ ducking: true }, 1000), 800);
   assert.equal(reduceDuckDamage({ ducking: false }, 1000), 1000);
   assert.equal(reduceDuckDamage(null, 1000), 1000);
+});
+
+test("a duck tap holds until the minimum duration, while held input can continue", () => {
+  const player = { _ducking: false };
+  const start = 1000;
+  assert.equal(updateDuckRequest(player, true, true, start), true);
+  player._ducking = true;
+  assert.equal(updateDuckRequest(player, false, true, start + DUCK_MIN_HOLD_MS - 1), true);
+  assert.equal(updateDuckRequest(player, true, true, start + DUCK_MIN_HOLD_MS), true);
+  assert.equal(updateDuckRequest(player, false, true, start + DUCK_MIN_HOLD_MS), false);
+});
+
+test("duck holds respect re-entry cooldown and cancel when ducking is interrupted", () => {
+  const start = 1000;
+  const player = { _ducking: false, _duckAvailableAt: start + DUCK_REENTRY_DELAY_MS };
+  assert.equal(updateDuckRequest(player, true, true, player._duckAvailableAt - 1), false);
+  assert.equal(updateDuckRequest(player, false, true, player._duckAvailableAt), false);
+  assert.equal(updateDuckRequest(player, true, true, player._duckAvailableAt), true);
+  player._ducking = true;
+  assert.equal(updateDuckRequest(player, false, false, player._duckAvailableAt + 1), false);
+  assert.equal(updateDuckRequest(player, false, true, player._duckAvailableAt + 2), false);
 });

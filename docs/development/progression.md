@@ -119,6 +119,10 @@ Per-card keys:
 - `name`: display label
 - `assetUrl`: card frame asset URL
 - `animationUrl`: optional transparent looping WebM video (or legacy WebP); `assetUrl` is its aligned still poster
+- `animationVersion` / `animationAppleVersion`: content hashes for the WebM/MOV
+  download URLs. The video importer stamps these automatically. After replacing
+  videos by hand, run `node scripts/art/player-card-versions.cjs`, then
+  `npm run validate:content`; validation rejects stale hashes.
 - `renderScale`: optional centered artwork scale, defaulting to 1; common cards
   use 0.95 in profile and shop presentations. Battle uses measured
   `battleViewport` bounds so every visible frame fills the same card rectangle.

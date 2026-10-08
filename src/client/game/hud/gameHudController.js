@@ -13,7 +13,10 @@ import {
 import { buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
 import { LEVEL_CAP, DEFAULT_CHARACTER } from "../../../shared/characters/characterStats.js";
 import { renderLevelBadge } from "../../views/levelBadgeView.js";
-import { disposePlayerCardMedia, layerPlayerCardMedia, createPlayerCardMedia, positionPlayerCardCanvas, warmEquippedPlayerCard } from "../../views/playerCardAnimation.cjs";
+import { pausePlayerCardPreparation, disposePlayerCardMedia, disposePlayerCardMediaWithin, layerPlayerCardMedia, createPlayerCardMedia, mirrorPlayerCardMedia, positionPlayerCardCanvas, warmEquippedPlayerCard } from "../../views/playerCardAnimation.cjs";
+import playerCardsCatalog from "../../../shared/catalogs/playerCardsCatalog.json";
+
+const DEFAULT_CARD_ASSET = "/assets/player-cards/default/default.webp";
 
 function getSelectionFromGameData(gameData) {
   return normalizeGameSelection({
@@ -38,18 +41,21 @@ export function createGameHudController({
   controlsHudStateKey = "bb_controls_hud_state_v2",
 } = {}) {
   const teamRows = new Map(); // name -> { row }
-  let cardCatalog = null;
+  // cardId -> media decoded ahead of the countdown; one per distinct card.
   const preparedCards = new Map();
   let cardsDisposed = false;
+  let preparingCards = false;
+  let releaseIntroDownloads;
   function clearPreparedCards() {
-    for (const { media } of preparedCards.values()) disposePlayerCardMedia(media);
+    preparingCards = false;
+    for (const media of preparedCards.values()) disposePlayerCardMedia(media);
     preparedCards.clear();
   }
   window.__BB_PAGE_SCOPE__?.onDispose(() => {
     cardsDisposed = true;
     clearPreparedCards();
+    releaseIntroDownloads?.();
   });
-  let cardCatalogFetchPromise = null;
   let countdownRunning = false;
   let pregameActive = false;
   let currentCardNodes = [];
@@ -64,78 +70,79 @@ export function createGameHudController({
   let statusBannerHideTimer = null;
   let spectateHudHideTimer = null;
 
-  function _fallbackCatalog() {
-    return {
-      defaultCardId: "default",
-      cards: [
-        {
-          id: "default",
-          name: "Default Card",
-          assetUrl: "/assets/player-cards/default/default.webp",
-        },
-      ],
+  // The catalog ships in the bundle; resolving a card never waits on the network.
+  function _resolveCard(selectedCardId) {
+    const list = Array.isArray(playerCardsCatalog?.cards) ? playerCardsCatalog.cards : [];
+    const byId = (id) => {
+      const wanted = String(id || "").trim();
+      return wanted ? list.find((card) => String(card?.id) === wanted) : null;
     };
+    return byId(selectedCardId) || byId(playerCardsCatalog?.defaultCardId) || list[0] ||
+      { id: "default", name: "Default Card", assetUrl: DEFAULT_CARD_ASSET };
   }
 
-  async function _ensureCardCatalog() {
-    if (cardCatalog) return cardCatalog;
-    if (cardCatalogFetchPromise) return cardCatalogFetchPromise;
-
-    cardCatalogFetchPromise = fetch("/player-cards/catalog", {
-      credentials: "same-origin",
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        const catalog = data?.catalog;
-        if (catalog && Array.isArray(catalog.cards) && catalog.cards.length) {
-          cardCatalog = catalog;
-        } else {
-          cardCatalog = _fallbackCatalog();
-        }
-        return cardCatalog;
-      })
-      .catch(() => {
-        cardCatalog = _fallbackCatalog();
-        return cardCatalog;
-      })
-      .finally(() => {
-        cardCatalogFetchPromise = null;
-      });
-
-    return cardCatalogFetchPromise;
+  function _idle(callback) {
+    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(callback, { timeout: 500 });
+    else setTimeout(callback, 0);
   }
 
-  function _resolveCard(catalog, selectedCardId) {
-    const list = Array.isArray(catalog?.cards) ? catalog.cards : [];
-    const wanted = String(selectedCardId || "").trim();
-    const bySelected = wanted
-      ? list.find((card) => String(card?.id) === wanted)
-      : null;
-    if (bySelected) return bySelected;
-    const def = String(catalog?.defaultCardId || "").trim();
-    if (def) {
-      const byDefault = list.find((card) => String(card?.id) === def);
-      if (byDefault) return byDefault;
-    }
-    return list[0] || _fallbackCatalog().cards[0];
+  /**
+   * Start each distinct roster card's download and decoder before the
+   * loading screen lifts, one card per idle period. Unfinished preparation
+   * pauses during the walkthrough. Matching cards share one decoder.
+   */
+  function prepareBattleCards(players = _gameData()?.players || []) {
+    if (cardsDisposed || countdownRunning || preparingCards || preparedCards.size) return;
+    const self = players.find((player) => player.name === _username());
+    if (self) warmEquippedPlayerCard(_resolveCard(self.selected_card_id));
+    const pending = [...new Map(players.map((player) => {
+      const card = _resolveCard(player.selected_card_id);
+      return [card.id, card];
+    })).values()];
+    preparingCards = true;
+    const next = () => {
+      if (!preparingCards || cardsDisposed || countdownRunning || pregameActive) return;
+      const card = pending.shift();
+      if (!card) { preparingCards = false; return; }
+      if (!preparedCards.has(card.id)) preparedCards.set(card.id, createPlayerCardMedia(card, { prepare: true }));
+      _idle(next);
+    };
+    _idle(next);
   }
 
-  function _createPlayerCardElement({ player, side, catalog, index = 0 }) {
+  // The first player with a card takes the prepared decoder; later players
+  // with the same card mirror its frames instead of decoding it again.
+  function _cardMedia(card, shown) {
+    const source = shown.get(card.id);
+    const mirror = source && mirrorPlayerCardMedia(source);
+    if (mirror) return mirror;
+    const prepared = preparedCards.get(card.id);
+    preparedCards.delete(card.id);
+    const media = prepared || createPlayerCardMedia(card);
+    if (!source) shown.set(card.id, media);
+    return media;
+  }
+
+  function _createPlayerCardElement({ player, side, shown, index = 0 }) {
     const root = document.createElement("div");
     root.className = `bs-player-card ${side === "your" ? "your" : "opp"}`;
 
-    const card = _resolveCard(catalog, player?.selected_card_id);
+    const card = _resolveCard(player?.selected_card_id);
 
     root.style.setProperty("--card-delay", `${index * 70}ms`);
 
-    const prepared = preparedCards.get(player?.name);
-    preparedCards.delete(player?.name);
-    if (prepared && prepared.cardId !== card.id) disposePlayerCardMedia(prepared.media);
-    const media = prepared?.cardId === card.id ? prepared.media : createPlayerCardMedia(card);
-    const frame = layerPlayerCardMedia(media);
+    const frame = layerPlayerCardMedia(_cardMedia(card, shown));
     frame.className = "bs-card-frame";
     frame.alt = card?.name || "Player Card";
     positionPlayerCardCanvas(frame, card, { battle: true });
+    // A filter on the card would re-render with every video frame, so the
+    // drop shadow is a static silhouette of the still artwork instead.
+    const shadow = document.createElement("img");
+    shadow.className = "bs-card-shadow";
+    shadow.src = frame.querySelector?.("img")?.src || card?.assetUrl || DEFAULT_CARD_ASSET;
+    shadow.alt = "";
+    shadow.setAttribute("aria-hidden", "true");
+    positionPlayerCardCanvas(shadow, card, { battle: true });
 
     const nameEl = document.createElement("div");
     nameEl.className = "bs-card-player-name";
@@ -185,12 +192,12 @@ export function createGameHudController({
       sprite.src = buildCharacterSkinBodyUrl(cls, "");
       sprite.alt = cls;
     } else {
-      sprite.src = card?.assetUrl || "/assets/player-cards/default/default.webp";
+      sprite.src = card?.assetUrl || DEFAULT_CARD_ASSET;
       sprite.alt = "default";
     }
     sprite.onerror = () => {
       sprite.onerror = null;
-      sprite.src = card?.assetUrl || "/assets/player-cards/default/default.webp";
+      sprite.src = card?.assetUrl || DEFAULT_CARD_ASSET;
     };
     spriteWrap.appendChild(sprite);
 
@@ -226,6 +233,7 @@ export function createGameHudController({
         <span class="bs-card-stat-label" aria-hidden="true">SP</span>
       </div>`;
 
+    root.appendChild(shadow);
     root.appendChild(frame);
     root.appendChild(nameEl);
     root.appendChild(trophyRow);
@@ -358,8 +366,10 @@ export function createGameHudController({
 
     const yourCol = document.getElementById("bs-your");
     const oppCol = document.getElementById("bs-opp");
-    if (yourCol) yourCol.innerHTML = "";
-    if (oppCol) oppCol.innerHTML = "";
+    for (const col of [yourCol, oppCol]) {
+      disposePlayerCardMediaWithin(col);
+      if (col) col.innerHTML = "";
+    }
 
     const yourTeam = (players || []).filter(
       (p) => p.team === gameData?.yourTeam,
@@ -368,52 +378,31 @@ export function createGameHudController({
       (p) => p.team !== gameData?.yourTeam,
     );
 
-    const renderPlayers = (catalog) => {
-      const self = (players || []).find(player => player.name === _username());
-      if (self) warmEquippedPlayerCard(_resolveCard(catalog, self.selected_card_id));
-      if (yourCol) yourCol.innerHTML = "";
-      if (oppCol) oppCol.innerHTML = "";
+    const self = (players || []).find(player => player.name === _username());
+    if (self) warmEquippedPlayerCard(_resolveCard(self.selected_card_id));
+    const shown = new Map();
+    const yourNodes = [];
+    const oppNodes = [];
 
-      const yourNodes = [];
-      const oppNodes = [];
-
-      yourTeam.forEach((p, index) => {
-        if (!yourCol) return;
-        const node = _createPlayerCardElement({
-          player: p,
-          side: "your",
-          catalog,
-          index,
-        });
-        yourCol.appendChild(node);
-        yourNodes.push(node);
-      });
-      oppTeam.forEach((p, index) => {
-        if (!oppCol) return;
-        const node = _createPlayerCardElement({
-          player: p,
-          side: "opp",
-          catalog,
-          index,
-        });
-        oppCol.appendChild(node);
-        oppNodes.push(node);
-      });
-
-      currentCardNodes = [...yourNodes, ...oppNodes];
-      // The catalog can resolve after the cards are already on screen.
-      if (_cardsRevealed(root)) _animateCardsIn(currentCardNodes);
-      requestAnimationFrame(() => _syncCardWrapState(root));
-      requestAnimationFrame(() => _syncCardWrapState(root));
-    };
-
-    const renderedCatalog = cardCatalog || _fallbackCatalog();
-    renderPlayers(renderedCatalog);
-    _ensureCardCatalog().then((catalog) => {
-      const stillVisible = !root.classList.contains("hidden");
-      if (!stillVisible || catalog === renderedCatalog) return;
-      renderPlayers(catalog || _fallbackCatalog());
+    yourTeam.forEach((p, index) => {
+      if (!yourCol) return;
+      const node = _createPlayerCardElement({ player: p, side: "your", shown, index });
+      yourCol.appendChild(node);
+      yourNodes.push(node);
     });
+    oppTeam.forEach((p, index) => {
+      if (!oppCol) return;
+      const node = _createPlayerCardElement({ player: p, side: "opp", shown, index });
+      oppCol.appendChild(node);
+      oppNodes.push(node);
+    });
+    // Anything prepared for a player who is no longer in the roster.
+    clearPreparedCards();
+
+    currentCardNodes = [...yourNodes, ...oppNodes];
+    if (_cardsRevealed(root)) _animateCardsIn(currentCardNodes);
+    requestAnimationFrame(() => _syncCardWrapState(root));
+    requestAnimationFrame(() => _syncCardWrapState(root));
 
     const c = document.getElementById("countdown-display");
     if (c) c.textContent = "5";
@@ -1039,6 +1028,8 @@ export function createGameHudController({
     clearPreparedCards();
     const overlay = document.getElementById("battle-start-overlay");
     if (!overlay) return;
+    const mountedCards = currentCardNodes;
+    currentCardNodes = [];
     const wrap = overlay.querySelector(".bs-wrap");
     if (wrap) wrap.style.opacity = "0";
     setTimeout(() => {
@@ -1049,6 +1040,8 @@ export function createGameHudController({
         "phase-darkened",
         "phase-cards",
       );
+      // The cards are offscreen for the rest of the match; free their decoders.
+      mountedCards.forEach(disposePlayerCardMediaWithin);
       try {
         const timerHud = document.getElementById("game-timer-hud");
         const teamHud = document.getElementById("team-status-hud");
@@ -1068,21 +1061,13 @@ export function createGameHudController({
   function setPregameActive(active) {
     pregameActive = !!active;
     document.body?.classList.toggle("match-pregame", pregameActive);
-    // Cards appear the moment the countdown starts; fetch their art now.
-    if (pregameActive) void _ensureCardCatalog().then(catalog => {
-      if (cardsDisposed || !pregameActive || countdownRunning) return;
-      clearPreparedCards();
-      const players = _gameData()?.players || [];
-      const self = players.find(player => player.name === _username());
-      if (self) warmEquippedPlayerCard(_resolveCard(catalog, self.selected_card_id));
-      for (const player of players) {
-        const card = _resolveCard(catalog, player.selected_card_id);
-        preparedCards.set(player.name, {
-          cardId: card.id,
-          media: createPlayerCardMedia(card, { prepare: true }),
-        });
-      }
-    });
+    if (pregameActive) {
+      releaseIntroDownloads ||= window.__BB_NAVIGATION__?.holdGameplayDownloads?.();
+    } else {
+      releaseIntroDownloads?.();
+      releaseIntroDownloads = null;
+    }
+    for (const media of preparedCards.values()) pausePlayerCardPreparation(media, pregameActive);
   }
 
   /**
@@ -1191,6 +1176,7 @@ export function createGameHudController({
     syncModeState,
     isBattleIntroActive: () => pregameActive || countdownRunning || _isOverlayVisible(),
     setPregameActive,
+    prepareBattleCards,
     startCountdown,
     hideBattleStartOverlay,
     setTimerPaused,

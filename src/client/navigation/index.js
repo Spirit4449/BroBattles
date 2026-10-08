@@ -573,6 +573,7 @@ window.__BB_NAVIGATION__ = {
   preload: preloader.enqueue, selectPreloadMode: preloader.selectMode,
   requestCardAnimation: preloader.requestCardAnimation,
   warmPlayerCard: preloader.warmPlayerCard,
+  warmRosterCards: preloader.warmRosterCards,
   holdGameplayDownloads: preloader.holdGameplay,
   warmLobby() { preloader.start('lobby'); },
   async prepareLobbyReturn(fallbackPartyId) {

@@ -4,7 +4,7 @@ const path = require('node:path');
 const { authedRoute, sendShopError, purchaseGrantFromShop } = require('../src/server/routes/routeHelpers');
 const { registerPlayerCardsRoutes } = require('../src/server/routes/modules/playerCardsRoutes');
 const { getPlayerCardsCatalog } = require('../src/server/services/cosmetics/playerCardsCatalog');
-const { playerCardImage, bindPlayerCardHover, positionPlayerCardCanvas, createPlayerCardMedia, restartPlayerCardMedia } = require('../src/client/views/playerCardAnimation.cjs');
+const { playerCardImage, bindPlayerCardHover, positionPlayerCardCanvas, createPlayerCardMedia, restartPlayerCardMedia, pausePlayerCardPreparation } = require('../src/client/views/playerCardAnimation.cjs');
 const { measurePlayerCardBounds } = require('../scripts/art/player-card-bounds.cjs');
 
 test('full animation canvas preserves the card layout rectangle without cropping effects', () => {
@@ -158,8 +158,15 @@ test('profile videos prepare visible tiles and retain their decoder between hove
     assert.equal(media.src, undefined);
     video.isConnected = false;
     const beforePreparation = plays;
-    const prepared = createPlayerCardMedia(card, { prepare: true, verifyAlpha: async () => true });
+    let alphaChecks = 0;
+    const prepared = createPlayerCardMedia(card, { prepare: true, verifyAlpha: async () => { alphaChecks++; return true; } });
+    pausePlayerCardPreparation(prepared, true);
     await deliver('blob:prepared');
+    assert.equal(alphaChecks, 0, 'a late download must not probe alpha during the flythrough');
+    assert.equal(prepared.src, undefined, 'a late download must not start a decoder during the flythrough');
+    pausePlayerCardPreparation(prepared, false);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(alphaChecks, 1);
     assert.equal(prepared.src, 'blob:prepared', 'prepare the actual detached playback element');
     assert.equal(prepared.preload, 'auto');
     assert.equal(plays, beforePreparation, 'preparation must not play offscreen');
@@ -170,6 +177,14 @@ test('profile videos prepare visible tiles and retain their decoder between hove
     assert.equal(loads, beforeMount, 'mounting reuses the prepared decoder');
     dispose();
     assert.equal(prepared.src, undefined, 'disposal releases the retained decoder');
+    let probeAttempts = 0;
+    const retrying = createPlayerCardMedia(card, { verifyAlpha: async () => ++probeAttempts === 1 ? null : true });
+    observe([{ isIntersecting: true }]);
+    await deliver('blob:retry-probe');
+    assert.equal(retrying.dataset.animationState, 'retrying', 'a failed probe is not proof the codec is unsupported');
+    await new Promise(resolve => setTimeout(resolve, 280));
+    assert.equal(retrying.src, 'blob:retry-probe', 'transient alpha failure recovers without a new download');
+    dispose();
     const unsupported = createPlayerCardMedia(card, { interactive: true, verifyAlpha: async () => false });
     observe([{ isIntersecting: true }]);
     await deliver('blob:opaque-green');
@@ -185,6 +200,90 @@ test('profile videos prepare visible tiles and retain their decoder between hove
 function fakeRes() {
   return { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
 }
+
+test('showing a card again while an obsolete alpha check finishes prepares the current download', async () => {
+  const previousWindow = global.window, previousDocument = global.document;
+  let observe, visibility, dispose, finishProbe, announceProbe;
+  const probing = new Promise(resolve => { announceProbe = resolve; });
+  const deliveries = [], priorities = [];
+  const attributes = {};
+  const video = {
+    tagName: 'VIDEO', isConnected: true, dataset: {},
+    setAttribute(key, value) { attributes[key] = value; },
+    getAttribute(key) { return attributes[key]; }, removeAttribute(key) { delete attributes[key]; },
+    set src(value) { attributes.src = value; }, get src() { return attributes.src; },
+    addEventListener() {}, pause() {}, load() {}, play() { return Promise.resolve(); },
+  };
+  global.window = {
+    __BB_NAVIGATION__: { requestCardAnimation(_entry, callback, options) {
+      deliveries.push(callback); priorities.push(options.interactive); return () => {};
+    } },
+    IntersectionObserver: class { constructor(fn) { observe = fn; } observe() {} disconnect() {} },
+    __BB_PAGE_SCOPE__: { onDispose(fn) { dispose = fn; } },
+  };
+  global.document = { hidden: false, createElement: () => video,
+    addEventListener(_event, callback) { visibility = callback; }, removeEventListener() {} };
+  try {
+    const card = getPlayerCardsCatalog().cards.find(card => card.animationUrl);
+    createPlayerCardMedia(card, { verifyAlpha: url => url === 'blob:obsolete'
+      ? new Promise(resolve => { finishProbe = resolve; announceProbe(); }) : Promise.resolve(true) });
+    observe([{ isIntersecting: true }]);
+    const oldPreparation = deliveries[0]('blob:obsolete');
+    await probing;
+    document.hidden = true; visibility();
+    document.hidden = false; visibility();
+    await deliveries[1]('blob:current');
+    finishProbe(true);
+    await oldPreparation;
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(video.src, 'blob:current', 'a replacement request must not be stranded by the old preparation');
+    assert.ok(priorities.every(Boolean), 'visible automatic playback must have foreground priority');
+    await deliveries[0]('blob:late-obsolete');
+    assert.equal(video.src, 'blob:current', 'cancelled subscriptions cannot replace the active source');
+  } finally {
+    dispose?.(); global.window = previousWindow; global.document = previousDocument;
+  }
+});
+
+test('alpha support is probed once per codec and persisted only after a decoded verdict', async () => {
+  const fs = require('node:fs'), vm = require('node:vm');
+  const source = fs.readFileSync(require.resolve('../src/client/views/playerCardAnimation.cjs'), 'utf8');
+  const saved = new Map();
+  let probes = 0, alpha = 0, fails = false;
+  function load() {
+    const context = {
+      module: { exports: {} }, require, setTimeout, clearTimeout,
+      navigator: { userAgent: 'card-test-browser' },
+      window: { localStorage: { getItem: key => saved.get(key), setItem: (key, value) => saved.set(key, value) } },
+      document: { createElement(tag) {
+        if (tag === 'canvas') return { getContext: () => ({ drawImage() {}, getImageData: () => ({ data: [0, 0, 0, alpha] }) }) };
+        probes++;
+        return { pause() {}, removeAttribute() {}, load() {
+          if (this.onloadeddata) queueMicrotask(() => fails ? this.onerror?.() : this.onloadeddata?.());
+        } };
+      } },
+    };
+    // Resolve the real module's relative dependencies from its own location.
+    context.require = require('node:module').createRequire(require.resolve('../src/client/views/playerCardAnimation.cjs'));
+    vm.runInNewContext(source, context);
+    return context.module.exports.verifyPlayerCardAlpha;
+  }
+  let verify = load();
+  assert.deepEqual(await Promise.all([verify('blob:a', 'webm'), verify('blob:b', 'webm')]), [true, true]);
+  assert.equal(probes, 1);
+  verify = load();
+  assert.equal(await verify('blob:new-page', 'webm'), true);
+  assert.equal(probes, 1, 'a page transition reuses the browser verdict');
+  fails = true;
+  assert.equal(await verify('blob:failed-mov', 'hevc'), null, 'load failure is distinct from a decoded opaque frame');
+  fails = false;
+  alpha = 255;
+  assert.equal(await verify('blob:opaque-mov', 'hevc'), false);
+  assert.equal(probes, 3, 'an inconclusive load must allow another probe');
+  verify = load();
+  assert.equal(await verify('blob:next-mov', 'hevc'), false);
+  assert.equal(probes, 3, 'a decoded opaque verdict is reused for this codec only');
+});
 
 function quietly(fn) {
   const original = console.error;
