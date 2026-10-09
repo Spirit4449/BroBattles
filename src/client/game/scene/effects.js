@@ -1284,9 +1284,9 @@ export function triggerDamageScreenPulse(scene, opts = {}) {
   const vigEl = document.getElementById("water-vignette");
   if (!vigEl) return;
 
-  scene._damageVignetteUntil = Date.now() + (opts.durationMs || 220);
   scene._damageVignetteAlpha = opts.alpha || 0.74;
-  vigEl.classList.add("water-danger-active");
+  // The looping water animation overrides inline opacity, so pause it for hits.
+  vigEl.classList.remove("water-danger-active");
 
   try {
     scene._damageVignetteTween?.stop?.();
@@ -1304,18 +1304,7 @@ export function triggerDamageScreenPulse(scene, opts = {}) {
       vigEl.style.opacity = String(pulseState.alpha);
     },
     onComplete: () => {
-      if (
-        (scene._poisonWaterY ?? Infinity) >
-        (Number(scene.scale?.height) ||
-          Number(scene.game?.config?.height) ||
-          1000) +
-          10
-      ) {
-        vigEl.classList.remove("water-danger-active");
-      }
-      if ((scene._damageVignetteUntil || 0) <= Date.now()) {
-        vigEl.style.opacity = "0";
-      }
+      vigEl.style.opacity = "0";
       scene._damageVignetteTween = null;
     },
   });

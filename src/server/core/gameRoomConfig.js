@@ -151,6 +151,10 @@ const MOVE_PLAUSIBLE_LAG_PAD_H = 80;
 const MOVE_PLAUSIBLE_LAG_PAD_V = 100;
 // Unused movement budget can bank up to this much time (ms) of travel.
 const MAX_MOVEMENT_CREDIT_MS = 500;
+// Clients send movement at least every 250ms (reliable keyframes). A human
+// silent for this long (hidden tab, stalled client) is stepped by the server
+// as if no keys were held, so they fall instead of hanging mid-air.
+const IDLE_FALLBACK_AFTER_MS = 500;
 // MAX movement clamps within WINDOW logs a "repeated movement clamps" warning
 // (reported only; clamping itself already bounds the packet).
 const MOVE_CLAMP_WINDOW_MS = 6000;
@@ -244,6 +248,7 @@ module.exports = {
   MOVE_PLAUSIBLE_LAG_PAD_H,
   MOVE_PLAUSIBLE_LAG_PAD_V,
   MAX_MOVEMENT_CREDIT_MS,
+  IDLE_FALLBACK_AFTER_MS,
   MOVE_CLAMP_WINDOW_MS,
   MOVE_CLAMP_MAX_IN_WINDOW,
   ACTION_MIN_INTERVAL_MS,

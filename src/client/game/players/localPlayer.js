@@ -8,6 +8,7 @@ import {
   resolveWallSlideFlipX,
 } from './wallMovement';
 import { predictCharacterSpecial } from '../characters/networkRegistry';
+import { withShotView } from '../characters/shared/shotPrediction';
 // player.js
 // NOTE: Refactored to remove circular dependency on game.js.
 // socket now comes from standalone socket.js and opponentPlayers are passed into createPlayer.
@@ -1352,9 +1353,9 @@ function fireSpecialAttack(context = null) {
   } catch (_) {}
   noteClientActionSent("special", { type: "special" });
   const specialRequest = { aim: serializeAimContext(context) };
-  socket.emit("game:special", predictCharacterSpecial(
+  socket.emit("game:special", withShotView(predictCharacterSpecial(
     currentCharacter, player?.scene, player, username, specialRequest,
-  ));
+  )));
 }
 
 function triggerSpecialNotReadyFeedback() {

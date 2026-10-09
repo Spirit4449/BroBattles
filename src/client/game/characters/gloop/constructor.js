@@ -4,17 +4,16 @@ import {
   performGloopSlimeball,
   spawnGloopSlimeballVisual,
   handleGloopSlimeSplat,
+  consumeGloopRelease,
 } from "./attack";
-import { playHookAction, playHookCatchAction } from "./special";
+import { playHookAction, playHookCatchAction, consumeGloopHook } from "./special";
 import { pullLocalPlayerByHook } from "./hookPull";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
-import { consumeOnce } from "../shared/packetDedupe";
 import { applyScaleLockedRageFx } from "../shared/powerupFx";
 import { playPlayerSound } from "../../audio/playerAudio";
 
 const NAME = "gloop";
-const consumeGloopRelease = (scene, id) => consumeOnce(scene, "gloop-release", id, 5000);
 
 function playOwnerThrow(scene, sprite) {
   playSpriteAnimation({
@@ -108,6 +107,8 @@ class Gloop extends CharacterEntityBase {
       return true;
     }
     if (type === `${NAME}-hook-release`) {
+      // The caster already predicted this hook under the same id.
+      if (!consumeGloopHook(scene, data.id)) return true;
       playOwnerThrow(scene, ownerSprite);
       playHookAction(scene, ownerSprite, data, true);
       return true;

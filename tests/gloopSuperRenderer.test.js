@@ -11,6 +11,12 @@ const animationApi = {};
 vm.runInNewContext(babel.transformSync(fs.readFileSync('src/client/game/characters/gloop/handAnimation.js', 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 }).code, { exports: animationApi });
+const loadServerClock = require('./helpers/serverClockModule');
+const loadShotPrediction = require('./helpers/shotPredictionModule');
+const packetDedupe = {};
+vm.runInNewContext(babel.transformSync(fs.readFileSync('src/client/game/characters/shared/packetDedupe.js', 'utf8'), {
+  babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+}).code, { exports: packetDedupe, Date });
 const playerAudio = {};
 vm.runInNewContext(babel.transformSync(fs.readFileSync('src/client/game/audio/playerAudio.js', 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
@@ -35,18 +41,24 @@ function setup(animated = false) {
     for (const method of ['setDepth', 'fillStyle', 'beginPath', 'closePath', 'fillPath', 'lineStyle', 'strokePath', 'lineBetween', 'fillEllipse', 'fillRect']) o[method] = () => o;
     objects.push(o); return o;
   }
+  const shots = loadShotPrediction({ serverClock: loadServerClock({ performance: { now: () => 0 } }) });
   const scene = { events: new EventEmitter(), textures: { exists: () => true },
     add: { sprite: object, graphics: object }, sound: { play: key => sounds.push(key) } };
   const owner = object(100, 200); owner.displayWidth = 80; owner.displayHeight = 100;
   scene._localPlayerAudioSprite = owner;
   vm.runInNewContext(code, { exports: api, require: name => name.includes('handAnimation') ? { ...animationApi, prepareHandAnimation: () => animated } : name.includes('characterTuning')
-    ? { getResolvedCharacterSpecialConfig: () => ({ visualScale: 0.28 }) }
+    ? { getResolvedCharacterSpecialConfig: () => ({ visualScale: 0.28, range: 500, speed: 1000,
+      collisionRadius: 44, collisionForwardOffset: 28, collisionOffsetY: 50 }) }
+    : name.includes('shotPrediction') ? shots
+    : name.includes('shotContact') ? require('../src/shared/combat/shotContact')
+    : name.includes('packetDedupe') ? packetDedupe
+    : name.includes('runtimeId') ? { createRuntimeId: prefix => `${prefix}-1` }
     : name.includes('gloopHookGeometry') ? require('../src/shared/characters/gloopHookGeometry.js')
     : name.includes('playerAudio') ? playerAudio
     : name.includes('renderLayers') ? { RENDER_LAYERS: { ATTACKS: 20 } } : { playSpriteAnimation() {} } });
   const launch = () => api.playHookAction(scene, owner, { id: 'hook1', start: { x: 120, y: 180 }, angle: 0, range: 500, speed: 1000 }, true);
   const frame = (ms = 50) => scene.events.emit('update', 0, ms);
-  return { api, scene, owner, objects, sounds, launch, frame };
+  return { api, scene, owner, objects, sounds, launch, frame, shots };
 }
 test('hand follows constant-speed attack while wrist follows moving caster', () => {
   const f = setup(); f.launch(); f.frame();
@@ -136,4 +148,52 @@ test('ribbon overlaps the wrist and widens to its sprite silhouette', () => {
   const wristBack = hand.x - 128 * 0.42 * hand.scaleX;
   assert.ok(tip.x > wristBack && tip.x < hand.x);
   assert.ok(Math.abs(tip.y - hand.y) > 10);
+});
+
+// The caster sees an enemy drawn with its body straddling the hook's damage line.
+function casterView(f) {
+  const enemy = { active: true, visible: true, flipX: false, username: 'foe', x: 330, y: 247.75 };
+  f.shots.trackShotTargets({ localUsername: 'me', opponentPlayersRef: { foe: { opponent: enemy, character: 'ninja' } } });
+  f.scene.children = { list: [enemy] };
+  const request = f.api.predictGloopHook(f.scene, f.owner, 'me', { aim: { angle: 0, direction: 1 } });
+  return { enemy, request, hand: f.objects[1] };
+}
+
+test('the caster\'s hook leaves on press under its request id; the echo of that id is skipped', () => {
+  const f = setup(), { request, hand } = casterView(f);
+  assert.equal(request.id, 'gloopHook-1');
+  assert.equal(f.api.consumeGloopHook(f.scene, request.id), false);
+  f.frame(50);
+  assert.ok(hand.x > 108.4, 'flying before any server packet');
+});
+
+test('the caster\'s hook latches onto the enemy as drawn and a confirmed catch closes without a jump', () => {
+  const f = setup(), { enemy, request, hand } = casterView(f);
+  for (let i = 0; i < 4; i++) f.frame(50);
+  const latched = { x: hand.x - enemy.x, y: hand.y - enemy.y };
+  assert.ok(hand.x < 330 && hand.x > 200, `held at ${hand.x}`);
+  enemy.x += 40; f.frame(50);
+  assert.equal(hand.x, enemy.x + latched.x, 'rides the drawn enemy');
+  const before = { x: hand.x, y: hand.y };
+  f.api.playHookCatchAction(f.scene, f.owner, { id: request.id, target: 'foe', start: { x: 300, y: 250 },
+    end: { x: 120, y: 200 }, pullDurationMs: 300 });
+  assert.deepEqual({ x: hand.x, y: hand.y }, before);
+  assert.equal(f.sounds.filter(s => s === 'gloop-pull').length, 1);
+});
+
+test('an unconfirmed latch lets go after a round trip instead of holding forever', () => {
+  const f = setup(), { hand } = casterView(f);
+  for (let i = 0; i < 4; i++) f.frame(50);
+  const held = hand.x;
+  for (let elapsed = 0; elapsed <= f.shots.confirmWindowMs() + 50; elapsed += 50) f.frame(50);
+  assert.equal(hand.visible, false);
+  assert.equal(hand.x, held, 'released where it was held');
+});
+
+test('hooks launched by others are never latched by bodies on this screen', () => {
+  const f = setup(), { enemy } = casterView(f);
+  f.api.playHookAction(f.scene, f.owner, { id: 'remote', start: { x: 120, y: 180 }, angle: 0, range: 500, speed: 1000 }, false);
+  const hand = f.objects.at(-3);
+  for (let i = 0; i < 6; i++) f.frame(50);
+  assert.ok(hand.x > enemy.x, `passed the drawn enemy to ${hand.x}`);
 });

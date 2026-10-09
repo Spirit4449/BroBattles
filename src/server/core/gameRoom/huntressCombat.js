@@ -3,6 +3,7 @@ const { snapshotEpoch } = require('./roomStateManager');
 const model = require('../../../shared/characters/huntressProjectile');
 const { participantId, getParticipant } = require('./participants');
 const { characterBody } = require('../../../shared/physics/duelGeometry');
+const { clampViewRewind, positionAt } = require('./lagCompensation');
 
 function initialize(room) {
   // Protocol version protects joins from stale clients; combat is always authoritative.
@@ -54,7 +55,8 @@ function request(room, p, data, special = false) {
     }
     p.lastCombatAt = now;
     const startup = model.attackConfig(special).castDelayMs || 0;
-    state.pending.push({ ownerId: participantId(p), id, shot, dueTick: room._tickId + Math.ceil(startup / model.STEP_MS) });
+    state.pending.push({ ownerId: participantId(p), id, shot, dueTick: room._tickId + Math.ceil(startup / model.STEP_MS),
+      viewRewindMs: clampViewRewind(data?.viewRewindMs) });
     // Keep public windups available to existing animations and bot perception.
     require('./characterActionRegistry').broadcastAction(room, p, {
       type: special ? 'huntress-windup-special' : 'huntress-arrow', id, angle: shot.angle, startup,
@@ -72,14 +74,15 @@ function pose(p) {
 function packetFor(attack) {
   return { ...attack.projectile, ownerName: attack.attackerName, ownerId: attack.attackerParticipantId };
 }
-function targetList(room, owner) {
+// Targets stand where the shooter saw them (see lagCompensation).
+function targetList(room, owner, viewRewindMs = 0, now = Date.now()) {
   const targets = [];
   for (const p of room.players.values()) {
     if (!p.isAlive || !p.loaded || p === owner || p.team === owner.team) continue;
-    const body = characterBody(p.char_class, p.flip);
-    const x = p.x + (p._bodyCenterOffsetX ?? body.offsetX), y = p.y + (p._bodyCenterOffsetY ?? body.offsetY);
+    const body = characterBody(p.char_class, p.flip), at = positionAt(p, viewRewindMs, now);
+    const x = at.x + (p._bodyCenterOffsetX ?? body.offsetX), y = at.y + (p._bodyCenterOffsetY ?? body.offsetY);
     const hw = p._bodyHalfWidth ?? body.halfWidth, hh = p._bodyHalfHeight ?? body.halfHeight;
-    targets.push({ name: p.name, bounds: model.insetBounds({ left: x - hw, right: x + hw, top: y - hh, bottom: y + hh }) });
+    targets.push({ name: p.name, at, bounds: model.insetBounds({ left: x - hw, right: x + hw, top: y - hh, bottom: y + hh }) });
   }
   const enemyTeam = owner.team === 'team1' ? 'team2' : 'team1';
   const vault = room.gameMode?.getVaultState?.(enemyTeam);
@@ -92,11 +95,14 @@ function targetList(room, owner) {
 function finish(room, attack, contact) {
   const owner = getParticipant(room, attack.attackerParticipantId);
   const target = [...room.players.values()].find(p => p.name === contact.target);
-  const targetBounds = target && owner && targetList(room, owner).find(p => p.name === target.name)?.bounds;
-  const attachment = targetBounds ? model.attachmentPoint(contact, targetBounds) : contact;
+  const struck = target && owner && targetList(room, owner, attack.viewRewindMs).find(p => p.name === target.name);
+  const attachment = struck ? model.attachmentPoint(contact, struck.bounds) : contact;
+  // Offsets are relative to where the shooter saw the target, so the arrow
+  // stays where it visibly struck on every client's displayed actor.
+  const anchor = struck?.at || target;
   const terminal = { type: 'huntress-terminal', id: attack.projectile.id, requestId: attack.clientRequestId,
     ...contact, rotation: Math.atan2(attack.vy, attack.vx),
-    targetOffset: target ? { x: attachment.x - target.x, y: attachment.y - target.y } : null,
+    targetOffset: target ? { x: attachment.x - anchor.x, y: attachment.y - anchor.y } : null,
     visual: { scale: attack.projectile.scale, embedMs: attack.projectile.embedMs, special: attack.projectile.special },
     movementReportAgeMs: target && !target.isBot && target._lastPositionPacketAt > 0 ? Math.max(0, Date.now() - target._lastPositionPacketAt) : null,
     ...timing(room), ownerName: attack.attackerName };
@@ -133,7 +139,7 @@ function tick(room) {
       projectile, clientRequestId: cast.id, attackerName: owner.name, attackerParticipantId: cast.ownerId,
       attackType: cast.shot.special ? 'huntress-burning-arrow' : 'huntress-arrow',
       x: projectile.x, y: projectile.y, vx: projectile.vx, vy: projectile.vy, gravity: projectile.gravity,
-      collisionRadius: projectile.radius, age: 0,
+      collisionRadius: projectile.radius, age: 0, viewRewindMs: cast.viewRewindMs || 0,
     });
     emit(room, owner, { type: 'huntress-projectiles', requestId: cast.id, projectiles: projectiles.map(p => packetFor(state.active.get(p.id))) });
   }
@@ -145,7 +151,7 @@ function tick(room) {
     const nextAge = Math.min(attack.projectile.maxLifetimeMs, Math.max(0, room._simulationMono - attack.projectile.launchMono));
     const next = model.sample(attack.projectile, nextAge);
     exposeDamageHitbox(room, attack.projectile, { kind: 'sweep', a: { x: attack.x, y: attack.y }, b: { x: next.x, y: next.y }, radius: attack.collisionRadius });
-    const contact = model.firstContact(attack, next, attack.collisionRadius, room.geometry.colliders, targetList(room, owner));
+    const contact = model.firstContact(attack, next, attack.collisionRadius, room.geometry.colliders, targetList(room, owner, attack.viewRewindMs));
     Object.assign(attack, next, { age: nextAge });
     if (contact) finish(room, attack, contact);
     else if (nextAge >= attack.projectile.maxLifetimeMs || attack.y >= room.geometry.world.y + room.geometry.world.height) {

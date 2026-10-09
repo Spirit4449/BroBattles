@@ -14,10 +14,12 @@ function getAbility(character) {
   return abilitiesByCharacter[String(character || "").toLowerCase()] || null;
 }
 
-function activateSpecial(room, player, now, payload = null) {
+// `shot` carries a human request's id and view rewind for abilities that fire
+// projectiles; bots and other abilities ignore it.
+function activateSpecial(room, player, now, payload = null, shot = null) {
   const ability = getAbility(player?.char_class);
   if (!ability || typeof ability.activate !== "function") return;
-  ability.activate(player, now, room, payload);
+  ability.activate(player, now, room, payload, shot);
 }
 
 function tickActiveAbilities(room, now) {

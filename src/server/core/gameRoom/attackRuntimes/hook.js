@@ -3,9 +3,9 @@ const { getResolvedCharacterSpecialConfig } = require("../../../../shared/charac
 const HOOK = getResolvedCharacterSpecialConfig("gloop", "hook");
 const { getParticipant, participantId } = require('../participants');
 const effectManager = require("../effects/effectManager");
-const { clampToWorld, circleAabbOverlap, getPlayerBounds, getAttackCollisionCenter } = require('./geometry');
+const { clampToWorld, circleAabbOverlap, getAttackCollisionCenter } = require('./geometry');
 const { buildProjectileLinearAttack } = require('./projectiles');
-const { getEnemyVaultTarget, emitServerHit, buildTargetList } = require('./targets');
+const { getEnemyVaultTarget, emitServerHit, buildTargetList, shotTargetBounds } = require('./targets');
 
 function resolveLiveGloopPullDestination(room, target, pull) {
   const source = getParticipant(room, String(pull?.sourceSocketId || ""));
@@ -239,7 +239,7 @@ function tickHookProjectile(room, attack, descriptor, now) {
 
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
-    const targetBounds = getPlayerBounds(target);
+    const targetBounds = shotTargetBounds(attack, target, now);
     if (!circleAabbOverlap(collisionCenter.x, collisionCenter.y, radius, targetBounds)) continue;
     attack.hitSet?.add(target.name);
     emitServerHit(room, attack, target.name, { damage: attack.damage });

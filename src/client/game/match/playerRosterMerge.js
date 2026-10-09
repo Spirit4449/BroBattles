@@ -69,3 +69,41 @@ export function mergeInitialRosterPlayer(rosterPlayer, livePlayer) {
       null,
   };
 }
+
+/**
+ * Apply a game:init roster to the remote player containers.
+ *
+ * game:init can land before or after the scene builds remote sprites. Before,
+ * the containers hold placeholder records. After (a slower join on a deployed
+ * server), the built sprites are kept: replacing them with placeholders would
+ * leave every other fighter invisible until live snapshots recreate them at
+ * FIGHT. Only fighters missing from the roster are destroyed.
+ *
+ * Returns true when the caller must refresh the built sprites from the roster.
+ */
+export function syncRemoteRoster({
+  players,
+  username,
+  yourTeam,
+  opponentPlayers,
+  teamPlayers,
+  spritesBuilt,
+  destroy,
+  placeholder,
+}) {
+  const remote = players.filter((p) => p.name !== username);
+  const names = new Set(remote.map((p) => p.name));
+  for (const container of [opponentPlayers, teamPlayers]) {
+    for (const name of Object.keys(container)) {
+      if (spritesBuilt && names.has(name)) continue;
+      destroy(container[name]);
+      delete container[name];
+    }
+  }
+  if (spritesBuilt) return true;
+  for (const p of remote) {
+    const container = p.team === yourTeam ? teamPlayers : opponentPlayers;
+    container[p.name] = placeholder(p);
+  }
+  return false;
+}

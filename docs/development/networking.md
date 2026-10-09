@@ -84,6 +84,17 @@ The client applies the error relative to the corrected input's recorded position
 
 Human collision locations still depend on received movement reports. Last-moment dodges can disagree under latency; projectile authority does not eliminate that limitation.
 
+## Shot prediction and lag compensation
+
+Every shooter (Huntress arrows and burning volley, Ninja shuriken and swarm, Wizard fireball, Gloop slimeball and hook) follows one contract. The shared pieces are `src/client/game/characters/shared/shotPrediction.js`, `src/server/core/gameRoom/lagCompensation.js` and `src/shared/combat/shotContact.js` (hit boxes, collision centres and swept contact used by both sides).
+
+1. **The shooter predicts its own launch.** Huntress and Ninja reconcile by projectile ID and keep the prediction's lead over the later server launch (capped at 300 ms) instead of pulling the shot back. Wizard and Gloop release locally after their windup under the request's ID; the server's echo of that ID is skipped. The Gloop hook request carries its ID through `game:special`.
+2. **Requests carry the render time.** `withShotView` adds `viewMono`, the server simulation time the render timeline is drawing remote actors at. The `game:action` and `game:special` socket handlers overwrite `viewRewindMs` with the arrival simulation time minus `viewMono`, clamped to `HIT_STALENESS_MAX_MS` (300 ms). Client values are never trusted, and bot shots, which never pass the transport, have no rewind.
+3. **The server tests targets where the shooter saw them.** Huntress, Ninja and the generic projectile and hook runtimes place each enemy at its position-history entry `viewRewindMs` before the current step. Melee runtimes are not rewound. Teleports (spawn and respawn) restart a player's history, so a rewind never reaches a pre-teleport position. Huntress attachment offsets are relative to the seen position.
+4. **The shooter draws hits at once against enemies as displayed.** Huntress arrows stick into the drawn body (and Bank Bust vaults) and follow it; Ninja and Wizard flash an impact once per enemy and leg; a Gloop slimeball splats; the hook latches. Damage, hit sounds, health and pulls still wait for the server. A predicted hit the server does not confirm within `confirmWindowMs()` (lowest RTT plus 220 ms) is withdrawn by fading or letting go, never by flying on or jumping. Other players' shots are not predicted against bodies.
+
+Clients also stop arrows at terrain with the bootstrap colliders, so shots never overshoot a wall while their terminal is in flight. The trade-off of the rewind is the victim's: under latency they can still be hit up to 300 ms after reaching cover.
+
 ## Diagnostics and verification
 
 Browser console diagnostics:

@@ -47,7 +47,7 @@ class MapPlaytestService {
       const session=socket.data.editorSession,room=session.room;
       socket.on('game:join',async(data,cb)=>{try{
         if(Number(data?.matchId)!==room.matchId)throw Error('Wrong playtest room');
-        if((room.ninjaCombatVersion===1&&data.ninjaCombatVersion!==1)||(room.huntressCombatVersion===2&&data.huntressCombatVersion!==2))throw Error('Reload the game client');
+        if((room.ninjaCombatVersion===1&&data.ninjaCombatVersion!==1)||(room.huntressCombatVersion===2&&data.huntressCombatVersion!==2))throw Object.assign(Error('Reload the game client'),{code:'CLIENT_UPDATE_REQUIRED'});
         await room.addPlayer(socket,socket.data.user);
         room.initializeSpawnPositions();
         room.sendGameStateToPlayer(socket);
@@ -58,7 +58,7 @@ class MapPlaytestService {
           if(!room.matchData.editorSoloPlaytest||!player?.isAlive||!player.loaded)return;
           room._handlePlayerDeath(player,{cause:'editor-self-kill',at:Date.now()});
         });
-      }catch(e){cb?.({ok:false,error:e.message});socket.emit('game:error',{message:e.message});}});
+      }catch(e){cb?.({ok:false,error:e.message});socket.emit('game:error',{message:e.message,code:e.code});}});
       socket.on('disconnect',()=>{if(!room._disposed)room.removePlayer(socket,socket.data.user).catch(()=>{});});
     });
   }

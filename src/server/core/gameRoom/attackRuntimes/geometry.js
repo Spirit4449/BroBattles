@@ -1,8 +1,10 @@
 const DEFAULT_TARGET_HALF_HEIGHT = 60;
 const DEFAULT_TARGET_HALF_WIDTH = 28;
 const { WORLD_MARGIN } = require("../../gameRoomConfig");
+const { circleAabbOverlap, attackCollisionCenter: getAttackCollisionCenter } = require("../../../../shared/combat/shotContact");
 
-function getPlayerBounds(target) {
+// `at` places the box at another position, such as a lag-compensated one.
+function getPlayerBounds(target, at = target) {
   const halfH = Math.max(
     8,
     Number(target?._bodyHalfHeight) || DEFAULT_TARGET_HALF_HEIGHT,
@@ -11,8 +13,8 @@ function getPlayerBounds(target) {
     4,
     Number(target?._bodyHalfWidth) || DEFAULT_TARGET_HALF_WIDTH,
   );
-  const centerX = Number(target.x) + (Number(target?._bodyCenterOffsetX) || 0);
-  const centerY = Number(target.y) + (Number(target?._bodyCenterOffsetY) || 0);
+  const centerX = Number(at.x) + (Number(target?._bodyCenterOffsetX) || 0);
+  const centerY = Number(at.y) + (Number(target?._bodyCenterOffsetY) || 0);
   return {
     left: centerX - halfW,
     right: centerX + halfW,
@@ -33,13 +35,6 @@ function normalizeAngleDelta(a, b) {
   while (delta > Math.PI) delta -= Math.PI * 2;
   while (delta < -Math.PI) delta += Math.PI * 2;
   return delta;
-}
-
-function circleAabbOverlap(cx, cy, radius, bounds) {
-  const nearestX = Math.max(bounds.left, Math.min(Number(cx), bounds.right));
-  const nearestY = Math.max(bounds.top, Math.min(Number(cy), bounds.bottom));
-  const dist = Math.hypot(Number(cx) - nearestX, Number(cy) - nearestY);
-  return dist <= radius;
 }
 
 function cubic(t, p0, p1, p2, p3) {
@@ -64,26 +59,6 @@ function resolvePositiveNumber(value, fallback) {
   const n = Number(value);
   if (Number.isFinite(n) && n > 0) return n;
   return fallback;
-}
-
-function getAttackCollisionCenter(attack, runtime = {}) {
-  const angle = Number(attack?.angle) || 0;
-  let forwardOffset = Number.isFinite(Number(attack?.collisionForwardOffset))
-    ? Number(attack.collisionForwardOffset)
-    : Number(runtime?.collisionForwardOffset) || 0;
-  // A rearward art-center correction must never put a new projectile's damage
-  // behind its launch point. Hold it at the muzzle until travel exceeds the
-  // configured correction, then preserve the requested offset in flight.
-  if (forwardOffset < 0 && Number.isFinite(Number(attack?.traveled))) {
-    forwardOffset = Math.max(forwardOffset, -Math.max(0, Number(attack.traveled)));
-  }
-  return {
-    x: (Number(attack?.x) || 0) + Math.cos(angle) * forwardOffset,
-    y:
-      (Number(attack?.y) || 0) +
-      Math.sin(angle) * forwardOffset +
-      (Number(attack?.collisionOffsetY) || Number(runtime?.collisionOffsetY) || 0),
-  };
 }
 
 function clampToWorld(value, axis, room) {

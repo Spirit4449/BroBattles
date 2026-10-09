@@ -7,6 +7,9 @@ import { playSpriteAnimation } from "../shared/animationState";
 
 import { createFireballParticles } from "./fireballParticles";
 import { playPlayerSound } from "../../audio/playerAudio";
+import { consumeOnce } from "../shared/packetDedupe";
+import { attackCollisionCenter } from "../../../../shared/combat/shotContact";
+import { predictShotContact } from "../shared/shotPrediction";
 
 const FIREBALL = getResolvedCharacterAttackConfig("wizard", "fireball");
 
@@ -23,6 +26,9 @@ const FIREBALL_FORWARD_OFFSET = FIREBALL.forwardOffset;
 const FIREBALL_BOB_FREQ_MS = FIREBALL.bobFreqMs;
 const FIREBALL_DEPTH = FIREBALL.depth;
 const FIREBALL_BASE_ANGLE_DEG = FIREBALL.baseAngleDeg;
+
+// Each release is drawn once, whether predicted locally or echoed by the server.
+export const consumeWizardRelease = (scene, id) => consumeOnce(scene, "wizard-release", id, 4000);
 
 let DEBUG_DRAW = false;
 const ACTIVE_DEBUG_SHAPES = new Set();
@@ -191,10 +197,19 @@ function resolveProjectileStart(payload, ownerSprite, angle, direction) {
   };
 }
 
+// The server's damage circle for a fireball `travel` px along its line, which
+// has no bob and starts at the unsettled muzzle point.
+function fireballDamageCenter(start, angle, travel) {
+  return attackCollisionCenter({
+    x: start.x + Math.cos(angle) * travel, y: start.y + Math.sin(angle) * travel, angle, traveled: travel,
+    collisionForwardOffset: FIREBALL.collisionForwardOffset, collisionOffsetY: FIREBALL.collisionOffsetY,
+  });
+}
+
 function spawnWizardFireballProjectile(
   scene,
   payload,
-  { ownerSprite = null } = {},
+  { ownerSprite = null, predictHits = false } = {},
 ) {
   if (!scene?.add) return null;
 
@@ -286,6 +301,9 @@ function spawnWizardFireballProjectile(
     const launchX = sprite.x - offsetX;
     const launchY = sprite.y - offsetY;
     trail = createFireballParticles(scene, sprite, angle);
+    // The caster sees the fireball burst on each enemy it passes, as drawn.
+    const struck = new Set();
+    let damageFrom = predictHits ? fireballDamageCenter({ x: launchX, y: launchY }, angle, 0) : null;
 
     travelTween = scene.tweens.add({
       targets: { t: 0 },
@@ -302,6 +320,14 @@ function spawnWizardFireballProjectile(
         const settle = 1 - correction * correction * (3 - 2 * correction);
         sprite.x = launchX + forwardX * travel + normalX * bobOffset + offsetX * settle;
         sprite.y = launchY + forwardY * travel + normalY * bobOffset + offsetY * settle;
+        if (damageFrom) {
+          const damageTo = fireballDamageCenter({ x: launchX, y: launchY }, angle, travel);
+          for (let hit; (hit = predictShotContact(damageFrom, damageTo, FIREBALL_COLLISION_RADIUS, { skip: struck }));) {
+            struck.add(hit.target.name);
+            spawnImpact(scene, hit.x, hit.y, false);
+          }
+          damageFrom = damageTo;
+        }
       },
       onComplete: () => {
         spawnImpact(scene, sprite.x, sprite.y, false);
@@ -342,6 +368,15 @@ export function performWizardFireball(instance, attackContext = null) {
     try {
       unlockFlip();
     } catch (_) {}
+  });
+  // The caster releases on time instead of a round trip later; the server's
+  // echo of this id is then skipped. An interrupted charge releases nothing.
+  scene.time.delayedCall(FIREBALL_CAST_DELAY_MS, () => {
+    if (!scene._wizardCharges?.has(attackId) || !p.active) return;
+    if (!consumeWizardRelease(scene, attackId)) return;
+    spawnWizardFireballProjectile(scene, { id: attackId, angle, direction, range: FIREBALL_RANGE,
+      duration: Math.round((FIREBALL_RANGE / FIREBALL_SPEED) * 1000), bob: FIREBALL_BOB_AMPLITUDE,
+      scale: FIREBALL_ACTIVE_SCALE }, { ownerSprite: p, predictHits: true });
   });
 
   return {

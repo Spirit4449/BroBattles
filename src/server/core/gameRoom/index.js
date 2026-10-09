@@ -254,10 +254,10 @@ class GameRoom {
       (p) => !p.isBot && Number(p.user_id) === userId,
     );
     if (!Number.isFinite(userId) || userId <= 0 || !matchPlayer) {
-      throw new Error("You are not a participant in this match");
+      throw Object.assign(new Error("You are not a participant in this match"), { code: "NOT_PARTICIPANT" });
     }
     if (this._disposed || this.status === "finished") {
-      throw new Error("This match has finished");
+      throw Object.assign(new Error("This match has finished"), { code: "MATCH_FINISHED" });
     }
 
     const gameRoom = `game:${this.matchId}`;
@@ -273,7 +273,7 @@ class GameRoom {
       // Another join may have completed while the legacy level lookup awaited IO.
       if (findExisting()) return this.addPlayer(socket, user);
       if (this._disposed || this.status === "finished") {
-        throw new Error("This match has finished");
+        throw Object.assign(new Error("This match has finished"), { code: "MATCH_FINISHED" });
       }
       const {
         maxHealth, baseDamage, specialDamage, specialChargeHits,
@@ -394,7 +394,7 @@ class GameRoom {
     p.superCharge = 0; p.lastCombatAt = now;
     const aimPayload = payload?.aim || null;
     if (p.isBot && p.char_class === 'ninja') startNinjaSwarm(this, p, now, aimPayload || {});
-    else activateSpecial(this, p, now, aimPayload);
+    else activateSpecial(this, p, now, aimPayload, { id: payload?.id, viewRewindMs: payload?.viewRewindMs });
     this.io.to(`game:${this.matchId}`).emit('super-update', { username: p.name, charge: 0, maxCharge: p.maxSuperCharge });
     if (p.char_class !== 'gloop') this.io.to(`game:${this.matchId}`).emit('player:special', {
       username: p.name, character: p.char_class, origin: { x: p.x, y: p.y }, flip: !!p.flip, aim: aimPayload,
@@ -879,6 +879,8 @@ class GameRoom {
       const stats = this._botTickStats ||= { ticks: 0, totalMs: 0, maxMs: 0 };
       stats.ticks++; stats.totalMs += elapsed; stats.maxMs = Math.max(stats.maxMs, elapsed);
     }
+
+    inputManager.stepIdleHumans(this, this.FIXED_DT_MS, now);
 
     // Humans record history when their position packets are accepted; bots
     // move every simulation step, so their history is sampled here.

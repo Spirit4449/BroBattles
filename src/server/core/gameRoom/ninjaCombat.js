@@ -4,6 +4,7 @@ const {sweep}=require('../../../shared/characters/huntressProjectile');
 const {characterBody}=require('../../../shared/physics/duelGeometry');
 const {participantId,getParticipant}=require('./participants');
 const {timing}=require('./huntressCombat');
+const {clampViewRewind,positionAt}=require('./lagCompensation');
 function initialize(room){room.ninjaCombatVersion=model.VERSION;room._ninja={active:new Map(),pending:[],requests:new Map(),terminals:[]};}
 function emit(room,p,action){room.io.to(`game:${room.matchId}`).emit('game:action',{playerName:p.name,character:'ninja',action:{...action,ninjaCombatVersion:model.VERSION,ownerEcho:true,...timing(room)}});}
 function ammo(p){return {ammoState:{...p.ammoState},revision:p._ninjaRevision=(p._ninjaRevision||0)+1};}
@@ -26,18 +27,21 @@ function request(room,p,data={},special=false){
     p._visibleAttack={at:now,startupMs:0,angle};
     if(special)room.io.to(`game:${room.matchId}`).emit('player:special',{username:p.name,character:'ninja',aim:{angle}});
     const count=special?model.swarmConfig().count:1;
-    for(let i=0;i<count;i++)state.pending.push({owner:participantId(p),requestId:id,angle,index:special?i:null,
+    const viewRewindMs=clampViewRewind(data.viewRewindMs);
+    for(let i=0;i<count;i++)state.pending.push({owner:participantId(p),requestId:id,angle,index:special?i:null,viewRewindMs,
       due:room._tickId+Math.ceil((special?i*model.swarmConfig().releaseMs:0)/model.STEP_MS)});
   }
   const result={type:'ninja-result',requestId:id,accepted:!reason,reason:reason||'accepted',...ammo(p)};
   state.requests.set(key,result);while(state.requests.size>512)state.requests.delete(state.requests.keys().next().value);
   emit(room,p,result);return !reason;
 }
-function targets(room,p){
+// Targets stand where the shooter saw them (see lagCompensation).
+function targets(room,p,viewRewindMs=0,now=Date.now()){
   const list=[];
   for(const t of room.players.values()){
     if(t===p||t.team===p.team||!t.isAlive||!t.loaded)continue;
-    const body=characterBody(t.char_class,t.flip),x=t.x+(t._bodyCenterOffsetX??body.offsetX),y=t.y+(t._bodyCenterOffsetY??body.offsetY),w=t._bodyHalfWidth??body.halfWidth,h=t._bodyHalfHeight??body.halfHeight;
+    const at=positionAt(t,viewRewindMs,now);
+    const body=characterBody(t.char_class,t.flip),x=at.x+(t._bodyCenterOffsetX??body.offsetX),y=at.y+(t._bodyCenterOffsetY??body.offsetY),w=t._bodyHalfWidth??body.halfWidth,h=t._bodyHalfHeight??body.halfHeight;
     list.push({name:t.name,movementReportAgeMs:!t.isBot&&t._lastPositionPacketAt>0?Math.max(0,Date.now()-t._lastPositionPacketAt):null,bounds:{left:x-w,right:x+w,top:y-h,bottom:y+h}});
   }
   const team=p.team==='team1'?'team2':'team1',v=room.gameMode?.getVaultState?.(team);
@@ -64,7 +68,7 @@ function tick(room){
     if(cast.due>room._tickId){state.pending.push(cast);continue;}
     const id=`${p.name}:${cast.requestId}:${cast.index??0}`,projectile=model.launch(p,cast.angle,id,cast.index);
     projectile.launchMono=room._simulationMono;projectile.ownerName=p.name;
-    const entry={projectile,owner:cast.owner,requestId:cast.requestId,hits:new Set()};state.active.set(id,entry);
+    const entry={projectile,owner:cast.owner,requestId:cast.requestId,hits:new Set(),viewRewindMs:cast.viewRewindMs||0};state.active.set(id,entry);
     emit(room,p,{type:'ninja-launch',requestId:cast.requestId,projectile});
   }
   for(const entry of state.active.values()){
@@ -76,7 +80,7 @@ function tick(room){
     for(const [index, segment] of segments.entries()){
       if(q.elapsed<60)continue;
       exposeDamageHitbox(room,q,{kind:'sweep',a:segment.a,b:segment.b,radius:q.cfg.collisionRadius},Date.now(),String(index));
-      const contacts=targets(room,p).map(t=>({...t,t:sweep(segment.a,segment.b,t.bounds,q.cfg.collisionRadius)}))
+      const contacts=targets(room,p,entry.viewRewindMs).map(t=>({...t,t:sweep(segment.a,segment.b,t.bounds,q.cfg.collisionRadius)}))
         .filter(t=>t.t!==null&&!(segment.terrain&&t.t>=1)).sort((a,b)=>a.t-b.t||a.name.localeCompare(b.name));
       for(const hit of contacts){
         const key=`${segment.phase}:${hit.name}`;if(entry.hits.has(key))continue;entry.hits.add(key);

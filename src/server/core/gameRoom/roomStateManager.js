@@ -124,6 +124,8 @@ function sendGameStateToPlayer(room, socket) {
     ...buildWorldStatePayload(room),
     players: (room.matchData.players || []).map((mp) => {
       const p = liveByName.get(mp.name);
+      // A participant who has not joined yet still has a spawn to stand on.
+      const position = p || spawnStateFor(room, mp) || {};
       return {
         name: mp.name,
         participantId: mp.participantId,
@@ -135,8 +137,8 @@ function sendGameStateToPlayer(room, socket) {
           p?.selected_skin_asset_url || mp.selected_skin_asset_url || null,
         selected_skin_game_assets:
           p?.selected_skin_game_assets || mp.selected_skin_game_assets || null,
-        x: roundPosition(p?.x),
-        y: roundPosition(p?.y),
+        x: roundPosition(position.x),
+        y: roundPosition(position.y),
         vx: Number.isFinite(p?.vx) ? p.vx : 0,
         vy: Number.isFinite(p?.vy) ? p.vy : 0,
         grounded: !!p?.grounded,

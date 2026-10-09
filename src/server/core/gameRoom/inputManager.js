@@ -14,6 +14,7 @@ const {
   MOVE_CLAMP_WINDOW_MS,
   MOVE_CLAMP_MAX_IN_WINDOW,
   MAX_MOVEMENT_CREDIT_MS,
+  IDLE_FALLBACK_AFTER_MS,
 } = require("../gameRoomConfig");
 const { isMovementSuppressed } = require("./abilityRuntimeManager");
 const netTestLogger = require("./netTestLogger");
@@ -31,6 +32,7 @@ const DASH_COLLISION_CORRECTION_PX = 2;
 const MOVING_SURFACE_LAG_S = 0.2;
 const movementPhysics = require("../../../shared/physics/movementPhysics.json");
 const effectManager = require("./effects/effectManager");
+const { stepBody } = require("../bots/physics");
 
 function updateBodyGeometry(player, room) {
   const body = characterBody(player.char_class, player.flip);
@@ -64,18 +66,23 @@ function resetMovementBudget(player, now = Date.now()) {
   player.lastInput = now;
   // A server teleport (spawn/respawn) supersedes any unacknowledged correction.
   player._correctionSentAt = 0;
+  player._idleFallback = false;
+  player._idleFallbackMoved = false;
+  // Lag-compensated hits must never rewind across a teleport.
+  player._posHistory = [];
+  if (Number.isFinite(Number(player.x)) && Number.isFinite(Number(player.y))) pushPositionHistory(player, now);
 }
 
 function movementStats(player) {
   return (player._movementStats ||= {
-    budget: 0, collision: 0, staleDropped: 0, maxErrorPx: 0,
+    budget: 0, collision: 0, idle: 0, staleDropped: 0, maxErrorPx: 0,
   });
 }
 
 function correctPosition(room, player, sequence, detail = {}) {
   if (!player.socketId) return;
   const stats = movementStats(player);
-  const reason = detail.reason === "collision" ? "collision" : "budget";
+  const reason = detail.reason === "collision" || detail.reason === "idle" ? detail.reason : "budget";
   stats[reason] += 1;
   const errorPx = Number(detail.errorPx) || 0;
   if (errorPx > stats.maxErrorPx) stats.maxErrorPx = errorPx;
@@ -248,6 +255,19 @@ function handlePlayerInput(room, socketId, inputData) {
     movementStats(playerData).staleDropped += 1;
     return;
   }
+  playerData._idleFallback = false;
+  if (playerData._idleFallbackMoved) {
+    // The client resumed from where it stopped; the server has since moved it.
+    // Drop this stale position and move the client to the server's instead.
+    playerData._idleFallbackMoved = false;
+    if (playerData._movementBudget) playerData._movementBudget.at = now;
+    playerData._lastPositionPacketAt = now;
+    playerData.lastInput = now;
+    const errorPx = Number.isFinite(inputData.x) && Number.isFinite(inputData.y)
+      ? Math.hypot(inputData.x - playerData.x, inputData.y - playerData.y) : 0;
+    correctPosition(room, playerData, packetSeq, { reason: "idle", errorPx });
+    return;
+  }
 
   if (infernoActive) {
     applyMovementVfxState(playerData, inputData);
@@ -399,6 +419,40 @@ function handlePlayerInput(room, socketId, inputData) {
   // Malformed position packets must not enter the legacy unvalidated movement path.
 }
 
+// A client whose page is hidden stops simulating and sending packets, which
+// left it hanging wherever its last packet put it, even mid-air. After
+// IDLE_FALLBACK_AFTER_MS of silence the server steps it with the bots' solver
+// as if no keys were held. Its next packet is answered with a correction.
+function stepIdleHumans(room, dtMs, now = Date.now()) {
+  if (room.status !== "active" || !room.geometry?.colliders) return;
+  for (const playerData of room.players.values()) {
+    if (playerData.isBot || !playerData.isAlive || !(playerData._lastPositionPacketAt > 0)) continue;
+    const lastHeard = Math.max(playerData._lastPositionPacketAt, Number(playerData.lastInput) || 0);
+    if (now - lastHeard < IDLE_FALLBACK_AFTER_MS ||
+        Number(playerData._controlLockUntil || 0) > now || isMovementSuppressed(playerData, now)) {
+      playerData._idleFallback = false;
+      continue;
+    }
+    if (!playerData._idleFallback) {
+      // Phaser releases held keys on blur, so the client was not ducking either.
+      playerData._idleFallback = true;
+      playerData.ducking = false;
+      playerData._jumpLaunch = null;
+    }
+    const x = playerData.x, y = playerData.y;
+    const result = stepBody(playerData, { direction: 0 }, room.geometry, dtMs, now,
+      effectManager.getModifiers(playerData, now));
+    playerData.animation = playerData.grounded
+      ? (Math.abs(playerData.vx) > 12 ? "running" : "idle")
+      : (playerData.vy < 0 ? "jumping" : "falling");
+    if (playerData.x !== x || playerData.y !== y) {
+      playerData._idleFallbackMoved = true;
+      pushPositionHistory(playerData, now);
+    }
+    if (result.fell) room._handlePlayerDeath(playerData, { cause: "fall", at: now });
+  }
+}
+
 // Bots move every simulation step on the server.
 function recordBotHistory(playerData, now = Date.now()) {
   if (!playerData?.isAlive || !Number.isFinite(Number(playerData.x)) ||
@@ -414,4 +468,5 @@ module.exports = {
   handlePlayerInput,
   pushPositionHistory,
   recordBotHistory,
+  stepIdleHumans,
 };

@@ -433,6 +433,12 @@ export function chooseRemoteAnimationState({
   if (logical === "jumping" || logical === "falling") {
     return grounded === false ? (Number.isFinite(vy) ? (vy < -20 ? "jumping" : "falling") : logical) : "idle";
   }
+  // A grounded snapshot is authoritative: position deltas on the ground come
+  // from moving platforms carrying the rider, not from the rider moving.
+  if (grounded === true) {
+    if (Math.abs(vx) > 20) return "running";
+    return logical === "running" ? "running" : "idle";
+  }
   if (grounded === false || Math.abs(dy) > 2.2 || Math.abs(vy) > 85) {
     return dy < 0 || vy < -20 ? "jumping" : "falling";
   }

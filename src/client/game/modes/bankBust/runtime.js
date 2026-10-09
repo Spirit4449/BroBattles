@@ -1,4 +1,5 @@
 import { RENDER_LAYERS } from "../../scene/renderLayers";
+import { setStaticShotTargets } from "../../characters/shared/shotPrediction";
 
 function cloneJson(v) {
   try {
@@ -515,6 +516,8 @@ export function createBankBustRuntime({
 
   function renderVaults(modeState) {
     const usedVaults = new Set();
+    // Standing enemy vaults are shot targets for this player's predicted hits.
+    const shotTargets = [];
     for (const [team, vaultRaw] of Object.entries(modeState?.vaults || {})) {
       usedVaults.add(team);
       const vault = getLayoutVault(team, vaultRaw);
@@ -524,6 +527,10 @@ export function createBankBustRuntime({
       const height = Math.max(60, Number(vault.height) || 180);
       const x = Number(vault.x) || 0;
       const y = Number(vault.y) || 0;
+      if (health > 0 && getLocalTeam() && team !== getLocalTeam()) {
+        shotTargets.push({ name: `vault:${team}`, inset: false, bounds: {
+          left: x - width / 2, right: x + width / 2, top: y - height / 2, bottom: y + height / 2 } });
+      }
 
       const event = modeState?.lastVaultDamageEvent;
       const eventAt = Number(event?.at) || 0;
@@ -581,6 +588,7 @@ export function createBankBustRuntime({
       );
     }
     cleanupUnused(vaultSprites, usedVaults);
+    setStaticShotTargets("bankBust", shotTargets);
   }
 
   function renderObjects(modeState) {
@@ -1054,6 +1062,7 @@ export function createBankBustRuntime({
   }
 
   function destroy() {
+    setStaticShotTargets("bankBust", []);
     try {
       objectiveGraphics.destroy();
       uiGraphics.destroy();

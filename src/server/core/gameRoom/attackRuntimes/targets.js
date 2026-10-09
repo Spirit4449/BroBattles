@@ -4,6 +4,12 @@ const { getParticipant } = require('../participants');
 const { circleAabbOverlap, getPlayerBounds } = require('./geometry');
 const { sweep } = require('../../../../shared/characters/huntressProjectile');
 const { isDetachedProjectile } = require('./projectileLifecycle');
+const { positionAt } = require('../lagCompensation');
+
+// Shots test targets where their shooter saw them; melee has no rewind.
+function shotTargetBounds(attack, target, now = Date.now()) {
+  return getPlayerBounds(target, positionAt(target, attack?.viewRewindMs, now));
+}
 
 function emitServerHit(room, attack, targetName, payload = {}) {
   attack.contactTarget = targetName;
@@ -13,7 +19,9 @@ function emitServerHit(room, attack, targetName, payload = {}) {
       target: targetName,
       attackType: attack.attackType,
       instanceId: attack.instanceId,
-      attackTime: Date.now(),
+      // Range checks for attached shots (hooks) use the positions the contact
+      // was tested against, not where the target has moved since.
+      attackTime: Date.now() - (Number(attack.viewRewindMs) || 0),
       damage: payload.damage,
     }, { server: true, runtimeProjectile: attack });
   } finally {
@@ -163,7 +171,7 @@ function hitCircleTargets(
     if (attack.hitSet?.has(target.name)) continue;
     const lastHitAt = Number(attack.hitTimes[target.name]) || 0;
     if (repeatCooldownMs > 0 && now - lastHitAt < repeatCooldownMs) continue;
-    const targetBounds = getPlayerBounds(target);
+    const targetBounds = shotTargetBounds(attack, target, now);
     if (!circleAabbOverlap(cx, cy, radius, targetBounds)) continue;
     attack.hitSet?.add(target.name);
     attack.hitTimes[target.name] = now;
@@ -196,7 +204,7 @@ function hitRectTargets(room, attack, descriptor, rect, now) {
   }
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
-    const targetBounds = getPlayerBounds(target);
+    const targetBounds = shotTargetBounds(attack, target, now);
     const overlap =
       rect.left <= targetBounds.right &&
       rect.right >= targetBounds.left &&
@@ -226,7 +234,7 @@ function hitCapsuleTargets(room, attack, descriptor, start, end, radius, now) {
   }
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
-    if (sweep(start, end, getPlayerBounds(target), radius) === null) continue;
+    if (sweep(start, end, shotTargetBounds(attack, target, now), radius) === null) continue;
     attack.hitSet?.add(target.name);
     emitServerHit(room, attack, target.name, { damage: attack.damage });
     emitHitAction(room, attack, descriptor, attacker, target, now);
@@ -235,4 +243,4 @@ function hitCapsuleTargets(room, attack, descriptor, start, end, radius, now) {
   return hitCount;
 }
 
-module.exports = { emitServerHit, applyDescriptorHitEffect, getEnemyVaultTarget, buildTargetList, emitHitAction, hitCircleTargets, hitRectTargets, hitCapsuleTargets };
+module.exports = { shotTargetBounds, emitServerHit, applyDescriptorHitEffect, getEnemyVaultTarget, buildTargetList, emitHitAction, hitCircleTargets, hitRectTargets, hitCapsuleTargets };

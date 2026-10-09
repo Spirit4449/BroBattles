@@ -51,6 +51,15 @@ test('remote death wins over residual velocity and dash snapshots reset landed j
   assert.equal(sprite._bbAnimationState.restartJump, false);
 });
 
+test('remote rider carried by a moving platform stays idle', () => {
+  const choose = (dx, dy) => animation.chooseRemoteAnimationState({ animation: 'idle',
+    previousPosition: { x: 100, y: 200 },
+    currentPosition: { x: 100 + dx, y: 200 + dy, vx: 0, vy: 0, grounded: true, wallSliding: false } });
+  assert.equal(choose(0, 6), 'idle');
+  assert.equal(choose(0, -6), 'idle');
+  assert.equal(choose(6, 0), 'idle');
+});
+
 const registry = load('../src/client/game/characters/index', {
   './manifest': { __esModule: true, default: [{ key: 'ninja', setupAnimations() {} }] },
   '../../views/skinAssets.js': {

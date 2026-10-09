@@ -6,9 +6,13 @@ import { lockPlayerFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
 import { playPlayerSound } from "../../audio/playerAudio";
+import { consumeOnce } from "../shared/packetDedupe";
+import { predictShotContact } from "../shared/shotPrediction";
 
 const NAME = "gloop";
 const SLIMEBALL = getResolvedCharacterAttackConfig(NAME, "slimeball");
+// Each release is drawn once, whether predicted locally or echoed by the server.
+export const consumeGloopRelease = (scene, id) => consumeOnce(scene, "gloop-release", id, 5000);
 // The map's world (its mode's arena), set as the physics bounds.
 function resolveWorldBounds(scene) {
   const { x, y, width, height } = scene.physics.world.bounds;
@@ -128,6 +132,7 @@ export function spawnGloopSlimeballVisual(
   scene,
   payload = {},
   ownerSprite = null,
+  { predictHits = false } = {},
 ) {
   if (!scene?.events || !scene?.add) return null;
 
@@ -228,11 +233,20 @@ export function spawnGloopSlimeballVisual(
     visual.finish({ onCharacter: true });
     debug?.setVisible(false);
   };
+  // The thrower's ball splats on an enemy as drawn, tested like the server's
+  // per-segment contact. A later server splat for this id is then ignored.
+  let struck = null;
+  const onSegment = predictHits ? (_from, s) => {
+    const at = { x: s.x, y: s.y };
+    struck = predictShotContact(at, at, s.collisionRadius);
+    return !!struck;
+  } : null;
   const update = (_, delta = 16) => {
     if (disposed) return;
     if (!ended) {
       state.mapCollisionRects = currentTerrain(scene, cfg.mapCollisionRects, serverTerrain);
-      const impacts = advanceSlimeball(state, delta, state.mapCollisionRects);
+      const impacts = advanceSlimeball(state, delta, state.mapCollisionRects, onSegment);
+      if (struck) { splat({ id: payload.id, target: struck.target.name }); return; }
       for (const hit of impacts) {
         visual.impact(hit);
         playSound(scene, "gloop-hit", { volume: hit.terminal ? 0.48 : 0.3,
@@ -275,6 +289,7 @@ export function performGloopSlimeball(instance, attackContext = null) {
   const attackId = createRuntimeId("gloopSlimeball");
   const worldBounds = resolveWorldBounds(scene);
   const unlockFlip = lockPlayerFlip(p);
+  const castOrigin = { x: p.x, y: p.y };
 
   p.flipX = direction < 0;
   playAttackAnimation(scene, p);
@@ -285,7 +300,7 @@ export function performGloopSlimeball(instance, attackContext = null) {
     } catch (_) {}
   });
 
-  return {
+  const payload = {
     type: `${NAME}-slimeball`,
     id: attackId,
     direction,
@@ -318,6 +333,18 @@ export function performGloopSlimeball(instance, attackContext = null) {
       Math.round(instance.constructor?.getStats?.()?.baseDamage || 0),
     ),
   };
+  // The thrower releases on time, from where the server will (the aimed start
+  // carried along with Gloop's windup movement); the echo of this id is skipped.
+  let interrupted = false;
+  const onInterrupt = () => { interrupted = true; };
+  p.once?.("attack:interrupted", onInterrupt);
+  scene.time.delayedCall(Number(SLIMEBALL.castDelayMs) || 0, () => {
+    p.off?.("attack:interrupted", onInterrupt);
+    if (interrupted || !p.active || !consumeGloopRelease(scene, attackId)) return;
+    spawnGloopSlimeballVisual(scene, { ...payload, type: `${NAME}-slimeball-release`, mapCollisionRects: undefined,
+      start: { x: payload.start.x + p.x - castOrigin.x, y: payload.start.y + p.y - castOrigin.y } }, p, { predictHits: true });
+  });
+  return payload;
 }
 
 export function changeDebugState(state) {

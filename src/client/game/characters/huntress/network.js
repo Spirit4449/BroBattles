@@ -1,11 +1,13 @@
-import { applyTeamVisual, teamPalette } from "../../../../shared/projectilePresentation";
+import { applyTeamVisual } from "../../../../shared/projectilePresentation";
 import { createRuntimeId } from '../shared/runtimeId';
 import { RENDER_LAYERS } from '../../scene/renderLayers';
 import { HuntressReplica } from '../../../../shared/characters/huntressReplication';
 import { serverClock, ensureServerClockEpoch } from '../../match/serverClock';
 import { remoteLaunchCorrection, reconcileFlight } from '../../../../shared/projectilePresentation';
-import { VERSION, attackConfig, resolveShot, powerFromSpeed, createVolley } from '../../../../shared/characters/huntressProjectile';
+import { VERSION, attackConfig, resolveShot, powerFromSpeed, createVolley, firstContact, sample, attachmentPoint } from '../../../../shared/characters/huntressProjectile';
+import { advanceGeometry } from '../../../../shared/maps/platformMotion';
 import { playPlayerSound } from '../../audio/playerAudio';
+import { isLocalShooter, predictShotContact, confirmWindowMs } from '../shared/shotPrediction';
 
 // The replica reads the shared match clock; it never resets or pings it.
 const replica = new HuntressReplica(serverClock);
@@ -13,7 +15,13 @@ let version = null, sceneRef = null, context = {};
 const sprites = new Map(), casts = new Map(), metrics = [];
 const predictedRequests = new Map();
 const fireParticles = new Set();
+// Predicted hits the server did not confirm; their flight is no longer drawn.
+const withdrawn = new Set();
+const WITHDRAW_FADE_MS = 150;
 let lastAmmoRevision = 0;
+// Bootstrap colliders carry their motion; terrain is static apart from that,
+// so every client can stop an arrow where the server will.
+let colliders = [], platformMotion = { movingColliders: [] };
 let updateListener = null;
 let shutdownListener = null;
 
@@ -23,8 +31,9 @@ export function resetHuntressNetwork() {
   for (const entry of sprites.values()) entry.sprite.destroy();
   for (const particle of fireParticles) particle.destroy();
   fireParticles.clear();
-  sprites.clear(); casts.clear(); predictedRequests.clear(); replica.reset(); lastAmmoRevision = 0;
+  sprites.clear(); casts.clear(); predictedRequests.clear(); withdrawn.clear(); replica.reset(); lastAmmoRevision = 0;
   sceneRef = null; updateListener = null; shutdownListener = null; context = {}; version = null;
+  colliders = []; platformMotion = { movingColliders: [] };
 }
 
 // Visibility resync is presentation-only: preserve the configured protocol and
@@ -33,7 +42,7 @@ export function discardHuntressPresentation() {
   for (const entry of sprites.values()) entry.sprite.destroy();
   for (const particle of fireParticles) particle.destroy();
   fireParticles.clear();
-  sprites.clear(); casts.clear(); predictedRequests.clear();
+  sprites.clear(); casts.clear(); predictedRequests.clear(); withdrawn.clear();
   replica.active.clear();
 }
 
@@ -41,6 +50,8 @@ export function configureHuntressNetwork(state) {
   resetHuntressNetwork();
   version = state?.huntressCombatVersion ?? null;
   if (version !== VERSION) return;
+  colliders = state.collisionGeometry?.colliders || [];
+  platformMotion = { movingColliders: colliders.filter(c => c.motion && c.base) };
   ensureServerClockEpoch(state.epoch);
   replica.reset(state.epoch);
   replica.clock.observe(state, performance.now());
@@ -70,46 +81,70 @@ function addSprite(scene, projectile) {
   sprites.set(projectile.id, entry);
   return entry;
 }
+// Where this frame's flight stops: the server's terrain sweep at the arrow's
+// own simulation time, and for the local shooter the enemies as drawn. Without
+// it an arrow flew on into a wall or body until the terminal arrived, then
+// jumped back. Terrain wins ties, as on the server.
+function flightContact(entry, p, point) {
+  const from = entry.flight || { x: p.x, y: p.y };
+  entry.flight = { x: point.x, y: point.y };
+  let wall = null;
+  if (colliders.length) {
+    advanceGeometry(platformMotion, p.launchMono + point.age);
+    wall = firstContact(from, point, 0, colliders, []);
+  }
+  const hit = isLocalShooter(p.ownerName) ? predictShotContact(from, point, p.radius, { inset: true }) : null;
+  if (hit && (!wall || hit.t < wall.t)) {
+    const at = attachmentPoint(hit, hit.bounds), body = hit.target.sprite;
+    return { x: at.x, y: at.y, target: hit.target.name, sprite: body,
+      offset: body ? { x: at.x - body.x, y: at.y - body.y } : null };
+  }
+  return wall && { x: wall.x, y: wall.y };
+}
+function placeHeld(entry) {
+  const { held } = entry, body = held.sprite;
+  if (body?.active && held.offset) entry.sprite.setPosition(body.x + held.offset.x, body.y + held.offset.y);
+  else entry.sprite.setPosition(held.x, held.y);
+  entry.sprite.setRotation(held.rotation);
+}
+// Fades a withdrawn prediction; true once it is gone.
+function fadeOut(entry, now) {
+  entry.withdrawnAt ??= now;
+  const alpha = 1 - (now - entry.withdrawnAt) / WITHDRAW_FADE_MS;
+  if (alpha > 0) { entry.sprite.setAlpha?.(alpha); return false; }
+  entry.sprite.destroy();
+  return true;
+}
 function record(event) { metrics.push(event); if (metrics.length > 240) metrics.shift(); }
 
 export function burningFx(scene, entry, now, embedded = false) {
-  if (now - (entry.lastFire || -Infinity) < (embedded ? 90 : 45)) return;
+  if (now - (entry.lastFire ?? -Infinity) < (embedded ? 100 : 40)) return;
   entry.lastFire = now;
-  const angle = entry.sprite.rotation || 0;
+  // One small, opaque cluster per emission. Fire bends against flight, then
+  // rises after impact; no smoke, additive halos or expanding translucent blobs.
+  if (fireParticles.size >= 320) return;
+  const angle = embedded ? Math.PI / 2 : entry.sprite.rotation || 0;
+  const phase = (entry.fireFrame = (entry.fireFrame || 0) + 1) % 3;
+  const size = entry.projectile.special ? 3 : 2;
   const x = entry.sprite.x, y = entry.sprite.y;
-  const emit = (radius, color, alpha, dx, dy, duration, scale) => {
-    // Bound cosmetic work during volleys; particles never affect combat.
-    if (fireParticles.size >= 320) return;
-    const particle = color === 0x62616a
-      ? scene.add.circle(x, y, radius, color, alpha)
-      : scene.add.graphics().setPosition(x, y).setAlpha(alpha);
-    if (color !== 0x62616a) {
-      // Stepped flame tongues, with an open fork and bright root: readable at
-      // arrow scale without blurring the shaft or tinting the whole projectile.
-      const size = radius / 4;
-      particle.fillStyle(color, 1);
-      particle.fillRect(-6*size, -2*size, 8*size, 4*size);
-      particle.fillRect(-10*size, -3*size, 5*size, 2*size);
-      particle.fillRect(-8*size, 2*size, 4*size, 2*size);
-      particle.fillStyle(teamPalette(entry.sprite).core, 0.8);
-      particle.fillRect(-2*size, -size, 3*size, 2*size);
-      particle.setRotation(angle);
-    }
-    fireParticles.add(particle);
-    particle.setDepth(RENDER_LAYERS.ATTACKS + 3);
-    scene.tweens.add({ targets: particle, x: x + dx, y: y + dy,
-      scaleX: scale, scaleY: scale * 1.5, alpha: 0, duration,
-      onComplete: () => { fireParticles.delete(particle); particle.destroy(); } });
+  const flame = scene.add.graphics().setPosition(x, y);
+  flame.setRotation(angle);
+  flame.setDepth(RENDER_LAYERS.ATTACKS + 5);
+  const block = (color, bx, by, w, h) => {
+    flame.fillStyle(color, 1);
+    flame.fillRect(bx * size, by * size, w * size, h * size);
   };
-  const drift = embedded ? 0 : -Math.cos(angle) * 26;
-  const lift = embedded ? -30 : -Math.sin(angle) * 26 - 12;
-  const palette = teamPalette(entry.sprite);
-  emit(entry.projectile.special ? 7 : 4, palette.mid, 0.7, drift - 4, lift, 240, 0.25);
-  emit(entry.projectile.special ? 4 : 2, palette.light, 0.95, drift + 3, lift - 7, 170, 0.2);
-  if (entry.projectile.special && (embedded || now - (entry.lastSmoke || -Infinity) > 120)) {
-    entry.lastSmoke = now;
-    emit(5, 0x62616a, 0.38, drift * 0.4 + 10, -48, 650, 2.2);
-  }
+  block(0xd94716, -4, -1, 5, 2);
+  block(0xff8526, -3, -1, 4, 2);
+  block(0xff8526, -5 - phase, phase === 1 ? 0 : -1, 3, 1);
+  block(0xffbf42, -2, -1, 3, 2);
+  block(0xffeaa0, 0, -1, 1, 2);
+  block(0xffbf42, -3 - phase, phase === 1 ? -2 : 1, 2, 1);
+  fireParticles.add(flame);
+  scene.tweens.add({ targets: flame,
+    x: x - Math.cos(angle) * 12, y: y - Math.sin(angle) * 12 - 6,
+    alpha: 0, duration: embedded ? 180 : 150,
+    onComplete: () => { fireParticles.delete(flame); flame.destroy(); } });
 }
 
 export function attachHuntressScene(scene, nextContext = {}) {
@@ -133,7 +168,9 @@ export function attachHuntressScene(scene, nextContext = {}) {
       for (const p of projectiles) replica.launch({ ...p, ownerName: cast.username }, true);
       record({ type: 'predicted-launch', requestId: id, windupOverrunMs: now - cast.due });
     }
+    for (const id of withdrawn) if (!replica.active.has(id)) withdrawn.delete(id);
     for (const [id, state] of replica.active) {
+      if (withdrawn.has(id)) continue;
       const p = state.projectile, point = replica.position(id, now);
       if (!point || point.age < 0) continue;
       if (point.age >= p.maxLifetimeMs) { replica.active.delete(id); continue; }
@@ -142,35 +179,56 @@ export function attachHuntressScene(scene, nextContext = {}) {
         entry.correction = remoteLaunchCorrection(targetSprite(p.ownerName), p.origin, point.age, now);
       }
       if (entry.revision && entry.revision !== state.revision) {
-        entry.correction = reconcileFlight(entry.sprite, point, now, Math.hypot(point.vx, point.vy));
+        // Compare both flights at this instant. The sprite holds last frame's
+        // position, so measuring from it stalled the arrow for a frame.
+        const previous = entry.projectile, wasShown = entry.correction ?
+          Math.max(0, 1 - (now - entry.correction.at) / (entry.correction.duration || 80)) : 0;
+        const predicted = sample(previous, replica.clock.now(now) - previous.launchMono + (entry.lead || 0));
+        entry.correction = reconcileFlight({ x: predicted.x + (entry.correction?.x || 0) * wasShown,
+          y: predicted.y + (entry.correction?.y || 0) * wasShown }, point, now, Math.hypot(point.vx, point.vy));
         record({ type: 'reconcile', id, errorPx: Math.hypot(entry.correction.x, entry.correction.y) });
       }
-      entry.revision = state.revision; entry.projectile = p;
+      entry.revision = state.revision; entry.projectile = p; entry.lead = state.lead;
+      const contact = !entry.held && flightContact(entry, p, point);
+      if (contact) entry.held = { ...contact, rotation: Math.atan2(point.vy, point.vx), at: now };
+      if (entry.held) {
+        // A predicted body hit the server has not confirmed in time is withdrawn.
+        if (entry.held.target && now - entry.held.at > confirmWindowMs()) {
+          if (fadeOut(entry, now)) { sprites.delete(id); withdrawn.add(id); }
+          continue;
+        }
+        placeHeld(entry);
+        burningFx(scene, entry, now, true);
+        continue;
+      }
       const blend = entry.correction ? Math.max(0, 1 - (now - entry.correction.at) / (entry.correction.duration || 80)) : 0;
       entry.sprite.setPosition(point.x + (entry.correction?.x || 0) * blend, point.y + (entry.correction?.y || 0) * blend);
       entry.sprite.setRotation(Math.atan2(point.vy, point.vx));
-      // Only a server terminal ends flight. Buffered actors are unsuitable for
-      // predicting impact: a false contact used to freeze and then jump arrows.
-      if (p.special) burningFx(scene, entry, now);
-      if (!p.special && now - entry.lastTrail > 45) {
-        entry.lastTrail = now;
-        const trail = scene.add.circle(entry.sprite.x, entry.sprite.y, p.special ? 3 : 1.5, teamPalette(entry.sprite).light, 0.5);
-        trail.setDepth(RENDER_LAYERS.ATTACKS + 2);
-        scene.tweens.add({ targets: trail, alpha: 0, duration: 150, onComplete: () => trail.destroy() });
-      }
+      burningFx(scene, entry, now);
+
     }
     for (const [id, entry] of sprites) {
       const terminal = replica.terminals.get(id);
       if (!terminal && replica.active.has(id)) continue;
       const embed = terminal && ['target', 'terrain'].includes(terminal.reason);
-      if (!embed || now - terminal.received > entry.projectile.embedMs) {
+      if (embed && now - terminal.received > entry.projectile.embedMs) {
         entry.sprite.destroy(); sprites.delete(id); continue;
       }
+      if (entry.held?.target) {
+        // A confirmed prediction stays exactly where it was drawn; any other
+        // outcome fades it rather than jumping it somewhere else.
+        if (terminal?.reason === 'target' && terminal.target === entry.held.target) {
+          placeHeld(entry);
+          burningFx(scene, entry, now, true);
+        } else if (fadeOut(entry, now)) sprites.delete(id);
+        continue;
+      }
+      if (!embed) { entry.sprite.destroy(); sprites.delete(id); continue; }
       const target = terminal.target && targetSprite(terminal.target);
       entry.sprite.setPosition(target?.active && terminal.targetOffset ? target.x + terminal.targetOffset.x : terminal.x,
         target?.active && terminal.targetOffset ? target.y + terminal.targetOffset.y : terminal.y);
       entry.sprite.setRotation(terminal.rotation);
-      if (entry.projectile.special) burningFx(scene, entry, now, true);
+      burningFx(scene, entry, now, true);
     }
   };
   scene.events.on('update', updateListener);
@@ -219,6 +277,7 @@ export function handleHuntressPacket(scene, packet, nextContext) {
       if (replica.clock.now(performance.now()) - p.launchMono < p.maxLifetimeMs) replica.launch(p);
     }
   } else if (action.type === 'huntress-terminal') {
+    withdrawn.delete(action.id);
     let existing = sprites.get(action.id);
     const age = Math.max(0, replica.clock.now(performance.now()) - action.simMono);
     if (replica.terminate(action, performance.now() - age)) {
@@ -231,10 +290,9 @@ export function handleHuntressPacket(scene, packet, nextContext) {
       if (action.appliedDamage > 0) playPlayerSound(scene,
         targetSprite(existing?.projectile?.ownerName || action.ownerName) || { x: action.x, y: action.y },
         'huntress-hit', { volume: 0.48 });
-      if (existing?.projectile.special && ['target', 'terrain'].includes(action.reason)) {
-        const flame = scene.add.circle(action.x, action.y, 26, teamPalette(existing.sprite).mid, 0.3);
-        flame.setDepth(RENDER_LAYERS.ATTACKS + 1);
-        scene.tweens.add({ targets: flame, alpha: 0, scaleX: 1.6, scaleY: 0.4, duration: 2200, onComplete: () => flame.destroy() });
+      if (existing && ['target', 'terrain'].includes(action.reason)) {
+        if (!existing.held) existing.sprite.setPosition(action.x, action.y);
+        burningFx(scene, existing, performance.now(), true);
       }
     }
   }

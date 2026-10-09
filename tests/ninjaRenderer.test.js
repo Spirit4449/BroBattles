@@ -1,6 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),babel=require('@babel/core');
 const {EventEmitter}=require('node:events');
 const loadServerClock=require('./helpers/serverClockModule');
+const loadShotPrediction=require('./helpers/shotPredictionModule');
 const model=require('../src/shared/characters/ninjaProjectile'),clock=require('../src/shared/characters/huntressReplication');
 const code=babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/ninja/network'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code;
 const playerAudio={};
@@ -11,17 +12,19 @@ function setup(initial={}){
   let now=0;const api={},images=[],sounds=[],ammo=[],releases=[],animation={};
   vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/animationState'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:animation,performance:{now:()=>now}});
   const serverClock=loadServerClock({performance:{now:()=>now}});
-  vm.runInNewContext(code,{exports:api,require:name=>name.includes('serverClock')?serverClock:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('playerAudio')?playerAudio:name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):name.includes('huntressReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:{connected:false},
+  const shots=loadShotPrediction({serverClock});
+  vm.runInNewContext(code,{exports:api,require:name=>name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('playerAudio')?playerAudio:name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):name.includes('huntressReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:{connected:false},
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){}});
   const sprite=(x,y,texture)=>{const s={x,y,texture,active:true,setPosition(x,y){this.x=x;this.y=y;return this;},setScale(){return this;},setDepth(){return this;},setTint(){return this;},setVisible(v){this.visible=v;},setRotation(){},destroy(){this.active=false;}};images.push(s);return s;};
-  const scene={events:new EventEmitter(),add:{image:sprite},tweens:{add(){}},sound:{play:key=>sounds.push(key)}};
+  const flashes=[];
+  const scene={events:new EventEmitter(),add:{image:sprite,circle:(x,y)=>{const c={x,y,setDepth(){return c;},destroy(){}};flashes.push(c);return c;}},tweens:{add(){}},sound:{play:key=>sounds.push(key)}};
   const owner={active:true,x:100,y:200,flipX:false};
   scene._localPlayerAudioSprite=owner;
   api.configureNinjaNetwork({ninjaCombatVersion:1,epoch:'room',sentMono:0,simMono:0,colliders:[],active:[],terminals:[],...initial});
   api.attachNinjaScene(scene,{localUsername:'owner',localPlayer:owner,onAmmo:a=>ammo.push(a)});
   const frame=t=>{now=t;api.observeNinjaSnapshot({snapshotEpoch:'room',sentMono:t,tMono:t});scene.events.emit('update');};
   const packet=(a,name='owner')=>api.handleNinjaPacket(scene,{playerName:name,action:{ninjaCombatVersion:1,epoch:'room',simMono:now,sentMono:now,...a}},{localUsername:'owner',localPlayer:owner});
-  return {api,scene,owner,frame,packet,images,sounds,ammo,releases,animation};
+  return {api,scene,owner,frame,packet,images,sounds,ammo,releases,animation,shots,flashes};
 }
 test('local launch is immediate and matches authoritative launch/reticle geometry',()=>{
   const f=setup();const aim=require('../src/client/game/characters/shared/attackAim').resolveAttackAimContext({character:'ninja',player:f.owner,pointerWorldX:500,pointerWorldY:50});
@@ -139,7 +142,9 @@ for (const rtt of [10, 50, 150, 250, 350]) test(`PvP owner confirmation preserve
   const q=model.launch(f.owner,0,'owner:shot:0'); q.ownerName='owner';
   f.packet({type:'ninja-launch',projectile:q,simMono:rtt/2,sentMono:rtt/2});
   let previous=f.images[0].x;
-  for(let t=rtt;t<=rtt+150;t+=10){
+  // Owners keep their prediction lead, so stop before the predicted turn.
+  const turn=model.config().outwardDuration+model.config().hoverDurationMs;
+  for(let t=rtt;t<=Math.min(rtt+150,turn);t+=10){
     f.frame(t);assert.ok(f.images[0].x>=previous-1e-8, `backward at ${t}`);previous=f.images[0].x;
   }
   // A genuine server turn must still be allowed to return toward the owner.
@@ -205,4 +210,44 @@ test('dedicated Ninja special continues across releases without accelerating nor
   assert.equal(plays[0][0].frameRate,30);assert.equal(plays[0][0].repeat,-1);
   assert.equal(plays[1][1],true);assert.equal(plays[0][0].duration,undefined);
   assert.equal(locks[0][1],'special');
+});
+
+test('owner shuriken keep their predicted pace when the later server launch confirms them',()=>{
+  const f=setup();
+  const request=f.api.predictNinja(f.scene,f.owner,'owner',{id:'shot',angle:0});
+  const q=model.launch(f.owner,request.angle,'owner:shot:0');q.ownerName='owner';
+  const expected=structuredClone(q);
+  // The predicted flight's own position at render time t, for per-frame pace.
+  const modelAt=t=>{const m=structuredClone(q);while(m.elapsed+model.STEP_MS<=t)model.step(m,f.owner,[]);
+    const n=structuredClone(m);model.step(n,f.owner,[]);return m.x+(n.x-m.x)*(t-m.elapsed)/model.STEP_MS;};
+  let last=null;
+  for(let t=0;t<=320;t+=16){
+    // The server launches one upstream trip (80 ms) after the throw.
+    if(t===160)f.packet({type:'ninja-launch',projectile:q,requestId:'shot',simMono:80,sentMono:80});
+    f.frame(t);
+    const x=f.images[0].x,pace=last===null?0:modelAt(t)-modelAt(t-16);
+    if(last!==null)assert.ok(x-last>=pace*0.8,`shuriken stalled at ${t}ms: ${x-last}px of ${pace}px`);
+    last=x;
+  }
+  while(expected.elapsed+model.STEP_MS<=320)model.step(expected,f.owner,[]);
+  const next=structuredClone(expected);model.step(next,f.owner,[]);
+  const at=expected.x+(next.x-expected.x)*(320-expected.elapsed)/model.STEP_MS;
+  assert.ok(Math.abs(f.images[0].x-at)<1e-6,'confirmed flight stays on the predicted timeline');
+  f.api.resetNinjaNetwork();
+});
+
+test('the thrower sees an impact on the enemy as drawn at once, once per leg; others do not',()=>{
+  for(const thrower of ['owner','remote']){
+    const f=setup();
+    const enemy={active:true,visible:true,x:330,y:180,flipX:false};
+    f.shots.trackShotTargets({localUsername:'owner',opponentPlayersRef:{enemy:{opponent:enemy,character:'wizard'}}});
+    const q=model.launch(f.owner,0,`${thrower}:shot:0`);q.ownerName=thrower;
+    f.packet({type:'ninja-launch',projectile:q,requestId:'shot'},thrower);
+    for(let t=0;t<=1400;t+=16)f.frame(t);
+    // Outward and return legs each cross the enemy once.
+    assert.equal(f.flashes.length,thrower==='owner'?2:0,thrower);
+    if(thrower==='owner')for(const flash of f.flashes)assert.ok(Math.abs(flash.x-330)<60,`flash at ${flash.x}`);
+    assert.equal(f.sounds.length,0,'hit sounds wait for the server');
+    f.api.resetNinjaNetwork();
+  }
 });

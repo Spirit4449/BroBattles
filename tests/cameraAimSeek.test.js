@@ -245,3 +245,68 @@ test('follow response covers the same fraction of a gap per second across frame 
   }
   for (const value of remaining) assert.ok(Math.abs(value - remaining[0]) < 1e-10);
 });
+
+test('landing carries the rendered view downward once, then settles, scaled by impact speed', () => {
+  const peaks = [];
+  for (const speed of [100, 500, 1200, 2400]) {
+    const { cam, scene, player, update } = cameraFixture();
+    player.body = { velocity: { y: speed }, touching: { down: false } };
+    update();
+    const boundsY = cam._bounds.y;
+    player.body.touching.down = true;
+    player.body.velocity.y = 0;
+    const offsets = [];
+    for (let frame = 0; frame < 60; frame++) {
+      update();
+      cam.preRender();
+      const before = cam.matrix.f;
+      cam.emit('prerender', cam);
+      offsets.push(before - cam.matrix.f);
+      assert.equal(cam._bounds.y, boundsY);
+    }
+    const peak = Math.max(...offsets);
+    peaks.push(peak);
+    if (speed > 180) {
+      assert.ok(offsets[0] > 0 && offsets[0] < peak, 'gentle downward onset');
+      assert.ok(offsets.indexOf(peak) > 0);
+    }
+    assert.equal(offsets.at(-1), 0, 'settles without retriggering on the ground');
+    assert.equal(scene._landingCameraCarry, null);
+  }
+  assert.equal(peaks[0], 0, 'small steps do not kick the camera');
+  assert.ok(peaks[2] > peaks[1] && peaks[1] > 0);
+  assert.equal(peaks[3], peaks[2], 'extreme impacts remain capped');
+});
+
+test('landing carry follows elapsed time and clears on reset, spectate, shutdown and reduced motion', () => {
+  const samples = [];
+  for (const fps of [30, 60, 120]) {
+    const { scene, player, update } = cameraFixture('duels-1v1', 1150, 520, 1000 / fps);
+    player.body = { velocity: { y: 1000 }, blocked: { down: false } };
+    update();
+    player.body.blocked.down = true;
+    player.body.velocity.y = 0;
+    for (let frame = 0; frame < fps / 10; frame++) update();
+    samples.push(scene._landingCameraOffsetY);
+  }
+  for (const sample of samples) assert.ok(Math.abs(sample - samples[0]) < 1e-8);
+  for (const finish of ['reset', 'spectate', 'shutdown', 'reducedMotion', 'replaceBody']) {
+    const { scene, player, update, render } = cameraFixture();
+    player.body = { velocity: { y: 1200 }, touching: { down: false } };
+    update();
+    player.body.touching.down = true;
+    player.body.velocity.y = 0;
+    update();
+    assert.ok(scene._landingCameraOffsetY > 0);
+    if (finish === 'reset') scene._resetAimCameraBounds();
+    if (finish === 'spectate') { scene._spectatorModeActive = true; render(); }
+    if (finish === 'shutdown') scene.events.emit('shutdown');
+    if (finish === 'replaceBody') { player.body = { velocity: { y: 0 } }; update(); }
+    if (finish === 'reducedMotion') {
+      reducedMotion = true;
+      try { update(); } finally { reducedMotion = false; }
+    }
+    assert.equal(scene._landingCameraOffsetY, 0);
+    assert.equal(scene._landingCameraCarry, null);
+  }
+});

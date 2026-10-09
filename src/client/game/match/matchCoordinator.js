@@ -10,6 +10,7 @@ import { getCharacterNetworkVersions, configureCharacterNetworks, resetCharacter
 // Dependencies are injected via the config object so this module has zero
 // hidden global state and can be tested or instantiated in isolation.
 import { normalizeMapId } from "../maps/manifest";
+import { resolveGameErrorAction } from "./gameErrorActions";
 import { spawnDamageImpact, spawnDuckGuardImpact } from "../scene/effects";
 import { spawnDeathTombstone } from "../scene/deathTombstone";
 import { applyActionToLocalPlayer, getCharacterSocketEvents, playCharacterSound } from "../characters";
@@ -191,9 +192,9 @@ export function createMatchCoordinator(config) {
 
 
   function _applyAuthoritativeRemotePosition(op, pd) {
-    if (!op?.opponent?.body) return;
-    const serverX = Number(pd?.x);
-    const serverY = Number(pd?.y);
+    if (!op?.opponent?.body || pd?.x == null || pd?.y == null) return;
+    const serverX = Number(pd.x);
+    const serverY = Number(pd.y);
     if (!Number.isFinite(serverX) || !Number.isFinite(serverY)) return;
 
     op.opponent.body.reset(serverX, serverY);
@@ -267,6 +268,7 @@ export function createMatchCoordinator(config) {
       normalizeMapId(gameData?.map),
     );
     op._spawnVersion = getSpawnVersion();
+    op.setLoadingGhost?.(!getIsLiveGame());
     _positionOpPlayer(op, pd);
     container[pd.name] = op;
     return op;
@@ -1086,14 +1088,38 @@ export function createMatchCoordinator(config) {
     }
   }
 
+  function _returnToLobby() {
+    const partyId = Number(
+      (getGameData()?.players || []).find((p) => p.name === getUsername())?.party_id,
+    );
+    if (window.__BB_NAVIGATION__?.prepareLobbyReturn) {
+      window.__BB_NAVIGATION__.prepareLobbyReturn(partyId);
+      return;
+    }
+    window.location.replace(
+      Number.isFinite(partyId) && partyId > 0 ? `/party/${partyId}` : "/",
+    );
+  }
+
   function _onGameError(error) {
     console.error("Game error:", error);
     _stopStartWatchdog();
+    const { action, buttonText } = resolveGameErrorAction(error, {
+      editorPlaytest:
+        !!getGameData()?.editorPlaytest ||
+        window.location.pathname === "/map-editor/playtest",
+    });
     hud.showSystemNotice?.({
       title: "Game Error",
       message: String(error?.message || "Something went wrong in this match."),
-      buttonText: "OK",
+      buttonText,
       tone: "error",
+      onConfirm: () => {
+        if (action === "reload") window.location.reload();
+        else if (action === "login") window.location.replace("/login");
+        else if (action === "banned") window.location.replace("/banned");
+        else if (action === "lobby") _returnToLobby();
+      },
     });
   }
 
@@ -1127,9 +1153,13 @@ export function createMatchCoordinator(config) {
   // Another fighter finished loading during the pregame (no snapshots yet).
   function _onPlayerLoaded(data) {
     if (!data?.name) return;
+    const rosterEntry = (getGameData()?.players || []).find((p) => p.name === data.name);
+    if (rosterEntry) rosterEntry.loaded = true;
     const wrapper = opponentPlayers[data.name] || teamPlayers[data.name] || _ensureOpPlayer(data.name);
     hud.setTeamHudPlayerPresence(data.name, true);
     hud.setTeamHudPlayerLoaded(data.name, true);
+    // Stand them on the spawn the server holds for them.
+    onServerSpawns?.({ [data.name]: { x: data.x, y: data.y } });
     wrapper?.setPresenceState?.(true, true);
   }
 

@@ -11,8 +11,8 @@ export function perform(
   isOwner = false,
 ) {
   if (!scene || !player || !player.active) return;
-  player._specialAnimLockUntil = Date.now() + 900;
-  markOneShotAnimation(player, 'special', 900, { remote: !isOwner });
+  player._specialAnimLockUntil = Date.now() + 450;
+  markOneShotAnimation(player, 'special', 450, { remote: !isOwner });
 
   playSpriteAnimation({
     scene,
@@ -27,22 +27,22 @@ export function perform(
   } catch (_) {}
 
   if (!scene.add) return;
-  const color = 0xff8a2f;
-  const aura = scene.add.circle(player.x, player.y - 12, 38, color, 0.18);
-  aura.setDepth((player.depth || 10) + 4);
-  aura.setBlendMode(Phaser.BlendModes.ADD);
+  // A quick bow-side ignition: separated square embers leave the silhouette clear.
+  const direction = player.flipX ? -1 : 1;
+  const sparks = scene.add.graphics().setPosition(player.x + direction * 18, player.y + 12);
+  sparks.setDepth((player.depth || 10) + 4);
+  for (let i = 0; i < 7; i++) {
+    sparks.fillStyle(i % 2 ? 0xffbf42 : 0xff8526, 1);
+    sparks.fillRect(direction * (i % 3) * 6, (i - 3) * 5, 3, 3);
+  }
+  const cleanup = () => {
+    scene.tweens.killTweensOf(sparks);
+    scene.events.off('shutdown', cleanup);
+    sparks.destroy();
+  };
+  scene.events.once('shutdown', cleanup);
   scene.tweens.add({
-    targets: aura,
-    alpha: 0,
-    scaleX: 2.1,
-    scaleY: 1.35,
-    duration: 560,
-    ease: "Cubic.easeOut",
-    onUpdate: () => {
-      if (!player.active) return;
-      aura.x = player.x;
-      aura.y = player.y - 12;
-    },
-    onComplete: () => aura.destroy(),
+    targets: sparks, x: sparks.x + direction * 16, y: sparks.y - 8,
+    alpha: 0, duration: 220, onComplete: cleanup,
   });
 }

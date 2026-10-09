@@ -16,6 +16,7 @@ import { preloadMapDocument } from '../game/maps/documentRuntime';
 import { buildScenery, preloadScenery } from '../game/maps/sceneryRuntime';
 import { installMovingPlatforms, passesThrough, platformClock, remoteRideOffset } from '../game/maps/movingPlatforms';
 import { attachCharacterNetworks, discardCharacterPresentation } from '../game/characters/networkRegistry';
+import { noteRemoteView } from '../game/characters/shared/shotPrediction';
 // game.js
 
 import {
@@ -53,6 +54,7 @@ import {
   followRemotePosition,
 } from "../game/scene/remoteSmoothing.js";
 import { createMatchCoordinator } from "../game/match/matchCoordinator";
+import { syncRemoteRoster } from "../game/match/playerRosterMerge";
 import { preloadGameAssets } from "../game/scene/preloadGameAssets";
 import { renderPoisonWater } from "../game/scene/poisonWaterRenderer";
 import { updateDynamicCamera } from "../game/scene/cameraDynamics";
@@ -261,6 +263,23 @@ window.__BB_NETWORK_DIAGNOSTICS__ = () => ({
   clock: getServerClockDiagnostics(),
 });
 
+// Console check for remote fighters that should be on screen but are not.
+window.__BB_REMOTE_PLAYERS__ = () =>
+  [...Object.entries(opponentPlayers), ...Object.entries(teamPlayers)].map(([name, w]) => ({
+    name,
+    sprite: !!w?.opponent,
+    active: w?.opponent?.active ?? null,
+    visible: w?.opponent?.visible ?? null,
+    alpha: w?.opponent?.alpha ?? null,
+    x: w?.opponent ? Math.round(w.opponent.x) : w?.x,
+    y: w?.opponent ? Math.round(w.opponent.y) : w?.y,
+    depth: w?.opponent?.depth ?? null,
+    loaded: w?.presenceLoaded ?? w?.loaded,
+    spawnPresented: w?._spawnPresented ?? null,
+    ghost: w?._loadingGhost ?? null,
+    live: isLiveGame,
+  }));
+
 // Game scene reference
 let gameScene = null;
 
@@ -368,6 +387,9 @@ matchCoordinator = createMatchCoordinator({
   setIsLiveGame: (v) => {
     isLiveGame = v;
     if (!v) return;
+    for (const wrapper of [...Object.values(opponentPlayers), ...Object.values(teamPlayers)]) {
+      wrapper?.setLoadingGhost?.(false);
+    }
     matchIntro.conclude();
     gameScene?._startMainBgm?.();
   },
@@ -663,33 +685,19 @@ function syncTeamHudFromSnapshot(playersByName) {
 
 // Initialize players based on server data
 function initializePlayers(players) {
-  // Clear existing players
-  for (const name in opponentPlayers) {
-    const existing = opponentPlayers[name];
-    if (typeof existing?.destroy === "function") existing.destroy();
-    else if (existing?.opponent?.destroy) existing.opponent.destroy();
-    delete opponentPlayers[name];
-  }
-
-  for (const name in teamPlayers) {
-    const existing = teamPlayers[name];
-    if (typeof existing?.destroy === "function") existing.destroy();
-    else if (existing?.opponent?.destroy) existing.opponent.destroy();
-    delete teamPlayers[name];
-  }
-
-  // Add players based on teams
-  players.forEach((playerData) => {
-    if (playerData.name === username) {
-      // This is the local player, handled separately
-      return;
-    }
-
-    const isTeammate = playerData.team === gameData.yourTeam;
-    const playerContainer = isTeammate ? teamPlayers : opponentPlayers;
-
-    // Create OpPlayer instance (this will be created when the scene is ready)
-    playerContainer[playerData.name] = {
+  const refresh = syncRemoteRoster({
+    players,
+    username,
+    yourTeam: gameData.yourTeam,
+    opponentPlayers,
+    teamPlayers,
+    spritesBuilt: gameScene?._remoteSpritesBuilt === true,
+    destroy: (existing) => {
+      if (typeof existing?.destroy === "function") existing.destroy();
+      else if (existing?.opponent?.destroy) existing.opponent.destroy();
+    },
+    // The scene turns these into sprites once it is ready.
+    placeholder: (playerData) => ({
       name: playerData.name,
       character: playerData.char_class,
       skinId: playerData.selected_skin_id || "",
@@ -704,8 +712,14 @@ function initializePlayers(players) {
         typeof playerData.spawnIndex === "number"
           ? playerData.spawnIndex
           : undefined,
-    };
+    }),
   });
+  if (refresh) gameScene.initializeOtherPlayers();
+}
+
+// Number(null) is 0: a missing coordinate must not read as the map corner.
+function isPosition(value) {
+  return value != null && value !== "" && Number.isFinite(Number(value));
 }
 
 // Before FIGHT the server's spawn is authoritative for every fighter. In a live
@@ -713,8 +727,8 @@ function initializePlayers(players) {
 function hasServerPosition(playerData) {
   return (
     (!isLiveGame || playerData?.loaded === true) &&
-    Number.isFinite(Number(playerData?.x)) &&
-    Number.isFinite(Number(playerData?.y))
+    isPosition(playerData?.x) &&
+    isPosition(playerData?.y)
   );
 }
 
@@ -726,9 +740,9 @@ function hasServerPosition(playerData) {
 function applyServerSpawns(spawns) {
   if (!spawns || isLiveGame) return;
   const place = (sprite, spawn) => {
-    const x = Number(spawn?.x);
-    const y = Number(spawn?.y);
-    if (!sprite?.body || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+    if (!sprite?.body || !isPosition(spawn?.x) || !isPosition(spawn?.y)) return false;
+    const x = Number(spawn.x);
+    const y = Number(spawn.y);
     sprite.body.reset(x, y);
     sprite.setVelocity?.(0, 0);
     sprite.setAcceleration?.(0, 0);
@@ -1352,6 +1366,7 @@ class GameScene extends Phaser.Scene {
           existing.finalizeSpawnPresentation?.();
           if (existing.updateUIPosition) existing.updateUIPosition();
         } catch (_) {}
+        this.applyRosterState(existing, playerData);
         return;
       }
 
@@ -1403,22 +1418,7 @@ class GameScene extends Phaser.Scene {
         if (opPlayer.updateUIPosition) opPlayer.updateUIPosition();
       } catch (_) {}
 
-      // Apply server-sent max health if provided
-      if (playerData.stats && typeof playerData.stats.health === "number") {
-        opPlayer.opMaxHealth = playerData.stats.health;
-        opPlayer.opCurrentHealth = playerData.stats.health;
-      }
-      if (typeof playerData.superCharge === "number") {
-        opPlayer.opSuperCharge = playerData.superCharge;
-      }
-      if (typeof playerData.maxSuperCharge === "number") {
-        opPlayer.opMaxSuperCharge = playerData.maxSuperCharge;
-      }
-      if (opPlayer.updateHealthBar) opPlayer.updateHealthBar();
-      opPlayer.setPresenceState?.(
-        playerData.connected !== false,
-        playerData.loaded === true,
-      );
+      this.applyRosterState(opPlayer, playerData);
 
       playerContainer[playerData.name] = opPlayer;
 
@@ -1432,6 +1432,28 @@ class GameScene extends Phaser.Scene {
         } catch (_) {}
       }, 1500);
     });
+    // A game:init arriving after this point refreshes these sprites in place.
+    this._remoteSpritesBuilt = true;
+  }
+
+  // Server-sent stats and presence for a remote fighter's sprite.
+  applyRosterState(opPlayer, playerData) {
+    if (playerData.stats && typeof playerData.stats.health === "number") {
+      opPlayer.opMaxHealth = playerData.stats.health;
+      opPlayer.opCurrentHealth = playerData.stats.health;
+    }
+    if (typeof playerData.superCharge === "number") {
+      opPlayer.opSuperCharge = playerData.superCharge;
+    }
+    if (typeof playerData.maxSuperCharge === "number") {
+      opPlayer.opMaxSuperCharge = playerData.maxSuperCharge;
+    }
+    if (opPlayer.updateHealthBar) opPlayer.updateHealthBar();
+    opPlayer.setLoadingGhost?.(!isLiveGame);
+    opPlayer.setPresenceState?.(
+      playerData.connected !== false,
+      playerData.loaded === true,
+    );
   }
 
   _renderPowerupsAndEffects() {
@@ -1660,13 +1682,16 @@ class GameScene extends Phaser.Scene {
     processSnapshotInterpolation({
       snapshotBuffer,
       now: performance.now(),
-      applyFrame: (frame) =>
+      applyFrame: (frame) => {
+        // Shots report this render time so the server aims at what was drawn.
+        noteRemoteView(frame.targetMono);
         this.interpolatePlayerStates(
           frame.aState,
           frame.bState,
           frame.alpha,
           frame,
-        ),
+        );
+      },
       onDebugLine: (line) => {
         if (!shouldMuteClientDefaultLogs()) console.log(line);
       },

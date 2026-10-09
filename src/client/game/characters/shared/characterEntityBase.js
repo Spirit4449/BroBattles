@@ -3,6 +3,7 @@ import { characterStats } from "../../../../shared/characters/characterStats.js"
 import { chooseRemoteAnimationState } from "./animationState";
 import { executeDefaultAttack } from "./attackFlow";
 import { playPlayerSound } from "../../audio/playerAudio";
+import { withShotView } from "./shotPrediction";
 
 /**
  * Base for browser character classes registered in ../manifest.js.
@@ -198,7 +199,7 @@ export default class CharacterEntityBase {
   static attackFlow = {};
 
   emitAttackAction(payload) {
-    socket.emit("game:action", payload);
+    socket.emit("game:action", withShotView(payload));
   }
 
   performDefaultAttack(payloadBuilder, onAfterFire) {

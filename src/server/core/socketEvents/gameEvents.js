@@ -8,13 +8,13 @@ function registerGameEvents(socket, { db, gameHub, abuseControl }) {
 
       if (!user) {
         cb?.({ ok: false, error: "unauthorized" });
-        socket.emit("game:error", { message: "Unauthorized" });
+        socket.emit("game:error", { message: "Unauthorized", code: "UNAUTHORIZED" });
         console.warn("[game:join] unauthorized socket", { sid: socket.id });
         return;
       }
       if (!Number.isFinite(matchId) || matchId <= 0) {
         cb?.({ ok: false, error: "bad_matchId" });
-        socket.emit("game:error", { message: "Match ID required" });
+        socket.emit("game:error", { message: "Match ID required", code: "BAD_MATCH_ID" });
         console.warn("[game:join] bad matchId", { sid: socket.id, data });
         return;
       }
@@ -28,6 +28,7 @@ function registerGameEvents(socket, { db, gameHub, abuseControl }) {
           cb?.({ ok: false, error: "banned" });
           socket.emit("game:error", {
             message: penalties?.banReason || "Your account has been banned.",
+            code: "BANNED",
           });
           return;
         }
@@ -37,6 +38,7 @@ function registerGameEvents(socket, { db, gameHub, abuseControl }) {
             message:
               "Matchmaking suspension is active. You cannot join matches right now.",
             suspendedUntilMs: mmSuspendedUntilMs,
+            code: "MM_SUSPENDED",
           });
           return;
         }
@@ -61,7 +63,7 @@ function registerGameEvents(socket, { db, gameHub, abuseControl }) {
       const room = gameHub.getGameRoom(matchId);
       if ((room?.ninjaCombatVersion === 1 && data?.ninjaCombatVersion !== 1) || (room?.huntressCombatVersion === 2 && data?.huntressCombatVersion !== 2)) {
         cb?.({ ok: false, error: 'client_update_required' });
-        socket.emit('game:error', { message: 'Please reload the game to join this match.' });
+        socket.emit('game:error', { message: 'Please reload the game to join this match.', code: 'CLIENT_UPDATE_REQUIRED' });
         return;
       }
       const ok = await gameHub.handlePlayerJoin(socket, matchId);
@@ -76,7 +78,7 @@ function registerGameEvents(socket, { db, gameHub, abuseControl }) {
         });
       } else {
         cb?.({ ok: false, error: "join_failed" });
-        socket.emit("game:error", { message: "Failed to join game" });
+        socket.emit("game:error", { message: "Failed to join game", code: "JOIN_FAILED" });
         console.warn("[game:join] hub returned false", {
           sid: socket.id,
           user: user.name,
@@ -85,7 +87,7 @@ function registerGameEvents(socket, { db, gameHub, abuseControl }) {
       }
     } catch (e) {
       cb?.({ ok: false, error: "exception" });
-      socket.emit("game:error", { message: "Failed to join game" });
+      socket.emit("game:error", { message: "Failed to join game", code: "JOIN_FAILED" });
       console.warn("[game:join] error", e?.message);
     }
   });

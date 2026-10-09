@@ -54,6 +54,8 @@ import { characterPresentation } from "../../../shared/characters/index.js";
 
 const OP_PLAYER_NAME_OFFSET_Y = 42;
 const HUD_SMOOTH_ALPHA = 0.35;
+// A fighter still loading during the pregame stands at its spawn as a ghost.
+const LOADING_GHOST_ALPHA = 0.4;
 const HUD_DEADBAND_PX = 0.75;
 
 function stabilizeHudAxis(current, target, snap = false) {
@@ -97,6 +99,7 @@ export default class RemotePlayer {
     this.effects = null; // per-opponent effects (e.g., Draven fire)
     this.presenceConnected = true;
     this.presenceLoaded = false;
+    this._loadingGhost = false;
     this._worldUiHidden = false;
     this._powerupInvisible = false;
     this._powerupStatusIcons = [];
@@ -682,26 +685,38 @@ export default class RemotePlayer {
     if (shouldShow) this.updateUIPosition();
   }
 
+  /**
+   * Before FIGHT, show a fighter that has not finished loading as a faded
+   * ghost at its spawn instead of hiding it. Once live, unloaded stays hidden.
+   */
+  setLoadingGhost(active) {
+    this._loadingGhost = active === true;
+    this.setPresenceState(this.presenceConnected, this.presenceLoaded);
+  }
+
   setPresenceState(connected, loaded) {
     if (connected === false || loaded === false) this._movementAudio?.reset();
     this.presenceConnected = connected !== false;
     this.presenceLoaded = loaded !== false;
-    const shouldRender =
+    const visible =
       !!this.opponent?.active &&
       !this._corpseRemoved &&
-      this._spawnPresented &&
-      this.presenceLoaded;
+      this._spawnPresented;
+    const ghost = visible && !this.presenceLoaded && this._loadingGhost;
+    const shouldRender = visible && this.presenceLoaded;
     if (this.opponent) {
-      this.opponent.setVisible(shouldRender);
+      this.opponent.setVisible(shouldRender || ghost);
       this.opponent.setAlpha(
-        this._powerupInvisible ? this.invisibleAttackAlpha() : 1,
+        ghost
+          ? LOADING_GHOST_ALPHA
+          : this._powerupInvisible ? this.invisibleAttackAlpha() : 1,
       );
     }
     if (this.opPlayerName) {
       this.opPlayerName.setVisible(
-        shouldRender && !this._worldUiHidden && !this._powerupInvisible,
+        (shouldRender || ghost) && !this._worldUiHidden && !this._powerupInvisible,
       );
-      this.opPlayerName.setAlpha(1);
+      this.opPlayerName.setAlpha(ghost ? LOADING_GHOST_ALPHA : 1);
     }
     this.spectateIcon?.setVisible(
       this._isSpectated &&

@@ -94,6 +94,9 @@ function sanitizeActionPayload(actionData) {
     "slowDurationMs",
     "slowSpeedMult",
     "slowJumpMult",
+    // Stamped by the transport from the request's view time; any client value
+    // was already overwritten (lagCompensation.stampViewRewind).
+    "viewRewindMs",
   ];
   for (const key of passThroughNumeric) {
     if (Number.isFinite(Number(actionData[key]))) {

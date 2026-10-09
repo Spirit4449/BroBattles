@@ -4,10 +4,16 @@ import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
 import { resolveGloopHookSocket } from "../../../../shared/characters/gloopHookGeometry";
 import { playPlayerSound } from "../../audio/playerAudio";
+import { createRuntimeId } from "../shared/runtimeId";
+import { consumeOnce } from "../shared/packetDedupe";
+import { predictShotContact, confirmWindowMs } from "../shared/shotPrediction";
+import { attackCollisionCenter } from "../../../../shared/combat/shotContact";
 
 const NAME = "gloop";
 const HOOK = getResolvedCharacterSpecialConfig(NAME, "hook");
 const ACTIVE_HOOK_VISUALS = new WeakMap();
+// Each hook is drawn once, whether predicted locally or echoed by the server.
+export const consumeGloopHook = (scene, id) => consumeOnce(scene, "gloop-hook", id, 5000);
 
 function playSpecialAnimation(scene, player) {
   playSpriteAnimation({
@@ -152,6 +158,23 @@ function createHookVisual(scene, owner, angle, start, id) {
     });
     tether.strokePath();
   }
+  // The caster's hook is tested like the server's: a damage circle along the
+  // straight line from Gloop's launch position, against enemies as drawn.
+  function latchOnDisplayedEnemy(t) {
+    const { origin, from } = visual.predict, traveled = visual.range * t;
+    const center = attackCollisionCenter({ x: origin.x + Math.cos(angle) * traveled,
+      y: origin.y + Math.sin(angle) * traveled, angle, traveled,
+      collisionForwardOffset: HOOK.collisionForwardOffset, collisionOffsetY: HOOK.collisionOffsetY });
+    visual.predict.from = center;
+    const hit = predictShotContact(from || center, center, HOOK.collisionRadius);
+    if (!hit) return false;
+    const sprite = hit.target.sprite;
+    visual.phase = "latched"; visual.elapsed = 0; visual.recoil = 0.6;
+    visual.latch = { target: hit.target.name, sprite,
+      offset: sprite ? { x: hand.x - sprite.x, y: hand.y - sprite.y } : { x: 0, y: 0 } };
+    burst(hand.x, hand.y, 8, 120);
+    return true;
+  }
   function update(_time, delta = 16.67) {
     if (!owner.active) { visual.destroy(); return; }
     const ms = Math.min(Math.max(delta, 0), 80), dt = ms / 1000;
@@ -161,11 +184,18 @@ function createHookVisual(scene, owner, angle, start, id) {
       const t = Math.min(1, visual.elapsed / visual.outMs);
       hand.setPosition(start.x + Math.cos(angle) * visual.range * t,
         start.y + Math.sin(angle) * visual.range * t);
-      if (t >= 1) {
+      if (visual.predict && latchOnDisplayedEnemy(t)) {
+        // Held on the enemy as drawn until the server's catch (or its absence).
+      } else if (t >= 1) {
         // A missed hook dissipates at maximum reach. Only a confirmed catch
         // travels back toward Gloop with its target.
         finish();
       }
+    } else if (visual.phase === "latched") {
+      const { latch } = visual;
+      if (latch.sprite?.active) hand.setPosition(latch.sprite.x + latch.offset.x, latch.sprite.y + latch.offset.y);
+      // No catch within a round trip: the server's hook missed; let go.
+      if (visual.elapsed > confirmWindowMs()) finish();
     } else if (visual.phase === "return" || visual.phase === "catch") {
       const caught = visual.phase === "catch";
       const t = Math.min(1, visual.elapsed / visual.returnMs);
@@ -235,6 +265,7 @@ export function playHookAction(scene, player, specialData = null, isOwner = fals
   const speed = Math.max(1, Number(specialData?.speed) || Number(HOOK.speed) || 900);
   visual.outMs = Math.max(1, visual.range / speed * 1000);
   visual.returnMs = Math.max(160, visual.outMs * 0.45);
+  if (isOwner && specialData?.predicted) visual.predict = { origin: { x: player.x, y: player.y } };
   visual.burst(start.x, start.y, 5, 90);
   try { playPlayerSound(scene, player, "gloop-special", { volume: 0.68 }); } catch (_) {}
 }
@@ -247,6 +278,10 @@ export function playHookCatchAction(scene, ownerPlayer, actionData = null, isOwn
   let visual = ACTIVE_HOOK_VISUALS.get(ownerPlayer);
   if (visual?.id && actionData?.id && visual.id !== actionData.id) return;
   if (visual?.phase === "catch" || visual?.phase === "settle") return;
+  // A confirmed latch closes from where the hand is drawn, without a jump.
+  if (visual?.phase === "latched" && visual.latch.target === actionData?.target) {
+    start.x = visual.hand.x; start.y = visual.hand.y;
+  }
   if (!visual) {
     const angle = Math.atan2(start.y - ownerPlayer.y, start.x - ownerPlayer.x);
     visual = createHookVisual(scene, ownerPlayer, angle, start, actionData?.id);
@@ -265,6 +300,17 @@ export function playHookCatchAction(scene, ownerPlayer, actionData = null, isOwn
   if (closed && !visual.hand._gripAnimated) visual.hand.setTexture?.(closed);
   visual.burst(start.x, start.y, 14, 170);
   try { playPlayerSound(scene, ownerPlayer, "gloop-pull", { volume: 0.62 }); } catch (_) {}
+}
+
+// The caster's hook leaves on press rather than a round trip later. The
+// request carries this id so the server's echo of it is skipped.
+export function predictGloopHook(scene, player, _username, request = {}) {
+  if (!scene?.add || !player?.active) return request;
+  const id = createRuntimeId("gloopHook");
+  consumeGloopHook(scene, id);
+  perform(scene, player, null, null, null, null, true, { ...(request.aim || {}), id,
+    range: HOOK.range, speed: HOOK.speed, predicted: true });
+  return { ...request, id };
 }
 
 export function perform(

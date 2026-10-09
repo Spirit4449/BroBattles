@@ -5,6 +5,7 @@ const { characterBody } = require('../src/shared/physics/duelGeometry');
 const { createMovementCorrector } = require('../src/client/game/players/movementCorrection');
 const WORLD = require('../src/shared/maps/arenas').arenaFor('duels-1v1').world;
 const physics = require('../src/shared/physics/movementPhysics.json');
+const { IDLE_FALLBACK_AFTER_MS } = require('../src/server/core/gameRoomConfig');
 
 function server(t) {
   let now = 100000;
@@ -126,6 +127,68 @@ test('dash contact disagreements within 2px are clamped silently; deeper penetra
     assert.equal(f.corrections().length, expected, `depth ${depth}`);
     assert.ok(f.player.x + shape.offsetX + shape.halfWidth <= wallLeft + 1e-6);
   }
+});
+
+// A floor under x = 0 and a silent client hanging in the air above it.
+function idleServer(t) {
+  const f = server(t);
+  const shape = characterBody('ninja');
+  const floor = { id: 'floor', left: -400, right: 400, top: 300, bottom: 340,
+    collision: { up: true, down: true, left: true, right: true } };
+  f.room.status = 'active';
+  f.room.geometry = { colliders: [floor], world: WORLD };
+  f.deaths = [];
+  f.room._handlePlayerDeath = (player, meta) => { f.deaths.push(meta); player.isAlive = false; };
+  f.standingY = floor.top - shape.offsetY - shape.halfHeight;
+  f.advance(20);
+  f.send({ x: 0, y: 0, sequence: 1, vx: 0, vy: 0, grounded: false });
+  f.tick = (ms) => {
+    for (let elapsed = 0; elapsed < ms; elapsed += 16) { f.advance(16); input.stepIdleHumans(f.room, 16); }
+  };
+  return f;
+}
+
+test('a silent client is held briefly, then falls and lands instead of hanging mid-air', t => {
+  const f = idleServer(t);
+  f.tick(IDLE_FALLBACK_AFTER_MS - 50);
+  assert.equal(f.player.y, 0);
+  f.tick(2000);
+  assert.ok(Math.abs(f.player.y - f.standingY) < 0.5, `landed at ${f.player.y}`);
+  assert.equal(f.player.grounded, true);
+  assert.equal(f.player.animation, 'idle');
+});
+
+test('a resumed client gets one correction to the server position before input is accepted again', t => {
+  const f = idleServer(t);
+  f.tick(IDLE_FALLBACK_AFTER_MS + 2000);
+  const landed = f.player.y;
+  // The client wakes up where it froze and keeps reporting that position.
+  f.send({ x: 0, y: 0, sequence: 2, correctionAck: 0 });
+  assert.equal(f.player.y, landed);
+  assert.equal(f.corrections().length, 1);
+  assert.equal(f.corrections()[0].reason, 'idle');
+  assert.equal(f.corrections()[0].y, landed);
+  f.advance(20);
+  f.send({ x: 0, y: 0, sequence: 3, correctionAck: 0 });
+  assert.equal(f.player.y, landed);
+  f.advance(20);
+  f.send({ x: 4, y: landed, sequence: 4, correctionAck: 1 });
+  assert.equal(f.player.x, 4);
+  assert.equal(f.corrections().length, 1);
+});
+
+test('a silent client off the edge of the map falls out of the world', t => {
+  const f = idleServer(t);
+  Object.assign(f.room.geometry.colliders[0], { left: 200, right: 400 });
+  f.tick(IDLE_FALLBACK_AFTER_MS + 8000);
+  assert.deepEqual(f.deaths.map(d => d.cause), ['fall']);
+});
+
+test('the idle fallback leaves rooms that are not active alone', t => {
+  const f = idleServer(t);
+  f.room.status = 'waiting';
+  f.tick(IDLE_FALLBACK_AFTER_MS + 1000);
+  assert.equal(f.player.y, 0);
 });
 
 function fakePlayer(x = 0, y = 0) {

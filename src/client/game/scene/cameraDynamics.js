@@ -10,17 +10,23 @@ const WALL_JUMP_RECOIL_IN_MS = 80;
 const WALL_JUMP_RECOIL_OUT_MS = 220;
 const WALL_JUMP_RECOIL_PX = 3;
 const WALL_JUMP_ZOOM_RATIO = 0.01;
+const LANDING_CARRY_IN_MS = 80;
+const LANDING_SETTLE_MS = 280;
+const LANDING_MAX_OFFSET_PX = 10;
 export const FOLLOW_LERP = { x: 0.08, y: 0.05 };
 
 function movementFollowLerp(velocity, axis, delta) {
   // Preserve gentle walking/jump tracking, then tighten up for dashes and falls.
   const speed = Math.abs(Number(velocity) || 0);
   const fast = smoothstep((speed - 300) / 700);
-  const perFrame = FOLLOW_LERP[axis] + (0.3 - FOLLOW_LERP[axis]) * fast;
+  const perFrame = FOLLOW_LERP[axis] + (0.24 - FOLLOW_LERP[axis]) * fast;
   return 1 - Math.pow(1 - perFrame, delta / (1000 / 60));
 }
 
 function resetMovementCameraFeedback(scene, cam) {
+  scene._landingCameraMotion = null;
+  scene._landingCameraCarry = null;
+  scene._landingCameraOffsetY = 0;
   scene._wallJumpCameraKick = null;
   scene._wallJumpCameraOffsetX = 0;
   cam.setZoom(cam.zoom - (scene._wallJumpCameraZoom || 0) - (scene._dashCameraZoom || 0));
@@ -40,6 +46,7 @@ function bindMovementCameraFeedback(scene, cam) {
       return;
     }
     cam.matrix.e -= scene._wallJumpCameraOffsetX || 0;
+    cam.matrix.f -= scene._landingCameraOffsetY || 0;
   };
   const cleanup = () => {
     cam.off('prerender', render);
@@ -72,6 +79,39 @@ function smoothstep(value) {
   return t * t * (3 - 2 * t);
 }
 
+function updateLandingCamera(scene, player, cam, delta, reducedMotion) {
+  const body = player.body;
+  const grounded = !!(body?.touching?.down || body?.blocked?.down);
+  const velocityY = Number(body?.velocity?.y) || 0;
+  const previous = scene._landingCameraMotion;
+  if (!reducedMotion && body && previous?.body === body &&
+      !previous.grounded && grounded && previous.velocityY > 180) {
+    scene._landingCameraCarry = {
+      elapsedMs: 0,
+      peak: LANDING_MAX_OFFSET_PX * smoothstep((previous.velocityY - 180) / 1020),
+      start: scene._landingCameraOffsetY || 0,
+    };
+    bindMovementCameraFeedback(scene, cam);
+  }
+  scene._landingCameraMotion = { body, grounded, velocityY };
+  if (reducedMotion || !body || (previous && previous.body !== body)) {
+    scene._landingCameraCarry = null;
+  }
+  const carry = scene._landingCameraCarry;
+  let offset = 0;
+  if (carry) {
+    carry.elapsedMs += delta;
+    if (carry.elapsedMs < LANDING_CARRY_IN_MS) {
+      offset = carry.start + (carry.peak - carry.start) * smoothstep(carry.elapsedMs / LANDING_CARRY_IN_MS);
+    } else {
+      offset = carry.peak * (1 - smoothstep((carry.elapsedMs - LANDING_CARRY_IN_MS) / LANDING_SETTLE_MS));
+    }
+    if (carry.elapsedMs >= LANDING_CARRY_IN_MS + LANDING_SETTLE_MS) scene._landingCameraCarry = null;
+  }
+  // Carry the view slightly downward after contact, then settle without bounce.
+  scene._landingCameraOffsetY = offset;
+}
+
 // Where the follow camera settles for a player standing at playerY: zoomed out
 // as the player climbs (more vertical context) and biased down when high up
 // (less empty sky). The arena camera (arenas.json) sets the zoom range and the
@@ -98,6 +138,7 @@ export function updateDynamicCamera(scene, player) {
   const { zoom: targetZoom, followOffsetY: targetFollowOffsetY } = restingCameraFrame(player.y, scene._mapArena.camera);
   const reducedMotion = typeof window !== 'undefined' &&
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  updateLandingCamera(scene, player, cam, followDelta, reducedMotion);
   const previousDashZoom = scene._dashCameraZoom || 0;
   const baseZoom = cam.zoom - previousDashZoom - (scene._wallJumpCameraZoom || 0);
   const dashing = !!player._dash && !reducedMotion;

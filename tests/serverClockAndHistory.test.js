@@ -32,10 +32,20 @@ test('humans record one history sample per accepted packet and rewind linearly b
   const player = { socketId: 'p', name: 'P', char_class: 'ninja', x: 0, y: 0, isAlive: true, connected: true };
   const room = { players: new Map([['p', player]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
   input.resetMovementBudget(player, now);
+  // A teleport (spawn) starts history afresh at the new position.
+  assert.deepEqual(player._posHistory, [{ x: 0, y: 0, t: now }]);
   now += 30; input.handlePlayerInput(room, 'p', { x: 0, y: 0, sequence: 1 });
   now += 30; input.handlePlayerInput(room, 'p', { x: 9, y: 0, sequence: 2 });
-  assert.equal(player._posHistory.length, 2);
+  assert.equal(player._posHistory.length, 3);
   assert.equal(getHistoricalPosition(player, now - 15).x, 4.5);
+});
+
+test('a teleport discards older history so rewinds never reach a pre-respawn position', () => {
+  const player = { x: 500, y: 0, isAlive: true, isBot: true };
+  for (let t = 0; t <= 200; t += 50) input.recordBotHistory(player, t);
+  Object.assign(player, { x: -800, y: 40 });
+  input.resetMovementBudget(player, 250);
+  assert.deepEqual(getHistoricalPosition(player, 100), { x: -800, y: 40 });
 });
 
 test('position history spans about one second regardless of sample rate', () => {

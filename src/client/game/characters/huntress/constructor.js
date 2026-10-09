@@ -6,6 +6,7 @@ import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
 import { applyScaleLockedRageFx } from "../shared/powerupFx";
 import { playPlayerSound } from "../../audio/playerAudio";
+import { withShotView } from "../shared/shotPrediction";
 
 const NAME = "huntress";
 
@@ -85,7 +86,7 @@ class Huntress extends CharacterEntityBase {
 
   // Shots are predicted locally before the server confirms them.
   emitAttackAction(payload) {
-    socket.emit("game:action", predictHuntressShot(this.scene, this.player, this.username, payload));
+    socket.emit("game:action", withShotView(predictHuntressShot(this.scene, this.player, this.username, payload)));
   }
 
   handlePointerDown(attackContext = null) {

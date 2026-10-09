@@ -63,3 +63,43 @@ test("connected player live stats still override stale roster stats", () => {
     specialDamage: 2200,
   });
 });
+
+function rosterSync(spritesBuilt, containers) {
+  const destroyed = [];
+  const refresh = api.syncRemoteRoster({
+    players: [
+      { name: "Me", team: "team1" },
+      { name: "Ally", team: "team1" },
+      { name: "Enemy", team: "team2" },
+    ],
+    username: "Me",
+    yourTeam: "team1",
+    ...containers,
+    spritesBuilt,
+    destroy: (wrapper) => destroyed.push(wrapper),
+    placeholder: (p) => ({ name: p.name, placeholder: true }),
+  });
+  return { refresh, destroyed };
+}
+
+test("a game:init that lands after the scene built sprites keeps them", () => {
+  const ally = { opponent: {} };
+  const enemy = { opponent: {} };
+  const stale = { opponent: {} };
+  const containers = { teamPlayers: { Ally: ally }, opponentPlayers: { Enemy: enemy, Gone: stale } };
+  const { refresh, destroyed } = rosterSync(true, containers);
+  assert.equal(refresh, true, "the caller refreshes built sprites from the roster");
+  assert.equal(containers.teamPlayers.Ally, ally);
+  assert.equal(containers.opponentPlayers.Enemy, enemy);
+  assert.deepEqual(destroyed, [stale], "only fighters missing from the roster go");
+  assert.equal("Gone" in containers.opponentPlayers, false);
+});
+
+test("a game:init before the scene is built leaves placeholders for it", () => {
+  const containers = { teamPlayers: {}, opponentPlayers: {} };
+  const { refresh } = rosterSync(false, containers);
+  assert.equal(refresh, false);
+  assert.equal(containers.teamPlayers.Ally.placeholder, true);
+  assert.equal(containers.opponentPlayers.Enemy.placeholder, true);
+  assert.equal("Me" in containers.teamPlayers, false);
+});

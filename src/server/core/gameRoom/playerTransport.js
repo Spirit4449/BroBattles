@@ -1,6 +1,7 @@
 const huntressCombat = require('./huntressCombat');
 const inputManager = require("./inputManager");
 const characterCombat = require('./characterCombatRegistry');
+const { stampViewRewind } = require('./lagCompensation');
 const {
   ACTION_MIN_INTERVAL_MS,
   ACTION_SPAM_WINDOW_MS,
@@ -25,6 +26,7 @@ function setupPlayerSocket(room, socket) {
   room.onSocket(socket, "game:action", (actionData) => {
     const player = room.players.get(socket.id);
     if (!player) return;
+    stampViewRewind(room, actionData);
     if (characterCombat.ownsAction(room, player, actionData)) {
       room.handlePlayerAction(socket.id, actionData);
       return;
@@ -67,7 +69,7 @@ function setupPlayerSocket(room, socket) {
   });
 
     // Handle special attack request
-  room.onSocket(socket, "game:special", (payload = {}) => room.requestSpecial(socket.id, payload));
+  room.onSocket(socket, "game:special", (payload = {}) => room.requestSpecial(socket.id, stampViewRewind(room, payload)));
 
   room.onSocket(socket, "deathdrop:pickup", (payload) => {
     room._handleDeathDropPickup(socket.id, payload);
@@ -93,7 +95,7 @@ function setupPlayerSocket(room, socket) {
         // No snapshots flow before FIGHT, so clients that loaded earlier would
         // keep this fighter hidden through the pregame without this.
         if (p.loaded) {
-          room.io.to(`game:${room.matchId}`).emit("player:loaded", { name: p.name });
+          room.io.to(`game:${room.matchId}`).emit("player:loaded", { name: p.name, x: p.x, y: p.y });
         }
       }
       if (room._noteReady(p) && !room._netTestEnabled) {

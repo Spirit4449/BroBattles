@@ -78,13 +78,13 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, play
   async function handlePlayerJoin(socket, matchId) {
     const room = activeRooms.get(matchId);
     if (!room) {
-      socket.emit("game:error", { message: "Game room not found" });
+      socket.emit("game:error", { message: "Game room not found", code: "ROOM_NOT_FOUND" });
       return false;
     }
 
     const user = socket.data.user;
     if (!user) {
-      socket.emit("game:error", { message: "Authentication required" });
+      socket.emit("game:error", { message: "Authentication required", code: "UNAUTHORIZED" });
       return false;
     }
 
@@ -97,7 +97,7 @@ function createGameHub({ io, db, runtimeConfig = null, abuseControl = null, play
         `[GameHub] Error adding player ${user.name} to room ${matchId}:`,
         error,
       );
-      socket.emit("game:error", { message: error.message });
+      socket.emit("game:error", { message: error.message, code: error.code || "JOIN_FAILED" });
       return false;
     }
   }

@@ -7,7 +7,9 @@ import { serverClock as clock, ensureServerClockEpoch } from '../../match/server
 import { remoteLaunchCorrection, reconcileFlight } from '../../../../shared/projectilePresentation';
 import { VERSION, STEP_MS, launch, step, swarmConfig } from '../../../../shared/characters/ninjaProjectile';
 import { advanceGeometry } from '../../../../shared/maps/platformMotion';
+import { clampLead } from '../../../../shared/characters/huntressReplication';
 import { createRuntimeId } from '../shared/runtimeId';
+import { isLocalShooter, predictShotContact, playPredictedImpact } from '../shared/shotPrediction';
 import { RENDER_LAYERS } from '../../scene/renderLayers';
 import { playPlayerSound } from '../../audio/playerAudio';
 const active=new Map(),terminals=new Set(),requests=new Map(),effects=new Set();
@@ -51,9 +53,33 @@ function accept(projectile,simMono){
   if(terminals.has(projectile.id))return;
   const prior=active.get(projectile.id);
   if(prior?.authoritativeAt>=simMono)return;
-  active.set(projectile.id,{...prior,p:copy(projectile),at:simMono,authoritativeAt:simMono,predicted:false,
+  // The server launches an owner's throw about one upstream trip after the
+  // prediction. Keep that lead rather than blending it away, which slowed or
+  // stalled confirmed shuriken mid-flight on the thrower's screen.
+  const lead=prior?.predicted&&!prior.pending?clampLead((simMono-projectile.elapsed)-(prior.at-prior.p.elapsed)):prior?.lead||0;
+  active.set(projectile.id,{...prior,p:copy(projectile),at:simMono,authoritativeAt:simMono,predicted:false,lead,
     correctionReported:false,wasPredicted:!!prior?.predicted,
-    correction:prior?.sprite?{visualX:prior.sprite.x,visualY:prior.sprite.y,at:performance.now()}:null});
+    correction:prior?.sprite?{replaced:{p:copy(prior.p),at:prior.at,lead:prior.lead||0,correction:prior.correction}}:null});
+}
+// Where a replaced flight would be drawn now. Confirmation measures its error
+// at one instant; measuring from last frame's sprite stalled it for a frame.
+function replacedFlight(r,o,sim,now){
+  const q=r.p,until=sim+r.lead;let at=r.at,count=0;
+  while(at+STEP_MS<=until&&count++<360&&!q.done){stepAt(q,o,at);at+=STEP_MS;}
+  const n=copy(q);if(!n.done)stepAt(n,o,at);
+  const f=Math.max(0,Math.min(1,(until-at)/STEP_MS)),c=r.correction;
+  const blend=c?.x!==undefined?Math.max(0,1-(now-c.at)/(c.duration||60)):0;
+  return {x:q.x+(n.x-q.x)*f+(c?.x||0)*blend,y:q.y+(n.y-q.y)*f+(c?.y||0)*blend};
+}
+// The thrower sees each enemy struck the moment the shuriken crosses it as
+// drawn, once per flight leg like the server. Damage and sound wait for it.
+function predictHits(scene,e,point){
+  const from=e.hitFrom;e.hitFrom=point;
+  if(!from||e.p.phase==='hover'||e.p.elapsed<(e.p.cfg.hitArmMs||0))return;
+  const leg=e.p.phase,struck=(e.struck||=new Map()),skip=(struck.get(leg)||struck.set(leg,new Set()).get(leg));
+  for(let hit;(hit=predictShotContact(from,point,e.p.cfg.collisionRadius,{skip}));){
+    skip.add(hit.target.name);playPredictedImpact(scene,hit.x,hit.y);
+  }
 }
 function remove(id){const e=active.get(id);e?.fx?.destroy();e?.sprite?.destroy();active.delete(id);}
 function tombstone(id){terminals.add(id);while(terminals.size>512)terminals.delete(terminals.values().next().value);remove(id);}
@@ -99,7 +125,8 @@ export function attachNinjaScene(scene,next={}){
         e.p={...launch(o,e.p.angle,id,e.p.special?i:null),ownerName:e.p.ownerName};e.pending=false;
       }
       // Bound catch-up work after stalls; authoritative state is refreshed on return.
-      let count=0;while(e.at+STEP_MS<=sim&&count++<360&&!e.p.done){stepAt(e.p,o,e.at);e.at+=STEP_MS;}
+      const until=sim+(e.lead||0);
+      let count=0;while(e.at+STEP_MS<=until&&count++<360&&!e.p.done){stepAt(e.p,o,e.at);e.at+=STEP_MS;}
       if(!e.sprite){
         if(e.p.special && !e.p.done && !e.releasePresented){presentSwarmRelease(scene,displayedOwner,swarmConfig().releaseMs,e.p.ownerName!==ctx.localUsername);e.releasePresented=true;}
         e.texture=ninjaProjectileTexture(scene,displayedOwner);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special && !e.texture.includes("-weapon"))e.sprite.setTint?.(0xc7efff);applyTeamVisual(e.sprite,o || {_bbTeamColor:ctx.opponentPlayersRef?.[e.p.ownerName]?0xff413f:0x50ce88},true,e.texture.includes("-weapon")?"crown":null);
@@ -107,16 +134,18 @@ export function attachNinjaScene(scene,next={}){
         if(e.p.ownerName!==ctx.localUsername)e.correction=remoteLaunchCorrection(displayedOwner,e.p.returnTarget,e.p.elapsed,now);
       }
       const next=copy(e.p);if(!next.done)stepAt(next,o,e.at);
-      const f=Math.max(0,Math.min(1,(sim-e.at)/STEP_MS));
-      if(e.correction&&e.correction.x===undefined){
-        e.correction=reconcileFlight({x:e.correction.visualX,y:e.correction.visualY},
+      const f=Math.max(0,Math.min(1,(until-e.at)/STEP_MS));
+      if(e.correction?.replaced){
+        e.correction=reconcileFlight(replacedFlight(e.correction.replaced,o,sim,now),
           {x:e.p.x+(next.x-e.p.x)*f,y:e.p.y+(next.y-e.p.y)*f},now,
           Math.hypot(next.x-e.p.x,next.y-e.p.y)*1000/STEP_MS);
       }
       if(e.correction&&!e.correctionReported){e.correctionReported=true;record({type:'correction',id,at:now,phase:e.p.phase,predicted:e.wasPredicted,errorPx:Math.hypot(e.correction.x,e.correction.y)});}
       const blend=e.correction?Math.max(0,1-(now-e.correction.at)/(e.correction.duration||60)):0;
-      let x=e.p.x+(next.x-e.p.x)*f+(e.correction?.x||0)*blend;
-      let y=e.p.y+(next.y-e.p.y)*f+(e.correction?.y||0)*blend;
+      const flight={x:e.p.x+(next.x-e.p.x)*f,y:e.p.y+(next.y-e.p.y)*f};
+      if(!e.p.done&&isLocalShooter(e.p.ownerName))predictHits(scene,e,flight);
+      let x=flight.x+(e.correction?.x||0)*blend;
+      let y=flight.y+(e.correction?.y||0)*blend;
       // Confirmation can describe a younger outbound projectile than prediction.
       // Let authority catch up without visually reversing its outbound travel.
       // Real terrain turns and returns bypass this constraint immediately.
@@ -128,7 +157,7 @@ export function attachNinjaScene(scene,next={}){
       e.sprite.setPosition(x,y);e.renderPhase=e.p.phase;
       animateNinjaProjectile(e.sprite,e.texture,e.p.elapsed,e.p.cfg.rotationSpeed,e.p.direction);
       e.fx?.update(now,!e.p.done);
-      if(e.p.done){e.sprite.setVisible?.(false);if(sim-e.at>2000)tombstone(id);continue;}e.sprite.setVisible?.(true);
+      if(e.p.done){e.sprite.setVisible?.(false);if(until-e.at>2000)tombstone(id);continue;}e.sprite.setVisible?.(true);
       if(now-(e.trailAt||0)>45&&effects.size<180){e.trailAt=now;const trail=scene.add.image(e.sprite.x,e.sprite.y,e.texture,e.sprite.frame?.name);trail.setScale(e.p.cfg.scale*.48);trail.setDepth(RENDER_LAYERS.ATTACKS-1);trail.alpha=.3;effects.add(trail);scene.tweens.add({targets:trail,alpha:0,duration:220,onComplete:()=>{effects.delete(trail);trail.destroy();}});}
     }
   };

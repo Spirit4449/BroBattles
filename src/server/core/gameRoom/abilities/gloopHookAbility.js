@@ -12,7 +12,7 @@ function toFinite(value, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function activate(caster, now, room, payload = null) {
+function activate(caster, now, room, payload = null, shot = null) {
   if (!caster || !room) return;
   const aim = payload && typeof payload === "object" ? payload : {};
   const fallbackAngle = caster.flip ? Math.PI : 0;
@@ -25,7 +25,10 @@ function activate(caster, now, room, payload = null) {
 
   const action = {
     type: "gloop-hook-release",
-    id: `gloopHook:${caster.socketId || caster.name}:${now}`,
+    // The owner predicts the hook under its own request id and skips this echo.
+    id: typeof shot?.id === "string" && shot.id && shot.id.length <= 128
+      ? shot.id : `gloopHook:${caster.socketId || caster.name}:${now}`,
+    viewRewindMs: shot?.viewRewindMs,
     ownerEcho: true,
     direction,
     angle,

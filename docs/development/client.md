@@ -315,7 +315,9 @@ The preserved drawing buffer is enabled only in the harness for pixel inspection
 
 The gameplay camera follows each movement axis more tightly as speed rises,
 so fast falls and dashes stay in view. Ordinary movement retains gentle follow;
-the follow blend accounts for frame time. Tuning lives in `cameraDynamics.js`.
+the follow blend accounts for frame time. Landings carry the view slightly downward
+and smoothly settle, with a capped offset based on impact speed. Reduced motion
+disables this landing effect. Tuning lives in `cameraDynamics.js`.
 
 ## Mobile battle controls
 
@@ -408,3 +410,19 @@ chime; result playback pauses map music and respects the existing SFX settings
 and audio-unlock handling. [Draw sound source](../../public/assets/game-sounds/README.md).
 
 Both the lobby profile and standalone profile use `src/client/account/nameChangeDialog.js` for name changes. They open a dedicated native modal using the shared popup frame, chroma header and close button. The dialog states the 50-gem cost and once-per-month limit, shows the next eligible date or current balance, and keeps validation errors inside the dialog. Its blue Change Name action includes the gem icon and price. Escape, Cancel and backdrop dismissal restore focus to the opener.
+
+Projectile damage uses one fading red screen pulse. While its tween is active,
+the poison-water renderer leaves opacity to the tween and pauses the looping
+water warning; the warning resumes afterward only if the player is in water.
+
+Sudden-death poison water uses a dense murky-green body, layered acid-green surface glow,
+and outlined bubbles in `poisonWaterRenderer.js`. Bubble positions advance by
+elapsed frame time independently of the rising surface, fading at their spawn
+and surface instead of recalculating their loop from the changing water depth.
+Surface interpolation is frame-rate independent; long resume gaps are capped.
+
+Huntress arrows use compact orange/gold pixel flame clusters on both basic and
+super volleys. Flight flames trail backward; embedded flames rise until the arrow
+expires. Super flames are larger, with a brief bow-side spark cue and a held-draw
+release animation. These cosmetics do not change burn damage or projectile timing.
+The renderer caps flame objects and clears them on presentation reset/shutdown.

@@ -44,7 +44,11 @@ class HuntressReplica {
     if (this.terminals.has(p.id) || this.rejected.has(p.requestId)) return false;
     const previous = this.active.get(p.id);
     if (previous && !previous.predicted) return false;
-    this.active.set(p.id, { projectile: p, predicted, revision: (previous?.revision || 0) + 1 });
+    // The server launches an owner's shot about one upstream trip after the
+    // prediction. Keep that lead instead of pulling the arrow back to the later
+    // launch, which made confirmed arrows visibly hesitate mid-flight.
+    const lead = previous ? clampLead(p.launchMono - previous.projectile.launchMono) : 0;
+    this.active.set(p.id, { projectile: p, predicted, lead, revision: (previous?.revision || 0) + 1 });
     return true;
   }
   terminate(terminal, localNow) {
@@ -62,8 +66,12 @@ class HuntressReplica {
   position(id, localNow) {
     const entry = this.active.get(id);
     if (!entry) return null;
-    const age = this.clock.now(localNow) - entry.projectile.launchMono;
+    const age = this.clock.now(localNow) - entry.projectile.launchMono + (entry.lead || 0);
     return { ...sample(entry.projectile, age), age };
   }
 }
-module.exports = { CombatClock, HuntressReplica };
+// A prediction can lead the server by its upstream latency. Bound it so a
+// stalled request cannot fast-forward a confirmed shot.
+const MAX_PREDICTION_LEAD_MS = 300;
+function clampLead(ms) { return Number.isFinite(ms) ? Math.max(0, Math.min(MAX_PREDICTION_LEAD_MS, ms)) : 0; }
+module.exports = { CombatClock, HuntressReplica, MAX_PREDICTION_LEAD_MS, clampLead };

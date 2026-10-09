@@ -7,13 +7,12 @@ import {
   spawnWizardFireballVisual,
   changeDebugState,
   playWizardCastWindup,
+  consumeWizardRelease,
 } from "./attack";
 import { playWizardArcaneSurge } from "./effects.js";
 import CharacterEntityBase from "../shared/characterEntityBase";
-import { consumeOnce } from "../shared/packetDedupe";
 
 const NAME = "wizard";
-const consumeWizardRelease = (scene, id) => consumeOnce(scene, "wizard-release", id, 4000);
 
 class Wizard extends CharacterEntityBase {
   static key = NAME;

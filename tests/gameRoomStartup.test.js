@@ -225,10 +225,19 @@ for (const lateMs of [PREGAME_MS + 700, null]) {
     const first = h.socket('first');
     const second = h.socket('second', h.friends[0]);
     await h.join(first);
+    const firstInit = first.sent.find((e) => e.type === 'game:init').payload;
+    const pending = firstInit.players.find((p) => p.name === h.friends[0].name);
+    assert.ok(Number.isFinite(pending.x) && Number.isFinite(pending.y),
+      'a fighter who has not joined yet still has a spawn position');
     await h.join(second);
+    const joined = [...h.room.players.values()].find((p) => p.name === h.friends[0].name);
+    assert.ok(Math.abs(joined.x - pending.x) <= 0.5 && Math.abs(joined.y - pending.y) <= 0.5,
+      'joining keeps that spawn');
     await h.ready(first);
     assert.deepEqual(h.events.filter((e) => e.type === 'player:loaded').map((e) => e.payload.name),
       [h.human.name], 'clients already in the pregame learn a fighter loaded');
+    const loaded = h.events.find((e) => e.type === 'player:loaded').payload;
+    assert.ok(Number.isFinite(loaded.x) && Number.isFinite(loaded.y), 'and where they stand');
     if (lateMs === null) {
       t.mock.timers.tick(PREGAME_MS + PREGAME_GRACE_MS - 1);
       assert.equal(h.started(), 0);
