@@ -1,5 +1,6 @@
 const { resolveShockwaveImpulse, SHOCKWAVE_MOMENTUM_MS } = require("../../../shared/physics/shockwaveImpulse");
 const tuning = require("../../../shared/physics/movementPhysics.json");
+const { FALL_OUT_DEPTH } = require("../../../shared/gameConstants");
 const { characterBody } = require("../../../shared/physics/duelGeometry");
 const { DUCK_SPEED_RATIO } = require("../../../shared/physics/ducking");
 const { acceptDash } = require('../../../shared/physics/dash');
@@ -18,7 +19,7 @@ function startDash(p, direction, now) {
   if (p._botActionUntil > now || !acceptDash(p, {
     dashSeq: (p._dashSeq || 0) + 1, dashX: direction.x, dashY: direction.y,
   }, now)) return false;
-  p.vx = direction.x * tuning.dashSpeed;
+  p.vx = direction.x * tuning.dashHorizontalSpeed;
   p.vy = direction.y * (direction.x === 0 && direction.y > 0 ? tuning.dashDownSpeed : tuning.dashSpeed);
   p._botDashCoastUntil = p._dashUntil + tuning.dashCoastMs;
   p._botDashWallContact = false;
@@ -69,7 +70,7 @@ function stepDash(p, intent, geometry, dtMs, now, modifiers) {
   p._bodyHalfWidth = b.halfWidth; p._bodyHalfHeight = b.halfHeight;
   p._bodyCenterOffsetX = b.offsetX; p._bodyCenterOffsetY = b.offsetY;
   p._lastWidth = b.displayWidth; p._lastHeight = b.displayHeight;
-  return { events: !wasGrounded && p.grounded ? ['land'] : [], fell: p.y > world.y + world.height + 50 };
+  return { events: !wasGrounded && p.grounded ? ['land'] : [], fell: p.y > world.y + world.height + FALL_OUT_DEPTH };
 }
 
 // Pure, fixed-step platform solver. Coordinates use the same sprite/body offsets as Phaser.
@@ -161,7 +162,7 @@ function stepBody(p, intent, geometry, dtMs, now, modifiers = {}) {
   p._bodyHalfWidth = b.halfWidth; p._bodyHalfHeight = b.halfHeight;
   p._bodyCenterOffsetX = b.offsetX; p._bodyCenterOffsetY = b.offsetY;
   p._lastWidth = b.displayWidth; p._lastHeight = b.displayHeight;
-  return { events, fell: p.y > world.y + world.height + 50 };
+  return { events, fell: p.y > world.y + world.height + FALL_OUT_DEPTH };
 }
 
 // Applies one tick of platform motion (advanceGeometry's result) to a body,

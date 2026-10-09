@@ -19,7 +19,7 @@ function player() {
     setFlipX(x){this.flipX=x;}, setAcceleration(){}, setDrag(){}, setMaxVelocity(){},
     setVelocity(x,y){this.body.velocity={x,y};} };
 }
-test('eight directions have identical distance; opposing keys cancel; no direction uses facing', () => {
+test('eight input directions are normalized; opposing keys cancel; no direction uses facing', () => {
   for (const [left,right,up,down] of [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1],[1,0,1,0],[0,1,1,0],[1,0,0,1],[0,1,0,1]]) {
     assert.ok(Math.abs(Math.hypot(...Object.values(dashDirection(left,right,up,down)))-1)<1e-10);
   }
@@ -31,7 +31,7 @@ test('ground or air dash suspends gravity, expires, and cannot repeat before 5 s
   for (const grounded of [true,false]) {
     const p=player();p.body.blocked.down=grounded;
     assert.equal(exported.updateDash(scene,p,{pressed:true,right:true,now:1000}),true);
-    assert.equal(p.body.velocity.x,physics.dashSpeed);assert.equal(p.body.allowGravity,false);
+    assert.equal(p.body.velocity.x,physics.dashHorizontalSpeed);assert.equal(p.body.allowGravity,false);
     assert.equal(exported.updateDash(scene,p,{now:1160}),false);
     assert.equal(p.body.allowGravity,true);assert.equal(p.body.velocity.y,0);
     assert.equal(exported.updateDash(scene,p,{pressed:true,now:6159}),false);
@@ -69,7 +69,7 @@ test('the actual movement handler completes its dash branch without touching lat
   let wallSlideCleared = false;
   const context = { player:p, scene:{game:{loop:{delta:16}}},
     mobileControlsController:null, combatMouseController:null, chatInputActive:false, window:{},
-    drawDashCooldown(){}, updateDash:()=>true, keySpace:key,
+    drawDashCooldown(){}, updateInvisibleAttackAlpha(){}, updateDash:()=>true, keySpace:key,
     Phaser:{Input:{Keyboard:{JustDown:()=>true}}},
     cursors:{left:key,right:key,up:key,down:key}, movementKeys:{left:key,right:key,up:key,down:key},
     dead:false, isAttacking:false, movementSpeedMult:1, powerupInvisible:false,
@@ -176,14 +176,14 @@ test('bottom HUD counts down to ready, stays independent of player coordinates, 
 test('dash starts at fixed speed regardless of incoming momentum and preserves exit velocity', () => {
  const p=player();p.body.velocity={x:200,y:-150};
  exported.updateDash(scene,p,{pressed:true,right:true,now:1000});
- assert.equal(p.body.velocity.x,physics.dashSpeed);assert.equal(p.body.velocity.y,0);
+ assert.equal(p.body.velocity.x,physics.dashHorizontalSpeed);assert.equal(p.body.velocity.y,0);
  exported.updateDash(scene,p,{now:1160});
- assert.equal(p.body.velocity.x,physics.dashSpeed);assert.equal(p.body.velocity.y,0);
+ assert.equal(p.body.velocity.x,physics.dashHorizontalSpeed);assert.equal(p.body.velocity.y,0);
  let acceleration,drag,limit;
  p.setAccelerationX=x=>acceleration=x;p.setDragX=x=>drag=x;p.setMaxVelocity=x=>limit=x;
  p.body.touching={down:false};
  exported.applyDashCoast(p,1,260,1160);
- assert.equal(acceleration,0);assert.equal(drag,900);assert.equal(limit,physics.dashSpeed);
+ assert.equal(acceleration,0);assert.equal(drag,900);assert.equal(limit,physics.dashHorizontalSpeed);
  p.body.touching.down=true;
  exported.applyDashCoast(p,1,260,1160);
  assert.equal(drag,physics.dashSurfaceDrag);
@@ -233,14 +233,14 @@ test('real Arcade steps coast smoothly and never reapply blocked dash velocity',
    setAcceleration:(x,y)=>body.setAcceleration(x,y),setAccelerationX:x=>body.setAccelerationX(x),setDragX:x=>body.setDragX(x)};
  body.velocity.set(200,-120);
  exported.updateDash(scene,p,{pressed:true,right:true,now:1000});body.update(1/60);
- assert.equal(body.velocity.x,physics.dashSpeed);assert.equal(body.velocity.y,0);
+ assert.equal(body.velocity.x,physics.dashHorizontalSpeed);assert.equal(body.velocity.y,0);
  exported.updateDash(scene,p,{now:1160});exported.applyDashCoast(p,1,260,1160);body.update(1/60);
- assert.equal(body.velocity.x,physics.dashSpeed-15);assert.ok(body.velocity.y>0);
+ assert.equal(body.velocity.x,physics.dashHorizontalSpeed-15);assert.ok(body.velocity.y>0);
  p._dashReadyAt=0;body.x=0;body.y=0;body.velocity.set(0,0);
  const wallScene={...scene,_mapObjects:[{body:{left:25,right:26,top:-200,bottom:200}}]};
  for(let i=0;i<9;i++) {
    exported.updateDash(wallScene,p,{pressed:i===0,right:true,now:3000+i*16});
-   assert.equal(body.velocity.x,i===0?physics.dashSpeed:0);
+   assert.equal(body.velocity.x,i===0?physics.dashHorizontalSpeed:0);
    body.resetFlags();body.update(1/60);exported.protectDashMotion(wallScene,p,3000+i*16);
    assert.ok(body.right<=25.000001);assert.equal(body.velocity.x,0);
  }
@@ -463,18 +463,20 @@ test('dash leading edge follows the rendered player and turns with actual travel
   assert.equal(f.scene.events.listenerCount('postupdate'),0);
 });
 
-test('straight-down dash has the boosted launch speed and vertical cap; diagonals stay normal', () => {
-  for (const right of [false, true]) {
+test('client and bots share faster horizontal launches while vertical components and caps stay unchanged', () => {
+  for (const [left, right, up, down] of [[true,false,false,false], [false,true,false,false], [false,false,true,false], [false,false,false,true], [true,false,true,false], [false,true,true,false], [true,false,false,true], [false,true,false,true]]) {
     const p = player(); let cap;
     p.setMaxVelocity = (x, y) => { cap = { x, y }; };
-    exported.updateDash(scene, p, { pressed: true, down: true, right, now: 1000 });
-    const expected = right ? physics.dashSpeed : physics.dashDownSpeed;
-    assert.ok(Math.abs(Math.hypot(p.body.velocity.x, p.body.velocity.y) - expected) < 1e-9);
-    assert.equal(cap.x, physics.dashMaxSpeed);
-    assert.equal(cap.y, right ? physics.dashMaxSpeed : physics.dashDownSpeed);
+    exported.updateDash(scene, p, { pressed: true, left, right, up, down, now: 1000 });
+    const direction = dashDirection(left, right, up, down);
+    const straightDown = direction.x === 0 && direction.y > 0;
+    assert.ok(Math.abs(p.body.velocity.x - direction.x * physics.dashHorizontalSpeed) < 1e-9);
+    assert.ok(Math.abs(p.body.velocity.y - direction.y * (straightDown ? physics.dashDownSpeed : physics.dashSpeed)) < 1e-9);
+    assert.equal(cap.x, physics.dashHorizontalSpeed);
+    assert.equal(cap.y, straightDown ? physics.dashDownSpeed : physics.dashMaxSpeed);
     const bot = { isAlive: true, grounded: false };
-    const direction = dashDirection(false, right, false, true);
     require('../src/server/core/bots/physics').startDash(bot, direction, 1000);
+    assert.equal(bot.vx, p.body.velocity.x);
     assert.equal(bot.vy, p.body.velocity.y);
   }
 });
@@ -519,4 +521,21 @@ test('remote knockback sequences trigger once and respect invisibility and lifec
   present(7); f.scene.events.emit('shutdown');
   assert.equal(f.timers[1].removed, true);
   assert.equal(f.sprite.listenerCount('destroy'), 0);
+});
+
+test('dashes respect open world edges and only stop at edges with collision enabled', () => {
+ const Body=require('phaser/src/physics/arcade/Body');
+ const Rectangle=require('phaser/src/geom/rectangle/Rectangle');
+ const dashDownPast=(checkCollision)=>{
+  const world={defaults:{},gravity:{x:0,y:physics.gravity},bounds:new Rectangle(0,0,400,200),checkCollision};
+  // One 60 Hz step of an 840 px/s downward dash crossing the bottom edge (y=180 for a 20px body).
+  const body=new Body(world);body.setSize(20,20);body.prev.set(100,175);body.x=100;body.y=189;
+  body.newVelocity.set(0,14);body.velocity.set(0,840);body.enable=true;body.collideWorldBounds=true;
+  exported.protectDashMotion({_mapObjects:[]},{body,_dash:{}},1000);
+  return body;
+ };
+ const open=dashDownPast({up:false,down:false,left:false,right:false});
+ assert.ok(open.y>180);assert.ok(open.velocity.y>0);assert.equal(open.blocked.down,false);
+ const closed=dashDownPast({up:true,down:true,left:true,right:true});
+ assert.ok(closed.y<=180);assert.equal(closed.velocity.y,0);assert.equal(closed.blocked.down,true);
 });

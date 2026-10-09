@@ -33,6 +33,13 @@ const MIGRATIONS = {
       }
     },
   },
+  'privacy-settings': {
+    describe: 'Per-account friend, message and presence privacy settings.',
+    async run(conn) {
+      await conn.query(readMigration('2026-10-09_privacy_settings.sql'));
+      await requireTables(conn, ['user_privacy_settings']);
+    },
+  },
   'highest-win-streak': {
     describe: 'Stored highest win streak and completed-history backfill.',
     async run(conn) {

@@ -82,11 +82,8 @@ async function buildGameDataForMatch({
     };
   }
 
+  // The roster query already carries each participant's equipped card.
   const allParticipants = await loadMatchRoster(db, matchId);
-
-  const selectedByName = await db.fetchSelectedCardsByNames(
-    allParticipants.filter((p) => !p.isBot).map((p) => p.name),
-  );
 
   const {
     getHealth,
@@ -101,7 +98,7 @@ async function buildGameDataForMatch({
     modeVariantId: selection.modeVariantId,
     selection,
     map: selection.mapId,
-    mapSnapshot: require("../maps/mapRepository").mapRepository.forMatch(matchId, selection.mapId, selection.modeVariantId || participant.mode),
+    mapSnapshot: require("../maps/mapRepository").mapRepository.forMatch(matchId, selection.mapId),
     yourName: user.name,
     isGuest: !!user.expires_at,
     isAdmin: typeof isAdminUser === "function" ? !!isAdminUser(user) : false,
@@ -126,7 +123,7 @@ async function buildGameDataForMatch({
         // Skin fields are resolved once by loadMatchRoster's decoration.
         selected_skin_id: p.selected_skin_id,
         profile_icon_id: String(p.profile_icon_id || "") || null,
-        selected_card_id: p.isBot ? p.selected_card_id : selectedByName[p.name] ?? null,
+        selected_card_id: p.selected_card_id ?? null,
         trophies: Number(p.trophies) || 0,
         level,
         stats: {

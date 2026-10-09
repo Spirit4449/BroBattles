@@ -53,8 +53,7 @@ button,
 }
 
 body.mobile-game-ui #game-timer-hud,
-body.mobile-game-ui #team-status-hud,
-body.mobile-game-ui #battle-keybind-hud {
+body.mobile-game-ui #team-status-hud {
   transform: scale(0.82);
   transform-origin: top center;
 }
@@ -65,12 +64,6 @@ body.mobile-game-ui #game-timer-hud {
 
 body.mobile-game-ui #team-status-hud {
   top: 18px;
-}
-
-body.mobile-game-ui #battle-keybind-hud {
-  bottom: 8px;
-  right: 8px;
-  opacity: 0.78;
 }
 
 body.mobile-game-ui #game-timer-display,
@@ -6816,6 +6809,11 @@ body.matchmaking-active #lobby-area {
   filter: brightness(0.5) saturate(0.72) blur(1.5px);
 }
 
+/* Once the overlay has faded in it covers the lobby completely. */
+body.matchmaking-covered #lobby-area {
+  visibility: hidden;
+}
+
 body.matchmaking-exiting #navbar,
 body.matchmaking-exiting #bottom-bar,
 body.matchmaking-exiting #lobby-area,
@@ -6872,7 +6870,7 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   position: absolute;
   inset: -24%;
   pointer-events: none;
-  will-change: transform, background-position;
+  will-change: transform;
 }
 
 .mm-bg::before {
@@ -6995,7 +6993,10 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
     rgba(145, 232, 255, 0.08) 9.1%,
     transparent 9.25% 18%
   );
-  transform: skewY(-3deg) translateY(20%);
+  inset: 0 0 auto;
+  height: 200%;
+  transform: skewY(-3deg);
+  will-change: transform;
   animation: mm-speed-lines-rise 8s linear infinite;
 }
 
@@ -7725,29 +7726,26 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
     0 0 22px rgba(255, 171, 45, 0.6);
 }
 
+/* Transform-only: animating background-position here repainted a large
+   blurred layer every frame, which phones could not keep up with. */
 @keyframes mm-gradient-drift-primary {
   0% {
-    background-position: -4% 84%, 52% -12%, 110% 76%, center;
-    transform: translate3d(-1.5%, 0, 0) scale(1.02);
+    transform: translate3d(-4%, 3%, 0) scale(1.02);
   }
   50% {
-    background-position: 18% 56%, 38% 20%, 82% 46%, center;
-    transform: translate3d(1%, -1.5%, 0) scale(1.07);
+    transform: translate3d(3%, -4%, 0) scale(1.07);
   }
   100% {
-    background-position: 34% 24%, 72% 42%, 62% 14%, center;
-    transform: translate3d(-0.5%, 1%, 0) scale(1.04);
+    transform: translate3d(-2%, -6%, 0) scale(1.04);
   }
 }
 
 @keyframes mm-gradient-drift-secondary {
   0% {
-    background-position: 8% 10%, 92% 16%, -40% 50%;
-    transform: translate3d(-1%, 1%, 0) scale(1);
+    transform: translate3d(-4%, 3%, 0) scale(1);
   }
   100% {
-    background-position: 74% 72%, 24% 64%, 140% 50%;
-    transform: translate3d(1.5%, -1%, 0) scale(1.08);
+    transform: translate3d(5%, -3%, 0) scale(1.08);
   }
 }
 
@@ -7770,10 +7768,10 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
 
 @keyframes mm-speed-lines-rise {
   from {
-    background-position: 0 0;
+    transform: skewY(-3deg) translate3d(0, 0, 0);
   }
   to {
-    background-position: 0 -100vh;
+    transform: skewY(-3deg) translate3d(0, -50%, 0);
   }
 }
 
@@ -8184,6 +8182,62 @@ body.matchmaking-exiting .bb-chat-lobby-wrap {
   .mm-footer {
     width: calc(100% - 36px);
     padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Phone GPUs drop tiles (dark flashes) under large blurs, blend modes and a
+   filter wrapping animated layers, so touch devices get a lighter version. */
+@media (hover: none), (pointer: coarse) {
+  .mm-bg,
+  .mm-overlay[data-state="ready"] .mm-bg {
+    filter: none;
+    transition: none;
+  }
+
+  .mm-bg::before,
+  .mm-bg::after {
+    inset: -10%;
+    mix-blend-mode: normal;
+  }
+
+  .mm-bg::before {
+    opacity: 0.6;
+    filter: blur(16px);
+  }
+
+  .mm-bg::after {
+    opacity: 0.45;
+    filter: blur(20px);
+  }
+
+  .mm-overlay[data-state="ready"] .mm-bg::before {
+    opacity: 0.75;
+    filter: blur(16px) sepia(0.18);
+  }
+
+  .mm-success-burst {
+    mix-blend-mode: normal;
+    filter: blur(10px);
+  }
+
+  .mm-speed-lines {
+    display: none;
+  }
+
+  .mm-particles i:nth-child(n + 21) {
+    display: none;
+  }
+
+  .mm-particles i {
+    box-shadow: 0 0 6px rgba(115, 235, 255, 0.7);
+  }
+
+  .mm-overlay[data-state="ready"] .mm-particles i {
+    box-shadow: 0 0 6px rgba(255, 210, 90, 0.75);
+  }
+
+  .mm-particles i:nth-child(5n) {
+    filter: none;
   }
 }
 

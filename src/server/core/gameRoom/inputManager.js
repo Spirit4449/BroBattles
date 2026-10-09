@@ -2,6 +2,7 @@ const { COLLISION_PACKET_TOLERANCE } = require('../../../shared/physics/movement
 const { sweepMovement } = require('../../../shared/physics/sweptCollision');
 const { resolveStomp } = require('./stomp');
 const { acceptDash } = require('../../../shared/physics/dash');
+const { FALL_OUT_DEPTH } = require('../../../shared/gameConstants');
 const {
   WORLD_MARGIN,
   POSITION_HISTORY_DEPTH,
@@ -318,17 +319,17 @@ function handlePlayerInput(room, socketId, inputData) {
     const modifiers = effectManager.getModifiers(playerData, now);
     const speedMult = Math.max(1, Math.min(movementPhysics.maxSpeedMult, Number(modifiers.speedMult) || 1));
     const dashSpeedAllowance = dashMotion
-      ? Math.max(0, movementPhysics.dashMaxSpeed - Math.max(0, dashAge) * movementPhysics.dashCoastDrag) : 0;
+      ? Math.max(0, movementPhysics.dashHorizontalSpeed - Math.max(0, dashAge) * movementPhysics.dashCoastDrag) : 0;
     // Riding a moving platform adds its speed to the rider's own.
     const carried = room.geometry?.platformSpeed || { x: 0, y: 0 };
     const speedX = Math.max(MOVE_PLAUSIBLE_SPEED_H, movementPhysics.wallKickFull * speedMult, dashSpeedAllowance) + impulseSpeed + carried.x;
     const dashVerticalSpeed = playerData.dashX === 0 && playerData.dashY > 0
       ? movementPhysics.dashDownSpeed : movementPhysics.dashMaxSpeed;
     const speedY = MOVE_PLAUSIBLE_SPEED_V + impulseSpeed + carried.y;
-    budget.x = Math.min(MOVE_PLAUSIBLE_LAG_PAD_H + speedX * MAX_MOVEMENT_CREDIT_MS / 1000 + (playerData._dashUntil > now ? movementPhysics.dashMaxSpeed * movementPhysics.dashDurationMs / 1000 : 0), budget.x + speedX * dtMove / 1000);
+    budget.x = Math.min(MOVE_PLAUSIBLE_LAG_PAD_H + speedX * MAX_MOVEMENT_CREDIT_MS / 1000 + (playerData._dashUntil > now ? movementPhysics.dashHorizontalSpeed * movementPhysics.dashDurationMs / 1000 : 0), budget.x + speedX * dtMove / 1000);
     budget.y = Math.min(MOVE_PLAUSIBLE_LAG_PAD_V + speedY * MAX_MOVEMENT_CREDIT_MS / 1000 + (playerData._dashUntil > now ? dashVerticalSpeed * movementPhysics.dashDurationMs / 1000 : 0), budget.y + speedY * dtMove / 1000);
     if (acceptedDash) {
-      const distance = movementPhysics.dashMaxSpeed * movementPhysics.dashDurationMs / 1000;
+      const distance = movementPhysics.dashHorizontalSpeed * movementPhysics.dashDurationMs / 1000;
       budget.x += distance;
       budget.y += dashVerticalSpeed * movementPhysics.dashDurationMs / 1000;
     }
@@ -387,6 +388,11 @@ function handlePlayerInput(room, socketId, inputData) {
       dy: rawY - prevInputY,
     });
     playerData.lastInput = now;
+    // Falling out of the world is decided here, as for bots in their physics step.
+    const world = room.geometry.world;
+    if (playerData.isAlive && playerData.y > world.y + world.height + FALL_OUT_DEPTH) {
+      room._handlePlayerDeath(playerData, { cause: "fall", at: now });
+    }
     return;
   }
 

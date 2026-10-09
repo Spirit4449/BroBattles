@@ -1,0 +1,8 @@
+Teleport — Fupicat
+Source: https://freesound.org/people/Fupicat/sounds/538154/
+License: Creative Commons Zero (CC0 1.0)
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Downloaded 2026-10-09 from the source page's high-quality MP3 preview:
+https://cdn.freesound.org/previews/538/538154_7724198-hq.mp3
+Stored unchanged as respawn.mp3. Runtime gain: 0.5, with player-distance attenuation.

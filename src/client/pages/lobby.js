@@ -542,6 +542,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         guest,
         newGuestCreated,
         getExistingPartyId: () => existingPartyId,
+        friendsController,
       }),
   ]);
   const initialCharClass = resolveCharacterKey(userData.char_class);

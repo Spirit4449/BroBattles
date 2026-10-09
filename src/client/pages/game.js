@@ -43,6 +43,8 @@ import { wireFullscreenToggles } from "../ui/fullscreen.js";
 import { createGameChatController } from "../chat/gameChatController.js";
 import { focusBattleInput, isChatInputActive, setChatInputActive } from "../game/players/localPlayer";
 import "../styles/chat.css";
+import "../styles/mobileControls.css";
+import { isTouchGameDevice } from "../game/scene/mobileControls.js";
 import "../styles/tutorialTips.css";
 import { createSnapshotBuffer, processSnapshotInterpolation } from "../game/match/snapshotBuffer";
 import {
@@ -121,6 +123,8 @@ import { POST_BATTLE_LOBBY_RETURN_KEY } from "../lib/storageKeys.js";
 
 
 wireFullscreenToggles();
+// Touch players get on-screen controls; chat and settings stay desktop-only.
+document.body.classList.toggle("bb-touch-game", isTouchGameDevice());
 
 createGameChatController({
   socket,
@@ -517,18 +521,26 @@ function syncLiveMatchContext() {
 }
 
 // Fetch game data from server
+// Navigation requests a battle's match data alongside the page and scripts.
+// A failed handoff falls back to a fresh request.
+async function requestGameData() {
+  const handoff = !editorSession && window.__BB_NAVIGATION__?.consumeGameData?.(matchId);
+  const prefetched = handoff && await handoff.catch(() => null);
+  if (prefetched) return prefetched;
+  const response = await fetch(editorSession ? `/api/admin/map-playtests/${editorSession}` : "/gamedata", {
+    method: editorSession ? "GET" : "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: editorSession ? undefined : JSON.stringify({ matchId: Number(matchId) }),
+  });
+  return { ok: response.ok, body: await response.json() };
+}
+
 async function fetchGameData() {
   try {
-    const response = await fetch(editorSession ? `/api/admin/map-playtests/${editorSession}` : "/gamedata", {
-      method: editorSession ? "GET" : "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: editorSession ? undefined : JSON.stringify({ matchId: Number(matchId) }),
-    });
-
-    const result = await response.json();
-    if (!response.ok || !result.success) {
+    const { ok, body: result } = await requestGameData();
+    if (!ok || !result.success) {
       const error = new Error(result.error || "Failed to fetch game data");
       error.code = result.code;
       throw error;
@@ -536,6 +548,8 @@ async function fetchGameData() {
 
     return result.gameData;
   } catch (error) {
+    // Missing consent is resolved by the caller's terms dialog.
+    if (error.code === "TERMS_REQUIRED") throw error;
     console.error("Failed to fetch game data:", error);
     if (!window.__BB_NAVIGATION__) hud.showSystemNotice?.({
       title: "Failed To Load Match",
@@ -563,8 +577,13 @@ async function initializeGame() {
     } else {
       noteClientLifecycle("fetch-gamedata", `matchId=${matchId}`);
     }
-    if (!editorSession) await ensureLegalAcceptance();
-    gameData = await fetchGameData();
+    // /gamedata enforces current terms, so ask only when it reports they are
+    // missing instead of spending a request on every battle.
+    gameData = await fetchGameData().catch(async (error) => {
+      if (editorSession || error.code !== "TERMS_REQUIRED") throw error;
+      await ensureLegalAcceptance();
+      return fetchGameData();
+    });
     if (!editorSession) battleTutorial.initialize();
     // Start fetching the authoritative map background as soon as match data
     // arrives. The loading screen stays visible until this image is ready.
@@ -595,10 +614,9 @@ async function initializeGame() {
     // 2) Enrich payload with gameId if provided
     if (gameData?.gameId) __joinPayload.gameId = Number(gameData.gameId);
 
-    // 3) Ensure connection; if not connected, connect and join on next connect
-    try {
-      await waitForConnect(4000);
-    } catch {}
+    // 3) Ensure connection; if not connected, connect and join on next connect.
+    // Asset loading does not need the socket, so Phaser starts without waiting.
+    waitForConnect(4000).catch(() => {});
     // Do not emit here; connect/reconnect handlers (and immediate call below) will do it once.
   } catch (error) {
     if(error.code === "CONSENT_CANCELLED") { location.assign("/"); return; }
@@ -750,6 +768,7 @@ window.__BB_PAGE_SCOPE__?.onDispose(async () => {
   matchCoordinator?.dispose();
   battleTutorial?.destroy();
   destroyMobileControls?.();
+  document.body.classList.remove("bb-touch-game");
   if (game) {
     const retiring = game;
     game = null;
@@ -781,11 +800,12 @@ window.__BOOT_GAME__ = () =>
       // Canvas text captures its font at creation; CSS preloads alone do not
       // guarantee it is decoded before the first Phaser text object is made.
       await Promise.all([
-        initializeGame(),
+        initializeGame().then(() => {
+          if (!gameData) throw new Error('Unable to initialize this battle');
+          return loadMode(gameData.modeId);
+        }),
         loadGameFonts(document.fonts),
       ]);
-      if (!gameData) throw new Error('Unable to initialize this battle');
-      await loadMode(gameData?.modeId);
       if (window.__BB_PAGE_SCOPE__ && !window.__BB_PAGE_SCOPE__.active) return;
       if (!game) {
         game = new Phaser.Game(config);
@@ -1270,9 +1290,7 @@ class GameScene extends Phaser.Scene {
     // Camera: smooth follow
     const cam = this.cameras.main;
 
-    // lerpX=0.08 for crisp horizontal tracking; lerpY=0.05 is deliberately
-    // lazier so the vertical frame shifts more gently - vertical centering is
-    // less critical than horizontal awareness.
+    // Start with gentle tracking; cameraDynamics tightens follow at high speed.
     followLocalPlayer(cam);
     if (!this._modeRuntime) {
       this._modeRuntime = createModeRuntime({

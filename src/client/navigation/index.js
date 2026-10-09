@@ -8,6 +8,7 @@ import { getSettings, subscribeSettings } from '../site/preferences';
 // page scopes and speculative asset warming. Start before either page boots.
 const transitionArtwork = window.Image ? new window.Image() : null;
 let transitionArtworkReady = !transitionArtwork;
+let transitionArtworkFailed = false;
 let transitionArtworkPromise;
 function prepareTransitionArtwork() {
   if (transitionArtworkReady || transitionArtworkPromise) return transitionArtworkPromise;
@@ -19,6 +20,7 @@ function prepareTransitionArtwork() {
       clearTimeout(timeout);
       transitionArtwork.onload = transitionArtwork.onerror = null;
       transitionArtworkReady = ready;
+      if (!ready) transitionArtworkFailed = true;
       resolve(ready);
     };
     // A failed image must not trap players on the outgoing screen forever.
@@ -37,6 +39,13 @@ function prepareTransitionArtwork() {
   return transitionArtworkPromise;
 }
 prepareTransitionArtwork();
+// Only the first attempt holds the outgoing screen. After a failure the image
+// retries in the background so a broken asset cannot stall every transition.
+function awaitTransitionArtwork() {
+  if (transitionArtworkReady) return null;
+  const pending = prepareTransitionArtwork();
+  return transitionArtworkFailed ? null : pending;
+}
 
 const bindings = 'window,document,location,setTimeout,clearTimeout,setInterval,clearInterval,requestAnimationFrame,cancelAnimationFrame,fetch,Audio,ResizeObserver,MutationObserver,IntersectionObserver';
 const supported = url => url.origin === location.origin && /^(\/$|\/party\/[^/]+\/?$|\/game\/[^/]+\/?$)/.test(url.pathname);
@@ -84,18 +93,38 @@ function dismissTransition() {
   }, Math.max(240, minimumMs - (Date.now() - transitionShownAt)));
 }
 let readinessTimer;
+let readinessTicket = null;
+const readinessTimeoutMs = 45000;
+// Fail only when a screen stops advancing, so a slow but progressing load
+// is never abandoned.
+function armReadinessTimer(ticket) {
+  clearTimeout(readinessTimer);
+  readinessTicket = ticket;
+  readinessTimer = setTimeout(() => { if (ticket === sequence) fail(new Error('Screen readiness timed out')); }, readinessTimeoutMs);
+}
+function clearReadinessTimer() {
+  clearTimeout(readinessTimer);
+  readinessTicket = null;
+}
 let audioContext;
 let pendingFetch;
 let cleanupPromise = Promise.resolve();
+let retiredScope;
 function retireCurrentPage() {
   const outgoing = currentScope;
-  cleanupPromise = cleanupPromise.then(() => outgoing?.dispose());
+  if (outgoing && outgoing !== retiredScope) {
+    retiredScope = outgoing;
+    cleanupPromise = cleanupPromise.then(() => outgoing.dispose());
+  }
   return cleanupPromise;
 }
 
-async function fetchRoute(url, signal, retryConnectionFailure) {
+// A prefetched response stands in for the first attempt, so retry timing and
+// limits are unchanged when it fails.
+async function fetchRoute(url, signal, retryConnectionFailure, prefetched) {
   for (let attempt = 0; ; attempt++) {
     try {
+      if (attempt === 0 && prefetched) return await prefetched;
       return await fetch(url, { credentials: 'same-origin', signal });
     } catch (error) {
       if (!retryConnectionFailure || attempt >= 2 || signal.aborted || error.name !== 'TypeError') throw error;
@@ -117,6 +146,56 @@ let routeProgress = 0;
 const preloader = createBattlePreloader();
 const lobbyReturn = createLobbyReturnController({ navigate, getRouteVersion: () => sequence, getScopeId: () => currentScope?.id, onStatusReady: () => updateRouteLoadingBar(25) });
 let routeHints = [];
+const gameRoutePattern = /^\/game\/([^/]+)\/?$/;
+function requestGameData(matchId, signal) {
+  const request = fetch('/gamedata', {
+    method: 'POST', credentials: 'same-origin', signal,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ matchId: Number(matchId) }),
+  }).then(async response => ({ ok: response.ok, body: await response.json() }));
+  request.catch(() => {});
+  return request;
+}
+// Single-use route responses requested before navigation commits to them:
+// the game page and its match data at match start, or the lobby during the
+// post-battle /status lookup. Neither request changes server state.
+const routePrefetchLifetimeMs = 15000;
+let routePrefetch = null;
+function discardRoutePrefetch() {
+  routePrefetch?.controller.abort();
+  routePrefetch = null;
+}
+function prefetchRoute(target) {
+  const url = new URL(target, location.href);
+  if (!supported(url) || routePrefetch?.href === url.href) return;
+  discardRoutePrefetch();
+  const controller = new AbortController();
+  const page = fetch(url.href, { credentials: 'same-origin', signal: controller.signal });
+  page.catch(() => {});
+  const match = url.pathname.match(gameRoutePattern);
+  routePrefetch = {
+    href: url.href, controller, page, at: Date.now(),
+    gameData: match ? requestGameData(match[1], controller.signal) : null,
+  };
+}
+function takeRoutePrefetch(href, signal) {
+  const entry = routePrefetch;
+  routePrefetch = null;
+  if (!entry) return null;
+  if (entry.href !== href || Date.now() - entry.at > routePrefetchLifetimeMs) {
+    entry.controller.abort();
+    return null;
+  }
+  signal.addEventListener('abort', () => entry.controller.abort(), { once: true });
+  return entry;
+}
+// The game bundle consumes its match data once, from the route that mounted it.
+let gameDataHandoff = null;
+function consumeGameData(matchId) {
+  const entry = gameDataHandoff;
+  gameDataHandoff = null;
+  return entry && entry.ticket === sequence && entry.matchId === String(matchId) ? entry.request : null;
+}
 const styleLoadsByNode = new WeakMap();
 const styleOwners = new WeakMap();
 function clearRouteHints() {
@@ -271,7 +350,7 @@ function showBattleLoadingBar() {
 }
 function ready() {
   if (!mounted || routeFailed) return;
-  clearTimeout(readinessTimer);
+  clearReadinessTimer();
   updateRouteLoadingBar(100);
   dismissTransition();
   clearRouteHints();
@@ -287,8 +366,10 @@ function fail(error) {
   lobbyAudio.handoff();
   mounted = false;
   ++sequence;
-  clearTimeout(readinessTimer);
+  clearReadinessTimer();
   pendingFetch?.abort();
+  discardRoutePrefetch();
+  gameDataHandoff = null;
   recoveryRequest?.abort();
   recoveryRequest = null;
   failureCode = error.code;
@@ -296,7 +377,7 @@ function fail(error) {
   clearRouteHints();
   preloader.stop();
   console.error('[navigation]', error);
-  showTransition('An error occured');
+  showTransition('An error occurred');
   transition.querySelector('button').hidden = false;
   const retry = transition.querySelector('button');
   if (retryAvailableAt) retryAvailableAt = Math.max(retryAvailableAt, Date.now() + 2000);
@@ -314,7 +395,7 @@ function fail(error) {
 async function retryFailedRoute() {
   if (!routeFailed || recoveryRequest || Date.now() < retryAvailableAt) return;
   const destination = transition?.dataset.destination || location.href;
-  const match = new URL(destination, location.href).pathname.match(/^\/game\/([^/]+)\/?$/);
+  const match = new URL(destination, location.href).pathname.match(gameRoutePattern);
   const code = failureCode;
   const ticket = sequence;
   const controller = new AbortController();
@@ -327,6 +408,7 @@ async function retryFailedRoute() {
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
     let returnToLobby = match && unavailableMatchCodes.has(code);
+    let gameData = null;
     if (match && !returnToLobby) {
       const response = await fetch('/gamedata', {
         method: 'POST', credentials: 'same-origin', signal: controller.signal,
@@ -338,11 +420,13 @@ async function retryFailedRoute() {
       if (!returnToLobby && (!response.ok || !result.success)) {
         throw new Error(result.error || 'Unable to check match');
       }
+      // The check already fetched this match's data; the game reuses it.
+      gameData = Promise.resolve({ ok: response.ok, body: result });
     }
     if (ticket !== sequence || recoveryRequest !== controller) return;
     clearTimeout(timeout);
     if (returnToLobby) await window.__BB_NAVIGATION__.prepareLobbyReturn();
-    else await navigate(destination, { replace: true });
+    else await navigate(destination, { replace: true, gameData });
   } catch (error) {
     if (ticket === sequence && recoveryRequest === controller) fail(error);
   } finally {
@@ -384,7 +468,7 @@ async function executeScript(source, owner) {
   }
   script.remove();
 }
-async function navigate(target, { replace = false, pop = false, lobbyReturnStatus = null } = {}) {
+async function navigate(target, { replace = false, pop = false, lobbyReturnStatus = null, gameData = null } = {}) {
   lobbyReturn.clear();
   clearRouteHints();
   const url = new URL(target, location.href);
@@ -404,15 +488,27 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
   });
   markRoute('start');
   mounted = false;
-  preloader.stop();
+  // A download already in flight finishes into the HTTP cache for the next screen.
+  preloader.stop({ finishActive: true });
   pendingFetch?.abort();
   const controller = new AbortController();
   pendingFetch = controller;
   const inLobby = document.body.dataset.bbScreen === 'lobby' && !!lobbyNavigator;
   const returningToLobby = document.body.dataset.bbScreen === 'game' && !url.pathname.startsWith('/game/');
+  const prefetched = takeRoutePrefetch(url.href, controller.signal);
+  // Request the page (and a battle's match data) before waiting on artwork,
+  // so the network overlaps the transition.
+  const pageRequest = fetchRoute(url.href, controller.signal, returningToLobby, prefetched?.page);
+  pageRequest.catch(() => {});
+  const gameMatch = url.pathname.match(gameRoutePattern);
+  gameDataHandoff = gameMatch ? {
+    ticket, matchId: gameMatch[1],
+    request: gameData || prefetched?.gameData || requestGameData(gameMatch[1], controller.signal),
+  } : null;
   // Leave the outgoing screen intact until the transition image is decoded.
-  if (!inLobby && !transitionArtworkReady) {
-    await prepareTransitionArtwork();
+  const artwork = !inLobby && awaitTransitionArtwork();
+  if (artwork) {
+    await artwork;
     if (ticket !== sequence) return;
   }
   // Keep the interactive lobby visible during a party request.
@@ -431,10 +527,9 @@ async function navigate(target, { replace = false, pop = false, lobbyReturnStatu
     transition.dataset.destination = url.href;
     transition.dataset.lobbyReturn = 'false';
   }
-  clearTimeout(readinessTimer);
-  readinessTimer = setTimeout(() => { if (ticket === sequence) fail(new Error('Screen readiness timed out')); }, 45000);
+  armReadinessTimer(ticket);
   try {
-    const response = await fetchRoute(url.href, controller.signal, returningToLobby);
+    const response = await pageRequest;
     if (ticket !== sequence) return;
     const finalUrl = new URL(response.url);
     if (!supported(finalUrl)) { lobbyReturn.clear(); location.assign(finalUrl.href); return; }
@@ -562,7 +657,9 @@ function scriptScope() {
 function progress(percent, message) {
   if (!transition || !mounted) return;
   if (transition.dataset.presentation === 'loading-bar') {
+    const previous = routeProgress;
     updateRouteLoadingBar(Math.min(99, Number(percent) || 0), message);
+    if (routeProgress > previous && readinessTicket === sequence) armReadinessTimer(sequence);
     return;
   }
   // Late asset callbacks must not overwrite a failure and its retry action.
@@ -576,25 +673,33 @@ window.__BB_NAVIGATION__ = {
   warmRosterCards: preloader.warmRosterCards,
   holdGameplayDownloads: preloader.holdGameplay,
   warmLobby() { preloader.start('lobby'); },
+  prefetchRoute,
+  consumeGameData,
   async prepareLobbyReturn(fallbackPartyId) {
     const routeVersion = sequence;
-    preloader.stop();
-    if (!transitionArtworkReady) {
-      await prepareTransitionArtwork();
-      if (routeVersion !== sequence) return;
-    }
+    preloader.stop({ finishActive: true });
+    const partyId = Number(fallbackPartyId);
+    const hasParty = Number.isFinite(partyId) && partyId > 0;
+    const destination = new URL(hasParty ? `/party/${partyId}` : '/', location.href).href;
+    // The match party is usually still current: load its page alongside /status.
+    if (hasParty) prefetchRoute(destination);
+    const returning = lobbyReturn.prepare(fallbackPartyId);
+    const artwork = awaitTransitionArtwork();
+    if (artwork) await artwork;
+    // A fast /status may already have started the lobby route, which shows its own loader.
+    if (routeVersion !== sequence) return returning;
     mounted = false;
     showLobbyLoadingBar();
-    const partyId = Number(fallbackPartyId);
-    transition.dataset.destination = new URL(Number.isFinite(partyId) && partyId > 0 ? `/party/${partyId}` : '/', location.href).href;
+    transition.dataset.destination = destination;
     transition.dataset.lobbyReturn = 'true';
     if (document.body.dataset.bbScreen === 'game') retireCurrentPage();
-    return lobbyReturn.prepare(fallbackPartyId);
+    return returning;
   },
   async beginBattleLoading() {
-    preloader.stop();
+    preloader.stop({ finishActive: true });
     const ticket = sequence;
-    if (!transitionArtworkReady) await prepareTransitionArtwork();
+    const artwork = awaitTransitionArtwork();
+    if (artwork) await artwork;
     if (ticket !== sequence) return;
     if (!transition) showBattleLoadingBar();
     await transitionEntrance;

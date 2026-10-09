@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const babel = require('@babel/core');
 
-function loadOpPlayer() {
+function loadOpPlayer(onRespawn = () => {}) {
   const exports = {};
   const code = babel.transformSync(
     fs.readFileSync(require.resolve('../src/client/game/players/RemotePlayer.js'), 'utf8'),
@@ -16,6 +16,7 @@ function loadOpPlayer() {
   ).code;
   const noop = () => {};
   const modules = {
+    '../scene/respawnEffect': { spawnRespawnEffect: onRespawn },
     '../characters': {
       getTextureKey: noop,
       resolveAnimKey: () => 'idle',
@@ -41,7 +42,8 @@ function loadOpPlayer() {
 }
 
 test('a pending corpse-removal callback cannot hide a respawned opponent', () => {
-  const OpPlayer = loadOpPlayer();
+  let respawnEffects = 0;
+  const OpPlayer = loadOpPlayer(() => { respawnEffects++; });
   const wrapper = Object.create(OpPlayer.prototype);
   let corpseCallback;
   let timerRemoved = false;
@@ -58,6 +60,7 @@ test('a pending corpse-removal callback cannot hide a respawned opponent', () =>
   wrapper.skinId = '';
   wrapper.opMaxHealth = 100;
   wrapper.effects = null;
+  wrapper.resizeBodyForDuck = () => {};
   wrapper.hideWorldUi = () => {};
   wrapper.setPresenceState = () => {};
   wrapper.updateUIPosition = () => {};
@@ -75,6 +78,7 @@ test('a pending corpse-removal callback cannot hide a respawned opponent', () =>
   wrapper.handleRespawn({ x: 10, y: 20, health: 100 });
   corpseCallback();
 
+  assert.equal(respawnEffects, 1);
   assert.equal(timerRemoved, true);
   assert.equal(wrapper._deathPresentationActive, false);
   assert.equal(wrapper._corpseRemoved, false);

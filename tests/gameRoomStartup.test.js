@@ -227,6 +227,8 @@ for (const lateMs of [PREGAME_MS + 700, null]) {
     await h.join(first);
     await h.join(second);
     await h.ready(first);
+    assert.deepEqual(h.events.filter((e) => e.type === 'player:loaded').map((e) => e.payload.name),
+      [h.human.name], 'clients already in the pregame learn a fighter loaded');
     if (lateMs === null) {
       t.mock.timers.tick(PREGAME_MS + PREGAME_GRACE_MS - 1);
       assert.equal(h.started(), 0);

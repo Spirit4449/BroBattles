@@ -91,6 +91,11 @@ async function loginPermanentUser({ app, db, req }) {
   }
 
   const user = rows[0];
+  // Verify the password before revealing ban status or reason.
+  const ok = await bcrypt.compare(password, user.password || "");
+  if (!ok) {
+    return failure(401, { success: false, error: "Invalid username or password." });
+  }
   if (Number(user?.is_banned || 0) === 1) {
     return {
       ok: false,
@@ -103,10 +108,6 @@ async function loginPermanentUser({ app, db, req }) {
         redirect: "/banned",
       },
     };
-  }
-  const ok = await bcrypt.compare(password, user.password || "");
-  if (!ok) {
-    return failure(401, { success: false, error: "Invalid username or password." });
   }
 
   return {

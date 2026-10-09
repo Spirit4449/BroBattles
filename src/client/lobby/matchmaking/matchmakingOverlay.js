@@ -6,6 +6,8 @@ import { DEFAULT_CHARACTER } from "../../../shared/characters/characterStats.js"
 import { refreshPlatformGrounding } from "../party/platformGrounding.mjs";
 
 const MATCHMAKING_EXIT_MS = 190;
+// Slightly longer than the overlay's 360ms fade-in.
+const MATCHMAKING_COVER_MS = 420;
 const ARRIVAL_MS = 1100;
 const LOBBY_CHROME_SELECTOR =
   "#navbar, .lobby-party-actions, .lobby-quick-actions, #lobby-area, #bottom-bar, .bb-chat-lobby-wrap";
@@ -35,6 +37,7 @@ function describeRoster(players, yourTeam) {
 
 export function createMatchmakingOverlay() {
   let hideTimer = null;
+  let coverTimer = null;
   let countTimer = null;
   // Per queue session: who has been seen (only later joiners play the
   // arrival), who queued from this lobby, and which seat each player holds.
@@ -42,6 +45,23 @@ export function createMatchmakingOverlay() {
   const session = { humans: new Set(), bots: 0, lobby: new Set(), seats: [] };
   const overlay = () => document.getElementById("matchmaking-overlay");
   const cancelButton = () => document.getElementById("mm-cancel");
+
+  // The lobby keeps animating under its blur until the opaque overlay covers
+  // it; skipping that work afterwards keeps phones from dropping frames.
+  function setLobbyCovered(covered) {
+    if (coverTimer) {
+      window.clearTimeout(coverTimer);
+      coverTimer = null;
+    }
+    if (!covered) {
+      document.body.classList.remove("matchmaking-covered");
+      return;
+    }
+    coverTimer = window.setTimeout(() => {
+      coverTimer = null;
+      document.body.classList.add("matchmaking-covered");
+    }, MATCHMAKING_COVER_MS);
+  }
 
   function setLobbyChromeInert(shouldBeInert) {
     document.querySelectorAll(LOBBY_CHROME_SELECTOR).forEach((element) => {
@@ -172,11 +192,13 @@ export function createMatchmakingOverlay() {
     void element.offsetWidth;
     element.classList.add("is-visible");
     element.setAttribute("aria-hidden", "false");
+    if (!document.body.classList.contains("matchmaking-covered") && !coverTimer) setLobbyCovered(true);
   }
 
   function hide({ immediate = false } = {}) {
     const element = overlay();
     if (!element) return;
+    setLobbyCovered(false);
     if (immediate) {
       if (hideTimer) {
         window.clearTimeout(hideTimer);

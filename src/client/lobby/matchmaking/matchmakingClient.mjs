@@ -33,6 +33,7 @@ export function createMatchmakingClient({
   audio = () => null,
   isAdmin = () => false,
   navigate = () => {},
+  prefetchMatch = () => {},
   rememberMatch = () => {},
   dispatchStart = () => {},
   suppressed = false,
@@ -292,6 +293,8 @@ export function createMatchmakingClient({
           return;
         }
         log.log("[join-debug] match:gameReady redirecting", debugMeta({ matchId }));
+        // The match is live now: load its page and data during the success hold.
+        prefetchMatch(matchId);
         const remaining = successHoldRemaining();
         if (remaining > 0) await new Promise((resolve) => timers.setTimeout(resolve, remaining));
         rememberMatch(matchId);

@@ -23,6 +23,9 @@ const WORLD_STATE_EVERY_TICKS = 8;
 // Each mode's world rectangle lives in src/shared/maps/arenas.json. This is
 // how far past its edges players and projectiles may travel (px).
 const WORLD_MARGIN = 400;
+// A player whose position is this far below the world's bottom edge has fallen
+// out and dies instantly (px). Must stay below WORLD_MARGIN to be reachable.
+const FALL_OUT_DEPTH = 50;
 
 // ---------------------------------------------------------------------------
 // Lobby & party
@@ -38,5 +41,6 @@ module.exports = {
   SNAPSHOT_EVERY_TICKS,
   WORLD_STATE_EVERY_TICKS,
   WORLD_MARGIN,
+  FALL_OUT_DEPTH,
   PARTY_JOIN_REQUEST_TIMEOUT_MS,
 };

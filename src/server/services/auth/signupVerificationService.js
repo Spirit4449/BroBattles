@@ -8,11 +8,6 @@ const result=(statusCode,payload)=>({ok:statusCode<400,statusCode,payload});
 const fail=(message,status=400)=>result(status,{success:false,error:message});
 const digest=(id,email,code)=>hashCode(`signup:${id}`,email,code);
 const {emailCooldown}=require('../email/emailCooldown');
-function rateError(row) {
-  const now=Date.now();
-  if(row.sent_at && now-new Date(row.sent_at).getTime()<60000) return fail('Wait a minute before requesting another code.',429);
-  if(row.window_start && now-new Date(row.window_start).getTime()<3600000 && row.send_count>=5) return fail('Too many codes requested. Try again in an hour.',429);
-}
 async function getGuest({requireCurrentUser,req,res}) {
   if(getBanHoldFromRequest(req))return null;
   const user=await requireCurrentUser(req,res);
@@ -92,4 +87,4 @@ async function verifySignup(context) {
     });
   }catch(error){if(error.code==='ER_DUP_ENTRY')return fail('That username or email was just taken. Go back and edit your details.',409);throw error;}
 }
-module.exports={beginSignup,pendingSignup,resendSignup,cancelSignup,verifySignup,rateError};
+module.exports={beginSignup,pendingSignup,resendSignup,cancelSignup,verifySignup};

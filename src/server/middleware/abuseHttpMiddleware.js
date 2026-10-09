@@ -56,6 +56,7 @@ function createAbuseHttpMiddleware({ abuseControl, resolveUser = async () => nul
         limit: bucket.limit,
         windowMs: bucket.windowMs,
         anonLimit: bucket.anonLimit,
+        scope: bucket.scope,
         enforceActiveSuspension: policy.enforceActiveSuspension !== false,
         countFailuresOnly: policy.countFailuresOnly === true,
       });

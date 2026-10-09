@@ -10,6 +10,15 @@ const WALL_JUMP_RECOIL_IN_MS = 80;
 const WALL_JUMP_RECOIL_OUT_MS = 220;
 const WALL_JUMP_RECOIL_PX = 3;
 const WALL_JUMP_ZOOM_RATIO = 0.01;
+export const FOLLOW_LERP = { x: 0.08, y: 0.05 };
+
+function movementFollowLerp(velocity, axis, delta) {
+  // Preserve gentle walking/jump tracking, then tighten up for dashes and falls.
+  const speed = Math.abs(Number(velocity) || 0);
+  const fast = smoothstep((speed - 300) / 700);
+  const perFrame = FOLLOW_LERP[axis] + (0.3 - FOLLOW_LERP[axis]) * fast;
+  return 1 - Math.pow(1 - perFrame, delta / (1000 / 60));
+}
 
 function resetMovementCameraFeedback(scene, cam) {
   scene._wallJumpCameraKick = null;
@@ -78,6 +87,12 @@ export function updateDynamicCamera(scene, player) {
   if (!scene || !player) return;
 
   const cam = scene.cameras.main;
+
+  const followDelta = clamp(scene.game.loop.delta || 1000 / 60, 0, 100);
+  cam.setLerp(
+    movementFollowLerp(player.body?.velocity?.x, 'x', followDelta),
+    movementFollowLerp(player.body?.velocity?.y, 'y', followDelta),
+  );
 
   // Smoothly approach the resting framing for the player's height.
   const { zoom: targetZoom, followOffsetY: targetFollowOffsetY } = restingCameraFrame(player.y, scene._mapArena.camera);

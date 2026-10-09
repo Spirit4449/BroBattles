@@ -497,6 +497,7 @@ function createAbuseControlService({ db, io }) {
     limit,
     windowMs,
     anonLimit,
+    scope = "",
     enforceActiveSuspension = true,
     countFailuresOnly = false,
   }) {
@@ -550,7 +551,11 @@ function createAbuseControlService({ db, io }) {
       ? Number(limit)
       : Number(anonLimit || limit || 1);
     const count = markBucketAndGetCount(
-      countFailuresOnly ? `http:failures:${source}:${identityKey}` : `http:${identityKey}`,
+      countFailuresOnly
+        ? `http:failures:${source}:${identityKey}`
+        : scope
+          ? `http:${scope}:${identityKey}`
+          : `http:${identityKey}`,
       Number(windowMs) || 10000,
       now,
       !countFailuresOnly,

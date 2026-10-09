@@ -149,5 +149,11 @@ export function pixelSprite(name, scale = 2, className = "") {
       if (color) rects += `<rect x="${x}" y="${y}" width="1" height="1" fill="${color}"/>`;
     }
   });
-  return `<svg class="bb-pixel ${className}" viewBox="0 0 ${width} ${height}" width="${width * scale}" height="${height * scale}" shape-rendering="crispEdges" aria-hidden="true">${rects}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="bb-pixel ${className}" viewBox="0 0 ${width} ${height}" width="${width * scale}" height="${height * scale}" shape-rendering="crispEdges" aria-hidden="true">${rects}</svg>`;
+}
+
+// Same sprite as an image URL, for places that take an <img> source.
+export function pixelSpriteUrl(name) {
+  const svg = pixelSprite(name, 1);
+  return svg ? `data:image/svg+xml,${encodeURIComponent(svg)}` : "";
 }

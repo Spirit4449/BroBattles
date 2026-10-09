@@ -48,6 +48,10 @@ function registerFriendRoutes({ app, requireCurrentUser, friendService, abuseCon
     relationship: await friendService.getRelationship(user, Number(req.query?.userId)),
   }));
 
+  route("get", "/friends/privacy", (user) => friendService.getPrivacySettings(user));
+
+  route("post", "/friends/privacy", (user, req) => friendService.updatePrivacy(user, req.body?.privacy));
+
   route("post", "/friends/request", async (user, req, res) => {
     if (!(await guard(res, user, "reaction", "POST /friends/request"))) return;
     const { userId, username, friendCode, query } = req.body || {};

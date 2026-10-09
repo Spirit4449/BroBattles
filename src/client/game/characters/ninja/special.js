@@ -29,7 +29,6 @@ function lockFlipDuringRelease(scene, player) {
 function spawnSingleSwarmShuriken(
   scene,
   player,
-  opponentPlayers,
   username,
   gameId,
   isOwner,
@@ -70,26 +69,18 @@ function spawnSingleSwarmShuriken(
     forwardDistance: shard.forwardDistance,
     outwardDuration: shard.outwardDuration,
     returnSpeed: shard.returnSpeed,
-    hitCooldown: SWARM.hitCooldownMs,
     endYOffset: shard.endYOffset,
     ctrl1YOffset: shard.ctrl1YOffset,
     ctrl2YOffset: shard.ctrl2YOffset,
     maxLifetime: SWARM.maxLifetimeMs,
   };
 
-  const shuriken = new ReturningShuriken(
+  new ReturningShuriken(
     scene,
     { x: spawnX, y: spawnY },
     player,
     config,
   );
-
-  if (isOwner) {
-    const enemyList = Array.isArray(opponentPlayers)
-      ? opponentPlayers
-      : Object.values(opponentPlayers || {});
-    shuriken.attachEnemyOverlap(enemyList);
-  }
 }
 
 export function perform(
@@ -126,7 +117,6 @@ export function perform(
       spawnSingleSwarmShuriken(
         scene,
         player,
-        opponentPlayers,
         username,
         gameId,
         isOwner,

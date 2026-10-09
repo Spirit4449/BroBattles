@@ -48,18 +48,6 @@ function registerPartyEvents(
   socket,
   { db, io, mm, partyPresence, partyState, partyQueueTransition, gameHub, PARTY_STATUS },
 ) {
-  async function setPartyStatusSafe(partyId, status) {
-    if (!partyId) return;
-    if (typeof db.setPartyStatus === "function") {
-      await db.setPartyStatus(partyId, status);
-      return;
-    }
-    await db.runQuery("UPDATE parties SET status = ? WHERE party_id = ?", [
-      status,
-      partyId,
-    ]);
-  }
-
   async function broadcastSelectionNotice(partyId, actorName, selection, kind) {
     const label =
       kind === "map"
@@ -159,13 +147,13 @@ function registerPartyEvents(
             [partyId],
           );
           if (!liveRows.length) {
-            await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
+            await db.setPartyStatus(partyId, PARTY_STATUS.IDLE);
             partyStatus = PARTY_STATUS.IDLE;
             console.warn(
               `[party:${partyId}] recovered stale live status during ready toggle`,
             );
           } else if (await gameHub?.endEmptyMatch(Number(liveRows[0].match_id))) {
-            await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
+            await db.setPartyStatus(partyId, PARTY_STATUS.IDLE);
             partyStatus = PARTY_STATUS.IDLE;
           } else {
             throw new Error("Your party is still in battle.");
@@ -182,14 +170,14 @@ function registerPartyEvents(
              WHERE mp.party_id = ? AND m.status IN ('queued', 'live') LIMIT 1`, [partyId],
           );
           if (!tickets.length && !matches.length) {
-            await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
+            await db.setPartyStatus(partyId, PARTY_STATUS.IDLE);
             partyStatus = PARTY_STATUS.IDLE;
           }
         }
         if (partyStatus === PARTY_STATUS.READY_CHECK && typeof mm.queueStatus === "function") {
           const queue = await mm.queueStatus({ partyId });
           if (queue.state === "missing") {
-            await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
+            await db.setPartyStatus(partyId, PARTY_STATUS.IDLE);
             partyStatus = PARTY_STATUS.IDLE;
           }
         }
@@ -228,7 +216,7 @@ function registerPartyEvents(
               throw new Error(getSelectionBlockReason(selection));
             }
             const botSlots = getPartyBotSlots(partyId);
-            await setPartyStatusSafe(partyId, PARTY_STATUS.QUEUED);
+            await db.setPartyStatus(partyId, PARTY_STATUS.QUEUED);
             await mm.queueJoin({
               partyId,
               modeId: selection.modeId,
@@ -245,7 +233,7 @@ function registerPartyEvents(
           } catch (err) {
             console.warn("enqueue failed:", err?.message);
             try {
-              await setPartyStatusSafe(partyId, PARTY_STATUS.IDLE);
+              await db.setPartyStatus(partyId, PARTY_STATUS.IDLE);
             } catch (_) {}
             await partyQueueTransition.cancelPartyQueue({
               partyId,

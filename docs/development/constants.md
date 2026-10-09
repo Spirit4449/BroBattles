@@ -82,10 +82,11 @@ The local player, the server's movement validation, and the bot physics all read
 | `wallKickVerticalMult` | Vertical scale on a wall kick. |
 | `wallKickLockMs` | Steering lockout after a wall kick. |
 | `minSpeedMult` / `maxSpeedMult` | Clamp on combined slow/haste effects. |
-| `dashSpeed` / `dashDownSpeed` | Dash burst speed in any normalized direction / the straight-down override (px/s). |
+| `dashSpeed` / `dashDownSpeed` | Dash vertical launch speed, applied to the normalized vertical component / the straight-down override (px/s). |
 | `dashDurationMs` | Length of the dash burst. |
 | `dashCooldownMs` | Cooldown after the burst; ordinary launch-to-launch spacing is `dashDurationMs + dashCooldownMs`. |
-| `dashMaxSpeed` | Per-axis burst cap; straight-down vertical motion uses `dashDownSpeed` instead. Coast/normal movement restore their own limits. |
+| `dashHorizontalSpeed` | Horizontal dash launch speed and horizontal burst cap (px/s); `dashSpeed` still sets the vertical component. |
+| `dashMaxSpeed` | Vertical burst cap; straight-down vertical motion uses `dashDownSpeed` instead. Coast/normal movement restore their own limits. |
 | `dashSteerAccel` | Grounded burst steering acceleration (px/s²). Steering stops once that burst becomes airborne. |
 | `dashCoastMs` / `dashCoastDrag` | Maximum coast window (ms) / airborne horizontal deceleration (px/s²). Ground coast uses `dashSurfaceDrag`; interruption can end coasting sooner. |
 | `dashSurfaceDrag` | Drag while dashing along the ground or a ceiling. |
@@ -140,7 +141,7 @@ The admin panel calls the runtime configuration service, which updates in-memory
 | `gameConstants.js` | 60 Hz simulation; snapshots every 2 ticks; world state every 8 ticks; fallback world 3600 × 1000px with 400px margin; party join requests expire after 15s |
 | `gameRoomConfig.js`: match | Duels regular time 150s; poison rises at 15px/s, ×2.2 for the first 12s; poison damage 400/s; sudden-death cap 80s; timer broadcast 500ms; elimination finish delay 3s; all-human departure grace 15s |
 | `gameRoomConfig.js`: regen | Starts after 3.5s out of combat; ticks every 1.5s for 25% of missing health, minimum 500, capped at max health |
-| `gameRoomConfig.js`: powerups | Spawn interval 25s; starting count 2; max active 3; pickup radius 70px; despawn 10s after the 2s omen; anchored spawn lift 22px |
+| `gameRoomConfig.js`: powerups | Spawn interval 25s; starting count 2; max active 3; pickup radius 34px (collected when a hurtbox overlaps the pickup circle); despawn 10s after the 2s omen; anchored spawn lift 22px |
 | `gameRoomConfig.js`: drops | Lifetime 12s; final 3s blinking; pickup radius 110px; 4–8 coin drops and 1–3 gem drops |
 | `gameRoomConfig.js`: validation | Hit rewind cap 300ms; future tolerance 120ms; history 1s / 128 samples; duplicate-hit window 80ms; stomp radius 110px and interruption 300ms |
 | `movementPhysics.json` | Run speed 260px/s; ground/air acceleration 3000/3300px/s²; gravity 990px/s²; jump speed parameter 468px/s; dash 560px/s (straight down 840), burst 160ms, cooldown 5000ms, coast up to 850ms |

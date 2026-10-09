@@ -2,8 +2,6 @@
 // Shared lightweight VFX helpers for movement, combat, and player lifecycle.
 import { RENDER_LAYERS } from "./renderLayers";
 
-const dustPool = [];
-const dustPoolMax = 120;
 const markerPool = new Set();
 
 // Central tuning for movement feedback. These effects use Phaser primitives so
@@ -569,60 +567,6 @@ export function spawnFastFallTrail(scene, sprite, opts = {}) {
   }
 }
 
-export function spawnDust(scene, x, y, tint = 0xbbbbbb) {
-  let g = dustPool.find((o) => !o.active);
-  if (!g) {
-    g = scene.add.graphics();
-    dustPool.push(g);
-  }
-  g.active = true;
-  g.clear();
-  g.setDepth(MOVEMENT_VFX_CONFIG.behindPlayerDepth);
-  const baseSize = Phaser.Math.Between(6, 10);
-  // Slightly higher starting alpha range for better visibility
-  const alphaStart = Phaser.Math.FloatBetween(0.45, 0.65);
-  const puffColor = Phaser.Display.Color.IntegerToColor(tint);
-  const pixel = Math.max(2, Math.round(baseSize / 3));
-  g.fillStyle(puffColor.color, alphaStart * 0.56);
-  g.fillRect(-pixel * 3, 0, pixel * 2, pixel * 2);
-  g.fillRect(pixel * 2, pixel, pixel * 2, pixel * 2);
-  g.fillStyle(puffColor.color, alphaStart);
-  g.fillRect(-pixel * 2, -pixel, pixel * 4, pixel * 3);
-  g.fillStyle(MOVEMENT_VFX_CONFIG.dustHighlight, alphaStart * 0.42);
-  g.fillRect(-pixel, -pixel * 2, pixel * 2, pixel);
-  g.x = x + Phaser.Math.Between(-4, 4);
-  g.y = y + Phaser.Math.Between(-2, 2);
-  const rise = Phaser.Math.Between(10, 22);
-  const driftX = Phaser.Math.Between(-12, 12);
-  const scaleTarget = Phaser.Math.FloatBetween(1.2, 1.6);
-  const duration = Phaser.Math.Between(380, 520);
-  g.scale = 1;
-  g.alpha = alphaStart;
-  scene.tweens.add({
-    targets: g,
-    x: g.x + driftX,
-    y: g.y - rise,
-    alpha: 0,
-    scale: scaleTarget,
-    duration,
-    ease: "Cubic.easeOut",
-    onComplete: () => {
-      g.active = false;
-      g.alpha = 1;
-      g.scale = 1;
-      g.clear();
-    },
-  });
-  if (dustPool.length > dustPoolMax) {
-    const old = dustPool.find((o) => !o.active);
-    if (old) {
-      old.destroy();
-      const idx = dustPool.indexOf(old);
-      if (idx >= 0) dustPool.splice(idx, 1);
-    }
-  }
-}
-
 export function spawnWallKickCloud(
   scene,
   x,
@@ -691,16 +635,6 @@ export function spawnWallKickCloud(
       ease: "Cubic.easeOut",
     });
   }
-}
-
-export function prewarmDust(scene, count = 6) {
-  for (let i = 0; i < count; i++) {
-    spawnDust(scene, -9999, -9999);
-  }
-  dustPool.forEach((g) => {
-    g.active = false;
-    g.clear();
-  });
 }
 
 export function spawnHealthMarker(scene, x, y, delta, opts = {}) {
@@ -1223,6 +1157,126 @@ export function spawnSpawnBurst(scene, sprite, opts = {}) {
       onComplete: () => strand.destroy(),
     });
   }
+}
+
+// Pixel "decloak" when the invisibility powerup ends: the sprite materializes
+// through a mask of chunky cells that switch on in a loose, noisy head-to-toe
+// order, while chroma pixels flicker in and out over the body. The mask is set
+// synchronously so the sprite never flashes fully visible before the effect.
+const CHROMA_CELL = 4;
+
+export function spawnChromaReveal(scene, sprite, opts = {}) {
+  if (!scene?.make || !scene.tweens || !sprite?.active || !sprite.frame) return;
+
+  sprite._chromaRevealStop?.();
+  const depth =
+    typeof opts.depth === "number" ? opts.depth : RENDER_LAYERS.PLAYER_HUD;
+  const duration = Number(opts.duration) || 520;
+  const hueStart = Math.random();
+  const hueAt = (h) =>
+    Phaser.Display.Color.HSVToRGB(((h % 1) + 1) % 1, 0.85, 1).color;
+
+  const cols = Math.max(1, Math.ceil(sprite.displayWidth / CHROMA_CELL));
+  const rows = Math.max(1, Math.ceil(sprite.displayHeight / CHROMA_CELL));
+  // Mostly top-down, with enough noise that the front stays ragged.
+  const cells = [];
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      cells.push({ r, c, jitter: Math.random(), revealed: false });
+    }
+  }
+
+  const maskGraphics = scene.make.graphics({}, false);
+  const mask = maskGraphics.createGeometryMask();
+  sprite.setMask(mask);
+
+  const frameBounds = () => {
+    const w = Math.abs(sprite.displayWidth);
+    const h = Math.abs(sprite.displayHeight);
+    const left = sprite.x - sprite.originX * w;
+    const top = sprite.y - sprite.originY * h;
+    const body = sprite.body;
+    const headTop = Math.max(top, (Number(body?.top) || top) - 10);
+    const feet = Math.max(headTop + 1, Number(body?.bottom) || top + h);
+    return { w, h, left, top, body, headTop, feet };
+  };
+
+  const spawnPixel = (x, y, hue) => {
+    const pixel = scene.add.rectangle(
+      x,
+      y,
+      CHROMA_CELL,
+      CHROMA_CELL,
+      hueAt(hue),
+      0,
+    );
+    pixel.setOrigin(0, 0);
+    pixel.setDepth(depth);
+    pixel.setBlendMode(Phaser.BlendModes.ADD);
+    scene.tweens.add({
+      targets: pixel,
+      fillAlpha: 0.9,
+      duration: Phaser.Math.Between(60, 110),
+      hold: Phaser.Math.Between(20, 70),
+      yoyo: true,
+      ease: "Sine.easeInOut",
+      onComplete: () => pixel.destroy(),
+    });
+  };
+
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    if (sprite._chromaRevealStop === finish) sprite._chromaRevealStop = null;
+    tween?.stop();
+    if (sprite.active && sprite.mask === mask) sprite.clearMask();
+    mask.destroy();
+    maskGraphics.destroy();
+  };
+
+  const draw = (t) => {
+    const b = frameBounds();
+    const cellW = b.w / cols;
+    const cellH = b.h / rows;
+    const span = b.feet - b.headTop;
+    const bodyLeft = Number(b.body?.left) || b.left;
+    const bodyRight = Number(b.body?.right) || b.left + b.w;
+    maskGraphics.clear();
+    maskGraphics.fillStyle(0xffffff, 1);
+    for (const cell of cells) {
+      const x = b.left + cell.c * cellW;
+      const y = b.top + cell.r * cellH;
+      const progress = Phaser.Math.Clamp((y - b.headTop) / span, 0, 1);
+      const threshold = progress * 0.6 + cell.jitter * 0.4;
+      if (t < threshold) continue;
+      maskGraphics.fillRect(x, y, Math.ceil(cellW), Math.ceil(cellH));
+      if (cell.revealed) continue;
+      cell.revealed = true;
+      const onBody =
+        x + cellW > bodyLeft && x < bodyRight && y + cellH > b.headTop && y < b.feet;
+      if (onBody && Math.random() < 0.45) {
+        spawnPixel(Math.round(x), Math.round(y), hueStart + progress * 0.8 + cell.jitter * 0.2);
+      }
+    }
+  };
+
+  const tween = scene.tweens.addCounter({
+    from: 0,
+    to: 1,
+    duration,
+    ease: "Linear",
+    onUpdate: (tw) => {
+      if (!sprite.active || sprite._powerupInvisible) {
+        finish();
+        return;
+      }
+      draw(tw.getValue());
+    },
+    onComplete: finish,
+  });
+  sprite._chromaRevealStop = finish;
+  draw(0);
 }
 
 export function triggerDamageScreenPulse(scene, opts = {}) {

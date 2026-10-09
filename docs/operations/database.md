@@ -37,6 +37,7 @@ Apply older SQL in chronological order after checking existing schema. Do not bl
 | `friends` | Users and matches; adds friend codes, social tables and the matches-created index |
 | `name-changes` | Users; adds nullable `users.next_name_change_at` for the paid monthly rename cooldown |
 | `friend-last-seen` | Users; adds nullable `users.last_seen_at` for persistent friend activity history |
+| `privacy-settings` | Users; creates `user_privacy_settings` for friend request, message, invite, last-seen, receipt and suggestion privacy |
 
 The helper's list order is not a dependency order: run `signup-marketing` before `email-polish`. Trophy Road's non-currency backfill calls application services; running its SQL alone is insufficient. Friends also adds columns/indexes outside its SQL file. Verify each environment independently; this documentation makes no claim about its applied state.
 
@@ -60,6 +61,7 @@ Use the actual SQL in [migrations](../../migrations/) for definitions rather tha
 | Site support | `legal_acceptances`, `site_requests`, `site_request_messages`; `2026-09-12_site_support.sql` |
 | Email and marketing | `account_emails`, `email_outbox`, `pending_signups`, `email_marketing`, `marketing_jobs`, `marketing_contact_sync`, `email_webhook_events`; September 13 migrations |
 | Friends | `friend_requests`, `friendships`, `friend_messages`, `friend_message_reactions`; `2026-10-02_friends.sql` plus helper |
+| Privacy | `user_privacy_settings`, one optional row per account; `2026-10-09_privacy_settings.sql` |
 
 Friend data is keyed by account ID, not username. The generated pending-pair key prevents concurrent pending requests for the same pair. Friendships store both directions; generated conversation pair columns support direct-message lookups. Guests cannot use friends.
 

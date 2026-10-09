@@ -15,6 +15,9 @@ const HTTP_BUCKETS = {
   strict: { limit: 8, windowMs: 10000, anonLimit: 4 },
   medium: { limit: 14, windowMs: 10000, anonLimit: 7 },
   lenient: { limit: 26, windowMs: 10000, anonLimit: 12 },
+  // Equipping is a cheap write that players repeat while browsing their
+  // collection, so it counts separately from the shared per-user allowance.
+  equip: { limit: 20, windowMs: 10000, anonLimit: 15, scope: "equip" },
 };
 
 const HTTP_ROUTE_POLICIES = {
@@ -42,12 +45,12 @@ const HTTP_ROUTE_POLICIES = {
   "POST /party/settings/update": { bucket: "medium" },
   "POST /party/join-request": { bucket: "medium" },
   "POST /party/join-request/respond": { bucket: "medium" },
-  "POST /selection-preferences": { bucket: "medium" },
-  "POST /player-cards/select": { bucket: "medium" },
+  "POST /selection-preferences": { bucket: "equip" },
+  "POST /player-cards/select": { bucket: "equip" },
   "POST /player-cards/buy": { bucket: "medium" },
-  "POST /profile-icons/select": { bucket: "medium" },
+  "POST /profile-icons/select": { bucket: "equip" },
   "POST /profile-icons/buy": { bucket: "medium" },
-  "POST /skins/select": { bucket: "medium" },
+  "POST /skins/select": { bucket: "equip" },
   "POST /skins/buy": { bucket: "medium" },
   "POST /trophies/claim": { bucket: "medium" },
   "POST /gamedata": { bucket: "medium" },

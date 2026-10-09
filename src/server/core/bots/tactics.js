@@ -4,7 +4,8 @@ const { bounds } = require('./physics');
 const { teamPosition } = require('./teamwork');
 const effects = require('../gameRoom/effects/effectManager');
 const { botProfile } = require('./characterProfiles');
-const { POWERUP_SHOCKWAVE_RADIUS, POWERUP_PICKUP_RADIUS, DEATH_DROP_PICKUP_RADIUS } = require('../gameRoomConfig');
+const { POWERUP_SHOCKWAVE_RADIUS, DEATH_DROP_PICKUP_RADIUS } = require('../gameRoomConfig');
+const { powerupGap, powerupReachX } = require('../gameRoom/powerupContact');
 
 const style = (player) => botProfile(player.char_class).spacing;
 const healthFraction = (p) => Math.max(0, Math.min(1, p.health / Math.max(1, p.maxHealth)));
@@ -18,20 +19,30 @@ function pickupTravel(brain, pickup, route) {
   return distance(brain.player, pickup) + routeCost(route) * 0.32;
 }
 
-function collectionDestination(brain, context, pickup, now, radius = POWERUP_PICKUP_RADIUS) {
+// Powerups are collected by hurtbox overlap with the orb; death drops by
+// distance from the fighter's position.
+function powerupReach(player, pickup) {
+  return { x: powerupReachX(player), gap: (at) => powerupGap(player, pickup, at) };
+}
+
+function dropReach(drop) {
+  return { x: DEATH_DROP_PICKUP_RADIUS, gap: (at) => distance(at, drop) - DEATH_DROP_PICKUP_RADIUS };
+}
+
+function collectionDestination(brain, context, pickup, now, reach = powerupReach(brain.player, pickup)) {
   let best = null, cost = Infinity;
   for (const surface of context.graph.surfaces) {
     const limits = walkLimits(surface, brain.player.char_class);
     const x = Math.max(limits.left, Math.min(limits.right, pickup.x));
     const stance = standOn(surface, brain.player.char_class, x);
-    if (Math.abs(x - pickup.x) >= radius ||
+    if (Math.abs(x - pickup.x) >= reach.x ||
         !canStandAt(brain.room.geometry, surface, brain.player.char_class, x)) continue;
     // Only pursue a pickup this stance (or a safe hop from it) can collect.
-    if (distance(stance, pickup) >= radius - 2) {
+    if (reach.gap(stance) >= -2) {
       if (pickup.y >= stance.y || stance.y - pickup.y > 240) continue;
       const hop = previewManeuver(stance, { direction: 0, jumpPressed: true }, brain.room.geometry,
         effects.getModifiers(brain.player, now), now, context.poisonY);
-      if (!hop || !hop.frames.some((f) => distance(f, pickup) < radius - 5)) continue;
+      if (!hop || !hop.frames.some((f) => reach.gap(f) < -5)) continue;
     }
     const route = context.routeTo(surface.id, x);
     if (route === null) continue;
@@ -244,7 +255,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
         yield;
       if (brain.retreating && enemies.some((enemy) => distance(p, enemy) < 650)) continue;
       if (!drop || drop.claimedBy || Number(drop.expiresAt || 0) <= now || drop.y >= poisonY - 40) continue;
-      const destination = collectionDestination(brain, context, drop, now, DEATH_DROP_PICKUP_RADIUS);
+      const destination = collectionDestination(brain, context, drop, now, dropReach(drop));
       if (!destination) continue;
       const { surface, route } = destination;
       const range = distance(p, drop);
@@ -403,6 +414,5 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
 // Synchronous adapters keep offline behavior tools usable; the live controller
 // consumes the same generators in small slices.
 function finishSteps(steps) { let result; do { result = steps.next(); } while (!result.done); return result.value; }
-function selectTarget(...args) { return finishSteps(selectTargetSteps(...args)); }
 function chooseDecision(...args) { return finishSteps(chooseDecisionSteps(...args)); }
-module.exports = { healthFraction, preferredRange, surfaceFor, selectTarget, chooseDecision, selectTargetSteps, chooseDecisionSteps, finishSteps };
+module.exports = { healthFraction, preferredRange, surfaceFor, chooseDecision, selectTargetSteps, chooseDecisionSteps, finishSteps };

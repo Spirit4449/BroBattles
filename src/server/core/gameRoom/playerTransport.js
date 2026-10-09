@@ -69,16 +69,6 @@ function setupPlayerSocket(room, socket) {
     // Handle special attack request
   room.onSocket(socket, "game:special", (payload = {}) => room.requestSpecial(socket.id, payload));
 
-    // Owner-side hit proposal (server authoritative application)
-  room.onSocket(socket, "hit", (payload) => {
-    room.handleHit(socket.id, payload);
-  });
-
-    // Heal proposal (e.g., abilities/pickups) - server clamps and applies
-  room.onSocket(socket, "heal", (payload) => {
-    room.handleHeal(socket.id, payload);
-  });
-
   room.onSocket(socket, "deathdrop:pickup", (payload) => {
     room._handleDeathDropPickup(socket.id, payload);
   });
@@ -100,6 +90,11 @@ function setupPlayerSocket(room, socket) {
         p._sceneReady = true;
         p.loaded = Number.isFinite(p.x) && Number.isFinite(p.y);
         inputManager.updateBodyGeometry(p, room);
+        // No snapshots flow before FIGHT, so clients that loaded earlier would
+        // keep this fighter hidden through the pregame without this.
+        if (p.loaded) {
+          room.io.to(`game:${room.matchId}`).emit("player:loaded", { name: p.name });
+        }
       }
       if (room._noteReady(p) && !room._netTestEnabled) {
         console.log(

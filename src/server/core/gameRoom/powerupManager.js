@@ -14,6 +14,7 @@ const {
 const { getDuelGeometry } = require("../../../shared/physics/duelGeometry");
 const { resolvePowerupPoints } = require("../../../shared/maps/mapDocument");
 const effectManager = require("./effects/effectManager");
+const { powerupGap } = require("./powerupContact");
 const { matchDurationMs } = require("./timerManager");
 const { effectDefs } = require("./effects/effectDefs");
 
@@ -225,9 +226,7 @@ function tickPowerups(room) {
     if (now < Number(pu.activeAt ?? pu.spawnedAt ?? 0) + PICKUP_DELAY_MS) continue;
     for (const p of room.players.values()) {
       if (!p.isAlive || p.connected === false || p.loaded !== true) continue;
-      const dx = (p.x || 0) - pu.x;
-      const dy = (p.y || 0) - pu.y;
-      if (Math.hypot(dx, dy) > (room.geometry?.settings?.pickupRadius ?? POWERUP_PICKUP_RADIUS)) continue;
+      if (powerupGap(p, pu, p, room.geometry?.settings?.pickupRadius ?? POWERUP_PICKUP_RADIUS) > 0) continue;
 
       applyPowerupToPlayer(room, p, pu.type, now);
       room._powerups.delete(id);

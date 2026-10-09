@@ -11,18 +11,6 @@ function registerMatchmakingEvents(
   socket,
   { db, io, mm, PARTY_STATUS, abuseControl },
 ) {
-  async function setPartyStatusSafe(partyId, status) {
-    if (!partyId) return;
-    if (typeof db.setPartyStatus === "function") {
-      await db.setPartyStatus(partyId, status);
-      return;
-    }
-    await db.runQuery("UPDATE parties SET status = ? WHERE party_id = ?", [
-      status,
-      partyId,
-    ]);
-  }
-
   socket.on("queue:join", async (data) => {
     try {
       const uname = socket.data.user?.name;
@@ -157,7 +145,7 @@ function registerMatchmakingEvents(
       }
       if (pid) {
         try {
-          await setPartyStatusSafe(pid, PARTY_STATUS.IDLE);
+          await db.setPartyStatus(pid, PARTY_STATUS.IDLE);
         } catch (_) {}
         try {
           const members = await db.fetchPartyMembersDetailed(pid);

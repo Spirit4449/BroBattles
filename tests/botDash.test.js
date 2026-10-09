@@ -121,7 +121,7 @@ test('airborne dash keeps its burst velocity, restores gravity, and replays a sa
   startDash(p, direction, now);
   preview.frames.forEach((frame, i) => {
     stepBody(p, frame, geometry, 1000 / 60, now + i * 1000 / 60);
-    if (i < 9) { assert.equal(p.vy, 0); assert.equal(p.vx, -movement.dashSpeed); }
+    if (i < 9) { assert.equal(p.vy, 0); assert.equal(p.vx, -movement.dashHorizontalSpeed); }
     if (i === 10) assert.ok(p.vy > 0, 'gravity resumes after the burst');
   });
   assert.equal(p.x, preview.end.x);

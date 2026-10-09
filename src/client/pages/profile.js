@@ -133,7 +133,9 @@ function renderCardsGrid() {
           };
           warmEquippedPlayerCard(profileData.selectedCardId);
           renderProfile(profileData);
-          renderCardsGrid();
+          // Rebuilding the grid would dispose and reload every card's media,
+          // so the tiles blink. Only rebuild when ownership actually changed.
+          if (!updateCardsGridSelection()) renderCardsGrid();
         } catch (err) {
           const msg = String(err?.message || "Please try again.");
           sonner("Could not equip player card", msg, "error");
@@ -143,6 +145,37 @@ function renderCardsGrid() {
 
     grid.appendChild(tile);
   });
+}
+
+// Flips the equipped state on the existing tiles. Returns false when the
+// rendered tiles no longer match the owned cards and the grid must rebuild.
+function updateCardsGridSelection() {
+  const grid = document.getElementById("cards-grid");
+  if (!grid) return true;
+  const buttons = [...grid.querySelectorAll("button[data-card-id]")];
+  const owned = new Set(
+    (profileData?.ownedCardIds || []).map((x) => String(x)),
+  );
+  const ownedIds = (cardsCatalog?.cards || [])
+    .map((card) => String(card?.id || ""))
+    .filter((id) => owned.has(id));
+  const rendered = new Set(buttons.map((btn) => btn.dataset.cardId));
+  if (
+    !ownedIds.length ||
+    rendered.size !== ownedIds.length ||
+    ownedIds.some((id) => !rendered.has(id))
+  ) {
+    return false;
+  }
+  const selected = String(profileData?.selectedCardId || "");
+  buttons.forEach((btn) => {
+    const isSelected = btn.dataset.cardId === selected;
+    btn.disabled = isSelected;
+    btn.textContent = isSelected ? "Selected" : "Equip";
+    const label = btn.parentElement?.querySelector("span");
+    if (label) label.textContent = isSelected ? "Equipped" : "Owned";
+  });
+  return true;
 }
 
 function renderIconsGrid() {

@@ -1124,6 +1124,15 @@ export function createMatchCoordinator(config) {
     }
   }
 
+  // Another fighter finished loading during the pregame (no snapshots yet).
+  function _onPlayerLoaded(data) {
+    if (!data?.name) return;
+    const wrapper = opponentPlayers[data.name] || teamPlayers[data.name] || _ensureOpPlayer(data.name);
+    hud.setTeamHudPlayerPresence(data.name, true);
+    hud.setTeamHudPlayerLoaded(data.name, true);
+    wrapper?.setPresenceState?.(true, true);
+  }
+
   function _onGameOver(payload) {
     resetCharacterNetworks();
     if (getGameEnded()) return; // idempotent guard
@@ -1294,6 +1303,7 @@ export function createMatchCoordinator(config) {
     socket.on("game:error", _onGameError);
     socket.on("player:disconnected", _onPlayerDisconnected);
     socket.on("player:reconnected", _onPlayerReconnected);
+    socket.on("player:loaded", _onPlayerLoaded);
     socket.on("game:over", _onGameOver);
     socket.on("game:timer", _onGameTimer);
     socket.on("game:sudden-death:start", _onGameSuddenDeath);
@@ -1332,6 +1342,7 @@ export function createMatchCoordinator(config) {
     socket.off("game:error", _onGameError);
     socket.off("player:disconnected", _onPlayerDisconnected);
     socket.off("player:reconnected", _onPlayerReconnected);
+    socket.off("player:loaded", _onPlayerLoaded);
     socket.off("game:over", _onGameOver);
     socket.off("game:timer", _onGameTimer);
     socket.off("game:sudden-death:start", _onGameSuddenDeath);

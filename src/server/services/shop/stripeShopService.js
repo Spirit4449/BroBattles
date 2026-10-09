@@ -623,17 +623,14 @@ function createStripeShopService({ db, shopService, stripeClient = null }) {
     if (!rows[0]) {
       throw shopService.createShopError(404, "order_not_found", "Order not found.");
     }
-    const orderRows = await db.runQuery(
-      "SELECT order_id, offer_id, status, amount_cents, currency, fulfilled_at FROM shop_orders WHERE order_id = ?",
-      [rows[0].order_id],
-    );
+    const { order_id, offer_id, status, amount_cents, currency, fulfilled_at } = rows[0];
     const walletRows = await db.runQuery(
       "SELECT coins, gems FROM users WHERE user_id = ?",
       [userId],
     );
     return {
       success: true,
-      order: orderRows[0],
+      order: { order_id, offer_id, status, amount_cents, currency, fulfilled_at },
       wallet: {
         coins: Number(walletRows[0]?.coins) || 0,
         gems: Number(walletRows[0]?.gems) || 0,

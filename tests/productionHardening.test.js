@@ -340,3 +340,55 @@ test('a shorter winning streak preserves the stored historical record', async ()
   await distributeMatchRewards(room, 'team1');
   assert.equal(f.db.state.user.highest_win_streak, 10);
 });
+
+test('client hit reports cannot damage other players', t => {
+  const { makeRoom } = require('./helpers/botRoom');
+  const f = makeRoom({ characters: ['thorg', 'wizard'] });
+  t.after(() => f.room.cleanup());
+  const [p, target] = f.players;
+  Object.assign(p, { x: 100, y: 200, isBot: false, connected: true, loaded: true });
+  Object.assign(target, { x: 130, y: 200, connected: true, loaded: true });
+  const hp = target.health;
+  for (const attackType of ['basic', 'special']) {
+    f.room.handleHit(p.participantId, { attacker: p.name, target: target.name, attackType, instanceId: `forged-${attackType}` });
+  }
+  assert.equal(target.health, hp);
+});
+
+test('falling below the world kills a human instantly from accepted positions', t => {
+  const { FALL_OUT_DEPTH } = require('../src/shared/gameConstants');
+  const f = movement(t), deaths = [];
+  f.room._handlePlayerDeath = (p, meta) => { deaths.push(meta.cause); p.isAlive = false; };
+  const bottom = WORLD.y + WORLD.height;
+  Object.assign(f.player, { y: bottom + FALL_OUT_DEPTH - 5 });
+  input.resetMovementBudget(f.player, Date.now());
+  f.advance(20); f.send({ x: 0, y: bottom + FALL_OUT_DEPTH - 1, sequence: 1 });
+  assert.deepEqual(deaths, []);
+  f.advance(20); f.send({ x: 0, y: bottom + FALL_OUT_DEPTH + 10, sequence: 2 });
+  assert.deepEqual(deaths, ['fall']);
+  f.advance(20); f.send({ x: 0, y: bottom + FALL_OUT_DEPTH + 20, sequence: 3 });
+  assert.deepEqual(deaths, ['fall']);
+});
+
+test('game sockets do not accept client hit or heal requests', () => {
+  const handlers = {};
+  const room = { onSocket: (_socket, name, cb) => { handlers[name] = cb; }, players: new Map(), status: 'active' };
+  GameRoom.prototype.setupPlayerSocket.call(room, { id: 's' });
+  assert.equal(handlers.hit, undefined);
+  assert.equal(handlers.heal, undefined);
+});
+
+test('login reveals ban status only after the password is verified', async () => {
+  const bcrypt = require('bcrypt');
+  const { loginPermanentUser } = require('../src/server/services/auth/authAccountService');
+  const password = await bcrypt.hash('correct-horse', 4);
+  const db = { runQuery: async () => [{ user_id: 1, name: 'Banned', password, is_banned: 1, ban_reason: 'Cheating' }] };
+  const login = (pw) => loginPermanentUser({ app: {}, db, req: { body: { username: 'Banned', password: pw }, signedCookies: {}, cookies: {} } });
+  const wrong = await login('guess');
+  assert.equal(wrong.statusCode, 401);
+  assert.equal(wrong.payload.banned, undefined);
+  assert.doesNotMatch(JSON.stringify(wrong.payload), /Cheating/);
+  const right = await login('correct-horse');
+  assert.equal(right.statusCode, 403);
+  assert.equal(right.payload.banned, true);
+});

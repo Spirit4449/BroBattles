@@ -28,9 +28,21 @@ export function presentRemoteDash(scene, sprite, state, tracker, hidden = false)
   playDashSound(scene, true, sprite);
 }
 
+// Characters like Gloop sit low in a tall art frame, so effects follow the
+// physics body center. It is derived from the sprite position (rather than
+// read from body.center) so it tracks interpolated remote sprites too.
+function bodyCenter(sprite) {
+  const body = sprite.body;
+  if (!body?.offset) return { x: sprite.x, y: sprite.y };
+  return {
+    x: sprite.x + Math.abs(sprite.scaleX) * (body.offset.x - sprite.displayOriginX) + body.width / 2,
+    y: sprite.y + Math.abs(sprite.scaleY) * (body.offset.y - sprite.displayOriginY) + body.height / 2,
+  };
+}
+
 export function spawnDashEffect(scene, sprite, x, y) {
   if (!sprite?.visible || !scene.add?.image || !scene.add?.graphics || !scene.time) return;
-  let previous = { x: sprite.x, y: sprite.y };
+  let previous = bodyCenter(sprite);
   let stopped = false;
   const length = Math.hypot(x, y);
   const ux = Number.isFinite(length) && length > 0 ? x / length : (sprite.flipX ? -1 : 1);
@@ -73,18 +85,18 @@ export function spawnDashEffect(scene, sprite, x, y) {
     }
   }
   let heading = Math.atan2(uy, ux);
-  let lastHeadX = sprite.x, lastHeadY = sprite.y;
+  let lastHead = previous;
   const followHead = () => {
     if (stopped) return;
     if (!sprite.active || !sprite.visible || sprite.alpha < 0.1) {
       burst.setAlpha(0);
       return;
     }
-    const dx = sprite.x - lastHeadX, dy = sprite.y - lastHeadY;
+    const center = bodyCenter(sprite);
+    const dx = center.x - lastHead.x, dy = center.y - lastHead.y;
     const distance = Math.hypot(dx, dy);
     if (distance >= 1 && distance <= 180) heading = Math.atan2(dy, dx);
-    lastHeadX = sprite.x; lastHeadY = sprite.y;
-    const center = sprite.getCenter?.() || sprite;
+    lastHead = center;
     burst.setPosition(center.x, center.y).setRotation(heading);
   };
   followHead();
@@ -94,11 +106,12 @@ export function spawnDashEffect(scene, sprite, x, y) {
   ghost();
   const stamp = () => {
     if (stopped || !sprite.active || !sprite.visible || sprite.alpha < 0.1) return;
-    const dx = sprite.x - previous.x, dy = sprite.y - previous.y;
+    const current = bodyCenter(sprite);
+    const dx = current.x - previous.x, dy = current.y - previous.y;
     const distance = Math.hypot(dx, dy);
     if (distance < 3) return;
     // Do not bridge teleports/respawns with a map-spanning trail.
-    if (distance > 180) { previous = { x: sprite.x, y: sprite.y }; return; }
+    if (distance > 180) { previous = current; return; }
     const tx = dx / distance, ty = dy / distance;
     const trail = scene.add.graphics().setDepth(sprite.depth - 0.1);
     for (let i = -1; i <= 1; i++) {
@@ -106,15 +119,15 @@ export function spawnDashEffect(scene, sprite, x, y) {
       trail.lineStyle(i ? 3 : 9, 0x39caff, i ? 0.65 : 0.4);
       const rear = i ? tailLength : 0;
       trail.lineBetween(previous.x - tx * rear - ty * offset, previous.y - ty * rear + tx * offset,
-        sprite.x - tx * rear - ty * offset, sprite.y - ty * rear + tx * offset);
+        current.x - tx * rear - ty * offset, current.y - ty * rear + tx * offset);
       if (i) {
         trail.lineStyle(1.5, 0xffffff, 0.55);
         trail.lineBetween(previous.x - tx * rear - ty * offset, previous.y - ty * rear + tx * offset,
-          sprite.x - tx * rear - ty * offset, sprite.y - ty * rear + tx * offset);
+          current.x - tx * rear - ty * offset, current.y - ty * rear + tx * offset);
       }
     }
     trail.lineStyle(3, 0xffffff, 0.95);
-    trail.lineBetween(previous.x, previous.y, sprite.x, sprite.y);
+    trail.lineBetween(previous.x, previous.y, current.x, current.y);
     // Bright segmented marks keep the trail readable against busy maps.
     for (let i = 0; i < 8; i++) {
       const t = Math.random(), spread = (Math.random() - 0.5) * 60;
@@ -126,7 +139,7 @@ export function spawnDashEffect(scene, sprite, x, y) {
     }
     fade(trail, 240);
     ghost();
-    previous = { x: sprite.x, y: sprite.y };
+    previous = current;
   };
   const timer = scene.time.addEvent({ delay: 24, repeat: 8, callback: stamp });
   const stop = () => {
@@ -205,9 +218,11 @@ export function protectDashMotion(scene, player, now = Date.now(), delta = 1 / 6
     if (face === 'left' || face === 'right') body.velocity.x = 0; else body.velocity.y = 0;
   }
   if (body.collideWorldBounds) {
-    const bounds = body.world.bounds;
-    const x = Math.max(bounds.x, Math.min(bounds.right - body.width, body.x));
-    const y = Math.max(bounds.y, Math.min(bounds.bottom - body.height, body.y));
+    // Honor per-edge world collision like Phaser's own bounds check: the
+    // battle scene opens every edge so dashes can carry players off the map.
+    const bounds = body.world.bounds, edges = body.world.checkCollision;
+    const x = Math.max(edges.left ? bounds.x : -Infinity, Math.min(edges.right ? bounds.right - body.width : Infinity, body.x));
+    const y = Math.max(edges.up ? bounds.y : -Infinity, Math.min(edges.down ? bounds.bottom - body.height : Infinity, body.y));
     if (x !== body.x) {
       body.velocity.x = 0;
       result.hits[x < body.x ? 'right' : 'left'] = true;
@@ -254,18 +269,19 @@ export function protectDashMotion(scene, player, now = Date.now(), delta = 1 / 6
       (c.right !== false && Math.abs(body.left - surface.right) < 0.5));
   }
   if (body.collideWorldBounds) {
-    const bounds = body.world.bounds;
-    for (const [face, touching] of Object.entries({
-      down: Math.abs(body.bottom - bounds.bottom) < 0.5 && body.velocity.y >= 0,
-      up: Math.abs(body.top - bounds.y) < 0.5 && body.velocity.y <= 0,
-      right: Math.abs(body.right - bounds.right) < 0.5 && body.velocity.x >= 0,
-      left: Math.abs(body.left - bounds.x) < 0.5 && body.velocity.x <= 0,
-    })) if (touching) {
+    const bounds = body.world.bounds, edges = body.world.checkCollision;
+    const contacts = {
+      down: edges.down && Math.abs(body.bottom - bounds.bottom) < 0.5 && body.velocity.y >= 0,
+      up: edges.up && Math.abs(body.top - bounds.y) < 0.5 && body.velocity.y <= 0,
+      right: edges.right && Math.abs(body.right - bounds.right) < 0.5 && body.velocity.x >= 0,
+      left: edges.left && Math.abs(body.left - bounds.x) < 0.5 && body.velocity.x <= 0,
+    };
+    for (const [face, touching] of Object.entries(contacts)) if (touching) {
       body.blocked[face] = true; body.blocked.none = false;
       body.touching[face] = true; body.touching.none = false;
     }
-    horizontalSurface ||= Math.abs(body.bottom - bounds.bottom) < 0.5 || Math.abs(body.top - bounds.y) < 0.5;
-    verticalSurface ||= Math.abs(body.right - bounds.right) < 0.5 || Math.abs(body.left - bounds.x) < 0.5;
+    horizontalSurface ||= (edges.down && Math.abs(body.bottom - bounds.bottom) < 0.5) || (edges.up && Math.abs(body.top - bounds.y) < 0.5);
+    verticalSurface ||= (edges.right && Math.abs(body.right - bounds.right) < 0.5) || (edges.left && Math.abs(body.left - bounds.x) < 0.5);
   }
   const friction = physics.dashSurfaceDrag * Math.max(0, delta);
   const slow = value => Math.sign(value) * Math.max(0, Math.abs(value) - friction);
@@ -317,7 +333,7 @@ export function updateDash(scene, player, { pressed, left, right, up, down, bloc
   }
   if (pressed && !dash && now >= (player._dashReadyAt || 0)) {
     const direction = dashDirection(left, right, up, down, player.flipX ? -1 : 1);
-    const vx = direction.x * physics.dashSpeed;
+    const vx = direction.x * physics.dashHorizontalSpeed;
     const vy = direction.y * (direction.x === 0 && direction.y > 0 ? physics.dashDownSpeed : physics.dashSpeed);
     dash = player._dash = { ...direction, vx, vy, steeredAt: now, until: now + physics.dashDurationMs,
       allowGravity: player.body.allowGravity,
@@ -343,7 +359,7 @@ export function updateDash(scene, player, { pressed, left, right, up, down, bloc
   player.body.allowGravity = dash.wallContact ? dash.allowGravity : false;
   player.setAcceleration(0, 0);
   player.setDrag(0, 0);
-  player.setMaxVelocity(physics.dashMaxSpeed,
+  player.setMaxVelocity(physics.dashHorizontalSpeed,
     dash.x === 0 && dash.y > 0 ? physics.dashDownSpeed : physics.dashMaxSpeed);
   const inputX = Number(!!right) - Number(!!left);
   const inputY = Number(!!down) - Number(!!up);
@@ -356,7 +372,7 @@ export function updateDash(scene, player, { pressed, left, right, up, down, bloc
     const velocity = player.body.velocity;
     // Rotate existing momentum toward live input. At a standstill, allow normal
     // movement speed so the player can steer away instead of waiting for expiry.
-    const speed = Math.min(physics.dashSpeed, Math.max(physics.maxSpeed, Math.hypot(velocity.x, velocity.y)));
+    const speed = Math.min(inputY ? physics.dashSpeed : physics.dashHorizontalSpeed, Math.max(physics.maxSpeed, Math.hypot(velocity.x, velocity.y)));
     let targetX = inputX / length * speed, targetY = inputY / length * speed;
     const contact = player.body.blocked || {};
     const touching = player.body.touching || {};

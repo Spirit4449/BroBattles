@@ -14,41 +14,6 @@ function spawnGeometry(scene, anchors) {
   return entries;
 }
 
-function getAnchorCenterX(anchor) {
-  if (!anchor) return null;
-
-  const bodyCenterX = Number(anchor?.body?.center?.x);
-  if (Number.isFinite(bodyCenterX)) return bodyCenterX;
-
-  const anchorX = Number(anchor?.x);
-  if (Number.isFinite(anchorX)) return anchorX;
-
-  return null;
-}
-
-function resolveSpawnX(scene, point, anchor = null) {
-  const x = Number(point?.x);
-  if (Number.isFinite(x)) return x;
-
-  const dx = Number(point?.dx);
-  const anchorX = getAnchorCenterX(anchor);
-  if (Number.isFinite(anchorX)) {
-    return Number.isFinite(dx) ? anchorX + dx : anchorX;
-  }
-
-  if (Number.isFinite(dx)) {
-    return getSceneWorldCenterX(scene) + dx;
-  }
-
-  return null;
-}
-
-function resolveSpawnY(point) {
-  const y = Number(point?.y);
-  if (Number.isFinite(y)) return y;
-  return null;
-}
-
 export function placeSpriteAtConfiguredSpawn(
   scene,
   sprite,
@@ -70,55 +35,12 @@ export function placeSpriteAtConfiguredSpawn(
   sprite.body.reset(landing.x - centerOffset, landing.y - bottomOffset);
 }
 
-export function getSpawnPreviewPoint(scene, point, anchors = {}, epsilon = 2, snapToSurface = false) {
-  if (snapToSurface && scene?._mapObjects?.length) {
-    const geometry = spawnGeometry(scene, anchors);
-    try {
-      const landing = resolveLanding(point, geometry.find(p => p.object === anchors[point?.anchorId]), geometry, { width: 48, height: 80 });
-      return { x: landing.x, y: landing.y };
-    } catch (_) { return null; }
-  }
-  const anchorId = String(point?.anchorId || "").trim();
-  const anchor = anchorId ? anchors?.[anchorId] : null;
-
-  const x = resolveSpawnX(scene, point, anchor);
-  if (!Number.isFinite(x)) return null;
-
-  if (anchor) {
-    const topY = anchor.body ? anchor.body.top : anchor.getTopCenter().y;
-    return { x, y: topY - epsilon };
-  }
-
-  const y = resolveSpawnY(point);
-  if (!Number.isFinite(y)) return null;
-  return { x, y };
-}
-
 export function getSpawnPointForTeam(spawnConfig, team, index) {
   const slots = spawnConfig?.players?.[team];
   if (!Array.isArray(slots) || !slots.length) return null;
 
   const i = Math.max(0, Math.min(slots.length - 1, Number(index) || 0));
   return slots[i] || slots[0];
-}
-
-export function getSceneWorldCenterX(scene) {
-  const worldCenter = Number(scene?.physics?.world?.bounds?.centerX);
-  if (Number.isFinite(worldCenter)) return worldCenter;
-
-  const worldX = Number(scene?.physics?.world?.bounds?.x);
-  const worldW = Number(scene?.physics?.world?.bounds?.width);
-  if (Number.isFinite(worldX) && Number.isFinite(worldW) && worldW > 0) {
-    return worldX + worldW / 2;
-  }
-
-  const scaleW = Number(scene?.scale?.width);
-  if (Number.isFinite(scaleW) && scaleW > 0) return scaleW / 2;
-
-  const gameW = Number(scene?.game?.config?.width);
-  if (Number.isFinite(gameW) && gameW > 0) return gameW / 2;
-
-  return 1150;
 }
 
 export function applyMapBounds(scene, boundsConfig = {}, options = {}) {

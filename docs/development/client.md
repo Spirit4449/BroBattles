@@ -145,7 +145,19 @@ calls `consumeLobbyReturnStatus()` once, avoiding a second status request. A
 failed lookup uses the match party as fallback and lets normal bootstrap retry;
 bans redirect immediately. Cancellation, errors, redirects, and newer routes
 discard unused data. `/partydata` remains fresh and retains membership/presence
-side effects.
+side effects. While `/status` is pending, the router also requests the match
+party's page; navigation uses it only when `/status` confirms that party.
+
+Battle entry overlaps its requests. `match:gameReady` prefetches the game page
+and `/gamedata` during the success hold, and any `/game/:id` navigation
+requests `/gamedata` alongside the page. The game bundle takes that response
+once through `consumeGameData(matchId)`, falling back to its own request.
+The terms dialog appears only when `/gamedata` reports `TERMS_REQUIRED`, and
+Phaser starts without waiting for the socket to connect. Route requests start
+before the transition artwork decodes. Only the first artwork attempt holds
+the outgoing screen. Navigation lets an in-flight warming asset finish into
+the HTTP cache instead of aborting it. The 45-second readiness timeout restarts
+whenever the loading bar advances, so only a stalled screen fails.
 
 The status service runs independent customization, party, and live-match reads
 concurrently after authentication/ban checks. Ownership synchronization retains
@@ -199,6 +211,17 @@ an estimate. Compare cold and warm runs and inspect `/status` and `/partydata`
 in the network panel when checking a deployment.
 
 ## Rendering and loading
+
+Respawns use `src/client/game/scene/respawnEffect.js` for local and remote
+fighters (including snapshot recovery): a cyan arrival beam, two expanding
+foot rings, and rising pixel sparks clear within a second. The effect stays at
+the arrival position without changing the fighter's alpha, physics, or input.
+Scene shutdown and sprite destruction cancel its tweens and remove its objects.
+Initial match arrivals retain the separate spawn burst; the existing respawn
+shield still indicates protection after the arrival cue ends. Fupicat's CC0
+Teleport cue (`game-sounds/respawn.mp3`) plays with the arrival effect through
+player-distance audio at half gain; unavailable audio never delays the visuals.
+Source and license are recorded in `game-sounds/respawn-credits.txt`.
 
 Knockback from every source starts a short pale streak and afterimage trail in
 `src/client/game/scene/knockbackTrail.js`. Local impulses start it immediately;
@@ -287,6 +310,22 @@ database or game server. It checks actual rendered pixels, transparency, clippin
 generated textures, WebGL render textures, quality changes, camera mapping,
 resize, automatic Canvas fallback, slow/failed audio, and teardown in both engines.
 The preserved drawing buffer is enabled only in the harness for pixel inspection.
+
+## Gameplay camera
+
+The gameplay camera follows each movement axis more tightly as speed rises,
+so fast falls and dashes stay in view. Ordinary movement retains gentle follow;
+the follow blend accounts for frame time. Tuning lives in `cameraDynamics.js`.
+
+## Mobile battle controls
+
+`src/client/game/scene/mobileControls.js` owns touch input; `src/client/styles/mobileControls.css` owns its look. It turns on for touch devices (`isTouchGameDevice`), or when `window.__BB_FORCE_MOBILE_CONTROLS = true` is set for desktop testing. The overlay is plain DOM above the canvas, and `localPlayer.js` reads it each frame through `isMovingLeft/Right`, `isJumpHeld`, `isDuckHeld`, `isAimingUp/Down` and the one-shot `consumeJumpFreshPress`/`consumeDashFreshPress`.
+
+- The left half is a floating movement stick. Pulling it straight down ducks, and up/down steers a dash.
+- The right-thumb cluster is ordered by use. Attack is largest and nearest the corner, then jump, then super and dash, then a small duck button. Tapping attack or super auto-aims at the nearest opponent; dragging aims manually. Super fills from the bottom as it charges; dash shows its cooldown as a lifting shutter, so the keyboard dash bar is hidden. When either is available its face turns solid, slowly fades brighter, and a highlight runs around its outline.
+- The look follows the battle HUD: a stepped pixel-circle ink outline around a lightly tinted see-through face, with solid colour-coded 12×12 pixel-art icons. `--bbm-px` (one art pixel) scales with the controls.
+- Positions scale with the shorter viewport side and respect safe-area insets. The overlay hides while the local player is dead so the spectate controls stay reachable.
+- `body.bb-touch-game` hides the in-game chat, the settings button and the keyboard reference on touch devices.
 
 ## Player sound distance
 

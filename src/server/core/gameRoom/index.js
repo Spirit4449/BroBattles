@@ -1123,13 +1123,6 @@ class GameRoom {
   }
 
   /**
-   * Handle heal proposal from client. Applies clamped heal to target.
-   */
-  handleHeal(socketId, payload) {
-    healthManager.handleHeal(this, socketId, payload);
-  }
-
-  /**
    * Evaluate whether one team has been fully eliminated and finish the game if so.
    */
   _checkVictoryCondition() {

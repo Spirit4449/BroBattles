@@ -444,6 +444,29 @@
   min-height: 34px;
 }
 
+.bb-friends-privacy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 2px solid var(--bb-ink);
+  background: rgba(15, 30, 48, 0.72);
+}
+
+.bb-friends-privacy-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #fff;
+  font-size: 8px;
+  line-height: 1.6;
+}
+
+.bb-friends-privacy-row .bb-pixel-select {
+  flex: none;
+}
+
 /* ---------- empty states ---------- */
 
 .bb-friends-empty-art {
@@ -660,4 +683,42 @@ body.matchmaking-exiting .bb-friends-wrap {
 .bb-friends-tab-count.is-request {
   background: linear-gradient(135deg, #fde047, #eab308);
   color: #2a1d02;
+}
+
+/* Online friends: small marker centered under the button. */
+.bb-friends-online-badge {
+  position: absolute;
+  left: 50%;
+  bottom: -11px;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px 0 2px;
+  background: #0f2a1b;
+  color: #dcfce7;
+  font: 7px/1 "Press Start 2P", system-ui;
+  box-shadow: 0 0 0 2px rgba(9, 15, 30, 0.96);
+  pointer-events: none;
+}
+
+.bb-friends-online-badge.hidden {
+  display: none;
+}
+
+/* Pixel "circle": a 4px square with notched corners. */
+.bb-friends-online-dot {
+  width: 4px;
+  height: 4px;
+  background: #4ade80;
+  box-shadow:
+    0 -1px 0 #4ade80,
+    0 1px 0 #4ade80,
+    -1px 0 0 #4ade80,
+    1px 0 0 #4ade80;
+  margin: 0 1px;
+  image-rendering: pixelated;
 }

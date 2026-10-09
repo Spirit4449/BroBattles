@@ -1039,9 +1039,11 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
     const reveal = state.reveal;
     state.reveal = null;
     reveal.__dismiss?.();
-    disposePlayerCardMediaWithin(reveal);
     reveal.classList.add("is-leaving");
-    window.setTimeout(() => reveal.remove(), 260);
+    window.setTimeout(() => {
+      disposePlayerCardMediaWithin(reveal);
+      reveal.remove();
+    }, 260);
   }
 
   function readWalletCount(counter) {

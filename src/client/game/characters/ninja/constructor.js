@@ -171,7 +171,6 @@ class Ninja extends CharacterEntityBase {
         username: this.username,
         gameId: this.gameId,
         isOwner: true,
-        serverAuthoritativeHits: true,
         instanceId: attackId,
         damage,
         rotationSpeed: RETURNING_SHURIKEN.rotationSpeed,
@@ -190,12 +189,8 @@ class Ninja extends CharacterEntityBase {
         config,
       );
 
-      // Enemy hit reporting is server-authoritative, but map blocking is
-      // visual simulation and should run on every client.
-      if (!config.serverAuthoritativeHits) {
-        const enemyList = Object.values(this.opponentPlayersRef || {});
-        returning.attachEnemyOverlap(enemyList);
-      }
+      // Enemy hits are server-authoritative; map blocking is visual
+      // simulation and runs on every client.
       returning.attachMapOverlap(this.mapObjects);
 
       // Perk: grant ammo on return

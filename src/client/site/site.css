@@ -188,3 +188,5 @@ body.site-auth{--bb-font-body:system-ui,-apple-system,"Segoe UI",sans-serif;font
 .site-mode:hover .site-mode-art img{transform:none}
 .site-card:not(.site-mode)>img{aspect-ratio:4/3}
 @media(min-width:651px){.site-about .site-hero-copy{bottom:-210px}.site-about .site-hero{margin-bottom:265px}}
+.site-settings-heading{margin:0 0 10px;font:12px/1.6 var(--bb-font-display);color:#dce9fa}.site-privacy{margin-top:32px}.site-privacy-setting{align-items:center;row-gap:2px!important;column-gap:14px!important}.site-privacy-setting>.site-setting-title{grid-column:1;grid-row:1;align-self:end}.site-privacy-setting small{grid-column:1;grid-row:2;align-self:start;color:#9fb4cf}.site-privacy-setting>:not(.site-setting-title):not(small){grid-column:2;grid-row:1/3;align-self:center}.site-privacy input:disabled{opacity:.6}
+.site-settings-window.is-resetting .site-privacy .site-setting{animation:none}

@@ -11,12 +11,17 @@ import {
 } from "../chat/presentation";
 import { sonner } from "../ui/sonner.js";
 import { showUiConfirm } from "../ui/uiConfirm.js";
-import { friendPresenceLabel, friendPresenceTitle } from "./friendPresence.mjs";
+import { formatOnlineCount, friendPresenceLabel, friendPresenceTitle, isFriendOnline } from "./friendPresence.mjs";
 import { pixelSprite } from "./pixelArt.js";
+import { PRIVACY_FIELDS, normalizePrivacy, onPrivacyChange, privacyControl, savePrivacy } from "./privacyClient.js";
+
+const FRIEND_REQUESTS_FIELD = PRIVACY_FIELDS.find((field) => field.key === "friendRequests");
 
 const TYPING_STOP_MS = 1500;
 const TYPING_STALE_MS = 4000;
 const STATUS_ORDER = { online: 0, "End Screen": 1, "In Battle": 2, offline: 3 };
+// Friends who log in close together are announced as one batch.
+const ONLINE_BATCH_MS = 4000;
 
 // Never show raw network/server wording to players.
 function showFriendError(error, title) {
@@ -65,6 +70,7 @@ export function createFriendsPanelController({
     view: "friends",
     me: null,
     friendCode: "",
+    privacy: normalizePrivacy(),
     friends: [],
     incoming: [],
     outgoing: [],
@@ -84,7 +90,11 @@ export function createFriendsPanelController({
     inviteCooldowns: {},
     // Friends who reacted to my messages while that chat wasn't in view.
     reactionFrom: new Set(),
+    // Recent teammates who just came online, waiting to be announced.
+    cameOnline: new Set(),
+    cameOnlineTimer: null,
   };
+  const onlineListeners = new Set();
 
   // Same drawer shell classes as the lobby chat so both slide in identically.
   const root = document.createElement("div");
@@ -136,7 +146,7 @@ export function createFriendsPanelController({
   launcher.type = "button";
   launcher.className = "bb-chat-button bb-chat-launcher bb-friends-launcher";
   launcher.setAttribute("aria-label", "Friends");
-  launcher.innerHTML = `${pixelSprite("friends", 2, "bb-friends-launcher-icon")}<span class="bb-chat-launcher-label">Friends</span><span class="bb-chat-badge hidden"></span><span class="bb-chat-badge bb-friends-request-badge hidden"></span><span class="bb-chat-reaction-badge hidden" title="New reaction"><img src="/assets/heart-filled.svg" alt="" width="14" height="14" /></span>`;
+  launcher.innerHTML = `${pixelSprite("friends", 2, "bb-friends-launcher-icon")}<span class="bb-chat-launcher-label">Friends</span><span class="bb-chat-badge hidden"></span><span class="bb-chat-badge bb-friends-request-badge hidden"></span><span class="bb-friends-online-badge hidden"><span class="bb-friends-online-dot" aria-hidden="true"></span><span class="bb-friends-online-count"></span></span><span class="bb-chat-reaction-badge hidden" title="New reaction"><img src="/assets/heart-filled.svg" alt="" width="14" height="14" /></span>`;
   document.body.appendChild(launcher);
 
   // Pair with the chat launcher when it is visible, otherwise take its spot.
@@ -174,6 +184,8 @@ export function createFriendsPanelController({
     badge: launcher.querySelector(".bb-chat-badge:not(.bb-friends-request-badge)"),
     requestBadge: launcher.querySelector(".bb-friends-request-badge"),
     heart: launcher.querySelector(".bb-chat-reaction-badge"),
+    onlineBadge: launcher.querySelector(".bb-friends-online-badge"),
+    onlineCount: launcher.querySelector(".bb-friends-online-count"),
   };
   // Same "Viewed by" popover as party chat.
   const viewersPopup = createViewersPopup({
@@ -227,6 +239,22 @@ export function createFriendsPanelController({
     setCount(ui.requestsTabCount, state.incoming.length);
     // Heart on the launcher like party chat; cleared once the drawer opens.
     ui.heart.classList.toggle("hidden", !state.reactionFrom.size || state.isOpen);
+    // Green marker: how many friends are online right now.
+    const online = state.friends.filter(isFriendOnline).length;
+    ui.onlineCount.textContent = formatOnlineCount(online);
+    ui.onlineBadge.classList.toggle("hidden", online === 0);
+    ui.onlineBadge.title = online === 1 ? "1 friend online" : `${online} friends online`;
+    launcher.setAttribute("aria-label", online ? `Friends, ${online} online` : "Friends");
+  }
+
+  function announceCameOnline() {
+    state.cameOnlineTimer = null;
+    const friends = [...state.cameOnline].map(friendById).filter(isFriendOnline);
+    state.cameOnline.clear();
+    if (!friends.length) return;
+    for (const listener of onlineListeners) {
+      try { listener(friends); } catch (_) {}
+    }
   }
 
   // ---------- data ----------
@@ -238,6 +266,7 @@ export function createFriendsPanelController({
       state.guest = false;
       state.me = data.me || null;
       state.friendCode = data.friendCode || "";
+      state.privacy = normalizePrivacy(data.privacy);
       state.friends = Array.isArray(data.friends) ? data.friends : [];
       state.incoming = Array.isArray(data.incoming) ? data.incoming : [];
       state.outgoing = Array.isArray(data.outgoing) ? data.outgoing : [];
@@ -532,7 +561,7 @@ export function createFriendsPanelController({
           dot.textContent = unread > 9 ? "9+" : String(unread);
           chat.appendChild(dot);
         }
-        const invite = inParty && friend.status === "online"
+        const invite = inParty && friend.status === "online" && friend.acceptsPartyInvites !== false
           ? inviteButton(friend)
           : null;
         const remove = iconButton("trash", `Remove ${friend.name}`, "is-danger", () => void confirmRemove(friend));
@@ -609,6 +638,22 @@ export function createFriendsPanelController({
       window.setTimeout(() => { btn.textContent = "Copy"; }, 1600);
     }));
     ui.content.appendChild(code);
+
+    const requestsRow = document.createElement("div");
+    requestsRow.className = "bb-friends-privacy-row";
+    requestsRow.innerHTML = `<div class="bb-friends-privacy-label">Accept requests from</div>`;
+    const requestsSelect = privacyControl(FRIEND_REQUESTS_FIELD, state.privacy.friendRequests, async (value) => {
+      requestsSelect.setDisabled(true);
+      try {
+        await savePrivacy({ friendRequests: value });
+      } catch (error) {
+        requestsSelect.setValue(state.privacy.friendRequests);
+        showFriendError(error, "Could not save setting");
+      }
+      requestsSelect.setDisabled(false);
+    }, { compact: true });
+    requestsRow.appendChild(requestsSelect.element);
+    ui.content.appendChild(requestsRow);
 
     // Not a <form>, and a search-type input, so password managers leave it alone.
     const addRow = document.createElement("div");
@@ -772,6 +817,11 @@ export function createFriendsPanelController({
         : `${state.friends.filter((f) => f.status !== "offline").length} online`;
     ui.subtitle.title = inChat ? friendPresenceTitle(friend) : "";
     ui.subtitle.className = `bb-chat-subtitle ${inChat ? statusClass(friend?.status) : ""}`;
+    // History stays readable when the friend has turned messages off.
+    const canMessage = !inChat || friend?.acceptsMessages !== false;
+    ui.textarea.disabled = !canMessage;
+    ui.send.disabled = !canMessage || state.sending;
+    ui.textarea.placeholder = canMessage ? "Write a message..." : `${friend?.name || "This friend"} isn't accepting messages`;
     for (const tab of ui.tabs.querySelectorAll("[data-view]")) {
       const active = tab.dataset.view === state.view;
       tab.classList.toggle("is-active", active);
@@ -913,11 +963,19 @@ export function createFriendsPanelController({
     }, { duration: 8000, sound: "notification" });
   });
 
-  listen("friends:presence", ({ userId, status, lastSeenAt } = {}) => {
+  listen("friends:presence", ({ userId, status, lastSeenAt, lastSeenHidden } = {}) => {
     const friend = friendById(userId);
     if (!friend) return;
+    const wasOnline = isFriendOnline(friend);
     friend.status = status;
+    if (!wasOnline && isFriendOnline(friend) && friend.gamesTogether > 0) {
+      state.cameOnline.add(friend.userId);
+      window.clearTimeout(state.cameOnlineTimer);
+      state.cameOnlineTimer = window.setTimeout(announceCameOnline, ONLINE_BATCH_MS);
+    }
+    syncBadge();
     if (lastSeenAt !== undefined) friend.lastSeenAt = lastSeenAt;
+    if (lastSeenHidden !== undefined) friend.lastSeenHidden = !!lastSeenHidden;
     if (state.isOpen) render();
   });
 
@@ -983,6 +1041,14 @@ export function createFriendsPanelController({
     }, { duration: 15000, sound: "notification" });
   });
 
+  // Saved here, in Settings, or in another tab.
+  function applyPrivacy(privacy) {
+    state.privacy = normalizePrivacy(privacy);
+    if (state.isOpen && state.view === "add") render();
+  }
+  const offPrivacy = onPrivacyChange(applyPrivacy);
+  listen("friends:privacy", ({ privacy } = {}) => applyPrivacy(privacy));
+
   // Socket reconnects can miss pushes, so resync.
   listen("connect", () => void refresh());
 
@@ -1025,8 +1091,16 @@ export function createFriendsPanelController({
       return "none";
     },
     addFriend: (target) => sendRequest(target),
+    // Called with recent teammates who just came online, batched.
+    onFriendsOnline(listener) {
+      onlineListeners.add(listener);
+      return () => onlineListeners.delete(listener);
+    },
     destroy() {
       window.clearInterval(presenceTimer);
+      window.clearTimeout(state.cameOnlineTimer);
+      onlineListeners.clear();
+      offPrivacy();
       for (const [event, handler] of socketListeners) socket?.off?.(event, handler);
       window.clearTimeout(state.friendTypingTimer);
       window.clearTimeout(state.localTypingTimer);

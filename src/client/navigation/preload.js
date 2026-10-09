@@ -47,7 +47,9 @@ export function createBattlePreloader() {
       job.priority = videoPriority(job.url, job.interactive);
       if (!job.listeners.size && !retained(job.url)) jobs.delete(key);
     }
-    interruptVideo();
+    // Discarding a partial download wastes its bytes and budget; only stop
+    // one nothing wants any more.
+    if (activeJob?.kind === 'video' && !jobs.has(activeJob.key)) interruptVideo();
   }
   // Card paths are fixed; the catalog's content hash makes the URL immutable.
   function cardVideoUrl(card) {
@@ -99,7 +101,9 @@ export function createBattlePreloader() {
     try { url = new URL(value, location.origin); } catch (_) { return; }
     if (url.origin !== location.origin || completed.has(url.href) || jobs.size >= 160) return;
     const key = target + ':' + url.href;
-    if (!jobs.has(key)) jobs.set(key, { key, url: url.href, target, priority, kind, attempts: 0 });
+    if (jobs.has(key)) return;
+    jobs.set(key, { key, url: url.href, target, priority, kind, attempts: 0 });
+    // New gameplay work preempts an optional card download.
     interruptVideo();
   }
   function addMode() {
@@ -338,7 +342,14 @@ export function createBattlePreloader() {
         schedule(0);
       }, 1200);
     },
-    stop() { enabled = false; screen = null; pause(); },
+    // finishActive lets an in-flight gameplay asset complete into the HTTP
+    // cache rather than discarding it as the next screen starts requesting it.
+    stop({ finishActive = false } = {}) {
+      enabled = false;
+      screen = null;
+      if (finishActive && activeJob && activeJob.kind !== 'video') cancelSchedule();
+      else pause();
+    },
   };
   return api;
 }

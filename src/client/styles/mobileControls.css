@@ -1,0 +1,405 @@
+/* Touch controls overlay (game/scene/mobileControls.js). Positions and sizes
+   are set inline from the viewport; this file owns the look, which follows the
+   battle HUD: hard ink outlines, stepped corners, flat three-tone shading and
+   no blur. --bbm-px (one art pixel) is set from the control scale. */
+
+#bb-mobile-controls {
+  --bbm-px: 4px;
+  --bbm-ink: rgba(3, 6, 11, 0.88);
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#bb-mobile-controls.is-dead {
+  display: none;
+}
+
+#bb-mobile-controls .bbm-inset-probe {
+  position: fixed;
+  visibility: hidden;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+#bb-mobile-controls .bbm-move-zone {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* Every control is a "pixel circle": a dark stepped outline ring (::before)
+   around a lightly tinted see-through face (::after). Only the icons are
+   solid, so the arena stays visible behind the buttons. Colours are RGB
+   triplets so each layer sets its own transparency. --c is the corner step,
+   --p the outline thickness (one art pixel). */
+#bb-mobile-controls .bbm-stick,
+#bb-mobile-controls .bbm-button {
+  --c: calc(var(--bbm-px) * 1.5);
+  --p: var(--bbm-px);
+  --bbm-rgb: 74 93 122;
+  --bbm-hi-rgb: 150 176 214;
+  --bbm-face: 0.28;
+  --bbm-ring: polygon(
+    evenodd,
+    calc(var(--c) * 3) 0,
+    calc(100% - var(--c) * 3) 0,
+    calc(100% - var(--c) * 3) var(--c),
+    calc(100% - var(--c)) var(--c),
+    calc(100% - var(--c)) calc(var(--c) * 3),
+    100% calc(var(--c) * 3),
+    100% calc(100% - var(--c) * 3),
+    calc(100% - var(--c)) calc(100% - var(--c) * 3),
+    calc(100% - var(--c)) calc(100% - var(--c)),
+    calc(100% - var(--c) * 3) calc(100% - var(--c)),
+    calc(100% - var(--c) * 3) 100%,
+    calc(var(--c) * 3) 100%,
+    calc(var(--c) * 3) calc(100% - var(--c)),
+    var(--c) calc(100% - var(--c)),
+    var(--c) calc(100% - var(--c) * 3),
+    0 calc(100% - var(--c) * 3),
+    0 calc(var(--c) * 3),
+    var(--c) calc(var(--c) * 3),
+    var(--c) var(--c),
+    calc(var(--c) * 3) var(--c),
+    calc(var(--c) * 3) 0,
+    calc(var(--c) * 3 + var(--p)) calc(var(--p)),
+    calc(100% - var(--c) * 3 - var(--p)) calc(var(--p)),
+    calc(100% - var(--c) * 3 - var(--p)) calc(var(--c) + var(--p)),
+    calc(100% - var(--c) - var(--p)) calc(var(--c) + var(--p)),
+    calc(100% - var(--c) - var(--p)) calc(var(--c) * 3 + var(--p)),
+    calc(100% - var(--p)) calc(var(--c) * 3 + var(--p)),
+    calc(100% - var(--p)) calc(100% - var(--c) * 3 - var(--p)),
+    calc(100% - var(--c) - var(--p)) calc(100% - var(--c) * 3 - var(--p)),
+    calc(100% - var(--c) - var(--p)) calc(100% - var(--c) - var(--p)),
+    calc(100% - var(--c) * 3 - var(--p)) calc(100% - var(--c) - var(--p)),
+    calc(100% - var(--c) * 3 - var(--p)) calc(100% - var(--p)),
+    calc(var(--c) * 3 + var(--p)) calc(100% - var(--p)),
+    calc(var(--c) * 3 + var(--p)) calc(100% - var(--c) - var(--p)),
+    calc(var(--c) + var(--p)) calc(100% - var(--c) - var(--p)),
+    calc(var(--c) + var(--p)) calc(100% - var(--c) * 3 - var(--p)),
+    calc(var(--p)) calc(100% - var(--c) * 3 - var(--p)),
+    calc(var(--p)) calc(var(--c) * 3 + var(--p)),
+    calc(var(--c) + var(--p)) calc(var(--c) * 3 + var(--p)),
+    calc(var(--c) + var(--p)) calc(var(--c) + var(--p)),
+    calc(var(--c) * 3 + var(--p)) calc(var(--c) + var(--p)),
+    calc(var(--c) * 3 + var(--p)) calc(var(--p)),
+    calc(var(--c) * 3) 0
+  );
+  --bbm-inner: polygon(
+    calc(var(--c) * 3 + var(--p)) calc(var(--p)),
+    calc(100% - var(--c) * 3 - var(--p)) calc(var(--p)),
+    calc(100% - var(--c) * 3 - var(--p)) calc(var(--c) + var(--p)),
+    calc(100% - var(--c) - var(--p)) calc(var(--c) + var(--p)),
+    calc(100% - var(--c) - var(--p)) calc(var(--c) * 3 + var(--p)),
+    calc(100% - var(--p)) calc(var(--c) * 3 + var(--p)),
+    calc(100% - var(--p)) calc(100% - var(--c) * 3 - var(--p)),
+    calc(100% - var(--c) - var(--p)) calc(100% - var(--c) * 3 - var(--p)),
+    calc(100% - var(--c) - var(--p)) calc(100% - var(--c) - var(--p)),
+    calc(100% - var(--c) * 3 - var(--p)) calc(100% - var(--c) - var(--p)),
+    calc(100% - var(--c) * 3 - var(--p)) calc(100% - var(--p)),
+    calc(var(--c) * 3 + var(--p)) calc(100% - var(--p)),
+    calc(var(--c) * 3 + var(--p)) calc(100% - var(--c) - var(--p)),
+    calc(var(--c) + var(--p)) calc(100% - var(--c) - var(--p)),
+    calc(var(--c) + var(--p)) calc(100% - var(--c) * 3 - var(--p)),
+    calc(var(--p)) calc(100% - var(--c) * 3 - var(--p)),
+    calc(var(--p)) calc(var(--c) * 3 + var(--p)),
+    calc(var(--c) + var(--p)) calc(var(--c) * 3 + var(--p)),
+    calc(var(--c) + var(--p)) calc(var(--c) + var(--p)),
+    calc(var(--c) * 3 + var(--p)) calc(var(--c) + var(--p))
+  );
+  position: fixed;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+#bb-mobile-controls :is(.bbm-stick, .bbm-button)::before,
+#bb-mobile-controls :is(.bbm-stick, .bbm-button)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+#bb-mobile-controls :is(.bbm-stick, .bbm-button)::before {
+  clip-path: var(--bbm-ring);
+  background: var(--bbm-ink);
+}
+
+/* Face: faint tint with a pixel highlight band on top and a shade band below. */
+#bb-mobile-controls :is(.bbm-stick, .bbm-button)::after {
+  clip-path: var(--bbm-inner);
+  background: linear-gradient(
+    180deg,
+    rgb(var(--bbm-hi-rgb) / calc(var(--bbm-face) + 0.12)) 0 calc(var(--p) * 2),
+    rgb(var(--bbm-rgb) / var(--bbm-face)) 0 calc(100% - var(--p) * 3),
+    rgb(3 6 11 / calc(var(--bbm-face) + 0.1)) 0
+  );
+}
+
+/* Pressed: the face fills in, the bevel flips and the icon sinks one pixel. */
+#bb-mobile-controls :is(.bbm-button, .bbm-aim).is-active {
+  --bbm-face: 0.5;
+}
+
+#bb-mobile-controls :is(.bbm-button, .bbm-aim).is-active::after {
+  background: linear-gradient(
+    180deg,
+    rgb(3 6 11 / 0.45) 0 calc(var(--p) * 2),
+    rgb(var(--bbm-rgb) / var(--bbm-face)) 0 calc(100% - var(--p) * 2),
+    rgb(var(--bbm-hi-rgb) / 0.6) 0
+  );
+}
+
+#bb-mobile-controls svg {
+  position: relative;
+  z-index: 2;
+  width: 46%;
+  height: auto;
+  fill: currentColor;
+  pointer-events: none;
+}
+
+#bb-mobile-controls svg .bbm-icon-shadow {
+  fill: var(--bbm-ink);
+}
+
+#bb-mobile-controls .is-active svg {
+  translate: 0 var(--bbm-px);
+}
+
+#bb-mobile-controls .bbm-thumb {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 50%;
+  width: var(--bbm-thumb, 40px);
+  height: var(--bbm-thumb, 40px);
+  background: linear-gradient(
+    180deg,
+    #ffffff 0 var(--bbm-px),
+    #dfe8f5 0 calc(100% - var(--bbm-px)),
+    #9fb0c8 0
+  );
+  /* Four offset ink copies make the HUD's notched pixel frame. */
+  box-shadow:
+    0 var(--bbm-px) var(--bbm-ink),
+    0 calc(var(--bbm-px) * -1) var(--bbm-ink),
+    var(--bbm-px) 0 var(--bbm-ink),
+    calc(var(--bbm-px) * -1) 0 var(--bbm-ink);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* Movement stick: an outlined pad that rests faintly at home. */
+#bb-mobile-controls .bbm-move {
+  --c: calc(var(--bbm-px) * 2);
+  --bbm-rgb: 16 39 68;
+  --bbm-hi-rgb: 122 169 229;
+  --bbm-face: 0.15;
+  opacity: 0.75;
+}
+
+#bb-mobile-controls .bbm-move.is-active {
+  --bbm-face: 0.3;
+  opacity: 1;
+}
+
+#bb-mobile-controls .bbm-move .bbm-thumb {
+  opacity: 0.9;
+}
+
+/* Aim sticks show their icon at rest and the thumb while dragging. */
+#bb-mobile-controls .bbm-aim .bbm-thumb {
+  visibility: hidden;
+  width: calc(var(--bbm-thumb, 40px) * 0.8);
+  height: calc(var(--bbm-thumb, 40px) * 0.8);
+}
+
+#bb-mobile-controls .bbm-aim.is-active .bbm-thumb {
+  visibility: visible;
+}
+
+#bb-mobile-controls .bbm-aim.is-active svg {
+  opacity: 0.35;
+}
+
+#bb-mobile-controls .bbm-basic {
+  --c: calc(var(--bbm-px) * 2);
+  --bbm-rgb: 217 67 79;
+  --bbm-hi-rgb: 255 138 138;
+  color: #ff5c69;
+}
+
+#bb-mobile-controls .bbm-jump {
+  --bbm-rgb: 61 145 235;
+  --bbm-hi-rgb: 140 200 255;
+  color: #5cb0ff;
+}
+
+/* Dash and a charged super fill in solid when they can be used, so their
+   availability reads at a glance; otherwise they stay see-through. */
+#bb-mobile-controls .bbm-dash {
+  --bbm-rgb: 25 184 132;
+  --bbm-hi-rgb: 124 242 200;
+  --bbm-face: 0.62;
+  color: #e6fff5;
+}
+
+#bb-mobile-controls .bbm-dash.is-cooling {
+  --bbm-face: 0.18;
+  color: #3fe8a8;
+}
+
+#bb-mobile-controls .bbm-dash.is-active,
+#bb-mobile-controls .bbm-special.is-ready.is-active {
+  --bbm-face: 0.8;
+}
+
+#bb-mobile-controls .bbm-duck {
+  --c: calc(var(--bbm-px) * 1.25);
+  color: #c9d6ea;
+}
+
+/* Super: dim gold until charged, filling from the bottom in steps; once ready
+   the face lights up and blinks. */
+#bb-mobile-controls .bbm-special {
+  --bbm-rgb: 120 90 25;
+  --bbm-hi-rgb: 200 160 70;
+  color: #b8913c;
+}
+
+#bb-mobile-controls .bbm-special.is-ready {
+  --bbm-rgb: 240 172 44;
+  --bbm-hi-rgb: 255 224 122;
+  --bbm-face: 0.66;
+  color: #fff8de;
+}
+
+
+#bb-mobile-controls :is(.bbm-charge, .bbm-cooldown) {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  clip-path: var(--bbm-inner);
+  pointer-events: none;
+}
+
+#bb-mobile-controls .bbm-charge {
+  background: linear-gradient(0deg, rgb(240 172 44 / 0.45) calc(var(--bbm-charge, 0) * 100%), transparent 0);
+}
+
+#bb-mobile-controls .bbm-special.is-ready .bbm-charge {
+  display: none;
+}
+
+/* Dash: dark shutter covers the remaining cooldown and lifts in steps. */
+#bb-mobile-controls .bbm-cooldown {
+  background: linear-gradient(180deg, rgb(3 6 11 / 0.55) calc(var(--bbm-cooldown, 0) * 100%), transparent 0);
+}
+
+#bb-mobile-controls .bbm-dash.is-cooling svg {
+  opacity: 0.5;
+}
+
+/* Ready effect for dash and a charged super: the face slowly fades brighter
+   and back, and a highlight travels around the pixel outline. The glint
+   clips a rotating conic gradient to the outline ring, so only the
+   gradient moves (on the compositor) while the stepped shape stays put. */
+#bb-mobile-controls :is(.bbm-glow, .bbm-glint) {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+  pointer-events: none;
+}
+
+#bb-mobile-controls .bbm-dash:not(.is-cooling) :is(.bbm-glow, .bbm-glint),
+#bb-mobile-controls .bbm-special.is-ready :is(.bbm-glow, .bbm-glint) {
+  display: block;
+}
+
+#bb-mobile-controls .bbm-glow {
+  clip-path: var(--bbm-inner);
+  background: rgb(var(--bbm-hi-rgb));
+  opacity: 0;
+  animation: bbm-ready-fade 3.6s ease-in-out infinite;
+}
+
+#bb-mobile-controls .bbm-glint {
+  overflow: hidden;
+  clip-path: var(--bbm-ring);
+}
+
+#bb-mobile-controls .bbm-glint::before {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  background: conic-gradient(
+    transparent 0 62%,
+    rgb(var(--bbm-hi-rgb) / 0.5) 74%,
+    #fff 82%,
+    rgb(var(--bbm-hi-rgb) / 0.5) 88%,
+    transparent 96%
+  );
+  animation: bbm-ready-glint 3s linear infinite;
+}
+
+#bb-mobile-controls .bbm-special .bbm-glint::before {
+  animation-duration: 2.6s;
+}
+
+/* Pressing takes over from the ready effect. */
+#bb-mobile-controls .is-active :is(.bbm-glow, .bbm-glint) {
+  display: none;
+}
+
+@keyframes bbm-ready-fade {
+  50% {
+    opacity: 0.32;
+  }
+}
+
+@keyframes bbm-ready-glint {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #bb-mobile-controls .bbm-glow,
+  #bb-mobile-controls .bbm-glint::before {
+    animation: none;
+  }
+
+  #bb-mobile-controls .bbm-glow {
+    opacity: 0.16;
+  }
+
+  #bb-mobile-controls .bbm-glint {
+    display: none !important;
+  }
+}
+
+/* Chat, settings and the keyboard reference are desktop affordances. (The
+   dash bar is hidden from localPlayer, since it can move into fullscreen.) */
+body.bb-touch-game .bb-chat-game-wrap,
+body.bb-touch-game .bb-chat-game-launcher,
+body.bb-touch-game .site-battle-settings,
+body.bb-touch-game #battle-keybind-hud {
+  display: none !important;
+}

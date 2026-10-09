@@ -54,45 +54,8 @@ function maybeBroadcastHealth(room, playerData, nowTs, meta = {}) {
   }
 }
 
-function handleHeal(room, socketId, payload) {
-  try {
-    if (!payload || typeof payload !== "object") return;
-    const source = room.players.get(socketId);
-    if (!source || !source.isAlive) return;
-    if (source.connected === false || source.loaded !== true) return;
-
-    const targetName = String(payload.target || source.name || "").trim();
-    if (!targetName) return;
-
-    const target = Array.from(room.players.values()).find(
-      (p) => p.name === targetName,
-    );
-    if (!target || !target.isAlive) return;
-    if (target.connected === false || target.loaded !== true) return;
-
-    if (source && source.team && target.team && source.team !== target.team) {
-      return;
-    }
-
-    const ref = Math.max(0, Number(source.baseDamage || 0));
-    const amount = Math.round(ref * 0.5);
-    if (amount <= 0) return;
-
-    const now = Date.now();
-    const old = target.health;
-    target.health = Math.min(target.maxHealth, target.health + amount);
-    if (target.health !== old) {
-      target.lastCombatAt = now;
-      broadcastHealthUpdate(room, target, { cause: "heal" });
-    }
-  } catch (e) {
-    console.warn(`[GameRoom ${room.matchId}] handleHeal error:`, e?.message);
-  }
-}
-
 module.exports = {
   processRegen,
   broadcastHealthUpdate,
   maybeBroadcastHealth,
-  handleHeal,
 };

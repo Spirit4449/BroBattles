@@ -71,39 +71,12 @@ function getMapDocument(mapId, scene) {
 }
 
 /**
- * Player + powerup spawn config for a map.
- * @param {number|string} mapId
- * @returns {object}
- */
-export function getMapSpawnConfig(mapId, scene = null) {
-  return getMapDocument(mapId, scene)?.spawns ?? { players: {}, powerups: [] };
-}
-
-/**
  * World and camera bounds for a map: its mode's arena (arenas.json).
  * @param {number|string} mapId
  * @returns {{world: object, camera: object}|null}
  */
 export function getMapArena(mapId, scene = null) {
   return mapArena(getMapDocument(mapId, scene));
-}
-
-/**
- * List of texture keys that can be used to add platforms in editor mode.
- * @param {number|string} mapId
- * @returns {string[]}
- */
-export function getMapEditorTextureKeys(mapId, scene = null) {
-  return Object.keys(getMapDocument(mapId, scene)?.assets || {});
-}
-
-/**
- * Runtime platform anchors for spawn snapping.
- * @param {number|string} mapId
- * @returns {object}
- */
-export function getMapSpawnAnchors(mapId, scene = null) {
-  return getDocumentRuntime(mapId, scene)?.anchors ?? {};
 }
 
 /**

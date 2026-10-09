@@ -44,7 +44,7 @@ The signed `user_id` cookie carries a session token. Socket authentication resol
 | Server → client | `game:snapshot`, `game:correction` | Replicated state and rejected-movement correction |
 | Server → client | `game:action`, `player:special` | Accepted combat presentation and protocol packets |
 | Server → client | `health-update`, `super-update` | Authoritative health/charge |
-| Server → client | `player:dead`, `player:respawn`, `player:disconnected`, `player:reconnected` | Actor lifecycle |
+| Server → client | `player:dead`, `player:respawn`, `player:disconnected`, `player:reconnected`, `player:loaded` | Actor lifecycle |
 | Server → client | `game:timer`, `game:sudden-death:start`, `game:over` | Match lifecycle |
 | Server → client | `powerup:collected`, `powerup:tick`, `deathdrop:collected` | Item/effect events |
 

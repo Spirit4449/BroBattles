@@ -4,6 +4,72 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const babel = require('@babel/core');
 
+test('respawn effect stays at the arrival point and releases objects and listeners', () => {
+  const { EventEmitter } = require('node:events');
+  const exports = {};
+  const code = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/respawnEffect.js'), 'utf8'), {
+    babelrc: false, configFile: false,
+    presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  }).code;
+  const audioExports = {};
+  const audioCode = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/audio/playerAudio.js'), 'utf8'), {
+    babelrc: false, configFile: false,
+    presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  }).code;
+  vm.runInNewContext(audioCode, { exports: audioExports });
+  vm.runInNewContext(code, { exports, require: id => id.includes('playerAudio')
+    ? audioExports : { RENDER_LAYERS: { PLAYER: 30 } } });
+  for (const end of ['complete', 'shutdown', 'destroy']) {
+    const objects = [];
+    const tweens = new Map();
+    const shape = (x, y) => {
+      const object = { x, y, destroyed: false, setDepth() {}, setStrokeStyle() {},
+        destroy() { assert.equal(this.destroyed, false); this.destroyed = true; } };
+      objects.push(object);
+      return object;
+    };
+    const sounds = [];
+    const scene = {
+      cache: { audio: { exists: () => end !== 'destroy' } },
+      sound: { play: (key, options) => sounds.push({ key, options }) },
+      events: new EventEmitter(), add: { rectangle: shape, ellipse: shape },
+      tweens: { add: config => tweens.set(config.targets, config), killTweensOf: object => tweens.delete(object) },
+    };
+    const sprite = Object.assign(new EventEmitter(), {
+      x: 500, y: 500, alpha: 1,
+      body: { center: { x: 0 }, bottom: 0, width: 40, height: 80 },
+    });
+    scene._localPlayerAudioSprite = end === 'shutdown' ? { x: 0, y: 0 } : sprite;
+    const cleanup = exports.spawnRespawnEffect(scene, sprite);
+    assert.equal(sounds.length, end === 'destroy' ? 0 : 1, 'missing audio must not block visuals');
+    if (sounds.length) {
+      assert.equal(sounds[0].key, 'sfx-respawn');
+      const baseVolume = audioExports.playerSoundVolume(scene, sprite, 1);
+      assert.ok(sounds[0].options.volume > 0 && sounds[0].options.volume <= baseVolume);
+      if (end === 'shutdown') assert.ok(baseVolume < 1, 'remote respawns attenuate with distance');
+    }
+    assert.ok(objects.length > 0);
+    assert.equal(objects[0].x, 0, 'zero-valued body coordinates are valid');
+    const origins = objects.map(o => [o.x, o.y]);
+    sprite.x += 100;
+    assert.deepEqual(objects.map(o => [o.x, o.y]), origins);
+    assert.equal(sprite.alpha, 1);
+    assert.ok([...tweens.keys()].every(target => target !== sprite));
+    if (end === 'complete') {
+      for (const [object, config] of tweens) {
+        tweens.delete(object);
+        config.onComplete();
+      }
+    } else if (end === 'shutdown') scene.events.emit('shutdown');
+    else sprite.emit('destroy');
+    cleanup();
+    assert.ok(objects.every(o => o.destroyed));
+    assert.equal(tweens.size, 0);
+    assert.equal(scene.events.listenerCount('shutdown'), 0);
+    assert.equal(sprite.listenerCount('destroy'), 0);
+  }
+});
+
 test('local respawn survives old death callbacks and refreshes the body before the HUD', () => {
   const exports = {};
   const noop = () => {};
@@ -14,6 +80,7 @@ test('local respawn survives old death callbacks and refreshes the body before t
   }).code;
   vm.runInNewContext(code, { exports, require: () => ({
     spawnDeathBurst: noop, spawnSpawnBurst: noop,
+    spawnRespawnEffect: () => order.push('respawn-effect'),
     playSpriteAnimation: () => order.push('animation'),
   }), window: {} });
   const handlers = {};
@@ -45,7 +112,7 @@ test('local respawn survives old death callbacks and refreshes the body before t
   die();
   order.length = 0;
   respawn();
-  assert.deepEqual(order, ['animation', 'body', 'hud']);
+  assert.deepEqual(order, ['animation', 'body', 'respawn-effect', 'hud']);
   assert.equal(timers[0].removed, true);
   timers[0].callback();
   assert.equal(player.visible, true);

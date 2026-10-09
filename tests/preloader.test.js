@@ -83,6 +83,28 @@ test('one request at a time; navigation aborts discovery and it retries on resum
   assert.ok(env.calls.some(call => call.url.includes('spritesheet')));
 });
 
+test('navigation can let an in-flight asset finish into the cache without starting more', async () => {
+  let release;
+  const env = setup((path, { signal }) => {
+    if (path !== '/assets/ninja/spritesheet.webp') return;
+    return new Promise((resolve, reject) => {
+      release = () => resolve(new Response('sprite'));
+      signal.addEventListener('abort', () => reject(new DOMException('stopped', 'AbortError')));
+    });
+  });
+  env.preloader.enqueue(['/assets/ninja/spritesheet.webp', '/assets/ninja/weapon.webp']);
+  env.preloader.start();
+  await env.advance(8000);
+  const active = env.calls.find(call => call.url === '/assets/ninja/spritesheet.webp');
+  assert.ok(active, 'the asset download is in flight');
+  env.preloader.stop({ finishActive: true });
+  assert.equal(active.options.signal.aborted, false);
+  const requests = env.calls.length;
+  release();
+  await env.advance(5000);
+  assert.equal(env.calls.length, requests, 'no further warming starts');
+});
+
 test('visibility and connection restrictions pause warming, including during its initial delay', async () => {
   const env = setup();
   env.preloader.start();
@@ -218,6 +240,26 @@ test('new gameplay work aborts an optional download and resumes it after critica
   await env.advance(2000);
   const paths = env.calls.map(call => call.url);
   assert.ok(paths.indexOf('/assets/new-map.webp') < paths.lastIndexOf(card('self').animationUrl));
+});
+
+test('repeated lobby warming and roster changes keep a wanted card download running', async () => {
+  // The map keeps failing, so it stays queued while the card downloads.
+  const env = setup((path, { signal }) => path === '/assets/map.webp' ? new Response('', { status: 503 })
+    : path === card('self').animationUrl
+      ? new Promise((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('stopped', 'AbortError'))))
+      : null);
+  env.preloader.enqueue(['/assets/map.webp']);
+  env.preloader.warmPlayerCard(card('self'));
+  env.preloader.start();
+  await env.advance(6000);
+  const download = env.calls.find(call => call.url === card('self').animationUrl);
+  assert.ok(download);
+  env.preloader.enqueue(['/assets/map.webp']);
+  env.preloader.warmRosterCards([card('self'), card('mate')]);
+  env.preloader.warmRosterCards([card('mate')]);
+  assert.equal(download.options.signal.aborted, false);
+  env.preloader.warmPlayerCard(card('other'));
+  assert.equal(download.options.signal.aborted, true, 'a card nobody wants any more stops');
 });
 
 test('leaving previews cancels pending work and changing equipped cards discards old warming', async () => {

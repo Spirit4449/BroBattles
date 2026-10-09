@@ -89,12 +89,6 @@ function getAllCharacters() {
   return Object.keys(characterStats);
 }
 
-function getFreeCharacters() {
-  return Object.keys(characterStats).filter(
-    (char) => characterStats[char].free,
-  );
-}
-
 function defaultCharacterList() {
   return Object.fromEntries(
     Object.keys(characterStats).map((char) => [
@@ -177,7 +171,6 @@ if (typeof module !== "undefined" && module.exports) {
     getCharacterStats,
     getCharacterTuning,
     getAllCharacters,
-    getFreeCharacters,
     defaultCharacterList,
     getHealth,
     getDamage,

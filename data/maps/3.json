@@ -276,7 +276,7 @@
     "spawnIntervalMs": 25000,
     "maxActive": 3,
     "despawnMs": 10000,
-    "pickupRadius": 70,
+    "pickupRadius": 34,
     "omenMs": 2000,
     "spawnLift": 22,
     "types": [

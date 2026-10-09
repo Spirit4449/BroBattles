@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { friendPresenceLabel, friendPresenceTitle } from '../src/client/friends/friendPresence.mjs';
+import { formatOnlineCount, friendPresenceLabel, friendPresenceTitle, friendsOnlineMessage, isFriendOnline } from '../src/client/friends/friendPresence.mjs';
 const { createFriendService } = createRequire(import.meta.url)('../src/server/services/social/friendService.js');
 
 const now = Date.parse('2026-10-09T16:00:00Z');
@@ -16,6 +16,8 @@ test('friend labels cover live activity, elapsed time, and missing history', () 
   assert.equal(friendPresenceLabel(offline(3_600_000), now), 'Last seen 1h ago');
   assert.equal(friendPresenceLabel(offline(86_400_000 * 3), now), 'Last seen 3d ago');
   assert.equal(friendPresenceLabel(offline(-60_000), now), 'Last seen just now');
+  assert.equal(friendPresenceLabel({ status: 'offline', lastSeenAt: null, lastSeenHidden: true }, now), 'Offline');
+  assert.equal(friendPresenceLabel({ status: 'online', lastSeenHidden: true }, now), 'Online');
   for (const lastSeenAt of [null, undefined, '', 'invalid']) {
     assert.equal(friendPresenceLabel({ status: 'offline', lastSeenAt }, now), 'Last seen unknown');
   }
@@ -60,5 +62,41 @@ test('presence updates send the saved timestamp to all friends', async () => {
   });
   await service.handleStatusChange('Away', 'offline');
   assert.deepEqual(events, [1, 3].map(id => ({ room: `user:${id}`, event: 'friends:presence',
-    payload: { userId: 2, name: 'Away', status: 'offline', lastSeenAt } })));
+    payload: { userId: 2, name: 'Away', status: 'offline', lastSeenAt, lastSeenHidden: false } })));
+});
+
+test('online marker counts any live status and caps at 9+', () => {
+  assert.equal(isFriendOnline({ status: 'online' }), true);
+  assert.equal(isFriendOnline({ status: 'In Battle' }), true);
+  assert.equal(isFriendOnline({ status: 'offline' }), false);
+  assert.equal(isFriendOnline(null), false);
+  assert.equal(formatOnlineCount(2), '2');
+  assert.equal(formatOnlineCount(9), '9');
+  assert.equal(formatOnlineCount(10), '9+');
+});
+
+test('came-online hint names up to three friends, then summarizes', () => {
+  assert.equal(friendsOnlineMessage([]), '');
+  assert.equal(friendsOnlineMessage(['Ana']), 'Ana is online!');
+  assert.equal(friendsOnlineMessage(['Ana', 'Bo']), 'Ana and Bo are online!');
+  assert.equal(friendsOnlineMessage(['Ana', 'Bo', 'Cy']), 'Ana, Bo and Cy are online!');
+  assert.equal(friendsOnlineMessage(['Ana', 'Bo', 'Cy', 'Di']), 'Ana, Bo and 2 others are online!');
+});
+
+test('friend overview reports recent games played with each friend', async () => {
+  const db = { runQuery: async sql => {
+    if (sql.includes('SELECT friend_code')) return [{ friend_code: 'ABCD-EFGH' }];
+    if (sql.includes('COUNT(DISTINCT mp1.match_id) AS games')) return [{ friend_id: 2, games: 3 }];
+    if (sql.includes('FROM friendships f\n')) return [
+      { user_id: 2, name: 'Teammate', last_seen_at: null },
+      { user_id: 3, name: 'Stranger', last_seen_at: null },
+    ];
+    return [];
+  } };
+  const service = createFriendService({ db });
+  const { friends } = await service.getOverview({ user_id: 1, name: 'Me', expires_at: null });
+  assert.deepEqual(friends.map(({ name, gamesTogether }) => ({ name, gamesTogether })), [
+    { name: 'Teammate', gamesTogether: 3 },
+    { name: 'Stranger', gamesTogether: 0 },
+  ]);
 });

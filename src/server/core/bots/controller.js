@@ -14,7 +14,8 @@ const { updateTeamwork } = require('./teamwork');
 const { resolveBotObjective } = require('./objectives');
 const { tryDashSteps, recordDash } = require('./dash');
 const movement = require('../../../shared/physics/movementPhysics.json');
-const { DEATH_DROP_PICKUP_RADIUS, POWERUP_PICKUP_RADIUS } = require('../gameRoomConfig');
+const { DEATH_DROP_PICKUP_RADIUS } = require('../gameRoomConfig');
+const { powerupGap, powerupReachX } = require('../gameRoom/powerupContact');
 const { FIXED_DT_MS } = require('../../../shared/gameConstants');
 const { botProfile } = require('./characterProfiles');
 // How often a bot riding a moving platform looks for a safe hop off.
@@ -521,12 +522,13 @@ class BotController {
       this.walkGoalX = goal.x;
       if (['pickup', 'loot'].includes(this.decision.mode)) {
         const pickup = this.decision.mode === 'pickup' ? this.room._powerups.get(this.decision.pickupId) : this.room._deathDrops.get(this.decision.dropId);
-        const radius = this.decision.mode === 'pickup' ? POWERUP_PICKUP_RADIUS : DEATH_DROP_PICKUP_RADIUS;
-        if (pickup && Math.abs(p.x - pickup.x) < radius / 2 &&
-            Math.hypot(p.x - pickup.x, p.y - pickup.y) >= radius - 2 && pickup.y < p.y) {
+        const powerup = this.decision.mode === 'pickup';
+        const reachX = powerup ? powerupReachX(p) : DEATH_DROP_PICKUP_RADIUS;
+        const gap = (at) => powerup ? powerupGap(p, pickup, at) : Math.hypot(at.x - pickup.x, at.y - pickup.y) - DEATH_DROP_PICKUP_RADIUS;
+        if (pickup && Math.abs(p.x - pickup.x) < reachX / 2 && gap(p) >= -2 && pickup.y < p.y) {
           const hop = previewManeuver(p, { direction: 0, jumpPressed: true }, this.room.geometry,
             effects.getModifiers(p, now), now, context.poisonY);
-          if (hop?.frames.some((frame) => Math.hypot(frame.x - pickup.x, frame.y - pickup.y) < radius - 5)) {
+          if (hop?.frames.some((frame) => gap(frame) < -5)) {
             this.maneuver = { ...hop, cursor: 0 };
             this.wantsProgress = true;
             return;
@@ -619,9 +621,10 @@ class BotController {
     const dx = x - p.x, speed = Math.abs(p.vx || 0);
     const pickup = this.decision?.mode === 'pickup' ? this.room._powerups.get(this.decision.pickupId) :
       this.decision?.mode === 'loot' ? this.room._deathDrops.get(this.decision.dropId) : null;
-    const radius = this.decision?.mode === 'loot' ? DEATH_DROP_PICKUP_RADIUS : POWERUP_PICKUP_RADIUS;
-    const pickupTolerance = pickup ? Math.max(1, Math.sqrt(Math.max(0,
-      radius ** 2 - (p.y - pickup.y) ** 2)) * 0.5) : 20;
+    const reachX = !pickup ? 0 : this.decision.mode === 'loot'
+      ? Math.sqrt(Math.max(0, DEATH_DROP_PICKUP_RADIUS ** 2 - (p.y - pickup.y) ** 2))
+      : powerupReachX(p, pickup);
+    const pickupTolerance = pickup ? Math.max(1, reachX * 0.5) : 20;
     // A few pixels can change whether a jump clears a platform edge.
     const deadband = takeoff ? 0.5 : Math.min(20, pickupTolerance);
     const stopping = speed * speed / (2 * movement.dragGround);

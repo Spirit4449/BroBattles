@@ -64,8 +64,9 @@ const POWERUP_SPAWN_INTERVAL_MS = 25000;
 const POWERUP_STARTING_COUNT = 2;
 // Never more than this many on the map at once.
 const POWERUP_MAX_ACTIVE = 3;
-// Server pickup distance from player to powerup center (px).
-const POWERUP_PICKUP_RADIUS = 70;
+// Radius of the collectible orb (px). Matches the drawn membrane; a player
+// collects it when their hurtbox overlaps this circle.
+const POWERUP_PICKUP_RADIUS = 34;
 // Uncollected powerups vanish after this long. Maps may override (`settings.despawnMs`).
 const POWERUP_DESPAWN_MS = 10000;
 // Warning "omen" shown before a powerup becomes collectible. Maps may override (`settings.omenMs`).

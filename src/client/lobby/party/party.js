@@ -135,6 +135,7 @@ const matchmaking = createMatchmakingClient({
   audio: () => window.__BB_NAVIGATION__?.lobbyAudio,
   isAdmin: () => !!window.__BRO_BATTLES_USERDATA__?.isAdmin,
   navigate: (url) => { window.location.href = url; },
+  prefetchMatch: (matchId) => window.__BB_NAVIGATION__?.prefetchRoute?.(`/game/${matchId}`),
   rememberMatch: (matchId) => sessionStorage.setItem("matchId", matchId),
   dispatchStart: () => window.dispatchEvent(new CustomEvent("bb:matchmaking-start")),
   suppressed: consumeBattleLobbyReturnFlag(),

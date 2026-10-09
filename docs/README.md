@@ -14,6 +14,7 @@ Documentation is organized by the job being done. Paths in prose and shell comma
 | Change navigation, rendering, loading, or sound | [Client](development/client.md) |
 | Edit maps, assets, spawns, or playtests | [Map Studio](development/maps.md) |
 | Change rewards, ownership, or player cards | [Progression](development/progression.md) |
+| Review the proposed daily/weekly quests feature | [Quests feature specification](design/quests.md) |
 | Provision or upgrade the database | [Database](operations/database.md) |
 | Deploy, recover, or verify security boundaries | [Deployment](operations/deployment.md) |
 | Configure Checkout and webhook processing | [Payments](operations/payments.md) |

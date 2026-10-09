@@ -45,6 +45,9 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
       }
       return;
     }
+    // Clients may only report their own fall-out; every other hit comes from
+    // a server-owned attack runtime.
+    if (!server && attackerName !== targetName) return;
 
     const attacker = Array.from(room.players.values()).find(
       (p) => p.name === attackerName,
@@ -258,7 +261,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
       return; // duplicate, ignore
     }
     room._recentHits.set(keySafe, now);
-    room._recordCombatStat(attacker, { hits: 1 });
+    if (!isSelf) room._recordCombatStat(attacker, { hits: 1 });
 
     if (targetVault) {
       const previousHealth = Number(targetVault.health) || 0;

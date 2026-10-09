@@ -16,17 +16,14 @@
 .name-change-dialog .bb-popup-title { font-size: var(--bb-title-sm); }
 .name-change-dialog .name-change-form {
   display: grid;
-  gap: var(--bb-space-5);
-  padding: var(--bb-space-6);
+  gap: var(--bb-space-3);
+  padding: var(--bb-space-4);
   margin: 0;
 }
 .name-change-policy { display: grid; gap: var(--bb-space-2); }
 .name-change-policy p { margin: 0; color: var(--bb-text-soft); font-size: 14px; line-height: 1.5; }
 .name-change-policy p strong { color: var(--bb-text); }
-.name-change-cost { display: flex; align-items: center; gap: var(--bb-space-2); color: var(--bb-text-muted); font-size: var(--bb-text-md); }
-.name-change-cost img { width: 28px; height: 28px; object-fit: contain; }
-.name-change-cost strong { color: var(--bb-gem); font: var(--bb-text-sm)/1.6 var(--bb-font-display); }
-.name-change-field { display: grid; gap: var(--bb-space-3); }
+.name-change-field { display: grid; gap: var(--bb-space-2); }
 .name-change-dialog label { color: var(--bb-text-soft); font: var(--bb-text-xs)/1.6 var(--bb-font-display); text-transform: uppercase; }
 .name-change-dialog input {
   box-sizing: border-box;
@@ -41,33 +38,42 @@
   font: var(--bb-text-sm)/1.6 var(--bb-font-display);
   user-select: text;
 }
-.name-change-hint { margin: 0; color: var(--bb-text-muted); font-size: 12px; line-height: 1.5; }
 .name-change-dialog .name-change-availability,
 .name-change-dialog .name-change-message { margin: 0; font-size: var(--bb-text-md); line-height: 1.6; }
 .name-change-dialog .name-change-availability { color: var(--bb-text-soft); }
 .name-change-availability[data-state="cooldown"],
 .name-change-availability[data-state="insufficient"] {
-  padding: var(--bb-space-3) var(--bb-space-4);
+  padding: var(--bb-space-2) var(--bb-space-3);
   border-left: 3px solid var(--bb-gold);
   background: var(--bb-panel-bg);
 }
 .name-change-dialog .name-change-message { color: var(--bb-red); }
 .name-change-actions {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 200px);
+  justify-content: end;
   align-items: stretch;
-  gap: var(--bb-action-gap);
-  padding-top: var(--bb-space-2);
-  padding-bottom: var(--bb-space-1);
+  gap: var(--bb-space-3);
+  padding-top: var(--bb-space-1);
 }
 .name-change-dialog .bb-button { min-height: 44px; padding: var(--bb-space-3); color: var(--bb-text); font-size: var(--bb-text-xs); }
 .name-change-dialog .name-change-cancel { background: var(--bb-surface-raised); }
-.name-change-dialog .name-change-submit { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: var(--bb-space-2) var(--bb-space-3); background: var(--bb-primary-gradient); }
+.name-change-dialog .name-change-submit { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: var(--bb-space-2); background: var(--bb-primary-gradient); }
+.name-change-dialog .name-change-submit > span:first-child { font-size: 8px; }
 .name-change-price { display: inline-flex; align-items: center; gap: var(--bb-space-1); white-space: nowrap; }
 .name-change-price img { width: var(--bb-currency-icon); height: var(--bb-currency-icon); object-fit: contain; }
 .name-change-dialog [hidden] { display: none !important; }
 @media (max-width: 480px) {
-  .name-change-dialog .name-change-form { padding: var(--bb-space-5); }
+  .name-change-dialog .name-change-form { padding: var(--bb-space-4); }
   .name-change-actions { grid-template-columns: 1fr; }
   .name-change-submit { grid-row: 1; }
 }
+
+.name-change-input-wrap { position: relative; }
+.name-change-dialog .name-change-input-wrap input { padding-right: 44px; }
+.name-change-validation { position: absolute; top: 50%; right: 14px; transform: translateY(-50%); display: grid; place-items: center; width: 22px; height: 22px; font: 900 22px/1 system-ui, sans-serif; }
+.name-change-validation[data-state="available"] { color: var(--bb-green); }
+.name-change-validation:is([data-state="invalid"], [data-state="taken"], [data-state="error"]) { color: var(--bb-red); }
+.name-change-validation[data-state="checking"] { color: var(--bb-text-muted); }
+.name-change-validation-reason { margin: 0; min-height: 2.8em; color: var(--bb-red); font-size: 10px; line-height: 1.4; }
+.name-change-dialog .name-change-submit { min-height: 64px; }

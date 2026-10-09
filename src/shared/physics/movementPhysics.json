@@ -29,6 +29,7 @@
   "minSpeedMult": 0.5,
   "maxSpeedMult": 2,
   "dashSpeed": 560,
+  "dashHorizontalSpeed": 590,
   "dashDownSpeed": 840,
   "dashDurationMs": 160,
   "dashCooldownMs": 5000,

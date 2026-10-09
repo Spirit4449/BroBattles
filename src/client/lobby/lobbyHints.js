@@ -1,9 +1,11 @@
-// Lobby tooltip hints: guest sign-up nudge, mode variety, featured sale and
-// suggested public parties.
+// Lobby tooltip hints: guest sign-up nudge, mode variety, featured sale,
+// suggested public parties and recent teammates coming online.
 import { createLobbyHintController, getRecentModeStreak } from "./lobbyHintController.mjs";
 import { fetchLobbyJson } from "./ui";
 import { getDiscoveryModeLabel } from "./party/partyOverlays.js";
 import { buildProfileIconUrl } from "../views/profileIconAssets.js";
+import { friendsOnlineMessage } from "../friends/friendPresence.mjs";
+import { pixelSpriteUrl } from "../friends/pixelArt.js";
 import { resolveCharacterKey } from "../../shared/characters/characterStats.js";
 
 async function loadLobbyHintData() {
@@ -112,9 +114,41 @@ function startPartySuggestionMonitor(controller, context, getExistingPartyId) {
   );
 }
 
+function buildFriendsOnlineHint(friends, friendsController) {
+  return {
+    id: "friends-online",
+    instanceKey: friends
+      .map((friend) => Number(friend.userId))
+      .sort((left, right) => left - right)
+      .join(","),
+    anchor: ".bb-friends-launcher",
+    align: "end",
+    variant: "friends",
+    icon: pixelSpriteUrl("friends"),
+    title: friends.length === 1 ? "Friend Online" : "Friends Online",
+    message: friendsOnlineMessage(friends.map((friend) => friend.name)),
+    ariaLabel: "Open friends",
+    onClick: () => friendsController.open("friends"),
+    priority: 20,
+    cooldownMs: 2 * 60_000,
+    repeatMs: 30 * 60_000,
+    when: () => !friendsController.isOpen(),
+  };
+}
+
+// Shares the lobby hint gap, so it never stacks on a sale or party hint.
+function startFriendsOnlineHints(controller, context, friendsController) {
+  friendsController?.onFriendsOnline?.((friends) => {
+    controller.showTimedBest(
+      [buildFriendsOnlineHint(friends, friendsController)],
+      { ...context, minGapMs: 45_000 },
+    );
+  });
+}
+
 // `getExistingPartyId` is re-read on every suggestion tick: joining a party
 // stops suggestions.
-export async function initializeLobbyHints({ shop, userData, guest, newGuestCreated, getExistingPartyId }) {
+export async function initializeLobbyHints({ shop, userData, guest, newGuestCreated, getExistingPartyId, friendsController }) {
   const controller = createLobbyHintController({
     storageKey: `bb_lobby_hints_v1:${userData?.user_id || userData?.name || "guest"}`,
   });
@@ -187,4 +221,5 @@ export async function initializeLobbyHints({ shop, userData, guest, newGuestCrea
     );
   }
   startPartySuggestionMonitor(controller, context, getExistingPartyId);
+  startFriendsOnlineHints(controller, context, friendsController);
 }

@@ -72,6 +72,11 @@ export function markOneShotAnimation(
   if (remote) {
     sprite._remoteActionAnimUntil = state.oneShotUntilPerf;
   }
+  // Every character's attack lands here, local or remote, so this is where an
+  // invisible attacker gives away a faded silhouette (see invisibilityReveal).
+  if (sprite._powerupInvisible && (state.oneShot === "throw" || state.oneShot === "special")) {
+    sprite._invisibleAttackFlashAt = nowPerf();
+  }
 }
 
 // Both character adapters and legacy actions mark the sprite. Read the same

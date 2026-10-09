@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { addPartyInvite, getInviteCooldownMs } = require("../party/partyInviteStore");
 const { DEFAULT_CHARACTER, resolveCharacterKey } = require("../../../shared/characters/characterStats.js");
+const { PRIVACY_FIELDS, privacyFromRow, sanitizePrivacyUpdate } = require("../../../shared/social/privacy.cjs");
 
 const MAX_FRIENDS = 200;
 const MAX_MESSAGE_LENGTH = 500;
@@ -8,6 +9,8 @@ const MAX_HISTORY_LIMIT = 100;
 const SUGGESTION_WINDOW_DAYS = 14;
 const SUGGESTION_MIN_GAMES = 2;
 const SUGGESTION_LIMIT = 10;
+// Friends played with in this window get "now online" lobby hints.
+const TEAMMATE_WINDOW_DAYS = 30;
 // Repeat-request protection, per sender -> recipient pair.
 const DECLINE_COOLDOWN_MINUTES = 10;
 const MAX_DECLINES = 3;
@@ -16,6 +19,10 @@ const MAX_REQUESTS_PER_DAY = 5;
 // No 0/O/1/I so codes are easy to read aloud and type.
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const FRIEND_CODE_PATTERN = /^[A-Z2-9]{4}-?[A-Z2-9]{4}$/i;
+// Joined as `p` wherever another player's privacy decides what we send.
+const PRIVACY_COLUMNS = PRIVACY_FIELDS.map((field) => `p.${field.column}`).join(", ");
+// Settings that change what friends see in their list.
+const FRIEND_VISIBLE_PRIVACY = new Set(["messages", "partyInvites", "lastSeen"]);
 
 function httpError(statusCode, message) {
   return Object.assign(new Error(message), { statusCode });
@@ -86,6 +93,55 @@ function createFriendService({ db, io }) {
     return Number(rows[0]?.c) || 0;
   }
 
+  async function getPrivacy(userId, q = db.runQuery) {
+    const rows = await q("SELECT * FROM user_privacy_settings WHERE user_id = ? LIMIT 1", [Number(userId)]);
+    return privacyFromRow(rows[0]);
+  }
+
+  // Name plus privacy for a player we are about to message or invite.
+  async function getUserWithPrivacy(userId) {
+    const rows = await db.runQuery(
+      `SELECT u.name, ${PRIVACY_COLUMNS}
+         FROM users u
+         LEFT JOIN user_privacy_settings p ON p.user_id = u.user_id
+        WHERE u.user_id = ? LIMIT 1`,
+      [Number(userId)],
+    );
+    return rows[0] ? { name: String(rows[0].name || ""), privacy: privacyFromRow(rows[0]) } : null;
+  }
+
+  // Receipts only flow when both players allow them.
+  async function sharesReadReceipts(userId, otherId) {
+    const rows = await db.runQuery(
+      "SELECT read_receipts FROM user_privacy_settings WHERE user_id IN (?, ?)",
+      [Number(userId), Number(otherId)],
+    );
+    return rows.every((row) => privacyFromRow(row).readReceipts);
+  }
+
+  async function playedTogetherRecently(q, userId, otherId) {
+    const [row] = await q(
+      `SELECT COUNT(DISTINCT mp1.match_id) AS games
+         FROM match_participants mp1
+         JOIN match_participants mp2 ON mp2.match_id = mp1.match_id AND mp2.user_id = ?
+         JOIN matches m
+           ON m.match_id = mp1.match_id
+          AND m.status = 'completed'
+          AND m.created_at > NOW() - INTERVAL ${SUGGESTION_WINDOW_DAYS} DAY
+        WHERE mp1.user_id = ?`,
+      [Number(otherId), Number(userId)],
+    );
+    return Number(row?.games) >= SUGGESTION_MIN_GAMES;
+  }
+
+  async function assertAcceptsRequest(q, fromId, to) {
+    const { friendRequests } = await getPrivacy(to.user_id, q);
+    if (friendRequests === "none") throw httpError(403, `${to.name} isn't accepting friend requests.`);
+    if (friendRequests === "recent" && !(await playedTogetherRecently(q, fromId, to.user_id))) {
+      throw httpError(403, `${to.name} only accepts friend requests from players they've battled with recently.`);
+    }
+  }
+
   async function getOrCreateFriendCode(userId) {
     const rows = await db.runQuery("SELECT friend_code FROM users WHERE user_id = ? LIMIT 1", [Number(userId)]);
     if (rows[0]?.friend_code) return rows[0].friend_code;
@@ -123,20 +179,51 @@ function createFriendService({ db, io }) {
     return (await db.runQuery(`${select} WHERE name = ? LIMIT 1`, [name.slice(0, 50)]))[0] || null;
   }
 
-  async function listFriends(userId) {
+  // Completed matches shared with each friend recently, keyed by friend id.
+  async function getGamesWithFriends(userId) {
     const rows = await db.runQuery(
-      `SELECT u.user_id, u.name, u.char_class, u.selected_profile_icon_id, u.trophies, u.last_seen_at, f.created_at
+      `SELECT mp2.user_id AS friend_id, COUNT(DISTINCT mp1.match_id) AS games
+         FROM match_participants mp1
+         JOIN match_participants mp2
+           ON mp2.match_id = mp1.match_id AND mp2.user_id <> mp1.user_id
+         JOIN matches m
+           ON m.match_id = mp1.match_id
+          AND m.status = 'completed'
+          AND m.created_at > NOW() - INTERVAL ${TEAMMATE_WINDOW_DAYS} DAY
+        WHERE mp1.user_id = ?
+          AND EXISTS (SELECT 1 FROM friendships link WHERE link.user_id = mp1.user_id AND link.friend_id = mp2.user_id)
+        GROUP BY mp2.user_id`,
+      [Number(userId)],
+    );
+    const out = new Map();
+    for (const row of rows) out.set(Number(row.friend_id), Number(row.games) || 0);
+    return out;
+  }
+
+  async function listFriends(userId) {
+    const [rows, gamesWith] = await Promise.all([db.runQuery(
+      `SELECT u.user_id, u.name, u.char_class, u.selected_profile_icon_id, u.trophies, u.last_seen_at, f.created_at,
+              ${PRIVACY_COLUMNS}
          FROM friendships f
          JOIN users u ON u.user_id = f.friend_id
+         LEFT JOIN user_privacy_settings p ON p.user_id = u.user_id
         WHERE f.user_id = ?
         ORDER BY u.name ASC`,
       [Number(userId)],
-    );
-    return rows.map((row) => ({
-      ...toPublicUser(row, getStatusForName(row.name)),
-      since: row.created_at,
-      lastSeenAt: row.last_seen_at || null,
-    }));
+    ), getGamesWithFriends(userId)]);
+    return rows.map((row) => {
+      const privacy = privacyFromRow(row);
+      const lastSeenHidden = privacy.lastSeen === "none";
+      return {
+        ...toPublicUser(row, getStatusForName(row.name)),
+        since: row.created_at,
+        lastSeenAt: lastSeenHidden ? null : row.last_seen_at || null,
+        lastSeenHidden,
+        acceptsMessages: privacy.messages !== "none",
+        acceptsPartyInvites: privacy.partyInvites !== "none",
+        gamesTogether: gamesWith.get(Number(row.user_id)) || 0,
+      };
+    });
   }
 
   async function listRequests(userId) {
@@ -178,13 +265,14 @@ function createFriendService({ db, io }) {
   async function getOverview(user) {
     assertRegistered(user);
     const userId = Number(user.user_id);
-    const [friendCode, friends, requests, unread] = await Promise.all([
+    const [friendCode, friends, requests, unread, privacy] = await Promise.all([
       getOrCreateFriendCode(userId),
       listFriends(userId),
       listRequests(userId),
       getUnreadCounts(userId),
+      getPrivacy(userId),
     ]);
-    return { me: { userId, name: String(user.name || ""), charClass: user.char_class || DEFAULT_CHARACTER, profileIconId: user.selected_profile_icon_id || null }, friendCode, friends, ...requests, unread };
+    return { me: { userId, name: String(user.name || ""), charClass: user.char_class || DEFAULT_CHARACTER, profileIconId: user.selected_profile_icon_id || null }, friendCode, friends, ...requests, unread, privacy };
   }
 
   async function getSuggestions(user) {
@@ -202,7 +290,10 @@ function createFriendService({ db, io }) {
           AND m.created_at > NOW() - INTERVAL ${SUGGESTION_WINDOW_DAYS} DAY
          JOIN users u
            ON u.user_id = mp2.user_id AND u.expires_at IS NULL AND COALESCE(u.is_banned, 0) = 0
+         LEFT JOIN user_privacy_settings p ON p.user_id = u.user_id
         WHERE mp1.user_id = ?
+          AND COALESCE(p.show_in_suggestions, 1) = 1
+          AND COALESCE(p.friend_requests, 'everyone') <> 'none'
           AND NOT EXISTS (SELECT 1 FROM friendships f WHERE f.user_id = ? AND f.friend_id = mp2.user_id)
           AND NOT EXISTS (
             SELECT 1 FROM friend_requests r
@@ -306,6 +397,7 @@ function createFriendService({ db, io }) {
         await acceptRequestRow(q, reverse[0]);
         return { status: "accepted" };
       }
+      await assertAcceptsRequest(q, me, other);
       await assertCanRequest(q, me, otherId, other.name);
       try {
         const insert = await q(
@@ -377,6 +469,11 @@ function createFriendService({ db, io }) {
     return { removed: true };
   }
 
+  async function assertAcceptsMessages(userId) {
+    const target = await getUserWithPrivacy(userId);
+    if (target?.privacy.messages === "none") throw httpError(403, `${target.name} isn't accepting messages.`);
+  }
+
   function toMessage(row, reactions = []) {
     return {
       messageId: Number(row.message_id),
@@ -430,6 +527,7 @@ function createFriendService({ db, io }) {
     if (Number(row.sender_id) === me) throw httpError(400, "You can't react to your own message.");
     const other = Number(row.recipient_id) === me ? Number(row.sender_id) : Number(row.recipient_id);
     await assertFriends(me, other);
+    await assertAcceptsMessages(other);
     const current = await db.runQuery(
       "SELECT reaction FROM friend_message_reactions WHERE message_id = ? AND user_id = ? LIMIT 1",
       [Number(row.message_id), me],
@@ -469,7 +567,11 @@ function createFriendService({ db, io }) {
         LIMIT ${cap}`,
       before ? [me, other, me, other, before] : [me, other, me, other],
     );
-    return { messages: await withReactions(rows.reverse()), hasMore: rows.length === cap };
+    const messages = await withReactions(rows.reverse());
+    if (!(await sharesReadReceipts(me, other))) {
+      for (const message of messages) if (message.senderId === me) message.readAt = null;
+    }
+    return { messages, hasMore: rows.length === cap };
   }
 
   async function sendMessage(user, friendId, body) {
@@ -479,6 +581,7 @@ function createFriendService({ db, io }) {
     const text = String(body || "").trim().slice(0, MAX_MESSAGE_LENGTH);
     if (!text) throw httpError(400, "Type a message first.");
     await assertFriends(me, other);
+    await assertAcceptsMessages(other);
     const insert = await db.runQuery(
       "INSERT INTO friend_messages (sender_id, recipient_id, body) VALUES (?, ?, ?)",
       [me, other, text],
@@ -512,7 +615,7 @@ function createFriendService({ db, io }) {
     if (result.affectedRows) {
       const readAt = new Date().toISOString();
       // The sender's chat flips its receipts; my other tabs clear their badge.
-      emitToUser(other, "friends:read", { readerId: me, upToMessageId, readAt });
+      if (await sharesReadReceipts(me, other)) emitToUser(other, "friends:read", { readerId: me, upToMessageId, readAt });
       emitToUser(me, "friends:read", { readerId: me, friendId: other, upToMessageId, readAt });
     }
     return { updated: Number(result.affectedRows) || 0 };
@@ -525,9 +628,10 @@ function createFriendService({ db, io }) {
     await assertFriends(me, other);
     const partyId = await db.getPartyIdByName(user.name);
     if (!partyId) throw httpError(400, "Join or create a party first, then invite friends.");
-    const rows = await db.runQuery("SELECT name FROM users WHERE user_id = ? LIMIT 1", [other]);
-    if (!rows[0]) throw httpError(404, "That player isn't on your friends list.");
-    const friendName = rows[0].name;
+    const target = await getUserWithPrivacy(other);
+    if (!target) throw httpError(404, "That player isn't on your friends list.");
+    const friendName = target.name;
+    if (target.privacy.partyInvites === "none") throw httpError(403, `${friendName} isn't accepting party invites.`);
     if (getStatusForName(friendName) === "offline") throw httpError(409, `${friendName} is offline right now.`);
     if (Number(await db.getPartyIdByName(friendName)) === Number(partyId)) throw httpError(409, `${friendName} is already in your party.`);
     const waitMs = getInviteCooldownMs(me, other);
@@ -546,18 +650,61 @@ function createFriendService({ db, io }) {
   async function handleStatusChange(name, status) {
     try {
       const rows = await db.runQuery(
-        `SELECT u.user_id, u.last_seen_at, f.friend_id
+        `SELECT u.user_id, u.last_seen_at, f.friend_id, p.last_seen
            FROM users u
            JOIN friendships f ON f.user_id = u.user_id
+           LEFT JOIN user_privacy_settings p ON p.user_id = u.user_id
           WHERE u.name = ?`,
         [name],
       );
       for (const row of rows) {
-        emitToUser(row.friend_id, "friends:presence", { userId: Number(row.user_id), name, status, lastSeenAt: row.last_seen_at || null });
+        const lastSeenHidden = privacyFromRow(row).lastSeen === "none";
+        emitToUser(row.friend_id, "friends:presence", {
+          userId: Number(row.user_id),
+          name,
+          status,
+          lastSeenAt: lastSeenHidden ? null : row.last_seen_at || null,
+          lastSeenHidden,
+        });
       }
     } catch (error) {
       console.warn("[friends] presence fan-out failed:", error?.message);
     }
+  }
+
+  async function getPrivacySettings(user) {
+    assertRegistered(user);
+    return { privacy: await getPrivacy(user.user_id) };
+  }
+
+  async function updatePrivacy(user, update) {
+    assertRegistered(user);
+    const me = Number(user.user_id);
+    const changes = sanitizePrivacyUpdate(update);
+    const fields = PRIVACY_FIELDS.filter((field) => field.key in changes);
+    if (!fields.length) throw httpError(400, "Pick a privacy setting to change.");
+    const columns = fields.map((field) => field.column);
+    const values = fields.map((field) => (field.boolean ? (changes[field.key] ? 1 : 0) : changes[field.key]));
+    await db.runQuery(
+      `INSERT INTO user_privacy_settings (user_id, ${columns.join(", ")})
+       VALUES (?, ${columns.map(() => "?").join(", ")})
+       ON DUPLICATE KEY UPDATE ${columns.map((column) => `${column} = VALUES(${column})`).join(", ")}`,
+      [me, ...values],
+    );
+    const privacy = await getPrivacy(me);
+    emitToUser(me, "friends:privacy", { privacy });
+    if (fields.some((field) => FRIEND_VISIBLE_PRIVACY.has(field.key))) {
+      const friends = await db.runQuery("SELECT friend_id FROM friendships WHERE user_id = ?", [me]);
+      notifyChanged(...friends.map((row) => row.friend_id));
+    }
+    return { privacy };
+  }
+
+  // No typing indicator toward a friend who can't receive messages.
+  async function canShowTyping(userId, friendId) {
+    if (!(await areFriends(userId, friendId))) return false;
+    const target = await getUserWithPrivacy(friendId);
+    return target?.privacy.messages !== "none";
   }
 
   function attachPresence({ getStatus }) {
@@ -569,7 +716,10 @@ function createFriendService({ db, io }) {
     attachPresence,
     handleStatusChange,
     areFriends,
+    canShowTyping,
     getOverview,
+    getPrivacySettings,
+    updatePrivacy,
     getSuggestions,
     getRelationship,
     sendRequest,

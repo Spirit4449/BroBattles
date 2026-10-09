@@ -31,12 +31,14 @@ import {
   getEffectsClass,
 } from "../characters";
 import {
+  spawnChromaReveal,
   spawnHealthMarker,
   spawnJumpTakeoff,
   spawnSpawnBurst,
   spawnWallKickCloud,
 } from "../scene/effects";
 import { bindLocalSocketEvents } from "./localSocketEvents";
+import { INVISIBLE_ALPHA, invisibleAttackAlpha } from "../powerups/invisibilityReveal.js";
 import { createLocalMovementAudio } from "./localMovementAudio";
 import { createLocalMovementFx } from "./localMovementFx";
 import { createLocalStateSync } from "./localStateSync";
@@ -297,6 +299,7 @@ const localStateSync = createLocalStateSync({
       if (player) { player._dashReadyAt = 0; player._dashHud?.hide(); }
     }
     dead = value;
+    mobileControlsController?.setHidden?.(!!value);
   },
   getMaxHealth: () => maxHealth,
   setMaxHealth: (value) => {
@@ -550,8 +553,6 @@ export function createPlayer(
   });
   if (!mobileControlsController) {
     mobileControlsController = createMobileControlsController({
-      Phaser,
-      getScene: () => scene,
       getPlayer: () => player,
       getPointerAimActive: () => !!attackAimState.active,
       getAimBasePoint: (family = "basic") =>
@@ -570,8 +571,11 @@ export function createPlayer(
           quick,
           quickFacingDirection: quick ? getNearestOpponentDirection(player, opponentPlayersRef) : null,
         }),
+      resolveQuickContext: (family) => resolveQuickAttackContext(family),
+      getSuperChargeRatio: () => (maxSuperCharge > 0 ? superCharge / maxSuperCharge : 0),
       onBasicFire: (context) => fireBasicAttack(context?.direction, context),
       onSpecialFire: (context) => fireSpecialAttack(context),
+      onSpecialNotReady: () => triggerSpecialNotReadyFeedback(),
       onClearReticle: () => clearAttackAimReticle(),
     });
   }
@@ -741,31 +745,7 @@ export function createPlayer(
     scene.physics.world.off("worldstep", protectDash);
   });
 
-  // Listener to detect if player leaves the world bounds. One request is in
-  // flight at a time; otherwise every frame below the world queues another.
-  let fallOutTimer = null;
-  scene.events.on("update", () => {
-    if (fallOutTimer || dead) return;
-    if (player.y > scene.physics.world.bounds.bottom + 50) {
-      fallOutTimer = setTimeout(() => {
-        fallOutTimer = null;
-        // Request a suicide if player falls out (treat as self-hit to 99999)
-        if (!dead) {
-          socket.emit("hit", {
-            attacker: username,
-            target: username,
-            damage: 99999,
-            gameId,
-          });
-          pdbg();
-        }
-      }, 500);
-    }
-  });
-  scene.events.once("shutdown", () => {
-    clearTimeout(fallOutTimer);
-    fallOutTimer = null;
-  });
+  // Falling out of the world is detected by the server from position packets.
 
   // Keep the local player hidden until the scene finishes spawn placement and any
   // reconnect position restore. That removes the first-frame pop from -100,-100.
@@ -950,14 +930,8 @@ export function createPlayer(
     ) {
       return;
     }
-    const mobilePointerHandled =
-      !!mobileControlsController?.handlePointerDown?.(pointer);
-    if (mobilePointerHandled) return;
-    if (
-      mobileControlsController?.isEnabled?.() &&
-      pointer?.pointerType === "touch"
-    )
-      return;
+    // Touches belong to the mobile controls overlay.
+    if (mobileControlsController?.isEnabled?.() && pointer?.wasTouch) return;
     if (!combatMouseController?.beginInput()) return;
     if (pointer.button === 0) {
       startPointerAttackAim(pointer, "basic", 0);
@@ -974,14 +948,8 @@ export function createPlayer(
 
   const pointerMoveHandler = (pointer) => {
     if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) return;
-    const mobilePointerHandled =
-      !!mobileControlsController?.handlePointerMove?.(pointer);
-    if (mobilePointerHandled) return;
-    if (
-      mobileControlsController?.isEnabled?.() &&
-      pointer?.pointerType === "touch"
-    )
-      return;
+    // Touches belong to the mobile controls overlay.
+    if (mobileControlsController?.isEnabled?.() && pointer?.wasTouch) return;
     if (!attackAimState.active) return;
     if (
       attackAimState.pointerId !== null &&
@@ -995,14 +963,8 @@ export function createPlayer(
 
   const pointerUpHandler = (pointer) => {
     if (chatInputActive || window.__BB_SITE_DIALOG_OPEN) return;
-    const mobilePointerHandled =
-      !!mobileControlsController?.handlePointerUp?.(pointer);
-    if (mobilePointerHandled) return;
-    if (
-      mobileControlsController?.isEnabled?.() &&
-      pointer?.pointerType === "touch"
-    )
-      return;
+    // Touches belong to the mobile controls overlay.
+    if (mobileControlsController?.isEnabled?.() && pointer?.wasTouch) return;
     const movementLockedNow =
       Math.max(
         Number(player?._movementLockedUntil || 0),
@@ -1087,6 +1049,7 @@ export function createPlayer(
         if (player) { player._dashReadyAt = 0; player._dashHud?.hide(); }
       }
       dead = value;
+      mobileControlsController?.setHidden?.(!!value);
     },
     getSuperCharge: () => superCharge,
     setSuperCharge: (value) => {
@@ -1472,9 +1435,10 @@ function drawAmmoBar(forcedX, forcedY) {
 // presentation (effects, animation) -> replicated input state.
 
 export function handlePlayerMovement(scene) {
-  drawDashCooldown(scene, player, dead);
-  mobileControlsController?.ensure?.(scene);
-  mobileControlsController?.layout?.(scene);
+  mobileControlsController?.update?.(scene);
+  updateInvisibleAttackAlpha();
+  // Touch players read the cooldown from the dash button instead.
+  drawDashCooldown(scene, player, dead || !!mobileControlsController?.isEnabled?.());
   if (isLocalInputInactive(scene)) {
     applyInactiveInputFrame(scene);
     return;
@@ -1665,12 +1629,13 @@ function applyInactiveInputFrame(scene) {
 // Advances the dash and ammo reload. Returns true while a dash owns movement.
 function updateDashAndAmmo(scene) {
   const now = Date.now();
+  const mobileDashPressed = !!mobileControlsController?.consumeDashFreshPress?.();
   const dashing = updateDash(scene, player, {
-    pressed: !!keySpace && Phaser.Input.Keyboard.JustDown(keySpace),
+    pressed: (!!keySpace && Phaser.Input.Keyboard.JustDown(keySpace)) || mobileDashPressed,
     left: cursors.left.isDown || movementKeys.left.isDown || !!mobileControlsController?.isMovingLeft?.(),
     right: cursors.right.isDown || movementKeys.right.isDown || !!mobileControlsController?.isMovingRight?.(),
-    up: cursors.up.isDown || movementKeys.up.isDown,
-    down: cursors.down.isDown || movementKeys.down.isDown,
+    up: cursors.up.isDown || movementKeys.up.isDown || !!mobileControlsController?.isAimingUp?.(),
+    down: cursors.down.isDown || movementKeys.down.isDown || !!mobileControlsController?.isAimingDown?.(),
     blocked: dead || isAttacking || Number(movementSpeedMult) <= 0 ||
       Math.max(player._movementLockedUntil || 0, player._externalControlLockUntil || 0,
         player._specialAnimLockUntil || 0, player._shockwaveUntil || 0,
@@ -1768,7 +1733,7 @@ function readMovementInput() {
     right: cursors.right.isDown || movementKeys.right.isDown || !!mobileControlsController?.isMovingRight?.(),
     up: directionalUpHeld || !!mobileControlsController?.isJumpHeld?.(),
     upFresh: directionalUpFresh || jumpButtonFresh,
-    down: cursors.down.isDown || movementKeys.down.isDown,
+    down: cursors.down.isDown || movementKeys.down.isDown || !!mobileControlsController?.isDuckHeld?.(),
     directionalUpHeld,
   };
 }
@@ -2202,6 +2167,13 @@ export function setPowerupMobility(speedMult = 1, jumpMult = 1) {
   return localStateSync.setPowerupMobility(speedMult, jumpMult);
 }
 
+// Attacking while invisible shows others a faded silhouette, so the local
+// ghost brightens to match and settles back (see invisibilityReveal).
+function updateInvisibleAttackAlpha() {
+  if (!powerupInvisible || !player?.active) return;
+  player.setAlpha(invisibleAttackAlpha(player._invisibleAttackFlashAt, INVISIBLE_ALPHA.local));
+}
+
 export function setPowerupInvisible(active = false) {
   const nextInvisible = active === true;
   const changed = nextInvisible !== powerupInvisible;
@@ -2209,7 +2181,16 @@ export function setPowerupInvisible(active = false) {
   if (player?.active) {
     player._powerupInvisible = powerupInvisible;
     if (powerupInvisible || changed) {
-      player.setAlpha(powerupInvisible ? 0.2 : 1);
+      player.setAlpha(
+        powerupInvisible
+          ? invisibleAttackAlpha(player._invisibleAttackFlashAt, INVISIBLE_ALPHA.local)
+          : 1,
+      );
+    }
+    if (changed && !powerupInvisible && !dead) {
+      try {
+        spawnChromaReveal(scene, player, { depth: 28 });
+      } catch (_) {}
     }
   }
   if (changed) {

@@ -245,18 +245,21 @@ function nameDialogHarness(profile, fetchJson = async () => ({})) {
     };
   }
   const button = element(), input = element(), submit = element(), form = element();
-  const message = element(), availability = element(), cancel = element();
+  const message = element(), availability = element(), cancel = element(), validation = element(), validationReason = element();
   const dialog = Object.assign(element(), {
     querySelector: selector => ({ form, input, '[type="submit"]': submit,
-      '.name-change-message': message, '.name-change-availability': availability })[selector],
+      '.name-change-message': message, '.name-change-availability': availability, '.name-change-validation': validation, '.name-change-validation-reason': validationReason })[selector],
     querySelectorAll: selector => selector === '[data-close]' ? [cancel] : [],
     showModal() { this.open = true; },
     close() { this.open = false; this.handlers.close?.(); },
   });
   const windowHandlers = new Map();
+  let pendingValidation;
   let changed;
   const context = {
-    exports: {}, Date,
+    exports: {}, Date, AbortController,
+    setTimeout: fn => { pendingValidation = fn; return 1; },
+    clearTimeout: () => { pendingValidation = null; },
     document: { createElement: () => dialog, body: { append() {} } },
     window: {
       addEventListener: (type, fn, capture) => windowHandlers.set(type, { fn, capture }),
@@ -272,7 +275,8 @@ function nameDialogHarness(profile, fetchJson = async () => ({})) {
   context.exports.wireNameChangeDialog(button, {
     getProfile: () => profile, fetchJson, onChanged: data => { changed = data; },
   });
-  return { button, dialog, input, submit, availability, windowHandlers,
+  return { button, dialog, input, submit, availability, validation, validationReason, windowHandlers,
+    check: () => pendingValidation?.(),
     changed: () => changed,
     open: () => button.handlers.click(),
     save: () => form.handlers.submit({ preventDefault() {} }),
@@ -316,4 +320,34 @@ test('name dialog blocks cooldown and insufficient funds, and publishes an ackno
   assert.equal(profile.gems, response.gems);
   assert.equal(profile.nextNameChangeAt, response.nextNameChangeAt);
   assert.equal(h.dialog.open, false);
+});
+
+
+test('name dialog validates input and checks username availability before enabling payment', async () => {
+  const requests = [];
+  const h = nameDialogHarness({ guest: false, username: 'Original', gems: 100 }, async url => {
+    requests.push(url);
+    return { available: url.includes('FreeName') };
+  });
+  h.open();
+  h.input.value = 'no spaces';
+  h.input.handlers.input();
+  assert.equal(h.validation.textContent, '×');
+  assert.match(h.validationReason.textContent, /3–14/);
+  assert.equal(h.submit.disabled, true);
+  assert.equal(requests.length, 0);
+  h.input.value = 'TakenName';
+  h.input.handlers.input();
+  assert.equal(h.validation.textContent, '…');
+  await h.check();
+  assert.equal(h.validation.textContent, '×');
+  assert.match(h.validationReason.textContent, /already taken/);
+  assert.equal(h.submit.disabled, true);
+  h.input.value = 'FreeName';
+  h.input.handlers.input();
+  await h.check();
+  assert.equal(h.validation.textContent, '✓');
+  assert.equal(h.validationReason.textContent, '');
+  assert.equal(h.submit.disabled, false);
+  assert.match(requests[1], /username-availability\?username=FreeName/);
 });

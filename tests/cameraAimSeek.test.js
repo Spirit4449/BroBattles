@@ -16,6 +16,7 @@ test('aim seek shifts camera limits at either map edge without accumulating boun
   const cam = { zoom: 1.8, useBounds: true, _bounds: { x: -40, y: -20, width: 2000, height: 1200 },
     followOffset: { x: 0, y: 120 },
     setZoom(z) { this.zoom = z; },
+    setLerp(x,y) { this.lerp = { x,y }; },
     setBounds(x,y,width,height) { this._bounds = { x,y,width,height }; },
     setFollowOffset(x,y) { this.followOffset = { x,y }; } };
   const scene = { cameras: { main: cam }, game: { loop: { delta: 16.67 } }, _mapArena: arenaFor('duels-1v1') };
@@ -204,4 +205,43 @@ test('dash-only camera feedback respects reduced motion and clears on release or
     assert.equal(scene._dashCameraBaseZoom, null);
     scene.events.emit('shutdown');
   }
+});
+
+
+test('fast falls and dashes stay closer to the follow target than gentle tracking', () => {
+  for (const axis of ['x', 'y']) for (const direction of [-1, 1]) {
+    const fast = cameraFixture(), gentle = cameraFixture();
+    for (const fixture of [fast, gentle]) {
+      fixture.cam.removeBounds();
+      fixture.player.body = { velocity: { x: 0, y: 0 } };
+    }
+    const baseline = { x: gentle.cam.lerp.x, y: gentle.cam.lerp.y };
+    for (let frame = 0; frame < 60; frame++) {
+      for (const fixture of [fast, gentle]) {
+        fixture.player.body.velocity[axis] = direction * 1200;
+        fixture.player[axis] += direction * 1200 / 60;
+        updateDynamicCamera(fixture.scene, fixture.player);
+        if (fixture === gentle) fixture.cam.setLerp(baseline.x, baseline.y);
+        fixture.render();
+      }
+    }
+    const lag = ({ cam, player }) => Math.abs(player[axis] - cam.followOffset[axis] - cam.midPoint[axis]);
+    assert.ok(lag(fast) < lag(gentle) * 0.6, 'high-speed follow substantially reduces lag');
+    const other = axis === 'x' ? 'y' : 'x';
+    assert.equal(fast.cam.lerp[other], baseline[other], 'only the moving axis speeds up');
+    fast.player.body.velocity[axis] = 0;
+    fast.update();
+    assert.equal(fast.cam.lerp[axis], baseline[axis], 'landing restores gentle tracking');
+  }
+});
+
+test('follow response covers the same fraction of a gap per second across frame rates', () => {
+  const remaining = [];
+  for (const fps of [30, 60, 120]) {
+    const { cam, scene, player } = cameraFixture('duels-1v1', 1150, 520, 1000 / fps);
+    player.body = { velocity: { x: 0, y: 800 } };
+    updateDynamicCamera(scene, player);
+    remaining.push(Math.pow(1 - cam.lerp.y, fps));
+  }
+  for (const value of remaining) assert.ok(Math.abs(value - remaining[0]) < 1e-10);
 });

@@ -12,7 +12,7 @@ function registerFriendEvents(socket, { friendService }) {
       const isTyping = !!payload?.isTyping;
       if (isTyping && Date.now() - lastTypingAt < TYPING_THROTTLE_MS) return cb?.({ ok: true });
       if (isTyping) lastTypingAt = Date.now();
-      if (!(await friendService.areFriends(user.user_id, friendId))) return cb?.({ ok: false });
+      if (!(await friendService.canShowTyping(user.user_id, friendId))) return cb?.({ ok: false });
       friendService.io?.to(`user:${friendId}`).emit("friends:typing", {
         userId: Number(user.user_id),
         isTyping,

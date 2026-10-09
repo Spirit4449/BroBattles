@@ -14,6 +14,7 @@ function fixture({ suppressed = false, players = [{ name: "Ann", char_class: "ni
   const emits = [];
   const notices = [];
   const navigations = [];
+  const prefetches = [];
   const timeouts = [];
   const intervals = [];
   let clock = 1000;
@@ -60,6 +61,7 @@ function fixture({ suppressed = false, players = [{ name: "Ann", char_class: "ni
     onReadyReset: () => { readyResets++; },
     notify: (...args) => notices.push(args),
     navigate: (url) => navigations.push(url),
+    prefetchMatch: (matchId) => prefetches.push(matchId),
     suppressed,
     timers: {
       setTimeout: (fn, ms) => { timeouts.push({ fn, ms }); return timeouts.length; },
@@ -72,7 +74,7 @@ function fixture({ suppressed = false, players = [{ name: "Ann", char_class: "ni
   });
   client.bindSocketEvents();
   return {
-    client, view, handlers, requests, emits, notices, navigations, timeouts, intervals,
+    client, view, handlers, requests, emits, notices, navigations, prefetches, timeouts, intervals,
     get readyResets() { return readyResets; },
     advance(ms) { clock += ms; },
   };
@@ -136,6 +138,18 @@ test("a found match is acknowledged only after the success hold", () => {
   assert.equal(f.emits.some(([event]) => event === "ready:ack"), false);
   ack.fn();
   assert.deepEqual(f.emits.at(-1), ["ready:ack", { matchId: 5 }]);
+});
+
+test("a ready match is prefetched during the success hold and entered after it", async () => {
+  const f = fixture();
+  f.handlers["queue:joined"]({ selection: duel });
+  f.handlers["match:found"]({ matchId: 5, selection: duel, players: [{ name: "Ann" }, { name: "Bo" }] });
+  const entering = f.handlers["match:gameReady"]({ matchId: 5 });
+  assert.deepEqual(f.prefetches, [5]);
+  assert.deepEqual(f.navigations, []);
+  f.timeouts.at(-1).fn();
+  await entering;
+  assert.deepEqual(f.navigations, ["/game/5"]);
 });
 
 test("a cancelled match resets the queue and the local ready state", () => {

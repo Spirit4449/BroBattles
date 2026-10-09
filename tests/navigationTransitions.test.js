@@ -153,9 +153,9 @@ function setup({ routeResponse, statusResponse, gameDataResponse, deferStyles = 
 
 test('return overlaps script downloads, CSS, and cleanup; status is delivered once to the new lobby', async () => {
   const env = setup({ deferStyles: true, deferCleanup: true });
-  const returning = env.nav.prepareLobbyReturn(2);
+  const returning = env.nav.prepareLobbyReturn(7);
   await flush();
-  assert.deepEqual(env.state.fetches.map(request => request.url), ['/status', '/party/7']);
+  assert.deepEqual(env.state.fetches.map(request => request.url), ['/party/7', '/status'], 'the match party page loads alongside status');
   assert.equal(env.state.preloaded.length, 1);
   assert.equal(env.state.styleRequests.length, 1);
   assert.equal(env.state.disposed, 1);
@@ -173,6 +173,14 @@ test('return overlaps script downloads, CSS, and cleanup; status is delivered on
   assert.ok(env.document.getElementById('bb-route-transition'));
   env.advanceTime(1);
   assert.equal(env.document.getElementById('bb-route-transition'), null);
+});
+
+test('a lobby prefetch for a party the player has left is discarded', async () => {
+  const env = setup();
+  await env.nav.prepareLobbyReturn(2);
+  assert.deepEqual(env.state.fetches.map(request => request.url), ['/party/2', '/status', '/party/7']);
+  assert.equal(env.location.pathname, '/party/7');
+  assert.equal(env.state.bodies, 1);
 });
 
 test('a blocked Cloudflare analytics beacon cannot fail lobby navigation', async () => {
@@ -263,15 +271,29 @@ test('transition artwork starts first and navigation waits for decode before cov
   const first = nav.navigate('/party/1');
   const second = nav.navigate('/party/2');
   assert.equal(document.getElementById('bb-route-transition'), null);
-  assert.equal(state.fetches.length, 0);
+  assert.deepEqual(state.fetches.map(request => request.url), ['/party/1', '/party/2'], 'requests overlap the decode');
+  assert.equal(state.fetches[0].options.signal.aborted, true, 'the superseded request is cancelled');
   image.onload();
   await flush();
   assert.equal(state.bodies, 0, 'download completion alone is not decode readiness');
   decodeDone();
   await Promise.all([first, second]);
-  assert.equal(state.fetches.length, 1, 'superseded route cannot resume after decoding');
-  assert.equal(state.fetches[0].url, '/party/2');
+  assert.equal(state.bodies, 1, 'superseded route cannot resume after decoding');
+  assert.equal(state.executed.length, 1);
+  assert.ok(document.getElementById('bb-route-transition'));
+});
+
+test('a failed transition image does not hold later navigations', async () => {
+  let image;
+  class Image { constructor() { image = this; } }
+  const { nav, document, state } = setup({ imageClass: Image });
+  const first = nav.navigate('/party/1');
+  image.onerror();
+  await first;
   assert.equal(state.bodies, 1);
+  // The retried image never settles; the next route must not wait for it.
+  await nav.navigate('/game/2');
+  assert.equal(state.bodies, 2);
   assert.ok(document.getElementById('bb-route-transition'));
 });
 
@@ -281,7 +303,7 @@ test('lobby return waits for artwork and a failed image still allows recovery', 
   const { nav, document, state } = setup({ imageClass: Image });
   const returning = nav.prepareLobbyReturn(2);
   assert.equal(document.getElementById('bb-route-transition'), null);
-  assert.equal(state.fetches.length, 0);
+  assert.deepEqual(state.fetches.map(request => request.url), ['/party/2', '/status'], 'requests overlap the decode');
   image.onerror();
   await flush();
   // The actual navigation retries a failed warmup; it must remain recoverable.
@@ -451,7 +473,7 @@ test('return retires game while status is pending and retry preserves lobby inte
   release({ ok: true, json: async () => env.status });
   await returning;
   await env.document.getElementById('bb-route-transition').querySelector('button').onclick();
-  assert.deepEqual(env.state.fetches.map(r => r.url), ['/status', '/party/7']);
+  assert.deepEqual(env.state.fetches.map(r => r.url), ['/party/7', '/status', '/party/7'], 'failure discards the unused prefetch');
   assert.equal(env.location.pathname, '/party/7');
 });
 
@@ -499,4 +521,48 @@ test('superseding a connection retry prevents another request to the old lobby',
   await returning;
   assert.equal(env.state.fetches.filter(r => r.url === '/party/7').length, 1);
   assert.equal(env.location.pathname, '/party/8');
+});
+
+test('a progressing screen is not abandoned by the readiness timeout', async () => {
+  const { nav, document, advanceTime } = setup();
+  await nav.navigate('/game/2');
+  // The harness template reports scripts done at 88%; later reports advance it.
+  for (let step = 1; step <= 3; step++) {
+    advanceTime(40000);
+    nav.progress(88 + step * 3);
+  }
+  assert.equal(document.getElementById('bb-route-transition').querySelector('button'), null);
+  advanceTime(45000);
+  assert.equal(document.getElementById('bb-route-transition').querySelector('button').hidden, false, 'a stalled screen still fails');
+});
+
+test('battle match data is requested with the page and handed to that game once', async () => {
+  const data = { ok: true, json: async () => ({ success: true, gameData: { map: 1 } }) };
+  const env = setup({ gameDataResponse: async () => data });
+  await env.nav.navigate('/game/2');
+  assert.deepEqual(env.state.fetches.map(r => r.url), ['/game/2', '/gamedata']);
+  assert.equal(env.nav.consumeGameData('3'), null, 'another match cannot take it');
+  await env.nav.navigate('/game/2');
+  const handoff = env.nav.consumeGameData('2');
+  assert.equal(JSON.stringify(await handoff), JSON.stringify({ ok: true, body: { success: true, gameData: { map: 1 } } }));
+  assert.equal(env.nav.consumeGameData('2'), null, 'single use');
+});
+
+test('a match prefetched during the found hold is reused by navigation', async () => {
+  const env = setup({ gameDataResponse: async () => ({ ok: true, json: async () => ({ success: true }) }) });
+  env.nav.prefetchRoute('/game/4');
+  env.advanceTime(2400);
+  await env.nav.navigate('/game/4');
+  assert.deepEqual(env.state.fetches.map(r => r.url), ['/game/4', '/gamedata']);
+  assert.ok(env.nav.consumeGameData('4'));
+});
+
+test('a prefetch for a different route is discarded', async () => {
+  const env = setup({ gameDataResponse: async () => ({ ok: true, json: async () => ({ success: true }) }) });
+  env.nav.prefetchRoute('/game/4');
+  const prefetchSignal = env.state.fetches[0].options.signal;
+  await env.nav.navigate('/party/3');
+  assert.equal(prefetchSignal.aborted, true);
+  assert.equal(env.nav.consumeGameData('4'), null);
+  assert.equal(env.state.fetches.at(-1).url, '/party/3');
 });

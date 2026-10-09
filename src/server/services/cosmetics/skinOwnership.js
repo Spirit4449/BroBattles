@@ -40,39 +40,6 @@ function getAutoUnlockSkinIds(userRow) {
   return Array.from(out);
 }
 
-async function unlockSkinForUser(db, userId, skinId, source = "grant") {
-  const normalizedUserId = Number(userId) || 0;
-  const normalizedSkinId = String(skinId || "").trim();
-  if (!normalizedUserId || !normalizedSkinId) {
-    return { success: false, reason: "invalid_args" };
-  }
-
-  const skin = getSkinById(normalizedSkinId);
-  if (!skin) {
-    return { success: false, reason: "unknown_skin" };
-  }
-
-  try {
-    const insertResult = await db.runQuery(
-      "INSERT IGNORE INTO user_skins (user_id, skin_id, source) VALUES (?, ?, ?)",
-      [normalizedUserId, normalizedSkinId, String(source || "grant")],
-    );
-    return {
-      success: true,
-      inserted: Number(insertResult?.affectedRows) > 0,
-      skinId: normalizedSkinId,
-    };
-  } catch (error) {
-    if (
-      error?.code === "ER_NO_SUCH_TABLE" ||
-      error?.code === "ER_BAD_FIELD_ERROR"
-    ) {
-      return { success: false, reason: "missing_schema" };
-    }
-    throw error;
-  }
-}
-
 function parseStoredSkinMap(raw) {
   if (raw == null) return null;
   if (typeof raw === "object") return raw;
@@ -196,6 +163,5 @@ async function syncSkinOwnershipForUser(db, userRow) {
 module.exports = {
   getAutoUnlockSkinIds,
   isSkinAutoUnlockedForUser,
-  unlockSkinForUser,
   syncSkinOwnershipForUser,
 };

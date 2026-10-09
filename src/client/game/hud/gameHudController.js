@@ -401,8 +401,6 @@ export function createGameHudController({
 
     currentCardNodes = [...yourNodes, ...oppNodes];
     if (_cardsRevealed(root)) _animateCardsIn(currentCardNodes);
-    requestAnimationFrame(() => _syncCardWrapState(root));
-    requestAnimationFrame(() => _syncCardWrapState(root));
 
     const c = document.getElementById("countdown-display");
     if (c) c.textContent = "5";

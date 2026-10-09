@@ -131,6 +131,7 @@ test('actual menu wiring supports early clicks, deferred profile deep links, and
     history: { replaceState: (_, __, url) => { location.href = new URL(url, location).href; } },
     refreshTrophyClaimAvailability: () => calls.push('trophies'),
     initializeLobbyHints: () => calls.push('hints'),
+    friendsController: {},
   });
   assert.deepEqual(calls, [], 'wiring menus does not initialize them or fetch optional data');
   assert.equal(typeof wiredProfile.open, 'function', 'socket bootstrap gets a usable facade immediately');

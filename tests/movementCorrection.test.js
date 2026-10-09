@@ -4,6 +4,7 @@ const input = require('../src/server/core/gameRoom/inputManager');
 const { characterBody } = require('../src/shared/physics/duelGeometry');
 const { createMovementCorrector } = require('../src/client/game/players/movementCorrection');
 const WORLD = require('../src/shared/maps/arenas').arenaFor('duels-1v1').world;
+const physics = require('../src/shared/physics/movementPhysics.json');
 
 function server(t) {
   let now = 100000;
@@ -18,6 +19,21 @@ function server(t) {
   return { player, room, events, corrections, advance: ms => { now += ms; },
     send: data => input.handlePlayerInput(room, 'p', data) };
 }
+
+test('server allows the full horizontal dash burst but repeated packets cannot grant it twice', t => {
+  const f = server(t);
+  f.player._movementBudget.x = 0;
+  const distance = physics.dashHorizontalSpeed * physics.dashDurationMs / 1000;
+  f.send({ x: distance, y: 0, vx: physics.dashHorizontalSpeed, sequence: 1,
+    dashSeq: 1, dashX: 1, dashY: 0 });
+  assert.equal(f.player.x, distance);
+  assert.equal(f.player.vx, physics.dashHorizontalSpeed);
+  assert.equal(f.corrections().length, 0);
+  f.send({ x: distance * 2, y: 0, sequence: 2, dashSeq: 1, dashX: 1, dashY: 0 });
+  assert.equal(f.player.x, distance);
+  assert.equal(f.corrections().length, 1);
+  assert.equal(f.corrections()[0].reason, 'budget');
+});
 
 test('packets already in flight when a correction is issued do not cascade into more corrections', t => {
   const f = server(t);

@@ -7,7 +7,8 @@
 // the shot short with a quick blend instead of a jump.
 import { PREGAME_MS } from "../../../shared/matchIntroTiming";
 import { bindMusicEnvelope } from "../../lib/musicEnvelope";
-import { restingCameraFrame } from "./cameraDynamics";
+import { restingCameraFrame, FOLLOW_LERP } from "./cameraDynamics";
+export { FOLLOW_LERP } from "./cameraDynamics";
 import {
   blendFraming,
   clampCenter,
@@ -19,8 +20,6 @@ const PREGAME_AUDIO_SRC = "/assets/game-sounds/pregame.mp3";
 const PREGAME_AUDIO_VOLUME = 0.55;
 const AUDIO_FADE_OUT_MS = 450;
 const CUT_SHORT_BLEND_MS = 650;
-// Lerp values the gameplay camera follows with (see initializeGameWorld).
-export const FOLLOW_LERP = { x: 0.08, y: 0.05 };
 
 function cameraBounds(cam, scene) {
   const b = cam.useBounds && cam._bounds?.width > 0 ? cam._bounds : scene.physics?.world?.bounds;

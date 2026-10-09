@@ -268,7 +268,10 @@ export function createLobbyHintController({
     element.setAttribute("role", hint.onClick ? "button" : "status");
     if (hint.onClick) {
       element.tabIndex = 0;
-      element.setAttribute("aria-label", `View ${hint.title || "offer"} in the shop`);
+      element.setAttribute(
+        "aria-label",
+        hint.ariaLabel || `View ${hint.title || "offer"} in the shop`,
+      );
     }
     element.innerHTML = `
       <span class="lobby-hint-pointer" aria-hidden="true"></span>

@@ -34,6 +34,29 @@ test('powerups wait 500ms after activation, rather than after the warning starts
   assert.equal(events.length, 1);
 });
 
+test('powerups are collected only when the hurtbox overlaps the orb circle', t => {
+  const { characterBody } = require('../src/shared/physics/duelGeometry');
+  const { POWERUP_PICKUP_RADIUS } = require('../src/server/core/gameRoomConfig');
+  const body = characterBody('ninja');
+  const { room } = fixture();
+  const player = room.players.get('player');
+  Object.assign(player, { char_class: 'ninja', flip: false });
+  t.mock.method(Date, 'now', () => 20000);
+  const top = player.y + body.offsetY - body.halfHeight;
+  const side = player.x + body.offsetX + body.halfWidth;
+  for (const [x, y, collected] of [
+    [player.x, top - POWERUP_PICKUP_RADIUS - 2, false],
+    [player.x, top - POWERUP_PICKUP_RADIUS + 2, true],
+    [side + POWERUP_PICKUP_RADIUS + 2, player.y + body.offsetY, false],
+    [side + POWERUP_PICKUP_RADIUS - 2, player.y + body.offsetY, true],
+  ]) {
+    room._powerups.clear();
+    room._powerups.set(1, { id: 1, type: 'rage', x, y, spawnedAt: 8000, activeAt: 10000, expiresAt: 30000 });
+    tickPowerups(room);
+    assert.equal(room._powerups.size === 0, collected, `orb at (${x}, ${y})`);
+  }
+});
+
 for (const type of ['coin', 'gem']) {
   test(`${type} rejects early pickup requests and awards exactly once at 500ms`, t => {
     const { room, rewards, events } = fixture();

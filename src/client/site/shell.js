@@ -9,6 +9,7 @@ import './pixelChecks.css';
 import config from '../../shared/site/siteConfig.json';
 import { getSettings, saveSettings, resetSettings, subscribeSettings, GRAPHICS_OPTIONS } from './preferences';
 import { initUISounds, playSound } from '../ui/uiSounds';
+import { privacySection } from './privacySection';
 export async function api(url, body, attempt=0) {
   let response;
   try { response=await fetch(url,{credentials:'same-origin',...(body ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {})}); } catch (error) { if(attempt<2){await new Promise(resolve=>setTimeout(resolve,400*(attempt+1)));return api(url,body,attempt+1);} throw new Error('Connection interrupted. Your progress is safe—please try again.'); }
@@ -100,7 +101,12 @@ export function openSettings() {
   document.addEventListener('bb:rendererchange',updateRenderer);
   dialog.addEventListener('close',()=>document.removeEventListener('bb:rendererchange',updateRenderer),{once:true});
   footer.append(reset,renderer);
-  body.append(form,remapKeys(dialog),footer);
+  // Headings only matter once a Privacy section joins the list (signed-in, out of battle).
+  const general=element('h3','General','site-settings-heading');general.hidden=true;
+  body.append(general,form,remapKeys(dialog),footer);
+  // Account-saved, so RESET leaves it alone. Battles (including map playtests) skip it.
+  const inBattle=inGame || document.body.dataset.bbScreen==='game';
+  if(!inBattle)body.append(privacySection(dialog,()=>{general.hidden=false;}));
 }
 let navigationGuard = async () => true;
 export function setNavigationGuard(guard) { navigationGuard = guard; }

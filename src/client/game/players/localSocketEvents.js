@@ -1,3 +1,4 @@
+import { spawnRespawnEffect } from '../scene/respawnEffect';
 import { endDash } from '../scene/dash';
 import { spawnKnockbackTrail } from '../scene/knockbackTrail';
 import movementPhysics from '../../../shared/physics/movementPhysics.json';
@@ -10,7 +11,6 @@ import {
   spawnDamageImpact,
   spawnDuckGuardImpact,
   spawnDeathBurst,
-  spawnSpawnBurst,
   triggerDamageScreenPulse,
 } from "../scene/effects";
 import { triggerDamageCameraShake } from "../scene/cameraDynamics";
@@ -273,11 +273,7 @@ export function bindLocalSocketEvents({
       // Animation frames can change the display origin; refresh the body before
       // drawing UI anchored to its top edge.
       player.body?.updateFromGameObject?.();
-      spawnSpawnBurst(scene, player, {
-        tint: 0xffffff,
-        accent: 0xb8ecff,
-        depth: 28,
-      });
+      spawnRespawnEffect(scene, player);
     } catch (_) {}
 
     try {

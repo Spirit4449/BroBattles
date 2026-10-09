@@ -1,3 +1,4 @@
+import { spawnRespawnEffect } from '../scene/respawnEffect';
 import { presentRemoteDash } from '../scene/dash';
 import { presentRemoteKnockback } from '../scene/knockbackTrail';
 import { spritePresentation } from '../characters/shared/spritePresentation';
@@ -37,6 +38,7 @@ import {
   spawnLandingImpact,
   spawnRunDust,
   spawnSpawnBurst,
+  spawnChromaReveal,
   spawnWallKickCloud,
   spawnWallSlideBurst,
   spawnWallSlideTrail,
@@ -47,6 +49,7 @@ import { playPlayerSound } from "../audio/playerAudio.js";
 import { createRemoteMovementAudio } from "../audio/remoteMovementAudio";
 import { DUCK_HEIGHT_RATIO } from "../../../shared/physics/ducking.js";
 import { resolveCharacterKey } from "../../../shared/characters/characterStats.js";
+import { INVISIBLE_ALPHA, invisibleAttackAlpha } from "../powerups/invisibilityReveal.js";
 import { characterPresentation } from "../../../shared/characters/index.js";
 
 const OP_PLAYER_NAME_OFFSET_Y = 42;
@@ -690,7 +693,9 @@ export default class RemotePlayer {
       this.presenceLoaded;
     if (this.opponent) {
       this.opponent.setVisible(shouldRender);
-      this.opponent.setAlpha(this._powerupInvisible ? 0 : 1);
+      this.opponent.setAlpha(
+        this._powerupInvisible ? this.invisibleAttackAlpha() : 1,
+      );
     }
     if (this.opPlayerName) {
       this.opPlayerName.setVisible(
@@ -747,12 +752,30 @@ export default class RemotePlayer {
     }
   }
 
+  // Attacking while invisible briefly gives away a faded silhouette.
+  invisibleAttackAlpha() {
+    return invisibleAttackAlpha(this.opponent?._invisibleAttackFlashAt, INVISIBLE_ALPHA.remote);
+  }
+
   setPowerupInvisible(active = false) {
+    const wasInvisible = this._powerupInvisible;
     this._powerupInvisible = active === true;
     if (this.opponent?.active) {
       this.opponent._powerupInvisible = this._powerupInvisible;
     }
     this.setPresenceState(this.presenceConnected, this.presenceLoaded);
+    if (
+      wasInvisible &&
+      !this._powerupInvisible &&
+      this.opponent?.active &&
+      this.opponent.visible &&
+      this.opCurrentHealth > 0 &&
+      !this._deathPresentationActive
+    ) {
+      try {
+        spawnChromaReveal(this.scene, this.opponent, { depth: 27 });
+      } catch (_) {}
+    }
   }
 
   finalizeSpawnPresentation() {
@@ -1012,11 +1035,7 @@ export default class RemotePlayer {
       );
       this.opponent._ducking = false;
       this.resizeBodyForDuck(false);
-      spawnSpawnBurst(this.scene, this.opponent, {
-        tint: 0xffffff,
-        accent: 0xb8ecff,
-        depth: 27,
-      });
+      spawnRespawnEffect(this.scene, this.opponent);
     } catch (_) {}
     if (!this.effects) {
       const EffectsCls = getEffectsClass(this.character);

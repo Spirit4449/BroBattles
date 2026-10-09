@@ -46,6 +46,23 @@ test("many successful upgrades never consume the upgrade or shared allowance", a
   assert.equal((await request(200, "/buy")).res.statusCode, 429);
 });
 
+test("equipping counts apart from the shared allowance and outlasts it", async () => {
+  const { HTTP_BUCKETS } = require("../src/server/services/moderation/abusePolicy");
+  const { request } = setup();
+  const equipPaths = ["/player-cards/select", "/profile-icons/select", "/skins/select"];
+  for (let i = 0; i < HTTP_BUCKETS.medium.limit + 1; i++) {
+    assert.equal((await request(200, equipPaths[i % equipPaths.length])).reachedRoute, true);
+  }
+  // Browsing cosmetics left the shared allowance untouched.
+  for (let i = 0; i < HTTP_BUCKETS.medium.limit; i++) {
+    assert.equal((await request(200, "/partydata")).reachedRoute, true);
+  }
+  for (let i = HTTP_BUCKETS.medium.limit + 1; i < HTTP_BUCKETS.equip.limit; i++) {
+    assert.equal((await request(200, "/skins/select")).reachedRoute, true);
+  }
+  assert.equal((await request(200, "/skins/select")).res.statusCode, 429);
+});
+
 test("eight failed upgrades trigger protection; successes and server errors do not count", async () => {
   const { request } = setup();
   for (let i = 0; i < 8; i++) {

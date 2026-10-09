@@ -77,7 +77,8 @@ function probeAlpha(url) {
 function verifyPlayerCardAlpha(url, format = animationFormat(url)) {
   if (alphaChecks.has(format)) return alphaChecks.get(format);
   const saved = readAlphaCache()?.[format];
-  const promise = typeof saved === 'boolean' ? Promise.resolve(saved) : probeAlpha(url).then(transparent => {
+  // Only an undecided format pays for a probe, and it waits for idle time.
+  const promise = typeof saved === 'boolean' ? Promise.resolve(saved) : whenIdle().then(() => probeAlpha(url)).then(transparent => {
     if (transparent == null) {
       alphaChecks.delete(format);
       return null;
@@ -101,12 +102,19 @@ function whenIdle() {
   return idleTurn;
 }
 
+// Apple platforms have HEVC alpha decoding; WebM alpha is not implied by
+// canPlayType('video/webm'). Every selected format is also pixel-probed.
+// Codec support is fixed for the page, so it is checked once.
+let appleHevc;
+function prefersAppleHevc() {
+  appleHevc ??= typeof navigator !== 'undefined' && /Apple/.test(navigator.vendor || '') &&
+    !!document.createElement('video').canPlayType('video/mp4; codecs="hvc1"');
+  return appleHevc;
+}
+
 function selectPlayerCardVideo(card) {
   const entry = resolveCard(card);
-  // Apple platforms have HEVC alpha decoding; WebM alpha is not implied by
-  // canPlayType('video/webm'). Every selected format is also pixel-probed.
-  const apple = typeof navigator !== 'undefined' && /Apple/.test(navigator.vendor || '');
-  if (apple && entry?.animationAppleUrl && document.createElement('video').canPlayType('video/mp4; codecs="hvc1"')) {
+  if (entry?.animationAppleUrl && prefersAppleHevc()) {
     return { ...entry, animationUrl: entry.animationAppleUrl, animationBytes: entry.animationAppleBytes,
       animationVersion: entry.animationAppleVersion };
   }
@@ -225,8 +233,7 @@ function createPlayerCardMedia(card, { hover = false, interactive = false, prepa
     const revision = preparationRevision;
     const url = receivedUrl;
     try {
-      await whenIdle();
-      if (preparationPaused || disposed || revision !== preparationRevision || document.hidden || motion?.matches) return;
+      if (document.hidden || motion?.matches) return;
       const transparent = await verifyAlpha(url, animationFormat(entry?.animationUrl));
       if (preparationPaused || disposed || revision !== preparationRevision) return;
       if (transparent == null && alphaRetries++ < 2) {
@@ -240,8 +247,8 @@ function createPlayerCardMedia(card, { hover = false, interactive = false, prepa
         stop();
         return;
       }
-      // Multiple cards may have awaited the same codec probe. Spread their
-      // actual decoder starts across idle turns too.
+      // Decoder starts take one idle turn each, so cards that finish together
+      // (or awaited the same codec probe) never share a frame.
       await whenIdle();
       if (preparationPaused || disposed || revision !== preparationRevision || document.hidden || motion?.matches) return;
       readyUrl = url;

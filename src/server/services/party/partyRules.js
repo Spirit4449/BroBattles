@@ -23,14 +23,6 @@ const TEAM_SIZE_BY_MODE = Object.freeze({
 // A disconnected party member keeps their slot this long before removal.
 const DISCONNECT_GRACE_MS = 3000;
 
-function teamSizeForMode(mode) {
-  return teamSizeForSelection({
-    modeId: "duels",
-    modeVariantId: legacyModeToVariantId(mode),
-    legacyMode: mode,
-  });
-}
-
 function capacityFromMode(mode) {
   return capacityFromSelection({
     modeId: "duels",
@@ -59,7 +51,6 @@ module.exports = {
   PARTY_STATUS,
   TEAM_SIZE_BY_MODE,
   DISCONNECT_GRACE_MS,
-  teamSizeForMode,
   capacityFromMode,
   teamSizeForSelection,
   capacityFromSelection,

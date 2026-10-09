@@ -4,12 +4,9 @@ import { createShurikenEffects } from './effects';
 // ReturningShuriken.js
 // Curved, returning, piercing shuriken with deterministic local simulation.
 
-import socket from "../../../lib/socket"; // owner-only hit events
-import { serverNowMono } from "../../match/serverClock";
+import socket from "../../../lib/socket"; // owner-only return signal
 import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/characterTuning.js";
-import { emitVaultHitForCircle } from "../shared/vaultTargeting";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
-import { playPlayerSound } from "../../audio/playerAudio";
 
 const RETURNING_SHURIKEN_DEFAULTS = getResolvedCharacterAttackConfig(
   "ninja",
@@ -48,7 +45,6 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
         gameId: "",
         isOwner: false,
         maxLifetime: RETURNING_SHURIKEN_DEFAULTS.maxLifetimeMs,
-        hitCooldown: RETURNING_SHURIKEN_DEFAULTS.hitCooldownMs,
         hoverDurationMs: RETURNING_SHURIKEN_DEFAULTS.hoverDurationMs,
         returnAcceleration: RETURNING_SHURIKEN_DEFAULTS.returnAcceleration,
         returnStartSpeedFactor:
@@ -67,7 +63,6 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     this.returnAcceleration = this.cfg.returnAcceleration;
     this.currentReturnSpeed =
       this.cfg.returnSpeed * this.cfg.returnStartSpeedFactor;
-    this.hitTimestamps = {}; // username -> last hit ms
 
     // Trail state
     this.trailInterval = 30; // ms
@@ -204,72 +199,6 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       3 * it * t * t * p2 +
       t * t * t * p3
     );
-  }
-
-  tryDamage(targetWrapper) {
-    if (this.cfg.serverAuthoritativeHits) return false;
-    if (!this.cfg.isOwner) return false; // only owner reports hits
-    if (!targetWrapper) return false;
-    const targetUsername =
-      targetWrapper.username ||
-      targetWrapper._username ||
-      targetWrapper.name ||
-      "unknown";
-    const now = this.scene.time.now;
-    const last = this.hitTimestamps[targetUsername] || 0;
-    if (now - last < this.cfg.hitCooldown) return false;
-    this.hitTimestamps[targetUsername] = now;
-    // Emit server-authoritative damage event
-    socket.emit("hit", {
-      attacker: this.cfg.username,
-      target: targetUsername,
-      damage: this.cfg.damage,
-      attackType: this.cfg.attackType || "basic",
-      instanceId: this.cfg.instanceId,
-      attackServerMono: serverNowMono() ?? undefined,
-      gameId: this.cfg.gameId,
-    });
-    // Play hit SFX locally for the owner
-    try {
-      playPlayerSound(this.scene, this.ownerSprite, "shurikenHit", { volume: 1, rate: 1.0 });
-    } catch (e) {}
-    return true;
-  }
-
-  tryDamageVault() {
-    if (this.cfg.serverAuthoritativeHits) return false;
-    if (!this.cfg.isOwner) return false;
-    const now = this.scene.time.now;
-    const last = this.hitTimestamps.__vault || 0;
-    if (now - last < this.cfg.hitCooldown) return false;
-    const hit = emitVaultHitForCircle({
-      attacker: this.cfg.username,
-      x: this.x,
-      y: this.y,
-      radius: Math.max(
-        10,
-        (this.displayWidth || this.width || 24) *
-          Math.max(0.1, Number(this.cfg.collisionRadiusScale) || 0.26),
-      ),
-      attackType: this.cfg.attackType || "basic",
-      instanceId: this.cfg.instanceId,
-      gameId: this.cfg.gameId,
-    });
-    if (hit) {
-      this.hitTimestamps.__vault = now;
-    }
-    return hit;
-  }
-
-  attachEnemyOverlap(objects) {
-    if (this.cfg.serverAuthoritativeHits) return;
-    objects.forEach((obj) => {
-      if (!obj) return;
-      const sprite = obj.opponent || obj;
-      this.scene.physics.add.overlap(this, sprite, () => {
-        this.tryDamage(obj.opponent ? obj : sprite);
-      });
-    });
   }
 
   attachMapOverlap(objects = null) {
@@ -445,6 +374,5 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
       this.glow.x = this.x;
       this.glow.y = this.y;
     }
-    this.tryDamageVault();
   }
 }
