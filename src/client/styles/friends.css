@@ -514,12 +514,70 @@
 
 /* ---------- profile modal ---------- */
 
-.profile-friend-btn {
-  margin-top: 8px;
-  font-family: "Press Start 2P", system-ui;
+.profile-head-copy {
+  min-width: 0;
 }
 
-.profile-friend-btn[hidden] {
+.profile-head-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.profile-head-title-row h2 {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+body .profile-head-title-row .profile-friend-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 28px;
+  margin: 0;
+  padding: 4px 8px;
+  border: 2px solid #071019;
+  background: linear-gradient(180deg, #328fce, #18548d);
+  color: #eff8ff;
+  font-family: "Press Start 2P", system-ui;
+  font-size: 7px;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-shadow: 1px 2px 0 #071019;
+  box-shadow: 0 3px 0 #071019, inset 0 2px 0 #ffffff38;
+}
+
+body .profile-head-title-row .profile-friend-btn[data-relation="outgoing"] {
+  background: linear-gradient(180deg, #72521e, #493312);
+  color: #ffe29a;
+}
+
+body .profile-head-title-row .profile-friend-btn:is([data-relation="friends"], [data-relation="incoming"]) {
+  background: linear-gradient(180deg, #287d50, #155235);
+  color: #caffdc;
+}
+
+body .profile-head-title-row .profile-friend-btn:disabled {
+  opacity: 1;
+  filter: none;
+  cursor: default;
+}
+
+.profile-friend-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
+body .profile-head-title-row .profile-friend-btn:focus-visible {
+  outline: 2px solid #ffe29a;
+  outline-offset: 4px;
+}
+
+body .profile-head-title-row .profile-friend-btn[hidden] {
   display: none;
 }
 

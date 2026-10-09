@@ -5,7 +5,7 @@
     "attackDescription": "Puffs out a magical smoke that deals splash damage to everyone in the path.",
     "baseDamage": 2500,
     "ammoCooldownMs": 450,
-    "ammoReloadMs": 1600,
+    "ammoReloadMs": 2000,
     "ammoCapacity": 3,
     "specialDescription": "Unleashes a staff nova that expands outward.",
     "specialBaseDamage": 2400,
@@ -58,6 +58,7 @@
         },
         "inferno": {
           "durationMs": 5000,
+          "damageTakenMult": 0.4,
           "riseMs": 650,
           "liftPx": 125,
           "bobPx": 8,

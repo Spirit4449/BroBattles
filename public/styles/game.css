@@ -579,9 +579,9 @@
         image-rendering: pixelated;
       }
       #battle-start-overlay .bs-card-level-badge {
-        --level-badge-size: 15cqw;
+        --level-badge-size: 17cqw;
         top: 43%;
-        left: 74%;
+        left: 69%;
         z-index: 3;
       }
       #battle-start-overlay .bs-card-character-name {

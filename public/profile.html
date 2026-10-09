@@ -44,24 +44,12 @@
             </button>
           </div>
           <div class="stat-row">
-            <span>Coins</span>
-            <strong id="profile-coins">0</strong>
-          </div>
-          <div class="stat-row">
-            <span>Gems</span>
-            <strong id="profile-gems">0</strong>
-          </div>
-          <div class="stat-row">
             <span>Trophies</span>
             <strong id="profile-trophies">0</strong>
           </div>
           <div class="stat-row">
             <span>Total Matches</span>
             <strong id="profile-matches">0</strong>
-          </div>
-          <div class="stat-row">
-            <span>Avg Character Level</span>
-            <strong id="profile-avg-level">1</strong>
           </div>
           <div class="actions-row">
             <button id="change-card-btn" class="profile-btn primary">
@@ -114,16 +102,9 @@
           <p id="email-status" class="account-message" aria-live="polite"></p>
           <div class="profile-account-actions">
             <button id="email-toggle" class="profile-btn" type="button">Add Email Address</button>
-            <button class="profile-btn" type="button" data-account-toggle aria-controls="username-form" aria-expanded="false">Change Name</button>
+            <button id="change-name-btn" class="profile-btn" type="button" aria-haspopup="dialog">Change Name</button>
             <button class="profile-btn" type="button" data-account-toggle aria-controls="password-form" aria-expanded="false">Change Password</button>
           </div>
-          <form id="username-form" class="profile-form" hidden>
-            <label for="new-username">Change Username</label>
-            <input id="new-username" name="new-username" type="text" />
-            <button type="submit" class="profile-btn">Save Username</button>
-            <button type="button" class="profile-btn" data-account-cancel>Cancel</button>
-          </form>
-
           <form id="password-form" class="profile-form" hidden>
             <label for="current-password">Current Password</label>
             <input

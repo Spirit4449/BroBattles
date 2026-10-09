@@ -70,3 +70,40 @@ test("Bros renderer uses profile portraits, level crests, and reports unlocked c
   assert.equal(renderedBadges[0].root, children[0].badge);
   assert.doesNotMatch(children[0].innerHTML, /body\.webp/);
 });
+
+function loadBadges() {
+  const compiled = transformFileSync(require.resolve('../src/client/views/levelBadgeView.js'),
+    { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] });
+  function element(tag) {
+    return { tag, children: [], dataset: {}, classList: { add() {}, remove() {} },
+      setAttribute(name, value) { this[name] = value; }, removeAttribute(name) { delete this[name]; },
+      replaceChildren() { this.children = []; },
+      append(...children) { for (const child of children) child.parent = this; this.children.push(...children); },
+      appendChild(child) { this.append(child); },
+      remove() { this.parent.children = this.parent.children.filter(child => child !== this); },
+    };
+  }
+  const context = { exports: {}, document: { createElement: element },
+    require: request => request.includes('characterStats')
+      ? require('../src/shared/characters/characterStats.js')
+      : require('../public/assets/levels/animations.json') };
+  vm.runInNewContext(compiled.code, context);
+  return context.exports;
+}
+
+test('level badges select looping images with reduced-motion posters and an error fallback', () => {
+  const { createLevelBadge } = loadBadges();
+  for (const level of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+    const root = createLevelBadge(level);
+    const picture = root.children[1];
+    assert.equal(picture.tag, 'picture');
+    const [source, art] = picture.children;
+    assert.equal(source.media, '(prefers-reduced-motion: no-preference)');
+    assert.match(source.srcset, new RegExp(`/levels/${level}-animated\\.webp\\?v=`));
+    assert.match(art.src, new RegExp(`/levels/${level}-poster\\.webp\\?v=`));
+    art.onerror();
+    assert.equal(picture.children.length, 1);
+    assert.equal(art.src, `/assets/levels/${level}.webp`);
+    assert.equal(art.onerror, null);
+  }
+});

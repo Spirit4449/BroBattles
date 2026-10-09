@@ -1,3 +1,4 @@
+import { applyWallet, walletRevision } from "../wallet.mjs";
 import { currencyRewardImage } from "../../views/rewardPresentation.js";
 import { playSound } from "../../ui/uiSounds.js";
 import { createRewardPresentation } from "../shop/shop.js";
@@ -10,11 +11,10 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
   const presentation = createRewardPresentation({
     state: { overlay: document.body, reveal: null },
     updateWallet: wallet => {
-      if (getUserData() && wallet) Object.assign(getUserData(), wallet);
+      applyWallet(getUserData(), wallet);
       updateLobbyResourceCounts();
     },
     onWalletTick: (currency, value) => {
-      if (getUserData()) getUserData()[currency] = value;
       const count = document.getElementById(currency === "coins" ? "coin-count" : "gem-count");
       if (count) count.textContent = value.toLocaleString();
     },
@@ -219,12 +219,12 @@ export function createTrophyController({ getUserData, onRewardsClaimed }) {
     if (trophyProgressionRefreshPromise) {
       return trophyProgressionRefreshPromise;
     }
+    const revision = walletRevision();
     trophyProgressionRefreshPromise = fetchLobbyJson("/trophies/progression")
       .then((progression) => {
         const recoveredClaim = progression.tiers?.some(tier => tier.claimed && trophyProgressionState?.tiers?.find(previous => previous.tierId === tier.tierId)?.claimed === false);
         if (!claimBusy && progression?.player && getUserData()) {
-          getUserData().coins = Number(progression.player.coins) || 0;
-          getUserData().gems = Number(progression.player.gems) || 0;
+          applyWallet(getUserData(), progression.player, revision);
           getUserData().char_levels = progression.player.char_levels || getUserData().char_levels;
           getUserData().trophy_peak = progression.player.trophyPeak;
           updateLobbyResourceCounts();

@@ -208,13 +208,14 @@ test('presence evicts idle historical users and coalesces lobby database lookups
   assert.deepEqual(service.getStats(), { users: 0, matches: 0 }); service.dispose();
 });
 
-function rewardsDb() {
+function rewardsDb(streak = 0, highest = streak) {
   let fail = false;
-  const db = serialDb({ match: { status: 'live' }, user: { user_id: 1, coins: 0, gems: 0, trophies: 100 }, committed: null }, (s, sql, p) => {
+  const db = serialDb({ match: { status: 'live' }, user: { user_id: 1, coins: 0, gems: 0, trophies: 100, highest_win_streak: highest }, committed: null }, (s, sql, p) => {
+    if (sql.includes('SELECT m.match_id, m.winner_team, mp.team')) return Array.from({ length: streak }, (_, i) => ({ match_id: streak - i, winner_team: 'team1', team: 'team1' }));
     if (sql.startsWith('SELECT status FROM matches')) return [s.match];
     if (sql.startsWith('SELECT summary FROM match_reward_commits')) return s.committed ? [{ summary: s.committed }] : [];
     if (sql.startsWith('SELECT user_id, COALESCE(trophies')) return [s.user];
-    if (sql.startsWith('UPDATE users SET coins')) { s.user.coins += p[0]; s.user.gems += p[1]; s.user.trophies += p[2]; return { affectedRows: 1 }; }
+    if (sql.startsWith('UPDATE users SET coins')) { s.user.coins += p[0]; s.user.gems += p[1]; s.user.trophies += p[2]; s.user.highest_win_streak = Math.max(s.user.highest_win_streak, p[3]); return { affectedRows: 1 }; }
     if (sql.startsWith('UPDATE matches')) { if (fail) throw new Error('simulated persistence failure'); s.match = { status: 'completed', summary: p[1] }; return { affectedRows: 1 }; }
     if (sql.startsWith('INSERT INTO match_reward_commits')) { s.committed = p[1]; return { affectedRows: 1 }; }
     if (sql.includes('UPDATE match_participants') || sql.startsWith('UPDATE parties')) return { affectedRows: 1 };
@@ -229,11 +230,12 @@ function rewardRoom(db) {
 test('reward writes, battle logs, and completion roll back together, then retry once', async () => {
   const f = rewardsDb(), room = rewardRoom(f.db); f.fail(true);
   await assert.rejects(distributeMatchRewards(room, 'team1'), /simulated/);
-  assert.equal(f.db.state.user.coins, 0); assert.equal(f.db.state.match.status, 'live');
+  assert.equal(f.db.state.user.coins, 0); assert.equal(f.db.state.user.highest_win_streak, 0); assert.equal(f.db.state.match.status, 'live');
   f.fail(false);
   const [first, retry] = await Promise.all([distributeMatchRewards(room, 'team1'), distributeMatchRewards(room, 'team1')]);
   assert.deepEqual(retry, first); assert.equal(f.db.state.user.coins, first[0].coinsAwarded);
   assert.equal(f.db.state.match.status, 'completed');
+  assert.equal(f.db.state.user.highest_win_streak, 1);
 });
 test('durable match results survive failed writes and service restart', async t => {
   const journalDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bb-results-test-'));
@@ -285,4 +287,56 @@ test('server clamps a dash crossing a thin wall using canonical player bounds', 
  f.advance(20);f.send({x:140,y:0,vx:1000,sequence:1,dashSeq:1,dashX:1,dashY:0});
  assert.ok(f.player.x+shape.offsetX+shape.halfWidth<=50.00001);
  assert.equal(f.player.vx,0);assert.ok(f.events.some(e=>e.name==='game:correction'));
+});
+
+
+test('committed rewards preserve win streak transitions across retries', async () => {
+  for (const [winner, expected] of [['team1', 5], ['team2', 0], [null, 4], ['draw', 4]]) {
+    const f = rewardsDb(4);
+    const room = rewardRoom(f.db);
+    const [reward] = await distributeMatchRewards(room, winner);
+    assert.equal(reward.winStreakBefore, 4);
+    assert.equal(reward.winStreakAfter, expected);
+    if (winner == null || winner === 'draw') {
+      assert.deepEqual(reward.winStreakBonuses, { coins: 0, gems: 0, trophies: 0 });
+    }
+    assert.equal(f.db.state.user.highest_win_streak, Math.max(4, expected));
+    const [retry] = await distributeMatchRewards(room, winner);
+    assert.deepEqual(retry, reward);
+    const saved = JSON.parse(f.db.state.match.summary);
+    assert.equal(saved.winnerTeam, winner || 'draw');
+  }
+});
+
+
+test('streak bonuses are credited on the unlocking win and retries never credit twice', async () => {
+  const { WIN_STREAK_TIERS, applyWinStreakRewards } = require('../src/shared/winStreakRewards.cjs');
+  for (const tier of WIN_STREAK_TIERS) {
+    const f = rewardsDb(tier.streak - 1), room = rewardRoom(f.db);
+    const [reward] = await distributeMatchRewards(room, 'team1');
+    const expected = applyWinStreakRewards(reward.winStreakBaseRewards, tier.streak);
+    assert.equal(reward.coinsAwarded, expected.totals.coins);
+    assert.equal(reward.gemsAwarded, expected.totals.gems);
+    assert.equal(reward.trophiesDelta, expected.totals.trophies);
+    assert.deepEqual(reward.winStreakBonuses, expected.bonuses);
+    assert.equal(f.db.state.user.coins, reward.coinsAwarded);
+    assert.equal(f.db.state.user.gems, reward.gemsAwarded);
+    assert.equal(f.db.state.user.trophies, 100 + reward.trophiesDelta);
+    const snapshot = structuredClone(f.db.state.user);
+    assert.deepEqual(await distributeMatchRewards(room, 'team1'), [reward]);
+    assert.deepEqual(f.db.state.user, snapshot);
+    const loss = rewardsDb(tier.streak);
+    const [lost] = await distributeMatchRewards(rewardRoom(loss.db), 'team2');
+    assert.deepEqual(lost.winStreakBonuses, { coins: 0, gems: 0, trophies: 0 });
+  }
+});
+
+
+test('a shorter winning streak preserves the stored historical record', async () => {
+  const f = rewardsDb(2, 10);
+  const room = rewardRoom(f.db);
+  await distributeMatchRewards(room, 'team1');
+  assert.equal(f.db.state.user.highest_win_streak, 10);
+  await distributeMatchRewards(room, 'team1');
+  assert.equal(f.db.state.user.highest_win_streak, 10);
 });

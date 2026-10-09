@@ -1,4 +1,4 @@
-// Match-level music cues: sudden-death loop and the win/lose sting.
+// Match-level music cues: sudden-death loop and result stings.
 import { bindAudio } from "../../site/preferences";
 
 export function startSuddenDeathMusic(gameScene) {
@@ -38,12 +38,11 @@ export function stopSuddenDeathMusic(gameScene) {
 export function playMatchEndSound(gameScene, winnerTeam, yourTeam) {
   if (document.hidden || !gameScene || !gameScene.sound) return;
   const key =
-    winnerTeam == null
-      ? null
+    winnerTeam == null || winnerTeam === "draw"
+      ? "draw"
       : winnerTeam === yourTeam
         ? "win"
         : "lose";
-  if (!key) return;
   const trigger = () => {
     try {
       gameScene._bgmEl?.pause();

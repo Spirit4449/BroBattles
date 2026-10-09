@@ -90,6 +90,29 @@ test('Inferno damage radius matches the tucked-in special reticle', () => {
   assert.equal(aim.defaultRange, 220);
 });
 
+test('Inferno reduces incoming damage only during its channel and stacks with shields', t => {
+  const effects = require('../src/server/core/gameRoom/effects/effectManager');
+  const tuning = require('../src/shared/characters/characterTuning').getResolvedCharacterSpecialConfig('draven', 'inferno');
+  const { room, players: [p, target] } = fixture(t);
+  p.health = p.maxHealth = 100000;
+  const now = Date.now();
+  inferno.activate(p, now);
+  assert.equal(effects.getModifiers(p, now).damageTakenMult, tuning.damageTakenMult);
+  // Real Inferno ticks also use the common incoming-damage modifiers.
+  target.char_class = 'draven';
+  inferno.activate(target, now);
+  const before = p.health;
+  const baseTickDamage = Math.round(Math.max(tuning.minDamagePerTick, target.specialDamage * tuning.damageScale));
+  inferno.tick(room, target, now + tuning.firstDamageDelayMs);
+  assert.equal(before - p.health, Math.round(baseTickDamage * tuning.damageTakenMult));
+  effects.apply(p, 'shield', now);
+  const shieldMult = require('../src/shared/effectRules').getEffectModifiers('shield').damageTakenMult;
+  assert.equal(effects.getModifiers(p, now).damageTakenMult, tuning.damageTakenMult * shieldMult);
+  assert.equal(effects.getModifiers(p, now + tuning.durationMs).damageTakenMult, shieldMult);
+  p.effects.dravenInfernoUntil = 0;
+  assert.equal(effects.getModifiers(p, now).damageTakenMult, shieldMult);
+});
+
 test('authoritative client sync preserves fractional super charge', async () => {
   const { createLocalStateSync } = await import('../src/client/game/players/localStateSync.js');
   let charge, max;

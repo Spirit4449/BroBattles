@@ -35,14 +35,16 @@ function segmentCrossesRect(ax, ay, bx, by, rect, padding = 8) {
 
 // Solve flight time first, including the muzzle offset and the runtime's
 // semi-implicit gravity step. Multiple roots give low and high firing arcs.
-function projectileSolutions(player, target, runtime, startup, prediction, dt, speedAtAngle) {
+function projectileSolutions(player, target, runtime, startup, prediction, dt, speedAtAngle, verticalPredictionSeconds = Infinity) {
   const speed = runtime.speed || 800, gravity = runtime.gravity || 0;
   const forward = (player._lastWidth || 80) * (runtime.forwardOffsetWidthFactor ?? runtime.forwardOffset ?? 0);
   const ox = player.x, oy = player.y - (player._lastHeight || 120) * (runtime.verticalOffsetHeightFactor ?? runtime.verticalOffset ?? 0);
   const vx = (target.vx || 0) * prediction, vy = (target.vy || 0) * prediction;
   const maxTime = gravity ? (runtime.maxLifetimeMs || 3000) / 1000 : (runtime.range || 1050) / speed;
   const vector = (t) => ({ x: target.x + vx * (startup + t) - ox,
-    y: target.y + vy * (startup + t) - oy - 0.5 * gravity * t * (t + dt) });
+    // Jump velocity changes quickly; some kits only lead it briefly rather
+    // than extrapolating the same rise/fall throughout a long arrow flight.
+    y: target.y + vy * Math.min(startup + t, verticalPredictionSeconds) - oy - 0.5 * gravity * t * (t + dt) });
   const launchSpeed = (v) => speedAtAngle ? speedAtAngle(Math.atan2(v.y, v.x)) : speed;
   const error = (t) => { const v = vector(t); return Math.hypot(v.x, v.y) - (launchSpeed(v) * t + forward); };
   const solutions = [];
@@ -152,14 +154,14 @@ function basicAim(player, target, profile, random, room) {
   let speedAtAngle = ballistic?.powerScaled ? huntressSpeed(distanceRatio) : null;
   let solution;
   if (ballistic) {
-    solution = projectileSolutions(player, target, runtime, startup, profile.prediction ?? 0.5, (room?.FIXED_DT_MS || FIXED_DT_MS) / 1000, speedAtAngle)
+    solution = projectileSolutions(player, target, runtime, startup, profile.prediction ?? 0.5, (room?.FIXED_DT_MS || FIXED_DT_MS) / 1000, speedAtAngle, ballistic.verticalPredictionSeconds)
       .find((shot) => !ballistic.coverCheck || clearTrajectory(room, shot, runtime.playerCollisionRadius || runtime.collisionRadius || 16));
     // A retreating target can outrun the initial distance-based choice.
     // Increase power within the same player tuning limits when necessary.
     if (!solution && speedAtAngle) {
       speedAtAngle = () => (runtime.speed || 560) * (aim.maxSpeedScale || 1.18);
       solution = projectileSolutions(player, target, runtime, startup, profile.prediction ?? 0.5,
-        (room?.FIXED_DT_MS || FIXED_DT_MS) / 1000, speedAtAngle)
+        (room?.FIXED_DT_MS || FIXED_DT_MS) / 1000, speedAtAngle, ballistic.verticalPredictionSeconds)
         .find((shot) => clearTrajectory(room, shot, runtime.playerCollisionRadius || runtime.collisionRadius || 16));
     }
   }

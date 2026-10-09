@@ -52,9 +52,9 @@ function renderLeaderboardRows(rows, profilePopup) {
         <strong>${wins.toLocaleString()}</strong>
         <small>Wins</small>
       </span>
-      <span class="leaderboard-trophies">
+      <span class="leaderboard-trophies" aria-label="${trophies.toLocaleString()} trophies">
         <img src="/assets/icons/trophy.webp" alt="" />
-        <span><strong>${trophies.toLocaleString()}</strong><small>Trophies</small></span>
+        <strong>${trophies.toLocaleString()}</strong>
       </span>
     `;
     item.addEventListener("click", () => {

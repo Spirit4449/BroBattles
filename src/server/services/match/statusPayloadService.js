@@ -3,6 +3,7 @@ const {
 } = require("../cosmetics/profileIconOwnership");
 const { syncSkinOwnershipForUser } = require("../cosmetics/skinOwnership");
 const { parseCharacterLevels } = require("../../../shared/characters/characterStats.js");
+const { getCurrentWinStreak } = require("./battleLog");
 
 function normalizeUserForStatus(user) {
   const out = user ? { ...user } : null;
@@ -72,7 +73,7 @@ async function buildStatusPayload({
     ? optionalStatusValue(load, fallback, onError)
     : Promise.resolve(fallback);
   const [iconState, skinState, selectedCardId, ownedCardIds,
-    preferredSelection, partyRows, liveMatchId] = await Promise.all([
+    preferredSelection, partyRows, liveMatchId, winStreak] = await Promise.all([
     optionalUserValue(() => syncProfileIconOwnershipForUser(db, userNormalized), {}),
     optionalUserValue(() => syncSkinOwnershipForUser(db, userNormalized), {}),
     optionalUserValue(() => db.getUserSelectedCardId(userId), null),
@@ -84,6 +85,9 @@ async function buildStatusPayload({
     // lookup must fail status rather than masquerade as "no party".
     db.runQuery("SELECT party_id FROM party_members WHERE name = ? LIMIT 1", [userNormalized?.name]),
     getUserLiveMatch(db, userId),
+    optionalUserValue(() => getCurrentWinStreak(db, userId), 0, error => {
+      console.warn("[status] unable to load win streak:", error?.message || error);
+    }),
   ]);
   if (userNormalized) {
     userNormalized.selected_card_id = selectedCardId;
@@ -93,6 +97,7 @@ async function buildStatusPayload({
     userNormalized.selected_skin_id_by_char = skinState?.selectedSkinIdByCharacter || {};
     userNormalized.owned_skin_ids = Array.isArray(skinState?.ownedSkinIds) ? skinState.ownedSkinIds : [];
     userNormalized.preferred_selection = preferredSelection;
+    userNormalized.winStreak = winStreak;
   }
 
   const mmSuspendedUntilMs = parseMs(userNormalized?.mm_suspended_until);

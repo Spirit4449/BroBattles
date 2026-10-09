@@ -99,3 +99,221 @@ test('same-origin metadata handles alias hosts and TLS proxies without allowing 
     assert.equal(isSameOrigin(request('https://evil.example',undefined)),false);
   } finally { if(old===undefined)delete process.env.PUBLIC_BASE_URL;else process.env.PUBLIC_BASE_URL=old; }
 });
+
+// Exercise the real rename route with a transactional account store. The
+// authentication snapshot stays stale deliberately, as it can during requests.
+function nameChangeHarness({ gems = 200, cooldown = false, guest = false } = {}) {
+  const { registerProfileRoutes } = require('../src/server/routes/modules/profileRoutes');
+  const routes = new Map();
+  const app = { locals: {}, get() {}, post: (path, handler) => routes.set(path, handler) };
+  let account = { name: 'Original', gems, next_name_change_at: cooldown ? new Date('2099-01-01') : null };
+  let partyName = account.name;
+  let tail = Promise.resolve();
+  const db = {
+    withTransaction: async (fn) => {
+      const previous = tail;
+      let release;
+      tail = new Promise(resolve => { release = resolve; });
+      await previous;
+      const saved = { ...account }, savedPartyName = partyName;
+      try {
+        return await fn(null, async (sql, params) => {
+          if (sql.startsWith('SELECT name, gems')) {
+            return [{ ...account, cooldown_active: account.next_name_change_at > new Date() ? 1 : 0 }];
+          }
+          if (sql.startsWith('UPDATE users')) {
+            if (params[0] === 'Taken') throw Object.assign(new Error('duplicate'), { code: 'ER_DUP_ENTRY' });
+            account.name = params[0];
+            account.gems -= params[1];
+            account.next_name_change_at = new Date('2099-01-01');
+            return { affectedRows: 1 };
+          }
+          if (sql.startsWith('UPDATE party_members')) {
+            if (partyName === params[1]) partyName = params[0];
+            return { affectedRows: 1 };
+          }
+          if (sql.startsWith('SELECT gems,')) return [{ ...account }];
+          throw new Error(`Unexpected query: ${sql}`);
+        });
+      } catch (error) {
+        account = saved;
+        partyName = savedPartyName;
+        throw error;
+      } finally { release(); }
+    },
+  };
+  registerProfileRoutes({ app, db, requireCurrentUser: async () => ({
+    user_id: 7, name: 'Original', gems: 200, expires_at: guest ? new Date() : null,
+  }) });
+  return {
+    account: () => ({ ...account }),
+    partyName: () => partyName,
+    expire: () => { account.next_name_change_at = new Date(0); },
+    request: async username => {
+      const response = { statusCode: 200, cookies: [],
+        status(code) { this.statusCode = code; return this; },
+        json(body) { this.body = body; return this; },
+        cookie(...args) { this.cookies.push(args); },
+      };
+      await routes.get('/profile/change-username')({ app, body: { username } }, response);
+      return response;
+    },
+  };
+}
+
+test('name changes charge gems, save cooldown and update party identity', async () => {
+  const h = nameChangeHarness();
+  const result = await h.request('NewName');
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.body.username, 'NewName');
+  const { NAME_CHANGE_COST } = require('../src/server/routes/modules/profileRoutes');
+  assert.equal(result.body.gems, 200 - NAME_CHANGE_COST);
+  assert.equal(result.body.gems, h.account().gems);
+  assert.ok(result.body.nextNameChangeAt > new Date());
+  assert.equal(h.partyName(), 'NewName');
+  assert.equal(result.cookies[0][1], 'NewName');
+  const saved = h.account();
+  assert.equal((await h.request('AnotherName')).statusCode, 429);
+  assert.deepEqual(h.account(), saved);
+  assert.equal((await h.request('NewName')).statusCode, 200);
+  assert.deepEqual(h.account(), saved);
+  h.expire();
+  assert.equal((await h.request('AnotherName')).statusCode, 200);
+  assert.equal(h.partyName(), 'AnotherName');
+  assert.ok(h.account().gems < saved.gems);
+});
+
+test('name changes reject invalid, taken, guest and unaffordable requests without charging', async () => {
+  for (const [options, name, status] of [
+    [{}, 'x', 400], [{}, 'Taken', 409],
+    [{ guest: true }, 'NewName', 403], [{ gems: 0 }, 'NewName', 400],
+    [{ cooldown: true }, 'NewName', 429],
+  ]) {
+    const h = nameChangeHarness(options), saved = h.account();
+    const result = await h.request(name);
+    assert.equal(result.statusCode, status, name);
+    assert.deepEqual(h.account(), saved);
+    assert.equal(h.partyName(), 'Original');
+    assert.equal(result.cookies.length, 0);
+  }
+});
+
+test('overlapping name changes only charge for one successful change', async () => {
+  const h = nameChangeHarness();
+  const results = await Promise.all([h.request('FirstName'), h.request('SecondName')]);
+  assert.deepEqual(results.map(result => result.statusCode), [200, 429]);
+  assert.equal(h.account().gems, results[0].body.gems);
+  assert.equal(h.account().name, 'FirstName');
+});
+
+test('lobby profile wires its actual Change Name button to the shared dialog', () => {
+  const { transformFileSync } = require('@babel/core');
+  const vm = require('node:vm');
+  const button = {};
+  const overlay = { querySelector: () => null };
+  let wiredButton, options;
+  const context = {
+    exports: {},
+    document: {
+      getElementById: id => id === 'profile-overlay' ? overlay : id === 'profile-change-name' ? button : null,
+      addEventListener() {},
+    },
+    require: request => {
+      if (request.includes('nameChangeDialog')) return { wireNameChangeDialog: (target, config) => { wiredButton = target; options = config; } };
+      if (request.includes('accountSettings')) return { wireAccountSettings: () => ({ close() {} }) };
+      if (request.includes('wallet')) return { subscribeWallet() {} };
+      return {};
+    },
+  };
+  const compiled = transformFileSync(require.resolve('../src/client/lobby/profile/profileController.js'), {
+    presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  });
+  vm.runInNewContext(compiled.code, context);
+  context.exports.createProfileController({ getUserData: () => ({}) }).initProfilePopup();
+  assert.equal(wiredButton, button);
+  assert.equal(typeof options.getProfile, 'function');
+  assert.equal(typeof options.onChanged, 'function');
+});
+
+function nameDialogHarness(profile, fetchJson = async () => ({})) {
+  const { transformFileSync } = require('@babel/core');
+  const vm = require('node:vm');
+  function element() {
+    return { handlers: {}, isConnected: true, disabled: false,
+      addEventListener(type, fn) { this.handlers[type] = fn; },
+      setAttribute() {}, focus() { this.focused = true; }, remove() { this.isConnected = false; },
+    };
+  }
+  const button = element(), input = element(), submit = element(), form = element();
+  const message = element(), availability = element(), cancel = element();
+  const dialog = Object.assign(element(), {
+    querySelector: selector => ({ form, input, '[type="submit"]': submit,
+      '.name-change-message': message, '.name-change-availability': availability })[selector],
+    querySelectorAll: selector => selector === '[data-close]' ? [cancel] : [],
+    showModal() { this.open = true; },
+    close() { this.open = false; this.handlers.close?.(); },
+  });
+  const windowHandlers = new Map();
+  let changed;
+  const context = {
+    exports: {}, Date,
+    document: { createElement: () => dialog, body: { append() {} } },
+    window: {
+      addEventListener: (type, fn, capture) => windowHandlers.set(type, { fn, capture }),
+      removeEventListener: type => windowHandlers.delete(type),
+    },
+    require: request => request.includes('popupMotion') ? { dismissPopup: (_dialog, done) => done() }
+      : request.includes('dialogDismiss') ? { wireBackdropDismiss() {} } : {},
+  };
+  const compiled = transformFileSync(require.resolve('../src/client/account/nameChangeDialog.js'), {
+    presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  });
+  vm.runInNewContext(compiled.code, context);
+  context.exports.wireNameChangeDialog(button, {
+    getProfile: () => profile, fetchJson, onChanged: data => { changed = data; },
+  });
+  return { button, dialog, input, submit, availability, windowHandlers,
+    changed: () => changed,
+    open: () => button.handlers.click(),
+    save: () => form.handlers.submit({ preventDefault() {} }),
+  };
+}
+
+test('name dialog traps Escape before the parent and restores focus', () => {
+  const h = nameDialogHarness({ guest: false, username: 'Player', gems: 100 });
+  h.open();
+  assert.equal(h.dialog.open, true);
+  assert.equal(h.input.value, 'Player');
+  const escape = h.windowHandlers.get('keydown');
+  assert.equal(escape.capture, true);
+  let prevented = false, stopped = false;
+  escape.fn({ key: 'Escape', preventDefault: () => { prevented = true; }, stopImmediatePropagation: () => { stopped = true; } });
+  assert.ok(prevented && stopped);
+  assert.equal(h.dialog.open, false);
+  assert.equal(h.button.focused, true);
+  assert.equal(h.windowHandlers.has('keydown'), false);
+});
+
+test('name dialog blocks cooldown and insufficient funds, and publishes an acknowledged wallet change', async () => {
+  for (const profile of [
+    { guest: false, gems: 0 },
+    { guest: false, gems: 100, nextNameChangeAt: '2099-01-01T00:00:00Z' },
+  ]) {
+    const h = nameDialogHarness(profile, () => { throw new Error('must not submit'); });
+    h.open();
+    assert.equal(h.submit.disabled, true);
+    await h.save();
+    assert.equal(h.changed(), undefined);
+  }
+  const profile = { guest: false, gems: 100, username: 'Original' };
+  const response = { username: 'NewName', gems: 50, nextNameChangeAt: '2099-01-01T00:00:00Z' };
+  const h = nameDialogHarness(profile, async () => response);
+  h.open();
+  h.input.value = 'NewName';
+  await h.save();
+  assert.equal(h.changed(), response);
+  assert.equal(profile.username, response.username);
+  assert.equal(profile.gems, response.gems);
+  assert.equal(profile.nextNameChangeAt, response.nextNameChangeAt);
+  assert.equal(h.dialog.open, false);
+});

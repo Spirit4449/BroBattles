@@ -33,7 +33,10 @@ Apply older SQL in chronological order after checking existing schema. Do not bl
 | `party-slots` | Party members; adds explicit slot index |
 | `trophy-road` | Trophy claims and cosmetic ownership tables; adds trophy peak, migrates claims and backfills non-currency grants |
 | `shop-views` | Users; creates account-saved viewed Shop offers and rotation acknowledgments |
+| `highest-win-streak` | Users and completed battle history; adds `users.highest_win_streak` and backfills historical records without lowering saved peaks |
 | `friends` | Users and matches; adds friend codes, social tables and the matches-created index |
+| `name-changes` | Users; adds nullable `users.next_name_change_at` for the paid monthly rename cooldown |
+| `friend-last-seen` | Users; adds nullable `users.last_seen_at` for persistent friend activity history |
 
 The helper's list order is not a dependency order: run `signup-marketing` before `email-polish`. Trophy Road's non-currency backfill calls application services; running its SQL alone is insufficient. Friends also adds columns/indexes outside its SQL file. Verify each environment independently; this documentation makes no claim about its applied state.
 
@@ -67,3 +70,7 @@ Friend data is keyed by account ID, not username. The generated pending-pair key
 `node scripts/db/verify-hardening-db.cjs` and `node scripts/db/verify-hardening-server.cjs` require permission to create/drop randomly named temporary databases. Build assets before the server verifier. They exercise isolated schema copies, not live account balances.
 
 Database backups alone do not cover `data/maps`, uploaded assets or the match-result journal. See [deployment](deployment.md) and [Map Studio](../development/maps.md).
+
+Apply `highest-win-streak` before running the server code that stores profile
+records. The helper scans completed history once per account; reruns preserve
+higher stored records and safely resume a partially completed backfill.

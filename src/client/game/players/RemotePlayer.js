@@ -1,4 +1,5 @@
 import { presentRemoteDash } from '../scene/dash';
+import { presentRemoteKnockback } from '../scene/knockbackTrail';
 import { spritePresentation } from '../characters/shared/spritePresentation';
 import { applyTeamVisual, TEAM_GREEN, TEAM_RED } from "../../../shared/projectilePresentation";
 import { bindCanvasName } from "../../site/preferences";
@@ -321,6 +322,9 @@ export default class RemotePlayer {
     }
     presentRemoteDash(this.scene, this.opponent, movementState, this,
       this.opCurrentHealth <= 0);
+    presentRemoteKnockback(this.scene, this.opponent, movementState, this,
+      this.opCurrentHealth <= 0 || this._powerupInvisible ||
+      !this.presenceLoaded || !this.presenceConnected || !this._spawnPresented);
     if (
       !this.scene?.add ||
       !this.opponent?.active ||

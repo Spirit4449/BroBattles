@@ -90,3 +90,22 @@ test("existing account suspensions still prevent upgrades", async () => {
   user.mm_suspended_until = new Date(Date.now() + 30000);
   assert.equal((await request()).res.body.type, "mm_suspended");
 });
+
+test('upgrade returns the committed coin balance, independently of the client balance', async () => {
+  const { registerEconomyRoutes } = require('../src/server/routes/modules/economy');
+  const { upgradePrice } = require('../src/shared/characters/characterStats');
+  const coins = upgradePrice(1) + 37;
+  const routes = {};
+  registerEconomyRoutes({
+    app: { post: (path, handler) => { routes[path] = handler; } },
+    auth: { requireCurrentUser: async () => ({ name: 'wallet-test' }) },
+    db: { withTransaction: async callback => callback(null, async sql => {
+      if (sql.startsWith('SELECT')) return [{ coins, lvl: 1 }];
+      return { affectedRows: 1 };
+    }) },
+  });
+  const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+  await routes['/upgrade']({ body: { character: 'ninja' } }, res);
+  assert.equal(res.code, 200);
+  assert.equal(res.body.coins, coins - res.body.spent);
+});

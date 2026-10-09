@@ -18,6 +18,8 @@ To give a new mode maps, add its variant id (from `gameModes.catalog.json`) to `
 
 Admins can open Map Studio using the Edit map action inside the lobby map selection menu, or visit `/map-editor`. Editing runs separately from matchmaking. The toolbar shows the map's mode. **New map** asks for the mode, and its spawns are sized to the mode's team size. Player slots stay fixed to that formation.
 
+Admin map cards place the Edit map action in the top-left corner of the preview. Hitbox debugging is controlled inside Map Studio; the lobby does not set or pass that preference to the editor.
+
 ### Editing controls
 
 - Click to select without moving. Shift-click toggles objects in the selection; drag empty space to box-select. Drag a selected object to move the group.

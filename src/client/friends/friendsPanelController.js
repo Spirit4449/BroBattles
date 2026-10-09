@@ -11,6 +11,7 @@ import {
 } from "../chat/presentation";
 import { sonner } from "../ui/sonner.js";
 import { showUiConfirm } from "../ui/uiConfirm.js";
+import { friendPresenceLabel, friendPresenceTitle } from "./friendPresence.mjs";
 import { pixelSprite } from "./pixelArt.js";
 
 const TYPING_STOP_MS = 1500;
@@ -384,6 +385,12 @@ export function createFriendsPanelController({
     const text = document.createElement("div");
     text.className = "bb-friends-text";
     text.innerHTML = `<div class="bb-friends-name">${escapeHtml(user.name)}</div><div class="bb-friends-sub ${subtitleClass}">${escapeHtml(subtitle ?? statusLabel(user.status))}</div>`;
+    if (subtitle === undefined) {
+      const label = text.querySelector(".bb-friends-sub");
+      label.dataset.friendPresenceId = String(user.userId);
+      label.textContent = friendPresenceLabel(user);
+      label.title = friendPresenceTitle(user);
+    }
     bindChatProfile(text.querySelector(".bb-friends-name"), user.name, openProfile);
     const actionsEl = document.createElement("div");
     actionsEl.className = "bb-friends-actions";
@@ -759,10 +766,11 @@ export function createFriendsPanelController({
     panel.classList.toggle("is-chatting", inChat);
     ui.title.textContent = inChat ? friend?.name || "Chat" : "Friends";
     ui.subtitle.textContent = inChat
-      ? statusLabel(friend?.status)
+      ? friendPresenceLabel(friend)
       : state.guest
         ? "Registered players only"
         : `${state.friends.filter((f) => f.status !== "offline").length} online`;
+    ui.subtitle.title = inChat ? friendPresenceTitle(friend) : "";
     ui.subtitle.className = `bb-chat-subtitle ${inChat ? statusClass(friend?.status) : ""}`;
     for (const tab of ui.tabs.querySelectorAll("[data-view]")) {
       const active = tab.dataset.view === state.view;
@@ -905,10 +913,11 @@ export function createFriendsPanelController({
     }, { duration: 8000, sound: "notification" });
   });
 
-  listen("friends:presence", ({ userId, status } = {}) => {
+  listen("friends:presence", ({ userId, status, lastSeenAt } = {}) => {
     const friend = friendById(userId);
-    if (!friend || friend.status === status) return;
+    if (!friend) return;
     friend.status = status;
+    if (lastSeenAt !== undefined) friend.lastSeenAt = lastSeenAt;
     if (state.isOpen) render();
   });
 
@@ -977,6 +986,23 @@ export function createFriendsPanelController({
   // Socket reconnects can miss pushes, so resync.
   listen("connect", () => void refresh());
 
+  // Refresh relative times without rebuilding rows or disturbing chat scroll/focus.
+  const presenceTimer = window.setInterval(() => {
+    if (!state.isOpen) return;
+    for (const label of ui.content.querySelectorAll("[data-friend-presence-id]")) {
+      const friend = friendById(Number(label.dataset.friendPresenceId));
+      if (friend) {
+        label.textContent = friendPresenceLabel(friend);
+        label.title = friendPresenceTitle(friend);
+      }
+    }
+    if (state.view === "chat") {
+      const friend = friendById(state.chatFriendId);
+      ui.subtitle.textContent = friendPresenceLabel(friend);
+      ui.subtitle.title = friendPresenceTitle(friend);
+    }
+  }, 30_000);
+
   void refresh();
 
   return {
@@ -1000,6 +1026,7 @@ export function createFriendsPanelController({
     },
     addFriend: (target) => sendRequest(target),
     destroy() {
+      window.clearInterval(presenceTimer);
       for (const [event, handler] of socketListeners) socket?.off?.(event, handler);
       window.clearTimeout(state.friendTypingTimer);
       window.clearTimeout(state.localTypingTimer);

@@ -71,11 +71,11 @@ test('a registered arrow can damage after its shooter moves beyond legacy range;
   target.x = arrow.x + 100; target.y = arrow.y;
   const before = target.health;
   step(20);
-  assert.equal(target.health, before - 1000);
+  assert.equal(target.health, before - model.attackConfig().damagePerArrow);
   assert.equal(room._huntress.active.size, 0);
   assert.equal(actions('huntress-terminal').length, 1);
   assert.equal(actions('huntress-terminal')[0].accepted, true);
-  step(20); assert.equal(target.health, before - 1000);
+  step(20); assert.equal(target.health, before - model.attackConfig().damagePerArrow);
 });
 
 test('swept player contact uses the same inset circle geometry, including thin targets and walls', () => {
@@ -138,7 +138,7 @@ test('burning arrows consume charge once, apply burn once, and publish precise t
   step(10);
   assert.equal(p.superCharge,1);
   const terminal=actions('huntress-terminal')[0];
-  assert.equal(terminal.appliedDamage,1000); assert.ok(terminal.targetOffset);
+  assert.equal(terminal.appliedDamage,model.attackConfig(true).damagePerArrow); assert.ok(terminal.targetOffset);
   assert.ok(Math.abs(terminal.targetOffset.x) <= target._bodyHalfWidth);
   assert.ok(target.effects.huntressBurn || target.activeEffects.huntressBurn);
 });
@@ -157,7 +157,7 @@ test('released basic and burning arrows survive owner death, damage and remain i
     assert.ok(arrow.x>startX);
     assert.equal(combat.bootstrap(room).projectiles.length,1);
     step(20);
-    assert.equal(target.health,hp-1000);
+    assert.equal(target.health,hp-model.attackConfig(special).damagePerArrow);
     assert.equal(combat.bootstrap(room).projectiles.length,0);
     assert.equal(actions('huntress-terminal')[0].accepted,true);
     assert.equal(actions('huntress-terminal')[0].reason,'target');
@@ -197,7 +197,7 @@ test('vault contacts use authoritative flight even when the shooter has moved aw
   const arrow=[...room._huntress.active.values()][1];
   for(const [id,a]of room._huntress.active)if(a!==arrow)room._huntress.active.delete(id);
   vault.x=arrow.x+50;vault.y=arrow.y;p.x=2200;step(10);
-  assert.equal(vault.health,9000);
+  assert.equal(vault.health,10000-model.attackConfig().damagePerArrow);
   assert.equal(actions('huntress-terminal')[0].target,'vault:team2');
 });
 
@@ -257,5 +257,5 @@ test('arrows still damage a player after their socket disconnects', t => {
   target.connected = false; target.socketId = null;
   const hp = target.health;
   step(20);
-  assert.equal(target.health, hp - 1000);
+  assert.equal(target.health, hp - model.attackConfig().damagePerArrow);
 });

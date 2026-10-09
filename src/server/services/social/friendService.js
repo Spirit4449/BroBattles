@@ -125,7 +125,7 @@ function createFriendService({ db, io }) {
 
   async function listFriends(userId) {
     const rows = await db.runQuery(
-      `SELECT u.user_id, u.name, u.char_class, u.selected_profile_icon_id, u.trophies, f.created_at
+      `SELECT u.user_id, u.name, u.char_class, u.selected_profile_icon_id, u.trophies, u.last_seen_at, f.created_at
          FROM friendships f
          JOIN users u ON u.user_id = f.friend_id
         WHERE f.user_id = ?
@@ -135,6 +135,7 @@ function createFriendService({ db, io }) {
     return rows.map((row) => ({
       ...toPublicUser(row, getStatusForName(row.name)),
       since: row.created_at,
+      lastSeenAt: row.last_seen_at || null,
     }));
   }
 
@@ -545,14 +546,14 @@ function createFriendService({ db, io }) {
   async function handleStatusChange(name, status) {
     try {
       const rows = await db.runQuery(
-        `SELECT u.user_id, f.friend_id
+        `SELECT u.user_id, u.last_seen_at, f.friend_id
            FROM users u
            JOIN friendships f ON f.user_id = u.user_id
           WHERE u.name = ?`,
         [name],
       );
       for (const row of rows) {
-        emitToUser(row.friend_id, "friends:presence", { userId: Number(row.user_id), name, status });
+        emitToUser(row.friend_id, "friends:presence", { userId: Number(row.user_id), name, status, lastSeenAt: row.last_seen_at || null });
       }
     } catch (error) {
       console.warn("[friends] presence fan-out failed:", error?.message);

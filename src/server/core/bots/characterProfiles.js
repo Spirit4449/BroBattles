@@ -90,7 +90,7 @@ const PROFILES = {
   },
   huntress: {
     spacing: { fraction: 0.65, cap: 370, clearance: 200, height: 85 },
-    aim: { ballistic: { coverCheck: true, powerScaled: true }, errorScale: { factor: 1.45, add: 0.025, max: 0.22 } },
+    aim: { ballistic: { coverCheck: true, powerScaled: true, verticalPredictionSeconds: 0.15 }, errorScale: { factor: 1.45, add: 0.025, max: 0.22 } },
     clearShot: 'trajectory',
     pressureShots: true,
     lobLimited: true,

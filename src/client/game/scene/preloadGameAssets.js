@@ -58,6 +58,7 @@ export function preloadGameAssets({
   // Music (non-blocking BGM: handled via HTMLAudio at runtime)
   scene.load.audio("win", `${staticPath}/game-sounds/win.mp3`);
   scene.load.audio("lose", `${staticPath}/game-sounds/lose.mp3`);
+  scene.load.audio("draw", `${staticPath}/game-sounds/draw.mp3`);
 
   // Powerup assets use the published WebP icons and MP3 sounds.
   for (const type of powerupTypes) {

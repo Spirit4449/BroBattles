@@ -15,6 +15,35 @@ async function requireTables(conn, tables) {
 }
 
 const MIGRATIONS = {
+  'name-changes': {
+    describe: 'Persistent monthly name-change cooldown.',
+    async run(conn) {
+      await conn.query(readMigration('2026-10-09_name_changes.sql'));
+      if (!(await hasColumn(conn, 'users', 'next_name_change_at'))) {
+        throw new Error('Verification failed; missing users.next_name_change_at');
+      }
+    },
+  },
+  'friend-last-seen': {
+    describe: 'Persistent account activity timestamps for friends.',
+    async run(conn) {
+      await conn.query(readMigration('2026-10-09_friend_last_seen.sql'));
+      if (!(await hasColumn(conn, 'users', 'last_seen_at'))) {
+        throw new Error('Verification failed; missing users.last_seen_at');
+      }
+    },
+  },
+  'highest-win-streak': {
+    describe: 'Stored highest win streak and completed-history backfill.',
+    async run(conn) {
+      await requireTables(conn, ['users', 'matches', 'match_participants']);
+      await conn.query(readMigration('2026-10-09_highest_win_streak.sql'));
+      if (!(await hasColumn(conn, 'users', 'highest_win_streak'))) {
+        throw new Error('Verification failed; missing users.highest_win_streak');
+      }
+      await require('./backfill-highest-win-streak.cjs').backfillHighestWinStreak(conn);
+    },
+  },
   'shop-views': {
     describe: 'Account-saved viewed Shop offers and rotations.',
     async run(conn) {

@@ -167,6 +167,11 @@ controller synchronously on demand, once per mount; profile/shop deep links stil
 open after readiness. Leaving the screen cancels pending setup. Party settings
 are fetched fresh when opened, not as an extra request during lobby bootstrap.
 
+Other players' profile headers place the friend action beside the title, wrapping
+on narrow screens. Pixel icons and blue (add), gold (pending), or green
+(accept/friends) treatments distinguish relationship states; pending and friends
+remain fully legible when disabled.
+
 During a foreground screen change, script preload hints start as soon as HTML
 arrives, alongside stylesheet loading and outgoing cleanup. Execution remains
 ordered and starts only after cleanup and styles complete. Hashed production
@@ -194,6 +199,12 @@ an estimate. Compare cold and warm runs and inspect `/status` and `/partydata`
 in the network panel when checking a deployment.
 
 ## Rendering and loading
+
+Knockback from every source starts a short pale streak and afterimage trail in
+`src/client/game/scene/knockbackTrail.js`. Local impulses start it immediately;
+server-owned `knockbackSeq` snapshots trigger it for remote fighters and bots.
+It follows actual rendered movement, skips invisible fighters and teleport
+jumps, and cleans up on sprite destruction or scene shutdown.
 
 Indeterminate loading uses the shared `.bb-battle-loader` in
 `public/styles/ui-system.css`: steel pixel blades clash around a gold spark. Only their
@@ -311,6 +322,8 @@ Relevant checks: `node --test tests/lobbyAudio.test.mjs tests/musicEnvelope.test
 
 The battle countdown plays its beeps and the final `/assets/game-sounds/start.mp3` FIGHT cue. Both cues are preloaded when the countdown starts.
 
+The match results Exit button preloads and plays the UI click cue before returning to the lobby. The automatic countdown return is silent.
+
 ## Map terrain and footsteps
 
 Set each map document's `metadata.terrain` through Map Studio/API (built-in defaults live in `src/shared/maps/<id>.json`):
@@ -331,4 +344,28 @@ Tests: `node --test tests/movementAudio.test.js`.
 
 ## UI cues and source records
 
+Level 10 artwork has a continuous gold CSS glow with gently cycling brightness
+in the shared `levelBadge.css`,
+covering both framed and standalone badges across selection, profiles, lobbies,
+and battle HUDs. Reduced motion keeps a static glow.
+
+Successful character upgrades transition the details badge from the previous
+level to the new one alongside the stat count-up. Reduced motion shows the new
+badge immediately. Stat gain labels reserve their space before confirmation so
+revealing the plus amounts does not resize the panel.
+
 `src/client/ui/uiSounds.js` owns delegated click/hover sounds, lazy loading and manual cue suppression. [UI sound usage and credits](../../public/assets/ui-sound/README.md), [reward sound sources](../../public/assets/ui-sound/rewards/README.md), and [movement sound provenance](../../public/assets/movement/README.md) stay beside their assets.
+
+Profile battle logs share `battleLogView.js` on the lobby popup and standalone
+profile page. Only recorded victories, defeats, and draws appear in the list and
+past-ten summary; legacy matches with unknown results are hidden. The pixel-font
+summary labels net trophies, wins, losses, and draws when present. Match rows show
+only the result, mode, map, time, and recorded trophy change; combat stats and
+rewards are omitted. Recorded zero trophy changes remain visible.
+
+Match results play separate win, loss, and draw cues. Null and explicit `draw`
+outcomes use `/assets/game-sounds/draw.mp3`, a short original suspended-fifth
+chime; result playback pauses map music and respects the existing SFX settings
+and audio-unlock handling. [Draw sound source](../../public/assets/game-sounds/README.md).
+
+Both the lobby profile and standalone profile use `src/client/account/nameChangeDialog.js` for name changes. They open a dedicated native modal using the shared popup frame, chroma header and close button. The dialog states the 50-gem cost and once-per-month limit, shows the next eligible date or current balance, and keeps validation errors inside the dialog. Its blue Change Name action includes the gem icon and price. Escape, Cancel and backdrop dismissal restore focus to the opener.

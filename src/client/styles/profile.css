@@ -164,7 +164,7 @@ body.profile-page-body .stat-row {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 9px;
+  margin-bottom: 18px;
   padding: 9px 11px;
   border: 2px solid var(--bb-border-soft);
   border-radius: var(--bb-radius-card);
@@ -523,22 +523,54 @@ body.profile-page-body .card-actions {
   text-shadow: var(--bb-title-shadow);
 }
 
+.battle-log-container,
+#profile-popup-battle-log {
+  font-family: var(--bb-font-display);
+}
+
 .battle-log-summary-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 12px;
-  padding: 0 2px;
-  font-size: 12px;
+  padding: 14px 12px;
+  background: rgba(5, 12, 25, 0.4);
+  border: 1px solid var(--bb-border-soft);
+  font-family: var(--bb-font-display);
   color: #8ba3c7;
 }
 
+.battle-summary-title {
+  color: var(--bb-text);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.battle-summary-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
 .battle-log-metric {
+  display: grid;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.battle-metric-label {
+  font-size: 8px;
+}
+
+.battle-log-metric strong {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  line-height: 1.4;
+  gap: 6px;
+  color: #fff;
+  font-weight: 400;
+  font-size: 11px;
 }
 
 .battle-log-summary-bar .trophy-mini-icon,
@@ -549,49 +581,24 @@ body.profile-page-body .card-actions {
   object-fit: contain;
 }
 
-.battle-summary-note,
-.battle-data-note {
-  color: #a7b9d0;
-  font-size: 12px;
-  line-height: 1.5;
-  margin: 0;
+.battle-log-metric.wins strong {
+  color: #3ad6a2;
 }
 
-.battle-summary-count {
-  margin-left: auto;
-  color: #7188a8;
+.battle-log-metric.losses strong,
+.battle-log-metric.trophies.negative strong {
+  color: #ff7b88;
 }
 
-.battle-log-metric strong {
-  color: #fff;
-  font-weight: 900;
-  font-family: var(--bb-font-display);
-  font-size: 11px;
-}
-
-.battle-log-metric.trophies {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.battle-log-metric.record {
-  padding-right: 12px;
-  border-right: 1px solid var(--bb-border-soft);
-}
-
+.battle-log-metric.draws strong,
 .battle-log-metric.trophies.positive strong {
   color: #ffd32a;
-}
-
-.battle-log-metric.trophies.negative strong {
-  color: #ff6b81;
 }
 
 .battle-cards-stream {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .battle-card {
@@ -604,35 +611,43 @@ body.profile-page-body .card-actions {
 
 
 .battle-card.victory {
-  border-left: 3px solid #19c890;
+  --battle-result-color: #3ad6a2;
+  --bb-card-accent: #397b70;
 }
 
 .battle-card.defeat {
-  border-left: 3px solid #ff4757;
+  --battle-result-color: #ff7b88;
+  --bb-card-accent: #854654;
 }
 
 .battle-card.draw {
-  border-left: 3px solid #ffa502;
+  --battle-result-color: #f4c565;
+  --bb-card-accent: #857044;
 }
 
-.battle-card.unknown {
-  border-left: 3px solid #8095af;
+/* Result frames use the shared square card tokens. These rows are read-only. */
+body .battle-card:is(.victory, .defeat, .draw) {
+  border-left-color: var(--battle-result-color);
 }
 
-.battle-outcome-badge.unknown {
-  background: #34465f;
+body .battle-card:hover {
+  translate: none;
+  border-color: var(--bb-card-accent);
+  border-left-color: var(--battle-result-color);
+  background: var(--bb-card-fill, var(--bb-card-bg));
 }
 
 /* Battle Card Main Body */
 .battle-card-main {
-  padding: 11px 12px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .battle-result-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 12px;
   min-width: 0;
@@ -646,24 +661,27 @@ body.profile-page-body .card-actions {
 .battle-match-meta h4 {
   margin: 0 0 2px;
   color: var(--bb-text);
-  font-size: 13px;
-  line-height: 1.2;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.7;
 }
 
 .battle-match-meta > span {
   display: block;
   overflow: hidden;
   color: #8ba3c7;
-  font-size: 11px;
-  line-height: 1.2;
+  font-size: 8px;
+  line-height: 1.7;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .battle-time {
+  grid-column: 3;
   margin-left: auto;
-  font-size: 11px;
-  color: #7188a8;
+  font-size: 8px;
+  line-height: 1.7;
+  color: #8ba3c7;
   white-space: nowrap;
 }
 
@@ -672,7 +690,7 @@ body.profile-page-body .card-actions {
   align-items: center;
   justify-content: center;
   min-width: 78px;
-  padding: 5px 9px;
+  padding: 8px 9px;
   border: 1px solid var(--bb-ink);
   font-family: var(--bb-font-display);
   font-size: 8px;
@@ -695,12 +713,15 @@ body.profile-page-body .card-actions {
 }
 
 .battle-trophy-pill {
+  grid-column: 4;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-width: 48px;
-  justify-content: flex-end;
-  padding: 0;
+  justify-content: center;
+  padding: 8px;
+  background: rgba(5, 12, 25, 0.5);
+  border: 1px solid var(--bb-border-soft);
   font-family: var(--bb-font-display);
   font-size: 9px;
   line-height: 1;
@@ -718,58 +739,6 @@ body.profile-page-body .card-actions {
   color: var(--bb-text-soft);
 }
 
-/* Compact secondary details */
-.battle-details-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
-  padding-left: 90px;
-  color: #7188a8;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.battle-combat-stats,
-.battle-rewards {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px 10px;
-}
-
-.battle-detail-divider {
-  width: 1px;
-  height: 12px;
-  background: var(--bb-border-soft);
-}
-
-.battle-details-row .chip-val {
-  font-variant-numeric: tabular-nums;
-  font-weight: 800;
-  color: #a7b9d0;
-}
-
-.battle-details-row .chip-val.kills {
-  color: #ff7675;
-}
-
-.battle-details-row .chip-val.damage {
-  color: #fdcb6e;
-}
-
-.battle-details-row .chip-val.hits {
-  color: #74b9ff;
-}
-
-.battle-details-row .chip-val.coins {
-  color: #ffd32a;
-}
-
-.battle-details-row .chip-val.gems {
-  color: #2ed573;
-}
-
 .battle-log-empty {
   display: flex;
   flex-direction: column;
@@ -778,13 +747,13 @@ body.profile-page-body .card-actions {
   padding: 36px 16px;
   border-radius: var(--bb-radius-card);
   background: rgba(5, 12, 25, 0.7);
-  border: 2px dashed var(--bb-border-soft);
+  border: 2px solid var(--bb-border-soft);
   box-shadow: 0 4px 0 var(--bb-ink);
 }
 
 .battle-log-empty-icon {
   margin-bottom: 12px;
-  opacity: 0.6;
+  opacity: 0.85;
 }
 
 .battle-log-empty-icon img {
@@ -803,7 +772,8 @@ body.profile-page-body .card-actions {
 
 .battle-log-empty p {
   margin: 0;
-  font-size: 13px;
+  font-size: 9px;
+  line-height: 1.9;
   color: #8ba3c7;
   max-width: 380px;
 }
@@ -815,30 +785,40 @@ body.profile-page-body .card-actions {
 }
 
 @media (max-width: 560px) {
-  .battle-summary-count {
-    display: none;
+  .battle-log-summary-bar {
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .battle-card-main {
+    padding: 12px;
   }
 
   .battle-result-row {
-    align-items: flex-start;
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .battle-match-meta {
+    grid-column: 1;
+    grid-row: 2;
   }
 
   .battle-outcome-badge {
-    min-width: 70px;
+    justify-self: start;
+  }
+
+  .battle-time {
+    grid-column: 2;
+    grid-row: 2;
   }
 
   .battle-trophy-pill {
-    margin-left: auto;
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
   }
 
-  .battle-details-row {
-    padding-left: 78px;
-  }
-
-  .battle-detail-divider {
-    display: none;
-  }
   body.profile-page-body .profile-page {
     --profile-page-header-height: 110px;
     width: min(100% - 20px, 1120px);

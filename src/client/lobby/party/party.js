@@ -374,6 +374,7 @@ function setupMapPickerControls(onSelect = null) {
         card.className = `map-select-card pixel-menu-button${
           String(mapDropdown.value) === value ? " active" : ""
         }`;
+        card.setAttribute('aria-pressed', String(String(mapDropdown.value) === value));
         const image = document.createElement('img');
         image.src = getMapSelectPreviewAsset(value);
         image.alt = opt.textContent || 'Map';
@@ -396,18 +397,7 @@ function setupMapPickerControls(onSelect = null) {
         if (editLink) {
           const choice = document.createElement('div');
           choice.className = 'map-choice';
-          const debugLabel = document.createElement('label');
-          debugLabel.className = 'map-choice-edit';
-          const debugCheck = document.createElement('input');
-          debugCheck.type = 'checkbox';
-          debugCheck.addEventListener('change', () => {
-            const url = new URL(editLink.href, location.origin);
-            if (debugCheck.checked) url.searchParams.set('debug', '1');
-            else url.searchParams.delete('debug');
-            editLink.href = url.pathname + url.search;
-          });
-          debugLabel.append(debugCheck, document.createTextNode('Debug hitboxes'));
-          choice.append(card, editLink, debugLabel);
+          choice.append(card, editLink);
           grid.appendChild(choice);
         } else grid.appendChild(card);
       });
@@ -418,6 +408,7 @@ function setupMapPickerControls(onSelect = null) {
     for (const card of grid.querySelectorAll(".map-select-card")) {
       const isActive = String(card.dataset.mapValue || "") === selected;
       card.classList.toggle("active", isActive);
+      card.setAttribute('aria-pressed', String(isActive));
     }
 
     content.replaceChildren(grid);
@@ -2195,4 +2186,3 @@ export function getPartyInteractionContext() {
       : [],
   };
 }
-

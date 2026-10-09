@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { createPlayerActivityService } = require('../src/server/services/match/playerActivityService');
 function fixture() {
   let time = 1000, liveMatch = 7;
-  const writes = [], events = [], probes = [];
+  const writes = [], events = [], probes = [], seen = [];
   const room = { status: 'active', humans: true, hasConnectedHumanPlayers() { return this.humans; } };
   const service = createPlayerActivityService({
     getGameRoom: () => room,
@@ -11,6 +11,7 @@ function fixture() {
     db: {
       runQuery: async () => liveMatch ? [{ match_id: liveMatch }] : [],
       getPartyIdByName: async () => 3, updateLastSeen: async () => {},
+      refreshUserLastSeen: async names => seen.push([...names]),
     },
     io: { to: id => ({ emit: (event, data) => events.push({ id, event, data }) }) },
     setPresence: async (name, status) => writes.push({ name, status }),
@@ -20,7 +21,7 @@ function fixture() {
     timeout: () => ({ emit: (event, data, ack) => probes.push({ event, data, ack }) }),
   });
   const lobby = socket('lobby'), game = socket('game');
-  return { service, room, lobby, game, writes, events, probes,
+  return { service, room, lobby, game, writes, events, probes, seen,
     setTime: value => { time = value; }, endDb: () => { liveMatch = null; },
     latest: () => writes.at(-1)?.status,
     flush: () => service.tick(),
@@ -130,4 +131,29 @@ test('another active human keeps the match available after the first leaves', as
   assert.equal(f.events.at(-1).data.matchId, 7);
   f.service.disconnect(friend);
   assert.equal(f.events.at(-1).data.matchId, null);
+});
+
+
+test('last-seen refresh includes active lobby and battle players, excludes offline players, and is throttled', async () => {
+  const f = fixture();
+  await f.service.lobbyPing(f.lobby);
+  await f.flush();
+  assert.deepEqual(f.seen, [['Owner']]);
+  await f.flush();
+  assert.equal(f.seen.length, 1);
+  f.setTime(11000);
+  await f.service.lobbyPing(f.lobby);
+  await f.flush();
+  assert.deepEqual(f.seen, [['Owner'], ['Owner']]);
+  f.service.disconnect(f.lobby);
+  f.setTime(21000);
+  await f.flush();
+  assert.equal(f.seen.length, 2);
+  f.service.registerMatch(7, [{ name: 'Owner' }, { name: 'Bot', isBot: true }]);
+  f.service.joinGame(f.game, 7);
+  f.service.gameActivity(f.game, 7);
+  f.setTime(31000);
+  f.service.gameActivity(f.game, 7);
+  await f.flush();
+  assert.deepEqual(f.seen.at(-1), ['Owner']);
 });

@@ -1,0 +1,72 @@
+{
+  "1": {
+    "source": "Animate_pixel_art_bronze_shield_20261009000201.mp4",
+    "version": "e2482eed40ba22bd",
+    "frames": 160,
+    "durationMs": 5280,
+    "bytes": 391688
+  },
+  "2": {
+    "source": "Animate_pixel-art_bronze_shield_20261009005637.mp4",
+    "version": "c858f43242513ca0",
+    "frames": 153,
+    "durationMs": 5280,
+    "bytes": 461176
+  },
+  "3": {
+    "source": "Animate_green_pixel_art_shield_20261009003355.mp4",
+    "version": "e6f1ff80b748ad7d",
+    "frames": 145,
+    "durationMs": 5280,
+    "bytes": 313590
+  },
+  "4": {
+    "source": "Animate_blue_pixel-art_shield_1080p_20261009003333.mp4",
+    "version": "231f236273e7dae6",
+    "frames": 148,
+    "durationMs": 5016,
+    "bytes": 434712
+  },
+  "5": {
+    "source": "Animate_pixel_art_shield_1080p_20261009004408.mp4",
+    "version": "19f877aa8ed84bc2",
+    "frames": 140,
+    "durationMs": 5280,
+    "bytes": 381824
+  },
+  "6": {
+    "source": "Pixel_art_badge_loop_1080p_20261009004813.mp4",
+    "version": "89e519acb404fa6f",
+    "frames": 143,
+    "durationMs": 5280,
+    "bytes": 517284
+  },
+  "7": {
+    "source": "Burgundy_shield_glowing_pixel_an…_20261009004009.mp4",
+    "version": "1dcf4545602ec261",
+    "frames": 154,
+    "durationMs": 5280,
+    "bytes": 672700
+  },
+  "8": {
+    "source": "Animating_pixel-art_laurel_shield_20261009000146.mp4",
+    "version": "31d1ce2f71e14c58",
+    "frames": 146,
+    "durationMs": 5280,
+    "bytes": 565222
+  },
+  "9": {
+    "source": "Animate_pixel_art_shield_flames_20261009003454.mp4",
+    "version": "04cc23bb455a55ee",
+    "frames": 123,
+    "durationMs": 4059,
+    "bytes": 384256
+  },
+  "10": {
+    "source": "Animating_pixel_art_shield_badge_20261009004850.mp4",
+    "version": "5eabf0eaa82e90f2",
+    "frames": 72,
+    "durationMs": 3024,
+    "bytes": 269606
+  }
+}

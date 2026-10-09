@@ -1,3 +1,4 @@
+import { applyWallet, subscribeWallet, walletRevision } from "../wallet.mjs";
 import { escapeHtml } from "../../../shared/site/html.cjs";
 import { playerCardImage, hydratePlayerCardMedia, disposePlayerCardMediaWithin } from "../../views/playerCardAnimation.cjs";
 import { showPlayerCardPreview } from "../../views/playerCardPreview.js";
@@ -154,7 +155,7 @@ function getItemIcon(item, grants) {
       ? "/assets/icons/gem.webp"
       : "/assets/icons/coin.webp";
   }
-  if (primary.kind === "skin") return "/assets/shop/icons/skins-hanger.svg";
+  if (primary.kind === "skin") return "/assets/shop/icons/skins-hanger.webp";
   if (primary.kind === "card" || primary.kind === "profileIcon")
     return "/assets/shop/icons/profile-v2.webp";
   return "/assets/shop/icons/shop-v2.webp";
@@ -491,6 +492,10 @@ export function initializeShop({
     });
   }
 
+  subscribeWallet((wallet, user) => {
+    if (user === userData) updateWallet(wallet, false);
+  });
+
   function updateWallet(wallet, notify = true, pulse = false) {
     if (!wallet) return;
     const normalized = {
@@ -517,7 +522,10 @@ export function initializeShop({
         );
       }
     });
-    if (notify) onWalletChange?.(normalized);
+    if (notify) {
+      applyWallet(userData, normalized);
+      onWalletChange?.(normalized);
+    }
   }
 
   function render({ preserveScroll = true, animateOffers = false } = {}) {
@@ -599,7 +607,10 @@ export function initializeShop({
     if (state.loading) return state.loading;
     state.loading = (async () => {
       try {
+        const revision = walletRevision();
         state.data = await fetchShopJson("/api/shop/bootstrap");
+        applyWallet(userData, state.data.wallet, revision);
+        if (userData) state.data.wallet = { coins: userData.coins, gems: userData.gems };
         state.clockOffset = new Date(state.data.serverNow).getTime() - Date.now();
         render(options);
         updateNewTags();

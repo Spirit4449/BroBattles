@@ -1,0 +1,20 @@
+Win streak sound credits
+
+streak-increase.mp3:
+"Power-Up Sound Effects", power_up_sound_v1_0.ogg,
+Julie Damsgaard / Spring Spring / Spring Enterprises.
+Source: https://opengameart.org/content/power-up-sound-effects
+License: CC0 https://creativecommons.org/publicdomain/zero/1.0/
+Changes: first 20 ms trimmed, click removal, 35 Hz high-pass / 9 kHz low-pass,
+120 ms fade-in, non-boosting limiter, 48 kHz 128 kbps MP3 conversion.
+
+streak-lost.mp3:
+"Oldschool win and die jump and run sounds", death.wav by sauer2.
+Source: https://opengameart.org/content/oldschool-win-and-die-jump-and-run-sounds
+License: CC0. MP3 conversion and 5 ms fade-in.
+
+streak-ding-coin.mp3 and streak-ding-gem.mp3:
+"Level up, power up, Coin get (13 Sounds)", Coin01.aif and Rise02.aif,
+WobbleBoxx Workshop.
+Source: https://opengameart.org/content/level-up-power-up-coin-get-13-sounds
+License: CC0. MP3 conversion and 5 ms fade-in.

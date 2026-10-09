@@ -10,6 +10,7 @@ function fixture({ fail = [], blocked = false, user = { user_id: 1, name: 'Playe
     skins: { selectedSkinIdByCharacter: { ninja: 'skin' }, ownedSkinIds: ['skin'] },
     card: 'card', cards: ['card'], preference: { mapId: 2 },
     party: [{ party_id: 42 }], match: [{ match_id: 91 }],
+    streak: 3,
   };
   const load = async key => {
     started.push(key);
@@ -21,6 +22,7 @@ function fixture({ fail = [], blocked = false, user = { user_id: 1, name: 'Playe
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/server/services/match/statusPayloadService'), 'utf8'), {
     module, console: { warn: (...args) => warnings.push(args), error() {} },
     require: name => {
+      if (name === './battleLog') return { getCurrentWinStreak: () => load('streak') };
       if (name.endsWith('/profileIconOwnership')) return { syncProfileIconOwnershipForUser: () => load('icons') };
       if (name.endsWith('/skinOwnership')) return { syncSkinOwnershipForUser: () => load('skins') };
       if (name.endsWith('/characterStats.js')) return require('../src/shared/characters/characterStats.js');
@@ -43,12 +45,13 @@ test('status starts all independent branches before any completes and preserves 
   const f = fixture({ blocked: true });
   const pending = f.build();
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(f.started, ['icons', 'skins', 'card', 'cards', 'preference', 'party', 'match']);
+  assert.deepEqual(f.started, ['icons', 'skins', 'card', 'cards', 'preference', 'party', 'match', 'streak']);
   f.release();
   const payload = JSON.parse(JSON.stringify(await pending));
   assert.equal(payload.party_id, 42);
   assert.equal(payload.live_match_id, 91);
   assert.equal(payload.userData.selected_card_id, 'card');
+  assert.equal(payload.userData.winStreak, 3);
   assert.deepEqual(payload.userData.owned_card_ids, ['card']);
   assert.equal(payload.userData.selected_profile_icon_id, 'icon');
   assert.deepEqual(payload.userData.owned_profile_icon_ids, ['icon']);
@@ -63,7 +66,7 @@ test('status starts all independent branches before any completes and preserves 
 });
 
 test('optional status failures retain defaults without suppressing authoritative membership', async () => {
-  const f = fixture({ fail: ['icons', 'skins', 'card', 'cards', 'preference', 'match'] });
+  const f = fixture({ fail: ['icons', 'skins', 'card', 'cards', 'preference', 'match', 'streak'] });
   const result = JSON.parse(JSON.stringify(await f.build()));
   assert.equal(result.party_id, 42);
   assert.equal(result.live_match_id, null);
@@ -74,7 +77,8 @@ test('optional status failures retain defaults without suppressing authoritative
   assert.deepEqual(result.userData.selected_skin_id_by_char, {});
   assert.deepEqual(result.userData.owned_skin_ids, []);
   assert.equal(result.userData.preferred_selection, null);
-  assert.equal(f.warnings.length, 1);
+  assert.equal(result.userData.winStreak, 0);
+  assert.equal(f.warnings.length, 2);
   await assert.rejects(fixture({ fail: ['party'] }).build(), /party/);
 });
 

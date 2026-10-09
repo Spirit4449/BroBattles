@@ -30,3 +30,7 @@ Support cannot promise recovery without enough evidence that the account is your
 ## Add an email address
 
 Open **Profile → Account → Add Email Address**, enter your email, and choose **Send code**. Enter the six-digit code from Bro Battles and choose **Verify email**. The code expires after ten minutes. You can resend after one minute. Check spam if it does not arrive. Email verification does not enable automatic password recovery.
+
+## Change your name
+
+Permanent accounts can change their name from **Profile → Account → Change Name**. Each change costs **50 gems**. After changing your name, wait **one calendar month** before changing it again. The form shows when your next change is available. Choosing your name during signup is free.

@@ -1,4 +1,5 @@
 const bcrypt = require("bcrypt");
+const NAME_CHANGE_COST = 50;
 const { getAllCharacters, resolveCharacterKey, canonicalCharacterKey, parseCharacterLevels } = require("../../../shared/characters/characterStats.js");
 const {
   syncProfileIconOwnershipForUser,
@@ -6,7 +7,7 @@ const {
 const {
   syncPlayerCardOwnershipForUser,
 } = require("../../services/cosmetics/playerCardOwnership");
-const { getBattleLogForUser } = require("../../services/match/battleLog");
+const { getBattleLogForUser, getCurrentWinStreak } = require("../../services/match/battleLog");
 
 const { USERNAME_RE, MIN_PW, MAX_PW } = require("../../services/auth/authAccountService");
 const { isReservedAdminName } = require("../../services/auth/auth");
@@ -80,6 +81,8 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       guest: !!userRow.expires_at,
       coins: Number(userRow.coins) || 0,
       gems: Number(userRow.gems) || 0,
+      nameChangeCost: NAME_CHANGE_COST,
+      nextNameChangeAt: userRow.next_name_change_at || null,
       trophies: Number(userRow.trophies) || 0,
       charClass,
       profileIconId: profileIconState.selectedProfileIconId || null,
@@ -87,6 +90,8 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
       avgCharLevel: avgLevel,
       totalMatches: Number(matchesRows?.[0]?.total) || 0,
       wins,
+      winStreak: await getCurrentWinStreak(db, userRow.user_id),
+      highestWinStreak: Number(userRow.highest_win_streak) || 0,
       selectedCardId: cardState.selectedCardId || null,
       ownedCardIds: cardState.ownedCardIds || [],
       selectedProfileIconId: profileIconState.selectedProfileIconId || null,
@@ -158,6 +163,8 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
           avgCharLevel: profile.avgCharLevel,
           totalMatches: profile.totalMatches,
           wins: profile.wins,
+          winStreak: profile.winStreak,
+          highestWinStreak: profile.highestWinStreak,
           battles: profile.battles || [],
         },
       });
@@ -231,32 +238,58 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
           error: "Username must be 3-14 chars: letters, numbers, _ . - only.",
         });
       }
-      if (next === String(user.name || "")) {
-        return res.json({ success: true, username: next });
-      }
       if (isReservedAdminName(next)) {
         return res
           .status(409)
           .json({ success: false, error: "Username is already taken." });
       }
 
-      await db.withTransaction(async (_conn, q) => {
-        await q("UPDATE users SET name = ? WHERE user_id = ?", [
-          next,
-          user.user_id,
-        ]);
-        await q("UPDATE party_members SET name = ? WHERE name = ?", [
-          next,
-          user.name,
-        ]);
+      const result = await db.withTransaction(async (_conn, q) => {
+        // Lock the account before checking either balance or cooldown. Concurrent
+        // renames and other wallet writes must see the committed account state.
+        const [current] = await q(
+          `SELECT name, gems, next_name_change_at,
+                  next_name_change_at > NOW(3) AS cooldown_active
+             FROM users WHERE user_id = ? FOR UPDATE`,
+          [user.user_id],
+        );
+        if (!current) return { status: 401, error: "Not authenticated" };
+        if (next === current.name) {
+          return { success: true, username: current.name, gems: Number(current.gems) || 0,
+            nextNameChangeAt: current.next_name_change_at || null };
+        }
+        if (current.cooldown_active) {
+          return { status: 429, error: "You can only change your name once per month.",
+            nextNameChangeAt: current.next_name_change_at };
+        }
+        if ((Number(current.gems) || 0) < NAME_CHANGE_COST) {
+          return { status: 400, error: `You need ${NAME_CHANGE_COST} gems to change your name.` };
+        }
+        await q(
+          `UPDATE users SET name = ?, gems = gems - ?,
+                  next_name_change_at = DATE_ADD(NOW(3), INTERVAL 1 MONTH)
+            WHERE user_id = ?`,
+          [next, NAME_CHANGE_COST, user.user_id],
+        );
+        await q("UPDATE party_members SET name = ? WHERE name = ?", [next, current.name]);
+        const [updated] = await q(
+          "SELECT gems, next_name_change_at FROM users WHERE user_id = ?",
+          [user.user_id],
+        );
+        return { success: true, username: next, gems: Number(updated.gems) || 0,
+          nextNameChangeAt: updated.next_name_change_at };
       });
+      if (result.error) {
+        const { status, ...payload } = result;
+        return res.status(status).json({ success: false, ...payload });
+      }
 
       res.cookie(
         "display_name",
         next,
         req.app.locals?.DISPLAY_COOKIE_OPTS || {},
       );
-      return res.json({ success: true, username: next });
+      return res.json(result);
     } catch (error) {
       if (error && (error.code === "ER_DUP_ENTRY" || error.errno === 1062)) {
         return res
@@ -327,4 +360,4 @@ function registerProfileRoutes({ app, db, requireCurrentUser }) {
   });
 }
 
-module.exports = { registerProfileRoutes };
+module.exports = { registerProfileRoutes, NAME_CHANGE_COST };

@@ -1,4 +1,5 @@
 import { warmEquippedPlayerCard } from "../views/playerCardAnimation.cjs";
+import { renderReadyWinStreak, wireWinStreakBenefits } from "../views/winStreakView.mjs";
 import { revealLobby, watchLobbyLoading, showLobbyLoadError } from "../lobby/lobbyReveal.js";
 import { setPartyButtonLabel } from "../lobby/party/partyButtonLabel.js";
 import { createLazyInitializer, deferLobbySetup } from "../lobby/deferredSetup.js";
@@ -38,6 +39,7 @@ import { wireFullscreenToggles } from "../ui/fullscreen.js";
 import { createLobbyChatController } from "../chat/lobbyChatController.js";
 import { formatSuspensionTime } from "../chat/presentation.js";
 import { createFriendsPanelController } from "../friends/friendsPanelController.js";
+import { pixelSprite } from "../friends/pixelArt.js";
 
 import { buildCharacterSkinBodyUrl } from "../views/skinAssets.js";
 
@@ -83,25 +85,28 @@ document
 
 // Add Friend / Pending / Friends button in another player's profile header.
 function syncProfileFriendButton(profile, viewingSelf) {
-  const head = document.querySelector("#profile-overlay .profile-head-copy");
+  const head = document.querySelector("#profile-overlay .profile-head-title-row");
   if (!head) return;
   let btn = document.getElementById("profile-friend-btn");
   if (!btn) {
     btn = document.createElement("button");
     btn.id = "profile-friend-btn";
     btn.type = "button";
-    btn.className = "bb-friends-btn is-primary profile-friend-btn";
+    btn.className = "bb-friends-btn profile-friend-btn";
     head.appendChild(btn);
   }
   const name = String(profile?.username || "");
   const relation = viewingSelf ? "self" : friendsController.relationshipFor(name);
   btn.hidden = relation === "self" || relation === "unavailable" || !!profile?.guest;
   btn.disabled = relation !== "none" && relation !== "incoming";
-  btn.textContent =
-    relation === "friends" ? "Friends ✓"
-      : relation === "outgoing" ? "Request Pending"
-        : relation === "incoming" ? "Accept Friend"
-          : "Add Friend";
+  btn.dataset.relation = relation;
+  const label = relation === "friends" ? "Friends"
+    : relation === "outgoing" ? "Request Pending"
+      : relation === "incoming" ? "Accept Friend"
+        : "Add Friend";
+  const icon = relation === "friends" || relation === "incoming" ? "check"
+    : relation === "outgoing" ? "envelope" : "invite";
+  btn.innerHTML = `${pixelSprite(icon, 2, "profile-friend-icon")}<span>${label}</span>`;
   btn.onclick = async () => {
     btn.disabled = true;
     const result = await friendsController.addFriend({ username: name });
@@ -268,6 +273,7 @@ const statusPromise = (returnStatus ? Promise.resolve(returnStatus) : fetch("/st
     if (data?.mapCatalog) { registerMapCatalog(data.mapCatalog); registerMapMetadata(data.mapCatalog); }
     if (data?.userData) {
       userData = data.userData;
+      renderReadyWinStreak(document.getElementById("ready-win-streak"), userData.winStreak);
       userData.isAdmin = !!data.isAdmin;
       window.__BRO_BATTLES_USERDATA__ = userData;
       warmEquippedPlayerCard(userData.selected_card_id || userData.selectedCardId);
@@ -443,6 +449,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Initialize UI sounds
   initUISounds();
+  wireWinStreakBenefits(document.getElementById('ready-win-streak'), document.getElementById('win-streak-benefits'));
 
   signUpOut(guest);
 
@@ -794,6 +801,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (signal.aborted) return;
       if (status.party_id) { window.location.href = `/party/${status.party_id}`; return; }
       if (status.userData) Object.assign(userData, status.userData);
+      renderReadyWinStreak(document.getElementById("ready-win-streak"), userData.winStreak);
       const character = userData.char_class || DEFAULT_CHARACTER;
       renderPartyMembers({ partyId: null, immediate: true, members: [{
         ...userData, team: 'team1', status: 'online',

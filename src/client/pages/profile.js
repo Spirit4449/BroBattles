@@ -5,6 +5,7 @@ import { wireEmailSettings } from "../account/emailSettings.js";
 import "../styles/profile.css";
 import "../styles/levelBadge.css";
 import "../styles/selectionPopup.css";
+import { wireNameChangeDialog } from "../account/nameChangeDialog.js";
 import { sonner } from "../ui/sonner.js";
 import { wireFullscreenToggles } from "../ui/fullscreen.js";
 import {
@@ -38,7 +39,9 @@ async function fetchJson(url, options) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data?.error || "Request failed");
+    const error = new Error(data?.error || "Request failed");
+    error.nextNameChangeAt = data?.nextNameChangeAt;
+    throw error;
   }
   return data;
 }
@@ -49,20 +52,11 @@ function renderProfile(profile) {
     profile.guest === true,
   );
   document.getElementById("profile-username").textContent = profile.username;
-  document.getElementById("profile-coins").textContent = String(
-    profile.coins || 0,
-  );
-  document.getElementById("profile-gems").textContent = String(
-    profile.gems || 0,
-  );
   document.getElementById("profile-trophies").textContent = String(
     profile.trophies || 0,
   );
   document.getElementById("profile-matches").textContent = String(
     profile.totalMatches || 0,
-  );
-  document.getElementById("profile-avg-level").textContent = String(
-    profile.avgCharLevel || 1,
   );
   const profileIconPreview = document.getElementById("profile-icon-preview");
   if (profileIconPreview) {
@@ -287,7 +281,15 @@ async function boot() {
     renderCardsGrid();
     renderIconsGrid();
 
-    document.getElementById("new-username").value = profileData.username || "";
+    wireNameChangeDialog(document.getElementById("change-name-btn"), {
+      getProfile: () => profileData,
+      fetchJson,
+      beforeOpen: () => accountSettings.close(),
+      onChanged: () => {
+        renderProfile(profileData);
+        setMessage("Username updated.");
+      },
+    });
 
     document.getElementById("back-btn")?.addEventListener("click", () => {
       window.location.href = "/";
@@ -320,30 +322,6 @@ async function boot() {
       .getElementById("close-icons-modal")
       ?.addEventListener("click", () => {
         document.getElementById("icons-modal")?.classList.add("hidden");
-      });
-
-    document
-      .getElementById("username-form")
-      ?.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        if (profileData?.guest !== false) return;
-        const username = String(
-          document.getElementById("new-username")?.value || "",
-        ).trim();
-        if (!username) return;
-        try {
-          const data = await fetchJson("/profile/change-username", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username }),
-          });
-          profileData.username = data.username || username;
-          renderProfile(profileData);
-          setMessage("Username updated.");
-          accountSettings.close("username-form");
-        } catch (err) {
-          setMessage(err.message || "Unable to update username.", true);
-        }
       });
 
     document

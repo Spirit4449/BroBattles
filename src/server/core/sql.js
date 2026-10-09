@@ -117,7 +117,11 @@ async function fetchPartyMembersDetailed(partyId) {
 }
 
 async function setUserStatus(name, status) {
-  return runQuery("UPDATE users SET status = ? WHERE name = ?", [status, name]);
+  return runQuery(
+    `UPDATE users SET last_seen_at = IF(? <> 'offline' OR status <> 'offline', NOW(), last_seen_at),
+                      status = ? WHERE name = ?`,
+    [status, status, name],
+  );
 }
 
 async function setUserSocketId(userId, socketId) {
@@ -511,6 +515,14 @@ async function setOfflineIfLastSeenOlderThan(minutes = 3) {
   return staleRows;
 }
 
+// Account activity survives party changes and server restarts.
+async function refreshUserLastSeen(names) {
+  for (let i = 0; i < names.length; i += 200) {
+    const chunk = names.slice(i, i + 200);
+    await runQuery(`UPDATE users SET last_seen_at = NOW() WHERE name IN (${chunk.map(() => "?").join(",")})`, chunk);
+  }
+}
+
 async function refreshPartyPresence(names) {
   for (let i = 0; i < names.length; i += 200) {
     const chunk = names.slice(i, i + 200);
@@ -523,6 +535,7 @@ module.exports = {
   databaseName: databaseConfig.database,
   pool,
   refreshPartyPresence,
+  refreshUserLastSeen,
   runQuery,
   runQueryConn,
   withTransaction,

@@ -210,10 +210,11 @@ test('huntress bot aim has extra inaccuracy for its forgiving arrow spread', () 
     `huntress error ${huntressError} should exceed ordinary error ${ordinaryError}`);
 });
 
-test('huntress intercepts moving targets more accurately than the previous gravity estimate', (t) => {
+test('huntress intercepts horizontal movement more accurately than the previous gravity estimate', (t) => {
   const p = player('huntress');
   let oldTotal = 0, newTotal = 0;
-  for (const [vx, vy] of [[0, 0], [120, 0], [-180, 0], [0, -100], [80, 80], [-80, -80]]) {
+  const velocities = [[0, 0], [120, 0], [-180, 0]];
+  for (const [vx, vy] of velocities) {
     const enemy = { ...target, vx, vy };
     const aim = basicAim(p, enemy, profile, () => 0.5, room);
     assert.equal(aim.canHit, true);
@@ -226,7 +227,31 @@ test('huntress intercepts moving targets more accurately than the previous gravi
     newTotal += miss;
   }
   assert.ok(newTotal < oldTotal);
-  t.diagnostic(`Mean closest approach: old ${(oldTotal / 6).toFixed(1)}px; new ${(newTotal / 6).toFixed(1)}px (perfect aim, constant velocity).`);
+  t.diagnostic(`Mean closest approach: old ${(oldTotal / velocities.length).toFixed(1)}px; new ${(newTotal / velocities.length).toFixed(1)}px (perfect aim, constant velocity).`);
+});
+
+test('huntress keeps jump and fall prediction near the current target height', () => {
+  const p = player('huntress');
+  for (const x of [-450, -250, 250, 450]) {
+    for (const vy of [-500, 500]) {
+      const enemy = { ...target, x, vy };
+      const aim = basicAim(p, enemy, profile, () => 0.5, room);
+      assert.equal(aim.canHit, true);
+      // Recover the aimed height when the arrow crosses the target's x.
+      const cfg = require('../src/shared/characters/huntressProjectile').attackConfig();
+      const forward = 80 * cfg.forwardOffset;
+      const time = (x / Math.cos(aim.angle) - forward) / aim.speed;
+      const y = p.y - 120 * cfg.verticalOffset + Math.sin(aim.angle) * (forward + aim.speed * time)
+        + 0.5 * cfg.gravity * time * (time + room.FIXED_DT_MS / 1000);
+      const lead = y - enemy.y;
+      assert.ok(lead * vy > 0, 'still anticipates the observed vertical direction');
+      assert.ok(Math.abs(lead) < 100, 'does not project a jump or fall far beyond the current body');
+      assert.ok(Math.abs(lead) < Math.abs(vy * time) / 2, 'vertical lead stays shorter than the arrow flight');
+      const noPrediction = basicAim(p, enemy, { ...profile, prediction: 0 }, () => 0.5, room);
+      const stationary = basicAim(p, { ...enemy, vy: 0 }, profile, () => 0.5, room);
+      assert.equal(noPrediction.angle, stationary.angle);
+    }
+  }
 });
 
 test('pressure shots threaten nearby space without wasting the last ammo charge', () => {

@@ -83,3 +83,22 @@ test("the coin ceiling still applies before collected drops", () => {
     { coins: 508, gems: 86 },
   );
 });
+
+
+test('streak tiers combine currency bonuses at their configured thresholds', () => {
+  const { WIN_STREAK_TIERS, winStreakMultipliers, applyWinStreakRewards } = require('../src/shared/winStreakRewards.cjs');
+  const base = { trophies: 29, coins: 111, gems: 27 };
+  for (const tier of WIN_STREAK_TIERS) {
+    const result = applyWinStreakRewards(base, tier.streak);
+    assert.equal(result.totals[tier.currency], Math.round(base[tier.currency] * tier.multiplier));
+    assert.equal(result.bonuses[tier.currency], result.totals[tier.currency] - base[tier.currency]);
+    const previous = winStreakMultipliers(tier.streak - 1);
+    assert.ok(previous[tier.currency] < tier.multiplier);
+  }
+  const top = WIN_STREAK_TIERS.at(-1);
+  const active = winStreakMultipliers(top.streak);
+  assert.equal(active.trophies, top.multiplier, 'trophies use the configured top tier');
+  assert.ok(active.coins > 1 && active.gems > 1, 'other unlocked currencies stay active');
+  assert.deepEqual(applyWinStreakRewards(base, 0).totals, base);
+  assert.equal(applyWinStreakRewards({ trophies: -14, coins: 0, gems: 0 }, top.streak).totals.trophies, -14);
+});

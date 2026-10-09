@@ -1621,6 +1621,73 @@ body.profile-page-body .profile-form[hidden] {
   text-align: left;
 }
 
+.bb-game-over-panel { position: relative; width: min(680px, 94vw); }
+.bb-game-over-panel > .bb-game-over-card { width: 100%; }
+.bb-game-over-streak {
+  position: absolute;
+  top: -10px;
+  left: -16px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 5px 6px;
+  border: 4px solid #090f1d;
+  border-radius: 0;
+  background: repeating-linear-gradient(0deg, #402d1c 0 4px, #382819 4px 8px);
+  color: #ffe4a2;
+  box-shadow: 3px 4px 0 #0008, inset 0 3px #ffd36a, inset 3px 0 #9c692c,
+    inset -3px 0 #805026, inset 0 -3px #6a4324;
+  font-family: var(--bb-font-display);
+  text-align: center;
+  pointer-events: none;
+  transform: rotate(-7deg);
+  animation: bb-streak-corner-in 400ms 180ms steps(5, end) both;
+}
+.bb-game-over-streak-icon { width: 34px; height: 38px; object-fit: contain; image-rendering: pixelated; }
+.bb-game-over-streak strong { display: block; font-size: 6px; line-height: 1.5; text-transform: uppercase; }
+.bb-game-over-streak-count {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+  line-height: 1.25;
+  text-shadow: 2px 2px #100e19;
+  transition: opacity 140ms steps(3, end), transform 140ms steps(3, end);
+}
+.bb-game-over-streak-count.is-changing { opacity: 0; transform: translateY(-7px); }
+.bb-game-over-streak-count.is-counted { animation: bb-streak-count-in 350ms steps(4, end) both; }
+.bb-game-over-streak.is-lost {
+  background: repeating-linear-gradient(0deg, #352c3c 0 4px, #2b2533 4px 8px);
+  color: #e8b9c8;
+  box-shadow: 3px 4px 0 #0008, inset 0 3px #bb879b, inset 3px 0 #7c5368,
+    inset -3px 0 #594152, inset 0 -3px #493445;
+}
+.bb-game-over-streak.is-lost .bb-game-over-streak-icon { content: url("/assets/icons/win-streak-poster.webp"); animation: bb-streak-extinguish 900ms 500ms steps(5, end) both; }
+.bb-streak-sparks { position: absolute; inset: 0; pointer-events: none; }
+.bb-streak-sparks i { position: absolute; left: calc(12% + var(--spark) * 10%); top: 40%; width: 3px; height: 3px; background: #ffcf52; animation: bb-streak-spark 1200ms calc(350ms + var(--spark) * 110ms) steps(6, end) 2 both; }
+.bb-streak-sparks i:nth-child(even) { background: #ff823d; top: 65%; }
+.is-lost .bb-streak-sparks i { background: #958595; animation-name: bb-streak-ash; animation-iteration-count: 1; }
+@keyframes bb-streak-corner-in { from { opacity: 0; transform: translateY(-12px) rotate(-12deg); } to { opacity: 1; transform: rotate(-7deg); } }
+@keyframes bb-streak-count-in { from { opacity: 0; transform: translateY(7px) scale(1.2); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes bb-streak-spark { 0% { opacity: 0; transform: translateY(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-35px); } }
+@keyframes bb-streak-ash { 0% { opacity: 0; transform: translateY(0); } 20% { opacity: .8; } 100% { opacity: 0; transform: translateY(30px); } }
+@keyframes bb-streak-extinguish { from { filter: grayscale(0); opacity: 1; } to { filter: grayscale(1); opacity: .5; } }
+@media (max-width: 680px) {
+  .bb-game-over-panel { width: min(520px, 96vw); }
+  .bb-game-over-panel:has(.bb-game-over-streak) .bb-game-over-hero { padding-top: 48px; }
+  .bb-game-over-streak { top: -6px; left: 6px; padding: 4px 9px 4px 5px; gap: 4px; }
+  .bb-game-over-streak-icon { width: 28px; height: 32px; }
+  .bb-game-over-streak strong { font-size: 5px; }
+  .bb-game-over-streak-count { font-size: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bb-game-over-streak, .bb-game-over-streak-count.is-counted,
+  .bb-game-over-streak.is-lost .bb-game-over-streak-icon { animation: none; }
+  .bb-game-over-streak-count { transition: none; }
+  .bb-game-over-streak.is-lost .bb-game-over-streak-icon { filter: grayscale(1); opacity: .5; }
+  .bb-streak-sparks { display: none; }
+}
+
 .bb-game-over-summary {
   animation: bb-game-over-rise 500ms 260ms var(--bb-ease) both;
 }
@@ -3096,3 +3163,30 @@ body .profile-bros-unlocked-count strong {
     animation: none;
   }
 }
+/* The fire trophy is reserved for win streaks. */
+@media (prefers-reduced-motion: reduce) {
+  img[src*="/assets/icons/win-streak.webp"] {
+    content: url("/assets/icons/win-streak-poster.webp");
+  }
+}
+
+/* Pixel embers carry streak energy into the reward cards. */
+.bb-streak-energy { position: fixed; inset: 0; z-index: 14010; pointer-events: none; }
+.bb-streak-energy i {
+  position: absolute; width: 10px; height: 10px; background: #ffe494;
+  margin: -5px;
+  box-shadow: -3px 3px 0 #ee8c2b;
+  animation: bb-streak-pixel-flight 400ms var(--delay) steps(12, end) both;
+}
+.bb-streak-energy i:nth-child(3n) { width: 8px; height: 8px; margin: -4px; background: #f6a539; box-shadow: -2px 2px 0 #d86b20; }
+@keyframes bb-streak-pixel-flight {
+  0% { opacity: 0; transform: translate(0, 0) scale(.5); }
+  15% { opacity: 1; }
+  50% { opacity: 1; transform: translate(calc(var(--flight-x) * .5 + var(--spread)), calc(var(--flight-y) * .5 + var(--arc))); }
+  100% { opacity: 0; transform: translate(var(--flight-x), var(--flight-y)) scale(1.4); }
+}
+.bb-game-over-reward.is-streak-boosted { animation: bb-streak-impact 500ms steps(5, end); }
+.bb-streak-bonus-label { color: #ffd36a !important; opacity: 0; }
+.is-streak-boosted .bb-streak-bonus-label { opacity: 1; }
+@keyframes bb-streak-impact { 0%, 40% { box-shadow: 0 0 20px #ffd36a, inset 0 0 15px #ffb42f66; } 100% { box-shadow: 0 4px 0 var(--bb-ink); } }
+@media (prefers-reduced-motion: reduce) { .bb-streak-energy { display: none; } .bb-game-over-reward.is-streak-boosted { animation: none; } }

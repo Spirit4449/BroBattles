@@ -46,6 +46,7 @@ function nullableNumber(value) {
 
 async function recordMatchOutcome(db, room, winnerTeam, rewardSummary = []) {
   if (!db || !room || !room.matchId) return null;
+  winnerTeam = winnerTeam || "draw";
   const matchId = Number(room.matchId);
   const rewardsMap = new Map();
   for (const r of rewardSummary || []) {
@@ -426,7 +427,68 @@ async function getBattleLogForUser(db, userId, limit = 10) {
   return battles;
 }
 
+// Read the consecutive winning tail of persisted history. Keyset pagination
+// avoids a limit on long streaks and does not count live/abandoned matches.
+async function getCurrentWinStreak(db, userId) {
+  if (!userId) return 0;
+  let streak = 0;
+  let before = null;
+  const pageSize = 100;
+  while (true) {
+    const rows = await db.runQuery(
+      `SELECT m.match_id, m.winner_team, mp.team
+         FROM match_participants mp
+         JOIN matches m ON m.match_id = mp.match_id
+        WHERE mp.user_id = ? AND m.status = 'completed'
+          ${before === null ? '' : 'AND m.match_id < ?'}
+        ORDER BY m.match_id DESC LIMIT ?`,
+      before === null ? [userId, pageSize] : [userId, before, pageSize],
+    );
+    for (const row of rows) {
+      // Legacy history without a recorded outcome cannot establish a loss.
+      if (!row.winner_team || row.winner_team === 'draw') continue;
+      if (row.winner_team !== row.team) return streak;
+      streak++;
+    }
+    if (rows.length < pageSize) return streak;
+    before = rows[rows.length - 1].match_id;
+  }
+}
+
+// Scan all completed history so older records survive later losses.
+async function getHighestWinStreak(db, userId) {
+  if (!userId) return 0;
+  let streak = 0;
+  let highest = 0;
+  let before = null;
+  const pageSize = 100;
+  while (true) {
+    const rows = await db.runQuery(
+      `SELECT m.match_id, m.winner_team, mp.team
+         FROM match_participants mp
+         JOIN matches m ON m.match_id = mp.match_id
+        WHERE mp.user_id = ? AND m.status = 'completed'
+          ${before === null ? '' : 'AND m.match_id < ?'}
+        ORDER BY m.match_id DESC LIMIT ?`,
+      before === null ? [userId, pageSize] : [userId, before, pageSize],
+    );
+    for (const row of rows) {
+      // Legacy history without a recorded outcome cannot establish a loss.
+      if (!row.winner_team || row.winner_team === 'draw') continue;
+      if (row.winner_team !== row.team) {
+        streak = 0;
+      } else {
+        highest = Math.max(highest, ++streak);
+      }
+    }
+    if (rows.length < pageSize) return highest;
+    before = rows[rows.length - 1].match_id;
+  }
+}
+
 module.exports = {
+  getHighestWinStreak,
+  getCurrentWinStreak,
   formatModeLabel,
   resolvePlayerIconId,
   recordMatchOutcome,

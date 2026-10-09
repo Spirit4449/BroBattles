@@ -107,6 +107,8 @@ The local player, the server's movement validation, and the bot physics all read
 | `presentation` | Client-only visual settings (art scale, animation locks, dash poses). |
 | `attacks` | Network action descriptors and authoritative runtime selection. Update these when adding or changing an attack mechanism; keep action IDs and damage types aligned with emitters and validators. |
 
+Huntress's displayed basic damage is the full three-arrow volley; actual contacts use `stats.tuning.attack.arrowSpread.damagePerArrow`. Keep `stats.baseDamage` consistent with the arrow count and per-arrow damage when balancing her basic attack. Burning Volley uses its separate `damagePerArrow` field. Each attack's `aim.quickTargetOffsetY` sets its default target height relative to the aim anchor (positive points down); the basic and super defaults aim slightly below their anchors.
+
 The Ninja swarm's per-shard fan (spawn offset, arc, speed) is computed once by `swarmShard()` in `src/shared/characters/ninjaProjectile.js`. The server, bots, and client renderer all call it.
 
 ## Powerups: `src/shared/catalogs/powerups.catalog.json`

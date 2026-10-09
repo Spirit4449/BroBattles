@@ -7,7 +7,9 @@ export async function fetchLobbyJson(url, options = {}) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload?.error || "Request failed");
+    const error = new Error(payload?.error || "Request failed");
+    error.nextNameChangeAt = payload?.nextNameChangeAt;
+    throw error;
   }
   return payload;
 }

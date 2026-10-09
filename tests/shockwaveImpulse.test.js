@@ -60,3 +60,20 @@ test('local shockwave handler lifts grounded players and removes speed caps imme
   assert.equal(player.drag, 0);
   assert.ok(player._shockwaveUntil > Date.now());
 });
+
+test('every participant knockback source advances the replicated trail sequence', () => {
+  const { applyParticipantKnockback } = require('../src/server/core/gameRoom/participants');
+  const events = [];
+  const room = { io: { to: () => ({emit: (event, data) => events.push({event, data})}) } };
+  for (const isBot of [false, true]) {
+    const player = {isBot, socketId: 'fighter'};
+    for (const cause of [undefined, 'stomp', 'shockwave']) {
+      const before = player.knockbackSeq || 0;
+      applyParticipantKnockback(room, player, {cause, amountX: 300, amountY: -180});
+      assert.equal(player.knockbackSeq, before + 1);
+    }
+    applyParticipantKnockback(room, player, {amountX: 0, amountY: 0});
+    assert.equal(player.knockbackSeq, 3, 'zero force creates no trail');
+  }
+  assert.equal(events.length, 4, 'human impulses retain their delivery');
+});

@@ -1,3 +1,4 @@
+import { drawShieldBubble } from "../../powerups/shieldBubble";
 import { teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
 import { getResolvedCharacterSpecialConfig } from "../../../../shared/characters/characterTuning.js";
 import { getResolvedCharacterSpecialAimConfig } from "../../../../shared/characters/characterTuning.js";
@@ -10,6 +11,8 @@ import {
 } from "../shared/animationState.js";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { playerSoundVolume } from "../../audio/playerAudio";
+
+const shieldReflections = new WeakMap();
 
 const INFERNO = getResolvedCharacterSpecialConfig("draven", "inferno");
 const INFERNO_AIM = getResolvedCharacterSpecialAimConfig("draven");
@@ -36,6 +39,8 @@ function syncInfernoOverlay(player, overlay) {
 }
 
 function destroyInfernoOverlay(player) {
+  player?._dravenInfernoShield?.destroy();
+  if (player) delete player._dravenInfernoShield;
   if (!player || !player._dravenInfernoOverlay) return;
   try {
     player._dravenInfernoOverlay.destroy();
@@ -192,6 +197,12 @@ function startInfernoVisualLoop(scene, player, token, isOwner) {
     }
 
     syncInfernoOverlay(player, player._dravenInfernoOverlay);
+    const shield = player._dravenInfernoShield;
+    if (shield) {
+      shield.clear();
+      drawShieldBubble(shield, player, { x: player.x, y: player.y, radius: 46 },
+        now / 1000, until - Date.now(), shieldReflections);
+    }
 
     scene.time.delayedCall(16, tick);
   };
@@ -242,7 +253,11 @@ export function perform(
     fallback: "throw",
   });
 
+  destroyInfernoOverlay(player);
   ensureInfernoOverlay(scene, player);
+  const shield = scene.add.graphics();
+  shield.setDepth(RENDER_LAYERS.PLAYER + 1);
+  player._dravenInfernoShield = shield;
 
   try {
     const sound = scene.sound?.add("draven-special", { volume: 0 });
@@ -278,6 +293,9 @@ export function perform(
 
   const interrupt = () => {
     if (player._dravenInfernoToken !== token) return;
+    player.off?.("attack:interrupted", interrupt);
+    player.off?.("destroy", interrupt);
+    scene.events?.off("shutdown", interrupt);
     player._movementLockedUntil = player._dravenInfernoUntil = 0;
     delete player._dravenInfernoToken;
     unlockFlip();
@@ -286,10 +304,14 @@ export function perform(
     delete player._dravenInfernoPrevGravity;
   };
   player.once?.("attack:interrupted", interrupt);
+  player.once?.("destroy", interrupt);
+  scene.events?.once("shutdown", interrupt);
   startInfernoVisualLoop(scene, player, token, isOwner);
 
   scene.time.delayedCall(DRAVEN_INFERNO_DURATION_MS, () => {
     player.off?.("attack:interrupted", interrupt);
+    player.off?.("destroy", interrupt);
+    scene.events?.off("shutdown", interrupt);
     if (!player || !player.active) return;
     if (player._dravenInfernoToken !== token) return;
 

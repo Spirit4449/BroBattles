@@ -3,6 +3,8 @@ const {
   buildPerformanceMaxima,
   calculateTrophyDelta,
 } = require("../../services/trophies/trophySystem");
+const { applyWinStreakRewards } = require("../../../shared/winStreakRewards.cjs");
+const { getCurrentWinStreak } = require("../../services/match/battleLog");
 
 function ensureRewardBucket(room, playerData) {
   if (!playerData || !playerData.name) return null;
@@ -97,27 +99,31 @@ async function applyMatchRewards(room, winnerTeam, q) {
       maxima,
       currentTrophies,
     });
+    const before = playerData.isBot ? 0 : await getCurrentWinStreak({ runQuery: q }, playerData.user_id);
+    const isDraw = winnerTeam == null || winnerTeam === 'draw';
+    const isWin = !isDraw && winnerTeam === playerData.team;
+    const after = playerData.isBot ? 0 : isDraw ? before : isWin ? before + 1 : 0;
+    const base = { coins: reward.coins, gems: reward.gems, trophies: Number(trophyInfo.trophiesDelta) || 0 };
+    const boosted = applyWinStreakRewards(base, isWin ? after : 0);
+    const totals = boosted.totals;
     summary.push({
       username: bucket.username,
       team: bucket.team,
       hits: bucket.hits,
       damage: bucket.damage,
       kills: bucket.kills,
-      coinsAwarded: playerData.isBot ? 0 : reward.coins,
-      gemsAwarded: playerData.isBot ? 0 : reward.gems,
-      trophiesDelta: playerData.isBot ? 0 : trophyInfo.trophiesDelta,
-      trophiesAwarded: playerData.isBot ? 0 : Math.max(0, Number(trophyInfo.trophiesDelta) || 0),
-      trophiesLost: playerData.isBot ? 0 : Math.max(0, -(Number(trophyInfo.trophiesDelta) || 0)),
+      coinsAwarded: playerData.isBot ? 0 : totals.coins,
+      gemsAwarded: playerData.isBot ? 0 : totals.gems,
+      trophiesDelta: playerData.isBot ? 0 : totals.trophies,
+      trophiesAwarded: playerData.isBot ? 0 : Math.max(0, totals.trophies),
+      trophiesLost: playerData.isBot ? 0 : Math.max(0, -totals.trophies),
+      ...(!playerData.isBot ? { winStreakBefore: before, winStreakAfter: after,
+        winStreakBaseRewards: base, winStreakBonuses: boosted.bonuses } : {}),
     });
-    if (
-      (reward.coins > 0 ||
-        reward.gems > 0 ||
-        (Number(trophyInfo.trophiesDelta) || 0) !== 0) &&
-      playerData.user_id && !playerData.isBot
-    ) {
+    if (playerData.user_id && !playerData.isBot) {
       const result = await q(
-        "UPDATE users SET coins = COALESCE(coins, 0) + ?, gems = COALESCE(gems, 0) + ?, trophies = GREATEST(0, COALESCE(trophies, 0) + ?), trophy_peak = GREATEST(COALESCE(trophy_peak, 0), trophies) WHERE user_id = ?",
-        [reward.coins, reward.gems, Number(trophyInfo.trophiesDelta) || 0, playerData.user_id]);
+        "UPDATE users SET coins = COALESCE(coins, 0) + ?, gems = COALESCE(gems, 0) + ?, trophies = GREATEST(0, COALESCE(trophies, 0) + ?), trophy_peak = GREATEST(COALESCE(trophy_peak, 0), trophies), highest_win_streak = GREATEST(COALESCE(highest_win_streak, 0), ?) WHERE user_id = ?",
+        [totals.coins, totals.gems, totals.trophies, after, playerData.user_id]);
       if (result.affectedRows !== 1) throw new Error("Reward participant update failed");
     }
   }

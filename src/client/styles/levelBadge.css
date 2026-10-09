@@ -24,6 +24,18 @@
 .level-badge[data-level="9"] { --level-accent-rgb: 178, 57, 255; }
 .level-badge[data-level="10"] { --level-accent-rgb: 255, 204, 62; }
 
+/* Base sizes follow visible poster bounds, with optical adjustments at game size. */
+.level-badge[data-level="1"] { --level-art-scale: 1.023; }
+.level-badge[data-level="2"] { --level-art-scale: 0.82; }
+.level-badge[data-level="3"] { --level-art-scale: 1; }
+.level-badge[data-level="4"] { --level-art-scale: 0.99; }
+.level-badge[data-level="5"] { --level-art-scale: 0.882; }
+.level-badge[data-level="6"] { --level-art-scale: 1; }
+.level-badge[data-level="7"] { --level-art-scale: 0.893; }
+.level-badge[data-level="8"] { --level-art-scale: 1.015; --level-art-offset-y: 0.075; }
+.level-badge[data-level="9"] { --level-art-scale: 1.06; }
+.level-badge[data-level="10"] { --level-art-scale: 1.08; }
+
 .level-badge--framed {
   position: relative;
   width: calc(var(--level-badge-size) + 6px);
@@ -101,6 +113,30 @@
   object-fit: contain;
   image-rendering: pixelated;
   filter: drop-shadow(0 2px 0 rgba(3, 6, 11, 0.78));
+  transform: translateY(calc(var(--level-badge-size) * var(--level-art-offset-y, 0)))
+    scale(var(--level-art-scale, 1));
+  transform-origin: center;
+}
+
+/* Shared by framed and standalone badges, including lobby and battle HUD. */
+.level-badge[data-level="10"] .level-badge__art {
+  filter: drop-shadow(0 2px 0 rgba(3, 6, 11, 0.78))
+    drop-shadow(0 0 2px rgba(255, 246, 204, 0.5))
+    drop-shadow(0 0 6px rgba(var(--level-accent-rgb), 0.58));
+  animation: level-ten-art-gleam 2.8s ease-in-out infinite;
+}
+
+@keyframes level-ten-art-gleam {
+  0%, 100% {
+    filter: drop-shadow(0 2px 0 rgba(3, 6, 11, 0.78))
+      drop-shadow(0 0 2px rgba(255, 246, 204, 0.5))
+      drop-shadow(0 0 6px rgba(var(--level-accent-rgb), 0.58));
+  }
+  50% {
+    filter: drop-shadow(0 2px 0 rgba(3, 6, 11, 0.78))
+      drop-shadow(0 0 2px rgba(255, 246, 204, 0.65))
+      drop-shadow(0 0 6px rgba(var(--level-accent-rgb), 0.72));
+  }
 }
 
 @keyframes level-badge-gradient-gleam {
@@ -129,6 +165,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .level-badge[data-level="10"] .level-badge__art {
+    animation: none;
+  }
+
   .level-badge--framed {
     animation: none;
     background-size: 125% 125%, 100% 100%;

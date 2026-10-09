@@ -1,0 +1,73 @@
+/* Compact account dialog; all visual treatments use the shared game tokens. */
+.name-change-dialog {
+  box-sizing: border-box;
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: var(--bb-popup-border-width) solid var(--bb-popup-border-color);
+  border-radius: var(--bb-radius-window);
+  background: var(--bb-popup-bg);
+  box-shadow: var(--bb-popup-shadow);
+  font-family: var(--bb-font-body);
+  overflow: auto;
+}
+.name-change-dialog[open] { animation: bb-popup-panel-in var(--bb-popup-motion) var(--bb-ease) both; }
+.name-change-dialog::backdrop { background: var(--bb-popup-backdrop); backdrop-filter: blur(var(--bb-overlay-blur)); }
+.name-change-dialog .bb-popup-title { font-size: var(--bb-title-sm); }
+.name-change-dialog .name-change-form {
+  display: grid;
+  gap: var(--bb-space-5);
+  padding: var(--bb-space-6);
+  margin: 0;
+}
+.name-change-policy { display: grid; gap: var(--bb-space-2); }
+.name-change-policy p { margin: 0; color: var(--bb-text-soft); font-size: 14px; line-height: 1.5; }
+.name-change-policy p strong { color: var(--bb-text); }
+.name-change-cost { display: flex; align-items: center; gap: var(--bb-space-2); color: var(--bb-text-muted); font-size: var(--bb-text-md); }
+.name-change-cost img { width: 28px; height: 28px; object-fit: contain; }
+.name-change-cost strong { color: var(--bb-gem); font: var(--bb-text-sm)/1.6 var(--bb-font-display); }
+.name-change-field { display: grid; gap: var(--bb-space-3); }
+.name-change-dialog label { color: var(--bb-text-soft); font: var(--bb-text-xs)/1.6 var(--bb-font-display); text-transform: uppercase; }
+.name-change-dialog input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: var(--bb-space-3);
+  border: 2px solid var(--bb-border);
+  border-radius: var(--bb-radius-control);
+  color: var(--bb-text);
+  background: var(--bb-bg-deep);
+  box-shadow: var(--bb-inset-shadow);
+  font: var(--bb-text-sm)/1.6 var(--bb-font-display);
+  user-select: text;
+}
+.name-change-hint { margin: 0; color: var(--bb-text-muted); font-size: 12px; line-height: 1.5; }
+.name-change-dialog .name-change-availability,
+.name-change-dialog .name-change-message { margin: 0; font-size: var(--bb-text-md); line-height: 1.6; }
+.name-change-dialog .name-change-availability { color: var(--bb-text-soft); }
+.name-change-availability[data-state="cooldown"],
+.name-change-availability[data-state="insufficient"] {
+  padding: var(--bb-space-3) var(--bb-space-4);
+  border-left: 3px solid var(--bb-gold);
+  background: var(--bb-panel-bg);
+}
+.name-change-dialog .name-change-message { color: var(--bb-red); }
+.name-change-actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: var(--bb-action-gap);
+  padding-top: var(--bb-space-2);
+  padding-bottom: var(--bb-space-1);
+}
+.name-change-dialog .bb-button { min-height: 44px; padding: var(--bb-space-3); color: var(--bb-text); font-size: var(--bb-text-xs); }
+.name-change-dialog .name-change-cancel { background: var(--bb-surface-raised); }
+.name-change-dialog .name-change-submit { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: var(--bb-space-2) var(--bb-space-3); background: var(--bb-primary-gradient); }
+.name-change-price { display: inline-flex; align-items: center; gap: var(--bb-space-1); white-space: nowrap; }
+.name-change-price img { width: var(--bb-currency-icon); height: var(--bb-currency-icon); object-fit: contain; }
+.name-change-dialog [hidden] { display: none !important; }
+@media (max-width: 480px) {
+  .name-change-dialog .name-change-form { padding: var(--bb-space-5); }
+  .name-change-actions { grid-template-columns: 1fr; }
+  .name-change-submit { grid-row: 1; }
+}

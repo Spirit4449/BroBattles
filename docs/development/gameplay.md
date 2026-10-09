@@ -58,6 +58,14 @@ projectile danger. Each opportunity has a 40% roll spaced 600–1000 ms apart;
 normal dash cooldown and hesitation still apply. Committed dash routes are kept.
 Successful decisions are counted in the `dashStomps` bot metric.
 
+## Draven's Inferno
+
+Draven takes 60% less incoming damage while channeling Inferno. A translucent,
+circular shield with the same shaded shell and reflections as spawn protection
+surrounds him for the channel and disappears when it ends or is interrupted. The incoming damage multiplier lives in
+`stats.tuning.special.inferno.damageTakenMult` in his shared character definition
+and stacks multiplicatively with other damage modifiers.
+
 ## Bots and matchmaking
 
 Bots are server participants, not user accounts or browser sessions. Bots can participate in the playable modes, including Bank Bust. Objective metadata in `src/server/core/bots/objectives.js` describes the enemy vault, but explicitly retains `standard-combat` behavior; dedicated objective planning is not implemented. `tests/botObjectives.test.js` verifies that distinction. Mid-match replacement is not an automatic recovery mechanism.
@@ -73,6 +81,8 @@ Bot battle cards are cosmetic. `src/server/core/bots/playerCards.js` weights the
 The `src/server/core/bots/` directory owns perception, navigation workers, movement execution, tactics, objectives, profiles and seeded simulation. `characterProfiles.js` defines spacing, aim model and super decisions. Shared map documents supply geometry. Navigation simulates movement and verifies stable landings, including jump/dash routes; actual takeoff state is revalidated. Difficulty scales through trophy anchors up to 4,000, retaining reaction delay, aim error and missed opportunities. Invisible opponents are not tracked by reading their live positions.
 
 Sudden-death routing treats poison exposure as a cost, preserving necessary submerged routes. Ordinary combat positioning continues away from danger; near full coverage, bots stop treating gas as a routing constraint. Headless tests do not establish production balance or browser smoothness.
+
+Huntress bots limit vertical movement prediction to a short window configured in `characterProfiles.js`, so a jump does not make them extrapolate upward velocity over the arrow's entire flight. Horizontal interception, arrow-drop compensation, and cover checks still use the full flight path.
 
 Run `npm run test:bots` and `npm run simulate:bots -- --matrix --seconds=30`. Add `--sudden-death=10` for poison scenarios. Test mixed human/bot matches, explicit slots, concurrent queue/cancel/ready requests, abandoned matches, and deployment capacity before expanding automatic fill.
 

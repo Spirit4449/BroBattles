@@ -1,3 +1,4 @@
+import { applyWallet, subscribeWallet } from "../wallet.mjs";
 import { escapeHtml } from "../../../shared/site/html.cjs";
 import { renderCharacterStatus } from "./characterStatusView.js";
 import { createModalFocus } from "../../ui/modalFocus.js";
@@ -526,6 +527,10 @@ function renderCharacterDetails(character) {
 
   const cardState = getCharacterCardState(character, _userDataRef);
   const selectedSkin = getSelectedSkin(character);
+  const upgradeAnimation =
+    _pendingUpgradeAnimation?.character === character
+      ? _pendingUpgradeAnimation
+      : null;
   const selectedSkinRarity = normalizeRarity(selectedSkin.rarity);
   const isUpgradePreview =
     _upgradePreview?.character === character &&
@@ -570,9 +575,27 @@ function renderCharacterDetails(character) {
 
   if (!cardState.isLocked && cardState.level > 0 && cardState.level <= LEVEL_CAP) {
     previewFrame.classList.add("has-character-level");
-    previewFrame.appendChild(createLevelBadge(cardState.level, {
+    const badge = createLevelBadge(cardState.level, {
       className: "level-badge--framed character-level character-details-preview-level-badge",
-    }));
+    });
+    previewFrame.appendChild(badge);
+    if (upgradeAnimation && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const previousBadge = createLevelBadge(upgradeAnimation.fromLevel, {
+        className: badge.className,
+        ariaHidden: true,
+      });
+      previewFrame.appendChild(previousBadge);
+      const outgoing = previousBadge.animate([
+        { opacity: 1, transform: "translateY(0) scale(1)" },
+        { opacity: 0, transform: "translateY(-12px) scale(0.8)" },
+      ], { duration: 320, easing: "ease-in", fill: "forwards" });
+      outgoing.onfinish = outgoing.oncancel = () => previousBadge.remove();
+      badge.animate([
+        { opacity: 0, transform: "translateY(12px) scale(0.8)" },
+        { opacity: 1, transform: "translateY(0) scale(1.12)", offset: 0.7 },
+        { opacity: 1, transform: "translateY(0) scale(1)" },
+      ], { duration: 580, delay: 180, easing: "ease-out", fill: "backwards" });
+    }
   }
 
   previewFrame.appendChild(previewGlow);
@@ -596,16 +619,12 @@ function renderCharacterDetails(character) {
   const nextHealth = getHealth(character, nextLevel);
   const nextDamage = getDamage(character, nextLevel);
   const nextSpecial = getSpecialDamage(character, nextLevel);
-  const upgradeAnimation =
-    _pendingUpgradeAnimation?.character === character
-      ? _pendingUpgradeAnimation
-      : null;
   const animatedStart = upgradeAnimation?.from || {};
 
   const statValueMarkup = (stat, value, nextValue) => {
     const displayValue = Number(animatedStart[stat] ?? value);
     const gain = Math.max(0, Number(nextValue) - Number(value));
-    return `<span class="stat-box-value-stack"><span class="stat-box-value" data-stat-value="${stat}" data-stat-target="${escapeHtml(value)}">${displayValue}</span>${isUpgradePreview ? `<span class="stat-box-gain">+${gain}</span>` : ""}</span>`;
+    return `<span class="stat-box-value-stack"><span class="stat-box-value" data-stat-value="${stat}" data-stat-target="${escapeHtml(value)}">${displayValue}</span><span class="stat-box-gain"${isUpgradePreview ? "" : ' aria-hidden="true"'}>+${gain}</span></span>`;
   };
   const statTrackMarkup = (stat, value, maxValue, nextValue) => {
     const displayedValue = Number(animatedStart[stat] ?? value);
@@ -706,10 +725,7 @@ function renderCharacterDetails(character) {
   const skinLabel = document.createElement("div");
   skinLabel.className = "character-details-skin-label";
   skinLabel.innerHTML = `
-    <svg class="character-details-hanger-icon" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <path d="M13 7.5a3 3 0 1 1 4.7 2.5c-1.1.8-1.7 1.3-1.7 2.5v1.1" />
-      <path d="M16 13.6 4.3 22.2c-1.3 1-.6 3.1 1.1 3.1h21.2c1.7 0 2.4-2.1 1.1-3.1L16 13.6Z" />
-    </svg>
+    <img class="character-details-hanger-icon" src="/assets/shop/icons/skins-hanger.webp" alt="" aria-hidden="true" />
     <span>Skin</span>
   `;
 
@@ -1014,7 +1030,14 @@ function emitCharacterMenuStatus(open) {
   } catch (_) {}
 }
 
+let unsubscribeWallet;
 export function initializeCharacterSelect(userData) {
+  unsubscribeWallet?.();
+  unsubscribeWallet = subscribeWallet((wallet, user) => {
+    if (user !== _userDataRef) return;
+    refreshUpgradeButtonAffordability();
+    if (_characterDetailsUi?.currentCharacter) renderCharacterDetails(_characterDetailsUi.currentCharacter);
+  });
   _userDataRef = userData;
   _skinsCatalog = SKINS_CATALOG;
   _ownedSkinIds = new Set(
@@ -1574,10 +1597,7 @@ function applyUpgrade(character, currentLevel) {
         const upgradedLevel = Number(data.newLevel);
         if (_userDataRef) {
           const spent = Number(data.spent || 0);
-          _userDataRef.coins = Math.max(
-            0,
-            Number(_userDataRef.coins || 0) - spent,
-          );
+          applyWallet(_userDataRef, { coins: data.coins ?? Math.max(0, Number(_userDataRef.coins || 0) - spent) });
           if (
             !_userDataRef.char_levels ||
             typeof _userDataRef.char_levels !== "object"
@@ -1596,6 +1616,7 @@ function applyUpgrade(character, currentLevel) {
       _upgradePreview = null;
       _pendingUpgradeAnimation = {
         character,
+        fromLevel: previousState.currentLevel,
         from: {
           health: previousState.currentHealth,
           damage: previousState.currentDamage,
@@ -1635,10 +1656,7 @@ function applyUnlock(character, price) {
         if (_userDataRef) {
           const spent = Number(data.spent || price || 0);
           const unlockedLevel = Number(data.newLevel || 1);
-          _userDataRef.gems = Math.max(
-            0,
-            Number(_userDataRef.gems || 0) - spent,
-          );
+          applyWallet(_userDataRef, { gems: data.gems ?? Math.max(0, Number(_userDataRef.gems || 0) - spent) });
           if (
             !_userDataRef.char_levels ||
             typeof _userDataRef.char_levels !== "object"

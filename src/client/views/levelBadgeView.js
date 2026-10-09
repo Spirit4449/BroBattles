@@ -1,4 +1,5 @@
 import { LEVEL_CAP } from "../../shared/characters/characterStats.js";
+import badgeAnimations from "../../../public/assets/levels/animations.json";
 
 export function normalizeCharacterLevel(level) {
   return Math.max(1, Math.min(LEVEL_CAP, Number(level) || 1));
@@ -50,7 +51,26 @@ export function renderLevelBadge(
   art.alt = "";
   art.draggable = false;
 
-  root.append(caption, art);
+  const animation = badgeAnimations[normalizedLevel];
+  if (animation) {
+    // Native image animation avoids autoplay/alpha-video decoder restrictions.
+    // Picture media selection also responds to live reduced-motion changes.
+    const picture = document.createElement("picture");
+    const source = document.createElement("source");
+    source.type = "image/webp";
+    source.media = "(prefers-reduced-motion: no-preference)";
+    source.srcset = `/assets/levels/${normalizedLevel}-animated.webp?v=${animation.version}`;
+    art.src = `/assets/levels/${normalizedLevel}-poster.webp?v=${animation.version}`;
+    art.onerror = () => {
+      source.remove();
+      art.onerror = null;
+      art.src = `/assets/levels/${normalizedLevel}.webp`;
+    };
+    picture.append(source, art);
+    root.append(caption, picture);
+  } else {
+    root.append(caption, art);
+  }
   return root;
 }
 

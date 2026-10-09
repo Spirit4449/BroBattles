@@ -76,3 +76,11 @@ Broadcast opt-outs are checked when email preferences are opened and immediately
 ## Friends
 
 `src/server/services/social/friendService.js` owns friend codes, requests, friendships, recent-player suggestions and direct messages. `src/client/friends/friendsPanelController.js` owns the panel; route/socket modules authenticate transport before calling the service. Guests cannot use friends. Apply the `friends` migration helper before enabling these flows; see [database](database.md).
+
+Friends show live activity while connected and a relative last-seen time while offline, with the exact local time on hover in the list and direct-message header. Apply `npm run migrate:apply -- friend-last-seen` before restarting with this change. `users.last_seen_at` persists activity independently of party membership, refreshes every ten seconds while active, and records transitions offline. Accounts without recorded activity show “Last seen unknown” until their next visit.
+
+## Name changes
+
+Permanent accounts pay 50 gems per name change at `/profile/change-username`. A successful change starts a one-calendar-month cooldown (month-end dates clamp to the last day of the next month). Balance, name, party membership name, and cooldown update in one transaction under an account row lock. Invalid or taken names, insufficient gems, and submitting the current name do not charge or restart the cooldown. The profile form shows the cost and next eligible local date.
+
+Apply `npm run migrate:apply -- name-changes` before restarting the server. Existing accounts start with no cooldown; signup names remain free.

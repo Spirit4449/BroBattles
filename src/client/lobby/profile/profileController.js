@@ -1,5 +1,8 @@
+import { applyWallet, subscribeWallet, walletRevision } from "../wallet.mjs";
+import { renderReadyWinStreak } from "../../views/winStreakView.mjs";
 import { createPlayerCardTile, comparePlayerCardsByRarity } from "../../views/playerCardTile.js";
 import { restartPlayerCardMedia, warmEquippedPlayerCard, presentPlayerCardMedia, createPlayerCardMedia, disposePlayerCardMediaWithin } from "../../views/playerCardAnimation.cjs";
+import { wireNameChangeDialog } from "../../account/nameChangeDialog.js";
 import { wireEmailSettings } from "../../account/emailSettings.js";
 import {
   buildProfileIconAlt,
@@ -68,11 +71,12 @@ export function createProfileController({ getUserData, onProfileRendered }) {
     };
 
     setText("profile-username", profile.username || "-");
-    setText("profile-hero-coins", Number(profile.coins) || 0);
-    setText("profile-hero-gems", Number(profile.gems) || 0);
     setText("profile-trophies", Number(profile.trophies) || 0);
-    setText("profile-avg-level", Number(profile.avgCharLevel) || 1);
     setText("profile-wins", Number(profile.wins) || 0);
+    setText("profile-highest-win-streak", Number(profile.highestWinStreak) || 0);
+    if (lobbyProfileState.viewingSelf) {
+      renderReadyWinStreak(document.getElementById("ready-win-streak"), profile.winStreak);
+    }
     setText("profile-hero-name", profile.username || "-");
     setText("profile-hero-class", resolveCharacterKey(profile.charClass));
     const heroAvatar = document.getElementById("profile-hero-avatar");
@@ -122,10 +126,6 @@ export function createProfileController({ getUserData, onProfileRendered }) {
     if (cardEditBadge) {
       cardEditBadge.hidden = !lobbyProfileState.viewingSelf;
     }
-    const subtitle = document.getElementById("profile-popup-subtitle");
-    if (subtitle) {
-      subtitle.textContent = "Loadout and progression overview";
-    }
     const title = document.getElementById("profile-popup-title");
     if (title) {
       title.textContent = `${profile.username || "Player"} Profile`;
@@ -153,11 +153,6 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       loadoutOverlay.setAttribute("aria-hidden", "true");
       if (cardsPanel) cardsPanel.classList.add("is-hidden");
       if (iconsPanel) iconsPanel.classList.add("is-hidden");
-    }
-
-    const usernameInput = document.getElementById("profile-new-username");
-    if (usernameInput && lobbyProfileState.viewingSelf && !usernameInput.value) {
-      usernameInput.value = profile.username || "";
     }
 
     // Keep navbar resource counters in sync after buy operations.
@@ -397,6 +392,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
     }
     if (lobbyProfileState.loadingPromise) return lobbyProfileState.loadingPromise;
 
+    const revision = walletRevision();
     lobbyProfileState.loadingPromise = Promise.all([
       profileFetchJson("/profile/data"),
       profileFetchJson("/player-cards/catalog"),
@@ -438,8 +434,9 @@ export function createProfileController({ getUserData, onProfileRendered }) {
 
           if (getUserData()) {
             getUserData().name = profile.username || getUserData().name;
-            getUserData().coins = Number(profile.coins ?? getUserData().coins) || 0;
-            getUserData().gems = Number(profile.gems ?? getUserData().gems) || 0;
+            applyWallet(getUserData(), profile, revision);
+            profile.coins = getUserData().coins;
+            profile.gems = getUserData().gems;
             getUserData().trophies =
               Number(profile.trophies ?? getUserData().trophies) || 0;
           }
@@ -463,9 +460,7 @@ export function createProfileController({ getUserData, onProfileRendered }) {
     const overlay = document.getElementById("profile-overlay");
     const closeBtn = document.getElementById("profile-close");
     const backdrop = overlay?.querySelector(".profile-overlay-backdrop");
-    const usernameForm = document.getElementById("profile-username-form");
     const passwordForm = document.getElementById("profile-password-form");
-    const usernameInput = document.getElementById("profile-new-username");
     const currentPasswordInput = document.getElementById(
       "profile-current-password",
     );
@@ -556,35 +551,20 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       if (!overlay.classList.contains("hidden")) close();
     });
 
-    usernameForm?.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (
-        !lobbyProfileState.viewingSelf ||
-        lobbyProfileState.profile?.guest !== false
-      )
-        return;
-      const username = String(usernameInput?.value || "").trim();
-      if (!username) return;
-      try {
-        const data = await profileFetchJson("/profile/change-username", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username }),
-        });
-
-        if (!lobbyProfileState.profile) lobbyProfileState.profile = {};
-        lobbyProfileState.profile.username = data.username || username;
-        if (getUserData()) getUserData().name = data.username || username;
-
+    wireNameChangeDialog(document.getElementById("profile-change-name"), {
+      getProfile: () => lobbyProfileState.viewingSelf ? lobbyProfileState.profile : null,
+      fetchJson: profileFetchJson,
+      beforeOpen: () => accountSettings.close(),
+      onChanged: (data, profile) => {
+        if (getUserData()) {
+          getUserData().name = profile.username;
+          applyWallet(getUserData(), data);
+        }
         const usernameText = document.getElementById("username-text");
-        if (usernameText) usernameText.textContent = data.username || username;
-
+        if (usernameText) usernameText.textContent = profile.username;
         renderProfilePopupStats();
         setProfilePopupMessage("Username updated.");
-        accountSettings.close("profile-username-form");
-      } catch (err) {
-        setProfilePopupMessage(err.message || "Unable to update username.", true);
-      }
+      },
     });
 
     passwordForm?.addEventListener("submit", async (e) => {
@@ -633,6 +613,9 @@ export function createProfileController({ getUserData, onProfileRendered }) {
       lobbyProfileState.profile.gems = wallet.gems;
     }
   }
+  subscribeWallet((wallet, user) => {
+    if (user === getUserData()) updateWallet(wallet);
+  });
   function invalidate() { lobbyProfileState.loadingPromise = null; }
 
   return { initProfilePopup, updateWallet, invalidate };

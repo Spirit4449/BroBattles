@@ -307,6 +307,11 @@
         </button>
       </div>
 
+      <div class="ready-button-wrap">
+      <div class="win-streak-control">
+        <button id="ready-win-streak" class="ready-win-streak" type="button" aria-expanded="false" aria-controls="win-streak-benefits" hidden></button>
+        <section id="win-streak-benefits" class="win-streak-benefits" aria-label="Win streak benefits" hidden></section>
+      </div>
       <input
         type="submit"
         id="ready"
@@ -314,6 +319,7 @@
         class="pixel-menu-button"
         value="Ready"
       />
+      </div>
     </div>
 
     <div id="profile-overlay" class="hidden" aria-hidden="true">
@@ -326,10 +332,9 @@
       >
         <header class="profile-popup-head">
           <div class="profile-head-copy">
-            <h2 id="profile-popup-title">Your Profile</h2>
-            <p id="profile-popup-subtitle" class="profile-popup-subtitle">
-              Loadout and progression overview
-            </p>
+            <div class="profile-head-title-row">
+              <h2 id="profile-popup-title">Your Profile</h2>
+            </div>
           </div>
           <button
             id="profile-close"
@@ -352,21 +357,9 @@
                   </span>
                   <span>Wins</span><strong id="profile-wins">0</strong>
                 </div>
-                <div
-                  class="profile-metric-card"
-                  data-profile-metric="trophies"
-                >
-                  <span class="profile-metric-icon" aria-hidden="true">
-                    <img src="/assets/icons/trophy.webp" alt="" />
-                  </span>
-                  <span>Trophies</span><strong id="profile-trophies">0</strong>
-                </div>
-                <div class="profile-metric-card" data-profile-metric="level">
-                  <span class="profile-metric-icon" aria-hidden="true">
-                    <img src="/assets/icons/upgrade.webp" alt="" />
-                  </span>
-                  <span>Avg Char Level</span
-                  ><strong id="profile-avg-level">1</strong>
+                <div class="profile-metric-card" data-profile-metric="win-streak">
+                  <span class="profile-metric-icon" aria-hidden="true"><img src="/assets/icons/win-streak.webp" alt="" /></span>
+                  <span>Highest win streak</span><strong id="profile-highest-win-streak">0</strong>
                 </div>
               </div>
 
@@ -430,17 +423,14 @@
               </div>
 
               <div class="profile-hero-side profile-hero-side-right">
-                <div class="profile-metric-card" data-profile-metric="coins" aria-label="Coins">
+                <div
+                  class="profile-metric-card"
+                  data-profile-metric="trophies"
+                >
                   <span class="profile-metric-icon" aria-hidden="true">
-                    <img src="/assets/icons/coin.webp" alt="" />
+                    <img src="/assets/icons/trophy.webp" alt="" />
                   </span>
-                  <strong id="profile-hero-coins">0</strong>
-                </div>
-                <div class="profile-metric-card" data-profile-metric="gems" aria-label="Gems">
-                  <span class="profile-metric-icon" aria-hidden="true">
-                    <img src="/assets/icons/gem.webp" alt="" />
-                  </span>
-                  <strong id="profile-hero-gems">0</strong>
+                  <span>Trophies</span><strong id="profile-trophies">0</strong>
                 </div>
               </div>
             </div>
@@ -496,25 +486,9 @@
             <p id="email-status" class="account-message" aria-live="polite"></p>
             <div class="profile-account-actions">
               <button id="email-toggle" class="profile-action-btn pixel-menu-button" type="button">Add Email Address</button>
-              <button class="profile-action-btn pixel-menu-button" type="button" data-account-toggle aria-controls="profile-username-form" aria-expanded="false">Change Name</button>
+              <button id="profile-change-name" class="profile-action-btn pixel-menu-button" type="button" aria-haspopup="dialog">Change Name</button>
               <button class="profile-action-btn pixel-menu-button" type="button" data-account-toggle aria-controls="profile-password-form" aria-expanded="false">Change Password</button>
             </div>
-            <form id="profile-username-form" class="profile-form" hidden>
-              <label for="profile-new-username">Change Username</label>
-              <input
-                id="profile-new-username"
-                type="text"
-                maxlength="20"
-                required
-              />
-              <button
-                class="profile-action-btn pixel-menu-button"
-                type="submit"
-              >
-                Update Name
-              </button>
-              <button class="profile-action-btn pixel-menu-button" type="button" data-account-cancel>Cancel</button>
-            </form>
             <form id="profile-password-form" class="profile-form" hidden>
               <label for="profile-current-password">Current Password</label>
               <input

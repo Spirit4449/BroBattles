@@ -83,7 +83,7 @@ function registerEconomyRoutes({ app, db, auth, io }) {
 
         return {
           status: 200,
-          body: { success: true, newLevel: dbLevel + 1, spent: price },
+          body: { success: true, newLevel: dbLevel + 1, spent: price, coins: dbCoins - price },
         };
       });
 

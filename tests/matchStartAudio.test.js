@@ -90,3 +90,37 @@ test("final countdown cue plays once alongside FIGHT and enabling input", () => 
   assert.equal(fights, 1);
   assert.equal(enabled, 1);
 });
+
+test("match result cues distinguish draws and wait for audio unlock", () => {
+  const exported = {}, calls = [], pending = [];
+  let paused = 0;
+  const document = { hidden: false };
+  const code = babel.transformSync(read("src/client/game/audio/matchAudio.js"), {
+    babelrc: false, configFile: false,
+    presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  }).code;
+  vm.runInNewContext(code, { exports: exported, require: () => ({}), document });
+  const scene = {
+    _bgmEl: { pause() { paused++; } },
+    sound: {
+      locked: false,
+      play(key) { calls.push(key); },
+      once(event, callback) { assert.equal(event, 'unlocked'); pending.push(callback); },
+    },
+  };
+  for (const outcome of [null, 'draw', 'red', 'blue']) {
+    exported.playMatchEndSound(scene, outcome, 'red');
+  }
+  assert.deepEqual(calls, ['draw', 'draw', 'win', 'lose']);
+  assert.equal(paused, 4);
+  scene.sound.locked = true;
+  exported.playMatchEndSound(scene, null, 'red');
+  assert.equal(calls.length, 4);
+  pending.shift()();
+  assert.equal(calls.at(-1), 'draw');
+  assert.equal(paused, 5);
+  document.hidden = true;
+  exported.playMatchEndSound(scene, null, 'red');
+  assert.equal(pending.length, 0);
+  assert.equal(calls.length, 5);
+});

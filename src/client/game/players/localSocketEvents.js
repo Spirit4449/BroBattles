@@ -1,4 +1,5 @@
 import { endDash } from '../scene/dash';
+import { spawnKnockbackTrail } from '../scene/knockbackTrail';
 import movementPhysics from '../../../shared/physics/movementPhysics.json';
 import { playPlayerSound } from '../audio/playerAudio';
 import { localMovementCorrector } from './localMovementCorrector';
@@ -230,6 +231,7 @@ export function bindLocalSocketEvents({
       player.setVelocityY(data?.radial === true ? amountY : -Math.abs(amountY));
     }
     player._wallKickLockUntil = Date.now() + 120;
+    if (amountX || amountY) spawnKnockbackTrail?.(getScene?.(), player);
   };
 
   const playerRespawnHandler = (payload) => {

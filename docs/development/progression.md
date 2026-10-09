@@ -55,6 +55,17 @@ The 200-trophy icon is retired. The user-supplied square WebP images are install
 
 Their IDs, road rewards and profile selection are registered. The original supplied images remain the selectable profile icons; generated bundle illustrations represent them on multi-reward road cards.
 
+## Wallet synchronization
+
+Lobby currency changes use `src/client/lobby/wallet.mjs`. Confirmed purchases and
+reward claims update shared user data and notify Shop, character selection, and
+the self-profile, including the lobby header. Character upgrades return the
+committed coin balance; unlocks return the remaining gems. Background Shop,
+Profile, and Trophy Road reads capture the wallet revision before fetching so an
+older response cannot overwrite a balance updated while the request was pending.
+Reward animation ticks are presentation-only; the acknowledged wallet remains
+the source for affordability checks.
+
 ## Claims and presentation
 
 `createRewardPresentation` in `src/client/lobby/shop/shop.js` is shared by Shop and Trophy Road. The revised showcase removes circular reward halos, uses large cosmetic artwork, places currencies in a separate row, and keeps collectible reveals open until Done/Escape. The header wallet sits above the road blur, glows on impacts, and counts up as currency particles arrive. Reduced motion skips the flying particles and entrance motion. Claim errors stay inline on the road.
@@ -86,6 +97,48 @@ npm run build
 ```
 
 The MySQL verification creates a temporary user inside a transaction and rolls all test writes back. It checks unique ownership and claim receipts, Bro level preservation, and unchanged selected cosmetics.
+
+## Win streaks
+
+`getCurrentWinStreak()` in `src/server/services/match/battleLog.js` derives the
+current consecutive wins from persisted completed battles, ordered by descending
+match ID. Wins across modes count together; only a loss resets the streak.
+Draws leave it unchanged and do not add a win. Live/cancelled battles and legacy outcomes without a winner do not count.
+Keyset pagination supports streaks longer than the battle-log display limit.
+Reading history avoids duplicate increments when match settlement is retried and
+requires no new database migration. Existing recorded wins count immediately.
+
+Status and public/self profiles expose `winStreak`. The lobby displays a flame
+and number beside Ready in the same layout from two wins onward. Zero and one are hidden. Click (or keyboard activation) toggles the benefit list using shared popup slide/fade timing;
+outside click, Escape, or focus leaving closes it. Hover does not open it. Active tiers are highlighted. Profiles expose `highestWinStreak` from `users.highest_win_streak`, backfilled
+from completed history with the same outcome rules, and label it “Highest win streak,” including zero. Ready and
+reward multipliers continue using the current streak. Match settlement raises
+the stored peak with `GREATEST` in the reward transaction; losses, draws, and
+retries cannot lower it. Profile reads do not scan history for the peak.
+Match reward receipts save `winStreakBefore` and `winStreakAfter` in the same
+transaction as the outcome. The end-of-match screen shows the increase or an
+active streak of at least two being lost in a short, angled pixel badge pinned to the result
+card’s top-left corner. A single counter changes from the previous value to the
+new value; it never displays both numbers together. Wins emit rising pixel sparks; losses extinguish the trophy and drop
+ash particles. Reduced motion uses a still icon and skips those effects; pending
+rewards do not claim a streak change. Retries
+reuse the saved transition. Draws persist an explicit `draw` winner value.
+
+`src/shared/winStreakRewards.cjs` owns the benefit tiers: 3+ wins grants +25%
+coins, 6+ adds +15% gems, and 9+ adds 2× trophies. Benefits combine across
+currencies. The lobby list labels only active tiers and has no footer description.
+The streak after the match determines eligibility, so the unlocking win qualifies.
+Losses/draws have no streak bonus (draws retain the streak for the next win) and trophy losses remain unchanged. Bonuses
+apply to positive match rewards after normal reward tuning/drop additions and
+round once to whole units. Base rewards and bonus amounts are saved with final
+credited amounts in the reward receipt. The match screen initially shows base
+rewards, then a thick, scattered pixel trail travels from the fire trophy into each boosted card.
+A gold flash and WobbleBoxx ding accompany the reward count-up
+before rewards fly to the wallet. Reduced motion reveals the final numbers
+without particle or count animation. Streak counter changes play the selected power-up
+or first standalone loss cue through shared SFX settings; source credits live in
+`public/assets/ui-sound/rewards/README.md`. The first win and loss of a one-win streak
+have no streak badge or cue.
 
 ## Player Cards Implementation Guide
 
@@ -301,3 +354,8 @@ verification remain separate from the fast in-memory commerce tests.
 Fulfilled lifetime receipts mark shop offers as Purchased, including bundles with
 currency. Owning a prerequisite cosmetic without a bundle receipt only makes the
 offer unavailable; it does not imply the bundle was purchased.
+
+Profile overview stats show wins, highest win streak, and trophies in the lobby, and
+trophies and total matches on the account page. Currency balances and average
+character level are omitted from both profile overviews; the Bros grid still
+shows each unlocked character’s level.

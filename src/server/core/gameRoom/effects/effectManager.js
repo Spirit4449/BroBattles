@@ -17,6 +17,8 @@
 const { effectDefs } = require("./effectDefs");
 
 const { combineModifiers } = require("../../../../shared/effectRules");
+const { getResolvedCharacterSpecialConfig } = require("../../../../shared/characters/characterTuning");
+const inferno = getResolvedCharacterSpecialConfig("draven", "inferno");
 
 function _state(player) {
   if (!player.activeEffects) player.activeEffects = {};
@@ -87,6 +89,10 @@ function getRemaining(player, effectKey, now) {
 function getModifiers(player, now) {
   const state = _state(player);
   const modifiers = [];
+  // Tie protection to the channel itself so interruption removes it immediately.
+  if (player.effects?.dravenInfernoUntil > now) {
+    modifiers.push({ damageTakenMult: inferno.damageTakenMult });
+  }
   for (const [key, entry] of Object.entries(state)) {
     if (entry.until <= now) continue;
     const def = effectDefs[key];

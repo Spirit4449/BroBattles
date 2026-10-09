@@ -159,18 +159,26 @@ function createPlayerActivityService({ db, io, setPresence, getGameRoom = () => 
     }
   }
   let ticking = false;
+  let lastSeenRefreshAt = -Infinity;
   async function tick() {
     if (ticking) return;
     ticking = true;
     try {
       const activeNames = [];
+      const seenNames = [];
       for (const s of users.values()) {
         for (const [id, at] of s.lobby) if (now() - at >= ACTIVITY_TTL_MS) s.lobby.delete(id);
         probe(s);
-        if (derive(s) === 'In Battle') activeNames.push(s.name);
+        const status = derive(s);
+        if (status === 'In Battle') activeNames.push(s.name);
+        if (status !== 'offline') seenNames.push(s.name);
       }
       // One indexed update replaces two queries per active player.
       if (activeNames.length && db.refreshPartyPresence) await db.refreshPartyPresence(activeNames);
+      if (db.refreshUserLastSeen && now() - lastSeenRefreshAt >= REFRESH_MS) {
+        if (seenNames.length) await db.refreshUserLastSeen(seenNames);
+        lastSeenRefreshAt = now();
+      }
       const states = [...users.values()];
       for (let i = 0; i < states.length; i += 8) {
         const results = await Promise.allSettled(states.slice(i, i + 8).map(async s => {

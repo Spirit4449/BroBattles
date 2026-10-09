@@ -613,4 +613,4 @@ window.addEventListener('keydown',ev=>{if($('dialog').open)return;const typing=/
 const viewportObserver=new ResizeObserver(()=>{if(game&&scene&&!preview)game.scale.resize($('viewport').clientWidth,$('viewport').clientHeight);});viewportObserver.observe($('viewport'));
 window.addEventListener('keyup',ev=>keyboard.delete(ev.key.toLowerCase()));window.addEventListener('blur',()=>{keyboard.clear();scene?.pointerUp();});window.addEventListener('pointerup',()=>scene?.pointerUp());
 window.addEventListener('beforeunload',ev=>{if(dirty()){persistDraft();ev.preventDefault();ev.returnValue='';}});
-(async()=>{try{await refreshMaps();const query=new URLSearchParams(location.search);$('debug-hitboxes').checked=query.get('debug')==='1';await loadMap(Number(query.get('map'))||mapList[0].id);}catch(e){error(e);}})();
+(async()=>{try{await refreshMaps();const query=new URLSearchParams(location.search);await loadMap(Number(query.get('map'))||mapList[0].id);}catch(e){error(e);}})();

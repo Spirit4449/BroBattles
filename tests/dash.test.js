@@ -478,3 +478,45 @@ test('straight-down dash has the boosted launch speed and vertical cap; diagonal
     assert.equal(bot.vy, p.body.velocity.y);
   }
 });
+
+const knockbackVfx = {};
+vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/knockbackTrail.js'), 'utf8'), {
+  babelrc: false, configFile: false, presets: [['@babel/preset-env', {targets:{node:'current'}}]],
+}).code, { exports: knockbackVfx });
+
+test('knockback trails follow horizontal and vertical movement, skip teleports, and clean up', () => {
+  const f = dashVfxFixture();
+  knockbackVfx.spawnKnockbackTrail(f.scene, f.sprite);
+  f.timers[0].callback();
+  assert.equal(f.shapes.length, 0, 'no trail while stationary');
+  f.sprite.x -= 18; f.sprite.y -= 25; f.timers[0].callback();
+  assert.equal(f.shapes.length, 2, 'streaks and afterimage follow the knock');
+  assert.ok(f.shapes[0].lines.every(line => line.every(Number.isFinite)));
+  knockbackVfx.spawnKnockbackTrail(f.scene, f.sprite);
+  assert.equal(f.timers[0].removed, true, 'a new hit replaces the active trail');
+  assert.ok(f.shapes.every(shape => shape.destroyed));
+  f.sprite.y += 20; f.timers[1].callback();
+  assert.equal(f.shapes.length, 4, 'vertical knockback also trails');
+  f.sprite.x += 1000; f.timers[1].callback();
+  assert.equal(f.shapes.length, 4);
+  assert.equal(f.timers[1].removed, true);
+  assert.equal(f.sprite.listenerCount('destroy'), 0);
+  assert.equal(f.scene.events.listenerCount('shutdown'), 0);
+});
+
+test('remote knockback sequences trigger once and respect invisibility and lifecycle', () => {
+  const f = dashVfxFixture(), tracker = {};
+  const present = (seq, hidden = false) => knockbackVfx.presentRemoteKnockback(
+    f.scene, f.sprite, {knockbackSeq: seq}, tracker, hidden);
+  present(2); assert.equal(f.timers.length, 0, 'join does not replay old hits');
+  present(4); assert.equal(f.timers.length, 1, 'skipped snapshots still trigger');
+  present(4); present(3); assert.equal(f.timers.length, 1);
+  present(5, true); assert.equal(f.timers.length, 1);
+  f.sprite._powerupInvisible = true; f.timers[0].callback();
+  assert.equal(f.timers[0].removed, true);
+  present(6); assert.equal(f.timers.length, 1);
+  f.sprite._powerupInvisible = false;
+  present(7); f.scene.events.emit('shutdown');
+  assert.equal(f.timers[1].removed, true);
+  assert.equal(f.sprite.listenerCount('destroy'), 0);
+});

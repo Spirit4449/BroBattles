@@ -2146,7 +2146,7 @@ body.shop-is-open .sonner-wrap {
 .shop-reveal-wallet > span { grid-template-rows: auto; }
 .shop-reveal-wallet img, .shop-reveal-wallet strong { grid-row: 1; }
 
-.shop-section-copy > img[src$="skins-hanger.svg"] { width: 19px; height: 19px; }
+.shop-section-copy > img[src$="skins-hanger.webp"] { width: 19px; height: 19px; }
 
 .reward-showcase .shop-reveal-mode .shop-reveal-art :is(img, video, .player-card-canvas) {
   width: auto; height: auto; border: 4px solid #000; border-radius: 0; box-sizing: border-box;

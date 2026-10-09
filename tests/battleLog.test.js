@@ -4,6 +4,8 @@ const {
   formatModeLabel,
   recordMatchOutcome,
   getBattleLogForUser,
+  getCurrentWinStreak,
+  getHighestWinStreak,
 } = require("../src/server/services/match/battleLog");
 
 test("formatModeLabel returns friendly readable mode labels", () => {
@@ -427,7 +429,7 @@ test("finishing a game persists results before game-over and bot cleanup, once o
   assert.equal(events[0].summary.players[0].damage, 950);
 });
 
-test("renderer distinguishes unavailable stats from real zeros and escapes names", async () => {
+test("renderer hides unknown results and combat stats, labels the summary, and escapes match labels", async () => {
   const { transformFileSync } = require("@babel/core");
   const vm = require("node:vm");
   const compiled = transformFileSync(require.resolve("../src/client/views/battleLogView.js"), {
@@ -441,13 +443,128 @@ test("renderer distinguishes unavailable stats from real zeros and escapes names
   const { renderBattleLog } = context.exports;
   const container = {};
   renderBattleLog(container, [{ matchId: 1, outcome: "unknown", player: { name: '<img src=x onerror=alert(1)>' }, playerStats: {} }]);
-  assert.match(container.innerHTML, /UNAVAILABLE/);
-  assert.match(container.innerHTML, /1 result unavailable/);
+  assert.match(container.innerHTML, /No Battle Results Yet/);
+  assert.doesNotMatch(container.innerHTML, /UNAVAILABLE|result unavailable|battle-outcome-badge/);
   assert.doesNotMatch(container.innerHTML, /DRAW|1D|onerror=alert\(1\)>/);
-  assert.match(container.innerHTML, /chip-val kills">—/);
+  assert.doesNotMatch(container.innerHTML, /chip-val|—/);
   assert.doesNotMatch(container.innerHTML, /battle-card-banner|battle-hero-avatar|Match #/);
   renderBattleLog(container, [{ matchId: 2, outcome: "draw", trophiesDelta: 0, playerStats: { kills: 0, damage: 0, hits: 0 } }]);
   assert.match(container.innerHTML, /DRAW/);
-  assert.match(container.innerHTML, /chip-val kills">0/);
+  assert.match(container.innerHTML, /<span>0<\/span>/);
+  assert.doesNotMatch(container.innerHTML, /battle-details-row|chip-val/);
   assert.doesNotMatch(container.innerHTML, /unavailable/);
+  renderBattleLog(container, [
+    { matchId: 3, outcome: "unknown", trophiesDelta: 999 },
+    { matchId: 4, outcome: "victory", modeLabel: '<img src=x onerror=alert(1)>', mapLabel: 'Arena & friends', playerStats: { kills: 2, damage: null, hits: NaN } },
+  ]);
+  assert.match(container.innerHTML, /Past 10 battles/);
+  assert.match(container.innerHTML, /Wins<\/span><strong>1/);
+  assert.match(container.innerHTML, /Losses<\/span><strong>0/);
+  assert.doesNotMatch(container.innerHTML, /recent battle/);
+  assert.match(container.innerHTML, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.match(container.innerHTML, /Arena &amp; friends/);
+  assert.doesNotMatch(container.innerHTML, /battle-details-row|chip-val/);
+  assert.doesNotMatch(container.innerHTML, /chip-val damage|chip-val hits|battle-trophy-pill|999|unavailable|—/);
+  renderBattleLog(container, Array.from({ length: 11 }, (_, matchId) => ({
+    matchId, outcome: "victory", trophiesDelta: 2,
+  })));
+  assert.equal((container.innerHTML.match(/<article /g) || []).length, 10);
+  assert.match(container.innerHTML, /Net trophies/);
+  assert.match(container.innerHTML, /\+20/);
+  assert.match(container.innerHTML, /Wins<\/span><strong>10/);
+  renderBattleLog(container, null);
+  assert.match(container.innerHTML, /No Battle Results Yet/);
+});
+
+
+test("current win streak ignores draws and resets only on losses", async () => {
+  const history = [];
+  const db = { async runQuery(sql, params) {
+    const [userId] = params;
+    const before = params.length === 3 ? params[1] : Infinity;
+    return history.filter(row => row.userId === userId && row.status === 'completed' && row.match_id < before)
+      .sort((a, b) => b.match_id - a.match_id).slice(0, params.at(-1));
+  } };
+  const add = (id, winner = 'team1', status = 'completed', userId = 1) => history.push({
+    match_id: id, winner_team: winner, team: 'team1', status, userId,
+  });
+  assert.equal(await getCurrentWinStreak(db, 1), 0);
+  add(1); add(2); add(3, 'team2', 'live'); add(4, 'team2', 'completed', 2);
+  assert.equal(await getCurrentWinStreak(db, 1), 2);
+  assert.equal(await getCurrentWinStreak(db, 1), 2, 'repeat reads do not increment streak');
+  add(5, 'team2');
+  assert.equal(await getCurrentWinStreak(db, 1), 0);
+  add(6); add(7);
+  assert.equal(await getCurrentWinStreak(db, 1), 2);
+  add(8, 'draw');
+  assert.equal(await getCurrentWinStreak(db, 1), 2);
+  add(8.5, 'draw');
+  assert.equal(await getCurrentWinStreak(db, 1), 2, 'consecutive draws preserve the streak');
+  add(9); add(215, null);
+  assert.equal(await getCurrentWinStreak(db, 1), 3);
+  for (let id = 10; id < 215; id++) add(id);
+  assert.equal(await getCurrentWinStreak(db, 1), 208, 'streaks are not truncated to a page');
+  assert.equal(await getCurrentWinStreak(db, null), 0);
+});
+
+
+test("highest win streak preserves historical records across losses, draws and history pages", async () => {
+  const history = [];
+  const db = { async runQuery(sql, params) {
+    const before = params.length === 3 ? params[1] : Infinity;
+    return history.filter(row => row.userId === params[0] && row.status === 'completed' && row.match_id < before)
+      .sort((a, b) => b.match_id - a.match_id).slice(0, params.at(-1));
+  } };
+  const add = (winner = 'team1', status = 'completed', userId = 1) => history.push({
+    match_id: history.length + 1, winner_team: winner, team: 'team1', status, userId,
+  });
+  assert.equal(await getHighestWinStreak(db, 1), 0);
+  add(); add(); add(); add('team2'); add(); add(); add('draw');
+  assert.equal(await getHighestWinStreak(db, 1), 3);
+  add(); add(null); add('team2', 'live'); add('team2', 'cancelled'); add('team2', 'completed', 2);
+  add(); add(); add();
+  assert.equal(await getHighestWinStreak(db, 1), 6, 'draws, unknown and unfinished outcomes and other users do not break a streak');
+  add('draw');
+  for (let i = 0; i < 206; i++) add();
+  add('team2'); add();
+  assert.equal(await getHighestWinStreak(db, 1), 212, 'historical records span pagination boundaries');
+  assert.equal(await getCurrentWinStreak(db, 1), 1, 'current streak remains independent');
+  assert.equal(await getHighestWinStreak(db, 1), 212, 'repeat reads preserve the record');
+  assert.equal(await getHighestWinStreak(db, null), 0);
+});
+
+test("highest streak backfill is repeatable and preserves higher saved records", async () => {
+  const { backfillHighestWinStreak } = require('../scripts/db/backfill-highest-win-streak.cjs');
+  const users = [{ user_id: 1, highest_win_streak: 0 }, { user_id: 2, highest_win_streak: 8 }];
+  const history = [
+    { match_id: 1, userId: 1, winner_team: 'team1', team: 'team1' },
+    { match_id: 2, userId: 1, winner_team: 'team1', team: 'team1' },
+    { match_id: 3, userId: 1, winner_team: 'team2', team: 'team1' },
+  ];
+  let commits = 0, rollbacks = 0, fail = false, snapshot;
+  const conn = {
+    async beginTransaction() { snapshot = structuredClone(users); },
+    async commit() { commits++; },
+    async rollback() { rollbacks++; users.splice(0, users.length, ...snapshot); },
+    async query(sql, params) {
+      if (sql.startsWith('SELECT user_id FROM users WHERE user_id >')) return [users.filter(u => u.user_id > params[0])];
+      if (sql.startsWith('SELECT user_id FROM users WHERE user_id =')) return [users.filter(u => u.user_id === params[0])];
+      if (sql.startsWith('SELECT m.match_id')) return [history.filter(row => row.userId === params[0]).sort((a, b) => b.match_id - a.match_id)];
+      if (sql.startsWith('UPDATE users')) {
+        users.find(u => u.user_id === params[1]).highest_win_streak = Math.max(users.find(u => u.user_id === params[1]).highest_win_streak, params[0]);
+        if (fail) throw new Error('backfill write failed');
+        return [{ affectedRows: 1 }];
+      }
+      throw new Error(`Unexpected backfill query: ${sql}`);
+    },
+  };
+  fail = true;
+  await assert.rejects(backfillHighestWinStreak(conn), /backfill write failed/);
+  assert.equal(users[0].highest_win_streak, 0);
+  assert.equal(rollbacks, 1);
+  fail = false;
+  await backfillHighestWinStreak(conn);
+  await backfillHighestWinStreak(conn);
+  assert.deepEqual(users.map(u => u.highest_win_streak), [2, 8]);
+  assert.equal(commits, 4);
 });

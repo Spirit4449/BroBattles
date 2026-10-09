@@ -152,6 +152,7 @@ test("Shop keeps tags while open and saves entire seen sections on close", async
     notifications: { hasNew: true, sections: { sales: { cycleKey: 'cycle', refreshed: true, offerIds: ['new-pack', 'collapsed-pack'], hasNew: true } } },
   });
   const { initializeShop } = vm.runInNewContext(source + '\n;({ initializeShop })', {
+    ...(await import('../src/client/lobby/wallet.mjs')),
     document, URL, CSS: { escape: value => value }, console,
     escapeHtml: require('../src/shared/site/html.cjs').escapeHtml,
     playSound() {}, requestAnimationFrame() {},
