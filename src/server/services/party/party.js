@@ -84,6 +84,7 @@ async function emitRoster(io, partyId, party, members, db = null, snapshot = {})
     members: roster,
     botSlots,
   });
+  return roster;
 }
 
 async function emitPartyNotice(io, partyId, notice) {

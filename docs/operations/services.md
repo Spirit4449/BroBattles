@@ -8,7 +8,7 @@ Edit `content/manifest.json` for News and Help titles, slugs, summaries, categor
 
 `content/legal/privacy.md` and `content/legal/terms.md` are the legal source documents served by the application. Changes to policies or operator details require a deliberate content/version update; implementation notes do not establish legal compliance.
 
-`src/shared/site/siteConfig.json` owns the visible version (`beta v1.1`), document versions, contact details, and retention durations. Increment document versions when seeking renewed acceptance. No date of birth or age eligibility step is implemented. The Terms state a 13+ audience and guardian-permission requirements.
+`src/shared/site/siteConfig.json` owns the visible version (`beta v1.1`), document versions, support contact, and retention durations. Increment document versions when seeking renewed acceptance. No date of birth or age eligibility step is implemented. The Terms state a 13+ audience and guardian-permission requirements.
 
 Signup records acceptance of both document versions atomically with conversion of the guest account. Existing and guest players accept when first pressing Ready, then continue into matchmaking. Lobby sockets can connect before acceptance; Ready, queue entry, and game-data access require current acceptance. Public information and support remain available separately. Already connected players may finish a match during a deployment; a reconnect uses the current server versions.
 

@@ -26,6 +26,7 @@ import SKINS_CATALOG from "../../../shared/catalogs/skinsCatalog.json";
 
 // Keep a reference to user data for confirmations and currency display
 let _userDataRef = null;
+let _charactersGrid = null;
 let _characterDetailsUi = null;
 let _skinsCatalog = SKINS_CATALOG;
 let _ownedSkinIds = new Set();
@@ -1040,6 +1041,7 @@ export function initializeCharacterSelect(userData) {
 
   const charactersGrid = document.createElement("div");
   charactersGrid.className = "characters-grid";
+  _charactersGrid = charactersGrid;
 
   const characters = getSortedCharacters(userData);
   characters.forEach((char) =>
@@ -1530,7 +1532,7 @@ function showErrorDialog(message, titleText = "Purchase failed") {
 
 // Replace a specific character card with a freshly rendered one.
 function rerenderCharacterCard(character, userData) {
-  const grid = document.querySelector(".characters-grid");
+  const grid = _charactersGrid;
   const oldCard =
     grid &&
     grid.querySelector(`.character-card[data-char="${CSS.escape(character)}"]`);
@@ -1659,7 +1661,7 @@ function applyUnlock(character, price) {
 
 // Re-evaluate visible cards against current coin balance
 function refreshUpgradeButtonAffordability() {
-  const cards = document.querySelectorAll(".character-card");
+  const cards = _charactersGrid?.querySelectorAll(".character-card") || [];
   cards.forEach((card) => {
     try {
       const character = card.dataset.char;
@@ -1680,6 +1682,14 @@ function refreshUpgradeButtonAffordability() {
       const selectedBadge = card.querySelector(".character-card-selected-badge");
       if (selectedBadge) selectedBadge.hidden = !selected;
       card.classList.toggle("locked", state.isLocked);
+      const imageWrap = card.querySelector(".character-card-image-wrap");
+      const lockOverlay = imageWrap?.querySelector(".character-card-lock-overlay");
+      if (state.isLocked && imageWrap && !lockOverlay) {
+        const overlay = document.createElement("div");
+        overlay.className = "character-card-lock-overlay";
+        overlay.innerHTML = '<img src="/assets/icons/lock.webp" alt="Locked" />';
+        imageWrap.appendChild(overlay);
+      } else if (!state.isLocked) lockOverlay?.remove();
       card.classList.toggle("is-maxed", state.isMaxed);
       card.classList.toggle("is-upgrade-ready", state.canUpgrade);
       card.classList.toggle("is-unlock-ready", state.canUnlock);
@@ -1691,6 +1701,11 @@ function refreshUpgradeButtonAffordability() {
 }
 
 export async function refreshCharacterRewards() {
+  // The claim response has already updated char_levels. Reflect ownership
+  // before the separate skin request completes so newly owned Bros lose their lock.
+  for (const character of Object.keys(_userDataRef?.char_levels || {})) rerenderCharacterCard(character, _userDataRef);
+  refreshUpgradeButtonAffordability();
+  if (_characterDetailsUi?.currentCharacter) renderCharacterDetails(_characterDetailsUi.currentCharacter);
   await bootstrapSkinState();
   for (const character of Object.keys(_userDataRef?.char_levels || {})) rerenderCharacterCard(character, _userDataRef);
   refreshUpgradeButtonAffordability();

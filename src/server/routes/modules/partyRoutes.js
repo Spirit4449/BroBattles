@@ -74,8 +74,6 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
         return res.status(result.statusCode || 500).json(result.payload || {});
       }
 
-      const membersForEmit = result.members;
-
       await req.app.locals.socketApi.moveUserSocketToParty(username, partyId);
       console.log("[party] /partydata moved socket to party", {
         username,
@@ -89,7 +87,7 @@ function registerPartyRoutes({ app, io, db, requireCurrentUser }) {
           );
         } catch (_) {}
       }
-      await emitRoster(io, partyId, result.party, membersForEmit, db, {
+      const membersForEmit = await emitRoster(io, partyId, result.party, result.members, db, {
         ownerName: result.ownerName,
       });
       const selection = normalizeSelectionFromRow(result.party || {});

@@ -132,3 +132,24 @@ test('ready state survives asynchronous room startup and accepts numeric-string 
   assert.equal(ready.isActive(77), false);
   assert.deepEqual(events, [['match:gameReady', { matchId: 77 }]]);
 });
+
+test('queue progress broadcasts skin changes without roster membership changes', async () => {
+  const { createProgressEmitter } = require('../src/server/core/matchmaking/progressEmitter');
+  const events = [];
+  let skin = 'ninja-arena-sovereign';
+  const emitter = createProgressEmitter({
+    db: { fetchPartyMembersDetailed: async () => [{ name: 'Player', char_class: 'ninja', selected_skin_id_by_char: { ninja: skin } }] },
+    io: { to: () => ({ emit: (event, data) => events.push(data) }) },
+    lastProgress: new Map(),
+  });
+  const tickets = [{ ticket_id: 1, party_id: 42, size: 1, mmr: 0, created_at: new Date() }];
+  const emit = () => emitter.emitProgressForBucket('duels', 'duels-1v1', 1, tickets, 1);
+  await emit();
+  await emit();
+  assert.equal(events.length, 1, 'unchanged skin does not emit duplicate progress');
+  skin = 'ninja-default';
+  await emit();
+  assert.equal(events.length, 2);
+  assert.equal(events[0].players[0].selected_skin_id, 'ninja-arena-sovereign');
+  assert.equal(events[1].players[0].selected_skin_id, 'ninja-default');
+});

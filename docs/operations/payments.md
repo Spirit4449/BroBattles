@@ -99,6 +99,19 @@ Wallet balances can become negative after a refund or dispute if the player
 already spent the purchased currency. This preserves the accounting trail and
 prevents value from being duplicated.
 
+## Before selling outside the United States
+
+Confirm which countries Checkout accepts, who is the seller of record, tax
+obligations, and how each market treats immediately delivered virtual currency.
+The current Checkout flow does not collect or record a separate express consent
+to immediate delivery or an acknowledgment that a withdrawal right is lost.
+The Terms therefore do not claim a blanket waiver; handle any applicable
+withdrawal request through support. If a market requires such consent to rely
+on an exception, implement it in the purchase flow and durable confirmation
+before relying on the exception. Verify the live Stripe Dashboard settings and
+customer-facing Checkout for every market enabled; repository code alone does
+not establish those settings.
+
 ## Runtime ownership
 
 `src/server/services/shop/stripeShopService.js` owns Checkout and Stripe event handling. `src/server/routes/modules/stripeWebhook.js` registers the raw-body route before JSON parsing. Preserve that order for signature verification. Signed events enter the durable inbox; fulfillment, receipts and ledger changes must remain idempotent. See [deployment recovery](deployment.md) for retry handling. Provider dashboard settings are external configuration and must be verified for the target account.

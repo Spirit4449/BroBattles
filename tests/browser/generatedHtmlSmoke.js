@@ -3,7 +3,9 @@ import { createPlayerCardMedia, disposePlayerCardMediaWithin } from "../../src/c
 import { showPlayerCardPreview } from "../../src/client/views/playerCardPreview.js";
 import { initializeShop, createRewardPresentation } from "../../src/client/lobby/shop/shop.js";
 import playerCards from "../../src/shared/catalogs/playerCardsCatalog.json";
+import trophyCatalog from "../../src/shared/catalogs/trophySystem.catalog.json";
 import { renderCharacterStatus } from "../../src/client/lobby/profile/characterStatusView.js";
+import { initializeCharacterSelect, openCharacterSelect, refreshCharacterRewards } from "../../src/client/lobby/profile/characterSelectController.js";
 import { createModalFocus } from "../../src/client/ui/modalFocus.js";
 import { getSharedSelectionPopupShell } from "../../src/client/ui/selectionPopupShell.js";
 import { createViewersPopup } from "../../src/client/chat/viewersPopup.js";
@@ -391,10 +393,13 @@ window.htmlSmoke = {
     const rewardHost = document.createElement('div'); document.body.append(rewardHost);
     const rewardState = { overlay: rewardHost };
     const rewards = createRewardPresentation({ state: rewardState, updateWallet() {} });
-    const revealed = rewards.showRewardReveal({ result: { wallet: {}, grants: [crown] }, item: bundle, kind: 'trophy' });
+    const trophyCard = Object.values(trophyCatalog.rewardTrack.majorMilestones)
+      .flatMap(milestone => milestone.rewards).find(grant => grant.kind === 'card');
+    const revealed = rewards.showRewardReveal({ result: { wallet: {}, grants: [trophyCard] }, item: { name: trophyCard.name, grants: [trophyCard] }, kind: 'trophy' });
     const rewardVideo = rewardHost.querySelector('video');
+    check(rewardVideo?.getAttribute('aria-label') === trophyCard.name, 'Trophy Road reveal showed the wrong card');
     for (let attempt = 0; attempt < 100 && rewardVideo.currentTime === 0; attempt++) await tick(50);
-    check(rewardVideo.currentTime > 0, 'unlocked card reveal did not animate');
+    check(rewardVideo.currentTime > 0, 'Trophy Road card reveal did not animate');
     rewards.closeReveal(); await revealed; rewardHost.remove();
     document.querySelector('.shop-overlay')?.remove();
     results.push('shop info button and animated unlock reveal');
@@ -497,6 +502,18 @@ window.htmlSmoke = {
     document.getElementById("outside").focus();
     check(document.activeElement.id === "outside", "destroy left a focus trap");
     results.push("viewer keyboard, profile handoff, and cleanup");
+    const player = { char_class: 'ninja', char_levels: { ninja: 1, gloop: 0 }, coins: 0, gems: 0 };
+    initializeCharacterSelect(player);
+    player.char_levels.gloop = 1; // Confirmed Trophy Road claim while the chooser is closed.
+    const skinRefresh = refreshCharacterRewards();
+    openCharacterSelect();
+    const gloopCard = document.querySelector('.characters-grid .character-card[data-char="gloop"]');
+    check(gloopCard && !gloopCard.classList.contains('locked'), 'claimed Gloop remained locked');
+    check(!gloopCard.querySelector('.character-card-lock-overlay'), 'claimed Gloop retained chains');
+    check(gloopCard.querySelector('.character-card-level'), 'claimed Gloop did not show his level');
+    window.__closeCharacterSelect();
+    await skinRefresh;
+    results.push('Trophy Road Gloop unlock refreshes the closed character chooser');
     check(!window.injected, "HTML injection executed");
     return results;
   },

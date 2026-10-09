@@ -7,7 +7,7 @@ export const QUEUE_HEALTH_INTERVAL_MS = 5000;
 const QUEUE_REQUEST_TIMEOUT_MS = 5000;
 
 const rosterSignature = (players) =>
-  JSON.stringify(players.map((p) => `${p?.botSlotKey || p?.name || ""}:${p?.char_class || ""}`));
+  JSON.stringify(players.map((p) => [p?.botSlotKey || p?.name || "", p?.char_class, p?.selected_skin_id, p?.selected_skin_asset_url, p?.team]));
 
 /**
  * @param {object} deps

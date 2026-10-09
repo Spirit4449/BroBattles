@@ -1,4 +1,4 @@
-**Effective date: September 12, 2026**
+**Effective date: October 8, 2026**
 
 These Terms govern your use of Bro Battles, its website, multiplayer game, virtual items, and support features. Please read them before playing.
 
@@ -32,15 +32,15 @@ Report concerns through the Help Center. We may investigate, remove content, res
 
 Virtual currency and items are licensed for use within Bro Battles. They are not money, do not earn interest, and have no right of cash redemption or transfer except where required by law or expressly supported by the service.
 
-Prices and what a purchase includes are shown before payment. Real-money purchases require a permanent account and are processed through Stripe. Only use a payment method you are authorized to use. Minors must have permission from the responsible adult for purchases.
+Prices and what a purchase includes are shown before payment. Real-money purchases require a permanent account and are processed through Stripe. Purchased currency is delivered after payment confirmation. Only use a payment method you are authorized to use. Minors must have permission from the responsible adult for purchases.
 
 Currency delivery depends on confirmation of payment. If a purchase is missing or disputed, contact support with the order reference. Refund and cancellation rights depend on applicable law and the circumstances; nothing here removes mandatory consumer rights. Refunds or chargebacks may cause granted currency or items to be removed. If currency was already spent, your balance may become negative.
 
-Do not assume digital goods are always nonrefundable. Any legally required immediate-delivery acknowledgment or withdrawal-right consent must be presented in the purchase flow where applicable.
+Do not assume digital goods are always nonrefundable. We do not ask you to waive any statutory withdrawal right in these Terms. Contact **support@brobattles.dev** with your order reference to request a refund or exercise an applicable withdrawal right.
 
-## 6. Beta service and changes
+## 6. Service and changes
 
-Bro Battles is in beta. Bugs, interruptions, balance changes, and changes to features or availability may occur. We do not promise uninterrupted access or that every feature will remain available indefinitely. We will comply with applicable consumer obligations regarding purchased content and material service changes.
+Bugs, interruptions, balance changes, and changes to features or availability may occur. We do not promise uninterrupted access or that every feature will remain available indefinitely. We will comply with applicable consumer obligations regarding purchased content and material service changes.
 
 Planned maintenance, emergencies, and third-party outages may affect play. Disconnecting during a match can affect its result.
 
@@ -58,10 +58,10 @@ Nothing in these Terms excludes liability that cannot lawfully be excluded, incl
 
 ## 9. Disputes and changes to these Terms
 
-Contact **support@brobattles.dev** first so we can try to resolve a concern. These Terms are intended to be governed by the laws of Georgia, United States, subject to mandatory protections and jurisdiction rights in your place of residence. They do not impose mandatory arbitration or a class-action waiver.
+Contact **support@brobattles.dev** first so we can try to resolve a concern. Applicable law and any mandatory jurisdiction rights in your place of residence remain available. These Terms do not impose mandatory arbitration or a class-action waiver.
 
 We may update these Terms. We will identify the updated version and seek renewed acceptance for material changes where required. If a provision is unenforceable, the remaining provisions continue to apply to the extent permitted by law.
 
-## 10. Operator and contact
+## 10. Contact
 
-Bro Battles is operated by **Nischay Patel, Georgia, United States**. Contact **support@brobattles.dev**.
+For questions about Bro Battles or these Terms, contact **Bro Battles Support** at **support@brobattles.dev**.

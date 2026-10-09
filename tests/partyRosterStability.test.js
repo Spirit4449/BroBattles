@@ -120,3 +120,23 @@ test('an unchanged level badge keeps its existing artwork', () => {
   context.setSlotLevelBadge(slot, 6);
   assert.equal(renders, 2);
 });
+
+test('matchmaking previews retain solo DOM portraits and raw party skin selections', () => {
+  const start = source.indexOf('function collectCurrentPartyMembers(');
+  const end = source.indexOf('\n}', start) + 2;
+  const skinUrl = '/assets/ninja/skins/ninja-arena-sovereign/body.webp';
+  const context = {
+    __partyContext: { members: [], botSlots: [] },
+    DEFAULT_CHARACTER: 'ninja', resolveCharacterKey: value => value || 'ninja',
+    getCurrentPartyMember: () => null,
+    document: { querySelectorAll: () => [{
+      dataset: { character: 'ninja' },
+      querySelector: selector => selector === '.username'
+        ? { textContent: 'Player (You)' } : { getAttribute: () => skinUrl },
+    }] },
+  };
+  const collect = vm.runInNewContext(source.slice(start, end) + '; collectCurrentPartyMembers', context);
+  assert.equal(collect()[0].selected_skin_asset_url, skinUrl);
+  context.__partyContext.members = [{ name: 'Player', char_class: 'ninja', selected_skin_id_by_char: { ninja: 'ninja-arena-sovereign' } }];
+  assert.equal(collect()[0].selected_skin_id, 'ninja-arena-sovereign');
+});

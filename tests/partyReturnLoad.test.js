@@ -38,7 +38,7 @@ function fixture({ existing = true, missing = false, full = false, privateParty 
       if (rosterFails) throw new Error('roster unavailable');
       return [
         { name: 'Owner', team: 'team2', slot_index: 1, char_class: 'ninja', status: 'online' },
-        { name: 'Player', team: 'team1', slot_index: 0, char_class: 'ninja', status },
+        { name: 'Player', team: 'team1', slot_index: 0, char_class: 'ninja', status, selected_skin_id_by_char: { ninja: 'ninja-arena-sovereign' } },
       ];
     },
     async fetchSelectedCardsByNames() { calls.push('cards'); return { Player: 'card' }; },
@@ -124,4 +124,17 @@ test('failed fresh roster read does not broadcast stale data or leak the transac
   assert.equal(f.calls.filter(q => q === 'release').length, 1);
   assert.equal(f.calls.includes('move'), false);
   assert.equal(f.emissions.length, 0);
+});
+
+test('party HTTP, roster and mode updates share the equipped skin after joining', async () => {
+  for (const existing of [false, true]) {
+    const f = fixture({ existing });
+    await f.run();
+    const members = f.res.payload.members;
+    assert.equal(members[1].selected_skin_id, 'ninja-arena-sovereign');
+    assert.equal(members[1].selected_skin_asset_url, '/assets/ninja/skins/ninja-arena-sovereign/body.webp');
+    for (const event of ['party:members', 'mode-change']) {
+      assert.deepEqual(f.emissions.find(e => e.event === event).data.members, members);
+    }
+  }
 });

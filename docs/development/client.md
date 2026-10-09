@@ -155,6 +155,10 @@ Successful `/partydata` requests release the joining transaction before pooled
 work, update online presence, then read the detailed roster once. That ordered
 snapshot supplies ownership to both the response and roster broadcast; card and
 skin enrichment, socket room movement, and new-join queue cancellation remain.
+The HTTP response and mode-change event reuse the enriched socket roster so
+party creation/joining cannot replace equipped skins with base portraits. Solo
+matchmaking previews retain the displayed lobby portrait, and queue roster
+change detection includes equipped skin IDs and portrait URLs.
 
 Shop/profile initialization, trophy availability, and lobby hints wait for
 `lobby:ready`, a painted frame, and idle time (with a timer fallback). They do not

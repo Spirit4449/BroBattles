@@ -212,3 +212,14 @@ test("queue progress keeps the lobby team so party seats never flip sides", () =
   assert.equal(last.yourTeam, "team1");
   assert.equal(last.players[0].team, "team1");
 });
+
+test("progress refreshes skins for an otherwise unchanged roster, including unequipping", () => {
+  const f = fixture();
+  f.client.startSolo(duel);
+  for (const skin of ['ninja-arena-sovereign', 'ninja-default']) {
+    const player = { name: 'Ann', char_class: 'ninja', selected_skin_id: skin, selected_skin_asset_url: `/skins/${skin}.webp` };
+    f.handlers['match:progress']({ selection: duel, found: 1, total: 2, players: [player] });
+    assert.equal(f.view.renders.at(-1).players[0].selected_skin_id, skin);
+    assert.equal(f.view.renders.at(-1).players[0].selected_skin_asset_url, player.selected_skin_asset_url);
+  }
+});

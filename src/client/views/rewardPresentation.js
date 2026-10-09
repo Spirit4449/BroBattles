@@ -62,8 +62,11 @@ export function rewardSound(grants, rarity) {
 export function resolveRewardGrants(receiptGrants, displayedGrants = []) {
   if (!Array.isArray(receiptGrants)) return displayedGrants || [];
   return receiptGrants.map(grant => {
+    // Trophy Road names collectible IDs itemId; Shop receipts name them id.
+    const id = grant.id || grant.itemId;
     const display = (displayedGrants || []).find(item => item.kind === grant.kind &&
-      (grant.kind === 'currency' ? item.currency === grant.currency : item.id === grant.id));
-    return { name: grant.id || grant.currency || 'Reward', image: '/assets/icons/lock.webp', ...display, ...grant };
+      (grant.kind === 'currency' ? item.currency === grant.currency : (item.id || item.itemId) === id));
+    return { name: id || grant.currency || 'Reward', image: '/assets/icons/lock.webp', ...display, ...grant,
+      ...(grant.kind === 'currency' ? {} : { id }) };
   });
 }

@@ -447,6 +447,7 @@ export function initializeShop({
         <div class="shop-checkout-backdrop"></div>
         <section class="shop-checkout-panel" role="dialog" aria-modal="true" aria-labelledby="shop-checkout-title">
           <header><h2 id="shop-checkout-title">Secure Checkout</h2><button type="button" class="shop-checkout-close bb-close pixel-menu-button" aria-label="Close checkout">×</button></header>
+          <p class="shop-checkout-notice">Currency is delivered after payment confirmation. Refund and withdrawal rights depend on applicable law. See the <a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a> or contact <a href="mailto:support@brobattles.dev">support@brobattles.dev</a>.</p>
           <div class="shop-checkout-host"></div>
         </section>
       </div>`;

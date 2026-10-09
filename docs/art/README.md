@@ -18,6 +18,8 @@ Use this guide for asset maintenance. [Prompt provenance](provenance.md) retains
 
 Installed body portraits are maintained independently from atlas packing. The shared canvas alignment tool is `scripts/art/align-body-canvases.cjs`; check dimensions and silhouettes after any import. Do not replace a newer portrait with an older packer's output merely because its historical prompt described that portrait.
 
+For the ten standalone level badges, use the [Gemini Omni animation prompts](level-badge-video-prompts.md) as image-to-video directions. They describe candidate loops; installed badges remain still images until reviewed and imported separately.
+
 ## Character-specific contracts
 
 - **Thorg:** current shared sweep phases are 70ms windup, 500ms strike and 300ms recovery in `src/shared/characters/thorg.json`. `thorgAttackFrames.json` supplies the attack track. The base atlas includes baked weapon/sweep artwork; legacy skin presentation has separate handling. Held pose imports use `thorg_duck.png` and `thorg_slide.png` with source alpha preserved. Straight-down stomp uses duck presentation; old falling-only dash notes are superseded.

@@ -1,12 +1,12 @@
-**Effective date: September 12, 2026**
+**Effective date: October 8, 2026**
 
 Your privacy matters in and out of the arena. This policy explains what Bro Battles collects, why it is used, and the choices available to you.
 
 ## 1. Information we process
 
-- **Accounts and sessions:** username, a securely hashed password for permanent accounts, temporary guest identifiers, session tokens, account status, and timestamps. If you add an email address, we store the address and verification status, with temporary hashed verification codes and attempt counts. We do not store your password in readable form.
+- **Accounts and sessions:** username, a securely hashed password for permanent accounts, temporary guest identifiers, session tokens, account status, and timestamps. Creating a permanent account requires an email address and verification. We store that address and verification status, with temporary hashed verification codes and attempt counts. You can later change your email address in account settings. We do not store your password in readable form.
 - **Gameplay:** character choices, parties, progression, virtual currency, match activity, battle records, and information needed to run multiplayer sessions.
-- **Communications:** chat messages and interactions, feedback, support requests, and replies. Information you put into public or party features can be visible to other players in those spaces.
+- **Communications:** friend requests, direct messages, party chat, message reactions and read information, feedback, support requests, and replies. Other members of a party can see its messages, reactions, and who viewed a message. The sender and recipient can see their direct messages, reactions, and read status. Friends and party members can also see the profile and activity information the game displays to them. Support requests are available to you and authorized support staff. Do not put information in a message that you do not want its audience to see.
 - **Purchases:** order identifiers, currency grants, payment status, refunds, and disputes. Stripe processes payment details. Bro Battles does not ask you to enter card numbers into its feedback or support forms.
 - **Technical and security information:** connection information such as IP addresses, request activity, and abuse-control records needed to deliver and protect the service. Hosting and network providers may process request logs under their own service configurations.
 - **Browser preferences:** settings and other interface preferences are saved in your browser. Clearing browser storage removes those preferences and can affect guest access.
@@ -31,7 +31,7 @@ This feature release does not add advertising or analytics trackers. Any optiona
 
 Other players can see usernames and information shared through multiplayer and chat features. Authorized administrators can access information needed for support, moderation, and operations.
 
-We use **Cloudflare** for website/network services **Stripe** for payment processing, and **Resend** to deliver verification emails and support/feedback notifications. Providers process information needed to deliver their services. Information may also be disclosed when required by law, to protect rights or security, or as part of a lawful transfer of the service with appropriate protections and notice where required.
+We use **Cloudflare** for website/network services, **Stripe** for payment processing, and **Resend** to deliver verification emails, support/feedback notifications, and opted-in game updates. When AI help search is configured and you submit a help search, we send your search words and our help article text to **Google's Gemini API** to rank relevant articles. Do not put personal or sensitive information in a help search. Providers process information needed to deliver their services. Information may also be disclosed when required by law, to protect rights or security, or as part of a lawful transfer of the service with appropriate protections and notice where required.
 
 We do not describe your information as anonymous merely because it uses a username.
 
@@ -41,7 +41,9 @@ Guest accounts are scheduled to expire after approximately two hours; cleanup ru
 
 Feedback submitted through the new feedback system is retained for up to 12 months. Support conversations are retained while open and for up to 12 months after closure, subject to periodic cleanup. Keep requests open only while they need attention.
 
-Permanent accounts and associated records are retained as needed to operate the service or fulfill legitimate legal, accounting, dispute, and security needs. Legal acceptance records identify the versions and time of acceptance. Deletion requests are reviewed manually; backup expiry and legally required retention can delay complete removal.
+Permanent accounts and their profile and progression records remain while the account is active; there is no automatic inactivity deletion for permanent accounts. Friend direct messages, reactions, and read status remain while both accounts exist, even if the players are no longer friends. Deleting either account removes their direct conversation from the live database. Party messages, reactions, and view records remain while the party exists. Deleting a party removes its chat records; deleting an account removes that player's party messages and related interactions from the live database.
+
+Battle history, purchase and currency records, and moderation/security records do not currently have a scheduled age-based deletion period. They are kept while needed to operate the game, resolve transactions or disputes, investigate abuse, or meet legal and accounting obligations. Legal acceptance records identify the versions and time of acceptance. Deletion requests are reviewed manually against those needs and other players' rights. Copies in backups may remain until the applicable backup rotation ends; that schedule depends on the deployed backup configuration.
 
 ## 6. Your choices and rights
 
@@ -57,7 +59,7 @@ Players under the age of majority must have a parent or guardian's permission. A
 
 ## 8. International processing and security
 
-The operator is based in the United States. Information may be processed in the United States and other places where providers operate. Applicable international-transfer requirements must be addressed through appropriate legal arrangements.
+Information may be processed in the United States and other places where providers operate. Applicable international-transfer requirements must be addressed through appropriate legal arrangements.
 
 We use measures such as password hashing, authenticated sessions, access controls, and request limits to protect the service. No system can guarantee absolute security.
 
@@ -65,5 +67,6 @@ We use measures such as password hashing, authenticated sessions, access control
 
 We may update this policy as the game develops. The effective date and version will identify changes; material changes will be brought to your attention where required.
 
-**Nischay Patel · Georgia, United States**  
+**Bro Battles Support**
+
 **support@brobattles.dev**

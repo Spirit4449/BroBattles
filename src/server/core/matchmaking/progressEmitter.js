@@ -170,7 +170,7 @@ function createProgressEmitter({ db, io, lastProgress }) {
       };
 
       const rosterSig = players
-        .map((p) => `${p.name}:${p.char_class || ""}`)
+        .map((p) => JSON.stringify([p.name, p.char_class, p.selected_skin_id, p.selected_skin_asset_url]))
         .join("|");
       const signature = `${modeId}:${modeVariantId}:${map}:${payload.found}:${payload.total}:${rosterSig}`;
 

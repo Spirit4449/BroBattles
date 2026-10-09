@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
+const { playerCardImage } = require('../src/client/views/playerCardAnimation.cjs');
+const { buildTrophyRewardTrack } = require('../src/server/services/trophies/trophySystem');
 const source = fs.readFileSync(path.join(__dirname, '../src/client/views/rewardPresentation.js'), 'utf8').replaceAll('export function', 'function');
 const { currencyParticleCount, currencyFlightPlan, currencyRewardImage, resolveRewardGrants } = vm.runInNewContext(source + '; ({ currencyParticleCount, currencyFlightPlan, currencyRewardImage, resolveRewardGrants })');
 
@@ -47,4 +49,14 @@ test('reward reveals use receipt grants after rotation or catalog changes', () =
   const changed = resolveRewardGrants([{ kind: 'currency', currency: 'coins', amount: 100 }], display);
   assert.equal(changed[0].name, 'Coins');
   assert.equal(changed[0].amount, 100);
+});
+
+test('a Trophy Road card claim resolves the awarded card and its animation', () => {
+  const reward = buildTrophyRewardTrack().flatMap(tier => tier.rewards)
+    .find(grant => grant.kind === 'card');
+  const [grant] = resolveRewardGrants([reward], [reward]);
+  assert.equal(grant.id, reward.itemId);
+  assert.equal(grant.name, reward.name);
+  assert.notEqual(playerCardImage(grant.id, { animate: false }), playerCardImage('default', { animate: false }));
+  assert.match(playerCardImage(grant.id), /-animated\.(?:webm|mov)$/);
 });

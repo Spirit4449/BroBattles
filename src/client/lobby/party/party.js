@@ -1466,7 +1466,7 @@ function applyMemberToSlot(member, slotId, isYourTeam = null) {
     const cls = member.char_class || DEFAULT_CHARACTER;
     const skinAsset =
       String(member.selected_skin_asset_url || "").trim() ||
-      buildCharacterSkinBodyUrl(cls, "");
+      buildCharacterSkinBodyUrl(cls, member.selected_skin_id ?? member.selected_skin_id_by_char?.[resolveCharacterKey(cls)]);
     if (spriteEl.getAttribute("src") !== skinAsset) spriteEl.src = skinAsset;
     spriteEl.alt = cls;
     spriteEl.classList.remove("random", "bot-shuffle-icon");
@@ -2093,7 +2093,7 @@ function collectCurrentPartyMembers() {
   const players = contextMembers.map((member) => ({
     name: member?.name || "Player",
     char_class: member?.char_class || DEFAULT_CHARACTER,
-    selected_skin_id: member?.selected_skin_id || null,
+    selected_skin_id: member?.selected_skin_id ?? member?.selected_skin_id_by_char?.[resolveCharacterKey(member?.char_class)] ?? null,
     selected_skin_asset_url: member?.selected_skin_asset_url || "",
     team: member?.team || null,
   }));
@@ -2110,7 +2110,10 @@ function collectCurrentPartyMembers() {
         slot.dataset.character && slot.dataset.character !== "Random"
           ? slot.dataset.character
           : DEFAULT_CHARACTER;
-      players.push({ name, char_class: cls });
+      players.push({
+        name, char_class: cls,
+        selected_skin_asset_url: slot.querySelector(".character-sprite")?.getAttribute("src") || "",
+      });
     }
   }
 
