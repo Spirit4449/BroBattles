@@ -4,7 +4,7 @@
     "baseHealth": 13000,
     "attackDescription": "Revolves his heavy weapon around his body, striking both sides with light knockback.",
     "baseDamage": 1500,
-    "ammoCooldownMs": 700,
+    "ammoCooldownMs": 560,
     "ammoReloadMs": 800,
     "ammoCapacity": 3,
     "specialDescription": "Enters a purple rage that buffs damage and strengthens knockback.",
@@ -40,8 +40,8 @@
           "reticleScaleLiftY": 37.8
         },
         "sweep": {
-          "windupMs": 70,
-          "strikeMs": 500,
+          "windupMs": 56,
+          "strikeMs": 400,
           "radiusX": 78,
           "radiusY": 26,
           "centerY": 13,
@@ -52,7 +52,7 @@
           "rageScale": 1.25,
           "footOffset": 37.8,
           "spriteForwardOffset": -1.5707963267948966,
-          "recoveryMs": 300,
+          "recoveryMs": 240,
           "hitboxReachScale": 1.3,
           "hitboxHeightScale": 2
         }

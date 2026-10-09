@@ -346,18 +346,19 @@ test('embedded mace atlas creates no separate weapon or hand overlays', () => {
   assert.equal(h.scene.events.listenerCount('postupdate'), 0);
 });
 
-test('video attack spends 70ms on windup, 500ms on strike, and 300ms on recovery', () => {
+test('video attack follows shared windup, strike, and recovery timing', () => {
+  const { windupMs, strikeMs, recoveryMs } = sweep.THORG_SWEEP;
   const h = videoHarness();
   weaponModule.startThorgSweep(h.scene, h.body, { direction: -1 });
   assert.equal(h.body.frame.name, 'throw00');
-  h.tick(35); assert.equal(h.body.frame.name, 'throw00');
-  h.tick(35); assert.equal(h.body.frame.name, 'throw01');
-  h.tick(250); assert.equal(h.body.frame.name, 'throw05');
-  h.tick(250); assert.equal(h.body.frame.name, 'throw09');
-  h.tick(275); assert.equal(h.body.frame.name, 'throw11');
+  h.tick(windupMs / 2); assert.equal(h.body.frame.name, 'throw00');
+  h.tick(windupMs / 2); assert.equal(h.body.frame.name, 'throw01');
+  h.tick(strikeMs / 2); assert.equal(h.body.frame.name, 'throw05');
+  h.tick(strikeMs / 2); assert.equal(h.body.frame.name, 'throw09');
+  h.tick(recoveryMs - 1); assert.equal(h.body.frame.name, 'throw11');
   assert.equal(h.body._thorgSweepActive, true);
   assert.equal(h.body.flipX, true);
-  h.tick(25);
+  h.tick(1);
   assert.equal(h.body._thorgSweepActive, false);
   assert.equal(h.body.paused, false);
   assert.equal(h.body._lockFlip, false);

@@ -130,3 +130,8 @@ The overlay shows authoritative server samples, so it may trail client-predicted
 art. Samples persist for 120 ms to expose impacts occurring between snapshots;
 this retention does not extend damage windows. Disconnected/stalled snapshot
 streams clear the client overlay after 250 ms. Scene shutdown removes listeners.
+
+Thorg’s regular attack timing is owned by `src/shared/characters/thorg.json`.
+Keep the windup, strike, and recovery durations synchronized with the corresponding
+poses in `src/shared/characters/thorgAttackFrames.json`; rendering and authoritative
+hit detection share that clock. `ammoCooldownMs` controls the interval between attacks.

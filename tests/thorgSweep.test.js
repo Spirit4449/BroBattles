@@ -79,14 +79,14 @@ test('every active displayed frame and combat pose share one clock', () => {
   for (const frame of THORG_ATTACK_FRAMES) {
     const middle = elapsed + frame.durationMs / 2;
     assert.equal(thorgAttackFrameAt(middle).frame, frame.frame);
-    if (middle >= 70 && middle < 570) {
-      const sample = sampleThorgSweep({}, (middle - 70) / 500);
+    if (middle >= THORG_SWEEP.windupMs && middle < THORG_SWEEP.windupMs + THORG_SWEEP.strikeMs) {
+      const sample = sampleThorgSweep({}, (middle - THORG_SWEEP.windupMs) / THORG_SWEEP.strikeMs);
       assert.deepEqual(sample.grip, { x: frame.grip[0], y: frame.grip[1] });
       assert.deepEqual(sample.tip, { x: frame.tip[0], y: frame.tip[1] });
     }
     elapsed += frame.durationMs;
   }
-  assert.ok(Math.abs(elapsed - 870) < 1e-8);
+  assert.ok(Math.abs(elapsed - (THORG_SWEEP.windupMs + THORG_SWEEP.strikeMs + THORG_SWEEP.recoveryMs)) < 1e-8);
 });
 
 test('authoritative sweep hits front and rear once, survives a delayed tick, and ignores spoofed reach/timing', t => {

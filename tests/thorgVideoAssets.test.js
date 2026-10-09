@@ -5,6 +5,7 @@ const vm = require('node:vm');
 const { createHash } = require('node:crypto');
 const babel = require('@babel/core');
 const atlas = require('../public/assets/thorg/animations.json');
+const { THORG_SWEEP } = require('../src/shared/characters/thorgSweep');
 const dependencies = {
   '../shared/animationBuilder': require('../src/client/game/characters/shared/animationBuilder'),
   '../../../../shared/characters/thorgSweep': require('../src/shared/characters/thorgSweep'),
@@ -117,12 +118,12 @@ test('video run keeps source order; attack frame durations match the combat cloc
   const attack = created.get('thorg-throw');
   const durations = Array.from(attack.frames, f => 1000 / attack.frameRate + f.duration);
   const sum = xs => xs.reduce((a, b) => a + b, 0);
-  assert.ok(Math.abs(sum(durations.slice(0, 1)) - 70) < 1e-8);
-  assert.ok(Math.abs(sum(durations.slice(1, 9)) - 500) < 1e-8);
-  assert.equal(sum(durations.slice(9)), 300);
+  assert.ok(Math.abs(sum(durations.slice(0, 1)) - THORG_SWEEP.windupMs) < 1e-8);
+  assert.ok(Math.abs(sum(durations.slice(1, 9)) - THORG_SWEEP.strikeMs) < 1e-8);
+  assert.equal(sum(durations.slice(9)), THORG_SWEEP.recoveryMs);
   assert.equal(created.get('thorg-jumping').frameRate, 24);
   assert.equal(created.get('thorg-falling').frameRate, 8);
-  assert.equal(attack.duration, 870);
+  assert.equal(attack.duration, THORG_SWEEP.windupMs + THORG_SWEEP.strikeMs + THORG_SWEEP.recoveryMs);
   assert.equal(created.get('thorg-dying').repeat, 0);
 });
 
