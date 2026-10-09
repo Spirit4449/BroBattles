@@ -119,14 +119,25 @@ function wireNavigation() {
     for(const [label,url] of [['About','/about'],['News','/news'],['Help Center','/help'],['Feedback','/feedback']]) {const a=element('a',label);a.href=url;if(url==='/help'){const badge=element('span','NEW','site-support-badge');badge.dataset.supportUnread='';badge.setAttribute('aria-hidden','true');a.append(badge);}menu.append(a);}
     const settings=element('button','Settings');settings.type='button';settings.onclick=()=>{toggle(false);openSettings();};menu.append(settings,element('hr'));
     for(const [label,url] of [['Privacy Policy','/privacy'],['Terms of Service','/terms']]){const a=element('a',label,'site-menu-legal');a.href=url;menu.append(a);}
-    menu.append(element('small',config.version));wrap.append(button,menu);host.querySelector('.site-menu-placeholder')?.remove();host.prepend(wrap);
+    const versionLabel=element('small',config.version);menu.append(versionLabel);
+    const refreshVersion=async()=>{
+      try {
+        const response=await fetch('/api/version',{cache:'no-store'});
+        if(!response.ok)throw new Error('Version unavailable');
+        const data=await response.json();
+        const status={current:'Up to date',different:`Deployment differs from ${data.branch}`,modified:'Uncommitted changes',development:'Development',unknown:'Unable to check'}[data.status] || 'Unable to check';
+        versionLabel.textContent=`${data.version || config.version}${data.build ? ` · Build ${data.build}` : ''} · ${status}`;
+        versionLabel.title=data.commit ? `Commit ${data.commit} · Built ${data.builtAt}${data.checkedAt ? ` · Checked ${data.checkedAt}` : ''}` : '';
+      } catch (_) { versionLabel.textContent=`${config.version} · Unable to check`; }
+    };
+    refreshVersion();wrap.append(button,menu);host.querySelector('.site-menu-placeholder')?.remove();host.prepend(wrap);
     menu.addEventListener('click', async event => {
       const link = event.target.closest('a');
       if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
       if (await navigationGuard()) location.assign(link.href);
     });
-    const toggle=value=>{menu.hidden=!value;button.setAttribute('aria-expanded',String(value));};
+    const toggle=value=>{menu.hidden=!value;button.setAttribute('aria-expanded',String(value));if(value)refreshVersion();};
     button.onclick=()=>{playSound('cursor4');toggle(menu.hidden);};
     wrap.addEventListener('keydown',event=>{if(event.key==='Escape'){toggle(false);button.focus();}if(event.key==='ArrowDown' && event.target===button){event.preventDefault();toggle(true);menu.querySelector('a').focus();}});
     document.addEventListener('click',event=>{if(!wrap.contains(event.target))toggle(false);});

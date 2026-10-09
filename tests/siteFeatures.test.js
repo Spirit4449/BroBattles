@@ -351,3 +351,51 @@ test('name dialog validates input and checks username availability before enabli
   assert.equal(h.submit.disabled, false);
   assert.match(requests[1], /username-availability\?username=FreeName/);
 });
+
+test('deployment version compares exact commits, caches checks, and never calls modified builds current', async () => {
+  const { createVersionService } = require('../src/server/services/site/buildVersion');
+  const commit = 'a'.repeat(40); let calls = 0; let time = 0;
+  const fetchImpl = async () => { calls++; return { ok: true, json: async () => ({ sha: commit }) }; };
+  const get = createVersionService({ build: { commit, build: 42, dirty: false }, production: true, fetchImpl, now: () => time });
+  const results = await Promise.all([get(), get()]);
+  assert.equal(results[0].status, 'current'); assert.equal(calls, 1);
+  await get(); assert.equal(calls, 1);
+  time += 61000; await get(); assert.equal(calls, 2);
+  for (const [build, expected] of [[{ commit: 'b'.repeat(40) }, 'different'], [{ commit, dirty: true }, 'modified']]) {
+    assert.equal((await createVersionService({ build, production: true, fetchImpl })()).status, expected);
+  }
+  assert.equal((await createVersionService({ build: null, production: true, fetchImpl })()).status, 'unknown');
+  assert.equal((await createVersionService({ build: { commit }, production: false, fetchImpl })()).status, 'development');
+});
+
+test('deployment checks become unknown after failed refreshes and invalid remote responses', async () => {
+  const { createVersionService } = require('../src/server/services/site/buildVersion');
+  const commit = 'a'.repeat(40); let time = 0;
+  const get = createVersionService({ build: { commit }, production: true, now: () => time,
+    fetchImpl: async () => { if (time) throw new Error('offline'); return { ok: true, json: async () => ({ sha: commit }) }; } });
+  assert.equal((await get()).status, 'current'); time = 61000;
+  assert.equal((await get()).status, 'unknown');
+  for (const response of [{ ok: false }, { ok: true, json: async () => ({ sha: 'bad' }) }]) {
+    assert.equal((await createVersionService({ build: { commit }, production: true, fetchImpl: async () => response })()).status, 'unknown');
+  }
+});
+
+test('build stamps follow Git history and mark uncommitted changes', () => {
+  const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+  const { execFileSync } = require('node:child_process');
+  const { createBuildVersion } = require('../scripts/build/buildVersion.cjs');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'bb-version-'));
+  const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: 'pipe' }).trim();
+  try {
+    git('init'); git('config', 'user.email', 'test@example.com'); git('config', 'user.name', 'Test');
+    git('-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'first');
+    const first = createBuildVersion({ cwd }); assert.equal(first.dirty, false);
+    git('-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'second');
+    const second = createBuildVersion({ cwd });
+    assert.equal(second.build, first.build + 1); assert.notEqual(second.commit, first.commit);
+    fs.writeFileSync(path.join(cwd, 'new.txt'), 'local edits');
+    assert.equal(createBuildVersion({ cwd }).dirty, true);
+    fs.writeFileSync(path.join(cwd, '.git/shallow'), second.commit + '\n');
+    assert.throws(() => createBuildVersion({ cwd }), /full Git history/);
+  } finally { fs.rmSync(cwd, { recursive: true, force: true }); }
+});

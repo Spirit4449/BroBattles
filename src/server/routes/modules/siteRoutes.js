@@ -20,6 +20,10 @@ function isSameOrigin(req) {
 function accepted(body) { return body?.accepted === true && body.termsVersion === config.termsVersion && body.privacyVersion === config.privacyVersion; }
 function registerSiteRoutes({ app, db, auth }) {
   registerSitePages(app);
+  const getVersion = require('../../services/site/buildVersion').createVersionService();
+  app.get('/api/version', async (_req, res) => {
+    res.set('Cache-Control', 'no-store').json(await getVersion());
+  });
   app.use(['/gamedata'], async (req,res,next) => {
     try {
       const user = await auth.requireCurrentUser(req,res);

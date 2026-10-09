@@ -88,6 +88,7 @@ module.exports = (_env = {}, argv = {}) => {
     ],
   },
   plugins: [
+    new (require("./scripts/build/buildVersion.cjs").BuildVersionPlugin)(),
     new (require("./scripts/build/pageRuntime.cjs"))(),
     ...(mode === "production" ? [new (require("./scripts/build/versionHtmlAssets.cjs"))()] : []),
     new MiniCssExtractPlugin({

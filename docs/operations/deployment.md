@@ -118,3 +118,29 @@ npm run test:network
 In an isolated test environment, verify unauthenticated and guest restrictions, cross-account support/ownership access, admin guards, same-origin write checks, duplicate purchase/claim delivery, session revocation, forged combat claims, and movement corrections. Use controlled test accounts and bounded requests. Do not interpret client-side UI restrictions as authorization. Socket identity comes from authenticated sessions and service mutations remain server-owned.
 
 For release QA, check two browsers through join, ready, countdown, combat, reconnect, results and lobby return; test Bank Bust respawns, bots, map edits, chat and sound. Report the actual test result and environment for each release instead of carrying forward a past passing count.
+
+## Automatic build versions
+
+Webpack stamps `dist/build-version.json` with the release name, Git commit count,
+full commit SHA, build time, and whether the checkout has uncommitted changes.
+Every build requires Git and full history (`git fetch --unshallow` for shallow
+clones). Build from a clean committed checkout for production. Counts advance
+along branch history; merges and rebases can change the count, so the SHA is the
+exact identity. Rebuilding a commit keeps its number and changes its build time.
+
+Deploy the generated manifest with the rest of `dist/` and the matching server
+source, then restart the server. The server snapshots the manifest at startup;
+production does not derive its version from the live checkout. `GET /api/version`
+is public and uncached by browsers. The site menu shows the deployed build and
+checks whether its SHA equals the latest GitHub deployment-branch commit. It
+refreshes on menu opening; remote checks are shared and cached for 60 seconds.
+“Up to date” means exact equality with the last successful check, not that a
+browser's already-loaded JavaScript is the newest bundle.
+
+Defaults are repository `Spirit4449/APCSP-Create-Project---Final` and branch
+`main`. Override with `BB_VERSION_REPOSITORY=owner/repo` and `BB_DEPLOY_BRANCH`.
+For a private repository set server-only `BB_VERSION_GITHUB_TOKEN` to a token
+with read access to repository contents. Never place it in client configuration.
+Unreachable GitHub, missing metadata, and access/rate-limit errors show “Unable
+to check”. A dirty build shows “Uncommitted changes”; local servers show
+“Development”. No commits, pushes, or deployments happen automatically.
