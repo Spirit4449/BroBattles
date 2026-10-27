@@ -1,7 +1,7 @@
 const huntressCombat = require('./huntressCombat');
 const inputManager = require("./inputManager");
 const characterCombat = require('./characterCombatRegistry');
-const { stampViewRewind } = require('./lagCompensation');
+const { stampViewRewind, createLatencyProbe } = require('./lagCompensation');
 const {
   ACTION_MIN_INTERVAL_MS,
   ACTION_SPAM_WINDOW_MS,
@@ -11,8 +11,10 @@ const {
 const { registerGameChatEvents } = require("../socketEvents/gameChatEvents");
 
 function setupPlayerSocket(room, socket) {
+  const latency = createLatencyProbe(room, socket);
   room.onSocket(socket, 'game:clock', (data, ack) => {
     if (typeof ack === 'function') ack(huntressCombat.timing(room));
+    latency.probe();
   });
     // Handle player input
   room.onSocket(socket, "game:input", (inputData) => {
@@ -26,7 +28,7 @@ function setupPlayerSocket(room, socket) {
   room.onSocket(socket, "game:action", (actionData) => {
     const player = room.players.get(socket.id);
     if (!player) return;
-    stampViewRewind(room, actionData);
+    stampViewRewind(room, actionData, latency);
     if (characterCombat.ownsAction(room, player, actionData)) {
       room.handlePlayerAction(socket.id, actionData);
       return;
@@ -69,7 +71,7 @@ function setupPlayerSocket(room, socket) {
   });
 
     // Handle special attack request
-  room.onSocket(socket, "game:special", (payload = {}) => room.requestSpecial(socket.id, stampViewRewind(room, payload)));
+  room.onSocket(socket, "game:special", (payload = {}) => room.requestSpecial(socket.id, stampViewRewind(room, payload, latency)));
 
   room.onSocket(socket, "deathdrop:pickup", (payload) => {
     room._handleDeathDropPickup(socket.id, payload);

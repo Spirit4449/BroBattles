@@ -184,6 +184,7 @@ function pushPositionHistory(playerData, now = Date.now()) {
     x: Number(playerData.x) || 0,
     y: Number(playerData.y) || 0,
     t: now,
+    body: require("./lagCompensation").collisionPose(playerData),
   });
   while (
     history.length > POSITION_HISTORY_DEPTH ||
@@ -265,7 +266,7 @@ function handlePlayerInput(room, socketId, inputData) {
     playerData.lastInput = now;
     const errorPx = Number.isFinite(inputData.x) && Number.isFinite(inputData.y)
       ? Math.hypot(inputData.x - playerData.x, inputData.y - playerData.y) : 0;
-    correctPosition(room, playerData, packetSeq, { reason: "idle", errorPx });
+    correctPosition(room, playerData, packetSeq, { reason: "idle", errorPx, vx: playerData.vx || 0, vy: playerData.vy || 0, grounded: !!playerData.grounded });
     return;
   }
 

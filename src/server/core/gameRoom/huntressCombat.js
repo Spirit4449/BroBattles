@@ -3,7 +3,7 @@ const { snapshotEpoch } = require('./roomStateManager');
 const model = require('../../../shared/characters/huntressProjectile');
 const { participantId, getParticipant } = require('./participants');
 const { characterBody } = require('../../../shared/physics/duelGeometry');
-const { clampViewRewind, positionAt } = require('./lagCompensation');
+const { clampViewRewind, poseAt } = require('./lagCompensation');
 
 function initialize(room) {
   // Protocol version protects joins from stale clients; combat is always authoritative.
@@ -79,9 +79,9 @@ function targetList(room, owner, viewRewindMs = 0, now = Date.now()) {
   const targets = [];
   for (const p of room.players.values()) {
     if (!p.isAlive || !p.loaded || p === owner || p.team === owner.team) continue;
-    const body = characterBody(p.char_class, p.flip), at = positionAt(p, viewRewindMs, now);
-    const x = at.x + (p._bodyCenterOffsetX ?? body.offsetX), y = at.y + (p._bodyCenterOffsetY ?? body.offsetY);
-    const hw = p._bodyHalfWidth ?? body.halfWidth, hh = p._bodyHalfHeight ?? body.halfHeight;
+    const body = characterBody(p.char_class, p.flip), at = poseAt(p, viewRewindMs, now);
+    const x = at.x + (at._bodyCenterOffsetX ?? body.offsetX), y = at.y + (at._bodyCenterOffsetY ?? body.offsetY);
+    const hw = at._bodyHalfWidth ?? body.halfWidth, hh = at._bodyHalfHeight ?? body.halfHeight;
     targets.push({ name: p.name, at, bounds: model.insetBounds({ left: x - hw, right: x + hw, top: y - hh, bottom: y + hh }) });
   }
   const enemyTeam = owner.team === 'team1' ? 'team2' : 'team1';

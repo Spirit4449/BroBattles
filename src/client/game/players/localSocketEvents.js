@@ -313,7 +313,10 @@ export function bindLocalSocketEvents({
       logical: 'falling', fallback: 'idle' });
   };
   const correctionHandler = (data) => {
-    localMovementCorrector?.apply(getPlayer(), data);
+    const player = getPlayer();
+    if (localMovementCorrector?.apply(player, data) && data.reason === 'idle') {
+      endDash(player, false);
+    }
   };
   socket.on("player:stomp", stompHandler);
   socket.on("game:correction", correctionHandler);

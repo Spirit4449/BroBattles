@@ -33,7 +33,8 @@ test('humans record one history sample per accepted packet and rewind linearly b
   const room = { players: new Map([['p', player]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
   input.resetMovementBudget(player, now);
   // A teleport (spawn) starts history afresh at the new position.
-  assert.deepEqual(player._posHistory, [{ x: 0, y: 0, t: now }]);
+  assert.deepEqual(player._posHistory.map(({ x, y, t }) => ({ x, y, t })), [{ x: 0, y: 0, t: now }]);
+  assert.ok(player._posHistory[0].body._bodyHalfHeight > 0);
   now += 30; input.handlePlayerInput(room, 'p', { x: 0, y: 0, sequence: 1 });
   now += 30; input.handlePlayerInput(room, 'p', { x: 9, y: 0, sequence: 2 });
   assert.equal(player._posHistory.length, 3);
@@ -104,4 +105,22 @@ test('the match clock bursts on a new epoch, keeps the lowest-RTT offset and rep
   assert.equal(timeouts.length, 10);
   assert.equal(clockModule.getServerClockDiagnostics().epoch, 'room-2');
   clockModule.stopServerClockSync();
+});
+
+test('server latency acknowledgments follow clock socket lifecycle without duplicate listeners', () => {
+  const { EventEmitter } = require('node:events');
+  const first = new EventEmitter(), second = new EventEmitter();
+  const clock = loadServerClock({ performance: { now: () => 0 } });
+  clock.startServerClockSync(first);
+  clock.startServerClockSync(first);
+  assert.equal(first.listenerCount('game:latency'), 1);
+  let replies = 0;
+  first.emit('game:latency', {}, () => replies++);
+  assert.equal(replies, 1);
+  clock.startServerClockSync(second);
+  assert.equal(first.listenerCount('game:latency'), 0);
+  second.emit('game:latency', {}, () => replies++);
+  assert.equal(replies, 2);
+  clock.stopServerClockSync();
+  assert.equal(second.listenerCount('game:latency'), 0);
 });

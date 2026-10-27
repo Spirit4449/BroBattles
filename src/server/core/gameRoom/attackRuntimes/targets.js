@@ -4,11 +4,11 @@ const { getParticipant } = require('../participants');
 const { circleAabbOverlap, getPlayerBounds } = require('./geometry');
 const { sweep } = require('../../../../shared/characters/huntressProjectile');
 const { isDetachedProjectile } = require('./projectileLifecycle');
-const { positionAt } = require('../lagCompensation');
+const { poseAt } = require('../lagCompensation');
 
 // Shots test targets where their shooter saw them; melee has no rewind.
 function shotTargetBounds(attack, target, now = Date.now()) {
-  return getPlayerBounds(target, positionAt(target, attack?.viewRewindMs, now));
+  return getPlayerBounds(target, poseAt(target, attack?.viewRewindMs, now));
 }
 
 function emitServerHit(room, attack, targetName, payload = {}) {

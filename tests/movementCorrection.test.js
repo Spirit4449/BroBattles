@@ -281,3 +281,35 @@ test('corrections are acknowledged even while the local body is unavailable', ()
   assert.equal(c.apply({ body: null }, { x: 1, y: 2, sequence: 1, correctionId: 3 }), false);
   assert.equal(c.getAck(), 3);
 });
+
+test('idle handoff restores server motion and cancels pending correction blending', t => {
+  const f = idleServer(t);
+  f.tick(IDLE_FALLBACK_AFTER_MS + 2000);
+  f.send({ x: 0, y: 0, sequence: 2, correctionAck: 0 });
+  const correction = f.corrections()[0];
+  const p = fakePlayer();
+  const c = createMovementCorrector();
+  c.recordSent(1, 0, 0);
+  c.apply(p, { x: 20, y: 0, sequence: 1, correctionId: 0 });
+  c.recordSent(2, 0, 0);
+  p.y = -50; // Local simulation has resumed its obsolete upward trajectory.
+  p.body.velocity = { x: 800, y: -500 };
+  p.body.acceleration = { x: 100, y: -100 };
+  assert.equal(c.apply(p, correction), true);
+  assert.equal(p.y, f.player.y);
+  assert.deepEqual(p.body.velocity, { x: f.player.vx, y: f.player.vy });
+  assert.deepEqual(p.body.acceleration, { x: 0, y: 0 });
+  for (let i = 0; i < 30; i++) c.update(p, 16);
+  assert.equal(p.x, f.player.x);
+  assert.equal(c.getDiagnostics().pendingPx, 0);
+  assert.equal(c.getDiagnostics().idle, 1);
+  assert.equal(c.apply(p, correction), false);
+});
+
+test('idle handoff preserves authoritative airborne velocity and supports old packets', () => {
+  const p = fakePlayer(), c = createMovementCorrector();
+  c.apply(p, { reason: 'idle', correctionId: 1, x: 20, y: 80, vx: 15, vy: 200, grounded: false });
+  assert.deepEqual(p.body.velocity, { x: 15, y: 200 });
+  c.apply(p, { reason: 'idle', correctionId: 2, x: 20, y: 100 });
+  assert.deepEqual(p.body.velocity, { x: 0, y: 0 });
+});

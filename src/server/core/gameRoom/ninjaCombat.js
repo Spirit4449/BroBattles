@@ -4,7 +4,7 @@ const {sweep}=require('../../../shared/characters/huntressProjectile');
 const {characterBody}=require('../../../shared/physics/duelGeometry');
 const {participantId,getParticipant}=require('./participants');
 const {timing}=require('./huntressCombat');
-const {clampViewRewind,positionAt}=require('./lagCompensation');
+const {clampViewRewind,poseAt}=require('./lagCompensation');
 function initialize(room){room.ninjaCombatVersion=model.VERSION;room._ninja={active:new Map(),pending:[],requests:new Map(),terminals:[]};}
 function emit(room,p,action){room.io.to(`game:${room.matchId}`).emit('game:action',{playerName:p.name,character:'ninja',action:{...action,ninjaCombatVersion:model.VERSION,ownerEcho:true,...timing(room)}});}
 function ammo(p){return {ammoState:{...p.ammoState},revision:p._ninjaRevision=(p._ninjaRevision||0)+1};}
@@ -40,8 +40,8 @@ function targets(room,p,viewRewindMs=0,now=Date.now()){
   const list=[];
   for(const t of room.players.values()){
     if(t===p||t.team===p.team||!t.isAlive||!t.loaded)continue;
-    const at=positionAt(t,viewRewindMs,now);
-    const body=characterBody(t.char_class,t.flip),x=at.x+(t._bodyCenterOffsetX??body.offsetX),y=at.y+(t._bodyCenterOffsetY??body.offsetY),w=t._bodyHalfWidth??body.halfWidth,h=t._bodyHalfHeight??body.halfHeight;
+    const at=poseAt(t,viewRewindMs,now);
+    const body=characterBody(t.char_class,t.flip),x=at.x+(at._bodyCenterOffsetX??body.offsetX),y=at.y+(at._bodyCenterOffsetY??body.offsetY),w=at._bodyHalfWidth??body.halfWidth,h=at._bodyHalfHeight??body.halfHeight;
     list.push({name:t.name,movementReportAgeMs:!t.isBot&&t._lastPositionPacketAt>0?Math.max(0,Date.now()-t._lastPositionPacketAt):null,bounds:{left:x-w,right:x+w,top:y-h,bottom:y+h}});
   }
   const team=p.team==='team1'?'team2':'team1',v=room.gameMode?.getVaultState?.(team);

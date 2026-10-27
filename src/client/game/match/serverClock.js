@@ -57,8 +57,12 @@ export function observeServerClockSnapshot(snapshot, received = performance.now(
     simMono: snapshot.tMono }, received);
 }
 
+function acknowledgeLatency(_data, ack) { if (typeof ack === 'function') ack(); }
+
 export function startServerClockSync(socket) {
+  socketRef?.off?.('game:latency', acknowledgeLatency);
   socketRef = socket;
+  socketRef?.on?.('game:latency', acknowledgeLatency);
   clearInterval(steadyTimer);
   steadyTimer = setInterval(ping, STEADY_INTERVAL_MS);
   if (serverClock.epoch) startBurst();
@@ -74,6 +78,7 @@ export function stopServerClockSync() {
   clearInterval(steadyTimer);
   steadyTimer = null;
   clearBurst();
+  socketRef?.off?.('game:latency', acknowledgeLatency);
   socketRef = null;
 }
 

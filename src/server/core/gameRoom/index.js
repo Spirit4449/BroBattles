@@ -330,8 +330,8 @@ class GameRoom {
       if (!Number.isFinite(playerData.x) || !Number.isFinite(playerData.y)) {
         Object.assign(playerData, this.spawnStateFor(playerData), { flip: false });
       }
-      inputManager.resetMovementBudget(playerData);
       inputManager.updateBodyGeometry(playerData, this);
+      inputManager.resetMovementBudget(playerData);
       this.players.set(socket.id, playerData);
       this._ensureRewardBucket(playerData);
     } else if (playerData.socketId === socket.id) {
@@ -358,8 +358,8 @@ class GameRoom {
       if (!Number.isFinite(playerData.x) || !Number.isFinite(playerData.y)) {
         Object.assign(playerData, this.spawnStateFor(playerData), { flip: false });
       }
-      inputManager.resetMovementBudget(playerData);
       inputManager.updateBodyGeometry(playerData, this);
+      inputManager.resetMovementBudget(playerData);
       this.players.set(socket.id, playerData);
       this._ensureRewardBucket(playerData);
       this.io.to(gameRoom).emit("player:reconnected", {
@@ -1187,11 +1187,11 @@ class GameRoom {
       playerData.health = Math.max(1, Number(playerData.maxHealth) || 1);
       playerData.x = nextX;
       playerData.y = nextY;
-      inputManager.resetMovementBudget(playerData, now);
+      playerData.ducking = false;
       inputManager.updateBodyGeometry(playerData, this);
+      inputManager.resetMovementBudget(playerData, now);
       playerData.vx = 0;
       playerData.vy = 0;
-      playerData.ducking = false;
       playerData.wallSliding = false;
       playerData.wallSide = null;
       playerData.lastDamagedAt = 0;

@@ -93,8 +93,8 @@ function initializeSpawnPositions(room) {
     if (spawn) {
       Object.assign(p, spawn, { vx: 0, vy: 0, grounded: true, flip: false });
     }
-    inputManager.resetMovementBudget(p);
     inputManager.updateBodyGeometry(p, room);
+    inputManager.resetMovementBudget(p);
     p.loaded =
       p.loaded === true ||
       (p._sceneReady === true && Number.isFinite(p.x) && Number.isFinite(p.y));

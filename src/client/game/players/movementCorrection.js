@@ -35,7 +35,7 @@ function createMovementCorrector({ now = () => Date.now() } = {}) {
   let pendingY = 0;
   const stats = {
     received: 0, applied: 0, ignoredStale: 0, unacknowledgedWhileDead: 0,
-    budget: 0, collision: 0, smoothed: 0, snapped: 0,
+    budget: 0, collision: 0, idle: 0, smoothed: 0, snapped: 0,
     lastPx: 0, maxPx: 0, totalPx: 0, history: [],
   };
 
@@ -78,6 +78,24 @@ function createMovementCorrector({ now = () => Date.now() } = {}) {
       return false;
     }
 
+    if (correction.reason === 'idle') {
+      // This is a handoff from server simulation, not an error in a client path.
+      // Discard pre-handoff blending and motion, including a suspended dash.
+      clear();
+      body.reset(correction.x, correction.y);
+      body.setVelocity(Number.isFinite(correction.vx) ? correction.vx : 0,
+        Number.isFinite(correction.vy) ? correction.vy : 0);
+      body.setAcceleration(0, 0);
+      for (const flags of [body.blocked, body.touching]) {
+        if (!flags) continue;
+        flags.left = flags.right = flags.up = false;
+        flags.down = correction.grounded === true;
+        flags.none = !flags.down;
+      }
+      stats.idle++; stats.applied++;
+      note({ id, sequence: correction.sequence, reason: 'idle', mode: 'handoff' });
+      return true;
+    }
     const collision = correction.reason === 'collision';
     stats[collision ? 'collision' : 'budget'] += 1;
     // Unknown sequences (older servers or evicted history) fall back to the

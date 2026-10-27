@@ -7,14 +7,14 @@ const { circleAabbOverlap, attackCollisionCenter: getAttackCollisionCenter } = r
 function getPlayerBounds(target, at = target) {
   const halfH = Math.max(
     8,
-    Number(target?._bodyHalfHeight) || DEFAULT_TARGET_HALF_HEIGHT,
+    Number(at?._bodyHalfHeight ?? target?._bodyHalfHeight) || DEFAULT_TARGET_HALF_HEIGHT,
   );
   const halfW = Math.max(
     4,
-    Number(target?._bodyHalfWidth) || DEFAULT_TARGET_HALF_WIDTH,
+    Number(at?._bodyHalfWidth ?? target?._bodyHalfWidth) || DEFAULT_TARGET_HALF_WIDTH,
   );
-  const centerX = Number(at.x) + (Number(target?._bodyCenterOffsetX) || 0);
-  const centerY = Number(at.y) + (Number(target?._bodyCenterOffsetY) || 0);
+  const centerX = Number(at.x) + (Number(at?._bodyCenterOffsetX ?? target?._bodyCenterOffsetX) || 0);
+  const centerY = Number(at.y) + (Number(at?._bodyCenterOffsetY ?? target?._bodyCenterOffsetY) || 0);
   return {
     left: centerX - halfW,
     right: centerX + halfW,
