@@ -43,20 +43,40 @@ body #battle-keybind-hud .controls-dash-row kbd {
   padding: 5px 8px;
   text-transform: uppercase;
 }
-/* Share sizing and safe-area gutters across the independently mounted HUD
-   elements. Keep translate separate from the entrance animation's transform. */
+/* All top HUD items share tracks, including mode-specific vaults and notices.
+   The grouping nodes use display: contents so their existing visibility
+   lifecycle still hides their children without taking them out of the grid. */
 body[data-bb-screen="game"] {
   --battle-hud-edge: max(12px, env(safe-area-inset-left), env(safe-area-inset-right));
   --battle-hud-top: calc(14px + env(safe-area-inset-top));
   --battle-timer-width: 142px;
   --battle-player-width: clamp(38px, 4vw, 54px);
 }
-body[data-bb-screen="game"] #game-timer-hud {
+body[data-bb-screen="game"] #battle-top-hud {
+  position: fixed;
   top: var(--battle-hud-top);
+  left: calc(var(--battle-hud-edge) + 88px);
+  right: calc(var(--battle-hud-edge) + 88px);
+  z-index: 9998;
+  max-width: 1320px;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: minmax(170px, 240px) minmax(0, 1fr) var(--battle-timer-width) minmax(0, 1fr) minmax(170px, 240px);
+  align-items: start;
+  gap: 14px;
+  pointer-events: none;
+}
+body[data-bb-screen="game"] #battle-top-hud :is(#team-status-hud, #bank-bust-hud) {
+  display: contents;
+}
+body[data-bb-screen="game"] #battle-top-hud #game-timer-hud {
+  position: static;
+  grid-column: 3;
+  grid-row: 1;
   width: var(--battle-timer-width);
   min-width: 0;
   padding: 7px 8px 8px;
-  translate: -50% 0;
+  translate: none;
   transform: none;
 }
 body[data-bb-screen="game"] #game-timer-hud.hud-intro-enter {
@@ -90,33 +110,31 @@ body[data-bb-screen="game"] .bb-chat-game-wrap {
   left: var(--battle-hud-edge);
   width: min(360px, calc(100vw - 2 * var(--battle-hud-edge)));
 }
-body[data-bb-screen="game"] #team-status-hud {
-  top: var(--battle-hud-top);
-  left: 50%;
-  right: auto;
-  width: min(720px, calc(100vw - 2 * var(--battle-hud-edge) - 180px));
-  translate: -50% 0;
-  transform: none;
-  align-items: flex-start;
-}
-body[data-bb-screen="game"] #team-status-hud.hud-intro-enter {
-  transform: translateY(-28px);
-}
-body[data-bb-screen="game"] #team-status-hud.hud-intro-enter.in {
-  transform: translateY(0);
-}
 body[data-bb-screen="game"] #team-status-hud .team-hud-side {
-  width: calc((100% - var(--battle-timer-width) - 32px) / 2);
+  width: auto;
+  min-width: 0;
   flex-direction: row;
+  grid-row: 1;
   gap: 0;
+  transition: opacity 380ms ease, transform 380ms ease;
 }
 body[data-bb-screen="game"] #team-status-hud .team-hud-side-left {
+  grid-column: 2;
   justify-content: flex-end;
 }
 body[data-bb-screen="game"] #team-status-hud .team-hud-side-right {
+  grid-column: 4;
   justify-content: flex-start;
   align-items: flex-start;
   margin-right: 0;
+}
+body[data-bb-screen="game"] #team-status-hud.hud-intro-enter .team-hud-side {
+  opacity: 0;
+  transform: translateY(-28px);
+}
+body[data-bb-screen="game"] #team-status-hud.hud-intro-enter.in .team-hud-side {
+  opacity: 1;
+  transform: translateY(0);
 }
 body[data-bb-screen="game"] #team-status-hud .team-hud-player-stack {
   flex-direction: row;
@@ -146,37 +164,112 @@ body[data-bb-screen="game"] #team-status-hud .team-hud-player-name {
   max-width: 100%;
   font-size: 5px;
 }
-/* Put both teams below the clock on phones and small windows. This also
-   avoids the mobile transform overrides shifting the clock off center. */
-@media (max-width: 799px) {
-  body[data-bb-screen="game"] {
-    --battle-player-width: clamp(32px, 6vw, 42px);
-  }
-  body[data-bb-screen="game"] #team-status-hud {
-    top: calc(var(--battle-hud-top) + 62px);
-    width: calc(100vw - 2 * var(--battle-hud-edge));
-  }
-  body[data-bb-screen="game"] #team-status-hud .team-hud-side {
-    width: calc((100% - 24px) / 2);
-  }
-  body[data-bb-screen="game"] #team-status-hud .team-hud-side-left {
-    justify-content: flex-start;
-  }
-  body[data-bb-screen="game"] #team-status-hud .team-hud-side-right {
-    justify-content: flex-end;
-  }
-  body[data-bb-screen="game"] #team-status-hud .team-hud-player-stack {
-    gap: 6px;
-  }
+body[data-bb-screen="game"] #battle-top-hud .bank-bust-vault {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  grid-row: 1;
 }
-@media (max-width: 479px) {
-  body[data-bb-screen="game"] { --battle-timer-width: 118px; }
-  body[data-bb-screen="game"] #game-timer-hud .timer-display {
-    font-size: 18px;
+body[data-bb-screen="game"] #bank-bust-team1 { grid-column: 1; }
+body[data-bb-screen="game"] #bank-bust-team2 { grid-column: 5; }
+body[data-bb-screen="game"] #battle-top-hud :is(#bank-bust-event, #bank-bust-alert) {
+  position: static;
+  grid-column: 1 / -1;
+  justify-self: center;
+  box-sizing: border-box;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.6;
+  translate: none;
+  transform: translateY(-14px);
+}
+body[data-bb-screen="game"] #battle-top-hud :is(#bank-bust-event, #bank-bust-alert).show {
+  transform: translateY(0);
+}
+/* Without vaults the rosters and clock fill the same shared row. */
+body[data-bb-screen="game"] #battle-top-hud:has(#bank-bust-hud.hidden) {
+  grid-template-columns: minmax(0, 1fr) var(--battle-timer-width) minmax(0, 1fr);
+}
+body[data-bb-screen="game"] #battle-top-hud:has(#bank-bust-hud.hidden) #game-timer-hud { grid-column: 2; }
+body[data-bb-screen="game"] #battle-top-hud:has(#bank-bust-hud.hidden) .team-hud-side-left { grid-column: 1; }
+body[data-bb-screen="game"] #battle-top-hud:has(#bank-bust-hud.hidden) .team-hud-side-right { grid-column: 3; }
+/* Compact the vaults before changing rows: preserve the number and let the
+   bar use the full panel width instead of squeezing beside it. */
+@media (max-width: 1199px) {
+  body[data-bb-screen="game"] {
+    --battle-timer-width: 100px;
+    --battle-player-width: clamp(28px, 4vw, 42px);
   }
-  body[data-bb-screen="game"] #game-timer-hud .timer-label {
-    font-size: 5px;
+  body[data-bb-screen="game"] #battle-top-hud {
+    grid-template-columns: clamp(88px, 12vw, 160px) minmax(0, 1fr) var(--battle-timer-width) minmax(0, 1fr) clamp(88px, 12vw, 160px);
+    gap: 8px;
   }
+  body[data-bb-screen="game"] #team-status-hud .team-hud-player-stack { gap: 4px; }
+  body[data-bb-screen="game"] #game-timer-hud .timer-display { font-size: 18px; }
+  body[data-bb-screen="game"] #game-timer-hud .timer-label { font-size: 5px; }
+  body[data-bb-screen="game"] #battle-top-hud .bank-bust-vault {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px 3px;
+    padding: 6px;
+  }
+  body[data-bb-screen="game"] .bank-bust-vault-top,
+  body[data-bb-screen="game"] .bank-bust-vault-bar-row { display: contents; }
+  body[data-bb-screen="game"] .bank-bust-vault-label {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--bb-text);
+  }
+  body[data-bb-screen="game"] .bank-bust-vault-coins {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    min-width: 0;
+    font-size: 8px;
+  }
+  body[data-bb-screen="game"] .bank-bust-vault-bar {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    height: 8px;
+    min-width: 0;
+  }
+  body[data-bb-screen="game"] .bank-bust-vault-delta {
+    position: absolute;
+    top: calc(100% + 3px);
+    right: 0;
+    font-size: 7px;
+  }
+  body[data-bb-screen="game"] .bank-bust-coin-icon { display: none; }
+}
+@media (max-width: 599px) {
+  body[data-bb-screen="game"] {
+    --battle-player-width: clamp(28px, 8vw, 42px);
+    --battle-timer-width: 90px;
+  }
+  body[data-bb-screen="game"] #battle-top-hud,
+  body[data-bb-screen="game"] #battle-top-hud:has(#bank-bust-hud.hidden) {
+    left: var(--battle-hud-edge);
+    right: var(--battle-hud-edge);
+    /* Leave the top corners for chat/settings; the compact HUD follows. */
+    top: calc(var(--battle-hud-top) + 48px);
+    grid-template-columns: minmax(0, 1fr) var(--battle-timer-width) minmax(0, 1fr);
+    gap: 12px 8px;
+  }
+  body[data-bb-screen="game"] #battle-top-hud #game-timer-hud,
+  body[data-bb-screen="game"] #battle-top-hud:has(#bank-bust-hud.hidden) #game-timer-hud {
+    grid-column: 2;
+    justify-self: center;
+  }
+  body[data-bb-screen="game"] #bank-bust-team1 { grid-column: 1; }
+  body[data-bb-screen="game"] #bank-bust-team2 { grid-column: 3; }
+  body[data-bb-screen="game"] #battle-top-hud #team-status-hud .team-hud-side { grid-row: 2; }
+  body[data-bb-screen="game"] #battle-top-hud #team-status-hud .team-hud-side-left { grid-column: 1; justify-content: flex-start; }
+  body[data-bb-screen="game"] #battle-top-hud #team-status-hud .team-hud-side-right { grid-column: 3; justify-content: flex-end; }
 }
 body #team-status-hud .team-hud-avatar-ring {
   border-radius: 0;

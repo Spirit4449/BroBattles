@@ -9,21 +9,43 @@ const {
   RANDOM_GOLD_PICKUP_VALUE,
   RANDOM_GOLD_PICKUP_RADIUS,
   RANDOM_GOLD_SPAWN_INTERVAL_MS,
+  RANDOM_GOLD_ARRIVE_MS,
+  RANDOM_GOLD_CLAIMABLE_MS,
+  COIN_EVENT_SNAPSHOT_LIMIT,
+  CENTER_GOLD_FIRST_SPAWN_MS,
+  CENTER_GOLD_INTERVAL_MS,
+  CENTER_GOLD_ANNOUNCE_LEAD_MS,
+  CENTER_GOLD_LIFETIME_MS,
+  CENTER_GOLD_SPILL_PILES,
+  CENTER_GOLD_SPILL_SPACING,
+  CENTER_GOLD_SPILL_LIFT,
   createBankBustObjects,
   createRandomGoldState,
+  createCenterGoldState,
   serializeModeObject,
   serializeRandomGoldPickup,
-  expireCollectionEvents,
+  expireCoinEvents,
 } = require("./state");
 
-// Match rules (vault HP, clock, respawn) live in gameModes.catalog.json under
-// the "bank-bust" mode's `settings`; these defaults read from that same entry
-// so a room built without a descriptor still matches the catalog.
+// Match rules live in gameModes.catalog.json under the "bank-bust" mode's
+// `settings`; these defaults read from that same entry so a room built without
+// a descriptor still matches the catalog.
 const CATALOG_SETTINGS = getModeById("bank-bust")?.settings || {};
-const DEFAULT_VAULT_MAX_HEALTH = CATALOG_SETTINGS.vaultMaxHp;
+const DEFAULT_VAULT_STARTING_COINS = CATALOG_SETTINGS.vaultStartingCoins;
+// A death-drop coin is worth 1 to the player's wallet, but the vault runs on the
+// same scale as combat damage, so banking one is worth this many vault coins.
+const DEFAULT_DEATH_DROP_VAULT_COINS = CATALOG_SETTINGS.deathDropVaultCoins;
+// A purchase may never take a vault below this, so a team cannot buy itself
+// into a loss.
+const DEFAULT_PURCHASE_FLOOR_COINS = CATALOG_SETTINGS.purchaseFloorCoins;
+const DEFAULT_LOW_COINS_RATIO = CATALOG_SETTINGS.lowCoinsRatio;
 const DEFAULT_MATCH_DURATION_MS = CATALOG_SETTINGS.matchDurationMs;
 const DEFAULT_RESPAWN_DELAY_MS = CATALOG_SETTINGS.respawnDelayMs;
 const DEFAULT_RESPAWN_SHIELD_MS = CATALOG_SETTINGS.respawnShieldMs;
+// How long the match runs on after a vault is emptied. The bust is drawn from
+// the snapshot that shows the vault at zero, and finishing on the killing blow
+// stopped the loop before that snapshot was ever sent.
+const VAULT_BUST_FINISH_DELAY_MS = 1800;
 // Vault-under-attack alerts stay in the snapshot this long.
 const ALERT_RETENTION_MS = 2200;
 // Vault turret bullets: hit radius (px) and max flight time.
@@ -33,15 +55,19 @@ const TURRET_PROJECTILE_MAX_LIFETIME_MS = 2200;
 function buildVaultState(
   team,
   layoutVault = null,
-  maxHealth = DEFAULT_VAULT_MAX_HEALTH,
+  startingCoins = DEFAULT_VAULT_STARTING_COINS,
 ) {
+  const start = Math.max(1, Math.round(Number(startingCoins) || 0));
   return {
     team,
     label:
       String(layoutVault?.label || "").trim() ||
       (team === "team1" ? "Blue Vault" : "Red Vault"),
-    maxHealth,
-    health: maxHealth,
+    // The one value this mode is about.
+    coins: start,
+    // Only a reference for the bar and the low-coins warning; it is never a
+    // cap and never a second pool.
+    startingCoins: start,
     destroyedAt: null,
     x: Number(layoutVault?.x) || 0,
     y: Number(layoutVault?.y) || 0,
@@ -131,9 +157,20 @@ function segmentIntersectsExpandedRect(
 class BankBustGameMode extends BaseGameMode {
   getSettings() {
     return {
-      vaultMaxHp:
-        Number(this.descriptor?.settings?.vaultMaxHp) ||
-        DEFAULT_VAULT_MAX_HEALTH,
+      vaultStartingCoins:
+        Number(this.descriptor?.settings?.vaultStartingCoins) ||
+        DEFAULT_VAULT_STARTING_COINS,
+      deathDropVaultCoins:
+        Number(this.descriptor?.settings?.deathDropVaultCoins) ||
+        DEFAULT_DEATH_DROP_VAULT_COINS,
+      purchaseFloorCoins: Math.max(
+        0,
+        Number(this.descriptor?.settings?.purchaseFloorCoins) ??
+          DEFAULT_PURCHASE_FLOOR_COINS,
+      ),
+      lowCoinsRatio:
+        Number(this.descriptor?.settings?.lowCoinsRatio) ||
+        DEFAULT_LOW_COINS_RATIO,
       matchDurationMs:
         Number(this.descriptor?.settings?.matchDurationMs) ||
         DEFAULT_MATCH_DURATION_MS,
@@ -169,22 +206,25 @@ class BankBustGameMode extends BaseGameMode {
       matchDurationMs: settings.matchDurationMs,
       respawnDelayMs: settings.respawnDelayMs,
       respawnShieldMs: settings.respawnShieldMs,
-      teamGold: { team1: 0, team2: 0 },
+      purchaseFloorCoins: settings.purchaseFloorCoins,
+      lowCoinsRatio: settings.lowCoinsRatio,
       objects: createBankBustObjects(layout),
       randomGold: createRandomGoldState(layout),
-      collectionEvents: [],
+      centerGold: createCenterGoldState(layout),
+      // One ledger for every coin movement in the match, in both directions.
+      coinEvents: [],
       turretProjectiles: [],
       lastProjectileTickAt: Date.now(),
       vaults: {
         team1: buildVaultState(
           "team1",
           layout?.vaults?.team1,
-          settings.vaultMaxHp,
+          settings.vaultStartingCoins,
         ),
         team2: buildVaultState(
           "team2",
           layout?.vaults?.team2,
-          settings.vaultMaxHp,
+          settings.vaultStartingCoins,
         ),
       },
       lastVaultDamageEvent: null,
@@ -200,6 +240,12 @@ class BankBustGameMode extends BaseGameMode {
     state.startedAt = now;
     state.endsAt = now + this.getMatchDurationMs();
     state.randomGold.nextSpawnAt = now + RANDOM_GOLD_SPAWN_INTERVAL_MS;
+    if (state.centerGold?.enabled) {
+      const spawnAt = now + CENTER_GOLD_FIRST_SPAWN_MS;
+      state.centerGold.spawnAt = spawnAt;
+      state.centerGold.announceAt = spawnAt - CENTER_GOLD_ANNOUNCE_LEAD_MS;
+      state.centerGold.phase = "scheduled";
+    }
   }
 
   getRespawnPlan(playerData) {
@@ -219,6 +265,27 @@ class BankBustGameMode extends BaseGameMode {
         ? { x: Number(respawn.x) || 0, y: Number(respawn.y) || 0 }
         : null,
     };
+  }
+
+  // Built walls stop the other team's shots. The builder's own team shoots
+  // through them, just as it walks through them.
+  getShotBlockers(shooterTeam) {
+    const blockers = [];
+    for (const entry of this.getModeState()?.objects || []) {
+      const owner = entry?.type === "wallSlot" ? entry.state?.builtByTeam : null;
+      if (!owner || owner === shooterTeam) continue;
+      const halfW = (Number(entry.state.width) || 48) / 2;
+      const halfH = (Number(entry.state.height) || 96) / 2;
+      blockers.push({
+        id: entry.id,
+        left: entry.x - halfW,
+        right: entry.x + halfW,
+        top: entry.y - halfH,
+        bottom: entry.y + halfH,
+        collision: { up: true, down: true, left: true, right: true },
+      });
+    }
+    return blockers;
   }
 
   getVaultState(targetTeam) {
@@ -249,35 +316,75 @@ class BankBustGameMode extends BaseGameMode {
     };
   }
 
-  addTeamGold(team, amount, meta = {}) {
-    const state = this.getModeState();
-    if (!state?.teamGold?.[team]) state.teamGold[team] = 0;
-    const gold = Math.max(0, Number(amount) || 0);
-    if (gold <= 0 || (team !== "team1" && team !== "team2")) return 0;
-    state.teamGold[team] =
-      Math.max(0, Number(state.teamGold[team]) || 0) + gold;
-    state.collectionEvents = Array.isArray(state.collectionEvents)
-      ? state.collectionEvents
-      : [];
-    state.collectionEvents.push({
-      type: meta?.type || "gold",
-      team,
-      amount: gold,
-      source: meta?.source || null,
-      collectedBy: meta?.collectedBy || null,
-      at: Date.now(),
-    });
-    return gold;
+  getVaultCoins(team) {
+    return Math.max(0, Number(this.getVaultState(team)?.coins) || 0);
   }
 
-  spendTeamGold(team, amount) {
+  // Every coin movement in the mode goes through here: pickups, mine hauls,
+  // death drops, centre gold, enemy damage and purchases. It owns the number,
+  // clamps it and writes the ledger entry the client renders from.
+  applyVaultCoins(team, delta, meta = {}) {
     const state = this.getModeState();
-    const gold = Math.max(0, Number(amount) || 0);
-    if (gold <= 0 || (team !== "team1" && team !== "team2")) return false;
-    const current = Math.max(0, Number(state?.teamGold?.[team]) || 0);
-    if (current < gold) return false;
-    state.teamGold[team] = current - gold;
-    return true;
+    const vault = this.getVaultState(team);
+    const change = Math.round(Number(delta) || 0);
+    if (!state || !vault || !change) return null;
+    if (team !== "team1" && team !== "team2") return null;
+    // Once a vault is gone the result is settled, including while the bust
+    // plays out: nothing can bank coins or empty the winner's vault as well.
+    if (vault.destroyedAt || state.phase === "finished") return null;
+
+    const before = Math.max(0, Number(vault.coins) || 0);
+    const after = Math.max(0, before + change);
+    const applied = after - before;
+    if (!applied) return null;
+
+    const now = Number(meta?.at) || Date.now();
+    vault.coins = after;
+    if (after === 0 && !vault.destroyedAt) {
+      vault.destroyedAt = now;
+      state.phase = "finished";
+    }
+
+    state.coinEvents = Array.isArray(state.coinEvents) ? state.coinEvents : [];
+    state.coinEvents.push({
+      // Why the number moved, so the client can pick the right feedback.
+      reason: String(meta?.reason || (applied > 0 ? "gain" : "loss")),
+      team,
+      delta: applied,
+      coins: after,
+      source: meta?.source || null,
+      actor: meta?.actor || null,
+      actorTeam: meta?.actorTeam || null,
+      x: Number.isFinite(Number(meta?.x)) ? Number(meta.x) : null,
+      y: Number.isFinite(Number(meta?.y)) ? Number(meta.y) : null,
+      at: now,
+    });
+    return { before, after, applied, vault };
+  }
+
+  // Purchases are paid out of the vault, but never far enough to hand the
+  // other team a win: the floor is the last thing a team can spend down to.
+  canAffordPurchase(team, cost) {
+    const state = this.getModeState(), vault = this.getVaultState(team);
+    const amount = Number(cost);
+    if (!vault || vault.destroyedAt || state?.phase === "finished" || !Number.isFinite(amount) || amount < 0) return false;
+    const price = Math.round(amount);
+    const configuredFloor = Number(state?.purchaseFloorCoins);
+    const floor = Number.isFinite(configuredFloor) ? Math.max(0, configuredFloor) : DEFAULT_PURCHASE_FLOOR_COINS;
+    const remaining = this.getVaultCoins(team) - price;
+    // Even a map configured with a zero purchase floor cannot buy a loss.
+    return remaining > 0 && remaining >= floor;
+  }
+
+  spendVaultCoins(team, cost, meta = {}) {
+    const price = Math.max(0, Math.round(Number(cost) || 0));
+    if (team !== "team1" && team !== "team2") return false;
+    if (!this.canAffordPurchase(team, price)) return false;
+    if (price === 0) return true;
+    return !!this.applyVaultCoins(team, -price, {
+      ...meta,
+      reason: meta?.reason || "purchase",
+    });
   }
 
   _findNearestInteractable(playerData) {
@@ -307,8 +414,20 @@ class BankBustGameMode extends BaseGameMode {
     if (!target) return { handled: true, shouldBroadcastSnapshot: false };
 
     if (target.type === "claimableTurret") {
+      if (target?.state?.claimedByTeam === playerData.team) {
+        return { handled: true, shouldBroadcastSnapshot: false };
+      }
       const cost = Math.max(0, Number(target?.state?.claimCost) || 0);
-      if (!this.spendTeamGold(playerData.team, cost)) {
+      if (
+        !this.spendVaultCoins(playerData.team, cost, {
+          reason: "purchase-turret",
+          source: target.id,
+          actor: playerData.name,
+          actorTeam: playerData.team,
+          x: target.x,
+          y: target.y,
+        })
+      ) {
         return { handled: true, shouldBroadcastSnapshot: false };
       }
       target.state.claimedByTeam = playerData.team;
@@ -323,7 +442,16 @@ class BankBustGameMode extends BaseGameMode {
         return { handled: true, shouldBroadcastSnapshot: false };
       }
       const cost = Math.max(0, Number(target?.state?.cost) || 0);
-      if (!this.spendTeamGold(playerData.team, cost)) {
+      if (
+        !this.spendVaultCoins(playerData.team, cost, {
+          reason: "purchase-wall",
+          source: target.id,
+          actor: playerData.name,
+          actorTeam: playerData.team,
+          x: target.x,
+          y: target.y,
+        })
+      ) {
         return { handled: true, shouldBroadcastSnapshot: false };
       }
       target.state.builtByTeam = playerData.team;
@@ -345,17 +473,126 @@ class BankBustGameMode extends BaseGameMode {
           (alert) => now - (Number(alert?.at) || 0) <= ALERT_RETENTION_MS,
         )
       : [];
-    state.collectionEvents = expireCollectionEvents(
-      state.collectionEvents,
-      now,
-    );
+    state.coinEvents = expireCoinEvents(state.coinEvents, now);
 
     this._tickGoldMines(now);
     this._tickRandomGold(now);
+    this._tickCenterGold(now);
     this._collectMineGold(now);
     this._collectRandomGold(now);
     this._tickTurretProjectiles(now);
     this._tickClaimedTurrets(now);
+  }
+
+  // The contested centre crate. It runs on a fixed announce -> spawn -> expire
+  // cycle at one visible spot, so both teams can commit to the fight in advance
+  // and no single drop decides the match.
+  _tickCenterGold(now) {
+    const state = this.getModeState();
+    const site = state?.centerGold;
+    if (!site?.enabled) return;
+
+    if (site.phase === "scheduled" && now >= Number(site.announceAt || 0)) {
+      site.phase = "announced";
+    }
+
+    if (
+      (site.phase === "scheduled" || site.phase === "announced") &&
+      now >= Number(site.spawnAt || 0)
+    ) {
+      site.phase = "active";
+      site.round = (Number(site.round) || 0) + 1;
+      site.expiresAt = now + CENTER_GOLD_LIFETIME_MS;
+      site.health = site.maxHealth;
+      site.lastHit = null;
+    }
+
+    if (site.phase === "active" && now >= Number(site.expiresAt || 0)) {
+      this._resolveCenterGold(now, "expired");
+    }
+  }
+
+  // The crate while it can be hit, or null. Attack runtimes test this exactly
+  // as they test a vault; either team may damage it.
+  getCenterCrate() {
+    const site = this.getModeState()?.centerGold;
+    if (!site?.enabled || site.phase !== "active" || !(site.health > 0)) return null;
+    return site;
+  }
+
+  damageCenterCrate(rawDamage, meta = {}) {
+    const site = this.getCenterCrate();
+    const damage = Math.max(0, Math.round(Number(rawDamage) || 0));
+    if (!site || damage <= 0) return 0;
+    const now = Number(meta?.at) || Date.now();
+    const applied = Math.min(site.health, damage);
+    site.health -= applied;
+    // Where the blow came from, so the crate can rock away from it.
+    site.lastHit = {
+      at: now,
+      x: Number.isFinite(Number(meta?.x)) ? Number(meta.x) : site.x,
+      damage: applied,
+      team: meta?.sourceTeam || null,
+    };
+    if (site.health <= 0) {
+      site.lastBreak = {
+        team: meta?.sourceTeam || null,
+        player: meta?.sourcePlayer || null,
+        round: site.round,
+        at: now,
+      };
+      this._spillCenterCrate(site, now);
+      this._resolveCenterGold(now, "broken");
+    }
+    return applied;
+  }
+
+  _spillCenterCrate(site, now) {
+    const randomGold = this.getModeState()?.randomGold;
+    if (!randomGold) return;
+    if (!Array.isArray(randomGold.pickups)) randomGold.pickups = [];
+    const piles = CENTER_GOLD_SPILL_PILES;
+    const floorY = site.y + site.height / 2;
+    const value = Math.floor(site.reward / piles);
+    for (let i = 0; i < piles; i++) {
+      randomGold.pickups.push({
+        id: `center-gold-${site.round}-${i}`,
+        x: site.x + (i - (piles - 1) / 2) * CENTER_GOLD_SPILL_SPACING,
+        y: floorY - CENTER_GOLD_SPILL_LIFT,
+        // Division leftovers go in the first pile, so the crate pays in full.
+        value: i === 0 ? site.reward - value * (piles - 1) : value,
+        radius: RANDOM_GOLD_PICKUP_RADIUS,
+        spawnedAt: now,
+        arrivalMs: RANDOM_GOLD_ARRIVE_MS,
+        claimableMs: RANDOM_GOLD_CLAIMABLE_MS,
+        reason: "centerGold",
+        fromX: site.x,
+        fromY: site.y,
+      });
+    }
+  }
+
+  _resolveCenterGold(now, outcome) {
+    const state = this.getModeState();
+    const site = state?.centerGold;
+    if (!site) return;
+    site.phase = "cooldown";
+    site.lastResolvedAt = now;
+    site.lastOutcome = outcome;
+    site.expiresAt = null;
+    site.health = 0;
+    const nextSpawnAt = now + CENTER_GOLD_INTERVAL_MS;
+    const matchEndsAt = Number(state?.endsAt) || 0;
+    // Do not schedule a drop that cannot be reached before the clock runs out.
+    if (matchEndsAt && nextSpawnAt + 4000 >= matchEndsAt) {
+      site.phase = "done";
+      site.spawnAt = null;
+      site.announceAt = null;
+      return;
+    }
+    site.spawnAt = nextSpawnAt;
+    site.announceAt = nextSpawnAt - CENTER_GOLD_ANNOUNCE_LEAD_MS;
+    site.phase = "scheduled";
   }
 
   _tickClaimedTurrets(now) {
@@ -452,9 +689,9 @@ class BankBustGameMode extends BaseGameMode {
       if (expired) continue;
 
       const hitWall = builtWalls.some((wall) => {
-        const width = Number(wall?.state?.width) || Number(wall?.width) || 120;
+        const width = Number(wall?.state?.width) || Number(wall?.width) || 48;
         const height =
-          Number(wall?.state?.height) || Number(wall?.height) || 46;
+          Number(wall?.state?.height) || Number(wall?.height) || 96;
         return segmentIntersectsExpandedRect(
           prevX,
           prevY,
@@ -559,6 +796,8 @@ class BankBustGameMode extends BaseGameMode {
       value: RANDOM_GOLD_PICKUP_VALUE,
       radius: RANDOM_GOLD_PICKUP_RADIUS,
       spawnedAt: now,
+      arrivalMs: RANDOM_GOLD_ARRIVE_MS,
+      claimableMs: RANDOM_GOLD_CLAIMABLE_MS,
     });
   }
 
@@ -585,10 +824,14 @@ class BankBustGameMode extends BaseGameMode {
         const dist = distance(player.x, player.y, entry.x, entry.y);
         if (dist > (Number(mine.collectionRadius) || 110)) continue;
         mine.storedGold = 0;
-        this.addTeamGold(player.team, storedGold, {
-          type: "goldMine",
+        this.applyVaultCoins(player.team, storedGold, {
+          reason: "mine",
           source: entry.id,
-          collectedBy: player.name,
+          actor: player.name,
+          actorTeam: player.team,
+          x: entry.x,
+          y: entry.y,
+          at: now,
         });
         break;
       }
@@ -602,7 +845,12 @@ class BankBustGameMode extends BaseGameMode {
     const players = this._eligiblePlayers();
     const remaining = [];
     for (const pickup of randomGold.pickups) {
-      if (now < Number(pickup.spawnedAt ?? 0) + PICKUP_DELAY_MS) {
+      // Collectable from the coin's first floor touch, while it still bounces.
+      const delay = Math.max(
+        PICKUP_DELAY_MS,
+        Number(pickup.claimableMs || pickup.arrivalMs) || 0,
+      );
+      if (now < Number(pickup.spawnedAt ?? 0) + delay) {
         remaining.push(pickup);
         continue;
       }
@@ -611,10 +859,14 @@ class BankBustGameMode extends BaseGameMode {
         const dist = distance(player.x, player.y, pickup.x, pickup.y);
         if (dist > (Number(pickup.radius) || RANDOM_GOLD_PICKUP_RADIUS))
           continue;
-        this.addTeamGold(player.team, pickup.value, {
-          type: "randomGold",
+        this.applyVaultCoins(player.team, pickup.value, {
+          reason: pickup.reason || "pickup",
           source: pickup.id,
-          collectedBy: player.name,
+          actor: player.name,
+          actorTeam: player.team,
+          x: pickup.x,
+          y: pickup.y,
+          at: now,
         });
         collected = true;
         break;
@@ -626,11 +878,14 @@ class BankBustGameMode extends BaseGameMode {
 
   onDeathDropCollected(playerData, drop) {
     if (!playerData || !drop || drop.type !== "coin") return null;
-    const amount = Math.max(1, Number(drop.value) || 1);
-    this.addTeamGold(playerData.team, amount, {
-      type: "deathDropCoin",
+    const amount = Math.max(1, Number(drop.value) || 1) * this.getSettings().deathDropVaultCoins;
+    this.applyVaultCoins(playerData.team, amount, {
+      reason: "deathDrop",
       source: drop.id,
-      collectedBy: playerData.name,
+      actor: playerData.name,
+      actorTeam: playerData.team,
+      x: Number(drop.x) || Number(playerData.x) || 0,
+      y: Number(drop.y) || Number(playerData.y) || 0,
     });
     return { suppressDefaultReward: true };
   }
@@ -641,23 +896,30 @@ class BankBustGameMode extends BaseGameMode {
     if (!state || !vaultState) return null;
 
     const damage = Math.max(0, Math.round(Number(rawDamage) || 0));
-    if (damage <= 0 || vaultState.health <= 0) return vaultState;
+    if (damage <= 0 || vaultState.coins <= 0) return vaultState;
 
+    // One point of damage is one coin: the vault is on the same scale as a
+    // player's health bar, so a 1200 hit takes 1200 either way.
     const now = Date.now();
-    vaultState.health = Math.max(0, vaultState.health - damage);
-    if (vaultState.health === 0 && !vaultState.destroyedAt) {
-      vaultState.destroyedAt = now;
-      state.phase = "finished";
-    }
+    const result = this.applyVaultCoins(targetTeam, -damage, {
+      reason: "enemyAttack",
+      source: meta?.attackType || null,
+      actor: meta?.sourcePlayer || null,
+      actorTeam: meta?.sourceTeam || null,
+      x: vaultState.x,
+      y: vaultState.y,
+      at: now,
+    });
+    if (!result) return vaultState;
 
     state.lastVaultDamageEvent = {
       type: "vault-under-attack",
       targetTeam,
       sourceTeam: meta?.sourceTeam || null,
       sourcePlayer: meta?.sourcePlayer || null,
-      damage,
-      health: vaultState.health,
-      maxHealth: vaultState.maxHealth,
+      coinsLost: -result.applied,
+      coins: vaultState.coins,
+      startingCoins: vaultState.startingCoins,
       at: now,
     };
 
@@ -680,7 +942,10 @@ class BankBustGameMode extends BaseGameMode {
     const team2Vault = state?.vaults?.team2;
     if (!team1Vault || !team2Vault) return null;
 
-    if (team1Vault.health <= 0 && team2Vault.health <= 0) {
+    const team1Empty = Math.max(0, Number(team1Vault.coins) || 0) <= 0;
+    const team2Empty = Math.max(0, Number(team2Vault.coins) || 0) <= 0;
+
+    if (team1Empty && team2Empty) {
       return {
         terminal: true,
         winnerTeam: null,
@@ -688,11 +953,11 @@ class BankBustGameMode extends BaseGameMode {
         meta: {
           outcome: "draw",
           destroyedObjectives: ["team1", "team2"],
-          finishDelayMs: 0,
+          finishDelayMs: VAULT_BUST_FINISH_DELAY_MS,
         },
       };
     }
-    if (team1Vault.health <= 0) {
+    if (team1Empty) {
       return {
         terminal: true,
         winnerTeam: "team2",
@@ -700,11 +965,11 @@ class BankBustGameMode extends BaseGameMode {
         meta: {
           outcome: "team2",
           destroyedObjective: "team1",
-          finishDelayMs: 0,
+          finishDelayMs: VAULT_BUST_FINISH_DELAY_MS,
         },
       };
     }
-    if (team2Vault.health <= 0) {
+    if (team2Empty) {
       return {
         terminal: true,
         winnerTeam: "team1",
@@ -712,7 +977,7 @@ class BankBustGameMode extends BaseGameMode {
         meta: {
           outcome: "team1",
           destroyedObjective: "team2",
-          finishDelayMs: 0,
+          finishDelayMs: VAULT_BUST_FINISH_DELAY_MS,
         },
       };
     }
@@ -737,34 +1002,85 @@ class BankBustGameMode extends BaseGameMode {
 
     state.phase = "finished";
 
-    if (team1Vault.health === team2Vault.health) {
+    // On the clock, the team with more coins still in its vault wins.
+    const team1Coins = Math.max(0, Number(team1Vault.coins) || 0);
+    const team2Coins = Math.max(0, Number(team2Vault.coins) || 0);
+
+    if (team1Coins === team2Coins) {
       return {
         terminal: true,
         winnerTeam: null,
         outcomeKey: "draw",
         meta: {
           timerExpired: true,
-          tiebreakReason: "equal-vault-health",
-          team1VaultHealth: team1Vault.health,
-          team2VaultHealth: team2Vault.health,
+          tiebreakReason: "equal-vault-coins",
+          team1VaultCoins: team1Coins,
+          team2VaultCoins: team2Coins,
           finishDelayMs: 0,
         },
       };
     }
 
-    const winnerTeam =
-      team1Vault.health < team2Vault.health ? "team2" : "team1";
+    const winnerTeam = team1Coins > team2Coins ? "team1" : "team2";
     return {
       terminal: true,
       winnerTeam,
       outcomeKey: winnerTeam,
       meta: {
         timerExpired: true,
-        tiebreakReason: "vault-health",
-        team1VaultHealth: team1Vault.health,
-        team2VaultHealth: team2Vault.health,
+        tiebreakReason: "vault-coins",
+        team1VaultCoins: team1Coins,
+        team2VaultCoins: team2Coins,
         finishDelayMs: 0,
       },
+    };
+  }
+
+  _serializeVault(team, layout, settings) {
+    const vault = this.getModeState()?.vaults?.[team] || null;
+    const layoutVault = layout?.vaults?.[team] || {};
+    const startingCoins = Math.max(
+      1,
+      Number(vault?.startingCoins) || settings.vaultStartingCoins,
+    );
+    return {
+      team,
+      coins: Math.max(0, Number(vault?.coins) ?? startingCoins),
+      startingCoins,
+      destroyedAt: vault?.destroyedAt || null,
+      x: vault?.x ?? (Number(layoutVault?.x) || 0),
+      y: vault?.y ?? (Number(layoutVault?.y) || 0),
+      width: vault?.width ?? (Number(layoutVault?.width) || 150),
+      height: vault?.height ?? (Number(layoutVault?.height) || 180),
+      radius: vault?.radius ?? (Number(layoutVault?.radius) || 90),
+      label:
+        vault?.label ||
+        layoutVault?.label ||
+        (team === "team1" ? "Blue Vault" : "Red Vault"),
+    };
+  }
+
+  _serializeCenterGold() {
+    const site = this.getModeState()?.centerGold || null;
+    if (!site?.enabled) return null;
+    return {
+      enabled: true,
+      phase: site.phase || "idle",
+      round: Number(site.round) || 0,
+      x: Number(site.x) || 0,
+      y: Number(site.y) || 0,
+      radius: Math.max(24, Number(site.radius) || 56),
+      width: Number(site.width) || 0,
+      height: Number(site.height) || 0,
+      reward: Math.max(1, Number(site.reward) || 0),
+      health: Math.max(0, Number(site.health) || 0),
+      maxHealth: Math.max(1, Number(site.maxHealth) || 1),
+      lastHit: site.lastHit || null,
+      announceAt: site.announceAt || null,
+      spawnAt: site.spawnAt || null,
+      expiresAt: site.expiresAt || null,
+      lastOutcome: site.lastOutcome || null,
+      lastBreak: site.lastBreak || null,
     };
   }
 
@@ -776,7 +1092,7 @@ class BankBustGameMode extends BaseGameMode {
       type: "bank-bust",
       topology: "team-vs-team",
       phase: state?.phase || "setup",
-      objectiveLabel: "Destroy the enemy vault",
+      objectiveLabel: "Drain the enemy vault",
       matchDurationMs:
         Number(state?.matchDurationMs) || settings.matchDurationMs,
       startedAt: state?.startedAt || null,
@@ -785,10 +1101,12 @@ class BankBustGameMode extends BaseGameMode {
       respawnDelayMs: Number(state?.respawnDelayMs) || settings.respawnDelayMs,
       respawnShieldMs:
         Number(state?.respawnShieldMs) || settings.respawnShieldMs,
-      teamGold: {
-        team1: Math.max(0, Number(state?.teamGold?.team1) || 0),
-        team2: Math.max(0, Number(state?.teamGold?.team2) || 0),
-      },
+      // The only spendable number in the mode is each vault's own coins.
+      purchaseFloorCoins: Math.max(
+        0,
+        Number(state?.purchaseFloorCoins) ?? settings.purchaseFloorCoins,
+      ),
+      lowCoinsRatio: Number(state?.lowCoinsRatio) || settings.lowCoinsRatio,
       objects: Array.isArray(state?.objects)
         ? state.objects.map((entry) => serializeModeObject(entry))
         : [],
@@ -822,44 +1140,13 @@ class BankBustGameMode extends BaseGameMode {
             lastUpdatedAt: Number(entry.lastUpdatedAt) || null,
           }))
         : [],
-      collectionEvents: Array.isArray(state?.collectionEvents)
-        ? state.collectionEvents.slice(-10)
+      coinEvents: Array.isArray(state?.coinEvents)
+        ? state.coinEvents.slice(-COIN_EVENT_SNAPSHOT_LIMIT)
         : [],
+      centerGold: this._serializeCenterGold(),
       vaults: {
-        team1: {
-          health: state?.vaults?.team1?.health ?? settings.vaultMaxHp,
-          maxHealth: state?.vaults?.team1?.maxHealth ?? settings.vaultMaxHp,
-          destroyedAt: state?.vaults?.team1?.destroyedAt || null,
-          x: state?.vaults?.team1?.x ?? (Number(layout?.vaults?.team1?.x) || 0),
-          y: state?.vaults?.team1?.y ?? (Number(layout?.vaults?.team1?.y) || 0),
-          width:
-            state?.vaults?.team1?.width ??
-            (Number(layout?.vaults?.team1?.width) || 150),
-          height:
-            state?.vaults?.team1?.height ??
-            (Number(layout?.vaults?.team1?.height) || 180),
-          radius:
-            state?.vaults?.team1?.radius ??
-            (Number(layout?.vaults?.team1?.radius) || 90),
-          label: state?.vaults?.team1?.label || "Blue Vault",
-        },
-        team2: {
-          health: state?.vaults?.team2?.health ?? settings.vaultMaxHp,
-          maxHealth: state?.vaults?.team2?.maxHealth ?? settings.vaultMaxHp,
-          destroyedAt: state?.vaults?.team2?.destroyedAt || null,
-          x: state?.vaults?.team2?.x ?? (Number(layout?.vaults?.team2?.x) || 0),
-          y: state?.vaults?.team2?.y ?? (Number(layout?.vaults?.team2?.y) || 0),
-          width:
-            state?.vaults?.team2?.width ??
-            (Number(layout?.vaults?.team2?.width) || 150),
-          height:
-            state?.vaults?.team2?.height ??
-            (Number(layout?.vaults?.team2?.height) || 180),
-          radius:
-            state?.vaults?.team2?.radius ??
-            (Number(layout?.vaults?.team2?.radius) || 90),
-          label: state?.vaults?.team2?.label || "Red Vault",
-        },
+        team1: this._serializeVault("team1", layout, settings),
+        team2: this._serializeVault("team2", layout, settings),
       },
       respawnPoints: {
         team1: layout?.respawnPoints?.team1 || null,

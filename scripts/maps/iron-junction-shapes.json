@@ -1,0 +1,340 @@
+{
+  "world": {
+    "width": 5000,
+    "mid": 252,
+    "bottom": 1140,
+    "shadeBottom": 1000
+  },
+  "tunnelShade": {
+    "file": "tunnel-shade.webp",
+    "left": 1620,
+    "right": 3380,
+    "top": 540,
+    "bottom": 900
+  },
+  "tunnelLamps": [
+    {
+      "x": 1748,
+      "y": 580,
+      "length": 312,
+      "width": 340
+    },
+    {
+      "x": 1800,
+      "y": 580,
+      "length": 136,
+      "width": 260
+    },
+    {
+      "x": 1900,
+      "y": 756,
+      "length": 136,
+      "width": 300
+    },
+    {
+      "x": 2140,
+      "y": 756,
+      "length": 136,
+      "width": 300
+    },
+    {
+      "x": 2380,
+      "y": 756,
+      "length": 136,
+      "width": 300
+    },
+    {
+      "x": 2620,
+      "y": 756,
+      "length": 136,
+      "width": 300
+    },
+    {
+      "x": 2860,
+      "y": 756,
+      "length": 136,
+      "width": 300
+    },
+    {
+      "x": 3100,
+      "y": 756,
+      "length": 136,
+      "width": 300
+    },
+    {
+      "x": 3200,
+      "y": 580,
+      "length": 136,
+      "width": 260
+    },
+    {
+      "x": 3252,
+      "y": 580,
+      "length": 312,
+      "width": 340
+    }
+  ],
+  "passageRoof": 580,
+  "tunnelCeiling": 756,
+  "shaft": [
+    1860,
+    2052
+  ],
+  "shelf": 716,
+  "shapes": [
+    {
+      "id": "side-wall",
+      "kind": "wall",
+      "left": -240,
+      "top": -540,
+      "width": 336,
+      "height": 1680
+    },
+    {
+      "id": "base",
+      "kind": "solid",
+      "left": 96,
+      "top": 252,
+      "width": 1704,
+      "height": 888
+    },
+    {
+      "id": "floor",
+      "kind": "solid",
+      "left": 1800,
+      "top": 252,
+      "width": 1400,
+      "height": 888
+    },
+    {
+      "id": "tunnel-back",
+      "kind": "tunnel",
+      "left": 1620,
+      "top": 540,
+      "width": 1760,
+      "height": 360
+    },
+    {
+      "id": "lane",
+      "kind": "deck",
+      "left": 1620,
+      "top": 252,
+      "width": 580,
+      "height": 76
+    },
+    {
+      "id": "balcony-back",
+      "kind": "deck",
+      "left": 96,
+      "top": -48,
+      "width": 516,
+      "height": 76
+    },
+    {
+      "id": "balcony-front",
+      "kind": "deck",
+      "left": 788,
+      "top": -48,
+      "width": 392,
+      "height": 76
+    },
+    {
+      "id": "perch",
+      "kind": "ledge",
+      "left": 844,
+      "top": -124,
+      "width": 120,
+      "height": 44
+    },
+    {
+      "id": "gantry",
+      "kind": "deck",
+      "left": 1480,
+      "top": -48,
+      "width": 660,
+      "height": 76
+    },
+    {
+      "id": "gantry-centre",
+      "kind": "deck",
+      "left": 2340,
+      "top": -48,
+      "width": 320,
+      "height": 76
+    },
+    {
+      "id": "climb-base-1",
+      "kind": "ledge",
+      "left": 1212,
+      "top": 152,
+      "width": 120,
+      "height": 44
+    },
+    {
+      "id": "climb-base-2",
+      "kind": "ledge",
+      "left": 1268,
+      "top": 52,
+      "width": 120,
+      "height": 44
+    },
+    {
+      "id": "climb-hill-1",
+      "kind": "ledge",
+      "left": 2260,
+      "top": 152,
+      "width": 120,
+      "height": 44
+    },
+    {
+      "id": "climb-hill-2",
+      "kind": "ledge",
+      "left": 2200,
+      "top": 52,
+      "width": 120,
+      "height": 44
+    },
+    {
+      "id": "shaft-ledge",
+      "kind": "ledge",
+      "left": 1980,
+      "top": 628,
+      "width": 72,
+      "height": 44
+    }
+  ],
+  "solids": [
+    {
+      "left": 0,
+      "right": 96,
+      "top": -540,
+      "bottom": 1140
+    },
+    {
+      "left": 4904,
+      "right": 5000,
+      "top": -540,
+      "bottom": 1140
+    },
+    {
+      "left": 96,
+      "right": 1440,
+      "top": 252,
+      "bottom": 1140
+    },
+    {
+      "left": 1440,
+      "right": 1620,
+      "top": 348,
+      "bottom": 1140
+    },
+    {
+      "left": 1620,
+      "right": 1800,
+      "top": 444,
+      "bottom": 580
+    },
+    {
+      "left": 3560,
+      "right": 4904,
+      "top": 252,
+      "bottom": 1140
+    },
+    {
+      "left": 3380,
+      "right": 3560,
+      "top": 348,
+      "bottom": 1140
+    },
+    {
+      "left": 3200,
+      "right": 3380,
+      "top": 444,
+      "bottom": 580
+    },
+    {
+      "left": 1620,
+      "right": 1692,
+      "top": 804,
+      "bottom": 1140
+    },
+    {
+      "left": 3308,
+      "right": 3380,
+      "top": 804,
+      "bottom": 1140
+    },
+    {
+      "left": 1800,
+      "right": 1860,
+      "top": 540,
+      "bottom": 580
+    },
+    {
+      "left": 3140,
+      "right": 3200,
+      "top": 540,
+      "bottom": 580
+    },
+    {
+      "left": 1804,
+      "right": 2052,
+      "top": 716,
+      "bottom": 756
+    },
+    {
+      "left": 2948,
+      "right": 3196,
+      "top": 716,
+      "bottom": 756
+    },
+    {
+      "left": 2052,
+      "right": 2140,
+      "top": 540,
+      "bottom": 756
+    },
+    {
+      "left": 2860,
+      "right": 2948,
+      "top": 540,
+      "bottom": 756
+    },
+    {
+      "left": 2140,
+      "right": 2260,
+      "top": 444,
+      "bottom": 756
+    },
+    {
+      "left": 2740,
+      "right": 2860,
+      "top": 444,
+      "bottom": 756
+    },
+    {
+      "left": 2260,
+      "right": 2380,
+      "top": 348,
+      "bottom": 756
+    },
+    {
+      "left": 2620,
+      "right": 2740,
+      "top": 348,
+      "bottom": 756
+    },
+    {
+      "left": 2380,
+      "right": 2620,
+      "top": 252,
+      "bottom": 756
+    },
+    {
+      "left": 1692,
+      "right": 3308,
+      "top": 892,
+      "bottom": 1140
+    }
+  ]
+}

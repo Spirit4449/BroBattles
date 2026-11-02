@@ -191,13 +191,13 @@ test('shielded contact consumes the arrow without damage or super charge', t => 
 test('vault contacts use authoritative flight even when the shooter has moved away', t => {
   const {room,players:[p,target],step,actions}=fixture(t,4);
   target.isAlive=false;
-  const vault={x:500,y:300,width:100,height:100,health:10000};
-  room.gameMode={getVaultState:()=>vault,damageVault(_team,damage){vault.health-=damage;return vault;}};
+  const vault={x:500,y:300,width:100,height:100,coins:10000};
+  room.gameMode={getVaultState:()=>vault,damageVault(_team,damage){vault.coins-=damage;return vault;}};
   room.handlePlayerAction(p.participantId,{type:'huntress-arrow',id:'vault',angle:0});step(6);
   const arrow=[...room._huntress.active.values()][1];
   for(const [id,a]of room._huntress.active)if(a!==arrow)room._huntress.active.delete(id);
   vault.x=arrow.x+50;vault.y=arrow.y;p.x=2200;step(10);
-  assert.equal(vault.health,10000-model.attackConfig().damagePerArrow);
+  assert.equal(vault.coins,10000-model.attackConfig().damagePerArrow);
   assert.equal(actions('huntress-terminal')[0].target,'vault:team2');
 });
 

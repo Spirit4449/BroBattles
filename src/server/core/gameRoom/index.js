@@ -5,7 +5,6 @@ const characterCombat = require('./characterCombatRegistry');
 // gameRoom.js
 // Individual game room handling server-authoritative game state
 const {
-  POWERUP_STARTING_COUNT,
   ABANDON_MATCH_GRACE_MS,
   REGEN_DELAY_MS,
   REGEN_TICK_MS,
@@ -131,6 +130,7 @@ class GameRoom {
     this._powerups = new Map(); // id -> { id, type, x, y, spawnedAt, expiresAt }
     this._nextPowerupId = 1;
     this._lastPowerupSpawnAt = 0;
+    this._startingPowerupsPending = false;
     this._powerupSpawnBag = [];
     this._powerupTypeBag = [];
     this._recentPowerupSpawnKeys = [];
@@ -653,9 +653,7 @@ class GameRoom {
     this._lastPowerupTypeBySpawnKey = Object.create(null);
     this._deathDrops.clear();
     this._nextDeathDropId = 1;
-    for (let i = 0; i < POWERUP_STARTING_COUNT; i++) {
-      this._spawnPowerup();
-    }
+    this._startingPowerupsPending = true;
     const monoNow = () => performance.now();
     let lastMono = monoNow();
     let simulatedMono = lastMono;

@@ -60,7 +60,9 @@ const REGEN_BROADCAST_MIN_MS = 120;
 
 // A new powerup spawns this often.
 const POWERUP_SPAWN_INTERVAL_MS = 25000;
-// Powerups placed when the fight starts.
+// Powerups placed once the fight has run this long.
+const POWERUP_FIRST_SPAWN_DELAY_MS = 5000;
+// How many powerups that first spawn places.
 const POWERUP_STARTING_COUNT = 2;
 // Never more than this many on the map at once.
 const POWERUP_MAX_ACTIVE = 3;
@@ -204,6 +206,7 @@ module.exports = {
   REGEN_MIN_ABS,
   REGEN_BROADCAST_MIN_MS,
   POWERUP_SPAWN_INTERVAL_MS,
+  POWERUP_FIRST_SPAWN_DELAY_MS,
   POWERUP_STARTING_COUNT,
   POWERUP_MAX_ACTIVE,
   POWERUP_PICKUP_RADIUS,

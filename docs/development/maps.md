@@ -62,6 +62,115 @@ The format is data-only JSON, validated by `src/shared/maps/mapDocument.js`. Sta
 
 - `id`, `label`, `modeVariantId` and `metadata` (presentation: previews, lobby background, music).
 - `layout.platforms`, `layout.hitboxes`, `assets`, `textureSizes`, `anchors`, `spawns`, `powerups` and `scenery`. Bank Bust maps also need `objectiveLayout.bankBust`.
+
+### Iron Junction is generated, not hand-edited
+
+Map 4 is written by `scripts/maps/build-iron-junction.cjs`, which emits both
+`src/shared/maps/4.json` and `data/maps/4.json`. Authoring it in code is what
+keeps the two halves exact mirrors and keeps every surface's height honest: the
+generator places artwork by the surface you want to stand on and works the
+sprite offset out itself. Edit the script and re-run it rather than editing the
+JSON; a Map Studio save will win at runtime and silently diverge from the
+source.
+
+#### Art drawn in code
+
+`scripts/art/bake-iron-junction.cjs` paints the platforms, walls, vault, mine and
+buildable walls on a 4-world-pixel grid from one palette, so they share a pixel
+size and colours. Nothing is scaled at runtime.
+
+Solid ground is painted from the union of all solid rectangles rather than
+stamped per block. A pixel with air above becomes walking surface and a pixel
+with air beside it becomes an edge, so stairs get real treads and risers with no
+slices to line up, and touching blocks share one brick grid. That grid is folded
+about the centre line, which makes the right half an exact flip of the left. The
+walking surface and horizontal brick courses are deliberately one-way-up: the
+earlier frame looked the same from all four sides and read as a rotated panel.
+
+Because art is baked to the geometry, building is two passes:
+
+```
+node scripts/maps/build-iron-junction.cjs     # writes iron-junction-shapes.json
+node scripts/art/bake-iron-junction.cjs       # bakes one image per shape
+node scripts/maps/build-iron-junction.cjs     # measures them and writes the map
+node scripts/maps/check-iron-junction.cjs     # always
+```
+
+#### The shape of the level
+
+Three storeys, about 300px apart, and a tunnel under them. HIGH is jump-through catwalks: two balconies carrying
+the mine and turret, split by a hatch directly over the vault, then one long deck
+towards the middle and a centre deck over the hill. MID is the top of the base, one jump-through lane, and the top of the hill.
+FLOOR is one flat run between the stairs, broken only by the hill in the centre.
+A full-height side wall closes each end of the level.
+
+The tunnel joins the two low points, with an S-bend at each end so that falling
+down a shaft does not put you in it. A shaft opens in the floor on each side of the
+hill, jumpable if you want to stay up, and drops onto a shelf. A low passage runs
+back under the lower treads of the stairs, off the end of the shelf, and into one
+flat run under the hill. Back out is a solid step at the end of the run, then a
+one-way ledge in the shaft.
+The low wall slot sits on the lip between the stairs and the shaft, so it shuts
+the floor and the tunnel together.
+
+The tunnel's darkness is a front layer (`tunnel-shade.webp`) baked to the shape of
+its air, with a soft hole cut under each lamp. It covers fighters but not the ground
+around it, so a fighter is dim in the dark and fully lit under a lamp, on every
+graphics setting. `atmosphere.lamps` adds the visible glow over that on High and
+Super High. If you move a lamp, re-run the bake or its hole stays behind.
+
+The mine and turret are drawn by the bake as short spritesheets, one file per owner.
+The mine's coin count is written onto the brass plate in its art, at the spot
+recorded in `propFrames.json`, which the bake writes. A turret's motion
+is client-side on top of the server's aim: unclaimed it droops, claimed it sweeps
+until it has a target, and it kicks back with a muzzle flash on each shot.
+
+Backdrop layers can carry `parts`, looping sprites pinned to a spot on the image.
+`scripts/art/install-iron-junction-backdrop.cjs` cuts the cog, crane hook, valve
+wheels and lamps out of the painted layers, replaces the painted smoke, and writes
+`iron-junction-parts.json` for the build. Most of these loops hold still for a while.
+
+A few animated pieces sit in the walls (`DECO_PLACES` in the build script): a
+clock, a coin chute, a furnace grate, a fuse box, a rat and a leaking
+valve. Each is different and used once, and most of each loop is still; keep it that
+way, because a wall of moving things reads as noise. They are four-frame strips
+painted by Codex's `image_gen` into `output/bank-bust-art/v5`, installed by
+`scripts/art/install-iron-junction-deco.cjs`, which lines the frames up and reduces
+them to a 2px grid. The build refuses a placement that is not inside solid ground,
+unless it is marked as hanging on the tunnel's back wall. About one brick in ten
+also carries a static patch, crack, rust stain or chip, chosen by a hash so it stays
+put and mirrors exactly.
+
+- **Climb.** Every storey is three big hops. Solid steps rise 96px, which keeps
+  their faces under `wallMinFaceHeight` so they do not catch a wall slide, and
+  ledges rise 100px. A jump peaks near 120, so none of them needs a perfect jump.
+- **Routes.** Each side has two climbs of two ledges from MID to HIGH, one beside
+  the base and one beside the hill. Decks and ledges are one-way, so they never seal the
+  ground beneath them.
+- **Clearance.** Solid ground never runs under a deck, and ledges sit in the gaps
+  between decks, so drawn pieces do not collide.
+
+A buildable wall is an upright 48x96 bulkhead. It is deliberately about a jump
+high: walls have no health, so a taller one could lock a team out of a base.
+Built walls stop the other team's shots as well as its players, through
+`getShotBlockers` on the mode. Terrain-colliding shots read them through
+`shotTerrain`; linear shots ignore terrain and test them directly.
+
+The **firing perch** is a ledge one step above the balcony on the enemy's approach
+to each vault. Decks stop shots, so from the deck the hatch hides the vault, but
+from the perch you can fire down through it, standing at its hatch end. The answer
+is the **hatch wall**, a 168px slot on the lip between perch and hatch. It is the one tall wall, because it
+has to stop a shot from someone jumping on the perch and because the hatch is
+never the only way into a base. The auditor checks both halves: the hatch end of
+the perch has a line to the vault, and the built wall cuts all of them.
+
+#### The auditor
+
+`scripts/maps/check-iron-junction.cjs` audits the result against
+`movementPhysics.json`: rise and gap limits, reachability from the spawns in both
+directions, mirror symmetry, world containment, and that spawns and objectives
+have somewhere to stand. Run it after any change to the level.
+
 - Platforms use center `x/y`, a `textureKey`, positive `scaleX/scaleY`, optional collision settings and a `body`. Body width/height are world pixels; offsets are unscaled texture pixels measured from the artwork's top left.
 - A platform may add `motion` to move (see [Moving platforms](#moving-platforms)).
 - `spawns.players.team1` and `team2` each list exactly the mode's players per team. A slot contains `anchorId`, optional horizontal `dx`, and optional `dropHeight`. Free powerups contain an `id`, `x/y`, optional `type`, and optional `enabled`.
@@ -124,7 +233,7 @@ Every map's backdrop renders inside Phaser from its required `scenery` block, wh
   - Optional: `scale`, `alpha`, `flipX`, and `after` or `front` (see below).
 
   Any map can use any library cloud. Add new cloud art under `public/assets/clouds/` and list it in `clouds.json`.
-- `atmosphere`: `glows`, `mist`, `rays`, `dust`, `platforms` (top-lit gradient on platform art, with an optional drop shadow) and `vignette`. `dust` may be a list of fields at different depths; large, faint motes placed `after` far layers read as out-of-focus particles. Rays and glows pulse with `alpha: [min, max]`.
+- `atmosphere`: `glows`, `mist`, `rays`, `lamps` (soft cones of light from a point, with `flicker`, always over the fighters), `dust`, `platforms` (top-lit gradient on platform art, with an optional drop shadow) and `vignette`. `dust` may be a list of fields at different depths; large, faint motes placed `after` far layers read as out-of-focus particles. Rays and glows pulse with `alpha: [min, max]`.
 
 Clouds, glows, mist and rays stack with `after`: a layer ID places them just above that layer, and `"arena"` places them over the platforms but under the fighters. `front: true` draws them over the fighters. Layers are sized for the mode's camera zoom range, so a map looks right at every zoom the match uses.
 
@@ -155,3 +264,11 @@ Spawn slots describe safe landing surfaces, not sprite centers. `src/shared/phys
 `spawnStateFor` in `src/server/core/gameRoom/roomStateManager.js` supplies human, bot, playtest and Bank Bust respawn positions from the match's map snapshot. `game:init` and `game:start` carry the server positions; the client falls back to document placement only when positions are absent. Movement input stays locked until FIGHT.
 
 Checks: `node --test tests/spawnPlacement.test.js tests/gameRoomStartup.test.js tests/pregameFlythrough.test.js`.
+
+### Mangrove Meadow collision surfaces
+
+Mangrove Meadow colliders follow the refreshed grassy surfaces rather than the
+flowers above them. Soil blocks retain their side walls for wall-jumping, with
+heights bounded by the artwork. Floating ledges use shallow bodies inset from the
+fringe. Every platform permits upward passage through its underside and catches
+players descending onto its top. Saved overrides retain their authored positions.

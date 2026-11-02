@@ -1,8 +1,18 @@
 import { drawShieldBubble } from "./shieldBubble";
+import {
+  addPixelCircle,
+  addPixelEllipse,
+  fillPixelBlob,
+  fillPixelEllipse,
+  PIXEL_FX_SIZE,
+  pixelBlobDepthAt,
+  rasterizePixelBlob,
+} from "./pixelShapes";
 import { PICKUP_DELAY_MS, POWERUP_CATALOG } from "../../../shared/powerups";
 // powerups/powerupRenderer.js
 import { RENDER_LAYERS } from "../scene/renderLayers";
 import { createDeathLootEffects, handleDeathLootContact } from "./deathLootEffects";
+import { coinSpinFrame } from "../modes/bankBust/coinMotion.mjs";
 
 export function createPowerupRenderer({
   scene,
@@ -47,7 +57,7 @@ export function createPowerupRenderer({
   }
 
   function deathDropTextureFor(type) {
-    return type === "gem" ? "deathdrop-gem" : "deathdrop-coin";
+    return type === "gem" ? "deathdrop-gem" : "coin-spin";
   }
 
   function deathDropColorFor(type) {
@@ -74,7 +84,7 @@ export function createPowerupRenderer({
   }
 
   function spawnTrailParticle(x, y, color, r = 5, life = 260) {
-    const c = scene.add.circle(x, y, r, color, 0.75);
+    const c = addPixelCircle(scene, x, y, r, color, 0.75);
     c.setDepth(RENDER_LAYERS.PLAYER_HUD);
     scene.tweens.add({
       targets: c,
@@ -239,7 +249,7 @@ export function createPowerupRenderer({
         });
       }
 
-      const flash = scene.add.circle(frame.x, frame.y, 38, 0xfff7d6, 0.9);
+      const flash = addPixelCircle(scene, frame.x, frame.y, 38, 0xfff7d6, 0.9);
       flash.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
       flash.setBlendMode(Phaser.BlendModes.ADD);
       scene.tweens.add({
@@ -254,7 +264,8 @@ export function createPowerupRenderer({
 
       for (let i = 0; i < 30; i += 1) {
         const angle = (i / 30) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.08, 0.08);
-        const spark = scene.add.circle(
+        const spark = addPixelCircle(
+          scene,
           frame.x,
           frame.y,
           Phaser.Math.FloatBetween(1.8, 4.5),
@@ -313,9 +324,9 @@ export function createPowerupRenderer({
     }
 
     const stream = [
-      scene.add.ellipse(sx, sy, 25, 12, color, 0.68),
-      scene.add.ellipse(sx, sy, 19, 8, 0xffffff, 0.42),
-      scene.add.ellipse(sx, sy, 13, 6, color, 0.28),
+      addPixelEllipse(scene, sx, sy, 25, 12, color, 0.68),
+      addPixelEllipse(scene, sx, sy, 19, 8, 0xffffff, 0.42),
+      addPixelEllipse(scene, sx, sy, 13, 6, color, 0.28),
     ];
     stream.forEach((part, i) => {
       part.setBlendMode(Phaser.BlendModes.ADD);
@@ -444,7 +455,8 @@ export function createPowerupRenderer({
       const vx = Number(spr.body?.velocity?.x) || 0;
       const vy = Number(spr.body?.velocity?.y) || 0;
       if ((Math.abs(vx) > 10 || Math.abs(vy) > 18) && Math.random() < 0.12) {
-        const mote = scene.add.circle(
+        const mote = addPixelCircle(
+          scene,
           spr.x - Math.sign(vx || (spr.flipX ? -1 : 1)) * Phaser.Math.Between(5, 12),
           (spr.body?.bottom || spr.y + 20) + Phaser.Math.Between(-5, 3),
           Phaser.Math.FloatBetween(1.1, 2.2),
@@ -644,7 +656,8 @@ export function createPowerupRenderer({
         typeof evt.x === "number" &&
         typeof evt.y === "number"
       ) {
-        const puff = scene.add.circle(
+        const puff = addPixelCircle(
+          scene,
           evt.x,
           evt.y,
           14,
@@ -693,13 +706,13 @@ export function createPowerupRenderer({
           alpha: 0,
           scaleX: 0.2,
           scaleY: 0.2,
-          angle: 220,
           duration: 190,
           ease: "Back.easeIn",
           onComplete: () => cleanupDeathDropVisual(id, visual),
         });
       } else if (typeof evt.x === "number" && typeof evt.y === "number") {
-        const puff = scene.add.circle(
+        const puff = addPixelCircle(
+          scene,
           evt.x,
           evt.y,
           13,
@@ -757,7 +770,9 @@ export function createPowerupRenderer({
         sprite.setDrag(35, 0);
         sprite.setVelocity(Number(drop.vx) || 0, Number(drop.vy) || 0);
         const maxDim = Math.max(sprite.width || 1, sprite.height || 1);
-        const targetSize = drop.type === "gem" ? 26 : 24;
+        // A round coin fills its frame where the gem is wide and flat, so the
+        // coin is drawn smaller to stand about as tall as the gem.
+        const targetSize = drop.type === "gem" ? 26 : 22;
         const baseScale = maxDim > 0 ? targetSize / maxDim : 1;
         sprite.setScale(baseScale);
         sprite._baseDeathDropScale = baseScale;
@@ -865,22 +880,18 @@ export function createPowerupRenderer({
       visual.sprite.alpha = blinkAlpha;
 
       if (visual.type === "coin") {
-        visual.sprite.scaleX =
-          baseScale * (0.88 + 0.12 * Math.sin(nowSec * 7.2 + visual.phase));
-        visual.sprite.scaleY = baseScale;
-        visual.sprite.rotation = 0.08 * Math.sin(nowSec * 3.1 + visual.phase);
+        // A real turn of the coin, and quicker while it is flying.
+        const spinRate = visual.settled ? 6 : 12;
+        visual.sprite.setFrame(coinSpinFrame(nowSec * spinRate + visual.phase));
       } else {
         const scalePulse = 0.94 + 0.08 * Math.sin(nowSec * 3.6 + visual.phase);
         visual.sprite.setScale(baseScale * scalePulse);
         visual.sprite.rotation = 0.06 * Math.sin(nowSec * 2.4 + visual.phase);
       }
 
-      if (!visual.settled) {
+      if (!visual.settled && visual.type !== "coin") {
         const flightAge = (scene.time.now - visual.bornAt) / 1000;
         visual.sprite.rotation = flightAge * visual.spin / (1 + visual.bounces);
-        if (visual.type === "coin") {
-          visual.sprite.scaleX = baseScale * (0.3 + 0.7 * Math.abs(Math.cos(flightAge * 10 + visual.phase)));
-        }
       }
 
       if (
@@ -1032,7 +1043,13 @@ export function createPowerupRenderer({
     if (activeStyle) {
       state.color = activeStyle.color;
       state.strength = activeStyle.strength;
-      state.styles = activeStyles;
+      // Keep powerups in pickup order so newer ones draw as outer rings.
+      const activeTypes = activeStyles.map((s) => s.type);
+      state.order = (state.order || []).filter((type) => activeTypes.includes(type));
+      for (const type of activeTypes) {
+        if (!state.order.includes(type)) state.order.push(type);
+      }
+      state.styles = state.order.map((type) => activeStyles.find((s) => s.type === type));
     }
     const isWaitingForArrival =
       (state.arrivalPendingUntil || 0) > scene.time.now;
@@ -1111,16 +1128,16 @@ export function createPowerupRenderer({
         Math.sin(a * 2 + nowSec * 7.5) * state.wobble * 0.065 +
         (Math.cos(a) * state.surfaceX + Math.sin(a) * state.surfaceY) * 0.075;
       const push = Math.cos(a) * Phaser.Math.Clamp(-state.dx * 0.004, -0.1, 0.1);
-      points.push(
-        new Phaser.Geom.Point(
+      points.push({
+        x:
           state.x +
-            Math.cos(a) * rx * (1 + ripple + push) +
-            Math.sin(a) * state.surfaceX * radius * 0.045,
+          Math.cos(a) * rx * (1 + ripple + push) +
+          Math.sin(a) * state.surfaceX * radius * 0.045,
+        y:
           state.y +
-            Math.sin(a) * ry * (1 + ripple) +
-            Math.cos(a) * state.surfaceY * radius * 0.04,
-        ),
-      );
+          Math.sin(a) * ry * (1 + ripple) +
+          Math.cos(a) * state.surfaceY * radius * 0.04,
+      });
     }
 
     const bubbleStyles = state.styles?.length
@@ -1129,63 +1146,70 @@ export function createPowerupRenderer({
     const bubbleColor = bubbleStyles[0].color;
     const bubbleStrength = bubbleStyles[0].strength;
     const lifeAlpha = Phaser.Math.Clamp(state.alpha, 0, 1);
-    g.fillStyle(0x071522, 0.07 * lifeAlpha);
-    g.fillPoints(points, true);
-    g.fillStyle(bubbleColor, (0.2 + bubbleStrength * 0.07) * lifeAlpha);
-    g.fillPoints(points, true);
+
+    // Rasterize one membrane per active powerup so it reads as pixel art.
+    // The oldest powerup is the core; each newer one wraps it a step wider.
+    const layerStep = PIXEL_FX_SIZE * 5;
+    const layers = bubbleStyles.map((bubbleStyle, i) => {
+      const scale = 1 + (i * layerStep) / radius;
+      const layerPoints = points.map((p) => ({
+        x: state.x + (p.x - state.x) * scale,
+        y: state.y + (p.y - state.y) * scale,
+      }));
+      return {
+        style: bubbleStyle,
+        radius: radius * scale,
+        blob: rasterizePixelBlob(layerPoints, { ringCount: 4 }),
+      };
+    });
+    const core = layers[0].blob;
+    const { cell, originX, originY } = core;
+    fillPixelBlob(g, core, 0x071522, 0.07 * lifeAlpha);
+    fillPixelBlob(g, core, bubbleColor, (0.2 + bubbleStrength * 0.07) * lifeAlpha);
 
     bubbleStyles.forEach((bubbleStyle, i) => {
-      const inset = i * 0.075;
-      const layerPoints = points.map(
-        (point) =>
-          new Phaser.Geom.Point(
-            state.x + (point.x - state.x) * (1 - inset),
-            state.y + (point.y - state.y) * (1 - inset),
-          ),
-      );
-      g.lineStyle(
-        i === 0 ? 4 : 3,
-        bubbleStyle.color,
-        (0.58 + bubbleStyle.strength * 0.25) * lifeAlpha,
-      );
-      g.strokePoints(layerPoints, true);
-
       const lobeAngle =
         nowSec * (0.55 + i * 0.08) + state.phase + (Math.PI * 2 * i) / bubbleStyles.length;
       const lobeDistance = radius * (bubbleStyles.length > 1 ? 0.27 : 0.19);
       const lobeX = state.x + Math.cos(lobeAngle) * lobeDistance;
       const lobeY = state.y + Math.sin(lobeAngle * 1.17) * radius * 0.2;
-      g.fillStyle(bubbleStyle.color, (0.2 + i * 0.018) * lifeAlpha);
-      g.fillEllipse(
-        lobeX,
-        lobeY,
-        Math.max(8, radius * (0.55 - i * 0.035)),
-        Math.max(6, radius * (0.34 - i * 0.018)),
+      const halfW = Math.max(4, radius * (0.275 - i * 0.0175));
+      const halfH = Math.max(3, radius * (0.17 - i * 0.009));
+      fillPixelBlob(g, core, bubbleStyle.color, (0.2 + i * 0.018) * lifeAlpha, (d, cx, cy) =>
+        d > 4 && ((cx - lobeX) / halfW) ** 2 + ((cy - lobeY) / halfH) ** 2 <= 1,
       );
     });
 
-    g.lineStyle(
-      1.5,
-      0xffffff,
-      (0.58 + bubbleStrength * 0.2) * lifeAlpha,
-    );
-    g.strokePoints(points, true);
+    layers.forEach((layer, i) => {
+      const { blob, style } = layer;
+      if (i > 0) {
+        // Tint only the band between this ring and the one inside it.
+        const inner = layers[i - 1].blob;
+        fillPixelBlob(g, blob, style.color, 0.14 * lifeAlpha, (d, cx, cy) =>
+          d > 0 && pixelBlobDepthAt(inner, cx, cy) === 0,
+        );
+      }
+      fillPixelBlob(g, blob, style.color, (0.62 + style.strength * 0.25) * lifeAlpha, (d) => d <= 3);
+      fillPixelBlob(g, blob, style.color, 0.32 * lifeAlpha, (d) => d === 4);
+      // Light the upper-left of each outline and shade the lower-right.
+      const lightReach = layer.radius * 0.3;
+      fillPixelBlob(g, blob, 0xffffff, (0.5 + style.strength * 0.2) * lifeAlpha, (d, cx, cy) =>
+        d === 1 && state.x - cx + (state.y - cy) > lightReach,
+      );
+      fillPixelBlob(g, blob, 0x071522, 0.22 * lifeAlpha, (d, cx, cy) =>
+        d === 1 && cx - state.x + (cy - state.y) > lightReach * 1.6,
+      );
+    });
 
-    const shineX = state.x - rx * 0.31 - speedX * Math.sign(vx || 1) * 3;
-    const shineY = state.y - ry * 0.34;
-    g.fillStyle(0xffffff, 0.46 * lifeAlpha);
-    g.fillEllipse(
-      shineX,
-      shineY,
-      Math.max(4, rx * 0.24),
-      Math.max(2.5, ry * 0.1),
-    );
-    g.fillStyle(0xffffff, 0.16 * lifeAlpha);
-    g.fillCircle(
-      state.x + rx * 0.32,
-      state.y + ry * 0.28,
-      Math.max(2, radius * 0.065),
-    );
+    const snap = (value, origin) => origin + Math.round((value - origin) / cell) * cell;
+    const shineX = snap(state.x - rx * 0.42 - speedX * Math.sign(vx || 1) * 3, originX);
+    const shineY = snap(state.y - ry * 0.4, originY);
+    const shineCells = Math.max(2, Math.round((rx * 0.24) / cell));
+    g.fillStyle(0xffffff, 0.6 * lifeAlpha);
+    g.fillRect(shineX + cell, shineY, shineCells * cell, cell);
+    g.fillRect(shineX, shineY + cell, cell, cell * 2);
+    g.fillStyle(0xffffff, 0.3 * lifeAlpha);
+    g.fillRect(snap(state.x + rx * 0.32, originX), snap(state.y + ry * 0.28, originY), cell, cell);
   }
 
   function renderPowerupAuras(nowSec) {
@@ -1388,23 +1412,30 @@ export function createPowerupRenderer({
       const x = frame.x;
       const y = frame.y;
       for (let i = 0; i < 3; i++) {
-        const ring = scene.add.circle(
+        const ring = addPixelCircle(
+          scene,
           x,
           y,
           24 + i * 4,
           colors.shield,
           0.22 - i * 0.05,
         );
+        const rim = addPixelCircle(scene, x, y, 24 + i * 4, 0xffedd5, 0.85, {
+          ring: 1,
+        });
         ring.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
-        ring.setStrokeStyle(3, 0xffedd5, 0.85);
+        rim.setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
         scene.tweens.add({
-          targets: ring,
+          targets: [ring, rim],
           alpha: 0,
           scaleX: 1.45 + i * 0.08,
           scaleY: 1.45 + i * 0.08,
           duration: 220 + i * 40,
           ease: "Cubic.easeOut",
-          onComplete: () => ring.destroy(),
+          onComplete: () => {
+            ring.destroy();
+            rim.destroy();
+          },
         });
       }
     }
@@ -1427,12 +1458,17 @@ export function createPowerupRenderer({
       const apertureW = 18 + open * 34;
       const apertureH = 3 + open * 8;
 
-      fxG.fillStyle(c, 0.1 + open * 0.13);
-      fxG.fillEllipse(cx, cy, apertureW + 18, apertureH + 9);
-      fxG.fillStyle(0x07111d, 0.26 + open * 0.22);
-      fxG.fillEllipse(cx, cy, apertureW, apertureH);
-      fxG.fillStyle(c, 0.3 + open * 0.28);
-      fxG.fillEllipse(cx, cy + 1, apertureW * 0.64, Math.max(2, apertureH * 0.42));
+      fillPixelEllipse(fxG, cx, cy, apertureW + 18, apertureH + 9, c, 0.1 + open * 0.13);
+      fillPixelEllipse(fxG, cx, cy, apertureW, apertureH, 0x07111d, 0.26 + open * 0.22);
+      fillPixelEllipse(
+        fxG,
+        cx,
+        cy + 1,
+        apertureW * 0.64,
+        Math.max(2, apertureH * 0.42),
+        c,
+        0.3 + open * 0.28,
+      );
 
       for (let streak = 0; streak < 3; streak += 1) {
         const fall =
@@ -1485,10 +1521,11 @@ export function createPowerupRenderer({
       let visual = scene._powerupVisuals[id];
       if (!visual) {
         const glowColor = colors[pu.type] || 0xffffff;
-        const glow = scene.add.ellipse(pu.x, pu.y, 40, 34, glowColor, 0.36);
+        const glow = addPixelEllipse(scene, pu.x, pu.y, 40, 34, glowColor, 0.36);
         glow.setDepth(RENDER_LAYERS.POWERUPS);
         glow.setBlendMode(Phaser.BlendModes.ADD);
-        const glowOuter = scene.add.ellipse(
+        const glowOuter = addPixelEllipse(
+          scene,
           pu.x,
           pu.y,
           50,
@@ -1498,7 +1535,8 @@ export function createPowerupRenderer({
         );
         glowOuter.setDepth(RENDER_LAYERS.POWERUPS - 1);
         glowOuter.setBlendMode(Phaser.BlendModes.ADD);
-        const glowCore = scene.add.ellipse(
+        const glowCore = addPixelEllipse(
+          scene,
           pu.x - 7,
           pu.y - 8,
           15,
@@ -1508,7 +1546,8 @@ export function createPowerupRenderer({
         );
         glowCore.setDepth(RENDER_LAYERS.POWERUPS);
         glowCore.setBlendMode(Phaser.BlendModes.ADD);
-        const omenBase = scene.add.ellipse(
+        const omenBase = addPixelEllipse(
+          scene,
           pu.x,
           pu.y + 18,
           42,
@@ -1518,10 +1557,10 @@ export function createPowerupRenderer({
         );
         omenBase.setDepth(RENDER_LAYERS.POWERUPS - 1);
         omenBase.setBlendMode(Phaser.BlendModes.ADD);
-        const omenRing = scene.add.ellipse(pu.x - 8, pu.y + 14, 17, 6, 0xffffff, 0.32);
+        const omenRing = addPixelEllipse(scene, pu.x - 8, pu.y + 14, 17, 6, 0xffffff, 0.32);
         omenRing.setDepth(RENDER_LAYERS.POWERUPS);
         omenRing.setBlendMode(Phaser.BlendModes.ADD);
-        const omenEcho = scene.add.ellipse(pu.x + 10, pu.y + 17, 22, 5, glowColor, 0.18);
+        const omenEcho = addPixelEllipse(scene, pu.x + 10, pu.y + 17, 22, 5, glowColor, 0.18);
         omenEcho.setDepth(RENDER_LAYERS.POWERUPS - 2);
         omenEcho.setBlendMode(Phaser.BlendModes.ADD);
         const iconKey = powerupTextureFor(pu.type);
@@ -1761,29 +1800,30 @@ export function createPowerupRenderer({
             const ripple =
               Math.sin(a * 3 + nowSec * 3.4 + visual.phase) * 1.25 +
               Math.sin(a * 5 - nowSec * 2.2 + visual.phase) * 0.65;
-            membrane.push(
-              new Phaser.Geom.Point(
-                cx + Math.cos(a) * (25 + ripple),
-                cy + Math.sin(a) * (22 + ripple * 0.72),
-              ),
-            );
+            membrane.push({
+              x: cx + Math.cos(a) * (25 + ripple),
+              y: cy + Math.sin(a) * (22 + ripple * 0.72),
+            });
           }
-          fxG.fillStyle(0x071522, 0.08);
-          fxG.fillPoints(membrane, true);
-          fxG.fillStyle(c, 0.31);
-          fxG.fillPoints(membrane, true);
-          fxG.lineStyle(5, c, 0.26);
-          fxG.strokePoints(membrane, true);
-          fxG.lineStyle(3, c, 0.88);
-          fxG.strokePoints(membrane, true);
-          fxG.lineStyle(1.5, 0xffffff, 0.8);
-          fxG.strokePoints(membrane, true);
-
+          const blob = rasterizePixelBlob(membrane, { ringCount: 4 });
+          fillPixelBlob(fxG, blob, 0x071522, 0.08);
+          fillPixelBlob(fxG, blob, c, 0.31);
           const fluidShift = Math.sin(nowSec * 1.8 + visual.phase);
-          fxG.fillStyle(c, 0.3);
-          fxG.fillEllipse(cx + fluidShift * 7, cy + 8, 31, 13);
-          fxG.fillStyle(0xffffff, 0.58);
-          fxG.fillEllipse(cx - 8 + fluidShift * 2, cy - 10, 10, 4);
+          const fluidX = cx + fluidShift * 7;
+          const fluidY = cy + 8;
+          fillPixelBlob(fxG, blob, c, 0.3, (d, px, py) =>
+            d > 4 && ((px - fluidX) / 15.5) ** 2 + ((py - fluidY) / 6.5) ** 2 <= 1,
+          );
+          fillPixelBlob(fxG, blob, c, 0.35, (d) => d === 4);
+          fillPixelBlob(fxG, blob, c, 0.9, (d) => d <= 3);
+          // Light the upper-left of the rim and shade the lower-right.
+          fillPixelBlob(fxG, blob, 0xffffff, 0.8, (d, px, py) =>
+            d === 1 && cx - px + (cy - py) > 7,
+          );
+          fillPixelBlob(fxG, blob, 0x071522, 0.25, (d, px, py) =>
+            d === 1 && px - cx + (py - cy) > 12,
+          );
+          fillPixelEllipse(fxG, cx - 8 + fluidShift * 2, cy - 10, 10, 4, 0xffffff, 0.58);
         }
       }
     }

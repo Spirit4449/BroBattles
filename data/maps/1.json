@@ -24,20 +24,28 @@
     "lushy-side-platform": {
       "type": "image",
       "url": "/assets/lushy/sidePlatform.webp"
+    },
+    "lushy-small-platform": {
+      "type": "image",
+      "url": "/assets/lushy/smallPlatform.webp"
     }
   },
   "textureSizes": {
     "lushy-base": {
-      "width": 1000,
-      "height": 426
+      "width": 4000,
+      "height": 1704
     },
     "lushy-platform": {
-      "width": 700,
-      "height": 121
+      "width": 2800,
+      "height": 484
     },
     "lushy-side-platform": {
-      "width": 523,
-      "height": 878
+      "width": 2092,
+      "height": 3512
+    },
+    "lushy-small-platform": {
+      "width": 4000,
+      "height": 1704
     }
   },
   "layout": {
@@ -46,14 +54,14 @@
         "textureKey": "lushy-base",
         "x": 1150,
         "y": 670,
-        "scaleX": 0.8,
-        "scaleY": 0.8,
+        "scaleX": 0.2,
+        "scaleY": 0.2,
         "flipX": false,
         "body": {
           "width": 800,
           "height": 38,
           "offsetX": 0,
-          "offsetY": 50
+          "offsetY": 200
         },
         "id": "p0"
       },
@@ -61,14 +69,14 @@
         "textureKey": "lushy-platform",
         "x": 1150,
         "y": 250,
-        "scaleX": 0.7,
-        "scaleY": 0.7,
+        "scaleX": 0.175,
+        "scaleY": 0.175,
         "flipX": false,
         "body": {
           "width": 490,
           "height": 20,
           "offsetX": 0,
-          "offsetY": 40
+          "offsetY": 160
         },
         "id": "p1"
       },
@@ -76,14 +84,14 @@
         "textureKey": "lushy-side-platform",
         "x": 670,
         "y": 321,
-        "scaleX": 0.3,
-        "scaleY": 0.3,
+        "scaleX": 0.075,
+        "scaleY": 0.075,
         "flipX": false,
         "body": {
           "width": 156.9,
           "height": 185,
           "offsetX": 0,
-          "offsetY": 140
+          "offsetY": 560
         },
         "id": "p2",
         "collision": {
@@ -97,14 +105,14 @@
         "textureKey": "lushy-side-platform",
         "x": 1619,
         "y": 321,
-        "scaleX": 0.3,
-        "scaleY": 0.3,
+        "scaleX": 0.075,
+        "scaleY": 0.075,
         "flipX": false,
         "body": {
           "width": 156.9,
           "height": 185,
           "offsetX": 0,
-          "offsetY": 140
+          "offsetY": 560
         },
         "id": "p3",
         "collision": {
@@ -115,32 +123,32 @@
         }
       },
       {
-        "textureKey": "lushy-base",
+        "textureKey": "lushy-small-platform",
         "x": 575,
         "y": 575,
-        "scaleX": 0.18,
-        "scaleY": 0.18,
+        "scaleX": 0.045,
+        "scaleY": 0.045,
         "flipX": false,
         "body": {
           "width": 180,
           "height": 40,
           "offsetX": 0,
-          "offsetY": 30
+          "offsetY": 120
         },
         "id": "p4"
       },
       {
-        "textureKey": "lushy-base",
+        "textureKey": "lushy-small-platform",
         "x": 1725,
         "y": 575,
-        "scaleX": 0.18,
-        "scaleY": 0.18,
+        "scaleX": 0.045,
+        "scaleY": 0.045,
         "flipX": false,
         "body": {
           "width": 180,
           "height": 40,
           "offsetX": 0,
-          "offsetY": 30
+          "offsetY": 120
         },
         "id": "p5"
       }

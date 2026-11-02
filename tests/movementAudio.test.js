@@ -10,7 +10,7 @@ const exported = {};
 const code = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/audio/movementAudio.js'), 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 }).code;
-vm.runInNewContext(code, { exports: exported, require: () => terrainAudio });
+vm.runInNewContext(code, { exports: exported, require: key => key.includes('movementSounds') ? require('../src/shared/physics/movementSounds') : terrainAudio });
 const { getTerrainSteps, footstepVolume, terrainLandingSound, shouldPlayLandingSound, preloadTerrainAudio } = exported;
 
 test('all maps specify a registered terrain and Bank Bust retains its original footsteps', () => {
@@ -89,4 +89,30 @@ test('walking off the spawn platform re-arms the next landing', () => {
   player.y = 220;
   assert.equal(shouldPlayLandingSound(player, false, 180), true);
   assert.equal(shouldPlayLandingSound(player, true, 0), true);
+});
+
+
+test('Bank Bust preloads isolated metal footsteps and preserves other movement cues', () => {
+  const registry = require('../src/shared/physics/movementSounds');
+  const api = {};
+  const source = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/modes/bankBust/preloadAssets.js'), 'utf8'), {
+    babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  }).code;
+  vm.runInNewContext(source, { exports: api, require: key => key.includes('movementSounds')
+    ? registry : require('../src/client/game/modes/bankBust/propFrames.json') });
+  const loads = new Map();
+  const scene = { load: { image() {}, spritesheet() {}, audio(key, url) { loads.set(key, url); } } };
+  api.preloadBankBustAssets(scene, '/assets');
+  for (const key of Object.keys(registry.bankBustMovementSounds)) {
+    const selected = registry.movementSoundKey(scene, key);
+    assert.notEqual(selected, key);
+    assert.equal(registry.movementSoundKey({}, key), key, 'other modes retain shared samples');
+    const file = fs.readFileSync(path.join(__dirname, '../public', loads.get(selected)));
+    assert.equal(file.toString('ascii', 0, 4), 'RIFF');
+    assert.equal(file.toString('ascii', 8, 12), 'WAVE');
+    assert.ok(file.length > 44);
+  }
+  for (const key of ['sfx-jump', 'sfx-walljump', 'sfx-dash', 'sfx-stomp', 'sfx-sliding', 'sfx-fall-air', 'sfx-duck-transition', 'sfx-duck-block', 'sfx-hard-land', 'sfx-damage']) {
+    assert.equal(registry.movementSoundKey(scene, key), key);
+  }
 });

@@ -3,6 +3,7 @@ import Phaser from 'phaser/dist/phaser-arcade-physics.min.js';
 import '../editor/mapEditor.css';
 import '../editor/pixelChecks.css';
 import { preloadMapDocument, syncMapDocument } from '../game/maps/documentRuntime';
+import { releaseRendererContext, rendererContextOf } from '../game/scene/releaseRenderer.js';
 import { buildScenery, preloadScenery, sceneryTextureKey } from '../game/maps/sceneryRuntime';
 import { clone, POWERUP_TYPES, MapHistory, validateDocument, validateMap, geometryFromMap } from '../../shared/maps/mapDocument';
 import { arenaFor, arenaIds, mapArena } from '../../shared/maps/arenas';
@@ -490,7 +491,7 @@ class StudioScene extends Phaser.Scene {
   update(){if(documentData)this.drawOverlay();}
 }
 
-async function startScene(){setBusy(true);$('marker-layer').replaceChildren();cameraPreview=false;document.body.classList.remove('camera-preview');$('camera-preview').setAttribute('aria-pressed','false');if(game){game.destroy(true);game=null;scene=null;await new Promise(r=>setTimeout(r,30));}
+async function startScene(){setBusy(true);$('marker-layer').replaceChildren();cameraPreview=false;document.body.classList.remove('camera-preview');$('camera-preview').setAttribute('aria-pressed','false');if(game){const retiringContext=rendererContextOf(game);const retired=new Promise(r=>game.events.once(Phaser.Core.Events.DESTROY,r));game.destroy(true);game=null;scene=null;await Promise.race([retired,new Promise(r=>setTimeout(r,30))]);releaseRendererContext(retiringContext);}
   return new Promise(resolve=>{sceneReady=()=>{setBusy(false);resolve();};const host=$('canvas');game=new Phaser.Game({type:Phaser.AUTO,parent:host,width:host.clientWidth,height:host.clientHeight,backgroundColor:'#111d29',transparent:false,pixelArt:true,physics:{default:'arcade',arcade:{gravity:{y:0}}},scale:{mode:Phaser.Scale.NONE},scene:StudioScene});});
 }
 async function setPreview(value,row=null){

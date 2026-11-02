@@ -1,3 +1,7 @@
+import {
+  drawPixelFill, drawPixelFrame, drawPixelGlow, drawPixelTrough, snapPixel,
+} from "./pixelBar";
+
 const states = new WeakMap();
 const RELEASE_MS = 700;
 
@@ -47,8 +51,8 @@ export function drawSuperChargeBar(graphics, background, {
   // either layer with an additional positional or scale offset.
   graphics.setPosition(0, 0).setScale(1).setRotation(0).clear();
   background.setPosition(0, 0).setScale(1).setRotation(0).clear();
-  background.fillStyle(0x222222, 0.65);
-  background.fillRect(x, y, width, height);
+  x = snapPixel(x);
+  y = snapPixel(y);
 
   // Channeled supers spend their charge immediately. Keep their remaining
   // duration in the bar instead, so the fill visibly drains during the effect.
@@ -60,38 +64,41 @@ export function drawSuperChargeBar(graphics, background, {
     ? Math.max(0, Math.min(1, (activeSuper.until - wallNow) / activeDuration))
     : 0;
   const displayedFraction = sustained ? activeFraction : fraction;
-  const pulse = 0.5 + 0.5 * Math.sin(now / 160);
+  // Quantised pulse so the glow blinks in steps like a sprite animation.
+  const pulse = Math.round((0.5 + 0.5 * Math.sin(now / 160)) * 3) / 3;
   const release = Math.max(0, 1 - (now - state.releasedAt) / RELEASE_MS) ** 2;
   const glowAlpha = sustained ? 0.5 + pulse * 0.22 : fraction >= 1 ? 0.3 + pulse * 0.3 : 0;
   const glow = Math.max(glowAlpha, sustained ? 0 : release);
   if (glow > 0) {
-    // Match the health-bar halo: layered, soft, and attached to the bar.
-    for (const [spread, alpha] of [[8, 0.12], [5, 0.22], [3, 0.42]]) {
-      graphics.fillStyle(0xffd700, glow * alpha);
-      graphics.fillRoundedRect(x - spread, y - spread, width + spread * 2, height + spread * 2, spread);
-    }
+    // Match the health-bar halo: stepped and attached to the bar.
+    drawPixelGlow(background, x, y, width, height, 0xffd700, glow);
   }
+  drawPixelFrame(background, x, y, width, height);
+  drawPixelTrough(background, x, y, width, height, 0x2e2a1c);
   if (notReady && fraction < 1) {
-    graphics.fillStyle(0xff4444, 0.65 + 0.35 * Math.abs(Math.sin(wallNow / 75)));
-    graphics.fillRect(x, y, width * Math.max(fraction, 0.18), height);
+    const blink = Math.floor(wallNow / 90) % 2 ? 1 : 0.55;
+    drawPixelFill(graphics, x, y, width * Math.max(fraction, 0.18), height, 0xff4444, blink);
   } else if (displayedFraction > 0) {
-    graphics.fillStyle(displayedFraction >= 1 ? 0xffd700 : 0xffff00, sustained ? 0.72 + pulse * 0.28 : 1);
-    graphics.fillRect(x, y, width * displayedFraction, height);
+    drawPixelFill(graphics, x, y, width * displayedFraction, height,
+      displayedFraction >= 1 ? 0xffd700 : 0xf2c21b, sustained ? 0.72 + pulse * 0.28 : 1);
     if (sustained) {
       graphics.fillStyle(0xfff6cf, 0.18 + pulse * 0.45);
-      graphics.fillRect(x, y, width * displayedFraction, 1);
+      graphics.fillRect(x, y, Math.round(width * displayedFraction), 1);
     }
   }
   // The spent charge keeps its width and fades to empty, like health chunks.
   if (release > 0 && !sustained) {
-    graphics.fillStyle(0xffd700, release);
-    graphics.fillRect(x, y, width * state.releasedFraction, height);
-    graphics.fillStyle(0xfff6cf, release * 0.9);
-    graphics.fillRect(x, y, width * state.releasedFraction, 1);
+    const steppedRelease = Math.ceil(release * 4) / 4;
+    graphics.fillStyle(0xfff6cf, steppedRelease);
+    graphics.fillRect(x, y, Math.round(width * state.releasedFraction), height);
   }
   if (glow > 0) {
-    graphics.lineStyle(2, sustained ? 0xffd700 : 0xfff6cf, glow);
-    graphics.strokeRoundedRect(x - 2, y - 2, width + 4, height + 4, 3);
+    // Light the outer frame ring when the super is ready or burning.
+    graphics.fillStyle(sustained ? 0xffd700 : 0xfff6cf, glow);
+    graphics.fillRect(x, y - 2, width, 1);
+    graphics.fillRect(x, y + height + 1, width, 1);
+    graphics.fillRect(x - 2, y, 1, height);
+    graphics.fillRect(x + width + 1, y, 1, height);
   }
   graphics.setDepth(41);
   background.setDepth(40);

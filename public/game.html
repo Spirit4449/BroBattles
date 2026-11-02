@@ -103,15 +103,6 @@
       </div>
     </div>
 
-    <aside id="team-status-hud" class="hidden" aria-live="polite">
-      <div class="team-hud-side team-hud-side-left">
-        <div class="team-hud-player-stack" id="team-status-left"></div>
-      </div>
-      <div class="team-hud-side team-hud-side-right">
-        <div class="team-hud-player-stack" id="team-status-right"></div>
-      </div>
-    </aside>
-
     <aside
       id="battle-keybind-hud"
       class="hidden"
@@ -205,52 +196,61 @@
       </div>
     </aside>
 
-    <div id="game-timer-hud" class="hidden" aria-live="polite">
-      <span class="timer-display" id="game-timer-display">3:00</span>
-      <span class="timer-label" id="game-timer-label">Time Remaining</span>
-    </div>
+    <div id="battle-top-hud">
+      <aside id="team-status-hud" class="hidden" aria-live="polite">
+        <div class="team-hud-side team-hud-side-left">
+          <div class="team-hud-player-stack" id="team-status-left"></div>
+        </div>
+        <div class="team-hud-side team-hud-side-right">
+          <div class="team-hud-player-stack" id="team-status-right"></div>
+        </div>
+      </aside>
+      <div id="game-timer-hud" class="hidden" aria-live="polite">
+        <span class="timer-display" id="game-timer-display">3:00</span>
+        <span class="timer-label" id="game-timer-label">Time Remaining</span>
+      </div>
 
-    <div id="bank-bust-hud" class="hidden" aria-live="polite">
-      <div id="bank-bust-team1" class="bank-bust-vault">
-        <div class="bank-bust-vault-top">
-          <div class="bank-bust-vault-top-left">
+      <!-- One number and one bar per vault: the coins in it. That value is the
+           vault's survivability and the team's spending power at the same time. -->
+      <div id="bank-bust-hud" class="hidden" aria-live="polite">
+        <div id="bank-bust-team1" class="bank-bust-vault">
+          <div class="bank-bust-vault-top">
             <span class="bank-bust-vault-label">Vault</span>
-            <span class="bank-bust-gold-inline">
-              <image src="/assets/icons/coin.webp" width="16" height="16" />
-
-              <strong class="bank-bust-gold-value">0</strong></span
-            >
+            <span class="bank-bust-vault-delta" aria-hidden="true"></span>
+          </div>
+          <div class="bank-bust-vault-bar-row">
+            <img class="bank-bust-coin-icon" src="/assets/icons/coin.webp" width="16" height="16" alt="" />
+            <div class="bank-bust-vault-bar">
+              <div class="bank-bust-vault-fill"></div>
+              <div class="bank-bust-vault-floor" aria-hidden="true"></div>
+            </div>
+            <strong class="bank-bust-vault-coins">0</strong>
           </div>
         </div>
-        <div class="bank-bust-vault-bar-row">
-          <div class="bank-bust-vault-bar">
-            <div class="bank-bust-vault-fill"></div>
+        <div id="bank-bust-team2" class="bank-bust-vault">
+          <div class="bank-bust-vault-top">
+            <span class="bank-bust-vault-label">Vault</span>
+            <span class="bank-bust-vault-delta" aria-hidden="true"></span>
           </div>
-          <span class="bank-bust-vault-value">50000 / 50000</span>
+          <div class="bank-bust-vault-bar-row">
+            <img class="bank-bust-coin-icon" src="/assets/icons/coin.webp" width="16" height="16" alt="" />
+            <div class="bank-bust-vault-bar">
+              <div class="bank-bust-vault-fill"></div>
+              <div class="bank-bust-vault-floor" aria-hidden="true"></div>
+            </div>
+            <strong class="bank-bust-vault-coins">0</strong>
+          </div>
         </div>
       </div>
-      <div id="bank-bust-team2" class="bank-bust-vault">
-        <div class="bank-bust-vault-top">
-          <div class="bank-bust-vault-top-left">
-            <span class="bank-bust-vault-label">Vault</span>
-            <span class="bank-bust-gold-inline">
-              <image src="/assets/icons/coin.webp" width="16" height="16" />
 
-              <strong class="bank-bust-gold-value">0</strong></span
-            >
-          </div>
-        </div>
-        <div class="bank-bust-vault-bar-row">
-          <div class="bank-bust-vault-bar">
-            <div class="bank-bust-vault-fill"></div>
-          </div>
-          <span class="bank-bust-vault-value">50000 / 50000</span>
-        </div>
+      <div id="bank-bust-event" class="hidden" aria-live="polite">
+        <span class="bb-event-label"></span>
+        <span class="bb-event-timer"></span>
       </div>
-    </div>
 
-    <div id="bank-bust-alert" class="hidden" aria-live="assertive">
-      Vault under attack!
+      <div id="bank-bust-alert" class="hidden" aria-live="assertive">
+        Vault under attack!
+      </div>
     </div>
 
     <!-- Battle Start Overlay (populated by game.js) -->

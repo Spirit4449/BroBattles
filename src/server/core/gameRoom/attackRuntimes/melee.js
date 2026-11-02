@@ -4,7 +4,7 @@ const { attackIdentity } = require('./attackIdentity');
 const effectManager = require("../effects/effectManager");
 const { THORG_SWEEP, sampleThorgHitbox } = require("../../../../shared/characters/thorgSweep");
 const { resolvePlayerHeight, getBoundsCenter, normalizeAngleDelta, getPlayerBounds } = require('./geometry');
-const { hitRectTargets, hitCapsuleTargets, getEnemyVaultTarget, emitServerHit, buildTargetList, emitHitAction } = require('./targets');
+const { hitRectTargets, hitCapsuleTargets, getObjectiveTargets, CENTER_CRATE_TARGET, emitServerHit, buildTargetList, emitHitAction } = require('./targets');
 
 function buildAttachedRectAttack(playerData, actionData, descriptor, now) {
   return {
@@ -125,17 +125,21 @@ function tickAttachedCone(room, attack, descriptor, now) {
   );
 
   exposeDamageHitbox(room, attack, { kind: 'sector', x: baseAnchorX, y: baseAnchorY, radius: radius + 24, innerRadius, angle, halfSpread }, now);
-  const vaultTarget = getEnemyVaultTarget(room, attacker);
-  if (vaultTarget && !attack.hitSet?.has(vaultTarget.targetName)) {
-    const vaultCenter = getBoundsCenter(vaultTarget.bounds);
-    const dx = vaultCenter.x - baseAnchorX;
-    const dy = vaultCenter.y - baseAnchorY;
+  for (const objective of getObjectiveTargets(room, attacker)) {
+    if (attack.hitSet?.has(objective.targetName)) continue;
+    const objectiveCenter = getBoundsCenter(objective.bounds);
+    const dx = objectiveCenter.x - baseAnchorX;
+    const dy = objectiveCenter.y - baseAnchorY;
     const dist = Math.hypot(dx, dy);
     const theta = Math.atan2(dy, dx);
     const delta = Math.abs(normalizeAngleDelta(theta, angle));
-    if (dist >= innerRadius && dist <= radius + 24 && delta <= halfSpread) {
-      attack.hitSet?.add(vaultTarget.targetName);
-      emitServerHit(room, attack, vaultTarget.targetName, {
+    // Tested at its centre, so the crate's half width counts as reach: you
+    // swing at its side, and it should not need hugging to take the hit.
+    const reach = radius + 24 +
+      (objective.targetName === CENTER_CRATE_TARGET ? (objective.bounds.right - objective.bounds.left) / 2 : 0);
+    if (dist >= innerRadius && dist <= reach && delta <= halfSpread) {
+      attack.hitSet?.add(objective.targetName);
+      emitServerHit(room, attack, objective.targetName, {
         damage: attack.damage,
       });
     }

@@ -17,6 +17,7 @@ const {
 const combatValidation = require("./combatValidation");
 const { reduceDuckDamage } = require("../../../shared/physics/ducking");
 const { chargeSuperForHit } = require("./superCharge");
+const { CENTER_CRATE_TARGET } = require("./attackRuntimes/targets");
 
 // Client wall clocks are unsynchronised, so a client-reported Date.now() cannot
 // place a hit on the server's history. Clients send the shared server-clock
@@ -70,7 +71,12 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     const targetVault = targetVaultTeam
       ? room.gameMode?.getVaultState?.(targetVaultTeam) || null
       : null;
-    if (!attacker || (!target && !targetVault)) {
+    const targetCrate = targetName === CENTER_CRATE_TARGET
+      ? room.gameMode?.getCenterCrate?.() || null
+      : null;
+    // A mode object rather than a player: no team, health bar or knockback.
+    const targetObjective = targetVault || targetCrate;
+    if (!attacker || (!target && !targetObjective)) {
       if (room.DEBUG_HIT_EVENTS) {
         console.log(
           `[HitDebug ${room.matchId}] reject reason=missing_player attacker=${attackerName} target=${targetName}`,
@@ -81,16 +87,16 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     if (
       attacker.connected === false ||
       attacker.loaded !== true ||
-      (!targetVault && target.loaded !== true)
+      (!targetObjective && target.loaded !== true)
     ) {
       if (room.DEBUG_HIT_EVENTS) {
         console.log(
-          `[HitDebug ${room.matchId}] reject reason=not_loaded_or_disconnected attacker=${attacker.name} target=${targetVault ? targetName : target.name}`,
+          `[HitDebug ${room.matchId}] reject reason=not_loaded_or_disconnected attacker=${attacker.name} target=${targetObjective ? targetName : target.name}`,
         );
       }
       return;
     }
-    if ((!attacker.isAlive && !trustedProjectile) || (!targetVault && !target.isAlive)) {
+    if ((!attacker.isAlive && !trustedProjectile) || (!targetObjective && !target.isAlive)) {
       if (room.DEBUG_HIT_EVENTS) {
         console.log(
           `[HitDebug ${room.matchId}] reject reason=dead_player attackerAlive=${attacker.isAlive} targetAlive=${target?.isAlive}`,
@@ -109,10 +115,10 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
       }
     }
     // Allow self-hit (suicide on fall) but otherwise disable friendly fire
-    const isSelf = !targetVault && attacker.name === target.name;
+    const isSelf = !targetObjective && attacker.name === target.name;
     if (
       !isSelf &&
-      !targetVault &&
+      !targetObjective &&
       attacker.team &&
       target.team &&
       attacker.team === target.team
@@ -167,17 +173,17 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     let attackWasFuture = false;
     if (trustedProjectile) {
       aPos = { x: attacker.x, y: attacker.y };
-      tPos = targetVault ? { x: targetVault.x, y: targetVault.y } : { x: target.x, y: target.y };
-    } else if (targetVault) {
+      tPos = targetObjective ? { x: targetObjective.x, y: targetObjective.y } : { x: target.x, y: target.y };
+    } else if (targetObjective) {
       aPos = room._getHistoricalPosition(attacker, attackTimeRaw);
-      tPos = { x: Number(targetVault.x) || 0, y: Number(targetVault.y) || 0 };
+      tPos = { x: Number(targetObjective.x) || 0, y: Number(targetObjective.y) || 0 };
       attackTimeClamped = Math.min(now, attackTimeRaw);
       attackWasFuture = attackTimeRaw > now + 250;
       dist = Math.hypot(
         Number(aPos?.x || 0) - tPos.x,
         Number(aPos?.y || 0) - tPos.y,
       );
-      maxDist += Math.max(20, Number(targetVault.radius) || 90);
+      maxDist += Math.max(20, Number(targetObjective.radius) || 90);
       if (
         attackType === "special" ||
         isNinjaSwarm ||
@@ -199,7 +205,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     if (attackWasFuture) {
       if (room.DEV_TIMING_DIAG) {
         console.warn(
-          `[GameRoom ${room.matchId}] hit rejected: future attackTime attacker=${attacker.name} target=${targetVault ? targetName : target.name} ` +
+          `[GameRoom ${room.matchId}] hit rejected: future attackTime attacker=${attacker.name} target=${targetObjective ? targetName : target.name} ` +
             `type=${attackType} raw=${attackTimeRaw} now=${now}`,
         );
       }
@@ -209,7 +215,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
       if (room.DEV_TIMING_DIAG) {
         console.warn(
           `[GameRoom ${room.matchId}] hit rejected: dist=${dist.toFixed(0)}px > max=${maxDist}px ` +
-            `attacker=${attacker.name}(${attacker.char_class}) target=${targetVault ? targetName : target.name} ` +
+            `attacker=${attacker.name}(${attacker.char_class}) target=${targetObjective ? targetName : target.name} ` +
             `type=${attackType} age=${(now - attackTimeClamped).toFixed(0)}ms`,
         );
       }
@@ -220,7 +226,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     // The target must be on the side the attacker is facing; a generous tolerance
     // prevents false rejections at the boundary.
     const isMeleeFacing =
-      !targetVault && requiresMeleeFacingCheck(attacker, attackType, isSelf);
+      !targetObjective && requiresMeleeFacingCheck(attacker, attackType, isSelf);
     if (isMeleeFacing) {
       const validFacing = combatValidation.isMeleeFacingValid({
         attacker,
@@ -240,9 +246,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     // Basic per-attacker->target rate limit to avoid accidental double submissions
     room._recentHits = room._recentHits || new Map(); // key: attacker|target -> timestamp
     const instanceId = payload.instanceId ? String(payload.instanceId) : "";
-    const hitTargetKey = targetVault
-      ? `vault:${targetVaultTeam}`
-      : target.name;
+    const hitTargetKey = targetObjective ? targetName.toLowerCase() : target.name;
     const keySafe =
       attacker.name +
       "|" +
@@ -255,16 +259,31 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     if (!isSelf && now - last < DUPLICATE_HIT_WINDOW_MS) {
       if (room.DEBUG_HIT_EVENTS) {
         console.log(
-          `[HitDebug ${room.matchId}] reject reason=duplicate attacker=${attacker.name} target=${targetVault ? targetName : target.name} type=${attackType} dt=${now - last}`,
+          `[HitDebug ${room.matchId}] reject reason=duplicate attacker=${attacker.name} target=${targetObjective ? targetName : target.name} type=${attackType} dt=${now - last}`,
         );
       }
       return; // duplicate, ignore
     }
     room._recentHits.set(keySafe, now);
+    if (targetCrate) {
+      // Neither team's property, so it counts for no one's combat stats.
+      const appliedDamage = room.gameMode.damageCenterCrate(dmg, {
+        sourcePlayer: attacker.name,
+        sourceTeam: attacker.team,
+        x: aPos?.x,
+      });
+      if (appliedDamage > 0) {
+        attacker.lastAttackAt = now;
+        attacker.lastCombatAt = now;
+        room.broadcastSnapshot();
+      }
+      return { accepted: true, appliedDamage };
+    }
     if (!isSelf) room._recordCombatStat(attacker, { hits: 1 });
 
     if (targetVault) {
-      const previousHealth = Number(targetVault.health) || 0;
+      // Objective damage is measured in the coins it strips out of the vault.
+      const previousCoins = Number(targetVault.coins) || 0;
       const vaultState = room.gameMode?.damageVault?.(targetVaultTeam, dmg, {
         sourcePlayer: attacker.name,
         sourceTeam: attacker.team,
@@ -272,7 +291,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
       });
       const appliedDamage = Math.max(
         0,
-        previousHealth - (Number(vaultState?.health) || 0),
+        previousCoins - (Number(vaultState?.coins) || 0),
       );
       if (appliedDamage > 0) {
         attacker.lastAttackAt = now;

@@ -41,7 +41,7 @@ function applyDescriptorHitEffect(
   if (
     !effectCfg?.type ||
     !target ||
-    String(target.name || "").startsWith("vault:")
+    /^(vault|crate):/.test(String(target.name || ""))
   ) {
     return;
   }
@@ -101,6 +101,27 @@ function getEnemyVaultTarget(room, attacker) {
   };
 }
 
+const CENTER_CRATE_TARGET = "crate:center";
+
+function getCenterCrateTarget(room) {
+  const crate = room?.gameMode?.getCenterCrate?.();
+  if (!crate) return null;
+  return {
+    targetName: CENTER_CRATE_TARGET,
+    bounds: {
+      left: crate.x - crate.width / 2,
+      right: crate.x + crate.width / 2,
+      top: crate.y - crate.height / 2,
+      bottom: crate.y + crate.height / 2,
+    },
+  };
+}
+
+// Mode objects this attacker can damage, tested before the players.
+function getObjectiveTargets(room, attacker) {
+  return [getEnemyVaultTarget(room, attacker), getCenterCrateTarget(room)].filter(Boolean);
+}
+
 function buildTargetList(room, attackerName, attackerTeam) {
   return Array.from(room.players.values()).filter((target) => {
     if (!target || !target.isAlive) return false;
@@ -151,14 +172,14 @@ function hitCircleTargets(
   attack.hitTimes = attack.hitTimes || Object.create(null);
   let hitCount = 0;
 
-  const vaultTarget = getEnemyVaultTarget(room, attacker);
-  if (vaultTarget && !attack.hitSet?.has(vaultTarget.targetName)) {
-    const lastVaultHitAt = Number(attack.hitTimes[vaultTarget.targetName]) || 0;
-    if (repeatCooldownMs <= 0 || now - lastVaultHitAt >= repeatCooldownMs) {
-      if (circleAabbOverlap(cx, cy, radius, vaultTarget.bounds)) {
-        attack.hitSet?.add(vaultTarget.targetName);
-        attack.hitTimes[vaultTarget.targetName] = now;
-        emitServerHit(room, attack, vaultTarget.targetName, {
+  for (const objective of getObjectiveTargets(room, attacker)) {
+    if (attack.hitSet?.has(objective.targetName)) continue;
+    const lastObjectiveHitAt = Number(attack.hitTimes[objective.targetName]) || 0;
+    if (repeatCooldownMs <= 0 || now - lastObjectiveHitAt >= repeatCooldownMs) {
+      if (circleAabbOverlap(cx, cy, radius, objective.bounds)) {
+        attack.hitSet?.add(objective.targetName);
+        attack.hitTimes[objective.targetName] = now;
+        emitServerHit(room, attack, objective.targetName, {
           damage: attack.damage,
         });
         hitCount += 1;
@@ -188,16 +209,16 @@ function hitRectTargets(room, attack, descriptor, rect, now) {
   exposeDamageHitbox(room, attack, { kind: 'rect', ...rect }, now);
   const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return;
-  const vaultTarget = getEnemyVaultTarget(room, attacker);
-  if (vaultTarget && !attack.hitSet?.has(vaultTarget.targetName)) {
+  for (const objective of getObjectiveTargets(room, attacker)) {
+    if (attack.hitSet?.has(objective.targetName)) continue;
     const overlap =
-      rect.left <= vaultTarget.bounds.right &&
-      rect.right >= vaultTarget.bounds.left &&
-      rect.top <= vaultTarget.bounds.bottom &&
-      rect.bottom >= vaultTarget.bounds.top;
+      rect.left <= objective.bounds.right &&
+      rect.right >= objective.bounds.left &&
+      rect.top <= objective.bounds.bottom &&
+      rect.bottom >= objective.bounds.top;
     if (overlap) {
-      attack.hitSet?.add(vaultTarget.targetName);
-      emitServerHit(room, attack, vaultTarget.targetName, {
+      attack.hitSet?.add(objective.targetName);
+      emitServerHit(room, attack, objective.targetName, {
         damage: attack.damage,
       });
     }
@@ -222,14 +243,11 @@ function hitCapsuleTargets(room, attack, descriptor, start, end, radius, now) {
   const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return 0;
   let hitCount = 0;
-  const vaultTarget = getEnemyVaultTarget(room, attacker);
-  if (
-    vaultTarget &&
-    !attack.hitSet?.has(vaultTarget.targetName) &&
-    sweep(start, end, vaultTarget.bounds, radius) !== null
-  ) {
-    attack.hitSet?.add(vaultTarget.targetName);
-    emitServerHit(room, attack, vaultTarget.targetName, { damage: attack.damage });
+  for (const objective of getObjectiveTargets(room, attacker)) {
+    if (attack.hitSet?.has(objective.targetName)) continue;
+    if (sweep(start, end, objective.bounds, radius) === null) continue;
+    attack.hitSet?.add(objective.targetName);
+    emitServerHit(room, attack, objective.targetName, { damage: attack.damage });
     hitCount++;
   }
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
@@ -243,4 +261,4 @@ function hitCapsuleTargets(room, attack, descriptor, start, end, radius, now) {
   return hitCount;
 }
 
-module.exports = { shotTargetBounds, emitServerHit, applyDescriptorHitEffect, getEnemyVaultTarget, buildTargetList, emitHitAction, hitCircleTargets, hitRectTargets, hitCapsuleTargets };
+module.exports = { CENTER_CRATE_TARGET, shotTargetBounds, emitServerHit, applyDescriptorHitEffect, getEnemyVaultTarget, getCenterCrateTarget, getObjectiveTargets, buildTargetList, emitHitAction, hitCircleTargets, hitRectTargets, hitCapsuleTargets };

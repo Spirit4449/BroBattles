@@ -44,6 +44,9 @@ export function installRenderResolution(game, Phaser, initialScale = 1) {
     set: value => { bufferHeight = value; },
   });
   const sync = () => {
+    // Reallocating the drawing buffer and the renderer's targets needs a live
+    // context; on a lost one every call throws before the page can recover.
+    if (renderer.contextLost || gl.isContextLost?.()) return;
     const { width, height } = game.scale.baseSize;
     const limits = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
     const maxSize = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE);

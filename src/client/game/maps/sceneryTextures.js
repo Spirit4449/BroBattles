@@ -8,6 +8,8 @@ export const SCENERY_TEXTURES = Object.freeze({
   fog: 'scenery-fx-fog',
   mist: 'scenery-fx-mist',
   vignette: 'scenery-fx-vignette',
+  lampCone: 'scenery-fx-lamp-cone',
+  lampPool: 'scenery-fx-lamp-pool',
 });
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -85,6 +87,13 @@ export function ensureSceneryTextures(scene) {
     [T.vignette]: () => paintAlpha(scene, T.vignette, 256, 256, (u, v) =>
       Math.pow(smoothstep(0.45, 1.05, Math.hypot((u - 0.5) * 2, (v - 0.5) * 2) / Math.SQRT2 * 1.25), 1.3)),
     [T.mist]: () => paintMist(scene, T.mist),
+    // A soft cone: narrow at the lamp, spreading and fading towards the ground.
+    [T.lampCone]: () => paintAlpha(scene, T.lampCone, 128, 128, (u, v) => {
+      const half = 0.06 + 0.26 * v;
+      return Math.exp(-Math.pow((u - 0.5) / half, 2) * 1.2) * Math.pow(1 - v, 0.7) * smoothstep(0, 0.04, v);
+    }),
+    [T.lampPool]: () => paintAlpha(scene, T.lampPool, 128, 32, (u, v) =>
+      Math.pow(clamp01(1 - Math.hypot((u - 0.5) * 2, (v - 0.5) * 2)), 1.8)),
   };
   for (const [key, paint] of Object.entries(painters)) {
     if (scene.textures.exists(key)) continue;

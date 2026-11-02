@@ -152,12 +152,12 @@ test('reticle and camera seek use direction without scaling from drag distance',
   assert.equal(near, 1);
   assert.equal(far, near);
   assert.ok(farDistance > nearDistance);
-  assert.equal(h.scene._combatAimLook.x, 72);
+  assert.equal(h.scene._combatAimLook.x, COMBAT_MOUSE_CONFIG.lookAhead);
   move(h, -60, 0);
   assert.equal(h.controller.getStrength(), near);
   move(h, 1000, 0);
   assert.equal(h.controller.getStrength(), 1);
-  assert.equal(h.scene._combatAimLook.x, 72);
+  assert.equal(h.scene._combatAimLook.x, COMBAT_MOUSE_CONFIG.lookAhead);
   move(h, -1030, 0);
   assert.equal(h.controller.isAiming(), false);
   assert.equal(h.scene._combatAimLook.x, 0);

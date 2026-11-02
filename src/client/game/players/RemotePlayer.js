@@ -182,14 +182,13 @@ export default class RemotePlayer {
     );
     bindCanvasName(this.opPlayerName, this.username);
     this.opPlayerName.setStyle({
-      fontFamily: "LilitaOne-Regular",
-      fontSize: "10px",
-      fontStyle: "bold",
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: "7px",
       fill: "#ffffff",
       stroke: "#000000",
       strokeThickness: 3,
     });
-    this.opPlayerName.setShadow(1, 1, "rgba(0, 0, 0, 0.65)", 1, true, true);
+    this.opPlayerName.setShadow(1, 1, "rgba(0, 0, 0, 0.65)", 0, true, true);
     this.opPlayerName.setOrigin(0.5, 0);
     this.opPlayerName.setDepth(50); // always above map objective props
 
@@ -202,8 +201,8 @@ export default class RemotePlayer {
     this._isSpectated = false;
 
     this.opHealthText = this.scene.add.text(0, 0, "", {
-      fontFamily: "LilitaOne-Regular",
-      fontSize: "10px",
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: "8px",
       color: "#FFFFFF",
       stroke: "#000000",
       strokeThickness: 4,

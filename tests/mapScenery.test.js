@@ -28,6 +28,10 @@ test('every map has scenery, validated with the map',()=>{
   s=>s.atmosphere.rays[0].alpha=[0.5,0.1],
   s=>s.atmosphere.dust[0].count=100000,
   s=>s.atmosphere.platforms.strength=2,
+  s=>{s.layers[0].parts=[{url:'/assets/x.webp',x:0,y:0,frameWidth:8,frameHeight:8,frameRate:4,frames:[]}];},
+  s=>{s.layers[0].parts=[{url:'https://elsewhere.example/x.webp',x:0,y:0,frameWidth:8,frameHeight:8,frameRate:4,frames:[0]}];},
+  s=>{s.atmosphere.lamps=[{x:0,y:0,length:100,width:100,color:'#ffffff',alpha:[0.5,0.1],periodMs:1000}];},
+  s=>{s.atmosphere.lamps=[{x:0,y:0,length:100,width:100,color:'#ffffff',alpha:[0.1,0.5],periodMs:50}];},
   s=>s.layers=[],
   s=>s.clouds.items[0].type='no-such-cloud',
   s=>s.clouds.items[1].id=s.layers[0].id,
@@ -119,4 +123,23 @@ test('parallax: far layers drift less than the arena, foreground more',()=>{
  assert.ok(Math.abs(origin.x+zoom*(t.x-0.3*(center.x-origin.x)-origin.x)-(origin.x+zoom*200))<1e-9);
  // Far layers respond less to camera zoom than the arena does.
  assert.ok(layerZoom(referenceZoom,2,0.2)<2&&layerZoom(referenceZoom,2,0.2)>referenceZoom);
+});
+
+test('a lamp stays in its brightness range and flickers some of the time',()=>{
+ const {lampState}=require('../src/shared/maps/scenery');
+ const lamp={alpha:[0.3,0.5],periodMs:3000,flicker:0.8};
+ const states=Array.from({length:2000},(_,i)=>lampState(lamp,i/60,2));
+ assert.ok(states.every(s=>s.alpha>=0&&s.alpha<=lamp.alpha[1]+1e-9));
+ assert.ok(states.some(s=>s.dip>0)&&states.some(s=>s.dip===0));
+ assert.notEqual(lampState(lamp,1,0).alpha,lampState(lamp,1,1).alpha,'lamps in a row move out of step');
+});
+
+test('animated layer parts validate and load each sheet once',()=>{
+ const {sceneryParts,validateScenery}=require('../src/shared/maps/scenery');
+ const part={url:'/assets/x.webp',x:1,y:2,frameWidth:8,frameHeight:8,frameRate:4,frames:[0,1,1]};
+ const scenery={layers:[{id:'a',url:'/assets/a.webp',scroll:0.5,parts:[part]},{id:'b',url:'/assets/a.webp',scroll:0.5,parts:[part]}]};
+ const errors=[];
+ validateScenery(scenery,(path,message)=>errors.push(`${path}: ${message}`),(v,path)=>{if(typeof v!=='number')errors.push(path);},()=>{});
+ assert.deepEqual(errors,[]);
+ assert.equal(sceneryParts(scenery).length,1);
 });

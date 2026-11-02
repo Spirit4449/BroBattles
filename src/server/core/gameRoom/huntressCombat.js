@@ -1,9 +1,11 @@
+const { shotTerrain } = require('./attackRuntimes/geometry');
 const { exposeDamageHitbox } = require('./damageHitboxes');
 const { snapshotEpoch } = require('./roomStateManager');
 const model = require('../../../shared/characters/huntressProjectile');
 const { participantId, getParticipant } = require('./participants');
 const { characterBody } = require('../../../shared/physics/duelGeometry');
 const { clampViewRewind, poseAt } = require('./lagCompensation');
+const { getCenterCrateTarget } = require('./attackRuntimes/targets');
 
 function initialize(room) {
   // Protocol version protects joins from stale clients; combat is always authoritative.
@@ -86,10 +88,12 @@ function targetList(room, owner, viewRewindMs = 0, now = Date.now()) {
   }
   const enemyTeam = owner.team === 'team1' ? 'team2' : 'team1';
   const vault = room.gameMode?.getVaultState?.(enemyTeam);
-  if (vault && vault.health > 0) targets.push({ name: `vault:${enemyTeam}`, bounds: {
+  if (vault && vault.coins > 0) targets.push({ name: `vault:${enemyTeam}`, bounds: {
     left: vault.x - (vault.width || 150) / 2, right: vault.x + (vault.width || 150) / 2,
     top: vault.y - (vault.height || 180) / 2, bottom: vault.y + (vault.height || 180) / 2,
   } });
+  const crate = getCenterCrateTarget(room);
+  if (crate) targets.push({ name: crate.targetName, bounds: crate.bounds });
   return targets.sort((a, b) => a.name.localeCompare(b.name));
 }
 function finish(room, attack, contact) {
@@ -151,7 +155,7 @@ function tick(room) {
     const nextAge = Math.min(attack.projectile.maxLifetimeMs, Math.max(0, room._simulationMono - attack.projectile.launchMono));
     const next = model.sample(attack.projectile, nextAge);
     exposeDamageHitbox(room, attack.projectile, { kind: 'sweep', a: { x: attack.x, y: attack.y }, b: { x: next.x, y: next.y }, radius: attack.collisionRadius });
-    const contact = model.firstContact(attack, next, attack.collisionRadius, room.geometry.colliders, targetList(room, owner, attack.viewRewindMs));
+    const contact = model.firstContact(attack, next, attack.collisionRadius, shotTerrain(room, owner.team), targetList(room, owner, attack.viewRewindMs));
     Object.assign(attack, next, { age: nextAge });
     if (contact) finish(room, attack, contact);
     else if (nextAge >= attack.projectile.maxLifetimeMs || attack.y >= room.geometry.world.y + room.geometry.world.height) {

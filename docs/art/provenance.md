@@ -455,3 +455,24 @@ Historical source records consolidated on 2026-10-05. These quotations preserve 
 > Source: /Users/nisch/.codex/generated_images/01a0a547-4385-7d51-bafe-94620bc9022b/exec-5d82e458-8f40-4890-ae14-45e9313dbd38.png
 
 > Prompt: Edit ONLY the load of gems in this cart. Preserve wooden cart body, metal straps, wheels and pixel art style. Replace huge upright diamonds with many smaller cyan blue gems nestled naturally inside cart under gravity, lying on sides at varied angles with strong overlap, a low irregular mound rising just above rim. Gems partly hidden behind front rim. No giant central hanging diamond, no symmetrical bouquet, no floating gems. Preserve faceted diamond shapes. Use case: precise-object-edit. Pixel-art game reward sprite. Preserve existing chunky crisp pixel clusters, dark outlines and currency colors/design. Genuine transparent alpha background, no glow, haze, ground shadow or backdrop. Entire sprite centered with 3% padding. No text.
+
+## Installed Lushy Peaks pixel platform set (2026-11-02)
+
+The user approved the fine pixel-art main island and its matching thin ledge,
+tall pillar and purpose-designed small ledge. The later smaller-stone revision
+was rejected; the approved main is retained unchanged as the art master.
+Both map backgrounds and Mangrove artwork remain unchanged.
+
+Built-in `image_gen` sources, exact variant prompts, logical pixel art and
+nearest-neighbor 4K PNG masters are retained under `output/lushy-pixel-final/`.
+`export-lushy-platform-set.cjs` verifies exact 4x pixel replication for variants.
+Installed WebPs are portable masters if the ignored working output is absent.
+
+`node scripts/art/install-meadow-peaks-art.cjs` aligns grass surfaces to the
+original collision offsets, exports lossless 4x nearest-neighbor WebP textures,
+and uses the editor replacement contract to compensate texture sizes, platform
+scales and body offsets. It asserts identical complete geometry before saving
+the built-in map and saved override through the map repository. World positions,
+collision rectangles, spawn references and gameplay sizes are preserved.
+The lobby uses the matching small ledge, aligned to its existing 32/638 surface
+ratio. The map selection preview is rebuilt from the installed art.

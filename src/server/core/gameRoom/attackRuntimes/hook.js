@@ -5,7 +5,7 @@ const { getParticipant, participantId } = require('../participants');
 const effectManager = require("../effects/effectManager");
 const { clampToWorld, circleAabbOverlap, getAttackCollisionCenter } = require('./geometry');
 const { buildProjectileLinearAttack } = require('./projectiles');
-const { getEnemyVaultTarget, emitServerHit, buildTargetList, shotTargetBounds } = require('./targets');
+const { getObjectiveTargets, emitServerHit, buildTargetList, shotTargetBounds } = require('./targets');
 
 function resolveLiveGloopPullDestination(room, target, pull) {
   const source = getParticipant(room, String(pull?.sourceSocketId || ""));
@@ -226,11 +226,11 @@ function tickHookProjectile(room, attack, descriptor, now) {
   );
   const collisionCenter = getAttackCollisionCenter(attack, runtime);
   exposeDamageHitbox(room, attack, { kind: 'circle', x: collisionCenter.x, y: collisionCenter.y, radius }, now);
-  const vaultTarget = getEnemyVaultTarget(room, attacker);
-  if (vaultTarget && !attack.hitSet?.has(vaultTarget.targetName)) {
-    if (circleAabbOverlap(collisionCenter.x, collisionCenter.y, radius, vaultTarget.bounds)) {
-      attack.hitSet?.add(vaultTarget.targetName);
-      emitServerHit(room, attack, vaultTarget.targetName, {
+  for (const objective of getObjectiveTargets(room, attacker)) {
+    if (attack.hitSet?.has(objective.targetName)) continue;
+    if (circleAabbOverlap(collisionCenter.x, collisionCenter.y, radius, objective.bounds)) {
+      attack.hitSet?.add(objective.targetName);
+      emitServerHit(room, attack, objective.targetName, {
         damage: attack.damage,
       });
       return true;

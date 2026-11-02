@@ -39,6 +39,7 @@ export function loadMode(modeId) {
 }
 
 export function preloadModeAssets(scene, modeId, staticPath) {
+  scene._bankBustMovementAudio = false;
   loadedModes.get(String(modeId))?.preload?.(scene, staticPath);
 }
 export function createModeRuntime(options) {

@@ -80,4 +80,12 @@ function sweptCircleOverlapsRect(prevX, prevY, nextX, nextY, rect, radius = 0) {
   return !(maxX < left || minX > right || maxY < top || minY > bottom);
 }
 
-module.exports = { getPlayerBounds, getBoundsCenter, normalizeAngleDelta, circleAabbOverlap, cubic, resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter, clampToWorld, sweptCircleOverlapsRect };
+// What a shot from this team collides with: the map, plus whatever the mode has
+// put up against it.
+function shotTerrain(room, shooterTeam, fallback = []) {
+  const colliders = room?.geometry?.colliders || fallback;
+  const blockers = room?.gameMode?.getShotBlockers?.(shooterTeam);
+  return blockers?.length ? [...colliders, ...blockers] : colliders;
+}
+
+module.exports = { shotTerrain, getPlayerBounds, getBoundsCenter, normalizeAngleDelta, circleAabbOverlap, cubic, resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter, clampToWorld, sweptCircleOverlapsRect };

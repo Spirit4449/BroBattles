@@ -1,5 +1,6 @@
+import { movementSoundKey } from "../../../shared/physics/movementSounds";
 import { playPlayerSound, playerSoundVolume } from './playerAudio';
-import { getTerrainSteps, footstepVolume, terrainLandingSound, shouldPlayLandingSound } from './movementAudio';
+import { getTerrainSteps, footstepVolume, terrainLandingSound, shouldPlayLandingSound, fallingAirVolume } from './movementAudio';
 import { MOVEMENT_VFX_CONFIG } from '../scene/effects';
 import movementPhysics from '../../../shared/physics/movementPhysics.json';
 
@@ -15,7 +16,7 @@ export function createRemoteMovementAudio(scene, sprite) {
   const now = () => performance.now();
   const play = (key, options) => {
     if (scene.sound?.locked) return;
-    try { playPlayerSound(scene, sprite, key, options); } catch (_) {}
+    try { playPlayerSound(scene, sprite, movementSoundKey(scene, key), options); } catch (_) {}
   };
   function step(speed, turning, time) {
     const steps = getTerrainSteps(scene._terrainType);
@@ -35,7 +36,7 @@ export function createRemoteMovementAudio(scene, sprite) {
     }
     try {
       if (!sound) {
-        sound = scene.sound?.add(key, { loop: true, volume: 0 });
+        sound = scene.sound?.add(movementSoundKey(scene, key), { loop: true, volume: 0 });
         if (!sound) return;
         loops.set(key, sound);
       }
@@ -69,7 +70,7 @@ export function createRemoteMovementAudio(scene, sprite) {
     const elapsed = falling ? time - fallStarted : 0;
     const ramp = clamp(elapsed / 220);
     const age = clamp(elapsed / 950);
-    loop('sfx-fall-air', falling ? (0.06 + fallSpeed * (0.16 + age * 0.14)) * ramp : 0,
+    loop('sfx-fall-air', falling ? fallingAirVolume(fallSpeed, age) * ramp : 0,
       0.72 + fallSpeed * 0.24 + age * 0.04);
   }
   function update(state, animationState = state) {

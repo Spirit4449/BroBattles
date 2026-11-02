@@ -16,8 +16,9 @@ Rule of thumb: values both client and server need go in `src/shared/`. Cross-cut
 | Level-up stat gains, level cap, upgrade prices, default character | `src/shared/characters/characterStats.js` |
 | Powerup duration, strength, color, sound | `src/shared/catalogs/powerups.catalog.json` |
 | Generic statuses (slow, stun, damage boost) | `src/shared/effectRules.js` |
-| Mode team sizes, unlock trophies, Bank Bust vault HP/clock/respawn | `src/shared/catalogs/gameModes.catalog.json` |
-| Bank Bust loose gold | `src/server/core/gameModes/bankBust/state.js` |
+| Mode team sizes, unlock trophies, Bank Bust vault coins/clock/respawn | `src/shared/catalogs/gameModes.catalog.json` |
+| Bank Bust loose gold and centre gold event | `src/server/core/gameModes/bankBust/state.js` |
+| Bank Bust purchase costs, mine yields, vault size | `objectiveLayout.bankBust` in `src/shared/maps/4.json` (built by `scripts/maps/build-iron-junction.cjs`) |
 | Map platforms, player/powerup spawn points, per-map powerup overrides | `src/shared/maps/<id>.json` (edit in Map Studio) |
 | Pregame flythrough, countdown, start deadline | `src/shared/matchIntroTiming.js` |
 | Trophy gains/losses, reward track and unlock milestones | `src/shared/catalogs/trophySystem.catalog.json` |
@@ -46,7 +47,7 @@ The file is split into commented sections:
 
 - **Match clock and sudden death:** `GAME_DURATION_MS`, the `SD_*` poison-rise values, `SUDDEN_DEATH_MAX_MS`, `ALL_DEAD_GAME_OVER_DELAY_MS`, `ABANDON_MATCH_GRACE_MS`.
 - **Passive regen:** `REGEN_DELAY_MS`, `REGEN_TICK_MS`, `REGEN_MISSING_RATIO`, `REGEN_MIN_ABS`. `GameRoom` copies these onto `room.REGEN_*` so tests can override them per room.
-- **Powerup spawning:** interval, starting count, max active, pickup radius, despawn, omen, spawn lift. Map documents configure each variant's `powerups` block (interval, max active, pickup radius, despawn, omen and lift); `geometryFromMap` exposes these as runtime `geometry.settings`. Spawn points come from the variant's `spawns.powerups`. The initial count remains the room default.
+- **Powerup spawning:** interval, first-spawn delay, starting count, max active, pickup radius, despawn, omen, spawn lift. Map documents configure each variant's `powerups` block (interval, max active, pickup radius, despawn, omen and lift); `geometryFromMap` exposes these as runtime `geometry.settings`. Spawn points come from the variant's `spawns.powerups`. The initial count remains the room default.
 - **Derived from the powerup catalog:** shockwave radius/force, health regen, poison DPS, freeze multipliers. Don't edit these here; edit the catalog.
 - **Death drops:** lifetime, blink, pickup radius, coin/gem ranges, launch velocities.
 - **Combat rules:** `STOMP_RADIUS`, `STOMP_INTERRUPT_MS`, `DUPLICATE_HIT_WINDOW_MS`. `NINJA_SWARM_HIT_DAMAGE` is derived from `ninja.json`.
@@ -77,6 +78,7 @@ The local player, the server's movement validation, and the bot physics all read
 | `wallSlideAttachDelayMs` | Delay before a wall slide engages. |
 | `wallSlideReentryDelayMs` | Delay before re-attaching to a wall after leaving it. |
 | `wallJumpHorizontalGracePx` | Extra horizontal reach (px) for detecting a wall jump. |
+| `wallMinFaceHeight` | A side must rise this far (px) above the ground under the body to be wall-slid on or wall-jumped off. Shorter ones are steps. |
 | `wallKickFull` | Horizontal speed of a wall kick (px/s). |
 | `wallKickVerticalBonus` / `wallKickMinVerticalSpeed` | Extra speed added to `jumpSpeed` / minimum speed before applying the vertical wall-kick multiplier (px/s). Scale with jump speed and gravity. |
 | `wallKickVerticalMult` | Vertical scale on a wall kick. |
@@ -141,14 +143,17 @@ The admin panel calls the runtime configuration service, which updates in-memory
 | `gameConstants.js` | 60 Hz simulation; snapshots every 2 ticks; world state every 8 ticks; fallback world 3600 × 1000px with 400px margin; party join requests expire after 15s |
 | `gameRoomConfig.js`: match | Duels regular time 150s; poison rises at 15px/s, ×2.2 for the first 12s; poison damage 400/s; sudden-death cap 80s; timer broadcast 500ms; elimination finish delay 3s; all-human departure grace 15s |
 | `gameRoomConfig.js`: regen | Starts after 3.5s out of combat; ticks every 1.5s for 25% of missing health, minimum 500, capped at max health |
-| `gameRoomConfig.js`: powerups | Spawn interval 25s; starting count 2; max active 3; pickup radius 34px (collected when a hurtbox overlaps the pickup circle); despawn 10s after the 2s omen; anchored spawn lift 22px |
+| `gameRoomConfig.js`: powerups | Spawn interval 25s; first 2 spawn 5s into the match; max active 3; pickup radius 34px (collected when a hurtbox overlaps the pickup circle); despawn 10s after the 2s omen; anchored spawn lift 22px |
 | `gameRoomConfig.js`: drops | Lifetime 12s; final 3s blinking; pickup radius 110px; 4–8 coin drops and 1–3 gem drops |
 | `gameRoomConfig.js`: validation | Hit rewind cap 300ms; future tolerance 120ms; history 1s / 128 samples; duplicate-hit window 80ms; stomp radius 110px and interruption 300ms |
-| `movementPhysics.json` | Run speed 260px/s; ground/air acceleration 3000/3300px/s²; gravity 990px/s²; jump speed parameter 468px/s; dash 560px/s (straight down 840), burst 160ms, cooldown 5000ms, coast up to 850ms |
+| `movementPhysics.json` | Run speed 260px/s; ground/air acceleration 3000/3300px/s²; gravity 990px/s²; jump speed parameter 490px/s; dash 600px/s (straight down 840), burst 160ms, cooldown 5000ms, coast up to 850ms |
 | `ducking.js` | Body height ×0.55; movement ×0.25; damage taken ×0.8; minimum hold 50ms; reentry delay 100ms |
 | `characterStats.js` | Level cap 10; levels 2–5 add 500 HP / 100 damage / 200 special damage per level; levels 6–10 add 400 / 80 / 100; next-level coin costs 200, 400, 800, 1600, 2400, 3300, 4500, 6100, 8200 |
-| `gameModes.catalog.json`: Bank Bust | Vault HP 50,000; match 210s; respawn 3500ms; respawn shield 3000ms; unlock 250 peak trophies |
-| `bankBust/state.js`: loose gold | Cap 6; value 10 each; pickup radius 42px; spawn interval 3200ms; collection event retention 1800ms |
+| `gameModes.catalog.json`: Bank Bust | Vault starts with 50,000 coins; 1 damage strips 1 coin; a banked death-drop coin is worth 50; purchases cannot take a vault below 7,500; low warning at 25%; match 210s; respawn 3500ms; respawn shield 3000ms; unlock 250 peak trophies |
+| `bankBust/BankBustGameMode.js`: `VAULT_BUST_FINISH_DELAY_MS` | Match runs on 1800ms after a vault is emptied, so the bust plays before `game:over` |
+| `bankBust/state.js`: loose gold | Cap 5; value 1,250 coins each; pickup radius 42px; spawn interval 3600ms; arrives over 1300ms, uncollectible until down; coin event retention 1800ms |
+| `bankBust/state.js`: centre crate | 15,000 health; holds 7,500 coins spilled as 5 piles; first drop 45s in; 50s between drops; announced 8s ahead; despawns after 30s |
+| Iron Junction `objectiveLayout` | Turret 8,750 coins; wall 5,500 coins; gold mine 500 coins per 5s capped at 2,000 |
 
 These are code defaults. Map documents override room geometry and per-map powerup settings; saved map overrides take precedence over built-ins. Mode settings supply Bank Bust's clock instead of the Duels default. Character level, effects and application-specific parameters change resolved stats. Admin overrides change reward multipliers/limits and bot filling. Editing a fallback does not change maps that explicitly store the old value. Review saved overrides and rebuild/restart the affected client/server before comparing behavior.
 

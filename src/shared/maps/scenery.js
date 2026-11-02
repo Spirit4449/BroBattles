@@ -1,6 +1,6 @@
 // A map's `scenery`: parallax art layers (at least one), drifting clouds and
-// optional atmosphere (fog, mist, glows, light rays, dust, platform lighting,
-// vignette). Presentation only. The server validates and pins it but never
+// optional atmosphere (fog, mist, glows, light rays, lamps, dust, platform
+// lighting, vignette). Presentation only. The server validates and pins it but never
 // simulates it.
 //
 // Layer and atmosphere positions are offsets in world units from the camera
@@ -60,6 +60,16 @@ function validateScenery(scenery, fail, num, id) {
     // (over platforms, clouds and arena haze; under fighters) or front (over
     // fighters; the default above scroll 1).
     if (layer?.stack !== undefined && !LAYER_STACKS.includes(layer.stack)) fail(`${path}.stack`, `use ${LAYER_STACKS.join(', ')}`);
+    // Animated parts of this layer's art: looping sprites pinned to a spot on the
+    // image (x, y are the sprite's centre in image px). They move with the layer.
+    list(layer?.parts, `${path}.parts`, 16).forEach((part, j) => {
+      const partPath = `${path}.parts[${j}]`;
+      url(part?.url, `${partPath}.url`);
+      num(part?.x, `${partPath}.x`); num(part?.y, `${partPath}.y`);
+      num(part?.frameWidth, `${partPath}.frameWidth`, 1, 4096); num(part?.frameHeight, `${partPath}.frameHeight`, 1, 4096);
+      num(part?.frameRate, `${partPath}.frameRate`, 0.1, 60);
+      if (!Array.isArray(part?.frames) || !part.frames.length || part.frames.some((f) => !Number.isInteger(f) || f < 0)) fail(`${partPath}.frames`, 'requires frame numbers');
+    });
     // Optional design frame: the full canvas the art was exported from and this
     // image's top-left inside it (image px). Layers that share a frame keep its
     // composition: the frame is fitted, and the image sits where it was drawn.
@@ -116,6 +126,16 @@ function validateScenery(scenery, fail, num, id) {
     num(r?.length, `${path}.length`, 1, 10000); range(r?.width, `${path}.width`, 1, 4000);
     range(r?.alpha, `${path}.alpha`, 0, 1); range(r?.periodMs, `${path}.periodMs`, 100, 60000);
   });
+  // Lamps: a soft cone of light down from (x, y) that breathes between `alpha` and
+  // dips by up to `flicker`. Drawn over the fighters, so it lights them too.
+  list(a.lamps, 'scenery.atmosphere.lamps', 24).forEach((l, i) => {
+    const path = `scenery.atmosphere.lamps[${i}]`;
+    color(l?.color, `${path}.color`);
+    num(l?.x, `${path}.x`); num(l?.y, `${path}.y`);
+    num(l?.length, `${path}.length`, 1, 2000); num(l?.width, `${path}.width`, 1, 2000);
+    range(l?.alpha, `${path}.alpha`, 0, 1); num(l?.periodMs, `${path}.periodMs`, 100, 60000);
+    opt(l?.flicker, `${path}.flicker`, 0, 1);
+  });
   // One dust field, or several at different depths. Without `after` a field
   // floats over the fighters.
   const dust = Array.isArray(a.dust) ? a.dust : a.dust === undefined ? [] : [a.dust];
@@ -135,6 +155,20 @@ function validateScenery(scenery, fail, num, id) {
   if (a.vignette !== undefined) { color(a.vignette?.color, 'scenery.atmosphere.vignette.color'); num(a.vignette?.alpha, 'scenery.atmosphere.vignette.alpha', 0, 1); }
 }
 
+/**
+ * A lamp's brightness at `seconds`. `phase` keeps a row of lamps out of step. The
+ * flicker holds for a short beat at a time, like a bad contact, rather than moving
+ * smoothly.
+ */
+function lampState(lamp, seconds, phase = 0) {
+  const turn = (seconds * 1000) / lamp.periodMs * Math.PI * 2 + phase * 1.7;
+  const beat = Math.floor(seconds * 9 + phase * 31);
+  const noise = Math.abs(Math.sin(beat * 12.9898 + phase * 78.233) * 43758.5453) % 1;
+  const dip = noise > 0.86 ? (lamp.flicker || 0) * ((noise - 0.86) / 0.14) : 0;
+  const breathe = 0.5 + 0.5 * Math.sin(turn);
+  return { alpha: (lamp.alpha[0] + (lamp.alpha[1] - lamp.alpha[0]) * breathe) * (1 - dip), dip };
+}
+
 /** Cloud art for a cloud object; "random" picks by ID, so every client agrees. */
 function cloudUrl(cloud) {
   if (cloud.type !== RANDOM_CLOUD) return CLOUD_TYPES[cloud.type];
@@ -147,6 +181,13 @@ function cloudUrl(cloud) {
 /** Clouds that render: none when the map turns them off. */
 function activeClouds(scenery) {
   return scenery?.clouds?.enabled ? scenery.clouds.items || [] : [];
+}
+
+/** Spritesheets a scenery block's animated layer parts load, one per file. */
+function sceneryParts(scenery) {
+  const byUrl = new Map();
+  for (const layer of scenery?.layers || []) for (const part of layer.parts || []) byUrl.set(part.url, part);
+  return [...byUrl.values()];
 }
 
 /** Image files a scenery block loads. */
@@ -195,4 +236,4 @@ function coverScale({ image, scroll, offset = { x: 0, y: 0 }, view, bounds, refe
   return scale;
 }
 
-module.exports = { ARENA_DEPTH, CLOUD_TYPES, CLOUD_DIRECTIONS, RANDOM_CLOUD, validateScenery, cloudUrl, activeClouds, sceneryUrls, layerZoom, sceneryTransform, coverScale };
+module.exports = { ARENA_DEPTH, CLOUD_TYPES, CLOUD_DIRECTIONS, RANDOM_CLOUD, validateScenery, cloudUrl, activeClouds, sceneryUrls, sceneryParts, lampState, layerZoom, sceneryTransform, coverScale };

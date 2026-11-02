@@ -630,10 +630,10 @@ test('bots hop over Bank Bust steps instead of pushing against their sides', (t)
   const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
   const h = setup(t, ['ninja', 'wizard']);
   h.room.geometry = getDuelGeometry(4);
-  const floor = h.room.geometry.colliders.find((surface) => surface.id === 'p19');
-  const step = h.room.geometry.colliders.find((surface) => surface.id === 'h7');
-  const destination = h.room.geometry.colliders.find((surface) => surface.id === 'p3');
-  h.place(h.p, step.left - 90, floor);
+  const floor = h.room.geometry.colliders.find((surface) => surface.id === 'floor-l-body');
+  const step = h.room.geometry.colliders.find((surface) => surface.id === 'hill-l-1-body');
+  const destination = h.room.geometry.colliders.find((surface) => surface.id === 'hill-l-2-body');
+  h.place(h.p, step.left - 60, floor);
   h.place(h.players[1], destination.x, destination);
   h.players[1].health = h.players[1].maxHealth = 1000000;
   h.brain.openingUntil = 0;
@@ -657,6 +657,40 @@ test('bots hop over Bank Bust steps instead of pushing against their sides', (t)
 
   assert.equal(clearedStep, true, 'lands beyond the step');
   assert.equal(h.brain.metrics.unforcedFalls, 0);
+});
+
+test('bots climb the Bank Bust routes to the catwalks and in and out of the tunnel', (t) => {
+  const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
+  for (const [startId, goalId] of [
+    ['chamber-l-3-body', 'gantry-l-body'],
+    ['hill-top-body', 'gantry-centre-body'],
+    ['tunnel-1-body', 'floor-l-body'],
+    ['shelf-l-body', 'tunnel-2-body'],
+    ['floor-l-body', 'tunnel-3-body'],
+    ['hill-top-body', 'tunnel-3-body'],
+  ]) {
+    const h = setup(t, ['ninja', 'wizard']);
+    h.room.geometry = getDuelGeometry(4);
+    const start = h.room.geometry.colliders.find((surface) => surface.id === startId);
+    const goal = h.room.geometry.colliders.find((surface) => surface.id === goalId);
+    h.place(h.p, start.x, start);
+    h.players[1].isAlive = false;
+    h.brain.openingUntil = 0;
+    h.brain.nextIdleAt = Infinity;
+    h.brain.random = () => 0.5;
+    h.brain.retreating = false;
+    h.brain.context(effects.getModifiers(h.p, h.now()), h.now());
+    h.brain.decision = { mode: 'reposition', goal: { x: goal.x, y: goal.top, surfaceId: goal.id } };
+    h.brain.nextDecisionAt = Infinity;
+
+    let arrived = false;
+    for (let i = 0; i < 720 && !arrived; i++) {
+      h.advance(1);
+      const feet = bounds(h.p).bottom;
+      arrived = Math.abs(feet - goal.top) < 6 && h.p.x >= goal.left && h.p.x <= goal.right;
+    }
+    assert.equal(arrived, true, `${startId} to ${goalId}, stopped at ${h.p.x},${h.p.y}`);
+  }
 });
 
 test('bots keep a safe platform route when the tactical decision timer expires', (t) => {
@@ -718,4 +752,16 @@ test('sampled navigation routes land on their advertised platforms under real ph
     }
   }
   assert.ok(replayed > 10);
+});
+
+test('one route search answers every Bank Bust destination the same as separate searches', () => {
+  const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
+  const { buildGraph, createRouteSearch, findRoute } = require('../src/server/core/bots/navigation');
+  const graph = buildGraph(getDuelGeometry(4), 'ninja');
+  const start = graph.surfaces.find((surface) => surface.id === 'chamber-l-3-body');
+  const options = { allowDash: true, startX: start.x };
+  const search = createRouteSearch(graph, start.id, Infinity, options);
+  for (const surface of graph.surfaces) for (const goalX of [undefined, surface.left, surface.right]) {
+    assert.deepEqual(search(surface.id, goalX), findRoute(graph, start.id, surface.id, Infinity, { ...options, goalX }), `${surface.id} at ${goalX}`);
+  }
 });

@@ -103,3 +103,53 @@ for (const map of duelMaps) for (const character of characters) {
     } finally { h.room.cleanup(); }
   });
 }
+
+test('Bank Bust roles find reachable siege and lower-lane objectives on the live map', (t) => {
+  const time = clock(t);
+  const h = makeRoom({ map: 4, characters: ['ninja', 'wizard'], seed: 17 });
+  t.after(() => h.room.cleanup());
+  const p = h.players[0], brain = h.room.botControllers.get(p.participantId);
+  const { bankDecisionSteps } = require('../../src/server/core/bots/bankBust');
+  const { finishSteps } = require('../../src/server/core/bots/tactics');
+  const effects = require('../../src/server/core/gameRoom/effects/effectManager');
+  const { standOn } = require('../../src/server/core/bots/navigation');
+  const own = h.room.modeState.vaults[p.team];
+  const surface = brain.graph.surfaces.filter(s => s.left <= own.x && s.right >= own.x)
+    .sort((a, b) => Math.abs(a.top - own.y) - Math.abs(b.top - own.y))[0];
+  Object.assign(p, standOn(surface, p.char_class, own.x));
+  h.room.modeState.objects = [];
+  h.room.modeState.randomGold.pickups = [];
+  brain.retreating = false;
+  const context = brain.context(effects.getModifiers(p, time.now()), time.now());
+  brain.bankRole = 'raider';
+  const siege = finishSteps(bankDecisionSteps(brain, context, [], time.now()));
+  assert.equal(siege?.mode, 'bank-siege');
+  assert.notEqual(context.routeTo(siege.goal.surfaceId, siege.goal.x), null);
+  brain.bankRole = 'flanker';
+  const flank = finishSteps(bankDecisionSteps(brain, context, [], time.now()));
+  assert.equal(flank?.mode, 'bank-flank');
+  assert.ok(flank.goal.y > own.y, 'flanker chooses a lower crossing');
+  assert.notEqual(context.routeTo(flank.goal.surfaceId, flank.goal.x), null);
+});
+
+test('an unopposed Bank Bust attacker commits across the map and damages the enemy vault', (t) => {
+  const time = clock(t);
+  const h = makeRoom({ map: 4, characters: ['ninja', 'wizard'], trophies: 2000, seed: 17 });
+  t.after(() => h.room.cleanup());
+  const p = h.players[0], brain = h.room.botControllers.get(p.participantId);
+  const { standOn } = require('../../src/server/core/bots/navigation');
+  const own = h.room.modeState.vaults[p.team], enemy = h.room.modeState.vaults.team2;
+  const surface = brain.graph.surfaces.filter(s => s.left <= own.x && s.right >= own.x)
+    .sort((a, b) => Math.abs(a.top - own.y) - Math.abs(b.top - own.y))[0];
+  Object.assign(p, standOn(surface, p.char_class, own.x));
+  h.players[1].isAlive = false;
+  h.room.botControllers.delete(h.players[1].participantId);
+  h.room.modeState.objects = [];
+  h.room.modeState.randomGold.pickups = [];
+  h.room.modeState.randomGold.spawnPoints = [];
+  brain.bankRole = 'raider';
+  brain.openingUntil = 0;
+  const initial = enemy.coins;
+  for (let i = 0; i < 2400 && p.isAlive && enemy.coins >= initial; i++) time.step(h);
+  assert.ok(enemy.coins < initial, `did not reach and attack vault: x=${p.x}, goal=${JSON.stringify(brain.decision)}, recoveries=${brain.metrics.recoveries}`);
+});

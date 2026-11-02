@@ -83,7 +83,7 @@ function tick(room, caster, now) {
   // Apply inferno pressure to enemy vault/safe when it is inside inferno radius.
   const enemyTeam = caster.team === "team1" ? "team2" : "team1";
   const vault = room?.gameMode?.getVaultState?.(enemyTeam) || null;
-  if (vault && Number(vault.health) > 0) {
+  if (vault && Number(vault.coins) > 0) {
     const vx = Number(vault.x) || 0;
     const vy = Number(vault.y) || 0;
     const vr = Math.max(30, Number(vault.radius) || 90);
@@ -91,7 +91,7 @@ function tick(room, caster, now) {
       Math.hypot(vx - infernoCenterX, vy - infernoCenterY) <=
       DRAVEN_INFERNO_RADIUS + vr
     ) {
-      const oldVaultHp = Number(vault.health) || 0;
+      const previousCoins = Number(vault.coins) || 0;
       room?.gameMode?.damageVault?.(enemyTeam, perTickDmg, {
         sourcePlayer: caster.name,
         sourceTeam: caster.team,
@@ -99,7 +99,7 @@ function tick(room, caster, now) {
       });
       const appliedVault = Math.max(
         0,
-        oldVaultHp - (Number(vault.health) || 0),
+        previousCoins - (Number(vault.coins) || 0),
       );
       if (appliedVault > 0) {
         room._recordCombatStat(caster, { damage: appliedVault, hits: 1 });
@@ -107,6 +107,20 @@ function tick(room, caster, now) {
         room._checkVictoryCondition?.();
       }
     }
+  }
+
+  const crate = room?.gameMode?.getCenterCrate?.() || null;
+  if (
+    crate &&
+    Math.hypot(crate.x - infernoCenterX, crate.y - infernoCenterY) <=
+      DRAVEN_INFERNO_RADIUS + crate.width / 2
+  ) {
+    const appliedCrate = room.gameMode.damageCenterCrate(perTickDmg, {
+      sourcePlayer: caster.name,
+      sourceTeam: caster.team,
+      x: infernoCenterX,
+    });
+    if (appliedCrate > 0) room.broadcastSnapshot?.();
   }
 
   for (const target of room.players.values()) {

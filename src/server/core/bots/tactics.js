@@ -1,3 +1,4 @@
+const { bankDecisionSteps } = require('./bankBust');
 const { basicAim, basicRange, hasClearShot, pressureAim } = require('./combat');
 const { nearestSurface, walkLimits, canStandAt, canWalkBetween, standOn, previewManeuver, routePoisonDamage } = require('./navigation');
 const { bounds } = require('./physics');
@@ -192,6 +193,9 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
     const route = routeTo(surface.id);
     if (route !== null) reachable.push({ surface, route });
   }
+
+  const bankDecision = yield* bankDecisionSteps(brain, context, enemies, now);
+  if (bankDecision) return bankDecision;
 
   // Pickup value competes with fighting, distance, and pressure from every enemy.
   if (!suddenDeath) {

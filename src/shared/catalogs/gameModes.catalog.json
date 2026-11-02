@@ -158,7 +158,7 @@
     {
       "id": "bank-bust",
       "label": "Bank Bust",
-      "description": "Bust the enemy vault before they bust yours.",
+      "description": "Drain the enemy vault's coins before they drain yours.",
       "artAsset": "/assets/map-banners/bank-bust.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
       "queueable": true,
@@ -167,11 +167,14 @@
       "runtimeClass": "bank-bust",
       "botObjective": {
         "kind": "destroy-vault",
-        "label": "Destroy the enemy vault"
+        "label": "Drain the enemy vault"
       },
       "defaultVariantId": "bank-bust-3v3",
       "settings": {
-        "vaultMaxHp": 50000,
+        "vaultStartingCoins": 50000,
+        "deathDropVaultCoins": 50,
+        "purchaseFloorCoins": 7500,
+        "lowCoinsRatio": 0.25,
         "matchDurationMs": 210000,
         "respawnDelayMs": 3500,
         "respawnShieldMs": 3000
@@ -186,7 +189,7 @@
         "scoreboard": true,
         "verticalScrolling": false,
         "aiBots": true,
-        "economy": false,
+        "economy": true,
         "modeState": true,
         "suddenDeath": false
       },
@@ -194,7 +197,7 @@
         {
           "id": "bank-bust-3v3",
           "label": "3v3",
-          "subtitle": "Destroy the enemy Vault first.",
+          "subtitle": "Empty the enemy Vault first.",
           "teamCount": 2,
           "playersPerTeam": 3,
           "maxPlayers": 6,

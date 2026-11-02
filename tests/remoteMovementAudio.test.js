@@ -10,6 +10,7 @@ function load(path, dependencies = {}, extra = {}) {
     babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code;
   vm.runInNewContext(code, { exports, require: key => {
+    if (key.includes('movementSounds')) return require('../src/shared/physics/movementSounds');
     assert.ok(key in dependencies, key); return dependencies[key];
   }, ...extra });
   return exports;
@@ -172,5 +173,27 @@ test('late startup landing events and grounded contact flicker stay silent', () 
   f.update({ grounded: false, vy: 180, movementFxSeq: 2 });
   f.update({ grounded: true, movementFxSeq: 3, movementFxType: 'land' });
   assert.deepEqual(f.calls.map(c => c.key), ['sfx-grass-land']);
+  f.controller.destroy();
+});
+
+
+test('Bank Bust changes footsteps while retaining shared launch, landing and loop sounds', () => {
+  const f = fixture();
+  f.scene._bankBustMovementAudio = true;
+  f.scene._terrainType = 'hard';
+  f.update({ grounded: true, vx: 260, movementFxSeq: 0 });
+  assert.ok(f.calls[0].key.startsWith('bank-bust-sfx-step-'));
+  f.update({ grounded: false, vy: -300, movementFxSeq: 1, movementFxType: 'jump' });
+  f.update({ grounded: false, wallSliding: true, vy: 100, movementFxSeq: 1 });
+  assert.ok(f.sounds.some(s => s.key === 'sfx-sliding' && s.isPlaying));
+  f.update({ grounded: false, vy: -300, movementFxSeq: 2, movementFxType: 'wall-jump' });
+  f.update({ grounded: false, vy: 700, movementFxSeq: 2 });
+  f.update({ grounded: false, vy: 700, movementFxSeq: 2 }, 250);
+  assert.ok(f.sounds.some(s => s.key === 'sfx-fall-air' && s.isPlaying));
+  f.update({ grounded: true, movementFxSeq: 3, movementFxType: 'land' });
+  assert.deepEqual(f.calls.slice(1).map(c => c.key), [
+    'sfx-jump', 'sfx-walljump', 'sfx-hard-land',
+  ]);
+  assert.ok(f.sounds.every(s => !s.isPlaying));
   f.controller.destroy();
 });

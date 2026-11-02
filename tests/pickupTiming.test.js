@@ -87,7 +87,7 @@ test('Bank Bust random gold stays visible but uncollectible for 500ms', () => {
   mode.room = room;
   mode.getModeState = () => state;
   let awarded = 0;
-  mode.addTeamGold = (team, value) => { awarded += value; };
+  mode.applyVaultCoins = (team, value) => { awarded += value; return { applied: value }; };
   for (const now of [10000, 10499]) {
     mode._collectRandomGold(now);
     assert.equal(state.randomGold.pickups.length, 1);

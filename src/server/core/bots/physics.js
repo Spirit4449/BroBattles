@@ -6,6 +6,7 @@ const { DUCK_SPEED_RATIO } = require("../../../shared/physics/ducking");
 const { acceptDash } = require('../../../shared/physics/dash');
 const { sweepMovement, resolveOverlap } = require('../../../shared/physics/sweptCollision');
 const { advanceGeometry, PLATFORM_STEP_UP_PX } = require('../../../shared/maps/platformMotion');
+const { isStepFace } = require('../../../shared/physics/wallJumpFace');
 
 function bounds(player) {
   const body = characterBody(player.char_class, player.flip);
@@ -13,6 +14,13 @@ function bounds(player) {
   return { ...body, left: x - body.halfWidth, right: x + body.halfWidth, top: y - body.halfHeight, bottom: y + body.halfHeight };
 }
 function overlaps(a, b, c, d) { return a < d - 0.01 && b > c + 0.01; }
+// Whether the side the body is against is a wall to slide on and kick off rather
+// than a step, as on the client.
+function onClimbableWall(p, geometry) {
+  if (!p.wallSide) return false;
+  if (!Number.isFinite(p._wallFaceTop)) return true;
+  return !isStepFace(p._wallFaceTop, bounds(p), geometry.colliders.map(r => ({ left: r.left, right: r.right, top: r.top, up: r.collision.up })));
+}
 function approach(value, target, amount) { return value < target ? Math.min(target, value + amount) : Math.max(target, value - amount); }
 
 function startDash(p, direction, now) {
@@ -60,12 +68,14 @@ function stepDash(p, intent, geometry, dtMs, now, modifiers) {
      (r.collision.right && Math.abs(b.left - r.right) < 0.5)));
   p.grounded = !!support; p.platformId = support?.id ?? null;
   p.wallSide = wall ? (Math.abs(b.right - wall.left) < 0.5 ? 'right' : 'left') : null;
+  p._wallFaceTop = wall?.top;
   if (wall) { p._botDashWallContact = true; p.vy *= Math.exp(-tuning.dashWallDragRate * dt); }
   if (bursting && (support || result.hits.up)) p.vx = approach(p.vx, 0, tuning.dashSurfaceDrag * dt);
   const strength = bursting ? 1 : Math.max(0, (p._botDashCoastUntil - now) / tuning.dashCoastMs) ** 2;
   p.vy /= 1 + tuning.dashVerticalResistance * Math.abs(p.vy) * dt * strength;
-  if (wall && !p.grounded && direction === (p.wallSide === 'left' ? -1 : 1)) p.vy = Math.min(p.vy, tuning.wallSlideMaxFallSpeed);
-  p.wallSliding = !!wall && !p.grounded && p.vy > 0;
+  const onWall = wall && !p.grounded && onClimbableWall(p, geometry);
+  if (onWall && direction === (p.wallSide === 'left' ? -1 : 1)) p.vy = Math.min(p.vy, tuning.wallSlideMaxFallSpeed);
+  p.wallSliding = !!onWall && p.vy > 0;
   if (p.grounded) { p._lastGroundTime = now; p._jumpConsumed = false; }
   p._bodyHalfWidth = b.halfWidth; p._bodyHalfHeight = b.halfHeight;
   p._bodyCenterOffsetX = b.offsetX; p._bodyCenterOffsetY = b.offsetY;
@@ -97,7 +107,7 @@ function stepBody(p, intent, geometry, dtMs, now, modifiers = {}) {
   p._lastGroundTime = p._lastGroundTime ?? -Infinity;
   if (wasGrounded) { p._lastGroundTime = now; p._jumpConsumed = false; }
   const wallSide = p.wallSide;
-  const canWallJump = wallSide && now >= (p._nextWallJump || 0) && !wasGrounded;
+  const canWallJump = wallSide && now >= (p._nextWallJump || 0) && !wasGrounded && onClimbableWall(p, geometry);
   if (intent.jumpPressed && jumpMult > 0 && now >= (p._knockbackUntil || 0)) {
     if (canWallJump) {
       p._jumpLaunch = null;
@@ -124,7 +134,7 @@ function stepBody(p, intent, geometry, dtMs, now, modifiers = {}) {
     else if (direction && speedMult > 0) p.vx = approach(p.vx, direction * maxSpeed, (p.grounded ? tuning.accel : tuning.airAccel) * dt);
     else p.vx = approach(p.vx, 0, (p.grounded ? tuning.dragGround : tuning.dragAir) * dt);
   }
-  const sliding = wallSide && !p.grounded && direction === (wallSide === "left" ? -1 : 1) && now >= (p._slideSuppressedUntil || 0);
+  const sliding = wallSide && !p.grounded && direction === (wallSide === "left" ? -1 : 1) && now >= (p._slideSuppressedUntil || 0) && onClimbableWall(p, geometry);
   p.vy += tuning.gravity * (p.vy > tuning.fallGravityMinSpeed && !sliding ? tuning.fallGravityFactor : 1) * dt;
   if (p._jumpLaunch) {
     const t = Math.min(1, (now - p._jumpLaunch.startedAt) / tuning.jumpRampMs);
@@ -139,9 +149,9 @@ function stepBody(p, intent, geometry, dtMs, now, modifiers = {}) {
   for (const rect of geometry.colliders) {
     if (!overlaps(before.top, before.bottom, rect.top, rect.bottom)) continue;
     if (p.vx > 0 && rect.collision.left && before.right <= rect.left + 0.1 && b.right >= rect.left) {
-      p.x -= b.right - rect.left; p.vx = 0; p.wallSide = "right"; b = bounds(p);
+      p.x -= b.right - rect.left; p.vx = 0; p.wallSide = "right"; p._wallFaceTop = rect.top; b = bounds(p);
     } else if (p.vx < 0 && rect.collision.right && before.left >= rect.right - 0.1 && b.left <= rect.right) {
-      p.x += rect.right - b.left; p.vx = 0; p.wallSide = "left"; b = bounds(p);
+      p.x += rect.right - b.left; p.vx = 0; p.wallSide = "left"; p._wallFaceTop = rect.top; b = bounds(p);
     }
   }
   const world = geometry.world;
@@ -157,7 +167,7 @@ function stepBody(p, intent, geometry, dtMs, now, modifiers = {}) {
       p.y += rect.bottom - b.top; p.vy = 0; p._jumpLaunch = null; b = bounds(p);
     }
   }
-  p.wallSliding = !!p.wallSide && !p.grounded && p.vy > 0;
+  p.wallSliding = !p.grounded && p.vy > 0 && onClimbableWall(p, geometry);
   if (p.grounded) { p._lastGroundTime = now; p._jumpConsumed = false; if (!wasGrounded) events.push("land"); }
   p._bodyHalfWidth = b.halfWidth; p._bodyHalfHeight = b.halfHeight;
   p._bodyCenterOffsetX = b.offsetX; p._bodyCenterOffsetY = b.offsetY;
@@ -249,4 +259,4 @@ function applyImpulse(player, impulse, now = Date.now()) {
   player._knockbackUntil = now + (["shockwave", "stomp"].includes(impulse.cause) ? SHOCKWAVE_MOMENTUM_MS : 180);
   player.grounded = false;
 }
-module.exports = { bounds, stepBody, applyImpulse, startDash, carryOnPlatforms, forecastGeometry };
+module.exports = { bounds, stepBody, onClimbableWall, applyImpulse, startDash, carryOnPlatforms, forecastGeometry };

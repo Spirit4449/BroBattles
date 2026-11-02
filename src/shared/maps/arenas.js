@@ -6,6 +6,11 @@
 // camera: the follow camera's bounds; `zoom` is the reference zoom scenery is
 // composed at; it eases between `maxZoom` with the player at or below
 // climbY[1] and `minZoom` at or above climbY[0] (cameraDynamics.js).
+// `followOffsetY` is how far below the middle of the view the player sits at
+// the foot of that climb, and `followOffsetClimb` how much further down they
+// slide at the top of it. A tall duel arena wants a large offset so there is
+// sky to read; a wide, shallow one wants a small one, or the player ends up
+// near the bottom of the screen with the action beside them off-view.
 const ARENAS = require('./arenas.json');
 const { modes } = require('../catalogs/gameModes.catalog.json');
 

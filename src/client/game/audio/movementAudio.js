@@ -1,6 +1,12 @@
 import terrainAudio from '../../../shared/physics/terrainAudio.json';
 import { playPlayerSound } from './playerAudio';
 
+// Shared mix for local and remote falling wind; retain the speed/time swell.
+export function fallingAirVolume(speedRatio, timeRatio) {
+  const clamp = value => Math.max(0, Math.min(1, Number(value) || 0));
+  return (0.06 + clamp(speedRatio) * (0.16 + clamp(timeRatio) * 0.14)) * 0.45;
+}
+
 export function getTerrainSteps(terrain) {
   const config = terrainAudio.terrains[terrain];
   return config?.steps?.length ? config.steps : terrainAudio.terrains[terrainAudio.defaultTerrain].steps;

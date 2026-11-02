@@ -1,4 +1,16 @@
 const MOVEMENT_PHYSICS = require('../../../shared/physics/movementPhysics.json');
+const { isStepFace } = require('../../../shared/physics/wallJumpFace');
+
+function standableSurfaces(mapObjects, playerBody) {
+  const surfaces = [];
+  for (const obj of mapObjects) {
+    const body = obj?.body;
+    if (!body || body === playerBody || body.enable === false) continue;
+    const left = Number(body.x) || 0;
+    surfaces.push({ left, right: left + (Number(body.width) || 0), top: Number(body.y) || 0, up: body.checkCollision?.up !== false });
+  }
+  return surfaces;
+}
 
 // Contact, jump buffering and attachment share one clock and one body state.
 // No Phaser scene or rendering resources are required to exercise these rules.
@@ -8,20 +20,25 @@ function resolveWallContact(player, mapObjects = [], input = {}, now = Date.now(
   const wallJumpHorizontalGracePx = MOVEMENT_PHYSICS.wallJumpHorizontalGracePx;
   const wallJumpPressBufferMs = 120;
   const wallSlideReentryDelayMs = MOVEMENT_PHYSICS.wallSlideReentryDelayMs;
-  const touchingLeftNow =
-    !!player.body.touching.left || !!player.body.blocked.left;
-  const touchingRightNow =
-    !!player.body.touching.right || !!player.body.blocked.right;
   const playerBodyLeft = player.body.x;
   const playerBodyRight = player.body.x + player.body.width;
   const playerBodyTop = player.body.y;
   const playerBodyBottom = player.body.y + player.body.height;
   let nearLeftWall = false;
   let nearRightWall = false;
-  let leftWallGap = Number.POSITIVE_INFINITY;
-  let rightWallGap = Number.POSITIVE_INFINITY;
+  // Distance to the walls beside the body, and whether a step is beside it.
+  // Steps are neither slid on nor kicked off.
+  let leftKickGap = Number.POSITIVE_INFINITY;
+  let rightKickGap = Number.POSITIVE_INFINITY;
+  let stepOnLeft = false;
+  let stepOnRight = false;
+  const maxKickReachPx = wallSlideSnapDistance + wallJumpHorizontalGracePx;
   const wallObjects = mapObjects;
   if (Array.isArray(wallObjects)) {
+    let surfaces = null;
+    const stepFace = (objTop) => isStepFace(objTop,
+      { left: playerBodyLeft, right: playerBodyRight, bottom: playerBodyBottom },
+      surfaces ||= standableSurfaces(wallObjects, player.body));
     for (const obj of wallObjects) {
       const body = obj?.body;
       if (!body || body === player.body || body.enable === false) continue;
@@ -40,22 +57,34 @@ function resolveWallContact(player, mapObjects = [], input = {}, now = Date.now(
 
       if (body.checkCollision?.right !== false && playerBodyLeft >= objRight) {
         const gap = playerBodyLeft - objRight;
-        leftWallGap = Math.min(leftWallGap, gap);
-        if (gap <= wallSlideSnapDistance) {
-          nearLeftWall = true;
+        if (gap <= maxKickReachPx) {
+          if (stepFace(objTop)) {
+            stepOnLeft = true;
+          } else {
+            leftKickGap = Math.min(leftKickGap, gap);
+            if (gap <= wallSlideSnapDistance) nearLeftWall = true;
+          }
         }
       }
       if (body.checkCollision?.left !== false && objLeft >= playerBodyRight) {
         const gap = objLeft - playerBodyRight;
-        rightWallGap = Math.min(rightWallGap, gap);
-        if (gap <= wallSlideSnapDistance) {
-          nearRightWall = true;
+        if (gap <= maxKickReachPx) {
+          if (stepFace(objTop)) {
+            stepOnRight = true;
+          } else {
+            rightKickGap = Math.min(rightKickGap, gap);
+            if (gap <= wallSlideSnapDistance) nearRightWall = true;
+          }
         }
       }
-      if (nearLeftWall && nearRightWall) break;
     }
   }
   const nowWallTs = now;
+  // Contact with something outside mapObjects, such as a built wall, still counts.
+  const touchingLeftNow =
+    (!!player.body.touching.left || !!player.body.blocked.left) && !stepOnLeft;
+  const touchingRightNow =
+    (!!player.body.touching.right || !!player.body.blocked.right) && !stepOnRight;
 
   // A fresh jump press detaches; an already-held Up input brakes the slide.
   const wallBrakeHeld = input.upHeld &&
@@ -68,17 +97,15 @@ function resolveWallContact(player, mapObjects = [], input = {}, now = Date.now(
   const horizontalKickReachPx =
     wallSlideSnapDistance +
     (bufferedJumpPressActive ? wallJumpHorizontalGracePx : 0);
-  const bufferedNearLeftWall =
-    Number.isFinite(leftWallGap) && leftWallGap <= horizontalKickReachPx;
-  const bufferedNearRightWall =
-    Number.isFinite(rightWallGap) && rightWallGap <= horizontalKickReachPx;
+  const kickableLeftWall = leftKickGap <= horizontalKickReachPx || touchingLeftNow;
+  const kickableRightWall = rightKickGap <= horizontalKickReachPx || touchingRightNow;
   const bufferedKickSide =
-    bufferedNearLeftWall && !bufferedNearRightWall
+    kickableLeftWall && !kickableRightWall
       ? "left"
-      : bufferedNearRightWall && !bufferedNearLeftWall
+      : kickableRightWall && !kickableLeftWall
         ? "right"
-        : bufferedNearLeftWall && bufferedNearRightWall
-          ? leftWallGap <= rightWallGap
+        : kickableLeftWall && kickableRightWall
+          ? leftKickGap <= rightKickGap
             ? "left"
             : "right"
           : null;

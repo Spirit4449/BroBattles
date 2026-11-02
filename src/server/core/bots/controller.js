@@ -1,7 +1,8 @@
+const { objectiveShot, tryBankInteraction, bankCombatEnemies } = require('./bankBust');
 const { createRandom } = require('./random');
 const { difficultyForTrophies, recoveryThreshold } = require('./config');
-const { bounds, stepBody, forecastGeometry } = require('./physics');
-const { findRoute, prepareTraversal, edgeKey, nearestSurface, safeWalkDirection, previewManeuver, walkLimits, poisonDamage } = require('./navigation');
+const { bounds, stepBody, onClimbableWall, forecastGeometry } = require('./physics');
+const { createRouteSearch, prepareTraversal, edgeKey, nearestSurface, safeWalkDirection, previewManeuver, walkLimits, poisonDamage } = require('./navigation');
 const { getNavigationGraph } = require('./navigationService');
 const { staticGeometry } = require('../../../shared/maps/platformMotion');
 const { advanceAmmo, basicAim, hasClearShot, pressureAim, requestBasic, requestSpecial } = require('./combat');
@@ -66,7 +67,11 @@ class BotController {
 
   tick(dt, now) {
     const p = this.player, room = this.room;
-    if (!p.isAlive || room.status !== 'active') { this.planning = null; return; }
+    if (!p.isAlive || room.status !== 'active') {
+      this.planning = null;
+      if (!p.isAlive) { this.bankFlankUntil = null; this.bankCommit = null; this.bankGuardUntil = 0; }
+      return;
+    }
     if (this.openingUntil === undefined) {
       this.openingUntil = now + this.openingDelay;
       this.nextHopAt = now + this.between(4000, 8000);
@@ -167,20 +172,20 @@ class BotController {
     const poisonAt = (offset) => room._suddenDeathActive && !gasSaturated ? room._computePoisonY(now + offset - room._loopStartWallTime - room.gameMode.getMatchDurationMs()) : Infinity;
     for (const [key, until] of this.blockedEdges) if (until <= now) this.blockedEdges.delete(key);
     const routes = new Map();
-    const routeTo = (id, goalX) => {
-      const routeKey = `${id}:${goalX ?? ""}`;
-      if (!routes.has(routeKey)) routes.set(routeKey, findRoute(graph, current?.id, id, poisonY, {
+    const search = createRouteSearch(graph, current?.id, poisonY, {
         allowDash: now >= Math.max(p._dashReadyAt || 0, this.nextDashAt || 0),
         poisonAt,
         blocked: this.blockedEdges,
         startX: p.x,
-        goalX,
         edgeCost: (edge, from) => {
           const key = `${from}:${edge.to}`;
           if (!this.routePreferences.has(key)) this.routePreferences.set(key, this.random() * 240);
           return (edge.jump ? 70 : 0) + (edge.dash ? 140 : 0) + this.routePreferences.get(key);
         },
-      }));
+    });
+    const routeTo = (id, goalX) => {
+      const routeKey = `${id}:${goalX ?? ""}`;
+      if (!routes.has(routeKey)) routes.set(routeKey, search(id, goalX));
       return routes.get(routeKey);
     };
     return { graph, current, poisonY, poisonAt, gasSaturated, routeTo };
@@ -239,7 +244,8 @@ class BotController {
     const recentlyHurt = p.lastDamagedAt > 0 && now - p.lastDamagedAt < 850;
     const previousRole = this.teamPlan?.role;
     this.teamPlan = updateTeamwork(this, observed, now);
-    const roleChanged = previousRole !== this.teamPlan?.role;
+    const bankMode = this.room.gameMode?.modeId === 'bank-bust';
+    const roleChanged = !bankMode && previousRole !== this.teamPlan?.role;
     if (roleChanged) {
       this.nextDecisionAt = 0;
       this.approachEdge = null;
@@ -249,7 +255,9 @@ class BotController {
     const awareness = this.profile.tacticalAwareness;
     this.retreating = this.teamPlan?.role === 'recover' || healthFraction(p) < recoveryThreshold(awareness, this.retreating, this.teamPlan?.morale);
     if (this.retreating && !wasRetreating) this.metrics.retreats++;
-    const target = yield* selectTargetSteps(this, enemies, context.routeTo, now);
+    tryBankInteraction(this, now);
+    const combatEnemies = bankCombatEnemies(this, enemies, now);
+    const target = yield* selectTargetSteps(this, combatEnemies, context.routeTo, now);
     const targetChanged = target?.participantId !== this.targetId;
     if (targetChanged) {
       if (this.targetId && target) this.metrics.targetSwitches++;
@@ -311,7 +319,7 @@ class BotController {
     const emergency = wasRetreating !== this.retreating || newRetreatHit;
     if (p.grounded && emergency) { this.clearTravel(); this.duckUntil = 0; }
     const goalUnsafe = p.grounded && !this.traversal && this.decision?.goal && context.routeTo(this.decision.goal.surfaceId, this.decision.goal.x) === null;
-    const committedRoute = (this.approachEdge || this.traversal) && !targetChanged && !roleChanged && !recentlyHurt && !threatened &&
+    const committedRoute = !bankMode && (this.approachEdge || this.traversal) && !targetChanged && !roleChanged && !recentlyHurt && !threatened &&
       !newRetreatHit && !goalUnsafe && !(this.retreating && enemies.some((enemy) => Math.hypot(enemy.x - p.x, enemy.y - p.y) < 320)) && wasRetreating === this.retreating && bounds(p).bottom < context.poisonY - 100;
     if (!this.decision || (now >= this.nextDecisionAt && !committedRoute) || pickupGone || lootGone || emergency || goalUnsafe) {
       const previousGoal = this.decision?.goal?.surfaceId;
@@ -335,7 +343,7 @@ class BotController {
     if (target && !this.intent.direction && p._botActionUntil <= now) {
       p.flip = target.x < p.x;
     }
-    if (now < this.idleUntil && !immediatePressure && p.grounded && !this.traversal && !this.maneuver) {
+    if (now < this.idleUntil && !this.decision.bankObjectiveId && !immediatePressure && p.grounded && !this.traversal && !this.maneuver) {
       this.intent = { direction: 0 };
       this.walkGoalX = null;
       this.approachEdge = null;
@@ -355,6 +363,8 @@ class BotController {
   tryCombat(...args) { return finishSteps(this.tryCombatSteps(...args)); }
 
   *tryCombatSteps(enemies, target, observed, now) {
+    const objective = objectiveShot(this, enemies);
+    target = objective || target;
     if (!target || now < this.nextOpportunity || now < (this.player._dashUntil || 0)) return;
     // Reserve the upcoming activation so an attack windup cannot invalidate a
     // jump-then-dash halfway across a gap. Combat resumes once it has launched.
@@ -384,7 +394,7 @@ class BotController {
         const contestId = this.decision?.contestTargetId;
         if (contestId && a.participantId === contestId) return -1;
         if (contestId && b.participantId === contestId) return 1;
-        const value = (enemy) => healthFraction(enemy) - (enemy.participantId === target.participantId ? 0.6 : 0);
+        const value = (enemy) => (enemy.objectiveTarget ? -2 : healthFraction(enemy)) - (enemy.participantId === target.participantId ? 0.6 : 0);
         return value(a) - value(b);
       });
     yield;
@@ -393,7 +403,7 @@ class BotController {
     const predict = (enemy) => ({ ...enemy, x: enemy.x + (enemy.vx || 0) * age, y: enemy.y + (enemy.vy || 0) * age });
     // Supers have their own ranges and targeting rules. A missing basic shot
     // must not prevent a hook, swarm, or self buff from being considered.
-    const superTarget = [target, ...enemies.filter((e) => e !== target)].map(predict)
+    const superTarget = [target, ...enemies.filter((e) => e !== target)].filter(e => !e.objectiveTarget).map(predict)
       .find((enemy) => shouldUseSuper(this, enemy, enemies, now));
     const candidate = candidates[0];
     if (!candidate && !superTarget) return;
@@ -508,9 +518,11 @@ class BotController {
     const intendedDirection = Math.sign(intendedX - p.x);
     const wallDirection = p.wallSide === 'right' ? 1 : p.wallSide === 'left' ? -1 : 0;
     const obstacleDirection = this.groundObstacleDirection(intendedDirection);
-    if (!this.approachEdge && intendedDirection && (intendedDirection === wallDirection || intendedDirection === obstacleDirection) &&
-        this.startObstacleRecovery(context, intendedDirection, now)) return;
     const route = context.routeTo(goal.surfaceId, goal.x);
+    // A wall towards the goal is only an obstacle with no route. A goal can lie
+    // beyond it on a lower level, and the route may lead the other way.
+    if (!this.approachEdge && !route?.length && intendedDirection && (intendedDirection === wallDirection || intendedDirection === obstacleDirection) &&
+        this.startObstacleRecovery(context, intendedDirection, now)) return;
     this.wantsProgress = route === null || route.length > 0 || Math.abs(goal.x - p.x) > 28;
     if (route?.length) {
       const edge = route[0];
@@ -728,7 +740,7 @@ class BotController {
       }
       this.lastWallSide = p.wallSide;
       const urgent = !landing || foot.bottom >= context.poisonY - 100;
-      const jump = (urgent || now >= this.wallWaitUntil) && now >= (p._nextWallJump || 0);
+      const jump = (urgent || now >= this.wallWaitUntil) && now >= (p._nextWallJump || 0) && onClimbableWall(p, this.room.geometry);
       this.intent = { direction: (p.wallSide === 'left' ? -1 : 1) * (jump ? -1 : 1), jumpPressed: jump };
     } else {
       this.lastWallSide = null;

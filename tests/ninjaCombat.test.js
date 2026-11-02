@@ -108,11 +108,11 @@ test('shielded contacts cannot grant damage or charge, and vault contacts use re
   assert.equal(target.health,hp);assert.equal(p.superCharge,0);
   assert.ok(f.actions('ninja-impact').every(a=>a.appliedDamage===0));
   target.loaded=false;
-  const vault={x:450,y:192,width:80,height:80,health:10000};
-  f.room.gameMode={getVaultState:team=>team==='team2'?vault:null,damageVault:(team,damage)=>{vault.health-=damage;return vault;}};
+  const vault={x:450,y:192,width:80,height:80,coins:10000};
+  f.room.gameMode={getVaultState:team=>team==='team2'?vault:null,damageVault:(team,damage)=>{vault.coins-=damage;return vault;}};
   p.ammoState.charges=1;p.ammoState.nextFireInMs=0;
   f.room.handlePlayerAction(p.participantId,{type:'ninja-shuriken',id:'vault',angle:0});f.step();p.x=2000;p._posHistory=[];
-  f.step(22);assert.ok(vault.health<10000);
+  f.step(22);assert.ok(vault.coins<10000);
 });
 
 test('wall returns occur on the collider surface, without the player-hit radius gap',()=>{

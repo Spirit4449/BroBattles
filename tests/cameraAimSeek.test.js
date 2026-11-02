@@ -12,26 +12,6 @@ vm.runInNewContext(code, { exports: exportsObject, window: { matchMedia: () => (
 const { updateDynamicCamera, restingCameraFrame, triggerWallJumpCameraKick } = exportsObject;
 const Phaser = { Math: { Clamp: (v, lo, hi) => Math.max(lo, Math.min(hi, v)) } };
 const { arenaFor, arenaIds } = require('../src/shared/maps/arenas');
-test('aim seek shifts camera limits at either map edge without accumulating bounds drift', () => {
-  const cam = { zoom: 1.8, useBounds: true, _bounds: { x: -40, y: -20, width: 2000, height: 1200 },
-    followOffset: { x: 0, y: 120 },
-    setZoom(z) { this.zoom = z; },
-    setLerp(x,y) { this.lerp = { x,y }; },
-    setBounds(x,y,width,height) { this._bounds = { x,y,width,height }; },
-    setFollowOffset(x,y) { this.followOffset = { x,y }; } };
-  const scene = { cameras: { main: cam }, game: { loop: { delta: 16.67 } }, _mapArena: arenaFor('duels-1v1') };
-  for (const x of [-100, 100]) {
-    scene._combatAimLook = { x, y: 30 };
-    for (let i = 0; i < 360; i++) updateDynamicCamera(scene, { x: x < 0 ? 0 : 2000, y: 520 }, Phaser);
-    assert.ok(Math.abs(cam._bounds.x - (-40 + x)) < 0.001);
-    assert.ok(Math.abs(cam.followOffset.x + x) < 0.001);
-    assert.equal(cam._bounds.width, 2000);
-    scene._resetAimCameraBounds();
-    assert.ok(Math.abs(cam._bounds.x + 40) < 0.001);
-    assert.ok(Math.abs(cam._bounds.y + 20) < 0.001);
-  }
-});
-
 test('every mode eases its follow zoom between its own limits as players climb', () => {
   for (const id of arenaIds()) {
     const camera = arenaFor(id).camera, [high, low] = camera.climbY;
@@ -65,6 +45,68 @@ function cameraFixture(id = 'duels-1v1', x = 1150, y = 520, delta = 1000 / 60) {
   for (let i = 0; i < 360; i++) update();
   return { cam, scene, player, update, render };
 }
+
+test('aim has identical screen displacement across maps, heights, edges and movement speeds', () => {
+  let reference;
+  for (const id of arenaIds()) {
+    const { world } = arenaFor(id);
+    for (const x of [world.x, world.x + world.width / 2, world.x + world.width]) {
+      for (const y of [world.y, world.y + world.height / 2, world.y + world.height]) {
+        for (const speed of [0, 1200]) {
+          const { cam, scene, player, update } = cameraFixture(id, x, y);
+          const bounds = { x: cam._bounds.x, y: cam._bounds.y };
+          const follow = { x: cam.followOffset.x, y: cam.followOffset.y };
+          player.body = { velocity: { x: speed, y: speed } };
+          const samples = [];
+          for (const aim of [{ x: 72, y: -36 }, { x: -72, y: 36 }, null]) {
+            scene._combatAimLook = aim;
+            for (let frame = 0; frame < 60; frame++) {
+              updateDynamicCamera(scene, player);
+              cam.preRender();
+              const before = { x: cam.matrix.e, y: cam.matrix.f };
+              cam.emit('prerender', cam);
+              samples.push([cam.matrix.e - before.x, cam.matrix.f - before.y]);
+              assert.equal(cam._bounds.x, bounds.x);
+              assert.equal(cam._bounds.y, bounds.y);
+              assert.ok(Math.abs(cam.followOffset.x - follow.x) < 1e-8);
+              assert.ok(Math.abs(cam.followOffset.y - follow.y) < 1e-8);
+            }
+          }
+          if (!reference) reference = samples;
+          samples.forEach((sample, i) => sample.forEach((v, axis) =>
+            assert.ok(Math.abs(v - reference[i][axis]) < 0.0001)));
+          assert.ok(samples[59][0] < -60, 'aim visibly shifts the view at every location');
+          scene._resetAimCameraBounds();
+          assert.equal(update(), 0);
+          scene.events.emit('shutdown');
+        }
+      }
+    }
+  }
+});
+
+test('aim uses elapsed time and preserves pointer-to-world mapping', () => {
+  const samples = [];
+  for (const fps of [30, 60, 120]) {
+    const { cam, scene, player } = cameraFixture('bank-bust-3v3', 0, 500, 1000 / fps);
+    scene._combatAimLook = { x: 72, y: -36 };
+    for (let frame = 0; frame < fps / 5; frame++) updateDynamicCamera(scene, player);
+    cam.preRender();
+    const before = cam.getWorldPoint(640, 360);
+    cam.emit('prerender', cam);
+    const after = cam.getWorldPoint(640, 360);
+    const shift = scene._aimCameraShift;
+    assert.ok(Math.abs((after.x - before.x) * cam.zoom - shift.x) < 0.0001);
+    assert.ok(Math.abs((after.y - before.y) * cam.zoom - shift.y) < 0.0001);
+    samples.push({ ...shift });
+    scene.events.emit('shutdown');
+    assert.equal(scene._aimCameraShift, null);
+  }
+  for (const sample of samples) {
+    assert.ok(Math.abs(sample.x - samples[0].x) < 1e-8);
+    assert.ok(Math.abs(sample.y - samples[0].y) < 1e-8);
+  }
+});
 
 test('wall-jump recoil and zoom stay consistent across maps, heights, bounds and dead zones', () => {
   let reference;

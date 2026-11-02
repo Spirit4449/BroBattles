@@ -12,16 +12,16 @@ export const MOVEMENT_VFX_CONFIG = Object.freeze({
   impactAccent: 0xffffff,
   behindPlayerDepth: RENDER_LAYERS.PLAYER - 2,
   frontParticleDepth: RENDER_LAYERS.PLAYER + 1,
-  landingMinVelocity: 230,
-  landingMaxVelocity: 760,
-  landingShockwaveMinFallPx: 150,
+  landingMinVelocity: 241,
+  landingMaxVelocity: 796,
+  landingShockwaveMinFallPx: 163,
   wallTrailIntervalMs: 48,
   runSpeedReference: 260,
   runDustMinIntervalMs: 48,
   runDustMaxIntervalMs: 112,
   directionChangeMinSpeed: 72,
-  fastFallStartVelocity: 270,
-  fastFallMaxVelocity: 760,
+  fastFallStartVelocity: 283,
+  fastFallMaxVelocity: 796,
   fastFallTrailMinIntervalMs: 42,
   fastFallTrailMaxIntervalMs: 104,
 });
@@ -646,40 +646,40 @@ export function spawnHealthMarker(scene, x, y, delta, opts = {}) {
   const self = opts.isSelf === true;
   const teammate = !self &&
     (opts.team === "ally" || opts.team === "teammate" || opts.team === true);
+  // Bright fills over a near-black outline keep numbers readable on any map.
   const color = positive
-    ? teammate ? "#91ffd0" : self ? "#f1f5f9" : "#ffb3b3"
-    : self ? "#ffb3b3" : "#ff5050";
-  const strokeColor = positive
-    ? teammate ? "#123e35" : self ? "#303744" : "#451a24"
-    : "#451a24";
-  const glowColor = positive
-    ? teammate ? "#23d88c" : self ? "#cbd5e1" : "#ff9292"
-    : self ? "#ff9292" : "#ff3030";
-  const label = `${positive ? "+" : "−"}${Math.abs(rounded)}`;
+    ? teammate ? "#7dffc0" : self ? "#ffffff" : "#ffd0d0"
+    : self ? "#ff8a8a" : "#ff4a4a";
+  const strokeColor = "#0d0a14";
+  const shadowColor = positive
+    ? teammate ? "#0a5c3c" : self ? "#4a5568" : "#7a1f2a"
+    : "#8a1010";
+  const label = `${positive ? "+" : "-"}${Math.abs(rounded)}`;
   // Combat numbers should remain legible above sprites, attacks, and HUD text.
   const depth = Math.max(
     RENDER_LAYERS.ATTACKS + 2,
     typeof opts.depth === "number" ? opts.depth : 0,
   );
   const marker = scene.add.text(x, y - 5, label, {
-    fontFamily: "LilitaOne-Regular, 'Arial Black', sans-serif",
-    fontSize: opts.fontSize || "16px",
-    fontStyle: "bold",
+    fontFamily: "'Press Start 2P', monospace",
+    fontSize: opts.fontSize || "12px",
     color,
     stroke: strokeColor,
-    strokeThickness: 4,
+    strokeThickness: 5,
     padding: { x: 8, y: 6 },
   });
   marker.setOrigin(0.5);
   marker.setDepth(depth);
-  marker.setShadow(0, 2, glowColor, 2, false, true);
+  // Hard offset shadow (no blur) for a chunky pixel look.
+  marker.setShadow(0, 3, shadowColor, 0, true, true);
   marker.setScale(0.65);
   const float = opts.floatDistance || 28;
   const duration = opts.duration || 820;
-  // Exclude transparent text padding, but allow for the pop overshoot and
-  // a small glow gap. Reserve the full drift so numbers cannot cross later.
-  const halfWidth = (marker.width - 16) * 0.625 + 3;
-  const halfHeight = (marker.height - 12) * 0.625 + 3;
+  // Exclude transparent text padding and the outline, leaving a small gap.
+  // Only part of the drift is reserved so stacked numbers sit close together.
+  const halfWidth = (marker.width - 16) * 0.5 - 1;
+  const halfHeight = (marker.height - 12) * 0.5 - 2;
+  const reservedDrift = float * 0.3;
   const occupied = [...markerPool]
     .filter((other) => other.active && other.scene === scene)
     .map((other) => other._healthMarkerBounds)
@@ -692,7 +692,7 @@ export function spawnHealthMarker(scene, x, y, delta, opts = {}) {
     xs.add(reserved.left - halfWidth);
     xs.add(reserved.right + halfWidth);
     ys.add(reserved.top - halfHeight);
-    ys.add(reserved.bottom + float + halfHeight);
+    ys.add(reserved.bottom + reservedDrift + halfHeight);
   }
   const positions = [...xs].flatMap((px) => [...ys].map((py) => ({
     x: px,
@@ -708,7 +708,7 @@ export function spawnHealthMarker(scene, x, y, delta, opts = {}) {
     markerY = position.y;
     bounds = {
       left: markerX - halfWidth, right: markerX + halfWidth,
-      top: markerY - float - halfHeight, bottom: markerY + halfHeight,
+      top: markerY - reservedDrift - halfHeight, bottom: markerY + halfHeight,
     };
     const overlaps = occupied.some((reserved) => {
       return bounds.left < reserved.right && bounds.right > reserved.left &&

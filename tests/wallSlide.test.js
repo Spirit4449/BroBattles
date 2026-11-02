@@ -6,6 +6,7 @@ const {
   applyWallSlide,
   resolveWallSlideFlipX,
 } = require('../src/client/game/players/wallMovement');
+const { stepBody } = require('../src/server/core/bots/physics');
 
 function localSlide(overrides = {}) {
   const player = {
@@ -158,4 +159,59 @@ test('wall slide never overrides sideways momentum or steering acceleration', ()
  const state=localSlide();state.player.body.velocity.x=-200;state.player.ax=-3000;
  localSlide({player:state.player});
  assert.equal(state.player.body.velocity.x,-200);assert.equal(state.player.ax,-3000);
+});
+
+// A body beside a face, in the air, `height` px of face above the ground below it.
+function besideFace({ side = 'right', height, touching = false, otherSide = null }) {
+  const groundTop = 300, faceTop = groundTop - height;
+  const player = { body: { x: 100, y: groundTop - 70, width: 30, height: 50,
+    touching: touching ? { [side]: true } : {}, blocked: {}, velocity: { x: 0, y: 100 } } };
+  const face = (faceSide) => ({ body: { x: faceSide === 'right' ? 134 : 56, y: faceTop, width: 40, height: 400 } });
+  const objects = [face(side), { body: { x: 0, y: groundTop, width: 300, height: 50 } }];
+  if (otherSide) objects.push({ body: { x: otherSide === 'right' ? 134 : 56, y: -500, width: 40, height: 1000 } });
+  return { player, result: resolveWallContact(player, objects, { jumpPressed: true }) };
+}
+
+test('a step is neither slid on nor kicked off', () => {
+  const height = tuning.wallMinFaceHeight - 1;
+  for (const side of ['left', 'right']) for (const touching of [false, true]) {
+    const { result } = besideFace({ side, height, touching });
+    assert.equal(result.effectiveWallSide, null);
+    assert.equal(result.wallSlideContact, false);
+    assert.equal(result.wallSide, null);
+  }
+});
+
+test('a face at the minimum height, a real wall opposite a step, and untracked walls all kick', () => {
+  const height = tuning.wallMinFaceHeight;
+  for (const side of ['left', 'right']) {
+    assert.equal(besideFace({ side, height }).result.effectiveWallSide, side);
+  }
+  const short = tuning.wallMinFaceHeight - 1;
+  assert.equal(besideFace({ side: 'right', height: short, otherSide: 'left' }).result.effectiveWallSide, 'left');
+  const player = { body: { x: 100, y: 100, width: 30, height: 50, touching: { left: true }, blocked: {}, velocity: { x: 0, y: 0 } } };
+  assert.equal(resolveWallContact(player, [], { jumpPressed: true }).effectiveWallSide, 'left');
+});
+
+test('bots follow the same rule: no slide or kick on a step, both on a wall', () => {
+  const rect = (id, left, right, top, bottom) => ({ id, left, right, top, bottom, collision: { up: true, down: true, left: true, right: true } });
+  const run = (height) => {
+    const groundTop = 1000;
+    const geometry = { world: { x: 0, y: 0, width: 2000, height: 2000 }, colliders: [
+      rect('ground', 0, 2000, groundTop, 1100), rect('face', 500, 900, groundTop - height, 1100)] };
+    const p = { char_class: 'ninja', x: 480, y: groundTop - height - 20, vx: 260, vy: 0, grounded: false, isAlive: true };
+    let now = 1000, events = [];
+    for (let i = 0; i < 40 && !p.wallSide; i++, now += 1000 / 60) stepBody(p, { direction: 1 }, geometry, 1000 / 60, now);
+    assert.ok(p.wallSide, 'reached the face');
+    p.grounded = false; p._lastGroundTime = -Infinity; p.y += 30;
+    const falling = { ...p, vy: 400 };
+    stepBody(falling, { direction: 1 }, geometry, 1000 / 60, now);
+    events = stepBody(p, { direction: 1, jumpPressed: true }, geometry, 1000 / 60, now).events;
+    return { events, fallSpeed: falling.vy };
+  };
+  const wall = run(tuning.wallMinFaceHeight + 200), step = run(tuning.wallMinFaceHeight - 1);
+  assert.ok(wall.events.includes('wall-jump'));
+  assert.equal(wall.fallSpeed, tuning.wallSlideMaxFallSpeed);
+  assert.ok(!step.events.includes('wall-jump'));
+  assert.ok(step.fallSpeed > 400);
 });

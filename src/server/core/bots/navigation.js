@@ -1,5 +1,5 @@
 const { characterBody } = require("../../../shared/physics/duelGeometry");
-const { bounds, stepBody, forecastGeometry } = require("./physics");
+const { bounds, stepBody, onClimbableWall, forecastGeometry } = require("./physics");
 const movement = require("../../../shared/physics/movementPhysics.json");
 const { SD_DAMAGE_PER_SEC } = require('../gameRoomConfig');
 const graphs = new WeakMap();
@@ -160,24 +160,36 @@ function routeOf(node) {
 }
 
 function findRoute(graph, from, to, poisonY = Infinity, options = {}) {
-  if (!from || !to) return null;
+  return createRouteSearch(graph, from, poisonY, options)(to, options.goalX);
+}
+
+// One search from one start answers any number of destinations. It expands only
+// as far as the queries need and keeps what it settled, so asking for every
+// surface on a large map costs one search rather than one per surface.
+function createRouteSearch(graph, from, poisonY = Infinity, options = {}) {
   const surfaces = new Map(graph.surfaces.map(s => [s.id, s]));
   const keyOf = (id, x, dashUsed = false) => `${id}:${Number.isFinite(x) ? Math.round(x) : ''}:${dashUsed}`;
-  const atGoal = (id, x) => id === to && (!graph.geometry || !Number.isFinite(options.goalX) || !Number.isFinite(x) ||
-    canWalkBetween(graph.geometry, surfaces.get(id), graph.character, x, options.goalX));
-  if (atGoal(from, options.startX)) return [];
+  const walkable = (id, x, goalX) => !graph.geometry || !Number.isFinite(goalX) || !Number.isFinite(x) ||
+    canWalkBetween(graph.geometry, surfaces.get(id), graph.character, x, goalX);
+  const settled = new Map();
   let seq = 0;
   const queue = new MinHeap(), visited = new Set();
   queue.push({ id: from, parent: null, edge: null, cost: 0, elapsed: 0, x: options.startX, seq: seq++ });
   const bestCost = new Map([[keyOf(from, options.startX), 0]]);
   const poisoned = Number.isFinite(poisonY);
+  return (to, goalX) => {
+  if (!from || !to) return null;
+  if (to === from && walkable(from, options.startX, goalX)) return [];
+  for (const item of settled.get(to) || []) if (walkable(to, item.x, goalX)) return routeOf(item);
   while (queue.size) {
     const item = queue.pop();
-    if (atGoal(item.id, item.x)) return routeOf(item);
+    if (!settled.has(item.id)) settled.set(item.id, []);
+    settled.get(item.id).push(item);
+    const found = item.id === to && walkable(to, item.x, goalX);
     // Reaching the same platform on the other side of a wall is a different
     // navigation state. Collapsing both landings prevents routes around blocks.
     const state = keyOf(item.id, item.x, item.dashUsed);
-    if (visited.has(state) || item.cost > bestCost.get(state)) continue;
+    if (visited.has(state) || item.cost > bestCost.get(state)) { if (found) return routeOf(item); continue; }
     visited.add(state);
     const available = [...(graph.edges.get(item.id) || []),
       ...(options.allowDash && !item.dashUsed ? graph.dashEdges?.get(item.id) || [] : [])];
@@ -210,8 +222,10 @@ function findRoute(graph, from, to, poisonY = Infinity, options = {}) {
         elapsed: item.elapsed + approach + edge.duration,
         seq: seq++ });
     }
+    if (found) return routeOf(item);
   }
   return null;
+  };
 }
 
 // A first-frame overlap with a ledge is not a usable landing. Include the
@@ -248,7 +262,7 @@ function prepareTraversal(player, edge, sourceGeometry, modifiers, now, poisonY 
   for (let i = 0; i < MAX_TRAVERSAL_FRAMES; i++) {
     const at = now + i * DT;
     forecast.step(p, i * DT);
-    const wallJump = edge.wallClimb && p.wallSide && at >= (p._nextWallJump || 0);
+    const wallJump = edge.wallClimb && onClimbableWall(p, geometry) && at >= (p._nextWallJump || 0);
     const direction = wallJump ? (p.wallSide === 'left' ? 1 : -1) : edge.direction;
     const input = { direction, jumpPressed: (edge.jump && i === 0) || !!wallJump,
       ...(edge.dash && i === edge.dashFrame ? { dash: edge.dash } : {}) };
@@ -354,4 +368,4 @@ function safeWalkDirection(player, direction, geometry) {
       (direction < 0 && stopX <= limits.left + 3)) return 0;
   return direction;
 }
-module.exports = { poisonDamage, routePoisonDamage, buildGraph, findRoute, prepareTraversal, edgeKey, nearestSurface, standOn, walkLimits, canStandAt, canWalkBetween, safeWalkDirection, previewManeuver };
+module.exports = { createRouteSearch, poisonDamage, routePoisonDamage, buildGraph, findRoute, prepareTraversal, edgeKey, nearestSurface, standOn, walkLimits, canStandAt, canWalkBetween, safeWalkDirection, previewManeuver };

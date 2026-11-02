@@ -1260,16 +1260,19 @@
         display: none !important;
       }
 
+      /* The two vault panels sit either side of the match timer and must line
+         up with it: they share its top edge, and nothing here may re-centre
+         them vertically or they drift out of the row. */
       #bank-bust-hud {
         position: fixed;
-        top: 30px;
+        top: 14px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 9997;
         width: min(880px, calc(100vw - 24px));
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-start;
         gap: clamp(180px, 22vw, 280px);
         pointer-events: none;
       }
@@ -1299,59 +1302,68 @@
         font-size: 11px;
         font-weight: 700;
       }
-      .bank-bust-vault-top-left {
-        display: flex;
-        align-items: center;
-        gap: 7px;
-      }
-      .bank-bust-gold-inline {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        color: var(--bb-coin);
-      }
-      .bank-bust-vault-value {
+      /* The last coin change, flashed next to the label so a gain or a loss is
+         readable without watching the number tick. */
+      .bank-bust-vault-delta {
         font-family: var(--bb-font-display);
         font-size: 9px;
-        color: var(--bb-text);
+        opacity: 0;
+        transform: translateY(3px);
+        transition:
+          opacity 140ms ease,
+          transform 140ms ease;
+      }
+      .bank-bust-vault-delta.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .bank-bust-vault-delta.gain {
+        color: var(--bb-coin);
+      }
+      .bank-bust-vault-delta.loss {
+        color: #fca5a5;
       }
       .bank-bust-vault-bar-row {
         display: flex;
         align-items: center;
         gap: 8px;
       }
+      .bank-bust-coin-icon {
+        display: block;
+        image-rendering: pixelated;
+        flex: none;
+      }
       .bank-bust-vault-bar {
+        position: relative;
         flex: 1;
-        height: 12px;
+        height: 14px;
         border-radius: 0;
         background: var(--bb-bg-deep);
         border: 2px solid var(--bb-ink);
         overflow: hidden;
       }
-      .bank-bust-stat-icon {
-        width: 14px;
-        height: 14px;
-        border-radius: 0;
-        border: 1px solid var(--bb-border);
-        background: var(--bb-surface-1);
-        color: var(--bb-text);
-        font-size: 8px;
-        font-weight: 700;
-        line-height: 1;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .bank-bust-gold-value {
+      .bank-bust-vault-coins {
         font-family: var(--bb-font-display);
-        font-size: 9px;
+        font-size: 11px;
         color: var(--bb-coin);
+        min-width: 44px;
+        text-align: right;
       }
       .bank-bust-vault-fill {
         width: 100%;
         height: 100%;
         border-radius: inherit;
-        transition: width 180ms ease;
+        transition: width 220ms ease;
+      }
+      /* Where spending stops. A team can buy down to this mark and no further,
+         so it is drawn on the same bar rather than given a bar of its own. */
+      .bank-bust-vault-floor {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: rgba(255, 255, 255, 0.55);
+        pointer-events: none;
       }
       #bank-bust-team1 .bank-bust-vault-fill {
         background: linear-gradient(90deg, #60a5fa, #93c5fd);
@@ -1359,9 +1371,81 @@
       #bank-bust-team2 .bank-bust-vault-fill {
         background: linear-gradient(90deg, #f87171, #fca5a5);
       }
-      #bank-bust-alert {
+      /* Vault running out of coins: the bar pulses rather than adding a
+         second warning element to the HUD. */
+      .bank-bust-vault.low .bank-bust-vault-fill {
+        animation: bb-vault-low 900ms ease-in-out infinite;
+      }
+      .bank-bust-vault.empty {
+        filter: grayscale(1);
+        opacity: 0.6;
+      }
+      @keyframes bb-vault-low {
+        0%,
+        100% {
+          filter: brightness(1);
+        }
+        50% {
+          filter: brightness(1.75);
+        }
+      }
+      /* Centre gold announcement and countdown. */
+      #bank-bust-event {
         position: fixed;
         top: 116px;
+        left: 50%;
+        transform: translate(-50%, -14px);
+        z-index: 9998;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 16px 8px;
+        background: var(--bb-hud-bg);
+        box-shadow: var(--bb-hud-frame);
+        color: var(--bb-coin);
+        font-family: var(--bb-font-display);
+        font-size: 10px;
+        letter-spacing: 0.5px;
+        opacity: 0;
+        pointer-events: none;
+        transition:
+          opacity 180ms ease,
+          transform 180ms ease;
+      }
+      #bank-bust-event.show {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+      #bank-bust-event.live {
+        color: #fde68a;
+        animation: bb-event-live 800ms ease-in-out infinite;
+      }
+      @keyframes bb-event-live {
+        0%,
+        100% {
+          filter: brightness(1);
+        }
+        50% {
+          filter: brightness(1.5);
+        }
+      }
+      #bank-bust-event .bb-event-timer {
+        color: var(--bb-text);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .bank-bust-vault.low .bank-bust-vault-fill,
+        #bank-bust-event.live {
+          animation: none;
+        }
+        .bank-bust-vault-fill {
+          transition: none;
+        }
+      }
+
+      #bank-bust-alert {
+        position: fixed;
+        top: 156px;
         left: 50%;
         transform: translate(-50%, -16px);
         z-index: 9998;
@@ -1455,8 +1539,11 @@
           width: auto;
           min-width: 0;
         }
-        #bank-bust-alert {
+        #bank-bust-event {
           top: 182px;
+        }
+        #bank-bust-alert {
+          top: 222px;
         }
       }
 

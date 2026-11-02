@@ -35,6 +35,7 @@ import { applyMapBounds } from "../game/maps/mapUtils";
 import { POST_MATCH_REWARD_STORAGE_KEY } from "../lobby/profile/postMatchRewards.js";
 import { applyMatchBackground } from "../game/scene/matchBackground.js";
 import { installAmbientBezels } from "../game/scene/ambientBezels.js";
+import { releaseRendererContext, rendererContextOf } from "../game/scene/releaseRenderer.js";
 import { fitGameSize, installViewportFit, viewportSize } from "../game/scene/gameViewport.js";
 import { playMatchEndSound, startSuddenDeathMusic, stopSuddenDeathMusic } from "../game/audio/matchAudio.js";
 import { createGameHudController } from "../game/hud/gameHudController";
@@ -786,6 +787,7 @@ window.__BB_PAGE_SCOPE__?.onDispose(async () => {
   if (game) {
     const retiring = game;
     game = null;
+    const retiringContext = rendererContextOf(retiring);
     // game.destroy() only emits each scene's DESTROY event. Shut the scenes
     // down first so their "shutdown" cleanup hooks run as they would on stop.
     for (const scene of retiring.scene.scenes) {
@@ -802,6 +804,7 @@ window.__BB_PAGE_SCOPE__?.onDispose(async () => {
       // before the next screen is mounted, including browser Back transitions.
       retiring.loop.wake();
     });
+    releaseRendererContext(retiringContext);
   }
 });
 window.__BOOT_GAME__ = () =>
@@ -885,6 +888,11 @@ class GameScene extends Phaser.Scene {
     // Don't let players move until game is fully ready (unless late-joining a live game)
     this.input.keyboard.enabled = false;
     this.physics.world.setBoundsCollision(false, false, false, false);
+    // The coin is smooth artwork shown at a quarter of its size, which nearest
+    // sampling turns to shimmer as it spins.
+    if (this.textures.exists("coin-spin")) {
+      this.textures.get("coin-spin").setFilter(Phaser.Textures.FilterMode.LINEAR);
+    }
     // Poison water overlay graphics (sudden death - drawn every frame in update)
     const worldH = BASE_GAME_HEIGHT;
     this._poisonWaterY = worldH + 60; // start off-screen below world

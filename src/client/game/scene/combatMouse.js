@@ -5,7 +5,8 @@ export const COMBAT_MOUSE_CONFIG = Object.freeze({
   fullDragDistance: 120,
   mouseSensitivity: 0.24,
   throwCenterDistance: 28,
-  lookAhead: 72,
+  // Camera aim pullback is disabled for now; restore to 72 to re-enable.
+  lookAhead: 0,
 });
 
 export function createCombatMouseController({ scene, canPlay, canCapture = canPlay, canPrepare = canCapture, onRelease, config = COMBAT_MOUSE_CONFIG, getPreferences = () => ({ sensitivity: 1, autoHideCursor: true }) }) {

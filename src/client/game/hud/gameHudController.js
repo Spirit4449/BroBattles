@@ -62,6 +62,8 @@ export function createGameHudController({
   let timerPaused = false;
   let lastModeAlertAt = 0;
   let lastModeAlertEventAt = 0;
+  const lastVaultCoins = {};
+  const vaultDeltaTimers = {};
   let noticeAutoCloseTimer = null;
   let keybindAutoDismissTimer = null;
   let collapseKeybindHud = null;
@@ -446,30 +448,58 @@ export function createGameHudController({
     }
   }
 
-  function _setVaultRow(teamKey, vault, yourTeam) {
+  // One row per vault showing the single value the mode runs on: the coins in
+  // it. The bar is that number against what the vault started with, and the
+  // tick on the bar is the floor purchases cannot spend past.
+  function _setVaultRow(teamKey, vault, yourTeam, modeState) {
     const row = document.getElementById(`bank-bust-${teamKey}`);
     if (!row || !vault) return;
     row.classList.toggle("friendly", yourTeam === teamKey);
-    row.classList.toggle("enemy", yourTeam && yourTeam !== teamKey);
-    const label = row.querySelector(".bank-bust-vault-label");
-    const value = row.querySelector(".bank-bust-vault-value");
+    row.classList.toggle("enemy", !!yourTeam && yourTeam !== teamKey);
+
+    const coins = Math.max(0, Number(vault?.coins) || 0);
+    const starting = Math.max(1, Number(vault?.startingCoins) || 1);
+    const ratio = Math.max(0, Math.min(1, coins / starting));
+    const lowRatio = Number(modeState?.lowCoinsRatio) || 0.25;
+
+    const value = row.querySelector(".bank-bust-vault-coins");
+    if (value) value.textContent = coins.toLocaleString("en-US");
+
     const fill = row.querySelector(".bank-bust-vault-fill");
-    const hp = Math.max(0, Number(vault?.health) || 0);
-    const maxHp = Math.max(1, Number(vault?.maxHealth) || 1);
-    const ratio = Math.max(0, Math.min(1, hp / maxHp));
-    if (label) {
-      label.textContent = yourTeam === teamKey ? "Vault" : "Vault";
+    if (fill) fill.style.width = `${(ratio * 100).toFixed(1)}%`;
+
+    const floor = row.querySelector(".bank-bust-vault-floor");
+    if (floor) {
+      const floorCoins = Math.max(0, Number(modeState?.purchaseFloorCoins) || 0);
+      const show = floorCoins > 0 && floorCoins < starting;
+      floor.style.display = show ? "block" : "none";
+      if (show) floor.style.left = `${((floorCoins / starting) * 100).toFixed(1)}%`;
     }
-    if (value) value.textContent = `${hp} / ${maxHp}`;
-    if (fill) {
-      fill.style.width = hp <= 0 ? "0%" : `${(ratio * 100).toFixed(1)}%`;
-    }
+
+    row.classList.toggle("empty", coins <= 0);
+    row.classList.toggle("low", coins > 0 && ratio <= lowRatio);
+
+    _flashVaultDelta(teamKey, row, coins);
   }
 
-  function _setTeamGold(teamKey, amount) {
-    const row = document.getElementById(`bank-bust-${teamKey}`);
-    const value = row?.querySelector(".bank-bust-gold-value");
-    if (value) value.textContent = `${Math.max(0, Number(amount) || 0)}`;
+  // The last coin change for this vault, flashed beside the label. Tracked
+  // here rather than read from the ledger so a burst of pickups reads as one
+  // movement instead of a stutter of numbers.
+  function _flashVaultDelta(teamKey, row, coins) {
+    const previous = lastVaultCoins[teamKey];
+    lastVaultCoins[teamKey] = coins;
+    if (previous === undefined || previous === coins) return;
+    const delta = coins - previous;
+    const label = row.querySelector(".bank-bust-vault-delta");
+    if (!label) return;
+    label.textContent = `${delta > 0 ? "+" : ""}${delta.toLocaleString("en-US")}`;
+    label.classList.remove("gain", "loss");
+    label.classList.add(delta > 0 ? "gain" : "loss", "show");
+    clearTimeout(vaultDeltaTimers[teamKey]);
+    vaultDeltaTimers[teamKey] = setTimeout(() => {
+      label.classList.remove("show");
+    }, 900);
+
   }
 
   function _showVaultAlert(event, yourTeam) {
@@ -483,8 +513,8 @@ export function createGameHudController({
     lastModeAlertEventAt = eventAt || now;
     const attackedOwnVault = yourTeam && event?.targetTeam === yourTeam;
     root.textContent = attackedOwnVault
-      ? "Your Vault is under attack!"
-      : "Enemy Vault under attack!";
+      ? "Your Vault is losing coins!"
+      : "Enemy Vault is losing coins!";
     root.classList.remove("hidden", "enemy-alert", "friendly-alert");
     root.classList.add(attackedOwnVault ? "friendly-alert" : "enemy-alert");
     root.classList.add("show");
@@ -494,21 +524,54 @@ export function createGameHudController({
     }, 1600);
   }
 
+  // Advance notice, then a live countdown, for the contested centre crate.
+  function _syncCenterGold(centerGold) {
+    const root = document.getElementById("bank-bust-event");
+    if (!root) return;
+    const label = root.querySelector(".bb-event-label");
+    const timer = root.querySelector(".bb-event-timer");
+    const phase = String(centerGold?.phase || "");
+    const now = Date.now();
+
+    let text = "";
+    let remaining = 0;
+    let live = false;
+    if (phase === "announced") {
+      text = `Crate incoming — ${Math.max(1, Number(centerGold?.reward) || 0).toLocaleString("en-US")} coins`;
+      remaining = Math.max(0, Number(centerGold?.spawnAt || 0) - now);
+    } else if (phase === "active") {
+      text = "Crate is down — break it open";
+      remaining = Math.max(0, Number(centerGold?.expiresAt || 0) - now);
+      live = true;
+    }
+
+    if (!text) {
+      root.classList.remove("show", "live");
+      root.classList.add("hidden");
+      return;
+    }
+    if (label) label.textContent = text;
+    if (timer) timer.textContent = `${Math.ceil(remaining / 1000)}s`;
+    root.classList.remove("hidden");
+    root.classList.add("show");
+    root.classList.toggle("live", live);
+  }
+
   function syncModeState(modeState, yourTeam = null) {
     const hud = document.getElementById("bank-bust-hud");
     if (!hud) return;
     if (!modeState || String(modeState?.type) !== "bank-bust") {
       hud.classList.add("hidden");
+      _syncCenterGold(null);
       return;
     }
     const introBlocking = countdownRunning || _isOverlayVisible();
     if (!introBlocking) {
       hud.classList.remove("hidden");
     }
-    _setVaultRow("team1", modeState?.vaults?.team1, yourTeam);
-    _setVaultRow("team2", modeState?.vaults?.team2, yourTeam);
-    _setTeamGold("team1", modeState?.teamGold?.team1);
-    _setTeamGold("team2", modeState?.teamGold?.team2);
+    _setVaultRow("team1", modeState?.vaults?.team1, yourTeam, modeState);
+    _setVaultRow("team2", modeState?.vaults?.team2, yourTeam, modeState);
+    _syncCenterGold(modeState?.centerGold);
     if (modeState?.lastVaultDamageEvent?.at) {
       _showVaultAlert(modeState.lastVaultDamageEvent, yourTeam);
     }

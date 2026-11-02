@@ -81,3 +81,21 @@ test('admin routes reject non-admin reads and writes and enforce revision protoc
  require('../src/server/routes/modules/mapEditorRoutes').registerMapEditorRoutes({app,requireCurrentUser:async()=>({}),isAdminUser:()=>false,pageRoot:'/tmp'});
  for(const[key,handler]of Object.entries(handlers).filter(([key])=>!key.startsWith('GET /assets/map-revisions/'))){const res={status(code){this.code=code;return this;},json(body){this.body=body;return this;}};await handler({method:key.split(' ')[0]},res);assert.equal(res.code,403,key);}
 });
+
+test('Mangrove Meadow grass catches descending players while undersides allow passage',()=>{
+ const {sweepMovement}=require('../src/shared/physics/sweptCollision');
+ for(const file of ['../src/shared/maps/2.json','../data/maps/2.json']){
+  const geometry=geometryFromMap(require(file));
+  for(const surface of geometry.colliders){
+   const x=(surface.left+surface.right)/2-10;
+   const below={x,y:surface.bottom+10,width:20,height:20};
+   assert.equal(sweepMovement(below,0,-100,[surface]).y,below.y-100,`${surface.id} underside`);
+   const above={x,y:surface.top-50,width:20,height:20};
+   const landed=sweepMovement(above,0,100,[surface]);
+   assert.equal(landed.y,surface.top-above.height,`${surface.id} landing`);
+   const beside={x:surface.left-30,y:surface.top+2,width:20,height:10};
+   const lateral=sweepMovement(beside,60,0,[surface]);
+   assert.equal(lateral.x,surface.collision.left ? surface.left-beside.width : beside.x+60,`${surface.id} side`);
+  }
+ }
+});

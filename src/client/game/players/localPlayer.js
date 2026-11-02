@@ -16,6 +16,9 @@ import socket from "../../lib/socket";
 import { drawSuperChargeBar, resetSuperBarAnimation } from "../scene/superBarRenderer";
 import { drawHealthBar, resetHealthBarAnimation } from "../scene/healthBarRenderer";
 import {
+  PIXEL_INK, drawPixelFill, drawPixelFrame, drawPixelTrough, snapPixel,
+} from "../scene/pixelBar";
+import {
   setStatusIconStackAlpha,
   setStatusIconStackVisible,
   syncStatusIconStack,
@@ -120,6 +123,7 @@ let powerupStatusIcons = [];
 let ammoBar; // graphics
 let ammoBarBack; // background graphics
 let ammoBarWidth = 60;
+const AMMO_BAR_HEIGHT = 6;
 let ammoCooldownMs = 1200; // time between shots
 let ammoReloadMs = 1200; // time to reload one charge
 let ammoCapacity = 1; // number of segments
@@ -760,21 +764,20 @@ export function createPlayer(
   playerName = scene.add.text(player.x, bodyTop - 40, username);
   bindCanvasName(playerName, username);
   playerName.setStyle({
-    fontFamily: "LilitaOne-Regular",
-    fontSize: "10px",
-    fontStyle: "bold",
+    fontFamily: "'Press Start 2P', monospace",
+    fontSize: "7px",
     fill: "#ffffff",
     stroke: "#000000",
     strokeThickness: 3,
   });
-  playerName.setShadow(1, 1, "rgba(0, 0, 0, 0.65)", 1, true, true);
+  playerName.setShadow(1, 1, "rgba(0, 0, 0, 0.65)", 0, true, true);
   playerName.setOrigin(0.5, 0);
   playerName.setDepth(42);
 
   // Health text
   healthText = scene.add.text(0, 0, "", {
-    fontFamily: "LilitaOne-Regular",
-    fontSize: "10px",
+    fontFamily: "'Press Start 2P', monospace",
+    fontSize: "8px",
     color: "#FFFFFF", // White
     stroke: "#000000", // Black
     strokeThickness: 4,
@@ -1306,8 +1309,10 @@ function updateHealthBar() {
   healthText.setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
 
   // Draw ammo bar underneath health (only for local player & when alive)
+  // Each bar's 2px pixel frame overlaps the one above, so the stack reads as
+  // one panel with ink dividers.
   drawAmmoBar(healthBarX, y + 11);
-  drawSuperBar(healthBarX, y + 18);
+  drawSuperBar(healthBarX, y + 19);
 }
 
 function fireBasicAttack(direction, context = null) {
@@ -1387,39 +1392,31 @@ function drawAmmoBar(forcedX, forcedY) {
   ammoBarBack.clear();
   ammoBar.clear();
 
-  // Background
-  ammoBarBack.fillStyle(0x222222, 0.65);
-  ammoBarBack.fillRoundedRect(x, y, ammoBarWidth, 6, 3);
-  ammoBarBack.lineStyle(2, 0x000000, 0.9);
-  ammoBarBack.strokeRoundedRect(x, y, ammoBarWidth, 6, 3);
+  const barX = snapPixel(x);
+  const barY = snapPixel(y);
+  drawPixelFrame(ammoBarBack, barX, barY, ammoBarWidth, AMMO_BAR_HEIGHT);
+  drawPixelTrough(ammoBarBack, barX, barY, ammoBarWidth, AMMO_BAR_HEIGHT);
 
-  // Draw segmented charges (like Brawl Stars)
-  const gap = 2;
+  // Segmented charges split by ink dividers
+  const gap = 1;
   const segmentWidth = (ammoBarWidth - gap * (ammoCapacity - 1)) / ammoCapacity;
   for (let i = 0; i < ammoCapacity; i++) {
-    const segX = x + i * (segmentWidth + gap);
-    // Determine fill for this segment
+    const segX = barX + Math.round(i * (segmentWidth + gap));
+    const nextX = barX + Math.round((i + 1) * (segmentWidth + gap)) - gap;
     let percent = 0;
     if (i < ammoCharges) {
-      percent = 1; // full charge
+      percent = 1;
     } else if (i === ammoCharges) {
       // currently reloading this segment: percent based on reload progress
       percent = Phaser.Math.Clamp(reloadTimerMs / ammoReloadMs, 0, 1);
-    } else {
-      percent = 0; // future segments empty
     }
-    // Colors
-    const emptyColor = 0x333333;
-    const readyColor = 0xff4040;
-    const chargingColor = 0xb32121;
-    const fillColor = percent >= 1 ? readyColor : chargingColor;
-    // Fill base (empty)
-    ammoBar.fillStyle(emptyColor, 0.5);
-    ammoBar.fillRoundedRect(segX, y, segmentWidth, 6, 2);
-    // Fill current percent
+    const fillColor = percent >= 1 ? 0xff4040 : 0xa82424;
     if (percent > 0) {
-      ammoBar.fillStyle(fillColor, 0.95);
-      ammoBar.fillRoundedRect(segX, y, segmentWidth * percent, 6, 2);
+      drawPixelFill(ammoBar, segX, barY, (nextX - segX) * percent, AMMO_BAR_HEIGHT, fillColor);
+    }
+    if (i > 0) {
+      ammoBar.fillStyle(PIXEL_INK, 1);
+      ammoBar.fillRect(segX - gap, barY, gap, AMMO_BAR_HEIGHT);
     }
   }
   ammoBar.setDepth(41);

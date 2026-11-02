@@ -1,8 +1,9 @@
+import { movementSoundKey } from "../../../shared/physics/movementSounds";
 // Movement sounds for the local fighter: terrain footsteps plus the looping
 // wall-slide scrape and falling-air rush. One instance per player module; the
 // loops are (re)created per scene through attach().
 import { MOVEMENT_VFX_CONFIG } from "../scene/effects";
-import { getTerrainSteps, footstepVolume } from "../audio/movementAudio";
+import { getTerrainSteps, footstepVolume, fallingAirVolume } from "../audio/movementAudio";
 
 const clamp = (value) => Math.max(0, Math.min(1, value)); // Phaser.Math.Clamp semantics
 const clamp01 = (value) => clamp(Number(value) || 0);
@@ -70,7 +71,7 @@ export function createLocalMovementAudio() {
     footstepCursor =
       (footstepCursor + (steps.length > 1 ? Phaser.Math.Between(1, steps.length - 1) : 1)) % steps.length;
     try {
-      scene.sound.play(steps[footstepCursor].key, {
+      scene.sound.play(movementSoundKey(scene, steps[footstepCursor].key), {
         volume: footstepVolume(speed, isDirectionChange, scene._terrainType),
         rate: (isDirectionChange ? 0.88 : 0.94) + speed * 0.14,
       });
@@ -128,7 +129,7 @@ export function createLocalMovementAudio() {
     }
     const speedRatio = clamp((Number(velocityY) - 85) / (MOVEMENT_VFX_CONFIG.fastFallMaxVelocity - 85));
     const timeRatio = clamp((Date.now() - (fallAirStartedAt || Date.now())) / 950);
-    const targetVolume = 0.06 + speedRatio * (0.16 + timeRatio * 0.14);
+    const targetVolume = fallingAirVolume(speedRatio, timeRatio);
     fallAirLoop.setVolume?.(lerp(Number(fallAirLoop.volume) || 0, targetVolume, 0.075));
     fallAirLoop.setRate?.(0.72 + speedRatio * 0.24 + timeRatio * 0.04);
   }

@@ -44,6 +44,31 @@ export function createDeathLootEffects(scene, Phaser) {
       .setDepth(depth).setBlendMode(Phaser.BlendModes.ADD);
   }
 
+  // A tall oval of soft light, for a coin appearing: bright down its middle and
+  // gone by every edge, so it reads as a glow with no visible box around it.
+  function glowImage(textureKey, x, y, tint) {
+    if (!scene.textures.exists(textureKey)) {
+      const width = 32;
+      const height = 96;
+      const texture = scene.textures.createCanvas(textureKey, width, height);
+      const pixels = texture.context.createImageData(width, height);
+      for (let py = 0; py < height; py++) {
+        for (let px = 0; px < width; px++) {
+          const across = 1 - Math.abs((px + 0.5) / width - 0.5) * 2;
+          const along = 1 - Math.abs((py + 0.5) / height - 0.5) * 2;
+          const i = (py * width + px) * 4;
+          pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = 255;
+          pixels.data[i + 3] = Math.round(255 * across ** 2 * along ** 1.5);
+        }
+      }
+      texture.context.putImageData(pixels, 0, 0);
+      texture.refresh();
+    }
+    return scene.add.image(x, y, textureKey)
+      .setTint(tint).setAlpha(0).setDepth(RENDER_LAYERS.POWERUPS - 1)
+      .setBlendMode(Phaser.BlendModes.ADD);
+  }
+
   function fade(object, duration, properties = {}) {
     scene.tweens.add({
       targets: object, alpha: 0, duration, ease: "Quad.easeOut",
@@ -93,5 +118,5 @@ export function createDeathLootEffects(scene, Phaser) {
     fade(puff, 180, { displayWidth: 48, displayHeight: 10 });
   }
 
-  return { glow, burst, trail, impact };
+  return { glow, glowImage, burst, trail, impact };
 }

@@ -2,7 +2,7 @@
 
 ## Wall movement
 
-Wall jumps use the shared movement tuning in `src/shared/physics/movementPhysics.json`. The horizontal kick is 360 px/s, and a 450 ms cooldown spaces successive kicks; the upward kick is unchanged so existing climbs remain reachable. Wall jumps play the character's existing jump frames over roughly 450 ms without slowing ordinary jumps. The wall-slide pose stays visible for 120 ms after natural separation from the wall, while a wall jump or landing replaces it immediately. This pose hold changes presentation only; wall contact, slide friction, and jump input still use the physical state.
+Wall jumps use the shared movement tuning in `src/shared/physics/movementPhysics.json`. The horizontal kick is 360 px/s, and a 450 ms cooldown spaces successive kicks; the upward kick scales with jump speed so existing climbs remain reachable. Wall slides and wall jumps need a real wall: a side whose top is less than `wallMinFaceHeight` above the ground under the body is a step. A body falls past a step at normal speed, and pressing jump beside one waits for the landing instead of kicking away from the climb. Wall jumps play the character's existing jump frames over roughly 450 ms without slowing ordinary jumps. The wall-slide pose stays visible for 120 ms after natural separation from the wall, while a wall jump or landing replaces it immediately. This pose hold changes presentation only; wall contact, slide friction, and jump input still use the physical state.
 
 When tuning this movement, check repeated wall jumps, narrow wall climbs, dash interruption, and both players' animation timing in a live match. The bot movement simulation reads the same kick and cooldown values.
 
@@ -66,9 +66,74 @@ surrounds him for the channel and disappears when it ends or is interrupted. The
 `stats.tuning.special.inferno.damageTakenMult` in his shared character definition
 and stacks multiplicatively with other damage modifiers.
 
+## Bank Bust: coins in the vault
+
+The mode runs on exactly one number per team, `vaults[team].coins`, and the
+server owns it. There is no player wallet, no team gold balance and no separate
+vault health: the coins in a vault are simultaneously its survivability and the
+team's spending power, and a vault at zero coins is destroyed.
+
+Every movement of that number goes through `applyVaultCoins(team, delta, meta)`
+in `src/server/core/gameModes/bankBust/BankBustGameMode.js`. Nothing else may
+write `coins`. It clamps the value, marks the vault destroyed at zero, and
+appends one entry to `coinEvents`, the single ledger the client renders all coin
+feedback from. `meta.reason` says what moved it — `pickup`, `mine`, `deathDrop`,
+`centerGold`, `enemyAttack`, `purchase-turret`, `purchase-wall`.
+
+Attack damage comes off the vault one for one: a 1200 hit takes 1200 coins, the
+same number it takes off a player's health bar. Every amount in the mode's
+economy (mine yield, pickups, centre gold, purchase costs) is on that scale. The
+one conversion left is death drops, whose coin is worth 1 to the player's wallet
+and `deathDropVaultCoins` when it is banked.
+
+Purchases are paid out of the vault through `spendVaultCoins`, which refuses any
+purchase that would leave the vault below `purchaseFloorCoins`. Purchases must also leave strictly positive coins, even if the configured floor is zero, and are refused after the match is finished. That floor is
+what stops a team buying itself into a loss; it is a rule about one value, not a
+second pool, and the HUD draws it as a mark on the same bar.
+
+When the clock expires, `onTimerExpired` compares the two teams' remaining
+coins. Code outside the mode that reads a vault — `damageResolver.js`,
+`dravenInfernoAbility.js`, `huntressCombat.js`, `ninjaCombat.js` — reads
+`coins`, never `health`.
+
+A vault reaching zero does not end the match on that tick. `evaluateVictoryState`
+asks for `VAULT_BUST_FINISH_DELAY_MS` first, because the client draws the bust
+from the snapshot showing the vault at zero and finishing at once stopped the
+loop before it was sent. `applyVaultCoins` refuses every change during that wait,
+so the result is already settled.
+
+Everything the vault does on screen lives in
+`src/client/game/modes/bankBust/vaultEffects.js`: the reaction to a hit, the
+smoke, sparks and alarm as it empties, and the bust (wind-up, blown-off door, coin
+eruption, camera focus on the vault). It is driven by the `coinEvents` ledger and
+the vault's coin count, is purely local, and honours reduced motion.
+
+Claimed turret barrels use the replicated server aim angle directly, including
+on the first shot and target changes. An unchanged aim does not time out into
+an idle sweep; recoil keeps the barrel on the bullet's direction.
+
+### Contested centre gold
+
+`centerGold` is a locked crate on a fixed schedule, not a random drop: it moves
+`scheduled -> announced -> active -> cooldown` at one visible site taken from
+the map's `objectiveLayout.bankBust.centerGold`. Both teams see the announcement
+before it lands, and a drop that could not be reached before the match ends is
+not scheduled at all. Several drops per match is the point: no single one
+decides the result.
+
+While `active`, the crate is a hit target for either team under the name
+`crate:center`. `getObjectiveTargets` in `attackRuntimes/targets.js` hands it to
+every attack runtime alongside the enemy vault, and `damageCenterCrate` takes the
+damage. Breaking it pays nobody directly: the reward splits into piles thrown
+across the hilltop as `randomGold` pickups, which the first player to reach each
+one collects into their own vault through `applyVaultCoins` with the reason
+`centerGold`. A crate left alone expires and spills nothing. It is not a player,
+so hitting it records no combat stats and builds no super. Crate-hunter bots move toward its announced site, attack the active crate,
+and compete for its spilled coins.
+
 ## Bots and matchmaking
 
-Bots are server participants, not user accounts or browser sessions. Bots can participate in the playable modes, including Bank Bust. Objective metadata in `src/server/core/bots/objectives.js` describes the enemy vault, but explicitly retains `standard-combat` behavior; dedicated objective planning is not implemented. `tests/botObjectives.test.js` verifies that distinction. Mid-match replacement is not an automatic recovery mechanism.
+Bots are server participants, not user accounts or browser sessions. Bots can participate in the playable modes, including Bank Bust. Bank Bust uses the objective planner in `src/server/core/bots/bankBust.js`; other modes retain standard combat tactics. Seeded personality preferences vary vault pressure, coin/mine farming, crate hunting, lower-route flanking, player aggression, and home-vault defense. Preferences are reviewed every 30 seconds, independently of think frequency. Each team assigns one dedicated infiltrator per three bots (at least one): roughly two thirds flank and one third rush directly. Other bots retain supporting preferences. Infiltrators prioritize the vault over incidental rewards and bypass more distant defenders, but still respond to immediate contact, recovery needs, and base threats. Active roles adapt: quiet-base defenders push, idle farmers and crate hunters raid, and a nearby bot covers an undefended vault when an observed intruder appears. Defensive alerts linger briefly after a threat disappears to avoid turning back and forth at the boundary. Reachable firing positions pull attackers toward the enemy vault; nearby threats and vault defenders return control to combat tactics, and low-health recovery and poison escape still take precedence. Bots take clear vault/crate shots even without a player target. Mines collect by proximity; turrets and home-side walls use the normal interaction action and authoritative purchase checks. Only a 12% opening willingness roll permits early claiming; the next review occurs 12–28 seconds after match start. Later willingness checks are spaced 8–14 seconds apart, with infiltrators less likely to buy than defenders. Planning and interaction share the same result so frequent thinks cannot force a purchase. Bots recheck the current balance at interaction time, keep the larger of an additional purchase-cost reserve above the mode floor or 35% of the current vault, and refuse purchases that surrender a winning score in the last 15 seconds. They avoid duplicating teammates’ side objectives. Valid objectives retain their exact stance for a minimum commitment window; later switches need a meaningful utility gain. Completed, unaffordable, or unreachable goals release immediately, and defense/recovery can override commitments. The generic team-role planner cannot cancel Bank Bust approaches; local combat uses separate enter/leave distances so distant target changes do not redirect objective travel. Flanking commitments are bounded and reset on death. `tests/botObjectives.test.js` covers planning, shooting priorities, roles, and purchases. Mid-match replacement is not an automatic recovery mechanism.
 
 The party slot UI supports explicit bot slots. Automatic queue filling is separately controlled by `bots.enabled` and `bots.rolloutPercent` in `src/server/lib/runtimeConfig.js` / `runtime-overrides.json`; defaults are disabled and zero. Apply the adaptive-bots migration before enabling it. Admin runtime changes apply live; direct override-file edits require a restart. Disabling filling leaves existing rooms running.
 

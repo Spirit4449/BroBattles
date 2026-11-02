@@ -2,10 +2,11 @@
 // backdrop renders here. Art layers, drifting clouds and parallax render at
 // every quality level. Atmosphere (fog, mist, glows, light rays, dust, platform
 // lighting, vignette) is WebGL-only and appears on High and Super High.
+// Lamps are atmosphere too: without it a lit area is simply dark.
 // Depth-of-field blur is baked into layer art by the importer, not done here.
 import { getSettings, subscribeSettings } from '../../site/preferences';
 import { RENDER_LAYERS } from '../scene/renderLayers';
-import { ARENA_DEPTH, activeClouds, cloudUrl, coverScale, sceneryTransform, sceneryUrls } from '../../../shared/maps/scenery';
+import { ARENA_DEPTH, activeClouds, cloudUrl, coverScale, lampState, sceneryParts, sceneryTransform, sceneryUrls } from '../../../shared/maps/scenery';
 import { mapArena } from '../../../shared/maps/arenas';
 import { ensureSceneryTextures, SCENERY_TEXTURES as T } from './sceneryTextures';
 import { GAME_VIEW } from '../scene/gameViewport';
@@ -20,6 +21,8 @@ const DASH_ZOOM = 1.03;
 const STACK = { fog: 1, mist: 2, glow: 3, rays: 4, dust: 4.5, clouds: 5 };
 // Clouds wrap this far beyond the camera bounds' half-width (world px).
 const CLOUD_WRAP_MARGIN = 500;
+// Over front layers, so a dark layer can cover a lamp's surroundings but not it.
+const LAMP_DEPTH = RENDER_LAYERS.SCENERY_FRONT + 0.8;
 
 /** Texture key a scenery image loads under. */
 export const sceneryTextureKey = (url) => `scenery:${url}`;
@@ -31,6 +34,10 @@ export function preloadScenery(scene, data) {
   for (const url of sceneryUrls(data?.scenery)) {
     const key = layerKey(url);
     if (!scene.textures.exists(key)) scene.load.image(key, url);
+  }
+  for (const part of sceneryParts(data?.scenery)) {
+    const key = layerKey(part.url);
+    if (!scene.textures.exists(key)) scene.load.spritesheet(key, part.url, { frameWidth: part.frameWidth, frameHeight: part.frameHeight });
   }
 }
 
@@ -89,6 +96,7 @@ export function buildScenery(scene, data, { still = false } = {}) {
     zoomLimits: [camera.minZoom, camera.maxZoom],
     depths: layerDepths(scenery.layers),
     layers: [],
+    parts: [],
     clouds: [],
     atmosphere: null,
   };
@@ -110,6 +118,7 @@ export function buildScenery(scene, data, { still = false } = {}) {
   }
 
   fitLayers(runtime);
+  buildLayerParts(runtime, still);
 
   // Clouds sit in the world like platforms and drift sideways; by default
   // over the platforms and under the fighters.
@@ -127,11 +136,11 @@ export function buildScenery(scene, data, { still = false } = {}) {
   });
 
   if (still) {
-    for (const item of [...runtime.layers, ...runtime.clouds]) {
+    for (const item of [...runtime.layers, ...runtime.parts, ...runtime.clouds]) {
       item.obj.setScrollFactor(1).setPosition(runtime.center.x + item.offset.x, runtime.center.y + item.offset.y)
         .setScale(item.sx, item.sy);
     }
-    runtime.destroy = () => { for (const item of [...runtime.layers, ...runtime.clouds]) item.obj.destroy(); };
+    runtime.destroy = () => { for (const item of [...runtime.layers, ...runtime.parts, ...runtime.clouds]) item.obj.destroy(); };
     scene._sceneryRuntime = runtime;
     return runtime;
   }
@@ -154,7 +163,8 @@ export function buildScenery(scene, data, { still = false } = {}) {
     unsubscribe();
     scene.events.off('postupdate', update);
     runtime.atmosphere?.destroy();
-    for (const item of [...runtime.layers, ...runtime.clouds]) item.obj.destroy();
+    for (const item of [...runtime.layers, ...runtime.parts, ...runtime.clouds]) item.obj.destroy();
+    runtime.parts = [];
     runtime.layers = [];
     runtime.clouds = [];
   };
@@ -198,6 +208,33 @@ function fitLayers(runtime) {
   }
 }
 
+// Animated parts sit on their layer's art, just above it and under its haze. They
+// start at different points in their loop, so repeats of a layer don't move as one.
+function buildLayerParts(runtime, still) {
+  const { scene } = runtime;
+  for (const item of runtime.layers) {
+    for (const [index, part] of (item.layer.parts || []).entries()) {
+      const key = layerKey(part.url);
+      if (!scene.textures.exists(key)) continue;
+      const obj = scene.add.sprite(0, 0, key, part.frames[0]).setScrollFactor(item.scroll)
+        .setDepth(runtime.depths[item.layer.id] + 0.5).setAlpha(item.layer.alpha ?? 1);
+      if (item.layer.tint) obj.setTint(color(item.layer.tint));
+      if (!still) {
+        const anim = `scenery-part:${part.url}:${part.frames.join()}`;
+        if (!scene.anims.exists(anim)) {
+          scene.anims.create({ key: anim, frameRate: part.frameRate, repeat: -1,
+            frames: part.frames.map((frame) => ({ key, frame })) });
+        }
+        obj.play({ key: anim, startFrame: (index * 7 + item.layer.id.length * 5 + runtime.parts.length * 3) % part.frames.length });
+      }
+      runtime.parts.push({ obj, scroll: item.scroll, sx: item.sx, sy: item.sy, offset: {
+        x: item.offset.x + (part.x - item.image.width / 2) * item.sx,
+        y: item.offset.y + (part.y - item.image.height / 2) * item.sy,
+      } });
+    }
+  }
+}
+
 function place(runtime, item, cam, origin) {
   const t = sceneryTransform({ scroll: item.scroll, offset: item.offset, center: runtime.center, origin,
     zoom: cam.zoom, referenceZoom: runtime.referenceZoom });
@@ -209,6 +246,7 @@ function updateScenery(runtime) {
   if (!cam) return;
   const origin = { x: cam.width * cam.originX, y: cam.height * cam.originY };
   for (const item of runtime.layers) place(runtime, item, cam, origin);
+  for (const item of runtime.parts) place(runtime, item, cam, origin);
   const time = runtime.scene.time.now / 1000;
   // Clouds drift and wrap around the arena, re-entering from the far side.
   for (const cloud of runtime.clouds) {
@@ -219,6 +257,12 @@ function updateScenery(runtime) {
   }
   const atmosphere = runtime.atmosphere;
   if (!atmosphere) return;
+  for (const { lamp, phase, cone, pool, bulb } of atmosphere.lamps) {
+    const { alpha } = lampState(lamp, time, phase);
+    cone.setAlpha(alpha);
+    pool.setAlpha(alpha * 0.9);
+    bulb.setAlpha(alpha * 1.4);
+  }
   for (const item of atmosphere.placed) place(runtime, item, cam, origin);
   // Full-screen overlays: scroll factor 0, sized to the zoomed view.
   for (const obj of atmosphere.screens) {
@@ -300,6 +344,23 @@ function buildAtmosphere(runtime) {
     }
   }
 
+  const lamps = [];
+  (a.lamps || []).forEach((lamp, phase) => {
+    const light = (key, depth) => add(scene.add.image(0, 0, key).setScrollFactor(1).setDepth(depth)
+      .setBlendMode(Phaser.BlendModes.ADD).setTint(color(lamp.color)));
+    const cone = light(T.lampCone, LAMP_DEPTH).setOrigin(0.5, 0);
+    const pool = light(T.lampPool, LAMP_DEPTH + 0.01);
+    const bulb = light(T.glow, LAMP_DEPTH + 0.02);
+    const sizeOf = (key) => scene.textures.get(key).getSourceImage();
+    placed.push({ obj: cone, scroll: 1, offset: { x: lamp.x, y: lamp.y },
+      sx: lamp.width / sizeOf(T.lampCone).width, sy: lamp.length / sizeOf(T.lampCone).height });
+    placed.push({ obj: pool, scroll: 1, offset: { x: lamp.x, y: lamp.y + lamp.length },
+      sx: (lamp.width * 1.3) / sizeOf(T.lampPool).width, sy: 48 / sizeOf(T.lampPool).height });
+    placed.push({ obj: bulb, scroll: 1, offset: { x: lamp.x, y: lamp.y },
+      sx: 90 / sizeOf(T.glow).width, sy: 90 / sizeOf(T.glow).height });
+    lamps.push({ lamp, phase, cone, pool, bulb });
+  });
+
   const dustFields = Array.isArray(a.dust) ? a.dust : a.dust ? [a.dust] : [];
   for (const d of dustFields) {
     const count = level === 'super-high' ? d.superHighCount ?? Math.round(d.count * 1.8) : d.count;
@@ -354,7 +415,7 @@ function buildAtmosphere(runtime) {
   }
 
   return {
-    level, placed, screens, mists, lit,
+    level, placed, screens, mists, lit, lamps,
     destroy() {
       for (const tween of tweens) tween.remove();
       for (const obj of objects) obj.destroy();

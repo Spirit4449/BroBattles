@@ -31,9 +31,8 @@ function normalizeBotObjective(room, player, objective = {}) {
     interaction:
       objective?.interaction == null ? null : String(objective.interaction),
 
-    // Objective directives are intentionally informational for now. A future
-    // planner can opt into them without changing today's bot behavior.
-    behavior: "standard-combat",
+    // Bank Bust has a dedicated planner; other modes retain combat tactics.
+    behavior: room?.gameMode?.modeId === "bank-bust" ? "bank-objectives" : "standard-combat",
   };
 }
 

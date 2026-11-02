@@ -10,6 +10,8 @@ const {
   POWERUP_SHOCKWAVE_FORCE_Y,
   POWERUP_FREEZE_SPEED_MULT,
   POWERUP_FREEZE_JUMP_MULT,
+  POWERUP_FIRST_SPAWN_DELAY_MS,
+  POWERUP_STARTING_COUNT,
 } = require("../src/server/core/gameRoomConfig");
 const effectManager = require("../src/server/core/gameRoom/effects/effectManager");
 const powerupManager = require("../src/server/core/gameRoom/powerupManager");
@@ -75,6 +77,35 @@ test("active spawn locations are never selected again", () => {
     const next = powerupManager.pickSpawnPoint(room);
     assert.notEqual(next._spawnPointKey, first._spawnPointKey);
   }
+});
+
+test("the first powerups wait for the opening delay before spawning", (t) => {
+  let now = 50000;
+  t.mock.method(Date, "now", () => now);
+  const room = {
+    status: "active",
+    matchData: { map: 1 },
+    players: new Map(),
+    _powerups: new Map(),
+    _deathDrops: new Map(),
+    _nextPowerupId: 1,
+    _powerupRandom: seededRandom(3),
+    _powerupSpawnBag: [],
+    _powerupTypeBag: [],
+    _recentPowerupSpawnKeys: [],
+    _loopStartWallTime: now,
+    _lastPowerupSpawnAt: now,
+    _startingPowerupsPending: true,
+  };
+
+  now += POWERUP_FIRST_SPAWN_DELAY_MS - 1;
+  powerupManager.tickPowerups(room);
+  assert.equal(room._powerups.size, 0);
+
+  now += 1;
+  powerupManager.tickPowerups(room);
+  assert.equal(room._powerups.size, POWERUP_STARTING_COUNT);
+  assert.equal(room._startingPowerupsPending, false);
 });
 
 test("powerup types shuffle independently without immediate repeats", () => {

@@ -24,6 +24,7 @@ function movementFollowLerp(velocity, axis, delta) {
 }
 
 function resetMovementCameraFeedback(scene, cam) {
+  scene._aimCameraShift = null;
   scene._landingCameraMotion = null;
   scene._landingCameraCarry = null;
   scene._landingCameraOffsetY = 0;
@@ -45,8 +46,10 @@ function bindMovementCameraFeedback(scene, cam) {
       resetMovementCameraFeedback(scene, cam);
       return;
     }
-    cam.matrix.e -= scene._wallJumpCameraOffsetX || 0;
-    cam.matrix.f -= scene._landingCameraOffsetY || 0;
+    // Aim is measured in screen pixels and bypasses follow, dead zones and bounds.
+    // Applying it to the matrix also keeps getWorldPoint aligned with the view.
+    cam.matrix.e -= (scene._aimCameraShift?.x || 0) + (scene._wallJumpCameraOffsetX || 0);
+    cam.matrix.f -= (scene._aimCameraShift?.y || 0) + (scene._landingCameraOffsetY || 0);
   };
   const cleanup = () => {
     cam.off('prerender', render);
@@ -113,13 +116,23 @@ function updateLandingCamera(scene, player, cam, delta, reducedMotion) {
 }
 
 // Where the follow camera settles for a player standing at playerY: zoomed out
-// as the player climbs (more vertical context) and biased down when high up
-// (less empty sky). The arena camera (arenas.json) sets the zoom range and the
-// heights it spans: maxZoom at or below climbY[1], minZoom at or above climbY[0].
+// as the player climbs (more vertical context) and framed lower in the view as
+// they climb, so there is room to see what they are about to drop onto. The
+// arena camera (arenas.json) sets the zoom range and the heights it spans:
+// maxZoom at or below climbY[1], minZoom at or above climbY[0].
+//
+// How far off centre the player sits is the arena's too. A follow offset that
+// suits a tall duel arena puts the player near the bottom of the screen on a
+// wide, shallow one, where most of what matters is beside them rather than
+// above. `followOffsetY` is the offset down at the foot of the climb and
+// `followOffsetClimb` how much more is added at the top of it; the defaults
+// are the values every arena used while this was hard-coded.
 export function restingCameraFrame(playerY, camera) {
   const [high, low] = camera.climbY;
   const t = clamp((playerY - high) / (low - high), 0, 1);
-  return { zoom: camera.minZoom + (camera.maxZoom - camera.minZoom) * t, followOffsetY: 120 + 80 * (1 - t) };
+  const base = Number.isFinite(camera.followOffsetY) ? camera.followOffsetY : 120;
+  const climb = Number.isFinite(camera.followOffsetClimb) ? camera.followOffsetClimb : 80;
+  return { zoom: camera.minZoom + (camera.maxZoom - camera.minZoom) * t, followOffsetY: base + climb * (1 - t) };
 }
 
 
@@ -200,36 +213,17 @@ export function updateDynamicCamera(scene, player) {
   cam.setZoom(restingZoom + dashZoom + wallJumpZoom);
   scene._dashCameraZoom = dashZoom;
   scene._wallJumpCameraZoom = wallJumpZoom;
-  // Only aim affects follow and bounds; recoil is applied by the renderer.
-  const shift = {
+  // Ease aim independently of the player's speed, map zoom and follow dead zone.
+  scene._aimCameraShift = {
     x: previous.x + (aim.x - previous.x) * aimBlend,
     y: previous.y + (aim.y - previous.y) * aimBlend,
   };
-  // Move the clamp window with the seek as well as the follow point. Otherwise
-  // bounds erase the entire aim offset when the player is at either map edge.
-  if (cam.useBounds && cam._bounds) {
-    const bounds = cam._bounds;
-    cam.setBounds(bounds.x - previous.x + shift.x, bounds.y - previous.y + shift.y,
-      bounds.width, bounds.height);
-  }
-  scene._aimCameraShift = shift;
+  bindMovementCameraFeedback(scene, cam);
   scene._wallJumpCameraOffsetX = recoil;
-  scene._resetAimCameraBounds = () => {
-    const offset = scene._aimCameraShift;
-    if (!offset) return;
-    if (cam.useBounds && cam._bounds) {
-      const bounds = cam._bounds;
-      cam.setBounds(bounds.x - offset.x, bounds.y - offset.y, bounds.width, bounds.height);
-    }
-    cam.setFollowOffset(0, cam.followOffset.y + offset.y);
-    scene._aimCameraShift = null;
-    resetMovementCameraFeedback(scene, cam);
-  };
-  cam.setFollowOffset(
-    -shift.x,
-    cam.followOffset.y + previous.y +
-      (targetFollowOffsetY - (cam.followOffset.y + previous.y)) * blend - shift.y,
-  );
+  scene._resetAimCameraBounds = () => resetMovementCameraFeedback(scene, cam);
+  cam.setFollowOffset(0,
+    cam.followOffset.y + (targetFollowOffsetY - cam.followOffset.y) * blend);
+
 }
 
 export function triggerDamageCameraShake(scene, damage) {

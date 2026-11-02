@@ -1,6 +1,7 @@
 import { POWERUP_CATALOG } from '../../../shared/powerups';
 // gameScene/preloadGameAssets.js
 import { preloadTerrainAudio } from '../audio/movementAudio';
+import { COIN_FRAME_SIZE } from '../modes/bankBust/coinMotion.mjs';
 
 export function preloadGameAssets({
   scene,
@@ -13,8 +14,15 @@ export function preloadGameAssets({
   // Character assets (preload all registered characters)
   preloadAllCharacters(scene, staticPath);
 
-  loadImage("deathdrop-coin", `${staticPath}/icons/coin.webp`);
   loadImage("deathdrop-gem", `${staticPath}/icons/gem.webp`);
+  scene.load.spritesheet("coin-spin", `${staticPath}/icons/coin-spin.webp`, {
+    frameWidth: COIN_FRAME_SIZE,
+    frameHeight: COIN_FRAME_SIZE,
+  });
+  scene.load.spritesheet("coin-sparkle", `${staticPath}/icons/coin-sparkle.webp`, {
+    frameWidth: 11,
+    frameHeight: 11,
+  });
   loadImage("spectate-icon", `${staticPath}/icons/spectate.webp`);
   for (let i = 1; i <= 3; i++) {
     loadImage(`tombstone-${i}`, `${staticPath}/tombstones/tombstone-${i}.webp`);

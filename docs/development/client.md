@@ -1,5 +1,17 @@
 # Browser lifecycle, rendering, and audio
 
+## Battle HUD layout
+
+`public/game.html` groups the team rosters, match clock, Bank Bust vault panels,
+and mode notices in `#battle-top-hud`. The shared grid in
+`src/client/styles/battlePixelHud.css` owns their placement: vaults flank the
+rosters and clock on wide screens, shrink below 1200px, and stay beside the
+clock above the rosters below 600px. Coin changes update the bar and delta
+without shaking the vault panels. Notices flow after those rows
+so wrapping player cards cannot collide with them. Keep mode visibility on the
+existing HUD group nodes; they use `display: contents` while visible.
+Bank Bust's world coin bar and value sit above each vault's artwork.
+
 ## Lobby and battle navigation
 
 `navigation.bundle.js` owns `/`, `/party/:id`, and `/game/:id` within one
@@ -313,6 +325,13 @@ The preserved drawing buffer is enabled only in the harness for pixel inspection
 
 ## Gameplay camera
 
+Mouse aiming adds a fixed screen-pixel look-ahead with time-based easing after
+camera follow and bounds processing. Its reach and response are independent of
+map zoom, player height, movement speed and follow dead zones, including at map
+edges. Release eases back to neutral; input release and spectator/shutdown cleanup
+clear the offset. The camera matrix carries the shift so pointer-to-world mapping
+stays aligned with the rendered view.
+
 The gameplay camera follows each movement axis more tightly as speed rises,
 so fast falls and dashes stay in view. Ordinary movement retains gentle follow;
 the follow blend accounts for frame time. Landings carry the view slightly downward
@@ -337,7 +356,13 @@ The local player hears their own sounds at the requested volume. The watched fig
 
 Opponent movement uses `src/client/game/audio/remoteMovementAudio.js`: terrain-specific footsteps and landings, jump and wall-jump cues, and wall-slide and falling-air loops. Event sequence IDs prevent repeated snapshots from replaying cues; older senders use movement transitions. Footsteps follow movement speed. Loops recalculate distance after each rendered frame and stop on landing, death, disconnect, respawn, presentation reset, or scene shutdown. Invisible fighters remain audible. The spawn intro suppresses movement audio.
 
+Falling wind uses `fallingAirVolume` in `movementAudio.js` for both local and remote fighters, at 45% of the original gain while retaining speed/time swell and playback fades.
+
 ## Lobby and match audio
+
+Bank Bust vault damage reuses the shared coin-pickup sound, with randomized
+pitch and volume that scales with damage. Rapid hits are throttled, including
+when reduced motion is enabled.
 
 `public/assets/music/lobby-aligned.mp3` is the supplied 決戦の鐘 lobby render. `matchmaking-aligned.mp3` is the supplied lower-pitched 決戦の鐘 (0.76x) render. They stream through two persistent HTML audio elements owned by navigation; party changes preserve playback. Both play continuously, with the inactive version silent, keeping memory use bounded without decoding both full songs into Web Audio buffers.
 
@@ -370,7 +395,9 @@ The match results Exit button preloads and plays the UI click cue before returni
 Set each map document's `metadata.terrain` through Map Studio/API (built-in defaults live in `src/shared/maps/<id>.json`):
 
 - `grass`: Lushy Peaks, Mangrove Meadow, Serenity. Four natural foot-on-grass steps and the soft “smush” landing.
-- `hard`: Iron Junction / Bank Bust. The original three industrial footstep samples and a concrete-impact landing.
+- `hard`: Industrial terrain defaults to the original three footsteps and concrete landing. Bank Bust overrides only the footsteps with a ready-made metal contact.
+
+Bank Bust uses morganpurkis’s CC BY 4.0 `Metal Footstep 3.wav`, a ready-made single metal footstep. All three existing footstep keys select this sample. Only footstep keys are overridden; jump, dash, wall-slide, duck, stomp, landing and falling wind retain their shared samples. `src/shared/physics/movementSounds.js` owns the isolated key mapping. Source and processing details live in `public/assets/bank-bust/movement/README.md`.
 
 This is a map-wide material, not automatic texture detection. Missing or unknown materials safely fall back to `hard`.
 

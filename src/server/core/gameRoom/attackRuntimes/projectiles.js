@@ -4,7 +4,7 @@ const { getParticipant } = require('../participants');
 const { attackIdentity } = require('./attackIdentity');
 const { WORLD_MARGIN } = require("../../gameRoomConfig");
 const { advanceSlimeball } = require("../../../../shared/characters/gloopProjectile");
-const { resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter } = require('./geometry');
+const { resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter, shotTerrain, sweptCircleOverlapsRect } = require('./geometry');
 const { hitCircleTargets } = require('./targets');
 
 function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
@@ -173,8 +173,13 @@ function tickLinearProjectile(room, attack, descriptor, now = Date.now()) {
   const dtSec = room.FIXED_DT_MS / 1000;
   attack.elapsed += room.FIXED_DT_MS;
   attack.traveled += Number(attack.speed || runtime.speed) * dtSec;
+  const fromX = attack.x, fromY = attack.y;
   attack.x += Number(attack.vx) * dtSec;
   attack.y += Number(attack.vy) * dtSec;
+  // Linear shots ignore terrain, but a built wall is there to stop them.
+  const radius = Math.max(1, Number(attack.collisionRadius || runtime.collisionRadius) || 1);
+  if (room.gameMode?.getShotBlockers?.(attacker.team)?.some((wall) =>
+    sweptCircleOverlapsRect(fromX, fromY, attack.x, attack.y, wall, radius))) return true;
   const collisionCenter = getAttackCollisionCenter(attack, runtime);
   const hitCount = hitCircleTargets(
     room,
@@ -199,7 +204,7 @@ function tickBouncingProjectile(room, attack, descriptor, now) {
   attack.worldMinX = Math.max(attack.worldMinX, world.x - WORLD_MARGIN);
   attack.worldMaxX = Math.min(attack.worldMaxX, world.x + world.width + WORLD_MARGIN);
   advanceSlimeball(attack, room.FIXED_DT_MS,
-    room.geometry?.colliders || attack.mapCollisionRects || [],
+    shotTerrain(room, attacker.team, attack.mapCollisionRects),
     () => {
       const hits = hitCircleTargets(room, attack, descriptor, attack.x, attack.y,
         Math.max(1, Number(attack.collisionRadius) || 18), now);

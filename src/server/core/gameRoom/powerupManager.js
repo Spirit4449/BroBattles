@@ -4,6 +4,8 @@ const {
   SD_RISE_FAST_PHASE_MS,
   SD_RISE_FAST_MULT,
   POWERUP_SPAWN_INTERVAL_MS,
+  POWERUP_FIRST_SPAWN_DELAY_MS,
+  POWERUP_STARTING_COUNT,
   POWERUP_MAX_ACTIVE,
   POWERUP_PICKUP_RADIUS,
   POWERUP_DESPAWN_MS,
@@ -213,7 +215,13 @@ function tickPowerups(room) {
   if (room.status !== "active") return;
   const now = Date.now();
 
-  if (now - room._lastPowerupSpawnAt >= (room.geometry?.settings?.spawnIntervalMs ?? POWERUP_SPAWN_INTERVAL_MS)) {
+  if (room._startingPowerupsPending) {
+    if (now - room._loopStartWallTime >= POWERUP_FIRST_SPAWN_DELAY_MS) {
+      room._startingPowerupsPending = false;
+      room._lastPowerupSpawnAt = now;
+      for (let i = 0; i < POWERUP_STARTING_COUNT; i++) spawnPowerup(room);
+    }
+  } else if (now - room._lastPowerupSpawnAt >= (room.geometry?.settings?.spawnIntervalMs ?? POWERUP_SPAWN_INTERVAL_MS)) {
     room._lastPowerupSpawnAt = now;
     spawnPowerup(room);
   }
