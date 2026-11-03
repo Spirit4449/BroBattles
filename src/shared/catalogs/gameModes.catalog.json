@@ -49,15 +49,6 @@
           "playersPerTeam": 2,
           "maxPlayers": 4,
           "lobbyLayout": "mirrored-teams"
-        },
-        {
-          "id": "duels-3v3",
-          "label": "3v3",
-          "subtitle": "Two teams of three.",
-          "teamCount": 2,
-          "playersPerTeam": 3,
-          "maxPlayers": 6,
-          "lobbyLayout": "mirrored-teams"
         }
       ],
       "unlockTrophies": 0

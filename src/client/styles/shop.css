@@ -658,7 +658,7 @@ body.shop-is-open .sonner-wrap {
   height: 100%;
   object-fit: cover;
   object-position: center;
-  image-rendering: auto;
+  image-rendering: pixelated;
   transition: filter 220ms ease;
 }
 

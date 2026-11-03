@@ -1707,7 +1707,6 @@ class GameScene extends Phaser.Scene {
         this._spectatedPlayerName = this._pickDeathSpectateTarget();
         if (!holdCamera) this._deathSpectateTargetLocked = true;
       }
-      if (!holdCamera) hud.endLocalDeathPause?.();
       this._enterSpectatorMode({ holdCamera });
     } else {
       if (this._localDeathStartedAt != null) {

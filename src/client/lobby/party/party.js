@@ -461,9 +461,28 @@ function setupModePickerControls(onSelect = null) {
     grid.className = "mode-select-grid";
     const selection = getCurrentSelection();
 
+    const selectSelection = (next) => {
+      const nextSelection = writeSelectionToDom(
+        { ...selection, ...next },
+        { persist: !checkIfInParty() },
+      );
+      if (typeof onSelect === "function") onSelect(nextSelection);
+      closePopup();
+    };
+
     [...getAllGameModes()].sort((a, b) => (a.unlockTrophies || 0) - (b.unlockTrophies || 0)).forEach((mode) => {
-      const card = document.createElement("button");
-      card.type = "button";
+      // Modes with team sizes reveal their variant options inside the card
+      // instead of opening a second screen, so the card can't be a <button>.
+      const hasVariants = getModeSelectionStyle(mode.id) === "subcards";
+      const card = document.createElement(hasVariants ? "div" : "button");
+      if (hasVariants) {
+        card.classList.add("has-variants");
+        card.setAttribute("role", "button");
+        card.setAttribute("aria-expanded", "false");
+        card.tabIndex = 0;
+      } else {
+        card.type = "button";
+      }
       card.className = `map-select-card mode-select-card pixel-menu-button${
         selection.modeId === mode.id ? " active" : ""
       }${mode.queueable ? "" : " is-disabled"}`;
@@ -471,7 +490,8 @@ function setupModePickerControls(onSelect = null) {
         mode.artAsset || mode.fallbackArtAsset || "/assets/fightImage.webp";
       const unlockReason = getModeProgressionBlockReason(mode.id);
       card.classList.toggle("is-trophy-locked", !!unlockReason);
-      card.disabled = !!unlockReason;
+      if (hasVariants) card.setAttribute("aria-disabled", String(!!unlockReason));
+      else card.disabled = !!unlockReason;
       card.innerHTML = `
         <div class="mode-select-art"><img src="${escapeHtml(artAsset)}" alt="${escapeHtml(mode.label)}" />${unlockReason ? '<span class="mode-select-lock" aria-hidden="true"><img src="/assets/icons/lock.webp" alt="" /></span>' : ""}</div>
         <div class="map-select-name">${escapeHtml(mode.label)}</div>
@@ -482,23 +502,47 @@ function setupModePickerControls(onSelect = null) {
         event.currentTarget.src =
           mode.fallbackArtAsset || "/assets/fightImage.webp";
       });
-      card.addEventListener("click", () => {
-        if (getModeSelectionStyle(mode.id) === "subcards") {
-          openModeVariantGrid(mode.id);
-          return;
-        }
-        const nextSelection = writeSelectionToDom(
-          {
-            ...selection,
-            modeId: mode.id,
-            modeVariantId: null,
-            mapId: null,
-          },
-          { persist: !checkIfInParty() },
-        );
-        if (typeof onSelect === "function") onSelect(nextSelection);
-        closePopup();
-      });
+
+      if (hasVariants) {
+        const options = document.createElement("div");
+        options.className = "mode-variant-options";
+        const variants = Array.isArray(mode?.variants) ? mode.variants : [];
+        variants.forEach((variant) => {
+          // Maps are made for one team size; a size without maps is coming soon.
+          const comingSoon = !getCompatibleMapsForSelection({ modeId: mode.id, modeVariantId: variant.id }).length;
+          const option = document.createElement("button");
+          option.type = "button";
+          option.className = `mode-variant-option pixel-menu-button${
+            selection.modeId === mode.id && selection.modeVariantId === variant.id ? " active" : ""
+          }`;
+          option.disabled = comingSoon;
+          option.title = comingSoon ? "Coming soon" : variant.subtitle || "";
+          option.textContent = variant.label;
+          option.addEventListener("click", (event) => {
+            event.stopPropagation();
+            selectSelection({ modeId: mode.id, modeVariantId: variant.id, mapId: selection.mapId });
+          });
+          options.appendChild(option);
+        });
+        card.appendChild(options);
+
+        const toggle = () => {
+          if (unlockReason) return;
+          const expanded = card.classList.toggle("is-expanded");
+          card.setAttribute("aria-expanded", String(expanded));
+          grid.classList.toggle("has-expanded", expanded);
+        };
+        card.addEventListener("click", toggle);
+        card.addEventListener("keydown", (event) => {
+          if (event.target !== card || (event.key !== "Enter" && event.key !== " ")) return;
+          event.preventDefault();
+          toggle();
+        });
+      } else {
+        card.addEventListener("click", () => {
+          selectSelection({ modeId: mode.id, modeVariantId: null, mapId: null });
+        });
+      }
       grid.appendChild(card);
     });
 
@@ -506,68 +550,6 @@ function setupModePickerControls(onSelect = null) {
     popupShell
       .mount({
         titleText: "Choose Mode",
-        onClose: closePopup,
-        zIndex: 12020,
-        contentNode: content,
-        backgroundNode: null,
-      })
-      .show();
-  };
-
-  const openModeVariantGrid = (modeId) => {
-    const popupUi = ensureModePopup();
-    const { popupShell, closePopup, content } = popupUi;
-    const mode = getModeById(modeId);
-    const selection = getCurrentSelection();
-    const wrapper = document.createElement("div");
-    wrapper.className = "selection-popup-stack";
-    const backButton = document.createElement("button");
-    backButton.type = "button";
-    backButton.className = "pixel-menu-button selection-popup-back";
-    backButton.textContent = "Back";
-    backButton.addEventListener("click", openModeGrid);
-    wrapper.appendChild(backButton);
-
-    const grid = document.createElement("div");
-    grid.className = "mode-select-grid subcards";
-    const variants = Array.isArray(mode?.variants) ? mode.variants : [];
-    variants.forEach((variant) => {
-      // Maps are made for one team size; a size without maps is coming soon.
-      const comingSoon = !getCompatibleMapsForSelection({ modeId, modeVariantId: variant.id }).length;
-      const card = document.createElement("button");
-      card.type = "button";
-      card.className = `map-select-card mode-select-card pixel-menu-button${
-        selection.modeVariantId === variant.id ? " active" : ""
-      }${comingSoon ? " is-disabled" : ""}`;
-      card.disabled = comingSoon;
-      card.innerHTML = `
-        <img src="${escapeHtml(getModeArtAsset(modeId))}" alt="${escapeHtml(variant.label)}" />
-        <div class="map-select-name">${escapeHtml(variant.label)}</div>
-        <div class="mode-select-subtitle">${escapeHtml(comingSoon ? "Coming soon" : variant.subtitle || getModeSubtitle(modeId))}</div>
-      `;
-      card.querySelector("img")?.addEventListener("error", (event) => {
-        event.currentTarget.src = getModeFallbackArtAsset(modeId);
-      });
-      card.addEventListener("click", () => {
-        const nextSelection = writeSelectionToDom(
-          {
-            ...selection,
-            modeId,
-            modeVariantId: variant.id,
-            mapId: selection.mapId,
-          },
-          { persist: !checkIfInParty() },
-        );
-        if (typeof onSelect === "function") onSelect(nextSelection);
-        closePopup();
-      });
-      grid.appendChild(card);
-    });
-    wrapper.appendChild(grid);
-    content.replaceChildren(wrapper);
-    popupShell
-      .mount({
-        titleText: `${mode?.label || "Mode"} Setup`,
         onClose: closePopup,
         zIndex: 12020,
         contentNode: content,

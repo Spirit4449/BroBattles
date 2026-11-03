@@ -259,4 +259,23 @@ function applyImpulse(player, impulse, now = Date.now()) {
   player._knockbackUntil = now + (["shockwave", "stomp"].includes(impulse.cause) ? SHOCKWAVE_MOMENTUM_MS : 180);
   player.grounded = false;
 }
-module.exports = { bounds, stepBody, onClimbableWall, applyImpulse, startDash, carryOnPlatforms, forecastGeometry };
+// The map plus the walls the mode has built (Bank Bust's walls). Players collide
+// with those on the client whichever team built them, so bots must too. The
+// same set of walls returns the same object, so navigation graphs cached by
+// geometry are rebuilt only when a wall goes up.
+const wallGeometries = new WeakMap();
+function movementGeometry(room) {
+  const geometry = room.geometry;
+  const walls = room.gameMode?.getMovementBlockers?.() || [];
+  if (!walls.length) return geometry;
+  let cache = wallGeometries.get(geometry);
+  if (!cache) wallGeometries.set(geometry, cache = new Map());
+  const key = walls.map((w) => `${w.id}:${w.left},${w.top},${w.right},${w.bottom}`).join('|');
+  let result = cache.get(key);
+  if (!result) cache.set(key, result = { ...geometry, colliders: [...geometry.colliders, ...walls] });
+  // Moving platforms are shared objects; only the motion clock needs copying.
+  result.motionTime = geometry.motionTime;
+  return result;
+}
+
+module.exports = { movementGeometry, bounds, stepBody, onClimbableWall, applyImpulse, startDash, carryOnPlatforms, forecastGeometry };

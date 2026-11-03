@@ -1,3 +1,13 @@
+// The server cancels a Draven inferno when the hook catches him; every client
+// drops the channel's hover, lock and overlay so the pull reads from the start.
+export function interruptHookedChannel(scene, targetName) {
+  if (!targetName) return;
+  const target = scene?.children?.list?.find(
+    (child) => child.active && child.username === targetName,
+  );
+  if (target?._dravenInfernoToken) target.emit?.("attack:interrupted");
+}
+
 // Pulls the local player along a Gloop hook when the server reports a catch
 // targeting them. Movement input is locked for the pull, and the pull keeps
 // tracking the hook owner so the player stops just in front of them.

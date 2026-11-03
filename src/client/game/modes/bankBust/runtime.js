@@ -725,8 +725,6 @@ export function createBankBustRuntime({
     wall.builtByTeam = builtByTeam || null;
     if (builtByTeam !== "team1" && builtByTeam !== "team2") return;
 
-    const local = currentLocalPlayer();
-    const localTeam = getLocalTeam();
     const addCollider = (sprite) => {
       if (!sprite?.body || !wall.zone?.body) return;
       try {
@@ -734,18 +732,14 @@ export function createBankBustRuntime({
       } catch (_) {}
     };
 
-    // The owning team can pass through; only the opposing team collides.
-    const ownerIsLocalTeam = localTeam === builtByTeam;
-    if (!ownerIsLocalTeam) {
-      addCollider(local);
-      for (const wrap of Object.values(getTeamPlayers?.() || {})) {
-        addCollider(wrap?.opponent);
-      }
+    // Every player collides, the owning team included. Only shots from the
+    // owning team pass through.
+    addCollider(currentLocalPlayer());
+    for (const wrap of Object.values(getTeamPlayers?.() || {})) {
+      addCollider(wrap?.opponent);
     }
-    if (ownerIsLocalTeam) {
-      for (const wrap of Object.values(getOpponentPlayers?.() || {})) {
-        addCollider(wrap?.opponent);
-      }
+    for (const wrap of Object.values(getOpponentPlayers?.() || {})) {
+      addCollider(wrap?.opponent);
     }
   }
 
@@ -1754,7 +1748,7 @@ export function createBankBustRuntime({
       objectGraphics.fillStyle(0x000000, 0.1 + 0.25 * progress);
       objectGraphics.fillEllipse(x, floor - 3, 40 + 90 * progress, 6 + 8 * progress);
       if (state.centerGoldPhase !== "announced") {
-        safePlaySfx("sfx-bankbust-mine-claim", { volume: 0.4 });
+        safePlaySfx("sfx-bankbust-crate-incoming", { volume: 0.5 });
       }
     }
 

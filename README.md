@@ -3,7 +3,7 @@
 A multiplayer browser arena built with Phaser 3, Express, Socket.IO, and MySQL.
 Human movement is simulated by the browser with server validation; the server owns combat outcomes, bots, match state, and rewards.
 
-Playable modes are Duels (1v1, 2v2, 3v3) and Bank Bust (3v3). The six fighters are Ninja, Thorg, Draven, Wizard, Huntress, and Gloop. Other catalog modes are marked Coming Soon. Map Studio edits the four built-in maps and saved custom maps.
+Playable modes are Duels (1v1, 2v2) and Bank Bust (3v3). The six fighters are Ninja, Thorg, Draven, Wizard, Huntress, and Gloop. Other catalog modes are marked Coming Soon. Map Studio edits the four built-in maps and saved custom maps.
 
 ## Run locally
 

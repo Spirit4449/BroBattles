@@ -6,7 +6,7 @@ If matchmaking seems stuck, cancel once and check that everyone is connected and
 
 ## Pick the right team size
 
-Duels supports 1v1, 2v2, and 3v3. The chosen mode must have enough room for the people in your party. If a selection cannot fit everyone, choose a larger variant or reduce the party size.
+Duels supports 1v1 and 2v2. The chosen mode must have enough room for the people in your party. If a selection cannot fit everyone, choose a larger variant or reduce the party size.
 
 The party owner manages shared settings. Other members can change selections only when the party permissions allow it. Check **Party Settings** if a button seems unavailable.
 

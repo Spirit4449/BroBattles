@@ -527,9 +527,9 @@ test("atomic assembly commits once under concurrent fill attempts and creates no
     {
       ...ticket(1, 800),
       status: "queued",
-      mode_id: "duels",
-      mode_variant_id: "duels-3v3",
-      map: 1,
+      mode_id: "bank-bust",
+      mode_variant_id: "bank-bust-3v3",
+      map: 4,
       claimed_by: null,
     },
   ];
@@ -588,7 +588,7 @@ test("atomic assembly commits once under concurrent fill attempts and creates no
   const picks = [{ ticket: queued[0], flip: false }];
   const results = await Promise.all(
     [1, 2].map(() =>
-      manager.assembleAndReady("duels", "duels-3v3", 1, picks, {
+      manager.assembleAndReady("bank-bust", "bank-bust-3v3", 4, picks, {
         teamSize: 3,
         fillBots: true,
         seed: 1,

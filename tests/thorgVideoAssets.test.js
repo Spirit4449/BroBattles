@@ -153,7 +153,7 @@ test('three directional dash poses cover one complete dash without looping', () 
   }
 });
 
-test('local and remote Thorg playback map all eight directions, including downward exceptions', () => {
+test('local and remote Thorg and Gloop playback map all eight directions, including downward exceptions', () => {
   const api = {};
   vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/animationState'), 'utf8'), {
     babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
@@ -161,15 +161,15 @@ test('local and remote Thorg playback map all eight directions, including downwa
   for (const [x, y, expected] of [[1, 0, 'dashright'], [-1, 0, 'dashright'],
     [1, -1, 'dashdiagonal'], [-1, -1, 'dashdiagonal'], [0, -1, 'dashup'],
     [1, 1, 'dashright'], [-1, 1, 'dashright'], [0, 1, 'ducking']]) {
-    for (const remote of [false, true]) {
+    for (const character of ['thorg','gloop']) for (const remote of [false, true]) {
       let played;
       const direction = { x, y };
       const sprite = { anims: { play: key => { played = key; } },
         ...(remote ? {} : { _dash: direction }) };
-      api.playCharacterAnimation({ scene: {}, sprite, character: 'thorg', logical: 'dashing',
+      api.playCharacterAnimation({ scene: {}, sprite, character, logical: 'dashing',
         ...(remote ? { dashDirection: direction } : {}),
         resolveAnimKey: (_scene, character, wanted) => `${character}-${wanted}` });
-      assert.equal(played, `thorg-${expected}`, `${remote ? 'remote' : 'local'} ${x},${y}`);
+      assert.equal(played, `${character}-${expected}`, `${remote ? 'remote' : 'local'} ${x},${y}`);
     }
   }
   assert.equal(api.directionalDashAnimation('ninja', { x: 1, y: -1 }), 'dashing');

@@ -1,4 +1,4 @@
-const { bounds, stepBody, startDash, forecastGeometry } = require('./physics');
+const { bounds, stepBody, startDash, forecastGeometry, movementGeometry } = require('./physics');
 const { maneuverDanger } = require('./perception');
 const { healthFraction, preferredRange } = require('./tactics');
 const { hasClearShot } = require('./combat');
@@ -73,9 +73,9 @@ function *tryStompSteps(brain, observed, mods, context, now) {
   yield;
   now = brain.room._botNow ?? now;
   if (p.grounded || !canDash(brain, mods, now)) return false;
-  const candidate = previewDash(p, direction, brain.room.geometry, mods, now, context.poisonAt);
+  const candidate = previewDash(p, direction, movementGeometry(brain.room), mods, now, context.poisonAt);
   if (!stompTargets(candidate, observed, now).length) return false;
-  const baseline = previewDash(p, null, brain.room.geometry, mods, now, context.poisonAt);
+  const baseline = previewDash(p, null, movementGeometry(brain.room), mods, now, context.poisonAt);
   if (!baseline || maneuverDanger(candidate, observed, now, p.char_class) >
       maneuverDanger(baseline, observed, now, p.char_class) + 20) return false;
   if (!startDash(p, direction, now)) return false;
@@ -117,7 +117,7 @@ function *tryDashSteps(brain, observed, target, threat, mods, context, now) {
   const directions = dodge ? [{ x: away, y: 0 }, { x: 0, y: -1 },
     { x: away * Math.SQRT1_2, y: -Math.SQRT1_2 }, { x: -away * Math.SQRT1_2, y: -Math.SQRT1_2 }]
     : [{ x: escape ? away : toward, y: 0 }];
-  const baseline = previewDash(p, null, brain.room.geometry, mods, now, context.poisonAt);
+  const baseline = previewDash(p, null, movementGeometry(brain.room), mods, now, context.poisonAt);
   if (!baseline) return false;
   const danger = maneuver => maneuverDanger(maneuver, observed, now, p.char_class);
   const baseDanger = danger(baseline);
@@ -125,7 +125,7 @@ function *tryDashSteps(brain, observed, target, threat, mods, context, now) {
   let best = null, bestScore = -Infinity;
   for (const direction of directions) {
     yield;
-    const candidate = previewDash(p, direction, brain.room.geometry, mods, now, context.poisonAt);
+    const candidate = previewDash(p, direction, movementGeometry(brain.room), mods, now, context.poisonAt);
     if (!candidate || !candidate.frames.some(frame => Math.hypot(frame.x - p.x, frame.y - p.y) >= 45)) continue;
     const risk = danger(candidate), avoided = baseDanger - risk;
     const escaped = escape ? separation(candidate.end) - separation(baseline.end) : 0;
@@ -139,7 +139,7 @@ function *tryDashSteps(brain, observed, target, threat, mods, context, now) {
   now = brain.room._botNow ?? now;
   // Planning can span ticks: recheck availability and the landing at activation.
   if (!best || !canDash(brain, mods, now)) return false;
-  const candidate = previewDash(p, best.direction, brain.room.geometry, mods, now, context.poisonAt);
+  const candidate = previewDash(p, best.direction, movementGeometry(brain.room), mods, now, context.poisonAt);
   if (!candidate || !startDash(p, best.direction, now)) return false;
   brain.clearTravel();
   brain.maneuver = { ...candidate, cursor: 0, resumeWalk: travel };

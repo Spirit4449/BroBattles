@@ -579,7 +579,6 @@ export function createPowerupRenderer({
       spr.clearTint();
       spr.setScale(baseX, baseY);
       spr.setOrigin(baseOriginX, baseOriginY);
-      spr.setTint(0xfca5a5);
       const vy = spr.body?.velocity?.y || 0;
       const vx = spr.body?.velocity?.x || 0;
       if (vy < -35 && Math.random() < 0.72) {
@@ -1008,6 +1007,9 @@ export function createPowerupRenderer({
     }
     if ((fx.poison || 0) > 0) {
       styles.push({ type: "poison", color: colors.poison, strength: 0.78 });
+    }
+    if ((fx.gravityBoots || 0) > 0) {
+      styles.push({ type: "gravityBoots", color: colors.gravityBoots, strength: 0.8 });
     }
     return styles;
   }

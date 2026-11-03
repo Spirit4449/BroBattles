@@ -87,8 +87,8 @@ function createHand(scene, x, y, angle, scale, variant = "open") {
 // The wrist follows the rendered caster; projectile travel stays on the server ray.
 function createHookVisual(scene, owner, angle, start, id) {
   const hand = createHand(scene, start.x, start.y, angle, Number(HOOK.visualScale) || 0.28);
-  const tether = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 4);
-  const fx = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 5);
+  const tether = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER - 1);
+  const fx = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER - 0.5);
   const baseScale = (Number(HOOK.visualScale) || 0.28) * (hand._gripAnimated ? 318 / 128 : 1);
   const visual = { hand, tether, fx, id, phase: "out", age: 0, elapsed: 0,
     start, angle, drops: [], trail: 0, recoil: 0, destroyed: false };
@@ -158,13 +158,13 @@ function createHookVisual(scene, owner, angle, start, id) {
       }
     }
     samples.push(points[points.length - 1]);
-    // Opaque ink edge and teal/blue flesh match the original hand sprite.
-    for (const [size, color, offset] of [[1.12, 0x071c38, 0], [1, 0x1176aa, 0], [0.72, 0x10b6bc, -PIXEL]]) {
+    // Black ink, royal-blue core, and mint jelly match the current body and hand art.
+    for (const [size, color, offset] of [[1.12, 0x000000, 0], [1, 0x103bb6, 0], [0.72, 0x2cc4bf, -PIXEL]]) {
       tether.fillStyle(color, 1);
       for (const p of samples) stampPixel(tether, p.x, p.y + offset, p.w * 2 * size);
     }
     // Dithered highlight along the upper edge.
-    tether.fillStyle(0x92dfc8, 0.8);
+    tether.fillStyle(0xa9efd5, 0.8);
     samples.forEach((p, i) => { if (i % 3 === 0) stampPixel(tether, p.x, p.y - p.w * 0.5, PIXEL); });
   }
   // The caster's hook is tested like the server's: a damage circle along the
@@ -254,10 +254,10 @@ function createHookVisual(scene, owner, angle, start, id) {
       d.vy += 330 * dt; d.x += d.vx * dt; d.y += d.vy * dt;
       const alpha = Math.min(1, (d.duration - d.life) / 140);
       // Square slime pixels with a one-cell trail instead of round droplets.
-      fx.fillStyle(0x137fa5, alpha * 0.7);
+      fx.fillStyle(0x103bb6, alpha * 0.7);
       stampPixel(fx, d.x - d.vx * 0.03, d.y - d.vy * 0.03, d.r * 1.4);
-      fx.fillStyle(0x25bcb2, alpha); stampPixel(fx, d.x, d.y, d.r * 2);
-      if (d.r > 2.5) { fx.fillStyle(0xa0e4cd, alpha * 0.85); stampPixel(fx, d.x - PIXEL / 2, d.y - PIXEL / 2, PIXEL); }
+      fx.fillStyle(0x2cc4bf, alpha); stampPixel(fx, d.x, d.y, d.r * 2);
+      if (d.r > 2.5) { fx.fillStyle(0xa9efd5, alpha * 0.85); stampPixel(fx, d.x - PIXEL / 2, d.y - PIXEL / 2, PIXEL); }
     }
     if (visual.phase === "settle" && !visual.drops.length) visual.destroy();
   }

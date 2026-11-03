@@ -1,6 +1,6 @@
 # Maps and Map Studio
 
-Every map is built for exactly one game mode: `duels-1v1`, `duels-2v2` or `bank-bust-3v3`. A map's `modeVariantId` decides which lobby selection lists it. A mode with no maps (Duels 3v3 today) shows as "Coming soon" in the party menu.
+Every map is built for exactly one game mode: `duels-1v1`, `duels-2v2` or `bank-bust-3v3`. A map's `modeVariantId` decides which lobby selection lists it. A mode with no maps shows as "Coming soon" in the party menu.
 
 ## Modes and arenas
 
@@ -152,9 +152,12 @@ put and mirrors exactly.
 
 A buildable wall is an upright 48x96 bulkhead. It is deliberately about a jump
 high: walls have no health, so a taller one could lock a team out of a base.
-Built walls stop the other team's shots as well as its players, through
-`getShotBlockers` on the mode. Terrain-colliding shots read them through
-`shotTerrain`; linear shots ignore terrain and test them directly.
+Built walls stop every player, the builder's team included, through
+`getMovementBlockers` on the mode (the client collides every player with them;
+bots read them through `movementGeometry` in `src/server/core/bots/physics.js`).
+They stop only the other team's shots, through `getShotBlockers`, so the
+builder's team fires through its own walls. Terrain-colliding shots read them
+through `shotTerrain`; linear shots ignore terrain and test them directly.
 
 The **firing perch** is a ledge one step above the balcony on the enemy's approach
 to each vault. Decks stop shots, so from the deck the hatch hides the vault, but

@@ -27,6 +27,7 @@ function setup(animated = false) {
     const o = new EventEmitter();
     Object.assign(o, { x, y, active: true, rects: [],
       setOrigin() { return this; },
+      setDepth(depth) { this.depth = depth; return this; },
       setFrame(frame) { this.frame = frame; return this; },
       setVisible(visible) { this.visible = visible; return this; },
       setRotation(rotation) { this.rotation = rotation; return this; },
@@ -38,13 +39,13 @@ function setup(animated = false) {
       clear() { this.rects = []; return this; },
       destroy() { this.active = false; this.emit('destroy'); },
     });
-    for (const method of ['setDepth', 'beginPath', 'closePath', 'fillPath', 'lineStyle', 'strokePath', 'lineBetween', 'fillEllipse']) o[method] = () => o;
+    for (const method of ['beginPath', 'closePath', 'fillPath', 'lineStyle', 'strokePath', 'lineBetween', 'fillEllipse']) o[method] = () => o;
     objects.push(o); return o;
   }
   const shots = loadShotPrediction({ serverClock: loadServerClock({ performance: { now: () => 0 } }) });
   const scene = { events: new EventEmitter(), textures: { exists: () => true },
     add: { sprite: object, graphics: object }, sound: { play: key => sounds.push(key) } };
-  const owner = object(100, 200); owner.displayWidth = 80; owner.displayHeight = 100;
+  const owner = object(100, 200); owner.setDepth(10); owner.displayWidth = 80; owner.displayHeight = 100;
   scene._localPlayerAudioSprite = owner;
   vm.runInNewContext(code, { exports: api, require: name => name.includes('handAnimation') ? { ...animationApi, prepareHandAnimation: () => animated } : name.includes('characterTuning')
     ? { getResolvedCharacterSpecialConfig: () => ({ visualScale: 0.28, range: 500, speed: 1000,
@@ -55,7 +56,7 @@ function setup(animated = false) {
     : name.includes('runtimeId') ? { createRuntimeId: prefix => `${prefix}-1` }
     : name.includes('gloopHookGeometry') ? require('../src/shared/characters/gloopHookGeometry.js')
     : name.includes('playerAudio') ? playerAudio
-    : name.includes('renderLayers') ? { RENDER_LAYERS: { ATTACKS: 20 } } : { playSpriteAnimation() {} } });
+    : name.includes('renderLayers') ? { RENDER_LAYERS: { PLAYER: 10, ATTACKS: 20 } } : { playSpriteAnimation() {} } });
   const launch = () => api.playHookAction(scene, owner, { id: 'hook1', start: { x: 120, y: 180 }, angle: 0, range: 500, speed: 1000 }, true);
   const frame = (ms = 50) => scene.events.emit('update', 0, ms);
   return { api, scene, owner, objects, sounds, launch, frame, shots };
@@ -63,6 +64,9 @@ function setup(animated = false) {
 test('hand follows constant-speed attack while wrist follows moving caster', () => {
   const f = setup(); f.launch(); f.frame();
   assert.equal(f.objects[1].x, 170);
+  assert.ok(f.objects[2].depth < f.owner.depth,'tether draws behind the caster');
+  assert.ok(f.objects[3].depth < f.owner.depth,'trail droplets draw behind the caster');
+  assert.ok(f.objects[1].depth > f.owner.depth,'hand stays visible in front');
   f.owner.x += 80; f.frame();
   assert.equal(f.objects[1].x, 220);
   const wrist = f.objects[2].rects[0];
@@ -145,7 +149,7 @@ test('ribbon overlaps the wrist and widens to its sprite silhouette', () => {
   const f = setup(true); f.owner.y = 192; f.launch();
   for (let i = 0; i < 5; i++) f.frame(50);
   const hand = f.objects[1], arm = f.objects[2];
-  const tip = arm.rects.filter(r => r.color === 0x071c38).at(-1);
+  const tip = arm.rects.filter(r => r.color === 0x000000).at(-1);
   const wristBack = hand.x - 128 * 0.42 * hand.scaleX;
   assert.ok(tip.x + tip.w / 2 > wristBack && tip.x + tip.w / 2 < hand.x);
   assert.ok(tip.h / 2 > 10);

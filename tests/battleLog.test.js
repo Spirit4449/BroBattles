@@ -11,7 +11,6 @@ const {
 test("formatModeLabel returns friendly readable mode labels", () => {
   assert.equal(formatModeLabel("duels", "duels-1v1"), "1v1 Duel");
   assert.equal(formatModeLabel("duels", "duels-2v2"), "2v2 Duel");
-  assert.equal(formatModeLabel("duels", "duels-3v3"), "3v3 Duel");
   assert.equal(formatModeLabel("bank-bust", "bank-bust-3v3"), "Bank Bust 3v3");
 });
 

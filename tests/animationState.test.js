@@ -95,3 +95,30 @@ test('dash resolution never scans an atlas; setup registers naturally ordered da
   assert.deepEqual(Array.from(animations.get('ninja-dashing').frames, frame => frame.frame), ['dash1', 'dash2', 'dash10']);
   assert.equal(registry.resolveAnimKey(scene, 'ninja', 'dashing'), 'ninja-dashing');
 });
+
+test('authored movement clips follow speed and vertical velocity for local and remote sprites',()=>{
+  const frames=Array.from({length:5},(_,i)=>({id:i}));
+  const clips={run:{key:'run',frames,bbMotion:{kind:'running',speed:260}},
+    jump:{key:'jump',frames,bbMotion:{kind:'jumping',speed:490}},
+    fall:{key:'fall',frames,bbMotion:{kind:'falling',speed:490}},idle:{key:'idle',frames}};
+  for(const remote of [false,true]){
+    const sprite={body:{velocity:{x:130,y:-490}},_bbAnimationVelocity:remote?{x:130,y:-490}:undefined,anims:{
+      play(key){this.currentAnim=clips[key];this.isPlaying=true;},
+      pause(){this.isPlaying=false;},setCurrentFrame(f){this.currentFrame=f;},timeScale:1}};
+    const velocity=remote?sprite._bbAnimationVelocity:sprite.body.velocity;
+    const play=(logical,key)=>animation.playCharacterAnimation({scene:{anims:{get:k=>clips[k]}},sprite,
+      character:'gloop',logical,resolveAnimKey:()=>key});
+    play('running','run');const slow=sprite.anims.timeScale;
+    velocity.x=260;
+    play('running','run');assert.ok(sprite.anims.timeScale>slow);
+    play('jumping','jump');assert.equal(sprite.anims.currentFrame,frames[0]);
+    assert.equal(sprite.anims.timeScale,1,'running speed must not leak into the jump');
+    velocity.y=-1;
+    play('jumping','jump');assert.equal(sprite.anims.currentFrame,frames.at(-1));
+    velocity.y=0;
+    play('falling','fall');assert.equal(sprite.anims.currentFrame,frames[0]);
+    velocity.y=490;
+    play('falling','fall');assert.equal(sprite.anims.currentFrame,frames.at(-1));
+    play('idle','idle');assert.equal(sprite.anims.isPlaying,true,'normal playback resumes after manual airborne poses');
+  }
+});

@@ -30,8 +30,8 @@ for (const [character, id] of [['ninja', 'ninja-arena-sovereign'], ['gloop', 'gl
         assert.deepEqual(entry.sourceSize, {w: 72, h: 72}, entry.filename);
       }
     } else {
-      // Gloop's skin retains the base animation names and logical frame sizes.
-      assert.deepEqual(logicalFrames(atlas.frames), logicalFrames(original.frames));
+      // Crystal retains the shared poses; base Gloop also has dedicated dash tracks.
+      assert.deepEqual(logicalFrames(atlas.frames), logicalFrames(original.frames.filter(f=>!/^dash(right|diagonal|up)\d+$/.test(f.filename))));
     }
     for (const {frame} of atlas.frames) {
       assert.ok(frame.x >= 0 && frame.y >= 0);

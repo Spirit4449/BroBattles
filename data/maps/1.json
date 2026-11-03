@@ -181,9 +181,9 @@
         "height": 12,
         "collision": {
           "up": true,
-          "down": true,
+          "down": false,
           "left": true,
-          "right": true
+          "right": false
         }
       },
       {

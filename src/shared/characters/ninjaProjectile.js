@@ -44,11 +44,13 @@ function outward(p, elapsed) {
     y:cubic(p.startY,p.startY+fy*d*.25+ny*c.ctrl1YOffset,p.startY+fy*d*.6-ny*Math.abs(c.ctrl2YOffset)+c.endYOffset*.45,p.startY+fy*d+c.endYOffset) };
 }
 // Earliest blocker the flight point meets on a->b, as a fraction, or null.
-function firstBlock(a,b,blockers){let first=null;for(const r of blockers){const t=sweep(a,b,r,0);if(t!==null&&(first===null||t<first))first=t;}return first;}
+// A shot already touching a wall (just turned back off it) is leaving it.
+function firstBlock(a,b,blockers){let first=null;for(const r of blockers){if(a.x>=r.left&&a.x<=r.right&&a.y>=r.top&&a.y<=r.bottom)continue;const t=sweep(a,b,r,0);if(t!==null&&(first===null||t<first))first=t;}return first;}
 // One fixed step on both sides. Terrain stalls outward shots for hitStallMs (so a
 // point-blank throw is still seen), then turns them back; returns pass
 // through terrain, matching the original human boomerang behavior. Blockers
-// (walls a mode builds against the shooter) stop the shot in every phase.
+// (walls a mode builds against the shooter) turn outward shots back like
+// terrain, and a return that meets one ends there instead of passing through.
 function step(p, owner, terrain = [], blockers = []) {
   if(p.done) return [];
   const segments=[]; p.elapsed+=STEP_MS;
@@ -63,10 +65,9 @@ function step(p, owner, terrain = [], blockers = []) {
       // Terrain contact uses the visible flight point, not the generous player-hit radius.
       for(const r of terrain) {const t=sweep(p,nextPoint,r,0);if(t!==null&&(!contact||t<contact.t))contact={t};}
       const block=firstBlock(p,nextPoint,blockers);
-      if(block!==null&&(!contact||block<=contact.t))contact={t:block,blocked:true};
+      if(block!==null&&(!contact||block<contact.t))contact={t:block};
       const end=contact?{x:p.x+(nextPoint.x-p.x)*contact.t,y:p.y+(nextPoint.y-p.y)*contact.t}:nextPoint;
       segments.push({a:{x:p.x,y:p.y},b:end,phase:'outward',terrain:!!contact});p.x=end.x;p.y=end.y;
-      if(contact?.blocked){p.done=true;p.reason='blocked';return segments;}
       if(contact){p.phase='stall';p.stallUntil=p.elapsed+(p.cfg.hitStallMs||0);return segments;}
     }
     if(p.elapsed>=p.cfg.outwardDuration)p.phase='hover';

@@ -2,7 +2,7 @@ The mode decides how you win. The map decides where the fight happens. Pick both
 
 ## Duels
 
-Duels is an elimination battle in **1v1, 2v2, or 3v3**. Knock out the other side before your team is eliminated. There are no respawns, so surviving and helping a teammate escape can matter as much as chasing one more hit.
+Duels is an elimination battle in **1v1 or 2v2**. Knock out the other side before your team is eliminated. There are no respawns, so surviving and helping a teammate escape can matter as much as chasing one more hit.
 
 If a Duel stays tied, sudden death pushes the action toward a finish.
 
@@ -18,7 +18,7 @@ Every 50 seconds a locked crate of coins is announced and then drops on the plat
 
 Iron Junction gives you three ways across. The **main lane** runs from the top of your base over a long catwalk to the hill in the middle. The **catwalks** overhead are reached by the short ledge climbs beside your base and beside the hill; they own the sightlines, your mine and your turret, and the gap between your balconies drops straight onto your vault. The **floor** runs flat from stair to stair, over the hill, and a **tunnel** beneath it links the shafts on either side of the hill, so you can cross under the fight. Each base has a wall slot on all three, so you choose which door to shut.
 
-Above each vault, a small **perch** on the balcony lets an attacker fire straight down through the hatch at it. Built walls stop enemy shots as well as enemy players, so a defender can shut that angle with the tall wall slot on the edge of the hatch.
+Above each vault, a small **perch** on the balcony lets an attacker fire straight down through the hatch at it. Built walls block every player, your own team included, but only stop enemy shots: your team can fire through its own walls. A defender can shut that angle with the tall wall slot on the edge of the hatch.
 
 ## Learning a map
 

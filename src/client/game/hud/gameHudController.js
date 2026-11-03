@@ -631,7 +631,7 @@ export function createGameHudController({
     return null;
   }
 
-  // Red edge flash and killer card while the camera holds on the local corpse.
+  // Red edge glow and killer card, shown from death until respawn or match end.
   // `info` (the player:dead payload) may arrive after the death begins.
   function showLocalDeath(info = null) {
     const root = document.getElementById("death-screen");
@@ -647,7 +647,7 @@ export function createGameHudController({
         }
       }
       root.style.setProperty("--death-screen-top", `${Math.round(Math.max(hudBottom, 48) + 48)}px`);
-      root.classList.remove("hidden", "is-ending");
+      root.classList.remove("hidden");
       root.setAttribute("aria-hidden", "false");
       document.getElementById("death-screen-killer")?.classList.add("hidden");
       // Restart the flash animation for back-to-back deaths (respawn modes).
@@ -663,17 +663,10 @@ export function createGameHudController({
     killerEl.classList.remove("hidden");
   }
 
-  // Pause over: fade the card before spectating starts.
-  function endLocalDeathPause() {
-    const root = document.getElementById("death-screen");
-    if (!root || root.classList.contains("hidden") || root.classList.contains("is-ending")) return;
-    root.classList.add("is-ending");
-  }
-
   function hideLocalDeath() {
     const root = document.getElementById("death-screen");
     if (!root) return;
-    root.classList.remove("show", "is-ending");
+    root.classList.remove("show");
     root.classList.add("hidden");
     root.setAttribute("aria-hidden", "true");
   }
@@ -1245,7 +1238,6 @@ export function createGameHudController({
     showStatusBanner,
     hideStatusBanner,
     showLocalDeath,
-    endLocalDeathPause,
     hideLocalDeath,
     initSpectateHud,
     setSpectatingPlayer,

@@ -51,7 +51,7 @@ test('stale roster and disconnected tickets are removed while a healthy queue st
     { ticket_id: 1, user_id: 1, size: 2, team1_count: 2, team2_count: 0 },
     { ticket_id: 2, user_id: 2, size: 1, team1_count: 1, team2_count: 0 },
     { ticket_id: 3, user_id: 3, size: 1, team1_count: 1, team2_count: 0, claimed_by: 'old-worker' },
-  ].map(row => ({ ...row, status: 'queued', created_at: new Date(Date.now() - 30000), mode_id: 'duels', mode_variant_id: 'duels-3v3', map: 1, mmr: 0 }));
+  ].map(row => ({ ...row, status: 'queued', created_at: new Date(Date.now() - 30000), mode_id: 'bank-bust', mode_variant_id: 'bank-bust-3v3', map: 4, mmr: 0 }));
   const users = [1, 2, 3].map(id => ({ user_id: id, name: `User${id}`, socket_id: `s${id}`, char_class: 'ninja' }));
   const db = { async runQuery(sql, params = []) {
     if (sql.startsWith('SELECT * FROM match_tickets')) return tickets.map(row => ({ ...row }));

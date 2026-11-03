@@ -7,7 +7,7 @@ import {
   consumeGloopRelease,
 } from "./attack";
 import { playHookAction, playHookCatchAction, consumeGloopHook } from "./special";
-import { pullLocalPlayerByHook } from "./hookPull";
+import { interruptHookedChannel, pullLocalPlayerByHook } from "./hookPull";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
 import { applyScaleLockedRageFx } from "../shared/powerupFx";
@@ -88,6 +88,7 @@ class Gloop extends CharacterEntityBase {
       return true;
     }
     if (type === `${NAME}-hook-catch`) {
+      interruptHookedChannel(scene, data.target);
       playHookCatchAction(scene, ownerSprite, data, false);
       return true;
     }
@@ -114,6 +115,7 @@ class Gloop extends CharacterEntityBase {
       return true;
     }
     if (type === `${NAME}-hook-catch`) {
+      interruptHookedChannel(scene, data.target);
       playHookCatchAction(scene, ownerSprite, data, true);
       return true;
     }

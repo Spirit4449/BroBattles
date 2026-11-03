@@ -100,7 +100,7 @@ Every map, including the four built-ins in `src/shared/maps/*.json`, is a Map St
 
 Effect modifiers stack multiplicatively through `src/shared/effectRules.js`. World snapshots retain numeric `playerEffects` durations and add `playerEffectMovement` with server-resolved movement, including per-application scaling and slows. Clients fall back to the shared base rules for older snapshots. Gravity Boots now use the server's 1.15 speed / 1.55 jump values; Rage and Thorg Rage retain their client speed boosts on the server too. This reconciles previously inconsistent gameplay, so movement and stacked effects need multiplayer checks.
 
-Current map documents still model two teams and 1v1/2v2/3v3 variants, with Bank Bust-specific objective layout. Adding free-for-all, PvE waves or a new objective topology requires a deliberate schema/runtime change. Do not infer support from a catalog entry marked unimplemented.
+Current map documents still model two teams and Duels 1v1/2v2 and Bank Bust 3v3 variants, with Bank Bust-specific objective layout. Adding free-for-all, PvE waves or a new objective topology requires a deliberate schema/runtime change. Do not infer support from a catalog entry marked unimplemented.
 
 Large orchestrators still contain lifecycle-sensitive code. Extract a further subsystem when it has clear ownership and a stable interface; do not create forwarding layers solely to reduce line counts.
 

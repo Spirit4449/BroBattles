@@ -63,6 +63,8 @@ function applyGloopPull(room, attacker, target, attack, now) {
     slowJumpMult: Math.max(0, Number(attack.slowJumpMult ?? HOOK.slowJumpMult)),
   };
   target._controlLockUntil = now + pullDurationMs + lockPaddingMs;
+  // A hooked Draven loses the inferno channel, otherwise its anchor holds him in place.
+  if (target.effects?.dravenInfernoUntil > now) target.effects.dravenInfernoUntil = 0;
   target.vx = 0;
   target.vy = 0;
   try {

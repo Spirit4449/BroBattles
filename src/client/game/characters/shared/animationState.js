@@ -232,7 +232,7 @@ export function holdWallSlidePose(sprite, { sliding = false, grounded = false, n
 // Dash directions use screen coordinates (negative Y points upward).
 export function directionalDashAnimation(character, direction) {
   if (direction?.x === 0 && direction?.y > 0) return "ducking";
-  if (String(character).toLowerCase() !== "thorg" ||
+  if (!["thorg", "gloop"].includes(String(character).toLowerCase()) ||
       !Number.isFinite(direction?.x) || !Number.isFinite(direction?.y)) return "dashing";
   if (direction.y < 0) return direction.x ? "dashdiagonal" : "dashup";
   return direction.x ? "dashright" : "falling";
@@ -262,6 +262,29 @@ export function playCharacterAnimation({
   const key = resolveAnimKey(scene, character, wanted, fallback, skinId);
   if (!key) return null;
   try {
+    const motion = scene.anims?.get?.(key)?.bbMotion;
+    // Remote sprites are positioned by interpolation; their Arcade velocity is not authoritative.
+    const velocity = sprite._bbAnimationVelocity || sprite.body?.velocity;
+    const motionState = sprite._bbAnimationState ||= {};
+    if (motion?.kind === 'running' && Number.isFinite(velocity?.x)) {
+      sprite.anims.timeScale = Math.max(0.15, Math.min(2.5, Math.abs(velocity.x) / motion.speed));
+      motionState.speedScaled = true;
+    } else if (motionState.speedScaled) {
+      sprite.anims.timeScale = 1;
+      motionState.speedScaled = false;
+    }
+    if ((motion?.kind === 'jumping' || motion?.kind === 'falling') &&
+        Number.isFinite(velocity?.y) && typeof sprite.anims.setCurrentFrame === 'function') {
+      const animation = scene.anims.get(key);
+      const progress = motion.kind === 'jumping'
+        ? 1 - Math.min(1, Math.max(0, -velocity.y / motion.speed))
+        : Math.min(1, Math.max(0, velocity.y / motion.speed));
+      if (sprite.anims.currentAnim?.key !== key) sprite.anims.play(key, true);
+      sprite.anims.pause();
+      sprite.anims.setCurrentFrame(animation.frames[Math.round(progress * (animation.frames.length - 1))]);
+      noteAnimationPlayed(sprite, wanted);
+      return key;
+    }
     const currentKey = sprite.anims?.currentAnim?.key || "";
     const state = sprite._bbAnimationState ||= {};
     const wallJumpPlayback = wanted === "jumping" && state.wallJumpAnimationUntil > nowMs();
@@ -385,6 +408,7 @@ export function chooseRemoteAnimationState({
   const previousY = previousPosition?.y ?? currentPosition?.y ?? sprite?.y ?? 0;
   const vx = Number(currentPosition?.vx);
   const vy = Number(currentPosition?.vy);
+  if (sprite) sprite._bbAnimationVelocity = { x: vx, y: vy };
   const grounded =
     typeof currentPosition?.grounded === "boolean"
       ? currentPosition.grounded

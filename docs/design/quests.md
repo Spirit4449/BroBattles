@@ -93,7 +93,7 @@ Targets below are starting hypotheses, not promises about difficulty. Damage thr
 | Special Delivery | Land 8 successful special attacks | Requires dedicated tracking |
 | Switch It Up | Complete matches with 2 different owned Bros | At least two owned Bros |
 | Bro Spotlight | Complete 2 matches with a named owned Bro | Character chosen on assignment |
-| Squad Up | Complete 2 team Duels matches | 2v2 or 3v3; premade party unnecessary |
+| Squad Up | Complete 2 team Duels matches | 2v2; premade party unnecessary |
 | Bank Job | Complete 2 Bank Bust matches | Bank Bust personally unlocked |
 | Vault Breaker | Deal a configured total of enemy-vault damage | Separate objective-damage metric required |
 | Power Trip | Collect 5 beneficial powerups | Requires pickup tracking and supported mode eligibility |

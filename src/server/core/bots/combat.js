@@ -7,6 +7,7 @@ const attackTypes = Object.fromEntries(Object.values(characterDefinitions).map(d
 const { botProfile, DEFAULT_SPECIAL_LOCK_MS, DEFAULT_SPECIAL_RANGE } = require('./characterProfiles');
 const { FIXED_DT_MS } = require('../../../shared/gameConstants');
 const ninjaModel = require('../../../shared/characters/ninjaProjectile');
+const { shotBlockers, shotTerrain } = require('../gameRoom/attackRuntimes/geometry');
 const BOT_ATTACK_TO_SUPER_COOLDOWN_MS = 400;
 
 function interceptTime(dx, dy, vx, vy, speed) {
@@ -65,7 +66,7 @@ function projectileSolutions(player, target, runtime, startup, prediction, dt, s
   return solutions;
 }
 
-function clearTrajectory(room, shot, radius) {
+function clearTrajectory(colliders, shot, radius) {
   let x = shot.ox + Math.cos(shot.angle) * shot.forward;
   let y = shot.oy + Math.sin(shot.angle) * shot.forward;
   const steps = shot.gravity ? Math.ceil(shot.time / shot.dt) : 1;
@@ -73,7 +74,7 @@ function clearTrajectory(room, shot, radius) {
     const t = shot.gravity ? Math.min(shot.time, i * shot.dt) : shot.time;
     const nx = shot.ox + Math.cos(shot.angle) * (shot.forward + shot.speed * t);
     const ny = shot.oy + Math.sin(shot.angle) * (shot.forward + shot.speed * t) + 0.5 * shot.gravity * t * (t + shot.dt);
-    if ((room?.geometry?.colliders || []).some((r) => segmentCrossesRect(x, y, nx, ny, r, radius))) return false;
+    if (colliders.some((r) => segmentCrossesRect(x, y, nx, ny, r, radius))) return false;
     x = nx; y = ny;
   }
   return true;
@@ -82,10 +83,12 @@ function clearTrajectory(room, shot, radius) {
 function hasClearShot(room, player, target, aim = basicAim(player, target, player.difficulty || {}, () => 0.5)) {
   const { clearShot } = botProfile(player.char_class);
   if (clearShot === 'trajectory') return aim.coverChecked ? aim.canHit : basicAim(player, target, player.difficulty || {}, () => 0.5, room).canHit;
-  if (!clearShot) return true;
-  const collisionRadius = (clearShot.radiusFromAttack &&
-    getResolvedAttackDescriptor(clearShot.radiusFromAttack)?.runtime?.collisionRadius) || clearShot.radius;
-  return !(room.geometry?.colliders || []).some((rect) =>
+  // Shots that ignore map terrain are still stopped by the other team's walls.
+  const colliders = clearShot ? shotTerrain(room, player.team) : shotBlockers(room, player.team);
+  if (!colliders.length) return true;
+  const collisionRadius = (clearShot && ((clearShot.radiusFromAttack &&
+    getResolvedAttackDescriptor(clearShot.radiusFromAttack)?.runtime?.collisionRadius) || clearShot.radius)) || 16;
+  return !colliders.some((rect) =>
     segmentCrossesRect(
       player.x,
       player.y,
@@ -154,15 +157,17 @@ function basicAim(player, target, profile, random, room) {
   let speedAtAngle = ballistic?.powerScaled ? huntressSpeed(distanceRatio) : null;
   let solution;
   if (ballistic) {
+    const terrain = shotTerrain(room, player.team);
+    const cover = ballistic.coverCheck ? terrain : shotBlockers(room, player.team);
     solution = projectileSolutions(player, target, runtime, startup, profile.prediction ?? 0.5, (room?.FIXED_DT_MS || FIXED_DT_MS) / 1000, speedAtAngle, ballistic.verticalPredictionSeconds)
-      .find((shot) => !ballistic.coverCheck || clearTrajectory(room, shot, runtime.playerCollisionRadius || runtime.collisionRadius || 16));
+      .find((shot) => clearTrajectory(cover, shot, runtime.playerCollisionRadius || runtime.collisionRadius || 16));
     // A retreating target can outrun the initial distance-based choice.
     // Increase power within the same player tuning limits when necessary.
     if (!solution && speedAtAngle) {
       speedAtAngle = () => (runtime.speed || 560) * (aim.maxSpeedScale || 1.18);
       solution = projectileSolutions(player, target, runtime, startup, profile.prediction ?? 0.5,
         (room?.FIXED_DT_MS || FIXED_DT_MS) / 1000, speedAtAngle, ballistic.verticalPredictionSeconds)
-        .find((shot) => clearTrajectory(room, shot, runtime.playerCollisionRadius || runtime.collisionRadius || 16));
+        .find((shot) => clearTrajectory(terrain, shot, runtime.playerCollisionRadius || runtime.collisionRadius || 16));
     }
   }
   const baseAimError = profile.aimError || 0;

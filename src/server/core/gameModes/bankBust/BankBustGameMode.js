@@ -267,8 +267,13 @@ class BankBustGameMode extends BaseGameMode {
     };
   }
 
+  // Built walls stop every player, the builder's team included.
+  getMovementBlockers() {
+    return this.getShotBlockers(null);
+  }
+
   // Built walls stop the other team's shots. The builder's own team shoots
-  // through them, just as it walks through them.
+  // through them, though it cannot walk through them.
   getShotBlockers(shooterTeam) {
     const blockers = [];
     for (const entry of this.getModeState()?.objects || []) {

@@ -2,6 +2,7 @@ const DEFAULT_TARGET_HALF_HEIGHT = 60;
 const DEFAULT_TARGET_HALF_WIDTH = 28;
 const { WORLD_MARGIN } = require("../../gameRoomConfig");
 const { circleAabbOverlap, attackCollisionCenter: getAttackCollisionCenter } = require("../../../../shared/combat/shotContact");
+const { sweep } = require("../../../../shared/characters/huntressProjectile");
 
 // `at` places the box at another position, such as a lag-compensated one.
 function getPlayerBounds(target, at = target) {
@@ -86,6 +87,13 @@ function shotBlockers(room, shooterTeam) {
   return room?.gameMode?.getShotBlockers?.(shooterTeam) || [];
 }
 
+// True when a wall built against this team stands between a and b. Damage
+// that reaches out from a point (splash, auras) does not pass through one.
+function wallBetween(room, attackerTeam, a, b) {
+  if (![a?.x, a?.y, b?.x, b?.y].every(Number.isFinite)) return false;
+  return shotBlockers(room, attackerTeam).some((wall) => sweep(a, b, wall, 0) !== null);
+}
+
 // What a shot from this team collides with: the map, plus whatever the mode has
 // put up against it.
 function shotTerrain(room, shooterTeam, fallback = []) {
@@ -94,4 +102,4 @@ function shotTerrain(room, shooterTeam, fallback = []) {
   return blockers.length ? [...colliders, ...blockers] : colliders;
 }
 
-module.exports = { shotTerrain, shotBlockers, getPlayerBounds, getBoundsCenter, normalizeAngleDelta, circleAabbOverlap, cubic, resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter, clampToWorld, sweptCircleOverlapsRect };
+module.exports = { shotTerrain, shotBlockers, wallBetween, getPlayerBounds, getBoundsCenter, normalizeAngleDelta, circleAabbOverlap, cubic, resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter, clampToWorld, sweptCircleOverlapsRect };

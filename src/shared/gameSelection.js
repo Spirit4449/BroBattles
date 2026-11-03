@@ -13,12 +13,11 @@ const DEFAULT_VARIANT_ID = String(
 );
 const DEFAULT_MAP_ID = Number(mapsCatalog?.defaultMapId) || 1;
 
-// Pre-catalog clients and party rows stored the team size (1-3) instead of a
+// Pre-catalog clients and party rows stored the team size instead of a
 // variant id.
 function legacyModeToVariantId(mode) {
   const numeric = Number(mode);
   if (numeric === 2) return "duels-2v2";
-  if (numeric === 3) return "duels-3v3";
   return DEFAULT_VARIANT_ID;
 }
 

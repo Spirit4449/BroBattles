@@ -3,6 +3,7 @@ const { EFFECT_RULES } = require('../../../shared/effectRules');
 const ninjaCombat = require('./ninjaCombat');
 const huntressCombat = require('./huntressCombat');
 const { isTrustedProjectileContact } = require('./attackRuntimes/projectileLifecycle');
+const { wallBetween } = require('./attackRuntimes/geometry');
 const { getParticipant, participantId } = require('./participants');
 const {
   NINJA_SWARM_HIT_DAMAGE,
@@ -217,6 +218,17 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
           `[GameRoom ${room.matchId}] hit rejected: dist=${dist.toFixed(0)}px > max=${maxDist}px ` +
             `attacker=${attacker.name}(${attacker.char_class}) target=${targetObjective ? targetName : target.name} ` +
             `type=${attackType} age=${(now - attackTimeClamped).toFixed(0)}ms`,
+        );
+      }
+      return;
+    }
+
+    // A built wall is a barrier: splash and melee damage do not reach the far
+    // side. Projectiles already stopped at the wall in their own flight.
+    if (!isSelf && !trustedProjectile && wallBetween(room, attacker.team, aPos, tPos)) {
+      if (room.DEBUG_HIT_EVENTS) {
+        console.log(
+          `[HitDebug ${room.matchId}] reject reason=wall attacker=${attacker.name} target=${targetName}`,
         );
       }
       return;

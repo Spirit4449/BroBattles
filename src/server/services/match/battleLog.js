@@ -12,7 +12,6 @@ function formatModeLabel(modeId, modeVariantId) {
   if (mId === "duels") {
     if (vId.includes("1v1")) return "1v1 Duel";
     if (vId.includes("2v2")) return "2v2 Duel";
-    if (vId.includes("3v3")) return "3v3 Duel";
     return "Duel";
   }
   if (mId === "bank-bust") {

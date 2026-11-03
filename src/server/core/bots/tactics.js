@@ -1,7 +1,7 @@
 const { bankDecisionSteps } = require('./bankBust');
 const { basicAim, basicRange, hasClearShot, pressureAim } = require('./combat');
 const { nearestSurface, walkLimits, canStandAt, canWalkBetween, standOn, previewManeuver, routePoisonDamage } = require('./navigation');
-const { bounds } = require('./physics');
+const { bounds, movementGeometry } = require('./physics');
 const { teamPosition } = require('./teamwork');
 const effects = require('../gameRoom/effects/effectManager');
 const { botProfile } = require('./characterProfiles');
@@ -37,11 +37,11 @@ function collectionDestination(brain, context, pickup, now, reach = powerupReach
     const x = Math.max(limits.left, Math.min(limits.right, pickup.x));
     const stance = standOn(surface, brain.player.char_class, x);
     if (Math.abs(x - pickup.x) >= reach.x ||
-        !canStandAt(brain.room.geometry, surface, brain.player.char_class, x)) continue;
+        !canStandAt(movementGeometry(brain.room), surface, brain.player.char_class, x)) continue;
     // Only pursue a pickup this stance (or a safe hop from it) can collect.
     if (reach.gap(stance) >= -2) {
       if (pickup.y >= stance.y || stance.y - pickup.y > 240) continue;
-      const hop = previewManeuver(stance, { direction: 0, jumpPressed: true }, brain.room.geometry,
+      const hop = previewManeuver(stance, { direction: 0, jumpPressed: true }, movementGeometry(brain.room),
         effects.getModifiers(brain.player, now), now, context.poisonY);
       if (!hop || !hop.frames.some((f) => reach.gap(f) < -5)) continue;
     }
@@ -84,7 +84,7 @@ function shockwaveEvadeGoal(brain, pickup, reachable, enemies, routeTo) {
     const margin = Math.min((surface.right - surface.left) / 3, brain.graph.body.halfWidth + 25);
     for (const rawX of [brain.player.x, surface.x, surface.left + margin, surface.right - margin]) {
       const x = Math.max(surface.left + margin, Math.min(surface.right - margin, rawX));
-      if (!canStandAt(brain.room.geometry, surface, brain.player.char_class, x) || routeTo(surface.id, x) === null) continue;
+      if (!canStandAt(movementGeometry(brain.room), surface, brain.player.char_class, x) || routeTo(surface.id, x) === null) continue;
       const point = { x, y: surface.top, surfaceId: surface.id };
       const blastRange = distance(point, pickup);
       const enemyRange = enemies.length ? Math.min(...enemies.map((enemy) => distance(point, enemy))) : Infinity;
@@ -309,9 +309,9 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
       if (target && wantsSpace) xs.push(clampX(target.x + side * Math.max(500, preferred * 1.4)), clampX(target.x - side * Math.max(500, preferred * 1.4)));
       for (const x of new Set(xs)) {
         yield;
-        if (!canStandAt(brain.room.geometry, surface, p.char_class, x)) continue;
+        if (!canStandAt(movementGeometry(brain.room), surface, p.char_class, x)) continue;
         const landingX = route.length ? route.at(-1).landingX : p.x;
-        const pointRoute = !Number.isFinite(landingX) || canWalkBetween(brain.room.geometry, surface, p.char_class, landingX, x)
+        const pointRoute = !Number.isFinite(landingX) || canWalkBetween(movementGeometry(brain.room), surface, p.char_class, landingX, x)
           ? route : routeTo(surface.id, x);
         if (pointRoute === null) continue;
         const point = { x, y: surface.top - graph.body.offsetY - graph.body.halfHeight };
@@ -391,7 +391,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
     if (surface) {
       const limits = walkLimits(surface, p.char_class);
       const x = Math.max(limits.left, Math.min(limits.right, brain.lastSeen.x));
-      const route = canStandAt(brain.room.geometry, surface, p.char_class, x) ? routeTo(surface.id, x) : null;
+      const route = canStandAt(movementGeometry(brain.room), surface, p.char_class, x) ? routeTo(surface.id, x) : null;
       if (route !== null && safeTrip(surface, route))
         return { mode: 'search', goal: { x, y: surface.top, surfaceId: surface.id } };
     }
@@ -400,7 +400,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
     const limits = walkLimits(surface, p.char_class, 22);
     const center = Math.max(limits.left, Math.min(limits.right, surface.x));
     const xs = [center, limits.left, limits.right].filter((x) =>
-      canStandAt(brain.room.geometry, surface, p.char_class, x) && routeTo(surface.id, x) !== null);
+      canStandAt(movementGeometry(brain.room), surface, p.char_class, x) && routeTo(surface.id, x) !== null);
     return xs.length ? [{ surface, x: xs[0] }] : [];
   });
   const options = exploration.filter(({ surface }) => surface.id !== current?.id);
@@ -411,7 +411,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
   const surface = choice.surface;
   const margin = Math.min((surface.right - surface.left) / 3, graph.body.halfWidth + 25);
   const proposedX = surface.left + margin + brain.random() * Math.max(0, surface.right - surface.left - margin * 2);
-  const x = !options.length && canStandAt(brain.room.geometry, surface, p.char_class, proposedX) && routeTo(surface.id, proposedX) !== null ? proposedX : choice.x;
+  const x = !options.length && canStandAt(movementGeometry(brain.room), surface, p.char_class, proposedX) && routeTo(surface.id, proposedX) !== null ? proposedX : choice.x;
   return { mode: 'patrol', goal: { x, y: surface.top, surfaceId: surface.id } };
 }
 

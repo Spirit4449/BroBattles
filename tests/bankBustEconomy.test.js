@@ -520,3 +520,38 @@ test('purchases cannot destroy a vault even when the map purchase floor is zero'
   assert.equal(room.gameMode.spendVaultCoins('team1', 1), false);
   assert.equal(vault.coins, before);
 });
+
+test("a built wall stops melee and splash damage reaching the far side", () => {
+  const room = combatRoom();
+  const mode = room.gameMode;
+  mode.onStart();
+  const vault = room.modeState.vaults.team2;
+  const attacker = fighter(room, "smasher", "team1", vault.x - 150, vault.y);
+
+  const before = mode.getVaultCoins("team2");
+  hitFor(room, attacker, "vault:team2");
+  const open = mode.getVaultCoins("team2");
+  assert.ok(open < before, "an open vault takes the hit");
+
+  const wall = room.modeState.objects.find((o) => o.type === "wallSlot");
+  Object.assign(wall, { x: vault.x - 75, y: vault.y });
+  wall.state.builtByTeam = "team2";
+  hitFor(room, attacker, "vault:team2");
+  assert.equal(mode.getVaultCoins("team2"), open, "the wall shields the vault");
+
+  // The builder's own team still strikes through its wall.
+  wall.state.builtByTeam = "team1";
+  hitFor(room, attacker, "vault:team2");
+  assert.ok(mode.getVaultCoins("team2") < open);
+});
+
+test("built walls block every team's movement but only the other team's shots", () => {
+  const room = combatRoom();
+  const mode = room.gameMode;
+  const wall = room.modeState.objects.find((o) => o.type === "wallSlot");
+  assert.deepEqual(mode.getMovementBlockers(), [], "an empty slot blocks nothing");
+  wall.state.builtByTeam = "team1";
+  assert.deepEqual(mode.getMovementBlockers().map((b) => b.id), [wall.id]);
+  assert.deepEqual(mode.getShotBlockers("team1"), [], "the builder's team shoots through");
+  assert.deepEqual(mode.getShotBlockers("team2").map((b) => b.id), [wall.id]);
+});

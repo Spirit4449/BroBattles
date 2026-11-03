@@ -141,12 +141,12 @@ test('shurikens damage disconnected targets but disconnected shooters cannot att
   assert.equal(f.room.handlePlayerAction(p.participantId,{type:'ninja-shuriken',id:'offline-shooter',angle:0}),false);
 });
 
-test('walls built against the ninja stop shurikens outward and on the return',t=>{
+test('walls built against the ninja turn shurikens back and stop their return',t=>{
   const f=fixture(t),[p,target]=f.players,hp=target.health,wall={left:240,right:260,top:-500,bottom:500};
   f.room.gameMode={...f.room.gameMode,getShotBlockers:team=>team===p.team?[wall]:[]};
-  f.room.handlePlayerAction(p.participantId,{type:'ninja-shuriken',id:'walled',angle:0});f.step(40);
+  f.room.handlePlayerAction(p.participantId,{type:'ninja-shuriken',id:'walled',angle:0});f.step(120);
   assert.equal(target.health,hp);
-  assert.equal(f.actions('ninja-terminal').at(-1).reason,'blocked');
+  assert.equal(f.actions('ninja-terminal').at(-1).reason,'returned');
   // Returns pass through terrain, but not through a wall.
   const owner={x:100,y:200},q=model.launch(owner,0,'return');
   while(q.phase!=='return')model.step(q,owner,[]);

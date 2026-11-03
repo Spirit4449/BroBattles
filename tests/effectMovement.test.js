@@ -85,6 +85,24 @@ test('zero slows survive projectile creation, contact and hook expiry', () => {
   assert.equal(effects.getModifiers(target, pullEnd + 100).speedMult, 1);
 });
 
+test('hooking a Draven mid-inferno cancels the channel and pulls him toward Gloop', () => {
+  const inferno = require('../src/server/core/gameRoom/abilities/dravenInfernoAbility');
+  const { buildHookProjectileAttack, applyGloopPull, tickRuntimeControlEffects } = require('../src/server/core/gameRoom/attackRuntimes/hook');
+  const attacker = { participantId: 'a', name: 'Gloop', char_class: 'gloop', x: 100, y: 100, isAlive: true, loaded: true };
+  const draven = { participantId: 'b', name: 'Draven', char_class: 'draven', x: 400, y: 100, isAlive: true, loaded: true };
+  const room = { players: new Map([['a', attacker], ['b', draven]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
+  inferno.activate(draven, 10000);
+  assert.equal(inferno.isMovementSuppressed(draven, 10100), true);
+  applyGloopPull(room, attacker, draven, buildHookProjectileAttack(attacker, {}, {}, 10100), 10100);
+  assert.equal(inferno.isMovementSuppressed(draven, 10100), false);
+  assert.equal(effects.getModifiers(draven, 10100).damageTakenMult, 1);
+  for (let now = 10116; now < 10300; now += 16) {
+    inferno.tick(room, draven, now);
+    tickRuntimeControlEffects(room, now);
+  }
+  assert.ok(draven.x < 400, `expected the pull to move Draven off his anchor, x=${draven.x}`);
+});
+
 test('sparse world state: only active timers, movement only for affected players', t => {
   let now = 10000;
   t.mock.method(Date, 'now', () => now);

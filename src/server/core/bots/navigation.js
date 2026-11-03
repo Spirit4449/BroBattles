@@ -35,6 +35,21 @@ function buildGraph(geometry, character, modifiers = {}) {
     const span = from.right - from.left - margin * 2;
     const samples = Math.max(2, Math.min(12, Math.ceil(span / 120)));
     const starts = Array.from({ length: samples + 1 }, (_, i) => from.left + margin + span * i / samples);
+    // Sparse samples on a wide floor can all be too far from a block standing on
+    // it (a built Bank Bust wall) to jump over it. Also take off just in front of
+    // anything that stops a walk along this surface.
+    const standing = bounds(standOn(from, character, from.x ?? (from.left + from.right) / 2));
+    for (const r of geometry.colliders) {
+      if (r === from || r.bottom <= standing.top + 2 || r.top >= standing.bottom - 2 ||
+          r.right <= from.left || r.left >= from.right) continue;
+      for (const gap of [8, 70]) {
+        if (r.collision.left) starts.push(r.left - body.halfWidth - gap);
+        if (r.collision.right) starts.push(r.right + body.halfWidth + gap);
+      }
+    }
+    for (let i = starts.length - 1; i > samples; i--) {
+      if (starts[i] < from.left + margin || starts[i] > from.right - margin) starts.splice(i, 1);
+    }
     for (const x of starts) for (const direction of [-1, 0, 1]) for (const jump of [false, true]) for (const wallClimb of [false, true]) {
       if (!direction && !jump) continue;
       const p = standOn(from, character, x - body.offsetX);
@@ -273,9 +288,16 @@ function prepareTraversal(player, edge, sourceGeometry, modifiers, now, poisonY 
     airborne ||= !p.grounded;
     if (p.grounded && (airborne || p.platformId !== player.platformId)) {
       if (edge.dash && i < edge.dashFrame) return null;
-      if (p.platformId === player.platformId || (edge.to && p.platformId !== edge.to)) return null;
+      if (edge.to && p.platformId !== edge.to) return null;
+      // Landing back on the takeoff surface only goes somewhere when it hops a
+      // block that stops walking there, such as a wall standing on the floor.
+      const sameSurface = p.platformId === player.platformId &&
+        geometry.colliders.find((r) => r.id === p.platformId);
+      if (p.platformId === player.platformId &&
+          (!sameSurface || canWalkBetween(geometry, sameSurface, player.char_class, player.x, p.x))) return null;
       const settlement = settleLanding(p, geometry, modifiers, now + (i + 1) * DT, poisonY);
       if (!settlement) return null;
+      if (sameSurface && canWalkBetween(geometry, sameSurface, player.char_class, player.x, settlement.end.x)) return null;
       frames.push(...settlement.frames);
       return { ...edge, to: p.platformId, landingX: settlement.end.x, frames, duration: frames.length * DT };
     }

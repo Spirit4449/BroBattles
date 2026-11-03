@@ -99,6 +99,10 @@ export function preloadBankBustAssets(scene, staticPath) {
     `${staticPath}/ui-sound/ready.mp3`,
   );
   scene.load.audio(
+    "sfx-bankbust-crate-incoming",
+    `${staticPath}/ui-sound/shop-reveal.ogg`,
+  );
+  scene.load.audio(
     "sfx-bankbust-wall-claim",
     `${staticPath}/bank-bust/wall-claim.mp3`,
   );

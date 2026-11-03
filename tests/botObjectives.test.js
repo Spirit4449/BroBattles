@@ -328,3 +328,68 @@ test('rushers bypass incidental defenders, prioritize the vault, but fight immed
   h.brain.retreating = true;
   assert.equal(h.decide([]), null, 'rushing does not disable recovery');
 });
+
+function wallSetup(builtByTeam) {
+  const h = bankSetup();
+  Object.assign(h.room.geometry, { world: { x: 0, y: 0, width: 4000, height: 1000 } });
+  Object.assign(h.room.geometry.colliders[0], { bottom: 540, collision: { up: true, down: true, left: true, right: true } });
+  h.room.modeState.objects = [{ id: 'wall', type: 'wallSlot', x: 1000, y: 452,
+    state: { builtByTeam, width: 48, height: 96 } }];
+  return h;
+}
+
+test('bots collide with built walls whichever team built them', () => {
+  const { stepBody, bounds, movementGeometry } = require('../src/server/core/bots/physics');
+  for (const builtByTeam of ['team1', 'team2']) {
+    const h = wallSetup(builtByTeam);
+    let now = 10000;
+    for (let i = 0; i < 120; i++, now += 16) {
+      stepBody(h.p, { direction: 1 }, movementGeometry(h.room), 16, now);
+    }
+    assert.ok(bounds(h.p).right <= 1000 - 24 + 0.5, `${builtByTeam} wall stops a team1 bot`);
+  }
+});
+
+test('bots plan routes over built walls, their own team\'s included', () => {
+  const { movementGeometry } = require('../src/server/core/bots/physics');
+  const { buildGraph, createRouteSearch } = require('../src/server/core/bots/navigation');
+  const routeAcross = (builtByTeam) => {
+    const h = wallSetup(builtByTeam);
+    const geometry = movementGeometry(h.room);
+    assert.equal(movementGeometry(h.room), geometry, 'same walls reuse one geometry');
+    const graph = buildGraph(geometry, h.p.char_class);
+    return createRouteSearch(graph, 'floor', Infinity, { startX: h.p.x })('floor', 1400);
+  };
+  for (const builtByTeam of ['team1', 'team2']) {
+    const route = routeAcross(builtByTeam);
+    assert.ok(route?.length, `${builtByTeam} wall needs a route over it`);
+    assert.ok(route.at(-1).landingX > 1024, 'the route ends past the wall');
+  }
+});
+
+test('bots shoot through their own team\'s walls but not the other team\'s', () => {
+  const { hasClearShot } = require('../src/server/core/bots/combat');
+  const clear = (builtByTeam) => {
+    const h = wallSetup(builtByTeam);
+    const target = { ...h.p, participantId: 'enemy', team: 'team2', x: 1200 };
+    return hasClearShot(h.room, h.p, target, { target: { x: target.x, y: target.y } });
+  };
+  assert.equal(clear('team2'), false);
+  assert.equal(clear('team1'), true);
+});
+
+test('bot dashes stop at built walls whichever team built them', () => {
+  const { stepBody, bounds, movementGeometry } = require('../src/server/core/bots/physics');
+  const dash = (builtByTeam) => {
+    const h = wallSetup(builtByTeam);
+    h.p.x = 900;
+    let now = 10000;
+    for (let i = 0; i < 60; i++, now += 16) {
+      stepBody(h.p, { direction: 1, dash: i === 0 ? { x: 1, y: 0 } : null }, movementGeometry(h.room), 16, now);
+    }
+    assert.ok(h.p._dashSeq > 0, 'the dash fired');
+    return bounds(h.p);
+  };
+  assert.ok(dash('team2').right <= 1000 - 24 + 0.5, 'enemy wall stops the dash');
+  assert.ok(dash('team1').right <= 1000 - 24 + 0.5, 'own wall stops the dash');
+});

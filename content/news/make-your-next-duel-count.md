@@ -4,7 +4,7 @@ Maybe you rushed too early last time. This round, you wait half a second and cat
 
 ## Your fight, your team size
 
-Duels brings elimination battles to **1v1, 2v2, and 3v3**. Go head-to-head to work on your timing, or bring friends and find out how your playstyles fit together. There are no respawns in Duels, so staying in the fight matters as much as landing a hit.
+Duels brings elimination battles to **1v1 and 2v2**. Go head-to-head to work on your timing, or bring friends and find out how your playstyles fit together. There are no respawns in Duels, so staying in the fight matters as much as landing a hit.
 
 ## Learn one thing each match
 

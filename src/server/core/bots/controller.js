@@ -1,7 +1,7 @@
 const { objectiveShot, tryBankInteraction, bankCombatEnemies } = require('./bankBust');
 const { createRandom } = require('./random');
 const { difficultyForTrophies, recoveryThreshold } = require('./config');
-const { bounds, stepBody, onClimbableWall, forecastGeometry } = require('./physics');
+const { bounds, stepBody, onClimbableWall, forecastGeometry, movementGeometry } = require('./physics');
 const { createRouteSearch, prepareTraversal, edgeKey, nearestSurface, safeWalkDirection, previewManeuver, walkLimits, poisonDamage } = require('./navigation');
 const { getNavigationGraph } = require('./navigationService');
 const { staticGeometry } = require('../../../shared/maps/platformMotion');
@@ -53,7 +53,7 @@ class BotController {
     this.ineffectivePositions = [];
     this.intent = { direction: 0 };
     this.objective = resolveBotObjective(room, player);
-    this.graph = getNavigationGraph(staticGeometry(room.geometry), player.char_class);
+    this.graph = getNavigationGraph(staticGeometry(movementGeometry(room)), player.char_class);
     this.visited = new Map();
     this.blockedEdges = new Map();
     this.routePreferences = new Map();
@@ -130,7 +130,7 @@ class BotController {
       this.intent = { direction: this.getDuckDirection(), jumpPressed: false };
     }
     if (!this.maneuver?.dash && (this.traversal || this.maneuver || (this.intent.direction && p._botActionUntil <= now))) p.flip = this.intent.direction < 0;
-    const result = stepBody(p, this.intent, room.geometry, dt, now, mods);
+    const result = stepBody(p, this.intent, this.movementGeometry(), dt, now, mods);
     this.intent.jumpPressed = false;
     this.intent.dash = null;
     p.lastInput = now;
@@ -144,7 +144,7 @@ class BotController {
     }
     if (p.grounded && this.traversal && (this.traversal.cursor >= this.traversal.frames.length || now > this.traversal.until)) {
       this.traversal = null;
-      this.intent = { direction: safeWalkDirection(p, 0, room.geometry) };
+      this.intent = { direction: safeWalkDirection(p, 0, this.movementGeometry()) };
       this.nextThink = 0;
     }
     p.ducking = p.grounded && now < this.duckUntil;
@@ -161,9 +161,13 @@ class BotController {
     }
   }
 
+  movementGeometry() {
+    return movementGeometry(this.room);
+  }
+
   context(mods, now) {
     const p = this.player, room = this.room;
-    const graph = getNavigationGraph(staticGeometry(room.geometry), p.char_class, { speedMult: mods.speedMult, jumpMult: mods.jumpMult });
+    const graph = getNavigationGraph(staticGeometry(this.movementGeometry()), p.char_class, { speedMult: mods.speedMult, jumpMult: mods.jumpMult });
     if (graph !== this.graph) { this.graph = graph; this.clearTravel(); this.nextDecisionAt = 0; }
     const current = graph.surfaces.find((s) => s.id === p.platformId) || nearestSurface(graph, { x: p.x, y: bounds(p).bottom });
     const actualPoisonY = room._suddenDeathActive ? room._computePoisonY(now - room._loopStartWallTime - room.gameMode.getMatchDurationMs()) : Infinity;
@@ -353,7 +357,7 @@ class BotController {
         ['retreat', 'kite'].includes(this.decision.mode) && this.intent.direction && now >= this.nextHopAt) {
       this.nextHopAt = now + this.between(5000, 9000);
       if (this.random() < 0.35) {
-        const hop = previewManeuver(p, { direction: this.intent.direction, jumpPressed: true }, this.room.geometry, mods, now, context.poisonY);
+        const hop = previewManeuver(p, { direction: this.intent.direction, jumpPressed: true }, this.movementGeometry(), mods, now, context.poisonY);
         if (hop) { this.maneuver = { ...hop, cursor: 0 }; this.metrics.optionalHops++; }
       }
     }
@@ -538,7 +542,7 @@ class BotController {
         const reachX = powerup ? powerupReachX(p) : DEATH_DROP_PICKUP_RADIUS;
         const gap = (at) => powerup ? powerupGap(p, pickup, at) : Math.hypot(at.x - pickup.x, at.y - pickup.y) - DEATH_DROP_PICKUP_RADIUS;
         if (pickup && Math.abs(p.x - pickup.x) < reachX / 2 && gap(p) >= -2 && pickup.y < p.y) {
-          const hop = previewManeuver(p, { direction: 0, jumpPressed: true }, this.room.geometry,
+          const hop = previewManeuver(p, { direction: 0, jumpPressed: true }, this.movementGeometry(),
             effects.getModifiers(p, now), now, context.poisonY);
           if (hop?.frames.some((frame) => gap(frame) < -5)) {
             this.maneuver = { ...hop, cursor: 0 };
@@ -572,7 +576,7 @@ class BotController {
     const p = this.player;
     if (!p.grounded || !direction) return 0;
     const body = bounds(p);
-    const blocked = this.room.geometry.colliders.some((rect) => {
+    const blocked = this.movementGeometry().colliders.some((rect) => {
       if (rect.id === p.platformId || body.bottom <= rect.top + 2 || body.top >= rect.bottom - 2) return false;
       if (direction > 0 && rect.collision.left) {
         const gap = rect.left - body.right;
@@ -592,7 +596,7 @@ class BotController {
     if (!p.grounded || !current || !direction) return false;
     // Small steps and low walls can be cleared immediately. Only commit when
     // the real movement solver proves that the hop lands safely.
-    const hop = previewManeuver(p, { direction, jumpPressed: true }, this.room.geometry,
+    const hop = previewManeuver(p, { direction, jumpPressed: true }, this.movementGeometry(),
       effects.getModifiers(p, now), now, context.poisonY);
     if (hop && (hop.end.platformId !== current.id || (hop.end.x - p.x) * direction > 35)) {
       this.clearTravel();
@@ -642,7 +646,7 @@ class BotController {
     const stopping = speed * speed / (2 * movement.dragGround);
     const coasting = Math.sign(p.vx) === Math.sign(dx) && Math.abs(dx) <= stopping + deadband;
     const direction = coasting || Math.abs(dx) <= deadband ? 0 : Math.sign(dx);
-    return takeoff ? direction : safeWalkDirection(p, direction, this.room.geometry);
+    return takeoff ? direction : safeWalkDirection(p, direction, this.movementGeometry());
   }
 
   // Routes cover static ground only. On a moving platform, edge toward the
@@ -651,7 +655,7 @@ class BotController {
   ridePlatform(now, mods) {
     const p = this.player;
     if (!p.grounded || this.maneuver || this.traversal) return false;
-    const support = this.room.geometry.movingColliders?.find((c) => c.id === p.platformId);
+    const support = this.movementGeometry().movingColliders?.find((c) => c.id === p.platformId);
     if (!support) return false;
     this.approachEdge = null;
     const goalX = this.decision?.goal?.x ?? this.target?.x ?? p.x;
@@ -685,7 +689,7 @@ class BotController {
         ...(direction ? [{ direction, jump: true, wallClimb: false, dash: { x: direction, y: 0 }, dashFrame: 18 }] : []),
       ];
       for (const edge of edges) {
-        const prepared = prepareTraversal(p, edge, this.room.geometry, mods, now, this.poisonY);
+        const prepared = prepareTraversal(p, edge, this.movementGeometry(), mods, now, this.poisonY);
         if (prepared && staticIds.has(prepared.to)) return { ...prepared, from: p.platformId, takeoffX: p.x };
       }
     }
@@ -702,11 +706,11 @@ class BotController {
           this.intent = { direction: 0 };
           return;
         }
-        const prepared = prepareTraversal(p, edge, this.room.geometry, mods, now, this.poisonY);
+        const prepared = prepareTraversal(p, edge, this.movementGeometry(), mods, now, this.poisonY);
         this.approachEdge = null;
         if (!prepared) {
           this.blockedEdges.set(edgeKey(edge), now + 2500);
-          this.intent = { direction: safeWalkDirection(p, 0, this.room.geometry) };
+          this.intent = { direction: safeWalkDirection(p, 0, this.movementGeometry()) };
           this.nextThink = 0;
           return;
         }
@@ -740,11 +744,11 @@ class BotController {
       }
       this.lastWallSide = p.wallSide;
       const urgent = !landing || foot.bottom >= context.poisonY - 100;
-      const jump = (urgent || now >= this.wallWaitUntil) && now >= (p._nextWallJump || 0) && onClimbableWall(p, this.room.geometry);
+      const jump = (urgent || now >= this.wallWaitUntil) && now >= (p._nextWallJump || 0) && onClimbableWall(p, this.movementGeometry());
       this.intent = { direction: (p.wallSide === 'left' ? -1 : 1) * (jump ? -1 : 1), jumpPressed: jump };
     } else {
       this.lastWallSide = null;
-      const steer = this.room.geometry.movingColliders?.length ? this.forecastLanding(now) : null;
+      const steer = this.movementGeometry().movingColliders?.length ? this.forecastLanding(now) : null;
       if (steer !== null) { this.intent = { direction: steer }; return; }
       const x = landing ? Math.max(landing.left + foot.halfWidth + 8, Math.min(landing.right - foot.halfWidth - 8, p.x)) : p.x;
       this.intent = { direction: Math.abs(x - p.x) > 8 ? Math.sign(x - p.x) : 0 };
@@ -760,7 +764,7 @@ class BotController {
     const p = this.player, mods = effects.getModifiers(p, now), forward = Math.sign(p.vx) || 1;
     this.landingDirection = null;
     for (const direction of [forward, 0, -forward]) {
-      const sim = { ...p }, forecast = forecastGeometry(this.room.geometry);
+      const sim = { ...p }, forecast = forecastGeometry(this.movementGeometry());
       for (let i = 0; i < 120; i++) {
         forecast.step(sim, i * FIXED_DT_MS);
         const result = stepBody(sim, { direction }, forecast.geometry, FIXED_DT_MS, now + i * FIXED_DT_MS, mods);
@@ -775,7 +779,7 @@ class BotController {
 
   *findDodgeSteps(observed, mods, now, poisonY) {
     const p = this.player;
-    const baseline = previewManeuver(p, { direction: this.intent.direction }, this.room.geometry, mods, now, poisonY);
+    const baseline = previewManeuver(p, { direction: this.intent.direction }, this.movementGeometry(), mods, now, poisonY);
     if (!baseline) return { best: null, baseDanger: Infinity, bestScore: Infinity };
     const poisonAt = this.context(mods, now).poisonAt;
     const hazardCost = (maneuver) => poisonDamage(maneuver.frames, maneuver.frames.length * FIXED_DT_MS, poisonY, poisonAt) * 1200 / Math.max(1, p.health);
@@ -784,7 +788,7 @@ class BotController {
     for (const direction of [-1, 0, 1]) for (const jumpPressed of [false, true]) {
       yield;
       if (jumpPressed && now - (this.lastJumpAt || 0) < 1800) continue;
-      const candidate = previewManeuver(p, { direction, jumpPressed }, this.room.geometry, mods, now, poisonY);
+      const candidate = previewManeuver(p, { direction, jumpPressed }, this.movementGeometry(), mods, now, poisonY);
       if (!candidate) continue;
       const score = maneuverDanger(candidate, observed, now, p.char_class) + hazardCost(candidate) + (jumpPressed ? 35 : 0);
       if (score < bestScore) { best = candidate; bestScore = score; }
@@ -832,7 +836,7 @@ class BotController {
     const safeDirection = safeWalkDirection(
       this.player,
       this.duckDirection,
-      this.room.geometry,
+      this.movementGeometry(),
     );
     if (safeDirection) this.duckDirection = safeDirection;
     return safeDirection;

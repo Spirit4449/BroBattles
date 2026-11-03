@@ -1679,7 +1679,7 @@
         }
       }
 
-      /* Local death pause: red edge flash and a compact killer card. */
+      /* Local death: red side glow and a compact killer card until respawn. */
       #death-screen {
         position: fixed;
         inset: 0;
@@ -1693,19 +1693,19 @@
       #death-screen.hidden {
         display: none;
       }
-      #death-screen.is-ending {
-        opacity: 0;
-      }
       .death-screen-flash {
         position: absolute;
         inset: 0;
-        background: radial-gradient(
-          ellipse at center,
-          rgba(214, 74, 74, 0) 55%,
-          rgba(169, 40, 51, 0.38) 82%,
-          rgba(110, 12, 22, 0.7) 100%
+        background: linear-gradient(
+          90deg,
+          rgba(110, 12, 22, 0.75) 0%,
+          rgba(169, 40, 51, 0.35) 7%,
+          rgba(214, 74, 74, 0) 18%,
+          rgba(214, 74, 74, 0) 82%,
+          rgba(169, 40, 51, 0.35) 93%,
+          rgba(110, 12, 22, 0.75) 100%
         );
-        opacity: 0.45;
+        opacity: 0.55;
       }
       #death-screen.show .death-screen-flash {
         animation: death-screen-flash 650ms ease-out;
@@ -1763,7 +1763,7 @@
       @keyframes death-screen-flash {
         0% { opacity: 0; }
         12% { opacity: 1; }
-        100% { opacity: 0.45; }
+        100% { opacity: 0.55; }
       }
       @keyframes death-screen-title {
         from { opacity: 0; transform: scale(1.2); }

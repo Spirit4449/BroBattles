@@ -1,5 +1,6 @@
 const { basicAim, basicRange, hasClearShot } = require('./combat');
 const { walkLimits, canStandAt, standOn } = require('./navigation');
+const { movementGeometry } = require('./physics');
 
 const { createRandom } = require('./random');
 const SUPPORT_STYLES = ['farmer', 'crate-hunter', 'hunter', 'defender', 'raider'];
@@ -198,7 +199,7 @@ function* bankDecisionSteps(brain, context, enemies, now) {
   const incumbent = candidates.find(c => c.id === previous?.decision.bankObjectiveId);
   const previousSurface = context.graph.surfaces.find(s => s.id === previous?.decision.goal.surfaceId);
   let validPrevious = incumbent && previousSurface && previous.role === role &&
-    canStandAt(brain.room.geometry, previousSurface, p.char_class, previous.decision.goal.x) &&
+    canStandAt(movementGeometry(brain.room), previousSurface, p.char_class, previous.decision.goal.x) &&
     context.routeTo(previousSurface.id, previous.decision.goal.x) !== null;
   if (validPrevious && incumbent.attack) {
     const stance = standOn(previousSurface, p.char_class, previous.decision.goal.x);
@@ -215,7 +216,7 @@ function* bankDecisionSteps(brain, context, enemies, now) {
       for (const rawX of new Set([candidate.x, candidate.x - range, candidate.x + range,
         ...(validPrevious && candidate.id === incumbent.id && surface.id === previousSurface.id ? [previous.decision.goal.x] : [])])) {
         const x = Math.max(limits.left, Math.min(limits.right, rawX));
-        if (!canStandAt(brain.room.geometry, surface, p.char_class, x)) continue;
+        if (!canStandAt(movementGeometry(brain.room), surface, p.char_class, x)) continue;
         const point = standOn(surface, p.char_class, x);
         if (candidate.attack) {
           const aim = basicAim(point, candidate, brain.profile, () => 0.5, brain.room);
