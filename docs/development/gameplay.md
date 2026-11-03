@@ -154,7 +154,7 @@ Run `npm run test:bots` and `npm run simulate:bots -- --matrix --seconds=30`. Ad
 ## Damage hitbox debugging
 
 Admins can check **Debug hitboxes** next to **Edit map** in the map picker. The
-editor inherits that option, and its toolbar checkbox controls the next playtest.
+editor inherits that option, and the checkbox in its playtest settings (the gear beside Playtest) controls the next playtest.
 Blue/green outlines show map and physics bodies; pink outlines show server damage
 volumes. Ctrl+M hides/shows the overlay during a debug playtest.
 

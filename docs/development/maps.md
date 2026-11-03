@@ -26,15 +26,16 @@ Admin map cards place the Edit map action in the top-left corner of the preview.
 - Drag corner or edge handles to resize. Proportions are preserved by default; hold Shift for free resizing. Size fields also preserve proportions unless Shift is held when the change is applied.
 - Tab switches a platform between green artwork handles and orange collision handles. Collision handles change the solid boundary without stretching the artwork.
 - Grid and alignment guides help with placement. Hold Command (macOS) or Control to bypass snapping. Player spawns still require a safe, walkable platform.
-- Space + drag, middle drag, or right drag pans. Scroll zooms; F fits the world. Arrow keys nudge the selected object; Shift increases the nudge to 16 pixels.
+- Space + drag, middle drag, or right drag pans. Scroll or pinch zooms toward the cursor; + and − zoom the view centre; F fits the world. Resizing the window keeps the current view unless it was fitted. Arrow keys nudge the whole selection; Shift increases the nudge to 16 pixels. A run of nudges is one undo step.
 - C toggles **Game camera**: live scenery (parallax, drifting clouds, atmosphere) framed by the mode's camera bounds and zoom range, as in a match. The overlay outlines the camera bounds.
 - Command/Control Z undoes; Command/Control Shift Z or Control Y redoes. History keeps 250 document states, including settings and scenery, while retaining the Phaser scene and camera.
-- D duplicates; Delete removes. A platform supporting a player spawn cannot be deleted until its markers are moved to another platform.
-- Escape opens a real game playtest. Choose Solo or With bots and a character first. Escape in the playtest returns to the editor. Controls/tutorial overlays stay hidden; the actual GameRoom, movement, combat, bots, objectives, effects, and powerups run in an isolated admin session. Playtests expire after an hour and do not award rewards or create matchmaking records.
+- D duplicates; Delete removes; Command/Control A selects everything. A platform supporting a player spawn cannot be deleted until its markers are moved to another platform.
+- **?** (or the ? button on the canvas toolbar) lists every shortcut. Clicking an object in the list pans to it when it is off screen; double-click always centres it.
+- Escape opens a real game playtest (Escape inside a text field only leaves the field). The gear beside **Playtest** sets opponents (Solo or With bots), character, hitbox debugging and infinite supers; the browser remembers them. Escape in the playtest returns to the editor. Controls/tutorial overlays stay hidden; the actual GameRoom, movement, combat, bots, objectives, effects, and powerups run in an isolated admin session. Playtests expire after an hour and do not award rewards or create matchmaking records.
 
 Powerup markers can be placed anywhere. Editing or dragging an older anchored powerup turns it into a free point; its coordinates are used directly by the server. Player markers always stay anchored.
 
-The World tab shows the mode's arena (read-only) and edits powerup rules and catalog presentation. Less common controls are inside expandable Advanced sections. Pixel fields display whole numbers; percentage fields expose values such as opacity without requiring decimal entry. Scale factors and coordinate conversions retain the precision needed to keep artwork and physics aligned.
+The World tab shows the mode's arena (read-only) and edits powerup rules and catalog presentation. Less common controls are inside expandable Advanced sections; they stay open, along with the inspector's scroll position and focused field, while you edit. Pixel fields display whole numbers; percentage fields expose values such as opacity without requiring decimal entry. Scale factors and coordinate conversions retain the precision needed to keep artwork and physics aligned.
 
 The Scenery tab edits the backdrop (see [Scenery](#scenery-parallax-and-atmosphere)): layers in back-to-front order, the cloud switch and the atmosphere settings. Clouds are canvas objects: add one from the add menu, then drag it, duplicate it or set its type, direction and speed in the inspector.
 
@@ -46,7 +47,7 @@ URLs must point under `/assets/`, corresponding to `public/assets/` in the repos
 
 **Save map** publishes uploaded artwork to its game asset path and updates the production `dist` copy if present. Uploaded images are also stored at immutable revision URLs so existing matches retain their artwork. A failed document save restores any overwritten artwork. Files must be at most 8 MB and 16384 pixels per dimension.
 
-**Export** produces a portable JSON document. Image files are not embedded. If artwork was uploaded, an export dialog lists every game file that must be copied manually, including uploads that have already been saved. Keep the replacement image files alongside your export.
+**Import** and **Export** are in the ⋯ menu beside **Save map**. Export produces a portable JSON document. Image files are not embedded. If artwork was uploaded, an export dialog lists every game file that must be copied manually, including uploads that have already been saved. Keep the replacement image files alongside your export.
 
 ## Persistence and deployment
 

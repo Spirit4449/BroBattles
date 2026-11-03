@@ -1,9 +1,88 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Map Studio · Bro Battles</title><link rel="stylesheet" href="/bundles/mapEditor.css"></head>
-<body><div id="studio">
-<header class="toolbar"><a href="/" class="brand" title="Return to lobby">BB<span>MAP STUDIO</span></a><select id="map-select" aria-label="Map"></select><span id="map-mode" class="mode-badge" title="Game mode this map is made for"></span><span class="separator"></span><button id="undo" title="Undo (⌘/Ctrl Z)" aria-label="Undo"><svg viewBox="0 0 24 24" class="ui-icon" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5 4 10l5 5M4 10h10a6 6 0 0 1 0 12" transform="translate(0 -2)"/></svg></button><button id="redo" title="Redo (⌘/Ctrl Shift Z)" aria-label="Redo"><svg viewBox="0 0 24 24" class="ui-icon" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 5 5-5 5m5-5H10a6 6 0 0 0 0 12" transform="translate(0 -2)"/></svg></button><button id="save-state" type="button" title="Review changes compared with the live map" aria-haspopup="dialog">Loading…</button><span class="spacer"></span><select id="playtest-kind" aria-label="Playtest opponents"><option value="solo">Solo</option><option value="bots">With bots</option></select><select id="playtest-character" aria-label="Playtest character"><option>ninja</option><option>thorg</option><option>draven</option><option>wizard</option><option>huntress</option><option>gloop</option></select><label class="playtest-option" title="Show map, player and attack collision shapes"><input type="checkbox" id="debug-hitboxes">Debug hitboxes</label><label class="playtest-option"><input type="checkbox" id="infinite-supers" checked>Infinite supers</label><button id="preview"><svg viewBox="0 0 24 24" class="ui-icon" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m8 4 12 8-12 8z"/></svg>Playtest <kbd>Esc</kbd></button><button id="export">Export</button><button id="import">Import</button><button id="save" class="primary">Save map</button></header>
-<aside class="browser"><div class="pane-title">OBJECTS <span id="object-count"></span></div><input id="search" type="search" placeholder="Find an object…" aria-label="Search objects"><div class="add-row"><select id="add-kind" aria-label="Object type"><option value="platform">Platform</option><option value="hitbox">Collision box</option><option value="powerup">Powerup spawn</option><option value="cloud">Cloud</option><option value="goldMine">Gold mine</option><option value="claimableTurret">Turret</option><option value="wallSlot">Wall slot</option><option value="gold">Gold spawn</option></select><button id="add" class="primary" title="Add object" aria-label="Add object"><svg viewBox="0 0 24 24" class="ui-icon" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button></div><div id="object-list"></div><div class="browser-footer"><button id="new-map">＋ New map</button></div></aside>
-<main id="viewport"><div id="canvas"></div><div id="marker-layer" aria-hidden="true"></div><div class="canvas-tools"><button id="fit" title="Fit world (F)" aria-label="Fit world"><svg viewBox="0 0 24 24" class="ui-icon" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg> Fit</button><button id="zoom-out" aria-label="Zoom out"><svg viewBox="0 0 24 24" class="ui-icon" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><span id="zoom-label">100%</span><button id="zoom-in" aria-label="Zoom in"><svg viewBox="0 0 24 24" class="ui-icon" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><button id="camera-preview" title="Look through the match camera: real parallax, fog and zoom range (C)" aria-pressed="false">Game camera</button><label>Snap <select id="grid"><option value="8">8 px</option><option value="16" selected>16 px</option><option value="32">32 px</option><option value="64">64 px</option><option value="0">Off</option></select></label></div><div id="canvas-hint">Shift-click to multi-select · Drag empty space to select an area · Space + drag to pan</div></main>
-<aside class="inspector"><nav><button data-tab="selection" class="active">Inspector</button><button data-tab="world">World</button><button data-tab="scenery">Scenery</button><button data-tab="assets">Assets</button></nav><div id="inspector-content"></div></aside>
-<footer><span id="status" role="status" aria-live="polite">Opening map…</span><span>⌘/Ctrl Z undo · Shift Z redo · D duplicate · Delete remove · Esc playtest</span></footer>
-</div><dialog id="dialog"><form method="dialog"><header><h2 id="dialog-title"></h2><button value="cancel" aria-label="Close">×</button></header><div id="dialog-content"></div><div class="dialog-actions"><button value="cancel">Cancel</button><button id="dialog-apply" value="default" class="primary">Apply</button></div></form></dialog><script src="/bundles/mapEditor.bundle.js"></script></body></html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Map Studio · Bro Battles</title>
+  <link rel="shortcut icon" href="/assets/logos/logo-small.webp" type="image/webp">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles/ui-system.css">
+  <link rel="stylesheet" href="/bundles/mapEditor.css">
+</head>
+<body>
+<div id="studio">
+  <header class="toolbar">
+    <a href="/" class="brand" title="Return to lobby"><img src="/assets/logos/wordmark.webp" width="118" height="24" alt="Bro Battles"><span>Map Studio</span></a>
+    <div class="tool-group map-group">
+      <select id="map-select" aria-label="Map"></select>
+      <span id="map-mode" class="mode-badge" title="Game mode this map is made for"></span>
+    </div>
+    <div class="tool-group history-group">
+      <button id="undo" class="icon-button" title="Undo (⌘/Ctrl Z)" aria-label="Undo"><svg viewBox="0 0 24 24" class="ui-icon" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M9 5 4 10l5 5M4 10h10a6 6 0 0 1 0 12" transform="translate(0 -2)"/></svg></button>
+      <button id="redo" class="icon-button" title="Redo (⌘/Ctrl Shift Z)" aria-label="Redo"><svg viewBox="0 0 24 24" class="ui-icon" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="m15 5 5 5-5 5m5-5H10a6 6 0 0 0 0 12" transform="translate(0 -2)"/></svg></button>
+      <button id="save-state" type="button" title="Review changes compared with the live map" aria-haspopup="dialog">Loading…</button>
+    </div>
+    <span class="spacer"></span>
+    <div class="tool-group playtest-group" aria-label="Playtest">
+      <button id="preview" class="playtest-button" title="Playtest this draft (Esc)"><svg viewBox="0 0 24 24" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M7 4h3v2h3v2h3v2h2v4h-2v2h-3v2h-3v2H7z"/></svg>Playtest<kbd>Esc</kbd></button>
+      <details class="menu" id="playtest-menu">
+        <summary class="icon-button" title="Playtest settings" aria-label="Playtest settings"><svg viewBox="0 0 24 24" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M10 2h4v3h2v2h3v4h3v2h-3v4h-3v2h-2v3h-4v-3H8v-2H5v-4H2v-2h3V7h3V5h2zm0 7v6h4V9z"/></svg></summary>
+        <div class="menu-panel">
+          <div class="menu-title">Playtest settings</div>
+          <label class="field"><span>Opponents</span><select id="playtest-kind"><option value="solo">Solo</option><option value="bots">With bots</option></select></label>
+          <label class="field"><span>Character</span><select id="playtest-character"><option value="ninja">Ninja</option><option value="thorg">Thorg</option><option value="draven">Draven</option><option value="wizard">Wizard</option><option value="huntress">Huntress</option><option value="gloop">Gloop</option></select></label>
+          <label class="check" title="Show map, player and attack collision shapes"><input type="checkbox" id="debug-hitboxes"><span>Debug hitboxes</span></label>
+          <label class="check"><input type="checkbox" id="infinite-supers" checked><span>Infinite supers</span></label>
+          <p class="menu-summary" id="playtest-summary"></p>
+        </div>
+      </details>
+    </div>
+    <div class="tool-group file-group">
+      <details class="menu" id="file-menu">
+        <summary class="icon-button" title="More" aria-label="More file actions"><svg viewBox="0 0 24 24" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M4 10h4v4H4zm6 0h4v4h-4zm6 0h4v4h-4z"/></svg></summary>
+        <div class="menu-panel menu-actions">
+          <button id="import" title="Replace this map with a JSON document">Import JSON…</button>
+          <button id="export" title="Download this map as JSON">Export JSON</button>
+        </div>
+      </details>
+      <button id="save" class="primary" title="Save map (⌘/Ctrl S)">Save map</button>
+    </div>
+  </header>
+  <aside class="browser">
+    <div class="pane-title">Objects <span id="object-count" class="count-chip"></span></div>
+    <input id="search" type="search" placeholder="Find an object…" aria-label="Search objects">
+    <div class="add-row">
+      <select id="add-kind" aria-label="Object type"><option value="platform">Platform</option><option value="hitbox">Collision box</option><option value="powerup">Powerup spawn</option><option value="cloud">Cloud</option><option value="goldMine" data-bank-bust>Gold mine</option><option value="claimableTurret" data-bank-bust>Turret</option><option value="wallSlot" data-bank-bust>Wall slot</option><option value="gold" data-bank-bust>Gold spawn</option></select>
+      <button id="add" class="primary icon-button" title="Add object at the view centre" aria-label="Add object"><svg viewBox="0 0 24 24" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M10 4h4v6h6v4h-6v6h-4v-6H4v-4h6z"/></svg></button>
+    </div>
+    <div id="object-list"></div>
+    <div class="browser-footer"><button id="new-map">＋ New map</button></div>
+  </aside>
+  <main id="viewport">
+    <div id="canvas"></div>
+    <div id="marker-layer" aria-hidden="true"></div>
+    <div class="canvas-tools">
+      <button id="fit" title="Fit world (F)" aria-label="Fit world"><svg viewBox="0 0 24 24" class="ui-icon" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><rect x="8" y="8" width="8" height="8"/></svg>Fit</button>
+      <button id="zoom-out" class="icon-button" title="Zoom out (−)" aria-label="Zoom out"><svg viewBox="0 0 24 24" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M5 10h14v4H5z"/></svg></button>
+      <span id="zoom-label">100%</span>
+      <button id="zoom-in" class="icon-button" title="Zoom in (+)" aria-label="Zoom in"><svg viewBox="0 0 24 24" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M10 5h4v5h5v4h-5v5h-4v-5H5v-4h5z"/></svg></button>
+      <span class="tool-divider"></span>
+      <button id="camera-preview" title="Look through the match camera: real parallax, fog and zoom range (C)" aria-pressed="false">Game camera</button>
+      <label class="snap-label">Snap <select id="grid" aria-label="Snap grid"><option value="8">8 px</option><option value="16" selected>16 px</option><option value="32">32 px</option><option value="64">64 px</option><option value="0">Off</option></select></label>
+      <span class="tool-divider"></span>
+      <button id="shortcuts" class="icon-button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+    </div>
+    <div id="canvas-hint" hidden><span>Shift-click to multi-select · Drag empty space to box-select · Space + drag or right-drag to pan · Scroll to zoom</span><button id="hint-close" type="button" aria-label="Dismiss hint">×</button></div>
+  </main>
+  <aside class="inspector">
+    <nav role="tablist"><button data-tab="selection" class="active">Inspector</button><button data-tab="world">World</button><button data-tab="scenery">Scenery</button><button data-tab="assets">Assets</button></nav>
+    <div id="inspector-content"></div>
+  </aside>
+  <footer><span id="status" role="status" aria-live="polite">Opening map…</span><span class="footer-keys"><kbd>⌘Z</kbd> undo <kbd>D</kbd> duplicate <kbd>Del</kbd> remove <kbd>Esc</kbd> playtest <kbd>?</kbd> all shortcuts</span></footer>
+</div>
+<dialog id="dialog"><form method="dialog"><header><h2 id="dialog-title"></h2><button value="cancel" class="dialog-close" aria-label="Close">×</button></header><div id="dialog-content"></div><div class="dialog-actions"><button id="dialog-cancel" value="cancel">Cancel</button><button id="dialog-apply" value="default" class="primary">Apply</button></div></form></dialog>
+<script src="/bundles/mapEditor.bundle.js"></script>
+</body>
+</html>
