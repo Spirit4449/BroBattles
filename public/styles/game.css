@@ -1304,6 +1304,17 @@
       }
       /* The last coin change, flashed next to the label so a gain or a loss is
          readable without watching the number tick. */
+      .bank-bust-vault-label {
+        overflow: hidden;
+        min-width: 0;
+        font-family: var(--bb-font-display);
+        font-size: 8px;
+        font-weight: 400;
+        text-transform: uppercase;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-shadow: 2px 2px 0 var(--bb-ink);
+      }
       .bank-bust-vault-delta {
         font-family: var(--bb-font-display);
         font-size: 9px;
@@ -1355,21 +1366,15 @@
         border-radius: inherit;
         transition: width 220ms ease;
       }
-      /* Where spending stops. A team can buy down to this mark and no further,
-         so it is drawn on the same bar rather than given a bar of its own. */
-      .bank-bust-vault-floor {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 2px;
-        background: rgba(255, 255, 255, 0.55);
-        pointer-events: none;
+      /* Slot colours for spectators; a player always sees their own vault
+         blue and the other red, whichever slot they are in. */
+      #bank-bust-team1 .bank-bust-vault-fill,
+      #bank-bust-hud .bank-bust-vault.friendly .bank-bust-vault-fill {
+        background: var(--bb-bar-chroma), linear-gradient(90deg, #60a5fa, #93c5fd);
       }
-      #bank-bust-team1 .bank-bust-vault-fill {
-        background: linear-gradient(90deg, #60a5fa, #93c5fd);
-      }
-      #bank-bust-team2 .bank-bust-vault-fill {
-        background: linear-gradient(90deg, #f87171, #fca5a5);
+      #bank-bust-team2 .bank-bust-vault-fill,
+      #bank-bust-hud .bank-bust-vault.enemy .bank-bust-vault-fill {
+        background: var(--bb-bar-chroma), linear-gradient(90deg, #f87171, #fca5a5);
       }
       /* Vault running out of coins: the bar pulses rather than adding a
          second warning element to the HUD. */
@@ -1431,6 +1436,9 @@
       }
       #bank-bust-event .bb-event-timer {
         color: var(--bb-text);
+      }
+      #bank-bust-event .bb-event-timer:empty {
+        display: none;
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -1668,6 +1676,108 @@
       @media (prefers-reduced-motion: reduce) {
         .game-status-banner, #spectate-hud, .spectate-arrow {
           transition-duration: 0.01ms;
+        }
+      }
+
+      /* Local death pause: red edge flash and a compact killer card. */
+      #death-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        pointer-events: none;
+        transition: opacity 360ms ease;
+      }
+      #death-screen.hidden {
+        display: none;
+      }
+      #death-screen.is-ending {
+        opacity: 0;
+      }
+      .death-screen-flash {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(214, 74, 74, 0) 55%,
+          rgba(169, 40, 51, 0.38) 82%,
+          rgba(110, 12, 22, 0.7) 100%
+        );
+        opacity: 0.45;
+      }
+      #death-screen.show .death-screen-flash {
+        animation: death-screen-flash 650ms ease-out;
+      }
+      .death-screen-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        margin-top: var(--death-screen-top, 96px);
+        text-align: center;
+      }
+      .death-screen-title {
+        margin: 0;
+        color: #fff1ee;
+        font-family: var(--bb-font-display);
+        font-size: clamp(16px, 2.6vw, 24px);
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        text-shadow: 3px 3px 0 var(--bb-ink), 0 0 14px rgba(214, 74, 74, 0.6);
+      }
+      #death-screen.show .death-screen-title {
+        animation: death-screen-title 420ms var(--bb-ease) both;
+      }
+      .death-screen-killer {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        margin: 0;
+        padding: 5px 12px 4px;
+        background: rgba(20, 8, 12, 0.78);
+        border: 2px solid var(--bb-red);
+        box-shadow: 3px 3px 0 var(--bb-ink);
+        color: var(--bb-text);
+        font-family: var(--bb-font-display);
+        text-transform: uppercase;
+        animation: death-screen-killer 320ms 180ms var(--bb-ease) both;
+      }
+      .death-screen-killer.hidden {
+        display: none;
+      }
+      .death-screen-killer-label {
+        font-size: 9px;
+        letter-spacing: 1px;
+        opacity: 0.75;
+      }
+      #death-screen-killer-name {
+        font-size: 11px;
+        letter-spacing: 1px;
+        color: #ffd4de;
+        text-shadow: 2px 2px 0 var(--bb-ink);
+      }
+      @keyframes death-screen-flash {
+        0% { opacity: 0; }
+        12% { opacity: 1; }
+        100% { opacity: 0.45; }
+      }
+      @keyframes death-screen-title {
+        from { opacity: 0; transform: scale(1.2); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      @keyframes death-screen-killer {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #death-screen.show .death-screen-flash,
+        #death-screen.show .death-screen-title,
+        .death-screen-killer {
+          animation: none;
         }
       }
 

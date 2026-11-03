@@ -92,7 +92,7 @@ test('walking off the spawn platform re-arms the next landing', () => {
 });
 
 
-test('Bank Bust preloads isolated metal footsteps and preserves other movement cues', () => {
+test('Bank Bust preloads isolated metal footsteps and landings and preserves other movement cues', () => {
   const registry = require('../src/shared/physics/movementSounds');
   const api = {};
   const source = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/modes/bankBust/preloadAssets.js'), 'utf8'), {
@@ -103,6 +103,7 @@ test('Bank Bust preloads isolated metal footsteps and preserves other movement c
   const loads = new Map();
   const scene = { load: { image() {}, spritesheet() {}, audio(key, url) { loads.set(key, url); } } };
   api.preloadBankBustAssets(scene, '/assets');
+  assert.ok(registry.bankBustMovementSounds[terrainLandingSound('hard', 1).key], 'Bank Bust overrides terrain landing');
   for (const key of Object.keys(registry.bankBustMovementSounds)) {
     const selected = registry.movementSoundKey(scene, key);
     assert.notEqual(selected, key);
@@ -112,7 +113,15 @@ test('Bank Bust preloads isolated metal footsteps and preserves other movement c
     assert.equal(file.toString('ascii', 8, 12), 'WAVE');
     assert.ok(file.length > 44);
   }
-  for (const key of ['sfx-jump', 'sfx-walljump', 'sfx-dash', 'sfx-stomp', 'sfx-sliding', 'sfx-fall-air', 'sfx-duck-transition', 'sfx-duck-block', 'sfx-hard-land', 'sfx-damage']) {
+  for (const key of ['sfx-jump', 'sfx-walljump', 'sfx-dash', 'sfx-stomp', 'sfx-sliding', 'sfx-fall-air', 'sfx-duck-transition', 'sfx-duck-block', 'sfx-damage']) {
     assert.equal(registry.movementSoundKey(scene, key), key);
   }
+});
+
+
+test('Bank Bust landing has extra gain without changing other modes or exceeding full volume', () => {
+  const bank = { _bankBustMovementAudio: true };
+  assert.ok(terrainLandingSound('hard', 0.3, bank).volume > terrainLandingSound('hard', 0.3, {}).volume);
+  assert.equal(terrainLandingSound('hard', 1, bank).volume, 1);
+  assert.equal(terrainLandingSound('hard', 0.3, {}).volume, terrainLandingSound('hard', 0.3).volume);
 });

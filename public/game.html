@@ -83,6 +83,17 @@
       </button>
     </aside>
 
+    <div id="death-screen" class="hidden" aria-hidden="true">
+      <div class="death-screen-flash"></div>
+      <div class="death-screen-card" role="status" aria-live="assertive">
+        <h2 class="death-screen-title">You Died</h2>
+        <p id="death-screen-killer" class="death-screen-killer hidden">
+          <span class="death-screen-killer-label">Eliminated by</span>
+          <strong id="death-screen-killer-name"></strong>
+        </p>
+      </div>
+    </div>
+
     <div
       id="game-notice-overlay"
       class="game-notice-overlay hidden"
@@ -219,11 +230,10 @@
             <span class="bank-bust-vault-delta" aria-hidden="true"></span>
           </div>
           <div class="bank-bust-vault-bar-row">
-            <img class="bank-bust-coin-icon" src="/assets/icons/coin.webp" width="16" height="16" alt="" />
             <div class="bank-bust-vault-bar">
               <div class="bank-bust-vault-fill"></div>
-              <div class="bank-bust-vault-floor" aria-hidden="true"></div>
             </div>
+            <img class="bank-bust-coin-icon" src="/assets/icons/coin.webp" width="16" height="16" alt="" />
             <strong class="bank-bust-vault-coins">0</strong>
           </div>
         </div>
@@ -233,11 +243,10 @@
             <span class="bank-bust-vault-delta" aria-hidden="true"></span>
           </div>
           <div class="bank-bust-vault-bar-row">
-            <img class="bank-bust-coin-icon" src="/assets/icons/coin.webp" width="16" height="16" alt="" />
             <div class="bank-bust-vault-bar">
               <div class="bank-bust-vault-fill"></div>
-              <div class="bank-bust-vault-floor" aria-hidden="true"></div>
             </div>
+            <img class="bank-bust-coin-icon" src="/assets/icons/coin.webp" width="16" height="16" alt="" />
             <strong class="bank-bust-vault-coins">0</strong>
           </div>
         </div>

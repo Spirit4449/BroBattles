@@ -108,7 +108,7 @@ export function createRemoteMovementAudio(scene, sprite) {
       const distance = Number(state.movementFxFallDistance) || Math.max(0, y - previous.peak);
       const strength = (clamp(impact / MOVEMENT_VFX_CONFIG.landingMaxVelocity) * 0.65 +
         clamp(distance / (MOVEMENT_VFX_CONFIG.landingShockwaveMinFallPx * 2)) * 0.35) ** 2;
-      const sound = terrainLandingSound(scene._terrainType, 0.28 + strength * 0.5);
+      const sound = terrainLandingSound(scene._terrainType, 0.28 + strength * 0.5, scene);
       play(sound.key, { volume: sound.volume, rate: 0.93 - strength * 0.02 });
     }
     if (walking && (event === 'turn' || !previous?.walking || time - lastStep >= 285 - 135 * speed)) {

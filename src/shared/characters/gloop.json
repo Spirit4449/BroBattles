@@ -44,7 +44,7 @@
           "maxThrowRange": 400,
           "launchSpeedMultiplier": 0.98,
           "maxLaunchSpeed": 323.4,
-          "maxUpwardSpeed": 270,
+          "maxUpwardSpeed": 300,
           "speed": 382.2,
           "range": 900,
           "collisionRadius": 18,

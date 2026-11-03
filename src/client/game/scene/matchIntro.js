@@ -47,9 +47,11 @@ const prefersReducedMotion = () =>
  * @param {() => object|null} deps.getScene
  * @param {() => object|null} deps.getPlayer local player sprite
  * @param {() => object[]} deps.getEnemySprites
+ * @param {() => ({enemy:{x:number,y:number},own:{x:number,y:number}}|null)} [deps.getTour]
+ *   bases to tour between instead of the default shot (Bank Bust's vaults)
  * @param {(active: boolean) => void} deps.onActiveChange
  */
-export function createMatchIntro({ getScene, getPlayer, getEnemySprites, onActiveChange }) {
+export function createMatchIntro({ getScene, getPlayer, getEnemySprites, getTour, onActiveChange }) {
   // Start downloading before the loading screen lifts.
   const audio = typeof Audio === "function" ? new Audio(PREGAME_AUDIO_SRC) : null;
   if (audio) audio.preload = "auto";
@@ -98,7 +100,7 @@ export function createMatchIntro({ getScene, getPlayer, getEnemySprites, onActiv
     const view = { width: cam.width, height: cam.height };
     const final = restFraming(player, bounds, view);
     const enemies = (getEnemySprites?.() || []).map(spritePosition).filter(Boolean);
-    const plan = planFlythrough({ bounds, view, enemy: centroid(enemies), final });
+    const plan = planFlythrough({ bounds, view, enemy: centroid(enemies), final, tour: getTour?.() || null });
     cam.stopFollow();
     return { plan, bounds, view, startedAt: performance.now() };
   }

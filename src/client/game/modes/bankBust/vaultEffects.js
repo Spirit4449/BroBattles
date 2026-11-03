@@ -12,8 +12,9 @@ const RAY_TEXTURE = "bb-vault-fx-ray";
 const TWINKLE_TEXTURE = "bb-vault-fx-twinkle";
 
 // Where the round door sits in the 216x224 vault artwork, as fractions of the
-// frame so it follows whatever size the map gives the vault.
-const DOOR = { x: 109 / 216, y: 114 / 224, radius: 80 / 216, wheelRadius: 41 / 216 };
+// frame so it follows whatever size the map gives the vault. The centre is
+// VAULT_DOOR_Y in scripts/art/bake-iron-junction.cjs; move both together.
+const DOOR = { x: 109 / 216, y: 106 / 224, radius: 80 / 216, wheelRadius: 41 / 216 };
 
 const GOLD = 0xffd264;
 const HOT = 0xfff3c4;
@@ -40,12 +41,28 @@ const POP_NUMBER_RISE_PX = 54;
 const POP_NUMBER_MERGE_MS = 160;
 
 const BUST_WINDUP_MS = 220;
+
+// A standing vault starts smoking once it has lost this share of its coins,
+// and the smoke thickens from there until it is about to break.
+const SMOKE_START_WEAR = 0.2;
+const SMOKE_SLOWEST_MS = 900;
+const SMOKE_FASTEST_MS = 110;
 const BUST_BLAST_COINS = 80;
 const BUST_GUSH_MS = 2800;
 const BUST_GUSH_INTERVAL_MS = 40;
 
 function between(min, max) {
   return min + Math.random() * (max - min);
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function mixColour(from, to, t) {
+  const channel = (shift) =>
+    Math.round(lerp((from >> shift) & 0xff, (to >> shift) & 0xff, t)) << shift;
+  return channel(16) | channel(8) | channel(0);
 }
 
 function pick(list) {
@@ -152,6 +169,7 @@ export function createVaultEffects({
         busted: false,
         doorPiece: null,
         nextAmbientAt: 0,
+        nextSmokeAt: 0,
         nextCoinDripAt: 0,
       };
       vaults.set(team, vault);
@@ -781,33 +799,56 @@ export function createVaultEffects({
   }
 
   // Smoke, sparks and glints that say how the vault is doing at a glance. They
-  // only run for vaults on camera: nobody sees the rest.
-  function ambient(vault, vaultFx, { low, stateKey }) {
+  // only run for vaults on camera: nobody sees the rest. The smoke is the
+  // health reading: it gets thicker, darker and faster as the coins run out.
+  function ambient(vault, vaultFx, { low, stateKey, health }) {
     if (reducedMotion) return;
     const door = doorPoint(vault);
     if (!onCamera(door.x, door.y)) return;
     const time = now();
-    if (time >= vaultFx.nextAmbientAt) {
-      if (stateKey === "breached") {
+    if (stateKey === "breached") {
+      if (time >= vaultFx.nextAmbientAt) {
         vaultFx.nextAmbientAt = time + 170;
         smoke(door.x + between(-34, 34), door.y + between(-16, 34), { scale: between(1.1, 1.9), rise: 190, alpha: 0.42, life: 1500 });
         if (Math.random() < 0.5) sparks(door.x + between(-30, 30), door.y + 30, 2, { speed: [80, 220], colors: [0xfb923c, GOLD] });
-      } else if (stateKey === "damaged") {
-        vaultFx.nextAmbientAt = time + (low ? 170 : 340);
-        const angle = Math.random() * Math.PI * 2;
-        const x = door.x + Math.cos(angle) * door.radius * 0.8;
-        const y = door.y + Math.sin(angle) * door.radius * 0.8;
-        smoke(x, y, { scale: low ? 1.1 : 0.8, rise: 110, alpha: low ? 0.46 : 0.32 });
-        if (Math.random() < (low ? 0.65 : 0.3)) sparks(x, y, low ? 6 : 3, { speed: [120, 320], colors: [0xbfdbfe, HOT] });
+      }
+      return;
+    }
+    if (time >= vaultFx.nextAmbientAt) {
+      const angle = Math.random() * Math.PI * 2;
+      if (stateKey === "damaged") {
+        vaultFx.nextAmbientAt = time + (low ? 260 : 520);
+        sparks(
+          door.x + Math.cos(angle) * door.radius * 0.8,
+          door.y + Math.sin(angle) * door.radius * 0.8,
+          low ? 4 : 2,
+          { speed: [120, 320], colors: [0xbfdbfe, HOT] },
+        );
       } else {
         vaultFx.nextAmbientAt = time + between(1400, 3000);
-        const angle = Math.random() * Math.PI * 2;
         twinkle(
           door.x + Math.cos(angle) * door.radius * between(0.45, 1),
           door.y + Math.sin(angle) * door.radius * between(0.45, 1),
           between(0.9, 1.5),
         );
       }
+    }
+    const wear = 1 - Math.max(0, Math.min(1, health));
+    if (wear > SMOKE_START_WEAR && time >= vaultFx.nextSmokeAt) {
+      const thick = (wear - SMOKE_START_WEAR) / (1 - SMOKE_START_WEAR);
+      vaultFx.nextSmokeAt = time + lerp(SMOKE_SLOWEST_MS, SMOKE_FASTEST_MS, thick) * between(0.8, 1.2);
+      const angle = Math.random() * Math.PI * 2;
+      smoke(
+        door.x + Math.cos(angle) * door.radius * 0.8,
+        door.y + Math.sin(angle) * door.radius * 0.8 - thick * 10,
+        {
+          scale: lerp(0.6, 1.8, thick),
+          rise: lerp(80, 200, thick),
+          alpha: lerp(0.2, 0.5, thick),
+          tint: mixColour(0x9ca3af, 0x1f2937, thick),
+          life: lerp(800, 1500, thick),
+        },
+      );
     }
     // Nearly empty, it can no longer hold on to what is left.
     if (low && stateKey !== "breached" && time >= vaultFx.nextCoinDripAt) {
@@ -850,13 +891,13 @@ export function createVaultEffects({
    * How the vault should be drawn this frame. Called once per vault per frame,
    * after tick(), and it also moves the wheel and runs the ambient effects.
    */
-  function pose(team, vault, { low = false, stateKey = "intact" } = {}) {
+  function pose(team, vault, { low = false, health = 1, stateKey = "intact" } = {}) {
     const vaultFx = vaultState(team);
     const time = now();
     const windingUp = time < vaultFx.windupUntil;
 
     if (reducedMotion) {
-      const still = { x: vault.x, y: vault.y, spriteY: vault.y, scaleX: 1, scaleY: 1, flash: false, hot: false, bloom: 0, alarm: 0, labelScale: 1 };
+      const still = { x: vault.x, y: vault.y, spriteY: vault.y, scaleX: 1, scaleY: 1, flash: false, hot: false, bloom: 0, labelScale: 1 };
       syncWheel(vaultFx, vault, still, stateKey);
       return still;
     }
@@ -872,15 +913,10 @@ export function createVaultEffects({
     if (vaultFx.shake < 0.05) vaultFx.shake = 0;
     vaultFx.bloom *= Math.exp(-delta * (vaultFx.busted ? 1.1 : 3.4));
 
-    // Coasts back to a slow idle turn, or rattles when nearly empty.
+    // Coasts back to a slow idle turn, and stops turning when nearly empty.
     const idleSpeed = stateKey === "intact" ? 0.35 : low ? 0 : 0.14;
     vaultFx.wheelSpeed += (idleSpeed - vaultFx.wheelSpeed) * Math.min(1, delta * 3.2);
     vaultFx.wheelAngle += vaultFx.wheelSpeed * delta;
-    let wheelRattle = 0;
-    if (low && stateKey !== "breached") {
-      wheelRattle = Math.sin(time / 42) * 0.05;
-      shake = Math.max(shake, 0.9 + 0.7 * Math.max(0, Math.sin(time / 300)));
-    }
 
     let squash = vaultFx.squash;
     let flashing = time < vaultFx.flashUntil;
@@ -900,8 +936,6 @@ export function createVaultEffects({
     const y = vault.y + offsetY;
     // Squash from the plinth, so the vault stays standing on the floor.
     const spriteY = y + (vault.height * (1 - scaleY)) / 2;
-    const alarm =
-      low && stateKey !== "breached" ? (Math.sin(time / 130) > 0 ? 1 : 0) : 0;
 
     const result = {
       x,
@@ -912,14 +946,10 @@ export function createVaultEffects({
       flash: flashing,
       hot: flashing || shake > 4,
       bloom: vaultFx.bloom,
-      alarm,
       labelScale: 1 + Math.min(0.5, vaultFx.shake * 0.03),
     };
-    const wheelAngle = vaultFx.wheelAngle;
-    vaultFx.wheelAngle = wheelAngle + wheelRattle;
     syncWheel(vaultFx, vault, result, stateKey);
-    vaultFx.wheelAngle = wheelAngle;
-    ambient(vault, vaultFx, { low, stateKey });
+    ambient(vault, vaultFx, { low, stateKey, health });
     return result;
   }
 

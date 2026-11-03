@@ -1,11 +1,13 @@
 import { RENDER_LAYERS } from "../../scene/renderLayers";
-import { setStaticShotTargets } from "../../characters/shared/shotPrediction";
+import { setShotBlockers, setStaticShotTargets } from "../../characters/shared/shotPrediction";
 import PROP_FRAMES from "./propFrames.json";
 import { createDeathLootEffects } from "../../powerups/deathLootEffects";
 import { createCoinFx } from "./coinFx";
 import {
   COIN_FRAME_SCALE,
+  COIN_FRAME_SIZE,
   coinSpinFrame,
+  crateShake,
   crateStage,
   createCrateSpring,
   kickCrate,
@@ -42,13 +44,14 @@ function createPromptHost() {
       #bank-bust-interact-prompt{position:fixed;left:0;top:0;transform:translate(-50%,-100%);display:none;align-items:center;gap:10px;z-index:100000;background:var(--bb-hud-bg);padding:8px 14px;color:var(--bb-text);font:10px/1 var(--bb-font-display);text-transform:uppercase;text-shadow:2px 2px 0 var(--bb-ink);box-shadow:var(--bb-hud-frame);white-space:nowrap;will-change:left,top}
       #bank-bust-interact-prompt.open{display:flex}
       #bank-bust-interact-prompt .bb-key{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 4px;background:var(--bb-text);color:var(--bb-ink);text-shadow:none;box-shadow:inset -2px -2px 0 rgba(0,0,0,.35)}
+      #bank-bust-interact-prompt .bb-lines{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
       #bank-bust-interact-prompt .bb-act{letter-spacing:.06em}
       #bank-bust-interact-prompt .bb-cost{display:inline-flex;align-items:center;gap:5px;color:#ffd264}
-      #bank-bust-interact-prompt .bb-coin{width:10px;height:10px;border-radius:50%;background:#ffd264;box-shadow:inset -2px -2px 0 rgba(0,0,0,.35)}
+      #bank-bust-interact-prompt .bb-coin{width:12px;height:12px;background:url(/assets/icons/coin.webp) center/contain no-repeat;image-rendering:pixelated}
       /* Affordable but blocked by the vault's spend floor: the price turns red
          and the key cap goes away, because pressing it would do nothing. */
       #bank-bust-interact-prompt.blocked .bb-cost{color:#ff8e8e}
-      #bank-bust-interact-prompt.blocked .bb-coin{background:#ff8e8e}
+      #bank-bust-interact-prompt.blocked .bb-coin{filter:grayscale(.6) brightness(.9)}
     </style>
     <div id="bank-bust-interact-prompt"></div>
   `;
@@ -234,7 +237,8 @@ export function createBankBustRuntime({
   // `prompt` is { key?, action, cost?, blocked? } or null.
   /** The texture for a prop owned by `team`, falling back to the neutral one. */
   function teamTexture(base, team) {
-    const key = `${base}-${team === "team1" || team === "team2" ? team : "neutral"}`;
+    const shown = colourTeam(team);
+    const key = `${base}-${shown === "team1" || shown === "team2" ? shown : "neutral"}`;
     return scene.textures?.exists?.(key) ? key : `${base}-neutral`;
   }
 
@@ -289,14 +293,18 @@ export function createBankBustRuntime({
     const action = document.createElement("span");
     action.className = "bb-act";
     action.textContent = prompt.action;
-    parts.push(action);
+    // Name over price, so the cap on the left reads as the key for both.
+    const lines = document.createElement("span");
+    lines.className = "bb-lines";
+    lines.append(action);
+    parts.push(lines);
     if (Number.isFinite(prompt.cost)) {
       const cost = document.createElement("span");
       cost.className = "bb-cost";
       const coin = document.createElement("span");
       coin.className = "bb-coin";
       cost.append(coin, document.createTextNode(formatCoins(prompt.cost)));
-      parts.push(cost);
+      lines.append(cost);
     }
     node.replaceChildren(...parts);
   }
@@ -320,6 +328,17 @@ export function createBankBustRuntime({
 
   function getLocalTeam() {
     return getGameData?.()?.yourTeam || currentLocalPlayer()?.team || null;
+  }
+
+  // Your own team always reads blue and the other team red, whichever slot
+  // the server put you in. The artwork and tints are keyed by slot (team1 is
+  // blue), so this swaps the slot used for colour only. Spectators, who have
+  // no team, see the slots as they are.
+  function colourTeam(team) {
+    if (team !== "team1" && team !== "team2") return team;
+    const local = getLocalTeam();
+    if (local !== "team1" && local !== "team2") return team;
+    return team === local ? "team1" : "team2";
   }
 
   function getModeObjectState(modeState, id) {
@@ -446,6 +465,49 @@ export function createBankBustRuntime({
     return glow;
   }
 
+  // The HUD bars wear the lobby chroma mosaic; this draws the same muted
+  // squares over a world-space fill. Cells are hashed from their position on
+  // the bar, so the pattern holds still as the fill drains.
+  const BAR_CHROMA = [0x548cb1, 0x7779af, 0xaa5555, 0x468e91, 0x986f88, 0xb79b48];
+  const BAR_CHROMA_CELL = 3;
+  function drawBarChroma(x, y, width, height) {
+    for (let col = 0; col * BAR_CHROMA_CELL < width; col++) {
+      for (let row = 0; row * BAR_CHROMA_CELL < height; row++) {
+        const hash = ((col * 73856093) ^ (row * 19349663)) >>> 0;
+        if (hash % 7 > 2) continue;
+        uiGraphics.fillStyle(BAR_CHROMA[hash % BAR_CHROMA.length], 0.14 + (hash % 3) * 0.06);
+        uiGraphics.fillRect(
+          x + col * BAR_CHROMA_CELL,
+          y + row * BAR_CHROMA_CELL,
+          Math.min(BAR_CHROMA_CELL, width - col * BAR_CHROMA_CELL),
+          Math.min(BAR_CHROMA_CELL, height - row * BAR_CHROMA_CELL),
+        );
+      }
+    }
+  }
+
+  // A coin beside a count: the label shifts right so the pair stays centred
+  // on (cx, cy). The icon lives wherever its label does.
+  function ensureCoinIcon(label, parent = null) {
+    if (label._coinIcon?.scene) return label._coinIcon;
+    const icon = scene.add.image(0, 0, "coin-spin", 0);
+    icon.setDepth(label.depth);
+    if (parent) parent.add(icon);
+    label._coinIcon = icon;
+    return icon;
+  }
+
+  function placeCoinLabel(label, icon, cx, cy, size) {
+    const iconSize = size;
+    const gap = Math.max(2, Math.round(size / 4));
+    const scale = Math.max(0.01, Math.abs(label.scaleX) || 1);
+    const labelW = label.width * scale;
+    const total = iconSize + gap + labelW;
+    icon.setScale(iconSize / COIN_FRAME_SIZE);
+    icon.setPosition(cx - total / 2 + iconSize / 2, cy);
+    label.setPosition(cx + (iconSize + gap) / 2, cy);
+  }
+
   // The coins-in-vault number, drawn over each vault in the world.
   function ensureVaultCoinLabel(team) {
     let label = vaultCoinLabels.get(team) || null;
@@ -500,7 +562,9 @@ export function createBankBustRuntime({
       glow?.core?.setVisible?.(false);
     }
     for (const [team, label] of vaultCoinLabels.entries()) {
-      if (!usedTeams.has(team)) label?.setVisible?.(false);
+      if (usedTeams.has(team)) continue;
+      label?.setVisible?.(false);
+      label?._coinIcon?.setVisible?.(false);
     }
   }
 
@@ -904,7 +968,7 @@ export function createBankBustRuntime({
       }
 
       const low = ratio <= lowRatio;
-      const pose = vaultFx.pose(team, { x, y, width, height }, { low, stateKey });
+      const pose = vaultFx.pose(team, { x, y, width, height }, { low, health: ratio, stateKey });
       const drawX = pose.x;
       const drawY = pose.y;
 
@@ -918,11 +982,10 @@ export function createBankBustRuntime({
         entry.body.clearTint();
         if (pose.flash) entry.body.setTintFill(0xffffff);
         else if (stateKey === "breached") entry.body.setTint(0x8b93a4);
-        else if (pose.alarm) entry.body.setTint(0xffb3a6);
         if (entry.accent) {
           // The accent mask is white, so tinting it gives an exact team
           // colour. It dims as the vault empties and flashes while it is hit.
-          entry.accent.setTint(pose.hot ? 0xffffff : TEAM_TINT[team] || 0xffffff);
+          entry.accent.setTint(pose.hot ? 0xffffff : TEAM_TINT[colourTeam(team)] || 0xffffff);
           entry.accent.setAlpha(coins <= 0 ? 0.25 : 0.55 + 0.45 * ratio);
         }
       }
@@ -933,8 +996,8 @@ export function createBankBustRuntime({
       if (glow) {
         const breathe = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(scene.time.now / 900);
         const alive = coins > 0 ? 1 : 0.25;
-        const haloColour = pose.bloom > 0.15 ? 0xffb347 : pose.alarm ? 0xff3b30 : coins > 0 ? 0xffb347 : 0x64748b;
-        const haloAlpha = pose.alarm ? 0.26 : (0.1 + 0.07 * breathe) * alive;
+        const haloColour = pose.bloom > 0.15 ? 0xffb347 : coins > 0 ? 0xffb347 : 0x64748b;
+        const haloAlpha = (0.1 + 0.07 * breathe) * alive;
         const haloSize = 2 * (width * (1 + 0.7 * pose.bloom) + 18 * breathe);
         glow.halo.setPosition(drawX, drawY);
         glow.halo.setDisplaySize(haloSize, haloSize);
@@ -944,7 +1007,7 @@ export function createBankBustRuntime({
         const coreSize = 2 * (width * 0.62 + 8 * breathe);
         glow.core.setPosition(drawX, drawY);
         glow.core.setDisplaySize(coreSize, coreSize);
-        glow.core.setTint(TEAM_TINT_SOFT[team] || 0xffd264);
+        glow.core.setTint(TEAM_TINT_SOFT[colourTeam(team)] || 0xffd264);
         glow.core.setAlpha(1.6 * (0.1 + 0.08 * breathe) * alive);
         glow.core.setVisible(true);
       }
@@ -955,7 +1018,7 @@ export function createBankBustRuntime({
       if (coins > 0) {
         const hitLeft = drawX - width / 2;
         const hitTop = drawY - height / 2;
-        const outlineTint = TEAM_TINT[team] || 0xffffff;
+        const outlineTint = TEAM_TINT[colourTeam(team)] || 0xffffff;
         uiGraphics.lineStyle(3, pose.hot ? 0xfff1b8 : outlineTint, pose.hot ? 1 : 0.7);
         uiGraphics.strokeRect(hitLeft, hitTop, width, height);
         // Corner ticks, so the rectangle still reads as a target and not as a
@@ -995,29 +1058,16 @@ export function createBankBustRuntime({
       state.vaultBarGhost.set(team, ghostRatio);
       uiGraphics.fillStyle(0xffffff, 0.85);
       uiGraphics.fillRect(barX, barY, barWidth * ghostRatio, barHeight);
-      const flashOn =
-        low && !reducedMotion && Math.sin(scene.time.now / 160) > 0;
-      uiGraphics.fillStyle(
-        flashOn ? 0xfff1b8 : TEAM_TINT_SOFT[team] || 0xffffff,
-        1,
-      );
+      uiGraphics.fillStyle(TEAM_TINT_SOFT[colourTeam(team)] || 0xffffff, 1);
       uiGraphics.fillRect(barX, barY, Math.max(0, barWidth * ratio), barHeight);
-      // Where spending has to stop, marked on the same bar.
-      const floorCoins = Math.max(0, Number(modeState?.purchaseFloorCoins) || 0);
-      if (floorCoins > 0 && floorCoins < startingCoins) {
-        uiGraphics.fillStyle(0xffffff, 0.6);
-        uiGraphics.fillRect(
-          barX + barWidth * (floorCoins / startingCoins),
-          barY,
-          2,
-          barHeight,
-        );
-      }
+      drawBarChroma(barX, barY, Math.max(0, barWidth * ratio), barHeight);
       const coinLabel = ensureVaultCoinLabel(team);
       coinLabel.setText(formatCoins(coins));
-      coinLabel.setPosition(drawX, barY - 14);
       coinLabel.setScale(pose.labelScale);
+      const coinIcon = ensureCoinIcon(coinLabel);
+      placeCoinLabel(coinLabel, coinIcon, drawX, barY - 14, 16 * pose.labelScale);
       coinLabel.setVisible(true);
+      coinIcon.setVisible(true);
     }
     hideUnusedVaults(usedVaults);
     const site = modeState?.centerGold;
@@ -1051,6 +1101,7 @@ export function createBankBustRuntime({
       container.y = Number(entry.y) || 0;
       const label = container._label;
       label.setPosition(0, 0);
+      label._coinIcon?.setVisible(false);
       if (entry.type === "goldMine") {
         const owner = state.mineOwnerById.get(entry.id) || null;
         // One texture per owner rather than a tint over the whole sprite: a
@@ -1075,15 +1126,20 @@ export function createBankBustRuntime({
         const full = stored >= Math.max(1, Number(runtime?.state?.maxStoredGold) || Infinity);
         label.setText(formatCoins(stored));
         label.setFontFamily("'Press Start 2P', monospace");
-        label.setFontSize(10);
+        label.setFontSize(8);
         label.setFontStyle("normal");
         label.setStroke("#000000", 0);
         label.setColor(full ? "#fff3b0" : stored > 0 ? "#ffd264" : "#8a6a34");
         label.setAlign("center");
         label.setResolution(3);
-        label.setPosition(
+        const mineIcon = ensureCoinIcon(label, container);
+        mineIcon.setVisible(true);
+        placeCoinLabel(
+          label,
+          mineIcon,
           (mineFrames.plateX - 0.5) * mineFrames.frameWidth,
           (mineFrames.plateY - 0.5) * mineFrames.frameHeight,
+          9,
         );
       } else if (entry.type === "claimableTurret") {
         const ownerTeam = runtime?.state?.claimedByTeam || null;
@@ -1106,6 +1162,32 @@ export function createBankBustRuntime({
           gunFrames,
           RENDER_LAYERS.GAME_OBJECTS + 1,
         );
+        if (ownerTeam) {
+          // Claimed turrets glow in their team's colour so owners read at a
+          // glance: soft stacked halos, then a crisp outline on the mount.
+          const glowTint = TEAM_TINT[colourTeam(ownerTeam)] || 0xffffff;
+          const pulse = 0.85 + 0.15 * Math.sin(performance.now() / 280);
+          const gx = container.x;
+          const gy = container.y + TURRET_RENDER_Y_OFFSET;
+          for (let i = 4; i >= 1; i -= 1) {
+            objectGraphics.fillStyle(glowTint, 0.07 * pulse * (5 - i));
+            objectGraphics.fillRoundedRect(
+              gx - mountFrames.frameWidth / 2 - i * 4,
+              gy - mountFrames.frameHeight / 2 - i * 4,
+              mountFrames.frameWidth + i * 8,
+              mountFrames.frameHeight + i * 8,
+              8 + i * 3,
+            );
+          }
+          objectGraphics.lineStyle(3, glowTint, 0.95);
+          objectGraphics.strokeRoundedRect(
+            gx - mountFrames.frameWidth / 2,
+            gy - mountFrames.frameHeight / 2,
+            mountFrames.frameWidth,
+            mountFrames.frameHeight,
+            8,
+          );
+        }
         if (turretBase) {
           turretBase.setVisible(true);
           turretBase.setPosition(
@@ -1147,7 +1229,7 @@ export function createBankBustRuntime({
         if (builtByTeam === "team1" || builtByTeam === "team2") {
           objectGraphics.lineStyle(
             3,
-            builtByTeam === "team1" ? 0x60a5fa : 0xf87171,
+            colourTeam(builtByTeam) === "team1" ? 0x60a5fa : 0xf87171,
             0.9,
           );
           objectGraphics.strokeRoundedRect(
@@ -1170,6 +1252,23 @@ export function createBankBustRuntime({
     cleanupUnused(turretHeadSprites, usedObjectIds);
 
     hideUnusedWallBodies(modeState);
+    publishShotBlockers(modeState);
+  }
+
+  // Built walls stop every shot from the other team, as on the server, so shot
+  // visuals end where the server's projectile does.
+  function publishShotBlockers(modeState) {
+    const localTeam = getLocalTeam();
+    const blockers = [];
+    for (const entry of Array.isArray(modeState?.objects) ? modeState.objects : []) {
+      const team = entry?.type === "wallSlot" ? entry.state?.builtByTeam : null;
+      if (team !== "team1" && team !== "team2") continue;
+      const halfW = (Number(entry.state.width) || 48) / 2;
+      const halfH = (Number(entry.state.height) || 96) / 2;
+      blockers.push({ friendly: !!localTeam && team === localTeam,
+        left: entry.x - halfW, right: entry.x + halfW, top: entry.y - halfH, bottom: entry.y + halfH });
+    }
+    setShotBlockers("bankBust", blockers);
   }
 
   function hideUnusedWallBodies(modeState) {
@@ -1333,7 +1432,7 @@ export function createBankBustRuntime({
   function ensureCrate() {
     if (crate?.body?.scene) return crate;
     if (!scene.textures?.exists?.("bank-bust-center-crate-intact")) return null;
-    // Pivoting on the base is what makes a blow rock it rather than spin it.
+    // Pivoting on the base keeps the squash and the jolt planted on the floor.
     const body = scene.add.image(-9999, -9999, "bank-bust-center-crate-intact");
     body.setOrigin(0.5, 1);
     body.setDepth(RENDER_LAYERS.GAME_OBJECTS + 1);
@@ -1406,7 +1505,7 @@ export function createBankBustRuntime({
     const face = x - side * 40;
     const topY = floor - height * 0.72;
     coinFx.debris(face, floor - height * 0.5, {
-      tint: 0x7a4a26, width: 7, height: 3, count: 5,
+      tint: 0x4a5a80, width: 7, height: 3, count: 5,
       speed: [140, 320], spread: 1.5,
       direction: side > 0 ? -Math.PI * 0.75 : -Math.PI * 0.25,
       floorY: floor, floorLeft: x - 120, floorRight: x + 120, life: [0.4, 0.7],
@@ -1422,7 +1521,7 @@ export function createBankBustRuntime({
     safePlaySfx("sfx-bankbust-turret-shoot", { volume: 0.05, rate: 0.6 });
   }
 
-  // The stage it just fell to: a plank goes flying and the pitch of the fight
+  // The stage it just fell to: a plate goes flying and the pitch of the fight
   // rises, so its condition reads without looking at the bar.
   function crackCrate(site) {
     const x = Number(site.x);
@@ -1458,7 +1557,7 @@ export function createBankBustRuntime({
     shockRing(x, midY, { radius: 260, color: 0xffd264, width: 6, duration: 520 });
     shockRing(x, midY, { radius: 150, color: 0xfff3c4, width: 3, duration: 360 });
     const floorRange = { floorY: floor - 8, floorLeft: x - 120, floorRight: x + 120 };
-    // The crate itself: its planks, its brackets and the padlock.
+    // The crate itself: its plates, straps, brackets and the dial.
     for (const [frame, count] of [[0, 2], [1, 3], [2, 4], [3, 1]]) {
       coinFx.debris(x, midY, {
         frame, count, speed: [260, 560], spread: Math.PI * 1.15,
@@ -1466,7 +1565,7 @@ export function createBankBustRuntime({
       });
     }
     coinFx.debris(x, midY, {
-      tint: 0x7a4a26, width: 8, height: 3, count: 18,
+      tint: 0x4a5a80, width: 8, height: 3, count: 18,
       speed: [200, 560], spread: Math.PI * 1.4, life: [0.5, 1], ...floorRange,
     });
     burstCoins(x, midY, {
@@ -1541,14 +1640,11 @@ export function createBankBustRuntime({
       if (t >= 1 || reducedMotion) landCrate(site);
       else lift = (1 - t * t) * CRATE_DROP_HEIGHT;
     }
-    const { rock, squash } = reducedMotion ? { rock: 0, squash: 0 } : entry.spring;
-    const halfWidth = entry.body.width / 2;
-    // Tipping about the base would push one corner through the floor, so the
-    // crate rides up onto that corner instead.
-    const ride = Math.abs(Math.sin(rock)) * halfWidth * 0.75;
+    const squash = reducedMotion ? 0 : entry.spring.squash;
+    const shake = reducedMotion ? { x: 0, tilt: 0 } : crateShake(entry.spring);
     entry.body.setVisible(true);
-    entry.body.setPosition(x, floor - lift - ride);
-    entry.body.setRotation(rock);
+    entry.body.setPosition(x + shake.x, floor - lift);
+    entry.body.setRotation(shake.tilt);
     entry.body.setScale(1 - squash * 0.55, 1 + squash);
 
     // White for the frame it is struck, then the last few seconds count down.
@@ -1564,7 +1660,7 @@ export function createBankBustRuntime({
     const shadowScale = Phaser.Math.Clamp(1 - lift / CRATE_DROP_HEIGHT, 0.25, 1);
     entry.shadow.setVisible(true);
     entry.shadow.setPosition(x, floor - 3);
-    entry.shadow.setScale(shadowScale * (1 + Math.abs(rock) * 0.5), shadowScale);
+    entry.shadow.setScale(shadowScale, shadowScale);
 
     const breathe = reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(scene.time.now / 420);
     entry.glow.setVisible(entry.landed);
@@ -1607,8 +1703,8 @@ export function createBankBustRuntime({
     }
   }
 
-  // The contested centre crate. Its site is always marked so both teams know
-  // where the fight will be; the crate itself only exists while it is live.
+  // The contested centre crate. Its site is marked only while a drop is
+  // counting down; the crate itself only exists while it is live.
   function renderCenterGold(modeState) {
     const site = modeState?.centerGold;
     if (!site?.enabled) {
@@ -1660,8 +1756,6 @@ export function createBankBustRuntime({
       if (state.centerGoldPhase !== "announced") {
         safePlaySfx("sfx-bankbust-mine-claim", { volume: 0.4 });
       }
-    } else if (phase !== "active" && phase !== "done") {
-      drawCrateSite(x, floor, 140, 0.28);
     }
 
     state.centerGoldPhase = phase;
@@ -1674,7 +1768,7 @@ export function createBankBustRuntime({
     const x = Number(shot?.x) || 0;
     const y = Number(shot?.y) || 0;
     const angle = Number(shot?.angle) || 0;
-    const team = shot?.ownerTeam;
+    const team = colourTeam(shot?.ownerTeam);
     const colour = team === "team2" ? 0xffb4b4 : team === "team1" ? 0xbfdcff : 0xffd264;
 
     const flash = scene.add.circle(x, y, 16, colour, 0.85);
@@ -1793,8 +1887,8 @@ export function createBankBustRuntime({
         sprite.setRotation(targetAngle);
       }
       sprite.clearTint();
-      if (ownerTeam === "team1") sprite.setTint(0x93c5fd);
-      if (ownerTeam === "team2") sprite.setTint(0xfca5a5);
+      if (colourTeam(ownerTeam) === "team1") sprite.setTint(0x93c5fd);
+      if (colourTeam(ownerTeam) === "team2") sprite.setTint(0xfca5a5);
     }
     for (const [id, sprite] of turretProjectileSprites.entries()) {
       if (activeIds.has(id)) continue;
@@ -1945,6 +2039,7 @@ export function createBankBustRuntime({
 
   function destroy() {
     setStaticShotTargets("bankBust", []);
+    setShotBlockers("bankBust", []);
     vaultFx.destroy();
     try {
       objectiveGraphics.destroy();
@@ -1959,7 +2054,10 @@ export function createBankBustRuntime({
       destroyContainer(glow?.halo);
       destroyContainer(glow?.core);
     }
-    for (const label of vaultCoinLabels.values()) destroyContainer(label);
+    for (const label of vaultCoinLabels.values()) {
+      destroyContainer(label._coinIcon);
+      destroyContainer(label);
+    }
     destroyContainer(crate?.body);
     destroyContainer(crate?.shadow);
     destroyContainer(crate?.glow);

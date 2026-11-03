@@ -182,6 +182,8 @@
   --bb-hud-fill: #102744;
   --bb-hud-fill-danger: #4a1a26;
   --bb-hud-mosaic: url("/assets/chromas/lobby-chroma-mosaic.svg") 0 0 / 288px 48px;
+  /* The same mosaic at half size, laid over progress-bar fills. */
+  --bb-bar-chroma: url("/assets/chromas/lobby-chroma-mosaic.svg") 0 0 / 144px 24px;
   --bb-hud-bg: linear-gradient(90deg, #10274430, #102744dd 45%, #10274460), var(--bb-hud-mosaic), var(--bb-hud-fill);
   --bb-hud-bg-danger: linear-gradient(90deg, #4a1a2630, #4a1a26e6 45%, #4a1a2660), var(--bb-hud-mosaic), var(--bb-hud-fill-danger);
   --bb-hud-label: var(--bb-border-highlight);
@@ -2622,30 +2624,36 @@ body.profile-page-body .profile-form[hidden] {
 #ready.battle-in-progress { --bb-ready-fill: linear-gradient(135deg, #2879df, #1856b8); }
 #ready.battle-in-progress:hover { --bb-ready-fill: linear-gradient(135deg, #398bf0, #2468ce); }
 
-/* Varied mineral-toned pixels over the lobby’s separate midnight palette. */
+/* One neutral blue on every map (unlike the bottom plate, it ignores the
+   page art), with the chroma mosaic and a pixel ink edge instead of a glow. */
 #navbar,
 .site-header {
+  /* The first layer softens the mosaic so the texture stays in the background. */
   background:
-    linear-gradient(90deg, rgba(16, 29, 47, .76), rgba(23, 26, 42, .94) 38%, rgba(34, 24, 40, .88) 72%, rgba(43, 27, 39, .76)),
-    linear-gradient(100deg, #243d50, #262b40 48%, #493042);
-  border-bottom: 2px solid #424052;
-  box-shadow: 0 4px 16px rgba(5, 13, 35, .35), inset 0 2px rgba(182, 186, 208, .09);
+    linear-gradient(rgba(29, 44, 76, .45), rgba(29, 44, 76, .45)),
+    var(--bb-chroma-mosaic),
+    linear-gradient(100deg, #1f3354, #1b2a48 50%, #212c52);
+  border-bottom: 4px solid var(--bb-ink);
+  box-shadow:
+    inset 0 3px rgba(255, 255, 255, .16),
+    inset 0 -3px rgba(8, 16, 75, .38),
+    0 4px rgba(3, 6, 11, .28);
 }
 
 #navbar > .flex:first-child h2 {
   text-shadow: 0 2px 0 #090e19;
 }
 
-/* Sparse color at the edges, with a quiet center and clear foreground text. */
+/* Stepped light and shade cells at the outer corners, like chroma buttons. */
 #navbar::before,
 .site-header::before {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: url("/assets/chromas/lobby-chroma-mosaic.svg") top left / 576px 96px repeat;
-  mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, .65) 9%, transparent 25%, transparent 93%, rgba(0, 0, 0, .45) 100%);
-  -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, .65) 9%, transparent 25%, transparent 93%, rgba(0, 0, 0, .45) 100%);
+  background:
+    url("/assets/chromas/chroma-corner-light.svg") left top / 24px 24px no-repeat,
+    url("/assets/chromas/chroma-corner-shade.svg") right bottom / 24px 24px no-repeat;
 }
 #navbar > *,
 .site-header > * {

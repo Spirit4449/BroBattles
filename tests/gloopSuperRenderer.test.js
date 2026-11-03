@@ -25,20 +25,20 @@ function setup(animated = false) {
   const api = {}, objects = [], sounds = [];
   function object(x = 0, y = 0) {
     const o = new EventEmitter();
-    Object.assign(o, { x, y, active: true, paths: [], lines: [],
+    Object.assign(o, { x, y, active: true, rects: [],
       setOrigin() { return this; },
       setFrame(frame) { this.frame = frame; return this; },
       setVisible(visible) { this.visible = visible; return this; },
       setRotation(rotation) { this.rotation = rotation; return this; },
-      lineTo(x, y) { this.lines.push({ x, y }); return this; },
+      fillStyle(color) { this.color = color; return this; },
+      fillRect(x, y, w, h) { this.rects.push({ x, y, w, h, color: this.color }); return this; },
       setPosition(x, y) { this.x = x; this.y = y; return this; },
       setScale(x, y) { this.scaleX = x; this.scaleY = y; return this; },
       setTexture(key) { this.texture = key; return this; },
-      moveTo(x, y) { this.paths.push({ x, y }); return this; },
-      clear() { this.paths = []; this.lines = []; return this; },
+      clear() { this.rects = []; return this; },
       destroy() { this.active = false; this.emit('destroy'); },
     });
-    for (const method of ['setDepth', 'fillStyle', 'beginPath', 'closePath', 'fillPath', 'lineStyle', 'strokePath', 'lineBetween', 'fillEllipse', 'fillRect']) o[method] = () => o;
+    for (const method of ['setDepth', 'beginPath', 'closePath', 'fillPath', 'lineStyle', 'strokePath', 'lineBetween', 'fillEllipse']) o[method] = () => o;
     objects.push(o); return o;
   }
   const shots = loadShotPrediction({ serverClock: loadServerClock({ performance: { now: () => 0 } }) });
@@ -65,7 +65,8 @@ test('hand follows constant-speed attack while wrist follows moving caster', () 
   assert.equal(f.objects[1].x, 170);
   f.owner.x += 80; f.frame();
   assert.equal(f.objects[1].x, 220);
-  assert.ok(Math.abs(f.objects[2].paths.at(-1).x - 188.4) < 0.001);
+  const wrist = f.objects[2].rects[0];
+  assert.ok(Math.abs(wrist.x + wrist.w / 2 - 188.4) <= 3);
 });
 
 test('missed hand dissipates at maximum range instead of returning', () => {
@@ -144,10 +145,10 @@ test('ribbon overlaps the wrist and widens to its sprite silhouette', () => {
   const f = setup(true); f.owner.y = 192; f.launch();
   for (let i = 0; i < 5; i++) f.frame(50);
   const hand = f.objects[1], arm = f.objects[2];
-  const tip = arm.lines[31];
+  const tip = arm.rects.filter(r => r.color === 0x071c38).at(-1);
   const wristBack = hand.x - 128 * 0.42 * hand.scaleX;
-  assert.ok(tip.x > wristBack && tip.x < hand.x);
-  assert.ok(Math.abs(tip.y - hand.y) > 10);
+  assert.ok(tip.x + tip.w / 2 > wristBack && tip.x + tip.w / 2 < hand.x);
+  assert.ok(tip.h / 2 > 10);
 });
 
 // The caster sees an enemy drawn with its body straddling the hook's damage line.

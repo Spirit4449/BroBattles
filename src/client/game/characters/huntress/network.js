@@ -7,7 +7,7 @@ import { remoteLaunchCorrection, reconcileFlight } from '../../../../shared/proj
 import { VERSION, attackConfig, resolveShot, powerFromSpeed, createVolley, firstContact, sample, attachmentPoint } from '../../../../shared/characters/huntressProjectile';
 import { advanceGeometry } from '../../../../shared/maps/platformMotion';
 import { playPlayerSound } from '../../audio/playerAudio';
-import { isLocalShooter, predictShotContact, confirmWindowMs } from '../shared/shotPrediction';
+import { isLocalShooter, predictShotContact, shotBlockersFor, confirmWindowMs } from '../shared/shotPrediction';
 
 // The replica reads the shared match clock; it never resets or pings it.
 const replica = new HuntressReplica(serverClock);
@@ -75,7 +75,8 @@ function targetSprite(name) {
 }
 function addSprite(scene, projectile) {
   const sprite = scene.add.sprite(projectile.x, projectile.y, 'huntress-arrow');
-  sprite.setScale(projectile.scale); sprite.setDepth(RENDER_LAYERS.ATTACKS + 4);
+  // Thicken across the shaft only so arrows read at a glance without growing longer.
+  sprite.setScale(projectile.scale, projectile.scale * (attackConfig(projectile.special).visualThickness || 1)); sprite.setDepth(RENDER_LAYERS.ATTACKS + 4);
   applyTeamVisual(sprite, targetSprite(projectile.ownerName) || { _bbTeamColor: context.opponentPlayersRef?.[projectile.ownerName] ? 0xff413f : 0x50ce88 }, true, "arrow");
   const entry = { sprite, projectile, revision: 0, lastTrail: 0 };
   sprites.set(projectile.id, entry);
@@ -89,9 +90,10 @@ function flightContact(entry, p, point) {
   const from = entry.flight || { x: p.x, y: p.y };
   entry.flight = { x: point.x, y: point.y };
   let wall = null;
-  if (colliders.length) {
+  const blockers = shotBlockersFor(p.ownerName);
+  if (colliders.length || blockers.length) {
     advanceGeometry(platformMotion, p.launchMono + point.age);
-    wall = firstContact(from, point, 0, colliders, []);
+    wall = firstContact(from, point, 0, blockers.length ? [...colliders, ...blockers] : colliders, []);
   }
   const hit = isLocalShooter(p.ownerName) ? predictShotContact(from, point, p.radius, { inset: true }) : null;
   if (hit && (!wall || hit.t < wall.t)) {

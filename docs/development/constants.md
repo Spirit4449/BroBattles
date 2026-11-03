@@ -142,7 +142,7 @@ The admin panel calls the runtime configuration service, which updates in-memory
 | --- | --- |
 | `gameConstants.js` | 60 Hz simulation; snapshots every 2 ticks; world state every 8 ticks; fallback world 3600 × 1000px with 400px margin; party join requests expire after 15s |
 | `gameRoomConfig.js`: match | Duels regular time 150s; poison rises at 15px/s, ×2.2 for the first 12s; poison damage 400/s; sudden-death cap 80s; timer broadcast 500ms; elimination finish delay 3s; all-human departure grace 15s |
-| `gameRoomConfig.js`: regen | Starts after 3.5s out of combat; ticks every 1.5s for 25% of missing health, minimum 500, capped at max health |
+| `gameRoomConfig.js`: regen | Starts after 3.8s out of combat; ticks every 1.5s for 25% of missing health, minimum 500, capped at max health |
 | `gameRoomConfig.js`: powerups | Spawn interval 25s; first 2 spawn 5s into the match; max active 3; pickup radius 34px (collected when a hurtbox overlaps the pickup circle); despawn 10s after the 2s omen; anchored spawn lift 22px |
 | `gameRoomConfig.js`: drops | Lifetime 12s; final 3s blinking; pickup radius 110px; 4–8 coin drops and 1–3 gem drops |
 | `gameRoomConfig.js`: validation | Hit rewind cap 300ms; future tolerance 120ms; history 1s / 128 samples; duplicate-hit window 80ms; stomp radius 110px and interruption 300ms |

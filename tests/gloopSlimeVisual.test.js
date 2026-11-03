@@ -8,7 +8,15 @@ const api = {};
 const code = babel.transformSync(fs.readFileSync('src/client/game/characters/gloop/slimeVisual.js','utf8'), {
   babelrc:false, configFile:false, presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code;
-vm.runInNewContext(code,{exports:api,require:name=>name.includes('projectilePresentation') ? require('../src/shared/projectilePresentation') : name.includes('renderLayers')
+const transformModule=file=>{
+  const exports={};
+  vm.runInNewContext(babel.transformSync(fs.readFileSync(file,'utf8'),{
+    babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
+  }).code,{exports});
+  return exports;
+};
+const pixelShapes=transformModule('src/client/game/powerups/pixelShapes.js');
+vm.runInNewContext(code,{exports:api,require:name=>name.includes('pixelShapes') ? pixelShapes : name.includes('projectilePresentation') ? require('../src/shared/projectilePresentation') : name.includes('renderLayers')
   ? {RENDER_LAYERS:{ATTACKS:20}} : require('../src/shared/characters/gloopProjectile')});
 function setup(owner) {
   const objects=[];
@@ -26,7 +34,8 @@ function setup(owner) {
         this.destroying=undefined;
       },
     });
-    for(const name of ['setDepth','setVisible','beginPath','moveTo','closePath','fillPath','lineStyle','fillEllipse','lineBetween','strokeCircle','arc','strokePath','setPosition','setScale','setRotation','setStrokeStyle']) g[name]=()=>g;
+    g.setPosition=(x,y)=>{g.x=x;g.y=y;return g;};
+    for(const name of ['setDepth','setVisible','beginPath','moveTo','closePath','fillPath','lineStyle','fillEllipse','lineBetween','strokeCircle','arc','strokePath','setScale','setRotation','setStrokeStyle','fillRect']) g[name]=()=>g;
     objects.push(g);return g;
   }}};
   const state={x:100,y:100,vx:200,vy:20,collisionRadius:28,floorY:500};
@@ -56,6 +65,20 @@ test('crystal goo survives rebound, deposits crystal residue and cleans up',()=>
   for(let i=0;i<50;i++)visual.update(100);
   assert.equal(visual.update(100),false);
   visual.destroy();assert.ok(objects.every(g=>g.destroyed));
+});
+
+test('a slimeball that bounces off a ledge falls with its physics instead of hovering at the ledge height',()=>{
+  const {visual,objects,state}=setup({texture:{key:'gloop'}});
+  state.vx=0;state.vy=0;state.y=100;
+  visual.impact({x:100,y:128,nx:0,ny:-1,speed:300,terminal:false});
+  state.contactHold={remaining:100,duration:100,speed:300};
+  for(let t=0;t<100;t+=16){state.contactHold.remaining-=16;visual.update(16);}
+  state.contactHold=null;
+  // Rolled off the platform's edge: the ball drops well below its top.
+  state.vx=120;state.vy=400;
+  for(let i=0;i<30;i++){state.x+=2;state.y+=6.4;visual.update(16);}
+  assert.ok(Math.abs(objects[0].y-state.y)<=4,`body at ${objects[0].y} trails the ball at ${state.y}`);
+  visual.destroy();
 });
 
 test('slimeball graphics can be destroyed by Phaser without recursive destruction',()=>{

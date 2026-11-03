@@ -188,7 +188,7 @@ test('high throws spend horizontal speed and cannot exceed the height budget', (
       vx: Math.cos(shot.angle) * shot.speed, vy: shot.initialVy };
     let minY = s.y;
     for (let i = 0; i < 180; i++) { advanceSlimeball(s, 1000 / 120); minY = Math.min(minY, s.y); }
-    assert.ok(shot.start.y - minY < 108);
+    assert.ok(shot.start.y - minY < cfg.maxUpwardSpeed ** 2 / (2 * cfg.gravity) + 1);
   }
 });
 

@@ -9,6 +9,10 @@
 // tall maps as a vertical drift, and maps that fit the screen as a zoom in.
 // There is never a direction change, and the shot ends exactly on the follow
 // framing so handing control back to the follow camera cannot jump.
+//
+// Modes with two bases to show (Bank Bust's vaults) pass `tour` instead: the
+// shot opens a little closer on the enemy base, eases out while crossing the
+// map, and eases back in on the local team's base, in one continuous move.
 
 // Share of the shot held still on the opening view: a breather to take the
 // arena in. ~0.35 s of it is hidden while the loading overlay fades out.
@@ -16,6 +20,11 @@ export const OPENING_HOLD = 0.28;
 // Longest glide, in screen lengths at the opening zoom. On huge maps the shot
 // opens toward the enemy side instead of the far edge, keeping it slow.
 const MAX_TRAVEL_SCREENS = 1.5;
+// Tour: the enemy base opens this much tighter than the follow camera, and the
+// crossing eases out to this share of it (never past the camera bounds).
+const TOUR_CLOSE_ZOOM = 1.1;
+const TOUR_WIDE_ZOOM = 0.75;
+export const TOUR_HOLD = 0.15;
 
 export const easeInOutSine = (t) => 0.5 - Math.cos(Math.PI * Math.min(1, Math.max(0, t))) / 2;
 
@@ -52,10 +61,13 @@ function frame(bounds, view, zoom, point) {
  * @param {{width:number,height:number}} input.view viewport size in screen pixels
  * @param {{x:number,y:number}|null} input.enemy enemy spawn centroid, if known
  * @param {{x:number,y:number,zoom:number}} input.final the follow camera's framing
- * @returns {{keys:Array<{at:number,x:number,y:number,zoom:number}>}}
+ * @param {{enemy:{x:number,y:number},own:{x:number,y:number}}|null} [input.tour]
+ *   enemy and local bases to tour between, for modes that have them
+ * @returns {{keys:Array<{at:number,x:number,y:number,zoom:number}>, tour?:object}}
  *   keys are timed as fractions of the shot (0..1); the last key is the final framing.
  */
-export function planFlythrough({ bounds, view, enemy, final }) {
+export function planFlythrough({ bounds, view, enemy, final, tour = null }) {
+  if (tour) return planTour({ bounds, view, final, tour });
   // As wide as the bounds allow, but never wider than where the shot ends.
   const overviewZoom = Math.min(fitZoom(bounds, view), final.zoom);
   // Without enemy positions, open on the part of the map farthest from us.
@@ -83,6 +95,21 @@ export function planFlythrough({ bounds, view, enemy, final }) {
   };
 }
 
+function planTour({ bounds, view, final, tour }) {
+  const close = final.zoom * TOUR_CLOSE_ZOOM;
+  const wide = Math.max(fitZoom(bounds, view), final.zoom * TOUR_WIDE_ZOOM);
+  const start = frame(bounds, view, close, tour.enemy);
+  return {
+    keys: [
+      { at: 0, ...start },
+      { at: TOUR_HOLD, ...start },
+      { at: 1, x: final.x, y: final.y, zoom: final.zoom },
+    ],
+    // The crossing (keys 1 -> 2) dips to this zoom halfway across.
+    tour: { wide },
+  };
+}
+
 /** Camera framing at `progress` (0..1), clamped to the bounds when given. */
 export function sampleFlythrough(plan, progress, { bounds, view } = {}) {
   const keys = plan.keys;
@@ -92,7 +119,12 @@ export function sampleFlythrough(plan, progress, { bounds, view } = {}) {
   const a = keys[i - 1];
   const b = keys[i];
   const local = b.at > a.at ? easeInOutSine((t - a.at) / (b.at - a.at)) : 1;
-  const zoom = lerpZoom(a.zoom, b.zoom, local);
+  let zoom = lerpZoom(a.zoom, b.zoom, local);
+  if (plan.tour && i === 2) {
+    // Ease out mid-crossing: a log-space dip that is flat at both ends.
+    const dip = Math.log(Math.min(a.zoom, b.zoom) / plan.tour.wide);
+    zoom *= Math.exp(-dip * Math.sin(Math.PI * local));
+  }
   const x = lerp(a.x, b.x, local);
   const y = lerp(a.y, b.y, local);
   return bounds && view ? frame(bounds, view, zoom, { x, y }) : { x, y, zoom };

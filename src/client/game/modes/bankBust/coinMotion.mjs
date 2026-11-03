@@ -56,36 +56,45 @@ export function coinSpinFrame(accumulator) {
   return whole < 0 ? whole + COIN_SPIN_FRAMES : whole;
 }
 
-const CRATE_ROCK_STIFFNESS = 240;
-const CRATE_ROCK_DAMPING = 8;
-const CRATE_SQUASH_STIFFNESS = 520;
-const CRATE_SQUASH_DAMPING = 18;
-const CRATE_ROCK_LIMIT = 0.3; // radians; further than this and it would topple
+const CRATE_SHAKE_HZ = 22; // a fast rattle, not a sway
+const CRATE_SHAKE_DECAY = 0.1; // seconds for the rattle to fall to about a third
+const CRATE_SHAKE_LIMIT = 9; // pixels; a pile of hits rattles harder, not further
+const CRATE_SQUASH_STIFFNESS = 900;
+const CRATE_SQUASH_DAMPING = 48;
 
 export function createCrateSpring() {
-  return { rock: 0, rockSpeed: 0, squash: 0, squashSpeed: 0 };
+  return { shake: 0, phase: 0, side: 1, squash: 0, squashSpeed: 0 };
 }
 
-// A blow knocks the crate away from the attacker and flattens it slightly.
-// Strength is about 1 for an ordinary hit.
+// A blow rattles the heavy box in place, first away from the attacker, and
+// flattens it slightly. Strength is about 1 for an ordinary hit.
 export function kickCrate(spring, side, strength = 1) {
-  spring.rockSpeed += (side < 0 ? -1 : 1) * 2.5 * strength;
-  spring.squashSpeed -= 2.6 * strength;
+  spring.shake = Math.min(CRATE_SHAKE_LIMIT, spring.shake + 5 * strength);
+  spring.phase = 0;
+  spring.side = side < 0 ? -1 : 1;
+  spring.squashSpeed -= 1.8 * strength;
 }
 
-// Sub-stepped so a long frame cannot launch it: the spring is stiff enough that
-// one 50ms step would otherwise gain energy rather than lose it.
+// Sub-stepped so a long frame cannot launch it: the squash spring is stiff
+// enough that one 50ms step would otherwise gain energy rather than lose it.
 export function stepCrateSpring(spring, dt) {
   const steps = Math.max(1, Math.ceil(dt / 0.008));
   const h = dt / steps;
   for (let i = 0; i < steps; i++) {
-    spring.rockSpeed += (-CRATE_ROCK_STIFFNESS * spring.rock - CRATE_ROCK_DAMPING * spring.rockSpeed) * h;
-    spring.rock += spring.rockSpeed * h;
     spring.squashSpeed += (-CRATE_SQUASH_STIFFNESS * spring.squash - CRATE_SQUASH_DAMPING * spring.squashSpeed) * h;
     spring.squash += spring.squashSpeed * h;
   }
-  spring.rock = Math.max(-CRATE_ROCK_LIMIT, Math.min(CRATE_ROCK_LIMIT, spring.rock));
+  spring.shake *= Math.exp(-dt / CRATE_SHAKE_DECAY);
+  if (spring.shake < 0.05) spring.shake = 0;
+  spring.phase += dt * CRATE_SHAKE_HZ * Math.PI * 2;
   return spring;
+}
+
+// Where the rattle puts the crate this frame, in pixels sideways, with a hint
+// of tilt so it reads as a jolt rather than a slide.
+export function crateShake(spring) {
+  const x = spring.side * spring.shake * Math.cos(spring.phase);
+  return { x, tilt: x * 0.004 };
 }
 
 // A coin that has come to rest turns on, slowly, until it faces front, so none

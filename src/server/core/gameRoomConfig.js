@@ -43,7 +43,7 @@ const ABANDON_MATCH_GRACE_MS = 15000;
 // ---------------------------------------------------------------------------
 
 // Time since last damage/attack before regen kicks in.
-const REGEN_DELAY_MS = 3500;
+const REGEN_DELAY_MS = 3800;
 // Regen heals in discrete ticks this far apart.
 const REGEN_TICK_MS = 1500;
 // Each tick heals this fraction of *missing* health (so it slows near full)...

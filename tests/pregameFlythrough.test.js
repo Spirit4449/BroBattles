@@ -8,7 +8,7 @@ const exported = {};
 vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/pregameFlythrough.js'), 'utf8'), {
   babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
 }).code, { exports: exported, Math });
-const { planFlythrough, sampleFlythrough, clampCenter, fitZoom, blendFraming, OPENING_HOLD } = exported;
+const { planFlythrough, sampleFlythrough, clampCenter, fitZoom, blendFraming, OPENING_HOLD, TOUR_HOLD } = exported;
 
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
 // Objects from the vm realm have a foreign prototype; compare fields.
@@ -82,6 +82,36 @@ test('unknown enemy spawns open on the side farthest from the player', () => {
   const bounds = { x: 0, y: 0, width: 3600, height: 900 };
   const result = shot(view, bounds, null, { x: 3400, y: 400 });
   assert.ok(result.frames[0].x < bounds.width / 2);
+});
+
+test('vault tours open closer on the enemy base, ease out, and ease back in on ours', () => {
+  for (const view of Object.values(screens)) {
+    const bounds = { x: -120, y: -520, width: 5240, height: 1620 };
+    const tour = { enemy: { x: 4300, y: 140 }, own: { x: 700, y: 140 } };
+    const zoom = 1.5;
+    const final = { ...clampCenter(bounds, view, zoom, 880, 120), zoom };
+    const plan = planFlythrough({ bounds, view, enemy: { x: 4120, y: 192 }, final, tour });
+    const frames = Array.from({ length: 601 }, (_, i) => sampleFlythrough(plan, i / 600, { bounds, view }));
+    const at = (p) => frames[Math.round(p * 600)];
+    const holdEnd = Math.floor(TOUR_HOLD * 600);
+    for (let i = 1; i <= holdEnd; i++) sameFraming(frames[i], frames[0], `still during the opening hold (${i})`);
+    assert.ok(frames[0].zoom > final.zoom, 'opens closer than the follow framing');
+    assert.ok(frames[0].x > bounds.x + bounds.width / 2, 'opens on the enemy vault');
+    const mid = at((TOUR_HOLD + 1) / 2);
+    assert.ok(mid.zoom < final.zoom, 'eases out while crossing');
+    // One move: x never reverses, and zoom goes out once then back in once.
+    const dx = frames.slice(1).map((f, i) => f.x - frames[i].x).filter(d => Math.abs(d) > 1e-9);
+    assert.ok(dx.every(d => d < 0), 'x travels one way');
+    const dz = frames.slice(1).map((f, i) => Math.sign(f.zoom - frames[i].zoom)).filter(Boolean);
+    assert.equal(dz.filter((d, i) => i > 0 && d !== dz[i - 1]).length, 1, 'zoom turns around once');
+    sameFraming(frames.at(-1), final, 'ends exactly on the follow framing');
+    for (let i = 1; i < frames.length; i++) {
+      const a = frames[i - 1], b = frames[i];
+      assert.ok(b.zoom >= fitZoom(bounds, view) - 1e-9, 'never shows past the camera bounds');
+      assert.ok(Math.abs(b.x - a.x) < view.width / a.zoom * 0.02, `x step ${i}`);
+      assert.ok(Math.abs(Math.log(b.zoom / a.zoom)) < 0.01, `zoom step ${i}`);
+    }
+  }
 });
 
 test('a cut-short blend starts where the camera is and lands on the target', () => {

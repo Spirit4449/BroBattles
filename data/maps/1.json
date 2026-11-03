@@ -78,7 +78,13 @@
           "offsetX": 0,
           "offsetY": 160
         },
-        "id": "p1"
+        "id": "p1",
+        "collision": {
+          "up": true,
+          "down": false,
+          "left": true,
+          "right": true
+        }
       },
       {
         "textureKey": "lushy-side-platform",
@@ -162,7 +168,7 @@
         "height": 24,
         "collision": {
           "up": true,
-          "down": true,
+          "down": false,
           "left": true,
           "right": true
         }

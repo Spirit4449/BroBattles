@@ -9,7 +9,7 @@ import { VERSION, STEP_MS, launch, step, swarmConfig } from '../../../../shared/
 import { advanceGeometry } from '../../../../shared/maps/platformMotion';
 import { clampLead } from '../../../../shared/characters/huntressReplication';
 import { createRuntimeId } from '../shared/runtimeId';
-import { isLocalShooter, predictShotContact, playPredictedImpact } from '../shared/shotPrediction';
+import { isLocalShooter, predictShotContact, playPredictedImpact, shotBlockersFor } from '../shared/shotPrediction';
 import { RENDER_LAYERS } from '../../scene/renderLayers';
 import { playPlayerSound } from '../../audio/playerAudio';
 const active=new Map(),terminals=new Set(),requests=new Map(),effects=new Set();
@@ -19,7 +19,7 @@ let enabled=false,sceneRef=null,listener=null,shutdown=null,ctx={},colliders=[],
 // Bootstrap colliders carry their motion; move them to each step's server time,
 // as the server does, so predictions hit moving platforms where they are.
 let platformMotion={movingColliders:[]};
-const stepAt=(p,o,at)=>{advanceGeometry(platformMotion,at);step(p,o,colliders);};
+const stepAt=(p,o,at)=>{advanceGeometry(platformMotion,at);step(p,o,colliders,shotBlockersFor(p.ownerName));};
 const copy=value=>JSON.parse(JSON.stringify(value));
 export function ninjaEnabled(){return enabled;}
 export function resetNinjaNetwork(){
@@ -75,7 +75,7 @@ function replacedFlight(r,o,sim,now){
 // drawn, once per flight leg like the server. Damage and sound wait for it.
 function predictHits(scene,e,point){
   const from=e.hitFrom;e.hitFrom=point;
-  if(!from||e.p.phase==='hover'||e.p.elapsed<(e.p.cfg.hitArmMs||0))return;
+  if(!from||e.p.phase==='hover'||e.p.phase==='stall'||e.p.elapsed<(e.p.cfg.hitArmMs||0))return;
   const leg=e.p.phase,struck=(e.struck||=new Map()),skip=(struck.get(leg)||struck.set(leg,new Set()).get(leg));
   for(let hit;(hit=predictShotContact(from,point,e.p.cfg.collisionRadius,{skip}));){
     skip.add(hit.target.name);playPredictedImpact(scene,hit.x,hit.y);
@@ -129,7 +129,8 @@ export function attachNinjaScene(scene,next={}){
       let count=0;while(e.at+STEP_MS<=until&&count++<360&&!e.p.done){stepAt(e.p,o,e.at);e.at+=STEP_MS;}
       if(!e.sprite){
         if(e.p.special && !e.p.done && !e.releasePresented){presentSwarmRelease(scene,displayedOwner,swarmConfig().releaseMs,e.p.ownerName!==ctx.localUsername);e.releasePresented=true;}
-        e.texture=ninjaProjectileTexture(scene,displayedOwner);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special && !e.texture.includes("-weapon"))e.sprite.setTint?.(0xc7efff);applyTeamVisual(e.sprite,o || {_bbTeamColor:ctx.opponentPlayersRef?.[e.p.ownerName]?0xff413f:0x50ce88},true,e.texture.includes("-weapon")?"crown":null);
+        const team=o || {_bbTeamColor:ctx.opponentPlayersRef?.[e.p.ownerName]?0xff413f:0x50ce88};
+        e.texture=ninjaProjectileTexture(scene,displayedOwner,team);e.sprite=scene.add.image(e.p.x,e.p.y,e.texture);e.sprite.setScale(e.p.cfg.scale);e.sprite.setDepth(RENDER_LAYERS.ATTACKS);if(e.p.special && e.texture==="shuriken")e.sprite.setTint?.(0xc7efff);applyTeamVisual(e.sprite,team,true,e.texture.includes("-weapon")?"crown":null);
         e.fx=createShurikenEffects(scene,e.sprite,{x:e.p.startX,y:e.p.startY,angle:e.p.angle,special:e.p.special,launch:e.p.elapsed<180});
         if(e.p.ownerName!==ctx.localUsername)e.correction=remoteLaunchCorrection(displayedOwner,e.p.returnTarget,e.p.elapsed,now);
       }

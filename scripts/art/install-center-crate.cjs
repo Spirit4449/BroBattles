@@ -14,7 +14,7 @@
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..", "..");
-const SRC = path.join(ROOT, "output", "bank-bust-art", "crate");
+const SRC = path.join(ROOT, "output", "bank-bust-art", "crate-steel");
 const DEST = path.join(ROOT, "public", "assets", "bank-bust");
 const ICONS = path.join(ROOT, "public", "assets", "icons");
 const sharp = require(path.join(ROOT, "spritesheet-generator", "node_modules", "sharp"));
@@ -23,10 +23,10 @@ const CRATE_WIDTH = 124;
 const DEBRIS_FRAME = 36;
 // Pieces of the 1254px intact stage: [left, top, width, height].
 const DEBRIS = [
-  [270, 140, 360, 220], // top plank
-  [640, 450, 390, 140], // middle plank
-  [75, 180, 175, 165], // corner bracket
-  [490, 545, 275, 375], // padlock
+  [240, 190, 420, 170], // lid plate
+  [125, 640, 310, 80], // brass strap
+  [90, 960, 155, 145], // corner bracket
+  [430, 560, 400, 390], // combination dial
 ];
 
 const WEBP = { quality: 94, alphaQuality: 100, effort: 6 };

@@ -30,19 +30,31 @@ export function createShurikenEffects(scene, sprite, { x, y, angle = 0, special 
     }
     fade(burst, 180, { scaleX: 1.8, scaleY: 1.8 });
   }
+  // Two spinning arcs stamped on a coarse grid so they read as pixel art, not a vector halo.
   const aura = graphics();
-  aura.fillStyle(color, 0.08).fillCircle(0, 0, 22);
-  aura.fillStyle(color, 0.16).fillCircle(0, 0, 13);
-  aura.lineStyle(1.5, color, 0.65);
-  aura.beginPath(); aura.arc(0, 0, 16, 0.2, 2.2); aura.strokePath();
-  aura.beginPath(); aura.arc(0, 0, 16, Math.PI + 0.2, Math.PI + 2.2); aura.strokePath();
-  aura.lineStyle(1.5, 0xffffff, 0.9);
-  aura.lineBetween(12, -4, 12, 4); aura.lineBetween(8, 0, 16, 0);
+  const pixel = 2, radius = special ? 19 : 16, cells = Math.ceil((radius + pixel) / pixel);
+  const ringCells = [], fillCells = [];
+  for (let gx = -cells; gx < cells; gx++) {
+    for (let gy = -cells; gy < cells; gy++) {
+      const cx = (gx + 0.5) * pixel, cy = (gy + 0.5) * pixel, d = Math.hypot(cx, cy);
+      if (Math.abs(d - radius) < pixel * 0.5) ringCells.push([gx * pixel, gy * pixel, Math.atan2(cy, cx)]);
+      else if (d < radius - pixel) fillCells.push([gx * pixel, gy * pixel]);
+    }
+  }
+  const drawAura = (spin) => {
+    aura.clear().fillStyle(color, 0.14);
+    for (const [x, y] of fillCells) aura.fillRect(x, y, pixel, pixel);
+    aura.fillStyle(color, 0.9);
+    for (const [x, y, a] of ringCells) {
+      const t = (((a - spin) % Math.PI) + Math.PI) % Math.PI;
+      if (t > 0.2 && t < 2.2) aura.fillRect(x, y, pixel, pixel);
+    }
+  };
   let lastX = sprite.x, lastY = sprite.y, lastTrail = -Infinity;
   return {
     update(now, visible = true) {
-      aura.setVisible(visible).setPosition(sprite.x, sprite.y).setRotation(now * 0.012);
-      aura.setScale((special ? 1.15 : 1) * (1 + Math.sin(now * 0.016) * 0.1));
+      aura.setVisible(visible).setPosition(Math.round(sprite.x), Math.round(sprite.y));
+      if (visible) drawAura(now * 0.012);
       if (!visible || now - lastTrail < 30) return;
       lastTrail = now;
       const dx = sprite.x - lastX, dy = sprite.y - lastY;

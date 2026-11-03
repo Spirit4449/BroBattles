@@ -780,6 +780,10 @@ export function createMatchCoordinator(config) {
       spawnDeathTombstone(getGameScene(), payload, dyingPlayer);
     }
     hud.setTeamHudPlayerAlive(payload.username, false);
+    if (payload.username === getUsername() && !getGameEnded()) {
+      getGameScene()?._noteLocalKiller?.(payload.killedBy);
+      hud.showLocalDeath?.(payload);
+    }
     if (Array.isArray(payload.drops) && payload.drops.length) {
       const known = Array.isArray(getLatestDeathDrops())
         ? getLatestDeathDrops()
@@ -1172,7 +1176,7 @@ export function createMatchCoordinator(config) {
     onStopSuddenDeathMusic();
     onPlayMatchEndSound(payload?.winnerTeam);
     try {
-      hud.hideSpectatingBanner?.();
+      hud.hideLocalDeath?.();
       hud.hideSpectatingPlayer?.();
       for (const wrapper of [
         ...Object.values(opponentPlayers),

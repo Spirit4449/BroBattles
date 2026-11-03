@@ -1,4 +1,5 @@
 import { characterHitBounds, firstTargetContact } from "../../../../shared/combat/shotContact";
+import { sweep } from "../../../../shared/characters/huntressProjectile";
 import { serverClock } from "../../match/serverClock";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
 
@@ -14,6 +15,7 @@ import { RENDER_LAYERS } from "../../scene/renderLayers";
 let viewMono = null;
 let roster = { localUsername: null, opponentPlayersRef: null };
 const staticTargets = new Map();
+const blockerSources = new Map();
 
 // The render timeline's current time (server simulation clock).
 export function noteRemoteView(targetMono) {
@@ -34,6 +36,37 @@ export function trackShotTargets(context = {}) {
 export function setStaticShotTargets(source, targets = []) {
   if (targets.length) staticTargets.set(source, targets);
   else staticTargets.delete(source);
+}
+
+// Mode walls that stop shots, such as Bank Bust's built walls:
+// [{ friendly, left, right, top, bottom }], friendly when built by this
+// player's team. A wall stops the other team's shots and lets its own through.
+export function setShotBlockers(source, blockers = []) {
+  if (blockers.length) blockerSources.set(source, blockers);
+  else blockerSources.delete(source);
+}
+
+// The walls that stop shots fired by `shooterName`.
+export function shotBlockersFor(shooterName) {
+  if (!blockerSources.size) return [];
+  const enemyShot = !!roster.opponentPlayersRef?.[shooterName];
+  const blockers = [];
+  for (const list of blockerSources.values()) {
+    for (const wall of list) if (wall.friendly === enemyShot) blockers.push(wall);
+  }
+  return blockers;
+}
+
+// Fraction along a->b where a circle fired by `shooterName` first meets one of
+// those walls, or null. Every shot stops there, even ones that pass terrain.
+export function shotBlockerContact(shooterName, a, b, radius = 0) {
+  if (![a?.x, a?.y, b?.x, b?.y].every(Number.isFinite)) return null;
+  let first = null;
+  for (const wall of shotBlockersFor(shooterName)) {
+    const t = sweep(a, b, wall, Math.max(0, Number(radius) || 0));
+    if (t !== null && (first === null || t < first)) first = t;
+  }
+  return first;
 }
 
 export function isLocalShooter(name) {
@@ -83,4 +116,5 @@ export function resetShotPrediction() {
   viewMono = null;
   roster = { localUsername: null, opponentPlayersRef: null };
   staticTargets.clear();
+  blockerSources.clear();
 }

@@ -4,6 +4,7 @@ import {
   COIN_SPIN_FRAMES,
   coinSpinFrame,
   crateStage,
+  crateShake,
   createCrateSpring,
   homingPoint,
   kickCrate,
@@ -72,27 +73,27 @@ test('a coin at rest turns until it faces front, then stays there', () => {
   }
 });
 
-test('a hit rocks the crate away from the attacker, and it settles back', () => {
+test('a hit rattles the crate away from the attacker, and it settles fast', () => {
   const spring = createCrateSpring();
   kickCrate(spring, 1);
-  stepCrateSpring(spring, 0.06);
-  assert.ok(spring.rock > 0, 'tips the way it was pushed');
-  assert.ok(spring.squash < 0 || spring.squashSpeed !== 0, 'and flattens');
+  assert.ok(crateShake(spring).x > 0, 'jolts the way it was pushed');
+  assert.ok(spring.squashSpeed < 0, 'and flattens');
 
   const other = createCrateSpring();
   kickCrate(other, -1);
-  stepCrateSpring(other, 0.06);
-  assert.ok(other.rock < 0);
+  assert.ok(crateShake(other).x < 0);
 
-  // It swings past upright rather than easing back: that is the wobble.
-  let crossed = false;
-  for (let i = 0; i < 40; i++) {
-    stepCrateSpring(spring, STEP);
-    if (spring.rock < 0) crossed = true;
+  // A quick back-and-forth rattle, not one slow sway.
+  let flips = 0;
+  let last = Math.sign(crateShake(spring).x);
+  for (let t = 0; t < 0.15; t += STEP / 4) {
+    stepCrateSpring(spring, STEP / 4);
+    const sign = Math.sign(crateShake(spring).x);
+    if (sign && sign !== last) { flips++; last = sign; }
   }
-  assert.ok(crossed, 'it wobbles');
-  for (let i = 0; i < 300; i++) stepCrateSpring(spring, STEP);
-  assert.ok(Math.abs(spring.rock) < 0.002);
+  assert.ok(flips >= 4, `rattles (${flips} flips)`);
+  for (let i = 0; i < 60; i++) stepCrateSpring(spring, STEP);
+  assert.ok(Math.abs(crateShake(spring).x) < 1e-9, "and stops dead");
   assert.ok(Math.abs(spring.squash) < 0.002);
 });
 
@@ -102,10 +103,12 @@ test('a slow frame or a pile of hits cannot throw the crate over', () => {
   let widest = 0;
   for (let i = 0; i < 40; i++) {
     stepCrateSpring(spring, 0.05);
-    widest = Math.max(widest, Math.abs(spring.rock));
-    assert.ok(Number.isFinite(spring.rock));
+    const { x, tilt } = crateShake(spring);
+    widest = Math.max(widest, Math.abs(x));
+    assert.ok(Number.isFinite(x) && Number.isFinite(spring.squash));
+    assert.ok(Math.abs(tilt) < 0.1);
   }
-  assert.ok(widest < Math.PI / 4);
+  assert.ok(widest < 20, 'stays on its plinth');
 });
 
 test('the crate falls apart in order as it loses health', () => {

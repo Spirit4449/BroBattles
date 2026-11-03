@@ -1,9 +1,14 @@
+import { teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
+
 // Skin artwork changes presentation only; projectile tuning remains shared.
-export function ninjaProjectileTexture(scene, owner) {
+// The default shuriken has a red copy for enemy throws; `team` carries the
+// owner's team colour when the owner sprite is not known.
+export function ninjaProjectileTexture(scene, owner, team = owner) {
   const skin = owner?._bbSkinTextureKey || owner?.texture?.key;
   const key = skin && `${skin}-weapon`;
   if (key && scene.textures?.exists(`${key}-spin`)) return `${key}-spin`;
-  return key && scene.textures?.exists(key) ? key : 'shuriken';
+  if (key && scene.textures?.exists(key)) return key;
+  return teamColor(team) === TEAM_RED && scene.textures?.exists('shuriken-red') ? 'shuriken-red' : 'shuriken';
 }
 
 export function animateNinjaProjectile(sprite, key, elapsed, rotationSpeed, direction) {

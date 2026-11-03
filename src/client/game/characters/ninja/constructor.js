@@ -38,7 +38,7 @@ class Ninja extends CharacterEntityBase {
       this.characterAssetPath(staticPath, "throw-effects.webp"),
       { frameWidth: 64, frameHeight: 64 });
     this.loadFiles(scene, staticPath, {
-      image: { shuriken: "shuriken.webp" },
+      image: { shuriken: "shuriken.webp", "shuriken-red": "shuriken-red.webp" },
       audio: {
         shurikenThrow: "shurikenThrow.mp3",
         shurikenHit: "hit.mp3",

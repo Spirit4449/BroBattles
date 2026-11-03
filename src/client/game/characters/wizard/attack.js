@@ -9,7 +9,7 @@ import { createFireballParticles } from "./fireballParticles";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { consumeOnce } from "../shared/packetDedupe";
 import { attackCollisionCenter } from "../../../../shared/combat/shotContact";
-import { predictShotContact } from "../shared/shotPrediction";
+import { predictShotContact, shotBlockerContact } from "../shared/shotPrediction";
 
 const FIREBALL = getResolvedCharacterAttackConfig("wizard", "fireball");
 
@@ -304,6 +304,8 @@ function spawnWizardFireballProjectile(
     // The caster sees the fireball burst on each enemy it passes, as drawn.
     const struck = new Set();
     let damageFrom = predictHits ? fireballDamageCenter({ x: launchX, y: launchY }, angle, 0) : null;
+    const shooter = ownerSprite?.username;
+    let lastTravel = 0;
 
     travelTween = scene.tweens.add({
       targets: { t: 0 },
@@ -313,7 +315,13 @@ function spawnWizardFireballProjectile(
       onUpdate: (tween) => {
         if (!sprite.active) return;
         const progress = Number(tween?.targets?.[0]?.t) || 0;
-        const travel = range * progress;
+        let travel = range * progress;
+        // A wall built against the caster stops the fireball, as on the server.
+        const blockedAt = shotBlockerContact(shooter,
+          { x: launchX + forwardX * lastTravel, y: launchY + forwardY * lastTravel },
+          { x: launchX + forwardX * travel, y: launchY + forwardY * travel }, FIREBALL_COLLISION_RADIUS);
+        if (blockedAt !== null) travel = lastTravel + (travel - lastTravel) * blockedAt;
+        lastTravel = travel;
         const bobOffset =
           Math.sin((travelDuration * progress) / FIREBALL_BOB_FREQ_MS) * bob;
         const correction = Math.min(1, travelDuration * progress / 240);
@@ -327,6 +335,13 @@ function spawnWizardFireballProjectile(
             spawnImpact(scene, hit.x, hit.y, false);
           }
           damageFrom = damageTo;
+        }
+        if (blockedAt !== null) {
+          travelTween.stop();
+          spawnImpact(scene, sprite.x, sprite.y, false);
+          sprite.destroy();
+          trail?.stop();
+          debugFollower?.destroy();
         }
       },
       onComplete: () => {

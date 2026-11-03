@@ -43,9 +43,13 @@ function outward(p, elapsed) {
   return { x:cubic(p.startX,p.startX+fx*d*.25+nx*c.ctrl1YOffset,p.startX+fx*d*.6-nx*Math.abs(c.ctrl2YOffset),p.startX+fx*d),
     y:cubic(p.startY,p.startY+fy*d*.25+ny*c.ctrl1YOffset,p.startY+fy*d*.6-ny*Math.abs(c.ctrl2YOffset)+c.endYOffset*.45,p.startY+fy*d+c.endYOffset) };
 }
-// One fixed step on both sides. Terrain turns outward shots back; returns pass
-// through terrain, matching the original human boomerang behavior.
-function step(p, owner, terrain = []) {
+// Earliest blocker the flight point meets on a->b, as a fraction, or null.
+function firstBlock(a,b,blockers){let first=null;for(const r of blockers){const t=sweep(a,b,r,0);if(t!==null&&(first===null||t<first))first=t;}return first;}
+// One fixed step on both sides. Terrain stalls outward shots for hitStallMs (so a
+// point-blank throw is still seen), then turns them back; returns pass
+// through terrain, matching the original human boomerang behavior. Blockers
+// (walls a mode builds against the shooter) stop the shot in every phase.
+function step(p, owner, terrain = [], blockers = []) {
   if(p.done) return [];
   const segments=[]; p.elapsed+=STEP_MS;
   if(p.elapsed>p.cfg.maxLifetimeMs) {p.done=true;p.reason='expired';return segments;}
@@ -58,11 +62,16 @@ function step(p, owner, terrain = []) {
       let contact=null;
       // Terrain contact uses the visible flight point, not the generous player-hit radius.
       for(const r of terrain) {const t=sweep(p,nextPoint,r,0);if(t!==null&&(!contact||t<contact.t))contact={t};}
+      const block=firstBlock(p,nextPoint,blockers);
+      if(block!==null&&(!contact||block<=contact.t))contact={t:block,blocked:true};
       const end=contact?{x:p.x+(nextPoint.x-p.x)*contact.t,y:p.y+(nextPoint.y-p.y)*contact.t}:nextPoint;
       segments.push({a:{x:p.x,y:p.y},b:end,phase:'outward',terrain:!!contact});p.x=end.x;p.y=end.y;
-      if(contact){p.phase='return';return segments;}
+      if(contact?.blocked){p.done=true;p.reason='blocked';return segments;}
+      if(contact){p.phase='stall';p.stallUntil=p.elapsed+(p.cfg.hitStallMs||0);return segments;}
     }
     if(p.elapsed>=p.cfg.outwardDuration)p.phase='hover';
+  } else if(p.phase==='stall') {
+    if(p.elapsed>=p.stallUntil)p.phase='return';
   } else if(p.phase==='hover') {
     if(p.elapsed>=p.cfg.outwardDuration+p.cfg.hoverDurationMs)p.phase='return';
   } else {
@@ -70,8 +79,11 @@ function step(p, owner, terrain = []) {
     if(dist<30){p.done=true;p.reason='returned';return segments;}
     p.currentReturnSpeed=Math.min(p.cfg.returnSpeed,p.currentReturnSpeed+p.cfg.returnAcceleration*STEP_MS/1000);
     const length=Math.min(dist,p.currentReturnSpeed*STEP_MS/1000);
-    const end={x:p.x+dx/dist*length,y:p.y+dy/dist*length};
-    segments.push({a:{x:p.x,y:p.y},b:end,phase:'return'});p.x=end.x;p.y=end.y;
+    let end={x:p.x+dx/dist*length,y:p.y+dy/dist*length};
+    const block=firstBlock(p,end,blockers);
+    if(block!==null)end={x:p.x+(end.x-p.x)*block,y:p.y+(end.y-p.y)*block};
+    segments.push({a:{x:p.x,y:p.y},b:end,phase:'return',terrain:block!==null});p.x=end.x;p.y=end.y;
+    if(block!==null){p.done=true;p.reason='blocked';}
   }
   return segments;
 }

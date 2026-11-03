@@ -169,3 +169,27 @@ export function addPixelEllipse(scene, x, y, width, height, color, alpha = 1, { 
 export function addPixelCircle(scene, x, y, radius, color, alpha = 1, options) {
   return addPixelEllipse(scene, x, y, radius * 2, radius * 2, color, alpha, options);
 }
+
+// Stepped status ring: an optional tinted disc inside a `lineCells`-thick
+// outline, lit at the upper-left like the powerup membranes.
+export function drawPixelRing(
+  g,
+  x,
+  y,
+  radius,
+  { fillColor, fillAlpha = 0, lineColor, lineAlpha, lineCells = 2, highlight = true } = {},
+) {
+  const points = [];
+  for (let i = 0; i < 28; i += 1) {
+    const a = (i / 28) * Math.PI * 2;
+    points.push({ x: x + Math.cos(a) * radius, y: y + Math.sin(a) * radius });
+  }
+  const blob = rasterizePixelBlob(points, { ringCount: lineCells + 1 });
+  if (fillAlpha > 0) fillPixelBlob(g, blob, fillColor, fillAlpha, (d) => d > lineCells);
+  fillPixelBlob(g, blob, lineColor, lineAlpha, (d) => d <= lineCells);
+  if (highlight) {
+    fillPixelBlob(g, blob, 0xffffff, 0.45 * lineAlpha, (d, cx, cy) =>
+      d === 1 && x - cx + (y - cy) > radius * 0.3,
+    );
+  }
+}

@@ -3,7 +3,7 @@ const { getResolvedCharacterSpecialConfig } = require("../../../../shared/charac
 const HOOK = getResolvedCharacterSpecialConfig("gloop", "hook");
 const { getParticipant, participantId } = require('../participants');
 const effectManager = require("../effects/effectManager");
-const { clampToWorld, circleAabbOverlap, getAttackCollisionCenter } = require('./geometry');
+const { clampToWorld, circleAabbOverlap, getAttackCollisionCenter, shotBlockers, sweptCircleOverlapsRect } = require('./geometry');
 const { buildProjectileLinearAttack } = require('./projectiles');
 const { getObjectiveTargets, emitServerHit, buildTargetList, shotTargetBounds } = require('./targets');
 
@@ -224,6 +224,9 @@ function tickHookProjectile(room, attack, descriptor, now) {
     1,
     Number(attack.collisionRadius || runtime.collisionRadius) || 1,
   );
+  // The hook reaches through terrain, but not through a wall built against it.
+  if (shotBlockers(room, attacker.team).some((wall) =>
+    sweptCircleOverlapsRect(prevX, prevY, attack.x, attack.y, wall, radius))) return true;
   const collisionCenter = getAttackCollisionCenter(attack, runtime);
   exposeDamageHitbox(room, attack, { kind: 'circle', x: collisionCenter.x, y: collisionCenter.y, radius }, now);
   for (const objective of getObjectiveTargets(room, attacker)) {

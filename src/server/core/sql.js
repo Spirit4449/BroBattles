@@ -1,6 +1,10 @@
 // Database
 const mysql = require("mysql2/promise"); // Just mysql doesn't work
-const { normalizeSelection } = require("../services/match/gameSelectionCatalog");
+const {
+  normalizeSelection,
+  normalizeSelectionFromRow,
+  getPlayersPerTeamForSelection,
+} = require("../services/match/gameSelectionCatalog");
 const databaseConfig = {
   host: process.env.DB_HOST || "localhost",
   port: Math.max(1, Number(process.env.DB_PORT) || 3306),
@@ -94,7 +98,9 @@ async function fetchPartyMembersDetailed(partyId) {
     `SELECT pm.name,
             pm.team,
             pm.slot_index,
-            p.mode AS party_team_size,
+            p.mode AS party_mode,
+            p.mode_id AS party_mode_id,
+            p.mode_variant_id AS party_mode_variant_id,
             pm.last_seen,
             u.char_class,
             CASE
@@ -113,7 +119,15 @@ async function fetchPartyMembersDetailed(partyId) {
       ORDER BY pm.joined_at, pm.name`,
     [partyId],
   );
-  return require("../services/party/partySlots").normalizePartySlots(rows, Number(rows[0]?.party_team_size) || 3);
+  if (!rows?.length) return rows;
+  // parties.mode is the legacy mode (1 for every non-duels mode), so take the
+  // seat count from the selection or Bank Bust seats 2-3 fold back to seat 1.
+  const teamSize = getPlayersPerTeamForSelection(normalizeSelectionFromRow({
+    mode: rows[0].party_mode,
+    mode_id: rows[0].party_mode_id,
+    mode_variant_id: rows[0].party_mode_variant_id,
+  }));
+  return require("../services/party/partySlots").normalizePartySlots(rows, teamSize);
 }
 
 async function setUserStatus(name, status) {

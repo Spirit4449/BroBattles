@@ -1,5 +1,6 @@
 import { updateDash, endDash, drawDashCooldown, protectDashMotion, applyDashCoast } from '../scene/dash';
 import { spritePresentation } from '../characters/shared/spritePresentation';
+import { attachTeamFootRing } from './teamFootRing';
 import { applyTeamVisual } from "../../../shared/projectilePresentation";
 import { getSettings, bindCanvasName, subscribeSettings } from "../../site/preferences";
 import {
@@ -239,6 +240,7 @@ function resetMovementInputState({ preserveVelocity = false } = {}) {
 
   if (player?.body) {
     player._lastJumpPressTime = 0;
+    player._jumpConsumed = false;
     player._lastWallKickAwayInputTs = 0;
     if (preserveVelocity) {
       releaseMovementForFocus(player, {
@@ -673,6 +675,7 @@ export function createPlayer(
   reloadTimerMs = 0;
   const presentation = spritePresentation(character, player.texture);
   player.setScale(presentation.scale);
+  attachTeamFootRing(scene, player, { isAlly: true, hidden: () => dead });
   player.setOrigin(presentation.originX, presentation.originY);
   player._bbHudTopOffset = presentation.hudTopOffset;
 
@@ -1928,6 +1931,9 @@ function playJumpAnimation(scene, wallJump = false) {
 function updateJumping(scene, wall, tuning, { movementLocked, shockwaveActive, groundSpeedRatio }) {
   const now = Date.now();
   const body = player.body;
+  // One ground/coyote jump per landing. Floor contact and the coyote window
+  // both outlive takeoff, so only a settled landing re-arms the jump.
+  if (body.touching.down && (body.velocity.y || 0) >= 0) player._jumpConsumed = false;
   if (
     !dead && !movementLocked && wall.effectiveWallSide && !body.touching.down &&
     !shockwaveActive && canWallJump && wall.bufferedJumpPressActive
@@ -1939,7 +1945,7 @@ function updateJumping(scene, wall, tuning, { movementLocked, shockwaveActive, g
     });
     player._lastJumpPressTime = 0;
   } else if (
-    wall.bufferedJumpPressActive && !shockwaveActive && !movementLocked &&
+    wall.bufferedJumpPressActive && !shockwaveActive && !movementLocked && !player._jumpConsumed &&
     (body.touching.down || now - (player._lastGroundTime || 0) <= tuning.coyoteTimeMs) &&
     !dead
   ) {
@@ -1984,6 +1990,7 @@ function performJump(scene, jumpSpeed) {
   }
   playJumpAnimation(scene);
   pdbg();
+  player._jumpConsumed = true;
   player._jumpLaunch = { startedAt: Date.now(), vy: -jumpSpeed * MOVEMENT_PHYSICS.jumpLaunchSpeedMult };
   player.setVelocityY(player._jumpLaunch.vy * MOVEMENT_PHYSICS.jumpStartSpeedRatio);
   isMoving = true;
@@ -1996,6 +2003,7 @@ function performWallJump(scene, wallSide, tuning) {
   player._dashCoastUntil = 0;
   player._wallSlideSuppressedUntil = Date.now() + tuning.wallSlideReentryDelayMs;
   player._jumpLaunch = null;
+  player._jumpConsumed = true;
   movementAudio.updateWallSlide(false);
   canWallJump = false;
   const fromLeft = wallSide === "left";

@@ -22,11 +22,12 @@ export function footstepVolume(speedRatio, directionChange, terrain) {
   return Math.min(1, terrainGain * terrainAudio.footstepVolumeScale * ((directionChange ? 0.52 : 0.4) + speed * (directionChange ? 0.13 : 0.15)));
 }
 
-export function terrainLandingSound(terrain, baseVolume) {
+export function terrainLandingSound(terrain, baseVolume, scene) {
   const landing = getTerrainConfig(terrain).landing;
+  const gain = scene?._bankBustMovementAudio ? 1.2 : 1;
   return {
     key: landing.key,
-    volume: Math.min(1, Math.max(0, Number(baseVolume) || 0) * (Number(landing.volumeScale) || 1)),
+    volume: Math.min(1, Math.max(0, Number(baseVolume) || 0) * (Number(landing.volumeScale) || 1) * gain),
   };
 }
 

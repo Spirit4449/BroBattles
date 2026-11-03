@@ -49,6 +49,7 @@ test('charge holds its size and reuses its animated sprite on release', () => {
     if (name.includes('renderLayers')) return { RENDER_LAYERS: { ATTACKS: 60 } };
     if (name.includes('characterTuning')) return { getResolvedCharacterAttackConfig: () => ({ activeScale: 0.5, castDelayMs: 520, speed: 450, range: 1050, forwardOffset: 0.23, verticalOffset: 0.12, baseAngleDeg: -90, bobAmplitude: 0, bobFreqMs: 120 }) };
     if (name.includes('runtimeId')) return { createRuntimeId: () => 'test' };
+    if (name.includes('shotPrediction')) return { shotBlockerContact: () => null };
     return {};
   });
   function object(x = 0, y = 0) {

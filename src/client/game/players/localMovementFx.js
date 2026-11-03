@@ -1,3 +1,4 @@
+import { movementSoundKey } from "../../../shared/physics/movementSounds";
 // Per-frame movement presentation for the local fighter: footstep cadence,
 // turn bursts, wall-slide sparks, fast-fall trails, landing impacts and run
 // dust. Gameplay never reads this state; it only follows the physics body.
@@ -172,9 +173,9 @@ export function createLocalMovementFx({ audio, noteEvent }) {
       const heightRatio = clamp01(fallDistance / (MOVEMENT_VFX_CONFIG.landingShockwaveMinFallPx * 2));
       const strength = velocityRatio * 0.65 + heightRatio * 0.35;
       const shaped = strength * strength;
-      const landingAudio = terrainLandingSound(scene._terrainType, 0.28 + shaped * 0.5);
+      const landingAudio = terrainLandingSound(scene._terrainType, 0.28 + shaped * 0.5, scene);
       if (playSound) {
-        scene.sound.play(landingAudio.key, { volume: landingAudio.volume, rate: 0.93 - shaped * 0.02 });
+        scene.sound.play(movementSoundKey(scene, landingAudio.key), { volume: landingAudio.volume, rate: 0.93 - shaped * 0.02 });
       }
       if (!hidden) {
         const body = player.body;

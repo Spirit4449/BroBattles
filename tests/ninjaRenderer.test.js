@@ -7,7 +7,7 @@ const code=babel.transformSync(fs.readFileSync(require.resolve('../src/client/ga
 const playerAudio={};
 vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/audio/playerAudio.js'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:playerAudio});
 const projectileTexture={};
-vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/ninja/projectileTexture'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:projectileTexture});
+vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/ninja/projectileTexture'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:projectileTexture,require:()=>require('../src/shared/projectilePresentation')});
 function setup(initial={}){
   let now=0;const api={},images=[],sounds=[],ammo=[],releases=[],animation={};
   vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/animationState'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:animation,performance:{now:()=>now}});
@@ -80,6 +80,14 @@ test('king basic, swarm and trails use crown; default and missing skin assets fa
   }
   assert.equal(projectileTexture.ninjaProjectileTexture({textures:{exists:()=>false}},{_bbSkinTextureKey:'ninja__ninja-arena-sovereign'}),'shuriken');
   assert.equal(projectileTexture.ninjaProjectileTexture({textures:{exists:k=>k===key}},{texture:{key:'ninja'}}),'shuriken');
+});
+test('enemy default shurikens use the red texture; skins keep their own',()=>{
+  const {TEAM_RED,TEAM_GREEN}=require('../src/shared/projectilePresentation');
+  const scene={textures:{exists:k=>k==='shuriken-red'||k==='ninja__ninja-arena-sovereign-weapon'}};
+  assert.equal(projectileTexture.ninjaProjectileTexture(scene,{_bbTeamColor:TEAM_RED}),'shuriken-red');
+  assert.equal(projectileTexture.ninjaProjectileTexture(scene,null,{_bbTeamColor:TEAM_RED}),'shuriken-red');
+  assert.equal(projectileTexture.ninjaProjectileTexture(scene,{_bbTeamColor:TEAM_GREEN}),'shuriken');
+  assert.equal(projectileTexture.ninjaProjectileTexture(scene,{_bbTeamColor:TEAM_RED,_bbSkinTextureKey:'ninja__ninja-arena-sovereign'}),'ninja__ninja-arena-sovereign-weapon');
 });
 test('authoritative crown launch resolves remote owner skin',()=>{
   const f=setup(),key='ninja__ninja-arena-sovereign-weapon';

@@ -43,7 +43,7 @@ test('thin terrain turns both human and bot shurikens back before targets behind
     f.room.handlePlayerAction(p.participantId,{type:'ninja-shuriken',id:'wall',angle:0});f.step(20);
     assert.equal(target.health,hp);
     const q=[...f.room._ninja.active.values()][0]?.projectile;
-    assert.ok(q?.phase==='return'||f.actions('ninja-terminal').some(a=>a.reason==='returned'));
+    assert.ok(q?.phase==='stall'||q?.phase==='return'||f.actions('ninja-terminal').some(a=>a.reason==='returned'));
   }
 });
 test('return refunds ammunition exactly once, and reload still advances',t=>{
@@ -122,8 +122,12 @@ test('wall returns occur on the collider surface, without the player-hit radius 
     let contact;
     for(let i=0;i<60&&!contact;i++)contact=model.step(q,owner,[wall]).find(s=>s.terrain);
     assert.ok(contact,'swept path detects a one-pixel wall');
-    assert.equal(q.phase,'return');
+    assert.equal(q.phase,'stall');
     assert.ok(Math.abs(q.x-(direction===1?wall.left:wall.right))<1e-9,'center reaches the actual surface');
+    // It holds at the surface for hitStallMs, then turns back.
+    const hitX=q.x,stallSteps=Math.ceil(q.cfg.hitStallMs/model.STEP_MS);
+    for(let i=1;i<stallSteps;i++){model.step(q,owner,[wall]);assert.equal(q.phase,'stall');assert.equal(q.x,hitX);}
+    model.step(q,owner,[wall]);assert.equal(q.phase,'return');
   }
 });
 
@@ -135,4 +139,18 @@ test('shurikens damage disconnected targets but disconnected shooters cannot att
   assert.equal(target.health,hp-p.baseDamage);
   p.connected=false;
   assert.equal(f.room.handlePlayerAction(p.participantId,{type:'ninja-shuriken',id:'offline-shooter',angle:0}),false);
+});
+
+test('walls built against the ninja stop shurikens outward and on the return',t=>{
+  const f=fixture(t),[p,target]=f.players,hp=target.health,wall={left:240,right:260,top:-500,bottom:500};
+  f.room.gameMode={...f.room.gameMode,getShotBlockers:team=>team===p.team?[wall]:[]};
+  f.room.handlePlayerAction(p.participantId,{type:'ninja-shuriken',id:'walled',angle:0});f.step(40);
+  assert.equal(target.health,hp);
+  assert.equal(f.actions('ninja-terminal').at(-1).reason,'blocked');
+  // Returns pass through terrain, but not through a wall.
+  const owner={x:100,y:200},q=model.launch(owner,0,'return');
+  while(q.phase!=='return')model.step(q,owner,[]);
+  const behind={left:q.x-60,right:q.x-50,top:-500,bottom:500};
+  for(let i=0;i<60&&!q.done;i++)model.step(q,owner,[behind],[behind]);
+  assert.equal(q.reason,'blocked');assert.ok(q.x>=behind.left);
 });

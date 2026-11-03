@@ -6,7 +6,7 @@ import { resolveGloopHookSocket } from "../../../../shared/characters/gloopHookG
 import { playPlayerSound } from "../../audio/playerAudio";
 import { createRuntimeId } from "../shared/runtimeId";
 import { consumeOnce } from "../shared/packetDedupe";
-import { predictShotContact, confirmWindowMs } from "../shared/shotPrediction";
+import { predictShotContact, confirmWindowMs, shotBlockerContact } from "../shared/shotPrediction";
 import { attackCollisionCenter } from "../../../../shared/combat/shotContact";
 
 const NAME = "gloop";
@@ -14,6 +14,13 @@ const HOOK = getResolvedCharacterSpecialConfig(NAME, "hook");
 const ACTIVE_HOOK_VISUALS = new WeakMap();
 // Each hook is drawn once, whether predicted locally or echoed by the server.
 export const consumeGloopHook = (scene, id) => consumeOnce(scene, "gloop-hook", id, 5000);
+// The arm and slime debris are drawn on this grid to match the pixel sprites.
+const PIXEL = 3;
+const snap = v => Math.round(v / PIXEL) * PIXEL;
+function stampPixel(graphics, x, y, size) {
+  const side = Math.max(PIXEL, Math.round(size / PIXEL) * PIXEL);
+  graphics.fillRect(snap(x - side / 2), snap(y - side / 2), side, side);
+}
 
 function playSpecialAnimation(scene, player) {
   playSpriteAnimation({
@@ -139,24 +146,26 @@ function createHookVisual(scene, owner, angle, start, id) {
           + Math.pow(Math.max(0, (t - 0.66) / 0.34), 2)
           * Math.max(0, (hand._gripAnimated ? 128 * 0.17 * hand.scaleY : 15) - width) });
     }
-    // Opaque ink edge and teal/blue flesh match the original hand sprite.
-    for (const [size, color, offset] of [[1.12, 0x071c38, 0], [1, 0x1176aa, 0], [0.72, 0x10b6bc, -1]]) {
-      tether.fillStyle(color, 1); tether.beginPath();
-      points.forEach((p, i) => {
-        const x = p.x + nx * p.w * size, y = p.y + ny * p.w * size + offset;
-        if (i === 0) tether.moveTo(x, y); else tether.lineTo(x, y);
-      });
-      for (let i = points.length - 1; i >= 0; i--) {
-        const p = points[i]; tether.lineTo(p.x - nx * p.w * size, p.y - ny * p.w * size + offset);
+    // Rasterise the ribbon into grid-snapped squares so the arm reads as
+    // chunky pixel art beside the sprite instead of a smooth vector tube.
+    const samples = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1];
+      const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / PIXEL));
+      for (let k = 0; k < steps; k++) {
+        const t = k / steps;
+        samples.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, w: a.w + (b.w - a.w) * t });
       }
-      tether.closePath(); tether.fillPath();
     }
-    tether.lineStyle(1.2, 0x92dfc8, 0.65); tether.beginPath();
-    points.forEach((p, i) => {
-      if (i === 0) tether.moveTo(p.x, p.y - p.w * 0.5);
-      else tether.lineTo(p.x, p.y - p.w * 0.5);
-    });
-    tether.strokePath();
+    samples.push(points[points.length - 1]);
+    // Opaque ink edge and teal/blue flesh match the original hand sprite.
+    for (const [size, color, offset] of [[1.12, 0x071c38, 0], [1, 0x1176aa, 0], [0.72, 0x10b6bc, -PIXEL]]) {
+      tether.fillStyle(color, 1);
+      for (const p of samples) stampPixel(tether, p.x, p.y + offset, p.w * 2 * size);
+    }
+    // Dithered highlight along the upper edge.
+    tether.fillStyle(0x92dfc8, 0.8);
+    samples.forEach((p, i) => { if (i % 3 === 0) stampPixel(tether, p.x, p.y - p.w * 0.5, PIXEL); });
   }
   // The caster's hook is tested like the server's: a damage circle along the
   // straight line from Gloop's launch position, against enemies as drawn.
@@ -182,9 +191,15 @@ function createHookVisual(scene, owner, angle, start, id) {
     const wrist = resolveStart(owner, visual.angle);
     if (visual.phase === "out") {
       const t = Math.min(1, visual.elapsed / visual.outMs);
+      const from = { x: hand.x, y: hand.y };
       hand.setPosition(start.x + Math.cos(angle) * visual.range * t,
         start.y + Math.sin(angle) * visual.range * t);
-      if (visual.predict && latchOnDisplayedEnemy(t)) {
+      // A wall built against Gloop stops the hand, as on the server.
+      const blockedAt = shotBlockerContact(owner.username, from, hand, HOOK.collisionRadius);
+      if (blockedAt !== null) {
+        hand.setPosition(from.x + (hand.x - from.x) * blockedAt, from.y + (hand.y - from.y) * blockedAt);
+        finish();
+      } else if (visual.predict && latchOnDisplayedEnemy(t)) {
         // Held on the enemy as drawn until the server's catch (or its absence).
       } else if (t >= 1) {
         // A missed hook dissipates at maximum reach. Only a confirmed catch
@@ -238,10 +253,11 @@ function createHookVisual(scene, owner, angle, start, id) {
       if (d.life >= d.duration) { visual.drops.splice(i, 1); continue; }
       d.vy += 330 * dt; d.x += d.vx * dt; d.y += d.vy * dt;
       const alpha = Math.min(1, (d.duration - d.life) / 140);
-      fx.lineStyle(d.r * 1.3, 0x137fa5, alpha);
-      fx.lineBetween(d.x - d.vx * 0.025, d.y - d.vy * 0.025, d.x, d.y);
-      fx.fillStyle(0x25bcb2, alpha); fx.fillEllipse(d.x, d.y, d.r * 1.6, d.r * 2.2);
-      fx.fillStyle(0xa0e4cd, alpha * 0.75); fx.fillRect(d.x - 1, d.y - 1, 1.5, 2);
+      // Square slime pixels with a one-cell trail instead of round droplets.
+      fx.fillStyle(0x137fa5, alpha * 0.7);
+      stampPixel(fx, d.x - d.vx * 0.03, d.y - d.vy * 0.03, d.r * 1.4);
+      fx.fillStyle(0x25bcb2, alpha); stampPixel(fx, d.x, d.y, d.r * 2);
+      if (d.r > 2.5) { fx.fillStyle(0xa0e4cd, alpha * 0.85); stampPixel(fx, d.x - PIXEL / 2, d.y - PIXEL / 2, PIXEL); }
     }
     if (visual.phase === "settle" && !visual.drops.length) visual.destroy();
   }

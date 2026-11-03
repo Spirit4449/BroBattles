@@ -456,6 +456,11 @@ export function createGameHudController({
     if (!row || !vault) return;
     row.classList.toggle("friendly", yourTeam === teamKey);
     row.classList.toggle("enemy", !!yourTeam && yourTeam !== teamKey);
+    const label = row.querySelector(".bank-bust-vault-label");
+    if (label) {
+      const text = !yourTeam ? "Vault" : yourTeam === teamKey ? "Team Vault" : "Enemy Vault";
+      if (label.textContent !== text) label.textContent = text;
+    }
 
     const coins = Math.max(0, Number(vault?.coins) || 0);
     const starting = Math.max(1, Number(vault?.startingCoins) || 1);
@@ -467,14 +472,6 @@ export function createGameHudController({
 
     const fill = row.querySelector(".bank-bust-vault-fill");
     if (fill) fill.style.width = `${(ratio * 100).toFixed(1)}%`;
-
-    const floor = row.querySelector(".bank-bust-vault-floor");
-    if (floor) {
-      const floorCoins = Math.max(0, Number(modeState?.purchaseFloorCoins) || 0);
-      const show = floorCoins > 0 && floorCoins < starting;
-      floor.style.display = show ? "block" : "none";
-      if (show) floor.style.left = `${((floorCoins / starting) * 100).toFixed(1)}%`;
-    }
 
     row.classList.toggle("empty", coins <= 0);
     row.classList.toggle("low", coins > 0 && ratio <= lowRatio);
@@ -505,18 +502,17 @@ export function createGameHudController({
   function _showVaultAlert(event, yourTeam) {
     const root = document.getElementById("bank-bust-alert");
     if (!root || !event) return;
+    // Only warn about your own Vault.
+    if (!yourTeam || event?.targetTeam !== yourTeam) return;
     const eventAt = Number(event?.at) || 0;
     if (eventAt && eventAt <= lastModeAlertEventAt) return;
     const now = Date.now();
     if (now - lastModeAlertAt < 20000) return;
     lastModeAlertAt = now;
     lastModeAlertEventAt = eventAt || now;
-    const attackedOwnVault = yourTeam && event?.targetTeam === yourTeam;
-    root.textContent = attackedOwnVault
-      ? "Your Vault is losing coins!"
-      : "Enemy Vault is losing coins!";
-    root.classList.remove("hidden", "enemy-alert", "friendly-alert");
-    root.classList.add(attackedOwnVault ? "friendly-alert" : "enemy-alert");
+    root.textContent = "You are being attacked";
+    root.classList.remove("hidden", "enemy-alert");
+    root.classList.add("friendly-alert");
     root.classList.add("show");
     setTimeout(() => {
       root.classList.remove("show");
@@ -524,37 +520,21 @@ export function createGameHudController({
     }, 1600);
   }
 
-  // Advance notice, then a live countdown, for the contested centre crate.
+  // Short heads-up while the centre crate is on its way; nothing once it lands.
   function _syncCenterGold(centerGold) {
     const root = document.getElementById("bank-bust-event");
     if (!root) return;
     const label = root.querySelector(".bb-event-label");
     const timer = root.querySelector(".bb-event-timer");
-    const phase = String(centerGold?.phase || "");
-    const now = Date.now();
-
-    let text = "";
-    let remaining = 0;
-    let live = false;
-    if (phase === "announced") {
-      text = `Crate incoming — ${Math.max(1, Number(centerGold?.reward) || 0).toLocaleString("en-US")} coins`;
-      remaining = Math.max(0, Number(centerGold?.spawnAt || 0) - now);
-    } else if (phase === "active") {
-      text = "Crate is down — break it open";
-      remaining = Math.max(0, Number(centerGold?.expiresAt || 0) - now);
-      live = true;
-    }
-
-    if (!text) {
+    if (String(centerGold?.phase || "") !== "announced") {
       root.classList.remove("show", "live");
       root.classList.add("hidden");
       return;
     }
-    if (label) label.textContent = text;
-    if (timer) timer.textContent = `${Math.ceil(remaining / 1000)}s`;
-    root.classList.remove("hidden");
+    if (label) label.textContent = "Crate incoming";
+    if (timer) timer.textContent = "";
+    root.classList.remove("hidden", "live");
     root.classList.add("show");
-    root.classList.toggle("live", live);
   }
 
   function syncModeState(modeState, yourTeam = null) {
@@ -640,16 +620,62 @@ export function createGameHudController({
     }, 320);
   }
 
-  function showSpectatingBanner() {
-    showStatusBanner("You Died", { variant: "danger" });
+  function describeKiller({ killedBy, cause } = {}) {
+    const name = killedBy ? String(killedBy) : "";
+    if (name) {
+      const turret = name.match(/^(\w+)-turret$/);
+      return { label: "Eliminated by", name: turret ? `${turret[1]} turret` : name };
+    }
+    if (cause === "fall") return { label: "You fell", name: "Out of bounds" };
+    if (cause === "poison") return { label: "Eliminated by", name: "Poison" };
+    return null;
   }
 
-  function hideSpectatingBanner() {
-    const textEl = document.getElementById("game-status-banner-text");
-    if (!textEl) return;
-    if (textEl.textContent === "You Died") {
-      hideStatusBanner();
+  // Red edge flash and killer card while the camera holds on the local corpse.
+  // `info` (the player:dead payload) may arrive after the death begins.
+  function showLocalDeath(info = null) {
+    const root = document.getElementById("death-screen");
+    if (!root) return;
+    if (root.classList.contains("hidden")) {
+      // Sit just below the top HUD, whose height varies with roster size.
+      // Name labels can overflow their cards, so measure every descendant.
+      const topHud = document.getElementById("team-status-hud");
+      let hudBottom = 0;
+      if (topHud && !topHud.classList.contains("hidden")) {
+        for (const el of [topHud, ...topHud.querySelectorAll("*")]) {
+          hudBottom = Math.max(hudBottom, el.getBoundingClientRect().bottom);
+        }
+      }
+      root.style.setProperty("--death-screen-top", `${Math.round(Math.max(hudBottom, 48) + 48)}px`);
+      root.classList.remove("hidden", "is-ending");
+      root.setAttribute("aria-hidden", "false");
+      document.getElementById("death-screen-killer")?.classList.add("hidden");
+      // Restart the flash animation for back-to-back deaths (respawn modes).
+      void root.offsetWidth;
+      root.classList.add("show");
     }
+    if (!info) return;
+    const killer = describeKiller(info);
+    const killerEl = document.getElementById("death-screen-killer");
+    if (!killer || !killerEl) return;
+    killerEl.querySelector(".death-screen-killer-label").textContent = killer.label;
+    document.getElementById("death-screen-killer-name").textContent = killer.name;
+    killerEl.classList.remove("hidden");
+  }
+
+  // Pause over: fade the card before spectating starts.
+  function endLocalDeathPause() {
+    const root = document.getElementById("death-screen");
+    if (!root || root.classList.contains("hidden") || root.classList.contains("is-ending")) return;
+    root.classList.add("is-ending");
+  }
+
+  function hideLocalDeath() {
+    const root = document.getElementById("death-screen");
+    if (!root) return;
+    root.classList.remove("show", "is-ending");
+    root.classList.add("hidden");
+    root.setAttribute("aria-hidden", "true");
   }
 
   function setSpectatingPlayer(name, { canSwitch = false } = {}) {
@@ -1218,8 +1244,9 @@ export function createGameHudController({
     showSuddenDeathBanner,
     showStatusBanner,
     hideStatusBanner,
-    showSpectatingBanner,
-    hideSpectatingBanner,
+    showLocalDeath,
+    endLocalDeathPause,
+    hideLocalDeath,
     initSpectateHud,
     setSpectatingPlayer,
     hideSpectatingPlayer,

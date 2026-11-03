@@ -10,6 +10,7 @@ import { createMatchmakingClient } from "../matchmaking/matchmakingClient.mjs";
 import { createMatchmakingOverlay } from "../matchmaking/matchmakingOverlay.js";
 import { createPartySlotDrag } from "./partySlotDrag.js";
 import { setPartyButtonLabel } from "./partyButtonLabel.js";
+import { playButtonSpawnFx, playButtonSpawnFxOnChange } from "./buttonSpawnFx.js";
 import { ensureLegalAcceptance } from "../../site/shell";
 import { createJoinRequestController } from './joinRequestController';
 import { createMapEditorLink } from '../../lib/mapEditorLink';
@@ -237,6 +238,10 @@ function syncModePickerUi(selection = getCurrentSelection()) {
       : mode?.description || "";
     const modeDropdown = document.getElementById("mode");
     if (modeDropdown) modeDropdown.disabled = openBtn.disabled;
+    playButtonSpawnFxOnChange(
+      openBtn,
+      `${normalized.modeId}:${normalized.modeVariantId || ""}`,
+    );
   }
 }
 
@@ -278,6 +283,7 @@ function syncMapPickerUi(mapValue, selection = getCurrentSelection()) {
       : compatibleMaps.length === 0
         ? "No compatible maps are available for this mode yet."
         : "";
+    playButtonSpawnFxOnChange(openBtn, compatibleMaps.length > 0 ? normalized : "");
   }
 }
 
@@ -943,16 +949,18 @@ export function socketInit(options = {}) {
         applyPlatformImageForMap(String(selection.mapId));
         applyLobbyCharacterOffsetForMap(
           String(selection.mapId),
-          String(selectionToLegacyMode(selection)),
+          getPlayersPerTeamForSelection(selection),
         );
       }
-      updatePlatformsForMode(String(selectionToLegacyMode(selection)));
+      // Use the real team size: the legacy mode is 1 for every non-duels mode,
+      // which collapses the 3v3 Bank Bust platforms while a slot move settles.
+      updatePlatformsForMode(getPlayersPerTeamForSelection(selection));
 
       // Render minimal 1v1 view into the existing two slots if available
       renderPartyMembers({
         ...data,
         selection,
-        mode: selectionToLegacyMode(selection),
+        mode: getPlayersPerTeamForSelection(selection),
         map: selection.mapId,
       });
       // Re-bind ready toggle on your slot after DOM updates
@@ -1957,6 +1965,11 @@ export function initReadyToggle() {
     const cur = (statusEl.textContent || "").toLowerCase();
     const nextReady = cur.trim() !== "ready";
     const partyId = getActivePartyId();
+    // Answer the click at once, before consent or the server reply.
+    playButtonSpawnFx(readyBtn, {
+      host: readyBtn.parentElement,
+      direction: nextReady ? "enter" : "exit",
+    });
     if (nextReady) {
       if (readyBtn.dataset.consentPending === '1') return;
       readyBtn.dataset.consentPending = '1';

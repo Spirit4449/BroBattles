@@ -14,9 +14,182 @@
 #ready { box-sizing: border-box; width: 200px; min-width: 200px; flex-shrink: 0; }
 #ready.battle-in-progress, #ready.is-disabled { width: auto; }
 
+/* Bottom controls sit on one small centered chroma plate, not a full band:
+   mode | ready | map. The picker group flattens so Ready can sit between. */
+#bottom-bar {
+  left: 0;
+  right: 0;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: max-content;
+  max-width: calc(100% - 24px);
+  height: auto;
+  margin-inline: auto;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  /* Pixel controls draw a 5px ink ring plus a 5px drop below it, so these
+     leave 14px of plate beside each control and a tighter 8px above and below. */
+  gap: 24px;
+  padding: 13px 19px 18px;
+  /* Frosted glass that takes on the lobby art's colors, with a hint of chroma. */
+  background:
+    var(--bb-chroma-mosaic),
+    linear-gradient(100deg, rgba(20, 52, 96, .3), rgba(14, 18, 40, .4) 50%, rgba(30, 22, 70, .3));
+  border: 4px solid var(--bb-ink);
+  box-shadow:
+    inset 0 3px rgba(255, 255, 255, .16),
+    inset 0 -3px rgba(8, 16, 75, .38),
+    0 6px rgba(3, 6, 11, .32);
+  backdrop-filter: blur(16px) saturate(1.5) brightness(.7);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5) brightness(.7);
+}
+#bottom-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    url("/assets/chromas/chroma-corner-light.svg") left top / 18px 18px no-repeat,
+    url("/assets/chromas/chroma-corner-shade.svg") right bottom / 18px 18px no-repeat;
+}
+#bottom-bar .dropdown-group { display: contents; }
+#bottom-bar .mode-picker { order: 1; }
+#bottom-bar .ready-button-wrap { order: 2; }
+#bottom-bar .map-picker { order: 3; }
+#bottom-bar .mode-picker,
+#bottom-bar .map-picker {
+  width: 260px;
+  min-width: 0;
+  height: 52px;
+  /* Dark frosted glass: the blurred plate shows through a smoky fill. */
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, 0) 55%),
+    rgba(5, 9, 26, .62);
+  backdrop-filter: blur(14px) saturate(.75) brightness(.8);
+  -webkit-backdrop-filter: blur(14px) saturate(.75) brightness(.8);
+}
+#bottom-bar .mode-picker:hover,
+#bottom-bar .map-picker:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, 0) 55%),
+    rgba(12, 20, 52, .58);
+  transform: none;
+}
+#bottom-bar .map-picker { flex-direction: row-reverse; justify-content: flex-start; }
+#bottom-bar .map-picker-copy { align-items: flex-end; text-align: right; }
+#bottom-bar :is(#map-preview-name, .mode-picker-copy) { max-width: none; min-width: 0; }
+.picker-label {
+  font-size: 7px;
+  line-height: 1.4;
+  letter-spacing: 1px;
+  color: #ffd76a;
+  text-transform: uppercase;
+}
+#ready { height: 52px; }
+/* The streak badge perches centered on top of Ready, out of the row. */
+#bottom-bar .win-streak-control {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  z-index: 3;
+  transform: translateX(-50%);
+}
+#bottom-bar .win-streak-benefits {
+  right: auto;
+  left: 50%;
+  margin-left: calc(min(320px, 100vw - 24px) / -2);
+}
+
+/* Faint spawn-in light when mode, map or ready changes (buttonSpawnFx.js).
+   Enter rises in cyan like a player spawning; exit falls in red. */
+.button-spawn-fx {
+  --fx-main: #11dfff;
+  --fx-bright: #d9fbff;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  opacity: 0;
+}
+.button-spawn-exit > .button-spawn-fx { --fx-main: #ff314e; --fx-bright: #fff1e8; }
+.button-spawn-enter > .button-spawn-fx,
+.button-spawn-exit > .button-spawn-fx { opacity: 1; }
+.button-spawn-fx-column {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(0deg, var(--fx-main), rgba(255, 255, 255, 0) 85%);
+  opacity: 0;
+}
+.button-spawn-fx-floor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--fx-bright);
+  box-shadow: 0 0 10px var(--fx-main);
+  opacity: 0;
+}
+.button-spawn-fx-shard {
+  position: absolute;
+  left: var(--shard-left);
+  bottom: 2px;
+  width: var(--shard-size);
+  height: var(--shard-size);
+  background: var(--fx-bright);
+  box-shadow: 0 0 6px var(--fx-main);
+  opacity: 0;
+}
+.button-spawn-fx-shard:nth-of-type(3n) { background: var(--fx-main); }
+.button-spawn-enter > .button-spawn-fx .button-spawn-fx-column { animation: buttonSpawnColumnIn 380ms cubic-bezier(.16, .84, .31, 1) both; }
+.button-spawn-enter > .button-spawn-fx .button-spawn-fx-floor { animation: buttonSpawnFloor 320ms ease-out both; }
+.button-spawn-enter > .button-spawn-fx .button-spawn-fx-shard { animation: buttonSpawnShardUp 300ms ease-out var(--shard-delay) both; }
+.button-spawn-exit > .button-spawn-fx .button-spawn-fx-column { animation: buttonSpawnColumnOut 360ms cubic-bezier(.55, .06, .68, .19) both; }
+.button-spawn-exit > .button-spawn-fx .button-spawn-fx-floor { animation: buttonSpawnFloor 300ms ease-in 60ms both; }
+.button-spawn-exit > .button-spawn-fx .button-spawn-fx-shard { animation: buttonSpawnShardDown 300ms ease-in var(--shard-delay) both; }
+/* Picker contents materialize behind the light, like a spawning sprite. */
+.button-spawn-enter:is(.mode-picker, .map-picker) > :not(.button-spawn-fx) {
+  animation: buttonSpawnContentIn 300ms ease-out both;
+}
+@keyframes buttonSpawnColumnIn {
+  0% { opacity: 0; transform: translateY(70%) scaleY(.3); }
+  25% { opacity: .2; transform: translateY(0) scaleY(1); }
+  100% { opacity: 0; transform: translateY(-45%) scaleY(.8); }
+}
+@keyframes buttonSpawnColumnOut {
+  0% { opacity: 0; transform: translateY(-45%) scaleY(.8); }
+  60% { opacity: .18; transform: translateY(0) scaleY(1); }
+  100% { opacity: 0; transform: translateY(70%) scaleY(.3); }
+}
+@keyframes buttonSpawnFloor {
+  0% { opacity: 0; transform: scaleX(.15); }
+  30% { opacity: .32; }
+  100% { opacity: 0; transform: scaleX(1); }
+}
+@keyframes buttonSpawnShardUp {
+  0% { opacity: 0; transform: translate(0, 6px); }
+  25% { opacity: .32; }
+  100% { opacity: 0; transform: translate(var(--shard-drift), calc(-1 * var(--shard-rise))); }
+}
+@keyframes buttonSpawnShardDown {
+  0% { opacity: 0; transform: translate(var(--shard-drift), calc(-1 * var(--shard-rise))); }
+  60% { opacity: .3; }
+  100% { opacity: 0; transform: translate(0, 6px); }
+}
+@keyframes buttonSpawnContentIn {
+  0% { opacity: .6; filter: blur(1.5px); transform: translateY(2px); }
+  100% { opacity: 1; filter: blur(0); transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .button-spawn-fx { display: none; }
+}
+
 .lobby-ready :is(#navbar button, #navbar .account, #navbar a,
   .lobby-party-actions .party-button, .lobby-quick-actions .party-button,
-  #bottom-bar .dropdown-group, #lobby-area .switch-character) {
+  #bottom-bar :is(.mode-picker, .map-picker), #lobby-area .switch-character) {
   filter: grayscale(1);
   opacity: 0.5;
   cursor: not-allowed;
@@ -89,8 +262,7 @@
   .lobby-quick-actions { top: var(--lobby-toolbar-top); right: 12px; gap: 12px; }
   .lobby-quick-actions .party-button { height: 34px; font-size: 8px; }
   #lobby-area { margin-top: 60px; height: calc(var(--bb-viewport-height, 100dvh) - 194px); }
-  #bottom-bar { box-sizing: border-box; height: 64px; padding: 8px 12px; gap: 14px; }
-  #bottom-bar .dropdown-group { flex: 1; min-width: 0; max-width: none; overflow: visible; gap: 12px; }
+  #bottom-bar { width: calc(100% - 16px); max-width: 640px; bottom: max(8px, env(safe-area-inset-bottom)); padding: 9px 13px 14px; gap: 18px; }
   #bottom-bar .mode-picker, #bottom-bar .map-picker { flex: 1; min-width: 0; width: auto; height: 42px; padding: 5px 8px; gap: 8px; }
   #mode-preview-img, #map-preview-img { width: 44px; height: 28px; }
   #mode-preview-name, #map-preview-name { font-size: 8px; line-height: 1.5; }
@@ -124,8 +296,6 @@
   .lobby-quick-actions .party-button { padding-inline: 7px; gap: 4px; }
   #leaderboard-button p { display: none; }
   #leaderboard-button { width: 34px; justify-content: center; }
-  #bottom-bar { height: 74px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-  #bottom-bar .dropdown-group { gap: 10px; }
   #bottom-bar .mode-picker, #bottom-bar .map-picker { padding: 5px; justify-content: center; }
   #mode-preview-img, #map-preview-img { display: none; }
   .mode-picker-copy { display: flex; }

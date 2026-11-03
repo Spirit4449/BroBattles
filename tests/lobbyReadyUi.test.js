@@ -39,6 +39,7 @@ function fixture() {
     getCurrentSelection: () => ({}), normalizeGameSelection: value => value,
     getSelectionBlockReason: () => '', ensureLegalAcceptance: async () => {},
     applyLobbyStatusVisualState: () => {},
+    playButtonSpawnFx: () => {},
     matchmaking: { resumeQueueing() {}, startSolo() {}, leaveSolo() {} },
     socket: { connected: true, timeout: () => ({ emit: (_, data, handler) => { ack = handler; } }) },
     sonner: (...args) => notices.push(args), MAINTENANCE_MESSAGE: 'Maintenance',

@@ -4,6 +4,7 @@ import { presentRemoteKnockback } from '../scene/knockbackTrail';
 import { spritePresentation } from '../characters/shared/spritePresentation';
 import { applyTeamVisual, TEAM_GREEN, TEAM_RED } from "../../../shared/projectilePresentation";
 import { bindCanvasName } from "../../site/preferences";
+import { attachTeamFootRing } from "./teamFootRing";
 // opplayer.js
 
 import {
@@ -162,6 +163,10 @@ export default class RemotePlayer {
 
     // Set depth so opponent renders above all map objects (bank bust graphics are at depths 7-24)
     this.opponent.setDepth(RENDER_LAYERS.PLAYER);
+    attachTeamFootRing(this.scene, this.opponent, {
+      isAlly: this.opponent._bbTeamColor === TEAM_GREEN,
+      hidden: () => this._deathPresentationActive || this._corpseRemoved || this._worldUiHidden,
+    });
 
     // Per-character effects: instantiate if available for this character
     const EffectsCls = getEffectsClass(this.character);

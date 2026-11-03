@@ -7,7 +7,7 @@ import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { consumeOnce } from "../shared/packetDedupe";
-import { predictShotContact } from "../shared/shotPrediction";
+import { predictShotContact, shotBlockersFor } from "../shared/shotPrediction";
 
 const NAME = "gloop";
 const SLIMEBALL = getResolvedCharacterAttackConfig(NAME, "slimeball");
@@ -244,7 +244,10 @@ export function spawnGloopSlimeballVisual(
   const update = (_, delta = 16) => {
     if (disposed) return;
     if (!ended) {
-      state.mapCollisionRects = currentTerrain(scene, cfg.mapCollisionRects, serverTerrain);
+      // Built walls are terrain to the slimeball, as on the server.
+      const blockers = shotBlockersFor(ownerSprite?.username);
+      const terrain = currentTerrain(scene, cfg.mapCollisionRects, serverTerrain);
+      state.mapCollisionRects = blockers.length ? [...terrain, ...blockers] : terrain;
       const impacts = advanceSlimeball(state, delta, state.mapCollisionRects, onSegment);
       if (struck) { splat({ id: payload.id, target: struck.target.name }); return; }
       for (const hit of impacts) {

@@ -212,28 +212,27 @@ body[data-bb-screen="game"] #battle-top-hud:has(#bank-bust-hud.hidden) .team-hud
   body[data-bb-screen="game"] #battle-top-hud .bank-bust-vault {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 5px 3px;
     padding: 6px;
   }
   body[data-bb-screen="game"] .bank-bust-vault-top,
   body[data-bb-screen="game"] .bank-bust-vault-bar-row { display: contents; }
   body[data-bb-screen="game"] .bank-bust-vault-label {
-    grid-column: 1;
+    grid-column: 1 / -1;
     grid-row: 1;
-    font-size: 9px;
-    font-weight: 700;
+    font-size: 7px;
     color: var(--bb-text);
   }
   body[data-bb-screen="game"] .bank-bust-vault-coins {
-    grid-column: 2;
-    grid-row: 1;
+    grid-column: 3;
+    grid-row: 2;
     align-self: center;
     min-width: 0;
     font-size: 8px;
   }
   body[data-bb-screen="game"] .bank-bust-vault-bar {
-    grid-column: 1 / -1;
+    grid-column: 2;
     grid-row: 2;
     height: 8px;
     min-width: 0;
@@ -244,7 +243,13 @@ body[data-bb-screen="game"] #battle-top-hud:has(#bank-bust-hud.hidden) .team-hud
     right: 0;
     font-size: 7px;
   }
-  body[data-bb-screen="game"] .bank-bust-coin-icon { display: none; }
+  body[data-bb-screen="game"] .bank-bust-coin-icon {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: center;
+    width: 10px;
+    height: 10px;
+  }
 }
 @media (max-width: 599px) {
   body[data-bb-screen="game"] {
@@ -289,7 +294,7 @@ body #team-status-hud .team-hud-player.enemy .team-hud-avatar-core {
 body .bb-dash-hud[data-ready="true"] { color: #e3ffe9; }
 body .bb-dash-hud[data-ready="true"] [data-dash-status] { color: #7ef0a1; }
 body .bb-dash-hud[data-ready="true"] .bb-dash-hud__fill {
-  background: linear-gradient(90deg, #25b868, #95ffb8);
+  background: var(--bb-bar-chroma), linear-gradient(90deg, #25b868, #95ffb8);
   box-shadow: 0 0 7px #54f89899;
 }
 /* Separate halo stays outside the pixel frame and pulses visibly over scenery. */
@@ -321,7 +326,7 @@ body .bb-dash-hud[data-dashing="true"] {
 }
 body .bb-dash-hud[data-dashing="true"] [data-dash-status] { color: #fffbd6; }
 body .bb-dash-hud[data-dashing="true"] .bb-dash-hud__fill {
-  background: #fff2a3;
+  background: var(--bb-bar-chroma), #fff2a3;
   box-shadow: 0 0 9px #ffe45b;
 }
 @keyframes dash-yellow-chroma {

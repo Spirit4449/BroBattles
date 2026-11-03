@@ -1,4 +1,5 @@
 import { setThorgRageVisual } from "./rageVisual";
+import { drawPixelRing } from "../../powerups/pixelShapes";
 // src/client/game/characters/thorg/thorg.js
 import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/characterTuning.js";
 import { animations } from "./anim";
@@ -272,16 +273,19 @@ class Thorg extends CharacterEntityBase {
     const r = frame.radius;
     const pulse = 0.75 + 0.25 * Math.sin(nowSec * 8 + x * 0.01);
 
-    graphics.fillStyle(colors?.thorgRage || 0x9333ea, 0.22 + 0.08 * pulse);
-    graphics.fillCircle(x, y, r + 6 + 5 * pulse);
-    graphics.lineStyle(4.5, colors?.thorgRage || 0x9333ea, 0.88 * pulse);
-    graphics.strokeCircle(x, y, r + 12 + 5 * pulse);
-    graphics.lineStyle(
-      3,
-      0xffffff,
-      0.28 + 0.18 * Math.abs(Math.sin(nowSec * 18 + y * 0.02)),
-    );
-    graphics.strokeCircle(x, y, r + 18 + 2.5 * pulse);
+    const rageColor = colors?.thorgRage || 0x9333ea;
+    drawPixelRing(graphics, x, y, r + 18 + 2.5 * pulse, {
+      lineColor: 0xffffff,
+      lineAlpha: 0.28 + 0.18 * Math.abs(Math.sin(nowSec * 18 + y * 0.02)),
+      lineCells: 1,
+      highlight: false,
+    });
+    drawPixelRing(graphics, x, y, r + 12 + 5 * pulse, {
+      fillColor: rageColor,
+      fillAlpha: 0.22 + 0.08 * pulse,
+      lineColor: rageColor,
+      lineAlpha: 0.88 * pulse,
+    });
     return true;
   }
 

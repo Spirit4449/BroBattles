@@ -1,6 +1,6 @@
 const { getParticipant } = require('../participants');
 const { attackIdentity } = require('./attackIdentity');
-const { resolvePositiveNumber, cubic, sweptCircleOverlapsRect } = require('./geometry');
+const { resolvePositiveNumber, cubic, sweptCircleOverlapsRect, shotBlockers } = require('./geometry');
 const { hitCircleTargets } = require('./targets');
 
 function buildReturningProjectileAttack(
@@ -151,6 +151,13 @@ function tickReturningProjectile(room, attack, descriptor) {
     attack.y += (dy / dist) * step;
     if (dist < 30) return true;
   }
+
+  // Returns pass through terrain, but a wall built against the shooter stops
+  // the shot in every phase.
+  const blocked = shotBlockers(room, attacker.team).some((rect) =>
+    sweptCircleOverlapsRect(prevX, prevY, attack.x, attack.y, rect,
+      Math.max(1, Number(runtime.collisionRadius) || 1)));
+  if (blocked) return true;
 
   if (
     attacker.isBot &&

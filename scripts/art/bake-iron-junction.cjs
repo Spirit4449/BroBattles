@@ -371,8 +371,10 @@ const PIPE_ROWS = [
 ];
 const PIPE_H = 8;
 const FLANGE_EVERY = 56;
+// Columns a gauge's centre needs on each side: its radius plus the side trim.
+const GAUGE_CLEAR = 10;
 /** A horizontal pipe whose top row is `top`, with flanges and the odd gauge. */
-function pipe(px, y, top, shadeIndex) {
+function pipe(px, y, top, shadeIndex, gaugeFits = () => true) {
   const row = y - top;
   const flange = (px + 20) % FLANGE_EVERY;
   const tones = PIPE_ROWS[Math.min(PIPE_ROWS.length - 1, shadeIndex)];
@@ -390,7 +392,7 @@ function pipe(px, y, top, shadeIndex) {
   // A pressure gauge on a short stem on every third length of pipe.
   const length = Math.floor((px + 20) / FLANGE_EVERY);
   const gx = flange - 30;
-  if (length % 3 === 1 && shadeIndex === 0) {
+  if (length % 3 === 1 && shadeIndex === 0 && gaugeFits(gx)) {
     const gy = row + 6;
     const r2 = gx * gx + gy * gy;
     if (r2 <= 22) {
@@ -478,8 +480,15 @@ function solidPainter(solids, worldW, midRow, bottomRow, shadeRow) {
 
     // Two pipe runs through the upper courses, in front of everything.
     const pipes = [midRow + 46, midRow + 118];
+    // A gauge only goes where the whole dial clears the angle iron at the
+    // block's sides; one at an edge would be sliced in half.
+    const mirror = px === x ? 1 : -1;
+    const gaugeAt = (top) => (gx) => {
+      const cx = x - mirror * gx;
+      return reach(cx, top, -1, 0, GAUGE_CLEAR) >= GAUGE_CLEAR && reach(cx, top, 1, 0, GAUGE_CLEAR) >= GAUGE_CLEAR;
+    };
     for (let k = 0; k < pipes.length; k++) {
-      const c = pipe(px, y, pipes[k], band + k);
+      const c = pipe(px, y, pipes[k], band + k, gaugeAt(pipes[k]));
       if (c) return c;
     }
     // Cable sagging between girders, lower down where it is darker.
@@ -707,49 +716,108 @@ function bakeLedge(shape) {
 // ---------------------------------------------------------------------------
 // The vault: three states of one door
 // ---------------------------------------------------------------------------
+// The door stands up on three steps between two gilt plinths, so the foot of the
+// frame is a stair and not a slab. The frame is the vault's hit box, so the steps
+// fit inside it rather than widening it.
 const VAULT_W = 54, VAULT_H = 56;
+const VAULT_DOOR_Y = 26;
+const VAULT_FOOT = 47;
+const VAULT_PLINTH = 9;
 function vaultFrame(lampColour) {
   const v = new Pix(VAULT_W, VAULT_H);
-  v.rect(0, 0, VAULT_W, VAULT_H, C.ink);
-  v.rect(1, 1, VAULT_W - 2, VAULT_H - 2, C.d2);
-  v.rect(1, 1, VAULT_W - 2, 7, C.l1);
-  v.rect(1, 1, VAULT_W - 2, 1, C.l3);
-  v.rect(1, 7, VAULT_W - 2, 1, C.ink);
-  v.rect(1, 49, VAULT_W - 2, 6, C.l1);
-  v.rect(1, 49, VAULT_W - 2, 1, C.ink);
-  v.rect(1, 50, VAULT_W - 2, 1, C.l2);
+  const W = VAULT_W, right = (x) => W - 1 - x;
+  v.rect(0, 0, W, VAULT_FOOT, C.ink);
+  v.rect(1, 1, W - 2, VAULT_FOOT - 1, C.d2);
+  v.rect(1, 1, W - 2, 5, C.l1);
+  v.rect(1, 1, W - 2, 1, C.l3);
+  v.rect(1, 6, W - 2, 1, C.ink);
+  // A gold bead along the foot of the cornice.
+  for (let x = 9; x < W - 9; x++) v.set(x, 5, x % 3 === 0 ? C.b3 : x % 3 === 1 ? C.b1 : C.b0);
   for (const x of [2, 47]) {
-    v.rect(x, 8, 5, 41, C.mid);
-    v.rect(x, 8, 1, 41, C.l1);
-    v.rect(x + 4, 8, 1, 41, C.ink);
+    v.rect(x, 7, 5, VAULT_FOOT - 7, C.mid);
+    v.rect(x, 7, 1, VAULT_FOOT - 7, C.l1);
+    v.rect(x + 4, 7, 1, VAULT_FOOT - 7, C.ink);
   }
-  for (const x of [2, 47]) for (let y = 12; y < 47; y += 10) {
+  for (const x of [2, 47]) for (let y = 11; y < VAULT_FOOT - 4; y += 10) {
     v.rect(x, y, 5, 2, C.d1);
     v.set(x + 2, y, C.b2);
   }
-  // Bolted gusset plates in the corners of the field, behind the door.
-  for (const [gx, gy, sx, sy] of [[8, 9, 1, 1], [45, 9, -1, 1], [8, 47, 1, -1], [45, 47, -1, -1]]) {
+  // Gilt gusset plates in the corners of the field, behind the door, each with a
+  // scroll worked into it and a lit rivet.
+  for (const [gx, gy, sx, sy] of [[8, 8, 1, 1], [45, 8, -1, 1], [8, 45, 1, -1], [45, 45, -1, -1]]) {
     for (let j = 0; j < 9; j++) for (let i = 0; i < 9 - j; i++) {
       const edge = i === 8 - j;
-      v.set(gx + i * sx, gy + j * sy, edge ? C.ink : j === 0 || i === 0 ? C.l1 : C.mid);
+      const scroll = i + j === 5 || (i === 3 && j === 3);
+      v.set(gx + i * sx, gy + j * sy, edge ? C.ink : j === 0 || i === 0 ? C.b3 : scroll ? C.b0 : C.b1);
     }
-    v.set(gx + 2 * sx, gy + 2 * sy, C.b2);
-    v.set(gx + 4 * sx, gy + 1 * sy, C.b1);
-    v.set(gx + 1 * sx, gy + 4 * sy, C.b1);
+    v.set(gx + 2 * sx, gy + 2 * sy, C.glow);
+    v.set(gx + 3 * sx, gy + 2 * sy, C.b2);
+    v.set(gx + 2 * sx, gy + 3 * sy, C.b2);
+  }
+  // Gold brackets folded round the two top corners, a jewel set in each.
+  for (const flip of [false, true]) {
+    const at = (x) => (flip ? right(x) : x);
+    for (let i = 1; i <= 8; i++) {
+      v.set(at(i), 1, C.b3);
+      v.set(at(i), 2, i === 8 ? C.b0 : C.b2);
+      v.set(at(i), 3, i > 2 ? C.ink : C.b1);
+      v.set(at(1), i, C.b3);
+      v.set(at(2), i, i === 8 ? C.b0 : C.b2);
+      v.set(at(3), i, i > 2 ? C.ink : C.b1);
+    }
+    v.rect(Math.min(at(2), at(3)), 2, 2, 2, C.ink);
+    v.set(at(2), 2, C.glow);
+    v.set(at(3), 3, C.b3);
+    // A finial on the outer tip of each arm.
+    v.set(at(9), 1, C.b2);
+    v.set(at(9), 2, C.b0);
+    v.set(at(1), 9, C.b2);
+    v.set(at(2), 9, C.b0);
   }
   // The lamp over the door, caged.
-  v.rect(21, 2, 12, 5, C.ink);
-  v.rect(22, 3, 10, 3, lampColour);
-  v.rect(22, 3, 10, 1, C.glow);
-  for (let x = 24; x < 31; x += 3) v.rect(x, 3, 1, 3, C.ink);
-  // A brass plaque on the plinth with the bank's stamp.
-  v.rect(17, 50, 20, 5, C.b0);
-  v.rect(18, 51, 18, 3, C.b2);
-  v.rect(18, 51, 18, 1, C.b3);
-  for (let x = 20; x < 35; x += 2) if (brickHash(x, 51) < 0.7) v.set(x, 52 + (x % 4 === 0 ? 0 : 1) * 0, C.b0);
-  v.set(19, 52, C.ink);
-  v.set(34, 52, C.ink);
-  for (const [x, y] of [[4, 3], [49, 3], [4, 52], [49, 52], [12, 3], [41, 3], [12, 52], [41, 52]]) v.rect(x, y, 2, 2, C.b2);
+  v.rect(21, 1, 12, 5, C.ink);
+  v.rect(22, 2, 10, 3, lampColour);
+  v.rect(22, 2, 10, 1, C.glow);
+  for (let x = 24; x < 31; x += 3) v.rect(x, 2, 1, 3, C.ink);
+
+  // The foot: a dark threshold between the plinths, and the steps over it.
+  v.rect(0, VAULT_FOOT, W, VAULT_H - VAULT_FOOT, C.ink);
+  v.rect(VAULT_PLINTH, VAULT_FOOT, W - VAULT_PLINTH * 2, VAULT_H - VAULT_FOOT - 1, C.d3);
+  const steps = [[15, VAULT_FOOT], [12, VAULT_FOOT + 3], [VAULT_PLINTH, VAULT_FOOT + 6]];
+  for (const [left, top] of steps) {
+    const w = W - left * 2;
+    v.rect(left, top, w, 3, C.ink);
+    v.rect(left, top, w - 1, 1, C.l4);
+    v.rect(left + 1, top + 1, w - 2, 1, C.l2);
+    v.rect(left + 1, top + 2, w - 2, 1, C.l1);
+    // Brass treads where the door's traffic has worn the steel down.
+    for (let x = left + 3; x < left + w - 3; x += 4) v.set(x, top, C.b3);
+  }
+  v.rect(VAULT_PLINTH, VAULT_H - 1, W - VAULT_PLINTH * 2, 1, C.ink);
+  // The gilt plinths either side, each with a cap, a rosette and a base.
+  for (const flip of [false, true]) {
+    const x0 = flip ? W - VAULT_PLINTH : 0;
+    const w = VAULT_PLINTH;
+    v.rect(x0, VAULT_FOOT, w, 2, C.b3);
+    v.rect(x0, VAULT_FOOT + 1, w, 1, C.b2);
+    v.rect(x0, VAULT_FOOT + 2, w, 1, C.ink);
+    v.rect(x0 + 1, VAULT_FOOT + 3, w - 2, 5, C.mid);
+    v.rect(x0 + 1, VAULT_FOOT + 3, 1, 5, C.l1);
+    v.rect(x0 + w - 2, VAULT_FOOT + 3, 1, 5, C.d1);
+    const rx = x0 + Math.floor(w / 2), ry = VAULT_FOOT + 5;
+    v.rect(rx - 1, ry - 1, 3, 3, C.b1);
+    v.set(rx, ry - 1, C.b3);
+    v.set(rx - 1, ry, C.b2);
+    v.set(rx, ry, C.glow);
+    v.set(rx + 1, ry + 1, C.b0);
+    v.rect(x0, VAULT_H - 1, w, 1, C.ink);
+    v.rect(x0, VAULT_H - 2, w, 1, C.b1);
+    v.rect(x0 + (flip ? 0 : 1), VAULT_H - 2, w - 1, 1, C.b2);
+  }
+  // Outline the whole frame again, over the corner gold.
+  v.rect(0, 0, W, 1, C.ink);
+  v.rect(0, 0, 1, VAULT_H, C.ink);
+  v.rect(W - 1, 0, 1, VAULT_H, C.ink);
   return v;
 }
 
@@ -829,7 +897,7 @@ function doorWheel(v, cx, cy, turn = 0) {
 }
 
 function bakeVaults() {
-  const cx = 27, cy = 28;
+  const cx = 27, cy = VAULT_DOOR_Y;
   const intact = vaultFrame(C.b3);
   doorRing(intact, cx, cy);
   doorWheel(intact, cx, cy);
@@ -837,14 +905,14 @@ function bakeVaults() {
   const damaged = vaultFrame(C.red);
   doorRing(damaged, cx, cy, (k) => k !== 1 && k !== 4);
   doorWheel(damaged, cx, cy, 0.5);
-  for (const crack of [[[10, 16], [16, 20], [14, 26], [21, 30]], [[44, 38], [38, 35], [39, 30], [33, 33]], [[30, 44], [28, 38], [31, 36]]]) {
+  for (const crack of [[[10, 14], [16, 18], [14, 24], [21, 28]], [[44, 36], [38, 33], [39, 28], [33, 31]], [[30, 42], [28, 36], [31, 34]]]) {
     for (let i = 0; i < crack.length - 1; i++) {
       damaged.line(...crack[i], ...crack[i + 1], C.ink);
       damaged.line(crack[i][0] + 1, crack[i][1], crack[i + 1][0] + 1, crack[i + 1][1], C.l3);
     }
   }
-  damaged.disc(38, 18, 3, C.d3);
-  damaged.disc(16, 38, 2, C.d3);
+  damaged.disc(38, 16, 3, C.d3);
+  damaged.disc(16, 36, 2, C.d3);
 
   const breached = vaultFrame(C.d3);
   breached.disc(cx, cy, 20, C.ink);
@@ -852,14 +920,14 @@ function bakeVaults() {
   breached.disc(cx, cy, 16, C.ink);
   breached.disc(cx, cy, 15, C.d3);
   // Nearly empty: a last scatter of coins on the floor of the hole.
-  for (const [x, y] of [[20, 40], [24, 41], [28, 40], [32, 41], [23, 38], [29, 38]]) breached.rect(x, y, 2, 2, x % 3 ? C.b2 : C.b3);
+  for (const [x, y] of [[20, 38], [24, 39], [28, 38], [32, 39], [23, 36], [29, 36]]) breached.rect(x, y, 2, 2, x % 3 ? C.b2 : C.b3);
   // The door, swung open on its hinge and seen edge on.
-  breached.rect(2, 12, 10, 34, C.ink);
-  breached.rect(3, 13, 8, 32, C.mid);
-  breached.rect(3, 13, 2, 32, C.l2);
-  breached.rect(6, 24, 4, 8, C.b2);
-  breached.rect(7, 26, 2, 4, C.b3);
-  for (const [x, y] of [[40, 12], [44, 22], [42, 40], [36, 46]]) breached.rect(x, y, 3, 2, C.ink);
+  breached.rect(2, 10, 10, 34, C.ink);
+  breached.rect(3, 11, 8, 32, C.mid);
+  breached.rect(3, 11, 2, 32, C.l2);
+  breached.rect(6, 22, 4, 8, C.b2);
+  breached.rect(7, 24, 2, 4, C.b3);
+  for (const [x, y] of [[40, 10], [44, 20], [42, 38], [36, 43]]) breached.rect(x, y, 3, 2, C.ink);
   return { "vault-intact.webp": intact, "vault-damaged.webp": damaged, "vault-breached.webp": breached };
 }
 

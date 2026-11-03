@@ -177,7 +177,7 @@ test('late startup landing events and grounded contact flicker stay silent', () 
 });
 
 
-test('Bank Bust changes footsteps while retaining shared launch, landing and loop sounds', () => {
+test('Bank Bust changes footsteps and landing while retaining shared launch and loop sounds', () => {
   const f = fixture();
   f.scene._bankBustMovementAudio = true;
   f.scene._terrainType = 'hard';
@@ -192,7 +192,7 @@ test('Bank Bust changes footsteps while retaining shared launch, landing and loo
   assert.ok(f.sounds.some(s => s.key === 'sfx-fall-air' && s.isPlaying));
   f.update({ grounded: true, movementFxSeq: 3, movementFxType: 'land' });
   assert.deepEqual(f.calls.slice(1).map(c => c.key), [
-    'sfx-jump', 'sfx-walljump', 'sfx-hard-land',
+    'sfx-jump', 'sfx-walljump', 'bank-bust-sfx-hard-land',
   ]);
   assert.ok(f.sounds.every(s => !s.isPlaying));
   f.controller.destroy();

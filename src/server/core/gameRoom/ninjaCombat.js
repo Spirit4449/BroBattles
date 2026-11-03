@@ -1,4 +1,4 @@
-const { shotTerrain } = require('./attackRuntimes/geometry');
+const { shotBlockers } = require('./attackRuntimes/geometry');
 const { exposeDamageHitbox } = require('./damageHitboxes');
 const model=require('../../../shared/characters/ninjaProjectile');
 const {sweep}=require('../../../shared/characters/huntressProjectile');
@@ -80,7 +80,7 @@ function tick(room){
     if(!p.loaded||p.connected===false){finish(room,entry,p,'owner-unavailable');continue;}
     if(q.launchMono===room._simulationMono)continue;
     q.returnTarget={x:p.x,y:p.y};
-    const oldPhase=q.phase,segments=model.step(q,p,shotTerrain(room,p.team));
+    const oldPhase=q.phase,segments=model.step(q,p,room.geometry?.colliders||[],shotBlockers(room,p.team));
     for(const [index, segment] of segments.entries()){
       if(q.elapsed<60)continue;
       exposeDamageHitbox(room,q,{kind:'sweep',a:segment.a,b:segment.b,radius:q.cfg.collisionRadius},Date.now(),String(index));
@@ -99,7 +99,7 @@ function tick(room){
     if(q.done){finish(room,entry,p,q.reason);continue;}
     // Return homing depends on reported owner movement: sparse corrections keep
     // clients aligned without sending every shuriken at the player snapshot rate.
-    if(oldPhase!==q.phase||(q.phase==='return'&&room._tickId%6===0))emit(room,p,{type:'ninja-state',id:q.id,state:{x:q.x,y:q.y,elapsed:q.elapsed,phase:q.phase,currentReturnSpeed:q.currentReturnSpeed,returnTarget:q.returnTarget}});
+    if(oldPhase!==q.phase||(q.phase==='return'&&room._tickId%6===0))emit(room,p,{type:'ninja-state',id:q.id,state:{x:q.x,y:q.y,elapsed:q.elapsed,phase:q.phase,stallUntil:q.stallUntil,currentReturnSpeed:q.currentReturnSpeed,returnTarget:q.returnTarget}});
   }
 }
 function trusted(room,entry,payload){return !!entry&&room._ninja?.active.get(entry.projectile.id)===entry&&entry.contact?.instanceId===payload.instanceId&&entry.contact.target===payload.target;}

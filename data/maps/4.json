@@ -1688,8 +1688,8 @@
         {
           "id": "wall-team1-main",
           "type": "wallSlot",
-          "x": 1416,
-          "y": 204,
+          "x": 1184,
+          "y": 208,
           "buildRadius": 110,
           "cost": 10000,
           "width": 48,
@@ -1718,8 +1718,8 @@
         {
           "id": "wall-team2-main",
           "type": "wallSlot",
-          "x": 3584,
-          "y": 204,
+          "x": 3824,
+          "y": 208,
           "buildRadius": 110,
           "cost": 10000,
           "width": 48,

@@ -158,15 +158,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
     this.glow.setDepth(RENDER_LAYERS.ATTACKS - 1);
     this.glow.setBlendMode(Phaser.BlendModes.ADD);
     this._drawGlow(glowColor);
-    scene.tweens.add({
-      targets: this.glow,
-      scale: { from: 0.95, to: 1.15 },
-      alpha: { from: 0.9, to: 0.55 },
-      duration: 600,
-      repeat: -1,
-      yoyo: true,
-      ease: "Sine.easeInOut",
-    });
+    this.glow.setAlpha(0.75);
 
     this.fx = createShurikenEffects(scene, this, { x: startPos.x, y: startPos.y, angle, special: this.cfg.attackType !== "basic" });
     this.scene.events.on("update", this.updateShuriken, this);

@@ -444,5 +444,7 @@ export function drawDashCooldown(scene, player, hidden = false) {
   hud.root.dataset.dashing = String(!!player._dash);
   hud.track.setAttribute('aria-valuenow', Math.round(progress * 100));
   hud.track.setAttribute('aria-valuetext', dashing ? 'Dashing' : remaining ? `${label} remaining` : 'Dash ready');
-  hud.fill.style.transform = `scaleX(${progress})`;
+  // Clip rather than scale, so the chroma mosaic on the fill keeps its
+  // pixel size. A full bar is left unclipped so its ready glow can show.
+  hud.fill.style.clipPath = progress >= 1 ? '' : `inset(0 ${((1 - progress) * 100).toFixed(2)}% 0 0)`;
 }

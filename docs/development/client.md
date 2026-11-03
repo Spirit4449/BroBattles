@@ -397,7 +397,7 @@ Set each map document's `metadata.terrain` through Map Studio/API (built-in defa
 - `grass`: Lushy Peaks, Mangrove Meadow, Serenity. Four natural foot-on-grass steps and the soft “smush” landing.
 - `hard`: Industrial terrain defaults to the original three footsteps and concrete landing. Bank Bust overrides only the footsteps with a ready-made metal contact.
 
-Bank Bust uses morganpurkis’s CC BY 4.0 `Metal Footstep 3.wav`, a ready-made single metal footstep. All three existing footstep keys select this sample. Only footstep keys are overridden; jump, dash, wall-slide, duck, stomp, landing and falling wind retain their shared samples. `src/shared/physics/movementSounds.js` owns the isolated key mapping. Source and processing details live in `public/assets/bank-bust/movement/README.md`.
+Bank Bust uses three individual metal footsteps and a heavier metal landing extracted from SoftDistortionFX’s CC0 `Metal Footsteps`. The landing layers a short bass thud with the recorded impact and plays at increased gain capped at full volume. Footstep and hard-terrain landing keys are overridden for local and remote fighters; other movement retains shared samples. `src/shared/physics/movementSounds.js` owns the isolated key mapping. Source and processing details live in `public/assets/bank-bust/movement/README.md`.
 
 This is a map-wide material, not automatic texture detection. Missing or unknown materials safely fall back to `hard`.
 

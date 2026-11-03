@@ -229,6 +229,7 @@ let readyAckSocketId = null; // socket that last carried our ready signal
 let isLiveGame = false; // server reported active game (late join)
 let pendingAuthoritativeLocalState = null; // apply once local sprite exists
 // Buffer for remote actions that arrive before scene is ready
+const LOCAL_DEATH_PAUSE_MS = 2000; // death screen before spectating
 const PENDING_ACTIONS = [];
 // Spawn coordination
 let SPAWN_VERSION = 0; // increments per scene init to version spawns
@@ -325,13 +326,30 @@ const matchIntro = createMatchIntro({
   getPlayer: () => player,
   getEnemySprites: () =>
     Object.values(opponentPlayers).map((wrapper) => wrapper?.opponent).filter(Boolean),
+  getTour: getVaultTour,
   onActiveChange: (active) => hud.setPregameActive(active),
 });
+
+// Bank Bust tours from the enemy vault to ours. Spectators get the default shot.
+function getVaultTour() {
+  const vaults = gameData?.mapSnapshot?.map?.objectiveLayout?.bankBust?.vaults;
+  const team = gameData?.yourTeam;
+  const own = vaults?.[team];
+  const enemy = Object.entries(vaults || {}).find(([key]) => key !== team)?.[1];
+  const point = (vault) =>
+    Number.isFinite(Number(vault?.x)) && Number.isFinite(Number(vault?.y))
+      ? { x: Number(vault.x), y: Number(vault.y) }
+      : null;
+  const tour = { enemy: point(enemy), own: point(own) };
+  return tour.enemy && tour.own ? tour : null;
+}
 
 // The loading screen lifted: this client's pregame starts and the server
 // counts us as loaded. A match already counting down or live skips it.
 function onGameRevealed() {
   clientRevealed = true;
+  // Ease the world in from dark as the loading screen lifts.
+  gameScene?.cameras?.main?.fadeIn(600, 0, 0, 0);
   trySendReadyAck();
   const skipPregame =
     isLiveGame || gameEnded || editorSession || gameData?.editorPlaytest ||
@@ -1149,9 +1167,6 @@ class GameScene extends Phaser.Scene {
         this._suddenDeathMusicSfx?.destroy();
       } catch (_) {}
       this._suddenDeathMusicSfx = null;
-      try {
-        hud.hideSpectatingBanner?.();
-      } catch (_) {}
     });
 
     // Cache my level and stats BEFORE creating the player so HUD uses server values
@@ -1478,13 +1493,12 @@ class GameScene extends Phaser.Scene {
     this._modeRuntime?.render?.();
   }
 
-  _enterSpectatorMode() {
+  _enterSpectatorMode({ holdCamera = false } = {}) {
     if (!this._spectatorModeActive) {
       this._spectatorModeActive = true;
       this._spectatorVignette = true;
-      hud.showSpectatingBanner?.();
     }
-    this._syncSpectatedPlayer();
+    this._setSpectatedPlayer(this._spectatedPlayerName, { holdCamera });
   }
 
   _getSpectatablePlayers() {
@@ -1508,7 +1522,29 @@ class GameScene extends Phaser.Scene {
       }));
   }
 
-  _setSpectatedPlayer(name) {
+  _noteLocalKiller(name) {
+    this._localKillerName = name ? String(name) : null;
+  }
+
+  // First spectate target after dying: the killer, else the nearest fighter.
+  _pickDeathSpectateTarget() {
+    const candidates = this._getSpectatablePlayers();
+    const killer = candidates.find((entry) => entry.name === this._localKillerName);
+    if (killer) return killer.name;
+    let nearest = null;
+    let nearestDistSq = Infinity;
+    for (const entry of candidates) {
+      const sprite = entry.wrapper.opponent;
+      const distSq = (sprite.x - player.x) ** 2 + (sprite.y - player.y) ** 2;
+      if (distSq < nearestDistSq) {
+        nearestDistSq = distSq;
+        nearest = entry.name;
+      }
+    }
+    return nearest;
+  }
+
+  _setSpectatedPlayer(name, { holdCamera = false } = {}) {
     const candidates = this._getSpectatablePlayers();
     const selected =
       candidates.find((entry) => entry.name === name) || candidates[0] || null;
@@ -1534,7 +1570,8 @@ class GameScene extends Phaser.Scene {
     }
 
     const cam = this.cameras.main;
-    if (!cam) return;
+    // The death pause keeps the camera on the local corpse.
+    if (!cam || holdCamera) return;
     if (!selected?.wrapper?.opponent) {
       if (!this._spectatorFallbackActive) {
         this._spectatorFallbackActive = true;
@@ -1594,6 +1631,7 @@ class GameScene extends Phaser.Scene {
   }
 
   _cycleSpectatedPlayer(direction = 1) {
+    this._deathSpectateTargetLocked = true;
     const candidates = this._getSpectatablePlayers();
     if (!candidates.length) {
       this._setSpectatedPlayer(null);
@@ -1656,8 +1694,28 @@ class GameScene extends Phaser.Scene {
     if (!hasJoined || !gameInitialized || gameEnded) return;
 
     if (dead) {
-      this._enterSpectatorMode();
+      // Hold the camera on the corpse before handing it to spectate.
+      const now = performance.now();
+      if (this._localDeathStartedAt == null) {
+        this._localDeathStartedAt = now;
+        hud.showLocalDeath?.();
+      }
+      const holdCamera = now - this._localDeathStartedAt < LOCAL_DEATH_PAUSE_MS;
+      // The killer name can land a few frames after health hits zero, so keep
+      // re-picking until the pause ends or the player chooses someone.
+      if (!this._deathSpectateTargetLocked) {
+        this._spectatedPlayerName = this._pickDeathSpectateTarget();
+        if (!holdCamera) this._deathSpectateTargetLocked = true;
+      }
+      if (!holdCamera) hud.endLocalDeathPause?.();
+      this._enterSpectatorMode({ holdCamera });
     } else {
+      if (this._localDeathStartedAt != null) {
+        this._localDeathStartedAt = null;
+        this._localKillerName = null;
+        this._deathSpectateTargetLocked = false;
+        hud.hideLocalDeath?.();
+      }
       this._spectatorVignette = false;
       if (this._spectatorModeActive) {
         try {
@@ -1676,7 +1734,6 @@ class GameScene extends Phaser.Scene {
       ]) {
         wrapper?.setSpectated?.(false);
       }
-      hud.hideSpectatingBanner?.();
       hud.hideSpectatingPlayer?.();
       if (!introCamera) updateDynamicCamera(this, player);
       localMovementCorrector.update(player, this.game?.loop?.delta ?? 16.67);
