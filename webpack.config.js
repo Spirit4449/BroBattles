@@ -2,6 +2,7 @@
 const path = require("path");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
+const TerserPlugin = require("terser-webpack-plugin");
 module.exports = (_env = {}, argv = {}) => {
   const mode = argv.mode || "development";
 
@@ -38,6 +39,13 @@ module.exports = (_env = {}, argv = {}) => {
     clean: false,
   },
   mode,
+  optimization: {
+    // Keep minification serial: parallel workers exhaust the shared 4 GB Pi.
+    minimizer: [new TerserPlugin({
+      parallel: false,
+      terserOptions: { compress: { passes: 2 } },
+    })],
+  },
   devtool: mode === "production" ? false : "inline-source-map",
   devServer: {
     port: 3001,

@@ -65,6 +65,12 @@ must be retained for duplicate protection. Use sandbox events when verifying thi
 
 ## Limits and validation
 
+Production JavaScript minification runs serially to reduce peak memory on the
+4 GB Raspberry Pi alongside its other services. Use `npm run build -- --progress`
+to see compilation stages; minification can take several minutes. Leave memory
+headroom before building and check `free -h` and `swapon --show` if the host stops
+responding. Swap provides a fallback but does not replace available RAM.
+
 Movement uses a server-time distance budget for every packet interval, including
 bursts and long gaps. Spawn positions, standing/ducking body dimensions, offsets,
 and grounded checks come from shared game geometry. Server knockback gets a
