@@ -9,7 +9,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { timingSafeEqual } = require("node:crypto");
-const { monitorEventLoopDelay } = require("node:perf_hooks");
+const { monitorEventLoopDelay, PerformanceObserver, constants: perfConstants } = require("node:perf_hooks");
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_TRACED_SOCKETS_PER_RUN = 8;
@@ -64,6 +64,8 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
   let lastCpu = null;
   let lastCpuAt = 0;
   let pruned = false;
+  let gcObserver = null;
+  const gc = { count: 0, ms: 0, max: 0, major: 0, majorMax: 0 };
 
   function pruneOldRuns() {
     if (pruned) return;
@@ -89,6 +91,17 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
       loopDelay.enable();
       lastCpu = process.cpuUsage();
       lastCpuAt = now();
+      // Garbage-collection pauses stop the game loop like any other main-thread work.
+      try {
+        gcObserver = new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) {
+            gc.count++; gc.ms += entry.duration; if (entry.duration > gc.max) gc.max = entry.duration;
+            const major = entry.detail?.kind === perfConstants.NODE_PERFORMANCE_GC_MAJOR;
+            if (major) { gc.major++; if (entry.duration > gc.majorMax) gc.majorMax = entry.duration; }
+          }
+        });
+        gcObserver.observe({ entryTypes: ["gc"] });
+      } catch (_) { gcObserver = null; }
       hostTimer = setInterval(sampleHost, 1000);
       hostTimer.unref?.();
     }
@@ -99,6 +112,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
     clearInterval(flushTimer); flushTimer = null;
     clearInterval(hostTimer); hostTimer = null;
     loopDelay?.disable(); loopDelay = null;
+    gcObserver?.disconnect(); gcObserver = null;
   }
 
   function getRun(runId) {
@@ -180,8 +194,11 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
       cpuPct: round(((cpu.user + cpu.system) / 1000 / elapsedMs) * 100),
       load1: round(os.loadavg()[0], 2),
       rssMb: Math.round(process.memoryUsage().rss / 1048576),
+      heapMb: Math.round(process.memoryUsage().heapUsed / 1048576),
+      gc: { n: gc.count, ms: round(gc.ms), max: round(gc.max), major: gc.major, majorMax: round(gc.majorMax) },
       ...readMeminfo(),
     };
+    gc.count = 0; gc.ms = 0; gc.max = 0; gc.major = 0; gc.majorMax = 0;
     loopDelay.reset();
     for (const run of runs.values()) write(run, "server", record);
   }
@@ -254,6 +271,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
       loopDeltas: [], maxSteps: 0,
       snapGaps: [], snapBytes: 0, snapCount: 0, lastSnapMono: null,
       botTickMs: [], botSlowest: null,
+      phases: {}, phaseMax: {}, stepMax: 0,
       inputs: new Map(), // socketId -> { count, gaps[], last, clamps }
       lastFlush: now(),
     };
@@ -297,7 +315,13 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
         p95: round(percentile(s.botTickMs, 0.95), 2), max: round(Math.max(...s.botTickMs), 2), slowest: s.botSlowest } : null,
       inputs,
       writeBuffers,
+      // Main-thread ms per phase of the fixed step over this window, and the
+      // slowest single step of each.
+      phases: Object.fromEntries(Object.entries(s.phases).map(([k, v]) => [k, round(v)])),
+      phaseMax: Object.fromEntries(Object.entries(s.phaseMax).map(([k, v]) => [k, round(v, 2)])),
+      stepMax: round(s.stepMax, 2),
     });
+    s.phases = {}; s.phaseMax = {}; s.stepMax = 0;
     s.loopDeltas.length = 0; s.maxSteps = 0;
     s.snapGaps.length = 0; s.snapBytes = 0; s.snapCount = 0;
     s.botTickMs.length = 0; s.botSlowest = null;
@@ -363,6 +387,43 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
       x: round(payload.x), y: round(payload.y) });
   }
 
+  // One fixed step's phase timings: { bots: ms, attacks: ms, ... }.
+  function notePhases(room, phases, totalMs) {
+    const s = room._netTrace;
+    if (!s?.runs.size) return;
+    for (const k in phases) {
+      const v = phases[k];
+      s.phases[k] = (s.phases[k] || 0) + v;
+      if (!(s.phaseMax[k] >= v)) s.phaseMax[k] = v;
+    }
+    if (totalMs > s.stepMax) s.stepMax = totalMs;
+  }
+
+  // An attack request from a traced socket, after the view rewind was stamped.
+  function noteAction(room, socketId, event, payload) {
+    const s = room._netTrace;
+    if (!s?.runs.size || !s.sockets.has(socketId)) return;
+    const id = payload?.id ?? payload?.requestId ?? payload?.clientRequestId ?? null;
+    emitRoom(room, { kind: "action", tag: s.sockets.get(socketId), ev: event, type: String(payload?.type || event).slice(0, 40),
+      id: id == null ? null : String(id).slice(0, 40), rewindMs: round(Number(payload?.viewRewindMs)),
+      viewMono: round(Number(payload?.viewMono)), sim: round(room._simulationMono), tick: room._tickId });
+  }
+
+  // Damage applied (or refused) where a traced player is the attacker or the
+  // target. `rewindMs` is how far back the target was tested.
+  function noteHit(room, attacker, targetName, info = {}) {
+    const s = room._netTrace;
+    if (!s?.runs.size) return;
+    const tagOf = (p) => (p?.socketId ? s.sockets.get(p.socketId) : null) || null;
+    const target = info.target || null;
+    const aTag = tagOf(attacker), vTag = tagOf(target);
+    if (!aTag && !vTag) return;
+    emitRoom(room, { kind: "hit", a: attacker?.name || null, aTag, aChar: attacker?.char_class || null,
+      aBot: !!attacker?.isBot, v: targetName, vTag, type: info.type || null, dmg: info.dmg ?? null,
+      id: info.id == null ? null : String(info.id).slice(0, 40), rewindMs: round(Number(info.rewindMs)),
+      ok: info.ok !== false, reason: info.reason || null, sim: round(room._simulationMono), tick: room._tickId });
+  }
+
   // Token-verified probe accounts may play trophy-locked modes (Bank Bust) as
   // fresh guests. Process-local and time-limited.
   const tracedUsers = new Map(); // name -> expiresAt
@@ -393,6 +454,9 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
     noteBotTick,
     noteInput,
     noteCorrection,
+    notePhases,
+    noteAction,
+    noteHit,
     noteGlobal,
     markTracedUser,
     isTracedUser,

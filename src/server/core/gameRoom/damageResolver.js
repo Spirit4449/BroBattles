@@ -19,6 +19,7 @@ const combatValidation = require("./combatValidation");
 const { reduceDuckDamage } = require("../../../shared/physics/ducking");
 const { chargeSuperForHit } = require("./superCharge");
 const { CENTER_CRATE_TARGET } = require("./attackRuntimes/targets");
+const { netTrace } = require("./netTraceRecorder");
 
 // Client wall clocks are unsynchronised, so a client-reported Date.now() cannot
 // place a hit on the server's history. Clients send the shared server-clock
@@ -305,6 +306,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
         0,
         previousCoins - (Number(vaultState?.coins) || 0),
       );
+      if (room._netTrace) traceHit(room, attacker, targetName, null, attackType, appliedDamage, payload, huntressProjectile || ninjaProjectile || runtimeProjectile);
       if (appliedDamage > 0) {
         attacker.lastAttackAt = now;
         attacker.lastCombatAt = now;
@@ -322,6 +324,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     const old = target.health;
     target.health = Math.max(0, target.health - Math.round(dmg));
     const appliedDamage = Math.max(0, old - target.health);
+    if (room._netTrace && !isSelf) traceHit(room, attacker, targetName, target, attackType, appliedDamage, payload, huntressProjectile || ninjaProjectile || runtimeProjectile);
     if (room.DEBUG_HIT_EVENTS) {
       console.log(
         `[HitDebug ${room.matchId}] accept attacker=${attacker.name} target=${target.name} type=${attackType} dist=${dist.toFixed(0)}/${maxDist} dmgRaw=${Math.round(dmg)} applied=${appliedDamage} hp=${old}->${target.health}`,
@@ -405,6 +408,11 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
   } catch (e) {
     console.warn(`[GameRoom ${room.matchId}] handleHit error:`, e?.message);
   }
+}
+
+function traceHit(room, attacker, targetName, target, attackType, appliedDamage, payload, projectile) {
+  netTrace.noteHit(room, attacker, targetName, { target, type: attackType, dmg: appliedDamage,
+    id: payload?.instanceId ?? projectile?.projectile?.id ?? null, rewindMs: projectile?.viewRewindMs ?? 0 });
 }
 
 module.exports = { handleHit, resolveAttackTime };

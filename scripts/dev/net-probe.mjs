@@ -6,8 +6,17 @@
 //
 //   node scripts/dev/net-probe.mjs [--base https://brobattles.dev] [--clients 2]
 //     [--mode bank-bust] [--variant bank-bust-3v3] [--map 1] [--char ninja]
-//     [--duration 90] [--script mixed|strafe|dash|idle] [--headed] [--cpu-throttle 4]
-//     [--run <id>] [--token <token>]
+//     [--duration 90] [--script mixed|strafe|dash|idle|attack|melee|special|fight]
+//     [--range 380] [--matches 1] [--baseline <runId>] [--no-report]
+//     [--headed] [--cpu-throttle 4] [--run <id>] [--token <token>]
+//
+// Attack scripts steer each client toward the nearest enemy and attack with the
+// keyboard (J basic, I special; both auto-aim at the nearest enemy): "attack"
+// keeps ranged distance, "melee" closes in, "special" also fires specials,
+// "fight" mixes attack with dashes and jumps. --range overrides the distance.
+// --matches N plays N matches in a row with the same browsers and party; runs
+// are named <run>-m1, <run>-m2, … The report runs at the end (brief) and, with
+// --baseline, is compared against that run.
 //
 // Token: --token, $BB_NET_TRACE_TOKEN, .env.nettrace, then (localhost only) .env.
 // Runs on this machine (Playwright headless shell, or Google Chrome with
@@ -55,8 +64,11 @@ const mapId = args.map != null ? String(args.map) : null;
 const character = args.char ? String(args.char) : null;
 const durationS = Number(args.duration) || 90;
 const script = String(args.script || "mixed");
+const matches = Math.max(1, Math.min(10, Number(args.matches) || 1));
+const MELEE = new Set(["thorg", "draven"]);
 const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-");
-const runId = String(args.run || `probe-${stamp}`);
+const baseRunId = String(args.run || `probe-${stamp}`);
+let runId = baseRunId;
 const tags = Array.from({ length: clients }, (_, i) => `c${i}`);
 
 const log = (...m) => console.log(`[${new Date().toISOString().slice(11, 19)}]`, ...m);
@@ -141,6 +153,94 @@ async function playScript(page, steps, deadline, offsetMs) {
   }
 }
 
+let reportRuns = [];
+
+// Steer toward the nearest enemy and attack it. Keys are held/released as in
+// a real player's hands; J and I auto-aim at the nearest enemy.
+const ATTACK_SCRIPTS = new Set(["attack", "melee", "special", "fight"]);
+async function playAttackScript(page, deadline, offsetMs, { range, specials, dashes }) {
+  await sleep(offsetMs);
+  const held = new Set();
+  const hold = async (key, down) => {
+    if (down === held.has(key)) return;
+    if (down) { held.add(key); await page.keyboard.down(key).catch(() => {}); }
+    else { held.delete(key); await page.keyboard.up(key).catch(() => {}); }
+  };
+  const tap = async (key, ms = 50) => { await page.keyboard.down(key).catch(() => {}); await sleep(ms); await page.keyboard.up(key).catch(() => {}); };
+  let nextAttack = 0, nextSpecial = Date.now() + 2500, nextJump = 0, nextDash = Date.now() + 3000;
+  while (Date.now() < deadline && !page.isClosed()) {
+    const e = await page.evaluate(() => window.__BB_NET_TRACE__?.nearestEnemy?.() || null).catch(() => null);
+    const now = Date.now();
+    if (!e) { await hold("KeyD", false); await hold("KeyA", false); await sleep(150); continue; }
+    const want = Math.abs(e.dx) > range ? Math.sign(e.dx) : Math.abs(e.dx) < range * 0.45 && range > 150 ? -Math.sign(e.dx) : 0;
+    await hold("KeyD", want > 0);
+    await hold("KeyA", want < 0);
+    if (e.dy < -90 && now >= nextJump) { nextJump = now + 900; await tap("KeyW", 90); }
+    if (Math.abs(e.dy) < 80 && Math.abs(e.dx) <= range * 1.15 && now >= nextAttack) {
+      nextAttack = now + 260 + Math.random() * 120;
+      await tap("KeyJ", 40);
+    }
+    if (specials && now >= nextSpecial && Math.abs(e.dx) <= range * 1.2) { nextSpecial = now + 2000; await tap("KeyI", 40); }
+    if (dashes && now >= nextDash) { nextDash = now + 2500 + Math.random() * 1500; await tap("Space", 50); }
+    await sleep(90);
+  }
+  for (const key of [...held]) await hold(key, false);
+}
+
+async function playMatch(all, owner, partyId) {
+  for (const c of all) {
+    await c.page.goto(`${base}/party/${partyId}?${traceQuery(c.tag)}`, { waitUntil: "domcontentloaded" });
+    await waitFor(c.page, () => !!window.__BB_NET_TRACE_SOCKET__?.connected, null, { label: `${c.tag} party socket` });
+  }
+  await sleep(1500);
+  if (character) {
+    for (const c of all) log(`${c.tag} char-change`, JSON.stringify(await emitAck(c.page, "char-change", { partyId, character })));
+  }
+  for (const c of all) {
+    const reply = await emitAck(c.page, "ready:status", { partyId, ready: true });
+    log(`${c.tag} ready`, JSON.stringify(reply).slice(0, 160));
+  }
+  await sleep(1500);
+  await emit(owner.page, "queue:fill-bots", {});
+  log("requested bot fill; waiting for /game/ …");
+  await Promise.all(all.map(c => c.page.waitForURL(/\/game\/\d+/, { timeout: 45000 })));
+  const matchId = owner.page.url().match(/\/game\/(\d+)/)?.[1];
+  log(`match ${matchId} loading`);
+
+  // Snapshots only flow after FIGHT.
+  await Promise.all(all.map(c => waitFor(c.page, () => (window.__BB_NET_TRACE__?.stats().snaps || 0) > 5, null,
+    { timeout: 60000, label: `${c.tag} first snapshots` })));
+  log("FIGHT — playing");
+  for (const c of all) await c.page.mouse.click(640, 360).catch(() => {});
+
+  const deadline = Date.now() + durationS * 1000;
+  if (process.env.PROBE_DEBUG) log(`deadline in ${deadline - Date.now()}ms`);
+  const steps = SCRIPTS[script] || SCRIPTS.mixed;
+  const players = all.map((c, i) => {
+    if (!ATTACK_SCRIPTS.has(script)) return playScript(c.page, steps, deadline, i * 370);
+    const range = Number(args.range) || (script === "melee" || MELEE.has(character) ? 70 : 380);
+    return playAttackScript(c.page, deadline, i * 370, { range, specials: script === "special" || script === "fight", dashes: script === "fight" });
+  });
+  const status = setInterval(async () => {
+    const lines = await Promise.all(all.map(async c => {
+      try {
+        const s = await c.page.evaluate(() => {
+          const t = window.__BB_NET_TRACE__?.stats(); const n = window.__BB_NETWORK_DIAGNOSTICS__?.();
+          return { t, delay: n?.interpDelayMs, under: n?.underrunFrames, rtt: n?.clock?.bestRttMs, corr: n?.corrections?.total ?? n?.corrections?.count };
+        });
+        return `${c.tag} snaps=${s.t?.snaps} maxGap=${s.t?.maxArrivalGapMs}ms corr=${s.t?.corrections} rtt=${Math.round(s.rtt ?? -1)} delay=${Math.round(s.delay ?? -1)} underruns=${s.under} up=${s.t?.uploads}/${s.t?.rejected}`;
+      } catch (e) { return `${c.tag} (${e.message.slice(0, 40)})`; }
+    }));
+    log(lines.join(" | "));
+  }, 5000);
+  const playStarted = Date.now();
+  await Promise.all(players);
+  clearInterval(status);
+  log(`played ${Math.round((Date.now() - playStarted) / 1000)}s`);
+  for (const c of all) await c.page.evaluate(() => window.__BB_NET_TRACE__?.flush()).catch(() => {});
+  await sleep(2500);
+}
+
 async function main() {
   log(`run ${runId} → ${base} (${clients} clients, ${modeId}:${variantId || "default"}${mapId ? ` map ${mapId}` : ""}, ${durationS}s, script=${script})`);
   const browser = await chromium.launch({
@@ -154,6 +254,8 @@ async function main() {
   });
   browser.on("disconnected", () => log("browser disconnected"));
   const all = [];
+  const runIds = [];
+  reportRuns = [];
   let exitCode = 0;
   try {
     for (const tag of tags) all.push(await openClient(browser, tag));
@@ -178,60 +280,31 @@ async function main() {
       log(`${g.tag} joined party ${partyId}`);
     }
 
-    for (const c of all) {
-      await c.page.goto(`${base}/party/${partyId}?${traceQuery(c.tag)}`, { waitUntil: "domcontentloaded" });
-      await waitFor(c.page, () => !!window.__BB_NET_TRACE_SOCKET__?.connected, null, { label: `${c.tag} party socket` });
+    for (let m = 1; m <= matches; m++) {
+      runId = matches > 1 ? `${baseRunId}-m${m}` : baseRunId;
+      runIds.push(runId);
+      log(`match ${m}/${matches}: run ${runId}`);
+      await playMatch(all, owner, partyId);
     }
-    await sleep(1500);
-    if (character) {
-      for (const c of all) log(`${c.tag} char-change`, JSON.stringify(await emitAck(c.page, "char-change", { partyId, character })));
-    }
-    for (const c of all) {
-      const reply = await emitAck(c.page, "ready:status", { partyId, ready: true });
-      log(`${c.tag} ready`, JSON.stringify(reply).slice(0, 160));
-    }
-    await sleep(1500);
-    await emit(owner.page, "queue:fill-bots", {});
-    log("requested bot fill; waiting for /game/ …");
-    await Promise.all(all.map(c => c.page.waitForURL(/\/game\/\d+/, { timeout: 45000 })));
-    const matchId = owner.page.url().match(/\/game\/(\d+)/)?.[1];
-    log(`match ${matchId} loading`);
-
-    // Snapshots only flow after FIGHT.
-    await Promise.all(all.map(c => waitFor(c.page, () => (window.__BB_NET_TRACE__?.stats().snaps || 0) > 5, null,
-      { timeout: 60000, label: `${c.tag} first snapshots` })));
-    log("FIGHT — playing");
-    for (const c of all) await c.page.mouse.click(640, 360).catch(() => {});
-
-    const deadline = Date.now() + durationS * 1000;
-    if (process.env.PROBE_DEBUG) log(`deadline in ${deadline - Date.now()}ms`);
-    const steps = SCRIPTS[script] || SCRIPTS.mixed;
-    const players = all.map((c, i) => playScript(c.page, steps, deadline, i * 370));
-    const status = setInterval(async () => {
-      const lines = await Promise.all(all.map(async c => {
-        try {
-          const s = await c.page.evaluate(() => {
-            const t = window.__BB_NET_TRACE__?.stats(); const n = window.__BB_NETWORK_DIAGNOSTICS__?.();
-            return { t, delay: n?.interpDelayMs, under: n?.underrunFrames, rtt: n?.clock?.bestRttMs, corr: n?.corrections?.total ?? n?.corrections?.count };
-          });
-          return `${c.tag} snaps=${s.t?.snaps} maxGap=${s.t?.maxArrivalGapMs}ms corr=${s.t?.corrections} rtt=${Math.round(s.rtt ?? -1)} delay=${Math.round(s.delay ?? -1)} underruns=${s.under} up=${s.t?.uploads}/${s.t?.rejected}`;
-        } catch (e) { return `${c.tag} (${e.message.slice(0, 40)})`; }
-      }));
-      log(lines.join(" | "));
-    }, 5000);
-    const playStarted = Date.now();
-    await Promise.all(players);
-    clearInterval(status);
-    log(`played ${Math.round((Date.now() - playStarted) / 1000)}s`);
-    for (const c of all) await c.page.evaluate(() => window.__BB_NET_TRACE__?.flush()).catch(() => {});
-    await sleep(2500);
-    log(`done. Report: node scripts/dev/net-report.mjs ${runId}${isLocal ? " --local" : ""}`);
+    log(`done. Report: node scripts/dev/net-report.mjs ${runIds.join(" ")}${isLocal ? " --local" : ""}`);
+    reportRuns = runIds.slice();
   } catch (e) {
     exitCode = 1;
     log("probe failed:", e.message);
     for (const c of all) log(`${c.tag} at ${c.page.url().replace(/ntk=[^&]+/, "ntk=…")}`);
   } finally {
     await browser.close().catch(() => {});
+  }
+  // Brief report (verdict and key lines) per match, then a comparison.
+  if (!args["no-report"]) {
+    const { execFileSync } = await import("node:child_process");
+    for (const id of reportRuns) {
+      try {
+        const out = execFileSync(process.execPath, [path.join(root, "scripts/dev/net-report.mjs"), id, "--brief", ...(isLocal ? ["--local"] : []),
+          ...(args.baseline ? ["--baseline", String(args.baseline)] : [])], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+        console.log(out);
+      } catch (e) { log(`report ${id} failed: ${e.message.slice(0, 200)}`); }
+    }
   }
   process.exit(exitCode);
 }

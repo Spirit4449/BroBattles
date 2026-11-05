@@ -38,6 +38,7 @@ function setupPlayerSocket(room, socket) {
     const player = room.players.get(socket.id);
     if (!player) return;
     stampViewRewind(room, actionData, latency);
+    if (room._netTrace) netTrace.noteAction(room, socket.id, 'game:action', actionData);
     if (characterCombat.ownsAction(room, player, actionData)) {
       room.handlePlayerAction(socket.id, actionData);
       return;
@@ -80,7 +81,11 @@ function setupPlayerSocket(room, socket) {
   });
 
     // Handle special attack request
-  room.onSocket(socket, "game:special", (payload = {}) => room.requestSpecial(socket.id, stampViewRewind(room, payload, latency)));
+  room.onSocket(socket, "game:special", (payload = {}) => {
+    stampViewRewind(room, payload, latency);
+    if (room._netTrace) netTrace.noteAction(room, socket.id, 'game:special', payload);
+    room.requestSpecial(socket.id, payload);
+  });
 
   room.onSocket(socket, "deathdrop:pickup", (payload) => {
     room._handleDeathDropPickup(socket.id, payload);

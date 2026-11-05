@@ -6,7 +6,7 @@ import { resolveGloopHookSocket } from "../../../../shared/characters/gloopHookG
 import { playPlayerSound } from "../../audio/playerAudio";
 import { createRuntimeId } from "../shared/runtimeId";
 import { consumeOnce } from "../shared/packetDedupe";
-import { predictShotContact, confirmWindowMs, shotBlockerContact } from "../shared/shotPrediction";
+import { predictShotContact, confirmWindowMs, shotBlockerContact, noteShotWithdrawn } from "../shared/shotPrediction";
 import { attackCollisionCenter } from "../../../../shared/combat/shotContact";
 
 const NAME = "gloop";
@@ -210,7 +210,7 @@ function createHookVisual(scene, owner, angle, start, id) {
       const { latch } = visual;
       if (latch.sprite?.active) hand.setPosition(latch.sprite.x + latch.offset.x, latch.sprite.y + latch.offset.y);
       // No catch within a round trip: the server's hook missed; let go.
-      if (visual.elapsed > confirmWindowMs()) finish();
+      if (visual.elapsed > confirmWindowMs()) { noteShotWithdrawn?.("gloop-hook"); finish(); }
     } else if (visual.phase === "return" || visual.phase === "catch") {
       const caught = visual.phase === "catch";
       const t = Math.min(1, visual.elapsed / visual.returnMs);

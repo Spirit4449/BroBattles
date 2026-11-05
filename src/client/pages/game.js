@@ -277,6 +277,18 @@ const disposeNetTrace = installNetTrace({
   getCorrectionDiagnostics: () => localMovementCorrector.getDiagnostics(),
   getClockDiagnostics: getServerClockDiagnostics,
   serverNow: serverNowMono,
+  getCharacter: () => player?._bbCharacter || null,
+  getEnemies: () => Object.entries(opponentPlayers)
+    .map(([name, w]) => (w?.opponent?.active && w.opponent.visible !== false && !(w.opCurrentHealth <= 0)
+      ? { name, x: w.opponent.x, y: w.opponent.y } : null)),
+  toScreen: (x, y) => {
+    const cam = gameScene?.cameras?.main, canvas = gameScene?.game?.canvas;
+    if (!cam || !canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const scale = rect.width / (gameScene.scale?.width || rect.width);
+    return { x: rect.left + (cam.x + (x - cam.worldView.x) * cam.zoom) * scale,
+      y: rect.top + (cam.y + (y - cam.worldView.y) * cam.zoom) * scale };
+  },
 });
 if (disposeNetTrace) window.__BB_PAGE_SCOPE__?.onDispose(disposeNetTrace);
 

@@ -7,7 +7,7 @@ import { remoteLaunchCorrection, reconcileFlight } from '../../../../shared/proj
 import { VERSION, attackConfig, resolveShot, powerFromSpeed, createVolley, firstContact, sample, attachmentPoint } from '../../../../shared/characters/huntressProjectile';
 import { advanceGeometry } from '../../../../shared/maps/platformMotion';
 import { playPlayerSound } from '../../audio/playerAudio';
-import { isLocalShooter, predictShotContact, shotBlockersFor, confirmWindowMs } from '../shared/shotPrediction';
+import { isLocalShooter, predictShotContact, shotBlockersFor, confirmWindowMs, noteShotWithdrawn } from '../shared/shotPrediction';
 
 // The replica reads the shared match clock; it never resets or pings it.
 const replica = new HuntressReplica(serverClock);
@@ -196,6 +196,7 @@ export function attachHuntressScene(scene, nextContext = {}) {
       if (entry.held) {
         // A predicted body hit the server has not confirmed in time is withdrawn.
         if (entry.held.target && now - entry.held.at > confirmWindowMs()) {
+          if (entry.withdrawnAt == null) noteShotWithdrawn?.('huntress', id);
           if (fadeOut(entry, now)) { sprites.delete(id); withdrawn.add(id); }
           continue;
         }

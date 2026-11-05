@@ -13,6 +13,9 @@ import { RENDER_LAYERS } from "../../scene/renderLayers";
 //    window is withdrawn by fading, never by flying on.
 
 let viewMono = null;
+// Production network tracing (match/netTrace.js) listens for predicted hits and
+// withdrawals here; null unless a traced tab installed it.
+let traceHook = null;
 let roster = { localUsername: null, opponentPlayersRef: null };
 const staticTargets = new Map();
 const blockerSources = new Map();
@@ -91,7 +94,9 @@ export function displayedShotTargets() {
 // `skip` holds names already struck by a piercing shot.
 export function predictShotContact(a, b, radius, { inset = false, skip = null } = {}) {
   if (![a?.x, a?.y, b?.x, b?.y].every(Number.isFinite)) return null;
-  return firstTargetContact(a, b, Math.max(0, Number(radius) || 0), displayedShotTargets(), { inset, skip });
+  const contact = firstTargetContact(a, b, Math.max(0, Number(radius) || 0), displayedShotTargets(), { inset, skip });
+  if (traceHook && contact?.target?.name) traceHook.prediction?.(contact.target.name);
+  return contact;
 }
 
 // A confirmation for a predicted hit arrives about one round trip after it is
@@ -110,6 +115,15 @@ export function playPredictedImpact(scene, x, y, color = 0xfff2d4, radius = 10) 
   scene.tweens?.add?.({ targets: flash, alpha: 0, scaleX: 1.8, scaleY: 1.8, duration: 160,
     onComplete: () => flash.destroy() });
   return flash;
+}
+
+export function setShotTraceHook(hook) {
+  traceHook = hook || null;
+}
+
+// A predicted hit the shooter takes back because the server did not confirm it.
+export function noteShotWithdrawn(kind, id = null) {
+  traceHook?.withdrawn?.(kind, id);
 }
 
 export function resetShotPrediction() {

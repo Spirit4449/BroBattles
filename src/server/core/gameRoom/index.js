@@ -662,18 +662,7 @@ class GameRoom {
     let snapshotDue = false;
     let worldStateDue = false;
 
-    const step = (currentMono) => {
-      this._simulationMono = currentMono;
-      this._tickId++;
-      tickMovingPlatforms(this, currentMono);
-      this.processTick();
-      attackRuntimeManager.tickActiveAttacks(this, Date.now());
-      characterCombat.tick(this);
-      this._tickPowerupEffects();
-      this.processRegen();
-      this._tickTimerAndSuddenDeath();
-      this._tickPowerups();
-      this._tickDeathDrops();
+    const runMode = () => {
       try {
         this.gameMode?.tick?.(Date.now());
       } catch (e) {
@@ -681,6 +670,44 @@ class GameRoom {
           `[GameRoom ${this.matchId}] mode tick failed:`,
           e?.message,
         );
+      }
+    };
+    // Traced rooms time each phase of the step (see netTraceRecorder).
+    const tracedStep = (currentMono) => {
+      const t0 = performance.now();
+      tickMovingPlatforms(this, currentMono);
+      const t1 = performance.now();
+      this.processTick();
+      const t2 = performance.now();
+      attackRuntimeManager.tickActiveAttacks(this, Date.now());
+      const t3 = performance.now();
+      characterCombat.tick(this);
+      const t4 = performance.now();
+      this._tickPowerupEffects();
+      this.processRegen();
+      this._tickTimerAndSuddenDeath();
+      this._tickPowerups();
+      this._tickDeathDrops();
+      const t5 = performance.now();
+      runMode();
+      const t6 = performance.now();
+      netTrace.notePhases(this, { platforms: t1 - t0, tick: t2 - t1, attacks: t3 - t2, combat: t4 - t3, items: t5 - t4, mode: t6 - t5 }, t6 - t0);
+    };
+    const step = (currentMono) => {
+      this._simulationMono = currentMono;
+      this._tickId++;
+      if (this._netTrace) tracedStep(currentMono);
+      else {
+        tickMovingPlatforms(this, currentMono);
+        this.processTick();
+        attackRuntimeManager.tickActiveAttacks(this, Date.now());
+        characterCombat.tick(this);
+        this._tickPowerupEffects();
+        this.processRegen();
+        this._tickTimerAndSuddenDeath();
+        this._tickPowerups();
+        this._tickDeathDrops();
+        runMode();
       }
       // Snapshot cadence: deterministic every N ticks
       if (this._tickId % this.SNAPSHOT_EVERY_TICKS === 0) {
@@ -715,8 +742,10 @@ class GameRoom {
       // Publish the final state, not every intermediate catch-up state. Immediate
       // respawn/action snapshots and discrete events retain their existing order.
       if (this._loopRunning) {
+        const publishStart = this._netTrace ? performance.now() : 0;
         if (snapshotDue) this._emitSnapshotWithTiming(simulatedMono);
         if (worldStateDue) this.broadcastWorldState();
+        if (this._netTrace && (snapshotDue || worldStateDue)) netTrace.notePhases(this, { publish: performance.now() - publishStart }, 0);
       }
       // Yield a bit to avoid busy-spinning the CPU.
       // Sleep roughly until the next tick is due (at least 0–1ms).

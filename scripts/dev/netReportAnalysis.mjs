@@ -29,6 +29,8 @@ export function analyzeServer(records) {
   const snapStalls = stalls.filter(s => s.what === "snapshot");
   const hosts = records.filter(r => r.kind === "host");
   const nav = records.filter(r => r.kind === "nav");
+  const actions = records.filter(r => r.kind === "action");
+  const hits = records.filter(r => r.kind === "hit");
   const navIntervals = nav.map(n => ({ start: n.t - (Number(n.buildMs) || 0) - Math.max(0, Number(n.queueMs) || 0), end: n.t }));
   const inNav = (t) => navIntervals.some(i => t >= i.start - 50 && t <= i.end + 50);
   const tickAt = (t) => ticks.find(k => t <= k.t && t > k.t - (k.windowMs || 1000) - 1);
@@ -70,8 +72,26 @@ export function analyzeServer(records) {
     },
     attribution: { stalls: loopStalls.length, withNav, withBots, withHostLoad, botThresholdMs: BOT_HEAVY_MS },
     writeBufferMax: fin(writeBufferMax),
-    _index: { ticks, loopStalls, snapStalls, hosts, inNav, tickAt, hostAt },
+    phases: phaseSummary(ticks),
+    gc: { pauseMax: fin(max(hosts.map(h => h.gc?.max))), majorMax: fin(max(hosts.map(h => h.gc?.majorMax))),
+      msPerSecondMax: fin(max(hosts.map(h => h.gc?.ms))) },
+    _index: { ticks, loopStalls, snapStalls, hosts, inNav, tickAt, hostAt, actions, hits },
   };
+}
+
+// Per-phase main-thread time (ms per second) across live ticks: p50/max of the
+// per-second totals and the slowest single step.
+function phaseSummary(ticks) {
+  const out = {};
+  for (const k of ticks) {
+    for (const [phase, ms] of Object.entries(k.phases || {})) (out[phase] ||= { perSecond: [], stepMax: 0 }).perSecond.push(ms);
+    for (const [phase, ms] of Object.entries(k.phaseMax || {})) {
+      (out[phase] ||= { perSecond: [], stepMax: 0 });
+      if (ms > out[phase].stepMax) out[phase].stepMax = ms;
+    }
+  }
+  return Object.fromEntries(Object.entries(out).map(([phase, v]) => [phase,
+    { p50PerSecond: quantile(v.perSecond, 0.5), maxPerSecond: fin(max(v.perSecond)), stepMax: v.stepMax }]));
 }
 
 function dedupeRooms(rooms) {
@@ -83,18 +103,20 @@ function dedupeRooms(rooms) {
 // ---- client ---------------------------------------------------------------
 
 export function flattenClient(records) {
-  const out = { user: null, names: [], frames: [], snaps: [], decoded: [], corrections: [], keys: [], diag: [], events: [], offsets: [] };
+  const out = { user: null, character: null, names: [], frames: [], snaps: [], decoded: [], corrections: [], keys: [], diag: [], events: [], combat: [], offsets: [] };
   for (const r of records) {
     const d = r.kind === "batch" ? r.data : null;
     if (!d) continue;
     out.user ||= d.user;
+    out.character ||= d.character || null;
     if (Array.isArray(d.names) && d.names.length >= out.names.length) out.names = d.names;
-    for (const k of ["frames", "snaps", "decoded", "corrections", "keys", "diag", "events"]) {
+    for (const k of ["frames", "snaps", "decoded", "corrections", "keys", "diag", "events", "combat"]) {
       if (Array.isArray(d[k])) out[k].push(...d[k]);
     }
     if (Number.isFinite(d.serverNowAtSend) && Number.isFinite(d.sentAt)) out.offsets.push(d.serverNowAtSend - d.sentAt);
   }
   for (const s of out.snaps) if (Number.isFinite(s[6]) && Number.isFinite(s[0])) out.offsets.push(s[6] - s[0]);
+  out.combat.sort((a, b) => a[0] - b[0]);
   out.frames.sort((a, b) => a[0] - b[0]);
   out.snaps.sort((a, b) => a[0] - b[0]);
   out.decoded.sort((a, b) => a[0] - b[0]);
@@ -222,7 +244,7 @@ function truthReversed(truth, t, dir, windowMs = 450) {
   return false;
 }
 
-export function analyzeClient(records, serverIndex) {
+export function analyzeClient(records, serverIndex, tag = null) {
   const c = flattenClient(records);
   if (!c.snaps.length && !c.frames.length) return { user: c.user, snapshots: 0 };
   const arrivals = analyzeArrivals(c.snaps, { serverIndex, offset: c.offset, frames: c.frames });
@@ -285,7 +307,105 @@ export function analyzeClient(records, serverIndex) {
     },
     corrections: { total: c.corrections.length, byReason, maxErrorPx: fin(max(c.corrections.map(x => x.errorPx))) },
     rubber: { local: suspect(localEvents), remote: suspect(remoteEvents), byCause, explained },
+    attacks: analyzeAttacks(c, serverIndex, tag),
     events: c.events,
+  };
+}
+
+// ---- attacks ----------------------------------------------------------------
+//
+// Client combat rows are [t, what, ...] in client performance.now(); `offset`
+// maps them onto server mono. Server "action" records are request receipts,
+// "hit" records damage applications. A request's id ties it to its receipt;
+// hits are tied to the latest earlier request of the same player.
+const ATTACK_INPUTS = new Map([["KeyJ", 1], ["KeyI", 1], ["Mouse0", 0], ["Mouse2", 0]]);
+const summary = (values) => {
+  const v = values.filter(Number.isFinite);
+  return v.length ? { n: v.length, p50: quantile(v, 0.5), p95: quantile(v, 0.95), max: max(v) } : { n: 0 };
+};
+
+export function analyzeAttacks(c, serverIndex, tag) {
+  const rows = c.combat || [];
+  const tx = rows.filter(r => r[1] === "tx");
+  if (!tx.length && !rows.some(r => r[1] === "pred")) return null;
+  const off = c.offset || 0;
+  const toServer = (t) => t + off;
+  const name = c.user;
+  // Attack keys fire on key down (polled once per frame); mouse attacks fire on release.
+  const presses = c.keys.filter(k => ATTACK_INPUTS.has(k[1]) && k[2] === ATTACK_INPUTS.get(k[1]));
+  const actions = (serverIndex?.actions || []).filter(a => a.tag === tag);
+  const hitsByMe = (serverIndex?.hits || []).filter(h => h.aTag === tag && h.ok && (h.dmg || 0) > 0);
+  const hitsOnMe = (serverIndex?.hits || []).filter(h => h.vTag === tag && h.ok && (h.dmg || 0) > 0);
+  const stallNear = (t0, t1) => (serverIndex?.loopStalls || []).some(s => s.t >= t0 && s.t - s.deltaMs <= t1);
+  const hp = rows.filter(r => r[1] === "hp");
+  const preds = rows.filter(r => r[1] === "pred");
+  const sp = rows.filter(r => r[1] === "sp");
+  const rtts = (c.diag || []).map(d => d.clock?.bestRttMs).filter(Number.isFinite);
+  const rtt = rtts.length ? Math.min(...rtts) : 20;
+
+  // Press -> request sent (the local attack plays in the same frame as the send).
+  const pressToSend = [], sendToServer = [];
+  const usedActions = new Set();
+  for (const r of tx) {
+    const press = presses.findLast(k => k[0] <= r[0] + 1 && k[0] >= r[0] - 250);
+    r.press = press ? press[0] : null;
+    if (press) pressToSend.push(r[0] - press[0]);
+    const id = r[4] == null ? null : String(r[4]);
+    const sent = toServer(r[0]);
+    const action = actions.find(a => !usedActions.has(a) && (id ? a.id === id : a.ev === r[2]) && a.t >= sent - 200 && a.t <= sent + 2000);
+    if (action) { usedActions.add(action); r.serverT = action.t; sendToServer.push(action.t - sent); }
+  }
+
+  // Each damaging hit: the request behind it, the prediction drawn for it, and
+  // when this client saw the target's health change.
+  const perHit = [];
+  for (const h of hitsByMe) {
+    const hitClient = h.t - off;
+    const cause = tx.findLast(r => r[0] <= hitClient + 5 && r[0] >= hitClient - 2500);
+    const health = hp.find(r => r[2] === h.v && r[0] >= hitClient - 5 && r[0] <= hitClient + 3000);
+    const pred = preds.findLast(r => r[2] === h.v && r[0] <= (health ? health[0] : hitClient + 400) && r[0] >= hitClient - 1500);
+    const superRow = sp.find(r => r[0] >= hitClient - 5 && r[0] <= hitClient + 3000);
+    perHit.push({
+      t: h.t, target: h.v, type: h.type, rewindMs: h.rewindMs,
+      serverToClient: health ? health[0] + off - h.t : null,
+      pressToConfirm: health && cause?.press != null ? health[0] - cause.press : null,
+      sendToHit: cause?.serverT != null ? h.t - cause.serverT : null,
+      predToConfirm: health && pred ? health[0] - pred[0] : null,
+      hitToSuper: superRow ? superRow[0] + off - h.t : null,
+      stall: stallNear(h.t - 300, health ? health[0] + off : h.t + 300),
+    });
+  }
+
+  // A prediction with no damaging server hit on that target soon after it was
+  // drawn is one the client will have withdrawn (or shown as a hit that never
+  // landed). The window is the client's own confirmation window.
+  const confirmWindow = Math.min(900, rtt + 220);
+  const unconfirmed = [];
+  for (const p of preds) {
+    const at = toServer(p[0]);
+    const ok = hitsByMe.some(h => h.v === p[2] && h.t >= at - 400 && h.t <= at + confirmWindow + 50);
+    if (!ok) unconfirmed.push({ t: at, target: p[2], stall: stallNear(at - 200, at + confirmWindow) });
+  }
+  const byType = {};
+  for (const h of perHit) (byType[h.type || "?"] ||= []).push(h);
+  return {
+    character: c.character, requests: tx.length, presses: presses.length,
+    pressToSend: summary(pressToSend), withinOneFrame: pressToSend.length ? pressToSend.filter(x => x <= 17).length / pressToSend.length : null,
+    sendToServer: summary(sendToServer),
+    hits: perHit.length,
+    serverToClient: summary(perHit.map(h => h.serverToClient)),
+    serverToClientStalled: summary(perHit.filter(h => h.stall).map(h => h.serverToClient)),
+    predToConfirm: summary(perHit.map(h => h.predToConfirm)),
+    pressToConfirm: summary(perHit.map(h => h.pressToConfirm)),
+    sendToHit: summary(perHit.map(h => h.sendToHit)),
+    hitToSuper: summary(perHit.map(h => h.hitToSuper)),
+    rewindAsShooter: summary(perHit.map(h => h.rewindMs)),
+    byType: Object.fromEntries(Object.entries(byType).map(([k, list]) => [k, {
+      hits: list.length, predToConfirm: summary(list.map(h => h.predToConfirm)), pressToConfirm: summary(list.map(h => h.pressToConfirm)) }])),
+    predictions: preds.length, unconfirmed: unconfirmed.length, unconfirmedDuringStall: unconfirmed.filter(u => u.stall).length,
+    unconfirmedRate: preds.length ? unconfirmed.length / preds.length : null,
+    withdrawnEvents: rows.filter(r => r[1] === "wd").length,
+    hitsTaken: hitsOnMe.length, rewindAsVictim: summary(hitsOnMe.map(h => h.rewindMs)),
   };
 }
 
@@ -295,7 +415,7 @@ export function analyzeRun({ server: serverRecords, clients: clientRecords }) {
   const server = analyzeServer(serverRecords);
   const idx = server._index;
   const clients = {};
-  for (const [tag, records] of Object.entries(clientRecords)) clients[tag] = analyzeClient(records, idx);
+  for (const [tag, records] of Object.entries(clientRecords)) clients[tag] = analyzeClient(records, idx, tag);
 
   // Timeline of notable seconds.
   const rows = [];

@@ -2,8 +2,11 @@
 // Merge one network trace run (server + every client) and print a plain-text
 // diagnosis. Fetches the run from the production Pi over SSH unless --local.
 //
-//   node scripts/dev/net-report.mjs <runId> [--local] [--dir <path>] [--json]
+//   node scripts/dev/net-report.mjs <runId> [--local] [--dir <path>] [--json] [--brief] [--baseline <runId>]
 //   node scripts/dev/net-report.mjs --compare <runA> <runB>
+//
+// --brief prints the verdict, server summary and attack lines only; --baseline
+// appends a comparison against an earlier run's report.json.
 //
 // Output goes to stdout; report.json is written next to the run under
 // output/net-traces/<runId>/ (gitignored).
@@ -81,7 +84,10 @@ function printReport(runId, r) {
   L.push(`navigation builds: ${s.nav.count} (build max ${fmt(s.nav.buildMax)}ms, queue max ${fmt(s.nav.queueMax)}ms, errors ${s.nav.errors})`);
   L.push(`host: load1 max ${fmt(s.host.loadMax, 2)} | event-loop delay p99 max ${fmt(s.host.loopDelayP99Max, 1)}ms, max ${fmt(s.host.loopDelayMax, 1)}ms | process cpu max ${fmt(s.host.cpuMax)}% | mem avail min ${fmt(s.host.memAvailMin)}MB | swap max ${fmt(s.host.swapMax)}MB`);
   L.push(`stall attribution: ${s.attribution.withNav} of ${s.attribution.stalls} loop stalls overlapped a navigation build, ${s.attribution.withBots} had bot ticks > ${s.attribution.botThresholdMs}ms that second, ${s.attribution.withHostLoad} had load1 > cpus`);
-  L.push(`max socket write buffer: ${fmt(s.writeBufferMax)} packets`);
+  L.push(`max socket write buffer: ${fmt(s.writeBufferMax)} packets | GC pause max ${fmt(s.gc?.pauseMax, 1)}ms (major ${fmt(s.gc?.majorMax, 1)}ms), GC ms/s max ${fmt(s.gc?.msPerSecondMax)}`);
+  if (s.phases && Object.keys(s.phases).length) {
+    L.push(`step phases (ms/s p50/max, slowest step): ${Object.entries(s.phases).map(([k, v]) => `${k} ${fmt(v.p50PerSecond)}/${fmt(v.maxPerSecond)} (${fmt(v.stepMax, 1)})`).join(" | ")}`);
+  }
   L.push("");
   for (const [tag, c] of Object.entries(r.clients)) {
     L.push(`## Client ${tag} (${c.user || "?"})`);
@@ -95,6 +101,14 @@ function printReport(runId, r) {
     L.push(`corrections: ${c.corrections.total} (${Object.entries(c.corrections.byReason).map(([k, v]) => `${k} ${v}`).join(", ") || "none"}), max error ${fmt(c.corrections.maxErrorPx, 1)}px`);
     L.push(`rubber-band: local ${c.rubber.local.length}, remote ${c.rubber.remote.length} → ${Object.entries(c.rubber.byCause).map(([k, v]) => `${k} ${v}`).join(", ") || "none"}` +
       ` (ignored as ordinary movement: ${Object.entries(c.rubber.explained || {}).map(([k, v]) => `${k} ${v}`).join(", ") || "none"})`);
+    const a = c.attacks;
+    if (a) {
+      const q = (x) => (x?.n ? `${fmt(x.p50)}/${fmt(x.p95)}` : "-");
+      L.push(`attacks (${a.character || "?"}): ${a.requests} requests, ${a.hits} damaging hits | p50/p95 ms: press→send ${q(a.pressToSend)} (${a.withinOneFrame == null ? "-" : Math.round(a.withinOneFrame * 100)}% ≤1 frame), send→server ${q(a.sendToServer)}, server hit→client health ${q(a.serverToClient)}${a.serverToClientStalled?.n ? ` (during stalls ${q(a.serverToClientStalled)})` : ""}`);
+      L.push(`  predicted hit→confirm ${q(a.predToConfirm)}, press→confirm ${q(a.pressToConfirm)}, request→server hit ${q(a.sendToHit)}, hit→super ${q(a.hitToSuper)} | rewind as shooter ${q(a.rewindAsShooter)} max ${fmt(a.rewindAsShooter?.max)}`);
+      L.push(`  predictions ${a.predictions}, unconfirmed ${a.unconfirmed} (${a.unconfirmedRate == null ? "-" : (a.unconfirmedRate * 100).toFixed(1)}%, ${a.unconfirmedDuringStall} near a server stall), withdrawn events ${a.withdrawnEvents} | hits taken ${a.hitsTaken}, rewind as victim ${q(a.rewindAsVictim)} max ${fmt(a.rewindAsVictim?.max)}`);
+      for (const [type, v] of Object.entries(a.byType || {})) L.push(`  ${type}: ${v.hits} hits, predicted→confirm ${q(v.predToConfirm)}, press→confirm ${q(v.pressToConfirm)}`);
+    }
     const events = [...c.rubber.local, ...c.rubber.remote].sort((a, b) => b.magnitudePx - a.magnitudePx).slice(0, 8);
     for (const e of events) {
       L.push(`  ${pad(e.kind, 6)} ${pad(e.actor || "self", 14)} t=${fmt(e.serverT / 1000, 2)}s ${fmt(e.magnitudePx, 1)}px cause=${e.cause}` +
@@ -116,19 +130,40 @@ function printReport(runId, r) {
   return L.join("\n");
 }
 
+export function comparable(r) {
+  const clients = Object.values(r.clients || {});
+  const sum = (f) => clients.reduce((n, c) => n + (f(c) || 0), 0);
+  const causes = {};
+  for (const c of clients) for (const [k, v] of Object.entries(c.rubber?.byCause || {})) causes[k] = (causes[k] || 0) + v;
+  const attackStat = (key, q) => {
+    const vals = clients.map(c => c.attacks?.[key]?.[q]).filter(Number.isFinite);
+    return vals.length ? Math.max(...vals) : null;
+  };
+  const preds = sum(c => c.attacks?.predictions), unconf = sum(c => c.attacks?.unconfirmed);
+  return {
+    loopStalls: r.server.loopStalls, loopStallsSevere: r.server.loopStallsSevere, loopMax: r.server.loopMax,
+    snapshotGaps: r.server.snapshotGaps, botMaxTick: r.server.botMax, botMsPerSecMax: r.server.botTotalMaxPerSecond,
+    navBuilds: r.server.nav.count, navQueueMax: r.server.nav.queueMax, gcPauseMax: r.server.gc?.pauseMax, loadMax: r.server.host.loadMax,
+    clientGaps: sum(c => c.gaps?.length), gapsServer: sum(c => c.gapCauses?.server), gapsTransport: sum(c => c.gapCauses?.transport),
+    gapsClient: sum(c => c.gapCauses?.client),
+    rubberLocal: sum(c => c.rubber?.local.length), rubberRemote: sum(c => c.rubber?.remote.length),
+    ...Object.fromEntries(Object.entries(causes).map(([k, v]) => [`rb:${k}`, v])),
+    corrections: sum(c => c.corrections?.total), correctionMaxPx: Math.max(0, ...clients.map(c => c.corrections?.maxErrorPx || 0)),
+    underrunsMax: Math.max(0, ...clients.map(c => c.render?.underruns || 0)),
+    attackHits: sum(c => c.attacks?.hits),
+    pressToSendP95: attackStat("pressToSend", "p95"),
+    predToConfirmP50: attackStat("predToConfirm", "p50"), predToConfirmP95: attackStat("predToConfirm", "p95"),
+    serverToClientP95: attackStat("serverToClient", "p95"),
+    pressToConfirmP50: attackStat("pressToConfirm", "p50"), pressToConfirmP95: attackStat("pressToConfirm", "p95"),
+    unconfirmedPct: preds ? (unconf / preds) * 100 : null,
+  };
+}
+
 function compare(a, b) {
-  const pick = (r) => ({
-    loopStalls: r.server.loopStalls, loopMax: r.server.loopMax, snapshotGaps: r.server.snapshotGaps,
-    botMax: r.server.botMax, navBuilds: r.server.nav.count, loadMax: r.server.host.loadMax,
-    clientGaps: Object.values(r.clients).reduce((n, c) => n + (c.gaps?.length || 0), 0),
-    transportGaps: Object.values(r.clients).reduce((n, c) => n + (c.gapCauses?.transport || 0), 0),
-    rubberLocal: Object.values(r.clients).reduce((n, c) => n + (c.rubber?.local.length || 0), 0),
-    rubberRemote: Object.values(r.clients).reduce((n, c) => n + (c.rubber?.remote.length || 0), 0),
-    corrections: Object.values(r.clients).reduce((n, c) => n + (c.corrections?.total || 0), 0),
-  });
-  const A = pick(a.report), B = pick(b.report);
-  const L = [`metric             ${pad(a.runId, 28)} ${b.runId}`];
-  for (const k of Object.keys(A)) L.push(`${pad(k, 18)} ${pad(fmt(A[k], 1), 28)} ${fmt(B[k], 1)}`);
+  const A = comparable(a.report), B = comparable(b.report);
+  const keys = [...new Set([...Object.keys(A), ...Object.keys(B)])];
+  const L = [`metric               ${pad(a.runId, 26)} ${b.runId}`];
+  for (const k of keys) L.push(`${pad(k, 20)} ${pad(fmt(A[k], 1), 26)} ${fmt(B[k], 1)}`);
   return L.join("\n");
 }
 
@@ -149,5 +184,16 @@ const report = analyzeRun(loadRun(dir));
 const outDir = path.join(OUT_ROOT, runId);
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, "report.json"), JSON.stringify(report, null, 1));
-console.log(args.json ? JSON.stringify(report, null, 1) : printReport(runId, report));
+const text = args.json ? JSON.stringify(report, null, 1) : printReport(runId, report);
+if (args.brief && !args.json) {
+  // Verdict, the server block, and each client's headline and attack lines.
+  const keep = /^(#|- |loop |snapshot emission|bots:|navigation|host:|stall attribution|max socket|step phases|## |gaps >=|corrections:|rubber-band:|attacks |  predicted|  predictions|render:)/;
+  console.log(text.split("\n").filter(l => keep.test(l) && !l.startsWith("## Notable")).join("\n"));
+} else console.log(text);
+if (args.baseline && typeof args.baseline === "string") {
+  try {
+    const base = JSON.parse(fs.readFileSync(path.join(OUT_ROOT, args.baseline, "report.json"), "utf8"));
+    console.log("\n" + compare({ runId: args.baseline, report: base }, { runId, report }));
+  } catch (e) { console.log(`(no baseline ${args.baseline}: ${e.message})`); }
+}
 console.log(`\n(report.json: ${path.relative(root, path.join(outDir, "report.json"))}; raw: ${dir})`);
