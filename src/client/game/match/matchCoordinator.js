@@ -28,6 +28,7 @@ import {
   shouldMuteClientDefaultLogs,
 } from "../../lib/netTestLogger.js";
 import { mergeInitialRosterPlayer } from "./playerRosterMerge.js";
+import { noteDecodedSnapshot } from "./netTrace";
 import { createSnapshotDecoder } from "../../../shared/snapshotDelta";
 import {
   observeServerClockSnapshot,
@@ -817,6 +818,7 @@ export function createMatchCoordinator(config) {
     const receivedAt = performance.now();
     const ingest = snapshotBuffer.ingestSnapshot(snapshot, receivedAt);
     if (ingest.accepted === false) return;
+    noteDecodedSnapshot(snapshot, receivedAt);
     observeServerClockSnapshot(snapshot, receivedAt);
     observeCharacterSnapshot(snapshot);
 

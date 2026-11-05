@@ -9,15 +9,24 @@ const {
   ACTION_SPAM_SUPPRESS_MS
 } = require("../gameRoomConfig");
 const { registerGameChatEvents } = require("../socketEvents/gameChatEvents");
+const { netTrace } = require('./netTraceRecorder');
 
 function setupPlayerSocket(room, socket) {
   const latency = createLatencyProbe(room, socket);
+  if (socket.data?.netTrace) {
+    netTrace.attachRoom(room, socket);
+    room.onSocket(socket, 'debug:net-trace', (payload, ack) => {
+      const ok = netTrace.acceptClientBatch(socket, payload);
+      if (typeof ack === 'function') ack({ ok });
+    });
+  }
   room.onSocket(socket, 'game:clock', (data, ack) => {
     if (typeof ack === 'function') ack(huntressCombat.timing(room));
     latency.probe();
   });
     // Handle player input
   room.onSocket(socket, "game:input", (inputData) => {
+    if (room._netTrace) netTrace.noteInput(room, socket.id);
     if (room.status !== "finished" && room.players.has(socket.id) && Number.isFinite(inputData?.x) && Number.isFinite(inputData?.y)) {
       room.playerActivity?.gameActivity(socket, room.matchId);
     }

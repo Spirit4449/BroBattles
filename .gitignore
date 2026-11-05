@@ -18,3 +18,6 @@ todo.md
 # Local database dumps (contain user data; never commit)
 /backup*.sql
 *.sql.bak
+
+# Production network traces (scripts/dev/net-probe.mjs)
+/data/net-traces/

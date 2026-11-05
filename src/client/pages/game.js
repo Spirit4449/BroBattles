@@ -64,7 +64,8 @@ import { installRenderResolution } from "../game/scene/renderResolution";
 import { deferSceneAudio } from "../game/audio/deferredAudio";
 import { createLocalInputSync } from "../game/scene/localInputSync";
 import { localMovementCorrector } from "../game/players/localMovementCorrector";
-import { getServerClockDiagnostics } from "../game/match/serverClock";
+import { getServerClockDiagnostics, serverNowMono } from "../game/match/serverClock";
+import { installNetTrace } from "../game/match/netTrace";
 import { updateHealthBars } from "../game/scene/healthBarRenderer";
 import { createModeRuntime, loadMode, preloadModeAssets, supportsSuddenDeath } from "../game/modes";
 import {
@@ -264,6 +265,20 @@ window.__BB_NETWORK_DIAGNOSTICS__ = () => ({
   corrections: localMovementCorrector.getDiagnostics(),
   clock: getServerClockDiagnostics(),
 });
+
+// Opt-in production tracing (?nettrace=<run>&ntk=<token>); a no-op otherwise.
+const disposeNetTrace = installNetTrace({
+  socket,
+  getLocal: () => player,
+  getRemotes: () => [...Object.entries(opponentPlayers), ...Object.entries(teamPlayers)]
+    .map(([name, w]) => (w?.opponent?.active ? { name, x: w.opponent.x, y: w.opponent.y } : null)),
+  getUsername: () => username,
+  getSnapshotDiagnostics: () => snapshotBuffer.getDiagnostics(),
+  getCorrectionDiagnostics: () => localMovementCorrector.getDiagnostics(),
+  getClockDiagnostics: getServerClockDiagnostics,
+  serverNow: serverNowMono,
+});
+if (disposeNetTrace) window.__BB_PAGE_SCOPE__?.onDispose(disposeNetTrace);
 
 // Console check for remote fighters that should be on screen but are not.
 window.__BB_REMOTE_PLAYERS__ = () =>

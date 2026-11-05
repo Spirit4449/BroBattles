@@ -1,4 +1,5 @@
 const { getModeUnlockReason, getModeUnlockRequirement } = require("../../../shared/trophyProgression");
+const { netTrace } = require("../../core/gameRoom/netTraceRecorder");
 async function assertModeAccess(db, modeId, { partyId, userId, actorName }) {
   if (!getModeUnlockRequirement(modeId)) return;
   const rows = actorName
@@ -8,6 +9,7 @@ async function assertModeAccess(db, modeId, { partyId, userId, actorName }) {
     : await db.runQuery("SELECT name, trophies, trophy_peak FROM users WHERE user_id = ?", [userId]);
   if (!rows.length) throw new Error("Player not found");
   for (const row of rows) {
+    if (netTrace.isTracedUser(row.name)) continue;
     const reason = getModeUnlockReason(modeId, row);
     if (reason) throw new Error(`${row.name}: ${reason}`);
   }

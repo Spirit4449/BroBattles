@@ -1,5 +1,6 @@
 // Minimal singleton Socket.IO client (bundled)
 import { io } from "socket.io-client";
+import { readNetTraceSpec } from "./netTraceSpec";
 
 function getSocketDebugMeta(socket) {
   const location =
@@ -24,14 +25,20 @@ function getSocketDebugMeta(socket) {
 // Party code can optionally await ensureSocketConnected() if it wants to
 // guarantee the handshake finished after /status completed.
 const editorSession = window.location.pathname === '/map-editor/playtest' ? new URLSearchParams(window.location.search).get('session') : null;
+const netTraceSpec = editorSession ? null : readNetTraceSpec();
 const socket = io(editorSession ? '/map-playtest' : '/', {
   ...(editorSession ? {auth:{session:editorSession}} : {}),
+  ...(netTraceSpec ? { auth: { netTrace: netTraceSpec } } : {}),
   withCredentials: true,
   autoConnect: false,
   transports: ["websocket"],
   upgrade: false,
   forceNew: false,
 });
+
+// Traced debug tabs expose the socket so the headless probe can drive the
+// lobby through the same events the UI emits.
+if (netTraceSpec) window.__BB_NET_TRACE_SOCKET__ = socket;
 
 // A soft navigation mounts a fresh bundle; retire this screen's connection
 // before the next screen authenticates and joins its room.

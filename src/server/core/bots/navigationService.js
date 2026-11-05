@@ -2,6 +2,7 @@ const { Worker } = require('node:worker_threads');
 const { createHash } = require('node:crypto');
 const { characterBody } = require('../../../shared/physics/duelGeometry');
 const { buildGraph } = require('./navigation');
+const { netTrace } = require('../gameRoom/netTraceRecorder');
 
 // The live server opts in; deterministic offline simulations retain buildGraph.
 // Never construct traversal graphs on the live game's event loop, even on a miss.
@@ -21,9 +22,12 @@ function createNavigationService({ limit = 32, log = console.info } = {}) {
       const entry = entries.get(key);
       if (!entry?.pending) return;
       finish(entry, graph, error);
-      log('[bots:navigation]', JSON.stringify({ character: entry.character,
+      const record = { character: entry.character,
         modifiers: entry.modifiers, buildMs: durationMs, error,
-        queueMs: performance.now() - entry.started - (durationMs || 0) }));
+        queueMs: performance.now() - entry.started - (durationMs || 0) };
+      log('[bots:navigation]', JSON.stringify(record));
+      netTrace.noteGlobal({ kind: 'nav', ...record,
+        stillPending: [...entries.values()].filter(e => e.pending).length });
       if (![...entries.values()].some(e => e.pending)) current.unref();
     });
     const failed = error => {

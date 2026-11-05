@@ -1,3 +1,4 @@
+const { netTrace } = require('./netTraceRecorder');
 const { damageHitboxSnapshot } = require('./damageHitboxes');
 const effectManager = require('./effects/effectManager');
 const { randomBytes } = require("node:crypto");
@@ -269,6 +270,7 @@ function broadcastSnapshot(room, extraTiming = null) {
     .to(`game:${room.matchId}`)
     .compress(false)
     .emit("game:snapshot", snapshot);
+  if (room._netTrace) netTrace.noteSnapshotEmit(room, snapshot);
 }
 
 function broadcastWorldState(room) {

@@ -95,6 +95,29 @@ Every shooter (Huntress arrows and burning volley, Ninja shuriken and swarm, Wiz
 
 Clients also stop arrows at terrain with the bootstrap colliders, so shots never overshoot a wall while their terminal is in flight. The trade-off of the rewind is the victim's: under latency they can still be hit up to 300 ms after reaching cover.
 
+## Production network tracing
+
+Lag and rubber-banding that only reproduce on the production Pi are measured with a run-scoped trace. It is off unless the server has `BB_NET_TRACE_TOKEN` (at least 16 characters) in its environment. `BB_NET_TRACE_DIR` overrides the output directory (default `data/net-traces`, gitignored).
+
+- **Opt in per tab:** open any page with `?nettrace=<runId>&ntk=<token>&ntag=<label>`. The spec is kept in `sessionStorage`, so it survives lobby → party → game navigation; `?nettrace=off` clears it. The socket handshake carries it, and `src/server/core/socket.js` verifies the token. A wrong token is ignored silently.
+- **Server** (`src/server/core/gameRoom/netTraceRecorder.js`): every room a traced socket joins writes `<runId>/server.jsonl`. Records are per-second loop/snapshot/bot/input/write-buffer summaries (`tick`), loop and snapshot-emission stalls (`stall`), corrections sent to traced players, navigation-worker builds (`nav`), and host load, event-loop delay, CPU, memory and swap (`host`). Writes are buffered and flushed once a second. Limits: 8 traced sockets and 50 MB per run, client batches at most 256 KB and one per 400 ms; runs older than seven days are pruned.
+- **Client** (`src/client/game/match/netTrace.js`): records raw snapshot arrivals, decoded positions, rendered local/remote positions per frame, corrections, keys, clock and render diagnostics, and uploads them every two seconds on `debug:net-trace` to `<runId>/<tag>.jsonl`. Detection happens offline in the report, so it can change without a client build.
+- **Probe accounts:** token-verified sockets may use `queue:fill-bots` for their own party and skip trophy mode locks for six hours, so fresh guests can test Bank Bust.
+
+```sh
+# One-time: npx playwright-core install chromium-headless-shell
+# Headless clients on this machine, private party, bots fill the rest.
+npm run net:probe -- --clients 2 --mode bank-bust --duration 90
+npm run net:probe -- --mode duels --variant duels-2v2 --char ninja --script dash
+# Fetch the run from the Pi over SSH and print the diagnosis.
+npm run net:report -- <runId>
+npm run net:report -- --compare <runA> <runB>
+```
+
+The probe reads the token from `--token`, `$BB_NET_TRACE_TOKEN` or a gitignored `.env.nettrace` (`BB_NET_TRACE_TOKEN=...`); against `--base http://localhost:3002` it falls back to `.env`. Use `--local` with the report for local runs. Other flags: `--chrome` (installed Google Chrome instead of the headless shell), `--map`, `--script strafe|dash|idle|mixed`, `--headed`, `--cpu-throttle <rate>`, `--run <id>`. Real browsers produce the same files when opened with the trace URL.
+
+The report classifies each client snapshot gap ≥100 ms as server-side (the server's own emission gap matched it) or transport, and each rubber-band event as correction, server-stall, transport-gap, client-frame-hitch, client-interpolation or unexplained. Reversals that follow a key press, or that appear in the server's own snapshots, count as ordinary movement. Loop stalls are cross-checked against navigation builds, heavy bot ticks and host overload. Headless Chrome renders in software, so treat client frame hitches with care and compare with `--headed`.
+
 ## Diagnostics and verification
 
 Browser console diagnostics:

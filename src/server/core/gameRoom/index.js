@@ -31,6 +31,7 @@ const lifecycleManager = require("./lifecycleManager");
 const roomStateManager = require("./roomStateManager");
 const netTestLogger = require("./netTestLogger");
 const { createTimingDiagnostics } = require("./timingDiagnostics");
+const { netTrace } = require("./netTraceRecorder");
 const attackRuntimeManager = require("./attackRuntimeManager");
 const characterActionRegistry = require("./characterActionRegistry");
 
@@ -733,6 +734,7 @@ class GameRoom {
         accBefore,
         accAfter: acc,
       });
+      if (this._netTrace) netTrace.noteLoopFrame(this, { deltaMs: rawDelta, stepsThisFrame, sleepMs });
       if (this._loopRunning) setTimeout(loop, sleepMs);
     };
     setTimeout(loop, 0);
@@ -871,7 +873,16 @@ class GameRoom {
     const first = (this._botPlanningCursor || 0) % (controllers.length || 1);
     this._botPlanningCursor = first + 1;
     this._botPlanningDeadline = botStart + 4;
-    for (let i = 0; i < controllers.length; i++) controllers[(first + i) % controllers.length].tick(this.FIXED_DT_MS, now);
+    if (this._netTrace) {
+      for (let i = 0; i < controllers.length; i++) {
+        const controller = controllers[(first + i) % controllers.length];
+        const started = performance.now();
+        controller.tick(this.FIXED_DT_MS, now);
+        netTrace.noteBotTick(this, controller, performance.now() - started);
+      }
+    } else {
+      for (let i = 0; i < controllers.length; i++) controllers[(first + i) % controllers.length].tick(this.FIXED_DT_MS, now);
+    }
     if (controllers.length) {
       const elapsed = performance.now() - botStart;
       const stats = this._botTickStats ||= { ticks: 0, totalMs: 0, maxMs: 0 };

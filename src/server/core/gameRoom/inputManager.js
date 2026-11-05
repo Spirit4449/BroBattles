@@ -1,3 +1,4 @@
+const { netTrace } = require('./netTraceRecorder');
 const { COLLISION_PACKET_TOLERANCE } = require('../../../shared/physics/movementPrecision');
 const { sweepMovement } = require('../../../shared/physics/sweptCollision');
 const { resolveStomp } = require('./stomp');
@@ -88,11 +89,13 @@ function correctPosition(room, player, sequence, detail = {}) {
   if (errorPx > stats.maxErrorPx) stats.maxErrorPx = errorPx;
   player._correctionId = (Number(player._correctionId) || 0) + 1;
   player._correctionSentAt = Date.now();
-  room.io?.to(player.socketId).emit("game:correction", {
+  const payload = {
     x: player.x, y: player.y, sequence,
     correctionId: player._correctionId,
     ...detail, reason,
-  });
+  };
+  room.io?.to(player.socketId).emit("game:correction", payload);
+  if (room._netTrace) netTrace.noteCorrection(room, player, payload);
 }
 
 // A packet tagged with an older correction was sent before the client saw the

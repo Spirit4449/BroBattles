@@ -24,6 +24,7 @@ const {
 } = require("../services/party/partyQueueTransitionService");
 const { registerChatEvents } = require("./socketEvents/chatEvents");
 const { registerFriendEvents } = require("./socketEvents/friendEvents");
+const { netTrace } = require("./gameRoom/netTraceRecorder");
 
 const DEBUG_SOCKET_EVENTS =
   String(process.env.DEBUG_SOCKET_EVENTS || "").toLowerCase() === "1" ||
@@ -137,6 +138,7 @@ function initSocket({
         cookieHeaderLength: header.length,
         sessionCookiePresent: !!userIdStr,
       });
+      socket.data.netTrace = netTrace.authorize(socket.handshake?.auth);
       if (!userIdStr) {
         socket.data.user = null;
         return next();
@@ -144,6 +146,7 @@ function initSocket({
       const user = await sessions.authenticateSocket(socket, userIdStr);
 
       socket.data.user = user || null;
+      if (user && socket.data.netTrace) netTrace.markTracedUser(user.name);
       if (!user) {
         console.warn("[socket-auth] no user found for signed cookie", {
           socketId: socket.id,

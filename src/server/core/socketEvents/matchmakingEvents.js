@@ -208,7 +208,9 @@ function registerMatchmakingEvents(
       if (!requester?.name || !requester?.user_id) {
         throw new Error("Authentication required.");
       }
-      if (!isAdminUser(requester)) {
+      // Traced debug clients (valid BB_NET_TRACE_TOKEN) may fill their own
+      // party's queue with bots so test matches never wait for real players.
+      if (!isAdminUser(requester) && !socket.data.netTrace) {
         throw new Error("Admins only.");
       }
       const partyId = await db.getPartyIdByName(requester.name);
