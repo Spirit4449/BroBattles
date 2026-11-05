@@ -29,3 +29,26 @@ test('worker builds equivalent routes without blocking, reuses rooms and separat
     assert.notEqual(service.getGraph(changed, 'ninja'), graph);
   } finally { await service.close(); }
 });
+
+test('a new wall borrows the built routes, walks against the new geometry, and switches when its own graph lands', async () => {
+  const service = createNavigationService({ log() {} });
+  try {
+    const geometry = getDuelGeometry(1);
+    const graph = await service.prepare(geometry, 'ninja');
+    const floor = graph.surfaces.reduce((a, b) => (b.right - b.left > a.right - a.left ? b : a));
+    const wall = { id: 'wall-test', left: floor.left + 200, right: floor.left + 248, top: floor.top - 96, bottom: floor.top,
+      collision: { up: true, down: true, left: true, right: true } };
+    const walled = { ...geometry, colliders: [...geometry.colliders, wall] };
+    const borrowed = service.getGraph(walled, 'ninja');
+    assert.notEqual(borrowed, graph);
+    assert.equal(borrowed.edges, graph.edges, 'routes come from the built graph');
+    assert.equal(borrowed.geometry, walled, 'walks are checked against the walls that stand now');
+    assert.equal(service.getGraph(walled, 'ninja'), borrowed, 'the borrowed graph is stable between thinks');
+    // Buffs never borrow: a jump built for one buff does not fit another.
+    assert.ok([...service.getGraph(walled, 'ninja', { speedMult: 1.5 }).edges.values()].every(list => list.length === 0));
+    const own = await service.prepare(walled, 'ninja');
+    assert.notEqual(own, borrowed);
+    assert.equal(service.getGraph(walled, 'ninja'), own);
+    assert.ok(own.surfaces.some(s => s.id === 'wall-test'), 'the wall top is a surface of its own graph');
+  } finally { await service.close(); }
+});
