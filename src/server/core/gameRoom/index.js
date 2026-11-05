@@ -11,6 +11,8 @@ const {
   REGEN_MISSING_RATIO,
   REGEN_MIN_ABS,
   REGEN_BROADCAST_MIN_MS,
+  BOT_PLANNING_STEP_MS,
+  BOT_PLANNING_FRAME_MS,
 } = require("../gameRoomConfig");
 const {
   FIXED_DT_MS,
@@ -733,6 +735,8 @@ class GameRoom {
       let stepsThisFrame = 0;
       snapshotDue = false;
       worldStateDue = false;
+      // Catch-up steps share one planning allowance (see BOT_PLANNING_FRAME_MS).
+      this._botFrameBudgetUntil = performance.now() + BOT_PLANNING_FRAME_MS;
       while (acc >= this.FIXED_DT_MS && this._loopRunning) {
         simulatedMono += this.FIXED_DT_MS;
         step(simulatedMono);
@@ -901,7 +905,7 @@ class GameRoom {
     const controllers = [...this.botControllers.values()];
     const first = (this._botPlanningCursor || 0) % (controllers.length || 1);
     this._botPlanningCursor = first + 1;
-    this._botPlanningDeadline = botStart + 4;
+    this._botPlanningDeadline = Math.min(botStart + BOT_PLANNING_STEP_MS, this._botFrameBudgetUntil ?? Infinity);
     if (this._netTrace) {
       for (let i = 0; i < controllers.length; i++) {
         const controller = controllers[(first + i) % controllers.length];

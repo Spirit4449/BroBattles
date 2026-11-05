@@ -172,6 +172,17 @@ const ACTION_SPAM_SUPPRESS_MS = 800; // lockout after exceeding the limit
 const MELEE_FACING_TOLERANCE = 50;
 
 // Maximum attacker→target distance (px) accepted for a hit, keyed by
+// ---------------------------------------------------------------------------
+// Bot planning budget
+// ---------------------------------------------------------------------------
+
+// Main-thread time bot planning may use in one fixed step (all bots share it).
+const BOT_PLANNING_STEP_MS = 4;
+// ...and in one loop frame. Timer jitter often runs two steps in a frame; after
+// a stall the loop runs dozens, and giving each its own allowance turned one
+// stall into the next.
+const BOT_PLANNING_FRAME_MS = 8;
+
 // "character|attackType". "any|..." rows are fallbacks; unknown keys use 600.
 // Keep these a little above each attack's real reach (see <name>.json).
 const ATTACK_MAX_DIST_MAP = {
@@ -191,6 +202,8 @@ const ATTACK_MAX_DIST_MAP = {
 
 module.exports = {
   WORLD_MARGIN,
+  BOT_PLANNING_STEP_MS,
+  BOT_PLANNING_FRAME_MS,
   GAME_DURATION_MS,
   SD_RISE_SPEED,
   SD_RISE_FAST_PHASE_MS,
