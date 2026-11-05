@@ -159,5 +159,14 @@
         "kind": "server-runtime-only"
       }
     }
+  },
+  "presentation": {
+    "hiResArt": {
+      "sourceSize": 160,
+      "scale": 0.96,
+      "groundY": 156,
+      "requiresFrame": "duck00",
+      "duckFrame": "duck00"
+    }
   }
 }
