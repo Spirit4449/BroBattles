@@ -1,7 +1,7 @@
 const { Worker } = require('node:worker_threads');
 const { createHash } = require('node:crypto');
 const { characterBody } = require('../../../shared/physics/duelGeometry');
-const { buildGraph } = require('./navigation');
+const { buildGraph, markGraphStatic } = require('./navigation');
 const { netTrace } = require('../gameRoom/netTraceRecorder');
 
 // The live server opts in; deterministic offline simulations retain buildGraph.
@@ -11,7 +11,7 @@ function createNavigationService({ limit = 32, log = console.info } = {}) {
   let worker = null, closed = false;
   function finish(entry, graph, error) {
     entry.pending = false;
-    if (graph) entry.graph = { ...graph, geometry: entry.geometry };
+    if (graph) entry.graph = markGraphStatic({ ...graph, geometry: entry.geometry });
     entry.retryAt = error ? Date.now() + 30000 : Infinity;
     entry.resolve(entry.graph);
   }
@@ -55,8 +55,8 @@ function createNavigationService({ limit = 32, log = console.info } = {}) {
       // A surface-only graph permits safe same-platform walking and combat while
       // the worker prepares routes. Never reuse routes built for different buffs.
       entry = { geometry, character, modifiers: mods, retryAt: 0,
-        graph: { geometry, character, surfaces, body: characterBody(character),
-          edges: new Map(surfaces.map(s => [s.id, []])) } };
+        graph: markGraphStatic({ geometry, character, surfaces, body: characterBody(character),
+          edges: new Map(surfaces.map(s => [s.id, []])) }) };
       for (const [oldKey, old] of entries) {
         if (entries.size < limit) break;
         if (!old.pending) entries.delete(oldKey);

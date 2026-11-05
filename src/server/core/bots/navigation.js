@@ -86,7 +86,7 @@ function buildGraph(geometry, character, modifiers = {}) {
       }
     }
   }
-  const graph = { surfaces, edges, dashEdges, body: characterBody(character), geometry, character };
+  const graph = markGraphStatic({ surfaces, edges, dashEdges, body: characterBody(character), geometry, character });
   // Bound modifier-specific cached graphs; default graphs are inexpensive to rebuild.
   if (cache.size >= 48) cache.delete(cache.keys().next().value);
   cache.set(key, graph);
@@ -178,50 +178,120 @@ function findRoute(graph, from, to, poisonY = Infinity, options = {}) {
   return createRouteSearch(graph, from, poisonY, options)(to, options.goalX);
 }
 
+// Graphs from buildGraph and the navigation service never change after they are
+// built, so their search tables are computed once and shared by every search.
+// Hand-made graphs (tests) get fresh tables per search.
+const STATIC_GRAPH = Symbol('staticNavigationGraph');
+const searchTables = new WeakMap();
+function markGraphStatic(graph) {
+  if (graph) graph[STATIC_GRAPH] = true;
+  return graph;
+}
+
+const stateKey = (id, x, dashUsed = false) => `${id}:${Number.isFinite(x) ? Math.round(x) : ''}:${dashUsed}`;
+
+// Precomputed per graph: integer ids for every (surface, landing x, dash used)
+// search state, adjacency records carrying their target state ids and string
+// keys, and per-surface walk blockers. canWalkBetween scans every collider;
+// the blockers that can stop a walk on a given surface are a small fixed set.
+function routeSearchTables(graph) {
+  if (graph[STATIC_GRAPH]) {
+    const cached = searchTables.get(graph);
+    if (cached && cached.geometry === graph.geometry) return cached;
+  }
+  const surfaces = new Map(graph.surfaces.map(s => [s.id, s]));
+  const index = new Map();
+  const idOf = (key) => { let k = index.get(key); if (k === undefined) index.set(key, k = index.size); return k; };
+  const records = (lists, dashOnly) => {
+    const out = new Map();
+    for (const [from, list] of lists || []) {
+      out.set(from, (list || []).map(edge => ({
+        edge,
+        k0: dashOnly ? -1 : idOf(stateKey(edge.to, edge.landingX, !!edge.dash)),
+        k1: idOf(stateKey(edge.to, edge.landingX, true)),
+        pair: `${from}:${edge.to}`,
+        key: null,
+        target: surfaces.has(edge.to),
+      })));
+    }
+    return out;
+  };
+  const adjacency = records(graph.edges, false);
+  const dashAdjacency = records(graph.dashEdges, true);
+  const walk = new Map();
+  if (graph.geometry) {
+    const b = characterBody(graph.character);
+    const body = characterBody(graph.character, undefined);
+    for (const surface of graph.surfaces) {
+      // Same arithmetic as bounds(standOn(surface, character, x)).
+      const y = surface.top - b.halfHeight - b.offsetY;
+      const top = (y + body.offsetY) - body.halfHeight, bottom = (y + body.offsetY) + body.halfHeight;
+      const rightward = [], leftward = [];
+      for (const r of graph.geometry.colliders) {
+        if (r.id === surface.id || !(bottom > r.top + 2 && top < r.bottom - 2)) continue;
+        if (r.collision.left) rightward.push(r);
+        if (r.collision.right) leftward.push(r);
+      }
+      walk.set(surface.id, { rightward, leftward, offsetX: body.offsetX, halfWidth: body.halfWidth });
+    }
+  }
+  const tables = { geometry: graph.geometry, surfaces, index, adjacency, dashAdjacency, walk };
+  if (graph[STATIC_GRAPH]) searchTables.set(graph, tables);
+  return tables;
+}
+
+// canWalkBetween(graph.geometry, surface, graph.character, fromX, toX) for a
+// graph surface, using the precomputed blockers.
+function tableWalk(tables, surfaceId, fromX, toX) {
+  const w = tables.walk.get(surfaceId);
+  if (!w) return false;
+  const a = fromX + w.offsetX, c = toX + w.offsetX;
+  const left = Math.min(a - w.halfWidth, c - w.halfWidth), right = Math.max(a + w.halfWidth, c + w.halfWidth);
+  const blockers = toX >= fromX ? w.rightward : w.leftward;
+  for (let i = 0; i < blockers.length; i++) {
+    const r = blockers[i];
+    if (right > r.left + 1 && left < r.right - 1) return false;
+  }
+  return true;
+}
+
 // One search from one start answers any number of destinations. It expands only
 // as far as the queries need and keeps what it settled, so asking for every
 // surface on a large map costs one search rather than one per surface.
 function createRouteSearch(graph, from, poisonY = Infinity, options = {}) {
-  const surfaces = new Map(graph.surfaces.map(s => [s.id, s]));
-  const keyOf = (id, x, dashUsed = false) => `${id}:${Number.isFinite(x) ? Math.round(x) : ''}:${dashUsed}`;
-  const walkable = (id, x, goalX) => !graph.geometry || !Number.isFinite(goalX) || !Number.isFinite(x) ||
-    canWalkBetween(graph.geometry, surfaces.get(id), graph.character, x, goalX);
+  const tables = routeSearchTables(graph);
+  const { surfaces } = tables;
+  const geometry = graph.geometry;
+  const walkable = (id, x, goalX) => !geometry || !Number.isFinite(goalX) || !Number.isFinite(x) ||
+    (surfaces.has(id) ? tableWalk(tables, id, x, goalX) : canWalkBetween(geometry, undefined, graph.character, x, goalX));
   const settled = new Map();
   let seq = 0;
-  const queue = new MinHeap(), visited = new Set();
-  queue.push({ id: from, parent: null, edge: null, cost: 0, elapsed: 0, x: options.startX, seq: seq++ });
-  const bestCost = new Map([[keyOf(from, options.startX), 0]]);
+  const queue = new MinHeap();
+  // State ids beyond the graph's own belong to the start position.
+  const startKey = stateKey(from, options.startX);
+  const startK = tables.index.get(startKey) ?? tables.index.size;
+  const size = Math.max(tables.index.size, startK + 1);
+  const visited = new Uint8Array(size);
+  const bestCost = new Float64Array(size).fill(Infinity);
+  bestCost[startK] = 0;
+  queue.push({ id: from, parent: null, edge: null, cost: 0, elapsed: 0, x: options.startX, seq: seq++, k: startK });
   const poisoned = Number.isFinite(poisonY);
-  return (to, goalX) => {
-  if (!from || !to) return null;
-  if (to === from && walkable(from, options.startX, goalX)) return [];
-  for (const item of settled.get(to) || []) if (walkable(to, item.x, goalX)) return routeOf(item);
-  while (queue.size) {
-    const item = queue.pop();
-    if (!settled.has(item.id)) settled.set(item.id, []);
-    settled.get(item.id).push(item);
-    const found = item.id === to && walkable(to, item.x, goalX);
-    // Reaching the same platform on the other side of a wall is a different
-    // navigation state. Collapsing both landings prevents routes around blocks.
-    const state = keyOf(item.id, item.x, item.dashUsed);
-    if (visited.has(state) || item.cost > bestCost.get(state)) { if (found) return routeOf(item); continue; }
-    visited.add(state);
-    const available = [...(graph.edges.get(item.id) || []),
-      ...(options.allowDash && !item.dashUsed ? graph.dashEdges?.get(item.id) || [] : [])];
-    const fromSurface = surfaces.get(item.id);
-    const hasX = Number.isFinite(item.x);
-    // Standing still on the takeoff surface is the same for every edge.
-    let standingFrames = null;
-    for (const edge of available) {
+  const blocked = options.blocked;
+  const edgeCost = options.edgeCost;
+  const relax = (item, records, fromSurface, hasX, standing) => {
+    let standingFrames = standing;
+    for (let i = 0; i < records.length; i++) {
+      const rec = records[i], edge = rec.edge;
       const dashUsed = !!(item.dashUsed || edge.dash);
-      const nextState = keyOf(edge.to, edge.landingX, dashUsed);
-      if (visited.has(nextState)) continue;
-      if (graph.geometry && hasX &&
-          !canWalkBetween(graph.geometry, fromSurface, graph.character, item.x, edge.takeoffX)) continue;
-      if (options.blocked?.has(edgeKey(edge, item.id)) || options.blocked?.has(`${item.id}:${edge.to}`)) continue;
-      const surface = surfaces.get(edge.to);
-      if (!surface) continue;
-      const penalty = Math.max(0, Number(options.edgeCost?.(edge, item.id)) || 0);
+      const next = dashUsed ? rec.k1 : rec.k0;
+      if (visited[next]) continue;
+      if (geometry && hasX && !tableWalk(tables, item.id, item.x, edge.takeoffX)) continue;
+      if (blocked?.size) {
+        rec.key ??= edgeKey(edge, item.id);
+        if (blocked.has(rec.key) || blocked.has(rec.pair)) continue;
+      }
+      if (!rec.target) continue;
+      const penalty = Math.max(0, Number(edgeCost?.(edge, item.id, rec.pair)) || 0);
       const approach = hasX ? Math.abs(edge.takeoffX - item.x) / movement.maxSpeed * 1000 : 0;
       let exposure = 0;
       if (poisoned) {
@@ -230,13 +300,34 @@ function createRouteSearch(graph, from, poisonY = Infinity, options = {}) {
           poisonDamage(standingFrames, approach, poisonY, options.poisonAt, item.elapsed);
       }
       const cost = item.cost + approach + edge.duration + penalty + exposure * 4;
-      if (cost >= (bestCost.get(nextState) ?? Infinity)) continue;
-      bestCost.set(nextState, cost);
+      if (cost >= bestCost[next]) continue;
+      bestCost[next] = cost;
       queue.push({ id: edge.to, parent: item, edge, x: edge.landingX, dashUsed,
         cost,
         elapsed: item.elapsed + approach + edge.duration,
-        seq: seq++ });
+        seq: seq++, k: next });
     }
+    return standingFrames;
+  };
+  return (to, goalX) => {
+  if (!from || !to) return null;
+  if (to === from && walkable(from, options.startX, goalX)) return [];
+  for (const item of settled.get(to) || []) if (walkable(to, item.x, goalX)) return routeOf(item);
+  while (queue.size) {
+    const item = queue.pop();
+    let done = settled.get(item.id);
+    if (!done) settled.set(item.id, done = []);
+    done.push(item);
+    const found = item.id === to && walkable(to, item.x, goalX);
+    // Reaching the same platform on the other side of a wall is a different
+    // navigation state. Collapsing both landings prevents routes around blocks.
+    if (visited[item.k] || item.cost > bestCost[item.k]) { if (found) return routeOf(item); continue; }
+    visited[item.k] = 1;
+    const fromSurface = surfaces.get(item.id);
+    const hasX = Number.isFinite(item.x);
+    // Standing still on the takeoff surface is the same for every edge.
+    const standing = relax(item, tables.adjacency.get(item.id) || [], fromSurface, hasX, null);
+    if (options.allowDash && !item.dashUsed) relax(item, tables.dashAdjacency.get(item.id) || [], fromSurface, hasX, standing);
     if (found) return routeOf(item);
   }
   return null;
@@ -390,4 +481,4 @@ function safeWalkDirection(player, direction, geometry) {
       (direction < 0 && stopX <= limits.left + 3)) return 0;
   return direction;
 }
-module.exports = { createRouteSearch, poisonDamage, routePoisonDamage, buildGraph, findRoute, prepareTraversal, edgeKey, nearestSurface, standOn, walkLimits, canStandAt, canWalkBetween, safeWalkDirection, previewManeuver };
+module.exports = { markGraphStatic, createRouteSearch, poisonDamage, routePoisonDamage, buildGraph, findRoute, prepareTraversal, edgeKey, nearestSurface, standOn, walkLimits, canStandAt, canWalkBetween, safeWalkDirection, previewManeuver };

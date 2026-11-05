@@ -181,8 +181,8 @@ class BotController {
         poisonAt,
         blocked: this.blockedEdges,
         startX: p.x,
-        edgeCost: (edge, from) => {
-          const key = `${from}:${edge.to}`;
+        edgeCost: (edge, from, pair) => {
+          const key = pair ?? `${from}:${edge.to}`;
           if (!this.routePreferences.has(key)) this.routePreferences.set(key, this.random() * 240);
           return (edge.jump ? 70 : 0) + (edge.dash ? 140 : 0) + this.routePreferences.get(key);
         },
