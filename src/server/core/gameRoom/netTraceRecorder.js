@@ -195,6 +195,7 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
       load1: round(os.loadavg()[0], 2),
       rssMb: Math.round(process.memoryUsage().rss / 1048576),
       heapMb: Math.round(process.memoryUsage().heapUsed / 1048576),
+      ...readProcCounters(),
       gc: { n: gc.count, ms: round(gc.ms), max: round(gc.max), major: gc.major, majorMax: round(gc.majorMax) },
       ...readMeminfo(),
     };
@@ -464,6 +465,28 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
     flushAll,
     closeAll: () => { for (const run of [...runs.values()]) closeRun(run); },
   };
+}
+
+// Page faults of this process and system iowait since the previous sample:
+// a loop blocked with little CPU is waiting on the disk (major faults, writes).
+let lastProc = null;
+function readProcCounters() {
+  try {
+    const stat = fs.readFileSync("/proc/self/stat", "utf8");
+    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    const minflt = Number(fields[7]), majflt = Number(fields[9]);
+    const cpu = fs.readFileSync("/proc/stat", "utf8").split("\n")[0].trim().split(/\s+/).slice(1).map(Number);
+    const total = cpu.reduce((a, b) => a + b, 0), iowait = cpu[4];
+    const status = fs.readFileSync("/proc/self/status", "utf8");
+    const vol = Number(status.match(/^voluntary_ctxt_switches:\s+(\d+)/m)?.[1] || 0);
+    const invol = Number(status.match(/^nonvoluntary_ctxt_switches:\s+(\d+)/m)?.[1] || 0);
+    const prev = lastProc;
+    lastProc = { minflt, majflt, total, iowait, vol, invol };
+    if (!prev) return {};
+    return { majflt: majflt - prev.majflt, minflt: minflt - prev.minflt,
+      iowaitPct: round(((iowait - prev.iowait) / Math.max(1, total - prev.total)) * 100),
+      ctxVol: vol - prev.vol, ctxInvol: invol - prev.invol };
+  } catch (_) { return {}; }
 }
 
 function readMeminfo() {
