@@ -1,5 +1,8 @@
 // server.js (moved to src/server)
 
+// Console output must never block the game loop on a busy disk.
+require("./lib/asyncConsole").installAsyncConsole();
+
 // Load environment variables from .env file
 require("dotenv").config();
 
