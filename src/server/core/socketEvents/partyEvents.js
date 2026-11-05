@@ -16,6 +16,7 @@ const {
   syncSkinOwnershipForUser,
 } = require("../../services/cosmetics/skinOwnership");
 const { getAllCharacters, getCharacterLevel } = require("../../../shared/characters/characterStats.js");
+const { netTrace } = require("../gameRoom/netTraceRecorder");
 const {
   getPartyBotSlots,
   setPartyBotSlot,
@@ -484,7 +485,9 @@ function registerPartyEvents(
         ack?.({ ok: false, error: "unready_before_character_change" });
         return;
       }
-      if (getCharacterLevel(freshUser, charClass) < 1) {
+      // Token-verified probe accounts (netTraceRecorder) may test any character;
+      // a locked character plays at level 1.
+      if (getCharacterLevel(freshUser, charClass) < 1 && !netTrace.isTracedUser(freshUser.name)) {
         ack?.({ ok: false, error: "character_locked" });
         return;
       }

@@ -14,8 +14,8 @@
 // keyboard (J basic, I special; both auto-aim at the nearest enemy): "attack"
 // keeps ranged distance, "melee" closes in, "special" also fires specials,
 // "fight" mixes attack with dashes and jumps. --range overrides the distance.
-// --matches N plays N matches in a row with the same browsers and party; runs
-// are named <run>-m1, <run>-m2, … The report runs at the end (brief) and, with
+// --matches N plays N matches in a row in the same browser (fresh guests and
+// party each); runs are named <run>-m1, <run>-m2, … The report runs at the end (brief) and, with
 // --baseline, is compared against that run.
 //
 // Token: --token, $BB_NET_TRACE_TOKEN, .env.nettrace, then (localhost only) .env.
@@ -98,6 +98,19 @@ async function emitAck(page, event, payload, timeout = 8000) {
     if (!s) return resolve({ error: "no traced socket" });
     s.timeout(timeout).emit(event, payload, (err, reply) => resolve(err ? { error: String(err.message || err) } : reply ?? { ok: true }));
   }), { event, payload, timeout });
+}
+
+// Emit and wait briefly for one of the named reply events.
+async function emitReply(page, event, payload, replies, timeout = 3000) {
+  return page.evaluate(({ event, payload, replies, timeout }) => new Promise((resolve) => {
+    const s = window.__BB_NET_TRACE_SOCKET__;
+    if (!s) return resolve({ error: "no traced socket" });
+    const done = (name) => (data) => { for (const r of replies) s.off(r, handlers[r]); resolve({ event: name, data }); };
+    const handlers = Object.fromEntries(replies.map(r => [r, done(r)]));
+    for (const r of replies) s.once(r, handlers[r]);
+    s.emit(event, payload);
+    setTimeout(() => { for (const r of replies) s.off(r, handlers[r]); resolve({ event: "timeout" }); }, timeout);
+  }), { event, payload, replies, timeout });
 }
 
 async function emit(page, event, payload) {
@@ -187,6 +200,28 @@ async function playAttackScript(page, deadline, offsetMs, { range, specials, das
   for (const key of [...held]) await hold(key, false);
 }
 
+async function setupParty(all) {
+  const [owner, ...guests] = all;
+  log("clients:", all.map(c => `${c.tag}=${c.me?.data?.username || "guest"}`).join(" "));
+  const selection = { modeId, ...(variantId ? { modeVariantId: variantId } : {}), ...(mapId ? { mapId } : {}) };
+  const created = await api(owner.page, "/create-party", { selection });
+  if (!created.ok) throw new Error(`create-party failed: ${created.status} ${JSON.stringify(created.data)}`);
+  owner.partyId = created.data.partyId;
+  log(`party ${owner.partyId} created by ${owner.tag}`);
+  for (const g of guests) {
+    const req = await api(g.page, "/party/join-request", { partyId: owner.partyId });
+    if (!req.ok) throw new Error(`${g.tag} join-request failed: ${req.status} ${JSON.stringify(req.data)}`);
+    const list = await api(owner.page, "/party/join-requests", { partyId: owner.partyId });
+    const pending = (list.data?.requests || []).filter(r => String(r.status || "pending") === "pending");
+    const request = pending[pending.length - 1];
+    if (!request) throw new Error(`no pending join request for ${g.tag}: ${JSON.stringify(list.data)}`);
+    const res = await api(owner.page, "/party/join-request/respond", { partyId: owner.partyId, requestId: request.requestId, response: "accept" });
+    if (!res.ok) throw new Error(`accept failed: ${res.status} ${JSON.stringify(res.data)}`);
+    log(`${g.tag} joined party ${owner.partyId}`);
+  }
+  return owner;
+}
+
 async function playMatch(all, owner, partyId) {
   for (const c of all) {
     await c.page.goto(`${base}/party/${partyId}?${traceQuery(c.tag)}`, { waitUntil: "domcontentloaded" });
@@ -201,9 +236,16 @@ async function playMatch(all, owner, partyId) {
     log(`${c.tag} ready`, JSON.stringify(reply).slice(0, 160));
   }
   await sleep(1500);
-  await emit(owner.page, "queue:fill-bots", {});
+  // The previous match's room lingers until it is abandoned; fill again until
+  // the party is placed in a new match.
+  const fill = () => emitReply(owner.page, "queue:fill-bots", {}, ["queue:fill-bots:ok", "queue:fill-bots:error"])
+    .then(r => { if (r.event !== "queue:fill-bots:ok") log("bot fill:", JSON.stringify(r).slice(0, 200)); }).catch(() => {});
+  await fill();
   log("requested bot fill; waiting for /game/ …");
-  await Promise.all(all.map(c => c.page.waitForURL(/\/game\/\d+/, { timeout: 45000 })));
+  const refill = setInterval(fill, 5000);
+  try {
+    await Promise.all(all.map(c => c.page.waitForURL(/\/game\/\d+/, { timeout: 75000 })));
+  } finally { clearInterval(refill); }
   const matchId = owner.page.url().match(/\/game\/(\d+)/)?.[1];
   log(`match ${matchId} loading`);
 
@@ -241,7 +283,24 @@ async function playMatch(all, owner, partyId) {
   await sleep(2500);
 }
 
+// Trace files append, so a reused run id would mix two matches in one report.
+async function assertFreshRun(ids) {
+  const { execFileSync } = await import("node:child_process");
+  for (const id of ids) {
+    if (fs.existsSync(path.join(root, "output", "net-traces", id))) throw new Error(`run ${id} already exists in output/net-traces; pick another --run`);
+  }
+  if (isLocal) return;
+  const remote = process.env.BB_NET_TRACE_REMOTE || "nisch@100.94.147.111";
+  const dir = process.env.BB_NET_TRACE_REMOTE_DIR || "~/Desktop/Game/data/net-traces";
+  const found = execFileSync("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=20", remote,
+    ids.map(id => `test -e ${dir}/${id} && echo ${id}`).join("; ") + "; true"], { encoding: "utf8" }).trim();
+  if (found) throw new Error(`run ${found.split("\n").join(", ")} already exists on the server; pick another --run`);
+}
+
 async function main() {
+  try {
+    await assertFreshRun(matches > 1 ? Array.from({ length: matches }, (_, i) => `${baseRunId}-m${i + 1}`) : [baseRunId]);
+  } catch (e) { log(e.message); process.exit(2); }
   log(`run ${runId} → ${base} (${clients} clients, ${modeId}:${variantId || "default"}${mapId ? ` map ${mapId}` : ""}, ${durationS}s, script=${script})`);
   const browser = await chromium.launch({
     // Playwright's headless shell by default (`npx playwright-core install
@@ -258,33 +317,17 @@ async function main() {
   reportRuns = [];
   let exitCode = 0;
   try {
-    for (const tag of tags) all.push(await openClient(browser, tag));
-    const [owner, ...guests] = all;
-    log("clients:", all.map(c => `${c.tag}=${c.me?.data?.username || "guest"}`).join(" "));
-
-    const selection = { modeId, ...(variantId ? { modeVariantId: variantId } : {}), ...(mapId ? { mapId } : {}) };
-    const created = await api(owner.page, "/create-party", { selection });
-    if (!created.ok) throw new Error(`create-party failed: ${created.status} ${JSON.stringify(created.data)}`);
-    const partyId = created.data.partyId;
-    log(`party ${partyId} created by ${owner.tag}`);
-
-    for (const g of guests) {
-      const req = await api(g.page, "/party/join-request", { partyId });
-      if (!req.ok) throw new Error(`${g.tag} join-request failed: ${req.status} ${JSON.stringify(req.data)}`);
-      const list = await api(owner.page, "/party/join-requests", { partyId });
-      const pending = (list.data?.requests || []).filter(r => String(r.status || "pending") === "pending");
-      const request = pending[pending.length - 1];
-      if (!request) throw new Error(`no pending join request for ${g.tag}: ${JSON.stringify(list.data)}`);
-      const res = await api(owner.page, "/party/join-request/respond", { partyId, requestId: request.requestId, response: "accept" });
-      if (!res.ok) throw new Error(`accept failed: ${res.status} ${JSON.stringify(res.data)}`);
-      log(`${g.tag} joined party ${partyId}`);
-    }
-
     for (let m = 1; m <= matches; m++) {
       runId = matches > 1 ? `${baseRunId}-m${m}` : baseRunId;
       runIds.push(runId);
       log(`match ${m}/${matches}: run ${runId}`);
-      await playMatch(all, owner, partyId);
+      // Fresh guests and party per match in the same browser: re-queueing a
+      // party that just left a live match is not reliable.
+      for (const c of all.splice(0)) await c.context.close().catch(() => {});
+      for (const tag of tags) all.push(await openClient(browser, tag));
+      const owner = await setupParty(all);
+      await playMatch(all, owner, owner.partyId);
+      reportRuns = runIds.slice();
     }
     log(`done. Report: node scripts/dev/net-report.mjs ${runIds.join(" ")}${isLocal ? " --local" : ""}`);
     reportRuns = runIds.slice();

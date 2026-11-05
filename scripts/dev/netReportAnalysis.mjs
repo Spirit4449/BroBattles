@@ -108,7 +108,7 @@ export function flattenClient(records) {
     const d = r.kind === "batch" ? r.data : null;
     if (!d) continue;
     out.user ||= d.user;
-    out.character ||= d.character || null;
+    if (d.character) out.character = d.character;
     if (Array.isArray(d.names) && d.names.length >= out.names.length) out.names = d.names;
     for (const k of ["frames", "snaps", "decoded", "corrections", "keys", "diag", "events", "combat"]) {
       if (Array.isArray(d[k])) out[k].push(...d[k]);
