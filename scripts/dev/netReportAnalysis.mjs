@@ -250,7 +250,10 @@ export function analyzeClient(records, serverIndex, tag = null) {
   const arrivals = analyzeArrivals(c.snaps, { serverIndex, offset: c.offset, frames: c.frames });
   const series = seriesFromFrames(c.frames, c.names);
   const truth = seriesFromDecoded(c.decoded, c.names);
-  const gapNear = (t) => arrivals.gaps.find(g => g.serverT - c.offset <= t + 30 && g.serverT - c.offset >= t - 400);
+  // A bounce is stamped at the last frame before it steps back; the snapshot
+  // that ends a gap (and pulls an extrapolated actor back) lands up to ~150 ms
+  // later.
+  const gapNear = (t) => arrivals.gaps.find(g => g.serverT - c.offset <= t + 200 && g.serverT - c.offset >= t - 400);
   const correctionNear = (t) => c.corrections.find(x => Math.abs(x.t - t) <= 120);
   const frameHitch = (t) => c.frames.find(f => f[1] >= 50 && Math.abs(f[0] - t) <= 60);
   const MOVE_KEYS = new Set(["KeyA", "KeyD", "KeyW", "KeyS", "Space", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
@@ -406,6 +409,12 @@ export function analyzeAttacks(c, serverIndex, tag) {
     unconfirmedRate: preds.length ? unconfirmed.length / preds.length : null,
     withdrawnEvents: rows.filter(r => r[1] === "wd").length,
     hitsTaken: hitsOnMe.length, rewindAsVictim: summary(hitsOnMe.map(h => h.rewindMs)),
+    // Raw values so several runs can be pooled per character.
+    samples: {
+      pressToSend: pressToSend.map(Math.round), pressToConfirm: perHit.map(h => h.pressToConfirm).filter(Number.isFinite).map(Math.round),
+      predToConfirm: perHit.map(h => h.predToConfirm).filter(Number.isFinite).map(Math.round),
+      serverToClient: perHit.map(h => h.serverToClient).filter(Number.isFinite).map(Math.round),
+    },
   };
 }
 

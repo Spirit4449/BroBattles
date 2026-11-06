@@ -284,9 +284,36 @@ function createNetTraceRecorder({ env = process.env, now = () => performance.now
     for (const run of state.runs) write(run, "server", { matchId: room.matchId, ...record });
   }
 
+  // Opt-in CPU profile of the live game process for one traced match:
+  // BB_NET_TRACE_CPU_PROFILE_S=<seconds> writes <run>/cpu.cpuprofile, starting
+  // when the first traced room goes live. Summarize with cpuprofile-top.cjs.
+  let profiling = null;
+  function maybeProfile(room) {
+    const seconds = Number(env.BB_NET_TRACE_CPU_PROFILE_S);
+    if (!(seconds > 0) || profiling || room.status !== "active") return;
+    const run = [...room._netTrace.runs][0];
+    if (!run || run.profiled) return;
+    run.profiled = true;
+    try {
+      const inspector = require("node:inspector");
+      const session = new inspector.Session();
+      session.connect();
+      profiling = session;
+      session.post("Profiler.setSamplingInterval", { interval: 1000 }, () => session.post("Profiler.enable", () => session.post("Profiler.start")));
+      write(run, "server", { kind: "cpu-profile", event: "start", seconds });
+      setTimeout(() => session.post("Profiler.stop", (error, result) => {
+        if (!error && result?.profile) fs.writeFile(path.join(run.dir, "cpu.cpuprofile"), JSON.stringify(result.profile), () => {});
+        write(run, "server", { kind: "cpu-profile", event: "stop", error: error?.message || null });
+        session.disconnect();
+        profiling = null;
+      }), seconds * 1000).unref?.();
+    } catch (_) { profiling = null; }
+  }
+
   function flushRoom(room, t) {
     const s = room._netTrace;
     if (!s || !s.runs.size) return;
+    maybeProfile(room);
     if (room._disposed) {
       for (const run of s.runs) run.rooms.delete(room);
       s.runs.clear();

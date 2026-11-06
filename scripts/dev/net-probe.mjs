@@ -5,7 +5,7 @@
 // `node scripts/dev/net-report.mjs <runId>`.
 //
 //   node scripts/dev/net-probe.mjs [--base https://brobattles.dev] [--clients 2]
-//     [--mode bank-bust] [--variant bank-bust-3v3] [--map 1] [--char ninja]
+//     [--mode bank-bust] [--variant bank-bust-3v3] [--map 1] [--char ninja | --char huntress,thorg]
 //     [--duration 90] [--script mixed|strafe|dash|idle|attack|melee|special|fight]
 //     [--range 380] [--matches 1] [--baseline <runId>] [--no-report]
 //     [--headed] [--cpu-throttle 4] [--run <id>] [--token <token>]
@@ -61,7 +61,9 @@ const clients = Math.max(1, Math.min(6, Number(args.clients) || 2));
 const modeId = String(args.mode || "bank-bust");
 const variantId = String(args.variant || (modeId === "bank-bust" ? "bank-bust-3v3" : modeId === "duels" ? "duels-2v2" : ""));
 const mapId = args.map != null ? String(args.map) : null;
-const character = args.char ? String(args.char) : null;
+// --char ninja or --char huntress,ninja (one per client, cycling).
+const characters = args.char ? String(args.char).split(",").map(x => x.trim()).filter(Boolean) : [];
+const characterFor = (i) => characters.length ? characters[i % characters.length] : null;
 const durationS = Number(args.duration) || 90;
 const script = String(args.script || "mixed");
 const matches = Math.max(1, Math.min(10, Number(args.matches) || 1));
@@ -228,8 +230,8 @@ async function playMatch(all, owner, partyId) {
     await waitFor(c.page, () => !!window.__BB_NET_TRACE_SOCKET__?.connected, null, { label: `${c.tag} party socket` });
   }
   await sleep(1500);
-  if (character) {
-    for (const c of all) log(`${c.tag} char-change`, JSON.stringify(await emitAck(c.page, "char-change", { partyId, character })));
+  if (characters.length) {
+    for (const [i, c] of all.entries()) log(`${c.tag} char-change`, JSON.stringify(await emitAck(c.page, "char-change", { partyId, character: characterFor(i) })));
   }
   for (const c of all) {
     const reply = await emitAck(c.page, "ready:status", { partyId, ready: true });
@@ -260,7 +262,7 @@ async function playMatch(all, owner, partyId) {
   const steps = SCRIPTS[script] || SCRIPTS.mixed;
   const players = all.map((c, i) => {
     if (!ATTACK_SCRIPTS.has(script)) return playScript(c.page, steps, deadline, i * 370);
-    const range = Number(args.range) || (script === "melee" || MELEE.has(character) ? 70 : 380);
+    const range = Number(args.range) || (script === "melee" || MELEE.has(characterFor(i)) ? 70 : 380);
     return playAttackScript(c.page, deadline, i * 370, { range, specials: script === "special" || script === "fight", dashes: script === "fight" });
   });
   const status = setInterval(async () => {
