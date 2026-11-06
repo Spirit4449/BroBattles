@@ -63,6 +63,16 @@ Monitor old inbox rows and `[shop:stripe] reconciliation pending` messages.
 Unmatched payment intents need investigation. Existing processed event receipts
 must be retained for duplicate protection. Use sandbox events when verifying this integration.
 
+## Shared Raspberry Pi
+
+Production shares a 4-core Raspberry Pi with other services. `scripts/ops/pi-cpu-reserve.sh` keeps one core for the game: it confines every other pm2 app (with its child processes, at niceness 10), Docker containers, MariaDB, the desktop session and the Pi's other system services to cores 0–2 with a lower CPU weight, and leaves the game, nginx and tailscaled on every core. MariaDB keeps normal priority because the game queries it. It is idempotent and runs as root every minute from `/etc/cron.d/pi-cpu-reserve`, which catches pm2 apps restarted since the last run:
+
+```
+* * * * * root nice -n 19 taskset -c 0-2 /home/nisch/Desktop/Game/scripts/ops/pi-cpu-reserve.sh >/dev/null 2>&1
+```
+
+The game inherits pm2's systemd unit, so restart pm2 with `sudo systemctl restart pm2-nisch` rather than from a login shell (which would put it in the confined user session); the script logs a warning to the journal if that happens. `pm2-logrotate` caps pm2 logs at 20 MB with five compressed copies.
+
 ## Limits and validation
 
 Production JavaScript minification runs serially to reduce peak memory on the
