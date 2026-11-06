@@ -123,11 +123,13 @@ function finish(room, attack, contact) {
   if (room._huntress.terminals.length > 256) room._huntress.terminals.shift();
   if (owner) emit(room, owner, terminal);
 }
+// Resolved on first use (circular imports); kept out of the per-tick path.
+let botCombat = null;
 function tick(room) {
   const started = performance.now(), state = room._huntress;
   for (const p of room.players.values()) {
     // BotController already advances bot ammunition each fixed step.
-    if (!p.isBot && p.char_class === 'huntress' && p.isAlive) require('../bots/combat').advanceAmmo(p, model.STEP_MS);
+    if (!p.isBot && p.char_class === 'huntress' && p.isAlive) (botCombat ||= require('../bots/combat')).advanceAmmo(p, model.STEP_MS);
   }
   const pending = state.pending;
   state.pending = [];

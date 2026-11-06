@@ -1,5 +1,5 @@
 const { characterBody } = require("../../../shared/physics/duelGeometry");
-const { bounds, stepBody, onClimbableWall, forecastGeometry } = require("./physics");
+const { bounds, stepBody, onClimbableWall, forecastGeometry, nearColliders } = require("./physics");
 const movement = require("../../../shared/physics/movementPhysics.json");
 const { SD_DAMAGE_PER_SEC } = require('../gameRoomConfig');
 const graphs = new WeakMap();
@@ -436,7 +436,7 @@ function walkLimits(surface, character, inset = EDGE_STANCE_INSET) {
 function canStandAt(geometry, surface, character, x) {
   return [false, true].every((flip) => {
     const body = bounds({ ...standOn(surface, character, x), flip });
-    return !geometry.colliders.some((r) => r.id !== surface.id &&
+    return !nearColliders(geometry, body.left - 2, body.right + 2).some((r) => r.id !== surface.id &&
       (r.collision.left || r.collision.right || r.collision.down) &&
       body.right > r.left + 1 && body.left < r.right - 1 &&
       body.bottom > r.top + 1 && body.top < r.bottom - 1);
@@ -448,7 +448,7 @@ function canWalkBetween(geometry, surface, character, fromX, toX) {
   const body = bounds(standOn(surface, character, fromX));
   const other = bounds(standOn(surface, character, toX));
   const left = Math.min(body.left, other.left), right = Math.max(body.right, other.right);
-  return !geometry.colliders.some((r) => r.id !== surface.id &&
+  return !nearColliders(geometry, left - 2, right + 2).some((r) => r.id !== surface.id &&
     (toX >= fromX ? r.collision.left : r.collision.right) &&
     body.bottom > r.top + 2 && body.top < r.bottom - 2 && right > r.left + 1 && left < r.right - 1);
 }

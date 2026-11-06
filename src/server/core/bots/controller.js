@@ -7,7 +7,7 @@ const { getNavigationGraph } = require('./navigationService');
 const { staticGeometry } = require('../../../shared/maps/platformMotion');
 const { advanceAmmo, basicAim, hasClearShot, pressureAim, requestBasic, requestSpecial } = require('./combat');
 const { observe, incomingThreat, maneuverDanger } = require('./perception');
-const { healthFraction, preferredRange, chooseDecision, selectTargetSteps, chooseDecisionSteps, finishSteps } = require('./tactics');
+const { healthFraction, preferredRange, selectTargetSteps, chooseDecisionSteps, finishSteps } = require('./tactics');
 const { updateSuperPlan, shouldUseSuper } = require('./supers');
 const effects = require('../gameRoom/effects/effectManager');
 const { isMovementSuppressed } = require('../gameRoom/abilityRuntimeManager');
@@ -24,6 +24,9 @@ const RIDE_EXIT_CHECK_MS = 250;
 // How often an airborne bot on a moving-platform map re-forecasts its landing.
 const AIR_LANDING_CHECK_MS = 100;
 
+// Resolved on first use (circular imports); per-tick require() calls were
+// measurable on the game thread.
+let stomp = null;
 class BotController {
   constructor(room, player) {
     this.room = room;
@@ -120,7 +123,7 @@ class BotController {
       this.walkGoalX = this.decision?.goal?.x;
       this.nextThink = 0;
     }
-    require('../gameRoom/stomp').resolveStomp(room, p, now);
+    (stomp ||= require('../gameRoom/stomp')).resolveStomp(room, p, now);
     p.ducking = p.grounded && now < this.duckUntil;
     if (p.ducking) {
       this.intent = { direction: this.getDuckDirection(), jumpPressed: false };
@@ -887,15 +890,20 @@ class BotController {
     const context = this.context(mods, now);
     // Recovery uses the same reachable, collision-free goals as exploration.
     // A raw platform center may be inside a wall and cannot be a fallback.
-    this.planning = null;
-    // Recovery has no combat target, so this only selects a reachable exploration
-    // point; it does not run the expensive tactical aiming search.
-    this.decision = chooseDecision(this, context, null, [], now);
+    // It is planned in slices like any think: run to completion here it took
+    // up to ~100 ms of the game thread on the Pi in Bank Bust.
+    this.planning = { steps: this.recoverySteps(context, now), at: now, damageAt: p.lastDamagedAt };
+    this.lastProgressAt = now;
+  }
+
+  // Recovery has no combat target, so this only selects a reachable exploration
+  // point; it does not run the expensive tactical aiming search.
+  *recoverySteps(context, now) {
+    this.decision = yield* chooseDecisionSteps(this, context, null, [], now);
     if (this.decision.goal) {
       this.nextDecisionAt = now + 2200;
       this.navigate(context, now);
     } else this.nextDecisionAt = 0;
-    this.lastProgressAt = now;
   }
 
   clearTravel() { this.traversal = null; this.approachEdge = null; this.maneuver = null; this.walkGoalX = null; this.pursuit = null; }

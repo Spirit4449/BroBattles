@@ -59,9 +59,11 @@ function finish(room,entry,p,reason){
   const event={type:'ninja-terminal',id:projectile.id,requestId:entry.requestId,reason,x:projectile.x,y:projectile.y,...ammo(p),...timing(room)};
   state.terminals.push(event);if(state.terminals.length>512)state.terminals.shift();emit(room,p,event);
 }
+// Resolved on first use (circular imports); kept out of the per-tick path.
+let botCombat=null;
 function tick(room){
   const state=room._ninja;if(!state)return;
-  for(const p of room.players.values())if(!p.isBot&&p.char_class==='ninja'&&p.isAlive)require('../bots/combat').advanceAmmo(p,model.STEP_MS);
+  for(const p of room.players.values())if(!p.isBot&&p.char_class==='ninja'&&p.isAlive)(botCombat||=require('../bots/combat')).advanceAmmo(p,model.STEP_MS);
   const pending=state.pending;state.pending=[];
   for(const cast of pending){
     const p=getParticipant(room,cast.owner);if(!p)continue;

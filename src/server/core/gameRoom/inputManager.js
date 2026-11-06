@@ -180,6 +180,9 @@ function clampToRoomBounds(x, y, room) {
 // for POSITION_HISTORY_MS so hit validation can rewind across a full RTT plus
 // the remote interpolation delay. Duplicate per-tick samples are not recorded:
 // they turned linear rewinds between packets into steps.
+// Resolved on first use (circular imports); a require() per history sample
+// was measurable on the game thread.
+let lagCompensation = null;
 function pushPositionHistory(playerData, now = Date.now()) {
   if (!playerData) return;
   const history = (playerData._posHistory ||= []);
@@ -187,7 +190,7 @@ function pushPositionHistory(playerData, now = Date.now()) {
     x: Number(playerData.x) || 0,
     y: Number(playerData.y) || 0,
     t: now,
-    body: require("./lagCompensation").collisionPose(playerData),
+    body: (lagCompensation ||= require("./lagCompensation")).collisionPose(playerData),
   });
   while (
     history.length > POSITION_HISTORY_DEPTH ||

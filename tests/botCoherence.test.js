@@ -192,6 +192,10 @@ test('tactics and recovery require a route to the actual point, not merely its p
   brain.lastPosition = { x: p.x, y: p.y };
   brain.lastProgressAt = time.now() - 3000;
   brain.checkProgress(time.now(), 1000 / 60, {});
+  // Recovery is planned in slices like any think; let the controller finish it.
+  assert.ok(brain.planning, 'a stuck bot starts recovery planning');
+  for (let i = 0; i < 200 && brain.planning; i++) brain.advancePlanning(time.now());
+  assert.equal(brain.planning, null);
   const goal = brain.decision.goal;
   assert.ok(goal);
   assert.ok(canStandAt(h.room.geometry, brain.graph.surfaces.find((s) => s.id === goal.surfaceId), p.char_class, goal.x));

@@ -1,5 +1,7 @@
 const { HIT_STALENESS_MAX_MS } = require("../gameRoomConfig");
 const { getHistoricalPosition } = require("./combatValidation");
+const { characterBody } = require('../../../shared/physics/characterBody');
+const { DUCK_HEIGHT_RATIO } = require('../../../shared/physics/ducking');
 
 // Shooter-favoring lag compensation for projectiles.
 //
@@ -76,8 +78,6 @@ function poseAt(player, rewindMs, now = Date.now()) {
 }
 
 function collisionPose(player) {
-  const { characterBody } = require('../../../shared/physics/characterBody');
-  const { DUCK_HEIGHT_RATIO } = require('../../../shared/physics/ducking');
   const body = characterBody(player.char_class, player.flip);
   const height = body.height * (player.ducking ? DUCK_HEIGHT_RATIO : 1);
   return {

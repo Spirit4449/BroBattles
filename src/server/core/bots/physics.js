@@ -8,10 +8,57 @@ const { sweepMovement, resolveOverlap } = require('../../../shared/physics/swept
 const { advanceGeometry, PLATFORM_STEP_UP_PX } = require('../../../shared/maps/platformMotion');
 const { isStepFace } = require('../../../shared/physics/wallJumpFace');
 
+// Broadphase: colliders bucketed by x for static geometry. Every query returns
+// the colliders that can touch an x-range in their original order, so loops
+// that take the first match or accumulate in order give the same result as a
+// scan of every collider. Geometry with moving platforms is always scanned
+// whole (its colliders move in place).
+const BUCKET_PX = 256;
+const EMPTY = Object.freeze([]);
+const colliderIndexes = new WeakMap();
+function colliderIndex(geometry) {
+  const colliders = geometry?.colliders;
+  if (!colliders || geometry.movingColliders?.length) return null;
+  let index = colliderIndexes.get(geometry);
+  if (index && index.colliders === colliders && index.count === colliders.length) return index;
+  index = { colliders, count: colliders.length, single: new Map(), pair: new Map() };
+  const spans = [];
+  for (const r of colliders) {
+    if (!Number.isFinite(r.left) || !Number.isFinite(r.right)) { colliderIndexes.set(geometry, null); return null; }
+    spans.push([Math.floor((r.left - 2) / BUCKET_PX), Math.floor((r.right + 2) / BUCKET_PX)]);
+  }
+  const first = Math.min(...spans.map(s => s[0])), last = Math.max(...spans.map(s => s[1]));
+  for (let b = first - 1; b <= last + 1; b++) {
+    const single = [], pair = [];
+    colliders.forEach((r, i) => {
+      const [lo, hi] = spans[i];
+      if (lo <= b && hi >= b) single.push(r);
+      if (lo <= b + 1 && hi >= b) pair.push(r);
+    });
+    index.single.set(b, single);
+    index.pair.set(b, pair);
+  }
+  colliderIndexes.set(geometry, index);
+  return index;
+}
+// Colliders that can overlap [left, right] (callers pad by their tolerances).
+function nearColliders(geometry, left, right) {
+  const index = colliderIndex(geometry);
+  if (!index || !(left <= right)) return geometry.colliders;
+  const b0 = Math.floor(left / BUCKET_PX), b1 = Math.floor(right / BUCKET_PX);
+  if (b1 === b0) return index.single.get(b0) || EMPTY;
+  if (b1 === b0 + 1) return index.pair.get(b0) || EMPTY;
+  return geometry.colliders;
+}
+
+// Same fields as spreading the body (characterBody's fixed shape) plus the
+// edges; a literal is markedly cheaper than a spread on this hot path.
 function bounds(player) {
   const body = characterBody(player.char_class, player.flip);
   const x = player.x + body.offsetX, y = player.y + body.offsetY;
-  return { ...body, left: x - body.halfWidth, right: x + body.halfWidth, top: y - body.halfHeight, bottom: y + body.halfHeight };
+  return { width: body.width, height: body.height, halfWidth: body.halfWidth, halfHeight: body.halfHeight,
+    offsetX: body.offsetX, offsetY: body.offsetY, displayWidth: body.displayWidth, displayHeight: body.displayHeight,
+    left: x - body.halfWidth, right: x + body.halfWidth, top: y - body.halfHeight, bottom: y + body.halfHeight };
 }
 function overlaps(a, b, c, d) { return a < d - 0.01 && b > c + 0.01; }
 // Whether the side the body is against is a wall to slide on and kick off rather
@@ -19,7 +66,10 @@ function overlaps(a, b, c, d) { return a < d - 0.01 && b > c + 0.01; }
 function onClimbableWall(p, geometry) {
   if (!p.wallSide) return false;
   if (!Number.isFinite(p._wallFaceTop)) return true;
-  return !isStepFace(p._wallFaceTop, bounds(p), geometry.colliders.map(r => ({ left: r.left, right: r.right, top: r.top, up: r.collision.up })));
+  const body = bounds(p);
+  // isStepFace only reads colliders under the body's x-range.
+  return !isStepFace(p._wallFaceTop, body, nearColliders(geometry, body.left - 2, body.right + 2)
+    .map(r => ({ left: r.left, right: r.right, top: r.top, up: r.collision.up })));
 }
 function approach(value, target, amount) { return value < target ? Math.min(target, value + amount) : Math.max(target, value - amount); }
 
@@ -51,8 +101,10 @@ function stepDash(p, intent, geometry, dtMs, now, modifiers) {
   }
   if (!bursting || p._botDashWallContact) p.vy += tuning.gravity * dt;
   const before = bounds(p);
+  const sweepDx = p.vx * dt;
   const result = sweepMovement({ x: before.left, y: before.top,
-    width: before.halfWidth * 2, height: before.halfHeight * 2 }, p.vx * dt, p.vy * dt, geometry.colliders);
+    width: before.halfWidth * 2, height: before.halfHeight * 2 }, sweepDx, p.vy * dt,
+    nearColliders(geometry, before.left + Math.min(0, sweepDx) - 2, before.right + Math.max(0, sweepDx) + 2));
   p.x += result.x - before.left; p.y += result.y - before.top;
   const world = geometry.world;
   const x = Math.max(world.x + before.halfWidth - before.offsetX,
@@ -61,9 +113,10 @@ function stepDash(p, intent, geometry, dtMs, now, modifiers) {
   p.x = x;
   if (result.hits.up || result.hits.down) p.vy = 0;
   const b = bounds(p);
-  const support = geometry.colliders.find(r => r.collision.up && p.vy >= 0 &&
+  const near = nearColliders(geometry, b.left - 2, b.right + 2);
+  const support = near.find(r => r.collision.up && p.vy >= 0 &&
     Math.abs(b.bottom - r.top) < 0.5 && overlaps(b.left, b.right, r.left, r.right));
-  const wall = geometry.colliders.find(r => overlaps(b.top, b.bottom, r.top, r.bottom) &&
+  const wall = near.find(r => overlaps(b.top, b.bottom, r.top, r.bottom) &&
     ((r.collision.left && Math.abs(b.right - r.left) < 0.5) ||
      (r.collision.right && Math.abs(b.left - r.right) < 0.5)));
   p.grounded = !!support; p.platformId = support?.id ?? null;
@@ -146,7 +199,8 @@ function stepBody(p, intent, geometry, dtMs, now, modifiers = {}) {
   p.x += p.vx * dt;
   let b = bounds(p);
   p.wallSide = null;
-  for (const rect of geometry.colliders) {
+  // A wall push only moves the body back toward where it started.
+  for (const rect of nearColliders(geometry, Math.min(before.left, b.left) - 2, Math.max(before.right, b.right) + 2)) {
     if (!overlaps(before.top, before.bottom, rect.top, rect.bottom)) continue;
     if (p.vx > 0 && rect.collision.left && before.right <= rect.left + 0.1 && b.right >= rect.left) {
       p.x -= b.right - rect.left; p.vx = 0; p.wallSide = "right"; p._wallFaceTop = rect.top; b = bounds(p);
@@ -159,7 +213,7 @@ function stepBody(p, intent, geometry, dtMs, now, modifiers = {}) {
   const old = bounds(p);
   p.y += p.vy * dt;
   b = bounds(p); p.grounded = false; p.platformId = null;
-  for (const rect of geometry.colliders) {
+  for (const rect of nearColliders(geometry, b.left - 2, b.right + 2)) {
     if (!overlaps(b.left, b.right, rect.left, rect.right)) continue;
     if (p.vy >= 0 && rect.collision.up && old.bottom <= rect.top + 0.15 && b.bottom >= rect.top) {
       p.y -= b.bottom - rect.top; p.vy = 0; p._jumpLaunch = null; p.grounded = true; p.platformId = rect.id; b = bounds(p);
@@ -278,4 +332,4 @@ function movementGeometry(room) {
   return result;
 }
 
-module.exports = { movementGeometry, bounds, stepBody, onClimbableWall, applyImpulse, startDash, carryOnPlatforms, forecastGeometry };
+module.exports = { nearColliders, movementGeometry, bounds, stepBody, onClimbableWall, applyImpulse, startDash, carryOnPlatforms, forecastGeometry };
