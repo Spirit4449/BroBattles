@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSnapshotBuffer, getRenderClockCorrection, getDeliveryClockCorrection } from "../src/client/game/match/snapshotBuffer.js";
-import { sampleRemoteFrame, readNetworkExperiments, followRemotePosition } from "../src/client/game/scene/remoteSmoothing.js";
+import { sampleRemoteFrame, readNetworkExperiments, followRemotePosition, remoteLifeState } from "../src/client/game/scene/remoteSmoothing.js";
 import roomState from "../src/server/core/gameRoom/roomStateManager.js";
 import roomModule from "../src/server/core/gameRoom/index.js";
 
@@ -272,4 +272,35 @@ test("delivery steering is a bounded slew that never reverses the timeline", () 
     }
   }
   assert.equal(getDeliveryClockCorrection(2, 16), 0);
+});
+
+test("snapshots drawn after a death or respawn event cannot undo it", () => {
+  // Real buffer: 30 Hz snapshots; the player dies after snapshot 10 and
+  // respawns at x=100 after snapshot 20.
+  const b = createSnapshotBuffer({ maxStateBuffer: 240 });
+  const alive = (seq) => seq <= 10 || seq > 20;
+  for (let seq = 1; seq <= 30; seq++) {
+    const t = seq * 1000 / 30;
+    b.ingestSnapshot(packet(seq, t, { players: { p: { x: seq > 20 ? 100 : 900, y: 0, isAlive: alive(seq) } } }), t + 50);
+  }
+  const at = (seq) => b.sampleAt(seq * 1000 / 30 + 10);
+  const life = (sample, event) => remoteLifeState(event, sample.aState, sample.aState.players.p, sample.bState, sample.bState.players.p);
+  const died = { epoch: "room-a", afterSeq: 10, dead: true };
+  const respawned = { epoch: "room-a", afterSeq: 20, dead: false };
+
+  // Without an event the snapshots decide, as before.
+  assert.equal(life(at(5), null).dead, false);
+  assert.equal(life(at(12), null).dead, true);
+
+  // Snapshots 9-10 still show the player alive; the death event wins.
+  assert.equal(life(at(9), died).dead, true);
+  assert.equal(life(at(10), died).dead, true);
+
+  // Snapshots before the respawn show the corpse at the death spot.
+  assert.deepEqual(life(at(19), respawned), { dead: false, holdPosition: true, newestOnly: false });
+  assert.deepEqual(life(at(20), respawned), { dead: false, holdPosition: false, newestOnly: true });
+  assert.deepEqual(life(at(22), respawned), { dead: false, holdPosition: false, newestOnly: false });
+
+  // Another room's sequence numbers are not compared with the event.
+  assert.equal(life(at(19), { ...respawned, epoch: "room-b" }).dead, true);
 });

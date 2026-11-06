@@ -177,6 +177,8 @@ export function createMatchCoordinator(config) {
 
   // Snapshots arrive as deltas; everything below sees rebuilt full states.
   const snapshotDecoder = createSnapshotDecoder();
+  // Newest snapshot received; death and respawn events carry it (remoteLifeState).
+  let lastSnapshotMark = null;
   let _startWatchdogTimer = null;
   let _startWatchdogDeadline = 0;
   let _forceLiveInputTimer = null;
@@ -799,7 +801,7 @@ export function createMatchCoordinator(config) {
     if (payload.username === getUsername() || presentationSuppressed()) return;
     const wrapper =
       opponentPlayers[payload.username] || teamPlayers[payload.username];
-    wrapper?.startDeathPresentation?.(payload);
+    wrapper?.startDeathPresentation?.({ ...payload, afterSnapshot: lastSnapshotMark });
   }
 
   function _onPlayerRespawn(payload) {
@@ -808,10 +810,13 @@ export function createMatchCoordinator(config) {
     if (payload.username === getUsername() || presentationSuppressed()) return;
     const wrapper =
       opponentPlayers[payload.username] || teamPlayers[payload.username];
-    wrapper?.handleRespawn?.(payload);
+    wrapper?.handleRespawn?.({ ...payload, afterSnapshot: lastSnapshotMark });
   }
 
   function _onGameSnapshot(packet) {
+    if (Number.isFinite(packet?.snapshotSeq)) {
+      lastSnapshotMark = { epoch: packet.snapshotEpoch ?? null, seq: packet.snapshotSeq };
+    }
     // Null until a keyframe arrives after joining or a missed packet.
     const snapshot = snapshotDecoder.decode(packet);
     if (!snapshot || !snapshot.players) return;

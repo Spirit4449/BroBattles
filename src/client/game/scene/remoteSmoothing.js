@@ -36,6 +36,29 @@ export function followRemotePosition(sprite, x, y, {
   }
 }
 
+// Death and respawn events arrive one interpolation delay ahead of the
+// snapshots being drawn, and those older snapshots still show the previous
+// life state. Socket.IO keeps one socket's messages in order, so every
+// snapshot received before an event was emitted before it: such snapshots take
+// the event's state instead, or they would undo the event until the timeline
+// caught up (a revived corpse, a respawned player back at the death spot).
+// `life` is `{ epoch, afterSeq, dead }` from the latest event, or null.
+export function remoteLifeState(life, aState, aPos, bState, bPos) {
+  const predates = (state) => !!life && Number.isFinite(life.afterSeq) &&
+    (life.epoch == null || state?.snapshotEpoch === life.epoch) &&
+    Number(state?.snapshotSeq) <= life.afterSeq;
+  const deadIn = (state, pos) => !!pos && (predates(state) ? life.dead === true : pos.isAlive === false);
+  const respawned = life?.dead === false;
+  return {
+    dead: deadIn(aState, aPos) || deadIn(bState, bPos),
+    // Positions from before a respawn are the death spot: keep the sprite at
+    // the spawn until the timeline reaches it, then jump to it without
+    // interpolating across the map.
+    holdPosition: respawned && predates(bState),
+    newestOnly: respawned && predates(aState) && !predates(bState),
+  };
+}
+
 export function sampleRemoteFrame(buffer, baseFrame, state, {
   attack = false, airborne = false, deltaMs = 16.67, snap = false,
 } = {}) {

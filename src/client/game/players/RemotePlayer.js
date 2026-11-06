@@ -617,6 +617,14 @@ export default class RemotePlayer {
     body.setSize(body.sourceWidth, ducking ? standing * DUCK_HEIGHT_RATIO : standing, false);
     this.applyFlipOffset();
     body.updateFromGameObject?.();
+    // Arcade's postUpdate moves the sprite by (position - prevFrame). Called
+    // mid-frame, the move above would be applied a second time; after
+    // body.reset() (respawn), which records the sprite's top-left, it was the
+    // collider offset: a one-frame 70-140 px jump.
+    if (body.position && body.prevFrame) {
+      body.prev?.copy?.(body.position);
+      body.prevFrame.copy(body.position);
+    }
   }
 
   // Top of the world HUD (name, bars). Ducking only nudges it down slightly
@@ -941,7 +949,15 @@ export default class RemotePlayer {
     } catch (_) {}
   }
 
+  // Death and respawn events carry the last snapshot received before them, so
+  // the interpolated timeline does not undo them (see remoteLifeState).
+  noteLifeEvent(meta, dead) {
+    const mark = meta?.afterSnapshot;
+    if (mark && Number.isFinite(mark.seq)) this._lifeEvent = { epoch: mark.epoch ?? null, afterSeq: mark.seq, dead };
+  }
+
   startDeathPresentation(meta = {}) {
+    this.noteLifeEvent(meta, true);
     this._movementAudio?.reset();
     if (
       !this.opponent ||
@@ -1016,6 +1032,7 @@ export default class RemotePlayer {
   }
 
   handleRespawn(meta = {}) {
+    this.noteLifeEvent(meta, false);
     this._movementAudio?.reset();
     if (!this.opponent) return;
     this._corpseRemovalTimer?.remove?.(false);

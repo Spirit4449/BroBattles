@@ -315,6 +315,9 @@ export function createSnapshotBuffer(options = {}) {
     stateBuffer.push({
       tMono: snapMono,
       tickId: typeof snapshot?.tickId === "number" ? snapshot.tickId : null,
+      // Lets lifecycle events tell which buffered states were sent before them.
+      snapshotSeq: sequence,
+      snapshotEpoch: incomingEpoch,
       players: snapshot?.players || {},
     });
 

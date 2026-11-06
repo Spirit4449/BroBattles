@@ -53,6 +53,7 @@ import {
   readNetworkExperiments,
   sampleRemoteFrame,
   followRemotePosition,
+  remoteLifeState,
 } from "../game/scene/remoteSmoothing.js";
 import { createMatchCoordinator } from "../game/match/matchCoordinator";
 import { syncRemoteRoster } from "../game/match/playerRosterMerge";
@@ -1896,8 +1897,8 @@ class GameScene extends Phaser.Scene {
 
       if (!aPosData && !bPosData) return;
 
-      const isDeadBySnapshot =
-        aPosData?.isAlive === false || bPosData?.isAlive === false;
+      const life = remoteLifeState(wrapper._lifeEvent, aState, aPosData, bState, bPosData);
+      const isDeadBySnapshot = life.dead;
       const isConnected =
         bPosData && typeof bPosData.connected === "boolean"
           ? bPosData.connected
@@ -1930,7 +1931,10 @@ class GameScene extends Phaser.Scene {
           Number.isFinite(bX) &&
           Number.isFinite(bY)
         ) {
-          if (inRespawnShield) {
+          if (life.newestOnly) {
+            targetX = bX;
+            targetY = bY;
+          } else if (inRespawnShield) {
             if (extrapolationMs > 0) {
               targetX = bX;
               targetY = bY;
@@ -1989,7 +1993,7 @@ class GameScene extends Phaser.Scene {
       const shouldSnapToTarget =
         Number(wrapper._networkSnapUntil) > performance.now();
 
-      if (!wrapper._deathPresentationActive && !wrapper._corpseRemoved) {
+      if (!wrapper._deathPresentationActive && !wrapper._corpseRemoved && !life.holdPosition) {
         if (shouldSnapToTarget) {
           spr.x = targetX;
           spr.y = targetY;
