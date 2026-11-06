@@ -301,6 +301,7 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
         attacker.lastCombatAt = now;
         room.broadcastSnapshot();
       }
+      if (room._netTrace) traceHit(room, attacker, targetName, null, attackType, appliedDamage, payload, huntressProjectile || ninjaProjectile || runtimeProjectile);
       return { accepted: true, appliedDamage };
     }
     if (!isSelf) room._recordCombatStat(attacker, { hits: 1 });
