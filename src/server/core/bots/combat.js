@@ -20,12 +20,16 @@ function interceptTime(dx, dy, vx, vy, speed) {
   return roots.length ? Math.min(...roots) : Math.sqrt(c) / speed;
 }
 
+// Liang–Barsky clip against the padded rect's four edges. Bot aiming calls
+// this thousands of times per decision, so it allocates nothing.
 function segmentCrossesRect(ax, ay, bx, by, rect, padding = 8) {
   const left = rect.left - padding, right = rect.right + padding;
   const top = rect.top - padding, bottom = rect.bottom + padding;
   let lo = 0, hi = 1;
   const dx = bx - ax, dy = by - ay;
-  for (const [p, q] of [[-dx, ax - left], [dx, right - ax], [-dy, ay - top], [dy, bottom - ay]]) {
+  for (let edge = 0; edge < 4; edge++) {
+    const p = edge === 0 ? -dx : edge === 1 ? dx : edge === 2 ? -dy : dy;
+    const q = edge === 0 ? ax - left : edge === 1 ? right - ax : edge === 2 ? ay - top : bottom - ay;
     if (p === 0) { if (q < 0) return false; continue; }
     const t = q / p;
     if (p < 0) lo = Math.max(lo, t); else hi = Math.min(hi, t);
@@ -66,16 +70,28 @@ function projectileSolutions(player, target, runtime, startup, prediction, dt, s
   return solutions;
 }
 
+// The flight is sampled once per fixed step, then only cover whose padded
+// bounds touch the whole flight's bounding box is tested: a segment cannot
+// cross a rect its own bounds miss. On Bank Bust an arc is ~180 segments
+// against dozens of walls, which held the game thread for up to 80 ms.
 function clearTrajectory(colliders, shot, radius) {
-  let x = shot.ox + Math.cos(shot.angle) * shot.forward;
-  let y = shot.oy + Math.sin(shot.angle) * shot.forward;
+  if (!colliders.length) return true;
   const steps = shot.gravity ? Math.ceil(shot.time / shot.dt) : 1;
+  const xs = new Float64Array(steps + 1), ys = new Float64Array(steps + 1);
+  xs[0] = shot.ox + Math.cos(shot.angle) * shot.forward;
+  ys[0] = shot.oy + Math.sin(shot.angle) * shot.forward;
+  let minX = xs[0], maxX = xs[0], minY = ys[0], maxY = ys[0];
   for (let i = 1; i <= steps; i++) {
     const t = shot.gravity ? Math.min(shot.time, i * shot.dt) : shot.time;
-    const nx = shot.ox + Math.cos(shot.angle) * (shot.forward + shot.speed * t);
-    const ny = shot.oy + Math.sin(shot.angle) * (shot.forward + shot.speed * t) + 0.5 * shot.gravity * t * (t + shot.dt);
-    if (colliders.some((r) => segmentCrossesRect(x, y, nx, ny, r, radius))) return false;
-    x = nx; y = ny;
+    const x = xs[i] = shot.ox + Math.cos(shot.angle) * (shot.forward + shot.speed * t);
+    const y = ys[i] = shot.oy + Math.sin(shot.angle) * (shot.forward + shot.speed * t) + 0.5 * shot.gravity * t * (t + shot.dt);
+    if (x < minX) minX = x; else if (x > maxX) maxX = x;
+    if (y < minY) minY = y; else if (y > maxY) maxY = y;
+  }
+  const near = colliders.filter((r) => r.left - radius <= maxX && r.right + radius >= minX && r.top - radius <= maxY && r.bottom + radius >= minY);
+  if (!near.length) return true;
+  for (let i = 1; i <= steps; i++) {
+    for (const r of near) if (segmentCrossesRect(xs[i - 1], ys[i - 1], xs[i], ys[i], r, radius)) return false;
   }
   return true;
 }
