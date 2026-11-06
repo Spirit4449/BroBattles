@@ -237,10 +237,18 @@ export function detectSnaps(series, { minPx = 28, teleportPx = 260 } = {}) {
   return out;
 }
 
-function truthReversed(truth, t, dir, windowMs = 450) {
+// Whether the server's own snapshots move the actor back against `dir` by at
+// least `minPx` in the window. Cumulative: a bot that turns around over
+// several small snapshot steps is real movement too.
+function truthReversed(truth, t, dir, windowMs = 450, minPx = 4) {
   if (!truth?.length) return null;
   const pts = truth.filter(p => p.t >= t - windowMs && p.t <= t + 150);
-  for (let i = 1; i < pts.length; i++) if ((pts[i].x - pts[i - 1].x) * dir < -4) return true;
+  let peak = -Infinity;
+  for (const p of pts) {
+    const along = p.x * dir;
+    if (along > peak) peak = along;
+    else if (peak - along >= minPx) return true;
+  }
   return false;
 }
 
