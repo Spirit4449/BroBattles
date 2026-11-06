@@ -54,20 +54,8 @@ import { INVISIBLE_ALPHA, invisibleAttackAlpha } from "../powerups/invisibilityR
 import { characterPresentation } from "../../../shared/characters/index.js";
 
 const OP_PLAYER_NAME_OFFSET_Y = 42;
-const HUD_SMOOTH_ALPHA = 0.35;
 // A fighter still loading during the pregame stands at its spawn as a ghost.
 const LOADING_GHOST_ALPHA = 0.4;
-const HUD_DEADBAND_PX = 0.75;
-
-function stabilizeHudAxis(current, target, snap = false) {
-  const nextTarget = Number(target);
-  if (!Number.isFinite(nextTarget)) return current;
-  const currentValue = Number(current);
-  if (snap || !Number.isFinite(currentValue)) return Math.round(nextTarget);
-  const delta = nextTarget - currentValue;
-  if (Math.abs(delta) <= HUD_DEADBAND_PX) return Math.round(currentValue);
-  return Math.round(currentValue + delta * HUD_SMOOTH_ALPHA);
-}
 
 export default class RemotePlayer {
   constructor(
@@ -656,14 +644,10 @@ export default class RemotePlayer {
   updateUIPosition({ drawBars = true } = {}) {
     if (!this.opponent) return;
     if (this._worldUiHidden) return;
-    const bodyTop = this.hudTopY();
-    const snapHud = Number(this._networkSnapUntil) > performance.now();
-    this._hudAnchorX = stabilizeHudAxis(
-      this._hudAnchorX,
-      this.opponent.x,
-      snapHud,
-    );
-    this._hudAnchorY = stabilizeHudAxis(this._hudAnchorY, bodyTop, snapHud);
+    // Anchor straight to the drawn sprite every frame, exactly like the local
+    // player's HUD. Smoothing here made remote bars trail their fighter.
+    this._hudAnchorX = this.opponent.x;
+    this._hudAnchorY = this.hudTopY();
     if (this.opPlayerName) {
       this.opPlayerName.setPosition(
         this._hudAnchorX,
@@ -838,19 +822,16 @@ export default class RemotePlayer {
     // Sets x in the center
     const hudX = Number.isFinite(Number(this._hudAnchorX))
       ? Number(this._hudAnchorX)
-      : Math.round(this.opponent.x);
+      : this.opponent.x;
     const healthBarX = hudX - this.opHealthBarWidth / 2;
-    // If no explicit Y provided, anchor to the sprite's body top so it doesn't jump
-    const bodyTop = this.opponent.body
-      ? this.opponent.body.y
-      : this.opponent.y - this.opponent.height / 2;
+    // Same anchor and offset as the local player's bar.
     const hudBodyTop = Number.isFinite(Number(this._hudAnchorY))
       ? Number(this._hudAnchorY)
-      : Math.round(bodyTop);
+      : this.hudTopY();
     const y =
       typeof healthBarY === "number" && !Number.isNaN(healthBarY)
         ? healthBarY
-        : hudBodyTop - 21;
+        : hudBodyTop - 20;
     if (dead === false) {
       this.opHealthText.setText(`${this.opCurrentHealth}`);
     } else {

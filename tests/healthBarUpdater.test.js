@@ -20,7 +20,6 @@ test('teammate and opponent name/bar anchors follow moving fighters every frame'
   function player() {
     const wrapper = Object.create(OpPlayer.prototype);
     wrapper.opponent = { x: 100, body: { y: 20 } };
-    wrapper._networkSnapUntil = Infinity;
     wrapper._hudAnchorX = 500;
     wrapper._hudAnchorY = -300;
     wrapper.opPlayerName = { setPosition(x, y) { this.x = x; this.y = y; } };
@@ -38,8 +37,9 @@ test('teammate and opponent name/bar anchors follow moving fighters every frame'
     }
     updateHealthBars({ opponentPlayers: { enemy }, teamPlayers: { ally }, syncPositions: true });
     for (const wrapper of [enemy, ally]) {
-      assert.equal(wrapper.barAnchor.x, Math.round(wrapper.opponent.x));
-      assert.equal(wrapper.barAnchor.y, Math.round(wrapper.opponent.body.y));
+      // Like the local player's bar: on the sprite this frame, no trailing.
+      assert.equal(wrapper.barAnchor.x, wrapper.opponent.x);
+      assert.equal(wrapper.barAnchor.y, wrapper.opponent.body.y);
       assert.equal(wrapper.opPlayerName.x, wrapper.barAnchor.x);
       assert.equal(wrapper.opPlayerName.y, wrapper.barAnchor.y - 42);
     }
