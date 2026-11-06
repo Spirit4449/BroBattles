@@ -7,7 +7,7 @@ import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { consumeOnce } from "../shared/packetDedupe";
-import { predictShotContact, shotBlockersFor } from "../shared/shotPrediction";
+import { predictShotContact, shotBlockersFor, notePredictedHit } from "../shared/shotPrediction";
 
 const NAME = "gloop";
 const SLIMEBALL = getResolvedCharacterAttackConfig(NAME, "slimeball");
@@ -249,7 +249,11 @@ export function spawnGloopSlimeballVisual(
       const terrain = currentTerrain(scene, cfg.mapCollisionRects, serverTerrain);
       state.mapCollisionRects = blockers.length ? [...terrain, ...blockers] : terrain;
       const impacts = advanceSlimeball(state, delta, state.mapCollisionRects, onSegment);
-      if (struck) { splat({ id: payload.id, target: struck.target.name }); return; }
+      if (struck) {
+        notePredictedHit({ delivery: "released", character: "gloop", target: struck.target });
+        splat({ id: payload.id, target: struck.target.name });
+        return;
+      }
       for (const hit of impacts) {
         visual.impact(hit);
         playSound(scene, "gloop-hit", { volume: hit.terminal ? 0.48 : 0.3,

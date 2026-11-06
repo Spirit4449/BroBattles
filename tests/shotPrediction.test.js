@@ -21,11 +21,14 @@ function load(file, require, globals = {}) {
 const packetDedupe = load('src/client/game/characters/shared/packetDedupe.js', () => ({}), { Date });
 
 // A scene with one enemy drawn standing so its body is centered on `centerY`.
-function arena({ enemyX = 330, centerY = 298, character = 'wizard' } = {}) {
-  const shots = loadShotPrediction({ serverClock: loadServerClock({ performance: { now: () => 0 } }) });
+function arena({ enemyX = 330, centerY = 298, character = 'wizard', clock = { now: () => 0 } } = {}) {
+  const shots = loadShotPrediction({ serverClock: loadServerClock({ performance: { now: () => 0 } }), performance: clock });
   const box = characterHitBounds(character, 0, 0);
-  const enemy = { active: true, visible: true, flipX: false, x: enemyX, y: centerY - (box.top + box.bottom) / 2 };
-  shots.trackShotTargets({ localUsername: 'me', opponentPlayersRef: { foe: { opponent: enemy, character } } });
+  const enemy = { active: true, visible: true, flipX: false, x: enemyX, y: centerY - (box.top + box.bottom) / 2,
+    anims: { frames: 0, update() { this.frames++; } } };
+  const sounds = [];
+  shots.trackShotTargets({ localUsername: 'me', opponentPlayersRef: { foe: { opponent: enemy, character } },
+    playHitSound: (who, sprite) => sounds.push({ who, sprite }) });
   const delayed = [], tweens = [], objects = [];
   function object(x = 0, y = 0, radius = 0, color = null) {
     const o = Object.assign(new EventEmitter(), { x, y, radius, color, active: true, visible: true, alpha: 1 });
@@ -39,9 +42,10 @@ function arena({ enemyX = 330, centerY = 298, character = 'wizard' } = {}) {
     tweens: { add: config => { tweens.push(config); return { stop() {} }; }, killTweensOf() {} },
     time: { delayedCall: (ms, fn) => delayed.push({ ms, fn }) },
     physics: { world: { bounds: { x: 0, y: 0, width: 3000, height: 1200 } } }, _mapObjects: [] };
-  const caster = Object.assign(new EventEmitter(), { active: true, x: 100, y: 300, flipX: false, displayWidth: 150, displayHeight: 150 });
+  const caster = Object.assign(new EventEmitter(), { active: true, x: 100, y: 300, flipX: false, displayWidth: 150, displayHeight: 150,
+    anims: { frames: 0, update() { this.frames++; } } });
   const runDelayed = () => { for (const job of delayed.splice(0).sort((a, b) => a.ms - b.ms)) job.fn(); };
-  return { shots, enemy, scene, caster, delayed, tweens, objects, runDelayed };
+  return { shots, enemy, scene, caster, delayed, tweens, objects, runDelayed, sounds };
 }
 const common = (f, extra = {}) => name =>
   name.includes('shotPrediction') ? f.shots : name.includes('shotContact') ? require('../src/shared/combat/shotContact')
@@ -49,7 +53,10 @@ const common = (f, extra = {}) => name =>
       : name.includes('projectilePresentation') ? require('../src/shared/projectilePresentation')
         : name.includes('renderLayers') ? { RENDER_LAYERS: { ATTACKS: 20 } }
           : name.includes('runtimeId') ? { createRuntimeId: prefix => `${prefix}-1` }
-            : name.includes('flipLock') ? { lockPlayerFlip: () => () => {} }
+            : name.includes('flipLock') ? { lockPlayerFlip: () => () => {}, enforceLockedFlip() {} }
+              : name.includes('attackDelivery') ? require('../src/shared/combat/attackDelivery')
+              : name.includes('thorgSweep') ? require('../src/shared/characters/thorgSweep')
+              : name.includes('shared/characters/index') ? require('../src/shared/characters')
               : extra[Object.keys(extra).find(key => name.includes(key))] || { playSpriteAnimation() {}, playPlayerSound() {} };
 
 test('requests carry the render time remote actors are drawn at, never an invented one', () => {
@@ -145,4 +152,62 @@ test('a slimeball thrown by another player is not ended by bodies on this screen
   api.spawnGloopSlimeballVisual(f.scene, { id: 'remote', direction: 1, angle: 0, start: { x: 130, y: 300 }, speed: 300, initialVy: 0 }, f.caster);
   for (let i = 0; i < 30; i++) f.scene.events.emit('update', 0, 16);
   assert.equal(finishes.length, 0);
+});
+
+test('every predicted hit plays its sound once at the target, holds a brief hitstop, and the server does not repeat it', () => {
+  const clock = { t: 1000, now() { return this.t; } };
+  const f = arena({ clock });
+  const target = { name: 'foe', sprite: f.enemy };
+  f.shots.notePredictedHit({ delivery: 'attached', character: 'thorg', target, attacker: f.caster });
+  assert.deepEqual(f.sounds.map(s => [s.who, s.sprite === f.enemy]), [['thorg', true]]);
+  // Both fighters' frames hold; then they run on.
+  f.enemy.anims.update(0, 16); f.caster.anims.update(0, 16);
+  assert.equal(f.enemy.anims.frames + f.caster.anims.frames, 0);
+  clock.t += 200;
+  f.enemy.anims.update(0, 16); f.caster.anims.update(0, 16);
+  assert.equal(f.enemy.anims.frames + f.caster.anims.frames, 2);
+  // The confirmation and the impact echo are each skipped once.
+  assert.equal(f.shots.takePredictedHit('foe', 'confirm'), true);
+  assert.equal(f.shots.takePredictedHit('foe', 'confirm'), false);
+  assert.equal(f.shots.takePredictedHit('foe', 'impact'), true);
+  // A released shot holds only the victim; an unconfirmed prediction expires.
+  f.shots.notePredictedHit({ delivery: 'released', character: 'ninja', target, attacker: f.caster });
+  f.enemy.anims.update(0, 16); f.caster.anims.update(0, 16);
+  assert.equal(f.caster.anims.frames, 2);
+  assert.equal(f.enemy.anims.frames, 1);
+  clock.t += 5000;
+  assert.equal(f.shots.takePredictedHit('foe', 'confirm'), false);
+  // Areas are never predicted.
+  f.shots.notePredictedHit({ delivery: 'area', character: 'draven', target, attacker: f.caster });
+  assert.equal(f.sounds.length, 2);
+});
+
+function melee(f, file, extra = {}) {
+  return load(file, common(f, { weapon: { startThorgSweep() {} }, ...extra }), { performance: f.clock });
+}
+
+test('a Draven splash strikes the enemy as drawn with the server volume, once, and misses one out of reach', () => {
+  const splash = tuning.getResolvedCharacterAttackConfig('draven', 'splash');
+  for (const [enemyX, strikes] of [[100 + splash.tipOffset, 1], [100 + splash.tipOffset + splash.width + 200, 0]]) {
+    const clock = { t: 0, now() { return this.t; } };
+    const f = Object.assign(arena({ enemyX, centerY: 290, character: 'draven', clock }), { clock });
+    f.scene.game = { loop: { delta: 16 } };
+    const api = melee(f, 'src/client/game/characters/draven/attack.js');
+    api.performDravenSplashAttack({ scene: f.scene, player: f.caster }, { direction: 1 });
+    for (; clock.t <= splash.activeWindowMs; clock.t += 16) f.scene.events.emit('update');
+    assert.equal(f.sounds.length, strikes, `enemy at ${enemyX}`);
+  }
+});
+
+test('a Thorg sweep strikes the enemy as drawn on the attack clock, after the windup, once', () => {
+  const sweep = tuning.getResolvedCharacterAttackConfig('thorg', 'sweep');
+  const clock = { t: 0, now() { return this.t; } };
+  const f = Object.assign(arena({ enemyX: 100 + sweep.radiusX, centerY: 290, character: 'thorg', clock }), { clock });
+  const api = melee(f, 'src/client/game/characters/thorg/attack.js');
+  api.performThorgFallAttack({ scene: f.scene, player: f.caster }, { direction: 1 });
+  for (; clock.t < sweep.windupMs; clock.t += 16) f.scene.events.emit('update');
+  assert.equal(f.sounds.length, 0, 'nothing during the windup');
+  for (; clock.t <= sweep.windupMs + sweep.strikeMs + 32; clock.t += 16) f.scene.events.emit('update');
+  assert.equal(f.sounds.length, 1);
+  assert.equal(f.scene.events.listenerCount('update'), 0, 'prediction stops with the strike');
 });

@@ -15,6 +15,7 @@ import { spawnDamageImpact, spawnDuckGuardImpact } from "../scene/effects";
 import { spawnDeathTombstone } from "../scene/deathTombstone";
 import { applyActionToLocalPlayer, getCharacterSocketEvents, playCharacterSound } from "../characters";
 import { playPlayerSound } from "../audio/playerAudio";
+import { takePredictedHit } from "../characters/shared/shotPrediction";
 import {
   getAnimationDurationMs,
   markOneShotAnimation,
@@ -927,7 +928,9 @@ export function createMatchCoordinator(config) {
               null;
         const soundSource = targetSprite ||
           (isSelfPacket ? getPlayer() : opponentPlayers[playerName]?.opponent || teamPlayers[playerName]?.opponent);
-        if (soundSource) playCharacterSound(scene, charKey, "hit", {}, soundSource);
+        // The attacker's own predicted hit already played its sound.
+        const predicted = isSelfPacket && takePredictedHit(targetName, "confirm");
+        if (soundSource && !predicted) playCharacterSound(scene, charKey, "hit", {}, soundSource);
         if (typeof handleRemoteAttack === "function") {
           handleRemoteAttack(scene, charKey, action, null, {
             targetSprite,

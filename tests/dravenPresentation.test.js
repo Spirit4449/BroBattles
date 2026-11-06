@@ -28,6 +28,7 @@ test('remote cast never schedules a phantom explosion; confirmed impact renders 
 test('explosion starts at contact frame with brief translucent fade-in',()=>{
   const api=load('src/client/game/characters/draven/attack.js',{
     '../../../../shared/characters/characterTuning.js':{getResolvedCharacterAttackConfig:()=>({})},
+    '../../../../shared/characters/index.js':require('../src/shared/characters'),
     '../../../../shared/projectilePresentation':require('../src/shared/projectilePresentation'),
     '../../scene/renderLayers':{RENDER_LAYERS:{PLAYER:30,ATTACKS:60}},
   });

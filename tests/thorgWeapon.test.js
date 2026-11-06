@@ -29,6 +29,7 @@ const weaponModule = load('../src/client/game/characters/thorg/weapon.js', {
   '../shared/flipLock': flips,
   '../shared/animationState': { playSpriteAnimation() {}, markOneShotAnimation() {} },
   '../../audio/playerAudio': playerAudio,
+  '../shared/shotPrediction': { inHitstop: sprite => performance.now() < (sprite?.anims?._hitstopUntil || 0) },
 });
 
 function object() {

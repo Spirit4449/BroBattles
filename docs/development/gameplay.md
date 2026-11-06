@@ -173,7 +173,9 @@ For new attacks:
 - Sprite-sheet attacks can declare `collisionOffsetY` for a world-space vertical
   correction. This preserves their aim direction and forward reach.
 - Connected melee weapons should use `hitCapsuleTargets` from the wielder's body
-  center to the weapon tip. This prevents a detached head-only box and keeps the
+  center to the weapon tip, with the shape defined in
+  `src/shared/combat/attackDelivery.js` so the attacker's client predicts the
+  same volume (see [Attack delivery](networking.md#attack-delivery)). This prevents a detached head-only box and keeps the
   debug outline identical to the authoritative damage query.
 - Dedicated collision protocols must call `exposeDamageHitbox(room, source,
   shape, now, part)` immediately before collision evaluation. Reuse the same

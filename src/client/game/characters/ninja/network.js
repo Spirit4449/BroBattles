@@ -9,7 +9,7 @@ import { VERSION, STEP_MS, launch, step, swarmConfig } from '../../../../shared/
 import { advanceGeometry } from '../../../../shared/maps/platformMotion';
 import { clampLead } from '../../../../shared/characters/huntressReplication';
 import { createRuntimeId } from '../shared/runtimeId';
-import { isLocalShooter, predictShotContact, playPredictedImpact, shotBlockersFor } from '../shared/shotPrediction';
+import { isLocalShooter, predictShotContact, playPredictedImpact, shotBlockersFor, notePredictedHit } from '../shared/shotPrediction';
 import { RENDER_LAYERS } from '../../scene/renderLayers';
 import { playPlayerSound } from '../../audio/playerAudio';
 const active=new Map(),terminals=new Set(),requests=new Map(),effects=new Set();
@@ -72,13 +72,14 @@ function replacedFlight(r,o,sim,now){
   return {x:q.x+(n.x-q.x)*f+(c?.x||0)*blend,y:q.y+(n.y-q.y)*f+(c?.y||0)*blend};
 }
 // The thrower sees each enemy struck the moment the shuriken crosses it as
-// drawn, once per flight leg like the server. Damage and sound wait for it.
+// drawn, once per flight leg like the server. Damage waits for it.
 function predictHits(scene,e,point){
   const from=e.hitFrom;e.hitFrom=point;
   if(!from||e.p.phase==='hover'||e.p.phase==='stall'||e.p.elapsed<(e.p.cfg.hitArmMs||0))return;
   const leg=e.p.phase,struck=(e.struck||=new Map()),skip=(struck.get(leg)||struck.set(leg,new Set()).get(leg));
   for(let hit;(hit=predictShotContact(from,point,e.p.cfg.collisionRadius,{skip}));){
     skip.add(hit.target.name);playPredictedImpact(scene,hit.x,hit.y);
+    notePredictedHit({delivery:'released',character:'ninja',target:hit.target});
   }
 }
 function remove(id){const e=active.get(id);e?.fx?.destroy();e?.sprite?.destroy();active.delete(id);}

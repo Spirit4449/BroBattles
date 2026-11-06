@@ -2,6 +2,7 @@ import { networkAdapter as ninja } from './ninja/network';
 import { networkAdapter as huntress } from './huntress/network';
 import { trackShotTargets, resetShotPrediction } from './shared/shotPrediction';
 import { predictGloopHook } from './gloop/special';
+import { playCharacterSound } from './index';
 
 // Explicit registration keeps client protocol code out of the shared catalog.
 const adapters = [ninja, huntress];
@@ -23,7 +24,8 @@ export function discardCharacterPresentation() {
   for (const adapter of adapters) adapter.discard();
 }
 export function attachCharacterNetworks(scene, context) {
-  trackShotTargets(context);
+  trackShotTargets({ ...context,
+    playHitSound: (character, sprite) => playCharacterSound(scene, character, 'hit', {}, sprite) });
   for (const adapter of adapters) adapter.attach(scene, context);
 }
 export function observeCharacterSnapshot(snapshot) {

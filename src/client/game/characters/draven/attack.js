@@ -7,6 +7,9 @@ import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
 import { playPlayerSound } from "../../audio/playerAudio";
+import { attackerPose, attachedRectShape } from "../../../../shared/combat/attackDelivery";
+import { attackDescriptors } from "../../../../shared/characters/index.js";
+import { predictAttachedContacts, notePredictedHit } from "../shared/shotPrediction";
 
 const SPLASH = getResolvedCharacterAttackConfig("draven", "splash");
 const SPLASH_W = SPLASH.width;
@@ -20,6 +23,8 @@ const MIN_SPLASH_H = SPLASH.minHeight;
 const GROW_DURATION_MS = SPLASH.growDurationMs;
 const CENTER_Y_FACTOR = SPLASH.centerYFactor;
 const HITBOX_INFLATE = SPLASH.hitboxInflate;
+// Where the server draws a confirmed splash on its target.
+const IMPACT_OFFSET_Y = Number(attackDescriptors["draven-splash"]?.events?.onHitAction?.offsetY) || 0;
 var DEBUG_DRAW = false; // Draw debug rectangle of current hitbox
 
 export function performDravenSplashAttack(instance, attackContext = null) {
@@ -47,6 +52,10 @@ export function performDravenSplashAttack(instance, attackContext = null) {
   // Continuous damage ticking within active window (owner only)
   let elapsed = 0;
   let dbg = null;
+  // The splash is predicted against enemies as drawn with the server's shape
+  // (attackDelivery.attachedRectShape); each enemy is struck once.
+  const startedAt = performance.now();
+  const struck = new Set();
   if (DEBUG_DRAW && scene && scene.add) {
     dbg = scene.add.graphics();
     dbg.setDepth(RENDER_LAYERS.ATTACKS);
@@ -63,6 +72,13 @@ export function performDravenSplashAttack(instance, attackContext = null) {
     elapsed += dt;
     // Reinforce visual flip lock every frame
     enforceLockedFlip(p);
+    const shapes = attachedRectShape(attackerPose("draven", p.x, p.y, { flip: direction < 0 }), SPLASH,
+      performance.now() - startedAt);
+    for (const hit of predictAttachedContacts(shapes, { skip: struck })) {
+      struck.add(hit.target.name);
+      if (hit.target.sprite) spawnExplosion(scene, hit.target.sprite.x, hit.target.sprite.y + IMPACT_OFFSET_Y);
+      notePredictedHit({ delivery: "attached", character: "draven", target: hit.target, attacker: p });
+    }
     if (DEBUG_DRAW && dbg) {
       dbg.clear();
       const growT = Phaser.Math.Clamp(

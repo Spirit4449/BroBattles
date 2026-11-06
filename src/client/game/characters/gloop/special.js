@@ -6,7 +6,7 @@ import { resolveGloopHookSocket } from "../../../../shared/characters/gloopHookG
 import { playPlayerSound } from "../../audio/playerAudio";
 import { createRuntimeId } from "../shared/runtimeId";
 import { consumeOnce } from "../shared/packetDedupe";
-import { predictShotContact, confirmWindowMs, shotBlockerContact, noteShotWithdrawn } from "../shared/shotPrediction";
+import { predictShotContact, confirmWindowMs, shotBlockerContact, noteShotWithdrawn, notePredictedHit } from "../shared/shotPrediction";
 import { attackCollisionCenter } from "../../../../shared/combat/shotContact";
 
 const NAME = "gloop";
@@ -182,6 +182,7 @@ function createHookVisual(scene, owner, angle, start, id) {
     visual.latch = { target: hit.target.name, sprite,
       offset: sprite ? { x: hand.x - sprite.x, y: hand.y - sprite.y } : { x: 0, y: 0 } };
     burst(hand.x, hand.y, 8, 120);
+    notePredictedHit({ delivery: "released", character: "gloop", target: hit.target, attacker: owner });
     return true;
   }
   function update(_time, delta = 16.67) {

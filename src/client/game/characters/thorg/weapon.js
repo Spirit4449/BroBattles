@@ -4,6 +4,7 @@ import { THORG_SWEEP, sampleThorgSweep, thorgAttackFrameAt } from "../../../../s
 import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
 import { playerSoundVolume } from "../../audio/playerAudio";
+import { inHitstop } from "../shared/shotPrediction";
 
 // A single held mace is used during locomotion, windup and the entire sweep.
 export function ensureThorgWeapon(scene, body) {
@@ -126,7 +127,8 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
   };
   const update = (_time, delta) => {
     if (!body.active || !weapon.active) { cleanup(); return; }
-    elapsed += Number(delta) || scene.game?.loop?.delta || 16;
+    // A hitstop holds the drawn swing with the body's frame.
+    if (!inHitstop(body)) elapsed += Number(delta) || scene.game?.loop?.delta || 16;
     enforceLockedFlip(body);
     const scale = body._bbVisualScale || 1;
     const centerY = body.y - 37.8 * (scale - 1);
@@ -254,7 +256,7 @@ function startEmbeddedSweep(scene, body, direction) {
   };
   const update = (_time, delta) => {
     if (!body.active || !String(body.frame?.name).startsWith('throw')) { cleanup(); return; }
-    elapsed += Number(delta) || scene.game?.loop?.delta || 16;
+    if (!inHitstop(body)) elapsed += Number(delta) || scene.game?.loop?.delta || 16;
     enforceLockedFlip(body);
     body.setFrame(thorgAttackFrameAt(elapsed).frame);
     if (elapsed >= duration) {

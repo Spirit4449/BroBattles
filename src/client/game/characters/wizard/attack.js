@@ -9,7 +9,7 @@ import { createFireballParticles } from "./fireballParticles";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { consumeOnce } from "../shared/packetDedupe";
 import { attackCollisionCenter } from "../../../../shared/combat/shotContact";
-import { predictShotContact, shotBlockerContact } from "../shared/shotPrediction";
+import { predictShotContact, shotBlockerContact, notePredictedHit } from "../shared/shotPrediction";
 
 const FIREBALL = getResolvedCharacterAttackConfig("wizard", "fireball");
 
@@ -333,6 +333,7 @@ function spawnWizardFireballProjectile(
           for (let hit; (hit = predictShotContact(damageFrom, damageTo, FIREBALL_COLLISION_RADIUS, { skip: struck }));) {
             struck.add(hit.target.name);
             spawnImpact(scene, hit.x, hit.y, false);
+            notePredictedHit({ delivery: "released", character: "wizard", target: hit.target });
           }
           damageFrom = damageTo;
         }

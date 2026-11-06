@@ -10,6 +10,7 @@ import {
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
 import { playPlayerSound } from "../../audio/playerAudio";
+import { takePredictedHit } from "../shared/shotPrediction";
 
 const NAME = "draven";
 
@@ -192,7 +193,8 @@ class Draven extends CharacterEntityBase {
       return true;
     }
     if (!data || data.type !== "draven-splash-explode") return false;
-    spawnExplosion(scene, Number(data.x) || 0, Number(data.y) || 0);
+    // A splash this client predicted already exploded on the drawn target.
+    if (!takePredictedHit(data.target, "impact")) spawnExplosion(scene, Number(data.x) || 0, Number(data.y) || 0);
     return true;
   }
 
