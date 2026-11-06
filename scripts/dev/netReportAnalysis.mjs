@@ -20,7 +20,18 @@ const median = (values) => quantile(values, 0.5);
 
 // ---- server ---------------------------------------------------------------
 
-export function analyzeServer(records) {
+// Only the part of the run players were in: from the start to the first
+// traced client leaving. A room keeps simulating (and stalling) for a while
+// after its humans leave, which no player sees.
+export function playedWindow(records) {
+  const firstActive = records.find(r => r.kind === "tick" && r.status === "active")?.t ?? -Infinity;
+  const leave = records.find(r => r.kind === "socket" && r.event === "disconnect" && r.t > firstActive)?.t;
+  return Number.isFinite(leave) ? leave : Infinity;
+}
+
+export function analyzeServer(allRecords) {
+  const end = playedWindow(allRecords);
+  const records = allRecords.filter(r => !(r.t > end) || ["run", "room", "socket"].includes(r.kind));
   const run = records.find(r => r.kind === "run") || {};
   const rooms = records.filter(r => r.kind === "room");
   const ticks = records.filter(r => r.kind === "tick" && r.status === "active");
