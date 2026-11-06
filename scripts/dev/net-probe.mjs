@@ -19,8 +19,8 @@
 // --baseline, is compared against that run.
 //
 // Token: --token, $BB_NET_TRACE_TOKEN, .env.nettrace, then (localhost only) .env.
-// Runs on this machine (Playwright headless shell, or Google Chrome with
-// --chrome/--headed); never run it on the server.
+// Runs on this machine (Playwright's headless shell; its full Chromium with
+// --headed; installed Google Chrome with --chrome); never run it on the server.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -306,8 +306,10 @@ async function main() {
   log(`run ${runId} → ${base} (${clients} clients, ${modeId}:${variantId || "default"}${mapId ? ` map ${mapId}` : ""}, ${durationS}s, script=${script})`);
   const browser = await chromium.launch({
     // Playwright's headless shell by default (`npx playwright-core install
-    // chromium-headless-shell`); installed Google Chrome for --headed or --chrome.
-    ...(args.headed || args.chrome ? { channel: "chrome" } : {}),
+    // chromium-headless-shell`); Playwright's Chromium for --headed
+    // (`npx playwright-core install chromium`); installed Google Chrome only
+    // with --chrome (on the dev Mac it is killed ~30 s after launch).
+    ...(args.chrome ? { channel: "chrome" } : {}),
     headless: !args.headed,
     // Real GPU (Metal) instead of SwiftShader, so client frame pacing is realistic.
     args: ["--use-angle=metal", "--enable-gpu", "--ignore-gpu-blocklist", "--disable-background-timer-throttling", "--disable-renderer-backgrounding",

@@ -149,7 +149,7 @@ Sudden-death routing treats poison exposure as a cost, preserving necessary subm
 
 Huntress bots limit vertical movement prediction to a short window configured in `characterProfiles.js`, so a jump does not make them extrapolate upward velocity over the arrow's entire flight. Horizontal interception, arrow-drop compensation, and cover checks still use the full flight path.
 
-Run `npm run test:bots` and `npm run simulate:bots -- --matrix --seconds=30`. Add `--sudden-death=10` for poison scenarios. Test mixed human/bot matches, explicit slots, concurrent queue/cancel/ready requests, abandoned matches, and deployment capacity before expanding automatic fill.
+Run `npm run test:bots` and `npm run simulate:bots -- --matrix --seconds=30`. Add `--sudden-death=10` for poison scenarios. The simulator prints tick and per-bot cost on the machine it runs on, graph builds and the slowest bot ticks; run it on the Pi for real numbers, and under `node --cpu-prof` with `scripts/dev/cpuprofile-top.cjs` to find hot spots. `--deterministic` finishes every plan in the tick it starts, so its play fingerprint must match before and after a performance-only change. Test mixed human/bot matches, explicit slots, concurrent queue/cancel/ready requests, abandoned matches, and deployment capacity before expanding automatic fill.
 
 ## Damage hitbox debugging
 
