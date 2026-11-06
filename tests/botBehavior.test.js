@@ -719,6 +719,7 @@ test('holding a platform eventually encourages a reachable alternative firing an
     x: h.p.x, top: current.top - 80 };
   const context = { ...original, graph: { ...original.graph, surfaces: [current, alternate] },
     routeTo: (id) => id === current.id ? [] : [{ to: alternate.id, duration: 500 }] };
+  context.routeSteps = function* (id) { return context.routeTo(id); };
   h.brain.surfaceEnteredAt = h.now();
   h.brain.visited.clear();
   h.brain.superPlan = null;
@@ -763,5 +764,31 @@ test('one route search answers every Bank Bust destination the same as separate 
   const search = createRouteSearch(graph, start.id, Infinity, options);
   for (const surface of graph.surfaces) for (const goalX of [undefined, surface.left, surface.right]) {
     assert.deepEqual(search(surface.id, goalX), findRoute(graph, start.id, surface.id, Infinity, { ...options, goalX }), `${surface.id} at ${goalX}`);
+  }
+});
+
+test('route queries paused between expansions and interleaved answer as uninterrupted ones do', () => {
+  const { getDuelGeometry } = require('../src/shared/physics/duelGeometry');
+  const { buildGraph, createRouteSearch } = require('../src/server/core/bots/navigation');
+  const graph = buildGraph(getDuelGeometry(4), 'ninja');
+  const start = graph.surfaces.find((surface) => surface.id === 'chamber-l-3-body');
+  const options = { allowDash: true, startX: start.x };
+  const whole = createRouteSearch(graph, start.id, Infinity, options);
+  const sliced = createRouteSearch(graph, start.id, Infinity, options);
+  const queries = graph.surfaces.flatMap((surface) => [undefined, surface.right].map((goalX) => ({
+    surface, goalX, steps: sliced.steps(surface.id, goalX), pauses: 0 })));
+  // Advance every query one slice at a time, round robin.
+  let open = queries;
+  while (open.length) {
+    open = open.filter((query) => {
+      const result = query.steps.next();
+      if (!result.done) { query.pauses++; return true; }
+      query.route = result.value;
+      return false;
+    });
+  }
+  assert.ok(queries.some((query) => query.pauses > 0), 'long queries pause');
+  for (const query of queries) {
+    assert.deepEqual(query.route, whole(query.surface.id, query.goalX), `${query.surface.id} at ${query.goalX}`);
   }
 });

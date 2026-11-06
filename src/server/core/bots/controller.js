@@ -2,7 +2,7 @@ const { objectiveShot, tryBankInteraction, bankCombatEnemies } = require('./bank
 const { createRandom } = require('./random');
 const { difficultyForTrophies, recoveryThreshold } = require('./config');
 const { bounds, stepBody, onClimbableWall, forecastGeometry, movementGeometry } = require('./physics');
-const { createRouteSearch, prepareTraversal, edgeKey, nearestSurface, safeWalkDirection, previewManeuver, walkLimits, poisonDamage } = require('./navigation');
+const { createRouteSearch, routeSearchTablesSteps, prepareTraversal, edgeKey, nearestSurface, safeWalkDirection, previewManeuver, walkLimits, poisonDamage } = require('./navigation');
 const { getNavigationGraph } = require('./navigationService');
 const { staticGeometry } = require('../../../shared/maps/platformMotion');
 const { advanceAmmo, basicAim, hasClearShot, pressureAim, requestBasic, requestSpecial } = require('./combat');
@@ -168,9 +168,12 @@ class BotController {
     return movementGeometry(this.room);
   }
 
-  context(mods, now) {
+  context(mods, now) { return finishSteps(this.contextSteps(mods, now)); }
+
+  *contextSteps(mods, now) {
     const p = this.player, room = this.room;
     const graph = getNavigationGraph(staticGeometry(this.movementGeometry()), p.char_class, { speedMult: mods.speedMult, jumpMult: mods.jumpMult });
+    const tables = yield* routeSearchTablesSteps(graph);
     if (graph !== this.graph) { this.graph = graph; this.clearTravel(); this.nextDecisionAt = 0; }
     const current = graph.surfaces.find((s) => s.id === p.platformId) || nearestSurface(graph, { x: p.x, y: bounds(p).bottom });
     const actualPoisonY = room._suddenDeathActive ? room._computePoisonY(now - room._loopStartWallTime - room.gameMode.getMatchDurationMs()) : Infinity;
@@ -184,6 +187,7 @@ class BotController {
         poisonAt,
         blocked: this.blockedEdges,
         startX: p.x,
+        tables,
         edgeCost: (edge, from, pair) => {
           const key = pair ?? `${from}:${edge.to}`;
           if (!this.routePreferences.has(key)) this.routePreferences.set(key, this.random() * 240);
@@ -195,7 +199,13 @@ class BotController {
       if (!routes.has(routeKey)) routes.set(routeKey, search(id, goalX));
       return routes.get(routeKey);
     };
-    return { graph, current, poisonY, poisonAt, gasSaturated, routeTo };
+    // routeTo for planning generators: a long search continues next frame.
+    const routeSteps = function* (id, goalX) {
+      const routeKey = `${id}:${goalX ?? ""}`;
+      if (!routes.has(routeKey)) routes.set(routeKey, yield* search.steps(id, goalX));
+      return routes.get(routeKey);
+    };
+    return { graph, current, poisonY, poisonAt, gasSaturated, routeTo, routeSteps };
   }
 
   advancePlanning(now) {
@@ -222,7 +232,7 @@ class BotController {
     this.metrics.thinks++;
     const p = this.player, enemies = observed?.enemies || [];
     this.collectNearbyDeathDrops(now);
-    const context = this.context(mods, now);
+    const context = yield* this.contextSteps(mods, now);
     this.objective = resolveBotObjective(this.room, p, {
       now,
       observed,
@@ -264,7 +274,7 @@ class BotController {
     if (this.retreating && !wasRetreating) this.metrics.retreats++;
     tryBankInteraction(this, now);
     const combatEnemies = bankCombatEnemies(this, enemies, now);
-    const target = yield* selectTargetSteps(this, combatEnemies, context.routeTo, now);
+    const target = yield* selectTargetSteps(this, combatEnemies, context.routeSteps, now);
     const targetChanged = target?.participantId !== this.targetId;
     if (targetChanged) {
       if (this.targetId && target) this.metrics.targetSwitches++;

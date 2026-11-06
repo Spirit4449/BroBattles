@@ -115,13 +115,13 @@ function surfaceFor(graph, target) {
   return nearestSurface(graph, { x: target.x, y: bounds(target).bottom });
 }
 
-function* selectTargetSteps(brain, enemies, routeTo, now = Date.now()) {
+function* selectTargetSteps(brain, enemies, routeSteps, now = Date.now()) {
   let best = null, bestScore = Infinity;
   const ownHealth = healthFraction(brain.player);
   for (const target of enemies) {
     yield;
     const hp = healthFraction(target), range = distance(brain.player, target);
-    const route = routeTo(surfaceFor(brain.graph, target)?.id);
+    const route = yield* routeSteps(surfaceFor(brain.graph, target)?.id);
     const awareness = brain.profile.tacticalAwareness ?? brain.profile.prediction ?? 0.5;
     let score = range * (0.7 - awareness * 0.2) + hp * (240 + awareness * 100);
     score -= (1 - hp) * (80 + awareness * 180);
@@ -166,7 +166,7 @@ function retreatExposure(player, point, route, enemies) {
 }
 
 function* chooseDecisionSteps(brain, context, target, enemies, now) {
-  const p = brain.player, { graph, current, poisonY, routeTo } = context;
+  const p = brain.player, { graph, current, poisonY, routeTo, routeSteps } = context;
   const spacing = style(p);
   const preferred = target ? preferredRange(brain, target) : spacing.cap;
   const formation = teamPosition(brain, target, preferred);
@@ -190,7 +190,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
   const reachable = [];
   for (const surface of graph.surfaces) {
     yield;
-    const route = routeTo(surface.id);
+    const route = yield* routeSteps(surface.id);
     if (route !== null) reachable.push({ surface, route });
   }
 
@@ -204,7 +204,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
     for (const pickup of brain.room._powerups?.values?.() || []) {
         yield;
       if (pickup.type !== 'shockwave' || Number(pickup.expiresAt || Infinity) <= now || pickup.y >= poisonY - 40) continue;
-      const surface = nearestSurface(graph, pickup), route = routeTo(surface?.id);
+      const surface = nearestSurface(graph, pickup), route = yield* routeSteps(surface?.id);
       if (route === null) continue;
       const ownTravel = pickupTravel(brain, pickup, route);
       const closest = closestEnemyTo(pickup, enemies);
@@ -312,7 +312,7 @@ function* chooseDecisionSteps(brain, context, target, enemies, now) {
         if (!canStandAt(movementGeometry(brain.room), surface, p.char_class, x)) continue;
         const landingX = route.length ? route.at(-1).landingX : p.x;
         const pointRoute = !Number.isFinite(landingX) || canWalkBetween(movementGeometry(brain.room), surface, p.char_class, landingX, x)
-          ? route : routeTo(surface.id, x);
+          ? route : yield* routeSteps(surface.id, x);
         if (pointRoute === null) continue;
         const point = { x, y: surface.top - graph.body.offsetY - graph.body.halfHeight };
         const travel = pointRoute.reduce((sum, e) => sum + e.duration, 0) * 0.045 + Math.abs(p.x - x) * 0.13;

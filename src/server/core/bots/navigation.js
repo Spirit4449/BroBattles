@@ -15,11 +15,42 @@ function standOn(surface, character, x) {
     vx: 0, vy: 0, grounded: true, platformId: surface.id };
 }
 
+// A surface's edges depend only on colliders its simulated moves came near.
+// Each graph records that area per surface (`sweeps`), so a graph for a changed
+// wall layout copies the edges of every surface whose area no changed collider
+// touches from the latest graph for the same character and buffs, and simulates
+// only the rest. The result equals a full build.
+const SWEEP_MARGIN = 48;
+const latestGraphs = new Map();
+const colliderSignature = (r) => JSON.stringify(r);
+function reusableSurfaces(base, geometry) {
+  if (!base?.sweeps || JSON.stringify(base.geometry.world) !== JSON.stringify(geometry.world) ||
+      base.geometry.movingColliders?.length || geometry.movingColliders?.length) return null;
+  const before = new Set(base.geometry.colliders.map(colliderSignature));
+  const after = new Set(geometry.colliders.map(colliderSignature));
+  const changed = [...base.geometry.colliders.filter(r => !after.has(colliderSignature(r))),
+    ...geometry.colliders.filter(r => !before.has(colliderSignature(r)))];
+  return (from) => {
+    const sweep = base.sweeps.get(from.id);
+    return !!sweep && before.has(colliderSignature(from)) && !changed.some(r =>
+      r.left < sweep.right && r.right > sweep.left && r.top < sweep.bottom && r.bottom > sweep.top);
+  };
+}
+function extendSweep(sweep, p) {
+  if (!sweep) return;
+  if (p.x < sweep.left) sweep.left = p.x;
+  if (p.x > sweep.right) sweep.right = p.x;
+  if (p.y < sweep.top) sweep.top = p.y;
+  if (p.y > sweep.bottom) sweep.bottom = p.y;
+}
+
 function buildGraph(geometry, character, modifiers = {}) {
   let cache = graphs.get(geometry);
   if (!cache) { cache = new Map(); graphs.set(geometry, cache); }
   const key = `${character}:${modifiers.speedMult ?? 1}:${modifiers.jumpMult ?? 1}`;
   if (cache.has(key)) return cache.get(key);
+  const base = latestGraphs.get(key);
+  const reusable = reusableSurfaces(base, geometry);
   // Tops buried under other solid ground (a pillar inside an arch) are not
   // places to stand, so they are left out of the graph.
   const standable = (r) => {
@@ -29,7 +60,19 @@ function buildGraph(geometry, character, modifiers = {}) {
   const surfaces = geometry.colliders.filter((r) => r.collision.up && r.right - r.left >= 12 && standable(r));
   const edges = new Map(surfaces.map((r) => [r.id, []]));
   const dashEdges = new Map(surfaces.map((r) => [r.id, []]));
+  const sweeps = new Map();
+  const reach = Math.max(characterBody(character).height, characterBody(character, true).height,
+    characterBody(character).width, characterBody(character, true).width) + SWEEP_MARGIN;
   for (const from of surfaces) {
+    if (reusable?.(from)) {
+      edges.set(from.id, base.edges.get(from.id));
+      dashEdges.set(from.id, base.dashEdges.get(from.id));
+      sweeps.set(from.id, base.sweeps.get(from.id));
+      continue;
+    }
+    const sweep = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity };
+    extendSweep(sweep, standOn(from, character, from.left));
+    extendSweep(sweep, standOn(from, character, from.right));
     const body = characterBody(character);
     const margin = Math.min((from.right - from.left) / 3, body.halfWidth + 4);
     const span = from.right - from.left - margin * 2;
@@ -54,7 +97,7 @@ function buildGraph(geometry, character, modifiers = {}) {
       if (!direction && !jump) continue;
       const p = standOn(from, character, x - body.offsetX);
       if (!canStandAt(geometry, from, character, p.x)) continue;
-      const travel = prepareTraversal(p, { direction, jump, wallClimb }, geometry, modifiers, 0);
+      const travel = prepareTraversal(p, { direction, jump, wallClimb }, geometry, modifiers, 0, Infinity, sweep);
       if (!travel) continue;
       const list = edges.get(from.id);
       const edge = { ...travel, takeoffX: p.x };
@@ -76,7 +119,7 @@ function buildGraph(geometry, character, modifiers = {}) {
         ...(direction ? [{ dash: { x: direction, y: 0 }, dashFrame: 18 }] : []),
       ];
       for (const choice of choices) {
-        const travel = prepareTraversal(p, { ...choice, direction, jump: choice.dashFrame > 0, wallClimb: false }, geometry, modifiers, 0);
+        const travel = prepareTraversal(p, { ...choice, direction, jump: choice.dashFrame > 0, wallClimb: false }, geometry, modifiers, 0, Infinity, sweep);
         if (!travel) continue;
         const list = dashEdges.get(from.id), edge = { ...travel, takeoffX: p.x };
         const existing = list.findIndex(e => e.to === edge.to && e.direction === direction &&
@@ -85,11 +128,16 @@ function buildGraph(geometry, character, modifiers = {}) {
         else if (edge.duration < list[existing].duration) list[existing] = edge;
       }
     }
+    sweeps.set(from.id, { left: sweep.left - reach, right: sweep.right + reach, top: sweep.top - reach, bottom: sweep.bottom + reach });
   }
-  const graph = markGraphStatic({ surfaces, edges, dashEdges, body: characterBody(character), geometry, character });
+  const graph = markGraphStatic({ surfaces, edges, dashEdges, body: characterBody(character), geometry, character, sweeps });
   // Bound modifier-specific cached graphs; default graphs are inexpensive to rebuild.
   if (cache.size >= 48) cache.delete(cache.keys().next().value);
   cache.set(key, graph);
+  latestGraphs.delete(key);
+  latestGraphs.set(key, graph);
+  // About 10 MB each on Bank Bust: one per character in a match, plus buffs.
+  if (latestGraphs.size > 8) latestGraphs.delete(latestGraphs.keys().next().value);
   return graph;
 }
 
@@ -195,6 +243,15 @@ const stateKey = (id, x, dashUsed = false) => `${id}:${Number.isFinite(x) ? Math
 // keys, and per-surface walk blockers. canWalkBetween scans every collider;
 // the blockers that can stop a walk on a given surface are a small fixed set.
 function routeSearchTables(graph) {
+  const build = routeSearchTablesSteps(graph);
+  let result;
+  do { result = build.next(); } while (!result.done);
+  return result.value;
+}
+
+// Yields between surfaces: the first search on a new graph builds its tables,
+// which bot planning spreads across frames.
+function* routeSearchTablesSteps(graph) {
   if (graph[STATIC_GRAPH]) {
     const cached = searchTables.get(graph);
     if (cached && cached.geometry === graph.geometry) return cached;
@@ -202,9 +259,10 @@ function routeSearchTables(graph) {
   const surfaces = new Map(graph.surfaces.map(s => [s.id, s]));
   const index = new Map();
   const idOf = (key) => { let k = index.get(key); if (k === undefined) index.set(key, k = index.size); return k; };
-  const records = (lists, dashOnly) => {
+  const records = function* (lists, dashOnly) {
     const out = new Map();
     for (const [from, list] of lists || []) {
+      yield;
       out.set(from, (list || []).map(edge => ({
         edge,
         k0: dashOnly ? -1 : idOf(stateKey(edge.to, edge.landingX, !!edge.dash)),
@@ -216,13 +274,14 @@ function routeSearchTables(graph) {
     }
     return out;
   };
-  const adjacency = records(graph.edges, false);
-  const dashAdjacency = records(graph.dashEdges, true);
+  const adjacency = yield* records(graph.edges, false);
+  const dashAdjacency = yield* records(graph.dashEdges, true);
   const walk = new Map();
   if (graph.geometry) {
     const b = characterBody(graph.character);
     const body = characterBody(graph.character, undefined);
     for (const surface of graph.surfaces) {
+      yield;
       // Same arithmetic as bounds(standOn(surface, character, x)).
       const y = surface.top - b.halfHeight - b.offsetY;
       const top = (y + body.offsetY) - body.halfHeight, bottom = (y + body.offsetY) + body.halfHeight;
@@ -258,8 +317,9 @@ function tableWalk(tables, surfaceId, fromX, toX) {
 // One search from one start answers any number of destinations. It expands only
 // as far as the queries need and keeps what it settled, so asking for every
 // surface on a large map costs one search rather than one per surface.
+const SEARCH_SLICE = 24;
 function createRouteSearch(graph, from, poisonY = Infinity, options = {}) {
-  const tables = routeSearchTables(graph);
+  const tables = options.tables || routeSearchTables(graph);
   const { surfaces } = tables;
   const geometry = graph.geometry;
   const walkable = (id, x, goalX) => !geometry || !Number.isFinite(goalX) || !Number.isFinite(x) ||
@@ -309,35 +369,51 @@ function createRouteSearch(graph, from, poisonY = Infinity, options = {}) {
     }
     return standingFrames;
   };
-  return (to, goalX) => {
-  if (!from || !to) return null;
-  if (to === from && walkable(from, options.startX, goalX)) return [];
-  for (const item of settled.get(to) || []) if (walkable(to, item.x, goalX)) return routeOf(item);
-  while (queue.size) {
-    const item = queue.pop();
-    let done = settled.get(item.id);
-    if (!done) settled.set(item.id, done = []);
-    done.push(item);
-    const found = item.id === to && walkable(to, item.x, goalX);
-    // Reaching the same platform on the other side of a wall is a different
-    // navigation state. Collapsing both landings prevents routes around blocks.
-    if (visited[item.k] || item.cost > bestCost[item.k]) { if (found) return routeOf(item); continue; }
-    visited[item.k] = 1;
-    const fromSurface = surfaces.get(item.id);
-    const hasX = Number.isFinite(item.x);
-    // Standing still on the takeoff surface is the same for every edge.
-    const standing = relax(item, tables.adjacency.get(item.id) || [], fromSurface, hasX, null);
-    if (options.allowDash && !item.dashUsed) relax(item, tables.dashAdjacency.get(item.id) || [], fromSurface, hasX, standing);
-    if (found) return routeOf(item);
+  // States settle in the same order however queries interleave, so a query
+  // can pause between expansions (bot planning spreads a long one across
+  // frames) and still return what an uninterrupted one would.
+  function* steps(to, goalX) {
+    if (!from || !to) return null;
+    if (to === from && walkable(from, options.startX, goalX)) return [];
+    let checked = 0;
+    for (;;) {
+      const done = settled.get(to) || [];
+      for (; checked < done.length; checked++) if (walkable(to, done[checked].x, goalX)) return routeOf(done[checked]);
+      if (!queue.size) return null;
+      for (let n = 0; n < SEARCH_SLICE && queue.size; n++) {
+        const item = queue.pop();
+        let list = settled.get(item.id);
+        if (!list) settled.set(item.id, list = []);
+        list.push(item);
+        const found = item.id === to && walkable(to, item.x, goalX);
+        // Reaching the same platform on the other side of a wall is a different
+        // navigation state. Collapsing both landings prevents routes around blocks.
+        if (visited[item.k] || item.cost > bestCost[item.k]) { if (found) return routeOf(item); continue; }
+        visited[item.k] = 1;
+        const fromSurface = surfaces.get(item.id);
+        const hasX = Number.isFinite(item.x);
+        // Standing still on the takeoff surface is the same for every edge.
+        const standing = relax(item, tables.adjacency.get(item.id) || [], fromSurface, hasX, null);
+        if (options.allowDash && !item.dashUsed) relax(item, tables.dashAdjacency.get(item.id) || [], fromSurface, hasX, standing);
+        if (found) return routeOf(item);
+      }
+      yield;
+    }
   }
-  return null;
+  const search = (to, goalX) => {
+    const query = steps(to, goalX);
+    let result;
+    do { result = query.next(); } while (!result.done);
+    return result.value;
   };
+  search.steps = steps;
+  return search;
 }
 
 // A first-frame overlap with a ledge is not a usable landing. Include the
 // braking/turning motion so a route ends on ground the bot can actually hold.
 // `geometry` is at the time of the step that produced `player`.
-function settleLanding(player, sourceGeometry, modifiers, now, poisonY = Infinity) {
+function settleLanding(player, sourceGeometry, modifiers, now, poisonY = Infinity, sweep = null) {
   const p = { ...player }, platformId = p.platformId, frames = [];
   const forecast = forecastGeometry(sourceGeometry), geometry = forecast.geometry;
   for (let i = 0; i < 36; i++) {
@@ -346,6 +422,7 @@ function settleLanding(player, sourceGeometry, modifiers, now, poisonY = Infinit
     frames.push({ direction, jumpPressed: false, x: p.x, y: p.y });
     p.flip = direction < 0;
     const result = stepBody(p, { direction }, geometry, DT, now + i * DT, modifiers);
+    extendSweep(sweep, p);
     if (result.fell || !p.grounded || p.platformId !== platformId) return null;
     if (!direction && Math.abs(p.vx) < 12) {
       const surface = geometry.colliders.find((s) => s.id === platformId);
@@ -361,8 +438,10 @@ function edgeKey(edge, from = edge.from) {
 
 // Graph samples establish connectivity. Validate the chosen motion again from
 // the actual takeoff state, including residual velocity and wall-jump timing.
-function prepareTraversal(player, edge, sourceGeometry, modifiers, now, poisonY = Infinity) {
+// `sweep`, when given, grows to cover every position the simulation visits.
+function prepareTraversal(player, edge, sourceGeometry, modifiers, now, poisonY = Infinity, sweep = null) {
   const p = { ...player, isAlive: player.isAlive ?? true }, frames = [];
+  extendSweep(sweep, p);
   const forecast = forecastGeometry(sourceGeometry), geometry = forecast.geometry;
   let airborne = false;
   for (let i = 0; i < MAX_TRAVERSAL_FRAMES; i++) {
@@ -375,6 +454,7 @@ function prepareTraversal(player, edge, sourceGeometry, modifiers, now, poisonY 
     frames.push({ ...input, x: p.x, y: p.y });
     p.flip = direction < 0;
     const result = stepBody(p, input, geometry, DT, at, modifiers);
+    extendSweep(sweep, p);
     if (result.fell || (input.dash && !result.events.includes('dash'))) return null;
     airborne ||= !p.grounded;
     if (p.grounded && (airborne || p.platformId !== player.platformId)) {
@@ -386,7 +466,7 @@ function prepareTraversal(player, edge, sourceGeometry, modifiers, now, poisonY 
         geometry.colliders.find((r) => r.id === p.platformId);
       if (p.platformId === player.platformId &&
           (!sameSurface || canWalkBetween(geometry, sameSurface, player.char_class, player.x, p.x))) return null;
-      const settlement = settleLanding(p, geometry, modifiers, now + (i + 1) * DT, poisonY);
+      const settlement = settleLanding(p, geometry, modifiers, now + (i + 1) * DT, poisonY, sweep);
       if (!settlement) return null;
       if (sameSurface && canWalkBetween(geometry, sameSurface, player.char_class, player.x, settlement.end.x)) return null;
       frames.push(...settlement.frames);
@@ -481,4 +561,4 @@ function safeWalkDirection(player, direction, geometry) {
       (direction < 0 && stopX <= limits.left + 3)) return 0;
   return direction;
 }
-module.exports = { markGraphStatic, createRouteSearch, poisonDamage, routePoisonDamage, buildGraph, findRoute, prepareTraversal, edgeKey, nearestSurface, standOn, walkLimits, canStandAt, canWalkBetween, safeWalkDirection, previewManeuver };
+module.exports = { markGraphStatic, createRouteSearch, routeSearchTablesSteps, poisonDamage, routePoisonDamage, buildGraph, findRoute, prepareTraversal, edgeKey, nearestSurface, standOn, walkLimits, canStandAt, canWalkBetween, safeWalkDirection, previewManeuver };

@@ -80,7 +80,7 @@ function bankSetup() {
   room.modeState.randomGold.pickups = [];
   room.modeState.centerGold.phase = 'scheduled';
   const brain = { room, player: p, profile: {}, bankRole: 'raider', bankClaimPlan: { willing: true, checkAt: Infinity } };
-  const context = { graph: { surfaces: [surface] }, poisonY: Infinity, routeTo: () => [] };
+  const context = { graph: { surfaces: [surface] }, poisonY: Infinity, routeTo: () => [], *routeSteps(id, x) { return context.routeTo(id, x); } };
   const decide = (enemies = [], now = 10000) => finishSteps(bankDecisionSteps(brain, context, enemies, now));
   return { room, p, brain, context, decide };
 }

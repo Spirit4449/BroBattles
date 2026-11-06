@@ -298,6 +298,7 @@ test('sudden-death tactics trade a hazardous retreat against a charging opponent
   const graph = buildGraph(h.room.geometry, p.char_class);
   const context = { graph, current: shelf, poisonY: 610, poisonAt: () => 610,
     routeTo: (id, x) => findRoute(graph, shelf.id, id, 610, { startX: p.x, goalX: x }) };
+  context.routeSteps = function* (id, x) { return context.routeTo(id, x); };
   brain.retreating = false;
   const escape = chooseDecision(brain, context, enemy, [enemy], time.now());
   assert.equal(escape.goal.surfaceId, floor.id, 'accepts poison to escape close pressure on the narrow shelf');

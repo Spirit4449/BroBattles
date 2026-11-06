@@ -200,7 +200,7 @@ function* bankDecisionSteps(brain, context, enemies, now) {
   const previousSurface = context.graph.surfaces.find(s => s.id === previous?.decision.goal.surfaceId);
   let validPrevious = incumbent && previousSurface && previous.role === role &&
     canStandAt(movementGeometry(brain.room), previousSurface, p.char_class, previous.decision.goal.x) &&
-    context.routeTo(previousSurface.id, previous.decision.goal.x) !== null;
+    (yield* context.routeSteps(previousSurface.id, previous.decision.goal.x)) !== null;
   if (validPrevious && incumbent.attack) {
     const stance = standOn(previousSurface, p.char_class, previous.decision.goal.x);
     const aim = basicAim(stance, incumbent, brain.profile, () => 0.5, brain.room);
@@ -222,7 +222,7 @@ function* bankDecisionSteps(brain, context, enemies, now) {
           const aim = basicAim(point, candidate, brain.profile, () => 0.5, brain.room);
           if (!aim.canHit || !hasClearShot(brain.room, point, candidate, aim)) continue;
         } else if (distance(point, candidate) > Math.max(16, (candidate.radius || 100) - 12)) continue;
-        const route = context.routeTo(surface.id, x);
+        const route = yield* context.routeSteps(surface.id, x);
         if (route === null) continue;
         const travel = route.reduce((sum, e) => sum + e.duration, 0);
         const allies = [...(brain.room.botControllers?.values() || [])].filter(b => b !== brain &&

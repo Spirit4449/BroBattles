@@ -119,7 +119,7 @@ test('roles produce different reachable movement goals, not just labels', () => 
     Object.assign(brain, { profile: { prediction: 1, aimError: 0, tacticalAwareness: 0.8 }, spacing: 1,
       visited: new Map(), random: () => 0.5, surfaceEnteredAt: 10000 });
     const graph = { surfaces: [floor], body: characterBody(brain.player.char_class) };
-    const context = { graph, current: floor, poisonY: Infinity, routeTo: () => [] };
+    const context = { graph, current: floor, poisonY: Infinity, routeTo: () => [], *routeSteps() { return []; } };
     const decision = chooseDecision(brain, context, h.enemy, [h.enemy], 10000);
     goals.set(brain.teamPlan.role, decision.goal.x);
   }
