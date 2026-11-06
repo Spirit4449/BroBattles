@@ -3,6 +3,7 @@ import {
   changeDebugState,
   performGloopSlimeball,
   spawnGloopSlimeballVisual,
+  spawnGloopSlimeBud,
   handleGloopSlimeSplat,
   consumeGloopRelease,
 } from "./attack";
@@ -71,6 +72,7 @@ class Gloop extends CharacterEntityBase {
     if (type === `${NAME}-slimeball`) {
       playOwnerThrow(scene, ownerSprite);
       playPlayerSound(scene, ownerSprite, "gloop-attack", { volume: 0.5 });
+      spawnGloopSlimeBud(scene, ownerSprite, data);
       return true;
     }
     if (type === `${NAME}-slimeball-splat`) {

@@ -10,6 +10,12 @@ export const FOOT_RING_ALLY = 0x3d8bff;
 export const FOOT_RING_ENEMY = 0xff413f;
 
 const WIDTH_PER_BODY = 1.55;
+// Bodies wider than a typical character (Thorg's is ~50px) widen the ring
+// only gently past this knee, and never beyond the cap, so a bulky hitbox
+// doesn't turn the marker into a huge disc.
+const KNEE_BODY_WIDTH = 34;
+const WIDTH_PER_BODY_PAST_KNEE = 0.35;
+const MAX_RING_WIDTH = 64;
 // A ring lying flat on the platform's top surface, seen almost side-on.
 const HEIGHT_PER_WIDTH = 0.26;
 // One world pixel per cell, like the health bars, so edges stay fine and the
@@ -44,7 +50,10 @@ export function footPoint(sprite) {
 // Even cell counts keep the oval centred on a grid line.
 export function footRingSize(bodyWidth, cell = CELL) {
   const evenCells = value => Math.max(2, 2 * Math.round(value / cell / 2)) * cell;
-  const width = Math.max(12 * cell, evenCells(bodyWidth * WIDTH_PER_BODY));
+  const body = Math.max(0, Number(bodyWidth) || 0);
+  const target = Math.min(body, KNEE_BODY_WIDTH) * WIDTH_PER_BODY
+    + Math.max(0, body - KNEE_BODY_WIDTH) * WIDTH_PER_BODY_PAST_KNEE;
+  const width = Math.max(12 * cell, Math.min(evenCells(MAX_RING_WIDTH), evenCells(target)));
   return { width, height: Math.max(6 * cell, evenCells(width * HEIGHT_PER_WIDTH)) };
 }
 

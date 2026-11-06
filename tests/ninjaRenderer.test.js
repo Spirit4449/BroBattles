@@ -248,13 +248,16 @@ test('the thrower sees an impact on the enemy as drawn at once, once per leg; ot
   for(const thrower of ['owner','remote']){
     const f=setup();
     const enemy={active:true,visible:true,x:330,y:180,flipX:false};
-    f.shots.trackShotTargets({localUsername:'owner',opponentPlayersRef:{enemy:{opponent:enemy,character:'wizard'}}});
+    const felt=[];
+    f.shots.trackShotTargets({localUsername:'owner',opponentPlayersRef:{enemy:{opponent:enemy,character:'wizard'}},
+      playHitFeedback:sprite=>{felt.push(sprite);return true;}});
     const q=model.launch(f.owner,0,`${thrower}:shot:0`);q.ownerName=thrower;
     f.packet({type:'ninja-launch',projectile:q,requestId:'shot'},thrower);
     for(let t=0;t<=1400;t+=16)f.frame(t);
     // Outward and return legs each cross the enemy once.
-    assert.equal(f.flashes.length,thrower==='owner'?2:0,thrower);
-    if(thrower==='owner')for(const flash of f.flashes)assert.ok(Math.abs(flash.x-330)<60,`flash at ${flash.x}`);
+    // Each crossing plays the shared hit feedback on the enemy as drawn.
+    assert.equal(felt.length,thrower==='owner'?2:0,thrower);
+    for(const sprite of felt)assert.equal(sprite,enemy);
     assert.equal(f.sounds.length,0,'hit sounds wait for the server');
     f.api.resetNinjaNetwork();
   }

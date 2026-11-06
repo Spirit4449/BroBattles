@@ -8,13 +8,13 @@ import { resolveShockwaveImpulse, SHOCKWAVE_MOMENTUM_MS } from "../../../shared/
 import { performSpecial } from "../characters/special";
 import {
   spawnStompImpact,
-  spawnDamageImpact,
   spawnDuckGuardImpact,
   spawnDeathBurst,
   triggerDamageScreenPulse,
 } from "../scene/effects";
 import { triggerDamageCameraShake } from "../scene/cameraDynamics";
 import { playSpriteAnimation } from "../characters/shared/animationState.js";
+import { playHitFeedback, hitstopForDelivery } from "../characters/shared/hitFeedback";
 
 export function bindLocalSocketEvents({
   socket,
@@ -87,7 +87,9 @@ export function bindLocalSocketEvents({
           spawnDuckGuardImpact(scene, player);
         }
         if (data.cause !== "poison") {
-          spawnDamageImpact(scene, player);
+          playHitFeedback(scene, player, {
+            hitstopMs: data.cause === "combat" ? hitstopForDelivery(data.delivery) : 0,
+          });
           triggerDamageScreenPulse(scene);
           triggerDamageCameraShake(scene, -delta);
         }

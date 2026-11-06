@@ -44,6 +44,7 @@ test('wizard fireball factory creates an animated sprite before team presentatio
     if (name.includes('characterTuning')) return require('../src/shared/characters/characterTuning');
     if (name.includes('projectilePresentation')) return require('../src/shared/projectilePresentation');
     if (name.includes('renderLayers')) return { RENDER_LAYERS: { ATTACKS: 10 } };
+    if (name.includes('fireballArt')) return { ensureFireballTextures() {}, FIREBALL_ORIGIN: { x: 0.5, y: 0.5 } };
     return {};
   }});
   let animation;

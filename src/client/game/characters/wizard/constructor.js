@@ -1,5 +1,6 @@
 // src/client/game/characters/wizard/constructor.js
 import { animations } from "./anim";
+import { ensureFireballTextures } from "./fireballArt";
 import {
   performWizardFireball,
   chargeWizardFireball,
@@ -43,16 +44,6 @@ class Wizard extends CharacterEntityBase {
       this.characterAssetPath(staticPath, "aura.webp"),
       this.characterAssetPath(staticPath, "aura.json"),
     );
-    scene.load.atlas(
-      "wizard-fireball-unified",
-      this.characterAssetPath(staticPath, "fireball-bb.webp"),
-      this.characterAssetPath(staticPath, "fireball-bb.json"),
-    );
-    scene.load.atlas(
-      "wizard-fireball-red",
-      this.characterAssetPath(staticPath, "fireball-bb-red.webp"),
-      this.characterAssetPath(staticPath, "fireball-bb-red.json"),
-    );
     this.loadFiles(scene, staticPath, {
       audio: { "wizard-fireball": "fireball.mp3", "wizard-special": "special.mp3" },
     });
@@ -66,6 +57,8 @@ class Wizard extends CharacterEntityBase {
 
   static setupAnimations(scene) {
     animations(scene);
+    // Fireball sheets are drawn in code (fireballArt.js), not loaded.
+    ensureFireballTextures(scene);
   }
 
   static setDebugState(enabled) {

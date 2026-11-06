@@ -1,5 +1,5 @@
 import { advanceSlimeball, slimeLaunch } from "../../../../shared/characters/gloopProjectile";
-import { createSlimeVisual } from "./slimeVisual";
+import { createSlimeVisual, createSlimeBud, slimeRadius } from "./slimeVisual";
 import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
@@ -128,6 +128,40 @@ export function handleGloopSlimeSplat(scene, payload) {
   scene.events.emit("gloop-slimeball-splat", payload);
 }
 
+// The windup lump that grows out of the thrower toward the aim, keyed by
+// throw id so the release (predicted or echoed) can take over from it.
+export function spawnGloopSlimeBud(scene, ownerSprite, payload = {}) {
+  if (!scene?.events || !scene?.add || !ownerSprite || payload.id == null) return null;
+  const start = payload.start;
+  if (!start || !Number.isFinite(start.x) || !Number.isFinite(start.y)) return null;
+  const direction = Number(payload.direction) === -1 ? -1 : 1;
+  const angle = Number.isFinite(payload.angle) ? payload.angle : direction < 0 ? Math.PI : 0;
+  const bud = createSlimeBud(scene, ownerSprite, {
+    offsetX: start.x - ownerSprite.x, offsetY: start.y - ownerSprite.y, angle,
+    radius: slimeRadius(Number(SLIMEBALL.collisionRadius) || 18, Number(SLIMEBALL.visualScale) || 1.5),
+    durationMs: Math.max(60, Number(payload.startup) || Number(SLIMEBALL.castDelayMs) || 120),
+  });
+  scene._gloopBuds ||= new Map();
+  scene._gloopBuds.get(payload.id)?.dispose();
+  const dispose = () => {
+    scene.events.off("postupdate", update);
+    scene.events.off("presentation:reset", dispose);
+    scene.events.off("shutdown", dispose);
+    if (scene._gloopBuds?.get(payload.id) === entry) scene._gloopBuds.delete(payload.id);
+    bud.destroy();
+  };
+  const update = (_, delta = 16) => { if (!bud.update(delta)) dispose(); };
+  const entry = { dispose, retract: () => bud.retract() };
+  scene._gloopBuds.set(payload.id, entry);
+  // After every position write of the frame (remote interpolation, Arcade's
+  // step), so the lump is drawn on the sprite as rendered, not a frame behind.
+  scene.events.on("postupdate", update);
+  scene.events.once("presentation:reset", dispose);
+  scene.events.once("shutdown", dispose);
+  bud.update(0);
+  return entry;
+}
+
 export function spawnGloopSlimeballVisual(
   scene,
   payload = {},
@@ -208,8 +242,18 @@ export function spawnGloopSlimeballVisual(
 
   const state = { ...cfg, x: start.x, y: start.y, vx: Math.cos(angle) * cfg.speed,
     vy: cfg.initialVy, collisionRadius: radius, elapsed: 0, traveled: 0, bounceCount: 0 };
-  const visual = createSlimeVisual(scene, state,
-    Number(payload.scale) || Number(SLIMEBALL.visualScale) || 1.5, ownerSprite);
+  const visualScale = Number(payload.scale) || Number(SLIMEBALL.visualScale) || 1.5;
+  scene._gloopBuds?.get(payload.id)?.dispose();
+  // A ball leaving near its thrower tears free of him on a neck of slime.
+  let spit = null;
+  const launchSpeed = Math.hypot(state.vx, state.vy);
+  if (ownerSprite?.active && launchSpeed > 0 &&
+      Math.hypot(start.x - ownerSprite.x, start.y - ownerSprite.y) < 120) {
+    const reach = slimeRadius(radius, visualScale) * 1.5;
+    spit = { offsetX: start.x - ownerSprite.x - state.vx / launchSpeed * reach,
+      offsetY: start.y - ownerSprite.y - state.vy / launchSpeed * reach };
+  }
+  const visual = createSlimeVisual(scene, state, visualScale, ownerSprite, spit);
   const debug = createDebugCircle(scene, radius);
   let disposed = false;
   let ended = false;
@@ -219,6 +263,7 @@ export function spawnGloopSlimeballVisual(
     if (disposed) return;
     disposed = true;
     scene.events.off("update", update);
+    scene.events.off("postupdate", draw);
     scene.events.off("gloop-slimeball-splat", splat);
     scene.events.off("presentation:reset", cleanup);
     scene.events.off("shutdown", cleanup);
@@ -262,12 +307,17 @@ export function spawnGloopSlimeballVisual(
       if (state.done) { ended = true; visual.finish(); debug?.setVisible(false); }
       if (debug?.active) { debug.x = state.x; debug.y = state.y; }
     }
-    if (!visual.update(delta) && ended) cleanup();
+  };
+  // Drawn once every position is final, so the neck torn from the thrower
+  // stays on his sprite as rendered.
+  const draw = (_, delta = 16) => {
+    if (!disposed && !visual.update(delta) && ended) cleanup();
   };
   scene.events.on("gloop-slimeball-splat", splat);
   const pendingSplat = scene._gloopSplats?.get(payload.id);
   if (pendingSplat) splat(pendingSplat);
   scene.events.on("update", update);
+  scene.events.on("postupdate", draw);
   scene.events.once("presentation:reset", cleanup);
   scene.events.once("shutdown", cleanup);
   // Phaser emits `destroy` before clearing the graphics object's scene. A
@@ -342,8 +392,10 @@ export function performGloopSlimeball(instance, attackContext = null) {
   };
   // The thrower releases on time, from where the server will (the aimed start
   // carried along with Gloop's windup movement); the echo of this id is skipped.
+  // The lump starts swelling out of him on the press, not at release.
+  spawnGloopSlimeBud(scene, p, payload);
   let interrupted = false;
-  const onInterrupt = () => { interrupted = true; };
+  const onInterrupt = () => { interrupted = true; scene._gloopBuds?.get(attackId)?.retract(); };
   p.once?.("attack:interrupted", onInterrupt);
   scene.time.delayedCall(Number(SLIMEBALL.castDelayMs) || 0, () => {
     p.off?.("attack:interrupted", onInterrupt);

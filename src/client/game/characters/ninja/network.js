@@ -9,7 +9,7 @@ import { VERSION, STEP_MS, launch, step, swarmConfig } from '../../../../shared/
 import { advanceGeometry } from '../../../../shared/maps/platformMotion';
 import { clampLead } from '../../../../shared/characters/huntressReplication';
 import { createRuntimeId } from '../shared/runtimeId';
-import { isLocalShooter, predictShotContact, playPredictedImpact, shotBlockersFor, notePredictedHit } from '../shared/shotPrediction';
+import { isLocalShooter, predictShotContact, shotBlockersFor, notePredictedHit } from '../shared/shotPrediction';
 import { RENDER_LAYERS } from '../../scene/renderLayers';
 import { playPlayerSound } from '../../audio/playerAudio';
 const active=new Map(),terminals=new Set(),requests=new Map(),effects=new Set();
@@ -78,7 +78,7 @@ function predictHits(scene,e,point){
   if(!from||e.p.phase==='hover'||e.p.phase==='stall'||e.p.elapsed<(e.p.cfg.hitArmMs||0))return;
   const leg=e.p.phase,struck=(e.struck||=new Map()),skip=(struck.get(leg)||struck.set(leg,new Set()).get(leg));
   for(let hit;(hit=predictShotContact(from,point,e.p.cfg.collisionRadius,{skip}));){
-    skip.add(hit.target.name);playPredictedImpact(scene,hit.x,hit.y);
+    skip.add(hit.target.name);
     notePredictedHit({delivery:'released',character:'ninja',target:hit.target});
   }
 }

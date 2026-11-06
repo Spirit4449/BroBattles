@@ -12,40 +12,87 @@ function load(file, imports = () => ({})) {
   vm.runInNewContext(code, { exports, require: imports, Phaser: { Math: { RadToDeg: r => r * 180 / Math.PI } } });
   return exports;
 }
-const particles = load('src/client/game/characters/wizard/fireballParticles.js', () => require('../src/shared/projectilePresentation'));
-test('pixel particles spread across the rear on both render layers and drain cleanly', () => {
+const art = load('src/client/game/characters/wizard/fireballArt.js');
+const particles = load('src/client/game/characters/wizard/fireballParticles.js',
+  name => name.includes('fireballArt') ? art : require('../src/shared/projectilePresentation'));
+function particleScene() {
   const emitters = [];
-  const scene = { events: new EventEmitter(), textures: { exists: () => true }, add: {
+  const scene = { events: new EventEmitter(), textures: { exists: () => true, get: () => ({ get: name => ({ name }) }) }, add: {
     particles: (_x, _y, texture, config) => {
       const emitter = { texture, config, calls: [], setDepth(depth) { this.depth = depth; return this; },
-        emitParticleAt(...args) { this.calls.push(args); }, destroy() { this.destroyed = true; } };
+        emitParticleAt(...args) { this.calls.push(args); }, explode(...args) { this.exploded = args; },
+        destroy() { this.destroyed = true; } };
       emitters.push(emitter); return emitter;
     },
   } };
+  return { scene, emitters };
+}
+test('trail pixels scatter from the back of the ball, behind it, and drain cleanly', () => {
+  const { scene, emitters } = particleScene();
   const sprite = { active: true, x: 100, y: 80, scaleX: 0.5, depth: 100 };
   const wake = particles.createFireballParticles(scene, sprite, 0);
   sprite.x = 124;
   scene.events.emit('postupdate', 0, 48);
-  assert.deepEqual(emitters.map(e => e.depth), [98, 99]);
-  for (const e of emitters) {
-    assert.equal(e.texture, 'wizard-fire-pixels');
-    assert.equal(e.calls.length, 18);
-    assert.ok(e.calls.every(c => Number.isInteger(c[0]) && Number.isInteger(c[1]) && c[0] < 124));
-    assert.ok(e.calls.some(c => c[1] < 80));
-    assert.ok(e.calls.some(c => c[1] > 80));
-  }
+  assert.ok(emitters.length >= 2);
+  assert.ok(emitters.every(e => e.depth < sprite.depth && e.texture === 'wizard-fire-pixels'));
+  const calls = emitters.flatMap(e => e.calls);
+  assert.ok(calls.length > 6);
+  assert.ok(calls.every(c => Number.isInteger(c[0]) && Number.isInteger(c[1]) && c[0] < 124));
+  assert.ok(calls.some(c => c[1] < 80) && calls.some(c => c[1] > 80), 'spread to both sides of the path');
+  // Pixels cool through the fireball palette in whole steps by swapping to
+  // pre-coloured frames, which also works where the renderer ignores tint.
+  const flame = emitters[0].config;
+  const p = {};
+  flame.tint.onEmit(p);
+  assert.equal(p.frame.name, `blue-${p._bbShape}-core`);
+  const frames = [0, 0.3, 0.6, 0.99].map(t => (flame.tint.onUpdate(p, 'tint', t), p.frame.name));
+  assert.equal(new Set(frames).size, 4);
+  assert.ok(frames[3].endsWith('-edge'));
+  const start = flame.scale.onEmit(p);
+  assert.ok(flame.scale.onUpdate(p, 'scale', 0.9) < start);
+  const emitted = calls.length;
   wake.stop();
   scene.events.emit('postupdate', 0, 100);
-  assert.ok(emitters.every(e => !e.destroyed && e.calls.length === 18));
-  scene.events.emit('postupdate', 0, 300);
+  assert.equal(emitters.flatMap(e => e.calls).length, emitted, 'no new pixels once stopped');
+  assert.ok(emitters.every(e => !e.destroyed), 'live pixels finish their life');
+  scene.events.emit('postupdate', 0, 1000);
   assert.ok(emitters.every(e => e.destroyed));
   assert.equal(scene.events.listenerCount('postupdate'), 0);
   assert.equal(scene.events.listenerCount('shutdown'), 0);
 });
+test('impact burst sprays pixels once and cleans itself up', () => {
+  const { scene, emitters } = particleScene();
+  let timer;
+  scene.time = { delayedCall: (_ms, fn) => (timer = fn) };
+  particles.spawnFireballBurst(scene, 10.4, 20.6, { _bbTeamColor: 0xff413f });
+  assert.equal(emitters.length, 1);
+  assert.deepEqual(emitters[0].exploded.slice(1), [10, 21]);
+  timer();
+  assert.ok(emitters[0].destroyed);
+  assert.equal(scene.events.listenerCount('shutdown'), 0);
+});
+test('fireball art: round leading face, grows on the staff, never clips its frame', () => {
+  const { FIREBALL_COLS: W, FIREBALL_ROWS: H, FIREBALL_ORIGIN } = art;
+  const cx = Math.round(FIREBALL_ORIGIN.x * W - 0.5), cy = Math.round(FIREBALL_ORIGIN.y * H - 0.5);
+  const filled = f => art.fireballFrameCells(f).reduce((n, c) => n + (c > 0), 0);
+  for (const [a, b] of [[0, 4], [4, 8], [8, 15]]) assert.ok(filled(b) > filled(a), `spawn grows from frame ${a} to ${b}`);
+  for (let f = 0; f < 32; f++) {
+    const cells = art.fireballFrameCells(f);
+    for (let x = 0; x < W; x++) assert.ok(!cells[x] && !cells[(H - 1) * W + x], `frame ${f} clear top/bottom`);
+    for (let y = 0; y < H; y++) assert.ok(!cells[y * W] && !cells[y * W + W - 1], `frame ${f} clear sides`);
+    if (f < 16) continue;
+    const run = (dx, dy) => { let n = 0; while (cells[(cy + dy * (n + 1)) * W + cx + dx * (n + 1)]) n++; return n; };
+    const [left, right, front] = [run(-1, 0), run(1, 0), run(0, 1)];
+    assert.ok(Math.abs(left - right) <= 1 && Math.abs(front - left) <= 1, `frame ${f} leading face is round`);
+    assert.ok(run(0, -1) > front, `frame ${f} trails flame behind`);
+    assert.equal(cells[cy * W + cx], 5, 'hot core at the anchor');
+  }
+});
 test('charge holds its size and reuses its animated sprite on release', () => {
   const attack = load('src/client/game/characters/wizard/attack.js', name => {
     if (name.includes('projectilePresentation')) return require('../src/shared/projectilePresentation');
-    if (name.includes('fireballParticles')) return { createFireballParticles: () => ({ stop() {}, destroy() {} }) };
+    if (name.includes('fireballParticles')) return { createFireballParticles: () => ({ stop() {}, destroy() {} }), spawnFireballBurst() {} };
+    if (name.includes('fireballArt')) return art;
     if (name.includes('renderLayers')) return { RENDER_LAYERS: { ATTACKS: 60 } };
     if (name.includes('characterTuning')) return { getResolvedCharacterAttackConfig: () => ({ activeScale: 0.5, castDelayMs: 520, speed: 450, range: 1050, forwardOffset: 0.23, verticalOffset: 0.12, baseAngleDeg: -90, bobAmplitude: 0, bobFreqMs: 120 }) };
     if (name.includes('runtimeId')) return { createRuntimeId: () => 'test' };

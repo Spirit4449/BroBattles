@@ -3,6 +3,10 @@ const DEFAULT_SPECIAL_MS = 900;
 const ACTION_PATTERN = /throw|attack|slash|special/i;
 const WALL_JUMP_ANIMATION_MS = 450;
 const WALL_SLIDE_POSE_HOLD_MS = 120;
+const DASH_ANIMATIONS = new Set(["dashing", "dashright", "dashdiagonal", "dashup"]);
+// Dash art plays at burst speed, then its last frame holds through the fast
+// part of the coast (burst + time for coast drag to return to run speed).
+export const DASH_POSE_HOLD_MS = 520;
 
 function nowPerf() {
   return typeof performance !== "undefined" && performance.now
@@ -296,25 +300,29 @@ export function playCharacterAnimation({
       sprite.anims.timeScale = 1;
       state.wallJumpAnimationKey = null;
     }
-    // Let the horizontal lunge read through the first part of the coast.
-    // Only extend the real Thorg dash art, never a skin's fallback animation.
-    if (logical === "dashing" && wanted === "dashright" && direction?.y === 0 &&
-        key.endsWith("-dashright") && currentKey !== key) {
-      state.horizontalDashKey = key;
-      state.horizontalDashUntil = nowMs() + 320;
+    // Hold the dash's last frame while the body is still coasting. Only real
+    // dash art is held, never a skin's fallback animation.
+    const dashArt = DASH_ANIMATIONS.has(wanted) && key.endsWith(`-${wanted}`);
+    if (logical === "dashing" && dashArt && currentKey !== key) {
+      state.dashKey = key;
+      state.dashUpward = direction?.y < 0;
+      state.dashUntil = nowMs() + DASH_POSE_HOLD_MS;
     }
-    if (state.horizontalDashKey) {
-      const coasting = wanted === "running" || wanted === "falling";
-      const continuing = logical === "dashing" && wanted === "dashright" && direction?.y === 0;
-      if (currentKey === state.horizontalDashKey && nowMs() < state.horizontalDashUntil &&
-          (coasting || continuing)) {
+    if (state.dashKey) {
+      // Rising out of an upward dash reads as "jumping"; a real jump press
+      // sets restartJump and still interrupts.
+      const coasting = wanted === "running" || wanted === "falling" ||
+        (wanted === "jumping" && state.dashUpward && !state.restartJump);
+      const continuing = logical === "dashing" && dashArt && key === state.dashKey;
+      const holding = nowMs() < state.dashUntil;
+      if (currentKey === state.dashKey && holding && (coasting || continuing)) {
         // Keep the completed animation on its final frame instead of restarting.
         noteAnimationPlayed(sprite, wanted);
         return currentKey;
       }
-      if (!continuing || nowMs() >= state.horizontalDashUntil) {
-        state.horizontalDashKey = null;
-        state.horizontalDashUntil = 0;
+      if (!continuing || !holding) {
+        state.dashKey = null;
+        state.dashUntil = 0;
       }
     }
     if (

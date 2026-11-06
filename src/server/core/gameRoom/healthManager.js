@@ -39,6 +39,7 @@ function broadcastHealthUpdate(room, playerData, meta = {}) {
     ),
     cause: meta.cause || null,
     duckBlocked: meta.duckBlocked === true,
+    delivery: meta.delivery || null,
     gameId: room.matchId,
   });
   playerData._lastHealthBroadcastAt = Date.now();

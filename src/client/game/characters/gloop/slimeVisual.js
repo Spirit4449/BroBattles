@@ -11,14 +11,17 @@ const snap = v => Math.round(v / CELL) * CELL;
 
 // Stamps square brushes onto the FX grid, filling each covered cell once so
 // translucent strokes don't darken where samples overlap.
-function stampCells(g, samples, color, alpha) {
+// round: discs instead of squares, for brushes wide enough to show corners.
+function stampCells(g, samples, color, alpha, round = false) {
   const filled = new Set();
   g.fillStyle(color, alpha);
   for (const { x, y, size } of samples) {
     const span = Math.max(1, Math.round(size / CELL));
     const col0 = Math.round(x / CELL - span / 2), row0 = Math.round(y / CELL - span / 2);
+    const mid = (span - 1) / 2, reach = (span / 2) ** 2;
     for (let row = row0; row < row0 + span; row++) {
       for (let col = col0; col < col0 + span; col++) {
+        if (round && span > 2 && (col - col0 - mid) ** 2 + (row - row0 - mid) ** 2 > reach) continue;
         const key = col * 100003 + row;
         if (filled.has(key)) continue;
         filled.add(key);
@@ -32,9 +35,25 @@ function fillPixelPolygon(g, points, color, alpha) {
   fillPixelBlob(g, rasterizePixelBlob(points, { ringCount: 0, grow: 0 }), color, alpha);
 }
 
-// One graphics batch for droplets/residue, one for the deformable liquid body.
-// Effects are bounded and outlive the projectile briefly; shutdown owns all cleanup.
-export function createSlimeVisual(scene, state, visualScale = 1.5, owner = null) {
+// A liquid bridge, thick where it joins each end and pinched between them.
+// pinch 1 severs it at the waist.
+function drawNeck(g, x0, y0, x1, y1, w0, w1, pinch, color, alpha) {
+  const steps = Math.max(2, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / CELL));
+  const samples = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const waist = 1 - (1 - (2 * t - 1) ** 2) * (0.4 + 0.6 * pinch);
+    const size = 2 * (w0 + (w1 - w0) * t) * waist;
+    if (size >= CELL * 0.75) samples.push({ x: x0 + (x1 - x0) * t, y: y0 + (y1 - y0) * t, size });
+  }
+  stampCells(g, samples, color, alpha, true);
+}
+
+export const slimeRadius = (collisionRadius, visualScale = 1.5) =>
+  collisionRadius * clamp(visualScale / 1.5, 0.75, 1.25);
+
+// Team and skin colouring shared by the ball and the bud it grows from.
+function slimePalette(owner) {
   const crystal = (owner?._bbSkinTextureKey || owner?.texture?.key) === 'gloop__gloop-amethyst';
   const sourceColors = crystal ? [0x4215b8, 0x5633cb, 0x261080, 0x3976bc] : COLORS;
   const skinTint = color => crystal ? ({
@@ -59,6 +78,77 @@ export function createSlimeVisual(scene, state, visualScale = 1.5, owner = null)
   };
   const tint = color => enemy ? (redRamp[color] ?? 0xf05a69) : skinTint(color);
   const colors = enemy ? (crystal ? [0xd54375,0xf56785,0x942d76,0xff9b99] : [0xff5360,0xf33f4d,0xea3043,0xff857e]) : sourceColors;
+  return { crystal, enemy, tint, colors };
+}
+
+// The throw's windup: a lump of Gloop swells out of his body toward the aim
+// and strains on a neck, so the ball visibly comes from him. It follows him
+// and hands over to the ball at release; offsets are the launch start
+// relative to the owner.
+export function createSlimeBud(scene, owner, { offsetX, offsetY, angle, radius, durationMs }) {
+  const { tint, enemy } = slimePalette(owner);
+  const neckG = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 5);
+  const blobG = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 6);
+  const dx = Math.cos(angle), dy = Math.sin(angle);
+  const reach = radius * 1.5;
+  let age = 0, grown = 0, retracting = false, destroyed = false;
+  const destroy = () => {
+    if (destroyed) return;
+    destroyed = true;
+    neckG.destroy(); blobG.destroy();
+  };
+  function blob(size, stretch, color, alpha, ox = 0, oy = 0) {
+    const points = [];
+    for (let i = 0; i < 48; i++) {
+      const a = i / 48 * Math.PI * 2;
+      const wave = 1 + 0.06 * Math.sin(a * 3 + age * 0.02);
+      const lx = Math.cos(a) * size * wave, ly = Math.sin(a) * size * wave;
+      // Stretched along the throw, the trailing half narrowing into the neck.
+      const lead = lx * stretch * (lx < 0 ? 1.1 : 1), side = ly / stretch;
+      points.push({ x: dx * lead - dy * side + ox, y: dy * lead + dx * side + oy });
+    }
+    const shape = rasterizePixelBlob(points, { ringCount: 2, grow: 0 });
+    fillPixelBlob(blobG, shape, tint(color), alpha);
+  }
+  return {
+    // false once it has nothing left to draw.
+    update(delta) {
+      if (destroyed || !owner?.active) { destroy(); return false; }
+      age += delta;
+      if (retracting) grown = Math.max(0, grown - delta / 90);
+      else {
+        const t = clamp(age / Math.max(1, durationMs), 0, 1);
+        grown = 1 - (1 - t) ** 3;
+        // A late release (remote latency) holds the lump; a lost one is reabsorbed.
+        if (age > durationMs + 450) retracting = true;
+      }
+      if (retracting && grown <= 0) { destroy(); return false; }
+      const rootX = owner.x + offsetX - dx * reach, rootY = owner.y + offsetY - dy * reach;
+      const travel = reach * (0.3 + 0.7 * grown);
+      const cx = rootX + dx * travel, cy = rootY + dy * travel;
+      const size = radius * (0.4 + 0.6 * grown) * (1 + 0.05 * Math.sin(age * 0.045));
+      const stretch = 1 + 0.3 * grown;
+      neckG.clear(); blobG.clear();
+      drawNeck(neckG, rootX, rootY, cx, cy, radius * 0.34, size * 0.45, grown * 0.6, tint(0x11bbaa), 0.98);
+      drawNeck(neckG, rootX, rootY, cx, cy, radius * 0.2, size * 0.26, grown * 0.6, tint(0x139ca9), 0.98);
+      blobG.setPosition(snap(cx), snap(cy));
+      blob(size * (enemy ? 1.08 : 1.04), stretch, 0x99e9c9, enemy ? 0.95 : 0.48);
+      blob(size, stretch, 0x11bbaa, 0.98);
+      blob(size * 0.89, stretch, 0x139ca9, 0.98);
+      blob(size * 0.7, stretch, 0x0868b6, 0.97, -dx * size * 0.12, size * 0.08);
+      fillPixelEllipse(blobG, -size * 0.4, -size * 0.45, Math.max(CELL * 2, size * 0.2), size * 0.34, tint(0xf2f5aa), 0.93);
+      return true;
+    },
+    retract() { retracting = true; },
+    destroy,
+  };
+}
+
+// One graphics batch for droplets/residue, one for the deformable liquid body.
+// Effects are bounded and outlive the projectile briefly; shutdown owns all cleanup.
+// spit: the root of the neck, relative to the owner, that the ball tears free of.
+export function createSlimeVisual(scene, state, visualScale = 1.5, owner = null, spit = null) {
+  const { crystal, enemy, tint, colors } = slimePalette(owner);
   const body = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 6);
   const fx = scene.add.graphics().setDepth(RENDER_LAYERS.ATTACKS + 2);
   const r = state.collisionRadius * clamp(visualScale / 1.5, 0.75, 1.25);
@@ -72,6 +162,15 @@ export function createSlimeVisual(scene, state, visualScale = 1.5, owner = null)
   // ripple: surface waves excited by an impact, decaying on their own.
   let anchor = 0, ripple = 0, freeAge = 1000;
   let flightAngle = 0, flightStretch = 1;
+  // Spat from Gloop: the neck to his body pinches off early in the flight,
+  // and the mass leaves drawn out along the throw, springing back as it flies.
+  const SNAP_MS = 95, SPIT_MS = 160;
+  let spitAge = spit ? 0 : Infinity, snapped = !spit;
+  if (spit) {
+    const launch = Math.atan2(state.vy, state.vx);
+    normal = { x: Math.cos(launch), y: Math.sin(launch) };
+    squash = -0.3;
+  }
 
   // A tapered liquid filament with a hanging head, stepped onto the pixel grid.
   function ribbon(x, y, tailX, tailY, width, color, alpha) {
@@ -285,6 +384,32 @@ export function createSlimeVisual(scene, state, visualScale = 1.5, owner = null)
       bodyX += normal.x * offset; bodyY += normal.y * offset;
     }
     body.setPosition(snap(bodyX), snap(bodyY));
+    if (spitAge < SPIT_MS && owner?.active) {
+      spitAge += delta;
+      const rootX = owner.x + spit.offsetX, rootY = owner.y + spit.offsetY;
+      const midX = (rootX + state.x) / 2, midY = (rootY + state.y) / 2;
+      if (!snapped && spitAge >= SNAP_MS) {
+        snapped = true;
+        const len = Math.hypot(state.x - rootX, state.y - rootY) || 1;
+        const ux = (state.x - rootX) / len, uy = (state.y - rootY) / len;
+        for (let i = 0; i < 7; i++) {
+          const along = i < 2 ? random(-70, -25) : random(30, 140), across = random(-55, 55);
+          droplet(midX, midY, ux * along - uy * across, uy * along + ux * across - 40, random(1.6, 3.4), random(320, 560));
+        }
+      }
+      if (!snapped) {
+        const pinch = clamp(spitAge / SNAP_MS, 0, 1);
+        drawNeck(fx, rootX, rootY, body.x, body.y, r * 0.34 * (1 - 0.4 * pinch), r * 0.45, pinch, tint(0x11bbaa), 0.98);
+        drawNeck(fx, rootX, rootY, body.x, body.y, r * 0.2 * (1 - 0.4 * pinch), r * 0.26, pinch, tint(0x139ca9), 0.98);
+      } else {
+        // The torn ends recoil: a stub sinks back into him, a tail into the ball.
+        const left = clamp(1 - (spitAge - SNAP_MS) / (SPIT_MS - SNAP_MS), 0, 1);
+        const stubX = rootX + (midX - rootX) * 0.8 * left, stubY = rootY + (midY - rootY) * 0.8 * left;
+        drawNeck(fx, rootX, rootY, stubX, stubY, r * 0.26 * left, CELL * 0.5, 0, tint(0x11bbaa), 0.98);
+        const tailX = body.x + (midX - body.x) * 0.8 * left, tailY = body.y + (midY - body.y) * 0.8 * left;
+        drawNeck(fx, body.x, body.y, tailX, tailY, r * 0.3 * left, CELL * 0.5, 0, tint(0x11bbaa), 0.98);
+      }
+    }
     body.setRotation(0); body.setScale(1);
     if (lastImpact && !lastImpact.terminal && impactAge < 320) {
       const attachmentX = lastImpact.x, attachmentY = lastImpact.y;

@@ -2,7 +2,6 @@ import { characterHitBounds, firstTargetContact } from "../../../../shared/comba
 import { DELIVERIES, shapeTouches } from "../../../../shared/combat/attackDelivery";
 import { sweep } from "../../../../shared/characters/huntressProjectile";
 import { serverClock } from "../../match/serverClock";
-import { RENDER_LAYERS } from "../../scene/renderLayers";
 
 // One contract for every attack (see docs/development/networking.md, "Attack
 // delivery"); the delivery's policy is in src/shared/combat/attackDelivery.js:
@@ -11,8 +10,9 @@ import { RENDER_LAYERS } from "../../scene/renderLayers";
 //    the server can test the attack's targets where this player saw them.
 // 2. The attacker predicts its own launch or swing and tests it against the
 //    enemies on screen. Every predicted contact goes through notePredictedHit:
-//    the hit sound plays at the target and a brief hitstop marks it, the same
-//    for every character. Damage and health still wait for the server, and the
+//    the hit sound plays at the target and the shared hit feedback
+//    (hitFeedback.js: flash, burst, hitstop) marks it, the same for every
+//    character. Damage and health still wait for the server, and the
 //    server's confirmation does not repeat what the prediction already played.
 // 3. A predicted hit the server has not confirmed within the confirmation
 //    window is withdrawn by fading, never by flying on.
@@ -24,7 +24,10 @@ let traceHook = null;
 let roster = { localUsername: null, opponentPlayersRef: null };
 // Plays a character's hit sound at a sprite; installed with the roster.
 let playHitSound = null;
-// Predicted hits awaiting the server: { target, at, confirm, impact }.
+// Plays the shared hit feedback on a struck sprite; installed with the roster.
+let playHitFeedback = null;
+// Predicted hits awaiting the server: { target, at, confirm, impact, feedback };
+// a part is true once nothing is left for the server's echo to skip.
 const predictedHits = [];
 const staticTargets = new Map();
 const blockerSources = new Map();
@@ -43,6 +46,7 @@ export function trackShotTargets(context = {}) {
   roster = { localUsername: context.localUsername ?? roster.localUsername,
     opponentPlayersRef: context.opponentPlayersRef ?? roster.opponentPlayersRef };
   if (context.playHitSound) playHitSound = context.playHitSound;
+  if (context.playHitFeedback) playHitFeedback = context.playHitFeedback;
 }
 
 // Mode objects that shots damage, such as Bank Bust vaults: [{ name, bounds }].
@@ -150,24 +154,28 @@ function prunePredictedHits(now) {
 }
 
 // The moment a predicted hit lands, for every delivery: the attacker's hit
-// sound at the target and a hitstop sized by the delivery.
+// sound and the shared hit feedback at the target, with the delivery's hitstop.
 export function notePredictedHit({ delivery, character, target, attacker = null }) {
   const policy = DELIVERIES[delivery];
   if (!policy?.predict || !target?.name) return;
   const now = performance.now();
   prunePredictedHits(now);
   const source = target.sprite || attacker;
-  // Only a hit whose sound played here may silence the server's.
-  if (source && playHitSound) {
-    playHitSound(character, source);
-    predictedHits.push({ target: target.name, at: now, confirm: false, impact: false });
+  // Only what played here may silence the server's echo of it.
+  const sounded = !!(source && playHitSound);
+  if (sounded) playHitSound(character, source);
+  const felt = !!(target.sprite && playHitFeedback?.(target.sprite, {
+    hitstopMs: policy.hitstopMs, duckBlocked: target.sprite._ducking === true }));
+  if (!felt) hitstop(target.sprite, policy.hitstopMs);
+  if (sounded || felt) {
+    predictedHits.push({ target: target.name, at: now, confirm: !sounded, impact: !sounded, feedback: !felt });
   }
-  hitstop(target.sprite, policy.hitstopMs);
   if (policy.attackerHitstop) hitstop(attacker, policy.hitstopMs);
 }
 
 // True once per predicted hit on `targetName` for each server echo ("confirm"
-// for the hit confirmation, "impact" for an impact effect), so the attacker's
+// for the hit confirmation, "impact" for an impact effect, "feedback" for the
+// health update's hit feedback), so the attacker's
 // client does not play again what the prediction already did.
 export function takePredictedHit(targetName, part = "confirm") {
   prunePredictedHits(performance.now());
@@ -183,16 +191,6 @@ export function confirmWindowMs() {
   const rtts = serverClock.samples.map((sample) => sample.rtt).filter(Number.isFinite);
   const rtt = rtts.length ? Math.min(...rtts) : 150;
   return Math.min(900, rtt + 220);
-}
-
-// A brief flash where a predicted shot meets a displayed enemy.
-export function playPredictedImpact(scene, x, y, color = 0xfff2d4, radius = 10) {
-  if (!scene?.add?.circle || !Number.isFinite(x) || !Number.isFinite(y)) return null;
-  const flash = scene.add.circle(x, y, radius, color, 0.75);
-  flash.setDepth?.(RENDER_LAYERS.ATTACKS + 6);
-  scene.tweens?.add?.({ targets: flash, alpha: 0, scaleX: 1.8, scaleY: 1.8, duration: 160,
-    onComplete: () => flash.destroy() });
-  return flash;
 }
 
 export function setShotTraceHook(hook) {

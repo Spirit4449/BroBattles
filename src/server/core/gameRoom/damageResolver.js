@@ -403,7 +403,10 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
           t: now,
         });
       }
-      room._broadcastHealthUpdate(target, { cause: "combat", duckBlocked });
+      // Every viewer holds the struck fighter for the same delivery hitstop.
+      const delivery = deliveryOf(runtimeProjectile?.runtimeKind) ||
+        (huntressProjectile || ninjaProjectile ? 'released' : null);
+      room._broadcastHealthUpdate(target, { cause: "combat", duckBlocked, delivery });
       if (target.health === 0 && old > 0) {
         console.log(
           `%c[GameRoom ${room.matchId}] Player ${target.name} was killed by ${attacker.name}`,

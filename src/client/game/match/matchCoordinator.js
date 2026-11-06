@@ -11,11 +11,11 @@ import { getCharacterNetworkVersions, configureCharacterNetworks, resetCharacter
 // hidden global state and can be tested or instantiated in isolation.
 import { normalizeMapId } from "../maps/manifest";
 import { resolveGameErrorAction } from "./gameErrorActions";
-import { spawnDamageImpact, spawnDuckGuardImpact } from "../scene/effects";
 import { spawnDeathTombstone } from "../scene/deathTombstone";
 import { applyActionToLocalPlayer, getCharacterSocketEvents, playCharacterSound } from "../characters";
 import { playPlayerSound } from "../audio/playerAudio";
 import { takePredictedHit } from "../characters/shared/shotPrediction";
+import { playHitFeedback, hitstopForDelivery } from "../characters/shared/hitFeedback";
 import {
   getAnimationDurationMs,
   markOneShotAnimation,
@@ -750,14 +750,12 @@ export function createMatchCoordinator(config) {
           opponentPlayers[payload.username] || teamPlayers[payload.username];
         if (wrapper?.opponent) {
           const scene = getGameScene();
-          if (scene) {
-            spawnDamageImpact(scene, wrapper.opponent);
-            if (
-              payload.duckBlocked === true ||
-              wrapper.opponent._ducking === true
-            ) {
-              spawnDuckGuardImpact(scene, wrapper.opponent);
-            }
+          // The attacker already played this at its predicted contact.
+          if (scene && !takePredictedHit(payload.username, "feedback")) {
+            playHitFeedback(scene, wrapper.opponent, {
+              hitstopMs: payload.cause === "combat" ? hitstopForDelivery(payload.delivery) : 0,
+              duckBlocked: payload.duckBlocked === true || wrapper.opponent._ducking === true,
+            });
           }
         }
       }

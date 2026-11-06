@@ -139,7 +139,7 @@ test('match healing uses the health power-up tick once even when health was alre
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code;
   vm.runInNewContext(code, { exports, require: () => ({
-    spawnDamageImpact: noop,
+    spawnDamageImpact: noop, playHitFeedback: noop, hitstopForDelivery: () => 0,
     getCharacterSocketEvents: () => [],
     applyActionToLocalPlayer: () => false,
     spawnDuckGuardImpact: noop,
@@ -206,7 +206,7 @@ test('match playback includes the freeze power-up tick', () => {
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code;
   vm.runInNewContext(code, { exports, require: () => ({
-    spawnDamageImpact: noop, spawnDuckGuardImpact: noop,
+    spawnDamageImpact: noop, spawnDuckGuardImpact: noop, playHitFeedback: noop, hitstopForDelivery: () => 0,
     getCharacterSocketEvents: () => [], applyActionToLocalPlayer: () => false,
     spawnDeathBurst: noop, spawnSpawnBurst: noop,
     triggerDamageScreenPulse: noop, triggerDamageCameraShake: noop,

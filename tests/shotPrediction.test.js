@@ -26,9 +26,14 @@ function arena({ enemyX = 330, centerY = 298, character = 'wizard', clock = { no
   const box = characterHitBounds(character, 0, 0);
   const enemy = { active: true, visible: true, flipX: false, x: enemyX, y: centerY - (box.top + box.bottom) / 2,
     anims: { frames: 0, update() { this.frames++; } } };
-  const sounds = [];
+  const sounds = [], impacts = [];
+  // The real shared hit feedback, with the scene's burst helpers recorded.
+  const feedback = load('src/client/game/characters/shared/hitFeedback.js', name =>
+    name.includes('shotPrediction') ? shots : name.includes('attackDelivery') ? require('../src/shared/combat/attackDelivery')
+      : { spawnDamageImpact: (_, sprite) => impacts.push({ sprite }), spawnDuckGuardImpact: (_, sprite) => impacts.push({ sprite, guard: true }) });
   shots.trackShotTargets({ localUsername: 'me', opponentPlayersRef: { foe: { opponent: enemy, character } },
-    playHitSound: (who, sprite) => sounds.push({ who, sprite }) });
+    playHitSound: (who, sprite) => sounds.push({ who, sprite }),
+    playHitFeedback: (sprite, options) => feedback.playHitFeedback(scene, sprite, options) });
   const delayed = [], tweens = [], objects = [];
   function object(x = 0, y = 0, radius = 0, color = null) {
     const o = Object.assign(new EventEmitter(), { x, y, radius, color, active: true, visible: true, alpha: 1 });
@@ -45,7 +50,7 @@ function arena({ enemyX = 330, centerY = 298, character = 'wizard', clock = { no
   const caster = Object.assign(new EventEmitter(), { active: true, x: 100, y: 300, flipX: false, displayWidth: 150, displayHeight: 150,
     anims: { frames: 0, update() { this.frames++; } } });
   const runDelayed = () => { for (const job of delayed.splice(0).sort((a, b) => a.ms - b.ms)) job.fn(); };
-  return { shots, enemy, scene, caster, delayed, tweens, objects, runDelayed, sounds };
+  return { shots, enemy, scene, caster, delayed, tweens, objects, runDelayed, sounds, impacts, feedback };
 }
 const common = (f, extra = {}) => name =>
   name.includes('shotPrediction') ? f.shots : name.includes('shotContact') ? require('../src/shared/combat/shotContact')
@@ -85,7 +90,8 @@ test('displayed targets use the server hit box at the drawn position; dead or hi
 
 function wizard(f) {
   return load('src/client/game/characters/wizard/attack.js', common(f, {
-    fireballParticles: { createFireballParticles: () => ({ stop() {}, destroy() {} }) },
+    fireballParticles: { createFireballParticles: () => ({ stop() {}, destroy() {} }), spawnFireballBurst() {} },
+    fireballArt: { ensureFireballTextures() {}, FIREBALL_ORIGIN: { x: 0.5, y: 0.7 } },
   }), { Phaser: { Math: { RadToDeg: r => r * 180 / Math.PI }, BlendModes: { ADD: 1 } } });
 }
 const FIREBALL = tuning.getResolvedCharacterAttackConfig('wizard', 'fireball');
@@ -125,7 +131,8 @@ test('other players\' fireballs never burst on this player\'s targets', () => {
 function gloop(f, finishes) {
   return load('src/client/game/characters/gloop/attack.js', common(f, {
     gloopProjectile: require('../src/shared/characters/gloopProjectile'),
-    slimeVisual: { createSlimeVisual: (scene, state) => {
+    slimeVisual: { slimeRadius: (r) => r, createSlimeBud: () => ({ update: () => true, retract() {}, destroy() {} }),
+      createSlimeVisual: (scene, state) => {
       let finished = false;
       return { body: { once() {} }, impact() {}, destroy() {}, state,
         update: () => !finished, finish(options = {}) { finished = true; finishes.push({ ...options, x: state.x, y: state.y }); } };
@@ -166,10 +173,15 @@ test('every predicted hit plays its sound once at the target, holds a brief hits
   clock.t += 200;
   f.enemy.anims.update(0, 16); f.caster.anims.update(0, 16);
   assert.equal(f.enemy.anims.frames + f.caster.anims.frames, 2);
-  // The confirmation and the impact echo are each skipped once.
+  // The shared hit feedback bursts on the target once.
+  assert.deepEqual(f.impacts.map(i => i.sprite === f.enemy), [true]);
+  // The confirmation, the impact echo and the health update's feedback are
+  // each skipped once.
   assert.equal(f.shots.takePredictedHit('foe', 'confirm'), true);
   assert.equal(f.shots.takePredictedHit('foe', 'confirm'), false);
   assert.equal(f.shots.takePredictedHit('foe', 'impact'), true);
+  assert.equal(f.shots.takePredictedHit('foe', 'feedback'), true);
+  assert.equal(f.shots.takePredictedHit('foe', 'feedback'), false);
   // A released shot holds only the victim; an unconfirmed prediction expires.
   f.shots.notePredictedHit({ delivery: 'released', character: 'ninja', target, attacker: f.caster });
   f.enemy.anims.update(0, 16); f.caster.anims.update(0, 16);
@@ -180,6 +192,37 @@ test('every predicted hit plays its sound once at the target, holds a brief hits
   // Areas are never predicted.
   f.shots.notePredictedHit({ delivery: 'area', character: 'draven', target, attacker: f.caster });
   assert.equal(f.sounds.length, 2);
+});
+
+test('the shared hit feedback flashes a white copy over the fighter, bursts, and holds it for the given hitstop', () => {
+  const clock = { t: 1000, now() { return this.t; } };
+  const f = arena({ clock });
+  const copies = [];
+  f.enemy.texture = { key: 'wizard-skin' };
+  f.enemy.frame = { name: 'idle3' };
+  f.enemy.tint = 0x50ce88;
+  f.scene.add.sprite = (x, y, key, frame) => {
+    const copy = { x, y, key, frame, active: true, setTintFill(color) { this.fill = color; }, setAlpha(a) { this.alpha = a; },
+      setPosition(px, py) { this.x = px; this.y = py; }, destroy() { this.active = false; } };
+    copies.push(copy); return copy;
+  };
+  assert.equal(f.feedback.playHitFeedback(f.scene, f.enemy, { hitstopMs: f.feedback.hitstopForDelivery('attached'), duckBlocked: true }), true);
+  assert.equal(copies.length, 1);
+  assert.deepEqual([copies[0].key, copies[0].frame, copies[0].fill], ['wizard-skin', 'idle3', 0xffffff]);
+  assert.equal(f.enemy.tint, 0x50ce88, 'the fighter keeps its own tint');
+  assert.deepEqual(f.impacts.map(i => !!i.guard), [false, true]);
+  f.enemy.anims.update(0, 16);
+  assert.equal(f.enemy.anims.frames, 0);
+  // The copy follows the fighter and is removed when it fades.
+  f.enemy.x += 40;
+  const fade = f.tweens.find(t => t.targets === copies[0]);
+  fade.onUpdate(); fade.onComplete();
+  assert.deepEqual([copies[0].x, copies[0].active], [f.enemy.x, false]);
+  // Hidden fighters get no flash; unknown deliveries give no hitstop.
+  f.enemy.visible = false;
+  f.feedback.playHitFeedback(f.scene, f.enemy, { hitstopMs: f.feedback.hitstopForDelivery(null) });
+  assert.equal(copies.length, 1);
+  assert.equal(f.feedback.hitstopForDelivery('released') > 0, true);
 });
 
 function melee(f, file, extra = {}) {

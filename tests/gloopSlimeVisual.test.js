@@ -104,5 +104,33 @@ test('slimeball graphics can be destroyed by Phaser without recursive destructio
     else scene.events.emit('shutdown');
     assert.ok(objects.slice(2).every(object=>object.destroyed));
     assert.equal(scene.events.listenerCount('update'),0);
+    assert.equal(scene.events.listenerCount('postupdate'),0);
   }
+});
+test('the windup lump grows out of the thrower, follows him, and is reabsorbed if never released',()=>{
+  const {scene}=setup({texture:{key:'gloop'}});
+  const owner={x:100,y:100,active:true,texture:{key:'gloop'}};
+  const made=[];
+  const probe=api.createSlimeBud({add:{graphics(){const g=scene.add.graphics();made.push(g);return g;}}},owner,{offsetX:10,offsetY:20,angle:0,radius:18,durationMs:120});
+  probe.update(16); owner.x+=50; probe.update(200);
+  assert.ok(Math.abs(made[1].x-(owner.x+10))<=4,'fully grown, the lump sits at the launch start on the moved thrower');
+  probe.retract();
+  let frames=0; while(probe.update(16)&&frames<100) frames++;
+  assert.ok(frames<20,'reabsorbed quickly');
+  assert.ok(made.every(g=>g.destroyed));
+});
+test('a spat ball stays joined to the thrower by a neck that tears off early in flight',()=>{
+  const owner={x:60,y:110,active:true,texture:{key:'gloop'}};
+  const neckColor=0x11bbaa;
+  const plain=setup(owner); plain.visual.update(16);
+  assert.ok(!plain.objects[1].colors.includes(neckColor),'no neck without a thrower to tear from');
+  const objects=[];
+  const scene={add:{graphics(){const g=setup(owner).scene.add.graphics();objects.push(g);return g;}}};
+  const state={x:100,y:100,vx:200,vy:-60,collisionRadius:18,floorY:500};
+  const visual=api.createSlimeVisual(scene,state,1.5,owner,{offsetX:5,offsetY:-5});
+  visual.update(16);
+  assert.ok(objects[1].colors.includes(neckColor),'joined at release');
+  for(let i=0;i<20;i++){state.x+=4;visual.update(16);}
+  assert.ok(!objects[1].colors.includes(neckColor),'torn free shortly after');
+  visual.destroy();
 });

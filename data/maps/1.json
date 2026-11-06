@@ -73,10 +73,10 @@
         "scaleY": 0.175,
         "flipX": false,
         "body": {
-          "width": 490,
+          "width": 484,
           "height": 20,
-          "offsetX": 0,
-          "offsetY": 160
+          "offsetX": 23,
+          "offsetY": 162
         },
         "id": "p1",
         "collision": {
@@ -162,28 +162,15 @@
     "hitboxes": [
       {
         "id": "hitbox-43340d54",
-        "x": 1158,
+        "x": 1156,
         "y": 268,
-        "width": 469,
+        "width": 475,
         "height": 24,
         "collision": {
-          "up": true,
+          "up": false,
           "down": false,
           "left": true,
           "right": true
-        }
-      },
-      {
-        "id": "hitbox-57208a5b",
-        "x": 918,
-        "y": 262,
-        "width": 11,
-        "height": 12,
-        "collision": {
-          "up": true,
-          "down": false,
-          "left": true,
-          "right": false
         }
       },
       {

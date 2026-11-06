@@ -5,7 +5,8 @@ import { lockPlayerFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
 import { playSpriteAnimation } from "../shared/animationState";
 
-import { createFireballParticles } from "./fireballParticles";
+import { createFireballParticles, spawnFireballBurst } from "./fireballParticles";
+import { ensureFireballTextures, FIREBALL_ORIGIN } from "./fireballArt";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { consumeOnce } from "../shared/packetDedupe";
 import { attackCollisionCenter } from "../../../../shared/combat/shotContact";
@@ -84,6 +85,7 @@ const FIREBALL_TEXTURE = "wizard-fireball-unified";
 const FIREBALL_FLIGHT_ANIM = "wizard-fireball-unified:flight";
 
 function createFireballSprite(scene, x, y, direction, owner = null) {
+  ensureFireballTextures(scene);
   const texture = teamColor(owner) === TEAM_RED && scene.textures.exists("wizard-fireball-red") ? "wizard-fireball-red" : FIREBALL_TEXTURE;
   const flightAnimation = `${texture}:flight`;
   const hasSheet = scene.textures.exists(texture);
@@ -91,9 +93,9 @@ function createFireballSprite(scene, x, y, direction, owner = null) {
     ? scene.add.sprite(x, y, texture, "fire16")
     : scene.add.circle(x, y, FIREBALL_VISUAL_RADIUS, 0x8ae7ff, 0.9);
   sprite.setDepth(Math.max(FIREBALL_DEPTH, RENDER_LAYERS.ATTACKS));
-  // The same lower hot-core anchor is used for every spawn and flight cell.
+  // Every spawn and flight cell is anchored on the ball's centre.
   if (hasSheet) {
-    sprite.setOrigin(0.5, 0.79);
+    sprite.setOrigin(FIREBALL_ORIGIN.x, FIREBALL_ORIGIN.y);
     sprite.texture?.setFilter?.(0);
   }
   sprite.setScale(FIREBALL_ACTIVE_SCALE);
@@ -113,8 +115,9 @@ function createFireballSprite(scene, x, y, direction, owner = null) {
   return sprite;
 }
 
-function spawnImpact(scene, x, y, playSound = true) {
+function spawnImpact(scene, x, y, playSound = true, owner = null) {
   try {
+    spawnFireballBurst(scene, x, y, owner);
     // Use simple circle flash instead of particles to avoid texture issues
     if (scene.add?.circle) {
       const flash = scene.add.circle(
@@ -332,21 +335,21 @@ function spawnWizardFireballProjectile(
           const damageTo = fireballDamageCenter({ x: launchX, y: launchY }, angle, travel);
           for (let hit; (hit = predictShotContact(damageFrom, damageTo, FIREBALL_COLLISION_RADIUS, { skip: struck }));) {
             struck.add(hit.target.name);
-            spawnImpact(scene, hit.x, hit.y, false);
+            spawnImpact(scene, hit.x, hit.y, false, sprite);
             notePredictedHit({ delivery: "released", character: "wizard", target: hit.target });
           }
           damageFrom = damageTo;
         }
         if (blockedAt !== null) {
           travelTween.stop();
-          spawnImpact(scene, sprite.x, sprite.y, false);
+          spawnImpact(scene, sprite.x, sprite.y, false, sprite);
           sprite.destroy();
           trail?.stop();
           debugFollower?.destroy();
         }
       },
       onComplete: () => {
-        spawnImpact(scene, sprite.x, sprite.y, false);
+        spawnImpact(scene, sprite.x, sprite.y, false, sprite);
         sprite.destroy();
         trail?.stop();
         debugFollower?.destroy();

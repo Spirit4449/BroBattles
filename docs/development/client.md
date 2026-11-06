@@ -362,6 +362,14 @@ disables this landing effect. Tuning lives in `cameraDynamics.js`.
 - Positions scale with the shorter viewport side and respect safe-area insets. The overlay hides while the local player is dead so the spectate controls stay reachable.
 - `body.bb-touch-game` hides the in-game chat, the settings button and the keyboard reference on touch devices.
 
+## Hit feedback
+
+Every attack that damages a fighter plays the same reaction, from `src/client/game/characters/shared/hitFeedback.js` (`playHitFeedback`): a white flash over the fighter's current frame, the shared damage burst (`spawnDamageImpact`), the duck-guard bubble when they were ducking, and an animation hold sized by the attack's delivery (`hitstopForDelivery`). The flash is a copy drawn over the sprite, so team, power-up and invisibility tints are untouched.
+
+Each viewer sees it once, as early as they know of the hit. The attacker plays it at its predicted contact (`notePredictedHit` in `shotPrediction.js`), and the health update that follows skips it (`takePredictedHit(name, "feedback")`). Everyone else plays it on the `health-update`, whose combat updates carry the attack's `delivery`. Burn ticks and other non-blow damage flash and burst without a hold; poison plays none. The local victim also gets the screen pulse and camera shake.
+
+Attack-specific presentation stays in each character's folder and plays alongside: each character's `hit` sound, fireball bursts, explosions. Do not add a per-character hit flash; route new attacks through `notePredictedHit` instead.
+
 ## Player sound distance
 
 Player-created effects use `src/client/game/audio/playerAudio.js`. Pass the acting player's sprite (or an impact point when the owner is unavailable) and the effect's local volume to `playPlayerSound`. Use `playerSoundVolume` for sound instances that need their own playback lifecycle. Dash, duck, attack, special, hit, death, and power-up tick cues use this path.

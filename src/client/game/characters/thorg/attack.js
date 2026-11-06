@@ -1,7 +1,7 @@
 import { createRuntimeId } from "../shared/runtimeId";
 import { THORG_SWEEP } from "../../../../shared/characters/thorgSweep";
 import { attackerPose, pathSweepShapes, pathSweepProgress } from "../../../../shared/combat/attackDelivery";
-import { predictAttachedContacts, notePredictedHit, playPredictedImpact } from "../shared/shotPrediction";
+import { predictAttachedContacts, notePredictedHit } from "../shared/shotPrediction";
 import { startThorgSweep } from "./weapon";
 export const THORG_FALL_WINDUP_MS = THORG_SWEEP.windupMs;
 export const THORG_FALL_STRIKE_MS = THORG_SWEEP.strikeMs;
@@ -23,7 +23,6 @@ function predictSweep(scene, body, direction) {
     const pose = attackerPose("thorg", body.x, body.y, { flip: direction < 0, scale: body._bbVisualScale || 1, legacy });
     for (const hit of predictAttachedContacts(pathSweepShapes(pose, direction, previous, progress), { skip: struck })) {
       struck.add(hit.target.name);
-      playPredictedImpact(scene, hit.x, hit.y, 0xfff2d4, 16);
       notePredictedHit({ delivery: "attached", character: "thorg", target: hit.target, attacker: body });
     }
     previous = progress;

@@ -179,43 +179,53 @@ test('local and remote Thorg and Gloop playback map all eight directions, includ
   }
 });
 
-test('horizontal dash holds its final pose through early coast and yields immediately to other actions', () => {
+test('dash art holds its last frame through the coast and yields immediately to other actions', () => {
   let now = 1000;
   const api = {};
   vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/animationState'), 'utf8'), {
     babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code, { exports: api, Date: { now: () => now } });
+  const scene = {};
+  const holdMs = api.DASH_POSE_HOLD_MS;
+  assert.ok(holdMs > dependencies['../../../../shared/physics/movementPhysics.json'].dashDurationMs);
   for (const remote of [false, true]) {
     const calls = [];
     const sprite = { anims: { currentAnim: null, play(key) {
       calls.push(key); this.currentAnim = { key };
     } } };
-    const play = (logical, y = 0) => {
-      if (!remote) sprite._dash = logical === 'dashing' ? { x: 1, y } : null;
-      return api.playCharacterAnimation({ scene: {}, sprite, character: 'thorg', logical,
-        ...(remote ? { dashDirection: { x: 1, y } } : {}),
+    const play = (logical, y = 0, x = 1) => {
+      if (!remote) sprite._dash = logical === 'dashing' ? { x, y } : null;
+      return api.playCharacterAnimation({ scene, sprite, character: 'thorg', logical,
+        ...(remote ? { dashDirection: { x, y } } : {}),
         resolveAnimKey: (_scene, character, wanted) => `${character}-${wanted}` });
     };
-    now = 1000;
-    play('dashing');
-    now = 1160;
-    sprite.anims.isPlaying = false;
-    assert.equal(play('running'), 'thorg-dashright');
-    now = 1319;
-    assert.equal(play('falling'), 'thorg-dashright');
-    assert.equal(calls.length, 1, 'held pose must not restart');
-    now = 1320;
-    assert.equal(play('running'), 'thorg-running');
+    for (const [x, y, key, coast] of [[1, 0, 'dashright', 'running'], [1, 1, 'dashright', 'falling'],
+      [1, -1, 'dashdiagonal', 'jumping'], [0, -1, 'dashup', 'jumping']]) {
+      now += 10000;
+      const start = now;
+      calls.length = 0;
+      play('dashing', y, x);
+      now = start + 160;
+      sprite.anims.isPlaying = false;
+      assert.equal(play(coast), `thorg-${key}`, `${x},${y} holds through coast`);
+      now = start + holdMs - 1;
+      assert.equal(play('falling'), `thorg-${key}`);
+      assert.equal(calls.length, 1, 'held pose must not restart');
+      now = start + holdMs;
+      assert.equal(play('running'), 'thorg-running');
+    }
     for (const action of ['throw', 'special', 'jumping', 'ducking', 'sliding', 'dying', 'idle']) {
-      now += 1000;
+      now += 10000;
       play('dashing');
       now += 170;
       assert.equal(play(action), `thorg-${action}`);
     }
-    now += 1000;
-    play('dashing', 1);
-    now += 160;
-    assert.equal(play('falling'), 'thorg-falling', 'downward diagonal keeps original timing');
+    // A real jump out of an upward dash still interrupts the hold.
+    now += 10000;
+    play('dashing', -1, 0);
+    now += 170;
+    sprite._bbAnimationState.restartJump = true;
+    assert.equal(play('jumping'), 'thorg-jumping');
   }
 });
 

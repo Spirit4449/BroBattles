@@ -101,6 +101,15 @@ test('your team and the other team get different ring colours', () => {
   assert.notEqual(footRingColor(true), footRingColor(false));
 });
 
+test('a very wide body gets a ring only modestly wider than a typical one', () => {
+  const typical = footRingSize(30).width;
+  const wide = footRingSize(52).width;
+  const huge = footRingSize(200).width;
+  assert.ok(wide >= typical);
+  assert.ok(wide / typical < 52 / 30, 'ring grows slower than the body past a normal width');
+  assert.ok(huge <= wide * 1.2, 'ring width is capped');
+});
+
 test('the ring is a flattened oval of grid-aligned cells, brightest along its front', () => {
   const rects = [];
   let style = null;
