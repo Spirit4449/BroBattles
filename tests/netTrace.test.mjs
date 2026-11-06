@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { EventEmitter } from "node:events";
 import recorderModule from "../src/server/core/gameRoom/netTraceRecorder.js";
-import { analyzeArrivals, detectBounces, analyzeRun } from "../scripts/dev/netReportAnalysis.mjs";
+import { analyzeArrivals, detectBounces, analyzeRun, analyzeAttacks } from "../scripts/dev/netReportAnalysis.mjs";
 
 const { createNetTraceRecorder } = recorderModule;
 const TOKEN = "t".repeat(24);
@@ -122,4 +122,17 @@ test("run analysis attributes loop stalls to navigation builds and heavy bot tic
   assert.equal(report.server.attribution.withNav, 1);
   assert.equal(report.server.attribution.withBots, 1);
   assert.ok(report.timeline.length >= 2);
+});
+
+test("a predicted hit is timed only to the hit from the shot it was drawn for", () => {
+  // Shot at 1000 predicted at 1100 and confirmed at 1136; the next shot at
+  // 1518 lands at 2015 without a prediction of its own.
+  const client = { user: "me", offset: 0, keys: [[1000, "KeyJ", 1], [1518, "KeyJ", 1]], diag: [],
+    combat: [[1000, "tx", "game:action", "arrow", "a1"], [1100, "pred", "foe"], [1136, "hp", "foe", 90],
+      [1518, "tx", "game:action", "arrow", "a2"], [2015, "hp", "foe", 80]] };
+  const server = { actions: [], loopStalls: [], hits: [
+    { t: 1120, aTag: "c0", v: "foe", ok: true, dmg: 10 }, { t: 2000, aTag: "c0", v: "foe", ok: true, dmg: 10 }] };
+  const attacks = analyzeAttacks(client, server, "c0");
+  assert.deepEqual(attacks.samples.predToConfirm, [36]);
+  assert.deepEqual(attacks.samples.pressToConfirm, [136, 497]);
 });

@@ -381,11 +381,16 @@ export function analyzeAttacks(c, serverIndex, tag) {
   // Each damaging hit: the request behind it, the prediction drawn for it, and
   // when this client saw the target's health change.
   const perHit = [];
+  // A prediction belongs to the first hit after it from the request it was
+  // drawn for; a later shot's hit must not be timed from it.
+  const usedPreds = new Set();
   for (const h of hitsByMe) {
     const hitClient = h.t - off;
     const cause = tx.findLast(r => r[0] <= hitClient + 5 && r[0] >= hitClient - 2500);
     const health = hp.find(r => r[2] === h.v && r[0] >= hitClient - 5 && r[0] <= hitClient + 3000);
-    const pred = preds.findLast(r => r[2] === h.v && r[0] <= (health ? health[0] : hitClient + 400) && r[0] >= hitClient - 1500);
+    const pred = preds.findLast(r => r[2] === h.v && !usedPreds.has(r) && r[0] <= (health ? health[0] : hitClient + 400) &&
+      r[0] >= Math.max(hitClient - 1500, cause ? cause[0] - 1 : -Infinity));
+    if (pred) usedPreds.add(pred);
     const superRow = sp.find(r => r[0] >= hitClient - 5 && r[0] <= hitClient + 3000);
     perHit.push({
       t: h.t, target: h.v, type: h.type, rewindMs: h.rewindMs,
