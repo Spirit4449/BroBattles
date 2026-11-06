@@ -15,6 +15,7 @@ if (editorSession) document.body.classList.add('editor-playtest');
 import { preloadMapDocument } from '../game/maps/documentRuntime';
 import { buildScenery, preloadScenery } from '../game/maps/sceneryRuntime';
 import { installMovingPlatforms, passesThrough, platformClock, remoteRideOffset } from '../game/maps/movingPlatforms';
+import { installDisplayRatePhysics } from '../game/scene/displayRatePhysics';
 import { attachCharacterNetworks, discardCharacterPresentation } from '../game/characters/networkRegistry';
 import { noteRemoteView } from '../game/characters/shared/shotPrediction';
 // game.js
@@ -934,6 +935,9 @@ class GameScene extends Phaser.Scene {
     // Don't let players move until game is fully ready (unless late-joining a live game)
     this.input.keyboard.enabled = false;
     this.physics.world.setBoundsCollision(false, false, false, false);
+    // One physics step per rendered frame, so the local fighter moves smoothly
+    // on high-refresh displays instead of on alternate frames.
+    installDisplayRatePhysics(this);
     // The coin is smooth artwork shown at a quarter of its size, which nearest
     // sampling turns to shimmer as it spins.
     if (this.textures.exists("coin-spin")) {
@@ -1773,7 +1777,10 @@ class GameScene extends Phaser.Scene {
 
     processSnapshotInterpolation({
       snapshotBuffer,
-      now: performance.now(),
+      // The frame's own timestamp: every frame is shown one refresh apart, but
+      // performance.now() here also counts however long this frame's earlier
+      // work took, which made remote fighters step unevenly.
+      now: Number.isFinite(this.game?.loop?.now) ? this.game.loop.now : performance.now(),
       applyFrame: (frame) => {
         // Shots report this render time so the server aims at what was drawn.
         noteRemoteView(frame.targetMono);

@@ -34,6 +34,7 @@ const MOVING_SURFACE_LAG_S = 0.2;
 const movementPhysics = require("../../../shared/physics/movementPhysics.json");
 const effectManager = require("./effects/effectManager");
 const { stepBody } = require("../bots/physics");
+const { notePlayoutSample, restartPlayout } = require("./humanPlayout");
 
 function updateBodyGeometry(player, room) {
   const body = characterBody(player.char_class, player.flip);
@@ -71,6 +72,7 @@ function resetMovementBudget(player, now = Date.now()) {
   player._idleFallbackMoved = false;
   // Lag-compensated hits must never rewind across a teleport.
   player._posHistory = [];
+  restartPlayout(player);
   if (Number.isFinite(Number(player.x)) && Number.isFinite(Number(player.y))) pushPositionHistory(player, now);
 }
 
@@ -186,6 +188,9 @@ let lagCompensation = null;
 function pushPositionHistory(playerData, now = Date.now()) {
   if (!playerData) return;
   const history = (playerData._posHistory ||= []);
+  // Human samples are keyed slightly ahead of arrival (when snapshots publish
+  // them). A server-side move recorded now supersedes any not yet published.
+  while (history.length && history[history.length - 1].t > now) history.pop();
   history.push({
     x: Number(playerData.x) || 0,
     y: Number(playerData.y) || 0,
@@ -409,7 +414,8 @@ function handlePlayerInput(room, socketId, inputData) {
       });
     }
     resolveStomp(room, playerData, now);
-    pushPositionHistory(playerData, now);
+    // Keyed by when snapshots publish this position (see humanPlayout.js).
+    pushPositionHistory(playerData, notePlayoutSample(playerData, packetTimestamp, now));
     netTestLogger.noteInput(room, playerData, now, {
       dx: rawX - prevInputX,
       dy: rawY - prevInputY,

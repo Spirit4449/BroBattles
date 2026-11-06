@@ -1,4 +1,5 @@
 import { updateDash, endDash, drawDashCooldown, protectDashMotion, applyDashCoast } from '../scene/dash';
+import { integrateLikeReferenceStep } from '../scene/displayRatePhysics';
 import { spritePresentation } from '../characters/shared/spritePresentation';
 import { attachTeamFootRing } from './teamFootRing';
 import { applyTeamVisual } from "../../../shared/projectilePresentation";
@@ -748,9 +749,18 @@ export function createPlayer(
   const protectDash = delta => { if (!dead) protectDashMotion(scene, player, Date.now(), delta); };
   scene.physics.world.on("worldstep", protectDash);
   scene.physics.world.on("worldstep", protectDuckEdge);
+  // Jumps and falls follow the same path at every refresh rate.
+  const restoreIntegration = integrateLikeReferenceStep(player.body);
+  // Arcade writes the frame's step back to the sprite in postupdate, after
+  // the scene's update. Placing the name, bars and icons there keeps them on
+  // the sprite drawn this frame instead of one frame behind it.
+  const syncUiAfterPhysics = () => { if (!dead && player?.visible) syncLocalUiPosition(); };
+  scene.events.on("postupdate", syncUiAfterPhysics);
   scene.events.once("shutdown", () => {
     scene.physics.world.off("worldstep", protectDuckEdge);
     scene.physics.world.off("worldstep", protectDash);
+    scene.events.off("postupdate", syncUiAfterPhysics);
+    restoreIntegration();
   });
 
   // Falling out of the world is detected by the server from position packets.
@@ -1488,7 +1498,6 @@ export function handlePlayerMovement(scene) {
   updateAirborneState(isWallSliding);
 
   updatePointerAttackAimState();
-  syncLocalUiPosition();
   movementFx.updateLanding(scene, player, { dead, hidden: powerupInvisible });
   if (player.body.touching.down) player._lastGroundTime = Date.now();
   // Per-character effects update (e.g., Draven fire trail)
@@ -1605,9 +1614,8 @@ function applyInactiveInputFrame(scene) {
     fallback: "idle",
     force: true,
   });
-  // Input can be inactive while Arcade Physics still advances the body. Keep
-  // all world-space HUD elements attached even while controls are released.
-  syncLocalUiPosition();
+  // Input can be inactive while Arcade Physics still advances the body; the
+  // postupdate sync keeps world-space HUD elements attached meanwhile.
   networkInputState = {
     left: false,
     right: false,
@@ -1666,7 +1674,6 @@ function applyDashFrame(scene) {
   applyFlipOffsetLocal?.();
   playCharacterAnimation({ scene, sprite: player, character: currentCharacter,
     skinId: currentSkinId, resolveAnimKey, logical: "dashing", fallback: "falling", force: true });
-  syncLocalUiPosition();
   networkInputState = {
     direction: player._dash.inputX || 0, jumpHeld: false, jumpPressed: false,
     grounded: !!player.body.touching.down, ducking: !!player._ducking,

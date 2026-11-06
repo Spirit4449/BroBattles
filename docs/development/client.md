@@ -271,6 +271,20 @@ Art importers refresh these measurements when replacing an asset. When adjusting
 the layout, preview every cosmetic frame in solo and full-team matches at desktop
 and phone sizes (`node scripts/dev/test-generated-html.cjs --battle-layout`).
 
+Arcade physics steps once per rendered frame (`src/client/game/scene/displayRatePhysics.js`).
+Before each scene update the world's step is resized to the frame's smoothed delta, and frames
+longer than 1/60 s split into equal steps no longer than that. Arcade's default fixed 60 Hz step
+moved the local fighter on alternate frames of a 120 Hz display while the camera eased every frame,
+so the fighter shook against the view (Chrome and Edge run at the display's rate; Safari usually
+caps at 60 Hz). The local name, health, ammo and super bars and status icons are placed in
+`postupdate`, after Arcade writes the step back to the sprite, so they never trail it by a frame.
+Shorter steps alone would make Arcade's semi-implicit integration drift with the refresh rate
+(jumps peaked ~3 px higher at 120 Hz), so the local body adds `(v_after - v_before) * (1/60 s - step) / 2`
+to each step (`integrateLikeReferenceStep`): any step length traces the 60 Hz path, and a 60 Hz step
+is unchanged. Rules applied per frame (fast-fall gravity switching on past the apex, the jump
+launch ramp) still take effect at frame instants, which can differ from 60 Hz by about a pixel
+over a long fall at rates that are not multiples of 60.
+
 The game uses `Phaser.AUTO`: WebGL when supported, Canvas otherwise. Characters,
 map objects, particles, animations, and effects use ordinary Phaser APIs in both
 renderers. Keep renderer-specific resolution handling in

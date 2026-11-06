@@ -5,6 +5,7 @@ const { randomBytes } = require("node:crypto");
 const { getDuelGeometry, spawnForParticipant } = require('../../../shared/physics/duelGeometry');
 const { participantId } = require('./participants');
 const { createSnapshotEncoder } = require('../../../shared/snapshotDelta');
+const { publishedMotion } = require('./humanPlayout');
 
 function snapshotEncoder(room) {
   return (room._snapshotEncoder ||= createSnapshotEncoder());
@@ -221,17 +222,21 @@ function broadcastSnapshot(room, extraTiming = null) {
     snapshotKind: extraTiming ? "periodic" : "event",
   };
   const players = {};
+  // The wall-clock instant this snapshot's simulation time stands for.
+  const wallAt = Number.isFinite(tMono) ? wall - (sentMono - tMono) : wall;
 
   if (room.matchData?.editorDebugHitboxes) snapshot.damageHitboxes = damageHitboxSnapshot(room, wall);
 
   // Identity fields (participantId, isBot, team, ...) never change mid-match;
   // clients take them from game:init, so periodic snapshots carry state only.
   for (const playerData of room.players.values()) {
+    // Humans are drawn time-aligned rather than at their latest packet.
+    const motion = publishedMotion(playerData, wallAt);
     const playerSnapshot = {
-      x: roundPosition(playerData.x),
-      y: roundPosition(playerData.y),
-      vx: roundVelocity(playerData.vx),
-      vy: roundVelocity(playerData.vy),
+      x: roundPosition(motion.x),
+      y: roundPosition(motion.y),
+      vx: roundVelocity(motion.vx),
+      vy: roundVelocity(motion.vy),
       grounded: !!playerData.grounded,
       ducking: !!playerData.ducking && !!playerData.grounded,
       wallSliding: !!playerData.wallSliding,
