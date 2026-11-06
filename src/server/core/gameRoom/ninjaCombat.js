@@ -5,7 +5,8 @@ const {sweep}=require('../../../shared/characters/huntressProjectile');
 const {characterBody}=require('../../../shared/physics/duelGeometry');
 const {participantId,getParticipant}=require('./participants');
 const {timing}=require('./huntressCombat');
-const {clampViewRewind,poseAt}=require('./lagCompensation');
+const {poseAt}=require('./lagCompensation');
+const {clampDeliveryRewind}=require('../../../shared/combat/attackDelivery');
 const {getCenterCrateTarget}=require('./attackRuntimes/targets');
 function initialize(room){room.ninjaCombatVersion=model.VERSION;room._ninja={active:new Map(),pending:[],requests:new Map(),terminals:[]};}
 function emit(room,p,action){room.io.to(`game:${room.matchId}`).emit('game:action',{playerName:p.name,character:'ninja',action:{...action,ninjaCombatVersion:model.VERSION,ownerEcho:true,...timing(room)}});}
@@ -29,7 +30,7 @@ function request(room,p,data={},special=false){
     p._visibleAttack={at:now,startupMs:0,angle};
     if(special)room.io.to(`game:${room.matchId}`).emit('player:special',{username:p.name,character:'ninja',aim:{angle}});
     const count=special?model.swarmConfig().count:1;
-    const viewRewindMs=clampViewRewind(data.viewRewindMs);
+    const viewRewindMs=clampDeliveryRewind('released',data.viewRewindMs);
     for(let i=0;i<count;i++)state.pending.push({owner:participantId(p),requestId:id,angle,index:special?i:null,viewRewindMs,
       due:room._tickId+Math.ceil((special?i*model.swarmConfig().releaseMs:0)/model.STEP_MS)});
   }

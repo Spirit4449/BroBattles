@@ -6,6 +6,7 @@ const characterCombat = require('../src/server/core/gameRoom/characterCombatRegi
 const { stampViewRewind, rewindAllowance, VIEW_BUFFER_ALLOWANCE_MS, createLatencyProbe, poseAt } = require('../src/server/core/gameRoom/lagCompensation');
 const { HIT_STALENESS_MAX_MS } = require('../src/server/core/gameRoomConfig');
 const { FIXED_DT_MS: STEP } = require('../src/shared/gameConstants');
+const { DELIVERIES } = require('../src/shared/combat/attackDelivery');
 
 // Every human shot: the request a browser sends, and the room entry point.
 const SHOOTERS = {
@@ -14,13 +15,17 @@ const SHOOTERS = {
   wizard: (room, p, id) => room.handlePlayerAction(p.participantId, request(room, { type: 'wizard-fireball', id, angle: 0, direction: 1 })),
   gloop: (room, p, id) => room.handlePlayerAction(p.participantId, request(room, { type: 'gloop-slimeball', id, direction: 1,
     target: { x: p.x + 220, y: p.y } })),
+  thorg: (room, p, id) => room.handlePlayerAction(p.participantId, request(room, { type: 'thorg-fall', id, direction: 1 })),
+  draven: (room, p, id) => room.handlePlayerAction(p.participantId, request(room, { type: 'draven-splash', id, direction: 1 })),
   'gloop hook': (room, p, id) => { p.superCharge = p.maxSuperCharge; return room.requestSpecial(p.participantId, request(room, { id, aim: { angle: 0 } })); },
 };
+// Attached attacks, with a target inside their reach.
+const MELEE = { thorg: { targetX: 160 }, draven: { targetX: 180 } };
 let viewLagMs = 0;
 // What the socket handlers do with a browser request rendered `viewLagMs` behind.
 function request(room, data) { return stampViewRewind(room, { ...data, viewMono: room._simulationMono - viewLagMs }, { samples: [{ at: performance.now(), rtt: HIT_STALENESS_MAX_MS }] }); }
 
-function arena(t, shooter) {
+function arena(t, shooter, { targetX = 330 } = {}) {
   const clock = { now: 5_000_000 };
   t.mock.method(Date, 'now', () => clock.now);
   const f = makeRoom({ characters: [shooter.split(' ')[0], 'thorg'] });
@@ -28,7 +33,7 @@ function arena(t, shooter) {
   const { room } = f, [p, target] = f.players;
   Object.assign(p, { x: 100, y: 300, isBot: false, connected: true, loaded: true });
   // A tall target across every shot's path, whatever its arc.
-  Object.assign(target, { x: 330, y: 300, isBot: false, connected: true, loaded: true,
+  Object.assign(target, { x: targetX, y: 300, isBot: false, connected: true, loaded: true,
     _bodyHalfWidth: 20, _bodyHalfHeight: 400, _bodyCenterOffsetX: 0, _bodyCenterOffsetY: 0 });
   room.geometry = { ...room.geometry, colliders: [] };
   room.gameMode = null; room._tickId = 0; room._simulationMono = 90_000;
@@ -49,15 +54,16 @@ function arena(t, shooter) {
   };
   // The target stood in the path until `ms` after the shot, then stepped away.
   f.leaveAfter = ms => {
-    const away = { x: 330, y: -5000 };
-    target._posHistory = [{ x: 330, y: 300, t: clock.now - 1000 }, { x: 330, y: 300, t: clock.now + ms },
+    const away = { x: targetX, y: -5000 };
+    target._posHistory = [{ x: targetX, y: 300, t: clock.now - 1000 }, { x: targetX, y: 300, t: clock.now + ms },
       { ...away, t: clock.now + ms + 1 }];
     Object.assign(target, away);
   };
   return f;
 }
 
-for (const shooter of Object.keys(SHOOTERS)) {
+const SHOTS = Object.keys(SHOOTERS).filter((name) => !MELEE[name]);
+for (const shooter of SHOTS) {
   test(`${shooter}: hits where the shooter saw a target that has since stepped away, within the rewind cap`, t => {
     // Reference: how long the shot takes to reach a target that stays put.
     viewLagMs = 0;
@@ -75,6 +81,24 @@ for (const shooter of Object.keys(SHOOTERS)) {
   });
 }
 
+for (const [attacker, options] of Object.entries(MELEE)) {
+  test(`${attacker}: a swing hits where the attacker saw a target that has since stepped away, within the attached cap`, t => {
+    const cap = DELIVERIES.attached.rewindCapMs;
+    assert.ok(cap < HIT_STALENESS_MAX_MS, 'melee rewinds less far than shots');
+    viewLagMs = 0;
+    const strikeMs = arena(t, attacker, options).fire();
+    assert.ok(strikeMs !== null, `${attacker} reaches a target that stays put`);
+    // The target leaves 30 ms before the swing reaches it on the live timeline.
+    for (const [lag, hits] of [[0, false], [cap - 20, true], [cap + 120, false]]) {
+      viewLagMs = lag;
+      const f = arena(t, attacker, options);
+      f.leaveAfter(strikeMs - (lag > cap ? lag - 20 : 30));
+      assert.equal(f.fire() !== null, hits, `${attacker} with the attacker's view ${lag} ms behind`);
+    }
+    viewLagMs = 0;
+  });
+}
+
 test('the server bounds claimed view age by observed latency and rejects malformed times', t => {
   const room = { _simulationMono: 1000 };
   assert.equal(stampViewRewind(room, { viewMono: 880, viewRewindMs: 999 }).viewRewindMs, 120);
@@ -84,7 +108,7 @@ test('the server bounds claimed view age by observed latency and rejects malform
   assert.equal(stampViewRewind(room, null), null);
 });
 
-test('bot shots and melee use live target positions', t => {
+test('bot shots use live target positions, and melee rewinds no further than the attached cap', t => {
   viewLagMs = 0;
   const f = arena(t, 'wizard'), [p] = f.players;
   p.isBot = true;
@@ -94,8 +118,8 @@ test('bot shots and melee use live target positions', t => {
   for (let i = 0; i < 120; i++) f.step();
   assert.equal(f.players[1].health, f.players[1].maxHealth);
   const melee = require('../src/server/core/gameRoom/attackRuntimes/attackIdentity')
-    .attackIdentity(p, { type: 'thorg-fall', viewRewindMs: 200 }, { runtime: { kind: 'path-rect' } }, Date.now());
-  assert.equal(melee.viewRewindMs, 0);
+    .attackIdentity(p, { type: 'thorg-fall', viewRewindMs: HIT_STALENESS_MAX_MS }, { runtime: { kind: 'path-rect' } }, Date.now());
+  assert.equal(melee.viewRewindMs, DELIVERIES.attached.rewindCapMs);
 });
 
 test('a Huntress arrow attaches relative to where the shooter saw the target', t => {
@@ -174,17 +198,18 @@ test('rewind interpolates position but preserves discrete historical body dimens
 for (const shooter of Object.keys(SHOOTERS)) {
   test(`${shooter}: contact uses the historical body, not a newer smaller body`, t => {
     viewLagMs = 0;
-    const travel = arena(t, shooter).fire();
-    const f = arena(t, shooter), target = f.players[1];
+    const melee = MELEE[shooter];
+    const travel = arena(t, shooter, melee).fire();
+    const f = arena(t, shooter, melee), target = f.players[1];
     const { collisionPose } = require('../src/server/core/gameRoom/lagCompensation');
     const standing = collisionPose(target), now = Date.now();
     // A posture transition moves the occupied area out of the flight path.
     Object.assign(target, { _bodyHalfHeight: 10, _bodyCenterOffsetY: 1000 });
     target._posHistory = [
       { x: target.x, y: target.y, t: now - 1000, body: standing },
-      { x: target.x, y: target.y, t: now + travel - 100, body: collisionPose(target) },
+      { x: target.x, y: target.y, t: now + travel - (melee ? 30 : 100), body: collisionPose(target) },
     ];
-    viewLagMs = 200;
+    viewLagMs = melee ? DELIVERIES.attached.rewindCapMs - 20 : 200;
     assert.ok(f.fire() !== null);
     viewLagMs = 0;
   });

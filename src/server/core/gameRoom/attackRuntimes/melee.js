@@ -2,9 +2,10 @@ const { exposeDamageHitbox } = require('../damageHitboxes');
 const { getParticipant } = require('../participants');
 const { attackIdentity } = require('./attackIdentity');
 const effectManager = require("../effects/effectManager");
-const { THORG_SWEEP, sampleThorgHitbox } = require("../../../../shared/characters/thorgSweep");
-const { resolvePlayerHeight, getBoundsCenter, normalizeAngleDelta, getPlayerBounds } = require('./geometry');
-const { hitRectTargets, hitCapsuleTargets, getObjectiveTargets, CENTER_CRATE_TARGET, emitServerHit, buildTargetList, emitHitAction } = require('./targets');
+const { THORG_SWEEP } = require("../../../../shared/characters/thorgSweep");
+const { attachedRectShape, pathSweepShapes, pathSweepProgress, sectorShape, shapeTouches } = require("../../../../shared/combat/attackDelivery");
+const { resolvePlayerHeight } = require('./geometry');
+const { hitRectTargets, hitCapsuleTargets, getObjectiveTargets, CENTER_CRATE_TARGET, emitServerHit, buildTargetList, emitHitAction, shotTargetBounds } = require('./targets');
 
 function buildAttachedRectAttack(playerData, actionData, descriptor, now) {
   return {
@@ -54,44 +55,23 @@ function buildAttachedConeAttack(playerData, actionData, descriptor, now) {
   };
 }
 
+// Attached attacks: shapes come from src/shared/combat/attackDelivery.js, the
+// same functions the attacker's client predicts with, and targets are tested
+// where the attacker saw them (shotTargetBounds, bounded by the delivery).
+function attackerPoseOf(attacker, extra = {}) {
+  return { x: Number(attacker.x), y: Number(attacker.y), flip: !!attacker.flip,
+    height: resolvePlayerHeight(attacker), ...extra };
+}
+
 function tickAttachedRect(room, attack, descriptor, now) {
   const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return true;
   const runtime = descriptor?.runtime || {};
   const elapsed = now - attack.createdAt;
   const totalDurationMs = Math.max(1, Number(runtime.activeWindowMs) || 1);
-  const sampleElapsed = Math.min(elapsed, totalDurationMs);
-  if (sampleElapsed < Math.max(0, Number(runtime.damageStartMs) || 0)) {
-    return elapsed >= totalDurationMs;
+  for (const shape of attachedRectShape(attackerPoseOf(attacker), runtime, elapsed)) {
+    hitRectTargets(room, attack, descriptor, shape, now);
   }
-
-  const direction = attacker.flip ? -1 : 1;
-  const width = Number(runtime.width) || 1;
-  const height = Number(runtime.height) || 1;
-  const cx = Number(attacker.x) + direction * (Number(runtime.tipOffset) || 0);
-  const baseCenterY =
-    Number(attacker.y) -
-    resolvePlayerHeight(attacker) * (Number(runtime.centerYFactor) || 0);
-  const growT = Math.min(
-    1,
-    sampleElapsed / Math.max(1, Number(runtime.growDurationMs) || 1),
-  );
-  const currentHeight =
-    Math.max(1, Number(runtime.minHeight) || 1) +
-    (height - Math.max(1, Number(runtime.minHeight) || 1)) * growT;
-  const finalBottom = baseCenterY + height / 2;
-  hitRectTargets(
-    room,
-    attack,
-    descriptor,
-    {
-      left: cx - width / 2,
-      right: cx + width / 2,
-      top: finalBottom - currentHeight,
-      bottom: finalBottom,
-    },
-    now,
-  );
   return elapsed >= totalDurationMs;
 }
 
@@ -106,38 +86,26 @@ function tickAttachedCone(room, attack, descriptor, now) {
     return elapsed >= totalDurationMs;
   }
 
-  const baseAnchorX = Number.isFinite(Number(attack.anchorX))
-    ? Number(attack.anchorX)
-    : Number(attacker.x) || 0;
-  const baseAnchorY = Number.isFinite(Number(attack.anchorY))
-    ? Number(attack.anchorY)
-    : Number(attacker.y) || 0;
-  const angle = Number(attack.angle) || 0;
-  const halfSpread =
-    (Number(attack.spreadDeg || runtime.spreadDeg || 56) * Math.PI) / 360;
-  const radius = Math.max(
-    1,
-    Number(attack.radius) || Number(runtime.radius) || 1,
-  );
-  const innerRadius = Math.max(
-    0,
-    Number(attack.innerRadius) || Number(runtime.innerRadius) || 0,
-  );
+  const anchor = {
+    x: Number.isFinite(Number(attack.anchorX)) ? Number(attack.anchorX) : Number(attacker.x) || 0,
+    y: Number.isFinite(Number(attack.anchorY)) ? Number(attack.anchorY) : Number(attacker.y) || 0,
+  };
+  const shape = sectorShape(anchor, {
+    angle: Number(attack.angle) || 0,
+    halfSpread: (Number(attack.spreadDeg || runtime.spreadDeg || 56) * Math.PI) / 360,
+    radius: Math.max(1, Number(attack.radius) || Number(runtime.radius) || 1),
+    innerRadius: Math.max(0, Number(attack.innerRadius) || Number(runtime.innerRadius) || 0),
+  });
 
-  exposeDamageHitbox(room, attack, { kind: 'sector', x: baseAnchorX, y: baseAnchorY, radius: radius + 24, innerRadius, angle, halfSpread }, now);
+  exposeDamageHitbox(room, attack, { kind: 'sector', x: shape.x, y: shape.y, radius: shape.radius + 24,
+    innerRadius: shape.innerRadius, angle: shape.angle, halfSpread: shape.halfSpread }, now);
   for (const objective of getObjectiveTargets(room, attacker)) {
     if (attack.hitSet?.has(objective.targetName)) continue;
-    const objectiveCenter = getBoundsCenter(objective.bounds);
-    const dx = objectiveCenter.x - baseAnchorX;
-    const dy = objectiveCenter.y - baseAnchorY;
-    const dist = Math.hypot(dx, dy);
-    const theta = Math.atan2(dy, dx);
-    const delta = Math.abs(normalizeAngleDelta(theta, angle));
     // Tested at its centre, so the crate's half width counts as reach: you
     // swing at its side, and it should not need hugging to take the hit.
-    const reach = radius + 24 +
+    const reach = 24 +
       (objective.targetName === CENTER_CRATE_TARGET ? (objective.bounds.right - objective.bounds.left) / 2 : 0);
-    if (dist >= innerRadius && dist <= reach && delta <= halfSpread) {
+    if (shapeTouches(shape, objective.bounds, { reach })) {
       attack.hitSet?.add(objective.targetName);
       emitServerHit(room, attack, objective.targetName, {
         damage: attack.damage,
@@ -147,15 +115,7 @@ function tickAttachedCone(room, attack, descriptor, now) {
 
   for (const target of buildTargetList(room, attacker.name, attacker.team)) {
     if (attack.hitSet?.has(target.name)) continue;
-    const bounds = getPlayerBounds(target);
-    const center = getBoundsCenter(bounds);
-    const dx = center.x - baseAnchorX;
-    const dy = center.y - baseAnchorY;
-    const dist = Math.hypot(dx, dy);
-    if (dist < innerRadius || dist > radius + 24) continue;
-    const theta = Math.atan2(dy, dx);
-    const delta = Math.abs(normalizeAngleDelta(theta, angle));
-    if (delta > halfSpread) continue;
+    if (!shapeTouches(shape, shotTargetBounds(attack, target, now), { reach: 24 })) continue;
     attack.hitSet?.add(target.name);
     emitServerHit(room, attack, target.name, { damage: attack.damage });
     emitHitAction(room, attack, descriptor, attacker, target, now);
@@ -167,26 +127,14 @@ function tickAttachedCone(room, attack, descriptor, now) {
 function tickPathRect(room, attack, descriptor, now) {
   const attacker = getParticipant(room, attack.attackerParticipantId);
   if (!attacker || !attacker.isAlive) return true;
-  const scale = effectManager.isActive(attacker, "thorgRage", now) ? THORG_SWEEP.rageScale : 1;
-  const elapsed = now - attack.createdAt;
-  if (elapsed < THORG_SWEEP.windupMs) return false;
-  const progress = Math.min(1, (elapsed - THORG_SWEEP.windupMs) / THORG_SWEEP.strikeMs);
-  const previous = attack.previousProgress || 0;
-  // Subsample the curved sweep even after a delayed tick, so neither side can tunnel.
-  const steps = Math.max(1, Math.ceil((progress - previous) * 96));
-  const legacy = ['thorg-storm', 'thorg-iron'].includes(attacker.selected_skin_id);
-  for (let i = 0; i <= steps; i++) {
-    const hitbox = sampleThorgHitbox({ x: Number(attacker.x), y: Number(attacker.y), direction: attack.direction, scale, legacy },
-      previous + (progress - previous) * i / steps);
-    hitCapsuleTargets(
-      room,
-      attack,
-      descriptor,
-      hitbox.a,
-      hitbox.b,
-      hitbox.radius,
-      now,
-    );
+  const progress = pathSweepProgress(now - attack.createdAt);
+  if (progress === null) return false;
+  const pose = attackerPoseOf(attacker, {
+    scale: effectManager.isActive(attacker, "thorgRage", now) ? THORG_SWEEP.rageScale : 1,
+    legacy: ['thorg-storm', 'thorg-iron'].includes(attacker.selected_skin_id),
+  });
+  for (const shape of pathSweepShapes(pose, attack.direction, attack.previousProgress || 0, progress)) {
+    hitCapsuleTargets(room, attack, descriptor, shape.a, shape.b, shape.radius, now);
   }
   attack.previousProgress = progress;
   return progress >= 1;

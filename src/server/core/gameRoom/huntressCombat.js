@@ -4,7 +4,8 @@ const { snapshotEpoch } = require('./roomStateManager');
 const model = require('../../../shared/characters/huntressProjectile');
 const { participantId, getParticipant } = require('./participants');
 const { characterBody } = require('../../../shared/physics/duelGeometry');
-const { clampViewRewind, poseAt } = require('./lagCompensation');
+const { poseAt } = require('./lagCompensation');
+const { clampDeliveryRewind } = require('../../../shared/combat/attackDelivery');
 const { getCenterCrateTarget } = require('./attackRuntimes/targets');
 
 function initialize(room) {
@@ -58,7 +59,7 @@ function request(room, p, data, special = false) {
     p.lastCombatAt = now;
     const startup = model.attackConfig(special).castDelayMs || 0;
     state.pending.push({ ownerId: participantId(p), id, shot, dueTick: room._tickId + Math.ceil(startup / model.STEP_MS),
-      viewRewindMs: clampViewRewind(data?.viewRewindMs) });
+      viewRewindMs: clampDeliveryRewind('released', data?.viewRewindMs) });
     // Keep public windups available to existing animations and bot perception.
     require('./characterActionRegistry').broadcastAction(room, p, {
       type: special ? 'huntress-windup-special' : 'huntress-arrow', id, angle: shot.angle, startup,

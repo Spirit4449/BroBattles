@@ -2,7 +2,9 @@ const huntressModel = require('../../../shared/characters/huntressProjectile');
 const { EFFECT_RULES } = require('../../../shared/effectRules');
 const ninjaCombat = require('./ninjaCombat');
 const huntressCombat = require('./huntressCombat');
-const { isTrustedProjectileContact } = require('./attackRuntimes/projectileLifecycle');
+const { isTrustedProjectileContact, isRuntimeContact } = require('./attackRuntimes/projectileLifecycle');
+const { deliveryOf } = require('../../../shared/combat/attackDelivery');
+const { positionAt } = require('./lagCompensation');
 const { wallBetween } = require('./attackRuntimes/geometry');
 const { getParticipant, participantId } = require('./participants');
 const {
@@ -60,6 +62,8 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     const trustedHuntress = server && huntressCombat.isTrustedContact(room, huntressProjectile, payload);
     const trustedProjectile = trustedNinja || trustedHuntress ||
       (server && isTrustedProjectileContact(room, runtimeProjectile, payload));
+    const attachedContact = server && deliveryOf(runtimeProjectile?.runtimeKind) === 'attached' &&
+      isRuntimeContact(room, runtimeProjectile, payload);
     if (attacker?.char_class === 'huntress' &&
         attackerName !== targetName && !trustedHuntress) return;
     if (!server && (getParticipant(room, socketId) !== attacker || attacker?.isBot)) return;
@@ -176,6 +180,13 @@ function handleHit(room, socketId, payload, { server = false, huntressProjectile
     if (trustedProjectile) {
       aPos = { x: attacker.x, y: attacker.y };
       tPos = targetObjective ? { x: targetObjective.x, y: targetObjective.y } : { x: target.x, y: target.y };
+    } else if (attachedContact) {
+      // The runtime already tested its shape on the attacker as it stands
+      // against the target where the attacker saw it; walls and facing are
+      // checked between those same two positions.
+      aPos = { x: attacker.x, y: attacker.y };
+      tPos = targetObjective ? { x: Number(targetObjective.x) || 0, y: Number(targetObjective.y) || 0 }
+        : positionAt(target, runtimeProjectile.viewRewindMs);
     } else if (targetObjective) {
       aPos = room._getHistoricalPosition(attacker, attackTimeRaw);
       tPos = { x: Number(targetObjective.x) || 0, y: Number(targetObjective.y) || 0 };

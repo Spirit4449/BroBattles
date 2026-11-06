@@ -29,6 +29,8 @@ function isMovementSuppressed(player, now) {
   return (player?.effects?.dravenInfernoUntil || 0) > now;
 }
 
+// An area delivery (shared/combat/attackDelivery.js): warned and lasting, so it
+// tests targets where they are now and is never rewound.
 function tick(room, caster, now) {
   if (
     !caster ||

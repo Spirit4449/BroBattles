@@ -6,7 +6,8 @@ const { sweep } = require('../../../../shared/characters/huntressProjectile');
 const { isDetachedProjectile } = require('./projectileLifecycle');
 const { poseAt } = require('../lagCompensation');
 
-// Shots test targets where their shooter saw them; melee has no rewind.
+// Attacks test targets where their attacker saw them: `viewRewindMs` is
+// already bounded by the attack's delivery (shared/combat/attackDelivery.js).
 function shotTargetBounds(attack, target, now = Date.now()) {
   return getPlayerBounds(target, poseAt(target, attack?.viewRewindMs, now));
 }
@@ -19,8 +20,8 @@ function emitServerHit(room, attack, targetName, payload = {}) {
       target: targetName,
       attackType: attack.attackType,
       instanceId: attack.instanceId,
-      // Range checks for attached shots (hooks) use the positions the contact
-      // was tested against, not where the target has moved since.
+      // Range checks use the positions the contact was tested against, not
+      // where the target has moved since.
       attackTime: Date.now() - (Number(attack.viewRewindMs) || 0),
       damage: payload.damage,
     }, { server: true, runtimeProjectile: attack });
@@ -150,6 +151,7 @@ function emitHitAction(room, attack, descriptor, attacker, target, now) {
       x: baseX + (Number(eventCfg.offsetX) || 0),
       y: baseY + (Number(eventCfg.offsetY) || 0),
       attacker: attacker.name,
+      target: target.name,
       ownerEcho: eventCfg.ownerEcho === true,
     },
     t: now,
