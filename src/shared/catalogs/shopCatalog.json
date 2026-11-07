@@ -67,9 +67,7 @@
     },
     "sales": {
       "discountPercent": 20,
-      "pinnedOfferIds": [
-        "ironbound-arsenal"
-      ],
+      "pinnedOfferIds": [],
       "promotedOfferIds": [
         "card-astral-amethyst",
         "card-mjolnirs-anvil",
@@ -84,64 +82,6 @@
     }
   },
   "offers": [
-    {
-      "id": "ironbound-arsenal",
-      "section": "sales",
-      "kind": "bundle",
-      "name": "Ironbound Arsenal",
-      "description": "Forge a complete Thorg loadout with Ironbound, Shuriken Strike, and a 500 coin battle fund.",
-      "rarity": "epic",
-      "badge": "BUNDLE",
-      "banner": "/assets/shop/banners/ironbound-arsenal-scene.webp",
-      "price": {
-        "type": "virtual",
-        "currency": "gems",
-        "amount": 250
-      },
-      "purchaseLimit": "lifetime",
-      "eligibility": {
-        "requiresNotOwned": {
-          "kind": "skin",
-          "id": "thorg-iron"
-        }
-      },
-      "grants": [
-        {
-          "kind": "skin",
-          "id": "thorg-iron"
-        },
-        {
-          "kind": "card",
-          "id": "shuriken-strike"
-        },
-        {
-          "kind": "currency",
-          "currency": "coins",
-          "amount": 500
-        }
-      ]
-    },
-    {
-      "id": "skin-thorg-iron",
-      "section": "skins",
-      "kind": "item",
-      "name": "Ironbound",
-      "description": "A battle-worn epic armor set forged for Thorg.",
-      "rarity": "epic",
-      "banner": "/assets/shop/banners/ironbound-scene.webp",
-      "price": {
-        "type": "virtual",
-        "currency": "gems",
-        "amount": 250
-      },
-      "purchaseLimit": "lifetime",
-      "grants": [
-        {
-          "kind": "skin",
-          "id": "thorg-iron"
-        }
-      ]
-    },
     {
       "id": "card-shuriken-strike",
       "section": "profile",

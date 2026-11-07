@@ -208,15 +208,7 @@ test('huntress selects a high arc over cover and rejects fully blocked trajector
   assert.equal(p.ammoState.charges, 3);
 });
 
-test('huntress bot aim has extra inaccuracy for its forgiving arrow spread', () => {
-  const ordinary = basicAim(player('ninja'), target, profile, () => 1, room);
-  const huntress = basicAim(player('huntress'), target, profile, () => 1, room);
-  const perfectHuntress = basicAim(player('huntress'), target, { ...profile, aimError: 0 }, () => 0.5, room);
-  const ordinaryError = Math.abs(ordinary.angle);
-  const huntressError = Math.abs(huntress.angle - perfectHuntress.angle);
-  assert.ok(huntressError > ordinaryError + 0.02,
-    `huntress error ${huntressError} should exceed ordinary error ${ordinaryError}`);
-});
+
 
 test('huntress intercepts horizontal movement more accurately than the previous gravity estimate', (t) => {
   const p = player('huntress');

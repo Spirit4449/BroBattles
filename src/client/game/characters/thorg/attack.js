@@ -19,8 +19,7 @@ function predictSweep(scene, body, direction) {
     if (!body.active) { stop(); return; }
     const progress = pathSweepProgress(performance.now() - startedAt);
     if (progress === null) return;
-    const legacy = /thorg-(storm|iron)/.test(String(body._bbSkinTextureKey || body.texture?.key));
-    const pose = attackerPose("thorg", body.x, body.y, { flip: direction < 0, scale: body._bbVisualScale || 1, legacy });
+    const pose = attackerPose("thorg", body.x, body.y, { flip: direction < 0, scale: body._bbVisualScale || 1 });
     for (const hit of predictAttachedContacts(pathSweepShapes(pose, direction, previous, progress), { skip: struck })) {
       struck.add(hit.target.name);
       notePredictedHit({ delivery: "attached", character: "thorg", target: hit.target, attacker: body });

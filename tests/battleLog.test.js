@@ -8,12 +8,6 @@ const {
   getHighestWinStreak,
 } = require("../src/server/services/match/battleLog");
 
-test("formatModeLabel returns friendly readable mode labels", () => {
-  assert.equal(formatModeLabel("duels", "duels-1v1"), "1v1 Duel");
-  assert.equal(formatModeLabel("duels", "duels-2v2"), "2v2 Duel");
-  assert.equal(formatModeLabel("bank-bust", "bank-bust-3v3"), "Bank Bust 3v3");
-});
-
 test("recordMatchOutcome writes summary JSON and updates participants", async () => {
   const executedQueries = [];
   const mockDb = {
@@ -475,7 +469,6 @@ test("renderer hides unknown results and combat stats, labels the summary, and e
   assert.match(container.innerHTML, /No Battle Results Yet/);
 });
 
-
 test("current win streak ignores draws and resets only on losses", async () => {
   const history = [];
   const db = { async runQuery(sql, params) {
@@ -505,7 +498,6 @@ test("current win streak ignores draws and resets only on losses", async () => {
   assert.equal(await getCurrentWinStreak(db, 1), 208, 'streaks are not truncated to a page');
   assert.equal(await getCurrentWinStreak(db, null), 0);
 });
-
 
 test("highest win streak preserves historical records across losses, draws and history pages", async () => {
   const history = [];

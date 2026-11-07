@@ -1,20 +1,18 @@
-// Enlarge medium art masters exactly 2x without changing their pixels or palette.
+// Install native-resolution medium masters without changing pixels or palette.
 // Usage: node scripts/art/install-shop-banner-art.cjs <directory-of-named-pngs>
-// Masters must be half the installed dimensions listed below.
+// CSS scales these native masters with nearest-neighbor rendering.
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const sharp = require('../../spritesheet-generator/node_modules/sharp');
 
 const root = path.resolve(__dirname, '../..');
 const banners = {
-  'daily-coins-scene': [2048, 768],
-  'daily-gems-scene': [2048, 768],
-  'coin-satchel-scene': [1536, 1024],
-  'gem-pouch-scene': [1536, 1024],
-  'gem-cache-scene': [1536, 1024],
-  'gem-vault-scene': [1536, 1024],
-  'ironbound-scene': [1536, 1024],
-  'ironbound-arsenal-scene': [2048, 768],
+  'daily-coins-scene': [1024, 384],
+  'daily-gems-scene': [1024, 384],
+  'coin-satchel-scene': [768, 512],
+  'gem-pouch-scene': [768, 512],
+  'gem-cache-scene': [768, 512],
+  'gem-vault-scene': [768, 512],
 };
 
 async function main() {
@@ -25,16 +23,15 @@ async function main() {
     const input = path.join(source, `${name}.png`);
     await fs.access(input);
     const metadata = await sharp(input).metadata();
-    if (metadata.width !== width / 2 || metadata.height !== height / 2) {
-      throw new Error(`${name} master must be ${width / 2}x${height / 2}.`);
+    if (metadata.width !== width || metadata.height !== height) {
+      throw new Error(`${name} master must be ${width}x${height}.`);
     }
   }
   for (const [name, [width, height]] of Object.entries(banners)) {
     await sharp(path.join(source, `${name}.png`))
-      .resize(width, height, { kernel: 'nearest' })
       .webp({ lossless: true, effort: 6 })
       .toFile(path.join(root, 'public/assets/shop/banners', `${name}.webp`));
-    console.log(`${name}: ${width}x${height}, 2x nearest-neighbor, original palette`);
+    console.log(`${name}: ${width}x${height}, native resolution, original palette`);
   }
 }
 

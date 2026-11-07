@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
 const defaults = require('../../../shared/maps').mapDefaults;
-const { clone, mapSummary, validateDocument } = require('../../../shared/maps/mapDocument');
+const { clone, mapSummary, validateDocument, upgradeDuelMap } = require('../../../shared/maps/mapDocument');
 const revisionOf = doc => createHash('sha256').update(JSON.stringify(doc)).digest('hex');
 // Bounded staleness for edits made outside this process (other workers, manual
 // file edits). Saves through this repository invalidate immediately.
@@ -14,7 +14,7 @@ class MapRepository {
     const file = path.join(this.directory, `${Number(id)}.json`);
     const document = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : clone(defaults.find(d => d.id === Number(id)) || null);
     if (!document) throw Object.assign(new Error('Map not found'), {status:404});
-    return document;
+    return upgradeDuelMap(document);
   }
   get(id) {
     const document = this.readDocument(id);
@@ -47,6 +47,7 @@ class MapRepository {
   }
   invalidateMetadata() { this._metadata = null; }
   save(document, expectedRevision) {
+    document = upgradeDuelMap(document);
     const errors = validateDocument(document);
     if (!errors.length) errors.push(...require("./mapAssetValidation").validateAssets(document));
     if (errors.length) throw Object.assign(new Error('Map validation failed'), {status:422, errors});

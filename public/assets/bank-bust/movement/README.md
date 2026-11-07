@@ -56,3 +56,5 @@ Volume adjustment: Bank Bust landing playback gain is now 2x (reduced from
 
 Further volume adjustment: Bank Bust landing playback gain is now 1.2x
 (reduced from 2x). The sample itself is unchanged.
+
+Delivery files use MP3 VBR quality 2, encoded with FFmpeg from the WAV cues above; sample rate and mono layout are preserved. The table documents the original source cuts.

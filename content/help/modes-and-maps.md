@@ -2,7 +2,7 @@ The mode decides how you win. The map decides where the fight happens. Pick both
 
 ## Duels
 
-Duels is an elimination battle in **1v1 or 2v2**. Knock out the other side before your team is eliminated. There are no respawns, so surviving and helping a teammate escape can matter as much as chasing one more hit.
+Duels is an elimination battle in **1v1 or 2v2**. Both formats share the same four maps; the format changes the number of players. Knock out the other side before your team is eliminated. There are no respawns, so surviving and helping a teammate escape can matter as much as chasing one more hit.
 
 If a Duel stays tied, sudden death pushes the action toward a finish.
 

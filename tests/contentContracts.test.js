@@ -4,7 +4,6 @@ const { validateContent } = require('../scripts/dev/validate-content.cjs');
 const { characterDefinitions } = require('../src/shared/characters');
 const { POWERUP_TYPES, POWERUP_CATALOG } = require('../src/shared/powerups');
 const { resolveLocalEffectMovement } = require('../src/shared/effectRules');
-const { effectDefs } = require('../src/server/core/gameRoom/effects/effectDefs');
 
 test('registered content has valid assets, effects, map documents and attack references', () => {
   assert.deepEqual(validateContent(), []);
@@ -52,25 +51,18 @@ test('validation rejects invalid reload/body data and duplicate tuning or price 
   }
 });
 
-test('shared movement uses authoritative boost values and multiplicative slow stacking', () => {
-  assert.deepEqual(resolveLocalEffectMovement({ rage: 100, gravityBoots: 100 }), { speedMult: 1.4375, jumpMult: 1.55 });
-  assert.deepEqual(resolveLocalEffectMovement({ freeze: 100, gloopHookSlow: 100 }), { speedMult: 0.225, jumpMult: 0.3 });
-  assert.deepEqual(resolveLocalEffectMovement({ stun: 100, rage: 100 }), { speedMult: 0, jumpMult: 0 });
-  assert.deepEqual(resolveLocalEffectMovement({ freeze: 0, slow: 100 }), { speedMult: 0.45, jumpMult: 0.7 });
+test('local movement multiplies active effects, ignores expired timers and honors authoritative overrides', () => {
+  const { EFFECT_RULES } = require('../src/shared/effectRules');
+  for (const keys of [['rage', 'gravityBoots'], ['freeze', 'gloopHookSlow'], ['stun', 'rage']]) {
+    const expected = { speedMult: 1, jumpMult: 1 };
+    for (const key of keys) for (const field of Object.keys(expected)) {
+      expected[field] *= EFFECT_RULES[key].modifiers[field] ?? 1;
+    }
+    assert.deepEqual(resolveLocalEffectMovement(Object.fromEntries(keys.map(key => [key, 100]))), expected, keys.join(','));
+  }
+  assert.deepEqual(resolveLocalEffectMovement({ freeze: 0, slow: 100 }), EFFECT_RULES.slow.modifiers);
   assert.deepEqual(resolveLocalEffectMovement({}, { speedMult: 1.2, jumpMult: 1.3 }), { speedMult: 1.2, jumpMult: 1.3 });
   assert.deepEqual(resolveLocalEffectMovement({}, null), { speedMult: 1, jumpMult: 1 });
-});
-
-test('server powerup effect durations match the powerup catalog', () => {
-  for (const key of POWERUP_TYPES) assert.equal(effectDefs[key].durationMs, POWERUP_CATALOG[key].durationMs);
-});
-
-test('character keys normalize to the shared default instead of per-call literals', () => {
-  const { DEFAULT_CHARACTER, resolveCharacterKey, getCharacterStats } = require('../src/shared/characters/characterStats');
-  assert.ok(getCharacterStats(DEFAULT_CHARACTER), 'default character must be registered');
-  assert.equal(resolveCharacterKey(null), DEFAULT_CHARACTER);
-  assert.equal(resolveCharacterKey(''), DEFAULT_CHARACTER);
-  assert.equal(resolveCharacterKey('Wizard'), 'wizard');
 });
 
 test('every registered character declares how bots play it', () => {

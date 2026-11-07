@@ -53,15 +53,15 @@ function clampDeliveryRewind(delivery, ms) {
 // The server tests them against targets at the attacker's view; the attacker's
 // client tests the same shapes against enemies as drawn.
 //
-// pose: { x, y, flip, height, scale = 1, legacy = false }; `height` is the body's
+// pose: { x, y, flip, height, scale = 1 }; `height` is the body's
 // display height (attackerPose).
 // Shapes: { kind: 'rect', left, right, top, bottom }
 //         { kind: 'capsule', a, b, radius }
 //         { kind: 'sector', x, y, radius, innerRadius, angle, halfSpread }
 
 // The pose a client draws its own character in, matching the server's.
-function attackerPose(character, x, y, { flip = false, scale = 1, legacy = false } = {}) {
-  return { x: Number(x), y: Number(y), flip: !!flip, scale, legacy,
+function attackerPose(character, x, y, { flip = false, scale = 1 } = {}) {
+  return { x: Number(x), y: Number(y), flip: !!flip, scale,
     height: characterBody(character, !!flip).displayHeight };
 }
 
@@ -85,7 +85,7 @@ function attachedRectShape(pose, runtime, elapsedMs) {
 // tunnels through a target after a long frame.
 function pathSweepShapes(pose, direction, fromProgress, toProgress) {
   const steps = Math.max(1, Math.ceil((toProgress - fromProgress) * 96));
-  const body = { x: Number(pose.x), y: Number(pose.y), direction, scale: pose.scale || 1, legacy: !!pose.legacy };
+  const body = { x: Number(pose.x), y: Number(pose.y), direction, scale: pose.scale || 1 };
   const shapes = [];
   for (let i = 0; i <= steps; i++) {
     const hitbox = sampleThorgHitbox(body, fromProgress + (toProgress - fromProgress) * i / steps);

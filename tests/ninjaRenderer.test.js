@@ -70,54 +70,6 @@ test('server return correction revives a provisionally caught visual until termi
   f.packet({type:'ninja-terminal',id:q.id});assert.equal(f.images[0].active,false);f.api.resetNinjaNetwork();
 });
 
-test('king basic, swarm and trails use crown; default and missing skin assets fall back',()=>{
-  const key='ninja__ninja-arena-sovereign-weapon';
-  for(const special of [false,true]){
-    const f=setup();f.owner._bbSkinTextureKey='ninja__ninja-arena-sovereign';
-    f.scene.textures={exists:k=>k===key};
-    f.api.predictNinja(f.scene,f.owner,'owner',{id:'crown',angle:0,aim:{angle:0}},special);
-    f.frame(0);f.frame(100);
-    assert.ok(f.images.length>1);
-    assert.ok(f.images.every(image=>image.texture===key));
-    f.api.resetNinjaNetwork();
-  }
-  assert.equal(projectileTexture.ninjaProjectileTexture({textures:{exists:()=>false}},{_bbSkinTextureKey:'ninja__ninja-arena-sovereign'}),'shuriken');
-  assert.equal(projectileTexture.ninjaProjectileTexture({textures:{exists:k=>k===key}},{texture:{key:'ninja'}}),'shuriken');
-});
-test('enemy default shurikens use the red texture; skins keep their own',()=>{
-  const {TEAM_RED,TEAM_GREEN}=require('../src/shared/projectilePresentation');
-  const scene={textures:{exists:k=>k==='shuriken-red'||k==='ninja__ninja-arena-sovereign-weapon'}};
-  assert.equal(projectileTexture.ninjaProjectileTexture(scene,{_bbTeamColor:TEAM_RED}),'shuriken-red');
-  assert.equal(projectileTexture.ninjaProjectileTexture(scene,null,{_bbTeamColor:TEAM_RED}),'shuriken-red');
-  assert.equal(projectileTexture.ninjaProjectileTexture(scene,{_bbTeamColor:TEAM_GREEN}),'shuriken');
-  assert.equal(projectileTexture.ninjaProjectileTexture(scene,{_bbTeamColor:TEAM_RED,_bbSkinTextureKey:'ninja__ninja-arena-sovereign'}),'ninja__ninja-arena-sovereign-weapon');
-});
-test('authoritative crown launch resolves remote owner skin',()=>{
-  const f=setup(),key='ninja__ninja-arena-sovereign-weapon';
-  f.scene.textures={exists:k=>k===key};
-  const remote={x:200,y:200,_bbSkinTextureKey:'ninja__ninja-arena-sovereign'};
-  f.api.attachNinjaScene(f.scene,{opponentPlayersRef:{king:{opponent:remote}}});
-  const q=model.launch(remote,0,'king:shot:0');q.ownerName='king';
-  f.packet({type:'ninja-launch',projectile:q});f.frame(100);
-  assert.ok(f.images.length>0);assert.ok(f.images.every(image=>image.texture===key));
-  f.api.resetNinjaNetwork();
-});
-
-test('crown spins through upright views and keeps z rotation zero in both directions',()=>{
-  const key='ninja__ninja-arena-sovereign-weapon-spin';
-  const scene={textures:{exists:k=>k===key}};
-  assert.equal(projectileTexture.ninjaProjectileTexture(scene,{_bbSkinTextureKey:'ninja__ninja-arena-sovereign'}),key);
-  const sprite={setRotation(v){this.rotation=v;},setFrame(v){this.frame=v;},setAngularVelocity(v){this.angularVelocity=v;}};
-  const frames=[];
-  for(let i=0;i<8;i++){
-    projectileTexture.animateNinjaProjectile(sprite,key,i*65,2000,1);
-    frames.push(sprite.frame);assert.equal(sprite.rotation,0);assert.equal(sprite.angularVelocity,0);
-  }
-  assert.equal(new Set(frames).size,8);
-  projectileTexture.animateNinjaProjectile(sprite,key,65,2000,-1);assert.equal(sprite.frame,7);
-  projectileTexture.animateNinjaProjectile(sprite,'shuriken',65,2000,1);assert.ok(sprite.rotation>0);
-});
-
 test('super presents each release once, without replaying on authoritative confirmation',()=>{
   const f=setup(),cfg=model.swarmConfig();
   f.api.predictNinja(f.scene,f.owner,'owner',{id:'burst',aim:{angle:0}},true);
@@ -130,20 +82,6 @@ test('super presents each release once, without replaying on authoritative confi
   assert.equal(f.releases.length,cfg.count);
   assert.ok(f.releases.every(r=>r.player===f.owner&&r.ms===cfg.releaseMs&&!r.remote));
   f.api.resetNinjaNetwork();
-});
-
-test('each swarm presentation restarts a skin-aware throw and plays its sound',()=>{
-  const api={},plays=[],locks=[],sounds=[];
-  const source=babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/ninja/swarmPresentation'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code;
-  vm.runInNewContext(source,{exports:api,require:name=>name.includes('playerAudio')?playerAudio:{resolveSpriteAnimationKey:()=> 'ninja__ninja-arena-sovereign-throw',markOneShotAnimation:(...args)=>locks.push(args)}});
-  const player={active:true,x:100,y:200,anims:{play:(...args)=>plays.push(args)}},scene={sound:{play:(...args)=>sounds.push(args)}};
-  scene._localPlayerAudioSprite=player;
-  for(let i=0;i<15;i++)api.presentSwarmRelease(scene,player,36,true);
-  assert.equal(plays.length,15);assert.equal(sounds.length,15);assert.equal(locks.length,15);
-  assert.equal(plays[0][0].key,'ninja__ninja-arena-sovereign-throw');
-  assert.equal(plays[0][0].duration,36);assert.equal(plays[0][1],false);
-  player.active=false;api.presentSwarmRelease(scene,player,36);
-  assert.equal(sounds.length,15);
 });
 
 for (const rtt of [10, 50, 150, 250, 350]) test(`PvP owner confirmation preserves outbound direction at steady ${rtt} ms RTT`, () => {

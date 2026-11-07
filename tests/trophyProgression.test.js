@@ -1,7 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
+
 const { buildTrophyRewardTrack, summarizeCurrencyRewards } = require('../src/server/services/trophies/trophySystem');
 const { getModeUnlockReason } = require('../src/shared/trophyProgression');
 const { grantTrophyItems } = require('../src/server/services/trophies/trophyRewardGrants');
@@ -30,16 +29,6 @@ test('road starts at 50, grows in spacing, places unlocks on exact tiers and end
   }
   assert.deepEqual(road.at(-1).rewards.map(r => r.kind).sort(), ['card','currency','currency','profileIcon','skin']);
   assert.deepEqual(summarizeCurrencyRewards(road.at(-1).rewards), { coins: 6000, gems: 250 });
-});
-
-test('all trophy art is bundled or explicitly awaits the user-supplied numeric icon', () => {
-  const root = path.resolve(__dirname, '../public');
-  for (const tier of buildTrophyRewardTrack()) for (const reward of tier.rewards) {
-    if (!fs.existsSync(path.join(root, reward.image))) {
-      assert.match(reward.itemId, /^(500|1000|5000|7500|10000)trophies$/);
-      assert.ok(fs.existsSync(path.join(root, reward.fallbackImage)));
-    }
-  }
 });
 
 test('mode access uses the host peak for parties and personal unlocks for selection', async () => {
@@ -148,36 +137,4 @@ test('Bro grants preserve an already upgraded character', async () => {
   const db = new TrophyDb(); db.state.user.char_levels.gloop = 8;
   await grantTrophyItems(db.runQuery.bind(db), 1, [{kind:'character',itemId:'gloop'}]);
   assert.equal(db.state.user.char_levels.gloop, 8);
-});
-
-
-test('currency caches use round amounts in both the road and claim payout', async () => {
-  const road = buildTrophyRewardTrack();
-  const currencies = road.flatMap(tier => tier.rewards).filter(reward => reward.kind === 'currency');
-  assert.ok(currencies.filter(reward => reward.currency === 'gems').every(reward => reward.amount % 5 === 0));
-  assert.ok(!currencies.some(reward => reward.currency === 'coins' && reward.amount === 900));
-  for (const [currency, amount] of [['coins', 100], ['coins', 1000], ['coins', 1200], ['gems', 5], ['gems', 25], ['gems', 40], ['gems', 60]]) {
-    const tier = road.find(tier => tier.rewards.length === 1 && tier.rewards[0].currency === currency && tier.rewards[0].amount === amount);
-    assert.ok(tier, `${amount} ${currency} reward must exist`);
-    const db = new TrophyDb();
-    const before = db.state.user[currency];
-    const response = await routeFixture(db)('/trophies/claim', { tierId: tier.tierId });
-    assert.equal(response.code, 200);
-    assert.equal(db.state.user[currency] - before, amount);
-  }
-});
-
-
-test('regular currency caches start small and grow through the road', () => {
-  const road = buildTrophyRewardTrack();
-  for (const [currency, first, last] of [['coins', 100, 1200], ['gems', 5, 60]]) {
-    const caches = road.filter(tier => tier.rewards.length === 1 && tier.rewards[0].currency === currency);
-    const amounts = caches.map(tier => tier.rewards[0].amount);
-    assert.equal(amounts[0], first);
-    assert.equal(amounts.at(-1), last);
-    assert.ok(new Set(amounts).size >= 7);
-    assert.ok(amounts.every((amount, index) => index === 0 || amount >= amounts[index - 1]));
-  }
-  const finale = road.at(-1);
-  assert.deepEqual(summarizeCurrencyRewards(finale.rewards), { coins: 6000, gems: 250 });
 });

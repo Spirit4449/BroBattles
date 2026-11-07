@@ -335,7 +335,7 @@ pending startup and restores patched methods; Phaser owns active loader cleanup.
 
 ### Verification
 
-`node --test tests/renderResolution.test.js tests/highResolutionCanvas.test.mjs tests/deferredAudio.test.mjs`
+`node --test tests/renderResolution.test.js tests/renderResolution.test.mjs tests/deferredAudio.test.mjs`
 
 `node scripts/dev/test-rendering.cjs` requires Playwright with Chromium and WebKit
 installed. `NODE_PATH` can point to an existing Playwright package directory;
@@ -426,7 +426,7 @@ when reduced motion is enabled.
 
 The lobby pair and sudden death music remain encoded as MP3 at 128 kbit/s stereo or 64 kbit/s mono. Bank Bust, Candyland, and the default map music use 96 kbit/s stereo; Mangrove and Serenity use 56 kbit/s mono. The lobby pair's alignment timing is unchanged.
 
-`src/client/navigation/lobbyAudio.mjs` uses the original version in the lobby and the relaxed version during ready, searching, found, and loading. It waits for the next quarter-note boundary and crossfades over approximately one beat. Cancellation switches back using the same rule. Both versions use the same base level, multiplied by the user's music setting. New matchmaking participants play `/assets/player-join.wav`; your own arrival, the initial roster, reordering, and repeated updates are silent. Match found and loading do not play a sound effect. Party join notifications also use the player-join cue. There is no runtime speed change, pitch shift, or low-pass filtering. If the relaxed stream is unavailable, the original continues until it can switch; media errors fall back to the available stream.
+`src/client/navigation/lobbyAudio.mjs` uses the original version in the lobby and the relaxed version during ready, searching, found, and loading. It waits for the next quarter-note boundary and crossfades over approximately one beat. Cancellation switches back using the same rule. Both versions use the same base level, multiplied by the user's music setting. New matchmaking participants play `/assets/player-join.mp3`; your own arrival, the initial roster, reordering, and repeated updates are silent. Match found and loading do not play a sound effect. Party join notifications also use the player-join cue. There is no runtime speed change, pitch shift, or low-pass filtering. If the relaxed stream is unavailable, the original continues until it can switch; media errors fall back to the available stream.
 
 The relaxed track continues at its existing level over the loading screen. Successful map music playback fades both lobby streams out, then pauses them. Map music fades in at 30% of its configured level during the intro/countdown and rises to its configured level at FIGHT. Joining a live match fades straight to the configured level. FIGHT also ends any remaining lobby audio if map playback was unavailable.
 
@@ -442,7 +442,7 @@ Each switch prepares the incoming stream at most once. A `seeked` event complete
 
 Export measurements in earlier work logs were local observations. The shipped tracks and `src/client/navigation/lobbyMusicTiming.mjs` are the retained runtime references.
 
-Relevant checks: `node --test tests/lobbyAudio.test.mjs tests/musicEnvelope.test.js tests/matchStartAudio.test.js tests/navigation.test.js tests/navigationTransitions.test.js tests/rewardAudio.test.js`.
+Relevant checks: `node --test tests/lobbyAudio.test.mjs tests/musicEnvelope.test.js tests/matchPresentation.test.js tests/navigation.test.js tests/navigationTransitions.test.js tests/rewardPresentation.test.js`.
 
 The battle countdown plays its beeps and the final `/assets/game-sounds/start.mp3` FIGHT cue. Both cues are preloaded when the countdown starts.
 
@@ -465,7 +465,7 @@ To add another material, add a named entry to `src/shared/physics/terrainAudio.j
 
 The initial player spawn is marked for a silent landing. The marker is consumed on the first grounded frame (or cleared on a deliberate jump or a real fall). Later gameplay landings retain their normal audio. This only suppresses the landing sound, not spawn visuals.
 
-Tests: `node --test tests/movementAudio.test.js`.
+Tests: `node --test tests/playerAudio.test.js`.
 
 
 ## UI cues and source records

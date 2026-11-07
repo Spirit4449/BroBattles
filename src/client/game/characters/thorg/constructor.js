@@ -4,7 +4,7 @@ import { drawPixelRing } from "../../powerups/pixelShapes";
 import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/characterTuning.js";
 import { animations } from "./anim";
 import { performThorgFallAttack, THORG_FALL_DURATION_MS, changeDebugState } from "./attack";
-import { ensureThorgWeapon, startThorgSweep } from "./weapon";
+import { startThorgSweep } from "./weapon";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { chooseRemoteAnimationState } from "../shared/animationState";
 
@@ -28,20 +28,11 @@ class Thorg extends CharacterEntityBase {
 
   static preload(scene, staticPath = "/assets", options = {}) {
     this.loadBaseAtlas(scene, staticPath, options);
-    scene.load.image(
-      `${NAME}-weapon`,
-      this.characterAssetPath(staticPath, "weapon.webp"),
-    );
-
-    scene.load.spritesheet("thorg-weapon-spin",
-      this.characterAssetPath(staticPath, "weapon-spin.webp"),
-      { frameWidth: 36, frameHeight: 101 });
-
     scene.load.audio(
       "thorg-throw",
       this.characterAssetPath(staticPath, "swoosh.mp3"),
     );
-    scene.load.audio("thorg-sweep", this.characterAssetPath(staticPath, "sweep.wav"));
+    scene.load.audio("thorg-sweep", this.characterAssetPath(staticPath, "sweep.mp3"));
     if (!scene.sound.get("thorg-hit")) {
       scene.load.audio(
         "thorg-hit",
@@ -54,160 +45,15 @@ class Thorg extends CharacterEntityBase {
     animations(scene, textureKey);
   }
 
-  // Thorg's video atlas and older skins have different pose counts/timings.
-  static setupSkinAnimations(scene, textureKey) {
-    this.setupAnimations(scene, textureKey);
-    return true;
-  }
-
   static setDebugState(enabled) {
     changeDebugState(enabled);
   }
 
-  // Remote attack visualization for Thorg: supports slash and falling rectangle
   static handleRemoteAttack(scene, data, ownerWrapper) {
-    const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
-    if (!ownerSprite) return true; // nothing to show
-    if (data.type === `${NAME}-slash`) {
-      Thorg._spawnSlashEffect(
-        scene,
-        ownerSprite,
-        data.direction,
-        data.range,
-        data.duration,
-      );
-      return true;
-    }
-    if (data.type === `${NAME}-fall`) {
-      startThorgSweep(scene, ownerSprite, { direction: data.direction });
-      return true;
-    }
-    return false;
-  }
-
-  // Shared helper to render the slash effect (graphics stroke arc)
-  static _spawnSlashEffect(
-    scene,
-    sprite,
-    direction = 1,
-    range = 20,
-    duration = 300,
-  ) {
-    // If we have an image, animate it along an overhead oval path. Otherwise, fallback to vector band.
-    const spriteTextureKey =
-      sprite?._bbSkinTextureKey || sprite?.texture?.key || "";
-    const skinWeaponKey =
-      spriteTextureKey && scene.textures.exists(`${spriteTextureKey}-weapon`)
-        ? `${spriteTextureKey}-weapon`
-        : null;
-    const weaponKey = skinWeaponKey || `${NAME}-weapon`;
-    const hasTex = scene.textures.exists(weaponKey);
-    const originOffsetY = sprite.height * 0.1;
-    const cx = () => sprite.x + (direction >= 0 ? 10 : -10);
-    const cy = () => sprite.y - originOffsetY;
-    const rx = range;
-    const ry = Math.round(range * 0.6);
-    const startRad = Phaser.Math.DegToRad(-90);
-    const endRad = Phaser.Math.DegToRad(90);
-
-    if (hasTex) {
-      const eff = scene.add.image(cx(), cy(), weaponKey);
-      eff.setDepth(6);
-      eff.setScale(0.9);
-      eff.setOrigin(direction >= 0 ? 0.1 : 0.9, 0.5); // pivot near the sword
-      eff.setFlipX(direction < 0);
-
-      const proxy = { t: 0 };
-      const tween = scene.tweens.add({
-        targets: proxy,
-        t: 1,
-        duration,
-        ease: "Sine.easeOut",
-        onUpdate: () => {
-          const a = Phaser.Math.Linear(startRad, endRad, proxy.t);
-          const cos = Math.cos(a);
-          const sin = Math.sin(a);
-          eff.x = cx() + direction * rx * cos;
-          eff.y = cy() + ry * sin;
-          // Face along tangent of the path
-          const tangent = Math.atan2(
-            ry * Math.cos(a),
-            -direction * rx * Math.sin(a),
-          );
-          eff.rotation = tangent;
-        },
-        onComplete: () => {
-          eff.destroy();
-        },
-      });
-      return tween;
-    }
-
-    // Fallback: draw an additive oval band (previous implementation)
-    const g = scene.add.graphics();
-    g.setDepth(5);
-    g.setBlendMode(Phaser.BlendModes.ADD);
-    const mainColor = 0x9ed1ff;
-    const outlineColor = 0xe4f5ff;
-    const thickness = Math.max(14, Math.round(range * 0.22));
-    const rxInner = Math.max(6, rx - thickness);
-    const ryInner = Math.max(4, ry - Math.round(thickness * 0.75));
-
-    const ept = (theta, rx0, ry0) => ({
-      x: cx() + direction * rx0 * Math.cos(theta),
-      y: cy() + ry0 * Math.sin(theta),
-    });
-
-    const proxy = { t: 0 };
-    const steps = 18;
-    return scene.tweens.add({
-      targets: proxy,
-      t: 1,
-      duration,
-      ease: "Sine.easeOut",
-      onUpdate: () => {
-        const now = Phaser.Math.Linear(startRad, endRad, proxy.t);
-        const t0 = Phaser.Math.Linear(
-          startRad,
-          now,
-          Math.max(0, proxy.t - 0.25),
-        );
-        g.clear();
-        g.fillStyle(mainColor, 0.85);
-        g.beginPath();
-        for (let i = 0; i <= steps; i++) {
-          const a = Phaser.Math.Linear(t0, now, i / steps);
-          const p = ept(a, rx, ry);
-          if (i === 0) g.moveTo(p.x, p.y);
-          else g.lineTo(p.x, p.y);
-        }
-        for (let i = steps; i >= 0; i--) {
-          const a = Phaser.Math.Linear(t0, now, i / steps);
-          const p = ept(a, rxInner, ryInner);
-          g.lineTo(p.x, p.y);
-        }
-        g.closePath();
-        g.fillPath();
-        g.lineStyle(
-          Math.max(2, Math.floor(thickness * 0.3)),
-          outlineColor,
-          0.9,
-        );
-        g.beginPath();
-        for (let i = 0; i <= steps; i++) {
-          const a = Phaser.Math.Linear(
-            Math.max(t0, now - 0.25),
-            now,
-            i / steps,
-          );
-          const p = ept(a, rx + 2, ry + 1);
-          if (i === 0) g.moveTo(p.x, p.y);
-          else g.lineTo(p.x, p.y);
-        }
-        g.strokePath();
-      },
-      onComplete: () => g.destroy(),
-    });
+    if (data.type !== `${NAME}-fall`) return false;
+    const sprite = ownerWrapper?.opponent;
+    if (sprite) startThorgSweep(scene, sprite, { direction: data.direction });
+    return true;
   }
 
   static chooseRemoteAnimation({
@@ -216,7 +62,6 @@ class Thorg extends CharacterEntityBase {
     currentPosition,
     sprite,
   } = {}) {
-    if (sprite?.scene) ensureThorgWeapon(sprite.scene, sprite);
     return chooseRemoteAnimationState({
       animation,
       previousPosition,
@@ -296,11 +141,6 @@ class Thorg extends CharacterEntityBase {
         options: { volume: 0.24, rate: 0.78 },
       },
     };
-  }
-
-  constructor(deps) {
-    super(deps);
-    ensureThorgWeapon(this.scene, this.player);
   }
 
   handlePointerDown(attackContext = null) {

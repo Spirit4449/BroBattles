@@ -81,42 +81,6 @@
             "spritesheetUrl": "/assets/thorg/spritesheet.webp",
             "animationsUrl": "/assets/thorg/animations.json"
           }
-        },
-        {
-          "id": "thorg-storm",
-          "name": "Stormforged",
-          "character": "thorg",
-          "available": true,
-          "assetUrl": "/assets/thorg/skins/thorg-storm/body.webp",
-          "rarity": "rare",
-          "unlockMethod": {
-            "type": "character",
-            "character": "thorg",
-            "limited": true
-          },
-          "showInPicker": true,
-          "gameAssets": {
-            "spritesheetUrl": "/assets/thorg/skins/thorg-storm/spritesheet.webp",
-            "animationsUrl": "/assets/thorg/skins/thorg-storm/animations.json",
-            "weaponUrl": "/assets/thorg/skins/thorg-storm/weapon.webp"
-          }
-        },
-        {
-          "id": "thorg-iron",
-          "name": "Ironbound",
-          "character": "thorg",
-          "available": true,
-          "assetUrl": "/assets/thorg/skins/thorg-iron/body.webp",
-          "rarity": "epic",
-          "unlockMethod": {
-            "type": "shop",
-            "limited": false
-          },
-          "showInPicker": true,
-          "gameAssets": {
-            "spritesheetUrl": "/assets/thorg/skins/thorg-iron/spritesheet.webp",
-            "animationsUrl": "/assets/thorg/skins/thorg-iron/animations.json"
-          }
         }
       ]
     },

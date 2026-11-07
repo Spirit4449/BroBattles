@@ -19,20 +19,7 @@ test('damage reach is 1.3x the visual tip and thickness doubles in both facings 
   }
 });
 
-test('replacement swing crosses both sides and passes overhead, mirroring its grip and tip', () => {
-  const body = { x: 300, y: 200, direction: 1 };
-  assert.ok(sampleThorgSweep(body, 0).x < body.x);
-  assert.ok(sampleThorgSweep(body, 0.6).x > body.x);
-  assert.ok(sampleThorgSweep(body, 0.8).y < body.y - 30);
-  assert.ok(sampleThorgSweep(body, 1).x < body.x);
-  for (let i = 0; i <= 100; i++) {
-    const a = sampleThorgSweep(body, i / 100), b = sampleThorgSweep({ ...body, direction: -1 }, i / 100);
-    assert.ok(Math.abs(a.x + b.x - body.x * 2) < 1e-9);
-    assert.equal(a.y, b.y);
-    assert.ok(Math.abs(a.grip.x + b.grip.x - body.x * 2) < 1e-9);
-    assert.equal(a.grip.y, b.grip.y);
-  }
-});
+
 
 test('damage capsule follows the displayed grip and mace tip', t => {
   const { damageHitboxSnapshot } = require('../src/server/core/gameRoom/damageHitboxes');
@@ -52,42 +39,7 @@ test('damage capsule follows the displayed grip and mace tip', t => {
   assert.equal(shape.radius, 14);
 });
 
-test('legacy skins retain the complete circular swing', () => {
-  const body = { x: 300, y: 200, legacy: true };
-  assert.deepEqual(sampleThorgSweep(body, 0), sampleThorgSweep(body, 1));
-  assert.equal(sampleThorgSweep(body, .5).x, 300 - THORG_SWEEP.radiusX);
-});
 
-test('authoritative legacy skin hitboxes still use their rendered orbit', t => {
-  const { damageHitboxSnapshot } = require('../src/server/core/gameRoom/damageHitboxes');
-  const { room, players: [p, target] } = makeRoom({ characters: ['thorg', 'ninja'] });
-  t.after(() => room.cleanup());
-  room.matchData.editorDebugHitboxes = true;
-  target.loaded = false;
-  Object.assign(p, { x: 500, y: 300, selected_skin_id: 'thorg-storm' });
-  const now = Date.now();
-  const attack = createRuntimeAttack(p, { type: 'thorg-fall', id: 'legacy', direction: -1 }, now);
-  tickRuntimeAttack(room, attack, now + THORG_SWEEP.windupMs);
-  const shape = damageHitboxSnapshot(room, now + THORG_SWEEP.windupMs)[0];
-  assert.deepEqual(shape.a, { x: 500, y: 313 });
-  assert.deepEqual(shape.b, { x: 500 - (THORG_SWEEP.radiusX + THORG_SWEEP.tipOffset) * 1.3, y: 313 });
-  assert.equal(shape.radius, THORG_SWEEP.hitboxRadius * 2);
-});
-
-test('every active displayed frame and combat pose share one clock', () => {
-  let elapsed = 0;
-  for (const frame of THORG_ATTACK_FRAMES) {
-    const middle = elapsed + frame.durationMs / 2;
-    assert.equal(thorgAttackFrameAt(middle).frame, frame.frame);
-    if (middle >= THORG_SWEEP.windupMs && middle < THORG_SWEEP.windupMs + THORG_SWEEP.strikeMs) {
-      const sample = sampleThorgSweep({}, (middle - THORG_SWEEP.windupMs) / THORG_SWEEP.strikeMs);
-      assert.deepEqual(sample.grip, { x: frame.grip[0], y: frame.grip[1] });
-      assert.deepEqual(sample.tip, { x: frame.tip[0], y: frame.tip[1] });
-    }
-    elapsed += frame.durationMs;
-  }
-  assert.ok(Math.abs(elapsed - (THORG_SWEEP.windupMs + THORG_SWEEP.strikeMs + THORG_SWEEP.recoveryMs)) < 1e-8);
-});
 
 test('authoritative sweep hits front and rear once, survives a delayed tick, and ignores spoofed reach/timing', t => {
   const { room, players: [p, front, rear, far] } = makeRoom({ characters: ['thorg', 'ninja', 'ninja', 'ninja'] });

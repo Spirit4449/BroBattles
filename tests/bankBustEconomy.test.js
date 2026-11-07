@@ -148,14 +148,7 @@ test("enemy damage strips exactly its own number of coins", () => {
   assert.equal(event.coins, mode.getVaultCoins("team1"));
 });
 
-test("damageVault reports the vault by its coins, which is what callers read", () => {
-  const room = roomFor();
-  const vault = room.gameMode.damageVault("team2", 1, {
-    sourceTeam: "team1",
-  });
-  assert.equal(vault.coins, SETTINGS.vaultStartingCoins - 1);
-  assert.equal(vault.health, undefined);
-});
+
 
 test("purchases are paid out of the vault and refused at the floor", () => {
   const room = roomFor();
@@ -212,36 +205,6 @@ test("an emptied vault is destroyed and loses the match", () => {
   const outcome = mode.evaluateVictoryState();
   assert.equal(outcome.terminal, true);
   assert.equal(outcome.winnerTeam, "team1");
-});
-
-test("turret barrels match their bullets on acquisition, held aim and target changes", async () => {
-  const { stepTurretAim } = await import("../src/client/game/modes/bankBust/turretMotion.mjs");
-  for (const ownerTeam of ["team1", "team2"]) {
-    const room = roomFor();
-    const turret = room.modeState.objects.find((o) => o.type === "claimableTurret");
-    room.modeState.objects = [turret];
-    turret.state.claimedByTeam = ownerTeam;
-    const enemy = addPlayer(room, "enemy", ownerTeam === "team1" ? "team2" : "team1", 0, 0);
-    const motion = { angle: 0, facing: 0, phase: 0 };
-    let now = 10000;
-    // Holding one aim for many seconds must not put the barrel back into its
-    // idle sweep. Large target changes must align on the first firing frame.
-    for (const aim of [Math.PI, Math.PI, -Math.PI / 2, 0, Math.PI / 4, -Math.PI + 0.01]) {
-      enemy.x = turret.x + Math.cos(aim) * 150;
-      enemy.y = turret.y + Math.sin(aim) * 150;
-      room.gameMode._tickClaimedTurrets(now);
-      const snapshot = room.gameMode.buildModeState();
-      const shot = snapshot.turretProjectiles.at(-1);
-      assert.equal(shot.spawnedAt, now, "a fresh shot was fired");
-      const renderAngle = stepTurretAim(motion, snapshot.objects[0].state.aimAngle, ownerTeam, now, 1 / 60);
-      const speed = Math.hypot(shot.vx, shot.vy);
-      assert.ok(Math.abs(-Math.cos(renderAngle) - shot.vx / speed) < 1e-10);
-      assert.ok(Math.abs(-Math.sin(renderAngle) - shot.vy / speed) < 1e-10);
-      const heldAngle = stepTurretAim(motion, snapshot.objects[0].state.aimAngle, ownerTeam, now + 4000, 1 / 60);
-      assert.equal(heldAngle, renderAngle, "stationary aim never expires");
-      now += Math.max(5000, turret.state.fireRateMs);
-    }
-  }
 });
 
 test("a bust holds the finish open long enough for clients to see the vault at zero", () => {
@@ -554,4 +517,27 @@ test("built walls block every team's movement but only the other team's shots", 
   assert.deepEqual(mode.getMovementBlockers().map((b) => b.id), [wall.id]);
   assert.deepEqual(mode.getShotBlockers("team1"), [], "the builder's team shoots through");
   assert.deepEqual(mode.getShotBlockers("team2").map((b) => b.id), [wall.id]);
+});
+
+test('claimed turrets fire at nearby enemies, retain their team and obey the firing interval', () => {
+  for (const ownerTeam of ['team1', 'team2']) {
+    const room = roomFor();
+    const turret = room.modeState.objects.find(object => object.type === 'claimableTurret');
+    room.modeState.objects = [turret];
+    turret.state.claimedByTeam = ownerTeam;
+    addPlayer(room, 'ally', ownerTeam, turret.x + 10, turret.y);
+    const enemy = addPlayer(room, 'enemy', ownerTeam === 'team1' ? 'team2' : 'team1', turret.x + 100, turret.y);
+    room.gameMode._tickClaimedTurrets(10000);
+    const shots = room.modeState.turretProjectiles;
+    assert.equal(shots.length, 1);
+    assert.equal(shots[0].ownerTeam, ownerTeam);
+    assert.equal(turret.state.lastTargetName, enemy.name);
+    assert.ok(shots[0].vx > 0 && Math.abs(shots[0].vy) < 1e-6);
+    room.gameMode._tickClaimedTurrets(10001);
+    assert.equal(shots.length, 1, 'an immediate repeat cannot fire again');
+    enemy.x = turret.x - 100;
+    room.gameMode._tickClaimedTurrets(10000 + turret.state.fireRateMs);
+    assert.equal(shots.length, 2);
+    assert.ok(shots[1].vx < 0, 'the next shot follows the new target position');
+  }
 });

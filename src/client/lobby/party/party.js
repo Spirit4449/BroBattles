@@ -215,7 +215,8 @@ function syncModePickerUi(selection = getCurrentSelection()) {
   if (previewName) previewName.textContent = getModeLabel(normalized.modeId);
   if (previewSubtitle) {
     const label = getSelectionDisplayLabel(normalized);
-    previewSubtitle.textContent = getModeProgressionBlockReason(normalized.modeId) || (label.includes("•")
+    const unlockReason = getActivePartyId() ? "" : getModeProgressionBlockReason(normalized.modeId);
+    previewSubtitle.textContent = unlockReason || (label.includes("•")
       ? label.split("•")[1].trim()
       : getModeSubtitle(normalized.modeId));
   }

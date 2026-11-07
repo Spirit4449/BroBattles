@@ -1223,7 +1223,6 @@ async function main() {
     "turret-gun": { frameWidth: 104, frameHeight: 48, frames: PROP_FRAMES_COUNT, rate: 3, hubX: 15.5 / 26, hubY: 0.5 },
   }, null, 2) + "\n");
   await pixelate("base-backdrop.png", "base-backdrop.webp", 216);
-  await pixelate("gold-pile.png", "center-bullion.webp", 52);
   console.log("Baked vault, mine, turret and wall art.");
 }
 

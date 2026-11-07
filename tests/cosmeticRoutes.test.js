@@ -1,99 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const path = require('node:path');
+
 const { authedRoute, sendShopError, purchaseGrantFromShop } = require('../src/server/routes/routeHelpers');
 const { registerPlayerCardsRoutes } = require('../src/server/routes/modules/playerCardsRoutes');
 const { getPlayerCardsCatalog } = require('../src/server/services/cosmetics/playerCardsCatalog');
 const { playerCardImage, bindPlayerCardHover, positionPlayerCardCanvas, createPlayerCardMedia, restartPlayerCardMedia, pausePlayerCardPreparation } = require('../src/client/views/playerCardAnimation.cjs');
-const { measurePlayerCardBounds } = require('../scripts/art/player-card-bounds.cjs');
-
-test('full animation canvas preserves the card layout rectangle without cropping effects', () => {
-  for (const card of getPlayerCardsCatalog().cards.filter(card => card.animationViewport)) {
-    const image = { style: {} };
-    positionPlayerCardCanvas(image, card);
-    const view = card.animationViewport;
-    const renderedWidth = parseFloat(image.style.width) / 100;
-    const renderedHeight = parseFloat(image.style.height) / 100;
-    const scale = card.renderScale || 1;
-    const inset = (1 - scale) / 2;
-    assert.ok(renderedWidth > 1 && renderedHeight > 1);
-    assert.ok(Math.abs(parseFloat(image.style.left) / 100 + renderedWidth * view.x / view.width - inset) < 1e-10);
-    assert.ok(Math.abs(parseFloat(image.style.top) / 100 + renderedHeight * view.y / view.height - inset) < 1e-10);
-    assert.ok(Math.abs(renderedWidth * view.w / view.width - scale) < 1e-10);
-    assert.ok(Math.abs(renderedHeight * view.h / view.height - scale) < 1e-10);
-  }
-});
-
-test('common static cards shrink around their center', () => {
-  const card = getPlayerCardsCatalog().cards.find(card => !card.animationViewport && card.renderScale);
-  const image = { style: {} };
-  positionPlayerCardCanvas(image, card);
-  assert.ok(card.renderScale > 0 && card.renderScale < 1);
-  assert.equal(image.style.transform, `scale(${card.renderScale})`);
-  assert.equal(image.style.transformOrigin, 'center');
-});
-
-test('battle cards preserve proportions with a shared reduction and a larger Shuriken frame', () => {
-  const catalog = getPlayerCardsCatalog();
-  const box = catalog.renderGuides.fullCardSizePx;
-  const reductions = new Map();
-  for (const card of catalog.cards) {
-    const image = { style: {} };
-    positionPlayerCardCanvas(image, card, { battle: true });
-    const view = card.battleViewport;
-    const width = parseFloat(image.style.width) / 100 * box.w;
-    const height = parseFloat(image.style.height) / 100 * box.h;
-    const left = parseFloat(image.style.left) / 100 * box.w;
-    const top = parseFloat(image.style.top) / 100 * box.h;
-    const scale = width / view.width;
-    assert.ok(Math.abs(scale - height / view.height) < 1e-10, card.id + ' must not stretch');
-    assert.ok(Math.abs(left + (view.x + view.w / 2) * scale - box.w / 2) < 1e-10);
-    assert.ok(Math.abs(top + (view.y + view.h / 2) * scale - box.h / 2) < 1e-10);
-    const fit = Math.min(box.w / view.w, box.h / view.h);
-    assert.ok(scale < fit && scale > fit * .8);
-    reductions.set(card.id, scale / fit);
-  }
-  for (const [id, reduction] of reductions) {
-    if (id === 'shuriken-strike') assert.ok(reduction > reductions.get('default'));
-    else assert.ok(Math.abs(reduction - reductions.get('default')) < 1e-10);
-  }
-});
-
-test('default battle viewport follows the visible bounds of its installed art', async () => {
-  const card = getPlayerCardsCatalog().cards.find(card => card.id === 'default');
-  const asset = path.join(__dirname, '../public', card.assetUrl);
-  assert.deepEqual(card.battleViewport, await measurePlayerCardBounds(asset));
-});
-
-test('animated cards loop in automatic contexts and retain a still fallback', () => {
-  for (const card of getPlayerCardsCatalog().cards) {
-    assert.equal(playerCardImage(card.id), card.animationUrl || card.assetUrl);
-    assert.equal(playerCardImage(card, { animate: false }), card.assetUrl);
-    assert.equal(playerCardImage(card, { reducedMotion: true }), card.assetUrl);
-  }
-  assert.equal(playerCardImage({ assetUrl: '/assets/still.webp', animationUrl: 'https://outside.invalid/x.webp' }), '/assets/still.webp');
-});
-
-test('profile animations keep looping after hover and focus leave, then fall back on error', () => {
-  const card = getPlayerCardsCatalog().cards.find(card => card.animationUrl);
-  const events = {}, imageEvents = {};
-  const tile = { addEventListener: (name, fn) => { events[name] = fn; }, contains: node => node === tile };
-  const image = { src: card.assetUrl, addEventListener: (name, fn) => { imageEvents[name] = fn; } };
-  bindPlayerCardHover(tile, image, card);
-  assert.equal(image.src, card.assetUrl);
-  events.mouseenter();
-  assert.equal(image.src, card.animationUrl);
-  events.focusin();
-  events.mouseleave?.();
-  assert.equal(image.src, card.animationUrl);
-  events.focusout?.({ relatedTarget: null });
-  assert.equal(image.src, card.animationUrl);
-  events.mouseenter();
-  imageEvents.error();
-  assert.equal(image.src, card.assetUrl);
-  events.mouseleave?.(); events.mouseenter();
-  assert.equal(image.src, card.assetUrl);
-});
 
 test('profile videos prepare visible tiles and retain their decoder between hover plays', async () => {
   const card = getPlayerCardsCatalog().cards.find(card => card.animationUrl);

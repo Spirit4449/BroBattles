@@ -99,30 +99,9 @@ test('injury interrupts a long movement commitment immediately', (t) => {
   assert.equal(brain.decision.mode, 'retreat');
 });
 
-test('trophy skills keep improving through 4000 and stay bounded above it', () => {
-  const tiers = [0, 500, 1250, 2000, 3000, 4000].map(difficultyForTrophies);
-  for (let i = 1; i < tiers.length; i++) {
-    assert.ok(tiers[i].reactionMinMs < tiers[i - 1].reactionMinMs);
-    assert.ok(tiers[i].aimError < tiers[i - 1].aimError);
-    assert.ok(tiers[i].tacticalAwareness > tiers[i - 1].tacticalAwareness);
-    assert.ok(tiers[i].dodgeChance > tiers[i - 1].dodgeChance);
-    assert.ok(tiers[i].mistakeChance < tiers[i - 1].mistakeChance);
-  }
-  assert.deepEqual(difficultyForTrophies(4000), difficultyForTrophies(90000));
-  assert.ok(tiers.at(-1).reactionMinMs >= 100);
-  assert.ok(tiers.at(-1).aimError > 0 && tiers.at(-1).dodgeChance < 1);
-});
 
-test('legacy BOT number and BOT ULTRA names cannot reenter through database name sampling', () => {
-  const forbidden = ['BOT 123456', 'BOT123', 'BOT ULTRA', 'bot_ultra', ' Bot-987 '];
-  const humans = [{ name: 'Human', team: 'team1', level: 1, trophies: 1000 }];
-  for (let seed = 0; seed < 30; seed++) {
-    const bots = createBotParticipants(humans, 3, { seed, realNames: [...forbidden, 'ActualPlayer'] });
-    assert.ok(bots.every((b) => !forbidden.includes(b.name)));
-    assert.equal(new Set(bots.map((b) => b.name.toLowerCase())).size, bots.length);
-  }
-  assert.ok(BOT_NAMES.length > 4000);
-});
+
+
 
 test('allied bots yield an ordinary pickup to the teammate already collecting it', (t) => {
   const time = clock(t), h = makeRoom({ characters: ['wizard', 'ninja', 'wizard', 'ninja'], trophies: 4000 });

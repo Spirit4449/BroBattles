@@ -1,7 +1,6 @@
-// Every map is built for exactly one game mode (a mode variant such as
-// duels-2v2). That mode's arena in arenas.json fixes the world size and the
-// match camera, so all maps of a mode play and frame alike; maps never
-// override them. See docs/development/maps.md.
+// Duel maps share a rotation across team sizes. Their arenaId preserves the
+// authored world and camera profile independently of the match formation.
+// Legacy variant arenas remain readable for existing documents and snapshots.
 //
 // camera: the follow camera's bounds; `zoom` is the reference zoom scenery is
 // composed at; it eases between `maxZoom` with the player at or below
@@ -28,19 +27,25 @@ const resolved = new Map(Object.entries(ARENAS).map(([id, arena]) => {
   })];
 }));
 
-/** The arena for a mode variant id, or null when the mode has no arena yet. */
+const duelArena = Object.freeze({ ...resolved.get('duels-1v1'), modeVariantId: 'duels', label: 'Duels', playersPerTeam: 2 });
+resolved.set('duels', duelArena);
+
+/** The arena for an authoring mode or a legacy match variant. */
 function arenaFor(modeVariantId) {
   return resolved.get(String(modeVariantId)) || null;
 }
 
 /** The arena a map document is built for. */
 function mapArena(map) {
-  return arenaFor(map?.modeVariantId);
+  const arena = arenaFor(map?.modeVariantId);
+  if (map?.modeVariantId !== 'duels') return arena;
+  const profile = arenaFor(map.arenaId || 'duels-1v1');
+  return profile?.modeId === 'duels' ? { ...arena, world: profile.world, camera: profile.camera } : null;
 }
 
-/** Mode variants maps can be made for. */
+/** Authoring modes offered by Map Studio. */
 function arenaIds() {
-  return [...resolved.keys()];
+  return [...resolved.keys()].filter(id => !['duels-1v1', 'duels-2v2'].includes(id));
 }
 
 module.exports = { arenaFor, mapArena, arenaIds };

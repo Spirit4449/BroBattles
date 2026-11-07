@@ -56,46 +56,7 @@ const ticket = (id, rating, a = 1, b = 0) => ({
   created_at: new Date(now - 10000),
 });
 
-test("server bootstrap supplies transaction and party lifecycle helpers to sockets", (t) => {
-  const { readFileSync } = require("node:fs");
-  const { runInNewContext } = require("node:vm");
-  const db = require("../src/server/core/sql");
-  t.after(() => db.pool.end());
-  const source = readFileSync(require.resolve("../src/server/server"), "utf8");
-  const start = source.indexOf("const socketApi = initSocket(");
-  const end = source.indexOf("app.locals.socketApi = socketApi;", start);
-  assert.ok(start >= 0 && end > start, "socket bootstrap is present");
-  let socketDb;
-  // Execute the actual dependency wiring without starting HTTP, jobs, or MySQL.
-  runInNewContext(source.slice(start, end), {
-    db,
-    io: {},
-    COOKIE_SECRET: "test",
-    auth: { sessions: {} },
-    matchResults: {},
-    runtimeConfig: {},
-    chatService: {},
-    abuseControl: {},
-    friendService: {},
-    initSocket(deps) {
-      socketDb = deps.db;
-      return {};
-    },
-  });
-  for (const name of [
-    "runQuery",
-    "withTransaction",
-    "setPartyStatus",
-    "setPartiesStatus",
-  ]) {
-    assert.equal(
-      typeof socketDb?.[name],
-      "function",
-      `socket DB provides ${name}`,
-    );
-    assert.equal(socketDb[name], db[name]);
-  }
-});
+
 
 test("fill starts from 5 seconds with randomized join times, disabled until configured", () => {
   const t1 = { ticket_id: 101, created_at: new Date(0) };

@@ -22,21 +22,21 @@ const soundPath = "/assets/ui-sound/";
 
 // Default sound mappings (filename without extension)
 const soundFiles = {
-  click: "Cursor4.wav",
+  click: "Cursor4.mp3",
   ready: "ready",
   cancel: "cancel",
-  cancel2: "cancel2.wav",
+  cancel2: "cancel2.mp3",
   success: "shop-confirm.ogg",
   error: "shop-error.ogg",
-  cursor2: "Cursor2.wav",
-  cursor3: "Cursor3.wav",
-  cursor4: "Cursor4.wav",
-  cursor5: "Cursor5.wav",
+  cursor2: "Cursor2.mp3",
+  cursor3: "Cursor3.mp3",
+  cursor4: "Cursor4.mp3",
+  cursor5: "Cursor5.mp3",
   party: "party",
   notification: "notification",
   beep: "/assets/game-sounds/beep.mp3",
   start: "/assets/game-sounds/start.mp3",
-  playerJoin: "/assets/player-join.wav",
+  playerJoin: "/assets/player-join.mp3",
   upgrade: "/assets/upgrade.mp3",
   unlock: "/assets/unlock.mp3",
   shopOpen: "shop-open.ogg",
@@ -57,9 +57,9 @@ const soundFiles = {
   rewardUnlock: "rewards/aura-radiant.mp3",
   rewardEpic: "rewards/aura-divine.mp3",
   rewardLegendary: "rewards/aura-celestial.mp3",
-  rewardCoinImpact: "rewards/coin-impact.wav",
-  rewardGemImpact: "rewards/gem-impact.wav",
-  shopCurrencyImpact: "shop-currency-impact.wav",
+  rewardCoinImpact: "rewards/coin-impact.mp3",
+  rewardGemImpact: "rewards/gem-impact.mp3",
+  shopCurrencyImpact: "shop-currency-impact.mp3",
 };
 
 function createAudioWithFallback(filename) {

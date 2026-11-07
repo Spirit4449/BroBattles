@@ -165,7 +165,6 @@ const DRAW_WIDTH = {
   "vault-intact.webp": 264, "vault-intact-accent.webp": 264,
   "vault-damaged.webp": 264, "vault-damaged-accent.webp": 264,
   "vault-breached.webp": 264, "vault-breached-accent.webp": 264,
-  "center-bullion.webp": 180,
 };
 
 async function resampleToDrawSize() {

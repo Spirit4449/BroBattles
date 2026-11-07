@@ -4,7 +4,7 @@ import PROP_FRAMES from "./propFrames.json";
 export function preloadBankBustAssets(scene, staticPath) {
   scene._bankBustMovementAudio = true;
   for (const [key, file] of Object.entries(bankBustMovementSounds)) {
-    scene.load.audio(`bank-bust-${key}`, `${staticPath}/bank-bust/movement/${file}.wav`);
+    scene.load.audio(`bank-bust-${key}`, `${staticPath}/bank-bust/movement/${file}.mp3`);
   }
   const loadImage = (key, ...args) => { if (!scene._mapAssetKeys?.has(key)) scene.load.image(key, ...args); };
   // Each coin level has its own vault frame, and all three share one bounding

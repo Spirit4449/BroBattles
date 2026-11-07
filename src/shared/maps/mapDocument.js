@@ -1,6 +1,6 @@
 // Versioned, data-only map contract. Shared by the editor, Phaser and the server.
-// A map is one layout for one game mode; its world and camera come from that
-// mode's arena (arenas.js), never from the map.
+// A map is one layout for a game mode. Duel maps support both formations;
+// their arena profile fixes the world and camera independently of team size.
 const { resolveLanding } = require('../physics/spawnPlacement');
 const SCHEMA_VERSION = 2;
 const { POWERUP_TYPES } = require('../powerups');
@@ -8,6 +8,17 @@ const { validateScenery } = require('./scenery');
 const { mapArena } = require('./arenas');
 const { validateMotion, motionPeakSpeed } = require('./platformMotion');
 const clone = value => JSON.parse(JSON.stringify(value));
+function upgradeDuelMap(document) {
+  const copy = clone(document);
+  if (!['duels-1v1', 'duels-2v2'].includes(copy?.modeVariantId)) return copy;
+  copy.arenaId = copy.modeVariantId;
+  copy.modeVariantId = 'duels';
+  for (const team of ['team1', 'team2']) {
+    const slots = copy.spawns?.players?.[team];
+    if (slots?.length === 1) slots.push({ ...clone(slots[0]), dx: (slots[0].dx || 0) + (team === 'team1' ? 80 : -80) });
+  }
+  return copy;
+}
 function geometryFromMap(data, mapId = null) {
   const platforms = data.layout.platforms.map((p, i) => {
     const size = data.textureSizes[p.textureKey];
@@ -61,7 +72,7 @@ function validateMapUnsafe(data) {
   function id(v, path) { if (typeof v !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(v) || ids.has(v)) fail(path, 'requires a unique stable ID'); ids.add(v); }
   if (!data || typeof data !== 'object') return ['map: must be an object'];
   const arena = mapArena(data);
-  if (!arena) return ['modeVariantId: must name a game mode with an arena in arenas.json'];
+  if (!arena) return ['modeVariantId/arenaId: must name a supported game mode and arena profile'];
   for (const key of ['bounds', 'background', 'variants']) if (data[key] !== undefined) fail(key, 'is not part of a map; the world and camera come from the mode\'s arena and backdrops are scenery layers');
   for (const kind of ['platforms', 'hitboxes']) {
     const rows = data.layout?.[kind];
@@ -160,4 +171,4 @@ class MapHistory {
   undo() { if (this.index > 0) this.index--; return clone(this.stack[this.index]); }
   redo() { if (this.index < this.stack.length - 1) this.index++; return clone(this.stack[this.index]); }
 }
-module.exports = { SCHEMA_VERSION, POWERUP_TYPES, clone, mapSummary, geometryFromMap, constrainPoint, resolvePowerupPoints, validateMap, validateDocument, MapHistory };
+module.exports = { upgradeDuelMap, SCHEMA_VERSION, POWERUP_TYPES, clone, mapSummary, geometryFromMap, constrainPoint, resolvePowerupPoints, validateMap, validateDocument, MapHistory };

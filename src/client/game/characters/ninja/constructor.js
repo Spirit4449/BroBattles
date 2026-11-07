@@ -43,7 +43,7 @@ class Ninja extends CharacterEntityBase {
       audio: {
         shurikenThrow: "shurikenThrow.mp3",
         shurikenHit: "hit.mp3",
-        shurikenHitWood: "woodhit.wav",
+        shurikenHitWood: "woodhit.mp3",
       },
     });
   }

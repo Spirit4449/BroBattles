@@ -1,22 +1,22 @@
 # Maps and Map Studio
 
-Every map is built for exactly one game mode: `duels-1v1`, `duels-2v2` or `bank-bust-3v3`. A map's `modeVariantId` decides which lobby selection lists it. A mode with no maps shows as "Coming soon" in the party menu.
+Duel maps use `modeVariantId: "duels"` and share one rotation across 1v1 and 2v2. Both formations offer maps 1, 2, 3 and 5; changing formation preserves the selected map and changes only the player count. Bank Bust maps use `bank-bust-3v3`. A mode with no maps shows as "Coming soon" in the party menu.
 
 ## Modes and arenas
 
-Each mode's world size and match camera live in `src/shared/maps/arenas.json` (read through `src/shared/maps/arenas.js`). All maps of a mode share them, and a map cannot override them, so every map of a mode plays and frames the same way.
+World and camera profiles live in `src/shared/maps/arenas.json` (read through `src/shared/maps/arenas.js`). A duel map's `arenaId` retains its authored profile (`duels-1v1` for maps 1–3, `duels-2v2` for map 5). These profile names are retained for compatibility; they do not restrict the map's match formation. Each map uses the same geometry and camera in either formation.
 
 - `world`: the physics bounds.
 - `camera`: the follow camera's bounds (`x`, `y`, `width`, `height`), its dead zone and `followOffsetY`.
   - `zoom` is the reference zoom that scenery is composed at.
   - The live zoom eases from `maxZoom`, with the player at or below `climbY[1]`, to `minZoom` at or above `climbY[0]`. See `restingCameraFrame` in `cameraDynamics.js`.
-  - The follow bounds extend 80 px past each side of the Duels 1v1 and Bank Bust worlds, giving players more camera tracking near the edges. Duels 2v2 retains a 90 px side inset to keep edge art out of view. Every mode's bounds also allow the camera to track above and below the physics world.
+  - The follow bounds extend 80 px past each side of the standard Duels and Bank Bust worlds, giving players more camera tracking near the edges. The tall Duels profile retains a 90 px side inset to keep edge art out of view. Every mode's bounds also allow the camera to track above and below the physics world.
 
-To give a new mode maps, add its variant id (from `gameModes.catalog.json`) to `arenas.json`. Retuning a mode's camera or size there changes all of its maps.
+To give a new mode maps, add its variant id (from `gameModes.catalog.json`) to `arenas.json`. Retuning an arena profile changes every map using that profile.
 
 ## Map Studio
 
-Admins can open Map Studio using the Edit map action inside the lobby map selection menu, or visit `/map-editor`. Editing runs separately from matchmaking. The toolbar shows the map's mode. **New map** asks for the mode, and its spawns are sized to the mode's team size. Player slots stay fixed to that formation.
+Admins can open Map Studio using the Edit map action inside the lobby map selection menu, or visit `/map-editor`. Editing runs separately from matchmaking. The toolbar shows the map's mode. **New map** offers Duels and Bank Bust. Duel maps have two spawn slots per team; 1v1 uses the first slot and 2v2 uses both. The playtest settings choose 1v1 or 2v2 independently of the map, and the lobby edit link initializes that choice. Player slots stay fixed to the map’s supported capacity.
 
 Admin map cards place the Edit map action in the top-left corner of the preview. Hitbox debugging is controlled inside Map Studio; the lobby does not set or pass that preference to the editor.
 
@@ -51,7 +51,7 @@ URLs must point under `/assets/`, corresponding to `public/assets/` in the repos
 
 ## Persistence and deployment
 
-Built-in documents live in `src/shared/maps/{id}.json`. The backend reads saved overrides from `data/maps/{id}.json`, or from `BB_MAP_DIR` if configured. Back up that directory and `public/assets` together and keep them writable/persistent on the server. Generated asset revisions, map history and match snapshots are runtime data excluded from Git. Saved overrides take precedence over built-in documents.
+Built-in documents live in `src/shared/maps/{id}.json`. The backend reads saved overrides from `data/maps/{id}.json`, or from `BB_MAP_DIR` if configured. Back up that directory and `public/assets` together and keep them writable/persistent on the server. Generated asset revisions, map history and match snapshots are runtime data excluded from Git. Saved overrides take precedence over built-in documents. Legacy duel overrides and imports are upgraded to shared Duels maps while retaining layout, art and arena profile; former 1v1 documents gain a second anchored spawn per team. Existing match snapshots stay pinned.
 
 Each save validates the document and its image/frame files, checks the revision to reject stale writes, and atomically replaces the document. Previous document revisions are retained in `history/{id}/`. Browser drafts recover unsaved edits; a stale draft must be exported and merged with the latest document before saving.
 
@@ -61,7 +61,7 @@ New maps are discovered by the lobby catalog without adding JavaScript modules. 
 
 The format is data-only JSON, validated by `src/shared/maps/mapDocument.js`. Start from an exported document or clone a built-in document, keep `schemaVersion: 2`, and preserve stable object IDs. A document contains:
 
-- `id`, `label`, `modeVariantId` and `metadata` (presentation: previews, lobby background, music).
+- `id`, `label`, `modeVariantId`, optional duel `arenaId` and `metadata` (presentation: previews, lobby background, music).
 - `layout.platforms`, `layout.hitboxes`, `assets`, `textureSizes`, `anchors`, `spawns`, `powerups` and `scenery`. Bank Bust maps also need `objectiveLayout.bankBust`.
 
 ### Iron Junction is generated, not hand-edited
@@ -177,7 +177,7 @@ have somewhere to stand. Run it after any change to the level.
 
 - Platforms use center `x/y`, a `textureKey`, positive `scaleX/scaleY`, optional collision settings and a `body`. Body width/height are world pixels; offsets are unscaled texture pixels measured from the artwork's top left.
 - A platform may add `motion` to move (see [Moving platforms](#moving-platforms)).
-- `spawns.players.team1` and `team2` each list exactly the mode's players per team. A slot contains `anchorId`, optional horizontal `dx`, and optional `dropHeight`. Free powerups contain an `id`, `x/y`, optional `type`, and optional `enabled`.
+- `spawns.players.team1` and `team2` each list exactly the map's supported players per team (two for shared Duels). A slot contains `anchorId`, optional horizontal `dx`, and optional `dropHeight`. Free powerups contain an `id`, `x/y`, optional `type`, and optional `enabled`.
 - Documents never contain world or camera bounds; those come from the mode's arena.
 
 `retargetMap(document, modeVariantId)` in `src/client/editor/editorModel.js` moves a document to another mode. It resizes the spawn lists and adds or drops objectives. That module also exposes the snapping, resizing, replacement, and export operations used by the GUI.
@@ -193,7 +193,7 @@ Authenticated admin endpoints:
 
 For manual JSON changes, import in Map Studio and Save, or use the authenticated API so validation and revision checks run. Do not modify a live match snapshot.
 
-Verification: `node --test tests/mapEditor*.test.js tests/mapDocumentRuntime.test.js` and `npm run build`.
+Verification: `node --test tests/mapEditor*.test.js tests/mapRuntime.test.js` and `npm run build`.
 
 ## Moving platforms
 
@@ -214,7 +214,7 @@ A platform's position is a pure function of server time (`src/shared/maps/platfo
 - Server movement budgets add the fastest platform speed on each axis. Dash collision checks on the server skip moving platforms, because the client saw them at an earlier time.
 - Keep moving platforms clear of paths that would squeeze players between them and other ground unless that is intended; squeezed players drop through the platform. Avoid placing them where flight abilities usually end (Draven's Inferno, Ninja's super), because a bot or player may come down after the platform has moved away.
 
-Checks: `node --test tests/movingPlatforms.test.js tests/ducking.test.js tests/mapEditor.test.js`, and `npm run test:slow` after changing bot behaviour. `tests/helpers/arcadePlatforms.js` runs the real Arcade bodies and client runtime headlessly for new movement cases.
+Checks: `node --test tests/movingPlatforms.test.js tests/playerCollision.test.js tests/mapEditor.test.js`, and `npm run test:slow` after changing bot behaviour. `tests/helpers/arcadePlatforms.js` runs the real Arcade bodies and client runtime headlessly for new movement cases.
 
 ## Scenery (parallax and atmosphere)
 
@@ -259,7 +259,7 @@ The importer trims and scales each image, bakes each layer's `blur`, saves WebP 
 
 New layers start with depth defaults that you then tune: the back layer is the sky, farther layers get more fog and blur, and layers above the platform folder are foreground. Re-running updates art in place and keeps the settings of layers and platforms already in the map. It needs `cwebp`/`dwebp` (`brew install webp`). Keep the source PNGs outside `public/`.
 
-Checks: `node --test tests/mapScenery.test.js` and `npm run validate:content`.
+Checks: `node --test tests/mapRuntime.test.js` and `npm run validate:content`.
 
 ## Spawn placement
 
@@ -267,7 +267,7 @@ Spawn slots describe safe landing surfaces, not sprite centers. `src/shared/phys
 
 `spawnStateFor` in `src/server/core/gameRoom/roomStateManager.js` supplies human, bot, playtest and Bank Bust respawn positions from the match's map snapshot. `game:init` and `game:start` carry the server positions; the client falls back to document placement only when positions are absent. Movement input stays locked until FIGHT.
 
-Checks: `node --test tests/spawnPlacement.test.js tests/gameRoomStartup.test.js tests/pregameFlythrough.test.js`.
+Checks: `node --test tests/mapRuntime.test.js tests/gameRoomStartup.test.js tests/matchPresentation.test.js`.
 
 ### Mangrove Meadow collision surfaces
 

@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
+const path = require('node:path');
+const { createClientModuleGraph } = require('./helpers/clientModule');
 const vm = require('node:vm');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
@@ -141,11 +142,16 @@ function setup({ routeResponse, statusResponse, gameDataResponse, deferStyles = 
       },
     }),
   });
-  for (const file of ['preload', 'lobbyReturn', 'index']) {
-    const source = fs.readFileSync(require.resolve(`../src/client/navigation/${file}.js`), 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, '');
-    // Keep the queue stub; resource discovery runs its actual implementation.
-    vm.runInContext(file === 'preload' ? source.slice(0, source.indexOf('function createBattlePreloader')) : source, context);
-  }
+  const modulePath = name => path.resolve(__dirname, '../src/client/' + name);
+  const imports = {
+    [modulePath('navigation/pageScope')]: { createPageScope: context.createPageScope },
+    [modulePath('navigation/lobbyAudio.mjs')]: { createLobbyAudio: context.createLobbyAudio },
+    [modulePath('site/preferences')]: { getSettings: context.getSettings, subscribeSettings: context.subscribeSettings },
+  };
+  const graph = createClientModuleGraph({ globals: context, imports });
+  const preload = graph.load(modulePath('navigation/preload.js'));
+  imports[modulePath('navigation/preload')] = { ...preload, createBattlePreloader: context.createBattlePreloader };
+  graph.load(modulePath('navigation/index.js'));
   const nav = window.__BB_NAVIGATION__;
   nav.scope();
   return { nav, state, document, location, status, advanceTime };

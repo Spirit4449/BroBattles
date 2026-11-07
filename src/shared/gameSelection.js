@@ -65,15 +65,14 @@ function createSelectionCatalog(getMaps) {
     );
   }
 
-  // Every map is built for one mode variant (its arena), so a selection's
-  // maps are exactly the maps made for that variant.
+  // Duel formations share the same maps; other modes keep variant compatibility.
   function getCompatibleMapsForSelection(selection) {
     const { mode, variant } = describeSelection(selection);
     if (!mode) return [];
     const variantId = String(variant?.id || "");
-    return getMaps().filter((map) => variantId
-      ? map?.modeVariantId === variantId
-      : map?.modeId === String(mode.id));
+    return getMaps().filter((map) => mode.id === 'duels'
+      ? map?.modeId === 'duels' || ['duels', 'duels-1v1', 'duels-2v2'].includes(map?.modeVariantId)
+      : variantId ? map?.modeVariantId === variantId : map?.modeId === String(mode.id));
   }
 
   function normalizeSelection(selection = {}) {

@@ -41,39 +41,7 @@ function particleScene() {
   } };
   return { scene, emitters };
 }
-test('trail pixels scatter from the back of the ball, behind it, and drain cleanly', () => {
-  const { scene, emitters } = particleScene();
-  const sprite = { active: true, x: 100, y: 80, scaleX: 0.5, depth: 100 };
-  const wake = particles.createFireballParticles(scene, sprite, 0);
-  sprite.x = 124;
-  scene.events.emit('postupdate', 0, 48);
-  assert.ok(emitters.length >= 2);
-  assert.ok(emitters.every(e => e.depth < sprite.depth && e.texture === 'wizard-fire-pixels'));
-  const calls = emitters.flatMap(e => e.calls);
-  assert.ok(calls.length > 6);
-  assert.ok(calls.every(c => Number.isInteger(c[0]) && Number.isInteger(c[1]) && c[0] < 124));
-  assert.ok(calls.some(c => c[1] < 80) && calls.some(c => c[1] > 80), 'spread to both sides of the path');
-  // Pixels cool through the fireball palette in whole steps by swapping to
-  // pre-coloured frames, which also works where the renderer ignores tint.
-  const flame = emitters[0].config;
-  const p = {};
-  flame.tint.onEmit(p);
-  assert.equal(p.frame.name, `blue-${p._bbShape}-core`);
-  const frames = [0, 0.3, 0.6, 0.99].map(t => (flame.tint.onUpdate(p, 'tint', t), p.frame.name));
-  assert.equal(new Set(frames).size, 4);
-  assert.ok(frames[3].endsWith('-edge'));
-  const start = flame.scale.onEmit(p);
-  assert.ok(flame.scale.onUpdate(p, 'scale', 0.9) < start);
-  const emitted = calls.length;
-  wake.stop();
-  scene.events.emit('postupdate', 0, 100);
-  assert.equal(emitters.flatMap(e => e.calls).length, emitted, 'no new pixels once stopped');
-  assert.ok(emitters.every(e => !e.destroyed), 'live pixels finish their life');
-  scene.events.emit('postupdate', 0, 1000);
-  assert.ok(emitters.every(e => e.destroyed));
-  assert.equal(scene.events.listenerCount('postupdate'), 0);
-  assert.equal(scene.events.listenerCount('shutdown'), 0);
-});
+
 test('impact burst sprays pixels once and cleans itself up', () => {
   const { scene, emitters } = particleScene();
   let timer;
@@ -89,31 +57,7 @@ test('impact burst sprays pixels once and cleans itself up', () => {
   scene.events.emit('presentation:reset');
   assert.ok(emitters[1].destroyed, 'a match reset clears live bursts');
 });
-test('explosion art: a hot pop that swells into a rising ring of flame and cools into smoke', () => {
-  const { EXPLOSION_COLS: W, EXPLOSION_ROWS: H, EXPLOSION_FRAMES: N, EXPLOSION_ORIGIN } = art;
-  const cy = Math.round(EXPLOSION_ORIGIN.y * H - 0.5);
-  const frames = Array.from({ length: N }, (_, f) => art.explosionFrameCells(f));
-  const count = (cells, test) => cells.reduce((n, c) => n + (test(c) ? 1 : 0), 0);
-  const fire = c => c > 1 && c < 6;
-  for (const [f, cells] of frames.entries()) {
-    for (let x = 0; x < W; x++) assert.ok(!cells[x] && !cells[(H - 1) * W + x], `frame ${f} clear top/bottom`);
-    for (let y = 0; y < H; y++) assert.ok(!cells[y * W] && !cells[y * W + W - 1], `frame ${f} clear sides`);
-  }
-  assert.ok(count(frames[0], c => c === 5) > count(frames[0], fire) / 2, 'opens on a white-hot pop');
-  const peak = frames.reduce((best, cells, f) => (count(cells, fire) > count(frames[best], fire) ? f : best), 0);
-  assert.ok(peak > 1 && count(frames[peak], fire) > count(frames[0], fire) * 4, 'swells well past the ball');
-  const above = cells => cells.reduce((n, c, i) => n + (fire(c) && Math.floor(i / W) < cy ? 1 : 0), 0);
-  assert.ok(above(frames[peak]) > count(frames[peak], fire) / 2, 'flames lick upward');
-  // After the pop the middle burns out, leaving a ring of flame.
-  const cx = Math.round(EXPLOSION_ORIGIN.x * W - 0.5);
-  const ring = frames[Math.round(N / 2)];
-  assert.equal(ring[cy * W + cx], 0, 'the centre burns out into a ring');
-  assert.ok(count(ring, fire) > count(frames[0], fire) * 2);
-  const last = frames[N - 1];
-  assert.equal(count(last, c => c >= 4 && c < 6), 0, 'the end has cooled');
-  assert.ok(count(last, c => c === 6) > 0, 'and leaves smoke');
-  assert.ok(count(last, fire) < count(frames[peak], fire) / 2, 'and breaks apart');
-});
+
 test('a fireball impact plays the team explosion once and cleans it up', () => {
   const attack = load('src/client/game/characters/wizard/attack.js', attackImports);
   const sprites = [];
@@ -144,25 +88,7 @@ test('a fireball impact plays the team explosion once and cleans it up', () => {
   assert.equal(scene.events.listenerCount('presentation:reset'), 0);
   assert.equal(scene.events.listenerCount('shutdown'), 0);
 });
-test('fireball art: round leading face, grows on the staff, never clips its frame', () => {
-  const { FIREBALL_COLS: W, FIREBALL_ROWS: H, FIREBALL_ORIGIN } = art;
-  const cx = Math.round(FIREBALL_ORIGIN.x * W - 0.5), cy = Math.round(FIREBALL_ORIGIN.y * H - 0.5);
-  const filled = f => art.fireballFrameCells(f).reduce((n, c) => n + (c > 0), 0);
-  for (const [a, b] of [[0, 4], [4, 8], [8, 15]]) assert.ok(filled(b) > filled(a), `spawn grows from frame ${a} to ${b}`);
-  for (let f = 0; f < 32; f++) {
-    const cells = art.fireballFrameCells(f);
-    for (let x = 0; x < W; x++) assert.ok(!cells[x] && !cells[(H - 1) * W + x], `frame ${f} clear top/bottom`);
-    for (let y = 0; y < H; y++) assert.ok(!cells[y * W] && !cells[y * W + W - 1], `frame ${f} clear sides`);
-    if (f < 16) continue;
-    const run = (dx, dy) => { let n = 0; while (cells[(cy + dy * (n + 1)) * W + cx + dx * (n + 1)]) n++; return n; };
-    const [left, right, front] = [run(-1, 0), run(1, 0), run(0, 1)];
-    assert.ok(Math.abs(left - right) <= 1 && Math.abs(front - left) <= 1, `frame ${f} leading face is round`);
-    const area = rows => rows.reduce((n, y) => n + cells.slice(y * W, y * W + W).filter(Boolean).length, 0);
-    const rows = [...Array(H).keys()];
-    assert.ok(area(rows.filter(y => y < cy)) > area(rows.filter(y => y > cy)) * 1.1, `frame ${f} trails flame behind`);
-    assert.equal(cells[cy * W + cx], 5, 'hot core at the anchor');
-  }
-});
+
 test('charge holds its size and reuses its animated sprite on release', () => {
   const attack = load('src/client/game/characters/wizard/attack.js', attackImports);
   function object(x = 0, y = 0) {

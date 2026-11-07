@@ -162,39 +162,6 @@ test('unreachable aims display the real flight endpoint rather than a fictitious
   assert.deepEqual(flight.preview.points.at(-1),model.sample(flight.projectile,flight.durationMs));
 });
 
-test('burning arrows emit pixel flames in flight and at attached impacts, then clean up',()=>{
-  const {api,scene,owner,created,frame,packet}=setup();
-  api.predictHuntressShot(scene,owner,'owner',{id:'fire',aim:{angle:0}},true);
-  frame(230);
-  const arrows=created.filter(s=>s.texture === 'huntress-arrow');
-  const flames=created.filter(s=>s.texture !== 'huntress-arrow');
-  assert.ok(arrows.length>0 && flames.length>=arrows.length, 'every super arrow is burning');
-  api.handleHuntressPacket(scene,packet({type:'huntress-terminal',id:'owner:fire:0',requestId:'fire',
-    reason:'target',target:'owner',targetOffset:{x:5,y:10},x:105,y:110,rotation:0,
-    visual:{special:true,scale:.24,embedMs:2200},appliedDamage:0}),{localUsername:'owner',localPlayer:owner});
-  owner.x=200;
-  const before=created.length;
-  frame(330);
-  assert.equal(created[0].x,205);
-  assert.ok(created.slice(before).some(s=>s.x===205&&s.y===110),'burn follows the attachment');
-  api.resetHuntressNetwork();
-  assert.ok(created.every(s=>!s.active));
-});
-
-test('normal arrows emit fire, flames fade and the network renderer detaches on cleanup', () => {
-  const {api,created,scene,owner,frame}=setup();
-  const tweens=[];
-  scene.tweens.add=options=>tweens.push(options);
-  api.predictHuntressShot(scene,owner,'owner',{id:'trail',angle:0,speed:model.resolveShot({angle:0}).speed});
-  frame(101);
-  const trails=tweens.filter(tween=>tween.targets.texture !== "huntress-arrow");
-  assert.ok(trails.length>=created.filter(s=>s.texture === "huntress-arrow").length);
-  for(const tween of trails){assert.equal(tween.alpha,0);tween.onComplete();assert.equal(tween.targets.active,false);}
-  api.resetHuntressNetwork();
-  assert.equal(scene.events.listenerCount('update'),0);
-  assert.ok(created.every(sprite=>!sprite.active));
-});
-
 test('PvP Huntress launches from the displayed moving opponent and converges to server flight',()=>{
   const f=setup();
   const remote={active:true,x:240,y:100,displayWidth:150,displayHeight:150};

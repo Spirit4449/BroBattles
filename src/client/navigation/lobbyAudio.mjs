@@ -5,8 +5,8 @@ export function createLobbyAudio({ getAudioContext, readSettings, createAudio = 
   later = setTimeout, cancel = clearTimeout } = {}) {
   const level = 0.264;
   const channels = new Map(), cues = new Map();
-  const cueFiles = { ready: '/assets/ui-sound/ready.mp3', cancel2: '/assets/ui-sound/cancel2.wav',
-    playerJoin: '/assets/player-join.wav' };
+  const cueFiles = { ready: '/assets/ui-sound/ready.mp3', cancel2: '/assets/ui-sound/cancel2.mp3',
+    playerJoin: '/assets/player-join.mp3' };
   let playerKeys;
   let phase = 'game', active = 'lobby', context;
   let unlocked = false, hidden = false, ready = false;

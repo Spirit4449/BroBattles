@@ -58,120 +58,38 @@ test('server grants a burst only once and rejects cooldown spam, dead/locked pla
  assert.equal(acceptDash({isAlive:true},{...input,dashSeq:Infinity},1000),false);
 });
 
-test('the actual movement handler completes its dash branch without touching later movement state', () => {
-  const source = fs.readFileSync(require.resolve('../src/client/game/players/localPlayer.js'), 'utf8');
-  // The per-frame pipeline and all of its step functions.
-  const movement = source.slice(source.indexOf('export function handlePlayerMovement(scene)'),
-    source.indexOf('export function setSuperStats(')).replace('export function', 'function');
-  const p = player(); p._dash = {x:-Math.SQRT1_2,y:-Math.SQRT1_2};
-  p.body.touching = {down:false}; p.body.velocity = {x:-495,y:-495};
-  const key = {isDown:false};
-  let wallSlideCleared = false;
-  const context = { player:p, scene:{game:{loop:{delta:16}}},
-    mobileControlsController:null, combatMouseController:null, chatInputActive:false, window:{},
-    drawDashCooldown(){}, updateInvisibleAttackAlpha(){}, updateDash:()=>true, keySpace:key,
-    Phaser:{Input:{Keyboard:{JustDown:()=>true}}},
-    cursors:{left:key,right:key,up:key,down:key}, movementKeys:{left:key,right:key,up:key,down:key},
-    dead:false, isAttacking:false, movementSpeedMult:1, powerupInvisible:false,
-    ammoCharges:1, ammoCapacity:1, reloadTimerMs:0, drawAmmoBar(){},
-    movementAudio:{stopLoops(){}}, movementFx:{clearWallSlide(){ wallSlideCleared = true; }},
-    isMoving:false, applyFlipOffsetLocal(){},
-    playCharacterAnimation(){}, currentCharacter:'ninja',currentSkinId:'',resolveAnimKey(){},
-    syncLocalUiPosition(){},getMovementFxNetworkState:()=>({}), networkInputState:null,
-  };
-  vm.runInNewContext(`${movement}; handlePlayerMovement(scene);`,context);
-  assert.equal(context.networkInputState.animation,'dashing');
-  assert.equal(context.networkInputState.wallSliding,false);
-  assert.equal(wallSlideCleared,true);
-  assert.equal(p._wallAttachSide,null);
+test('an accepted dash publishes its real movement and clears wall-slide state', t => {
+  const { createLocalPlayerFixture } = require('./helpers/localPlayerFixture');
+  const f = createLocalPlayerFixture();
+  t.after(() => f.destroy());
+  f.press('left'); f.press('up'); f.press('dash');
+  f.frame();
+  const state = f.api.getNetworkInputState();
+  assert.equal(state.animation, 'dashing');
+  assert.equal(state.wallSliding, false);
+  assert.equal(state.wallSide, null);
+  assert.ok(state.vx < 0 && state.vy < 0);
+  assert.equal(state.loaded, true);
 });
 
-test('normal movement and dash coasting preserve boosted vertical speeds within the shared cap', () => {
-  const Body = require('phaser/src/physics/arcade/Body');
-  const World = require('phaser/src/physics/arcade/World');
-  const source = fs.readFileSync(require.resolve('../src/client/game/players/localPlayer.js'), 'utf8');
-  const movement = source.slice(source.indexOf('export function handlePlayerMovement(scene)'),
-    source.indexOf('export function setSuperStats(')).replace('export function', 'function');
-  const world = { defaults: {}, gravity: { x: 0, y: 0 }, updateMotion: World.prototype.updateMotion,
-    computeVelocity: World.prototype.computeVelocity, computeAngularVelocity: World.prototype.computeAngularVelocity };
-  const body = new Body(world); body.setSize(20, 20); body.enable = true;
-  const p = { body, setMaxVelocity:(x,y)=>body.setMaxVelocity(x,y), setDragX:x=>body.setDragX(x), setAccelerationX:x=>body.setAccelerationX(x) };
-  const context = vm.createContext({ player:p, Date, physics });
-  vm.runInContext(movement, context);
+test('normal movement and a completed dash preserve boosted vertical speed within the shared cap', t => {
+  const { createLocalPlayerFixture } = require('./helpers/localPlayerFixture');
   for (const sign of [-1, 1]) for (const coast of [false, true]) {
+    const f = createLocalPlayerFixture();
+    t.after(() => f.destroy());
+    if (coast) {
+      f.press('right'); f.press('dash'); f.frame();
+      f.release('right'); f.release('dash');
+      f.advance(physics.dashDurationMs + 1); f.frame();
+    }
     const velocity = sign * physics.maxVerticalSpeed * 0.95;
-    body.setVelocity(physics.maxSpeed * 1.5, velocity);
-    p._dashCoastUntil = coast ? Date.now() + physics.dashCoastMs : 0;
-    vm.runInContext('applyBodyLimits(physics, false)', context);
-    if (coast) exported.applyDashCoast(p, 1, physics.maxSpeed);
-    body.update(1 / 60);
-    assert.equal(body.velocity.y, velocity, `vertical speed survives ${coast ? 'coast' : 'normal movement'}`);
+    f.player.body.setVelocity(physics.maxSpeed * 1.5, velocity);
+    f.frame();
+    f.player.body.update(0);
+    assert.equal(f.player.body.velocity.y, velocity, coast ? 'coast' : 'ordinary movement');
   }
   assert.ok(require('../src/server/core/gameRoomConfig').MOVE_PLAUSIBLE_SPEED_V > physics.maxVerticalSpeed);
 });
-
-test('dash sound plays once per accepted launch, including when the visual effect is hidden', () => {
-  const calls=[];const audioScene={...scene,cache:{audio:{exists:()=>true}},sound:{play:(...args)=>calls.push(args)}};
-  const p=player();
-  exported.updateDash(audioScene,p,{pressed:true,now:1000,showEffect:false});
-  exported.updateDash(audioScene,p,{pressed:true,now:1050});
-  exported.updateDash(audioScene,p,{pressed:true,now:2000});
-  assert.equal(calls.length,1);
-  assert.equal(calls[0][0],'sfx-dash');
-  assert.equal(calls[0][1].volume,0.7);
-  assert.ok(calls[0][1].rate>=0.97 && calls[0][1].rate<=1.03);
-  exported.updateDash(audioScene,p,{pressed:true,now:6160,showEffect:false});
-  assert.equal(calls.length,2);
-  audioScene._localPlayerAudioSprite={active:true,x:0,y:0};
-  exported.playDashSound(audioScene,true,{x:0,y:0});
-  assert.ok(Math.abs(calls[2][1].volume-0.63)<1e-12);
-});
-
-test('bottom HUD counts down to ready, stays independent of player coordinates, and cleans up', t => {
-  let now=1000;t.mock.method(Date,'now',()=>now);
-  const parts={};
-  const element=()=>({style:{setProperty(k,v){this[k]=v;}},dataset:{},textContent:'',setAttribute(k,v){this[k]=v;},remove(){this.removed=true;}});
-  const root=element();root.querySelector=key=>parts[key] ||= element();
-  const handlers={}; const body={appendChild(el){this.child=el;}};
-  const document={body,createElement:()=>root,addEventListener(){},removeEventListener(){}};
-  const hudExports={};
-  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/dash.js'),'utf8'),{
-    babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
-  }).code,{exports:hudExports,require:path=>path.endsWith('.json')?physics:path.includes('playerAudio')?playerAudio:{dashDirection},Date,document});
-  const p=player();p._dashReadyAt=6000;p.once=(name,fn)=>handlers[name]=fn;
-  const hudScene={events:{once:(name,fn)=>handlers[name]=fn,off(){}}};
-  hudExports.drawDashCooldown(hudScene,p);
-  assert.equal(p._dashHud.fill.style.clipPath,'inset(0 100.00% 0 0)');
-  p._dash={until:1160};p._dashReadyAt=6160;
-  hudExports.drawDashCooldown(hudScene,p);
-  assert.equal(p._dashHud.status.textContent,'Dash!');
-  assert.equal(p._dashHud.fill.style.clipPath,'');
-  assert.equal(p._dashHud.root.dataset.ready,'false');
-  now=1080;hudExports.drawDashCooldown(hudScene,p);
-  assert.equal(p._dashHud.fill.style.clipPath,'inset(0 50.00% 0 0)');
-  p._dash=null;now=1160;hudExports.drawDashCooldown(hudScene,p);
-  assert.equal(p._dashHud.status.textContent,'5.0s');
-  assert.equal(p._dashHud.fill.style.clipPath,'inset(0 100.00% 0 0)');
-  p._dashReadyAt=6000;
-  now=3500;p.x=9000;hudExports.drawDashCooldown(hudScene,p);
-  assert.equal(p._dashHud.fill.style.clipPath,'inset(0 50.00% 0 0)');
-  assert.equal(body.child,root);
-  now=6000;hudExports.drawDashCooldown(hudScene,p);
-  assert.equal(p._dashHud.status.textContent,'Ready');
-  assert.equal(p._dashHud.fill.style.clipPath,'');
-  assert.equal(p._dashHud.root.dataset.idle,'false');
-  now=12000;hudExports.drawDashCooldown(hudScene,p);
-  assert.equal(p._dashHud.root.dataset.idle,'true');
-  assert.equal(p._dashHud.root.style['--dash-pulse-opacity'],'0');
-  now=17999;hudExports.drawDashCooldown(hudScene,p);
-  assert.equal(p._dashHud.root.style['--dash-pulse-opacity'],'0');
-  now=19000;hudExports.drawDashCooldown(hudScene,p);
-  assert.ok(Number(p._dashHud.root.style['--dash-pulse-opacity'])>0);
-  p._dashReadyAt=24000;hudExports.drawDashCooldown(hudScene,p);
-  assert.equal(p._dashHud.root.dataset.idle,'false');
-  handlers.shutdown();assert.equal(root.removed,true);assert.equal(p._dashHud,null);
-});
-
 
 test('dash starts at fixed speed regardless of incoming momentum and preserves exit velocity', () => {
  const p=player();p.body.velocity={x:200,y:-150};
@@ -401,19 +319,7 @@ function dashVfxFixture() {
     }};
   return {scene,sprite,shapes,timers,delayed,sounds};
 }
-test('dash has an immediate visible cue at rest, trails actual motion, and stops on shutdown',()=>{
-  const f=dashVfxFixture();
-  exported.spawnDashEffect(f.scene,f.sprite,1,0);
-  assert.equal(f.shapes.length,2, 'leading bow and afterimage exist before movement');
-  f.timers[0].callback(); assert.equal(f.shapes.length,2, 'wall contact adds no false trail');
-  f.sprite.x+=15; f.timers[0].callback();
-  assert.equal(f.shapes.length,4);
-  assert.ok(f.shapes[2].lines.every(line=>line.every(Number.isFinite)));
-  f.sprite.x+=1000;f.timers[0].callback(); assert.equal(f.shapes.length,4);
-  f.scene.events.emit('shutdown');assert.equal(f.timers[0].removed,true);
-  assert.equal(f.sprite.listenerCount('destroy'),0);
-  f.sprite.x+=15;f.timers[0].callback();assert.equal(f.shapes.length,4);
-});
+
 test('remote dash survives skipped snapshots and ignores duplicate, missing and older IDs',()=>{
   const f=dashVfxFixture(), tracker={};
   const present=(state,hidden=false)=>
@@ -430,15 +336,7 @@ test('remote dash survives skipped snapshots and ignores duplicate, missing and 
   assert.equal(f.sounds.length,2);
   assert.ok(f.sounds[1][1].volume<0.3);
 });
-test('an invisible opponent dash remains audible without drawing its trail',()=>{
-  const f=dashVfxFixture(),tracker={_lastDashSeq:1};
-  f.sprite.visible=false;
-  f.sprite._powerupInvisible=true;
-  exported.presentRemoteDash(f.scene,f.sprite,{dashSeq:2,dashX:1,dashY:0},tracker);
-  assert.equal(f.shapes.length,0);
-  assert.equal(f.sounds.length,1);
-  assert.ok(Math.abs(f.sounds[0][1].volume-0.63)<1e-12);
-});
+
 test('joining during an active dash plays once and sprite destruction stops trail',()=>{
   const f=dashVfxFixture(),tracker={},state={dashSeq:3,animation:'dashing',dashX:-1,dashY:0};
   exported.presentRemoteDash(f.scene,f.sprite,state,tracker);
@@ -446,21 +344,6 @@ test('joining during an active dash plays once and sprite destruction stops trai
   assert.equal(f.sounds.length,1);
   f.sprite.emit('destroy');assert.equal(f.timers[0].removed,true);
   assert.equal(f.scene.events.listenerCount('shutdown'),0);
-});
-
-
-test('dash leading edge follows the rendered player and turns with actual travel',()=>{
-  const f=dashVfxFixture();
-  exported.spawnDashEffect(f.scene,f.sprite,1,0);
-  const head=f.shapes[0];
-  assert.equal(head.x,f.sprite.x);assert.equal(head.rotation,0);
-  assert.ok(head.lines.some(([x1,,x2])=>x1>20 && x2>20), 'bow projects in front');
-  f.sprite.y+=12;
-  f.scene.events.emit('postupdate');
-  assert.equal(head.y,f.sprite.y);assert.equal(head.rotation,Math.PI/2);
-  f.delayed[0]();
-  assert.equal(head.destroyed,true);
-  assert.equal(f.scene.events.listenerCount('postupdate'),0);
 });
 
 test('client and bots share faster horizontal launches while vertical components and caps stay unchanged', () => {

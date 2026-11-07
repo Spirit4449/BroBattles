@@ -188,6 +188,26 @@ class CommerceFakeDb {
   }
 }
 
+// Synthetic offers preserve bundle/skin commerce coverage independently of live inventory.
+function commerceCatalog() {
+  const catalog = structuredClone(require('../src/server/services/shop/shopCatalog').getShopCatalog());
+  const skin = { kind: 'skin', id: 'ninja-arena-sovereign' };
+  const common = {
+    rarity: 'epic', banner: '/assets/shop/banners/shuriken-strike-scene.webp',
+    price: { type: 'virtual', currency: 'gems', amount: 250 }, purchaseLimit: 'lifetime',
+  };
+  catalog.offers.unshift({
+    ...common, id: 'test-arsenal', section: 'sales', kind: 'bundle', name: 'Test bundle',
+    eligibility: { requiresNotOwned: skin },
+    grants: [skin, { kind: 'card', id: 'shuriken-strike' },
+      { kind: 'currency', currency: 'coins', amount: 500 }],
+  }, {
+    ...common, id: 'test-skin', section: 'skins', kind: 'item', name: 'Test skin', grants: [skin],
+  });
+  catalog.rotation.sales.pinnedOfferIds = ['test-arsenal'];
+  return catalog;
+}
+
 function createFixture({ gems = 250, coins = 0 } = {}) {
   const user = {
     user_id: 7,
@@ -197,13 +217,13 @@ function createFixture({ gems = 250, coins = 0 } = {}) {
     selected_skin_id_by_char: JSON.stringify({ thorg: "thorg-default" }),
   };
   const db = new CommerceFakeDb(user);
-  return { db, user, service: createShopService({ db }) };
+  return { db, user, service: createShopService({ db, catalogProvider: commerceCatalog }) };
 }
 
 test("concurrent bundle purchases charge and grant exactly once without equipping", async () => {
   const { db, service } = createFixture();
-  const sale = (await service.buildBootstrap({ user_id: 7 })).sections.sales.find(item => item.id === "ironbound-arsenal");
-  const offers = require('../src/server/services/shop/shopCatalog').getShopCatalog().offers;
+  const sale = (await service.buildBootstrap({ user_id: 7 })).sections.sales.find(item => item.id === "test-arsenal");
+  const offers = commerceCatalog().offers;
   const standaloneCosmetics = sale.grants.filter(grant => grant.kind !== 'currency').map(grant =>
     offers.find(offer => offer.grants.length === 1 && offer.grants[0].kind === grant.kind && offer.grants[0].id === grant.id));
   assert.equal(sale.originalPrice.amount, standaloneCosmetics.reduce((sum, offer) => sum + offer.price.amount, 0));
@@ -213,12 +233,12 @@ test("concurrent bundle purchases charge and grant exactly once without equippin
   const [first, second] = await Promise.all([
     service.purchaseVirtual({
       userId: 7,
-      offerId: "ironbound-arsenal",
+      offerId: "test-arsenal",
       idempotencyKey: "bundle-request-1",
     }),
     service.purchaseVirtual({
       userId: 7,
-      offerId: "ironbound-arsenal",
+      offerId: "test-arsenal",
       idempotencyKey: "bundle-request-2",
     }),
   ]);
@@ -228,7 +248,7 @@ test("concurrent bundle purchases charge and grant exactly once without equippin
   assert.equal(stored.gems, 250 - sale.price.amount);
   assert.equal(JSON.parse(db.state.redemptions[0].price_snapshot).amount, sale.price.amount);
   assert.equal(stored.coins, 500);
-  assert.ok(db.state.skins.get(7).has("thorg-iron"));
+  assert.ok(db.state.skins.get(7).has("ninja-arena-sovereign"));
   assert.ok(db.state.cards.get(7).has("shuriken-strike"));
   assert.equal(stored.selected_card_id, "default");
   assert.equal(
@@ -239,12 +259,12 @@ test("concurrent bundle purchases charge and grant exactly once without equippin
 
 test("insufficient funds roll back the complete offer", async () => {
   const { db, service } = createFixture({ gems: 0 });
-  const sale = (await service.buildBootstrap({ user_id: 7 })).sections.sales.find(item => item.id === "ironbound-arsenal");
+  const sale = (await service.buildBootstrap({ user_id: 7 })).sections.sales.find(item => item.id === "test-arsenal");
   db.state.users.get(7).gems = sale.price.amount - 1;
   await assert.rejects(
     service.purchaseVirtual({
       userId: 7,
-      offerId: "ironbound-arsenal",
+      offerId: "test-arsenal",
       idempotencyKey: "bundle-too-expensive",
     }),
     (error) => error.code === "insufficient_funds",
@@ -311,7 +331,7 @@ test('rotating card offers charge the displayed sale price and keep the wood def
 
 test('sale purchases reject a stale displayed price', async () => {
   const { db, service } = createFixture();
-  const sale = (await service.buildBootstrap({ user_id: 7 })).sections.sales.find(item => item.id === 'ironbound-arsenal');
+  const sale = (await service.buildBootstrap({ user_id: 7 })).sections.sales.find(item => item.id === 'test-arsenal');
   await assert.rejects(service.purchaseVirtual({
     userId: 7,
     offerId: sale.id,
@@ -322,7 +342,7 @@ test('sale purchases reject a stale displayed price', async () => {
 });
 
 function configurableFixture() {
-  const catalog = structuredClone(require('../src/server/services/shop/shopCatalog').getShopCatalog());
+  const catalog = commerceCatalog();
   const { db, user } = createFixture({ gems: 10000 });
   return { catalog, db, user, service: createShopService({ db, catalogProvider: () => catalog }) };
 }
@@ -331,12 +351,12 @@ test('catalog sections display bundles and promoted skins only once at the charg
   const { catalog, service, user, db } = configurableFixture();
   const bundle = catalog.offers.find(offer => offer.kind === 'bundle');
   bundle.section = 'profile';
-  catalog.rotation.sales.pinnedOfferIds = ['skin-thorg-iron'];
+  catalog.rotation.sales.pinnedOfferIds = ['test-skin'];
   const bootstrap = await service.buildBootstrap(user);
   assert.deepEqual(bootstrap.sectionMeta, catalog.sections);
   assert.ok(bootstrap.sections.profile.some(item => item.id === bundle.id && item.grants.length === bundle.grants.length));
-  assert.ok(!bootstrap.sections.skins.some(item => item.id === 'skin-thorg-iron'));
-  const sale = bootstrap.sections.sales.find(item => item.id === 'skin-thorg-iron');
+  assert.ok(!bootstrap.sections.skins.some(item => item.id === 'test-skin'));
+  const sale = bootstrap.sections.sales.find(item => item.id === 'test-skin');
   const before = db.state.users.get(user.user_id).gems;
   await service.purchaseVirtual({ userId: user.user_id, offerId: sale.id, expectedPrice: sale.price.amount, expectedCurrency: sale.price.currency, idempotencyKey: 'promoted-skin-test' });
   assert.equal(db.state.users.get(user.user_id).gems, before - sale.price.amount);
@@ -402,7 +422,7 @@ test('grant failures roll back the wallet, receipt and earlier bundle grants', a
     if (sql.startsWith('INSERT IGNORE INTO user_cards')) throw new Error('grant failure');
     return query(sql, params);
   };
-  await assert.rejects(service.purchaseVirtual({ userId: user.user_id, offerId: 'ironbound-arsenal', idempotencyKey: 'failing-bundle-grant' }), /grant failure/);
+  await assert.rejects(service.purchaseVirtual({ userId: user.user_id, offerId: 'test-arsenal', idempotencyKey: 'failing-bundle-grant' }), /grant failure/);
   assert.equal(db.state.users.get(user.user_id).gems, user.gems);
   assert.equal(db.state.redemptions.length, 0);
   assert.equal(db.state.ledger.length, 0);
@@ -427,7 +447,7 @@ test('checkout status displays saved reward snapshots without depending on the c
 
 test('bundle receipts distinguish purchased bundles from ownership-blocked offers', async () => {
   const { service, db, user } = createFixture();
-  const offerId = 'ironbound-arsenal';
+  const offerId = 'test-arsenal';
   const getState = async () => (await service.buildBootstrap(user)).sections.sales.find(item => item.id === offerId).state;
   assert.equal((await getState()).purchased, false);
   await service.purchaseVirtual({ userId: user.user_id, offerId, idempotencyKey: 'purchased-bundle-label' });
@@ -452,7 +472,7 @@ test("viewed Shop items persist across service instances and refreshes remain in
   await service.markViewed({ userId: user.user_id, rotations, offerIds: [sale.id] });
   await service.markViewed({ userId: user.user_id, rotations, offerIds: [sale.id] });
   assert.equal(db.state.views.filter(row => row.view_kind === 'offer').length, 1);
-  const otherDevice = createShopService({ db });
+  const otherDevice = createShopService({ db, catalogProvider: commerceCatalog });
   const viewed = await otherDevice.buildBootstrap(user);
   assert.equal(viewed.sections.sales.find(item => item.id === sale.id).isNew, false);
   assert.equal(viewed.notifications.sections.sales.refreshed, false);
@@ -479,7 +499,7 @@ test("viewed Shop state rejects unknown offers and sections before writing", asy
 
 test("newly added offers are unread while price edits and owned cards do not become new", async () => {
   const { db, user } = createFixture();
-  const catalog = structuredClone(require('../src/server/services/shop/shopCatalog').getShopCatalog());
+  const catalog = commerceCatalog();
   const service = createShopService({ db, catalogProvider: () => catalog });
   const before = await service.buildBootstrap(user);
   const offers = Object.values(before.sections).flat().filter(item => item.isNew).map(item => item.id);
@@ -495,4 +515,39 @@ test("newly added offers are unread while price edits and owned cards do not bec
   assert.equal(after.sections.currency.find(item => item.id === added.id).isNew, true);
   assert.equal(after.notifications.sections.currency.hasNew, true);
   assert.ok(Object.values(after.sections).flat().filter(item => item.state.owned).every(item => !item.isNew));
+});
+
+test('checkout sends the embedded payment contract, saved price and order identity to Stripe', async t => {
+  const { createStripeShopService } = require('../src/server/services/shop/stripeShopService');
+  const configuration = { STRIPE_SECRET_KEY: 'test-secret', STRIPE_PUBLISHABLE_KEY: 'test-public',
+    STRIPE_WEBHOOK_SECRET: 'test-webhook', PUBLIC_BASE_URL: 'https://game.test', STRIPE_AUTOMATIC_TAX: 'false' };
+  const previous = Object.fromEntries(Object.keys(configuration).map(key => [key, process.env[key]]));
+  Object.assign(process.env, configuration);
+  t.after(() => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+  const { db, service, user } = createFixture();
+  const offer = require('../src/server/services/shop/shopCatalog').getShopCatalog().offers.find(offer => offer.price.type === 'money');
+  const order = { order_id: 'saved-order', user_id: user.user_id, offer_id: offer.id,
+    amount_cents: offer.price.amountCents, currency: offer.price.currency };
+  const runQuery = db.runQuery;
+  db.runQuery = async (sql, params) => {
+    if (sql.startsWith('SELECT * FROM shop_orders')) return [order];
+    if (sql.startsWith('UPDATE shop_orders')) return { affectedRows: 1 };
+    return runQuery(sql, params);
+  };
+  let request, options;
+  const stripe = createStripeShopService({ db, shopService: service, stripeClient: { checkout: { sessions: {
+    async create(params, opts) { request = params; options = opts; return { id: 'session', client_secret: 'client-secret' }; },
+  } } } });
+  const result = await stripe.createCheckoutSession({ user, offerId: offer.id, idempotencyKey: 'checkout-contract', returnPath: '/party/7' });
+  assert.equal(request.ui_mode, 'embedded_page');
+  assert.deepEqual(request.managed_payments, { enabled: false });
+  assert.equal(request.line_items[0].price_data.unit_amount, order.amount_cents);
+  assert.deepEqual(request.metadata, { orderId: order.order_id, userId: String(user.user_id), offerId: offer.id });
+  assert.equal(request.return_url, 'https://game.test/party/7?shop_checkout={CHECKOUT_SESSION_ID}');
+  assert.equal(options.idempotencyKey, `bro-battles-shop:${order.order_id}`);
+  assert.equal(result.clientSecret, 'client-secret');
 });

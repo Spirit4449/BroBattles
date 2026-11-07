@@ -24,10 +24,10 @@ class TestSocket extends EventEmitter {
   }
 }
 
-// A built-in map for each team size: each map is made for one mode.
+// Both duel formations use the same map; Bank Bust has its own pool.
 const { mapDefaults } = require('../src/shared/maps');
 const { mapArena } = require('../src/shared/maps/arenas');
-const mapForTeamSize = (teamSize) => mapDefaults.find((map) => mapArena(map).playersPerTeam === teamSize);
+const mapForTeamSize = (teamSize) => mapDefaults.find((map) => teamSize <= 2 ? mapArena(map).modeId === 'duels' : mapArena(map).playersPerTeam === teamSize);
 
 async function setup(t, teamSize = 1, { humans = 1 } = {}) {
   const map = mapForTeamSize(teamSize), arena = mapArena(map);
@@ -61,7 +61,7 @@ async function setup(t, teamSize = 1, { humans = 1 } = {}) {
   };
   const hub = createGameHub({ io, db });
   const room = await hub.createGameRoom(1341, {
-    mode: teamSize, modeId: arena.modeId, modeVariantId: arena.modeVariantId,
+    mode: teamSize, modeId: arena.modeId, modeVariantId: arena.modeId === 'duels' ? `duels-${teamSize}v${teamSize}` : arena.modeVariantId,
     map: map.id,
     players: [human, ...friends, ...createBotParticipants([human, ...friends], teamSize, { seed: 17 }).map(decorateParticipant)],
   });
@@ -86,7 +86,7 @@ async function setup(t, teamSize = 1, { humans = 1 } = {}) {
 }
 
 for (const teamSize of [1, 2, 3]) {
-  test(`${mapArena(mapForTeamSize(teamSize)).label} socket join starts a filled room after human readiness`, async (t) => {
+  test(`${mapArena(mapForTeamSize(teamSize)).label} ${teamSize}v${teamSize} socket join starts a filled room after human readiness`, async (t) => {
     const h = await setup(t, teamSize);
     const client = h.socket('human');
     assert.deepEqual(await h.join(client), { ok: true, matchId: 1341 });

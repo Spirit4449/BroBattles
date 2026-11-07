@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": 3,
   "label": "Serenity",
-  "modeVariantId": "duels-1v1",
+  "modeVariantId": "duels",
   "metadata": {
     "key": "serenity",
     "terrain": "grass",
@@ -233,11 +233,19 @@
         {
           "dx": 0,
           "anchorId": "h5"
+        },
+        {
+          "dx": 80,
+          "anchorId": "h5"
         }
       ],
       "team2": [
         {
           "dx": 0,
+          "anchorId": "p0"
+        },
+        {
+          "dx": -80,
           "anchorId": "p0"
         }
       ]
@@ -316,5 +324,6 @@
         "scroll": 0.1
       }
     ]
-  }
+  },
+  "arenaId": "duels-1v1"
 }

@@ -3,7 +3,7 @@ const {GameRoom}=require('../../core/gameRoom');
 const {createBotParticipants}=require('../../core/bots/identity');
 const {decorateParticipant}=require('../match/matchRosterService');
 const { getAllCharacters, getHealth, getDamage, getSpecialDamage, DEFAULT_CHARACTER }=require("../../../shared/characters/characterStats.js");
-const {clone,mapSummary,validateDocument}=require('../../../shared/maps/mapDocument');
+const {clone,mapSummary,validateDocument,upgradeDuelMap}=require('../../../shared/maps/mapDocument');
 const {mapArena}=require('../../../shared/maps/arenas');
 const {validateAssets}=require('./mapAssetValidation');
 const {getParticipant}=require('../../core/gameRoom/participants');
@@ -62,18 +62,22 @@ class MapPlaytestService {
       socket.on('disconnect',()=>{if(!room._disposed)room.removePlayer(socket,socket.data.user).catch(()=>{});});
     });
   }
-  create(user,{document,bots=false,infiniteSupers=false,debugHitboxes=false,character=DEFAULT_CHARACTER,spawn=null}){
+  create(user,{document,bots=false,infiniteSupers=false,debugHitboxes=false,character=DEFAULT_CHARACTER,spawn=null,modeVariantId=null}){
+    document=upgradeDuelMap(document);
     const errors=validateDocument(document);if(!errors.length)errors.push(...validateAssets(document));
     if(errors.length)throw Object.assign(Error('Map validation failed'),{status:422,errors});
     if(!this.namespace)throw Object.assign(Error('Playtest server is not initialized'),{status:503});
     if(!getAllCharacters().includes(character))throw Object.assign(Error('Unknown character'),{status:400});
     for(const[token,session]of this.sessions)if(session.ownerId===Number(user.user_id)||Date.now()>session.expiresAt)this.remove(token);
-    const arena=mapArena(document),size=arena.playersPerTeam,{schemaVersion,...map}=clone(document);
+    const arena=mapArena(document);
+    if(arena.modeId==='duels' && modeVariantId != null && !['duels-1v1','duels-2v2'].includes(modeVariantId))throw Object.assign(Error('Unknown duel formation'),{status:400});
+    const variantId=arena.modeId==='duels'?(modeVariantId || 'duels-1v1'):arena.modeVariantId;
+    const size=arena.modeId==='duels'?(variantId==='duels-2v2'?2:1):arena.playersPerTeam,{schemaVersion,...map}=clone(document);
     // Play from a selected marker uses the same constrained spawn config as a normal match.
     if(spawn?.point){const choices=Object.values(map.spawns.players).flat();if(!choices.some(p=>JSON.stringify(p)===JSON.stringify(spawn.point)))throw Object.assign(Error('Unknown spawn marker'),{status:400});map.spawns.players.team1[0]=clone(spawn.point);}
     const human=decorateParticipant({...user,team:'team1',char_class:character,level:1,participantId:`user:${user.user_id}`});
     const players=[human,...(bots?createBotParticipants([human],size,{seed:42}).map(decorateParticipant):[])];
-    const {modeId,modeVariantId}=arena;
+    const {modeId}=arena;modeVariantId=variantId;
     const matchId=Date.now();
     const snapshot={mapId:document.id,revision:'editor-draft',metadata:mapSummary(document),map};
     // Deliberately has no database capability: a playtest cannot award or persist anything.

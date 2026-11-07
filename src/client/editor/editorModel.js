@@ -1,4 +1,4 @@
-const { clone, geometryFromMap, constrainPoint } = require('../../shared/maps/mapDocument');
+const { clone, geometryFromMap, constrainPoint, upgradeDuelMap } = require('../../shared/maps/mapDocument');
 const { arenaFor } = require('../../shared/maps/arenas');
 function allRows(map) {
   const rows = [...map.layout.platforms.map(value=>({kind:'platform',value})), ...map.layout.hitboxes.map(value=>({kind:'hitbox',value}))];
@@ -111,8 +111,11 @@ module.exports.exportDocument=exportDocument;
 // slot per player that mode allows (extra slots reuse the last one until moved)
 // and objectives only where the mode has them.
 function retargetMap(document, modeVariantId) {
+  if (['duels-1v1', 'duels-2v2'].includes(modeVariantId)) modeVariantId = 'duels';
+  document = upgradeDuelMap(document);
   const arena=arenaFor(modeVariantId);if(!arena)throw Error(`${modeVariantId} has no arena in arenas.json yet.`);
   const copy=clone(document);copy.modeVariantId=modeVariantId;
+  if(arena.modeId!=='duels')delete copy.arenaId;
   for(const team of ['team1','team2']){
     const slots=copy.spawns.players[team];
     copy.spawns.players[team]=Array.from({length:arena.playersPerTeam},(_,i)=>clone(slots[Math.min(i,slots.length-1)]));

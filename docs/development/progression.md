@@ -39,7 +39,7 @@ Ordinary rewards alternate 300 coins and 15 gems, increasing by 50% of that base
 
 The finale contains the 10,000 player icon, Arena Sovereign Ninja skin, Crown of the Arena player card, 6,000 coins and 250 gems.
 
-Modes unlock automatically at the player's highest achieved trophies. Party queue admission checks the host’s peak trophies on the server; personal mode-selection changes check the acting player’s unlock. Solo admission checks the individual account. Skins, icons, cards and Bros require their Trophy Road claim. Ownership is permanent and uses the same tables and equip endpoints as Shop and Profile. Gloop cannot be bought through `/buy` or unlocked through `/upgrade`; existing owners keep their levels. To add another trophy Bro, set its stats' `unlockMethod` to `{ "type": "trophyRoad", "min": ... }` and add a `character` reward with its character key.
+Modes unlock automatically at the player's highest achieved trophies. Party queue admission checks the host’s peak trophies on the server. Members can ready up and play the owner’s selected mode even below its unlock threshold; the lobby displays the selected format without a personal unlock warning. This party access does not grant a permanent personal unlock. Personal mode-selection changes check the acting player’s unlock. Solo admission checks the individual account. Skins, icons, cards and Bros require their Trophy Road claim. Ownership is permanent and uses the same tables and equip endpoints as Shop and Profile. Gloop cannot be bought through `/buy` or unlocked through `/upgrade`; existing owners keep their levels. To add another trophy Bro, set its stats' `unlockMethod` to `{ "type": "trophyRoad", "min": ... }` and add a `character` reward with its character key.
 
 Only Duels and Bank Bust currently have playable game implementations in this repository. The other modes retain their existing Coming Soon status independently of trophy access. Adding their gameplay is a separate task.
 
@@ -91,7 +91,7 @@ Verification:
 
 ```sh
 node scripts/db/verify-trophy-road.cjs
-node --test tests/trophyProgression.test.js tests/trophySkinAssets.test.js
+node --test tests/trophyProgression.test.js
 npm test
 npm run build
 ```

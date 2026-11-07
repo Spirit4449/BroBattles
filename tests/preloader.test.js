@@ -1,8 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
+const { loadClientModule } = require('./helpers/clientModule');
 const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../src/client/navigation/preload.js'), 'utf8').replace(/^export /gm, '');
 const flush = async () => { for (let n = 0; n < 4; n++) await new Promise(resolve => setImmediate(resolve)); };
 
 function setup(handler) {
@@ -24,9 +23,9 @@ function setup(handler) {
       return new Response('asset');
     },
   });
-  vm.runInContext(source, context);
+  const api = loadClientModule(require.resolve('../src/client/navigation/preload.js'), context);
   return {
-    preloader: context.createBattlePreloader(), calls, connection, document, listeners, context,
+    preloader: api.createBattlePreloader(), calls, connection, document, listeners, context,
     async advance(ms) {
       const end = now + ms;
       for (;;) {

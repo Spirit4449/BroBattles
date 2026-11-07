@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": 1,
   "label": "Lushy Peaks",
-  "modeVariantId": "duels-1v1",
+  "modeVariantId": "duels",
   "metadata": {
     "key": "lushy-peaks",
     "terrain": "grass",
@@ -157,11 +157,19 @@
         {
           "dx": 0,
           "anchorId": "p0"
+        },
+        {
+          "dx": 80,
+          "anchorId": "p0"
         }
       ],
       "team2": [
         {
           "dx": 0,
+          "anchorId": "p1"
+        },
+        {
+          "dx": -80,
           "anchorId": "p1"
         }
       ]
@@ -255,5 +263,6 @@
         "scroll": 0.1
       }
     ]
-  }
+  },
+  "arenaId": "duels-1v1"
 }

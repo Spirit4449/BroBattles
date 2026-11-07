@@ -126,7 +126,7 @@ Deploy `src/`, `content/`, generated `dist/`, package metadata and installed pro
 Use executable tests instead of historical pasted console flood/spoof scripts:
 
 ```sh
-node --test tests/productionHardening.test.js tests/cosmeticRoutes.test.js tests/shopCommerce.test.js tests/emailRoutes.test.js tests/signupVerification.test.js
+node --test tests/productionHardening.test.js tests/cosmeticRoutes.test.js tests/shopCommerce.test.js tests/emailService.test.js
 npm run test:network
 ```
 

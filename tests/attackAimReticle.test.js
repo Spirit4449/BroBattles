@@ -1,194 +1,56 @@
-const test = require('node:test');
+const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const { createRequire } = require('node:module');
-const babel = require('@babel/core');
-const Phaser = {
-  Geom: { Point: class { constructor(x, y) { Object.assign(this, { x, y }); } },
-    Line: class { constructor(x1, y1, x2, y2) { Object.assign(this, { x1, y1, x2, y2 }); } } },
-  Math: { DegToRad: d => d * Math.PI / 180, Linear: (a, b, t) => a + (b - a) * t },
-};
-function load(file) {
-  const path = require.resolve(file), exports = {};
-  const { code } = babel.transformSync(fs.readFileSync(path, 'utf8'), {
-    babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+
+describe("Aim guides", () => {
+
+  const { resolveAttackAimContext } = require('../src/client/game/characters/shared/attackAim.js');
+  const { resolveGloopHookSocket } = require('../src/shared/characters/gloopHookGeometry.js');
+
+  test('Gloop super guide starts at the same visible-body socket as the fired hand', () => {
+    const player = { x: 200, y: 300, width: 128, height: 128,
+      displayWidth: 153.6, displayHeight: 153.6,
+      body: { width: 33.6, height: 45.6, center: { x: 200, y: 350 } } };
+    const state = resolveAttackAimContext({ character: 'gloop', player,
+      family: 'special', pointerWorldX: 900, pointerWorldY: 350, quick: false });
+    const firedFrom = resolveGloopHookSocket(player, state.angle);
+    assert.ok(Math.abs(state.anchorX - firedFrom.x) < 0.001);
+    assert.ok(Math.abs(state.anchorY - firedFrom.y) < 0.001);
+    assert.equal(state.baseX, state.anchorX);
+    assert.equal(state.baseY, state.anchorY);
   });
-  vm.runInNewContext(code, { exports, Phaser,
-    require: id => id.includes('renderLayers') ? { RENDER_LAYERS: { RETICLES: 100 } } : createRequire(path)(id) });
-  return exports;
-}
-const { resolveAttackAimContext } = require('../src/client/game/characters/shared/attackAim.js');
-const { resolveGloopHookSocket } = require('../src/shared/characters/gloopHookGeometry.js');
-const { createAttackAimReticleController, getAttackGuideStyle } = load('../src/client/game/scene/attackAimReticle.js');
-function context(character) {
-  return resolveAttackAimContext({ character, player: { x: 200, y: 300, width: 80, height: 100 },
-    family: 'basic', pointerWorldX: 700, pointerWorldY: 300, quick: false });
-}
-test('wizard guide reads longer and wider than ninja; arrows and slime retain curved samples', () => {
-  const wizard = getAttackGuideStyle(context('wizard')), ninja = getAttackGuideStyle(context('ninja'));
-  assert.ok(wizard.length > ninja.length);
-  assert.ok(wizard.width > ninja.width);
-  for (const character of ['huntress', 'gloop']) {
-    const state = context(character), points = state.throwPreview.points;
-    assert.ok(points.length > 2);
-    const first = points[0], last = points.at(-1);
-    assert.ok(points.some(p => Math.abs((p.x - first.x) * (last.y - first.y) - (p.y - first.y) * (last.x - first.x)) > 1));
-    assert.ok(getAttackGuideStyle(state).length > 100);
-  }
+
 });
 
-test('short Gloop aim still shows the falling side of its trajectory', () => {
-  const state = resolveAttackAimContext({ character: 'gloop',
-    player: { x: 200, y: 300, width: 80, height: 100 }, family: 'basic',
-    pointerWorldX: 210, pointerWorldY: 300, quick: false });
-  assert.equal(state.range, state.minRange);
-  assert.ok(getAttackGuideStyle(state).length >= 220);
-  assert.ok(state.throwPreview.points.some(point => point.y > state.anchorY + 20));
-});
-test('all basic attack shapes render finite geometry and directional guides visibly fade', () => {
-  for (const character of ['wizard', 'ninja', 'huntress', 'gloop', 'draven', 'thorg']) {
-    const styles = [], shapes = [];
-    const scene = { add: { graphics() {
-      const g = {};
-      for (const key of ['setPosition', 'setDepth', 'setAlpha', 'setVisible', 'clear', 'destroy']) g[key] = () => g;
-      for (const key of ['fillStyle', 'lineStyle']) g[key] = (...args) => { styles.push(args); return g; };
-      for (const key of ['strokeLineShape', 'fillPoints', 'strokePoints', 'fillEllipse', 'strokeEllipse']) {
-        g[key] = (...args) => { shapes.push(args); return g; };
+describe("Quick attack direction", () => {
+  const { getNearestOpponentDirection, resolveAttackAimContext } = require('../src/client/game/characters/shared/attackAim');
+
+  test('quick direction selects the nearest living visible opponent and falls back to facing', () => {
+    const player = { x: 300, y: 300, flipX: false };
+    const enemy = (x, y, extra = {}) => ({ opponent: { x, y, active: true }, opCurrentHealth: 100, ...extra });
+    assert.equal(getNearestOpponentDirection(player, {
+      left: enemy(200, 300), right: enemy(320, 600),
+      dead: enemy(310, 300, { opCurrentHealth: 0 }),
+      hidden: enemy(305, 300, { _powerupInvisible: true }),
+    }), -1);
+    assert.equal(getNearestOpponentDirection(player, {}), 1);
+    assert.equal(getNearestOpponentDirection({ ...player, flipX: true }, {}), -1);
+  });
+
+  test('quick attacks match the ordinary default trajectory facing the chosen side; aimed attacks ignore it', () => {
+    for (const character of ['huntress', 'gloop', 'wizard', 'ninja']) {
+      for (const family of ['basic', 'special']) {
+        const player = { x: 300, y: 300, width: 150, height: 150, flipX: false };
+        const options = { character, family, player, quick: true };
+        const chosen = resolveAttackAimContext({ ...options, quickFacingDirection: -1 });
+        const facing = resolveAttackAimContext({ ...options, player: { ...player, flipX: true } });
+        for (const key of ['angle', 'range', 'targetX', 'targetY', 'direction']) {
+          assert.equal(chosen[key], facing[key], `${character} ${family} ${key}`);
+        }
+        const manual = { ...options, quick: false, pointerWorldX: 600, pointerWorldY: 240 };
+        assert.deepEqual(resolveAttackAimContext({ ...manual, quickFacingDirection: -1 }),
+          resolveAttackAimContext(manual));
+        assert.equal(player.flipX, false);
       }
-      return g;
-    } } };
-    const renderer = createAttackAimReticleController(scene);
-    renderer.update({ ...context(character), centerCue: { proximity: 1, held: true } });
-    assert.ok(shapes.length > 0, character);
-    assert.ok(!JSON.stringify(shapes).includes('null'), character);
-    const alphas = styles.map(s => s.at(-1));
-    assert.ok(Math.max(...alphas) >= 0.6, character);
-    assert.ok(Math.min(...alphas) < 0.3, character);
-    renderer.destroy();
-  }
-});
-
-test('guide reach ignores drag strength and melee footprints remain fixed', () => {
-  const wizard = context('wizard');
-  assert.equal(getAttackGuideStyle({ ...wizard, previewStrength: 0.01 }).length,
-    getAttackGuideStyle({ ...wizard, previewStrength: 1 }).length);
-  for (const character of ['draven', 'thorg']) {
-    const draws = [];
-    const scene = { add: { graphics() {
-      const g = {};
-      for (const key of ['setPosition', 'setDepth', 'setAlpha', 'setVisible', 'clear', 'destroy', 'fillStyle', 'lineStyle']) g[key] = () => g;
-      for (const key of ['strokeLineShape', 'fillPoints', 'strokePoints', 'fillEllipse', 'strokeEllipse'])
-        g[key] = (...args) => { draws.push([key, ...args]); return g; };
-      return g;
-    } } };
-    const renderer = createAttackAimReticleController(scene);
-    renderer.update({ ...context(character), previewStrength: 0.1 });
-    const short = JSON.stringify(draws); draws.length = 0;
-    renderer.update({ ...context(character), previewStrength: 1 });
-    assert.equal(JSON.stringify(draws), short, character);
-    renderer.destroy();
-  }
-});
-
-test('Thorg draws a smaller reticle without shortening his attack range', () => {
-  const player = { x: 200, y: 300, width: 80, height: 100 };
-  const state = resolveAttackAimContext({ character: 'thorg', player,
-    family: 'basic', pointerWorldX: 700, pointerWorldY: 300, quick: false });
-  const ellipses = [];
-  const scene = { add: { graphics() {
-    const g = {};
-    for (const key of ['setPosition', 'setDepth', 'setAlpha', 'setVisible', 'clear', 'destroy', 'fillStyle', 'lineStyle']) g[key] = () => g;
-    g.strokeEllipse = (x, y, width, height) => { ellipses.push({ x, y, width, height }); return g; };
-    g.fillEllipse = () => g;
-    return g;
-  } } };
-  const renderer = createAttackAimReticleController(scene);
-  renderer.update(state);
-  assert.equal(state.range, state.maxRange);
-  assert.equal(state.roundRadius, state.range);
-  assert.ok(ellipses.length > 0);
-  assert.ok(ellipses[0].width < state.range * 2);
-  assert.ok(ellipses[0].height < state.config.radiusY * 2);
-  assert.ok(ellipses[0].height < ellipses[0].width * 0.6);
-  assert.ok(ellipses[0].y <= state.baseY);
-  assert.ok(ellipses[0].y + ellipses[0].height / 2 < state.baseY + player.height / 2);
-  renderer.destroy();
-});
-
-test('Gloop super guide displays the hook full attack reach', () => {
-  const state = resolveAttackAimContext({ character: 'gloop',
-    player: { x: 200, y: 300, width: 80, height: 100 }, family: 'special',
-    pointerWorldX: 900, pointerWorldY: 300, quick: false });
-  assert.equal(getAttackGuideStyle(state).length, state.range);
-  assert.equal(state.range, 760);
-});
-
-test('Gloop super guide starts at the same visible-body socket as the fired hand', () => {
-  const player = { x: 200, y: 300, width: 128, height: 128,
-    displayWidth: 153.6, displayHeight: 153.6,
-    body: { width: 33.6, height: 45.6, center: { x: 200, y: 350 } } };
-  const state = resolveAttackAimContext({ character: 'gloop', player,
-    family: 'special', pointerWorldX: 900, pointerWorldY: 350, quick: false });
-  const firedFrom = resolveGloopHookSocket(player, state.angle);
-  assert.ok(Math.abs(state.anchorX - firedFrom.x) < 0.001);
-  assert.ok(Math.abs(state.anchorY - firedFrom.y) < 0.001);
-  assert.equal(state.baseX, state.anchorX);
-  assert.equal(state.baseY, state.anchorY);
-});
-
-test('basic reticle turns red at zero ammo and returns to white when ammo reloads', () => {
-  const colors = [];
-  const scene = { add: { graphics() {
-    const g = {};
-    for (const key of ['setPosition', 'setDepth', 'setAlpha', 'setVisible', 'clear', 'destroy']) g[key] = () => g;
-    g.fillStyle = color => { colors.push(color); return g; };
-    g.lineStyle = (_width, color) => { colors.push(color); return g; };
-    for (const key of ['strokeLineShape', 'fillPoints', 'strokePoints', 'fillEllipse', 'strokeEllipse']) g[key] = () => g;
-    return g;
-  } } };
-  let ammo = 0;
-  const renderer = createAttackAimReticleController(scene, { getAmmoCharges: () => ammo });
-  renderer.update(context('ninja'));
-  assert.ok(colors.includes(0xff3030));
-  assert.ok(!colors.includes(0xffffff));
-  colors.length = 0;
-  ammo = 1;
-  renderer.update(context('ninja'));
-  assert.ok(colors.includes(0xffffff));
-  assert.ok(!colors.includes(0xff3030));
-  renderer.destroy();
-});
-
-for (const character of ['huntress', 'gloop', 'wizard']) {
-  test(`${character} fades completely before switching sides and resets on hide`, () => {
-    const graphics = [];
-    const scene = { time: { now: 0 }, add: { graphics() {
-      const g = { alpha: 1, lines: [] };
-      for (const key of ['setPosition', 'setDepth', 'setVisible', 'destroy', 'fillStyle', 'lineStyle', 'fillPoints', 'strokePoints', 'fillEllipse', 'strokeEllipse']) g[key] = () => g;
-      g.setAlpha = a => { g.alpha = a; return g; };
-      g.clear = () => { g.lines = []; return g; };
-      g.strokeLineShape = line => { g.lines.push(line); return g; };
-      graphics.push(g); return g;
-    } } };
-    const controller = createAttackAimReticleController(scene);
-    const right = context(character);
-    const left = resolveAttackAimContext({ character, player: { x: 200, y: 300, width: 80, height: 100 },
-      family: 'basic', pointerWorldX: -300, pointerWorldY: 300, quick: false });
-    controller.update(right);
-    const original = JSON.stringify(graphics[0].lines);
-    scene.time.now = 40; controller.update(left);
-    assert.equal(graphics[0].alpha, 0.5);
-    assert.equal(JSON.stringify(graphics[0].lines), original);
-    scene.time.now = 80; controller.update(left);
-    assert.equal(graphics[0].alpha, 0);
-    assert.notEqual(JSON.stringify(graphics[0].lines), original);
-    scene.time.now = 130; controller.update(left);
-    assert.equal(graphics[0].alpha, 0.5);
-    scene.time.now = 180; controller.update(left);
-    assert.equal(graphics[0].alpha, 1);
-    controller.hide(); controller.update(right);
-    assert.equal(graphics[0].alpha, 1);
-    controller.destroy();
+    }
   });
-}
+});

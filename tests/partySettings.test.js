@@ -45,9 +45,9 @@ function fixture(allow = 1) {
   return { party, writes, emissions, db, io, state, view: createPartyRouteService({ db }) };
 }
 
-// A real 2v2 map: every map is made for one mode.
+// Duel maps are available to either team formation.
 const selection = { modeId: "duels", modeVariantId: "duels-2v2",
-  mapId: require("../src/shared/maps").mapDefaults.find((map) => map.modeVariantId === "duels-2v2").id };
+  mapId: require("../src/shared/maps").mapDefaults.find((map) => map.modeVariantId === "duels").id };
 
 test("owner can save permissions, read them back, and broadcast them to members", async () => {
   const f = fixture();
@@ -169,24 +169,7 @@ for (const event of ['map-change', 'mode-change']) {
   });
 }
 
-test('selection toast is hidden for the actor but visible for other party members', () => {
-  const source = require('node:fs').readFileSync('src/client/lobby/party/party.js','utf8');
-  const start = source.indexOf('  socket.on("party:notice"');
-  const end = source.indexOf('\n  });',start)+6;
-  let handler;
-  const toasts=[];
-  require('node:vm').runInNewContext(source.slice(start,end),{
-    socket:{on:(_,fn)=>handler=fn},getActivePartyId:()=>7,getCurrentLobbyUserName:()=> 'Owner',
-    sonner:(...args)=>toasts.push(args),
-  });
-  handler({partyId:7,type:'map',actorName:' owner ',title:'Changed map'});
-  handler({partyId:7,type:'mode',actorName:'Owner',title:'Changed mode'});
-  assert.equal(toasts.length,0);
-  handler({partyId:7,type:'map',actorName:'Member',title:'Changed map'});
-  assert.equal(toasts.length,1);
-  handler({partyId:8,type:'map',actorName:'Member',title:'Changed map'});
-  assert.equal(toasts.length,1);
-});
+
 
 test('shrinking same-team party persists valid seats and broadcasts server roster', async () => {
   const f = fixture();

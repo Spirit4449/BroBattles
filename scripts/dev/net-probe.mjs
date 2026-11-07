@@ -18,7 +18,7 @@
 // party each); runs are named <run>-m1, <run>-m2, … The report runs at the end (brief) and, with
 // --baseline, is compared against that run.
 //
-// Token: --token, $BB_NET_TRACE_TOKEN, .env.nettrace, then (localhost only) .env.
+// Token: --token, $BB_NET_TRACE_TOKEN, then .env (local and remote runs).
 // Runs on this machine (Playwright's headless shell; its full Chromium with
 // --headed; installed Google Chrome with --chrome); never run it on the server.
 import fs from "node:fs";
@@ -51,10 +51,9 @@ function readEnvFile(file, key) {
 const args = parseArgs(process.argv.slice(2));
 const base = String(args.base || "https://brobattles.dev").replace(/\/$/, "");
 const isLocal = /\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(base);
-const token = args.token || process.env.BB_NET_TRACE_TOKEN || readEnvFile(".env.nettrace", "BB_NET_TRACE_TOKEN")
-  || (isLocal ? readEnvFile(".env", "BB_NET_TRACE_TOKEN") : null);
+const token = args.token || process.env.BB_NET_TRACE_TOKEN || readEnvFile(".env", "BB_NET_TRACE_TOKEN");
 if (!token) {
-  console.error("No trace token. Pass --token, set BB_NET_TRACE_TOKEN, or add it to .env.nettrace.");
+  console.error("No trace token. Pass --token, set BB_NET_TRACE_TOKEN, or add it to .env.");
   process.exit(2);
 }
 const clients = Math.max(1, Math.min(6, Number(args.clients) || 2));

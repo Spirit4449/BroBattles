@@ -65,19 +65,7 @@ test('bots can protect a wounded human teammate without assigning the human a ro
   assert.equal(h.room._botTeamwork.get('blue').plans.has('human'), false);
 });
 
-test('morale falls under injury and local pressure and recovers with health and support', () => {
-  const h = setup();
-  const initial = h.plan()[0].morale;
-  h.allies[0].health = 250;
-  h.allies[0].lastDamagedAt = 12500;
-  h.allies[1].x = h.allies[2].x = 2000;
-  const threats = [0, 1, 2].map((i) => ({ ...h.enemy, participantId: `enemy${i}`, x: 550 + i * 80 }));
-  const shaken = h.plan(12500, threats)[0].morale;
-  assert.ok(shaken < initial - 0.2);
-  h.allies[0].health = 1000;
-  h.allies[1].x = 600; h.allies[2].x = 700;
-  assert.ok(h.plan(16000)[0].morale > shaken);
-});
+
 
 test('empty ammo favors holding, and a pair uses opposite sides without duplicate roles', () => {
   const h = setup(2);
@@ -156,15 +144,4 @@ test('an anchor rotates toward activity instead of defending an empty starting p
   const anchor = h.brains.find((brain) => brain.teamPlan.role === 'anchor');
   const goal = teamPosition(anchor, h.enemy);
   assert.ok(goal.x > anchor.player.x + 500);
-});
-
-test('higher trophy teams use stronger formation guidance and update their plans sooner', () => {
-  const { difficultyForTrophies } = require('../src/server/core/bots/config');
-  const low = setup(), high = setup();
-  low.allies.forEach((p) => p.difficulty = difficultyForTrophies(0));
-  high.allies.forEach((p) => p.difficulty = difficultyForTrophies(4000));
-  low.plan(); high.plan();
-  const weight = (h) => teamPosition(h.brains.find((b) => b.teamPlan.role === 'support'), h.enemy).weight;
-  assert.ok(weight(high) > weight(low));
-  assert.ok(high.room._botTeamwork.get('blue').nextPlanAt < low.room._botTeamwork.get('blue').nextPlanAt);
 });

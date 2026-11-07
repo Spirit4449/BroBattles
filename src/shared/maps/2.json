@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": 2,
   "label": "Mangrove Meadow",
-  "modeVariantId": "duels-1v1",
+  "modeVariantId": "duels",
   "metadata": {
     "key": "mangrove-meadow",
     "terrain": "grass",
@@ -277,12 +277,20 @@
         {
           "anchorId": "p7",
           "dx": -33.40000000000009
+        },
+        {
+          "anchorId": "p7",
+          "dx": 46.59999999999991
         }
       ],
       "team2": [
         {
           "anchorId": "p4",
           "dx": -7.399999999999977
+        },
+        {
+          "anchorId": "p4",
+          "dx": -87.39999999999998
         }
       ]
     },
@@ -370,5 +378,6 @@
         "scroll": 0.1
       }
     ]
-  }
+  },
+  "arenaId": "duels-1v1"
 }

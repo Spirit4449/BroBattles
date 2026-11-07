@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": 5,
   "label": "Candy Land",
-  "modeVariantId": "duels-2v2",
+  "modeVariantId": "duels",
   "metadata": {
     "key": "candy-land",
     "terrain": "grass",
@@ -639,5 +639,6 @@
         }
       ]
     }
-  }
+  },
+  "arenaId": "duels-2v2"
 }

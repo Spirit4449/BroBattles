@@ -165,7 +165,6 @@ function tickPathRect(room, attack, descriptor, now) {
   if (progress === null) return false;
   const pose = attackerPoseOf(attacker, {
     scale: effectManager.isActive(attacker, "thorgRage", now) ? THORG_SWEEP.rageScale : 1,
-    legacy: ['thorg-storm', 'thorg-iron'].includes(attacker.selected_skin_id),
   });
   for (const shape of pathSweepShapes(pose, attack.direction, attack.previousProgress || 0, progress)) {
     hitCapsuleTargets(room, attack, descriptor, shape.a, shape.b, shape.radius, now);

@@ -31,11 +31,11 @@ Find the relevant file by name (`tests/<feature>*.test.js`) or with `grep -rl "<
 
 Writing tests:
 
-- Test behavior by calling real modules. Many client tests load browser modules through `vm` or Babel with stubbed imports; copy an existing test for the same folder.
+- Test behavior by calling real modules. Load complete client modules through `tests/helpers/clientModule.js`; do not extract private functions from source strings or strip imports/exports with regular expressions. Stub browser, network, media or rendering boundaries while keeping the behavior under test real.
 - Do not assert on source or CSS text (regular expressions over a file's contents), and do not pin tuning constants to literal numbers. Both break on harmless edits and were removed in the October 2026 test trim.
 - Extend the existing file for a feature instead of adding a new file for one regression. Each file is a separate process.
 - Put anything that takes more than about a second in `tests/slow/`. It is excluded from `npm test`.
-- `tests/helpers/` holds shared fixtures (`botRoom.js` builds a headless room with bots). `tests/browser/` holds Playwright harnesses described in the [client guide](client.md); they are not part of any npm test script.
+- `tests/helpers/` holds shared fixtures: `botRoom.js` builds a headless room with bots; `clientModule.js` compiles complete browser modules and resolves real relative dependencies in an isolated VM; `browserFixture.js` uses the dev dependency LinkeDOM for DOM structure/events with explicit browser boundaries; `lobbyFixture.js` loads the actual page template; `localPlayerFixture.js` initializes the real player controller and Arcade body with rendering doubles. These fixtures do not establish real browser layout, rendering or audio playback. `tests/browser/` holds Playwright harnesses described in the [client guide](client.md); they are not part of any npm test script.
 
 ## Add a character
 
@@ -57,7 +57,7 @@ For a built-in map shipped with the repository, add `src/shared/maps/<id>.json` 
 
 Do not add a legacy JavaScript map module, dropdown option, map-specific preload branch or powerup coordinate table. Documents own those values. Pass the owning scene into runtime map queries; do not retain map objects after scene shutdown.
 
-Test the document and asset validation, the spawn formation for the map's mode, powerup placement, boundaries, collisions, objective layout and an isolated editor playtest. `node --test tests/mapEditor*.test.js tests/mapDocumentRuntime.test.js` covers the document workflow.
+Test the document and asset validation, the spawn formation for the map's mode, powerup placement, boundaries, collisions, objective layout and an isolated editor playtest. `node --test tests/mapEditor*.test.js tests/mapRuntime.test.js` covers the document workflow.
 
 ## Add a mode
 
