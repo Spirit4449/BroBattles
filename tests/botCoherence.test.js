@@ -249,8 +249,9 @@ test('a pursued bot fires repeated counterattacks while continuing to escape', (
 test('poison exposure uses player origin, travel time and the future rising level', () => {
   const { poisonDamage } = require('../src/server/core/bots/navigation');
   assert.equal(poisonDamage([{ y: 899 }], 1000, 900), 0);
-  assert.equal(poisonDamage([{ y: 900 }], 1000, 900), 400);
-  assert.equal(poisonDamage([{ y: 890 }, { y: 890 }], 1000, 900, (ms) => 900 - ms * 0.04), 200);
+  const { SD_DAMAGE_PER_SEC } = require('../src/server/core/gameRoomConfig');
+  assert.equal(poisonDamage([{ y: 900 }], 1000, 900), SD_DAMAGE_PER_SEC);
+  assert.equal(poisonDamage([{ y: 890 }, { y: 890 }], 1000, 900, (ms) => 900 - ms * 0.04), SD_DAMAGE_PER_SEC / 2);
 });
 
 test('routing prefers a dry detour but retains a submerged stepping stone when necessary', () => {

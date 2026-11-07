@@ -13,7 +13,7 @@ export function resetSuperBarAnimation(graphics, player) {
 export function drawSuperChargeBar(graphics, background, {
   x, y, charge, maxCharge, player, notReady = false,
 }) {
-  const width = 60;
+  const width = 52;
   const height = 4;
   const now = graphics.scene.time.now;
   const wallNow = Date.now();

@@ -208,6 +208,8 @@ export function bindLocalSocketEvents({
 
     const amountX = Number(data?.amountX) || 0;
     const amountY = Number(data?.amountY) || 0;
+    // The server cancels a pending stomp when knocked back; match it locally.
+    player._stompArmedUntil = 0;
     if (data?.cause === "stomp") {
       endDash(player, false);
       player._attackInterruptedUntil = Date.now() + 300;
@@ -294,9 +296,15 @@ export function bindLocalSocketEvents({
     const scene = getScene();
     if (!scene || !Number.isFinite(data?.x) || !Number.isFinite(data?.y)) return;
     const local = data.username === getUsername();
-    spawnStompImpact(scene, data.x, data.y, { cameraShake: local });
-    if (local) scene.sound?.play('sfx-stomp', { volume: 1 });
-    else playPlayerSound(scene, { x: data.x, y: data.y }, 'sfx-stomp', { volume: 1 });
+    // Our own stomp was already shown and heard on landing (localMovementFx);
+    // the server event then only confirms who it interrupted.
+    const predicted = local && Date.now() - (scene._localStompPredictedAt || 0) < 1000;
+    if (predicted) scene._localStompPredictedAt = 0;
+    else {
+      spawnStompImpact(scene, data.x, data.y, { cameraShake: local });
+      if (local) scene.sound?.play('sfx-stomp', { volume: 1 });
+      else playPlayerSound(scene, { x: data.x, y: data.y }, 'sfx-stomp', { volume: 1 });
+    }
     for (const name of data.interrupted || []) {
       const wrapper = Object.values(getOpponentPlayersRef() || {}).find(op =>
         op.username === name || op.name === name || op.opponent?.name === name);

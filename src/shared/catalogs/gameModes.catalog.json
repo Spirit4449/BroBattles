@@ -162,9 +162,9 @@
       },
       "defaultVariantId": "bank-bust-3v3",
       "settings": {
-        "vaultStartingCoins": 50000,
-        "deathDropVaultCoins": 50,
-        "purchaseFloorCoins": 7500,
+        "vaultStartingCoins": 10000,
+        "deathDropVaultCoins": 10,
+        "purchaseFloorCoins": 1250,
         "lowCoinsRatio": 0.25,
         "matchDurationMs": 210000,
         "respawnDelayMs": 3500,

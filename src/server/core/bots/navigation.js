@@ -359,7 +359,7 @@ function createRouteSearch(graph, from, poisonY = Infinity, options = {}) {
         exposure = poisonDamage(edge.frames, edge.duration, poisonY, options.poisonAt, item.elapsed + approach) +
           poisonDamage(standingFrames, approach, poisonY, options.poisonAt, item.elapsed);
       }
-      const cost = item.cost + approach + edge.duration + penalty + exposure * 4;
+      const cost = item.cost + approach + edge.duration + penalty + exposure * 24;
       if (cost >= bestCost[next]) continue;
       bestCost[next] = cost;
       queue.push({ id: edge.to, parent: item, edge, x: edge.landingX, dashUsed,

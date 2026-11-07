@@ -1,9 +1,9 @@
 {
   "key": "wizard",
   "stats": {
-    "baseHealth": 5000,
+    "baseHealth": 830,
     "attackDescription": "Releases a fireball that bursts on the first enemy it hits, splashing everyone nearby.",
-    "baseDamage": 3000,
+    "baseDamage": 500,
     "ammoCooldownMs": 800,
     "ammoReloadMs": 3000,
     "ammoCapacity": 3,
@@ -86,7 +86,7 @@
       }
     },
     "description": "Master of the fireball, wielder of the powerups.",
-    "unlockPrice": 200
+    "unlockPrice": 299
   },
   "frame": {
     "w": 231,

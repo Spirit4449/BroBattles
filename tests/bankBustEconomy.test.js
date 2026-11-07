@@ -286,7 +286,7 @@ function hitFor(room, attacker, target) {
 function fighter(room, name, team, x, y) {
   const player = addPlayer(room, name, team, x, y);
   player.char_class = "thorg";
-  player.baseDamage = 2500;
+  player.baseDamage = 415;
   return player;
 }
 

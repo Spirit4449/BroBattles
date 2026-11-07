@@ -114,11 +114,11 @@ let latestMovementFxEvent = {
 
 let frame;
 
-let maxHealth = 8000;
-let currentHealth = 8000; // Client-side copy (display only)
+let maxHealth = 1000;
+let currentHealth = 1000; // Client-side copy (display only)
 let dead = false;
 
-let healthBarWidth = 60;
+let healthBarWidth = 52;
 let healthBar;
 let healthText;
 let duckShieldIcon;
@@ -127,7 +127,7 @@ let powerupStatusIcons = [];
 // Ammo/Cooldown bar (client-side only)
 let ammoBar; // graphics
 let ammoBarBack; // background graphics
-let ammoBarWidth = 60;
+let ammoBarWidth = 52;
 const AMMO_BAR_HEIGHT = 6;
 let ammoCooldownMs = 1200; // time between shots
 let ammoReloadMs = 1200; // time to reload one charge
@@ -679,7 +679,7 @@ export function createPlayer(
   reloadTimerMs = 0;
   const presentation = spritePresentation(character, player.texture);
   player.setScale(presentation.scale);
-  attachTeamFootRing(scene, player, { isAlly: true, hidden: () => dead });
+  attachTeamFootRing(scene, player, { isAlly: true, isSelf: true, hidden: () => dead });
   player.setOrigin(presentation.originX, presentation.originY);
   bindPlayerOrigin(player, presentation);
   player._bbHudTopOffset = presentation.hudTopOffset;
@@ -2030,7 +2030,7 @@ function performWallJump(scene, wallSide, tuning) {
       ? body.x + (fromLeft ? 0 : body.width)
       : player.x + (fromLeft ? -player.width * 0.5 : player.width * 0.5);
     const contactY = body ? body.y + body.height * 0.62 : player.y + player.height * 0.18;
-    if (!powerupInvisible) spawnWallKickCloud(scene, contactX, contactY, fromLeft ? 1 : -1);
+    if (!powerupInvisible) spawnWallKickCloud(scene, contactX, contactY, fromLeft ? 1 : -1, { follow: player });
   } catch (_) {}
   noteMovementFxEvent("wall-jump", { direction: fromLeft ? 1 : -1, wallSide: fromLeft ? "left" : "right" });
   triggerWallJumpCameraKick(scene, fromLeft ? 1 : -1);

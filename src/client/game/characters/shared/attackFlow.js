@@ -74,7 +74,7 @@ export function executeDefaultAttack({
 
 export function resolveSessionDamage(
   characterStatsDamage,
-  fallbackDamage = 1000,
+  fallbackDamage = 200,
 ) {
   const session =
     (typeof window !== "undefined" && window.__MATCH_SESSION__) || {};

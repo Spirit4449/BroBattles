@@ -16,7 +16,7 @@
     "lightColor": 11070912,
     "durationMs": 10000,
     "tickVolume": 0.2,
-    "healingPerSecond": 600
+    "healingPerSecond": 100
   },
   "shield": {
     "assetDir": "shield",
@@ -33,7 +33,7 @@
     "lightColor": 16114543,
     "durationMs": 8000,
     "tickVolume": 0.28,
-    "damagePerSecond": 600
+    "damagePerSecond": 50
   },
   "gravityBoots": {
     "assetDir": "gravity-boots",

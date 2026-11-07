@@ -79,11 +79,11 @@ export default class RemotePlayer {
     this.map = map;
     this.mapObjects;
     this.playersInTeam = playersInTeam;
-    this.opMaxHealth = 8000;
-    this.opCurrentHealth = 8000;
+    this.opMaxHealth = 1000;
+    this.opCurrentHealth = 1000;
     this.opSuperCharge = 0;
     this.opMaxSuperCharge = 100;
-    this.opHealthBarWidth = 60;
+    this.opHealthBarWidth = 52;
     this.movementTween = null; // Store reference to current movement tween
     this.effects = null; // per-opponent effects (e.g., Draven fire)
     this.presenceConnected = true;
@@ -98,7 +98,6 @@ export default class RemotePlayer {
     this._corpseRemoved = false;
     this._corpseRemovalTimer = null;
     this._movementVfxState = null;
-    this._wallSlideVfxAt = 0;
     this._runDustVfxAt = 0;
     this._fastFallVfxAt = 0;
     this._lastMovementFxSeq = null;
@@ -411,6 +410,7 @@ export default class RemotePlayer {
             contactX,
             contactY,
             Number(movementState.movementFxDirection) < 0 ? -1 : 1,
+            { follow: this.opponent },
           );
         }
       } else if (movementFxSeq < this._lastMovementFxSeq) {
@@ -470,6 +470,7 @@ export default class RemotePlayer {
         contactX,
         contactY,
         velocityX < 0 ? -1 : 1,
+        { follow: this.opponent },
       );
     }
 
@@ -545,19 +546,19 @@ export default class RemotePlayer {
       const contactY = body
         ? body.y + body.height * 0.68
         : this.opponent.y + 12;
+      const slideRatio = Phaser.Math.Clamp(
+        velocityY / MOVEMENT_VFX_CONFIG.wallSlideSpeedReference,
+        0,
+        1,
+      );
       if (!previous?.wallSliding) {
         spawnWallSlideBurst(this.scene, contactX, contactY, side);
-        this._wallSlideVfxAt = 0;
       }
-      if (
-        !this._wallSlideVfxAt ||
-        now - this._wallSlideVfxAt >= MOVEMENT_VFX_CONFIG.wallTrailIntervalMs
-      ) {
-        this._wallSlideVfxAt = now;
-        spawnWallSlideTrail(this.scene, contactX, contactY, side);
-      }
-    } else {
-      this._wallSlideVfxAt = 0;
+      spawnWallSlideTrail(this.scene, contactX, contactY, side, {
+        speedRatio: slideRatio,
+        velocityY,
+        owner: this,
+      });
     }
 
     this._movementVfxState = {
@@ -948,7 +949,6 @@ export default class RemotePlayer {
 
     this._deathPresentationActive = true;
     this._movementVfxState = null;
-    this._wallSlideVfxAt = 0;
     this._runDustVfxAt = 0;
     this._fastFallVfxAt = 0;
     this._spawnPresented = true;
@@ -1024,7 +1024,6 @@ export default class RemotePlayer {
     this._worldUiHidden = false;
     this._spawnPresented = true;
     this._movementVfxState = null;
-    this._wallSlideVfxAt = 0;
     this._runDustVfxAt = 0;
     this._fastFallVfxAt = 0;
     this._networkSnapUntil = performance.now() + 220;

@@ -1,14 +1,14 @@
 {
   "key": "gloop",
   "stats": {
-    "baseHealth": 7000,
+    "baseHealth": 1170,
     "attackDescription": "Lobs a heavy slimeball that bounces twice and splats on the first enemy, coating them in slowing slime.",
-    "baseDamage": 2000,
+    "baseDamage": 335,
     "ammoCooldownMs": 400,
     "ammoReloadMs": 1500,
     "ammoCapacity": 1,
     "specialDescription": "Launches a slime hand that catches an enemy, pulls them close, and leaves them heavily slowed.",
-    "specialBaseDamage": 500,
+    "specialBaseDamage": 85,
     "specialChargeHits": 6,
     "specialChargePerHit": 0,
     "spriteScale": 1.2,
@@ -88,7 +88,7 @@
           "collisionRadius": 44,
           "collisionForwardOffset": 28,
           "collisionOffsetY": 50,
-          "damage": 500,
+          "damage": 85,
           "pullDurationMs": 1000,
           "pullLockPaddingMs": 120,
           "pulledStopDistance": 10,
@@ -101,7 +101,7 @@
       }
     },
     "description": "A sticky control fighter who slows enemies and reels them in.",
-    "unlockPrice": 100,
+    "unlockPrice": 199,
     "unlockMethod": {
       "type": "trophyRoad",
       "min": 2000

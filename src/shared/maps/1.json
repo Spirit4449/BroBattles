@@ -53,7 +53,7 @@
       {
         "textureKey": "lushy-base",
         "x": 1150,
-        "y": 670,
+        "y": 710,
         "scaleX": 0.2,
         "scaleY": 0.2,
         "flipX": false,
@@ -68,7 +68,7 @@
       {
         "textureKey": "lushy-platform",
         "x": 1150,
-        "y": 250,
+        "y": 290,
         "scaleX": 0.175,
         "scaleY": 0.175,
         "flipX": false,
@@ -83,7 +83,7 @@
       {
         "textureKey": "lushy-side-platform",
         "x": 670,
-        "y": 321,
+        "y": 361,
         "scaleX": 0.075,
         "scaleY": 0.075,
         "flipX": false,
@@ -98,7 +98,7 @@
       {
         "textureKey": "lushy-side-platform",
         "x": 1619,
-        "y": 321,
+        "y": 361,
         "scaleX": 0.075,
         "scaleY": 0.075,
         "flipX": false,
@@ -113,7 +113,7 @@
       {
         "textureKey": "lushy-small-platform",
         "x": 575,
-        "y": 575,
+        "y": 615,
         "scaleX": 0.045,
         "scaleY": 0.045,
         "flipX": false,
@@ -128,7 +128,7 @@
       {
         "textureKey": "lushy-small-platform",
         "x": 1725,
-        "y": 575,
+        "y": 615,
         "scaleX": 0.045,
         "scaleY": 0.045,
         "flipX": false,
@@ -178,62 +178,62 @@
       {
         "id": "powerup-0",
         "x": 935,
-        "y": 516
+        "y": 556
       },
       {
         "id": "powerup-1",
         "x": 1150,
-        "y": 516
+        "y": 556
       },
       {
         "id": "powerup-2",
         "x": 1365,
-        "y": 516
+        "y": 556
       },
       {
         "id": "powerup-3",
         "x": 1005,
-        "y": 212
+        "y": 252
       },
       {
         "id": "powerup-4",
         "x": 1150,
-        "y": 212
+        "y": 252
       },
       {
         "id": "powerup-5",
         "x": 1295,
-        "y": 212
+        "y": 252
       },
       {
         "id": "powerup-6",
         "x": 645,
-        "y": 207
+        "y": 247
       },
       {
         "id": "powerup-7",
         "x": 814,
-        "y": 516
+        "y": 556
       },
       {
         "id": "powerup-8",
         "x": 1489,
-        "y": 516
+        "y": 556
       },
       {
         "id": "powerup-9",
         "x": 1646,
-        "y": 207
+        "y": 247
       },
       {
         "id": "powerup-10",
         "x": 574,
-        "y": 518
+        "y": 558
       },
       {
         "id": "powerup-11",
         "x": 1727,
-        "y": 518
+        "y": 558
       }
     ]
   },

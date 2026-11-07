@@ -136,3 +136,18 @@ test('landing carry follows elapsed time and clears on reset, spectate, shutdown
     assert.equal(scene._landingCameraCarry, null);
   }
 });
+
+test('every arena rests the player at the same height on screen, at any zoom', () => {
+  const screenOffset = (id, at) => {
+    const camera = arenaFor(id).camera;
+    const y = at === 'floor' ? camera.climbY[1] + 50 : camera.climbY[0] - 50;
+    const rest = restingCameraFrame(y, camera);
+    return rest.followOffsetY * rest.zoom;
+  };
+  const ids = ['duels-1v1', 'duels-2v2', 'bank-bust-3v3'];
+  for (const at of ['floor', 'top']) {
+    const offsets = ids.map(id => screenOffset(id, at));
+    for (const value of offsets) assert.ok(Math.abs(value - offsets[0]) < 1e-6, `${at}: ${offsets.join(', ')}`);
+  }
+  assert.ok(screenOffset('duels-1v1', 'top') >= screenOffset('duels-1v1', 'floor'), 'climbing frames the player lower');
+});

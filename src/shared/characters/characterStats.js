@@ -12,33 +12,26 @@ const LEVEL_CAP = 10;
 // invalidating the balance players already know.
 // Last level that uses the standard gains; levels above it use mastery gains.
 const STANDARD_LEVEL_CAP = 5;
-// Stats added per level up, for levels 2..STANDARD_LEVEL_CAP.
-const STANDARD_LEVEL_STAT_GAINS = {
-  health: 500,
-  damage: 100,
-  specialDamage: 200,
-};
-// Stats added per level up above STANDARD_LEVEL_CAP (up to LEVEL_CAP).
-const MASTERY_LEVEL_STAT_GAINS = {
-  health: 400,
-  damage: 80,
-  specialDamage: 100,
-};
+// Fraction of the level-1 stat added per level up, for levels
+// 2..STANDARD_LEVEL_CAP. Percentages keep each character's role intact as it
+// levels (a flat bonus would favour fragile characters over tanks).
+const STANDARD_LEVEL_GAIN_FRACTION = 0.07;
+// Fraction of the level-1 stat added per level above STANDARD_LEVEL_CAP.
+const MASTERY_LEVEL_GAIN_FRACTION = 0.03;
 
 // Coin cost to upgrade, indexed by the character's current level; each value
-// buys the next level. Needs LEVEL_CAP - 1 priced entries.
-// The first four entries preserve the existing economy exactly.
+// buys the next level. Needs LEVEL_CAP - 1 priced entries (about x1.5 a step).
 const UPGRADE_PRICES = [
   null,
-  200,
-  400,
-  800,
-  1600,
-  2400,
-  3300,
-  4500,
-  6100,
-  8200,
+  150,
+  300,
+  550,
+  900,
+  1400,
+  2100,
+  3000,
+  4200,
+  5800,
 ];
 
 const characterStats = definitions.characterStats;
@@ -98,26 +91,31 @@ function defaultCharacterList() {
   );
 }
 
-function getHealth(character, level) {
-  const safeLevel = Math.max(1, Number(level) || 1);
+// Multiplier on a level-1 stat at the given level (1 at level 1).
+function levelStatMultiplier(level) {
+  const safeLevel = Math.min(LEVEL_CAP, Math.max(1, Math.floor(Number(level)) || 1));
   const standardLevels = Math.min(safeLevel, STANDARD_LEVEL_CAP) - 1;
   const masteryLevels = Math.max(0, safeLevel - STANDARD_LEVEL_CAP);
   return (
-    characterStats[character].baseHealth +
-    standardLevels * STANDARD_LEVEL_STAT_GAINS.health +
-    masteryLevels * MASTERY_LEVEL_STAT_GAINS.health
+    1 +
+    standardLevels * STANDARD_LEVEL_GAIN_FRACTION +
+    masteryLevels * MASTERY_LEVEL_GAIN_FRACTION
   );
 }
 
+// Leveled stats snap to the same grid as the base stats (HP to 10s, damage
+// to 5s) so every number a player sees looks deliberate.
+function scaleForLevel(baseValue, level, step) {
+  const raw = (Number(baseValue) || 0) * levelStatMultiplier(level);
+  return Math.round(raw / step) * step;
+}
+
+function getHealth(character, level) {
+  return scaleForLevel(characterStats[character].baseHealth, level, 10);
+}
+
 function getDamage(character, level) {
-  const safeLevel = Math.max(1, Number(level) || 1);
-  const standardLevels = Math.min(safeLevel, STANDARD_LEVEL_CAP) - 1;
-  const masteryLevels = Math.max(0, safeLevel - STANDARD_LEVEL_CAP);
-  return (
-    characterStats[character].baseDamage +
-    standardLevels * STANDARD_LEVEL_STAT_GAINS.damage +
-    masteryLevels * MASTERY_LEVEL_STAT_GAINS.damage
-  );
+  return scaleForLevel(characterStats[character].baseDamage, level, 5);
 }
 
 // Charge is measured in landed hits, independent of level and damage modifiers.
@@ -138,18 +136,11 @@ function getSuperChargePerHit(character, attackType = "basic") {
 }
 
 function getSpecialDamage(character, level) {
-  const safeLevel = Math.max(1, Number(level) || 1);
-  const standardLevels = Math.min(safeLevel, STANDARD_LEVEL_CAP) - 1;
-  const masteryLevels = Math.max(0, safeLevel - STANDARD_LEVEL_CAP);
-  return (
-    characterStats[character].specialBaseDamage +
-    standardLevels * STANDARD_LEVEL_STAT_GAINS.specialDamage +
-    masteryLevels * MASTERY_LEVEL_STAT_GAINS.specialDamage
-  );
+  return scaleForLevel(characterStats[character].specialBaseDamage, level, 5);
 }
 
 // The level upgrade price reflects the current level the character is at
-// If the character was at level 1 it would cost 200 to go to level 2
+// e.g. UPGRADE_PRICES[1] buys level 2
 function upgradePrice(level) {
   return UPGRADE_PRICES[Math.floor(Number(level))] ?? undefined;
 }

@@ -4,11 +4,12 @@ import { PIXEL_INK, snapPixel } from "../scene/pixelBar.js";
 import { playerAnchor } from "../characters/shared/rig.js";
 
 // Team marker: a pixel-art oval on the floor around each player's feet, blue
-// for your team (yourself included) and red for the other team. It sits
+// for your team, white for yourself and red for the other team. It sits
 // beside the sprite rather than on it, so the artwork is never filtered.
 
 export const FOOT_RING_ALLY = 0x3d8bff;
 export const FOOT_RING_ENEMY = 0xff413f;
+export const FOOT_RING_SELF = 0xffffff;
 
 const WIDTH_PER_BODY = 1.55;
 // Bodies wider than a typical character (Thorg's is ~50px) widen the ring
@@ -34,7 +35,8 @@ const MAX_STEP_PX = 40;
 // lies on the floor around the feet instead of hovering behind them.
 const DROP_PER_RADIUS = 0.35;
 
-export function footRingColor(isAlly) {
+export function footRingColor(isAlly, isSelf = false) {
+  if (isSelf) return FOOT_RING_SELF;
   return isAlly ? FOOT_RING_ALLY : FOOT_RING_ENEMY;
 }
 
@@ -122,9 +124,9 @@ export function advanceSpin(phase, dx) {
 
 // `hidden` reports states where the owner keeps a sprite but no marker
 // belongs, such as a corpse.
-export function attachTeamFootRing(scene, sprite, { isAlly, hidden = () => false } = {}) {
+export function attachTeamFootRing(scene, sprite, { isAlly, isSelf = false, hidden = () => false } = {}) {
   if (!scene?.add?.graphics || !sprite) return null;
-  const color = footRingColor(isAlly);
+  const color = footRingColor(isAlly, isSelf);
   const ring = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER - 1).setVisible(false);
   let shape = null;
   let phase = 0;

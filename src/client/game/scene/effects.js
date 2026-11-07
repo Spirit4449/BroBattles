@@ -1,6 +1,13 @@
 // effects.js
 // Shared lightweight VFX helpers for movement, combat, and player lifecycle.
 import { RENDER_LAYERS } from "./renderLayers";
+import { getCloudSystem } from "./clouds/cloudLayer";
+import {
+  emitPuff,
+  emitSurfaceBurst,
+  emitWake,
+  emitWallScrape,
+} from "./clouds/cloudEmitters";
 
 const markerPool = new Set();
 
@@ -15,7 +22,7 @@ export const MOVEMENT_VFX_CONFIG = Object.freeze({
   landingMinVelocity: 241,
   landingMaxVelocity: 796,
   landingShockwaveMinFallPx: 163,
-  wallTrailIntervalMs: 48,
+  wallSlideSpeedReference: 120,
   runSpeedReference: 260,
   runDustMinIntervalMs: 48,
   runDustMaxIntervalMs: 112,
@@ -33,43 +40,6 @@ function destroyWhenDone(scene, target, tweenConfig) {
     ...tweenConfig,
     onComplete: () => target?.destroy?.(),
   });
-}
-
-function spawnMotionPuff(scene, x, y, opts = {}) {
-  if (!scene?.add) return null;
-  const tint = opts.tint || MOVEMENT_VFX_CONFIG.dustTint;
-  const radius = Number(opts.radius) || Phaser.Math.Between(6, 10);
-  const alpha = Number(opts.alpha) || Phaser.Math.FloatBetween(0.62, 0.82);
-  const puff = scene.add.graphics();
-  puff.setDepth(
-    Number.isFinite(opts.depth)
-      ? opts.depth
-      : MOVEMENT_VFX_CONFIG.behindPlayerDepth,
-  );
-  const pixel = Math.max(2, Math.round(radius / 3));
-  // Deliberately stepped blocks instead of soft circles: these retain a
-  // playful pixel silhouette while scaling and fading.
-  puff.fillStyle(tint, alpha * 0.42);
-  puff.fillRect(-pixel * 3, 0, pixel * 2, pixel * 2);
-  puff.fillRect(pixel * 2, pixel, pixel * 2, pixel * 2);
-  puff.fillStyle(tint, alpha);
-  puff.fillRect(-pixel * 2, -pixel, pixel * 4, pixel * 3);
-  puff.fillRect(-pixel, -pixel * 2, pixel * 3, pixel * 2);
-  puff.fillStyle(MOVEMENT_VFX_CONFIG.dustHighlight, alpha * 0.34);
-  puff.fillRect(-pixel, -pixel * 2, pixel * 2, pixel);
-  puff.setPosition(Math.round(x), Math.round(y));
-  puff.setScale(Number(opts.startScale) || 0.72);
-
-  destroyWhenDone(scene, puff, {
-    x: x + (Number(opts.driftX) || 0),
-    y: y + (Number(opts.driftY) || 0),
-    alpha: 0,
-    scaleX: Number(opts.endScaleX) || Phaser.Math.FloatBetween(1.3, 1.8),
-    scaleY: Number(opts.endScaleY) || Phaser.Math.FloatBetween(1.1, 1.5),
-    duration: Number(opts.duration) || Phaser.Math.Between(280, 420),
-    ease: "Cubic.easeOut",
-  });
-  return puff;
 }
 
 function spawnGroundRing(scene, x, y, width, opts = {}) {
@@ -104,6 +74,25 @@ function spawnGroundRing(scene, x, y, width, opts = {}) {
   return ring;
 }
 
+
+// ---------------------------------------------------------------------------
+// Movement clouds
+//
+// Cloud shapes come from the simulated cloud system in ./clouds: soft blobs
+// that melt into one pixel-art silhouette, puff out, and break into smaller
+// drifting pieces as they travel. These helpers translate movement events into
+// physical inputs (contact point, surface normal, impact strength, momentum),
+// so the same collision looks the same on every floor and wall.
+// ---------------------------------------------------------------------------
+
+function withClouds(scene, draw) {
+  const system = getCloudSystem(scene);
+  if (system) draw(system.sim, system);
+}
+
+/** Paces wall-slide clouds by distance slid, so density follows speed. */
+const WALL_SCRAPE_SPACING_PX = 9;
+
 /** A compact, directional burst at the instant the player leaves the floor. */
 export function spawnJumpTakeoff(scene, x, y, opts = {}) {
   if (!scene?.add) return;
@@ -111,52 +100,30 @@ export function spawnJumpTakeoff(scene, x, y, opts = {}) {
   const velocityX = Number(opts.velocityX) || 0;
   const motionBias = Phaser.Math.Clamp(velocityX / 280, -1, 1);
 
-  spawnGroundRing(scene, x, y - 1, bodyWidth * 1.25, {
-    duration: 210,
-    endScaleX: 1.48,
+  spawnGroundRing(scene, x, y - 1, bodyWidth * 1.15, {
+    duration: 200,
+    endScaleX: 1.42,
   });
 
-  const flash = scene.add.graphics();
-  flash.setDepth(MOVEMENT_VFX_CONFIG.behindPlayerDepth);
-  flash.fillStyle(MOVEMENT_VFX_CONFIG.dustHighlight, 0.28);
-  flash.fillRect(-bodyWidth * 0.52, -3, bodyWidth * 1.04, 6);
-  flash.fillStyle(MOVEMENT_VFX_CONFIG.dustHighlight, 0.18);
-  flash.fillRect(-bodyWidth * 0.34, -7, bodyWidth * 0.68, 3);
-  flash.setPosition(Math.round(x), Math.round(y - 2));
-  flash.setBlendMode(Phaser.BlendModes.ADD);
-  destroyWhenDone(scene, flash, {
-    alpha: 0,
-    scaleX: 1.35,
-    scaleY: 0.55,
-    duration: 140,
-    ease: "Quad.easeOut",
-  });
-
-  for (let i = 0; i < 7; i++) {
-    const side = i % 2 === 0 ? -1 : 1;
-    const distance = Phaser.Math.Between(18, 38);
-    spawnMotionPuff(
-      scene,
-      x + side * Phaser.Math.Between(3, Math.max(5, bodyWidth * 0.24)),
-      y - Phaser.Math.Between(1, 5),
-      {
-        radius: Phaser.Math.Between(6, 10),
-        driftX: side * distance + motionBias * 10,
-        driftY: -Phaser.Math.Between(5, 16),
-        duration: Phaser.Math.Between(260, 380),
-        endScaleX: Phaser.Math.FloatBetween(1.35, 1.9),
-        endScaleY: Phaser.Math.FloatBetween(0.9, 1.25),
-      },
-    );
-  }
+  // The feet shove the floor backwards, so the trailing streak is the big one.
+  withClouds(scene, (sim) => emitSurfaceBurst(sim, {
+    x,
+    y,
+    nx: 0,
+    ny: -1,
+    strength: 0.18 + Math.abs(motionBias) * 0.2,
+    bias: -motionBias * 0.85,
+    pop: true,
+    halfWidth: bodyWidth * 0.4,
+  }));
 
   // Short lift lines make the impulse read immediately even at a distance.
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 3; i++) {
     const lift = scene.add.graphics();
     lift.setDepth(MOVEMENT_VFX_CONFIG.frontParticleDepth);
-    lift.fillStyle(MOVEMENT_VFX_CONFIG.impactAccent, 0.74 - i * 0.08);
+    lift.fillStyle(MOVEMENT_VFX_CONFIG.impactAccent, 0.7 - i * 0.1);
     const w = Phaser.Math.Between(2, 4);
-    const h = Phaser.Math.Between(7, 13);
+    const h = Phaser.Math.Between(7, 12);
     lift.fillRect(-w / 2, -h, w, h);
     lift.setPosition(
       x + Phaser.Math.Between(-bodyWidth * 0.34, bodyWidth * 0.34),
@@ -173,7 +140,7 @@ export function spawnJumpTakeoff(scene, x, y, opts = {}) {
   }
 }
 
-/** A velocity-scaled landing shockwave, dust fan, and small debris spray. */
+/** A velocity-scaled landing shockwave, rolling clouds and a debris spray. */
 export function spawnLandingImpact(scene, x, y, opts = {}) {
   if (!scene?.add) return;
   const impactVelocity = Math.max(0, Number(opts.impactVelocity) || 0);
@@ -181,7 +148,7 @@ export function spawnLandingImpact(scene, x, y, opts = {}) {
     (impactVelocity - MOVEMENT_VFX_CONFIG.landingMinVelocity) /
       (MOVEMENT_VFX_CONFIG.landingMaxVelocity -
         MOVEMENT_VFX_CONFIG.landingMinVelocity),
-    0.28,
+    0.15,
     1,
   );
   const bodyWidth = Math.max(38, Number(opts.bodyWidth) || 52);
@@ -189,6 +156,7 @@ export function spawnLandingImpact(scene, x, y, opts = {}) {
   const fallDistance = Math.max(0, Number(opts.fallDistance) || 0);
   const showShockwave =
     fallDistance >= MOVEMENT_VFX_CONFIG.landingShockwaveMinFallPx;
+  const heavy = (Number(opts.smokeMultiplier) || 1) > 1;
 
   if (showShockwave) {
     spawnGroundRing(scene, x, y - 1, radius, {
@@ -198,58 +166,25 @@ export function spawnLandingImpact(scene, x, y, opts = {}) {
     });
   }
 
-  const groundFlash = scene.add.graphics();
-  groundFlash.setDepth(MOVEMENT_VFX_CONFIG.behindPlayerDepth);
-  groundFlash.fillStyle(
-    MOVEMENT_VFX_CONFIG.dustHighlight,
-    0.18 + intensity * 0.16,
-  );
-  const impactPlateWidth = showShockwave ? radius * 1.3 : bodyWidth * 0.68;
-  groundFlash.fillRect(-impactPlateWidth * 0.5, -3, impactPlateWidth, 6);
-  groundFlash.fillStyle(MOVEMENT_VFX_CONFIG.dustHighlight, 0.13);
-  groundFlash.fillRect(
-    -impactPlateWidth * 0.3,
-    -8,
-    impactPlateWidth * 0.6,
-    4,
-  );
-  groundFlash.setPosition(Math.round(x), Math.round(y - 2));
-  groundFlash.setBlendMode(Phaser.BlendModes.ADD);
-  destroyWhenDone(scene, groundFlash, {
-    alpha: 0,
-    scaleX: showShockwave ? 1.4 + intensity * 0.25 : 1.08,
-    scaleY: 0.62,
-    duration: 160 + intensity * 70,
-    ease: "Quad.easeOut",
-  });
+  // Air squeezed out from under the feet rolls away both ways along the floor.
+  withClouds(scene, (sim) => emitSurfaceBurst(sim, {
+    x,
+    y,
+    nx: 0,
+    ny: -1,
+    strength: intensity * 0.75,
+    bias: Phaser.Math.Clamp((Number(opts.velocityX) || 0) / 400, -0.6, 0.6),
+    scale: heavy ? 1.2 : 0.85,
+    pop: true,
+    halfWidth: bodyWidth * 0.45,
+    // A stomp is the heaviest contact there is: fully solid cloud.
+    ...(heavy ? { opacity: 1 } : {}),
+  }));
 
-  const puffCount = Math.round((7 + intensity * 5) * (opts.smokeMultiplier || 1));
-  for (let i = 0; i < puffCount; i++) {
-    const side = i % 2 === 0 ? -1 : 1;
-    const lateralSpeed = Phaser.Math.Between(
-      24,
-      Math.round(44 + intensity * 34),
-    );
-    spawnMotionPuff(
-      scene,
-      x + side * Phaser.Math.Between(2, Math.max(6, bodyWidth * 0.38)),
-      y - Phaser.Math.Between(0, 6),
-      {
-        radius: Phaser.Math.Between(7, Math.round(10 + intensity * 4)),
-        alpha: Phaser.Math.FloatBetween(0.66, 0.9),
-        driftX: side * lateralSpeed,
-        driftY: -Phaser.Math.Between(6, Math.round(16 + intensity * 14)),
-        duration: Phaser.Math.Between(310, 470),
-        endScaleX: Phaser.Math.FloatBetween(1.5, 2.15),
-        endScaleY: Phaser.Math.FloatBetween(1, 1.35),
-      },
-    );
-  }
-
-  const debrisCount = Math.round(4 + intensity * 5);
+  const debrisCount = Math.round(2 + intensity * 4);
   for (let i = 0; i < debrisCount; i++) {
     const side = i % 2 === 0 ? -1 : 1;
-    const debrisSize = Phaser.Math.Between(3, intensity > 0.7 ? 6 : 4);
+    const debrisSize = Phaser.Math.Between(3, intensity > 0.7 ? 5 : 4);
     const debris = scene.add.rectangle(
       x + Phaser.Math.Between(-8, 8),
       y - Phaser.Math.Between(2, 7),
@@ -285,197 +220,105 @@ export function spawnLandingImpact(scene, x, y, opts = {}) {
   }
 }
 
-/** Initial scrape accent when entering a wall slide. */
+/** Clouds squeezed along the wall when a slide grabs on. */
 export function spawnWallSlideBurst(scene, x, y, side = "left") {
   if (!scene?.add) return;
   const away = side === "left" ? 1 : -1;
-
-  const contactFlash = scene.add.graphics();
-  contactFlash.setDepth(MOVEMENT_VFX_CONFIG.frontParticleDepth);
-  contactFlash.fillStyle(MOVEMENT_VFX_CONFIG.dustHighlight, 0.86);
-  contactFlash.fillRect(-2, -21, 4, 42);
-  contactFlash.fillRect(away > 0 ? 2 : -10, -13, 8, 5);
-  contactFlash.fillRect(away > 0 ? 2 : -14, 2, 12, 5);
-  contactFlash.fillStyle(MOVEMENT_VFX_CONFIG.dustTint, 0.72);
-  contactFlash.fillRect(away > 0 ? 4 : -10, 12, 6, 5);
-  contactFlash.setPosition(Math.round(x), Math.round(y));
-  contactFlash.setBlendMode(Phaser.BlendModes.ADD);
-  destroyWhenDone(scene, contactFlash, {
-    x: x + away * 8,
-    alpha: 0,
-    scaleX: 1.5,
-    scaleY: 1.18,
-    duration: 190,
-    ease: "Quad.easeOut",
-  });
-
-  for (let i = 0; i < 8; i++) {
-    spawnMotionPuff(
-      scene,
-      x + away * Phaser.Math.Between(1, 4),
-      y + Phaser.Math.Between(-14, 14),
-      {
-        radius: Phaser.Math.Between(5, 10),
-        driftX: away * Phaser.Math.Between(18, 38),
-        driftY: Phaser.Math.Between(-22, 9),
-        duration: Phaser.Math.Between(250, 370),
-      },
-    );
-  }
+  // Still travelling down on contact, so the downward streak is longer.
+  withClouds(scene, (sim) => emitSurfaceBurst(sim, {
+    x,
+    y,
+    nx: away,
+    ny: 0,
+    strength: 0.12,
+    bias: away * 0.5,
+    surfaceOffset: -0.35,
+  }));
 }
 
-/** One throttled wall-scrape emission; callers control the cadence. */
-export function spawnWallSlideTrail(scene, x, y, side = "left") {
+/**
+ * Wall-slide clouds, called every frame while sliding. Blobs are laid along
+ * the wall per distance slid (not per frame), so a fast slide leaves a dense
+ * column and a slow one a sparse trail, at any frame rate. `owner` is any
+ * object that persists for the fighter; it stores where the last blob went.
+ */
+export function spawnWallSlideTrail(scene, x, y, side = "left", opts = {}) {
   if (!scene?.add) return;
   const away = side === "left" ? 1 : -1;
-  spawnMotionPuff(
-    scene,
-    x + away * Phaser.Math.Between(1, 4),
-    y + Phaser.Math.Between(-4, 7),
-    {
-      radius: Phaser.Math.Between(4, 7),
-      alpha: Phaser.Math.FloatBetween(0.52, 0.72),
-      driftX: away * Phaser.Math.Between(11, 23),
-      driftY: -Phaser.Math.Between(5, 14),
-      duration: Phaser.Math.Between(240, 330),
-      endScaleX: Phaser.Math.FloatBetween(1.2, 1.6),
-      endScaleY: Phaser.Math.FloatBetween(1, 1.3),
-    },
-  );
-
-  // A chunky contact tick makes every scrape pulse readable. Alternating its
-  // vertical placement keeps the slide lively without moving the player body.
-  const gripTick = scene.add.graphics();
-  gripTick.setDepth(MOVEMENT_VFX_CONFIG.frontParticleDepth);
-  gripTick.fillStyle(MOVEMENT_VFX_CONFIG.dustHighlight, 0.82);
-  gripTick.fillRect(away > 0 ? 0 : -11, -2, 11, 4);
-  gripTick.fillRect(away > 0 ? 2 : -8, -6, 6, 3);
-  gripTick.setPosition(Math.round(x), Math.round(y));
-  gripTick.setBlendMode(Phaser.BlendModes.ADD);
-  destroyWhenDone(scene, gripTick, {
-    x: gripTick.x + away * Phaser.Math.Between(12, 20),
-    y: gripTick.y + Phaser.Math.Between(4, 12),
-    alpha: 0,
-    scaleX: 1.3,
-    duration: Phaser.Math.Between(110, 170),
-    ease: "Cubic.easeOut",
+  const owner = opts.owner || scene;
+  const now = Date.now();
+  const last = owner._cloudScrape;
+  const fresh = !last || last.side !== side || now - last.at > 160 ||
+    Math.abs(last.x - x) > 12 || Math.abs(y - last.y) > 80;
+  if (fresh) {
+    owner._cloudScrape = { x, y, side, at: now };
+    return;
+  }
+  last.at = now;
+  last.x = x;
+  const travelled = y - last.y;
+  if (travelled < WALL_SCRAPE_SPACING_PX) return;
+  withClouds(scene, (sim) => {
+    const speedRatio = Phaser.Math.Clamp(Number(opts.speedRatio) || 0.6, 0, 1);
+    const steps = Math.min(6, Math.floor(travelled / WALL_SCRAPE_SPACING_PX));
+    for (let i = 1; i <= steps; i++) {
+      emitWallScrape(sim, {
+        x,
+        y: last.y + i * WALL_SCRAPE_SPACING_PX,
+        awayX: away,
+        speedRatio,
+        slideVelocity: Number(opts.velocityY) || 0,
+      });
+    }
   });
-
-  for (let i = 0; i < 2; i++) {
-    const chunkSize = Phaser.Math.Between(3, 6);
-    const chunk = scene.add.rectangle(
-      x,
-      y + Phaser.Math.Between(-7, 8),
-      chunkSize,
-      chunkSize,
-      i === 0
-        ? MOVEMENT_VFX_CONFIG.dustTint
-        : MOVEMENT_VFX_CONFIG.dustHighlight,
-      Phaser.Math.FloatBetween(0.66, 0.92),
-    );
-    chunk.setDepth(MOVEMENT_VFX_CONFIG.frontParticleDepth);
-    destroyWhenDone(scene, chunk, {
-      x: chunk.x + away * Phaser.Math.Between(13, 29),
-      y: chunk.y + Phaser.Math.Between(12, 30),
-      alpha: 0,
-      rotation: Phaser.Math.FloatBetween(-1.6, 1.6),
-      duration: Phaser.Math.Between(160, 250),
-      ease: "Cubic.easeIn",
-    });
-  }
-
-  if (Math.random() < 0.72) {
-    const fleck = scene.add.graphics();
-    fleck.setDepth(MOVEMENT_VFX_CONFIG.frontParticleDepth);
-    fleck.fillStyle(MOVEMENT_VFX_CONFIG.dustHighlight, 0.92);
-    const length = Phaser.Math.Between(6, 11);
-    fleck.fillRect(-1, -length / 2, 2, length);
-    fleck.setPosition(x + away * 3, y + Phaser.Math.Between(-5, 5));
-    fleck.setRotation(away * Phaser.Math.FloatBetween(0.18, 0.48));
-    fleck.setBlendMode(Phaser.BlendModes.ADD);
-    destroyWhenDone(scene, fleck, {
-      x: fleck.x + away * Phaser.Math.Between(10, 19),
-      y: fleck.y + Phaser.Math.Between(13, 24),
-      alpha: 0,
-      scaleY: 0.35,
-      duration: Phaser.Math.Between(130, 190),
-      ease: "Cubic.easeIn",
-    });
-  }
+  last.y += Math.floor(travelled / WALL_SCRAPE_SPACING_PX) * WALL_SCRAPE_SPACING_PX;
 }
 
-/** Visible, velocity-scaled dust kicked behind a grounded runner. */
+/** Velocity-scaled clouds kicked behind a grounded runner. */
 export function spawnRunDust(scene, x, y, opts = {}) {
   if (!scene?.add) return;
   const direction = Number(opts.direction) < 0 ? -1 : 1;
   const intensity = Phaser.Math.Clamp(Number(opts.intensity) || 0.35, 0.2, 1);
   const behind = -direction;
-  const count = Math.round(1 + intensity * 2);
 
-  for (let i = 0; i < count; i++) {
-    spawnMotionPuff(
-      scene,
-      x + behind * Phaser.Math.Between(2, 10),
-      y - Phaser.Math.Between(1, 8),
-      {
-        radius: Phaser.Math.Between(5, Math.round(8 + intensity * 4)),
-        alpha: Phaser.Math.FloatBetween(0.42, 0.64),
-        driftX:
-          behind *
-          Phaser.Math.Between(12, Math.round(24 + intensity * 12)),
-        driftY: -Phaser.Math.Between(6, Math.round(12 + intensity * 7)),
-        duration: Phaser.Math.Between(220, 330),
-        endScaleX: Phaser.Math.FloatBetween(1.2, 1.55),
-        endScaleY: Phaser.Math.FloatBetween(0.85, 1.12),
-      },
-    );
+  // Light footing: a small puff on some steps only, and none at a walk.
+  if (intensity > 0.4 && Math.random() < 0.3 + intensity * 0.25) {
+    withClouds(scene, (sim) => emitPuff(sim, {
+      // Callers pass a point ~10px behind the body; pull it in to the heel.
+      x: x - behind * Phaser.Math.Between(3, 6),
+      y: y - Phaser.Math.Between(0, 1),
+      vx: behind * Phaser.Math.Between(22, Math.round(30 + intensity * 14)),
+      vy: -Phaser.Math.Between(2, 5),
+      size: 4 + intensity * 2.5 + Math.random(),
+      lobes: intensity > 0.7 ? 2 : 1,
+      // Kicked back off the heel, then the puff curls up and over.
+      curl: -behind * Phaser.Math.FloatBetween(5.5, 7.5),
+      drag: 3,
+      rise: 18,
+      lifeScale: 0.55,
+      erodeRate: 20,
+      opacity: 0.74 + intensity * 0.08,
+    }));
   }
 
-  // Chunky square flecks keep footstep dust in the same pixel language as
-  // jumps, landings, and wall interactions.
-  const chipCount = Math.round(1 + intensity * 2);
-  for (let i = 0; i < chipCount; i++) {
-    const chip = scene.add.graphics();
+  if (Math.random() < 0.35 + intensity * 0.3) {
+    const chip = scene.add.rectangle(
+      Math.round(x + behind * Phaser.Math.Between(1, 6)),
+      Math.round(y - Phaser.Math.Between(2, 6)),
+      3,
+      3,
+      MOVEMENT_VFX_CONFIG.dustTint,
+      0.7,
+    );
     chip.setDepth(MOVEMENT_VFX_CONFIG.frontParticleDepth);
-    chip.fillStyle(
-      i % 2 === 0
-        ? MOVEMENT_VFX_CONFIG.dustHighlight
-        : MOVEMENT_VFX_CONFIG.dustTint,
-      Phaser.Math.FloatBetween(0.38, 0.62),
-    );
-    const size = Phaser.Math.Between(2, 4);
-    chip.fillRect(-size / 2, -size / 2, size, size);
-    chip.setPosition(
-      Math.round(x + behind * Phaser.Math.Between(1, 8)),
-      Math.round(y - Phaser.Math.Between(2, 7)),
-    );
     destroyWhenDone(scene, chip, {
-      x:
-        chip.x +
-        behind * Phaser.Math.Between(8, Math.round(15 + intensity * 10)),
-      y: chip.y - Phaser.Math.Between(5, Math.round(9 + intensity * 6)),
+      x: chip.x + behind * Phaser.Math.Between(10, Math.round(16 + intensity * 12)),
+      y: chip.y - Phaser.Math.Between(5, 12),
       alpha: 0,
-      scaleX: Phaser.Math.FloatBetween(0.55, 1.15),
-      scaleY: Phaser.Math.FloatBetween(0.55, 1.15),
-      duration: Phaser.Math.Between(150, 240),
+      duration: Phaser.Math.Between(150, 230),
       ease: "Cubic.easeOut",
     });
   }
-
-  const groundPixel = scene.add.graphics();
-  groundPixel.setDepth(MOVEMENT_VFX_CONFIG.behindPlayerDepth);
-  groundPixel.fillStyle(MOVEMENT_VFX_CONFIG.dustHighlight, 0.44);
-  groundPixel.fillRect(behind > 0 ? 0 : -14, -2, 14, 4);
-  groundPixel.fillStyle(MOVEMENT_VFX_CONFIG.dustTint, 0.3);
-  groundPixel.fillRect(behind > 0 ? 6 : -18, 3, 12, 3);
-  groundPixel.setPosition(Math.round(x), Math.round(y));
-  destroyWhenDone(scene, groundPixel, {
-    x: groundPixel.x + behind * (12 + intensity * 10),
-    alpha: 0,
-    scaleX: 1.12,
-    duration: 150 + intensity * 55,
-    ease: "Cubic.easeOut",
-  });
 }
 
 /** A planted-foot skid burst when grounded input reverses direction. */
@@ -484,14 +327,24 @@ export function spawnDirectionChangeBurst(scene, x, y, opts = {}) {
   const previousDirection = Number(opts.previousDirection) < 0 ? -1 : 1;
   const speedRatio = Phaser.Math.Clamp(Number(opts.speedRatio) || 0.4, 0.25, 1);
 
-  for (let i = 0; i < 9; i++) {
-    const size = Phaser.Math.Between(3, 7);
+  // Momentum carries the skid cloud the way the player was going.
+  withClouds(scene, (sim) => emitSurfaceBurst(sim, {
+    x,
+    y,
+    nx: 0,
+    ny: -1,
+    strength: 0.12 + speedRatio * 0.3,
+    bias: previousDirection * 0.9,
+  }));
+
+  for (let i = 0; i < 4; i++) {
+    const size = Phaser.Math.Between(3, 5);
     const block = scene.add.rectangle(
-      x + Phaser.Math.Between(-7, 7),
-      y - Phaser.Math.Between(1, 7),
+      x + Phaser.Math.Between(-6, 6),
+      y - Phaser.Math.Between(1, 6),
       size,
-      Phaser.Math.Between(3, size + 2),
-      i % 3 === 0
+      size,
+      i % 2 === 0
         ? MOVEMENT_VFX_CONFIG.dustHighlight
         : MOVEMENT_VFX_CONFIG.dustTint,
       Phaser.Math.FloatBetween(0.68, 0.94),
@@ -501,11 +354,11 @@ export function spawnDirectionChangeBurst(scene, x, y, opts = {}) {
       x:
         block.x +
         previousDirection *
-          Phaser.Math.Between(24, Math.round(50 + speedRatio * 25)),
-      y: block.y - Phaser.Math.Between(7, Math.round(17 + speedRatio * 14)),
+          Phaser.Math.Between(24, Math.round(46 + speedRatio * 24)),
+      y: block.y - Phaser.Math.Between(7, Math.round(15 + speedRatio * 12)),
       alpha: 0,
       rotation: Phaser.Math.FloatBetween(-1.2, 1.2),
-      duration: Phaser.Math.Between(220, 360),
+      duration: Phaser.Math.Between(200, 320),
       ease: "Cubic.easeOut",
     });
   }
@@ -567,56 +420,90 @@ export function spawnFastFallTrail(scene, sprite, opts = {}) {
   }
 }
 
-export function spawnWallKickCloud(
-  scene,
-  x,
-  y,
-  direction = 1,
-  tint = 0xd9d9d9,
-) {
+
+/**
+ * Wall kick: a hard push-off. A flash and a pixel pressure arc leave the wall,
+ * clouds squeeze out along the wall both ways, and if `opts.follow` (the
+ * fighter's sprite) is given, a tapering wake trails the launch for a moment
+ * and breaks up behind it.
+ */
+export function spawnWallKickCloud(scene, x, y, direction = 1, opts = {}) {
   if (!scene || !scene.add) return;
-  const puffs = Phaser.Math.Between(3, 4);
   const push = direction >= 0 ? 1 : -1;
 
-  for (let i = 0; i < puffs; i++) {
-    const g = scene.add.graphics();
-    g.setDepth(MOVEMENT_VFX_CONFIG.frontParticleDepth);
-    g.fillStyle(tint, Phaser.Math.FloatBetween(0.38, 0.58));
-    const size = Phaser.Math.Between(3, 5);
-    g.fillRect(-size / 2, -size / 2, size, size);
-    if (i % 2 === 0) {
-      g.fillStyle(MOVEMENT_VFX_CONFIG.dustHighlight, 0.7);
-      g.fillRect(-size / 2, -size, Math.max(2, size * 0.45), size * 0.45);
-    }
-    g.x = x + Phaser.Math.Between(-4, 4);
-    g.y = y + Phaser.Math.Between(-5, 5);
+  const flash = scene.add.graphics();
+  flash.setDepth(MOVEMENT_VFX_CONFIG.frontParticleDepth);
+  flash.fillStyle(MOVEMENT_VFX_CONFIG.impactAccent, 0.92);
+  flash.fillRect(push > 0 ? 0 : -4, -24, 4, 48);
+  flash.fillStyle(MOVEMENT_VFX_CONFIG.impactAccent, 0.55);
+  flash.fillRect(push > 0 ? 4 : -8, -14, 4, 28);
+  flash.setPosition(Math.round(x), Math.round(y));
+  flash.setBlendMode(Phaser.BlendModes.ADD);
+  destroyWhenDone(scene, flash, {
+    alpha: 0,
+    scaleY: 1.35,
+    duration: 130,
+    ease: "Quad.easeOut",
+  });
 
-    scene.tweens.add({
-      targets: g,
-      x: g.x + push * Phaser.Math.Between(20, 42),
-      y: g.y + Phaser.Math.Between(-24, 18),
-      alpha: 0,
-      scaleX: Phaser.Math.FloatBetween(1.25, 1.9),
-      scaleY: Phaser.Math.FloatBetween(1.25, 1.9),
-      duration: Phaser.Math.Between(180, 260),
-      ease: "Cubic.easeOut",
-      onComplete: () => g.destroy(),
-    });
+  // Stepped ")" arc that travels off the wall like a pressure wave.
+  const arc = scene.add.graphics();
+  arc.setDepth(MOVEMENT_VFX_CONFIG.frontParticleDepth);
+  const step = 3;
+  const half = 8;
+  for (let k = -half; k <= half; k++) {
+    const bend = Math.round((1 - (k / half) ** 2) * 3) * step;
+    arc.fillStyle(MOVEMENT_VFX_CONFIG.impactAccent, 0.85 - Math.abs(k / half) * 0.45);
+    arc.fillRect(push * bend - (push > 0 ? 0 : step), k * step, step, step);
   }
+  arc.setPosition(Math.round(x + push * 4), Math.round(y));
+  arc.setBlendMode(Phaser.BlendModes.ADD);
+  destroyWhenDone(scene, arc, {
+    x: arc.x + push * 34,
+    alpha: 0,
+    scaleY: 1.4,
+    scaleX: 1.3,
+    duration: 220,
+    ease: "Cubic.easeOut",
+  });
 
-  // Horizontal counterparts to the segmented fast-fall lines. Spread them
-  // around the contact point and stretch away from the wall as the kick fires.
-  for (let i = 0; i < 7; i++) {
+  withClouds(scene, (sim, system) => {
+    emitSurfaceBurst(sim, {
+      x,
+      y,
+      nx: push,
+      ny: 0,
+      strength: 0.38,
+      // The kick drives up and away, so more air escapes downward.
+      bias: push * 0.35,
+      scale: 0.85,
+      rise: 10,
+    });
+    const target = opts.follow;
+    if (target) {
+      system.follow(target, {
+        durationMs: 170,
+        spacing: 10,
+        offsetY: 6,
+        emit: (s, wx, wy, progress) => emitWake(s, {
+          x: wx,
+          y: wy,
+          size: 9,
+          progress,
+          vx: -push * 25,
+          vy: 10,
+        }),
+      });
+    }
+  });
+
+  // Horizontal speed lines sell the impulse.
+  for (let i = 0; i < 4; i++) {
     const streak = scene.add.graphics();
     streak.setDepth(MOVEMENT_VFX_CONFIG.behindPlayerDepth);
-    streak.fillStyle(
-      i % 3 === 0
-        ? MOVEMENT_VFX_CONFIG.dustHighlight
-        : MOVEMENT_VFX_CONFIG.impactAccent,
-      Phaser.Math.FloatBetween(0.48, 0.78),
-    );
+    streak.fillStyle(MOVEMENT_VFX_CONFIG.impactAccent, Phaser.Math.FloatBetween(0.5, 0.78));
     const pixel = Phaser.Math.Between(2, 3);
-    const length = Phaser.Math.Between(30, 58);
+    const length = Phaser.Math.Between(30, 52);
     const first = Math.round(length * 0.45);
     const gapEnd = Math.round(length * 0.62);
     const last = Math.round(length * 0.22);
@@ -624,7 +511,7 @@ export function spawnWallKickCloud(
     streak.fillRect(push > 0 ? gapEnd : -gapEnd - last, -pixel / 2, last, pixel);
     streak.setPosition(
       Math.round(x + push * Phaser.Math.Between(2, 14)),
-      Math.round(y + (i - 3) * 8 + Phaser.Math.Between(-2, 2)),
+      Math.round(y + (i - 1.5) * 11 + Phaser.Math.Between(-2, 2)),
     );
     streak.setBlendMode(Phaser.BlendModes.ADD);
     destroyWhenDone(scene, streak, {
@@ -1327,5 +1214,5 @@ export function spawnStompImpact(scene, x, y, opts = {}) {
     scene.tweens.add({ targets: ring, scaleX: 110 / radius, scaleY: 1.8,
       alpha: 0, duration: 360, delay, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
   }
-  if (opts.cameraShake) scene.cameras?.main?.shake?.(120, 0.006);
+  if (opts.cameraShake) scene.cameras?.main?.shake?.(135, 0.0075);
 }

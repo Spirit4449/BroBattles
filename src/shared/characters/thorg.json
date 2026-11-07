@@ -1,14 +1,14 @@
 {
   "key": "thorg",
   "stats": {
-    "baseHealth": 13000,
+    "baseHealth": 2170,
     "attackDescription": "Revolves his heavy weapon around his body, striking both sides with light knockback.",
-    "baseDamage": 1500,
+    "baseDamage": 250,
     "ammoCooldownMs": 560,
     "ammoReloadMs": 800,
     "ammoCapacity": 3,
     "specialDescription": "Enters a purple rage that buffs damage and strengthens knockback.",
-    "specialBaseDamage": 2800,
+    "specialBaseDamage": 465,
     "specialChargeHits": 3,
     "specialChargePerHit": 0,
     "spriteScale": 0.7,

@@ -7,9 +7,11 @@ Duel maps use `modeVariantId: "duels"` and share one rotation across 1v1 and 2v2
 World and camera profiles live in `src/shared/maps/arenas.json` (read through `src/shared/maps/arenas.js`). A duel map's `arenaId` retains its authored profile (`duels-1v1` for maps 1–3, `duels-2v2` for map 5). These profile names are retained for compatibility; they do not restrict the map's match formation. Each map uses the same geometry and camera in either formation.
 
 - `world`: the physics bounds.
-- `camera`: the follow camera's bounds (`x`, `y`, `width`, `height`), its dead zone and `followOffsetY`.
+- `camera`: the follow camera's bounds (`x`, `y`, `width`, `height`) and its dead zone.
   - `zoom` is the reference zoom that scenery is composed at.
   - The live zoom eases from `maxZoom`, with the player at or below `climbY[1]`, to `minZoom` at or above `climbY[0]`. See `restingCameraFrame` in `cameraDynamics.js`.
+  - Where the player rests in the view is the same in every mode and while spectating: `FOLLOW_SCREEN_OFFSET` in `cameraDynamics.js` sets it in screen pixels below the middle of the view (more at the top of the climb), so the zoom does not change it. Arenas do not set a follow offset.
+  - Maps that share an arena keep their main floor at the same height, so the climb zoom, camera bounds and sudden-death poison treat each alike. The 1v1 duel maps (1–3) put the top of their main floor (`p0`) at y 580. Shift every platform, hitbox and free powerup point together when moving a layout.
   - The follow bounds extend 80 px past each side of the standard Duels and Bank Bust worlds, giving players more camera tracking near the edges. The tall Duels profile retains a 90 px side inset to keep edge art out of view. Every mode's bounds also allow the camera to track above and below the physics world.
 
 To give a new mode maps, add its variant id (from `gameModes.catalog.json`) to `arenas.json`. Retuning an arena profile changes every map using that profile.

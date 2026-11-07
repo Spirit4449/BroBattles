@@ -124,4 +124,21 @@ describe("Spawn support and clearance", () => {
   test('invalid maps fail explicitly instead of spawning in the void', () => {
     assert.throws(() => resolveLanding({}, null, [], { width: 40, height: 60 }), /walkable/);
   });
+  test('maps that share an arena keep their main floor at the same height', () => {
+    const { MapRepository } = require('../src/server/services/maps/mapRepository');
+    const { geometryFromMap } = require('../src/shared/maps/mapDocument');
+    const { mapArena } = require('../src/shared/maps/arenas');
+    const repo = new MapRepository();
+    const floors = new Map();
+    for (const id of repo.mapIds()) {
+      const doc = repo.readDocument(id);
+      const walkable = geometryFromMap(doc).colliders.filter(p => !p.motion && p.collision.up !== false);
+      const floor = walkable.reduce((a, b) => (b.right - b.left > a.right - a.left ? b : a));
+      const key = JSON.stringify(mapArena(doc).camera);
+      floors.set(key, [...(floors.get(key) || []), { id, top: floor.top }]);
+    }
+    for (const group of floors.values()) {
+      for (const { id, top } of group) assert.ok(Math.abs(top - group[0].top) <= 1, `map ${id} floor ${top} vs map ${group[0].id} ${group[0].top}`);
+    }
+  });
 });

@@ -61,7 +61,7 @@ import { createMatchCoordinator } from "../game/match/matchCoordinator";
 import { syncRemoteRoster } from "../game/match/playerRosterMerge";
 import { preloadGameAssets } from "../game/scene/preloadGameAssets";
 import { renderPoisonWater } from "../game/scene/poisonWaterRenderer";
-import { updateDynamicCamera } from "../game/scene/cameraDynamics";
+import { updateDynamicCamera, restingCameraFrame } from "../game/scene/cameraDynamics";
 import { createMatchIntro, FOLLOW_LERP } from "../game/scene/matchIntro";
 import { installRenderResolution } from "../game/scene/renderResolution";
 import { deferSceneAudio } from "../game/audio/deferredAudio";
@@ -1339,6 +1339,9 @@ class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
 
     // Start with gentle tracking; cameraDynamics tightens follow at high speed.
+    if (player && this._mapArena?.camera) {
+      cam.setFollowOffset(0, restingCameraFrame(player.y, this._mapArena.camera).followOffsetY);
+    }
     followLocalPlayer(cam);
     if (!this._modeRuntime) {
       this._modeRuntime = createModeRuntime({
@@ -1628,13 +1631,15 @@ class GameScene extends Phaser.Scene {
     // of startFollow snapping straight to the newly selected sprite.
     cameraTarget.x = watchedPlayer.x;
     cameraTarget.y = watchedPlayer.y;
-    // Keep the watched fighter lower in frame, revealing more of the platforms
-    // above them, while staying substantially closer than the old map overview.
+    // Frame the watched fighter exactly as their own follow camera would.
+    const rest = this._mapArena?.camera
+      ? restingCameraFrame(watchedPlayer.y, this._mapArena.camera)
+      : { zoom: 1.55, followOffsetY: 85 };
     cam.setFollowOffset(
       0,
-      cam.followOffset.y + (180 - cam.followOffset.y) * 0.1,
+      cam.followOffset.y + (rest.followOffsetY - cam.followOffset.y) * 0.1,
     );
-    cam.setZoom(cam.zoom + (1.55 - cam.zoom) * 0.075);
+    cam.setZoom(cam.zoom + (rest.zoom - cam.zoom) * 0.075);
   }
 
   _syncSpectatedPlayer() {

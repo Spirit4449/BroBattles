@@ -11,23 +11,23 @@ function rewards(bucket, winnerTeam = "team1", playerTeam = "team1", runtimeConf
 
 test("performance taper preserves result rewards while reducing combat scaling", () => {
   assert.deepEqual(
-    rewards({ hits: 3, damage: 4000, kills: 1 }),
-    { coins: 131, gems: 27 },
+    rewards({ hits: 3, damage: 670, kills: 1 }),
+    { coins: 35, gems: 2 },
   );
   assert.deepEqual(
-    rewards({ hits: 3, damage: 2500, kills: 0 }, "team1", "team2"),
-    { coins: 73, gems: 0 },
+    rewards({ hits: 3, damage: 420, kills: 0 }, "team1", "team2"),
+    { coins: 18, gems: 0 },
   );
   assert.deepEqual(
     rewards({ hits: 0, damage: 0, kills: 0 }, null, "team1"),
-    { coins: 50, gems: 0 },
+    { coins: 18, gems: 0 },
   );
 });
 
 test("high-performance gem milestones use the tapered whole-number values", () => {
   assert.deepEqual(
-    rewards({ hits: 10, damage: 16000, kills: 3 }),
-    { coins: 255, gems: 86 },
+    rewards({ hits: 10, damage: 2670, kills: 3 }),
+    { coins: 57, gems: 5 },
   );
 });
 
@@ -35,12 +35,12 @@ test("collected drops retain their full value after the reward taper", () => {
   assert.deepEqual(
     rewards({
       hits: 3,
-      damage: 4000,
+      damage: 670,
       kills: 1,
       dropCoins: 7,
       dropGems: 3,
     }),
-    { coins: 138, gems: 30 },
+    { coins: 42, gems: 5 },
   );
 });
 
@@ -59,7 +59,7 @@ test("runtime multipliers round core rewards before adding whole collected drops
     rewards(
       {
         hits: 3,
-        damage: 4000,
+        damage: 670,
         kills: 1,
         dropCoins: 7,
         dropGems: 3,
@@ -68,7 +68,7 @@ test("runtime multipliers round core rewards before adding whole collected drops
       "team1",
       runtimeConfig,
     ),
-    { coins: 73, gems: 17 },
+    { coins: 25, gems: 4 },
   );
 });
 
@@ -80,7 +80,7 @@ test("the coin ceiling still applies before collected drops", () => {
       kills: 100,
       dropCoins: 8,
     }),
-    { coins: 508, gems: 86 },
+    { coins: 158, gems: 5 },
   );
 });
 

@@ -4,8 +4,8 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-const LIGHT_HIT_DAMAGE_LIMIT = 2000;
-const MAX_SHAKE_DAMAGE = 6000;
+const LIGHT_HIT_DAMAGE_LIMIT = 330;
+const MAX_SHAKE_DAMAGE = 1000;
 const WALL_JUMP_RECOIL_IN_MS = 80;
 const WALL_JUMP_RECOIL_OUT_MS = 220;
 const WALL_JUMP_RECOIL_PX = 3;
@@ -18,8 +18,8 @@ export const FOLLOW_LERP = { x: 0.08, y: 0.05 };
 function movementFollowLerp(velocity, axis, delta) {
   // Preserve gentle walking/jump tracking, then tighten up for dashes and falls.
   const speed = Math.abs(Number(velocity) || 0);
-  const fast = smoothstep((speed - 300) / 700);
-  const perFrame = FOLLOW_LERP[axis] + (0.24 - FOLLOW_LERP[axis]) * fast;
+  const fast = smoothstep((speed - 180) / 520);
+  const perFrame = FOLLOW_LERP[axis] + (0.4 - FOLLOW_LERP[axis]) * fast;
   return 1 - Math.pow(1 - perFrame, delta / (1000 / 60));
 }
 
@@ -115,24 +115,23 @@ function updateLandingCamera(scene, player, cam, delta, reducedMotion) {
   scene._landingCameraOffsetY = offset;
 }
 
+// How far below the middle of the view the player rests, in screen pixels, at
+// the foot of the climb and at the top of it (more room to see what they are
+// about to drop onto). These are screen pixels, so every arena and zoom frames
+// the player at the same height on screen.
+export const FOLLOW_SCREEN_OFFSET = Object.freeze({ floor: 130, top: 180 });
+
 // Where the follow camera settles for a player standing at playerY: zoomed out
 // as the player climbs (more vertical context) and framed lower in the view as
-// they climb, so there is room to see what they are about to drop onto. The
-// arena camera (arenas.json) sets the zoom range and the heights it spans:
-// maxZoom at or below climbY[1], minZoom at or above climbY[0].
-//
-// How far off centre the player sits is the arena's too. A follow offset that
-// suits a tall duel arena puts the player near the bottom of the screen on a
-// wide, shallow one, where most of what matters is beside them rather than
-// above. `followOffsetY` is the offset down at the foot of the climb and
-// `followOffsetClimb` how much more is added at the top of it; the defaults
-// are the values every arena used while this was hard-coded.
+// they climb. The arena camera (arenas.json) sets the zoom range and the
+// heights it spans: maxZoom at or below climbY[1], minZoom at or above climbY[0].
+// `followOffsetY` is in world pixels, as Phaser's follow offset expects.
 export function restingCameraFrame(playerY, camera) {
   const [high, low] = camera.climbY;
   const t = clamp((playerY - high) / (low - high), 0, 1);
-  const base = Number.isFinite(camera.followOffsetY) ? camera.followOffsetY : 120;
-  const climb = Number.isFinite(camera.followOffsetClimb) ? camera.followOffsetClimb : 80;
-  return { zoom: camera.minZoom + (camera.maxZoom - camera.minZoom) * t, followOffsetY: base + climb * (1 - t) };
+  const zoom = camera.minZoom + (camera.maxZoom - camera.minZoom) * t;
+  const screen = FOLLOW_SCREEN_OFFSET.floor + (FOLLOW_SCREEN_OFFSET.top - FOLLOW_SCREEN_OFFSET.floor) * (1 - t);
+  return { zoom, followOffsetY: screen / zoom };
 }
 
 

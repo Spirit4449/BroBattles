@@ -10,7 +10,7 @@ const barStates = new WeakMap();
 const DAMAGE_FLASH_MS = 140;
 const HEAL_FADE_MS = 400;
 const BAR_HEIGHT = 9;
-const HEALTH_PER_TICK = 1000;
+const HEALTH_PER_TICK = 165;
 const TROUGH_BASE = 0x2a2633;
 
 function blendColor(from, to, amount) {

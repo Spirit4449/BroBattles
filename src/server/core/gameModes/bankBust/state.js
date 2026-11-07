@@ -22,7 +22,7 @@ const COIN_EVENT_SNAPSHOT_LIMIT = 12;
 // it open and its coins spill out as piles anyone can grab, so doing the damage
 // earns the first run at them rather than the coins themselves.
 const CENTER_GOLD_REWARD = 7500; // coins in the crate, split across its piles
-const CENTER_GOLD_HEALTH = 15000; // damage it takes to break open
+const CENTER_GOLD_HEALTH = 2000; // damage it takes to break open
 const CENTER_GOLD_SPILL_PILES = 5;
 const CENTER_GOLD_SPILL_SPACING = 48; // px between piles on the hilltop
 const CENTER_GOLD_SPILL_LIFT = 40; // a pile's centre above the crate's floor
@@ -54,19 +54,19 @@ function createModeObjectState(def = {}) {
       storedGold: 0,
       lastGeneratedAt: Date.now(),
       collectionRadius: Math.max(40, Number(def?.collectionRadius) || 100),
-      yieldAmount: Math.max(1, Number(def?.yieldAmount) || 500),
+      yieldAmount: Math.max(1, Number(def?.yieldAmount) || 85),
       yieldIntervalMs: Math.max(500, Number(def?.yieldIntervalMs) || 5000),
-      maxStoredGold: Math.max(1, Number(def?.maxStoredGold) || 2000),
+      maxStoredGold: Math.max(1, Number(def?.maxStoredGold) || 335),
       radius: Math.max(20, Number(def?.radius) || 80),
     };
   } else if (base.type === "claimableTurret") {
     base.state = {
       claimedByTeam: null,
       claimRadius: Math.max(40, Number(def?.claimRadius) || 110),
-      claimCost: Math.max(0, Number(def?.claimCost) || 8750),
+      claimCost: Math.max(0, Number(def?.claimCost) || 1460),
       range: Math.max(100, Number(def?.range) || 520),
       fireRateMs: Math.max(200, Number(def?.fireRateMs) || 900),
-      damage: Math.max(1, Number(def?.damage) || 700),
+      damage: Math.max(1, Number(def?.damage) || 115),
       projectileSpeed: Math.max(1, Number(def?.projectileSpeed) || 520),
       turnSpeed: Math.max(0.01, Number(def?.turnSpeed) || 0.08),
     };
@@ -74,7 +74,7 @@ function createModeObjectState(def = {}) {
     base.state = {
       builtByTeam: null,
       buildRadius: Math.max(30, Number(def?.buildRadius) || 100),
-      cost: Math.max(0, Number(def?.cost) || 5500),
+      cost: Math.max(0, Number(def?.cost) || 915),
       width: Math.max(10, Number(def?.width) || 48),
       height: Math.max(10, Number(def?.height) || 96),
     };

@@ -70,10 +70,10 @@ function pick(list) {
 }
 
 // Everything a hit does scales from zero up to a hit this big, about the
-// hardest super in the game. Ordinary attacks (1200-3000) sit low on that range
+// hardest super in the game. Ordinary attacks (200-500) sit low on that range
 // on purpose: they land constantly, so they have to stay a small reaction.
-const FULL_HIT_DAMAGE = 9000;
-const COINS_PER_DAMAGE = 1 / 400;
+const FULL_HIT_DAMAGE = 1500;
+const COINS_PER_DAMAGE = 3 / 200;
 const MAX_COINS_PER_HIT = 22;
 
 /** How hard a hit lands on that scale, 0 to 1. */

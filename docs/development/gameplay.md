@@ -6,7 +6,7 @@ Wall jumps use the shared movement tuning in `src/shared/physics/movementPhysics
 
 When tuning this movement, check repeated wall jumps, narrow wall climbs, dash interruption, and both players' animation timing in a live match. The bot movement simulation reads the same kick and cooldown values.
 
-Wall kicks emit a short burst of segmented white and warm-white horizontal speed lines, matching the fast-fall trail style. Lines spread around the wall contact point and stretch away from it, with a few small dust flecks marking the impact. Local and remote players use the same effect.
+Wall kicks flash at the contact point, send a pixel pressure arc and a few horizontal speed lines away from the wall, squeeze clouds out along the wall, and leave a short cloud wake behind the launching fighter. Wall slides lay clouds against the wall per distance slid, so faster slides leave a denser column. Local and remote players use the same effects.
 
 The local player's wall jump adds a 3 screen-pixel horizontal camera recoil toward the wall and a subtle 1% zoom in, easing in together over 80 ms and returning over 220 ms. Recoil applies to the final camera render transform, after follow smoothing, dead zones, and bounds, so its strength stays consistent across maps and heights. The zoom pulse uses the current resting view at takeoff; height-based zoom pauses during the pulse and resumes gradually over 220 ms afterward. These combine with aim framing, dash zoom, and damage shake without accumulating drift, and respect reduced-motion preferences. Camera feedback clears on input release, spectating, scene shutdown, or camera destruction.
 

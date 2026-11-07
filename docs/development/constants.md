@@ -128,6 +128,7 @@ These values only change what the local player sees or feels, so each one stays 
 - Camera and shake: `src/client/game/scene/cameraDynamics.js`, `src/client/game/scene/matchIntro.js` (`FOLLOW_LERP`, pregame audio)
 - Mouse and aim: `src/client/game/scene/combatMouse.js`, `src/client/game/characters/shared/attackAim.js`
 - Movement VFX: `src/client/game/scene/effects.js` (`MOVEMENT_VFX_CONFIG`)
+- Movement clouds: `src/client/game/scene/clouds/` (simulation limits in `cloudSim.js`, palette in `cloudRaster.js`, cloud pixel size in `cloudLayer.js`, shape sizes, speeds and per-action opacity in `cloudEmitters.js`, layer opacity in `cloudLayer.js`)
 - Render order: `src/client/game/scene/renderLayers.js`
 - Viewport: `src/client/pages/game.js` (`BASE_GAME_WIDTH/HEIGHT`, the design resolution)
 - Storage keys that more than one module uses: `src/client/lib/storageKeys.js`

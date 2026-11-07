@@ -27,7 +27,7 @@ const SD_RISE_FAST_PHASE_MS = 12000;
 // ...by this multiplier on SD_RISE_SPEED.
 const SD_RISE_FAST_MULT = 2.2;
 // Damage per second dealt to anyone standing in the poison.
-const SD_DAMAGE_PER_SEC = 400;
+const SD_DAMAGE_PER_SEC = 65;
 // Hard cap on sudden death; after this long a tiebreak decides the winner.
 const SUDDEN_DEATH_MAX_MS = 80 * 1000;
 // How often the match timer is broadcast to clients.
@@ -49,7 +49,7 @@ const REGEN_TICK_MS = 1500;
 // Each tick heals this fraction of *missing* health (so it slows near full)...
 const REGEN_MISSING_RATIO = 0.25;
 // ...but never less than this flat amount.
-const REGEN_MIN_ABS = 500;
+const REGEN_MIN_ABS = 85;
 // Minimum spacing between health-update broadcasts caused by regen.
 const REGEN_BROADCAST_MIN_MS = 120;
 
@@ -104,11 +104,11 @@ const DEATH_DROP_PICKUP_RADIUS = 110;
 // from where the server spawned it (px).
 const DEATH_DROP_MAX_CLIENT_POS_DELTA = 420;
 // Random coin count per death (inclusive range).
-const DEATH_DROP_COIN_MIN = 4;
-const DEATH_DROP_COIN_MAX = 8;
+const DEATH_DROP_COIN_MIN = 2;
+const DEATH_DROP_COIN_MAX = 4;
 // Random gem count per death (inclusive range).
-const DEATH_DROP_GEM_MIN = 1;
-const DEATH_DROP_GEM_MAX = 3;
+const DEATH_DROP_GEM_MIN = 0;
+const DEATH_DROP_GEM_MAX = 1;
 // Horizontal launch speed: VX_STEP per step from center, plus up to VX_JITTER random.
 const DEATH_DROP_LAUNCH_VX_STEP = 15;
 const DEATH_DROP_LAUNCH_VX_JITTER = 10;

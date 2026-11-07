@@ -19,7 +19,7 @@ describe("Catalog validation and pricing", () => {
     assert.deepEqual(
       catalog.rotation.dailies.rewards.map((reward) => reward.grants[0]),
       [
-        { kind: "currency", currency: "coins", amount: 75 },
+        { kind: "currency", currency: "coins", amount: 40 },
         { kind: "currency", currency: "gems", amount: 5 },
       ],
     );
@@ -38,12 +38,11 @@ describe("Catalog validation and pricing", () => {
     });
     assert.deepEqual(
       [
-        "coins-1000-usd",
-        "gems-250-usd",
+        "gems-60-usd",
+        "gems-330-usd",
         "gems-700-usd",
-        "gems-1500-usd",
       ].map((id) => byId.get(id).price.amountCents),
-      [99, 199, 499, 999],
+      [99, 499, 999],
     );
 
     for (const offer of catalog.offers) {

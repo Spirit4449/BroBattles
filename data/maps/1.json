@@ -53,7 +53,7 @@
       {
         "textureKey": "lushy-base",
         "x": 1150,
-        "y": 670,
+        "y": 710,
         "scaleX": 0.2,
         "scaleY": 0.2,
         "flipX": false,
@@ -68,7 +68,7 @@
       {
         "textureKey": "lushy-platform",
         "x": 1150,
-        "y": 250,
+        "y": 290,
         "scaleX": 0.175,
         "scaleY": 0.175,
         "flipX": false,
@@ -89,7 +89,7 @@
       {
         "textureKey": "lushy-side-platform",
         "x": 670,
-        "y": 321,
+        "y": 361,
         "scaleX": 0.075,
         "scaleY": 0.075,
         "flipX": false,
@@ -110,7 +110,7 @@
       {
         "textureKey": "lushy-side-platform",
         "x": 1619,
-        "y": 321,
+        "y": 361,
         "scaleX": 0.075,
         "scaleY": 0.075,
         "flipX": false,
@@ -131,7 +131,7 @@
       {
         "textureKey": "lushy-small-platform",
         "x": 575,
-        "y": 575,
+        "y": 615,
         "scaleX": 0.045,
         "scaleY": 0.045,
         "flipX": false,
@@ -146,7 +146,7 @@
       {
         "textureKey": "lushy-small-platform",
         "x": 1725,
-        "y": 575,
+        "y": 615,
         "scaleX": 0.045,
         "scaleY": 0.045,
         "flipX": false,
@@ -163,7 +163,7 @@
       {
         "id": "hitbox-43340d54",
         "x": 1156,
-        "y": 268,
+        "y": 308,
         "width": 475,
         "height": 24,
         "collision": {
@@ -176,7 +176,7 @@
       {
         "id": "hitbox-34177f54",
         "x": 1149,
-        "y": 603,
+        "y": 643,
         "width": 767,
         "height": 46,
         "collision": {
@@ -189,7 +189,7 @@
       {
         "id": "hitbox-3efaa7d9",
         "x": 1150,
-        "y": 647,
+        "y": 687,
         "width": 735,
         "height": 42,
         "collision": {
@@ -202,7 +202,7 @@
       {
         "id": "hitbox-56a82967",
         "x": 1154,
-        "y": 685,
+        "y": 725,
         "width": 660,
         "height": 34,
         "collision": {
@@ -215,7 +215,7 @@
       {
         "id": "hitbox-2ca91373",
         "x": 1180,
-        "y": 730,
+        "y": 770,
         "width": 584,
         "height": 54,
         "collision": {
@@ -254,62 +254,62 @@
       {
         "id": "powerup-0",
         "x": 935,
-        "y": 516
+        "y": 556
       },
       {
         "id": "powerup-1",
         "x": 1150,
-        "y": 516
+        "y": 556
       },
       {
         "id": "powerup-2",
         "x": 1365,
-        "y": 516
+        "y": 556
       },
       {
         "id": "powerup-3",
         "x": 1005,
-        "y": 212
+        "y": 252
       },
       {
         "id": "powerup-4",
         "x": 1150,
-        "y": 212
+        "y": 252
       },
       {
         "id": "powerup-5",
         "x": 1295,
-        "y": 212
+        "y": 252
       },
       {
         "id": "powerup-6",
         "x": 645,
-        "y": 207
+        "y": 247
       },
       {
         "id": "powerup-7",
         "x": 814,
-        "y": 516
+        "y": 556
       },
       {
         "id": "powerup-8",
         "x": 1489,
-        "y": 516
+        "y": 556
       },
       {
         "id": "powerup-9",
         "x": 1646,
-        "y": 207
+        "y": 247
       },
       {
         "id": "powerup-10",
         "x": 574,
-        "y": 518
+        "y": 558
       },
       {
         "id": "powerup-11",
         "x": 1727,
-        "y": 518
+        "y": 558
       }
     ]
   },

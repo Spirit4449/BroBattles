@@ -3,6 +3,8 @@ import { dashDirection } from '../../../shared/physics/dash';
 
 import { sweepMovement } from '../../../shared/physics/sweptCollision';
 import { playPlayerSound } from '../audio/playerAudio';
+import { getCloudSystem } from './clouds/cloudLayer';
+import { emitPuff, emitWake } from './clouds/cloudEmitters';
 
 export function playDashSound(scene, remote = false, source = null) {
   // A little pitch movement keeps repeat dashes from sounding identical.
@@ -40,8 +42,32 @@ function bodyCenter(sprite) {
   };
 }
 
+// A small puff kicked out behind the launch point, then a thin wake along the
+// first stretch of the dash. Kept light so the speed lines stay the read.
+function spawnDashClouds(scene, sprite, origin, ux, uy) {
+  const system = getCloudSystem?.(scene);
+  if (!system) return;
+  emitPuff(system.sim, {
+    x: origin.x - ux * 10,
+    y: origin.y - uy * 10 + 6,
+    vx: -ux * 70,
+    vy: -uy * 70 - 8,
+    size: 8,
+    lobes: 3,
+    rise: 10,
+  });
+  system.follow(sprite, {
+    durationMs: 150,
+    spacing: 16,
+    offsetY: 4,
+    emit: (sim, x, y, progress) => emitWake(sim, {
+      x, y, size: 6, progress, vx: -ux * 30, vy: -uy * 30,
+    }),
+  });
+}
+
 export function spawnDashEffect(scene, sprite, x, y) {
-  if (!sprite?.visible || !scene.add?.image || !scene.add?.graphics || !scene.time) return;
+  if (!sprite?.visible || !scene.add?.graphics || !scene.time) return;
   let previous = bodyCenter(sprite);
   let stopped = false;
   const length = Math.hypot(x, y);
@@ -50,12 +76,6 @@ export function spawnDashEffect(scene, sprite, x, y) {
   const fade = (target, duration, extra = {}) => scene.tweens.add({
     targets: target, alpha: 0, duration, ...extra, onComplete: () => target.destroy(),
   });
-  const ghost = () => {
-    const image = scene.add.image(sprite.x, sprite.y, sprite.texture.key, sprite.frame.name)
-      .setOrigin(sprite.originX, sprite.originY).setScale(sprite.scaleX, sprite.scaleY)
-      .setFlipX(sprite.flipX).setTint(0xb9edff).setAlpha(0.32).setDepth(sprite.depth - 1);
-    fade(image, 170);
-  };
   // A white-hot bow wraps the leading edge, with thinner cyan shoulders
   // sweeping back beside the character, like air flowing around a meteor.
   const burst = scene.add.graphics().setDepth(sprite.depth + 0.1);
@@ -103,7 +123,7 @@ export function spawnDashEffect(scene, sprite, x, y) {
   // Run after interpolation so the leading edge stays attached between stamps.
   scene.events?.on('postupdate', followHead);
   fade(burst, 120, { delay: 100 });
-  ghost();
+  spawnDashClouds(scene, sprite, previous, ux, uy);
   const stamp = () => {
     if (stopped || !sprite.active || !sprite.visible || sprite.alpha < 0.1) return;
     const current = bodyCenter(sprite);
@@ -138,7 +158,6 @@ export function spawnDashEffect(scene, sprite, x, y) {
       trail.lineBetween(px, py, px - tx * size, py - ty * size);
     }
     fade(trail, 240);
-    ghost();
     previous = current;
   };
   const timer = scene.time.addEvent({ delay: 24, repeat: 8, callback: stamp });
@@ -340,6 +359,12 @@ export function updateDash(scene, player, { pressed, left, right, up, down, bloc
       airborne: !(player.body.touching?.down || player.body.blocked?.down) || vy !== 0 };
     player._dashReadyAt = now + physics.dashDurationMs + physics.dashCooldownMs;
     player._dashSeq = (player._dashSeq || 0) + 1;
+    // Same arming rule as the server (shared/physics/dash acceptDash), so the
+    // local landing can show the stomp without waiting for the round trip.
+    player._stompArmedUntil = direction.x === 0 && direction.y === 1 &&
+      !(player.body.touching?.down || player.body.blocked?.down)
+      ? now + physics.dashDurationMs + physics.dashCoastMs
+      : 0;
     player._dashDirection = direction;
     player._jumpLaunch = null;
     player._duckRequested = false;

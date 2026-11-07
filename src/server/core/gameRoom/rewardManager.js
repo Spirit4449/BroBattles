@@ -139,21 +139,24 @@ function calculateRewards(room, bucket, winnerTeam, playerTeam) {
   const dropGems = bucket?.dropGems || 0;
   const isWinner = winnerTeam && playerTeam && winnerTeam === playerTeam;
 
-  const baseCoins = 40;
+  // Coins: a typical loss pays about 20, a win about 35, plus performance. Upgrade prices
+  // (characterStats UPGRADE_PRICES) are tuned against these amounts.
+  const baseCoins = 10;
   // Keep the participation and outcome rewards approachable while tapering the
   // performance faucet that lets already-strong players compound upgrades.
-  const coinFromHits = hits * 2;
-  const coinFromDamage = Math.floor(damage / 200);
-  const coinFromKills = kills * 25;
-  const winBonus = winnerTeam == null ? 10 : isWinner ? 40 : 15;
+  const coinFromHits = Math.floor(hits / 3);
+  const coinFromDamage = Math.floor(damage / 250);
+  const coinFromKills = kills * 6;
+  const winBonus = winnerTeam == null ? 8 : isWinner ? 16 : 6;
   let coins =
     baseCoins + coinFromHits + coinFromDamage + coinFromKills + winBonus;
+  // Gems are the premium currency, so a match pays at most a handful.
   let gems = 0;
-  if (isWinner) gems += 18;
-  if (kills >= 1) gems += 9;
-  if (kills >= 2) gems += 27;
-  if (damage >= 10000) gems += 18;
-  if (damage >= 15000) gems += 14;
+  if (isWinner) gems += 1;
+  if (kills >= 1) gems += 1;
+  if (kills >= 2) gems += 1;
+  if (damage >= 1700) gems += 1;
+  if (damage >= 2500) gems += 1;
 
   const overrides = (() => {
     try {
@@ -177,7 +180,7 @@ function calculateRewards(room, bucket, winnerTeam, playerTeam) {
   }
 
   const minCoins = Number(overrides?.rewardFloor) || 5;
-  const maxCoins = Number(overrides?.rewardCeiling) || 500;
+  const maxCoins = Number(overrides?.rewardCeiling) || 150;
   coins = Math.max(minCoins, Math.min(maxCoins, Math.round(coins)));
   gems = Math.max(0, Math.round(gems));
   coins += Math.max(0, Math.round(dropCoins));

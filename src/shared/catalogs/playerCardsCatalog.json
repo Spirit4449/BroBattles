@@ -38,7 +38,7 @@
       "rarity": "rare",
       "cost": {
         "coins": 0,
-        "gems": 50
+        "gems": 79
       },
       "animationUrl": "/assets/player-cards/shuriken-strike/shuriken-strike-animated.webm",
       "animationViewport": {
@@ -153,7 +153,7 @@
       "rarity": "common",
       "cost": {
         "coins": 0,
-        "gems": 25
+        "gems": 29
       },
       "animationAppleUrl": "/assets/player-cards/radiant-silver/radiant-silver-animated.mov",
       "animationAppleBytes": 188627,
@@ -176,7 +176,7 @@
       "rarity": "legendary",
       "cost": {
         "coins": 0,
-        "gems": 200
+        "gems": 149
       },
       "assetUrl": "/assets/player-cards/astral-amethyst/astral-amethyst-poster.webp",
       "animationUrl": "/assets/player-cards/astral-amethyst/astral-amethyst-animated.webm",
@@ -209,7 +209,7 @@
       "rarity": "rare",
       "cost": {
         "coins": 0,
-        "gems": 50
+        "gems": 79
       },
       "assetUrl": "/assets/player-cards/mjolnirs-anvil/mjolnirs-anvil-poster.webp",
       "animationUrl": "/assets/player-cards/mjolnirs-anvil/mjolnirs-anvil-animated.webm",
@@ -242,7 +242,7 @@
       "rarity": "common",
       "cost": {
         "coins": 0,
-        "gems": 25
+        "gems": 29
       },
       "assetUrl": "/assets/player-cards/radiant-diamond/radiant-diamond-poster.webp",
       "animationUrl": "/assets/player-cards/radiant-diamond/radiant-diamond-animated.webm",
@@ -276,7 +276,7 @@
       "rarity": "common",
       "cost": {
         "coins": 0,
-        "gems": 25
+        "gems": 29
       },
       "assetUrl": "/assets/player-cards/radiant-emerald/radiant-emerald-poster.webp",
       "animationUrl": "/assets/player-cards/radiant-emerald/radiant-emerald-animated.webm",
@@ -310,7 +310,7 @@
       "rarity": "common",
       "cost": {
         "coins": 0,
-        "gems": 25
+        "gems": 29
       },
       "assetUrl": "/assets/player-cards/radiant-gold/radiant-gold-poster.webp",
       "animationUrl": "/assets/player-cards/radiant-gold/radiant-gold-animated.webm",
@@ -344,7 +344,7 @@
       "rarity": "common",
       "cost": {
         "coins": 0,
-        "gems": 25
+        "gems": 29
       },
       "assetUrl": "/assets/player-cards/radiant-ruby/radiant-ruby-poster.webp",
       "animationUrl": "/assets/player-cards/radiant-ruby/radiant-ruby-animated.webm",
@@ -378,7 +378,7 @@
       "rarity": "rare",
       "cost": {
         "coins": 0,
-        "gems": 50
+        "gems": 79
       },
       "assetUrl": "/assets/player-cards/wizard-spell/wizard-spell-poster.webp",
       "animationUrl": "/assets/player-cards/wizard-spell/wizard-spell-animated.webm",

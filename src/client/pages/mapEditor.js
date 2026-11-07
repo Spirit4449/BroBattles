@@ -306,7 +306,7 @@ function addObject(kind=$('add-kind').value,textureKey=null){
     else if(kind==='cloud'){map().scenery.clouds||={enabled:true,items:[]};map().scenery.clouds.items.push({...p,type:RANDOM_CLOUD,direction:'right',speed:6,scale:0.8});}
     else{const b=map().objectiveLayout.bankBust;if(!b)throw Error('Bank Bust objects belong to a Bank Bust map. Select Iron Junction or create a map from it.');
       if(kind==='gold')b.randomGoldSpawnPoints.push(p);
-      else b.objects.push({...p,type:kind,...({goldMine:{radius:86,collectionRadius:110,yieldAmount:10,yieldIntervalMs:4000,maxStoredGold:60},claimableTurret:{claimRadius:110,claimCost:120,range:520,fireRateMs:900,damage:700,projectileSpeed:520,turnSpeed:0.08},wallSlot:{buildRadius:100,cost:90,width:120,height:46}})[kind]});
+      else b.objects.push({...p,type:kind,...({goldMine:{radius:86,collectionRadius:110,yieldAmount:10,yieldIntervalMs:4000,maxStoredGold:60},claimableTurret:{claimRadius:110,claimCost:120,range:520,fireRateMs:900,damage:115,projectileSpeed:520,turnSpeed:0.08},wallSlot:{buildRadius:100,cost:90,width:120,height:46}})[kind]});
     }
     if(['platform','hitbox'].includes(kind)){
       const placed=(kind==='platform'?map().layout.platforms:map().layout.hitboxes).find(r=>r.id===newId);

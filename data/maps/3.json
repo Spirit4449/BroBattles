@@ -53,7 +53,7 @@
       {
         "textureKey": "serenity-large-platform",
         "x": 1150,
-        "y": 700,
+        "y": 722,
         "scaleX": 0.45,
         "scaleY": 0.45,
         "flipX": false,
@@ -68,7 +68,7 @@
       {
         "textureKey": "serenity-side-platform",
         "x": 648,
-        "y": 281,
+        "y": 303,
         "scaleX": 0.86,
         "scaleY": 0.86,
         "flipX": true,
@@ -83,7 +83,7 @@
       {
         "textureKey": "serenity-side-platform",
         "x": 1000,
-        "y": 381,
+        "y": 403,
         "scaleX": 0.76,
         "scaleY": 0.76,
         "flipX": false,
@@ -98,7 +98,7 @@
       {
         "textureKey": "serenity-small-rock",
         "x": 765,
-        "y": 484,
+        "y": 506,
         "scaleX": 0.45,
         "scaleY": 0.45,
         "flipX": false,
@@ -119,7 +119,7 @@
       {
         "textureKey": "serenity-log-platform",
         "x": 1504.6,
-        "y": 260.91,
+        "y": 282.91,
         "scaleX": 0.6,
         "scaleY": 0.6,
         "flipX": false,
@@ -136,7 +136,7 @@
     "hitboxes": [
       {
         "x": 544,
-        "y": 247,
+        "y": 269,
         "width": 16,
         "height": 160,
         "collision": {
@@ -149,7 +149,7 @@
       },
       {
         "x": 1094,
-        "y": 361,
+        "y": 383,
         "width": 14,
         "height": 144,
         "collision": {
@@ -162,7 +162,7 @@
       },
       {
         "x": 1350,
-        "y": 350,
+        "y": 372,
         "width": 175,
         "height": 16,
         "collision": {
@@ -175,7 +175,7 @@
       },
       {
         "x": 1506,
-        "y": 271,
+        "y": 293,
         "width": 369,
         "height": 18,
         "collision": {
@@ -188,7 +188,7 @@
       },
       {
         "x": 1655,
-        "y": 350,
+        "y": 372,
         "width": 177,
         "height": 16,
         "collision": {
@@ -233,12 +233,12 @@
       {
         "id": "powerup-1",
         "x": 1424,
-        "y": 464
+        "y": 486
       },
       {
         "id": "powerup-2",
         "x": 1152,
-        "y": 368
+        "y": 390
       },
       {
         "id": "powerup-3",
@@ -248,12 +248,12 @@
       {
         "id": "powerup-4",
         "x": 1648,
-        "y": 192
+        "y": 214
       },
       {
         "id": "powerup-5",
         "x": 848,
-        "y": 208
+        "y": 230
       },
       {
         "id": "powerup-6",
@@ -263,7 +263,7 @@
       {
         "id": "powerup-7",
         "x": 1184,
-        "y": 176
+        "y": 198
       },
       {
         "id": "powerup-8",

@@ -84,11 +84,6 @@ export function applyMapBounds(scene, boundsConfig = {}, options = {}) {
       cam.setBounds(x, y, width, height);
     }
 
-    const followOffsetY = Number(camera.followOffsetY);
-    if (Number.isFinite(followOffsetY)) {
-      cam.setFollowOffset(0, followOffsetY);
-    }
-
     const deadzoneW = Number(camera.deadzoneWidth);
     const deadzoneH = Number(camera.deadzoneHeight);
     if (Number.isFinite(deadzoneW) && Number.isFinite(deadzoneH)) {

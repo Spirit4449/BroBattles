@@ -118,3 +118,49 @@ test('local stomp interruption restores dash gravity and preserves the outward i
   assert.equal(player._externalControlLockUntil,undefined);
   dispose();
 });
+
+test('a local downward air dash shows its stomp on landing, and the server echo does not repeat it', () => {
+  const { loadClientModule } = require('./helpers/clientModule');
+  const shown = [], sounds = [];
+  const effectsStub = { MOVEMENT_VFX_CONFIG: { landingMaxVelocity: 796, landingShockwaveMinFallPx: 163 },
+    spawnLandingImpact: () => shown.push('landing'), spawnStompImpact: () => shown.push('stomp') };
+  const fx = loadClientModule('src/client/game/players/localMovementFx.js', { Date, require: (path) =>
+    path.includes('scene/effects') ? effectsStub :
+    path.includes('movementAudio') ? { shouldPlayLandingSound: () => false, terrainLandingSound: () => ({}) } :
+    path.includes('movementSounds') ? { movementSoundKey: (_s, key) => key } : {} });
+  const movement = fx.createLocalMovementFx({ audio: {}, noteEvent() {} });
+  const scene = { sound: { play: (key) => sounds.push(key) } };
+  const player = { x: 100, y: 100, height: 60, body: { touching: { down: false }, velocity: { y: 900 },
+    center: { x: 100 }, bottom: 130, width: 40 } };
+  const land = () => {
+    player.body.touching.down = false;
+    movement.updateLanding(scene, player, { dead: false, hidden: false });
+    player.body.touching.down = true;
+    movement.updateLanding(scene, player, { dead: false, hidden: false });
+  };
+
+  player._stompArmedUntil = Date.now() + 500;
+  land();
+  assert.deepEqual(shown, ['stomp']);
+  assert.deepEqual(sounds, ['sfx-stomp']);
+  land();
+  assert.deepEqual(shown, ['stomp', 'landing'], 'an ordinary landing afterwards is not a stomp');
+
+  // The server's confirmation for that stomp must not draw or play it again.
+  const fs = require('node:fs'), vm = require('node:vm'), babel = require('@babel/core');
+  const exports = {}, handlers = {};
+  const source = fs.readFileSync(require.resolve('../src/client/game/players/localSocketEvents'), 'utf8');
+  vm.runInNewContext(babel.transformSync(source, { babelrc: false, configFile: false,
+    presets: [['@babel/preset-env', { targets: { node: 'current' } }]] }).code, { exports, Date, window: {},
+    require: (path) => path.includes('movementPhysics') ? require('../src/shared/physics/movementPhysics.json') :
+      path.includes('scene/effects') ? effectsStub : { playSpriteAnimation() {}, playPlayerSound() {} } });
+  const dispose = exports.bindLocalSocketEvents({ socket: { on: (e, fn) => handlers[e] = fn, off() {} },
+    getPlayer: () => player, getDead: () => false, getScene: () => scene, getUsername: () => 'me',
+    getOpponentPlayersRef: () => ({}) });
+  handlers['player:stomp']({ username: 'me', x: 100, y: 130, interrupted: [] });
+  assert.deepEqual(shown, ['stomp', 'landing']);
+  assert.deepEqual(sounds, ['sfx-stomp']);
+  handlers['player:stomp']({ username: 'me', x: 100, y: 130, interrupted: [] });
+  assert.deepEqual(shown, ['stomp', 'landing', 'stomp'], 'an unpredicted server stomp is still shown');
+  dispose();
+});

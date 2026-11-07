@@ -1,14 +1,14 @@
 {
   "key": "draven",
   "stats": {
-    "baseHealth": 6500,
+    "baseHealth": 1080,
     "attackDescription": "Puffs out a magical smoke that deals splash damage to everyone in the path.",
-    "baseDamage": 2500,
+    "baseDamage": 415,
     "ammoCooldownMs": 450,
     "ammoReloadMs": 2000,
     "ammoCapacity": 3,
     "specialDescription": "Unleashes a staff nova that expands outward.",
-    "specialBaseDamage": 2400,
+    "specialBaseDamage": 400,
     "specialChargeHits": 4,
     "specialChargePerHit": 0.25,
     "spriteScale": 1.2,
@@ -33,7 +33,7 @@
           "angleMode": "horizontal-only"
         },
         "splash": {
-          "width": 150,
+          "width": 118,
           "height": 108,
           "activeWindowMs": 450,
           "flipUnlockMs": 530,
@@ -68,7 +68,7 @@
           "firstDamageDelayMs": 80,
           "damageTickMs": 220,
           "damageScale": 0.22,
-          "minDamagePerTick": 120
+          "minDamagePerTick": 20
         }
       },
       "effects": {
@@ -102,7 +102,7 @@
       }
     },
     "description": "A dark sorcerer who manipulates shadows.",
-    "unlockPrice": 280
+    "unlockPrice": 399
   },
   "frame": {
     "w": 250,

@@ -37,7 +37,7 @@ export default class ReturningShuriken extends Phaser.Physics.Arcade.Image {
         scale: RETURNING_SHURIKEN_DEFAULTS.scale,
         collisionSizeScale: RETURNING_SHURIKEN_DEFAULTS.collisionSizeScale,
         collisionRadiusScale: RETURNING_SHURIKEN_DEFAULTS.collisionRadiusScale,
-        damage: 1000,
+        damage: 200,
         glowScale: 1,
         attackType: "basic",
         instanceId: null,

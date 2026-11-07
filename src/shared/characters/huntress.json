@@ -1,14 +1,14 @@
 {
   "key": "huntress",
   "stats": {
-    "baseHealth": 5500,
+    "baseHealth": 920,
     "attackDescription": "Fires three arrows in a slight spread, each dealing damage on impact.",
-    "baseDamage": 2550,
+    "baseDamage": 425,
     "ammoCooldownMs": 400,
     "ammoReloadMs": 1500,
     "ammoCapacity": 3,
     "specialDescription": "Unleashes a wide volley of burning arrows that ignite enemies.",
-    "specialBaseDamage": 9000,
+    "specialBaseDamage": 1500,
     "specialChargeHits": 6,
     "specialChargePerHit": 1,
     "spriteScale": 1.5,
@@ -62,7 +62,7 @@
           "speed": 900,
           "range": 1000,
           "collisionRadius": 16,
-          "damagePerArrow": 850,
+          "damagePerArrow": 140,
           "visualScale": 0.22,
           "visualThickness": 1.7,
           "castDelayMs": 100,
@@ -117,13 +117,13 @@
           "speed": 960,
           "range": 960,
           "collisionRadius": 18,
-          "damagePerArrow": 1000,
+          "damagePerArrow": 165,
           "visualScale": 0.24,
           "visualThickness": 1.7,
           "castDelayMs": 230,
           "releaseMs": 0,
           "burnDurationMs": 5000,
-          "burnTotalDamage": 500,
+          "burnTotalDamage": 85,
           "groundBurnMs": 2200,
           "gravity": 360,
           "maxLifetimeMs": 6000,
@@ -132,7 +132,7 @@
       }
     },
     "description": "A precise ranged fighter who pins enemies down with arrows.",
-    "unlockPrice": 50
+    "unlockPrice": 149
   },
   "frame": {
     "w": 100,

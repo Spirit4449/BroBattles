@@ -1,6 +1,6 @@
 import { movementSoundKey } from "../../../shared/physics/movementSounds";
 // Per-frame movement presentation for the local fighter: footstep cadence,
-// turn bursts, wall-slide sparks, fast-fall trails, landing impacts and run
+// turn bursts, wall-slide clouds, fast-fall trails, landing impacts and run
 // dust. Gameplay never reads this state; it only follows the physics body.
 // `hidden` (invisibility powerup) suppresses visuals but not audio/events.
 import {
@@ -9,6 +9,7 @@ import {
   spawnFastFallTrail,
   spawnLandingImpact,
   spawnRunDust,
+  spawnStompImpact,
   spawnWallSlideBurst,
   spawnWallSlideTrail,
 } from "../scene/effects";
@@ -31,7 +32,6 @@ export function createLocalMovementFx({ audio, noteEvent }) {
   let lastGroundInputDirection = 0;
   let lastDirectionChangeAt = 0;
   let wasWallSliding = false;
-  let wallSlideElapsed = 0;
   let fastFallElapsed = 0;
   let wasOnGround = false;
   let initialized = false;
@@ -45,7 +45,6 @@ export function createLocalMovementFx({ audio, noteEvent }) {
     lastAirborneVelocityY = 0;
     airbornePeakBottomY = null;
     wasWallSliding = false;
-    wallSlideElapsed = 0;
     fastFallElapsed = 0;
     lastGroundInputDirection = 0;
     lastDirectionChangeAt = 0;
@@ -110,7 +109,8 @@ export function createLocalMovementFx({ audio, noteEvent }) {
 
   // Strong entry accent, then a lighter continuous scrape.
   function updateWallSlide(scene, player, { sliding, wallSide, maxFallSpeed, hidden }) {
-    audio.updateWallSlide(sliding, clamp01((Number(player.body.velocity.y) || 0) / maxFallSpeed));
+    const slideRatio = clamp01((Number(player.body.velocity.y) || 0) / maxFallSpeed);
+    audio.updateWallSlide(sliding, slideRatio);
     if (sliding) {
       const side = wallSide || (player.flipX ? "left" : "right");
       const body = player.body;
@@ -118,15 +118,14 @@ export function createLocalMovementFx({ audio, noteEvent }) {
       const contactY = body ? body.y + body.height * 0.68 : player.y + 12;
       if (!wasWallSliding && !hidden) {
         spawnWallSlideBurst(scene, contactX, contactY, side);
-        wallSlideElapsed = MOVEMENT_VFX_CONFIG.wallTrailIntervalMs;
       }
-      wallSlideElapsed += scene.game.loop.delta;
-      if (wallSlideElapsed >= MOVEMENT_VFX_CONFIG.wallTrailIntervalMs) {
-        wallSlideElapsed = 0;
-        if (!hidden) spawnWallSlideTrail(scene, contactX, contactY, side);
+      if (!hidden) {
+        spawnWallSlideTrail(scene, contactX, contactY, side, {
+          speedRatio: slideRatio,
+          velocityY: Number(player.body.velocity.y) || 0,
+          owner: player,
+        });
       }
-    } else {
-      wallSlideElapsed = 0;
     }
     wasWallSliding = sliding;
   }
@@ -177,9 +176,18 @@ export function createLocalMovementFx({ audio, noteEvent }) {
       if (playSound) {
         scene.sound.play(movementSoundKey(scene, landingAudio.key), { volume: landingAudio.volume, rate: 0.93 - shaped * 0.02 });
       }
-      if (!hidden) {
-        const body = player.body;
-        spawnLandingImpact(scene, Number(body?.center?.x) || player.x, bodyBottom(player) - 2, {
+      // A downward air dash that lands is a stomp. Show it now instead of
+      // when the server confirms it a round trip later.
+      const stomp = (player._stompArmedUntil || 0) >= Date.now();
+      player._stompArmedUntil = 0;
+      const body = player.body;
+      const impactX = Number(body?.center?.x) || player.x;
+      if (stomp) {
+        scene._localStompPredictedAt = Date.now();
+        scene.sound?.play?.("sfx-stomp", { volume: 1 });
+        if (!hidden) spawnStompImpact(scene, impactX, bodyBottom(player) - 2, { cameraShake: true });
+      } else if (!hidden) {
+        spawnLandingImpact(scene, impactX, bodyBottom(player) - 2, {
           impactVelocity: lastAirborneVelocityY,
           fallDistance,
           bodyWidth: Number(body?.width) || player.displayWidth,
