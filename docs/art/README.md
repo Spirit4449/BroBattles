@@ -52,6 +52,8 @@ and inspect the alpha edges and loop after importing.
 
 ## Tools and regeneration
 
+For terrain or props redrawn as crisp pixel art in code (the Lushy Peaks platforms), follow [Code-drawn pixel art](code-pixel-art.md): process, choosing pixel size from map scale, and quality rules.
+
 The [Sprite Workshop](../../spritesheet-generator/README.md) is the general local image/atlas/video editor. It keeps editable projects and exports; it never installs into game assets automatically. Its independent package supplies Sharp for several repository art scripts.
 
 Specialized importers live in `scripts/art/`: body alignment, king packing, Crystal/Gloop pose packing, Thorg video import, team-combat packing, reward import and badge splitting. Read a script before running it: source paths, system dependencies and output scope differ. Depending on the tool, prerequisites include the Workshop's dependencies, Python/Pillow, FFmpeg/FFprobe or `cwebp`. Some inputs referenced by old generators were intentionally removed; the retained WebP/JSON assets are the working masters in those cases. Do not assume ignored `output/` files or absolute workstation paths exist in another checkout.

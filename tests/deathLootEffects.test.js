@@ -23,28 +23,22 @@ function loot(vy = -120) {
     setVelocity(x, y) { body.velocity = { x, y }; } } };
 }
 
-test("first floor contact preserves the bounce and loses sideways momentum", () => {
+test("first floor contact settles without a bounce or sideways slide", () => {
   const visual = loot();
   let impacts = 0;
   handleDeathLootContact(visual, 100, () => impacts++);
-  assert.equal(visual.settled, undefined);
-  assert.equal(visual.sprite.body.velocity.y, -120);
-  assert.equal(visual.sprite.body.velocity.x, 93);
-  assert.equal(visual.sprite.body.allowGravity, true);
+  assert.equal(visual.settled, true);
+  assert.equal(visual.sprite.body.velocity.y, 0);
+  assert.equal(visual.sprite.body.velocity.x, 0);
+  assert.equal(visual.sprite.body.allowGravity, false);
   // Adjacent platform colliders must not count the same impact twice.
   handleDeathLootContact(visual, 100, () => impacts++);
   assert.equal(impacts, 1);
-  assert.equal(visual.bounces, 1);
 });
 
-test("diminishing bounces settle at a stable pickup position", () => {
+test("landing fixes a stable pickup position on the first contact", () => {
   const visual = loot();
   handleDeathLootContact(visual, 100);
-  visual.sprite.body.velocity.y = -50;
-  handleDeathLootContact(visual, 400);
-  assert.equal(visual.settled, undefined);
-  visual.sprite.body.velocity.y = -21;
-  handleDeathLootContact(visual, 550);
   assert.equal(visual.settled, true);
   assert.equal(visual.settledX, 300);
   assert.equal(visual.settledY, 400);
@@ -58,11 +52,11 @@ test("walls and collected loot do not trigger landing, gentle floor contacts set
   visual.sprite.body.blocked.down = false;
   visual.sprite.body.touching.down = false;
   handleDeathLootContact(visual, 100);
-  assert.equal(visual.bounces, undefined);
+  assert.equal(visual.settled, undefined);
   visual.sprite.body.touching.down = true;
   visual.despawning = true;
   handleDeathLootContact(visual, 200);
-  assert.equal(visual.bounces, undefined);
+  assert.equal(visual.settled, undefined);
   visual.despawning = false;
   handleDeathLootContact(visual, 300);
   assert.equal(visual.settled, true);

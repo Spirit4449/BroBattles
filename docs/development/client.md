@@ -1,5 +1,13 @@
 # Browser lifecycle, rendering, and audio
 
+## Death drop visuals
+
+Coins and gems fan out from a defeated player with their server supplied launch
+velocities. The client stops each drop on its first platform contact, then keeps
+its pickup position fixed. Square glints mark the launch, landing, and collection;
+collection lifts and fades the sprite. The server still controls the pickup delay
+and award.
+
 ## Battle HUD layout
 
 `public/game.html` groups the team rosters, match clock, Bank Bust vault panels,

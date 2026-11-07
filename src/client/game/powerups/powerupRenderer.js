@@ -680,6 +680,7 @@ export function createPowerupRenderer({
       const visual = scene._deathDropVisuals[id];
       if (visual && !visual.despawning) {
         visual.despawning = true;
+        deathLootFx.pickup(visual.sprite.x, visual.sprite.y, deathDropColorFor(evt.type));
         try {
           visual.sprite.body.enable = false;
         } catch (_) {}
@@ -691,32 +692,13 @@ export function createPowerupRenderer({
             visual.glowCore,
           ],
           alpha: 0,
-          scaleX: 0.2,
-          scaleY: 0.2,
-          duration: 190,
-          ease: "Back.easeIn",
+          y: "-=14",
+          duration: 170,
+          ease: "Quad.easeOut",
           onComplete: () => cleanupDeathDropVisual(id, visual),
         });
       } else if (typeof evt.x === "number" && typeof evt.y === "number") {
-        const puff = addPixelCircle(
-          scene,
-          evt.x,
-          evt.y,
-          13,
-          deathDropColorFor(evt.type),
-          0.88,
-        );
-        puff.setDepth(RENDER_LAYERS.PLAYER_HUD);
-        puff.setBlendMode(Phaser.BlendModes.ADD);
-        scene.tweens.add({
-          targets: puff,
-          alpha: 0,
-          scaleX: 1.9,
-          scaleY: 1.9,
-          duration: 180,
-          ease: "Quad.easeOut",
-          onComplete: () => puff.destroy(),
-        });
+        deathLootFx.pickup(evt.x, evt.y, deathDropColorFor(evt.type));
       }
     }
   }
@@ -753,8 +735,8 @@ export function createPowerupRenderer({
         );
         sprite.setDepth(RENDER_LAYERS.POWERUPS);
         sprite.setCollideWorldBounds(false);
-        sprite.setBounce(0.45, 0.42);
-        sprite.setDrag(35, 0);
+        sprite.setBounce(0, 0);
+        sprite.setDrag(12, 0);
         sprite.setVelocity(Number(drop.vx) || 0, Number(drop.vy) || 0);
         const maxDim = Math.max(sprite.width || 1, sprite.height || 1);
         // A round coin fills its frame where the gem is wide and flat, so the
@@ -789,7 +771,6 @@ export function createPowerupRenderer({
           blinkAt: Number(drop.blinkAt) || 0,
           expiresAt: Number(drop.expiresAt) || 0,
           settled: false,
-          bounces: 0,
           nextTrailAt: scene.time.now,
           bornAt: scene.time.now,
           spin: (Number(drop.vx) < 0 ? -1 : 1) * (drop.type === "gem" ? 4 : 7),
@@ -836,10 +817,8 @@ export function createPowerupRenderer({
         pulseT > 0 ? 0.26 + (0.74 - pulseT * 0.08) * pulseWave : 1;
 
       if (visual.settled) {
-        const bob = Math.sin(nowSec * 2.8 + visual.phase) * 5;
         visual.sprite.x = visual.settledX;
-        const lift = Math.min(1, (scene.time.now - visual.settledAt) / 220);
-        visual.sprite.y = visual.settledY + (-6 + bob) * lift;
+        visual.sprite.y = visual.settledY;
       }
 
       const x = visual.sprite.x;
@@ -878,7 +857,7 @@ export function createPowerupRenderer({
 
       if (!visual.settled && visual.type !== "coin") {
         const flightAge = (scene.time.now - visual.bornAt) / 1000;
-        visual.sprite.rotation = flightAge * visual.spin / (1 + visual.bounces);
+        visual.sprite.rotation = flightAge * visual.spin;
       }
 
       if (

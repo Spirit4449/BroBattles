@@ -2,19 +2,11 @@ import { RENDER_LAYERS } from "../scene/renderLayers";
 
 const GLOW_TEXTURE = "death-loot-soft-glow";
 
-// Arcade has already applied restitution when the collision callback runs.
 export function handleDeathLootContact(visual, now, onImpact) {
   const body = visual?.sprite?.body;
   if (!body || visual.settled || visual.despawning) return;
   if (!body.blocked.down && !body.touching.down) return;
-  if (now - (visual.lastImpactAt ?? -Infinity) < 60) return;
-  visual.lastImpactAt = now;
-  visual.bounces = (visual.bounces || 0) + 1;
   onImpact?.(visual);
-  if (Math.abs(body.velocity.y) > 45 && visual.bounces < 3) {
-    body.velocity.x *= 0.62;
-    return;
-  }
   visual.settled = true;
   visual.settledAt = now;
   visual.settledX = visual.sprite.x;
@@ -26,6 +18,11 @@ export function handleDeathLootContact(visual, now, onImpact) {
 }
 
 export function createDeathLootEffects(scene, Phaser) {
+  function pixel(x, y, size, tint, alpha = 1) {
+    return scene.add.rectangle(Math.round(x), Math.round(y), size, size, tint, alpha)
+      .setDepth(RENDER_LAYERS.PLAYER + 1);
+  }
+
   function glow(x, y, size, tint, alpha, depth = RENDER_LAYERS.POWERUPS) {
     if (!scene.textures.exists(GLOW_TEXTURE)) {
       const texture = scene.textures.createCanvas(GLOW_TEXTURE, 64, 64);
@@ -76,29 +73,16 @@ export function createDeathLootEffects(scene, Phaser) {
     });
   }
 
-  function ring(x, y, tint, radius, duration) {
-    const object = scene.add.circle(x, y, 8)
-      .setStrokeStyle(2, tint, 0.8).setDepth(RENDER_LAYERS.PLAYER + 1)
-      .setBlendMode(Phaser.BlendModes.ADD);
-    fade(object, duration, { scaleX: radius / 8, scaleY: radius / 8 });
-  }
-
   function burst(x, y) {
-    const flash = glow(x, y, 90, 0xfff3c4, 1, RENDER_LAYERS.PLAYER + 1);
-    fade(flash, 260, { displayWidth: 170, displayHeight: 170 });
-    ring(x, y, 0xffe5a3, 82, 420);
-    const pool = glow(x, y + 5, 130, 0xffbb44, 0.6);
-    pool.setScale(pool.scaleX, pool.scaleY * 0.35);
-    fade(pool, 650);
-    for (let i = 0; i < 20; i++) {
-      const angle = (i / 20) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.1, 0.1);
-      const distance = Phaser.Math.Between(35, 100);
-      const spark = glow(x, y, Phaser.Math.Between(7, 13),
-        i % 4 === 0 ? 0x67e8f9 : 0xffd76a, 0.95, RENDER_LAYERS.PLAYER + 1);
-      fade(spark, Phaser.Math.Between(280, 520), {
+    // Small square glints follow the same fan as the launched loot.
+    for (let i = 0; i < 12; i++) {
+      const angle = Math.PI + (i / 11) * Math.PI;
+      const distance = Phaser.Math.Between(22, 58);
+      const spark = pixel(x, y, i % 3 === 0 ? 6 : 4,
+        i % 4 === 0 ? 0x67e8f9 : 0xffd76a);
+      fade(spark, Phaser.Math.Between(240, 390), {
         x: x + Math.cos(angle) * distance,
-        y: y + Math.sin(angle) * distance - 18,
-        scaleX: 0.02, scaleY: 0.02,
+        y: y + Math.sin(angle) * distance,
       });
     }
   }
@@ -107,16 +91,29 @@ export function createDeathLootEffects(scene, Phaser) {
     const sprite = visual.sprite;
     const speed = Math.hypot(sprite.body.velocity.x, sprite.body.velocity.y);
     if (speed < 65) return;
-    const spark = glow(sprite.x, sprite.y, 13, tint, 0.65);
-    fade(spark, 220, { displayWidth: 3, displayHeight: 3, y: sprite.y - 5 });
+    const spark = pixel(sprite.x, sprite.y, 4, tint, 0.7);
+    fade(spark, 180, { y: sprite.y - 5 });
   }
 
   function impact(visual, tint) {
-    if (visual.bounces > 2) return;
     const sprite = visual.sprite;
-    const puff = glow(sprite.x, sprite.y + sprite.displayHeight / 2, 32, tint, 0.65);
-    fade(puff, 180, { displayWidth: 48, displayHeight: 10 });
+    const y = sprite.y + sprite.displayHeight / 2;
+    for (const direction of [-1, 1]) {
+      const chip = pixel(sprite.x, y, 4, tint, 0.75);
+      fade(chip, 150, { x: sprite.x + direction * 12, y: y - 4 });
+    }
   }
 
-  return { glow, glowImage, burst, trail, impact };
+  function pickup(x, y, tint) {
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2;
+      const chip = pixel(x, y, i % 2 ? 3 : 5, tint);
+      fade(chip, 170, {
+        x: x + Math.cos(angle) * 20,
+        y: y + Math.sin(angle) * 20,
+      });
+    }
+  }
+
+  return { glow, glowImage, burst, trail, impact, pickup };
 }

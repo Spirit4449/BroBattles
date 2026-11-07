@@ -56,12 +56,8 @@
         left: 0;
         right: 0;
         height: 0;
-        background: linear-gradient(
-          to top,
-          rgba(22, 101, 52, 0.72) 0%,
-          rgba(22, 163, 74, 0.42) 55%,
-          transparent 100%
-        );
+        /* Single flat colour to match the pixel-art water */
+        background: rgba(47, 125, 30, 0.78);
         pointer-events: none;
         z-index: 0;
         display: none;
