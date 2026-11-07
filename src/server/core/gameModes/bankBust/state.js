@@ -6,7 +6,7 @@
 // Loose gold scattered around the map (spawn points come from the map's
 // objectiveLayout.bankBust.randomGoldSpawnPoints).
 const RANDOM_GOLD_PICKUP_CAP = 5; // max loose gold pickups on the map at once
-const RANDOM_GOLD_PICKUP_VALUE = 1250; // coins added to the collector's vault
+const RANDOM_GOLD_PICKUP_VALUE = 250; // coins added to the collector's vault
 const RANDOM_GOLD_PICKUP_RADIUS = 42; // pickup distance (px)
 const RANDOM_GOLD_SPAWN_INTERVAL_MS = 3600; // one new pickup this often
 const RANDOM_GOLD_ARRIVE_MS = 1300; // drop-and-bounce animation length
@@ -21,7 +21,7 @@ const COIN_EVENT_SNAPSHOT_LIMIT = 12;
 // it lands, so the fight over it is scheduled rather than random. Attacks break
 // it open and its coins spill out as piles anyone can grab, so doing the damage
 // earns the first run at them rather than the coins themselves.
-const CENTER_GOLD_REWARD = 7500; // coins in the crate, split across its piles
+const CENTER_GOLD_REWARD = 2000; // coins in the crate, split across its piles
 const CENTER_GOLD_HEALTH = 2000; // damage it takes to break open
 const CENTER_GOLD_SPILL_PILES = 5;
 const CENTER_GOLD_SPILL_SPACING = 48; // px between piles on the hilltop
@@ -54,16 +54,16 @@ function createModeObjectState(def = {}) {
       storedGold: 0,
       lastGeneratedAt: Date.now(),
       collectionRadius: Math.max(40, Number(def?.collectionRadius) || 100),
-      yieldAmount: Math.max(1, Number(def?.yieldAmount) || 85),
+      yieldAmount: Math.max(1, Number(def?.yieldAmount) || 100),
       yieldIntervalMs: Math.max(500, Number(def?.yieldIntervalMs) || 5000),
-      maxStoredGold: Math.max(1, Number(def?.maxStoredGold) || 335),
+      maxStoredGold: Math.max(1, Number(def?.maxStoredGold) || 400),
       radius: Math.max(20, Number(def?.radius) || 80),
     };
   } else if (base.type === "claimableTurret") {
     base.state = {
       claimedByTeam: null,
       claimRadius: Math.max(40, Number(def?.claimRadius) || 110),
-      claimCost: Math.max(0, Number(def?.claimCost) || 1460),
+      claimCost: Math.max(0, Number(def?.claimCost) || 3000),
       range: Math.max(100, Number(def?.range) || 520),
       fireRateMs: Math.max(200, Number(def?.fireRateMs) || 900),
       damage: Math.max(1, Number(def?.damage) || 115),
@@ -74,7 +74,7 @@ function createModeObjectState(def = {}) {
     base.state = {
       builtByTeam: null,
       buildRadius: Math.max(30, Number(def?.buildRadius) || 100),
-      cost: Math.max(0, Number(def?.cost) || 915),
+      cost: Math.max(0, Number(def?.cost) || 1100),
       width: Math.max(10, Number(def?.width) || 48),
       height: Math.max(10, Number(def?.height) || 96),
     };

@@ -18,17 +18,17 @@ export function createShurikenEffects(scene, sprite, { x, y, angle = 0, special 
       frames: scene.anims.generateFrameNumbers('ninja-throw-effects', { start: 25, end: 29 }),
       frameRate: 24, repeat: 0 });
     const flash = scene.add.sprite(x, y, 'ninja-throw-effects', 25)
-      .setOrigin(0.25, 0.5).setRotation(angle).setScale(special ? 1.5 : 1.2)
+      .setOrigin(0.25, 0.5).setRotation(angle).setScale(special ? 1.15 : 0.9)
       .setDepth(RENDER_LAYERS.ATTACKS + 1).setBlendMode('ADD');
-    flash.play(key);
-    fade(flash, 220);
+    flash.setAlpha(0.55).play(key);
+    fade(flash, 160);
     const burst = graphics().setPosition(x, y).setRotation(angle);
-    burst.lineStyle(2, 0xffffff, 0.9);
+    burst.lineStyle(1.5, 0xffffff, 0.45);
     for (let i = -2; i <= 2; i++) {
       const a = i * 0.48;
-      burst.lineBetween(Math.cos(a) * 8, Math.sin(a) * 8, Math.cos(a) * 30, Math.sin(a) * 30);
+      burst.lineBetween(Math.cos(a) * 8, Math.sin(a) * 8, Math.cos(a) * 20, Math.sin(a) * 20);
     }
-    fade(burst, 180, { scaleX: 1.8, scaleY: 1.8 });
+    fade(burst, 180, { scaleX: 1.4, scaleY: 1.4 });
   }
   // Two spinning arcs stamped on a coarse grid so they read as pixel art, not a vector halo.
   const aura = graphics();
@@ -42,9 +42,9 @@ export function createShurikenEffects(scene, sprite, { x, y, angle = 0, special 
     }
   }
   const drawAura = (spin) => {
-    aura.clear().fillStyle(color, 0.14);
+    aura.clear().fillStyle(color, 0.06);
     for (const [x, y] of fillCells) aura.fillRect(x, y, pixel, pixel);
-    aura.fillStyle(color, 0.9);
+    aura.fillStyle(color, 0.5);
     for (const [x, y, a] of ringCells) {
       const t = (((a - spin) % Math.PI) + Math.PI) % Math.PI;
       if (t > 0.2 && t < 2.2) aura.fillRect(x, y, pixel, pixel);
@@ -55,19 +55,19 @@ export function createShurikenEffects(scene, sprite, { x, y, angle = 0, special 
     update(now, visible = true) {
       aura.setVisible(visible).setPosition(Math.round(sprite.x), Math.round(sprite.y));
       if (visible) drawAura(now * 0.012);
-      if (!visible || now - lastTrail < 30) return;
+      if (!visible || now - lastTrail < 50) return;
       lastTrail = now;
       const dx = sprite.x - lastX, dy = sprite.y - lastY;
-      if (particles.size < 36 && Math.hypot(dx, dy) > 1) {
-        const length = Math.min(44, Math.hypot(dx, dy));
+      if (particles.size < 20 && Math.hypot(dx, dy) > 1) {
+        const length = Math.min(28, Math.hypot(dx, dy));
         const trail = graphics().setPosition(sprite.x, sprite.y).setRotation(Math.atan2(dy, dx));
-        trail.lineStyle(5, 0xeaf6ff, 0.16).lineBetween(-length, 0, 0, 0);
-        trail.lineStyle(1.5, 0xffffff, 0.75).lineBetween(-length, 0, 0, 0);
-        const starX = -length * 0.5, starY = Math.sin(now * 0.07) * 9;
-        trail.lineStyle(2, color, 0.95);
+        trail.lineStyle(4, 0xeaf6ff, 0.08).lineBetween(-length, 0, 0, 0);
+        trail.lineStyle(1, 0xffffff, 0.4).lineBetween(-length, 0, 0, 0);
+        const starX = -length * 0.5, starY = Math.sin(now * 0.07) * 5;
+        trail.lineStyle(1.5, color, 0.5);
         trail.lineBetween(starX - 3, starY, starX + 3, starY);
         trail.lineBetween(starX, starY - 3, starX, starY + 3);
-        fade(trail, 210);
+        fade(trail, 150);
       }
       lastX = sprite.x; lastY = sprite.y;
     },

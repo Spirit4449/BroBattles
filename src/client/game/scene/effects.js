@@ -560,7 +560,7 @@ export function spawnHealthMarker(scene, x, y, delta, opts = {}) {
   // Hard offset shadow (no blur) for a chunky pixel look.
   marker.setShadow(0, 3, shadowColor, 0, true, true);
   // Small hits (multi-hit attacks, ticks) draw smaller so they don't flood the screen.
-  const sizeScale = Math.abs(rounded) < 600 ? 0.78 : 0.95;
+  const sizeScale = Math.abs(rounded) < 200 ? 0.78 : 0.95;
   marker.setScale(0.65 * sizeScale);
   const float = opts.floatDistance || 28;
   const duration = opts.duration || 820;

@@ -1633,7 +1633,7 @@
         "width": 124,
         "height": 116,
         "radius": 60,
-        "reward": 7500,
+        "reward": 2000,
         "health": 2000
       },
       "objects": [
@@ -1644,9 +1644,9 @@
           "y": -93,
           "radius": 86,
           "collectionRadius": 110,
-          "yieldAmount": 85,
+          "yieldAmount": 100,
           "yieldIntervalMs": 5000,
-          "maxStoredGold": 335
+          "maxStoredGold": 400
         },
         {
           "id": "mine-team2",
@@ -1655,9 +1655,9 @@
           "y": -93,
           "radius": 86,
           "collectionRadius": 110,
-          "yieldAmount": 85,
+          "yieldAmount": 100,
           "yieldIntervalMs": 5000,
-          "maxStoredGold": 335
+          "maxStoredGold": 400
         },
         {
           "id": "turret-team1",
@@ -1665,7 +1665,7 @@
           "x": 1080,
           "y": -45,
           "claimRadius": 110,
-          "claimCost": 2500,
+          "claimCost": 3000,
           "range": 560,
           "fireRateMs": 950,
           "damage": 115,
@@ -1678,7 +1678,7 @@
           "x": 3920,
           "y": -45,
           "claimRadius": 110,
-          "claimCost": 2500,
+          "claimCost": 3000,
           "range": 560,
           "fireRateMs": 950,
           "damage": 115,
@@ -1691,7 +1691,7 @@
           "x": 1184,
           "y": 208,
           "buildRadius": 110,
-          "cost": 1665,
+          "cost": 2000,
           "width": 48,
           "height": 96
         },
@@ -1701,7 +1701,7 @@
           "x": 1520,
           "y": -73,
           "buildRadius": 110,
-          "cost": 1665,
+          "cost": 2000,
           "width": 48,
           "height": 96
         },
@@ -1711,7 +1711,7 @@
           "x": 1853,
           "y": 204,
           "buildRadius": 110,
-          "cost": 915,
+          "cost": 1100,
           "width": 48,
           "height": 96
         },
@@ -1721,7 +1721,7 @@
           "x": 3824,
           "y": 208,
           "buildRadius": 110,
-          "cost": 1665,
+          "cost": 2000,
           "width": 48,
           "height": 96
         },
@@ -1731,7 +1731,7 @@
           "x": 3480,
           "y": -73,
           "buildRadius": 110,
-          "cost": 1665,
+          "cost": 2000,
           "width": 48,
           "height": 96
         },
@@ -1741,7 +1741,7 @@
           "x": 3147,
           "y": 204,
           "buildRadius": 110,
-          "cost": 915,
+          "cost": 1100,
           "width": 48,
           "height": 96
         },
@@ -1751,7 +1751,7 @@
           "x": 812,
           "y": -109,
           "buildRadius": 110,
-          "cost": 1665,
+          "cost": 2000,
           "width": 48,
           "height": 168
         },
@@ -1761,7 +1761,7 @@
           "x": 4188,
           "y": -109,
           "buildRadius": 110,
-          "cost": 1665,
+          "cost": 2000,
           "width": 48,
           "height": 168
         }
