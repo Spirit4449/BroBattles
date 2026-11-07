@@ -1,4 +1,5 @@
 const test = require('node:test');
+const { launchPoint } = require('../src/shared/characters/characterRig');
 const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
 const combat = require('../src/server/core/gameRoom/huntressCombat');
@@ -39,8 +40,9 @@ test('human and bot launches share canonical tuning, windup, muzzle and ammuniti
     step(); assert.equal(room._huntress.active.size, 3);
     assert.equal(actions('huntress-projectiles').length, 1);
     const center = actions('huntress-projectiles')[0].projectiles[1], body = characterBody('huntress');
-    assert.equal(center.x, p.x + body.displayWidth * model.attackConfig().forwardOffset);
-    assert.equal(center.y, p.y - body.displayHeight * model.attackConfig().verticalOffset);
+    const muzzle = launchPoint('huntress', model.attackConfig().muzzle, { x: p.x, y: p.y }, 0);
+    assert.equal(center.x, muzzle.x);
+    assert.equal(center.y, muzzle.y);
     assert.equal(center.vx, model.resolveShot({angle:0,power:0.5}).speed);
     assert.equal(center.gravity, model.attackConfig().gravity);
     const replica = new HuntressReplica(); replica.launch(center);

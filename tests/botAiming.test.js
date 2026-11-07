@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { basicAim, hasClearShot, requestBasic } = require('../src/server/core/bots/combat');
 const { getResolvedAttackDescriptor } = require('../src/server/core/gameRoom/attackDescriptorResolver');
+const { launchTravel } = require('../src/shared/combat/launchRamp');
+const { muzzleOf } = require('../src/shared/characters/characterRig');
 
 const profile = { prediction: 1, aimError: 0 };
 const room = { FIXED_DT_MS: 1000 / 60, geometry: { colliders: [] } };
@@ -26,16 +28,22 @@ test('ducking does not change whether a bot considers the target attackable', ()
 function missDistance(p, enemy, angle, speed) {
   const huntress = p.char_class === 'huntress';
   const cfg = require('../src/shared/characters/huntressProjectile').attackConfig();
-  const runtime = huntress ? { ...cfg, forwardOffsetWidthFactor: cfg.forwardOffset, verticalOffsetHeightFactor: cfg.verticalOffset }
-    : getResolvedAttackDescriptor('wizard-fireball-release').runtime;
+  const runtime = huntress ? cfg : getResolvedAttackDescriptor('wizard-fireball-release').runtime;
+  // Shots leave the character's rig muzzle, facing the enemy.
+  const muzzle = muzzleOf(p.char_class, runtime.muzzle, { x: p.x, y: p.y, flip: enemy.x < p.x });
   speed ??= runtime.speed;
   const startup = getResolvedAttackDescriptor(huntress ? 'huntress-arrow' : 'wizard-fireball').actionFlow.startupMs / 1000;
   const dt = room.FIXED_DT_MS / 1000, g = huntress ? runtime.gravity : 0;
-  let x = p.x + Math.cos(angle) * 80 * runtime.forwardOffsetWidthFactor;
-  let y = p.y - 120 * runtime.verticalOffsetHeightFactor + Math.sin(angle) * 80 * runtime.forwardOffsetWidthFactor;
+  let x = muzzle.pivot.x + Math.cos(angle) * muzzle.reach;
+  let y = muzzle.pivot.y + Math.sin(angle) * muzzle.reach;
   let vy = Math.sin(angle) * speed, best = Infinity;
   for (let t = dt; t <= (huntress ? runtime.maxLifetimeMs / 1000 : runtime.range / runtime.speed); t += dt) {
-    vy += g * dt; x += Math.cos(angle) * speed * dt; y += vy * dt;
+    if (huntress) { vy += g * dt; x += Math.cos(angle) * speed * dt; y += vy * dt; }
+    else {
+      // The fireball eases off the staff on the shared launch curve.
+      const step = launchTravel(t * 1000, runtime) - launchTravel((t - dt) * 1000, runtime);
+      x += Math.cos(angle) * step; y += Math.sin(angle) * step;
+    }
     best = Math.min(best, Math.hypot(x - enemy.x - enemy.vx * (startup + t), y - enemy.y - enemy.vy * (startup + t)));
   }
   return best;
@@ -239,9 +247,9 @@ test('huntress keeps jump and fall prediction near the current target height', (
       assert.equal(aim.canHit, true);
       // Recover the aimed height when the arrow crosses the target's x.
       const cfg = require('../src/shared/characters/huntressProjectile').attackConfig();
-      const forward = 80 * cfg.forwardOffset;
-      const time = (x / Math.cos(aim.angle) - forward) / aim.speed;
-      const y = p.y - 120 * cfg.verticalOffset + Math.sin(aim.angle) * (forward + aim.speed * time)
+      const { pivot, reach: forward } = muzzleOf('huntress', cfg.muzzle, { x: p.x, y: p.y, flip: enemy.x < p.x });
+      const time = ((x - (pivot.x - p.x)) / Math.cos(aim.angle) - forward) / aim.speed;
+      const y = pivot.y + Math.sin(aim.angle) * (forward + aim.speed * time)
         + 0.5 * cfg.gravity * time * (time + room.FIXED_DT_MS / 1000);
       const lead = y - enemy.y;
       assert.ok(lead * vy > 0, 'still anticipates the observed vertical direction');

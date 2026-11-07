@@ -21,6 +21,17 @@ test('content validation rejects a missing action and wrong effect owner', () =>
   assert.ok(errors.some(error => error.includes('unknown effect')));
 });
 
+test('content validation rejects rig points that are malformed or outside the frame', () => {
+  const characters = structuredClone(characterDefinitions);
+  characters.wizard.rig.feet = [999, 140];
+  characters.wizard.rig.points.staffTip.attack[2] = ['x', 1];
+  characters.wizard.rig.points.orb = 'top';
+  const errors = validateContent({ characters });
+  assert.ok(errors.some(error => error.includes('wizard: rig feet is outside')));
+  assert.ok(errors.some(error => error.includes('staffTip.attack[2] must be [x, y]')));
+  assert.ok(errors.some(error => error.includes('rig orb must be')));
+});
+
 test('content validation detects colliding action IDs and unsupported attack runtimes', () => {
   const characters = structuredClone(characterDefinitions);
   characters.draven.attacks['ninja-shuriken'] = { character: 'draven', runtime: { kind: 'missing-runtime' } };

@@ -17,7 +17,7 @@
       "heightShrink": 194,
       "offsetXFromHalf": 0,
       "offsetY": 111,
-      "flipOffset": 5
+      "flipOffset": 0
     },
     "tuning": {
       "attack": {
@@ -141,5 +141,8 @@
   },
   "presentation": {
     "abilityLockAnimation": "special"
+  },
+  "rig": {
+    "feet": [123, 167]
   }
 }

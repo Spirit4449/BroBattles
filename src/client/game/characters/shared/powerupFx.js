@@ -11,7 +11,6 @@ export function applyScaleLockedRageFx(
   sprite.setTint(pulse > 0.52 ? 0xc084fc : 0x9333ea);
 
   sprite.setScale(sprite._puBaseScaleX || 1, sprite._puBaseScaleY || 1);
-  sprite.setOrigin(sprite._puBaseOriginX ?? 0.5, sprite._puBaseOriginY ?? 0.5);
 
   if (typeof spawnTrailParticle === "function" && Math.random() < 0.34) {
     spawnTrailParticle(

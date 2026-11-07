@@ -1,4 +1,8 @@
 import { advanceSlimeball, slimeLaunch } from "../../../../shared/characters/gloopProjectile";
+import { attachToPlayer } from "../shared/attachToPlayer";
+import rigData from "../../../../shared/characters/characterRig.js";
+
+const { launchPoint } = rigData;
 import { createSlimeVisual, createSlimeBud, slimeRadius } from "./slimeVisual";
 import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
@@ -40,13 +44,14 @@ function createDebugCircle(scene, radius) {
   return registerDebugShape(circle);
 }
 
-function playAttackAnimation(scene, sprite) {
+function playAttackAnimation(scene, sprite, id = null) {
   playSpriteAnimation({
     scene,
     sprite,
     character: NAME,
     logical: "throw",
     fallback: "special",
+    id,
   });
 }
 
@@ -96,29 +101,13 @@ function resolveStart(payload = {}, ownerSprite = null, angle = 0) {
     return { x: startX, y: startY };
   }
 
+  // The same rig muzzle the server launches from (gloop.json slimeMuzzle).
   const originX = Number(payload?.origin?.x);
   const originY = Number(payload?.origin?.y);
-  if (Number.isFinite(originX) && Number.isFinite(originY)) {
-    const width = ownerSprite?.displayWidth || ownerSprite?.width || 80;
-    const height = ownerSprite?.displayHeight || ownerSprite?.height || 100;
-    return {
-      x:
-        originX +
-        Math.cos(angle) * width * (Number(SLIMEBALL.forwardOffset) || 0.32),
-      y: originY - height * (Number(SLIMEBALL.verticalOffset) || 0.1),
-    };
-  }
-
-  const width = ownerSprite?.displayWidth || ownerSprite?.width || 80;
-  const height = ownerSprite?.displayHeight || ownerSprite?.height || 100;
-  return {
-    x:
-      (ownerSprite?.x || 0) +
-      Math.cos(angle) * width * (Number(SLIMEBALL.forwardOffset) || 0.32),
-    y:
-      (ownerSprite?.y || 0) -
-      height * (Number(SLIMEBALL.verticalOffset) || 0.1),
-  };
+  const from = Number.isFinite(originX) && Number.isFinite(originY)
+    ? { x: originX, y: originY }
+    : { x: Number(ownerSprite?.x) || 0, y: Number(ownerSprite?.y) || 0 };
+  return launchPoint("gloop", SLIMEBALL.muzzle, { ...from, flip: Math.cos(angle) < 0 }) || from;
 }
 
 export function handleGloopSlimeSplat(scene, payload) {
@@ -143,22 +132,16 @@ export function spawnGloopSlimeBud(scene, ownerSprite, payload = {}) {
   });
   scene._gloopBuds ||= new Map();
   scene._gloopBuds.get(payload.id)?.dispose();
-  const dispose = () => {
-    scene.events.off("postupdate", update);
-    scene.events.off("presentation:reset", dispose);
-    scene.events.off("shutdown", dispose);
-    if (scene._gloopBuds?.get(payload.id) === entry) scene._gloopBuds.delete(payload.id);
-    bud.destroy();
-  };
-  const update = (_, delta = 16) => { if (!bud.update(delta)) dispose(); };
-  const entry = { dispose, retract: () => bud.retract() };
+  // Drawn after every position write of the frame (remote interpolation,
+  // Arcade's step), so the lump sits on the sprite as rendered.
+  const attachment = attachToPlayer(scene, ownerSprite, {
+    objects: [bud],
+    endsWithPlayer: false,
+    onEnd: () => { if (scene._gloopBuds?.get(payload.id) === entry) scene._gloopBuds.delete(payload.id); },
+    update: (_ms, dt) => bud.update(dt) !== false,
+  });
+  const entry = { dispose: () => attachment.destroy(), retract: () => bud.retract() };
   scene._gloopBuds.set(payload.id, entry);
-  // After every position write of the frame (remote interpolation, Arcade's
-  // step), so the lump is drawn on the sprite as rendered, not a frame behind.
-  scene.events.on("postupdate", update);
-  scene.events.once("presentation:reset", dispose);
-  scene.events.once("shutdown", dispose);
-  bud.update(0);
   return entry;
 }
 
@@ -349,7 +332,7 @@ export function performGloopSlimeball(instance, attackContext = null) {
   const castOrigin = { x: p.x, y: p.y };
 
   p.flipX = direction < 0;
-  playAttackAnimation(scene, p);
+  playAttackAnimation(scene, p, attackId);
   playSound(scene, "gloop-attack", { volume: 0.5 }, p);
   scene.time.delayedCall(Number(SLIMEBALL.flipLockMs) || 520, () => {
     try {

@@ -103,7 +103,7 @@ function redrawInspector(){
   panel.scrollTop=scroll;if(focusIndex>=0)controls()[focusIndex]?.focus({preventScroll:true});
 }
 function drawInspector(){document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===activeTab));const panel=$('inspector-content');panel.replaceChildren();
-  $('map-mode').textContent=mapArena(map())?.label||'';syncAddKinds();
+  syncAddKinds();
   if(activeTab==='world'){
     panel.append(node('h3',documentData.label));field(panel,'Map name',documentData.label,v=>transaction(()=>{documentData.label=v;}));
     const arena=mapArena(map()),w=arena.world,c=arena.camera;

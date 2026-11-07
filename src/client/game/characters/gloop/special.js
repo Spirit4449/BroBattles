@@ -22,13 +22,14 @@ function stampPixel(graphics, x, y, size) {
   graphics.fillRect(snap(x - side / 2), snap(y - side / 2), side, side);
 }
 
-function playSpecialAnimation(scene, player) {
+function playSpecialAnimation(scene, player, options = {}) {
   playSpriteAnimation({
     scene,
     sprite: player,
     character: NAME,
     logical: "special",
     fallback: "throw",
+    ...options,
   });
 }
 
@@ -344,8 +345,8 @@ export function perform(
 
   const angle = resolveAngle(player, specialData);
   player.flipX = Math.cos(angle) < -0.1;
-  player._specialAnimLockUntil = Date.now() + 850;
-  playSpecialAnimation(scene, player);
+  player._specialCastLockUntil = Date.now() + 850;
+  playSpecialAnimation(scene, player, { holdMs: 850, remote: !isOwner });
 
   playHookAction(scene, player, specialData, isOwner);
 }

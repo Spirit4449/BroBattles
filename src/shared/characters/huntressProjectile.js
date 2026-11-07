@@ -5,12 +5,13 @@ const { getResolvedCharacterAttackConfig, getResolvedCharacterSpecialConfig,
 const VERSION = 2;
 // Replays step at the server tick so client predictions match the server.
 const { FIXED_DT_MS: STEP_MS } = require('../gameConstants');
+const { muzzleOf } = require('./characterRig.js');
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 function attackConfig(special = false) {
   const arrows = getResolvedCharacterAttackConfig('huntress', 'arrowSpread');
   const cfg = special ? getResolvedCharacterSpecialConfig('huntress', 'burningVolley') : arrows;
-  return { ...cfg, forwardOffset: arrows.forwardOffset, verticalOffset: arrows.verticalOffset };
+  return { ...cfg, muzzle: arrows.muzzle };
 }
 
 function resolveShot(aim = {}, special = false) {
@@ -42,13 +43,21 @@ function createVolley(pose, shot, requestId, launchMono) {
   });
 }
 
+// The bow (huntress.json `rig.points`): arrows leave `reach` from its pivot
+// along the aim. The pivot is centred under her at bow height, so the launch
+// does not depend on which way she faces. Server, bots and the predicting
+// client share this.
+function bowMuzzle(pose, cfg) {
+  return muzzleOf('huntress', cfg.muzzle, pose) || { pivot: { x: Number(pose.x), y: Number(pose.y) }, reach: 0 };
+}
+
 function createProjectile(pose, shot, angle, cfg, identity = {}) {
-  const forward = pose.width * cfg.forwardOffset;
+  const { pivot, reach } = bowMuzzle(pose, cfg);
   return {
       ...identity,
       origin: { x: pose.x, y: pose.y },
-      x: pose.x + Math.cos(angle) * forward,
-      y: pose.y - pose.height * cfg.verticalOffset + Math.sin(angle) * forward,
+      x: pivot.x + Math.cos(angle) * reach,
+      y: pivot.y + Math.sin(angle) * reach,
       vx: Math.cos(angle) * shot.speed, vy: Math.sin(angle) * shot.speed,
       gravity: cfg.gravity, maxLifetimeMs: cfg.maxLifetimeMs,
       radius: cfg.playerCollisionRadius || cfg.collisionRadius,
@@ -61,8 +70,8 @@ function createProjectile(pose, shot, angle, cfg, identity = {}) {
 function aimAtTarget(pose, target, power = 0.5, special = false, samples = 32) {
   const cfg = attackConfig(special);
   const flatSpeed = resolveShot({ angle: 0, power }, special).speed;
-  const forward = pose.width * cfg.forwardOffset;
-  const dx = target.x - pose.x, dy = target.y - (pose.y - pose.height * cfg.verticalOffset);
+  const { pivot, reach: forward } = bowMuzzle(pose, cfg);
+  const dx = target.x - pivot.x, dy = target.y - pivot.y;
   const gravityOnly = { x: 0, y: 0, vx: 0, vy: 0, gravity: cfg.gravity, maxLifetimeMs: cfg.maxLifetimeMs };
   const evaluate = ms => {
     const drop = sample(gravityOnly, ms).y;

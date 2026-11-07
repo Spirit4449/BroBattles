@@ -14,13 +14,56 @@ test('standard Ninja preserves authoritative standing and ducking collision geom
   const close = (a,b) => assert.ok(Math.abs(a-b)<1e-8, `${a} != ${b}`);
   close(width*scale,original.width);
   close(height*scale,original.height);
-  close((128-256*originX)*scale,original.offsetX);
+  // Client body centre: origin plus offset (the origin sits under the rig's feet).
+  close((128+body.offsetXFromHalf-256*originX)*scale,original.offsetX);
   close((body.offsetY+height/2-256*originY)*scale,original.offsetY);
   for(const ratio of [1,0.55]) {
     const duckHeight=height*ratio;
     close((body.offsetY+height-duckHeight+duckHeight-256*originY)*scale,
       original.offsetY+original.height/2);
   }
+});
+
+test('off-centre art stands on its feet either way it faces, with the body where it was', () => {
+  const { bindPlayerOrigin } = require('../src/client/game/characters/shared/rig.js');
+  const { rigOf } = require('../src/shared/characters/characterRig');
+  const { characterFrames, characterPresentation } = require('../src/shared/characters');
+  const frame = characterFrames.wizard, standX = rigOf('wizard').feet[0];
+  const shifted = spritePresentation('wizard', { key: 'wizard' });
+  const centred = spritePresentation('wizard', { key: 'wizard-skin' });
+  assert.equal(centred.originX, 0.5, 'other art keeps the centred origin');
+  // Phaser mirrors a flipped texture inside its frame, so the feet are at W - x.
+  const feetOnScreen = (p, flip) => ((flip ? frame.w - standX : standX) - (flip ? p.flipOriginX : p.originX) * frame.w) * p.scale;
+  // Arcade: body.x = sprite.x - displayOriginX * scale + offset.x * scale; offsets ignore flip.
+  const offsetFor = (p, flip) => frame.w / 2 - (frame.w - p.body.widthShrink) / 2 + p.body.offsetXFromHalf + (flip ? p.body.flipOffset || 0 : 0);
+  const bodyCentre = (p, flip) => (offsetFor(p, flip) - (flip ? p.flipOriginX ?? p.originX : p.originX) * frame.w
+    + (frame.w - p.body.widthShrink) / 2) * p.scale;
+  for (const flip of [false, true]) {
+    assert.ok(Math.abs(feetOnScreen(shifted, flip)) < 1e-8, `feet on the sprite position (flip ${flip})`);
+    assert.ok(Math.abs(bodyCentre(shifted, flip) - bodyCentre(centred, flip)) < 1e-8, `body unchanged (flip ${flip})`);
+  }
+  class Sprite {
+    setOrigin(x = 0.5, y = x) { this.originX = x; this.originY = y; return this; }
+  }
+  const sprite = Object.assign(new Sprite(), { flipX: false, frame: { realWidth: frame.w },
+    body: { offset: { x: offsetFor(shifted, false), y: 7 }, setOffset(x, y) { this.offset = { x, y }; } } });
+  bindPlayerOrigin(sprite, shifted);
+  assert.equal(sprite.originX, shifted.originX);
+  const saved = sprite.originX; // what powerup effects capture and later restore
+  sprite.flipX = true;
+  assert.equal(sprite.originX, shifted.flipOriginX);
+  assert.ok(Math.abs(sprite.body.offset.x - offsetFor(shifted, true)) < 1e-8, 'matches what applyFlipOffset sets');
+  assert.equal(sprite.body.offset.y, 7);
+  sprite.setOrigin(saved, 0.5);
+  assert.equal(sprite.originX, shifted.flipOriginX, 'restoring a saved origin keeps the current facing');
+  sprite.setOrigin(0.2, 0.4);
+  assert.equal(sprite.originX, shifted.flipOriginX, 'nothing else moves the horizontal origin');
+  assert.equal(sprite.originY, 0.4, 'vertical origin is still free');
+  sprite.setOrigin(saved, 0.5);
+  sprite.flipX = 0;
+  assert.equal(sprite.flipX, false);
+  assert.equal(sprite.originX, shifted.originX);
+  assert.ok(Math.abs(sprite.body.offset.x - offsetFor(shifted, false)) < 1e-8);
 });
 
 test('legacy Sovereign presentation remains unchanged',()=>{

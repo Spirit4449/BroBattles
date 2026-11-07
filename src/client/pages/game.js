@@ -1,6 +1,7 @@
 import { processPlayerPlatformCollision } from '../game/players/platformCollision';
 import { loadGameFonts } from '../game/scene/loadGameFonts';
 import { installDamageHitboxDebug } from '../game/scene/damageHitboxDebug';
+import { installRigDebug } from '../game/scene/rigDebug';
 import { bindGameAudio, getSettings, graphicsRenderScale, subscribeSettings } from "../site/preferences";
 import { bindMusicEnvelope } from '../lib/musicEnvelope';
 import { ensureLegalAcceptance } from "../site/shell";
@@ -110,11 +111,10 @@ import {
   getCharacterEffectTickSounds,
 } from "../game/characters";
 import {
-  getAnimationDurationMs,
-  markOneShotAnimation,
+  clearAction,
+  presentRemoteAction,
   remoteAnimationLockUntil,
   playCharacterAnimation,
-  toLogicalAnimation,
 } from "../game/characters/shared/animationState.js";
 import socket, { waitForConnect } from "../lib/socket";
 import OpPlayer from "../game/players/RemotePlayer";
@@ -523,14 +523,7 @@ function snapRemotePlayersToLatestState() {
     const x = Number(entry?.x), y = Number(entry?.y);
     if (!sprite || !Number.isFinite(x) || !Number.isFinite(y)) continue;
     try { sprite.body?.reset?.(x, y); } catch (_) { sprite.setPosition?.(x, y); }
-    if (sprite._bbAnimationState) {
-      sprite._bbAnimationState.oneShot = null;
-      sprite._bbAnimationState.oneShotUntilMs = 0;
-      sprite._bbAnimationState.oneShotUntilPerf = 0;
-    }
-    sprite._remoteActionAnimUntil = 0;
-    const wrapper = opponentPlayers[entry.name] || teamPlayers[entry.name];
-    if (wrapper) wrapper._animLockUntil = 0;
+    clearAction(sprite);
   }
 }
 
@@ -1099,23 +1092,8 @@ class GameScene extends Phaser.Scene {
                 act.direction = wrapper.opponent.flipX ? -1 : 1;
               }
             }
-            const consumed = handleRemoteAttack(this, charKey, act, wrapper);
-            if (consumed && wrapper?.opponent) {
-              const currentKey = wrapper.opponent.anims?.currentAnim?.key || "";
-              const logical = toLogicalAnimation(
-                currentKey || act.type,
-                charKey,
-              );
-              const duration = getAnimationDurationMs(
-                this,
-                currentKey,
-                logical === "special" ? 900 : 520,
-              );
-              markOneShotAnimation(wrapper.opponent, logical, duration, {
-                remote: true,
-              });
-              wrapper._animLockUntil = performance.now() + duration;
-            }
+            presentRemoteAction({ scene: this, wrapper, character: charKey, actionType: act.type },
+              () => handleRemoteAttack(this, charKey, act, wrapper));
           } catch (_) {}
         }
         if (retryActions.length) {
@@ -1320,6 +1298,7 @@ class GameScene extends Phaser.Scene {
 
     // Toggle physics debug with Ctrl+M (ensures debug graphic exists)
     if (gameData?.editorPlaytest) installDamageHitboxDebug(this, socket);
+    installRigDebug(this);
     const setHitboxDebug = (enable) => {
       const world = this.physics?.world;
       if (!world) return;
@@ -2073,7 +2052,7 @@ class GameScene extends Phaser.Scene {
         ) {
           wrapper.applyFlipOffset();
         }
-        const lockUntil = remoteAnimationLockUntil(spr, wrapper);
+        const lockUntil = remoteAnimationLockUntil(spr);
         if (performance.now() >= lockUntil) {
           const chosenAnim = chooseRemoteAnimation(wrapper.character, {
             animation: animSrc.animation || "idle",

@@ -1,5 +1,5 @@
 import { teamColor, TEAM_RED } from "../../../../shared/projectilePresentation";
-import { FIREBALL_PALETTES } from "./fireballArt";
+import { FIREBALL_PALETTES, FIREBALL_RADIUS_PX } from "./fireballArt";
 
 // Trail pixels share the fireball sheet's palette and its 2-screen-pixel art
 // cell. Chips shrink and cool in whole steps (core -> light -> mid -> edge)
@@ -7,7 +7,7 @@ import { FIREBALL_PALETTES } from "./fireballArt";
 // Colours are baked into the texture and stepped by swapping frames, because
 // the Canvas renderer fallback ignores particle tint.
 const CHIP = 6; // three art cells at activeScale 0.5
-const BALL_RADIUS = 19; // screen px at activeScale 0.5
+const BALL_RADIUS = FIREBALL_RADIUS_PX;
 const STEP_MS = 8;
 const TEXTURE = "wizard-fire-pixels";
 const SHAPES = ["square", "plus", "round"];
@@ -167,18 +167,21 @@ export function spawnFireballBurst(scene, x, y, owner) {
   if (!scene?.add?.particles || !scene.textures) return;
   const emitter = scene.add.particles(0, 0, getPixelTexture(scene), {
     emitting: false, blendMode: "NORMAL",
-    lifespan: { min: 200, max: 460 }, speed: { min: 60, max: 190 }, angle: { min: 0, max: 360 },
-    gravityY: -80, scale: shrinking([1, 2 / 3, 2 / 3]),
+    // Biased upward so the spray rises with the flames.
+    lifespan: { min: 260, max: 620 }, speed: { min: 70, max: 230 }, angle: { min: 190, max: 350 },
+    gravityY: -60, scale: shrinking([1, 2 / 3, 2 / 3]),
     tint: toneRamp(scene, teamOf(owner), SHAPES, ["core", "light", "mid", "edge"]),
   }).setDepth(owner?.depth ?? 100);
-  emitter.explode(14, Math.round(x), Math.round(y));
+  emitter.explode(16, Math.round(x), Math.round(y));
   let done = false;
   const destroy = () => {
     if (done) return;
     done = true;
     scene.events?.off?.("shutdown", destroy);
+    scene.events?.off?.("presentation:reset", destroy);
     emitter.destroy();
   };
   scene.events?.once?.("shutdown", destroy);
-  scene.time?.delayedCall?.(520, destroy);
+  scene.events?.once?.("presentation:reset", destroy);
+  scene.time?.delayedCall?.(680, destroy);
 }

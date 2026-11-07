@@ -157,7 +157,7 @@ test('authoritative release publishes the same launch and terrain used for damag
   const packet=emitted.at(-1).action, runtime=room._activeAttacks[0];
   const expected=slimeLaunch({x:100,y:200,width:150,height:150},target,cfg);
   expected.start.x += 25;
-  assert.deepEqual(packet.start,expected.start);
+  assert.ok(Math.abs(packet.start.x-expected.start.x)<1e-9&&Math.abs(packet.start.y-expected.start.y)<1e-9,JSON.stringify(packet.start));
   assert.equal(runtime.x,packet.start.x);assert.equal(runtime.y,packet.start.y);
   assert.equal(runtime.vx,Math.cos(packet.angle)*packet.speed);
   assert.equal(runtime.vy,packet.initialVy);

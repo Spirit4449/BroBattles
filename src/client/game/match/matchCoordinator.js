@@ -16,11 +16,7 @@ import { applyActionToLocalPlayer, getCharacterSocketEvents, playCharacterSound 
 import { playPlayerSound } from "../audio/playerAudio";
 import { takePredictedHit } from "../characters/shared/shotPrediction";
 import { playHitFeedback, hitstopForDelivery } from "../characters/shared/hitFeedback";
-import {
-  getAnimationDurationMs,
-  markOneShotAnimation,
-  toLogicalAnimation,
-} from "../characters/shared/animationState.js";
+import { presentRemoteAction } from "../characters/shared/animationState.js";
 import {
   configureClientNetTest,
   noteClientLifecycle,
@@ -1053,29 +1049,19 @@ export function createMatchCoordinator(config) {
         }
       }
 
-      const consumed = handleRemoteAttack(scene, charKey, act, wrapper, {
-        opponentPlayersRef: opponentPlayers,
-        teamPlayersRef: teamPlayers,
-        localPlayer: getPlayer(),
-        localUsername: getUsername(),
-        attackerUsername: playerName,
-        attackerTeam: pd?.team || "",
-        players: gameData.players || [],
-      });
-      // Prevent snapshot animation from immediately overwriting attack animation,
-      // and open a precision window so interpolation blends toward hit position.
+      // The handler's animation holds snapshot animation off the sprite.
+      const consumed = presentRemoteAction({ scene, wrapper, character: charKey, actionType: act.type },
+        () => handleRemoteAttack(scene, charKey, act, wrapper, {
+          opponentPlayersRef: opponentPlayers,
+          teamPlayersRef: teamPlayers,
+          localPlayer: getPlayer(),
+          localUsername: getUsername(),
+          attackerUsername: playerName,
+          attackerTeam: pd?.team || "",
+          players: gameData.players || [],
+        }));
+      // Open a precision window so interpolation blends toward hit position.
       if (consumed && wrapper) {
-        const currentKey = wrapper.opponent?.anims?.currentAnim?.key || "";
-        const logical = toLogicalAnimation(currentKey || act.type, charKey);
-        const duration = getAnimationDurationMs(
-          scene,
-          currentKey,
-          logical === "special" ? 900 : 520,
-        );
-        markOneShotAnimation(wrapper.opponent, logical, duration, {
-          remote: true,
-        });
-        wrapper._animLockUntil = performance.now() + duration;
         wrapper._attackPrecisionUntil =
           performance.now() + REMOTE_ATTACK_PRECISION_WINDOW_MS;
       }

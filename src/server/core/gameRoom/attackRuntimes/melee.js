@@ -5,7 +5,10 @@ const effectManager = require("../effects/effectManager");
 const { THORG_SWEEP } = require("../../../../shared/characters/thorgSweep");
 const { attachedRectShape, pathSweepShapes, pathSweepProgress, sectorShape, shapeTouches } = require("../../../../shared/combat/attackDelivery");
 const { resolvePlayerHeight } = require('./geometry');
-const { hitRectTargets, hitCapsuleTargets, getObjectiveTargets, CENTER_CRATE_TARGET, emitServerHit, buildTargetList, emitHitAction, shotTargetBounds } = require('./targets');
+const { wizardChargeShapes, chargeConfig } = require('../../../../shared/characters/wizardCharge');
+const CHARGE = chargeConfig();
+const { burstSplash } = require('./projectiles');
+const { hitRectTargets, hitCapsuleTargets, capsuleTouch, getObjectiveTargets, CENTER_CRATE_TARGET, emitServerHit, buildTargetList, emitHitAction, shotTargetBounds } = require('./targets');
 
 function buildAttachedRectAttack(playerData, actionData, descriptor, now) {
   return {
@@ -61,6 +64,37 @@ function buildAttachedConeAttack(playerData, actionData, descriptor, now) {
 function attackerPoseOf(attacker, extra = {}) {
   return { x: Number(attacker.x), y: Number(attacker.y), flip: !!attacker.flip,
     height: resolvePlayerHeight(attacker), ...extra };
+}
+
+// A charging fireball (wizard): live while the caster winds up, it bursts on the
+// first enemy touching it, splashing everyone around, and cancels the release.
+// `windup` is shared with the scheduled release (characterActionRegistry).
+function buildAttachedChargeAttack(playerData, actionData, descriptor, now) {
+  const runtime = descriptor?.runtime || {};
+  return {
+    ...attackIdentity(playerData, actionData, descriptor, now),
+    windup: actionData?._windup || { burst: false },
+    interruptSeq: playerData._attackInterruptSeq || 0,
+    damage: Number(actionData?.damage) || Number(playerData.baseDamage) || 1,
+    splashRadius: Math.max(1, Number(runtime.splashRadius) || 1),
+    hitSet: new Set(),
+  };
+}
+
+function tickAttachedCharge(room, attack, descriptor, now) {
+  const attacker = getParticipant(room, attack.attackerParticipantId);
+  if (!attacker || !attacker.isAlive || attacker.connected === false || attacker.loaded === false) return true;
+  if ((attacker._attackInterruptSeq || 0) !== attack.interruptSeq) return true;
+  const elapsed = now - attack.createdAt;
+  if (elapsed >= CHARGE.endMs) return true; // the release takes over
+  const shapes = wizardChargeShapes(attackerPoseOf(attacker), elapsed, CHARGE);
+  if (!shapes.length) return false;
+  const [{ a, b, radius }] = shapes;
+  const touched = capsuleTouch(room, attack, a, b, radius, now);
+  if (!touched) return false;
+  attack.windup.burst = true;
+  burstSplash(room, attack, descriptor, attacker, touched, now);
+  return true;
 }
 
 function tickAttachedRect(room, attack, descriptor, now) {
@@ -140,4 +174,6 @@ function tickPathRect(room, attack, descriptor, now) {
   return progress >= 1;
 }
 
-module.exports = { buildAttachedRectAttack, buildPathRectAttack, buildAttachedConeAttack, tickAttachedRect, tickAttachedCone, tickPathRect };
+module.exports = {
+  buildAttachedChargeAttack,
+  tickAttachedCharge, buildAttachedRectAttack, buildPathRectAttack, buildAttachedConeAttack, tickAttachedRect, tickAttachedCone, tickPathRect };

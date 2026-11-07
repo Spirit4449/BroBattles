@@ -15,6 +15,20 @@ function load(file, imports = () => ({})) {
 const art = load('src/client/game/characters/wizard/fireballArt.js');
 const particles = load('src/client/game/characters/wizard/fireballParticles.js',
   name => name.includes('fireballArt') ? art : require('../src/shared/projectilePresentation'));
+const attackImports = name => {
+  if (name.includes('projectilePresentation')) return require('../src/shared/projectilePresentation');
+  if (name.includes('fireballParticles')) return { createFireballParticles: () => ({ stop() {}, destroy() {} }), spawnFireballBurst() {} };
+  if (name.includes('fireballArt')) return art;
+  if (name.includes('launchRamp')) return require('../src/shared/combat/launchRamp');
+  if (name.includes('renderLayers')) return { RENDER_LAYERS: { ATTACKS: 60 } };
+  if (name.includes('shared/rig')) return require('../src/client/game/characters/shared/rig.js');
+  if (name.includes('characterRig')) return require('../src/shared/characters/characterRig');
+  if (name.includes('attachToPlayer')) return require('../src/client/game/characters/shared/attachToPlayer.js');
+  if (name.includes('characterTuning')) return { getResolvedCharacterAttackConfig: () => ({ activeScale: 0.5, castDelayMs: 520, speed: 450, range: 1050, forwardOffset: 0.23, verticalOffset: 0.12, baseAngleDeg: -90, bobAmplitude: 0, bobFreqMs: 120 }) };
+  if (name.includes('runtimeId')) return { createRuntimeId: () => 'test' };
+  if (name.includes('shotPrediction')) return { shotBlockerContact: () => null };
+  return {};
+};
 function particleScene() {
   const emitters = [];
   const scene = { events: new EventEmitter(), textures: { exists: () => true, get: () => ({ get: name => ({ name }) }) }, add: {
@@ -70,6 +84,65 @@ test('impact burst sprays pixels once and cleans itself up', () => {
   timer();
   assert.ok(emitters[0].destroyed);
   assert.equal(scene.events.listenerCount('shutdown'), 0);
+  assert.equal(scene.events.listenerCount('presentation:reset'), 0);
+  particles.spawnFireballBurst(scene, 0, 0, null);
+  scene.events.emit('presentation:reset');
+  assert.ok(emitters[1].destroyed, 'a match reset clears live bursts');
+});
+test('explosion art: a hot pop that swells into a rising ring of flame and cools into smoke', () => {
+  const { EXPLOSION_COLS: W, EXPLOSION_ROWS: H, EXPLOSION_FRAMES: N, EXPLOSION_ORIGIN } = art;
+  const cy = Math.round(EXPLOSION_ORIGIN.y * H - 0.5);
+  const frames = Array.from({ length: N }, (_, f) => art.explosionFrameCells(f));
+  const count = (cells, test) => cells.reduce((n, c) => n + (test(c) ? 1 : 0), 0);
+  const fire = c => c > 1 && c < 6;
+  for (const [f, cells] of frames.entries()) {
+    for (let x = 0; x < W; x++) assert.ok(!cells[x] && !cells[(H - 1) * W + x], `frame ${f} clear top/bottom`);
+    for (let y = 0; y < H; y++) assert.ok(!cells[y * W] && !cells[y * W + W - 1], `frame ${f} clear sides`);
+  }
+  assert.ok(count(frames[0], c => c === 5) > count(frames[0], fire) / 2, 'opens on a white-hot pop');
+  const peak = frames.reduce((best, cells, f) => (count(cells, fire) > count(frames[best], fire) ? f : best), 0);
+  assert.ok(peak > 1 && count(frames[peak], fire) > count(frames[0], fire) * 4, 'swells well past the ball');
+  const above = cells => cells.reduce((n, c, i) => n + (fire(c) && Math.floor(i / W) < cy ? 1 : 0), 0);
+  assert.ok(above(frames[peak]) > count(frames[peak], fire) / 2, 'flames lick upward');
+  // After the pop the middle burns out, leaving a ring of flame.
+  const cx = Math.round(EXPLOSION_ORIGIN.x * W - 0.5);
+  const ring = frames[Math.round(N / 2)];
+  assert.equal(ring[cy * W + cx], 0, 'the centre burns out into a ring');
+  assert.ok(count(ring, fire) > count(frames[0], fire) * 2);
+  const last = frames[N - 1];
+  assert.equal(count(last, c => c >= 4 && c < 6), 0, 'the end has cooled');
+  assert.ok(count(last, c => c === 6) > 0, 'and leaves smoke');
+  assert.ok(count(last, fire) < count(frames[peak], fire) / 2, 'and breaks apart');
+});
+test('a fireball impact plays the team explosion once and cleans it up', () => {
+  const attack = load('src/client/game/characters/wizard/attack.js', attackImports);
+  const sprites = [];
+  const created = [];
+  function object(x = 0, y = 0, texture = null) {
+    const o = Object.assign(new EventEmitter(), { active: true, x, y, texture, anims: { play(key) { this.key = key; }, stop() {} },
+      destroy() { this.active = false; this.emit('destroy'); } });
+    for (const m of ['setScale', 'setOrigin', 'setAngle', 'setDepth', 'setStrokeStyle', 'setVisible', 'setFrame', 'setBlendMode', 'setRotation'])
+      o[m] = () => o;
+    sprites.push(o);
+    return o;
+  }
+  const tweens = [];
+  const scene = { events: new EventEmitter(), textures: { exists: () => true },
+    anims: { exists: key => created.includes(key), create: config => created.push(config.key) },
+    add: { sprite: object, circle: object }, time: { delayedCall() {} },
+    tweens: { add: config => { const tween = { ...config, targets: [config.targets], stop() {} }; tweens.push(tween); return tween; }, killTweensOf() {} } };
+  const enemy = object(300, 100);
+  enemy._bbTeamColor = 0xff413f;
+  attack.spawnWizardFireballVisual(scene, { id: 'remote', angle: Math.PI }, enemy);
+  tweens[tweens.length - 1].onComplete();
+  const booms = sprites.filter(o => String(o.texture).startsWith('wizard-explosion'));
+  assert.equal(booms.length, 1);
+  assert.equal(booms[0].texture, 'wizard-explosion-red');
+  assert.equal(booms[0].anims.key, 'wizard-explosion-red:burst');
+  booms[0].emit('animationcomplete');
+  assert.equal(booms[0].active, false);
+  assert.equal(scene.events.listenerCount('presentation:reset'), 0);
+  assert.equal(scene.events.listenerCount('shutdown'), 0);
 });
 test('fireball art: round leading face, grows on the staff, never clips its frame', () => {
   const { FIREBALL_COLS: W, FIREBALL_ROWS: H, FIREBALL_ORIGIN } = art;
@@ -84,21 +157,14 @@ test('fireball art: round leading face, grows on the staff, never clips its fram
     const run = (dx, dy) => { let n = 0; while (cells[(cy + dy * (n + 1)) * W + cx + dx * (n + 1)]) n++; return n; };
     const [left, right, front] = [run(-1, 0), run(1, 0), run(0, 1)];
     assert.ok(Math.abs(left - right) <= 1 && Math.abs(front - left) <= 1, `frame ${f} leading face is round`);
-    assert.ok(run(0, -1) > front, `frame ${f} trails flame behind`);
+    const area = rows => rows.reduce((n, y) => n + cells.slice(y * W, y * W + W).filter(Boolean).length, 0);
+    const rows = [...Array(H).keys()];
+    assert.ok(area(rows.filter(y => y < cy)) > area(rows.filter(y => y > cy)) * 1.1, `frame ${f} trails flame behind`);
     assert.equal(cells[cy * W + cx], 5, 'hot core at the anchor');
   }
 });
 test('charge holds its size and reuses its animated sprite on release', () => {
-  const attack = load('src/client/game/characters/wizard/attack.js', name => {
-    if (name.includes('projectilePresentation')) return require('../src/shared/projectilePresentation');
-    if (name.includes('fireballParticles')) return { createFireballParticles: () => ({ stop() {}, destroy() {} }), spawnFireballBurst() {} };
-    if (name.includes('fireballArt')) return art;
-    if (name.includes('renderLayers')) return { RENDER_LAYERS: { ATTACKS: 60 } };
-    if (name.includes('characterTuning')) return { getResolvedCharacterAttackConfig: () => ({ activeScale: 0.5, castDelayMs: 520, speed: 450, range: 1050, forwardOffset: 0.23, verticalOffset: 0.12, baseAngleDeg: -90, bobAmplitude: 0, bobFreqMs: 120 }) };
-    if (name.includes('runtimeId')) return { createRuntimeId: () => 'test' };
-    if (name.includes('shotPrediction')) return { shotBlockerContact: () => null };
-    return {};
-  });
+  const attack = load('src/client/game/characters/wizard/attack.js', attackImports);
   function object(x = 0, y = 0) {
     const o = Object.assign(new EventEmitter(), { active: true, x, y, anims: { play(key) { this.key = key; }, stop() {} }, destroy() { this.active = false; this.emit('destroy'); } });
     for (const m of ['setScale', 'setOrigin', 'setAngle', 'setDepth', 'setStrokeStyle', 'setVisible', 'setFrame', 'setBlendMode']) o[m] = value => { if (m === 'setScale') o.scale = value; if (m === 'setFrame') o.frameName = value; return o; };

@@ -1,5 +1,7 @@
 import { setThorgRageVisual } from "./rageVisual";
-import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState";
+import { playerAnchor } from "../shared/rig";
+import { PLAYER_LAYERS } from "../shared/attachToPlayer";
+import { playSpriteAnimation } from "../shared/animationState";
 import { getResolvedCharacterSpecialConfig } from "../../../../shared/characters/characterTuning.js";
 import { playPlayerSound } from "../../audio/playerAudio";
 
@@ -33,15 +35,18 @@ export function perform(
   setLocalRageState(player, true);
   player._thorgAttackCleanup?.();
   setThorgRageVisual(scene, player, true);
-  playSpriteAnimation({ scene, sprite: player, character: "thorg", logical: "special", fallback: "idle", force: false });
-  markOneShotAnimation(player, "special", 600);
+  playSpriteAnimation({ scene, sprite: player, character: "thorg", logical: "special", fallback: "idle",
+    holdMs: 600, remote: !isOwner });
 
-  const aura = scene.add.circle(player.x, player.y - 10, 42, 0x9333ea, 0.22);
-  aura.setDepth(14);
+  // Bursts from the middle of his hitbox, just behind him.
+  const centre = playerAnchor(player, "centre");
+  const behind = (player.depth || 30) + PLAYER_LAYERS.behind;
+  const aura = scene.add.circle(centre.x, centre.y, 42, 0x9333ea, 0.22);
+  aura.setDepth(behind);
   aura.setBlendMode(Phaser.BlendModes.ADD);
 
-  const shock = scene.add.circle(player.x, player.y - 10, 26, 0xffffff, 0.18);
-  shock.setDepth(15);
+  const shock = scene.add.circle(centre.x, centre.y, 26, 0xffffff, 0.18);
+  shock.setDepth(behind);
   shock.setBlendMode(Phaser.BlendModes.ADD);
 
   scene.tweens.add({
@@ -65,13 +70,13 @@ export function perform(
 
   for (let i = 0; i < 18; i++) {
     const spark = scene.add.circle(
-      player.x + Phaser.Math.Between(-18, 18),
-      player.y + Phaser.Math.Between(-44, 12),
+      centre.x + Phaser.Math.Between(-18, 18),
+      centre.y + Phaser.Math.Between(-34, 22),
       Phaser.Math.Between(3, 6),
       i % 3 === 0 ? 0xffffff : 0xa855f7,
       i % 3 === 0 ? 0.75 : 0.62,
     );
-    spark.setDepth(16);
+    spark.setDepth(behind);
     spark.setBlendMode(Phaser.BlendModes.ADD);
     scene.tweens.add({
       targets: spark,

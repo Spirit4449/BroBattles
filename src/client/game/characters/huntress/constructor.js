@@ -52,6 +52,7 @@ class Huntress extends CharacterEntityBase {
         character: NAME,
         logical: "throw",
         fallback: "idle",
+        id: data.id ?? null,
       });
       return true;
     }

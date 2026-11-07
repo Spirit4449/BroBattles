@@ -54,11 +54,60 @@ export function getAnimationDurationMs(scene, key, fallbackMs = DEFAULT_ONE_SHOT
   return Math.round(frameCount * interval + explicitDuration) + 30;
 }
 
+// ---------------------------------------------------------------------------
+// Action layer
+//
+// A throw or special is an "action". Each sprite has at most one, recorded on
+// `_bbAnimationState` on a single clock (performance.now):
+//   oneShot             logical action ("throw" | "special")
+//   actionId            the attack/special it belongs to, when known
+//   actionStartedAt     when its pose started (for effects that follow it)
+//   oneShotUntilPerf    when movement animation may take the sprite back
+// While an action is active, movement animation (playCharacterAnimation) leaves
+// the sprite alone; only dashing and dying interrupt it. Asking for the same
+// action again (a prediction, then the server's echo) continues it instead of
+// restarting it. Pass `restart: true`, or a new `id`, to start it over.
+// ---------------------------------------------------------------------------
+
+function isActionLogical(logical) {
+  return logical === "throw" || logical === "special";
+}
+
+export function activeAction(sprite, now = nowPerf()) {
+  const state = sprite?._bbAnimationState;
+  if (!state?.oneShot || !(Number(state.oneShotUntilPerf) > now)) return null;
+  return {
+    logical: state.oneShot,
+    id: state.actionId ?? null,
+    startedAt: Number(state.actionStartedAt) || now,
+    until: Number(state.oneShotUntilPerf),
+  };
+}
+
+// How long the current action's pose has been showing (0 when none is).
+export function actionElapsedMs(sprite, logical = null) {
+  const now = nowPerf();
+  const action = activeAction(sprite, now);
+  if (!action || (logical && action.logical !== toLogicalAnimation(logical))) return 0;
+  return Math.max(0, now - action.startedAt);
+}
+
+export function clearAction(sprite) {
+  const state = sprite?._bbAnimationState;
+  if (!state) return;
+  state.oneShot = null;
+  state.actionId = null;
+  state.actionStartedAt = 0;
+  state.oneShotUntilPerf = 0;
+}
+
+// Records (or extends) the sprite's action without playing anything. Marking
+// the action that is already showing only ever extends it.
 export function markOneShotAnimation(
   sprite,
   logical = "throw",
   durationMs = DEFAULT_ONE_SHOT_MS,
-  { remote = false } = {},
+  { remote = false, id = null } = {},
 ) {
   if (!sprite) return;
   const ms = Math.max(80, Number(durationMs) || DEFAULT_ONE_SHOT_MS);
@@ -67,31 +116,50 @@ export function markOneShotAnimation(
   state.wallJumpAnimationKey = null;
   state.wallJumpAnimationUntil = 0;
   state.wallSlidePoseUntil = 0;
-  state.oneShot = toLogicalAnimation(logical);
-  state.currentLogical = state.oneShot;
-  state.oneShotUntilMs = nowMs() + ms;
-  state.oneShotUntilPerf = nowPerf() + ms;
+  const next = toLogicalAnimation(logical);
+  const now = nowPerf();
+  const continuing = state.oneShot === next && Number(state.oneShotUntilPerf) > now &&
+    (id == null || state.actionId == null || state.actionId === id);
+  if (!continuing) state.actionStartedAt = now;
+  if (id != null) state.actionId = id;
+  else if (!continuing) state.actionId = null;
+  state.oneShot = next;
+  state.currentLogical = next;
+  state.oneShotUntilPerf = continuing ? Math.max(Number(state.oneShotUntilPerf), now + ms) : now + ms;
   state.remote = !!remote;
+  state.playCount = (state.playCount || 0) + 1;
   sprite._bbAnimationState = state;
-  if (remote) {
-    sprite._remoteActionAnimUntil = state.oneShotUntilPerf;
-  }
   // Every character's attack lands here, local or remote, so this is where an
   // invisible attacker gives away a faded silhouette (see invisibilityReveal).
-  if (sprite._powerupInvisible && (state.oneShot === "throw" || state.oneShot === "special")) {
-    sprite._invisibleAttackFlashAt = nowPerf();
+  if (sprite._powerupInvisible && isActionLogical(state.oneShot)) {
+    sprite._invisibleAttackFlashAt = now;
   }
 }
 
-// Both character adapters and legacy actions mark the sprite. Read the same
-// contract when movement snapshots render, including per-release swarm locks.
-export function remoteAnimationLockUntil(sprite, wrapper = {}) {
-  return Math.max(
-    Number(wrapper._animLockUntil || 0),
-    Number(sprite?._remoteActionAnimUntil || 0),
-    Number(sprite?._bbAnimationState?.oneShotUntilPerf || 0),
-    Number(sprite?._specialAnimLockUntilPerf || 0),
-  );
+export function animationPlayCount(sprite) {
+  return Number(sprite?._bbAnimationState?.playCount) || 0;
+}
+
+// Runs a remote action's character handler, then marks the action as remote
+// so the snapshot loop leaves the sprite alone for the animation the handler
+// presented. A follow-up packet that presents nothing (a wizard's release
+// after its windup) keeps the existing action instead of restarting it.
+export function presentRemoteAction({ scene, wrapper, character, actionType }, present) {
+  const sprite = wrapper?.opponent;
+  const before = animationPlayCount(sprite);
+  const consumed = present();
+  if (!consumed || !wrapper || animationPlayCount(sprite) === before) return consumed;
+  const currentKey = sprite?.anims?.currentAnim?.key || "";
+  const logical = toLogicalAnimation(currentKey || actionType, character);
+  const duration = getAnimationDurationMs(scene, currentKey,
+    logical === "special" ? DEFAULT_SPECIAL_MS : DEFAULT_ONE_SHOT_MS);
+  markOneShotAnimation(sprite, logical, duration, { remote: true });
+  return consumed;
+}
+
+// When remote snapshot animation may take the sprite back.
+export function remoteAnimationLockUntil(sprite) {
+  return Number(activeAction(sprite)?.until || 0);
 }
 
 export function noteAnimationPlayed(sprite, logical = "idle") {
@@ -103,8 +171,11 @@ export function noteAnimationPlayed(sprite, logical = "idle") {
     state.lastInterruption = { from: state.oneShot, to: next, at: nowPerf() };
     state.interruptionCount = (state.interruptionCount || 0) + 1;
   }
-  state.currentLogical = toLogicalAnimation(logical);
+  state.currentLogical = next;
   state.updatedAt = nowMs();
+  // Counts every (re)play and one-shot mark, so callers can tell whether a
+  // handler presented an animation or only reacted to a follow-up packet.
+  state.playCount = (state.playCount || 0) + 1;
   if (state.currentLogical === "jumping") {
     state.jumpPlayedAirborne = true;
   }
@@ -167,13 +238,24 @@ export function resolveSpriteAnimationKey({
   return candidates.find((key) => anims.exists(key)) || null;
 }
 
+/**
+ * Present an animation now, from character code (attacks, specials, death,
+ * respawn). Throws and specials start an action (see above): asking for the
+ * action that is already showing continues it, unless `restart` is set or `id`
+ * names a different attack. Any other animation ends the action and plays.
+ *   holdMs  keep the action at least this long (a cast that outlasts its art)
+ *   remote  the sprite is another player's (interruption diagnostics)
+ */
 export function playSpriteAnimation({
   scene,
   sprite,
   character,
   logical = "idle",
   fallback = "idle",
-  force = true,
+  restart = false,
+  id = null,
+  holdMs = 0,
+  remote = false,
 } = {}) {
   if (!sprite?.anims) return null;
   const key = resolveSpriteAnimationKey({
@@ -184,9 +266,29 @@ export function playSpriteAnimation({
     fallback,
   });
   if (!key) return null;
+  const char = String(character || sprite?._bbCharacter || "").toLowerCase();
+  const wanted = toLogicalAnimation(logical, char);
   try {
-    sprite.anims.play(key, force);
-    noteAnimationPlayed(sprite, logical);
+    if (isActionLogical(wanted)) {
+      const current = activeAction(sprite);
+      const sameAttack = id == null || current?.id == null || current.id === id;
+      if (!restart && current?.logical === wanted && sameAttack &&
+          sprite.anims.currentAnim?.key === key) {
+        if (holdMs > 0) markOneShotAnimation(sprite, wanted, holdMs, { remote, id });
+        return key;
+      }
+      sprite.anims.play(key, false);
+      noteAnimationPlayed(sprite, wanted);
+      const animMs = getAnimationDurationMs(scene, key,
+        wanted === "special" ? DEFAULT_SPECIAL_MS : DEFAULT_ONE_SHOT_MS);
+      // A new attack replaces the old action rather than extending it.
+      clearAction(sprite);
+      markOneShotAnimation(sprite, wanted, Math.max(Number(holdMs) || 0, animMs), { remote, id });
+      return key;
+    }
+    clearAction(sprite);
+    sprite.anims.play(key, !restart);
+    noteAnimationPlayed(sprite, wanted);
     return key;
   } catch (_) {
     return null;
@@ -259,6 +361,11 @@ export function playCharacterAnimation({
     return null;
   }
   let wanted = toLogicalAnimation(logical, character);
+  // Movement never cuts an action short; dashing and dying end it.
+  if (activeAction(sprite)) {
+    if (wanted !== "dying" && wanted !== "dashing") return sprite.anims.currentAnim?.key || null;
+    clearAction(sprite);
+  }
   const direction = dashDirection || sprite._dash;
   if (wanted === "dashing") {
     wanted = directionalDashAnimation(character, direction);
@@ -362,11 +469,8 @@ export function playCharacterAnimation({
 
 export function clearExpiredOneShot(sprite) {
   const state = sprite?._bbAnimationState;
-  if (!state?.oneShot) return;
-  if (nowMs() < Number(state.oneShotUntilMs || 0)) return;
-  state.oneShot = null;
-  state.oneShotUntilMs = 0;
-  state.oneShotUntilPerf = 0;
+  if (!state?.oneShot || activeAction(sprite)) return;
+  clearAction(sprite);
 }
 
 export function deriveMovementAnimation({
@@ -378,11 +482,10 @@ export function deriveMovementAnimation({
   vy = 0,
   dead = false,
   movementLocked = false,
-  specialLocked = false,
   fallback = "idle",
 } = {}) {
   if (dead) return "dying";
-  if (movementLocked || specialLocked) return fallback;
+  if (movementLocked) return fallback;
   if (wallSliding && !grounded) return "sliding";
   if (!grounded) return Number(vy) < -20 ? "jumping" : "falling";
   if (ducking) return "ducking";
@@ -393,9 +496,8 @@ export function deriveMovementAnimation({
 export function getPresentedAnimation(sprite, fallback = "idle") {
   clearExpiredOneShot(sprite);
   const state = sprite?._bbAnimationState;
-  if (state?.oneShot && nowMs() < Number(state.oneShotUntilMs || 0)) {
-    return state.oneShot;
-  }
+  const action = activeAction(sprite);
+  if (action) return action.logical;
   if (state?.currentLogical && !isActionAnimation(state.currentLogical)) {
     return state.currentLogical;
   }
@@ -423,9 +525,7 @@ export function chooseRemoteAnimationState({
       : undefined;
   const dx = currentX - previousX;
   const dy = currentY - previousY;
-  const actionActive =
-    Number(sprite?._remoteActionAnimUntil || 0) > nowPerf() ||
-    Number(sprite?._bbAnimationState?.oneShotUntilPerf || 0) > nowPerf();
+  const actionActive = !!activeAction(sprite);
 
   if ((logical === "throw" || logical === "special") && actionActive) {
     return logical;

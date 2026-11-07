@@ -1,7 +1,3 @@
-import {
-  playSpriteAnimation,
-  resolveSpriteAnimationKey,
-} from "../shared/animationState.js";
 import { playPlayerSound } from "../../audio/playerAudio";
 
 import { POWERUP_COLORS } from "../../powerups/powerupConfig";
@@ -9,7 +5,6 @@ import { getResolvedCharacterSpecialConfig } from "../../../../shared/characters
 
 // Cast/beam timings live in src/shared/characters/wizard.json (special.arcaneSurge).
 const SURGE = getResolvedCharacterSpecialConfig("wizard", "arcaneSurge");
-const ARCANE_SURGE_CAST_MS = SURGE.castMs; // caster animation + lock
 const ARCANE_SURGE_BEAM_MS = SURGE.beamMs; // total beam lifetime per ally
 // Visual-only beam phases within ARCANE_SURGE_BEAM_MS.
 const BEAM_HIT_MS = 300; // beam reaches the ally
@@ -194,115 +189,15 @@ function createPowerupBeam(scene, caster, sprite, entry) {
   });
 }
 
-function attachWizardAura(scene, sprite) {
-  if (!scene?.add || !sprite?.active || !scene.textures?.exists("wizard-aura")) {
-    return;
-  }
-
-  const animKey = scene.anims?.exists("wizard-aura-loop")
-    ? "wizard-aura-loop"
-    : null;
-  const aura = scene.add.sprite(sprite.x, sprite.y, "wizard-aura");
-  aura.setDepth((sprite.depth || 20) - 1);
-  aura.setAlpha(0);
-  aura.setScale(2);
-  if (animKey) {
-    try {
-      aura.play(animKey, true);
-    } catch (_) {}
-  }
-
-  const state = { t: 0 };
-  scene.tweens.add({
-    targets: state,
-    t: 1,
-    duration: ARCANE_SURGE_CAST_MS,
-    ease: "Sine.easeInOut",
-    onUpdate: () => {
-      if (!sprite?.active) return;
-      const anchor = getSpriteAnchor(sprite);
-      const pulse = 0.84 + Math.sin(state.t * Math.PI * 6) * 0.12;
-      aura.x = anchor.x;
-      aura.y = anchor.y + anchor.height * 0.12;
-      aura.alpha = 0.28 * (1 - state.t * 0.72) * pulse;
-      aura.scaleX = (sprite.flipX ? -1 : 1) * (1.14 + state.t * 0.08);
-      aura.scaleY = 1.12 + state.t * 0.1;
-    },
-    onComplete: () => {
-      scene.tweens.add({
-        targets: aura,
-        alpha: 0,
-        duration: 180,
-        ease: "Quad.easeOut",
-        onComplete: () => aura.destroy(),
-      });
-    },
-  });
-}
-
-function playCasterSpecialAnimation(scene, sprite) {
-  if (!scene?.time || !sprite?.active || !sprite?.anims) return;
-  const specialKey = resolveSpriteAnimationKey({
-    scene,
-    sprite,
-    character: "wizard",
-    logical: "special",
-    fallback: "throw",
-  });
-  const idleKey = resolveSpriteAnimationKey({
-    scene,
-    sprite,
-    character: "wizard",
-    logical: "idle",
-    fallback: "idle",
-  });
-  if (!specialKey) return;
-  sprite._specialAnimLockUntil = Date.now() + ARCANE_SURGE_CAST_MS + 120;
-  sprite._specialAnimLockUntilPerf = performance.now() + ARCANE_SURGE_CAST_MS + 120;
-
-  playSpriteAnimation({
-    scene,
-    sprite,
-    character: "wizard",
-    logical: "special",
-    fallback: "throw",
-  });
-
-  scene.time.delayedCall(Math.max(450, ARCANE_SURGE_CAST_MS - 120), () => {
-    if (!sprite?.active || !idleKey) return;
-    try {
-      const current = sprite.anims?.currentAnim?.key || "";
-      if (current === specialKey) {
-        playSpriteAnimation({
-          scene,
-          sprite,
-          character: "wizard",
-          logical: "idle",
-          fallback: "idle",
-        });
-      }
-    } catch (_) {}
-  });
-}
-
 export function playWizardArcaneSurge(scene, payload, resolveSpriteByName) {
   if (!scene?.add || typeof resolveSpriteByName !== "function") return;
 
   const recipients = Array.isArray(payload?.recipients) ? payload.recipients : [];
   if (!recipients.length) return;
 
-  try {
-    playPlayerSound(scene, resolveSpriteByName(payload?.caster), "wizard-special", {
-      volume: 0.52,
-      rate: 1,
-    });
-  } catch (_) {}
-
+  // The caster's pose, cast effect and sound come from `player:special`
+  // (special.js); this event only adds the beams to teammates.
   const casterSprite = resolveSpriteByName(payload?.caster);
-  if (casterSprite?.active) {
-    playCasterSpecialAnimation(scene, casterSprite);
-    attachWizardAura(scene, casterSprite);
-  }
 
   for (const entry of recipients) {
     const sprite = resolveSpriteByName(entry?.username);

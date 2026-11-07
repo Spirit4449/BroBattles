@@ -2,7 +2,7 @@ import { ninjaEnabled } from './network';
 import ReturningShuriken from "./attack";
 import { getResolvedCharacterSpecialConfig } from "../../../../shared/characters/characterTuning.js";
 import { createRuntimeId } from "../shared/runtimeId";
-import { lockPlayerFlip } from "../shared/flipLock";
+import { aimFacesLeft, faceAttack } from "../shared/flipLock";
 import { presentSwarmRelease } from './swarmPresentation';
 import { swarmShard } from "../../../../shared/characters/ninjaProjectile";
 
@@ -17,15 +17,6 @@ function makeSwarmInstanceId(burstIndex) {
   return createRuntimeId("ninja_swarm", burstIndex);
 }
 
-function lockFlipDuringRelease(scene, player) {
-  if (!player) return;
-  const unlockFlip = lockPlayerFlip(player);
-  scene.time.delayedCall(SWARM_LOCK_MS, () => {
-    if (!player || !player.active) return;
-    unlockFlip();
-  });
-}
-
 function spawnSingleSwarmShuriken(
   scene,
   player,
@@ -36,20 +27,7 @@ function spawnSingleSwarmShuriken(
   specialData = null,
 ) {
   if (!player || !player.active) return;
-  const resolvedAngle = Number.isFinite(Number(specialData?.angle))
-    ? Number(specialData.angle)
-    : null;
-  const direction =
-    Number(specialData?.direction) === -1 ||
-    (Number.isFinite(resolvedAngle) &&
-      Math.cos(resolvedAngle) < 0 &&
-      Number(specialData?.direction) !== 1)
-      ? -1
-      : Number(specialData?.direction) === 1
-        ? 1
-        : player.flipX
-          ? -1
-          : 1;
+  const direction = aimFacesLeft(specialData, player.flipX) ? -1 : 1;
   const angle = direction < 0 ? Math.PI : 0;
   const shard = swarmShard(burstIndex, direction);
   const spawnX = player.x + shard.spawnOffsetX;
@@ -93,23 +71,10 @@ export function perform(
   isOwner = false,
   specialData = null,
 ) {
-  const desiredAngle = Number.isFinite(Number(specialData?.angle))
-    ? Number(specialData.angle)
-    : null;
-  const desiredDirection =
-    Number(specialData?.direction) === -1
-      ? -1
-      : Number.isFinite(desiredAngle) && Math.cos(desiredAngle) < 0
-        ? -1
-      : Number(specialData?.direction) === 1
-        ? 1
-        : player?.flipX
-          ? -1
-          : 1;
-  if (player) {
-    player.flipX = desiredDirection < 0;
-  }
-  lockFlipDuringRelease(scene, player);
+  // Face the aim (left or right) for the whole barrage. The owner already
+  // turned on the key press (predictNinja); this covers remote viewers and
+  // re-holds the facing for the full release.
+  if (player) faceAttack(scene, player, aimFacesLeft(specialData, player.flipX), SWARM_LOCK_MS);
 
   if (ninjaEnabled()) return;
   for (let index = 0; index < SWARM_COUNT; index++) {

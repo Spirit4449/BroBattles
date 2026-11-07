@@ -337,6 +337,34 @@ generated textures, WebGL render textures, quality changes, camera mapping,
 resize, automatic Canvas fallback, slow/failed audio, and teardown in both engines.
 The preserved drawing buffer is enabled only in the harness for pixel inspection.
 
+## Character animation
+
+Every fighter, local or remote, is animated through
+`src/client/game/characters/shared/animationState.js`. Character code never
+calls `sprite.anims.play` for its own pose.
+
+- **Actions.** Throws and specials go through `playSpriteAnimation` with
+  `logical: "throw"` or `"special"`. That starts the sprite's one action, which
+  lasts as long as its animation, or `holdMs` when a cast outlasts its art
+  (Draven's Inferno). The action is stored on one clock (`performance.now`).
+- **No accidental restarts.** Asking for the action already showing continues
+  it. The local key press, the server's `player:special` echo and any later
+  event therefore show a single pose. Pass the attack's `id` so a new attack
+  starts over while a repeated packet for the same attack does not, or
+  `restart: true` when every call is a fresh swing (Thorg's sweep).
+- **Movement waits.** `playCharacterAnimation`, the per-frame movement pose
+  for local input and remote snapshots, leaves an active action alone. Only
+  dashing and dying end it. Death, respawn and interrupts call
+  `playSpriteAnimation` with a non-action animation, or `clearAction`.
+- **Remote actions.** Wrap a remote action handler in `presentRemoteAction`.
+  The snapshot loop reads `remoteAnimationLockUntil(sprite)` and does not
+  take the sprite back until the action ends.
+- **Following a pose.** Effects tied to a pose read `actionElapsedMs(sprite)`
+  so they join at the pose's current frame (the wizard's super cast).
+- **Gameplay locks are separate.** `_specialCastLockUntil` (from
+  `presentation.specialAnimationLockMs`) only blocks dashing. It never changes
+  which animation shows.
+
 ## Gameplay camera
 
 Mouse aiming adds a fixed screen-pixel look-ahead with time-based easing after

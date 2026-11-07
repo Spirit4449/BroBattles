@@ -1,4 +1,5 @@
 import { drawShieldBubble } from "./shieldBubble";
+import { bodyBounds, playerAnchor } from "../characters/shared/rig";
 import {
   addPixelCircle,
   addPixelEllipse,
@@ -434,14 +435,8 @@ export function createPowerupRenderer({
       spr._puBaseScaleX = spr.scaleX || 1;
       spr._puBaseScaleY = spr.scaleY || 1;
     }
-    if (typeof spr._puBaseOriginX !== "number") {
-      spr._puBaseOriginX = typeof spr.originX === "number" ? spr.originX : 0.5;
-      spr._puBaseOriginY = typeof spr.originY === "number" ? spr.originY : 0.5;
-    }
     const baseX = spr._puBaseScaleX || 1;
     const baseY = spr._puBaseScaleY || 1;
-    const baseOriginX = spr._puBaseOriginX ?? 0.5;
-    const baseOriginY = spr._puBaseOriginY ?? 0.5;
     const rageOn = (fx?.rage || 0) > 0;
     const healthOn = (fx?.health || 0) > 0;
     const poisonOn = (fx?.poison || 0) > 0;
@@ -452,7 +447,6 @@ export function createPowerupRenderer({
     if (invisibleOn) {
       spr.clearTint();
       spr.setScale(baseX, baseY);
-      spr.setOrigin(baseOriginX, baseOriginY);
       const vx = Number(spr.body?.velocity?.x) || 0;
       const vy = Number(spr.body?.velocity?.y) || 0;
       if ((Math.abs(vx) > 10 || Math.abs(vy) > 18) && Math.random() < 0.12) {
@@ -500,7 +494,6 @@ export function createPowerupRenderer({
       const freezePulse = Math.sin(nowSec * 5 + (spr.x || 0) * 0.01);
       spr.setTint(freezePulse > 0 ? 0xdffaff : 0x67e8f9);
       spr.setScale(baseX, baseY);
-      spr.setOrigin(baseOriginX, baseOriginY);
       if (Math.random() < 0.24) {
         spawnTrailParticle(
           spr.x + Phaser.Math.Between(-12, 12),
@@ -514,7 +507,6 @@ export function createPowerupRenderer({
       const pulse = Math.sin(nowSec * 8 + (spr.x || 0) * 0.01);
       spr.setTint(pulse > 0 ? 0xc084fc : 0x9333ea);
       spr.setScale(baseX, baseY);
-      spr.setOrigin(baseOriginX, baseOriginY);
       if (Math.random() < 0.32) {
         spawnTrailParticle(
           spr.x + Phaser.Math.Between(-14, 14),
@@ -528,7 +520,6 @@ export function createPowerupRenderer({
       const healthPulse = Math.sin(nowSec * 5 + (spr.x || 0) * 0.01);
       spr.setTint(healthPulse > 0 ? 0x86efac : 0x34d399);
       spr.setScale(baseX, baseY);
-      spr.setOrigin(baseOriginX, baseOriginY);
       if (Math.random() < 0.55) {
         spawnPlusParticle(
           spr.x + Phaser.Math.Between(-16, 16),
@@ -541,7 +532,6 @@ export function createPowerupRenderer({
     } else if (poisonOn) {
       spr.clearTint();
       spr.setScale(baseX, baseY);
-      spr.setOrigin(baseOriginX, baseOriginY);
       if (Math.random() < 0.42) {
         spawnTrailParticle(
           spr.x + Phaser.Math.Between(-12, 12),
@@ -555,7 +545,6 @@ export function createPowerupRenderer({
       const burnPulse = 0.5 + 0.5 * Math.sin(nowSec * 12 + (spr.x || 0) * 0.01);
       const burnColor = colors.huntressBurn || 0xff7a1f;
       spr.setScale(baseX, baseY);
-      spr.setOrigin(baseOriginX, baseOriginY);
       spr.setTint(burnPulse > 0.5 ? 0xffb46d : 0xff6a1f);
       if (Math.random() < 0.72) {
         spawnTrailParticle(
@@ -578,7 +567,6 @@ export function createPowerupRenderer({
     } else if (bootsOn) {
       spr.clearTint();
       spr.setScale(baseX, baseY);
-      spr.setOrigin(baseOriginX, baseOriginY);
       const vy = spr.body?.velocity?.y || 0;
       const vx = spr.body?.velocity?.x || 0;
       if (vy < -35 && Math.random() < 0.72) {
@@ -598,7 +586,6 @@ export function createPowerupRenderer({
     } else {
       spr.clearTint();
       spr.setScale(baseX, baseY);
-      spr.setOrigin(baseOriginX, baseOriginY);
     }
   }
 
@@ -945,21 +932,21 @@ export function createPowerupRenderer({
     }
   }
 
+  // Auras and bubbles centre on the drawn body (rig `core`, else the hitbox
+  // centre) and keep the hitbox's height, so a short body such as Gloop's
+  // blob is wrapped rather than floating under its effect.
   function spriteFrameForAura(spr) {
     if (!spr) return { x: 0, y: 0, top: 0, bottom: 0, radius: 24 };
-    const body = spr.body;
-    if (
-      body &&
-      Number.isFinite(body.center?.x) &&
-      Number.isFinite(body.center?.y)
-    ) {
-      const w = Math.max(14, Number(body.width) || 14);
-      const h = Math.max(20, Number(body.height) || 20);
+    const bounds = bodyBounds(spr);
+    if (bounds) {
+      const core = playerAnchor(spr, "core");
+      const w = Math.max(14, Number(bounds.width) || 14);
+      const h = Math.max(20, Number(bounds.height) || 20);
       return {
-        x: body.center.x,
-        y: body.center.y,
-        top: Number(body.top) || body.center.y - h / 2,
-        bottom: Number(body.bottom) || body.center.y + h / 2,
+        x: core.x,
+        y: core.y,
+        top: core.y - h / 2,
+        bottom: core.y + h / 2,
         radius: Phaser.Math.Clamp(Math.max(w, h) * 0.58, 18, 46),
       };
     }

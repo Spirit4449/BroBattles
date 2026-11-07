@@ -106,7 +106,7 @@ The local player, the server's movement validation, and the bot physics all read
 | `stats.spriteScale`, `stats.body` | Render scale and hitbox shrink and offset. Defaults are in `characterTuning.js` (`CHARACTER_BODY_DEFAULTS`). |
 | `stats.tuning.attack.aim`, `stats.tuning.special.aim` | Aim reticle shape and range. `reticleScale`, `radiusY`, and `reticleOffsetY` control a round reticle's drawn size and placement without changing range or damage. Draven's inferno also uses its `aim.radius` as its damage radius. |
 | `stats.tuning.attack.<name>` | Basic-attack projectile or melee numbers (speed, range, radius, timings). |
-| `stats.tuning.special.<name>` | Super numbers, for example `ninja.swarm`, `draven.inferno` (now includes `damageTickMs`, `damageScale`, `minDamagePerTick`, `firstDamageDelayMs`, `bobWaveMs`), `wizard.arcaneSurge` (`powerScale`, `durationScale`, `castMs`, `beamMs`, `teammateBlockedPowerups`, `fallbackPowerup`), `gloop.hook`, and Thorg's `rageDurationMs` / `rageModifiers` / `knockback`. |
+| `stats.tuning.special.<name>` | Super numbers, for example `ninja.swarm`, `draven.inferno` (now includes `damageTickMs`, `damageScale`, `minDamagePerTick`, `firstDamageDelayMs`, `bobWaveMs`), `wizard.arcaneSurge` (`powerScale`, `durationScale`, `castMs`, `beamMs`, `powerups` (the helpful pool the caster and teammates roll from), `fallbackPowerup`), `gloop.hook`, and Thorg's `rageDurationMs` / `rageModifiers` / `knockback`. |
 | `presentation` | Client-only visual settings (art scale, animation locks, dash poses). |
 | `attacks` | Network action descriptors and authoritative runtime selection. Update these when adding or changing an attack mechanism; keep action IDs and damage types aligned with emitters and validators. |
 

@@ -177,6 +177,7 @@ class Draven extends CharacterEntityBase {
       character: NAME,
       logical: "throw",
       fallback: "idle",
+      id: data.id ?? null,
     });
     // Play remote attack start SFX (mirror owner's throw)
     try {

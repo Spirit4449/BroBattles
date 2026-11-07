@@ -3,7 +3,10 @@ const { getResolvedCharacterSpecialConfig } = require("../../../../shared/charac
 
 // Tuning lives in src/shared/characters/wizard.json (special.arcaneSurge).
 const SURGE = getResolvedCharacterSpecialConfig("wizard", "arcaneSurge");
-const TEAMMATE_BLOCKED_POWERUPS = SURGE.teammateBlockedPowerups;
+// Only helpful powerups: the caster and every teammate roll from the same pool.
+// Shockwave is left out because it also knocks back the caster's own team.
+const SURGE_POWERUPS = (Array.isArray(SURGE.powerups) ? SURGE.powerups : [])
+  .filter((type) => POWERUP_TYPES.includes(type));
 const FALLBACK_POWERUP = SURGE.fallbackPowerup;
 const ARCANE_SURGE_POWER_SCALE = SURGE.powerScale;
 const ARCANE_SURGE_DURATION_SCALE = SURGE.durationScale;
@@ -15,23 +18,8 @@ function randomFrom(list) {
   return pool[index] || FALLBACK_POWERUP;
 }
 
-function getAllowedPowerupsForTarget(caster, target) {
-  const all = Array.isArray(POWERUP_TYPES) ? POWERUP_TYPES.slice() : [];
-  if (!all.length) return [FALLBACK_POWERUP];
-  if (target?.name === caster?.name) return ["rage"];
-
-  const sameTeam =
-    caster?.team && target?.team && String(caster.team) === String(target.team);
-  if (!sameTeam) return all;
-
-  const blocked = new Set(
-    (Array.isArray(TEAMMATE_BLOCKED_POWERUPS)
-      ? TEAMMATE_BLOCKED_POWERUPS
-      : []
-    ).map((value) => String(value)),
-  );
-  const filtered = all.filter((type) => !blocked.has(String(type)));
-  return filtered.length ? filtered : ["rage"];
+function getAllowedPowerupsForTarget() {
+  return SURGE_POWERUPS.length ? SURGE_POWERUPS.slice() : [FALLBACK_POWERUP];
 }
 
 function activate(caster, now, room) {
@@ -48,9 +36,7 @@ function activate(caster, now, room) {
       continue;
     }
 
-    const allowed = getAllowedPowerupsForTarget(caster, target);
-    const type =
-      target.name === caster.name ? "rage" : randomFrom(allowed);
+    const type = randomFrom(getAllowedPowerupsForTarget());
 
     room._applyPowerupToPlayer(target, type, now, {
       powerScale: ARCANE_SURGE_POWER_SCALE,
@@ -77,6 +63,6 @@ function activate(caster, now, room) {
 module.exports = {
   key: "wizard",
   activate,
-  TEAMMATE_BLOCKED_POWERUPS,
+  SURGE_POWERUPS,
   ARCANE_SURGE_POWER_SCALE,
 };

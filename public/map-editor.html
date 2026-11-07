@@ -17,7 +17,6 @@
     <a href="/" class="brand" title="Return to lobby"><img src="/assets/logos/wordmark.webp" width="118" height="24" alt="Bro Battles"><span>Map Studio</span></a>
     <div class="tool-group map-group">
       <select id="map-select" aria-label="Map"></select>
-      <span id="map-mode" class="mode-badge" title="Game mode this map is made for"></span>
     </div>
     <div class="tool-group history-group">
       <button id="undo" class="icon-button" title="Undo (⌘/Ctrl Z)" aria-label="Undo"><svg viewBox="0 0 24 24" class="ui-icon" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M9 5 4 10l5 5M4 10h10a6 6 0 0 1 0 12" transform="translate(0 -2)"/></svg></button>
@@ -27,17 +26,13 @@
     <span class="spacer"></span>
     <div class="tool-group playtest-group" aria-label="Playtest">
       <button id="preview" class="playtest-button" title="Playtest this draft (Esc)"><svg viewBox="0 0 24 24" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M7 4h3v2h3v2h3v2h2v4h-2v2h-3v2h-3v2H7z"/></svg>Playtest<kbd>Esc</kbd></button>
-      <details class="menu" id="playtest-menu">
-        <summary class="icon-button" title="Playtest settings" aria-label="Playtest settings"><svg viewBox="0 0 24 24" class="ui-icon" fill="currentColor" aria-hidden="true"><path d="M10 2h4v3h2v2h3v4h3v2h-3v4h-3v2h-2v3h-4v-3H8v-2H5v-4H2v-2h3V7h3V5h2zm0 7v6h4V9z"/></svg></summary>
-        <div class="menu-panel">
-          <div class="menu-title">Playtest settings</div>
-          <label class="field"><span>Opponents</span><select id="playtest-kind"><option value="solo">Solo</option><option value="bots">With bots</option></select></label>
-          <label class="field"><span>Character</span><select id="playtest-character"><option value="ninja">Ninja</option><option value="thorg">Thorg</option><option value="draven">Draven</option><option value="wizard">Wizard</option><option value="huntress">Huntress</option><option value="gloop">Gloop</option></select></label>
-          <label class="check" title="Show map, player and attack collision shapes"><input type="checkbox" id="debug-hitboxes"><span>Debug hitboxes</span></label>
-          <label class="check"><input type="checkbox" id="infinite-supers" checked><span>Infinite supers</span></label>
-          <p class="menu-summary" id="playtest-summary"></p>
-        </div>
-      </details>
+      <div class="playtest-settings" role="group" aria-label="Playtest settings">
+        <select id="playtest-kind" class="playtest-inline" title="Opponents" aria-label="Opponents"><option value="solo">Solo</option><option value="bots">With bots</option></select>
+        <select id="playtest-character" class="playtest-inline" title="Character" aria-label="Character"><option value="ninja">Ninja</option><option value="thorg">Thorg</option><option value="draven">Draven</option><option value="wizard">Wizard</option><option value="huntress">Huntress</option><option value="gloop">Gloop</option></select>
+        <label class="check playtest-toggle" title="Show map, player and attack collision shapes"><input type="checkbox" id="debug-hitboxes"><span>Hitboxes</span></label>
+        <label class="check playtest-toggle" title="Infinite supers"><input type="checkbox" id="infinite-supers" checked><span>∞ Supers</span></label>
+      </div>
+      <span id="playtest-summary" hidden></span>
     </div>
     <div class="tool-group file-group">
       <details class="menu" id="file-menu">

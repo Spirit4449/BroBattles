@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { characterDefinitions } = require('../../src/shared/characters');
+const { rigErrors } = require('../../src/shared/characters/characterRig');
 const { POWERUP_CATALOG } = require('../../src/shared/powerups');
 const { effectDefs } = require('../../src/server/core/gameRoom/effects/effectDefs');
 const { validateDocument } = require('../../src/shared/maps/mapDocument');
@@ -38,6 +39,7 @@ function validateContent({ characters = characterDefinitions, powerups = POWERUP
     for (const field of ['ammoReloadMs', 'ammoCooldownMs', 'spriteScale']) {
       if (!Number.isFinite(definition.stats?.[field]) || definition.stats[field] <= 0) errors.push(`${key}: invalid ${field}`);
     }
+    errors.push(...rigErrors(definition).map(error => `${key}: ${error}`));
     const body = definition.stats?.body;
     for (const field of ['widthShrink', 'heightShrink', 'offsetXFromHalf', 'offsetY']) {
       if (!Number.isFinite(body?.[field])) errors.push(`${key}: invalid body.${field}`);

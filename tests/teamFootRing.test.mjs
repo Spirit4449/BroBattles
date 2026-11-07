@@ -122,3 +122,4 @@ test('the ring is a flattened oval of grid-aligned cells, brightest along its fr
   const peak = side => Math.max(...team.filter(side).map(r => r.alpha));
   assert.ok(peak(r => r.y > 0) > peak(r => r.y < 0));
 });
+

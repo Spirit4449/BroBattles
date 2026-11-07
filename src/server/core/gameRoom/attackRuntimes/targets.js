@@ -207,6 +207,29 @@ function hitCircleTargets(
   return hitCount;
 }
 
+// What a circle first touches among the targets this attack could damage,
+// without dealing damage: splash projectiles use it to find where they burst.
+// Players burst at the centre of their body; mode objects (vault, crate) at
+// the contact point, since their centre can be far from where they were hit.
+function circleTouch(room, attack, cx, cy, radius, now) {
+  exposeDamageHitbox(room, attack, { kind: 'circle', x: cx, y: cy, radius }, now);
+  const attacker = getParticipant(room, attack.attackerParticipantId);
+  if (!attacker || (!attacker.isAlive && !isDetachedProjectile(attack))) return null;
+  let best = null;
+  for (const target of buildTargetList(room, attacker.name, attacker.team)) {
+    if (attack.hitSet?.has(target.name)) continue;
+    const bounds = shotTargetBounds(attack, target, now);
+    if (!circleAabbOverlap(cx, cy, radius, bounds)) continue;
+    const x = (bounds.left + bounds.right) / 2, y = (bounds.top + bounds.bottom) / 2;
+    const distance = Math.hypot(x - cx, y - cy);
+    if (!best || distance < best.distance) best = { name: target.name, x, y, distance };
+  }
+  if (best) return best;
+  const objective = getObjectiveTargets(room, attacker).find((o) =>
+    !attack.hitSet?.has(o.targetName) && circleAabbOverlap(cx, cy, radius, o.bounds));
+  return objective ? { name: objective.targetName, x: cx, y: cy, distance: 0 } : null;
+}
+
 function hitRectTargets(room, attack, descriptor, rect, now) {
   exposeDamageHitbox(room, attack, { kind: 'rect', ...rect }, now);
   const attacker = getParticipant(room, attack.attackerParticipantId);
@@ -240,6 +263,28 @@ function hitRectTargets(room, attack, descriptor, rect, now) {
   }
 }
 
+// The nearest enemy (or else mode object) a capsule touches, without damaging
+// it: splash attacks then burst on it. Players report their body centre.
+function capsuleTouch(room, attack, start, end, radius, now) {
+  exposeDamageHitbox(room, attack, { kind: 'sweep', a: start, b: end, radius }, now);
+  const attacker = getParticipant(room, attack.attackerParticipantId);
+  if (!attacker || !attacker.isAlive) return null;
+  const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+  let best = null;
+  for (const target of buildTargetList(room, attacker.name, attacker.team)) {
+    if (attack.hitSet?.has(target.name)) continue;
+    const bounds = shotTargetBounds(attack, target, now);
+    if (sweep(start, end, bounds, radius) === null) continue;
+    const x = (bounds.left + bounds.right) / 2, y = (bounds.top + bounds.bottom) / 2;
+    const distance = Math.hypot(x - mid.x, y - mid.y);
+    if (!best || distance < best.distance) best = { name: target.name, x, y, distance };
+  }
+  if (best) return best;
+  const objective = getObjectiveTargets(room, attacker).find((o) =>
+    !attack.hitSet?.has(o.targetName) && sweep(start, end, o.bounds, radius) !== null);
+  return objective ? { name: objective.targetName, x: mid.x, y: mid.y, distance: 0 } : null;
+}
+
 function hitCapsuleTargets(room, attack, descriptor, start, end, radius, now) {
   exposeDamageHitbox(room, attack, { kind: 'sweep', a: start, b: end, radius }, now);
   const attacker = getParticipant(room, attack.attackerParticipantId);
@@ -263,4 +308,4 @@ function hitCapsuleTargets(room, attack, descriptor, start, end, radius, now) {
   return hitCount;
 }
 
-module.exports = { CENTER_CRATE_TARGET, shotTargetBounds, emitServerHit, applyDescriptorHitEffect, getEnemyVaultTarget, getCenterCrateTarget, getObjectiveTargets, buildTargetList, emitHitAction, hitCircleTargets, hitRectTargets, hitCapsuleTargets };
+module.exports = { CENTER_CRATE_TARGET, shotTargetBounds, emitServerHit, applyDescriptorHitEffect, getEnemyVaultTarget, getCenterCrateTarget, getObjectiveTargets, buildTargetList, emitHitAction, hitCircleTargets, circleTouch, capsuleTouch, hitRectTargets, hitCapsuleTargets };

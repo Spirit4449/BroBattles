@@ -10,10 +10,12 @@ const projectileTexture={};
 vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/ninja/projectileTexture'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:projectileTexture,require:()=>require('../src/shared/projectilePresentation')});
 function setup(initial={}){
   let now=0;const api={},images=[],sounds=[],ammo=[],releases=[],animation={};
+  const flipLock={},timers=[];
+  vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/flipLock'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:flipLock});
   vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/animationState'),'utf8'),{babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]]}).code,{exports:animation,performance:{now:()=>now}});
   const serverClock=loadServerClock({performance:{now:()=>now}});
   const shots=loadShotPrediction({serverClock});
-  vm.runInNewContext(code,{exports:api,require:name=>name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('playerAudio')?playerAudio:name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):name.includes('huntressReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:{connected:false},
+  vm.runInNewContext(code,{exports:api,require:name=>name.includes('serverClock')?serverClock:name.includes('shotPrediction')?shots:name.includes('projectilePresentation')?require('../src/shared/projectilePresentation'):name.includes('playerAudio')?playerAudio:name.includes('animationState')?animation:name==='./swarmPresentation'?{presentSwarmRelease:(scene,player,ms,remote)=>releases.push({player,ms,remote})}:name==='./projectileTexture'?projectileTexture:name==='./effects'?{createShurikenEffects:()=>({update(){},destroy(){}})}:name.includes('ninjaProjectile')?model:name.includes('platformMotion')?require('../src/shared/maps/platformMotion'):name.includes('huntressReplication')?clock:name.includes('runtimeId')?{createRuntimeId:()=> 'request'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:20}}:name.includes('flipLock')?flipLock:{connected:false},
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){}});
   const sprite=(x,y,texture)=>{const s={x,y,texture,active:true,setPosition(x,y){this.x=x;this.y=y;return this;},setScale(){return this;},setDepth(){return this;},setTint(){return this;},setVisible(v){this.visible=v;},setRotation(){},destroy(){this.active=false;}};images.push(s);return s;};
   const flashes=[];
@@ -24,7 +26,8 @@ function setup(initial={}){
   api.attachNinjaScene(scene,{localUsername:'owner',localPlayer:owner,onAmmo:a=>ammo.push(a)});
   const frame=t=>{now=t;api.observeNinjaSnapshot({snapshotEpoch:'room',sentMono:t,tMono:t});scene.events.emit('update');};
   const packet=(a,name='owner')=>api.handleNinjaPacket(scene,{playerName:name,action:{ninjaCombatVersion:1,epoch:'room',simMono:now,sentMono:now,...a}},{localUsername:'owner',localPlayer:owner});
-  return {api,scene,owner,frame,packet,images,sounds,ammo,releases,animation,shots,flashes};
+  scene.time={delayedCall:(ms,fn)=>timers.push({ms,fn})};
+  return {api,scene,owner,frame,packet,images,sounds,ammo,releases,animation,shots,flashes,flipLock,timers};
 }
 test('local launch is immediate and matches authoritative launch/reticle geometry',()=>{
   const f=setup();const aim=require('../src/client/game/characters/shared/attackAim').resolveAttackAimContext({character:'ninja',player:f.owner,pointerWorldX:500,pointerWorldY:50});
@@ -261,4 +264,29 @@ test('the thrower sees an impact on the enemy as drawn at once, once per leg; ot
     assert.equal(f.sounds.length,0,'hit sounds wait for the server');
     f.api.resetNinjaNetwork();
   }
+});
+
+test('the owner turns toward the super on the press and holds that facing through the barrage',()=>{
+  for(const [startLeft,angle,left] of [[false,Math.PI,true],[true,0,false],[true,Math.PI,true],[false,0,false]]){
+    const f=setup();f.owner.flipX=startLeft;
+    f.api.predictNinja(f.scene,f.owner,'owner',{id:'super',aim:{angle}},true);
+    assert.equal(f.owner.flipX,left,`aim ${angle} from ${startLeft?'left':'right'}`);
+    assert.equal(f.owner._lockFlip,true,'running cannot turn him back');
+    const swarm=model.swarmConfig?model.swarmConfig():null;
+    if(swarm)assert.equal(f.timers.at(-1).ms,swarm.count*swarm.releaseMs+swarm.lockPaddingMs);
+    f.timers.at(-1).fn();assert.equal(f.owner._lockFlip,false);
+    f.api.resetNinjaNetwork();
+  }
+});
+
+test('a newer facing lock survives the older lock releasing, and aim maps to facing',()=>{
+  const {flipLock}=setup();const player={flipX:false};
+  const first=flipLock.faceAttack(null,player,true,0);
+  const second=flipLock.faceAttack(null,player,true,0);
+  first();assert.equal(player._lockFlip,true,'an earlier unlock does not release the newer lock');
+  second();assert.equal(player._lockFlip,false);
+  assert.equal(flipLock.aimFacesLeft({angle:0},true),false,'a rightward aim turns right');
+  assert.equal(flipLock.aimFacesLeft({angle:Math.PI},false),true);
+  assert.equal(flipLock.aimFacesLeft({angle:-Math.PI/2},true),true,'a vertical aim keeps facing');
+  assert.equal(flipLock.aimFacesLeft({direction:1,angle:Math.PI},true),false,'an explicit direction wins');
 });

@@ -1,5 +1,5 @@
 import { applyTeamVisual } from "../../../../shared/projectilePresentation";
-import { thorgGripPose } from "./weaponMotion";
+import { thorgGripPose, THORG_ART } from "./weaponMotion";
 import { THORG_SWEEP, sampleThorgSweep, thorgAttackFrameAt } from "../../../../shared/characters/thorgSweep";
 import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState";
 import { lockPlayerFlip, enforceLockedFlip } from "../shared/flipLock";
@@ -44,17 +44,17 @@ export function ensureThorgWeapon(scene, body) {
     weapon.setDisplaySize((legacySkin ? 30 : 26) * scale, (legacySkin ? 71 : 26 * 101 / 36) * scale);
     const grip = thorgGripPose(body, Number(delta) || 16);
     const direction = body.flipX ? -1 : 1;
-    weapon.setPosition(body.x + direction * grip.x * scale, body.y - 37.8 * (scale - 1) + (grip.y - (String(body.frame?.name).startsWith("sliding") ? 7 : 0)) * scale);
+    weapon.setPosition(body.x + direction * grip.x * scale, body.y - THORG_ART.feetDrop * (scale - 1) + (grip.y - (String(body.frame?.name).startsWith("sliding") ? 7 : 0)) * scale);
     weapon.rotation = direction * grip.angle;
     // Draw the carried weapon over the torso so the grip reads as held.
     weapon.setDepth((body.depth ?? 30) + 0.1);
     if (!legacySkin && weapon.visible && !String(body.frame?.name).startsWith("idle")) {
-      const x = Math.round(grip.x / 0.7 + 64);
-      const y = Math.round(grip.y / 0.7 + 64);
+      const x = Math.round(grip.x / THORG_ART.scale + THORG_ART.centre);
+      const y = Math.round(grip.y / THORG_ART.scale + THORG_ART.centre);
       const drawHand = (image, cx, cy, width, height) => {
         image.setTexture(body.texture.key, body.frame.name);
-        image.setOrigin(0.5).setDisplaySize(89.6 * scale, 89.6 * scale);
-        image.setPosition(body.x, body.y - 37.8 * (scale - 1));
+        image.setOrigin(body.originX, body.originY).setDisplaySize(THORG_ART.displaySize * scale, THORG_ART.displaySize * scale);
+        image.setPosition(body.x, body.y - THORG_ART.feetDrop * (scale - 1));
         image.setFlipX(body.flipX).setCrop(cx - width / 2, cy - height / 2, width, height);
         image.setDepth((body.depth ?? 30) + 0.2).setAlpha(body.alpha).setVisible(true);
         if (body.isTinted) image.setTint(body.tintTopLeft); else image.clearTint();
@@ -91,7 +91,8 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
   // Keep recovery tied to the carry grip, not the moving throw-frame hands.
   const carryGrip = { ...thorgGripPose(body, 0) };
   body._thorgSweepActive = true;
-  playSpriteAnimation({ scene, sprite: body, character: "thorg", logical: "throw", fallback: "idle" });
+  // Every call is a new sweep (the previous one was cleaned up above).
+  playSpriteAnimation({ scene, sprite: body, character: "thorg", logical: "throw", fallback: "idle", restart: true });
   const strikeEnd = THORG_SWEEP.windupMs + THORG_SWEEP.strikeMs;
   const duration = strikeEnd + THORG_SWEEP.recoveryMs;
   markOneShotAnimation(body, "throw", duration);
@@ -131,7 +132,7 @@ export function startThorgSweep(scene, body, { direction = body.flipX ? -1 : 1 }
     if (!inHitstop(body)) elapsed += Number(delta) || scene.game?.loop?.delta || 16;
     enforceLockedFlip(body);
     const scale = body._bbVisualScale || 1;
-    const centerY = body.y - 37.8 * (scale - 1);
+    const centerY = body.y - THORG_ART.feetDrop * (scale - 1);
     const legacySkin = /thorg-(storm|iron)/.test(String(body._bbSkinTextureKey || body.texture?.key));
     weapon.setDisplaySize((legacySkin ? 30 : 26) * scale, (legacySkin ? 71 : 26 * 101 / 36) * scale);
     const handRadius = legacySkin ? 24 : 35;
@@ -227,7 +228,7 @@ function startEmbeddedSweep(scene, body, direction) {
   const unlock = lockPlayerFlip(body);
   const duration = THORG_SWEEP.windupMs + THORG_SWEEP.strikeMs + THORG_SWEEP.recoveryMs;
   body._thorgSweepActive = true;
-  playSpriteAnimation({ scene, sprite: body, character: 'thorg', logical: 'throw', fallback: 'idle' });
+  playSpriteAnimation({ scene, sprite: body, character: 'thorg', logical: 'throw', fallback: 'idle', restart: true });
   markOneShotAnimation(body, 'throw', duration);
   body.anims?.pause?.();
   body.setFrame('throw00');

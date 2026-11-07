@@ -94,7 +94,7 @@ How an attack reaches its target decides how it is networked, so attacks are net
 
 | Delivery | Attacks | Server rewind | Attacker's client |
 | --- | --- | --- | --- |
-| attached: the hitbox moves with the attacker | Thorg sweep (`path-rect`), Draven splash (`attached-rect`), `attached-cone` | targets where the attacker saw them, capped lower than shots | swing tested against enemies as drawn; hit sound and a hitstop on both fighters |
+| attached: the hitbox moves with the attacker | Thorg sweep (`path-rect`), Draven splash (`attached-rect`), Wizard's charging fireball (`attached-charge`), `attached-cone` | targets where the attacker saw them, capped lower than shots | swing tested against enemies as drawn; hit sound and a hitstop on both fighters |
 | released: flies on its own | Huntress arrows and burning volley, Ninja shuriken and swarm, Wizard fireball, Gloop slimeball and hook | constant offset for the whole flight | launch predicted and reconciled by ID; hit sound and a shorter hitstop on the victim |
 | area: warned, resolves later | Draven Inferno | none: the target had time to react (favor the target) | nothing predicted |
 | self | Thorg Rage, Wizard Arcane Surge, dash | not applicable | predicted locally |

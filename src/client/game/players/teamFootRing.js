@@ -1,6 +1,7 @@
 import { RENDER_LAYERS } from "../scene/renderLayers.js";
 import { fillPixelBlob, rasterizePixelBlob } from "../powerups/pixelShapes.js";
 import { PIXEL_INK, snapPixel } from "../scene/pixelBar.js";
+import { playerAnchor } from "../characters/shared/rig.js";
 
 // Team marker: a pixel-art oval on the floor around each player's feet, blue
 // for your team (yourself included) and red for the other team. It sits
@@ -144,7 +145,7 @@ export function attachTeamFootRing(scene, sprite, { isAlly, hidden = () => false
   };
 
   const sync = () => {
-    const foot = !sprite.active || !sprite.visible || hidden() ? null : footPoint(sprite);
+    const foot = !sprite.active || !sprite.visible || hidden() || !sprite.body ? null : playerAnchor(sprite, "feet");
     if (!foot || !(sprite.alpha > 0)) {
       ring.setVisible(false);
       lastX = null;
@@ -153,9 +154,8 @@ export function attachTeamFootRing(scene, sprite, { isAlly, hidden = () => false
     if (lastX !== null) phase = advanceSpin(phase, sprite.x - lastX);
     lastX = sprite.x;
     draw(sprite.body.width);
-    // Centred on sprite.x like the health bar: the body's centre shifts when a
-    // character turns, which would make the ring hop sideways.
-    ring.setPosition(snapPixel(sprite.x), snapPixel(foot.y + shape.ry * DROP_PER_RADIUS));
+    // The rig's feet anchor: the stand point the health bar also centres on.
+    ring.setPosition(snapPixel(foot.x), snapPixel(foot.y + shape.ry * DROP_PER_RADIUS));
     ring.setAlpha(sprite.alpha);
     ring.setVisible(true);
   };

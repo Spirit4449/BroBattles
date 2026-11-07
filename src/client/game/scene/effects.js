@@ -672,14 +672,17 @@ export function spawnHealthMarker(scene, x, y, delta, opts = {}) {
   marker.setDepth(depth);
   // Hard offset shadow (no blur) for a chunky pixel look.
   marker.setShadow(0, 3, shadowColor, 0, true, true);
-  marker.setScale(0.65);
+  // Small hits (multi-hit attacks, ticks) draw smaller so they don't flood the screen.
+  const sizeScale = Math.abs(rounded) < 600 ? 0.78 : 0.95;
+  marker.setScale(0.65 * sizeScale);
   const float = opts.floatDistance || 28;
   const duration = opts.duration || 820;
   // Exclude transparent text padding and the outline, leaving a small gap.
   // Only part of the drift is reserved so stacked numbers sit close together.
-  const halfWidth = (marker.width - 16) * 0.5 - 1;
-  const halfHeight = (marker.height - 12) * 0.5 - 2;
-  const reservedDrift = float * 0.3;
+  // Neighbours may overlap slightly so bursts of hits stay packed together.
+  const halfWidth = ((marker.width - 16) * 0.5 - 1) * sizeScale * 0.8;
+  const halfHeight = ((marker.height - 12) * 0.5 - 2) * sizeScale * 0.7;
+  const reservedDrift = float * 0.15;
   const occupied = [...markerPool]
     .filter((other) => other.active && other.scene === scene)
     .map((other) => other._healthMarkerBounds)
@@ -722,14 +725,14 @@ export function spawnHealthMarker(scene, x, y, delta, opts = {}) {
   marker.once("destroy", () => markerPool.delete(marker));
   scene.tweens.add({
     targets: marker,
-    scale: 1.15,
+    scale: 1.15 * sizeScale,
     duration: 110,
     ease: "Back.easeOut",
     onComplete: () => {
       if (!marker.active) return;
       scene.tweens.add({
         targets: marker,
-        scale: 1,
+        scale: sizeScale,
         angle: 0,
         duration: 160,
         ease: "Sine.easeOut",

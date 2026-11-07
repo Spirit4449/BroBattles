@@ -10,7 +10,7 @@ function load(file) {
     babelrc: false, configFile: false,
     presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
   }).code;
-  vm.runInNewContext(code, { exports, require: () => ({}), performance: { now: () => 10000 } });
+  vm.runInNewContext(code, { exports, require: id => (id.includes('shared/rig') ? require('../src/client/game/characters/shared/rig.js') : {}), performance: { now: () => 10000 } });
   return exports;
 }
 const { updateHealthBars } = load('../src/client/game/scene/healthBarRenderer.js');

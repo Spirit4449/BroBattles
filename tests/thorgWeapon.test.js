@@ -19,7 +19,9 @@ function load(file, dependencies = {}) {
   }});
   return exports;
 }
-const motion = load('../src/client/game/characters/thorg/weaponMotion.js', { './handAnchors.json': anchors });
+const motion = load('../src/client/game/characters/thorg/weaponMotion.js', { './handAnchors.json': anchors,
+  '../../../../shared/characters': require('../src/shared/characters'),
+  '../../../../shared/characters/characterRig.js': require('../src/shared/characters/characterRig') });
 const flips = load('../src/client/game/characters/shared/flipLock.js');
 const playerAudio = load('../src/client/game/audio/playerAudio.js');
 const weaponModule = load('../src/client/game/characters/thorg/weapon.js', {

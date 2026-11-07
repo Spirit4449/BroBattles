@@ -6,6 +6,8 @@ const { characterBody } = require('../../../shared/physics/duelGeometry');
 const attackTypes = Object.fromEntries(Object.values(characterDefinitions).map(definition => [definition.key, definition.basicAction]));
 const { botProfile, DEFAULT_SPECIAL_LOCK_MS, DEFAULT_SPECIAL_RANGE } = require('./characterProfiles');
 const { FIXED_DT_MS } = require('../../../shared/gameConstants');
+const { launchLagMs } = require('../../../shared/combat/launchRamp');
+const { muzzleOf } = require('../../../shared/characters/characterRig');
 const ninjaModel = require('../../../shared/characters/ninjaProjectile');
 const { shotBlockers, shotTerrain } = require('../gameRoom/attackRuntimes/geometry');
 const BOT_ATTACK_TO_SUPER_COOLDOWN_MS = 400;
@@ -42,8 +44,11 @@ function segmentCrossesRect(ax, ay, bx, by, rect, padding = 8) {
 // semi-implicit gravity step. Multiple roots give low and high firing arcs.
 function projectileSolutions(player, target, runtime, startup, prediction, dt, speedAtAngle, verticalPredictionSeconds = Infinity) {
   const speed = runtime.speed || 800, gravity = runtime.gravity || 0;
-  const forward = (player._lastWidth || 80) * (runtime.forwardOffsetWidthFactor ?? runtime.forwardOffset ?? 0);
-  const ox = player.x, oy = player.y - (player._lastHeight || 120) * (runtime.verticalOffsetHeightFactor ?? runtime.verticalOffset ?? 0);
+  // The rig muzzle the shot really leaves from, facing the target.
+  const muzzle = runtime.muzzle && muzzleOf(player.char_class, runtime.muzzle, { x: player.x, y: player.y, flip: target.x < player.x });
+  const forward = muzzle ? muzzle.reach : (player._lastWidth || 80) * (runtime.forwardOffsetWidthFactor ?? runtime.forwardOffset ?? 0);
+  const ox = muzzle ? muzzle.pivot.x : player.x;
+  const oy = muzzle ? muzzle.pivot.y : player.y - (player._lastHeight || 120) * (runtime.verticalOffsetHeightFactor ?? runtime.verticalOffset ?? 0);
   const vx = (target.vx || 0) * prediction, vy = (target.vy || 0) * prediction;
   const maxTime = gravity ? (runtime.maxLifetimeMs || 3000) / 1000 : (runtime.range || 1050) / speed;
   const vector = (t) => ({ x: target.x + vx * (startup + t) - ox,
@@ -160,7 +165,8 @@ function basicAim(player, target, profile, random, room) {
   }
   const { type, descriptor, aim, runtime, range } = aimTuning(player.char_class, room);
   const distance = Math.hypot(target.x - player.x, target.y - player.y);
-  const startup = (Number(descriptor?.actionFlow?.startupMs) || Number(runtime.windupMs) || 0) / 1000;
+  // Eased launches run a fixed lag behind a constant-speed shot.
+  const startup = ((Number(descriptor?.actionFlow?.startupMs) || Number(runtime.windupMs) || 0) + launchLagMs(runtime)) / 1000;
   const flight = Math.min(0.9, startup + interceptTime(target.x - player.x, target.y - player.y,
     target.vx || 0, target.vy || 0, runtime.speed || 800)) * (profile.prediction ?? 0.5);
   const dx = target.x + (target.vx || 0) * flight - player.x;

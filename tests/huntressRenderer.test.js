@@ -55,7 +55,8 @@ test('predicted arrow appears on the first render frame after windup without a s
   frame(99);assert.equal(created.length,0);
   frame(100);assert.equal(created.filter(s=>s.active && s.texture === "huntress-arrow").length,3); // Flame particles do not count as arrows.
   const arrows=created.filter(s=>s.texture === "huntress-arrow");
-  assert.ok(arrows.some(s => s.x === 118 && s.y === 124), "central arrow launches from the muzzle");
+  const muzzle=require('../src/shared/characters/characterRig').launchPoint('huntress',model.attackConfig().muzzle,{x:owner.x,y:owner.y},0);
+  assert.ok(arrows.some(s => Math.abs(s.x-muzzle.x)<1e-9 && Math.abs(s.y-muzzle.y)<1e-9), "central arrow launches from the bow");
   api.resetHuntressNetwork();
 });
 test('rejection before windup suppresses launch, including a subsequent contradictory release',()=>{
@@ -210,7 +211,8 @@ test('PvP Huntress launches from the displayed moving opponent and converges to 
 
 // The local shooter sees an enemy drawn at (300, 120); its box straddles the arrow.
 function shooterView(f,{owner='owner'}={}){
-  const enemy={active:true,visible:true,x:300,y:120,flipX:false};
+  // Low enough that an arrow from the bow, with its drop, meets the body.
+  const enemy={active:true,visible:true,x:300,y:140,flipX:false};
   const opponentPlayersRef={enemy:{opponent:enemy,character:'ninja'}};
   f.shots.trackShotTargets({localUsername:'owner',opponentPlayersRef});
   f.api.attachHuntressScene(f.scene,{localUsername:'owner',localPlayer:f.owner,opponentPlayersRef});
@@ -220,7 +222,7 @@ function shooterView(f,{owner='owner'}={}){
   const arrow=()=>f.created.find(s=>s.texture==='huntress-arrow');
   const terminal=(action)=>f.api.handleHuntressPacket(f.scene,{...f.packet({type:'huntress-terminal',id:p.id,requestId:'shot',
     rotation:0,visual:{scale:.22,embedMs:2000,special:false},...action}),playerName:owner},{});
-  return {enemy,p,arrow,terminal,box:model.insetBounds(require('../src/shared/combat/shotContact').characterHitBounds('ninja',300,120))};
+  return {enemy,p,arrow,terminal,box:model.insetBounds(require('../src/shared/combat/shotContact').characterHitBounds('ninja',300,140))};
 }
 test('owner arrows stick into the enemy as drawn and stay put when the server confirms',()=>{
   const f=setup(),{enemy,arrow,terminal,box}=shooterView(f);

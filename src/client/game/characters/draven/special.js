@@ -5,7 +5,6 @@ import { getResolvedCharacterSpecialAimConfig } from "../../../../shared/charact
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 import {
-  markOneShotAnimation,
   playSpriteAnimation,
   resolveSpriteAnimationKey,
 } from "../shared/animationState.js";
@@ -235,7 +234,6 @@ export function perform(
   player._dravenInfernoLift = DRAVEN_INFERNO_LIFT_PX;
   player._dravenInfernoRiseMs = DRAVEN_INFERNO_RISE_MS;
   player._movementLockedUntil = now + DRAVEN_INFERNO_DURATION_MS;
-  markOneShotAnimation(player, "special", DRAVEN_INFERNO_DURATION_MS);
 
   const unlockFlip = lockPlayerFlip(player);
 
@@ -245,12 +243,15 @@ export function perform(
     player.setVelocity(0, 0);
   }
 
+  // The pose holds for the whole channel.
   playSpriteAnimation({
     scene,
     sprite: player,
     character: "draven",
     logical: "special",
     fallback: "throw",
+    holdMs: DRAVEN_INFERNO_DURATION_MS,
+    remote: !isOwner,
   });
 
   destroyInfernoOverlay(player);

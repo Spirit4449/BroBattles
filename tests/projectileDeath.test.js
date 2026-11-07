@@ -83,6 +83,9 @@ for (const character of ['wizard', 'gloop']) {
     assert.ok(callbacks.length);
     f.room._handlePlayerDeath(owner);
     callbacks.forEach(fn => fn());
+    // One tick ends anything attached to the dead caster (the wizard's charge);
+    // a released shot would survive it.
+    f.step();
     assert.equal(f.room._activeAttacks?.length || 0, 0);
   });
 }

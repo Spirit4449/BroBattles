@@ -4,8 +4,10 @@ const { getParticipant } = require('../participants');
 const { attackIdentity } = require('./attackIdentity');
 const { WORLD_MARGIN } = require("../../gameRoomConfig");
 const { advanceSlimeball } = require("../../../../shared/characters/gloopProjectile");
+const { launchTravel } = require('../../../../shared/combat/launchRamp');
+const { launchPoint } = require('../../../../shared/characters/characterRig');
 const { resolvePlayerWidth, resolvePlayerHeight, resolvePositiveNumber, getAttackCollisionCenter, shotTerrain, sweptCircleOverlapsRect } = require('./geometry');
-const { hitCircleTargets } = require('./targets');
+const { hitCircleTargets, circleTouch } = require('./targets');
 
 function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
   const runtime = descriptor?.runtime || {};
@@ -17,6 +19,10 @@ function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
       : 0;
   const width = resolvePlayerWidth(playerData);
   const height = resolvePlayerHeight(playerData);
+  // A rig muzzle (characters/<name>.json) places the spawn on the drawn art.
+  const muzzle = runtime.muzzle
+    ? launchPoint(playerData.char_class, runtime.muzzle, { x: Number(playerData.x), y: Number(playerData.y), flip: direction < 0 }, angle)
+    : null;
   const startPayloadX = Number(actionData?.start?.x);
   const startPayloadY = Number(actionData?.start?.y);
   const originPayloadX = Number(actionData?.origin?.x);
@@ -25,7 +31,7 @@ function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
     ? startPayloadX
     : Number.isFinite(originPayloadX)
       ? originPayloadX
-      : Number(playerData.x) +
+      : muzzle ? muzzle.x : Number(playerData.x) +
         Math.cos(angle) *
           width *
           (Number(runtime.forwardOffsetWidthFactor) || 0);
@@ -33,7 +39,7 @@ function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
     ? startPayloadY
     : Number.isFinite(originPayloadY)
       ? originPayloadY
-      : Number(playerData.y) -
+      : muzzle ? muzzle.y : Number(playerData.y) -
         height * (Number(runtime.verticalOffsetHeightFactor) || 0) +
         Math.sin(angle) *
           width *
@@ -71,6 +77,9 @@ function buildProjectileLinearAttack(playerData, actionData, descriptor, now) {
     startY,
     traveled: 0,
     elapsed: 0,
+    launchEaseMs: Math.max(0, Number(runtime.launchEaseMs) || 0),
+    splashRadius: Math.max(0, Number(runtime.splashRadius) || 0),
+    launchStartSpeed: Number(runtime.launchStartSpeed ?? 1),
     maxLifetimeMs: Math.max(
       150,
       Number(actionData?.maxLifetimeMs) ||
@@ -172,15 +181,36 @@ function tickLinearProjectile(room, attack, descriptor, now = Date.now()) {
   const runtime = descriptor?.runtime || {};
   const dtSec = room.FIXED_DT_MS / 1000;
   attack.elapsed += room.FIXED_DT_MS;
-  attack.traveled += Number(attack.speed || runtime.speed) * dtSec;
   const fromX = attack.x, fromY = attack.y;
-  attack.x += Number(attack.vx) * dtSec;
-  attack.y += Number(attack.vy) * dtSec;
+  if (attack.launchEaseMs > 0) {
+    // Eased launches follow the shared curve the client draws.
+    const traveled = launchTravel(attack.elapsed, { speed: attack.speed || runtime.speed,
+      launchEaseMs: attack.launchEaseMs, launchStartSpeed: attack.launchStartSpeed });
+    const step = traveled - attack.traveled;
+    attack.traveled = traveled;
+    attack.x += Math.cos(attack.angle) * step;
+    attack.y += Math.sin(attack.angle) * step;
+  } else {
+    attack.traveled += Number(attack.speed || runtime.speed) * dtSec;
+    attack.x += Number(attack.vx) * dtSec;
+    attack.y += Number(attack.vy) * dtSec;
+  }
   // Linear shots ignore terrain, but a built wall is there to stop them.
   const radius = Math.max(1, Number(attack.collisionRadius || runtime.collisionRadius) || 1);
-  if (room.gameMode?.getShotBlockers?.(attacker.team)?.some((wall) =>
-    sweptCircleOverlapsRect(fromX, fromY, attack.x, attack.y, wall, radius))) return true;
+  const blocked = room.gameMode?.getShotBlockers?.(attacker.team)?.some((wall) =>
+    sweptCircleOverlapsRect(fromX, fromY, attack.x, attack.y, wall, radius));
   const collisionCenter = getAttackCollisionCenter(attack, runtime);
+  const range = Math.max(1, Number(attack.range || runtime.range) || 1);
+  if (attack.splashRadius > 0) {
+    // Splash shots stop on the first thing they touch (or a wall, or the end
+    // of their range) and burst, damaging everyone around the burst once.
+    // A struck player is the centre of the burst.
+    const touched = blocked ? null : circleTouch(room, attack, collisionCenter.x, collisionCenter.y, radius, now);
+    if (!blocked && !touched && attack.traveled < range) return false;
+    burstSplash(room, attack, descriptor, attacker, touched || collisionCenter, now);
+    return true;
+  }
+  if (blocked) return true;
   const hitCount = hitCircleTargets(
     room,
     attack,
@@ -191,9 +221,23 @@ function tickLinearProjectile(room, attack, descriptor, now = Date.now()) {
     now,
   );
   if (attack.destroyOnHit && hitCount > 0) return true;
-  return (
-    attack.traveled >= Math.max(1, Number(attack.range || runtime.range) || 1)
-  );
+  return attack.traveled >= range;
+}
+
+// Damages every target within the splash radius of `at`, then tells every
+// client where the shot burst so their drawn flights stop on the same spot.
+function burstSplash(room, attack, descriptor, attacker, at, now) {
+  hitCircleTargets(room, attack, descriptor, at.x, at.y, attack.splashRadius, now);
+  const type = descriptor?.runtime?.impactActionType;
+  if (!type || !room.io?.to) return;
+  room.io.to(`game:${room.matchId}`).emit("game:action", {
+    playerName: attacker.name,
+    character: attacker.char_class,
+    origin: { x: attacker.x, y: attacker.y },
+    flip: !!attacker.flip,
+    action: { type, id: attack.instanceId, x: at.x, y: at.y, ownerEcho: true },
+    t: now,
+  });
 }
 
 function tickBouncingProjectile(room, attack, descriptor, now) {
@@ -213,4 +257,4 @@ function tickBouncingProjectile(room, attack, descriptor, now) {
   return !!attack.done;
 }
 
-module.exports = { buildProjectileLinearAttack, buildProjectileBounceAttack, tickLinearProjectile, tickBouncingProjectile };
+module.exports = { buildProjectileLinearAttack, buildProjectileBounceAttack, tickLinearProjectile, tickBouncingProjectile, burstSplash };

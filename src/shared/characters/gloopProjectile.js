@@ -1,4 +1,5 @@
 const { getResolvedCharacterAttackConfig } = require("./characterTuning");
+const { launchPoint } = require('./characterRig.js');
 const SLIME = getResolvedCharacterAttackConfig("gloop", "slimeball");
 // Shared fixed-step slime physics. Collision normals drive both rebound and animation.
 const STEP_MS = 1000 / 120;
@@ -68,8 +69,8 @@ function slimeLaunch(pose, target, cfg) {
       y: pose.y + (target.y - pose.y) * ratio };
   }
   const direction = target.x < pose.x ? -1 : 1;
-  const start = { x: pose.x + direction * (pose.width || 80) * cfg.forwardOffset,
-    y: pose.y - (pose.height || 100) * cfg.verticalOffset };
+  // Leaves from the slime muzzle (gloop.json `rig.points`), toward the target.
+  const start = launchPoint('gloop', cfg.muzzle, { x: pose.x, y: pose.y, flip: direction < 0 }) || { x: pose.x, y: pose.y };
   const dx = target.x - start.x, dy = target.y - start.y;
   // Solve the same discrete gravity/drag integrator used in flight, for a lob
   // whose flight time grows with distance. No decorative Bezier approximation.

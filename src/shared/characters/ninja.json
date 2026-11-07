@@ -31,6 +31,7 @@
         },
         "returningShuriken": {
           "rotationSpeed": 2000,
+          "flipLockMs": 320,
           "forwardDistance": 500,
           "arcHeight": 160,
           "outwardDuration": 380,
@@ -127,5 +128,9 @@
       "requiresFrame": "attack00",
       "duckFrame": "jumping00"
     }
+  },
+  "rig": {
+    "frame": [256, 256],
+    "feet": [127, 240]
   }
 }

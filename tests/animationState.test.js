@@ -122,3 +122,116 @@ test('authored movement clips follow speed and vertical velocity for local and r
     play('idle','idle');assert.equal(sprite.anims.isPlaying,true,'normal playback resumes after manual airborne poses');
   }
 });
+
+test('a remote follow-up packet that plays nothing keeps the windup lock instead of restarting it', () => {
+  // Wizard: the windup plays the throw, the release 520 ms later plays nothing.
+  const throwAnim = { frameRate: 18, frames: Array.from({ length: 8 }, () => ({ duration: 58 })) };
+  const scene = { anims: { get: key => (key === 'wizard-throw' ? throwAnim : null) } };
+  const sprite = { anims: { play(key) { this.currentAnim = { key }; } } };
+  const wrapper = { opponent: sprite };
+  const playThrow = () => { sprite.anims.play('wizard-throw'); animation.noteAnimationPlayed(sprite, 'throw'); return true; };
+  const present = (actionType, handler) =>
+    animation.presentRemoteAction({ scene, wrapper, character: 'wizard', actionType }, handler);
+
+  const lockOf = target => animation.remoteAnimationLockUntil(target);
+  assert.equal(present('wizard-fireball', playThrow), true);
+  const lock = lockOf(sprite);
+  assert.ok(lock > 0);
+
+  assert.equal(present('wizard-fireball-release', () => true), true);
+  assert.equal(lockOf(sprite), lock, 'the release does not extend the lock');
+
+  // A handler that replays the animation (the next attack) gets a fresh lock.
+  const start = Date.now(); while (Date.now() - start < 5) {}
+  present('wizard-fireball', playThrow);
+  assert.ok(lockOf(sprite) > lock);
+
+  // Unconsumed actions never lock.
+  const idle = { opponent: { anims: {} } };
+  animation.presentRemoteAction({ scene, wrapper: idle, character: 'wizard', actionType: 'x' }, () => false);
+  assert.equal(lockOf(idle.opponent), 0);
+});
+
+// The action layer on a controllable clock, with a fake Phaser animation set.
+function actionRig() {
+  let now = 1000;
+  const exports = {};
+  const { code } = babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/shared/animationState'), 'utf8'), {
+    babelrc: false, configFile: false,
+    presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  });
+  vm.runInNewContext(code, { exports, require: () => ({}), performance: { now: () => now }, Date: { now: () => now } });
+  const clips = {
+    'wizard-special': { frameRate: 50, frames: Array.from({ length: 16 }, () => ({ duration: 90 })) },
+    'wizard-throw': { frameRate: 18, frames: Array.from({ length: 8 }, () => ({ duration: 58 })) },
+  };
+  for (const key of ['idle', 'running', 'jumping', 'dying', 'dashing']) clips[`wizard-${key}`] = { frameRate: 10, frames: [{}] };
+  const scene = { anims: { exists: key => !!clips[key], get: key => clips[key] } };
+  const plays = [];
+  const sprite = { _bbCharacter: 'wizard', anims: { play(key, ignoreIfPlaying) {
+    plays.push({ key, ignoreIfPlaying });
+    if (!(ignoreIfPlaying && this.currentAnim?.key === key)) this.currentAnim = { key };
+  } } };
+  const api = exports;
+  const action = (logical, options = {}) => api.playSpriteAnimation({ scene, sprite, character: 'wizard', logical, fallback: 'idle', ...options });
+  const move = logical => api.playCharacterAnimation({ scene, sprite, character: 'wizard', logical,
+    resolveAnimKey: (_scene, char, wanted) => `${char}-${wanted}` });
+  return { api, sprite, plays, action, move, duration: key => api.getAnimationDurationMs(scene, key), advance: ms => { now += ms; } };
+}
+
+test('a special shows for its whole animation and movement cannot cut it short', () => {
+  const rig = actionRig();
+  rig.action('special');
+  const length = rig.duration('wizard-special');
+  rig.advance(length - 50);
+  for (const logical of ['running', 'jumping', 'idle']) rig.move(logical);
+  assert.equal(rig.sprite.anims.currentAnim.key, 'wizard-special');
+  assert.equal(rig.api.getPresentedAnimation(rig.sprite), 'special');
+  rig.advance(60);
+  rig.move('running');
+  assert.equal(rig.sprite.anims.currentAnim.key, 'wizard-running');
+});
+
+test('asking for the showing special again continues it; only a hold extends it', () => {
+  const rig = actionRig();
+  rig.action('special');                 // local press
+  const until = rig.api.activeAction(rig.sprite).until;
+  rig.advance(150);
+  rig.action('special');                 // server echo
+  assert.equal(rig.plays.length, 1, 'the echo does not restart the pose');
+  assert.equal(rig.api.activeAction(rig.sprite).until, until);
+  assert.equal(Math.round(rig.api.actionElapsedMs(rig.sprite, 'special')), 150);
+  rig.action('special', { holdMs: 3000 });
+  assert.equal(rig.plays.length, 1);
+  assert.ok(rig.api.activeAction(rig.sprite).until > until);
+  rig.action('special', { restart: true });
+  assert.equal(rig.plays.length, 2);
+  assert.equal(rig.api.actionElapsedMs(rig.sprite), 0);
+});
+
+test('a new attack id restarts the throw, the same id does not', () => {
+  const rig = actionRig();
+  rig.action('throw', { id: 'a' });
+  rig.action('throw', { id: 'a' });
+  assert.equal(rig.plays.length, 1);
+  rig.advance(100);
+  rig.action('throw', { id: 'b' });
+  assert.equal(rig.plays.length, 2);
+  assert.equal(rig.plays[1].ignoreIfPlaying, false);
+  assert.equal(rig.api.activeAction(rig.sprite).id, 'b');
+});
+
+test('dashing and dying end an action; other character animations replace it', () => {
+  for (const interrupt of ['dashing', 'dying']) {
+    const rig = actionRig();
+    rig.action('special');
+    rig.move(interrupt);
+    assert.equal(rig.sprite.anims.currentAnim.key, `wizard-${interrupt}`);
+    assert.equal(rig.api.activeAction(rig.sprite), null);
+  }
+  const rig = actionRig();
+  rig.action('throw');
+  rig.action('dying');
+  assert.equal(rig.api.activeAction(rig.sprite), null);
+  assert.equal(rig.sprite.anims.currentAnim.key, 'wizard-dying');
+});

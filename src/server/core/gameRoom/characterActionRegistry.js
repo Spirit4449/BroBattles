@@ -105,7 +105,15 @@ function scheduleWindupRelease(
   );
 
   const interruptSeq = playerData._attackInterruptSeq || 0;
+  // A charge that bursts on someone during the windup replaces the release.
+  const windup = { burst: false };
+  if (flow.chargeActionType) {
+    attackRuntimeManager.registerAttackFromAction(room, playerData, {
+      ...actionData, type: String(flow.chargeActionType).toLowerCase(), _windup: windup,
+    }, actionNow);
+  }
   const emitRelease = () => {
+    if (windup.burst) return;
     if ((playerData._attackInterruptSeq || 0) !== interruptSeq) return;
     if (
       room.status !== "active" ||
@@ -201,6 +209,9 @@ function handleCharacterAction(
     broadcastAction(room, playerData, actionData, actionNow);
     return { handled: true };
   }
+  // Started by the server inside another attack (a wizard's charge); a
+  // client may not trigger it on its own.
+  if (flowKind === "server-internal") return { handled: true };
   if (flowKind === "server-runtime-only") {
     registerRuntimeAttack(room, playerData, actionData, actionNow);
     return { handled: true };

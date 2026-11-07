@@ -67,8 +67,7 @@
           "visualThickness": 1.7,
           "castDelayMs": 100,
           "flipLockMs": 600,
-          "forwardOffset": 0.12,
-          "verticalOffset": -0.16,
+          "muzzle": "bow",
           "embedMs": 2000,
           "gravity": 460,
           "maxLifetimeMs": 5000
@@ -167,6 +166,13 @@
       "groundY": 156,
       "requiresFrame": "duck00",
       "duckFrame": "duck00"
+    }
+  },
+  "rig": {
+    "frame": [160, 160],
+    "feet": [80.5, 156],
+    "points": {
+      "bow": { "pivot": [80.5, 125], "reach": 19.5 }
     }
   }
 }

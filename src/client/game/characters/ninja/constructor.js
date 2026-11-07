@@ -7,6 +7,7 @@ import { resolveSessionDamage } from "../shared/attackFlow";
 import CharacterEntityBase from "../shared/characterEntityBase";
 import { playSpriteAnimation } from "../shared/animationState";
 import { createRuntimeId } from "../shared/runtimeId";
+import { faceAttack } from "../shared/flipLock";
 import { consumeOnce } from "../shared/packetDedupe";
 import { playPlayerSound } from "../../audio/playerAudio";
 
@@ -84,6 +85,7 @@ class Ninja extends CharacterEntityBase {
         character: NAME,
         logical: "throw",
         fallback: "idle",
+        id: data.id || data.instanceId || null,
       });
       // Instantiate a non-owner returning shuriken so visuals match
       const shuriken = new ReturningShuriken(
@@ -155,6 +157,9 @@ class Ninja extends CharacterEntityBase {
 
     const fired = this.performDefaultAttack(() => {
       const attackId = createRuntimeId("ninjaShuriken");
+      // Face the throw and hold it through the throw, so running the other
+      // way does not turn him back mid-throw.
+      faceAttack(this.scene, p, direction < 0, RETURNING_SHURIKEN.flipLockMs);
       // Play throw anim and sfx
       this.scene.sound.play("shurikenThrow", { volume: 1, rate: 1.3 });
       playSpriteAnimation({
@@ -163,6 +168,7 @@ class Ninja extends CharacterEntityBase {
         character: NAME,
         logical: "throw",
         fallback: "idle",
+        id: attackId,
       });
 
       const config = {

@@ -17,7 +17,7 @@ export function performHuntressArrowSpread(instance, attackContext = null) {
   const speed = Math.max(1, ARROWS.speed * (Number(context.speedScale) || 1));
   const id = createRuntimeId("huntressArrow");
   const unlockFlip = lockPlayerFlip(p);
-  playSpriteAnimation({ scene, sprite: p, character: "huntress", logical: "throw", fallback: "throw" });
+  playSpriteAnimation({ scene, sprite: p, character: "huntress", logical: "throw", fallback: "throw", id });
   try {
     if (scene?.cache?.audio?.exists?.("huntress-attack") || scene?.sound?.get?.("huntress-attack")) {
       playPlayerSound(scene, p, "huntress-attack", { volume: 0.48 });

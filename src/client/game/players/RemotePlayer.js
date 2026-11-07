@@ -2,6 +2,7 @@ import { spawnRespawnEffect } from '../scene/respawnEffect';
 import { presentRemoteDash } from '../scene/dash';
 import { presentRemoteKnockback } from '../scene/knockbackTrail';
 import { spritePresentation } from '../characters/shared/spritePresentation';
+import { bindPlayerOrigin, playerAnchor } from '../characters/shared/rig';
 import { applyTeamVisual, TEAM_GREEN, TEAM_RED } from "../../../shared/projectilePresentation";
 import { bindCanvasName } from "../../site/preferences";
 import { attachTeamFootRing } from "./teamFootRing";
@@ -14,6 +15,7 @@ import {
   getEffectsClass,
 } from "../characters";
 import { performSpecial } from "../characters/special";
+import { clearAction } from "../characters/shared/animationState";
 import { player } from "./localPlayer";
 import socket from "../../lib/socket";
 import {
@@ -49,9 +51,7 @@ import { playDuckTransitionSound } from "../audio/movementAudio.js";
 import { playPlayerSound } from "../audio/playerAudio.js";
 import { createRemoteMovementAudio } from "../audio/remoteMovementAudio";
 import { DUCK_HEIGHT_RATIO } from "../../../shared/physics/ducking.js";
-import { resolveCharacterKey } from "../../../shared/characters/characterStats.js";
 import { INVISIBLE_ALPHA, invisibleAttackAlpha } from "../powerups/invisibilityReveal.js";
-import { characterPresentation } from "../../../shared/characters/index.js";
 
 const OP_PLAYER_NAME_OFFSET_Y = 42;
 // A fighter still loading during the pregame stands at its spawn as a ghost.
@@ -129,6 +129,7 @@ export default class RemotePlayer {
     }
     this.opponent.setScale(presentation.scale);
     this.opponent.setOrigin(presentation.originX, presentation.originY);
+    bindPlayerOrigin(this.opponent, presentation);
     this.opponent._bbHudTopOffset = presentation.hudTopOffset;
     this.opponent.body.allowGravity = false;
     this.opponent.setCollideWorldBounds(false); // no world-bounds collision for remote visuals
@@ -281,8 +282,6 @@ export default class RemotePlayer {
 
     this.specialListener = (data) => {
       if (data.username === this.username) {
-        const specialLockMs = characterPresentation(resolveCharacterKey(data.character)).specialAnimationLockMs;
-        if (specialLockMs) this._animLockUntil = performance.now() + specialLockMs;
         performSpecial(
           data.character,
           this.scene,
@@ -646,7 +645,7 @@ export default class RemotePlayer {
     if (this._worldUiHidden) return;
     // Anchor straight to the drawn sprite every frame, exactly like the local
     // player's HUD. Smoothing here made remote bars trail their fighter.
-    this._hudAnchorX = this.opponent.x;
+    this._hudAnchorX = playerAnchor(this.opponent, "top").x;
     this._hudAnchorY = this.hudTopY();
     if (this.opPlayerName) {
       this.opPlayerName.setPosition(
@@ -985,6 +984,8 @@ export default class RemotePlayer {
     try {
       this.opponent.alpha = 1;
       this.opponent.setVisible(true);
+      // Death ends any throw or special that was showing.
+      clearAction?.(this.opponent);
       this.opponent.anims.play(
         resolveAnimKey(
           this.scene,
@@ -1046,6 +1047,7 @@ export default class RemotePlayer {
       this.opponent.setVisible(true);
       this.opponent.setAlpha(1);
       this.opponent.body.enable = true;
+      clearAction?.(this.opponent);
       this.opponent.anims.play(
         resolveAnimKey(this.scene, this.character, "idle", "idle", this.skinId),
         true,

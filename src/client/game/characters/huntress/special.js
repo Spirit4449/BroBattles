@@ -1,5 +1,8 @@
-import { playSpriteAnimation, markOneShotAnimation } from "../shared/animationState.js";
+import { playSpriteAnimation } from "../shared/animationState.js";
+import rigData from "../../../../shared/characters/characterRig.js";
 import { playPlayerSound } from "../../audio/playerAudio";
+
+const { launchPoint } = rigData;
 
 export function perform(
   scene,
@@ -11,15 +14,15 @@ export function perform(
   isOwner = false,
 ) {
   if (!scene || !player || !player.active) return;
-  player._specialAnimLockUntil = Date.now() + 450;
-  markOneShotAnimation(player, 'special', 450, { remote: !isOwner });
-
+  player._specialCastLockUntil = Date.now() + 450;
   playSpriteAnimation({
     scene,
     sprite: player,
     character: "huntress",
     logical: "special",
     fallback: "throw",
+    holdMs: 450,
+    remote: !isOwner,
   });
 
   try {
@@ -29,7 +32,10 @@ export function perform(
   if (!scene.add) return;
   // A quick bow-side ignition: separated square embers leave the silhouette clear.
   const direction = player.flipX ? -1 : 1;
-  const sparks = scene.add.graphics().setPosition(player.x + direction * 18, player.y + 12);
+  // Where her arrows leave the bow (huntress.json rig.points.bow).
+  const bow = launchPoint("huntress", "bow", { x: player.x, y: player.y, flip: player.flipX }, player.flipX ? Math.PI : 0)
+    || { x: player.x + direction * 18, y: player.y + 12 };
+  const sparks = scene.add.graphics().setPosition(bow.x, bow.y);
   sparks.setDepth((player.depth || 10) + 4);
   for (let i = 0; i < 7; i++) {
     sparks.fillStyle(i % 2 ? 0xffbf42 : 0xff8526, 1);

@@ -63,8 +63,10 @@ test('every registered generic damage runtime publishes its collision geometry w
 test('configured projectile offsets align Wizard and Gloop collision with their art', () => {
   const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
   const now = Date.now();
+  const { getResolvedCharacterAttackConfig } = require('../src/shared/characters/characterTuning');
+  const fireball = getResolvedCharacterAttackConfig('wizard', 'fireball');
   for (const [type, expectedOffset, expectedOffsetY] of [
-    ['wizard-fireball-release', -90, 16],
+    ['wizard-fireball-release', fireball.collisionForwardOffset, fireball.collisionOffsetY],
     ['gloop-hook-release', 28, 50],
   ]) {
     const player = { name: 'A', socketId: 'a', x: 500, y: 300, isAlive: true, loaded: true, team: 'team1' };
@@ -75,8 +77,10 @@ test('configured projectile offsets align Wizard and Gloop collision with their 
       geometry: { world: { x: 0, y: 0, width: 2000, height: 1000 } },
     };
     const attack = createRuntimeAttack(player, { type, id: type, angle: 0 }, now);
-    tickRuntimeAttack(room, attack, now + 250);
-    const shape = damageHitboxSnapshot(room, now + 250)[0];
+    // Fly past the launch ease, where a rearward offset is still held at the muzzle.
+    const ticks = type.startsWith('wizard') ? 2 : 1;
+    for (let i = 1; i <= ticks; i++) tickRuntimeAttack(room, attack, now + 250 * i);
+    const shape = damageHitboxSnapshot(room, now + 250 * ticks)[0];
     assert.equal(shape.kind, 'circle');
     assert.ok(Math.abs(shape.x - (attack.x + expectedOffset)) < 1e-9, type);
     assert.equal(shape.y, attack.y + expectedOffsetY);

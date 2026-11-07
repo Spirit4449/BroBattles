@@ -46,6 +46,7 @@ export function performDravenSplashAttack(instance, attackContext = null) {
     character: "draven",
     logical: "throw",
     fallback: "idle",
+    id: attackId,
   });
 
   // Debug visuals removed (box no longer drawn)

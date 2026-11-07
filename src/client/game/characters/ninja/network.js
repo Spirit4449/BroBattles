@@ -2,7 +2,8 @@ import { applyTeamVisual } from "../../../../shared/projectilePresentation";
 import { presentSwarmRelease } from './swarmPresentation';
 import { ninjaProjectileTexture, animateNinjaProjectile } from './projectileTexture';
 import { createShurikenEffects } from './effects';
-import { playSpriteAnimation, markOneShotAnimation, getAnimationDurationMs } from '../shared/animationState';
+import { playSpriteAnimation } from '../shared/animationState';
+import { aimFacesLeft, faceAttack } from '../shared/flipLock';
 import { serverClock as clock, ensureServerClockEpoch } from '../../match/serverClock';
 import { remoteLaunchCorrection, reconcileFlight } from '../../../../shared/projectilePresentation';
 import { VERSION, STEP_MS, launch, step, swarmConfig } from '../../../../shared/characters/ninjaProjectile';
@@ -99,6 +100,8 @@ export function predictNinja(scene,player,username,payload,special=false){
   const id=payload.id||createRuntimeId('ninja');
   const angle=Number(special?payload.aim?.angle:payload.angle);
   const resolved=Number.isFinite(angle)?angle:player.flipX?Math.PI:0;
+  // The owner turns toward the super on the press, not a round trip later.
+  if(special){const c=swarmConfig();faceAttack(scene,player,aimFacesLeft({angle:resolved},player.flipX),c.count*c.releaseMs+(Number(c.lockPaddingMs)||0));}
   const now=performance.now();
   requests.set(id,{at:now,special,accepted:false,username});
   const count=special?swarmConfig().count:1;
@@ -178,8 +181,8 @@ export function handleNinjaPacket(scene,packet,next){
   }else if(a.type==='ninja-launch'){
     if(!a.projectile.special&&packet.playerName!==ctx.localUsername&&!active.has(a.projectile.id)&&!terminals.has(a.projectile.id)){
       const sprite=owner(packet.playerName);
-      const key=playSpriteAnimation({scene,sprite,character:'ninja',logical:'throw',fallback:'idle',force:false});
-      if(key)markOneShotAnimation(sprite,'throw',getAnimationDurationMs(scene,key),{remote:true});
+      // Each launched projectile is its own throw.
+      playSpriteAnimation({scene,sprite,character:'ninja',logical:'throw',fallback:'idle',id:a.projectile.id,remote:true});
       playPlayerSound(scene, sprite, 'shurikenThrow', {volume:1,rate:1.3});
     }
     accept(a.projectile,a.simMono);

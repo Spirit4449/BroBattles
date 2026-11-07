@@ -1,6 +1,7 @@
 import { updateDash, endDash, drawDashCooldown, protectDashMotion, applyDashCoast } from '../scene/dash';
 import { integrateLikeReferenceStep } from '../scene/displayRatePhysics';
 import { spritePresentation } from '../characters/shared/spritePresentation';
+import { bindPlayerOrigin, playerAnchor } from '../characters/shared/rig';
 import { attachTeamFootRing } from './teamFootRing';
 import { applyTeamVisual } from "../../../shared/projectilePresentation";
 import { getSettings, bindCanvasName, subscribeSettings } from "../../site/preferences";
@@ -60,6 +61,8 @@ import {
   markOneShotAnimation,
   noteAnimationPlayed,
   playCharacterAnimation,
+  playSpriteAnimation,
+  activeAction,
   resetAirborneJumpAnimation,
   markWallJumpAnimation,
   holdWallSlidePose,
@@ -678,6 +681,7 @@ export function createPlayer(
   player.setScale(presentation.scale);
   attachTeamFootRing(scene, player, { isAlly: true, hidden: () => dead });
   player.setOrigin(presentation.originX, presentation.originY);
+  bindPlayerOrigin(player, presentation);
   player._bbHudTopOffset = presentation.hudTopOffset;
 
   // Establish frame/body sizing BEFORE computing spawn so height math is correct
@@ -1222,12 +1226,13 @@ function drawIndicatorTriangle() {
   if (!indicatorTriangle || !player) return;
   indicatorTriangle.clear();
   const bodyTop = getStableLocalUiTop();
+  const hudX = playerAnchor(player, "top").x;
   const triangle = new Phaser.Geom.Triangle(
-    player.x,
+    hudX,
     bodyTop - 10,
-    player.x - 13,
+    hudX - 13,
     bodyTop - 20,
-    player.x + 13,
+    hudX + 13,
     bodyTop - 20,
   );
   indicatorTriangle.fillStyle(0x99ab2c);
@@ -1238,7 +1243,7 @@ export function syncLocalUiPosition() {
   if (!player) return;
   const uiTop = getStableLocalUiTop();
   try {
-    playerName?.setPosition(player.x, uiTop - 42);
+    playerName?.setPosition(playerAnchor(player, "top").x, uiTop - 42);
   } catch (_) {}
   try {
     if (indicatorTriangle?.visible) drawIndicatorTriangle();
@@ -1283,7 +1288,7 @@ function updateHealthBar() {
   if (currentHealth <= 0) currentHealth = 0;
   pdbg();
 
-  const healthBarX = player.x - healthBarWidth / 2;
+  const healthBarX = playerAnchor(player, "top").x - healthBarWidth / 2;
   const bodyTop = getStableLocalUiTop();
   // Always anchor to bodyTop so it doesn't jump when dead
   const y = bodyTop - 20; // just above body
@@ -1357,12 +1362,16 @@ function fireSpecialAttack(context = null) {
       handlePlayerMovement,
     });
   } catch (_) {}
-  const specialLockMs = characterPresentation(resolveCharacterKey(currentCharacter)).specialAnimationLockMs;
-  if (specialLockMs && player) {
-    player._specialAnimLockUntil = Date.now() + specialLockMs;
+  // Gameplay only: some casts (the wizard's) block dashing for a while. The
+  // pose is the special action below, which lasts as long as its animation.
+  const castLockMs = characterPresentation(resolveCharacterKey(currentCharacter)).specialAnimationLockMs;
+  if (castLockMs && player) {
+    player._specialCastLockUntil = Date.now() + castLockMs;
   }
-  if (player) {
-    markOneShotAnimation(player, "special", 1100);
+  // Start the pose on the press; the server's `player:special` continues it.
+  if (player?.scene) {
+    playSpriteAnimation({ scene: player.scene, sprite: player, character: currentCharacter,
+      logical: "special", fallback: "throw" });
   }
   try {
     if (player?.scene) {
@@ -1549,9 +1558,6 @@ function isControlLocked(now = Date.now()) {
   ) > now;
 }
 
-function isSpecialAnimationLocked() {
-  return (player?._specialAnimLockUntil || 0) > Date.now();
-}
 
 function isLoadedForNetwork() {
   return !dead && Number.isFinite(player?.x) && Number.isFinite(player?.y) && player?.visible !== false;
@@ -1569,12 +1575,6 @@ function buildNetworkInputState(fields) {
     ...getMovementFxNetworkState(),
     loaded: isLoadedForNetwork(),
   };
-}
-
-// Throw/special poses outrank the movement pose while they are playing.
-function withActionPose(movementAnimation) {
-  const presented = getPresentedAnimation(player, movementAnimation);
-  return presented === "throw" || presented === "special" ? presented : movementAnimation;
 }
 
 // Controls are released (chat, dialogs, unfocused desktop window): drop
@@ -1600,10 +1600,10 @@ function applyInactiveInputFrame(scene) {
     vy: Number(player?.body?.velocity?.y) || 0,
     dead,
     movementLocked: isControlLocked(now),
-    specialLocked: Number(player?._specialAnimLockUntil || 0) > now,
     fallback: getPresentedAnimation(player, "idle"),
   });
-  const passiveAnimation = withActionPose(desiredMovementAnimation);
+  // While a throw or special is showing, the controller keeps it.
+  const passiveAnimation = desiredMovementAnimation;
   playCharacterAnimation({
     scene,
     sprite: player,
@@ -1647,7 +1647,7 @@ function updateDashAndAmmo(scene) {
     down: cursors.down.isDown || movementKeys.down.isDown || !!mobileControlsController?.isAimingDown?.(),
     blocked: dead || isAttacking || Number(movementSpeedMult) <= 0 ||
       Math.max(player._movementLockedUntil || 0, player._externalControlLockUntil || 0,
-        player._specialAnimLockUntil || 0, player._shockwaveUntil || 0,
+        player._specialCastLockUntil || 0, player._shockwaveUntil || 0,
         player._knockbackUntil || 0) > now,
     now,
     showEffect: !powerupInvisible,
@@ -1918,7 +1918,8 @@ function applyHorizontalMovement(input, tuning, { ducking, shockwaveActive }) {
 }
 
 function playJumpAnimation(scene, wallJump = false) {
-  if (isAttacking || isSpecialAnimationLocked()) return;
+  // A jump during an attack does not restart the jump frames once it ends.
+  if (isAttacking || activeAction(player)) return;
   if (wallJump) markWallJumpAnimation(player);
   else resetAirborneJumpAnimation(player);
   playCharacterAnimation({
@@ -2092,7 +2093,6 @@ function presentMovementAnimation(scene, { wallSliding, movementLocked, lockedBy
     vy: Number(player?.body?.velocity?.y) || 0,
     dead,
     movementLocked,
-    specialLocked: isSpecialAnimationLocked(),
     fallback: getPresentedAnimation(player, "idle"),
   });
   const abilityLockAnimation = characterPresentation(resolveCharacterKey(currentCharacter)).abilityLockAnimation;
@@ -2103,7 +2103,8 @@ function presentMovementAnimation(scene, { wallSliding, movementLocked, lockedBy
     character: currentCharacter,
     skinId: currentSkinId,
     resolveAnimKey,
-    logical: withActionPose(desired),
+    // A throw or special that is showing keeps the sprite (animationState.js).
+    logical: desired,
     fallback: "idle",
     // Phaser's second play argument means "ignore if already playing".
     // Keep it enabled so the one-frame duck pose is not restarted every tick.

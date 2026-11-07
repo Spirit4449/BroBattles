@@ -9,6 +9,7 @@ const ATTACK_RUNTIMES = {
   'projectile-bounce': { create: projectiles.buildProjectileBounceAttack, tick: projectiles.tickBouncingProjectile },
   'attached-rect': { create: melee.buildAttachedRectAttack, tick: melee.tickAttachedRect },
   'attached-cone': { create: melee.buildAttachedConeAttack, tick: melee.tickAttachedCone },
+  'attached-charge': { create: melee.buildAttachedChargeAttack, tick: melee.tickAttachedCharge },
   'path-rect': { create: melee.buildPathRectAttack, tick: melee.tickPathRect },
   'returning-projectile': { create: returning.buildReturningProjectileAttack, tick: returning.tickReturningProjectile },
   'hook-projectile': { create: hook.buildHookProjectileAttack, tick: hook.tickHookProjectile },

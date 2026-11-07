@@ -26,6 +26,7 @@ const DELIVERIES = Object.freeze({
 const RUNTIME_DELIVERY = Object.freeze({
   'attached-rect': 'attached',
   'attached-cone': 'attached',
+  'attached-charge': 'attached',
   'path-rect': 'attached',
   'projectile-linear': 'released',
   'projectile-bounce': 'released',

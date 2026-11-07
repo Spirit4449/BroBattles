@@ -148,21 +148,26 @@ kbd {
   white-space: nowrap;
 }
 #map-select { width: 190px; font-weight: 700; }
-.mode-badge {
-  padding: 5px 8px;
-  border: 2px solid var(--bb-ink);
-  color: #241703;
-  background: linear-gradient(180deg, #ffd977, #e6a93a);
-  box-shadow: 0 2px var(--bb-ink);
-  font: 7px/1.4 var(--bb-font-display);
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-.mode-badge:empty { display: none; }
 #save-state { min-width: 112px; color: var(--bb-text-soft); background: #0d1a2e; }
 #save-state.is-dirty { color: #241703; background: linear-gradient(180deg, #ffd977, #e6a93a); }
 #save-state img { width: 11px; height: 11px; image-rendering: pixelated; }
-.playtest-group { gap: 4px; padding-right: 16px; border-right: 2px solid rgba(255, 255, 255, 0.12); }
+.playtest-group { gap: 8px; padding-right: 16px; border-right: 2px solid rgba(255, 255, 255, 0.12); }
+/* One recessed strip holding every playtest option, the same height as the buttons. */
+.playtest-settings {
+  display: flex;
+  align-items: stretch;
+  height: 32px;
+  border: 2px solid var(--bb-ink);
+  background: rgba(5, 12, 25, 0.9);
+  box-shadow: 0 3px var(--bb-ink), inset 0 2px rgba(0, 0, 0, 0.35);
+}
+.playtest-settings > * + * { border-left: 2px solid rgba(255, 255, 255, 0.08); }
+#studio .playtest-settings select.playtest-inline { width: auto; height: 100%; padding-block: 0; border: 0; background-color: transparent; box-shadow: none; }
+.playtest-settings .playtest-toggle { position: relative; margin: 0; padding: 0 10px; gap: 0; color: var(--studio-muted); font: 8px/1 var(--bb-font-display); text-transform: uppercase; white-space: nowrap; user-select: none; }
+.playtest-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.playtest-toggle:hover { color: var(--studio-text); }
+.playtest-toggle:has(input:checked) { color: var(--bb-gold); background: rgba(255, 210, 90, 0.12); }
+.playtest-toggle:has(input:focus-visible) { outline: 2px solid var(--bb-border-highlight); outline-offset: -2px; }
 .menu { position: relative; }
 .menu > summary { list-style: none; }
 .menu > summary::-webkit-details-marker { display: none; }

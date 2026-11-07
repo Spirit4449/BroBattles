@@ -51,8 +51,7 @@
           "visualScale": 1.5,
           "castDelayMs": 120,
           "flipLockMs": 520,
-          "forwardOffset": 0.1,
-          "verticalOffset": -0.24,
+          "muzzle": "slimeMuzzle",
           "initialVy": -45,
           "gravity": 340,
           "maxBounces": 2,
@@ -161,6 +160,13 @@
       "runtime": {
         "kind": "hook-projectile"
       }
+    }
+  },
+  "rig": {
+    "feet": [63.5, 124],
+    "points": {
+      "core": [63.5, 112],
+      "slimeMuzzle": { "pivot": [63.5, 94.72], "reach": 12.8, "alongAim": false }
     }
   }
 }

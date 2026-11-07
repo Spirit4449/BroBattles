@@ -1,5 +1,19 @@
 // Source-pixel grip tracks. The sprite and weapon share the atlas animation clock.
 import handAnchors from "./handAnchors.json";
+import { characterFrames, characterStats } from "../../../../shared/characters";
+import rigData from "../../../../shared/characters/characterRig.js";
+
+// Thorg's art geometry, from his definition and rig (thorg.json): the atlas
+// frame centre (hand anchors are source pixels), world pixels per source pixel,
+// the frame's on-screen size, and how far his feet sit below the frame centre
+// (rage scaling grows him about his feet).
+const FRAME = characterFrames.thorg;
+export const THORG_ART = Object.freeze({
+  centre: FRAME.w / 2,
+  scale: characterStats.thorg.spriteScale,
+  displaySize: FRAME.w * characterStats.thorg.spriteScale,
+  feetDrop: (rigData.rigOf("thorg").feet[1] - FRAME.h / 2) * characterStats.thorg.spriteScale,
+});
 export function thorgGripPose(body, delta = 16) {
   const frame = String(body.frame?.name || "idle00");
   const name = frame.match(/^[a-z]+/i)?.[0] || "idle";
@@ -19,8 +33,8 @@ export function thorgGripPose(body, delta = 16) {
   const phase = (index + fraction) * Math.PI / 3;
   const lift = idle ? Math.sin(phase) * 0.2 : 0;
   const inertia = Math.max(-0.14, Math.min(0.14, (Number(body.body?.velocity?.y) || 0) / 2400));
-  const target = { x: ((a[0] + (b[0]-a[0])*mix) - 64) * 0.7,
-    y: ((a[1] + (b[1]-a[1])*mix) - 64) * 0.7 + lift,
+  const target = { x: ((a[0] + (b[0]-a[0])*mix) - THORG_ART.centre) * THORG_ART.scale,
+    y: ((a[1] + (b[1]-a[1])*mix) - THORG_ART.centre) * THORG_ART.scale + lift,
     angle: (a[2] ?? -4.48) + ((b[2] ?? -4.48) - (a[2] ?? -4.48))*mix + inertia +
       (idle ? Math.sin(phase)*0.008 : 0) };
   const pose = body._thorgGripPose || { ...target };

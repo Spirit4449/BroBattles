@@ -476,3 +476,11 @@ the built-in map and saved override through the map repository. World positions,
 collision rectangles, spawn references and gameplay sizes are preserved.
 The lobby uses the matching small ledge, aligned to its existing 32/638 surface
 ratio. The map selection preview is rebuilt from the installed art.
+
+## Lushy Peaks code-drawn platforms (2026-11-07)
+
+The four gameplay platforms (`base`, `largePlatform`, `smallPlatform`, `sidePlatform`) are now drawn in code and replace the 2026-11-02 set at identical texture sizes, so map scales and collision are unchanged.
+
+- `scripts/art/lushy-platform-masks.cjs` traces each original's silhouette and stones and samples its rock pixels onto a chunky grid (mode colour, snapped to the shared palette). It reads the previous WebPs from `output/lushy-code-platforms/originals/` (ignored; restore them from git history if absent). The large ledge's outline comes from the approved render of `scripts/art/generate-lushy-large-platform.cjs`.
+- `scripts/art/generate-lushy-platforms.cjs <base|small|side|large>` draws the rock from those samples, then adds the draped turf mat, crack-following vines, hanging moss, flowers and the pillar's thistle, and writes an exact nearest-neighbour upscale.
+- Texture pixels per art pixel: base 12, large 8, small 40, side 24, chosen so the pixels look the same size on screen.

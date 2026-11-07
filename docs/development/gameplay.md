@@ -167,6 +167,21 @@ For new attacks:
 
 - Prefer `hitCircleTargets` or `hitRectTargets`; both publish their exact input
   geometry before searching targets, including when no enemies are present.
+- Straight projectiles can declare `splashRadius` (Wizard's fireball does):
+  the shot stops on the first target it touches, a wall, or the end of its
+  range, bursts on the struck player's body centre (or the contact point for a
+  wall, mode object or range end), damages every target within that radius of
+  the burst once, and
+  broadcasts `impactActionType` with the burst point so every client's drawn
+  flight stops there.
+- A `windup-release` flow can declare `chargeActionType` (Wizard's fireball
+  does): while the caster winds up, an `attached-charge` capsule over his head
+  and behind his back (`src/shared/characters/wizardCharge.js`, tuned in
+  `attack.fireball.charge`) bursts on the first enemy touching it with the
+  same damage and splash, and the release is cancelled. Its flow kind is
+  `server-internal`, so a client cannot start it on its own. The caster's
+  client predicts it with the same shape; other clients burst the charging
+  ball from the impact broadcast.
 - Straight projectiles can declare `collisionForwardOffset` in character tuning
   when the damaging part of asymmetric artwork is ahead of or behind its motion
   origin. The shared runtime rotates that offset with the attack angle.

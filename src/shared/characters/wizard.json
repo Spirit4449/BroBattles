@@ -2,7 +2,7 @@
   "key": "wizard",
   "stats": {
     "baseHealth": 5000,
-    "attackDescription": "Releases a fireball that deals splash damage to everyone in the path.",
+    "attackDescription": "Releases a fireball that bursts on the first enemy it hits, splashing everyone nearby.",
     "baseDamage": 3000,
     "ammoCooldownMs": 800,
     "ammoReloadMs": 3000,
@@ -33,20 +33,28 @@
         },
         "fireball": {
           "speed": 450,
+          "launchEaseMs": 280,
+          "launchStartSpeed": 0.28,
           "range": 1050,
           "visualRadius": 14,
           "collisionRadius": 28,
-          "collisionForwardOffset": -90,
-          "collisionOffsetY": 16,
+          "splashRadius": 60,
+          "collisionForwardOffset": 0,
+          "collisionOffsetY": 0,
           "initialScale": 0.1,
           "activeScale": 0.5,
           "glowRadiusMultiplier": 1.35,
           "bobAmplitude": 5,
-          "verticalOffset": 0.12,
           "castDelayMs": 520,
+          "charge": {
+            "startMs": 60,
+            "radius": 24,
+            "behind": [-34, -10],
+            "above": [8, -46]
+          },
           "flipLockMs": 650,
           "bobTweenMs": 220,
-          "forwardOffset": 0.23,
+          "muzzle": "fireballMuzzle",
           "bobFreqMs": 120,
           "depth": 100,
           "baseAngleDeg": -90
@@ -66,8 +74,12 @@
           "durationScale": 1.5,
           "castMs": 2000,
           "beamMs": 1000,
-          "teammateBlockedPowerups": [
-            "poison"
+          "powerups": [
+            "rage",
+            "health",
+            "shield",
+            "gravityBoots",
+            "invisibility"
           ],
           "fallbackPowerup": "shield"
         }
@@ -98,7 +110,18 @@
         "kind": "windup-release",
         "broadcastType": "wizard-fireball",
         "releaseActionType": "wizard-fireball-release",
-        "releaseOwnerEcho": true
+        "releaseOwnerEcho": true,
+        "chargeActionType": "wizard-fireball-charge"
+      }
+    },
+    "wizard-fireball-charge": {
+      "character": "wizard",
+      "actionFlow": {
+        "kind": "server-internal"
+      },
+      "attackType": "basic",
+      "runtime": {
+        "kind": "attached-charge"
       }
     },
     "wizard-fireball-release": {
@@ -114,5 +137,18 @@
   },
   "presentation": {
     "specialAnimationLockMs": 2100
+  },
+  "rig": {
+    "feet": [103, 137],
+    "points": {
+      "chest": [109, 70],
+      "fireballMuzzle": { "pivot": [134, 74], "reach": 0 },
+      "orb": [165, 64],
+      "staffTip": {
+        "default": [88, 62],
+        "attack": [[142, 76], [140, 76], [142, 76], [142, 72], [134, 74], [144, 70], [138, 68], [140, 66]],
+        "special": [[60, 26], [49, 27], [59, 24], [165, 64], [165, 64], [165, 64]]
+      }
+    }
   }
 }

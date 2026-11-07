@@ -301,14 +301,14 @@ export function bindLocalSocketEvents({
       const wrapper = Object.values(getOpponentPlayersRef() || {}).find(op =>
         op.username === name || op.name === name || op.opponent?.name === name);
       if (!wrapper?.opponent) continue;
-      wrapper._animLockUntil = 0;
       interruptPresentation(wrapper.opponent);
     }
   };
   const interruptPresentation = (sprite) => {
     sprite.emit?.('attack:interrupted');
     sprite._thorgAttackCleanup?.();
-    sprite._remoteActionAnimUntil = sprite._specialAnimLockUntilPerf = sprite._specialAnimLockUntil = 0;
+    sprite._specialCastLockUntil = 0;
+    // Ends any throw or special, so the falling pose below can play.
     sprite._bbAnimationState = {};
     sprite._lockFlip = false;
     playSpriteAnimation({ scene: getScene(), sprite, character: sprite._bbCharacter,

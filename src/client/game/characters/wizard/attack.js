@@ -3,30 +3,37 @@ import { getResolvedCharacterAttackConfig } from "../../../../shared/characters/
 import { createRuntimeId } from "../shared/runtimeId";
 import { lockPlayerFlip } from "../shared/flipLock";
 import { RENDER_LAYERS } from "../../scene/renderLayers";
+import { rigPoint } from "../shared/rig";
+import rigData from "../../../../shared/characters/characterRig.js";
+
+const { launchPoint } = rigData;
+import { attachToPlayer } from "../shared/attachToPlayer";
 import { playSpriteAnimation } from "../shared/animationState";
 
 import { createFireballParticles, spawnFireballBurst } from "./fireballParticles";
-import { ensureFireballTextures, FIREBALL_ORIGIN } from "./fireballArt";
+import { ensureFireballTextures, FIREBALL_ORIGIN, EXPLOSION_ORIGIN, EXPLOSION_FRAMES, explosionTextureKey } from "./fireballArt";
 import { playPlayerSound } from "../../audio/playerAudio";
 import { consumeOnce } from "../shared/packetDedupe";
 import { attackCollisionCenter } from "../../../../shared/combat/shotContact";
-import { predictShotContact, shotBlockerContact, notePredictedHit } from "../shared/shotPrediction";
+import { launchTravel, launchDurationMs } from "../../../../shared/combat/launchRamp";
+import { predictShotContact, predictAttachedContacts, shotBlockerContact, notePredictedHit } from "../shared/shotPrediction";
+import { wizardChargeShapes } from "../../../../shared/characters/wizardCharge";
 
 const FIREBALL = getResolvedCharacterAttackConfig("wizard", "fireball");
 
-const FIREBALL_SPEED = FIREBALL.speed;
 const FIREBALL_RANGE = FIREBALL.range;
 const FIREBALL_VISUAL_RADIUS = FIREBALL.visualRadius;
 const FIREBALL_COLLISION_RADIUS = FIREBALL.collisionRadius;
+const FIREBALL_SPLASH_RADIUS = FIREBALL.splashRadius || FIREBALL.collisionRadius;
 const FIREBALL_ACTIVE_SCALE = FIREBALL.activeScale;
 const FIREBALL_BOB_AMPLITUDE = FIREBALL.bobAmplitude;
-const FIREBALL_VERTICAL_OFFSET = FIREBALL.verticalOffset;
 const FIREBALL_CAST_DELAY_MS = FIREBALL.castDelayMs;
 const FIREBALL_FLIP_LOCK_MS = FIREBALL.flipLockMs;
-const FIREBALL_FORWARD_OFFSET = FIREBALL.forwardOffset;
 const FIREBALL_BOB_FREQ_MS = FIREBALL.bobFreqMs;
 const FIREBALL_DEPTH = FIREBALL.depth;
 const FIREBALL_BASE_ANGLE_DEG = FIREBALL.baseAngleDeg;
+// The ball eases off the staff on the same curve the server's hitbox uses.
+const FIREBALL_DURATION_MS = Math.round(launchDurationMs(FIREBALL.range, FIREBALL));
 
 // Each release is drawn once, whether predicted locally or echoed by the server.
 export const consumeWizardRelease = (scene, id) => consumeOnce(scene, "wizard-release", id, 4000);
@@ -115,11 +122,40 @@ function createFireballSprite(scene, x, y, direction, owner = null) {
   return sprite;
 }
 
+// The ball bursts into pixel flames that rise and break apart into smoke.
+function spawnExplosion(scene, x, y, owner) {
+  const texture = explosionTextureKey(teamColor(owner) === TEAM_RED ? "red" : "blue");
+  if (!scene.add?.sprite || !scene.textures?.exists?.(texture)) return false;
+  const key = `${texture}:burst`;
+  if (!scene.anims.exists(key)) {
+    scene.anims.create({
+      key,
+      frames: Array.from({ length: EXPLOSION_FRAMES }, (_, i) => ({ key: texture, frame: `boom${i}` })),
+      frameRate: 20,
+      repeat: 0,
+    });
+  }
+  const boom = scene.add.sprite(Math.round(x), Math.round(y), texture, "boom0")
+    .setOrigin(EXPLOSION_ORIGIN.x, EXPLOSION_ORIGIN.y)
+    .setScale(FIREBALL_ACTIVE_SCALE)
+    .setDepth(Math.max(FIREBALL_DEPTH, RENDER_LAYERS.ATTACKS) + 1);
+  const destroy = () => {
+    scene.events.off("presentation:reset", destroy);
+    scene.events.off("shutdown", destroy);
+    if (boom.active) boom.destroy();
+  };
+  boom.once("animationcomplete", destroy);
+  scene.events.once("presentation:reset", destroy);
+  scene.events.once("shutdown", destroy);
+  boom.anims.play(key);
+  return true;
+}
+
 function spawnImpact(scene, x, y, playSound = true, owner = null) {
   try {
     spawnFireballBurst(scene, x, y, owner);
-    // Use simple circle flash instead of particles to avoid texture issues
-    if (scene.add?.circle) {
+    // Without the generated sheet (tests, a failed canvas) fall back to a flash.
+    if (!spawnExplosion(scene, x, y, owner) && scene.add?.circle) {
       const flash = scene.add.circle(
         x,
         y,
@@ -146,14 +182,16 @@ function spawnImpact(scene, x, y, playSound = true, owner = null) {
   } catch (_) {}
 }
 
-export function playWizardCastWindup(scene, ownerSprite, volume = 0.3) {
+// Each fireball id is its own cast, so a new fireball starts the throw over
+// while a repeated packet for the same fireball leaves it alone.
+export function playWizardCastWindup(scene, ownerSprite, volume = 0.3, id = null) {
   playSpriteAnimation({
     scene,
     sprite: ownerSprite,
     character: "wizard",
     logical: "throw",
     fallback: "idle",
-    force: false,
+    id,
   });
 
   try {
@@ -184,20 +222,10 @@ function resolveProjectileStart(payload, ownerSprite, angle, direction) {
     : direction < 0
       ? Math.PI
       : 0;
-  return {
-    x:
-      (ownerSprite?.x || 0) +
-      Math.cos(resolvedAngle) *
-        ((ownerSprite?.displayWidth || 80) * FIREBALL_FORWARD_OFFSET),
-    y: ownerSprite
-      ? ownerSprite.y -
-        (ownerSprite.displayHeight || ownerSprite.height || 120) *
-          FIREBALL_VERTICAL_OFFSET +
-        Math.sin(resolvedAngle) *
-          ((ownerSprite.displayWidth || ownerSprite.width || 80) *
-            FIREBALL_FORWARD_OFFSET)
-      : 0,
-  };
+  // The same rig muzzle the server spawns from (wizard.json fireballMuzzle).
+  return launchPoint("wizard", FIREBALL.muzzle, {
+    x: Number(ownerSprite?.x) || 0, y: Number(ownerSprite?.y) || 0, flip: direction < 0,
+  }, resolvedAngle) || { x: Number(ownerSprite?.x) || 0, y: Number(ownerSprite?.y) || 0 };
 }
 
 // The server's damage circle for a fireball `travel` px along its line, which
@@ -229,7 +257,7 @@ function spawnWizardFireballProjectile(
   const start = resolveProjectileStart(payload, ownerSprite, angle, direction);
   const range = payload?.range || FIREBALL_RANGE;
   const travelDuration =
-    payload?.duration || Math.round((range / FIREBALL_SPEED) * 1000);
+    payload?.duration || Math.round(launchDurationMs(range, FIREBALL));
   const startup = Math.max(0, Number(payload?.startup) || 0);
   const bob = payload?.bob ?? FIREBALL_BOB_AMPLITUDE;
   const scale = Number(payload?.scale) || FIREBALL_ACTIVE_SCALE;
@@ -304,11 +332,23 @@ function spawnWizardFireballProjectile(
     const launchX = sprite.x - offsetX;
     const launchY = sprite.y - offsetY;
     trail = createFireballParticles(scene, sprite, angle);
-    // The caster sees the fireball burst on each enemy it passes, as drawn.
-    const struck = new Set();
+    // The fireball stops on the first thing it touches and bursts there. The
+    // caster predicts that contact; every flight also stops where the server
+    // says it burst (see burstWizardFireball).
     let damageFrom = predictHits ? fireballDamageCenter({ x: launchX, y: launchY }, angle, 0) : null;
     const shooter = ownerSprite?.username;
     let lastTravel = 0;
+    const burst = (x, y) => {
+      if (!sprite.active) return;
+      travelTween?.stop();
+      spawnImpact(scene, x, y, false, sprite);
+      sprite.destroy();
+      trail?.stop();
+      debugFollower?.destroy();
+    };
+    const flights = scene._wizardFlights ||= new Map();
+    flights.set(attackId, burst);
+    sprite.once?.("destroy", () => { if (flights.get(attackId) === burst) flights.delete(attackId); });
 
     travelTween = scene.tweens.add({
       targets: { t: 0 },
@@ -318,42 +358,39 @@ function spawnWizardFireballProjectile(
       onUpdate: (tween) => {
         if (!sprite.active) return;
         const progress = Number(tween?.targets?.[0]?.t) || 0;
-        let travel = range * progress;
+        const flown = travelDuration * progress;
+        let travel = progress >= 1 ? range : Math.min(range, launchTravel(flown, FIREBALL));
         // A wall built against the caster stops the fireball, as on the server.
         const blockedAt = shotBlockerContact(shooter,
           { x: launchX + forwardX * lastTravel, y: launchY + forwardY * lastTravel },
           { x: launchX + forwardX * travel, y: launchY + forwardY * travel }, FIREBALL_COLLISION_RADIUS);
         if (blockedAt !== null) travel = lastTravel + (travel - lastTravel) * blockedAt;
         lastTravel = travel;
-        const bobOffset =
-          Math.sin((travelDuration * progress) / FIREBALL_BOB_FREQ_MS) * bob;
-        const correction = Math.min(1, travelDuration * progress / 240);
+        // The bob grows in with the launch so the ball leaves the staff level.
+        const bobIn = Math.min(1, flown / Math.max(1, FIREBALL.launchEaseMs || 1));
+        const bobOffset = Math.sin(flown / FIREBALL_BOB_FREQ_MS) * bob * bobIn * bobIn;
+        const correction = Math.min(1, flown / 240);
         const settle = 1 - correction * correction * (3 - 2 * correction);
         sprite.x = launchX + forwardX * travel + normalX * bobOffset + offsetX * settle;
         sprite.y = launchY + forwardY * travel + normalY * bobOffset + offsetY * settle;
         if (damageFrom) {
           const damageTo = fireballDamageCenter({ x: launchX, y: launchY }, angle, travel);
-          for (let hit; (hit = predictShotContact(damageFrom, damageTo, FIREBALL_COLLISION_RADIUS, { skip: struck }));) {
-            struck.add(hit.target.name);
-            spawnImpact(scene, hit.x, hit.y, false, sprite);
-            notePredictedHit({ delivery: "released", character: "wizard", target: hit.target });
-          }
+          const hit = predictShotContact(damageFrom, damageTo, FIREBALL_COLLISION_RADIUS);
           damageFrom = damageTo;
+          if (hit) {
+            // A struck player is the centre of the burst, as on the server;
+            // mode objects burst where they were touched.
+            const at = hit.target.sprite && hit.bounds
+              ? { x: (hit.bounds.left + hit.bounds.right) / 2, y: (hit.bounds.top + hit.bounds.bottom) / 2 }
+              : { x: hit.x, y: hit.y };
+            predictSplash(at, "released");
+            burst(at.x, at.y);
+            return;
+          }
         }
-        if (blockedAt !== null) {
-          travelTween.stop();
-          spawnImpact(scene, sprite.x, sprite.y, false, sprite);
-          sprite.destroy();
-          trail?.stop();
-          debugFollower?.destroy();
-        }
+        if (blockedAt !== null) burst(sprite.x, sprite.y);
       },
-      onComplete: () => {
-        spawnImpact(scene, sprite.x, sprite.y, false, sprite);
-        sprite.destroy();
-        trail?.stop();
-        debugFollower?.destroy();
-      },
+      onComplete: () => burst(sprite.x, sprite.y),
     });
   };
 
@@ -381,8 +418,8 @@ export function performWizardFireball(instance, attackContext = null) {
   const attackId = createRuntimeId("wizardFireball");
 
   const unlockFlip = lockPlayerFlip(p);
-  playWizardCastWindup(scene, p, 0.55);
-  chargeWizardFireball(scene, p, { id: attackId, angle, direction });
+  playWizardCastWindup(scene, p, 0.55, attackId);
+  chargeWizardFireball(scene, p, { id: attackId, angle, direction, predict: true });
   scene.time.delayedCall(FIREBALL_FLIP_LOCK_MS, () => {
     try {
       unlockFlip();
@@ -394,7 +431,7 @@ export function performWizardFireball(instance, attackContext = null) {
     if (!scene._wizardCharges?.has(attackId) || !p.active) return;
     if (!consumeWizardRelease(scene, attackId)) return;
     spawnWizardFireballProjectile(scene, { id: attackId, angle, direction, range: FIREBALL_RANGE,
-      duration: Math.round((FIREBALL_RANGE / FIREBALL_SPEED) * 1000), bob: FIREBALL_BOB_AMPLITUDE,
+      duration: FIREBALL_DURATION_MS, bob: FIREBALL_BOB_AMPLITUDE,
       scale: FIREBALL_ACTIVE_SCALE }, { ownerSprite: p, predictHits: true });
   });
 
@@ -404,7 +441,7 @@ export function performWizardFireball(instance, attackContext = null) {
     direction,
     angle,
     range: FIREBALL_RANGE,
-    duration: Math.round((FIREBALL_RANGE / FIREBALL_SPEED) * 1000),
+    duration: FIREBALL_DURATION_MS,
     startup: FIREBALL_CAST_DELAY_MS,
     bob: FIREBALL_BOB_AMPLITUDE,
     scale: FIREBALL_ACTIVE_SCALE,
@@ -413,6 +450,26 @@ export function performWizardFireball(instance, attackContext = null) {
       Math.round(instance.constructor?.getStats?.()?.baseDamage || 0),
     ),
   };
+}
+
+// Everyone inside the splash around `at` is hit once, the struck target included.
+function predictSplash(at, delivery) {
+  const splashed = new Set();
+  for (let victim; (victim = predictShotContact(at, at, FIREBALL_SPLASH_RADIUS, { skip: splashed }));) {
+    splashed.add(victim.target.name);
+    notePredictedHit({ delivery, character: "wizard", target: victim.target });
+  }
+}
+
+// The server reports where a fireball burst; a flight still in the air stops
+// and explodes there. Flights that already burst (the caster's prediction, or
+// the end of range) ignore it.
+export function burstWizardFireball(scene, data) {
+  const burst = scene?._wizardFlights?.get(String(data?.id));
+  const x = Number(data?.x), y = Number(data?.y);
+  if (!burst || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+  burst(x, y);
+  return true;
 }
 
 export function spawnWizardFireballVisual(scene, payload, ownerSprite) {
@@ -438,17 +495,9 @@ export function changeDebugState(state) {
   }
 }
 
-// Staff-tip coordinates in the wizard's untrimmed 231 x 190 attack frames.
-const STAFF_TIPS = [[142, 76], [140, 76], [142, 76], [142, 72], [134, 74], [144, 70], [138, 68], [140, 66]];
+// The staff tip on the frame being shown (wizard.json `rig.points.staffTip`).
 export function getWizardStaffTip(owner) {
-  const match = /attack(\d+)|throw(\d+)/i.exec(String(owner.frame?.name || ""));
-  const [x, y] = match ? STAFF_TIPS[Math.min(7, Number(match[1] ?? match[2]))] : [88, 62];
-  const sx = (owner.displayWidth || 231) / 231;
-  const sy = (owner.displayHeight || 190) / 190;
-  return {
-    x: owner.x + (x - (owner.originX ?? 0.5) * 231) * sx * (owner.flipX ? -1 : 1),
-    y: owner.y + (y - (owner.originY ?? 0.5) * 190) * sy,
-  };
+  return rigPoint(owner, "staffTip", "wizard") || { x: owner.x, y: owner.y };
 }
 
 // Spawn frames are selected from the same sheet using cast elapsed time.
@@ -469,37 +518,50 @@ export function chargeWizardFireball(scene, owner, payload = {}) {
     sprite.anims.stop();
     sprite.setFrame("fire00");
   }
-  let elapsed = 0;
-  let detached = false;
-  const detach = () => {
-    if (detached) return;
-    detached = true;
-    charges.delete(key);
-    scene.events.off("postupdate", update);
-    scene.events.off("shutdown", destroy);
-    scene.events.off("presentation:reset", destroy);
-    owner.off?.("destroy", destroy);
-    owner.off?.("attack:interrupted", destroy);
+  // The forming ball already burns anyone on top of or behind the wizard
+  // (shared/characters/wizardCharge.js). It bursts where the server says, or
+  // where the caster predicts, and is then never released.
+  const flights = scene._wizardFlights ||= new Map();
+  const flightId = payload.id != null ? String(payload.id) : null;
+  let burst = null;
+  const attachment = attachToPlayer(scene, owner, {
+    key: `wizard-charge:${key === owner ? "owner" : key}`,
+    objects: [sprite],
+    lifetimeMs: FIREBALL_CAST_DELAY_MS + 700,
+    endOn: ["attack:interrupted"],
+    onEnd: () => { if (charges.get(key) === entry) charges.delete(key); },
+    update(elapsed) {
+      if (payload.predict && elapsed > 0) {
+        const pose = { x: owner.x, y: owner.y, flip: direction < 0 };
+        const [hit] = predictAttachedContacts(wizardChargeShapes(pose, elapsed));
+        if (hit) {
+          const at = { x: hit.x, y: hit.y };
+          predictSplash(at, "attached");
+          burst(at.x, at.y);
+          return false;
+        }
+      }
+      Object.assign(sprite, getWizardStaffTip(owner));
+      const t = Math.min(1, elapsed / FIREBALL_CAST_DELAY_MS);
+      if (hasSheet) sprite.setFrame(`fire${String(Math.min(15, Math.floor(t * 16))).padStart(2, "0")}`);
+      else sprite.setScale(FIREBALL_ACTIVE_SCALE * (0.025 + 0.975 * t));
+      return true;
+    },
+  });
+  const destroy = () => attachment.destroy();
+  burst = (x, y) => {
+    if (!sprite.active) return;
+    spawnImpact(scene, x, y, false, sprite);
+    destroy();
   };
-  const destroy = () => { detach(); sprite.destroy(); };
-  const update = (_time, delta = 16.67) => {
-    elapsed += Math.max(0, delta);
-    if (!owner.active || owner.body?.enable === false || elapsed > FIREBALL_CAST_DELAY_MS + 700) return destroy();
-    Object.assign(sprite, getWizardStaffTip(owner));
-    const t = Math.min(1, elapsed / FIREBALL_CAST_DELAY_MS);
-    if (hasSheet) sprite.setFrame(`fire${String(Math.min(15, Math.floor(t * 16))).padStart(2, "0")}`);
-    else sprite.setScale(FIREBALL_ACTIVE_SCALE * (0.025 + 0.975 * t));
-  };
-  charges.set(key, { destroy, release() {
-    detach();
+  if (flightId) flights.set(flightId, burst);
+  sprite.once?.("destroy", () => { if (flightId && flights.get(flightId) === burst) flights.delete(flightId); });
+  const entry = { destroy, release() {
+    attachment.detach();
     sprite.setScale(FIREBALL_ACTIVE_SCALE);
     if (hasSheet) sprite.anims.play(sprite._bbFlightAnimation || FIREBALL_FLIGHT_ANIM, true);
     return sprite;
-  } });
-  scene.events.on("postupdate", update);
-  scene.events.once("shutdown", destroy);
-  scene.events.once("presentation:reset", destroy);
-  owner.once?.("destroy", destroy);
-  owner.once?.("attack:interrupted", destroy);
+  } };
+  charges.set(key, entry);
   return sprite;
 }

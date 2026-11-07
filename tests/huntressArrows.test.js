@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const model = require('../src/shared/characters/huntressProjectile');
+const { muzzleOf } = require('../src/shared/characters/characterRig');
 
 // Exercise the shared model used by both prediction and authoritative collision.
 test('normal and burning arrows launch from the same body socket', () => {
@@ -9,9 +10,11 @@ test('normal and burning arrows launch from the same body socket', () => {
     const shots = [false, true].map(special => model.createVolley(pose, model.resolveShot({ angle }, special), 'shot', 0));
     for (const volley of shots) {
       for (const p of volley) {
+        // Both leave the bow muzzle in her rig (huntress.json rig.points).
         const direction = Math.atan2(p.vy, p.vx), cfg = model.attackConfig(p.special);
-        assert.ok(Math.abs(p.x - (pose.x + Math.cos(direction) * pose.width * cfg.forwardOffset)) < 1e-10);
-        assert.ok(Math.abs(p.y - (pose.y - pose.height * cfg.verticalOffset + Math.sin(direction) * pose.width * cfg.forwardOffset)) < 1e-10);
+        const { pivot, reach } = muzzleOf('huntress', cfg.muzzle, pose);
+        assert.ok(Math.abs(p.x - (pivot.x + Math.cos(direction) * reach)) < 1e-10);
+        assert.ok(Math.abs(p.y - (pivot.y + Math.sin(direction) * reach)) < 1e-10);
       }
     }
   }

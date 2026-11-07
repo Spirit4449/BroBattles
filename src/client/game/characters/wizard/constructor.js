@@ -39,11 +39,6 @@ class Wizard extends CharacterEntityBase {
   static preload(scene, staticPath = "/assets", options = {}) {
     if (!scene?.load) return;
     this.loadBaseAtlas(scene, staticPath, options);
-    scene.load.atlas(
-      "wizard-aura",
-      this.characterAssetPath(staticPath, "aura.webp"),
-      this.characterAssetPath(staticPath, "aura.json"),
-    );
     this.loadFiles(scene, staticPath, {
       audio: { "wizard-fireball": "fireball.mp3", "wizard-special": "special.mp3" },
     });
@@ -70,7 +65,7 @@ class Wizard extends CharacterEntityBase {
     const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
     if (data.type === `${NAME}-fireball`) {
       chargeWizardFireball(scene, ownerSprite, data);
-      playWizardCastWindup(scene, ownerSprite, 0.55);
+      playWizardCastWindup(scene, ownerSprite, 0.55, data.id ?? null);
       return true;
     }
     if (data.type === `${NAME}-fireball-release`) {

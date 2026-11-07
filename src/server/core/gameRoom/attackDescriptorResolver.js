@@ -6,6 +6,16 @@ function getRuntimeOverrides(actionType) {
   const key = String(actionType || "").toLowerCase();
   if (!key) return null;
 
+  if (key === "wizard-fireball-charge") {
+    const fireball = getResolvedCharacterAttackConfig("wizard", "fireball") || {};
+    return {
+      runtime: {
+        splashRadius: Math.max(0, Number(fireball.splashRadius) || 0),
+        impactActionType: "wizard-fireball-impact",
+      },
+    };
+  }
+
   if (key === "wizard-fireball" || key === "wizard-fireball-release") {
     const fireball =
       getResolvedCharacterAttackConfig("wizard", "fireball") || {};
@@ -15,10 +25,13 @@ function getRuntimeOverrides(actionType) {
       collisionOffsetY: Number(fireball.collisionOffsetY),
       speed: Number(fireball.speed),
       range: Number(fireball.range),
-      forwardOffsetWidthFactor: Number(fireball.forwardOffset),
-      verticalOffsetHeightFactor: Number(fireball.verticalOffset),
+      muzzle: fireball.muzzle,
       bobAmplitude: Number(fireball.bobAmplitude),
       bobFreqMs: Number(fireball.bobFreqMs),
+      launchEaseMs: Number(fireball.launchEaseMs) || 0,
+      launchStartSpeed: Number(fireball.launchStartSpeed ?? 1),
+      splashRadius: Math.max(0, Number(fireball.splashRadius) || 0),
+      impactActionType: "wizard-fireball-impact",
     };
     if (key === "wizard-fireball") {
       return {

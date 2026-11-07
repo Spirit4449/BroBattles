@@ -16,13 +16,15 @@ import { playPlayerSound } from "../../audio/playerAudio";
 
 const NAME = "gloop";
 
-function playOwnerThrow(scene, sprite) {
+// Each slimeball or hook id is its own throw.
+function playOwnerThrow(scene, sprite, id = null) {
   playSpriteAnimation({
     scene,
     sprite,
     character: NAME,
     logical: "throw",
     fallback: "special",
+    id,
   });
 }
 
@@ -70,7 +72,7 @@ class Gloop extends CharacterEntityBase {
     const ownerSprite = ownerWrapper ? ownerWrapper.opponent : null;
     const type = String(data.type || "").toLowerCase();
     if (type === `${NAME}-slimeball`) {
-      playOwnerThrow(scene, ownerSprite);
+      playOwnerThrow(scene, ownerSprite, data.id ?? null);
       playPlayerSound(scene, ownerSprite, "gloop-attack", { volume: 0.5 });
       spawnGloopSlimeBud(scene, ownerSprite, data);
       return true;
@@ -85,7 +87,7 @@ class Gloop extends CharacterEntityBase {
       return true;
     }
     if (type === `${NAME}-hook-release`) {
-      playOwnerThrow(scene, ownerSprite);
+      playOwnerThrow(scene, ownerSprite, data.id ?? null);
       playHookAction(scene, ownerSprite, data, false);
       return true;
     }
@@ -112,7 +114,7 @@ class Gloop extends CharacterEntityBase {
     if (type === `${NAME}-hook-release`) {
       // The caster already predicted this hook under the same id.
       if (!consumeGloopHook(scene, data.id)) return true;
-      playOwnerThrow(scene, ownerSprite);
+      playOwnerThrow(scene, ownerSprite, data.id ?? null);
       playHookAction(scene, ownerSprite, data, true);
       return true;
     }
