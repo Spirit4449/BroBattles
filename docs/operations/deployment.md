@@ -97,8 +97,7 @@ seconds per query. Tune the corresponding `DB_*` variables from `.env.example`
 based on measured load. Timed-out connections are discarded; callers may retry
 only operations whose duplicate behavior is safe.
 
-Normal production builds clean `dist` to remove stale debug bundles and omit
-source maps. Keep only generated build artifacts in `dist`. `npm run sourcemap` remains an
+Production builds omit source maps and preserve `dist` to avoid rewriting unchanged assets. Use `npm run cleanbuild` before a build when a full artifact cleanup is needed. HTTP responses use compression for compressible content above 1 KiB; event streams are excluded, and movement Socket.IO messages remain uncompressed. Keep only generated build artifacts in `dist`. `npm run sourcemap` remains an
 explicit debugging build; do not publish its map files in public production
 assets. Webpack still reports large-bundle warnings; asset splitting is a
 separate performance improvement.

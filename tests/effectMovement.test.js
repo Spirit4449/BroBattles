@@ -127,3 +127,24 @@ test('sparse world state: only active timers, movement only for affected players
   assert.deepEqual(p.playerEffectMovement, {});
   assert.deepEqual(resolveLocalEffectMovement(p.playerEffects.Slowed, p.playerEffectMovement.Slowed), { speedMult: 1, jumpMult: 1 });
 });
+
+test('world publication skips unchanged state, sends changes and retains recovery heartbeats', t => {
+  let now = 10000;
+  t.mock.method(Date, 'now', () => now);
+  const sent = [];
+  const room = { matchId: 1, players: new Map(), _powerups: new Map(),
+    _buildDeathDropsSnapshot: () => [], _buildPlayerEffectsSnapshot: () => ({}),
+    io: { to: () => ({ compress() { return this; }, emit(event, data) { sent.push(data); } }) } };
+  const { broadcastWorldState } = require('../src/server/core/gameRoom/roomStateManager');
+  broadcastWorldState(room);
+  now += 100; broadcastWorldState(room);
+  assert.equal(sent.length, 1);
+  room._powerups.set('p', { id: 'p', type: 'health', x: 10, y: 20 });
+  broadcastWorldState(room);
+  assert.equal(sent.length, 2);
+  assert.equal(sent[1].powerups[0].id, 'p');
+  now += 1100; broadcastWorldState(room);
+  assert.equal(sent.length, 3);
+  room._powerups.clear(); broadcastWorldState(room);
+  assert.deepEqual(sent[3].powerups, []);
+});

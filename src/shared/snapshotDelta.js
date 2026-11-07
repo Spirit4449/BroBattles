@@ -11,6 +11,8 @@
 // (reconnect, late listener) drops deltas until the next keyframe, which the
 // room sends at least once per second and immediately after any join.
 
+const { decodeWire } = require("./networkWire");
+
 const KEYFRAME_EVERY_SNAPSHOTS = 30;
 const DELETED_FIELDS = "_del";
 
@@ -78,6 +80,7 @@ function createSnapshotDecoder() {
   return {
     reset() { epoch = null; lastSeq = null; players = null; },
     decode(snapshot) {
+      snapshot = decodeWire(snapshot);
       if (!snapshot || typeof snapshot !== "object") return null;
       const incoming = snapshot.players && typeof snapshot.players === "object"
         ? snapshot.players : {};

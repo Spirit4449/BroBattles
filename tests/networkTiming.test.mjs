@@ -1,3 +1,4 @@
+import wire from "../src/shared/networkWire.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSnapshotBuffer, getRenderClockCorrection, getDeliveryClockCorrection } from "../src/client/game/match/snapshotBuffer.js";
@@ -14,7 +15,7 @@ const packet = (seq, time, extra = {}) => ({
 test("immediate snapshots share simulation time but have distinct emission sequences", () => {
   const sent = [];
   const room = { matchId: 1, players: new Map(), _tickId: 60, _simulationMono: 1000,
-    io: { to: () => ({ compress() { return this; }, emit(_, p) { sent.push(p); } }) } };
+    io: { to: () => ({ compress() { return this; }, emit(_, p) { sent.push(wire.decodeWire(p)); } }) } };
   roomState.broadcastSnapshot(room, { tMono: 1000 });
   roomState.broadcastSnapshot(room);
   room._tickId = 62; room._simulationMono += 1000 / 30;
@@ -303,4 +304,47 @@ test("snapshots drawn after a death or respawn event cannot undo it", () => {
 
   // Another room's sequence numbers are not compared with the event.
   assert.equal(life(at(19), { ...respawned, epoch: "room-b" }).dead, true);
+});
+
+test('input wire saves geometry and FX repetition while reliably delivering new effects', async () => {
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const fs = require('node:fs'), vm = require('node:vm'), babel = require('@babel/core');
+  const filename = require.resolve('../src/client/game/scene/localInputSync.js');
+  const realRequire = createRequire(filename);
+  const exports = {};
+  let now = 10000;
+  vm.runInNewContext(babel.transformSync(fs.readFileSync(filename, 'utf8'), {
+    babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
+  }).code, { exports, Date: { now: () => now }, require(name) {
+    if (name.includes('localMovementCorrector')) return { localMovementCorrector: { getAck: () => 0, recordSent() {} } };
+    if (name.includes('netTestLogger')) return { noteClientInputSent() {}, noteClientIntentSent() {} };
+    return realRequire(name);
+  } });
+  const sent = [];
+  const emitter = reliable => ({ compress() { return this; }, emit(event, data) {
+    sent.push({ reliable, data: wire.decodeWire(JSON.parse(JSON.stringify(data))) });
+  } });
+  const socket = { ...emitter(true), volatile: emitter(false) };
+  let fx = 0;
+  const sync = exports.createLocalInputSync({ socket, getAmmoSyncState: () => ({ charges: 3 }),
+    getNetworkInputState: () => ({ movementFxSeq: fx, movementFxType: 'jump', grounded: true }) });
+  const player = { x: 100, y: 100, body: { velocity: { x: 0, y: 0 }, touching: { down: true } } };
+  const state = { handlePlayerMovement() {} };
+  sync.sync({}, player, state);
+  assert.equal(sent[0].reliable, true);
+  assert.equal(sent[0].data.loaded, true);
+  now += 20; sync.sync({}, player, state);
+  assert.equal(sent[1].reliable, false);
+  assert.equal(sent[1].data.loaded, undefined);
+  assert.equal(sent[1].data.bodyHalfWidth, undefined);
+  assert.equal(sent[1].data.movementFxType, undefined);
+  now += 20; fx++; sync.sync({}, player, state);
+  assert.equal(sent[2].reliable, true);
+  assert.equal(sent[2].data.movementFxType, 'jump');
+  now += 20; sync.sync({}, player, state);
+  assert.equal(sent[3].data.movementFxType, undefined);
+  now += 300; sync.sync({}, player, state);
+  assert.equal(sent[4].reliable, true);
+  assert.equal(sent[4].data.movementFxType, 'jump');
 });

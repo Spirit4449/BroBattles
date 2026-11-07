@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Rebuild Candy Land's painterly scenery on a deliberate, shared screen-pixel grid.
+// Rebuild Candy Land's painterly scenery on a deliberate screen-pixel grid.
+// Existing platform linework receives only edge-safe palette cleanup.
 // Usage: node scripts/art/pixelate-candyland.cjs [--install]
 // Original scenery masters live beside this script for reproducible rebuilds.
 const fs = require('node:fs');
@@ -16,9 +17,9 @@ const ITEMS = [
   ['peaks', 4, 28], ['midground-peaks', 4, 32],
   ['side-candy-left', 5, 32], ['side-candy-right', 5, 28],
   ['top', 4, 28], ['bottom', 8, 32],
-  ['platform-base', 6, 32], ['platform-tall', 6, 32],
-  ['platform-top-arch', 4, 32], ['platform-moving', 4, 24],
-  ['lobby-platform', 4, 28],
+  ['platform-base', 0, 48], ['platform-tall', 0, 48],
+  ['platform-top-arch', 0, 48], ['platform-moving', 0, 36],
+  ['lobby-platform', 0, 40],
 ];
 const install = process.argv.includes('--install');
 const rgb = (data, i) => [data[i], data[i + 1], data[i + 2]];
@@ -67,6 +68,7 @@ async function render(name, size, colors) {
   const source = path.join(SOURCE, filename);
   const { data, info } = await sharp(source).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
+  if (size === 0) return renderPlatform(name, colors, data, width, height);
   const w = Math.ceil(width / size), h = Math.ceil(height / size);
   const palette = paletteFor(data, width, height, colors);
   const cells = new Int16Array(w * h).fill(-1);
@@ -102,6 +104,29 @@ async function render(name, size, colors) {
     .webp({ lossless: true }).toFile(candidate);
   if (install) fs.copyFileSync(candidate, path.join(INSTALLED, filename));
   console.log(`${name}: ${width}x${height}, ${size}px grid, ${colors} colors${install ? ' (installed)' : ''}`);
+}
+async function renderPlatform(name, colors, source, width, height) {
+  const palette = paletteFor(source, width, height, colors);
+  const result = Buffer.from(source);
+  // The supplied platforms already have carefully placed icing, brick and
+  // candy contours. Retain every high-contrast edge and the exact alpha mask.
+  // Only flat 2x2 interior patches are snapped to a restrained palette.
+  for (let y = 0; y < height - 1; y += 2) for (let x = 0; x < width - 1; x += 2) {
+    const pos = [(y * width + x) * 4, (y * width + x + 1) * 4,
+      ((y + 1) * width + x) * 4, ((y + 1) * width + x + 1) * 4];
+    if (pos.some(i => source[i + 3] < 255)) continue;
+    const samples = pos.map(i => rgb(source, i));
+    let contrast = 0;
+    for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++)
+      contrast = Math.max(contrast, dist(samples[a], samples[b]));
+    if (contrast > 120) continue;
+    const mode = nearest(samples[0], palette), color = palette[mode];
+    for (const i of pos) { result[i] = color[0]; result[i + 1] = color[1]; result[i + 2] = color[2]; }
+  }
+  const candidate = path.join(OUT, name + '.webp');
+  await sharp(result, { raw: { width, height, channels: 4 } }).webp({ lossless: true }).toFile(candidate);
+  if (install) fs.copyFileSync(candidate, path.join(INSTALLED, name + '.webp'));
+  console.log(`${name}: ${width}x${height}, edge-safe palette cleanup${install ? ' (installed)' : ''}`);
 }
 (async () => {
   fs.mkdirSync(SOURCE, { recursive: true });

@@ -1,3 +1,4 @@
+import { NETWORK_WIRE_VERSION } from "../../../shared/networkWire";
 import { supportsSuddenDeath } from '../../../shared/modeCapabilities';
 import { COUNTDOWN_MS } from '../../../shared/matchIntroTiming';
 import { getCharacterNetworkVersions, configureCharacterNetworks, resetCharacterNetworks, observeCharacterSnapshot, handleCharacterNetworkPacket } from '../characters/networkRegistry';
@@ -303,7 +304,7 @@ export function createMatchCoordinator(config) {
   /** Re-emit game:join when a socket connection is established or restored. */
   function _tryJoin() {
     const joinPayload = getJoinPayload();
-    if (joinPayload) { Object.assign(joinPayload, getCharacterNetworkVersions()); }
+    if (joinPayload) { Object.assign(joinPayload, getCharacterNetworkVersions(), { networkWireVersion: NETWORK_WIRE_VERSION }); }
     const currentSocketId = socket.id || null;
     if (
       currentSocketId &&
@@ -450,7 +451,7 @@ export function createMatchCoordinator(config) {
   }
 
   async function _recoverTimedOutStart(joinPayload) {
-    Object.assign(joinPayload, getCharacterNetworkVersions());
+    Object.assign(joinPayload, getCharacterNetworkVersions(), { networkWireVersion: NETWORK_WIRE_VERSION });
     if (_startWatchdogRecoveryInFlight) return false;
     _startWatchdogRecoveryInFlight = true;
     try {
@@ -498,7 +499,7 @@ export function createMatchCoordinator(config) {
     if (getIsLiveGame() || getGameEnded()) return;
     if (_startWatchdogTimer) return;
 
-    const joinPayload = { ...getJoinPayload(), ...getCharacterNetworkVersions() };
+    const joinPayload = { ...getJoinPayload(), ...getCharacterNetworkVersions(), networkWireVersion: NETWORK_WIRE_VERSION };
     const joinMatchId = Number(joinPayload.matchId);
     if (!Number.isFinite(joinMatchId) || joinMatchId <= 0) return;
 
@@ -809,12 +810,12 @@ export function createMatchCoordinator(config) {
   }
 
   function _onGameSnapshot(packet) {
-    if (Number.isFinite(packet?.snapshotSeq)) {
-      lastSnapshotMark = { epoch: packet.snapshotEpoch ?? null, seq: packet.snapshotSeq };
-    }
     // Null until a keyframe arrives after joining or a missed packet.
     const snapshot = snapshotDecoder.decode(packet);
     if (!snapshot || !snapshot.players) return;
+    if (Number.isFinite(snapshot.snapshotSeq)) {
+      lastSnapshotMark = { epoch: snapshot.snapshotEpoch ?? null, seq: snapshot.snapshotSeq };
+    }
     const receivedAt = performance.now();
     const ingest = snapshotBuffer.ingestSnapshot(snapshot, receivedAt);
     if (ingest.accepted === false) return;

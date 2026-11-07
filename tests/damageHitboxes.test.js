@@ -125,12 +125,12 @@ test('overlay follows the debug toggle and cleans up stale frames and scene list
   let now = 100, circles = 0, destroyed = false;
   vm.runInNewContext(babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/scene/damageHitboxDebug.js'), 'utf8'), {
     babelrc: false, configFile: false, presets: [['@babel/preset-env', { targets: { node: 'current' } }]],
-  }).code, { exports: moduleExports, Date: { now: () => now } });
+  }).code, { exports: moduleExports, require: require("node:module").createRequire(require.resolve("../src/client/game/scene/damageHitboxDebug.js")), Date: { now: () => now } });
   const graphics = { setDepth() { return this; }, clear() {}, lineStyle() {}, strokeCircle() { circles++; }, destroy() { destroyed = true; } };
   const events = new EventEmitter(), socket = new EventEmitter();
   const scene = { add: { graphics: () => graphics }, events, physics: { world: { drawDebug: true } }, cameras: { main: { zoom: 1 } } };
   moduleExports.installDamageHitboxDebug(scene, socket);
-  socket.emit('game:snapshot', { damageHitboxes: [{ kind: 'circle', x: 10, y: 20, radius: 8 }] });
+  socket.emit('game:snapshot', require('../src/shared/networkWire').encodeWire({ damageHitboxes: [{ kind: 'circle', x: 10, y: 20, radius: 8 }] }));
   events.emit('postupdate'); assert.equal(circles, 1);
   scene.physics.world.drawDebug = false;
   events.emit('postupdate'); assert.equal(circles, 1);

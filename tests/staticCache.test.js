@@ -44,3 +44,36 @@ test('card animations are immutable only when the requested version matches thei
     assert.match(headerFor(hash('replacement video')), /immutable/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test('HTTP compresses text, negotiates identity and leaves event streams unbuffered', async t => {
+  const http = require('node:http'), express = require('express');
+  const { gunzipSync } = require('node:zlib');
+  const app = express();
+  app.use(require('../src/server/middleware/httpCompression'));
+  const body = 'const example = "hello world";\n'.repeat(1000);
+  app.get('/bundle.js', (_, res) => res.type('js').send(body));
+  app.get('/events', (_, res) => res.type('text/event-stream').send(body));
+  const server = http.createServer(app);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  async function get(path, encoding) {
+    return new Promise((resolve, reject) => {
+      http.get({ host: '127.0.0.1', port: server.address().port, path,
+        headers: { 'Accept-Encoding': encoding } }, res => {
+        const chunks = [];
+        res.on('data', c => chunks.push(c));
+        res.on('end', () => resolve({ headers: res.headers, body: Buffer.concat(chunks) }));
+        res.on('error', reject);
+      }).on('error', reject);
+    });
+  }
+  const gzip = await get('/bundle.js', 'gzip');
+  assert.equal(gzip.headers['content-encoding'], 'gzip');
+  assert.match(gzip.headers.vary, /Accept-Encoding/);
+  assert.equal(gunzipSync(gzip.body).toString(), body);
+  assert.ok(gzip.body.length < Buffer.byteLength(body));
+  const identity = await get('/bundle.js', 'identity');
+  assert.equal(identity.headers['content-encoding'], undefined);
+  assert.equal(identity.body.toString(), body);
+  assert.equal((await get('/events', 'gzip')).headers['content-encoding'], undefined);
+});

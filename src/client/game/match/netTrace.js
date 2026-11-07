@@ -1,3 +1,4 @@
+import { decodeWire } from "../../../shared/networkWire.js";
 // Client half of production network tracing. Inactive (every export a no-op)
 // unless this tab carries a nettrace spec (see lib/netTraceSpec.js). Records raw
 // timelines — snapshot arrivals, decoded positions, rendered positions per
@@ -41,6 +42,7 @@ export function installNetTrace({ socket, getLocal, getRemotes, getUsername, get
   const event = (type, data = {}) => state.events.push({ t: r1(performance.now()), type, ...data });
 
   const onSnapshot = (packet) => {
+    packet = decodeWire(packet);
     const t = performance.now();
     const gap = state.lastArrival == null ? null : t - state.lastArrival;
     state.lastArrival = t;

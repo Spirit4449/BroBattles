@@ -212,7 +212,7 @@ test('authoritative combat is the default and incompatible clients must reload',
   let ack;
   await handlers.get('game:join')({matchId:1},a=>{ack=a;});
   assert.equal(ack.error,'client_update_required');assert.equal(joined,0);
-  await handlers.get('game:join')({matchId:1,huntressCombatVersion:2,ninjaCombatVersion:1},a=>{ack=a;});
+  await handlers.get('game:join')({matchId:1,huntressCombatVersion:2,ninjaCombatVersion:1,networkWireVersion:1},a=>{ack=a;});
   assert.equal(ack.ok,true);assert.equal(joined,1);
   assert.equal(room.huntressCombatVersion, model.VERSION);
 });

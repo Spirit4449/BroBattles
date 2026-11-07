@@ -52,6 +52,12 @@ This table is an overview, not an exhaustive schema. Read emitters and listeners
 
 ## Snapshots and clocks
 
+The versioned `src/shared/networkWire.js` codec shortens input and snapshot keys only on the wire; handlers, interpolation and trace records use descriptive names. `game:join.networkWireVersion` must match the server; cached clients are asked to reload. Deploy the client and server together. Monotonic snapshot times are rounded to 0.1 ms; sequence, epoch, tick and wall time remain explicit because event snapshots and catch-up publication do not have a fixed one-to-one relationship.
+
+Inputs omit sprite/body geometry (the server derives canonical geometry). Movement-effect changes send a reliable packet containing all effect details; subsequent volatile packets omit details. Reliable keyframes refresh effect details, animation, ammo and late-join readiness at least every 250 ms while inputs are flowing.
+
+World state is compared without its timestamp and sent when changed, with a one-second heartbeat for start/rejoin recovery. Active timers that change still publish at the normal world-state cadence.
+
 Each snapshot carries room-instance `snapshotEpoch`, increasing `snapshotSeq`, simulation `tMono`, publication `sentMono`, `snapshotKind` (`periodic` or `event`), plus tick/wall-time fields. Clients reject stale/duplicate sequences before roster or HUD updates. New emissions at the same simulation instant replace that instant in the buffer; reconnects and epoch changes reset history. Compatibility handling accepts older payloads without sequence fields.
 
 Catch-up callbacks coalesce periodic snapshots and world state while preserving every simulation step and discrete event. Snapshots remain non-volatile. `BB_COALESCE_SNAPSHOTS=0` disables coalescing for newly created rooms for controlled comparisons.

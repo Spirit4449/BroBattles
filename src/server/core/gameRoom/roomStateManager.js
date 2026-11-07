@@ -1,3 +1,4 @@
+const { encodeWire } = require("../../../shared/networkWire");
 const { netTrace } = require('./netTraceRecorder');
 const { damageHitboxSnapshot } = require('./damageHitboxes');
 const effectManager = require('./effects/effectManager');
@@ -214,8 +215,8 @@ function broadcastSnapshot(room, extraTiming = null) {
 
   const snapshot = {
     timestamp: wall,
-    sentMono,
-    tMono,
+    sentMono: Math.round(sentMono * 10) / 10,
+    tMono: Math.round(tMono * 10) / 10,
     tickId: room._tickId || 0,
     snapshotSeq: room._snapshotSeq,
     snapshotEpoch: snapshotEpoch(room),
@@ -274,15 +275,23 @@ function broadcastSnapshot(room, extraTiming = null) {
   room.io
     .to(`game:${room.matchId}`)
     .compress(false)
-    .emit("game:snapshot", snapshot);
+    .emit("game:snapshot", encodeWire(snapshot));
   if (room._netTrace) netTrace.noteSnapshotEmit(room, snapshot);
 }
 
 function broadcastWorldState(room) {
+  const payload = buildWorldStatePayload(room);
+  const { timestamp, ...state } = payload;
+  const fingerprint = JSON.stringify(state);
+  // Keep a one-second heartbeat for start recovery and newly joined listeners.
+  if (fingerprint === room._worldStateFingerprint &&
+      timestamp - room._worldStateSentAt < 1000) return;
+  room._worldStateFingerprint = fingerprint;
+  room._worldStateSentAt = timestamp;
   room.io
     .to(`game:${room.matchId}`)
     .compress(false)
-    .emit("game:state", buildWorldStatePayload(room));
+    .emit("game:state", payload);
 }
 
 module.exports = {

@@ -1,3 +1,4 @@
+import { encodeWire } from "../../../shared/networkWire";
 import { quantizeMovementPosition } from '../../../shared/physics/movementPrecision';
 // gameScene/localInputSync.js
 // Emits game:input: the locally simulated position plus control state. A change
@@ -34,7 +35,6 @@ export function createLocalInputSync({
   let lastAnimationSent = null;
   let lastAnimationSentAt = 0;
 
-  const quantizePosition = (value) => Math.round((Number(value) || 0) * 2) / 2;
   const quantizeVelocity = (value) => Math.round(Number(value) || 0);
   const sameAmmoState = (a, b) =>
     !!a &&
@@ -94,17 +94,6 @@ export function createLocalInputSync({
     const includeAnimation =
       animation !== lastAnimationSent || now - lastAnimationSentAt >= 180;
 
-    const body = player.body || null;
-    const bodyHalfWidth = body?.width ? Math.round(body.width / 2) : null;
-    const bodyHalfHeight = body?.height ? Math.round(body.height / 2) : null;
-    const bodyCenterOffsetX =
-      body?.center && Number.isFinite(player.x)
-        ? Math.round((body.center.x - player.x) * 2) / 2
-        : 0;
-    const bodyCenterOffsetY =
-      body?.center && Number.isFinite(player.y)
-        ? Math.round((body.center.y - player.y) * 2) / 2
-        : 0;
     const currentState = {
       dashSeq: player._dashSeq || 0,
       dashX: player._dashDirection?.x || 0,
@@ -145,17 +134,10 @@ export function createLocalInputSync({
         0,
         Math.round(Number(rawInput?.movementFxImpactVelocity) || 0),
       ),
-      loaded: true,
       sequence: packetSequence,
       // Lets the server discard packets sent before the latest correction.
       correctionAck: localMovementCorrector.getAck(),
       timestamp: now,
-      width: quantizePosition(player.displayWidth || player.width || 0),
-      height: quantizePosition(player.displayHeight || player.height || 0),
-      bodyHalfWidth,
-      bodyHalfHeight,
-      bodyCenterOffsetX,
-      bodyCenterOffsetY,
     };
     if (includeAnimation) currentState.animation = animation;
     if (includeAmmoState) currentState.ammoState = ammoState;
@@ -170,6 +152,7 @@ export function createLocalInputSync({
         : 0;
     const shouldSendReliable =
       currentState.dashSeq !== (lastPlayerState.dashSeq || 0) ||
+      currentState.movementFxSeq !== lastPlayerState.movementFxSeq ||
       reliable ||
       force ||
       now - lastReliableMovementSent >= RELIABLE_KEYFRAME_INTERVAL_MS ||
@@ -183,7 +166,18 @@ export function createLocalInputSync({
 
     // Disable per-message compression for movement for lower latency.
     // Send every throttle interval, not only on visible state deltas.
-    movementEmitter.emit("game:input", currentState);
+    const packet = { ...currentState };
+    // Changed effects go reliably, so a dropped volatile packet cannot consume
+    // the event sequence before its details reach the server.
+    if (shouldSendReliable) {
+      packet.loaded = true; // late join readiness, refreshed on keyframes
+      packet.animation = animation;
+      packet.ammoState = ammoState;
+    } else {
+      for (const key of ['movementFxType', 'movementFxDirection',
+        'movementFxWallSide', 'movementFxFallDistance', 'movementFxImpactVelocity']) delete packet[key];
+    }
+    movementEmitter.emit("game:input", encodeWire(packet));
     localMovementCorrector.recordSent(packetSequence, currentState.x, currentState.y);
     noteClientInputSent({
       now,

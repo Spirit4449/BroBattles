@@ -1,3 +1,4 @@
+const { decodeWire } = require("../../../shared/networkWire");
 const huntressCombat = require('./huntressCombat');
 const inputManager = require("./inputManager");
 const characterCombat = require('./characterCombatRegistry');
@@ -26,6 +27,7 @@ function setupPlayerSocket(room, socket) {
   });
     // Handle player input
   room.onSocket(socket, "game:input", (inputData) => {
+    inputData = decodeWire(inputData);
     if (room._netTrace) netTrace.noteInput(room, socket.id);
     if (room.status !== "finished" && room.players.has(socket.id) && Number.isFinite(inputData?.x) && Number.isFinite(inputData?.y)) {
       room.playerActivity?.gameActivity(socket, room.matchId);

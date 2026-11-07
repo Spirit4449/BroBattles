@@ -1,3 +1,4 @@
+import { decodeWire } from "../../src/shared/networkWire.js";
 import socket from '../../src/client/lib/socket';
 import { configureHuntressNetwork, attachHuntressScene, handleHuntressPacket,
   observeHuntressSnapshot, predictHuntressShot } from '../../src/client/game/characters/huntress/network';
@@ -34,7 +35,7 @@ socket.on('lab:init',data=>{
   document.getElementById('status').textContent=`${data.username} · protocol ${data.combat.huntressCombatVersion}`;
   automatic=query.get('client')==='0';
 });
-socket.on('game:snapshot',snapshot=>observeHuntressSnapshot(snapshot));
+socket.on('game:snapshot',snapshot=>observeHuntressSnapshot(decodeWire(snapshot)));
 socket.on('game:action',packet=>{
   actions.push(packet.action.type);if(actions.length>30)actions.shift();
   handleHuntressPacket(scene,packet,ctx);

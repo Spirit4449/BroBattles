@@ -1,3 +1,4 @@
+const wire = require("../src/shared/networkWire");
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createSnapshotEncoder, createSnapshotDecoder, KEYFRAME_EVERY_SNAPSHOTS } = require('../src/shared/snapshotDelta');
@@ -84,7 +85,7 @@ test('a live bot room publishes deltas that rebuild every full snapshot', (t) =>
   t.after(() => h.room.cleanup());
   delete h.room.broadcastSnapshot; // the helper stubs it out; use the real one
   const full = [], sent = [];
-  h.room.io.to = () => ({ emit: (type, payload) => { if (type === 'game:snapshot') sent.push(payload); }, compress() { return this; } });
+  h.room.io.to = () => ({ emit: (type, payload) => { if (type === 'game:snapshot') sent.push(wire.decodeWire(payload)); }, compress() { return this; } });
   // Capture the full states the encoder was given, before delta encoding.
   h.room.broadcastSnapshot();
   const encode = h.room._snapshotEncoder.encode;
@@ -112,4 +113,24 @@ test('a field that becomes undefined is deleted on the client, as JSON would dro
   const decoded = decoder.decode(wire(packet(encoder, 2, { a: { x: 1, health: undefined } })));
   assert.deepEqual(decoded.players.a, { x: 1 });
   assert.deepEqual(decoder.decode(wire(packet(encoder, 3, { a: { x: 2, health: undefined } }))).players.a, { x: 2 });
+});
+
+test('compact wire snapshots round trip deltas, deletions and packet-loss recovery', () => {
+  const encoder = createSnapshotEncoder();
+  const decoder = createSnapshotDecoder();
+  const states = randomStates(100);
+  const bytes = value => Buffer.byteLength(JSON.stringify(value));
+  let originalBytes = 0, compactBytes = 0;
+  for (let i = 0; i < states.length; i++) {
+    const original = { ...packet(encoder, i + 1, states[i]), timestamp: 1700000000000 + i,
+      tMono: i * 33.3, sentMono: i * 33.3, tickId: i * 2, snapshotKind: 'periodic' };
+    const compact = JSON.parse(JSON.stringify(wire.encodeWire(original)));
+    assert.deepEqual(wire.decodeWire(compact), original);
+    originalBytes += bytes(original); compactBytes += bytes(compact);
+    if (i === 10) continue;
+    const decoded = decoder.decode(compact);
+    if (i > 10 && i < KEYFRAME_EVERY_SNAPSHOTS) assert.equal(decoded, null);
+    else assert.deepEqual(decoded.players, states[i]);
+  }
+  assert.ok(compactBytes < originalBytes * 0.8, `${compactBytes} vs ${originalBytes}`);
 });

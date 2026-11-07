@@ -1,8 +1,10 @@
+import { decodeWire } from "../../../shared/networkWire.js";
 // One renderer for server-authoritative damage volumes; no sprite-size guesses.
 export function installDamageHitboxDebug(scene, socket) {
   const graphics = scene.add.graphics().setDepth(100000);
   let shapes = [], receivedAt = 0;
   const receive = snapshot => {
+    snapshot = decodeWire(snapshot);
     shapes = snapshot.damageHitboxes || [];
     receivedAt = Date.now();
   };
