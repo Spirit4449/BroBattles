@@ -13,8 +13,8 @@ describe("World pickups and timed effects", () => {
     POWERUP_FREEZE_JUMP_MULT,
     POWERUP_FIRST_SPAWN_DELAY_MS,
     POWERUP_STARTING_COUNT,
-  } = require("../src/server/core/gameRoomConfig");
-  const effectManager = require("../src/server/core/gameRoom/effects/effectManager");
+  } = require("../src/shared/combat/matchConfig.js");
+  const effectManager = require("../src/shared/combat/runtime/effects/effectManager.js");
   const powerupManager = require("../src/server/core/gameRoom/powerupManager");
 
   function seededRandom(seed = 1) {
@@ -196,6 +196,7 @@ describe("World pickups and timed effects", () => {
       loaded: true,
     };
     const room = {
+      applyKnockback(player, impulse) { require('../src/server/core/gameRoom/participants').applyParticipantKnockback(this, player, impulse); },
       players: new Map([
         [collector.socketId, collector],
         [nearbyEnemy.socketId, nearbyEnemy],
@@ -237,6 +238,7 @@ describe("World pickups and timed effects", () => {
       x, y: 0, socketId: String(i), isAlive: true, connected: true, loaded: true,
     }));
     const room = {
+      applyKnockback(player, impulse) { require('../src/server/core/gameRoom/participants').applyParticipantKnockback(this, player, impulse); },
       players: new Map([['source', collector], ...targets.map(t => [t.socketId, t])]),
       io: { to: () => ({ emit: (event, payload) => hits.push(payload) }) },
     };
@@ -251,7 +253,7 @@ describe("World pickups and timed effects", () => {
 });
 
 describe("Team powerup grants", () => {
-  const surge = require('../src/server/core/gameRoom/abilities/wizardArcaneSurgeAbility');
+  const surge = require('../src/shared/combat/runtime/abilities/wizardArcaneSurgeAbility.js');
   const { POWERUP_CATALOG } = require('../src/shared/powerups');
 
   function cast(random) {
@@ -259,6 +261,7 @@ describe("Team powerup grants", () => {
     const player = (name, team) => ({ name, team, isAlive: true, loaded: true });
     const caster = player('wiz', 'team1');
     const room = {
+      applyKnockback(player, impulse) { require('../src/server/core/gameRoom/participants').applyParticipantKnockback(this, player, impulse); },
       players: new Map([caster, player('ally', 'team1'), player('foe', 'team2')].map(p => [p.name, p])),
       _applyPowerupToPlayer: (target, type) => applied.push([target.name, type]),
       io: { to: () => ({ emit: (event, payload) => emitted.push(payload) }) },

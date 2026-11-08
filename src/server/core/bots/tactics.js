@@ -1,11 +1,11 @@
 const { bankDecisionSteps } = require('./bankBust');
-const { basicAim, basicRange, hasClearShot, pressureAim } = require('./combat');
+const { basicAim, basicRange, hasClearShot, pressureAim } = require('../../../shared/combat/combat.js');
 const { nearestSurface, walkLimits, canStandAt, canWalkBetween, standOn, previewManeuver, routePoisonDamage } = require('./navigation');
 const { bounds, movementGeometry } = require('./physics');
 const { teamPosition } = require('./teamwork');
-const effects = require('../gameRoom/effects/effectManager');
-const { botProfile } = require('./characterProfiles');
-const { POWERUP_SHOCKWAVE_RADIUS, DEATH_DROP_PICKUP_RADIUS } = require('../gameRoomConfig');
+const effects = require('../../../shared/combat/runtime/effects/effectManager.js');
+const { botProfile } = require('../../../shared/combat/characterProfiles.js');
+const { POWERUP_SHOCKWAVE_RADIUS, DEATH_DROP_PICKUP_RADIUS } = require('../../../shared/combat/matchConfig.js');
 const { powerupGap, powerupReachX } = require('../gameRoom/powerupContact');
 
 const style = (player) => botProfile(player.char_class).spacing;

@@ -1,10 +1,10 @@
 const { bounds, stepBody, startDash, forecastGeometry, movementGeometry } = require('./physics');
 const { maneuverDanger } = require('./perception');
 const { healthFraction, preferredRange } = require('./tactics');
-const { hasClearShot } = require('./combat');
-const { isMovementSuppressed } = require('../gameRoom/abilityRuntimeManager');
+const { hasClearShot } = require('../../../shared/combat/combat.js');
+const { isMovementSuppressed } = require('../../../shared/combat/runtime/abilityRuntimeManager.js');
 const movement = require('../../../shared/physics/movementPhysics.json');
-const { STOMP_RADIUS } = require('../gameRoomConfig');
+const { STOMP_RADIUS } = require('../../../shared/combat/matchConfig.js');
 const { FIXED_DT_MS: DT } = require('../../../shared/gameConstants');
 
 function recordDash(brain, kind, now) {

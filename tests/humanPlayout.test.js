@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const input = require('../src/server/core/gameRoom/inputManager');
 const { publishedMotion, MAX_PLAYOUT_MS } = require('../src/server/core/gameRoom/humanPlayout');
-const { getHistoricalPosition } = require('../src/server/core/gameRoom/combatValidation');
+const { getHistoricalPosition } = require('../src/shared/combat/runtime/combatValidation.js');
 const movement = require('../src/shared/physics/movementPhysics.json');
 const WORLD = require('../src/shared/maps/arenas').arenaFor('duels-1v1').world;
 

@@ -41,9 +41,9 @@ const {
   requestBasic,
   requestSpecial,
   advanceAmmo,
-} = require("../src/server/core/bots/combat");
+} = require("../src/shared/combat/combat.js");
 const { makeRoom } = require("./helpers/botRoom");
-const effects = require("../src/server/core/gameRoom/effects/effectManager");
+const effects = require("../src/shared/combat/runtime/effects/effectManager.js");
 const { getParticipant } = require("../src/server/core/gameRoom/participants");
 const now = 100000;
 const ticket = (id, rating, a = 1, b = 0) => ({
@@ -421,7 +421,7 @@ test("a human Gloop hook keeps its server pull attached to a bot target", (t) =>
   h.place(gloop, 950);
   h.place(bot, 1180);
   const initialX = bot.x;
-  const { registerAttackFromAction, tickActiveAttacks } = require("../src/server/core/gameRoom/attackRuntimeManager");
+  const { registerAttackFromAction, tickActiveAttacks } = require("../src/shared/combat/runtime/attackRuntimeManager.js");
   assert.equal(
     registerAttackFromAction(
       h.room,

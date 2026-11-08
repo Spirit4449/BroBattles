@@ -3344,3 +3344,15 @@ body .profile-bros-unlocked-count strong {
 .is-streak-boosted .bb-streak-bonus-label { opacity: 1; }
 @keyframes bb-streak-impact { 0%, 40% { box-shadow: 0 0 20px #ffd36a, inset 0 0 15px #ffb42f66; } 100% { box-shadow: 0 4px 0 var(--bb-ink); } }
 @media (prefers-reduced-motion: reduce) { .bb-streak-energy { display: none; } .bb-game-over-reward.is-streak-boosted { animation: none; } }
+
+/* Lobby header coin/gem counters: just the icon and number, no box. */
+body #navbar-right .currency-resource,
+body #navbar-right .currency-resource:is(:hover, :focus-visible) {
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+body #navbar-right .currency-resource:is(:hover, :focus-visible) {
+  filter: brightness(1.2);
+}

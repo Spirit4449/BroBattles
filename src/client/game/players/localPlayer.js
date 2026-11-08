@@ -18,9 +18,7 @@ import { withShotView } from '../characters/shared/shotPrediction';
 import socket from "../../lib/socket";
 import { drawSuperChargeBar, resetSuperBarAnimation } from "../scene/superBarRenderer";
 import { drawHealthBar, resetHealthBarAnimation } from "../scene/healthBarRenderer";
-import {
-  PIXEL_INK, drawPixelFill, drawPixelFrame, drawPixelTrough, snapPixel,
-} from "../scene/pixelBar";
+import { drawAmmoChargeBar } from "../scene/ammoBarRenderer";
 import {
   setStatusIconStackAlpha,
   setStatusIconStackVisible,
@@ -128,7 +126,6 @@ let powerupStatusIcons = [];
 let ammoBar; // graphics
 let ammoBarBack; // background graphics
 let ammoBarWidth = 52;
-const AMMO_BAR_HEIGHT = 6;
 let ammoCooldownMs = 1200; // time between shots
 let ammoReloadMs = 1200; // time to reload one charge
 let ammoCapacity = 1; // number of segments
@@ -1411,38 +1408,9 @@ function drawAmmoBar(forcedX, forcedY) {
     (forcedX !== undefined ? forcedX : player.x - ammoBarWidth / 2) + shakeX;
   const bodyTop = getStableLocalUiTop();
   const y = forcedY !== undefined ? forcedY : bodyTop - 9; // just under health bar
-  ammoBarBack.clear();
-  ammoBar.clear();
-
-  const barX = snapPixel(x);
-  const barY = snapPixel(y);
-  drawPixelFrame(ammoBarBack, barX, barY, ammoBarWidth, AMMO_BAR_HEIGHT);
-  drawPixelTrough(ammoBarBack, barX, barY, ammoBarWidth, AMMO_BAR_HEIGHT);
-
-  // Segmented charges split by ink dividers
-  const gap = 1;
-  const segmentWidth = (ammoBarWidth - gap * (ammoCapacity - 1)) / ammoCapacity;
-  for (let i = 0; i < ammoCapacity; i++) {
-    const segX = barX + Math.round(i * (segmentWidth + gap));
-    const nextX = barX + Math.round((i + 1) * (segmentWidth + gap)) - gap;
-    let percent = 0;
-    if (i < ammoCharges) {
-      percent = 1;
-    } else if (i === ammoCharges) {
-      // currently reloading this segment: percent based on reload progress
-      percent = Phaser.Math.Clamp(reloadTimerMs / ammoReloadMs, 0, 1);
-    }
-    const fillColor = percent >= 1 ? 0xff4040 : 0xa82424;
-    if (percent > 0) {
-      drawPixelFill(ammoBar, segX, barY, (nextX - segX) * percent, AMMO_BAR_HEIGHT, fillColor);
-    }
-    if (i > 0) {
-      ammoBar.fillStyle(PIXEL_INK, 1);
-      ammoBar.fillRect(segX - gap, barY, gap, AMMO_BAR_HEIGHT);
-    }
-  }
-  ammoBar.setDepth(41);
-  ammoBarBack.setDepth(40);
+  drawAmmoChargeBar(ammoBar, ammoBarBack, { x, y, width: ammoBarWidth,
+    ammo: { capacity: ammoCapacity, charges: ammoCharges, reloadTimerMs, reloadMs: ammoReloadMs },
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,73 @@
+const thorgRageAbility = require("./abilities/thorgRageAbility.js");
+const dravenInfernoAbility = require("./abilities/dravenInfernoAbility.js");
+const wizardArcaneSurgeAbility = require("./abilities/wizardArcaneSurgeAbility.js");
+const gloopHookAbility = require("./abilities/gloopHookAbility.js");
+
+const abilitiesByCharacter = {
+  [thorgRageAbility.key]: thorgRageAbility,
+  [dravenInfernoAbility.key]: dravenInfernoAbility,
+  [wizardArcaneSurgeAbility.key]: wizardArcaneSurgeAbility,
+  [gloopHookAbility.key]: gloopHookAbility,
+};
+
+function getAbility(character) {
+  return abilitiesByCharacter[String(character || "").toLowerCase()] || null;
+}
+
+// `shot` carries a human request's id and view rewind for abilities that fire
+// projectiles; bots and other abilities ignore it.
+function activateSpecial(room, player, now, payload = null, shot = null) {
+  const ability = getAbility(player?.char_class);
+  if (!ability || typeof ability.activate !== "function") return;
+  ability.activate(player, now, room, payload, shot);
+}
+
+function tickActiveAbilities(room, now) {
+  for (const caster of room.players.values()) {
+    const ability = getAbility(caster?.char_class);
+    if (!ability || typeof ability.tick !== "function") continue;
+    ability.tick(room, caster, now);
+  }
+}
+
+function isMovementSuppressed(player, now) {
+  const ability = getAbility(player?.char_class);
+  if (!ability || typeof ability.isMovementSuppressed !== "function") {
+    return false;
+  }
+  return !!ability.isMovementSuppressed(player, now);
+}
+
+function applyOutgoingDamageMultiplier(attacker, damage, now) {
+  const ability = getAbility(attacker?.char_class);
+  if (!ability || typeof ability.applyOutgoingDamageMultiplier !== "function") {
+    return damage;
+  }
+  return ability.applyOutgoingDamageMultiplier(attacker, damage, now);
+}
+
+function requiresMeleeFacingCheck(attacker, attackType, isSelf) {
+  const ability = getAbility(attacker?.char_class);
+  if (!ability || typeof ability.requiresMeleeFacingCheck !== "function") {
+    return false;
+  }
+  return !!ability.requiresMeleeFacingCheck(attackType, isSelf);
+}
+
+function getKnockback(attacker, target, now) {
+  const ability = getAbility(attacker?.char_class);
+  if (!ability || typeof ability.getKnockback !== "function") {
+    return null;
+  }
+  return ability.getKnockback(attacker, target, now);
+}
+
+module.exports = {
+  hasAbility: character => !!getAbility(character),
+  activateSpecial,
+  tickActiveAbilities,
+  isMovementSuppressed,
+  applyOutgoingDamageMultiplier,
+  requiresMeleeFacingCheck,
+  getKnockback,
+};

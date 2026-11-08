@@ -71,7 +71,7 @@ test('position packets require map support and trigger only once on landing', ()
   assert.equal(events.filter(e=>e.event==='player:stomp').length,1);
 });
 test('interrupted windups never release later, even after the stun has expired', () => {
-  const { handleCharacterAction } = require('../src/server/core/gameRoom/characterActionRegistry');
+  const { handleCharacterAction } = require('../src/shared/combat/runtime/characterActionRegistry.js');
   for (const character of ['wizard','gloop']) {
     const {room,source,left}=fixture(); const callbacks=[];
     room.scheduleAction=fn=>callbacks.push(fn);

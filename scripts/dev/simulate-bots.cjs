@@ -30,8 +30,8 @@ navigation.buildGraph = function timedBuildGraph(...buildArgs) {
 const { makeRoom } = require('../../tests/helpers/botRoom');
 const { createRandom } = require('../../src/server/core/bots/random');
 const { BotController } = require('../../src/server/core/bots/controller');
-const { getModifiers } = require('../../src/server/core/gameRoom/effects/effectManager');
-const { isMovementSuppressed } = require('../../src/server/core/gameRoom/abilityRuntimeManager');
+const { getModifiers } = require('../../src/shared/combat/runtime/effects/effectManager.js');
+const { isMovementSuppressed } = require('../../src/shared/combat/runtime/abilityRuntimeManager.js');
 const { broadcastSnapshot } = require('../../src/server/core/gameRoom/roomStateManager');
 const args = Object.fromEntries(process.argv.slice(2).map((arg) => arg.replace(/^--/, '').split('=')));
 const seconds = Math.max(1, Math.min(300, Number(args.seconds) || 30));

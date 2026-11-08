@@ -1,7 +1,7 @@
-const effects = require('../gameRoom/effects/effectManager');
+const effects = require('../../../shared/combat/runtime/effects/effectManager.js');
 const { participantId, getParticipant } = require('../gameRoom/participants');
 const { bounds } = require('./physics');
-const { botProfile } = require('./characterProfiles');
+const { botProfile } = require('../../../shared/combat/characterProfiles.js');
 
 function observe(room, player, now, samples) {
   const enemies = [...room.players.values()].filter((p) =>

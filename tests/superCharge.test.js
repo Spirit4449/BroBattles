@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
 const { getSuperChargeHits, getSuperChargePerHit } = require("../src/shared/characters/characterStats.js");
-const inferno = require('../src/server/core/gameRoom/abilities/dravenInfernoAbility');
+const inferno = require('../src/shared/combat/runtime/abilities/dravenInfernoAbility.js');
 
 function fixture(t, character = 'draven') {
   const f = makeRoom({ characters: [character, 'wizard'] });
@@ -78,14 +78,14 @@ test('Inferno charges per successful tick, skips shields, and publishes fraction
   assert.equal(p.superCharge, .25);
   inferno.tick(room, p, 1101);
   assert.equal(p.superCharge, .25);
-  require('../src/server/core/gameRoom/effects/effectManager').apply(target, 'respawnShield', 1101, { durationMs: 3000 }, room);
+  require('../src/shared/combat/runtime/effects/effectManager.js').apply(target, 'respawnShield', 1101, { durationMs: 3000 }, room);
   inferno.tick(room, p, 1400);
   assert.equal(p.superCharge, .25);
   assert.equal(events.filter(e => e.type === 'super-update').at(-1).payload.charge, .25);
 });
 
 test('Inferno reduces incoming damage only during its channel and stacks with shields', t => {
-  const effects = require('../src/server/core/gameRoom/effects/effectManager');
+  const effects = require('../src/shared/combat/runtime/effects/effectManager.js');
   const tuning = require('../src/shared/characters/characterTuning').getResolvedCharacterSpecialConfig('draven', 'inferno');
   const { room, players: [p, target] } = fixture(t);
   p.health = p.maxHealth = 100000;

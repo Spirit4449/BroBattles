@@ -1,4 +1,4 @@
-const { basicAim, basicRange, hasClearShot } = require('./combat');
+const { basicAim, basicRange, hasClearShot } = require('../../../shared/combat/combat.js');
 const { walkLimits, canStandAt, standOn } = require('./navigation');
 const { movementGeometry } = require('./physics');
 

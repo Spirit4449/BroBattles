@@ -42,27 +42,27 @@
       },
       "animationUrl": "/assets/player-cards/shuriken-strike/shuriken-strike-animated.webm",
       "animationViewport": {
-        "width": 1080,
-        "height": 1920,
-        "x": 196,
-        "y": 310,
-        "w": 688,
-        "h": 1290
+        "width": 488,
+        "height": 804,
+        "x": 64,
+        "y": 60,
+        "w": 361,
+        "h": 677
       },
-      "animationBytes": 314789,
+      "animationBytes": 70526,
       "animationAppleUrl": "/assets/player-cards/shuriken-strike/shuriken-strike-animated.mov",
-      "animationAppleBytes": 480679,
+      "animationAppleBytes": 184997,
       "shopAssetUrl": "/assets/player-cards/shuriken-strike/shuriken-strike.webp",
       "battleViewport": {
-        "width": 540,
-        "height": 960,
-        "x": 98,
-        "y": 155,
-        "w": 343,
-        "h": 646
+        "width": 488,
+        "height": 804,
+        "x": 64,
+        "y": 60,
+        "w": 360,
+        "h": 680
       },
-      "animationVersion": "2bf7125a9cd98430",
-      "animationAppleVersion": "e32f8dab129ecb6b"
+      "animationVersion": "0fde33291a718b8f",
+      "animationAppleVersion": "bb8abea20737a6ef"
     },
     {
       "id": "slime-circuit",
@@ -79,40 +79,40 @@
       },
       "animationUrl": "/assets/player-cards/slime-circuit/slime-circuit-animated.webm",
       "animationViewport": {
-        "width": 1080,
-        "height": 1920,
-        "x": 220,
-        "y": 310,
-        "w": 640,
-        "h": 1280
+        "width": 464,
+        "height": 816,
+        "x": 60,
+        "y": 58,
+        "w": 344,
+        "h": 688
       },
-      "animationBytes": 652431,
+      "animationBytes": 93402,
       "animationAppleUrl": "/assets/player-cards/slime-circuit/slime-circuit-animated.mov",
-      "animationAppleBytes": 546333,
+      "animationAppleBytes": 267539,
       "battleViewport": {
-        "width": 540,
-        "height": 960,
-        "x": 110,
-        "y": 153,
-        "w": 320,
-        "h": 646
+        "width": 464,
+        "height": 816,
+        "x": 60,
+        "y": 56,
+        "w": 344,
+        "h": 696
       },
-      "animationVersion": "701bea711eb3edf2",
-      "animationAppleVersion": "9ee86f0997743e24"
+      "animationVersion": "edad4d559da9844e",
+      "animationAppleVersion": "2f6720c80ee98bcc"
     },
     {
       "id": "arena-crown",
       "name": "Crown of the Arena",
       "assetUrl": "/assets/player-cards/arena-crown/arena-crown-poster.webp",
       "animationUrl": "/assets/player-cards/arena-crown/arena-crown-animated.webm",
-      "animationBytes": 720865,
+      "animationBytes": 163212,
       "animationViewport": {
-        "width": 800,
-        "height": 1600,
-        "x": 70,
-        "y": 170,
-        "w": 660,
-        "h": 1268
+        "width": 448,
+        "height": 848,
+        "x": 37,
+        "y": 69,
+        "w": 375,
+        "h": 720
       },
       "rarity": "legendary",
       "cost": {
@@ -124,31 +124,31 @@
         "min": 10000
       },
       "animationAppleUrl": "/assets/player-cards/arena-crown/arena-crown-animated.mov",
-      "animationAppleBytes": 706805,
+      "animationAppleBytes": 357003,
       "battleViewport": {
-        "width": 400,
-        "height": 800,
-        "x": 45,
-        "y": 91,
-        "w": 310,
-        "h": 601
+        "width": 448,
+        "height": 848,
+        "x": 48,
+        "y": 76,
+        "w": 352,
+        "h": 678
       },
-      "animationVersion": "59956cb793f3e236",
-      "animationAppleVersion": "70b5b3dfb981d026"
+      "animationVersion": "001ffd4edf0405e9",
+      "animationAppleVersion": "ab534e5871625801"
     },
     {
       "id": "radiant-silver",
       "name": "Radiant Silver",
       "assetUrl": "/assets/player-cards/radiant-silver/radiant-silver-poster.webp",
       "animationUrl": "/assets/player-cards/radiant-silver/radiant-silver-animated.webm",
-      "animationBytes": 88162,
+      "animationBytes": 37245,
       "animationViewport": {
-        "width": 1080,
-        "height": 1920,
-        "x": 215,
-        "y": 333,
-        "w": 650,
-        "h": 1250
+        "width": 456,
+        "height": 804,
+        "x": 48,
+        "y": 57,
+        "w": 359,
+        "h": 691
       },
       "rarity": "common",
       "cost": {
@@ -156,19 +156,19 @@
         "gems": 29
       },
       "animationAppleUrl": "/assets/player-cards/radiant-silver/radiant-silver-animated.mov",
-      "animationAppleBytes": 188627,
+      "animationAppleBytes": 112394,
       "shopAssetUrl": "/assets/player-cards/radiant-silver/radiant-silver.webp",
       "renderScale": 0.95,
       "battleViewport": {
-        "width": 540,
-        "height": 960,
-        "x": 115,
-        "y": 211,
-        "w": 311,
-        "h": 535
+        "width": 456,
+        "height": 804,
+        "x": 56,
+        "y": 106,
+        "w": 344,
+        "h": 590
       },
-      "animationVersion": "d633cbcc18a5a502",
-      "animationAppleVersion": "a62d1fc46044a1e3"
+      "animationVersion": "cbc19f76f8e5ef99",
+      "animationAppleVersion": "abcd8c52d80155a7"
     },
     {
       "id": "astral-amethyst",
@@ -181,27 +181,27 @@
       "assetUrl": "/assets/player-cards/astral-amethyst/astral-amethyst-poster.webp",
       "animationUrl": "/assets/player-cards/astral-amethyst/astral-amethyst-animated.webm",
       "animationViewport": {
-        "width": 1080,
-        "height": 1920,
-        "x": 222,
-        "y": 326,
-        "w": 636,
-        "h": 1234
+        "width": 520,
+        "height": 932,
+        "x": 85,
+        "y": 120,
+        "w": 350,
+        "h": 678
       },
-      "animationBytes": 1740873,
+      "animationBytes": 143078,
       "animationAppleUrl": "/assets/player-cards/astral-amethyst/astral-amethyst-animated.mov",
-      "animationAppleBytes": 1141138,
+      "animationAppleBytes": 283838,
       "shopAssetUrl": "/assets/player-cards/astral-amethyst/astral-amethyst.webp",
       "battleViewport": {
-        "width": 720,
-        "height": 1280,
-        "x": 149,
-        "y": 217,
-        "w": 422,
-        "h": 823
+        "width": 520,
+        "height": 932,
+        "x": 86,
+        "y": 120,
+        "w": 348,
+        "h": 674
       },
-      "animationVersion": "b505b5b5d641f2b2",
-      "animationAppleVersion": "76c75fa0ef0b53cb"
+      "animationVersion": "5b7ed412d4bd4e1a",
+      "animationAppleVersion": "3af0586adad682e5"
     },
     {
       "id": "mjolnirs-anvil",
@@ -214,27 +214,27 @@
       "assetUrl": "/assets/player-cards/mjolnirs-anvil/mjolnirs-anvil-poster.webp",
       "animationUrl": "/assets/player-cards/mjolnirs-anvil/mjolnirs-anvil-animated.webm",
       "animationViewport": {
-        "width": 1080,
-        "height": 1920,
-        "x": 226,
-        "y": 328,
-        "w": 628,
-        "h": 1214
+        "width": 472,
+        "height": 804,
+        "x": 64,
+        "y": 56,
+        "w": 344,
+        "h": 665
       },
-      "animationBytes": 554924,
+      "animationBytes": 124120,
       "animationAppleUrl": "/assets/player-cards/mjolnirs-anvil/mjolnirs-anvil-animated.mov",
-      "animationAppleBytes": 388304,
+      "animationAppleBytes": 266500,
       "shopAssetUrl": "/assets/player-cards/mjolnirs-anvil/mjolnirs-anvil.webp",
       "battleViewport": {
-        "width": 540,
-        "height": 960,
-        "x": 113,
-        "y": 164,
-        "w": 314,
-        "h": 606
+        "width": 472,
+        "height": 804,
+        "x": 64,
+        "y": 56,
+        "w": 344,
+        "h": 664
       },
-      "animationVersion": "fc06565d8d3c7822",
-      "animationAppleVersion": "2f436f00dfe4c908"
+      "animationVersion": "5bda76f62d99dbde",
+      "animationAppleVersion": "906518fb8c232f69"
     },
     {
       "id": "radiant-diamond",
@@ -247,28 +247,28 @@
       "assetUrl": "/assets/player-cards/radiant-diamond/radiant-diamond-poster.webp",
       "animationUrl": "/assets/player-cards/radiant-diamond/radiant-diamond-animated.webm",
       "animationViewport": {
-        "width": 1080,
-        "height": 1920,
-        "x": 208,
-        "y": 327,
-        "w": 665,
-        "h": 1269
+        "width": 456,
+        "height": 804,
+        "x": 46,
+        "y": 57,
+        "w": 364,
+        "h": 694
       },
-      "animationBytes": 132029,
+      "animationBytes": 58189,
       "animationAppleUrl": "/assets/player-cards/radiant-diamond/radiant-diamond-animated.mov",
-      "animationAppleBytes": 223674,
+      "animationAppleBytes": 173861,
       "shopAssetUrl": "/assets/player-cards/radiant-diamond/radiant-diamond.webp",
       "renderScale": 0.95,
       "battleViewport": {
-        "width": 540,
-        "height": 960,
-        "x": 111,
-        "y": 206,
-        "w": 318,
-        "h": 544
+        "width": 456,
+        "height": 804,
+        "x": 54,
+        "y": 104,
+        "w": 348,
+        "h": 592
       },
-      "animationVersion": "c552a7a54d15582f",
-      "animationAppleVersion": "2519dc226d0b54bb"
+      "animationVersion": "2833f1d92731ca77",
+      "animationAppleVersion": "093f29d1dbdb1d5c"
     },
     {
       "id": "radiant-emerald",
@@ -281,28 +281,28 @@
       "assetUrl": "/assets/player-cards/radiant-emerald/radiant-emerald-poster.webp",
       "animationUrl": "/assets/player-cards/radiant-emerald/radiant-emerald-animated.webm",
       "animationViewport": {
-        "width": 1080,
-        "height": 1920,
-        "x": 210,
-        "y": 325,
-        "w": 660,
-        "h": 1271
+        "width": 456,
+        "height": 804,
+        "x": 50,
+        "y": 57,
+        "w": 357,
+        "h": 687
       },
-      "animationBytes": 94841,
+      "animationBytes": 94752,
       "animationAppleUrl": "/assets/player-cards/radiant-emerald/radiant-emerald-animated.mov",
-      "animationAppleBytes": 199680,
+      "animationAppleBytes": 218140,
       "shopAssetUrl": "/assets/player-cards/radiant-emerald/radiant-emerald.webp",
       "renderScale": 0.95,
       "battleViewport": {
-        "width": 540,
-        "height": 960,
-        "x": 111,
-        "y": 204,
-        "w": 318,
-        "h": 547
+        "width": 456,
+        "height": 804,
+        "x": 56,
+        "y": 102,
+        "w": 344,
+        "h": 594
       },
-      "animationVersion": "d88767e8d3bbaa27",
-      "animationAppleVersion": "e8afb2d651b089e3"
+      "animationVersion": "33e1fc4b288819ac",
+      "animationAppleVersion": "a888cc45ca4f9b02"
     },
     {
       "id": "radiant-gold",
@@ -315,28 +315,28 @@
       "assetUrl": "/assets/player-cards/radiant-gold/radiant-gold-poster.webp",
       "animationUrl": "/assets/player-cards/radiant-gold/radiant-gold-animated.webm",
       "animationViewport": {
-        "width": 1080,
-        "height": 1920,
-        "x": 214,
-        "y": 327,
-        "w": 652,
-        "h": 1264
+        "width": 472,
+        "height": 820,
+        "x": 57,
+        "y": 63,
+        "w": 357,
+        "h": 692
       },
-      "animationBytes": 137745,
+      "animationBytes": 51464,
       "animationAppleUrl": "/assets/player-cards/radiant-gold/radiant-gold-animated.mov",
-      "animationAppleBytes": 233266,
+      "animationAppleBytes": 157017,
       "shopAssetUrl": "/assets/player-cards/radiant-gold/radiant-gold.webp",
       "renderScale": 0.95,
       "battleViewport": {
-        "width": 540,
-        "height": 960,
-        "x": 113,
-        "y": 205,
-        "w": 314,
-        "h": 544
+        "width": 472,
+        "height": 820,
+        "x": 64,
+        "y": 108,
+        "w": 344,
+        "h": 596
       },
-      "animationVersion": "299ce1a65ddd18fd",
-      "animationAppleVersion": "0ec2d8c9afb942ed"
+      "animationVersion": "f3d1940a0079b0d5",
+      "animationAppleVersion": "4195bfd2eaf2c7ad"
     },
     {
       "id": "radiant-ruby",
@@ -349,28 +349,28 @@
       "assetUrl": "/assets/player-cards/radiant-ruby/radiant-ruby-poster.webp",
       "animationUrl": "/assets/player-cards/radiant-ruby/radiant-ruby-animated.webm",
       "animationViewport": {
-        "width": 1080,
-        "height": 1920,
-        "x": 212,
-        "y": 329,
-        "w": 656,
-        "h": 1264
+        "width": 456,
+        "height": 804,
+        "x": 48,
+        "y": 58,
+        "w": 358,
+        "h": 690
       },
-      "animationBytes": 156727,
+      "animationBytes": 49871,
       "animationAppleUrl": "/assets/player-cards/radiant-ruby/radiant-ruby-animated.mov",
-      "animationAppleBytes": 331705,
+      "animationAppleBytes": 194498,
       "shopAssetUrl": "/assets/player-cards/radiant-ruby/radiant-ruby.webp",
       "renderScale": 0.95,
       "battleViewport": {
-        "width": 540,
-        "height": 960,
-        "x": 113,
-        "y": 207,
-        "w": 315,
-        "h": 543
+        "width": 456,
+        "height": 804,
+        "x": 56,
+        "y": 104,
+        "w": 344,
+        "h": 592
       },
-      "animationVersion": "f1afea35dd174e40",
-      "animationAppleVersion": "4de4568cc77a3426"
+      "animationVersion": "8f14ca04b79fa596",
+      "animationAppleVersion": "bf4e76f9822d3a8f"
     },
     {
       "id": "wizard-spell",
@@ -383,27 +383,27 @@
       "assetUrl": "/assets/player-cards/wizard-spell/wizard-spell-poster.webp",
       "animationUrl": "/assets/player-cards/wizard-spell/wizard-spell-animated.webm",
       "animationViewport": {
-        "width": 1080,
-        "height": 1920,
-        "x": 234,
-        "y": 384,
-        "w": 614,
-        "h": 1116
+        "width": 488,
+        "height": 900,
+        "x": 72,
+        "y": 128,
+        "w": 345,
+        "h": 627
       },
-      "animationBytes": 350308,
+      "animationBytes": 50053,
       "animationAppleUrl": "/assets/player-cards/wizard-spell/wizard-spell-animated.mov",
-      "animationAppleBytes": 344306,
+      "animationAppleBytes": 132259,
       "shopAssetUrl": "/assets/player-cards/wizard-spell/wizard-spell.webp",
       "battleViewport": {
-        "width": 540,
-        "height": 960,
-        "x": 117,
-        "y": 192,
-        "w": 306,
-        "h": 557
+        "width": 488,
+        "height": 900,
+        "x": 72,
+        "y": 128,
+        "w": 344,
+        "h": 624
       },
-      "animationVersion": "18dcba25b076b3ff",
-      "animationAppleVersion": "0234844f9d5726d7"
+      "animationVersion": "97af63c7ab2dfc87",
+      "animationAppleVersion": "a97a5382df32301c"
     }
   ]
 }

@@ -1,0 +1,186 @@
+/* Mode "how to play" dialog (modeInfoDialog.js) and the i button on mode cards.
+   Frame, header and motion come from the shared .cs-confirm dialog styles. */
+
+.mode-select-card {
+  position: relative;
+}
+
+.mode-info-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  box-sizing: border-box;
+  padding: 0;
+  color: #fff;
+  background: var(--bb-primary-gradient, linear-gradient(180deg, #438feb, #285fc0));
+  box-shadow: var(--bb-control-shadow);
+  cursor: pointer;
+  user-select: none;
+  transition: filter 0.12s ease, transform 0.12s ease;
+}
+
+/* Pixel "i" drawn as an SVG so it sits dead centre regardless of font metrics. */
+.mode-info-button svg {
+  display: block;
+  width: 6px;
+  height: 10px;
+  shape-rendering: crispEdges;
+  filter: drop-shadow(1px 1px 0 rgba(2, 5, 12, 0.6));
+}
+
+.mode-info-button:hover {
+  filter: brightness(1.14) saturate(1.06);
+  transform: translateY(-1px);
+}
+
+.mode-info-button:active {
+  transform: translateY(2px);
+  box-shadow: var(--bb-control-shadow-pressed);
+}
+
+.mode-info-button:focus-visible {
+  outline: 2px solid #baf36b;
+  outline-offset: 3px;
+}
+
+/* Sits above the mode picker (z-index 12020). */
+.mode-info-backdrop {
+  z-index: 12060;
+}
+
+.cs-confirm.mode-info-dialog {
+  width: min(100%, 820px);
+  max-height: calc(100dvh - 40px);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding-bottom: 0;
+}
+
+.cs-confirm .mode-info-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: none;
+  margin-bottom: 0;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  font-size: clamp(13px, 1.5vw, 17px);
+}
+
+.mode-info-close {
+  flex: none;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.mode-info-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  min-height: 0;
+  padding: 20px 0 var(--bb-confirm-padding);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.mode-info-art {
+  position: relative;
+  align-self: start;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--bb-surface-1, #0b1629);
+  box-shadow:
+    0 0 0 3px var(--bb-ink, #03060b),
+    0 0 0 5px var(--bb-border, #385478),
+    0 6px 0 5px var(--bb-ink, #03060b);
+}
+
+.mode-info-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+}
+
+/* A slow pixel glint across the art, like the map preview. */
+.mode-info-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(90deg, transparent 0 6px, rgba(255, 255, 255, 0.4) 6px 12px, transparent 12px 24px);
+  -webkit-mask: linear-gradient(115deg, transparent 40%, #000 48%, #000 52%, transparent 60%) 200% 0 / 300% 100% no-repeat;
+  mask: linear-gradient(115deg, transparent 40%, #000 48%, #000 52%, transparent 60%) 200% 0 / 300% 100% no-repeat;
+  animation: mode-info-glint 5s steps(30, end) 0.3s infinite;
+}
+
+@keyframes mode-info-glint {
+  0% { -webkit-mask-position: 200% 0; mask-position: 200% 0; }
+  30%, 100% { -webkit-mask-position: -100% 0; mask-position: -100% 0; }
+}
+
+.mode-info-ribbon {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  padding: 7px 9px 6px;
+  color: #241703;
+  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-size: 9px;
+  text-transform: uppercase;
+  background: var(--bb-gold, #efc86e);
+  box-shadow: 0 0 0 2px var(--bb-ink, #03060b), 0 3px 0 2px var(--bb-ink, #03060b);
+}
+
+.mode-info-copy {
+  min-width: 0;
+  align-self: start;
+  font-family: var(--bb-font-body, "Lato", sans-serif);
+}
+
+.mode-info-heading {
+  margin: 0 0 14px;
+  color: #fff;
+  font-family: var(--bb-font-display, "Press Start 2P", monospace);
+  font-size: 12px;
+  line-height: 1.4;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 rgba(2, 5, 12, 0.62);
+}
+
+.mode-info-copy p {
+  margin: 0 0 14px;
+  color: var(--bb-text-soft, #c9d6e8);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.mode-info-copy p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 680px) {
+  .mode-info-body {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding-top: 16px;
+  }
+
+  .mode-info-art {
+    aspect-ratio: 16 / 9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-info-art::after { animation: none; opacity: 0; }
+  .mode-info-button { transition: none; }
+}

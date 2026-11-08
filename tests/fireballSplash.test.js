@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
-const { registerAttackFromAction, tickActiveAttacks } = require('../src/server/core/gameRoom/attackRuntimeManager');
+const { registerAttackFromAction, tickActiveAttacks } = require('../src/shared/combat/runtime/attackRuntimeManager.js');
 const { getResolvedCharacterAttackConfig } = require('../src/shared/characters/characterTuning');
 
 const FIREBALL = getResolvedCharacterAttackConfig('wizard', 'fireball');
@@ -78,7 +78,7 @@ test('an enemy standing in the end-of-range burst is splashed', t => {
   assert.equal(enemy.health, hp - owner.baseDamage);
 });
 
-const { handleCharacterAction } = require('../src/server/core/gameRoom/characterActionRegistry');
+const { handleCharacterAction } = require('../src/shared/combat/runtime/characterActionRegistry.js');
 const { wizardChargeShapes, chargeConfig } = require('../src/shared/characters/wizardCharge');
 function castAt(f, now) {
   const [owner] = f.players;

@@ -10,7 +10,8 @@
     "musicVolume": 0.11,
     "mapSelectPreviewAsset": "/assets/serenity/preview.webp",
     "lobbyBgAsset": "/assets/serenity/lobbyBg.webp",
-    "lobbyPlatformAsset": "/assets/serenity/lobbyPlatform.webp"
+    "lobbyPlatformAsset": "/assets/serenity/lobbyPlatform.webp",
+    "mapFullPreviewAsset": "/assets/serenity/full-preview.webp"
   },
   "assets": {
     "serenity-large-platform": {

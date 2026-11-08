@@ -1,10 +1,10 @@
-const { exposeDamageHitbox } = require('./damageHitboxes');
+const { exposeDamageHitbox } = require('../../../shared/combat/runtime/damageHitboxes.js');
 const {
   GAME_DURATION_MS,
   SD_DAMAGE_PER_SEC,
   SUDDEN_DEATH_MAX_MS,
   TIMER_EMIT_INTERVAL_MS,
-} = require("../gameRoomConfig");
+} = require("../../../shared/combat/matchConfig.js");
 const netTestLogger = require("./netTestLogger");
 
 // Regulation length; sudden death (when the mode supports it) starts after it.

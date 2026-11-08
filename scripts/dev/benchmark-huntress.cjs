@@ -1,9 +1,9 @@
 // Measure six firing Huntresses under a repeatable headless workload; not a GPU or hosting benchmark.
 const { makeRoom } = require('../../tests/helpers/botRoom');
-const combat = require('../../src/server/core/gameRoom/huntressCombat');
-const runtime = require('../../src/server/core/gameRoom/attackRuntimeManager');
+const combat = require('../../src/shared/combat/runtime/huntressCombat.js');
+const runtime = require('../../src/shared/combat/runtime/attackRuntimeManager.js');
 const { broadcastSnapshot } = require('../../src/server/core/gameRoom/roomStateManager');
-const { advanceAmmo } = require('../../src/server/core/bots/combat');
+const { advanceAmmo } = require('../../src/shared/combat/combat.js');
 const { STEP_MS } = require('../../src/shared/characters/huntressProjectile');
 const originalNow = Date.now;
 const originalLog = console.log;

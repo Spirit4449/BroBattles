@@ -20,6 +20,59 @@ so wrapping player cards cannot collide with them. Keep mode visibility on the
 existing HUD group nodes; they use `display: contents` while visible.
 Bank Bust's world coin bar and value sit above each vault's artwork.
 
+## Lobby character showcase
+
+The expanded character panel previews all characters by default (reduced motion
+keeps the portrait). `lobby/profile/showcaseMotion.js` fits opaque idle
+width and height inside a common reference size, independent of atlas padding or
+selected skin. Character kits may override `visual.height`, `visual.maxWidth` and
+`visual.bodyTop` (a fraction excluding an overhead prop). Thorg reads taller than
+the default fighter; Draven is measured below his tall staff plume.
+Both fighters use that same scale reference and the same HUD width; animation
+poses and supers do not resize the camera. Jumping uses the game's launch speed,
+gravity and stronger falling gravity, with room reserved for the full arc.
+Animation demonstrations use normal game speed and animation rate, grass
+footsteps, landing audio and shared dust.
+
+Fight participants use the panel's level for health and damage. Gloop spars with
+Ninja; higher-damage characters normally face Thorg. Wizard faces one opponent with a green teammate standing behind him as a
+bystander, so Arcane Surge visibly grants a real powerup to an ally. `showcaseRoster` returns
+participant IDs, teams and positions; simulation and presentation have no two-player
+assumption. Fights start with empty super bars. Charge is earned through hits and carried
+between practice rounds, allowing kits such as Gloop to charge across multiple
+Ninja opponents. Ammo consumption, reloads, returning-projectile refunds, damage
+and effects are real match outcomes. Defeated fighters stay down until the active
+fighters on one side are eliminated, followed by a new round; bystanders do not
+keep a defeated side fighting. Buff presentation is allowed to finish before reset.
+There is no hidden healing, alternating attack turn, walk-home reset or shortened
+ability duration.
+
+`showcaseDirector.js` chooses ordinary commands independently for each participant.
+It uses shared aiming/ammo/profile logic and comfortable distance bands with
+hysteresis and acceleration. The featured fighter uses short bursts with pauses in addition to the real
+attack cooldown. Sparring partners answer more slowly, withhold supers, and ease
+off when their target is hurt; they use the same health/damage stats. Bystanders
+stand still, do not attack, and stay behind the featured fighter's movement bounds.
+Supers require earned charge and have a director pacing interval. Effect modifiers
+affect movement. The local ammo bar reuses `scene/ammoBarRenderer.js`, including
+its pixel frame, red segments and gradual refill, with super below it as in matches.
+`showcaseFight.js` renders events from `shared/combat/previewSession.js`, which hosts
+the same attack, damage, ability and effect modules as GameRoom. Ninja's return
+contacts, Huntress's burn ticks, Gloop's slows/pull and Wizard's team grants therefore
+need no separate showcase implementation. Animation demonstrations use this host
+too. Projectile network adapters are instantiated with an isolated local clock;
+health feedback, character event handlers, powerup visuals and sounds reuse match
+presentation. Huntress's isolated renderer accepts compact arrow framing without
+changing its collision or damage.
+
+Optional `game/characters/<key>/showcase.js` files contain art framing only. New
+characters inherit combat support from their normal runtime registration, with no
+showcase allowlist or attack script. Content validation checks basic/special runtime
+coverage. `tests/profileCharacters.test.js` covers mechanic contracts, roster levels,
+ammo, stable spacing, teardown and identical preview/GameRoom outcomes for all
+registered characters. Renderer tests cover compact embedded arrows and cleanup.
+See [Add a character](contributing.md#add-a-character) for the extension contract.
+
 ## Lobby and battle navigation
 
 `navigation.bundle.js` owns `/`, `/party/:id`, and `/game/:id` within one

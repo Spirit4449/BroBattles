@@ -1,7 +1,9 @@
-const damageResolver = require('./damageResolver');
+const { combatNow } = require("../../../shared/combat/runtime/clock");
+const { requestSpecial } = require("../../../shared/combat/runtime/actions");
+const damageResolver = require('../../../shared/combat/runtime/damageResolver.js');
 const actionValidation = require('./actionValidation');
 const playerTransport = require('./playerTransport');
-const characterCombat = require('./characterCombatRegistry');
+const characterCombat = require('../../../shared/combat/runtime/characterCombatRegistry.js');
 // gameRoom.js
 // Individual game room handling server-authoritative game state
 const {
@@ -13,18 +15,18 @@ const {
   REGEN_BROADCAST_MIN_MS,
   BOT_PLANNING_STEP_MS,
   BOT_PLANNING_FRAME_MS,
-} = require("../gameRoomConfig");
+} = require("../../../shared/combat/matchConfig.js");
 const {
   FIXED_DT_MS,
   SNAPSHOT_EVERY_TICKS,
   WORLD_STATE_EVERY_TICKS,
 } = require("../../../shared/gameConstants");
 
-const effectManager = require("./effects/effectManager");
+const effectManager = require("../../../shared/combat/runtime/effects/effectManager.js");
 
 const powerupManager = require("./powerupManager");
 const deathDropManager = require("./deathDropManager");
-const combatValidation = require("./combatValidation");
+const combatValidation = require("../../../shared/combat/runtime/combatValidation.js");
 const healthManager = require("./healthManager");
 const timerManager = require("./timerManager");
 const inputManager = require("./inputManager");
@@ -34,19 +36,17 @@ const roomStateManager = require("./roomStateManager");
 const netTestLogger = require("./netTestLogger");
 const { createTimingDiagnostics } = require("./timingDiagnostics");
 const { netTrace } = require("./netTraceRecorder");
-const attackRuntimeManager = require("./attackRuntimeManager");
-const characterActionRegistry = require("./characterActionRegistry");
+const attackRuntimeManager = require("../../../shared/combat/runtime/attackRuntimeManager.js");
+const characterActionRegistry = require("../../../shared/combat/runtime/characterActionRegistry.js");
 
 const { createGameModeRuntime } = require("../gameModes");
 const {
-  activateSpecial,
   tickActiveAbilities
-} = require("./abilityRuntimeManager");
+} = require("../../../shared/combat/runtime/abilityRuntimeManager.js");
 
 const { getDuelGeometry } = require('../../../shared/physics/duelGeometry');
 const { tickMovingPlatforms } = require('./movingPlatforms');
 const { BotController } = require('../bots/controller');
-const { startNinjaSwarm } = require('../bots/combat');
 
 const { getParticipant, participantId } = require('./participants');
 const { deleteMatchBots } = require('../../services/match/matchRosterService');
@@ -80,6 +80,7 @@ class GameRoom {
 
     // Fixed-step loop state (see startGameLoop)
     this._loopRunning = false;
+    this.traceCombatHit = (attacker, targetName, details) => netTrace.noteHit(this, attacker, targetName, details);
     this._tickId = 0; // monotonically increasing per 60Hz tick
     this._chatSeq = 1;
     // Tick/snapshot cadence: src/shared/gameConstants.js
@@ -388,21 +389,7 @@ class GameRoom {
   }
 
   requestSpecial(id, payload = {}) {
-    const p = getParticipant(this, id);
-    const special = characterCombat.requestSpecial(this, p, payload);
-    if (special?.handled) return special.result;
-    if (!p || !p.isAlive || !p.loaded || this.status !== 'active') return false;
-    const now = Date.now();
-    if (Math.max(p._controlLockUntil || 0, p._attackInterruptedUntil || 0) > now || p.superCharge < p.maxSuperCharge) return false;
-    p.superCharge = 0; p.lastCombatAt = now;
-    const aimPayload = payload?.aim || null;
-    if (p.isBot && p.char_class === 'ninja') startNinjaSwarm(this, p, now, aimPayload || {});
-    else activateSpecial(this, p, now, aimPayload, { id: payload?.id, viewRewindMs: payload?.viewRewindMs });
-    this.io.to(`game:${this.matchId}`).emit('super-update', { username: p.name, charge: 0, maxCharge: p.maxSuperCharge });
-    if (p.char_class !== 'gloop') this.io.to(`game:${this.matchId}`).emit('player:special', {
-      username: p.name, character: p.char_class, origin: { x: p.x, y: p.y }, flip: !!p.flip, aim: aimPayload,
-    });
-    return true;
+    return requestSpecial(this, id, payload);
   }
 
   /**
@@ -817,7 +804,7 @@ class GameRoom {
       playerData.loaded !== true
     )
       return;
-    if (Math.max(playerData._controlLockUntil || 0, playerData._attackInterruptedUntil || 0) > Date.now()) return;
+    if (Math.max(playerData._controlLockUntil || 0, playerData._attackInterruptedUntil || 0) > combatNow(this)) return;
 
     const sanitizedAction = this._sanitizeActionPayload(actionData);
     if (!sanitizedAction) return;
@@ -836,7 +823,7 @@ class GameRoom {
             flip: !!playerData.flip,
             character: playerData.char_class,
             action: characterActionRegistry.withoutUnusedTerrain(sanitizedAction),
-            t: Date.now(),
+            t: combatNow(this),
           });
         }
         if (modeResult?.shouldBroadcastSnapshot) {
@@ -859,7 +846,7 @@ class GameRoom {
     }
 
     // Mark as combat to pause regen even if attack misses
-    const actionNow = Date.now();
+    const actionNow = combatNow(this);
     playerData.lastCombatAt = actionNow;
 
     const characterActionResult = characterActionRegistry.handleCharacterAction(
@@ -876,7 +863,7 @@ class GameRoom {
       this,
       playerData,
       sanitizedAction,
-      Date.now(),
+      combatNow(this),
     );
   }
 

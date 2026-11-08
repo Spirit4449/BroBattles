@@ -1,5 +1,5 @@
-import { networkAdapter as ninja } from './ninja/network';
-import { networkAdapter as huntress } from './huntress/network';
+import { networkAdapter as ninja, createNinjaNetwork } from './ninja/network';
+import { networkAdapter as huntress, createHuntressNetwork } from './huntress/network';
 import { networkAdapter as wizard } from './wizard/network';
 import { trackShotTargets, resetShotPrediction } from './shared/shotPrediction';
 import { predictGloopHook } from './gloop/special';
@@ -7,7 +7,16 @@ import { playCharacterSound } from './index';
 import { playHitFeedback } from './shared/hitFeedback';
 
 // Explicit registration keeps client protocol code out of the shared catalog.
-const adapters = [ninja, huntress, wizard];
+const registrations = [
+  { adapter: ninja, create: options => createNinjaNetwork(options).networkAdapter },
+  { adapter: huntress, create: options => createHuntressNetwork(options).networkAdapter },
+  { adapter: wizard, create: () => wizard },
+];
+const adapters = registrations.map(entry => entry.adapter);
+// Embedded simulations use the same registrations with isolated state/clocks.
+export function createCharacterNetworkAdapters(options = {}) {
+  return registrations.map(entry => entry.create(options));
+}
 const byCharacter = Object.fromEntries(adapters.map(adapter => [adapter.key, adapter]));
 // Specials that launch a predicted shot without a dedicated protocol.
 const specialPredictors = { gloop: predictGloopHook };

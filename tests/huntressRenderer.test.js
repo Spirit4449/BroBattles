@@ -8,7 +8,7 @@ const replication=require('../src/shared/characters/huntressReplication');
 const {resolveAttackAimContext}=require('../src/client/game/characters/shared/attackAim');
 const tuning=require("../src/shared/characters/characterTuning.js");
 const {makeRoom}=require('./helpers/botRoom');
-const combat=require('../src/server/core/gameRoom/huntressCombat');
+const combat=require('../src/shared/combat/runtime/huntressCombat.js');
 const attackCode=babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/huntress/attack.js'),'utf8'),{
   babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code;
@@ -27,7 +27,7 @@ vm.runInNewContext(attackCode,{exports:attackApi,require:name=>name.includes('pr
 const code=babel.transformSync(fs.readFileSync(require.resolve('../src/client/game/characters/huntress/network.js'),'utf8'),{
   babelrc:false,configFile:false,presets:[['@babel/preset-env',{targets:{node:'current'}}]],
 }).code;
-function setup(colliders=[]){
+function setup(colliders=[],networkOptions=null){
   const api={},created=[],sounds=[];let now=0;
   const socket={connected:false};
   const serverClock=loadServerClock({performance:{now:()=>now}});
@@ -37,8 +37,9 @@ function setup(colliders=[]){
     name.includes('playerAudio')?playerAudio:
     name.includes('runtimeId')?{createRuntimeId:()=> 'generated'}:name.includes('renderLayers')?{RENDER_LAYERS:{ATTACKS:10}}:socket,
     performance:{now:()=>now},setInterval:()=>1,clearInterval(){},window:{}});
-  function sprite(x,y,texture){const s={active:true,x,y,texture,setPosition(x,y){this.x=x;this.y=y;return this;},setRotation(r){this.rotation=r;return this;},
-    setScale(){return this;},setDepth(){return this;},setTint(){return this;},destroy(){this.active=false;}};created.push(s);return s;}
+  if(networkOptions) Object.assign(api,api.createHuntressNetwork(networkOptions));
+  function sprite(x,y,texture){const s={active:true,x,y,texture,width:200,setPosition(x,y){this.x=x;this.y=y;return this;},setRotation(r){this.rotation=r;return this;},
+    setScale(x,y=x){this.scaleX=x;this.scaleY=y;return this;},setDepth(){return this;},setTint(){return this;},destroy(){this.active=false;}};created.push(s);return s;}
   const scene={events:new EventEmitter(),add:{sprite,circle(){throw new Error("Huntress fire must not emit round smoke or halos");},graphics(){const g=sprite(0,0);for(const key of ["setAlpha","fillStyle","fillRect"])g[key]=()=>g;return g;}},tweens:{add(){}},sound:{play:key=>sounds.push(key)}};
   api.configureHuntressNetwork({huntressCombatVersion:2,epoch:'room',sentMono:0,simMono:0,projectiles:[],terminals:[],collisionGeometry:{colliders}});
   const owner={active:true,x:100,y:100,displayWidth:150,displayHeight:150,flipX:false};
@@ -277,4 +278,22 @@ test('arrows stop at terrain before the server terminal arrives and stay there o
   f.tick(616);
   assert.ok(Math.abs(arrow().x-contact.x)<1e-6);
   f.api.resetHuntressNetwork();
+});
+
+test('isolated showcase arrows stay compact, follow embedded targets, expire and clean up',()=>{
+  const f=setup([], {arrowLength:28});
+  const target={active:true,x:120,y:140};
+  f.api.handleHuntressPacket(f.scene,f.packet({type:'huntress-terminal',id:'remote:compact:0',requestId:'compact',
+    reason:'target',target:'victim',x:120,y:140,targetOffset:{x:0,y:0},rotation:0,
+    visual:{scale:.22,embedMs:500,special:false},appliedDamage:100}),
+    {opponentPlayersRef:{victim:{opponent:target}}});
+  f.tick(10);
+  const arrow=f.created.find(s=>s.texture==='huntress-arrow');
+  assert.ok(arrow.width*arrow.scaleX<=28+1e-9);
+  assert.equal(arrow.scaleX,arrow.scaleY);
+  target.x+=12;f.tick(20);
+  assert.equal(arrow.x,target.x);
+  f.tick(600);assert.equal(arrow.active,false);
+  f.api.resetHuntressNetwork();
+  assert.equal(f.scene.events.listenerCount('update'),0);
 });

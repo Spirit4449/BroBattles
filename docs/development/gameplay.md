@@ -158,7 +158,7 @@ editor inherits that option, and the checkbox in its playtest settings (the gear
 Blue/green outlines show map and physics bodies; pink outlines show server damage
 volumes. Ctrl+M hides/shows the overlay during a debug playtest.
 
-`src/server/core/gameRoom/damageHitboxes.js` is the common damage-shape publisher.
+`src/shared/combat/runtime/damageHitboxes.js` is the common damage-shape publisher.
 It runs only in editor rooms with debug enabled. Normal matches send no additional
 hitbox data. The debug transport itself does not alter damage rules; attack
 geometry remains controlled by the shared character tuning and collision helpers.

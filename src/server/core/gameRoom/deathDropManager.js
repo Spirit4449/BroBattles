@@ -13,7 +13,7 @@ const {
   DEATH_DROP_LAUNCH_VY_BASE,
   DEATH_DROP_LAUNCH_VY_JITTER,
   DEATH_DROP_LAUNCH_VY_SPREAD_BONUS,
-} = require("../gameRoomConfig");
+} = require("../../../shared/combat/matchConfig.js");
 
 function randomInt(min, max) {
   const lo = Math.min(min, max);

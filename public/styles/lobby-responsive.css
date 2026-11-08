@@ -78,7 +78,17 @@
 }
 #bottom-bar .map-picker { flex-direction: row-reverse; justify-content: flex-start; }
 #bottom-bar .map-picker-copy { align-items: flex-end; text-align: right; }
-#bottom-bar :is(#map-preview-name, .mode-picker-copy) { max-width: none; min-width: 0; }
+#bottom-bar :is(#mode-preview-img, #map-preview-img) { flex-shrink: 0; }
+#bottom-bar .mode-picker-copy { flex: 1 1 auto; min-width: 0; max-width: none; }
+#bottom-bar :is(#mode-preview-name, #map-preview-name) { max-width: 100%; min-width: 0; }
+/* Long map names wrap to a second line instead of running past the frame. */
+#bottom-bar #map-preview-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
 .picker-label {
   font-size: 7px;
   line-height: 1.4;

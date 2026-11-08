@@ -1,8 +1,8 @@
 const { encodeWire } = require("../../../shared/networkWire");
 const { netTrace } = require('./netTraceRecorder');
-const { damageHitboxSnapshot } = require('./damageHitboxes');
-const effectManager = require('./effects/effectManager');
-const { randomBytes } = require("node:crypto");
+const { damageHitboxSnapshot } = require('../../../shared/combat/runtime/damageHitboxes.js');
+const effectManager = require('../../../shared/combat/runtime/effects/effectManager.js');
+const { snapshotEpoch } = require("../../../shared/combat/runtime/clock");
 const { getDuelGeometry, spawnForParticipant } = require('../../../shared/physics/duelGeometry');
 const { participantId } = require('./participants');
 const { createSnapshotEncoder } = require('../../../shared/snapshotDelta');
@@ -21,12 +21,6 @@ function roundPosition(value) {
 function roundVelocity(value) {
   const num = Number(value);
   return Number.isFinite(num) ? Math.round(num) : 0;
-}
-
-// Clients only compare epochs for equality (a new room resets clock samples),
-// so 48 random bits are plenty and cost 8 bytes instead of a 36-byte UUID.
-function snapshotEpoch(room) {
-  return (room._snapshotEpoch ??= randomBytes(6).toString("base64url"));
 }
 
 // Server-computed movement multipliers, only for players with active effects.
@@ -115,7 +109,7 @@ function sendGameStateToPlayer(room, socket) {
   }
 
   const gameStateForPlayer = {
-    ...require('./characterCombatRegistry').bootstrap(room),
+    ...require('../../../shared/combat/runtime/characterCombatRegistry.js').bootstrap(room),
     matchId: room.matchId,
     mode: room.matchData.mode,
     modeId: room.matchData.modeId || "duels",

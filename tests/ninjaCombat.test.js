@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {makeRoom}=require('./helpers/botRoom');
-const combat=require('../src/server/core/gameRoom/ninjaCombat');
+const combat=require('../src/shared/combat/runtime/ninjaCombat.js');
 const model=require('../src/shared/characters/ninjaProjectile');
 function fixture(t,isBot=false){
   const f=makeRoom({characters:['ninja','wizard']});t.after(()=>f.room.cleanup());
@@ -103,7 +103,7 @@ test('shared flight is identical across render rates and swept segments do not t
 
 test('shielded contacts cannot grant damage or charge, and vault contacts use registered flight',t=>{
   const f=fixture(t),[p,target]=f.players,hp=target.health;
-  require('../src/server/core/gameRoom/effects/effectManager').apply(target,'respawnShield',Date.now(),{durationMs:3000},f.room);
+  require('../src/shared/combat/runtime/effects/effectManager.js').apply(target,'respawnShield',Date.now(),{durationMs:3000},f.room);
   f.room.handlePlayerAction(p.participantId,{type:'ninja-shuriken',id:'shield',angle:0});f.step(25);
   assert.equal(target.health,hp);assert.equal(p.superCharge,0);
   assert.ok(f.actions('ninja-impact').every(a=>a.appliedDamage===0));

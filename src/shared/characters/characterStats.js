@@ -15,9 +15,9 @@ const STANDARD_LEVEL_CAP = 5;
 // Fraction of the level-1 stat added per level up, for levels
 // 2..STANDARD_LEVEL_CAP. Percentages keep each character's role intact as it
 // levels (a flat bonus would favour fragile characters over tanks).
-const STANDARD_LEVEL_GAIN_FRACTION = 0.07;
+const STANDARD_LEVEL_GAIN_FRACTION = 0.15;
 // Fraction of the level-1 stat added per level above STANDARD_LEVEL_CAP.
-const MASTERY_LEVEL_GAIN_FRACTION = 0.03;
+const MASTERY_LEVEL_GAIN_FRACTION = 0.075;
 
 // Coin cost to upgrade, indexed by the character's current level; each value
 // buys the next level. Needs LEVEL_CAP - 1 priced entries (about x1.5 a step).
@@ -91,31 +91,39 @@ function defaultCharacterList() {
   );
 }
 
-// Multiplier on a level-1 stat at the given level (1 at level 1).
-function levelStatMultiplier(level) {
+// Each level adds the same fixed amount: a percentage of the level-1 stat,
+// rounded to a multiple of 10. Rounding the gain (not the total) keeps every
+// upgrade within a band identical, and a multiple of 10 keeps the last digit
+// of a stat constant across levels (Thorg damage 250, 290, 330... never
+// flipping between 0s and 5s).
+const LEVEL_GAIN_STEP = 10;
+
+function levelGain(baseValue, fraction) {
+  if (!(baseValue > 0)) return 0;
+  return Math.max(
+    LEVEL_GAIN_STEP,
+    Math.round((baseValue * fraction) / LEVEL_GAIN_STEP) * LEVEL_GAIN_STEP,
+  );
+}
+
+function scaleForLevel(baseValue, level) {
+  const base = Number(baseValue) || 0;
   const safeLevel = Math.min(LEVEL_CAP, Math.max(1, Math.floor(Number(level)) || 1));
   const standardLevels = Math.min(safeLevel, STANDARD_LEVEL_CAP) - 1;
   const masteryLevels = Math.max(0, safeLevel - STANDARD_LEVEL_CAP);
   return (
-    1 +
-    standardLevels * STANDARD_LEVEL_GAIN_FRACTION +
-    masteryLevels * MASTERY_LEVEL_GAIN_FRACTION
+    base +
+    standardLevels * levelGain(base, STANDARD_LEVEL_GAIN_FRACTION) +
+    masteryLevels * levelGain(base, MASTERY_LEVEL_GAIN_FRACTION)
   );
 }
 
-// Leveled stats snap to the same grid as the base stats (HP to 10s, damage
-// to 5s) so every number a player sees looks deliberate.
-function scaleForLevel(baseValue, level, step) {
-  const raw = (Number(baseValue) || 0) * levelStatMultiplier(level);
-  return Math.round(raw / step) * step;
-}
-
 function getHealth(character, level) {
-  return scaleForLevel(characterStats[character].baseHealth, level, 10);
+  return scaleForLevel(characterStats[character].baseHealth, level);
 }
 
 function getDamage(character, level) {
-  return scaleForLevel(characterStats[character].baseDamage, level, 5);
+  return scaleForLevel(characterStats[character].baseDamage, level);
 }
 
 // Charge is measured in landed hits, independent of level and damage modifiers.
@@ -136,7 +144,7 @@ function getSuperChargePerHit(character, attackType = "basic") {
 }
 
 function getSpecialDamage(character, level) {
-  return scaleForLevel(characterStats[character].specialBaseDamage, level, 5);
+  return scaleForLevel(characterStats[character].specialBaseDamage, level);
 }
 
 // The level upgrade price reflects the current level the character is at

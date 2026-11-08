@@ -368,7 +368,7 @@ test('bots plan routes over built walls, their own team\'s included', () => {
 });
 
 test('bots shoot through their own team\'s walls but not the other team\'s', () => {
-  const { hasClearShot } = require('../src/server/core/bots/combat');
+  const { hasClearShot } = require('../src/shared/combat/combat.js');
   const clear = (builtByTeam) => {
     const h = wallSetup(builtByTeam);
     const target = { ...h.p, participantId: 'enemy', team: 'team2', x: 1200 };

@@ -16,8 +16,8 @@ const {
   MOVE_CLAMP_MAX_IN_WINDOW,
   MAX_MOVEMENT_CREDIT_MS,
   IDLE_FALLBACK_AFTER_MS,
-} = require("../gameRoomConfig");
-const { isMovementSuppressed } = require("./abilityRuntimeManager");
+} = require("../../../shared/combat/matchConfig.js");
+const { isMovementSuppressed } = require("../../../shared/combat/runtime/abilityRuntimeManager.js");
 const netTestLogger = require("./netTestLogger");
 
 const { characterBody } = require("../../../shared/physics/duelGeometry");
@@ -32,7 +32,7 @@ const DASH_COLLISION_CORRECTION_PX = 2;
 // Latency allowance for judging contact with a moving platform.
 const MOVING_SURFACE_LAG_S = 0.2;
 const movementPhysics = require("../../../shared/physics/movementPhysics.json");
-const effectManager = require("./effects/effectManager");
+const effectManager = require("../../../shared/combat/runtime/effects/effectManager.js");
 const { stepBody } = require("../bots/physics");
 const { notePlayoutSample, restartPlayout } = require("./humanPlayout");
 
@@ -195,7 +195,7 @@ function pushPositionHistory(playerData, now = Date.now()) {
     x: Number(playerData.x) || 0,
     y: Number(playerData.y) || 0,
     t: now,
-    body: (lagCompensation ||= require("./lagCompensation")).collisionPose(playerData),
+    body: (lagCompensation ||= require("../../../shared/combat/runtime/lagCompensation.js")).collisionPose(playerData),
   });
   while (
     history.length > POSITION_HISTORY_DEPTH ||

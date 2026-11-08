@@ -1,4 +1,4 @@
-const { BOT_PROFILES, botProfile, healthFraction } = require('./characterProfiles');
+const { BOT_PROFILES, botProfile, healthFraction } = require('../../../shared/combat/characterProfiles.js');
 
 // Derived for callers/tests that read a character's advertised super range.
 const SUPER_RANGES = Object.freeze(Object.fromEntries(

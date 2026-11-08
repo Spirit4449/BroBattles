@@ -2267,13 +2267,17 @@
 .character-details-wallet > span { grid-template-rows: auto; }
 .character-details-wallet img, .character-details-wallet strong { grid-row: 1; }
 
-/* Geometric arrows avoid font baseline and side-bearing offsets. */
+/* Stepped 2px-pixel triangle arrows match the chunky pixel UI. */
 .character-details-skin-stepper::before {
   content: "";
-  width: 8px;
-  height: 12px;
+  width: 10px;
+  height: 18px;
   background: currentColor;
-  clip-path: polygon(0 0, 50% 0, 100% 50%, 50% 100%, 0 100%, 50% 50%);
+  clip-path: polygon(
+    0 0, 2px 0, 2px 2px, 4px 2px, 4px 4px, 6px 4px, 6px 6px, 8px 6px, 8px 8px,
+    10px 8px, 10px 10px, 8px 10px, 8px 12px, 6px 12px, 6px 14px, 4px 14px,
+    4px 16px, 2px 16px, 2px 18px, 0 18px
+  );
 }
 .character-details-skin-stepper:first-child::before {
   transform: rotate(180deg);
@@ -2325,3 +2329,117 @@
   display: flex;
 }
 .cs-next-wrap { width: 120px; height: 120px; }
+
+/* Showcase views (characterShowcase.js): body portrait, attacks, fight. The
+   Phaser canvas is transparent over a CSS backdrop and crossfades with the
+   portrait once its first frame is drawn. */
+.character-showcase {
+  grid-area: 1 / 1;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgba(6, 10, 20, 0.12), rgba(6, 10, 20, 0.38)),
+    url("/assets/showcase/backdrop.webp") center 40% / cover no-repeat;
+  image-rendering: pixelated;
+  opacity: 0;
+  transition: opacity 420ms ease;
+  pointer-events: none;
+}
+
+.character-showcase canvas {
+  display: block;
+  transition: opacity 200ms ease;
+}
+
+/* Swapping live views dips only the fighters; the backdrop stays put. */
+.character-showcase.is-swapping canvas {
+  opacity: 0;
+}
+
+.character-showcase-caption {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 4;
+  font: 7px/1 "Press Start 2P", monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 2px #000, 2px 0 #000, -2px 0 #000, 0 -2px #000;
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+
+.character-details-preview-frame[data-showcase-view="animations"] .character-showcase-caption:not(:empty) {
+  opacity: 1;
+}
+
+.character-details-preview-image,
+.character-details-preview-glow {
+  transition: opacity 420ms ease;
+}
+
+.character-details-preview-frame[data-showcase-view="animations"] .character-showcase,
+.character-details-preview-frame[data-showcase-view="fight"] .character-showcase {
+  opacity: 1;
+}
+
+.character-details-preview-frame[data-showcase-view="animations"] .character-details-lock-overlay,
+.character-details-preview-frame[data-showcase-view="fight"] .character-details-lock-overlay,
+.character-details-preview-frame[data-showcase-view="animations"] .character-details-preview-image,
+.character-details-preview-frame[data-showcase-view="animations"] .character-details-preview-glow,
+.character-details-preview-frame[data-showcase-view="fight"] .character-details-preview-image,
+.character-details-preview-frame[data-showcase-view="fight"] .character-details-preview-glow {
+  opacity: 0;
+}
+
+.character-showcase-switcher {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 4;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(6, 10, 20, 0.72);
+  box-shadow: 0 2px #000, 0 -2px #000, 2px 0 #000, -2px 0 #000;
+}
+
+.character-showcase-view {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 6px 8px;
+  font: 7px/1 "Press Start 2P", monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.72);
+  background: transparent;
+  cursor: pointer;
+}
+
+.character-showcase-view:hover {
+  color: #fff;
+  background: rgba(var(--character-chroma-main), 0.22);
+}
+
+.character-showcase-view[aria-pressed="true"] {
+  color: #0b1020;
+  background: rgb(var(--character-chroma-light));
+  box-shadow: inset 0 -2px rgba(var(--character-chroma-shadow), 0.55);
+}
+
+.character-showcase-view:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+.character-details-preview-frame.is-showcase-loading .character-showcase-view[aria-pressed="true"] {
+  animation: characterShowcaseLoading 900ms ease-in-out infinite;
+}
+
+@keyframes characterShowcaseLoading {
+  50% { opacity: 0.55; }
+}

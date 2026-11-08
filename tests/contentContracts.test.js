@@ -8,7 +8,7 @@ const { resolveLocalEffectMovement } = require('../src/shared/effectRules');
 test('registered content has valid assets, effects, map documents and attack references', () => {
   assert.deepEqual(validateContent(), []);
   assert.deepEqual(require('../src/shared/maps/mapDocument').POWERUP_TYPES, POWERUP_TYPES);
-  assert.deepEqual(require('../src/server/core/gameRoomConfig').POWERUP_TYPES, POWERUP_TYPES);
+  assert.deepEqual(require('../src/shared/combat/matchConfig.js').POWERUP_TYPES, POWERUP_TYPES);
 });
 
 test('content validation rejects a missing action and wrong effect owner', () => {
@@ -66,7 +66,7 @@ test('local movement multiplies active effects, ignores expired timers and honor
 });
 
 test('every registered character declares how bots play it', () => {
-  const { BOT_PROFILES } = require('../src/server/core/bots/characterProfiles');
+  const { BOT_PROFILES } = require('../src/shared/combat/characterProfiles.js');
   const botProfiles = { ...BOT_PROFILES };
   delete botProfiles.gloop;
   assert.ok(validateContent({ botProfiles }).some(error => error.includes('gloop: missing bot profile')));

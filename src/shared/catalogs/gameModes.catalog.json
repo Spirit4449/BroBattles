@@ -6,6 +6,11 @@
       "id": "duels",
       "label": "Duels",
       "description": "Classic elimination battles with selectable team sizes.",
+      "details": [
+        "Fight the other team in a 1v1 or 2v2 battle.",
+        "You only get one life. Knock out everyone on the other team to win.",
+        "If time runs out, poison starts rising from the floor. Stay above it and finish the fight."
+      ],
       "artAsset": "/assets/map-banners/duels.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
       "queueable": true,
@@ -57,6 +62,11 @@
       "id": "capture-flag",
       "label": "Capture the Flag",
       "description": "Steal the enemy flag and return it home.",
+      "details": [
+        "Each team has a flag at its base.",
+        "Grab the enemy flag and bring it back to your base to score. If you get knocked out while carrying it, you drop it.",
+        "The team with the most points at the end wins."
+      ],
       "artAsset": "/assets/map-banners/capture-the-flag.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
       "queueable": false,
@@ -88,6 +98,11 @@
       "id": "tower",
       "label": "Tower",
       "description": "Race upward through a vertical hazard map.",
+      "details": [
+        "Everyone starts at the bottom of a tall tower full of traps.",
+        "Climb as fast as you can. If you fall or get knocked out, you start lower down.",
+        "The first player to reach the top wins."
+      ],
       "artAsset": "/assets/map-banners/tower.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
       "queueable": false,
@@ -119,6 +134,11 @@
       "id": "airdrop",
       "label": "Airdrop",
       "description": "Collect more falling loot than anyone else.",
+      "details": [
+        "Loot drops from the sky all over the map.",
+        "Run to it and grab it before anyone else. If you get knocked out, you drop some of yours.",
+        "The player with the most loot at the end wins."
+      ],
       "artAsset": "/assets/map-banners/airdrop.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
       "queueable": false,
@@ -150,6 +170,11 @@
       "id": "bank-bust",
       "label": "Bank Bust",
       "description": "Drain the enemy vault's coins before they drain yours.",
+      "details": [
+        "Each team protects a vault full of coins. Hit the enemy vault to knock coins out of it.",
+        "Pick up coins and use gold mines to fill your own vault back up. You can also spend coins on turrets and walls to defend it.",
+        "Empty the enemy vault to win. If time runs out, the team with more coins wins."
+      ],
       "artAsset": "/assets/map-banners/bank-bust.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
       "queueable": true,
@@ -201,6 +226,11 @@
       "id": "bot-survival",
       "label": "Bot Survival",
       "description": "Last as long as you can against bots.",
+      "details": [
+        "Team up and fight waves of bots. Each wave is harder than the last.",
+        "You only get one life, so stay together and help each other.",
+        "Survive as many waves as you can."
+      ],
       "artAsset": "/assets/map-banners/bot-survival.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
       "queueable": false,
@@ -232,6 +262,11 @@
       "id": "soccer",
       "label": "Soccer",
       "description": "Score more goals than the other side.",
+      "details": [
+        "Hit the ball into the other team's goal to score.",
+        "Your attacks push the ball, so aim your hits. Keep a teammate back to defend your goal.",
+        "The team with the most goals at the end wins."
+      ],
       "artAsset": "/assets/map-banners/soccer.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
       "queueable": false,
@@ -263,6 +298,11 @@
       "id": "bedwars",
       "label": "Bedwars",
       "description": "Protect your bed, upgrade, and wipe the other team.",
+      "details": [
+        "Each team has a bed at its base. While your bed is standing, you come back after getting knocked out.",
+        "Break the enemy bed so they can't come back, and protect your own.",
+        "The last team with players left wins."
+      ],
       "artAsset": "/assets/map-banners/bedwars.webp",
       "fallbackArtAsset": "/assets/fightImage.webp",
       "queueable": false,

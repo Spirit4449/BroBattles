@@ -2,7 +2,7 @@ const test = require('node:test');
 const { launchPoint } = require('../src/shared/characters/characterRig');
 const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
-const combat = require('../src/server/core/gameRoom/huntressCombat');
+const combat = require('../src/shared/combat/runtime/huntressCombat.js');
 const model = require('../src/shared/characters/huntressProjectile');
 const { characterBody, getDuelGeometry } = require('../src/shared/physics/duelGeometry');
 const { HuntressReplica, CombatClock } = require('../src/shared/characters/huntressReplication');
@@ -178,7 +178,7 @@ test('death during huntress windup cancels unreleased arrows', t => {
 
 test('shielded contact consumes the arrow without damage or super charge', t => {
   const {room,players:[p,target],step,actions}=fixture(t);
-  require('../src/server/core/gameRoom/effects/effectManager').apply(target,'respawnShield',Date.now(),{durationMs:3000},room);
+  require('../src/shared/combat/runtime/effects/effectManager.js').apply(target,'respawnShield',Date.now(),{durationMs:3000},room);
   room.handlePlayerAction(p.participantId,{type:'huntress-arrow',id:'shield',angle:0});step(6);
   const arrow=[...room._huntress.active.values()][1];
   for(const [id,a]of room._huntress.active)if(a!==arrow)room._huntress.active.delete(id);

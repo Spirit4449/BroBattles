@@ -8,9 +8,10 @@
     "terrain": "grass",
     "musicAsset": "/assets/candyland/main.mp3",
     "musicVolume": 0.3,
-    "mapSelectPreviewAsset": "/assets/candyland/lobby-background.webp",
+    "mapSelectPreviewAsset": "/assets/candyland/preview.webp",
     "lobbyBgAsset": "/assets/candyland/lobby-background.webp",
-    "lobbyPlatformAsset": "/assets/candyland/lobby-platform.webp"
+    "lobbyPlatformAsset": "/assets/candyland/lobby-platform.webp",
+    "mapFullPreviewAsset": "/assets/candyland/full-preview.webp"
   },
   "assets": {
     "candy-base": {

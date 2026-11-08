@@ -10,7 +10,8 @@
     "musicVolume": 0.11,
     "mapSelectPreviewAsset": "/assets/lushy/preview.webp",
     "lobbyBgAsset": "/assets/lushy/lobbyBg.webp",
-    "lobbyPlatformAsset": "/assets/lushy/lobbyPlatform.webp"
+    "lobbyPlatformAsset": "/assets/lushy/lobbyPlatform.webp",
+    "mapFullPreviewAsset": "/assets/lushy/full-preview.webp"
   },
   "assets": {
     "lushy-base": {

@@ -9,12 +9,12 @@ const assert = require("node:assert/strict");
 const { createGameModeRuntime } = require("../src/server/core/gameModes");
 const { getModeById } = require("../src/shared/gameSelection");
 const mapDocument = require("../src/shared/maps/4.json");
-const { handleHit } = require("../src/server/core/gameRoom/damageResolver");
+const { handleHit } = require("../src/shared/combat/runtime/damageResolver.js");
 const {
   CENTER_CRATE_TARGET,
   getObjectiveTargets,
   hitCircleTargets,
-} = require("../src/server/core/gameRoom/attackRuntimes/targets");
+} = require("../src/shared/combat/runtime/attackRuntimes/targets.js");
 
 const SETTINGS = getModeById("bank-bust").settings;
 

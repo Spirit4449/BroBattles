@@ -20,8 +20,11 @@ import { getSharedSelectionPopupShell } from "../../ui/selectionPopupShell.js";
 import { wireFullscreenToggles } from "../../ui/fullscreen.js";
 import {
   getMapSelectPreviewAsset,
+  getMapFullPreviewAsset,
   getLobbyPlatformAsset,
 } from "../../game/maps/manifest";
+import { openMapPreviewLightbox } from "./mapPreviewLightbox.js";
+import { openModeInfoDialog } from "./modeInfoDialog.js";
 import { buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
 import { DEFAULT_CHARACTER, resolveCharacterKey, parseCharacterLevels } from "../../../shared/characters/characterStats.js";
 import { setSlotLevelBadge } from "../../views/levelBadgeView.js";
@@ -402,12 +405,21 @@ function setupMapPickerControls(onSelect = null) {
           user: window.__BRO_BATTLES_USERDATA__, mapId: value,
           mapLabel: opt.textContent, teamSize: getPlayersPerTeamForSelection(getCurrentSelection()),
         });
-        if (editLink) {
-          const choice = document.createElement('div');
-          choice.className = 'map-choice';
-          choice.append(card, editLink);
-          grid.appendChild(choice);
-        } else grid.appendChild(card);
+        const expand = document.createElement('button');
+        expand.type = 'button';
+        expand.className = 'map-select-expand mode-info-button';
+        expand.setAttribute('aria-label', `Expand ${opt.textContent || 'map'} preview`);
+        expand.title = 'View full map';
+        expand.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path fill="#ffffff" d="M0 0h1v1h-1zM0 1h1v1h-1zM0 2h1v1h-1zM0 3h1v1h-1zM0 7h1v1h-1zM0 8h1v1h-1zM0 9h1v1h-1zM0 10h1v1h-1zM1 0h1v1h-1zM1 10h1v1h-1zM2 0h1v1h-1zM2 10h1v1h-1zM3 0h1v1h-1zM3 10h1v1h-1zM7 0h1v1h-1zM7 10h1v1h-1zM8 0h1v1h-1zM8 10h1v1h-1zM9 0h1v1h-1zM9 10h1v1h-1zM10 0h1v1h-1zM10 1h1v1h-1zM10 2h1v1h-1zM10 3h1v1h-1zM10 7h1v1h-1zM10 8h1v1h-1zM10 9h1v1h-1zM10 10h1v1h-1z"/><path fill="#cfe8ff" d="M1 1h1v1h-1zM1 9h1v1h-1zM2 2h1v1h-1zM2 8h1v1h-1zM3 3h1v1h-1zM3 7h1v1h-1zM7 3h1v1h-1zM7 7h1v1h-1zM8 2h1v1h-1zM8 8h1v1h-1zM9 1h1v1h-1zM9 9h1v1h-1z"/><path fill="#0b1a33" d="M1 2h1v1h-1zM1 3h1v1h-1zM1 4h1v1h-1zM1 8h1v1h-1zM1 11h1v1h-1zM2 1h1v1h-1zM2 11h1v1h-1zM3 1h1v1h-1zM3 9h1v1h-1zM3 11h1v1h-1zM4 1h1v1h-1zM4 4h1v1h-1zM4 8h1v1h-1zM4 11h1v1h-1zM8 1h1v1h-1zM8 4h1v1h-1zM8 11h1v1h-1zM9 3h1v1h-1zM9 11h1v1h-1zM10 11h1v1h-1zM11 1h1v1h-1zM11 2h1v1h-1zM11 3h1v1h-1zM11 4h1v1h-1zM11 8h1v1h-1zM11 9h1v1h-1zM11 10h1v1h-1zM11 11h1v1h-1z"/></svg>';
+        expand.addEventListener('click', (event) => {
+          event.stopPropagation();
+          openMapPreviewLightbox({ src: getMapFullPreviewAsset(value), title: opt.textContent || 'Map' });
+        });
+        const choice = document.createElement('div');
+        choice.className = 'map-choice';
+        choice.append(card, expand);
+        if (editLink) choice.append(editLink);
+        grid.appendChild(choice);
       });
     }
 
@@ -438,6 +450,28 @@ function setupMapPickerControls(onSelect = null) {
   }
 
   syncMapPickerUi(mapDropdown.value);
+}
+
+// A press anywhere outside an opened mode card closes it.
+function collapseModeCards(grid, except = null) {
+  grid.querySelectorAll(".mode-select-card.is-expanded").forEach((card) => {
+    if (card === except) return;
+    card.classList.remove("is-expanded");
+    card.setAttribute("aria-expanded", "false");
+  });
+  grid.classList.toggle("has-expanded", !!grid.querySelector(".mode-select-card.is-expanded"));
+}
+
+let __modeCardOutsidePressBound = false;
+function bindModeCardOutsidePress() {
+  if (__modeCardOutsidePressBound) return;
+  __modeCardOutsidePressBound = true;
+  document.addEventListener("pointerdown", (event) => {
+    const grid = document.querySelector(".mode-select-grid.has-expanded");
+    if (!grid) return;
+    const openCard = grid.querySelector(".mode-select-card.is-expanded");
+    if (openCard && !openCard.contains(event.target)) collapseModeCards(grid);
+  }, true);
 }
 
 function setupModePickerControls(onSelect = null) {
@@ -477,7 +511,6 @@ function setupModePickerControls(onSelect = null) {
       const hasVariants = getModeSelectionStyle(mode.id) === "subcards";
       const card = document.createElement(hasVariants ? "div" : "button");
       if (hasVariants) {
-        card.classList.add("has-variants");
         card.setAttribute("role", "button");
         card.setAttribute("aria-expanded", "false");
         card.tabIndex = 0;
@@ -486,17 +519,19 @@ function setupModePickerControls(onSelect = null) {
       }
       card.className = `map-select-card mode-select-card pixel-menu-button${
         selection.modeId === mode.id ? " active" : ""
-      }${mode.queueable ? "" : " is-disabled"}`;
+      }${mode.queueable ? "" : " is-disabled"}${hasVariants ? " has-variants" : ""}`;
       const artAsset =
         mode.artAsset || mode.fallbackArtAsset || "/assets/fightImage.webp";
       const unlockReason = getModeProgressionBlockReason(mode.id);
+      const teamSizes = (Array.isArray(mode.variants) ? mode.variants : [])
+        .map((variant) => variant.label).filter(Boolean).join(" \u00b7 ");
       card.classList.toggle("is-trophy-locked", !!unlockReason);
       if (hasVariants) card.setAttribute("aria-disabled", String(!!unlockReason));
       else card.disabled = !!unlockReason;
       card.innerHTML = `
         <div class="mode-select-art"><img src="${escapeHtml(artAsset)}" alt="${escapeHtml(mode.label)}" />${unlockReason ? '<span class="mode-select-lock" aria-hidden="true"><img src="/assets/icons/lock.webp" alt="" /></span>' : ""}</div>
         <div class="map-select-name">${escapeHtml(mode.label)}</div>
-        <div class="mode-select-subtitle">${escapeHtml(mode.description || "")}</div>
+        ${teamSizes ? `<div class="mode-select-teams">${escapeHtml(teamSizes)}</div>` : ""}
         <div class="mode-select-meta">${unlockReason && mode.unlockTrophies ? `<span>Unlock at</span><span class="mode-select-trophy-cost"><img src="/assets/icons/trophy.webp" alt="Trophies" /><span>${mode.unlockTrophies.toLocaleString()}</span></span>` : ""}</div>
       `;
       card.querySelector("img")?.addEventListener("error", (event) => {
@@ -504,9 +539,31 @@ function setupModePickerControls(onSelect = null) {
           mode.fallbackArtAsset || "/assets/fightImage.webp";
       });
 
+      // Cards can be <button>s, so the info trigger is a span with button role.
+      const infoBtn = document.createElement("span");
+      infoBtn.className = "mode-info-button";
+      infoBtn.setAttribute("role", "button");
+      infoBtn.setAttribute("aria-label", `About ${mode.label}`);
+      infoBtn.tabIndex = 0;
+      infoBtn.innerHTML = '<svg viewBox="0 0 6 10" fill="currentColor" aria-hidden="true"><path d="M2 0h2v2H2zM1 3h3v5h1v2H1V8h1V5H1z"/></svg>';
+      const openInfo = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openModeInfoDialog(mode);
+      };
+      infoBtn.addEventListener("click", openInfo);
+      infoBtn.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") openInfo(event);
+      });
+      card.appendChild(infoBtn);
+
       if (hasVariants) {
+        // The wrapper collapses to zero height, so the card only grows when opened.
+        const optionsWrap = document.createElement("div");
+        optionsWrap.className = "mode-variant-reveal";
         const options = document.createElement("div");
         options.className = "mode-variant-options";
+        optionsWrap.appendChild(options);
         const variants = Array.isArray(mode?.variants) ? mode.variants : [];
         variants.forEach((variant) => {
           // Maps are made for one team size; a size without maps is coming soon.
@@ -525,7 +582,7 @@ function setupModePickerControls(onSelect = null) {
           });
           options.appendChild(option);
         });
-        card.appendChild(options);
+        card.appendChild(optionsWrap);
 
         const toggle = () => {
           if (unlockReason) return;
@@ -548,6 +605,7 @@ function setupModePickerControls(onSelect = null) {
     });
 
     content.replaceChildren(grid);
+    bindModeCardOutsidePress();
     popupShell
       .mount({
         titleText: "Choose Mode",

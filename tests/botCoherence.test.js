@@ -8,7 +8,7 @@ const { difficultyForTrophies } = require('../src/server/core/bots/config');
 const { createBotParticipants, BOT_NAMES } = require('../src/server/core/bots/identity');
 const { chooseDecision, preferredRange } = require('../src/server/core/bots/tactics');
 const { observe } = require('../src/server/core/bots/perception');
-const effects = require('../src/server/core/gameRoom/effects/effectManager');
+const effects = require('../src/shared/combat/runtime/effects/effectManager.js');
 const characters = ['ninja', 'thorg', 'draven', 'wizard', 'huntress', 'gloop'];
 
 function clock(t) {
@@ -249,7 +249,7 @@ test('a pursued bot fires repeated counterattacks while continuing to escape', (
 test('poison exposure uses player origin, travel time and the future rising level', () => {
   const { poisonDamage } = require('../src/server/core/bots/navigation');
   assert.equal(poisonDamage([{ y: 899 }], 1000, 900), 0);
-  const { SD_DAMAGE_PER_SEC } = require('../src/server/core/gameRoomConfig');
+  const { SD_DAMAGE_PER_SEC } = require('../src/shared/combat/matchConfig.js');
   assert.equal(poisonDamage([{ y: 900 }], 1000, 900), SD_DAMAGE_PER_SEC);
   assert.equal(poisonDamage([{ y: 890 }, { y: 890 }], 1000, 900, (ms) => 900 - ms * 0.04), SD_DAMAGE_PER_SEC / 2);
 });

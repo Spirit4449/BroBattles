@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { THORG_SWEEP, THORG_ATTACK_FRAMES, thorgAttackFrameAt, sampleThorgSweep, sampleThorgHitbox } = require('../src/shared/characters/thorgSweep');
-const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
+const { createRuntimeAttack, tickRuntimeAttack } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
 const { makeRoom } = require('./helpers/botRoom');
-const rage = require('../src/server/core/gameRoom/abilities/thorgRageAbility');
+const rage = require('../src/shared/combat/runtime/abilities/thorgRageAbility.js');
 
 test('damage reach is 1.3x the visual tip and thickness doubles in both facings and rage', () => {
   for (const direction of [-1, 1]) for (const scale of [1, 1.25]) {
@@ -22,7 +22,7 @@ test('damage reach is 1.3x the visual tip and thickness doubles in both facings 
 
 
 test('damage capsule follows the displayed grip and mace tip', t => {
-  const { damageHitboxSnapshot } = require('../src/server/core/gameRoom/damageHitboxes');
+  const { damageHitboxSnapshot } = require('../src/shared/combat/runtime/damageHitboxes.js');
   const { room, players: [p, target] } = makeRoom({ characters: ['thorg', 'ninja'] });
   t.after(() => room.cleanup());
   room.matchData.editorDebugHitboxes = true;
@@ -70,7 +70,7 @@ test('every normal hit pushes away from Thorg on either side', () => {
 });
 
 test('rage grows sweep around fixed feet and expands authoritative hit reach', t => {
-  const effects = require('../src/server/core/gameRoom/effects/effectManager');
+  const effects = require('../src/shared/combat/runtime/effects/effectManager.js');
   const { room, players: [p, target] } = makeRoom({ characters: ['thorg', 'ninja'] });
   t.after(() => room.cleanup());
   Object.assign(p, { x: 500, y: 300 });

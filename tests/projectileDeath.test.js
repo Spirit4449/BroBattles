@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
-const { registerAttackFromAction, tickActiveAttacks } = require('../src/server/core/gameRoom/attackRuntimeManager');
-const { getAttackCollisionCenter } = require('../src/server/core/gameRoom/attackRuntimes/geometry');
+const { registerAttackFromAction, tickActiveAttacks } = require('../src/shared/combat/runtime/attackRuntimeManager.js');
+const { getAttackCollisionCenter } = require('../src/shared/combat/runtime/attackRuntimes/geometry.js');
 
 function fixture(t, character) {
   const f = makeRoom({ characters: [character, 'wizard'] });

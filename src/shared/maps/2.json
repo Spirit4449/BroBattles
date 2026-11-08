@@ -8,9 +8,10 @@
     "terrain": "grass",
     "musicAsset": "/assets/mangrove/mangrove_main.mp3",
     "musicVolume": 0.11,
-    "mapSelectPreviewAsset": "/assets/mangrove/gameBg.webp",
+    "mapSelectPreviewAsset": "/assets/mangrove/preview.webp",
     "lobbyBgAsset": "/assets/mangrove/lobbyBg.webp",
-    "lobbyPlatformAsset": "/assets/mangrove/lobbyPlatform.webp"
+    "lobbyPlatformAsset": "/assets/mangrove/lobbyPlatform.webp",
+    "mapFullPreviewAsset": "/assets/mangrove/full-preview.webp"
   },
   "assets": {
     "mangrove-base-middle": {

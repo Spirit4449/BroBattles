@@ -88,7 +88,7 @@ test('normal movement and a completed dash preserve boosted vertical speed withi
     f.player.body.update(0);
     assert.equal(f.player.body.velocity.y, velocity, coast ? 'coast' : 'ordinary movement');
   }
-  assert.ok(require('../src/server/core/gameRoomConfig').MOVE_PLAUSIBLE_SPEED_V > physics.maxVerticalSpeed);
+  assert.ok(require('../src/shared/combat/matchConfig.js').MOVE_PLAUSIBLE_SPEED_V > physics.maxVerticalSpeed);
 });
 
 test('dash starts at fixed speed regardless of incoming momentum and preserves exit velocity', () => {

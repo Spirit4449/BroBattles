@@ -1,7 +1,7 @@
 const { participantId, applyParticipantKnockback } = require('./participants');
 const { characterBody } = require('../../../shared/physics/duelGeometry');
-const { isDetachedProjectile } = require('./attackRuntimes/projectileLifecycle');
-const { STOMP_RADIUS, STOMP_INTERRUPT_MS } = require('../gameRoomConfig');
+const { isDetachedProjectile } = require('../../../shared/combat/runtime/attackRuntimes/projectileLifecycle.js');
+const { STOMP_RADIUS, STOMP_INTERRUPT_MS } = require('../../../shared/combat/matchConfig.js');
 
 // Called only after map collision has established support, never from a client event.
 function resolveStomp(room, player, now = Date.now()) {

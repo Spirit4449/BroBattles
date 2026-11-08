@@ -65,7 +65,7 @@ test('contact order follows distance rather than collider array order', () => {
 });
 
 test('server runtime follows the shared model through a wall rebound', () => {
-  const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
+  const { createRuntimeAttack, tickRuntimeAttack } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
   const player = { participantId: 'gloop-test', name: 'Gloop', team: 'team1', isAlive: true, x: 0, y: 0, char_class: 'gloop' };
   const rects = [{ left: 80, right: 85, top: -100, bottom: 200 }];
   const attack = createRuntimeAttack(player, { type: 'gloop-slimeball-release', id: 'slime-test',
@@ -97,7 +97,7 @@ test('reachable aimed throws reach the requested point with the configured discr
 
 test('normal reticle consistently follows the server through two bounces', () => {
   const { resolveAttackAimContext } = require('../src/client/game/characters/shared/attackAim');
-  const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
+  const { createRuntimeAttack, tickRuntimeAttack } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
   const cfg = require("../src/shared/characters/characterTuning.js").getResolvedCharacterAttackConfig('gloop', 'slimeball');
   const rects = [{ left: 600, right: 620, top: 0, bottom: 500 }];
   const player = { x: 100, y: 250, displayWidth: 150, displayHeight: 150, scene: {
@@ -121,7 +121,7 @@ test('normal reticle consistently follows the server through two bounces', () =>
 
 test('a very short Gloop reticle continues through its bounce', () => {
   const { resolveAttackAimContext } = require('../src/client/game/characters/shared/attackAim');
-  const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
+  const { createRuntimeAttack, tickRuntimeAttack } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
   const cfg = require("../src/shared/characters/characterTuning.js").getResolvedCharacterAttackConfig('gloop', 'slimeball');
   const rects = [{ left: 400, right: 600, top: 340, bottom: 370 }];
   const player = { x: 500, y: 250, displayWidth: 150, displayHeight: 150, scene: {
@@ -142,7 +142,7 @@ test('a very short Gloop reticle continues through its bounce', () => {
 });
 
 test('authoritative release publishes the same launch and terrain used for damage', () => {
-  const { handleCharacterAction } = require('../src/server/core/gameRoom/characterActionRegistry');
+  const { handleCharacterAction } = require('../src/shared/combat/runtime/characterActionRegistry.js');
   const { slimeLaunch } = require('../src/shared/characters/gloopProjectile');
   const cfg = require("../src/shared/characters/characterTuning.js").getResolvedCharacterAttackConfig('gloop','slimeball');
   const owner = { participantId:'gloop-release',name:'Gloop',char_class:'gloop',isAlive:true,loaded:true,
@@ -194,8 +194,8 @@ test('high throws spend horizontal speed and cannot exceed the height budget', (
 
 test('release translates the preview with windup movement without changing its impulse', () => {
   const { resolveAttackAimContext } = require('../src/client/game/characters/shared/attackAim');
-  const { handleCharacterAction } = require('../src/server/core/gameRoom/characterActionRegistry');
-  const { tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
+  const { handleCharacterAction } = require('../src/shared/combat/runtime/characterActionRegistry.js');
+  const { tickRuntimeAttack } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
   const rects = [{ left: -500, right: 1000, top: 400, bottom: 450 }];
   for (const target of [{x: 500,y: 200}, {x: 250,y: -100}, {x: -200,y: 250}]) {
     const player = { x: 100, y: 300, displayWidth: 150, displayHeight: 150,
@@ -221,7 +221,7 @@ test('release translates the preview with windup movement without changing its i
 });
 
 test('slime hits only one overlapping enemy and broadcasts the terminal splat', () => {
-  const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
+  const { createRuntimeAttack, tickRuntimeAttack } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
   const owner={participantId:'owner',name:'Gloop',char_class:'gloop',team:'a',isAlive:true,loaded:true,x:0,y:100};
   const enemies=['one','two'].map(name=>({participantId:name,name,char_class:'gloop',team:'b',isAlive:true,loaded:true,x:80,y:100,_lastWidth:150,_lastHeight:150}));
   const hits=[],events=[];

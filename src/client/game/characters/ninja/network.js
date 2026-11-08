@@ -4,7 +4,7 @@ import { ninjaProjectileTexture, animateNinjaProjectile } from './projectileText
 import { createShurikenEffects } from './effects';
 import { playSpriteAnimation } from '../shared/animationState';
 import { aimFacesLeft, faceAttack } from '../shared/flipLock';
-import { serverClock as clock, ensureServerClockEpoch } from '../../match/serverClock';
+import { serverClock as matchClock, ensureServerClockEpoch as ensureMatchEpoch } from '../../match/serverClock';
 import { remoteLaunchCorrection, reconcileFlight } from '../../../../shared/projectilePresentation';
 import { VERSION, STEP_MS, launch, step, swarmConfig } from '../../../../shared/characters/ninjaProjectile';
 import { advanceGeometry } from '../../../../shared/maps/platformMotion';
@@ -13,6 +13,10 @@ import { createRuntimeId } from '../shared/runtimeId';
 import { isLocalShooter, predictShotContact, shotBlockersFor, notePredictedHit } from '../shared/shotPrediction';
 import { RENDER_LAYERS } from '../../scene/renderLayers';
 import { playPlayerSound } from '../../audio/playerAudio';
+// Match and embedded previews own separate flights, clocks and teardown.
+export function createNinjaNetwork(options = {}) {
+const clock = options.clock || matchClock;
+const ensureServerClockEpoch = options.ensureEpoch || ensureMatchEpoch;
 const active=new Map(),terminals=new Set(),requests=new Map(),effects=new Set();
 const diagnostics=[];
 function record(event){diagnostics.push(event);if(diagnostics.length>120)diagnostics.shift();}
@@ -22,8 +26,9 @@ let enabled=false,sceneRef=null,listener=null,shutdown=null,ctx={},colliders=[],
 let platformMotion={movingColliders:[]};
 const stepAt=(p,o,at)=>{advanceGeometry(platformMotion,at);step(p,o,colliders,shotBlockersFor(p.ownerName));};
 const copy=value=>JSON.parse(JSON.stringify(value));
-export function ninjaEnabled(){return enabled;}
-export function resetNinjaNetwork(){
+function ninjaEnabled(){return enabled;}
+function resetNinjaNetwork(){
+  if(sceneRef) delete sceneRef._ninjaCombatEnabled;
   if(sceneRef&&listener)sceneRef.events.off('update',listener);
   if(sceneRef&&shutdown)sceneRef.events.off('shutdown',shutdown);
   for(const e of active.values()){e.fx?.destroy();e.sprite?.destroy();}
@@ -34,12 +39,12 @@ export function resetNinjaNetwork(){
 // Remove combat presentation that was on screen when the browser stopped
 // rendering. Keep the network runtime configured so fresh packets can resume
 // normally, but never replay projectiles that crossed the arena while hidden.
-export function discardNinjaPresentation(){
+function discardNinjaPresentation(){
   for(const e of active.values()){e.fx?.destroy();e.sprite?.destroy();}
   for(const e of effects)e.destroy();
   effects.clear();active.clear();requests.clear();
 }
-export function configureNinjaNetwork(state){
+function configureNinjaNetwork(state){
   resetNinjaNetwork();if(state?.ninjaCombatVersion!==VERSION)return;
   enabled=true;colliders=state.colliders||[];platformMotion={movingColliders:colliders.filter(c=>c.motion&&c.base)};ensureServerClockEpoch(state.epoch);clock.observe(state,performance.now());
   if(typeof window!=='undefined')window.__BB_NINJA_DIAGNOSTICS__=()=>({
@@ -48,7 +53,7 @@ export function configureNinjaNetwork(state){
   for(const t of state.terminals||[])terminals.add(t.id);
   for(const e of state.active||[])accept(e.projectile,state.simMono);
 }
-export function observeNinjaSnapshot(snapshot){if(enabled)clock.observe({epoch:snapshot.snapshotEpoch,sentMono:snapshot.sentMono,simMono:snapshot.tMono},performance.now());}
+function observeNinjaSnapshot(snapshot){if(enabled)clock.observe({epoch:snapshot.snapshotEpoch,sentMono:snapshot.sentMono,simMono:snapshot.tMono},performance.now());}
 function owner(name){return name===ctx.localUsername?ctx.localPlayer:ctx.opponentPlayersRef?.[name]?.opponent||ctx.teamPlayersRef?.[name]?.opponent;}
 function accept(projectile,simMono){
   if(terminals.has(projectile.id))return;
@@ -94,7 +99,7 @@ function applyAmmo(action){
   ammo.charges=Math.max(0,ammo.charges-[...requests.values()].filter(r=>!r.special&&!r.accepted).length);
   ctx.onAmmo?.(ammo);
 }
-export function predictNinja(scene,player,username,payload,special=false){
+function predictNinja(scene,player,username,payload,special=false){
   if(!enabled)return payload;
   attachNinjaScene(scene,{localPlayer:player,localUsername:username});
   const id=payload.id||createRuntimeId('ninja');
@@ -111,9 +116,9 @@ export function predictNinja(scene,player,username,payload,special=false){
   }
   return special?{id,aim:{angle:resolved}}:{type:'ninja-shuriken',id,angle:resolved};
 }
-export function attachNinjaScene(scene,next={}){
+function attachNinjaScene(scene,next={}){
   ctx={...ctx,...next};if(!enabled||!scene||sceneRef===scene)return;
-  sceneRef=scene;
+  sceneRef=scene; scene._ninjaCombatEnabled=true;
   listener=()=>{
     const now=performance.now(),sim=clock.now(now);
     for(const [id,r] of requests)if(now-r.at>2500){requests.delete(id);if(!r.accepted)for(const [key,e]of active)if(key.startsWith(`${r.username}:${id}:`)&&e.predicted)tombstone(key);}
@@ -168,7 +173,7 @@ export function attachNinjaScene(scene,next={}){
   };
   scene.events.on('update',listener);shutdown=()=>resetNinjaNetwork();scene.events.once('shutdown',shutdown);
 }
-export function handleNinjaPacket(scene,packet,next){
+function handleNinjaPacket(scene,packet,next){
   const a=packet?.action;if(!enabled||a?.ninjaCombatVersion!==VERSION)return false;
   if(a.epoch!==clock.epoch)return true;
   attachNinjaScene(scene,next);clock.observe(a,performance.now());
@@ -198,7 +203,7 @@ export function handleNinjaPacket(scene,packet,next){
 }
 
 // Lifecycle contract consumed by the generic match and scene controllers.
-export const networkAdapter = {
+const networkAdapter = {
   key: 'ninja',
   joinFields: { ninjaCombatVersion: 1 },
   bootstrapKey: 'ninjaCombat',
@@ -210,3 +215,16 @@ export const networkAdapter = {
   handlePacket: handleNinjaPacket,
   predictSpecial: (scene, player, username, request) => predictNinja(scene, player, username, request, true),
 };
+
+return { ninjaEnabled, resetNinjaNetwork, discardNinjaPresentation, configureNinjaNetwork, observeNinjaSnapshot, predictNinja, attachNinjaScene, handleNinjaPacket, networkAdapter };
+}
+const defaultNetwork = createNinjaNetwork();
+export const ninjaEnabled = defaultNetwork.ninjaEnabled;
+export const resetNinjaNetwork = defaultNetwork.resetNinjaNetwork;
+export const discardNinjaPresentation = defaultNetwork.discardNinjaPresentation;
+export const configureNinjaNetwork = defaultNetwork.configureNinjaNetwork;
+export const observeNinjaSnapshot = defaultNetwork.observeNinjaSnapshot;
+export const predictNinja = defaultNetwork.predictNinja;
+export const attachNinjaScene = defaultNetwork.attachNinjaScene;
+export const handleNinjaPacket = defaultNetwork.handleNinjaPacket;
+export const networkAdapter = defaultNetwork.networkAdapter;

@@ -244,3 +244,26 @@ describe("Bounded vault effects", () => {
     assert.equal(coinsIn(scene).filter((coin) => !coin.destroyed).length, 0);
   });
 });
+
+test('shared ammo renderer shows sequential refill and clears when the HUD is hidden', () => {
+  const { createClientModuleGraph } = require('./helpers/clientModule');
+  const { drawAmmoChargeBar } = createClientModuleGraph().load('src/client/game/scene/ammoBarRenderer.js');
+  const graphics = () => ({ rects: [], clear() { this.rects = []; }, fillStyle() {},
+    fillRect(x, y, width, height) { this.rects.push({ x, y, width, height }); }, setDepth() {} });
+  const front = graphics(), back = graphics();
+  const ammo = { capacity: 3, charges: 1, reloadTimerMs: 0, reloadMs: 1000 };
+  const render = () => {
+    drawAmmoChargeBar(front, back, { x: 10.3, y: 20.4, ammo });
+    assert.ok(front.rects.every(r => Number.isInteger(r.x) && Number.isInteger(r.y)), 'pixel aligned');
+    return front.rects.reduce((area, r) => area + r.width * r.height, 0);
+  };
+  const emptyReload = render(), frame = structuredClone(back.rects);
+  ammo.reloadTimerMs = ammo.reloadMs / 2;
+  const halfReload = render();
+  assert.ok(halfReload > emptyReload);
+  ammo.reloadTimerMs = ammo.reloadMs;
+  assert.ok(render() > halfReload);
+  assert.deepEqual(back.rects, frame, 'refill does not change the shared pixel frame');
+  drawAmmoChargeBar(front, back, { x: 10, y: 20, ammo: null });
+  assert.equal(front.rects.length + back.rects.length, 0);
+});

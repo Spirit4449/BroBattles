@@ -19,6 +19,7 @@ import { playSound } from "../../ui/uiSounds.js";
 import { buildCharacterSkinBodyUrl } from "../../views/skinAssets.js";
 import { dismissPopup } from "../../ui/popupMotion.js";
 import { disposeSkinCarousel, switchSkinPreview } from "./skinCarousel.mjs";
+import { hideCharacterShowcase, mountCharacterShowcase, updateCharacterShowcaseSkin } from "./characterShowcase.js";
 import { sonner } from "../../ui/sonner.js";
 import { resolveBodyPortrait, buildFramedBodyPortrait } from "../../views/bodyPortraitAssets.js";
 import { BRO_PORTRAIT_PALETTES, buildPortraitChromaTile } from "../../views/broPortrait.mjs";
@@ -242,6 +243,7 @@ function updateSkinDetails(character, direction = 1) {
     alt: `${character} ${skin.label}`,
     direction,
   });
+  updateCharacterShowcaseSkin(ui.previewStage, character, skin.id);
   const row = ui.stickyFooter.querySelector('.character-details-inline-skin');
   for (const element of [row, ui.previewStage]) {
     for (const value of SUPPORTED_RARITIES) element.classList.toggle(`skin-rarity-${value}`, value === rarity);
@@ -396,6 +398,7 @@ function getCharacterDetailsTarget(character) {
 function hideCharacterDetails() {
   if (!_characterDetailsUi) return;
   disposeSkinCarousel(_characterDetailsUi.previewStage);
+  hideCharacterShowcase();
   _upgradePreview = null;
   _pendingUpgradeAnimation = null;
   _characterDetailsUi.popup.classList.remove("is-upgrade-confirming");
@@ -609,6 +612,12 @@ function renderCharacterDetails(character) {
 
   ui.preview.appendChild(previewFrame);
   ui.previewStage = previewFrame;
+  mountCharacterShowcase(previewFrame, {
+    character,
+    skinId: selectedSkin.id,
+    level: cardState.currentLevel,
+    name: String(_userDataRef?.name || "You"),
+  });
 
   // Three main stat boxes: Health (full width top), Attack and Special (side by side)
   const statsContainer = document.createElement("div");

@@ -1,5 +1,5 @@
 const { characterBody } = require("../../../shared/physics/duelGeometry");
-const { POWERUP_PICKUP_RADIUS } = require("../gameRoomConfig");
+const { POWERUP_PICKUP_RADIUS } = require("../../../shared/combat/matchConfig.js");
 
 // Hurtbox of `player` placed at `at` (bot stance and hop previews reuse the body).
 function hurtbox(player, at) {

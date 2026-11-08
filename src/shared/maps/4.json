@@ -10,7 +10,8 @@
     "musicVolume": 0.22,
     "mapSelectPreviewAsset": "/assets/bank-bust/preview.webp",
     "lobbyBgAsset": "/assets/bank-bust/lobbyBg.webp",
-    "lobbyPlatformAsset": "/assets/bank-bust/lobbyPlatform.webp"
+    "lobbyPlatformAsset": "/assets/bank-bust/lobbyPlatform.webp",
+    "mapFullPreviewAsset": "/assets/bank-bust/full-preview.webp"
   },
   "assets": {
     "bank-bust-shape-side-wall": {

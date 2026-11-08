@@ -2,13 +2,17 @@ import { applyTeamVisual } from "../../../../shared/projectilePresentation";
 import { createRuntimeId } from '../shared/runtimeId';
 import { RENDER_LAYERS } from '../../scene/renderLayers';
 import { HuntressReplica } from '../../../../shared/characters/huntressReplication';
-import { serverClock, ensureServerClockEpoch } from '../../match/serverClock';
+import { serverClock as matchClock, ensureServerClockEpoch as ensureMatchEpoch } from '../../match/serverClock';
 import { remoteLaunchCorrection, reconcileFlight } from '../../../../shared/projectilePresentation';
 import { VERSION, attackConfig, resolveShot, powerFromSpeed, createVolley, firstContact, sample, attachmentPoint } from '../../../../shared/characters/huntressProjectile';
 import { advanceGeometry } from '../../../../shared/maps/platformMotion';
 import { playPlayerSound } from '../../audio/playerAudio';
 import { isLocalShooter, predictShotContact, shotBlockersFor, confirmWindowMs, noteShotWithdrawn, notePredictedHit } from '../shared/shotPrediction';
 
+// Match and embedded previews own separate flights, clocks and teardown.
+export function createHuntressNetwork(options = {}) {
+const serverClock = options.clock || matchClock;
+const ensureServerClockEpoch = options.ensureEpoch || ensureMatchEpoch;
 // The replica reads the shared match clock; it never resets or pings it.
 const replica = new HuntressReplica(serverClock);
 let version = null, sceneRef = null, context = {};
@@ -25,7 +29,7 @@ let colliders = [], platformMotion = { movingColliders: [] };
 let updateListener = null;
 let shutdownListener = null;
 
-export function resetHuntressNetwork() {
+function resetHuntressNetwork() {
   if (sceneRef && updateListener) sceneRef.events.off('update', updateListener);
   if (sceneRef && shutdownListener) sceneRef.events.off('shutdown', shutdownListener);
   for (const entry of sprites.values()) entry.sprite.destroy();
@@ -38,7 +42,7 @@ export function resetHuntressNetwork() {
 
 // Visibility resync is presentation-only: preserve the configured protocol and
 // clock, while dropping arrows/casts that would otherwise appear after a stall.
-export function discardHuntressPresentation() {
+function discardHuntressPresentation() {
   for (const entry of sprites.values()) entry.sprite.destroy();
   for (const particle of fireParticles) particle.destroy();
   fireParticles.clear();
@@ -46,7 +50,7 @@ export function discardHuntressPresentation() {
   replica.active.clear();
 }
 
-export function configureHuntressNetwork(state) {
+function configureHuntressNetwork(state) {
   resetHuntressNetwork();
   version = state?.huntressCombatVersion ?? null;
   if (version !== VERSION) return;
@@ -63,7 +67,7 @@ export function configureHuntressNetwork(state) {
   });
 }
 
-export function observeHuntressSnapshot(snapshot) {
+function observeHuntressSnapshot(snapshot) {
   if (version !== VERSION) return;
   replica.clock.observe({ epoch: snapshot.snapshotEpoch, sentMono: snapshot.sentMono, simMono: snapshot.tMono }, performance.now());
 }
@@ -76,7 +80,8 @@ function targetSprite(name) {
 function addSprite(scene, projectile) {
   const sprite = scene.add.sprite(projectile.x, projectile.y, 'huntress-arrow');
   // Thicken across the shaft only so arrows read at a glance without growing longer.
-  sprite.setScale(projectile.scale, projectile.scale * (attackConfig(projectile.special).visualThickness || 1)); sprite.setDepth(RENDER_LAYERS.ATTACKS + 4);
+  const visualScale = options.arrowLength ? Math.min(projectile.scale, options.arrowLength / sprite.width) : projectile.scale;
+  sprite.setScale(visualScale, options.arrowLength ? visualScale : visualScale * (attackConfig(projectile.special).visualThickness || 1)); sprite.setDepth(RENDER_LAYERS.ATTACKS + 4);
   applyTeamVisual(sprite, targetSprite(projectile.ownerName) || { _bbTeamColor: context.opponentPlayersRef?.[projectile.ownerName] ? 0xff413f : 0x50ce88 }, true, "arrow");
   const entry = { sprite, projectile, revision: 0, lastTrail: 0 };
   sprites.set(projectile.id, entry);
@@ -119,7 +124,7 @@ function fadeOut(entry, now) {
 }
 function record(event) { metrics.push(event); if (metrics.length > 240) metrics.shift(); }
 
-export function burningFx(scene, entry, now, embedded = false) {
+function burningFx(scene, entry, now, embedded = false) {
   if (now - (entry.lastFire ?? -Infinity) < (embedded ? 100 : 40)) return;
   entry.lastFire = now;
   // One small, opaque cluster per emission. Fire bends against flight, then
@@ -149,7 +154,7 @@ export function burningFx(scene, entry, now, embedded = false) {
     onComplete: () => { fireParticles.delete(flame); flame.destroy(); } });
 }
 
-export function attachHuntressScene(scene, nextContext = {}) {
+function attachHuntressScene(scene, nextContext = {}) {
   context = { ...context, ...nextContext };
   if (version !== VERSION || !scene || sceneRef === scene) return;
   if (sceneRef && updateListener) sceneRef.events.off('update', updateListener);
@@ -240,7 +245,7 @@ export function attachHuntressScene(scene, nextContext = {}) {
   scene.events.once('shutdown', shutdownListener);
 }
 
-export function handleHuntressPacket(scene, packet, nextContext) {
+function handleHuntressPacket(scene, packet, nextContext) {
   const action = packet?.action;
   if (version !== VERSION || action?.huntressCombatVersion !== VERSION) return false;
   if (action.epoch !== replica.clock.epoch) return true;
@@ -303,7 +308,7 @@ export function handleHuntressPacket(scene, packet, nextContext) {
   return true;
 }
 
-export function predictHuntressShot(scene, owner, username, payload, special = false) {
+function predictHuntressShot(scene, owner, username, payload, special = false) {
   if (version !== VERSION) return payload;
   const id = payload.id || createRuntimeId('huntressShot');
   const aim = special ? payload.aim || {} : payload;
@@ -318,7 +323,7 @@ export function predictHuntressShot(scene, owner, username, payload, special = f
 }
 
 // Lifecycle contract consumed by the generic match and scene controllers.
-export const networkAdapter = {
+const networkAdapter = {
   key: 'huntress',
   joinFields: { huntressCombatVersion: VERSION },
   bootstrapKey: 'huntressCombat',
@@ -330,3 +335,16 @@ export const networkAdapter = {
   handlePacket: handleHuntressPacket,
   predictSpecial: (scene, player, username, request) => predictHuntressShot(scene, player, username, request, true),
 };
+
+return { resetHuntressNetwork, discardHuntressPresentation, configureHuntressNetwork, observeHuntressSnapshot, burningFx, attachHuntressScene, handleHuntressPacket, predictHuntressShot, networkAdapter };
+}
+const defaultNetwork = createHuntressNetwork();
+export const resetHuntressNetwork = defaultNetwork.resetHuntressNetwork;
+export const discardHuntressPresentation = defaultNetwork.discardHuntressPresentation;
+export const configureHuntressNetwork = defaultNetwork.configureHuntressNetwork;
+export const observeHuntressSnapshot = defaultNetwork.observeHuntressSnapshot;
+export const burningFx = defaultNetwork.burningFx;
+export const attachHuntressScene = defaultNetwork.attachHuntressScene;
+export const handleHuntressPacket = defaultNetwork.handleHuntressPacket;
+export const predictHuntressShot = defaultNetwork.predictHuntressShot;
+export const networkAdapter = defaultNetwork.networkAdapter;

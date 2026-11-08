@@ -5,20 +5,20 @@ const { bounds, stepBody, onClimbableWall, forecastGeometry, movementGeometry } 
 const { createRouteSearch, routeSearchTablesSteps, prepareTraversal, edgeKey, nearestSurface, safeWalkDirection, previewManeuver, walkLimits, poisonDamage } = require('./navigation');
 const { getNavigationGraph } = require('./navigationService');
 const { staticGeometry } = require('../../../shared/maps/platformMotion');
-const { advanceAmmo, basicAim, hasClearShot, pressureAim, requestBasic, requestSpecial } = require('./combat');
+const { advanceAmmo, basicAim, hasClearShot, pressureAim, requestBasic, requestSpecial } = require('../../../shared/combat/combat.js');
 const { observe, incomingThreat, maneuverDanger } = require('./perception');
 const { healthFraction, preferredRange, selectTargetSteps, chooseDecisionSteps, finishSteps } = require('./tactics');
 const { updateSuperPlan, shouldUseSuper } = require('./supers');
-const effects = require('../gameRoom/effects/effectManager');
-const { isMovementSuppressed } = require('../gameRoom/abilityRuntimeManager');
+const effects = require('../../../shared/combat/runtime/effects/effectManager.js');
+const { isMovementSuppressed } = require('../../../shared/combat/runtime/abilityRuntimeManager.js');
 const { updateTeamwork } = require('./teamwork');
 const { resolveBotObjective } = require('./objectives');
 const { tryDashSteps, recordDash } = require('./dash');
 const movement = require('../../../shared/physics/movementPhysics.json');
-const { DEATH_DROP_PICKUP_RADIUS } = require('../gameRoomConfig');
+const { DEATH_DROP_PICKUP_RADIUS } = require('../../../shared/combat/matchConfig.js');
 const { powerupGap, powerupReachX } = require('../gameRoom/powerupContact');
 const { FIXED_DT_MS } = require('../../../shared/gameConstants');
-const { botProfile } = require('./characterProfiles');
+const { botProfile } = require('../../../shared/combat/characterProfiles.js');
 // How often a bot riding a moving platform looks for a safe hop off.
 const RIDE_EXIT_CHECK_MS = 250;
 // How often an airborne bot on a moving-platform map re-forecasts its landing.

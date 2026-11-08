@@ -8,13 +8,13 @@ describe("Attack contact and launch", () => {
   describe("Delivery policies and contact shapes", () => {
     const { DELIVERIES, deliveryOf, clampDeliveryRewind, attackerPose, attachedRectShape, pathSweepShapes,
       shapeTouches } = require('../src/shared/combat/attackDelivery');
-    const { ATTACK_RUNTIMES, createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
-    const { getResolvedAttackDescriptor } = require('../src/server/core/gameRoom/attackDescriptorResolver');
+    const { ATTACK_RUNTIMES, createRuntimeAttack, tickRuntimeAttack } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
+    const { getResolvedAttackDescriptor } = require('../src/shared/combat/runtime/attackDescriptorResolver.js');
     const { attackDescriptors } = require('../src/shared/characters');
     const { getResolvedCharacterAttackConfig } = require('../src/shared/characters/characterTuning');
     const { updateBodyGeometry } = require('../src/server/core/gameRoom/inputManager');
-    const { damageHitboxSnapshot } = require('../src/server/core/gameRoom/damageHitboxes');
-    const { HIT_STALENESS_MAX_MS } = require('../src/server/core/gameRoomConfig');
+    const { damageHitboxSnapshot } = require('../src/shared/combat/runtime/damageHitboxes.js');
+    const { HIT_STALENESS_MAX_MS } = require('../src/shared/combat/matchConfig.js');
 
     test('every attack runtime and every attack belongs to a delivery with a bounded rewind', () => {
       for (const kind of Object.keys(ATTACK_RUNTIMES)) assert.ok(deliveryOf(kind), `${kind} has a delivery`);
@@ -136,7 +136,7 @@ describe("Attack contact and launch", () => {
 
     test('the server moves the fireball along the same curve the client draws', () => {
       assert.ok(fireball.launchEaseMs > 0 && fireball.launchStartSpeed < 1, 'wizard eases its launch');
-      const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
+      const { createRuntimeAttack, tickRuntimeAttack } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
       const player = { name: 'A', socketId: 'a', x: 500, y: 300, isAlive: true, loaded: true, team: 'team1' };
       const room = { players: new Map([['a', player]]), FIXED_DT_MS: 1000 / 60,
         geometry: { world: { x: 0, y: 0, width: 4000, height: 1000 } } };

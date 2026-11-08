@@ -36,7 +36,7 @@ test('powerups wait 500ms after activation, rather than after the warning starts
 
 test('powerups are collected only when the hurtbox overlaps the orb circle', t => {
   const { characterBody } = require('../src/shared/physics/duelGeometry');
-  const { POWERUP_PICKUP_RADIUS } = require('../src/server/core/gameRoomConfig');
+  const { POWERUP_PICKUP_RADIUS } = require('../src/shared/combat/matchConfig.js');
   const body = characterBody('ninja');
   const { room } = fixture();
   const player = room.players.get('player');

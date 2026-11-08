@@ -1,10 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { makeRoom } = require('./helpers/botRoom');
-const { tickActiveAttacks } = require('../src/server/core/gameRoom/attackRuntimeManager');
-const characterCombat = require('../src/server/core/gameRoom/characterCombatRegistry');
-const { stampViewRewind, rewindAllowance, VIEW_BUFFER_ALLOWANCE_MS, createLatencyProbe, poseAt } = require('../src/server/core/gameRoom/lagCompensation');
-const { HIT_STALENESS_MAX_MS } = require('../src/server/core/gameRoomConfig');
+const { tickActiveAttacks } = require('../src/shared/combat/runtime/attackRuntimeManager.js');
+const characterCombat = require('../src/shared/combat/runtime/characterCombatRegistry.js');
+const { stampViewRewind, rewindAllowance, VIEW_BUFFER_ALLOWANCE_MS, createLatencyProbe, poseAt } = require('../src/shared/combat/runtime/lagCompensation.js');
+const { HIT_STALENESS_MAX_MS } = require('../src/shared/combat/matchConfig.js');
 const { FIXED_DT_MS: STEP } = require('../src/shared/gameConstants');
 const { DELIVERIES } = require('../src/shared/combat/attackDelivery');
 
@@ -117,7 +117,7 @@ test('bot shots use live target positions, and melee rewinds no further than the
   f.room.handlePlayerAction(p.participantId, { type: 'wizard-fireball', id: 'bot', angle: 0, direction: 1, viewRewindMs: 300 });
   for (let i = 0; i < 120; i++) f.step();
   assert.equal(f.players[1].health, f.players[1].maxHealth);
-  const melee = require('../src/server/core/gameRoom/attackRuntimes/attackIdentity')
+  const melee = require('../src/shared/combat/runtime/attackRuntimes/attackIdentity.js')
     .attackIdentity(p, { type: 'thorg-fall', viewRewindMs: HIT_STALENESS_MAX_MS }, { runtime: { kind: 'path-rect' } }, Date.now());
   assert.equal(melee.viewRewindMs, DELIVERIES.attached.rewindCapMs);
 });
@@ -176,7 +176,7 @@ test('latency probe measures server elapsed time and bounds outstanding requests
 
 test('rewind interpolates position but preserves discrete historical body dimensions', () => {
   const input = require('../src/server/core/gameRoom/inputManager');
-  const { shotTargetBounds } = require('../src/server/core/gameRoom/attackRuntimes/targets');
+  const { shotTargetBounds } = require('../src/shared/combat/runtime/attackRuntimes/targets.js');
   const { circleAabbOverlap } = require('../src/shared/combat/shotContact');
   const p = { char_class: 'ninja', x: 100, y: 100, _bodyHalfWidth: 20,
     _bodyHalfHeight: 60, _bodyCenterOffsetX: 0, _bodyCenterOffsetY: 0 };
@@ -201,7 +201,7 @@ for (const shooter of Object.keys(SHOOTERS)) {
     const melee = MELEE[shooter];
     const travel = arena(t, shooter, melee).fire();
     const f = arena(t, shooter, melee), target = f.players[1];
-    const { collisionPose } = require('../src/server/core/gameRoom/lagCompensation');
+    const { collisionPose } = require('../src/shared/combat/runtime/lagCompensation.js');
     const standing = collisionPose(target), now = Date.now();
     // A posture transition moves the occupied area out of the flight path.
     Object.assign(target, { _bodyHalfHeight: 10, _bodyCenterOffsetY: 1000 });

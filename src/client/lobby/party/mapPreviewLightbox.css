@@ -1,0 +1,54 @@
+/* Full-arena map preview opened from the map picker (mapPreviewLightbox.js).
+   Frame, header, close control and motion are the shared bb-popup ones. */
+
+/* Expand and edit buttons on map cards reuse the mode card's i button
+   (.mode-info-button in modeInfoDialog.css): expand in its corner, edit beside it. */
+.map-choice .mode-info-button { top: 0; right: 0; text-decoration: none; }
+.map-choice .map-choice-edit { right: 30px; }
+.map-choice .mode-info-button svg {
+  /* 12px pixel art at 1:1 so each cell stays one screen pixel wide. */
+  width: 12px;
+  height: 12px;
+  shape-rendering: crispEdges;
+  filter: none;
+}
+
+.map-preview-dialog.bb-popup {
+  box-sizing: border-box;
+  max-width: 96vw;
+  max-height: 94dvh;
+  padding: 0;
+  border: var(--bb-popup-border-width) solid var(--bb-popup-border-color);
+  border-radius: var(--bb-radius-window);
+  background: var(--bb-popup-bg);
+  box-shadow: var(--bb-popup-shadow);
+  font-family: var(--bb-font-body);
+}
+.map-preview-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  animation: bb-popup-panel-in var(--bb-popup-motion) var(--bb-ease) both;
+}
+.map-preview-dialog::backdrop {
+  background: var(--bb-popup-backdrop);
+  backdrop-filter: blur(var(--bb-overlay-blur));
+}
+.map-preview-dialog .bb-popup-header { flex: 0 0 auto; }
+
+.map-preview-body { padding: var(--bb-space-4); min-height: 0; }
+
+/* Sized from the image's own aspect before opening: as large as fits in both
+   directions (minus the header and padding), so it never reflows on show. */
+.map-preview-image {
+  display: block;
+  aspect-ratio: var(--map-preview-aspect);
+  width: min(calc(96vw - 2 * var(--bb-space-4) - 2 * var(--bb-popup-border-width)),
+             calc((94dvh - 64px - 2 * var(--bb-space-4) - 2 * var(--bb-popup-border-width)) * var(--map-preview-aspect)));
+  height: auto;
+  max-width: 1800px;
+  user-select: none;
+}
+
+@media (max-width: 640px) {
+  .map-preview-body { padding: var(--bb-space-2); }
+}

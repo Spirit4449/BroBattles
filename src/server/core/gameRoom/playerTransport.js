@@ -1,14 +1,14 @@
 const { decodeWire } = require("../../../shared/networkWire");
-const huntressCombat = require('./huntressCombat');
+const huntressCombat = require('../../../shared/combat/runtime/huntressCombat.js');
 const inputManager = require("./inputManager");
-const characterCombat = require('./characterCombatRegistry');
-const { stampViewRewind, createLatencyProbe } = require('./lagCompensation');
+const characterCombat = require('../../../shared/combat/runtime/characterCombatRegistry.js');
+const { stampViewRewind, createLatencyProbe } = require('../../../shared/combat/runtime/lagCompensation.js');
 const {
   ACTION_MIN_INTERVAL_MS,
   ACTION_SPAM_WINDOW_MS,
   ACTION_SPAM_MAX_IN_WINDOW,
   ACTION_SPAM_SUPPRESS_MS
-} = require("../gameRoomConfig");
+} = require("../../../shared/combat/matchConfig.js");
 const { registerGameChatEvents } = require("../socketEvents/gameChatEvents");
 const { netTrace } = require('./netTraceRecorder');
 

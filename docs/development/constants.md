@@ -2,14 +2,14 @@
 
 This page maps the main tuning domains to their owning files. Shared values are imported or derived from those owners; feature-local constants remain beside their implementation. Numeric defaults below were checked against the source on 2026-10-05 and are not a substitute for the running configuration. JSON files can't hold comments, so their fields are described here. JavaScript constants are commented where they are defined.
 
-Rule of thumb: values both client and server need go in `src/shared/`. Cross-cutting server match values go in `src/server/core/gameRoomConfig.js`; service-specific limits remain in their services. Values that belong to one character, powerup, mode, or map go in that thing's content file.
+Rule of thumb: values both client and server need go in `src/shared/`. Cross-cutting server match values go in `src/shared/combat/matchConfig.js`; service-specific limits remain in their services. Values that belong to one character, powerup, mode, or map go in that thing's content file.
 
 ## Quick lookup
 
 | I want to change… | Edit |
 | --- | --- |
 | Server tick rate, snapshot rate, fallback world size, party join-request timeout | `src/shared/gameConstants.js` |
-| Match length, sudden death, regen, powerup spawn cadence, death drops, stomp, anti-cheat limits | `src/server/core/gameRoomConfig.js` |
+| Match length, sudden death, regen, powerup spawn cadence, death drops, stomp, anti-cheat limits | `src/shared/combat/matchConfig.js` |
 | Run/jump/wall/dash feel | `src/shared/physics/movementPhysics.json` |
 | Ducking (height, speed, damage reduction) | `src/shared/physics/ducking.js` |
 | A character's HP, damage, ammo, super charge, hitbox, attack/special tuning | `src/shared/characters/<name>.json` |
@@ -24,7 +24,7 @@ Rule of thumb: values both client and server need go in `src/shared/`. Cross-cut
 | Trophy gains/losses, reward track and unlock milestones | `src/shared/catalogs/trophySystem.catalog.json` |
 | Bot fill timing | `src/server/core/bots/config.js` (`defaults`) or `runtime-overrides.json` → `bots` |
 | Bot skill by trophies | `src/server/core/bots/config.js` (`difficultyForTrophies`) |
-| Per-character bot behavior (ranges, super use) | `src/server/core/bots/characterProfiles.js` |
+| Per-character bot behavior (ranges, super use) | `src/shared/combat/characterProfiles.js` |
 | Reward multipliers, maintenance, bot rollout (live through admin updates) | `runtime-overrides.json` (admin panel writes it) |
 | Username/password rules | `src/server/services/auth/authAccountService.js` |
 
@@ -41,7 +41,7 @@ These constants are used by the server, the client, bots, and the replicated pro
 | `WORLD_MARGIN` | How far past the world edges players, hooks and projectiles may travel. Each mode's world rectangle lives in `src/shared/maps/arenas.json`. |
 | `PARTY_JOIN_REQUEST_TIMEOUT_MS` | Lifetime of a party join request. The server enforces it and the client shows it as a countdown. |
 
-## Server match tuning: `src/server/core/gameRoomConfig.js`
+## Server match tuning: `src/shared/combat/matchConfig.js`
 
 The file is split into commented sections:
 
@@ -142,11 +142,11 @@ The admin panel calls the runtime configuration service, which updates in-memory
 | Owner | Current defaults |
 | --- | --- |
 | `gameConstants.js` | 60 Hz simulation; snapshots every 2 ticks; world state every 8 ticks; fallback world 3600 × 1000px with 400px margin; party join requests expire after 15s |
-| `gameRoomConfig.js`: match | Duels regular time 150s; poison rises at 15px/s, ×2.2 for the first 12s; poison damage 400/s; sudden-death cap 80s; timer broadcast 500ms; elimination finish delay 3s; all-human departure grace 15s |
-| `gameRoomConfig.js`: regen | Starts after 3.8s out of combat; ticks every 1.5s for 25% of missing health, minimum 500, capped at max health |
-| `gameRoomConfig.js`: powerups | Spawn interval 25s; first 2 spawn 5s into the match; max active 3; pickup radius 34px (collected when a hurtbox overlaps the pickup circle); despawn 10s after the 2s omen; anchored spawn lift 22px |
-| `gameRoomConfig.js`: drops | Lifetime 12s; final 3s blinking; pickup radius 110px; 4–8 coin drops and 1–3 gem drops |
-| `gameRoomConfig.js`: validation | Hit rewind cap 300ms; future tolerance 120ms; history 1s / 128 samples; duplicate-hit window 80ms; stomp radius 110px and interruption 300ms |
+| `matchConfig.js`: match | Duels regular time 150s; poison rises at 15px/s, ×2.2 for the first 12s; poison damage 400/s; sudden-death cap 80s; timer broadcast 500ms; elimination finish delay 3s; all-human departure grace 15s |
+| `matchConfig.js`: regen | Starts after 3.8s out of combat; ticks every 1.5s for 25% of missing health, minimum 500, capped at max health |
+| `matchConfig.js`: powerups | Spawn interval 25s; first 2 spawn 5s into the match; max active 3; pickup radius 34px (collected when a hurtbox overlaps the pickup circle); despawn 10s after the 2s omen; anchored spawn lift 22px |
+| `matchConfig.js`: drops | Lifetime 12s; final 3s blinking; pickup radius 110px; 4–8 coin drops and 1–3 gem drops |
+| `matchConfig.js`: validation | Hit rewind cap 300ms; future tolerance 120ms; history 1s / 128 samples; duplicate-hit window 80ms; stomp radius 110px and interruption 300ms |
 | `movementPhysics.json` | Run speed 260px/s; ground/air acceleration 3000/3300px/s²; gravity 990px/s²; jump speed parameter 490px/s; dash 600px/s (straight down 840), burst 160ms, cooldown 5000ms, coast up to 850ms |
 | `ducking.js` | Body height ×0.55; movement ×0.25; damage taken ×0.8; minimum hold 50ms; reentry delay 100ms |
 | `characterStats.js` | Level cap 10; levels 2–5 add 500 HP / 100 damage / 200 special damage per level; levels 6–10 add 400 / 80 / 100; next-level coin costs 200, 400, 800, 1600, 2400, 3300, 4500, 6100, 8200 |

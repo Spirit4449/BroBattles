@@ -1,7 +1,7 @@
 const { appendPartyChatLog } = require("../../services/party/partyChatLog");
 const { deleteMatchBots } = require("../../services/match/matchRosterService");
-const { ALL_DEAD_GAME_OVER_DELAY_MS } = require("../gameRoomConfig");
-const effectManager = require("./effects/effectManager");
+const { ALL_DEAD_GAME_OVER_DELAY_MS } = require("../../../shared/combat/matchConfig.js");
+const effectManager = require("../../../shared/combat/runtime/effects/effectManager.js");
 const {
   COUNTDOWN_MS,
   START_DEADLINE_MS,

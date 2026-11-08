@@ -102,6 +102,19 @@ export function getMapSelectPreviewAsset(mapId) {
 }
 
 /**
+ * Whole-arena preview for the map picker's expand view, rendered by
+ * scripts/art/render-map-full-previews.cjs; falls back to the select preview.
+ * @param {number|string} mapId
+ * @returns {string}
+ */
+export function getMapFullPreviewAsset(mapId) {
+  return (
+    MAP_META.get(normalizeMapId(mapId))?.mapFullPreviewAsset ||
+    getMapSelectPreviewAsset(mapId)
+  );
+}
+
+/**
  * Lobby background image URL for the given map.
  * @param {number|string} mapId
  * @returns {string}

@@ -1,10 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const input = require('../src/server/core/gameRoom/inputManager');
-const { resolveAttackTime } = require('../src/server/core/gameRoom/damageResolver');
-const { evaluateHitRange, getHistoricalPosition } = require('../src/server/core/gameRoom/combatValidation');
+const { resolveAttackTime } = require('../src/shared/combat/runtime/damageResolver.js');
+const { evaluateHitRange, getHistoricalPosition } = require('../src/shared/combat/runtime/combatValidation.js');
 const { HuntressReplica, CombatClock } = require('../src/shared/characters/huntressReplication');
-const { POSITION_HISTORY_MS } = require('../src/server/core/gameRoomConfig');
+const { POSITION_HISTORY_MS } = require('../src/shared/combat/matchConfig.js');
 const loadServerClock = require('./helpers/serverClockModule');
 const WORLD = require('../src/shared/maps/arenas').arenaFor('duels-1v1').world;
 

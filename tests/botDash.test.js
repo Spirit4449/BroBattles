@@ -5,7 +5,7 @@ const { previewDash, tryDashSteps } = require('../src/server/core/bots/dash');
 const { standOn } = require('../src/server/core/bots/navigation');
 const { incomingThreat, maneuverDanger } = require('../src/server/core/bots/perception');
 const { finishSteps, preferredRange } = require('../src/server/core/bots/tactics');
-const { requestBasic, requestSpecial } = require('../src/server/core/bots/combat');
+const { requestBasic, requestSpecial } = require('../src/shared/combat/combat.js');
 const movement = require('../src/shared/physics/movementPhysics.json');
 const { makeRoom } = require('./helpers/botRoom');
 

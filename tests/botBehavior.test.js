@@ -7,11 +7,11 @@ describe("Bot behavior and routes", () => {
   const { standOn } = require('../src/server/core/bots/navigation');
   const { observe, incomingThreat } = require('../src/server/core/bots/perception');
   const { preferredRange } = require('../src/server/core/bots/tactics');
-  const { basicAim, hasClearShot } = require('../src/server/core/bots/combat');
+  const { basicAim, hasClearShot } = require('../src/shared/combat/combat.js');
   const { SUPER_RANGES, updateSuperPlan, shouldUseSuper } = require('../src/server/core/bots/supers');
   const { difficultyForTrophies } = require('../src/server/core/bots/config');
-  const { registerAttackFromAction, tickActiveAttacks } = require('../src/server/core/gameRoom/attackRuntimeManager');
-  const effects = require('../src/server/core/gameRoom/effects/effectManager');
+  const { registerAttackFromAction, tickActiveAttacks } = require('../src/shared/combat/runtime/attackRuntimeManager.js');
+  const effects = require('../src/shared/combat/runtime/effects/effectManager.js');
 
   function setup(t, characters = ['wizard', 'ninja'], trophies = 1000) {
     let now = 1000000;
@@ -557,7 +557,7 @@ describe("Bot behavior and routes", () => {
 
   test('human Huntress flight is authoritative and visible to bots without duplicate releases', (t) => {
     const h = setup(t, ['huntress', 'ninja']), [human, bot] = h.players;
-    const combat = require('../src/server/core/gameRoom/huntressCombat');
+    const combat = require('../src/shared/combat/runtime/huntressCombat.js');
     human.isBot = false;
     assert.equal(h.room.handlePlayerAction(human.participantId, { type: 'huntress-arrow', id: 'human-shot', angle: 0 }), true);
     h.room._tickId += 10;
@@ -798,7 +798,7 @@ describe("Bot behavior and routes", () => {
 
 describe("Disconnected living targets", () => {
   const { makeRoom } = require('./helpers/botRoom');
-  const inferno = require('../src/server/core/gameRoom/abilities/dravenInfernoAbility');
+  const inferno = require('../src/shared/combat/runtime/abilities/dravenInfernoAbility.js');
   const { observe } = require('../src/server/core/bots/perception');
 
   test('bots see disconnected living enemies and Inferno damages them', t => {

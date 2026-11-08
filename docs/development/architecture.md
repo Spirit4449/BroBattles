@@ -4,7 +4,7 @@
 
 The browser uses Phaser, the server uses Express and Socket.IO, and persistent account/party state lives in MySQL. Human movement is client-simulated with server bounds and dash collision checks; combat outcomes and bot simulation are server-owned. Keep socket events, HTTP responses, DOM identifiers, saved map schemas and gameplay tuning stable during structural changes.
 
-Entry points assemble features. A feature owns its state and behavior; shared modules contain data and pure rules that can run in the browser, server or tests without Phaser, DOM or database dependencies. Explicit registries are preferred to directory scanning or a plugin framework.
+Entry points assemble features. A feature owns its state and behavior; shared modules contain data, pure rules and combat runtimes with injected host services that can run in the browser, server or tests without Phaser, DOM or database dependencies. Explicit registries are preferred to directory scanning or a plugin framework.
 
 ## Folder layout
 
@@ -42,6 +42,7 @@ src/
     middleware/ jobs/ lib/ (catalog loader, request windows, runtime config)
   shared/            data and pure rules used by browser, server and tests
     characters/      character JSON, stats, tuning, projectile/hitbox geometry
+    combat/          attacks, abilities, status effects, aiming/ammo; host-injected runtime
     physics/         movement, dash, ducking, collision, spawn placement
     maps/            built-in map documents and map schema
     catalogs/        cosmetics, shop, powerups, modes and trophy catalogs
@@ -56,9 +57,9 @@ src/
 
 | Content | Definition | Runtime integration |
 | --- | --- | --- |
-| Characters | `src/shared/characters/<key>.json`, registered in `index.js` alongside those files | Browser classes in `src/client/game/characters/manifest.js`; authoritative attacks and abilities under `src/server/core/gameRoom/` |
+| Characters | `src/shared/characters/<key>.json`, registered in `index.js` alongside those files | Browser classes in `src/client/game/characters/manifest.js`; combat attacks and abilities under `src/shared/combat/runtime/`, hosted authoritatively by GameRoom |
 | Character progression/tuning access | `src/shared/characters/characterStats.js`, `characterTuning.js` | Import the shared helpers directly; no forwarding modules. Use `DEFAULT_CHARACTER`/`resolveCharacterKey()` for missing or stored character keys rather than a `"ninja"` literal |
-| Bot play style per character | `src/server/core/bots/characterProfiles.js` | One profile per character: spacing, melee/buff flags, aim model, super range and super decision. Content validation requires a profile for every registered character |
+| Bot play style per character | `src/shared/combat/characterProfiles.js` | One profile per character: spacing, melee/buff flags, aim model, super range and super decision. Content validation requires a profile for every registered character |
 | Character frames, duck cells, attack descriptors | Derived from character definitions | Exports from `characters/index.js` and rules in `ducking.js`; do not add parallel tables |
 | Powerups | `src/shared/catalogs/powerups.catalog.json` | `powerups.js` derives catalog exports and owns the shared pickup delay; `effectRules.js` shares modifiers with server callbacks and client prediction |
 | Maps | Built-ins in `src/shared/maps/<id>.json`; saved overrides in `data/maps/` or `BB_MAP_DIR` | `mapDocument.js` validates; `maps/index.js` registers built-ins and derives catalog metadata |
@@ -89,11 +90,11 @@ Import owning domains directly. Pass-through compatibility files have been remov
 
 - `src/server/routes/` and `core/socketEvents/` adapt transport to `src/server/services/<domain>/`. Keep database mutations and transaction rules in services; there is no separate helpers layer, so put domain logic in its domain folder and only generic utilities in `src/server/lib/`.
 - `src/server/core/gameRoom/index.js` coordinates room lifecycle and simulation. Its public methods delegate payload validation to `gameRoom/actionValidation.js`, socket registration to `playerTransport.js`, and hit processing to `damageResolver.js`.
-- `gameRoom/characterAttackRegistry.js` maps attack runtime kinds to constructors and tick functions. `attackRuntimes/` groups linear/bouncing projectiles, melee, returning projectiles, hooks, shared geometry and target handling.
-- `gameRoom/characterCombatRegistry.js` delegates Ninja/Huntress initialization, requests, ticks, bootstrap and disposal. Their protocol-specific engines own projectile trust and reconciliation. Huntress authoritative combat is always enabled; the old browser collision engine and rollout toggle are removed. Protocol version checks require stale clients to reload.
-- `gameRoom/abilityRuntimeManager.js` selects character ability modules in `abilities/`. `effects/` owns timed effect application, stacking, expiry and snapshots.
+- `shared/combat/runtime/characterAttackRegistry.js` maps attack runtime kinds to constructors and tick functions. `attackRuntimes/` groups linear/bouncing projectiles, melee, returning projectiles, hooks, shared geometry and target handling.
+- `shared/combat/runtime/characterCombatRegistry.js` delegates Ninja/Huntress initialization, requests, ticks, bootstrap and disposal. Their protocol-specific engines own projectile trust and reconciliation. Huntress authoritative combat is always enabled; the old browser collision engine and rollout toggle are removed. Protocol version checks require stale clients to reload.
+- `shared/combat/runtime/abilityRuntimeManager.js` selects character ability modules in `abilities/`. `effects/` owns timed effect application, stacking, expiry and snapshots.
 - `core/gameModes/` owns authoritative victory/objective rules. Mode capability data controls client sudden-death behavior, and client mode factories own objective rendering/assets.
-- `core/bots/` owns perception, navigation and tactics. Basic action identity comes from character definitions; per-character play style lives only in `bots/characterProfiles.js`. Bot modules read profile fields instead of comparing `char_class` strings; protocol-specific helpers such as `startNinjaSwarm` remain explicit.
+- `core/bots/` owns perception, navigation and tactics. Basic action identity comes from character definitions; per-character play style lives only in `shared/combat/characterProfiles.js`. Bot modules read profile fields instead of comparing `char_class` strings; protocol-specific helpers such as `startNinjaSwarm` remain explicit.
 
 ## Deliberate boundaries
 
@@ -110,3 +111,19 @@ Large orchestrators still contain lifecycle-sensitive code. Extract a further su
 Run `npm run validate:content`, relevant Node tests, then `npm test` and `npm run build` for cross-cutting changes. Content validation checks registered character data/assets, attack references/runtime kinds, powerup assets/effects, invalid body/reload values, duplicate cosmetic prices/movement tuning, shop offers and built-in map documents. It does not replace gameplay testing or the server's uploaded-map asset validation.
 
 [Contributing](contributing.md) lists concrete extension steps; The character brief in that guide lists design/art inputs.
+
+### Embedded combat sessions
+
+`shared/combat/runtime/` owns combat mechanisms for both the authoritative GameRoom
+and the local `PreviewSession`. Hosts supply participant state, geometry, clock,
+randomness, scheduling, event delivery, health/death callbacks and knockback.
+GameRoom keeps socket authentication, input sanitization, match modes, persistence,
+rewards and server telemetry. The preview has no connection to those services.
+`combatClock` is optional: live rooms default to their existing wall clock, while
+previews/tests advance deterministic fixed steps. Match tuning lives in
+`shared/combat/matchConfig.js`; the old server config entry re-exports it.
+
+Client projectile adapters expose instance factories. The default instances serve
+matches; embedded scenes own separate flights, clocks and teardown. A preview must
+never configure/reset the match singleton. See the lobby showcase section in
+[Client](client.md#lobby-character-showcase) and the executable host-parity tests.

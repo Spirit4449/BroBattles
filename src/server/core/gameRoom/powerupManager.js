@@ -1,3 +1,4 @@
+const { applyPowerupToPlayer } = require("../../../shared/combat/runtime/effects/powerupApplication");
 const { PICKUP_DELAY_MS } = require("../../../shared/powerups");
 const {
   SD_RISE_SPEED,
@@ -12,13 +13,13 @@ const {
   POWERUP_OMEN_MS,
   POWERUP_SPAWN_Y_LIFT,
   POWERUP_TYPE_ROTATION,
-} = require("../gameRoomConfig");
+} = require("../../../shared/combat/matchConfig.js");
 const { getDuelGeometry } = require("../../../shared/physics/duelGeometry");
 const { resolvePowerupPoints } = require("../../../shared/maps/mapDocument");
-const effectManager = require("./effects/effectManager");
+const effectManager = require("../../../shared/combat/runtime/effects/effectManager.js");
 const { powerupGap } = require("./powerupContact");
 const { matchDurationMs } = require("./timerManager");
-const { effectDefs } = require("./effects/effectDefs");
+const { effectDefs } = require("../../../shared/combat/runtime/effects/effectDefs.js");
 
 // Spawn points come from the map document (`spawns.powerups`, edited in the
 // map editor). Rooms without map geometry fall back to the shipped map file.
@@ -198,18 +199,6 @@ function isInSuddenDeathWater(room, playerData, nowTs) {
   return typeof playerData?.y === "number" && playerData.y >= poisonY;
 }
 
-function applyPowerupToPlayer(room, playerData, type, nowTs, params = null) {
-  if (!playerData) return;
-  const durationScale = Number(params?.durationScale);
-  const nextParams = params && typeof params === "object" ? { ...params } : {};
-  if (Number.isFinite(durationScale) && durationScale > 0) {
-    const baseDuration = Number(effectDefs?.[type]?.durationMs);
-    if (Number.isFinite(baseDuration) && baseDuration > 0) {
-      nextParams.durationMs = Math.round(baseDuration * durationScale);
-    }
-  }
-  effectManager.apply(playerData, type, nowTs, nextParams, room);
-}
 
 function tickPowerups(room) {
   if (room.status !== "active") return;

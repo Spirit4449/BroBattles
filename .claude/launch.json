@@ -4,8 +4,20 @@
     {
       "name": "dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3002
+    },
+    {
+      "name": "pixel-card-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "-e",
+        "const h=require('http'),f=require('fs'),p=require('path');const R='/Users/nisch/Desktop/code/Bro Battles/output/pixel-cards';h.createServer((q,s)=>{const u=decodeURIComponent(q.url.split('?')[0]);const fp=p.join(R,u.endsWith('/')?u+'index.html':u);if(!fp.startsWith(R)||!f.existsSync(fp)){s.writeHead(404);return s.end();}const t={'.html':'text/html','.webm':'video/webm','.mov':'video/quicktime','.webp':'image/webp','.png':'image/png'}[p.extname(fp)]||'application/octet-stream';s.writeHead(200,{'content-type':t,'cache-control':'no-store'});f.createReadStream(fp).pipe(s);}).listen(4177);"
+      ],
+      "port": 4177
     }
   ]
 }

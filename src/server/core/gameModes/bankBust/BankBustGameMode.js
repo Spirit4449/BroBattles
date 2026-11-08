@@ -1,8 +1,8 @@
-const { exposeDamageHitbox } = require('../../gameRoom/damageHitboxes');
+const { exposeDamageHitbox } = require('../../../../shared/combat/runtime/damageHitboxes.js');
 const { PICKUP_DELAY_MS } = require("../../../../shared/powerups");
 const { BaseGameMode } = require("../BaseGameMode");
 const { getModeById } = require("../../../../shared/gameSelection");
-const effectManager = require("../../gameRoom/effects/effectManager");
+const effectManager = require("../../../../shared/combat/runtime/effects/effectManager.js");
 const { reduceDuckDamage } = require("../../../../shared/physics/ducking");
 const {
   RANDOM_GOLD_PICKUP_CAP,

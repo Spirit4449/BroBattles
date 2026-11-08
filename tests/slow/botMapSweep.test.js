@@ -111,7 +111,7 @@ test('Bank Bust roles find reachable siege and lower-lane objectives on the live
   const p = h.players[0], brain = h.room.botControllers.get(p.participantId);
   const { bankDecisionSteps } = require('../../src/server/core/bots/bankBust');
   const { finishSteps } = require('../../src/server/core/bots/tactics');
-  const effects = require('../../src/server/core/gameRoom/effects/effectManager');
+  const effects = require('../../src/shared/combat/runtime/effects/effectManager.js');
   const { standOn } = require('../../src/server/core/bots/navigation');
   const own = h.room.modeState.vaults[p.team];
   const surface = brain.graph.surfaces.filter(s => s.left <= own.x && s.right >= own.x)

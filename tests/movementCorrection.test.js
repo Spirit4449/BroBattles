@@ -5,7 +5,7 @@ const { characterBody } = require('../src/shared/physics/duelGeometry');
 const { createMovementCorrector } = require('../src/client/game/players/movementCorrection');
 const WORLD = require('../src/shared/maps/arenas').arenaFor('duels-1v1').world;
 const physics = require('../src/shared/physics/movementPhysics.json');
-const { IDLE_FALLBACK_AFTER_MS } = require('../src/server/core/gameRoomConfig');
+const { IDLE_FALLBACK_AFTER_MS } = require('../src/shared/combat/matchConfig.js');
 
 function server(t) {
   let now = 100000;

@@ -76,7 +76,7 @@ export function perform(
   // re-holds the facing for the full release.
   if (player) faceAttack(scene, player, aimFacesLeft(specialData, player.flipX), SWARM_LOCK_MS);
 
-  if (ninjaEnabled()) return;
+  if (scene?._ninjaCombatEnabled ?? ninjaEnabled()) return;
   for (let index = 0; index < SWARM_COUNT; index++) {
     scene.time.delayedCall(index * SWARM_RELEASE_MS, () => {
       spawnSingleSwarmShuriken(

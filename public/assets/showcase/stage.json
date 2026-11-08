@@ -1,0 +1,11 @@
+{
+  "platform": {
+    "width": 1000,
+    "height": 415,
+    "surfaceY": 39
+  },
+  "backdrop": {
+    "width": 1200,
+    "height": 500
+  }
+}

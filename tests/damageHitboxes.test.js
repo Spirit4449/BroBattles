@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { exposeDamageHitbox, damageHitboxSnapshot, SAMPLE_TTL_MS } = require('../src/server/core/gameRoom/damageHitboxes');
-const { hitCircleTargets, hitRectTargets } = require('../src/server/core/gameRoom/attackRuntimes/targets');
+const { exposeDamageHitbox, damageHitboxSnapshot, SAMPLE_TTL_MS } = require('../src/shared/combat/runtime/damageHitboxes.js');
+const { hitCircleTargets, hitRectTargets } = require('../src/shared/combat/runtime/attackRuntimes/targets.js');
 
 test('damage geometry is debug-only, replaced per source, and expires even after attack removal', () => {
   const room = { matchData: {} }, source = { attackerName: 'A', instanceId: 'shot' };
@@ -30,7 +30,7 @@ test('shared target queries expose damage shapes even when there are no enemies'
 });
 
 test('every registered generic damage runtime publishes its collision geometry without targets', () => {
-  const { ATTACK_RUNTIMES, createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
+  const { ATTACK_RUNTIMES, createRuntimeAttack, tickRuntimeAttack } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
   const { attackDescriptors } = require('../src/shared/characters');
   const covered = new Set();
   const now = Date.now();
@@ -61,7 +61,7 @@ test('every registered generic damage runtime publishes its collision geometry w
 });
 
 test('configured projectile offsets align Wizard and Gloop collision with their art', () => {
-  const { createRuntimeAttack, tickRuntimeAttack } = require('../src/server/core/gameRoom/characterAttackRegistry');
+  const { createRuntimeAttack, tickRuntimeAttack } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
   const now = Date.now();
   const { getResolvedCharacterAttackConfig } = require('../src/shared/characters/characterTuning');
   const fireball = getResolvedCharacterAttackConfig('wizard', 'fireball');
@@ -88,7 +88,7 @@ test('configured projectile offsets align Wizard and Gloop collision with their 
 });
 
 test('rearward projectile correction cannot damage behind its launch point', () => {
-  const { getAttackCollisionCenter } = require('../src/server/core/gameRoom/attackRuntimes/geometry');
+  const { getAttackCollisionCenter } = require('../src/shared/combat/runtime/attackRuntimes/geometry.js');
   const attack = { x: 107, y: 50, angle: 0, traveled: 7, collisionForwardOffset: -90 };
   assert.deepEqual(getAttackCollisionCenter(attack), { x: 100, y: 50 });
 });
@@ -96,7 +96,7 @@ test('rearward projectile correction cannot damage behind its launch point', () 
 test('dedicated Ninja and Huntress protocols expose each basic and special projectile', t => {
   const { makeRoom } = require('./helpers/botRoom');
   for (const character of ['ninja', 'huntress']) {
-    const combat = require(`../src/server/core/gameRoom/${character}Combat`);
+    const combat = require(`../src/shared/combat/runtime/${character}Combat`);
     for (const special of [false, true]) {
       const { room, players } = makeRoom({ characters: [character, 'wizard'] });
       t.after(() => room.cleanup());

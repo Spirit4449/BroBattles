@@ -1,0 +1,35 @@
+const { getResolvedCharacterSpecialConfig } = require("../../../characters/characterTuning");
+const knockback = getResolvedCharacterSpecialConfig("thorg", "knockback");
+const effectManager = require("../effects/effectManager.js");
+
+function activate(player, now) {
+  effectManager.apply(player, "thorgRage", now);
+}
+
+// damageMult (1.3) is declared in effectDefs.thorgRage.modifiers and applied
+// automatically by effectManager.getModifiers() in the combat pipeline.
+function applyOutgoingDamageMultiplier(attacker, damage /*, now */) {
+  return damage;
+}
+
+function getKnockback(attacker, target, now) {
+  const rage = effectManager.isActive(attacker, "thorgRage", now);
+  if (!target) return null;
+  const knockDirection = (target.x || 0) >= (attacker.x || 0) ? 1 : -1;
+  return {
+    amountX: (rage ? knockback.rageX : knockback.baseX) * knockDirection,
+    amountY: rage ? knockback.rageY : knockback.baseY,
+  };
+}
+
+function requiresMeleeFacingCheck(attackType, isSelf) {
+  return false; // The mace completes a full revolution, including behind Thorg.
+}
+
+module.exports = {
+  key: "thorg",
+  activate,
+  applyOutgoingDamageMultiplier,
+  getKnockback,
+  requiresMeleeFacingCheck,
+};

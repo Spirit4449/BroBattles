@@ -1,0 +1,88 @@
+const { combatNow } = require("../clock");
+const attackRuntimeManager = require("../attackRuntimeManager.js");
+const { broadcastAction } = require("../characterActionRegistry.js");
+const {
+  getResolvedCharacterSpecialConfig,
+} = require("../../../characters/characterTuning.js");
+
+const KEY = "gloop";
+const HOOK = getResolvedCharacterSpecialConfig(KEY, "hook") || {};
+
+function toFinite(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function activate(caster, now, room, payload = null, shot = null) {
+  if (!caster || !room) return;
+  const aim = payload && typeof payload === "object" ? payload : {};
+  const fallbackAngle = caster.flip ? Math.PI : 0;
+  const angle = toFinite(aim.angle, fallbackAngle);
+  const direction =
+    Number(aim.direction) === -1 ||
+    (Math.cos(angle) < -0.1 && Number(aim.direction) !== 1)
+      ? -1
+      : 1;
+
+  const action = {
+    type: "gloop-hook-release",
+    // The owner predicts the hook under its own request id and skips this echo.
+    id: typeof shot?.id === "string" && shot.id && shot.id.length <= 128
+      ? shot.id : `gloopHook:${caster.socketId || caster.name}:${now}`,
+    viewRewindMs: shot?.viewRewindMs,
+    ownerEcho: true,
+    direction,
+    angle,
+    speed: Math.max(1, Number(HOOK.speed)),
+    range: Math.max(1, Number(HOOK.range)),
+    collisionRadius: Math.max(1, Number(HOOK.collisionRadius)),
+    damage: Math.max(
+      1,
+      Number(HOOK.damage),
+    ),
+    pullDurationMs: Math.max(120, Number(HOOK.pullDurationMs)),
+    pullLockPaddingMs: Math.max(0, Number(HOOK.pullLockPaddingMs)),
+    pulledStopDistance: Math.max(1, Number(HOOK.pulledStopDistance)),
+    slowDurationMs: Math.max(1, Number(HOOK.slowDurationMs)),
+    slowSpeedMult: Math.max(0, Number(HOOK.slowSpeedMult)),
+    slowJumpMult: Math.max(0, Number(HOOK.slowJumpMult)),
+    maxLifetimeMs: Math.max(
+      200,
+      Math.ceil(
+        (Math.max(1, Number(HOOK.range)) /
+          Math.max(1, Number(HOOK.speed))) *
+          1000 *
+          1.5,
+      ),
+    ),
+  };
+
+  const startup = Math.max(0, Number(HOOK.castDelayMs ?? 0));
+  const interruptSeq = caster._attackInterruptSeq || 0;
+  const release = () => {
+    if ((caster._attackInterruptSeq || 0) !== interruptSeq) return;
+    if (
+      room.status !== "active" ||
+      !caster.isAlive ||
+      caster.connected === false ||
+      caster.loaded !== true
+    ) {
+      return;
+    }
+    attackRuntimeManager.registerAttackFromAction(
+      room,
+      caster,
+      action,
+      combatNow(room),
+    );
+    broadcastAction(room, caster, action, combatNow(room));
+  };
+
+  if (startup > 0) room.scheduleAction(release, startup);
+  else release();
+}
+
+module.exports = {
+  key: KEY,
+  activate,
+};

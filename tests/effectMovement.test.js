@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const effects = require('../src/server/core/gameRoom/effects/effectManager');
+const effects = require('../src/shared/combat/runtime/effects/effectManager.js');
 const { buildWorldStatePayload } = require('../src/server/core/gameRoom/roomStateManager');
 const { resolveLocalEffectMovement, EFFECT_RULES } = require('../src/shared/effectRules');
 const { characterDefinitions } = require('../src/shared/characters');
@@ -59,9 +59,9 @@ test('ability effect defaults derive from their character tuning', () => {
 });
 
 test('zero slows survive projectile creation, contact and hook expiry', () => {
-  const { buildProjectileBounceAttack } = require('../src/server/core/gameRoom/attackRuntimes/projectiles');
-  const { applyDescriptorHitEffect } = require('../src/server/core/gameRoom/attackRuntimes/targets');
-  const { buildHookProjectileAttack, applyGloopPull, tickRuntimeControlEffects } = require('../src/server/core/gameRoom/attackRuntimes/hook');
+  const { buildProjectileBounceAttack } = require('../src/shared/combat/runtime/attackRuntimes/projectiles.js');
+  const { applyDescriptorHitEffect } = require('../src/shared/combat/runtime/attackRuntimes/targets.js');
+  const { buildHookProjectileAttack, applyGloopPull, tickRuntimeControlEffects } = require('../src/shared/combat/runtime/attackRuntimes/hook.js');
   const attacker = { participantId: 'a', name: 'Gloop', char_class: 'gloop', x: 100, y: 100 };
   const target = { participantId: 'b', name: 'Target', x: 200, y: 100, isAlive: true, loaded: true };
   const room = { players: new Map([['a', attacker], ['b', target]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };
@@ -86,8 +86,8 @@ test('zero slows survive projectile creation, contact and hook expiry', () => {
 });
 
 test('hooking a Draven mid-inferno cancels the channel and pulls him toward Gloop', () => {
-  const inferno = require('../src/server/core/gameRoom/abilities/dravenInfernoAbility');
-  const { buildHookProjectileAttack, applyGloopPull, tickRuntimeControlEffects } = require('../src/server/core/gameRoom/attackRuntimes/hook');
+  const inferno = require('../src/shared/combat/runtime/abilities/dravenInfernoAbility.js');
+  const { buildHookProjectileAttack, applyGloopPull, tickRuntimeControlEffects } = require('../src/shared/combat/runtime/attackRuntimes/hook.js');
   const attacker = { participantId: 'a', name: 'Gloop', char_class: 'gloop', x: 100, y: 100, isAlive: true, loaded: true };
   const draven = { participantId: 'b', name: 'Draven', char_class: 'draven', x: 400, y: 100, isAlive: true, loaded: true };
   const room = { players: new Map([['a', attacker], ['b', draven]]), geometry: { colliders: [], world: WORLD }, io: { to: () => ({ emit() {} }) } };

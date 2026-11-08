@@ -1,7 +1,7 @@
 const { characterBody } = require("../../../shared/physics/duelGeometry");
 const { bounds, stepBody, onClimbableWall, forecastGeometry, nearColliders } = require("./physics");
 const movement = require("../../../shared/physics/movementPhysics.json");
-const { SD_DAMAGE_PER_SEC } = require('../gameRoomConfig');
+const { SD_DAMAGE_PER_SEC } = require('../../../shared/combat/matchConfig.js');
 const graphs = new WeakMap();
 const { FIXED_DT_MS: DT } = require('../../../shared/gameConstants');
 const EDGE_STANCE_INSET = 14;

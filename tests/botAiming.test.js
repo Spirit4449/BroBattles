@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { basicAim, hasClearShot, requestBasic } = require('../src/server/core/bots/combat');
-const { getResolvedAttackDescriptor } = require('../src/server/core/gameRoom/attackDescriptorResolver');
+const { basicAim, hasClearShot, requestBasic } = require('../src/shared/combat/combat.js');
+const { getResolvedAttackDescriptor } = require('../src/shared/combat/runtime/attackDescriptorResolver.js');
 const { launchTravel } = require('../src/shared/combat/launchRamp');
 const { muzzleOf } = require('../src/shared/characters/characterRig');
 
@@ -255,7 +255,7 @@ test('huntress keeps jump and fall prediction near the current target height', (
 });
 
 test('pressure shots threaten nearby space without wasting the last ammo charge', () => {
-  const { pressureAim } = require('../src/server/core/bots/combat');
+  const { pressureAim } = require('../src/shared/combat/combat.js');
   const p = { ...player('huntress'), isAlive: true, participantId: 'pressure-bot', _botActionSeq: 0,
     ammoState: { charges: 3, nextFireInMs: 0, cooldownMs: 100 } };
   const enemy = { ...target, x: 580 };
@@ -323,7 +323,7 @@ test('ninja bot shurikens stop when their swept path crosses a wall', () => {
   const {
     createRuntimeAttack,
     tickRuntimeAttack,
-  } = require('../src/server/core/gameRoom/characterAttackRegistry');
+  } = require('../src/shared/combat/runtime/characterAttackRegistry.js');
   const ninja = {
     ...player('ninja'),
     participantId: 'wall-test-ninja',

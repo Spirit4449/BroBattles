@@ -1,14 +1,15 @@
+const { combatCoverageErrors } = require("../../src/shared/combat/runtime/coverage");
 const fs = require('node:fs');
 const path = require('node:path');
 const { characterDefinitions } = require('../../src/shared/characters');
 const { rigErrors } = require('../../src/shared/characters/characterRig');
 const { POWERUP_CATALOG } = require('../../src/shared/powerups');
-const { effectDefs } = require('../../src/server/core/gameRoom/effects/effectDefs');
+const { effectDefs } = require('../../src/shared/combat/runtime/effects/effectDefs.js');
 const { validateDocument } = require('../../src/shared/maps/mapDocument');
 const mapDefaults = require('../../src/shared/maps').mapDefaults;
 const { CLOUD_TYPES } = require('../../src/shared/maps/scenery');
-const { ATTACK_RUNTIMES } = require('../../src/server/core/gameRoom/characterAttackRegistry');
-const { BOT_PROFILES } = require('../../src/server/core/bots/characterProfiles');
+const { ATTACK_RUNTIMES } = require('../../src/shared/combat/runtime/characterAttackRegistry.js');
+const { BOT_PROFILES } = require('../../src/shared/combat/characterProfiles.js');
 const skinsCatalog = require('../../src/shared/catalogs/skinsCatalog.json');
 const cardsCatalog = require('../../src/shared/catalogs/playerCardsCatalog.json');
 const { FIELDS: CARD_VERSION_FIELDS, playerCardAssetVersion } = require('../art/player-card-versions.cjs');
@@ -21,7 +22,7 @@ function validateContent({ characters = characterDefinitions, powerups = POWERUP
     ...Object.values(skinsCatalog.characters).flatMap(entry => entry.skins),
     ...cardsCatalog.cards, ...iconsCatalog.icons,
   ], shop = shopCatalog, botProfiles = BOT_PROFILES } = {}) {
-  const errors = [];
+  const errors = combatCoverageErrors(characters);
   const publicDir = path.resolve(__dirname, '../../public');
   const assetExists = (url, owner) => {
     if (!fs.existsSync(path.join(publicDir, url))) errors.push(`${owner}: missing asset ${url}`);
@@ -49,7 +50,7 @@ function validateContent({ characters = characterDefinitions, powerups = POWERUP
     if (!(definition.frame?.w > 0) || !(definition.frame?.h > 0)) errors.push(`${key}: missing frame dimensions`);
     if (!Array.isArray(definition.duckFrame) || definition.duckFrame.length !== 2 || definition.duckFrame.some(n => !Number.isInteger(n) || n < 1)) errors.push(`${key}: invalid duck frame`);
     if (!actions[definition.basicAction] || actions[definition.basicAction].character !== key) errors.push(`${key}: unknown basic action ${definition.basicAction}`);
-    if (!Object.hasOwn(botProfiles, key)) errors.push(`${key}: missing bot profile in src/server/core/bots/characterProfiles.js`);
+    if (!Object.hasOwn(botProfiles, key)) errors.push(`${key}: missing bot profile in src/shared/combat/characterProfiles.js`);
     for (const file of ['body.webp', 'spritesheet.webp', 'animations.json']) assetExists(`/assets/${key}/${file}`, key);
     const atlasPath = path.join(publicDir, 'assets', key, 'animations.json');
     if (fs.existsSync(atlasPath)) {
