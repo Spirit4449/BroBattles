@@ -1,5 +1,4 @@
 import { drawAmmoChargeBar } from "../../game/scene/ammoBarRenderer";
-import { activeEffectLabels } from "../../game/powerups/powerupConfig";
 import { createShowcaseFight } from "./showcaseFight";
 import { showcaseRoster } from "./showcaseKit";
 import { POWERUP_CATALOG } from "../../../shared/powerups";
@@ -140,10 +139,9 @@ export function createShowcaseStage(host) {
     const bar = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
     const superBack = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
     const superBar = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
-    const status = scene.add.text(0, 0, "", { fontFamily: "monospace", fontSize: "7px", color: "#fff2ab", stroke: "#000000", strokeThickness: 2 }).setOrigin(0.5, 0).setDepth(RENDER_LAYERS.PLAYER_HUD + 2);
     const ammoBack = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER_HUD);
     const ammo = scene.add.graphics().setDepth(RENDER_LAYERS.PLAYER_HUD + 1);
-    fighter.hud = { status, ammo, ammoBack, label, healthText, bar, superBack, superBar, parts: [status, ammo, ammoBack, label, healthText, bar, superBack, superBar] };
+    fighter.hud = { ammo, ammoBack, label, healthText, bar, superBack, superBar, parts: [ammo, ammoBack, label, healthText, bar, superBack, superBar] };
   }
 
   // Anchored like RemotePlayer.updateHealthBar / localPlayer.updateHealthBar.
@@ -161,7 +159,6 @@ export function createShowcaseStage(host) {
       x: hudX - HUD_BAR_WIDTH / 2, y, width: HUD_BAR_WIDTH, health: Math.max(0, fighter.health), maxHealth: fighter.maxHealth,
       color: fighter.team === "team1" ? 0xaebb50 : 0xb24035, teamGlowColor: fighter.team === "team1" ? 0x83dca6 : 0xe04a4e, isLocal: fighter.self,
     });
-    hud.status.setPosition(hudX, top - 53).setText(activeEffectLabels(fighter.status).join(" · "));
     drawAmmoChargeBar(hud.ammo, hud.ammoBack, { x: hudX - HUD_BAR_WIDTH / 2, y: y + 11, width: HUD_BAR_WIDTH,
       ammo: fighter.self && !fighter.defeated ? fighter.ammo : null });
     drawSuperChargeBar(hud.superBar, hud.superBack, {
@@ -476,10 +473,10 @@ export function createShowcaseStage(host) {
   // ---- routines --------------------------------------------------------------
 
   // Every animation in turn, on the spot or across the platform.
-  async function animationsRoutine(d, hero, caption) {
-    const step = async (label, action) => { d.alive(); caption(label); await action(); };
-    await step("Idle", async () => { idlePose(hero); await d.wait(1300); });
-    await step("Run", async () => {
+  async function animationsRoutine(d, hero) {
+    const step = async action => { d.alive(); await action(); };
+    await step(async () => { idlePose(hero); await d.wait(1300); });
+    await step(async () => {
       await runTo(d, hero, view.runLimit);
       await runTo(d, hero, -view.runLimit);
       await runTo(d, hero, 0);
@@ -487,15 +484,15 @@ export function createShowcaseStage(host) {
       idlePose(hero);
       await d.wait(250);
     });
-    await step("Jump", async () => { await hop(d, hero); await d.wait(500); });
-    await step("Duck", async () => {
+    await step(async () => { await hop(d, hero); await d.wait(500); });
+    await step(async () => {
       safely(() => playPlayerSound(scene, hero.sprite, "sfx-duck-transition", { volume: 0.5 }));
       play(hero, "ducking");
       await d.wait(1000);
       play(hero, "idle");
       await d.wait(300);
     });
-    await step("Dash", async () => {
+    await step(async () => {
       await dash(d, hero, -1);
       await d.wait(300);
       await runTo(d, hero, 0);
@@ -503,13 +500,13 @@ export function createShowcaseStage(host) {
       play(hero, "idle");
       await d.wait(300);
     });
-    await step("Attack", async () => {
+    await step(async () => {
       combat.attack(hero);
       await d.wait(1100);
       idlePose(hero);
       await d.wait(500);
     });
-    await step("Super", async () => {
+    await step(async () => {
       combat.special(hero);
       // Let the actual ability finish, including the full Inferno / Rage.
       await d.wait(1200);
@@ -522,7 +519,7 @@ export function createShowcaseStage(host) {
     // Not every atlas has a defeat animation (Gloop's has none).
     const canFall = !!resolveSpriteAnimationKey({ scene, sprite: hero.sprite, character: hero.character, logical: "dying", fallback: "dying" })
       ?.endsWith("-dying");
-    if (canFall) await step("Defeat", async () => {
+    if (canFall) await step(async () => {
       hero.defeated = true;
       hero.health = 0;
 
@@ -533,7 +530,7 @@ export function createShowcaseStage(host) {
     });
   }
 
-  function startRoutine(mode, caption) {
+  function startRoutine(mode, onCycleComplete) {
     const d = director(++runId);
     const [hero] = fighters;
     const guard = promise => promise.catch(error => { if (error !== CANCELLED) console.warn("[showcase] routine failed", error); });
@@ -542,11 +539,10 @@ export function createShowcaseStage(host) {
       onRoundEnd: carriedCharge => { if (current) stage.show({ ...current, carriedCharge }); },
     });
     cancelHooks.add(combat.dispose);
-    if (mode === "fight") {
-      caption("");
-      return;
-    }
-    guard((async () => { for (;;) await animationsRoutine(d, hero, caption); })());
+    if (mode === "animations") guard(animationsRoutine(d, hero).then(() => {
+      d.alive();
+      onCycleComplete();
+    }));
   }
 
   // Resolves after the scene has drawn the new routine, so fading the canvas
@@ -579,10 +575,10 @@ export function createShowcaseStage(host) {
     // Loads a view's atlases and sounds without starting it.
     prepare,
     // Builds a view (`animations` or `fight`); true once its first frame is drawn.
-    async show({ character, skinId, level = 1, mode, name = "You", onCaption = () => {}, carriedCharge = {} }) {
+    async show({ character, skinId, level = 1, mode, name = "You", onCycleComplete = () => {}, carriedCharge = {} }) {
       game.loop.wake();
       await sceneStarted;
-      const request = { character, skinId, level, mode, name, onCaption, carriedCharge };
+      const request = { character, skinId, level, mode, name, onCycleComplete, carriedCharge };
       current = request;
       runId++;
       await prepare(request);
@@ -599,7 +595,7 @@ export function createShowcaseStage(host) {
       });
       scene._localPlayerAudioSprite = fighters[0].sprite;
       layout();
-      startRoutine(mode, label => { if (current === request) onCaption(label); });
+      startRoutine(mode, () => { if (current === request) onCycleComplete(); });
       await nextRender();
       return current === request;
     },

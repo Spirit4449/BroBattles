@@ -34,10 +34,12 @@ export function createShowcaseDirector(session, { halfWidth = 240, random = seed
         const distance = target ? Math.abs(target.x - p.x) : 0;
         const range = basicRange(p, session);
         const desired = kit.melee ? Math.min(kit.spacing.cap, range * kit.spacing.fraction)
-          : Math.min(kit.spacing.cap, range * kit.spacing.fraction, halfWidth * 0.8);
+          : Math.min(kit.spacing.cap, range * kit.spacing.fraction);
         if (now >= brain.until) {
-          const far = target && distance > desired + 38;
-          const close = target && !kit.melee && distance < desired - 65 && (p.ammoState.charges === 0 || p.health < p.maxHealth * 0.6);
+          const approachAt = kit.melee ? desired + 38 : range * 0.9;
+          const far = target && distance > approachAt;
+          const close = target && !kit.melee && distance < Math.min(desired - 65, kit.spacing.clearance) &&
+            (direction > 0 ? p.x - brain.minX : brain.maxX - p.x) > 65 && (p.ammoState.charges === 0 || p.health < p.maxHealth * 0.6);
           brain.move = far ? direction : close ? -direction : 0;
           brain.until = now + 450 + random() * 400;
         }

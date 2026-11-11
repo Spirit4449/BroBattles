@@ -103,8 +103,10 @@ export function createShowcaseFight({ scene, fighters, halfWidth, face, play, mo
       if (autoplay || isMovementSuppressed(p, session.now)) sprite.setPosition(p.x, fighter.standY + p.y - p.groundY);
       sprite._powerupEffects = fighter.status;
       if (!p.isAlive || !autoplay) continue;
-      face(fighter, p.flip ? -1 : 1);
-      const moving = Math.abs(p.vx) > 10;
+      const pushed = session.now < (p._previewImpulseUntil || 0);
+      const moving = !pushed && Math.abs(p.vx) > 10;
+      const aiming = session.now < (p._botActionUntil || 0) || performance.now() < remoteAnimationLockUntil(sprite);
+      face(fighter, moving && !aiming ? Math.sign(p.vx) : p.flip ? -1 : 1);
       // playSpriteAnimation respects an active action's lock.
       if (performance.now() >= remoteAnimationLockUntil(sprite)) play(fighter, !p.grounded ? (p.vy < 0 ? 'jumping' : 'falling') : moving ? 'running' : 'idle');
       if (moving && p.grounded && time >= (fighter.nextDustAt || 0)) {

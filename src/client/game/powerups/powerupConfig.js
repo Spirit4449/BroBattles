@@ -25,11 +25,3 @@ export function createPowerupTickSounds(characterTickSounds = {}) {
     ...characterTickSounds,
   };
 }
-
-// Human labels for compact status displays. Multiple slows share one label.
-export function activeEffectLabels(effects = {}) {
-  const labels = { thorgRage: 'Rage', huntressBurn: 'Burning', gloopSlimeSlow: 'Slowed',
-    gloopHookSlow: 'Slowed', slow: 'Slowed', stun: 'Stunned', health: 'Healing', freeze: 'Frozen', respawnShield: 'Protected' };
-  return [...new Set(Object.entries(effects).filter(([, remaining]) => remaining > 0).map(([key]) =>
-    labels[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase())))];
-}

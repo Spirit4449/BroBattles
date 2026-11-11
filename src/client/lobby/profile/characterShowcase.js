@@ -41,7 +41,6 @@ export function mountCharacterShowcase(frame, { character, skinId, level = 1, na
     request: 0,
     timer: null,
     buttons: new Map(),
-    caption: null,
   };
   session = current;
   decorateFrame(current, "body");
@@ -69,10 +68,6 @@ function decorateFrame(current, shownView) {
   current.buttons.clear();
   frame.dataset.showcaseView = shownView;
   frame.appendChild(buildSwitcher(current));
-  current.caption = document.createElement("div");
-  current.caption.className = "character-showcase-caption";
-  current.caption.setAttribute("aria-live", "polite");
-  frame.appendChild(current.caption);
   if (host) frame.prepend(host);
 }
 
@@ -81,9 +76,7 @@ function adoptFrame(current, frame, { skinId, level, name }) {
   current.frame = frame;
   current.level = level;
   current.name = name;
-  const caption = current.caption?.textContent || "";
   decorateFrame(current, current.view === "body" || !host ? "body" : current.view);
-  current.caption.textContent = caption;
   if (changed) {
     current.skinId = skinId;
     if (current.view !== "body") void setView(current, current.view, { force: true });
@@ -133,10 +126,6 @@ function buildSwitcher(current) {
   return switcher;
 }
 
-function setCaption(current, text) {
-  if (current.caption) current.caption.textContent = text || "";
-}
-
 async function setView(current, view, { force = false } = {}) {
   if (session !== current || (current.view === view && !force)) return;
   const request = ++current.request;
@@ -145,7 +134,6 @@ async function setView(current, view, { force = false } = {}) {
   for (const [id, button] of current.buttons) button.setAttribute("aria-pressed", String(id === view));
 
   if (view === "body") {
-    setCaption(current, "");
     current.frame.dataset.showcaseView = "body";
     current.frame.classList.remove("is-showcase-loading");
     await delay(FADE_MS);
@@ -156,7 +144,6 @@ async function setView(current, view, { force = false } = {}) {
   // Live to live: dip only the canvas (the backdrop stays), never the portrait.
   if (wasLive && host) {
     host.classList.add("is-swapping");
-    setCaption(current, "");
     await delay(FADE_MS);
     if (current.request !== request) return;
   }
@@ -167,7 +154,7 @@ async function setView(current, view, { force = false } = {}) {
     if (host.parentNode !== current.frame) current.frame.prepend(host);
     const shown = await stage.show({
       character: current.character, skinId: current.skinId, level: current.level, name: current.name, mode: view,
-      onCaption: text => { if (current.request === request) setCaption(current, text); },
+      onCycleComplete: () => { if (current.request === request) void setView(current, "fight"); },
     });
     if (!shown || current.request !== request) return;
     current.frame.dataset.showcaseView = view;
