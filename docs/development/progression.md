@@ -320,6 +320,8 @@ offers start unread when this feature is introduced.
 `shop_views` saves acknowledgments per account, so other devices pick them up on
 opening the Shop, returning to the lobby browser tab, or the foreground lobby
 minute refresh. Background notification polling never rerenders an open Shop.
+Offers marked unavailable are hidden from the Shop and do not generate new-offer
+notifications; claimed daily rewards and purchased offers retain their status.
 `POST /api/shop/viewed` accepts catalog offer IDs and the exact displayed rotation
 keys. Old screens cannot acknowledge a newer rotation. Failed saves retain tags.
 Apply `npm run migrate:apply -- shop-views` before deploying this feature.
@@ -329,6 +331,15 @@ sale IDs stay featured; `promotedCount` entries rotate through `promotedOfferIds
 Do not duplicate IDs across these lists. Active promotions appear only in Sales,
 including skins. Offers whose home section is Sales must be in one of the lists;
 when rotated out they cannot be purchased through a direct API request.
+
+The Profile shop offers Crystal Slime for 39 gems and Ember Crown and Moonblade
+Skull for 59 gems each. Sky Duck and Berry Bomb cost 39 gems each; Robo Cat costs
+59 gems. All six profile icons also enter the weekly Sales rotation.
+Sky Adventure (55 gems) features Radiant Diamond, Sky Duck, and 300 coins;
+Crystal Treasury (159 gems) features Astral Amethyst, Crystal Slime, and 800 coins.
+These bundles are pinned in Sales and require the included card to be unowned.
+The currency section also offers 1,200 coins for $0.99 through Stripe Checkout,
+alongside the gem-priced coin packs.
 
 `rotation.sales.discountPercent` sets the default item discount (0 disables it).
 Bundles retain their catalog price by default. An offer's optional
@@ -359,3 +370,5 @@ Profile overview stats show wins, highest win streak, and trophies in the lobby,
 trophies and total matches on the account page. Currency balances and average
 character level are omitted from both profile overviews; the Bros grid still
 shows each unlocked character’s level.
+
+Shop cards preview their grants and price before purchase. Character unlocks use the unlock preview, and upgrades show the coin cost alongside the stat preview. A currency shortfall offers matching shop packs. Choosing a pack opens its own purchase review.

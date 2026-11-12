@@ -241,6 +241,7 @@ registerRoutes({
     try { require("./services/maps/mapRepository").mapRepository.listMetadata(); }
     catch (error) { console.warn("[maps] unable to warm metadata cache", error.message); }
     server.listen(port, "0.0.0.0", () => {
+      void stripeShopService.listener.start(port);
       console.log(
         `Server listening on 0.0.0.0:${port} (cookies secure=${SECURE_COOKIES}, env=${
           process.env.NODE_ENV || "undefined"

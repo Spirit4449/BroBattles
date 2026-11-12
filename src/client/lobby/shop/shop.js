@@ -5,7 +5,7 @@ import { showPlayerCardPreview } from "../../views/playerCardPreview.js";
 import { sonner } from "../../ui/sonner.js";
 import { currencyRewardImage, rewardSound, currencyParticleCount, currencyFlightPlan, resolveRewardGrants } from "../../views/rewardPresentation.js";
 import { playSound } from "../../ui/uiSounds.js";
-import { showUiConfirm } from "../../ui/uiConfirm.js";
+import { createModalFocus } from "../../ui/modalFocus.js";
 import "../../styles/shop.css";
 
 const FRIENDLY_ERRORS = {
@@ -85,6 +85,10 @@ function formatCountdown(targetIso, now = Date.now()) {
   const seconds = totalSeconds % 60;
   if (days > 0) return `${days}d ${hours}h ${minutes}m`;
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function currencyIcon(currency) {
+  return `<img class="purchase-currency-icon" src="/assets/icons/${currency === "coins" ? "coin" : "gem"}.webp" alt="">`;
 }
 
 function priceMarkup(price) {
@@ -220,6 +224,8 @@ function itemMarkup(item, sectionId, itemIndex) {
 }
 
 function sectionMarkup(meta, items) {
+  const hasUnavailable = items.some(item => getActionState(item).label === "UNAVAILABLE");
+  items = items.filter(item => getActionState(item).label !== "UNAVAILABLE");
   const collapsible = !!meta.collapsible;
   if (collapsible) {
     const ranks = { common: 0, rare: 1, epic: 2, legendary: 3 };
@@ -233,10 +239,46 @@ function sectionMarkup(meta, items) {
         ${timerKind ? `<div class="shop-reset-chip"><img class="shop-clock-icon" src="/assets/ui/shop-clock.webp" alt="" /><strong data-shop-countdown="${timerKind}">--:--:--</strong></div>` : ""}
       </header>
       <div id="shop-grid-${meta.id}" class="shop-offer-grid${meta.id === "sales" ? " shop-sales-grid" : ""}">
-        ${items.length ? items.map((item, index) => itemMarkup(item, meta.id, index)).join("") : collapsible ? `<div class="shop-empty shop-collection-complete"><img class="shop-collection-star" src="/assets/icons/special.webp" alt="" /><strong>Collection complete!</strong><p>You own everything here. Time to show it off.</p><button class="bb-button" type="button" data-shop-open-profile>Go to Profile</button></div>` : '<div class="shop-empty"><strong>Nothing here yet.</strong></div>'}
+        ${items.length ? items.map((item, index) => itemMarkup(item, meta.id, index)).join("") : collapsible && !hasUnavailable ? `<div class="shop-empty shop-collection-complete"><img class="shop-collection-star" src="/assets/icons/special.webp" alt="" /><strong>Collection complete!</strong><p>You own everything here. Time to show it off.</p><button class="bb-button" type="button" data-shop-open-profile>Go to Profile</button></div>` : '<div class="shop-empty"><strong>Nothing available right now.</strong></div>'}
       </div>
       ${collapsible ? `<button class="shop-expand bb-button" type="button" aria-expanded="false" aria-controls="shop-grid-${meta.id}">Expand</button>` : ''}
     </section>`;
+}
+
+function purchaseDialog(title, content, confirm = "", { headerClose = false, onPack } = {}) {
+  return new Promise(resolve => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "cs-confirm-backdrop";
+    backdrop.innerHTML = `<section class="cs-confirm cs-purchase-confirm purchase-review" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
+      ${headerClose ? `<header class="cs-confirm-title purchase-dialog-header"><h2>${escapeHtml(title)}</h2><button type="button" class="bb-close pixel-menu-button" data-dismiss aria-label="Close">×</button></header>` : `<h2 class="cs-confirm-title">${escapeHtml(title)}</h2>`}
+      <div class="cs-confirm-body">${content}</div>
+      ${headerClose ? "" : `<div class="cs-confirm-actions"><button type="button" class="cs-btn cancel pixel-menu-button" data-dismiss>${confirm ? "Cancel" : "Close"}</button>
+      ${confirm ? `<button type="button" class="cs-btn confirm pixel-menu-button" data-confirm>${confirm}</button>` : ""}</div>`}</section>`;
+    const finish = value => {
+      focus.deactivate();
+      backdrop.remove();
+      resolve(value);
+    };
+    const focus = createModalFocus(backdrop.firstElementChild, { onEscape: () => finish(null) });
+    let reviewingPack = false;
+    backdrop.addEventListener("click", async event => {
+      const button = event.target.closest("button");
+      if (event.target === backdrop || button?.hasAttribute("data-dismiss")) finish(null);
+      else if (button?.hasAttribute("data-confirm")) finish(true);
+      else if (button?.dataset.pack && !reviewingPack) {
+        reviewingPack = true;
+        try {
+          const missing = await onPack(button);
+          if (missing <= 0) finish(null);
+          else backdrop.querySelector("[data-shortfall]").textContent = missing.toLocaleString();
+        } finally {
+          reviewingPack = false;
+        }
+      }
+    });
+    document.body.append(backdrop);
+    focus.activate();
+  });
 }
 
 function loadStripeJs() {
@@ -773,7 +815,7 @@ export function initializeShop({
 
   const { closeReveal, showRewardReveal } = createRewardPresentation({ state, updateWallet, onProfileInvalidate });
 
-  async function handleSuccess({ result, button, item, kind = "purchase" }) {
+  async function handleSuccess({ result, button, item, kind = "purchase", floating = false }) {
     if (result.duplicate || result.alreadyOwned) {
       updateWallet(result.wallet);
       onProfileInvalidate?.();
@@ -789,8 +831,40 @@ export function initializeShop({
       isBigPurchase(item) ? "shopBigSuccess" : "shopConfirm",
       isBigPurchase(item) ? 0.52 : 0.42,
     );
-    await showRewardReveal({ result, item, kind, sourceRect });
+    await showRewardReveal({ result, item, kind, sourceRect, floating });
     await refresh({ preserveScroll: true, animateOffers: false });
+  }
+
+  async function chooseCurrencyPack(currency, missing) {
+    playSound("shopError", 0.35);
+    const required = Number(state.data.wallet[currency]) + missing;
+    const packs = (state.data?.sections?.currency || []).filter(item =>
+      item.grants.some(grant => grant.kind === "currency" && grant.currency === currency));
+    const cards = packs.map(pack => {
+      const action = getActionState(pack);
+      const grant = pack.grants.find(grant => grant.kind === "currency" && grant.currency === currency);
+      return `<button type="button" class="purchase-pack" data-currency="${currency}" data-pack="${escapeHtml(pack.id)}" ${action.disabled ? "disabled" : ""}>
+        <span class="shop-offer-visual purchase-pack-stage"><img class="purchase-pack-art" src="${currencyRewardImage(currency, grant.amount)}" alt=""><strong class="shop-offer-name">${currencyIcon(currency)} +${grant.amount.toLocaleString()} ${currency}</strong></span>
+        <span class="shop-buy-button purchase-pack-price">${priceMarkup(pack.price)}</span>${action.disabled ? `<small>${escapeHtml(pack.state.reason || action.label)}</small>` : ""}</button>`;
+    }).join("");
+    return purchaseDialog("Insufficient Funds", `<p class="purchase-shortfall">You need <span>${currencyIcon(currency)} <b data-shortfall>${missing.toLocaleString()}</b> more ${currency}.</span></p>
+      <div class="purchase-packs">${cards || "No packs available."}</div>`, "", {
+        headerClose: true,
+        onPack: async button => {
+          const pack = packs.find(pack => pack.id === button.dataset.pack);
+          await reviewItem(pack, button, true);
+          return required - Number(state.data.wallet[currency]);
+        },
+      });
+  }
+
+  async function characterShortfall({ currency, missing }) {
+    try {
+      if (!state.data) await refresh();
+      await chooseCurrencyPack(currency, missing);
+    } catch (error) {
+      reportError(error, "load");
+    }
   }
 
   function wireOfferActions() {
@@ -803,6 +877,21 @@ export function initializeShop({
     });
     state.scroll?.querySelectorAll("[data-shop-action]").forEach((button) => {
       const action = button.dataset.shopAction;
+      const card = button.closest("[data-shop-item-id]");
+      const review = async () => {
+        if (action) return button.click();
+        const item = findItem(button.dataset.itemId);
+        await purchaseDialog(item.name, escapeHtml(item.state.reason || getActionState(item).label));
+      };
+      card.addEventListener("click", event => {
+        if (!event.target.closest("button")) void review();
+      });
+      card.addEventListener("keydown", event => {
+        if (event.target === card && ["Enter", " "].includes(event.key)) {
+          event.preventDefault();
+          void review();
+        }
+      });
       if (!action) return;
       // Purchase/claim/checkout flows own their feedback, including async cues.
       button.dataset.sound = "none";
@@ -812,86 +901,94 @@ export function initializeShop({
         const offerId = String(button.dataset.offerId || "");
         const itemId = String(button.dataset.itemId || "");
         const item = findItem(itemId) || findItem(offerId);
-        button.disabled = true;
-        const original = button.innerHTML;
         try {
-          if (action === "daily") {
-            button.innerHTML = "<span>Opening...</span>";
-            const result = await fetchShopJson("/api/shop/claim-daily", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ idempotencyKey: idempotencyKey("daily") }),
-            });
-            await handleSuccess({ result, button, item, kind: "daily" });
-            return;
-          }
-          if (action === "purchase") {
-            const currency =
-              item?.price?.currency === "coins" ? "coins" : "gems";
-            const amount = Number(item?.price?.amount) || 0;
-            const balance = Number(state.data?.wallet?.[currency]) || 0;
-            if (balance < amount) {
-              shopToast(
-                "error",
-                `Not enough ${currency}`,
-                `You need ${(amount - balance).toLocaleString()} more ${currency}.`,
-              );
-              return;
-            }
-            const ok = await showUiConfirm({
-              title: `Unlock ${item?.name || "this item"}?`,
-              message: "Add it to your collection?",
-              confirmLabel: amount.toLocaleString(),
-              cancelLabel: "Back",
-              confirmIcon:
-                currency === "coins" ? "/assets/icons/coin.webp" : "/assets/icons/gem.webp",
-              confirmSound: "shopBuy",
-              cancelSound: "cancel",
-            });
-            if (!ok) return;
-            button.innerHTML = "<span>Forging...</span>";
-            const result = await fetchShopJson("/api/shop/purchase", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                offerId,
-                expectedPrice: amount,
-                expectedCurrency: currency,
-                idempotencyKey: idempotencyKey("purchase"),
-              }),
-            });
-            await handleSuccess({ result, button, item });
-            return;
-          }
-          if (action === "checkout") {
-            if (state.data?.account?.guest || guest) {
-              const next = `${window.location.pathname}?shop=currency`;
-              window.location.href = `/signup?next=${encodeURIComponent(next)}`;
-              return;
-            }
-            button.innerHTML = "<span>Opening...</span>";
-            try {
-              await openCheckout(offerId);
-            } catch (error) {
-              closeCheckout();
-              reportError(error, "checkout");
-            }
-          }
-        } catch (error) {
-          if (error.wallet) updateWallet(error.wallet);
-          reportError(error, action);
-          if (["price_changed", "offer_unavailable", "offer_ineligible"].includes(error.code)) {
-            await refresh().catch(refreshError => reportError(refreshError, "refresh"));
-          }
+          await reviewItem(item, button);
         } finally {
           state.actionPending = false;
-          if (button.isConnected) {
-            button.disabled = false;
-            button.innerHTML = original;
-          }
         }
       });
     });
+  }
+
+  async function reviewItem(item, button, floating = false) {
+    const { action, offerId } = getActionState(item);
+    button.disabled = true;
+    const original = button.innerHTML;
+    try {
+      const price = item.price;
+      const wallet = state.data.wallet;
+      const remaining = price?.type === "virtual" ? wallet[price.currency] - price.amount : null;
+      if (remaining !== null && remaining < 0) {
+        await chooseCurrencyPack(price.currency, -remaining);
+        return;
+      }
+      const grants = item.grants || [];
+      const rewards = grants.map(grant => {
+        const label = grant.kind === "currency" ? `+${grant.amount.toLocaleString()} ${grant.name}` : grant.name;
+        const art = grant.kind === "currency" ? currencyRewardImage(grant.currency, grant.amount) : grant.shopImage || grant.image;
+        const tint = grant.kind === "currency"
+          ? `reward-tint-${safeCssToken(grant.currency)}`
+          : `shop-rarity-${safeCssToken(grant.rarity || item.rarity || "common")}`;
+        return `<li class="purchase-grant ${tint} purchase-grant-${safeCssToken(grant.kind)}"><div class="purchase-stage"><img src="${escapeHtml(art)}" alt=""></div><strong>${grant.kind === "currency" ? currencyIcon(grant.currency) : ""} ${escapeHtml(label)}</strong></li>`;
+      }).join("");
+      const confirmed = await purchaseDialog(action === "daily" ? "Confirm claim" : "Confirm purchase",
+        `${grants.length > 1 ? `<h3>${escapeHtml(item.name)}</h3>` : ""}<ul class="purchase-grants">${rewards}</ul>`,
+        `${action === "daily" ? "Claim" : "Buy"} ${priceMarkup(price)}`);
+      if (!confirmed) return;
+      if (action === "daily") {
+        button.innerHTML = "<span>Opening...</span>";
+        const result = await fetchShopJson("/api/shop/claim-daily", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idempotencyKey: idempotencyKey("daily") }),
+        });
+        await handleSuccess({ result, button, item, kind: "daily" });
+        return;
+      }
+      if (action === "purchase") {
+        const currency =
+          item?.price?.currency === "coins" ? "coins" : "gems";
+        const amount = Number(item?.price?.amount) || 0;
+        button.innerHTML = "<span>Forging...</span>";
+        const result = await fetchShopJson("/api/shop/purchase", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            offerId,
+            expectedPrice: amount,
+            expectedCurrency: currency,
+            idempotencyKey: idempotencyKey("purchase"),
+          }),
+        });
+        await handleSuccess({ result, button, item, floating });
+        return;
+      }
+      if (action === "checkout") {
+        if (state.data?.account?.guest || guest) {
+          const next = `${window.location.pathname}?shop=currency`;
+          window.location.href = `/signup?next=${encodeURIComponent(next)}`;
+          return;
+        }
+        button.innerHTML = "<span>Opening...</span>";
+        try {
+          await openCheckout(offerId, floating);
+        } catch (error) {
+          closeCheckout();
+          reportError(error, "checkout");
+        }
+      }
+    } catch (error) {
+      if (error.wallet) updateWallet(error.wallet);
+      reportError(error, action);
+      if (["price_changed", "offer_unavailable", "offer_ineligible"].includes(error.code)) {
+        await refresh().catch(refreshError => reportError(refreshError, "refresh"));
+      }
+    } finally {
+      if (button.isConnected) {
+        button.disabled = false;
+        button.innerHTML = original;
+      }
+    }
   }
 
   function findItem(id) {
@@ -907,13 +1004,23 @@ export function initializeShop({
     return null;
   }
 
-  async function openCheckout(offerId) {
+  async function openCheckout(offerId, floating) {
+    ensureShell();
     closeCheckout();
     const attempt = state.checkoutAttempt;
     const panel = state.overlay.querySelector(".shop-checkout");
+    let dismissed;
+    if (floating) {
+      state.floatingCheckout = panel;
+      document.body.appendChild(panel);
+      panel.classList.add("shop-floating-layer");
+      state.checkoutFocus = createModalFocus(panel, { onEscape: closeCheckout });
+      dismissed = new Promise(resolve => { state.checkoutDismissed = resolve; });
+    }
     const host = panel.querySelector(".shop-checkout-host");
     panel.setAttribute("aria-hidden", "false");
     panel.classList.add("is-open");
+    state.checkoutFocus?.activate();
     playSound("shopOpen", 0.28);
     host.innerHTML =
       '<div class="shop-checkout-loading"><span class="shop-loading-rune bb-battle-loader" aria-hidden="true"></span><strong>Opening checkout...</strong></div>';
@@ -940,6 +1047,7 @@ export function initializeShop({
     state.checkout = checkout;
     host.innerHTML = "";
     checkout.mount(host);
+    await dismissed;
   }
 
   async function completeCheckout(sessionId) {
@@ -963,9 +1071,13 @@ export function initializeShop({
       }
       if (result?.order?.status === "fulfilled") {
         const item = findItem(state.checkoutOfferId || result?.order?.offer_id);
-        const panel = state.overlay.querySelector(".shop-checkout-panel");
+        const floating = !!state.floatingCheckout;
+        const dismissed = state.checkoutDismissed;
+        state.checkoutDismissed = null;
+        const panel = state.floatingCheckout || state.overlay.querySelector(".shop-checkout-panel");
         closeCheckout();
-        await handleSuccess({ result, button: panel, item, kind: "checkout" });
+        try { await handleSuccess({ result, button: panel, item, kind: "checkout", floating }); }
+        finally { dismissed?.(); }
       } else {
         closeCheckout();
         await refresh();
@@ -993,7 +1105,16 @@ export function initializeShop({
     state.checkout = null;
     state.checkoutSessionId = null;
     state.checkoutOfferId = null;
-    const panel = state.overlay.querySelector(".shop-checkout");
+    const panel = state.floatingCheckout || state.overlay.querySelector(".shop-checkout");
+    if (state.floatingCheckout) {
+      state.checkoutFocus.deactivate();
+      state.checkoutFocus = null;
+      panel.classList.remove("shop-floating-layer");
+      state.overlay.appendChild(panel);
+      state.floatingCheckout = null;
+      state.checkoutDismissed?.();
+      state.checkoutDismissed = null;
+    }
     panel?.classList.remove("is-open");
     panel?.setAttribute("aria-hidden", "true");
     const host = panel?.querySelector(".shop-checkout-host");
@@ -1029,7 +1150,7 @@ export function initializeShop({
     }, 0);
   }
 
-  return { open, openOffer, close, refresh, refreshNotifications, jumpTo, getFeaturedSale };
+  return { open, openOffer, characterShortfall, close, refresh, refreshNotifications, jumpTo, getFeaturedSale };
 }
 
 // Shared by Shop and Trophy Road so reward motion, audio and wallet impacts stay identical.
@@ -1247,11 +1368,11 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
     }
   }
 
-  function revealGrantMarkup(grant, index) {
+  function revealGrantMarkup(grant, index, showQuantity = true) {
     const currency = grant.kind === "currency" ? (grant.currency === "gems" ? "gems" : "coins") : null;
     return `<div class="shop-reveal-grant shop-reveal-${safeCssToken(grant.kind)}" data-character="${escapeHtml(grant.character || "")}" style="--reveal-index:${index}"${currency ? ` data-reveal-currency="${currency}"` : ""}>
       <span class="shop-reveal-art"><img ${grant.kind === "card" ? `data-animated-card-id="${escapeHtml(grant.id)}"` : ""} src="${escapeHtml(grant.kind === "currency" ? currencyRewardImage(grant.currency, grant.amount) : grant.kind === "card" ? playerCardImage(grant.id, { animate: false }) : grant.image)}" alt="${escapeHtml(grant.name)}" /></span>
-      ${currency ? `<strong class="shop-reveal-currency-amount">+${(Number(grant.amount) || 0).toLocaleString()} ${currency === "gems" ? "Gems" : "Coins"}</strong>` : ""}
+      ${currency && showQuantity ? `<strong class="shop-reveal-currency-amount">${currencyIcon(currency)} +${(Number(grant.amount) || 0).toLocaleString()} ${currency === "gems" ? "Gems" : "Coins"}</strong>` : ""}
     </div>`;
   }
 
@@ -1274,7 +1395,7 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
     };
   }
 
-  async function showRewardReveal({ result, item, kind, sourceRect, startingWallet: walletBefore }) {
+  async function showRewardReveal({ result, item, kind, sourceRect, startingWallet: walletBefore, floating = false }) {
     closeReveal();
     const grants = resolveRewardGrants(result?.grants, item?.grants);
     const rarity = safeCssToken(item?.rarity || "rare");
@@ -1300,7 +1421,9 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
     const reveal = document.createElement("div");
     reveal.className = `shop-reward-reveal reward-showcase shop-rarity-${rarity}${collectibles.length ? " has-collectibles" : " currency-only"}${kind === "trophy" ? " trophy-reward-reveal" : ""}`;
     reveal.classList.toggle('single-card-reveal', collectibles.length === 1 && collectibles[0].kind === 'card' && currencies.length === 0);
-    reveal.style.setProperty("--rarity-rgb", rarity === "legendary" ? "255, 197, 61" : rarity === "epic" ? "181, 110, 255" : "63, 158, 239");
+    if (grants.length === 1 && currencies.length) {
+      reveal.classList.add(`reward-tint-${safeCssToken(currencies[0].currency)}`);
+    }
     const previousFocus = document.activeElement;
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     if (sourceRect) {
@@ -1322,16 +1445,19 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
         <span data-reveal-wallet-shell="gems"><img src="/assets/icons/gem.webp" alt="Gems" /><strong data-reveal-wallet="gems">${startingWallet.gems.toLocaleString()}</strong></span>
       </div>
       <section class="shop-reveal-panel" role="dialog" aria-modal="true" aria-label="${escapeHtml(heading.name)}" tabindex="-1">
-        <header class="shop-reveal-heading"><h2>${escapeHtml(heading.name)}</h2><p class="shop-reveal-subheader">${escapeHtml(heading.type)}</p></header>
+        <header class="shop-reveal-heading"><h2>${grants.length === 1 && currencies.length ? currencyIcon(currencies[0].currency) : ""}${escapeHtml(heading.name)}</h2><p class="shop-reveal-subheader">${escapeHtml(heading.type)}</p></header>
         <div class="shop-reveal-grants">
           ${collectibles.length ? `<div class="shop-reveal-collectibles" style="--reward-columns:${Math.min(3, collectibles.length)}">${collectibles.map(revealGrantMarkup).join("")}</div>` : ""}
-          ${currencies.length ? `<div class="shop-reveal-currencies">${currencies.map((grant, index) => revealGrantMarkup(grant, collectibles.length + index)).join("")}</div>` : ""}
+          ${currencies.length ? `<div class="shop-reveal-currencies">${currencies.map((grant, index) => revealGrantMarkup(grant, collectibles.length + index, grants.length > 1)).join("")}</div>` : ""}
         </div>
         <button type="button" class="pixel-menu-button reward-continue" aria-hidden="true" tabindex="-1" data-sound="cursor4" data-volume="0.28">Done</button>
       </section>
       ${Array.from({ length: 8 }, (_, index) => `<i class="shop-reveal-shard" style="--shard:${index}"></i>`).join("")}`;
     hydratePlayerCardMedia(reveal, { interactive: true });
-    state.overlay.appendChild(reveal);
+    if (floating) reveal.classList.add("shop-floating-layer");
+    (floating ? document.body : state.overlay).appendChild(reveal);
+    const floatingFocus = floating ? createModalFocus(reveal) : null;
+    floatingFocus?.activate();
     state.reveal = reveal;
     const continueButton = reveal.querySelector("button");
     continueButton.style.visibility = "hidden";
@@ -1345,6 +1471,7 @@ export function createRewardPresentation({ state, updateWallet, onProfileInvalid
       resolveDismissed();
     };
     reveal.__dismiss = () => {
+      floatingFocus?.deactivate();
       reveal.dataset.dismissed = "1";
       reveal.dispatchEvent(new Event("reward-dismiss"));
       reveal.querySelectorAll("[data-reveal-wallet]").forEach(node => writeWalletCount(node, result?.wallet?.[node.dataset.revealWallet]));

@@ -20,6 +20,7 @@ export function showPlayerCardPreview(grants) {
   const mediaElements = [];
   for (const card of entries) {
     const figure = document.createElement('figure');
+    figure.className = `shop-rarity-${card.rarity}`;
     const media = createPlayerCardMedia(card, { interactive: true });
     mediaElements.push(media);
     figure.append(presentPlayerCardMedia(media, card, { containEffects: true }));

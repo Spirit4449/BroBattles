@@ -38,19 +38,12 @@ to create Stripe Products or Prices for these initial currency packs.
 
 ## Local webhook forwarding
 
-Install the Stripe CLI, authenticate it, and forward only the events handled by
-the shop:
-
-```bash
-stripe login
-stripe listen \
-  --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,refund.created,refund.failed,charge.dispute.created,charge.dispute.closed,charge.dispute.funds_reinstated \
-  --forward-to http://localhost:3002/api/payments/stripe/webhook
-```
-
-Copy the `whsec_...` value printed by `stripe listen` into
-`STRIPE_WEBHOOK_SECRET`, then restart the application when you are ready to run
-it. The real-money buttons stay disabled until all Stripe variables are present.
+Install the Stripe CLI and run `npm run dev` with the sandbox keys configured.
+After HTTP startup the server launches `stripe listen` with the shop's test API
+key, forwards shop events to its bound port, and reads the signing secret into
+memory. A separate CLI session and local signing-secret setup are unnecessary.
+Check the server log or **Admin → Store → Orders & payments** for listener
+status. Use **Refresh payment status** to see the latest state.
 
 Useful official references:
 
@@ -67,7 +60,7 @@ Configure the production provider endpoint using your actual public HTTPS host:
 https://YOUR_PUBLIC_HOST/api/payments/stripe/webhook
 ```
 
-Subscribe it to the same events used by the local CLI command. Put that
+Subscribe it to the events listed in `src/server/services/shop/stripeListener.js`. On `npm start` the HTTP server listens directly and checks the configured endpoint URL, enabled state and event subscriptions with Stripe. This startup check requires webhook endpoint read access. A signed test delivery verifies reachability and the signing secret. Put that
 endpoint's signing secret—not the CLI secret—in production
 `STRIPE_WEBHOOK_SECRET`.
 

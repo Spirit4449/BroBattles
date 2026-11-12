@@ -501,6 +501,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     openOffer: (...args) => ensureShop().openOffer(...args),
     getFeaturedSale: () => ensureShop().getFeaturedSale(),
   };
+  document.addEventListener("character-currency-shortfall", event => void ensureShop().characterShortfall(event.detail));
   shopButton?.addEventListener("click", () => void shop.open("sales"));
   coinResourceButton?.addEventListener(
     "click",

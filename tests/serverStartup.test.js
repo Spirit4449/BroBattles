@@ -101,3 +101,40 @@ describe("Bounded asynchronous logging", () => {
     assert.match(sink.output, /^first\n0123456789\n\[asyncConsole\] dropped 9 lines/);
   });
 });
+
+describe("Stripe startup listener", () => {
+  const { createStripeListener, webhookPath } = require('../src/server/services/shop/stripeListener');
+
+  test('local CLI readiness installs the signing secret and exit clears it', async t => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const { PassThrough } = require('node:stream');
+    const child = new (require('node:events').EventEmitter)();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    const listener = createStripeListener({ production: false, stripe: {}, secretKey: 'sk_test_example', spawnCli(command, args) {
+      assert.equal(command, 'stripe');
+      assert.ok(args.includes('http://127.0.0.1:4321' + webhookPath));
+      return child;
+    } });
+    await listener.start(4321);
+    assert.equal(listener.getStatus().state, 'starting');
+    child.stderr.write('Ready! Your webhook signing secret is whsec_example\n');
+    assert.equal(listener.getSigningSecret(), 'whsec_example');
+    assert.equal(listener.getStatus().state, 'listening');
+    child.emit('close', 1);
+    assert.equal(listener.getStatus().state, 'error');
+    assert.equal(listener.getSigningSecret(), '');
+  });
+
+  test('production verifies the public endpoint and event subscriptions', async () => {
+    const endpoint = { url: 'https://shop.example' + webhookPath, status: 'enabled', enabled_events: ['*'] };
+    const stripe = { webhookEndpoints: { list: () => [endpoint] } };
+    const listener = createStripeListener({ production: true, stripe, publicBaseUrl: 'https://shop.example', configuredSecret: 'whsec_endpoint' });
+    await listener.start(3002);
+    assert.equal(listener.getStatus().state, 'listening');
+    endpoint.enabled_events = ['checkout.session.completed'];
+    await listener.start(3002);
+    assert.equal(listener.getStatus().state, 'error');
+  });
+});

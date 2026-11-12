@@ -67,7 +67,10 @@
     },
     "sales": {
       "discountPercent": 20,
-      "pinnedOfferIds": [],
+      "pinnedOfferIds": [
+        "bundle-sky-adventure",
+        "bundle-crystal-treasury"
+      ],
       "promotedOfferIds": [
         "card-astral-amethyst",
         "card-mjolnirs-anvil",
@@ -76,12 +79,216 @@
         "card-radiant-gold",
         "card-radiant-ruby",
         "card-wizard-spell",
-        "card-radiant-silver"
+        "card-radiant-silver",
+        "icon-ember-crown",
+        "icon-crystal-slime",
+        "icon-moonblade-skull",
+        "icon-sky-duck",
+        "icon-berry-bomb",
+        "icon-robo-cat"
       ],
       "promotedCount": 2
     }
   },
   "offers": [
+    {
+      "id": "bundle-sky-adventure",
+      "section": "profile",
+      "kind": "bundle",
+      "name": "Sky Adventure",
+      "description": "Take to the skies with a player card, icon and coins.",
+      "rarity": "rare",
+      "banner": "/assets/shop/banners/sky-adventure-bundle.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 55
+      },
+      "purchaseLimit": "lifetime",
+      "eligibility": {
+        "requiresNotOwned": {
+          "kind": "card",
+          "id": "radiant-diamond"
+        }
+      },
+      "grants": [
+        {
+          "kind": "card",
+          "id": "radiant-diamond"
+        },
+        {
+          "kind": "profileIcon",
+          "id": "sky-duck"
+        },
+        {
+          "kind": "currency",
+          "currency": "coins",
+          "amount": 300
+        }
+      ]
+    },
+    {
+      "id": "bundle-crystal-treasury",
+      "section": "profile",
+      "kind": "bundle",
+      "name": "Crystal Treasury",
+      "description": "A legendary card, crystal companion and coins for your collection.",
+      "rarity": "legendary",
+      "banner": "/assets/shop/banners/crystal-treasury-bundle.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 159
+      },
+      "purchaseLimit": "lifetime",
+      "eligibility": {
+        "requiresNotOwned": {
+          "kind": "card",
+          "id": "astral-amethyst"
+        }
+      },
+      "grants": [
+        {
+          "kind": "card",
+          "id": "astral-amethyst"
+        },
+        {
+          "kind": "profileIcon",
+          "id": "crystal-slime"
+        },
+        {
+          "kind": "currency",
+          "currency": "coins",
+          "amount": 800
+        }
+      ]
+    },
+    {
+      "id": "icon-sky-duck",
+      "section": "profile",
+      "kind": "item",
+      "name": "Sky Duck",
+      "description": "An aviator duck ready for takeoff.",
+      "rarity": "rare",
+      "banner": "/assets/shop/banners/sky-duck-icon.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 39
+      },
+      "purchaseLimit": "lifetime",
+      "grants": [
+        {
+          "kind": "profileIcon",
+          "id": "sky-duck"
+        }
+      ]
+    },
+    {
+      "id": "icon-berry-bomb",
+      "section": "profile",
+      "kind": "item",
+      "name": "Berry Bomb",
+      "description": "A berry with a little explosive flavor.",
+      "rarity": "rare",
+      "banner": "/assets/shop/banners/berry-bomb-icon-v2.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 39
+      },
+      "purchaseLimit": "lifetime",
+      "grants": [
+        {
+          "kind": "profileIcon",
+          "id": "berry-bomb"
+        }
+      ]
+    },
+    {
+      "id": "icon-robo-cat",
+      "section": "profile",
+      "kind": "item",
+      "name": "Robo Cat",
+      "description": "A feline from the future, built for battle.",
+      "rarity": "epic",
+      "banner": "/assets/shop/banners/robo-cat-icon.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 59
+      },
+      "purchaseLimit": "lifetime",
+      "grants": [
+        {
+          "kind": "profileIcon",
+          "id": "robo-cat"
+        }
+      ]
+    },
+    {
+      "id": "icon-ember-crown",
+      "section": "profile",
+      "kind": "item",
+      "name": "Ember Crown",
+      "description": "A blazing crown for the arena.",
+      "rarity": "epic",
+      "banner": "/assets/shop/banners/ember-crown-icon.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 59
+      },
+      "purchaseLimit": "lifetime",
+      "grants": [
+        {
+          "kind": "profileIcon",
+          "id": "ember-crown"
+        }
+      ]
+    },
+    {
+      "id": "icon-crystal-slime",
+      "section": "profile",
+      "kind": "item",
+      "name": "Crystal Slime",
+      "description": "A mischievous slime with a crystal crest.",
+      "rarity": "rare",
+      "banner": "/assets/shop/banners/crystal-slime-icon.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 39
+      },
+      "purchaseLimit": "lifetime",
+      "grants": [
+        {
+          "kind": "profileIcon",
+          "id": "crystal-slime"
+        }
+      ]
+    },
+    {
+      "id": "icon-moonblade-skull",
+      "section": "profile",
+      "kind": "item",
+      "name": "Moonblade Skull",
+      "description": "Crossed blades beneath a moonlit skull.",
+      "rarity": "epic",
+      "banner": "/assets/shop/banners/moonblade-skull-icon.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 59
+      },
+      "purchaseLimit": "lifetime",
+      "grants": [
+        {
+          "kind": "profileIcon",
+          "id": "moonblade-skull"
+        }
+      ]
+    },
     {
       "id": "card-shuriken-strike",
       "section": "profile",
@@ -100,6 +307,72 @@
         {
           "kind": "card",
           "id": "shuriken-strike"
+        }
+      ]
+    },
+    {
+      "id": "coins-300-gems",
+      "section": "currency",
+      "kind": "currency-pack",
+      "name": "300 Coins",
+      "description": "Exchange 15 gems for 300 coins.",
+      "rarity": "common",
+      "banner": "/assets/shop/banners/coin-satchel-scene.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 15
+      },
+      "purchaseLimit": "unlimited",
+      "grants": [
+        {
+          "kind": "currency",
+          "currency": "coins",
+          "amount": 300
+        }
+      ]
+    },
+    {
+      "id": "coins-1000-gems",
+      "section": "currency",
+      "kind": "currency-pack",
+      "name": "1,000 Coins",
+      "description": "Exchange 50 gems for 1,000 coins.",
+      "rarity": "common",
+      "banner": "/assets/shop/banners/coin-chest-scene.webp",
+      "price": {
+        "type": "virtual",
+        "currency": "gems",
+        "amount": 50
+      },
+      "purchaseLimit": "unlimited",
+      "grants": [
+        {
+          "kind": "currency",
+          "currency": "coins",
+          "amount": 1000
+        }
+      ]
+    },
+    {
+      "id": "coins-1200-usd",
+      "section": "currency",
+      "kind": "currency-pack",
+      "name": "1,200 Coins",
+      "description": "Get 1,200 coins for your battle fund.",
+      "rarity": "common",
+      "banner": "/assets/shop/banners/coin-cart-scene.webp",
+      "price": {
+        "type": "money",
+        "currency": "usd",
+        "amountCents": 99
+      },
+      "purchaseLimit": "unlimited",
+      "grants": [
+        {
+          "kind": "currency",
+          "currency": "coins",
+          "amount": 1200
         }
       ]
     },

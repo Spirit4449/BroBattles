@@ -64,12 +64,12 @@ function registerAdminRoutes({
       try {
         shop = {
           ...(await shopService.getAdminStatus()),
-          payment: stripeShopService.getConfigurationStatus(),
+          payment: { ...stripeShopService.getConfigurationStatus(), listener: stripeShopService.listener.getStatus() },
         };
       } catch (error) {
         shop = {
           error: error?.message || "Shop schema is unavailable",
-          payment: stripeShopService.getConfigurationStatus(),
+          payment: { ...stripeShopService.getConfigurationStatus(), listener: stripeShopService.listener.getStatus() },
         };
       }
       return res.json({
@@ -354,10 +354,10 @@ function registerAdminRoutes({
   app.get("/api/admin/shop/status", async (req, res) => {
     if (!await requireAdminUser(req, res)) return sendUnauthorized(res);
     try {
-      return res.json({ success: true, ...(await shopService.getAdminStatus()), payment: stripeShopService.getConfigurationStatus() });
+      return res.json({ success: true, ...(await shopService.getAdminStatus()), payment: { ...stripeShopService.getConfigurationStatus(), listener: stripeShopService.listener.getStatus() } });
     } catch (error) {
       console.error("[admin] shop status", error);
-      return res.json({ success: true, error: error?.message || "Shop schema is unavailable", payment: stripeShopService.getConfigurationStatus() });
+      return res.json({ success: true, error: error?.message || "Shop schema is unavailable", payment: { ...stripeShopService.getConfigurationStatus(), listener: stripeShopService.listener.getStatus() } });
     }
   });
 

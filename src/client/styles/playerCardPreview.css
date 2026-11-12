@@ -24,4 +24,24 @@
   object-fit: contain;
   display: block;
 }
-.player-card-preview figcaption { margin: 16px 0 8px; }
+.player-card-preview figure figcaption {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 8px;
+  padding: 6px 12px;
+  border-block: 2px solid rgba(var(--rarity-rgb), .65);
+  background: linear-gradient(90deg, transparent, rgba(var(--rarity-rgb), .2), transparent);
+  color: color-mix(in srgb, rgb(var(--rarity-rgb)) 68%, white);
+  font-size: clamp(10px, 2vw, 14px);
+  letter-spacing: .1em;
+  text-shadow: 0 2px #050b14;
+}
+.player-card-preview figcaption::before,
+.player-card-preview figcaption::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  background: rgb(var(--rarity-rgb));
+  transform: rotate(45deg);
+}

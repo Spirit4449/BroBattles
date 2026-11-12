@@ -33,7 +33,7 @@ function fixture() {
   };
 }
 
-test('shop renders server grants and pricing, blocks unavailable purchases, and distinguishes purchased and owned offers', async () => {
+test('shop renders available offers, hides unavailable offers, and distinguishes purchased and owned offers', async () => {
   const f = fixture();
   await f.shop.open();
   const card = () => f.document.querySelector('[data-shop-item-id="custom-bundle"]');
@@ -43,7 +43,8 @@ test('shop renders server grants and pricing, blocks unavailable purchases, and 
   assert.equal(card().querySelector('[data-shop-action]').disabled, false);
   f.bundle.state.available = false;
   await f.shop.refresh();
-  assert.equal(card().querySelector('[data-shop-action]').disabled, true);
+  assert.equal(card(), null);
+  assert.match(f.document.querySelector('.shop-scroll').textContent, /Nothing available right now/);
   f.bundle.state.purchased = true;
   await f.shop.refresh();
   assert.ok(card().textContent.includes('PURCHASED'));
@@ -84,4 +85,49 @@ test('NEW tags survive the visit; closing saves fully viewed sections but not a 
   await f.shop.close();
   await f.runTimers(1000);
   assert.equal(views().length, 1, 'leaving before the visibility delay must not save a second view');
+});
+
+test('clicking an offer previews its shortfall or its rewards before purchase', async () => {
+  const f = fixture();
+  f.data.sections.currency = [{
+    id: 'gem-pack', name: 'Gem Pouch', state: { available: true }, kind: 'currency-pack',
+    price: { type: 'money', amountCents: 99 }, grants: [{ kind: 'currency', currency: 'gems', amount: 60 }],
+  }];
+  await f.shop.open();
+  const card = () => f.document.querySelector('[data-shop-item-id="custom-bundle"]');
+  const dialog = () => f.document.querySelector('.purchase-review');
+  card().click();
+  assert.match(dialog().textContent, /40 more gems/);
+  assert.ok(dialog().querySelector('[data-pack="gem-pack"]'));
+  dialog().querySelector('[data-dismiss]').click();
+  await f.settle();
+  f.data.wallet.gems = 100;
+  await f.shop.refresh();
+  card().click();
+  assert.match(dialog().textContent, /10 Coins/);
+  assert.doesNotMatch(dialog().textContent, /Remaining|After purchase/);
+  assert.match(dialog().querySelector('[data-confirm]').textContent, /Buy.*40/);
+  dialog().querySelector('[data-dismiss]').click();
+  assert.equal(f.requests.some(request => request.url.endsWith('/purchase')), false);
+});
+
+test('character shortfalls keep their pack picker open beneath a purchase review', async () => {
+  const f = fixture();
+  f.data.sections.currency = [{
+    id: 'gem-pack', name: '60 Gems', state: { available: true }, kind: 'currency-pack',
+    price: { type: 'money', amountCents: 99 }, grants: [{ kind: 'currency', currency: 'gems', name: 'Gems', amount: 60 }],
+  }];
+  const pending = f.shop.characterShortfall({ currency: 'gems', missing: 40 });
+  await f.settle();
+  const picker = f.document.querySelector('.purchase-review');
+  picker.querySelector('[data-pack]').click();
+  const dialogs = f.document.querySelectorAll('.purchase-review');
+  assert.equal(dialogs.length, 2);
+  assert.match(dialogs[1].textContent, /Confirm purchase/i);
+  assert.equal(f.document.body.classList.contains('shop-is-open'), false);
+  dialogs[1].querySelector('[data-dismiss]').click();
+  await f.settle();
+  assert.equal(f.document.querySelector('.purchase-review'), picker);
+  picker.querySelector('[data-dismiss]').click();
+  await pending;
 });

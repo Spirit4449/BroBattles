@@ -290,6 +290,49 @@ test("Shuriken Strike charges its catalog gem price and never charges coins or e
   assert.ok(db.state.cards.get(7).has("shuriken-strike"));
 });
 
+test('shop profile icons grant ownership at the displayed price without equipping', async () => {
+  const catalog = commerceCatalog();
+  for (const id of ['ember-crown', 'crystal-slime', 'moonblade-skull', 'sky-duck', 'berry-bomb', 'robo-cat']) {
+    const offer = catalog.offers.find(entry => entry.id === `icon-${id}`);
+    assert.ok(catalog.rotation.sales.promotedOfferIds.includes(offer.id));
+    const { db, service } = createFixture({ gems: offer.price.amount });
+    const bootstrap = await service.buildBootstrap({ user_id: 7 });
+    const displayed = [...bootstrap.sections.profile, ...bootstrap.sections.sales].find(entry => entry.id === offer.id);
+    assert.ok(displayed);
+    const selectedBefore = db.state.users.get(7).selected_profile_icon_id;
+    await service.purchaseVirtual({ userId: 7, offerId: offer.id, idempotencyKey: `buy:${id}` });
+    assert.equal(db.state.users.get(7).gems, offer.price.amount - displayed.price.amount);
+    assert.ok(db.state.icons.get(7).has(id));
+    assert.equal(db.state.users.get(7).selected_profile_icon_id, selectedBefore);
+  }
+});
+
+test('featured cosmetic bundles grant their card, icon and coins once', async () => {
+  const catalog = require('../src/server/services/shop/shopCatalog').getShopCatalog();
+  for (const id of ['bundle-sky-adventure', 'bundle-crystal-treasury']) {
+    const offer = catalog.offers.find(entry => entry.id === id);
+    assert.ok(catalog.rotation.sales.pinnedOfferIds.includes(id));
+    const { db, user } = createFixture({ gems: offer.price.amount, coins: 10 });
+    const service = createShopService({ db, catalogProvider: () => catalog });
+    const displayed = (await service.buildBootstrap(user)).sections.sales.find(entry => entry.id === id);
+    assert.ok(displayed);
+    const beforeIcon = db.state.users.get(7).selected_profile_icon_id;
+    const args = { userId: 7, offerId: id, idempotencyKey: `bundle:${id}` };
+    await service.purchaseVirtual(args);
+    assert.equal((await service.purchaseVirtual(args)).duplicate, true);
+    const card = offer.grants.find(grant => grant.kind === 'card');
+    const icon = offer.grants.find(grant => grant.kind === 'profileIcon');
+    const coins = offer.grants.find(grant => grant.currency === 'coins');
+    assert.ok(db.state.cards.get(7).has(card.id));
+    assert.ok(db.state.icons.get(7).has(icon.id));
+    assert.equal(db.state.users.get(7).coins, 10 + coins.amount);
+    assert.equal(db.state.users.get(7).gems, offer.price.amount - displayed.price.amount);
+    assert.equal(db.state.users.get(7).selected_card_id, 'default');
+    assert.equal(db.state.users.get(7).selected_profile_icon_id, beforeIcon);
+    assert.equal(db.state.redemptions.length, 1);
+  }
+});
+
 test("concurrent daily claims grant the current reward only once", async () => {
   const { db, service } = createFixture({ gems: 0, coins: 0 });
   const [first, second] = await Promise.all([
@@ -459,6 +502,9 @@ test('bundle receipts distinguish purchased bundles from ownership-blocked offer
   const blocked = await getState();
   assert.equal(blocked.purchased, false, 'owning the skin alone does not imply a bundle purchase');
   assert.equal(blocked.available, false);
+  const bootstrap = await service.buildBootstrap(user);
+  assert.equal(bootstrap.sections.sales.find(item => item.id === offerId).isNew, false);
+  assert.ok(!bootstrap.notifications.sections.sales.offerIds.includes(offerId));
 });
 
 

@@ -1,8 +1,9 @@
+const { webhookPath } = require("../../services/shop/stripeListener");
 const express = require("express");
 
 function registerStripeWebhookRoute({ app, stripeShopService }) {
   app.post(
-    "/api/payments/stripe/webhook",
+    webhookPath,
     express.raw({ type: "application/json" }),
     async (req, res) => {
       try {

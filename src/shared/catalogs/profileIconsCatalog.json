@@ -184,6 +184,66 @@
         "type": "character",
         "character": "gloop"
       }
+    },
+    {
+      "id": "ember-crown",
+      "name": "Ember Crown",
+      "assetUrl": "/assets/profile-icons/ember-crown.webp",
+      "rarity": "epic",
+      "showInPicker": true,
+      "cost": {
+        "gems": 59
+      }
+    },
+    {
+      "id": "crystal-slime",
+      "name": "Crystal Slime",
+      "assetUrl": "/assets/profile-icons/crystal-slime.webp",
+      "rarity": "rare",
+      "showInPicker": true,
+      "cost": {
+        "gems": 39
+      }
+    },
+    {
+      "id": "moonblade-skull",
+      "name": "Moonblade Skull",
+      "assetUrl": "/assets/profile-icons/moonblade-skull.webp",
+      "rarity": "epic",
+      "showInPicker": true,
+      "cost": {
+        "gems": 59
+      }
+    },
+    {
+      "id": "sky-duck",
+      "name": "Sky Duck",
+      "assetUrl": "/assets/profile-icons/sky-duck.webp",
+      "rarity": "rare",
+      "showInPicker": true,
+      "cost": {
+        "gems": 39
+      }
+    },
+    {
+      "id": "berry-bomb",
+      "name": "Berry Bomb",
+      "assetUrl": "/assets/profile-icons/berry-bomb.webp",
+      "rarity": "rare",
+      "showInPicker": true,
+      "cost": {
+        "gems": 39
+      }
+    },
+    {
+      "id": "robo-cat",
+      "name": "Robo Cat",
+      "assetUrl": "/assets/profile-icons/robo-cat.webp",
+      "rarity": "epic",
+      "showInPicker": true,
+      "cost": {
+        "gems": 59
+      }
     }
   ]
 }

@@ -4,6 +4,10 @@ Non-player-card banners live in `public/assets/shop/banners/` and are selected
 by `src/shared/catalogs/shopCatalog.json`. The player-card banners are maintained
 separately.
 
+The coin packs use distinct scenes: a treasury satchel, a torchlit cavern chest,
+and a moonlit mine cart. The chest and cart were revised using the Bank Bust cover
+and coin icon as style and subject references, and exported as 768×512 lossless WebP.
+
 The approved direction is the detailed treasury scene reviewed on 2026-11-03:
 consistent visible pixel clusters throughout the architecture and props,
 continuous stepped outlines, readable material details, and natural perspective.

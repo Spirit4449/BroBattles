@@ -1,3 +1,4 @@
+const { createStripeListener } = require("./stripeListener");
 const crypto = require("crypto");
 
 function parseJson(value, fallback) {
@@ -34,11 +35,13 @@ function createStripeShopService({ db, shopService, stripeClient = null }) {
     }
   }
 
+  const listener = createStripeListener({ stripe, secretKey, publicBaseUrl, configuredSecret: webhookSecret });
+
   function getConfigurationStatus() {
     const missing = [];
     if (!publishableKey) missing.push("STRIPE_PUBLISHABLE_KEY");
     if (!secretKey) missing.push("STRIPE_SECRET_KEY");
-    if (!webhookSecret) missing.push("STRIPE_WEBHOOK_SECRET");
+    if (!listener.getSigningSecret()) missing.push("STRIPE_WEBHOOK_SECRET");
     if (!publicBaseUrl) missing.push("PUBLIC_BASE_URL");
     if (!stripe && secretKey) missing.push("stripe package");
     return {
@@ -72,7 +75,7 @@ function createStripeShopService({ db, shopService, stripeClient = null }) {
 
   function assertWebhookEnabled() {
     assertStripeClient();
-    if (!webhookSecret) {
+    if (!listener.getSigningSecret()) {
       throw shopService.createShopError(
         503,
         "payments_unavailable",
@@ -595,7 +598,7 @@ function createStripeShopService({ db, shopService, stripeClient = null }) {
 
   async function handleWebhook(payload, signature) {
     assertWebhookEnabled();
-    const event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+    const event = stripe.webhooks.constructEvent(payload, signature, listener.getSigningSecret());
     // Only signature-verified events enter the durable inbox.
     await db.runQuery("INSERT IGNORE INTO shop_webhook_inbox (event_id, payload) VALUES (?, ?)", [event.id, JSON.stringify(event)]);
     return processVerifiedEvent(event);
@@ -644,6 +647,7 @@ function createStripeShopService({ db, shopService, stripeClient = null }) {
     fulfillCheckoutSession,
     getCheckoutStatus,
     getConfigurationStatus,
+    listener,
     handleWebhook,
     reconcileWebhooks,
   };

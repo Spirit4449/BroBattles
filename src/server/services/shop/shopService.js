@@ -300,7 +300,7 @@ function createShopService({ db, catalogProvider = getShopCatalog }) {
     for (const meta of catalog.sections || []) {
       const items = sections[meta.id] || [];
       for (const item of items) {
-        item.isNew = item.kind !== "daily" && !item.state.owned && !item.state.purchased
+        item.isNew = item.kind !== "daily" && item.state.available && !item.state.owned && !item.state.purchased
           && !viewed.has(`offer:${item.id}`);
       }
       const cycleKey = rotations[meta.id]?.cycleKey || null;

@@ -608,6 +608,10 @@ function renderPayments() {
   const stripe = node("article", null, "panel");
   stripe.append(node("div", "Stripe payments", "panel-title"));
   stripe.append(node("p", payment.enabled ? "Stripe is configured. Real-money offers can be bought." : "Stripe is off, so real-money offers show as unavailable.", payment.enabled ? "good-text" : "bad-text"));
+  if (payment.listener) stripe.append(node("p", payment.listener.message, payment.listener.state === "listening" ? "good-text" : "hint"));
+  stripe.append(button("Refresh payment status", "btn", async () => {
+    try { await loadStatus(); render(); } catch (error) { showToast(error.message); }
+  }));
   if (payment.missing?.length) {
     stripe.append(node("p", "Add these to the server's environment and restart:", "hint"));
     const list = node("ul", null, "plain-list");

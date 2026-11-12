@@ -848,7 +848,7 @@ function renderCharacterDetails(character) {
         e.stopPropagation();
         playSound("cursor4", 0.2);
         if (!cardState.canUpgrade) {
-          showInsufficientDialog("coins");
+          showInsufficientDialog("coins", cardState.price - Number(_userDataRef?.coins || 0));
           return;
         }
         if (!isUpgradePreview) {
@@ -868,7 +868,8 @@ function renderCharacterDetails(character) {
         upgradeButton.classList.add("is-confirming");
         upgradeButton.style.minWidth = `${_upgradePreview.minimumButtonWidth || 0}px`;
         upgradeButton.setAttribute("aria-label", `Confirm upgrade ${character} for ${cardState.price} coins`);
-        upgradeButton.textContent = "CONFIRM?";
+        upgradeButton.innerHTML = `<span class="character-details-action-label">Confirm</span><span class="button-price"><img class="cs-currency" src="/assets/icons/coin.webp" alt="coins"> ${cardState.price}</span>`;
+
       }
       footer.appendChild(upgradeButton);
     } else {
@@ -1452,7 +1453,7 @@ function showConfirmDialog(opts, onConfirm) {
   const remaining = current - Number(price || 0);
 
   if (remaining < 0) {
-    return showInsufficientDialog(isUpgrade ? "coins" : "gems");
+    return showInsufficientDialog(isUpgrade ? "coins" : "gems", -remaining);
   }
 
   const backdrop = document.createElement("div");
@@ -1520,21 +1521,6 @@ function showConfirmDialog(opts, onConfirm) {
     levelLine.appendChild(nextWrap);
     msg.appendChild(levelLine);
   }
-
-  const priceRow = document.createElement("p");
-  priceRow.className = "cs-price-row";
-  const remainingIcon = document.createElement("img");
-  remainingIcon.className = "cs-currency";
-  remainingIcon.src = isUpgrade ? "/assets/icons/coin.webp" : "/assets/icons/gem.webp";
-  remainingIcon.alt = isUpgrade ? "Coins" : "Gems";
-  const remainingText = document.createElement("span");
-  remainingText.textContent = `Remaining: ${Math.max(
-    remaining,
-    0,
-  )}`;
-  priceRow.appendChild(remainingIcon);
-  priceRow.appendChild(remainingText);
-  msg.appendChild(priceRow);
 
   const actions = document.createElement("div");
   actions.className = "cs-confirm-actions";
@@ -1616,15 +1602,10 @@ function showMessageDialog(titleText, bodyContent) {
   installPriorityEscape(backdrop);
 }
 
-function showInsufficientDialog(currency) {
-  if (!document.querySelector(".character-select-overlay")) return;
-  const icon = document.createElement("img");
-  icon.className = "cs-currency";
-  icon.src = currency === "coins" ? "/assets/icons/coin.webp" : "/assets/icons/gem.webp";
-  icon.alt = currency;
-  const txt = document.createElement("span");
-  txt.textContent = ` Not enough ${currency} to complete this purchase.`;
-  showMessageDialog("Not enough funds", [icon, txt]);
+function showInsufficientDialog(currency, missing) {
+  document.dispatchEvent(new CustomEvent("character-currency-shortfall", {
+    detail: { currency, missing },
+  }));
 }
 
 // Generic error dialog for server-side errors

@@ -2833,6 +2833,7 @@ body .shop-header {
      --bb-card-fill   / --bb-card-fill-hover     background
      --bb-card-halo                              extra glow or inset lip    */
 body :is(
+  .purchase-pack,
   .character-card,
   .map-select-card,
   .trophy-lane-card,
@@ -2858,6 +2859,7 @@ body :is(
 
 /* Shop offers paint rarity light into their own fill; every other card uses the token. */
 body :is(
+  .purchase-pack,
   .character-card,
   .map-select-card,
   .trophy-lane-card,
@@ -2876,6 +2878,7 @@ body :is(
 /* Interactive cards lift 2px. `translate` composes with layout transforms
    (Trophy Road positions its cards with translateX(-50%)). */
 body :is(
+  .purchase-pack,
   .character-card,
   .map-select-card,
   .profile-icon-choice-tile,
@@ -2888,6 +2891,7 @@ body :is(
 }
 
 body :is(
+  .purchase-pack,
   .character-card,
   .map-select-card,
   .profile-icon-choice-tile,
@@ -3226,6 +3230,22 @@ body .profile-bros-unlocked-count strong {
 }
 
 /* Card preview uses the same popup frame, chroma header and close control. */
+body .shop-rarity-common {
+  --rarity-rgb: 137, 160, 184;
+}
+body .shop-rarity-rare {
+  --rarity-rgb: 63, 158, 239;
+}
+body .shop-rarity-epic {
+  --rarity-rgb: 176, 91, 235;
+}
+body .shop-rarity-legendary {
+  --rarity-rgb: 247, 174, 57;
+}
+
+body .reward-tint-coins { --rarity-rgb: 255, 196, 57; }
+body .reward-tint-gems { --rarity-rgb: 74, 193, 255; }
+
 .player-card-preview.bb-popup {
   border: var(--bb-popup-border-width) solid var(--bb-popup-border-color);
   border-radius: var(--bb-radius-window);
